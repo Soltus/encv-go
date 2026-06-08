@@ -407,3 +407,36 @@ curl -s http://localhost:5173/src/views/Tasks.vue | grep "predictPlugin"
 2. **API 调用链** — 高优先级（数据不加载 = UI 为空）
 3. **computed 派生** — 中优先级（显示错误但可排查）
 4. **样式/CSS** — 低优先级（视觉问题不影响功能）
+
+## Skill 目录归属铁律（避免污染语言统计）
+
+> **`.agents/skills/` 与 `plugin-openlist/src/main/assets/` 已被 `.github/linguist.yml` 与 `.gitattributes` 标记为 `linguist-vendored`/`linguist-generated`，提交到这两处的代码不会出现在仓库 Languages 栏。**
+
+### 强制规则
+
+- **SHALL NOT** 向 `.agents/skills/**` 提交 first-party 技能定义 — 该目录是 Trae IDE / Capacitor / Ionic / Lynx 等第三方技能的存储位置（语言统计排除 + 搜索不索引）
+- **SHALL NOT** 直接编辑 `app/encv-mobile/plugin-openlist/src/main/assets/openlist/assets/**` 下的 dist 产物（`index-*.js`、`p-*.js`、`index-*.css`）— 这些是上游 OpenList 仓库 Vite 构建产物，由 `app/encv-mobile/scripts/build-plugin-openlist-web.sh` 自动重新生成
+- **SHALL NOT** 向 `app/encv-mobile/.agents/skills/**` 提交 first-party 脚本 — 该目录是 Lynx 工具链的第三方 skill 副本，含 5MB+ bundle 文件
+- first-party skill 应放置到 `.trae/skills/` 或新建 `app/encv-mobile/scripts/agents-skills/` 目录
+
+### 例外
+
+- 第三方 skill 升级（手动 sync Capacitor / Lynx skill 定义）可以覆盖 `.agents/skills/`，但需在 PR 描述中说明
+- `plugin-openlist/src/main/assets/openlist/assets/` 的 dist 更新只能通过 `build-plugin-openlist-web.sh` 触发，不接受手工 PR 修改
+
+### 验证
+
+```bash
+# 检查 first-party 资源是否误入被 linguist-vendored 排除的目录
+git check-attr -a -- $(git ls-files .agents/skills/ app/encv-mobile/.agents/skills/ app/encv-mobile/plugin-openlist/src/main/assets/openlist/assets/ 2>/dev/null) | awk -F': ' '
+{
+  file = $1; attr = $2; val = $3; seen[file] = 1
+  if ((attr == "linguist-vendored" || attr == "linguist-generated" || attr == "binary") && val == "set") vendored[file] = 1
+}
+END {
+  bad = 0; total = 0
+  for (f in seen) { total++; if (!vendored[f]) bad++ }
+  if (bad == 0) print "✅ 所有", total, "个文件都已正确标记"
+  else print "❌ 有", bad, "个未标记文件"
+}'
+```
