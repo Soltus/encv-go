@@ -7,6 +7,21 @@ import (
 	"testing"
 )
 
+// stubConfigProviderLegacy 是 ConfigProvider 的最小测试桩。
+// 2026-06-15：legacyDataPathCandidates 依赖 cfg.ServingDir()，必须传非空。
+type stubConfigProviderLegacy struct {
+	servingDir string
+}
+
+func (s *stubConfigProviderLegacy) IsMobile() bool                  { return false }
+func (s *stubConfigProviderLegacy) IsDev() bool                     { return false }
+func (s *stubConfigProviderLegacy) AndroidPackageName() string      { return "com.test.encv" }
+func (s *stubConfigProviderLegacy) DataDir() string                 { return s.servingDir }
+func (s *stubConfigProviderLegacy) AppDataFallbackDir() string      { return s.servingDir }
+func (s *stubConfigProviderLegacy) DevSandboxDir() string           { return "" }
+func (s *stubConfigProviderLegacy) ServingDir() string              { return s.servingDir }
+func (s *stubConfigProviderLegacy) AutomationDriver() string        { return "local" }
+
 // TestMigrateLegacyDataPath_RenamesOldToNew 验证从老路径（serving_dir/mounts.json）
 // 迁移到新路径（serving_dir/.encv/mounts.json）的核心逻辑。
 //
@@ -25,7 +40,11 @@ func TestMigrateLegacyDataPath_RenamesOldToNew(t *testing.T) {
 		t.Fatalf("seed old path: %v", err)
 	}
 
-	r := &MountRegistry{dataPath: newPath}
+	// cfg 传 tmpDir → legacyDataPathCandidates() 会列出 <tmpDir>/mounts.json 和 <tmpDir>/.encv/mounts.json
+	r := &MountRegistry{
+		dataPath: newPath,
+		cfg:      &stubConfigProviderLegacy{servingDir: tmpDir},
+	}
 	if err := r.migrateLegacyDataPath(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -68,7 +87,10 @@ func TestMigrateLegacyDataPath_SwapsWhenBothExist(t *testing.T) {
 		t.Fatalf("seed new: %v", err)
 	}
 
-	r := &MountRegistry{dataPath: newPath}
+	r := &MountRegistry{
+		dataPath: newPath,
+		cfg:      &stubConfigProviderLegacy{servingDir: tmpDir},
+	}
 	if err := r.migrateLegacyDataPath(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -98,7 +120,10 @@ func TestMigrateLegacyDataPath_NoOpWhenOldAbsent(t *testing.T) {
 	tmpDir := t.TempDir()
 	newPath := filepath.Join(tmpDir, ".encv", "mounts.json")
 	// 老路径不存在
-	r := &MountRegistry{dataPath: newPath}
+	r := &MountRegistry{
+		dataPath: newPath,
+		cfg:      &stubConfigProviderLegacy{servingDir: tmpDir},
+	}
 	if err := r.migrateLegacyDataPath(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -135,7 +160,10 @@ func TestMigrateLegacyDataPath_HandlesNestedDir(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	r := &MountRegistry{dataPath: newPath}
+	r := &MountRegistry{
+		dataPath: newPath,
+		cfg:      &stubConfigProviderLegacy{servingDir: servingDir},
+	}
 	if err := r.migrateLegacyDataPath(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -168,6 +196,7 @@ func TestLoad_TriggersMigration(t *testing.T) {
 		byID:     make(map[string]*Mount),
 		byName:   make(map[string]*Mount),
 		drivers:  make(map[string]DriverFactory),
+		cfg:      &stubConfigProviderLegacy{servingDir: tmpDir},
 	}
 	// Load 内的解析会因为没有 driver 注册而失败，但这不是我们要测的；
 	// 我们只关心迁移已经发生（老路径消失 + 新路径有数据）

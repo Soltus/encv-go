@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -92,23 +93,108 @@ type Server struct {
 
 // mountRegistryDataPath 返回 mounts.json 的持久化路径。
 //
-// 优先级：
-//  1. ENCV_MOUNTS_FILE 环境变量（明确指定）
-//  2. cfg.Server.Dir/.encv/mounts.json（隐藏子目录，dotfile filter 自动隐藏）
-//  3. os.TempDir()/encv-mounts/mounts.json（兜底）
+// 平台 + 环境矩阵（2026-06-15 重设计）：
 //
-// 2026-06-15 修根因：原 priority 2 用 cfg.Server.Dir/mounts.json，
-// 会让 mounts.json 出现在 Files 列表的根目录（用户能看到、能"删除"），
-// 误导"我的系统配置为什么在这里"。改为隐藏子目录 .encv/，
-// 利用现有 dotfile filter 自然隐藏，不污染用户数据视图。
+//	平台    环境              路径
+//	─────  ───────────       ──────────────────────────────────────────
+//	Android 任意              <ENCV_APP_FILES_DIR>/.encv/mounts.json
+//	                          （默认 fallback: /data/user/0/com.encvgo.app/files/.encv/mounts.json）
+//	Linux   dev (ENCV_DEV=1)  $XDG_DATA_HOME/encv-dev/mounts.json
+//	                          （默认: $HOME/.local/share/encv-dev/mounts.json）
+//	Linux   production        $XDG_DATA_HOME/encv/mounts.json
+//	macOS   dev               $HOME/Library/Application Support/encv-dev/mounts.json
+//	macOS   production        $HOME/Library/Application Support/encv/mounts.json
+//	Windows dev (ENCV_DEV=1)  %LOCALAPPDATA%\encv-dev\mounts.json
+//	Windows production        %LOCALAPPDATA%\encv\mounts.json
+//
+// 设计原则（2026-06-15 用户反馈"放应用 data 路径，不要 /storage/emulated/0"）：
+//  1. Android 必须放 app 私有目录（其他 app 看不到，符合 Android scoped storage）
+//     — /storage/emulated/0 是公共存储根，会污染用户媒体视图
+//  2. 桌面端遵循 XDG / Windows 标准，避免污染用户工作目录
+//  3. dev / production 用不同 sub 目录，避免 dev 配置覆盖 production 数据
+//  4. 全局 .encv 隐藏子目录（多一层），dotfile filter 进一步保护
+//  5. 优先级：ENCV_MOUNTS_FILE（明确指定） > 默认值
+//
+// 兼容性：
+//   - 老路径 `<servingDir>/.encv/mounts.json`（dev 沙箱老用法）由 migrateLegacyDataPath
+//     自动迁移到新位置
+//   - 老路径 `<servingDir>/mounts.json`（v1 之前散落根目录）由 migrateLegacyDataPath
+//     归档到 `<servingDir>/.encv/mounts.json.migrated-<unix>`（不再跟用户媒体混）
 func mountRegistryDataPath(cfg *config.Config) string {
 	if v := os.Getenv("ENCV_MOUNTS_FILE"); v != "" {
 		return v
 	}
-	if cfg != nil && cfg.Server.Dir != "" {
-		return filepath.Join(cfg.Server.Dir, ".encv", "mounts.json")
+	return defaultMountRegistryDataPath()
+}
+
+// defaultMountRegistryDataPath 平台/env 默认路径实现。
+//
+// 测试覆盖：
+//   - TestMountRegistryDataPath_Android
+//   - TestMountRegistryDataPath_LinuxDev
+//   - TestMountRegistryDataPath_LinuxProd
+//   - TestMountRegistryDataPath_WindowsDev
+//   - TestMountRegistryDataPath_WindowsProd
+//   - TestMountRegistryDataPath_MacOS
+func defaultMountRegistryDataPath() string {
+	isAndroid := os.Getenv("ENCV_MOBILE") == "1"
+	if isAndroid {
+		return androidMountRegistryPath()
 	}
-	return filepath.Join(os.TempDir(), "encv-mounts", "mounts.json")
+	isDev := os.Getenv("ENCV_DEV") == "1" || os.Getenv("ENCV_DEV_PREVIEW") == "1"
+	return desktopMountRegistryPath(isDev)
+}
+
+// androidMountRegistryPath Android 端 app 私有目录。
+//
+// 优先 ENCV_APP_FILES_DIR（Kotlin 端 EncvGoService 通过 `context.filesDir.absolutePath` 注入）。
+// Fallback：硬编码 `/data/user/0/com.encvgo.app/files`（与 android/app/build.gradle.kts
+// applicationId 一致，可被 ENCV_PACKAGE_NAME 覆盖）。
+func androidMountRegistryPath() string {
+	filesDir := os.Getenv("ENCV_APP_FILES_DIR")
+	if filesDir == "" {
+		pkg := os.Getenv("ENCV_PACKAGE_NAME")
+		if pkg == "" {
+			pkg = "com.encvgo.app"
+		}
+		filesDir = filepath.Join("/data/user/0", pkg, "files")
+	}
+	return filepath.Join(filesDir, ".encv", "mounts.json")
+}
+
+// desktopMountRegistryPath 桌面端（Linux / macOS / Windows）mounts.json 路径。
+//
+// dev / production 用不同 sub 目录防覆盖。
+func desktopMountRegistryPath(isDev bool) string {
+	switch runtime.GOOS {
+	case "windows":
+		base := os.Getenv("LOCALAPPDATA")
+		if base == "" {
+			base = os.Getenv("APPDATA")
+		}
+		if base == "" {
+			base = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
+		}
+		return filepath.Join(base, desktopAppDirName(isDev), "mounts.json")
+	case "darwin":
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, "Library", "Application Support", desktopAppDirName(isDev), "mounts.json")
+	default: // linux / 其他 unix
+		base := os.Getenv("XDG_DATA_HOME")
+		if base == "" {
+			home, _ := os.UserHomeDir()
+			base = filepath.Join(home, ".local", "share")
+		}
+		return filepath.Join(base, desktopAppDirName(isDev), "mounts.json")
+	}
+}
+
+// desktopAppDirName 桌面端 app 目录名（dev 加 -dev 后缀）。
+func desktopAppDirName(isDev bool) string {
+	if isDev {
+		return "encv-dev"
+	}
+	return "encv"
 }
 
 // resolveUserPath 解析用户路径为绝对路径（multi-mount-aware）。

@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 )
 
@@ -29,81 +31,113 @@ const mountFileVersion = 1
 // serving dir 的 .encv/ 隐藏子目录里（dotfile filter 自动隐藏）。
 const legacyDataBasename = "mounts.json"
 
-// migrateLegacyDataPath 一次性处理老路径数据。
+// migrateLegacyDataPath 一次性处理老路径数据，迁移到新路径或移到 forensic 备份。
 //
-// 触发条件：老路径 serving_dir/mounts.json 存在
+// 触发条件：老路径文件存在（servingDir 范围内的 dev 沙箱老用法 + v1 散落）
 //
-// 操作矩阵（2026-06-15 修复用户数据保留逻辑）：
+// 候选 legacy 路径（按优先级检查，找到第一个存在的就处理）：
+//  1. <servingDir>/mounts.json                  — v1 之前散落根目录
+//  2. <servingDir>/.encv/mounts.json            — dev 沙箱老用法
+//
+// 操作矩阵（每个候选 legacy）：
 //
 //	老文件  新文件   操作
-//	✓       ✗       老 → 新（原子 rename，新文件首次创建）
-//	✓       ✓       atomic swap：老 → 新（用户的真实数据），新 → .migrated-<unix>（forensic 备份）
-//	✗       *       no-op
+//	✓       ✗       老 → 新（原子 rename）
+//	✓       ✓       atomic swap：老 → 新（用户真实数据），新 → .migrated-<unix>
+//	✗       *       skip（继续检查下一个候选）
 //
-// 2026-06-15 修复根因（双 bug）：
-//  1. 原版"新文件存在就跳过" → 老文件永远残留在根目录，被 FileList 当普通文件列出
-//  2. 启动流程不调 Load → 即使迁移成功，用户的 mount 数据也没恢复（被 Bootstrap 默认值覆盖）
-// 现在：
-//   - 老文件**总是**被处理（迁移或 swap）
-//   - atomic swap 保证老文件的内容（用户真实数据）会变成新文件
-//   - 之前的新文件 rename 到 .migrated-<unix> 作 forensic 备份
-//   - 后续 Load 会从新文件恢复用户数据
+// 2026-06-15 修复根因（三重 bug）：
+//  1. 持久化路径选错：把 cfg.Server.Dir（用户媒体目录）当 dataDir → mounts.json 污染用户视图
+//     — 重设计 mountRegistryDataPath：分平台/分环境选 app data 目录
+//  2. "新文件存在就跳过" → 老文件永远残留
+//     — 改为 atomic swap
+//  3. 启动流程不调 Load → 即使迁移成功，用户数据也没恢复
+//     — MigrateFromServingDir 显式调 Load
 //
 // 安全性：
-//   - 不删任何文件（rename only） → 用户数据可恢复
+//   - 不删任何文件（rename only）→ 用户数据可恢复
 //   - 失败的中间状态：rename 失败返回 error，调用方 log 后继续（不阻塞启动）
+//   - dev / production 隔离：只迁移 servingDir 范围内的老文件，不动 XDG/AppData 的 production 数据
 func (r *MountRegistry) migrateLegacyDataPath() error {
 	if r.dataPath == "" {
 		return nil
 	}
-	// 老路径 = 新路径的父目录 + 老 basename
-	// 例：dataPath = /workspace/.encv/mounts.json
-	//     legacy = /workspace/mounts.json
-	legacyPath := filepath.Join(filepath.Dir(filepath.Dir(r.dataPath)), legacyDataBasename)
-	if legacyPath == r.dataPath {
-		return nil // 同一路径（用户在隐藏子目录里手动放了文件）
-	}
-	// 老文件不存在 → no-op
-	if _, err := os.Stat(legacyPath); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return nil
-		}
-		return fmt.Errorf("stat legacy %s: %w", legacyPath, err)
-	}
-	// 老文件存在 → 看新文件存不存在
-	newExists := false
-	if _, err := os.Stat(r.dataPath); err == nil {
-		newExists = true
-	} else if !errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("stat new %s: %w", r.dataPath, err)
+	// 收集所有可能的 legacy 路径
+	candidates := r.legacyDataPathCandidates()
+	if len(candidates) == 0 {
+		return nil
 	}
 
-	// 创建目标目录
-	if err := os.MkdirAll(filepath.Dir(r.dataPath), 0755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", filepath.Dir(r.dataPath), err)
-	}
+	for _, legacyPath := range candidates {
+		if legacyPath == r.dataPath {
+			continue // 同一路径
+		}
+		// 老文件不存在 → skip
+		if _, err := os.Stat(legacyPath); err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				continue
+			}
+			return fmt.Errorf("stat legacy %s: %w", legacyPath, err)
+		}
 
-	if newExists {
-		// 两个文件都存在 → atomic swap：以老文件（用户真实数据）为准
-		// 1. 新文件 rename 到 forensic 备份
-		bakPath := fmt.Sprintf("%s.migrated-%d", r.dataPath, time.Now().Unix())
-		if err := os.Rename(r.dataPath, bakPath); err != nil {
-			return fmt.Errorf("rename new to backup %s: %w", bakPath, err)
+		// 老文件存在 → 看新文件存不存在
+		newExists := false
+		if _, err := os.Stat(r.dataPath); err == nil {
+			newExists = true
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("stat new %s: %w", r.dataPath, err)
 		}
-		// 2. 老文件 rename 到新文件位置（用户数据接管）
-		if err := os.Rename(legacyPath, r.dataPath); err != nil {
-			return fmt.Errorf("rename legacy %s -> %s: %w", legacyPath, r.dataPath, err)
+
+		// 创建目标目录
+		if err := os.MkdirAll(filepath.Dir(r.dataPath), 0755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", filepath.Dir(r.dataPath), err)
 		}
-		fmt.Fprintf(os.Stderr, "[mount] legacy mounts.json swapped in (user data restored): %s -> %s, previous new file archived to %s\n",
-			legacyPath, r.dataPath, bakPath)
-	} else {
-		// 新文件不存在 → 老 → 新原子 rename（一次性迁移）
-		if err := os.Rename(legacyPath, r.dataPath); err != nil {
-			return fmt.Errorf("rename %s -> %s: %w", legacyPath, r.dataPath, err)
+
+		if newExists {
+			// 两个文件都存在 → atomic swap：以老文件（用户真实数据）为准
+			bakPath := fmt.Sprintf("%s.migrated-%d", r.dataPath, time.Now().Unix())
+			if err := renameAcrossDevices(r.dataPath, bakPath); err != nil {
+				return fmt.Errorf("rename new to backup %s: %w", bakPath, err)
+			}
+			if err := renameAcrossDevices(legacyPath, r.dataPath); err != nil {
+				return fmt.Errorf("rename legacy %s -> %s: %w", legacyPath, r.dataPath, err)
+			}
+			fmt.Fprintf(os.Stderr, "[mount] legacy mounts.json swapped in (user data restored): %s -> %s, previous new file archived to %s\n",
+				legacyPath, r.dataPath, bakPath)
+		} else {
+			// 新文件不存在 → 老 → 新原子 rename
+			if err := renameAcrossDevices(legacyPath, r.dataPath); err != nil {
+				return fmt.Errorf("rename %s -> %s: %w", legacyPath, r.dataPath, err)
+			}
+			fmt.Fprintf(os.Stderr, "[mount] migrated legacy mounts.json: %s -> %s\n", legacyPath, r.dataPath)
 		}
-		fmt.Fprintf(os.Stderr, "[mount] migrated legacy mounts.json: %s -> %s\n", legacyPath, r.dataPath)
+		// 处理完一个 legacy 后返回（避免多个 legacy 互相打架）
+		return nil
 	}
 	return nil
+}
+
+// legacyDataPathCandidates 收集可能的 legacy 路径。
+//
+// 范围：cfg.ServingDir() 内的 mounts.json 散落文件
+//  - v1 之前 binary 把 mounts.json 写在 <servingDir>/ 根目录
+//  - 中间过渡版本写到 <servingDir>/.encv/mounts.json（dev 沙箱）
+//
+// 不在范围：
+//  - XDG / AppData 目录（那是 production / dev 的新位置，dev 启动时不应覆盖 production）
+//  - /tmp（兜底路径，每次重启就清空）
+func (r *MountRegistry) legacyDataPathCandidates() []string {
+	if r.cfg == nil {
+		return nil
+	}
+	servingDir := r.cfg.ServingDir()
+	if servingDir == "" {
+		return nil
+	}
+	return []string{
+		filepath.Join(servingDir, legacyDataBasename),                   // <servingDir>/mounts.json
+		filepath.Join(servingDir, ".encv", legacyDataBasename),         // <servingDir>/.encv/mounts.json
+	}
 }
 
 // Load 从 dataPath 加载挂载点列表。
@@ -206,7 +240,92 @@ func (r *MountRegistry) Save() error {
 		return fmt.Errorf("mount: write tmp: %w", err)
 	}
 	if err := os.Rename(tmp, r.dataPath); err != nil {
-		return fmt.Errorf("mount: rename: %w", err)
+		// 跨设备 rename 失败（Save tmp 在 dataPath 同 dir，但若 r.dataPath 在不同
+		// mount point 的 tmpdir 上仍可能 EXDEV）→ 兜底为 copy + remove
+		if err := renameAcrossDevices(tmp, r.dataPath); err != nil {
+			return fmt.Errorf("mount: rename: %w", err)
+		}
+	}
+	return nil
+}
+
+// renameAcrossDevices 跨设备安全的 rename。
+//
+// 行为：
+//   - 优先 os.Rename（原子，快）
+//   - 跨设备（EXDEV / "invalid cross-device link"）→ fallback 到 copy + remove
+//     （Android: /data/user/0/<pkg>/ 和 /storage/emulated/0/ 在不同分区，rename 失败；
+//      dev 沙箱：host fs 跟 mount ns 也是不同设备）
+//
+// 原子性：单 rename 原子；copy+remove 不是原子的（copy 成功后 remove 失败 → 留 src 残骸）
+// 副作用：remove 失败时会 print warning，不 return error（让主流程继续）
+func renameAcrossDevices(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	} else if !isCrossDeviceError(err) {
+		return err
+	}
+	// 跨设备 fallback：copy + remove
+	if err := copyFileAndRemove(src, dst); err != nil {
+		return fmt.Errorf("cross-device copy+remove %s -> %s: %w", src, dst, err)
+	}
+	return nil
+}
+
+// isCrossDeviceError 判断错误是否是 EXDEV（跨设备 rename 失败）。
+func isCrossDeviceError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// *os.LinkError 包裹的 syscall.Errno 或 errors.Is
+	if errors.Is(err, syscall.EXDEV) {
+		return true
+	}
+	// Linux 字符串（兜底，跨语言路径）
+	if msg := err.Error(); msg != "" {
+		if contains(msg, "invalid cross-device link") || contains(msg, "cross-device") {
+			return true
+		}
+	}
+	return false
+}
+
+// contains 简易 substring（避免引入 strings import 的小循环）
+func contains(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+// copyFileAndRemove 复制 src 到 dst，然后删除 src。
+// 用于跨设备 rename 失败时的兜底。
+func copyFileAndRemove(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return fmt.Errorf("mkdir: %w", err)
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return fmt.Errorf("open src: %w", err)
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return fmt.Errorf("create dst: %w", err)
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		os.Remove(dst)
+		return fmt.Errorf("copy: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("close dst: %w", err)
+	}
+	// copy 成功后删除 src（失败仅 log，不阻塞）
+	if err := os.Remove(src); err != nil {
+		fmt.Fprintf(os.Stderr, "[mount] warning: failed to remove src after copy %s: %v\n", src, err)
 	}
 	return nil
 }
