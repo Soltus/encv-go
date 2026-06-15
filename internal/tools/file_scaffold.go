@@ -77,7 +77,11 @@ func BuildReadme(projectName string, stack TechStack) string {
 		sb.WriteString("```\n\n")
 		sb.WriteString("## Test\n\n")
 		sb.WriteString("```bash\n")
-		sb.WriteString("go test ./...\n")
+		sb.WriteString("# ✅ 模块化（沙箱推荐）：单包跑\n")
+		sb.WriteString("bash ../../scripts/test-go.sh .\n")
+		sb.WriteString("\n")
+		sb.WriteString("# ✅ CI 模式：全包跑\n")
+		sb.WriteString("ENCV_TEST_FULL=1 bash ../../scripts/test-all-go.sh\n")
 		sb.WriteString("```\n")
 	default:
 		sb.WriteString("(unspecified tech stack)\n")
