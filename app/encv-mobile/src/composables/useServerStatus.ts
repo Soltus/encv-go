@@ -39,6 +39,12 @@ async function probeHttp() {
   //   useServerStatus 共享状态，让 UI 任何地方都能显示当前 backend 身份
   if (result.instanceId) backendInstanceId.value = result.instanceId
   if (result.version) backendVersion.value = result.version
+  // 🆕 2026-06-15 修复：instance 变化通过专门事件发出（不依赖 lastError）
+  //   之前：hijack 警告进 lastError → 永远显示"backend instance changed" → 状态卡 offline
+  //   现在：emit 'backend:instance-changed' → UI 顶部 banner 提示，状态机立即恢复 online
+  if (result.instanceChanged) {
+    eventBus.emit('backend:instance-changed', result.instanceChanged)
+  }
   return { ...result, latency: dt }
 }
 

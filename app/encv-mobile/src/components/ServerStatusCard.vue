@@ -59,6 +59,20 @@
       </div>
     </div>
 
+    <!-- 🆕 2026-06-15：instance-changed banner（后端崩重启后短暂提示；不阻塞状态机）
+         之前：hijack 警告进 lastError → 永远显示 → 状态卡 offline
+         现在：emit 'backend:instance-changed' → 这里监听 → 顶部 banner → 4s 后自动消失 -->
+    <div v-if="instanceChangedBanner" class="instance-changed-banner" role="status">
+      <ion-icon :icon="refreshCircleIcon" class="banner-icon" />
+      <span class="banner-text">
+        {{ t('serverStatus.instanceChangedBanner') || 'Backend 已重启，新进程已上线' }}
+        <code class="banner-prev">{{ instanceChangedBanner.previous.slice(0, 6) }}</code>
+        <ion-icon :icon="arrowForwardIcon" class="banner-arrow" />
+        <code class="banner-curr">{{ instanceChangedBanner.current.slice(0, 6) }}</code>
+      </span>
+      <button class="banner-close" :aria-label="t('common.close')" @click.stop="instanceChangedBanner = null">×</button>
+    </div>
+
     <!-- ② 详细字段网格（仅 online 状态显示） -->
     <div v-if="state === 'online'" class="detail-grid">
       <div class="detail-item">
@@ -112,7 +126,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { useServerStatus } from '@/composables/useServerStatus'
 import { formatRelativeTime } from '@/composables/relativeTime'
-import { cloudOfflineOutline, speedometerOutline, wifiOutline, layersOutline } from 'ionicons/icons'
+import { cloudOfflineOutline, speedometerOutline, wifiOutline, layersOutline, refreshCircleOutline as refreshCircleIcon, arrowForwardOutline as arrowForwardIcon } from 'ionicons/icons'
+import { eventBus } from '@/composables/useEventBus'
 import { IonIcon } from '@ionic/vue'
 
 interface Props {
@@ -206,6 +221,20 @@ watch(backendInstanceId, (newId) => {
   prevInstanceId.value = newId
 })
 
+// 🆕 2026-06-15：监听 useServerStatus 发的 'backend:instance-changed' 事件
+//   之前：hijack 警告进 lastError → 永远显示"backend instance changed" → 状态卡 offline → 死锁
+//   现在：emit 事件 → 这里显示 4s banner（短暂提示，不阻塞）
+let bannerTimer: ReturnType<typeof setTimeout> | null = null
+const instanceChangedBanner = ref<{ previous: string; current: string } | null>(null)
+function onInstanceChanged(data: { previous: string; current: string }) {
+  instanceChangedBanner.value = data
+  if (bannerTimer) clearTimeout(bannerTimer)
+  bannerTimer = setTimeout(() => {
+    instanceChangedBanner.value = null
+    bannerTimer = null
+  }, 4000)
+}
+
 // —— latency 分类 / 显示 ——
 const latencyText = computed(() => {
   if (latencyMs.value <= 0) return '—'
@@ -246,9 +275,12 @@ onMounted(() => {
     now.value = Date.now()
     lastCheckKey.value++ // 强制 time-roll 重渲染
   }, 30_000)
+  eventBus.on('backend:instance-changed', onInstanceChanged)
 })
 onUnmounted(() => {
   if (tickHandle) clearInterval(tickHandle)
+  if (bannerTimer) clearTimeout(bannerTimer)
+  eventBus.off('backend:instance-changed', onInstanceChanged)
 })
 
 const footerText = computed(() => {
@@ -486,6 +518,48 @@ defineExpose({ checkStatus })
   background: color-mix(in srgb, var(--ion-color-primary, #3880ff) 18%, transparent);
   color: var(--ion-color-primary, #3880ff);
 }
+
+/* 🆕 2026-06-15：instance-changed banner（4s 自动消失；不进 lastError，不阻塞状态） */
+.instance-changed-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: rgba(var(--ion-color-warning-rgb), 0.12);
+  border: 1px solid rgba(var(--ion-color-warning-rgb), 0.3);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--ion-color-warning-shade);
+  animation: banner-in 0.3s ease-out;
+}
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.banner-icon { font-size: 16px; flex-shrink: 0; }
+.banner-text { flex: 1; line-height: 1.4; }
+.banner-prev, .banner-curr {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  padding: 0 4px;
+  background: var(--ion-color-light);
+  border-radius: 3px;
+  color: var(--ion-text-color);
+}
+.banner-curr { background: rgba(var(--ion-color-warning-rgb), 0.2); color: var(--ion-color-warning-shade); }
+.banner-arrow { font-size: 12px; opacity: 0.6; vertical-align: middle; }
+.banner-close {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+.banner-close:hover { opacity: 1; }
 
 /* ============ Detail grid ============ */
 .detail-grid {

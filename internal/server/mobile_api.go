@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Soltus/encv-go/internal/config"
+	"github.com/Soltus/encv-go/internal/mount"
 	mobileservice "github.com/Soltus/encv-go/internal/service"
 	"github.com/Soltus/encv-go/internal/utils"
 	"github.com/Soltus/encv-go/internal/v2/container/detector"
@@ -109,6 +110,20 @@ func (s *Server) handleListFilesGin(c *gin.Context) {
 	queryPath := utils.DecodeGinQueryParam(c.Query("path"))
 	slog.Info("API: list files", "path", queryPath)
 
+	// 🆕 2026-06-15 multi-mount 适配：mount 虚拟根 "/d" 或 "/d/"
+	//   在 mount 系统里，根目录 /d 不是真实 FS 路径，而是 mount 列表入口
+	//   直接返 mount list 转 FileInfo[]，让前端用同一份 FileInfo 列表展示
+	//   （前端的 Files.vue 无需另起 listMounts() 拉取 — 走 /api/files 同一路径）
+	if (queryPath == "/d" || queryPath == "/d/") && s.mountRegistry != nil {
+		slog.Info("API: list files (mount root)", "path", queryPath, "mountCount", len(s.mountRegistry.List()))
+		files := mountListAsFiles(s.mountRegistry.List())
+		c.JSON(http.StatusOK, gin.H{"files": files})
+		return
+	}
+	if queryPath == "/d" || queryPath == "/d/" {
+		slog.Warn("API: list files mount root but registry is nil", "path", queryPath)
+	}
+
 	files, err := s.mobileSvc.ListFiles(queryPath)
 	if err != nil {
 		writeServiceErrorGin(c, err)
@@ -132,6 +147,29 @@ func (s *Server) handleListFilesGin(c *gin.Context) {
 
 	slog.Info("API: list files result", "path", queryPath, "count", len(files))
 	c.JSON(http.StatusOK, gin.H{"files": files})
+}
+
+// mountListAsFiles 把 mount registry 列表转 FileInfo（前端可直接当目录展示）
+//   🆕 2026-06-15 multi-mount 适配：Files.vue 根 /d 直接展示 mount 列表
+func mountListAsFiles(mounts []*mount.Mount) []mobileservice.FileInfo {
+	files := make([]mobileservice.FileInfo, 0, len(mounts))
+	for _, m := range mounts {
+		if !m.Enabled {
+			continue
+		}
+		files = append(files, mobileservice.FileInfo{
+			Name:        m.Name,
+			Path:        m.MountPath, // /d/<name>
+			IsDirectory: true,
+			Size:        0,
+			Modified:    m.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			// 额外字段：前端在 ion-item 副标题用 driver badge + mount_path + root_path 展示
+			MountDriver: m.Driver,
+			MountPath:   m.MountPath,
+			MountRoot:   m.RootPath,
+		})
+	}
+	return files
 }
 
 func (s *Server) handleDeleteFileGin(c *gin.Context) {
@@ -1360,6 +1398,17 @@ func (s *Server) handleListFilesStreamGin(c *gin.Context) {
 	flusher, ok := c.Writer.(http.Flusher)
 	if !ok {
 		flusher = nil
+	}
+
+	// 🆕 2026-06-15 multi-mount 适配：mount 虚拟根 /d 走 mount list（与 handleListFilesGin 同步）
+	if (queryPath == "/d" || queryPath == "/d/") && s.mountRegistry != nil {
+		files := mountListAsFiles(s.mountRegistry.List())
+		for _, fi := range files {
+			data, _ := json.Marshal(fi)
+			s.writeSSEEvent(c, flusher, string(data))
+		}
+		s.writeSSEEvent(c, flusher, `[DONE]`)
+		return
 	}
 
 	absPath, err := s.resolveUserPath(queryPath)

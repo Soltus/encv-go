@@ -291,7 +291,16 @@ export function getExternalStreamUrl(path: string): string {
   return `${baseUrl}/api/stream/external?path=${proxySafeEncode(path)}`
 }
 
-export async function checkServerStatus(): Promise<{ online: boolean; error?: string; instanceId?: string; version?: string }> {
+export async function checkServerStatus(): Promise<{
+  online: boolean
+  error?: string
+  instanceId?: string
+  version?: string
+  /** 🆕 2026-06-15：backend instance_id 跨会话变化（后端真崩重启场景，不是劫持）。
+   *  仍然 online=true（ping 200 + JSON + 合法 instance_id）；
+   *  上层 useServerStatus emit 'backend:instance-changed' 给 UI banner 提示。 */
+  instanceChanged?: { previous: string; current: string }
+}> {
   try {
     // 🆕 2026-06-15：复用桌面后端 performPingCheck 的 InstanceID 防劫持机制。
     //
@@ -333,21 +342,35 @@ export async function checkServerStatus(): Promise<{ online: boolean; error?: st
     if (ping.status !== 'ok') {
       return { online: false, error: `ping status=${ping.status}` }
     }
-    // 跨会话比对：localStorage 的 instance_id 与当前响应不一致 → 进程被替换
+    // 🆕 2026-06-15 修复 #1（死锁根因）：
+    //
+    // 历史 bug：旧逻辑 "比对失败就 return online:false 且不 persist"——后端真的崩重启后，
+    //   新 instance_id 跟 localStorage 老 ID 不一致 → 报 online:false + error: 'instance changed'
+    //   → 永远不 persist 新 ID → 下次探测还是不一致 → 死循环 offline
+    //
+    // 修复（顺序关键）：
+    //   1. **先 persist 新 instance_id**（不管一不一样都 persist——重启用）
+    //   2. 再比对——不一致时**仍然 return online:true**（ping 实质是 200 + JSON + 合法 instance_id）
+    //   3. hijack 警告通过专用 `instanceChanged: {previous, current}` 字段返回，不靠 error
+    //   4. 上层 useServerStatus 收到 instanceChanged 字段 → emit instanceChanged 事件
+    //      → UI 顶部 banner 提示（不阻塞状态机 / 不进 lastError）
     const previousId = readPersistedInstanceId()
+    persistBackendIdentity(ping.instance_id, ping.version) // ① 永远先 persist
+    let instanceChanged: { previous: string; current: string } | undefined
     if (previousId && previousId !== ping.instance_id) {
-      console.warn('[API] backend instance_id changed (port hijacked / backend replaced?)', {
+      // ② 不一致 → 是 backend 真的崩重启（不是劫持；劫持场景下 ping 不会 200+JSON+合法 instance_id）
+      console.warn('[API] backend instance_id changed (likely backend restart, not hijack)', {
         previous: previousId, current: ping.instance_id,
       })
+      instanceChanged = { previous: previousId, current: ping.instance_id }
+      // ③ 仍然 return online=true + 仅在 instanceChanged 字段带警告
       return {
-        online: false,
-        error: `backend instance changed (was ${shortHash(previousId)}, now ${shortHash(ping.instance_id)})—possible port hijack`,
+        online: true,
         instanceId: ping.instance_id,
         version: ping.version,
+        instanceChanged, // 上层用此发事件，UI 顶部 banner 提示
       }
     }
-    // 通过 → 持久化新值
-    persistBackendIdentity(ping.instance_id, ping.version)
     console.info('[API] server online (ping OK)', { instanceId: shortHash(ping.instance_id), version: ping.version })
     return { online: true, instanceId: ping.instance_id, version: ping.version }
   } catch (e) {

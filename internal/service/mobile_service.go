@@ -67,6 +67,10 @@ type FileInfo struct {
 	IsEncrypted bool   `json:"isEncrypted"`
 	Size        int64  `json:"size"`
 	Modified    string `json:"modified"`
+	// 🆕 2026-06-15 multi-mount 适配：mount 伪 item 字段（仅 /d mount 根 list 时填充）
+	MountDriver string `json:"mount_driver,omitempty"`
+	MountPath   string `json:"mount_path,omitempty"`
+	MountRoot   string `json:"mount_root,omitempty"`
 }
 
 type FileContentResult struct {
