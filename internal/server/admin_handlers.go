@@ -14,7 +14,6 @@ import (
 	"github.com/Soltus/encv-go/internal/auth"
 	"github.com/Soltus/encv-go/internal/injector"
 	"github.com/Soltus/encv-go/internal/routes"
-	"github.com/Soltus/encv-go/internal/utils"
 	"github.com/Soltus/encv-go/internal/v2/container/detector"
 	"github.com/Soltus/encv-go/internal/v2/plugins"
 	"github.com/gin-gonic/gin"
@@ -167,7 +166,7 @@ func (s *Server) handleFileAnalyzeGin(c *gin.Context) {
 		return
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, req.Path)
+	absPath, err := s.resolveUserPath(req.Path)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    51,
@@ -267,7 +266,7 @@ func (s *Server) handleFileRenameGin(c *gin.Context) {
 		return
 	}
 
-	oldAbsPath, err := utils.SafeResolveToAbsPath(s.servingDir, req.OldPath)
+	oldAbsPath, err := s.resolveUserPath(req.OldPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    51,
@@ -342,7 +341,7 @@ func (s *Server) handleFileCopyGin(c *gin.Context) {
 		return
 	}
 
-	srcAbsPath, err := utils.SafeResolveToAbsPath(s.servingDir, req.SrcPath)
+	srcAbsPath, err := s.resolveUserPath(req.SrcPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    51,
@@ -352,7 +351,7 @@ func (s *Server) handleFileCopyGin(c *gin.Context) {
 		return
 	}
 
-	destAbsPath, err := utils.SafeResolveToAbsPath(s.servingDir, req.DestPath)
+	destAbsPath, err := s.resolveUserPath(req.DestPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    51,
@@ -455,7 +454,7 @@ func (s *Server) handleFileMoveGin(c *gin.Context) {
 		return
 	}
 
-	srcAbsPath, err := utils.SafeResolveToAbsPath(s.servingDir, req.SrcPath)
+	srcAbsPath, err := s.resolveUserPath(req.SrcPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    51,
@@ -465,7 +464,7 @@ func (s *Server) handleFileMoveGin(c *gin.Context) {
 		return
 	}
 
-	destAbsPath, err := utils.SafeResolveToAbsPath(s.servingDir, req.DestPath)
+	destAbsPath, err := s.resolveUserPath(req.DestPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    51,

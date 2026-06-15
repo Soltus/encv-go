@@ -93,9 +93,9 @@ type Server struct {
 // mountRegistryDataPath 返回 mounts.json 的持久化路径。
 //
 // 优先级：
-//   1. ENCV_MOUNTS_FILE 环境变量（明确指定）
-//   2. cfg.Server.Dir/mounts.json（与服务根同目录）
-//   3. os.TempDir()/encv-mounts/mounts.json（兜底）
+//  1. ENCV_MOUNTS_FILE 环境变量（明确指定）
+//  2. cfg.Server.Dir/mounts.json（与服务根同目录）
+//  3. os.TempDir()/encv-mounts/mounts.json（兜底）
 func mountRegistryDataPath(cfg *config.Config) string {
 	if v := os.Getenv("ENCV_MOUNTS_FILE"); v != "" {
 		return v
@@ -104,6 +104,27 @@ func mountRegistryDataPath(cfg *config.Config) string {
 		return filepath.Join(cfg.Server.Dir, "mounts.json")
 	}
 	return filepath.Join(os.TempDir(), "encv-mounts", "mounts.json")
+}
+
+// resolveUserPath 解析用户路径为绝对路径（multi-mount-aware）。
+//
+// 优先级：
+//  1. mountRegistry 已注入 + 路径以 /d/ 开头 → 走 mount.Resolve（最长前缀匹配）
+//  2. 否则 → 走旧 SafeResolveToAbsPath(servingDir, ...) 兜底（向后兼容）
+//
+// 返回 raw err；调用方负责 wrap 成 HTTP 状态码 / JSON error。
+//
+// 2026-06-15 Phase D：替换 server 包 12 处 SafeResolveToAbsPath 调用
+// （mobile_api.go 5 / admin_handlers.go 6 / server_handle.go 1）。
+func (s *Server) resolveUserPath(userPath string) (string, error) {
+	if s.mountRegistry != nil && strings.HasPrefix(userPath, "/d/") {
+		res, err := s.mountRegistry.Resolve(userPath)
+		if err != nil {
+			return "", fmt.Errorf("mount resolve %q: %w", userPath, err)
+		}
+		return res.AbsPath, nil
+	}
+	return utils.SafeResolveToAbsPath(s.servingDir, userPath)
 }
 
 func NewServer(ctx context.Context, configPath string) *Server {
@@ -158,9 +179,13 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	}
 
 	// 🆕 2026-06-15 multi-mount: 把 mount registry 注入 MobileService
-	//   - MobileService 用 MountRootProvider 接口只取 primary RootPath
-	//   - 用 primaryRootProvider 适配器桥接 mount.MountRegistry → service.MountRootProvider
-	mobileSvc.SetMountRegistry(&primaryRootProvider{reg: s.mountRegistry})
+	//   - primaryRootProvider 适配器桥接 mount.MountRegistry → service.MountRootProvider
+	//   - taskMountResolver 适配器桥接 mount.MountRegistry → service.MountResolver
+	//   - MobileService.SetMountRegistry 一次性注入两个用途（task 路径解析 + DeleteFile 守卫）
+	mobileSvc.SetMountRegistry(
+		&primaryRootProvider{reg: s.mountRegistry},
+		&taskMountResolver{reg: s.mountRegistry},
+	)
 
 	// 剧本外置 spec：若 agent_settings.mock_scenarios_dir 非空，
 	// 用 ScenarioLoader 加载 YAML/JSON 剧本，注入到 MockEngine。

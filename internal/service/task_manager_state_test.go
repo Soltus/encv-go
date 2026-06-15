@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -271,6 +272,83 @@ func TestTaskManager_ResolveAbsPath_PathTraversal(t *testing.T) {
 
 	result = tm.resolveAbsPath("/../../../etc/passwd")
 	assert.True(t, strings.HasPrefix(result, "/data/serving"), "absolute path traversal should be contained within servingDir, got %s", result)
+}
+
+// 🆕 2026-06-15 multi-mount（spec Phase C3）：mount-aware resolveAbsPath
+//
+// 行为：
+//   - mountResolver != nil + path 以 /d/ 开头 → 走 mount 解析
+//   - mountResolver == nil → 旧行为（SafeResolveToAbsPath）
+//   - mountResolver != nil + 解析失败 → 返回空（failTask 上游处理）
+func TestTaskManager_ResolveAbsPath_Mount(t *testing.T) {
+	mb := new(MockBroadcaster)
+	tm := newTestTaskManager(mb)
+	tm.servingDir = "/data/serving"
+
+	// 1. mountResolver 注入
+	tm.SetMountResolver(&fakeMountResolver{
+		mounts: map[string]*fakeMount{
+			"/d/automation": {mountID: "m-auto", absPath: "/data/app/encv-automation"},
+			"/d/primary":    {mountID: "m-prim", absPath: "/data/serving"},
+		},
+	})
+
+	t.Run("/d/automation 走 mount 解析", func(t *testing.T) {
+		// /d/automation/01-plain-media/video/sample.mp4
+		// → mount abs = /data/app/encv-automation, sub = 01-plain-media/video/sample.mp4
+		result := tm.resolveAbsPath("/d/automation/01-plain-media/video/sample.mp4")
+		assert.Equal(t, "/data/app/encv-automation/01-plain-media/video/sample.mp4", result)
+	})
+
+	t.Run("/d/primary 走 mount 解析", func(t *testing.T) {
+		result := tm.resolveAbsPath("/d/primary/Download/foo.txt")
+		assert.Equal(t, "/data/serving/Download/foo.txt", result)
+	})
+
+	t.Run("非 /d 路径走旧 SafeResolveToAbsPath（mountResolver 注入但不生效）", func(t *testing.T) {
+		result := tm.resolveAbsPath("/video.mp4")
+		assert.Equal(t, "/data/serving/video.mp4", result)
+	})
+
+	t.Run("未知 /d/xxx 返回空（failTask 上游处理）", func(t *testing.T) {
+		result := tm.resolveAbsPath("/d/nonexistent/foo")
+		assert.Empty(t, result)
+	})
+
+	// 2. mountResolver 移除后回到旧行为
+	tm.SetMountResolver(nil)
+	t.Run("mountResolver 移除后 /d/ 路径也走旧行为（应当返回 servingDir/d/...）", func(t *testing.T) {
+		result := tm.resolveAbsPath("/d/automation/foo.mp4")
+		// 旧行为：把 /d/automation/foo.mp4 当作相对路径 → /data/serving/d/automation/foo.mp4
+		assert.Equal(t, "/data/serving/d/automation/foo.mp4", result)
+	})
+}
+
+// fakeMountResolver 测试用 mount resolver stub
+type fakeMountResolver struct {
+	mounts map[string]*fakeMount
+}
+
+type fakeMount struct {
+	mountID string
+	absPath string
+}
+
+func (f *fakeMountResolver) Resolve(virtualPath string) (*MountResolveResult, error) {
+	for mp, m := range f.mounts {
+		if virtualPath == mp {
+			return &MountResolveResult{MountID: m.mountID, AbsPath: m.absPath, SubPath: ""}, nil
+		}
+		if strings.HasPrefix(virtualPath, mp+"/") {
+			sub := strings.TrimPrefix(virtualPath, mp+"/")
+			return &MountResolveResult{
+				MountID: m.mountID,
+				AbsPath: m.absPath + "/" + sub,
+				SubPath: sub,
+			}, nil
+		}
+	}
+	return nil, errors.New("fakeMountResolver: no mount")
 }
 
 func TestTaskManager_FailTask(t *testing.T) {

@@ -91,6 +91,11 @@ type MobileService struct {
 	//   用途：保护 primary 挂载根 + 解析虚拟路径（Phase C/D 切到 mount）
 	mountRegistry MountRootProvider
 
+	// 🆕 2026-06-15 multi-mount (Phase D): mount 路径解析器
+	//   - nil 时 resolveUserPath 回退到 SafeResolveToAbsPath(s.servingDir, ...)
+	//   - 由 SetMountRegistry 第二个参数注入（同一来源 = taskManager 的 resolver）
+	mountResolver MountResolver
+
 	// --- 可选依赖注入（用于测试） ---
 	dirReader         DirReader         // nil = 使用 os.ReadDir
 	containerDetector ContainerDetector // nil = 使用 detector.DetectContainer
@@ -105,8 +110,16 @@ type MountRootProvider interface {
 // SetMountRegistry 注入 mount registry（多挂载点）
 //   - 调用方：server.NewServer 在 registry 创建后调用
 //   - nil 是合法值（未启用 multi-mount 模式时）
-func (s *MobileService) SetMountRegistry(reg MountRootProvider) {
+//
+// 副作用：把 MountResolver（task 路径解析）也注入到内部 taskManager
+//   - 一次性 SetMountRegistry 调够两个用途
+//   - server.go 不需要再单独调 taskManager.SetMountResolver
+func (s *MobileService) SetMountRegistry(reg MountRootProvider, taskResolver MountResolver) {
 	s.mountRegistry = reg
+	s.mountResolver = taskResolver
+	if s.taskManager != nil {
+		s.taskManager.SetMountResolver(taskResolver)
+	}
 }
 
 // primaryRootPath 返回 primary 挂载的 RootPath；mount registry 未注入时回退到 servingDir
@@ -120,6 +133,28 @@ func (s *MobileService) primaryRootPath() string {
 		}
 	}
 	return s.servingDir
+}
+
+// resolveUserPath 解析用户路径为绝对路径（multi-mount-aware）。
+//
+// 优先级：
+//  1. mountResolver 已注入 + 路径以 /d/ 开头 → 走 mount.Resolve（最长前缀匹配）
+//  2. 否则 → 走旧 SafeResolveToAbsPath(servingDir, ...) 兜底（向后兼容）
+//
+// 返回 raw err；调用方负责 wrap 成 ForbiddenError / BadRequestError。
+//
+// 2026-06-15 Phase D：替换 mobile_service.go 中 13 处 SafeResolveToAbsPath 调用，
+// 让 /d/automation/... /d/primary/... 等虚拟路径走 mount 解析，/foo/bar.bin
+// 等传统相对路径保持旧行为。
+func (s *MobileService) resolveUserPath(userPath string) (string, error) {
+	if s.mountResolver != nil && strings.HasPrefix(userPath, "/d/") {
+		res, err := s.mountResolver.Resolve(userPath)
+		if err != nil {
+			return "", fmt.Errorf("mount resolve %q: %w", userPath, err)
+		}
+		return res.AbsPath, nil
+	}
+	return utils.SafeResolveToAbsPath(s.servingDir, userPath)
 }
 
 func NewMobileService(servingDir string, cfg *config.Config) *MobileService {
@@ -137,7 +172,7 @@ func (s *MobileService) ListFiles(queryPath string) ([]FileInfo, error) {
 		queryPath = "/"
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
 		return nil, &ForbiddenError{Err: err}
 	}
@@ -206,9 +241,9 @@ func (s *MobileService) DeleteFile(queryPath string) error {
 		return &BadRequestError{Err: errors.New("'path' query parameter is required")}
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
-		slog.Error("SafeResolveToAbsPath failed", "path", queryPath, "error", err)
+		slog.Error("resolveUserPath failed", "path", queryPath, "error", err)
 		return &ForbiddenError{Err: err}
 	}
 
@@ -341,7 +376,7 @@ func (s *MobileService) UploadFile(targetPath string, fileName string, content i
 		return nil, &ForbiddenError{Err: errors.New("filename contains path traversal sequence")}
 	}
 
-	absDir, err := utils.SafeResolveToAbsPath(s.servingDir, targetPath)
+	absDir, err := s.resolveUserPath(targetPath)
 	if err != nil {
 		return nil, &ForbiddenError{Err: fmt.Errorf("invalid target path: %w", err)}
 	}
@@ -429,7 +464,7 @@ func (s *MobileService) ReadFileContent(queryPath string) (*FileContentResult, e
 		return nil, &BadRequestError{Err: errors.New("'path' query parameter is required")}
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
 		return nil, &ForbiddenError{Err: err}
 	}
@@ -497,7 +532,7 @@ func (s *MobileService) GetFileInfo(queryPath string) (*FileInfoResult, error) {
 		return nil, &BadRequestError{Err: errors.New("'path' query parameter is required")}
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
 		return nil, &ForbiddenError{Err: err}
 	}
@@ -668,7 +703,7 @@ func (s *MobileService) RenameFile(req *RenameFileRequest) (*RenameFileResponse,
 		return nil, &BadRequestError{Err: errors.New("'new_name' is required")}
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, req.Path)
+	absPath, err := s.resolveUserPath(req.Path)
 	if err != nil {
 		return nil, &ForbiddenError{Err: err}
 	}
@@ -1089,7 +1124,7 @@ func (s *MobileService) SearchFiles(queryPath string, keyword string, recursive 
 		return s.ListFiles(queryPath)
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
 		return nil, &ForbiddenError{Err: err}
 	}
@@ -1374,7 +1409,7 @@ func (a *chunkNamerAdapter) IsDataChunk(filename string) bool {
 }
 
 func (s *MobileService) FileExists(queryPath string) (bool, error) {
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) {
 			return false, nil
@@ -1395,7 +1430,7 @@ func (s *MobileService) FileExists(queryPath string) (bool, error) {
 }
 
 func (s *MobileService) CheckEncryptOutputExists(sourcePath, targetDir string) (bool, string, error) {
-	sourceAbs, err := utils.SafeResolveToAbsPath(s.servingDir, sourcePath)
+	sourceAbs, err := s.resolveUserPath(sourcePath)
 	if err != nil {
 		return false, "", &ForbiddenError{Err: err}
 	}
@@ -1407,7 +1442,7 @@ func (s *MobileService) CheckEncryptOutputExists(sourcePath, targetDir string) (
 
 	outputDir := targetDir
 	if outputDir != "" {
-		decoded, err := utils.SafeResolveToAbsPath(s.servingDir, outputDir)
+		decoded, err := s.resolveUserPath(outputDir)
 		if err == nil {
 			outputDir = decoded
 		}
@@ -1426,7 +1461,7 @@ func (s *MobileService) CheckEncryptOutputExists(sourcePath, targetDir string) (
 		outputPath = strings.TrimRight(outputPath, "/") + "/" + outputName
 	}
 
-	outputAbs, err := utils.SafeResolveToAbsPath(s.servingDir, outputPath)
+	outputAbs, err := s.resolveUserPath(outputPath)
 	if err != nil {
 		return false, outputPath, nil
 	}
@@ -1446,7 +1481,7 @@ func (s *MobileService) StreamExternalFile(w http.ResponseWriter, r *http.Reques
 		return &BadRequestError{Err: errors.New("'path' query parameter is required")}
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, filePath)
+	absPath, err := s.resolveUserPath(filePath)
 	if err != nil {
 		return &BadRequestError{Err: fmt.Errorf("failed to resolve path: %w", err)}
 	}
@@ -1454,7 +1489,7 @@ func (s *MobileService) StreamExternalFile(w http.ResponseWriter, r *http.Reques
 	info, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			resolved, resolveErr := utils.SafeResolveToAbsPath(s.servingDir, filePath)
+			resolved, resolveErr := s.resolveUserPath(filePath)
 			if resolveErr == nil {
 				if resolvedInfo, statErr := os.Stat(resolved); statErr == nil {
 					slog.Info("StreamExternalFile: absolute path not found, resolved via servingDir", "input", absPath, "resolved", resolved)

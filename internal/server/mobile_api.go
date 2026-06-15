@@ -1264,7 +1264,7 @@ func (s *Server) handlePredictPluginGin(c *gin.Context) {
 	if req.Type == "encrypt" {
 		// ★ 关键修复: 先用 SafeResolveToAbsPath 把前端传来的路径解析为绝对路径，
 		// 防止 mobile 模式下 servingDir=/storage/emulated/0 时，插件拿不到真实文件
-		absSourcePath, err := utils.SafeResolveToAbsPath(s.servingDir, req.SourcePath)
+		absSourcePath, err := s.resolveUserPath(req.SourcePath)
 		if err != nil {
 			c.JSON(200, gin.H{"candidates": []gin.H{}, "pluginName": nil, "taskOptions": nil, "error": fmt.Sprintf("invalid path: %v", err)})
 			return
@@ -1272,7 +1272,7 @@ func (s *Server) handlePredictPluginGin(c *gin.Context) {
 		candidates = plugins.FindAllEncryptingPlugins(absSourcePath)
 	} else {
 		// ★ 关键修复: 同上，解密前必须先 resolve 绝对路径
-		absSourcePath, err := utils.SafeResolveToAbsPath(s.servingDir, req.SourcePath)
+		absSourcePath, err := s.resolveUserPath(req.SourcePath)
 		if err != nil {
 			c.JSON(200, gin.H{"candidates": []gin.H{}, "pluginName": nil, "taskOptions": nil, "error": fmt.Sprintf("invalid path: %v", err)})
 			return
@@ -1362,7 +1362,7 @@ func (s *Server) handleListFilesStreamGin(c *gin.Context) {
 		flusher = nil
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
 		s.writeSSEEvent(c, flusher, `{"error":"invalid path"}`)
 		s.writeSSEEvent(c, flusher, `[DONE]`)
@@ -1432,7 +1432,7 @@ func (s *Server) handleAlistEncryptStreamGin(c *gin.Context) {
 		return
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
@@ -1500,7 +1500,7 @@ func (s *Server) handlePluginFilesStreamGin(c *gin.Context) {
 		flusher = nil
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
 		s.writeSSEEvent(c, flusher, `{"error":"invalid path"}`)
 		s.writeSSEEvent(c, flusher, `[DONE]`)

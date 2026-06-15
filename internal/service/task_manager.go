@@ -50,9 +50,20 @@ type MobileTask struct {
 	ContainerVersion  int               `json:"containerVersion,omitempty"`
 	OutputPath        string            `json:"outputPath,omitempty"`
 	Steps             []TaskStep        `json:"steps,omitempty"`
-	CreatedAt         time.Time         `json:"createdAt"`
-	CompletedAt       *time.Time        `json:"completedAt,omitempty"`
-	cancelFn          context.CancelFunc
+
+	// 🆕 2026-06-15 multi-mount（spec Phase C1）
+	//   - SourcePath 是 /d/<mount>/... 形式时，记录解析后的 mount_id + sub_path
+	//   - SourcePath 是旧绝对路径且能匹配到 mount 时同样记录
+	//   - 都无法匹配时 MountID == ""，回退到 s.servingDir 解析（向后兼容）
+	//   - JSON 字段加 omitempty：旧 fixture（无 mountId）反序列化时自动空值
+	MountID          string `json:"mountId,omitempty"`
+	MountSubPath     string `json:"mountSubPath,omitempty"`
+	TargetMountID    string `json:"targetMountId,omitempty"`
+	TargetMountSubPath string `json:"targetMountSubPath,omitempty"`
+
+	CreatedAt   time.Time  `json:"createdAt"`
+	CompletedAt *time.Time `json:"completedAt,omitempty"`
+	cancelFn    context.CancelFunc
 }
 
 type TaskManager struct {
@@ -64,6 +75,65 @@ type TaskManager struct {
 	wg          sync.WaitGroup
 	broadcaster Broadcaster
 	persistPath string
+
+	// 🆕 2026-06-15 multi-mount（spec Phase C1）
+	//   - nil → 旧行为，所有 sourcePath 走 SafeResolveToAbsPath(servingDir, ...)
+	//   - 非 nil → sourcePath 是 /d/<mount>/... 时走 mount 解析
+	//   - 用 interface 而不是 *mount.MountRegistry：避免 service → mount 反向依赖
+	mountResolver MountResolver
+}
+
+// MountResolver 是 mount.MountRegistry 的子集接口（service 包不依赖 mount 包）
+//
+// 行为：
+//   - input "/d/<mount>/<sub>" → Resolver 用最长前缀匹配找到 mount
+//   - output MountResolveResult：MountID + AbsPath + SubPath
+//   - 找不到 / mount 禁用 / mount 只读：返回错误
+type MountResolver interface {
+	Resolve(virtualPath string) (*MountResolveResult, error)
+}
+
+// MountResolveResult 是 mount.ResolveResult 的 service 包本地副本
+// （避免 import mount 包；同时让 service 不知道 mount 内部结构）
+type MountResolveResult struct {
+	MountID string // mount 唯一 ID（持久化用）
+	AbsPath string // 解析后的绝对路径（运行时用）
+	SubPath string // mount 内部相对路径（持久化用）
+}
+
+// SetMountResolver 注入 mount resolver
+//
+// 调用方：server.NewServer 在 mount registry 创建后调用
+// nil 是合法值（向后兼容：未启用 multi-mount 时）
+func (tm *TaskManager) SetMountResolver(r MountResolver) {
+	tm.mountResolver = r
+}
+
+// tryAttachMount 尝试把 sourcePath 解析为 (mountID, subPath) 并写到 task。
+//   - isTarget=false → 写到 MountID/MountSubPath（source）
+//   - isTarget=true  → 写到 TargetMountID/TargetMountSubPath（target）
+//
+// 调用规约：
+//   - 调用方必须确认 tm.mountResolver != nil
+//   - 解析失败不报错（err swallowed）—— 任务回退到旧 SafeResolveToAbsPath 解析
+//   - 非 / 开头路径直接跳过（不尝试 mount 解析）
+func (tm *TaskManager) tryAttachMount(task *MobileTask, sourcePath string, isTarget bool) {
+	if !strings.HasPrefix(sourcePath, "/") {
+		return // relative path 不走 mount
+	}
+	res, err := tm.mountResolver.Resolve(sourcePath)
+	if err != nil {
+		// mount 解析失败 → 不存 mount_id，留到 processTask 时报"invalid source path"
+		slog.Debug("mount resolve skipped in tryAttachMount", "path", sourcePath, "error", err)
+		return
+	}
+	if isTarget {
+		task.TargetMountID = res.MountID
+		task.TargetMountSubPath = res.SubPath
+	} else {
+		task.MountID = res.MountID
+		task.MountSubPath = res.SubPath
+	}
 }
 
 func NewTaskManager(servingDir string, cfg *config.Config, broadcaster Broadcaster) *TaskManager {
@@ -168,13 +238,32 @@ func (tm *TaskManager) Create(taskType, sourcePath, targetPath, password string,
 		CreatedAt:        time.Now(),
 	}
 
+	// 🆕 2026-06-15 multi-mount（spec Phase C1+C2）
+	//   两种 sourcePath 形式都尝试 mount 解析：
+	//   1. /d/<mount>/... 形式（new format，front-end 切到 B4 后默认用这个）
+	//      → 显式 mount 解析（longest prefix match）
+	//   2. 旧绝对路径（/storage/emulated/0/foo, /foo 等）
+	//      → mount.Resolve fallback 到 primary mount（自动映射）
+	//   3. 非 / 开头（relative path） → 跳过 mount 解析（旧 SafeResolveToAbsPath 处理）
+	//
+	//   targetPath 也同样处理（如果非空）。
+	if tm.mountResolver != nil {
+		tm.tryAttachMount(task, sourcePath, false /* isTarget */)
+		if targetPath != "" {
+			tm.tryAttachMount(task, targetPath, true /* isTarget */)
+		}
+	}
+
 	tm.mu.Lock()
 	tm.tasks[task.ID] = task
 	tm.mu.Unlock()
 
 	tm.saveTasks()
 
-	slog.Info("Task created", "id", task.ID, "type", taskType, "source", sourcePath, "target", targetPath, "version", version)
+	slog.Info("Task created", "id", task.ID, "type", taskType, "source", sourcePath,
+		"target", targetPath, "version", version,
+		"mountId", task.MountID, "mountSubPath", task.MountSubPath,
+		"targetMountId", task.TargetMountID)
 	if tm.broadcaster != nil {
 		tm.broadcaster.Broadcast("task:created", task)
 	}
@@ -398,6 +487,22 @@ func (tm *TaskManager) dequeue() *MobileTask {
 }
 
 func (tm *TaskManager) resolveAbsPath(sourcePath string) string {
+	// 🆕 2026-06-15 multi-mount（spec Phase C3）
+	//   - sourcePath 是 /d/<mount>/... 形式 + mountResolver 注入 → 走 mount 解析
+	//     → 真机：/d/automation/... → /data/user/<uid>/com.encvgo.app/files/encv-automation/...
+	//     → 任务运行时不再依赖 servingDir（servingDir 改了不影响任务）
+	//   - mountResolver 为 nil 或解析失败 → 留空 → processTask failTask("invalid source path")
+	//   - 其他形式（/storage/emulated/0/...、/test.mp4 等） → 走旧 SafeResolveToAbsPath
+	if strings.HasPrefix(sourcePath, "/d/") && tm.mountResolver != nil {
+		res, err := tm.mountResolver.Resolve(sourcePath)
+		if err != nil {
+			slog.Warn("mount resolve failed in resolveAbsPath", "path", sourcePath, "error", err)
+			return ""
+		}
+		return res.AbsPath
+	}
+
+	// 旧行为：SafeResolveToAbsPath 走 servingDir
 	abs, err := utils.SafeResolveToAbsPath(tm.servingDir, sourcePath)
 	if err != nil {
 		// Security: path traversal detected (e.g., "../../../etc/passwd").

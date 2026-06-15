@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/Soltus/encv-go/internal/config"
@@ -95,3 +96,42 @@ func (p *primaryRootProvider) GetPrimaryRootPath() string {
 
 // 编译期断言
 var _ mobileservice.MountRootProvider = (*primaryRootProvider)(nil)
+
+// taskMountResolver 把 mount.MountRegistry 适配为 service.MountResolver。
+//
+// 用途：让 service.TaskManager 拿到 mount 解析后的 abs path / mount_id / sub_path。
+//
+// 桥接链：server.NewServer 构造 mount.MountRegistry → 包成 taskMountResolver
+//   → 注入到 taskManager.SetMountResolver(r) → resolveAbsPath("/d/automation/...") 用
+type taskMountResolver struct {
+	reg *mount.MountRegistry
+}
+
+func (t *taskMountResolver) Resolve(virtualPath string) (*mobileservice.MountResolveResult, error) {
+	if t == nil || t.reg == nil {
+		return nil, fmt.Errorf("taskMountResolver: nil registry")
+	}
+	res, err := t.reg.Resolve(virtualPath)
+	if err != nil {
+		return nil, err
+	}
+	if res == nil || res.Mount == nil {
+		return nil, fmt.Errorf("taskMountResolver: empty resolve result")
+	}
+	return &mobileservice.MountResolveResult{
+		MountID: res.Mount.ID,
+		AbsPath: res.AbsPath,
+		SubPath: res.RelPath,
+	}, nil
+}
+
+// 编译期断言
+var _ mobileservice.MountResolver = (*taskMountResolver)(nil)
+
+// 编译期断言：保证 service.MountResolveResult 是 mount.ResolveResult 的形状子集
+// （任何字段变动会触发这里的不兼容 — 提示重新适配）
+var _ struct {
+	MountID string
+	AbsPath string
+	SubPath string
+} = mobileservice.MountResolveResult{}

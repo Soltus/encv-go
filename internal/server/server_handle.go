@@ -94,7 +94,7 @@ func (s *Server) handleStreamRequest(w http.ResponseWriter, r *http.Request) {
 
 	filePath := utils.DecodeGinQueryParam(rawPath)
 
-	cleanedFilePath, err := utils.SafeResolveToAbsPath(s.servingDir, filePath)
+	cleanedFilePath, err := s.resolveUserPath(filePath)
 	if err != nil {
 		// 根据错误类型返回不同的 HTTP 状态码
 		if strings.Contains(err.Error(), "forbidden") {
