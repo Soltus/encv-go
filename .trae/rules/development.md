@@ -167,9 +167,12 @@ PORT=17000 node scripts/openpreview-stub.js &
 # 2) 调用 OpenPreview 激活外网预览
 OpenPreview(command_id="<id>", preview_url="http://localhost:16666/")
 # 预览 URL 必须用 preview-gateway 端口（16666），不是 Vite 8100
-# 原因：vite.config.ts D14 决策后，Vite 已不再 proxy /api/* 到 :2025
-#       所有 /api/* 走 :16666 gateway → proxy → :2025 拿 JSON
-#       直连 :8100 的 /api/* 会撞 Vite SPA fallback → 200 text/html（"假挂"假象）
+# 原因：vite.config.ts D9 决策（spec/unify-sandbox-preview-port §3.1）后，
+#       Vite 是纯净 SPA dev server，**不再 proxy /api/* 到 :2025**。
+#       所有 /api/* 走 :16666 gateway → proxy → :2025 拿 JSON。
+#       直连 :8100 的 /api/* 会撞 Vite SPA fallback → 200 text/html（"假挂"假象）。
+# 注意：D14 决策（同样在 spec/unify-sandbox-preview-port）只解决 HMR host 问题，
+#       跟 Vite 是否 proxy 无关——不要把这两个决策混为一谈。
 ```
 
 **完整 6 步脚本行为 + 排查表 + service-guard 根因清单** → [详情文档 §五](../rule-library/development.md#五capacitor-预览标准化流程)

@@ -413,6 +413,9 @@ func (s *Server) Start(version string) (string, error) {
 	// 🆕 2026-06-14：Runtime 自描述端点（child 主动声明状态，parent 只读）
 	// 见 internal/server/runtime_api.go
 	r.GET("/api/runtime", s.handleRuntimeAPI)
+	// 🆕 2026-06-15：统一诊断端点 — 聚合 ping/health/runtime/build-info/ffmpeg-status/service-guard
+	// AI / 前端探针调一次拿全貌，替代在 6+ 路由里挑 + 编错路径的历史痛点。
+	r.GET("/api/diagnose", s.handleDiagnoseGin)
 	r.GET("/stream", gin.WrapF(s.handleStreamRequest))
 	r.GET("/decrypt", gin.WrapF(s.handleStreamRequest))
 	r.GET("/preview/*filepath", gin.WrapH(http.StripPrefix("/preview", web.PreviewHandler())))
