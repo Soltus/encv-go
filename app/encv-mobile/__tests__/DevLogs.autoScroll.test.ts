@@ -475,4 +475,34 @@ describe('DevLogs v6：纯手动挡', () => {
     // → ensureScrollEl 链路设置。jsdom 下 ensureScrollEl 行为由 stub 控制，与 1M 优化目标
     // （items 透传 + cap 1M + filter 增量）独立，不在 1M 优化验收范围内。
   })
+
+  /**
+   * 🆕 2026-06-15 修 #3 回归测试：IncrementalFilter.pushMany 必须调 notify。
+   *
+   * 背景：之前 pushMany 漏调 this.notify()，导致 DevLogs.vue 的 backendUpdateTick
+   * 永远不增 → 4 个症状（全不响应）：
+   *   1. watch(backendUpdateTick) 不触发 → 自动滚动失效
+   *   2. totalBackendCount 缓存 stale → "共 1 条（已筛选 10186 条）" 计数错
+   *   3. triggerRef 不调用 → VirtualLogList.virtualizerOptions 不重算 → 列表卡死
+   *
+   * 验证方法：subscribe 到 IncrementalFilter，调用 setBackendLogs([]) + pushMany 路径
+   * （走 WS 模拟），断言 subscribe callback 至少被调 1 次。
+   * setBackendLogs 内部 clear() + pushMany(arr)——重点是 pushMany 路径必须通知。
+   */
+  it('14. 回归：pushMany 必须调 notify（防 4 症状再次回归）', async () => {
+    const w = mountDevLogs()
+    await flushPromises()
+    const bf = (w.vm as any).backendFilter as import('@/utils/IncrementalFilter').IncrementalFilter
+    let notifyCount = 0
+    const unsub = bf.subscribe(() => { notifyCount++ })
+    // 模拟自动化测试批量入队：setBackendLogs 内部走 clear() + pushMany(arr)
+    ;(w.vm as any).setBackendLogs([
+      { id: 1, timestamp: '00:00:01', level: 'info', message: 'a' },
+      { id: 2, timestamp: '00:00:02', level: 'info', message: 'b' },
+      { id: 3, timestamp: '00:00:03', level: 'info', message: 'c' },
+    ])
+    unsub()
+    // 关键断言：setBackendLogs 内部 pushMany 必须触发 notify ≥ 1 次
+    expect(notifyCount).toBeGreaterThanOrEqual(1)
+  })
 })

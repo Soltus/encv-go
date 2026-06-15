@@ -64,11 +64,32 @@ export class IncrementalFilter {
   /** 上一帧过滤 push 调用耗时（ms，debug 用） */
   public lastProcessMs: number = 0
   /**
-   * 版本号：每次 push / pushMany / rebuild / clear 自增。
-   * Vue 不能直接 watch IncrementalFilter 内部状态（非 reactive proxy），
-   * 用 version 作为 trigger source：`watch(() => filter.version, ...)`
+   * 变更通知订阅列表。
+   * - 推/批推/rebuild/clear 时同步 notify()
+   * - DevLogs.vue 用它驱动 backendUpdateTick ref → 触发 computed 重算
+   * - 替代 `watch(() => filter.version, ...)` 模式（markRaw 对象上 watch 永远不 invoke）
+   */
+  private listeners: Set<() => void> = new Set()
+  /**
+   * 单调递增的版本号（push/pushMany/rebuild/clear 自增）。保留作为 debug 探针。
+   * ⚠️ 不可单独用作 Vue watch source — markRaw 对象的属性读写不会被 vue track。
+   * 必须配合 subscribe() 通知机制使用。
    */
   public version: number = 0
+
+  /**
+   * 订阅变更通知。返回取消订阅函数。
+   * 用于 vue 层把 IncrementalFilter 状态同步到 reactive ref。
+   */
+  subscribe(cb: () => void): () => void {
+    this.listeners.add(cb)
+    return () => { this.listeners.delete(cb) }
+  }
+
+  /** 同步通知所有订阅者 */
+  private notify(): void {
+    for (const cb of this.listeners) cb()
+  }
 
   constructor(capacity: number) {
     this.source = new RingBuffer<LogEntry>(capacity)
@@ -81,16 +102,24 @@ export class IncrementalFilter {
     this.source.push(item)
     this.processPending()
     this.version++
+    this.notify()
   }
 
   /**
    * 批量推入（同帧合并优化）。
    * 时间复杂度：O(items.length)
+   *
+   * 🆕 2026-06-15 修：补 this.notify()。rAF 合并路径下这是 hot path，漏掉会导致
+   * DevLogs.vue 的 backendUpdateTick 永远不增 → 4 个症状（全不响应）：
+   *   1. 自动滚动失效（watch(tick) 不触发）
+   *   2. "共 1 条（已筛选 10186 条）" 计数错（totalBackendCount 缓存 stale）
+   *   3. 看着像级别筛选/搜索也失效（其实 setFilter 路径正常，但 pushMany 不通知 → UI 卡死）
    */
   pushMany(items: LogEntry[]): void {
     for (let i = 0; i < items.length; i++) this.source.push(items[i])
     this.processPending()
     this.version++
+    this.notify()
   }
 
   /**
@@ -130,6 +159,8 @@ export class IncrementalFilter {
     this.state = state
     this.predicate = buildPredicate(state)
     this.rebuild()
+    this.version++
+    this.notify()
   }
 
   private isSameState(s: FilterState): boolean {
@@ -195,6 +226,7 @@ export class IncrementalFilter {
     this.processed = 0
     this.droppedSinceRebuild = 0
     this.version++
+    this.notify()
   }
 
   /**

@@ -189,7 +189,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, onBeforeUnmount, nextTick, markRaw } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, onBeforeUnmount, nextTick, markRaw, shallowRef, triggerRef } from 'vue'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
   IonSegment, IonSegmentButton, IonSearchbar, IonButton,
@@ -232,9 +232,38 @@ const scrollEl = ref<HTMLElement | null>(null)
  */
 const MAX_BACKEND_LOGS = 1_000_000
 const backendFilter = markRaw(new IncrementalFilter(MAX_BACKEND_LOGS))
-/** 同步 trigger：watch backendFilter.version → 触发 computed 重算 */
+/**
+ * 同步 trigger：IncrementalFilter 是 markRaw 对象，watch 纯函数 getter 永远不 invoke
+ * （vue 内部对 markRaw 属性不 track）。改用 IncrementalFilter.subscribe() 显式通知：
+ * 推/批推/rebuild/clear 时同步 notify → 这里 ++tick → computed 重算 → UI 更新。
+ *
+ * 🆕 2026-06-15 修 #2：补 backendLogsView (shallowRef) + triggerRef。
+ * 原因：IncrementalFilter 内部 result 数组是同一个引用（mutate in place 以避免 O(N) 复制），
+ * 哪怕 computed 重算，Vue 比较新旧 value 是 Object.is —— 同 ref → 下游不触发。
+ * 同时 VirtualLogList 内部 `virtualizerOptions = computed(() => ({ count: props.items.length }))`，
+ * props.items.length 读的是 plain array，**Vue 不 track** plain array 的 .length 属性。
+ *
+ * 解决：用一个 shallowRef 持有数组引用，每次 IncrementalFilter 变更时
+ *   backendLogsView.value = backendFilter.getResult()  // 显式赋值（ref 同值也不影响）
+ *   triggerRef(backendLogsView)                         // 强制 trigger 下游
+ * → 依赖 backendLogsView 的所有 effects 全部重算
+ *   → backendFilteredItems 重算 → 同样 ref 传下去
+ *   → filteredCurrent 重算 → 读到 .length 新值
+ *   → VirtualLogList 收到 props.items 引用变化 → virtualizerOptions 重算 → virtualizer 更新 count
+ *
+ * 修复的 4 个症状：
+ *   - "共 1 条（已筛选 10186 条）" 计数错（totalBackendCount 走 tick，notify 后正常）
+ *   - 切后端 tab 自动滚动失效（watch(tick) 现在能 fire）
+ *   - 级别筛选/搜索 UI 不响应（pushMany 之前漏 notify，filter.setFilter 路径 OK 但 pushMany 看着像卡死）
+ *   - VirtualLogList 显示不全（virtualizer count 不更新）
+ */
 const backendUpdateTick = ref(0)
-watch(() => backendFilter.version, (v) => { backendUpdateTick.value = v })
+const backendLogsView = shallowRef<readonly LogEntry[]>(backendFilter.getResult())
+const unsubBackendFilter = backendFilter.subscribe(() => {
+  backendUpdateTick.value++
+  backendLogsView.value = backendFilter.getResult()
+  triggerRef(backendLogsView)
+})
 
 // 🆕 2026-06-15 rAF coalesce 后端日志：把单帧内多条 WS 消息合并为 1 次 filter.pushMany
 let pendingBackendLogs: LogEntry[] = []
@@ -301,10 +330,16 @@ const { logs: frontendLogs, clearLogs: clearFrontendLogs } = useFrontendLogs()
  * 🆕 2026-06-15 1M+ 容量：所有 backend 状态都从 IncrementalFilter 读
  *   - filteredBackendItems：O(1) 拿当前过滤结果（incremental cache）
  *   - totalBackendCount：O(1) 拿 ring buffer 当前大小
- *   - backendUpdateTick：watch filter.version 触发 computed 重算（解决 Vue 看不到非响应对象变化）
+ *   - backendUpdateTick：subscribe() 触发 → 触发重算 + triggerRef 桥接
+ *
+ *   依赖 backendLogsView（shallowRef）+ backendUpdateTick（ref）：
+ *   - backendLogsView 强制 trigger 链：filter 变更 → triggerRef → 下游 effects 重算
+ *   - backendUpdateTick 是显式 dep 标识（computed 缓存基于 dep 集合，triggerRef 内部也会 mark dep）
  */
 const backendFilteredItems = computed<readonly LogEntry[]>(() => {
-  // 访问 tick 触发 computed dep；filter.getResult() 返回同一引用但 tick 变 → virtualizer 重算
+  // 访问 backendLogsView 触发 computed dep；filter.getResult() 返回同一引用但 triggerRef → 强制下游
+  void backendLogsView.value
+  // 显式 dep 标识：subscribe 回调里 ++tick，computed 也会重新求值
   void backendUpdateTick.value
   return backendFilter.getResult()
 })
@@ -608,6 +643,7 @@ onMounted(async () => {
 onUnmounted(() => {
   eventBus.off('ws:message', onWsMessage)
   eventBus.off('server:status', onServerStatus)
+  unsubBackendFilter()
 })
 
 /** 暴露给单元测试（生产环境无副作用） */
