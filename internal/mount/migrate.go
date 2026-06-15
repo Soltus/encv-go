@@ -9,19 +9,35 @@ import (
 
 // MigrateFromServingDir 是 cfg.ServingDir → primary mount 的迁移入口。
 //
-// 行为：
-//   1. 检查 mounts.json 是否存在
-//   2. 不存在 → 调 BootstrapFromConfig 创建默认 mount
-//   3. 存在但没有 primary mount → 调 BootstrapFromConfig 补齐
-//   4. 完成后 Save 一次
+// 行为（2026-06-15 修复启动加载缺失）：
+//  1. migrateLegacyDataPath：老路径 serving_dir/mounts.json → 新路径 serving_dir/.encv/mounts.json
+//  2. Load：把持久化文件里的 mount 列表恢复到内存
+//  3. 检查是否需要 Bootstrap（仅当 Load 之后内存仍没有 primary mount 才补齐）
+//  4. 完成后 Save 一次（仅在 Bootstrap 触发时）
 //
 // 启动流程（server.NewServer）：
 //   NewRegistry
 //     → RegisterDriverFactory x 3
-//     → MigrateFromServingDir
-//     → Save (首次启动把 Bootstrap 落盘)
+//     → MigrateFromServingDir（migrate → load → bootstrap? → save?）
+//
+// 2026-06-15 修复：原版只 os.Stat 检查 dataPath + 内存 GetByName，**Load 从未被调用**。
+// 后果是：每次启动都走 Bootstrap，用户的自定义 mount 配置被默认配置覆盖。
+// 老路径 serving_dir/mounts.json 也永远没人读取（成了孤儿文件，但还在原位）。
+// 现在显式 migrate + load，再判断 bootstrap 必要性。
 func (r *MountRegistry) MigrateFromServingDir(ctx context.Context) error {
-	// Step 1: 检查持久化文件
+	// Step 1: 迁移老路径数据到新路径（一次性，原子 rename）
+	if err := r.migrateLegacyDataPath(); err != nil {
+		// 迁移失败不致命：继续尝试从 dataPath 读（也许 dataPath 已经存在）
+		fmt.Fprintf(os.Stderr, "[mount] migrate: legacy migration failed: %v\n", err)
+	}
+
+	// Step 2: 加载持久化数据到内存（如果存在）
+	if err := r.Load(); err != nil {
+		// Load 失败不致命：fallback 到 Bootstrap（全新数据）
+		fmt.Fprintf(os.Stderr, "[mount] migrate: load failed (will bootstrap): %v\n", err)
+	}
+
+	// Step 3: 检查持久化文件
 	needBootstrap := false
 	if r.dataPath == "" {
 		// 不持久化 → 总是 Bootstrap
@@ -30,7 +46,7 @@ func (r *MountRegistry) MigrateFromServingDir(ctx context.Context) error {
 		if _, err := os.Stat(r.dataPath); os.IsNotExist(err) {
 			needBootstrap = true
 		} else {
-			// 文件存在，但可能没有 primary
+			// 文件存在但内存里没有 primary mount（Load 失败 / 文件为空 / 文件不含 primary）→ 补齐
 			if r.GetByName(NamePrimary) == nil {
 				needBootstrap = true
 			}

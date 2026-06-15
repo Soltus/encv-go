@@ -94,14 +94,19 @@ type Server struct {
 //
 // 优先级：
 //  1. ENCV_MOUNTS_FILE 环境变量（明确指定）
-//  2. cfg.Server.Dir/mounts.json（与服务根同目录）
+//  2. cfg.Server.Dir/.encv/mounts.json（隐藏子目录，dotfile filter 自动隐藏）
 //  3. os.TempDir()/encv-mounts/mounts.json（兜底）
+//
+// 2026-06-15 修根因：原 priority 2 用 cfg.Server.Dir/mounts.json，
+// 会让 mounts.json 出现在 Files 列表的根目录（用户能看到、能"删除"），
+// 误导"我的系统配置为什么在这里"。改为隐藏子目录 .encv/，
+// 利用现有 dotfile filter 自然隐藏，不污染用户数据视图。
 func mountRegistryDataPath(cfg *config.Config) string {
 	if v := os.Getenv("ENCV_MOUNTS_FILE"); v != "" {
 		return v
 	}
 	if cfg != nil && cfg.Server.Dir != "" {
-		return filepath.Join(cfg.Server.Dir, "mounts.json")
+		return filepath.Join(cfg.Server.Dir, ".encv", "mounts.json")
 	}
 	return filepath.Join(os.TempDir(), "encv-mounts", "mounts.json")
 }
