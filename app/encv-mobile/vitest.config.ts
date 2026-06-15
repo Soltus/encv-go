@@ -35,6 +35,11 @@ export default defineConfig({
       'src/api/**/*.test.ts',
       // 🆕 2026-06-10：src/lib 下的单测（mockDataGenerator、dev-start-guard 等纯函数模块）
       'src/lib/**/*.test.ts',
+      // 🆕 2026-06-15：src/utils 下的单测（RingBuffer / IncrementalFilter 等纯数据
+      // 结构 + 压力测试。1M push 实测约 1-2s，能在 60s 超时内跑完）
+      'src/utils/**/*.test.ts',
     ],
+    // RingBuffer 10M 压测需要放宽默认 5s 超时
+    testTimeout: 60_000,
   },
 })
