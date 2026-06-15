@@ -58,6 +58,9 @@ tmp/
 # Mock data (generated, not committed)
 __mock_data__/
 
+# Test run artifacts (test-architecture-refactor-defense-awareness, 2026-06-15)
+.test-runs/
+
 # Local overrides for tracked env-style config files
 scripts/openlist-fork.env.local
 
