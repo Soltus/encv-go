@@ -364,3 +364,51 @@ func TestDiagnoseInfo_JSONSchema_HasAllFields(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteActualPortFile_AtomicWrite(t *testing.T) {
+	// 验证端口公告文件能正确写出
+	dir := t.TempDir()
+	path := filepath.Join(dir, "encv-go.port")
+	if err := writeActualPortFile(path, 2026, "instance-abc-123"); err != nil {
+		t.Fatalf("writeActualPortFile failed: %v", err)
+	}
+	// 文件存在
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected file exists: %v", err)
+	}
+	// 内容正确（2 行：port + instanceID）
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 lines, got %d: %q", len(lines), string(data))
+	}
+	if lines[0] != "2026" {
+		t.Errorf("expected port=2026, got %q", lines[0])
+	}
+	if lines[1] != "instance-abc-123" {
+		t.Errorf("expected instanceID=instance-abc-123, got %q", lines[1])
+	}
+}
+
+func TestWriteActualPortFile_OverwritesExisting(t *testing.T) {
+	// 验证重新启动会覆盖旧文件（不是 append）
+	dir := t.TempDir()
+	path := filepath.Join(dir, "encv-go.port")
+	if err := writeActualPortFile(path, 2025, "old-instance"); err != nil {
+		t.Fatalf("first write failed: %v", err)
+	}
+	if err := writeActualPortFile(path, 2026, "new-instance"); err != nil {
+		t.Fatalf("second write failed: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	if lines[0] != "2026" || lines[1] != "new-instance" {
+		t.Errorf("expected overwrite, got %q", string(data))
+	}
+}

@@ -607,9 +607,56 @@ func (s *Server) Start(version string) (string, error) {
 			s.runtimeInfoMu.Lock()
 			s.runtimeInfo.Port = p
 			s.runtimeInfoMu.Unlock()
+			// 🆕 2026-06-15：把实际监听端口写到 /tmp/encv-go.port，
+			// 让 preview-gateway :16666 能跟随漂移到 2026+ 的真实端口
+			// （StartGinWithRetry 在 2025 被占时自动 +1）。原子写避免读到半截内容。
+			portFile := os.Getenv("ENCV_PORT_FILE")
+			if portFile == "" {
+				portFile = "/tmp/encv-go.port"
+			}
+			if writeErr := writeActualPortFile(portFile, p, s.instanceID); writeErr != nil {
+				slog.Warn("write port file failed (gateway may use stale :2025)", "path", portFile, "error", writeErr)
+			} else {
+				slog.Info("actual port announced to gateway", "path", portFile, "port", p)
+			}
 		}
 	}
 	return addr, nil
+}
+
+// writeActualPortFile 原子写端口公告文件。
+//
+// 文件格式（2 行，UTF-8）：
+//   <port>\n
+//   <instance_id>\n
+//
+// 流程：先写临时文件，再 rename 到目标路径。rename 在同一文件系统下是原子操作，
+// reader 永远读到完整内容或读到旧版本（不会读到半截）。
+func writeActualPortFile(path string, port int, instanceID string) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".encv-go.port.*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	// 写失败时清理临时文件
+	defer func() {
+		if _, statErr := os.Stat(tmpName); statErr == nil {
+			os.Remove(tmpName)
+		}
+	}()
+	if _, err := tmp.WriteString(strconv.Itoa(port) + "\n" + instanceID + "\n"); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 func (s *Server) webdavLoggingMiddleware() func(http.Handler) http.Handler {
