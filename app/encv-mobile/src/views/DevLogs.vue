@@ -81,10 +81,12 @@
       </div>
 
       <div v-else class="log-list">
-        <div class="conn-indicator">
-          <ion-badge :color="serverOnline ? 'success' : 'danger'">
-            {{ serverOnline ? t('devlogs.connected') : t('devlogs.disconnected') }}
-          </ion-badge>
+        <!-- 🆕 2026-06-15：复用 ServerStatusCard 替代简单 badge
+             展示后端连接详情（instance_id / latency / transport），
+             用户在切到 backend tab 时一眼看到完整状态。
+             简单的 badge 仍在 status-bar（footer）显示为 "connected/disconnected"。 -->
+        <div class="devlog-status-card-wrap">
+          <ServerStatusCard :clickable="false" :compact="true" />
         </div>
         <div v-if="backendFilteredItems.length === 0" class="empty-logs">
           <p>{{ t('devlogs.noLogs') }}</p>
@@ -752,6 +754,15 @@ defineExpose({
 .conn-indicator {
   text-align: center;
   padding: 4px 0 8px;
+}
+
+/* 🆕 2026-06-15：DevLogs backend tab 顶部的 ServerStatusCard 容器
+   compact 模式：保留状态行 + latency/transport pills，省略 detail-grid / footer */
+.devlog-status-card-wrap {
+  padding: 4px 6px 8px;
+}
+.devlog-status-card-wrap :deep(.server-status-card) {
+  width: 100%;
 }
 
 /* .log-entry 及其 .error/.warn/.info/.debug 变体样式已在 VirtualLogList.vue 中定义

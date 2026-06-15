@@ -63,6 +63,13 @@
         </ion-card-content>
       </ion-card>
 
+      <!-- ①.5 🆕 2026-06-15：复用 ServerStatusCard
+           上一张卡片显示"我连到哪里"（baseUrl + 来源），本卡片显示"我连的是谁"（instance_id + version + transport + 状态切换动画）
+           两张互补：上面管 URL 选择，下面管 backend 身份确认（防劫持） -->
+      <div class="statusCardSecondary">
+        <ServerStatusCard :clickable="false" :hide-instance-id="false" />
+      </div>
+
       <!-- ② 自动探测 + 重置操作 -->
       <div class="actionRow">
         <ion-button
@@ -205,6 +212,7 @@ import { useI18n } from '@/composables/useI18n'
 import { useServerStatus } from '@/composables/useServerStatus'
 import { useApiBaseProbe, type ProbeResult } from '@/composables/useApiBaseProbe'
 import { DEFAULT_API_BASE_URL, getApiBaseUrl } from '@/api/encv'
+import ServerStatusCard from '@/components/ServerStatusCard.vue'
 
 const { t } = useI18n()
 const server = useServerStatus()
@@ -410,6 +418,15 @@ onMounted(async () => {
   border-radius: 4px;
   font-size: 12px;
   color: var(--ion-color-danger);
+}
+
+/* ①.5 ServerStatusCard 容器：与上方 ion-card 对齐，间距略小以体现"副卡片"层次 */
+.statusCardSecondary {
+  margin: 0 0 16px;
+}
+.statusCardSecondary :deep(.server-status-card) {
+  width: 100%;
+  box-shadow: none;
 }
 
 /* ② 操作行 */
