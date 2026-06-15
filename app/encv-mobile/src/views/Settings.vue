@@ -94,6 +94,14 @@
         <ion-list-header>
           <ion-label>{{ t('settings.connection') }}</ion-label>
         </ion-list-header>
+        <!-- 🆕 2026-06-15 修复：把旧的内联 status badge 升级为完整 ServerStatusCard
+             - 旧实现：ion-item 内联 badge + port + instance_id + version（4 行静态）
+             - 新实现：ion-item 保留作"点击进详情页"入口，下方挂 ServerStatusCard
+                      展示完整 4 字段 detail-grid（version / instance_id / port / lastCheck）
+                      + pulse dot + transport pill + 错误态 body
+             - 用户 22:29 反馈"详情页是旧的"→ 实际 ServerSettings 详情页 line 41 已是 ServerStatusCard
+             - 这里是直接把卡片嵌进 Settings 首页，**用户无需进入详情页就能看到**
+             - card 自己 clickable 跳详情页（与 ion-item 二选一行为） -->
         <ion-item button @click="goServer" detail>
           <ion-icon :icon="serverIcon" slot="start"></ion-icon>
           <ion-label>
@@ -105,15 +113,20 @@
               <span v-if="serverOnline && backendPort" class="port-info">:{{ backendPort }}</span>
               <span v-if="!serverOnline && connectionError" class="connection-error-inline"> - {{ connectionError }}</span>
             </p>
-            <!-- 🆕 2026-06-15：复用 desktop performPingCheck 的 instance_id 防劫持
-                 展示当前 backend 进程唯一 ID（前 8 字符）+ version，
-                 让用户/AI 能直接核对"我连的是不是同一个进程" -->
-            <p v-if="serverOnline && backendInstanceId" class="instance-info">
-              <code class="instance-id">{{ backendInstanceId.slice(0, 8) }}</code>
-              <span v-if="backendVersion" class="version-info">v{{ backendVersion }}</span>
+            <p class="serverCardHint">
+              <ion-icon :icon="chevronForwardIcon" class="serverCardHintIcon" />
+              <span>{{ t('settings.serverCardHint') || '点击查看完整状态卡片' }}</span>
             </p>
           </ion-label>
         </ion-item>
+      </ion-list>
+
+      <!-- 🆕 2026-06-15：ServerStatusCard 直接挂首页（ion-list 之外，让卡片自己占满宽度） -->
+      <div class="serverCardSlot">
+        <ServerStatusCard :clickable="true" :hide-instance-id="false" @click="goServer" />
+      </div>
+
+      <ion-list>
         <ion-item v-if="isNative()" button @click="goEngine" detail>
           <ion-icon :icon="filmOutline" slot="start"></ion-icon>
           <ion-label>
@@ -396,6 +409,7 @@ import {
   phonePortraitOutline,
   colorPaletteOutline, layersOutline, globeOutline,
   fileTrayFull as databaseIcon,
+  chevronForward as chevronForwardIcon,
 } from 'ionicons/icons'
 import { useServerStatus } from '@/composables/useServerStatus'
 import { useConfig } from '@/composables/useConfig'
@@ -410,6 +424,7 @@ import type { IndexStats, FFmpegStatus } from '@/api/encv'
 import { PLAY_MODE, isMpvSubMode } from '@/constants/player'
 import FilePickerModal from '@/components/FilePickerModal.vue'
 import ConfigFieldItem from '@/components/ConfigFieldItem.vue'
+import ServerStatusCard from '@/components/ServerStatusCard.vue'
 
 const router = useRouter()
 const { isOnline: serverOnline, lastError: connectionError, checkStatus, backendPort, backendInstanceId, backendVersion } = useServerStatus()
@@ -951,6 +966,26 @@ watch(() => getFieldValue(['plugin_settings', 'alist_encrypt', 'enabled']), (ena
 .connection-error-inline {
   color: var(--ion-color-danger);
   font-size: 12px;
+}
+/* 🆕 2026-06-15：ServerStatusCard 嵌进首页（ion-list 之外）— 让卡片自己占满宽度并保留 ion-item 间距 */
+.serverCardSlot {
+  margin: 8px 0 16px;
+  padding: 0 16px;
+}
+.serverCardSlot :deep(.server-status-card) {
+  /* 卡片在 ion-list 之外时去掉左右内边距、保留全宽 */
+  margin: 0;
+}
+.serverCardHint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  opacity: 0.6;
+  margin-top: 4px;
+}
+.serverCardHintIcon {
+  font-size: 14px;
 }
 .browse-btn {
   --padding-start: 8px;
