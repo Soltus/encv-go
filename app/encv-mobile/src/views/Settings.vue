@@ -94,15 +94,25 @@
         <ion-list-header>
           <ion-label>{{ t('settings.connection') }}</ion-label>
         </ion-list-header>
-        <ion-item button @click="goServer" detail lines="none" class="server-card-item">
-          <!-- 🆕 2026-06-15：复用 ServerStatusCard
-               - 状态点 pulse / 4 字段 detail-grid / latency / transport / instance_id 变化闪烁
-               - 0 硬编码颜色，主题色自动适配（深色模式 / 7 色板）
-               - :clickable 避免卡片本身响应点击（点击由 ion-item 处理） -->
-          <div class="server-card-wrap">
-            <ServerStatusCard :clickable="false" :hide-instance-id="false" />
-            <ion-icon :icon="chevronForwardOutline" class="server-card-chevron" />
-          </div>
+        <ion-item button @click="goServer" detail>
+          <ion-icon :icon="serverIcon" slot="start"></ion-icon>
+          <ion-label>
+            <h3>{{ t('settings.serverTitle') }}</h3>
+            <p>
+              <ion-badge :color="serverOnline ? 'success' : 'danger'">
+                {{ serverOnline ? t('settings.online') : t('settings.offline') }}
+              </ion-badge>
+              <span v-if="serverOnline && backendPort" class="port-info">:{{ backendPort }}</span>
+              <span v-if="!serverOnline && connectionError" class="connection-error-inline"> - {{ connectionError }}</span>
+            </p>
+            <!-- 🆕 2026-06-15：复用 desktop performPingCheck 的 instance_id 防劫持
+                 展示当前 backend 进程唯一 ID（前 8 字符）+ version，
+                 让用户/AI 能直接核对"我连的是不是同一个进程" -->
+            <p v-if="serverOnline && backendInstanceId" class="instance-info">
+              <code class="instance-id">{{ backendInstanceId.slice(0, 8) }}</code>
+              <span v-if="backendVersion" class="version-info">v{{ backendVersion }}</span>
+            </p>
+          </ion-label>
         </ion-item>
         <ion-item v-if="isNative()" button @click="goEngine" detail>
           <ion-icon :icon="filmOutline" slot="start"></ion-icon>
@@ -386,7 +396,6 @@ import {
   phonePortraitOutline,
   colorPaletteOutline, layersOutline, globeOutline,
   fileTrayFull as databaseIcon,
-  chevronForwardOutline,
 } from 'ionicons/icons'
 import { useServerStatus } from '@/composables/useServerStatus'
 import { useConfig } from '@/composables/useConfig'
@@ -401,10 +410,9 @@ import type { IndexStats, FFmpegStatus } from '@/api/encv'
 import { PLAY_MODE, isMpvSubMode } from '@/constants/player'
 import FilePickerModal from '@/components/FilePickerModal.vue'
 import ConfigFieldItem from '@/components/ConfigFieldItem.vue'
-import ServerStatusCard from '@/components/ServerStatusCard.vue'
 
 const router = useRouter()
-const { isOnline: serverOnline, checkStatus } = useServerStatus()
+const { isOnline: serverOnline, lastError: connectionError, checkStatus, backendPort, backendInstanceId, backendVersion } = useServerStatus()
 const { schemaFields, loading: configLoading, dirty, restartNeeded, loadConfig, saveConfig, resetConfig, getFieldValue, setFieldValue, resetFieldToDefault } = useConfig()
 const { t, tField, tSectionTitle } = useI18n()
 
@@ -920,33 +928,29 @@ watch(() => getFieldValue(['plugin_settings', 'alist_encrypt', 'enabled']), (ena
   opacity: 0.7;
   margin-left: 4px;
 }
-/* 🆕 2026-06-15：server 列表项内部嵌入 ServerStatusCard
-   - 卡片占据主要宽度，右侧 chevron 用作"点击跳转"视觉提示
-   - 取消 ion-label 默认的 padding / min-height 让卡片边缘贴齐 ion-item
-   - 移除 ion-item 的右侧 detail 指示器（ion-card 自带关闭感） */
-.server-card-item {
-  --min-height: 0;
-  --padding-start: 0;
-  --padding-end: 0;
-  --inner-padding-end: 0;
-}
-.server-card-wrap {
+/* 🆕 2026-06-15：backend 进程身份展示（performPingCheck 模式复用）
+   让用户/AI 能直接核对"我连的是不是同一个进程" */
+.instance-info {
+  margin: 4px 0 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
+  gap: 6px;
 }
-.server-card-wrap :deep(.server-status-card) {
-  flex: 1;
-  min-width: 0;
-  /* 在 ion-item 内不要过大的 padding，让卡片整体看起来像内嵌子组件 */
-  --card-pad: 12px 14px;
+.instance-info .instance-id {
+  font-family: var(--ion-font-family-monospace, monospace);
+  font-size: 11px;
+  background: var(--ion-color-light);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--ion-color-primary);
 }
-.server-card-chevron {
-  color: var(--ion-color-medium);
-  font-size: 18px;
-  flex-shrink: 0;
+.instance-info .version-info {
+  font-size: 11px;
+  opacity: 0.7;
+}
+.connection-error-inline {
+  color: var(--ion-color-danger);
+  font-size: 12px;
 }
 .browse-btn {
   --padding-start: 8px;

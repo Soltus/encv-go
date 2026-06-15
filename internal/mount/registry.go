@@ -69,6 +69,20 @@ func (r *MountRegistry) ListDrivers() []string {
 	return out
 }
 
+// GetHiddenFilenames 返回挂载子系统自身持久化的配置文件 basename 列表。
+//
+// 用途：mobile_service.ListFiles 在展示文件列表时过滤掉这些文件，
+// 避免 mounts.json 这类 system config 出现在用户视野里。
+//
+// 实现：dataPath 不为空时取其 basename；空时返回空 slice（不持久化模式不过滤）。
+// 线程安全：dataPath 在构造后只读，无需锁。
+func (r *MountRegistry) GetHiddenFilenames() []string {
+	if r.dataPath == "" {
+		return nil
+	}
+	return []string{filepath.Base(r.dataPath)}
+}
+
 // instantiate 通过 factory 创建 driver 实例。每次新建避免状态污染。
 func (r *MountRegistry) instantiate(name string) (Driver, error) {
 	f, ok := r.drivers[name]

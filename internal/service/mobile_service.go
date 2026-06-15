@@ -135,6 +135,20 @@ func (s *MobileService) primaryRootPath() string {
 	return s.servingDir
 }
 
+// isSystemConfigFile 判断文件名是否为 mount 子系统的隐藏配置文件。
+// 单一入口：ListFiles / SearchFiles 共用，避免在两处分别散写过滤逻辑。
+func (s *MobileService) isSystemConfigFile(name string) bool {
+	if s.mountRegistry == nil {
+		return false
+	}
+	for _, hidden := range s.mountRegistry.GetHiddenFilenames() {
+		if name == hidden {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveUserPath 解析用户路径为绝对路径（multi-mount-aware）。
 //
 // 优先级：
@@ -193,6 +207,16 @@ func (s *MobileService) ListFiles(queryPath string) ([]FileInfo, error) {
 	var files []FileInfo
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+
+		// 🆕 2026-06-15：过滤 mount 子系统自身配置文件
+		// 历史问题：mounts.json 持久化在 serving dir 内（/storage/emulated/0/mounts.json
+		//   或 dev 的 /workspace/mounts.json），导致 Files 列表第一项就是这个 json，
+		//   用户困惑"为什么我能删除我的系统配置？"
+		// 修复：从 mount registry 拿隐藏列表（registry 是 single source of truth）
+		if s.isSystemConfigFile(entry.Name()) {
+			slog.Debug("ListFiles: skip system config file", "name", entry.Name())
 			continue
 		}
 
@@ -1181,6 +1205,13 @@ func (s *MobileService) SearchFiles(queryPath string, keyword string, recursive 
 				}
 				return nil
 			}
+			// 🆕 2026-06-15：递归搜索时同样过滤 system config（mounts.json）
+			if s.isSystemConfigFile(d.Name()) {
+				if d.IsDir() {
+					return fs.SkipDir
+				}
+				return nil
+			}
 			if strings.Contains(strings.ToLower(d.Name()), keyword) {
 				relPath, relErr := filepath.Rel(absPath, path)
 				if relErr != nil {
@@ -1224,6 +1255,10 @@ func (s *MobileService) SearchFiles(queryPath string, keyword string, recursive 
 		}
 		for _, entry := range entries {
 			if strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			// 🆕 2026-06-15：非递归搜索时同样过滤 system config
+			if s.isSystemConfigFile(entry.Name()) {
 				continue
 			}
 			if strings.Contains(strings.ToLower(entry.Name()), keyword) {

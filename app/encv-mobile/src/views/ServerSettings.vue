@@ -32,42 +32,20 @@
     </ion-header>
 
     <ion-content class="serverSettingsContent">
-      <!-- ① 当前 baseUrl 状态卡片 -->
-      <ion-card class="statusCard" :class="{ 'statusCard_offline': !server.isOnline.value, 'statusCard_probing': probe.isProbing.value }">
-        <ion-card-content>
-          <div class="statusHeader">
-            <ion-icon
-              :icon="server.isOnline.value ? serverOnlineIcon : serverOfflineIcon"
-              :class="['statusIcon', server.isOnline.value ? 'statusIcon_online' : 'statusIcon_offline']"
-            />
-            <div class="statusTextBlock">
-              <div class="statusLabel">
-                {{ server.isOnline.value
-                    ? (t('settings.server.online') || '在线')
-                    : (t('settings.server.offline') || '离线') }}
-              </div>
-              <div class="statusBaseUrl" :title="currentBaseUrl">{{ currentBaseUrl }}</div>
-              <div v-if="probe.lastResult.value" class="statusMeta">
-                <span class="statusSourceTag" :class="`statusSourceTag_${probe.lastResult.value.source}`">
-                  {{ sourceLabel(probe.lastResult.value.source) }}
-                </span>
-                <span class="statusLatency">{{ probe.lastResult.value.latencyMs }}ms</span>
-              </div>
-            </div>
-          </div>
-          <!-- 错误详情：探测失败时显示 -->
-          <div v-if="probe.lastError.value" class="statusError">
-            <ion-icon :icon="alertCircleIcon" />
-            <span>{{ probe.lastError.value }}</span>
-          </div>
-        </ion-card-content>
-      </ion-card>
+      <!-- 🆕 2026-06-15：升级详情页状态卡片 = 用 ServerStatusCard
+           替换原本自定义的 status card（state badge + baseUrl + source + latency + error）。
+           ServerStatusCard 提供更丰富的信息（version / instance_id / port / transport / 状态切换动画）
+           + 主题色适配（0 硬编码颜色）+ pulse / time-roll 等动态效果。
 
-      <!-- ①.5 🆕 2026-06-15：复用 ServerStatusCard
-           上一张卡片显示"我连到哪里"（baseUrl + 来源），本卡片显示"我连的是谁"（instance_id + version + transport + 状态切换动画）
-           两张互补：上面管 URL 选择，下面管 backend 身份确认（防劫持） -->
-      <div class="statusCardSecondary">
-        <ServerStatusCard :clickable="false" :hide-instance-id="false" />
+           baseUrl + source 信息移到 header subtitle（ion-note 风格 chip）保留可见。 -->
+      <ServerStatusCard :clickable="false" :hide-instance-id="false" />
+
+      <!-- ① 当前 baseUrl + source 摘要（ion-note 风格小 chip，提示"我连到哪里"） -->
+      <div class="statusSubline">
+        <code class="statusSublineUrl" :title="currentBaseUrl">{{ currentBaseUrl }}</code>
+        <span v-if="probe.lastResult.value" class="statusSublineSource" :class="`statusSourceTag_${probe.lastResult.value.source}`">
+          {{ sourceLabel(probe.lastResult.value.source) }}
+        </span>
       </div>
 
       <!-- ② 自动探测 + 重置操作 -->
@@ -193,7 +171,7 @@
 import { ref, computed, onMounted } from 'vue'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonButton, IonIcon,
-  IonContent, IonCard, IonCardContent, IonList, IonItem, IonLabel, IonInput, IonSpinner, IonToast,
+  IonContent, IonList, IonItem, IonLabel, IonInput, IonSpinner, IonToast,
 } from '@ionic/vue'
 import {
   refreshOutline as refreshIcon,
@@ -205,8 +183,6 @@ import {
   createOutline as createIcon,
   checkmarkOutline as checkmarkIcon,
   alertCircleOutline as alertCircleIcon,
-  cloudOfflineOutline as serverOfflineIcon,
-  cloudDoneOutline as serverOnlineIcon,
 } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
 import { useServerStatus } from '@/composables/useServerStatus'
@@ -350,84 +326,45 @@ onMounted(async () => {
   --padding-bottom: 30px;
 }
 
-/* ① 状态卡片 */
-.statusCard {
-  margin: 0 0 16px;
-  border: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.14));
+/* 🆕 2026-06-15：详情页状态卡片 = ServerStatusCard
+   - 全宽容器，间距与 ion-card 视觉一致 */
+.serverSettingsContent > .server-status-card {
+  margin-bottom: 8px;
 }
-.statusCard_offline {
-  border-color: rgba(var(--ion-color-danger-rgb), 0.4);
-}
-.statusCard_probing {
-  opacity: 0.7;
-}
-.statusHeader {
+
+/* ① 状态卡片下方一行：baseUrl + source tag（紧凑信息条） */
+.statusSubline {
   display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-.statusIcon {
-  font-size: 28px;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-.statusIcon_online { color: var(--ion-color-success); }
-.statusIcon_offline { color: var(--ion-color-danger); }
-.statusTextBlock { flex: 1; min-width: 0; }
-.statusLabel {
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 6px 10px;
   font-size: 12px;
-  font-weight: 500;
-  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.7));
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.85));
+  flex-wrap: wrap;
 }
-.statusBaseUrl {
+.statusSublineUrl {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 14px;
+  font-size: 12px;
+  background: var(--ion-color-light);
+  padding: 2px 6px;
+  border-radius: 4px;
   color: var(--ion-text-color);
   word-break: break-all;
-  margin: 4px 0;
+  max-width: 100%;
 }
-.statusMeta {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 11px;
-  margin-top: 4px;
-}
-.statusSourceTag {
+.statusSublineSource {
   padding: 1px 6px;
   border-radius: 4px;
   font-weight: 500;
+  font-size: 11px;
+  white-space: nowrap;
 }
+
+/* 保留 source tag 配色（来自被替换的旧 statusCard） */
 .statusSourceTag_cached { background: rgba(var(--ion-color-medium-rgb), 0.18); color: var(--ion-color-medium); }
 .statusSourceTag_loopback { background: rgba(var(--ion-color-primary-rgb), 0.18); color: var(--ion-color-primary); }
 .statusSourceTag_lan-candidate { background: rgba(var(--ion-color-success-rgb), 0.18); color: var(--ion-color-success); }
-.statusLatency {
-  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.7));
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.statusError {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-top: 10px;
-  padding: 8px 10px;
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
-  border-left: 3px solid var(--ion-color-danger);
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--ion-color-danger);
-}
-
-/* ①.5 ServerStatusCard 容器：与上方 ion-card 对齐，间距略小以体现"副卡片"层次 */
-.statusCardSecondary {
-  margin: 0 0 16px;
-}
-.statusCardSecondary :deep(.server-status-card) {
-  width: 100%;
-  box-shadow: none;
-}
 
 /* ② 操作行 */
 .actionRow {
