@@ -18,14 +18,15 @@
 | **Layer2 标签** | `full-regression.yml` | 标签 `ci:full` + `workflow_dispatch` + `push` (main) | 全包 regression (`ENCV_TEST_FULL=1`) | maintainer | ~15-20min |
 | **Layer3 E2E** | `e2e-integration.yml` | 标签 `ci:e2e` + `workflow_dispatch` + `push` (main) + `schedule` | 加密 roundtrip E2E | maintainer | ~20-30min |
 
-### 1.2 防恶意消耗机制（4 重防御）
+### 1.2 防恶意消耗机制（3 重防御）
 
 | 攻击向量 | 防御 | 效果 |
 |---------|------|------|
 | 陌生 fork spam PR | PR 只触发 Layer1（4 个 matrix 任务，~2-5 min 总时长） | 攻击成本低但 GitHub 配额消耗有上限 |
 | 同一 PR 反复 push | workflow 自身 `concurrency: cancel-in-progress` | 新 push 自动取消旧 run |
-| 巨大 PR 浪费算力 | Layer1 加 PR size 拦截（>3000 行拒绝跑 → exit 1） | spam PR 触发即失败 |
 | 标签滥用 | `pull_request` 而非 `pull_request_target`（无 secrets 暴露）+ 加 `concurrency` | 标签触发也受 PR 生命周期管控 |
+
+**注意：不加 PR size 拦截** — 用户场景里大部分 PR 是巨型重构 / 跨包改造，size 拦截会误伤真实工作流。Layer1 单次成本有上限（~5 min × 4 matrix），可接受。恶意 PR 触发 Layer1 → 红灯 → 无法 merge → 自然终止。
 
 ### 1.3 标签命名约定（强制前缀 `ci:`）
 

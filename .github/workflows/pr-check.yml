@@ -11,11 +11,12 @@ name: "PR Check (Layer 1: Quick)"
 #   - ci:full 标签 → 走 full-regression.yml
 #   - ci:e2e 标签 → 走 e2e-integration.yml
 #
-# 防恶意消耗 4 重防御：
+# 防恶意消耗 3 重防御：
 #   1. Layer1 单包 + -short（最快 ~2-5 min 总时长）
-#   2. PR size 拦截：>3000 行变更直接 exit 1 拒绝跑
-#   3. concurrency: cancel-in-progress 取消同 PR 旧 run
-#   4. pull_request 事件不暴露 secrets（无 token 可偷）
+#   2. concurrency: cancel-in-progress 取消同 PR 旧 run
+#   3. pull_request 事件不暴露 secrets（无 token 可偷）
+# 注意：不加 PR size 拦截 — 用户场景里大部分 PR 是巨型重构/跨包改造，
+#      拦截会误伤真实工作流。Layer1 单次成本有上限（~5 min），接受。
 #
 # 适配新测试系统（test-orchestration-defense）：
 #   - Go 测试统一走 scripts/test-go.sh（单包 -short 默认）
@@ -23,7 +24,7 @@ name: "PR Check (Layer 1: Quick)"
 #
 # Branch Protection：
 #   - 应在仓库 Rulesets → Rules → Required status checks 中
-#     把 "PR Check (Layer 1: Quick) / pr-size-guard" 设为 required
+#     把 "PR Check (Layer 1: Quick) / layer1-quick-tests" 设为 required
 #     强制 PR 必通过 Layer1 才能 merge
 # =====================================================
 
@@ -42,32 +43,11 @@ env:
   MONOREPO_MOBILE_DIR: "app/encv-mobile"
 
 jobs:
-  # ── PR size 拦截（防 spam 巨大 PR 浪费算力） ──
-  pr-size-guard:
-    name: PR size guard (<3000 lines)
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    if: github.event_name == 'pull_request'
-    steps:
-      - name: Check PR diff size
-        run: |
-          ADDED=${{ github.event.pull_request.additions }}
-          DELETED=${{ github.event.pull_request.deletions }}
-          SIZE=$((ADDED + DELETED))
-          echo "PR size: $SIZE lines (added=$ADDED, deleted=$DELETED)"
-          if [ $SIZE -gt 3000 ]; then
-            echo "::error::PR too large ($SIZE lines > 3000). Please split into smaller PRs."
-            echo "::error::Anti-abuse: large PRs likely spam. Split your changes."
-            exit 1
-          fi
-          echo "✅ PR size OK (${SIZE} lines)"
-
   # ── Layer1 quick tests（4 个 matrix 任务并行） ──
   layer1-quick-tests:
     name: Layer 1 — ${{ matrix.test-group }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: pr-size-guard
     strategy:
       fail-fast: false
       matrix:
@@ -165,7 +145,7 @@ jobs:
     name: Layer 1 Summary
     runs-on: ubuntu-latest
     timeout-minutes: 1
-    needs: [pr-size-guard, layer1-quick-tests]
+    needs: [layer1-quick-tests]
     if: always()
     steps:
       - name: Generate summary
@@ -174,7 +154,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| PR size guard | ${{ needs.pr-size-guard.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Layer 1 matrix (4 tests) | ${{ needs.layer1-quick-tests.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 下一步" >> $GITHUB_STEP_SUMMARY
