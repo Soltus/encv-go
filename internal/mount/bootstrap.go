@@ -29,7 +29,7 @@ func (r *MountRegistry) BootstrapFromConfig(ctx context.Context) error {
 		if r.GetByName(NamePrimary) == nil {
 			if err := r.Create(&Mount{
 				Name:      NamePrimary,
-				MountPath: "/" + NamePrimary,
+				MountPath: "/d/" + NamePrimary, // 🆕 2026-06-15 multi-mount 统一规范：所有 mount 必须以 /d/ 前缀
 				Driver:    DriverLocal,
 				RootPath:  r.cfg.ServingDir(),
 				Enabled:   true,
@@ -44,7 +44,7 @@ func (r *MountRegistry) BootstrapFromConfig(ctx context.Context) error {
 		if r.GetByName(NameAutomation) == nil {
 			if err := r.Create(&Mount{
 				Name:         NameAutomation,
-				MountPath:    "/" + NameAutomation,
+				MountPath:    "/d/" + NameAutomation, // 🆕 2026-06-15 同上
 				Driver:       r.cfg.AutomationDriver(), // 默认 "appdata"，可改 "local"
 				Enabled:      true,
 				DriverConfig: map[string]any{"subpath": "encv-automation"},
@@ -59,7 +59,7 @@ func (r *MountRegistry) BootstrapFromConfig(ctx context.Context) error {
 		if r.GetByName(NameSandbox) == nil {
 			if err := r.Create(&Mount{
 				Name:      NameSandbox,
-				MountPath: "/" + NameSandbox,
+				MountPath: "/d/" + NameSandbox, // 🆕 2026-06-15 同上
 				Driver:    DriverSandbox,
 				Enabled:   true,
 			}); err != nil {

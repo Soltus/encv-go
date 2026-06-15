@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "mounts": [
+    {
+      "id": "52216960-045f-4568-a2f3-cfd23db2d55f",
+      "name": "automation",
+      "mount_path": "/d/automation",
+      "driver": "appdata",
+      "root_path": "/tmp/encv-automation",
+      "enabled": true,
+      "read_only": false,
+      "driver_config": {
+        "subpath": "encv-automation"
+      },
+      "created_at": "2026-06-15T18:13:23.195839815Z",
+      "updated_at": "2026-06-15T18:13:23.195839815Z"
+    },
+    {
+      "id": "e995545c-b134-4503-b1c6-71325f85f99f",
+      "name": "primary",
+      "mount_path": "/d/primary",
+      "driver": "local",
+      "root_path": "/workspace",
+      "enabled": true,
+      "read_only": false,
+      "created_at": "2026-06-15T18:13:23.195830101Z",
+      "updated_at": "2026-06-15T18:13:23.195830101Z"
+    },
+    {
+      "id": "d03558d4-da77-4657-bae1-56baaf14dff4",
+      "name": "mytest",
+      "mount_path": "/d/mytest",
+      "driver": "local",
+      "root_path": "/tmp/test-mytest",
+      "enabled": true,
+      "read_only": false,
+      "created_at": "2026-06-15T18:13:40.56874079Z",
+      "updated_at": "2026-06-15T18:13:40.56874079Z"
+    }
+  ],
+  "saved_at": "2026-06-15T18:13:40.568744002Z"
+}
