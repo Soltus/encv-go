@@ -118,6 +118,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/AppearanceDetail.vue'),
       },
       {
+        // 🆕 2026-06-15 multi-mount (spec Phase E)：挂载点管理
+        path: 'settings/mounts',
+        component: () => import('@/views/MountsDetail.vue'),
+      },
+      {
         path: 'devlogs',
         component: () => import('@/views/DevLogs.vue'),
       },

@@ -125,13 +125,20 @@
 
       <ion-list>
         <ion-list-header>
-          <ion-label>{{ t('settings.cache') }}</ion-label>
+          <ion-label>{{ t('settings.storage') }}</ion-label>
         </ion-list-header>
         <ion-item button @click="goCache" detail>
           <ion-icon :icon="databaseIcon" slot="start"></ion-icon>
           <ion-label>
             <h3>{{ t('settings.cacheAndIndex') }}</h3>
             <p>{{ indexStats?.isIndexing ? t('settings.indexing') : (indexStats && indexStats.totalFiles > 0 ? (indexStats.source === 'webdav' ? 'WebDAV ' + t('settings.indexReady') : t('settings.indexReady')) : t('settings.noIndexData')) }}</p>
+          </ion-label>
+        </ion-item>
+        <ion-item button @click="goMounts" detail>
+          <ion-icon :icon="serverIcon" slot="start"></ion-icon>
+          <ion-label>
+            <h3>{{ t('settings.mountsTitle') }}</h3>
+            <p>{{ t('settings.mountsHelp') }}</p>
           </ion-label>
         </ion-item>
       </ion-list>
@@ -555,6 +562,10 @@ function goAbout() {
 
 function goCache() {
   router.push('/tabs/settings/cache')
+}
+
+function goMounts() {
+  router.push('/tabs/settings/mounts')
 }
 
 function goPlugins() {

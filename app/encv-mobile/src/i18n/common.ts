@@ -6,6 +6,10 @@ export default {
     'common.refresh': '刷新',
     'common.error': '错误',
     'common.close': '关闭',
+    'common.edit': '编辑',
+    'common.delete': '删除',
+    'common.save': '保存',
+    'common.loading': '加载中...',
 
     'tabs.home': '首页',
     'tabs.files': '文件',
@@ -265,6 +269,10 @@ export default {
     'common.refresh': 'Refresh',
     'common.error': 'Error',
     'common.close': 'Close',
+    'common.edit': 'Edit',
+    'common.delete': 'Delete',
+    'common.save': 'Save',
+    'common.loading': 'Loading...',
 
     'tabs.home': 'Home',
     'tabs.files': 'Files',

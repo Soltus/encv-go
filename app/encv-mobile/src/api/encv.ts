@@ -1280,3 +1280,177 @@ export async function predictPlugin(
   }
   return response.json()
 }
+
+// 🆕 2026-06-15 multi-mount (spec Phase E)：挂载点管理 API
+//
+// 后端路由：internal/server/mount_api.go
+// 数据模型：internal/mount/mount.go (Mount)
+//
+// 端点：
+//   GET    /api/mounts               → listMounts / ListMountsResponse
+//   GET    /api/mounts/:id           → getMount
+//   POST   /api/mounts               → createMount
+//   PUT    /api/mounts/:id           → updateMount
+//   DELETE /api/mounts/:id           → deleteMount
+//   POST   /api/mounts/:id/resolve   → resolveMountPath
+//   GET    /api/mounts/:id/usage     → fetchMountUsage
+
+/** Mount 挂载点数据模型。与后端 mount.Mount 字段一一对应（snake_case）。 */
+export interface Mount {
+  id: string
+  name: string
+  mount_path: string
+  driver: string
+  root_path: string
+  enabled: boolean
+  read_only: boolean
+  driver_config?: Record<string, unknown>
+  created_at?: string
+  updated_at?: string
+}
+
+/** 预置 driver 名常量（与后端 mount.DriverLocal/AppData/Sandbox 一致）。 */
+export const MOUNT_DRIVERS = ['local', 'appdata', 'sandbox'] as const
+export type MountDriver = (typeof MOUNT_DRIVERS)[number]
+
+/** 预置 mount name 提示常量（仅用于 UI 提示，非后端强制）。 */
+export const MOUNT_PRESET_NAMES = ['primary', 'automation', 'sandbox'] as const
+
+export interface ListMountsResponse {
+  mounts: Mount[]
+  drivers: string[]
+}
+
+export interface ResolveMountResponse {
+  virtual_path: string
+  abs_path: string
+  rel_path: string
+  mount_name: string
+}
+
+export interface MountUsageResponse {
+  mount_id: string
+  root_path: string
+  entry_count: number
+}
+
+/** 通用 mount 错误格式化。 */
+async function readMountError(response: Response, op: string): Promise<string> {
+  let detail = `HTTP ${response.status}`
+  try {
+    const body = await response.text()
+    if (body) {
+      // 尝试解析 {"error": "..."}
+      try {
+        const parsed = JSON.parse(body)
+        if (parsed?.error) detail = parsed.error
+        else detail = body.slice(0, 200)
+      } catch {
+        detail = body.slice(0, 200)
+      }
+    }
+  } catch {}
+  return `${op} failed: ${detail}`
+}
+
+export async function listMounts(): Promise<ListMountsResponse> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts`)
+  if (!response.ok) {
+    const msg = await readMountError(response, 'listMounts')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getMount(id: string): Promise<Mount> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts/${encodeURIComponent(id)}`)
+  if (!response.ok) {
+    const msg = await readMountError(response, 'getMount')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+/** Create / Update 通用 body 字段（不含 id / created_at / updated_at）。 */
+export interface MountInput {
+  name: string
+  mount_path: string
+  driver: string
+  enabled: boolean
+  read_only: boolean
+  driver_config?: Record<string, unknown>
+}
+
+export async function createMount(input: MountInput): Promise<Mount> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) {
+    const msg = await readMountError(response, 'createMount')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function updateMount(id: string, input: MountInput): Promise<Mount> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) {
+    const msg = await readMountError(response, 'updateMount')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function deleteMount(id: string): Promise<void> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  // 204 No Content 视为成功；其他都抛错
+  if (response.status === 204) return
+  if (!response.ok) {
+    const msg = await readMountError(response, 'deleteMount')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+}
+
+export async function resolveMountPath(id: string, subPath: string): Promise<ResolveMountResponse> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts/${encodeURIComponent(id)}/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sub_path: subPath }),
+  })
+  if (!response.ok) {
+    const msg = await readMountError(response, 'resolveMountPath')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function fetchMountUsage(id: string): Promise<MountUsageResponse> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts/${encodeURIComponent(id)}/usage`)
+  if (!response.ok) {
+    const msg = await readMountError(response, 'fetchMountUsage')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+  return response.json()
+}
