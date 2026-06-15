@@ -169,10 +169,12 @@ func TestReport_MarkAndSummarize(t *testing.T) {
 }
 
 func TestReport_FinalizeAll(t *testing.T) {
+	// 写到 ENCV_TEST_REPORT_DIR 覆盖位置（test 结束后 t.TempDir 自动清理不影响）
 	dir := t.TempDir()
-	oldDir := ReportDir()
-	defaultReporter.dir = dir
-	defer func() { defaultReporter.dir = oldDir }()
+	oldEnv := os.Getenv("ENCV_TEST_REPORT_DIR")
+	_ = os.Setenv("ENCV_TEST_REPORT_DIR", dir)
+	defer func() { _ = os.Setenv("ENCV_TEST_REPORT_DIR", oldEnv) }()
+	reportDirCache = "" // 失效 ReportDir 缓存
 
 	Reset()
 	MarkFailure(t, StatusPass, "")

@@ -27,6 +27,10 @@ cd "$ROOT"
 HARD_TIMEOUT=${HARD_TIMEOUT:-600}        # 总硬超时 10min
 PACKAGE_TIMEOUT=${PACKAGE_TIMEOUT:-120}  # 单包超时 2min
 LOG_ROOT=${LOG_ROOT:-.test-runs}
+# PKGS 优先级：命令行位置参数 > PKGS 环境变量 > 默认 ./internal/...
+if [ $# -gt 0 ] && [ -z "${PKGS:-}" ]; then
+  PKGS="$*"
+fi
 PKGS=${PKGS:-"./internal/..."}
 EXTRA_ARGS=${EXTRA_ARGS:-}
 

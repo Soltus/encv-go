@@ -1,4 +1,4 @@
-.PHONY: encv copy-files build-all build-artifacts run clean dev-backend dev-mobile test-go test-diagnose test-self
+.PHONY: encv copy-files build-all build-artifacts run clean dev-backend dev-mobile test-go test-diagnose test-self test-all-go
 
 OUTPUT_DIR ?= dist
 

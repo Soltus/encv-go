@@ -15,6 +15,7 @@ package testutil
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -57,13 +58,43 @@ type Reporter struct {
 }
 
 // 默认全局 reporter
-var defaultReporter = &Reporter{
-	dir: ".test-runs",
-}
+var defaultReporter = &Reporter{}
 
 // ReportDir 返回报告输出目录。
+// 自动发现项目根（含 go.mod 的目录），这样从子包跑 go test 也能正确写入。
+// 可通过 ENCV_TEST_REPORT_DIR 强制覆盖。
 func ReportDir() string {
-	return defaultReporter.dir
+	if d := os.Getenv("ENCV_TEST_REPORT_DIR"); d != "" {
+		return d
+	}
+	if cached := reportDirCache; cached != "" {
+		return cached
+	}
+	cwd, _ := os.Getwd()
+	root := findProjectRoot(cwd)
+	if root == "" {
+		root = cwd
+	}
+	reportDirCache = filepath.Join(root, ".test-runs")
+	return reportDirCache
+}
+
+var reportDirCache string
+
+// findProjectRoot 从 start 向上找含 go.mod 的目录。
+func findProjectRoot(start string) string {
+	dir := start
+	for i := 0; i < 10; i++ {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+	return ""
 }
 
 // record 内部记录一条报告。
@@ -122,22 +153,34 @@ func FinalizeAll(t *testing.T) {
 }
 
 // flush 把内存中所有 report 写盘。
-// 文件路径：<dir>/reports-<ts>.json
+// 文件路径：<ReportDir()>/reports-<ts>.json
 func (r *Reporter) flush() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.reports) == 0 {
 		return nil
 	}
-	if err := os.MkdirAll(r.dir, 0o755); err != nil {
+	dir := r.dir
+	if dir == "" {
+		dir = ReportDir()
+	}
+	if dir == "" {
+		return fmt.Errorf("flush: report dir is empty (cwd=%s)", mustGetwdReport())
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	fname := filepath.Join(r.dir, "reports-"+time.Now().Format("20060102-150405")+".json")
+	fname := filepath.Join(dir, "reports-"+time.Now().Format("20060102-150405")+".json")
 	data, err := json.MarshalIndent(r.reports, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(fname, data, 0o644)
+}
+
+func mustGetwdReport() string {
+	wd, _ := os.Getwd()
+	return wd
 }
 
 // Reset 清空所有 report（用于多次 FinalizeAll 之间）。
