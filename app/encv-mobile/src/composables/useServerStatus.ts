@@ -1,5 +1,5 @@
 import { ref, onMounted, onUnmounted, type Ref } from 'vue'
-import { checkServerStatus, setApiBaseUrl, DEFAULT_API_BASE_URL } from '@/api/encv'
+import { checkServerStatus, setApiBaseUrl, DEFAULT_API_BASE_URL, getPersistedBackendIdentity } from '@/api/encv'
 import { eventBus } from './useEventBus'
 import { useRealtimeTransport, type TransportMode } from './useRealtimeTransport'
 import { isNative, restartBackend, stopBackend, getBackendStatus } from '@/plugins/GoProcess'
@@ -13,6 +13,18 @@ const isStopping = ref(false)
 // 🆕 2026-06-10 详情页状态展示增强
 const latencyMs = ref(0)              // 上次 checkStatus HTTP 响应延迟
 const lastCheckedAt = ref<Date | null>(null)  // 上次探测时间
+// 🆕 2026-06-15：复用桌面后端 performPingCheck 的 InstanceID 防劫持机制
+//   持久化到 localStorage 的 instance_id（key: encv-server-instance-id）。
+//   跨会话探测时如果变化 → 报告"backend instance changed"，防止
+//   "返 200 application/json 的进程被错认为 encv-go" 的漏洞。
+const backendInstanceId = ref('')
+const backendVersion = ref('')
+// 首次启动时从 localStorage 恢复（让 UI 立刻能展示"上次连的进程"）
+const persisted = getPersistedBackendIdentity()
+if (persisted) {
+  backendInstanceId.value = persisted.instanceId
+  backendVersion.value = persisted.version
+}
 let initialized = false
 let nativeBridgeListenerAdded = false
 
@@ -23,6 +35,10 @@ async function probeHttp() {
   const dt = Math.round(performance.now() - t0)
   latencyMs.value = dt
   lastCheckedAt.value = new Date()
+  // 🆕 2026-06-15：把 checkServerStatus 探测到的 instance_id / version 同步到
+  //   useServerStatus 共享状态，让 UI 任何地方都能显示当前 backend 身份
+  if (result.instanceId) backendInstanceId.value = result.instanceId
+  if (result.version) backendVersion.value = result.version
   return { ...result, latency: dt }
 }
 
@@ -304,6 +320,12 @@ export function useServerStatus() {
     transportMode: transport.transportMode as Readonly<Ref<TransportMode>>,
     lastCheckedAt,
     isSandboxBrowser: transport.isSandboxBrowser,
+    // 🆕 2026-06-15：当前 backend 的 instance_id + version
+    //   来自 desktop 后端 /ping（PingResponse.instance_id），用于：
+    //   1. 防"端口被劫持"——performPingCheck 模式复用
+    //   2. UI 详情页展示当前 backend 身份（用户/AI 都可看）
+    backendInstanceId,
+    backendVersion,
     restartBackend: handleRestart,
     stopBackend: handleStop,
     // 手动重连：跑探测链 + 重建 transport（用于 Settings "立即探测" / 错误 banner "重试"）

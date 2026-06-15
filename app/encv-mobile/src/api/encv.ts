@@ -1,4 +1,12 @@
 const SERVER_URL_KEY = 'encv-server-url'
+// 🆕 2026-06-15：跨会话持久化 backend instance_id，用于防"端口被劫持/换进程"误判
+//   后端 performPingCheck (internal/register/server_start.go:103) 启动期就比对
+//   instance_id 防劫持，移动端必须复用同一机制——单看 200 + JSON 不够。
+//   任何"返 200 application/json" 的进程（mock / 旧 encv-go / 上游代理 / 中间人）
+//   都会骗过老的 checkServerStatus。InstanceID 是 encv-go 启动时唯一生成的
+//   UUID4，进程内常驻不变，重启即换。
+const SERVER_INSTANCE_ID_KEY = 'encv-server-instance-id'
+const SERVER_VERSION_KEY = 'encv-server-version'
 export const DEFAULT_API_BASE_URL = 'http://127.0.0.1:2025'
 // 🆕 2026-06-10 沙箱 OpenPreview 浏览器专用：必须用**同源** fetch。
 //   - OpenPreview 浏览器在 agent-tool-host 上，访问 127.0.0.1/localhost
@@ -283,36 +291,132 @@ export function getExternalStreamUrl(path: string): string {
   return `${baseUrl}/api/stream/external?path=${proxySafeEncode(path)}`
 }
 
-export async function checkServerStatus(): Promise<{ online: boolean; error?: string }> {
+export async function checkServerStatus(): Promise<{ online: boolean; error?: string; instanceId?: string; version?: string }> {
   try {
-    // 关键：使用与 Agent API 端点完全相同的 base URL。
-    // 在 dev模式下 getApiBaseUrl() 返回空字符串（相对路径），
-    // 但 preview-gateway 只代理 /api 和 /agent-api 前缀——
-    // 如果用 /api/service-guard 而 preview-gateway 的 /api 规则因某种原因
-    // 未覆盖该子路径（或 Trae 外层 proxy 干扰），探测会静默失败。
+    // 🆕 2026-06-15：复用桌面后端 performPingCheck 的 InstanceID 防劫持机制。
     //
-    // 改用 /api/config 作为健康检查端点（content-type 校验防 vite SPA fallback），
-    // 因为：
-    //   1. 用户日志证实 /api/* 路径可达（decrypt-key status=200）
-    //   2. /api/config 是 encv-go 核心端点，一定存在
-    //   3. 即使返回空 JSON {} 也证明后端在线（vs vite 返回 HTML）
+    // 历史：老代码只校验 Content-Type: application/json，但任何返 JSON 200 的进程
+    //   都能骗过——mock / 旧 encv-go / 上游代理 / 编译时拼出来的"伪 backend" 都会
+    //   被误判为 online。然后 token / 文件路径 / 任务数据就泄露给错误进程。
+    //
+    // 新逻辑（对齐 internal/register/server_start.go:89 performPingCheck）：
+    //   1. 调 /ping（无副作用的探测端点，后端返 PingResponse{status, version, instance_id, server_dir, webdav_dir}）
+    //   2. status code == 200 + content-type: application/json
+    //   3. **decode** 响应体成 PingResponse（不能只看 status == "ok"）
+    //   4. **instance_id 必填**：为空或缺字段 → 不是 encv-go → 报 hijacked
+    //   5. **跨会话比对**：localStorage 缓存的 instance_id 不一致 → "进程被替换" → 报 hijacked
+    //   6. 通过 → 持久化新的 instance_id + version 覆盖旧值（upgrade 场景：version 变了清缓存）
+    //
+    // 为什么不用 /api/config：
+    //   - /api/config 返空 JSON 也能 200，老逻辑下无法判断 backend 是不是 encv-go
+    //   - /ping 必有 instance_id，是 encv-go 唯一契约
     const baseUrl = getApiBaseUrl()
-    const response = await fetch(`${baseUrl}/api/config`)
-    if (response.ok) {
-      const contentType = response.headers.get('content-type') || ''
-      if (contentType.includes('application/json')) {
-        console.info('[API] server online (config JSON)')
-        return { online: true }
-      }
-      console.warn('[API] server probe returned non-JSON, treating as offline')
-      return { online: false, error: `config probe returned ${contentType || 'unknown'} (likely vite SPA fallback)` }
+    const response = await fetch(`${baseUrl}/ping`, {
+      // 强制不要缓存——instance_id 是 freshness 敏感的，HTTP 缓存可能让上一进程的 instance_id
+      // 错认给当前进程
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json' },
+    })
+    if (!response.ok) {
+      return { online: false, error: `HTTP ${response.status}` }
     }
-    return { online: false, error: `HTTP ${response.status}` }
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      // Vite SPA fallback / 任何返回 text/html 的"假 backend"——老逻辑的 case 仍要拦截
+      console.warn('[API] server probe returned non-JSON, treating as offline')
+      return { online: false, error: `ping returned ${contentType || 'unknown'} (likely vite SPA fallback or wrong port)` }
+    }
+    const ping = await parsePingResponse(response)
+    if (!ping) {
+      return { online: false, error: 'ping response missing required fields (instance_id / status / version)' }
+    }
+    if (ping.status !== 'ok') {
+      return { online: false, error: `ping status=${ping.status}` }
+    }
+    // 跨会话比对：localStorage 的 instance_id 与当前响应不一致 → 进程被替换
+    const previousId = readPersistedInstanceId()
+    if (previousId && previousId !== ping.instance_id) {
+      console.warn('[API] backend instance_id changed (port hijacked / backend replaced?)', {
+        previous: previousId, current: ping.instance_id,
+      })
+      return {
+        online: false,
+        error: `backend instance changed (was ${shortHash(previousId)}, now ${shortHash(ping.instance_id)})—possible port hijack`,
+        instanceId: ping.instance_id,
+        version: ping.version,
+      }
+    }
+    // 通过 → 持久化新值
+    persistBackendIdentity(ping.instance_id, ping.version)
+    console.info('[API] server online (ping OK)', { instanceId: shortHash(ping.instance_id), version: ping.version })
+    return { online: true, instanceId: ping.instance_id, version: ping.version }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.debug('[API] server offline:', msg)
     return { online: false, error: msg }
   }
+}
+
+/** PingResponse 子集（snake_case 与后端 internal/v2/types/types.go PingResponse 一致） */
+interface PingResponse {
+  status: string
+  version: string
+  instance_id: string
+  server_dir?: string
+  webdav_dir?: string
+}
+
+/**
+ * 安全 decode PingResponse。返回 null 表示"非 encv-go 响应"（字段缺失/类型错）。
+ *
+ * 不 throw：让调用方走 {online:false, error:...} 路径而不是 exception 路径。
+ */
+async function parsePingResponse(response: Response): Promise<PingResponse | null> {
+  try {
+    const obj = await response.json()
+    if (!obj || typeof obj !== 'object') return null
+    const status = typeof obj.status === 'string' ? obj.status : ''
+    const version = typeof obj.version === 'string' ? obj.version : ''
+    const instanceId = typeof obj.instance_id === 'string' ? obj.instance_id : ''
+    if (!status || !instanceId) {
+      // 关键字段缺失 → 不是 encv-go 响应
+      return null
+    }
+    return {
+      status,
+      version,
+      instance_id: instanceId,
+      server_dir: typeof obj.server_dir === 'string' ? obj.server_dir : undefined,
+      webdav_dir: typeof obj.webdav_dir === 'string' ? obj.webdav_dir : undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
+function readPersistedInstanceId(): string | null {
+  if (typeof localStorage === 'undefined') return null
+  return localStorage.getItem(SERVER_INSTANCE_ID_KEY)
+}
+
+function persistBackendIdentity(instanceId: string, version: string) {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem(SERVER_INSTANCE_ID_KEY, instanceId)
+  if (version) localStorage.setItem(SERVER_VERSION_KEY, version)
+}
+
+/** 短 hash 显示（前 8 字符）——给 UI 展示用，避免完整 UUID 占太多视觉空间 */
+function shortHash(id: string): string {
+  if (!id) return '(empty)'
+  return id.length > 8 ? id.slice(0, 8) : id
+}
+
+/** UI 读取持久化的 backend instance_id（用于"上次连接的是哪个进程"展示） */
+export function getPersistedBackendIdentity(): { instanceId: string; version: string } | null {
+  if (typeof localStorage === 'undefined') return null
+  const id = localStorage.getItem(SERVER_INSTANCE_ID_KEY)
+  if (!id) return null
+  return { instanceId: id, version: localStorage.getItem(SERVER_VERSION_KEY) || '' }
 }
 
 export async function deleteFile(path: string): Promise<void> {
