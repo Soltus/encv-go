@@ -154,15 +154,15 @@ export class RingBuffer<T> {
    * - 若 totalPushedIndex 已被覆盖（> totalPushed - capacity），返回 undefined
    *   （slot 仍是旧 item，调用方应触发 rebuild）
    */
-  atPushed(pushedIndex: number): T | undefined {
+  atPushed(pushedIndex: number): T | null {
     // 第 k 次 push 写入 slot (k % capacity)
     // 当 source.size < capacity 时，slot 里是 null（未写过）
     // 当 source.size === capacity 时，所有 slot 都有有效 item
-    if (pushedIndex < 0) return undefined
+    if (pushedIndex < 0) return null
     const cap = this.capacity
     const earliestStillValid = this.totalPushed - this.size
-    if (pushedIndex < earliestStillValid) return undefined // 已被覆盖
-    return this.slots[pushedIndex % cap] as T | undefined ?? null
+    if (pushedIndex < earliestStillValid) return null // 已被覆盖
+    return this.slots[pushedIndex % cap] ?? null
   }
 
   /**

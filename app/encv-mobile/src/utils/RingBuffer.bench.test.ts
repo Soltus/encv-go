@@ -15,7 +15,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { RingBuffer } from './RingBuffer'
-import { IncrementalFilter, type LogEntry, type FilterState } from './IncrementalFilter'
+import { IncrementalFilter, type LogEntry } from './IncrementalFilter'
 
 function makeLogEntry(i: number): LogEntry {
   const levels: LogEntry['level'][] = ['debug', 'info', 'warn', 'error']
@@ -226,7 +226,6 @@ describe('🔥 极限能力实测（关键验收）', () => {
   }, 90_000) // 90s timeout
 
   it('FPS: 100 条/秒 × 10 分钟 = 60K 条；最终过滤 + 读取耗时', () => {
-    const N = 60_000
     const f = new IncrementalFilter(1_000_000) // 用 1M 容量
     const FRAME_MS = 1000 / 60 // 60 FPS → 16.67ms/frame
 

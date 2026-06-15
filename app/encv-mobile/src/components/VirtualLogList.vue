@@ -44,7 +44,9 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useI18n } from '@/composables/useI18n'
 
 interface Props {
-  items: T[]
+  /** 🆕 2026-06-15 1M+ 优化：接受 readonly 数组，IncrementalFilter.getResult() 内部结果
+   *  不允许外部 mutate 但 props 仍兼容 mutable 调用方（协变） */
+  items: readonly T[]
   /** 滚动容器（ion-content 的 .inner-scroll） */
   scrollEl: HTMLElement | null
   /** 单条 item 估计高度（px），固定行高 */

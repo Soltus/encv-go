@@ -25,6 +25,9 @@
 import type { LogEntry } from '@/composables/useFrontendLogs'
 import { RingBuffer } from './RingBuffer'
 
+/** 重导出方便消费者（如 RingBuffer.bench.test.ts）单点引入 */
+export type { LogEntry }
+
 export type Level = 'debug' | 'info' | 'warn' | 'error' | 'all'
 export type FilterPredicate = (entry: LogEntry) => boolean
 
@@ -97,7 +100,6 @@ export class IncrementalFilter {
   private processPending(): void {
     if (this.source.totalPushed === this.processed) return
     const t0 = performance.now()
-    const cap = this.source.capacity
     const earliestValid = this.source.earliestValidPushed
     const start = Math.max(this.processed, earliestValid)
     const end = this.source.totalPushed
