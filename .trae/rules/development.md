@@ -38,17 +38,31 @@
 
 ## 二、严禁阻塞式服务启动
 
-**Go 后端服务必须在后台运行，不得占用当前终端。**
+**Go 后端 / Vite dev server 严禁在当前终端前台运行；必须在 PM2 → preview-gateway 链路内管理（详见 §5.2）。**
 
 ```bash
-# ❌ 错误：直接前台运行 — 终端被占用
-$ go run ./cmd/encv/ serve
+# ❌ 错误：所有"绕过 pm2"的启动方式 — 全部非法
+$ go run ./cmd/encv/ serve          # 前台占终端
+$ go run ./cmd/encv/ start          # 前台占终端
+$ go run ./cmd/encv/ serve > /tmp/encv-backend.log 2>&1 &  # nohup / & 后台
+$ nohup go run ./cmd/encv/ start > /tmp/encv-backend.log 2>&1 &
+$ tmux new-session -d -s encv 'go run ./cmd/encv/ start'  # tmux 包装
+$ vite                                       # dev-start-guard 拦截
+$ npm run dev                                # dev-start-guard 拦截
+$ pnpm exec vite                             # dev-start-guard 拦截
+$ CI=true pnpm exec vite                     # 绕过意图明确，dev-start-guard 拦截（2026-06-15 收紧）
+$ PPA_SPAWNED=1 pnpm exec vite               # 绕过意图明确，dev-start-guard 拦截（2026-06-15 收紧）
+$ bash -c 'go run ./cmd/encv/ start'         # bash 包装同样非法
+```
 
-# ✅ 正确：4 种后台启动方式
-$ go run ./cmd/encv/ serve > /tmp/encv-backend.log 2>&1 &  # ① & 后台
-$ nohup go run ./cmd/encv/ serve > /tmp/encv-backend.log 2>&1 &  # ② nohup
-$ tmux new-session -d -s encv 'go run ./cmd/encv/ serve'  # ③ tmux（推荐）
-# ④ IDE 独立终端标签
+**✅ 唯一合法链路**（详见 §5.2）：
+
+```bash
+$ pm2 start /workspace/ecosystem.config.cjs
+# → preview-gateway(:16666) spawn 子进程：
+#   - air → encv-go(:2025)
+#   - vite → encv-mobile(:8100, SPAWN_VITE=1)
+#   - openlist (按需)
 ```
 
 **后台进程管理命令**：`lsof -i :2025 -t` / `tail -f /tmp/encv-backend.log` / `kill $(lsof -i :2025 -t)`
@@ -89,17 +103,25 @@ done
 
 ## 五、Capacitor 预览标准化流程
 
-### 5.1 完整启动序列
+### 5.1 ⚠️ 本节已废弃 — 仅作历史背景
 
-```
-Step 1 ──→ Step 2 ──→ Step 3（可选）
-Backend     Frontend    Capacitor
-:2025       :5173       sync/preview
-```
-
-**Step 1**：后台启动 `go run ./cmd/encv/ serve > /tmp/encv-backend.log 2>&1 &` → 验证 `curl http://127.0.0.1:2025/api/health`
-**Step 2**：`npm run dev` 启动 Vite
-**Step 3（可选）**：`npx cap sync` / `npx cap open android` / `npx cap serve`
+> **唯一合法启动方式：见 §5.2 Capacitor 预览专用一键脚本（PM2 → preview-gateway）。**
+> 
+> **5.1 描述的"通用方式"（go run / npm run dev / npx cap serve 等）已全部被 dev-start-guard + air 配置 + ecosystem.config.cjs 收紧，2026-06-15 不再可用。**
+> 
+> 历史背景（保留供排错参考）：
+> 
+> ```
+> Step 1 ──→ Step 2 ──→ Step 3（可选）
+> Backend     Frontend    Capacitor
+> :2025       :5173       sync/preview
+> ```
+> 
+> 旧 Step 1（已废弃）：`go run ./cmd/encv/ serve > /tmp/encv-backend.log 2>&1 &`
+> 旧 Step 2（已废弃）：`npm run dev` 启动 Vite
+> 旧 Step 3（已废弃）：`npx cap sync` / `npx cap open android` / `npx cap serve`
+> 
+> **以上三种"通用方式"在沙箱内一律被 dev-start-guard / air 拦截。请改走 §5.2 的 pm2 路线。**
 
 ### 5.2 Capacitor 预览专用一键脚本（`scripts/start-preview.sh`）
 
