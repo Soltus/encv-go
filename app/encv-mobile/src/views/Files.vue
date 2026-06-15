@@ -651,20 +651,11 @@ const currentPath = ref(MOUNT_ROOT)
 const loading = ref(false)
 const connecting = ref(false)
 
-// 🆕 2026-06-15 multi-mount 适配：mount 状态（用于根目录展示）
-const mounts = ref<Mount[]>([])
+// 🆕 2026-06-15 multi-mount 适配：mount 根 /d 由后端 handleListFilesGin 返 mount 列表
+//   - 后端响应里 mount 伪 item 含 mount_driver / mount_path / mount_root 字段
+//   - frontend Files.vue 通过 mountDriverOf(file) / mountPathOf(file) / mountRootOf(file) 访问
+//   - 这里不再维护本地 mounts ref（避免与文件列表数据源不一致）
 const isMountRoot = computed(() => currentPath.value === MOUNT_ROOT)
-// 解析 mount 路径段 /d/<name>/<sub>... — 面包屑用
-const mountForCurrentPath = computed<Mount | null>(() => {
-  if (!isMountRoot.value) {
-    const segs = currentPath.value.split('/').filter(Boolean) // ['d', 'name', ...]
-    if (segs.length >= 2 && segs[0] === 'd') {
-      const name = segs[1]
-      return mounts.value.find(m => m.name === name) ?? null
-    }
-  }
-  return null
-})
 
 const searchQuery = ref('')
 const searchRecursive = ref(false)
@@ -692,8 +683,14 @@ const pathSegments = computed(() => {
     if (index === 0 && name === 'd') {
       displayName = t('files.mountRoot') || '挂载点' // 第一段显示成"挂载点"
     } else if (index === 1) {
-      // mount name 段：用 mount.name（如果存在）保持简洁
-      const m = mounts.value.find(mt => mt.name === name)
+      // mount name 段：从 files.value 里找 mount 伪 item（mount_driver 字段存在），
+      // 找不到就原样用路径段（容错）
+      const m = files.value.find(
+        (f) =>
+          f.isDirectory &&
+          mountDriverOf(f) != null &&
+          f.name === name,
+      )
       if (m) displayName = m.name
     }
     return {
