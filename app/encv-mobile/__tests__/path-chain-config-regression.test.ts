@@ -3,10 +3,13 @@
  *
  * ⚠️ 关键回归测试：mock 数据根路径链路一致性
  *
- * 链路：
+ * 链路（2026-06-15 multi-mount 改造）：
  *   A. 自动化测试 sourcePath 派生 = useAutomationTests.DEFAULT_AUTOMATION_SOURCE
- *      父目录 = `${servingDir}/encv-automation/`，即 /storage/emulated/0/encv-automation/
- *   B. withSafetyBoundary({forceAutomation: true}) 把 /storage/emulated/0/* 强制改写到 encv-automation 命名空间
+ *      = /d/automation/01-plain-media/video/sample.mp4（虚拟 mount 路径）
+ *      → 后端解析：真机 → /data/user/<uid>/com.encvgo.app/files/encv-automation/01-plain-media/video/sample.mp4
+ *                  dev  → $TMPDIR/encv-appdata/encv-automation/01-plain-media/video/sample.mp4
+ *   B. withSafetyBoundary 降级为 no-op（spec Phase B5）→ 路径不再客户端改写
+ *      命名空间隔离改由后端 mount 系统承担
  *
  * 如果任一处漂移 → Mock 写盘路径 ≠ 任务读盘路径 → "source file not found" 错误
  *
@@ -14,6 +17,10 @@
  *   - 删 ENCV_MOCK_ROOT 相关测试（ecosystem.config.cjs 不再注入该 env，由 mobile overlay 直接决定 servingDir）
  *   - 删 generate-mock-files.ts 相关测试（Node CLI 脚本已废弃）
  *   - 保留 DEFAULT_AUTOMATION_SOURCE 父目录测试（自动化测试 sourcePath 命名空间硬约束）
+ *
+ * 2026-06-15 改造（multi-mount）：
+ *   - 父目录从 `/storage/emulated/0/encv-automation` 改为 `/d/automation`
+ *   - 真实物理路径现在由后端 mount registry 解析（不再是前端能看见的字符串）
  *
  * 文件位置说明：此文件在 /workspace/app/encv-mobile/__tests__/（仓库根级），
  * 不在 src/ 里 — 故 tsconfig.json 的 include 范围（src 之下的 ts）不会扫它，
@@ -37,11 +44,13 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
 
-// ⚠️ 硬约束：自动化测试 sourcePath 父目录（withSafetyBoundary 改写后的目标 namespace）
-const EXPECTED_AUTOMATION_NS = '/storage/emulated/0/encv-automation'
+// 🆕 2026-06-15 multi-mount：父目录断言改为 mount 虚拟路径
+//  - 旧值：/storage/emulated/0/encv-automation（绝对路径，前端可读）
+//  - 新值：/d/automation（虚拟 mount 路径，运行时由后端 mount registry 解析）
+const EXPECTED_AUTOMATION_NS = '/d/automation'
 
 describe('path-chain — 配置文件防回归（跨链路一致）', () => {
-  it('【防回归】useAutomationTests.DEFAULT_AUTOMATION_SOURCE 父目录必须 = /storage/emulated/0/encv-automation', () => {
+  it('【防回归】useAutomationTests.DEFAULT_AUTOMATION_SOURCE 父目录必须 = /d/automation（multi-mount）', () => {
     const src = readFileSync(
       resolve(REPO_ROOT, 'app/encv-mobile/src/composables/useAutomationTests.ts'),
       'utf-8',
@@ -50,7 +59,7 @@ describe('path-chain — 配置文件防回归（跨链路一致）', () => {
     const m = src.match(/DEFAULT_AUTOMATION_SOURCE\s*=\s*['"]([^'"]+)['"]/)
     expect(m, 'DEFAULT_AUTOMATION_SOURCE must be present in useAutomationTests.ts').toBeTruthy()
     const sourcePath = m![1]
-    // 父目录（去掉 01-plain-media/...）必须是 encv-automation 命名空间
+    // 父目录（去掉 01-plain-media/...）必须是 /d/automation mount 命名空间
     expect(sourcePath.startsWith(`${EXPECTED_AUTOMATION_NS}/`)).toBe(true)
   })
 

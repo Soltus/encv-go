@@ -157,6 +157,11 @@ func NewServer(ctx context.Context, configPath string) *Server {
 		fmt.Fprintf(os.Stderr, "[mount] MigrateFromServingDir failed: %v\n", err)
 	}
 
+	// 🆕 2026-06-15 multi-mount: 把 mount registry 注入 MobileService
+	//   - MobileService 用 MountRootProvider 接口只取 primary RootPath
+	//   - 用 primaryRootProvider 适配器桥接 mount.MountRegistry → service.MountRootProvider
+	mobileSvc.SetMountRegistry(&primaryRootProvider{reg: s.mountRegistry})
+
 	// 剧本外置 spec：若 agent_settings.mock_scenarios_dir 非空，
 	// 用 ScenarioLoader 加载 YAML/JSON 剧本，注入到 MockEngine。
 	// 详见 internal/server/mock_scenarios/SCHEMA.md。

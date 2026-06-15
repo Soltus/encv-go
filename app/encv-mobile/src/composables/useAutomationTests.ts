@@ -79,17 +79,20 @@ export interface GenerateTestCaseOptions {
  * 自动化测试默认源文件。
  *
  * 真实运行时由后端 /api/mock/generate 生成（用户主动按 UI 按钮 / 直接 curl），
- * 写到 /storage/emulated/0/encv-automation/01-plain-media/ 命名空间。
+ * 写到 mount registry 解析后的 /d/automation mount 根目录下。
  *
- * 路径派生：
- *   - mockRoot = DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 5).join('/') + '/'
- *             = /storage/emulated/0/encv-automation/
- *   - withSafetyBoundary({forceAutomation: true}) 强制改写 /storage/emulated/0/* 到 encv-automation 命名空间
+ * 2026-06-15 multi-mount 重构（spec Phase B4）：
+ *   - 旧形式（硬编码绝对路径）：/storage/emulated/0/encv-automation/01-plain-media/video/sample.mp4
+ *   - 新形式（mount 虚拟路径）：/d/automation/01-plain-media/video/sample.mp4
+ *   - 真机：后端解析为 /data/user/<uid>/com.encvgo.app/files/encv-automation/01-plain-media/video/sample.mp4
+ *   - dev 沙箱：后端解析为 $TMPDIR/encv-appdata/encv-automation/01-plain-media/video/sample.mp4
+ *   - 不再依赖 withSafetyBoundary 客户端改写（mount 系统天然做命名空间隔离）
  *
- * 2026-06-10 note：Node CLI 脚本 scripts/generate-mock-files.ts 已废弃，但路径派生逻辑保留
- *   （因为 servedir 仍来自 mobile overlay = /storage/emulated/0，encv-automation 子目录约定不变）。
+ * mockRoot 派生（动态）：
+ *   - DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 3).join('/') = '/d/automation'
+ *   - 后端校验：必须以 /d/ 开头 + mountRegistry.Resolve 成功
  */
-export const DEFAULT_AUTOMATION_SOURCE = '/storage/emulated/0/encv-automation/01-plain-media/video/sample.mp4'
+export const DEFAULT_AUTOMATION_SOURCE = '/d/automation/01-plain-media/video/sample.mp4'
 
 export function useAutomationTests() {
   const { withSafetyBoundary } = usePathResolver()

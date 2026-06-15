@@ -87,9 +87,39 @@ type MobileService struct {
 	contentHandler *handler.ContentHandler
 	chunkNamers    []namer.ChunkNamer
 
+	// 🆕 2026-06-15 multi-mount: 来自 server.MountRegistry
+	//   用途：保护 primary 挂载根 + 解析虚拟路径（Phase C/D 切到 mount）
+	mountRegistry MountRootProvider
+
 	// --- 可选依赖注入（用于测试） ---
 	dirReader         DirReader         // nil = 使用 os.ReadDir
 	containerDetector ContainerDetector // nil = 使用 detector.DetectContainer
+}
+
+// MountRootProvider 是 mount.MountRegistry 的子集接口
+// （service 包只依赖 RootPath，避免拉整个 mount 包类型链）
+type MountRootProvider interface {
+	GetPrimaryRootPath() string
+}
+
+// SetMountRegistry 注入 mount registry（多挂载点）
+//   - 调用方：server.NewServer 在 registry 创建后调用
+//   - nil 是合法值（未启用 multi-mount 模式时）
+func (s *MobileService) SetMountRegistry(reg MountRootProvider) {
+	s.mountRegistry = reg
+}
+
+// primaryRootPath 返回 primary 挂载的 RootPath；mount registry 未注入时回退到 servingDir
+//
+// 2026-06-15 改造：原本 s.servingDir 既作为 primary mount 的 RootPath，又作为删除守卫的目标。
+// 重构后显式分两个概念：mount 配置（primary.RootPath） vs 兼容性兜底（s.servingDir）。
+func (s *MobileService) primaryRootPath() string {
+	if s.mountRegistry != nil {
+		if r := s.mountRegistry.GetPrimaryRootPath(); r != "" {
+			return r
+		}
+	}
+	return s.servingDir
 }
 
 func NewMobileService(servingDir string, cfg *config.Config) *MobileService {
@@ -182,12 +212,18 @@ func (s *MobileService) DeleteFile(queryPath string) error {
 		return &ForbiddenError{Err: err}
 	}
 
-	// 🆕 2026-06-10 修复 #1：安全防御 — 禁止删除 servingDir 根目录
+	// 🆕 2026-06-10 修复 #1：安全防御 — 禁止删除 primary 挂载根目录
 	// 历史 bug：servingDir=/storage/emulated/0 → queryPath="/" 解析后 absPath 恰为根
 	//   用户长按"删除"后会把所有 mock 数据、用户文件一锅端
-	// 修复：absPath == servingDir 时拒绝
-	if absPath == s.servingDir {
-		slog.Warn("DeleteFile: refuse to delete servingDir root", "path", queryPath)
+	// 修复：absPath == primary mount RootPath 时拒绝
+	//
+	// 🆕 2026-06-15 multi-mount：来源改为 primary mount RootPath（servingDir 兜底）
+	//   - 真机：primary.RootPath = /storage/emulated/0（LocalDriver 绑 cfg.Server.Dir）
+	//   - dev：primary.RootPath = 当前 cfg.Server.Dir（LocalDriver Abs 解析）
+	//   - 兜底：未注入 mount registry 时用 s.servingDir（兼容旧模式）
+	protectedRoot := s.primaryRootPath()
+	if absPath == protectedRoot {
+		slog.Warn("DeleteFile: refuse to delete primary mount root", "path", queryPath, "root", protectedRoot)
 		return &ForbiddenError{Err: errors.New("cannot delete the root of the serving directory")}
 	}
 

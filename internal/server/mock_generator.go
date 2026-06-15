@@ -59,19 +59,14 @@ import (
 //   - 真机：build-ffmpeg-android.sh 编 libffmpeg.so → APK jniLibs → dlopen 调 ffmpeg_run
 // ════════════════════════════════════════════════════════════════════
 
-// mockRootAllowList 是允许写入的根目录白名单（绝对路径前缀）。
-// 2026-06-10 改造：删除 dev 模式相对路径（`__mock_data__`），全部走绝对路径。
-//   1. /storage/emulated/0（servingDir 根，给 Files 浏览器用）
-//   2. /storage/emulated/0/encv-automation（自动化测试命名空间，withSafetyBoundary 改写后的目标）
-//   3. /sdcard/encv-automation（真机 symlink 兼容）
-//   4. /data/local/tmp/encv-automation（调试用）
-// 其他路径一律 403。
-var mockRootAllowList = []string{
-	"/storage/emulated/0",
-	"/storage/emulated/0/encv-automation",
-	"/sdcard/encv-automation",
-	"/data/local/tmp/encv-automation",
-}
+// 🆕 2026-06-15 multi-mount 重构：root 必须是 /d/<mount>/... 形式的虚拟挂载路径。
+//
+//   - /d/automation/...  → 走 mount registry 解析到真机 appdata 目录（解决 P1 EACCES）
+//   - /d/primary/...     → 走 primary 挂载（用户数据，给 Files 浏览器用）
+//   - 其他 /d/<x>/...    → 任意已注册挂载
+//   - 旧绝对路径（/storage/emulated/0/...）一律 403 —— 强制迁移
+//
+// 旧 mockRootAllowList 静态白名单删除（spec Phase B1）。旧定义归档见文末。
 
 // mockGeneratorRequest 是 POST /api/mock/generate 的请求体
 type mockGeneratorRequest struct {
@@ -91,34 +86,25 @@ type mockGeneratorDone struct {
 	TotalSize int64 `json:"totalSize"`
 }
 
-// validateMockRoot 校验 root 是否在白名单前缀内
-func validateMockRoot(root string) error {
+// validateMockRoot 校验 root 是否是有效的 mount 路径。
+//
+// 2026-06-15 multi-mount 重构：root 必须是 /d/<mount>/... 形式
+//  → 通过 mountRegistry.Resolve 校验挂载存在 + 解析出 abs 路径
+//  → 旧绝对路径（/storage/emulated/0/...）一律拒绝
+func (s *Server) validateMockRoot(root string) error {
 	if root == "" {
 		return fmt.Errorf("root is empty")
 	}
-	// 规范化
-	clean := filepath.Clean(root)
-	if !filepath.IsAbs(clean) {
-		// dev 模式：相对路径转绝对
-		abs, err := filepath.Abs(clean)
-		if err != nil {
-			return fmt.Errorf("invalid root path: %w", err)
-		}
-		clean = abs
+	if s.mountRegistry == nil {
+		return fmt.Errorf("mount registry not initialized")
 	}
-	for _, allow := range mockRootAllowList {
-		allowClean := filepath.Clean(allow)
-		if !filepath.IsAbs(allowClean) {
-			if abs, err := filepath.Abs(allowClean); err == nil {
-				allowClean = abs
-			}
-		}
-		// 精确匹配或在 allow 前缀下
-		if clean == allowClean || strings.HasPrefix(clean, allowClean+string(os.PathSeparator)) {
-			return nil
-		}
+	if !strings.HasPrefix(root, "/d/") {
+		return fmt.Errorf("root %q must be a mount path (start with /d/...)", root)
 	}
-	return fmt.Errorf("root %q is not in allowlist", root)
+	if _, err := s.mountRegistry.Resolve(root); err != nil {
+		return fmt.Errorf("resolve %q: %w", root, err)
+	}
+	return nil
 }
 
 // mockFileSpec 描述一个待生成的文件
@@ -258,19 +244,22 @@ func (s *Server) handleMockGenerateGin(c *gin.Context) {
 		return
 	}
 
-	if err := validateMockRoot(req.Root); err != nil {
-		slog.Warn("Mock generate rejected: root not in allowlist", "root", req.Root, "error", err)
+	if err := s.validateMockRoot(req.Root); err != nil {
+		slog.Warn("Mock generate rejected: invalid mount path", "root", req.Root, "error", err)
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
 
-	// 规范化 root
-	root := filepath.Clean(req.Root)
-	if !filepath.IsAbs(root) {
-		if abs, err := filepath.Abs(root); err == nil {
-			root = abs
-		}
+	// 🆕 2026-06-15 multi-mount: 解析虚拟挂载路径到绝对路径
+	//   /d/automation → /data/user/<uid>/com.encvgo.app/files/encv-automation
+	//   /d/primary    → /storage/emulated/0
+	res, err := s.mountRegistry.Resolve(req.Root)
+	if err != nil {
+		slog.Error("Mock generate: mount resolve failed", "root", req.Root, "error", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "mount resolve failed: " + err.Error()})
+		return
 	}
+	root := res.AbsPath
 
 	specs := generateMockSpecs(req.Type)
 	if specs == nil {
@@ -495,16 +484,17 @@ func (s *Server) handleMockResetGin(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body: " + err.Error()})
 		return
 	}
-	if err := validateMockRoot(req.Root); err != nil {
+	if err := s.validateMockRoot(req.Root); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 		return
 	}
-	root := filepath.Clean(req.Root)
-	if !filepath.IsAbs(root) {
-		if abs, err := filepath.Abs(root); err == nil {
-			root = abs
-		}
+	// 🆕 2026-06-15 multi-mount: 解析虚拟挂载路径到绝对路径
+	res, err := s.mountRegistry.Resolve(req.Root)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "mount resolve failed: " + err.Error()})
+		return
 	}
+	root := res.AbsPath
 
 	// 已知子目录（保留目录结构，删除其中内容）
 	knownSubdirs := []string{
@@ -1008,3 +998,24 @@ func makeBytes(n int, fill byte) []byte {
 	}
 	return out
 }
+
+// ════════════════════════════════════════════════════════════════════
+// 📦 归档：旧 mockRootAllowList（2026-06-15 multi-mount 重构删除）
+//
+//   旧实现是静态白名单绝对路径前缀匹配，2026-06-10 改造删除 dev 模式相对路径。
+//   重构原因（spec §1.2）：
+//     1. 硬编码 /storage/emulated/0 → 多用户 mode 下变成 /storage/emulated/<uid>/0
+//     2. /storage/emulated/0/encv-automation → Android 11+ scoped storage EACCES
+//     3. dev 沙箱里写 mock 跟真机路径不一致 → 自动化测试找不到
+//
+//   新实现走 mount.MountRegistry：root 必须是 /d/<mount>/... 形式，
+//   通过 Resolve() 动态解析到 abs 路径（真机 /data/user/<uid>/com.encvgo.app/files/encv-automation）
+//
+// 保留这段仅供历史查阅，**不要**在新代码里引用。
+// ════════════════════════════════════════════════════════════════════
+// var mockRootAllowList = []string{
+// 	"/storage/emulated/0",
+// 	"/storage/emulated/0/encv-automation",
+// 	"/sdcard/encv-automation",
+// 	"/data/local/tmp/encv-automation",
+// }

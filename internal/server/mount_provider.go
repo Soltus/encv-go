@@ -5,6 +5,7 @@ import (
 
 	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/mount"
+	mobileservice "github.com/Soltus/encv-go/internal/service"
 )
 
 // configMountProvider 把 *config.Config 适配为 mount.ConfigProvider。
@@ -72,3 +73,25 @@ func (p *configMountProvider) AutomationDriver() string {
 
 // 编译期断言
 var _ mount.ConfigProvider = (*configMountProvider)(nil)
+
+// primaryRootProvider 把 mount.MountRegistry 适配为 service.MountRootProvider。
+//
+// 用途：让 service.MobileService 拿到 primary mount 的 RootPath 用于删除守卫。
+// 桥接链：server.NewServer 构造 mount.MountRegistry → 包成 primaryRootProvider
+//   → 注入到 mobileSvc.SetMountRegistry(reg) → mobileSvc.primaryRootPath() 用
+type primaryRootProvider struct {
+	reg *mount.MountRegistry
+}
+
+func (p *primaryRootProvider) GetPrimaryRootPath() string {
+	if p == nil || p.reg == nil {
+		return ""
+	}
+	if m := p.reg.GetByName("primary"); m != nil {
+		return m.RootPath
+	}
+	return ""
+}
+
+// 编译期断言
+var _ mobileservice.MountRootProvider = (*primaryRootProvider)(nil)

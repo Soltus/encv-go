@@ -207,7 +207,18 @@ func (s *Server) handleUploadFileGin(c *gin.Context) {
 //
 // 所以现在守卫只验证"servingDir 是不是 mobile 标准路径"，不关心里面有没有数据。
 func (s *Server) handleServiceGuardGin(c *gin.Context) {
-	expectedDir := "/storage/emulated/0"
+	// 🆕 2026-06-15 multi-mount: expectedDir 来自 primary mount 解析（不再是硬编码 /storage/emulated/0）
+	//   - 真机：primary.RootPath = /storage/emulated/0（LocalDriver 绑 cfg.Server.Dir）
+	//   - dev 沙箱：primary.RootPath = 当前 cfg.Server.Dir（LocalDriver Abs 解析）
+	//   - 后端 start 时 cfg.Server.Dir 被 ApplyMobileOverlay 改为 /storage/emulated/0（mobile mode）
+	//     或者 = 当前 cwd（普通 mode）—— primary mount 的 RootPath 跟这个对齐
+	primaryExpected := "/storage/emulated/0" // 兜底
+	if s.mountRegistry != nil {
+		if pm := s.mountRegistry.GetByName("primary"); pm != nil && pm.RootPath != "" {
+			primaryExpected = pm.RootPath
+		}
+	}
+	expectedDir := primaryExpected
 
 	// 1. 解析成绝对路径
 	absDir, err := filepath.Abs(s.servingDir)
