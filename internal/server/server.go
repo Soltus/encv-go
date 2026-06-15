@@ -21,6 +21,8 @@ import (
 	"github.com/Soltus/encv-go/internal/auth"
 	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/middleware"
+	"github.com/Soltus/encv-go/internal/mount"
+	"github.com/Soltus/encv-go/internal/mount/drivers"
 	"github.com/Soltus/encv-go/internal/openlist"
 	"github.com/Soltus/encv-go/internal/openlist/web"
 	"github.com/Soltus/encv-go/internal/register"
@@ -72,6 +74,9 @@ type Server struct {
 	// toolDeps 是 tools 包的依赖注入（v2 工具注册表使用）。
 	// Server 启动时构造一次，executeAgentTool 路径下注入到 tools.GlobalRegistry.Dispatch。
 	toolDeps *tools.ToolDeps
+	// 🆕 2026-06-15：多挂载点注册表（multi-mount-storage-refactor spec）
+	// 启动时构造，与 cfg.servingDir / cfg.isMobile / cfg.isDev 一起决定默认 mount
+	mountRegistry *mount.MountRegistry
 	// 🆕 2026-06-14：跨进程 IPC 重构 — RuntimeInfo 内存字段
 	//
 	// 单一来源：Go 自己持有，HTTP /api/runtime 对外声明。
@@ -83,6 +88,22 @@ type Server struct {
 	// atomic.LoadInt64 无锁读，atomic.StoreInt64 写。
 	// HeartbeatStaleThreshold = 30s，见 runtime_api.go
 	lastHeartbeatMs int64
+}
+
+// mountRegistryDataPath 返回 mounts.json 的持久化路径。
+//
+// 优先级：
+//   1. ENCV_MOUNTS_FILE 环境变量（明确指定）
+//   2. cfg.Server.Dir/mounts.json（与服务根同目录）
+//   3. os.TempDir()/encv-mounts/mounts.json（兜底）
+func mountRegistryDataPath(cfg *config.Config) string {
+	if v := os.Getenv("ENCV_MOUNTS_FILE"); v != "" {
+		return v
+	}
+	if cfg != nil && cfg.Server.Dir != "" {
+		return filepath.Join(cfg.Server.Dir, "mounts.json")
+	}
+	return filepath.Join(os.TempDir(), "encv-mounts", "mounts.json")
 }
 
 func NewServer(ctx context.Context, configPath string) *Server {
@@ -119,6 +140,21 @@ func NewServer(ctx context.Context, configPath string) *Server {
 			return s.isInAnyMount(absPath)
 		},
 		Config: cfg,
+	}
+
+	// 🆕 2026-06-15：多挂载点注册表（multi-mount-storage-refactor spec）
+	// 启动顺序：
+	//   1. NewRegistry
+	//   2. RegisterDriverFactory x 3
+	//   3. MigrateFromServingDir（Load → 必要时 Bootstrap → Save）
+	// 完成后 s.mountRegistry 可用于 HTTP API + 未来 task_manager 路径解析
+	s.mountRegistry = mount.NewRegistry(&configMountProvider{cfg: cfg}, mountRegistryDataPath(cfg))
+	s.mountRegistry.RegisterDriverFactory(mount.DriverLocal, func() mount.Driver { return drivers.NewLocalDriver() })
+	s.mountRegistry.RegisterDriverFactory(mount.DriverAppData, func() mount.Driver { return drivers.NewAppDataDriver() })
+	s.mountRegistry.RegisterDriverFactory(mount.DriverSandbox, func() mount.Driver { return drivers.NewSandboxDriver() })
+	if err := s.mountRegistry.MigrateFromServingDir(context.Background()); err != nil {
+		// 启动期失败不阻塞服务（旧 cfg.ServingDir 路径仍可用；新 mount 系统降级为不可用）
+		fmt.Fprintf(os.Stderr, "[mount] MigrateFromServingDir failed: %v\n", err)
 	}
 
 	// 剧本外置 spec：若 agent_settings.mock_scenarios_dir 非空，
@@ -405,6 +441,14 @@ func (s *Server) Start(version string) (string, error) {
 	r.GET("/api/alist-encrypt/stream", s.handleAlistEncryptStreamGin)
 	r.GET("/api/alist-encrypt/decode-filename", s.handleAlistDecodeFilenameGin)
 	r.POST("/api/logs", s.handleAPILogsGin)
+	// 🆕 2026-06-15：多挂载点管理 API（multi-mount-storage-refactor spec §6.1）
+	r.GET("/api/mounts", s.handleListMountsGin)
+	r.GET("/api/mounts/:id", s.handleGetMountGin)
+	r.POST("/api/mounts", s.handleCreateMountGin)
+	r.PUT("/api/mounts/:id", s.handleUpdateMountGin)
+	r.DELETE("/api/mounts/:id", s.handleDeleteMountGin)
+	r.POST("/api/mounts/:id/resolve", s.handleResolveMountPathGin)
+	r.GET("/api/mounts/:id/usage", s.handleMountUsageGin)
 	// 自动化测试 mock 数据生成/重置（root 白名单校验后写入）
 	r.POST("/api/mock/generate", s.handleMockGenerateGin)
 	r.POST("/api/mock/reset", s.handleMockResetGin)
