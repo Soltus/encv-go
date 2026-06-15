@@ -123,7 +123,7 @@ done
 > 
 > **以上三种"通用方式"在沙箱内一律被 dev-start-guard / air 拦截。请改走 §5.2 的 pm2 路线。**
 
-### 5.2 Capacitor 预览专用一键脚本（`scripts/start-preview.sh`）
+### 5.2 Capacitor 预览专用一键脚本（`scripts/previews.sh`）
 
 **核心铁律**：
 - servingDir 永远为 `/storage/emulated/0` 绝对路径
@@ -136,15 +136,38 @@ done
 
 | 端口 | 进程 | 身份 |
 |------|------|------|
-| 16000 | agent-tool-host | 公网反向代理入口 |
-| 5174/5175/... | Vite | 实际 dev server（端口漂移） |
-| 2025 | encv（air 监视） | Go Backend |
+| 16000 | agent-tool-host | 公网反向代理入口（严禁碰） |
+| 16666 | preview-gateway | 唯一对外预览入口（pm2 管） |
+| 15003 | openpreview-stub | OpenPreview 工具 web_server command_id 源（pm2 管） |
+| 8100 | encv-mobile-vite | Vite dev server（gateway 内部子进程） |
+| 2025 | encv-go（air 监视） | Go Backend（gateway 内部子进程） |
+| 5174/5244 | plugin-openlist-vite / openlist | 按需（默认不起） |
+
+**链路（pm2 唯一权威）**：
+
+```bash
+# 一键环境准备（装 air / pm2 / pnpm / build gateway）
+bash scripts/setup-sandbox-env.sh
+
+# 一键启 preview（pm2 管 2 个 app + gateway 内部 spawn 子进程）
+bash scripts/previews.sh start
+
+# 状态 / 日志 / 强杀
+bash scripts/previews.sh status
+bash scripts/previews.sh logs preview-gateway
+bash scripts/previews.sh kill
+```
 
 **激活外部访问**：
 ```bash
-# 脚本返回后必须调用 OpenPreview
-OpenPreview(command_id="<id>", preview_url="http://localhost:5174/")
-# 预览 URL 用 Vite 实际端口（5174），不是 5173
+# 1) 启一个 web_server 类型 command 拿 command_id（任何 200 OK 服务都行）
+#    openpreview-stub 已被 pm2 占着 :15003，所以临时启一个 :17000 实例
+PORT=17000 node scripts/openpreview-stub.js &
+
+# 2) 调用 OpenPreview 激活外网预览
+OpenPreview(command_id="<id>", preview_url="http://localhost:8100/")
+# 预览 URL 用 encv-mobile-vite 实际端口（8100），不是 16666
+# gateway 已经在 :16666 统一对外，但 OpenPreview 工具要直连 Vite 拿 SPA
 ```
 
 **完整 6 步脚本行为 + 排查表 + service-guard 根因清单** → [详情文档 §五](../rule-library/development.md#五capacitor-预览标准化流程)
