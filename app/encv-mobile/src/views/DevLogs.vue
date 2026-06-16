@@ -204,7 +204,7 @@ import { useRealtimeTransport } from '@/composables/useRealtimeTransport'
 import { useFrontendLogs, type LogEntry } from '@/composables/useFrontendLogs'
 import { showToast } from '@/composables/useToast'
 import { copyToClipboard } from '@/composables/useClipboard'
-import { checkServerStatus } from '@/api/encv'
+import { checkServerStatus, getRecentBackendLogs } from '@/api/encv'
 import { IncrementalFilter, type Level } from '@/utils/IncrementalFilter'
 
 const { t } = useI18n()
@@ -630,6 +630,27 @@ onMounted(async () => {
   if (!serverOnline.value) {
     const result = await checkServerStatus()
     serverOnline.value = result.online
+  }
+
+  // 🆕 2026-06-16：冷启动拉一次后端历史日志
+  // 不依赖 WS / http-poll 模式：HTTP 拉一次 GET /api/logs/recent
+  // 真机 WS 模式：历史日志（启动前）补齐；WS 推的实时日志仍通过 onWsMessage 收
+  // OpenPreview 沙箱：http-poll 模式也调用 getRecentBackendLogs，但这是冷启动多拉一次（幂等）
+  if (serverOnline.value) {
+    try {
+      const resp = await getRecentBackendLogs()
+      for (const e of resp.logs || []) {
+        const lvl: Level = ['debug', 'info', 'warn', 'error'].includes(e.level) ? (e.level as Level) : 'info'
+        queueBackendLog({
+          id: ++nextId,
+          timestamp: e.timestamp || new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+          level: lvl,
+          message: e.message,
+        })
+      }
+    } catch (err) {
+      console.warn('[DevLogs] cold-start fetch recent logs failed:', err instanceof Error ? err.message : String(err))
+    }
   }
 
   // 写入一条启动日志（INFO/WARN 取决于 server 状态）——首条直接 push 即可

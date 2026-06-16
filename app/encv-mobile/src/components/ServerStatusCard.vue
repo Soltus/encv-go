@@ -516,6 +516,17 @@ defineExpose({ checkStatus, restartBackend, stopBackend })
   min-height: 160px; /* JS 同步后会覆盖 */
   transition: min-height var(--transition-height);
 
+  /* 🆕 2026-06-16 修复 Android 翻转"幽灵内容"
+     根因链：
+     1. ion-tab-bar 的 backdrop-filter: blur(20px) 在 Android WebView 上抓取
+        屏幕所有 GPU 合成层的内容作为模糊输入
+     2. ServerStatusCard 翻转时 transform 触发 GPU 合成层
+     3. 合成层被 tab bar 的 backdrop-filter "贴" 到 tab bar 区域显示
+        → 背面"应用信息"等内容在 tab bar 左下角"穿透"出来
+        → 翻转回来也不消失（合成层仍在）
+     修复：isolation: isolate 创建独立 stacking context，backdrop-filter 抓不到 */
+  isolation: isolate;
+
   /* 拟物：外层 drop-shadow（卡片浮起阴影） */
   filter:
     drop-shadow(0 1px 1px rgba(0, 0, 0, 0.10))

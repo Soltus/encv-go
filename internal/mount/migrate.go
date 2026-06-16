@@ -37,7 +37,16 @@ func (r *MountRegistry) MigrateFromServingDir(ctx context.Context) error {
 		fmt.Fprintf(os.Stderr, "[mount] migrate: load failed (will bootstrap): %v\n", err)
 	}
 
-	// Step 3: 检查持久化文件
+	// Step 3: 检查持久化文件 + 关键 mount 是否齐全
+	//
+	// 🆕 2026-06-16 修复：原版只看 primary 缺失 → 触发 Bootstrap。但真机历史上
+	// 持久化的 mounts.json 可能只含 primary（早期版本没 automation / 用户手动
+	// 删了 / 写盘时被截断），Load 恢复后内存里 automation 不存在 → needBootstrap
+	// 判定为 false → 永远不补齐 automation → API 只看到 1 个 mount。
+	//
+	// 修复：needBootstrap 判定为「primary 或 automation 任意一个缺失」都触发
+	// Bootstrap（BootstrapFromConfig 内部每个 mount 都用 GetByName 判定是否补齐，
+	// 已存在的不会被覆盖，用户的自定义 mount 保留）。
 	needBootstrap := false
 	if r.dataPath == "" {
 		// 不持久化 → 总是 Bootstrap
@@ -46,8 +55,9 @@ func (r *MountRegistry) MigrateFromServingDir(ctx context.Context) error {
 		if _, err := os.Stat(r.dataPath); os.IsNotExist(err) {
 			needBootstrap = true
 		} else {
-			// 文件存在但内存里没有 primary mount（Load 失败 / 文件为空 / 文件不含 primary）→ 补齐
-			if r.GetByName(NamePrimary) == nil {
+			// 文件存在但内存里缺 primary 或 automation → 补齐
+			// （sandbox 是 dev-only，缺了不强制补；BootstrapFromConfig 内部按 IsDev 决定）
+			if r.GetByName(NamePrimary) == nil || r.GetByName(NameAutomation) == nil {
 				needBootstrap = true
 			}
 		}
