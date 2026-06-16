@@ -268,6 +268,12 @@ func NewServer(ctx context.Context, configPath string) *Server {
 		// 启动期失败不阻塞服务（旧 cfg.ServingDir 路径仍可用；新 mount 系统降级为不可用）
 		fmt.Fprintf(os.Stderr, "[mount] MigrateFromServingDir failed: %v\n", err)
 	}
+	// 挂载点创建确认日志（真机调试：logcat 可搜 [mount] 关键字确认 automation mount 是否就绪）
+	mounts := s.mountRegistry.List()
+	for _, m := range mounts {
+		fmt.Fprintf(os.Stderr, "[mount] ready: name=%s driver=%s path=%s root=%s\n",
+			m.Name, m.Driver, m.MountPath, m.RootPath)
+	}
 
 	// 🆕 2026-06-15 multi-mount: 把 mount registry 注入 MobileService
 	//   - primaryRootProvider 适配器桥接 mount.MountRegistry → service.MountRootProvider

@@ -373,8 +373,11 @@ class EncvGoService : Service() {
                 environment()["ENCV_CONFIG_PATH"] = configPath
                 environment()["ENCV_MOBILE"] = "1"
                 environment()["HOME"] = filesDir.absolutePath
+                // 显式告诉 Go 端 app 私有文件目录（mount 系统 + 日志持久化需要）
+                // 不依赖 appdata.go 的硬编码 fallback，确保路径 100% 正确
+                environment()["ENCV_APP_FILES_DIR"] = filesDir.absolutePath
                 // - ENCV_LIB_DIR 给 cgo CallFFmpegNative 用（dlopen libffmpeg.so）
-                // - ENCV_FFMPEG_WORKER 给 ffmpeg-worker 路径用（workerClient.locateWorker 优先选这个）
+                // - ENCV_FFMPEG_WORKER 给 ffmpeg worker 路径用（workerClient.locateWorker 优先选这个）
                 //   改用 subprocess worker 调 ffmpeg 后，父进程 ctx cancel 时可以 SIGKILL worker
                 //   解锁（之前 in-process cgo 阻塞 OS thread 没法 cancel，hang spinner forever）
                 environment()["ENCV_LIB_DIR"] = applicationInfo.nativeLibraryDir

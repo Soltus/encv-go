@@ -71,7 +71,7 @@
         <div v-if="filteredFrontend.length === 0" class="empty-logs">
           <p>{{ t('devlogs.noLogs') }}</p>
         </div>
-        <VirtualLogList v-else :items="filteredFrontend" :scroll-el="scrollEl" @select="onLogSelect">
+        <VirtualLogList :key="'frontend'" v-if="filteredFrontend.length > 0" :items="filteredFrontend" :scroll-el="scrollEl" @select="onLogSelect">
           <template #default="{ item }">
             <span class="log-time">[{{ item.timestamp }}]</span>
             <ion-badge :color="getBadgeColor(item.level)" class="level-badge">{{ item.level.toUpperCase() }}</ion-badge>
@@ -90,7 +90,7 @@
         <div v-if="backendFilteredItems.length === 0" class="empty-logs">
           <p>{{ t('devlogs.noLogs') }}</p>
         </div>
-        <VirtualLogList v-else :items="backendFilteredItems" :scroll-el="scrollEl" @select="onLogSelect">
+        <VirtualLogList :key="'backend'" v-if="backendFilteredItems.length > 0" :items="backendFilteredItems" :scroll-el="scrollEl" @select="onLogSelect">
           <template #default="{ item }">
             <span class="log-time">[{{ item.timestamp }}]</span>
             <ion-badge :color="getBadgeColor(item.level)" class="level-badge">{{ item.level.toUpperCase() }}</ion-badge>

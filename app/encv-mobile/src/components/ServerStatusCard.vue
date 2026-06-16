@@ -708,9 +708,38 @@ defineExpose({ checkStatus, restartBackend, stopBackend })
   animation: ssc-sheen 1.2s ease-out;
 }
 @keyframes ssc-sheen {
-  0%   { opacity: 0.7; }
+  0%   { opacity: 0.85; }
   50%  { opacity: 1; }
-  100% { opacity: 0.7; }
+  100% { opacity: 0.85; }
+}
+
+/* 状态色底部柔光（accent 色内阴影，让卡片"发光"） */
+.server-status-card.state-online .card-face {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.10),
+    inset 1px 0 0 rgba(255, 255, 255, 0.18),
+    inset -1px 0 0 rgba(0, 0, 0, 0.06),
+    inset 0 2px 6px rgba(0, 0, 0, 0.04),
+    inset 0 -2px 4px color-mix(in srgb, var(--ion-color-success, #2dd55b) 8%, transparent);
+}
+.server-status-card.state-offline .card-face {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.10),
+    inset 1px 0 0 rgba(255, 255, 255, 0.18),
+    inset -1px 0 0 rgba(0, 0, 0, 0.06),
+    inset 0 2px 6px rgba(0, 0, 0, 0.04),
+    inset 0 -2px 4px color-mix(in srgb, var(--ion-color-danger, #eb445a) 8%, transparent);
+}
+.server-status-card.state-checking .card-face {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.10),
+    inset 1px 0 0 rgba(255, 255, 255, 0.18),
+    inset -1px 0 0 rgba(0, 0, 0, 0.06),
+    inset 0 2px 6px rgba(0, 0, 0, 0.04),
+    inset 0 -2px 4px color-mix(in srgb, var(--ion-color-warning, #ffc409) 8%, transparent);
 }
 
 /* ============ 状态行（正面） ============ */
