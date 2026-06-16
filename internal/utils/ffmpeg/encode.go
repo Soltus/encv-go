@@ -56,6 +56,11 @@ type workerRequest struct {
 	Args      []string `json:"args"`
 	FFmpegBin string   `json:"ffmpeg_bin,omitempty"`
 	LibDir    string   `json:"lib_dir,omitempty"`
+	// 🆕 2026-06-16：tmp_dir 告诉 worker 写 stdout/stderr 重定向文件的位置
+	//   旧实现 worker 硬编码 /tmp/ffmpeg_stdout_XXXXXX → Android 上 /tmp/ 不可写 → EACCES
+	//   现在 Go 父进程传 os.TempDir()（gomobile 注入为 context.cacheDir）→ 真机可写
+	//   worker fallback 链：JSON tmp_dir > $TMPDIR env > /data/local/tmp/ > 已知 cacheDir
+	TmpDir    string   `json:"tmp_dir,omitempty"`
 	TimeoutMs int      `json:"timeout_ms,omitempty"`
 	Mode      string   `json:"mode,omitempty"` // "ffmpeg"（默认） | "ffprobe"
 }
@@ -145,6 +150,9 @@ func runWorkerJSON(ctx context.Context, workerBin string, mode string, args []st
 		FFmpegBin: locateFFmpegSystem(),
 		// 🆕 2026-06-15 修 #3：JSON lib_dir 用上面算好的 libDir（兜底后非空）
 		LibDir:    libDir,
+		// 🆕 2026-06-16：传 os.TempDir() 给 worker（gomobile 注入为 context.cacheDir）
+		//   Worker 优先用 JSON tmp_dir 写 stdout/stderr 重定向文件（不再硬编码 /tmp/）
+		TmpDir:    os.TempDir(),
 		TimeoutMs: timeoutMs,
 		Mode:      mode,
 	}
@@ -160,7 +168,12 @@ func runWorkerJSON(ctx context.Context, workerBin string, mode string, args []st
 	// 理由：之前旧 worker_client.go 是显式 cmd.Env = append(os.Environ(), "ENCV_LIB_DIR="+getLibDir()) 注入。
 	// 重构成 Encode(ctx, args) 后丢了这一行 → 父进程 env 空时 worker dlopen 系统路径 /libffmpeg.so 失败 → exit_code -1。
 	// 修法：同上，libDir 用上面兜底后的非空值，强制注入到 cmd.Env。
-	cmd.Env = append(os.Environ(), "ENCV_LIB_DIR="+libDir)
+	cmd.Env = append(os.Environ(),
+		"ENCV_LIB_DIR="+libDir,
+		// 🆕 2026-06-16：显式注入 TMPDIR=os.TempDir()，让 worker 即便没读到 JSON tmp_dir
+		//   也能用 env 兜底（gomobile 启动 Go 进程时通常已设 TMPDIR，这里再双保险）
+		"TMPDIR="+os.TempDir(),
+	)
 
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start worker: %w", err)

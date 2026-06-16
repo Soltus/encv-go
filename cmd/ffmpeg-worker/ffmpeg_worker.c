@@ -378,8 +378,22 @@ int main(void) {
     }
 
     int timeout_ms = 0;
+    char json_tmp_dir[MAX_TMP_PATH] = {0};
     json_find_string(json_buf, "lib_dir", g_lib_dir, sizeof(g_lib_dir));
+    json_find_string(json_buf, "tmp_dir", json_tmp_dir, sizeof(json_tmp_dir));
     json_find_int(json_buf, "timeout_ms", &timeout_ms);
+
+    // 3.5 🆕 2026-06-16：解析 tmp_dir（在 redirect_output_start 之前必须完成）
+    //   优先级：JSON tmp_dir > TMPDIR env > /data/local/tmp/ > 已知 cacheDir
+    //   旧实现硬编码 /tmp/ → Android 上 EACCES
+    resolve_tmp_dir(json_tmp_dir);
+    if (g_tmp_dir[0] == '\0') {
+        printf("{\"error\":\"no writable temp dir (tried JSON tmp_dir, $TMPDIR, /data/local/tmp/, /data/user/0/com.encvgo.app/cache/)\",\"exit_code\":-1}\n");
+        fflush(stdout);
+        for (int i = 0; i < argc; i++) free(args[i]);
+        free(args);
+        return 1;
+    }
 
     // 4. 设置超时
     setup_timeout(timeout_ms);
