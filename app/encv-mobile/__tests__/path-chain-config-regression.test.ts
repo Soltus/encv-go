@@ -76,4 +76,23 @@ describe('path-chain — 配置文件防回归（跨链路一致）', () => {
     )
     expect(exists, 'generate-mock-files.ts should be removed (2026-06-10)').toBe(false)
   })
+
+  // 🆕 2026-06-15 multi-mount：mockRoot 计算必须 .slice(0, 3) = '/d/automation'
+  //   旧 .slice(0, 5) = '/d/automation/01-plain-media/video/' → mount 解析失败
+  //   触发：23:50 真机 mock generate "invalid mount path" bug
+  it.each([
+    ['WorkflowDashboard.vue'],
+    ['AutomationTestsDetail.vue'],
+  ])('【防回归】%s 的 mockRoot 计算必须 .slice(0, 3) = /d/automation（multi-mount）', (viewFile) => {
+    const src = readFileSync(
+      resolve(REPO_ROOT, `app/encv-mobile/src/views/${viewFile}`),
+      'utf-8',
+    )
+    // 匹配：DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, N).join('/') + '/'
+    const m = src.match(/DEFAULT_AUTOMATION_SOURCE\.split\(['"`]\/['"`]\)\.slice\(0,\s*(\d+)\)/)
+    expect(m, `mockRoot slice() in ${viewFile}`).toBeTruthy()
+    const n = Number(m![1])
+    // N 必须是 3（'/d/automation'），不是 5（'/d/automation/01-plain-media/video/'）
+    expect(n, `${viewFile} mockRoot slice(0, N) N must be 3 (not 5)`).toBe(3)
+  })
 })

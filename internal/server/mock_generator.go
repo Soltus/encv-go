@@ -91,6 +91,10 @@ type mockGeneratorDone struct {
 // 2026-06-15 multi-mount 重构：root 必须是 /d/<mount>/... 形式
 //  → 通过 mountRegistry.Resolve 校验挂载存在 + 解析出 abs 路径
 //  → 旧绝对路径（/storage/emulated/0/...）一律拒绝
+//
+// 2026-06-15 增强反馈：错误响应里列出现有 mount 列表 + 提示正确路径
+//  → 真实环境 user 看到 "invalid mount path" 不知道该用啥
+//  → 以前直接 403 文本 → 现在 403 JSON {error, available_mounts, hint}
 func (s *Server) validateMockRoot(root string) error {
 	if root == "" {
 		return fmt.Errorf("root is empty")
@@ -99,12 +103,71 @@ func (s *Server) validateMockRoot(root string) error {
 		return fmt.Errorf("mount registry not initialized")
 	}
 	if !strings.HasPrefix(root, "/d/") {
-		return fmt.Errorf("root %q must be a mount path (start with /d/...)", root)
+		// 列出当前可用 mount 帮用户诊断
+		available := s.listMountNames()
+		return fmt.Errorf(
+			"root %q must be a mount path (start with /d/...); "+
+				"available mounts: [%s] — "+
+				"frontend should compute mockRoot from DEFAULT_AUTOMATION_SOURCE (slice 0..3 = '/d/automation'), "+
+				"not raw absolute path",
+			root, available,
+		)
 	}
 	if _, err := s.mountRegistry.Resolve(root); err != nil {
-		return fmt.Errorf("resolve %q: %w", root, err)
+		available := s.listMountNames()
+		return fmt.Errorf(
+			"resolve %q: %w; available mounts: [%s] — "+
+				"前端 mockRoot 派生 bug 常见：DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, N) 的 N 应该是 3 而不是 5 "+
+				"（取多了会把子目录当 mount 路径）",
+			root, err, available,
+		)
 	}
 	return nil
+}
+
+// listMountNames 返回当前 mount registry 里的 mount 名字列表（用于错误反馈，字符串）
+func (s *Server) listMountNames() string {
+	if s.mountRegistry == nil {
+		return "<registry nil>"
+	}
+	list := s.mountRegistry.List()
+	names := make([]string, 0, len(list))
+	for _, m := range list {
+		if m.Enabled {
+			names = append(names, m.Name+"→"+m.MountPath)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+// mountSummary 是错误响应里 available_mounts 数组的单个元素
+type mountSummary struct {
+	Name      string `json:"name"`
+	MountPath string `json:"mount_path"`
+	RootPath  string `json:"root_path"`
+	Enabled   bool   `json:"enabled"`
+}
+
+// listMountSummaries 返回当前 mount registry 里的 mount 摘要列表（结构化）
+// 2026-06-15 增强反馈用：前端可以直接渲染成列表
+func (s *Server) listMountSummaries() []mountSummary {
+	if s.mountRegistry == nil {
+		return []mountSummary{}
+	}
+	list := s.mountRegistry.List()
+	out := make([]mountSummary, 0, len(list))
+	for _, m := range list {
+		if !m.Enabled {
+			continue
+		}
+		out = append(out, mountSummary{
+			Name:      m.Name,
+			MountPath: m.MountPath,
+			RootPath:  m.RootPath,
+			Enabled:   m.Enabled,
+		})
+	}
+	return out
 }
 
 // mockFileSpec 描述一个待生成的文件
@@ -246,7 +309,15 @@ func (s *Server) handleMockGenerateGin(c *gin.Context) {
 
 	if err := s.validateMockRoot(req.Root); err != nil {
 		slog.Warn("Mock generate rejected: invalid mount path", "root", req.Root, "error", err)
-		c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
+		// 🆕 2026-06-15 增强反馈：返回 JSON {error, available_mounts, hint} 给前端
+		//   前端能直接显示「当前可用 mount 列表」+「正确用法」+「定位 mockRoot slice bug」
+		//   available_mounts 是结构化数组 [{name, mount_path, root_path}, ...]
+		//   不再是字符串（前端解析更简单）
+		c.JSON(http.StatusForbidden, gin.H{
+			"error": err.Error(),
+			"available_mounts": s.listMountSummaries(),
+			"hint":  "mockRoot should be /d/automation (or /d/primary, /d/sandbox), not a sub-path under a mount",
+		})
 		return
 	}
 

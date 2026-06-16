@@ -198,7 +198,11 @@ import StepDetailPanel from './StepDetailPanel.vue'
 const { t } = useI18n()
 
 // ---- Legacy: Mock 数据 / 自动化测试 ----
-const mockRoot = computed(() => DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 5).join('/') + '/')
+// 🆕 2026-06-15 multi-mount 修复：必须 .slice(0, 3) = '/d/automation'（mount 根）
+//   旧 .slice(0, 5) = '/d/automation/01-plain-media/video/' → mount registry
+//   找不到这个 mount → 403 "invalid mount path" → UI spinner 永远转
+//   参见 useAutomationTests.ts L91-94 注释
+const mockRoot = computed(() => DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 3).join('/') + '/')
 const isGenerating = ref(false)
 const isResetting = ref(false)
 const mockStats = ref<{ count: number; totalSize: number } | null>(null)

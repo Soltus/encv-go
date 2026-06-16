@@ -370,7 +370,11 @@ import StepDetailPanel from '@/components/automation/StepDetailPanel.vue'
 const { t } = useI18n()
 
 // ---- Mock 数据 ----
-const mockRoot = computed(() => DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 5).join('/') + '/')
+// 🆕 2026-06-15 multi-mount 修复：必须 .slice(0, 3) = '/d/automation'（mount 根）
+//   旧 .slice(0, 5) = '/d/automation/01-plain-media/video/' → mount registry
+//   找不到这个 mount → 403 "invalid mount path" → UI spinner 永远转
+//   参见 useAutomationTests.ts L91-94 注释
+const mockRoot = computed(() => DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 3).join('/') + '/')
 const isGenerating = ref(false)
 const isResetting = ref(false)
 const mockStats = ref<{ count: number; totalSize: number; skipped?: number } | null>(null)
@@ -819,11 +823,30 @@ function classifyMockError(errMsg: string): { title: string; hint: string } {
       hint: '后端进程可能已崩溃（502/网络拒绝）。\n\n排查：\n  1) adb logcat | grep encv-go | tail -200\n  2) 真机：开发者选项里重启 backend service\n  3) 沙箱：pm2 logs encv-go 看 panic stack',
     }
   }
-  // 9. mockRoot 路径不在白名单
+  // 9. mockRoot 路径不在白名单（老 allowlist 错误，保留兼容）
   if (/not in allowlist/i.test(errMsg)) {
     return {
       title: 'Mock 生成失败：路径不在白名单',
       hint: '后端 servingDir 校验拒绝。mockRoot 必须是白名单前缀（如 /storage/emulated/0/encv-automation）。\n\n排查：检查 settings.user.json 的 mockRoot 配置。',
+    }
+  }
+  // 🆕 2026-06-15 multi-mount：mount 路径解析失败（最常见）
+  //   后端响应：{error: "resolve \"/d/automation/...\"...available mounts: [primary→/d/primary, ...]"}
+  if (/invalid mount path|resolve.*no mount matches|available mounts/i.test(errMsg)) {
+    // 提取 available_mounts 字段
+    const availMatch = errMsg.match(/available mounts:\s*\[([^\]]*)\]/)
+    const availList = availMatch?.[1]?.trim() || '(unknown — 见后端日志)'
+    return {
+      title: 'Mock 生成失败：mockRoot 不是有效 mount 路径',
+      hint:
+        `后端 mount registry 找不到 mockRoot。\n\n` +
+        `当前可用 mount：[${availList}]\n\n` +
+        `常见 bug：DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, N) 的 N 取错了\n` +
+        `  - N=3 ✅ → '/d/automation'（mount 根）\n` +
+        `  - N=5 ❌ → '/d/automation/01-plain-media/video/'（取多了，无此 mount）\n\n` +
+        `排查：\n` +
+        `  1) WorkflowDashboard.vue L201 / AutomationTestsDetail.vue L373 → 改 N=3\n` +
+        `  2) 后端 slog：grep "Mock generate rejected" /workspace/encv.log`,
     }
   }
   // 10. 兜底

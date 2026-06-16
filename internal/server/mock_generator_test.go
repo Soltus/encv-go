@@ -158,6 +158,66 @@ func TestValidateMockRoot(t *testing.T) {
 	}
 }
 
+// 🆕 2026-06-15 增强反馈测试：错误信息必须含 available mounts + slice 提示
+func TestValidateMockRoot_ErrorMessageContainsAvailableMounts(t *testing.T) {
+	s := setupMockTestServer()
+
+	// 1. /d/ 开头但 mount 不存在 → 错误信息必须含 [automation, primary, sandbox]
+	err := s.validateMockRoot("/d/nonexistent")
+	if err == nil {
+		t.Fatal("expected error for /d/nonexistent")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "available mounts") {
+		t.Errorf("error should mention 'available mounts', got: %q", msg)
+	}
+	if !strings.Contains(msg, "automation→/d/automation") {
+		t.Errorf("error should list automation mount, got: %q", msg)
+	}
+	if !strings.Contains(msg, "primary→/d/primary") {
+		t.Errorf("error should list primary mount, got: %q", msg)
+	}
+	if !strings.Contains(msg, "slice") || !strings.Contains(msg, "N 应该是 3") {
+		t.Errorf("error should hint at slice(0, 3) vs slice(0, 5) bug, got: %q", msg)
+	}
+
+	// 2. 非 /d/ 开头（绝对路径）→ 错误信息也必须含 available mounts
+	err = s.validateMockRoot("/storage/emulated/0/encv-automation")
+	if err == nil {
+		t.Fatal("expected error for absolute path")
+	}
+	msg = err.Error()
+	if !strings.Contains(msg, "available mounts") {
+		t.Errorf("error should mention 'available mounts' for absolute path too, got: %q", msg)
+	}
+}
+
+// 🆕 2026-06-15 listMountSummaries 结构化输出测试
+func TestListMountSummaries(t *testing.T) {
+	s := setupMockTestServer()
+	summaries := s.listMountSummaries()
+	if len(summaries) < 2 {
+		t.Fatalf("expected at least 2 mount summaries, got %d", len(summaries))
+	}
+	// 每个 summary 字段必须正确
+	hasAutomation := false
+	hasPrimary := false
+	for _, sm := range summaries {
+		if sm.Name == "automation" && sm.MountPath == "/d/automation" {
+			hasAutomation = true
+		}
+		if sm.Name == "primary" && sm.MountPath == "/d/primary" {
+			hasPrimary = true
+		}
+		if !sm.Enabled {
+			t.Errorf("disabled mount %q should not appear in summaries", sm.Name)
+		}
+	}
+	if !hasAutomation || !hasPrimary {
+		t.Errorf("missing automation or primary in summaries: %+v", summaries)
+	}
+}
+
 func TestGenerateMockSpecs(t *testing.T) {
 	t.Run("plain non-empty", func(t *testing.T) {
 		specs := generateMockSpecs("plain")
