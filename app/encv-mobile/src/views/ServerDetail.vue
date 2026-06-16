@@ -197,8 +197,7 @@ async function handleRequestBatteryOpt() {
 }
 
 async function checkServerInner() {
-  // 刷新按钮：只 ping 一次后端 + 弹 toast，不跳详情页
-  // （防 ion-item 冒泡用 .stop，但本身也独立可用 — 跟 goServerStatusDetail 路径严格区分）
+  // 刷新按钮：只 ping 一次后端 + 弹 toast
   await checkStatus()
   showToast({
     message: serverOnline.value ? t('settings.serverOnline') : t('settings.serverOffline'),

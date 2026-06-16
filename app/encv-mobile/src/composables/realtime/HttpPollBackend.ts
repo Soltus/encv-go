@@ -148,6 +148,7 @@ export function createHttpPollBackend(
   async function fetchAndEmitLogs(): Promise<void> {
     // 🆕 2026-06-16：拉后端 ring buffer 日志（http-poll 模式下用户期望 devlogs 看到后端日志）
     // 增量拉：since=lastLogTimestamp（HH:MM:SS 字符串），server 端按字符串 > 过滤
+    // source 标签：'backend_http_poll'（让用户能区分这是 http-poll 拉来的后端日志，不是 WS 推的）
     try {
       const resp = await _fetchLogs(lastLogTimestamp || undefined)
       for (const e of resp.logs || []) {
@@ -157,6 +158,10 @@ export function createHttpPollBackend(
             level: e.level,
             message: e.message,
             timestamp: e.timestamp,
+            source: 'backend_http_poll',
+            // 后端 slog 当前没把 stack 推到 ring buffer（按需后续扩展），
+            // 这里传 undefined 让 DevLogs 弹窗不显示 stack section
+            stack: undefined,
           },
         })
         if (e.timestamp > lastLogTimestamp) lastLogTimestamp = e.timestamp

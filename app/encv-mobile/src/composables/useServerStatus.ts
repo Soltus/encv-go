@@ -84,7 +84,7 @@ function recordLatency(ms: number) {
 }
 
 /** 主动 ping baseUrl — 不修改 isOnline / lastError，纯粹测 RTT
- *  用于 ServerStatusDetail.vue "网络诊断" 按钮 */
+ *  已无外部消费者（ServerStatusDetail.vue 于 2026-06-16 删除） */
 async function networkPing(): Promise<{ ok: boolean; ms: number; error?: string }> {
   const t0 = performance.now()
   try {

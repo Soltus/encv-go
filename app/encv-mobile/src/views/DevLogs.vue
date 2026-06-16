@@ -160,19 +160,31 @@
           </button>
         </div>
         <div class="log-detail-body">
-          <div class="log-detail-row">
-            <span class="log-detail-label">{{ t('devlogs.logDetailTimestamp') }}</span>
-            <span class="log-detail-value log-time-detail">{{ selectedLog.timestamp }}</span>
+          <!-- 🆕 2026-06-16：紧凑 1 行 2 列 — 时间 + 级别合并节省垂直空间 -->
+          <div class="log-detail-row log-detail-meta-row">
+            <div class="log-detail-meta-item">
+              <span class="log-detail-label">{{ t('devlogs.logDetailTimestamp') }}</span>
+              <span class="log-detail-value log-time-detail">{{ selectedLog.timestamp }}</span>
+            </div>
+            <div class="log-detail-meta-item">
+              <span class="log-detail-label">{{ t('devlogs.logDetailLevel') }}</span>
+              <ion-badge :color="getBadgeColor(selectedLog.level)" class="level-badge">
+                {{ selectedLog.level.toUpperCase() }}
+              </ion-badge>
+            </div>
           </div>
-          <div class="log-detail-row">
-            <span class="log-detail-label">{{ t('devlogs.logDetailLevel') }}</span>
-            <ion-badge :color="getBadgeColor(selectedLog.level)" class="level-badge">
-              {{ selectedLog.level.toUpperCase() }}
-            </ion-badge>
+          <!-- 🆕 升级能力：显示来源（哪个 console.* / ws / http-poll 通道）+ 原始堆栈（error 级别） -->
+          <div v-if="selectedLog.source" class="log-detail-row">
+            <span class="log-detail-label">{{ t('devlogs.logDetailSource') }}</span>
+            <span class="log-detail-value log-source-detail">{{ selectedLog.source }}</span>
           </div>
           <div class="log-detail-row log-detail-message-row">
             <span class="log-detail-label">{{ t('devlogs.logDetailMessage') }}</span>
             <pre class="log-detail-message">{{ selectedLog.message }}</pre>
+          </div>
+          <div v-if="selectedLog.stack" class="log-detail-row log-detail-stack-row">
+            <span class="log-detail-label">{{ t('devlogs.logDetailStack') }}</span>
+            <pre class="log-detail-stack">{{ selectedLog.stack }}</pre>
           </div>
         </div>
         <div class="log-detail-footer">
@@ -615,12 +627,17 @@ function onWsMessage(data: any) {
       timestamp: logData.timestamp || new Date().toLocaleTimeString('zh-CN', { hour12: false }),
       level,
       message,
+      // 🆕 2026-06-16：来源 + 堆栈透传
+      //  WS 推来的 → 'ws_log_handler'（真机主路径）
+      //  透传 stack（如果后端 slog 后续扩展推 stack，这里自动显示）
+      source: typeof logData.source === 'string' ? logData.source : 'ws_log_handler',
+      stack: typeof logData.stack === 'string' ? logData.stack : undefined,
     })
     return
   }
   if (data && data.type && data.type !== 'log' && data.type !== 'pong' && data.type !== 'server:status') {
     const msg = typeof data === 'string' ? data : JSON.stringify(data)
-    queueBackendLog({ id: ++nextId, timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }), level: 'debug', message: msg })
+    queueBackendLog({ id: ++nextId, timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }), level: 'debug', message: msg, source: 'ws_log_handler' })
   }
 }
 
@@ -1035,6 +1052,32 @@ defineExpose({
   word-break: break-all;
 }
 .log-time-detail { color: var(--ion-color-medium); }
+/* 🆕 2026-06-16：紧凑 1 行 2 列 — 时间 + 级别共用一行 */
+.log-detail-meta-row {
+  flex-direction: row;
+  gap: 12px;
+  align-items: stretch;
+}
+.log-detail-meta-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.log-source-detail {
+  color: var(--ion-color-primary);
+  font-weight: 600;
+  font-size: 11px;
+  background: var(--ion-color-light);
+  padding: 2px 6px;
+  border-radius: 3px;
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .log-detail-message-row { flex: 1; min-height: 0; }
 .log-detail-message {
   margin: 0;
@@ -1049,6 +1092,24 @@ defineExpose({
   max-height: 50vh;
   overflow-y: auto;
   color: var(--ion-text-color);
+}
+/* 🆕 2026-06-16：堆栈专用样式 — 深色背景 + 小字体 + 高对比（错误排障优先） */
+.log-detail-stack-row { flex-shrink: 0; }
+.log-detail-stack {
+  margin: 0;
+  padding: 10px 12px;
+  background: #1e1e1e;   /* 始终深色 — 即便整体主题是 light */
+  color: #d4d4d4;
+  border-radius: 6px;
+  font-family: var(--ion-font-family-monospace, 'Courier New', monospace);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 35vh;       /* 堆栈常常很长，但不要比 message 抢更多空间 */
+  overflow-y: auto;
+  user-select: text;       /* 关键：可复制堆栈 */
+  -webkit-user-select: text;
 }
 .log-detail-footer {
   display: flex;

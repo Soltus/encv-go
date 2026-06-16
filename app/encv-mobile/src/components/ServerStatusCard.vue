@@ -62,7 +62,7 @@
             <ion-button
               fill="outline"
               size="small"
-              :title="t('serverStatusDetail.refresh')"
+              :title="t('serverStatus.refresh')"
               :disabled="checking"
               @click.stop="emit('check')"
             >

@@ -66,6 +66,9 @@ export default {
     'devlogs.logDetailTimestamp': 'Time',
     'devlogs.logDetailLevel': 'Level',
     'devlogs.logDetailMessage': 'Message',
+    // 🆕 2026-06-16: upgrade log detail modal capabilities
+    'devlogs.logDetailSource': 'Source',
+    'devlogs.logDetailStack': 'Stack trace',
     'devlogs.logDetailCopy': 'Copy',
     'devlogs.logDetailCopied': 'Copied',
     'devlogs.logDetailClose': 'Close',
