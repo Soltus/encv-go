@@ -313,17 +313,20 @@ watch(state, () => {
   isFlipped.value = false
 })
 
-// 🆕 Android WebView 3D transform 不可靠：翻转内容透过半透明 tab bar 泄露
-//   检测方式：UA 含 android 且非桌面浏览器
-//   修复：Android 原生禁用 3D rotateY，改用 opacity + scale fade 切换
-const isAndroidNative = (() => {
-  try {
-    const ua = navigator.userAgent || ''
-    return /android/i.test(ua)
-  } catch { return false }
-})()
-// 外层 class：Android 用 is-flip-fade（无 3D），其他用 is-flipped（3D rotateY）
-const flipClass = computed(() => isFlipped.value ? (isAndroidNative ? 'is-flip-fade' : 'is-flipped') : '')
+// —— 3D 翻转（统一逻辑） ——
+//
+// 🆕 2026-06-16 恢复统一 3D rotateY 翻转
+//   历史 Android 上用过 is-flip-fade（opacity fade）当 fallback —
+//     当时症状是点击卡片跳转 /tabs/settings/server/status（被旧 @click 残留影响）
+//   真相：跳转的不是「翻转泄露」，是 ServerDetail.vue 旧 @click 残留
+//     旧残留已删（详情页文件 + router 路由 + 组件 click 绑定），Android 上点击恢复正常翻转
+//   现在：所有平台统一用 is-flipped 3D rotateY
+//
+// 防御性仍保留（防 Android WebView 极端情况）：
+//   - isolation: isolate（独立 stacking context，防 backdrop-filter 抓合成层）
+//   - .error-detail max-height（防离线错误文本撑爆卡片）
+//   - .back-value.monospace max-height（防长 instance_id 撑爆）
+const flipClass = computed(() => isFlipped.value ? 'is-flipped' : '')
 
 // —— 脉冲 / 光泽动画 ——
 const pulsing = ref(false)
@@ -555,43 +558,6 @@ defineExpose({ checkStatus, restartBackend, stopBackend })
 }
 .server-status-card.is-flipped .card-3d-inner {
   transform: rotateY(180deg);
-}
-
-/* ============ 🆕 Android Fade 模式（替代 3D flip） ============
-   Android WebView 上 backface-visibility + 3D transform 不可靠：
-   - 翻转后背面内容透过半透明 tab bar (rgba 0.78 + backdrop-filter) 泄露到屏幕底部
-   - 症状：能看到"应用信息"等背面文字出现在 tab bar 左下角，翻转回来也不消失
-   - 方案：完全禁用 3D transform，改用 opacity + scale 淡入淡出切换双面
-   */
-.server-status-card.is-flip-fade .card-3d-inner {
-  /* 不做任何 3D transform — 保持平面 */
-  transform: none;
-}
-.server-status-card.is-flip-fade .card-face-front {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: scale(0.96);
-  transition:
-    border-color var(--transition-fast),
-    background-color var(--transition-fast),
-    transform var(--transition-3d),
-    opacity var(--transition-3d) ease-in,
-    visibility 0s linear var(--transition-3d);
-}
-.server-status-card.is-flip-fade .card-face-back {
-  /* 抵消自身的 rotateY(180) — fade 模式不需要镜像抵消 */
-  transform: none;
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-  transform: scale(1);
-  transition:
-    border-color var(--transition-fast),
-    background-color var(--transition-fast),
-    transform var(--transition-3d) ease-out,
-    opacity var(--transition-3d) ease-out,
-    visibility 0s linear 0s;
 }
 
 /* ============ 双面通用：Grid 叠放 + 自然高度 + 拟物表面 ============

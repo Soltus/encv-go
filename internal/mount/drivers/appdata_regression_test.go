@@ -38,29 +38,33 @@ func (s *stubAndroidCfg) AutomationDriver() string   { return mount.DriverAppDat
 //   - 绝不能在 /sdcard/ 下
 //   - 任何带 "emulated" / "sdcard" / "storage" 关键字都不是 app-private
 //
+// 🆕 2026-06-16：测试用 stubAndroidCfgDataDir 模拟 Kotlin 端 ENCV_APP_FILES_DIR 注入
+//   cfg.DataDir() 返回 /data/user/10490/com.encvgo.app/files（Kotlin context.filesDir）
+//   driver 优先用 cfg.DataDir() 作为 base，subpath 拼在后面
+//   最终 root = /data/user/10490/com.encvgo.app/files/encv-automation
+//
+//   历史：driver 硬编码 /data/user/<uid>/<pkg>/files → 真机 EACCES（sdcardfs FUSE 权限）
+//   新实现：driver 优先用 cfg.DataDir()（Kotlin 已知的好路径），无 cfg 时兜底硬编码
+//
 // 通过 test 防止后续"误改 driver 默认值"导致真机 EACCES。
 func TestAppDataDriver_RealDevicePath(t *testing.T) {
 	if runtime.GOOS == "android" {
 		t.Skip("本测试在 Android 真机上无意义（直接走 driver）")
 	}
 
-	cfg := &stubAndroidCfg{pkg: "com.encvgo.app", fbDir: t.TempDir()}
+	// 模拟 Kotlin context.filesDir = /data/user/10490/com.encvgo.app/files
+	cfg := &stubAndroidCfgDataDir{
+		pkg:     "com.encvgo.app",
+		fbDir:   t.TempDir(),
+		dataDir: "/data/user/10490/com.encvgo.app/files",
+	}
 	drv := NewAppDataDriver()
 	// 强制当作 Android（绕过 runtime.GOOS 检查）
 	drv.isAndroid = true
-	m := &mount.Mount{
-		Name:         "automation",
-		MountPath:    "/d/automation",
-		Driver:       mount.DriverAppData,
-		DriverConfig: map[string]any{"subpath": "encv-automation"},
-	}
-	if err := drv.Init(context.Background(), m, cfg); err != nil {
-		t.Fatalf("Init failed: %v", err)
-	}
-
-	root := drv.ResolveRoot()
-	if root == "" {
-		t.Fatal("RootPath 空")
+	// 🆕 2026-06-16：用 ComputeRootPath 直接算路径（不调 Init，避免在 CI 上真 mkdir /data/user/10490）
+	root, usedAndroid := drv.ComputeRootPath(cfg, "encv-automation")
+	if !usedAndroid {
+		t.Errorf("isAndroid=true 时应走 Android 路径，usedAndroid=false")
 	}
 
 	// ① 必须以 /data/user/ 开头
@@ -85,9 +89,14 @@ func TestAppDataDriver_RealDevicePath(t *testing.T) {
 			t.Errorf("RootPath 命中 shared-storage 红线 %q: %q", bad, root)
 		}
 	}
-	// ⑥ uid 必须存在（数字 1+ 位）
+	// ⑥ uid 必须存在（数字 1+ 位）— 10490
 	if !hasUIDSegment(root) {
 		t.Errorf("RootPath 不含 uid 数字段: %q", root)
+	}
+	// ⑦ 🆕 2026-06-16：根路径末尾必须是 subpath（无多余 subpath 段）
+	expectedSuffix := filepath.Join("/data/user/10490/com.encvgo.app/files", "encv-automation")
+	if root != expectedSuffix {
+		t.Errorf("RootPath 应 = cfg.DataDir() + subpath\ngot  = %q\nwant = %q", root, expectedSuffix)
 	}
 
 	t.Logf("✅ AppDataDriver 真机 root = %s", root)
@@ -155,6 +164,127 @@ func TestAppDataDriver_MkdirAll(t *testing.T) {
 		t.Errorf("dev mode 应创建 root 目录: %v", err)
 	}
 }
+
+// TestAppDataDriver_AndroidLeafMkdir_UnitIsolated 验证 2026-06-16 修复的 leaf-mkdir 逻辑。
+//
+//   旧实现：os.MkdirAll(d.root) 递归创建父目录 → 真机上撞 /data/user/<uid>/ EACCES
+//   新实现：先 os.Stat 判断 d.root 是否已存在；不存在时只 os.Mkdir 叶子
+//
+//   关键不变量（纯函数级别，不依赖 Android 路径）：
+//   - 当 leaf 父目录存在 + writable + leaf 不存在时 → Init 应成功，leaf 被创建
+//   - 当 leaf 已存在时 → Init 应秒过（不重复 mkdir）
+//
+//   本测试在 Linux 上跑，不走 driver 默认的 /data/user/<uid>/ 硬编码路径，
+//   改用 cfg.DataDir() 覆盖（由 stubAndroidCfg 提供）。
+//   真实 Android 路径上同样行为（在 cfg.AndroidDataDir() 拿到的 filesDir 下创建 subpath），
+//   真机是否修复由用户在 Android 上验证（CI 无法模拟 sdcardfs FUSE 行为）。
+func TestAppDataDriver_AndroidLeafMkdir_UnitIsolated(t *testing.T) {
+	if runtime.GOOS == "android" {
+		t.Skip("本测试在 Android 真机上无意义（路径硬编码 vs cfg.DataDir 行为一致）")
+	}
+
+	// 用 t.TempDir() 模拟 Android 系统的 files/ 父目录
+	tmpDir := t.TempDir()
+	fakeFilesDir := filepath.Join(tmpDir, "files")
+	if err := os.Mkdir(fakeFilesDir, 0755); err != nil {
+		t.Fatalf("setup: create fake files/ parent: %v", err)
+	}
+
+	// stub 让 cfg.DataDir() 返回 fakeFilesDir
+	cfg := &stubAndroidCfgDataDir{
+		pkg:     "com.encvgo.app",
+		fbDir:   tmpDir,
+		dataDir: fakeFilesDir,
+	}
+	drv := NewAppDataDriver()
+	drv.isAndroid = true
+	m := &mount.Mount{
+		Name:         "automation",
+		MountPath:    "/d/automation",
+		Driver:       mount.DriverAppData,
+		DriverConfig: map[string]any{"subpath": "encv-automation"},
+	}
+
+	if err := drv.Init(context.Background(), m, cfg); err != nil {
+		t.Fatalf("Init 应成功（leaf 不存在 + parent writable）: %v", err)
+	}
+
+	root := drv.ResolveRoot()
+	if !filepath.IsAbs(root) {
+		t.Errorf("root 应是绝对路径: %q", root)
+	}
+	// 1. root 必须包含 subpath
+	if !containsPath(root, "encv-automation") {
+		t.Errorf("root 应含 subpath encv-automation: %q", root)
+	}
+	// 2. root 必须已创建（leaf）
+	if _, err := os.Stat(root); err != nil {
+		t.Errorf("Init 后 leaf 应存在: %v", err)
+	}
+	// 3. 父目录 fakeFilesDir 应仍然存在（未被破坏）
+	if _, err := os.Stat(fakeFilesDir); err != nil {
+		t.Errorf("parent files/ 应仍存在: %v", err)
+	}
+	t.Logf("✅ android mode root = %s", root)
+}
+
+// TestAppDataDriver_AndroidLeafMkdir_RootExists 验证 2026-06-16 修复：
+//   root 已存在 → Init 秒过（不重复 mkdir）
+//   对应真机：老 mounts.json 持久化路径命中 → 重启后系统已创建 → 重复 mkdir 没意义
+func TestAppDataDriver_AndroidLeafMkdir_RootExists(t *testing.T) {
+	if runtime.GOOS == "android" {
+		t.Skip("本测试在 Android 真机上无意义")
+	}
+
+	tmpDir := t.TempDir()
+	fakeFilesDir := filepath.Join(tmpDir, "files")
+	if err := os.Mkdir(fakeFilesDir, 0755); err != nil {
+		t.Fatalf("setup: %v", err)
+	}
+	// 预创建 root
+	expectedRoot := filepath.Join(fakeFilesDir, "encv-automation")
+	if err := os.Mkdir(expectedRoot, 0755); err != nil {
+		t.Fatalf("setup pre-create root: %v", err)
+	}
+
+	cfg := &stubAndroidCfgDataDir{
+		pkg:     "com.encvgo.app",
+		fbDir:   tmpDir,
+		dataDir: fakeFilesDir,
+	}
+	drv := NewAppDataDriver()
+	drv.isAndroid = true
+	m := &mount.Mount{
+		Name:         "automation",
+		MountPath:    "/d/automation",
+		Driver:       mount.DriverAppData,
+		DriverConfig: map[string]any{"subpath": "encv-automation"},
+	}
+
+	if err := drv.Init(context.Background(), m, cfg); err != nil {
+		t.Errorf("root 已存在时 Init 应成功: %v", err)
+	}
+	if drv.ResolveRoot() != expectedRoot {
+		t.Errorf("ResolveRoot = %q, want %q", drv.ResolveRoot(), expectedRoot)
+	}
+}
+
+// stubAndroidCfgDataDir 给测试用：让 cfg.DataDir() 返回自定义路径
+// （替代硬编码的 /data/user/<uid>/<pkg>/files，使 Linux CI 上可测试）
+type stubAndroidCfgDataDir struct {
+	pkg     string
+	fbDir   string
+	dataDir string
+}
+
+func (s *stubAndroidCfgDataDir) IsMobile() bool             { return true }
+func (s *stubAndroidCfgDataDir) IsDev() bool                { return false }
+func (s *stubAndroidCfgDataDir) AndroidPackageName() string { return s.pkg }
+func (s *stubAndroidCfgDataDir) DataDir() string            { return s.dataDir }
+func (s *stubAndroidCfgDataDir) AppDataFallbackDir() string { return s.fbDir }
+func (s *stubAndroidCfgDataDir) DevSandboxDir() string      { return "" }
+func (s *stubAndroidCfgDataDir) ServingDir() string         { return "" }
+func (s *stubAndroidCfgDataDir) AutomationDriver() string   { return mount.DriverAppData }
 
 // containsPath 不区分大小写检查 path 是否包含 sub。
 func containsPath(path, sub string) bool {
