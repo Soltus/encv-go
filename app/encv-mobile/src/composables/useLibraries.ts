@@ -372,11 +372,14 @@ export function useLibraries() {
     }
   }
 
+  // ⚠️ 关键：必须返回 ComputedRef 而不是快照！
+  // 否则 load() 异步填充 androidItems.value / backendItems.value 后，
+  // 调用方拿到的还是空数组（失去响应性）
   return {
-    androidItems: itemsByCategory.value.android,
-    frontendItems: itemsByCategory.value.frontend,
-    backendItems: itemsByCategory.value.backend,
-    allItems: allItems.value,
+    androidItems: computed(() => itemsByCategory.value.android),
+    frontendItems: computed(() => itemsByCategory.value.frontend),
+    backendItems: computed(() => itemsByCategory.value.backend),
+    allItems: computed(() => allItems.value),
     loading: computed(() => loading.value),
     loaded: computed(() => loaded.value),
     error: computed(() => error.value),

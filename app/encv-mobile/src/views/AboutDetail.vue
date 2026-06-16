@@ -186,7 +186,7 @@ async function onLibMounted(item: LibraryItem) {
 }
 
 watch([androidItems, frontendItems, backendItems], () => {
-  for (const list of [androidItems, frontendItems, backendItems]) {
+  for (const list of [androidItems.value, frontendItems.value, backendItems.value]) {
     for (const item of list) {
       if (!item.description && item.descriptionStatus === 'placeholder') {
         onLibMounted(item)
