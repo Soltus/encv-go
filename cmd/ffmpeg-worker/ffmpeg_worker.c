@@ -49,6 +49,7 @@
 #define MAX_JSON_LEN    (1 << 20)  // 1MB：支持大 ffprobe JSON 输出
 #define MAX_LIB_PATH    4096
 #define MAX_OUTPUT_LEN  (256 * 1024)  // 256KB stdout/stderr 上限（截断防 OOM）
+#define MAX_TMP_PATH    512  // 临时文件路径（Android 真机 /data/user/<uid>/<pkg>/cache 长 ~80 字节，留足余量）
 
 // ========== FFmpeg/FFprobe 函数指针 ==========
 typedef int (*run_fn_t)(int, char**);
@@ -170,23 +171,92 @@ static int json_parse_args(const char* json, char*** out_args, int* out_argc, co
 typedef struct {
     int saved_stdout;
     int saved_stderr;
-    char stdout_path[64];
-    char stderr_path[64];
+    char stdout_path[MAX_TMP_PATH];
+    char stderr_path[MAX_TMP_PATH];
 } output_redirect_t;
+
+// ========== 🆕 2026-06-16：真机可写 temp dir 解析 ==========
+//
+// 旧实现硬编码 "/tmp/ffmpeg_stdout_XXXXXX" → Android 上 /tmp/ 不存在 / 不可写 → EACCES
+//   症状：mock 生成 ffmpeg 转码全部失败 "failed to create output temp files: Permission denied"
+//   静态文件生成（PDF/TXT/CSV/AE/SCCGV）正常，因为它们不调 ffmpeg，直接写 mount 路径
+//
+// 修复：worker 启动时按以下优先级选 temp dir：
+//   1. JSON 请求里的 "tmp_dir" 字段（Go 父进程从 os.TempDir() 传过来，最准确）
+//   2. TMPDIR 环境变量（Go 父进程 os.Environ() 继承，gomobile 设置为 context.cacheDir）
+//   3. /data/local/tmp/（Android shell temp；app 进程可能不可写，仅兜底）
+//   4. "/data/user/0/com.encvgo.app/cache"（已知 app cacheDir，兜底）
+//   5. 当前 cwd（如果可写）
+//
+// 任一尝试失败时返回 -1，让 redirect_output_start 输出可读错误（不再静默 /tmp 失败）
+static char g_tmp_dir[MAX_TMP_PATH] = {0};
+
+static int try_set_tmp_dir(const char* candidate) {
+    if (candidate == NULL || candidate[0] == '\0') return -1;
+    // 路径太长直接拒
+    if (strlen(candidate) >= MAX_TMP_PATH - 32) return -1;  // 留 32 字节给 "ffmpeg_stdout_XXXXXX\0"
+    // 必须以 / 结尾
+    char buf[MAX_TMP_PATH];
+    snprintf(buf, sizeof(buf), "%s", candidate);
+    size_t bl = strlen(buf);
+    if (bl == 0 || buf[bl - 1] != '/') {
+        if (bl + 1 >= sizeof(buf)) return -1;
+        buf[bl] = '/';
+        buf[bl + 1] = '\0';
+    }
+    // mkdir -p（EEXIST 视为成功）
+    if (mkdir(buf, 0700) != 0 && errno != EEXIST) {
+        return -1;
+    }
+    // 试写：写个 test 文件
+    char test_path[MAX_TMP_PATH];
+    snprintf(test_path, sizeof(test_path), "%s.encv_worker_writable", buf);
+    int fd = open(test_path, O_CREAT | O_WRONLY | O_TRUNC, 0600);
+    if (fd < 0) {
+        return -1;
+    }
+    close(fd);
+    unlink(test_path);
+    // 成功：写回 g_tmp_dir
+    snprintf(g_tmp_dir, sizeof(g_tmp_dir), "%s", buf);
+    return 0;
+}
+
+static void resolve_tmp_dir(const char* json_tmp_dir) {
+    // 1. JSON 优先
+    if (json_tmp_dir != NULL && json_tmp_dir[0] != '\0') {
+        if (try_set_tmp_dir(json_tmp_dir) == 0) return;
+    }
+    // 2. TMPDIR 环境
+    const char* env_tmp = getenv("TMPDIR");
+    if (env_tmp != NULL && env_tmp[0] != '\0') {
+        if (try_set_tmp_dir(env_tmp) == 0) return;
+    }
+    // 3. /data/local/tmp/
+    if (try_set_tmp_dir("/data/local/tmp/") == 0) return;
+    // 4. 已知 app cacheDir（Android shared user 0 + pkg）
+    if (try_set_tmp_dir("/data/user/0/com.encvgo.app/cache/") == 0) return;
+    // 5. 全部失败 → g_tmp_dir 留空 → redirect_output_start 会返回明确错误
+}
 
 static int redirect_output_start(output_redirect_t* r) {
     memset(r, 0, sizeof(*r));
     r->saved_stdout = -1;
     r->saved_stderr = -1;
 
+    if (g_tmp_dir[0] == '\0') {
+        errno = EACCES;
+        return -1;
+    }
+
     // stdout 临时文件
-    strcpy(r->stdout_path, "/tmp/ffmpeg_stdout_XXXXXX");
+    snprintf(r->stdout_path, sizeof(r->stdout_path), "%sffmpeg_stdout_XXXXXX", g_tmp_dir);
     int fd_out = mkstemp(r->stdout_path);
     if (fd_out < 0) return -1;
     close(fd_out);
 
     // stderr 临时文件
-    strcpy(r->stderr_path, "/tmp/ffmpeg_stderr_XXXXXX");
+    snprintf(r->stderr_path, sizeof(r->stderr_path), "%sffmpeg_stderr_XXXXXX", g_tmp_dir);
     int fd_err = mkstemp(r->stderr_path);
     if (fd_err < 0) {
         unlink(r->stdout_path);
