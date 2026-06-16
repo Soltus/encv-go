@@ -88,9 +88,9 @@ export interface GenerateTestCaseOptions {
  *   - dev 沙箱：后端解析为 $TMPDIR/encv-appdata/encv-automation/01-plain-media/video/sample.mp4
  *   - 不再依赖 withSafetyBoundary 客户端改写（mount 系统天然做命名空间隔离）
  *
- * mockRoot 派生（动态）：
- *   - DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 3).join('/') = '/d/automation'
- *   - 后端校验：必须以 /d/ 开头 + mountRegistry.Resolve 成功
+ * 🆕 2026-06-15 声明式：不要再用 .split('/').slice(N) 派生 mockRoot
+ *   - 正确做法：见 src/lib/mockConstants.ts 的 MOCK_GENERATE_ROOT
+ *   - 此常量仅用于 source 路径默认 + 单元测试
  */
 export const DEFAULT_AUTOMATION_SOURCE = '/d/automation/01-plain-media/video/sample.mp4'
 

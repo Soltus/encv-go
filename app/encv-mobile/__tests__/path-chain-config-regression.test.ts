@@ -77,22 +77,51 @@ describe('path-chain — 配置文件防回归（跨链路一致）', () => {
     expect(exists, 'generate-mock-files.ts should be removed (2026-06-10)').toBe(false)
   })
 
-  // 🆕 2026-06-15 multi-mount：mockRoot 计算必须 .slice(0, 3) = '/d/automation'
-  //   旧 .slice(0, 5) = '/d/automation/01-plain-media/video/' → mount 解析失败
-  //   触发：23:50 真机 mock generate "invalid mount path" bug
+  // 🆕 2026-06-15 multi-mount：mockRoot 必须是声明式常量 MOCK_GENERATE_ROOT
+  //   禁用 .split('/').slice(N) 的隐式推导（fragile：源路径改前缀就静默错）
+  //   正确做法：见 src/lib/mockConstants.ts 的 MOCK_GENERATE_ROOT
   it.each([
-    ['WorkflowDashboard.vue'],
-    ['AutomationTestsDetail.vue'],
-  ])('【防回归】%s 的 mockRoot 计算必须 .slice(0, 3) = /d/automation（multi-mount）', (viewFile) => {
+    'WorkflowDashboard.vue',
+    'AutomationTestsDetail.vue',
+  ])('【防回归】%s 必须 import MOCK_GENERATE_ROOT 声明式常量（禁 split/slice 推导）', (viewFile) => {
     const src = readFileSync(
       resolve(REPO_ROOT, `app/encv-mobile/src/views/${viewFile}`),
       'utf-8',
     )
-    // 匹配：DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, N).join('/') + '/'
-    const m = src.match(/DEFAULT_AUTOMATION_SOURCE\.split\(['"`]\/['"`]\)\.slice\(0,\s*(\d+)\)/)
-    expect(m, `mockRoot slice() in ${viewFile}`).toBeTruthy()
-    const n = Number(m![1])
-    // N 必须是 3（'/d/automation'），不是 5（'/d/automation/01-plain-media/video/'）
-    expect(n, `${viewFile} mockRoot slice(0, N) N must be 3 (not 5)`).toBe(3)
+    // ① 必须 import 声明式常量
+    expect(
+      src.includes("from '@/lib/mockConstants'") &&
+        (src.includes('MOCK_GENERATE_ROOT') || src.includes('MOCK_MOUNT')),
+      `${viewFile} must import MOCK_GENERATE_ROOT from '@/lib/mockConstants'`,
+    ).toBe(true)
+    // ② 严禁再出现 .split('/').slice(0, 派生 mockRoot 的隐式逻辑
+    expect(
+      /\.split\(['"`]\/['"`]\)\.slice\(/.test(src),
+      `${viewFile} must NOT use .split('/').slice(...) for mockRoot derivation (2026-06-15 禁用)`,
+    ).toBe(false)
+    // ③ 严禁再 import DEFAULT_AUTOMATION_SOURCE 用于 mockRoot 派生
+    const usesDefaultForMockRoot =
+      /import\s*\{[^}]*DEFAULT_AUTOMATION_SOURCE[^}]*\}\s*from\s*['"]@\/composables\/useAutomationTests['"]/.test(src)
+    expect(
+      usesDefaultForMockRoot,
+      `${viewFile} must NOT import DEFAULT_AUTOMATION_SOURCE (used to derive mockRoot via slice)`,
+    ).toBe(false)
+  })
+
+  // 🆕 2026-06-15 mount path 单一真相源验证
+  it('【防回归】mountPath() 必须以 /d/ 前缀构造（与后端 mount.go 一致）', async () => {
+    const mod = await import('../src/lib/mountPath')
+    expect(mod.mountPath('automation')).toBe('/d/automation')
+    expect(mod.mountPath('primary')).toBe('/d/primary')
+    expect(mod.unmountPath('/d/automation/foo')).toBe('automation')
+    expect(mod.unmountPath('/d')).toBe('')
+  })
+
+  // 🆕 2026-06-15 mockConstants 一致性验证
+  it('【防回归】MOCK_GENERATE_ROOT 必须 = mountPath("automation") + "/"', async () => {
+    const m = await import('../src/lib/mockConstants')
+    const mp = await import('../src/lib/mountPath')
+    expect(m.MOCK_GENERATE_ROOT).toBe(mp.mountPath(m.AUTOMATION_MOUNT_NAME) + '/')
+    expect(m.MOCK_GENERATE_ROOT).toBe('/d/automation/')
   })
 })

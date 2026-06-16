@@ -107,7 +107,11 @@ func (p *configMountProvider) AutomationDriver() string {
 	if v := os.Getenv("ENCV_AUTOMATION_DRIVER"); v != "" {
 		return v
 	}
-	return mount.DriverAppData // 默认不可见（真机安全）
+	// 🆕 2026-06-15 默认改 "local"（真机可见 = /storage/emulated/0/encv-automation/）
+	// 旧默认 "appdata" → 写到 /data/user/0/<pkg>/files/ 内部存储 → 文件管理器看不到
+	// 自动化测试场景下用户必须能"在手机文件夹里看到"生成的 mock 数据
+	// 想要隔离的 opt-in：ENCV_AUTOMATION_DRIVER=appdata
+	return mount.DriverLocal
 }
 
 // 编译期断言

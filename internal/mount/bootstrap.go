@@ -3,15 +3,17 @@ package mount
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 )
 
 // Bootstrap 根据 ConfigProvider 在空 registry 上创建默认 mount。
 //
 // 规则（2026-06-15 重设计：所有 mount 总是在所有模式下创建，避免「mount 缺失导致 mock generate 403」）：
 //   - primary        → local driver，root = cfg.ServingDir()（dev sandbox 不变） 或 cfg.DataDir()（兜底）
-//   - automation     → cfg.AutomationDriver()（默认 appdata），root 由 driver 计算
-//                      桌面：cfg.AppDataFallbackDir()/encv-automation
-//                      真机：/data/user/<uid>/<pkg>/files/encv-automation
+//   - automation     → cfg.AutomationDriver()（默认 "local"，真机可见）
+//                      真机：/storage/emulated/0/encv-automation/（用户能在文件管理器看到）
+//                      dev 沙箱：cfg.ServingDir()/encv-automation
+//                      若配 ENCV_AUTOMATION_DRIVER=appdata → 切回 appdata driver（不可见但隔离）
 //   - sandbox        → sandbox driver（dev only；prod 模式不创建）
 //   - 已存在的同名 mount 不覆盖
 //
@@ -53,17 +55,29 @@ func (r *MountRegistry) BootstrapFromConfig(ctx context.Context) error {
 		}
 	}
 
-	// 2. automation（始终创建 — appdata driver 自己处理 desktop 真机差异）
-	//    🆕 2026-06-15 修复：去掉 cfg.IsMobile() 条件门，避免 mobile overlay 未生效时漏创建
+	// 2. automation（始终创建；root 取决于 driver）
+	//    🆕 2026-06-15 修复：去掉 cfg.IsMobile() 条件门
+	//    🆕 2026-06-15 真机可见：默认 local driver → 真机 root = <servingDir>/encv-automation
 	if r.GetByName(NameAutomation) == nil {
-		if err := r.Create(&Mount{
+		driver := r.cfg.AutomationDriver()
+		mount := &Mount{
 			Name:         NameAutomation,
-			MountPath:    "/d/" + NameAutomation, // 🆕 2026-06-15 同上
-			Driver:       r.cfg.AutomationDriver(), // 默认 "appdata"，可改 "local"
+			MountPath:    "/d/" + NameAutomation,
+			Driver:       driver,
 			Enabled:      true,
 			DriverConfig: map[string]any{"subpath": "encv-automation"},
-		}); err != nil {
-			return fmt.Errorf("bootstrap automation: %w", err)
+		}
+		// local driver 必须在 Create() 之前设置 RootPath（LocalDriver.Init 校验非空）
+		// appdata driver 自己用 cfg + subpath 算 RootPath
+		if driver == DriverLocal {
+			base := r.cfg.ServingDir()
+			if base == "" {
+				base = r.cfg.DataDir()
+			}
+			mount.RootPath = filepath.Join(base, "encv-automation")
+		}
+		if err := r.Create(mount); err != nil {
+			return fmt.Errorf("bootstrap automation: %w (driver=%s)", err, driver)
 		}
 	}
 

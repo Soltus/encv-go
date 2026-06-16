@@ -357,7 +357,7 @@ import {
 } from '@/api/encv'
 import { generateMockFilesViaBackend, resetMockFilesViaBackend } from '@/api/mockGenerator'
 import { extToRelativePath } from '@/lib/mockDataGenerator'
-import { DEFAULT_AUTOMATION_SOURCE } from '@/composables/useAutomationTests'
+import { MOCK_GENERATE_ROOT } from '@/lib/mockConstants'
 import { formatContainerVersion } from '@/constants/containerVersion'
 import { useWorkflowEngine } from '@/composables/useWorkflowEngine'
 import type { WorkflowDefinition, WorkflowRun, JobRun, StepRun, StepDefinition } from '@/lib/workflow/types'
@@ -370,11 +370,11 @@ import StepDetailPanel from '@/components/automation/StepDetailPanel.vue'
 const { t } = useI18n()
 
 // ---- Mock 数据 ----
-// 🆕 2026-06-15 multi-mount 修复：必须 .slice(0, 3) = '/d/automation'（mount 根）
-//   旧 .slice(0, 5) = '/d/automation/01-plain-media/video/' → mount registry
-//   找不到这个 mount → 403 "invalid mount path" → UI spinner 永远转
-//   参见 useAutomationTests.ts L91-94 注释
-const mockRoot = computed(() => DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 3).join('/') + '/')
+// 🆕 2026-06-15 声明式：mockRoot = AUTOMATION_MOUNT_PATH + '/'（常量，不再 split/slice）
+//   之前 .slice(0, 5) 隐式推导：DEFAULT_AUTOMATION_SOURCE 改前缀 → UI 静默选错 → 403
+//   现在改 mount path = 改 src/lib/mockConstants.ts + 后端 mount.go，两个源，不会漏
+// 保留 computed() 是因为下方有 `mockRoot.value` 引用，零行为变化
+const mockRoot = computed(() => MOCK_GENERATE_ROOT)
 const isGenerating = ref(false)
 const isResetting = ref(false)
 const mockStats = ref<{ count: number; totalSize: number; skipped?: number } | null>(null)
@@ -841,9 +841,10 @@ function classifyMockError(errMsg: string): { title: string; hint: string } {
       hint:
         `后端 mount registry 找不到 mockRoot。\n\n` +
         `当前可用 mount：[${availList}]\n\n` +
-        `常见 bug：DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, N) 的 N 取错了\n` +
-        `  - N=3 ✅ → '/d/automation'（mount 根）\n` +
-        `  - N=5 ❌ → '/d/automation/01-plain-media/video/'（取多了，无此 mount）\n\n` +
+        `常见 bug：mockRoot 派生用了字符串切片（fragile）\n` +
+        `  - 应使用 MOCK_GENERATE_ROOT 声明式常量（src/lib/mockConstants.ts）\n` +
+        `  - 错误示例：mockRoot = "/d/automation/01-plain-media/video/"（取多了）\n` +
+        `  - 正确示例：mockRoot = "/d/automation/"（mount 根）\n\n` +
         `排查：\n` +
         `  1) WorkflowDashboard.vue L201 / AutomationTestsDetail.vue L373 → 改 N=3\n` +
         `  2) 后端 slog：grep "Mock generate rejected" /workspace/encv.log`,
