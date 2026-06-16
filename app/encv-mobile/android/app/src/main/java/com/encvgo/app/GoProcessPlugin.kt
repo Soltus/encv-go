@@ -636,6 +636,24 @@ class GoProcessPlugin : Plugin() {
         if (p != null) call.resolve(JSObject().apply { put("success", true); put("path", p) }) else call.reject("Failed to save dev logs")
     }
 
+    // 🆕 2026-06-17：读取 android-deps.json manifest（由 Gradle task generateAndroidDepsManifest 在
+    //   :app:preBuild 阶段生成到 app/src/main/assets/android-deps.json）
+    //   用途：About 页"Android 库"section 数据源
+    @PluginMethod
+    fun getAndroidDeps(call: PluginCall) {
+        try {
+            val stream = context.assets.open("android-deps.json")
+            val bytes = stream.readBytes()
+            stream.close()
+            val text = String(bytes, Charsets.UTF_8)
+            // JSObject 解析 JSON 文本后传给前端
+            call.resolve(JSObject(text))
+        } catch (e: Exception) {
+            Log.w("GoProcessPlugin", "android-deps.json not found or unreadable: ${e.message}")
+            call.reject("android-deps.json not found: ${e.message}")
+        }
+    }
+
     private fun registerStatusReceiver() {
         if (receiverRegistered) return
         val filter = IntentFilter().apply { addAction(EncvGoService.BROADCAST_BACKEND_READY); addAction(EncvGoService.BROADCAST_BACKEND_STATUS) }

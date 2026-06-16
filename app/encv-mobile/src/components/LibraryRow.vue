@@ -1,0 +1,237 @@
+<template>
+  <div class="lib-row">
+    <div class="lib-title-row">
+      <div class="lib-name-version">
+        <span class="lib-name">{{ item.name }}</span>
+        <span class="lib-version">{{ item.version }}</span>
+      </div>
+      <div class="lib-badges">
+        <span class="lib-source-badge" :title="t('about.libsSource') + ': ' + sourceLabel">
+          {{ sourceLabel }}
+        </span>
+        <span
+          class="lib-status-badge"
+          :class="['lib-status-' + item.status]"
+          :title="statusLabel"
+        >
+          {{ statusLabel }}
+        </span>
+        <span
+          class="lib-importance-badge"
+          :class="['lib-importance-' + item.importance]"
+          :title="importanceLabel"
+        >
+          {{ importanceLabel }}
+        </span>
+      </div>
+    </div>
+    <div class="lib-description-row">
+      <span v-if="item.description" class="lib-description lib-description-explicit">
+        {{ item.description }}
+      </span>
+      <span v-else-if="item.descriptionStatus === 'fetching'" class="lib-description lib-description-fetching">
+        <span class="lib-description-spinner"></span>
+        {{ t('about.libFetchingDescription') }}
+      </span>
+      <span v-else-if="resolvedDescription" class="lib-description lib-description-fetched">
+        {{ resolvedDescription }}
+      </span>
+      <span v-else class="lib-description lib-description-placeholder">
+        {{ t('about.libDescriptionPlaceholder') }}
+      </span>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { useI18n } from '@/composables/useI18n'
+import type { LibraryItem } from '@/composables/useLibraries'
+
+const props = defineProps<{ item: LibraryItem }>()
+const { t } = useI18n()
+
+const resolvedDescription = ref<string>(props.item.descriptionFallback || '')
+
+const sourceLabel = computed(() => {
+  const s = props.item.source
+  if (s === 'package.json') return t('about.libSource.packageJson')
+  if (s === 'libs.versions.toml') return t('about.libSource.libsVersionsToml')
+  if (s === 'build.gradle.kts') return t('about.libSource.buildGradleKts')
+  if (s === 'go.mod') return t('about.libSource.goMod')
+  if (s === 'runtime.Version()') return t('about.libSource.runtimeVersion')
+  return t('about.libSource.unknown')
+})
+
+const statusLabel = computed(() => {
+  const s = props.item.status
+  if (s === 'active') return t('about.libStatus.active')
+  if (s === 'broken') return t('about.libStatus.broken')
+  return t('about.libStatus.historical')
+})
+
+const importanceLabel = computed(() => {
+  const i = props.item.importance
+  if (i === 'core') return t('about.libImportance.core')
+  if (i === 'light') return t('about.libImportance.light')
+  return t('about.libImportance.transitive')
+})
+
+watch(
+  () => props.item.descriptionFallback,
+  (v) => {
+    if (v) resolvedDescription.value = v
+  },
+)
+</script>
+
+<style scoped>
+.lib-row {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+body.dark .lib-row {
+  border-bottom-color: #2a2a2c;
+}
+
+.lib-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lib-name-version {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.lib-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ion-text-color);
+  word-break: break-all;
+}
+
+.lib-version {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  font-family: monospace;
+  flex-shrink: 0;
+}
+
+.lib-badges {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.lib-source-badge,
+.lib-status-badge,
+.lib-importance-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.lib-source-badge {
+  background: var(--ion-color-light-shade, #e0e0e0);
+  color: var(--ion-color-medium-shade);
+}
+
+body.dark .lib-source-badge {
+  background: #3a3a3c;
+  color: var(--ion-color-medium-tint);
+}
+
+.lib-status-active {
+  background: rgba(var(--ion-color-success-rgb), 0.16);
+  color: var(--ion-color-success-shade);
+}
+
+.lib-status-broken {
+  background: rgba(var(--ion-color-danger-rgb), 0.16);
+  color: var(--ion-color-danger-shade);
+}
+
+.lib-status-historical {
+  background: rgba(var(--ion-color-medium-rgb), 0.16);
+  color: var(--ion-color-medium-shade);
+}
+
+.lib-importance-core {
+  background: rgba(var(--ion-color-primary-rgb), 0.16);
+  color: var(--ion-color-primary-shade);
+}
+
+.lib-importance-light {
+  background: rgba(var(--ion-color-tertiary-rgb, var(--ion-color-secondary-rgb)), 0.16);
+  color: var(--ion-color-tertiary-shade, var(--ion-color-secondary-shade));
+}
+
+.lib-importance-transitive {
+  background: rgba(var(--ion-color-medium-rgb), 0.12);
+  color: var(--ion-color-medium-shade);
+}
+
+.lib-description-row {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.lib-description {
+  display: inline;
+  word-break: break-word;
+}
+
+.lib-description-explicit {
+  color: var(--ion-text-color);
+}
+
+.lib-description-fetched {
+  color: var(--ion-color-medium-shade);
+  font-style: italic;
+}
+
+.lib-description-placeholder {
+  color: var(--ion-color-medium);
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.lib-description-fetching {
+  color: var(--ion-color-medium);
+}
+
+.lib-description-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--ion-color-medium);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: lib-spin 0.8s linear infinite;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+@keyframes lib-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+</style>

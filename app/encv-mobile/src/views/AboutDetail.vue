@@ -10,6 +10,7 @@
     </ion-header>
 
     <ion-content>
+      <!-- App 通用信息 -->
       <ion-list>
         <ion-list-header>
           <ion-label>{{ t('settings.about') }}</ion-label>
@@ -38,6 +39,7 @@
         </ion-item>
       </ion-list>
 
+      <!-- 原生引擎 (FFmpeg 来自 /api/build-info) -->
       <div v-if="buildInfoLoading" class="build-info-loading">
         <ion-spinner name="crescent"></ion-spinner>
       </div>
@@ -45,179 +47,76 @@
         <ion-icon :icon="warningOutline" color="warning"></ion-icon>
         <span>{{ t('about.failedToLoad') }}</span>
       </div>
-      <template v-else>
-        <ion-list>
-          <ion-list-header>
-            <ion-label>{{ t('about.nativeEngine') }}</ion-label>
-          </ion-list-header>
-          <ion-item v-if="buildInfo">
-            <ion-icon :icon="videocamOutline" slot="start" class="lib-icon ffmpeg-icon"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">FFmpeg</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">{{ buildInfo.ffmpeg_version }}</ion-badge>
-                <ion-badge color="danger" class="lib-badge license-badge">{{ buildInfo.ffmpeg_license }}</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.ffmpegDesc') }}</p>
-            </ion-label>
-          </ion-item>
-        </ion-list>
+      <ion-list v-else>
+        <ion-list-header>
+          <ion-label>{{ t('about.nativeEngine') }}</ion-label>
+        </ion-list-header>
+        <ion-item v-if="buildInfo">
+          <ion-icon :icon="videocamOutline" slot="start" class="lib-icon ffmpeg-icon"></ion-icon>
+          <ion-label>
+            <div class="lib-title-row">
+              <h3 class="lib-name">FFmpeg</h3>
+              <ion-badge color="medium" class="lib-badge version-badge">{{ buildInfo.ffmpeg_version }}</ion-badge>
+              <ion-badge color="danger" class="lib-badge license-badge">{{ buildInfo.ffmpeg_license }}</ion-badge>
+            </div>
+            <p class="lib-desc">{{ t('about.ffmpegDesc') }}</p>
+          </ion-label>
+        </ion-item>
+      </ion-list>
 
-        <ion-list>
-          <ion-list-header>
-            <ion-label>{{ t('about.backendLibs') }}</ion-label>
-          </ion-list-header>
-          <ion-item>
-            <ion-icon :icon="serverOutline" slot="start" class="lib-icon go-icon"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">Go</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">{{ goVersion }}</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">BSD-3-Clause</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.goRuntimeDesc') }}</p>
-            </ion-label>
-          </ion-item>
-          <ion-item>
-            <ion-icon :icon="globeOutline" slot="start"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">Gin</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v1.12.0</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">MIT</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.ginDesc') }}</p>
-            </ion-label>
-          </ion-item>
-          <ion-item>
-            <ion-icon :icon="terminalOutline" slot="start"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">Cobra</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v1.10.2</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">Apache-2.0</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.cobraDesc') }}</p>
-            </ion-label>
-          </ion-item>
-          <ion-item>
-            <ion-icon :icon="filmOutline" slot="start"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">go-mp4</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v1.4.1</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">MIT</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.goMp4Desc') }}</p>
-            </ion-label>
-          </ion-item>
-          <ion-item>
-            <ion-icon :icon="imagesOutline" slot="start"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">go-exif</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v3.0.1</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">MIT</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.goExifDesc') }}</p>
-            </ion-label>
-          </ion-item>
-          <ion-item>
-            <ion-icon :icon="eyeOutline" slot="start"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">fsnotify</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v1.9.0</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">BSD-3-Clause</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.fsnotifyDesc') }}</p>
-            </ion-label>
-          </ion-item>
-          <ion-item>
-            <ion-icon :icon="swapHorizontalOutline" slot="start"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">gorilla/websocket</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v1.5.3</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">BSD-2-Clause</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.websocketDesc') }}</p>
-            </ion-label>
-          </ion-item>
-          <ion-item>
-            <ion-icon :icon="speedometerOutline" slot="start"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">go-humanize</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v1.0.1</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">MIT</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.humanizeDesc') }}</p>
-            </ion-label>
-          </ion-item>
-        </ion-list>
+      <!-- 🆕 2026-06-17：库展示重构 - 数据源 manifest + 状态/重要性双重标记 -->
 
-        <ion-list>
-          <ion-list-header>
-            <ion-label>{{ t('about.frontendLibs') }}</ion-label>
-          </ion-list-header>
-          <ion-item>
-            <ion-icon :icon="logoVimeo" slot="start" class="lib-icon vue-icon"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">Vue</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v3.5</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">MIT</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.vueDesc') }}</p>
-            </ion-label>
-          </ion-item>
-          <ion-item>
-            <ion-icon :icon="logoIonic" slot="start" class="lib-icon ionic-icon"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">Ionic</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v8.8</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">MIT</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.ionicDesc') }}</p>
-            </ion-label>
-          </ion-item>
-          <ion-item>
-            <ion-icon :icon="capacitorIcon" slot="start" class="lib-icon capacitor-icon"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">Capacitor</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v8.3</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">MIT</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.capacitorDesc') }}</p>
-            </ion-label>
-          </ion-item>
-          <ion-item>
-            <ion-icon :icon="playCircleOutline" slot="start"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">Artplayer</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v5.4</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">MIT</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.artplayerDesc') }}</p>
-            </ion-label>
-          </ion-item>
-          <ion-item>
-            <ion-icon :icon="gitBranchOutline" slot="start"></ion-icon>
-            <ion-label>
-              <div class="lib-title-row">
-                <h3 class="lib-name">vue-router</h3>
-                <ion-badge color="medium" class="lib-badge version-badge">v4.6</ion-badge>
-                <ion-badge color="tertiary" class="lib-badge license-badge">MIT</ion-badge>
-              </div>
-              <p class="lib-desc">{{ t('about.vueRouterDesc') }}</p>
-            </ion-label>
-          </ion-item>
-        </ion-list>
-      </template>
+      <!-- Android 库 -->
+      <ion-list>
+        <ion-list-header>
+          <ion-label>{{ t('about.androidLibs') }}</ion-label>
+        </ion-list-header>
+        <div v-if="libsLoading" class="build-info-loading">
+          <ion-spinner name="crescent"></ion-spinner>
+        </div>
+        <div v-else-if="androidItems.length === 0" class="build-info-error">
+          <ion-icon :icon="warningOutline" color="medium"></ion-icon>
+          <span>{{ t('about.libsEmpty') }}</span>
+        </div>
+        <template v-else>
+          <LibraryRow v-for="item in androidItems" :key="`android-${item.name}`" :item="item" @vue:mounted="onLibMounted(item)" />
+        </template>
+      </ion-list>
+
+      <!-- 前端库 -->
+      <ion-list>
+        <ion-list-header>
+          <ion-label>{{ t('about.frontendLibs') }}</ion-label>
+        </ion-list-header>
+        <div v-if="frontendItems.length === 0" class="build-info-error">
+          <ion-icon :icon="warningOutline" color="medium"></ion-icon>
+          <span>{{ t('about.libsEmpty') }}</span>
+        </div>
+        <template v-else>
+          <LibraryRow v-for="item in frontendItems" :key="`frontend-${item.name}`" :item="item" @vue:mounted="onLibMounted(item)" />
+        </template>
+      </ion-list>
+
+      <!-- 后端库 -->
+      <ion-list>
+        <ion-list-header>
+          <ion-label>{{ t('about.backendLibs') }}</ion-label>
+        </ion-list-header>
+        <div v-if="libsLoading && backendItems.length === 0" class="build-info-loading">
+          <ion-spinner name="crescent"></ion-spinner>
+        </div>
+        <div v-else-if="backendItems.length === 0 && libsError" class="build-info-error">
+          <ion-icon :icon="warningOutline" color="warning"></ion-icon>
+          <span>{{ t('about.libsFailed') }}: {{ libsError }}</span>
+        </div>
+        <div v-else-if="backendItems.length === 0" class="build-info-error">
+          <ion-icon :icon="warningOutline" color="medium"></ion-icon>
+          <span>{{ t('about.libsEmpty') }}</span>
+        </div>
+        <template v-else>
+          <LibraryRow v-for="item in backendItems" :key="`backend-${item.name}`" :item="item" @vue:mounted="onLibMounted(item)" />
+        </template>
+      </ion-list>
 
     </ion-content>
   </ion-page>
@@ -231,17 +130,13 @@ import {
 } from '@ionic/vue'
 import {
   informationCircle, codeSlash, logoGithub, openOutline, videocamOutline,
-  serverOutline, warningOutline, globeOutline, terminalOutline,
-  filmOutline, imagesOutline, eyeOutline, swapHorizontalOutline,
-  speedometerOutline, playCircleOutline, gitBranchOutline,
-  logoVimeo,
+  warningOutline,
 } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
 import { fetchBuildInfo, type BuildInfo } from '@/api/encv'
-import { ref, onMounted } from 'vue'
-
-const capacitorIcon = terminalOutline
-const logoIonic = globeOutline
+import { useLibraries, type LibraryItem } from '@/composables/useLibraries'
+import { ref, onMounted, watch } from 'vue'
+import LibraryRow from '@/components/LibraryRow.vue'
 
 const { t } = useI18n()
 
@@ -249,9 +144,19 @@ const buildInfo = ref<BuildInfo | null>(null)
 const buildInfoLoading = ref(true)
 const buildInfoError = ref(false)
 const appVersion = ref('v1.0.0')
-const goVersion = ref('go1.x')
+
+const {
+  androidItems,
+  frontendItems,
+  backendItems,
+  loading: libsLoading,
+  error: libsError,
+  load: loadLibraries,
+  resolveDescription,
+} = useLibraries()
 
 onMounted(async () => {
+  // 加载 buildInfo
   try {
     const info = await fetchBuildInfo()
     buildInfo.value = info
@@ -262,6 +167,31 @@ onMounted(async () => {
     buildInfoError.value = true
   } finally {
     buildInfoLoading.value = false
+  }
+  // 加载库列表
+  loadLibraries()
+})
+
+/**
+ * 触发 description 解析
+ * 监听所有 items 的变化,逐个处理无 description 的项
+ */
+async function onLibMounted(item: LibraryItem) {
+  if (item.description) return  // 已有显式描述
+  if (item.descriptionStatus === 'fetched' || item.descriptionStatus === 'placeholder') return  // 已尝试过
+  // 异步解析（fire-and-forget）
+  resolveDescription(item).catch(() => {
+    item.descriptionStatus = 'placeholder'
+  })
+}
+
+watch([androidItems, frontendItems, backendItems], () => {
+  for (const list of [androidItems, frontendItems, backendItems]) {
+    for (const item of list) {
+      if (!item.description && item.descriptionStatus === 'placeholder') {
+        onLibMounted(item)
+      }
+    }
   }
 })
 
@@ -277,26 +207,6 @@ function openGitHub() {
 }
 
 .ffmpeg-icon {
-  color: var(--ion-color-primary);
-}
-
-.x264-icon {
-  color: var(--ion-color-danger);
-}
-
-.go-icon {
-  color: var(--ion-color-tertiary);
-}
-
-.vue-icon {
-  color: #42b883;
-}
-
-.ionic-icon {
-  color: var(--ion-color-primary);
-}
-
-.capacitor-icon {
   color: var(--ion-color-primary);
 }
 
