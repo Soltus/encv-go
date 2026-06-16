@@ -49,6 +49,17 @@ export interface MockSpecDiag {
   ffmpegArgs: string[]
   exitCode: number
   stderr: string
+  // 🆕 修复 B1 + B2 (2026-06-17)：增强调试字段
+  /** 源文件实际写入字节数（plan_diag 为 0） */
+  srcSize?: number
+  /** 目标文件实际写入字节数（plan_diag 为 0；失败时可能为 0 或部分） */
+  dstSize?: number
+  /** worker 实际使用的 tmp dir（plan_diag 为空；失败时也可能为空表示 5 级 fallback 全失败） */
+  workerTmpDir?: string
+  /** worker 响应的 error 字段（与 stderr 区分；可定位 ENGINE_LOAD_FAILED 等） */
+  workerError?: string
+  /** 拼接好的「worker_tmp_dir + lib_dir + pid + src/dst size」一行可读文本（流程日志展示用） */
+  contextInfo?: string
 }
 
 /**

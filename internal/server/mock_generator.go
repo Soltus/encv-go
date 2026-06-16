@@ -205,6 +205,17 @@ type mockFileSpec struct {
 	// 🆕 2026-06-12：runner 标识（ffmpeg / mediacodec / static）
 	//   Phase 3.3 MediaCodec 实装后填 'mediacodec'；当前固定 'ffmpeg'
 	runner string
+	// 🆕 修复 B1 + B2 (2026-06-17)：增强调试字段
+	//   - srcSize: 源文件实际写入字节数（失败排查「源是否被成功写出」）
+	//   - dstSize: 目标文件实际写入字节数（失败排查「ffmpeg 是否写了部分输出」）
+	//   - workerTmpDir: worker 实际使用的 tmp dir（resolved，失败时为空）
+	//   - workerError: worker 响应的 error 字段（与 stderr 区分；可定位 ENGINE_LOAD_FAILED 等）
+	//   - contextInfo: 拼接好的「worker_tmp_dir + lib_dir + pid + src/dst size」一行可读文本
+	srcSize       int64
+	dstSize       int64
+	workerTmpDir  string
+	workerError   string
+	contextInfo   string
 }
 
 // generateMockSpecs 返回指定 type 的所有文件 specs
@@ -369,7 +380,7 @@ func (s *Server) handleMockGenerateGin(c *gin.Context) {
 	}
 	for i, sp := range specs {
 		diagData := fmt.Sprintf(
-			`{"index": %d, "total": %d, "relativePath": %q, "status": "pending", "encoder": %q, "runner": %q, "ffmpegArgs": %s, "exitCode": 0, "stderr": ""}`,
+			`{"index": %d, "total": %d, "relativePath": %q, "status": "pending", "encoder": %q, "runner": %q, "ffmpegArgs": %s, "exitCode": 0, "stderr": "", "srcSize": 0, "dstSize": 0, "workerTmpDir": "", "workerError": "", "contextInfo": ""}`,
 			i+1, len(specs), sp.relativePath, sp.encoderHint, sp.runner, jsonEscapeStringSlice(sp.ffmpegArgs),
 		)
 		if err := writeSseEvent(c.Writer, flusher, "spec_plan", diagData); err != nil {
@@ -450,10 +461,11 @@ func (s *Server) handleMockGenerateGin(c *gin.Context) {
 				}
 			}
 			diagData := fmt.Sprintf(
-				`{"index": %d, "total": %d, "relativePath": %q, "status": %q, "encoder": %q, "runner": %q, "ffmpegArgs": %s, "exitCode": %d, "stderr": %q}`,
+				`{"index": %d, "total": %d, "relativePath": %q, "status": %q, "encoder": %q, "runner": %q, "ffmpegArgs": %s, "exitCode": %d, "stderr": %q, "srcSize": %d, "dstSize": %d, "workerTmpDir": %q, "workerError": %q, "contextInfo": %q}`,
 				idx, len(specs), sp.relativePath, diagStatus, sp.encoderHint, sp.runner,
 				jsonEscapeStringSlice(sp.ffmpegArgs),
 				sp.exitCode, sp.stderr,
+				sp.srcSize, sp.dstSize, sp.workerTmpDir, sp.workerError, sp.contextInfo,
 			)
 			if err := writeSseEvent(c.Writer, flusher, "spec_diag", diagData); err != nil {
 				clientGone = true
@@ -759,23 +771,74 @@ func ffmpegGenerate(ext string) (data []byte, stderr string, exitCode int, err e
 	args = append(args, "-y", "-loglevel", "error", dstPath)
 
 	// 5. 跑 ffmpeg
+	// 🆕 修复 B1 (2026-06-17)：预 mkdir worker 专属 tmp dir，worker 子进程 SELinux 上下文与 Go 父进程
+	//   不同，自身 5 级 fallback 全部失败。Go 父进程走 gomobile File API（Java 上下文）创建，SELinux 正确。
+	workerTmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("encv_worker_%d_%d", os.Getpid(), seq))
+	if mkdirErr := os.MkdirAll(workerTmpDir, 0700); mkdirErr != nil {
+		return nil, fmt.Sprintf("mkdir worker tmp %s: %v", workerTmpDir, mkdirErr), -1, mkdirErr
+	}
+	defer func() { _ = os.RemoveAll(workerTmpDir) }()
+
 	// 🆕 2026-06-15：ffmpeg.RunWithOutput(ctx, args...) → ffmpeg.Encode(ctx, args...) 返回 *EncodeResult
+	// 🆕 修复 B1：用 EncodeWithTmpDir 把 workerTmpDir 传 worker
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	res, runErr := ffmpeg.Encode(ctx, args...)
+	res, runErr := ffmpeg.EncodeWithTmpDir(ctx, workerTmpDir, args...)
 	var ffmpegStderr string
 	var ffmpegExit int
+	var workerTmpDirResolved string
 	if res != nil {
 		ffmpegStderr = res.Stderr
 		ffmpegExit = res.ExitCode
+		workerTmpDirResolved = res.WorkerTmpDir
 	}
 	if runErr != nil {
 		// 典型：ctx canceled / ctx deadline exceeded / spawn 失败
-		return nil, fmt.Sprintf("ffmpeg spawn/run error: %v\nstderr: %s\nargs: %v", runErr, ffmpegStderr, args), ffmpegExit, runErr
+		var errDetail string
+		if res != nil && res.Error != "" {
+			errDetail = "\nworker error: " + res.Error
+		}
+		// 🆕 修复 B2：补 lib_dir / tmp_dir / 源/目标文件大小 / worker PID 上下文
+		var srcSize, dstSize int64
+		if fi, _ := os.Stat(srcPath); fi != nil {
+			srcSize = fi.Size()
+		}
+		if fi, _ := os.Stat(dstPath); fi != nil {
+			dstSize = fi.Size()
+		}
+		effTmpDir := workerTmpDirResolved
+		if effTmpDir == "" {
+			effTmpDir = workerTmpDir
+		}
+		return nil, fmt.Sprintf(
+			"ffmpeg spawn/run: %v\nstderr: %s%s\ncontext: worker_tmp_dir=%s (requested %s) src=%s(size=%d) dst=%s(size=%d) pid=%d args: %v",
+			runErr, ffmpegStderr, errDetail,
+			effTmpDir, workerTmpDir, srcPath, srcSize, dstPath, dstSize, os.Getpid(), args,
+		), ffmpegExit, runErr
 	}
 	if ffmpegExit != 0 {
 		// 典型 stderr：「Unknown encoder 'libmp3lame'」/「Encoder not found」/ 编码器失败
-		return nil, fmt.Sprintf("ffmpeg exit=%d, stderr: %s\nargs: %v", ffmpegExit, ffmpegStderr, args), ffmpegExit, fmt.Errorf("ffmpeg exit=%d", ffmpegExit)
+		var errDetail string
+		if res != nil && res.Error != "" {
+			errDetail = "\nworker error: " + res.Error
+		}
+		// 🆕 修复 B2：同上补 context
+		var srcSize, dstSize int64
+		if fi, _ := os.Stat(srcPath); fi != nil {
+			srcSize = fi.Size()
+		}
+		if fi, _ := os.Stat(dstPath); fi != nil {
+			dstSize = fi.Size()
+		}
+		effTmpDir := workerTmpDirResolved
+		if effTmpDir == "" {
+			effTmpDir = workerTmpDir
+		}
+		return nil, fmt.Sprintf(
+			"ffmpeg exit=%d, stderr: %s%s\ncontext: worker_tmp_dir=%s (requested %s) src=%s(size=%d) dst=%s(size=%d) pid=%d args: %v",
+			ffmpegExit, ffmpegStderr, errDetail,
+			effTmpDir, workerTmpDir, srcPath, srcSize, dstPath, dstSize, os.Getpid(), args,
+		), ffmpegExit, fmt.Errorf("ffmpeg exit=%d", ffmpegExit)
 	}
 
 	// 6. 读回
@@ -904,28 +967,68 @@ func executeMockSpec(sp *mockFileSpec) {
 	// 🆕 2026-06-12 Phase 4：timeout 10s → 5s。
 	// 5s 上限基于"单次 ffmpeg -c copy / 软编 mp3 30-50MB 输入 < 2s"的实测。
 	// 真机 cgo hang 时不再等 30s 才超时；硬上限 5s（worker hard timer + 500ms 兜底）
+	// 🆕 修复 B1 (2026-06-17)：预 mkdir worker 专属 tmp dir。
+	//   worker 子进程 SELinux 上下文与 Go 父进程不同，自身 5 级 fallback 全部失败。
+	//   Go 父进程走 gomobile File API（Java 上下文）创建，SELinux 正确。
+	seq := mockFfmpegSeq.Add(1)
+	workerTmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("encv_worker_%d_%d", os.Getpid(), seq))
+	if mkdirErr := os.MkdirAll(workerTmpDir, 0700); mkdirErr != nil {
+		sp.stderr = fmt.Sprintf("mkdir worker tmp %s: %v", workerTmpDir, mkdirErr)
+		sp.exitCode = -1
+		sp.workerTmpDir = workerTmpDir
+		sp.contextInfo = fmt.Sprintf("worker_tmp_dir=%s (mkdir failed: %v) pid=%d", workerTmpDir, mkdirErr, os.Getpid())
+		return
+	}
+	defer func() { _ = os.RemoveAll(workerTmpDir) }()
+	sp.workerTmpDir = workerTmpDir
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	// 🆕 2026-06-15：ffmpeg.RunWithOutput(ctx, args...) → ffmpeg.Encode(ctx, args...) 返回 *EncodeResult
-	res, runErr := ffmpeg.Encode(ctx, sp.ffmpegArgs...)
+	// 🆕 修复 B1：用 EncodeWithTmpDir 把 workerTmpDir 传 worker
+	res, runErr := ffmpeg.EncodeWithTmpDir(ctx, workerTmpDir, sp.ffmpegArgs...)
 	var ffmpegStderr string
 	var ffmpegExit int
 	if res != nil {
 		ffmpegStderr = res.Stderr
 		ffmpegExit = res.ExitCode
+		if res.WorkerTmpDir != "" {
+			sp.workerTmpDir = res.WorkerTmpDir // 用 worker 实际确认的 dir 覆盖（fallback 情况）
+		}
+		if res.Error != "" {
+			sp.workerError = res.Error
+		}
 	}
+	// 🆕 修复 B2：补 lib_dir / tmp_dir / 源/目标文件大小 / worker PID 上下文
+	var srcSize, dstSize int64
+	if fi, _ := os.Stat(srcPath); fi != nil {
+		srcSize = fi.Size()
+	}
+	if fi, _ := os.Stat(dstPath); fi != nil {
+		dstSize = fi.Size()
+	}
+	sp.srcSize = srcSize
+	sp.dstSize = dstSize
+	sp.contextInfo = fmt.Sprintf("worker_tmp_dir=%s src=%s(size=%d) dst=%s(size=%d) pid=%d",
+		sp.workerTmpDir, srcPath, srcSize, dstPath, dstSize, os.Getpid())
+
 	if runErr != nil {
 		// 🆕 2026-06-15：把 worker 响应的 Error 字段也拼到 stderr（之前只拼 Stderr 会丢 ENGINE_LOAD_FAILED 等关键诊断）
 		var errDetail string
 		if res != nil && res.Error != "" {
 			errDetail = "\nworker error: " + res.Error
 		}
-		sp.stderr = fmt.Sprintf("ffmpeg spawn/run: %v\nstderr: %s%s", runErr, ffmpegStderr, errDetail)
+		// 🆕 修复 B2：context 单独成段，便于前端折叠展示
+		sp.stderr = fmt.Sprintf("ffmpeg spawn/run: %v\nstderr: %s%s\ncontext: %s", runErr, ffmpegStderr, errDetail, sp.contextInfo)
 		sp.exitCode = ffmpegExit
 		return
 	}
 	if ffmpegExit != 0 {
-		sp.stderr = fmt.Sprintf("ffmpeg exit=%d\nstderr: %s", ffmpegExit, ffmpegStderr)
+		// 🆕 修复 B2：同上
+		var errDetail string
+		if res != nil && res.Error != "" {
+			errDetail = "\nworker error: " + res.Error
+		}
+		sp.stderr = fmt.Sprintf("ffmpeg exit=%d\nstderr: %s%s\ncontext: %s", ffmpegExit, ffmpegStderr, errDetail, sp.contextInfo)
 		sp.exitCode = ffmpegExit
 		return
 	}
@@ -933,13 +1036,14 @@ func executeMockSpec(sp *mockFileSpec) {
 	// 4. 读回
 	data, rerr := os.ReadFile(dstPath)
 	if rerr != nil || len(data) == 0 {
-		sp.stderr = fmt.Sprintf("read dst %s: %v (size=%d)", dstPath, rerr, len(data))
+		sp.stderr = fmt.Sprintf("read dst %s: %v (size=%d)\ncontext: %s", dstPath, rerr, len(data), sp.contextInfo)
 		sp.exitCode = ffmpegExit
 		return
 	}
 	sp.data = data
 	sp.stderr = ffmpegStderr
 	sp.exitCode = 0
+	// 成功时 sp.contextInfo 保留（前端可展开看「成功路径的环境」）
 }
 
 // mockFfmpegSeq 用于 planMockSpec 内部生成唯一 tmp 文件名

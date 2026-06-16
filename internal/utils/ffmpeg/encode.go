@@ -47,6 +47,18 @@ type EncodeResult struct {
 	// 调用方（如 mock_generator.go）拿不到 worker 进程内部错误时，可从这里取。
 	// 之前漏掉这个字段 → mock_generator 拼装 stderr 时 res.Error 编译不过。
 	Error string
+	// 🆕 修复 B1: worker 实际使用的 tmp_dir（用于流程日志展示）
+	// worker 优先用 JSON 传入的 tmp_dir，失败时 5 级 fallback 兜底
+	WorkerTmpDir string
+}
+
+// runWorkerOptions 控制单次 worker 调用的可选项。
+type runWorkerOptions struct {
+	// WorkerTmpDir 强制指定 worker 写 stdout/stderr 重定向文件的目录。
+	//   修复 B1：传 per-call 专属 dir，Go 父进程已用 gomobile File API 预 mkdir（SELinux 正确），
+	//   worker 子进程直接 open 即可，避免 worker 自身 5 级 fallback 全部失败。
+	//   留空 = 走 os.TempDir()（gomobile 注入为 context.cacheDir）。
+	WorkerTmpDir string
 }
 
 // workerRequest/Response 与 cmd/ffmpeg-worker/ffmpeg_worker.c 的 JSON 协议对齐。
@@ -71,6 +83,8 @@ type workerResponse struct {
 	Stderr     string `json:"stderr"`
 	DurationMs int64  `json:"duration_ms"`
 	Error      string `json:"error,omitempty"`
+	// 🆕 修复 B1: worker 回报实际使用的 tmp_dir（用于流程日志展示）
+	TmpDir string `json:"tmp_dir,omitempty"`
 }
 
 // locateWorker 找 ffmpeg-worker binary 路径。
@@ -127,7 +141,9 @@ func locateWorker() (string, error) {
 // ctx cancel + 硬 timer SIGKILL 兜底（防 cgo 阻塞父进程）。
 //
 // 🆕 2026-06-15：替代旧 workerClient.RunWithOutput（go 文件已删除）；协议与 ffmpeg_worker.c 同步。
-func runWorkerJSON(ctx context.Context, workerBin string, mode string, args []string) (*EncodeResult, error) {
+//
+// 🆕 修复 B1 (2026-06-17): opts.WorkerTmpDir 非空时强制使用（Go 父进程预 mkdir）
+func runWorkerJSON(ctx context.Context, workerBin string, mode string, args []string, opts runWorkerOptions) (*EncodeResult, error) {
 	timeoutMs := 0
 	if deadline, ok := ctx.Deadline(); ok {
 		timeoutMs = int(time.Until(deadline).Milliseconds())
@@ -145,6 +161,13 @@ func runWorkerJSON(ctx context.Context, workerBin string, mode string, args []st
 		libDir = utils.GetLibDir() // utils 包公开 getLibDir 兜底
 	}
 
+	// 🆕 修复 B1: 优先用 opts.WorkerTmpDir（Go 父进程预 mkdir，SELinux 上下文正确）
+	//   留空兜底 = os.TempDir()（gomobile 注入为 context.cacheDir）
+	workerTmpDir := opts.WorkerTmpDir
+	if workerTmpDir == "" {
+		workerTmpDir = os.TempDir()
+	}
+
 	req := workerRequest{
 		Args:      args,
 		FFmpegBin: locateFFmpegSystem(),
@@ -152,7 +175,8 @@ func runWorkerJSON(ctx context.Context, workerBin string, mode string, args []st
 		LibDir:    libDir,
 		// 🆕 2026-06-16：传 os.TempDir() 给 worker（gomobile 注入为 context.cacheDir）
 		//   Worker 优先用 JSON tmp_dir 写 stdout/stderr 重定向文件（不再硬编码 /tmp/）
-		TmpDir:    os.TempDir(),
+		// 🆕 修复 B1 (2026-06-17)：传 per-call 专属 dir（opts.WorkerTmpDir）
+		TmpDir:    workerTmpDir,
 		TimeoutMs: timeoutMs,
 		Mode:      mode,
 	}
@@ -172,7 +196,8 @@ func runWorkerJSON(ctx context.Context, workerBin string, mode string, args []st
 		"ENCV_LIB_DIR="+libDir,
 		// 🆕 2026-06-16：显式注入 TMPDIR=os.TempDir()，让 worker 即便没读到 JSON tmp_dir
 		//   也能用 env 兜底（gomobile 启动 Go 进程时通常已设 TMPDIR，这里再双保险）
-		"TMPDIR="+os.TempDir(),
+		// 🆕 修复 B1 (2026-06-17)：用 workerTmpDir 替代 os.TempDir()，与 JSON tmp_dir 对齐
+		"TMPDIR="+workerTmpDir,
 	)
 
 	if err := cmd.Start(); err != nil {
@@ -234,12 +259,18 @@ func runWorkerJSON(ctx context.Context, workerBin string, mode string, args []st
 		finalErr = fmt.Errorf("ffmpeg worker reported: %s", resp.Error)
 	}
 
+	// 🆕 修复 B1: worker 回报实际 tmp_dir（resp.TmpDir 优先，回落到 workerTmpDir 假设值）
+	resolvedTmpDir := resp.TmpDir
+	if resolvedTmpDir == "" {
+		resolvedTmpDir = workerTmpDir
+	}
 	return &EncodeResult{
-		Stdout:     []byte(resp.Stdout),
-		Stderr:     resp.Stderr + stderrBuf.String(),
-		ExitCode:   resp.ExitCode,
-		DurationMs: resp.DurationMs,
-		Error:      resp.Error,
+		Stdout:       []byte(resp.Stdout),
+		Stderr:       resp.Stderr + stderrBuf.String(),
+		ExitCode:     resp.ExitCode,
+		DurationMs:   resp.DurationMs,
+		Error:        resp.Error,
+		WorkerTmpDir: resolvedTmpDir,
 	}, finalErr
 }
 

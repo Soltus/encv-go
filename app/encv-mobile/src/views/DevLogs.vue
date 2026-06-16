@@ -285,7 +285,8 @@ const backendUpdateTick = ref(0)
 const backendLogsView = shallowRef<readonly LogEntry[]>(backendFilter.getResult())
 const unsubBackendFilter = backendFilter.subscribe(() => {
   backendUpdateTick.value++
-  backendLogsView.value = backendFilter.getResult()
+  // 🆕 修复 A1: spread 创建新数组引用，让 Vue 3 computed 缓存失效链路完整传递
+  backendLogsView.value = [...backendFilter.getResult()]
   triggerRef(backendLogsView)
 })
 
@@ -365,7 +366,8 @@ const backendFilteredItems = computed<readonly LogEntry[]>(() => {
   void backendLogsView.value
   // 显式 dep 标识：subscribe 回调里 ++tick，computed 也会重新求值
   void backendUpdateTick.value
-  return backendFilter.getResult()
+  // 🆕 修复 A1: spread 确保返回新引用（双保险 — 即便 subscription 回调漏 spread，下游也能失效）
+  return [...backendFilter.getResult()]
 })
 const totalBackendCount = computed(() => {
   void backendUpdateTick.value
