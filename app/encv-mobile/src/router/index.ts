@@ -87,6 +87,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/AgentSettingsDetail.vue'),
       },
       {
+        // 🆕 2026-06-15 v4：专用「服务器状态详情页」
+        // 用户要"ion-item 状态行直接是精美卡片 + 点跳独立详情页看事实表"
+        // 入口：ServerDetail 顶部的 ServerStatusCard 点击
+        path: 'settings/server/status',
+        component: () => import('@/views/ServerStatusDetail.vue'),
+        meta: { title: 'serverStatusDetail.title' },
+      },
+      {
         path: 'settings/devtools',
         component: () => import('@/views/DevToolsDetail.vue'),
       },
