@@ -88,8 +88,24 @@ const routes: RouteRecordRaw[] = [
       },
       {
         // 服务器地址管理页（手动配置 baseUrl 兜底）
-        path: 'settings/server',
-        component: () => import('@/views/ServerSettings.vue'),
+        // 🆕 2026-06-15 v5：路径从 /settings/server 改到 /settings/server/url
+        //   - /settings/server  → ServerDetail.vue（总览 / 状态 / 子服务 / 权限）
+        //   - /settings/server/url  → ServerUrlDetail.vue（手动 baseUrl 兜底）
+        //   - /settings/server/status → ServerStatusDetail.vue（后端状态事实表）
+        //   3 个路径严格区分 0 混淆
+        path: 'settings/server/url',
+        component: () => import('@/views/ServerUrlDetail.vue'),
+        meta: { title: 'settings.server.title' },
+      },
+      {
+        // 🆕 2026-06-15 v4：专用「服务器状态详情页」—— 单职责，0 混淆
+        //   - 跟 ServerUrlDetail（URL 配置，/settings/server/url）严格区分
+        //   - 跟 ServerDetail（首页总览 + 状态 ion-item 链接，/settings/server）严格区分
+        //   - 跟 DevLogs / AgentSettingsDetail 内嵌的 ServerStatusCard 严格区分
+        //   入口：ServerDetail 状态行点击、Settings 状态行点击
+        path: 'settings/server/status',
+        component: () => import('@/views/ServerStatusDetail.vue'),
+        meta: { title: 'serverStatusDetail.title' },
       },
       {
         path: 'settings/devtools',

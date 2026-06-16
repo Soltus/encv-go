@@ -1,6 +1,6 @@
 <!--
-  ServerSettings - 服务器地址配置页
-  位置：/settings/server（从 AgentSettingsDetail "服务器地址" 入口跳入）
+  ServerUrlDetail - 服务器地址配置页（🆕 2026-06-15 v5 重命名）
+  位置：/settings/server/url（从 ServerDetail "服务器地址" ion-item 入口跳入）
   作用：手动管理 baseUrl 兜底——自动探测链失败时用户最后的逃生通道
   提供的操作：
     - 显示当前 baseUrl + 来源（loopback / LAN / 自定义）
@@ -9,6 +9,15 @@
     - "手动输入" 输入框：写自定义 URL
     - "恢复默认 loopback" 按钮：清 localStorage + 重探测
   失败态：显示红色 banner + 详细错误（从 lastError 拿）
+
+  重命名铁律（用户 2026-06-15 怒批"绕了几轮找不到北"后）：
+    - 旧名 ServerSettings（跟 ServerDetail / ServerStatusDetail 混用）
+    - 新名 ServerUrlDetail（只干"URL 配置"一件事）—— 文件名 + 类名 + 路径名一致
+    - 路径：/settings/server/url（从 /settings/server 改出来）
+    - 3 个页面严格区分（路径 + 文件名 + 顶部标题）：
+      · /settings/server        → ServerDetail.vue      "服务器"（总览）
+      · /settings/server/status → ServerStatusDetail.vue "服务器状态"（事实表）
+      · /settings/server/url    → ServerUrlDetail.vue    "服务器地址"（URL 兜底）
 -->
 <template>
   <ion-page>
@@ -31,14 +40,15 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="serverSettingsContent">
-      <!-- 🆕 2026-06-15：升级详情页状态卡片 = 用 ServerStatusCard
-           替换原本自定义的 status card（state badge + baseUrl + source + latency + error）。
-           ServerStatusCard 提供更丰富的信息（version / instance_id / port / transport / 状态切换动画）
-           + 主题色适配（0 硬编码颜色）+ pulse / time-roll 等动态效果。
+    <ion-content class="serverUrlDetailContent">
+      <!-- 🆕 2026-06-15 v5：升级详情页状态卡片 = 用 ServerStatusCard
+           替换原本自定义的 status card（state badge + baseUrl + source + latency / error）。
+           🆕 2026-06-15 v5 二次升级：clickable=true + @click 跳 /tabs/settings/server/status
+           —— 这样在任何页面看到这张卡片都能跳到 ServerStatusDetail 看完整事实表
+           —— 单职责 + 单入口，0 混淆
 
            baseUrl + source 信息移到 header subtitle（ion-note 风格 chip）保留可见。 -->
-      <ServerStatusCard :clickable="false" :hide-instance-id="false" />
+      <ServerStatusCard :clickable="true" :hide-instance-id="false" @click="goStatusDetail" />
 
       <!-- ① 当前 baseUrl + source 摘要（ion-note 风格小 chip，提示"我连到哪里"） -->
       <div class="statusSubline">
@@ -189,10 +199,17 @@ import { useServerStatus } from '@/composables/useServerStatus'
 import { useApiBaseProbe, type ProbeResult } from '@/composables/useApiBaseProbe'
 import { DEFAULT_API_BASE_URL, getApiBaseUrl } from '@/api/encv'
 import ServerStatusCard from '@/components/ServerStatusCard.vue'
+import { useRouter } from 'vue-router'
 
 const { t } = useI18n()
 const server = useServerStatus()
 const probe = useApiBaseProbe()
+const router = useRouter()
+
+// 🆕 2026-06-15 v5：跳「服务器状态详情页」（事实表）—— 单入口 0 混淆
+function goStatusDetail() {
+  router.push('/tabs/settings/server/status')
+}
 
 const manualUrl = ref('')
 const manualError = ref('')
@@ -319,7 +336,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.serverSettingsContent {
+.serverUrlDetailContent {
   --padding-start: 14px;
   --padding-end: 14px;
   --padding-top: 10px;
@@ -328,7 +345,7 @@ onMounted(async () => {
 
 /* 🆕 2026-06-15：详情页状态卡片 = ServerStatusCard
    - 全宽容器，间距与 ion-card 视觉一致 */
-.serverSettingsContent > .server-status-card {
+.serverUrlDetailContent > .server-status-card {
   margin-bottom: 8px;
 }
 

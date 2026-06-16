@@ -4,7 +4,7 @@
 //   - useApiBase setup()（冷启动）
 //   - document.visibilitychange（切回前台）
 //   - useServerStatus.manualReconnect()（手动重连）
-//   - ServerSettings.vue "立即探测" 按钮
+//   - ServerUrlDetail.vue "立即探测" 按钮
 //
 // 探测优先级：
 //   [1]   localStorage.encv-server-url（用户上次手动设的，最优先）

@@ -107,11 +107,18 @@ func (p *configMountProvider) AutomationDriver() string {
 	if v := os.Getenv("ENCV_AUTOMATION_DRIVER"); v != "" {
 		return v
 	}
-	// 🆕 2026-06-15 默认改 "local"（真机可见 = /storage/emulated/0/encv-automation/）
-	// 旧默认 "appdata" → 写到 /data/user/0/<pkg>/files/ 内部存储 → 文件管理器看不到
-	// 自动化测试场景下用户必须能"在手机文件夹里看到"生成的 mock 数据
-	// 想要隔离的 opt-in：ENCV_AUTOMATION_DRIVER=appdata
-	return mount.DriverLocal
+	// 🆕 2026-06-15 默认 = "appdata"（app-private 路径，真机有权限）
+	//
+	// 警告：改成 "local" 是致命错！
+	//   - local driver 在真机写 /storage/emulated/0/encv-automation/
+	//   - /storage/emulated/0/ 是 Android shared storage
+	//   - Android 11+ 需要 MANAGE_EXTERNAL_STORAGE 权限
+	//   - Android 13+ scoped storage 写裸路径直接 EACCES
+	//   - app-private 路径（/data/user/0/<pkg>/files/）不需要任何运行时权限
+	//   - 不要为了"用户在文件管理器里看到"而切到 local — 真机直接崩
+	//
+	// 想要 local（dev 沙箱 shell 可见）的 opt-in：ENCV_AUTOMATION_DRIVER=local
+	return mount.DriverAppData
 }
 
 // 编译期断言

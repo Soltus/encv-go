@@ -10,10 +10,11 @@ import (
 //
 // 规则（2026-06-15 重设计：所有 mount 总是在所有模式下创建，避免「mount 缺失导致 mock generate 403」）：
 //   - primary        → local driver，root = cfg.ServingDir()（dev sandbox 不变） 或 cfg.DataDir()（兜底）
-//   - automation     → cfg.AutomationDriver()（默认 "local"，真机可见）
-//                      真机：/storage/emulated/0/encv-automation/（用户能在文件管理器看到）
-//                      dev 沙箱：cfg.ServingDir()/encv-automation
-//                      若配 ENCV_AUTOMATION_DRIVER=appdata → 切回 appdata driver（不可见但隔离）
+//   - automation     → cfg.AutomationDriver()（默认 "appdata" = app-private 路径）
+//                      ⚠️ 必须是 appdata，不是 local！local 在真机会 EACCES（shared storage 没权限）
+//                      真机：/data/user/<uid>/<pkg>/files/encv-automation/（有权限）
+//                      dev 沙箱：cfg.AppDataFallbackDir()/encv-automation
+//                      若配 ENCV_AUTOMATION_DRIVER=local → 真机 EACCES 必失败
 //   - sandbox        → sandbox driver（dev only；prod 模式不创建）
 //   - 已存在的同名 mount 不覆盖
 //

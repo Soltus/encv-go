@@ -2,7 +2,7 @@
   ServerStatusCard.vue — 后端状态卡片（🆕 2026-06-15 彻底重构 v3）
 
   单一职责：**只回答一个问题**——后端是否在线？
-  - 其它一切（version / instance_id / port / latency / transport / 上次检查时间）→ ServerSettings 详情页
+  - 其它一切（version / instance_id / port / latency / transport / 上次检查时间）→ ServerUrlDetail 详情页
   - 卡片**绝不再内嵌**多 pill / 多 grid / 复杂动画 / 横幅
 
   设计铁律（用户 2026-06-15 怒批后重设计）：
@@ -61,10 +61,10 @@ defineProps<{
 defineEmits<{ (e: 'click'): void }>()
 
 const { t } = useI18n()
-const { isOnline, isChecking, lastError, transportMode } = useServerStatus()
+const { isOnline, isRestarting, lastError, transportMode } = useServerStatus()
 
 const state = computed<'online' | 'offline' | 'checking'>(() => {
-  if (isChecking.value) return 'checking'
+  if (isRestarting.value) return 'checking'
   return isOnline.value ? 'online' : 'offline'
 })
 

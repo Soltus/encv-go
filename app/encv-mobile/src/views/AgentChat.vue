@@ -772,7 +772,7 @@ async function handleRefreshLanAccess(): Promise<void> {
  *  2. useServerStatus.manualReconnect() 重新探测 + 重建 WS
  *  3. 失败 → toast 红色；成功 → toast 绿色 + 1.6s 后自动隐藏
  *
- * 与 ServerSettings.vue "使用" 按钮的区别：本处是"立即生效"，不进入配置页
+ * 与 ServerUrlDetail.vue "使用" 按钮的区别：本处是"立即生效"，不进入配置页
  * （适合用户已经看到 LAN 列表想直接切换的场景）
  */
 async function handleUseLanAddress(url: string): Promise<void> {

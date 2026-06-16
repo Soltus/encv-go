@@ -24,7 +24,14 @@
             <ion-icon :icon="copyIcon" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-item>
-        <ion-item>
+        <ion-item button @click="goServerUrlDetail" detail>
+          <ion-icon :icon="globeOutline" slot="start"></ion-icon>
+          <ion-label>
+            <h3>{{ t('settings.serverUrl') || '服务器地址' }}</h3>
+            <p class="readonly-url">{{ serverUrl }}</p>
+          </ion-label>
+        </ion-item>
+        <ion-item button @click="goServerStatusDetail" detail>
           <ion-icon :icon="serverIcon" slot="start"></ion-icon>
           <ion-label class="ion-text-wrap">
             <h3>{{ t('settings.status') }}</h3>
@@ -33,31 +40,33 @@
                 {{ serverOnline ? t('settings.online') : t('settings.offline') }}
               </ion-badge>
               <span v-if="serverOnline && backendPort" class="port-info">:{{ backendPort }}</span>
-              <span v-if="serverOnline && latencyMs > 0" class="latency-info">· {{ latencyMs }}ms</span>
-              <span v-if="serverOnline" class="transport-info" :class="`transport-${transportMode}`">· {{ transportLabel }}</span>
             </p>
             <p v-if="!serverOnline && connectionError" class="connection-error">
               {{ connectionError }}
             </p>
-            <p v-if="serverOnline && lastCheckedAt" class="status-meta">
-              {{ t('settings.lastChecked') }} {{ lastCheckedAtFormatted }}
+            <p v-if="serverOnline && backendInstanceId" class="instance-id-line">
+              <code class="instance-id">{{ backendInstanceId.slice(0, 8) }}</code>
+              <span v-if="backendVersion" class="version-info">v{{ backendVersion }}</span>
             </p>
-            <p v-if="serverOnline && isSandboxBrowser" class="status-warning">
-              {{ t('settings.sandboxWsWarning') }}
-            </p>
+            <!-- 🆕 2026-06-15 v4：详情页（latency / transport / last checked / sandbox warning）已迁到
+                 /tabs/settings/server/status 专用页（ServerStatusDetail.vue），单职责 0 混淆
+                 此 ion-item 只显示：在线/离线 + 端口 + instance_id 前 8 位 + version
+                 点击 → 跳详情页 -->
+            <p class="status-hint">{{ t('settings.statusDetailHint') || '点击查看完整状态详情' }}</p>
           </ion-label>
           <div slot="end" class="server-controls">
-            <ion-button fill="outline" size="small" @click="checkServer">
+            <!-- 刷新按钮：只做"再 ping 一次后端 + 弹 toast"，不跳详情页（用 .stop 防止冒泡到 ion-item 的导航） -->
+            <ion-button fill="outline" size="small" @click.stop="checkServerInner">
               <ion-icon :icon="refreshIcon" slot="icon-only"></ion-icon>
             </ion-button>
             <ion-button v-if="isRestarting" fill="outline" size="small" color="medium" disabled>
               <ion-spinner slot="icon-only" name="crescent"></ion-spinner>
             </ion-button>
-            <ion-button v-else-if="serverOnline" fill="outline" size="small" color="danger" @click="handleStop" :disabled="isStopping">
+            <ion-button v-else-if="serverOnline" fill="outline" size="small" color="danger" @click.stop="handleStop" :disabled="isStopping">
               <ion-spinner v-if="isStopping" slot="icon-only" name="crescent"></ion-spinner>
               <ion-icon v-else :icon="stopIcon" slot="icon-only"></ion-icon>
             </ion-button>
-            <ion-button v-else fill="outline" size="small" color="warning" @click="handleRestart">
+            <ion-button v-else fill="outline" size="small" color="warning" @click.stop="handleRestart">
               <ion-icon :icon="playIcon" slot="icon-only"></ion-icon>
             </ion-button>
           </div>
@@ -164,11 +173,11 @@ const {
   backendPort,
   isRestarting,
   isStopping,
-  // 🆕 2026-06-10 状态展示增强
-  latencyMs,
-  transportMode,
-  lastCheckedAt,
-  isSandboxBrowser,
+  // 🆕 2026-06-15：状态 ion-item 只显示 instance_id 前 8 位 + version
+  //   完整详情（latency / transport / last checked / sandbox warning）已迁到
+  //   /tabs/settings/server/status 专用页（ServerStatusDetail.vue）
+  backendInstanceId,
+  backendVersion,
 } = useServerStatus()
 const { t } = useI18n()
 
@@ -180,24 +189,6 @@ const permBatteryOpt = ref(false)
 let permissionCheckTimer: number | null = null
 
 const router = useRouter()
-
-// 传输模式的人类可读标签
-const transportLabel = computed(() => {
-  switch (transportMode.value) {
-    case 'ws': return 'WebSocket'
-    case 'http-poll': return 'HTTP polling'
-    case 'native-bridge': return 'Native bridge'
-    default: return 'unknown'
-  }
-})
-
-// 上次探测时间的 HH:MM:SS 格式
-const lastCheckedAtFormatted = computed(() => {
-  if (!lastCheckedAt.value) return ''
-  const d = lastCheckedAt.value
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-})
 
 const httpPort = computed(() => (configData.value?.server as Record<string, unknown>)?.port ?? '-')
 const rootDir = computed(() => (configData.value?.server as Record<string, unknown>)?.dir ?? '/')
@@ -211,6 +202,11 @@ const webdavUsername = computed(() => (configData.value?.webdav as Record<string
 function goHttpServer() { router.push('/tabs/settings/server/http') }
 function goAdminServer() { router.push('/tabs/settings/server/admin') }
 function goWebdavServer() { router.push('/tabs/settings/server/webdav') }
+// 🆕 2026-06-15 v4：跳专用「服务器状态详情页」—— 单职责，0 混淆
+function goServerStatusDetail() { router.push('/tabs/settings/server/status') }
+// 🆕 2026-06-15 v5：跳专用「服务器地址配置页」—— URL 兜底，0 混淆
+//   跟 ServerUrlDetail（URL 配置页）对应，路径 /settings/server/url
+function goServerUrlDetail() { router.push('/tabs/settings/server/url') }
 
 async function copyToClipboard(text: string) {
   const ok = await clipboardWrite(text)
@@ -248,7 +244,9 @@ async function handleRequestBatteryOpt() {
   setTimeout(() => refreshPermissions(), 5000)
 }
 
-async function checkServer() {
+async function checkServerInner() {
+  // 刷新按钮：只 ping 一次后端 + 弹 toast，不跳详情页
+  // （防 ion-item 冒泡用 .stop，但本身也独立可用 — 跟 goServerStatusDetail 路径严格区分）
   await checkStatus()
   showToast({
     message: serverOnline.value ? t('settings.serverOnline') : t('settings.serverOffline'),
