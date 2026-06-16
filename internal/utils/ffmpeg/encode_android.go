@@ -21,7 +21,21 @@ func Encode(ctx context.Context, args ...string) (*EncodeResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ffmpeg-worker not found: %w", err)
 	}
-	return runWorkerJSON(ctx, bin, "ffmpeg", args)
+	// 🆕 修复 B1: Encode 不接受 opts 参数（保持包级 API 稳定），内部用空 opts
+	// 走 os.TempDir() 兜底。caller 想用 per-call tmp dir 应直接调 runWorkerJSON。
+	return runWorkerJSON(ctx, bin, "ffmpeg", args, runWorkerOptions{})
+}
+
+// 🆕 修复 B1 (2026-06-17): EncodeWithTmpDir 与 Encode 相同，但允许 caller 指定 worker tmp dir。
+//   典型用法：mock_generator.go 预 mkdir os.TempDir()/encv_worker_<pid>_<seq>/ 再传进来，
+//   避免 worker 自身 5 级 fallback 在真机全部失败（SELinux 上下文问题）。
+//   沙箱环境下走 encode_exec.go 的同名函数（直接调系统 ffmpeg，tmpDir 忽略）。
+func EncodeWithTmpDir(ctx context.Context, workerTmpDir string, args ...string) (*EncodeResult, error) {
+	bin, err := locateWorker()
+	if err != nil {
+		return nil, fmt.Errorf("ffmpeg-worker not found: %w", err)
+	}
+	return runWorkerJSON(ctx, bin, "ffmpeg", args, runWorkerOptions{WorkerTmpDir: workerTmpDir})
 }
 
 // Probe 在真机环境下直接 in-process cgo 调 libffprobe.so（utils.CallFFprobeNative）。

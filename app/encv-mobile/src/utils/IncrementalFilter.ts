@@ -40,7 +40,10 @@ export interface FilterState {
 
 export function buildPredicate(state: FilterState): FilterPredicate {
   const { levels, searchLower } = state
-  const allLevels = levels.has('all') || levels.size === 0
+  // 🆕 修复 A2: 移除 `|| levels.size === 0` 短路
+  // 空 set 必须 0 通过（用户已取消全选，预期看不到任何日志）
+  // 'all' 必须显式在 set 中（由 toggleLevel 在 select-all 时 push 进 set）
+  const allLevels = levels.has('all')
   return (entry: LogEntry): boolean => {
     if (!allLevels && !levels.has(entry.level as Level)) return false
     if (searchLower && !entry.message.toLowerCase().includes(searchLower)) return false

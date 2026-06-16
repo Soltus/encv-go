@@ -171,7 +171,17 @@
 <span class="lbl">exit code:</span> {{ entry.exitCode }}
 <span class="lbl">stderr:</span>
 {{ entry.stderr || '(empty)' }}
-<span class="lbl">at:</span> {{ entry.at }}</pre>
+<span class="lbl">at:</span> {{ entry.at }}
+<!-- 🆕 修复 B1 + B2 (2026-06-17)：context 块（5 字段），失败时核心调试信息 -->
+<span v-if="entry.srcSize !== undefined || entry.dstSize !== undefined || entry.workerTmpDir || entry.workerError || entry.contextInfo" class="lbl">context:</span>
+<span v-if="entry.workerError">worker error: {{ entry.workerError }}
+</span>
+<span v-if="entry.workerTmpDir">worker tmp_dir: {{ entry.workerTmpDir }}
+</span>
+<span v-if="entry.srcSize !== undefined || entry.dstSize !== undefined">file sizes: src={{ entry.srcSize ?? 0 }} bytes, dst={{ entry.dstSize ?? 0 }} bytes
+</span>
+<span v-if="entry.contextInfo">{{ entry.contextInfo }}
+</span></pre>
             </li>
           </ol>
         </div>
@@ -405,6 +415,12 @@ interface MockGenLogEntry {
   at: string
   expanded: boolean
   _marked?: boolean // onProgress 标记过 ok 的不重复 mark
+  // 🆕 修复 B1 + B2 (2026-06-17)：增强调试字段
+  srcSize?: number
+  dstSize?: number
+  workerTmpDir?: string
+  workerError?: string
+  contextInfo?: string
 }
 const mockGenLog = ref<MockGenLogEntry[]>([])
 const mockGenLogTotal = ref(0)
@@ -596,6 +612,12 @@ async function handleGenerateMock() {
           stderr: diag.stderr,
           at: new Date().toISOString(),
           expanded: diag.status === 'failed', // 失败自动展开
+          // 🆕 修复 B1 + B2 (2026-06-17)：保留 5 字段到 entry（UI 渲染 context 块用）
+          srcSize: diag.srcSize,
+          dstSize: diag.dstSize,
+          workerTmpDir: diag.workerTmpDir,
+          workerError: diag.workerError,
+          contextInfo: diag.contextInfo,
         }
         if (existing >= 0) {
           mockGenLog.value[existing] = entry
@@ -729,6 +751,13 @@ function copyMockGenLog() {
     lines.push(`    ffmpeg args: ${e.ffmpegArgs.length > 0 ? e.ffmpegArgs.join(' ') : '(静态字节 - 无 ffmpeg 调用)'}`)
     lines.push(`    exit code: ${e.exitCode}`)
     lines.push(`    at: ${e.at}`)
+    // 🆕 修复 B1 + B2 (2026-06-17)：复制时附带 context 信息（便于问题反馈时粘贴到 issue）
+    if (e.workerTmpDir) lines.push(`    worker tmp_dir: ${e.workerTmpDir}`)
+    if (e.workerError) lines.push(`    worker error: ${e.workerError}`)
+    if (e.srcSize !== undefined || e.dstSize !== undefined) {
+      lines.push(`    file sizes: src=${e.srcSize ?? 0} bytes, dst=${e.dstSize ?? 0} bytes`)
+    }
+    if (e.contextInfo) lines.push(`    context: ${e.contextInfo}`)
     if (e.stderr) {
       lines.push(`    stderr:`)
       for (const ln of e.stderr.split('\n')) lines.push(`      ${ln}`)

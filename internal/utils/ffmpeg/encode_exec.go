@@ -43,7 +43,15 @@ func Encode(ctx context.Context, args ...string) (*EncodeResult, error) {
 		Stderr:     stderrBuf.String(),
 		ExitCode:   exitCode,
 		DurationMs: time.Since(start).Milliseconds(),
+		// 沙箱不走 worker subprocess，WorkerTmpDir 留空（流程日志展示时显示 "(sandbox, no worker)"）
 	}, err
+}
+
+// 🆕 修复 B1 (2026-06-17): 沙箱版本 workerTmpDir 参数被忽略（沙箱走系统 ffmpeg，不走 worker 子进程）。
+//   保留同名函数让 caller 平台无关调用。
+func EncodeWithTmpDir(ctx context.Context, workerTmpDir string, args ...string) (*EncodeResult, error) {
+	_ = workerTmpDir
+	return Encode(ctx, args...)
 }
 
 // locateFFprobeSystem 找系统 ffprobe binary（沙箱走）。

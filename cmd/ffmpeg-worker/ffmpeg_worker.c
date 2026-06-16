@@ -58,6 +58,8 @@ typedef void (*reset_fn_t)(void);
 // ========== 全局状态 ==========
 static volatile sig_atomic_t g_timeout_triggered = 0;
 static char g_lib_dir[MAX_LIB_PATH] = {0};
+// 🆕 修复 B1 (2026-06-17)：启动时记录 cwd，用于 error 日志回报
+static char g_orig_cwd[MAX_TMP_PATH] = {0};
 
 // ========== 超时处理（硬超时） ==========
 static void timeout_sig_handler(int sig) {
@@ -250,19 +252,66 @@ static int redirect_output_start(output_redirect_t* r) {
     }
 
     // stdout 临时文件
-    snprintf(r->stdout_path, sizeof(r->stdout_path), "%sffmpeg_stdout_XXXXXX", g_tmp_dir);
-    int fd_out = mkstemp(r->stdout_path);
-    if (fd_out < 0) return -1;
-    close(fd_out);
-
-    // stderr 临时文件
-    snprintf(r->stderr_path, sizeof(r->stderr_path), "%sffmpeg_stderr_XXXXXX", g_tmp_dir);
-    int fd_err = mkstemp(r->stderr_path);
-    if (fd_err < 0) {
-        unlink(r->stdout_path);
-        return -1;
+    // 🆕 修复 B1 (2026-06-17 第二轮): 用 open(O_CREAT|O_WRONLY|O_TRUNC) 不用 mkstemp
+    //   原因：真机 Android SELinux 上下文下 mkstemp 的 O_EXCL 走特殊路径，命中 EACCES
+    //   但 open(O_CREAT|O_WRONLY|O_TRUNC) 成功（try_set_tmp_dir 测试文件就是用这个方式）
+    //   唯一性靠 PID + 进程内单调计数器保证，不依赖文件系统原子 O_EXCL
+    {
+        static int seq = 0;
+        int tried = 0;
+        for (;;) {
+            int n = snprintf(r->stdout_path, sizeof(r->stdout_path),
+                             "%sffmpeg_stdout_%ld_%d.tmp", g_tmp_dir, (long)getpid(), seq);
+            if (n < 0 || (size_t)n >= sizeof(r->stdout_path)) {
+                fprintf(stderr, "{\"worker_debug\":\"stdout_path snprintf overflow, g_tmp_dir=%s, n=%d\"}", g_tmp_dir, n);
+                errno = ENAMETOOLONG;
+                return -1;
+            }
+            int fd_out = open(r->stdout_path, O_CREAT | O_WRONLY | O_TRUNC, 0600);
+            if (fd_out >= 0) {
+                // success
+                close(fd_out);
+                seq++;
+                break;
+            }
+            // 失败：seq 碰撞或 EEXIST → 下一轮
+            if (++tried > 1000) {
+                fprintf(stderr, "{\"worker_debug\":\"stdout temp file create failed after %d tries, errno=%d(%s), g_tmp_dir=%s, last_path=%s\"}",
+                        tried, errno, strerror(errno), g_tmp_dir, r->stdout_path);
+                return -1;
+            }
+            seq++;
+        }
     }
-    close(fd_err);
+
+    // stderr 临时文件（同理）
+    {
+        static int seq = 0;
+        int tried = 0;
+        for (;;) {
+            int n = snprintf(r->stderr_path, sizeof(r->stderr_path),
+                             "%sffmpeg_stderr_%ld_%d.tmp", g_tmp_dir, (long)getpid(), seq);
+            if (n < 0 || (size_t)n >= sizeof(r->stderr_path)) {
+                fprintf(stderr, "{\"worker_debug\":\"stderr_path snprintf overflow, g_tmp_dir=%s, n=%d\"}", g_tmp_dir, n);
+                errno = ENAMETOOLONG;
+                unlink(r->stdout_path);
+                return -1;
+            }
+            int fd_err = open(r->stderr_path, O_CREAT | O_WRONLY | O_TRUNC, 0600);
+            if (fd_err >= 0) {
+                close(fd_err);
+                seq++;
+                break;
+            }
+            if (++tried > 1000) {
+                fprintf(stderr, "{\"worker_debug\":\"stderr temp file create failed after %d tries, errno=%d(%s), g_tmp_dir=%s, last_path=%s\"}",
+                        tried, errno, strerror(errno), g_tmp_dir, r->stderr_path);
+                unlink(r->stdout_path);
+                return -1;
+            }
+            seq++;
+        }
+    }
 
     fflush(stdout);
     fflush(stderr);
@@ -347,6 +396,11 @@ static void json_emit_string(const char* s) {
 
 // ========== 主函数 ==========
 int main(void) {
+    // 🆕 修复 B1 (2026-06-17)：启动时记录 cwd，用于 error 日志回报「实际尝试过哪些 dir」
+    if (getcwd(g_orig_cwd, sizeof(g_orig_cwd)) == NULL) {
+        g_orig_cwd[0] = '\0';
+    }
+
     // 1. 完整读取 stdin（JSON 请求）
     char json_buf[MAX_JSON_LEN];
     ssize_t total = 0;
@@ -386,9 +440,13 @@ int main(void) {
     // 3.5 🆕 2026-06-16：解析 tmp_dir（在 redirect_output_start 之前必须完成）
     //   优先级：JSON tmp_dir > TMPDIR env > /data/local/tmp/ > 已知 cacheDir
     //   旧实现硬编码 /tmp/ → Android 上 EACCES
+    // 🆕 修复 B1 (2026-06-17)：在 error 信息中回报已尝试的候选 dir
     resolve_tmp_dir(json_tmp_dir);
     if (g_tmp_dir[0] == '\0') {
-        printf("{\"error\":\"no writable temp dir (tried JSON tmp_dir, $TMPDIR, /data/local/tmp/, /data/user/0/com.encvgo.app/cache/)\",\"exit_code\":-1}\n");
+        printf("{\"error\":\"no writable temp dir (tried JSON tmp_dir=\\\"%s\\\", $TMPDIR=\\\"%s\\\", /data/local/tmp/, /data/user/0/com.encvgo.app/cache/, cwd=\\\"%s\\\")\",\"exit_code\":-1,\"tmp_dir\":\"\"}\n",
+            json_tmp_dir[0] ? json_tmp_dir : "(empty)",
+            getenv("TMPDIR") ? getenv("TMPDIR") : "(empty)",
+            g_orig_cwd[0] ? g_orig_cwd : "(empty)");
         fflush(stdout);
         for (int i = 0; i < argc; i++) free(args[i]);
         free(args);
@@ -473,13 +531,16 @@ int main(void) {
                        (end.tv_usec - start.tv_usec) / 1000L;
 
     // 12. 输出 JSON 响应
-    // 顺序：exit_code, stdout, stderr, duration_ms, error
+    // 顺序：exit_code, stdout, stderr, duration_ms, tmp_dir, error
     // 字段顺序与 Go encode.go workerResponse 严格对齐（json.Unmarshal 按字段名匹配，顺序不严格，但便于调试）
+    // 🆕 修复 B1 (2026-06-17)：回报实际使用的 tmp_dir（流程日志展示用）
     printf("{\"exit_code\":%d,\"stdout\":", exit_code);
     json_emit_string(stdout_buf);
     printf(",\"stderr\":");
     json_emit_string(stderr_buf);
     printf(",\"duration_ms\":%ld", duration_ms);
+    printf(",\"tmp_dir\":");
+    json_emit_string(g_tmp_dir);
     if (g_timeout_triggered) {
         printf(",\"error\":\"timeout exceeded after %d ms\"", timeout_ms);
     } else {
