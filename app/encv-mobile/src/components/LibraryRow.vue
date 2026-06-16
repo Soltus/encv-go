@@ -2,6 +2,12 @@
   <div class="lib-row">
     <div class="lib-title-row">
       <div class="lib-name-version">
+        <ion-icon
+          v-if="iconName"
+          :icon="resolvedIcon"
+          class="lib-icon"
+          :title="t('about.libsIcon') + ': ' + iconName"
+        ></ion-icon>
         <span class="lib-name">{{ item.name }}</span>
         <span class="lib-version">{{ item.version }}</span>
       </div>
@@ -22,6 +28,20 @@
           :title="importanceLabel"
         >
           {{ importanceLabel }}
+        </span>
+        <span
+          v-if="item.license && item.license !== 'unknown'"
+          class="lib-license-badge"
+          :title="t('about.libsLicense') + ': ' + item.license"
+        >
+          {{ item.license }}
+        </span>
+        <span
+          v-else
+          class="lib-license-badge lib-license-unknown"
+          :title="t('about.libsLicenseUnknown')"
+        >
+          {{ t('about.libsLicenseUnknown') }}
         </span>
       </div>
     </div>
@@ -47,11 +67,105 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import type { LibraryItem } from '@/composables/useLibraries'
+import { addIcons } from 'ionicons'
+import {
+  helpCircle,
+  logoAndroid,
+  logoGoogle,
+  logoIonic,
+  logoVue,
+  cube,
+  apps,
+  grid,
+  image,
+  construct,
+  eye,
+  layers,
+  colorPalette,
+  sync,
+  gitNetwork,
+  bug,
+  flask,
+  cafe,
+  speedometer,
+  phonePortrait,
+  phonePortraitOutline,
+  shareSocial,
+  chatbubbles,
+  playCircle,
+  documentText,
+  terminal,
+  list,
+  analytics,
+  globe,
+  server,
+  codeSlash,
+  checkmarkCircle,
+  flash,
+  film,
+  text,
+  code,
+  key,
+  archive,
+  lockClosed,
+  cog,
+  arrowForward,
+} from 'ionicons/icons'
 
 const props = defineProps<{ item: LibraryItem }>()
 const { t } = useI18n()
 
+// 注册所有可能用到的 ionicon（避免按需引用导致 svg 缺失）
+addIcons({
+  'help-circle': helpCircle,
+  'logo-android': logoAndroid,
+  'logo-google': logoGoogle,
+  'logo-ionic': logoIonic,
+  'logo-vue': logoVue,
+  cube: cube,
+  apps: apps,
+  grid: grid,
+  image: image,
+  construct: construct,
+  eye: eye,
+  layers: layers,
+  'color-palette': colorPalette,
+  sync: sync,
+  'git-network': gitNetwork,
+  bug: bug,
+  flask: flask,
+  cafe: cafe,
+  speedometer: speedometer,
+  'phone-portrait': phonePortrait,
+  'phone-portrait-outline': phonePortraitOutline,
+  'share-social': shareSocial,
+  chatbubbles: chatbubbles,
+  'play-circle': playCircle,
+  'document-text': documentText,
+  terminal: terminal,
+  list: list,
+  analytics: analytics,
+  globe: globe,
+  server: server,
+  'code-slash': codeSlash,
+  'checkmark-circle': checkmarkCircle,
+  flash: flash,
+  film: film,
+  text: text,
+  code: code,
+  key: key,
+  archive: archive,
+  'lock-closed': lockClosed,
+  cog: cog,
+  'arrow-forward': arrowForward,
+})
+
 const resolvedDescription = ref<string>(props.item.descriptionFallback || '')
+
+const iconName = computed<string>(() => props.item.icon || 'cube')
+
+// ion-icon 通过 :icon prop 接受 string（自动查 addIcons 注册的 svg 路径）
+const resolvedIcon = computed<string>(() => iconName.value)
 
 const sourceLabel = computed(() => {
   const s = props.item.source
@@ -108,10 +222,20 @@ body.dark .lib-row {
 
 .lib-name-version {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.lib-icon {
+  font-size: 18px;
+  color: var(--ion-color-primary);
+  flex-shrink: 0;
+}
+
+body.dark .lib-icon {
+  color: var(--ion-color-primary-tint);
 }
 
 .lib-name {
@@ -138,7 +262,8 @@ body.dark .lib-row {
 
 .lib-source-badge,
 .lib-status-badge,
-.lib-importance-badge {
+.lib-importance-badge,
+.lib-license-badge {
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 10px;
@@ -186,6 +311,22 @@ body.dark .lib-source-badge {
 .lib-importance-transitive {
   background: rgba(var(--ion-color-medium-rgb), 0.12);
   color: var(--ion-color-medium-shade);
+}
+
+.lib-license-badge {
+  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  color: var(--ion-color-primary-shade);
+  font-family: monospace;
+}
+
+body.dark .lib-license-badge {
+  background: rgba(var(--ion-color-primary-rgb), 0.20);
+}
+
+.lib-license-unknown {
+  background: rgba(var(--ion-color-medium-rgb), 0.10);
+  color: var(--ion-color-medium-shade);
+  font-style: italic;
 }
 
 .lib-description-row {

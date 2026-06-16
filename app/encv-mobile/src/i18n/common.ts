@@ -230,6 +230,10 @@ export default {
     // 🆕 2026-06-17：About 页库展示重构 - 库依赖状态/重要性/来源标记
     'about.androidLibs': 'Android 库',
     'about.libsSource': '来源',
+    'about.libsIcon': '图标',
+    'about.libsLicense': '许可证',
+    'about.libsLicenseUnknown': '未知许可证',
+    'about.libsIconUnknown': '未知图标',
     'about.libSource.packageJson': 'package.json',
     'about.libSource.libsVersionsToml': 'libs.versions.toml',
     'about.libSource.buildGradleKts': 'build.gradle.kts',
@@ -512,6 +516,10 @@ export default {
     // 🆕 2026-06-17：About page libraries refactor - status/importance/source labels
     'about.androidLibs': 'Android Libraries',
     'about.libsSource': 'Source',
+    'about.libsIcon': 'Icon',
+    'about.libsLicense': 'License',
+    'about.libsLicenseUnknown': 'Unknown License',
+    'about.libsIconUnknown': 'Unknown Icon',
     'about.libSource.packageJson': 'package.json',
     'about.libSource.libsVersionsToml': 'libs.versions.toml',
     'about.libSource.buildGradleKts': 'build.gradle.kts',

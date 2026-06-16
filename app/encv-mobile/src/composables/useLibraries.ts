@@ -46,6 +46,8 @@ export interface LibraryItem {
   description: string
   descriptionFallback?: string
   descriptionStatus: 'explicit' | 'fetched' | 'placeholder' | 'fetching'
+  icon: string
+  license: string
 }
 
 const backendItems = ref<LibraryItem[]>([])
@@ -192,6 +194,8 @@ function buildFromFrontend(): LibraryItem[] {
       status: computeStatus(raw.name, raw.version, source),
       description: String(raw.description || ''),
       descriptionStatus: raw.description ? 'explicit' : 'placeholder',
+      icon: String(raw.icon || 'cube'),
+      license: String(raw.license || 'unknown'),
     }
     items.push(item)
   }
@@ -212,6 +216,8 @@ function buildFromBackend(raws: Array<any>): LibraryItem[] {
       status: computeStatus(r.name, r.version, source),
       description: String(r.description || ''),
       descriptionStatus: r.description ? 'explicit' : 'placeholder',
+      icon: String(r.icon || 'cube'),
+      license: String(r.license || 'unknown'),
     } as LibraryItem
   })
 }
@@ -245,6 +251,8 @@ async function load(): Promise<void> {
               kind: a.kind,
               importance: a.importance,
               description: a.description,
+              icon: a.icon,
+              license: a.license,
             })),
           }),
         )

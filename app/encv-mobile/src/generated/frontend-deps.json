@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-16T20:20:38.661Z",
+  "generated_at": "2026-06-16T21:37:12.385Z",
   "source_file": "package.json",
   "items": [
     {
@@ -10,7 +10,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
-      "description": ""
+      "description": "Capacitor 插件：高刷新率屏幕支持",
+      "icon": "speedometer",
+      "license": "MIT"
     },
     {
       "name": "@capacitor/android",
@@ -19,7 +21,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
-      "description": ""
+      "description": "Capacitor Android 平台 native 桥接",
+      "icon": "logo-android",
+      "license": "MIT"
     },
     {
       "name": "@capacitor/core",
@@ -28,7 +32,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
-      "description": ""
+      "description": "Capacitor 核心运行时（Web ↔ Native 桥接）",
+      "icon": "git-network",
+      "license": "MIT"
     },
     {
       "name": "@capacitor/device",
@@ -37,7 +43,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
-      "description": ""
+      "description": "Capacitor 设备信息插件（型号/OS/平台）",
+      "icon": "phone-portrait",
+      "license": "MIT"
     },
     {
       "name": "@capacitor/screen-orientation",
@@ -46,7 +54,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
-      "description": ""
+      "description": "Capacitor 屏幕方向控制插件",
+      "icon": "phone-portrait-outline",
+      "license": "MIT"
     },
     {
       "name": "@capacitor/share",
@@ -55,7 +65,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
-      "description": ""
+      "description": "Capacitor 系统分享面板插件",
+      "icon": "share-social",
+      "license": "MIT"
     },
     {
       "name": "@capacitor/status-bar",
@@ -64,7 +76,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
-      "description": ""
+      "description": "Capacitor 状态栏样式控制插件",
+      "icon": "phone-portrait",
+      "license": "MIT"
     },
     {
       "name": "@ionic/vue",
@@ -73,7 +87,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
-      "description": ""
+      "description": "Ionic Vue UI 组件库（移动端 Web）",
+      "icon": "logo-ionic",
+      "license": "MIT"
     },
     {
       "name": "@ionic/vue-router",
@@ -82,7 +98,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
-      "description": ""
+      "description": "Ionic Vue 路由集成（适配 ion-router-outlet）",
+      "icon": "git-network",
+      "license": "MIT"
     },
     {
       "name": "@tanstack/vue-virtual",
@@ -91,7 +109,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
-      "description": ""
+      "description": "TanStack Virtual — 大列表虚拟滚动",
+      "icon": "list",
+      "license": "MIT"
     },
     {
       "name": "@tdesign-vue-next/chat",
@@ -100,7 +120,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
-      "description": ""
+      "description": "TDesign Vue 聊天组件（AI 消息渲染）",
+      "icon": "chatbubbles",
+      "license": "MIT"
     },
     {
       "name": "artplayer",
@@ -109,7 +131,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
-      "description": ""
+      "description": "ArtPlayer — 现代 HTML5 视频播放器",
+      "icon": "play-circle",
+      "license": "MIT"
     },
     {
       "name": "ionicons",
@@ -118,7 +142,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
-      "description": ""
+      "description": "Ionicons — Ionic 官方图标库",
+      "icon": "image",
+      "license": "MIT"
     },
     {
       "name": "markstream-vue",
@@ -127,7 +153,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
-      "description": ""
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "vconsole",
@@ -136,7 +164,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
-      "description": ""
+      "description": "vConsole — 移动端 Web 调试控制台",
+      "icon": "terminal",
+      "license": "MIT"
     },
     {
       "name": "vue",
@@ -145,7 +175,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
-      "description": ""
+      "description": "Vue.js — 渐进式 JavaScript 框架",
+      "icon": "logo-vue",
+      "license": "MIT"
     },
     {
       "name": "vue-router",
@@ -154,7 +186,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
-      "description": ""
+      "description": "Vue.js 官方路由管理器",
+      "icon": "git-network",
+      "license": "MIT"
     },
     {
       "name": "vue-virtual-scroller",
@@ -163,7 +197,9 @@
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
-      "description": ""
+      "description": "Vue Virtual Scroller — 虚拟滚动列表",
+      "icon": "list",
+      "license": "MIT"
     },
     {
       "name": "@capacitor/cli",
@@ -172,7 +208,9 @@
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
-      "description": ""
+      "description": "Capacitor CLI — 平台 sync/build 命令行",
+      "icon": "terminal",
+      "license": "MIT"
     },
     {
       "name": "@vitejs/plugin-vue",
@@ -181,7 +219,9 @@
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
-      "description": ""
+      "description": "Vite Vue SFC 编译插件",
+      "icon": "logo-vue",
+      "license": "MIT"
     },
     {
       "name": "@vitest/coverage-v8",
@@ -190,7 +230,9 @@
       "source": "package.json",
       "kind": "devDependency",
       "importance": "light",
-      "description": ""
+      "description": "Vitest V8 覆盖率报告",
+      "icon": "analytics",
+      "license": "MIT"
     },
     {
       "name": "@vue/test-utils",
@@ -199,7 +241,9 @@
       "source": "package.json",
       "kind": "devDependency",
       "importance": "light",
-      "description": ""
+      "description": "Vue Test Utils — Vue 组件测试工具",
+      "icon": "flask",
+      "license": "MIT"
     },
     {
       "name": "jsdom",
@@ -208,7 +252,9 @@
       "source": "package.json",
       "kind": "devDependency",
       "importance": "light",
-      "description": ""
+      "description": "jsdom — 浏览器 DOM 的 Node 实现",
+      "icon": "globe",
+      "license": "MIT"
     },
     {
       "name": "sirv",
@@ -217,7 +263,9 @@
       "source": "package.json",
       "kind": "devDependency",
       "importance": "light",
-      "description": ""
+      "description": "sirv — 静态文件服务器（Vite preview 用）",
+      "icon": "server",
+      "license": "MIT"
     },
     {
       "name": "typescript",
@@ -226,7 +274,9 @@
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
-      "description": ""
+      "description": "TypeScript — JavaScript 类型化超集",
+      "icon": "code-slash",
+      "license": "Apache-2.0"
     },
     {
       "name": "vite",
@@ -235,7 +285,9 @@
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
-      "description": ""
+      "description": "Vite — 下一代前端构建工具",
+      "icon": "flash",
+      "license": "MIT"
     },
     {
       "name": "vitest",
@@ -244,7 +296,9 @@
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
-      "description": ""
+      "description": "Vitest — Vite 原生单元测试框架",
+      "icon": "flask",
+      "license": "MIT"
     },
     {
       "name": "vue-tsc",
@@ -253,7 +307,9 @@
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
-      "description": ""
+      "description": "vue-tsc — Vue + TypeScript 类型检查 CLI",
+      "icon": "checkmark-circle",
+      "license": "MIT"
     }
   ]
 }
