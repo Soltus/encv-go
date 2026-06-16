@@ -24,13 +24,6 @@
             <ion-icon :icon="copyIcon" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-item>
-        <ion-item button @click="goServerUrlDetail" detail>
-          <ion-icon :icon="globeOutline" slot="start"></ion-icon>
-          <ion-label>
-            <h3>{{ t('settings.serverUrl') || '服务器地址' }}</h3>
-            <p class="readonly-url">{{ serverUrl }}</p>
-          </ion-label>
-        </ion-item>
         <ion-item button @click="goServerStatusDetail" detail>
           <ion-icon :icon="serverIcon" slot="start"></ion-icon>
           <ion-label class="ion-text-wrap">
@@ -204,9 +197,6 @@ function goAdminServer() { router.push('/tabs/settings/server/admin') }
 function goWebdavServer() { router.push('/tabs/settings/server/webdav') }
 // 🆕 2026-06-15 v4：跳专用「服务器状态详情页」—— 单职责，0 混淆
 function goServerStatusDetail() { router.push('/tabs/settings/server/status') }
-// 🆕 2026-06-15 v5：跳专用「服务器地址配置页」—— URL 兜底，0 混淆
-//   跟 ServerUrlDetail（URL 配置页）对应，路径 /settings/server/url
-function goServerUrlDetail() { router.push('/tabs/settings/server/url') }
 
 async function copyToClipboard(text: string) {
   const ok = await clipboardWrite(text)

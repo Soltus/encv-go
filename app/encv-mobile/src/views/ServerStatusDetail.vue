@@ -116,8 +116,8 @@
 <script setup lang="ts">
 /**
  * 🆕 2026-06-15 v4：
- *   - 用户多次反馈"绕了几轮找不到北"——之前 ServerStatusCard 在 DevLogs/ServerUrlDetail/AgentSettingsDetail 都用，混在一起
- *   - 抽到独立页面 + 路由 /tabs/settings/server/status，命名 ServerStatusDetail.vue 与 ServerUrlDetail.vue 严格区分
+ *   - 用户多次反馈"绕了几轮找不到北"——之前 ServerStatusCard 在 DevLogs/ServerSettings/AgentSettingsDetail 都用，混在一起
+ *   - 抽到独立页面 + 路由 /tabs/settings/server/status，命名 ServerStatusDetail.vue 与 ServerSettings.vue 严格区分
  *   - 状态用大色块、其它信息用事实表 label:value 单行，0 装饰 0 动画 0 banner
  *   - 引入 useServerStatus() 直接拿所有事实（instanceId/version/port/transport/latency/lastError/lastCheckedAt/isOnline/isChecking/transportMode）
  *   - 监听 backend:instance-changed 事件：显示「后端实例已变更」事实行
@@ -193,8 +193,7 @@ function formatLastChecked(d: Date | string): string {
 }
 
 function goServerUrl() {
-  // 🆕 2026-06-15 v5：路径修正 —— 实际是 /tabs/settings/server/url（不是 server-url）
-  router.push('/tabs/settings/server/url')
+  router.push('/tabs/settings/server-url')
 }
 </script>
 
