@@ -791,5 +791,9 @@ export default {
     'serverStatusDetail.probing': 'Probing…',
     'serverStatusDetail.connectFailed': 'Cannot reach backend',
     'serverStatusDetail.goServerUrl': 'Manage server URL',
+    'serverStatus.label.state': 'Status',
+    'serverStatus.label.transport': 'Transport',
+    'serverStatus.label.latency': 'Latency',
+    'serverStatus.label.version': 'Version',
   },
 }

@@ -24,83 +24,37 @@
             <ion-icon :icon="copyIcon" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-item>
-        <!-- 🆕 2026-06-15 v7：状态行 = ServerStatusDetail.vue 那个"精美卡片" 原汁原味搬进来
-             用户怒批"丑死了"+"i18n 也没有"：
-               · 之前我用 ServerStatusCard（dot+label+reason 极简版）= 错误
-               · 之前我自己写的 .statusFactCard（16px dot / 18px label / 88px factLabel）= 错误
-               · 正确 = ServerStatusDetail.vue 那个完整版：
-                 · 22px 大圆点 + 22px 大字 "在线/离线/检查中"
-                 · 下方紧跟事实表（96px label / 13.5px value / mono 字体）
-                 · 用 serverStatusDetail.* 完整 i18n 段
-               · 这次原版搬到 ServerDetail.vue 顶部
-               · 独立详情页 ServerStatusDetail.vue 仍保留作 deep link 入口（路由恢复） -->
-        <section class="statusDetailCard" aria-label="服务器状态">
-          <div class="statusHero" :class="`is-${stateClass}`" role="status" :aria-label="stateText">
-            <div class="statusHeroDot" :class="`is-${stateClass}`" aria-hidden="true" />
-            <div class="statusHeroText">
-              <div class="statusHeroLabel">{{ stateText }}</div>
-              <div class="statusHeroReason">{{ stateReason }}</div>
-            </div>
-            <div class="statusCardActions">
-              <ion-button fill="outline" size="small" @click="checkServerInner" :title="t('serverStatusDetail.refresh') || '刷新'">
-                <ion-icon :icon="refreshIcon" slot="icon-only"></ion-icon>
-              </ion-button>
-              <ion-button v-if="isRestarting" fill="outline" size="small" color="medium" disabled>
-                <ion-spinner slot="icon-only" name="crescent"></ion-spinner>
-              </ion-button>
-              <ion-button v-else-if="serverOnline" fill="outline" size="small" color="danger" @click="handleStop" :disabled="isStopping">
-                <ion-spinner v-if="isStopping" slot="icon-only" name="crescent"></ion-spinner>
-                <ion-icon v-else :icon="stopIcon" slot="icon-only"></ion-icon>
-              </ion-button>
-              <ion-button v-else fill="outline" size="small" color="warning" @click="handleRestart">
-                <ion-icon :icon="playIcon" slot="icon-only"></ion-icon>
-              </ion-button>
-            </div>
+        <!-- 🆕 2026-06-15 v8：状态行 = ServerStatusCard 4-pill grid "银行卡通"
+             用户怒批"丑死了"+"i18n 也没有"+"和银行卡那样的才叫卡片"：
+               · 之前单行 dot+label+reason = 错
+               · 之前我自己写的 .statusFactCard (16px dot) = 错
+               · 之前 ServerStatusDetail.vue 内联 (22px dot) = 仍丑
+               · 正确 = 4-pill grid 银行卡通：
+                 · 2x2 网格，4 个 pill
+                 · Pill 1 = 状态 (state dot + 在线/离线/检查中)
+                 · Pill 2 = 传输 (wifi/pulse/swap 图标 + HTTP Polling/WebSocket/Native bridge)
+                 · Pill 3 = 延迟 (timer 图标 + 42 ms)
+                 · Pill 4 = 版本 (pricetag 图标 + vX.Y.Z / 18b967b8)
+               · 整张卡圆角矩形，像银行卡
+               · 右侧仍带 refresh / stop / restart 按钮 -->
+        <div class="statusCardRow">
+          <ServerStatusCard :clickable="true" @click="goServerStatusDetail" />
+          <div class="statusCardActions">
+            <ion-button fill="outline" size="small" @click="checkServerInner" :title="t('serverStatusDetail.refresh')">
+              <ion-icon :icon="refreshIcon" slot="icon-only"></ion-icon>
+            </ion-button>
+            <ion-button v-if="isRestarting" fill="outline" size="small" color="medium" disabled>
+              <ion-spinner slot="icon-only" name="crescent"></ion-spinner>
+            </ion-button>
+            <ion-button v-else-if="serverOnline" fill="outline" size="small" color="danger" @click="handleStop" :disabled="isStopping">
+              <ion-spinner v-if="isStopping" slot="icon-only" name="crescent"></ion-spinner>
+              <ion-icon v-else :icon="stopIcon" slot="icon-only"></ion-icon>
+            </ion-button>
+            <ion-button v-else fill="outline" size="small" color="warning" @click="handleRestart">
+              <ion-icon :icon="playIcon" slot="icon-only"></ion-icon>
+            </ion-button>
           </div>
-
-          <div class="factTable">
-            <div class="factRow">
-              <div class="factLabel">{{ t('serverStatusDetail.instanceId') }}</div>
-              <div class="factValue factMono">{{ backendInstanceId || '—' }}</div>
-            </div>
-            <div class="factRow">
-              <div class="factLabel">{{ t('serverStatusDetail.version') }}</div>
-              <div class="factValue factMono">{{ backendVersion || '—' }}</div>
-            </div>
-            <div class="factRow">
-              <div class="factLabel">{{ t('serverStatusDetail.port') }}</div>
-              <div class="factValue">{{ backendPort ? `:${backendPort}` : '—' }}</div>
-            </div>
-            <div class="factRow">
-              <div class="factLabel">{{ t('serverStatusDetail.transport') }}</div>
-              <div class="factValue">
-                <span class="transportTag" :class="`transport-${transportMode}`">{{ transportLabel }}</span>
-              </div>
-            </div>
-            <div class="factRow">
-              <div class="factLabel">{{ t('serverStatusDetail.latency') }}</div>
-              <div class="factValue">{{ latencyMs > 0 ? `${latencyMs} ms` : '—' }}</div>
-            </div>
-            <div class="factRow">
-              <div class="factLabel">{{ t('serverStatusDetail.lastChecked') }}</div>
-              <div class="factValue">{{ lastCheckedAt ? formatLastChecked(lastCheckedAt) : '—' }}</div>
-            </div>
-            <div v-if="!serverOnline && connectionError" class="factRow factRow_error">
-              <div class="factLabel">{{ t('serverStatusDetail.lastError') }}</div>
-              <div class="factValue">{{ connectionError }}</div>
-            </div>
-            <div v-if="serverOnline && isSandboxBrowser" class="factRow factRow_warning">
-              <div class="factLabel">{{ t('serverStatusDetail.sandboxNote') }}</div>
-              <div class="factValue">{{ t('serverStatus.sandboxPollingHint') }}</div>
-            </div>
-            <div v-if="instanceChanged" class="factRow factRow_warning">
-              <div class="factLabel">{{ t('serverStatusDetail.backendChanged') }}</div>
-              <div class="factValue">
-                {{ t('serverStatusDetail.backendChangedHint', { prev: instanceChanged.previous, curr: instanceChanged.current }) }}
-              </div>
-            </div>
-          </div>
-        </section>
+        </div>
       </ion-list>
 
       <ion-list>
@@ -197,25 +151,12 @@ import { isNative, requestNotificationPermission, requestStoragePermission, requ
 const configData = ref<Record<string, unknown> | null>(null)
 const {
   isOnline: serverOnline,
-  lastError: connectionError,
   checkStatus,
   restartBackend,
   stopBackend,
-  backendPort,
   isRestarting,
   isStopping,
-  // 🆕 2026-06-15 v7：状态行直接展示事实表（22px 大色块）
-  //   instanceId / version / port / transport / latency / lastCheckedAt / sandbox / backendChanged
-  //   ServerStatusDetail.vue 那个独立详情页依然作为深链入口保留
-  backendInstanceId,
-  backendVersion,
-  transportMode,
-  latencyMs,
-  lastCheckedAt,
-  isSandboxBrowser,
 } = useServerStatus()
-import { useI18n } from '@/composables/useI18n'
-import { eventBus } from '@/composables/useEventBus'
 const { t } = useI18n()
 
 const serverUrl = ref(getServerUrl())
@@ -338,9 +279,9 @@ onMounted(async () => {
 
 <style scoped>
 /* ============================================================
-   🆕 2026-06-15 v6：状态行 = ServerStatusCard 卡片 + 右侧操作按钮
-   ServerStatusCard 自带 .server-status-card 的边、点、文字样式
-   这里只负责：把它和右侧按钮放在一行
+   🆕 2026-06-15 v8：状态行 = ServerStatusCard 4-pill grid "银行卡通"
+   ServerStatusCard 自带 2x2 grid、icon、label、value
+   这里只负责：把它和右侧操作按钮放在一行
    ============================================================ */
 .statusCardRow {
   display: flex;
