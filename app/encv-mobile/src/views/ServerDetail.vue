@@ -24,28 +24,17 @@
             <ion-icon :icon="copyIcon" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-item>
-        <!-- 后端状态行：ServerStatusCard 完整版
-             单一职责 = 后端健康度可视化（不承载任何设置项 / 表单 / 跳转入口）
-             点卡片 → 翻转看诊断详情；点 ServerStatusCardRow 旁的按钮 → 触发对应操作
-             点卡片右侧空白仍 emit 'click' → 跳独立详情页（router.push） -->
-        <div class="statusCardRow">
-          <ServerStatusCard :clickable="true" @click="goServerStatusDetail" />
-          <div class="statusCardActions">
-            <ion-button fill="outline" size="small" @click="checkServerInner" :title="t('serverStatusDetail.refresh')">
-              <ion-icon :icon="refreshIcon" slot="icon-only"></ion-icon>
-            </ion-button>
-            <ion-button v-if="isRestarting" fill="outline" size="small" color="medium" disabled>
-              <ion-spinner slot="icon-only" name="crescent"></ion-spinner>
-            </ion-button>
-            <ion-button v-else-if="serverOnline" fill="outline" size="small" color="danger" @click="handleStop" :disabled="isStopping">
-              <ion-spinner v-if="isStopping" slot="icon-only" name="crescent"></ion-spinner>
-              <ion-icon v-else :icon="stopIcon" slot="icon-only"></ion-icon>
-            </ion-button>
-            <ion-button v-else fill="outline" size="small" color="warning" @click="handleRestart">
-              <ion-icon :icon="playIcon" slot="icon-only"></ion-icon>
-            </ion-button>
-          </div>
-        </div>
+        <!-- 后端状态行：ServerStatusCard（操作按钮已内嵌到卡片内）
+             点卡片空白 → 翻转看诊断；点按钮 → 触发对应 handler
+             3D 实体化 + 高度自适应平滑伸缩在 ServerStatusCard 内部实现 -->
+        <ServerStatusCard
+          :clickable="true"
+          :hide-actions="false"
+          @click="goServerStatusDetail"
+          @check="checkServerInner"
+          @restart="handleRestart"
+          @stop="handleStop"
+        />
       </ion-list>
 
       <ion-list>
@@ -122,11 +111,10 @@ import { useRouter } from 'vue-router'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
   IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
-  IonButton, alertController, IonSpinner,
+  IonButton, alertController,
 } from '@ionic/vue'
 import {
-  server as serverIcon, refresh as refreshIcon,
-  stop as stopIcon, play as playIcon,
+  server as serverIcon,
   notifications as notificationsIcon, folderOpen,
   copy as copyIcon, shieldCheckmark, cloudOutline, globeOutline,
   batteryCharging as batteryOptimizationIcon,
@@ -145,8 +133,6 @@ const {
   checkStatus,
   restartBackend,
   stopBackend,
-  isRestarting,
-  isStopping,
 } = useServerStatus()
 const { t } = useI18n()
 
@@ -269,22 +255,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* 状态行：ServerStatusCard + 右侧操作按钮（refresh / restart / stop）
-   ServerStatusCard 自带 3D 翻转 + 脉冲 + detail-grid
-   这里只负责：把它和右侧操作按钮放在一行 */
-.statusCardRow {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-  margin: 8px 14px 12px;
-}
-.statusCardRow .server-status-card { flex: 1; min-width: 0; }
-.statusCardActions {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-  flex-shrink: 0;
-}
+/* 状态行：ServerStatusCard 完整版（操作按钮内嵌在卡片内）
+   卡片自身实现 3D 实体化 / 高度自适应 / 翻转动画 / 操作按钮
+   ServerDetail 父级只负责传 @click / @check / @stop / @restart 监听 */
 
 .connection-error {
   color: var(--ion-color-danger);

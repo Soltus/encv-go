@@ -379,6 +379,8 @@ export default {
     'serverStatus.unknownError': '未知错误',
     'serverStatus.latencyHint': '后端响应延迟',
     'serverStatus.transportHint': '实时通信方式',
+    'serverStatus.stop': '停止后端',
+    'serverStatus.start': '启动后端',
     // 后端状态卡片专属键（3D 翻转 + 诊断）
     'serverStatus.instanceChangedBanner': '后端已重启，新进程已上线',
     'serverStatus.flipHint': '点此翻转，看诊断详情',

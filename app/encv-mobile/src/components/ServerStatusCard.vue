@@ -15,24 +15,38 @@
       · ServerSettings.vue      URL 配置页（属于"配置 backend 怎么连"，不是"显示连上没"）
       · AgentSettingsDetail.vue Agent 设置详情（"AI 行为配置"，不是"后端健康度"）
 
-  视觉：3D 实体化（perspective + 厚度 box-shadow）+ 双面翻转（点正面看诊断，点反面回到状态）。
+  视觉：3D 实体化（perspective + 厚度底面 + 表面光泽 + 倒角 + hover 抬起 translateZ/rotateX）
+  + 双面翻转（Grid 叠放 + backface-visibility，告别 absolute 残留 + 高度跳变）。
+  高度自适应：JS 测两个面 offsetHeight → 设容器 min-height + transition → 平滑伸缩。
   主题：100% CSS variables（--ion-color-* / --ion-background-color / --ion-text-color），
         0 硬编码颜色。深色模式自动适配。
 
   使用：
-    <ServerStatusCard :compact="false" :clickable="true" @click="goServerDetail" />
+    <ServerStatusCard
+      :clickable="true"
+      :compact="false"
+      @click="goServerDetail"
+      @check="checkStatus"
+      @restart="restartBackend"
+      @stop="stopBackend"
+    />
 -->
 <template>
   <div
-    class="card-3d-wrapper"
-    :class="[`state-${state}`, { 'is-flipped': isFlipped }]"
+    ref="wrapperRef"
+    class="server-status-card"
+    :class="[
+      `state-${state}`,
+      { 'is-flipped': isFlipped, 'is-pulse': pulsing, 'is-compact': compact, 'is-clickable': clickable },
+    ]"
     role="status"
     :aria-label="ariaLabel"
+    @click="onCardClick"
   >
-    <div class="card-3d-inner">
-      <!-- ============ 正面：状态概览 ============ -->
-      <div class="card-face card-face-front" @click="onCardClick">
-        <!-- 状态行 -->
+    <div ref="innerRef" class="card-3d-inner">
+      <!-- ============ 正面：状态概览 + 操作按钮 ============ -->
+      <div ref="frontRef" class="card-face card-face-front">
+        <!-- 状态行：左 = dot + label，中 = flex:1，右 = 操作按钮 -->
         <div class="status-row">
           <div class="status-indicator">
             <span class="pulse-dot" :class="`pulse-${state}`">
@@ -42,25 +56,72 @@
               <span class="status-label">{{ statusLabel }}</span>
             </div>
           </div>
-          <div class="status-meta">
-            <span
-              v-if="latencyPillVisible"
-              class="meta-pill"
-              :class="`latency-${latencyQuality}`"
-              :title="t('serverStatus.latencyHint')"
+
+          <!-- 操作按钮内嵌卡片内（refresh / restart / stop） -->
+          <div v-if="!hideActions" class="status-actions" @click.stop>
+            <ion-button
+              fill="outline"
+              size="small"
+              :title="t('serverStatusDetail.refresh')"
+              :disabled="checking"
+              @click.stop="emit('check')"
             >
-              <ion-icon :icon="speedometerOutline" class="meta-pill-icon" />
-              {{ latencyText }}
-            </span>
-            <span
-              v-if="transport"
-              class="meta-pill transport-pill"
-              :title="t('serverStatus.transportHint')"
+              <ion-spinner v-if="checking" slot="icon-only" name="crescent" />
+              <ion-icon v-else :icon="refreshIcon" slot="icon-only" />
+            </ion-button>
+            <ion-button
+              v-if="checking"
+              fill="outline"
+              size="small"
+              color="medium"
+              disabled
             >
-              <ion-icon :icon="transportIcon" class="meta-pill-icon" />
-              {{ transport }}
-            </span>
+              <ion-spinner slot="icon-only" name="crescent" />
+            </ion-button>
+            <ion-button
+              v-else-if="isOnline"
+              fill="outline"
+              size="small"
+              color="danger"
+              :disabled="stopping"
+              :title="t('serverStatus.stop')"
+              @click.stop="emit('stop')"
+            >
+              <ion-spinner v-if="stopping" slot="icon-only" name="crescent" />
+              <ion-icon v-else :icon="stopIcon" slot="icon-only" />
+            </ion-button>
+            <ion-button
+              v-else
+              fill="outline"
+              size="small"
+              color="warning"
+              :title="t('serverStatus.start')"
+              @click.stop="emit('restart')"
+            >
+              <ion-icon :icon="playIcon" slot="icon-only" />
+            </ion-button>
           </div>
+        </div>
+
+        <!-- meta pills（latency + transport wifi） -->
+        <div v-if="latencyPillVisible || transport" class="meta-row">
+          <span
+            v-if="latencyPillVisible"
+            class="meta-pill"
+            :class="`latency-${latencyQuality}`"
+            :title="t('serverStatus.latencyHint')"
+          >
+            <ion-icon :icon="speedometerOutline" class="meta-pill-icon" />
+            {{ latencyText }}
+          </span>
+          <span
+            v-if="transport"
+            class="meta-pill transport-pill"
+            :title="t('serverStatus.transportHint')"
+          >
+            <ion-icon :icon="transportIcon" class="meta-pill-icon" />
+            {{ transport }}
+          </span>
         </div>
 
         <!-- instance-changed banner（4s 自动消失；不进 lastError，不阻塞状态） -->
@@ -126,7 +187,7 @@
       </div>
 
       <!-- ============ 反面：诊断 / 操作历史 ============ -->
-      <div class="card-face card-face-back" @click="onCardClick">
+      <div ref="backRef" class="card-face card-face-back">
         <div class="back-header">
           <ion-icon :icon="pulseIcon" class="back-header-icon" />
           <span class="back-header-title">{{ t('serverStatus.diagnosticsTitle') }}</span>
@@ -175,7 +236,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { useServerStatus } from '@/composables/useServerStatus'
 import { formatRelativeTime } from '@/composables/relativeTime'
@@ -189,6 +250,8 @@ import {
   refreshOutline as refreshIcon,
   syncOutline as flipBackIcon,
   pulseOutline as pulseIcon,
+  stopCircleOutline as stopIcon,
+  playCircleOutline as playIcon,
 } from 'ionicons/icons'
 import { eventBus } from '@/composables/useEventBus'
 import { IonIcon } from '@ionic/vue'
@@ -198,12 +261,20 @@ interface Props {
   compact?: boolean
   /** 卡片可点击 → 触发外部 click 事件（注意：内部翻转也走 click，但 emit 仍 fire） */
   clickable?: boolean
+  /** 隐藏内嵌操作按钮（让父级自己渲染） */
+  hideActions?: boolean
 }
 const props = withDefaults(defineProps<Props>(), {
   compact: false,
   clickable: false,
+  hideActions: true, // 默认隐藏操作按钮 — 只有 ServerDetail 这种"健康度 + 操作"场景显式启用
 })
-const emit = defineEmits<{ (e: 'click'): void }>()
+const emit = defineEmits<{
+  (e: 'click'): void
+  (e: 'check'): void
+  (e: 'restart'): void
+  (e: 'stop'): void
+}>()
 
 const { t } = useI18n()
 const {
@@ -216,14 +287,25 @@ const {
   lastCheckedAt,
   transportMode,
   checkStatus,
+  restartBackend,
+  stopBackend,
+  isRestarting,
+  isStopping,
 } = useServerStatus()
 
+// —— refs ——
+const wrapperRef = ref<HTMLElement | null>(null)
+const innerRef = ref<HTMLElement | null>(null)
+const frontRef = ref<HTMLElement | null>(null)
+const backRef = ref<HTMLElement | null>(null)
+
 // —— state machine: online | offline | checking ——
-const isChecking = ref(false)
+const checking = computed(() => isRestarting.value) // 重启中 ≡ 检查中
 const state = computed<'online' | 'offline' | 'checking'>(() => {
-  if (isChecking.value) return 'checking'
+  if (checking.value) return 'checking'
   return isOnline.value ? 'online' : 'offline'
 })
+const stopping = computed(() => isStopping.value)
 
 // —— 3D 翻转 ——
 const isFlipped = ref(false)
@@ -314,17 +396,15 @@ const transport = computed(() => {
 const transportFullLabel = computed(() => {
   const m = transportMode.value
   switch (m) {
-    case 'ws': return t('serverStatus.transportWs') || 'WebSocket (real-time push)'
-    case 'http-poll': return t('serverStatus.transportHttpPoll') || 'HTTP Polling (periodic pull)'
-    case 'native-bridge': return t('serverStatus.transportNativeBridge') || 'Native bridge (in-app IPC)'
-    default: return t('serverStatus.transportUnknown') || 'Unknown'
+    case 'ws': return t('serverStatus.transportWs')
+    case 'http-poll': return t('serverStatus.transportHttpPoll')
+    case 'native-bridge': return t('serverStatus.transportNativeBridge')
+    default: return t('serverStatus.transportUnknown')
   }
 })
 const transportIcon = computed(() => {
   const m = transportMode.value
   // 用户要求：HTTP Polling 旁必须有 wifi 图标
-  // 策略：所有真实 transport（ws / http-poll / native-bridge）统一用 wifi 图标
-  // 只在 unknown 时退化为 layers 图标
   if (m === 'ws' || m === 'http-poll' || m === 'native-bridge') return wifiOutline
   return layersOutline
 })
@@ -343,7 +423,23 @@ const lastCheckAbsolute = computed(() => {
 const lastCheckKey = ref(0)
 const now = ref(Date.now())
 let tickHandle: ReturnType<typeof setInterval> | null = null
+
+// —— 高度自适应 + 平滑伸缩 ——
+async function syncHeight() {
+  await nextTick()
+  if (!wrapperRef.value || !frontRef.value || !backRef.value) return
+  const fh = frontRef.value.offsetHeight
+  const bh = backRef.value.offsetHeight
+  const max = Math.max(fh, bh, 160) // 兜底 min-height
+  wrapperRef.value.style.minHeight = `${max}px`
+}
+
 onMounted(() => {
+  // 初始高度
+  syncHeight()
+  // 监听窗口尺寸变化
+  window.addEventListener('resize', syncHeight)
+  // 30s 滚动刷新
   tickHandle = setInterval(() => {
     now.value = Date.now()
     lastCheckKey.value++
@@ -353,32 +449,38 @@ onMounted(() => {
 onUnmounted(() => {
   if (tickHandle) clearInterval(tickHandle)
   if (bannerTimer) clearTimeout(bannerTimer)
+  window.removeEventListener('resize', syncHeight)
   eventBus.off('backend:instance-changed', onInstanceChanged)
 })
 
-// —— 点击：翻转（如果 clickable 也 emit 外部 click） ——
+// 翻转时 / 状态切换时 / 关键数据变化时重测高度
+watch([isFlipped, state, isOnline, transportMode, lastError, instanceChangedBanner], () => {
+  syncHeight()
+})
+
+// —— 点击卡片主体翻转 ——
 function onCardClick(event: MouseEvent) {
-  // 阻止子元素点击冒泡时翻转（按钮 / pill / 链接等）
   const target = event.target as HTMLElement
-  if (target.closest('button, a, .meta-pill, .flip-hint')) {
+  // 阻止子元素点击冒泡时翻转（按钮 / pill / 链接 / flip-hint）
+  if (target.closest('button, a, .meta-pill, .flip-hint, .status-actions, ion-button')) {
     return
   }
   isFlipped.value = !isFlipped.value
   if (props.clickable) emit('click')
 }
 
-// —— expose checkStatus to parent via defineExpose ——
-defineExpose({ checkStatus })
+// —— expose to parent ——
+defineExpose({ checkStatus, restartBackend, stopBackend })
 </script>
 
 <style scoped>
 /* ============================================================
-   ServerStatusCard — 3D 实体化 + 双面翻转
+   ServerStatusCard — 3D 实体化 + 双面翻转 + 高度自适应
    100% CSS variables — 0 硬编码颜色。深色模式自动适配。
    ============================================================ */
 
-/* ============ 3D 容器 ============ */
-.card-3d-wrapper {
+/* ============ 外层 3D 上下文 ============ */
+.server-status-card {
   --card-bg: var(--ion-background-color, #fff);
   --card-border: var(--ion-color-medium, #92949c);
   --card-text: var(--ion-text-color, #000);
@@ -387,32 +489,50 @@ defineExpose({ checkStatus })
   --card-radius: 14px;
   --transition-3d: 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
   --transition-fast: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-height: 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 
   position: relative;
-  perspective: 1200px;
+  display: grid;
+  grid-template-areas: 'stack';
+  perspective: 1500px;
   perspective-origin: 50% 30%;
   width: 100%;
-  /* 3D 实体化的"厚度" — 多层 box-shadow 模拟金属质感 */
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.08))
-          drop-shadow(0 4px 8px rgba(0, 0, 0, 0.06))
-          drop-shadow(0 8px 16px rgba(0, 0, 0, 0.04));
+  min-height: 160px; /* JS 同步后会覆盖 */
+  transition: min-height var(--transition-height);
+
+  /* 3D 实体化的"厚度" — 多层 drop-shadow 模拟金属质感 */
+  filter:
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.08))
+    drop-shadow(0 4px 8px rgba(0, 0, 0, 0.06))
+    drop-shadow(0 10px 20px rgba(0, 0, 0, 0.05));
+}
+.server-status-card.is-clickable { cursor: pointer; }
+
+/* hover 抬起 + 微旋转（3D 凸起效果） */
+.server-status-card.is-clickable:hover {
+  filter:
+    drop-shadow(0 2px 2px rgba(0, 0, 0, 0.10))
+    drop-shadow(0 8px 16px rgba(0, 0, 0, 0.10))
+    drop-shadow(0 16px 32px rgba(0, 0, 0, 0.08));
+  transform: translateY(-2px);
 }
 
+/* ============ 内层翻转元素 ============ */
 .card-3d-inner {
-  position: relative;
-  width: 100%;
-  min-height: 140px;
+  grid-area: stack;
   transform-style: preserve-3d;
   transition: transform var(--transition-3d);
+  display: grid;
+  grid-template-areas: 'stack';
 }
-.card-3d-wrapper.is-flipped .card-3d-inner {
+.server-status-card.is-flipped .card-3d-inner {
   transform: rotateY(180deg);
 }
 
-/* ============ 双面通用 ============ */
+/* ============ 双面通用：Grid 叠放 + 自然高度 ============ */
 .card-face {
-  position: absolute;
-  inset: 0;
+  grid-area: stack;
+  /* 关键：不再 position: absolute → 高度由内容自然撑开，Grid 取 max */
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   display: flex;
@@ -424,54 +544,71 @@ defineExpose({ checkStatus })
   border: 1px solid var(--card-border);
   border-left-width: 4px;
   border-radius: var(--card-radius);
-  /* 内层 3D 阴影（叠加 drop-shadow 形成厚度） */
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4),
-              inset 0 -1px 0 rgba(0, 0, 0, 0.04);
+  /* 倒角 + 表面光泽 inset（高光在顶部 / 阴影在底部） */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
-  min-height: inherit;
-  cursor: pointer;
+  min-height: inherit; /* 让面继承 wrapper 的 min-height */
   overflow: hidden;
 }
-.card-face-front {
-  /* 正面 z-index 高，反面旋转后 z-index 翻转 */
-  transform: rotateY(0deg);
-}
+.server-status-card.is-clickable .card-face { cursor: pointer; }
 .card-face-back {
   transform: rotateY(180deg);
 }
 
 /* ============ 状态变体：边框 + 主题色 ============ */
-.card-3d-wrapper.state-online {
+.server-status-card.state-online {
   --card-accent: var(--ion-color-success, #2dd55b);
   --card-border: color-mix(in srgb, var(--ion-color-success, #2dd55b) 30%, var(--ion-color-medium, #92949c));
 }
-.card-3d-wrapper.state-offline {
+.server-status-card.state-offline {
   --card-accent: var(--ion-color-danger, #eb445a);
   --card-border: color-mix(in srgb, var(--ion-color-danger, #eb445a) 35%, var(--ion-color-medium, #92949c));
 }
-.card-3d-wrapper.state-checking {
+.server-status-card.state-checking {
   --card-accent: var(--ion-color-warning, #ffc409);
   --card-border: color-mix(in srgb, var(--ion-color-warning, #ffc409) 35%, var(--ion-color-medium, #92949c));
 }
-.card-face {
-  border-left-color: var(--card-accent);
-}
+.card-face { border-left-color: var(--card-accent); }
 
-/* ============ 状态切换光泽扫过 ============ */
-.card-face::before {
+/* ============ 3D 实体化关键：底面 + 表面光泽 ============ */
+
+/* 底面（::before）：在卡片正下方 4px 处，模拟卡片厚度 */
+.server-status-card::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: -3px;
+  height: 6px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0.02));
+  border-radius: 0 0 var(--card-radius) var(--card-radius);
+  filter: blur(2px);
+  z-index: -1;
+  opacity: 0.5;
+  transition: opacity var(--transition-fast);
+}
+.server-status-card:hover::before { opacity: 0.8; }
+
+/* 表面光泽（::after）：对角线渐变 + hover 扫过 */
+.card-face::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.18) 50%, transparent 70%);
-  opacity: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, transparent 40%, transparent 60%, rgba(255, 255, 255, 0.04) 100%);
   pointer-events: none;
+  border-radius: inherit;
+  opacity: 0.7;
   transition: opacity var(--transition-fast);
 }
-.card-3d-wrapper.state-online .card-face-front::before,
-.card-3d-wrapper.state-offline .card-face-front::before,
-.card-3d-wrapper.state-checking .card-face-front::before {
-  opacity: 1;
-  /* 静态光泽（不扫动，状态色已隐含光感） */
+.server-status-card.is-pulse .card-face-front::after {
+  animation: ssc-sheen 1.2s ease-out;
+}
+@keyframes ssc-sheen {
+  0%   { opacity: 0.7; }
+  50%  { opacity: 1; }
+  100% { opacity: 0.7; }
 }
 
 /* ============ 状态行（正面） ============ */
@@ -502,6 +639,26 @@ defineExpose({ checkStatus })
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ============ 操作按钮（内嵌卡片内右侧） ============ */
+.status-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+/* 让卡片内 ion-button 紧凑 + 不抢空间 */
+.status-actions ion-button {
+  --padding-start: 6px;
+  --padding-end: 6px;
+  margin: 0;
+  height: 30px;
+  min-height: 30px;
+}
+.status-actions ion-button::part(native) {
+  padding: 0 6px;
+  min-height: 28px;
 }
 
 /* ============ Pulse dot ============ */
@@ -548,12 +705,12 @@ defineExpose({ checkStatus })
   100% { transform: scale(1.8); opacity: 0; }
 }
 
-/* ============ Status meta pills（latency / transport） ============ */
-.status-meta {
+/* ============ meta-row（latency + transport） ============ */
+.meta-row {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 .meta-pill {
   display: inline-flex;
@@ -803,7 +960,7 @@ defineExpose({ checkStatus })
   opacity: 0.5;
   transition: opacity var(--transition-fast);
 }
-.card-3d-wrapper:hover .flip-hint { opacity: 0.9; }
+.server-status-card:hover .flip-hint { opacity: 0.9; }
 .flip-hint-icon {
   font-size: 11px;
   width: 11px;
@@ -814,24 +971,25 @@ defineExpose({ checkStatus })
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
 }
-.card-3d-wrapper.is-flipped .flip-hint-icon {
+.server-status-card.is-flipped .flip-hint-icon {
   animation: flip-hint-spin 2s linear infinite reverse;
 }
 
 /* ============ Compact mode ============ */
-.card-3d-wrapper.is-compact .card-face {
+.server-status-card.is-compact .card-face {
   padding: 10px 12px;
   gap: 6px;
-  min-height: 80px;
 }
-.card-3d-wrapper.is-compact .status-label { font-size: 13px; }
-.card-3d-wrapper.is-compact .pulse-dot { width: 12px; height: 12px; }
-.card-3d-wrapper.is-compact .detail-grid { display: none; }
+.server-status-card.is-compact .status-label { font-size: 13px; }
+.server-status-card.is-compact .pulse-dot { width: 12px; height: 12px; }
+.server-status-card.is-compact .detail-grid { display: none; }
+.server-status-card.is-compact .status-actions { display: none; }
 
 /* ============ 响应式 ============ */
 @media (max-width: 380px) {
   .detail-grid { grid-template-columns: 1fr; }
-  .status-meta { flex-wrap: wrap; }
+  .meta-row { flex-direction: column; align-items: flex-start; }
+  .status-actions ion-button { height: 28px; min-height: 28px; }
 }
 
 /* ============ 减弱动画（无障碍） ============ */
@@ -842,5 +1000,6 @@ defineExpose({ checkStatus })
   .back-value.monospace.instance-changed { animation: none; }
   .time-roll { animation: none; }
   .flip-hint-icon { animation: none; }
+  .server-status-card { transition: none; }
 }
 </style>
