@@ -24,46 +24,85 @@
             <ion-icon :icon="copyIcon" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-item>
-        <ion-item button @click="goServerStatusDetail" detail>
-          <ion-icon :icon="serverIcon" slot="start"></ion-icon>
-          <ion-label class="ion-text-wrap">
-            <h3>{{ t('settings.status') }}</h3>
-            <p class="status-line">
-              <ion-badge :color="serverOnline ? 'success' : 'danger'">
-                {{ serverOnline ? t('settings.online') : t('settings.offline') }}
-              </ion-badge>
-              <span v-if="serverOnline && backendPort" class="port-info">:{{ backendPort }}</span>
-            </p>
-            <p v-if="!serverOnline && connectionError" class="connection-error">
-              {{ connectionError }}
-            </p>
-            <p v-if="serverOnline && backendInstanceId" class="instance-id-line">
-              <code class="instance-id">{{ backendInstanceId.slice(0, 8) }}</code>
-              <span v-if="backendVersion" class="version-info">v{{ backendVersion }}</span>
-            </p>
-            <!-- 🆕 2026-06-15 v4：详情页（latency / transport / last checked / sandbox warning）已迁到
-                 /tabs/settings/server/status 专用页（ServerStatusDetail.vue），单职责 0 混淆
-                 此 ion-item 只显示：在线/离线 + 端口 + instance_id 前 8 位 + version
-                 点击 → 跳详情页 -->
-            <p class="status-hint">{{ t('settings.statusDetailHint') || '点击查看完整状态详情' }}</p>
-          </ion-label>
-          <div slot="end" class="server-controls">
-            <!-- 刷新按钮：只做"再 ping 一次后端 + 弹 toast"，不跳详情页（用 .stop 防止冒泡到 ion-item 的导航） -->
-            <ion-button fill="outline" size="small" @click.stop="checkServerInner">
-              <ion-icon :icon="refreshIcon" slot="icon-only"></ion-icon>
-            </ion-button>
-            <ion-button v-if="isRestarting" fill="outline" size="small" color="medium" disabled>
-              <ion-spinner slot="icon-only" name="crescent"></ion-spinner>
-            </ion-button>
-            <ion-button v-else-if="serverOnline" fill="outline" size="small" color="danger" @click.stop="handleStop" :disabled="isStopping">
-              <ion-spinner v-if="isStopping" slot="icon-only" name="crescent"></ion-spinner>
-              <ion-icon v-else :icon="stopIcon" slot="icon-only"></ion-icon>
-            </ion-button>
-            <ion-button v-else fill="outline" size="small" color="warning" @click.stop="handleRestart">
-              <ion-icon :icon="playIcon" slot="icon-only"></ion-icon>
-            </ion-button>
+        <!-- 🆕 2026-06-15 v6：状态 ion-item → 内联「精美卡片」hero + 事实表
+             用户怒批"ion-item 看不见在哪吗"——之前这行只是 badge + 18b967b8 + vdev
+             现在这行 = ServerStatusDetail.vue 整页内容内联：
+               ① 大色块 hero（在线/离线/检查中 + 原因）
+               ② 事实表：instance_id / version / port / transport / latency / last_checked / last_error / sandbox / backend_changed
+               ③ 右侧按钮：refresh / stop / restart
+             不再跳 /settings/server/status 单独页（删路由）；用户要的是这一行本身就是"详情页" -->
+        <section class="statusFactCard" :class="`is-${stateClass}`" aria-label="服务器状态">
+          <div class="statusHeroRow">
+            <span class="statusHeroDot" :class="`is-${stateClass}`" aria-hidden="true" />
+            <div class="statusHeroText">
+              <div class="statusHeroLabel">{{ stateText }}</div>
+              <div class="statusHeroReason">{{ stateReason }}</div>
+            </div>
+            <div class="server-controls">
+              <ion-button fill="outline" size="small" @click="checkServerInner">
+                <ion-icon :icon="refreshIcon" slot="icon-only"></ion-icon>
+              </ion-button>
+              <ion-button v-if="isRestarting" fill="outline" size="small" color="medium" disabled>
+                <ion-spinner slot="icon-only" name="crescent"></ion-spinner>
+              </ion-button>
+              <ion-button v-else-if="serverOnline" fill="outline" size="small" color="danger" @click="handleStop" :disabled="isStopping">
+                <ion-spinner v-if="isStopping" slot="icon-only" name="crescent"></ion-spinner>
+                <ion-icon v-else :icon="stopIcon" slot="icon-only"></ion-icon>
+              </ion-button>
+              <ion-button v-else fill="outline" size="small" color="warning" @click="handleRestart">
+                <ion-icon :icon="playIcon" slot="icon-only"></ion-icon>
+              </ion-button>
+            </div>
           </div>
-        </ion-item>
+
+          <div class="factTable">
+            <div class="factRow">
+              <div class="factLabel">{{ t('serverStatusDetail.instanceId') || '实例 ID' }}</div>
+              <div class="factValue factMono">{{ backendInstanceId || '—' }}</div>
+            </div>
+            <div class="factRow">
+              <div class="factLabel">{{ t('serverStatusDetail.version') || '版本' }}</div>
+              <div class="factValue factMono">{{ backendVersion || '—' }}</div>
+            </div>
+            <div class="factRow">
+              <div class="factLabel">{{ t('serverStatusDetail.port') || '端口' }}</div>
+              <div class="factValue">{{ backendPort ? `:${backendPort}` : '—' }}</div>
+            </div>
+            <div class="factRow">
+              <div class="factLabel">{{ t('serverStatusDetail.transport') || '传输' }}</div>
+              <div class="factValue">
+                <span class="transportTag" :class="`transport-${transportMode}`">
+                  {{ transportLabel }}
+                </span>
+              </div>
+            </div>
+            <div class="factRow">
+              <div class="factLabel">{{ t('serverStatusDetail.latency') || '延迟' }}</div>
+              <div class="factValue">{{ latencyMs > 0 ? `${latencyMs} ms` : '—' }}</div>
+            </div>
+            <div class="factRow">
+              <div class="factLabel">{{ t('serverStatusDetail.lastChecked') || '上次检测' }}</div>
+              <div class="factValue">{{ lastCheckedAt ? formatLastChecked(lastCheckedAt) : '—' }}</div>
+            </div>
+            <div v-if="!serverOnline && connectionError" class="factRow factRow_error">
+              <div class="factLabel">{{ t('serverStatusDetail.lastError') || '上次错误' }}</div>
+              <div class="factValue">{{ connectionError }}</div>
+            </div>
+            <div v-if="serverOnline && isSandboxBrowser" class="factRow factRow_warning">
+              <div class="factLabel">{{ t('serverStatusDetail.sandboxNote') || '沙箱提示' }}</div>
+              <div class="factValue">
+                {{ t('serverStatus.sandboxPollingHint') || '当前为沙箱浏览器，WebSocket 已降级为 HTTP 轮询' }}
+              </div>
+            </div>
+            <div v-if="instanceChanged" class="factRow factRow_warning">
+              <div class="factLabel">{{ t('serverStatusDetail.backendChanged') || '后端变更' }}</div>
+              <div class="factValue">
+                {{ t('serverStatusDetail.backendChangedHint', { prev: instanceChanged.previous, curr: instanceChanged.current }) ||
+                   `实例 ID 已变更 ${instanceChanged.previous} → ${instanceChanged.current}` }}
+              </div>
+            </div>
+          </div>
+        </section>
       </ion-list>
 
       <ion-list>
@@ -135,12 +174,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
   IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
-  IonBadge, IonButton, alertController, IonSpinner,
+  IonButton, alertController, IonSpinner,
 } from '@ionic/vue'
 import {
   server as serverIcon, refresh as refreshIcon,
@@ -151,6 +190,7 @@ import {
 } from 'ionicons/icons'
 import { useServerStatus } from '@/composables/useServerStatus'
 import { useI18n } from '@/composables/useI18n'
+import { eventBus } from '@/composables/useEventBus'
 import { showToast } from '@/composables/useToast'
 import { copyToClipboard as clipboardWrite } from '@/composables/useClipboard'
 import { getServerUrl, fetchConfig } from '@/api/encv'
@@ -166,11 +206,15 @@ const {
   backendPort,
   isRestarting,
   isStopping,
-  // 🆕 2026-06-15：状态 ion-item 只显示 instance_id 前 8 位 + version
-  //   完整详情（latency / transport / last checked / sandbox warning）已迁到
-  //   /tabs/settings/server/status 专用页（ServerStatusDetail.vue）
+  // 🆕 2026-06-15 v6：状态区"精美卡片"内联所有事实
+  //   不再跳 /settings/server/status 单独页（路由删除）
+  //   instanceId / version / port / transport / latency / lastCheckedAt / sandbox / backendChanged
   backendInstanceId,
   backendVersion,
+  transportMode,
+  latencyMs,
+  lastCheckedAt,
+  isSandboxBrowser,
 } = useServerStatus()
 const { t } = useI18n()
 
@@ -192,11 +236,58 @@ const webdavRoot = computed(() => {
 })
 const webdavUsername = computed(() => (configData.value?.webdav as Record<string, unknown>)?.username ?? '')
 
+// 🆕 2026-06-15 v6：状态"精美卡片"内联 —— 状态机/文本/原因/transport label
+const stateClass = computed<'online' | 'offline' | 'checking'>(() => {
+  if (isRestarting.value) return 'checking'
+  return serverOnline.value ? 'online' : 'offline'
+})
+
+const stateText = computed(() => {
+  switch (stateClass.value) {
+    case 'online': return t('serverStatus.online') || '在线'
+    case 'offline': return t('serverStatus.offline') || '离线'
+    case 'checking': return t('serverStatus.checking') || '检查中…'
+  }
+})
+
+const stateReason = computed(() => {
+  if (stateClass.value === 'online') return t('serverStatusDetail.allOk') || '后端正常响应'
+  if (stateClass.value === 'checking') return t('serverStatusDetail.probing') || '正在探测…'
+  if (connectionError.value) return connectionError.value
+  if (transportMode.value === 'http-poll') {
+    return t('serverStatus.sandboxPollingHint') || '沙箱环境使用 HTTP 轮询'
+  }
+  return t('serverStatus.noDetail') || '无法连接后端'
+})
+
+const transportLabel = computed(() => {
+  switch (transportMode.value) {
+    case 'ws': return 'WebSocket'
+    case 'http-poll': return 'HTTP polling'
+    case 'native-bridge': return 'Native bridge'
+    case 'unknown': return '—'
+    default: return transportMode.value
+  }
+})
+
+// 后端实例 ID 变更（eventBus）
+const instanceChanged = ref<{ previous: string; current: string } | null>(null)
+function onBackendInstanceChanged(payload: { previous: string; current: string }) {
+  instanceChanged.value = payload
+}
+onMounted(() => eventBus.on('backend:instance-changed', onBackendInstanceChanged))
+onUnmounted(() => eventBus.off('backend:instance-changed', onBackendInstanceChanged))
+
+function formatLastChecked(d: Date | string): string {
+  const dt = typeof d === 'string' ? new Date(d) : d
+  if (Number.isNaN(dt.getTime())) return '—'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`
+}
+
 function goHttpServer() { router.push('/tabs/settings/server/http') }
 function goAdminServer() { router.push('/tabs/settings/server/admin') }
 function goWebdavServer() { router.push('/tabs/settings/server/webdav') }
-// 🆕 2026-06-15 v4：跳专用「服务器状态详情页」—— 单职责，0 混淆
-function goServerStatusDetail() { router.push('/tabs/settings/server/status') }
 
 async function copyToClipboard(text: string) {
   const ok = await clipboardWrite(text)
@@ -293,6 +384,97 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* ============================================================
+   🆕 2026-06-15 v6：状态区"精美卡片"内联
+   替代原本 ion-item 行（badge + instance_id + version）
+   现在 = 大色块 hero + 事实表 label:value 单行
+   ============================================================ */
+.statusFactCard {
+  display: block;
+  margin: 8px 14px 16px;
+  padding: 0;
+  border: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.18));
+  border-left-width: 5px;
+  border-radius: 8px;
+  background: var(--encv-bg-elevated, rgba(127, 127, 127, 0.04));
+  overflow: hidden;
+}
+.statusFactCard.is-online { border-left-color: var(--ion-color-success, #2dd55b); }
+.statusFactCard.is-offline { border-left-color: var(--ion-color-danger, #eb445a); }
+.statusFactCard.is-checking { border-left-color: var(--ion-color-warning, #ffc409); }
+
+.statusHeroRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 14px 12px;
+}
+.statusHeroDot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--ion-color-medium);
+}
+.statusHeroDot.is-online { background: var(--ion-color-success, #2dd55b); }
+.statusHeroDot.is-offline { background: var(--ion-color-danger, #eb445a); }
+.statusHeroDot.is-checking { background: var(--ion-color-warning, #ffc409); opacity: 0.7; }
+
+.statusHeroText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.statusHeroLabel { font-size: 18px; font-weight: 700; line-height: 1.15; }
+.statusHeroReason { font-size: 12px; color: var(--encv-text-secondary, rgba(127, 127, 127, 0.75)); line-height: 1.35; word-break: break-word; }
+
+.server-controls { display: flex; gap: 4px; flex-shrink: 0; }
+
+.factTable {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.12));
+  background: var(--ion-background-color, #fff);
+}
+.factRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.06));
+}
+.factRow:last-child { border-bottom: none; }
+.factRow_error { background: rgba(var(--ion-color-danger-rgb), 0.06); }
+.factRow_warning { background: rgba(var(--ion-color-warning-rgb), 0.06); }
+
+.factLabel {
+  flex: 0 0 88px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.85));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.factValue {
+  flex: 1;
+  font-size: 13px;
+  color: var(--ion-text-color);
+  word-break: break-all;
+  text-align: right;
+}
+.factMono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.transportTag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  background: rgba(var(--ion-color-primary-rgb), 0.14);
+  color: var(--ion-color-primary);
+}
+.transportTag.transport-ws { background: rgba(var(--ion-color-success-rgb), 0.14); color: var(--ion-color-success); }
+.transportTag.transport-http-poll { background: rgba(var(--ion-color-warning-rgb), 0.14); color: var(--ion-color-warning); }
+
 .connection-error {
   color: var(--ion-color-danger);
   font-size: 12px;

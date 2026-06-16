@@ -87,15 +87,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/AgentSettingsDetail.vue'),
       },
       {
-        // 🆕 2026-06-15 v4：专用「服务器状态详情页」—— 单职责，0 混淆
-        //   - 跟 ServerDetail（首页总览 + 状态 ion-item 链接，/settings/server）严格区分
-        //   - 跟 DevLogs / AgentSettingsDetail 内嵌的 ServerStatusCard 严格区分
-        //   入口：ServerDetail 状态行点击
-        path: 'settings/server/status',
-        component: () => import('@/views/ServerStatusDetail.vue'),
-        meta: { title: 'serverStatusDetail.title' },
-      },
-      {
         path: 'settings/devtools',
         component: () => import('@/views/DevToolsDetail.vue'),
       },
