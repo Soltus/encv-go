@@ -3,6 +3,7 @@ package mount
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 )
@@ -64,6 +65,12 @@ func (r *MountRegistry) MigrateFromServingDir(ctx context.Context) error {
 	}
 
 	if needBootstrap {
+		// 🆕 2026-06-16：记录 Bootstrap 触发前的 mount 列表，便于排查「哪些 mount 是补齐的」
+		// 推到 WSLogHandler → DevLogs 能看到「automation mount 补齐: ...」
+		beforeList := make([]string, 0, len(r.List()))
+		for _, m := range r.List() {
+			beforeList = append(beforeList, m.Name)
+		}
 		if err := r.BootstrapFromConfig(ctx); err != nil {
 			return fmt.Errorf("migrate: bootstrap: %w", err)
 		}
@@ -75,6 +82,34 @@ func (r *MountRegistry) MigrateFromServingDir(ctx context.Context) error {
 			fmt.Fprintf(os.Stderr, "[mount] migrate: created %s with %d mount(s)\n",
 				filepath.Base(r.dataPath), len(r.List()))
 		}
+		// 🆕 2026-06-16：slog.Info 让 DevLogs 看到 bootstrap 补齐结果
+		//   - 真机调试：用户能直接在 DevLogs 后端日志面板看到「automation mount 已补齐」
+		//   - 排查：mounts.json 缺 mount → Bootstrap 触发 → 这里打 INFO 级别日志
+		afterList := make([]string, 0, len(r.List()))
+		for _, m := range r.List() {
+			afterList = append(afterList, m.Name)
+		}
+		added := diffStrings(beforeList, afterList)
+		if len(added) > 0 {
+			slog.Info("mount bootstrap: 补齐缺失的挂载点", "added", added, "total", afterList)
+		} else {
+			slog.Info("mount bootstrap: 完整，无需补齐", "total", afterList)
+		}
 	}
 	return nil
+}
+
+// diffStrings 返回 in b 但不在 a 的元素（a/b 都是 mount name 列表）
+func diffStrings(a, b []string) []string {
+	inA := make(map[string]struct{}, len(a))
+	for _, s := range a {
+		inA[s] = struct{}{}
+	}
+	var added []string
+	for _, s := range b {
+		if _, ok := inA[s]; !ok {
+			added = append(added, s)
+		}
+	}
+	return added
 }

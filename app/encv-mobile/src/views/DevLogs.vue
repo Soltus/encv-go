@@ -223,6 +223,15 @@ const autoScrollEnabled = ref(true)
 const contentRef = ref<InstanceType<typeof IonContent> | null>(null)
 /** ion-content 的 .inner-scroll 元素（虚拟列表的 scroll 容器） */
 const scrollEl = ref<HTMLElement | null>(null)
+
+/** VirtualLogList refs（用于主动调 forceMeasure 触发首次渲染） */
+const frontendListRef = ref<{ forceMeasure: () => void } | null>(null)
+const backendListRef = ref<{ forceMeasure: () => void } | null>(null)
+function virtualizerForceMeasure(): void {
+  // 当前 active tab 的 virtual list 才需要 measure
+  if (activeTab.value === 'frontend') frontendListRef.value?.forceMeasure()
+  else backendListRef.value?.forceMeasure()
+}
 /**
  * 🆕 2026-06-15 1M+ 容量优化：用 IncrementalFilter 替代 shallowRef<LogEntry[]>
  *   - push O(1)（ring buffer）
@@ -630,6 +639,41 @@ onMounted(async () => {
   if (!serverOnline.value) {
     const result = await checkServerStatus()
     serverOnline.value = result.online
+  }
+
+  // 🆕 2026-06-16 修复：ion-content 异步渲染时 .inner-scroll 还没 ready
+  // 旧逻辑：onMounted 调一次 ensureScrollEl → 可能仍 null → virtualizer 一直空 → 列表全白
+  // 修法：多次重试（rAF + 0ms/50ms/150ms/300ms）+ ResizeObserver 兜底监听
+  let retryCount = 0
+  const maxRetries = 8
+  const tryInitScrollEl = (): void => {
+    const el = ensureScrollEl()
+    if (el) {
+      // 拿到 .inner-scroll 后，强制 virtualizer 重算（首次 watch 已触发 measure()，
+      // 这里再 measure 一次确保虚拟列表渲染首屏 items）
+      virtualizerForceMeasure()
+      return
+    }
+    retryCount++
+    if (retryCount < maxRetries) {
+      // 指数退避：0ms → 50ms → 100ms → 150ms → 200ms → 250ms → 300ms
+      const delay = Math.min(50 * retryCount, 300)
+      setTimeout(tryInitScrollEl, delay)
+    }
+  }
+  tryInitScrollEl()
+
+  // 兜底：ResizeObserver 监听 contentRef 尺寸变化（ion-content 完成渲染时会触发）
+  if (typeof ResizeObserver !== 'undefined' && contentRef.value) {
+    const hostEl = ((contentRef.value as any).$el || contentRef.value) as HTMLElement | undefined
+    if (hostEl) {
+      const ro = new ResizeObserver(() => {
+        if (!scrollEl.value) tryInitScrollEl()
+      })
+      ro.observe(hostEl)
+      // 组件卸载时断开（onBeforeUnmount 已存在清理 hook，这里先缓存到 ro 变量）
+      ;(contentRef.value as any).__devlogsRO__ = ro
+    }
   }
 
   // 🆕 2026-06-16：冷启动拉一次后端历史日志

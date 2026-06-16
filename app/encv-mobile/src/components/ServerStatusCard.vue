@@ -1066,9 +1066,19 @@ defineExpose({ checkStatus, restartBackend, stopBackend })
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1;
+  min-height: 0;
 }
 .error-title { font-size: 13px; font-weight: 600; color: var(--ion-color-danger, #eb445a); }
-.error-detail { font-size: 12px; color: var(--card-text-muted); word-break: break-word; }
+/* 🆕 2026-06-16 限制 error-detail 高度 — 错误文本可能很长（如 stack trace / multiline log），
+   不限 max-height 会把卡片撑到 1 屏高度，物理越界到 ion-tab-bar 区域 */
+.error-detail {
+  font-size: 12px;
+  color: var(--card-text-muted);
+  word-break: break-word;
+  max-height: 60px;
+  overflow-y: auto;
+}
 
 /* ============ 反面：诊断 / 操作历史 ============ */
 .back-header {
@@ -1116,6 +1126,10 @@ defineExpose({ checkStatus, restartBackend, stopBackend })
   display: inline-block;
   max-width: 100%;
   word-break: break-all;
+  /* 🆕 2026-06-16 限制 monospace 文本最多 2 行 + scroll — instance_id 长时（如 32 字符 uuid）撑高卡片 */
+  max-height: 2.8em;
+  overflow-y: auto;
+  line-height: 1.4;
 }
 .back-value.monospace.instance-changed {
   animation: ssc-instance-change 1.5s ease-out;

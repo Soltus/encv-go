@@ -109,6 +109,20 @@ watch(() => props.scrollEl, (newEl, oldEl) => {
 })
 
 /**
+ * 🆕 2026-06-16：暴露给父级 DevLogs 用 — 当 .inner-scroll 异步 ready 时父级主动调一次
+ * 让 virtualizer 立刻测量 + 渲染首屏 items。
+ *
+ * 为什么需要这个：watch scrollEl 在 oldEl=null → newEl=non-null 时触发 measure()，
+ * 但 DevLogs 的 ensureScrollEl 内部 scrollEl.value = el 是同步赋值 → 父级能 watch 到。
+ * 然而父级在 onMounted 多次 retry 拿到 el 后，仍可能因为 Vue 调度时序问题 watch 没及时触发
+ * （例如 nextTick 之间的竞争）。父级主动调 forceMeasure 兜底。
+ */
+function forceMeasure(): void {
+  virtualizer.value.measure()
+}
+defineExpose({ forceMeasure })
+
+/**
  * 高亮区间 [start, end)（CSS ::highlight 用 Range API 计算得出）
  * 当前 stub 实现：返回 null（父级用 plain text 渲染）
  * 父级可选择接入 CSS Custom Highlight API：
