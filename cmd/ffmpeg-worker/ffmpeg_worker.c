@@ -252,19 +252,66 @@ static int redirect_output_start(output_redirect_t* r) {
     }
 
     // stdout 临时文件
-    snprintf(r->stdout_path, sizeof(r->stdout_path), "%sffmpeg_stdout_XXXXXX", g_tmp_dir);
-    int fd_out = mkstemp(r->stdout_path);
-    if (fd_out < 0) return -1;
-    close(fd_out);
-
-    // stderr 临时文件
-    snprintf(r->stderr_path, sizeof(r->stderr_path), "%sffmpeg_stderr_XXXXXX", g_tmp_dir);
-    int fd_err = mkstemp(r->stderr_path);
-    if (fd_err < 0) {
-        unlink(r->stdout_path);
-        return -1;
+    // 🆕 修复 B1 (2026-06-17 第二轮): 用 open(O_CREAT|O_WRONLY|O_TRUNC) 不用 mkstemp
+    //   原因：真机 Android SELinux 上下文下 mkstemp 的 O_EXCL 走特殊路径，命中 EACCES
+    //   但 open(O_CREAT|O_WRONLY|O_TRUNC) 成功（try_set_tmp_dir 测试文件就是用这个方式）
+    //   唯一性靠 PID + 进程内单调计数器保证，不依赖文件系统原子 O_EXCL
+    {
+        static int seq = 0;
+        int tried = 0;
+        for (;;) {
+            int n = snprintf(r->stdout_path, sizeof(r->stdout_path),
+                             "%sffmpeg_stdout_%ld_%d.tmp", g_tmp_dir, (long)getpid(), seq);
+            if (n < 0 || (size_t)n >= sizeof(r->stdout_path)) {
+                fprintf(stderr, "{\"worker_debug\":\"stdout_path snprintf overflow, g_tmp_dir=%s, n=%d\"}", g_tmp_dir, n);
+                errno = ENAMETOOLONG;
+                return -1;
+            }
+            int fd_out = open(r->stdout_path, O_CREAT | O_WRONLY | O_TRUNC, 0600);
+            if (fd_out >= 0) {
+                // success
+                close(fd_out);
+                seq++;
+                break;
+            }
+            // 失败：seq 碰撞或 EEXIST → 下一轮
+            if (++tried > 1000) {
+                fprintf(stderr, "{\"worker_debug\":\"stdout temp file create failed after %d tries, errno=%d(%s), g_tmp_dir=%s, last_path=%s\"}",
+                        tried, errno, strerror(errno), g_tmp_dir, r->stdout_path);
+                return -1;
+            }
+            seq++;
+        }
     }
-    close(fd_err);
+
+    // stderr 临时文件（同理）
+    {
+        static int seq = 0;
+        int tried = 0;
+        for (;;) {
+            int n = snprintf(r->stderr_path, sizeof(r->stderr_path),
+                             "%sffmpeg_stderr_%ld_%d.tmp", g_tmp_dir, (long)getpid(), seq);
+            if (n < 0 || (size_t)n >= sizeof(r->stderr_path)) {
+                fprintf(stderr, "{\"worker_debug\":\"stderr_path snprintf overflow, g_tmp_dir=%s, n=%d\"}", g_tmp_dir, n);
+                errno = ENAMETOOLONG;
+                unlink(r->stdout_path);
+                return -1;
+            }
+            int fd_err = open(r->stderr_path, O_CREAT | O_WRONLY | O_TRUNC, 0600);
+            if (fd_err >= 0) {
+                close(fd_err);
+                seq++;
+                break;
+            }
+            if (++tried > 1000) {
+                fprintf(stderr, "{\"worker_debug\":\"stderr temp file create failed after %d tries, errno=%d(%s), g_tmp_dir=%s, last_path=%s\"}",
+                        tried, errno, strerror(errno), g_tmp_dir, r->stderr_path);
+                unlink(r->stdout_path);
+                return -1;
+            }
+            seq++;
+        }
+    }
 
     fflush(stdout);
     fflush(stderr);
