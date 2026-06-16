@@ -1,7 +1,6 @@
 package server
 
 import (
-	"log/slog"
 	"net/http"
 	"os"
 
@@ -48,62 +47,17 @@ func (s *Server) handleListMountsGin(c *gin.Context) {
 	for _, m := range mounts {
 		dtos = append(dtos, toDTO(m))
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"mounts":  dtos,
-		"drivers": s.mountRegistry.ListDrivers(),
-	})
-}
-
-// 🆕 2026-06-16: handleRefreshMountsGin POST /api/mounts/refresh
-//   用途：用户主动触发 mount registry 重新 Bootstrap（补齐缺失的 primary/automation/sandbox）
-//   场景：真机历史上持久化的 mounts.json 只含 primary（automation 缺失）
-//   - 老 API 不能重跑 Bootstrap（GET /api/mounts 只读）
-//   - 真机用户调"刷新挂载点"按钮 → POST /api/mounts/refresh
-//   - 后端：list 当前 mount → 调 BootstrapFromConfig（idempotent） → Save → 返回新 list + added diff
-//   - 同时 slog.Info 推到 DevLogs（用户能立即在 DevLogs 看到「automation mount 已补齐」）
-func (s *Server) handleRefreshMountsGin(c *gin.Context) {
-	if s.mountRegistry == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "mount registry not initialized"})
-		return
-	}
-	// 1. 记录调用前 mount names
-	beforeList := make([]string, 0, len(s.mountRegistry.List()))
-	for _, m := range s.mountRegistry.List() {
-		beforeList = append(beforeList, m.Name)
-	}
-	// 2. 重新 Bootstrap（idempotent — 已存在的不会覆盖，用户的自定义 mount 保留）
-	if err := s.mountRegistry.BootstrapFromConfig(c.Request.Context()); err != nil {
-		slog.Error("mount refresh: bootstrap failed", "err", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	// 3. Save（落盘 — 防止下次启动又缺）
-	if err := s.mountRegistry.Save(); err != nil {
-		slog.Warn("mount refresh: save failed", "err", err)
-	}
-	// 4. 计算 added diff
-	afterList := make([]string, 0, len(s.mountRegistry.List()))
-	for _, m := range s.mountRegistry.List() {
-		afterList = append(afterList, m.Name)
-	}
-	added := mount.DiffStrings(beforeList, afterList)
-	if len(added) > 0 {
-		slog.Info("mount refresh: 补齐缺失的挂载点", "added", added, "total", afterList)
-	} else {
-		slog.Info("mount refresh: 完整，无需补齐", "total", afterList)
-	}
-	// 5. 返回新 list
-	mounts := s.mountRegistry.List()
-	dtos := make([]mountDTO, 0, len(mounts))
-	for _, m := range mounts {
-		dtos = append(dtos, toDTO(m))
+	// 🆕 2026-06-16：把 mount 启动期错误也返回前端（不再静默）
+	// 历史：fmt.Fprintf(os.Stderr) → DevLogs 看不到 → 用户不知道 mount 为何失败
+	// 现在：s.mountBootstrapErrors 暴露到响应，MountsDetail.vue 顶部 banner 直接显示
+	bootstrapErrors := s.mountBootstrapErrors
+	if bootstrapErrors == nil {
+		bootstrapErrors = []string{}
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"mounts":  dtos,
-		"drivers": s.mountRegistry.ListDrivers(),
-		"added":   added,
-		"before":  beforeList,
-		"after":   afterList,
+		"mounts":           dtos,
+		"drivers":          s.mountRegistry.ListDrivers(),
+		"bootstrap_errors": bootstrapErrors,
 	})
 }
 

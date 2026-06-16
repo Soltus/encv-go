@@ -24,6 +24,55 @@
         </div>
       </div>
 
+      <!--
+        🆕 2026-06-16：mount 启动期错误 banner（不再静默）
+        历史：后端 MigrateFromServingDir 失败 → fmt.Fprintf(stderr) → DevLogs 看不到 → 用户不知道 mount 为何缺失
+        现在：s.mountBootstrapErrors → /api/mounts 响应 bootstrap_errors → 这里顶部 banner 直接展示
+      -->
+      <div v-if="bootstrapErrors.length > 0" class="bootstrap-error-banner" role="alert">
+        <div class="bootstrap-error-header">
+          <ion-icon :icon="alertCircleOutline" color="danger" class="bootstrap-error-icon"></ion-icon>
+          <div class="bootstrap-error-title-block">
+            <div class="bootstrap-error-title">
+              Mount 启动失败（{{ bootstrapErrors.length }}）
+            </div>
+            <div class="bootstrap-error-subtitle">
+              mount registry 启动时遇到问题，下列挂载点可能未就绪
+            </div>
+          </div>
+          <button class="bootstrap-error-close" @click="bootstrapErrors = []" aria-label="关闭">×</button>
+        </div>
+        <ul class="bootstrap-error-list">
+          <li v-for="(msg, i) in bootstrapErrors" :key="i" class="bootstrap-error-item">
+            <pre class="bootstrap-error-message">{{ msg }}</pre>
+          </li>
+        </ul>
+      </div>
+
+      <!--
+        🆕 2026-06-16：操作错误 banner（create / update / delete / toggle 失败持久展示）
+        历史：showToast 2.5s 一闪就消失 → 用户看不到根因
+        现在：operationError 内联展示，附带 hint 提示排查
+      -->
+      <div v-if="operationError" class="bootstrap-error-banner" role="alert">
+        <div class="bootstrap-error-header">
+          <ion-icon :icon="alertCircleOutline" color="danger" class="bootstrap-error-icon"></ion-icon>
+          <div class="bootstrap-error-title-block">
+            <div class="bootstrap-error-title">
+              {{ operationError.title }}
+            </div>
+            <div class="bootstrap-error-subtitle">
+              {{ operationError.subtitle }}
+            </div>
+          </div>
+          <button class="bootstrap-error-close" @click="operationError = null" aria-label="关闭">×</button>
+        </div>
+        <pre class="bootstrap-error-message">{{ operationError.message }}</pre>
+        <div v-if="operationError.hint" class="bootstrap-error-hint">
+          <strong>💡 排查:</strong> {{ operationError.hint }}
+        </div>
+      </div>
+
       <!-- 加载 / 错误状态 -->
       <div v-if="loading && mounts.length === 0" class="status-block">
         <ion-spinner name="crescent"></ion-spinner>
@@ -276,6 +325,18 @@ const loading = ref(false)
 const loadError = ref('')
 const togglingId = ref<string | null>(null)
 
+// 🆕 2026-06-16：mount 启动期错误（从 /api/mounts 响应 bootstrap_errors 字段读取，不再静默）
+const bootstrapErrors = ref<string[]>([])
+
+// 🆕 2026-06-16：操作错误内联 banner（create/update/delete/toggle 失败持久展示）
+interface OperationError {
+  title: string
+  subtitle: string
+  message: string
+  hint?: string
+}
+const operationError = ref<OperationError | null>(null)
+
 // Editor
 const editorOpen = ref(false)
 const editing = ref<Mount | null>(null)
@@ -315,6 +376,8 @@ async function loadAll() {
     const resp = await listMounts()
     mounts.value = resp.mounts ?? []
     drivers.value = resp.drivers?.length ? resp.drivers : [...MOUNT_DRIVERS]
+    // 🆕 2026-06-16：把后端返回的 mount 启动期错误推到 UI（不再静默）
+    bootstrapErrors.value = resp.bootstrap_errors ?? []
   } catch (e) {
     loadError.value = e instanceof Error ? e.message : String(e)
     mounts.value = []
@@ -366,6 +429,13 @@ async function handleToggleEnabled(m: Mount, enabled: boolean) {
     // 回滚
     m.enabled = original
     const msg = e instanceof Error ? e.message : String(e)
+    // 🆕 2026-06-16：内联错误 banner（持久展示，不再依赖 toast 一闪就消失）
+    operationError.value = {
+      title: '挂载点切换失败',
+      subtitle: `挂载点 ${m.name} (${m.mount_path}) 启用状态切换失败`,
+      message: msg,
+      hint: '检查 root_path 目录是否存在 + 是否有写权限（RO 标志）。后端 mount.MountRegistry.Update 也会校验必填字段。',
+    }
     showToast({ message: t('settings.mountUpdateFailed') + ': ' + msg, duration: 3000, color: 'danger' })
   } finally {
     togglingId.value = null
@@ -419,6 +489,18 @@ async function handleSave() {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     saveError.value = msg
+    // 🆕 2026-06-16：内联错误 banner（持久展示）
+    // 关闭 modal 后用户仍能看到错误根因（toast 2.5s 后消失）
+    operationError.value = {
+      title: editing.value ? '挂载点更新失败' : '挂载点创建失败',
+      subtitle: editing.value
+        ? `挂载点 ${editing.value.name} (${editing.value.mount_path}) 更新失败`
+        : `新建挂载点 ${input.name} (${input.mount_path}) 失败`,
+      message: msg,
+      hint: editing.value
+        ? '检查 root_path 是否仍可写 + driver 工厂是否支持此 mount。primary mount 的 driver 字段不能改。'
+        : '检查 mount_path 路径唯一性（primary/automation/sandbox 已存在）+ driver 名拼写（local/appdata/sandbox）',
+    }
     showToast({ message: t('settings.mountSaveFailed') + ': ' + msg, duration: 3000, color: 'danger' })
   }
 }
@@ -441,6 +523,13 @@ async function confirmDelete(m: Mount) {
             await loadAll()
           } catch (e) {
             const msg = e instanceof Error ? e.message : String(e)
+            // 🆕 2026-06-16：内联错误 banner（持久展示）
+            operationError.value = {
+              title: '挂载点删除失败',
+              subtitle: `挂载点 ${m.name} (${m.mount_path}) 删除失败`,
+              message: msg,
+              hint: 'primary mount 不可删（后端 ErrPrimaryProtected 保护）。其他 mount 删除会校验 root_path 引用计数。',
+            }
             showToast({ message: t('settings.mountDeleteFailed') + ': ' + msg, duration: 3000, color: 'danger' })
           }
         },
@@ -733,5 +822,89 @@ async function runResolve() {
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--ion-color-danger);
+}
+
+/* ========== 🆕 2026-06-16：mount 启动期错误 banner / 操作错误 banner ========== */
+.bootstrap-error-banner {
+  margin: 10px 16px 4px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(220, 38, 38, 0.10) 0%, rgba(220, 38, 38, 0.04) 100%);
+  border-left: 4px solid var(--ion-color-danger);
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(220, 38, 38, 0.12);
+}
+.bootstrap-error-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.bootstrap-error-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.bootstrap-error-title-block {
+  flex: 1;
+  min-width: 0;
+}
+.bootstrap-error-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ion-color-danger-shade);
+  line-height: 1.3;
+}
+.bootstrap-error-subtitle {
+  font-size: 11.5px;
+  color: var(--ion-color-medium);
+  margin-top: 2px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+}
+.bootstrap-error-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--ion-color-medium);
+  cursor: pointer;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.bootstrap-error-close:hover {
+  color: var(--ion-color-danger);
+}
+.bootstrap-error-list {
+  list-style: none;
+  margin: 10px 0 0 34px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bootstrap-error-item {
+  margin: 0;
+}
+.bootstrap-error-message {
+  margin: 10px 0 0 34px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ion-color-dark);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.bootstrap-error-hint {
+  margin: 10px 0 0 34px;
+  padding: 8px 10px;
+  background: rgba(59, 130, 246, 0.08);
+  border-left: 3px solid var(--ion-color-primary);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ion-color-dark);
 }
 </style>

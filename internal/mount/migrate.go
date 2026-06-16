@@ -29,13 +29,15 @@ func (r *MountRegistry) MigrateFromServingDir(ctx context.Context) error {
 	// Step 1: 迁移老路径数据到新路径（一次性，原子 rename）
 	if err := r.migrateLegacyDataPath(); err != nil {
 		// 迁移失败不致命：继续尝试从 dataPath 读（也许 dataPath 已经存在）
-		fmt.Fprintf(os.Stderr, "[mount] migrate: legacy migration failed: %v\n", err)
+		// 🆕 2026-06-16：slog.Warn 让 DevLogs 也能看到（不只 stderr）
+		slog.Warn("mount migrate: legacy migration failed", "err", err)
 	}
 
 	// Step 2: 加载持久化数据到内存（如果存在）
 	if err := r.Load(); err != nil {
 		// Load 失败不致命：fallback 到 Bootstrap（全新数据）
-		fmt.Fprintf(os.Stderr, "[mount] migrate: load failed (will bootstrap): %v\n", err)
+		// 🆕 2026-06-16：slog.Warn 让 DevLogs 也能看到（不只 stderr）
+		slog.Warn("mount migrate: load failed (will bootstrap)", "err", err)
 	}
 
 	// Step 3: 检查持久化文件 + 关键 mount 是否齐全
@@ -100,7 +102,9 @@ func (r *MountRegistry) MigrateFromServingDir(ctx context.Context) error {
 }
 
 // DiffStrings 返回 in b 但不在 a 的元素（a/b 都是 mount name 列表）
-// 导出供 server/mount_api.go handleRefreshMountsGin 共用
+// 用于「调用前后 mount 列表对比 → 找出补齐项」，目前主要在 migrate.go 内部使用
+// 2026-06-16：原 handleRefreshMountsGin 已删除（/api/mounts/refresh 端点被移除）
+//   DiffStrings 保留导出以便未来如果需要再次暴露"补齐 diff"能力时复用
 func DiffStrings(a, b []string) []string {
 	inA := make(map[string]struct{}, len(a))
 	for _, s := range a {

@@ -78,6 +78,10 @@ type Server struct {
 	// 🆕 2026-06-15：多挂载点注册表（multi-mount-storage-refactor spec）
 	// 启动时构造，与 cfg.servingDir / cfg.isMobile / cfg.isDev 一起决定默认 mount
 	mountRegistry *mount.MountRegistry
+	// 🆕 2026-06-16：mount 启动期错误（不再静默 — /api/mounts 响应里暴露给前端）
+	// 典型来源：migrateLegacyDataPath / Load / BootstrapFromConfig / Save 失败
+	// 历史：fmt.Fprintf(os.Stderr, ...) → 只进 stderr → DevLogs 看不到 → 用户不知道 mount 为何失败
+	mountBootstrapErrors []string
 	// 🆕 2026-06-14：跨进程 IPC 重构 — RuntimeInfo 内存字段
 	//
 	// 单一来源：Go 自己持有，HTTP /api/runtime 对外声明。
@@ -265,8 +269,12 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	s.mountRegistry.RegisterDriverFactory(mount.DriverAppData, func() mount.Driver { return drivers.NewAppDataDriver() })
 	s.mountRegistry.RegisterDriverFactory(mount.DriverSandbox, func() mount.Driver { return drivers.NewSandboxDriver() })
 	if err := s.mountRegistry.MigrateFromServingDir(context.Background()); err != nil {
-		// 启动期失败不阻塞服务（旧 cfg.ServingDir 路径仍可用；新 mount 系统降级为不可用）
-		fmt.Fprintf(os.Stderr, "[mount] MigrateFromServingDir failed: %v\n", err)
+		// 🆕 2026-06-16：不再静默
+		//   历史：fmt.Fprintf(os.Stderr, ...) → 只进 stderr，DevLogs 看不到 → 用户不知道 mount 为何失败
+		//   现在：slog.Error 让 WSLogHandler 推到 DevLogs + 存到 s.mountBootstrapErrors 让 /api/mounts 暴露
+		msg := fmt.Sprintf("mount MigrateFromServingDir failed: %v", err)
+		slog.Error("mount bootstrap failed", "err", err)
+		s.mountBootstrapErrors = append(s.mountBootstrapErrors, msg)
 	}
 	// 挂载点创建确认日志（真机调试：logcat 可搜 [mount] 关键字确认 automation mount 是否就绪）
 	mounts := s.mountRegistry.List()
@@ -276,7 +284,7 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	}
 	// 🆕 2026-06-16: 启动时**无条件** slog.Info 当前 mount list（推到 DevLogs）
 	//   真机用户能立即在 DevLogs 看到「mount registry ready: count=3 names=[primary automation sandbox]」
-	//   这条日志是 WSHub 推送的兜底 — 即使用户没调 /api/mounts/refresh 也能看到 mount 状态
+	//   启动期错误也通过 slog.Error 推到 DevLogs（不再静默 — 旧实现 fmt.Fprintf(stderr)）
 	mountNames := make([]string, 0, len(mounts))
 	for _, m := range mounts {
 		mountNames = append(mountNames, m.Name)
@@ -583,8 +591,8 @@ func (s *Server) Start(version string) (string, error) {
 	r.GET("/api/logs/recent", s.handleAPILogsRecentGin)
 	// 🆕 2026-06-15：多挂载点管理 API（multi-mount-storage-refactor spec §6.1）
 	r.GET("/api/mounts", s.handleListMountsGin)
-	// 🆕 2026-06-16: 主动触发 mount bootstrap 补齐（真机场景：mounts.json 缺 automation → 用户手动触发刷新）
-	r.POST("/api/mounts/refresh", s.handleRefreshMountsGin)
+	// 2026-06-16 移除：/api/mounts/refresh — 自动迁移启动期补齐已经够用（migrate.go MigrateFromServingDir），
+	//   不需要用户主动触发；mount 失败信息通过 /api/mounts 响应的 bootstrap_errors 字段暴露给 MountsDetail.vue 内联 banner
 	r.GET("/api/mounts/:id", s.handleGetMountGin)
 	r.POST("/api/mounts", s.handleCreateMountGin)
 	r.PUT("/api/mounts/:id", s.handleUpdateMountGin)

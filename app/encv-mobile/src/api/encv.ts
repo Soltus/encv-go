@@ -633,32 +633,6 @@ export async function getRecentBackendLogs(since?: string): Promise<RecentLogsRe
   return response.json()
 }
 
-/**
- * 🆕 2026-06-16：主动触发后端 mount registry 重新 Bootstrap
- *   - 场景：真机历史 mounts.json 缺 automation → 用户手动触发刷新
- *   - 后端：list 当前 mount → BootstrapFromConfig（idempotent）→ Save → slog.Info → 返回新 list
- *   - 返回：{ mounts, drivers, added, before, after }
- */
-export interface MountRefreshResponse {
-  mounts: ListMountsResponse['mounts']
-  drivers: string[]
-  /** 本次补齐新增的 mount 名称（['automation']） */
-  added: string[]
-  /** 调用前 mount 名称列表 */
-  before: string[]
-  /** 调用后 mount 名称列表 */
-  after: string[]
-}
-
-export async function refreshMounts(): Promise<MountRefreshResponse> {
-  const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/mounts/refresh`, { method: 'POST' })
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
-  }
-  return response.json()
-}
-
 export async function createTask(
   type: TaskType,
   sourcePath: string,
@@ -1501,6 +1475,14 @@ export const MOUNT_PRESET_NAMES = ['primary', 'automation', 'sandbox'] as const
 export interface ListMountsResponse {
   mounts: Mount[]
   drivers: string[]
+  /**
+   * 🆕 2026-06-16：mount 启动期错误（不再静默）
+   * - 后端 server.go 在 MigrateFromServingDir 失败时 append 到 s.mountBootstrapErrors
+   * - /api/mounts 响应里暴露
+   * - MountsDetail.vue 顶部 banner 展示，每条对应一个 mount 启动失败原因
+   * - 典型场景：mounts.json 损坏 / bootstrap 写盘失败 / driver 工厂 panic
+   */
+  bootstrap_errors: string[]
 }
 
 export interface ResolveMountResponse {
