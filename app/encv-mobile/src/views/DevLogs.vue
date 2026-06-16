@@ -182,9 +182,11 @@
             <span class="log-detail-label">{{ t('devlogs.logDetailMessage') }}</span>
             <pre class="log-detail-message">{{ selectedLog.message }}</pre>
           </div>
-          <div v-if="selectedLog.stack" class="log-detail-row log-detail-stack-row">
+          <!-- 🆕 2026-06-16：error 级别永远显示堆栈 section（即使没 stack 也显示「(无堆栈)」提示，让用户知道功能存在） -->
+          <div v-if="selectedLog.level === 'error'" class="log-detail-row log-detail-stack-row">
             <span class="log-detail-label">{{ t('devlogs.logDetailStack') }}</span>
-            <pre class="log-detail-stack">{{ selectedLog.stack }}</pre>
+            <pre v-if="selectedLog.stack" class="log-detail-stack">{{ selectedLog.stack }}</pre>
+            <pre v-else class="log-detail-stack log-detail-stack-empty">(no stack trace available — 后端 slog 暂未推送 stack，前端 Error 已支持)</pre>
           </div>
         </div>
         <div class="log-detail-footer">
@@ -1110,6 +1112,12 @@ defineExpose({
   overflow-y: auto;
   user-select: text;       /* 关键：可复制堆栈 */
   -webkit-user-select: text;
+}
+/* 🆕 2026-06-16：无堆栈时显示「(no stack trace available)」占位 — 仍是深色但斜体低对比 */
+.log-detail-stack-empty {
+  font-style: italic;
+  opacity: 0.65;
+  color: #888;
 }
 .log-detail-footer {
   display: flex;

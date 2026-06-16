@@ -89,7 +89,7 @@ func (r *MountRegistry) MigrateFromServingDir(ctx context.Context) error {
 		for _, m := range r.List() {
 			afterList = append(afterList, m.Name)
 		}
-		added := diffStrings(beforeList, afterList)
+		added := DiffStrings(beforeList, afterList)
 		if len(added) > 0 {
 			slog.Info("mount bootstrap: 补齐缺失的挂载点", "added", added, "total", afterList)
 		} else {
@@ -99,8 +99,9 @@ func (r *MountRegistry) MigrateFromServingDir(ctx context.Context) error {
 	return nil
 }
 
-// diffStrings 返回 in b 但不在 a 的元素（a/b 都是 mount name 列表）
-func diffStrings(a, b []string) []string {
+// DiffStrings 返回 in b 但不在 a 的元素（a/b 都是 mount name 列表）
+// 导出供 server/mount_api.go handleRefreshMountsGin 共用
+func DiffStrings(a, b []string) []string {
 	inA := make(map[string]struct{}, len(a))
 	for _, s := range a {
 		inA[s] = struct{}{}

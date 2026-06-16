@@ -30,7 +30,6 @@
         <ServerStatusCard
           :clickable="true"
           :hide-actions="false"
-          @click="goServerStatusDetail"
           @check="checkServerInner"
           @restart="handleRestart"
           @stop="handleStop"
@@ -157,8 +156,6 @@ const webdavUsername = computed(() => (configData.value?.webdav as Record<string
 function goHttpServer() { router.push('/tabs/settings/server/http') }
 function goAdminServer() { router.push('/tabs/settings/server/admin') }
 function goWebdavServer() { router.push('/tabs/settings/server/webdav') }
-// ServerStatusCard 点击 → 跳独立详情页（事实表）
-function goServerStatusDetail() { router.push('/tabs/settings/server/status') }
 
 async function copyToClipboard(text: string) {
   const ok = await clipboardWrite(text)

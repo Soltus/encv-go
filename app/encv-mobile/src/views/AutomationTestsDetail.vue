@@ -87,6 +87,14 @@
             <span v-else-if="mountError" class="mount-status-badge mount-status-badge--error">离线</span>
             <span v-else-if="hasAutomationMount" class="mount-status-badge mount-status-badge--ok">就绪</span>
             <span v-else class="mount-status-badge mount-status-badge--warn">未找到 automation</span>
+            <!-- 🆕 2026-06-16: 主动触发 mount refresh（真机场景：mounts.json 缺 automation → 用户点这个按钮立即补齐） -->
+            <ion-button v-if="!hasAutomationMount && !mountLoading"
+              size="small" fill="outline" :disabled="refreshing" @click="handleRefreshMounts"
+              class="mount-refresh-btn"
+            >
+              <ion-spinner v-if="refreshing" slot="icon-only" name="crescent" />
+              <ion-icon v-else :icon="refreshIcon" slot="icon-only" />
+            </ion-button>
           </div>
           <ul v-if="mountList.length > 0" class="mount-status-list">
             <li v-for="m in mountList" :key="m.name" class="mount-status-item">
@@ -370,13 +378,14 @@ import {
   addCircleOutline, trashOutline, syncOutline, playCircleOutline, closeCircleOutline,
   checkmarkCircleOutline, warningOutline, copyOutline, terminalOutline,
   chevronUpOutline, chevronDownOutline, ellipsisHorizontalOutline,
-  hourglassOutline,
+  hourglassOutline, refreshOutline,
 } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
 import { showToast } from '@/composables/useToast'
 import {
   fetchPlugins,
   listMounts,
+  refreshMounts,
   type PluginMeta,
   type ListMountsResponse,
 } from '@/api/encv'
@@ -393,6 +402,7 @@ import TreeView from '@/components/automation/TreeView.vue'
 import StepDetailPanel from '@/components/automation/StepDetailPanel.vue'
 
 const { t } = useI18n()
+const refreshIcon = refreshOutline  // 🆕 2026-06-16: 挂载点刷新按钮图标
 
 // ---- Mock 数据 ----
 // 🆕 2026-06-15 声明式：mockRoot = AUTOMATION_MOUNT_PATH + '/'（常量，不再 split/slice）
@@ -410,6 +420,7 @@ const mockGenerated = ref(false)
 const mountList = ref<ListMountsResponse['mounts']>([])
 const mountLoading = ref(false)
 const mountError = ref<string | null>(null)
+const refreshing = ref(false)  // 🆕 2026-06-16: refresh mounts 操作中
 const hasAutomationMount = computed(() =>
   mountList.value.some((m) => m.name === 'automation'),
 )
@@ -424,6 +435,34 @@ async function fetchMountStatus() {
     mountList.value = []
   } finally {
     mountLoading.value = false
+  }
+}
+
+/** 🆕 2026-06-16: 主动触发后端 mount refresh（补齐缺失的 automation 等） */
+async function handleRefreshMounts(): Promise<void> {
+  if (refreshing.value) return
+  refreshing.value = true
+  try {
+    const resp = await refreshMounts()
+    mountList.value = resp.mounts ?? []
+    if (resp.added && resp.added.length > 0) {
+      showToast({
+        message: `已补齐挂载点: ${resp.added.join(', ')}`,
+        duration: 2500,
+        color: 'success',
+      })
+    } else {
+      showToast({ message: '挂载点已完整', duration: 1500, color: 'success' })
+    }
+    await fetchMountStatus()
+  } catch (err) {
+    showToast({
+      message: `refresh 失败: ${err instanceof Error ? err.message : String(err)}`,
+      duration: 3000,
+      color: 'danger',
+    })
+  } finally {
+    refreshing.value = false
   }
 }
 

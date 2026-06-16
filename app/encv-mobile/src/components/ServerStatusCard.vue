@@ -8,7 +8,6 @@
   使用边界（避免与"设置项"卡片混淆）：
     ✅ 可用位置
       · ServerDetail.vue        详情页状态行
-      · ServerStatusDetail.vue  独立诊断页（直接 useServerStatus 而非此组件）
       · DevLogs.vue             debug 工具顶栏（compact 模式）
     ❌ 不可用位置（这些是"设置"语义，放这里会让用户误以为是"系统设置建议"）
       · Settings.vue            设置首页（配置项 + 主题 + 权限）

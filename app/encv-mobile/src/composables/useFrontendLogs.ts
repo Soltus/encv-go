@@ -106,6 +106,10 @@ export function hijackConsole() {
   origConsole = saved
   // 启动日志（确保 DevLogs 首次打开前端面板时不为空）
   addLog('info', ['Frontend logger ready'], 'console.info')
+  // 🆕 2026-06-16：立即打一个 Error 让用户能在 DevLogs 看到 stack 渲染效果
+  //   点开这条 error 日志应该看到「调用堆栈」section 包含 Error.stack
+  //   用于验证 safeStringify 的 stack 提取 + 弹窗 stack section 渲染
+  console.error(new Error('Frontend stack test (DevLogs 详情弹窗应显示堆栈)'))
   // 沙箱预览（16000 → 2025 → 5173）链路下 agent-tool-host 不支持 WebSocket 升级，
   // vite HMR client 会持续报 `failed to connect to websocket`。
   // 这是预期内的环境噪声，不影响应用运行（vites 仍能 deliver 模块，
