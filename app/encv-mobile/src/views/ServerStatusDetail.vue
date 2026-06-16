@@ -1,299 +1,789 @@
 <!--
-  ServerStatusDetail.vue — 服务器状态详情页（🆕 2026-06-15 v4 专用页）
+  ServerStatusDetail.vue — 后端状态详情页
 
-  单一职责：**只显示后端状态的全部信息**——其它什么都不做。
-  - 不管 URL 配置 → ServerUrlDetail.vue
-  - 不管日志 → DevLogs.vue
-  - 不管 agent / webdav / http / admin 等子服务 → 那些都在 ServerDetail.vue 列表里
-  - 此页面 = 100% 专注：online? version? instance_id? port? latency? transport? 上次检查时间? 上次错误?
+  这个页面的存在意义 = 展示 ServerStatusCard 装不下的信息：
+    ✅ 延迟趋势图（最近 60 次探测，SVG 折线图）
+    ✅ 状态切换时间线（最近 10 次 online ↔ offline）
+    ✅ 操作历史（最近 30 条 check / start / stop / restart / ping）
+    ✅ 网络诊断（主动 ping baseUrl 测 RTT，裸 ping 不改 isOnline）
+    ✅ 应用元信息（App 启动时间 / 平台 / User-Agent / apiBaseUrl）
 
-  用户 2026-06-15 怒批"绕了几轮找不到北"后的设计铁律：
-    1. **第一眼就看出状态**——上方大色块 + 大字「在线 / 离线 / 检查中」+ 原因
-    2. **下面紧接分块的「事实表」**——每一项都是 label : value 一行，不再有「为什么这里有 latency」
-    3. **0 装饰 0 动画 0 旁注**——不做"等宽字体网格"也不做"dot pulse"也不做"顶部 banner"
-    4. **顶部刷新按钮**——重连一次后所有事实自动更新
-    5. **回退按钮**——返回 ServerDetail.vue 列表
+  跟 ServerStatusCard 的边界：
+    ❌ 不再列 fact table（version / port / instanceId / transport / latency）
+       这些在卡片正面 + 反面已经有，这里重复展示无价值
+    ❌ 不再有大色块 hero
+       卡片的状态点 + label 已是 0→1 摘要，详情页承接"1→N"展开
 
-  命名一致：XxxDetail.vue 的命名约定（MountsDetail / AppearanceDetail / EngineDetail 等），
-  此页就叫 ServerStatusDetail，绝对不会跟 ServerUrlDetail / ServerDetail 混淆。
+  使用：/tabs/settings/server/status（从 ServerStatusCard 点击进入）
 -->
 <template>
   <ion-page>
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
-          <ion-back-button default-href="/tabs/settings/server"></ion-back-button>
+          <ion-back-button :default-href="'/tabs/settings/server'" />
         </ion-buttons>
-        <ion-title>{{ t('serverStatusDetail.title') || '服务器状态' }}</ion-title>
+        <ion-title>{{ t('serverStatusDetail.title') }}</ion-title>
         <ion-buttons slot="end">
-          <ion-button
-            :disabled="status.isRestarting.value"
-            @click="status.manualReconnect()"
-            :title="t('serverStatusDetail.refresh') || '刷新'"
-          >
-            <ion-spinner v-if="status.isRestarting.value" name="crescent" />
-            <ion-icon v-else :icon="refreshOutline" slot="icon-only" />
+          <ion-button @click="onRefresh">
+            <ion-icon :icon="refreshIcon" slot="icon-only" />
           </ion-button>
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
     <ion-content class="statusDetailContent">
-      <!-- ① 状态大色块：第一眼就看到 -->
-      <section class="statusHero" :class="`is-${state}`" role="status" :aria-label="stateText">
-        <div class="statusHeroDot" :class="`is-${state}`" aria-hidden="true" />
-        <div class="statusHeroText">
-          <div class="statusHeroLabel">{{ stateText }}</div>
-          <div v-if="reason" class="statusHeroReason">{{ reason }}</div>
-          <div v-else class="statusHeroReason">{{ stateSubtitle }}</div>
+      <!-- ============ ① 当前状态摘要（迷你版 ServerStatusCard）============ -->
+      <section class="stateSummary" :class="`is-${state}`">
+        <span class="stateDot" :class="`is-${state}`" />
+        <div class="stateText">
+          <div class="stateLabel">{{ stateLabel }}</div>
+          <div class="stateSub">{{ stateSubText }}</div>
+        </div>
+        <div class="stateQuickFacts">
+          <span class="quickFact">
+            <ion-icon :icon="timerIcon" />
+            {{ latencyText }}
+          </span>
+          <span class="quickFact" v-if="transport">
+            <ion-icon :icon="wifiIcon" />
+            {{ transport }}
+          </span>
         </div>
       </section>
 
-      <!-- ② 事实表：label : value 形式，每项一行，0 解释 -->
-      <section class="factTable" aria-label="服务器事实">
-        <div class="factRow">
-          <div class="factLabel">{{ t('serverStatusDetail.instanceId') || '实例 ID' }}</div>
-          <div class="factValue factMono">{{ status.backendInstanceId.value || '—' }}</div>
+      <!-- ============ ② 延迟趋势图（SVG，0 依赖）============ -->
+      <section class="detailSection">
+        <div class="sectionHeader">
+          <ion-icon :icon="trendingUpIcon" />
+          <span class="sectionTitle">{{ t('serverStatusDetail.latencyTrend') }}</span>
+          <span class="sectionMeta">{{ latencyHistory.length }} {{ t('serverStatusDetail.samples') }}</span>
         </div>
-        <div class="factRow">
-          <div class="factLabel">{{ t('serverStatusDetail.version') || '版本' }}</div>
-          <div class="factValue factMono">{{ status.backendVersion.value || '—' }}</div>
-        </div>
-        <div class="factRow">
-          <div class="factLabel">{{ t('serverStatusDetail.port') || '端口' }}</div>
-          <div class="factValue">{{ status.backendPort.value ? `:${status.backendPort.value}` : '—' }}</div>
-        </div>
-        <div class="factRow">
-          <div class="factLabel">{{ t('serverStatusDetail.transport') || '传输' }}</div>
-          <div class="factValue">
-            <span class="transportTag" :class="`transport-${status.transportMode.value}`">
-              {{ transportLabel }}
-            </span>
+        <div class="trendChart">
+          <svg
+            v-if="latencyHistory.length > 0"
+            class="trendSvg"
+            :viewBox="`0 0 ${trendWidth} ${trendHeight}`"
+            preserveAspectRatio="none"
+            aria-label="latency trend"
+          >
+            <!-- 网格 -->
+            <g class="trendGrid">
+              <line v-for="y in 4" :key="`g${y}`" :x1="0" :x2="trendWidth" :y1="(trendHeight * y) / 4" :y2="(trendHeight * y) / 4" />
+            </g>
+            <!-- 折线 -->
+            <polyline
+              v-if="trendPoints"
+              class="trendLine"
+              :points="trendPoints"
+            />
+            <!-- 数据点 -->
+            <circle
+              v-for="(p, i) in trendDataPoints"
+              :key="`p${i}`"
+              :cx="p.x"
+              :cy="p.y"
+              r="2"
+              class="trendDot"
+            />
+          </svg>
+          <div v-else class="trendEmpty">
+            <ion-icon :icon="hourglassIcon" />
+            <span>{{ t('serverStatusDetail.noData') }}</span>
           </div>
         </div>
-        <div class="factRow">
-          <div class="factLabel">{{ t('serverStatusDetail.latency') || '延迟' }}</div>
-          <div class="factValue">
-            {{ status.latencyMs.value > 0 ? `${status.latencyMs.value} ms` : '—' }}
+        <div v-if="latencyHistory.length > 0" class="trendLegend">
+          <span class="legendItem">
+            <span class="legendSwatch legendSwatchMin" />
+            {{ minLatency }}ms
+          </span>
+          <span class="legendItem">
+            <span class="legendSwatch legendSwatchAvg" />
+            {{ avgLatency }}ms
+          </span>
+          <span class="legendItem">
+            <span class="legendSwatch legendSwatchMax" />
+            {{ maxLatency }}ms
+          </span>
+        </div>
+      </section>
+
+      <!-- ============ ③ 状态切换时间线 ============ -->
+      <section class="detailSection">
+        <div class="sectionHeader">
+          <ion-icon :icon="timeIcon" />
+          <span class="sectionTitle">{{ t('serverStatusDetail.timeline') }}</span>
+          <span class="sectionMeta">{{ stateHistory.length }} {{ t('serverStatusDetail.records') }}</span>
+        </div>
+        <div v-if="stateHistory.length === 0" class="emptyState">
+          <ion-icon :icon="hourglassIcon" />
+          <span>{{ t('serverStatusDetail.noData') }}</span>
+        </div>
+        <ul v-else class="timeline">
+          <li
+            v-for="(item, i) in stateHistory"
+            :key="item.at + '-' + i"
+            class="timelineItem"
+            :class="`is-${item.state}`"
+          >
+            <span class="timelineDot" :class="`is-${item.state}`" />
+            <div class="timelineBody">
+              <div class="timelineRow">
+                <span class="timelineState">{{ t(`serverStatus.${item.state}`) }}</span>
+                <span class="timelineTime">{{ formatTime(item.at) }}</span>
+              </div>
+              <div v-if="item.reason" class="timelineReason">{{ item.reason }}</div>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <!-- ============ ④ 操作历史 ============ -->
+      <section class="detailSection">
+        <div class="sectionHeader">
+          <ion-icon :icon="listIcon" />
+          <span class="sectionTitle">{{ t('serverStatusDetail.actions') }}</span>
+          <span class="sectionMeta">{{ actionHistory.length }} {{ t('serverStatusDetail.records') }}</span>
+        </div>
+        <div v-if="actionHistory.length === 0" class="emptyState">
+          <ion-icon :icon="hourglassIcon" />
+          <span>{{ t('serverStatusDetail.noData') }}</span>
+        </div>
+        <ul v-else class="actionLog">
+          <li
+            v-for="(item, i) in actionHistory"
+            :key="item.at + '-' + i"
+            class="actionLogItem"
+            :class="item.success ? 'is-success' : 'is-failed'"
+          >
+            <ion-icon
+              :icon="actionIcon(item.action)"
+              class="actionLogIcon"
+              :class="item.success ? 'is-success' : 'is-failed'"
+            />
+            <div class="actionLogBody">
+              <div class="actionLogRow">
+                <span class="actionLogName">{{ t(`serverStatusDetail.action.${item.action}`) }}</span>
+                <span class="actionLogTime">{{ formatTime(item.at) }}</span>
+              </div>
+              <div v-if="item.detail" class="actionLogDetail">{{ item.detail }}</div>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <!-- ============ ⑤ 网络诊断 ============ -->
+      <section class="detailSection">
+        <div class="sectionHeader">
+          <ion-icon :icon="networkIcon" />
+          <span class="sectionTitle">{{ t('serverStatusDetail.networkDiag') }}</span>
+        </div>
+        <div class="networkBox">
+          <div class="networkRow">
+            <div class="networkLabel">{{ t('serverStatusDetail.apiBaseUrl') }}</div>
+            <div class="networkValue monospace">{{ metrics.apiBaseUrl || '—' }}</div>
           </div>
-        </div>
-        <div class="factRow">
-          <div class="factLabel">{{ t('serverStatusDetail.lastChecked') || '上次检测' }}</div>
-          <div class="factValue">
-            {{ status.lastCheckedAt.value ? formatLastChecked(status.lastCheckedAt.value) : '—' }}
-          </div>
-        </div>
-        <div v-if="!status.isOnline.value && status.lastError.value" class="factRow factRow_error">
-          <div class="factLabel">{{ t('serverStatusDetail.lastError') || '上次错误' }}</div>
-          <div class="factValue">{{ status.lastError.value }}</div>
-        </div>
-        <div v-if="status.isOnline.value && status.isSandboxBrowser.value" class="factRow factRow_warning">
-          <div class="factLabel">{{ t('serverStatusDetail.sandboxNote') || '沙箱提示' }}</div>
-          <div class="factValue">
-            {{ t('serverStatus.sandboxPollingHint') || '当前为沙箱浏览器，WebSocket 已降级为 HTTP 轮询' }}
-          </div>
-        </div>
-        <div v-if="instanceChanged" class="factRow factRow_warning">
-          <div class="factLabel">{{ t('serverStatusDetail.backendChanged') || '后端变更' }}</div>
-          <div class="factValue">
-            {{ t('serverStatusDetail.backendChangedHint', { prev: instanceChanged.previous, curr: instanceChanged.current }) ||
-               `实例 ID 已变更 ${instanceChanged.previous} → ${instanceChanged.current}` }}
+          <ion-button
+            fill="outline"
+            size="default"
+            expand="block"
+            :disabled="pinging"
+            @click="onPing"
+          >
+            <ion-spinner v-if="pinging" slot="start" name="crescent" />
+            <ion-icon v-else :icon="pulseIcon" slot="start" />
+            {{ pinging ? t('serverStatusDetail.pinging') : t('serverStatusDetail.pingTest') }}
+          </ion-button>
+          <div v-if="lastPing" class="pingResult" :class="lastPing.ok ? 'is-success' : 'is-failed'">
+            <ion-icon
+              :icon="lastPing.ok ? checkmarkIcon : closeIcon"
+              class="pingResultIcon"
+            />
+            <div class="pingResultText">
+              <div class="pingResultTitle">
+                {{ lastPing.ok ? t('serverStatusDetail.pingOk') : t('serverStatusDetail.pingFailed') }}
+                <span class="pingResultMs">{{ lastPing.ms }}ms</span>
+              </div>
+              <div v-if="lastPing.error" class="pingResultError">{{ lastPing.error }}</div>
+            </div>
           </div>
         </div>
       </section>
 
-      <!-- ③ 底部：相关跳转（避免此页变孤立） -->
-      <section class="relatedActions">
-        <ion-button expand="block" fill="outline" @click="goServerUrl">
-          <ion-icon :icon="globeOutline" slot="start" />
-          {{ t('serverStatusDetail.goServerUrl') || '管理服务器地址' }}
-        </ion-button>
+      <!-- ============ ⑥ 应用元信息 ============ -->
+      <section class="detailSection">
+        <div class="sectionHeader">
+          <ion-icon :icon="phonePortraitIcon" />
+          <span class="sectionTitle">{{ t('serverStatusDetail.appInfo') }}</span>
+        </div>
+        <div class="metaGrid">
+          <div class="metaCell">
+            <div class="metaLabel">{{ t('serverStatusDetail.appUptime') }}</div>
+            <div class="metaValue">{{ appUptime }}</div>
+          </div>
+          <div class="metaCell">
+            <div class="metaLabel">{{ t('serverStatusDetail.appPlatform') }}</div>
+            <div class="metaValue">{{ metrics.platform }}</div>
+          </div>
+          <div class="metaCell metaCellFull">
+            <div class="metaLabel">{{ t('serverStatusDetail.appNative') }}</div>
+            <div class="metaValue">
+              <span class="badge" :class="metrics.isNative ? 'is-yes' : 'is-no'">
+                {{ metrics.isNative ? t('serverStatusDetail.yes') : t('serverStatusDetail.no') }}
+              </span>
+              <span v-if="metrics.isSandboxBrowser" class="badge is-sandbox">
+                {{ t('serverStatusDetail.sandboxBrowser') }}
+              </span>
+            </div>
+          </div>
+          <div class="metaCell metaCellFull">
+            <div class="metaLabel">{{ t('serverStatusDetail.appUA') }}</div>
+            <div class="metaValue monospace small">{{ shortUA }}</div>
+          </div>
+        </div>
       </section>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
-/**
- * 🆕 2026-06-15 v4：
- *   - 用户多次反馈"绕了几轮找不到北"——之前 ServerStatusCard 在 DevLogs/ServerSettings/AgentSettingsDetail 都用，混在一起
- *   - 抽到独立页面 + 路由 /tabs/settings/server/status，命名 ServerStatusDetail.vue 与 ServerSettings.vue 严格区分
- *   - 状态用大色块、其它信息用事实表 label:value 单行，0 装饰 0 动画 0 banner
- *   - 引入 useServerStatus() 直接拿所有事实（instanceId/version/port/transport/latency/lastError/lastCheckedAt/isOnline/isChecking/transportMode）
- *   - 监听 backend:instance-changed 事件：显示「后端实例已变更」事实行
- */
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonButton, IonIcon,
-  IonContent, IonSpinner,
-} from '@ionic/vue'
-import { refreshOutline, globeOutline } from 'ionicons/icons'
+import { computed, onMounted, ref } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { useServerStatus } from '@/composables/useServerStatus'
-import { eventBus } from '@/composables/useEventBus'
+import {
+  refreshOutline as refreshIcon,
+  timerOutline as timerIcon,
+  wifiOutline as wifiIcon,
+  trendingUpOutline as trendingUpIcon,
+  hourglassOutline as hourglassIcon,
+  timeOutline as timeIcon,
+  listOutline as listIcon,
+  gitNetworkOutline as networkIcon,
+  pulseOutline as pulseIcon,
+  checkmarkCircleOutline as checkmarkIcon,
+  closeCircleOutline as closeIcon,
+  phonePortraitOutline as phonePortraitIcon,
+  cloudUploadOutline as checkActionIcon,
+  refreshCircleOutline as restartActionIcon,
+  stopCircleOutline as stopActionIcon,
+  playCircleOutline as playActionIcon,
+  linkOutline as reconnectActionIcon,
+} from 'ionicons/icons'
 
 const { t } = useI18n()
-const router = useRouter()
-const status = useServerStatus()
+const {
+  isOnline,
+  latencyMs,
+  transportMode,
+  lastCheckedAt,
+  backendInstanceId,
+  backendVersion,
+  checkStatus,
+  latencyHistory,
+  stateHistory,
+  actionHistory,
+  metrics,
+  recordAction,
+  networkPing,
+} = useServerStatus()
 
-// 状态计算
+// —— 状态摘要 ——
 const state = computed<'online' | 'offline' | 'checking'>(() => {
-  if (status.isRestarting.value) return 'checking'
-  return status.isOnline.value ? 'online' : 'offline'
+  if (isChecking.value) return 'checking'
+  return isOnline.value ? 'online' : 'offline'
 })
-
-const stateText = computed(() => {
+const isChecking = ref(false)
+const stateLabel = computed(() => {
   switch (state.value) {
-    case 'online': return t('serverStatus.online') || '在线'
-    case 'offline': return t('serverStatus.offline') || '离线'
-    case 'checking': return t('serverStatus.checking') || '检查中…'
+    case 'online': return t('serverStatus.online')
+    case 'offline': return t('serverStatus.offline')
+    case 'checking': return t('serverStatus.checking')
   }
 })
-
-const stateSubtitle = computed(() => {
-  if (state.value === 'online') return t('serverStatusDetail.allOk') || '后端正常响应'
-  if (state.value === 'checking') return t('serverStatusDetail.probing') || '正在探测…'
-  return t('serverStatusDetail.connectFailed') || '无法连接后端'
-})
-
-const reason = computed(() => {
-  if (state.value === 'online') return ''
-  if (state.value === 'checking') return ''
-  if (status.lastError.value) return status.lastError.value
-  if (status.transportMode.value === 'http-poll') {
-    return t('serverStatus.sandboxPollingHint') || '沙箱环境使用 HTTP 轮询'
+const stateSubText = computed(() => {
+  if (state.value === 'online' && backendVersion.value) {
+    return `v${backendVersion.value} · ${shortId(backendInstanceId.value)}`
   }
-  return t('serverStatus.noDetail') || '无法连接后端'
+  if (state.value === 'offline') {
+    return lastCheckedAt.value
+      ? `${t('serverStatus.lastCheck')}: ${formatTime(lastCheckedAt.value.getTime())}`
+      : t('serverStatus.backendOffline')
+  }
+  return ''
+})
+function shortId(id: string) {
+  return id ? id.slice(0, 8) : '—'
+}
+
+// —— latency / transport 摘要 ——
+const latencyText = computed(() => {
+  if (latencyMs.value <= 0) return '—'
+  if (latencyMs.value < 1000) return `${latencyMs.value}ms`
+  return `${(latencyMs.value / 1000).toFixed(2)}s`
+})
+const transport = computed(() => {
+  const m = transportMode.value
+  return m && m !== 'unknown' ? m.toUpperCase() : ''
 })
 
-const transportLabel = computed(() => {
-  switch (status.transportMode.value) {
-    case 'ws': return 'WebSocket'
-    case 'http-poll': return 'HTTP polling'
-    case 'native-bridge': return 'Native bridge'
-    case 'unknown': return '—'
-    default: return status.transportMode.value
+// —— 趋势图数据 ——
+const trendWidth = 320
+const trendHeight = 80
+const minLatency = computed(() => latencyHistory.value.length > 0 ? Math.min(...latencyHistory.value.map(p => p.ms)) : 0)
+const maxLatency = computed(() => latencyHistory.value.length > 0 ? Math.max(...latencyHistory.value.map(p => p.ms)) : 0)
+const avgLatency = computed(() => {
+  if (latencyHistory.value.length === 0) return 0
+  return Math.round(latencyHistory.value.reduce((sum, p) => sum + p.ms, 0) / latencyHistory.value.length)
+})
+const trendPoints = computed(() => {
+  if (latencyHistory.value.length < 2) return ''
+  const arr = latencyHistory.value
+  const max = Math.max(maxLatency.value, 1)
+  const stepX = trendWidth / (arr.length - 1)
+  return arr.map((p, i) => {
+    const x = i * stepX
+    // y 0 在顶部 = 趋势图底部，对应 max 延迟
+    const y = trendHeight - (p.ms / max) * (trendHeight - 4) - 2
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+})
+const trendDataPoints = computed(() => {
+  if (latencyHistory.value.length < 2) return []
+  const arr = latencyHistory.value
+  const max = Math.max(maxLatency.value, 1)
+  const stepX = trendWidth / (arr.length - 1)
+  return arr.map((p, i) => {
+    const x = i * stepX
+    const y = trendHeight - (p.ms / max) * (trendHeight - 4) - 2
+    return { x, y }
+  })
+})
+
+// —— 网络 ping ——
+const pinging = ref(false)
+const lastPing = ref<{ ok: boolean; ms: number; error?: string } | null>(null)
+async function onPing() {
+  pinging.value = true
+  try {
+    lastPing.value = await networkPing()
+  } finally {
+    pinging.value = false
+  }
+}
+
+// —— 操作 history 图标映射 ——
+function actionIcon(action: string) {
+  switch (action) {
+    case 'check': return checkActionIcon
+    case 'restart': return restartActionIcon
+    case 'stop': return stopActionIcon
+    case 'start': return playActionIcon
+    case 'reconnect': return reconnectActionIcon
+    case 'ping': return pulseIcon
+    default: return checkActionIcon
+  }
+}
+
+// —— 时间格式 ——
+function formatTime(ts: number) {
+  const d = new Date(ts)
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+// —— App uptime ——
+const now = ref(Date.now())
+setInterval(() => { now.value = Date.now() }, 1000)
+const appUptime = computed(() => {
+  const s = Math.floor((now.value - metrics.value.appStartTime) / 1000)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  if (h > 0) return `${h}h ${m}m`
+  if (m > 0) return `${m}m ${sec}s`
+  return `${sec}s`
+})
+const shortUA = computed(() => {
+  const ua = metrics.value.userAgent
+  if (ua.length <= 80) return ua
+  return ua.slice(0, 80) + '…'
+})
+
+// —— refresh ——
+async function onRefresh() {
+  isChecking.value = true
+  recordAction('check', true, t('serverStatusDetail.manualTrigger'))
+  try {
+    await checkStatus()
+  } finally {
+    isChecking.value = false
+  }
+}
+
+onMounted(() => {
+  // 进来时跑一次 check（确保 history 有点）
+  if (latencyHistory.value.length === 0) {
+    onRefresh()
   }
 })
-
-// 后端实例 ID 变更（监听 eventBus 拿到 latest 一次）
-const instanceChanged = ref<{ previous: string; current: string } | null>(null)
-function onBackendInstanceChanged(payload: { previous: string; current: string }) {
-  instanceChanged.value = payload
-}
-onMounted(() => eventBus.on('backend:instance-changed', onBackendInstanceChanged))
-onUnmounted(() => eventBus.off('backend:instance-changed', onBackendInstanceChanged))
-
-function formatLastChecked(d: Date | string): string {
-  const dt = typeof d === 'string' ? new Date(d) : d
-  if (Number.isNaN(dt.getTime())) return '—'
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${pad(dt.getHours())}:${pad(dt.getMinutes())}:${pad(dt.getSeconds())}`
-}
-
-function goServerUrl() {
-  router.push('/tabs/settings/server-url')
-}
 </script>
 
 <style scoped>
 /* ============================================================
-   ServerStatusDetail v4 — 重构到「无法混淆」
-   设计：① 大色块 hero ② 事实表 ③ 跳转按钮
-   0 硬编码颜色，全部 CSS variables
+   ServerStatusDetail — 详情页（卡片装不下的信息）
+   100% CSS variables — 0 硬编码颜色
    ============================================================ */
-
 .statusDetailContent {
-  --padding-start: 14px;
-  --padding-end: 14px;
-  --padding-top: 12px;
-  --padding-bottom: 30px;
+  --background: var(--ion-background-color, #fff);
 }
 
-/* ① 大色块 hero */
-.statusHero {
+/* ============ 状态摘要条（迷你卡片） ============ */
+.stateSummary {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 22px 18px;
-  border-radius: 10px;
-  border: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.18));
-  margin-bottom: 18px;
-  background: var(--encv-bg-elevated, rgba(127, 127, 127, 0.06));
+  gap: 12px;
+  margin: 14px 14px 6px;
+  padding: 12px 14px;
+  background: var(--ion-background-color, #fff);
+  border: 1px solid var(--ion-color-medium-shade, #747484);
+  border-left-width: 4px;
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
-.statusHero.is-online { border-color: var(--ion-color-success); border-left-width: 5px; }
-.statusHero.is-offline { border-color: var(--ion-color-danger); border-left-width: 5px; }
-.statusHero.is-checking { border-color: var(--ion-color-warning); border-left-width: 5px; }
-
-.statusHeroDot {
-  width: 22px;
-  height: 22px;
+.stateSummary.is-online { border-left-color: var(--ion-color-success, #2dd55b); }
+.stateSummary.is-offline { border-left-color: var(--ion-color-danger, #eb445a); }
+.stateSummary.is-checking { border-left-color: var(--ion-color-warning, #ffc409); }
+.stateDot {
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: var(--encv-text-secondary, rgba(127, 127, 127, 0.5));
 }
-.statusHeroDot.is-online { background: var(--ion-color-success); }
-.statusHeroDot.is-offline { background: var(--ion-color-danger); }
-.statusHeroDot.is-checking { background: var(--ion-color-warning); }
+.stateDot.is-online { background: var(--ion-color-success, #2dd55b); box-shadow: 0 0 8px color-mix(in srgb, var(--ion-color-success, #2dd55b) 60%, transparent); }
+.stateDot.is-offline { background: var(--ion-color-danger, #eb445a); }
+.stateDot.is-checking { background: var(--ion-color-warning, #ffc409); }
+.stateText { flex: 1; min-width: 0; }
+.stateLabel { font-size: 14px; font-weight: 600; color: var(--ion-text-color, #000); }
+.stateSub { font-size: 11px; color: color-mix(in srgb, var(--ion-text-color, #000) 55%, transparent); margin-top: 1px; }
+.stateQuickFacts { display: flex; gap: 6px; flex-shrink: 0; }
+.quickFact {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ion-color-primary, #3880ff);
+  background: color-mix(in srgb, var(--ion-color-primary, #3880ff) 12%, transparent);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+.quickFact ion-icon { font-size: 11px; width: 11px; height: 11px; }
 
-.statusHeroText { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.statusHeroLabel { font-size: 22px; font-weight: 700; line-height: 1.1; }
-.statusHeroReason { font-size: 13px; color: var(--encv-text-secondary, rgba(127, 127, 127, 0.75)); line-height: 1.4; word-break: break-word; }
+/* ============ section 通用 ============ */
+.detailSection {
+  margin: 14px;
+  background: var(--ion-background-color, #fff);
+  border: 1px solid color-mix(in srgb, var(--ion-color-medium, #92949c) 40%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--ion-color-primary, #3880ff) 6%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--ion-color-medium, #92949c) 30%, transparent);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ion-text-color, #000);
+}
+.sectionHeader ion-icon {
+  font-size: 16px;
+  color: var(--ion-color-primary, #3880ff);
+}
+.sectionMeta {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--ion-text-color, #000) 55%, transparent);
+}
+.sectionTitle { flex: 1; }
 
-/* ② 事实表：label : value 形式 */
-.factTable {
+.emptyState {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.14));
-  border-radius: 8px;
-  overflow: hidden;
-  margin-bottom: 18px;
-  background: var(--encv-bg-base, var(--ion-background-color, #fff));
-}
-.factRow {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.08));
-}
-.factRow:last-child { border-bottom: none; }
-.factRow_error { background: rgba(var(--ion-color-danger-rgb), 0.06); }
-.factRow_warning { background: rgba(var(--ion-color-warning-rgb), 0.06); }
-
-.factLabel {
-  flex: 0 0 96px;
+  align-items: center;
+  gap: 6px;
+  padding: 24px 16px;
+  color: color-mix(in srgb, var(--ion-text-color, #000) 45%, transparent);
   font-size: 12px;
+}
+.emptyState ion-icon { font-size: 24px; opacity: 0.5; }
+
+/* ============ 趋势图 ============ */
+.trendChart {
+  position: relative;
+  padding: 12px 14px;
+  background: var(--ion-background-color, #fff);
+}
+.trendSvg {
+  display: block;
+  width: 100%;
+  height: 80px;
+}
+.trendGrid line {
+  stroke: color-mix(in srgb, var(--ion-color-medium, #92949c) 25%, transparent);
+  stroke-width: 0.5;
+  stroke-dasharray: 2 3;
+}
+.trendLine {
+  fill: none;
+  stroke: var(--ion-color-primary, #3880ff);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1px color-mix(in srgb, var(--ion-color-primary, #3880ff) 40%, transparent));
+}
+.trendDot {
+  fill: var(--ion-color-primary, #3880ff);
+  opacity: 0.7;
+}
+.trendEmpty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 0;
+  color: color-mix(in srgb, var(--ion-text-color, #000) 45%, transparent);
+  font-size: 12px;
+}
+.trendEmpty ion-icon { font-size: 24px; opacity: 0.5; }
+.trendLegend {
+  display: flex;
+  gap: 12px;
+  padding: 6px 14px 12px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--ion-text-color, #000) 55%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+.legendItem { display: inline-flex; align-items: center; gap: 4px; }
+.legendSwatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+.legendSwatchMin { background: var(--ion-color-success, #2dd55b); }
+.legendSwatchAvg { background: var(--ion-color-primary, #3880ff); }
+.legendSwatchMax { background: var(--ion-color-warning, #ffc409); }
+
+/* ============ 时间线 ============ */
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 6px 14px 12px;
+}
+.timelineItem {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+}
+.timelineItem::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 18px;
+  bottom: -6px;
+  width: 1px;
+  background: color-mix(in srgb, var(--ion-color-medium, #92949c) 30%, transparent);
+}
+.timelineItem:last-child::before { display: none; }
+.timelineDot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+.timelineDot.is-online { background: var(--ion-color-success, #2dd55b); }
+.timelineDot.is-offline { background: var(--ion-color-danger, #eb445a); }
+.timelineDot.is-checking { background: var(--ion-color-warning, #ffc409); }
+.timelineBody { flex: 1; min-width: 0; }
+.timelineRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.timelineState { font-size: 13px; font-weight: 600; color: var(--ion-text-color, #000); }
+.timelineTime {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--ion-text-color, #000) 55%, transparent);
+  font-family: var(--ion-font-family-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+.timelineReason {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--ion-text-color, #000) 65%, transparent);
+  margin-top: 1px;
+}
+
+/* ============ 操作历史 ============ */
+.actionLog {
+  list-style: none;
+  margin: 0;
+  padding: 6px 14px 12px;
+}
+.actionLogItem {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  align-items: flex-start;
+}
+.actionLogIcon {
+  font-size: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.actionLogIcon.is-success { color: var(--ion-color-success, #2dd55b); }
+.actionLogIcon.is-failed { color: var(--ion-color-danger, #eb445a); }
+.actionLogBody { flex: 1; min-width: 0; }
+.actionLogRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.actionLogName { font-size: 13px; font-weight: 500; color: var(--ion-text-color, #000); }
+.actionLogTime {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--ion-text-color, #000) 55%, transparent);
+  font-family: var(--ion-font-family-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+.actionLogDetail {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--ion-text-color, #000) 60%, transparent);
+  margin-top: 1px;
+  font-family: var(--ion-font-family-monospace, monospace);
+  word-break: break-all;
+}
+
+/* ============ 网络诊断 ============ */
+.networkBox {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.networkRow {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.networkLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--ion-text-color, #000) 55%, transparent);
+  font-weight: 500;
+}
+.networkValue {
+  font-size: 12px;
+  color: var(--ion-text-color, #000);
+  word-break: break-all;
+}
+.pingResult {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  align-items: flex-start;
+}
+.pingResult.is-success {
+  background: color-mix(in srgb, var(--ion-color-success, #2dd55b) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ion-color-success, #2dd55b) 30%, transparent);
+}
+.pingResult.is-failed {
+  background: color-mix(in srgb, var(--ion-color-danger, #eb445a) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ion-color-danger, #eb445a) 30%, transparent);
+}
+.pingResultIcon { font-size: 20px; flex-shrink: 0; }
+.pingResult.is-success .pingResultIcon { color: var(--ion-color-success, #2dd55b); }
+.pingResult.is-failed .pingResultIcon { color: var(--ion-color-danger, #eb445a); }
+.pingResultText { flex: 1; min-width: 0; }
+.pingResultTitle {
+  font-size: 13px;
   font-weight: 600;
-  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.85));
+  color: var(--ion-text-color, #000);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.pingResultMs {
+  font-family: var(--ion-font-family-monospace, monospace);
+  font-size: 12px;
+  color: var(--ion-color-primary, #3880ff);
+  font-variant-numeric: tabular-nums;
+}
+.pingResultError {
+  font-size: 11px;
+  color: var(--ion-color-danger, #eb445a);
+  margin-top: 2px;
+  font-family: var(--ion-font-family-monospace, monospace);
+}
+
+/* ============ 应用元信息 ============ */
+.metaGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+  padding: 12px 14px;
+}
+.metaCell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.metaCellFull { grid-column: 1 / -1; }
+.metaLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: color-mix(in srgb, var(--ion-text-color, #000) 55%, transparent);
+  font-weight: 500;
+}
+.metaValue {
+  font-size: 12px;
+  color: var(--ion-text-color, #000);
+  word-break: break-all;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.metaValue.monospace {
+  font-family: var(--ion-font-family-monospace, monospace);
+}
+.metaValue.small { font-size: 11px; }
+.badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.factValue {
-  flex: 1;
-  font-size: 13.5px;
-  color: var(--ion-text-color);
-  word-break: break-all;
-  text-align: right;
-}
-.factMono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12.5px;
-}
+.badge.is-yes { background: color-mix(in srgb, var(--ion-color-success, #2dd55b) 22%, transparent); color: var(--ion-color-success, #2dd55b); }
+.badge.is-no { background: color-mix(in srgb, var(--ion-color-medium, #92949c) 22%, transparent); color: color-mix(in srgb, var(--ion-text-color, #000) 60%, transparent); }
+.badge.is-sandbox { background: color-mix(in srgb, var(--ion-color-warning, #ffc409) 22%, transparent); color: var(--ion-color-warning-shade, #cc8a00); }
 
-.transportTag {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: 4px;
-  font-size: 11.5px;
-  font-weight: 500;
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
-  color: var(--ion-color-primary);
+/* ============ 响应式 ============ */
+@media (max-width: 380px) {
+  .stateSummary { flex-wrap: wrap; }
+  .stateQuickFacts { width: 100%; justify-content: flex-end; }
+  .metaGrid { grid-template-columns: 1fr; }
 }
-.transportTag.transport-websocket { background: rgba(var(--ion-color-success-rgb), 0.14); color: var(--ion-color-success); }
-.transportTag.transport-http-poll { background: rgba(var(--ion-color-warning-rgb), 0.14); color: var(--ion-color-warning); }
-
-/* ③ 跳转 */
-.relatedActions { margin-top: 6px; }
 </style>

@@ -28,6 +28,88 @@ if (persisted) {
 let initialized = false
 let nativeBridgeListenerAdded = false
 
+// ============================================================
+// 🆕 2026-06-16：详情页专属可观察数据（卡片放不下）
+//  1) latencyHistory    — 最近 60 次探测延迟（SVG 折线图）
+//  2) stateHistory      — 最近 10 次状态切换（时间线）
+//  3) actionHistory     — 最近 30 次用户操作（操作日志）
+//  4) metrics           — 应用元信息（App 版本 / 平台 / User-Agent / 启动时间）
+//  5) recordAction()    — 父级调用，登记用户操作
+//  6) networkPing()     — 主动 ping baseUrl 测 RTT（裸 ping，无 checkStatus 副作用）
+// ============================================================
+
+/** 延迟历史（环形 buffer，最多 60 条） */
+const latencyHistory = ref<Array<{ at: number; ms: number }>>([])
+/** 状态切换历史（最多 10 条） */
+const stateHistory = ref<Array<{ at: number; state: 'online' | 'offline' | 'checking'; reason: string }>>([])
+/** 用户操作历史（最多 30 条） */
+const actionHistory = ref<Array<{ at: number; action: 'check' | 'start' | 'stop' | 'restart' | 'reconnect' | 'ping'; success: boolean; detail?: string }>>([])
+/** 应用元信息 */
+const metrics = ref<{
+  appStartTime: number
+  platform: string
+  userAgent: string
+  networkType: string
+  isNative: boolean
+  isSandboxBrowser: boolean
+  apiBaseUrl: string
+}>({
+  appStartTime: Date.now(),
+  platform: 'unknown',
+  userAgent: '',
+  networkType: 'unknown',
+  isNative: false,
+  isSandboxBrowser: false,
+  apiBaseUrl: '',
+})
+// 初始化静态 metrics
+metrics.value.platform = (typeof navigator !== 'undefined' && (navigator as any).platform) || 'unknown'
+metrics.value.userAgent = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
+metrics.value.isNative = isNative()
+metrics.value.isSandboxBrowser = useRealtimeTransport().isSandboxBrowser.value
+
+function recordAction(action: 'check' | 'start' | 'stop' | 'restart' | 'reconnect' | 'ping', success: boolean, detail?: string) {
+  actionHistory.value.unshift({ at: Date.now(), action, success, detail })
+  if (actionHistory.value.length > 30) actionHistory.value.length = 30
+}
+
+function recordStateChange(state: 'online' | 'offline' | 'checking', reason = '') {
+  stateHistory.value.unshift({ at: Date.now(), state, reason })
+  if (stateHistory.value.length > 10) stateHistory.value.length = 10
+}
+
+function recordLatency(ms: number) {
+  latencyHistory.value.push({ at: Date.now(), ms })
+  if (latencyHistory.value.length > 60) latencyHistory.value.shift()
+}
+
+/** 主动 ping baseUrl — 不修改 isOnline / lastError，纯粹测 RTT
+ *  用于 ServerStatusDetail.vue "网络诊断" 按钮 */
+async function networkPing(): Promise<{ ok: boolean; ms: number; error?: string }> {
+  const t0 = performance.now()
+  try {
+    const { getApiBaseUrl } = await import('@/api/encv')
+    const baseUrl = getApiBaseUrl()
+    metrics.value.apiBaseUrl = baseUrl
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), 5000)
+    const res = await fetch(`${baseUrl}/ping`, { method: 'GET', signal: ctrl.signal })
+    clearTimeout(timer)
+    const ms = Math.round(performance.now() - t0)
+    if (res.ok) {
+      recordAction('ping', true, `${ms}ms`)
+      return { ok: true, ms }
+    }
+    recordAction('ping', false, `HTTP ${res.status}`)
+    return { ok: false, ms, error: `HTTP ${res.status}` }
+  } catch (e) {
+    const ms = Math.round(performance.now() - t0)
+    const err = e instanceof Error ? e.message : String(e)
+    recordAction('ping', false, err)
+    return { ok: false, ms, error: err }
+  }
+}
+
 // 探测一次 HTTP + 测延迟
 async function probeHttp() {
   const t0 = performance.now()
@@ -35,6 +117,8 @@ async function probeHttp() {
   const dt = Math.round(performance.now() - t0)
   latencyMs.value = dt
   lastCheckedAt.value = new Date()
+  // 🆕 记录到延迟历史（详情页趋势图）
+  if (result.online) recordLatency(dt)
   // 🆕 2026-06-15：把 checkServerStatus 探测到的 instance_id / version 同步到
   //   useServerStatus 共享状态，让 UI 任何地方都能显示当前 backend 身份
   if (result.instanceId) backendInstanceId.value = result.instanceId
@@ -50,7 +134,12 @@ async function probeHttp() {
 
 function onServerStatus(data: { online: boolean }) {
   if (isRestarting.value && !data.online) return
+  const wasOnline = isOnline.value
   isOnline.value = data.online
+  // 🆕 状态切换 → push 历史
+  if (wasOnline !== data.online) {
+    recordStateChange(data.online ? 'online' : 'offline', data.online ? 'connected' : 'disconnected')
+  }
   if (data.online) {
     lastError.value = ''
   }
@@ -75,6 +164,8 @@ async function checkStatus() {
     isRestarting.value = false
     isStopping.value = false
   }
+  // 🆕 2026-06-16 详情页：记录操作历史
+  recordAction('check', result.online, result.online ? `${result.latency}ms` : (result.error || 'offline'))
   return result
 }
 
@@ -200,6 +291,7 @@ async function handleRestart(): Promise<boolean> {
   if (!isNative()) {
     isOnline.value = false
     useRealtimeTransport().disconnect()
+    recordAction('restart', false, 'not native')
     return false
   }
   isRestarting.value = true
@@ -207,6 +299,7 @@ async function handleRestart(): Promise<boolean> {
   isOnline.value = false
   lastError.value = ''
   useRealtimeTransport().disconnect()
+  recordStateChange('checking', 'restarting')
   try {
     const result = await restartBackend()
     isRestarting.value = false
@@ -222,8 +315,10 @@ async function handleRestart(): Promise<boolean> {
         lastError.value = ''
         useRealtimeTransport().connect()
       }
+      recordAction('restart', true, `port=${status.port}`)
     } else {
       lastError.value = result.lastError || lastError.value
+      recordAction('restart', false, result.lastError || 'unknown')
     }
     return result.success
   } catch (e) {
@@ -234,20 +329,26 @@ async function handleRestart(): Promise<boolean> {
 }
 
 async function handleStop(): Promise<boolean> {
-  if (!isNative()) return false
+  if (!isNative()) {
+    recordAction('stop', false, 'not native')
+    return false
+  }
   isStopping.value = true
   isRestarting.value = false
   isOnline.value = false
   lastError.value = ''
   useRealtimeTransport().disconnect()
+  recordStateChange('checking', 'stopping')
   try {
     const result = await stopBackend()
     isStopping.value = false
     backendPort.value = 0
+    recordAction('stop', result.success, result.success ? 'stopped' : 'failed')
     return result.success
   } catch (e) {
     isStopping.value = false
     lastError.value = e instanceof Error ? e.message : String(e)
+    recordAction('stop', false, e instanceof Error ? e.message : String(e))
     return false
   }
 }
@@ -338,5 +439,13 @@ export function useServerStatus() {
     manualReconnect,
     // 直接暴露 probe composable，UI 可调 probe() / setManual() / resetToDefault()
     probe: useApiBaseProbe,
+    // 🆕 2026-06-16：详情页专属可观察数据
+    //   趋势图 / 时间线 / 操作历史 / 应用元信息 / 主动 ping
+    latencyHistory,
+    stateHistory,
+    actionHistory,
+    metrics,
+    recordAction,
+    networkPing,
   }
 }
