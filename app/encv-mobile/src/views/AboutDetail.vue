@@ -51,7 +51,7 @@
         <ion-list-header>
           <ion-label>{{ t('about.nativeEngine') }}</ion-label>
         </ion-list-header>
-        <ion-item v-if="buildInfo">
+        <ion-item v-if="buildInfo" button detail @click="goFfmpegEngine">
           <ion-icon :icon="videocamOutline" slot="start" class="lib-icon ffmpeg-icon"></ion-icon>
           <ion-label>
             <div class="lib-title-row">
@@ -136,9 +136,11 @@ import { useI18n } from '@/composables/useI18n'
 import { fetchBuildInfo, type BuildInfo } from '@/api/encv'
 import { useLibraries, type LibraryItem } from '@/composables/useLibraries'
 import { ref, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import LibraryRow from '@/components/LibraryRow.vue'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const buildInfo = ref<BuildInfo | null>(null)
 const buildInfoLoading = ref(true)
@@ -197,6 +199,11 @@ watch([androidItems, frontendItems, backendItems], () => {
 
 function openGitHub() {
   window.open('https://github.com/Soltus/encv-go', '_blank')
+}
+
+function goFfmpegEngine() {
+  // 三级页：FFmpeg 引擎详情（runtime status + build info + 7 类 components）
+  router.push('/tabs/settings/about/engine')
 }
 </script>
 

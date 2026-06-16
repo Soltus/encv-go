@@ -114,20 +114,6 @@
             </p>
           </ion-label>
         </ion-item>
-        <ion-item v-if="isNative()" button @click="goEngine" detail>
-          <ion-icon :icon="filmOutline" slot="start"></ion-icon>
-          <ion-label>
-            <h3>{{ t('settings.engineStatus') }}</h3>
-            <p>
-              <ion-badge :color="engineStatus?.ffmpeg_available ? 'success' : 'danger'">
-                {{ t('settings.ffmpegAvail') }}
-              </ion-badge>
-              <ion-badge :color="engineStatus?.ffprobe_available ? 'success' : 'danger'">
-                {{ t('settings.ffprobeAvail') }}
-              </ion-badge>
-            </p>
-          </ion-label>
-        </ion-item>
       </ion-list>
 
       <ion-list>
@@ -405,8 +391,8 @@ import { showToast } from '@/composables/useToast'
 import { isNative, pickFolder, getPluginFullState, ensurePluginLoaded } from '@/plugins/GoProcess'
 import { registerFileFeature, unregisterFileFeature } from '@/composables/useFileFeatures'
 import { createAlistEncryptFeature } from '@/features/alist-encrypt'
-import { getIndexStats, fetchConfig, updateConfig, fetchFFmpegStatus } from '@/api/encv'
-import type { IndexStats, FFmpegStatus } from '@/api/encv'
+import { getIndexStats, fetchConfig, updateConfig } from '@/api/encv'
+import type { IndexStats } from '@/api/encv'
 import { PLAY_MODE, isMpvSubMode } from '@/constants/player'
 import FilePickerModal from '@/components/FilePickerModal.vue'
 import ConfigFieldItem from '@/components/ConfigFieldItem.vue'
@@ -418,7 +404,6 @@ const { t, tField, tSectionTitle } = useI18n()
 
 const configLoaded = ref(false)
 const indexStats = ref<IndexStats | null>(null)
-const engineStatus = ref<FFmpegStatus | null>(null)
 
 const videoPlayerMode = ref(localStorage.getItem('encv_player_video') || PLAY_MODE.ARTPLAYER)
 const audioPlayerMode = ref(localStorage.getItem('encv_player_audio') || PLAY_MODE.MPV_PLUGIN)
@@ -557,10 +542,6 @@ async function handleSaveJson() {
 
 function goServer() {
   router.push('/tabs/settings/server')
-}
-
-function goEngine() {
-  router.push('/tabs/settings/engine')
 }
 
 function goAbout() {
@@ -809,7 +790,6 @@ onMounted(() => {
       .catch(() => { configLoaded.value = true })
     getIndexStats().then((s) => { indexStats.value = s }).catch(() => {})
     if (isNative()) {
-      fetchFFmpegStatus().then((s) => { engineStatus.value = s }).catch(() => {})
       refreshMpvPluginStatus().catch(() => {})
     }
     syncAlistEncryptFeature()
@@ -862,7 +842,6 @@ watch(serverOnline, (online) => {
         .catch(() => { configLoaded.value = true })
     }
     getIndexStats().then((s) => { indexStats.value = s }).catch(() => {})
-    if (isNative()) { fetchFFmpegStatus().then((s) => { engineStatus.value = s }).catch(() => {}) }
   }
 })
 

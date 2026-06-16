@@ -3,7 +3,7 @@
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
-          <ion-back-button default-href="/tabs/settings"></ion-back-button>
+          <ion-back-button default-href="/tabs/settings/about"></ion-back-button>
         </ion-buttons>
         <ion-title>{{ t('settings.engineDetail') }}</ion-title>
       </ion-toolbar>
@@ -319,7 +319,7 @@ onMounted(async () => {
   } catch (e) {
     buildInfoError.value = true
     buildInfoErrorMessage.value = (e as Error)?.message || String(e) || 'Unknown error'
-    console.error('[EngineDetail] build info load error:', e)  // ✅ 控制台也打出来
+    console.error('[FfmpegEngineDetail] build info load error:', e)  // ✅ 控制台也打出来
   } finally {
     buildInfoLoading.value = false
   }

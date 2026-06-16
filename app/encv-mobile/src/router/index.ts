@@ -67,8 +67,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/WebdavServerDetail.vue'),
       },
       {
-        path: 'settings/engine',
-        component: () => import('@/views/EngineDetail.vue'),
+        // 🆕 2026-06-17：FFmpeg 引擎详情从 Settings 一级迁移到 About 二级
+        // 路径层级 /tabs/settings/about/engine（三级）反映导航层级
+        // 旧路径 /tabs/settings/engine 已删除（外部 deep link 会 404，不需要兼容）
+        path: 'settings/about/engine',
+        component: () => import('@/views/FfmpegEngineDetail.vue'),
       },
       {
         path: 'settings/about',
