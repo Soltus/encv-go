@@ -379,6 +379,9 @@ export default {
     'serverStatus.unknownError': '未知错误',
     'serverStatus.latencyHint': '后端响应延迟',
     'serverStatus.transportHint': '实时通信方式',
+    // 🆕 2026-06-15 v1 完整精美卡片恢复：instance-changed banner 提示
+    // （之前 99ec4ac 用 || fallback 字符串，本轮补 i18n）
+    'serverStatus.instanceChangedBanner': '后端已重启，新进程已上线',
 
     // 🆕 2026-06-15 v6：服务器状态详情页（ServerStatusDetail.vue）独立 i18n 段
     // 跟 serverStatus.*（卡片上用）严格区分 —— 详情页才有 title / refresh / 各事实标签
@@ -773,6 +776,8 @@ export default {
     'serverStatus.unknownError': 'Unknown error',
     'serverStatus.latencyHint': 'Backend response latency',
     'serverStatus.transportHint': 'Real-time transport',
+    // 🆕 2026-06-15 v1 完整精美卡片恢复：instance-changed banner 提示
+    'serverStatus.instanceChangedBanner': 'Backend restarted, new process online',
 
     // 🆕 2026-06-15 v6：服务器状态详情页（ServerStatusDetail.vue）独立 i18n 段
     'serverStatusDetail.title': 'Server status',
