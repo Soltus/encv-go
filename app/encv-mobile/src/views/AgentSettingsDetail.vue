@@ -25,12 +25,13 @@
       <!-- ② 错误态 —— 后端挂掉 / 配置拉取失败 / 离线时显示，
               给出明确原因 + 手动重试按钮，避免页面一片空白让用户无所适从 -->
       <div v-else-if="!serverOnline || configError" class="configErrorContainer">
-        <!-- 🆕 2026-06-15：复用 ServerStatusCard —— 替代之前的"诊断信息" details
-             卡片已经包含 instance_id / port / latency / last check 等所有信息，
+        <!-- 后端健康度摘要：让用户调 Agent 前先看后端是否在线
+             此页面语义 = "Agent 行为配置"，不是"后端状态显示"
+             卡片自带 version / instance_id / port / latency 等丰富信息，
              视觉效果 + 动态（pulse / 状态切换）远比纯文本好。
              保留下方"诊断文本" details 给高级用户 / bug report 用 -->
         <div class="configErrorCardWrap">
-          <ServerStatusCard :clickable="false" :hide-instance-id="false" />
+          <ServerStatusCard :clickable="false" />
         </div>
         <h2 class="configErrorTitle">
           {{ serverOnline

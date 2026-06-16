@@ -32,13 +32,10 @@
     </ion-header>
 
     <ion-content class="serverSettingsContent">
-      <!-- 🆕 2026-06-15：升级详情页状态卡片 = 用 ServerStatusCard
-           替换原本自定义的 status card（state badge + baseUrl + source + latency + error）。
-           ServerStatusCard 提供更丰富的信息（version / instance_id / port / transport / 状态切换动画）
-           + 主题色适配（0 硬编码颜色）+ pulse / time-roll 等动态效果。
-
-           baseUrl + source 信息移到 header subtitle（ion-note 风格 chip）保留可见。 -->
-      <ServerStatusCard :clickable="false" :hide-instance-id="false" />
+      <!-- 后端健康度摘要：让用户改 URL 前先看到当前连接状态
+           此页面语义 = "URL 配置"，不是"状态详情"
+           所以这里卡片不可点（避免和 ServerDetail 状态行的可点行为混淆） -->
+      <ServerStatusCard :clickable="false" />
 
       <!-- ① 当前 baseUrl + source 摘要（ion-note 风格小 chip，提示"我连到哪里"） -->
       <div class="statusSubline">

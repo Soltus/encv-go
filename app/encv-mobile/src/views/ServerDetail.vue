@@ -24,19 +24,10 @@
             <ion-icon :icon="copyIcon" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-item>
-        <!-- 🆕 2026-06-15 v8：状态行 = ServerStatusCard 4-pill grid "银行卡通"
-             用户怒批"丑死了"+"i18n 也没有"+"和银行卡那样的才叫卡片"：
-               · 之前单行 dot+label+reason = 错
-               · 之前我自己写的 .statusFactCard (16px dot) = 错
-               · 之前 ServerStatusDetail.vue 内联 (22px dot) = 仍丑
-               · 正确 = 4-pill grid 银行卡通：
-                 · 2x2 网格，4 个 pill
-                 · Pill 1 = 状态 (state dot + 在线/离线/检查中)
-                 · Pill 2 = 传输 (wifi/pulse/swap 图标 + HTTP Polling/WebSocket/Native bridge)
-                 · Pill 3 = 延迟 (timer 图标 + 42 ms)
-                 · Pill 4 = 版本 (pricetag 图标 + vX.Y.Z / 18b967b8)
-               · 整张卡圆角矩形，像银行卡
-               · 右侧仍带 refresh / stop / restart 按钮 -->
+        <!-- 后端状态行：ServerStatusCard 完整版
+             单一职责 = 后端健康度可视化（不承载任何设置项 / 表单 / 跳转入口）
+             点卡片 → 翻转看诊断详情；点 ServerStatusCardRow 旁的按钮 → 触发对应操作
+             点卡片右侧空白仍 emit 'click' → 跳独立详情页（router.push） -->
         <div class="statusCardRow">
           <ServerStatusCard :clickable="true" @click="goServerStatusDetail" />
           <div class="statusCardActions">
@@ -180,7 +171,7 @@ const webdavUsername = computed(() => (configData.value?.webdav as Record<string
 function goHttpServer() { router.push('/tabs/settings/server/http') }
 function goAdminServer() { router.push('/tabs/settings/server/admin') }
 function goWebdavServer() { router.push('/tabs/settings/server/webdav') }
-// 🆕 2026-06-15 v6：ServerStatusCard 点击 → 跳独立详情页（事实表）
+// ServerStatusCard 点击 → 跳独立详情页（事实表）
 function goServerStatusDetail() { router.push('/tabs/settings/server/status') }
 
 async function copyToClipboard(text: string) {
@@ -278,11 +269,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-/* ============================================================
-   🆕 2026-06-15 v8：状态行 = ServerStatusCard 4-pill grid "银行卡通"
-   ServerStatusCard 自带 2x2 grid、icon、label、value
-   这里只负责：把它和右侧操作按钮放在一行
-   ============================================================ */
+/* 状态行：ServerStatusCard + 右侧操作按钮（refresh / restart / stop）
+   ServerStatusCard 自带 3D 翻转 + 脉冲 + detail-grid
+   这里只负责：把它和右侧操作按钮放在一行 */
 .statusCardRow {
   display: flex;
   align-items: stretch;

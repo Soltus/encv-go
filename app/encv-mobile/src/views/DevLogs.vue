@@ -81,10 +81,9 @@
       </div>
 
       <div v-else class="log-list">
-        <!-- 🆕 2026-06-15：复用 ServerStatusCard 替代简单 badge
-             展示后端连接详情（instance_id / latency / transport），
-             用户在切到 backend tab 时一眼看到完整状态。
-             简单的 badge 仍在 status-bar（footer）显示为 "connected/disconnected"。 -->
+        <!-- debug 工具顶栏：后端健康度摘要（compact 模式）
+             此页面语义 = "开发日志 / 调试"，需要看到后端是否在线但不要占太多空间
+             卡片不可点（避免和 ServerDetail 状态行的可点行为混淆） -->
         <div class="devlog-status-card-wrap">
           <ServerStatusCard :clickable="false" :compact="true" />
         </div>

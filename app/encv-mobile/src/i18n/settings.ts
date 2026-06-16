@@ -379,9 +379,19 @@ export default {
     'serverStatus.unknownError': '未知错误',
     'serverStatus.latencyHint': '后端响应延迟',
     'serverStatus.transportHint': '实时通信方式',
-    // 🆕 2026-06-15 v1 完整精美卡片恢复：instance-changed banner 提示
-    // （之前 99ec4ac 用 || fallback 字符串，本轮补 i18n）
+    // 后端状态卡片专属键（3D 翻转 + 诊断）
     'serverStatus.instanceChangedBanner': '后端已重启，新进程已上线',
+    'serverStatus.flipHint': '点此翻转，看诊断详情',
+    'serverStatus.flipBackHint': '点此翻回，看实时状态',
+    'serverStatus.diagnosticsTitle': '诊断 / 操作历史',
+    'serverStatus.fullInstanceId': '完整进程 ID',
+    'serverStatus.fullError': '完整错误信息',
+    'serverStatus.transportDesc': '实时通信方式说明',
+    'serverStatus.timestamp': '时间戳',
+    'serverStatus.transportWs': 'WebSocket（实时推送）',
+    'serverStatus.transportHttpPoll': 'HTTP Polling（定时轮询）',
+    'serverStatus.transportNativeBridge': 'Native bridge（应用内 IPC）',
+    'serverStatus.transportUnknown': '尚未探测',
 
     // 🆕 2026-06-15 v6：服务器状态详情页（ServerStatusDetail.vue）独立 i18n 段
     // 跟 serverStatus.*（卡片上用）严格区分 —— 详情页才有 title / refresh / 各事实标签
@@ -776,8 +786,19 @@ export default {
     'serverStatus.unknownError': 'Unknown error',
     'serverStatus.latencyHint': 'Backend response latency',
     'serverStatus.transportHint': 'Real-time transport',
-    // 🆕 2026-06-15 v1 完整精美卡片恢复：instance-changed banner 提示
+    // Backend status card keys (3D flip + diagnostics)
     'serverStatus.instanceChangedBanner': 'Backend restarted, new process online',
+    'serverStatus.flipHint': 'Tap to flip, view diagnostics',
+    'serverStatus.flipBackHint': 'Tap to flip back, view live status',
+    'serverStatus.diagnosticsTitle': 'Diagnostics / history',
+    'serverStatus.fullInstanceId': 'Full process ID',
+    'serverStatus.fullError': 'Full error message',
+    'serverStatus.transportDesc': 'Transport mode',
+    'serverStatus.timestamp': 'Timestamp',
+    'serverStatus.transportWs': 'WebSocket (real-time push)',
+    'serverStatus.transportHttpPoll': 'HTTP Polling (periodic pull)',
+    'serverStatus.transportNativeBridge': 'Native bridge (in-app IPC)',
+    'serverStatus.transportUnknown': 'Not yet probed',
 
     // 🆕 2026-06-15 v6：服务器状态详情页（ServerStatusDetail.vue）独立 i18n 段
     'serverStatusDetail.title': 'Server status',
