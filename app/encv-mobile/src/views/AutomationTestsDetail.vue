@@ -77,6 +77,28 @@
           </ion-label>
         </ion-item>
 
+        <!-- 🆕 挂载点状态（真机调试：确认后端 mount 系统就绪） -->
+        <div class="mount-status-card">
+          <div class="mount-status-header">
+            <ion-icon :icon="mountError ? closeCircleOutline : (hasAutomationMount ? checkmarkCircleOutline : hourglassOutline)"
+                      :color="mountError ? 'danger' : (hasAutomationMount ? 'success' : 'warning')"></ion-icon>
+            <span class="mount-status-title">挂载点</span>
+            <span v-if="mountLoading" class="mount-status-badge mount-status-badge--loading">查询中...</span>
+            <span v-else-if="mountError" class="mount-status-badge mount-status-badge--error">离线</span>
+            <span v-else-if="hasAutomationMount" class="mount-status-badge mount-status-badge--ok">就绪</span>
+            <span v-else class="mount-status-badge mount-status-badge--warn">未找到 automation</span>
+          </div>
+          <ul v-if="mountList.length > 0" class="mount-status-list">
+            <li v-for="m in mountList" :key="m.name" class="mount-status-item">
+              <span class="mount-status-name">{{ m.name }}</span>
+              <code class="mount-status-path">{{ m.mount_path || '/' }}</code>
+              <span v-if="m.driver" class="mount-status-driver">{{ m.driver }}</span>
+            </li>
+          </ul>
+          <p v-else-if="mountError" class="mount-status-error">{{ mountError }}</p>
+          <p v-else-if="!mountLoading && mountList.length === 0" class="mount-status-empty">后端未返回挂载点 — 请确认 Go 后端已启动</p>
+        </div>
+
         <ion-item button @click="handleGenerateMock" :disabled="isGenerating">
           <ion-icon :icon="addCircleOutline" slot="start" color="primary"></ion-icon>
           <ion-label>
@@ -348,12 +370,15 @@ import {
   addCircleOutline, trashOutline, syncOutline, playCircleOutline, closeCircleOutline,
   checkmarkCircleOutline, warningOutline, copyOutline, terminalOutline,
   chevronUpOutline, chevronDownOutline, ellipsisHorizontalOutline,
+  hourglassOutline,
 } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
 import { showToast } from '@/composables/useToast'
 import {
   fetchPlugins,
+  listMounts,
   type PluginMeta,
+  type ListMountsResponse,
 } from '@/api/encv'
 import { generateMockFilesViaBackend, resetMockFilesViaBackend } from '@/api/mockGenerator'
 import { extToRelativePath } from '@/lib/mockDataGenerator'
@@ -380,6 +405,27 @@ const isResetting = ref(false)
 const mockStats = ref<{ count: number; totalSize: number; skipped?: number } | null>(null)
 const generateProgressText = ref('')
 const mockGenerated = ref(false)
+
+// 🆕 挂载点状态（真机调试：确认后端 mount 系统是否就绪）
+const mountList = ref<ListMountsResponse['mounts']>([])
+const mountLoading = ref(false)
+const mountError = ref<string | null>(null)
+const hasAutomationMount = computed(() =>
+  mountList.value.some((m) => m.name === 'automation'),
+)
+async function fetchMountStatus() {
+  mountLoading.value = true
+  mountError.value = null
+  try {
+    const res = await listMounts()
+    mountList.value = res.mounts ?? []
+  } catch (e) {
+    mountError.value = e instanceof Error ? e.message : String(e)
+    mountList.value = []
+  } finally {
+    mountLoading.value = false
+  }
+}
 
 // 🆕 2026-06-12 饱和调试：流程日志（每个 spec 一行，含完整 ffmpeg 诊断）
 //   - 即使后端 cgo 阻塞导致 SSE 中断，最后收到的 spec_diag 也会被记录
@@ -1267,6 +1313,8 @@ function humanSize(bytes: number): string {
 onMounted(() => {
   tickHandle = setInterval(() => { _tickNow.value = Date.now() }, 1000)
   wsStart()
+  // 🆕 挂载点状态（真机调试：确认 automation mount 是否就绪）
+  fetchMountStatus()
   // 🆕 2026-06-12：监听 MainActivity 推送的 CustomEvent，显示 lastError
   window.addEventListener('encv:backend-status', onBackendStatus)
 })
@@ -1281,6 +1329,24 @@ onUnmounted(() => {
 <style scoped>
 .section-hint { font-size: 12px; color: var(--ion-color-medium-shade); padding: 8px 16px 4px; margin: 0; }
 .mock-root-path { font-family: monospace; font-size: 12px; background: var(--ion-color-light-shade); padding: 2px 6px; border-radius: 4px; }
+
+/* 🆕 挂载点状态卡片 */
+.mount-status-card { margin: 6px 16px 10px; padding: 10px 14px; background: var(--ion-color-light); border-radius: 8px; border: 1px solid rgba(var(--ion-color-medium-rgb), 0.15); }
+.mount-status-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.mount-status-header ion-icon { font-size: 16px; }
+.mount-status-title { font-weight: 600; font-size: 13px; color: var(--ion-text-color); }
+.mount-status-badge { font-size: 10px; padding: 1px 7px; border-radius: 8px; font-weight: 600; margin-left: auto; }
+.mount-status-badge--loading { background: rgba(var(--ion-color-primary-rgb), 0.15); color: var(--ion-color-primary); }
+.mount-status-badge--ok { background: rgba(34, 197, 94, 0.15); color: #16a34a; }
+.mount-status-badge--error { background: rgba(239, 68, 68, 0.12); color: #dc2626; }
+.mount-status-badge--warn { background: rgba(245, 158, 11, 0.12); color: #b45309; }
+.mount-status-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.mount-status-item { display: flex; align-items: center; gap: 6px; padding: 3px 6px; background: rgba(var(--ion-color-medium-rgb), 0.04); border-radius: 4px; font-size: 11.5px; }
+.mount-status-name { font-weight: 500; min-width: 72px; color: var(--ion-text-color); }
+.mount-status-path { flex: 1; font-family: monospace; font-size: 10.5px; color: var(--ion-color-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mount-status-driver { font-size: 9.5px; color: var(--ion-color-medium-shade); background: rgba(var(--ion-color-medium-rgb), 0.08); padding: 0 4px; border-radius: 3px; }
+.mount-status-error { margin: 4px 0 0; font-size: 11px; color: var(--ion-color-danger); font-family: monospace; word-break: break-all; }
+.mount-status-empty { margin: 4px 0 0; font-size: 11.5px; color: var(--ion-color-medium); }
 .mock-stats-card { margin: 8px 16px; padding: 12px 16px; background: var(--ion-color-light); border-radius: 8px; }
 .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 14px; }
 .stat-value { font-weight: 600; font-family: monospace; }

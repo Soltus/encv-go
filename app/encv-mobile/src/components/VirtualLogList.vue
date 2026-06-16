@@ -39,7 +39,7 @@
 </template>
 
 <script setup lang="ts" generic="T extends { id: number; level: string }">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useI18n } from '@/composables/useI18n'
 
@@ -95,6 +95,18 @@ const virtualizer = useVirtualizer(virtualizerOptions)
 
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
 const totalSize = computed(() => virtualizer.value.getTotalSize())
+
+// 🆕 修复：scrollEl 首次为 null 时 virtualizer 返回空 items → 列表全空白
+//   根因：Ionic ion-content 的 .inner-scroll 在 shadow DOM 内，onMounted 时可能还没 ready
+//   ensureScrollEl() 需要 querySelector shadow root → 首次渲染时 scrollEl=null
+//   useVirtualizer 拿到 null getScrollElement → getVirtualItems()=[] → v-for 不渲染
+//   修复：watch scrollEl 从 null → 非 null 时触发 measure() 重新计算可见项
+watch(() => props.scrollEl, (newEl, oldEl) => {
+  if (!oldEl && newEl) {
+    // scrollEl 刚从 null 变为可用 → 告诉 virtualizer 重新测量
+    virtualizer.value.measure()
+  }
+})
 
 /**
  * 高亮区间 [start, end)（CSS ::highlight 用 Range API 计算得出）
