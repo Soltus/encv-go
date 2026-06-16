@@ -91,9 +91,14 @@ const routes: RouteRecordRaw[] = [
         // 旧版 ServerStatusDetail.vue 是「点卡片跳独立页」设计，已被 ServerStatusCard 翻转取代
         // （卡片翻转到背面 = 自带诊断/操作历史/进程 ID/transport 详情）
         // 入口：原 ServerDetail 顶部的 ServerStatusCard @click="goServerStatusDetail"
-        // 现状：ServerDetail.vue 不再调 goServerStatusDetail；本路由删除防「打开 app 看到残留 page」
+        // 现状：ServerDetail.vue 不再调 goServerStatusDetail；本路由删除防「打开 app 看到残留 page」{
         path: 'settings/devtools',
         component: () => import('@/views/DevToolsDetail.vue'),
+      },
+      {
+        // 🆕 2026-06-17：日志设置三级页面（vConsole 之外的日志相关设置 + 导出/清空）
+        path: 'settings/devtools/log-settings',
+        component: () => import('@/views/LogSettingsDetail.vue'),
       },
       {
         path: 'settings/devtools/automation',
