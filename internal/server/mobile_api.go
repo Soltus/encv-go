@@ -13,9 +13,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Soltus/encv-go/internal/config"
+	"github.com/Soltus/encv-go/internal/logger"
+	"github.com/Soltus/encv-go/internal/mount"
 	mobileservice "github.com/Soltus/encv-go/internal/service"
 	"github.com/Soltus/encv-go/internal/utils"
 	"github.com/Soltus/encv-go/internal/v2/container/detector"
@@ -67,7 +70,25 @@ func (s *Server) handlePingGin(c *gin.Context) {
 }
 
 func (s *Server) handleHealthGin(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	// 🆕 2026-06-14：跨进程 IPC 重构 — 改为 JSON 响应（含心跳状态）
+	//
+	// 历史：返回 {"status":"ok"}。parent（Kotlin EncvGoService）只能判存活不能判 hang。
+	// 新：返回 {"status","heartbeat_age_ms","heartbeat_ok"}。
+	//     parent 通过 heartbeat_ok 字段判 hang，连续 N 次 false 才销毁进程。
+	//
+	// 向后兼容：保留 "status" 字段，前端 / 沙箱 preview-gateway 用 code==200 判断不受影响。
+	hbMs := atomic.LoadInt64(&s.lastHeartbeatMs)
+	var hbAgeMs int64 = -1
+	var hbOK bool = false
+	if hbMs > 0 {
+		hbAgeMs = time.Now().UnixMilli() - hbMs
+		hbOK = hbAgeMs < HeartbeatStaleThreshold.Milliseconds()
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"status":           "ok",
+		"heartbeat_age_ms": hbAgeMs,
+		"heartbeat_ok":     hbOK,
+	})
 }
 
 func (s *Server) handleServerShutdownGin(c *gin.Context) {
@@ -89,6 +110,20 @@ func (s *Server) handleServerShutdownGin(c *gin.Context) {
 func (s *Server) handleListFilesGin(c *gin.Context) {
 	queryPath := utils.DecodeGinQueryParam(c.Query("path"))
 	slog.Info("API: list files", "path", queryPath)
+
+	// 🆕 2026-06-15 multi-mount 适配：mount 虚拟根 "/d" 或 "/d/"
+	//   在 mount 系统里，根目录 /d 不是真实 FS 路径，而是 mount 列表入口
+	//   直接返 mount list 转 FileInfo[]，让前端用同一份 FileInfo 列表展示
+	//   （前端的 Files.vue 无需另起 listMounts() 拉取 — 走 /api/files 同一路径）
+	if (queryPath == "/d" || queryPath == "/d/") && s.mountRegistry != nil {
+		slog.Info("API: list files (mount root)", "path", queryPath, "mountCount", len(s.mountRegistry.List()))
+		files := mountListAsFiles(s.mountRegistry.List())
+		c.JSON(http.StatusOK, gin.H{"files": files})
+		return
+	}
+	if queryPath == "/d" || queryPath == "/d/" {
+		slog.Warn("API: list files mount root but registry is nil", "path", queryPath)
+	}
 
 	files, err := s.mobileSvc.ListFiles(queryPath)
 	if err != nil {
@@ -113,6 +148,29 @@ func (s *Server) handleListFilesGin(c *gin.Context) {
 
 	slog.Info("API: list files result", "path", queryPath, "count", len(files))
 	c.JSON(http.StatusOK, gin.H{"files": files})
+}
+
+// mountListAsFiles 把 mount registry 列表转 FileInfo（前端可直接当目录展示）
+//   🆕 2026-06-15 multi-mount 适配：Files.vue 根 /d 直接展示 mount 列表
+func mountListAsFiles(mounts []*mount.Mount) []mobileservice.FileInfo {
+	files := make([]mobileservice.FileInfo, 0, len(mounts))
+	for _, m := range mounts {
+		if !m.Enabled {
+			continue
+		}
+		files = append(files, mobileservice.FileInfo{
+			Name:        m.Name,
+			Path:        m.MountPath, // /d/<name>
+			IsDirectory: true,
+			Size:        0,
+			Modified:    m.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			// 额外字段：前端在 ion-item 副标题用 driver badge + mount_path + root_path 展示
+			MountDriver: m.Driver,
+			MountPath:   m.MountPath,
+			MountRoot:   m.RootPath,
+		})
+	}
+	return files
 }
 
 func (s *Server) handleDeleteFileGin(c *gin.Context) {
@@ -188,7 +246,18 @@ func (s *Server) handleUploadFileGin(c *gin.Context) {
 //
 // 所以现在守卫只验证"servingDir 是不是 mobile 标准路径"，不关心里面有没有数据。
 func (s *Server) handleServiceGuardGin(c *gin.Context) {
-	expectedDir := "/storage/emulated/0"
+	// 🆕 2026-06-15 multi-mount: expectedDir 来自 primary mount 解析（不再是硬编码 /storage/emulated/0）
+	//   - 真机：primary.RootPath = /storage/emulated/0（LocalDriver 绑 cfg.Server.Dir）
+	//   - dev 沙箱：primary.RootPath = 当前 cfg.Server.Dir（LocalDriver Abs 解析）
+	//   - 后端 start 时 cfg.Server.Dir 被 ApplyMobileOverlay 改为 /storage/emulated/0（mobile mode）
+	//     或者 = 当前 cwd（普通 mode）—— primary mount 的 RootPath 跟这个对齐
+	primaryExpected := "/storage/emulated/0" // 兜底
+	if s.mountRegistry != nil {
+		if pm := s.mountRegistry.GetByName("primary"); pm != nil && pm.RootPath != "" {
+			primaryExpected = pm.RootPath
+		}
+	}
+	expectedDir := primaryExpected
 
 	// 1. 解析成绝对路径
 	absDir, err := filepath.Abs(s.servingDir)
@@ -908,6 +977,28 @@ func (s *Server) handleAPILogsGin(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+// 🆕 2026-06-16: GET /api/logs/recent — 返回 slog ring buffer 最近 N 条
+//   用途：WS 失败降级 http-poll 时，前端 devlogs 仍能看到后端日志
+//   参数：?since=ISO8601（可选；不传则返回全量）
+func (s *Server) handleAPILogsRecentGin(c *gin.Context) {
+	since := c.Query("since")
+	entries := logger.DefaultLogBuffer.Snapshot()
+	if since != "" {
+		filtered := entries[:0]
+		for _, e := range entries {
+			if e["timestamp"] > since {
+				filtered = append(filtered, e)
+			}
+		}
+		entries = filtered
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"logs":     entries,
+		"count":    len(entries),
+		"capacity": 500,
+	})
+}
+
 func (s *Server) writeConfigToFile() error {
 	if s.configPath == "" {
 		return fmt.Errorf("config path not available")
@@ -1234,7 +1325,7 @@ func (s *Server) handlePredictPluginGin(c *gin.Context) {
 	if req.Type == "encrypt" {
 		// ★ 关键修复: 先用 SafeResolveToAbsPath 把前端传来的路径解析为绝对路径，
 		// 防止 mobile 模式下 servingDir=/storage/emulated/0 时，插件拿不到真实文件
-		absSourcePath, err := utils.SafeResolveToAbsPath(s.servingDir, req.SourcePath)
+		absSourcePath, err := s.resolveUserPath(req.SourcePath)
 		if err != nil {
 			c.JSON(200, gin.H{"candidates": []gin.H{}, "pluginName": nil, "taskOptions": nil, "error": fmt.Sprintf("invalid path: %v", err)})
 			return
@@ -1242,7 +1333,7 @@ func (s *Server) handlePredictPluginGin(c *gin.Context) {
 		candidates = plugins.FindAllEncryptingPlugins(absSourcePath)
 	} else {
 		// ★ 关键修复: 同上，解密前必须先 resolve 绝对路径
-		absSourcePath, err := utils.SafeResolveToAbsPath(s.servingDir, req.SourcePath)
+		absSourcePath, err := s.resolveUserPath(req.SourcePath)
 		if err != nil {
 			c.JSON(200, gin.H{"candidates": []gin.H{}, "pluginName": nil, "taskOptions": nil, "error": fmt.Sprintf("invalid path: %v", err)})
 			return
@@ -1332,7 +1423,18 @@ func (s *Server) handleListFilesStreamGin(c *gin.Context) {
 		flusher = nil
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	// 🆕 2026-06-15 multi-mount 适配：mount 虚拟根 /d 走 mount list（与 handleListFilesGin 同步）
+	if (queryPath == "/d" || queryPath == "/d/") && s.mountRegistry != nil {
+		files := mountListAsFiles(s.mountRegistry.List())
+		for _, fi := range files {
+			data, _ := json.Marshal(fi)
+			s.writeSSEEvent(c, flusher, string(data))
+		}
+		s.writeSSEEvent(c, flusher, `[DONE]`)
+		return
+	}
+
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
 		s.writeSSEEvent(c, flusher, `{"error":"invalid path"}`)
 		s.writeSSEEvent(c, flusher, `[DONE]`)
@@ -1402,7 +1504,7 @@ func (s *Server) handleAlistEncryptStreamGin(c *gin.Context) {
 		return
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
 		return
@@ -1470,7 +1572,7 @@ func (s *Server) handlePluginFilesStreamGin(c *gin.Context) {
 		flusher = nil
 	}
 
-	absPath, err := utils.SafeResolveToAbsPath(s.servingDir, queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
 		s.writeSSEEvent(c, flusher, `{"error":"invalid path"}`)
 		s.writeSSEEvent(c, flusher, `[DONE]`)

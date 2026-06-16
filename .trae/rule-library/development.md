@@ -339,7 +339,13 @@ echo "  Logs:     tail -f /tmp/encv-backend.log"
 echo "  Stop:     kill $(lsof -i :2025 -t) $(lsof -i :5173 -t)"
 ```
 
-### 5.2.1 Capacitor 预览专用一键启动（`scripts/start-preview.sh`）
+### 5.2.1 ⚠️ 本节已废弃 — 历史背景
+
+> **唯一合法启动方式**：[workspace rules §5.2 Capacitor 预览专用一键脚本（`scripts/previews.sh`）](../rules/development.md#五capacitor-预览标准化流程)。
+> 本节描述的 `app/encv-mobile/scripts/start-preview.sh` 已被 `scripts/previews.sh` 取代（2026-06-08 改造为 PM2 → preview-gateway 链路）。
+> 历史背景保留供排错参考（如需找旧脚本，文件仍在 `app/encv-mobile/scripts/start-preview.sh`，但**不要在新工作中使用**）。
+
+### 5.2.1 Capacitor 预览专用一键启动（`scripts/start-preview.sh`）⚠️ 已废弃
 
 **适用场景**：浏览器沙箱预览、Capacitor 开发模式。脚本整合 mock 数据生成 + 后端 air 监视 + Vite 前端为一条命令。
 

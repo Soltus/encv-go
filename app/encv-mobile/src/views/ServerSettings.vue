@@ -32,36 +32,18 @@
     </ion-header>
 
     <ion-content class="serverSettingsContent">
-      <!-- ① 当前 baseUrl 状态卡片 -->
-      <ion-card class="statusCard" :class="{ 'statusCard_offline': !server.isOnline.value, 'statusCard_probing': probe.isProbing.value }">
-        <ion-card-content>
-          <div class="statusHeader">
-            <ion-icon
-              :icon="server.isOnline.value ? serverOnlineIcon : serverOfflineIcon"
-              :class="['statusIcon', server.isOnline.value ? 'statusIcon_online' : 'statusIcon_offline']"
-            />
-            <div class="statusTextBlock">
-              <div class="statusLabel">
-                {{ server.isOnline.value
-                    ? (t('settings.server.online') || '在线')
-                    : (t('settings.server.offline') || '离线') }}
-              </div>
-              <div class="statusBaseUrl" :title="currentBaseUrl">{{ currentBaseUrl }}</div>
-              <div v-if="probe.lastResult.value" class="statusMeta">
-                <span class="statusSourceTag" :class="`statusSourceTag_${probe.lastResult.value.source}`">
-                  {{ sourceLabel(probe.lastResult.value.source) }}
-                </span>
-                <span class="statusLatency">{{ probe.lastResult.value.latencyMs }}ms</span>
-              </div>
-            </div>
-          </div>
-          <!-- 错误详情：探测失败时显示 -->
-          <div v-if="probe.lastError.value" class="statusError">
-            <ion-icon :icon="alertCircleIcon" />
-            <span>{{ probe.lastError.value }}</span>
-          </div>
-        </ion-card-content>
-      </ion-card>
+      <!-- 后端健康度摘要：让用户改 URL 前先看到当前连接状态
+           此页面语义 = "URL 配置"，不是"状态详情"
+           所以这里卡片不可点（避免和 ServerDetail 状态行的可点行为混淆） -->
+      <ServerStatusCard :clickable="false" />
+
+      <!-- ① 当前 baseUrl + source 摘要（ion-note 风格小 chip，提示"我连到哪里"） -->
+      <div class="statusSubline">
+        <code class="statusSublineUrl" :title="currentBaseUrl">{{ currentBaseUrl }}</code>
+        <span v-if="probe.lastResult.value" class="statusSublineSource" :class="`statusSourceTag_${probe.lastResult.value.source}`">
+          {{ sourceLabel(probe.lastResult.value.source) }}
+        </span>
+      </div>
 
       <!-- ② 自动探测 + 重置操作 -->
       <div class="actionRow">
@@ -94,117 +76,80 @@
         <p class="sectionHint">
           {{ t('settings.server.lanCandidatesHint') || '来自 dev 机器的 /api/network/lan-access 端点。点击立即切换。' }}
         </p>
-        <ion-list class="lanList">
-          <ion-item
-            v-for="(c, idx) in lanCandidates"
-            :key="c"
-            button
-            :detail="false"
-            :class="{ 'lanItem_active': currentBaseUrl === c }"
-            @click="handleUseCandidate(c)"
+        <div class="lanList">
+          <button
+            v-for="addr in lanCandidates"
+            :key="addr"
+            class="lanItem"
+            type="button"
+            @click="handleUseLanAddress(addr)"
           >
-            <ion-icon :icon="idx === 0 ? starIcon : wifiIcon" slot="start" :class="idx === 0 ? 'lanIcon_preferred' : ''" />
-            <ion-label>
-              <div class="lanUrl">{{ c }}</div>
-              <div class="lanSubLabel">
-                {{ idx === 0
-                    ? (t('settings.server.preferred') || '推荐')
-                    : (t('settings.server.alternative') || '备选') }}
-              </div>
-            </ion-label>
-            <ion-button
-              v-if="currentBaseUrl !== c"
-              slot="end"
-              fill="clear"
-              size="small"
-              @click.stop="handleUseCandidate(c)"
-            >
-              {{ t('settings.server.use') || '使用' }}
-            </ion-button>
-            <ion-icon
-              v-else
-              slot="end"
-              :icon="checkmarkIcon"
-              class="lanCheckmark"
-            />
-          </ion-item>
-        </ion-list>
-      </div>
-
-      <!-- ④ 手动输入 URL -->
-      <div class="manualSection">
-        <h3 class="sectionTitle">
-          <ion-icon :icon="createIcon" />
-          <span>{{ t('settings.server.manual') || '手动指定' }}</span>
-        </h3>
-        <p class="sectionHint">
-          {{ t('settings.server.manualHint') || '如自动探测和 LAN 候选都不适用，可手动输入完整 URL（http(s)://host:port）。' }}
-        </p>
-        <ion-item class="manualInputRow">
-          <ion-input
-            v-model="manualUrl"
-            :placeholder="t('settings.server.manualPlaceholder') || 'http://192.168.1.x:2025'"
-            autocapitalize="off"
-            autocorrect="off"
-            :spellcheck="false"
-            :clear-input="true"
-          />
-        </ion-item>
-        <ion-button
-          expand="block"
-          fill="outline"
-          :disabled="!isManualValid"
-          @click="handleManualSave"
-        >
-          {{ t('settings.server.save') || '保存并连接' }}
-        </ion-button>
-        <div v-if="manualError" class="manualError">
-          <ion-icon :icon="alertCircleIcon" />
-          <span>{{ manualError }}</span>
+            <code class="lanAddr">{{ addr }}</code>
+            <ion-icon :icon="checkmarkIcon" class="lanUseIcon" />
+          </button>
         </div>
       </div>
 
-      <!-- ⑤ 调试信息（展开可看探测日志） -->
-      <details class="debugSection" v-if="probe.lastResult.value">
-        <summary>{{ t('settings.server.debug') || '调试日志' }}</summary>
-        <pre class="debugLog">{{ probe.lastResult.value.log.join('\n') }}</pre>
-      </details>
-    </ion-content>
+      <!-- ④ 手动输入 baseUrl -->
+      <div class="manualSection">
+        <h3 class="sectionTitle">
+          <ion-icon :icon="createIcon" />
+          <span>{{ t('settings.server.manualUrl') || '手动输入' }}</span>
+        </h3>
+        <p class="sectionHint">
+          {{ t('settings.server.manualUrlHint') || '适用于后端不在探测范围内的场景。点击下方按钮应用。' }}
+        </p>
+        <div class="manualInputRow">
+          <input
+            v-model="manualUrl"
+            type="text"
+            class="manualInput"
+            :placeholder="t('settings.server.manualUrlPlaceholder') || 'http://192.168.x.x:2025'"
+            spellcheck="false"
+            @keyup.enter="handleUseManual"
+          />
+          <ion-button
+            fill="solid"
+            :disabled="!isManualValid"
+            @click="handleUseManual"
+          >
+            {{ t('settings.server.use') || '使用' }}
+          </ion-button>
+        </div>
+        <p v-if="manualError" class="manualError">{{ manualError }}</p>
+      </div>
 
-    <!-- Toast：探测 / 切换结果反馈 -->
-    <ion-toast
-      :is-open="toastOpen"
-      :message="toastMessage"
-      :duration="2000"
-      :color="toastColor"
-      @did-dismiss="toastOpen = false"
-    />
+      <!-- ⑤ Toast 反馈（probe 成功 / 失败 / 切换结果） -->
+      <ion-toast
+        :is-open="toastOpen"
+        :message="toastMessage"
+        :color="toastColor"
+        :duration="1600"
+        @didDismiss="toastOpen = false"
+      />
+    </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonButton, IonIcon,
-  IonContent, IonCard, IonCardContent, IonList, IonItem, IonLabel, IonInput, IonSpinner, IonToast,
+  IonContent, IonSpinner, IonToast,
 } from '@ionic/vue'
 import {
-  refreshOutline as refreshIcon,
+  refresh as refreshIcon,
   searchOutline as searchIcon,
   homeOutline as homeIcon,
   globeOutline as globeIcon,
-  wifiOutline as wifiIcon,
-  starOutline as starIcon,
   createOutline as createIcon,
   checkmarkOutline as checkmarkIcon,
-  alertCircleOutline as alertCircleIcon,
-  cloudOfflineOutline as serverOfflineIcon,
-  cloudDoneOutline as serverOnlineIcon,
 } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
 import { useServerStatus } from '@/composables/useServerStatus'
 import { useApiBaseProbe, type ProbeResult } from '@/composables/useApiBaseProbe'
 import { DEFAULT_API_BASE_URL, getApiBaseUrl } from '@/api/encv'
+import ServerStatusCard from '@/components/ServerStatusCard.vue'
 
 const { t } = useI18n()
 const server = useServerStatus()
@@ -295,24 +240,27 @@ async function handleReset(): Promise<void> {
   }
 }
 
-async function handleUseCandidate(url: string): Promise<void> {
+async function handleUseLanAddress(addr: string): Promise<void> {
   try {
-    probe.setManual(url)
-    await server.manualReconnect()
-    showToast(`${t('settings.server.useSuccess') || '已切换'}：${url}`, server.isOnline.value ? 'success' : 'warning')
+    manualUrl.value = addr
+    manualError.value = ''
+    probe.setManual(addr)
+    server.manualReconnect().then(() => {
+      showToast(`${t('settings.server.useSuccess') || '已切换'}：${addr}`, server.isOnline.value ? 'success' : 'warning')
+    })
   } catch (e) {
-    showToast(`${t('settings.server.probeError') || '切换失败'}：${e instanceof Error ? e.message : String(e)}`, 'danger')
+    manualError.value = e instanceof Error ? e.message : String(e)
   }
 }
 
-function handleManualSave(): void {
-  manualError.value = ''
-  const v = manualUrl.value.trim()
+async function handleUseManual(): Promise<void> {
   if (!isManualValid.value) {
-    manualError.value = t('settings.server.manualInvalid') || 'URL 格式不正确（需 http(s)://host:port）'
+    manualError.value = t('settings.server.manualUrlInvalid') || 'URL 格式无效'
     return
   }
   try {
+    const v = manualUrl.value.trim()
+    manualError.value = ''
     probe.setManual(v)
     server.manualReconnect().then(() => {
       showToast(`${t('settings.server.useSuccess') || '已切换'}：${v}`, server.isOnline.value ? 'success' : 'warning')
@@ -342,156 +290,138 @@ onMounted(async () => {
   --padding-bottom: 30px;
 }
 
-/* ① 状态卡片 */
-.statusCard {
-  margin: 0 0 16px;
-  border: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.14));
-}
-.statusCard_offline {
-  border-color: rgba(var(--ion-color-danger-rgb), 0.4);
-}
-.statusCard_probing {
-  opacity: 0.7;
-}
-.statusHeader {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-.statusIcon {
-  font-size: 28px;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-.statusIcon_online { color: var(--ion-color-success); }
-.statusIcon_offline { color: var(--ion-color-danger); }
-.statusTextBlock { flex: 1; min-width: 0; }
-.statusLabel {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.7));
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.statusBaseUrl {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 14px;
-  color: var(--ion-text-color);
-  word-break: break-all;
-  margin: 4px 0;
-}
-.statusMeta {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 11px;
-  margin-top: 4px;
-}
-.statusSourceTag {
-  padding: 1px 6px;
-  border-radius: 4px;
-  font-weight: 500;
-}
-.statusSourceTag_cached { background: rgba(var(--ion-color-medium-rgb), 0.18); color: var(--ion-color-medium); }
-.statusSourceTag_loopback { background: rgba(var(--ion-color-primary-rgb), 0.18); color: var(--ion-color-primary); }
-.statusSourceTag_lan-candidate { background: rgba(var(--ion-color-success-rgb), 0.18); color: var(--ion-color-success); }
-.statusLatency {
-  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.7));
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.statusError {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-top: 10px;
-  padding: 8px 10px;
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
-  border-left: 3px solid var(--ion-color-danger);
-  border-radius: 4px;
-  font-size: 12px;
-  color: var(--ion-color-danger);
+/* 🆕 2026-06-15：详情页状态卡片 = ServerStatusCard
+   - 全宽容器，间距与 ion-card 视觉一致 */
+.serverSettingsContent > .server-status-card {
+  margin-bottom: 8px;
 }
 
-/* ② 操作行 */
+/* ① 状态卡片下方一行：baseUrl + source tag（紧凑信息条） */
+.statusSubline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.85));
+  flex-wrap: wrap;
+}
+.statusSublineUrl {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: var(--ion-color-light);
+  color: var(--ion-color-light-contrast, #000);
+  padding: 2px 6px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+.statusSublineSource {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--ion-color-medium-tint, rgba(127, 127, 127, 0.15));
+  color: var(--ion-color-medium-shade, #74788c);
+}
+.statusSourceTag_loopback { background: var(--ion-color-primary-tint); color: var(--ion-color-primary-shade); }
+.statusSourceTag_lan-candidate { background: var(--ion-color-success-tint); color: var(--ion-color-success-shade); }
+.statusSourceTag_current-origin { background: var(--ion-color-warning-tint); color: var(--ion-color-warning-shade); }
+.statusSourceTag_cached { background: var(--ion-color-medium-tint); color: var(--ion-color-medium-shade); }
+
+/* ② 探测 / 重置按钮 */
 .actionRow {
   display: flex;
-  flex-direction: column;
   gap: 8px;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
+.actionRow ion-button { flex: 1; }
 
-/* ③ LAN 候选 */
-.lanSection, .manualSection { margin-bottom: 20px; }
+/* 通用 section 标题 */
 .sectionTitle {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 0 0 6px;
-  font-size: 12px;
+  gap: 8px;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.85));
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  margin: 0 0 4px;
+  color: var(--ion-text-color);
 }
-.sectionTitle ion-icon { font-size: 14px; color: var(--ion-color-primary); }
+.sectionTitle ion-icon { font-size: 18px; }
 .sectionCount {
   margin-left: auto;
-  background: var(--encv-bg-elevated, rgba(127, 127, 127, 0.12));
-  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.7));
-  font-size: 10px;
+  font-size: 11px;
+  background: var(--ion-color-primary-tint);
+  color: var(--ion-color-primary-shade);
   padding: 1px 6px;
   border-radius: 8px;
   font-weight: 500;
-  letter-spacing: 0;
-  text-transform: none;
 }
 .sectionHint {
-  font-size: 11.5px;
-  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.7));
+  font-size: 12px;
+  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.75));
   margin: 0 0 10px;
-  line-height: 1.45;
+  line-height: 1.4;
 }
-.lanList { background: transparent; padding: 0; }
-.lanItem { --background: var(--encv-bg-elevated, rgba(127, 127, 127, 0.06)); --border-color: var(--encv-border-color, rgba(127, 127, 127, 0.14)); margin-bottom: 6px; border-radius: 6px; }
-.lanItem_active { --background: rgba(var(--ion-color-primary-rgb), 0.1); --border-color: rgba(var(--ion-color-primary-rgb), 0.3); }
-.lanUrl { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; font-weight: 500; }
-.lanSubLabel { font-size: 10.5px; color: var(--encv-text-secondary, rgba(127, 127, 127, 0.7)); margin-top: 2px; }
-.lanIcon_preferred { color: var(--ion-color-warning); }
-.lanCheckmark { color: var(--ion-color-success); font-size: 20px; }
+
+/* ③ LAN 候选列表 */
+.lanSection { margin-bottom: 18px; }
+.lanList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lanItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.2));
+  border-radius: 6px;
+  background: var(--ion-background-color, #fff);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background-color 0.15s ease;
+}
+.lanItem:hover { background: var(--ion-color-light); }
+.lanItem:focus-visible { outline: 2px solid var(--ion-color-primary); }
+.lanAddr {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+  color: var(--ion-text-color);
+}
+.lanUseIcon {
+  font-size: 18px;
+  color: var(--ion-color-success);
+  flex-shrink: 0;
+}
 
 /* ④ 手动输入 */
-.manualInputRow { --background: var(--encv-bg-elevated, rgba(127, 127, 127, 0.06)); --border-color: var(--encv-border-color, rgba(127, 127, 127, 0.14)); margin-bottom: 10px; border-radius: 6px; }
-.manualError {
+.manualSection { margin-bottom: 24px; }
+.manualInputRow {
   display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-top: 8px;
-  padding: 6px 10px;
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
-  border-radius: 4px;
-  font-size: 11.5px;
-  color: var(--ion-color-danger);
+  gap: 8px;
+  align-items: stretch;
 }
-
-/* ⑤ 调试 */
-.debugSection { margin-top: 20px; }
-.debugSection summary {
-  font-size: 11px;
-  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.7));
-  cursor: pointer;
-  user-select: none;
-  padding: 4px 0;
-}
-.debugLog {
-  margin: 8px 0 0;
-  padding: 8px;
-  background: var(--encv-bg-elevated, rgba(127, 127, 127, 0.06));
-  border-radius: 4px;
+.manualInput {
+  flex: 1;
+  font: inherit;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10.5px;
-  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.85));
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-break: break-all;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.3));
+  border-radius: 6px;
+  background: var(--ion-background-color, #fff);
+  color: var(--ion-text-color);
+  outline: none;
+  min-width: 0;
+}
+.manualInput:focus { border-color: var(--ion-color-primary); }
+.manualError {
+  font-size: 12px;
+  color: var(--ion-color-danger);
+  margin: 6px 0 0;
 }
 </style>

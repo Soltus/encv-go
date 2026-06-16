@@ -3,19 +3,22 @@
  *
  * Vite plugin：dev 模式启动守卫，强制走 PM2 → preview-gateway 链路。
  *
- * ⚠️ 防御机制触发条件（必须**同时**满足才抛错）：
+ * ⚠️ 触发条件（必须**同时**满足才抛错）：
  *   ① env.command === 'serve'  （build 模式永远不抛 — 产线打包任何时候都应可执行）
- *   ② CI !== 'true' / '1'      （CI 环境跑 lint/build 不需要 PM2）
- *   ③ SPAWN_VITE !== '1'        （非 preview-gateway spawn）
- *   ④ !PM2_HOME                （非 PM2 进程树）
- *   ⑤ !PPA_SPAWNED              （非 PPA 子进程）
+ *   ② SPAWN_VITE !== '1'        （非 preview-gateway spawn）
+ *   ③ !PM2_HOME                （非 PM2 进程树）
+ *   ④ !PPA_SPAWNED              （非 PPA 子进程）
  *
- * 历史踩坑（2026-06-10）：守卫最初没看 env.command，CI 跑 `pnpm run build`
- * 也被拦截，导致产线打包失败。修复：build 模式直接 return。
+ * 唯一合法链路：
+ *   pm2 start ecosystem.config.cjs
+ *     → preview-gateway (spawn vite with SPAWN_VITE=1 env)
+ *       → vite 正常启动
  *
- * 历史踩坑（2026-06-10 之前）：沙箱里 PM2_HOME 是 agent-tool-host 设的，
- * 守卫会放行 — 但**正确**，因为 PM2 真的在管 vite（preview-gateway
- * spawn 的子进程继承 PM2_HOME env）。用户本地直接 `vite` 没 PM2 才会抛。
+ * 任何绕过方式（CI=true、nohup vite、pnpm exec vite 等）一律视为非法启动。
+ *
+ * 历史（2026-06-15）收编：原版有 5 个条件（含 CI / PPA_SPAWNED），
+ *   出现"CI 跑 dev"和"用户 PPA 包装后直接 vite"两类绕过 → 收紧为 3 个。
+ *   唯一权威 = PM2 进程树。CI 永远不应跑 vite dev（应跑 build/lint/test）。
  */
 
 import type { Plugin } from 'vite'
@@ -32,17 +35,14 @@ export function devStartGuard(opts: DevStartGuardOptions = {}): Plugin {
       // ① build 模式直接跳过 — 产线打包任何时候都应可执行
       if (env?.command !== 'serve') return
 
-      // ② CI 环境跳过 — GitHub Actions / GitLab CI / Jenkins 等
-      if (process.env.CI === 'true' || process.env.CI === '1') return
-
-      // ③ SPAWN_VITE=1 表示由 preview-gateway spawn，合法
+      // ② preview-gateway spawn 合法
       if (process.env.SPAWN_VITE === '1') return
 
-      // ④ PM2 管理下也合法（PM2_HOME 由 agent-tool-host 或 pm2 daemon 设）
+      // ③ PM2 管理下合法（PM2_HOME 由 agent-tool-host 或 pm2 daemon 设）
       const isPm2 = !!process.env.PM2_HOME
 
-      // ⑤ PPA_SPAWNED 是 preview-gateway 老版本用的标记
-      if (!isPm2 && !process.env.PPA_SPAWNED) {
+      // ④ 唯一权威 = PM2 进程树。其他一切（CI / PPA_SPAWNED / nohup / bash -c）一律拒绝
+      if (!isPm2) {
         const msg = opts.errorMessage ?? DEFAULT_ERROR_MESSAGE
         throw new Error(msg)
       }
@@ -55,25 +55,22 @@ const DEFAULT_ERROR_MESSAGE = `
 ║  [dev-start-guard] 检测到非法启动方式！立即终止。        ║
 ╠══════════════════════════════════════════════════════════╣
 ║                                                          ║
-║  ❌ 你正在直接运行 vite / npm run dev                    ║
+║  ❌ 你正在直接运行 vite / npm run dev / pnpm exec vite   ║
 ║     这在本项目中是非法的。                               ║
 ║                                                          ║
-║  原因：                                                   ║
-║    ① preview-gateway(:16666) 是唯一对外入口               ║
-║       内部管理子进程(vite:8100, air:2025 等)             ║
-║    ② 直接 vite 不注入 ENCV_DEV_PREVIEW / ENCV_MOBILE env ║
-║    ③ Vite 扫描 plugin-openlist/index.html → 文件找不到  ║
-║    ④ HMR 缺 gateway dynamicHmrHostPlugin Host 头透传      ║
-║                                                          ║
-║  ✅ 正确启动方式：                                        ║
+║  唯一合法链路：                                            ║
 ║    pm2 start /workspace/ecosystem.config.cjs              ║
+║      → preview-gateway(:16666)                            ║
+║        → spawn vite(:8100) with SPAWN_VITE=1             ║
 ║                                                          ║
-║  或重启：                                                 ║
-║    pm2 restart preview-gateway                           ║
-║    pm2 logs preview-gateway --lines 20                   ║
+║  ❌ 非法绕过方式（已收紧，2026-06-15）：                  ║
+║    - CI=true vite / pnpm exec vite                       ║
+║    - nohup vite / bash -c 'vite'                         ║
+║    - PPA_SPAWNED=1 包装后再 vite                          ║
+║    - 直接 go run ./cmd/encv/ start 启后端                ║
+║                                                          ║
+║  没有 pm2 / air → 装；不要绕过本守卫。                   ║
 ║                                                          ║
 ║  预览地址：http://localhost:16666/                        ║
 ╚══════════════════════════════════════════════════════════╝
 `.trim()
-
-

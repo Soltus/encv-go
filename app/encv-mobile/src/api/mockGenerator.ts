@@ -41,7 +41,7 @@ export interface MockSpecDiag {
   encoder: string
   /**
    * 🆕 2026-06-12：runner 标识
-   *   - "ffmpeg": 走 ffmpeg.RunWithOutput（沙箱 / 真机兜底）
+   *   - "ffmpeg": 走 ffmpeg.Encode（沙箱 / 真机兜底）
    *   - "mediacodec": 走 Android MediaCodec 硬编（Phase 3.3 实装）
    *   - "static": 静态字节直接写盘（PNG/JPEG/PDF/TXT/AE 等）
    */

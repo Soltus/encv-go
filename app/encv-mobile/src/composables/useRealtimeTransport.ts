@@ -13,9 +13,13 @@
  *
  * 选举规则（按优先级）：
  *   1. _forcedMode（测试用强制模式）
- *   2. isNative()                → native-bridge
- *   3. isOpenPreviewBrowser()    → http-poll
- *   4. 默认                       → ws
+ *   2. isOpenPreviewBrowser()    → http-poll
+ *   3. 默认                       → ws
+ *
+ * 2026-06-14 增强（安卓真机 WS 稳定性）：
+ *   - **WS → HttpPoll 自动降级**：WS 连续失败 N 次后自动切换到 http-poll，
+ *     避免 Android 系统层静默杀长连接导致 UI 永远卡在「连接中」状态。
+ *   - **降级后定期尝试回升**：每 5min 尝试用 WS 重连一次，成功则切回。
  *
  * 历史 bug 根因：
  *   - 沙箱 OpenPreview 浏览器 trae 反代 :16000 不支持 WebSocket upgrade
@@ -25,7 +29,7 @@
  *
  * 验证：
  *   - ws 模式：沙箱本地 dev (localhost:16666) / 真机浏览器
- *   - http-poll 模式：OpenPreview 浏览器
+ *   - http-poll 模式：OpenPreview 浏览器 / WS 持续失败降级
  *   - native-bridge 模式：APK 真机（暂未实现）
  */
 
@@ -57,6 +61,17 @@ export interface RealtimeTransport {
   /** 测试用：重置单例（仅在测试 setup/teardown 用） */
   __resetForTesting(): void
 }
+
+// =============================================================================
+// 自动降级参数（2026-06-14 新增）
+// =============================================================================
+// 触发条件：WS 模式下，短时间内累计 N 次"ws 关闭"事件 → 切到 http-poll
+// 理由：Android 系统层 / Capacitor WebView 在某些情况下会静默杀长连接，
+//       WS 端可能长时间无法重连成功 → 用 http-poll 兜底
+// =============================================================================
+const WS_FAILURE_WINDOW_MS = 60_000       // 失败统计窗口（60s）
+const WS_FAILURE_THRESHOLD = 3            // 窗口内 N 次失败触发降级
+const WS_RECOVERY_CHECK_MS = 5 * 60_000   // 降级后每 5min 尝试回升 WS
 
 // 模块级单例
 let _instance: RealtimeTransport | null = null
@@ -128,11 +143,91 @@ function createTransport(): RealtimeTransport {
   let backend: Backend | null = null
   let cleanupListeners: (() => void) | null = null
 
+  // 2026-06-14 增强：自动降级状态
+  // 注意：这些 state 闭包在 ensureBackend 内被引用，ensureBackend 又是 createTransport 内
+  // 闭包 → 整个 transport 生命周期内只有一份
+  let wsFailureTimestamps: number[] = []  // 滑动窗口内的失败时间戳
+  let downgradeTimer: ReturnType<typeof setTimeout> | null = null  // 降级后定期尝试回升 WS
+  let isAutoDowngraded = false  // 当前是否处于自动降级状态
+
+  function recordWsFailure() {
+    const now = Date.now()
+    wsFailureTimestamps.push(now)
+    // 清理窗口外的旧时间戳
+    wsFailureTimestamps = wsFailureTimestamps.filter(
+      t => now - t < WS_FAILURE_WINDOW_MS,
+    )
+    console.info(
+      `[RealtimeTransport] WS failure recorded: ${wsFailureTimestamps.length}/${WS_FAILURE_THRESHOLD} in last ${WS_FAILURE_WINDOW_MS}ms`,
+    )
+    if (wsFailureTimestamps.length >= WS_FAILURE_THRESHOLD) {
+      console.warn(
+        `[RealtimeTransport] WS 连续失败 ${wsFailureTimestamps.length} 次，自动降级到 http-poll`,
+      )
+      isAutoDowngraded = true
+      // 强制重启 — 这次 start() 走 http-poll
+      backend?.stop()
+      backend = null
+      connectionState.value = 'disconnected'
+      transportMode.value = 'unknown'
+      // 重置失败统计（避免一直升级失败）
+      wsFailureTimestamps = []
+      // 安排定期回升检查
+      scheduleWsRecoveryCheck()
+      // 触发 connect（这次 electMode 仍然返回 ws，但 transport 内部逻辑要走 http-poll）
+      setTimeout(() => reconnectInternal(), 0)
+    }
+  }
+
+  /**
+   * 降级后定期尝试切回 WS — 每 WS_RECOVERY_CHECK_MS 探一次。
+   * 注意：探的时候清空 isAutoDowngraded 标记，让 electMode 决定走 ws 还是 http-poll。
+   * 探成功（ws.onopen 触发）→ 继续 ws；探失败 → 再次 recordWsFailure → 重新降级
+   */
+  function scheduleWsRecoveryCheck() {
+    if (downgradeTimer) return
+    console.info(`[RealtimeTransport] scheduling WS recovery check in ${WS_RECOVERY_CHECK_MS}ms`)
+    downgradeTimer = setTimeout(() => {
+      downgradeTimer = null
+      if (!isAutoDowngraded) return
+      console.info('[RealtimeTransport] attempting WS recovery')
+      isAutoDowngraded = false  // 临时解除降级标记，让 electMode 选 ws
+      backend?.stop()
+      backend = null
+      connectionState.value = 'disconnected'
+      transportMode.value = 'unknown'
+      wsFailureTimestamps = []  // 给 recovery 一次干净的机会
+      setTimeout(() => reconnectInternal(), 0)
+    }, WS_RECOVERY_CHECK_MS)
+  }
+
+  function clearDowngradeTimer() {
+    if (downgradeTimer) {
+      clearTimeout(downgradeTimer)
+      downgradeTimer = null
+    }
+  }
+
+  /** 决定当前实际 mode（electMode + 自动降级叠加） */
+  function resolveMode(): TransportMode {
+    if (isAutoDowngraded) {
+      // 降级状态：用 electMode 但强制 http-poll
+      return 'http-poll'
+    }
+    return electMode()
+  }
+
   function ensureBackend(): Backend {
     if (backend) return backend
-    const mode = electMode()
+    const mode = resolveMode()
     transportMode.value = mode
-    const emit = (type: string, data: any) => eventBus.emit(type as any, data)
+    const emit = (type: string, data: any) => {
+      eventBus.emit(type as any, data)
+      // 2026-06-14 增强：ws 模式下的关闭事件 → 记录失败，可能触发降级
+      if (type === 'server:connection-error' && mode === 'ws') {
+        recordWsFailure()
+      }
+    }
     switch (mode) {
       case 'native-bridge':
         backend = createNativeBridgeBackend(emit)
@@ -162,34 +257,53 @@ function createTransport(): RealtimeTransport {
     })
   }
 
+  // 2026-06-14 修复：原代码在 setTimeout 回调中调用 connect()，但 connect
+  // 是返回对象的方法名，闭包捕获不到（undefined）。改为内部函数 doConnect。
+  function doConnect() {
+    if (connectionState.value === 'connecting' || connectionState.value === 'connected') return
+    ensureListeners()
+    connectionState.value = 'connecting'
+    ensureBackend().start()
+  }
+
+  function doDisconnect() {
+    backend?.stop()
+    backend = null
+    connectionState.value = 'disconnected'
+    transportMode.value = 'unknown'
+    // 2026-06-14：清理降级 timer，避免内存泄漏
+    clearDowngradeTimer()
+  }
+
+  function doForceReconnect() {
+    backend?.stop()
+    backend = null
+    doConnect()
+  }
+
+  function doForceMode(mode: TransportMode | null) {
+    _forcedMode = mode
+    backend?.stop()
+    backend = null
+    transportMode.value = 'unknown'
+    connectionState.value = 'disconnected'
+  }
+
+  // 供 setTimeout 调用的内部重连（不重复 start 检查）
+  function reconnectInternal() {
+    backend?.stop()
+    backend = null
+    doConnect()
+  }
+
   return {
-    connect() {
-      if (connectionState.value === 'connecting' || connectionState.value === 'connected') return
-      ensureListeners()
-      connectionState.value = 'connecting'
-      ensureBackend().start()
-    },
-    disconnect() {
-      backend?.stop()
-      backend = null
-      connectionState.value = 'disconnected'
-      transportMode.value = 'unknown'
-    },
-    forceReconnect() {
-      backend?.stop()
-      backend = null
-      this.connect()
-    },
+    connect: doConnect,
+    disconnect: doDisconnect,
+    forceReconnect: doForceReconnect,
     connectionState: connectionState as Readonly<Ref<ConnectionState>>,
     transportMode: transportMode as Readonly<Ref<TransportMode>>,
     isSandboxBrowser: isSandboxBrowser as Readonly<Ref<boolean>>,
-    __forceMode(mode) {
-      _forcedMode = mode
-      backend?.stop()
-      backend = null
-      transportMode.value = 'unknown'
-      connectionState.value = 'disconnected'
-    },
+    __forceMode: doForceMode,
     __resetForTesting() {
       backend?.stop()
       backend = null
@@ -197,6 +311,9 @@ function createTransport(): RealtimeTransport {
       cleanupListeners = null
       transportMode.value = 'unknown'
       connectionState.value = 'disconnected'
+      clearDowngradeTimer()
+      isAutoDowngraded = false
+      wsFailureTimestamps = []
       _instance = null
       _forcedMode = null
     },

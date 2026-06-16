@@ -27,7 +27,7 @@
  *   - Web Locks API 防多 tab 重复 poll
  */
 
-import { getTasks, type EncvTask } from '@/api/encv'
+import { getTasks, getRecentBackendLogs, type EncvTask } from '@/api/encv'
 import type { Backend, EventEmitter } from './Backend'
 
 /** snapshot 用最少的字段做 diff（其他字段变化跟 task 4 件套无关） */
@@ -62,6 +62,8 @@ export interface HttpPollBackendOptions {
   onError?: (e: unknown) => void
   /** 注入 fetchTasks（测试用） */
   fetchTasks?: () => Promise<EncvTask[]>
+  /** 注入 fetchLogs（测试用；默认调 getRecentBackendLogs） */
+  fetchLogs?: () => Promise<Awaited<ReturnType<typeof getRecentBackendLogs>>>
 }
 
 const BASELINE_INTERVAL_MS = 2000
@@ -81,6 +83,8 @@ export function createHttpPollBackend(
   const lastSnapshot = new Map<string, TaskSnapshot>()
 
   const _fetchTasks = options.fetchTasks ?? getTasks
+  const _fetchLogs = options.fetchLogs ?? getRecentBackendLogs
+  let lastLogTimestamp = ''  // 增量拉日志游标（HH:MM:SS 字符串）
 
   function intervalMs(): number {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
@@ -141,11 +145,39 @@ export function createHttpPollBackend(
     }
   }
 
+  async function fetchAndEmitLogs(): Promise<void> {
+    // 🆕 2026-06-16：拉后端 ring buffer 日志（http-poll 模式下用户期望 devlogs 看到后端日志）
+    // 增量拉：since=lastLogTimestamp（HH:MM:SS 字符串），server 端按字符串 > 过滤
+    // source 标签：'backend_http_poll'（让用户能区分这是 http-poll 拉来的后端日志，不是 WS 推的）
+    try {
+      const resp = await _fetchLogs(lastLogTimestamp || undefined)
+      for (const e of resp.logs || []) {
+        emit('log', {
+          type: 'log',
+          data: {
+            level: e.level,
+            message: e.message,
+            timestamp: e.timestamp,
+            source: 'backend_http_poll',
+            // 后端 slog 当前没把 stack 推到 ring buffer（按需后续扩展），
+            // 这里传 undefined 让 DevLogs 弹窗不显示 stack section
+            stack: undefined,
+          },
+        })
+        if (e.timestamp > lastLogTimestamp) lastLogTimestamp = e.timestamp
+      }
+    } catch (e) {
+      console.warn('[HttpPollBackend] fetchLogs failed:', e instanceof Error ? e.message : String(e))
+    }
+  }
+
   async function tick(): Promise<void> {
     if (!running) return
     try {
       const tasks = await _fetchTasks()
       diffAndEmit(tasks)
+      // 🆕 拉后端日志（独立 try/catch — 不让日志拉失败影响 task 拉取）
+      await fetchAndEmitLogs()
       backoffMs = 1000  // 成功重置
       if (!firstTickResolved) {
         firstTickResolved = true
@@ -177,6 +209,7 @@ export function createHttpPollBackend(
       running = true
       firstTickResolved = false
       backoffMs = 1000
+      lastLogTimestamp = ''  // 重置增量游标（start 重新拉全量）
       tick()
     },
     stop() {
@@ -191,6 +224,7 @@ export function createHttpPollBackend(
       lastSnapshot.clear()
       backoffMs = 1000
       firstTickResolved = false
+      lastLogTimestamp = ''
     },
   }
 }

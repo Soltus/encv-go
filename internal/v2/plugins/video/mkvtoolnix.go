@@ -56,7 +56,7 @@ func getVideoTrackID(filePath string) (string, error) {
 }
 
 func getVideoTrackIDWithFFProbe(filePath string) (string, error) {
-	output, err := ffmpeg.Probe("-v", "error", "-select_streams", "v:0", "-show_entries", "stream=index", "-of", "csv=p=0", filePath)
+	output, err := ffmpeg.Probe(context.Background(), "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=index", "-of", "csv=p=0", filePath)
 	if err != nil {
 		return "", fmt.Errorf("ffprobe failed to get video track ID: %w", err)
 	}
@@ -770,7 +770,8 @@ func mergeSplitPartsWithFFmpeg(sortedPaths []string, outputDir string, cacheDir 
 	concatFile.Close()
 
 	args := []string{"-y", "-f", "concat", "-safe", "0", "-i", concatPath, "-c", "copy", tempPath}
-	if err := ffmpeg.Run(context.Background(), args...); err != nil {
+	// 🆕 2026-06-15：ffmpeg.Run(ctx, args) → ffmpeg.Encode(ctx, args)，返回 *EncodeResult
+	if _, err := ffmpeg.Encode(context.Background(), args...); err != nil {
 		os.Remove(tempPath)
 		return "", fmt.Errorf("ffmpeg concat merge failed: %w", err)
 	}

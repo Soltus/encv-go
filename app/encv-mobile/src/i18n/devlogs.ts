@@ -21,6 +21,19 @@ export default {
     'devlogs.noLogsDesc': '日志输出将显示在这里。',
     'devlogs.copied': '已复制 {count} 条日志',
     'devlogs.copyFailed': '复制失败',
+    // 🆕 2026-06-14 v6：纯手动挡（toolbar 显式开关 + 浮动 ↓ 按钮）
+    'devlogs.scrollToBottom': '跳到最新日志',
+    'devlogs.scrollToTop': '回到顶部',
+    'devlogs.autoScrollOn': '跟随中',
+    'devlogs.autoScrollOff': '已暂停',
+    // 🆕 2026-06-15 修 #2：点击行展开详情
+    'devlogs.logDetail': '日志详情',
+    'devlogs.logDetailTimestamp': '时间',
+    'devlogs.logDetailLevel': '级别',
+    'devlogs.logDetailMessage': '内容',
+    'devlogs.logDetailCopy': '复制',
+    'devlogs.logDetailCopied': '已复制',
+    'devlogs.logDetailClose': '关闭',
   },
   en: {
     'devlogs.title': 'Developer Logs',
@@ -43,5 +56,21 @@ export default {
     'devlogs.noLogsDesc': 'Log output will appear here.',
     'devlogs.copied': 'Copied {count} logs',
     'devlogs.copyFailed': 'Copy failed',
+    // 🆕 2026-06-14 v6：纯手动挡（toolbar 显式开关 + 浮动 ↓ 按钮）
+    'devlogs.scrollToBottom': 'Jump to latest log',
+    'devlogs.scrollToTop': 'Jump to top',
+    'devlogs.autoScrollOn': 'Following',
+    'devlogs.autoScrollOff': 'Paused',
+    // 🆕 2026-06-15 修 #2：点击行展开详情
+    'devlogs.logDetail': 'Log Detail',
+    'devlogs.logDetailTimestamp': 'Time',
+    'devlogs.logDetailLevel': 'Level',
+    'devlogs.logDetailMessage': 'Message',
+    // 🆕 2026-06-16: upgrade log detail modal capabilities
+    'devlogs.logDetailSource': 'Source',
+    'devlogs.logDetailStack': 'Stack trace',
+    'devlogs.logDetailCopy': 'Copy',
+    'devlogs.logDetailCopied': 'Copied',
+    'devlogs.logDetailClose': 'Close',
   },
 }

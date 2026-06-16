@@ -1,4 +1,12 @@
 const SERVER_URL_KEY = 'encv-server-url'
+// 🆕 2026-06-15：跨会话持久化 backend instance_id，用于防"端口被劫持/换进程"误判
+//   后端 performPingCheck (internal/register/server_start.go:103) 启动期就比对
+//   instance_id 防劫持，移动端必须复用同一机制——单看 200 + JSON 不够。
+//   任何"返 200 application/json" 的进程（mock / 旧 encv-go / 上游代理 / 中间人）
+//   都会骗过老的 checkServerStatus。InstanceID 是 encv-go 启动时唯一生成的
+//   UUID4，进程内常驻不变，重启即换。
+const SERVER_INSTANCE_ID_KEY = 'encv-server-instance-id'
+const SERVER_VERSION_KEY = 'encv-server-version'
 export const DEFAULT_API_BASE_URL = 'http://127.0.0.1:2025'
 // 🆕 2026-06-10 沙箱 OpenPreview 浏览器专用：必须用**同源** fetch。
 //   - OpenPreview 浏览器在 agent-tool-host 上，访问 127.0.0.1/localhost
@@ -283,36 +291,155 @@ export function getExternalStreamUrl(path: string): string {
   return `${baseUrl}/api/stream/external?path=${proxySafeEncode(path)}`
 }
 
-export async function checkServerStatus(): Promise<{ online: boolean; error?: string }> {
+export async function checkServerStatus(): Promise<{
+  online: boolean
+  error?: string
+  instanceId?: string
+  version?: string
+  /** 🆕 2026-06-15：backend instance_id 跨会话变化（后端真崩重启场景，不是劫持）。
+   *  仍然 online=true（ping 200 + JSON + 合法 instance_id）；
+   *  上层 useServerStatus emit 'backend:instance-changed' 给 UI banner 提示。 */
+  instanceChanged?: { previous: string; current: string }
+}> {
   try {
-    // 关键：使用与 Agent API 端点完全相同的 base URL。
-    // 在 dev模式下 getApiBaseUrl() 返回空字符串（相对路径），
-    // 但 preview-gateway 只代理 /api 和 /agent-api 前缀——
-    // 如果用 /api/service-guard 而 preview-gateway 的 /api 规则因某种原因
-    // 未覆盖该子路径（或 Trae 外层 proxy 干扰），探测会静默失败。
+    // 🆕 2026-06-15：复用桌面后端 performPingCheck 的 InstanceID 防劫持机制。
     //
-    // 改用 /api/config 作为健康检查端点（content-type 校验防 vite SPA fallback），
-    // 因为：
-    //   1. 用户日志证实 /api/* 路径可达（decrypt-key status=200）
-    //   2. /api/config 是 encv-go 核心端点，一定存在
-    //   3. 即使返回空 JSON {} 也证明后端在线（vs vite 返回 HTML）
+    // 历史：老代码只校验 Content-Type: application/json，但任何返 JSON 200 的进程
+    //   都能骗过——mock / 旧 encv-go / 上游代理 / 编译时拼出来的"伪 backend" 都会
+    //   被误判为 online。然后 token / 文件路径 / 任务数据就泄露给错误进程。
+    //
+    // 新逻辑（对齐 internal/register/server_start.go:89 performPingCheck）：
+    //   1. 调 /ping（无副作用的探测端点，后端返 PingResponse{status, version, instance_id, server_dir, webdav_dir}）
+    //   2. status code == 200 + content-type: application/json
+    //   3. **decode** 响应体成 PingResponse（不能只看 status == "ok"）
+    //   4. **instance_id 必填**：为空或缺字段 → 不是 encv-go → 报 hijacked
+    //   5. **跨会话比对**：localStorage 缓存的 instance_id 不一致 → "进程被替换" → 报 hijacked
+    //   6. 通过 → 持久化新的 instance_id + version 覆盖旧值（upgrade 场景：version 变了清缓存）
+    //
+    // 为什么不用 /api/config：
+    //   - /api/config 返空 JSON 也能 200，老逻辑下无法判断 backend 是不是 encv-go
+    //   - /ping 必有 instance_id，是 encv-go 唯一契约
     const baseUrl = getApiBaseUrl()
-    const response = await fetch(`${baseUrl}/api/config`)
-    if (response.ok) {
-      const contentType = response.headers.get('content-type') || ''
-      if (contentType.includes('application/json')) {
-        console.info('[API] server online (config JSON)')
-        return { online: true }
-      }
-      console.warn('[API] server probe returned non-JSON, treating as offline')
-      return { online: false, error: `config probe returned ${contentType || 'unknown'} (likely vite SPA fallback)` }
+    const response = await fetch(`${baseUrl}/ping`, {
+      // 强制不要缓存——instance_id 是 freshness 敏感的，HTTP 缓存可能让上一进程的 instance_id
+      // 错认给当前进程
+      cache: 'no-store',
+      headers: { 'Accept': 'application/json' },
+    })
+    if (!response.ok) {
+      return { online: false, error: `HTTP ${response.status}` }
     }
-    return { online: false, error: `HTTP ${response.status}` }
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      // Vite SPA fallback / 任何返回 text/html 的"假 backend"——老逻辑的 case 仍要拦截
+      console.warn('[API] server probe returned non-JSON, treating as offline')
+      return { online: false, error: `ping returned ${contentType || 'unknown'} (likely vite SPA fallback or wrong port)` }
+    }
+    const ping = await parsePingResponse(response)
+    if (!ping) {
+      return { online: false, error: 'ping response missing required fields (instance_id / status / version)' }
+    }
+    if (ping.status !== 'ok') {
+      return { online: false, error: `ping status=${ping.status}` }
+    }
+    // 🆕 2026-06-15 修复 #1（死锁根因）：
+    //
+    // 历史 bug：旧逻辑 "比对失败就 return online:false 且不 persist"——后端真的崩重启后，
+    //   新 instance_id 跟 localStorage 老 ID 不一致 → 报 online:false + error: 'instance changed'
+    //   → 永远不 persist 新 ID → 下次探测还是不一致 → 死循环 offline
+    //
+    // 修复（顺序关键）：
+    //   1. **先 persist 新 instance_id**（不管一不一样都 persist——重启用）
+    //   2. 再比对——不一致时**仍然 return online:true**（ping 实质是 200 + JSON + 合法 instance_id）
+    //   3. hijack 警告通过专用 `instanceChanged: {previous, current}` 字段返回，不靠 error
+    //   4. 上层 useServerStatus 收到 instanceChanged 字段 → emit instanceChanged 事件
+    //      → UI 顶部 banner 提示（不阻塞状态机 / 不进 lastError）
+    const previousId = readPersistedInstanceId()
+    persistBackendIdentity(ping.instance_id, ping.version) // ① 永远先 persist
+    let instanceChanged: { previous: string; current: string } | undefined
+    if (previousId && previousId !== ping.instance_id) {
+      // ② 不一致 → 是 backend 真的崩重启（不是劫持；劫持场景下 ping 不会 200+JSON+合法 instance_id）
+      console.warn('[API] backend instance_id changed (likely backend restart, not hijack)', {
+        previous: previousId, current: ping.instance_id,
+      })
+      instanceChanged = { previous: previousId, current: ping.instance_id }
+      // ③ 仍然 return online=true + 仅在 instanceChanged 字段带警告
+      return {
+        online: true,
+        instanceId: ping.instance_id,
+        version: ping.version,
+        instanceChanged, // 上层用此发事件，UI 顶部 banner 提示
+      }
+    }
+    console.info('[API] server online (ping OK)', { instanceId: shortHash(ping.instance_id), version: ping.version })
+    return { online: true, instanceId: ping.instance_id, version: ping.version }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.debug('[API] server offline:', msg)
     return { online: false, error: msg }
   }
+}
+
+/** PingResponse 子集（snake_case 与后端 internal/v2/types/types.go PingResponse 一致） */
+interface PingResponse {
+  status: string
+  version: string
+  instance_id: string
+  server_dir?: string
+  webdav_dir?: string
+}
+
+/**
+ * 安全 decode PingResponse。返回 null 表示"非 encv-go 响应"（字段缺失/类型错）。
+ *
+ * 不 throw：让调用方走 {online:false, error:...} 路径而不是 exception 路径。
+ */
+async function parsePingResponse(response: Response): Promise<PingResponse | null> {
+  try {
+    const obj = await response.json()
+    if (!obj || typeof obj !== 'object') return null
+    const status = typeof obj.status === 'string' ? obj.status : ''
+    const version = typeof obj.version === 'string' ? obj.version : ''
+    const instanceId = typeof obj.instance_id === 'string' ? obj.instance_id : ''
+    if (!status || !instanceId) {
+      // 关键字段缺失 → 不是 encv-go 响应
+      return null
+    }
+    return {
+      status,
+      version,
+      instance_id: instanceId,
+      server_dir: typeof obj.server_dir === 'string' ? obj.server_dir : undefined,
+      webdav_dir: typeof obj.webdav_dir === 'string' ? obj.webdav_dir : undefined,
+    }
+  } catch {
+    return null
+  }
+}
+
+function readPersistedInstanceId(): string | null {
+  if (typeof localStorage === 'undefined') return null
+  return localStorage.getItem(SERVER_INSTANCE_ID_KEY)
+}
+
+function persistBackendIdentity(instanceId: string, version: string) {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem(SERVER_INSTANCE_ID_KEY, instanceId)
+  if (version) localStorage.setItem(SERVER_VERSION_KEY, version)
+}
+
+/** 短 hash 显示（前 8 字符）——给 UI 展示用，避免完整 UUID 占太多视觉空间 */
+function shortHash(id: string): string {
+  if (!id) return '(empty)'
+  return id.length > 8 ? id.slice(0, 8) : id
+}
+
+/** UI 读取持久化的 backend instance_id（用于"上次连接的是哪个进程"展示） */
+export function getPersistedBackendIdentity(): { instanceId: string; version: string } | null {
+  if (typeof localStorage === 'undefined') return null
+  const id = localStorage.getItem(SERVER_INSTANCE_ID_KEY)
+  if (!id) return null
+  return { instanceId: id, version: localStorage.getItem(SERVER_VERSION_KEY) || '' }
 }
 
 export async function deleteFile(path: string): Promise<void> {
@@ -475,6 +602,35 @@ export async function getTasks(): Promise<EncvTask[]> {
   }
   const data = await response.json()
   return data.tasks || []
+}
+
+/**
+ * 🆕 2026-06-16：拉取后端 ring buffer 最近 N 条日志
+ *   - http-poll 模式：每次 tick 拉一次
+ *   - WS 模式：onMounted 冷启动时拉一次历史（WS 推的实时日志不补历史）
+ *   - since 参数：增量拉取（时间戳字符串，HH:MM:SS 格式）
+ */
+export interface BackendLogEntry {
+  level: 'debug' | 'info' | 'warn' | 'error'
+  message: string
+  timestamp: string  // HH:MM:SS
+}
+export interface RecentLogsResponse {
+  logs: BackendLogEntry[]
+  count: number
+  capacity: number
+}
+
+export async function getRecentBackendLogs(since?: string): Promise<RecentLogsResponse> {
+  const baseUrl = getApiBaseUrl()
+  const url = since
+    ? `${baseUrl}/api/logs/recent?since=${encodeURIComponent(since)}`
+    : `${baseUrl}/api/logs/recent`
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  return response.json()
 }
 
 export async function createTask(
@@ -1277,6 +1433,188 @@ export async function predictPlugin(
   if (!response.ok) {
     console.error('[API] predictPlugin failed:', response.status)
     throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  return response.json()
+}
+
+// 🆕 2026-06-15 multi-mount (spec Phase E)：挂载点管理 API
+//
+// 后端路由：internal/server/mount_api.go
+// 数据模型：internal/mount/mount.go (Mount)
+//
+// 端点：
+//   GET    /api/mounts               → listMounts / ListMountsResponse
+//   GET    /api/mounts/:id           → getMount
+//   POST   /api/mounts               → createMount
+//   PUT    /api/mounts/:id           → updateMount
+//   DELETE /api/mounts/:id           → deleteMount
+//   POST   /api/mounts/:id/resolve   → resolveMountPath
+//   GET    /api/mounts/:id/usage     → fetchMountUsage
+
+/** Mount 挂载点数据模型。与后端 mount.Mount 字段一一对应（snake_case）。 */
+export interface Mount {
+  id: string
+  name: string
+  mount_path: string
+  driver: string
+  root_path: string
+  enabled: boolean
+  read_only: boolean
+  driver_config?: Record<string, unknown>
+  created_at?: string
+  updated_at?: string
+}
+
+/** 预置 driver 名常量（与后端 mount.DriverLocal/AppData/Sandbox 一致）。 */
+export const MOUNT_DRIVERS = ['local', 'appdata', 'sandbox'] as const
+export type MountDriver = (typeof MOUNT_DRIVERS)[number]
+
+/** 预置 mount name 提示常量（仅用于 UI 提示，非后端强制）。 */
+export const MOUNT_PRESET_NAMES = ['primary', 'automation', 'sandbox'] as const
+
+export interface ListMountsResponse {
+  mounts: Mount[]
+  drivers: string[]
+  /**
+   * 🆕 2026-06-16：mount 启动期错误（不再静默）
+   * - 后端 server.go 在 MigrateFromServingDir 失败时 append 到 s.mountBootstrapErrors
+   * - /api/mounts 响应里暴露
+   * - MountsDetail.vue 顶部 banner 展示，每条对应一个 mount 启动失败原因
+   * - 典型场景：mounts.json 损坏 / bootstrap 写盘失败 / driver 工厂 panic
+   */
+  bootstrap_errors: string[]
+}
+
+export interface ResolveMountResponse {
+  virtual_path: string
+  abs_path: string
+  rel_path: string
+  mount_name: string
+}
+
+export interface MountUsageResponse {
+  mount_id: string
+  root_path: string
+  entry_count: number
+}
+
+/** 通用 mount 错误格式化。 */
+async function readMountError(response: Response, op: string): Promise<string> {
+  let detail = `HTTP ${response.status}`
+  try {
+    const body = await response.text()
+    if (body) {
+      // 尝试解析 {"error": "..."}
+      try {
+        const parsed = JSON.parse(body)
+        if (parsed?.error) detail = parsed.error
+        else detail = body.slice(0, 200)
+      } catch {
+        detail = body.slice(0, 200)
+      }
+    }
+  } catch {}
+  return `${op} failed: ${detail}`
+}
+
+export async function listMounts(): Promise<ListMountsResponse> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts`)
+  if (!response.ok) {
+    const msg = await readMountError(response, 'listMounts')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function getMount(id: string): Promise<Mount> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts/${encodeURIComponent(id)}`)
+  if (!response.ok) {
+    const msg = await readMountError(response, 'getMount')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+/** Create / Update 通用 body 字段（不含 id / created_at / updated_at）。 */
+export interface MountInput {
+  name: string
+  mount_path: string
+  driver: string
+  enabled: boolean
+  read_only: boolean
+  driver_config?: Record<string, unknown>
+}
+
+export async function createMount(input: MountInput): Promise<Mount> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) {
+    const msg = await readMountError(response, 'createMount')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function updateMount(id: string, input: MountInput): Promise<Mount> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!response.ok) {
+    const msg = await readMountError(response, 'updateMount')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function deleteMount(id: string): Promise<void> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  // 204 No Content 视为成功；其他都抛错
+  if (response.status === 204) return
+  if (!response.ok) {
+    const msg = await readMountError(response, 'deleteMount')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+}
+
+export async function resolveMountPath(id: string, subPath: string): Promise<ResolveMountResponse> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts/${encodeURIComponent(id)}/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sub_path: subPath }),
+  })
+  if (!response.ok) {
+    const msg = await readMountError(response, 'resolveMountPath')
+    console.error('[API]', msg)
+    throw new Error(msg)
+  }
+  return response.json()
+}
+
+export async function fetchMountUsage(id: string): Promise<MountUsageResponse> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/mounts/${encodeURIComponent(id)}/usage`)
+  if (!response.ok) {
+    const msg = await readMountError(response, 'fetchMountUsage')
+    console.error('[API]', msg)
+    throw new Error(msg)
   }
   return response.json()
 }

@@ -662,3 +662,21 @@ export async function generateMockFiles(opts: GenerateOptions): Promise<Generate
 export function listAllRelativePaths(): string[] {
   return collectSpecs('all').map((s) => s.relativePath)
 }
+
+/**
+ * 🆕 2026-06-15 按 ext 查找 plain 类别中第一个匹配 spec 的 relativePath。
+ *
+ * 用途：自动化测试 (AutomationTestsDetail.vue) 按 plugin.supportedExtensions[0] 派生 sourcePath，
+ *       必须跟 mock 后端实际生成的文件名一致（mock 是唯一真相源）。
+ *
+ * 安全性：每个 plugin 的 supportedExtensions[0] 唯一（mp4/mp3/jpg/txt/pdf/docx），
+ *         不会触发 m4a vs m4a-lossless 这种同 ext 多 spec 歧义。
+ *
+ * @returns spec.relativePath 如 '01-plain-media/audio/music.mp3'；找不到返回 null
+ */
+export function extToRelativePath(ext: string): string | null {
+  const e = ext.toLowerCase().replace(/^\./, '')
+  const specs = collectSpecs('plain')
+  const spec = specs.find((s) => s.relativePath.toLowerCase().endsWith('.' + e))
+  return spec?.relativePath ?? null
+}

@@ -108,21 +108,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sync"
 	"unsafe"
 )
 
-var (
-	libDirOnce  sync.Once
-	libDirCache string
-)
-
-func getLibDir() string {
-	libDirOnce.Do(func() {
-		libDirCache = os.Getenv("ENCV_LIB_DIR")
-	})
-	return libDirCache
-}
+// 平台无关的 libDir 状态（getLibDir/GetLibDir）在 libdir.go 定义（无 build tag，
+// 沙箱编译时也可见——ffmpeg 包在 !android build 也 import utils）。
 
 type NativeErrorType int
 

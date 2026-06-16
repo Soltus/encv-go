@@ -111,8 +111,12 @@ if def, ok := registry.Get("list_files"); ok {
 ```bash
 cd agent
 go mod tidy
-go test ./...
-go test -race ./...
+
+# ✅ 模块化（沙箱推荐）：单包跑
+bash ../scripts/test-go.sh .
+
+# ✅ CI 模式：全包跑
+ENCV_TEST_FULL=1 bash ../scripts/test-all-go.sh
 ```
 
 The Phase 1 tests must keep coverage ≥ 70 % on `types.go` and

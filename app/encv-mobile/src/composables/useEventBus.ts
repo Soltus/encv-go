@@ -43,6 +43,13 @@ export interface EncvEvents {
    * UI 监听后显示错误 banner。
    */
   'api-base:disconnected': { error: string }
+  /**
+   * 🆕 2026-06-15：backend instance_id 跨会话变化（后端真崩重启场景）
+   * payload: { previous: string; current: string }
+   * UI 监听后顶部 banner 提示 4s，**不**进 lastError / 不阻塞状态机。
+   * 历史 bug：之前进 lastError → 永远显示"backend instance changed" → offline 死锁
+   */
+  'backend:instance-changed': { previous: string; current: string }
 }
 
 type EventKey = keyof EncvEvents

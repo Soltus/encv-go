@@ -73,13 +73,41 @@ function detectIllegalLaunch() {
     return { illegal: false }
   }
 
-  // 如果进程父级不是 pm2/gateway，且没有 SPAWN_VITE 标记，可能是手动 vite
-  if (!process.env.PM2_HOME && !process.env.SPAWN_VITE) {
-    // 不太确定的情况——只警告不阻断
-    return { illegal: false, warning: '未检测到 PM2 或 SPAWN_VITE 环境标记，请确认通过 pm2 start ecosystem.config.cjs 启动' }
+  // PM2 进程树在管 = 合法（agent-tool-host 或 pm2 daemon 设 PM2_HOME）
+  if (process.env.PM2_HOME) {
+    return { illegal: false }
   }
 
-  return { illegal: false }
+  // 唯一权威 = PM2 进程树。其他一切（含 PPA_SPAWNED）一律视为非法
+  // 2026-06-15 收紧：原版"只警告不阻断"→ 改为 exit 1
+  return {
+    illegal: true,
+    reason: '未检测到 PM2_HOME 或 SPAWN_VITE 环境标记',
+    detail: [
+      '',
+      '═══════════════════════════════════════════════',
+      '  本项目禁止绕过 PM2 → preview-gateway 链路启动！',
+      '═══════════════════════════════════════════════',
+      '',
+      '原因：',
+      '  ① preview-gateway(:16666) 是唯一对外入口，内部管理子进程',
+      '  ② 直接 vite 不会注入 ENCV_DEV_PREVIEW / ENCV_MOBILE env',
+      '  ③ Vite 自动扫描 plugin-openlist/index.html → 找不到文件报错',
+      '  ④ HMR 需要 gateway 的 dynamicHmrHostPlugin 透传 Host 头',
+      '',
+      '❌ 非法绕过方式（2026-06-15 收紧）：',
+      '  - CI=true 绕开 dev-start-guard',
+      '  - PPA_SPAWNED=1 包装后再 vite',
+      '  - nohup / bash -c / tmux 包装',
+      '  - 直接 go run ./cmd/encv/ start 启后端',
+      '',
+      '✅ 正确启动方式：',
+      '  pm2 start /workspace/ecosystem.config.cjs',
+      '',
+      '预览地址：http://localhost:16666/',
+      '═══════════════════════════════════════════════',
+    ].join('\n'),
+  }
 }
 
 // ==================== 主逻辑 ====================

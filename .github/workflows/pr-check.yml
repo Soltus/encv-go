@@ -1,0 +1,171 @@
+name: "PR Check (Layer 1: Quick)"
+
+# =====================================================
+# Layer 1 必跑 — 任何 PR + push to main 都触发
+#
+# 触发：
+#   - pull_request (main, dev) — PR 打开/更新
+#   - push to main             — merge 后最终验证
+#
+# 不触发 Layer1 的入口（避免恶意消耗）：
+#   - ci:full 标签 → 走 full-regression.yml
+#   - ci:e2e 标签 → 走 e2e-integration.yml
+#
+# 防恶意消耗 3 重防御：
+#   1. Layer1 单包 + -short（最快 ~2-5 min 总时长）
+#   2. concurrency: cancel-in-progress 取消同 PR 旧 run
+#   3. pull_request 事件不暴露 secrets（无 token 可偷）
+# 注意：不加 PR size 拦截 — 用户场景里大部分 PR 是巨型重构/跨包改造，
+#      拦截会误伤真实工作流。Layer1 单次成本有上限（~5 min），接受。
+#
+# 适配新测试系统（test-orchestration-defense）：
+#   - Go 测试统一走 scripts/test-go.sh（单包 -short 默认）
+#   - 禁止 yaml 内联 go test ./...（沙箱断网 + 守卫抛错）
+#
+# Branch Protection：
+#   - 应在仓库 Rulesets → Rules → Required status checks 中
+#     把 "PR Check (Layer 1: Quick) / layer1-quick-tests" 设为 required
+#     强制 PR 必通过 Layer1 才能 merge
+# =====================================================
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main]
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NDK_VERSION: "26.1.10909125"
+  MONOREPO_MOBILE_DIR: "app/encv-mobile"
+
+jobs:
+  # ── Layer1 quick tests（4 个 matrix 任务并行） ──
+  layer1-quick-tests:
+    name: Layer 1 — ${{ matrix.test-group }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        test-group:
+          - frontend-vitest
+          - go-core-test
+          - combolite-static
+          - lint-no-nodejs-crypto
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          submodules: false  # 防御
+
+      - name: Set up pnpm
+        if: matrix.test-group == 'frontend-vitest'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        if: matrix.test-group == 'frontend-vitest'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ env.MONOREPO_MOBILE_DIR }}/pnpm-lock.yaml
+
+      - name: Set up Go
+        if: matrix.test-group != 'frontend-vitest'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ./go.mod
+          cache-dependency-path: go.sum
+
+      - name: Cache pnpm dependencies
+        if: matrix.test-group == 'frontend-vitest'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.MONOREPO_MOBILE_DIR }}/node_modules
+            ${{ env.MONOREPO_MOBILE_DIR }}/packages/components/node_modules
+            ${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/web/node_modules
+          key: pnpm-main-${{ hashFiles('${{ env.MONOREPO_MOBILE_DIR }}/pnpm-lock.yaml', '${{ env.MONOREPO_MOBILE_DIR }}/packages/**/package.json', '${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/web/package.json') }}
+          restore-keys: |
+            pnpm-main-
+
+      - name: Install frontend dependencies
+        if: matrix.test-group == 'frontend-vitest'
+        run: cd ${{ env.MONOREPO_MOBILE_DIR }} && pnpm install --frozen-lockfile
+
+      - name: Run frontend vitest
+        if: matrix.test-group == 'frontend-vitest'
+        run: |
+          cd ${{ env.MONOREPO_MOBILE_DIR }}
+          echo "═══ Frontend vitest (Layer 1) ═══"
+          pnpm exec vitest run --reporter=verbose 2>&1 | tee test-output.txt
+
+      - name: Run Go core tests (单包 -short, 走 test-go.sh)
+        if: matrix.test-group == 'go-core-test'
+        run: |
+          echo "═══ Go Core Tests (Layer 1, 单包 -short) ═══"
+          # 单包跑，test-go.sh 默认 -short -failfast
+          # 不调用 ENCV_TEST_FULL，避免多包守卫抛错
+          bash scripts/test-go.sh ./internal/service 2>&1 | tee test-output.txt
+          bash scripts/test-go.sh ./internal/utils 2>&1 | tee -a test-output.txt
+          bash scripts/test-go.sh ./internal/mount 2>&1 | tee -a test-output.txt
+
+      - name: Run ComboLite static check (单包 + -run 过滤)
+        if: matrix.test-group == 'combolite-static'
+        run: |
+          echo "═══ ComboLite Static Check (Layer 1, 单包 + -run) ═══"
+          bash scripts/test-go.sh ./internal/service -run TestComboLite 2>&1 | tee test-output.txt
+
+      - name: Run no-nodejs-crypto lint
+        if: matrix.test-group == 'lint-no-nodejs-crypto'
+        run: |
+          echo "═══ No-NodeJS-Crypto Lint (Layer 1) ═══"
+          bash scripts/ci-check-no-nodejs-crypto.sh 2>&1 | tee test-output.txt
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: layer1-${{ matrix.test-group }}-output
+          path: test-output.txt
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ── Layer1 summary（让 reviewer 一眼看绿/红） ──
+  layer1-summary:
+    name: Layer 1 Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    needs: [layer1-quick-tests]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Layer 1 (PR Check) Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Layer 1 matrix (4 tests) | ${{ needs.layer1-quick-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 下一步" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.layer1-quick-tests.result }}" = "success" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Layer 1 全绿。准备 merge 前请加 \`ci:full\` 标签触发 Layer 2 全包 regression：" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "gh pr edit \${{ github.event.pull_request.number }} --add-label ci:full" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "重大变更可同时加 \`ci:e2e\` 触发 Layer 3 E2E。" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Layer 1 失败 — 查看各 matrix 任务的 test-output.txt artifact 定位错误。" >> $GITHUB_STEP_SUMMARY
+          fi

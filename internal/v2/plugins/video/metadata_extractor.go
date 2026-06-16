@@ -3,6 +3,7 @@
 package video
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -177,14 +178,19 @@ func extractMetadataFromOriginalFile(path string) (*VideoIndex, error) {
 	)
 
 	// 1. 使用 ffprobe 获取基础元数据
-	output, err := ffmpeg.Probe("-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path)
+	// 🆕 2026-06-15：ffmpeg.Probe(ctx, args) 签名调整（原 args... → ctx, args...）
+	output, err := ffmpeg.Probe(context.Background(), "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", path)
 	if err != nil {
 		errMsg := err.Error()
+		// 🆕 2026-06-15：新增 exit status 8 / Invalid data 识别（真机 cgo 拒绝半截数据）
 		if strings.Contains(errMsg, "ENGINE_LOAD_FAILED") || strings.Contains(errMsg, "ENGINE_SYMBOL_MISSING") {
 			return nil, fmt.Errorf("video engine unavailable, please reinstall the app: %w", err)
 		}
 		if strings.Contains(errMsg, "No such file") || strings.Contains(errMsg, "Permission denied") {
 			return nil, fmt.Errorf("cannot access file '%s': %w", filepath.Base(path), err)
+		}
+		if strings.Contains(errMsg, "exit status 8") || strings.Contains(errMsg, "Invalid data") {
+			return nil, fmt.Errorf("mock file appears corrupted, please regenerate mock data (ffprobe rejected: %s): %w", filepath.Base(path), err)
 		}
 		return nil, fmt.Errorf("ffprobe failed on original file: %w", err)
 	}
@@ -327,7 +333,7 @@ func parseDuration(d string) float64 {
 
 // 使用 ffprobe 提取章节
 func extractChaptersWithFFprobe(path string) ([]MKVChapterInfo, error) {
-	output, err := ffmpeg.Probe("-v", "error", "-show_chapters", "-of", "json", path)
+	output, err := ffmpeg.Probe(context.Background(), "-v", "error", "-show_chapters", "-of", "json", path)
 	if err != nil {
 		return nil, fmt.Errorf("ffprobe command failed: %w", err)
 	}

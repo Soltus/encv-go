@@ -32,11 +32,6 @@ class EncvGoService : Service() {
         private const val MAX_PORT_SCAN = 10
         private const val START_TIMEOUT_MS = 10_000L
         private const val POLL_INTERVAL_MS = 200L
-        // 🆕 2026-06-12 Phase 4：心跳文件 mtime 探活阈值。
-        // 8s = 5s ffmpeg timeout + 3s 容差（worker 启动 + 调度 + cgo dlopen）。
-        // 真机 cgo ffmpeg_run 二次 hang 时，Process.isAlive() 仍 true，
-        // 只能靠 mtime 探活主动发现 hang → 强杀重启。
-        private const val HEARTBEAT_STALE_MS = 8_000L
 
         const val ACTION_START = "com.encvgo.action.START"
         const val ACTION_STOP = "com.encvgo.action.STOP"
@@ -102,15 +97,16 @@ class EncvGoService : Service() {
     private val processReady = AtomicBoolean(false)
     private var wakeLock: PowerManager.WakeLock? = null
 
-    // 🆕 2026-06-12 Phase 4：心跳文件路径（与 Go 端 ENCV_HEARTBEAT_PATH 同步）
-    // Go 进程每次 ffmpeg 调用后 write 当前时间戳到这个文件；
-    // Kotlin 1s poll lastModified()，>HEARTBEAT_STALE_MS 没更新即判 hang。
-    // 路径优先 ENCV_SERVING_DIR（真机 servingDir），fallback 缓存目录。
-    private val heartbeatFile: File by lazy {
-        val dir = System.getenv("ENCV_SERVING_DIR") ?: System.getenv("ENCV_CACHE_DIR")
-            ?: filesDir.absolutePath
-        File(dir, ".encv_heartbeat")
-    }
+    // 🆕 2026-06-14：删除 heartbeatFile 字段
+    //
+    // 历史（重构成因）：
+    //   - 2026-06-12 Phase 4 引入文件版心跳：Go 写 .encv_heartbeat，Kotlin 1s poll mtime
+    //   - 2026-06-14 路径 bug：Kotlin / Go 读不同文件 → 7s 必死
+    //   - 2026-06-14 改 HTTP /health JSON 探活（见 checkHeartbeatOk()）
+    //   - 2026-06-14 全部删除：不再需要文件、不再需要 ENCV_HEARTBEAT_PATH env
+    //                     不再需要 resolvedHeartbeatFile() / resolveServingDir() / 探写降级
+    //
+    // 见 spec/cross-process-ipc-refactor/spec.md §3.3, §3.5
 
     // 🆕 2026-06-12 崩溃根因修复：goProcess 死时自动重启（带指数退避 + 最多 3 次）
     //   死因：真机 libffmpeg.so 没编 encoder → go_GenerateMP3 走 NativeRunner → cgo panic
@@ -121,6 +117,15 @@ class EncvGoService : Service() {
     private val restartExecutor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
         Thread(r, "encv-go-restart").apply { isDaemon = true }
     }
+
+    // 🆕 2026-06-14：HTTP /health 连续失败计数器
+    //
+    // 用法：checkHeartbeatOk() 返回 false 时 +1，返回 true 时清零。
+    // 触发 hang 阈值：>= 2（连续 2 次失败 ≈ 2s 抖动容差）。
+    //
+    // 为什么用计数：HTTP 偶发超时（网络栈 / WebView 切换 / OS doze）很常见，
+    // 单次失败就 kill 进程会太激进。
+    private var httpFailCount = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -159,15 +164,17 @@ class EncvGoService : Service() {
         super.onDestroy()
     }
 
-    // 🆕 2026-06-12 Phase 4：mtime 探活 + 自动重启
+    // 🆕 2026-06-14 简化：HTTP /health JSON 探活（单一策略）
     //
-    // 双判探活：
+    // 旧实现有 if-else 灰度（HTTP / mtime），验证后切到 HTTP-only 并删 mtime 分支。
+    //
+    // 行为：
     //   1) Process.isAlive()=false → 进程真死（exit/crash）→ 老逻辑处理
-    //   2) heartbeatFile.lastModified() 超过 HEARTBEAT_STALE_MS 没更新 →
-    //      Go 进程 OS 层还活着（cgo ffmpeg_run 阻塞 OS thread 不响应 ctx cancel）
-    //      但 Go runtime 调度被污染 → kill + restart
+    //   2) checkHeartbeatOk()=false 连续 2 次（约 2s）→ 进程 alive 但内部 hang
+    //      （cgo ffmpeg_run 阻塞 OS thread 不响应 ctx cancel）→ kill + restart
+    //   3) checkHeartbeatOk()=true → 健康，重置 httpFailCount 和 restartAttempts
     //
-    // 触发后 publishFailure reason="go_hang:..."（前端按 go_hang 分类）
+    // 触发后 publishFailure reason="http_health_failed_Nx_in_2s"（前端按 go_hang 分类）
     private fun startProcessAliveMonitor() {
         restartExecutor.scheduleWithFixedDelay({
             val proc = goProcess ?: return@scheduleWithFixedDelay
@@ -187,24 +194,20 @@ class EncvGoService : Service() {
                 return@scheduleWithFixedDelay
             }
 
-            // 进程还活着 → 检查 mtime 心跳
-            val mtimeMs = try { heartbeatFile.lastModified() } catch (e: Throwable) { 0L }
-            if (mtimeMs == 0L) {
-                // 心跳文件还没建（go 进程刚启动还没跑过 ffmpeg）→ 不判 hang
-                // 但要等首次 ffmpeg 调用 5s 内必须更新；如果等超过 60s 还没建文件
-                // 说明 Go 端 ENCV_HEARTBEAT_PATH 配置错 — 这种情况判定为 hang
-                if (restartAttempts > 0 && (restartAttempts * 1_000L) > 60_000L) {
-                    handleHang("heartbeat_file_never_created_after_${restartAttempts}s")
+            // ② HTTP /health JSON 探活
+            val httpOk = checkHeartbeatOk()
+            if (httpOk) {
+                httpFailCount = 0
+            } else {
+                httpFailCount += 1
+                // 容忍 1 次抖动，连续 2 次失败（≈2s）才判 hang
+                if (httpFailCount >= 2) {
+                    handleHang("http_health_failed_${httpFailCount}x_in_2s")
+                    return@scheduleWithFixedDelay
                 }
-                return@scheduleWithFixedDelay
-            }
-            val ageMs = System.currentTimeMillis() - mtimeMs
-            if (ageMs > HEARTBEAT_STALE_MS) {
-                handleHang("heartbeat_stale_${ageMs}ms")
-                return@scheduleWithFixedDelay
             }
 
-            // 进程健康 — 重置重启计数
+            // ③ 进程健康 — 重置重启计数
             if (restartAttempts > 0) {
                 restartAttempts = 0
             }
@@ -247,18 +250,77 @@ class EncvGoService : Service() {
         }, delayMs, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
-    // 🆕 2026-06-12 Phase 4：启动后立即 touch 心跳文件，避免 8s 内 mtime=0 误判 hang
-    //   Go 进程接管后每次 ffmpeg 调用会自己更新 mtime。
-    //   这里只是 initial bootstrap。
-    private fun touchHeartbeat() {
-        try {
-            heartbeatFile.parentFile?.mkdirs()
-            heartbeatFile.writeText(System.currentTimeMillis().toString())
+    // 🆕 2026-06-14：删除 touchHeartbeat() 方法（之前在 startGoProcess 末尾调用）。
+    // 心跳改 HTTP /health 探活，Kotlin 不再需要 touch 心跳文件。
+    // 见 spec/cross-process-ipc-refactor/spec.md §3.3
+
+    /**
+     * 🆕 2026-06-14：HTTP /health JSON 心跳探活
+     *
+     * 替代 mtime 文件探活的设计原则：
+     *   - 单一来源：Go 端 `startHeartbeatLoopInMemory` 每 2s 写 atomic.Int64
+     *   - HTTP /health JSON 包含 heartbeat_ok / heartbeat_age_ms 字段
+     *   - parent (Kotlin) 通过 GET /health 读，无需文件、无需 env 协商
+     *
+     * 调用方：startProcessAliveMonitor
+     * 行为：
+     *   - 1s 超时
+     *   - HTTP 200 + heartbeat_ok=true → 进程健康
+     *   - HTTP 200 + heartbeat_ok=false → 进程 alive 但内部 hang（cgo 阻塞等）
+     *   - 非 200 / 连接失败 / 超时 / 解析失败 → 视为失败
+     *
+     * 端口：传 0 表示用 lastKnownPort；传非 0 表示用指定端口（启动期）
+     *
+     * 行业参考：Android Studio、VS Code、Firebase CLI 全部用 HTTP /health
+     * 见 spec/cross-process-ipc-refactor/spec.md §3
+     */
+    private fun checkHeartbeatOk(port: Int = 0): Boolean {
+        val p = if (port > 0) port else lastKnownPort
+        if (p <= 0) {
+            // 还没确定端口（启动早期）→ 不算 hang
+            return true
+        }
+        return try {
+            val conn = URL("http://127.0.0.1:$p/health").openConnection() as HttpURLConnection
+            conn.connectTimeout = 1_000
+            conn.readTimeout = 1_000
+            conn.requestMethod = "GET"
+            conn.setRequestProperty("Connection", "close")  // 避免 keep-alive 占用连接
+            val code = conn.responseCode
+            if (code != 200) {
+                Log.d(TAG, "checkHeartbeatOk: HTTP $code from /health")
+                conn.disconnect()
+                return false
+            }
+            val body = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+            val json = JSONObject(body)
+            val ok = json.optBoolean("heartbeat_ok", false)
+            if (!ok) {
+                val age = json.optLong("heartbeat_age_ms", -1L)
+                Log.w(TAG, "checkHeartbeatOk: heartbeat_stale (age=${age}ms)")
+            }
+            ok
         } catch (e: Throwable) {
-            Log.w(TAG, "Failed to touch heartbeat file (探活降级为仅 isAlive)", e)
+            Log.d(TAG, "checkHeartbeatOk: connection failed (port=$p) — ${e.javaClass.simpleName}: ${e.message}")
+            false
         }
     }
 
+    // 🆕 2026-06-14：startGoProcess 启动 Go 子进程
+    //
+    // 重构后只剩 5 个 env var（删了 ENCV_SERVING_DIR、ENCV_HEARTBEAT_PATH）：
+    //   - ENCV_CONFIG_PATH   — Kotlin 拥有，告诉 Go 读哪个 config
+    //   - ENCV_MOBILE=1      — Go 行为开关（启 mobile overlay）
+    //   - HOME               — Go 找 user home
+    //   - ENCV_LIB_DIR       — Kotlin 显式知道 native lib 位置
+    //   - ENCV_FFMPEG_WORKER — 同上（ffmpeg worker 路径）
+    //
+    // 不再设：
+    //   - ENCV_SERVING_DIR    — Go 自己决定（mobile overlay + os.Getwd() fallback）
+    //   - ENCV_HEARTBEAT_PATH — 心跳全在内存（Server.startHeartbeatLoopInMemory + HTTP /health）
+    //
+    // 见 spec/cross-process-ipc-refactor/spec.md §3.5
     private fun startGoProcess(source: String, command: String?) {
         if (goProcess?.isAlive == true && processReady.get()) {
             publishStatus(null, source, command)
@@ -281,27 +343,53 @@ class EncvGoService : Service() {
             val configPath = File(filesDir, "config.user.json").absolutePath
             Log.i(TAG, "Starting backend: ${binary.absolutePath} start")
 
+            // 🆕 2026-06-14：先探测 servingDir 是否可写，不可写则降级到 filesDir。
+            //
+            // 背景：Android 11+ scoped storage 限制 + 真机用户拒绝存储权限 →
+            //   /storage/emulated/0 写不了（即使是 app 自己的目录）→ Go 端
+            //   servingDir/.encv_heartbeat 写失败 → 即使 mtime 路径一致 Go 也写不了。
+            //
+            // 防御：每次启动 Go 前探写一次，失败就改写 config.user.json 的
+            //   mobile.server.dir 到 filesDir（永远可写、无需权限），并把同
+            //   路径也写进 ENCV_HEARTBEAT_PATH。
+            // 🆕 2026-06-14：Kotlin 不再设 ENCV_SERVING_DIR / ENCV_HEARTBEAT_PATH 给 Go。
+            //
+            // 历史：Kotlin 用 resolveServingDir() 探测 /storage/emulated/0 可写性，
+            //       失败时降级到 filesDir 并写 config.user.json。
+            //       Go 端有 mobile overlay 自己会决定 servingDir。
+            //
+            // 新：Kotlin 不管 servingDir（Go 自己处理），零文件依赖，零 env 协商。
+            //     如果需要知道 Go 在用哪个目录，调 GET /api/runtime 读 serving_dir 字段。
+            //     见 spec/cross-process-ipc-refactor/spec.md §3.5
+            //
+            // 【防回归】不要重新引入：
+            //   - resolveServingDir() — 探测并改写 config
+            //   - heartbeatFile — 文件版心跳
+            //   - touchHeartbeat() — 启动时 touch 文件
+            //   - ENCV_HEARTBEAT_PATH env — Go 端不再读
+            //   - ENCV_SERVING_DIR env — Go 端不再读
+
             goProcess = ProcessBuilder(binary.absolutePath, "start").apply {
                 environment()["ENCV_CONFIG_PATH"] = configPath
                 environment()["ENCV_MOBILE"] = "1"
                 environment()["HOME"] = filesDir.absolutePath
-                // 🆕 2026-06-11 Phase 2: 跟 ENCV_LIB_DIR 同源
+                // 显式告诉 Go 端 app 私有文件目录（mount 系统 + 日志持久化需要）
+                // 不依赖 appdata.go 的硬编码 fallback，确保路径 100% 正确
+                environment()["ENCV_APP_FILES_DIR"] = filesDir.absolutePath
                 // - ENCV_LIB_DIR 给 cgo CallFFmpegNative 用（dlopen libffmpeg.so）
-                // - ENCV_FFMPEG_WORKER 给 ffmpeg-worker 路径用（workerClient.locateWorker 优先选这个）
+                // - ENCV_FFMPEG_WORKER 给 ffmpeg worker 路径用（workerClient.locateWorker 优先选这个）
                 //   改用 subprocess worker 调 ffmpeg 后，父进程 ctx cancel 时可以 SIGKILL worker
                 //   解锁（之前 in-process cgo 阻塞 OS thread 没法 cancel，hang spinner forever）
                 environment()["ENCV_LIB_DIR"] = applicationInfo.nativeLibraryDir
                 environment()["ENCV_FFMPEG_WORKER"] =
                     File(applicationInfo.nativeLibraryDir, "libffmpeg-worker.so").absolutePath
-                // 🆕 2026-06-12 Phase 4：worker 写心跳到 servingDir/.encv_heartbeat
-                environment()["ENCV_SERVING_DIR"] = System.getenv("ENCV_SERVING_DIR")
-                    ?: "/storage/emulated/0"  // 真机默认 servingDir
+                // 🆕 2026-06-14：删除 ENCV_SERVING_DIR / ENCV_HEARTBEAT_PATH
+                // Go 自己决定 servingDir（mobile overlay + os.Getwd() fallback）
+                // 心跳全在内存（Server.startHeartbeatLoopInMemory + HTTP /health）
+                // 见 spec/cross-process-ipc-refactor/spec.md §3
                 redirectErrorStream(true)
                 directory(filesDir)
             }.start()
-
-            // 🆕 2026-06-12 Phase 4：bootstrap 心跳文件 — Kotlin 端 1s poll mtime 前必须有文件
-            touchHeartbeat()
 
             monitorProcessOutput(startupGeneration.incrementAndGet(), source, command)
             waitForBackendReady(startupGeneration.get(), source, command)

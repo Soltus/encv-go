@@ -511,10 +511,12 @@ async function main(): Promise<void> {
   // ── Step 1: 路径解析（fail-fast）──
   const paths = resolvePaths()
 
-  // ── Step 2:（已废弃）preflight mock 生成 ──
-  // 2026-06-10 改造：Node CLI 脚本已删，mock 数据由用户主动调后端 /api/mock/generate。
-  // ensureMockData 保留为 noop 桩（仅打 log）。
-  await ensureMockData(paths.mobileDir)
+  // ── Step 2：preflight 建空 mobileDataDir ──
+  // 2026-06-14 修复：传 mobileDataDir（= /storage/emulated/0），不是 mobileDir（= app/encv-mobile）
+  // 之前传错导致 service-guard 一直 BLOCK：os.Stat('/workspace/app/encv-mobile') ≠ '/storage/emulated/0'，
+  // mobile 真机/预览标准路径不匹配。
+  // ensureMockData 只建空目录，mock 数据由用户主动调后端 /api/mock/generate 生成。
+  await ensureMockData(paths.mobileDataDir)
 
   // ── Step 3: 启动子进程 ──
   childrenManager = new ChildrenManager()

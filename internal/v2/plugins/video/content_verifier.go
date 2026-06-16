@@ -401,13 +401,21 @@ func (p *VideoContentVerifier) checkFFmpegDecoding(origPath, decPath string) err
 
 // runFFmpegStressTest 执行单个文件的解码测试 (性能优化版)
 func (p *VideoContentVerifier) runFFmpegStressTest(ctx context.Context, filePath, label string) error {
-	_, stderrStr, exitCode, err := ffmpeg.RunWithOutput(ctx,
+	// 🆕 2026-06-15：ffmpeg.RunWithOutput(ctx, args...) → ffmpeg.Encode(ctx, args...) 返回 *EncodeResult
+	res, err := ffmpeg.Encode(ctx,
 		"-v", "error",
 		"-nostdin",
 		"-i", filePath,
 		"-f", "null",
 		"-",
 	)
+	stderrStr := ""
+	exitCode := 0
+	if res != nil {
+		stderrStr = res.Stderr
+		exitCode = res.ExitCode
+	}
+	_ = exitCode
 
 	if strings.Contains(stderrStr, "corrupt") ||
 		strings.Contains(stderrStr, "Invalid") ||
@@ -477,7 +485,8 @@ func (p *VideoContentVerifier) getVideoMetrics(filePath string) (int, float64, e
 // 【性能优化】使用 nb_frames 而不是 -count_frames，避免耗时的帧解码
 func (p *VideoContentVerifier) getVideoMetricsFallback(filePath string) (int, float64, error) {
 	// 首先尝试使用 nb_frames（元数据中的帧数，非常快）
-	output, err := ffmpeg.Probe(
+	// 🆕 2026-06-15：ffmpeg.Probe(ctx, args) 签名调整
+	output, err := ffmpeg.Probe(context.Background(),
 		"-v", "error",
 		"-select_streams", "v:0",
 		"-show_entries", "stream=nb_frames",
@@ -662,7 +671,8 @@ func (p *VideoContentVerifier) diagnoseFragmentation(origPath, decPath string) e
 
 // DiagnoseGOPAlignment ... (保留)
 func (p *VideoContentVerifier) DiagnoseGOPAlignment(filePath string, binaryOffsets []uint64) error {
-	output, err := ffmpeg.Probe(
+	// 🆕 2026-06-15：ffmpeg.Probe(ctx, args) 签名调整
+	output, err := ffmpeg.Probe(context.Background(),
 		"-v", "error", "-select_streams", "v:0",
 		"-skip_frame", "nokey", "-show_entries", "frame=pkt_pos,pkt_pts_time",
 		"-of", "json", filePath,

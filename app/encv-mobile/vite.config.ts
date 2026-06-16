@@ -7,23 +7,21 @@ import path from 'node:path'
 // =============================================================================
 //
 // 本项目架构：preview-gateway(:16666) spawn vite(:8100) 作为子进程。
-// 直接运行 vite 会导致：
-//   ① ENCV_DEV_PREVIEW / ENCV_MOBILE 等 env 未注入
-//   ② Vite 自动扫描 plugin-openlist/web/index.html → 找不到 src/views/ 下文件报错
-//   ③ HMR 在沙箱环境无法工作（缺 gateway 的 dynamicHmrHostPlugin Host 头透传）
-//
-// 合法启动链路：
+// 唯一合法启动链路：
 //   pm2 start ecosystem.config.cjs
 //     → preview-gateway (spawn vite with SPAWN_VITE=1 env)
 //       → vite 正常启动
 //
-// 非法启动方式会被此插件拦截并抛出异常 + 给出正确用法。
-
-// ⚠️ 防御：dev 模式启动守卫
-//  - 详细逻辑见 src/lib/dev-start-guard.ts（含 build/CI 跳过规则）
-//  - 单测见 src/composables/__tests__/dev-start-guard.test.ts
-//  - 文件必须在 src/ 下 — vite 5/6/7/8 默认不 transform src/ 外的 .ts，
-//    scripts/ 下的 .ts 会被 vite 当 external → 守卫拿不到 devStartGuard 函数
+// 非法启动方式一律被 dev-start-guard 拦截并抛错：
+//   - 直接 vite / npm run dev / pnpm exec vite
+//   - CI=true 绕过（2026-06-15 已收紧，CI 不应跑 vite dev）
+//   - PPA_SPAWNED=1 包装（2026-06-15 已收紧，仅 PM2 进程树合法）
+//   - nohup / bash -c 包装
+//
+// 守卫实现：./src/lib/dev-start-guard.ts
+// 单测：      src/composables/__tests__/dev-start-guard.test.ts
+// 文件必须在 src/ 下 — vite 5/6/7/8 默认不 transform src/ 外的 .ts，
+// scripts/ 下的 .ts 会被 vite 当 external → 守卫拿不到 devStartGuard 函数
 import { devStartGuard } from './src/lib/dev-start-guard'
 
 // =============================================================================

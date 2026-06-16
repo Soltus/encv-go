@@ -105,6 +105,13 @@
               <span v-if="serverOnline && backendPort" class="port-info">:{{ backendPort }}</span>
               <span v-if="!serverOnline && connectionError" class="connection-error-inline"> - {{ connectionError }}</span>
             </p>
+            <!-- 🆕 2026-06-15：复用 desktop performPingCheck 的 instance_id 防劫持
+                 展示当前 backend 进程唯一 ID（前 8 字符）+ version，
+                 让用户/AI 能直接核对"我连的是不是同一个进程" -->
+            <p v-if="serverOnline && backendInstanceId" class="instance-info">
+              <code class="instance-id">{{ backendInstanceId.slice(0, 8) }}</code>
+              <span v-if="backendVersion" class="version-info">v{{ backendVersion }}</span>
+            </p>
           </ion-label>
         </ion-item>
         <ion-item v-if="isNative()" button @click="goEngine" detail>
@@ -125,13 +132,20 @@
 
       <ion-list>
         <ion-list-header>
-          <ion-label>{{ t('settings.cache') }}</ion-label>
+          <ion-label>{{ t('settings.storage') }}</ion-label>
         </ion-list-header>
         <ion-item button @click="goCache" detail>
           <ion-icon :icon="databaseIcon" slot="start"></ion-icon>
           <ion-label>
             <h3>{{ t('settings.cacheAndIndex') }}</h3>
             <p>{{ indexStats?.isIndexing ? t('settings.indexing') : (indexStats && indexStats.totalFiles > 0 ? (indexStats.source === 'webdav' ? 'WebDAV ' + t('settings.indexReady') : t('settings.indexReady')) : t('settings.noIndexData')) }}</p>
+          </ion-label>
+        </ion-item>
+        <ion-item button @click="goMounts" detail>
+          <ion-icon :icon="serverIcon" slot="start"></ion-icon>
+          <ion-label>
+            <h3>{{ t('settings.mountsTitle') }}</h3>
+            <p>{{ t('settings.mountsHelp') }}</p>
           </ion-label>
         </ion-item>
       </ion-list>
@@ -398,7 +412,7 @@ import FilePickerModal from '@/components/FilePickerModal.vue'
 import ConfigFieldItem from '@/components/ConfigFieldItem.vue'
 
 const router = useRouter()
-const { isOnline: serverOnline, lastError: connectionError, checkStatus, backendPort } = useServerStatus()
+const { isOnline: serverOnline, lastError: connectionError, checkStatus, backendPort, backendInstanceId, backendVersion } = useServerStatus()
 const { schemaFields, loading: configLoading, dirty, restartNeeded, loadConfig, saveConfig, resetConfig, getFieldValue, setFieldValue, resetFieldToDefault } = useConfig()
 const { t, tField, tSectionTitle } = useI18n()
 
@@ -555,6 +569,10 @@ function goAbout() {
 
 function goCache() {
   router.push('/tabs/settings/cache')
+}
+
+function goMounts() {
+  router.push('/tabs/settings/mounts')
 }
 
 function goPlugins() {
@@ -909,6 +927,26 @@ watch(() => getFieldValue(['plugin_settings', 'alist_encrypt', 'enabled']), (ena
   font-size: 12px;
   opacity: 0.7;
   margin-left: 4px;
+}
+/* 🆕 2026-06-15：backend 进程身份展示（performPingCheck 模式复用）
+   让用户/AI 能直接核对"我连的是不是同一个进程" */
+.instance-info {
+  margin: 4px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.instance-info .instance-id {
+  font-family: var(--ion-font-family-monospace, monospace);
+  font-size: 11px;
+  background: var(--ion-color-light);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--ion-color-primary);
+}
+.instance-info .version-info {
+  font-size: 11px;
+  opacity: 0.7;
 }
 .connection-error-inline {
   color: var(--ion-color-danger);

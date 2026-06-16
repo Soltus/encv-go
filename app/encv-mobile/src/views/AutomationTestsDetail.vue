@@ -356,7 +356,8 @@ import {
   type PluginMeta,
 } from '@/api/encv'
 import { generateMockFilesViaBackend, resetMockFilesViaBackend } from '@/api/mockGenerator'
-import { DEFAULT_AUTOMATION_SOURCE } from '@/composables/useAutomationTests'
+import { extToRelativePath } from '@/lib/mockDataGenerator'
+import { MOCK_GENERATE_ROOT } from '@/lib/mockConstants'
 import { formatContainerVersion } from '@/constants/containerVersion'
 import { useWorkflowEngine } from '@/composables/useWorkflowEngine'
 import type { WorkflowDefinition, WorkflowRun, JobRun, StepRun, StepDefinition } from '@/lib/workflow/types'
@@ -369,7 +370,11 @@ import StepDetailPanel from '@/components/automation/StepDetailPanel.vue'
 const { t } = useI18n()
 
 // ---- Mock 数据 ----
-const mockRoot = computed(() => DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 5).join('/') + '/')
+// 🆕 2026-06-15 声明式：mockRoot = AUTOMATION_MOUNT_PATH + '/'（常量，不再 split/slice）
+//   之前 .slice(0, 5) 隐式推导：DEFAULT_AUTOMATION_SOURCE 改前缀 → UI 静默选错 → 403
+//   现在改 mount path = 改 src/lib/mockConstants.ts + 后端 mount.go，两个源，不会漏
+// 保留 computed() 是因为下方有 `mockRoot.value` 引用，零行为变化
+const mockRoot = computed(() => MOCK_GENERATE_ROOT)
 const isGenerating = ref(false)
 const isResetting = ref(false)
 const mockStats = ref<{ count: number; totalSize: number; skipped?: number } | null>(null)
@@ -818,11 +823,31 @@ function classifyMockError(errMsg: string): { title: string; hint: string } {
       hint: '后端进程可能已崩溃（502/网络拒绝）。\n\n排查：\n  1) adb logcat | grep encv-go | tail -200\n  2) 真机：开发者选项里重启 backend service\n  3) 沙箱：pm2 logs encv-go 看 panic stack',
     }
   }
-  // 9. mockRoot 路径不在白名单
+  // 9. mockRoot 路径不在白名单（老 allowlist 错误，保留兼容）
   if (/not in allowlist/i.test(errMsg)) {
     return {
       title: 'Mock 生成失败：路径不在白名单',
       hint: '后端 servingDir 校验拒绝。mockRoot 必须是白名单前缀（如 /storage/emulated/0/encv-automation）。\n\n排查：检查 settings.user.json 的 mockRoot 配置。',
+    }
+  }
+  // 🆕 2026-06-15 multi-mount：mount 路径解析失败（最常见）
+  //   后端响应：{error: "resolve \"/d/automation/...\"...available mounts: [primary→/d/primary, ...]"}
+  if (/invalid mount path|resolve.*no mount matches|available mounts/i.test(errMsg)) {
+    // 提取 available_mounts 字段
+    const availMatch = errMsg.match(/available mounts:\s*\[([^\]]*)\]/)
+    const availList = availMatch?.[1]?.trim() || '(unknown — 见后端日志)'
+    return {
+      title: 'Mock 生成失败：mockRoot 不是有效 mount 路径',
+      hint:
+        `后端 mount registry 找不到 mockRoot。\n\n` +
+        `当前可用 mount：[${availList}]\n\n` +
+        `常见 bug：mockRoot 派生用了字符串切片（fragile）\n` +
+        `  - 应使用 MOCK_GENERATE_ROOT 声明式常量（src/lib/mockConstants.ts）\n` +
+        `  - 错误示例：mockRoot = "/d/automation/01-plain-media/video/"（取多了）\n` +
+        `  - 正确示例：mockRoot = "/d/automation/"（mount 根）\n\n` +
+        `排查：\n` +
+        `  1) WorkflowDashboard.vue L201 / AutomationTestsDetail.vue L373 → 改 N=3\n` +
+        `  2) 后端 slog：grep "Mock generate rejected" /workspace/encv.log`,
     }
   }
   // 10. 兜底
@@ -921,11 +946,15 @@ function buildDynamicWorkflow(): void {
     const opts = plugin.taskOptions
     if (!opts) continue
 
-    // ====== 修 #4：按 plugin.supportedExtensions 选源文件 ======
+    // 🆕 2026-06-15 修 #4：按 plugin.supportedExtensions[0] + mock spec 实际路径派生 sourcePath
+    // （不再硬编码 sample.{ext}，跟 mock 真相对齐：mp3→music.mp3 / mkv→comedy.mkv / jpg→photo.jpg）
     const supportedExts = plugin.supportedExtensions ?? []
     if (supportedExts.length === 0) continue
     const sourceExt = supportedExts[0]
-    const sourcePath = `${mockRoot.value}01-plain-media/${categoryForExt(sourceExt)}/sample.${sourceExt}`
+    const specRelPath = extToRelativePath(sourceExt)
+    const sourcePath = specRelPath
+      ? `${mockRoot.value}${specRelPath}`
+      : `${mockRoot.value}01-plain-media/${categoryForExt(sourceExt)}/sample.${sourceExt}`
 
     const versions: number[] = opts.supportVersionSelect && opts.supportedVersions
       ? opts.supportedVersions
@@ -1079,10 +1108,12 @@ function buildDynamicWorkflow(): void {
             : '')
 
           // 🆕 修 #5：解密读 encrypt 阶段写出的产物
-          // encrypt 步骤把 sample.{ext} 加密成 sample.{ext}.{containerExt}
+          // encrypt 步骤把 spec.relativePath basename 加密成 basename + containerExt
           // 加密后文件名由 plugin 内部决定 → 后端 outputExt = ext + containerExt
+          // 之前硬编码 sample.${sourceExt}.${containerExt} → 对 mp3/mkv/jpg 等 mock 实际名不一致 → "文件不存在"
           const containerExt = plugin.containerExtension || `${sourceExt}.encv`
-          const encryptedFileName = `sample.${sourceExt}.${containerExt}`
+          const sourceBasename = sourcePath.split('/').pop() ?? `sample.${sourceExt}`
+          const encryptedFileName = `${sourceBasename}.${containerExt}`
           const sourcePathForDecrypt = `${mockRoot.value}02-test-output/${baseSafeId}/${encryptedFileName}`
 
           const stepId = `dec_${safeId.replace(/^dec_/, '')}`
@@ -1250,6 +1281,7 @@ onUnmounted(() => {
 <style scoped>
 .section-hint { font-size: 12px; color: var(--ion-color-medium-shade); padding: 8px 16px 4px; margin: 0; }
 .mock-root-path { font-family: monospace; font-size: 12px; background: var(--ion-color-light-shade); padding: 2px 6px; border-radius: 4px; }
+
 .mock-stats-card { margin: 8px 16px; padding: 12px 16px; background: var(--ion-color-light); border-radius: 8px; }
 .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 14px; }
 .stat-value { font-weight: 600; font-family: monospace; }

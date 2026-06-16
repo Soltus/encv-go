@@ -423,11 +423,17 @@ go run ./cmd/encv start
 单元测试
 
 ```cmd
-# 运行 service 包下的所有测试
-go test ./internal/service -v
+# ✅ 推荐：通过统一入口（默认 -short + -failfast）
+bash scripts/test-go.sh ./internal/service -v
 
-# 只运行特定测试
-go test ./internal/service -run="TestContinuousRead|TestRandomSeek" -v
+# ✅ 只跑特定测试
+bash scripts/test-go.sh -run "TestContinuousRead|TestRandomSeek" ./internal/service -v
+
+# ✅ 模块化编排：自动遍历所有包 + 单包 -short 跑
+bash scripts/test-all-go.sh
+
+# ⚠️ 严禁 go test ./... / ./internal/...（沙箱内 380s+ 必断网）
+# 详见 .trae/rules/test-orchestration.md
 ```
 
 一个简单的测试流程是加密一个示例视频目录：

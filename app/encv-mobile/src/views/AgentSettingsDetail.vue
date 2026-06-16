@@ -25,7 +25,14 @@
       <!-- ② 错误态 —— 后端挂掉 / 配置拉取失败 / 离线时显示，
               给出明确原因 + 手动重试按钮，避免页面一片空白让用户无所适从 -->
       <div v-else-if="!serverOnline || configError" class="configErrorContainer">
-        <ion-icon :icon="cloudOfflineOutline" class="configErrorIcon"></ion-icon>
+        <!-- 后端健康度摘要：让用户调 Agent 前先看后端是否在线
+             此页面语义 = "Agent 行为配置"，不是"后端状态显示"
+             卡片自带 version / instance_id / port / latency 等丰富信息，
+             视觉效果 + 动态（pulse / 状态切换）远比纯文本好。
+             保留下方"诊断文本" details 给高级用户 / bug report 用 -->
+        <div class="configErrorCardWrap">
+          <ServerStatusCard :clickable="false" />
+        </div>
         <h2 class="configErrorTitle">
           {{ serverOnline
               ? (t('agent.configLoadFailed') || '加载 AI 配置失败')
@@ -36,9 +43,9 @@
               ? configError
               : (t('agent.backendOfflineHint') || '请确认 encv-go 服务已启动，或检查网络连接。') }}
         </p>
-        <!-- 诊断信息：展开查看当前探测结果，避免"后端服务未连接"这种无用的提示 -->
-        <details class="configErrorDiag" open>
-          <summary>诊断信息</summary>
+        <!-- 诊断信息：展开查看当前探测结果（forensic / bug report 仍有用） -->
+        <details class="configErrorDiag">
+          <summary>诊断信息（技术细节）</summary>
           <pre class="configErrorDiagPre">{{ diagInfo }}</pre>
         </details>
         <button type="button" class="configErrorRetryBtn" :disabled="configLoading" @click="retryLoadConfig">
@@ -338,7 +345,7 @@ import {
   IonBadge,
 } from '@ionic/vue'
 import {
-  save as saveIcon, sparklesOutline, cloudOutline, cloudOfflineOutline, settingsOutline,
+  save as saveIcon, sparklesOutline, cloudOutline, settingsOutline,
   documentText, lockClosed, speedometerOutline, key, globeOutline,
   optionsOutline, listOutline, flashOutline, closeCircleOutline,
   checkmarkCircle, lockOpenOutline, alertCircleOutline,
@@ -356,6 +363,7 @@ import { runSyncDoctor, type DoctorReport } from '@/composables/useAgent'
 import type { FieldDef } from '@/config/schemaParser'
 import ConfigFieldItem from '@/components/ConfigFieldItem.vue'
 import InputWithHistory from '@/components/InputWithHistory.vue'
+import ServerStatusCard from '@/components/ServerStatusCard.vue'
 import { useRouter } from 'vue-router'
 
 /** 健壮的错误序列化 — 处理 TypeError/DOMException/AbortError/普通 Error 等所有情况 */
@@ -1416,6 +1424,14 @@ function handleGoToDevLogs() {
   color: var(--encv-text-secondary);
 }
 
+/* 🆕 2026-06-15：错误态顶部 ServerStatusCard 容器
+   让卡片横向填满但保留最大宽度（避免在 600+px 屏宽时卡片无限拉伸） */
+.configErrorCardWrap {
+  width: 100%;
+  max-width: 480px;
+  margin-bottom: 16px;
+}
+
 /* 错误态：后端离线 / 配置拉取失败 —— 给用户明确的可执行信息 */
 .configErrorContainer {
   display: flex;
@@ -1426,12 +1442,6 @@ function handleGoToDevLogs() {
   text-align: center;
   color: var(--encv-text-secondary);
   min-height: 50vh;
-}
-.configErrorIcon {
-  font-size: 64px;
-  color: var(--ion-color-medium, #92949c);
-  margin-bottom: 16px;
-  opacity: 0.7;
 }
 .configErrorTitle {
   margin: 0 0 8px;

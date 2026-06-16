@@ -2,6 +2,8 @@ export default {
   'zh-CN': {
     'files.title': '文件',
     'files.root': '根目录',
+    // 🆕 2026-06-15 multi-mount 适配：mount 虚拟根用"挂载点"显示
+    'files.mountRoot': '挂载点',
     'files.loading': '正在加载文件...',
     'files.connecting': '正在连接后端...',
     'files.serverOffline': '服务器离线',
@@ -48,6 +50,8 @@ export default {
   en: {
     'files.title': 'Files',
     'files.root': 'Root',
+    // 🆕 2026-06-15 multi-mount 适配
+    'files.mountRoot': 'Mounts',
     'files.loading': 'Loading files...',
     'files.connecting': 'Connecting to backend...',
     'files.serverOffline': 'Server Offline',

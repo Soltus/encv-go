@@ -38,17 +38,31 @@
 
 ## 二、严禁阻塞式服务启动
 
-**Go 后端服务必须在后台运行，不得占用当前终端。**
+**Go 后端 / Vite dev server 严禁在当前终端前台运行；必须在 PM2 → preview-gateway 链路内管理（详见 §5.2）。**
 
 ```bash
-# ❌ 错误：直接前台运行 — 终端被占用
-$ go run ./cmd/encv/ serve
+# ❌ 错误：所有"绕过 pm2"的启动方式 — 全部非法
+$ go run ./cmd/encv/ serve          # 前台占终端
+$ go run ./cmd/encv/ start          # 前台占终端
+$ go run ./cmd/encv/ serve > /tmp/encv-backend.log 2>&1 &  # nohup / & 后台
+$ nohup go run ./cmd/encv/ start > /tmp/encv-backend.log 2>&1 &
+$ tmux new-session -d -s encv 'go run ./cmd/encv/ start'  # tmux 包装
+$ vite                                       # dev-start-guard 拦截
+$ npm run dev                                # dev-start-guard 拦截
+$ pnpm exec vite                             # dev-start-guard 拦截
+$ CI=true pnpm exec vite                     # 绕过意图明确，dev-start-guard 拦截（2026-06-15 收紧）
+$ PPA_SPAWNED=1 pnpm exec vite               # 绕过意图明确，dev-start-guard 拦截（2026-06-15 收紧）
+$ bash -c 'go run ./cmd/encv/ start'         # bash 包装同样非法
+```
 
-# ✅ 正确：4 种后台启动方式
-$ go run ./cmd/encv/ serve > /tmp/encv-backend.log 2>&1 &  # ① & 后台
-$ nohup go run ./cmd/encv/ serve > /tmp/encv-backend.log 2>&1 &  # ② nohup
-$ tmux new-session -d -s encv 'go run ./cmd/encv/ serve'  # ③ tmux（推荐）
-# ④ IDE 独立终端标签
+**✅ 唯一合法链路**（详见 §5.2）：
+
+```bash
+$ pm2 start /workspace/ecosystem.config.cjs
+# → preview-gateway(:16666) spawn 子进程：
+#   - air → encv-go(:2025)
+#   - vite → encv-mobile(:8100, SPAWN_VITE=1)
+#   - openlist (按需)
 ```
 
 **后台进程管理命令**：`lsof -i :2025 -t` / `tail -f /tmp/encv-backend.log` / `kill $(lsof -i :2025 -t)`
@@ -89,19 +103,27 @@ done
 
 ## 五、Capacitor 预览标准化流程
 
-### 5.1 完整启动序列
+### 5.1 ⚠️ 本节已废弃 — 仅作历史背景
 
-```
-Step 1 ──→ Step 2 ──→ Step 3（可选）
-Backend     Frontend    Capacitor
-:2025       :5173       sync/preview
-```
+> **唯一合法启动方式：见 §5.2 Capacitor 预览专用一键脚本（PM2 → preview-gateway）。**
+> 
+> **5.1 描述的"通用方式"（go run / npm run dev / npx cap serve 等）已全部被 dev-start-guard + air 配置 + ecosystem.config.cjs 收紧，2026-06-15 不再可用。**
+> 
+> 历史背景（保留供排错参考）：
+> 
+> ```
+> Step 1 ──→ Step 2 ──→ Step 3（可选）
+> Backend     Frontend    Capacitor
+> :2025       :5173       sync/preview
+> ```
+> 
+> 旧 Step 1（已废弃）：`go run ./cmd/encv/ serve > /tmp/encv-backend.log 2>&1 &`
+> 旧 Step 2（已废弃）：`npm run dev` 启动 Vite
+> 旧 Step 3（已废弃）：`npx cap sync` / `npx cap open android` / `npx cap serve`
+> 
+> **以上三种"通用方式"在沙箱内一律被 dev-start-guard / air 拦截。请改走 §5.2 的 pm2 路线。**
 
-**Step 1**：后台启动 `go run ./cmd/encv/ serve > /tmp/encv-backend.log 2>&1 &` → 验证 `curl http://127.0.0.1:2025/api/health`
-**Step 2**：`npm run dev` 启动 Vite
-**Step 3（可选）**：`npx cap sync` / `npx cap open android` / `npx cap serve`
-
-### 5.2 Capacitor 预览专用一键脚本（`scripts/start-preview.sh`）
+### 5.2 Capacitor 预览专用一键脚本（`scripts/previews.sh`）
 
 **核心铁律**：
 - servingDir 永远为 `/storage/emulated/0` 绝对路径
@@ -114,15 +136,43 @@ Backend     Frontend    Capacitor
 
 | 端口 | 进程 | 身份 |
 |------|------|------|
-| 16000 | agent-tool-host | 公网反向代理入口 |
-| 5174/5175/... | Vite | 实际 dev server（端口漂移） |
-| 2025 | encv（air 监视） | Go Backend |
+| 16000 | agent-tool-host | 公网反向代理入口（严禁碰） |
+| 16666 | preview-gateway | 唯一对外预览入口（pm2 管） |
+| 15003 | openpreview-stub | OpenPreview 工具 web_server command_id 源（pm2 管） |
+| 8100 | encv-mobile-vite | Vite dev server（gateway 内部子进程） |
+| 2025 | encv-go（air 监视） | Go Backend（gateway 内部子进程） |
+| 5174/5244 | plugin-openlist-vite / openlist | 按需（默认不起） |
+
+**链路（pm2 唯一权威）**：
+
+```bash
+# 一键环境准备（装 air / pm2 / pnpm / build gateway）
+bash scripts/setup-sandbox-env.sh
+
+# 一键启 preview（pm2 管 2 个 app + gateway 内部 spawn 子进程）
+bash scripts/previews.sh start
+
+# 状态 / 日志 / 强杀
+bash scripts/previews.sh status
+bash scripts/previews.sh logs preview-gateway
+bash scripts/previews.sh kill
+```
 
 **激活外部访问**：
 ```bash
-# 脚本返回后必须调用 OpenPreview
-OpenPreview(command_id="<id>", preview_url="http://localhost:5174/")
-# 预览 URL 用 Vite 实际端口（5174），不是 5173
+# 1) 启一个 web_server 类型 command 拿 command_id（任何 200 OK 服务都行）
+#    openpreview-stub 已被 pm2 占着 :15003，所以临时启一个 :17000 实例
+PORT=17000 node scripts/openpreview-stub.js &
+
+# 2) 调用 OpenPreview 激活外网预览
+OpenPreview(command_id="<id>", preview_url="http://localhost:16666/")
+# 预览 URL 必须用 preview-gateway 端口（16666），不是 Vite 8100
+# 原因：vite.config.ts D9 决策（spec/unify-sandbox-preview-port §3.1）后，
+#       Vite 是纯净 SPA dev server，**不再 proxy /api/* 到 :2025**。
+#       所有 /api/* 走 :16666 gateway → proxy → :2025 拿 JSON。
+#       直连 :8100 的 /api/* 会撞 Vite SPA fallback → 200 text/html（"假挂"假象）。
+# 注意：D14 决策（同样在 spec/unify-sandbox-preview-port）只解决 HMR host 问题，
+#       跟 Vite 是否 proxy 无关——不要把这两个决策混为一谈。
 ```
 
 **完整 6 步脚本行为 + 排查表 + service-guard 根因清单** → [详情文档 §五](../rule-library/development.md#五capacitor-预览标准化流程)

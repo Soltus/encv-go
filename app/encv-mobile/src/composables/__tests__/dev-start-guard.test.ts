@@ -1,15 +1,22 @@
 /**
  * dev-start-guard.test.ts
  *
- * 🆕 2026-06-10 CI build 误拦截防回归（用户报告 `pnpm run build` 失败）：
- *  验证 devStartGuard 在 build 模式 / CI 环境 / SPAWN_VITE=1 / PM2_HOME 存在时
- *  全部不抛错，只在"裸跑 vite dev + 无合法 env"时抛错。
+ * 🆕 2026-06-15 pm2 唯一权威收编（用户命令）：
+ *  devStartGuard 只放行三种情况：
+ *    ① env.command === 'build'（产线打包，与 PM2 无关）
+ *    ② SPAWN_VITE === '1'    （preview-gateway spawn 合法）
+ *    ③ PM2_HOME 有值          （PM2 进程树在管 vite）
+ *  其他一切（包括 CI=true / PPA_SPAWNED=1 / 直接 vite dev）一律抛错。
+ *
+ * 历史：
+ *   - 2026-06-10：CI build 误拦截防回归（用户报告 pnpm run build 失败）
+ *   - 2026-06-15：移除 CI 跳过 + PPA_SPAWNED 跳过 → 收紧为 PM2 唯一权威
  *
  * 文件位置说明：此文件在 src/composables/__tests__/（vue-tsc 扫描范围），
  *  但**不** import node:fs/path/url 等协议 — 故不会因 tsconfig 不加载
  *  @types/node 报 TS2307。
  *
- * 测试策略：通过 vi.stubEnv 修改 process.env 后用 devStartGuard().config()
+ * 测试策略：通过 process.env 切换后用 devStartGuard().config()
  *  钩子（传不同 env.command 参数）验证行为。每个 it 完成后恢复 env，
  *  避免污染后续测试。
  */
@@ -36,7 +43,7 @@ function callGuard(plugin: ReturnType<typeof devStartGuard>, env: MinimalEnv): v
   handler.call(undefined, {}, env)
 }
 
-describe('devStartGuard — 触发条件防回归', () => {
+describe('devStartGuard — 唯一权威 = PM2 进程树', () => {
   const ORIGINAL_ENV = { ...process.env }
 
   beforeEach(() => {
@@ -53,7 +60,7 @@ describe('devStartGuard — 触发条件防回归', () => {
     Object.assign(process.env, ORIGINAL_ENV)
   })
 
-  // === build 模式必须跳过 ===
+  // === ① build 模式必须跳过（产线打包合法） ===
   it('build 模式 + 无合法 env → 不抛错（CI 产线打包能跑）', () => {
     const plugin = devStartGuard({ errorMessage: 'should not throw' })
     expect(() => callGuard(plugin, { command: 'build' })).not.toThrow()
@@ -64,38 +71,46 @@ describe('devStartGuard — 触发条件防回归', () => {
     expect(() => callGuard(plugin, { command: 'build' })).not.toThrow()
   })
 
-  // === CI 环境必须跳过 ===
-  it('serve 模式 + CI=true + 无 PM2 → 不抛错（GitHub Actions 跑 lint）', () => {
-    process.env.CI = 'true'
-    const plugin = devStartGuard({ errorMessage: 'should not throw' })
-    expect(() => callGuard(plugin, { command: 'serve' })).not.toThrow()
-  })
-
-  it('serve 模式 + CI=1 + 无 PM2 → 不抛错', () => {
-    process.env.CI = '1'
-    const plugin = devStartGuard({ errorMessage: 'should not throw' })
-    expect(() => callGuard(plugin, { command: 'serve' })).not.toThrow()
-  })
-
-  // === SPAWN_VITE=1 必须放过 ===
+  // === ② SPAWN_VITE=1 必须放过 ===
   it('serve 模式 + SPAWN_VITE=1 → 不抛错（preview-gateway spawn 合法）', () => {
     process.env.SPAWN_VITE = '1'
     const plugin = devStartGuard({ errorMessage: 'should not throw' })
     expect(() => callGuard(plugin, { command: 'serve' })).not.toThrow()
   })
 
-  // === PM2_HOME 存在必须放过 ===
+  // === ③ PM2_HOME 存在必须放过 ===
   it('serve 模式 + PM2_HOME 有值 → 不抛错（PM2 在管 vite）', () => {
     process.env.PM2_HOME = '/root/.pm2'
     const plugin = devStartGuard({ errorMessage: 'should not throw' })
     expect(() => callGuard(plugin, { command: 'serve' })).not.toThrow()
   })
 
-  // === PPA_SPAWNED 兼容老版本 ===
-  it('serve 模式 + PPA_SPAWNED=1 → 不抛错（preview-gateway 老版本）', () => {
-    process.env.PPA_SPAWNED = '1'
+  // === CI=true 不再放行：PM2 唯一权威 ===
+  it('serve 模式 + CI=true + 无 PM2 → 抛错（CI 跑 vite dev 视为非法）', () => {
+    process.env.CI = 'true'
+    const plugin = devStartGuard({ errorMessage: 'TASK_FAILED_TOKEN_CI绕过' })
+    expect(() => callGuard(plugin, { command: 'serve' })).toThrow(/TASK_FAILED_TOKEN_CI绕过/)
+  })
+
+  it('serve 模式 + CI=1 + 无 PM2 → 抛错', () => {
+    process.env.CI = '1'
+    const plugin = devStartGuard({ errorMessage: 'TASK_FAILED_TOKEN_CI1绕过' })
+    expect(() => callGuard(plugin, { command: 'serve' })).toThrow(/TASK_FAILED_TOKEN_CI1绕过/)
+  })
+
+  // === CI=true 但有 PM2_HOME 仍然放行 ===
+  it('serve 模式 + CI=true + PM2_HOME 有值 → 不抛错（PM2 在管，不看 CI）', () => {
+    process.env.CI = 'true'
+    process.env.PM2_HOME = '/root/.pm2'
     const plugin = devStartGuard({ errorMessage: 'should not throw' })
     expect(() => callGuard(plugin, { command: 'serve' })).not.toThrow()
+  })
+
+  // === PPA_SPAWNED 不再放行：与 CI 一样视为歧义可绕过方式 ===
+  it('serve 模式 + PPA_SPAWNED=1 + 无 PM2 → 抛错（老 PPA 标记已不合法）', () => {
+    process.env.PPA_SPAWNED = '1'
+    const plugin = devStartGuard({ errorMessage: 'TASK_FAILED_TOKEN_PPA绕过' })
+    expect(() => callGuard(plugin, { command: 'serve' })).toThrow(/TASK_FAILED_TOKEN_PPA绕过/)
   })
 
   // === 必须抛错的场景 ===
@@ -116,13 +131,5 @@ describe('devStartGuard — 触发条件防回归', () => {
     expect(caught!.message).toContain('pm2 start')
     expect(caught!.message).toContain('preview-gateway')
     expect(caught!.message).toContain('16666')
-  })
-
-  // === CI + serve 优先级：CI 在前先放行（不被 PM2 检查影响） ===
-  it('serve 模式 + CI=true + 显式 PM2_HOME 缺失 → 不抛错（CI 先于 PM2 判定）', () => {
-    process.env.CI = 'true'
-    // PM2_HOME 没设
-    const plugin = devStartGuard({ errorMessage: 'should not throw' })
-    expect(() => callGuard(plugin, { command: 'serve' })).not.toThrow()
   })
 })

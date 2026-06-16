@@ -79,8 +79,19 @@ module.exports = {
         // (internal/config/config.go:292-294)
         ENCV_DEV_PREVIEW: '1',
         ENCV_MOBILE: '1',
+        // ── mobile-overlay 数据根（service-guard 硬约束）──
+        // 🆕 2026-06-14 修复：service-guard (mobile_api.go:210) 硬编码 /storage/emulated/0，
+        //   preflight.ensureMockData 必须建这个目录。paths.ts 拆 mobileDir / mobileDataDir：
+        //   - mobileDir = app/encv-mobile（vite cwd，必须存在 node_modules）
+        //   - mobileDataDir = /storage/emulated/0（mobile 真机/dev preview 标准挂载点）
+        MOBILE_DATA_DIR: '/storage/emulated/0',
+        MOBILE_DIR: MOBILE_DIR,
         // ── air binary 路径（gateway 子进程要 spawn air 监视 encv-go）──
-        AIR_BIN: '/root/.local/share/mise/installs/go/1.25.1/bin/air',
+        // 🆕 2026-06-14 修复：原路径 `/root/.local/share/mise/installs/go/1.25.1/bin/air`
+        //   在沙箱里不存在（mise 目录有但 air 没装到那里）。setup-sandbox-env.sh
+        //   用 `go install github.com/air-verse/air@latest` 装到 GOPATH/bin（/root/go/bin）。
+        //   验证：which air → /root/go/bin/air
+        AIR_BIN: '/root/go/bin/air',
       },
       // 网关本体轻量；子进程会跑出来几百 MB（Go 编译 + Vite + node_modules）
       max_memory_restart: '256M',

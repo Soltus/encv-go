@@ -186,7 +186,7 @@ import {
 import { useI18n } from '@/composables/useI18n'
 import { showToast } from '@/composables/useToast'
 import { generateMockFilesViaBackend, resetMockFilesViaBackend } from '@/api/mockGenerator'
-import { DEFAULT_AUTOMATION_SOURCE } from '@/composables/useAutomationTests'
+import { MOCK_GENERATE_ROOT } from '@/lib/mockConstants'
 import { useWorkflowEngine } from '@/composables/useWorkflowEngine'
 import type { WorkflowDefinition, WorkflowRun, JobRun, StepRun } from '@/lib/workflow/types'
 import TestReportHeader from './TestReportHeader.vue'
@@ -198,7 +198,10 @@ import StepDetailPanel from './StepDetailPanel.vue'
 const { t } = useI18n()
 
 // ---- Legacy: Mock 数据 / 自动化测试 ----
-const mockRoot = computed(() => DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 5).join('/') + '/')
+// 🆕 2026-06-15 声明式：mockRoot = AUTOMATION_MOUNT_PATH + '/'（常量，不再 split/slice）
+//   之前 .slice(0, 5) 隐式推导：DEFAULT_AUTOMATION_SOURCE 改前缀 → UI 静默选错 → 403
+//   现在改 mount path = 改 src/lib/mockConstants.ts + 后端 mount.go，两个源，不会漏
+const mockRoot = MOCK_GENERATE_ROOT
 const isGenerating = ref(false)
 const isResetting = ref(false)
 const mockStats = ref<{ count: number; totalSize: number } | null>(null)
@@ -285,7 +288,7 @@ async function handleGenerateMock() {
   let lastSize = 0
   try {
     const result = await generateMockFilesViaBackend({
-      root: mockRoot.value,
+      root: mockRoot,
       type: 'all',
       onProgress: (p) => {
         lastCount++
@@ -307,7 +310,7 @@ async function handleResetMock() {
   if (isResetting.value) return
   isResetting.value = true
   try {
-    const r = await resetMockFilesViaBackend(mockRoot.value)
+    const r = await resetMockFilesViaBackend(mockRoot)
     mockStats.value = null
     showToast({ message: `Reset: ${r.removed} files`, color: 'success', duration: 1500 })
   } catch (e) {

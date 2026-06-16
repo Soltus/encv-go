@@ -103,7 +103,7 @@ curl -s :16666/api/service-guard | jq '.context.envDevPreview'   # true
 curl -s :16666/api/service-guard | jq '.context.servingDir'     # /storage/emulated/0
 ```
 
-**绝对禁止**：移除 L3 兜底 / 不设 L1 `ENCV_*` env / 删 L2 显式 spread / 复活 start-preview.sh inline env 注入
+**绝对禁止**：移除 L3 兜底 / 不设 L1 `ENCV_*` env / 删 L2 显式 spread / 复活 previews.sh inline env 注入
 
 > 完整数据流 + 自检失败排查表 → [详情文档 §五](../rule-library/preview-management.md#五env-注入铁律)
 

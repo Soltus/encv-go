@@ -3,7 +3,7 @@
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
-          <ion-button v-if="currentPath !== '/'" @click="goUp">
+          <ion-button v-if="currentPath !== '/d'" @click="goUp">
             <ion-icon :icon="arrowBack" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-buttons>
@@ -14,10 +14,10 @@
         </ion-buttons>
         <ion-title>{{ t('files.title') }}</ion-title>
       </ion-toolbar>
-      <ion-toolbar v-if="currentPath !== '/' && !isSearching">
+      <ion-toolbar v-if="currentPath !== '/d' && !isSearching">
         <div class="breadcrumb-scroll">
           <div class="breadcrumb">
-            <span class="breadcrumb-item" @click="navigateTo('/')">{{ t('files.root') }}</span>
+            <span class="breadcrumb-item" @click="navigateTo('/d')">{{ t('files.mountRoot') || '挂载点' }}</span>
             <span v-for="(segment, index) in pathSegments" :key="index" class="breadcrumb-segment">
               <ion-icon :icon="chevronForward" class="breadcrumb-sep"></ion-icon>
               <span class="breadcrumb-item" @click="navigateTo(segment.path)">{{ segment.name }}</span>
@@ -309,6 +309,14 @@
               <h2>{{ file.display_name || file.name }}</h2>
               <p v-if="searchQuery && !file.isDirectory" class="search-path">{{ file.path }}</p>
               <p v-if="!file.isDirectory && file.size">{{ formatFileSize(file.size) }}<span v-if="file.modified && !searchQuery"> · {{ formatDateTime(file.modified) }}</span></p>
+              <!-- 🆕 2026-06-15 multi-mount 适配：mount 伪 item 在根目录展示
+                   driver badge + 真实 mount_path + resolved root_path
+                   让用户能看到 "这是个 mount，不是普通目录" -->
+              <p v-else-if="file.isDirectory && mountDriverOf(file)">
+                <ion-badge color="primary" class="mount-driver-badge">{{ mountDriverOf(file) }}</ion-badge>
+                <code class="mount-path-inline">{{ mountPathOf(file) }}</code>
+                <span class="mount-root-inline">→ {{ mountRootOf(file) }}</span>
+              </p>
               <p v-else-if="file.isDirectory">{{ t('files.directory') }}</p>
               <p v-for="sub in fileSubtitles[file.path]" :key="'sub-' + sub.text" class="real-name" :style="{ color: sub.color || 'var(--ion-color-danger)' }">{{ sub.text }}</p>
               <div v-if="!file.isDirectory && !searchQuery && file._tags && file._tags.length > 0" class="file-tag-chips">
@@ -633,9 +641,21 @@ const renameAlertInputs = computed(() => {
   return inputs
 })
 
-const currentPath = ref('/')
+// 🆕 2026-06-15 multi-mount 适配：currentPath 起始改为 '/d'（mount 虚拟根）
+//   旧版：'/' 直接是 serving dir（一个根目录）
+//   新版：'/' 不再合法；根是 '/d'，下面是 mount 列表（primary / automation / sandbox）
+//   后端 /api/files?path=/d → mount registry 解析为 mount 列表
+//   后续 /api/files?path=/d/<name>/... → 走对应 mount driver
+const MOUNT_ROOT = '/d'
+const currentPath = ref(MOUNT_ROOT)
 const loading = ref(false)
 const connecting = ref(false)
+
+// 🆕 2026-06-15 multi-mount 适配：mount 根 /d 由后端 handleListFilesGin 返 mount 列表
+//   - 后端响应里 mount 伪 item 含 mount_driver / mount_path / mount_root 字段
+//   - frontend Files.vue 通过 mountDriverOf(file) / mountPathOf(file) / mountRootOf(file) 访问
+//   - 这里不再维护本地 mounts ref（避免与文件列表数据源不一致）
+const isMountRoot = computed(() => currentPath.value === MOUNT_ROOT)
 
 const searchQuery = ref('')
 const searchRecursive = ref(false)
@@ -651,12 +671,33 @@ const MAX_RETRIES = isNative() ? 15 : 3
 const RETRY_DELAY = 1000
 
 const pathSegments = computed(() => {
-  if (currentPath.value === '/') return []
+  if (currentPath.value === '/d') return [] // mount 根：面包屑在 ion-toolbar v-if 控制不显示
+  // 🆕 2026-06-15 multi-mount 适配：面包屑第一段固定是 'd'（mount 根名）
+  //   旧版：path='/' → 空 parts → []
+  //   新版：path='/d/<name>/<sub>' → 显示 [d, <name>, <sub>]
+  //   第一段点 → 跳到 /d（mount 根）
+  if (currentPath.value === MOUNT_ROOT) return []
   const parts = currentPath.value.split('/').filter(Boolean)
-  return parts.map((name, index) => ({
-    name,
-    path: '/' + parts.slice(0, index + 1).join('/'),
-  }))
+  return parts.map((name, index) => {
+    let displayName = name
+    if (index === 0 && name === 'd') {
+      displayName = t('files.mountRoot') || '挂载点' // 第一段显示成"挂载点"
+    } else if (index === 1) {
+      // mount name 段：从 files.value 里找 mount 伪 item（mount_driver 字段存在），
+      // 找不到就原样用路径段（容错）
+      const m = files.value.find(
+        (f) =>
+          f.isDirectory &&
+          mountDriverOf(f) != null &&
+          f.name === name,
+      )
+      if (m) displayName = m.name
+    }
+    return {
+      name: displayName,
+      path: '/' + parts.slice(0, index + 1).join('/'),
+    }
+  })
 })
 
 const displayFiles = computed(() => {
@@ -671,7 +712,14 @@ const sortedFiles = computed(() => {
 
 let loadGeneration = 0
 
+// 🆕 2026-06-15 multi-mount 适配：根目录 /d 由后端 handleListFilesGin 返 mount 列表
+//   旧前端逻辑：currentPath='/' → 后端列 serving dir 子目录
+//   新前端逻辑：currentPath='/d' → 后端 mountListAsFiles 返 mount 列表 → Files.vue 当目录展示
+//   mount 伪 item 包含 mount_driver / mount_path / mount_root 字段
+//   进 mount 后 currentPath='/d/<name>' → listFiles 走 mount.Resolve → 列 mount root 下的文件
 async function loadFiles() {
+  // mount 根走 listFiles 走 stream 同样路径 /api/files/stream?path=/d → 后端 mountListAsFiles
+  //   让前端只需维护一个 loadFiles 路径
   console.info('[Files] Loading files (stream), path:', currentPath.value)
   const gen = ++loadGeneration
   loading.value = true
@@ -712,7 +760,7 @@ async function loadFiles() {
         serverOnline.value = true
         loading.value = false
         connecting.value = false
-        if (currentPath.value !== '/') {
+        if (currentPath.value !== '/d') {
           showToast({ message: t('files.pathNotFound'), duration: 2000, color: 'warning' })
           goUp()
         }
@@ -756,7 +804,7 @@ async function handleRefresh(event: CustomEvent) {
       }
       if (error instanceof NotFoundError) {
         serverOnline.value = true
-        if (currentPath.value !== '/') {
+        if (currentPath.value !== '/d') {
           goUp()
         }
       }
@@ -783,17 +831,35 @@ function navigateTo(path: string) {
 }
 
 function openContainingFolder(file: FileItem) {
-  const parentDir = file.path.substring(0, file.path.lastIndexOf('/')) || '/'
+  // 🆕 2026-06-15 multi-mount 适配：父目录 = /d/<mount_name>
+  //   旧版：file.path='/foo/bar.txt' → parent='/foo'
+  //   新版：file.path='/d/primary/foo/bar.txt' → parent='/d/primary'（不能进 /d/foo）
+  const parts = file.path.split('/').filter(Boolean)
+  let parentDir: string
+  if (parts.length >= 2 && parts[0] === 'd') {
+    // /d/<name>/... → 父 = /d/<name>
+    parentDir = '/' + parts.slice(0, 2).join('/')
+  } else {
+    parentDir = file.path.substring(0, file.path.lastIndexOf('/')) || MOUNT_ROOT
+  }
   searchQuery.value = ''
   searchResults.value = null
   navigateTo(parentDir)
 }
 
 function goUp() {
-  if (currentPath.value === '/') return
+  // 🆕 2026-06-15 multi-mount 适配：
+  //   旧版：'/' 不能再上；其他路径弹掉最后一段
+  //   新版：'/d' 不能再上；'/d/<name>' 上到 '/d'；'/<more>' 弹最后一段
+  if (isMountRoot.value) return
   const parts = currentPath.value.split('/').filter(Boolean)
-  parts.pop()
-  currentPath.value = parts.length === 0 ? '/' : '/' + parts.join('/')
+  if (parts.length === 2 && parts[0] === 'd') {
+    // 当前在 /d/<name> 顶层 → 退到 /d
+    currentPath.value = MOUNT_ROOT
+  } else {
+    parts.pop()
+    currentPath.value = parts.length === 0 ? MOUNT_ROOT : '/' + parts.join('/')
+  }
   searchQuery.value = ''
   searchResults.value = null
   loadFiles()
@@ -820,9 +886,11 @@ async function handleFileClick(file: FileItem) {
   }
 
   if (file.isDirectory) {
-    const newPath = currentPath.value === '/'
-      ? '/' + file.name
-      : currentPath.value + '/' + file.name
+    // 🆕 2026-06-15 multi-mount 适配：根目录已是 /d
+    //   旧版：'/' + name = '/<name>'
+    //   新版：'/d' + name = '/d/<name>'
+    const base = currentPath.value === '/d' ? '/d' : currentPath.value
+    const newPath = base + '/' + file.name
     navigateTo(newPath)
     return
   }
@@ -929,9 +997,9 @@ async function handleLongPress(file: FileItem) {
       icon: folderOpen,
       cssClass: 'action-section-view',
       handler: () => {
-        const newPath = currentPath.value === '/'
-          ? '/' + file.name
-          : currentPath.value + '/' + file.name
+        // 🆕 2026-06-15 multi-mount 适配：根目录 /d + name
+        const base = currentPath.value === '/d' ? '/d' : currentPath.value
+        const newPath = base + '/' + file.name
         navigateTo(newPath)
       },
     })
@@ -1068,7 +1136,8 @@ async function handleCopy(file: FileItem) {
   const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : ''
   const baseName = ext ? file.name.slice(0, -ext.length) : file.name
   const destName = `${baseName}_copy${ext}`
-  const destPath = currentPath.value === '/' ? `/${destName}` : `${currentPath.value}/${destName}`
+  // 🆕 2026-06-15 multi-mount 适配：根目录 /d 而不是 /
+  const destPath = currentPath.value === '/d' ? `/d/${destName}` : `${currentPath.value}/${destName}`
   try {
     await copyFile(file.path, destPath)
     await loadFiles()
@@ -1309,6 +1378,21 @@ function getPluginIcon(plugin: PluginMeta): any {
   if (featureIcon) return featureIcon
   const icons: Record<string, string> = { video: filmOutline, audio: musicalNotesOutline, image: imageOutline, pdf: documentTextOutline, text: documentOutline, wps: documentOutline }
   return icons[plugin.name] || lockClosed
+}
+
+// 🆕 2026-06-15 multi-mount 适配：mount 伪 item 字段访问器
+//   强类型访问 (file as any) 在 template 里太丑，集中到 helper 里
+function mountDriverOf(file: FileItem): string | null {
+  const f = file as FileItem & { mount_driver?: string }
+  return f.mount_driver ?? null
+}
+function mountPathOf(file: FileItem): string {
+  const f = file as FileItem & { mount_path?: string }
+  return f.mount_path ?? ''
+}
+function mountRootOf(file: FileItem): string {
+  const f = file as FileItem & { mount_root?: string }
+  return f.mount_root ?? ''
 }
 
 async function searchPluginFiles(
@@ -1763,6 +1847,29 @@ ion-item {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 🆕 2026-06-15 multi-mount 适配：mount 伪 item 样式（driver badge + mount_path + root_path） */
+.mount-driver-badge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  text-transform: lowercase;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.mount-path-inline {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--ion-color-primary);
+  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.mount-root-inline {
+  font-size: 10px;
+  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.7));
+  margin-left: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* ===== 长按菜单分区样式 (action-sheet overlay，需 :global) ===== */

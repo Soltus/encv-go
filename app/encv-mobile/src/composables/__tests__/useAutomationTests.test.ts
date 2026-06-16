@@ -153,21 +153,21 @@ describe('useAutomationTests.generateTestCases 笛卡尔积', () => {
 })
 
 describe('useAutomationTests.runTests 真实行为', () => {
-  it('真机：forceAutomation 改写 source 后调 createTask', async () => {
+  it('真机：forceAutomation no-op 后调 createTask（multi-mount 改造）', async () => {
     Object.defineProperty(import.meta, 'env', { configurable: true, get: () => ({ DEV: false }) })
     const t = useAutomationTests()
     t.plugins.value = [makePlugin('p', [4], 4)]
-    const cases = t.generateTestCases({ sourceFile: '/storage/emulated/0/Download/real.txt' })
+    const cases = t.generateTestCases({ sourceFile: '/d/automation/01-plain-media/video/sample.mp4' })
 
     await t.runTests(cases)
 
-    // createTask 的第二个参数（sourcePath）应该是改写后的路径
+    // createTask 的第二个参数（sourcePath）应该是 no-op 后的原路径
     expect(createTaskMock).toHaveBeenCalledTimes(cases.length)
     for (const call of createTaskMock.mock.calls) {
       const sourcePath = call[1]
-      expect(sourcePath.startsWith('/storage/emulated/0/encv-automation/')).toBe(true)
-      // 原 Download/real.txt 改写到 encv-automation/Download/real.txt
-      expect(sourcePath).toBe('/storage/emulated/0/encv-automation/Download/real.txt')
+      expect(sourcePath.startsWith('/d/automation/')).toBe(true)
+      // multi-mount 改造后 withSafetyBoundary 降级为 no-op
+      expect(sourcePath).toBe('/d/automation/01-plain-media/video/sample.mp4')
     }
   })
 
@@ -242,7 +242,10 @@ describe('useAutomationTests.runTests 真实行为', () => {
 })
 
 describe('useAutomationTests 常量', () => {
-  it('DEFAULT_AUTOMATION_SOURCE 指向 encv-automation 命名空间', () => {
-    expect(DEFAULT_AUTOMATION_SOURCE).toBe('/storage/emulated/0/encv-automation/01-plain-media/video/sample.mp4')
+  it('DEFAULT_AUTOMATION_SOURCE 指向 /d/automation mount（multi-mount 改造）', () => {
+    // 旧值：/storage/emulated/0/encv-automation/01-plain-media/video/sample.mp4
+    // 新值：/d/automation/01-plain-media/video/sample.mp4
+    //   → 后端解析为 /data/user/<uid>/com.encvgo.app/files/encv-automation/01-plain-media/video/sample.mp4
+    expect(DEFAULT_AUTOMATION_SOURCE).toBe('/d/automation/01-plain-media/video/sample.mp4')
   })
 })

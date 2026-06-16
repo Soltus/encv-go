@@ -51,7 +51,8 @@ func detectPreferredEncoder() string {
 		if enc.args == nil {
 			return enc.name
 		}
-		if err := ffmpeg.Run(context.Background(), append([]string{"-y", "-threads", "1"}, enc.args...)...); err == nil {
+		// 🆕 2026-06-15：ffmpeg.Run(ctx, args) → ffmpeg.Encode(ctx, args) 返回 *EncodeResult
+		if _, err := ffmpeg.Encode(context.Background(), append([]string{"-y", "-threads", "1"}, enc.args...)...); err == nil {
 			slog.Info("Detected available encoder", "component", "CONTENT_PREPROCESSOR", "encoder", enc.name)
 			return enc.name
 		}
@@ -72,7 +73,16 @@ func (p *VideoContentPreprocessor) runFFmpegCmd(args []string, tempPath string) 
 		ctx = context.Background()
 	}
 
-	stdout, stderrStr, exitCode, err := ffmpeg.RunWithOutput(ctx, args...)
+	// 🆕 2026-06-15：ffmpeg.RunWithOutput(ctx, args...) → ffmpeg.Encode(ctx, args...) 返回 *EncodeResult
+	res, err := ffmpeg.Encode(ctx, args...)
+	stdout := []byte(nil)
+	stderrStr := ""
+	exitCode := 0
+	if res != nil {
+		stdout = res.Stdout
+		stderrStr = res.Stderr
+		exitCode = res.ExitCode
+	}
 	if err != nil || exitCode != 0 {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -234,7 +244,7 @@ func (p *VideoContentPreprocessor) updateWithPreprocessedInfo(preprocessedPath, 
 		p.index.MimeType = mimeType
 	}
 
-	output, err := ffmpeg.Probe("-v", "quiet", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", preprocessedPath)
+	output, err := ffmpeg.Probe(context.Background(), "-v", "quiet", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", preprocessedPath)
 	if err == nil {
 		if d, err := strconv.ParseFloat(strings.TrimSpace(string(output)), 64); err == nil {
 			p.index.DurationSeconds = d
@@ -287,7 +297,8 @@ func extractKeyFrameOffsets(filePath string, format string) ([]uint64, error) {
 func extractKeyFrameOffsetsWithFFProbe(filePath string) ([]uint64, error) {
 	fmt.Println("-> [DIAG] Optimized: Extracting exact keyframe positions in a single pass.")
 
-	output, err := ffmpeg.Probe(
+	// 🆕 2026-06-15：ffmpeg.Probe(ctx, args) 签名调整
+	output, err := ffmpeg.Probe(context.Background(),
 		"-v", "error",
 		"-select_streams", "v:0",
 		"-skip_frame", "nokey",
@@ -408,7 +419,8 @@ func (p *VideoContentPreprocessor) remapMKVWithFFmpeg(inputPath string) (io.Read
 	tempFile.Close()
 
 	args := []string{"-y", "-i", inputPath, "-c", "copy", "-reserve_index_space", "500", tempPath}
-	if err := ffmpeg.Run(context.Background(), args...); err != nil {
+	// 🆕 2026-06-15：ffmpeg.Run(ctx, args) → ffmpeg.Encode(ctx, args) 返回 *EncodeResult
+	if _, err := ffmpeg.Encode(context.Background(), args...); err != nil {
 		os.Remove(tempPath)
 		return nil, tempPath, fmt.Errorf("ffmpeg MKV remuxing failed: %w", err)
 	}

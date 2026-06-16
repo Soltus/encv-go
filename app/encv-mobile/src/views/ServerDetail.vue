@@ -24,44 +24,16 @@
             <ion-icon :icon="copyIcon" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-item>
-        <ion-item>
-          <ion-icon :icon="serverIcon" slot="start"></ion-icon>
-          <ion-label class="ion-text-wrap">
-            <h3>{{ t('settings.status') }}</h3>
-            <p class="status-line">
-              <ion-badge :color="serverOnline ? 'success' : 'danger'">
-                {{ serverOnline ? t('settings.online') : t('settings.offline') }}
-              </ion-badge>
-              <span v-if="serverOnline && backendPort" class="port-info">:{{ backendPort }}</span>
-              <span v-if="serverOnline && latencyMs > 0" class="latency-info">· {{ latencyMs }}ms</span>
-              <span v-if="serverOnline" class="transport-info" :class="`transport-${transportMode}`">· {{ transportLabel }}</span>
-            </p>
-            <p v-if="!serverOnline && connectionError" class="connection-error">
-              {{ connectionError }}
-            </p>
-            <p v-if="serverOnline && lastCheckedAt" class="status-meta">
-              {{ t('settings.lastChecked') }} {{ lastCheckedAtFormatted }}
-            </p>
-            <p v-if="serverOnline && isSandboxBrowser" class="status-warning">
-              {{ t('settings.sandboxWsWarning') }}
-            </p>
-          </ion-label>
-          <div slot="end" class="server-controls">
-            <ion-button fill="outline" size="small" @click="checkServer">
-              <ion-icon :icon="refreshIcon" slot="icon-only"></ion-icon>
-            </ion-button>
-            <ion-button v-if="isRestarting" fill="outline" size="small" color="medium" disabled>
-              <ion-spinner slot="icon-only" name="crescent"></ion-spinner>
-            </ion-button>
-            <ion-button v-else-if="serverOnline" fill="outline" size="small" color="danger" @click="handleStop" :disabled="isStopping">
-              <ion-spinner v-if="isStopping" slot="icon-only" name="crescent"></ion-spinner>
-              <ion-icon v-else :icon="stopIcon" slot="icon-only"></ion-icon>
-            </ion-button>
-            <ion-button v-else fill="outline" size="small" color="warning" @click="handleRestart">
-              <ion-icon :icon="playIcon" slot="icon-only"></ion-icon>
-            </ion-button>
-          </div>
-        </ion-item>
+        <!-- 后端状态行：ServerStatusCard（操作按钮已内嵌到卡片内）
+             点卡片空白 → 翻转看诊断；点按钮 → 触发对应 handler
+             3D 实体化 + 高度自适应平滑伸缩在 ServerStatusCard 内部实现 -->
+        <ServerStatusCard
+          :clickable="true"
+          :hide-actions="false"
+          @check="checkServerInner"
+          @restart="handleRestart"
+          @stop="handleStop"
+        />
       </ion-list>
 
       <ion-list>
@@ -138,17 +110,17 @@ import { useRouter } from 'vue-router'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
   IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
-  IonBadge, IonButton, alertController, IonSpinner,
+  IonButton, alertController,
 } from '@ionic/vue'
 import {
-  server as serverIcon, refresh as refreshIcon,
-  stop as stopIcon, play as playIcon,
+  server as serverIcon,
   notifications as notificationsIcon, folderOpen,
   copy as copyIcon, shieldCheckmark, cloudOutline, globeOutline,
   batteryCharging as batteryOptimizationIcon,
 } from 'ionicons/icons'
 import { useServerStatus } from '@/composables/useServerStatus'
 import { useI18n } from '@/composables/useI18n'
+import ServerStatusCard from '@/components/ServerStatusCard.vue'
 import { showToast } from '@/composables/useToast'
 import { copyToClipboard as clipboardWrite } from '@/composables/useClipboard'
 import { getServerUrl, fetchConfig } from '@/api/encv'
@@ -157,18 +129,9 @@ import { isNative, requestNotificationPermission, requestStoragePermission, requ
 const configData = ref<Record<string, unknown> | null>(null)
 const {
   isOnline: serverOnline,
-  lastError: connectionError,
   checkStatus,
   restartBackend,
   stopBackend,
-  backendPort,
-  isRestarting,
-  isStopping,
-  // 🆕 2026-06-10 状态展示增强
-  latencyMs,
-  transportMode,
-  lastCheckedAt,
-  isSandboxBrowser,
 } = useServerStatus()
 const { t } = useI18n()
 
@@ -180,24 +143,6 @@ const permBatteryOpt = ref(false)
 let permissionCheckTimer: number | null = null
 
 const router = useRouter()
-
-// 传输模式的人类可读标签
-const transportLabel = computed(() => {
-  switch (transportMode.value) {
-    case 'ws': return 'WebSocket'
-    case 'http-poll': return 'HTTP polling'
-    case 'native-bridge': return 'Native bridge'
-    default: return 'unknown'
-  }
-})
-
-// 上次探测时间的 HH:MM:SS 格式
-const lastCheckedAtFormatted = computed(() => {
-  if (!lastCheckedAt.value) return ''
-  const d = lastCheckedAt.value
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-})
 
 const httpPort = computed(() => (configData.value?.server as Record<string, unknown>)?.port ?? '-')
 const rootDir = computed(() => (configData.value?.server as Record<string, unknown>)?.dir ?? '/')
@@ -248,7 +193,8 @@ async function handleRequestBatteryOpt() {
   setTimeout(() => refreshPermissions(), 5000)
 }
 
-async function checkServer() {
+async function checkServerInner() {
+  // 刷新按钮：只 ping 一次后端 + 弹 toast
   await checkStatus()
   showToast({
     message: serverOnline.value ? t('settings.serverOnline') : t('settings.serverOffline'),
@@ -305,6 +251,10 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* 状态行：ServerStatusCard 完整版（操作按钮内嵌在卡片内）
+   卡片自身实现 3D 实体化 / 高度自适应 / 翻转动画 / 操作按钮
+   ServerDetail 父级只负责传 @click / @check / @stop / @restart 监听 */
+
 .connection-error {
   color: var(--ion-color-danger);
   font-size: 12px;

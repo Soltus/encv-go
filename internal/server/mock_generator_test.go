@@ -1,15 +1,16 @@
 // internal/server/mock_generator_test.go
 // 单元测试覆盖：
-// 1. validateMockRoot 白名单
+// 1. validateMockRoot 接受 /d/<mount>/... mount 路径（multi-mount 改造 2026-06-15）
 // 2. generateMockSpecs 各类别非空
-// 3. handleMockGenerateGin 拒绝非白名单 root
-// 4. handleMockResetGin 拒绝非白名单 root
+// 3. handleMockGenerateGin 拒绝非 mount 路径 root
+// 4. handleMockResetGin 拒绝非 mount 路径 root
 // 5. handleMockGenerateGin SSE 流（progress + done 事件）
 // 6. minimalMP4/MKV/MP3/FLAC magic + size（依赖 ffmpeg，CI 无 ffmpeg 自动 SKIP）
 package server
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Soltus/encv-go/internal/mount"
 	"github.com/Soltus/encv-go/internal/utils/ffmpeg"
 	"github.com/gin-gonic/gin"
 )
@@ -27,9 +29,10 @@ import (
 // 2026-06-11 改造：minimalMP4/MKV/MP3/FLAC 现在**只**走 ffmpeg（无 base64 fallback）
 // → 没有 ffmpeg 时这些函数返回 nil，断言 magic byte 会 panic
 // → 改 SKIP 而非 FAIL（CI 容器没装 ffmpeg 不算 fail，但本地 dev / 真机必须有）
+// 🆕 2026-06-15：ffmpeg.Available() → ffmpeg.IsAvailable()
 func requireFFmpeg(t *testing.T) {
 	t.Helper()
-	ffmpegOk, ffprobeOk, errMsg := ffmpeg.Available()
+	ffmpegOk, ffprobeOk, errMsg := ffmpeg.IsAvailable()
 	if !ffmpegOk && !ffprobeOk {
 		t.Skipf("ffmpeg runner not available, skipping (errMsg=%q)", errMsg)
 	}
@@ -39,10 +42,91 @@ func init() {
 	gin.SetMode(gin.TestMode)
 }
 
+// stubMountResolver 不再使用 —— 改用真 mount.MountRegistry + stub ConfigProvider
+// 🆕 2026-06-15 multi-mount：构造一个带 stub cfg 的真 MountRegistry
+//
+//   - /d/automation mount → /tmp/test-automation
+//   - /d/primary mount    → /tmp/test-primary
 func setupMockTestServer() *Server {
-	// 直接构造一个最小可用的 Server（不需要 config）
-	return &Server{}
+	// 真 MountRegistry（带 stub config provider + LocalDriver factory）
+	stubCfg := &stubConfigForMountRegistry{
+		servingDir:   "/tmp/test-primary",
+		mobile:       false,
+		androidPkg:   "",
+		appdataDir:   "/tmp/test-appdata",
+		sandboxDir:   "/tmp/test-sandbox",
+		devSandbox:   "/tmp/test-sandbox",
+		automationDr: "appdata",
+	}
+	reg := mount.NewRegistry(stubCfg, "/tmp/test-mounts.json")
+	reg.RegisterDriverFactory(mount.DriverLocal, func() mount.Driver { return stubLocalDriverFactory() })
+
+	// 主动注册两个测试 mount
+	_ = reg.Create(&mount.Mount{
+		Name:      "automation",
+		MountPath: "/d/automation",
+		Driver:    mount.DriverLocal,
+		RootPath:  "/tmp/test-automation",
+		Enabled:   true,
+	})
+	_ = reg.Create(&mount.Mount{
+		Name:      "primary",
+		MountPath: "/d/primary",
+		Driver:    mount.DriverLocal,
+		RootPath:  "/tmp/test-primary",
+		Enabled:   true,
+	})
+
+	return &Server{mountRegistry: reg}
 }
+
+// stubLocalDriverFactory 返回一个不走 fs 操作的 LocalDriver stub
+// （mock_generator_test 不调 Stat/ReadDir，所以简单实现即可）
+func stubLocalDriverFactory() mount.Driver {
+	return &fakeLocalDriver{}
+}
+
+type fakeLocalDriver struct {
+	root string
+}
+
+func (d *fakeLocalDriver) Name() string                                                            { return "local" }
+func (d *fakeLocalDriver) Init(ctx context.Context, m *mount.Mount, cfg mount.ConfigProvider) error {
+	if m != nil {
+		d.root = m.RootPath
+	}
+	return nil
+}
+func (d *fakeLocalDriver) ResolveRoot() string                                                     { return d.root }
+func (d *fakeLocalDriver) CheckPermission() error                                                  { return nil }
+func (d *fakeLocalDriver) Stat(path string) (os.FileInfo, error)                                   { return nil, nil }
+func (d *fakeLocalDriver) ReadDir(path string) ([]os.DirEntry, error)                              { return nil, nil }
+func (d *fakeLocalDriver) ReadFile(path string) ([]byte, error)                                    { return nil, nil }
+func (d *fakeLocalDriver) WriteFile(path string, data []byte, mode os.FileMode) error              { return nil }
+func (d *fakeLocalDriver) MkdirAll(path string, mode os.FileMode) error                            { return nil }
+func (d *fakeLocalDriver) Remove(path string) error                                                { return nil }
+func (d *fakeLocalDriver) Rename(oldPath, newPath string) error                                   { return nil }
+func (d *fakeLocalDriver) Reload(m *mount.Mount) error                                             { return nil }
+
+// stubConfigForMountRegistry 满足 mount.ConfigProvider 接口
+type stubConfigForMountRegistry struct {
+	servingDir   string
+	mobile       bool
+	androidPkg   string
+	appdataDir   string
+	sandboxDir   string
+	devSandbox   string
+	automationDr string
+}
+
+func (c *stubConfigForMountRegistry) ServingDir() string         { return c.servingDir }
+func (c *stubConfigForMountRegistry) IsMobile() bool            { return c.mobile }
+func (c *stubConfigForMountRegistry) IsDev() bool               { return false }
+func (c *stubConfigForMountRegistry) AndroidPackageName() string { return c.androidPkg }
+func (c *stubConfigForMountRegistry) DataDir() string           { return c.appdataDir }
+func (c *stubConfigForMountRegistry) AppDataFallbackDir() string { return c.appdataDir }
+func (c *stubConfigForMountRegistry) DevSandboxDir() string      { return c.devSandbox }
+func (c *stubConfigForMountRegistry) AutomationDriver() string   { return c.automationDr }
 
 func TestValidateMockRoot(t *testing.T) {
 	tests := []struct {
@@ -50,30 +134,87 @@ func TestValidateMockRoot(t *testing.T) {
 		root     string
 		wantPass bool
 	}{
+		// 🆕 2026-06-15 multi-mount：root 必须是 /d/<mount>/... 形式
 		{"empty root", "", false},
-		{"servingDir 根", "/storage/emulated/0", true},
-		{"servingDir 子目录", "/storage/emulated/0/01-plain-media", true},
-		{"automation_真机", "/storage/emulated/0/encv-automation", true},
-		{"automation_sdcard", "/sdcard/encv-automation", true},
-		{"automation_tmp", "/data/local/tmp/encv-automation", true},
-		{"automation_子目录", "/storage/emulated/0/encv-automation/01-plain-media", true},
-		// 2026-06-10 改造：/storage/emulated/0 本身在白名单，所以其任意子目录都被接受
-		// （包括 Download 这种用户真实数据目录）。后端不背语义锅——前端 UI 负责限定写到哪。
-		// 真要保护用户 Download 等目录，应该在 UI 端做约束，不在后端白名单做。
-		{"servingDir 根的用户子目录", "/storage/emulated/0/Download", true},
-		{"encv-automation 错位前缀", "/storage/emulated/0/encv-automation-bak", true},
-		{"陌生路径", "/var/log/something", false},
-		{"/etc", "/etc", false},
+		{"absolute path 不接受（必须是 /d/）", "/storage/emulated/0", false},
+		{"absolute path 不接受（encv-automation 旧）", "/storage/emulated/0/encv-automation", false},
+		{"automation mount 根", "/d/automation", true},
+		{"automation mount 子目录", "/d/automation/01-plain-media/video/sample.mp4", true},
+		{"primary mount 子目录", "/d/primary/Download/foo.txt", true},
+		{"非 /d 开头", "/etc", false},
+		{"陌生 /d/xxx 路径", "/d/nonexistent/foo", false},
+		{"/d 后面必须有 mount 名", "/d/", false},
 	}
 
+	s := setupMockTestServer()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateMockRoot(tt.root)
+			err := s.validateMockRoot(tt.root)
 			passed := err == nil
 			if passed != tt.wantPass {
 				t.Errorf("validateMockRoot(%q) pass=%v, want %v (err=%v)", tt.root, passed, tt.wantPass, err)
 			}
 		})
+	}
+}
+
+// 🆕 2026-06-15 增强反馈测试：错误信息必须含 available mounts + slice 提示
+func TestValidateMockRoot_ErrorMessageContainsAvailableMounts(t *testing.T) {
+	s := setupMockTestServer()
+
+	// 1. /d/ 开头但 mount 不存在 → 错误信息必须含 [automation, primary, sandbox]
+	err := s.validateMockRoot("/d/nonexistent")
+	if err == nil {
+		t.Fatal("expected error for /d/nonexistent")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "available mounts") {
+		t.Errorf("error should mention 'available mounts', got: %q", msg)
+	}
+	if !strings.Contains(msg, "automation→/d/automation") {
+		t.Errorf("error should list automation mount, got: %q", msg)
+	}
+	if !strings.Contains(msg, "primary→/d/primary") {
+		t.Errorf("error should list primary mount, got: %q", msg)
+	}
+	if !strings.Contains(msg, "slice") || !strings.Contains(msg, "N 应该是 3") {
+		t.Errorf("error should hint at slice(0, 3) vs slice(0, 5) bug, got: %q", msg)
+	}
+
+	// 2. 非 /d/ 开头（绝对路径）→ 错误信息也必须含 available mounts
+	err = s.validateMockRoot("/storage/emulated/0/encv-automation")
+	if err == nil {
+		t.Fatal("expected error for absolute path")
+	}
+	msg = err.Error()
+	if !strings.Contains(msg, "available mounts") {
+		t.Errorf("error should mention 'available mounts' for absolute path too, got: %q", msg)
+	}
+}
+
+// 🆕 2026-06-15 listMountSummaries 结构化输出测试
+func TestListMountSummaries(t *testing.T) {
+	s := setupMockTestServer()
+	summaries := s.listMountSummaries()
+	if len(summaries) < 2 {
+		t.Fatalf("expected at least 2 mount summaries, got %d", len(summaries))
+	}
+	// 每个 summary 字段必须正确
+	hasAutomation := false
+	hasPrimary := false
+	for _, sm := range summaries {
+		if sm.Name == "automation" && sm.MountPath == "/d/automation" {
+			hasAutomation = true
+		}
+		if sm.Name == "primary" && sm.MountPath == "/d/primary" {
+			hasPrimary = true
+		}
+		if !sm.Enabled {
+			t.Errorf("disabled mount %q should not appear in summaries", sm.Name)
+		}
+	}
+	if !hasAutomation || !hasPrimary {
+		t.Errorf("missing automation or primary in summaries: %+v", summaries)
 	}
 }
 

@@ -87,11 +87,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/AgentSettingsDetail.vue'),
       },
       {
-        // 服务器地址管理页（手动配置 baseUrl 兜底）
-        path: 'settings/server',
-        component: () => import('@/views/ServerSettings.vue'),
-      },
-      {
+        // 🆕 2026-06-16：删除「服务器状态详情页」独立路由
+        // 旧版 ServerStatusDetail.vue 是「点卡片跳独立页」设计，已被 ServerStatusCard 翻转取代
+        // （卡片翻转到背面 = 自带诊断/操作历史/进程 ID/transport 详情）
+        // 入口：原 ServerDetail 顶部的 ServerStatusCard @click="goServerStatusDetail"
+        // 现状：ServerDetail.vue 不再调 goServerStatusDetail；本路由删除防「打开 app 看到残留 page」
         path: 'settings/devtools',
         component: () => import('@/views/DevToolsDetail.vue'),
       },
@@ -116,6 +116,11 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'settings/appearance',
         component: () => import('@/views/AppearanceDetail.vue'),
+      },
+      {
+        // 🆕 2026-06-15 multi-mount (spec Phase E)：挂载点管理
+        path: 'settings/mounts',
+        component: () => import('@/views/MountsDetail.vue'),
       },
       {
         path: 'devlogs',

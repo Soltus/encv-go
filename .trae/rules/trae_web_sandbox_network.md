@@ -134,7 +134,7 @@ done
 - **OpenPreview 只能用启动 dev server 的那条命令的 command_id**（非后续 curl ID）
 - **代理路由有 session/TTL**——长时间不活动需重新调用
 - **多个 dev server 时，OpenPreview 只能注册一个端口**（默认 / 路径）
-- start-preview.sh 是 bash，**没有 OpenPreview 工具能力**——必须 agent 收尾调
+- previews.sh 是 bash，**没有 OpenPreview 工具能力**——必须 agent 收尾调
 
 > 401 真实源头诊断（3 段证据链）+ 9.1.2 收敛结论 + trae 网关层 401 vs encv-go 业务 401 区分 → [详情文档 §九.1.2](../rule-library/trae_web_sandbox_network.md#九preview-链路实际可达性矩阵2026-06-08-实战实测)
 
@@ -193,6 +193,6 @@ done
 - ❌ 在 mock 浏览器里让用户"开 DevTools 看 Network"——**没有 DevTools**
 - ❌ 在 encv-go / preview-gateway 加 auth 头绕过 401（401 在它们之前）
 
-> 跨文档引用（verification-discipline §7 / setup-kotlinc.sh / start-preview.sh / android.md）→ [详情文档 §十](../rule-library/trae_web_sandbox_network.md#十跨文档引用)
+> 跨文档引用（verification-discipline §7 / setup-kotlinc.sh / previews.sh / android.md）→ [详情文档 §十](../rule-library/trae_web_sandbox_network.md#十跨文档引用)
 
 > 拆分：2026-06-11

@@ -1,39 +1,37 @@
 /**
- * usePathResolver.withSafetyBoundary 单元测试
+ * usePathResolver 单元测试
  *
- * 重点覆盖：
- * 1. dev 模式（import.meta.env.DEV=true）→ no-op
- * 2. 真机模式（DEV=false）→ /storage/emulated/0/* 自动改写到 encv-automation
- * 3. 已在 encv-automation 内的路径不重复包裹
- * 4. forceAutomation 选项强制改写
- * 5. 非 storage 路径行为
+ * 🆕 2026-06-15 multi-mount 重构：withSafetyBoundary 已降级为 no-op（spec Phase B5）
+ *   - 旧行为：dev 原样返回，release 把 /storage/emulated/0/* 改写到 encv-automation
+ *   - 新行为：始终原样返回（只走 normalize，**不**改写）
+ *   - 命名空间隔离改由后端 mount 系统承担（/d/automation → appdata）
+ *
+ * 本测试覆盖新行为：
+ *   1. withSafetyBoundary 永远原样返回（除 normalize）
+ *   2. 基础 API：normalize / isAbsolutePath / getMockPaths 不变
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { usePathResolver } from '@/composables/usePathResolver'
 
-describe('usePathResolver.withSafetyBoundary', () => {
+describe('usePathResolver.withSafetyBoundary (no-op mode)', () => {
   beforeEach(() => {
-    // vitest 默认 import.meta.env.DEV = true（test mode）
-    // 显式 stub 为 true，确保 beforeEach 进入的初始状态可预测
     vi.stubEnv('DEV', true)
   })
-
   afterEach(() => {
     vi.unstubAllEnvs()
   })
 
-  // 真机（release）模式
   function withProd(): void {
     vi.stubEnv('DEV', false)
     vi.stubEnv('PROD', true)
   }
-  // dev 模式
   function withDev(): void {
     vi.stubEnv('DEV', true)
     vi.stubEnv('PROD', false)
   }
 
-  it('dev 模式 + 普通调用：原路径不变', () => {
+  // 🆕 2026-06-15：所有调用都走 normalize 后原样返回
+  it('dev 模式 + 普通调用：原路径不变（仅 normalize）', () => {
     withDev()
     const { withSafetyBoundary } = usePathResolver()
     expect(withSafetyBoundary('/storage/emulated/0/Download/foo.txt'))
@@ -46,33 +44,26 @@ describe('usePathResolver.withSafetyBoundary', () => {
     expect(withSafetyBoundary('/mock/video.mp4')).toBe('/mock/video.mp4')
   })
 
-  it('真机 + 普通调用：/storage/emulated/0/foo 改写到 encv-automation/foo', () => {
+  it('真机 + 普通调用：不再改写（原 spec 真机会改写到 encv-automation）', () => {
     withProd()
     const { withSafetyBoundary } = usePathResolver()
+    // 🆕 no-op：原路径保留
     expect(withSafetyBoundary('/storage/emulated/0/Download/photo.jpg'))
-      .toBe('/storage/emulated/0/encv-automation/Download/photo.jpg')
+      .toBe('/storage/emulated/0/Download/photo.jpg')
   })
 
-  it('真机 + 普通调用：/storage/emulated/0/encv-automation 已在命名空间内，不重复包裹', () => {
+  it('真机 + 普通调用：mount 路径原样返回', () => {
+    withProd()
+    const { withSafetyBoundary } = usePathResolver()
+    expect(withSafetyBoundary('/d/automation/01-plain-media/video/sample.mp4'))
+      .toBe('/d/automation/01-plain-media/video/sample.mp4')
+  })
+
+  it('真机 + 普通调用：encv-automation 旧绝对路径保留（migration 期兼容）', () => {
     withProd()
     const { withSafetyBoundary } = usePathResolver()
     expect(withSafetyBoundary('/storage/emulated/0/encv-automation/01-plain-media/video/sample.mp4'))
       .toBe('/storage/emulated/0/encv-automation/01-plain-media/video/sample.mp4')
-  })
-
-  it('真机 + 普通调用：/storage/emulated/0/encv-automation-sub/foo 不被改写（边界测试）', () => {
-    withProd()
-    const { withSafetyBoundary } = usePathResolver()
-    // /encv-automation-sub 不是 encv-automation 子路径
-    expect(withSafetyBoundary('/storage/emulated/0/encv-automation-sub/foo.txt'))
-      .toBe('/storage/emulated/0/encv-automation/encv-automation-sub/foo.txt')
-  })
-
-  it('真机 + 普通调用：/storage/emulated/0/encv-automation（精确）不重复包裹', () => {
-    withProd()
-    const { withSafetyBoundary } = usePathResolver()
-    expect(withSafetyBoundary('/storage/emulated/0/encv-automation'))
-      .toBe('/storage/emulated/0/encv-automation')
   })
 
   it('真机 + 普通调用：非 storage 路径（/tmp, /data, /mock）不变', () => {
@@ -83,32 +74,18 @@ describe('usePathResolver.withSafetyBoundary', () => {
     expect(withSafetyBoundary('/mock/video.mp4')).toBe('/mock/video.mp4')
   })
 
-  it('真机 + forceAutomation：/storage/emulated/0 改写到 encv-automation', () => {
+  it('真机 + forceAutomation：也 no-op（原 spec 强制改写）', () => {
     withProd()
     const { withSafetyBoundary } = usePathResolver()
     expect(withSafetyBoundary('/storage/emulated/0/Download/important.jpg', { forceAutomation: true }))
-      .toBe('/storage/emulated/0/encv-automation/Download/important.jpg')
+      .toBe('/storage/emulated/0/Download/important.jpg')
   })
 
-  it('dev + forceAutomation：仍然强制改写（保护 dev 模式）', () => {
+  it('dev + forceAutomation：也 no-op（原 spec 强制改写）', () => {
     withDev()
     const { withSafetyBoundary } = usePathResolver()
     expect(withSafetyBoundary('/storage/emulated/0/Download/foo', { forceAutomation: true }))
-      .toBe('/storage/emulated/0/encv-automation/Download/foo')
-  })
-
-  it('forceAutomation：非 storage 路径放到 __misc__', () => {
-    withProd()
-    const { withSafetyBoundary } = usePathResolver()
-    expect(withSafetyBoundary('/tmp/sandbox.bin', { forceAutomation: true }))
-      .toBe('/storage/emulated/0/encv-automation/__misc__/sandbox.bin')
-  })
-
-  it('forceAutomation：已在 encv-automation 内不重复', () => {
-    withProd()
-    const { withSafetyBoundary } = usePathResolver()
-    expect(withSafetyBoundary('/storage/emulated/0/encv-automation/x', { forceAutomation: true }))
-      .toBe('/storage/emulated/0/encv-automation/x')
+      .toBe('/storage/emulated/0/Download/foo')
   })
 
   it('空字符串原样返回', () => {
@@ -121,8 +98,9 @@ describe('usePathResolver.withSafetyBoundary', () => {
   it('路径含反斜杠被规范化（Windows 风格）', () => {
     withProd()
     const { withSafetyBoundary } = usePathResolver()
+    // 🆕 no-op：只做 normalize，不再改写
     expect(withSafetyBoundary('\\storage\\emulated\\0\\Download\\foo'))
-      .toBe('/storage/emulated/0/encv-automation/Download/foo')
+      .toBe('/storage/emulated/0/Download/foo')
   })
 })
 

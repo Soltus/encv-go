@@ -74,11 +74,16 @@ describe('useRealtimeTransport', () => {
     expect(t.transportMode.value).toBe('http-poll')
   })
 
-  it('Capacitor native → native-bridge', () => {
+  it('Capacitor native → ws (NOT native-bridge, 2026-06-11 设计变更)', () => {
+    // 2026-06-11 决策：Capacitor 真机走 ws 模式，不用 native-bridge
+    // 原因：NativeBridgeBackend 是空壳（start() 只 emit online:true，无事件转发）——
+    //       走 native-bridge 意味着真机 task 进度永远不更新
+    //       Capacitor WebView = Android System WebView / iOS WKWebView = Chrome/Safari 内核
+    //       → WebSocket 原生支持，直连 127.0.0.1:2025 即可
     ;(window as any).Capacitor = { isNativePlatform: () => true }
     const t = useRealtimeTransport()
     t.connect()
-    expect(t.transportMode.value).toBe('native-bridge')
+    expect(t.transportMode.value).toBe('ws')
   })
 
   it('forced mode overrides election', () => {

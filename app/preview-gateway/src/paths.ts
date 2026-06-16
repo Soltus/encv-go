@@ -38,6 +38,14 @@ function which(bin: string): string | undefined {
 export interface ResolvedPaths {
   repoRoot: string
   mobileDir: string
+  /**
+   * 🆕 2026-06-14 拆分：mobile-overlay 模式下 encv-go 暴露的 servingDir 根
+   * （mobile_api.go:209-263 硬约束 servingDir=/storage/emulated/0）。
+   * preflight.ensureMockData 建这个目录让 service-guard 通过。
+   * 与 mobileDir 区别：mobileDir 是 encv-mobile app 工作目录（vite cwd），
+   * mobileDataDir 是 mobile 真机/dev preview 的标准挂载点（mock data 落点）。
+   */
+  mobileDataDir: string
   pluginWebDir: string
   airBin: string
   nodeBin: string
@@ -54,6 +62,10 @@ export interface ResolvedPaths {
 export function resolvePaths(): ResolvedPaths {
   const repoRoot = process.env.REPO_ROOT ?? '/workspace'
   const mobileDir = process.env.MOBILE_DIR ?? `${repoRoot}/app/encv-mobile`
+  // 🆕 2026-06-14 拆分：与 mobileDir 独立。MOBILE_DATA_DIR 默认 /storage/emulated/0
+  // （mobile 真机 + dev preview 标准路径；mobile_api.go:210 硬编码）。
+  // mobile 真机上此目录由系统挂载（设备自带），dev preview 沙箱里 preflight 负责建。
+  const mobileDataDir = process.env.MOBILE_DATA_DIR ?? '/storage/emulated/0'
   const pluginWebDir = process.env.PLUGIN_WEB_DIR ?? `${mobileDir}/plugin-openlist/web`
 
   // air — 优先 env，否则 PATH，否则 mise/go 标准位置
@@ -90,6 +102,7 @@ export function resolvePaths(): ResolvedPaths {
   const resolved: ResolvedPaths = {
     repoRoot,
     mobileDir,
+    mobileDataDir,
     pluginWebDir,
     airBin,
     nodeBin,
