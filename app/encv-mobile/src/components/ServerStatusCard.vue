@@ -479,7 +479,11 @@ defineExpose({ checkStatus, restartBackend, stopBackend })
    100% CSS variables — 0 硬编码颜色。深色模式自动适配。
    ============================================================ */
 
-/* ============ 外层 3D 上下文 ============ */
+/* ============ 外层 3D 上下文（拟物 + 金属拉丝 + 倒角厚度） ============
+   关键兼容性：Android WebView 不可靠 backface-visibility，因此使用
+   visibility + opacity + 自身 rotateY(180) 抵消外层旋转。
+   见 L596-628 配套规则。
+   */
 .server-status-card {
   --card-bg: var(--ion-background-color, #fff);
   --card-border: var(--ion-color-medium, #92949c);
@@ -500,20 +504,22 @@ defineExpose({ checkStatus, restartBackend, stopBackend })
   min-height: 160px; /* JS 同步后会覆盖 */
   transition: min-height var(--transition-height);
 
-  /* 3D 实体化的"厚度" — 多层 drop-shadow 模拟金属质感 */
+  /* 拟物：外层 drop-shadow（卡片浮起阴影） */
   filter:
-    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.08))
-    drop-shadow(0 4px 8px rgba(0, 0, 0, 0.06))
-    drop-shadow(0 10px 20px rgba(0, 0, 0, 0.05));
+    drop-shadow(0 1px 1px rgba(0, 0, 0, 0.10))
+    drop-shadow(0 4px 8px rgba(0, 0, 0, 0.08))
+    drop-shadow(0 10px 20px rgba(0, 0, 0, 0.06))
+    drop-shadow(0 24px 48px rgba(0, 0, 0, 0.04));
 }
 .server-status-card.is-clickable { cursor: pointer; }
 
 /* hover 抬起 + 微旋转（3D 凸起效果） */
 .server-status-card.is-clickable:hover {
   filter:
-    drop-shadow(0 2px 2px rgba(0, 0, 0, 0.10))
-    drop-shadow(0 8px 16px rgba(0, 0, 0, 0.10))
-    drop-shadow(0 16px 32px rgba(0, 0, 0, 0.08));
+    drop-shadow(0 2px 2px rgba(0, 0, 0, 0.12))
+    drop-shadow(0 8px 16px rgba(0, 0, 0, 0.12))
+    drop-shadow(0 16px 32px rgba(0, 0, 0, 0.10))
+    drop-shadow(0 32px 64px rgba(0, 0, 0, 0.06));
   transform: translateY(-2px);
 }
 
@@ -529,32 +535,107 @@ defineExpose({ checkStatus, restartBackend, stopBackend })
   transform: rotateY(180deg);
 }
 
-/* ============ 双面通用：Grid 叠放 + 自然高度 ============ */
+/* ============ 双面通用：Grid 叠放 + 自然高度 + 拟物表面 ============
+   拟物三层叠加：
+   1) `linear-gradient` 顶部高光 + 底部内阴影（玻璃/塑料光泽）
+   2) `repeating-linear-gradient` 45° 极细斜纹（金属拉丝/磨砂质感）
+   3) `box-shadow` inset 多层（顶部高光 1px、底部 1px、左侧 1px 倒角、右侧 1px 倒角）
+   */
 .card-face {
   grid-area: stack;
   /* 关键：不再 position: absolute → 高度由内容自然撑开，Grid 取 max */
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 14px 16px;
-  background: var(--card-bg);
+
+  /* 表面层：拉丝 + 顶部高光 + 底部内阴影 */
+  background:
+    /* 顶部高光带（玻璃效果） */
+    linear-gradient(180deg,
+      rgba(255, 255, 255, 0.65) 0%,
+      rgba(255, 255, 255, 0.20) 4%,
+      transparent 14%,
+      transparent 86%,
+      rgba(0, 0, 0, 0.05) 100%),
+    /* 金属拉丝（45° 极细斜纹） */
+    repeating-linear-gradient(135deg,
+      rgba(255, 255, 255, 0.025) 0px,
+      rgba(255, 255, 255, 0.025) 1px,
+      transparent 1px,
+      transparent 3px),
+    /* 深色模式下拉丝反向（黑丝纹理） */
+    repeating-linear-gradient(45deg,
+      rgba(0, 0, 0, 0.04) 0px,
+      rgba(0, 0, 0, 0.04) 1px,
+      transparent 1px,
+      transparent 4px),
+    /* 底色（主题色感知） */
+    var(--card-bg);
+
   color: var(--card-text);
   border: 1px solid var(--card-border);
   border-left-width: 4px;
   border-radius: var(--card-radius);
-  /* 倒角 + 表面光泽 inset（高光在顶部 / 阴影在底部） */
+
+  /* 倒角 + 多层玻璃高光 inset（顶 / 底 / 左 / 右倒角） */
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.04);
-  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+    /* 顶部高光（白色 1px） */
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    /* 底部 1px 暗边（倒角） */
+    inset 0 -1px 0 rgba(0, 0, 0, 0.10),
+    /* 左侧 1px 高光（倒角） */
+    inset 1px 0 0 rgba(255, 255, 255, 0.18),
+    /* 右侧 1px 暗边（倒角） */
+    inset -1px 0 0 rgba(0, 0, 0, 0.06),
+    /* 中间下沉的柔和阴影（"凸起"感） */
+    inset 0 2px 6px rgba(0, 0, 0, 0.04);
+
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    transform var(--transition-3d),
+    opacity var(--transition-3d),
+    visibility 0s linear var(--transition-3d);
+
   min-height: inherit; /* 让面继承 wrapper 的 min-height */
   overflow: hidden;
+  /* 显式设置 backface-visibility 作为双保险（iOS Safari 必需要） */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 .server-status-card.is-clickable .card-face { cursor: pointer; }
+
+/* 反面：自身 rotateY(180) 抵消外层翻转（防止文字镜像）
+   + visibility/opacity 严格控制"未翻转时不可见"（Android WebView 兼容） */
 .card-face-back {
   transform: rotateY(180deg);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+/* 翻转后：正面隐藏，反面显示 */
+.server-status-card.is-flipped .card-face-front {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    transform var(--transition-3d),
+    opacity var(--transition-3d),
+    visibility 0s linear var(--transition-3d);
+}
+.server-status-card.is-flipped .card-face-back {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast),
+    transform var(--transition-3d),
+    opacity var(--transition-3d),
+    visibility 0s linear 0s; /* 翻转开始即恢复可见（不是延迟到末） */
 }
 
 /* ============ 状态变体：边框 + 主题色 ============ */
