@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Soltus/encv-go/internal/config"
+	"github.com/Soltus/encv-go/internal/logger"
 	"github.com/Soltus/encv-go/internal/mount"
 	mobileservice "github.com/Soltus/encv-go/internal/service"
 	"github.com/Soltus/encv-go/internal/utils"
@@ -974,6 +975,28 @@ func (s *Server) handleAPILogsGin(c *gin.Context) {
 		slog.Info(msg)
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// 🆕 2026-06-16: GET /api/logs/recent — 返回 slog ring buffer 最近 N 条
+//   用途：WS 失败降级 http-poll 时，前端 devlogs 仍能看到后端日志
+//   参数：?since=ISO8601（可选；不传则返回全量）
+func (s *Server) handleAPILogsRecentGin(c *gin.Context) {
+	since := c.Query("since")
+	entries := logger.DefaultLogBuffer.Snapshot()
+	if since != "" {
+		filtered := entries[:0]
+		for _, e := range entries {
+			if e["timestamp"] > since {
+				filtered = append(filtered, e)
+			}
+		}
+		entries = filtered
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"logs":     entries,
+		"count":    len(entries),
+		"capacity": 500,
+	})
 }
 
 func (s *Server) writeConfigToFile() error {

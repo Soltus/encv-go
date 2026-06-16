@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Soltus/encv-go/internal/logger"
 	"github.com/Soltus/encv-go/internal/service"
 )
 
@@ -53,6 +54,12 @@ func (h *WSLogHandler) Handle(ctx context.Context, r slog.Record) error {
 			},
 		})
 		h.hub.BroadcastRaw(msg)
+		// 🆕 2026-06-16: 同步写入 ring buffer，供 http-poll 降级模式 GET /api/logs/recent 拉取
+		logger.DefaultLogBuffer.Push(map[string]string{
+			"level":     levelStr,
+			"message":   r.Message,
+			"timestamp": time.Now().Format("15:04:05"),
+		})
 	}
 
 	return h.inner.Handle(ctx, r)

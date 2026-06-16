@@ -571,6 +571,8 @@ func (s *Server) Start(version string) (string, error) {
 	r.GET("/api/alist-encrypt/stream", s.handleAlistEncryptStreamGin)
 	r.GET("/api/alist-encrypt/decode-filename", s.handleAlistDecodeFilenameGin)
 	r.POST("/api/logs", s.handleAPILogsGin)
+	// 🆕 2026-06-16: GET /api/logs/recent — http-poll 降级模式 + WS 模式冷启动时拉历史日志
+	r.GET("/api/logs/recent", s.handleAPILogsRecentGin)
 	// 🆕 2026-06-15：多挂载点管理 API（multi-mount-storage-refactor spec §6.1）
 	r.GET("/api/mounts", s.handleListMountsGin)
 	r.GET("/api/mounts/:id", s.handleGetMountGin)

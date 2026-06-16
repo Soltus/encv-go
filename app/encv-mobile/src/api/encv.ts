@@ -604,6 +604,35 @@ export async function getTasks(): Promise<EncvTask[]> {
   return data.tasks || []
 }
 
+/**
+ * 🆕 2026-06-16：拉取后端 ring buffer 最近 N 条日志
+ *   - http-poll 模式：每次 tick 拉一次
+ *   - WS 模式：onMounted 冷启动时拉一次历史（WS 推的实时日志不补历史）
+ *   - since 参数：增量拉取（时间戳字符串，HH:MM:SS 格式）
+ */
+export interface BackendLogEntry {
+  level: 'debug' | 'info' | 'warn' | 'error'
+  message: string
+  timestamp: string  // HH:MM:SS
+}
+export interface RecentLogsResponse {
+  logs: BackendLogEntry[]
+  count: number
+  capacity: number
+}
+
+export async function getRecentBackendLogs(since?: string): Promise<RecentLogsResponse> {
+  const baseUrl = getApiBaseUrl()
+  const url = since
+    ? `${baseUrl}/api/logs/recent?since=${encodeURIComponent(since)}`
+    : `${baseUrl}/api/logs/recent`
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  return response.json()
+}
+
 export async function createTask(
   type: TaskType,
   sourcePath: string,
