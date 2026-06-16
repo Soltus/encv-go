@@ -672,16 +672,37 @@ defineExpose({ checkStatus, restartBackend, stopBackend })
 }
 .server-status-card:hover::before { opacity: 0.8; }
 
-/* 表面光泽（::after）：对角线渐变 + hover 扫过 */
+/* 表面光泽（::after）：对角线渐变 + 状态色高光 */
 .card-face::after {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, transparent 40%, transparent 60%, rgba(255, 255, 255, 0.04) 100%);
+  background:
+    /* 对角线斜光（高光从左上扫到右下） */
+    linear-gradient(135deg,
+      rgba(255, 255, 255, 0.10) 0%,
+      transparent 35%,
+      transparent 65%,
+      rgba(0, 0, 0, 0.04) 100%);
   pointer-events: none;
   border-radius: inherit;
-  opacity: 0.7;
+  opacity: 0.85;
   transition: opacity var(--transition-fast);
+}
+/* 状态色高光带（顶部 1px 用 accent 色） */
+.card-face::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--card-accent) 20%,
+    var(--card-accent) 80%,
+    transparent 100%);
+  opacity: 0.4;
+  pointer-events: none;
+  border-radius: var(--card-radius) var(--card-radius) 0 0;
 }
 .server-status-card.is-pulse .card-face-front::after {
   animation: ssc-sheen 1.2s ease-out;
