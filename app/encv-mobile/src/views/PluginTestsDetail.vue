@@ -284,7 +284,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 
 // 🆕 2026-06-12 崩溃根因修复：后端 crash 完全静默 → 监听 MainActivity 推送的 window CustomEvent
 //   链路：EncvGoService.sendBroadcast (Android system broadcast)
@@ -351,6 +352,7 @@ import StepDetailPanel from '@/components/automation/StepDetailPanel.vue'
 import StepInlineTimeline from '@/components/automation/StepInlineTimeline.vue'
 
 const { t } = useI18n()
+const route = useRoute()
 
 // ---- Mock 数据 ----
 // 🆕 2026-06-15 声明式：mockRoot = AUTOMATION_MOUNT_PATH + '/'（常量，不再 split/slice）
@@ -1174,7 +1176,41 @@ onMounted(() => {
   // useWorkflowTaskService 内部通过 useTaskEventBridge 自动订阅 WS 4 件套事件
   // 🆕 2026-06-12：监听 MainActivity 推送的 CustomEvent，显示 lastError
   window.addEventListener('encv:backend-status', onBackendStatus)
+  // 🆕 v3 2026-06-18 Task 10：从 Tasks.vue group card 跳转过来时，自动选中对应 run
+  //   链路：Tasks.vue viewGroupReport(runId) → router.push query.runId → 这里读取
+  //   serviceRuns 可能还没加载完，用 nextTick + 重试机制兜底
+  const queryRunId = route.query.runId
+  if (typeof queryRunId === 'string' && queryRunId) {
+    selectHistoryRunByRunId(queryRunId)
+  }
 })
+
+/**
+ * 🆕 v3 2026-06-18 Task 10：按 runId 从 serviceRuns 中查找并选中历史 run
+ *
+ * serviceRuns 在 useWorkflowTaskService 初始化时从 localStorage 异步加载，
+ * onMounted 时可能还没就绪 → 用 watch + nextTick 兜底重试。
+ */
+function selectHistoryRunByRunId(runId: string) {
+  const record = serviceRuns.value.find((r) => r.id === runId)
+  if (record) {
+    selectHistoryRun(record)
+    return
+  }
+  // 兜底：serviceRuns 可能还在加载，watch 一次（5s 超时）
+  const stop = watch(
+    serviceRuns,
+    (runs) => {
+      const rec = runs.find((r) => r.id === runId)
+      if (rec) {
+        selectHistoryRun(rec)
+        stop()
+      }
+    },
+    { deep: false },
+  )
+  setTimeout(() => stop(), 5000)
+}
 
 onUnmounted(() => {
   if (tickHandle) clearInterval(tickHandle)

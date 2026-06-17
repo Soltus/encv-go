@@ -352,6 +352,21 @@ func (f *fakeMountResolver) Resolve(virtualPath string) (*MountResolveResult, er
 	return nil, errors.New("fakeMountResolver: no mount")
 }
 
+// 🆕 v3 2026-06-18 Task 8：AbsToVirtual 反向解析 stub
+//   - 简化实现：遍历 mounts，找 absPath 是 m.absPath 子路径的 mount
+func (f *fakeMountResolver) AbsToVirtual(absPath string) (string, error) {
+	for mp, m := range f.mounts {
+		if absPath == m.absPath {
+			return mp, nil
+		}
+		if strings.HasPrefix(absPath, m.absPath+"/") {
+			sub := strings.TrimPrefix(absPath, m.absPath+"/")
+			return mp + "/" + sub, nil
+		}
+	}
+	return "", errors.New("fakeMountResolver: no mount matches abs path")
+}
+
 func TestTaskManager_FailTask(t *testing.T) {
 	mb := new(MockBroadcaster)
 	mb.On("Broadcast", mock.Anything, mock.Anything).Return()

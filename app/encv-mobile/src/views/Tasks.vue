@@ -159,50 +159,64 @@
           <!--       点 group card 右侧 chevron 展开/折叠详情 -->
           <!-- 🆕 2026-06-10 修复 v2：2 级嵌套 — group 展开时按 pluginName 插 plugin_section 段头 -->
           <ion-item-sliding v-if="item.kind === 'group'">
-            <ion-item button detail @click="toggleTaskGroup(item.groupKey!)" :class="['task-group-card', `group-tone-${item.tone}`]">
-              <div class="group-icon-bubble" :class="`group-tone-${item.tone}`" slot="start">
+            <ion-item button detail @click="toggleTaskGroup(item.groupKey!)" :class="['tl-item-card', 'tl-item-card--group', `tl-tone--${item.tone}`]">
+              <div :class="['tl-bubble', 'tl-bubble--lg', `tl-tone--${item.tone}`]" slot="start">
                 <ion-icon :icon="item.tone === 'ai_agent' ? hardwareChipOutline : cogOutline"></ion-icon>
               </div>
               <ion-label>
-                <h2 class="group-title">
+                <h2 :class="['tl-title', 'tl-title--lg']">
                   {{ item.tone === 'ai_agent' ? t('tasks.triggeredBy_ai_agent') : t('tasks.triggeredBy_automation') }}
-                  <span class="group-count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</span>
+                  <span class="tl-title__count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</span>
                 </h2>
-                <p class="card-meta-row group-meta-row">
-                  <ion-badge v-if="item.summary.passed > 0" color="success" class="status-badge">
-                    <ion-icon :icon="checkmarkCircle" class="badge-icon"></ion-icon>
+                <p class="tl-meta-row">
+                  <ion-badge v-if="item.summary.passed > 0" color="success" class="tl-status-badge">
+                    <ion-icon :icon="checkmarkCircle" class="tl-badge-icon"></ion-icon>
                     {{ item.summary.passed }}
                   </ion-badge>
-                  <ion-badge v-if="item.summary.failed > 0" color="danger" class="status-badge">
-                    <ion-icon :icon="closeCircle" class="badge-icon"></ion-icon>
+                  <ion-badge v-if="item.summary.failed > 0" color="danger" class="tl-status-badge">
+                    <ion-icon :icon="closeCircle" class="tl-badge-icon"></ion-icon>
                     {{ item.summary.failed }}
                   </ion-badge>
-                  <ion-badge v-if="item.summary.running > 0" color="warning" class="status-badge">
-                    <ion-spinner name="dots" class="badge-spinner"></ion-spinner>
+                  <ion-badge v-if="item.summary.running > 0" color="warning" class="tl-status-badge">
+                    <ion-spinner name="dots" class="tl-badge-spinner"></ion-spinner>
                     {{ item.summary.running }}
                   </ion-badge>
-                  <ion-badge v-if="item.summary.pending > 0" color="medium" class="status-badge">
+                  <ion-badge v-if="item.summary.pending > 0" color="medium" class="tl-status-badge">
                     {{ item.summary.pending }}
                   </ion-badge>
                 </p>
-                <div class="group-progress-track">
+                <div :class="['tl-progress', 'tl-progress--lg', `tl-tone--${item.tone}`]">
                   <div
-                    class="group-progress-fill"
+                    class="tl-progress__fill"
                     :style="{ width: item.summary.percent + '%' }"
                   ></div>
                 </div>
-                <p class="task-time-info group-time-info">
-                  <span class="time-created">{{ formatDateTime(item.summary.latestCreatedAt) }}</span>
-                  <span class="group-percent-label">{{ item.summary.percent }}%</span>
+                <p :class="['tl-time-info', `tl-tone--${item.tone}`]">
+                  <span class="tl-time-info__created">{{ formatDateTime(item.summary.latestCreatedAt) }}</span>
+                  <span class="tl-time-info__percent">{{ item.summary.percent }}%</span>
                 </p>
               </ion-label>
+              <ion-button
+                v-if="item.runId"
+                slot="end"
+                fill="clear"
+                size="small"
+                @click.stop="viewGroupReport(item.runId)"
+                :title="t('tasks.viewReport')"
+                class="group-report-btn"
+              >
+                <ion-icon
+                  :icon="documentTextOutline"
+                  slot="icon-only"
+                ></ion-icon>
+              </ion-button>
               <ion-button
                 slot="end"
                 fill="clear"
                 size="small"
                 @click.stop="toggleTaskGroup(item.groupKey!)"
                 :title="isTaskGroupExpanded(item.groupKey!) ? t('tasks.collapse') : t('tasks.expand')"
-                class="group-chevron-btn"
+                class="tl-chevron-btn"
               >
                 <ion-icon
                   :icon="isTaskGroupExpanded(item.groupKey!) ? chevronBack : chevronForward"
@@ -219,30 +233,30 @@
             button
             :detail="false"
             @click="toggleSubSection(item.subKey)"
-            :class="['sub-section-header', `sub-dim-${item.meta.dimension}`, `sub-tone-${item.meta.tone}`, { 'is-collapsed': item.isCollapsed }]"
+            :class="['tl-item-card', 'tl-item-card--subsection', `tl-tone--${item.meta.dimension}`, { 'is-collapsed': item.isCollapsed }]"
             :lines="'none'"
           >
-            <div class="sub-section-icon-bubble" :class="`sub-tone-${item.meta.tone}`" slot="start">
+            <div :class="['tl-bubble', 'tl-bubble--md', `tl-tone--${item.meta.dimension}`]" slot="start">
               <ion-icon :icon="getSubSectionIcon(item.meta.icon)"></ion-icon>
             </div>
             <ion-label class="sub-section-label">
-              <h3 class="sub-section-name">{{ item.meta.label }}</h3>
-              <p class="sub-section-count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</p>
+              <h3 :class="['tl-title', 'tl-title--md']">{{ item.meta.label }}</h3>
+              <p class="tl-title__count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</p>
             </ion-label>
             <div class="sub-section-badges" slot="end">
-              <ion-badge v-if="item.subSummary.passed > 0" color="success" class="status-badge">
-                <ion-icon :icon="checkmarkCircle" class="badge-icon"></ion-icon>
+              <ion-badge v-if="item.subSummary.passed > 0" color="success" class="tl-status-badge tl-status-badge--sm">
+                <ion-icon :icon="checkmarkCircle" class="tl-badge-icon"></ion-icon>
                 {{ item.subSummary.passed }}
               </ion-badge>
-              <ion-badge v-if="item.subSummary.failed > 0" color="danger" class="status-badge">
-                <ion-icon :icon="closeCircle" class="badge-icon"></ion-icon>
+              <ion-badge v-if="item.subSummary.failed > 0" color="danger" class="tl-status-badge tl-status-badge--sm">
+                <ion-icon :icon="closeCircle" class="tl-badge-icon"></ion-icon>
                 {{ item.subSummary.failed }}
               </ion-badge>
-              <ion-badge v-if="item.subSummary.running > 0" color="warning" class="status-badge">
-                <ion-spinner name="dots" class="badge-spinner"></ion-spinner>
+              <ion-badge v-if="item.subSummary.running > 0" color="warning" class="tl-status-badge tl-status-badge--sm">
+                <ion-spinner name="dots" class="tl-badge-spinner"></ion-spinner>
                 {{ item.subSummary.running }}
               </ion-badge>
-              <ion-badge v-if="item.subSummary.pending > 0" color="medium" class="status-badge">
+              <ion-badge v-if="item.subSummary.pending > 0" color="medium" class="tl-status-badge tl-status-badge--sm">
                 {{ item.subSummary.pending }}
               </ion-badge>
             </div>
@@ -251,7 +265,7 @@
               fill="clear"
               size="small"
               :title="item.isCollapsed ? t('tasks.expand') : t('tasks.collapse')"
-              class="sub-section-chevron-btn"
+              class="tl-chevron-btn"
               @click.stop="toggleSubSection(item.subKey)"
             >
               <ion-icon
@@ -259,9 +273,9 @@
                 slot="icon-only"
               ></ion-icon>
             </ion-button>
-            <div class="sub-section-progress-track">
+            <div :class="['tl-progress', 'tl-progress--sm', `tl-tone--${item.meta.dimension}`, 'sub-section-progress-track']">
               <div
-                class="sub-section-progress-fill"
+                class="tl-progress__fill"
                 :style="{ width: item.subSummary.percent + '%' }"
               ></div>
             </div>
@@ -271,6 +285,7 @@
           <!-- collapsed sub_section 的 task 不在 displayedItems 里（buildDisplayedItems 过滤） -->
           <ion-item-sliding v-else>
             <ion-item
+              :class="['tl-item-card']"
               @click="openTaskDetail(item.task)"
               button
               detail
@@ -282,9 +297,9 @@
               ></ion-icon>
               <ion-label>
                 <h2>{{ getTaskName(item.task) }}</h2>
-                <p class="card-meta-row">
+                <p class="tl-meta-row">
                   <span class="task-id">#{{ item.task.id.slice(0, 6) }}</span>
-                  <ion-badge :color="getStatusColor(item.task.status)" class="status-badge">
+                  <ion-badge :color="getStatusColor(item.task.status)" class="tl-status-badge">
                     {{ getStatusLabel(item.task.status) }}
                   </ion-badge>
                   <span class="task-type">{{ item.task.type === 'encrypt' ? t('tasks.encrypt') : t('tasks.decrypt') }}</span>
@@ -306,9 +321,9 @@
                     {{ t('tasks.triggeredBy_' + getTriggeredBy(item.task.id)) }}
                   </ion-badge>
                 </p>
-                <p class="task-time-info">
-                  <span class="time-created">{{ formatDateTime(item.task.createdAt) }}</span>
-                  <span v-if="getTaskDuration(item.task)" class="time-duration">{{ getTaskDuration(item.task) }}</span>
+                <p class="tl-time-info">
+                  <span class="tl-time-info__created">{{ formatDateTime(item.task.createdAt) }}</span>
+                  <span v-if="getTaskDuration(item.task)" class="tl-time-info__duration">{{ getTaskDuration(item.task) }}</span>
                 </p>
                 <div v-if="item.task.status === 'running' || item.task.status === 'cancelling'" class="progress-section">
                   <ion-progress-bar
@@ -412,6 +427,7 @@ import {
   extensionPuzzle, swapVertical, chevronDown,
   hardwareChipOutline, cogOutline, person, chevronForward, chevronBack,
   folderOutline, ellipsisHorizontalCircleOutline,
+  documentTextOutline,
 } from 'ionicons/icons'
 import { useRoute, useRouter } from 'vue-router'
 import type { EncvTask, TaskType } from '@/api/encv'
@@ -783,6 +799,16 @@ function isTaskGroupExpanded(key: string): boolean {
   return expandedGroupKeys.value.has(key)
 }
 
+// 🆕 v3 2026-06-18 Task 10：group card 跳转按钮 → PluginTestsDetail（带 runId query）
+// 把任务系统的 group card 与插件测试报告系统打通：用户点击「查看报告」直接跳到
+// /tabs/settings/devtools/plugin-tests?runId=xxx，PluginTestsDetail 读取 query 自动选中 run
+function viewGroupReport(runId: string) {
+  router.push({
+    path: '/tabs/settings/devtools/plugin-tests',
+    query: { runId },
+  })
+}
+
 // 🆕 2026-06-11 v5：sub_section 折叠状态（每个 section header 可独立折叠）
 // 持久化 key v2（v1 用 plugin-section 前缀，已废弃）
 const COLLAPSED_SUBSECTIONS_KEY = 'encv_tasks_collapsed_subsections_v1'
@@ -1130,28 +1156,16 @@ onIonViewWillEnter(() => {
 
 .task-id {
   font-size: 11px;
-  font-family: monospace;
-  color: var(--encv-text-secondary);
+  font-family: var(--tl-card-font-mono);
+  color: var(--tl-card-text-secondary);
   opacity: 0.7;
   margin-right: 2px;
 }
 
-.status-badge {
-  margin-right: 8px;
-  font-size: 11px;
-}
-
 .task-type {
   font-size: 12px;
-  color: var(--encv-text-secondary);
+  color: var(--tl-card-text-secondary);
   margin-left: 6px;
-}
-
-.card-meta-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
 }
 
 .plugin-badge {
@@ -1184,11 +1198,11 @@ onIonViewWillEnter(() => {
   align-items: center;
   gap: 3px;
   font-size: 10px;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  color: var(--ion-color-medium);
-  background: rgba(var(--ion-color-medium-rgb, 148, 149, 153), 0.1);
+  font-family: var(--tl-card-font-mono);
+  color: var(--tl-card-text-secondary);
+  background: rgba(var(--tl-state-created-rgb), 0.1);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--tl-card-radius-sm);
   margin-left: 4px;
   white-space: nowrap;
 }
@@ -1197,220 +1211,27 @@ onIonViewWillEnter(() => {
   flex-shrink: 0;
 }
 
-.task-time-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--encv-text-secondary);
-}
-
 /* ============================================================
-   🆕 2026-06-10 修复：自动化测试 / AI agent 任务组卡片美化
+   🆕 v3 2026-06-18 Task 4：group / sub_section / task card 视觉
+   已迁移到 timeline-utilities.css 的 .tl-item-card / .tl-bubble /
+   .tl-status-badge / .tl-progress / .tl-title / .tl-time-info /
+   .tl-meta-row / .tl-chevron-btn utility class。
+   本文件只保留 Tasks.vue 特有的布局覆盖。
    ============================================================ */
-.task-group-card {
-  --background: var(--ion-color-light);
-  border-left: 4px solid var(--ion-color-primary);
-  margin: 8px 0;
-  border-radius: 8px;
-  overflow: hidden;
-  transition: background 0.2s ease;
+
+/* 🆕 v3 2026-06-18 Task 10：group card 查看报告按钮 */
+.group-report-btn {
+  --color: var(--tl-trigger-automation);
+  margin: 0 4px 0 0;
 }
-.task-group-card.group-tone-ai_agent {
-  border-left-color: var(--ion-color-secondary);
-  --background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(139, 92, 246, 0.02));
+.group-report-btn:hover {
+  --color: var(--tl-state-analyzing);
 }
-.task-group-card.group-tone-automation {
-  border-left-color: var(--ion-color-primary);
-  --background: linear-gradient(135deg, rgba(79, 140, 255, 0.08), rgba(79, 140, 255, 0.02));
+.tl-tone--ai_agent .group-report-btn {
+  --color: var(--tl-trigger-ai-agent);
 }
 
-.group-icon-bubble {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  margin-right: 4px;
-}
-.group-icon-bubble.group-tone-ai_agent {
-  background: var(--ion-color-secondary);
-  color: white;
-}
-.group-icon-bubble.group-tone-automation {
-  background: var(--ion-color-primary);
-  color: white;
-}
-.group-icon-bubble ion-icon {
-  font-size: 22px;
-}
-
-.group-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0 0 4px;
-  color: var(--ion-color-dark);
-}
-.group-count {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ion-color-medium-shade);
-  margin-left: 4px;
-}
-
-.group-meta-row {
-  margin: 6px 0;
-}
-.group-meta-row .status-badge {
-  font-size: 11px;
-  padding: 3px 8px;
-  margin-right: 4px;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-.badge-icon {
-  font-size: 12px;
-}
-.badge-spinner {
-  width: 10px;
-  height: 10px;
-  --color: currentColor;
-}
-
-.group-progress-track {
-  height: 6px;
-  background: var(--ion-color-step-100, rgba(0, 0, 0, 0.06));
-  border-radius: 3px;
-  overflow: hidden;
-  margin: 6px 0 4px;
-}
-.group-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--ion-color-primary), var(--ion-color-primary-shade));
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-.group-tone-ai_agent .group-progress-fill {
-  background: linear-gradient(90deg, var(--ion-color-secondary), var(--ion-color-secondary-shade));
-}
-
-.group-time-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 2px 0 0;
-  font-size: 11px;
-}
-.group-percent-label {
-  font-weight: 600;
-  color: var(--ion-color-primary);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-}
-.group-tone-ai_agent .group-percent-label {
-  color: var(--ion-color-secondary);
-}
-
-.group-chevron-btn {
-  --color: var(--ion-color-medium-shade);
-  margin: 0;
-}
-
-/* ============================================================
-   🆕 2026-06-11 v5：sub_section_header（取代 v4 plugin-sub-section）
-   - 4 种 dimension tone：plugin / type / category / none
-   - 🆕 Task 15：移除 sticky（与虚拟滚动 absolute 定位冲突）
-   - 商业级视觉：subtle shadow + 1px border + backdrop-filter
-   - 可折叠：整段 button + 右侧 chevron
-   ============================================================ */
-ion-item.sub-section-header {
-  --padding-start: 56px;       /* 左侧缩进（对应 group card 4px border + 40px icon + 12px 间距） */
-  --padding-end: 12px;
-  --padding-top: 10px;
-  --padding-bottom: 12px;
-  --min-height: 52px;
-  --background: var(--sub-bg, rgba(79, 140, 255, 0.05));
-  --background-hover: var(--sub-bg-hover, rgba(79, 140, 255, 0.08));
-  --background-activated: var(--sub-bg-activated, rgba(79, 140, 255, 0.12));
-  --border-color: var(--sub-border, rgba(79, 140, 255, 0.12));
-  --color: var(--ion-color-dark);
-  --inner-padding-end: 0;
-  font-size: 13px;
-  /* 商业级视觉：backdrop-filter 保留半透明感 */
-  backdrop-filter: blur(10px) saturate(140%);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  background-color: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 4px 12px -4px rgba(0, 0, 0, 0.06);
-  transition: background 0.18s ease, box-shadow 0.18s ease;
-}
-ion-item.sub-section-header.is-collapsed {
-  /* 折叠时视觉上「轻」一点：subtle hint 让用户知道里面有内容 */
-  background-color: rgba(250, 250, 252, 0.92);
-}
-
-/* 4 种 dimension tone：plugin (primary 蓝) / type (warning 黄) / category (success 绿) / none (medium 灰) */
-ion-item.sub-section-header.sub-tone-plugin {
-  --sub-bg: rgba(79, 140, 255, 0.05);
-  --sub-bg-hover: rgba(79, 140, 255, 0.08);
-  --sub-bg-activated: rgba(79, 140, 255, 0.12);
-  --sub-border: rgba(79, 140, 255, 0.14);
-}
-ion-item.sub-section-header.sub-tone-type {
-  --sub-bg: rgba(255, 167, 38, 0.05);
-  --sub-bg-hover: rgba(255, 167, 38, 0.08);
-  --sub-bg-activated: rgba(255, 167, 38, 0.12);
-  --sub-border: rgba(255, 167, 38, 0.14);
-}
-ion-item.sub-section-header.sub-tone-category {
-  --sub-bg: rgba(54, 175, 110, 0.05);
-  --sub-bg-hover: rgba(54, 175, 110, 0.08);
-  --sub-bg-activated: rgba(54, 175, 110, 0.12);
-  --sub-border: rgba(54, 175, 110, 0.14);
-}
-ion-item.sub-section-header.sub-tone-none {
-  --sub-bg: rgba(158, 158, 158, 0.04);
-  --sub-bg-hover: rgba(158, 158, 158, 0.07);
-  --sub-bg-activated: rgba(158, 158, 158, 0.1);
-  --sub-border: rgba(158, 158, 158, 0.12);
-}
-
-.sub-section-icon-bubble {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;          /* 商业级：圆角方形（vs 圆形） */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  flex-shrink: 0;
-  margin-left: -40px;
-  background: var(--ion-color-primary);
-  color: white;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-.sub-section-icon-bubble.sub-tone-plugin {
-  background: linear-gradient(135deg, #5b9dff, #2f7ce0);
-  color: white;
-}
-.sub-section-icon-bubble.sub-tone-type {
-  background: linear-gradient(135deg, #ffb74d, #f57c00);
-  color: white;
-}
-.sub-section-icon-bubble.sub-tone-category {
-  background: linear-gradient(135deg, #66bb6a, #388e3c);
-  color: white;
-}
-.sub-section-icon-bubble.sub-tone-none {
-  background: linear-gradient(135deg, #bdbdbd, #9e9e9e);
-  color: white;
-}
-.sub-section-icon-bubble ion-icon {
-  font-size: 16px;
-}
-
+/* sub_section 布局覆盖（utility class 不含的特定布局） */
 .sub-section-label {
   margin: 0 !important;
   display: flex;
@@ -1418,25 +1239,6 @@ ion-item.sub-section-header.sub-tone-none {
   gap: 0;
   min-width: 0;
 }
-.sub-section-label h3.sub-section-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ion-color-dark);
-  margin: 0;
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  letter-spacing: -0.01em;       /* 商业级：tight letter-spacing 提升精致感 */
-}
-.sub-section-label p.sub-section-count {
-  font-size: 11px;
-  color: var(--encv-text-secondary);
-  margin: 0;
-  line-height: 1.3;
-  font-weight: 500;
-}
-
 .sub-section-badges {
   display: flex;
   gap: 4px;
@@ -1444,70 +1246,13 @@ ion-item.sub-section-header.sub-tone-none {
   align-items: center;
   margin-right: 4px;
 }
-.sub-section-badges .status-badge {
-  font-size: 10px;
-  --padding-start: 5px;
-  --padding-end: 6px;
-  --padding-top: 1px;
-  --padding-bottom: 1px;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-weight: 600;             /* 商业级：徽章文字加粗 */
-}
-.sub-section-badges .badge-icon {
-  font-size: 10px;
-}
-.sub-section-badges .badge-spinner {
-  width: 8px;
-  height: 8px;
-  --color: currentColor;
-}
-
-.sub-section-chevron-btn {
-  --color: var(--ion-color-medium-shade);
-  margin: 0;
-  transition: transform 0.2s ease;   /* 商业级：旋转动画 */
-}
-.sub-section-chevron-btn ion-icon {
-  transition: transform 0.2s ease;
-}
-.is-collapsed .sub-section-chevron-btn ion-icon {
-  transform: rotate(-90deg);
-}
-
+/* sub_section 底部进度条需要 absolute 定位（贴底） */
 .sub-section-progress-track {
   position: absolute;
-  left: 56px;
-  right: 12px;
+  left: var(--tl-item-padding-start-subsection, 56px);
+  right: var(--tl-space-lg, 12px);
   bottom: 0;
-  height: 2px;
-  background: rgba(0, 0, 0, 0.05);
-  overflow: hidden;
   pointer-events: none;
-}
-.sub-section-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--ion-color-primary), var(--ion-color-primary-shade));
-  transition: width 0.3s ease;
-}
-.sub-tone-type .sub-section-progress-fill {
-  background: linear-gradient(90deg, #ffb74d, #f57c00);
-}
-.sub-tone-category .sub-section-progress-fill {
-  background: linear-gradient(90deg, #66bb6a, #388e3c);
-}
-.sub-tone-none .sub-section-progress-fill {
-  background: linear-gradient(90deg, #bdbdbd, #9e9e9e);
-}
-
-.time-created {
-  color: var(--encv-text-secondary);
-}
-
-.time-duration {
-  color: var(--ion-color-primary);
-  font-weight: 500;
 }
 
 .progress-section {
@@ -1528,26 +1273,26 @@ ion-item.sub-section-header.sub-tone-none {
   gap: 8px;
   margin-top: 4px;
   font-size: 11px;
-  color: var(--encv-text-secondary);
+  color: var(--tl-card-text-secondary);
   flex-wrap: wrap;
 }
 
 .phase-label {
-  color: var(--ion-color-primary);
+  color: var(--tl-state-analyzing);
   font-weight: 500;
 }
 
 .progress-percent {
   font-weight: 600;
-  color: var(--encv-text-secondary);
+  color: var(--tl-card-text-secondary);
 }
 
 .speed-label {
-  color: var(--encv-text-secondary);
+  color: var(--tl-card-text-secondary);
 }
 
 .eta-label {
-  color: var(--encv-text-secondary);
+  color: var(--tl-card-text-secondary);
 }
 
 .completed-info {

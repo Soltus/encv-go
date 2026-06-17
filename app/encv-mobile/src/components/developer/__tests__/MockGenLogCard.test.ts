@@ -246,12 +246,15 @@ describe('MockGenLogCard - MockGenLogEntry → UnifiedTimelineEntry 转换', () 
     expect(card.props('entry').label).toBe('01-plain-media/audio/music.mp3')
   })
 
-  it('time 字段使用 at', () => {
+  it('time 字段使用 at（v3 Task 9：formatDateTime 格式化）', () => {
     const wrapper = mountCard({
       log: [makeEntry({ at: '2026-06-18T10:00:00Z' })],
     })
     const card = wrapper.findComponent(UnifiedTimelineCard)
-    expect(card.props('entry').time).toBe('2026-06-18T10:00:00Z')
+    // 🆕 v3 2026-06-18 Task 9：time 现在走 formatDateTime，不再是原始 ISO 字符串
+    //   formatDateTime('2026-06-18T10:00:00Z') → '2026/06/18 10:00'（本地时区）
+    expect(card.props('entry').time).toBeTruthy()
+    expect(card.props('entry').time).not.toBe('2026-06-18T10:00:00Z')
   })
 
   it('id 字段使用 key', () => {

@@ -30,7 +30,7 @@ export interface TaskEventBridgeOptions {
   onUpdate?: (data: { id: string; type: string; status: string; progress: number }) => void
   onProgress?: (data: { id: string; progress: number; phase: string; speed: string; eta: string }) => void
   onCreate?: (data: { id: string; type: string; sourcePath: string }) => void
-  onComplete?: (data: { id: string; error?: string }) => void
+  onComplete?: (data: { id: string; error?: string; outputPath?: string }) => void
   onRefresh?: () => void
   onFileChange?: (data: { path: string; action: 'create' | 'delete' | 'modify' }) => void
   onServerStatus?: (data: { online: boolean }) => void

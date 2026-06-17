@@ -96,8 +96,14 @@ type TaskManager struct {
 //   - input "/d/<mount>/<sub>" → Resolver 用最长前缀匹配找到 mount
 //   - output MountResolveResult：MountID + AbsPath + SubPath
 //   - 找不到 / mount 禁用 / mount 只读：返回错误
+//
+// 🆕 v3 2026-06-18 Task 8：新增 AbsToVirtual 反向解析
+//   - 物理绝对路径 → 虚拟路径 /d/<mount>/<sub>
+//   - 用于 task.OutputPath / step.Detail 统一存虚拟路径
 type MountResolver interface {
 	Resolve(virtualPath string) (*MountResolveResult, error)
+	// 🆕 Task 8：absPath → virtualPath（找不到匹配 mount 返回 error）
+	AbsToVirtual(absPath string) (string, error)
 }
 
 // MountResolveResult 是 mount.ResolveResult 的 service 包本地副本
@@ -372,9 +378,11 @@ func (tm *TaskManager) updateProgress(id string, progress int, phase, speed, eta
 					break
 				}
 			}
+			// v3 2026-06-18：为新 step 填充有意义的 phase 描述（前端时间线展开显示）
 			task.Steps = append(task.Steps, TaskStep{
 				Phase:     phase,
 				StartedAt: now,
+				Detail:    phaseDetailDescription(phase),
 			})
 		}
 		task.Progress = progress
@@ -391,6 +399,29 @@ func (tm *TaskManager) updateProgress(id string, progress int, phase, speed, eta
 			"speed":    speed,
 			"eta":      eta,
 		})
+	}
+}
+
+// phaseDetailDescription 返回 phase 对应的人类可读描述（前端时间线展开显示）。
+// v3 2026-06-18：每个 phase 切换时为新 TaskStep 填充有意义的 Detail。
+func phaseDetailDescription(phase string) string {
+	switch phase {
+	case "analyzing":
+		return "分析源文件格式与流信息"
+	case "initializing":
+		return "初始化加密引擎"
+	case "preprocessing":
+		return "预处理源数据"
+	case "encrypting":
+		return "加密数据流"
+	case "decrypting":
+		return "解密数据流"
+	case "packing":
+		return "打包加密产物"
+	case "verifying":
+		return "校验产物完整性"
+	default:
+		return ""
 	}
 }
 
@@ -547,6 +578,27 @@ func (tm *TaskManager) resolveAbsPath(sourcePath string) string {
 		return ""
 	}
 	return abs
+}
+
+// absToVirtualPath 把物理绝对路径转换为前端可消费的虚拟路径 /d/<mount>/<sub>。
+//
+// 🆕 v3 2026-06-18 Task 8：后端统一虚拟路径
+//   - mountResolver 未注入或解析失败 → fallback 返回原 absPath（向后兼容）
+//   - 用于 task.OutputPath / step.Detail，让前端 Files.vue 直接用 route.query 跳转
+func (tm *TaskManager) absToVirtualPath(absPath string) string {
+	if absPath == "" {
+		return ""
+	}
+	if tm.mountResolver == nil {
+		return absPath
+	}
+	virtual, err := tm.mountResolver.AbsToVirtual(absPath)
+	if err != nil {
+		slog.Warn("absToVirtualPath: mount resolve failed, fallback to absPath",
+			"absPath", absPath, "error", err)
+		return absPath
+	}
+	return virtual
 }
 
 func (tm *TaskManager) processTask(task *MobileTask) {
@@ -711,19 +763,24 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 		now := time.Now()
 		task.CompletedAt = &now
 
+		// 🆕 v3 2026-06-18 Task 8：outputPath 转虚拟路径再存储
+		//   - EncryptFileWithPlugin 返回物理绝对路径
+		//   - 前端 Files.vue 需要虚拟路径 /d/<mount>/... 才能定位
+		virtualOutput := tm.absToVirtualPath(outputPath)
+
 		for i := len(task.Steps) - 1; i >= 0; i-- {
 			if task.Steps[i].CompletedAt == nil {
 				task.Steps[i].CompletedAt = &now
-				if outputPath != "" {
-					task.Steps[i].Detail = outputPath
+				if virtualOutput != "" {
+					task.Steps[i].Detail = virtualOutput
 				}
 				break
 			}
 		}
 
-		if outputPath != "" {
+		if virtualOutput != "" {
 			task.ContainerVersion = detectContainerVersion(outputPath)
-			task.OutputPath = outputPath
+			task.OutputPath = virtualOutput
 		}
 
 		if warnings := video.LastVerifyWarnings(); len(warnings) > 0 {
@@ -738,9 +795,11 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 
 	slog.Info("Task completed", "id", task.ID, "type", task.Type)
 	if tm.broadcaster != nil {
+		// v3 2026-06-18：task:completed 事件增加 outputPath（前端无需下拉刷新即可显示产物）
 		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
-			"id":     task.ID,
-			"status": "completed",
+			"id":         task.ID,
+			"status":     "completed",
+			"outputPath": task.OutputPath,
 		})
 		tm.broadcaster.Broadcast("file:change", map[string]interface{}{
 			"path": task.SourcePath,
@@ -934,18 +993,21 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 		now := time.Now()
 		task.CompletedAt = &now
 
+		// 🆕 v3 2026-06-18 Task 8：outputPath 转虚拟路径再存储（与 processEncrypt 一致）
+		virtualOutput := tm.absToVirtualPath(outputPath)
+
 		for i := len(task.Steps) - 1; i >= 0; i-- {
 			if task.Steps[i].CompletedAt == nil {
 				task.Steps[i].CompletedAt = &now
-				if outputPath != "" {
-					task.Steps[i].Detail = outputPath
+				if virtualOutput != "" {
+					task.Steps[i].Detail = virtualOutput
 				}
 				break
 			}
 		}
 
-		if outputPath != "" {
-			task.OutputPath = outputPath
+		if virtualOutput != "" {
+			task.OutputPath = virtualOutput
 		}
 	}
 	tm.mu.Unlock()
@@ -954,9 +1016,11 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 
 	slog.Info("Task completed", "id", task.ID, "type", task.Type, "output", task.OutputPath)
 	if tm.broadcaster != nil {
+		// v3 2026-06-18：task:completed 事件增加 outputPath（前端无需下拉刷新即可显示产物）
 		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
-			"id":     task.ID,
-			"status": "completed",
+			"id":         task.ID,
+			"status":     "completed",
+			"outputPath": task.OutputPath,
 		})
 		tm.broadcaster.Broadcast("file:change", map[string]interface{}{
 			"path": task.SourcePath,

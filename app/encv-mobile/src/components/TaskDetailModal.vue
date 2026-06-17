@@ -62,9 +62,15 @@ function openOutput(outputPath: string) {
   modalController.dismiss({ action: 'opened', id: props.task.id, outputPath })
 }
 
+// 🆕 v3 2026-06-18 Task 8：locateOutput 不再做路径转换
+//   - 后端 task.outputPath 已统一为虚拟路径 /d/<mount>/<sub>（task_manager.absToVirtualPath）
+//   - 前端直接拆 dir + name 塞 route.query，Files.vue onIonViewWillEnter 消费
+//   - 旧版逻辑（物理绝对路径 → 前端无法解析）已废弃
 function locateOutput(outputPath: string) {
-  const name = outputPath.split('/').pop() || outputPath
-  const dir = outputPath.substring(0, outputPath.lastIndexOf('/')) || '/'
+  const trimmed = outputPath.replace(/\/+$/, '')
+  const lastSlash = trimmed.lastIndexOf('/')
+  const name = lastSlash >= 0 ? trimmed.substring(lastSlash + 1) : trimmed
+  const dir = lastSlash >= 0 ? trimmed.substring(0, lastSlash) : '/d'
   router.push({ path: '/tabs/files', query: { path: dir, highlight: name } })
   modalController.dismiss({ action: 'located', id: props.task.id, outputPath })
 }

@@ -18,6 +18,7 @@ export default {
     'tasks.tasksCount': '个任务',
     'tasks.expand': '展开',
     'tasks.collapse': '折叠',
+    'tasks.viewReport': '查看报告',
     'tasks.newTask': '新建任务',
     'tasks.close': '关闭',
     'tasks.taskType': '任务类型',
@@ -142,6 +143,9 @@ export default {
     'tasks.openOutput': '打开产物',
     'tasks.locateInFiles': '在 Files 中定位',
     'tasks.previewUnsupportedExt': '该扩展名暂不支持直接预览',
+    // 🆕 v3 2026-06-18 Task 7：时间线步骤细节补充
+    'tasks.phaseDetail': '阶段说明',
+    'tasks.cryptoSummary': '加密参数',
 
     // 🆕 2026-06-11 v5：breadcrumb 层级 + section 维度
     'tasks.hierarchy': '任务层级',
@@ -398,6 +402,7 @@ export default {
     'tasks.tasksCount': 'tasks',
     'tasks.expand': 'Expand',
     'tasks.collapse': 'Collapse',
+    'tasks.viewReport': 'View Report',
     'tasks.newTask': 'New Task',
     'tasks.close': 'Close',
     'tasks.taskType': 'Task Type',
@@ -521,7 +526,10 @@ export default {
     'tasks.outputFile': 'Output File',
     'tasks.openOutput': 'Open Output',
     'tasks.locateInFiles': 'Locate in Files',
-    'tasks.previewUnsupportedExt': 'This extension is not directly previewable',
+    'tasks.previewUnsupportedExt': 'This extension does not support direct preview',
+    // 🆕 v3 2026-06-18 Task 7：时间线步骤细节补充
+    'tasks.phaseDetail': 'Phase Detail',
+    'tasks.cryptoSummary': 'Crypto Params',
 
     // 🆕 2026-06-11 v5: breadcrumb hierarchy + section dimension
     'tasks.hierarchy': 'Task Hierarchy',

@@ -357,7 +357,7 @@ export function useTasksList() {
     }
   }
 
-  function applyTaskCompleted(data: { id: string; error?: string }) {
+  function applyTaskCompleted(data: { id: string; error?: string; outputPath?: string }) {
     const idx = tasks.value.findIndex((t) => t.id === data.id)
     if (idx === -1) {
       // Task 10：乱序缓冲
@@ -368,6 +368,17 @@ export function useTasksList() {
     if (isTerminalTaskStatus(tasks.value[idx].status)) return
 
     const prev = tasks.value[idx]
+    // 🆕 v3 2026-06-18 Task 7：用 WS 推送的 outputPath 补写 task.outputPath + 最后一个 step.detail
+    // 后端 task:completed 事件 payload 已包含 outputPath（无需下拉刷新即可显示产物）
+    const wsOutputPath = data.outputPath ?? ''
+    const prevSteps = prev.steps ?? []
+    const nextSteps = wsOutputPath && prevSteps.length > 0
+      ? prevSteps.map((step, i) =>
+          // 最后一个未完成的 step：补写 outputPath（与后端 task_manager.go 行为一致）
+          i === prevSteps.length - 1 ? { ...step, detail: wsOutputPath } : step,
+        )
+      : prev.steps
+
     const next = [...tasks.value]
     next[idx] = {
       ...prev,
@@ -378,6 +389,9 @@ export function useTasksList() {
       eta: '',
       error: data.error,
       completedAt: new Date().toISOString(),
+      // 🆕 Task 7：WS 推送的 outputPath 写入 task 对象
+      outputPath: wsOutputPath || prev.outputPath,
+      steps: nextSteps,
     }
     tasks.value = next
   }

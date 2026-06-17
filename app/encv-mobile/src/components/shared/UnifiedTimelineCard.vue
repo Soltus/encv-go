@@ -395,6 +395,10 @@ function toggleExpand() {
   font-size: 11px;
   color: var(--tl-card-text-tertiary);
   white-space: nowrap;
+  /* v3 2026-06-18：限制时间最大宽度，避免长 ISO 字符串撑满宽度导致溢出 */
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .utc__chevron {

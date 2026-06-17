@@ -376,7 +376,37 @@ describe('TaskTimeline - 展开详情卡片化', () => {
     expect(cards[1].props('entry').hasExpandableDetail).toBe(true)
   })
 
-  it('expandDetail 包含 outputPath / startedAt / completedAt / duration', () => {
+  it('expandDetail 包含 outputPath / startedAt / completedAt / duration（v3 Task 7：outputPath 来自 task.outputPath）', () => {
+    // 🆕 v3 2026-06-18 Task 7：step.detail 不再直接映射到 outputPath
+    //   - step.detail === task.outputPath → outputPath（后端任务完成时覆写最后一步）
+    //   - step.detail !== task.outputPath → phaseDetail（phase 描述）
+    //   - completed 条目 + 最后一步 → 从 task.outputPath 取 outputPath
+    const task = makeTask({
+      status: 'completed',
+      phase: 'completed',
+      outputPath: '/d/primary/output.encv',
+      completedAt: '2026-06-18T10:00:05Z',
+      steps: [
+        makeStep({
+          phase: 'encrypting',
+          startedAt: '2026-06-18T10:00:00Z',
+          completedAt: '2026-06-18T10:00:05Z',
+          detail: '/d/primary/output.encv', // === task.outputPath → 映射到 outputPath
+        }),
+      ],
+    })
+    const wrapper = mountTimeline(task)
+    const cards = wrapper.findAllComponents(UnifiedTimelineCard)
+    // cards[0] = created, cards[1] = encrypting step, cards[2] = completed
+    const expandDetail = cards[1].props('entry').expandDetail
+    expect(expandDetail).toBeDefined()
+    expect(expandDetail?.outputPath).toBe('/d/primary/output.encv')
+    expect(expandDetail?.startedAt).toBeTruthy()
+    expect(expandDetail?.completedAt).toBeTruthy()
+    expect(expandDetail?.duration).toBe('5s')
+  })
+
+  it('v3 Task 7：step.detail 不等于 task.outputPath 时映射到 phaseDetail', () => {
     const task = makeTask({
       status: 'running',
       phase: 'encrypting',
@@ -384,8 +414,7 @@ describe('TaskTimeline - 展开详情卡片化', () => {
         makeStep({
           phase: 'encrypting',
           startedAt: '2026-06-18T10:00:00Z',
-          completedAt: '2026-06-18T10:00:05Z',
-          detail: '/storage/emulated/0/output.encv',
+          detail: '加密数据流', // phase 描述，不等于 task.outputPath
         }),
       ],
     })
@@ -393,10 +422,57 @@ describe('TaskTimeline - 展开详情卡片化', () => {
     const cards = wrapper.findAllComponents(UnifiedTimelineCard)
     const expandDetail = cards[1].props('entry').expandDetail
     expect(expandDetail).toBeDefined()
-    expect(expandDetail?.outputPath).toBe('/storage/emulated/0/output.encv')
-    expect(expandDetail?.startedAt).toBeTruthy()
-    expect(expandDetail?.completedAt).toBeTruthy()
-    expect(expandDetail?.duration).toBe('5s')
+    expect(expandDetail?.phaseDetail).toBe('加密数据流')
+    expect(expandDetail?.outputPath).toBeUndefined()
+  })
+
+  it('v3 Task 7：created 条目展开显示 sourcePath', () => {
+    const task = makeTask({
+      status: 'running',
+      phase: 'encrypting',
+      sourcePath: '/d/primary/input.mp4',
+    })
+    const wrapper = mountTimeline(task)
+    const cards = wrapper.findAllComponents(UnifiedTimelineCard)
+    // cards[0] = created
+    const createdEntry = cards[0].props('entry')
+    expect(createdEntry.hasExpandableDetail).toBe(true)
+    expect(createdEntry.expandDetail?.sourcePath).toBe('/d/primary/input.mp4')
+  })
+
+  it('v3 Task 7：encrypting step 展开显示 cryptoSummary', () => {
+    const task = makeTask({
+      status: 'running',
+      phase: 'encrypting',
+      cipherMode: 1,
+      compressionMode: 'zstd',
+      steps: [
+        makeStep({
+          phase: 'encrypting',
+          startedAt: '2026-06-18T10:00:00Z',
+        }),
+      ],
+    })
+    const wrapper = mountTimeline(task)
+    const cards = wrapper.findAllComponents(UnifiedTimelineCard)
+    const expandDetail = cards[1].props('entry').expandDetail
+    expect(expandDetail).toBeDefined()
+    expect(expandDetail?.cryptoSummary).toBe('AES-256 · Zstd')
+  })
+
+  it('v3 Task 7：completed 条目展开显示 outputPath（用 task.outputPath）', () => {
+    const task = makeTask({
+      status: 'completed',
+      phase: 'completed',
+      outputPath: '/d/primary/output.encv',
+      completedAt: '2026-06-18T10:00:10Z',
+    })
+    const wrapper = mountTimeline(task)
+    const cards = wrapper.findAllComponents(UnifiedTimelineCard)
+    // 最后一个 card 是 completed
+    const completedEntry = cards[cards.length - 1].props('entry')
+    expect(completedEntry.hasExpandableDetail).toBe(true)
+    expect(completedEntry.expandDetail?.outputPath).toBe('/d/primary/output.encv')
   })
 
   it('点击展开后渲染自定义 detail slot（输出路径卡片）', async () => {

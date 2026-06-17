@@ -9,8 +9,20 @@
         :highlight="entry.isHighlight === true"
         v-model:expanded="expandedMap[entry.id]"
       >
-        <!-- 自定义 detail slot：卡片化展开（输出路径 / 开始 / 完成 / 耗时） -->
+        <!-- 自定义 detail slot：卡片化展开（源文件 / 加密参数 / 阶段说明 / 产物路径 / 开始 / 完成 / 耗时 / 错误） -->
         <template #detail="{ entry: e }">
+          <div v-if="e.expandDetail?.sourcePath" class="timeline-detail-card timeline-detail-card--path">
+            <div class="timeline-detail-label">{{ t('tasks.sourcePath') }}</div>
+            <div class="timeline-detail-value timeline-detail-value--mono">{{ e.expandDetail.sourcePath }}</div>
+          </div>
+          <div v-if="e.expandDetail?.cryptoSummary" class="timeline-detail-card">
+            <div class="timeline-detail-label">{{ t('tasks.cryptoSummary') }}</div>
+            <div class="timeline-detail-value">{{ e.expandDetail.cryptoSummary }}</div>
+          </div>
+          <div v-if="e.expandDetail?.phaseDetail" class="timeline-detail-card timeline-detail-card--path">
+            <div class="timeline-detail-label">{{ t('tasks.phaseDetail') }}</div>
+            <div class="timeline-detail-value">{{ e.expandDetail.phaseDetail }}</div>
+          </div>
           <div v-if="e.expandDetail?.outputPath" class="timeline-detail-card timeline-detail-card--path">
             <div class="timeline-detail-label">{{ t('tasks.outputFile') }}</div>
             <div class="timeline-detail-value timeline-detail-value--mono">{{ e.expandDetail.outputPath }}</div>
@@ -148,10 +160,14 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
   const entries: InternalTimelineEntry[] = []
   const steps = props.task.steps ?? []
   const isTerminal = ['completed', 'failed', 'cancelled'].includes(props.task.status)
+  const cryptoMeta = getCryptoSummary()
 
   // 1. 始终推送 "created" 事件
-  // 🆕 Task 18：meta 字段显示 crypto params 摘要（折叠态可见）
-  const cryptoMeta = getCryptoSummary()
+  // 🆕 v3 2026-06-18 Task 7：created 条目展开显示源文件路径
+  const createdHasExpand = !!props.task.sourcePath
+  const createdExpandDetail: UnifiedTimelineEntry['expandDetail'] | undefined = createdHasExpand
+    ? { sourcePath: props.task.sourcePath }
+    : undefined
   entries.push({
     id: `created-${props.task.createdAt}`,
     phase: Phase.Created,
@@ -159,8 +175,9 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
     time: formatDateTime(props.task.createdAt),
     status: 'success',
     isCurrent: false,
-    hasExpandableDetail: false,
+    hasExpandableDetail: createdHasExpand,
     meta: cryptoMeta || undefined,
+    expandDetail: createdExpandDetail,
   })
 
   // 2. 从 task.steps 派生（如果存在）
@@ -194,7 +211,11 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
           ? durationStr ?? t('tasks.timelineDone')
           : ''
 
-      // 展开详情
+      // 🆕 v3 2026-06-18 Task 7：展开详情
+      // - step.detail 同时承载 phase 描述和 outputPath（后端任务完成时覆写最后一步 detail）
+      // - 前端判断：若 step.detail === task.outputPath 则视为 outputPath，否则视为 phase 描述
+      // - 加密参数摘要：仅 encrypting/decrypting step 显示
+      // - outputPath：优先用 task.outputPath（WS 推送），step.detail 作 fallback
       const expandDetail: UnifiedTimelineEntry['expandDetail'] = {}
       let hasExpand = false
       if (step.startedAt) {
@@ -209,8 +230,33 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
         expandDetail.duration = durationStr
         hasExpand = true
       }
-      if (step.detail) {
-        expandDetail.outputPath = step.detail
+
+      // 加密参数摘要（仅 encrypting/decrypting step）
+      if (phaseEnum === Phase.Encrypting || phaseEnum === Phase.Decrypting) {
+        if (cryptoMeta) {
+          expandDetail.cryptoSummary = cryptoMeta
+          hasExpand = true
+        }
+      }
+
+      // phase 描述 vs outputPath 区分
+      const stepDetail = step.detail ?? ''
+      const taskOutputPath = props.task.outputPath ?? ''
+      if (stepDetail) {
+        if (taskOutputPath && stepDetail === taskOutputPath) {
+          // step.detail 是 outputPath（后端任务完成时覆写最后一步）
+          expandDetail.outputPath = stepDetail
+          hasExpand = true
+        } else {
+          // step.detail 是 phase 描述
+          expandDetail.phaseDetail = stepDetail
+          hasExpand = true
+        }
+      }
+
+      // outputPath：若 step.detail 未承载，且当前 step 是最后一步 + 任务已完成，从 task.outputPath 取
+      if (!expandDetail.outputPath && taskOutputPath && completed && step === steps[steps.length - 1] && props.task.status === 'completed') {
+        expandDetail.outputPath = taskOutputPath
         hasExpand = true
       }
 
@@ -249,9 +295,20 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
         status = 'pending'
       }
 
+      // 🆕 v3 2026-06-18 Task 7：fallback 模式也补充加密参数摘要
+      const phaseEnum = toPhase(p)
+      const fallbackExpand: UnifiedTimelineEntry['expandDetail'] = {}
+      let hasFallbackExpand = false
+      if (phaseEnum === Phase.Encrypting || phaseEnum === Phase.Decrypting) {
+        if (cryptoMeta) {
+          fallbackExpand.cryptoSummary = cryptoMeta
+          hasFallbackExpand = true
+        }
+      }
+
       entries.push({
         id: `${p}-fallback-${i}`,
-        phase: toPhase(p),
+        phase: phaseEnum,
         label: getPhaseLabel(p),
         time: isCurrent ? t('tasks.timelineInProgress') : isPast ? t('tasks.timelineDone') : '',
         progress: isCurrent ? props.task.progress : undefined,
@@ -259,13 +316,19 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
         eta: isCurrent ? props.task.eta : undefined,
         status,
         isCurrent,
-        hasExpandableDetail: false,
+        hasExpandableDetail: hasFallbackExpand,
+        expandDetail: hasFallbackExpand ? fallbackExpand : undefined,
       })
     }
   }
 
   // 4. 完成态：追加 "completed" 事件
+  // 🆕 v3 2026-06-18 Task 7：completed 条目展开显示 outputPath（用 task.outputPath，不依赖 step.detail）
   if (props.task.status === 'completed') {
+    const completedHasExpand = !!props.task.outputPath
+    const completedExpandDetail: UnifiedTimelineEntry['expandDetail'] | undefined = completedHasExpand
+      ? { outputPath: props.task.outputPath }
+      : undefined
     entries.push({
       id: `completed-${props.task.completedAt ?? ''}`,
       phase: Phase.Completed,
@@ -273,7 +336,8 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
       time: props.task.completedAt ? formatDateTime(props.task.completedAt) : '',
       status: 'success',
       isCurrent: false,
-      hasExpandableDetail: false,
+      hasExpandableDetail: completedHasExpand,
+      expandDetail: completedExpandDetail,
     })
   }
 
@@ -324,7 +388,7 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
 .section-title {
   font-size: 14px;
   font-weight: 700;
-  color: var(--ion-text-color);
+  color: var(--tl-card-text-primary);
   margin-bottom: 10px;
   display: flex;
   align-items: center;
@@ -337,9 +401,13 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
 }
 
 /* ==================== 自定义 detail slot 卡片样式 ==================== */
-/* 覆盖 UnifiedTimelineCard 默认 detail slot 的网格布局，使用更紧凑的卡片 */
+/* v3 2026-06-18 Task 5：修复"脏"背景 + grid 适配
+ * 旧版 `background: var(--tl-card-border)` 用边框色 token 当背景色 → 半透明灰 → 卡片"脏"
+ * 新版用 state-created-rgb 极浅底色（0.04 透明度），视觉干净
+ * min-width: 0 确保 grid item 可收缩（防止内容溢出撑破 grid 列）
+ */
 .timeline-detail-card {
-  background: var(--tl-card-border);
+  background: rgba(var(--tl-state-created-rgb), 0.04);
   border-radius: var(--tl-card-radius-sm);
   padding: 6px 8px;
   min-width: 0;

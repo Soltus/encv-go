@@ -343,6 +343,12 @@ export interface UnifiedTimelineEntry {
     outputPath?: string
     error?: string
     extra?: Record<string, string>
+    /** 🆕 v3 2026-06-18 Task 7：源文件路径（created 条目展开显示） */
+    sourcePath?: string
+    /** 🆕 v3 2026-06-18 Task 7：阶段说明（step.detail，后端 Task 6 填充） */
+    phaseDetail?: string
+    /** 🆕 v3 2026-06-18 Task 7：加密参数摘要（encrypting/decrypting step 显示） */
+    cryptoSummary?: string
   }
 }
 

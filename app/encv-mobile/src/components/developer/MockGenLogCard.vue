@@ -117,6 +117,8 @@ import {
 import UnifiedTimelineCard from '@/components/shared/UnifiedTimelineCard.vue'
 import { Phase, type UnifiedTimelineEntry, type StepStatus } from '@/lib/workflow/types'
 import type { MockGenLogEntry, MockGenLogSummary } from '@/composables/useMockGenLog'
+// v3 2026-06-18：FFMPEG 日志时间格式化（避免 ISO 字符串撑满宽度导致溢出）
+import { formatDateTime } from '@/composables/useDateFormat'
 
 /**
  * MockGenLogCard — FFMPEG 流程日志卡（Task 13 SubTask 13.2/13.3）
@@ -173,7 +175,8 @@ function toUnifiedTimelineEntry(entry: MockGenLogEntry): UnifiedTimelineEntry {
     id: entry.key,
     phase: Phase.Completed,
     label: entry.relativePath,
-    time: entry.at,
+    // v3 2026-06-18：格式化 ISO 时间戳为可读形式（避免 24 字符 ISO 字符串撑满宽度）
+    time: formatDateTime(entry.at),
     status: STATUS_MAP[entry.status],
     hasExpandableDetail: true,
     expandDetail: {

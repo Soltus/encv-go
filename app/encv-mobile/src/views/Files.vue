@@ -289,6 +289,8 @@
             :key="file.path"
             @click="handleFileClick(file)"
             v-longpress="() => handleLongPress(file)"
+            :data-highlight-path="file.path"
+            :class="{ 'file-highlight': highlightedPath === file.path }"
           >
             <div slot="start" class="file-thumbnail-slot lazy-thumb-target" :data-file-path="file.path">
                 <img
@@ -405,8 +407,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { onIonViewWillEnter } from '@ionic/vue'
 import {
   IonPage,
@@ -612,6 +614,7 @@ const mainSortLabel = computed(() => {
   return (map[sortBy.value] || '名称') + (sortDesc.value ? '↓' : '↑')
 })
 const router = useRouter()
+const route = useRoute()
 const serverOnline = ref(false)
 const noPermission = ref(false)
 const files = ref<FileItem[]>([])
@@ -650,6 +653,14 @@ const MOUNT_ROOT = '/d'
 const currentPath = ref(MOUNT_ROOT)
 const loading = ref(false)
 const connecting = ref(false)
+
+// 🆕 v3 2026-06-18 Task 8：route.query 驱动的文件高亮
+//   - TaskDetailModal.locateOutput 跳转 /tabs/files?path=<dir>&highlight=<name>
+//   - onIonViewWillEnter 读取 query，导航到目录后等待 loadFiles 完成，再滚动 + 高亮
+//   - highlightedPath 保存当前要高亮的 file.path（用于 ion-item class 绑定）
+const pendingHighlight = ref<string | null>(null)
+const highlightedPath = ref<string | null>(null)
+let highlightTimer: ReturnType<typeof setTimeout> | null = null
 
 // 🆕 2026-06-15 multi-mount 适配：mount 根 /d 由后端 handleListFilesGin 返 mount 列表
 //   - 后端响应里 mount 伪 item 含 mount_driver / mount_path / mount_root 字段
@@ -747,6 +758,14 @@ async function loadFiles() {
       console.info('[Files] Stream complete, total:', result.files.length, 'files')
 
       loadFileTagsForCurrentDir()
+
+      // 🆕 v3 2026-06-18 Task 8：loadFiles 完成后处理 pendingHighlight
+      if (pendingHighlight.value) {
+        const name = pendingHighlight.value
+        pendingHighlight.value = null
+        // nextTick 等 ion-item 渲染完再滚动 + 高亮
+        nextTick(() => highlightFile(name))
+      }
       return
     } catch (error) {
       if (error instanceof PermissionDeniedError) {
@@ -828,6 +847,39 @@ function navigateTo(path: string) {
   searchQuery.value = ''
   searchResults.value = null
   loadFiles()
+}
+
+// 🆕 v3 2026-06-18 Task 8：高亮指定文件（route.query.highlight 驱动）
+//   - 在 files.value 中按 name 找匹配项（basename 匹配，避免路径前缀差异）
+//   - scrollIntoView 滚动到目标 ion-item
+//   - 临时加 file-highlight class（2 秒后移除）
+function highlightFile(name: string) {
+  if (!name) return
+  // 在已加载的 files 中找 basename 匹配
+  const target = files.value.find((f) => f.name === name)
+  if (!target) {
+    console.info('[Files] highlightFile: target not found in current dir:', name)
+    return
+  }
+  highlightedPath.value = target.path
+  // 滚动到目标 ion-item（用 data-file-path 属性定位）
+  nextTick(() => {
+    const el = document.querySelector<HTMLElement>(
+      `ion-item[data-highlight-path="${CSS.escape(target.path)}"]`,
+    )
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      console.info('[Files] highlightFile: scrolled to', target.path)
+    } else {
+      console.info('[Files] highlightFile: element not found for path:', target.path)
+    }
+  })
+  // 2 秒后移除高亮
+  if (highlightTimer) clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => {
+    highlightedPath.value = null
+    highlightTimer = null
+  }, 2000)
 }
 
 function openContainingFolder(file: FileItem) {
@@ -1590,6 +1642,31 @@ onMounted(() => {
 })
 
 onIonViewWillEnter(() => {
+  // 🆕 v3 2026-06-18 Task 8：读取 route.query.path / route.query.highlight
+  //   - TaskDetailModal.locateOutput 跳转 /tabs/files?path=<dir>&highlight=<name>
+  //   - 若 path 与 currentPath 不同 → 导航到目标目录，loadFiles 完成后高亮
+  //   - 若 path 与 currentPath 相同 → 直接高亮（不重新 loadFiles）
+  //   - 若无 query → 旧行为（仅在 files 为空时 reload）
+  const qPath = typeof route.query.path === 'string' ? route.query.path : ''
+  const qHighlight = typeof route.query.highlight === 'string' ? route.query.highlight : ''
+
+  if (qPath && qHighlight) {
+    if (qPath !== currentPath.value) {
+      // 切换目录 + 延迟高亮（loadFiles 完成后触发）
+      pendingHighlight.value = qHighlight
+      currentPath.value = qPath
+      searchQuery.value = ''
+      searchResults.value = null
+      loadFiles()
+    } else {
+      // 同目录直接高亮
+      highlightFile(qHighlight)
+    }
+    // 消费完 query 后清掉，避免下次进入 tab 又触发
+    router.replace({ path: route.path, query: {} })
+    return
+  }
+
   if (files.value.length === 0 && !loading.value && !connecting.value) {
     loadFiles()
   }
@@ -1599,6 +1676,11 @@ onUnmounted(() => {
   eventBus.off('file:change', onFileChange)
   window.removeEventListener('encv:backend-ready', onBackendReadyWindow as EventListener)
   if (searchTimer) clearTimeout(searchTimer)
+  // 🆕 v3 2026-06-18 Task 8：清理高亮定时器
+  if (highlightTimer) {
+    clearTimeout(highlightTimer)
+    highlightTimer = null
+  }
 })
 
 function onBackendReadyWindow(event: Event) {
@@ -1608,6 +1690,16 @@ function onBackendReadyWindow(event: Event) {
 </script>
 
 <style scoped>
+/* 🆕 v3 2026-06-18 Task 8：route.query.highlight 驱动的文件高亮 */
+/*   - 2 秒临时高亮（highlightFile 函数控制 highlightedPath）
+/*   - 用 ion-color-primary 浅底 + 左侧 3px 边条，视觉锚点清晰 */
+.file-highlight {
+  --background: rgba(var(--ion-color-primary-rgb), 0.12);
+  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  box-shadow: inset 3px 0 0 var(--ion-color-primary);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
 /* 播放错误展示区域 */
 .play-error-banner {
   background: rgba(var(--ion-color-danger-rgb), 0.08);

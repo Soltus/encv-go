@@ -7,9 +7,16 @@
   - 虚拟列表接管渲染：仅渲染可见窗口 + overscan 个 item，DOM 节点数恒定
   - measureElement 自动测量动态高度（group card / sub_section_header / task card 高度不同；
     task card 展开警告详情时高度也会变化）
-  - content-visibility: auto + contain-intrinsic-size 白屏优化（快速滚动时浏览器跳过
-    不可见内容的渲染，提供占位高度避免滚动条抖动）
+  - useAnimationFrameWithResizeObserver: true 让 RO 回调在 rAF 中执行，
+    避免 RO 与 Vue patch 调度竞争导致测量时序不确定
   - 暴露 forceMeasure() 给父级兜底（ion-content .inner-scroll 异步 ready 时父级主动调一次）
+
+  ⚠️ 2026-06-18 v3 修复：移除 content-visibility: auto + contain-intrinsic-size
+    根因：content-visibility 让浏览器对不在视口的元素跳过渲染，用 80px 占位。
+    ResizeObserver 测量时读到 80px 占位值（而非实际高度），写入 itemSizeCache。
+    后续 measureElement 同步路径发现缓存有值就直接返回 80px，不再读 DOM → 缓存中毒自我强化。
+    getTotalSize() = Σ(被污染的 80px) → 容器高度错误 → calculateRange() 计算错误窗口 → 白屏。
+    "空白高度不固定"是因为 group/sub_section/task 高度差异大，与 80px 占位的差值正负不一。
 
   参考：VirtualLogList.vue（固定行高，不带 measureElement）；
         DevLogs.vue ensureScrollEl()（ion-content shadowRoot .inner-scroll 获取模式）
@@ -56,8 +63,10 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  estimateSize: 80,
-  overscan: 20,
+  // v3：从 80 改为 120（接近 task card 实际高度，减少首次渲染 totalSize 偏差）
+  estimateSize: 120,
+  // v3：从 20 降到 10（20 对异构列表过大，增加 RO 测量负担；10 足以覆盖快速滚动）
+  overscan: 10,
   getKey: (item: T) => item.key,
 })
 
@@ -66,6 +75,8 @@ const virtualizerOptions = computed(() => ({
   getScrollElement: () => props.scrollEl,
   estimateSize: () => props.estimateSize,
   overscan: props.overscan,
+  // v3：启用 rAF 调度 RO 回调，避免与 Vue patch 竞争导致测量时序不确定
+  useAnimationFrameWithResizeObserver: true,
 }))
 
 const virtualizer = useVirtualizer(virtualizerOptions)
@@ -135,11 +146,11 @@ defineExpose({ forceMeasure })
   contain: layout paint;
 }
 
+/* v3：移除 content-visibility: auto + contain-intrinsic-size
+   原因：与 measureElement 动态高度测量冲突，导致 ResizeObserver 测到占位高度，
+   污染 itemSizeCache，引发 getTotalSize() / calculateRange() 全链路错误 → 白屏。
+   虚拟滚动本身已只渲染可见 + overscan 个 item，不需要浏览器再跳过渲染。 */
 .task-virtual-item {
-  /* 白屏优化：content-visibility: auto 让浏览器跳过不可见 item 的渲染，
-     contain-intrinsic-size 提供占位高度避免滚动条抖动。
-     measureElement 会用实际高度覆盖占位值。 */
-  content-visibility: auto;
-  contain-intrinsic-size: 80px;
+  /* 无 content-visibility — 让 measureElement 拿到准确的 offsetHeight */
 }
 </style>
