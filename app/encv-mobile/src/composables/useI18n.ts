@@ -10,7 +10,14 @@ import errors from '@/i18n/errors'
 import modals from '@/i18n/modals'
 import agent from '@/i18n/agent'
 
-type Locale = 'zh-CN' | 'en'
+// ===== 公开类型 =====
+
+export type Locale = 'zh-CN' | 'en'
+export type MessageParams = Record<string, string>
+export type TFunction = (key: string, params?: MessageParams) => string
+export type TFieldFunction = (key: string) => string
+export type TSectionTitleFunction = (title: string) => string
+
 type MessageModule = { 'zh-CN': Record<string, string>; en: Record<string, string> }
 
 function mergeModules(modules: MessageModule[]): Record<Locale, Record<string, string>> {
@@ -107,14 +114,39 @@ const sectionTitleMap: Record<string, string> = {
   'AI 助手设置': 'settings.agentSettings',
 }
 
-function t(key: string, params?: Record<string, string>): string {
-  let msg = messages[currentLocale.value]?.[key] || key
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      msg = msg.replace(`{${k}}`, v)
-    }
+/**
+ * 把 `{key}` 占位符替换成 params[key]。
+ * 占位符不区分大小写、支持多次出现（按 replaceAll 语义）。
+ */
+function injectParams(msg: string, params: MessageParams): string {
+  let result = msg
+  for (const [k, v] of Object.entries(params)) {
+    const re = new RegExp(`\\{${k}\\}`, 'g')
+    result = result.replace(re, v)
   }
-  return msg
+  return result
+}
+
+// DEV 下 missing key 只警告一次（避免循环 render 刷屏）
+let tMissingWarned: Set<string> | null = null
+
+function t(key: string, params?: MessageParams): string {
+  const lookup = messages[currentLocale.value]
+  if (!lookup || !(key in lookup)) {
+    // 回退链：zh-CN → en → key
+    const fallback = messages.en[key] ?? key
+    if (import.meta.env.DEV) {
+      const warned = (tMissingWarned ??= new Set<string>())
+      if (!warned.has(key)) {
+        warned.add(key)
+        // eslint-disable-next-line no-console
+        console.warn(`[i18n] missing key: ${key} (locale: ${currentLocale.value})`)
+      }
+    }
+    return params ? injectParams(fallback, params) : fallback
+  }
+  const msg = lookup[key]
+  return params ? injectParams(msg, params) : msg
 }
 
 function tField(key: string): string {
@@ -138,7 +170,14 @@ function getLocale(): Locale {
   return currentLocale.value
 }
 
-export function useI18n() {
+export function useI18n(): {
+  t: TFunction
+  tField: TFieldFunction
+  tSectionTitle: TSectionTitleFunction
+  setLocale: (locale: Locale) => void
+  getLocale: () => Locale
+  locale: typeof currentLocale
+} {
   return {
     t,
     tField,
