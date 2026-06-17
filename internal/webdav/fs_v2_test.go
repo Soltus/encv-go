@@ -10,13 +10,17 @@ import (
 	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/v2/container/manifest"
 	"github.com/Soltus/encv-go/internal/v2/crypto"
+	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/Soltus/encv-go/internal/v2/types"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 func createV4ContainerForWebDAV(t testing.TB) string {
 	t.Helper()
 	tempDir := t.TempDir()
-	containerPath := filepath.Join(tempDir, "test_v4.encv")
+	containerPath := filepath.Join(tempDir, "test_v4"+pluginsext.VideoExt)
 
 	salt, _ := crypto.GenerateSalt_v2(types.SaltSize_v2)
 	key := crypto.GenerateKey("test-password", salt, types.KeySize_v2)

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/Soltus/encv-go/internal/v2/crypto"
+	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/Soltus/encv-go/internal/v2/types"
 	"github.com/Soltus/encv-go/internal/v2/writer"
 )
@@ -210,7 +211,7 @@ func CreateV4Fixture(t testing.TB, dataSize int64, segCount int) *V4ContainerFix
 		KVI:           kviRaw,
 	}
 
-	containerPath := filepath.Join(tempDir, "fixture_v4.encv")
+	containerPath := filepath.Join(tempDir, "fixture_v4"+pluginsext.VideoExt)
 
 	err := writer.WriteV4Container(&writer.V4WriteParams{
 		OutputPath:     containerPath,

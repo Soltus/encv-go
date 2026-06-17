@@ -2,11 +2,13 @@ package reader
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/Soltus/encv-go/internal/logger"
 	"github.com/Soltus/encv-go/internal/utils"
@@ -225,7 +227,10 @@ func (r *remoteEncryptedContainerReader) GetFragmentReader(fragID string) (io.Re
 			slog.String("fragment_id", fragID),
 		)
 
-		req, err := http.NewRequest("GET", r.containerURL, nil)
+		// 【P0-1 修复】必须带 ctx + client.Timeout，否则上游 hang 时整测试卡死
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.containerURL, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create GET request for '%s': %w", fragID, err)
 		}
@@ -235,7 +240,7 @@ func (r *remoteEncryptedContainerReader) GetFragmentReader(fragID string) (io.Re
 			}
 		}
 
-		client := &http.Client{}
+		client := &http.Client{Timeout: 30 * time.Second}
 		resp, err := client.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to execute GET request for '%s': %w", fragID, err)

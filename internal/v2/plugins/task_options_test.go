@@ -17,13 +17,13 @@ func initPluginsForTaskOptions(t *testing.T) {
 	cfg := &config.Config{
 		Password: "global-test-pw",
 		PluginSettings: map[string]json.RawMessage{
-			"video":         json.RawMessage(`{"suffix": ".encv"}`),
-			"alist_encrypt": json.RawMessage(`{"suffix": ".bin", "enc_type": "aesctr"}`),
-			"text":          json.RawMessage(`{"suffix": ".sccgt"}`),
-			"audio":         json.RawMessage(`{"suffix": ".sccga"}`),
-			"image":         json.RawMessage(`{"suffix": ".sccgi"}`),
-			"pdf":           json.RawMessage(`{"suffix": ".sccgp"}`),
-			"wps":           json.RawMessage(`{"suffix": ".sccgw"}`),
+			"video":         json.RawMessage(`{"ext": ".sccgv"}`),
+		"alist_encrypt": json.RawMessage(`{"ext": ".bin", "enc_type": "aesctr"}`),
+		"text":          json.RawMessage(`{"ext": ".sccgt"}`),
+		"audio":         json.RawMessage(`{"ext": ".sccga"}`),
+		"image":         json.RawMessage(`{"ext": ".sccgi"}`),
+		"pdf":           json.RawMessage(`{"ext": ".sccgpdf"}`),
+		"wps":           json.RawMessage(`{"ext": ".sccgwps"}`),
 		},
 	}
 	ctx := config.NewContext(context.Background(), cfg)

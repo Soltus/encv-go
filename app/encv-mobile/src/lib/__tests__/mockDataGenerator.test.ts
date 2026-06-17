@@ -209,7 +209,7 @@ describe('mockDataGenerator', () => {
 
   describe('端到端路径一致性 — Mock 写入 vs 任务提交', () => {
     /**
-     * 模拟 AutomationTestsDetail.vue 的 mockRoot 计算逻辑：
+     * 模拟 PluginTestsDetail.vue 的 mockRoot 计算逻辑：
      *
      *   DEFAULT_AUTOMATION_SOURCE = '/storage/emulated/0/encv-automation/01-plain-media/video/sample.mp4'
      *   mockRoot = DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 5).join('/') + '/'

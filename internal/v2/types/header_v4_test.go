@@ -7,6 +7,9 @@ import (
 	"encoding/binary"
 	"hash/crc32"
 	"testing"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 // TestHeaderV4_CipherMode_RoundTrip 验证 v4 Header 的 CipherMode 字段

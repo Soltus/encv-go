@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // isAddrInUseErr 检查错误是否为“地址已在使用”
@@ -41,7 +42,7 @@ func DownloadRange(url string, headers map[string]string, start, end int64) ([]b
 		req.Header.Set(k, v)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute range request for %s: %w", url, err)
@@ -70,7 +71,7 @@ func ReadAllFromURL(url string, headers map[string]string) ([]byte, error) {
 	}
 
 	// 3. 执行请求
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request for %s: %w", url, err)
@@ -102,7 +103,7 @@ func GetRemoteStream(fileURL string, headers map[string]string) (io.ReadCloser, 
 		req.Header.Add(key, value)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute request for %s: %w", fileURL, err)
@@ -141,7 +142,7 @@ func MakeAuthenticatedRequest(method, url, body, token string) (*http.Response, 
 		log.Printf("-> [Auth Debug] Using permanent token for request to %s", url)
 	}
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: 30 * time.Second}
 	return client.Do(req)
 }
 
@@ -185,9 +186,11 @@ func GetRemoteStreamWithRange(url string, headers map[string][]string, start, en
 		}
 	}
 
-	client := &http.Client{}
+	// 【P0 修复】默认 30s 超时，防止上游 hang 时整测试卡死
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
+		// 【P0 修复附赠】原 return 0 在 *http.Response 返回类型下编译失败，改为 nil
 		return nil, fmt.Errorf("failed to execute request: %w", err)
 	}
 

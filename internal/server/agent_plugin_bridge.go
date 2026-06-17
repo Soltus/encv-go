@@ -53,13 +53,13 @@ var pluginOpsByName = func() map[string]pluginToolDef {
 		m[p.Name()+"_encrypt"] = pluginToolDef{
 			plugin:      p,
 			name:        p.Name() + "_encrypt",
-			description: fmt.Sprintf("使用 %s 插件加密文件为 .encv 容器", cnName),
+			description: fmt.Sprintf("使用 %s 插件加密文件为 %s 容器", cnName, p.GetContainerExtension()),
 			op:          "encrypt",
 		}
 		m[p.Name()+"_decrypt"] = pluginToolDef{
 			plugin:      p,
 			name:        p.Name() + "_decrypt",
-			description: fmt.Sprintf("使用 %s 插件解密 .encv 容器为原始文件", cnName),
+			description: fmt.Sprintf("使用 %s 插件解密 %s 容器为原始文件", cnName, p.GetContainerExtension()),
 			op:          "decrypt",
 		}
 	}
@@ -147,13 +147,13 @@ func buildDynamicSchema(p plugins.Plugin, op string) map[string]interface{} {
 		}
 		properties["output_path"] = map[string]interface{}{
 			"type":        "string",
-			"description": "加密产物 .encv 容器输出路径（绝对路径）",
+			"description": "加密产物容器输出路径（绝对路径，扩展名由 plugin.GetContainerExtension() 决定）",
 		}
 		required = append(required, "input_paths", "output_path")
 	} else { // decrypt
 		properties["container_path"] = map[string]interface{}{
 			"type":        "string",
-			"description": ".encv 容器文件绝对路径",
+			"description": "加密容器文件绝对路径（扩展名由 plugin.GetContainerExtension() 决定）",
 		}
 		properties["output_dir"] = map[string]interface{}{
 			"type":        "string",

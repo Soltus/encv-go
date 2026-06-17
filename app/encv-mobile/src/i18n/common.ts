@@ -139,8 +139,16 @@ export default {
     // 自动化测试入口（开发者选项 / 生产可用）
     'devtools.automationTests': '自动化测试',
     'devtools.automationTestsHint': '动态生成用例并提交到后端，覆盖 plugin × type × version × cipher × compression',
-    'devtools.automationTestsEntry': '运行自动化测试',
+    // 🆕 2026-06-17：section header 整体搬到 AutomationTestsHub.vue，
+    // 入口 ion-item 改名为「插件测试」（消除与 section header 重名歧义）
+    'devtools.automationTestsEntry': '插件测试',
     'devtools.automationTestsEntryDesc': '生成测试数据 + 动态派生测试用例 + 提交任务',
+    // 🆕 2026-06-17：PluginTestsDetail.vue 页面 title 使用
+    'devtools.pluginTests': '插件测试',
+    // 🆕 2026-06-17：AutomationTestsHub.vue 内部子项 i18n key
+    'devtools.automationHub.testEntries': '测试入口',
+    'devtools.automationHub.pluginTests': '插件测试',
+    'devtools.automationHub.pluginTestsDesc': '动态派生 plugin × type × version × cipher × compression 笛卡尔积测试用例',
     'devtools.availableInProd': '生产可用',
     'devtools.mockDataManager': 'Mock 数据',
     'devtools.mockDataManagerHint': '生成或重置 Mock 文件。dev 写到项目根，dev 模式；真机写到 /storage/emulated/0/encv-automation/',
@@ -425,8 +433,16 @@ export default {
     // Automation tests (Developer Options / available in production)
     'devtools.automationTests': 'Automation Tests',
     'devtools.automationTestsHint': 'Dynamically generate test cases covering plugin × type × version × cipher × compression',
-    'devtools.automationTestsEntry': 'Run Automation Tests',
+    // 🆕 2026-06-17：section header 整体搬到 AutomationTestsHub.vue,
+    // 入口 ion-item 改名为 "Plugin Tests" (消除与 section header 重名歧义)
+    'devtools.automationTestsEntry': 'Plugin Tests',
     'devtools.automationTestsEntryDesc': 'Generate mock data + derive test cases + submit tasks',
+    // 🆕 2026-06-17：PluginTestsDetail.vue 页面 title 使用
+    'devtools.pluginTests': 'Plugin Tests',
+    // 🆕 2026-06-17：AutomationTestsHub.vue 内部子项 i18n key
+    'devtools.automationHub.testEntries': 'Test Entries',
+    'devtools.automationHub.pluginTests': 'Plugin Tests',
+    'devtools.automationHub.pluginTestsDesc': 'Derive cartesian-product test cases: plugin × type × version × cipher × compression',
     'devtools.availableInProd': 'Available in Prod',
     'devtools.mockDataManager': 'Mock Data',
     'devtools.mockDataManagerHint': 'Generate or reset mock files. dev: project root; release: /storage/emulated/0/encv-automation/',

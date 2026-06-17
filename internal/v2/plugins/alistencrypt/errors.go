@@ -6,7 +6,6 @@ var (
 	ErrExtensionRequired = fmt.Errorf("this encryption algorithm requires an extension package; only AES-128-CTR is built-in")
 	ErrInvalidPassword   = fmt.Errorf("invalid password or password mismatch")
 	ErrInvalidFormat     = fmt.Errorf("invalid file format: not a valid alist-encrypt file")
-	ErrSuffixConflict    = fmt.Errorf("suffix conflicts with ENCV container format (.sccgv/.encv are reserved)")
 )
 
 type DecryptionError struct {

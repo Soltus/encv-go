@@ -26,6 +26,7 @@
 package testutil
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -34,6 +35,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	// 强制激活 test-guard：拦截裸 go test 调用（必须经 scripts/test-go.sh）
+	// 详见 internal/testguard/guard.go
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 // DevStartGuard 端口 + pid 文件预检查 + 单实例锁定。
@@ -50,7 +55,7 @@ func DevStartGuard(processName string, port int, behavior string) error {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		// 端口被占
-		stuckPid, lookupErr := findProcessByPort(port)
+		stuckPid, lookupErr := findProcessByPort(port, 3*time.Second)
 		if lookupErr != nil {
 			return fmt.Errorf("port %d in use and cannot identify: %w", port, lookupErr)
 		}
@@ -145,7 +150,13 @@ func IsProcessAlive(pid int) bool {
 
 // findProcessByPort 用 /proc/net/tcp + /proc/<pid>/fd 找占用端口的 PID。
 // 平台限制：仅 Linux。
-func findProcessByPort(port int) (int, error) {
+//
+// 【P1-5 修复】带 context 整体超时：沙箱内 /proc/<pid>/net/tcp 在 D 状态进程上
+// 可能挂很久，加 deadline 防止整个 /proc 遍历卡死沙箱。
+func findProcessByPort(port int, timeout time.Duration) (int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
 	// 简化：尝试 lsof，回退到 /proc/net/tcp
 	// 真实生产建议用 github.com/shirou/gopsutil/net，这里不引入第三方依赖
 	entries, err := os.ReadDir("/proc")
@@ -154,6 +165,10 @@ func findProcessByPort(port int) (int, error) {
 	}
 	portHex := fmt.Sprintf("%04X", port)
 	for _, e := range entries {
+		// 每轮检查 ctx 取消
+		if ctx.Err() != nil {
+			return 0, fmt.Errorf("findProcessByPort timeout (%s) while scanning /proc", timeout)
+		}
 		if !e.IsDir() {
 			continue
 		}
@@ -163,7 +178,8 @@ func findProcessByPort(port int) (int, error) {
 		}
 		// 检查 /proc/<pid>/net/tcp
 		tcpPath := fmt.Sprintf("/proc/%d/net/tcp", pid)
-		data, err := os.ReadFile(tcpPath)
+		// 【P1-5 增强】单文件读也用 ctx 限速：goroutine 包装 + select
+		data, err := readFileCtx(ctx, tcpPath)
 		if err != nil {
 			continue
 		}
@@ -180,4 +196,26 @@ func findProcessByPort(port int) (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("no process found on port %d", port)
+}
+
+// readFileCtx 读文件但响应 ctx 取消（用于 /proc/* 路径）。
+// 注：os.ReadFile 本身不支持 ctx，所以用 goroutine + select 模拟。
+// 沙箱内 /proc/<pid>/net/tcp 在 D 状态进程上可能阻塞 syscall，
+// 此处用 ctx 兜底，最坏情况 goroutine 泄漏但调用方已返。
+func readFileCtx(ctx context.Context, path string) ([]byte, error) {
+	type result struct {
+		data []byte
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		data, err := os.ReadFile(path)
+		ch <- result{data, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.data, r.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }

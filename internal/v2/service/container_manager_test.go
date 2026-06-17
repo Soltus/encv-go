@@ -5,6 +5,9 @@ import (
 
 	"github.com/Soltus/encv-go/internal/testutil"
 	"github.com/stretchr/testify/assert"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 // TestGetReadablePath_ValidContainer_ReturnsOriginal 验证有效容器直接返回原始路径，不触发重建
