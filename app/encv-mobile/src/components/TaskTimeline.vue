@@ -2,188 +2,298 @@
   <div class="detail-section">
     <div class="section-title">{{ t('tasks.timeline') }}</div>
     <div class="timeline">
-      <div
-        v-for="(event, idx) in timelineEvents"
-        :key="idx"
-        class="timeline-event"
-        :class="{
-          'event-current': event.isCurrent,
-          'event-completed': event.completed,
-          'event-error': event.error,
-          'event-expandable': event.hasExpandableDetail,
-        }"
-        @click="toggleStep(idx)"
+      <UnifiedTimelineCard
+        v-for="entry in unifiedEntries"
+        :key="entry.id"
+        :entry="entry"
+        :highlight="entry.isHighlight === true"
+        v-model:expanded="expandedMap[entry.id]"
       >
-        <div class="timeline-dot"></div>
-        <div class="timeline-content">
-          <div class="event-header">
-            <span class="event-phase">{{ event.phaseLabel }}</span>
-            <span class="event-time">{{ event.time }}</span>
-            <ion-icon
-              v-if="event.hasExpandableDetail"
-              :icon="expandedSteps.has(idx) ? chevronDown : chevronForward"
-              class="expand-icon"
-              color="medium"
-            />
+        <!-- 自定义 detail slot：卡片化展开（输出路径 / 开始 / 完成 / 耗时） -->
+        <template #detail="{ entry: e }">
+          <div v-if="e.expandDetail?.outputPath" class="timeline-detail-card timeline-detail-card--path">
+            <div class="timeline-detail-label">{{ t('tasks.outputFile') }}</div>
+            <div class="timeline-detail-value timeline-detail-value--mono">{{ e.expandDetail.outputPath }}</div>
           </div>
-          <p v-if="event.summary" class="event-detail">{{ event.summary }}</p>
-          <div v-if="expandedSteps.has(idx) && event.expandDetail" class="event-expand">
-            <div v-if="event.expandDetail.duration" class="expand-row">
-              <span class="expand-label">{{ t('tasks.duration') }}</span>
-              <span class="expand-value">{{ event.expandDetail.duration }}</span>
-            </div>
-            <div v-if="event.expandDetail.startedAt" class="expand-row">
-              <span class="expand-label">{{ t('tasks.startedAt') }}</span>
-              <span class="expand-value">{{ event.expandDetail.startedAt }}</span>
-            </div>
-            <div v-if="event.expandDetail.completedAt" class="expand-row">
-              <span class="expand-label">{{ t('tasks.completedAt') }}</span>
-              <span class="expand-value">{{ event.expandDetail.completedAt }}</span>
-            </div>
-            <div v-if="event.expandDetail.outputPath" class="expand-row">
-              <span class="expand-label">{{ t('tasks.outputFile') }}</span>
-              <span class="expand-value expand-path">{{ event.expandDetail.outputPath }}</span>
-            </div>
+          <div v-if="e.expandDetail?.startedAt" class="timeline-detail-card">
+            <div class="timeline-detail-label">{{ t('tasks.startedAt') }}</div>
+            <div class="timeline-detail-value">{{ e.expandDetail.startedAt }}</div>
           </div>
-        </div>
-      </div>
+          <div v-if="e.expandDetail?.completedAt" class="timeline-detail-card">
+            <div class="timeline-detail-label">{{ t('tasks.completedAt') }}</div>
+            <div class="timeline-detail-value">{{ e.expandDetail.completedAt }}</div>
+          </div>
+          <div
+            v-if="e.expandDetail?.duration"
+            class="timeline-detail-card"
+            :class="{ 'timeline-detail-card--highlight': e.isHighlight }"
+          >
+            <div class="timeline-detail-label">{{ t('tasks.duration') }}</div>
+            <div class="timeline-detail-value">{{ e.expandDetail.duration }}</div>
+          </div>
+          <div
+            v-if="e.expandDetail?.error"
+            class="timeline-detail-card timeline-detail-card--error"
+          >
+            <div class="timeline-detail-label">{{ t('tasks.error') }}</div>
+            <div class="timeline-detail-value timeline-detail-value--mono">{{ e.expandDetail.error }}</div>
+          </div>
+        </template>
+      </UnifiedTimelineCard>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { chevronDown, chevronForward } from 'ionicons/icons'
+import { computed, reactive } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { formatDateTime, formatDuration } from '@/composables/useDateFormat'
 import type { EncvTask } from '@/api/encv'
+import UnifiedTimelineCard from '@/components/shared/UnifiedTimelineCard.vue'
+import {
+  Phase,
+  type StepStatus,
+  type UnifiedTimelineEntry,
+} from '@/lib/workflow/types'
 
 const props = defineProps<{ task: EncvTask }>()
 const { t } = useI18n()
 
-const expandedSteps = ref(new Set<number>())
+// 展开状态映射：entry.id → 是否展开（受控模式）
+const expandedMap = reactive<Record<string, boolean>>({})
 
-interface TimelineExpandDetail {
-  startedAt?: string
-  completedAt?: string
-  duration?: string
-  outputPath?: string
+// ==================== Phase 映射表 ====================
+
+/** 裸 phase 字符串 → Phase 枚举（兼容后端推送的字符串值） */
+const PHASE_MAP: Record<string, Phase> = {
+  created: Phase.Created,
+  analyzing: Phase.Analyzing,
+  initializing: Phase.Initializing,
+  preprocessing: Phase.Preprocessing,
+  encrypting: Phase.Encrypting,
+  decrypting: Phase.Decrypting,
+  packing: Phase.Packing,
+  verifying: Phase.Verifying,
+  completed: Phase.Completed,
+  // 兼容旧值
+  done: Phase.Completed,
 }
 
-interface TimelineEvent {
-  phase: string
-  phaseLabel: string
-  time: string
-  summary?: string
-  isCurrent: boolean
-  completed: boolean
-  error?: boolean
-  hasExpandableDetail: boolean
-  expandDetail?: TimelineExpandDetail
+/** Phase 枚举 → i18n key（替代旧版 switch + 裸字符串） */
+const PHASE_I18N_KEY: Record<Phase, string> = {
+  [Phase.Created]: 'tasks.timelineCreated',
+  [Phase.Analyzing]: 'tasks.phaseAnalyzing',
+  [Phase.Initializing]: 'tasks.phaseInitializing',
+  [Phase.Preprocessing]: 'tasks.phasePreprocessing',
+  [Phase.Encrypting]: 'tasks.phaseEncrypting',
+  [Phase.Decrypting]: 'tasks.phaseDecrypting',
+  [Phase.Packing]: 'tasks.phasePacking',
+  [Phase.Verifying]: 'tasks.phaseVerifying',
+  [Phase.Completed]: 'tasks.phaseCompleted',
 }
 
-function toggleStep(idx: number) {
-  if (expandedSteps.value.has(idx)) {
-    expandedSteps.value.delete(idx)
-  } else {
-    expandedSteps.value.add(idx)
-  }
-}
-
+/** 根据 phase 字符串获取 i18n 标签 */
 function getPhaseLabel(phase: string): string {
-  switch (phase) {
-    case 'analyzing': return t('tasks.phaseAnalyzing')
-    case 'initializing': return t('tasks.phaseInitializing')
-    case 'preprocessing': return t('tasks.phasePreprocessing')
-    case 'encrypting': return t('tasks.phaseEncrypting')
-    case 'decrypting': return t('tasks.phaseDecrypting')
-    case 'packing': return t('tasks.phasePacking')
-    case 'verifying': return t('tasks.phaseVerifying')
-    case 'completed': return t('tasks.phaseCompleted')
-    default: return phase
-  }
+  const phaseEnum = PHASE_MAP[phase]
+  if (!phaseEnum) return phase
+  return t(PHASE_I18N_KEY[phaseEnum])
 }
 
-const timelineEvents = computed(() => {
-  const events: TimelineEvent[] = []
-  const steps = props.task.steps ?? []
+/** 把 phase 字符串转为 Phase 枚举（未知值降级为 Created） */
+function toPhase(phase: string | undefined | null): Phase {
+  if (!phase) return Phase.Created
+  return PHASE_MAP[phase] ?? Phase.Created
+}
 
-  events.push({
-    phase: 'created',
-    phaseLabel: t('tasks.timelineCreated'),
+// ==================== 内部构建类型 ====================
+
+/**
+ * 内部条目（带原始耗时毫秒数，用于计算最长耗时高亮）
+ * 不暴露给 UnifiedTimelineCard，仅用于 computed 内部排序
+ */
+interface InternalTimelineEntry extends UnifiedTimelineEntry {
+  _durationMs?: number
+}
+
+// ==================== 耗时计算 ====================
+
+/** 计算两个 ISO 时间字符串之间的毫秒数（无效返回 0） */
+function calcDurationMs(startedAt?: string, completedAt?: string): number {
+  if (!startedAt || !completedAt) return 0
+  const start = new Date(startedAt).getTime()
+  const end = new Date(completedAt).getTime()
+  if (isNaN(start) || isNaN(end) || end < start) return 0
+  return end - start
+}
+
+// ==================== 时间线构建 ====================
+
+const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
+  const entries: InternalTimelineEntry[] = []
+  const steps = props.task.steps ?? []
+  const isTerminal = ['completed', 'failed', 'cancelled'].includes(props.task.status)
+
+  // 1. 始终推送 "created" 事件
+  entries.push({
+    id: `created-${props.task.createdAt}`,
+    phase: Phase.Created,
+    label: t('tasks.timelineCreated'),
     time: formatDateTime(props.task.createdAt),
+    status: 'success',
     isCurrent: false,
-    completed: true,
     hasExpandableDetail: false,
   })
 
+  // 2. 从 task.steps 派生（如果存在）
   if (steps.length > 0) {
     for (const step of steps) {
-      const isCurrent = step.phase === props.task.phase && !step.completedAt
+      const phaseEnum = toPhase(step.phase)
+      const isCurrent = step.phase === props.task.phase && !step.completedAt && props.task.status === 'running'
       const completed = !!step.completedAt
-      const startedMs = new Date(step.startedAt).getTime()
-      const completedMs = step.completedAt ? new Date(step.completedAt).getTime() : 0
-      const stepDuration = completed && completedMs > startedMs ? formatDuration(completedMs - startedMs) : undefined
+      const durationMs = calcDurationMs(step.startedAt, step.completedAt)
+      const durationStr = completed && durationMs > 0 ? formatDuration(durationMs) : undefined
 
-      const expandDetail: TimelineExpandDetail = {}
+      // 状态映射：current → running, completed → success, 否则 pending
+      let status: StepStatus
+      if (isCurrent) {
+        status = 'running'
+      } else if (completed) {
+        status = 'success'
+      } else {
+        status = 'pending'
+      }
+
+      // 派生 progress / speed / eta（仅当前 step 从 task 级别字段继承）
+      const progress = isCurrent ? props.task.progress : undefined
+      const speed = isCurrent ? props.task.speed : undefined
+      const eta = isCurrent ? props.task.eta : undefined
+
+      // 时间显示：进行中显示"进行中..."；完成显示耗时；否则空
+      const timeStr = isCurrent
+        ? t('tasks.timelineInProgress')
+        : completed
+          ? durationStr ?? t('tasks.timelineDone')
+          : ''
+
+      // 展开详情
+      const expandDetail: UnifiedTimelineEntry['expandDetail'] = {}
       let hasExpand = false
-      if (step.startedAt) { expandDetail.startedAt = formatDateTime(step.startedAt); hasExpand = true }
-      if (step.completedAt) { expandDetail.completedAt = formatDateTime(step.completedAt); hasExpand = true }
-      if (stepDuration) { expandDetail.duration = stepDuration; hasExpand = true }
-      if (step.detail) { expandDetail.outputPath = step.detail; hasExpand = true }
+      if (step.startedAt) {
+        expandDetail.startedAt = formatDateTime(step.startedAt)
+        hasExpand = true
+      }
+      if (step.completedAt) {
+        expandDetail.completedAt = formatDateTime(step.completedAt)
+        hasExpand = true
+      }
+      if (durationStr) {
+        expandDetail.duration = durationStr
+        hasExpand = true
+      }
+      if (step.detail) {
+        expandDetail.outputPath = step.detail
+        hasExpand = true
+      }
 
-      events.push({
-        phase: step.phase,
-        phaseLabel: getPhaseLabel(step.phase),
-        time: isCurrent ? t('tasks.timelineInProgress') : (completed ? stepDuration ?? t('tasks.timelineDone') : ''),
-        summary: isCurrent && props.task.speed ? `${props.task.progress}% · ${props.task.speed}` + (props.task.eta ? ` · ETA ${props.task.eta}` : '') : undefined,
+      entries.push({
+        id: `${step.phase}-${step.startedAt}`,
+        phase: phaseEnum,
+        label: getPhaseLabel(step.phase),
+        time: timeStr,
+        duration: durationStr,
+        progress,
+        speed,
+        eta,
+        status,
         isCurrent,
-        completed,
         hasExpandableDetail: hasExpand,
         expandDetail: hasExpand ? expandDetail : undefined,
+        _durationMs: durationMs,
       })
     }
   } else {
+    // 3. fallback：task.steps 为空时从 phase 序列派生（保留旧版行为）
     const phases = ['analyzing', 'initializing', 'preprocessing', 'encrypting', 'decrypting', 'packing', 'verifying']
     const phaseOrder = phases.indexOf(props.task.phase ?? '')
 
     for (let i = 0; i < phases.length; i++) {
       const p = phases[i]
-      const isCurrent = p === props.task.phase
-      const isPast = !isCurrent && (phaseOrder > i || ['completed', 'failed', 'cancelled'].includes(props.task.status))
+      const isCurrent = p === props.task.phase && props.task.status === 'running'
+      const isPast = !isCurrent && (phaseOrder > i || isTerminal)
 
-      events.push({
-        phase: p,
-        phaseLabel: getPhaseLabel(p),
-        time: isCurrent ? t('tasks.timelineInProgress') : (isPast ? t('tasks.timelineDone') : ''),
-        summary: isCurrent && props.task.speed ? `${props.task.progress}% · ${props.task.speed}` + (props.task.eta ? ` · ETA ${props.task.eta}` : '') : undefined,
+      let status: StepStatus
+      if (isCurrent) {
+        status = 'running'
+      } else if (isPast) {
+        status = 'success'
+      } else {
+        status = 'pending'
+      }
+
+      entries.push({
+        id: `${p}-fallback-${i}`,
+        phase: toPhase(p),
+        label: getPhaseLabel(p),
+        time: isCurrent ? t('tasks.timelineInProgress') : isPast ? t('tasks.timelineDone') : '',
+        progress: isCurrent ? props.task.progress : undefined,
+        speed: isCurrent ? props.task.speed : undefined,
+        eta: isCurrent ? props.task.eta : undefined,
+        status,
         isCurrent,
-        completed: isPast,
         hasExpandableDetail: false,
       })
     }
   }
 
+  // 4. 完成态：追加 "completed" 事件
   if (props.task.status === 'completed') {
-    events.push({
-      phase: 'done',
-      phaseLabel: t('tasks.phaseCompleted'),
+    entries.push({
+      id: `completed-${props.task.completedAt ?? ''}`,
+      phase: Phase.Completed,
+      label: t('tasks.phaseCompleted'),
       time: props.task.completedAt ? formatDateTime(props.task.completedAt) : '',
+      status: 'success',
       isCurrent: false,
-      completed: true,
       hasExpandableDetail: false,
     })
   }
 
+  // 5. 失败 / 取消态：标记最后一个事件为 failure，并附加错误信息
   if (props.task.status === 'failed' || props.task.status === 'cancelled') {
-    const last = events[events.length - 1]
-    last.error = true
-    last.phaseLabel = props.task.status === 'failed' ? t('tasks.failed') : t('tasks.cancelled')
-    last.summary = props.task.error
+    const last = entries[entries.length - 1]
+    if (last) {
+      last.status = 'failure'
+      last.label = props.task.status === 'failed' ? t('tasks.failed') : t('tasks.cancelled')
+      if (props.task.error) {
+        last.hasExpandableDetail = true
+        last.expandDetail = {
+          ...(last.expandDetail ?? {}),
+          error: props.task.error,
+        }
+      }
+    }
   }
 
-  return events
+  // 6. 计算最长耗时 phase 并高亮
+  let maxDurationMs = 0
+  let maxEntryId: string | null = null
+  for (const entry of entries) {
+    if (entry._durationMs && entry._durationMs > maxDurationMs) {
+      maxDurationMs = entry._durationMs
+      maxEntryId = entry.id
+    }
+  }
+  if (maxEntryId) {
+    const maxEntry = entries.find((e) => e.id === maxEntryId)
+    if (maxEntry) maxEntry.isHighlight = true
+  }
+
+  // 7. 剥离内部字段，返回 UnifiedTimelineEntry[]
+  return entries.map((entry) => {
+    const { _durationMs: _ignored, ...rest } = entry
+    void _ignored
+    return rest
+  })
 })
 </script>
 
@@ -204,134 +314,63 @@ const timelineEvents = computed(() => {
 
 .timeline {
   position: relative;
-  padding-left: 24px;
-}
-
-.timeline::before {
-  content: '';
-  position: absolute;
-  left: 7px;
-  top: 8px;
-  bottom: 8px;
-  width: 2px;
-  background: var(--ion-color-step-200);
-}
-
-.timeline-event {
-  position: relative;
-  padding-bottom: 16px;
-}
-
-.timeline-event:last-child {
-  padding-bottom: 4px;
-}
-
-.timeline-event.event-expandable {
-  cursor: pointer;
-}
-
-.timeline-dot {
-  position: absolute;
-  left: -21px;
-  top: 4px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--ion-color-step-200);
-  border: 2px solid var(--ion-color-step-200);
-  z-index: 1;
-}
-
-.event-completed .timeline-dot {
-  background: var(--ion-color-success);
-  border-color: var(--ion-color-success);
-}
-
-.event-current .timeline-dot {
-  background: var(--ion-color-primary);
-  border-color: var(--ion-color-primary);
-  box-shadow: 0 0 0 4px rgba(var(--ion-color-primary-rgb), 0.2);
-  animation: pulse 1.5s infinite;
-}
-
-.event-error .timeline-dot {
-  background: var(--ion-color-danger);
-  border-color: var(--ion-color-danger);
-}
-
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 0 4px rgba(var(--ion-color-primary-rgb), 0.2); }
-  50% { box-shadow: 0 0 0 8px rgba(var(--ion-color-primary-rgb), 0.1); }
-}
-
-.timeline-content {
   padding-left: 4px;
 }
 
-.event-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
-.event-phase {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ion-text-color);
-}
-
-.event-time {
-  font-size: 11px;
-  color: var(--ion-color-medium);
-  white-space: nowrap;
-}
-
-.expand-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.event-detail {
-  font-size: 12px;
-  color: var(--ion-color-medium);
-  margin-top: 2px;
-}
-
-.event-expand {
-  margin-top: 6px;
-  padding: 8px 10px;
-  background: var(--ion-color-step-100, #f0f0f0);
+/* ==================== 自定义 detail slot 卡片样式 ==================== */
+/* 覆盖 UnifiedTimelineCard 默认 detail slot 的网格布局，使用更紧凑的卡片 */
+.timeline-detail-card {
+  background: var(--ion-color-step-50, #f7f7f7);
   border-radius: 6px;
-  font-size: 11px;
-  line-height: 1.6;
+  padding: 6px 8px;
+  min-width: 0;
 }
 
-.expand-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
+.timeline-detail-card--path {
+  grid-column: 1 / -1;
 }
 
-.expand-row + .expand-row {
-  margin-top: 2px;
+.timeline-detail-card--highlight {
+  background: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.1);
+  border: 1px solid rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.3);
 }
 
-.expand-label {
-  color: var(--ion-color-medium);
-  flex-shrink: 0;
+.timeline-detail-card--error {
+  background: rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.08);
+  grid-column: 1 / -1;
 }
 
-.expand-value {
-  color: var(--ion-text-color);
+.timeline-detail-label {
+  font-size: 10px;
+  color: var(--ion-color-medium, #92949c);
+  margin-bottom: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.timeline-detail-value {
+  font-size: 12px;
+  color: var(--ion-text-color, #000);
   font-weight: 500;
-  text-align: right;
   word-break: break-all;
 }
 
-.expand-path {
-  font-family: monospace;
-  font-size: 10px;
+.timeline-detail-value--mono {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+/* ==================== 暗黑模式适配（body.dark） ==================== */
+:global(body.dark) .timeline-detail-card {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:global(body.dark) .timeline-detail-card--highlight {
+  background: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.12);
+  border-color: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.4);
+}
+
+:global(body.dark) .timeline-detail-value {
+  color: rgba(255, 255, 255, 0.88);
 }
 </style>

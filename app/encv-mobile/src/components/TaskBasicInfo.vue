@@ -122,6 +122,10 @@ import { showToast } from '@/composables/useToast'
 import type { EncvTask } from '@/api/encv'
 import { getTriggeredBy, getRunIdForTask } from '@/composables/useTaskTrigger'
 import { formatContainerVersion } from '@/constants/containerVersion'
+import {
+  useSectionDerivation,
+  type SectionDimension,
+} from '@/composables/useSectionDerivation'
 
 const props = defineProps<{ task: EncvTask }>()
 const { t } = useI18n()
@@ -158,13 +162,20 @@ const triggeredByIcon = computed(() => {
 })
 
 // 🆕 2026-06-11 v5：section 维度元数据（与 Tasks.vue deriveSubSection 保持一致）
-// 重要：必须在 TaskBasicInfo 里**独立实现**这个派生逻辑，因为 TaskBasicInfo 是独立
-//   组件，不知道 Tasks.vue 的 section 状态。保持派生规则完全一致即可。
+// 🆕 2026-06-18 Task 6：派生逻辑已抽取到 @/composables/useSectionDerivation。
+//   TaskBasicInfo 是单 task 组件，dimension 由 props.task 字段决定（per-component），
+//   适合用 useSectionDerivation(dimension) composable 包裹。
+//   'none' 维度的 label 用 i18n 覆盖（保持原行为：t('tasks.sectionOther')）。
+const sectionDimension = computed<SectionDimension>(() =>
+  props.task.pluginName ? 'plugin' : 'none',
+)
+const { derive } = useSectionDerivation(sectionDimension)
 const sectionMeta = computed(() => {
-  if (props.task.pluginName) {
-    return { dimension: 'plugin' as const, value: props.task.pluginName, label: props.task.pluginName }
+  const meta = derive(props.task)
+  if (meta.dimension === 'none') {
+    return { ...meta, label: t('tasks.sectionOther') }
   }
-  return { dimension: 'none' as const, value: '__none__', label: t('tasks.sectionOther') }
+  return meta
 })
 const sectionIcon = computed(() => {
   // 当前 sectionMeta 仅返回 'plugin' | 'none' 两个维度（type / category 留给 Tasks.vue 派生）

@@ -52,7 +52,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TestCaseResult } from '@/composables/useAutomationTests'
+import type { TestCaseResult } from '@/lib/workflow/types'
 import { CATEGORY_META, type ErrorCategory } from '@/composables/useErrorAnalyzer'
 
 const props = defineProps<{

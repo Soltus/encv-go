@@ -554,7 +554,7 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 	task.cancelFn = cancel
 	defer cancel()
 
-	tm.updateProgress(taskID, 5, "analyzing", "", "")
+	tm.updateProgress(taskID, 5, string(PhaseAnalyzing), "", "")
 
 	info, err := os.Stat(absPath)
 	if err != nil {
@@ -598,7 +598,7 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 		return
 	}
 
-	tm.updateProgress(taskID, 10, "initializing", "", "")
+	tm.updateProgress(taskID, 10, string(PhaseInitializing), "", "")
 
 	var plugin plugins.Plugin
 	if task.PluginName != "" {
@@ -648,7 +648,7 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 			"taskId", taskID)
 	}
 
-	tm.updateProgress(taskID, 15, "preprocessing", "", "")
+	tm.updateProgress(taskID, 15, string(PhasePreprocessing), "", "")
 
 	fileSize := info.Size()
 	stopMonitor := make(chan struct{})
@@ -671,7 +671,7 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 	if task.Status != "cancelling" {
 		task.Status = "completed"
 		task.Progress = 100
-		task.Phase = "completed"
+		task.Phase = string(PhaseCompleted)
 		task.Speed = ""
 		task.Eta = ""
 		now := time.Now()
@@ -790,9 +790,9 @@ func (tm *TaskManager) monitorFileProgress(taskID, outputDir string, totalSize i
 			}
 			tm.mu.RUnlock()
 
-			phase := "encrypting"
-			if currentPhase == "preprocessing" {
-				phase = "preprocessing"
+			phase := string(PhaseEncrypting)
+			if currentPhase == string(PhasePreprocessing) {
+				phase = string(PhasePreprocessing)
 			}
 
 			tm.updateProgress(taskID, progress, phase, speedStr, etaStr)
@@ -810,7 +810,7 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 	task.cancelFn = cancel
 	defer cancel()
 
-	tm.updateProgress(taskID, 5, "analyzing", "", "")
+	tm.updateProgress(taskID, 5, string(PhaseAnalyzing), "", "")
 
 	task.ContainerVersion = detectContainerVersion(absPath)
 
@@ -837,7 +837,7 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 		}
 	}
 
-	tm.updateProgress(taskID, 10, "initializing", "", "")
+	tm.updateProgress(taskID, 10, string(PhaseInitializing), "", "")
 
 	plugin, err := plugins.FindDecryptingPlugin(absPath)
 	if err != nil {
@@ -871,7 +871,7 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 			"taskId", taskID, "context", "decrypt")
 	}
 
-	tm.updateProgress(taskID, 15, "preprocessing", "", "")
+	tm.updateProgress(taskID, 15, string(PhasePreprocessing), "", "")
 
 	fileSize := info.Size()
 	stopMonitor := make(chan struct{})
@@ -894,7 +894,7 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 	if task.Status != "cancelling" {
 		task.Status = "completed"
 		task.Progress = 100
-		task.Phase = "completed"
+		task.Phase = string(PhaseCompleted)
 		task.Speed = ""
 		task.Eta = ""
 		now := time.Now()

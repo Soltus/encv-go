@@ -436,8 +436,14 @@ import { showToast } from '@/composables/useToast'
 import { useNewTaskModal } from '@/composables/useNewTaskModal'
 import { useTasksList } from '@/composables/useTasksList'
 import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
+import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
 import { getTriggeredBy, getRunIdForTask } from '@/composables/useTaskTrigger'
 import { formatContainerVersion } from '@/constants/containerVersion'
+import {
+  deriveSubSection,
+  type SectionDimension,
+  type SectionMeta,
+} from '@/composables/useSectionDerivation'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -462,6 +468,15 @@ const {
   isPasswordError, toggleWarningDetail, formatWarningDetail,
   getTaskIcon, getTaskColor, getStatusColor, getPhaseLabel,
 } = useTasksList()
+
+// 🆕 2026-06-18 Task 16：统一工作流任务服务
+// 用途：
+//   1. showAutomationReports 从 workflowTaskService.runs 读取历史运行记录（替代旧 encv_automation_results_v1 key）
+//   2. 内部通过 useTaskEventBridge 订阅 4 件套 WS 事件，维护 currentRun / runs 状态
+//   3. Tasks.vue 仍保留 useTaskEventBridge 4 件套回调（applyTask*）以实时更新 tasks ref
+//      —— 因为 Tasks.vue 显示所有任务（含非 workflow 的用户单任务），不能只依赖 workflowTaskService
+//      workflowTaskService 只追踪 workflow run 内的 task，单任务不归它管
+const workflowTaskService = useWorkflowTaskService()
 
 useTaskEventBridge({
   onUpdate: applyTaskUpdate,
@@ -568,12 +583,10 @@ const GROUP_FOLD_THRESHOLD = 2
 //   - 当前支持 4 种 dimension：plugin / type / category / none
 //   - 未来加新维度：只需要在 SECTION_META 加一行 + deriveSubSection 加一个 case
 //   - task 没 pluginName → fallback 到 'none'（不会丢失，归到「其他任务」section）
-type SectionDimension = 'plugin' | 'type' | 'category' | 'none'
-
-interface SubSectionKey {
-  dimension: SectionDimension
-  value: string  // 'AES-256' / 'encrypt' / 'download' / '__none__'
-}
+//
+// 🆕 2026-06-18 Task 6：deriveSubSection / SectionDimension / SectionMeta 已抽取到
+//   @/composables/useSectionDerivation，这里只保留 Tasks.vue 专用的 UI 元数据
+//   （SubSectionMeta + SECTION_META + sectionKeyToString + buildSubSectionMeta）。
 
 interface SubSectionMeta {
   dimension: SectionDimension
@@ -593,8 +606,8 @@ const SECTION_META: Record<SectionDimension, { icon: string; toneClass: string }
   none: { icon: 'ellipsis-horizontal-circle', toneClass: 'none' },
 }
 
-function sectionKeyToString(k: SubSectionKey): string {
-  return `${k.dimension}:${k.value}`
+function sectionKeyToString(meta: SectionMeta): string {
+  return `${meta.dimension}:${meta.key}`
 }
 
 /**
@@ -604,38 +617,43 @@ function sectionKeyToString(k: SubSectionKey): string {
  *   2. 未来扩展：task.category / task.subType 等可在中间插入 case
  *   3. 都没 → 'none' 维度（统一归到「其他任务」section，不会丢失）
  *
+ * 🆕 2026-06-18 Task 6：实际派生逻辑已迁移到 @/composables/useSectionDerivation
+ *   deriveSubSection(task, dimension)。这里只保留「按 task 字段 pick 维度」的本地策略，
+ *   因为 Tasks.vue 的维度选择是 per-task 的（不是 per-component），不适合用
+ *   useSectionDerivation(dimension) 单维度 composable。
+ *
  * 升级指南：未来加新维度时
  *   - SECTION_META 加一条（icon + toneClass）
- *   - deriveSubSection 加一个 if 分支
+ *   - pickSectionDimension 加一个 if 分支
  *   - i18n 加 'tasks.dimensionXxx' 文案
  *   不需要改 displayedItems / 模板 / CSS
  */
-function deriveSubSection(task: EncvTask): SubSectionKey {
+function pickSectionDimension(task: EncvTask): SectionDimension {
   if (task.pluginName) {
-    return { dimension: 'plugin', value: task.pluginName }
+    return 'plugin'
   }
   // 未来扩展预留：
-  // if (task.category) return { dimension: 'category', value: task.category }
-  // if (task.subType) return { dimension: 'type', value: task.subType }
-  return { dimension: 'none', value: '__none__' }
+  // if (task.category) return 'category'
+  // if (task.subType) return 'type'
+  return 'none'
 }
 
-function buildSubSectionMeta(key: SubSectionKey): SubSectionMeta {
-  const meta = SECTION_META[key.dimension]
-  // label 默认用 value 本身，特殊 case 可覆盖
-  let label = key.value
-  if (key.dimension === 'none' && key.value === '__none__') {
+function buildSubSectionMeta(meta: SectionMeta): SubSectionMeta {
+  const sectionMeta = SECTION_META[meta.dimension]
+  // label 默认用 composable 派生的 label，特殊 case 可覆盖
+  let label = meta.label
+  if (meta.dimension === 'none' && meta.key === 'all') {
     label = '其他任务'  // fallback section 标签（i18n key 在模板里覆盖）
   }
-  if (key.dimension === 'type') {
-    label = key.value === 'encrypt' ? '加密任务' : key.value === 'decrypt' ? '解密任务' : key.value
+  if (meta.dimension === 'type') {
+    label = meta.key === 'encrypt' ? '加密任务' : meta.key === 'decrypt' ? '解密任务' : meta.label
   }
   return {
-    dimension: key.dimension,
-    value: key.value,
+    dimension: meta.dimension,
+    value: meta.key,
     label,
-    icon: meta.icon,
-    tone: key.dimension,
+    icon: sectionMeta.icon,
+    tone: meta.dimension,
   }
 }
 
@@ -776,7 +794,8 @@ const displayedItems = computed<DisplayItem[]>(() => {
     }
     const tone: 'automation' | 'ai_agent' = by === 'ai_agent' ? 'ai_agent' : 'automation'
     // 🆕 v5：用 deriveSubSection 动态派生（兼容 task 没 pluginName 的情况）
-    const section = deriveSubSection(t)
+    // 🆕 2026-06-18 Task 6：deriveSubSection 从 composable 导入，pickSectionDimension 决定维度
+    const section = deriveSubSection(t, pickSectionDimension(t))
     const sectionKeyStr = sectionKeyToString(section)
     const meta = buildSubSectionMeta(section)
     const g = groupsByRun.get(runId)
@@ -1008,39 +1027,39 @@ async function resetGrouping() {
 //   - 自动按失败率 / 错误模式分类，输出可疑 bug 列表
 //   - 关键失败 → 上报后端 /api/dev/automation-report（让后端聚合分析）
 //   - 用户视角：调试栏按钮触发，但**用户不用等结果**，console + 后端都看得到
+//
+// 🆕 2026-06-18 Task 16：数据源迁移
+//   - 旧：localStorage key `encv_automation_results_v1`（useAutomationTests 持久化，Task 8 已删除）
+//   - 新：workflowTaskService.runs（UnifiedRunRecord[]，localStorage key `encv_workflow_tasks_v1`）
+//   - 字段映射：UnifiedRunRecord.results[].caseId 替代旧 caseName；category 从 workflowRun.triggeredBy 派生
 function showAutomationReports() {
-  const STORAGE_KEY = 'encv_automation_results_v1'
-  let runs: any[] = []
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) runs = parsed
-    }
-  } catch (e) {
-    console.error('[automation-report] localStorage parse failed:', e)
-    return
-  }
+  // 🆕 Task 16：从 workflowTaskService.runs 读取（响应式 ref → 取 .value）
+  const runs = workflowTaskService.runs.value
   if (runs.length === 0) {
-    console.info('[automation-report] no runs in localStorage (key=' + STORAGE_KEY + ')')
+    console.info('[automation-report] no runs in workflowTaskService.runs (key=encv_workflow_tasks_v1)')
     return
   }
 
   // 自动分析
-  const webdavRuns = runs.filter((r) => r.category === 'webdav')
-  const pluginRuns = runs.filter((r) => r.category !== 'webdav')
+  // 🆕 Task 16：category 从 workflowRun.triggeredBy 派生（旧字段 r.category 已不存在）
+  //   - triggeredBy === 'ai_agent' → 归到 'ai_agent' 桶
+  //   - 其他（user / automation）→ 归到 'plugin' 桶
+  //   注：旧版 webdav category 已合并到统一 workflow 体系，不再单独区分
+  const aiAgentRuns = runs.filter((r) => r.workflowRun?.triggeredBy === 'ai_agent')
+  const pluginRuns = runs.filter((r) => r.workflowRun?.triggeredBy !== 'ai_agent')
   const totalPassed = runs.reduce((acc, r) => acc + (r.passed ?? 0), 0)
   const totalFailed = runs.reduce((acc, r) => acc + (r.failed ?? 0), 0)
   const totalSkipped = runs.reduce((acc, r) => acc + (r.skipped ?? 0), 0)
   const totalCases = totalPassed + totalFailed + totalSkipped
   const failureRate = totalCases > 0 ? (totalFailed / totalCases) * 100 : 0
 
-  // 错误聚类：相同 caseName 失败多次 → 可疑 bug
+  // 错误聚类：相同 caseId 失败多次 → 可疑 bug
+  // 🆕 Task 16：UnifiedRunRecord.results[].status 用 'failure'（旧版用 'failed'）
   const errorMap = new Map<string, { count: number; firstError: string; runs: string[] }>()
   for (const r of runs) {
     for (const c of r.results ?? []) {
-      if (c.status === 'failed') {
-        const key = `${c.category ?? '?'}:${c.caseName ?? c.caseId ?? '?'}`
+      if (c.status === 'failure') {
+        const key = `case:${c.caseId ?? '?'}`
         const prev = errorMap.get(key)
         if (prev) {
           prev.count++
@@ -1057,12 +1076,12 @@ function showAutomationReports() {
 
   // 最近一次失败的 run
   const lastRun = runs[0]
-  const lastRunFailed = (lastRun?.results ?? []).filter((c: any) => c.status === 'failed')
+  const lastRunFailed = (lastRun?.results ?? []).filter((c) => c.status === 'failure')
 
   // 输出结构化报告
   console.group('[automation-report] 自动化测试历史分析')
-  console.log('localStorage key:', STORAGE_KEY)
-  console.log('run 总数:', runs.length, '(webdav=' + webdavRuns.length + ', plugin=' + pluginRuns.length + ')')
+  console.log('data source: workflowTaskService.runs (localStorage key=encv_workflow_tasks_v1)')
+  console.log('run 总数:', runs.length, '(ai_agent=' + aiAgentRuns.length + ', plugin=' + pluginRuns.length + ')')
   console.log('总用例:', totalCases, '· 通过:', totalPassed, '· 失败:', totalFailed, '· 跳过:', totalSkipped)
   console.log('总失败率:', failureRate.toFixed(2) + '%')
   if (lastRun) {
@@ -1073,8 +1092,8 @@ function showAutomationReports() {
       passed: lastRun.passed,
       failed: lastRun.failed,
       skipped: lastRun.skipped,
-      category: lastRun.category ?? 'plugin',
-      baseUrl: lastRun.baseUrl,
+      triggeredBy: lastRun.workflowRun?.triggeredBy ?? 'user',
+      workflowDefId: lastRun.workflowRun?.workflowDefId,
     })
     if (lastRunFailed.length > 0) {
       console.warn('最近 run 失败用例:', lastRunFailed)
@@ -1094,9 +1113,9 @@ function showAutomationReports() {
 
   // 上报后端（fire-and-forget，不阻塞 UI）
   reportAutomationToBackend({
-    storageKey: STORAGE_KEY,
+    storageKey: 'encv_workflow_tasks_v1',
     runCount: runs.length,
-    webdavRunCount: webdavRuns.length,
+    aiAgentRunCount: aiAgentRuns.length,
     pluginRunCount: pluginRuns.length,
     totalCases,
     totalPassed,
@@ -1104,7 +1123,7 @@ function showAutomationReports() {
     totalSkipped,
     failureRate: Number(failureRate.toFixed(2)),
     suspiciousBugs: suspiciousBugs.map(([name, info]) => ({ name, count: info.count, firstError: info.firstError })),
-    lastRunFailed: lastRunFailed.map((c: any) => ({ caseName: c.caseName, error: c.error, httpStatus: c.httpStatus, errorKind: c.errorKind })),
+    lastRunFailed: lastRunFailed.map((c) => ({ caseId: c.caseId, error: c.error, duration: c.duration })),
     timestamp: new Date().toISOString(),
   }).catch((e) => {
     console.debug('[automation-report] backend report failed (silent):', e)

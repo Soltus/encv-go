@@ -150,22 +150,22 @@
       </template>
 
       <!-- 历史运行列表 -->
-      <ion-list v-if="runs.length > 0 && !currentRun">
+      <ion-list v-if="serviceRuns.length > 0 && !currentRun">
         <ion-list-header>
           <ion-label>PAST RUNS</ion-label>
         </ion-list-header>
         <ion-item
-          v-for="run in runs.slice(0, 10)"
-          :key="run.id"
+          v-for="record in serviceRuns.slice(0, 10)"
+          :key="record.id"
           button
           detail
-          @click="selectHistoryRun(run)"
+          @click="selectHistoryRun(record)"
         >
           <ion-label>
-            <h3>{{ run.id.slice(0, 16) }}...</h3>
-            <p>{{ run.status }} · {{ run.jobs.length }} jobs · {{ formatTime(run.createdAt) }}</p>
+            <h3>{{ record.id.slice(0, 16) }}...</h3>
+            <p>{{ record.workflowRun?.status ?? 'unknown' }} · {{ record.workflowRun?.jobs.length ?? 0 }} jobs · {{ formatTime(record.startedAt) }}</p>
           </ion-label>
-          <StepMiniBadge :status="run.status === 'running' ? 'queued' : run.status" :show-name="false" slot="end" />
+          <StepMiniBadge :status="(record.workflowRun?.status === 'running' ? 'queued' : record.workflowRun?.status) ?? 'queued'" :show-name="false" slot="end" />
         </ion-item>
       </ion-list>
 
@@ -187,8 +187,10 @@ import { useI18n } from '@/composables/useI18n'
 import { showToast } from '@/composables/useToast'
 import { generateMockFilesViaBackend, resetMockFilesViaBackend } from '@/api/mockGenerator'
 import { MOCK_GENERATE_ROOT } from '@/lib/mockConstants'
-import { useWorkflowEngine } from '@/composables/useWorkflowEngine'
+import { useWorkflowStore } from '@/composables/useWorkflowStore'
+import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
 import type { WorkflowDefinition, WorkflowRun, JobRun, StepRun } from '@/lib/workflow/types'
+import type { UnifiedRunRecord } from '@/lib/workflow/types'
 import TestReportHeader from './TestReportHeader.vue'
 import StepMiniBadge from './StepMiniBadge.vue'
 import JobPipelineCard from './JobPipelineCard.vue'
@@ -208,12 +210,18 @@ const mockStats = ref<{ count: number; totalSize: number } | null>(null)
 const generateProgressText = ref('')
 
 // ---- Workflow Engine ----
+// 🆕 Task 7：useWorkflowEngine 已退役，拆分为：
+//   - useWorkflowStore：definitions CRUD + 内置模板注册
+//   - useWorkflowTaskService：运行执行 + WS 事件 + 持久化
+const store = useWorkflowStore()
 const {
-  definitions, runs, currentRun, isRunning,
+  definitions, getDefinition, registerBuiltinTemplates,
+} = store
+const {
+  currentRun, isRunning,
   totalSteps, completedSteps, successSteps, failedSteps,
-  runWorkflow, cancelCurrentRun, startListening, stopListening,
-  registerBuiltinTemplates,
-} = useWorkflowEngine()
+  runs: serviceRuns, submitRun, cancelRun,
+} = useWorkflowTaskService()
 
 const selectedDefId = ref<string>('')
 const viewMode = ref<'pipeline' | 'tree'>('pipeline')
@@ -322,22 +330,28 @@ async function handleResetMock() {
 
 async function handleRunWorkflow() {
   if (!selectedDefId.value || isRunning.value) return
+  const def = getDefinition(selectedDefId.value)
+  if (!def) return
   try {
-    await runWorkflow(selectedDefId.value, 'automation')
+    await submitRun({ workflow: def, triggeredBy: 'automation' })
     showToast({ message: `Workflow started`, color: 'success', duration: 1500 })
   } catch (e) {
     showToast({ message: `${e instanceof Error ? e.message : e}`, color: 'danger', duration: 2500 })
   }
 }
 
-function handleCancel() {
-  cancelCurrentRun()
+async function handleCancel() {
+  if (currentRun.value) {
+    await cancelRun(currentRun.value.id)
+  }
   showToast({ message: 'Workflow cancelled', color: 'warning', duration: 1500 })
 }
 
-function selectHistoryRun(run: WorkflowRun) {
-  // 加载历史运行到 currentRun（简化：直接赋值，实际应从 store 获取完整数据）
-  currentRun.value = run
+function selectHistoryRun(record: UnifiedRunRecord) {
+  // 从 UnifiedRunRecord.workflowRun 快照恢复到 currentRun（UI 回放历史运行）
+  if (record.workflowRun) {
+    currentRun.value = record.workflowRun
+  }
 }
 
 function onSelectStep(step: StepRun) {
@@ -354,8 +368,7 @@ const selectedStepJob = computed(() =>
 
 onMounted(() => {
   tickHandle = setInterval(() => { _tickNow.value = Date.now() }, 1000)
-  startListening()
-  // 注册内置模板
+  // useWorkflowTaskService 内部通过 useTaskEventBridge 自动订阅 WS 4 件套事件
   registerBuiltinTemplates(BUILTIN_TEMPLATES)
   // 默认选中第一个模板
   if (definitions.value.length > 0 && !selectedDefId.value) {
@@ -364,7 +377,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   if (tickHandle) clearInterval(tickHandle)
-  stopListening()
+  // useWorkflowTaskService 内部通过 useTaskEventBridge 自动取消订阅
 })
 
 // ---- Utils ----

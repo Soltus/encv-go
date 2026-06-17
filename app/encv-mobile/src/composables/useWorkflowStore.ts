@@ -3,8 +3,12 @@
  *
  * 职责：
  * - WorkflowDefinition 的持久化（localStorage）
- * - WorkflowRun 运行历史的持久化
  * - 内置模板的注册和加载
+ *
+ * 2026-06-18 spec unify-workflow-task-service：
+ *   - runs 历史持久化已移除（消费者 useWorkflowEngine 已删除）
+ *   - runs 相关功能由 useWorkflowTaskService 接管（key = encv_workflow_tasks_v1）
+ *   - 本 composable 仅保留 definitions CRUD + 内置模板注册
  *
  * MVP 阶段纯前端存储，预留后端 API 接口签名。
  */
@@ -12,9 +16,8 @@
 import { ref } from 'vue'
 import type {
   WorkflowDefinition,
-  WorkflowRun,
 } from '@/lib/workflow/types'
-import { WORKFLOW_STORE_KEY, WORKFLOW_RUNS_KEY } from '@/lib/workflow/types'
+import { WORKFLOW_STORE_KEY } from '@/lib/workflow/types'
 
 /** 生成简易 UUID（不需要 crypto 库） */
 function generateId(): string {
@@ -38,51 +41,8 @@ function saveJSON<T>(key: string, data: T): void {
   }
 }
 
-/**
- * 深合并（patch 字段优先于 base；嵌套对象/数组递归处理）
- * - 普通对象递归 merge
- * - 数组 patch 完全替换 base（语义：patch 是新版本，数组整体覆盖）
- * - null/undefined patch 字段保留 base
- * - undefined patch 字段忽略（保留 base）
- *
- * 用例：useWorkflowStore.updateRun(runId, { ...currentRun })
- *   → currentRun 内部 step.status / step.progress 已被 reactive proxy 改过
- *   → 深合并保证这些变化能正确反映到 store.runs 对应 run
- */
-function deepMerge<T extends Record<string, any>>(base: T, patch: Partial<T>): T {
-  if (patch === null || typeof patch !== 'object') return base
-  const result: any = Array.isArray(base) ? [...base] : { ...base }
-  for (const key of Object.keys(patch)) {
-    const patchVal = (patch as any)[key]
-    const baseVal = (base as any)[key]
-    if (patchVal === undefined) {
-      // 保留 base
-      continue
-    }
-    if (
-      patchVal !== null &&
-      typeof patchVal === 'object' &&
-      !Array.isArray(patchVal) &&
-      baseVal !== null &&
-      typeof baseVal === 'object' &&
-      !Array.isArray(baseVal)
-    ) {
-      // 普通对象 → 递归
-      result[key] = deepMerge(baseVal, patchVal)
-    } else if (Array.isArray(patchVal)) {
-      // 数组：patch 是新版本 → 浅拷贝 patch 数组（不深拷贝元素，保留 reactive proxy / ref 引用）
-      result[key] = [...patchVal]
-    } else {
-      // 原始值 / null → 直接覆盖
-      result[key] = patchVal
-    }
-  }
-  return result
-}
-
 export function useWorkflowStore() {
   const definitions = ref<WorkflowDefinition[]>(loadJSON(WORKFLOW_STORE_KEY, []))
-  const runs = ref<WorkflowRun[]>(loadJSON(WORKFLOW_RUNS_KEY, []))
 
   // ==================== Definition CRUD ====================
 
@@ -120,41 +80,6 @@ export function useWorkflowStore() {
     return definitions.value.find((d) => d.id === id)
   }
 
-  // ==================== Run History ====================
-
-  function addRun(run: WorkflowRun): void {
-    runs.value = [run, ...runs.value].slice(0, 100) // 保留最近 100 条
-    persistRuns()
-  }
-
-  function updateRun(runId: string, patch: Partial<WorkflowRun>): void {
-    // 🆕 2026-06-10 修复：深合并 patch（jobs 数组内 step 内部属性变化必须保留）
-    // 历史 bug：{ ...r, ...patch } 浅合并 → 如果 patch.jobs 是同一个 reference，浅合并后 step 内部修改能保留（因为引用共享）
-    //   但如果调用方传 patch 整个 run（line 191: store.updateRun(currentRun.value.id, { ...currentRun.value })），
-    //   spread 会把 run 的所有顶层属性拷给 patch（包括 nested jobs reference）— 实际是 OK 的。
-    // 真正脆弱的场景：localStorage 读取时 JSON.parse 拿回 plain object，丢失 reference。
-    //   当 useWorkflowEngine 的 onTaskCompleted 改 step.status 后调 store.updateRun（line 191），
-    //   patch 里的 jobs 数组和 store.runs 里的 jobs 数组可能是不同的 reference（line 259/291/296 的 updateRun(run.id, run)）。
-    //   深合并保证 patch.jobs 内的 step 对象变更能正确反映到 store.runs。
-    // 实现：JSON.parse(JSON.stringify) deep clone（性能对 100 条 run × 几百 step 够用，< 5ms）
-    runs.value = runs.value.map((r) => (r.id === runId ? deepMerge(r, patch) : r))
-    persistRuns()
-  }
-
-  function getRun(runId: string): WorkflowRun | undefined {
-    return runs.value.find((r) => r.id === runId)
-  }
-
-  /** 获取某个 workflowDef 的最近 N 次运行 */
-  function getRunsForDefinition(defId: string, limit = 10): WorkflowRun[] {
-    return runs.value.filter((r) => r.workflowDefId === defId).slice(0, limit)
-  }
-
-  function clearRuns(): void {
-    runs.value = []
-    persistRuns()
-  }
-
   // ==================== 内置模板管理 ====================
 
   /**
@@ -183,22 +108,12 @@ export function useWorkflowStore() {
     saveJSON(WORKFLOW_STORE_KEY, definitions.value)
   }
 
-  function persistRuns(): void {
-    saveJSON(WORKFLOW_RUNS_KEY, runs.value)
-  }
-
   return {
     definitions,
-    runs,
     createDefinition,
     updateDefinition,
     deleteDefinition,
     getDefinition,
-    addRun,
-    updateRun,
-    getRun,
-    getRunsForDefinition,
-    clearRuns,
     registerBuiltin,
     registerBuiltinTemplates,
   }

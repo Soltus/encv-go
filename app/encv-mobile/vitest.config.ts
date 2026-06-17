@@ -38,6 +38,9 @@ export default defineConfig({
       // 🆕 2026-06-15：src/utils 下的单测（RingBuffer / IncrementalFilter 等纯数据
       // 结构 + 压力测试。1M push 实测约 1-2s，能在 60s 超时内跑完）
       'src/utils/**/*.test.ts',
+      // 🆕 2026-06-18 Task 10：src/components 下的单测（PhaseIcon / PhaseBadge 等
+      // 通用共享组件。放在 src/components/**/__tests__/ 目录下，就近原则）
+      'src/components/**/__tests__/**/*.test.ts',
     ],
     // RingBuffer 10M 压测需要放宽默认 5s 超时
     testTimeout: 60_000,
