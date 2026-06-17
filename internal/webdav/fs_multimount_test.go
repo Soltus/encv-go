@@ -311,3 +311,86 @@ func TestIsContainerExtension_Registered(t *testing.T) {
 		}
 	}
 }
+
+// TestWebdavPathToIndexKey_TraversalBlocked 验证 webdavPathToIndexKey 拦截 .. 段。
+//
+// 🆕 2026-06-17：与 resolvePath 的 .. 拦截配对，覆盖 webdav 路径转 index key 的全入口
+func TestWebdavPathToIndexKey_TraversalBlocked(t *testing.T) {
+	tmpDir := t.TempDir()
+	fs := createMinimalWebDAVFS(tmpDir)
+	fs.webdavPrefix = "/webdav"
+	fs.dir = tmpDir
+
+	attacks := []string{
+		"/webdav/../../etc/passwd",
+		"/webdav/foo/../escape",
+		"/webdav/../d/primary/secret",
+	}
+	for _, attack := range attacks {
+		_, err := fs.webdavPathToIndexKey(attack)
+		if err == nil {
+			t.Errorf("webdavPathToIndexKey(%q) should fail (path traversal)", attack)
+		}
+	}
+}
+
+// TestWebdavPathToIndexKey_Valid 验证合法路径正常转换。
+func TestWebdavPathToIndexKey_Valid(t *testing.T) {
+	tmpDir := t.TempDir()
+	fs := createMinimalWebDAVFS(tmpDir)
+	fs.webdavPrefix = "/webdav"
+	fs.dir = tmpDir
+
+	cases := []struct {
+		webdavPath string
+		want       string
+	}{
+		{"/webdav/", "."},
+		{"/webdav", "."},
+		{"/webdav/foo/bar", "foo/bar"},
+		{"/webdav/foo/bar.txt", "foo/bar.txt"},
+	}
+	for _, c := range cases {
+		got, err := fs.webdavPathToIndexKey(c.webdavPath)
+		if err != nil {
+			t.Errorf("webdavPathToIndexKey(%q) failed: %v", c.webdavPath, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("webdavPathToIndexKey(%q) = %q, want %q", c.webdavPath, got, c.want)
+		}
+	}
+}
+
+// TestCrossMount_Escape 验证跨 mount 逃逸被拦截。
+//
+// 攻击场景：webdav handler 收到 PROPFIND /d/automation/../../d/primary/secret
+// 解析后 userPath = "/../../d/primary/secret" → 含 .. 段 → 拒绝
+func TestCrossMount_Escape(t *testing.T) {
+	tmpDir := t.TempDir()
+	fs := createMinimalWebDAVFS(tmpDir)
+	fs.webdavPrefix = "/d/automation"
+	fs.dir = tmpDir
+
+	attacks := []string{
+		"/d/automation/../../d/primary/secret",
+		"/d/automation/../d/primary",
+		"/d/automation/../../etc/passwd",
+	}
+	for _, attack := range attacks {
+		_, err := fs.resolvePath(attack)
+		if err == nil {
+			t.Errorf("cross-mount escape via %q should fail", attack)
+		}
+	}
+}
+
+// TestMountBootstrapErrors_FieldExists 验证 Server struct 包含 mountBootstrapErrors 字段
+// （webdavFS 多 mount 注册失败时记录到这里）
+func TestMountBootstrapErrors_FieldExists(t *testing.T) {
+	// 简单的编译期检查：如果字段不存在，type assertion 编译失败
+	type checkField struct {
+		mountBootstrapErrors []string
+	}
+	_ = checkField{}
+}

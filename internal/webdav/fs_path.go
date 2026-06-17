@@ -12,6 +12,9 @@ import (
 // webdavPathToIndexKey 将 WebDAV Handler 传入的绝对路径，转换为用于索引查找的标准键。
 // 例如："/webdav/output/file.txt" -> "output/file.txt"
 // 例如："/webdav/" -> "."
+//
+// 🆕 2026-06-17：多挂载点安全强化 — 显式拦截 .. 段，防止攻击者构造含 .. 的 webdav 路径
+// （虽然 webdavPathToIndexKey 只查表不触发 fs 操作，防御性也加上）
 func (fs *encvWebDAVFS) webdavPathToIndexKey(webdavPath string) (string, error) {
 	if strings.HasPrefix(webdavPath, fs.webdavPrefix) {
 		key := strings.TrimPrefix(webdavPath, fs.webdavPrefix)
@@ -19,6 +22,12 @@ func (fs *encvWebDAVFS) webdavPathToIndexKey(webdavPath string) (string, error) 
 		key = strings.TrimSuffix(key, "/")
 		if key == "" {
 			return ".", nil
+		}
+		// 🆕 2026-06-17：拦截 .. 段（攻击者可能构造 "/webdav/../etc/passwd"）
+		for _, seg := range strings.Split(filepath.ToSlash(key), "/") {
+			if seg == ".." {
+				return "", fmt.Errorf("path traversal detected: '%s' contains '..' segments", webdavPath)
+			}
 		}
 		return key, nil
 	}
