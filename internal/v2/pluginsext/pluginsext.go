@@ -1,6 +1,6 @@
 // Package pluginsext 集中导出各 plugin 真实容器扩展名常量。
 //
-// 权威来源：internal/v2/plugins/<plugin>/plugin.go 的 GetContainerExtension() 默认值
+// 权威来源：internal/v2/plugins/<plugin>/plugin.go 的 GetDefaultSettings() 默认值
 // （这些常量是该默认值的镜像，必须随 plugin 源码同步）。
 //
 // 为什么需要这个包：
@@ -11,15 +11,15 @@
 //   - 本包是 leaf package（无任何 import），所有测试包都能安全 import
 //
 // 同步校验：internal/v2/plugins/pluginsext_sync_test.go 在测试时
-// 读取 plugin.GetContainerExtension() 并断言本包常量与之一致，
+// 读取 plugin.GetDefaultSettings() 并断言本包常量与之一致，
 // 任何不一致都会让 CI 红灯。
 //
 // 不要在本包中放置任何非容器扩展名的常量或逻辑——保持极简。
 package pluginsext
 
-// 各 plugin 默认容器扩展名（镜像 plugin.GetContainerExtension() 默认值）。
-// 历史注：alist_encrypt plugin 默认 .bin，但兼容 alist v2 历史扩展名
-// （plugin.go L100 注释）；本常量反映 plugin 默认 .bin。
+// 各 plugin 默认容器扩展名（镜像 plugin.GetDefaultSettings() 中 ext/suffix 字段）。
+// 注意：alist_encrypt plugin **没有**任何 .encv 特殊处理——它的 GetContainerExtension()
+// 只返回 p.settings.Suffix（默认 .bin），用户可任意配置为其他后缀。
 const (
 	VideoExt = ".sccgv" // video plugin 默认
 	AudioExt = ".sccga" // audio plugin 默认
@@ -27,5 +27,5 @@ const (
 	TextExt  = ".sccgt" // text plugin 默认
 	PdfExt   = ".sccgpdf"
 	WpsExt   = ".sccgwps"
-	AlistExt = ".bin" // alist_encrypt plugin 默认（兼容 alist v2 历史）
+	AlistExt = ".bin" // alist_encrypt plugin 默认（无 .encv 特殊兼容）
 )
