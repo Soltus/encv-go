@@ -44,6 +44,16 @@ import (
 	goWebdav "golang.org/x/net/webdav"
 )
 
+// 🆕 2026-06-17：webdavFSEntry 是多挂载点 webdav 适配用的封装。
+// 每个 mount 一个 webdavFS 实例（独立 dir / indexCache / fsnotify watcher），
+// 同时持有 goWebdav.FileSystem（给 Handler 用）和 webdav.IndexProvider（给 SearchInIndex / GetIndexStats 用）。
+type webdavFSEntry struct {
+	fs         webdav.IndexProvider
+	fileSystem goWebdav.FileSystem
+	mount      *mount.Mount
+	webdavPath string // URL 前缀，如 "/d/automation" 或 "/webdav"
+}
+
 type Server struct {
 	server         *http.Server
 	cfg            *config.Config
@@ -65,6 +75,9 @@ type Server struct {
 	chunkNamers    []namer.ChunkNamer
 	jwtManager     *auth.JWTManager
 	webdavFS       webdav.IndexProvider
+	// 🆕 2026-06-17：多挂载点 webdav 实例表（multi-mount-storage-refactor spec 续）
+	// 启动期按 mount registry 填充；key = mount.Name（primary / automation / sandbox 等）
+	webdavFSByMount map[string]*webdavFSEntry
 	mockEngine     *MockEngine
 	// scenarioLoader 是剧本外置 spec 引入的加载器。
 	// 若 agent_settings.mock_scenarios_dir 非空，
@@ -559,6 +572,9 @@ func (s *Server) Start(version string) (string, error) {
 	r.POST("/api/webdav/test", s.handleTestWebDAVGin)
 	r.GET("/api/webdav/test-local", s.handleTestLocalWebDAVGin)
 	r.GET("/api/webdav/local-info", s.handleWebDavLocalInfoGin)
+	// 🆕 2026-06-17：多挂载点 webdav manifest API（multi-mount-storage-refactor spec 续）
+	// 前端 WebDavAutomationTestsDetail.vue 用此 API 动态生成测试用例
+	r.GET("/api/webdav/manifest", s.handleWebDavManifestGin)
 	r.GET("/api/remote/info", s.handleRemoteInfoGin)
 	r.GET("/api/remote/openlist", s.handleListOpenlistSitesGin)
 	r.POST("/api/remote/openlist", s.handleAddOpenlistSiteGin)
@@ -676,38 +692,174 @@ func (s *Server) Start(version string) (string, error) {
 		openlistGroup.OPTIONS("/:siteId/*path", handleOpenlistProxyGin(proxyGin))
 	}
 
-	if s.webdavDir != "" {
-		webdavFS, indexProvider, fsErr := webdav.NewENCVFS(config.NewContext(context.Background(), s.cfg), s.readerService, s.chunkNamers)
+	// 🆕 2026-06-17：多挂载点 webdav 适配
+	//
+	// 之前的实现：单根 webdavFS，URL 仅 /webdav/*path。问题：
+	//   1. mobile_api.go 大量代码用 s.webdavFS.SearchInIndex / GetIndexStats
+	//      → 单根架构下 SearchInIndex 只覆盖 primary（servingDir）范围
+	//   2. WebDAV 协议直接暴露 servingDir 物理根，不感知 mount 概念
+	//      → 多 mount 引入后，physical dir（primary）vs test dir（automation）必须隔离
+	//   3. 路径穿越 / 跨 mount 逃逸无法用单 FS 隔离（必须每个 mount 独立 FS）
+	//
+	// 新实现（multi-mount-storage-refactor spec 续）：
+	//   - s.webdavFS           保留，指向 primary mount（向后兼容 mobile_api.go + /webdav/ 入口）
+	//   - s.webdavFSByMount    新增，key = mount.Name；每个 mount 一个独立 webdavFS 实例
+	//   - URL 双兼容：
+	//       /webdav/*path              →  primary（向后兼容所有旧客户端 / Windows Explorer 单 webdav）
+	//       /d/<mount_path>/*path      →  对应 mount（多 webdav 客户端用）
+	//   - 路径逃逸防护：webdavFS 实例的 dir = mount.RootPath（绝对路径）；
+	//     webdav library 的 Resolve 自动用 dir 限制（拼 filepath.Clean + IsAbs 校验）
+	//     → 跨 mount 逃逸测试会在 attack module 跑
+	//
+	// 性能：每个 mount 一个独立 indexCache + fsnotify watcher + runIndexer goroutine。
+	// 启动期独立失败 → 记录到 s.mountBootstrapErrors，前端 /api/mounts 可见。
+	s.webdavFSByMount = make(map[string]*webdavFSEntry)
+
+	// 1. 收集所有 enabled mounts（primary / automation / sandbox 等）
+	webdavEnabledMounts := []*mount.Mount{}
+	if s.mountRegistry != nil {
+		for _, m := range s.mountRegistry.List() {
+			if !m.Enabled {
+				continue
+			}
+			// 过滤：只对 webdavProtocol=true 的 mount 注册（防御性：未来可加开关）
+			webdavEnabledMounts = append(webdavEnabledMounts, m)
+		}
+	}
+
+	// 2. 确保 primary mount 也在列表里（即使 mountRegistry 里没 primary，也用 s.webdavDir 兜底）
+	hasPrimary := false
+	for _, m := range webdavEnabledMounts {
+		if m.Name == mount.NamePrimary {
+			hasPrimary = true
+			break
+		}
+	}
+	if !hasPrimary && s.webdavDir != "" {
+		// 兜底：用 s.webdavDir 作为 primary（cfg.Webdav.Dir 兼容路径）
+		// 此时 webdavFS 的 dir = s.webdavDir，mount.Mount 字段是 nil（仅供 /webdav/ 入口用）
+		webdavEnabledMounts = append(webdavEnabledMounts, &mount.Mount{
+			Name:      mount.NamePrimary,
+			MountPath: "/",
+			RootPath:  s.webdavDir,
+			Enabled:   true,
+		})
+	}
+
+	// 3. 为每个 mount 创建 webdavFS 实例 + 注册 handler
+	for _, m := range webdavEnabledMounts {
+		// 创建该 mount 的 webdavFS
+		webdavFSRaw, indexProvider, fsErr := webdav.NewENCVFSForRoot(
+			config.NewContext(context.Background(), s.cfg),
+			m.RootPath,
+			s.readerService,
+			s.chunkNamers,
+		)
 		if fsErr != nil {
-			slog.Warn("WebDAV initialization failed, skipping WebDAV", "error", fsErr)
+			errMsg := fmt.Sprintf("WebDAV init failed for mount %s (root=%s): %v", m.Name, m.RootPath, fsErr)
+			slog.Warn(errMsg)
+			s.mountBootstrapErrors = append(s.mountBootstrapErrors, errMsg)
+			continue
+		}
+
+		// type assert：encvWebDAVFS 同时实现 goWebdav.FileSystem 和 webdav.IndexProvider
+		fsConcrete, ok := webdavFSRaw.(goWebdav.FileSystem)
+		if !ok {
+			errMsg := fmt.Sprintf("WebDAV FS for mount %s does not implement goWebdav.FileSystem", m.Name)
+			slog.Error(errMsg)
+			s.mountBootstrapErrors = append(s.mountBootstrapErrors, errMsg)
+			continue
+		}
+
+		webdavHandler := &goWebdav.Handler{
+			FileSystem: fsConcrete,
+			LockSystem: goWebdav.NewMemLS(),
+		}
+		authMiddleware := middleware.BasicAuthDynamic(s)
+		loggingMiddleware := s.webdavLoggingMiddleware()
+		protectedWebdavHandler := authMiddleware(loggingMiddleware(webdavHandler))
+
+		webdavMethods := []string{
+			"GET", "POST", "PUT", "PATCH", "HEAD", "OPTIONS", "DELETE", "CONNECT", "TRACE",
+			"PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK",
+		}
+
+		// URL 前缀：/d/<mount_path>/* (mount_path 形如 "automation", "primary", "sandbox")
+		// 例：mount_path = "/d/automation" → URL = "/d/automation/*path"
+		// 例：mount_path = "/"           → URL = "/*path" (primary 兜底)
+		var urlPrefix string
+		if m.MountPath == "/" || m.MountPath == "" {
+			urlPrefix = s.webdavPath // 用 cfg.Webdav.Root 兜底
 		} else {
-			s.webdavFS = indexProvider
-			webdavHandler := &goWebdav.Handler{
-				FileSystem: webdavFS,
-				LockSystem: goWebdav.NewMemLS(),
+			// m.MountPath 形如 "/d/automation"，规范化：以 "/" 开头 + 以 "/" 结尾
+			mp := strings.TrimSuffix(m.MountPath, "/")
+			if !strings.HasPrefix(mp, "/") {
+				mp = "/" + mp
 			}
-			authMiddleware := middleware.BasicAuthDynamic(s)
-			loggingMiddleware := s.webdavLoggingMiddleware()
-			protectedWebdavHandler := authMiddleware(loggingMiddleware(webdavHandler))
+			urlPrefix = mp + "/"
+		}
 
-			webdavMethods := []string{
-				"GET", "POST", "PUT", "PATCH", "HEAD", "OPTIONS", "DELETE", "CONNECT", "TRACE",
-				"PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK",
-			}
+		// 注册到 /d/<mount_path>/*path
+		for _, method := range webdavMethods {
+			r.Handle(method, urlPrefix+"*path", gin.WrapH(protectedWebdavHandler))
+		}
+		// 精确匹配根 URL（无 path 部分），重定向到根路径
+		rootURL := strings.TrimSuffix(urlPrefix, "/")
+		if rootURL != "" {
 			for _, method := range webdavMethods {
-				r.Handle(method, s.webdavPath+"*path", gin.WrapH(protectedWebdavHandler))
+				r.Handle(method, rootURL, func(c *gin.Context) {
+					c.Request.URL.Path = urlPrefix
+					protectedWebdavHandler.ServeHTTP(c.Writer, c.Request)
+				})
 			}
+		}
 
-			webdavRoot := strings.TrimSuffix(s.webdavPath, "/")
-			if webdavRoot != "" {
+		// 🆕 2026-06-17：primary mount 额外注册 cfg.Webdav.Root 作为向后兼容入口
+		//
+		// 为什么不合并：mount registry 的 primary.MountPath = "/d/primary"（多 mount 时代的虚拟路径），
+		// 但 cfg.Webdav.Root = "/webdav/"（向后兼容旧客户端 + Windows Explorer 单 webdav）。
+		// 两个 URL 入口都指向同一 webdavFS 实例（独立 dir 校验）。
+		//
+		// 注册方式：相同 handler 在第二路径前缀下注册（不创建第二个 webdavFS 实例，
+		// 因为 mount registry 里的 primary mount 已经创建了一个）。
+		//
+		// 为什么不省略：删 /webdav/ 入口会破坏所有老客户端的"单 webdav 入口"配置 + 现有测试。
+		if m.Name == mount.NamePrimary && s.webdavPath != "" && s.webdavPath != urlPrefix {
+			legacyPrefix := s.webdavPath
+			for _, method := range webdavMethods {
+				r.Handle(method, legacyPrefix+"*path", gin.WrapH(protectedWebdavHandler))
+			}
+			legacyRoot := strings.TrimSuffix(legacyPrefix, "/")
+			if legacyRoot != "" {
 				for _, method := range webdavMethods {
-					r.Handle(method, webdavRoot, func(c *gin.Context) {
-						c.Request.URL.Path = s.webdavPath
+					r.Handle(method, legacyRoot, func(c *gin.Context) {
+						c.Request.URL.Path = legacyPrefix
 						protectedWebdavHandler.ServeHTTP(c.Writer, c.Request)
 					})
 				}
 			}
+			slog.Info("WebDAV legacy /webdav/ alias also registered (backward compat for old clients + Windows Explorer single-webdav)")
 		}
+
+		entry := &webdavFSEntry{
+			fs:         indexProvider,
+			fileSystem: fsConcrete,
+			mount:      m,
+			webdavPath: urlPrefix,
+		}
+		s.webdavFSByMount[m.Name] = entry
+
+		// 兼容：primary 的 webdavFS 同时存到 s.webdavFS（旧调用方用）
+		if m.Name == mount.NamePrimary && s.webdavFS == nil {
+			s.webdavFS = indexProvider
+		}
+
+		slog.Info("WebDAV handler registered",
+			"mount", m.Name,
+			"mount_path", m.MountPath,
+			"root_path", m.RootPath,
+			"url_prefix", urlPrefix,
+		)
 	}
 
 	r.NoRoute(gin.WrapF(s.handleRequest))

@@ -51,6 +51,8 @@ type encvWebDAVFS struct {
 	excludeDirs map[string]bool
 	// 【新增】定义已知的容器文件扩展名
 	containerExtensions map[string]bool
+	// 🆕 2026-06-17：注册的容器扩展名列表（manifest API 暴露给前端）
+	registeredContainerExts []string
 	// 【新增】文件系统监视器
 	watcher *fsnotify.Watcher
 	// 【新增】存储所有已知的碎片命名规则，用于过滤
@@ -107,9 +109,27 @@ type decryptedDir struct {
 
 // NewENCVFS 创建一个新的 encvWebDAVFS 实例
 // 【修改】构造函数现在需要接收 ReaderService 和 Config
+//
+// rootDir 指定 WebDAV 服务的物理根目录：
+//   - "" 空字符串时兜底用 cfg.Webdav.Dir（向后兼容旧调用方）
+//   - 非空时用显式 rootDir（多挂载点场景）
+//
+// 🆕 2026-06-17：多挂载点 webdav 适配（multi-mount-storage-refactor spec 续）
+//   - server.go 现在为每个 mount 调一次 NewENCVFSForRoot(ctx, m.RootPath, ...)
+//   - 每个 mount 独立 indexCache / fsnotify watcher / runIndexer goroutine
+//   - URL 路径由 server.go 路由（/webdav/、/d/automation/、/d/primary/、/d/sandbox/）
 func NewENCVFS(ctx context.Context, readerService *service.ReaderService, chunkNamers []namer.ChunkNamer) (goWebdav.FileSystem, IndexProvider, error) {
+	return NewENCVFSForRoot(ctx, "", readerService, chunkNamers)
+}
+
+// NewENCVFSForRoot 创建绑定到显式 rootDir 的 webdavFS。
+// 🆕 2026-06-17：多挂载点适配用。rootDir 非空时优先使用。
+func NewENCVFSForRoot(ctx context.Context, rootDir string, readerService *service.ReaderService, chunkNamers []namer.ChunkNamer) (goWebdav.FileSystem, IndexProvider, error) {
 	cfg := config.FromContext(ctx)
-	dir := cfg.Webdav.Dir
+	if rootDir == "" {
+		rootDir = cfg.Webdav.Dir
+	}
+	dir := rootDir
 	var err error
 	if dir == "/" {
 		dir, err = os.Getwd()
@@ -157,6 +177,8 @@ func NewENCVFS(ctx context.Context, readerService *service.ReaderService, chunkN
 		},
 		indexReady:          make(chan struct{}),
 		containerExtensions: containerExtensionsMap,
+		// 🆕 2026-06-17：保留原始顺序供 manifest 暴露
+		registeredContainerExts: registeredExtsSlice,
 		ChunkNamers:         chunkNamers,
 		excludeDirs: map[string]bool{
 			"node_modules": true,
@@ -496,6 +518,10 @@ type IndexProvider interface {
 	SearchInIndex(keyword, queryPath string, maxResults int) []SearchEntry
 	Dir() string
 	IsContainerExtension(filename string) bool
+	// 🆕 2026-06-17：多挂载点 webdav 适配（multi-mount-storage-refactor spec 续）
+	// 返回 mount 的 manifest snapshot（virtual tree + container map + index stats）
+	// 用于 GET /api/webdav/manifest API
+	GetManifest() ManifestSnapshot
 }
 
 type IndexStatsResult struct {
@@ -503,6 +529,41 @@ type IndexStatsResult struct {
 	TotalDirs  int    `json:"totalDirs"`
 	Containers int    `json:"containers"`
 	Source     string `json:"source"`
+}
+
+// 🆕 2026-06-17：ManifestSnapshot 是 GetManifest 的返回值。
+// 用于 GET /api/webdav/manifest API：前端用 virtual tree 生成 manifest-driven 测试用例。
+//
+// 字段语义：
+//   - IndexReady: indexCache 是否已构建完成（false 时 Frontend 等待后端 rebuild）
+//   - IndexStats: 文件 / 目录 / 容器计数
+//   - VirtualTree: 扁平化虚拟文件树（virtual_path / name / is_dir / size / container 物理路径）
+//   - ContainerMap: 虚拟路径 → 物理容器路径的映射（攻防测试用：验证容器可见性）
+//   - RegisteredContainerExts: webdavFS 注册的容器扩展名（攻防测试用：构造容器物理路径）
+type ManifestSnapshot struct {
+	IndexReady             bool                          `json:"index_ready"`
+	IndexStats             IndexStatsResult              `json:"index_stats"`
+	VirtualTree            []ManifestVirtualEntry        `json:"virtual_tree"`
+	ContainerMap           []ManifestContainerMapping    `json:"container_map"`
+	RegisteredContainerExts []string                      `json:"registered_container_exts"`
+}
+
+// ManifestVirtualEntry 描述 manifest 中的一个虚拟文件 / 目录节点。
+type ManifestVirtualEntry struct {
+	VirtualPath string `json:"virtual_path"` // 相对 mount root 的路径（不含前导 /）
+	Name        string `json:"name"`
+	IsDir       bool   `json:"is_dir"`
+	Size        int64  `json:"size"`
+	ModTime     int64  `json:"mod_time"` // unix epoch seconds
+	Container   string `json:"container,omitempty"` // 物理容器路径（仅虚拟文件有）
+}
+
+// ManifestContainerMapping 描述虚拟文件 → 物理容器的映射。
+// 攻防测试用：构造 PROPFIND <container_path> 验证容器可见性是否被 webdavFS 过滤。
+type ManifestContainerMapping struct {
+	VirtualPath   string `json:"virtual_path"`
+	ContainerPath string `json:"container_path"`
+	MountName     string `json:"mount_name"` // 🆕 用于多 mount 场景标识
 }
 
 func (fs *encvWebDAVFS) GetIndexStats() IndexStatsResult {
@@ -566,6 +627,66 @@ func (fs *encvWebDAVFS) Dir() string {
 func (fs *encvWebDAVFS) IsContainerExtension(filename string) bool {
 	ext := strings.ToLower(filepath.Ext(filename))
 	return fs.containerExtensions[ext]
+}
+
+// GetManifest 返回当前 webdavFS 实例的 manifest snapshot。
+// 🆕 2026-06-17：用于 GET /api/webdav/manifest API。
+//
+// 实现：
+//   1. 调 getIndexes() 拿 pathIndexes 快照（深拷贝，线程安全）
+//   2. 遍历 fileInfoMap 构造 VirtualTree
+//   3. 遍历 reversePathMap 构造 ContainerMap（虚拟路径 → 物理路径）
+//   4. 检查 indexReady channel 状态
+//
+// 性能：fileInfoMap 1000 项 ~1ms；10000 项 ~10ms。可接受。
+func (fs *encvWebDAVFS) GetManifest() ManifestSnapshot {
+	snap := ManifestSnapshot{
+		RegisteredContainerExts: append([]string(nil), fs.registeredContainerExts...),
+	}
+
+	// indexReady 检查（非阻塞）
+	select {
+	case <-fs.indexReady:
+		snap.IndexReady = true
+	default:
+		snap.IndexReady = false
+	}
+
+	idx := fs.getIndexes()
+	snap.IndexStats = IndexStatsResult{
+		TotalFiles: len(idx.pathMap),
+		TotalDirs:  len(idx.dirMap),
+		Containers: len(idx.reversePathMap),
+		Source:     "webdav",
+	}
+
+	// 构造 VirtualTree
+	snap.VirtualTree = make([]ManifestVirtualEntry, 0, len(idx.fileInfoMap))
+	for vPath, info := range idx.fileInfoMap {
+		entry := ManifestVirtualEntry{
+			VirtualPath: vPath,
+			Name:        info.Name(),
+			IsDir:       info.IsDir(),
+			Size:        info.Size(),
+			ModTime:     info.ModTime().Unix(),
+		}
+		// 关联物理容器路径
+		if containerPath, isVirtual := idx.pathMap[vPath]; isVirtual {
+			entry.Container = containerPath
+		}
+		snap.VirtualTree = append(snap.VirtualTree, entry)
+	}
+
+	// 构造 ContainerMap
+	snap.ContainerMap = make([]ManifestContainerMapping, 0, len(idx.reversePathMap))
+	for containerPath, vPath := range idx.reversePathMap {
+		snap.ContainerMap = append(snap.ContainerMap, ManifestContainerMapping{
+			VirtualPath:   vPath,
+			ContainerPath: containerPath,
+		})
+	}
+
+	return snap
 }
 
 func (fs *encvWebDAVFS) WaitForIndexReady(ctx context.Context) {

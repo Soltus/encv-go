@@ -49,6 +49,9 @@ func (fs *encvWebDAVFS) physicalPathToIndexKey(physicalPath, virtualFilename str
 }
 
 // resolvePath 将 WebDAV 路径安全地解析为本地文件系统绝对路径
+//
+// 🆕 2026-06-17：多挂载点安全强化（multi-mount-storage-refactor spec 续）
+//   - 在 SafeResolveToAbsPath 之前先做 path.Clean 显式检查 ..
 func (fs *encvWebDAVFS) resolvePath(name string) (string, error) {
 	if !strings.HasPrefix(name, fs.webdavPrefix) {
 		trimmed := strings.TrimSuffix(fs.webdavPrefix, "/")
@@ -61,6 +64,24 @@ func (fs *encvWebDAVFS) resolvePath(name string) (string, error) {
 	userPath := strings.TrimPrefix(name, fs.webdavPrefix)
 	if userPath == "" {
 		userPath = "."
+	}
+
+	// 🆕 2026-06-17：显式拦截路径穿越（防止 userPath 是绝对路径 / 含 .. 段）
+	//
+	// 为什么需要这步：SafeResolveToAbsPath 用 filepath.Rel 校验 .. 段，
+	// 但 filepath.Clean 会把开头的 .. 段裁剪（POSIX 语义：".." 在根目录之上无效），
+	// 导致 absPath 越过 baseDir 上层目录。
+	//
+	// 攻击向量：userPath = "/../../etc/passwd" → Clean → "/etc/passwd" → absPath = baseDir + "/etc/passwd"
+	// filepath.Rel(baseDir, baseDir/etc/passwd) = "etc/passwd" → 不以 .. 开头 → 通过校验
+	// 实际 attacker 拿到了 baseDir/etc/passwd 的访问权限（虽然不能逃出 baseDir，但可读 baseDir 任意子目录）
+	//
+	// 修复：直接按 path segment 检查 ..（不依赖 Clean 行为）。
+	// 任何段 == ".." 立即拒绝。
+	for _, seg := range strings.Split(filepath.ToSlash(userPath), "/") {
+		if seg == ".." {
+			return "", fmt.Errorf("path traversal detected: '%s' contains '..' segments", name)
+		}
 	}
 
 	return utils.SafeResolveToAbsPath(fs.dir, userPath)
