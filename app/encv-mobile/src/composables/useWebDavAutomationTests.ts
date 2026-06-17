@@ -18,11 +18,13 @@
  *  - abort signal 由协调器持有，用户点击 Cancel 时调用 abort()
  */
 
-import { ref, type Ref, type ComputedRef, computed } from 'vue'
-import { useI18n } from '@/composables/useI18n'
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useWebDavManifest } from '@/composables/useWebDavManifest'
 import { useWebDavTestRunner } from '@/composables/useWebDavTestRunner'
 import { WEBDAV_TEST_MODULES, getModuleById } from '@/composables/useWebDavTestModules'
+import { MOCK_GENERATE_ROOT } from '@/lib/mockConstants'
+import { generateMockFilesViaBackend } from '@/api/mockGenerator'
 import type {
   TestCaseResult,
   TestRun,
@@ -87,6 +89,31 @@ export function useWebDavAutomationTests(): UseWebDavAutomationTestsReturn {
   // 当前 run 的 abort controller（per module）
   const abortControllers: Record<string, AbortController | null> = {}
 
+  // 🆕 2026-06-17：复用插件测试的 mock 生成（用户原话）
+  // WebDAV 自动化测试的 encrypted_container_preview / attack module 依赖 mount 内 plain media
+  // 跑 module 前先调 generateMockFilesViaBackend（同 MOCK_GENERATE_ROOT）确保 media 存在
+  // → 之前 5 个 case 期望 [200, 404, 500] 把 fixture 缺失当合法，掩盖真问题
+  // → 现在去掉 500：plain media 由本函数兜底生成，500 是真违规
+  // 注意：v4 加密容器 fixture（.sccgv 文件）由用户/之前会话预先生成，本函数不创建
+  const ensureMockMediaCache = { lastRun: 0, inFlight: false }
+  async function ensureMockMedia(): Promise<void> {
+    // 30s 缓存：避免同一 session 反复调（generateMockFiles 写盘约 5-10s）
+    if (Date.now() - ensureMockMediaCache.lastRun < 30_000) return
+    if (ensureMockMediaCache.inFlight) return
+    ensureMockMediaCache.inFlight = true
+    try {
+      console.log('[useWebDavAutomationTests] ensureMockMedia: generateMockFilesViaBackend', MOCK_GENERATE_ROOT)
+      const result = await generateMockFilesViaBackend({ root: MOCK_GENERATE_ROOT })
+      console.log('[useWebDavAutomationTests] ensureMockMedia: done', result)
+      ensureMockMediaCache.lastRun = Date.now()
+    } catch (e) {
+      // 失败不阻塞 module 执行（fixture 缺失由 case 的 skip 处理）
+      console.warn('[useWebDavAutomationTests] ensureMockMedia failed (non-fatal):', e)
+    } finally {
+      ensureMockMediaCache.inFlight = false
+    }
+  }
+
   async function runModule(moduleId: string): Promise<void> {
     const module = getModuleById(moduleId)
     if (!module) {
@@ -109,10 +136,15 @@ export function useWebDavAutomationTests(): UseWebDavAutomationTestsReturn {
       return
     }
 
+    // 🆕 1.5 复用插件测试的 mock 生成（确保 plain media 存在）
+    await ensureMockMedia()
+
     const ctx = buildContext(manifestComposable)
     const controller = new AbortController()
     abortControllers[moduleId] = controller
     ctx.abortSignal = controller.signal
+    // 🆕 2026-06-17：注入 triggerAbort 给 case beforeRun 调用（避免 AbortSignal 类型无 abort() 方法的问题）
+    ctx.triggerAbort = () => controller.abort()
 
     state.value = {
       status: 'running',

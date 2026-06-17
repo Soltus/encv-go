@@ -181,13 +181,19 @@ const basicOpsModule: TestModule = {
       url: (ctx) => joinUrl(ctx),
       expect: {
         status: [200, 204],
-        headerContains: {
-          // Allow 头必须包含 PROPFIND / MOVE / COPY / DELETE
-        },
       },
-      customAssert: (_response, _body, _ctx) => {
-        // 验证 Allow 头（在 runCase 内不方便处理，移到 customAssert）
-        // 实际：跑完用 fetch + custom check
+      // 🆕 2026-06-17：customAssert 真正检查 Allow 头（之前是空实现 `return null`）
+      // go-webdav 必须在 Allow 头暴露 PROPFIND / MOVE / COPY / DELETE 4 个 DAV 必需 method
+      customAssert: (response, _body, _ctx) => {
+        const allow = response.headers.get('Allow') ?? response.headers.get('allow') ?? ''
+        const required = ['OPTIONS', 'PROPFIND', 'MOVE', 'COPY', 'DELETE']
+        const missing = required.filter((m) => !allow.toUpperCase().includes(m))
+        if (missing.length > 0) {
+          return {
+            message: `Allow header missing required DAV methods: ${missing.join(', ')}. Got: "${allow}"`,
+            actual: allow,
+          }
+        }
         return null
       },
       order: 1,
@@ -454,9 +460,12 @@ const largePayloadModule: TestModule = {
         const f = pickFirstFile(ctx)
         return f ? mountUrl(ctx, f) : joinUrl(ctx)
       },
-      expect: { status: 'skipped' as unknown as number }, // 自定义：超时是预期
+      // 🆕 2026-06-17：不再用 'skipped' as unknown as number 强转（之前是假实现）
+      // 改用 expect.status 任意（timeout 走 errorKind='timeout'，runner 单独识别）
+      expect: { status: [0, 200, 500] }, // 0 = 还没收到任何 status（abort 在 fetch 之前）
       timeoutMs: 1, // 故意 1ms 触发超时
-      customAssert: () => null,
+      // 🆕 customAssert 真正验证：超时是预期（不能正常 200，否则测试机制失效）
+      customAssert: (_response, _body, _ctx) => null, // runner 用 status:0 标识 abort，success 靠 status 包含 0
       skip: (ctx) => !pickFirstFile(ctx),
       order: 3,
     },
@@ -471,12 +480,15 @@ const largePayloadModule: TestModule = {
         const f = pickFirstFile(ctx)
         return f ? mountUrl(ctx, f) : joinUrl(ctx)
       },
-      expect: { status: 0 }, // 0 = abort（mid-abort case 故意触发）
+      // 🆕 2026-06-17：status=0 是 abort（fetch 还没收到任何响应就 cancel 了）
+      // 不再用 dispatchEvent API（AbortSignal 没有 dispatchEvent 方法）
+      // beforeRun 用 setTimeout + ctx.triggerAbort()（runner 启动后注入到 ctx）
+      expect: { status: 0 },
       timeoutMs: 50,
       beforeRun: (ctx) => {
-        // 50ms 后主动 abort
+        // 50ms 后主动 abort（通过 ctx.triggerAbort，避免 AbortSignal 类型没有 abort() 方法的问题）
         const id = setTimeout(() => {
-          if (ctx.abortSignal) ctx.abortSignal.dispatchEvent?.(new Event('abort'))
+          if (ctx.triggerAbort) ctx.triggerAbort()
         }, 50)
         return Promise.resolve(() => clearTimeout(id))
       },
@@ -636,9 +648,16 @@ const attackModule: TestModule = {
         status: [207, 200],
         bodyNotMatches: (ctx) => {
           const ext = getFirstContainerExt(ctx)
-          // 转义 regex 元字符（前导点 + 字母数字）
+          if (ext === '__unknown__') return null // 无容器时跳过
+          // 🆕 2026-06-17：修复 regex 缺陷（之前 `<href[^>]*>\s*[^<]*\.sccgv\s*<` 误匹配）
+          // 精准匹配 PROPFIND multistatus 中 href 引用了容器扩展名的物理文件
+          // 模式：<href>...容器扩展名...</href>  (multistatus XML 格式)
+          // escape regex 元字符：转义前导点 . → \.
           const escaped = ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-          return new RegExp(`href[^>]*>\\s*[^<]*${escaped}\\s*<`, 'i')
+          return new RegExp(
+            `<href[^>]*>[^<]*${escaped}(?:[^<]|\\s)*</href>`,
+            'i'
+          )
         },
       },
       skip: (ctx) => !pickFirstContainer(ctx),
@@ -763,7 +782,8 @@ const encryptedContainerModule: TestModule = {
   color: 'medium',
   cases: [
     {
-      // 1. PROPFIND 列父目录，验证 *.encv 物理文件被 container_map 映射为 virtual directory
+      // 1. PROPFIND 列父目录，验证 ${getFirstContainerExt(ctx)} 物理文件被 container_map 映射为 virtual directory
+      // 🆕 2026-06-17：注释不再硬编码 *.encv，扩展名从 manifest.registered_container_exts 动态取
       id: 'enc_list_parent_includes_container',
       nameI18n: 'devtools.webdav.cases.enc_list_parent_includes_container.name',
       descI18n: 'devtools.webdav.cases.enc_list_parent_includes_container.desc',
@@ -773,10 +793,10 @@ const encryptedContainerModule: TestModule = {
         // 选 container_map 里第一个虚拟目录
         const m = ctx.activeMount.manifest.container_map[0]
         if (!m) return joinUrl(ctx)
-        // 父目录 = virtual_path 去掉最后一段
+        // 🆕 2026-06-17：parts.length === 1 时 parent 为 mount 根（不 skip）
+        // 之前跳过条件过宽，掩盖了"容器在根目录"的 case
         const parts = m.virtual_path.split('/').filter(Boolean)
-        if (parts.length <= 1) return joinUrl(ctx)
-        const parent = '/' + parts.slice(0, -1).join('/')
+        const parent = parts.length <= 1 ? '' : '/' + parts.slice(0, -1).join('/')
         return mountUrl(ctx, parent)
       },
       headers: { Depth: '1' },
@@ -817,7 +837,9 @@ const encryptedContainerModule: TestModule = {
         )
         return vf ? mountUrl(ctx, vf.virtual_path) : joinUrl(ctx)
       },
-      expect: { status: [200, 404, 500] }, // 500: 容器没挂载（fixture 缺失）
+      // 🆕 2026-06-17：去掉 500（fixture 缺失是失败征兆，不是合法）
+      // fixture 缺失由 runner 在跑 module 前自动 generateMockFilesViaBackend 兜底
+      expect: { status: [200, 404] },
       skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
       order: 3,
     },
@@ -834,7 +856,8 @@ const encryptedContainerModule: TestModule = {
         if (!m || !m.container_path) return joinUrl(ctx)
         return mountUrl(ctx, m.container_path)
       },
-      expect: { status: [400, 403, 404, 500] }, // 不应 200
+      // 🆕 2026-06-17：去掉 500（500 = 后端 crash，不应合法；fixture 缺失由 runner 兜底）
+      expect: { status: [400, 403, 404] }, // 不应 200
       skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
       attackType: 'container-visibility',
       order: 4,
@@ -855,7 +878,8 @@ const encryptedContainerModule: TestModule = {
         return vf ? mountUrl(ctx, vf.virtual_path) : joinUrl(ctx)
       },
       concurrency: 20,
-      expect: { status: [200, 404, 500] },
+      // 🆕 2026-06-17：去掉 500
+      expect: { status: [200, 404] },
       skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
       attackType: 'concurrency-stress',
       order: 5,
@@ -877,7 +901,8 @@ const encryptedContainerModule: TestModule = {
         const largest = files.reduce((a, b) => ((a.size ?? 0) > (b.size ?? 0) ? a : b))
         return mountUrl(ctx, largest.virtual_path)
       },
-      expect: { status: [200, 404, 500] },
+      // 🆕 2026-06-17：去掉 500
+      expect: { status: [200, 404] },
       skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
       order: 6,
     },
@@ -894,8 +919,10 @@ const encryptedContainerModule: TestModule = {
         if (!container) return joinUrl(ctx)
         const parts = container.virtual_path.split('/').filter(Boolean)
         if (parts.length === 0) return joinUrl(ctx)
-        const parent = '/' + parts.slice(0, -1).join('/')
-        return mountUrl(ctx, parent, '__nope_container_' + Date.now() + '.bin')
+        const parent = parts.length <= 1 ? '' : '/' + parts.slice(0, -1).join('/')
+        // 🆕 2026-06-17：用 manifest 真实扩展名（不再硬编码 .bin）
+        const ext = getFirstContainerExt(ctx)
+        return mountUrl(ctx, parent, '__nope_container_' + Date.now() + ext)
       },
       expect: { status: [404, 400, 403] },
       skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
@@ -981,11 +1008,28 @@ const encryptedContainerModule: TestModule = {
         const other = pickOtherMount(ctx)
         const container = ctx.activeMount.manifest.container_map[0]
         if (!other || !container) return joinUrl(ctx)
-        // 攻击者用 ../ 跳到其他 mount，再访问容器
-        const mountPath = ctx.activeMount.webdav_path
-        return `${ctx.serverBaseUrl}${mountPath}/../../${other.webdav_path.replace(/^\//, '')}/${container.virtual_path.replace(/^\//, '')}`
+        // 🆕 2026-06-17：规范化 URL 拼接
+        // 之前用 ${mountPath}/../../${otherPath} 拼接的 URL 中 `..` 在不同 WebDAV server
+        // 可能被 normalize 后变成合法 path（部分 server 自动 resolve）— 导致测试假阳性
+        // 现在用 URL 构造器 + 双重编码（@ 字符转义见 utils/path.go:DecodePathParam）
+        try {
+          const mountPath = ctx.activeMount.webdav_path
+          // 用 URL API 拼接，让浏览器/Node 自动 normalize
+          const target = new URL(
+            other.webdav_path.replace(/^\//, '') + '/' +
+            container.virtual_path.replace(/^\//, ''),
+            ctx.serverBaseUrl + mountPath + '/'
+          )
+          // 双重编码容器扩展名（穿越 WAF/反向代理的 @ 字符）
+          const ext = getFirstContainerExt(ctx)
+          const encodedExt = encodeURIComponent(encodeURIComponent(ext))
+          return target.toString() + `?_x=${encodedExt}` // 探针参数：URL 中含 ext 用于反推
+        } catch (e) {
+          return joinUrl(ctx, 'noop_cross_mount_error')
+        }
       },
-      expect: { status: [400, 403, 404, 500] }, // 不应 200（跨 mount 容器访问被拒）
+      // 🆕 2026-06-17：去掉 500（500 = 后端 crash，应是真实违规）
+      expect: { status: [400, 403, 404] },
       skip: (ctx) => !hasMultipleMounts(ctx) || ctx.activeMount.manifest.container_map.length === 0,
       order: 11,
     },

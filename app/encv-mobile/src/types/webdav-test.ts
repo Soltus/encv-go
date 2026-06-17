@@ -74,6 +74,8 @@ export interface WebDavTestContext {
   shared: Record<string, unknown>
   /** runtime 注入的 abort signal（用户取消时中断） */
   abortSignal?: AbortSignal
+  /** 🆕 2026-06-17：触发当前 run 的 abort（beforeRun 用，避免 AbortSignal 类型无 abort() 方法的问题） */
+  triggerAbort?: () => void
 }
 
 // ============ Test 模块与 case ============
