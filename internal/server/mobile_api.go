@@ -1367,10 +1367,25 @@ func (s *Server) handlePluginsGin(c *gin.Context) {
 	var metas []PluginMeta
 	for _, p := range plugins.Plugins {
 		opts := p.GetTaskOptions()
+
+		// 🆕 2026-06-17：nil 兜底为 []string{}
+		// alist_encrypt 故意 SupportedExtensions() 返回 nil（"处理所有文件"语义）
+		// 但 JSON 序列化为 null 后，前端模板 `p.supportedExtensions.length` 抛
+		// `Cannot read properties of null (reading 'length')` 崩溃
+		// → 在 API 输出层强制兜底为非 nil 空数组，前端安全访问
+		supportedExts := p.SupportedExtensions()
+		if supportedExts == nil {
+			supportedExts = []string{}
+		}
+		supportedMimes := p.SupportedMimePrefixes()
+		if supportedMimes == nil {
+			supportedMimes = []string{}
+		}
+
 		metas = append(metas, PluginMeta{
 			Name:                  p.Name(),
-			SupportedExtensions:   p.SupportedExtensions(),
-			SupportedMimePrefixes: p.SupportedMimePrefixes(),
+			SupportedExtensions:   supportedExts,
+			SupportedMimePrefixes: supportedMimes,
 			ContainerExtension:    p.GetContainerExtension(),
 			TaskOptions:           taskOptionsToGinH(opts),
 		})
