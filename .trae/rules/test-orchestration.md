@@ -3,6 +3,8 @@
 > **核心原则：Go 测试必须模块化（单包 + -short）跑，禁止全包 `./...` 直跑沙箱。**
 > **沙箱跑 `go test ./...` 动辄 380s+，耗尽网络配额触发断网。**
 > **test-go.sh / test-all-go.sh 是唯一合法入口；违反者直接抛错 exit 64。**
+> **🆕 2026-06-17：前端 vitest 同样禁止在沙箱跑（沙箱跑 vitest 同样会耗尽网络配额/触发断网）。**
+> **前端 type check 走 `pnpm exec npx vue-tsc --noEmit`（沙箱合法入口）。**
 
 > **完整内容 + 守卫实现 + 拓扑分批 + 历史踩坑**：[详情文档](../rule-library/test-orchestration.md)
 
@@ -76,6 +78,77 @@ ENCV_TEST_FULL=1 bash scripts/test-go.sh ./internal/server
 
 ---
 
+## 🆕 二点五、前端 vitest 不在沙箱跑（强制规则 · 2026-06-17）
+
+### 二点五.1 铁律
+
+> **沙箱内禁止跑 `pnpm exec vitest` / `pnpm exec npx vitest` / `npm test` / `yarn test` 等任何前端测试运行器。**
+> **沙箱内前端 type check 唯一合法入口：`pnpm exec npx vue-tsc --noEmit`（或 `npx vue-tsc --noEmit`）。**
+
+### 二点五.2 为什么 vitest 禁沙箱
+
+| 风险 | 触发 |
+|------|------|
+| **网络配额耗尽** | vitest happy-dom / jsdom + 大型 test 套件需拉大量 npm 依赖；沙箱 `~600s/任务` 配额快速耗尽 |
+| **transform 阻塞** | vitest watch 模式会卡在 `transforming` 几分钟，触发 dev-start-guard / service-guard |
+| **内存爆** | happy-dom 实例 × N test 文件 → Vite Node process 涨到 4-6 GB → OOM kill（exit 137） |
+| **污染 preview-gateway** | vitest 启动自带 dev server，跟 preview-gateway 抢 8100 端口冲突 |
+
+### 二点五.3 正确流程
+
+| 阶段 | 沙箱内 | 沙箱外（用户本机 / CI） |
+|------|--------|---------------------|
+| **写 test** | ✅ 写代码（`*.test.ts`） | ✅ |
+| **type check** | ✅ `pnpm exec npx vue-tsc --noEmit` | ✅ |
+| **单元测试** | ❌ **禁止** | ✅ `pnpm exec vitest` |
+| **E2E（Playwright/Cypress）** | ❌ **禁止** | ✅ 单独 runner |
+
+### 二点五.4 沙箱 type check 正确命令
+
+```bash
+# ✅ 沙箱内合法：纯 type check，不启动 vitest，不拉大依赖
+cd /workspace/app/encv-mobile
+pnpm exec npx vue-tsc --noEmit
+
+# ✅ 沙箱内合法：等价（pnpm exec 包装）
+pnpm exec vue-tsc --noEmit
+
+# ❌ 沙箱内禁止（虽然 type check 模式也不跑 test，但命名暗示 vitest）
+pnpm exec vitest --typecheck
+pnpm exec vitest run
+```
+
+> 核心区分：`vue-tsc` 是 TS 编译器前端（轻量 ~5s），`vitest` 是测试运行器（重量 ~30-60s 起 + watch）。
+
+### 二点五.5 违规示例（绝不允许）
+
+| 违规命令 | 后果 |
+|---------|------|
+| `pnpm exec vitest run` | 触发 transform 阻塞 → 网络断网 / OOM |
+| `pnpm exec vitest --typecheck` | 命名混淆，且实际仍走 vitest runner |
+| `pnpm test` | 等价 vitest run |
+| `pnpm exec npx vitest --run src/views/WebDavAutomationTestsDetail.spec.ts` | 单文件 vitest 仍触发依赖拉取 |
+
+### 二点五.6 未来：vitest 沙箱合法化条件
+
+- [ ] 沙箱网络配额从 ~600s 提升到 ~3600s
+- [ ] vitest 沙箱模式（disable transform 缓存预热）
+- [ ] Playwright headless 在沙箱中稳定运行
+- [ ] 引入 `vitest --shard` + `--reporter=basic` 进一步压缩耗时
+
+**当前（2026-06-17）：以上条件未满足，vitest 严禁在沙箱跑。**
+
+### 二点五.7 与 Go 测试守卫的关系
+
+| 维度 | Go (`go test`) | 前端 (`vitest`) |
+|------|---------------|-----------------|
+| **沙箱禁跑** | ✅ test-go.sh 守卫 exit 64 | ✅ 本规则明确禁止（无 shell 守卫，靠纪律） |
+| **推荐入口** | `scripts/test-go.sh` | `vue-tsc --noEmit`（type only） |
+| **合法子集** | 单包 + `-short` + `-run` | 无合法子集（沙箱直接禁） |
+| **沙箱外** | `ENCV_TEST_FULL=1 bash scripts/test-all-go.sh` | `pnpm exec vitest run` |
+
+---
+
 ## 三、为什么沙箱内禁止全包跑
 
 ### 3.1 沙箱网络配额
@@ -131,7 +204,7 @@ ENCV_TEST_FULL=1 bash scripts/test-go.sh ./internal/server
 |------|------|
 | [development.md §5](file:///workspace/.trae/rules/development.md) | 后端启动规范；test-go.sh 与之同级（都是"统一入口 + 守卫"模式） |
 | [combolite.md](file:///workspace/.trae/rules/combolite.md) | 无关（combolite 集成） |
-| [automation-workflow.md](file:///workspace/.trae/rules/automation-workflow.md) | 弱相关（vitest 模块化测试可参考本规则） |
+| [automation-workflow.md](file:///workspace/.trae/rules/automation-workflow.md) | 弱相关（vitest 模块化测试可参考本规则 §二点五） |
 
 ---
 
@@ -140,5 +213,9 @@ ENCV_TEST_FULL=1 bash scripts/test-go.sh ./internal/server
 - [scripts/test-go.sh](file:///workspace/scripts/test-go.sh) — Go 测试唯一入口 + 守卫
 - [scripts/test-all-go.sh](file:///workspace/scripts/test-all-go.sh) — 模块化编排入口
 - [dev-start-guard.ts](file:///workspace/app/encv-mobile/src/lib/dev-start-guard.ts) — Vite dev 守卫（同源设计）
+- **前端 type check**：`pnpm exec npx vue-tsc --noEmit`（沙箱合法入口，详见 §二点五）
+
+---
 
 > 创建：2026-06-15（test-orchestration-defense）
+> 更新：2026-06-17（新增 §二点五：vitest 不在沙箱跑）
