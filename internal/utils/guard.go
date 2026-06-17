@@ -18,6 +18,12 @@ type ExecutionGuard struct {
 
 // Do 是一个包级别的公开函数，用于执行被守护的操作。
 // 它会使用全局的 executionGuard 实例。
+//
+// ⚠️ 【P1-4 警示】非可重入：fn() 内部禁止再次调 Do(sameKey, ...)，
+//
+//	会导致 sync.Mutex 死锁（当前 Do 不持锁等 fn 完成，但 fn 内
+//	重入会再次尝试拿同一个非可重入 mutex 死锁）。
+//	跨 key 调用安全（其他 key 不互斥）。
 func Do(key string, fn func() error) error {
 	return executionGuard.do(key, fn)
 }

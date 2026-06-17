@@ -78,9 +78,11 @@ func setupSandboxDir(t *testing.T) string {
 	dir := t.TempDir()
 
 	// 1. MP4 files (fake header + sparse data)
-	mkFakeMP4(t, filepath.Join(dir, "Movies", "vacation_2024.mp4"), 150*1024*1024)
-	mkFakeMP4(t, filepath.Join(dir, "Movies", "clip001.mp4"), 50*1024*1024)
-	mkFakeMP4(t, filepath.Join(dir, "Movies", "old_video.mp4"), 200*1024*1024)
+	// 【P2-8 修复】原 150+50+200=400MB 在 overlay2 非 sparse → 物理写入 /tmp 满
+	// 减到 110+20+110=240MB（仍 > 测试阈值 100MB*2）
+	mkFakeMP4(t, filepath.Join(dir, "Movies", "vacation_2024.mp4"), 110*1024*1024)
+	mkFakeMP4(t, filepath.Join(dir, "Movies", "clip001.mp4"), 20*1024*1024)
+	mkFakeMP4(t, filepath.Join(dir, "Movies", "old_video.mp4"), 110*1024*1024)
 
 	// 2. SRT subtitle files
 	writeFile(t, filepath.Join(dir, "subs", "english.srt"),
@@ -248,9 +250,9 @@ func TestE2E_SearchFiles_RealMount(t *testing.T) {
 
 	// AST: AND(name_glob=*.mp4, size_gt=100MB)
 	args := map[string]any{
-		"mount_id": "sandbox",
-		"rel_path": "/",
-		"recursive": true,
+		"mount_id":    "sandbox",
+		"rel_path":    "/",
+		"recursive":   true,
 		"max_results": 50,
 		"expression": map[string]any{
 			"type": "and",
@@ -308,9 +310,9 @@ func TestE2E_SearchFiles_ContentRegex(t *testing.T) {
 	deps := e2eToolDeps(dir)
 
 	args := map[string]any{
-		"mount_id":   "sandbox",
-		"rel_path":   "/",
-		"recursive":  true,
+		"mount_id":    "sandbox",
+		"rel_path":    "/",
+		"recursive":   true,
 		"max_results": 50,
 		"expression": map[string]any{
 			"type": "and",
@@ -643,9 +645,9 @@ func TestE2E_CommandRun_RealFileCommand(t *testing.T) {
 
 	// 用 `file` 命令（白名单）—— 对 fake MP4 也能输出稳定结果
 	args := map[string]any{
-		"mount_id":   "sandbox",
-		"command":    "file",
-		"args":       []string{"Movies/vacation_2024.mp4"},
+		"mount_id":    "sandbox",
+		"command":     "file",
+		"args":        []string{"Movies/vacation_2024.mp4"},
 		"timeout_sec": 5,
 	}
 	argsJSON, _ := json.Marshal(args)
@@ -683,9 +685,9 @@ func TestE2E_CommandRun_RealFfprobe(t *testing.T) {
 	deps := e2eToolDeps(dir)
 
 	args := map[string]any{
-		"mount_id":   "sandbox",
-		"command":    "ffprobe",
-		"args":       []string{"-v", "error", "-show_format", "Movies/vacation_2024.mp4"},
+		"mount_id":    "sandbox",
+		"command":     "ffprobe",
+		"args":        []string{"-v", "error", "-show_format", "Movies/vacation_2024.mp4"},
 		"timeout_sec": 5,
 	}
 	argsJSON, _ := json.Marshal(args)
@@ -740,8 +742,8 @@ func TestE2E_CommandRun_BlacklistDenied(t *testing.T) {
 // ─── T15 综合：完整 mock_resume 端到端 ──────────────────────────
 
 // TestE2E_MockResume_FullLoop 模拟前端 useAgent 端到端调用：
-//   1. 第 1 次 send("search_recursive_mp4") → 后端启动剧本 → 推 stream_start + tool_call + tool_result + stream_end
-//   2. 模拟后端通过 tools.GlobalRegistry 真执行 search_files，验证命中
+//  1. 第 1 次 send("search_recursive_mp4") → 后端启动剧本 → 推 stream_start + tool_call + tool_result + stream_end
+//  2. 模拟后端通过 tools.GlobalRegistry 真执行 search_files，验证命中
 //
 // 这部分测试验证：
 //   - 后端能正确接收到前端传来的 {mode, scenario} 字段（chatRequest struct）
@@ -769,9 +771,9 @@ func TestE2E_MockResume_FullLoop(t *testing.T) {
 		_ = patched
 		// 直接构造 args（避免 JSON 改写复杂度）
 		args := map[string]any{
-			"mount_id": "sandbox",
-			"rel_path": "/",
-			"recursive": true,
+			"mount_id":    "sandbox",
+			"rel_path":    "/",
+			"recursive":   true,
 			"max_results": 50,
 			"expression": map[string]any{
 				"type": "and",

@@ -3,25 +3,34 @@
 // 工具调用循环 + 确认/拒绝/递归调 OpenAI 的实现。
 //
 // 状态机：
+//
 //   - 客户端 → POST /api/chat {messages, sessionId}
 //     → 后端代理到 OpenAI streaming →
-//       ① 累积 content → text_delta
-//       ② 累积 tool_calls（按 id 聚合 index/function.name/args）
-//       ③ 若 finish_reason == "tool_calls"：
-//          - 推 tool_call 事件（每个 tool_call 一个事件）
-//          - 推 stream_end
-//          - 把 messages + pendingToolCalls 缓存到 session 状态
-//       ④ 否则 finish_reason == "stop"：
-//          - 推 stream_end
+//     ① 累积 content → text_delta
+//     ② 累积 tool_calls（按 id 聚合 index/function.name/args）
+//     ③ 若 finish_reason == "tool_calls"：
+//
+//   - 推 tool_call 事件（每个 tool_call 一个事件）
+//
+//   - 推 stream_end
+//
+//   - 把 messages + pendingToolCalls 缓存到 session 状态
+//     ④ 否则 finish_reason == "stop"：
+//
+//   - 推 stream_end
 //
 //   - 客户端 → POST /api/confirm {sessionId, toolCallId, decision}
-//     - decision=accept  → 取出 pending tool_call → executePluginTool → 把 result 追加到 messages → 递归 chat
-//     - decision=decline → 追加 cancelled tool_result 到 messages → 递归 chat
-//     - decision=cancel  → 推 stream_end（不递归）
+//
+//   - decision=accept  → 取出 pending tool_call → executePluginTool → 把 result 追加到 messages → 递归 chat
+//
+//   - decision=decline → 追加 cancelled tool_result 到 messages → 递归 chat
+//
+//   - decision=cancel  → 推 stream_end（不递归）
 //
 //   - 客户端 → POST /api/resume {sessionId, offset}
-//     - 简化版：当前后端无事件缓存（bufio.Scanner 流式）→ 返回 "resume_not_implemented" 错误。
-//       完整断点续传需要重构 chat 为事件驱动（带 ID），后续 phase 处理。
+//
+//   - 简化版：当前后端无事件缓存（bufio.Scanner 流式）→ 返回 "resume_not_implemented" 错误。
+//     完整断点续传需要重构 chat 为事件驱动（带 ID），后续 phase 处理。
 //
 // 会话存储：sync.Map[sessionId]*agentSession + RWMutex
 package server
@@ -71,9 +80,9 @@ type agentSession struct {
 	// EventCache 按事件 ID 升序存储，/api/resume 用它重放 lastEventID 之后的事件。
 	// 写入锁：sess.mu
 	// 读取锁：sess.mu（Resume 时拷贝切片后释放锁）
-	EventCache    []AgentEvent
+	EventCache     []AgentEvent
 	eventIDCounter int64 // 单调递增事件 ID（sess.mu 保护下读写）
-	InProgress    bool  // 当前是否有 chat/confirm 在生成（用于 Resume 状态判定）
+	InProgress     bool  // 当前是否有 chat/confirm 在生成（用于 Resume 状态判定）
 
 	// ─── F 阶段：4 决策 UX（accept_for_session） ───
 	// GrantedTools 记录本 session 内已被用户"本次会话授权"的工具名。
@@ -208,9 +217,9 @@ func executeAndRecurse(ctx context.Context, s *Server, sess *agentSession, agent
 type openaiChatResponse struct {
 	Choices []struct {
 		Message struct {
-			Role      string                 `json:"role"`
-			Content   string                 `json:"content"`
-			ToolCalls []toolCallAccumulator  `json:"tool_calls"`
+			Role      string                `json:"role"`
+			Content   string                `json:"content"`
+			ToolCalls []toolCallAccumulator `json:"tool_calls"`
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
@@ -248,7 +257,7 @@ func callOpenAIChatOnce(ctx context.Context, cfg agentConfig, model string, temp
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -273,7 +282,9 @@ func callOpenAIChatOnce(ctx context.Context, cfg agentConfig, model string, temp
 		"status", resp.StatusCode,
 		"has_tool_calls", len(out.Choices) > 0 && len(out.Choices[0].Message.ToolCalls) > 0,
 		"finish_reason", func() string {
-			if len(out.Choices) > 0 { return out.Choices[0].FinishReason }
+			if len(out.Choices) > 0 {
+				return out.Choices[0].FinishReason
+			}
 			return "(no choices)"
 		}(),
 	)
@@ -321,7 +332,8 @@ func callOpenAIStream(ctx context.Context, cfg agentConfig, model string, temper
 	req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
 	req.Header.Set("Accept", "text/event-stream")
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	// 【P2-9 修复】120s 太长 + 与 ctx 冲突；60s + ctx 双重兜底
+	client := &http.Client{Timeout: 60 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -333,28 +345,44 @@ func callOpenAIStream(ctx context.Context, cfg agentConfig, model string, temper
 		return nil, fmt.Errorf("upstream HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
+	// 【P0-2 修复】producer 必须响应 ctx.Done() + channel 满时 select default 丢弃
 	ch := make(chan openaiStreamEvent, 64)
 	go func() {
 		defer close(ch)
 		defer resp.Body.Close()
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+		// emit: 把事件送到 ch；满/取消时 select default 丢弃（与 ws_hub 语义一致）
+		emit := func(typ string, data interface{}) {
+			select {
+			case ch <- openaiStreamEvent{Type: typ, Data: data}:
+			case <-ctx.Done():
+			default:
+				// 通道满或消费者已退：丢弃
+			}
+		}
 		for scanner.Scan() {
+			// 每行先检查 ctx（避免 scanner.Scan 阻塞时无法响应取消）
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			line := scanner.Text()
 			if !strings.HasPrefix(line, "data: ") {
 				continue
 			}
 			dataStr := strings.TrimPrefix(line, "data: ")
 			if dataStr == "[DONE]" {
-				ch <- openaiStreamEvent{Type: "stream_end"}
+				emit("stream_end", "")
 				return
 			}
 			var chunk struct {
 				Choices []struct {
 					Delta struct {
-						Content           string                `json:"content"`
-						ToolCalls         []toolCallAccumulator `json:"tool_calls"`
-						ReasoningContent  string                `json:"reasoning_content"`
+						Content          string                `json:"content"`
+						ToolCalls        []toolCallAccumulator `json:"tool_calls"`
+						ReasoningContent string                `json:"reasoning_content"`
 					} `json:"delta"`
 					FinishReason string `json:"finish_reason"`
 				} `json:"choices"`
@@ -364,20 +392,24 @@ func callOpenAIStream(ctx context.Context, cfg agentConfig, model string, temper
 			}
 			for _, choice := range chunk.Choices {
 				if choice.Delta.Content != "" {
-					ch <- openaiStreamEvent{Type: "text_delta", Data: choice.Delta.Content}
+					emit("text_delta", choice.Delta.Content)
 				}
 				if choice.Delta.ReasoningContent != "" {
-					ch <- openaiStreamEvent{Type: "reasoning_delta", Data: choice.Delta.ReasoningContent}
+					emit("reasoning_delta", choice.Delta.ReasoningContent)
 				}
 				if len(choice.Delta.ToolCalls) > 0 {
 					for _, tc := range choice.Delta.ToolCalls {
-						ch <- openaiStreamEvent{Type: "tool_call_chunk", Data: tc}
+						emit("tool_call_chunk", tc)
 					}
 				}
 				if choice.FinishReason != "" {
-					ch <- openaiStreamEvent{Type: "finish_reason", Data: choice.FinishReason}
+					emit("finish_reason", choice.FinishReason)
 				}
 			}
+		}
+		// 检查 scanner 错误（网络截断等）
+		if err := scanner.Err(); err != nil && ctx.Err() == nil {
+			slog.Warn("callOpenAIStream: scanner error", "err", err)
 		}
 	}()
 
