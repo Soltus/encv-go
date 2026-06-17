@@ -1,8 +1,9 @@
 /**
  * PhaseBadge 单元测试
  *
- * 覆盖 Task 10 SubTask 10.4：
+ * 覆盖：
  * - 9 个 Phase 值渲染对应 label
+ * - 2 个终态 status 值（failed / cancelled）渲染对应 label
  * - 自定义 label 覆盖默认
  * - class 包含 phase 标识
  * - 包含 PhaseIcon 子组件
@@ -12,6 +13,7 @@ import { mount } from '@vue/test-utils'
 import PhaseBadge from '@/components/shared/PhaseBadge.vue'
 import PhaseIcon from '@/components/shared/PhaseIcon.vue'
 import { Phase, ALL_PHASES } from '@/lib/workflow/types'
+import type { PhaseIconValue } from '@/components/shared/PhaseIcon.vue'
 
 // ion-icon stub：PhaseIcon 内部使用 ion-icon，需 stub 避免 @ionic/vue 全局注册依赖
 const IonIconStub = {
@@ -22,7 +24,7 @@ const IonIconStub = {
   template: '<span class="ion-icon-stub" />',
 }
 
-function mountPhaseBadge(phase: Phase, label?: string) {
+function mountPhaseBadge(phase: PhaseIconValue, label?: string) {
   return mount(PhaseBadge, {
     props: label !== undefined ? { phase, label } : { phase },
     global: {
@@ -31,8 +33,8 @@ function mountPhaseBadge(phase: Phase, label?: string) {
   })
 }
 
-// Phase → 期望的默认中文 label
-const EXPECTED_LABEL_MAP: Record<Phase, string> = {
+// Phase / Status → 期望的默认中文 label
+const EXPECTED_LABEL_MAP: Record<string, string> = {
   [Phase.Created]: '已创建',
   [Phase.Analyzing]: '分析中',
   [Phase.Initializing]: '初始化',
@@ -42,6 +44,8 @@ const EXPECTED_LABEL_MAP: Record<Phase, string> = {
   [Phase.Packing]: '打包中',
   [Phase.Verifying]: '校验中',
   [Phase.Completed]: '已完成',
+  failed: '失败',
+  cancelled: '已取消',
 }
 
 describe('PhaseBadge - 9 个 Phase 值渲染对应默认 label', () => {
@@ -126,5 +130,27 @@ describe('PhaseBadge - 基础渲染', () => {
   it('渲染单个 phase-badge__label 元素', () => {
     const wrapper = mountPhaseBadge(Phase.Created)
     expect(wrapper.findAll('.phase-badge__label')).toHaveLength(1)
+  })
+})
+
+describe('PhaseBadge - 2 个终态 status 值渲染对应 label', () => {
+  it('failed 渲染默认 label "失败"', () => {
+    const wrapper = mountPhaseBadge('failed')
+    expect(wrapper.find('.phase-badge__label').text()).toBe('失败')
+  })
+
+  it('cancelled 渲染默认 label "已取消"', () => {
+    const wrapper = mountPhaseBadge('cancelled')
+    expect(wrapper.find('.phase-badge__label').text()).toBe('已取消')
+  })
+
+  it('failed 根元素包含 phase-badge--failed class', () => {
+    const wrapper = mountPhaseBadge('failed')
+    expect(wrapper.find('.phase-badge').classes()).toContain('phase-badge--failed')
+  })
+
+  it('cancelled 根元素包含 phase-badge--cancelled class', () => {
+    const wrapper = mountPhaseBadge('cancelled')
+    expect(wrapper.find('.phase-badge').classes()).toContain('phase-badge--cancelled')
   })
 })

@@ -320,8 +320,8 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
 /* ==================== 自定义 detail slot 卡片样式 ==================== */
 /* 覆盖 UnifiedTimelineCard 默认 detail slot 的网格布局，使用更紧凑的卡片 */
 .timeline-detail-card {
-  background: var(--ion-color-step-50, #f7f7f7);
-  border-radius: 6px;
+  background: var(--tl-card-border);
+  border-radius: var(--tl-card-radius-sm);
   padding: 6px 8px;
   min-width: 0;
 }
@@ -331,18 +331,18 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
 }
 
 .timeline-detail-card--highlight {
-  background: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.1);
-  border: 1px solid rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.3);
+  background: rgba(var(--tl-state-preprocessing-rgb), 0.1);
+  border: 1px solid rgba(var(--tl-state-preprocessing-rgb), 0.3);
 }
 
 .timeline-detail-card--error {
-  background: rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.08);
+  background: rgba(var(--tl-state-failed-rgb), 0.08);
   grid-column: 1 / -1;
 }
 
 .timeline-detail-label {
   font-size: 10px;
-  color: var(--ion-color-medium, #92949c);
+  color: var(--tl-card-text-tertiary);
   margin-bottom: 2px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -350,27 +350,13 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
 
 .timeline-detail-value {
   font-size: 12px;
-  color: var(--ion-text-color, #000);
+  color: var(--tl-card-text-primary);
   font-weight: 500;
   word-break: break-all;
 }
 
 .timeline-detail-value--mono {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--tl-card-font-mono);
   font-size: 11px;
-}
-
-/* ==================== 暗黑模式适配（body.dark） ==================== */
-:global(body.dark) .timeline-detail-card {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-:global(body.dark) .timeline-detail-card--highlight {
-  background: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.12);
-  border-color: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.4);
-}
-
-:global(body.dark) .timeline-detail-value {
-  color: rgba(255, 255, 255, 0.88);
 }
 </style>

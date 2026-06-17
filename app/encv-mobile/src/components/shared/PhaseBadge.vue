@@ -8,16 +8,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { Phase } from '@/lib/workflow/types'
-import PhaseIcon from './PhaseIcon.vue'
+import PhaseIcon, { type PhaseIconValue } from './PhaseIcon.vue'
 
 const props = defineProps<{
-  phase: Phase
+  phase: PhaseIconValue
   /** 自定义 label，未传则使用 PHASE_LABEL_MAP 默认值 */
   label?: string
 }>()
 
 // Phase → 中文 label 映射（与后端 Phase 枚举值一一对应）
-const PHASE_LABEL_MAP: Record<Phase, string> = {
+const PHASE_LABEL_MAP: Record<string, string> = {
   [Phase.Created]: '已创建',
   [Phase.Analyzing]: '分析中',
   [Phase.Initializing]: '初始化',
@@ -27,6 +27,8 @@ const PHASE_LABEL_MAP: Record<Phase, string> = {
   [Phase.Packing]: '打包中',
   [Phase.Verifying]: '校验中',
   [Phase.Completed]: '已完成',
+  failed: '失败',
+  cancelled: '已取消',
 }
 
 const label = computed(() => props.label ?? PHASE_LABEL_MAP[props.phase] ?? props.phase)
@@ -41,8 +43,6 @@ const label = computed(() => props.label ?? PHASE_LABEL_MAP[props.phase] ?? prop
   border-radius: 10px;
   font-size: 12px;
   font-weight: 500;
-  background: var(--ion-color-light, #f4f5f8);
-  color: var(--ion-color-medium, #92949c);
   white-space: nowrap;
 }
 
@@ -50,47 +50,49 @@ const label = computed(() => props.label ?? PHASE_LABEL_MAP[props.phase] ?? prop
   line-height: 1;
 }
 
-/* Phase 状态色（基于 Ionic 调色板 CSS 变量） */
+/* Phase 状态色（使用 design token，light/dark 双主题均保留状态色） */
 .phase-badge--created {
-  background: rgba(var(--ion-color-medium-rgb, 146, 148, 156), 0.12);
-  color: var(--ion-color-medium, #92949c);
+  background: rgba(var(--tl-state-created-rgb), 0.15);
+  color: var(--tl-state-created);
 }
 .phase-badge--analyzing {
-  background: rgba(var(--ion-color-primary-rgb, 79, 140, 255), 0.12);
-  color: var(--ion-color-primary, #4f8cff);
+  background: rgba(var(--tl-state-analyzing-rgb), 0.15);
+  color: var(--tl-state-analyzing);
 }
 .phase-badge--initializing {
-  background: rgba(var(--ion-color-primary-rgb, 79, 140, 255), 0.12);
-  color: var(--ion-color-primary, #4f8cff);
+  background: rgba(var(--tl-state-initializing-rgb), 0.15);
+  color: var(--tl-state-initializing);
 }
 .phase-badge--preprocessing {
-  background: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.12);
-  color: var(--ion-color-warning, #ffc409);
+  background: rgba(var(--tl-state-preprocessing-rgb), 0.15);
+  color: var(--tl-state-preprocessing);
 }
 .phase-badge--encrypting {
-  background: rgba(var(--ion-color-success-rgb, 45, 211, 111), 0.12);
-  color: var(--ion-color-success, #2dd36f);
+  background: rgba(var(--tl-state-encrypting-rgb), 0.15);
+  color: var(--tl-state-encrypting);
 }
 .phase-badge--decrypting {
-  background: rgba(var(--ion-color-success-rgb, 45, 211, 111), 0.12);
-  color: var(--ion-color-success, #2dd36f);
+  background: rgba(var(--tl-state-decrypting-rgb), 0.15);
+  color: var(--tl-state-decrypting);
 }
 .phase-badge--packing {
-  background: rgba(var(--ion-color-tertiary-rgb, 112, 102, 255), 0.12);
-  color: var(--ion-color-tertiary, #7066ff);
+  background: rgba(var(--tl-state-packing-rgb), 0.15);
+  color: var(--tl-state-packing);
 }
 .phase-badge--verifying {
-  background: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.12);
-  color: var(--ion-color-warning, #ffc409);
+  background: rgba(var(--tl-state-verifying-rgb), 0.15);
+  color: var(--tl-state-verifying);
 }
 .phase-badge--completed {
-  background: rgba(var(--ion-color-success-rgb, 45, 211, 111), 0.15);
-  color: var(--ion-color-success, #2dd36f);
+  background: rgba(var(--tl-state-completed-rgb), 0.18);
+  color: var(--tl-state-completed);
 }
-
-/* 暗黑模式适配（项目使用 body.dark 标记暗黑模式，见 useTheme.ts syncDarkClass） */
-:global(body.dark) .phase-badge {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.75);
+.phase-badge--failed {
+  background: rgba(var(--tl-state-failed-rgb), 0.15);
+  color: var(--tl-state-failed);
+}
+.phase-badge--cancelled {
+  background: rgba(var(--tl-state-cancelled-rgb), 0.15);
+  color: var(--tl-state-cancelled);
 }
 </style>

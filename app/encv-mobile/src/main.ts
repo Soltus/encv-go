@@ -20,6 +20,7 @@ import '@ionic/vue/css/padding.css'
 import '@ionic/vue/css/flex-utils.css'
 import '@ionic/vue/css/display.css'
 import './theme/variables.css'
+import './styles/timeline-tokens.css'
 
 const app = createApp(App).use(IonicVue).use(router)
 

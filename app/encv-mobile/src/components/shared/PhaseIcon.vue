@@ -1,41 +1,66 @@
 <template>
-  <ion-icon :icon="icon" :class="['phase-icon', `phase-icon--${phase}`]" />
+  <ion-icon
+    :icon="icon"
+    :class="['phase-icon', `phase-icon--${phase}`]"
+    :style="size ? { fontSize: `${size}px` } : undefined"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { IonIcon } from '@ionic/vue'
 import {
+  cloudUploadOutline,
   searchOutline,
-  settingsOutline,
-  colorFilterOutline,
+  playOutline,
+  codeSlashOutline,
   lockClosedOutline,
   lockOpenOutline,
   cubeOutline,
   shieldCheckmarkOutline,
   checkmarkCircleOutline,
-  flashOutline,
+  closeCircleOutline,
+  banOutline,
+  helpCircleOutline,
 } from 'ionicons/icons'
 import { Phase } from '@/lib/workflow/types'
 
-const props = defineProps<{
-  phase: Phase
-}>()
+/**
+ * PhaseIcon 支持的值：
+ * - 9 个 Phase 枚举值（created ~ completed）
+ * - 2 个终态 status 值（failed / cancelled）
+ *
+ * 统一用 ion-icon，删除 emoji / Unicode / 自定义 SVG。
+ */
+export type PhaseIconValue = Phase | 'failed' | 'cancelled'
 
-// Phase → ion-icon 映射（与后端 Phase 枚举值一一对应）
-const PHASE_ICON_MAP: Record<Phase, string> = {
-  [Phase.Created]: flashOutline,
+const props = withDefaults(
+  defineProps<{
+    phase: PhaseIconValue
+    /** 图标尺寸（px），未传则继承父级 font-size */
+    size?: number
+  }>(),
+  {
+    size: undefined,
+  },
+)
+
+// Phase / Status → ion-icon 映射（与后端 Phase 枚举值一一对应）
+const PHASE_ICON_MAP: Record<PhaseIconValue, string> = {
+  [Phase.Created]: cloudUploadOutline,
   [Phase.Analyzing]: searchOutline,
-  [Phase.Initializing]: settingsOutline,
-  [Phase.Preprocessing]: colorFilterOutline,
+  [Phase.Initializing]: playOutline,
+  [Phase.Preprocessing]: codeSlashOutline,
   [Phase.Encrypting]: lockClosedOutline,
   [Phase.Decrypting]: lockOpenOutline,
   [Phase.Packing]: cubeOutline,
   [Phase.Verifying]: shieldCheckmarkOutline,
   [Phase.Completed]: checkmarkCircleOutline,
+  failed: closeCircleOutline,
+  cancelled: banOutline,
 }
 
-const icon = computed(() => PHASE_ICON_MAP[props.phase] ?? flashOutline)
+const icon = computed(() => PHASE_ICON_MAP[props.phase] ?? helpCircleOutline)
 </script>
 
 <style scoped>

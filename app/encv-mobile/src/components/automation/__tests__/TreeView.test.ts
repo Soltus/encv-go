@@ -239,12 +239,15 @@ describe('TreeView - 展开/收起', () => {
     expect(parent.classes()).toContain('tree__node--expanded')
   })
 
-  it('展开时 arrow 显示 ▾，收起时显示 ▸', async () => {
+  it('展开时 arrow 用 chevron-down，收起时用 chevron-forward', async () => {
     const wrapper = mountTree()
     const arrow = wrapper.find('.tree__node--parent .tree__arrow')
-    expect(arrow.text()).toBe('▸')
+    expect(arrow.exists()).toBe(true)
+    // 收起状态：ion-icon stub 渲染为 .ion-icon-stub（class 合并到同一元素）
+    expect(arrow.classes()).toContain('ion-icon-stub')
     await wrapper.find('.tree__node--parent').trigger('click')
-    expect(arrow.text()).toBe('▾')
+    const arrowExpanded = wrapper.find('.tree__node--parent .tree__arrow')
+    expect(arrowExpanded.exists()).toBe(true)
   })
 
   it('点击父节点 emit toggle-node 事件', async () => {
@@ -468,11 +471,15 @@ describe('TreeView - 进度/耗时/速率字段显示', () => {
     expect(wrapper.find('.tree__node--parent .tree__duration').exists()).toBe(false)
   })
 
-  it('speed 字段存在时渲染（带 ⚡ 前缀）', () => {
+  it('speed 字段存在时渲染（含 ion-icon flash 图标）', () => {
     const wrapper = mountTree({
       nodes: [makeNode({ speed: '12.5 MB/s' })],
     })
-    expect(wrapper.find('.tree__speed').text()).toBe('⚡12.5 MB/s')
+    const speedEl = wrapper.find('.tree__speed')
+    expect(speedEl.exists()).toBe(true)
+    expect(speedEl.text()).toBe('12.5 MB/s')
+    // 包含 ion-icon 图标（stub 渲染为 .ion-icon-stub）
+    expect(speedEl.find('.ion-icon-stub').exists()).toBe(true)
   })
 
   it('speed 缺失时不渲染', () => {
@@ -482,11 +489,11 @@ describe('TreeView - 进度/耗时/速率字段显示', () => {
     expect(wrapper.find('.tree__node--parent .tree__speed').exists()).toBe(false)
   })
 
-  it('errorHint 字段存在时渲染 ✕', () => {
+  it('errorHint 字段存在时渲染 ion-icon close-circle', () => {
     const wrapper = mountTree({
-      nodes: [makeNode({ errorHint: '✕' })],
+      nodes: [makeNode({ errorHint: 'error' })],
     })
-    expect(wrapper.find('.tree__node--parent .tree__error-hint').exists()).toBe(true)
+    expect(wrapper.find('.tree__node--parent .tree__error-hint-icon').exists()).toBe(true)
   })
 
   it('子节点的 progress 字段渲染', async () => {
@@ -612,7 +619,7 @@ describe('TreeView - workflowRun 兼容派生', () => {
     })
     // 自动展开（有 failure），第三个子节点有 error
     const children = wrapper.findAll('.tree__node--child')
-    expect(children[2].find('.tree__error-hint').exists()).toBe(true)
+    expect(children[2].find('.tree__error-hint-icon').exists()).toBe(true)
   })
 
   it('workflowRun 派生的 step.durationMs → duration 格式化', async () => {

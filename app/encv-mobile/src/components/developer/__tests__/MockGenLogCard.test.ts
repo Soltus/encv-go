@@ -305,31 +305,31 @@ describe('MockGenLogCard - MockGenLogEntry → UnifiedTimelineEntry 转换', () 
 })
 
 describe('MockGenLogCard - runner 图标渲染', () => {
-  it('runner=ffmpeg 时显示 ⚙ 图标 + ffmpeg class', () => {
+  it('runner=ffmpeg 时渲染 ion-icon + ffmpeg class', () => {
     const wrapper = mountCard({
       log: [makeEntry({ runner: 'ffmpeg' })],
     })
     const runner = wrapper.find('.mock-gen-log-runner')
     expect(runner.exists()).toBe(true)
-    expect(runner.text()).toBe('⚙')
+    expect(runner.find('.ion-icon-stub').exists()).toBe(true)
     expect(runner.classes()).toContain('mock-gen-log-runner--ffmpeg')
   })
 
-  it('runner=mediacodec 时显示 ⚡ 图标 + mediacodec class', () => {
+  it('runner=mediacodec 时渲染 ion-icon + mediacodec class', () => {
     const wrapper = mountCard({
       log: [makeEntry({ runner: 'mediacodec' })],
     })
     const runner = wrapper.find('.mock-gen-log-runner')
-    expect(runner.text()).toBe('⚡')
+    expect(runner.find('.ion-icon-stub').exists()).toBe(true)
     expect(runner.classes()).toContain('mock-gen-log-runner--mediacodec')
   })
 
-  it('runner=static 时显示 📄 图标 + static class', () => {
+  it('runner=static 时渲染 ion-icon + static class', () => {
     const wrapper = mountCard({
       log: [makeEntry({ runner: 'static' })],
     })
     const runner = wrapper.find('.mock-gen-log-runner')
-    expect(runner.text()).toBe('📄')
+    expect(runner.find('.ion-icon-stub').exists()).toBe(true)
     expect(runner.classes()).toContain('mock-gen-log-runner--static')
   })
 })

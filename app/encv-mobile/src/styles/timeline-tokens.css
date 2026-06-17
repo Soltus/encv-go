@@ -1,0 +1,133 @@
+/**
+ * Timeline / Tree / Card Design Tokens
+ *
+ * 以重构前 MockGenLogCard 深色终端风格为现代审美基准：
+ *   - 深色终端渐变背景（dark）/ 浅色渐变背景（light）
+ *   - 等宽字体（ui-monospace）
+ *   - 极细半透明边框
+ *   - 8px 圆角
+ *   - 紧凑布局
+ *   - 状态色 runner 标识
+ *
+ * 唯一问题修复：硬编码 #0F1419 黑色未适配主题 → 改为 design token 双主题。
+ */
+
+:root {
+  /* ===== 卡片背景渐变（light 模式：浅色） ===== */
+  --tl-card-bg-gradient-start: #FAFBFC;
+  --tl-card-bg-gradient-end: #F4F6F8;
+
+  /* ===== 卡片边框（极细半透明深色） ===== */
+  --tl-card-border: rgba(0, 0, 0, 0.08);
+  --tl-card-border-strong: rgba(0, 0, 0, 0.12);
+
+  /* ===== 卡片文字 ===== */
+  --tl-card-text-primary: #1A1D21;
+  --tl-card-text-secondary: #5F6B7A;
+  --tl-card-text-tertiary: #8B95A5;
+
+  /* ===== 等宽字体栈（与重构前 MockGenLogCard 一致） ===== */
+  --tl-card-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* ===== 圆角 ===== */
+  --tl-card-radius: 8px;
+  --tl-card-radius-sm: 4px;
+
+  /* ===== 状态色（9 个 phase + failed/cancelled） ===== */
+  /* 与 PhaseBadge 的 Ionic 调色板对齐，但用独立变量方便统一管理 */
+  --tl-state-created: #92949C;
+  --tl-state-created-rgb: 146, 148, 156;
+
+  --tl-state-analyzing: #4f8cff;
+  --tl-state-analyzing-rgb: 79, 140, 255;
+
+  --tl-state-initializing: #4f8cff;
+  --tl-state-initializing-rgb: 79, 140, 255;
+
+  --tl-state-preprocessing: #ffc409;
+  --tl-state-preprocessing-rgb: 255, 196, 9;
+
+  --tl-state-encrypting: #2dd36f;
+  --tl-state-encrypting-rgb: 45, 211, 111;
+
+  --tl-state-decrypting: #2dd36f;
+  --tl-state-decrypting-rgb: 45, 211, 111;
+
+  --tl-state-packing: #7066ff;
+  --tl-state-packing-rgb: 112, 102, 255;
+
+  --tl-state-verifying: #ffc409;
+  --tl-state-verifying-rgb: 255, 196, 9;
+
+  --tl-state-completed: #2dd36f;
+  --tl-state-completed-rgb: 45, 211, 111;
+
+  --tl-state-failed: #eb445a;
+  --tl-state-failed-rgb: 235, 68, 90;
+
+  --tl-state-cancelled: #92949C;
+  --tl-state-cancelled-rgb: 146, 148, 156;
+
+  /* ===== 进度条样式（与 TestReportHeader 统一） ===== */
+  --tl-progress-height: 4px;
+  --tl-progress-radius: 2px;
+  --tl-progress-bg: rgba(0, 0, 0, 0.06);
+  --tl-progress-fill: var(--ion-color-primary, #4f8cff);
+
+  /* ===== 展开详情（左侧 2px 边线 + padding，非嵌套卡片） ===== */
+  --tl-detail-border-left: 2px solid var(--tl-card-border-strong);
+  --tl-detail-padding: 8px 12px;
+}
+
+body.dark {
+  /* ===== 卡片背景渐变（dark 模式：深色终端） ===== */
+  --tl-card-bg-gradient-start: #0F1419;
+  --tl-card-bg-gradient-end: #0A0E12;
+
+  /* ===== 卡片边框（极细半透明浅色） ===== */
+  --tl-card-border: rgba(255, 255, 255, 0.06);
+  --tl-card-border-strong: rgba(255, 255, 255, 0.10);
+
+  /* ===== 卡片文字 ===== */
+  --tl-card-text-primary: #E0E0E0;
+  --tl-card-text-secondary: #8B95A5;
+  --tl-card-text-tertiary: #5F6B7A;
+
+  /* ===== 状态色（dark 模式微调亮度，保留状态色不抹平） ===== */
+  --tl-state-created: #92949C;
+  --tl-state-created-rgb: 146, 148, 156;
+
+  --tl-state-analyzing: #5a9bff;
+  --tl-state-analyzing-rgb: 90, 155, 255;
+
+  --tl-state-initializing: #5a9bff;
+  --tl-state-initializing-rgb: 90, 155, 255;
+
+  --tl-state-preprocessing: #ffd548;
+  --tl-state-preprocessing-rgb: 255, 213, 72;
+
+  --tl-state-encrypting: #2fdf75;
+  --tl-state-encrypting-rgb: 47, 223, 117;
+
+  --tl-state-decrypting: #2fdf75;
+  --tl-state-decrypting-rgb: 47, 223, 117;
+
+  --tl-state-packing: #8a85ff;
+  --tl-state-packing-rgb: 138, 133, 255;
+
+  --tl-state-verifying: #ffd548;
+  --tl-state-verifying-rgb: 255, 213, 72;
+
+  --tl-state-completed: #2fdf75;
+  --tl-state-completed-rgb: 47, 223, 117;
+
+  --tl-state-failed: #ff4961;
+  --tl-state-failed-rgb: 255, 73, 97;
+
+  --tl-state-cancelled: #92949C;
+  --tl-state-cancelled-rgb: 146, 148, 156;
+
+  /* ===== 进度条 ===== */
+  --tl-progress-bg: rgba(255, 255, 255, 0.08);
+  --tl-progress-fill: var(--ion-color-primary, #4f8cff);
+}

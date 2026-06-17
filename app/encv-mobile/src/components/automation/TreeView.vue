@@ -29,7 +29,10 @@
           ]"
           @click="toggleNode(node)"
         >
-          <span class="tree__arrow">{{ expandedSet.has(node.id) ? '▾' : '▸' }}</span>
+          <ion-icon
+            :icon="expandedSet.has(node.id) ? chevronDown : chevronForward"
+            class="tree__arrow"
+          />
           <slot name="node-icon" :node="node">
             <PhaseIcon v-if="node.phase" :phase="node.phase" />
             <StepMiniBadge v-else :status="node.status" :show-name="false" />
@@ -38,11 +41,17 @@
           <slot name="node-meta" :node="node">
             <span v-if="node.meta" class="tree__meta">{{ node.meta }}</span>
           </slot>
-          <span v-if="node.errorHint" class="tree__error-hint">✕</span>
+          <ion-icon
+            v-if="node.errorHint"
+            :icon="closeCircleOutline"
+            class="tree__error-hint-icon"
+          />
           <!-- 进度 / 速率 / 耗时（字段缺失时隐藏） -->
           <span v-if="node.progress != null" class="tree__progress">{{ node.progress }}%</span>
           <span v-if="node.duration" class="tree__duration">{{ node.duration }}</span>
-          <span v-if="node.speed" class="tree__speed">⚡{{ node.speed }}</span>
+          <span v-if="node.speed" class="tree__speed">
+            <ion-icon :icon="flashOutline" class="tree__speed-icon" />{{ node.speed }}
+          </span>
         </button>
 
         <!-- 子节点 -->
@@ -73,10 +82,16 @@
               <slot name="node-meta" :node="child">
                 <span v-if="child.meta" class="tree__meta">{{ child.meta }}</span>
               </slot>
-              <span v-if="child.errorHint" class="tree__error-hint">✕</span>
+              <ion-icon
+                v-if="child.errorHint"
+                :icon="closeCircleOutline"
+                class="tree__error-hint-icon"
+              />
               <span v-if="child.progress != null" class="tree__progress">{{ child.progress }}%</span>
               <span v-if="child.duration" class="tree__duration">{{ child.duration }}</span>
-              <span v-if="child.speed" class="tree__speed">⚡{{ child.speed }}</span>
+              <span v-if="child.speed" class="tree__speed">
+                <ion-icon :icon="flashOutline" class="tree__speed-icon" />{{ child.speed }}
+              </span>
             </button>
             <!-- 子节点展开详情（slot-based） -->
             <div
@@ -99,6 +114,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
+import { IonIcon } from '@ionic/vue'
+import { chevronDown, chevronForward, closeCircleOutline, flashOutline } from 'ionicons/icons'
 import StepMiniBadge from './StepMiniBadge.vue'
 import PhaseIcon from '@/components/shared/PhaseIcon.vue'
 import {
@@ -190,7 +207,7 @@ function deriveNodesFromWorkflowRun(
         speed: step.speed,
         eta: step.eta,
         duration: step.durationMs != null ? formatDurationMs(step.durationMs) : undefined,
-        errorHint: step.error ? '✕' : undefined,
+        errorHint: step.error ? 'error' : undefined,
       })),
     }
   })
@@ -372,8 +389,7 @@ function selectNode(node: UnifiedTreeNode) {
 .tree__node--timed_out { border-left: 2px solid rgba(230, 81, 0, 0.4); }
 
 .tree__arrow {
-  width: 14px;
-  font-size: 10px;
+  font-size: 12px;
   color: #8B7355;
   flex-shrink: 0;
 }
@@ -402,6 +418,12 @@ function selectNode(node: UnifiedTreeNode) {
   flex-shrink: 0;
 }
 
+.tree__error-hint-icon {
+  font-size: 12px;
+  color: #8B1E3F;
+  flex-shrink: 0;
+}
+
 .tree__progress {
   font-size: 10px;
   color: #1565C0;
@@ -416,8 +438,16 @@ function selectNode(node: UnifiedTreeNode) {
 }
 
 .tree__speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 10px;
   color: #1565C0;
+  flex-shrink: 0;
+}
+
+.tree__speed-icon {
+  font-size: 11px;
   flex-shrink: 0;
 }
 
@@ -453,15 +483,15 @@ function selectNode(node: UnifiedTreeNode) {
   font-size: 13px;
 }
 
-/* ==================== 暗黑模式适配（body.dark） ==================== */
+/* ==================== 暗黑模式适配（body.dark）—— 保留档案主题，非纯黑 ==================== */
 :global(body.dark) .tree {
-  color: rgba(255, 255, 255, 0.92);
+  color: #E0E0E0;
 }
 
 :global(body.dark) .tree__search {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.92);
+  background: #1A1D21;
+  border-color: rgba(255, 255, 255, 0.10);
+  color: #E0E0E0;
 }
 :global(body.dark) .tree__search::placeholder {
   color: rgba(255, 255, 255, 0.4);
@@ -471,7 +501,7 @@ function selectNode(node: UnifiedTreeNode) {
 }
 
 :global(body.dark) .tree__count {
-  color: rgba(255, 255, 255, 0.6);
+  color: #8B95A5;
 }
 
 :global(body.dark) .tree__node-wrap {
@@ -479,14 +509,14 @@ function selectNode(node: UnifiedTreeNode) {
 }
 
 :global(body.dark) .tree__node {
-  color: rgba(255, 255, 255, 0.92);
+  color: #E0E0E0;
 }
 :global(body.dark) .tree__node:hover {
   background: rgba(255, 255, 255, 0.04);
 }
 
 :global(body.dark) .tree__node--parent {
-  background: rgba(255, 255, 255, 0.04);
+  background: #1A1D21;
   border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 
@@ -499,15 +529,15 @@ function selectNode(node: UnifiedTreeNode) {
 }
 
 :global(body.dark) .tree__arrow {
-  color: rgba(255, 255, 255, 0.5);
+  color: #8B95A5;
 }
 
 :global(body.dark) .tree__meta {
-  color: rgba(255, 255, 255, 0.5);
+  color: #8B95A5;
 }
 
-:global(body.dark) .tree__error-hint {
-  color: var(--ion-color-danger, #eb445a);
+:global(body.dark) .tree__error-hint-icon {
+  color: var(--tl-state-failed);
 }
 
 :global(body.dark) .tree__progress {
@@ -515,7 +545,7 @@ function selectNode(node: UnifiedTreeNode) {
 }
 
 :global(body.dark) .tree__duration {
-  color: rgba(255, 255, 255, 0.5);
+  color: #8B95A5;
 }
 
 :global(body.dark) .tree__speed {
@@ -528,20 +558,20 @@ function selectNode(node: UnifiedTreeNode) {
 }
 
 :global(body.dark) .tree__empty {
-  color: rgba(255, 255, 255, 0.5);
+  color: #8B95A5;
 }
 
 /* 暗黑模式下状态色边框 */
 :global(body.dark) .tree__node--failure {
-  border-left-color: rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.5);
+  border-left-color: rgba(var(--tl-state-failed-rgb), 0.5);
 }
 :global(body.dark) .tree__node--success {
-  border-left-color: rgba(var(--ion-color-success-rgb, 45, 211, 111), 0.4);
+  border-left-color: rgba(var(--tl-state-completed-rgb), 0.4);
 }
 :global(body.dark) .tree__node--running {
-  border-left-color: rgba(var(--ion-color-primary-rgb, 79, 140, 255), 0.5);
+  border-left-color: rgba(var(--tl-state-analyzing-rgb), 0.5);
 }
 :global(body.dark) .tree__node--timed_out {
-  border-left-color: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.5);
+  border-left-color: rgba(var(--tl-state-preprocessing-rgb), 0.5);
 }
 </style>

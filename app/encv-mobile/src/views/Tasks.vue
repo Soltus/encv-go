@@ -109,7 +109,7 @@
       </ion-popover>
     </ion-header>
 
-    <ion-content>
+    <ion-content ref="contentRef">
       <ion-refresher slot="fixed" @ionRefresh="handleRefresh">
         <ion-refresher-content></ion-refresher-content>
       </ion-refresher>
@@ -142,24 +142,6 @@
       </div>
 
       <ion-list v-else>
-        <!-- 🆕 2026-06-10 修复 v4：可见的调试计数（让用户能确认 grouping 是否在工作） -->
-        <div class="grouping-debug-bar">
-          <span>共 <strong>{{ tasks.length }}</strong> 个 task</span>
-          <span class="grouping-debug-sep">·</span>
-          <span><strong>{{ debugGroupCount }}</strong> 个 run 分组</span>
-          <span class="grouping-debug-sep">·</span>
-          <span><strong>{{ debugSingletonCount }}</strong> 个单条</span>
-          <span class="grouping-debug-sep">·</span>
-          <span><strong>{{ debugByTriggeredBy.automation }}</strong> auto / <strong>{{ debugByTriggeredBy.ai_agent }}</strong> ai / <strong>{{ debugByTriggeredBy.user }}</strong> user</span>
-          <ion-button size="small" fill="clear" @click="resetGrouping" class="grouping-reset-btn">
-            <ion-icon :icon="sync" slot="start"></ion-icon>
-            重置分组
-          </ion-button>
-          <ion-button size="small" fill="clear" @click="showAutomationReports" class="grouping-reset-btn" title="查看所有自动化测试历史报告（localStorage 持久化）">
-            <ion-icon :icon="archiveOutline" slot="start"></ion-icon>
-            查看报告
-          </ion-button>
-        </div>
         <template v-for="item in displayedItems" :key="item.key">
           <!-- 🆕 2026-06-10 修复：自动化测试 / AI agent 任务组折叠 -->
           <!-- 历史：自动化测试一次跑 N 个用例 → 污染 task 列表（用户截图的"浪费屏幕空间"）-->
@@ -425,7 +407,7 @@ import {
   warningOutline, lockClosed, search, funnel, trashBin,
   extensionPuzzle, swapVertical, chevronDown,
   hardwareChipOutline, cogOutline, person, chevronForward, chevronBack,
-  folderOutline, ellipsisHorizontalCircleOutline, archiveOutline,
+  folderOutline, ellipsisHorizontalCircleOutline,
 } from 'ionicons/icons'
 import { useRoute, useRouter } from 'vue-router'
 import type { EncvTask, TaskType } from '@/api/encv'
@@ -436,7 +418,6 @@ import { showToast } from '@/composables/useToast'
 import { useNewTaskModal } from '@/composables/useNewTaskModal'
 import { useTasksList } from '@/composables/useTasksList'
 import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
-import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
 import { getTriggeredBy, getRunIdForTask } from '@/composables/useTaskTrigger'
 import { formatContainerVersion } from '@/constants/containerVersion'
 import {
@@ -468,15 +449,6 @@ const {
   isPasswordError, toggleWarningDetail, formatWarningDetail,
   getTaskIcon, getTaskColor, getStatusColor, getPhaseLabel,
 } = useTasksList()
-
-// 🆕 2026-06-18 Task 16：统一工作流任务服务
-// 用途：
-//   1. showAutomationReports 从 workflowTaskService.runs 读取历史运行记录（替代旧 encv_automation_results_v1 key）
-//   2. 内部通过 useTaskEventBridge 订阅 4 件套 WS 事件，维护 currentRun / runs 状态
-//   3. Tasks.vue 仍保留 useTaskEventBridge 4 件套回调（applyTask*）以实时更新 tasks ref
-//      —— 因为 Tasks.vue 显示所有任务（含非 workflow 的用户单任务），不能只依赖 workflowTaskService
-//      workflowTaskService 只追踪 workflow run 内的 task，单任务不归它管
-const workflowTaskService = useWorkflowTaskService()
 
 useTaskEventBridge({
   onUpdate: applyTaskUpdate,
@@ -977,177 +949,6 @@ onIonViewWillEnter(() => {
     fetchTasks()
   }
 })
-
-// 🆕 2026-06-10 修复 v4：可见的调试计数（让用户能直接看到 grouping 是否在工作）
-// 历史：用户报「毫无变化，我非常失望」—— HMR 没生效 / localStorage v2 数据 stale / 用户没刷新页面
-// 修复：在 task 列表顶部显示 group / singleton / by triggeredBy 计数，让用户一眼看出问题在哪
-const debugGroupCount = computed(() => {
-  // 统计当前 displayedItems 里 group card 数量
-  return displayedItems.value.filter((i) => i.kind === 'group').length
-})
-const debugSingletonCount = computed(() => {
-  return displayedItems.value.filter((i) => i.kind === 'task').length
-})
-const debugByTriggeredBy = computed(() => {
-  const acc: { automation: number; ai_agent: number; user: number } = {
-    automation: 0,
-    ai_agent: 0,
-    user: 0,
-  }
-  for (const t of tasks.value) {
-    const by = t.triggeredBy ?? getTriggeredBy(t.id)
-    if (by === 'automation') acc.automation++
-    else if (by === 'ai_agent') acc.ai_agent++
-    else acc.user++
-  }
-  return acc
-})
-
-// 🆕 2026-06-10 修复 v4：手动重置分组（强制清空 localStorage + 重新拉取）
-// 用法：调试栏右上「重置分组」按钮 → 调这个 → 所有 task 变 'user' → 重新跑 workflow
-//   强制丢弃 stale localStorage（v2 数据残留让 task 分散到不同 runId，永远凑不到 1 个 group）
-async function resetGrouping() {
-  const { clearTriggeredBy } = await import('@/composables/useTaskTrigger')
-  clearTriggeredBy()
-  // 🆕 2026-06-11 v5：同时清 sub_section 折叠状态
-  try {
-    localStorage.removeItem(COLLAPSED_SUBSECTIONS_KEY)
-  } catch {
-    // silent
-  }
-  collapsedSubSectionKeys.value = new Set()
-  showToast({ message: '已清空任务触发者缓存，刷新页面后生效', duration: 2000, color: 'medium' })
-  await fetchTasks()
-}
-
-// 🆕 2026-06-11 v7：自动化测试报告分析器
-// 设计原则（用户原话「测试报告是给你看的不是给我看的」）：
-//   - 不弹 alert / showToast 烦用户
-//   - 写 console.group 输出结构化分析（dev console 直接看）
-//   - 自动按失败率 / 错误模式分类，输出可疑 bug 列表
-//   - 关键失败 → 上报后端 /api/dev/automation-report（让后端聚合分析）
-//   - 用户视角：调试栏按钮触发，但**用户不用等结果**，console + 后端都看得到
-//
-// 🆕 2026-06-18 Task 16：数据源迁移
-//   - 旧：localStorage key `encv_automation_results_v1`（useAutomationTests 持久化，Task 8 已删除）
-//   - 新：workflowTaskService.runs（UnifiedRunRecord[]，localStorage key `encv_workflow_tasks_v1`）
-//   - 字段映射：UnifiedRunRecord.results[].caseId 替代旧 caseName；category 从 workflowRun.triggeredBy 派生
-function showAutomationReports() {
-  // 🆕 Task 16：从 workflowTaskService.runs 读取（响应式 ref → 取 .value）
-  const runs = workflowTaskService.runs.value
-  if (runs.length === 0) {
-    console.info('[automation-report] no runs in workflowTaskService.runs (key=encv_workflow_tasks_v1)')
-    return
-  }
-
-  // 自动分析
-  // 🆕 Task 16：category 从 workflowRun.triggeredBy 派生（旧字段 r.category 已不存在）
-  //   - triggeredBy === 'ai_agent' → 归到 'ai_agent' 桶
-  //   - 其他（user / automation）→ 归到 'plugin' 桶
-  //   注：旧版 webdav category 已合并到统一 workflow 体系，不再单独区分
-  const aiAgentRuns = runs.filter((r) => r.workflowRun?.triggeredBy === 'ai_agent')
-  const pluginRuns = runs.filter((r) => r.workflowRun?.triggeredBy !== 'ai_agent')
-  const totalPassed = runs.reduce((acc, r) => acc + (r.passed ?? 0), 0)
-  const totalFailed = runs.reduce((acc, r) => acc + (r.failed ?? 0), 0)
-  const totalSkipped = runs.reduce((acc, r) => acc + (r.skipped ?? 0), 0)
-  const totalCases = totalPassed + totalFailed + totalSkipped
-  const failureRate = totalCases > 0 ? (totalFailed / totalCases) * 100 : 0
-
-  // 错误聚类：相同 caseId 失败多次 → 可疑 bug
-  // 🆕 Task 16：UnifiedRunRecord.results[].status 用 'failure'（旧版用 'failed'）
-  const errorMap = new Map<string, { count: number; firstError: string; runs: string[] }>()
-  for (const r of runs) {
-    for (const c of r.results ?? []) {
-      if (c.status === 'failure') {
-        const key = `case:${c.caseId ?? '?'}`
-        const prev = errorMap.get(key)
-        if (prev) {
-          prev.count++
-          prev.runs.push(r.id?.slice(0, 12) ?? '?')
-        } else {
-          errorMap.set(key, { count: 1, firstError: c.error ?? '', runs: [r.id?.slice(0, 12) ?? '?'] })
-        }
-      }
-    }
-  }
-  const suspiciousBugs = Array.from(errorMap.entries())
-    .filter(([, v]) => v.count >= 2)
-    .sort((a, b) => b[1].count - a[1].count)
-
-  // 最近一次失败的 run
-  const lastRun = runs[0]
-  const lastRunFailed = (lastRun?.results ?? []).filter((c) => c.status === 'failure')
-
-  // 输出结构化报告
-  console.group('[automation-report] 自动化测试历史分析')
-  console.log('data source: workflowTaskService.runs (localStorage key=encv_workflow_tasks_v1)')
-  console.log('run 总数:', runs.length, '(ai_agent=' + aiAgentRuns.length + ', plugin=' + pluginRuns.length + ')')
-  console.log('总用例:', totalCases, '· 通过:', totalPassed, '· 失败:', totalFailed, '· 跳过:', totalSkipped)
-  console.log('总失败率:', failureRate.toFixed(2) + '%')
-  if (lastRun) {
-    console.log('最近 run:', {
-      id: lastRun.id,
-      startedAt: lastRun.startedAt,
-      totalCases: lastRun.totalCases,
-      passed: lastRun.passed,
-      failed: lastRun.failed,
-      skipped: lastRun.skipped,
-      triggeredBy: lastRun.workflowRun?.triggeredBy ?? 'user',
-      workflowDefId: lastRun.workflowRun?.workflowDefId,
-    })
-    if (lastRunFailed.length > 0) {
-      console.warn('最近 run 失败用例:', lastRunFailed)
-    }
-  }
-  if (suspiciousBugs.length > 0) {
-    console.error('🚨 可疑 bug（多次失败的用例）:')
-    for (const [name, info] of suspiciousBugs) {
-      console.error(`  ${name} — 失败 ${info.count} 次`)
-      console.error(`    错误: ${info.firstError}`)
-      console.error(`    出现在 run: ${info.runs.join(', ')}`)
-    }
-  } else if (totalFailed === 0) {
-    console.info('✅ 所有 run 均无失败')
-  }
-  console.groupEnd()
-
-  // 上报后端（fire-and-forget，不阻塞 UI）
-  reportAutomationToBackend({
-    storageKey: 'encv_workflow_tasks_v1',
-    runCount: runs.length,
-    aiAgentRunCount: aiAgentRuns.length,
-    pluginRunCount: pluginRuns.length,
-    totalCases,
-    totalPassed,
-    totalFailed,
-    totalSkipped,
-    failureRate: Number(failureRate.toFixed(2)),
-    suspiciousBugs: suspiciousBugs.map(([name, info]) => ({ name, count: info.count, firstError: info.firstError })),
-    lastRunFailed: lastRunFailed.map((c) => ({ caseId: c.caseId, error: c.error, duration: c.duration })),
-    timestamp: new Date().toISOString(),
-  }).catch((e) => {
-    console.debug('[automation-report] backend report failed (silent):', e)
-  })
-}
-
-/**
- * 上报自动化测试分析结果到后端（fire-and-forget）
- * 失败不阻塞 UI，silent
- */
-async function reportAutomationToBackend(payload: object): Promise<void> {
-  try {
-    const { getApiBaseUrl } = await import('@/api/encv')
-    const baseUrl = getApiBaseUrl()
-    await fetch(`${baseUrl}/api/dev/automation-report`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-  } catch {
-    // 后端没接这个 endpoint 没关系，console 已经输出了
-    throw new Error('backend report endpoint unavailable')
-  }
-}
 </script>
 
 <style scoped>
@@ -1754,45 +1555,5 @@ ion-item.sub-section-header.sub-tone-none {
   padding: 12px 16px;
   font-size: 13px;
   color: var(--encv-text-secondary);
-}
-
-/* ============================================================
-   🆕 2026-06-10 修复 v4：可见的调试计数栏
-   用途：让用户能直接看到 grouping 是否在工作
-   历史：用户报「毫无变化，我非常失望」时排查卡住 — HMR 没生效 / localStorage v2 stale
-        都没法让用户自查。修这个栏 → 任何时候用户都能看到 group / singleton / by 计数。
-   ============================================================ */
-.grouping-debug-bar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  padding: 8px 14px;
-  margin: 8px 12px 4px;
-  background: linear-gradient(135deg, rgba(79, 140, 255, 0.06), rgba(139, 92, 246, 0.06));
-  border: 1px dashed rgba(79, 140, 255, 0.3);
-  border-radius: 6px;
-  font-size: 11px;
-  color: var(--encv-text-secondary);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  line-height: 1.4;
-}
-.grouping-debug-bar strong {
-  color: var(--ion-color-dark);
-  font-weight: 700;
-  font-family: inherit;
-  margin: 0 2px;
-}
-.grouping-debug-sep {
-  color: var(--ion-color-medium-shade);
-  opacity: 0.5;
-  font-weight: 300;
-}
-.grouping-reset-btn {
-  margin-left: auto;
-  --padding-start: 8px;
-  --padding-end: 8px;
-  font-size: 11px;
-  height: 28px;
 }
 </style>

@@ -26,7 +26,8 @@
       ></ion-icon>
       <span>{{ summaryText }}</span>
       <span v-if="summary.disconnected" class="mock-gen-log-disconnect">
-        ⚠ 后端连接已断开 — 下面 {{ log.length }} 行是「处理到这步」
+        <ion-icon :icon="warningOutline" class="mock-gen-log-disconnect-icon"></ion-icon>
+        <span>后端连接已断开 — 下面 {{ log.length }} 行是「处理到这步」</span>
       </span>
     </div>
 
@@ -39,10 +40,10 @@
         :expanded="entry.expanded"
         @toggle="onToggle(entry.key, $event)"
       >
-        <!-- 自定义 icon slot：runner 图标（⚡mediacodec / ⚙ffmpeg / 📄static） -->
+        <!-- 自定义 icon slot：runner 图标（flash=mediacodec / cog=ffmpeg / document=static） -->
         <template #icon>
           <span class="mock-gen-log-runner" :class="`mock-gen-log-runner--${entry.runner}`">
-            {{ runnerEmoji(entry.runner) }}
+            <ion-icon :icon="runnerIcon(entry.runner)" />
           </span>
         </template>
 
@@ -109,6 +110,9 @@ import {
   copyOutline,
   checkmarkCircleOutline,
   warningOutline,
+  flashOutline,
+  settingsOutline,
+  documentTextOutline,
 } from 'ionicons/icons'
 import UnifiedTimelineCard from '@/components/shared/UnifiedTimelineCard.vue'
 import { Phase, type UnifiedTimelineEntry, type StepStatus } from '@/lib/workflow/types'
@@ -125,7 +129,7 @@ import type { MockGenLogEntry, MockGenLogSummary } from '@/composables/useMockGe
  *   - status: 'ok' → 'success' / 'failed' → 'failure' / 'pending' → 'running'
  *   - time: entry.at
  *   - hasExpandableDetail: true（所有条目都可展开看 ffmpeg args / stderr）
- *   - icon slot: runner emoji（⚡mediacodec / ⚙ffmpeg / 📄static）
+ *   - icon slot: runner ion-icon（flash=mediacodec / settings=ffmpeg / document=static）
  *   - meta slot: [index/total] · encoder · exit code
  *   - detail slot: ffmpeg args / stderr / context 卡片化
  */
@@ -143,11 +147,11 @@ const emit = defineEmits<{
   (e: 'copy'): void
 }>()
 
-/** runner 标识 → emoji 字符 */
-function runnerEmoji(runner: string): string {
-  if (runner === 'mediacodec') return '⚡'
-  if (runner === 'static') return '📄'
-  return '⚙'
+/** runner 标识 → ion-icon */
+function runnerIcon(runner: string) {
+  if (runner === 'mediacodec') return flashOutline
+  if (runner === 'static') return documentTextOutline
+  return settingsOutline // ffmpeg / default
 }
 
 /** MockGenLogEntry.status → StepStatus 映射 */
@@ -162,7 +166,7 @@ const STATUS_MAP: Record<MockGenLogEntry['status'], StepStatus> = {
  *
  * FFMPEG 日志无 phase 概念，统一用 Phase.Completed 作为默认值
  * （UnifiedTimelineCard 的 PhaseIcon 会渲染 checkmarkCircleOutline，
- *   但本组件用 #icon slot 覆盖为 runner emoji，phase 仅影响状态色边框）
+ *   但本组件用 #icon slot 覆盖为 runner ion-icon，phase 仅影响状态色边框）
  */
 function toUnifiedTimelineEntry(entry: MockGenLogEntry): UnifiedTimelineEntry {
   return {
@@ -199,15 +203,15 @@ function onToggle(key: string, _value: boolean): void {
 </script>
 
 <style scoped>
-/* ========== FFMPEG 流程日志卡（迁移自 PluginTestsDetail.vue 1390-1506 行） ========== */
+/* ========== FFMPEG 流程日志卡（用 design token 双主题适配） ========== */
 .mock-gen-log-card {
   margin: 8px 16px 12px;
   padding: 12px 14px;
-  background: linear-gradient(180deg, #0F1419 0%, #0A0E12 100%);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  color: #E0E0E0;
+  background: linear-gradient(180deg, var(--tl-card-bg-gradient-start) 0%, var(--tl-card-bg-gradient-end) 100%);
+  border-radius: var(--tl-card-radius);
+  border: 1px solid var(--tl-card-border);
+  font-family: var(--tl-card-font-mono);
+  color: var(--tl-card-text-primary);
 }
 
 .mock-gen-log-header {
@@ -216,7 +220,7 @@ function onToggle(key: string, _value: boolean): void {
   align-items: center;
   margin-bottom: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--tl-card-border);
 }
 .mock-gen-log-title {
   display: flex;
@@ -224,13 +228,13 @@ function onToggle(key: string, _value: boolean): void {
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #F4EFE6;
+  color: var(--tl-card-text-primary);
 }
 .mock-gen-log-title ion-icon {
   font-size: 14px;
 }
 .mock-gen-log-count {
-  color: #6B7280;
+  color: var(--tl-card-text-tertiary);
   font-size: 11px;
   margin-left: 4px;
 }
@@ -238,10 +242,10 @@ function onToggle(key: string, _value: boolean): void {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #E0E0E0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
+  background: var(--tl-card-border);
+  color: var(--tl-card-text-primary);
+  border: 1px solid var(--tl-card-border-strong);
+  border-radius: var(--tl-card-radius-sm);
   padding: 3px 8px;
   font-size: 11px;
   font-family: inherit;
@@ -249,15 +253,15 @@ function onToggle(key: string, _value: boolean): void {
   transition: all 0.15s;
 }
 .mock-gen-log-copy:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--tl-card-border-strong);
 }
 .mock-gen-log-copy ion-icon {
   font-size: 12px;
 }
 .mock-gen-log-copy--copied {
-  background: rgba(34, 197, 94, 0.15);
-  color: #4ADE80;
-  border-color: rgba(34, 197, 94, 0.3);
+  background: rgba(var(--tl-state-completed-rgb), 0.15);
+  color: var(--tl-state-completed);
+  border-color: rgba(var(--tl-state-completed-rgb), 0.3);
 }
 
 .mock-gen-log-summary {
@@ -266,15 +270,21 @@ function onToggle(key: string, _value: boolean): void {
   gap: 6px;
   padding: 6px 0;
   font-size: 12px;
-  color: #9CA3AF;
+  color: var(--tl-card-text-secondary);
   flex-wrap: wrap;
 }
 .mock-gen-log-summary ion-icon {
   font-size: 14px;
 }
 .mock-gen-log-disconnect {
-  color: #F59E0B;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--tl-state-preprocessing);
   font-weight: 600;
+}
+.mock-gen-log-disconnect-icon {
+  font-size: 13px;
 }
 
 .mock-gen-log-list {
@@ -288,44 +298,47 @@ function onToggle(key: string, _value: boolean): void {
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 4px;
+  border-radius: var(--tl-card-radius-sm);
   font-size: 12px;
   font-weight: bold;
   flex-shrink: 0;
 }
+.mock-gen-log-runner ion-icon {
+  font-size: 13px;
+}
 .mock-gen-log-runner--ffmpeg {
-  background: rgba(139, 92, 246, 0.15);
-  color: #8B5CF6;
+  background: rgba(var(--tl-state-packing-rgb), 0.15);
+  color: var(--tl-state-packing);
 }
 .mock-gen-log-runner--mediacodec {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22C55E;
+  background: rgba(var(--tl-state-completed-rgb), 0.15);
+  color: var(--tl-state-completed);
 }
 .mock-gen-log-runner--static {
-  background: rgba(100, 116, 139, 0.15);
-  color: #64748B;
+  background: rgba(var(--tl-state-created-rgb), 0.15);
+  color: var(--tl-state-created);
 }
 
 /* ========== meta slot 内的元素 ========== */
 .mock-gen-log-idx {
-  color: #6B7280;
+  color: var(--tl-card-text-tertiary);
   font-weight: 600;
   font-size: 11px;
 }
 .mock-gen-log-encoder {
-  color: #8B5CF6;
+  color: var(--tl-state-packing);
   font-size: 10.5px;
 }
 .mock-gen-log-exitcode {
-  color: #FCA5A5;
+  color: var(--tl-state-failed);
   font-weight: 600;
   font-size: 10.5px;
 }
 
 /* ========== detail slot 内的卡片 ========== */
 .mock-gen-log-detail-card {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
+  background: var(--tl-card-border);
+  border-radius: var(--tl-card-radius-sm);
   padding: 6px 8px;
   min-width: 0;
 }
@@ -333,12 +346,12 @@ function onToggle(key: string, _value: boolean): void {
   grid-column: 1 / -1;
 }
 .mock-gen-log-detail-card--error {
-  background: rgba(220, 38, 38, 0.12);
+  background: rgba(var(--tl-state-failed-rgb), 0.12);
   grid-column: 1 / -1;
 }
 .mock-gen-log-detail-label {
   font-size: 10px;
-  color: #58A6FF;
+  color: var(--tl-state-analyzing);
   font-weight: 600;
   margin-bottom: 2px;
   text-transform: uppercase;
@@ -346,27 +359,12 @@ function onToggle(key: string, _value: boolean): void {
 }
 .mock-gen-log-detail-value {
   font-size: 11px;
-  color: #C9D1D9;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--tl-card-text-primary);
+  font-family: var(--tl-card-font-mono);
   white-space: pre-wrap;
   word-break: break-all;
   margin: 0;
   max-height: 200px;
   overflow-y: auto;
-}
-
-/* ========== 暗黑模式适配（body.dark class） ========== */
-:global(body.dark) .mock-gen-log-card {
-  background: linear-gradient(180deg, #1A1F24 0%, #131719 100%);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-:global(body.dark) .mock-gen-log-title {
-  color: #F4EFE6;
-}
-:global(body.dark) .mock-gen-log-detail-card {
-  background: rgba(255, 255, 255, 0.04);
-}
-:global(body.dark) .mock-gen-log-detail-value {
-  color: rgba(255, 255, 255, 0.88);
 }
 </style>

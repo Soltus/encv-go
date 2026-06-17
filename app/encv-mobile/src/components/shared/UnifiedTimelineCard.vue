@@ -61,8 +61,14 @@
           </div>
           <span class="utc__progress-text">{{ entry.progress }}%</span>
         </div>
-        <span v-if="entry.speed" class="utc__metric">⚡ {{ entry.speed }}</span>
-        <span v-if="entry.eta" class="utc__metric">⏳ {{ entry.eta }}</span>
+        <span v-if="entry.speed" class="utc__metric">
+          <ion-icon :icon="flashOutline" class="utc__metric-icon" />
+          {{ entry.speed }}
+        </span>
+        <span v-if="entry.eta" class="utc__metric">
+          <ion-icon :icon="hourglassOutline" class="utc__metric-icon" />
+          {{ entry.eta }}
+        </span>
       </div>
 
       <!-- 错误提示（始终显示，作为快速预览） -->
@@ -120,7 +126,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { IonIcon } from '@ionic/vue'
-import { chevronUp, chevronDown, alertCircleOutline } from 'ionicons/icons'
+import { chevronUp, chevronDown, alertCircleOutline, flashOutline, hourglassOutline } from 'ionicons/icons'
 import PhaseIcon from './PhaseIcon.vue'
 import type { UnifiedTimelineEntry } from '@/lib/workflow/types'
 
@@ -197,8 +203,8 @@ function toggleExpand() {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--ion-color-step-300, #b2b2b2);
-  border: 2px solid var(--ion-color-step-300, #b2b2b2);
+  background: var(--tl-state-created);
+  border: 2px solid var(--tl-state-created);
   flex-shrink: 0;
   z-index: 1;
 }
@@ -206,7 +212,7 @@ function toggleExpand() {
 .utc__line {
   flex: 1;
   width: 2px;
-  background: var(--ion-color-step-200, #d3d3d3);
+  background: var(--tl-card-border-strong);
   margin-top: 2px;
   min-height: 8px;
 }
@@ -216,93 +222,119 @@ function toggleExpand() {
   display: none;
 }
 
-/* ==================== 右侧卡片 ==================== */
+/* ==================== 右侧卡片（顶部 2px 渐变状态色条 + design token 背景） ==================== */
 .utc__card {
   flex: 1;
   min-width: 0;
-  background: var(--ion-card-background, #ffffff);
-  border-radius: 8px;
+  background: linear-gradient(
+    180deg,
+    var(--tl-card-bg-gradient-start),
+    var(--tl-card-bg-gradient-end)
+  );
+  border-radius: var(--tl-card-radius);
+  border: 1px solid var(--tl-card-border);
   padding: 12px;
   margin-left: 8px;
   margin-bottom: 8px;
-  border-left: 4px solid var(--ion-color-step-300, #b2b2b2);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
 }
 
-/* ==================== 状态色左边框 ==================== */
-.utc--success .utc__card {
-  border-left-color: var(--ion-color-success, #2dd36f);
+/* 顶部 2px 渐变状态色条（替代左侧 4px 边框） */
+.utc__card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--tl-state-created);
+  opacity: 0.8;
+}
+
+/* ==================== 状态色（顶部条 + dot） ==================== */
+.utc--success .utc__card::before {
+  background: var(--tl-state-completed);
 }
 .utc--success .utc__dot {
-  background: var(--ion-color-success, #2dd36f);
-  border-color: var(--ion-color-success, #2dd36f);
+  background: var(--tl-state-completed);
+  border-color: var(--tl-state-completed);
 }
 
-.utc--failure .utc__card {
-  border-left-color: var(--ion-color-danger, #eb445a);
+.utc--failure .utc__card::before {
+  background: var(--tl-state-failed);
 }
 .utc--failure .utc__dot {
-  background: var(--ion-color-danger, #eb445a);
-  border-color: var(--ion-color-danger, #eb445a);
+  background: var(--tl-state-failed);
+  border-color: var(--tl-state-failed);
 }
 
-.utc--running .utc__card {
-  border-left-color: var(--ion-color-primary, #4f8cff);
+.utc--running .utc__card::before {
+  background: linear-gradient(
+    90deg,
+    var(--tl-state-analyzing),
+    var(--tl-state-encrypting)
+  );
 }
 .utc--running .utc__dot {
-  background: var(--ion-color-primary, #4f8cff);
-  border-color: var(--ion-color-primary, #4f8cff);
+  background: var(--tl-state-analyzing);
+  border-color: var(--tl-state-analyzing);
   animation: utc-pulse 1.5s ease-in-out infinite;
 }
 
-.utc--cancelled .utc__card,
-.utc--skipped .utc__card {
-  border-left-color: var(--ion-color-medium, #92949c);
+.utc--cancelled .utc__card::before,
+.utc--skipped .utc__card::before {
+  background: var(--tl-state-cancelled);
 }
 .utc--cancelled .utc__dot,
 .utc--skipped .utc__dot {
-  background: var(--ion-color-medium, #92949c);
-  border-color: var(--ion-color-medium, #92949c);
+  background: var(--tl-state-cancelled);
+  border-color: var(--tl-state-cancelled);
 }
 
-.utc--timed_out .utc__card {
-  border-left-color: var(--ion-color-warning, #ffc409);
+.utc--timed_out .utc__card::before {
+  background: var(--tl-state-preprocessing);
 }
 .utc--timed_out .utc__dot {
-  background: var(--ion-color-warning, #ffc409);
-  border-color: var(--ion-color-warning, #ffc409);
+  background: var(--tl-state-preprocessing);
+  border-color: var(--tl-state-preprocessing);
 }
 
-.utc--queued .utc__card,
-.utc--submitted .utc__card,
-.utc--pending .utc__card {
-  border-left-color: var(--ion-color-step-300, #b2b2b2);
+.utc--queued .utc__card::before,
+.utc--submitted .utc__card::before,
+.utc--pending .utc__card::before {
+  background: var(--tl-state-created);
 }
 
 @keyframes utc-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(var(--ion-color-primary-rgb, 79, 140, 255), 0.4);
+    box-shadow: 0 0 0 0 rgba(var(--tl-state-analyzing-rgb), 0.4);
   }
   50% {
-    box-shadow: 0 0 0 5px rgba(var(--ion-color-primary-rgb, 79, 140, 255), 0.1);
+    box-shadow: 0 0 0 5px rgba(var(--tl-state-analyzing-rgb), 0.1);
   }
 }
 
 /* ==================== current 状态高亮 ==================== */
 .utc--current .utc__card {
-  box-shadow: 0 0 0 2px rgba(var(--ion-color-primary-rgb, 79, 140, 255), 0.25),
+  box-shadow: 0 0 0 2px rgba(var(--tl-state-analyzing-rgb), 0.25),
     0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 /* ==================== highlight 状态（最长耗时等） ==================== */
 .utc--highlight .utc__card {
-  background: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.06);
+  background: linear-gradient(
+    180deg,
+    var(--tl-card-bg-gradient-start),
+    rgba(var(--tl-state-preprocessing-rgb), 0.06)
+  );
 }
 
 .utc__duration--highlight {
   font-weight: 700;
-  color: var(--ion-color-warning, #ffc409);
+  color: var(--tl-state-preprocessing);
 }
 
 /* ==================== 头部行 ==================== */
@@ -329,7 +361,7 @@ function toggleExpand() {
 .utc__label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--ion-text-color, #000);
+  color: var(--tl-card-text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -337,7 +369,7 @@ function toggleExpand() {
 
 .utc__meta {
   font-size: 11px;
-  color: var(--ion-color-medium, #92949c);
+  color: var(--tl-card-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -354,25 +386,25 @@ function toggleExpand() {
 .utc__duration {
   font-size: 11px;
   font-weight: 500;
-  color: var(--ion-color-medium, #92949c);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--tl-card-text-secondary);
+  font-family: var(--tl-card-font-mono);
   white-space: nowrap;
 }
 
 .utc__time {
   font-size: 11px;
-  color: var(--ion-color-medium, #92949c);
+  color: var(--tl-card-text-tertiary);
   white-space: nowrap;
 }
 
 .utc__chevron {
   font-size: 14px;
-  color: var(--ion-color-medium, #92949c);
+  color: var(--tl-card-text-tertiary);
   flex-shrink: 0;
   transition: transform 0.2s ease;
 }
 
-/* ==================== 进度条 + 速率 + ETA ==================== */
+/* ==================== 进度条 + 速率 + ETA（与 TestReportHeader 统一：4px 高，2px 圆角） ==================== */
 .utc__metrics {
   display: flex;
   align-items: center;
@@ -391,35 +423,39 @@ function toggleExpand() {
 
 .utc__progress-bar {
   flex: 1;
-  height: 4px;
-  background: var(--ion-color-step-200, #d3d3d3);
-  border-radius: 2px;
+  height: var(--tl-progress-height);
+  background: var(--tl-progress-bg);
+  border-radius: var(--tl-progress-radius);
   overflow: hidden;
 }
 
 .utc__progress-fill {
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    var(--ion-color-primary, #4f8cff),
-    var(--ion-color-primary-shade, #3a78e0)
-  );
-  border-radius: 2px;
+  background: var(--tl-progress-fill);
+  border-radius: var(--tl-progress-radius);
   transition: width 0.3s ease;
 }
 
 .utc__progress-text {
   font-size: 10px;
   font-weight: 600;
-  color: var(--ion-color-medium, #92949c);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--tl-card-text-secondary);
+  font-family: var(--tl-card-font-mono);
   white-space: nowrap;
 }
 
 .utc__metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 10px;
-  color: var(--ion-color-medium, #92949c);
+  color: var(--tl-card-text-secondary);
   white-space: nowrap;
+}
+
+.utc__metric-icon {
+  font-size: 11px;
+  flex-shrink: 0;
 }
 
 /* ==================== 错误提示 ==================== */
@@ -429,10 +465,10 @@ function toggleExpand() {
   gap: 4px;
   margin-top: 6px;
   padding: 4px 8px;
-  background: rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.08);
-  border-radius: 4px;
+  background: rgba(var(--tl-state-failed-rgb), 0.08);
+  border-radius: var(--tl-card-radius-sm);
   font-size: 11px;
-  color: var(--ion-color-danger, #eb445a);
+  color: var(--tl-state-failed);
 }
 
 .utc__error-hint ion-icon {
@@ -446,31 +482,29 @@ function toggleExpand() {
   white-space: nowrap;
 }
 
-/* ==================== 展开详情（卡片化） ==================== */
+/* ==================== 展开详情（左侧 2px 边线 + padding，非嵌套卡片） ==================== */
 .utc__detail {
+  margin-top: 10px;
+  padding: var(--tl-detail-padding);
+  border-left: var(--tl-detail-border-left);
+  margin-left: 0;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 8px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--ion-color-step-100, #ececec);
+  animation: utc-detail-enter 0.2s ease;
 }
 
 .utc__detail-card {
-  background: var(--ion-color-step-50, #f7f7f7);
-  border-radius: 6px;
-  padding: 6px 8px;
   min-width: 0;
 }
 
 .utc__detail-card--error {
-  background: rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.08);
   grid-column: 1 / -1;
 }
 
 .utc__detail-label {
   font-size: 10px;
-  color: var(--ion-color-medium, #92949c);
+  color: var(--tl-card-text-tertiary);
   margin-bottom: 2px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -478,19 +512,14 @@ function toggleExpand() {
 
 .utc__detail-value {
   font-size: 12px;
-  color: var(--ion-text-color, #000);
+  color: var(--tl-card-text-primary);
   font-weight: 500;
   word-break: break-all;
 }
 
 .utc__detail-value--mono {
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--tl-card-font-mono);
   font-size: 11px;
-}
-
-/* ==================== 展开动画（CSS animation，避免 Vue <transition> 在 jsdom 中不触发 transitionend） ==================== */
-.utc__detail {
-  animation: utc-detail-enter 0.2s ease;
 }
 
 @keyframes utc-detail-enter {
@@ -502,40 +531,5 @@ function toggleExpand() {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-/* ==================== 暗黑模式适配（body.dark） ==================== */
-:global(body.dark) .utc__card {
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-:global(body.dark) .utc--current .utc__card {
-  box-shadow: 0 0 0 2px rgba(var(--ion-color-primary-rgb, 79, 140, 255), 0.35),
-    0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-:global(body.dark) .utc--highlight .utc__card {
-  background: rgba(var(--ion-color-warning-rgb, 255, 196, 9), 0.1);
-}
-
-:global(body.dark) .utc__label {
-  color: rgba(255, 255, 255, 0.92);
-}
-
-:global(body.dark) .utc__detail-card {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-:global(body.dark) .utc__detail-value {
-  color: rgba(255, 255, 255, 0.88);
-}
-
-:global(body.dark) .utc__detail {
-  border-top-color: rgba(255, 255, 255, 0.08);
-}
-
-:global(body.dark) .utc__progress-bar {
-  background: rgba(255, 255, 255, 0.12);
 }
 </style>
