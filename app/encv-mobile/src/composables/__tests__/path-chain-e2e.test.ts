@@ -3,7 +3,7 @@
  *
  * 链路：
  *   DEFAULT_AUTOMATION_SOURCE (常量)
- *     → AutomationTestsDetail.vue 的 mockRoot 计算
+ *     → PluginTestsDetail.vue 的 mockRoot 计算
  *       → generateMockFilesViaBackend({ root: mockRoot })  [前端发请求]
  *         → 后端 handleMockGenerateGin 接收 root + filepath.Join(root, relativePath) 写盘
  *           → useWorkflowEngine.executeJob() 取 sourcePath
@@ -43,7 +43,7 @@ beforeEach(() => {
 /** useAutomationTests.ts L77 */
 const DEFAULT_AUTOMATION_SOURCE = '/storage/emulated/0/encv-automation/01-plain-media/video/sample.mp4'
 
-/** AutomationTestsDetail.vue L225 — mockRoot computed */
+/** PluginTestsDetail.vue L225 — mockRoot computed */
 function computeMockRootFromSource(): string {
   return DEFAULT_AUTOMATION_SOURCE.split('/').slice(0, 5).join('/') + '/'
 }
@@ -256,7 +256,7 @@ describe('端到端路径一致性测试', () => {
 
   describe('阶段 6：Workflow Engine 路径传递', () => {
     /**
-     * AutomationTestsDetail.vue buildDynamicWorkflow() 中：
+     * PluginTestsDetail.vue buildDynamicWorkflow() 中：
      *   steps.push({
      *     action: {
      *       params: {

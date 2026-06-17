@@ -5,7 +5,7 @@
         <ion-buttons slot="start">
           <ion-back-button default-href="/tabs/settings/devtools"></ion-back-button>
         </ion-buttons>
-        <ion-title>{{ t('devtools.automationTests') }}</ion-title>
+        <ion-title>{{ t('devtools.pluginTests') }}</ion-title>
         <ion-buttons slot="end">
           <!-- 视图切换 -->
           <button
@@ -452,7 +452,7 @@ function setInlineError(err: Omit<InlineError, 'at'>): void {
   inlineError.value = { ...err, at: Date.now() }
   // 同步 log 到 console 便于开发期排查
   // eslint-disable-next-line no-console
-  console.error('[AutomationTestsDetail] inline error', err)
+  console.error('[PluginTestsDetail] inline error', err)
 }
 function clearInlineError(): void {
   inlineError.value = null
@@ -875,7 +875,7 @@ function classifyMockError(errMsg: string): { title: string; hint: string } {
         `  - 错误示例：mockRoot = "/d/automation/01-plain-media/video/"（取多了）\n` +
         `  - 正确示例：mockRoot = "/d/automation/"（mount 根）\n\n` +
         `排查：\n` +
-        `  1) WorkflowDashboard.vue L201 / AutomationTestsDetail.vue L373 → 改 N=3\n` +
+        `  1) WorkflowDashboard.vue L201 / PluginTestsDetail.vue L373 → 改 N=3\n` +
         `  2) 后端 slog：grep "Mock generate rejected" /workspace/encv.log`,
     }
   }
