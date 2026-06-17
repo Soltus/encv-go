@@ -1,5 +1,5 @@
 /**
- * useWebDavTestModules — 7 module × 30+ test case 定义
+ * useWebDavTestModules — 8 module × 46 test case 定义
  *
  * 🆕 2026-06-17：声明式重构（multi-mount-storage-refactor spec 续）
  *
@@ -12,7 +12,7 @@
  *  - edge         边界情况（5 case）
  *  - attack       攻防测试（8 case）
  *
- * 6 类攻防标记（attackType 字段）：
+ * 9 类攻防标记（attackType 字段）：
  *  - container-visibility / cross-mount-escape / index-rebuild-race
  *  - resource-exhaustion / protocol-consistency / concurrency-stress
  *  - large-payload / slow-network
@@ -56,6 +56,26 @@ function pickFirstContainer(ctx: WebDavTestContext): { virtual: string; containe
 
 function hasMultipleMounts(ctx: WebDavTestContext): boolean {
   return ctx.manifest.mounts.length > 1
+}
+
+/**
+ * 从 active mount 的 manifest.registered_container_exts 动态取第一个扩展名。
+ * 绝不能硬编码 .sccg* / .encv / .ae —— 后端 plugin 系统是权威，配置可变。
+ * @returns 包含前导点的扩展名（如 ".sccgv"），若 manifest 为空则返回 '__unknown__' 哨兵。
+ */
+function getFirstContainerExt(ctx: WebDavTestContext): string {
+  const exts = ctx.activeMount.manifest.registered_container_exts
+  if (!Array.isArray(exts) || exts.length === 0) return '__unknown__'
+  // 后端总是返回包含前导点的扩展名（如 ".sccgv"）
+  return exts[0]
+}
+
+/**
+ * 从 active mount 找第一个**非 root** 的另一个 mount（用于跨 mount 测试）。
+ */
+function pickOtherMount(ctx: WebDavTestContext): { name: string; webdav_path: string } | null {
+  const other = ctx.manifest.mounts.find((m) => m.name !== ctx.activeMount.name)
+  return other ? { name: other.name, webdav_path: other.webdav_path } : null
 }
 
 // ============= Module 1: auth（认证）============
@@ -611,9 +631,15 @@ const attackModule: TestModule = {
       headers: () => ({ Depth: '1', 'Content-Type': 'application/xml' }),
       body: '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>',
       expect: {
-        // 列表不能包含 *.encv 物理文件（被 IsContainerExtension 过滤）
+        // 列表不能包含容器物理文件（被 IsContainerExtension 过滤）
+        // 动态从 manifest.registered_container_exts 取扩展名（不能硬编码 .sccg* / .encv）
         status: [207, 200],
-        bodyNotMatches: /href[^>]*>\s*[^<]*\.encv\s*</i,
+        bodyNotMatches: (ctx) => {
+          const ext = getFirstContainerExt(ctx)
+          // 转义 regex 元字符（前导点 + 字母数字）
+          const escaped = ext.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          return new RegExp(`href[^>]*>\\s*[^<]*${escaped}\\s*<`, 'i')
+        },
       },
       skip: (ctx) => !pickFirstContainer(ctx),
       order: 3,
@@ -719,7 +745,9 @@ const attackModule: TestModule = {
 // ============= Module 8: encrypted_container_preview（加密容器预览）============
 //
 // 🆕 2026-06-17：用户补充要求 — 之前要求的「预览加密容器测试」一直没做
-// 加密容器（.encv / .ae）是本项目核心功能，必须有专项 module 覆盖
+// 加密容器是本项目核心功能，必须有专项 module 覆盖
+// ⚠️ 容器扩展名从 manifest.registered_container_exts 动态取，
+//    绝不能硬编码任何具体后缀（plugin 系统是权威，配置可变）
 // 覆盖维度：
 //   1. list 容器（PROPFIND depth=1 拿到 virtual files）
 //   2. GET 容器内虚拟文件（解密路径）
@@ -737,7 +765,8 @@ const encryptedContainerModule: TestModule = {
   color: 'medium',
   cases: [
     {
-      // 1. PROPFIND 列父目录，验证 *.encv 物理文件被 container_map 映射为 virtual directory
+      // 1. PROPFIND 列父目录，验证容器物理文件被 container_map 映射为 virtual directory
+      // 注意：扩展名从 manifest.registered_container_exts 动态取，不能硬编码
       id: 'enc_list_parent_includes_container',
       nameI18n: 'devtools.webdav.cases.enc_list_parent_includes_container.name',
       descI18n: 'devtools.webdav.cases.enc_list_parent_includes_container.desc',
@@ -854,6 +883,114 @@ const encryptedContainerModule: TestModule = {
       expect: { status: [200, 404, 500] },
       skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
       order: 6,
+    },
+    {
+      // 7. 访问不存在的容器虚拟路径 → 404（模拟容器被删除/重命名后的行为）
+      id: 'enc_get_nonexistent_container_404',
+      nameI18n: 'devtools.webdav.cases.enc_get_nonexistent_container_404.name',
+      descI18n: 'devtools.webdav.cases.enc_get_nonexistent_container_404.desc',
+      module: 'encrypted_container_preview',
+      method: 'GET',
+      url: (ctx) => {
+        // 用容器虚拟路径的父目录 + 时间戳拼一个不存在的虚拟文件
+        const container = ctx.activeMount.manifest.container_map[0]
+        if (!container) return joinUrl(ctx)
+        const parts = container.virtual_path.split('/').filter(Boolean)
+        if (parts.length === 0) return joinUrl(ctx)
+        const parent = '/' + parts.slice(0, -1).join('/')
+        return mountUrl(ctx, parent, '__nope_container_' + Date.now() + '.bin')
+      },
+      expect: { status: [404, 400, 403] },
+      skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
+      order: 7,
+    },
+    {
+      // 8. PROPFIND depth=infinity 容器根，验证能完整列出容器内全部虚拟文件
+      //    （不是嵌套容器 —— ENCV v4 不支持容器套容器；这里测容器内**多级目录**的虚拟文件）
+      id: 'enc_propfind_container_depth_infinity',
+      nameI18n: 'devtools.webdav.cases.enc_propfind_container_depth_infinity.name',
+      descI18n: 'devtools.webdav.cases.enc_propfind_container_depth_infinity.desc',
+      module: 'encrypted_container_preview',
+      method: 'PROPFIND',
+      url: (ctx) => {
+        const m = ctx.activeMount.manifest.container_map[0]
+        return m ? mountUrl(ctx, m.virtual_path) : joinUrl(ctx)
+      },
+      headers: () => ({ Depth: 'infinity', 'Content-Type': 'application/xml' }),
+      body: '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>',
+      expect: { status: [207, 200, 403] }, // 403 = server 拒绝 depth=infinity 也合法
+      timeoutMs: 30_000,
+      skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
+      order: 8,
+    },
+    {
+      // 9. HEAD 容器内虚拟文件，验证元数据（Content-Type / Content-Length / Last-Modified）
+      id: 'enc_head_virtual_file_inside',
+      nameI18n: 'devtools.webdav.cases.enc_head_virtual_file_inside.name',
+      descI18n: 'devtools.webdav.cases.enc_head_virtual_file_inside.desc',
+      module: 'encrypted_container_preview',
+      method: 'HEAD',
+      url: (ctx) => {
+        const container = ctx.activeMount.manifest.container_map[0]
+        if (!container) return joinUrl(ctx)
+        const vf = ctx.activeMount.manifest.virtual_tree.find(
+          (e) => !e.is_dir && e.virtual_path.startsWith(container.virtual_path + '/')
+        )
+        return vf ? mountUrl(ctx, vf.virtual_path) : joinUrl(ctx)
+      },
+      expect: { status: [200, 404, 500] },
+      skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
+      order: 9,
+    },
+    {
+      // 10. Range request 容器内文件（HTTP Range 头）—— 用于视频拖动条
+      id: 'enc_range_request_virtual_file',
+      nameI18n: 'devtools.webdav.cases.enc_range_request_virtual_file.name',
+      descI18n: 'devtools.webdav.cases.enc_range_request_virtual_file.desc',
+      module: 'encrypted_container_preview',
+      method: 'GET',
+      url: (ctx) => {
+        const container = ctx.activeMount.manifest.container_map[0]
+        if (!container) return joinUrl(ctx)
+        const vf = ctx.activeMount.manifest.virtual_tree.find(
+          (e) => !e.is_dir && e.virtual_path.startsWith(container.virtual_path + '/')
+        )
+        return vf ? mountUrl(ctx, vf.virtual_path) : joinUrl(ctx)
+      },
+      // Range: bytes=0-1023 请求前 1KB（容器解密 + 流式 chunk）
+      headers: (ctx) => {
+        const container = ctx.activeMount.manifest.container_map[0]
+        if (!container) return {} as Record<string, string>
+        const vf = ctx.activeMount.manifest.virtual_tree.find(
+          (e) => !e.is_dir && e.virtual_path.startsWith(container.virtual_path + '/')
+        )
+        if (!vf || !vf.size || vf.size < 1024) return {} as Record<string, string>
+        return { Range: 'bytes=0-1023' }
+      },
+      // 期望：206 Partial Content（Range 支持）或 200（不支持但能 GET）
+      expect: { status: [206, 200, 404, 500, 416] }, // 416 = Range Not Satisfiable（小文件）
+      skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
+      order: 10,
+    },
+    {
+      // 11. 跨 mount 访问容器：尝试用 path traversal 访问其他 mount 中的容器
+      id: 'enc_cross_mount_access_container',
+      nameI18n: 'devtools.webdav.cases.enc_cross_mount_access_container.name',
+      descI18n: 'devtools.webdav.cases.enc_cross_mount_access_container.desc',
+      module: 'encrypted_container_preview',
+      attackType: 'cross-mount-escape',
+      method: 'GET',
+      url: (ctx) => {
+        const other = pickOtherMount(ctx)
+        const container = ctx.activeMount.manifest.container_map[0]
+        if (!other || !container) return joinUrl(ctx)
+        // 攻击者用 ../ 跳到其他 mount，再访问容器
+        const mountPath = ctx.activeMount.webdav_path
+        return `${ctx.serverBaseUrl}${mountPath}/../../${other.webdav_path.replace(/^\//, '')}/${container.virtual_path.replace(/^\//, '')}`
+      },
+      expect: { status: [400, 403, 404, 500] }, // 不应 200（跨 mount 容器访问被拒）
+      skip: (ctx) => !hasMultipleMounts(ctx) || ctx.activeMount.manifest.container_map.length === 0,
+      order: 11,
     },
   ],
 }

@@ -1,10 +1,10 @@
 /**
- * useWebDavAutomationTests — 7 module 协调器 + 持久化
+ * useWebDavAutomationTests — 8 module 协调器 + 持久化
  *
  * 🆕 2026-06-17：声明式重构（multi-mount-storage-refactor spec 续）
  *
  * 设计：
- *  - 7 module 各自独立的 run state（ref<RunState>）
+ *  - 8 module 各自独立的 run state（ref<RunState>）
  *  - 持久化到 localStorage（key 升级到 v2 兼容破坏性 schema 变化）
  *  - 旧 v1 数据清空（用户已确认）
  *  - 翻译注入：调用 useI18n，传入 runner 的 translateName 闭包
@@ -66,7 +66,7 @@ export function useWebDavAutomationTests(): UseWebDavAutomationTestsReturn {
   const manifestComposable = useWebDavManifest()
   const { runCase } = useWebDavTestRunner()
 
-  // 7 module 独立状态
+  // 8 module 独立状态
   const moduleStates: Record<string, Ref<ModuleRunState>> = {}
   for (const m of WEBDAV_TEST_MODULES) {
     moduleStates[m.id] = ref<ModuleRunState>({

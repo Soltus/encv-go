@@ -3,7 +3,7 @@
  *
  * 🆕 2026-06-17：声明式重构（multi-mount-storage-refactor spec 续）
  *   之前：硬编码 switch case + 18 case 一次跑完
- *   现在：TestDescriptor 数据驱动 + 7 module 独立 runner + 6 类攻防场景
+ *   现在：TestDescriptor 数据驱动 + 8 module 独立 runner + 9 类攻防场景
  */
 
 // ============ Manifest（后端返回）============
@@ -78,7 +78,7 @@ export interface WebDavTestContext {
 
 // ============ Test 模块与 case ============
 
-/** 6 类攻防类型（attack / edge module 内部 case 分类） */
+/** 9 类攻防类型（attack / edge / encrypted_container_preview module 内部 case 分类） */
 export type AttackType =
   | 'container-visibility'  // 容器可见性泄露
   | 'cross-mount-escape'    // 跨 mount 逃逸
@@ -106,10 +106,10 @@ export interface TestExpectations {
   status?: number | number[]
   /** 排除的 status code */
   statusNotIn?: number[]
-  /** body 必须匹配（regex 或 substring） */
-  bodyMatches?: RegExp | string
-  /** body 必须不匹配（regex 或 substring） */
-  bodyNotMatches?: RegExp | string
+  /** body 必须匹配（regex 或 substring，支持函数动态构造） */
+  bodyMatches?: RegExp | string | ((ctx: WebDavTestContext) => RegExp | string | null | undefined)
+  /** body 必须不匹配（regex 或 substring，支持函数动态构造） */
+  bodyNotMatches?: RegExp | string | ((ctx: WebDavTestContext) => RegExp | string | null | undefined)
   /** 响应时间限制（ms） */
   responseTimeMs?: { max: number }
   /** 必须包含的 header（key/value 包含关系） */
@@ -127,7 +127,7 @@ export interface TestDescriptor {
   descI18n: string
   /** 所属 module id */
   module: string
-  /** 6 类攻防标记（attack / edge module 用） */
+  /** 9 类攻防标记（attack / edge / encrypted_container_preview module 用） */
   attackType?: AttackType
   /** HTTP 方法 */
   method: HttpMethod

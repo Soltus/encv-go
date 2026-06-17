@@ -155,8 +155,8 @@ export function useWebDavTestRunner() {
           errorKind = status >= 500 ? 'http_5xx' : 'http_4xx'
           error = `status ${status} is in excluded list [${statusNotIn.join(',')}]`
         } else {
-          // body 验证
-          const bodyFail = validateBody(primaryBody, desc.expect.bodyMatches, desc.expect.bodyNotMatches)
+          // body 验证（bodyMatches / bodyNotMatches 支持函数式动态构造）
+          const bodyFail = validateBody(primaryBody, desc.expect.bodyMatches, desc.expect.bodyNotMatches, ctx)
           if (bodyFail) {
             passed = false
             errorKind = 'assertion'
@@ -287,17 +287,21 @@ async function runSingleFetch(
 
 function validateBody(
   body: string,
-  matches: RegExp | string | undefined,
-  notMatches: RegExp | string | undefined
+  matches: RegExp | string | ((ctx: WebDavTestContext) => RegExp | string | null | undefined) | undefined,
+  notMatches: RegExp | string | ((ctx: WebDavTestContext) => RegExp | string | null | undefined) | undefined,
+  ctx: WebDavTestContext
 ): AssertionFailure | null {
-  if (matches !== undefined) {
-    const m = matches instanceof RegExp ? matches : new RegExp(matches)
+  // 解析函数式 bodyMatches / bodyNotMatches（动态构造 regex，避免硬编码）
+  const resolvedMatches = typeof matches === 'function' ? matches(ctx) : matches
+  const resolvedNotMatches = typeof notMatches === 'function' ? notMatches(ctx) : notMatches
+  if (resolvedMatches !== undefined && resolvedMatches !== null) {
+    const m = resolvedMatches instanceof RegExp ? resolvedMatches : new RegExp(resolvedMatches)
     if (!m.test(body)) {
       return { message: `body missing pattern ${m}`, actual: body.slice(0, 200) }
     }
   }
-  if (notMatches !== undefined) {
-    const m = notMatches instanceof RegExp ? notMatches : new RegExp(notMatches)
+  if (resolvedNotMatches !== undefined && resolvedNotMatches !== null) {
+    const m = resolvedNotMatches instanceof RegExp ? resolvedNotMatches : new RegExp(resolvedNotMatches)
     if (m.test(body)) {
       return { message: `body unexpectedly matched pattern ${m}`, actual: body.slice(0, 200) }
     }

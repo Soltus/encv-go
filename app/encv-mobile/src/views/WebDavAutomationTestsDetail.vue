@@ -440,7 +440,7 @@ const { t } = useI18n()
 const automation = useWebDavAutomationTests()
 const { modules, moduleStates, historyRuns, isAnyRunning, runModule, runAll, cancelModule, clearHistory } = automation
 
-// 🆕 2026-06-17: 7 module grid 使用 manifest composable（独立拉取 + mount 选择）
+// 🆕 2026-06-17: 8 module grid 使用 manifest composable（独立拉取 + mount 选择）
 const manifest = useWebDavManifest()
 
 const totalCases = computed(() => modules.reduce((sum, m) => sum + m.cases.length, 0))

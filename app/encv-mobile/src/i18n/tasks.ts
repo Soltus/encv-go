@@ -237,9 +237,9 @@ export default {
     'devtools.sparseContainer.cleanupSuccess': '清理完成',
     'devtools.sparseContainer.cleanupFailed': '清理失败',
 
-    // 🆕 2026-06-17：WebDAV 自动化测试 7 module 声明式重构
-    // 新结构：Module × TestDescriptor，6 类攻防标记，35 case
-    // 7 个 module 名/描述
+    // 🆕 2026-06-17：WebDAV 自动化测试 8 module 声明式重构
+    // 新结构：Module × TestDescriptor，9 类攻防标记，46 case
+    // 8 个 module 名/描述
     'devtools.webdav.modules.auth.name': '认证',
     'devtools.webdav.modules.auth.desc': 'Basic Auth 行为验证：缺凭据 / 错凭据 / 正确凭据 / 无 auth 配置',
     'devtools.webdav.modules.basic_ops.name': '基础 CRUD',
@@ -256,7 +256,7 @@ export default {
     'devtools.webdav.modules.attack.desc': '容器可见性、跨 mount 逃逸、协议注入、index race、资源耗尽',
     'devtools.webdav.modules.encrypted_container_preview.name': '加密容器预览',
     'devtools.webdav.modules.encrypted_container_preview.desc': 'PROPFIND 列容器 / GET 容器内虚拟文件 / 物理路径访问阻断 / 并发访问 / 大文件解密流式',
-    // 6 类攻防标记（实际使用 8 类 attackType，UI 显示所有）
+    // 9 类攻防标记（实际使用 9 类 attackType，UI 显示所有）
     'devtools.webdav.attackTypes.container-visibility': '容器可见性',
     'devtools.webdav.attackTypes.cross-mount-escape': '跨 mount 逃逸',
     'devtools.webdav.attackTypes.index-rebuild-race': 'Index 重建 race',
@@ -265,7 +265,7 @@ export default {
     'devtools.webdav.attackTypes.concurrency-stress': '并发压力',
     'devtools.webdav.attackTypes.large-payload': '大文件传输',
     'devtools.webdav.attackTypes.slow-network': '慢网络 / 超时',
-    // 35 case 名/描述（auth × 4 + basic_ops × 5 + protocol × 5 + concurrency × 4 + large_payload × 4 + edge × 5 + attack × 8 = 35）
+    // 46 case 名/描述（auth × 4 + basic_ops × 5 + protocol × 5 + concurrency × 4 + large_payload × 4 + edge × 5 + attack × 8 + encrypted_container_preview × 11 = 46）
     'devtools.webdav.cases.auth_no_credentials_401.name': '无凭据 → 401/403',
     'devtools.webdav.cases.auth_no_credentials_401.desc': '请求不带 Authorization，期望被服务端拒绝',
     'devtools.webdav.cases.auth_wrong_credentials_401.name': '错误凭据 → 401/403',
@@ -324,8 +324,8 @@ export default {
     'devtools.webdav.cases.attack_container_propfind_physical_path.desc': '尝试访问 container_map 中的物理路径，期望被虚拟文件覆盖',
     'devtools.webdav.cases.attack_container_get_physical_path.name': 'GET 容器物理路径',
     'devtools.webdav.cases.attack_container_get_physical_path.desc': '直接 GET 容器物理路径，期望不能泄露 manifest 头部',
-    'devtools.webdav.cases.attack_container_list_dir_excludes_ext.name': 'list 不暴露 .encv',
-    'devtools.webdav.cases.attack_container_list_dir_excludes_ext.desc': 'PROPFIND 父目录，验证 *.encv 物理文件被过滤',
+    'devtools.webdav.cases.attack_container_list_dir_excludes_ext.name': 'list 不暴露容器扩展名',
+    'devtools.webdav.cases.attack_container_list_dir_excludes_ext.desc': 'PROPFIND 父目录，验证容器物理文件被 IsContainerExtension 过滤（扩展名从 manifest 动态取）',
     'devtools.webdav.cases.attack_cross_mount_traversal.name': '跨 mount 路径遍历',
     'devtools.webdav.cases.attack_cross_mount_traversal.desc': '通过 ../ 尝试访问其他 mount，期望被拒绝',
     'devtools.webdav.cases.attack_cross_mount_to_etc.name': '跨 mount 到 /etc/passwd',
@@ -338,7 +338,7 @@ export default {
     'devtools.webdav.cases.attack_resource_exhaustion_burst.desc': '100 并发 GET，期望 backpressure 429/503 或全部成功',
     // 🆕 2026-06-17：encrypted_container_preview module（6 case）
     'devtools.webdav.cases.enc_list_parent_includes_container.name': '列父目录含容器',
-    'devtools.webdav.cases.enc_list_parent_includes_container.desc': 'PROPFIND 父目录，验证 *.encv 被 container_map 映射为虚拟目录',
+    'devtools.webdav.cases.enc_list_parent_includes_container.desc': 'PROPFIND 父目录，验证容器物理文件被 container_map 映射为虚拟目录（扩展名从 manifest 动态取）',
     'devtools.webdav.cases.enc_list_container_via_propfind.name': 'PROPFIND 容器内',
     'devtools.webdav.cases.enc_list_container_via_propfind.desc': 'PROPFIND depth=1 容器虚拟目录，期望 207 + 列出虚拟文件',
     'devtools.webdav.cases.enc_get_virtual_file_inside.name': 'GET 容器内虚拟文件',
@@ -349,6 +349,16 @@ export default {
     'devtools.webdav.cases.enc_concurrent_access_same_container.desc': '20 并发 GET 同一容器内文件，验证 file-system 锁不冲突',
     'devtools.webdav.cases.enc_get_largest_virtual_in_container.name': 'GET 容器内最大文件',
     'devtools.webdav.cases.enc_get_largest_virtual_in_container.desc': '解密 + 流式 GET 容器内 size 最大的虚拟文件',
+    'devtools.webdav.cases.enc_get_nonexistent_container_404.name': '访问不存在容器 → 404',
+    'devtools.webdav.cases.enc_get_nonexistent_container_404.desc': 'GET 一个不存在的容器虚拟路径（模拟容器被删除），期望 404/400/403',
+    'devtools.webdav.cases.enc_propfind_container_depth_infinity.name': 'PROPFIND depth=infinity 容器',
+    'devtools.webdav.cases.enc_propfind_container_depth_infinity.desc': '深度列出容器内所有虚拟文件（验证多级目录/大量文件）',
+    'devtools.webdav.cases.enc_head_virtual_file_inside.name': 'HEAD 容器内文件元数据',
+    'devtools.webdav.cases.enc_head_virtual_file_inside.desc': 'HEAD 容器内虚拟文件，验证 Content-Type / Content-Length 正确',
+    'devtools.webdav.cases.enc_range_request_virtual_file.name': 'Range 容器内文件',
+    'devtools.webdav.cases.enc_range_request_virtual_file.desc': 'HTTP Range bytes=0-1023，验证容器内文件支持拖动条（期望 206）',
+    'devtools.webdav.cases.enc_cross_mount_access_container.name': '跨 mount 容器逃逸',
+    'devtools.webdav.cases.enc_cross_mount_access_container.desc': '用 ../ 尝试跨 mount 访问容器，期望被拒（400/403/404/500）',
     // 顶部 manifest 状态卡 + module grid UI
     'devtools.webdav.manifestStatus': '挂载清单',
     'devtools.webdav.manifestReady': '就绪',
@@ -630,7 +640,7 @@ export default {
     'devtools.webdav.attackTypes.concurrency-stress': 'Concurrency Stress',
     'devtools.webdav.attackTypes.large-payload': 'Large Payload',
     'devtools.webdav.attackTypes.slow-network': 'Slow Network / Timeout',
-    // 35 case names/descriptions
+    // 46 case names/descriptions
     'devtools.webdav.cases.auth_no_credentials_401.name': 'No credentials → 401/403',
     'devtools.webdav.cases.auth_no_credentials_401.desc': 'Request without Authorization, expect server rejection',
     'devtools.webdav.cases.auth_wrong_credentials_401.name': 'Wrong credentials → 401/403',
@@ -689,8 +699,8 @@ export default {
     'devtools.webdav.cases.attack_container_propfind_physical_path.desc': 'Try accessing physical path from container_map, expect virtual-file override',
     'devtools.webdav.cases.attack_container_get_physical_path.name': 'GET Container Physical Path',
     'devtools.webdav.cases.attack_container_get_physical_path.desc': 'Direct GET on container physical path, expect no manifest header leak',
-    'devtools.webdav.cases.attack_container_list_dir_excludes_ext.name': 'List Hides .encv',
-    'devtools.webdav.cases.attack_container_list_dir_excludes_ext.desc': 'PROPFIND parent dir, verify *.encv physical files are filtered',
+    'devtools.webdav.cases.attack_container_list_dir_excludes_ext.name': 'List Hides Container Extensions',
+    'devtools.webdav.cases.attack_container_list_dir_excludes_ext.desc': 'PROPFIND parent dir, verify container physical files are filtered by IsContainerExtension (exts from manifest dynamically)',
     'devtools.webdav.cases.attack_cross_mount_traversal.name': 'Cross-mount Path Traversal',
     'devtools.webdav.cases.attack_cross_mount_traversal.desc': 'Try ../ to access other mount, expect rejection',
     'devtools.webdav.cases.attack_cross_mount_to_etc.name': 'Cross-mount → /etc/passwd',
@@ -703,7 +713,7 @@ export default {
     'devtools.webdav.cases.attack_resource_exhaustion_burst.desc': '100 concurrent GETs, expect backpressure 429/503 or all success',
     // 🆕 2026-06-17: encrypted_container_preview module (6 cases)
     'devtools.webdav.cases.enc_list_parent_includes_container.name': 'List Parent Includes Container',
-    'devtools.webdav.cases.enc_list_parent_includes_container.desc': 'PROPFIND parent dir, verify *.encv is mapped to virtual directory via container_map',
+    'devtools.webdav.cases.enc_list_parent_includes_container.desc': 'PROPFIND parent dir, verify container physical files are mapped to virtual dir via container_map (exts from manifest dynamically)',
     'devtools.webdav.cases.enc_list_container_via_propfind.name': 'PROPFIND Container Contents',
     'devtools.webdav.cases.enc_list_container_via_propfind.desc': 'PROPFIND depth=1 on container virtual dir, expect 207 + virtual file listing',
     'devtools.webdav.cases.enc_get_virtual_file_inside.name': 'GET Virtual File Inside',
@@ -714,6 +724,16 @@ export default {
     'devtools.webdav.cases.enc_concurrent_access_same_container.desc': '20 concurrent GETs of a file inside the same container, verify no fs lock conflict',
     'devtools.webdav.cases.enc_get_largest_virtual_in_container.name': 'GET Largest Virtual in Container',
     'devtools.webdav.cases.enc_get_largest_virtual_in_container.desc': 'Decrypt + stream GET on the largest virtual file inside a container',
+    'devtools.webdav.cases.enc_get_nonexistent_container_404.name': 'GET Nonexistent Container → 404',
+    'devtools.webdav.cases.enc_get_nonexistent_container_404.desc': 'GET a nonexistent container virtual path (simulate container deleted), expect 404/400/403',
+    'devtools.webdav.cases.enc_propfind_container_depth_infinity.name': 'PROPFIND Container Depth=Infinity',
+    'devtools.webdav.cases.enc_propfind_container_depth_infinity.desc': 'Deep list all virtual files inside a container (verify multi-level dirs / many files)',
+    'devtools.webdav.cases.enc_head_virtual_file_inside.name': 'HEAD Virtual File Metadata',
+    'devtools.webdav.cases.enc_head_virtual_file_inside.desc': 'HEAD virtual file inside container, verify Content-Type / Content-Length',
+    'devtools.webdav.cases.enc_range_request_virtual_file.name': 'Range Request Virtual File',
+    'devtools.webdav.cases.enc_range_request_virtual_file.desc': 'HTTP Range bytes=0-1023, verify container file supports seek (expect 206)',
+    'devtools.webdav.cases.enc_cross_mount_access_container.name': 'Cross-Mount Container Escape',
+    'devtools.webdav.cases.enc_cross_mount_access_container.desc': 'Use ../ to attempt cross-mount container access, expect rejected (400/403/404/500)',
     // Top manifest status card + module grid UI
     'devtools.webdav.manifestStatus': 'Mount Manifest',
     'devtools.webdav.manifestReady': 'Ready',
