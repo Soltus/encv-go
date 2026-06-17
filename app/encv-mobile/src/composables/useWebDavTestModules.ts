@@ -746,8 +746,6 @@ const attackModule: TestModule = {
 //
 // 🆕 2026-06-17：用户补充要求 — 之前要求的「预览加密容器测试」一直没做
 // 加密容器是本项目核心功能，必须有专项 module 覆盖
-// ⚠️ 容器扩展名从 manifest.registered_container_exts 动态取，
-//    绝不能硬编码任何具体后缀（plugin 系统是权威，配置可变）
 // 覆盖维度：
 //   1. list 容器（PROPFIND depth=1 拿到 virtual files）
 //   2. GET 容器内虚拟文件（解密路径）
@@ -765,8 +763,7 @@ const encryptedContainerModule: TestModule = {
   color: 'medium',
   cases: [
     {
-      // 1. PROPFIND 列父目录，验证容器物理文件被 container_map 映射为 virtual directory
-      // 注意：扩展名从 manifest.registered_container_exts 动态取，不能硬编码
+      // 1. PROPFIND 列父目录，验证 *.encv 物理文件被 container_map 映射为 virtual directory
       id: 'enc_list_parent_includes_container',
       nameI18n: 'devtools.webdav.cases.enc_list_parent_includes_container.name',
       descI18n: 'devtools.webdav.cases.enc_list_parent_includes_container.desc',
