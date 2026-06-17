@@ -17,6 +17,9 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/handler"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 const testPassword = "test-password-123"
@@ -82,14 +85,6 @@ func TestPluginInitialization(t *testing.T) {
 		err := p.Initialize(ctx)
 		require.NoError(t, err)
 		assert.Equal(t, ".sccgv", p.settings.Suffix, "reserved V2 suffix should be preserved")
-	})
-
-	t.Run("suffix_encv_reserved_allowed", func(t *testing.T) {
-		// .encv is the legacy reserved extension; same rule as .sccgv.
-		p, ctx := newPluginWithSettings(t, ".encv", testPassword, "aesctr")
-		err := p.Initialize(ctx)
-		require.NoError(t, err)
-		assert.Equal(t, ".encv", p.settings.Suffix, "reserved legacy suffix should be preserved")
 	})
 
 	t.Run("suffix_no_dot_auto_fix", func(t *testing.T) {
@@ -161,20 +156,9 @@ func TestCanDecrypt(t *testing.T) {
 
 		tmpDir := t.TempDir()
 		sccgvPath := filepath.Join(tmpDir, "file.sccgv")
-		require.NoError(t, os.WriteFile(sccgvPath, []byte("encv container"), 0644))
+		require.NoError(t, os.WriteFile(sccgvPath, []byte("v4 container"), 0644))
 
-		assert.False(t, p.CanDecrypt(sccgvPath), ".sccgv should return false (ENCV container excluded)")
-	})
-
-	t.Run("encv_returns_false", func(t *testing.T) {
-		p, ctx := newPluginWithSettings(t, ".bin", testPassword, "aesctr")
-		require.NoError(t, p.Initialize(ctx))
-
-		tmpDir := t.TempDir()
-		encvPath := filepath.Join(tmpDir, "file.encv")
-		require.NoError(t, os.WriteFile(encvPath, []byte("encv container"), 0644))
-
-		assert.False(t, p.CanDecrypt(encvPath), ".encv should return false (ENCV container excluded)")
+		assert.False(t, p.CanDecrypt(sccgvPath), ".sccgv should return false (V4 container has its own plugin)")
 	})
 
 	t.Run("V1_legacy_no_magic_returns_true", func(t *testing.T) {

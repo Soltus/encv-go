@@ -213,6 +213,25 @@
           </ion-label>
         </ion-item>
 
+        <!-- ========== 🆕 2026-06-17 插件真实扩展名（权威显示）========== -->
+        <!-- 目的：用户一眼看出后端 plugin.GetContainerExtension() 返回什么值 -->
+        <!-- 任何硬编码 .encv 或 .sccg* 在测试中都会与这里对比立即发现 -->
+        <div v-if="plugins.length > 0" class="plugin-ext-card">
+          <div class="plugin-ext-header">
+            <ion-icon :icon="checkmarkCircleOutline" color="primary"></ion-icon>
+            <span class="plugin-ext-title">插件权威扩展名（来自后端 plugin.GetContainerExtension()）</span>
+          </div>
+          <div class="plugin-ext-list">
+            <div v-for="p in plugins" :key="p.name" class="plugin-ext-row">
+              <span class="plugin-ext-name">{{ p.name }}</span>
+              <code class="plugin-ext-value">{{ p.containerExtension || '(空)' }}</code>
+              <span v-if="p.supportedExtensions.length > 0" class="plugin-ext-supports">
+                supports: {{ p.supportedExtensions.join(', ') }}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <!-- 运行控制 -->
         <ion-item
           button
@@ -1320,6 +1339,17 @@ onUnmounted(() => {
 .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 14px; }
 .stat-value { font-weight: 600; font-family: monospace; }
 .stat-value--warn { color: #B8860B; }
+
+/* ========== 🆕 2026-06-17 插件权威扩展名卡片 ========== */
+.plugin-ext-card { margin: 8px 16px; padding: 12px 16px; background: rgba(79, 140, 255, 0.06); border-radius: 8px; border-left: 3px solid var(--ion-color-primary); }
+.plugin-ext-header { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ion-color-primary-shade); font-weight: 600; margin-bottom: 8px; }
+.plugin-ext-header ion-icon { font-size: 18px; }
+.plugin-ext-title { letter-spacing: 0.2px; }
+.plugin-ext-list { display: flex; flex-direction: column; gap: 4px; }
+.plugin-ext-row { display: grid; grid-template-columns: 120px 100px 1fr; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
+.plugin-ext-name { font-weight: 500; color: var(--ion-text-color); }
+.plugin-ext-value { font-family: monospace; background: var(--ion-color-light-shade); padding: 1px 6px; border-radius: 3px; color: var(--ion-color-primary-shade); font-weight: 600; }
+.plugin-ext-supports { color: var(--ion-color-medium); font-family: monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .progress-text { font-size: 12px; color: var(--ion-color-medium); padding: 4px 16px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .progress-card { margin: 8px 16px; padding: 12px 16px; background: var(--ion-color-light); border-radius: 8px; }
 .progress-stats { display: flex; justify-content: space-between; margin-top: 6px; font-size: 13px; }

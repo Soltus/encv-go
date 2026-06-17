@@ -6,18 +6,17 @@
 #
 # 背景：
 #   ① ENC v4 plugin 容器扩展名由 plugin.GetContainerExtension() 动态返回
-#     （权威来源：internal/v2/plugins/<plugin>/plugin.go 的 GetContainerExtension()）：
+#     （权威来源：internal/v2/plugins/<plugin>/plugin.go 的 GetDefaultSettings() 默认值）：
 #        video    → .sccgv
 #        audio    → .sccga
 #        image    → .sccgi
 #        text     → .sccgt
 #        pdf      → .sccgpdf
 #        wps      → .sccgwps
-#        alist_encrypt → .bin（默认；兼容 alist 历史 .encv v2 格式）
-#   ② 严禁在任何 v4 plugin 上下文中硬编码 ".encv"。
-#   ③ 历史上 agent_plugin_bridge.go / task_options_test.go / SKILL.md / 前端
-#     schema.json / WorkflowDashboard.vue / PluginTestsDetail.vue 都曾误写
-#     ".encv" 为"v4 加密容器"——已统一改回 plugin 权威。
+#        alist_encrypt → .bin
+#   ② alist_encrypt plugin 无任何 .encv 特殊处理：CanDecrypt/Decrypt 只匹配
+#     p.settings.Suffix（默认 .bin，用户可任意配置），不存在"历史 .encv 兼容"。
+#   ③ 严禁在任何 v4 plugin 上下文中硬编码 ".encv"。
 #
 # 禁止模式（仅检测作为"文件后缀"出现的 .encv）：
 #   - *.encv（任意文件名 + .encv 后缀）
@@ -62,7 +61,6 @@ INCLUDE=(
 
 # 3) 文件路径白名单（整个路径或目录）
 #    以下是**合法**的 .encv 出现位置（不要检测）：
-#    - alistencrypt plugin 目录：plugin.go 明确支持 .encv 历史格式
 #    - agent/ 整个目录：独立 go module，模拟 alist legacy 格式
 #    - internal/server/agent_*_test.go：测试 ENCV magic bytes 检测
 #    - internal/mount/ 测试：.encv/mounts.json 是 ENCV 的 config 目录
@@ -71,7 +69,6 @@ INCLUDE=(
 #    - 任何 .encv/ 隐藏目录
 #    - logcat.txt / test_v4.txt / ci-check-no-encv.sh / .trae/{documents,specs}/
 PATH_ALLOWLIST=(
-  -not -path '*/alistencrypt/*'
   -not -path '*/logcat.txt'
   -not -path '*/test_v4.txt*'
   -not -path '*/ci-check-no-encv.sh'
@@ -101,18 +98,18 @@ if [[ -n "$output" ]]; then
   total=$(echo "$output" | wc -l | tr -d ' ')
   echo "Total: $total violations"
   echo ""
-  echo "违规说明：.encv 是 alistencrypt plugin 的历史保留扩展名。"
-  echo "ENC v4 plugin 容器扩展名由 plugin.GetContainerExtension() 动态返回（plugin 源码是权威）："
+  echo "违规说明：.encv 不是任何 plugin 的合法默认后缀（alist_encrypt plugin 也无特殊兼容）。"
+  echo "ENC v4 plugin 容器扩展名由 plugin.GetDefaultSettings() 动态返回（plugin 源码是权威）："
   echo "  video→.sccgv, audio→.sccga, image→.sccgi, text→.sccgt, pdf→.sccgpdf, wps→.sccgwps"
-  echo "  alist_encrypt 默认 .bin（兼容 alist 历史 .encv v2 格式）"
+  echo "  alist_encrypt 默认 .bin（无 .encv 特殊兼容）"
   echo ""
   echo "修复指引："
-  echo "  1. 找到 plugin 真实扩展名（看 internal/v2/plugins/<plugin>/plugin.go 的 GetContainerExtension()）"
-  echo "  2. 把硬编码 .encv 改成 testutil.GetTest<Plugin>ContainerExt() 调用结果"
-  echo "  3. 前端从 /api/webdav/manifest 接口的 registered_container_exts 字段取"
+  echo "  1. 找到 plugin 真实默认扩展名（看 internal/v2/plugins/<plugin>/plugin.go 的 GetDefaultSettings()）"
+  echo "  2. 把硬编码 .encv 改成 pluginsext.<X>Ext 常量（从 internal/v2/pluginsext 包 import）"
+  echo "  3. pluginsext.VideoExt / .AudioExt / .ImageExt / .TextExt / .PdfExt / .WpsExt / .AlistExt"
   echo "  4. 命名空间前缀（.encv-tasks.json / .encv_heartbeat / .encv_tmp 等）合法"
   echo "  5. 隐藏目录（.encv/mounts.json / .encv/agent / .encv/skills）合法"
-  echo "  6. alistencrypt plugin 目录（alist 兼容）合法"
+  echo "  6. agent/ 独立 go module + alist legacy 测试代码合法"
   exit 1
 fi
 

@@ -24,14 +24,19 @@
 | `go test -run TestX ./internal/service` | ✅ 单包 + 过滤 | 透传 |
 | `ENCV_TEST_FULL=1 go test ./internal/...` | CI 模式 | ✅ 放行（去 -short） |
 
-### 1.2 守卫实现位置
+### 1.2 守卫实现位置（🆕 2026-06-17 三层防护）
 
-**代码层（双层防护）**：
+**代码层（三层防护，缺一不可）**：
 
-1. **Shell 层**：[scripts/test-go.sh:52-100](file:///workspace/scripts/test-go.sh#L52-L100) `is_multipkg` 检测 + exit 64
-2. **推荐入口**：[scripts/test-all-go.sh:80-148](file:///workspace/scripts/test-all-go.sh#L80-L148) 默认走模块化（go list 拿包 + 循环单包）
+1. **Shell 层（多包模式拦截）**：[scripts/test-go.sh:52-100](file:///workspace/scripts/test-go.sh#L52-L100) `is_multipkg` 检测 + exit 64
+2. **Shell 层（env 标记注入）**：[scripts/test-go.sh:196-210](file:///workspace/scripts/test-go.sh#L196-L210) `export ENCV_TEST_INVOKED_BY=scripts/test-go.sh`（供第 3 层 Go init() 验证）
+3. **Go init() 层（裸 go test 拦截）**：[internal/testguard/guard.go](file:///workspace/internal/testguard/guard.go) — 任何 import 了 testguard 的测试包，init() 强制检查 `ENCV_TEST_INVOKED_BY` 是否设置；未设置 → exit 64
+4. **推荐入口**：[scripts/test-all-go.sh](file:///workspace/scripts/test-all-go.sh) 默认走模块化（go list 拿包 + 循环单包）
 
-**为什么不写 Go init() 守卫**：Go init() 必须被 import 才执行；写 init() 的 package 必须被所有 test 包 import → 全局污染 / 不可控 / 易被 `go test -run` 规避。Shell 守卫在 go test 进程启动**之前**拦截，无法绕过。
+> **早期版本曾反对 Go init() 守卫（"必须被 import 才执行 / 全局污染 / 不可控"），2026-06-17 推翻**：
+> - 用户多次反馈"go 完整测试拦截似乎没有考虑到所有调用方式，没有拦截你刚才" — 证明纯 shell 守卫对裸 `go test` 无效
+> - 解决方案：在关键根包（`internal/v2/plugins` / `internal/v2/container/detector` / `internal/v2/container/handle` / `internal/v2/writer` / `internal/v2/reader` / `internal/v2/service` / `internal/v2/handler` / `internal/v2/crypto` / `internal/v2/types` / `internal/webdav` / `internal/service` / `internal/utils` / `internal/mount` / `internal/config` / `internal/skills` 等）的 `_test.go` 加 `_ "github.com/Soltus/encv-go/internal/testguard"` blank import
+> - production binary 旁路：`os.Args[0]` 不含 `.test` 且无 `-test.*` flag → 不是 test binary → 放行（避免 `go run ./cmd/encv/ serve` 被误伤）
 
 ---
 
@@ -146,6 +151,92 @@ pnpm exec vitest run
 | **推荐入口** | `scripts/test-go.sh` | `vue-tsc --noEmit`（type only） |
 | **合法子集** | 单包 + `-short` + `-run` | 无合法子集（沙箱直接禁） |
 | **沙箱外** | `ENCV_TEST_FULL=1 bash scripts/test-all-go.sh` | `pnpm exec vitest run` |
+
+---
+
+## 🆕 二点六、Go init() 守卫（testguard）— 裸 `go test` 拦截
+
+### 二点六.1 为什么需要
+
+> **用户原话**：「go 完整测试拦截似乎没有考虑到所有调用方式，没有拦截你刚才」
+
+**问题链**：
+- `scripts/test-go.sh` 的 bash 守卫**只对 `bash scripts/test-go.sh` 入口有效**
+- 用户直接 `go test ./internal/v2/plugins` 时 → bash 守卫完全不触发 → 裸 go test 进程跑（可能跑全包、超时、沙箱断网）
+- 解决方法：**Go test binary 启动时 init() 拦截**
+
+### 二点六.2 三态判定（testguard init()）
+
+```go
+// internal/testguard/guard.go
+func init() {
+    // 0) Production binary 旁路
+    //    - os.Args[0] 包含 ".test"（如 detector.test）→ go test 标准模式
+    //    - os.Args 含 -test.* flag → 任何含 test flag 的进程
+    //    - os.Args[0] 包含 ".test."（如 detector.test.new）→ `go test -c -o` 产物
+    isTestBinary := checkArgs(os.Args)
+    if !isTestBinary {
+        return  // production binary → 放行（go run / go build 产物不误伤）
+    }
+
+    // 1) 用户显式 bypass
+    if os.Getenv("ENCV_TEST_BYPASS_GUARD") == "1" {
+        return
+    }
+
+    // 2) 守卫主逻辑
+    if os.Getenv("ENCV_TEST_INVOKED_BY") == "" {
+        fmt.Fprintf(os.Stderr, "❌ 拦截裸 go test ...")
+        os.Exit(64)  // EX_USAGE — 与 bash 守卫一致
+    }
+}
+```
+
+### 二点六.3 接入方式
+
+| 包类型 | 接入 | 效果 |
+|--------|------|------|
+| **测试入口包** | 在任一 `_test.go` 加 `_ ".../testguard"` blank import | 该包的 test binary 启动时 init() 触发守卫 |
+| **推荐覆盖范围** | `internal/v2/plugins` / `detector` / `handle` / `manifest` / `writer` / `reader` / `service` / `handler` / `crypto` / `types` / `webdav` / `service` / `utils` / `mount` / `config` / `skills` 等 | 17+ 关键根包全拦截 |
+| **未覆盖包** | 暂时不在守卫范围（接受限制） | 裸 `go test ./internal/<未覆盖包>` 仍能跑（但需自负责任） |
+| **production 启动** | 不在 test binary 上下文 → init() 提前 return | `go run ./cmd/encv/ serve` 不受影响 |
+
+### 二点六.4 紧急 Bypass
+
+```bash
+# 紧急调试场景（仅限 CI fail / sandbox 异常）
+ENCV_TEST_BYPASS_GUARD=1 go test -run TestX ./internal/<pkg>
+# 输出：守卫放行，测试正常跑（不推荐常规使用）
+```
+
+### 二点六.5 跨包测试（多包 + bypass）
+
+```bash
+# 跨包调试时临时 bypass（绕过 test-all-go.sh 的 MODULAR_MAX_PKGS 守卫）
+ENCV_TEST_BYPASS_GUARD=1 go test ./internal/v2/plugins/... ./internal/v2/container/...
+# 注意：这只绕过 init() 守卫，不绕过 MODULAR_MAX_PKGS（那个在 test-all-go.sh）
+```
+
+### 二点六.6 验证
+
+```bash
+# ✅ 放行（scripts/test-go.sh 会 export ENCV_TEST_INVOKED_BY）
+bash scripts/test-go.sh ./internal/v2/plugins  # PASS
+
+# ❌ 拦截（裸 go test）
+go test ./internal/v2/plugins  # FAIL + 完整拦截信息（exit 64 → go test 报 FAIL）
+
+# ❌ 拦截（直接跑编译产物）
+go test -c -o /tmp/foo.test ./internal/v2/plugins
+unset ENCV_TEST_INVOKED_BY
+/tmp/foo.test  # 拦截
+
+# ✅ 放行（带 env）
+ENCV_TEST_INVOKED_BY=scripts/test-go.sh /tmp/foo.test  # PASS
+
+# ✅ 放行（带 bypass）
+ENCV_TEST_BYPASS_GUARD=1 /tmp/foo.test  # PASS
+```
 
 ---
 

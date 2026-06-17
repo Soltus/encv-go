@@ -14,6 +14,9 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/crypto"
 	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/Soltus/encv-go/internal/v2/types"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 const testPassword = "test-password-123"

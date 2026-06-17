@@ -8,6 +8,9 @@ import (
 	"github.com/Soltus/encv-go/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 func newTestMobileService(t *testing.T) (*MobileService, string) {

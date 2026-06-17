@@ -193,6 +193,22 @@ if [ "$TEMP_LEAKED" -gt 0 ]; then
   find /tmp -maxdepth 1 -name "encv-test-*" -size +100M -exec rm -rf {} \; 2>/dev/null || true
 fi
 
+# ====================================================
+# === 🆕 2026-06-17 守卫层 2：Go test binary 进程级拦截 ===
+# ====================================================
+# scripts/test-go.sh 的 bash 守卫对"裸 go test ./internal/<pkg>"完全无效。
+# 用户多次反馈"go 完整测试拦截似乎没有考虑到所有调用方式"——
+# 必须从 Go test binary 启动时（init()）强制要求 ENCV_TEST_INVOKED_BY。
+#
+# 工作原理：
+#   - scripts/test-go.sh 执行 go test 前 export ENCV_TEST_INVOKED_BY=scripts/test-go.sh
+#   - internal/testguard 包的 init() 检查该 env var
+#   - 未设置 → os.Exit(64)（与 bash 守卫一致）
+#   - CI 环境（CI=true / GITHUB_ACTIONS=true）自动放行
+#   - 用户显式 ENCV_TEST_BYPASS_GUARD=1 可紧急 bypass
+# ====================================================
+export ENCV_TEST_INVOKED_BY="scripts/test-go.sh"
+
 # ── pre-flight 3：端口 2025 占用检查（mock backend 可能残留） ──
 if command -v lsof >/dev/null 2>&1; then
   if lsof -i :2025 -t >/dev/null 2>&1; then

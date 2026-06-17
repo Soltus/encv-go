@@ -34,6 +34,10 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	// 强制激活 test-guard：拦截裸 go test 调用（必须经 scripts/test-go.sh）
+	// 详见 internal/testguard/guard.go
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 // DevStartGuard 端口 + pid 文件预检查 + 单实例锁定。

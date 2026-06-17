@@ -60,6 +60,20 @@
                 · {{ t('devtools.webdav.attackTagged', { count: String(attackCountTotal) }) }}
               </span>
             </p>
+            <!-- 🆕 2026-06-17 当前 activeMount 的注册容器扩展名（权威显示） -->
+            <!-- 目的：用户一眼看出 manifest 实际注册的 container 扩展名是哪些 -->
+            <!-- 任何 .encv 硬编码或期望 .sccg* 都会与这里对比立即发现 -->
+            <div
+              v-if="manifest.activeMount.value && (manifest.activeMount.value.manifest.registered_container_exts?.length ?? 0) > 0"
+              class="manifest-container-exts"
+            >
+              <span class="exts-label">已注册容器扩展名:</span>
+              <code
+                v-for="ext in manifest.activeMount.value.manifest.registered_container_exts"
+                :key="ext"
+                class="ext-pill"
+              >{{ ext }}</code>
+            </div>
           </div>
         </div>
         <!-- Mount 选择器（仅多 mount 时显示） -->
@@ -847,6 +861,32 @@ watch(
   font-size: 10px;
   color: var(--ion-color-danger);
   font-weight: 600;
+}
+
+/* ========== 🆕 2026-06-17 已注册容器扩展名（manifest activeMount 权威显示） ========== */
+.manifest-container-exts {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.06);
+}
+.exts-label {
+  font-size: 11px;
+  color: var(--ion-color-medium-shade);
+  font-weight: 500;
+}
+.ext-pill {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--ion-color-primary-tint, #d6e4ff);
+  color: var(--ion-color-primary-shade, #1a3a8e);
+  padding: 2px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(79, 140, 255, 0.2);
 }
 .manifest-error { color: var(--ion-color-danger) !important; }
 .manifest-empty-hint {

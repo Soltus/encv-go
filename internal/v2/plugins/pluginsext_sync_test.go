@@ -5,6 +5,9 @@ import (
 	"testing"
 
 	"github.com/Soltus/encv-go/internal/v2/pluginsext"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 // TestPluginExts_SyncWithDefaults 强制约束 pluginsext 常量与 plugin 源码默认同步。
