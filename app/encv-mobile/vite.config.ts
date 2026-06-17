@@ -23,6 +23,7 @@ import path from 'node:path'
 // 文件必须在 src/ 下 — vite 5/6/7/8 默认不 transform src/ 外的 .ts，
 // scripts/ 下的 .ts 会被 vite 当 external → 守卫拿不到 devStartGuard 函数
 import { devStartGuard } from './src/lib/dev-start-guard'
+import { frontendDepsManifestPlugin } from './vite-plugins/frontend-deps-manifest'
 
 // =============================================================================
 // ENCV Mobile Vite Config
@@ -233,6 +234,7 @@ function dynamicHmrHostPlugin(): Plugin {
 export default defineConfig({
   plugins: [
     devStartGuard(),  // ⚠️ 防御：禁止直接 vite 启动，必须通过 PM2 → preview-gateway
+    frontendDepsManifestPlugin(),  // 🆕 2026-06-17：读 package.json 生成 frontend-deps.json manifest
     vue(),
     dynamicHmrHostPlugin(),
     // ────────────────────────────────────────────────────────────────────────

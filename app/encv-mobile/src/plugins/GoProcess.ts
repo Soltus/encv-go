@@ -309,6 +309,32 @@ export async function saveDevLogs(logs: string): Promise<{ success: boolean; pat
   }
 }
 
+// 🆕 2026-06-17：读取 android-deps.json manifest
+// native 端返回完整 manifest，web 端返回 null（前端 fallback 不显示 Android 段）
+export interface AndroidDepsManifest {
+  schema_version?: number
+  generated_at?: string
+  items: Array<{
+    name: string
+    version: string
+    version_range?: string
+    source?: string
+    kind?: string
+    importance?: string
+    description?: string
+  }>
+}
+
+export async function getAndroidDeps(): Promise<AndroidDepsManifest | null> {
+  try {
+    const result = await GoProcess.getAndroidDeps()
+    return result as AndroidDepsManifest | null
+  } catch (e) {
+    console.error('[ENCV] GoProcess.getAndroidDeps() failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
+    return null
+  }
+}
+
 export async function getPluginFullState(pluginId: string): Promise<PluginFullState> {
   try {
     const result = await GoProcess.getPluginFullState({ pluginId })

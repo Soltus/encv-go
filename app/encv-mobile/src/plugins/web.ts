@@ -72,6 +72,9 @@ export interface GoProcessPlugin {
   clearLogs(): Promise<{ success: boolean }>
   openLogViewer(): Promise<{ success: boolean }>
   saveDevLogs(options: { logs: string }): Promise<{ success: boolean; path?: string }>
+  // 🆕 2026-06-17：读取 android-deps.json manifest (build 时由 Gradle task 生成)
+  // web 端 mock 返回 null（无 Android assets）
+  getAndroidDeps(): Promise<{ items: any[] } | null>
 }
 
 export class GoProcessWeb extends WebPlugin implements GoProcessPlugin {
@@ -208,5 +211,10 @@ export class GoProcessWeb extends WebPlugin implements GoProcessPlugin {
 
   async saveDevLogs(_options: { logs: string }): Promise<{ success: boolean; path?: string }> {
     return { success: false }
+  }
+
+  // 🆕 2026-06-17：web 模式 mock — 没有 Android assets，返回 null
+  async getAndroidDeps(): Promise<{ items: any[] } | null> {
+    return null
   }
 }

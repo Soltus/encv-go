@@ -67,8 +67,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/WebdavServerDetail.vue'),
       },
       {
-        path: 'settings/engine',
-        component: () => import('@/views/EngineDetail.vue'),
+        // 🆕 2026-06-17：FFmpeg 引擎详情从 Settings 一级迁移到 About 二级
+        // 路径层级 /tabs/settings/about/engine（三级）反映导航层级
+        // 旧路径 /tabs/settings/engine 已删除（外部 deep link 会 404，不需要兼容）
+        path: 'settings/about/engine',
+        component: () => import('@/views/FfmpegEngineDetail.vue'),
       },
       {
         path: 'settings/about',
@@ -91,9 +94,14 @@ const routes: RouteRecordRaw[] = [
         // 旧版 ServerStatusDetail.vue 是「点卡片跳独立页」设计，已被 ServerStatusCard 翻转取代
         // （卡片翻转到背面 = 自带诊断/操作历史/进程 ID/transport 详情）
         // 入口：原 ServerDetail 顶部的 ServerStatusCard @click="goServerStatusDetail"
-        // 现状：ServerDetail.vue 不再调 goServerStatusDetail；本路由删除防「打开 app 看到残留 page」
+        // 现状：ServerDetail.vue 不再调 goServerStatusDetail；本路由删除防「打开 app 看到残留 page」{
         path: 'settings/devtools',
         component: () => import('@/views/DevToolsDetail.vue'),
+      },
+      {
+        // 🆕 2026-06-17：日志设置三级页面（vConsole 之外的日志相关设置 + 导出/清空）
+        path: 'settings/devtools/log-settings',
+        component: () => import('@/views/LogSettingsDetail.vue'),
       },
       {
         path: 'settings/devtools/automation',

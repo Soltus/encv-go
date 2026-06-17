@@ -18,25 +18,12 @@
           <ion-icon :icon="bugOutline" slot="start"></ion-icon>
           <ion-toggle :checked="vconsoleEnabled" @ionChange="handleVConsoleToggle">{{ t('devtools.vconsole') }}</ion-toggle>
         </ion-item>
-        <ion-item button @click="handleExportLogs" detail>
-          <ion-icon :icon="downloadOutline" slot="start"></ion-icon>
+        <!-- 🆕 2026-06-17：vConsole 之外的所有日志相关设置合并到「日志设置」三级页面 -->
+        <ion-item button @click="goLogSettings" detail>
+          <ion-icon :icon="terminal" slot="start"></ion-icon>
           <ion-label>
-            <h3>{{ t('devtools.exportLogs') }}</h3>
-            <p>{{ t('devtools.exportLogsDesc') }}</p>
-          </ion-label>
-        </ion-item>
-        <ion-item button @click="handleOpenLogViewer" detail>
-          <ion-icon :icon="readerOutline" slot="start"></ion-icon>
-          <ion-label>
-            <h3>{{ t('devtools.openLog') }}</h3>
-            <p>{{ t('devtools.openLogDesc') }}</p>
-          </ion-label>
-        </ion-item>
-        <ion-item button @click="handleClearLogs" detail>
-          <ion-icon :icon="trashOutline" slot="start"></ion-icon>
-          <ion-label>
-            <h3>{{ t('devtools.clearLogs') }}</h3>
-            <p>{{ t('devtools.clearLogsDesc') }}</p>
+            <h3>{{ t('settings.logSettings') }}</h3>
+            <p>{{ t('devtools.logSettingsDesc') }}</p>
           </ion-label>
         </ion-item>
       </ion-list>
@@ -102,47 +89,6 @@
         </ion-item>
       </ion-list>
 
-      <ion-list v-if="configLoaded">
-        <ion-list-header>
-          <ion-label>{{ t('settings.logSettings') }}</ion-label>
-          <ion-badge slot="end" color="primary" class="scope-badge scope-synced">
-            <ion-icon :icon="cloudOutline" class="scope-badge-icon"></ion-icon>
-            <span class="scope-text">{{ t('settings.synced') }}</span>
-          </ion-badge>
-        </ion-list-header>
-        <div v-if="logLevelField && logLevelField.selectOptions && logLevelField.selectOptions.length > 2" class="log-level-card">
-          <div class="field-label-row">
-            <ion-icon :icon="terminal" class="field-icon"></ion-icon>
-            <span class="field-label-text">{{ tField('level') }}</span>
-            <span class="required-mark">*</span>
-            <ion-icon :icon="cloudOutline" class="sync-indicator" :title="t('settings.synced')"></ion-icon>
-            <ion-button v-if="isLogLevelCustomized" fill="clear" size="small" class="reset-btn" @click="resetLogLevelToDefault">
-              <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
-            </ion-button>
-          </div>
-          <div class="preset-cards">
-            <div
-              v-for="opt in logLevelField.selectOptions"
-              :key="opt.value"
-              class="preset-card"
-              :class="{ 'preset-card-active': logLevel === opt.value }"
-              @click="handleLogLevelChange(opt.value)"
-            >
-              <div class="preset-card-title">{{ opt.label }}</div>
-              <div v-if="opt.description" class="preset-card-desc">{{ opt.description }}</div>
-            </div>
-          </div>
-        </div>
-        <InputWithHistory
-          :model-value="logFile"
-          :label="tField('file')"
-          :placeholder="t('devtools.logFilePlaceholder')"
-          :icon="documentText"
-          history-key="config.log.file"
-          @update:model-value="handleLogFileChange"
-        />
-        </ion-list>
-
       <ion-list>
         <ion-list-header>
           <ion-label>{{ t('devtools.composePrototypes') }}</ion-label>
@@ -179,78 +125,28 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
   IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel, IonToggle,
-  IonButton, IonBadge, alertController,
+  IonBadge,
 } from '@ionic/vue'
 import {
-  bugOutline, downloadOutline, readerOutline, trashOutline,
-  chevronForward, playCircleOutline, musicalNotesOutline,
-  colorPaletteOutline, settingsOutline, terminal, documentText,
-  cloudOutline, refreshOutline, eyeOutline, cloudUploadOutline,
+  bugOutline, chevronForward, playCircleOutline, musicalNotesOutline,
+  colorPaletteOutline, settingsOutline, terminal, eyeOutline, cloudUploadOutline,
   extensionPuzzleOutline, flaskOutline, rocketOutline,
   serverOutline,  // 🆕 ECv4 容量边界测试
 } from 'ionicons/icons'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
 import { useDevTools } from '@/composables/useDevTools'
-import { useConfig } from '@/composables/useConfig'
-import { getDefaultValue } from '@/config/schemaParser'
-import { showToast } from '@/composables/useToast'
-import { isNative, exportLogs, clearLogs, openLogViewer, saveDevLogs } from '@/plugins/GoProcess'
-import { getFrontendLogsJson } from '@/composables/useFrontendLogs'
 import { getAllPrototypes } from './prototypes/registry'
-import InputWithHistory from '@/components/InputWithHistory.vue'
 
-const { t, tField } = useI18n()
+const { t } = useI18n()
 const router = useRouter()
 const { vconsoleEnabled, toggleVConsole } = useDevTools()
-const { schemaFields, getFieldValue, setFieldValue, saveConfig, resetFieldToDefault } = useConfig()
 
-const configLoaded = computed(() => schemaFields.value.length > 0)
-
-const logLevel = computed(() => String(getFieldValue(['log', 'level']) ?? 'info'))
-const logFile = computed(() => String(getFieldValue(['log', 'file']) ?? ''))
-
-const logLevelField = computed(() => {
-  const logSection = schemaFields.value.find((s) => s.key === 'log')
-  if (!logSection || !logSection.properties) return null
-  return logSection.properties.find((p) => p.key === 'level') || null
-})
-
-const logDefault = computed(() => {
-  if (!logLevelField.value) return 'info'
-  return String(getDefaultValue(logLevelField.value))
-})
-
-const isLogLevelCustomized = computed(() => logLevel.value !== logDefault.value)
-
-function resetLogLevelToDefault() {
-  if (!logLevelField.value) return
-  resetFieldToDefault(['log', 'level'], logLevelField.value)
-  saveLogConfig()
-}
-
-async function handleLogLevelChange(value: string) {
-  setFieldValue(['log', 'level'], value)
-  await saveLogConfig()
-}
-
-async function handleLogFileChange(value: string) {
-  setFieldValue(['log', 'file'], value)
-  await saveLogConfig()
-}
-
-async function saveLogConfig() {
-  try {
-    await saveConfig()
-    showToast({ message: t('settings.configSaved'), duration: 1500, color: 'success' })
-  } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
-    showToast({ message: t('settings.configSaveFailed') + ': ' + detail, duration: 3000, color: 'danger' })
-  }
+function goLogSettings() {
+  router.push('/tabs/settings/devtools/log-settings')
 }
 
 const prototypes = getAllPrototypes()
@@ -310,53 +206,6 @@ function goSparseContainerTest() {
 function handleVConsoleToggle(event: CustomEvent) {
   toggleVConsole(event.detail.checked)
 }
-
-async function handleExportLogs() {
-  if (!isNative()) return
-  try {
-    await saveDevLogs(getFrontendLogsJson())
-    const result = await exportLogs()
-    if (result.success) {
-      showToast({ message: t('devtools.exportSuccess'), duration: 1500, color: 'success' })
-    } else {
-      showToast({ message: t('devtools.exportFailed'), duration: 2000, color: 'danger' })
-    }
-  } catch {
-    showToast({ message: t('devtools.exportFailed'), duration: 2000, color: 'danger' })
-  }
-}
-
-async function handleOpenLogViewer() {
-  if (!isNative()) return
-  try {
-    await openLogViewer()
-  } catch {
-    showToast({ message: t('devtools.openLogFailed'), duration: 2000, color: 'danger' })
-  }
-}
-
-async function handleClearLogs() {
-  if (!isNative()) return
-  const alert = await alertController.create({
-    header: t('devtools.clearLogsConfirm'),
-    buttons: [
-      { text: t('common.cancel'), role: 'cancel' },
-      {
-        text: t('common.confirm'),
-        role: 'confirm',
-        handler: async () => {
-          const result = await clearLogs()
-          if (result.success) {
-            showToast({ message: t('devtools.clearSuccess'), duration: 1500, color: 'success' })
-          } else {
-            showToast({ message: t('devtools.clearFailed'), duration: 2000, color: 'danger' })
-          }
-        },
-      },
-    ],
-  })
-  await alert.present()
-}
 </script>
 
 <style scoped>
@@ -393,118 +242,6 @@ async function handleClearLogs() {
 .scope-prod {
   --background: rgba(var(--ion-color-success-rgb), 0.16);
   --color: var(--ion-color-success-shade);
-}
-
-.log-level-card {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--ion-color-light-shade, #e0e0e0);
-}
-
-body.dark .log-level-card {
-  border-bottom-color: #2a2a2c;
-}
-
-.field-icon {
-  font-size: 18px;
-  color: var(--ion-color-medium);
-  flex-shrink: 0;
-}
-
-.field-label-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.field-label-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-weight: 500;
-  font-size: 15px;
-}
-
-.required-mark {
-  color: var(--ion-color-danger);
-  margin-left: 2px;
-}
-
-.sync-indicator {
-  font-size: 12px;
-  color: var(--ion-color-primary);
-  opacity: 0.4;
-  flex-shrink: 0;
-}
-
-.reset-btn {
-  --padding-start: 4px;
-  --padding-end: 4px;
-  min-width: 28px;
-  min-height: 28px;
-  margin: 0;
-}
-
-.reset-btn ion-icon {
-  font-size: 16px;
-}
-
-.preset-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-  gap: 8px;
-  margin-top: 10px;
-  width: 100%;
-}
-
-.preset-card {
-  padding: 10px 8px;
-  border: 2px solid var(--ion-color-light-shade, #e0e0e0);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: center;
-  background: var(--ion-background-color, transparent);
-}
-
-.preset-card-active {
-  border-color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-}
-
-.preset-card-title {
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.preset-card-desc {
-  font-size: 11px;
-  color: var(--ion-color-medium);
-  margin-top: 3px;
-  line-height: 1.3;
-}
-
-@media (max-width: 599px) {
-  .preset-cards {
-    grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
-    gap: 6px;
-  }
-  .preset-card-title {
-    font-size: 12px;
-  }
-  .preset-card-desc {
-    font-size: 10px;
-  }
-}
-</style>
-
-<style>
-body.dark .preset-card {
-  border-color: #3a3a3c;
-}
-
-body.dark .preset-card-active {
-  border-color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
 }
 </style>
 

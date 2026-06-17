@@ -3,7 +3,6 @@ export default {
     'devlogs.title': '开发者日志',
     'devlogs.frontend': '前端日志',
     'devlogs.backend': '后端日志',
-    'devtools.logFilePlaceholder': '留空则只输出到控制台',
     'devlogs.all': '全部',
     'devlogs.debug': 'DEBUG',
     'devlogs.info': 'INFO',
