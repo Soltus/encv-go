@@ -676,3 +676,66 @@ describe('TaskTimeline - fallback 模式', () => {
     expect(preprocessingCard.props('entry').status).toBe('running')
   })
 })
+
+// 🆕 2026-06-18 Task 18：crypto params 摘要显示在 created 条目的 meta 字段
+describe('TaskTimeline - crypto params 摘要 (Task 18)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('cipherMode=1 (AES-256) + compressionMode=zstd → meta 为 "AES-256 · Zstd"', () => {
+    const task = makeTask({
+      cipherMode: 1,
+      compressionMode: 'zstd',
+    })
+    const wrapper = mountTimeline(task)
+    const cards = wrapper.findAllComponents(UnifiedTimelineCard)
+    const createdCard = cards[0]
+    expect(createdCard.props('entry').meta).toBe('AES-256 · Zstd')
+  })
+
+  it('cipherMode=0 (AES-128) + compressionMode=none → meta 为 "AES-128 · none"', () => {
+    const task = makeTask({
+      cipherMode: 0,
+      compressionMode: 'none',
+    })
+    const wrapper = mountTimeline(task)
+    const cards = wrapper.findAllComponents(UnifiedTimelineCard)
+    expect(cards[0].props('entry').meta).toBe('AES-128 · none')
+  })
+
+  it('仅 cipherMode=1（无 compressionMode）→ meta 为 "AES-256"', () => {
+    const task = makeTask({
+      cipherMode: 1,
+    })
+    const wrapper = mountTimeline(task)
+    const cards = wrapper.findAllComponents(UnifiedTimelineCard)
+    expect(cards[0].props('entry').meta).toBe('AES-256')
+  })
+
+  it('仅 compressionMode=zstd（无 cipherMode）→ meta 为 "Zstd"', () => {
+    const task = makeTask({
+      compressionMode: 'zstd',
+    })
+    const wrapper = mountTimeline(task)
+    const cards = wrapper.findAllComponents(UnifiedTimelineCard)
+    expect(cards[0].props('entry').meta).toBe('Zstd')
+  })
+
+  it('旧任务无 crypto 字段 → meta 为 undefined（不显示空摘要）', () => {
+    const task = makeTask()
+    const wrapper = mountTimeline(task)
+    const cards = wrapper.findAllComponents(UnifiedTimelineCard)
+    expect(cards[0].props('entry').meta).toBeUndefined()
+  })
+
+  it('cipherMode=null（旧任务显式 null）→ meta 不包含 cipher', () => {
+    const task = makeTask({
+      cipherMode: null as unknown as number,
+      compressionMode: 'zstd',
+    })
+    const wrapper = mountTimeline(task)
+    const cards = wrapper.findAllComponents(UnifiedTimelineCard)
+    expect(cards[0].props('entry').meta).toBe('Zstd')
+  })
+})

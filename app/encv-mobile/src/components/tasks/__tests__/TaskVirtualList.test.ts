@@ -71,7 +71,7 @@ const SlotWrapper = {
   },
   methods: {
     forceMeasure() {
-      return (this.$refs.listRef as any).forceMeasure()
+      return (this as any).$refs.listRef.forceMeasure()
     },
   },
 }
@@ -131,10 +131,7 @@ describe('TaskVirtualList', () => {
     await flushPromises()
     const itemWrapper = wrapper.find('.task-virtual-item')
     expect(itemWrapper.exists()).toBe(true)
-    const style = (window.getComputedStyle(itemWrapper.element as HTMLElement) as any)
-      .contentVisibility
-    // jsdom 可能不解析 content-visibility，检查 attribute style 字符串也行
-    // 这里用 getComputedStyle，jsdom 不支持时 fallback 检查 class 存在
+    // jsdom 不解析 content-visibility，检查 class 存在即可（CSS 规则在组件 scoped style 内）
     expect(itemWrapper.classes()).toContain('task-virtual-item')
   })
 

@@ -128,12 +128,30 @@ function calcDurationMs(startedAt?: string, completedAt?: string): number {
 
 // ==================== 时间线构建 ====================
 
+// 🆕 2026-06-18 Task 18：crypto params 摘要（显示在 "created" 条目的 meta slot）
+// 返回 "AES-256 · zstd" / "AES-128" / "zstd" / ""（旧任务无 crypto 字段时返回空串）
+function getCryptoSummary(): string {
+  const task = props.task
+  const parts: string[] = []
+  if (task.cipherMode !== undefined && task.cipherMode !== null) {
+    parts.push(task.cipherMode === 1 ? 'AES-256' : 'AES-128')
+  }
+  if (task.compressionMode === 'zstd') {
+    parts.push('Zstd')
+  } else if (task.compressionMode === 'none') {
+    parts.push('none')
+  }
+  return parts.join(' · ')
+}
+
 const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
   const entries: InternalTimelineEntry[] = []
   const steps = props.task.steps ?? []
   const isTerminal = ['completed', 'failed', 'cancelled'].includes(props.task.status)
 
   // 1. 始终推送 "created" 事件
+  // 🆕 Task 18：meta 字段显示 crypto params 摘要（折叠态可见）
+  const cryptoMeta = getCryptoSummary()
   entries.push({
     id: `created-${props.task.createdAt}`,
     phase: Phase.Created,
@@ -142,6 +160,7 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
     status: 'success',
     isCurrent: false,
     hasExpandableDetail: false,
+    meta: cryptoMeta || undefined,
   })
 
   // 2. 从 task.steps 派生（如果存在）

@@ -141,8 +141,18 @@
         <p>{{ t('tasks.noTasksDesc') }}</p>
       </div>
 
-      <ion-list v-else>
-        <template v-for="item in displayedItems" :key="item.key">
+      <!-- 🆕 Task 15：用 TaskVirtualList 替换 ion-list + v-for -->
+      <!-- 历史：ion-list + v-for 渲染所有 displayedItems → 200+ task 时 DOM 节点爆炸 -->
+      <!-- 修复：TaskVirtualList 用 @tanstack/vue-virtual 仅渲染可见窗口 + overscan 20 个 item -->
+      <!-- 注意：collapsed sub_section 的 task 不在 displayedItems 里（v-show 与虚拟滚动冲突） -->
+      <TaskVirtualList
+        v-else
+        :items="displayedItems"
+        :scroll-el="scrollEl"
+        ref="virtualListRef"
+        class="tasks-virtual-list"
+      >
+        <template #default="{ item }">
           <!-- 🆕 2026-06-10 修复：自动化测试 / AI agent 任务组折叠 -->
           <!-- 历史：自动化测试一次跑 N 个用例 → 污染 task 列表（用户截图的"浪费屏幕空间"）-->
           <!-- 修复：连续 ≥2 个 triggeredBy != 'user' 的 task → 折叠成 1 张 group card -->
@@ -202,26 +212,14 @@
             </ion-item>
           </ion-item-sliding>
 
-          <!-- 🆕 2026-06-10 修复 v2：2 级嵌套的 sub_section 段头 -->
-          <!-- 在 group card 展开后插入，按 section 维度（v5）桶里每个 section 1 个段头 -->
-          <!-- 段头下方是该 section 的所有 task 卡片（紧随其后的 kind='task' 项） -->
-          <!-- 🆕 2026-06-11 v5：sub_section 可独立折叠 + sticky 滚动冻结 -->
-          <!--
-            🆕 2026-06-10 修复 v3：改用 <ion-item> 而不是裸 <div>
-            历史：<div> 在 <ion-list> 里 → Ionic 把 <div> 当普通子节点，但 <ion-list> 有自己的
-              列表 CSS（display 规则、滚动容器、虚拟化），<div> 子节点不参与，导致：
-              - 段头高度计算异常（被压成 0 或被列表 padding 吃掉）
-              - 任务卡和段头之间没分隔线
-              - "插件没正确识别，任务依旧全部平铺"
-            修复：用 <ion-item> + 自定义 class，禁用 button/clickable，让 Ionic 当作「装饰 item」
-            🆕 2026-06-11 v5：恢复 button + clickable（要可折叠），用 sticky CSS 解决冻结
-          -->
+          <!-- 🆕 2026-06-11 v5：sub_section 段头（可独立折叠） -->
+          <!-- 🆕 Task 15：移除 position: sticky（与虚拟滚动 absolute 定位冲突） -->
           <ion-item
             v-else-if="item.kind === 'sub_section_header'"
             button
             :detail="false"
             @click="toggleSubSection(item.subKey)"
-            :class="['sub-section-header', `sub-dim-${item.meta.dimension}`, `sub-tone-${item.meta.tone}`, { 'is-sticky': true, 'is-collapsed': item.isCollapsed }]"
+            :class="['sub-section-header', `sub-dim-${item.meta.dimension}`, `sub-tone-${item.meta.tone}`, { 'is-collapsed': item.isCollapsed }]"
             :lines="'none'"
           >
             <div class="sub-section-icon-bubble" :class="`sub-tone-${item.meta.tone}`" slot="start">
@@ -269,12 +267,13 @@
             </div>
           </ion-item>
 
+          <!-- 🆕 Task 15：移除 v-show（虚拟滚动下 display:none 会导致 measureElement 测量 0px） -->
+          <!-- collapsed sub_section 的 task 不在 displayedItems 里（buildDisplayedItems 过滤） -->
           <ion-item-sliding v-else>
             <ion-item
               @click="openTaskDetail(item.task)"
               button
               detail
-              v-show="!item.subKey || !isSubSectionCollapsed(item.subKey)"
             >
               <ion-icon
                 :icon="getTaskIcon(item.task)"
@@ -292,6 +291,11 @@
                   <ion-badge v-if="item.task.pluginName" color="primary" class="plugin-badge">
                     {{ item.task.pluginName }}
                   </ion-badge>
+                  <!-- 🆕 2026-06-18 Task 18：crypto params 摘要 badge（仅当有 cipherMode/compressionMode 时显示） -->
+                  <span v-if="getCryptoSummary(item.task)" class="crypto-summary">
+                    <ion-icon :icon="lockClosedOutline" class="crypto-summary-icon"></ion-icon>
+                    {{ getCryptoSummary(item.task) }}
+                  </span>
                   <ion-badge
                     v-if="getTriggeredBy(item.task.id) !== 'user'"
                     :color="getTriggeredByColor(item.task.id)"
@@ -379,7 +383,7 @@
             </ion-item-options>
           </ion-item-sliding>
         </template>
-      </ion-list>
+      </TaskVirtualList>
 
       <ion-fab vertical="bottom" horizontal="end" slot="fixed">
         <ion-fab-button @click="openNewTask()">
@@ -392,11 +396,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onIonViewWillEnter } from '@ionic/vue'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonRefresher, IonRefresherContent, IonList, IonItem,
+  IonRefresher, IonRefresherContent, IonItem,
   IonItemSliding, IonItemOptions, IonItemOption, IonIcon,
   IonLabel, IonBadge, IonProgressBar, IonFab, IonFabButton,
   IonSpinner, IonButton, IonButtons, IonSearchbar, IonChip,
@@ -404,7 +408,7 @@ import {
 } from '@ionic/vue'
 import {
   add, closeCircle, checkmarkCircle, timer, sync,
-  warningOutline, lockClosed, search, funnel, trashBin,
+  warningOutline, lockClosed, lockClosedOutline, search, funnel, trashBin,
   extensionPuzzle, swapVertical, chevronDown,
   hardwareChipOutline, cogOutline, person, chevronForward, chevronBack,
   folderOutline, ellipsisHorizontalCircleOutline,
@@ -425,11 +429,74 @@ import {
   type SectionDimension,
   type SectionMeta,
 } from '@/composables/useSectionDerivation'
+// 🆕 Task 15：虚拟滚动组件
+import TaskVirtualList from '@/components/tasks/TaskVirtualList.vue'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const { openNewTask } = useNewTaskModal()
+
+// 🆕 Task 15：虚拟滚动所需的 ion-content 滚动容器引用
+// ion-content 内部用 shadow DOM 渲染 .inner-scroll，需要通过 shadowRoot.querySelector 获取
+// 参考 DevLogs.vue 的 ensureScrollEl() 模式
+const contentRef = ref<any>(null)
+const scrollEl = ref<HTMLElement | null>(null)
+const virtualListRef = ref<{ forceMeasure: () => void } | null>(null)
+
+/**
+ * 🆕 Task 15：从 ion-content shadow DOM 获取 .inner-scroll 滚动容器
+ *
+ * ion-content 是 Ionic 的 shadow DOM 组件，实际滚动发生在内部 .inner-scroll 元素上，
+ * 不是 ion-content host 本身。@tanstack/vue-virtual 需要拿到这个真实滚动元素才能
+ * 监听 scroll 事件 + 测量视口高度。
+ *
+ * 时序问题：onMounted 时 ion-content 可能还没完成 shadow DOM 渲染 → scrollEl=null
+ * 修法：多次重试（rAF + setTimeout 指数退避）+ ResizeObserver 兜底监听 host 尺寸变化
+ */
+function ensureScrollEl(): HTMLElement | null {
+  if (!contentRef.value) return null
+  const hostEl = (contentRef.value.$el || contentRef.value) as HTMLElement | undefined
+  if (!hostEl || !hostEl.shadowRoot) return null
+  const el = hostEl.shadowRoot.querySelector('.inner-scroll') as HTMLElement | null
+  if (el && el !== scrollEl.value) scrollEl.value = el
+  return scrollEl.value
+}
+
+let scrollElRetryTimer: ReturnType<typeof setTimeout> | null = null
+let scrollElRO: ResizeObserver | null = null
+
+function initScrollElWithRetry(): void {
+  let retryCount = 0
+  const maxRetries = 8
+  const tryInit = (): void => {
+    const el = ensureScrollEl()
+    if (el) {
+      // 拿到 .inner-scroll 后，强制 virtualizer 重算（首次 watch 已触发 measure()，
+      // 这里再 measure 一次确保虚拟列表渲染首屏 items）
+      virtualListRef.value?.forceMeasure?.()
+      return
+    }
+    retryCount++
+    if (retryCount < maxRetries) {
+      // 指数退避：50ms → 100ms → 150ms → 200ms → 250ms → 300ms
+      const delay = Math.min(50 * retryCount, 300)
+      scrollElRetryTimer = setTimeout(tryInit, delay)
+    }
+  }
+  tryInit()
+
+  // 兜底：ResizeObserver 监听 contentRef 尺寸变化（ion-content 完成渲染时会触发）
+  if (typeof ResizeObserver !== 'undefined' && contentRef.value) {
+    const hostEl = (contentRef.value.$el || contentRef.value) as HTMLElement | undefined
+    if (hostEl) {
+      scrollElRO = new ResizeObserver(() => {
+        if (!scrollEl.value) tryInit()
+      })
+      scrollElRO.observe(hostEl)
+    }
+  }
+}
 
 const {
   tasks, loading, expandedWarningDetail, sortBy,
@@ -466,6 +533,21 @@ function getTriggeredByColor(taskId: string): string {
 function getTriggeredByIcon(taskId: string): string {
   const v = getTriggeredBy(taskId)
   return v === 'automation' ? cogOutline : v === 'ai_agent' ? hardwareChipOutline : person
+}
+
+// 🆕 2026-06-18 Task 18：任务卡片副标题 crypto params 摘要
+// 返回 "AES-256 · zstd" / "AES-128" / "zstd" / ""（旧任务无 crypto 字段时返回空串）
+function getCryptoSummary(task: EncvTask): string {
+  const parts: string[] = []
+  if (task.cipherMode !== undefined && task.cipherMode !== null) {
+    parts.push(task.cipherMode === 1 ? t('tasks.cipherMode256') : t('tasks.cipherMode128'))
+  }
+  if (task.compressionMode === 'zstd') {
+    parts.push('Zstd')
+  } else if (task.compressionMode === 'none') {
+    parts.push(t('tasks.compressionNone'))
+  }
+  return parts.join(' · ')
 }
 
 // 🆕 2026-06-11 v5：sub_section icon name → ionicon 映射
@@ -732,9 +814,6 @@ function toggleSubSection(key: string) {
   else next.add(key)
   collapsedSubSectionKeys.value = next
 }
-function isSubSectionCollapsed(key: string): boolean {
-  return collapsedSubSectionKeys.value.has(key)
-}
 
 const displayedItems = computed<DisplayItem[]>(() => {
   const tasks = filteredTasks.value
@@ -810,14 +889,20 @@ const displayedItems = computed<DisplayItem[]>(() => {
       // 始终构造 group card
       result.push(buildGroupItem(groupKey, g.runId, allGroupTasks, g.tone, g.sections))
       if (groupExpanded) {
-        // 🆕 v5：group 展开时按 section 维度插 sub_section_header（可折叠 + sticky）
+        // 🆕 v5：group 展开时按 section 维度插 sub_section_header（可独立折叠）
+        // 🆕 Task 15：collapsed sub_section 的 task 不放入 displayedItems
+        //   历史：v-show 隐藏 task → 虚拟滚动 measureElement 测到 display:none 元素高度为 0
+        //   修复：collapsed 时只输出 sub_section_header，不输出其下 task
+        //   用户展开 sub_section 时 collapsedSubSectionKeys 变化 → displayedItems 重算 → task 出现
         for (const sec of g.sections) {
           const subKey = `sub-${groupKey}-${sec.sectionKeyStr}`
           const isCollapsed = collapsedSubSectionKeys.value.has(subKey)
           result.push(buildSubSectionHeader(subKey, g.runId, sec.meta, sec.tasks, isCollapsed))
-          // sub_section 内的 task 跟随折叠
-          for (const t of sec.tasks) {
-            result.push({ kind: 'task', key: t.id, task: t, subKey, groupKey })
+          if (!isCollapsed) {
+            // sub_section 展开时才输出其下 task
+            for (const t of sec.tasks) {
+              result.push({ kind: 'task', key: t.id, task: t, subKey, groupKey })
+            }
           }
         }
       }
@@ -921,6 +1006,10 @@ function buildSubSectionHeader(
 // 🆕 onMounted：只处理路由 query（长按菜单跳转过来时打开 new task modal）
 // 首次 fetchTasks 由 onIonViewWillEnter 接管（每次切回 tab 智能刷新）。
 onMounted(() => {
+  // 🆕 Task 15：初始化虚拟滚动所需的 ion-content .inner-scroll 引用
+  // ion-content shadow DOM 异步渲染，需要重试 + ResizeObserver 兜底
+  initScrollElWithRetry()
+
   if (route.query.action === 'new') {
     const sourcePath = route.query.source as string
     const taskType = (route.query.type || 'encrypt') as TaskType
@@ -930,6 +1019,18 @@ onMounted(() => {
     } else {
       openNewTask()
     }
+  }
+})
+
+// 🆕 Task 15：组件卸载时清理 scrollEl 重试定时器 + ResizeObserver
+onBeforeUnmount(() => {
+  if (scrollElRetryTimer) {
+    clearTimeout(scrollElRetryTimer)
+    scrollElRetryTimer = null
+  }
+  if (scrollElRO) {
+    scrollElRO.disconnect()
+    scrollElRO = null
   }
 })
 
@@ -1077,6 +1178,25 @@ onIonViewWillEnter(() => {
   vertical-align: middle;
 }
 
+/* 🆕 2026-06-18 Task 18：crypto params 摘要 badge */
+.crypto-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--ion-color-medium);
+  background: rgba(var(--ion-color-medium-rgb, 148, 149, 153), 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.crypto-summary-icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
 .task-time-info {
   display: flex;
   align-items: center;
@@ -1202,7 +1322,7 @@ onIonViewWillEnter(() => {
 /* ============================================================
    🆕 2026-06-11 v5：sub_section_header（取代 v4 plugin-sub-section）
    - 4 种 dimension tone：plugin / type / category / none
-   - sticky 滚动冻结（top: 0）
+   - 🆕 Task 15：移除 sticky（与虚拟滚动 absolute 定位冲突）
    - 商业级视觉：subtle shadow + 1px border + backdrop-filter
    - 可折叠：整段 button + 右侧 chevron
    ============================================================ */
@@ -1218,11 +1338,8 @@ ion-item.sub-section-header {
   --border-color: var(--sub-border, rgba(79, 140, 255, 0.12));
   --color: var(--ion-color-dark);
   --inner-padding-end: 0;
-  position: sticky;
-  top: 0;
-  z-index: 5;
   font-size: 13px;
-  /* 商业级视觉：backdrop-filter 让 sticky 时半透明 */
+  /* 商业级视觉：backdrop-filter 保留半透明感 */
   backdrop-filter: blur(10px) saturate(140%);
   -webkit-backdrop-filter: blur(10px) saturate(140%);
   background-color: rgba(255, 255, 255, 0.92);
@@ -1555,5 +1672,17 @@ ion-item.sub-section-header.sub-tone-none {
   padding: 12px 16px;
   font-size: 13px;
   color: var(--encv-text-secondary);
+}
+
+/* ============================================================
+   🆕 Task 15：TaskVirtualList 容器样式
+   - 虚拟列表接管 ion-content 内的滚动渲染
+   - 移除 ion-list 默认 padding（虚拟列表自己管理布局）
+   ============================================================ */
+.tasks-virtual-list {
+  width: 100%;
+  /* 给虚拟列表一点底部留白，避免 FAB 遮挡最后一个 item */
+  padding-bottom: 80px;
+  box-sizing: border-box;
 }
 </style>

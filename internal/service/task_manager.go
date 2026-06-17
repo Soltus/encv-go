@@ -51,6 +51,13 @@ type MobileTask struct {
 	OutputPath        string            `json:"outputPath,omitempty"`
 	Steps             []TaskStep        `json:"steps,omitempty"`
 
+	// 🆕 2026-06-18 Task 16：加解密参数持久化
+	//   前端 createTask 传 cipherMode (0=AES-128-GCM, 1=AES-256-GCM) + compressionMode ('none'|'zstd')
+	//   后端持久化让任务列表刷新后仍能回显参数（Task 18 展示用）
+	//   omitempty：旧任务（无这两个字段）反序列化时自动空值，向后兼容
+	CipherMode      int    `json:"cipherMode,omitempty"`
+	CompressionMode string `json:"compressionMode,omitempty"`
+
 	// 🆕 2026-06-15 multi-mount（spec Phase C1）
 	//   - SourcePath 是 /d/<mount>/... 形式时，记录解析后的 mount_id + sub_path
 	//   - SourcePath 是旧绝对路径且能匹配到 mount 时同样记录
@@ -274,6 +281,33 @@ func (tm *TaskManager) CreateWithExtras(taskType, sourcePath, targetPath, passwo
 	task := tm.Create(taskType, sourcePath, targetPath, password, version, pluginName)
 	task.SecondaryPassword = secondaryPassword
 	task.ExtraFields = extras
+	return task
+}
+
+// 🆕 2026-06-18 Task 16：CreateWithCryptoParams 接受 cipherMode / compressionMode 持久化
+//
+// 前端 createTask API 传 cipherMode (0=AES-128-GCM, 1=AES-256-GCM) + compressionMode ('none'|'zstd')
+// 后端持久化让任务列表刷新后仍能回显参数（Task 18 任务卡片展示用）。
+//
+// 设计取舍：
+//   - 不修改 CreateWithExtras 签名（保持向后兼容，已有 3 个测试依赖旧签名）
+//   - 新增独立方法让调用方显式选择是否传 crypto 参数
+//   - cipherMode=0 / compressionMode='none' 仍持久化（用户主动选了默认值，回显时需要知道）
+//     用 omitempty + 显式判断：调用方传 0/'none' 时仍写入字段（前端会显式传）
+//
+// 调用方：internal/server/mobile_api.go handleCreateTaskGin
+func (tm *TaskManager) CreateWithCryptoParams(
+	taskType, sourcePath, targetPath, password, secondaryPassword string,
+	version int, pluginName string,
+	extras map[string]string,
+	cipherMode int,
+	compressionMode string,
+) *MobileTask {
+	task := tm.CreateWithExtras(taskType, sourcePath, targetPath, password, secondaryPassword,
+		version, pluginName, extras)
+	task.CipherMode = cipherMode
+	task.CompressionMode = compressionMode
+	tm.saveTasks()
 	return task
 }
 

@@ -108,6 +108,9 @@ export default {
     'tasks.compressionNoneHelp': '不压缩，加密更快',
     'tasks.compressionZstd': 'zstd 压缩',
     'tasks.compressionZstdHelp': '纯文本/重复二进制可节省 30-70% 空间',
+    // 🆕 2026-06-18 Task 18：任务详情卡片 crypto params 区块标题 + 摘要
+    'tasks.cryptoParams': '加解密参数',
+    'tasks.cryptoParamsSummary': '{cipher} · {compression}',
 
     'tasks.passwordErrorHint': '密码可能错误，请检查后重试',
     'tasks.warning': '警告',
@@ -485,6 +488,9 @@ export default {
     'tasks.compressionNoneHelp': 'No compression, faster encryption',
     'tasks.compressionZstd': 'zstd compression',
     'tasks.compressionZstdHelp': 'Plain text / repetitive binary can save 30-70% space',
+    // 🆕 2026-06-18 Task 18: crypto params section title + summary
+    'tasks.cryptoParams': 'Crypto Parameters',
+    'tasks.cryptoParamsSummary': '{cipher} · {compression}',
 
     'tasks.passwordErrorHint': 'Password may be wrong, please check and retry',
     'tasks.warning': 'Warning',

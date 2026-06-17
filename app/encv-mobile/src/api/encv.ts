@@ -592,6 +592,15 @@ export interface EncvTask {
   //   - 跨 session：localStorage 作 fallback（旧 task 没有这 2 字段，try useTaskTrigger）
   triggeredBy?: 'user' | 'automation' | 'ai_agent'
   runId?: string
+  // 🆕 2026-06-18 Task 17：加解密参数回显字段
+  // 后端 Task 16 持久化 cipherMode (0=AES-128-GCM, 1=AES-256-GCM) + compressionMode ('none'|'zstd')
+  // 前端 Task 18 任务卡片展示用 — 刷新页面后仍能回显参数
+  // optional：旧任务（Task 16 之前创建的）没有这 2 字段，反序列化时 undefined
+  cipherMode?: number
+  compressionMode?: 'none' | 'zstd'
+  // extraFields 已存在于 EncvTask 之外（createTask body 传），但后端 MobileTask 也有这个字段
+  // 这里加上让前端能读到后端回传的 extraFields（如 plugin_password 等自定义参数）
+  extraFields?: Record<string, string>
 }
 
 export async function getTasks(): Promise<EncvTask[]> {

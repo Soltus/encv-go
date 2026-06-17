@@ -351,6 +351,28 @@
 - 若扩展：单测覆盖笛卡尔积包含 cipherMode/compressionMode
 - 若未扩展：备注原因
 
+**调查结论（2026-06-18）**：**未暴露**，保持现状。
+
+后端 7 个插件（video / audio / image / pdf / wps / text / alistencrypt）的 `GetTaskOptions()` 返回的 `ExtraFields` 均不包含 `cipherMode` / `compressionMode` 字段：
+
+| 插件 | ExtraFields keys |
+|------|------------------|
+| video | stream_preset, encrypt_filename, fn_rounds, fn_charset, fn_deconfuse, fn_structured（6 个） |
+| audio / image / pdf / wps / text | encrypt_filename, fn_rounds, fn_charset, fn_deconfuse, fn_structured（各 5 个） |
+| alistencrypt | plugin_password, encode_filename, enc_type（3 个） |
+
+`cipherMode` / `compressionMode` 实际处理位置：
+- **后端**：作为 `MobileTask` 结构体顶层字段（`task_manager.go` L54-59），通过 `CreateWithCryptoParams()` 持久化，API 请求体也是顶层字段（`mobile_api.go` L460-462）
+- **前端**：`NewTaskModal` / `EncryptBody.vue` 中硬编码 radio group（AES-128/AES-256、none/zstd），仅 v4 容器显示，不通过 `extraFields` 动态渲染
+
+**决策**：保持 `useTestCaseGeneration` 现状（仅从 `extraFields` 派生笛卡尔积）。`cipherMode` / `compressionMode` 仅用于任务详情展示回显（Task 18 已实现）。
+
+**已知限制**：自动化测试不会覆盖 `cipherMode` × `compressionMode` 维度组合。如未来需要覆盖，有两种路径：
+1. 后端插件 `GetTaskOptions()` 暴露这两个字段为 `select` 类型（对齐 automation-workflow 规则 §三）
+2. 前端 `useTestCaseGeneration` 硬编码 v4 容器的 cipher/compression 维度（违背"零硬编码"原则，不推荐）
+
+当前选择路径 0（不覆盖），因为加解密参数的正确性已由后端单测 + 真机手动验证覆盖。
+
 ---
 
 ## Task 20: 真机验证 + 回归测试
