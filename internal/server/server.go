@@ -748,50 +748,13 @@ func (s *Server) Start(version string) (string, error) {
 
 	// 3. 为每个 mount 创建 webdavFS 实例 + 注册 handler
 	for _, m := range webdavEnabledMounts {
-		// 创建该 mount 的 webdavFS
-		webdavFSRaw, indexProvider, fsErr := webdav.NewENCVFSForRoot(
-			config.NewContext(context.Background(), s.cfg),
-			m.RootPath,
-			s.readerService,
-			s.chunkNamers,
-		)
-		if fsErr != nil {
-			errMsg := fmt.Sprintf("WebDAV init failed for mount %s (root=%s): %v", m.Name, m.RootPath, fsErr)
-			slog.Warn(errMsg)
-			s.mountBootstrapErrors = append(s.mountBootstrapErrors, errMsg)
-			continue
-		}
-
-		// type assert：encvWebDAVFS 同时实现 goWebdav.FileSystem 和 webdav.IndexProvider
-		fsConcrete, ok := webdavFSRaw.(goWebdav.FileSystem)
-		if !ok {
-			errMsg := fmt.Sprintf("WebDAV FS for mount %s does not implement goWebdav.FileSystem", m.Name)
-			slog.Error(errMsg)
-			s.mountBootstrapErrors = append(s.mountBootstrapErrors, errMsg)
-			continue
-		}
-
-		webdavHandler := &goWebdav.Handler{
-			FileSystem: fsConcrete,
-			LockSystem: goWebdav.NewMemLS(),
-		}
-		authMiddleware := middleware.BasicAuthDynamic(s)
-		loggingMiddleware := s.webdavLoggingMiddleware()
-		protectedWebdavHandler := authMiddleware(loggingMiddleware(webdavHandler))
-
-		webdavMethods := []string{
-			"GET", "POST", "PUT", "PATCH", "HEAD", "OPTIONS", "DELETE", "CONNECT", "TRACE",
-			"PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK",
-		}
-
-		// URL 前缀：/d/<mount_path>/* (mount_path 形如 "automation", "primary", "sandbox")
-		// 例：mount_path = "/d/automation" → URL = "/d/automation/*path"
-		// 例：mount_path = "/"           → URL = "/*path" (primary 兜底)
+		// 3.1 计算该 mount 的主 URL 前缀
+		// 例：mount_path = "/d/automation" → urlPrefix = "/d/automation/"
+		// 例：mount_path = "/"           → urlPrefix = s.webdavPath (cfg.Webdav.Root 兜底)
 		var urlPrefix string
 		if m.MountPath == "/" || m.MountPath == "" {
 			urlPrefix = s.webdavPath // 用 cfg.Webdav.Root 兜底
 		} else {
-			// m.MountPath 形如 "/d/automation"，规范化：以 "/" 开头 + 以 "/" 结尾
 			mp := strings.TrimSuffix(m.MountPath, "/")
 			if !strings.HasPrefix(mp, "/") {
 				mp = "/" + mp
@@ -799,67 +762,49 @@ func (s *Server) Start(version string) (string, error) {
 			urlPrefix = mp + "/"
 		}
 
-		// 注册到 /d/<mount_path>/*path
-		for _, method := range webdavMethods {
-			r.Handle(method, urlPrefix+"*path", gin.WrapH(protectedWebdavHandler))
-		}
-		// 精确匹配根 URL（无 path 部分），重定向到根路径
-		rootURL := strings.TrimSuffix(urlPrefix, "/")
-		if rootURL != "" {
-			for _, method := range webdavMethods {
-				r.Handle(method, rootURL, func(c *gin.Context) {
-					c.Request.URL.Path = urlPrefix
-					protectedWebdavHandler.ServeHTTP(c.Writer, c.Request)
-				})
-			}
-		}
-
 		// 🆕 2026-06-17：primary mount 额外注册 cfg.Webdav.Root 作为向后兼容入口
-		//
-		// 为什么不合并：mount registry 的 primary.MountPath = "/d/primary"（多 mount 时代的虚拟路径），
-		// 但 cfg.Webdav.Root = "/webdav/"（向后兼容旧客户端 + Windows Explorer 单 webdav）。
-		// 两个 URL 入口都指向同一 webdavFS 实例（独立 dir 校验）。
-		//
-		// 注册方式：相同 handler 在第二路径前缀下注册（不创建第二个 webdavFS 实例，
-		// 因为 mount registry 里的 primary mount 已经创建了一个）。
-		//
-		// 为什么不省略：删 /webdav/ 入口会破坏所有老客户端的"单 webdav 入口"配置 + 现有测试。
+		// 关键修复：primary mount 走【双 URL + 双 webdavFS】模式
+		// - /d/primary/* → webdavFS_a（webdavPrefix = "/d/primary"）
+		// - /webdav/*    → webdavFS_b（webdavPrefix = "/webdav"）
+		// 两个 webdavFS 指向同一 RootPath 但 webdavPrefix 不同 → h.Prefix 必须各自设对
+		// 修复前：共用 webdavHandler，h.Prefix 永远是最后注册那一个（/webdav 或 /d/primary），
+		//         另一个 URL 走 webdavFS.webdavPathToIndexKey 时 prefix 不匹配 → 405
+		primaryLegacyPrefix := ""
 		if m.Name == mount.NamePrimary && s.webdavPath != "" && s.webdavPath != urlPrefix {
-			legacyPrefix := s.webdavPath
-			for _, method := range webdavMethods {
-				r.Handle(method, legacyPrefix+"*path", gin.WrapH(protectedWebdavHandler))
-			}
-			legacyRoot := strings.TrimSuffix(legacyPrefix, "/")
-			if legacyRoot != "" {
-				for _, method := range webdavMethods {
-					r.Handle(method, legacyRoot, func(c *gin.Context) {
-						c.Request.URL.Path = legacyPrefix
-						protectedWebdavHandler.ServeHTTP(c.Writer, c.Request)
-					})
-				}
-			}
-			slog.Info("WebDAV legacy /webdav/ alias also registered (backward compat for old clients + Windows Explorer single-webdav)")
+			primaryLegacyPrefix = s.webdavPath
 		}
 
-		entry := &webdavFSEntry{
-			fs:         indexProvider,
-			fileSystem: fsConcrete,
-			mount:      m,
-			webdavPath: urlPrefix,
+		// 3.2 为主 URL 注册 webdavFS + handler
+		entry, fsErr := s.registerWebdavHandlerForURL(r, m, urlPrefix)
+		if fsErr != nil {
+			errMsg := fmt.Sprintf("WebDAV init failed for mount %s (root=%s, url=%s): %v", m.Name, m.RootPath, urlPrefix, fsErr)
+			slog.Warn(errMsg)
+			s.mountBootstrapErrors = append(s.mountBootstrapErrors, errMsg)
+			continue
 		}
 		s.webdavFSByMount[m.Name] = entry
 
-		// 兼容：primary 的 webdavFS 同时存到 s.webdavFS（旧调用方用）
+		// 3.3 兼容：primary 的 webdavFS 同时存到 s.webdavFS（旧调用方用）
 		if m.Name == mount.NamePrimary && s.webdavFS == nil {
-			s.webdavFS = indexProvider
+			s.webdavFS = entry.fs
 		}
 
-		slog.Info("WebDAV handler registered",
-			"mount", m.Name,
-			"mount_path", m.MountPath,
-			"root_path", m.RootPath,
-			"url_prefix", urlPrefix,
-		)
+		// 3.4 primary mount 额外注册 legacy URL（独立的 webdavFS + handler）
+		//
+		// 🆕 2026-06-17：独立 webdavFS（不复用主 URL 的）→ 修 405
+		// 原因：h.Prefix 是 webdavHandler 的字段（单一值），不能一 handler 多 URL。
+		// 共享 FS 也不行：webdavFS.webdavPrefix 也得跟 h.Prefix 一致，否则 webdavPathToIndexKey 拒。
+		if primaryLegacyPrefix != "" {
+			_, legacyErr := s.registerWebdavHandlerForURL(r, m, primaryLegacyPrefix)
+			if legacyErr != nil {
+				errMsg := fmt.Sprintf("WebDAV legacy URL init failed for mount %s (url=%s): %v", m.Name, primaryLegacyPrefix, legacyErr)
+				slog.Warn(errMsg)
+				s.mountBootstrapErrors = append(s.mountBootstrapErrors, errMsg)
+			} else {
+				slog.Info("WebDAV legacy /webdav/ alias also registered (backward compat for old clients + Windows Explorer single-webdav)",
+					"url_prefix", primaryLegacyPrefix)
+			}
+		}
 	}
 
 	r.NoRoute(gin.WrapF(s.handleRequest))
@@ -888,24 +833,168 @@ func (s *Server) webdavLoggingMiddleware() func(http.Handler) http.Handler {
 			start := time.Now()
 			method := r.Method
 			path := r.URL.Path
+			clientIP := clientIPFromRequest(r)
+			ua := r.Header.Get("User-Agent")
 
+			// 🆕 2026-06-17：增强的 loggingResponseWriter — 记录 body bytes + category
 			lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 			next.ServeHTTP(lrw, r)
 
 			elapsed := time.Since(start)
-			slog.Info("WebDAV", "method", method, "path", path, "status", lrw.statusCode, "elapsed", elapsed)
+			latencyCategory := latencyCategoryFromMs(elapsed.Milliseconds())
+
+			attrs := []any{
+				"method", method,
+				"path", path,
+				"status", lrw.statusCode,
+				"bytes", lrw.bytesWritten,
+				"elapsed_ms", elapsed.Milliseconds(),
+				"latency", latencyCategory,
+				"client_ip", clientIP,
+			}
+			if ua != "" {
+				attrs = append(attrs, "ua", ua)
+			}
+
+			// 按 status 选择 log level：5xx → error，4xx → warn，其他 → info
+			switch {
+			case lrw.statusCode >= 500:
+				slog.Error("WebDAV", attrs...)
+			case lrw.statusCode >= 400:
+				slog.Warn("WebDAV", attrs...)
+			default:
+				slog.Info("WebDAV", attrs...)
+			}
 		})
 	}
 }
 
+// clientIPFromRequest 解析请求的 client IP（trust X-Forwarded-For 第一个）
+func clientIPFromRequest(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if idx := strings.IndexByte(xff, ','); idx > 0 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if xrip := r.Header.Get("X-Real-IP"); xrip != "" {
+		return strings.TrimSpace(xrip)
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// latencyCategoryFromMs 把延迟按量级分桶（fast/normal/slow/very-slow）
+func latencyCategoryFromMs(ms int64) string {
+	switch {
+	case ms < 50:
+		return "fast"
+	case ms < 200:
+		return "normal"
+	case ms < 1000:
+		return "slow"
+	default:
+		return "very-slow"
+	}
+}
+
+// registerWebdavHandlerForURL 为 (mount, urlPrefix) 组合注册一个独立的 webdavFS + handler。
+//
+// 🆕 2026-06-17：从 StartWebDavServer 提取的 helper（multi-mount-storage-refactor spec 续）
+// 关键修复：每个 URL 前缀绑定一个独立 webdavFS 实例，避免 h.Prefix / webdavPrefix 串号。
+// primary mount 在双 URL 场景下会被调用 2 次（/d/primary/ 和 /webdav/），每次都创建独立 FS。
+func (s *Server) registerWebdavHandlerForURL(r *gin.Engine, m *mount.Mount, urlPrefix string) (*webdavFSEntry, error) {
+	// 1. 为该 URL 前缀创建独立 webdavFS
+	webdavFSRaw, indexProvider, fsErr := webdav.NewENCVFSForRoot(
+		config.NewContext(context.Background(), s.cfg),
+		m.RootPath,
+		urlPrefix, // 🆕 传入 urlPrefix，让 fs.webdavPrefix 跟 URL 一致
+		s.readerService,
+		s.chunkNamers,
+	)
+	if fsErr != nil {
+		return nil, fsErr
+	}
+
+	fsConcrete, ok := webdavFSRaw.(goWebdav.FileSystem)
+	if !ok {
+		return nil, fmt.Errorf("WebDAV FS for mount %s (url=%s) does not implement goWebdav.FileSystem", m.Name, urlPrefix)
+	}
+
+	// 2. 创建 webdavHandler，**关键**：h.Prefix = urlPrefix
+	// → go-webdav 库 stripPrefix 正确剥离 URL → Stat 收到的是相对路径
+	// → webdavPathToIndexKey 校验通过（fs.webdavPrefix == urlPrefix）
+	// 🆕 2026-06-17：h.Prefix 字段必须设（修复 405 的根因）
+	webdavHandler := &goWebdav.Handler{
+		Prefix:     urlPrefix,
+		FileSystem: fsConcrete,
+		LockSystem: goWebdav.NewMemLS(),
+	}
+
+	authMiddleware := middleware.BasicAuthDynamic(s)
+	loggingMiddleware := s.webdavLoggingMiddleware()
+	protectedWebdavHandler := authMiddleware(loggingMiddleware(webdavHandler))
+
+	webdavMethods := []string{
+		"GET", "POST", "PUT", "PATCH", "HEAD", "OPTIONS", "DELETE", "CONNECT", "TRACE",
+		"PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK",
+	}
+
+	// 3. 注册到 <urlPrefix>*path
+	for _, method := range webdavMethods {
+		r.Handle(method, urlPrefix+"*path", gin.WrapH(protectedWebdavHandler))
+	}
+	// 4. 精确匹配根 URL（无 path 部分）
+	rootURL := strings.TrimSuffix(urlPrefix, "/")
+	if rootURL != "" {
+		for _, method := range webdavMethods {
+			r.Handle(method, rootURL, func(c *gin.Context) {
+				c.Request.URL.Path = urlPrefix
+				protectedWebdavHandler.ServeHTTP(c.Writer, c.Request)
+			})
+		}
+	}
+
+	entry := &webdavFSEntry{
+		fs:         indexProvider,
+		fileSystem: fsConcrete,
+		mount:      m,
+		webdavPath: urlPrefix,
+	}
+
+	slog.Info("WebDAV handler registered",
+		"mount", m.Name,
+		"mount_path", m.MountPath,
+		"root_path", m.RootPath,
+		"url_prefix", urlPrefix,
+		"fs_webdav_prefix", indexProvider.WebdavPrefix(),
+	)
+
+	return entry, nil
+}
+
 type loggingResponseWriter struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode   int
+	bytesWritten int64
 }
 
 func (lrw *loggingResponseWriter) WriteHeader(code int) {
 	lrw.statusCode = code
 	lrw.ResponseWriter.WriteHeader(code)
+}
+
+// Write 包装 http.ResponseWriter.Write，记录响应 body bytes
+func (lrw *loggingResponseWriter) Write(p []byte) (int, error) {
+	if lrw.statusCode == 0 {
+		lrw.statusCode = http.StatusOK
+	}
+	n, err := lrw.ResponseWriter.Write(p)
+	lrw.bytesWritten += int64(n)
+	return n, err
 }
 
 func (lrw *loggingResponseWriter) Flush() {

@@ -115,16 +115,23 @@ type decryptedDir struct {
 //   - 非空时用显式 rootDir（多挂载点场景）
 //
 // 🆕 2026-06-17：多挂载点 webdav 适配（multi-mount-storage-refactor spec 续）
-//   - server.go 现在为每个 mount 调一次 NewENCVFSForRoot(ctx, m.RootPath, ...)
+//   - server.go 现在为每个 mount 调一次 NewENCVFSForRoot(ctx, m.RootPath, urlPrefix, ...)
 //   - 每个 mount 独立 indexCache / fsnotify watcher / runIndexer goroutine
 //   - URL 路径由 server.go 路由（/webdav/、/d/automation/、/d/primary/、/d/sandbox/）
+//   - urlPrefix 既是 h.Prefix（go-webdav 用）也是 fs.webdavPrefix（路径归一化用）
 func NewENCVFS(ctx context.Context, readerService *service.ReaderService, chunkNamers []namer.ChunkNamer) (goWebdav.FileSystem, IndexProvider, error) {
-	return NewENCVFSForRoot(ctx, "", readerService, chunkNamers)
+	return NewENCVFSForRoot(ctx, "", "", readerService, chunkNamers)
 }
 
-// NewENCVFSForRoot 创建绑定到显式 rootDir 的 webdavFS。
+// NewENCVFSForRoot 创建绑定到显式 rootDir + urlPrefix 的 webdavFS。
 // 🆕 2026-06-17：多挂载点适配用。rootDir 非空时优先使用。
-func NewENCVFSForRoot(ctx context.Context, rootDir string, readerService *service.ReaderService, chunkNamers []namer.ChunkNamer) (goWebdav.FileSystem, IndexProvider, error) {
+//
+// urlPrefix 决定 webdav 服务的 URL 前缀（例 "/d/automation"）：
+//   - 设给 h.Prefix（go-webdav 库剥离 URL 前缀）
+//   - 设给 fs.webdavPrefix（路径归一化 / 路径穿越检查）
+//   - 两边必须一致，否则会出现 405 错误（go-webdav 把非 IsNotExist 错误转 405）
+//   - "" 空字符串时兜底用 cfg.Webdav.Root（向后兼容旧单根调用方）
+func NewENCVFSForRoot(ctx context.Context, rootDir, urlPrefix string, readerService *service.ReaderService, chunkNamers []namer.ChunkNamer) (goWebdav.FileSystem, IndexProvider, error) {
 	cfg := config.FromContext(ctx)
 	if rootDir == "" {
 		rootDir = cfg.Webdav.Dir
@@ -148,7 +155,14 @@ func NewENCVFSForRoot(ctx context.Context, rootDir string, readerService *servic
 		}
 	}
 	// 规范化 WebDAV 前缀，确保它是一个以 '/' 开头且不以 '/' 结尾的路径
-	webdavPrefix := strings.TrimSuffix(cfg.Webdav.Root, "/")
+	// 🆕 2026-06-17：urlPrefix 优先于 cfg.Webdav.Root
+	//   - urlPrefix = "/d/automation" → multi-mount 模式
+	//   - urlPrefix = "" → 兜底用 cfg.Webdav.Root（向后兼容）
+	prefixSrc := urlPrefix
+	if prefixSrc == "" {
+		prefixSrc = cfg.Webdav.Root
+	}
+	webdavPrefix := strings.TrimSuffix(prefixSrc, "/")
 	if !strings.HasPrefix(webdavPrefix, "/") {
 		webdavPrefix = "/" + webdavPrefix
 	}
@@ -522,6 +536,9 @@ type IndexProvider interface {
 	// 返回 mount 的 manifest snapshot（virtual tree + container map + index stats）
 	// 用于 GET /api/webdav/manifest API
 	GetManifest() ManifestSnapshot
+	// 🆕 2026-06-17：返回 webdav URL 前缀（与 h.Prefix 必须一致）
+	// server.go 用此值配置 goWebdav.Handler.Prefix，让 go-webdav 库正确剥离 URL 前缀
+	WebdavPrefix() string
 }
 
 type IndexStatsResult struct {
@@ -622,6 +639,13 @@ func (fs *encvWebDAVFS) SearchInIndex(keyword, queryPath string, maxResults int)
 
 func (fs *encvWebDAVFS) Dir() string {
 	return fs.dir
+}
+
+// WebdavPrefix 返回当前 webdavFS 实例的 URL 前缀。
+// server.go 必须用此值设 goWebdav.Handler.Prefix，否则会出现 405 错误。
+// 🆕 2026-06-17：多挂载点 webdav 适配（multi-mount-storage-refactor spec 续）
+func (fs *encvWebDAVFS) WebdavPrefix() string {
+	return fs.webdavPrefix
 }
 
 func (fs *encvWebDAVFS) IsContainerExtension(filename string) bool {

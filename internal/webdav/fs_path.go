@@ -13,31 +13,31 @@ import (
 // 例如："/webdav/output/file.txt" -> "output/file.txt"
 // 例如："/webdav/" -> "."
 //
+// 🆕 2026-06-17：多挂载点 webdav 适配（multi-mount-storage-refactor spec 续）
+//   - 当 goWebdav.Handler.Prefix 被正确设置（server.go 层用 fs.WebdavPrefix() 注入），
+//     Stat/OpenFile/Mkdir/RemoveAll 收到的 name 是已经剥离 URL 前缀的相对路径。
+//   - 但保持函数同时支持【含前缀】和【不含前缀】两种入参，向后兼容老调用方 + 测试。
+//
 // 🆕 2026-06-17：多挂载点安全强化 — 显式拦截 .. 段，防止攻击者构造含 .. 的 webdav 路径
 // （虽然 webdavPathToIndexKey 只查表不触发 fs 操作，防御性也加上）
-func (fs *encvWebDAVFS) webdavPathToIndexKey(webdavPath string) (string, error) {
-	if strings.HasPrefix(webdavPath, fs.webdavPrefix) {
-		key := strings.TrimPrefix(webdavPath, fs.webdavPrefix)
-		key = strings.TrimPrefix(key, "/")
-		key = strings.TrimSuffix(key, "/")
-		if key == "" {
-			return ".", nil
-		}
-		// 🆕 2026-06-17：拦截 .. 段（攻击者可能构造 "/webdav/../etc/passwd"）
-		for _, seg := range strings.Split(filepath.ToSlash(key), "/") {
-			if seg == ".." {
-				return "", fmt.Errorf("path traversal detected: '%s' contains '..' segments", webdavPath)
-			}
-		}
-		return key, nil
+func (fs *encvWebDAVFS) webdavPathToIndexKey(name string) (string, error) {
+	// 1. 防御性剥离：如果入参仍含 webdavPrefix，主动剥离（兼容旧调用方 / 测试）
+	if fs.webdavPrefix != "" && strings.HasPrefix(name, fs.webdavPrefix) {
+		name = strings.TrimPrefix(name, fs.webdavPrefix)
 	}
-
-	trimmed := strings.TrimSuffix(fs.webdavPrefix, "/")
-	if webdavPath == trimmed {
+	name = strings.TrimPrefix(name, "/")
+	name = strings.TrimSuffix(name, "/")
+	if name == "" {
 		return ".", nil
 	}
 
-	return "", fmt.Errorf("path '%s' is not under webdav root '%s'", webdavPath, fs.webdavPrefix)
+	// 2. 拦截 .. 段（攻击者可能构造 "/webdav/../etc/passwd"，即使 h.Prefix 已剥离）
+	for _, seg := range strings.Split(filepath.ToSlash(name), "/") {
+		if seg == ".." {
+			return "", fmt.Errorf("path traversal detected: '%s' contains '..' segments", name)
+		}
+	}
+	return name, nil
 }
 
 // physicalPathToIndexKey 将物理容器路径和解析出的虚拟文件名，组合成标准的索引键。
@@ -59,20 +59,20 @@ func (fs *encvWebDAVFS) physicalPathToIndexKey(physicalPath, virtualFilename str
 
 // resolvePath 将 WebDAV 路径安全地解析为本地文件系统绝对路径
 //
+// 🆕 2026-06-17：多挂载点 webdav 适配（multi-mount-storage-refactor spec 续）
+//   - 当 goWebdav.Handler.Prefix 被正确设置（server.go 层用 fs.WebdavPrefix() 注入），
+//     Stat/OpenFile/Mkdir/RemoveAll 收到的 name 是已经剥离 URL 前缀的相对路径。
+//   - 但保持函数同时支持【含前缀】和【不含前缀】两种入参，向后兼容老调用方 + 测试。
+//
 // 🆕 2026-06-17：多挂载点安全强化（multi-mount-storage-refactor spec 续）
 //   - 在 SafeResolveToAbsPath 之前先做 path.Clean 显式检查 ..
 func (fs *encvWebDAVFS) resolvePath(name string) (string, error) {
-	if !strings.HasPrefix(name, fs.webdavPrefix) {
-		trimmed := strings.TrimSuffix(fs.webdavPrefix, "/")
-		if name == trimmed {
-			return fs.dir, nil
-		}
-		return "", fmt.Errorf("path '%s' is not under webdav root '%s'", name, fs.webdavPrefix)
+	// 1. 防御性剥离：如果入参仍含 webdavPrefix，主动剥离（兼容旧调用方 / 测试）
+	if fs.webdavPrefix != "" && strings.HasPrefix(name, fs.webdavPrefix) {
+		name = strings.TrimPrefix(name, fs.webdavPrefix)
 	}
-
-	userPath := strings.TrimPrefix(name, fs.webdavPrefix)
-	if userPath == "" {
-		userPath = "."
+	if name == "" {
+		name = "."
 	}
 
 	// 🆕 2026-06-17：显式拦截路径穿越（防止 userPath 是绝对路径 / 含 .. 段）
@@ -87,11 +87,11 @@ func (fs *encvWebDAVFS) resolvePath(name string) (string, error) {
 	//
 	// 修复：直接按 path segment 检查 ..（不依赖 Clean 行为）。
 	// 任何段 == ".." 立即拒绝。
-	for _, seg := range strings.Split(filepath.ToSlash(userPath), "/") {
+	for _, seg := range strings.Split(filepath.ToSlash(name), "/") {
 		if seg == ".." {
 			return "", fmt.Errorf("path traversal detected: '%s' contains '..' segments", name)
 		}
 	}
 
-	return utils.SafeResolveToAbsPath(fs.dir, userPath)
+	return utils.SafeResolveToAbsPath(fs.dir, name)
 }

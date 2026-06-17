@@ -2,10 +2,14 @@ package webdav
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	goWebdav "golang.org/x/net/webdav"
 
 	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/utils"
@@ -25,7 +29,7 @@ func TestNewENCVFSForRoot_ExplicitRoot(t *testing.T) {
 	}
 	ctx := config.NewContext(t.Context(), cfg)
 
-	fileSys, indexProvider, err := NewENCVFSForRoot(ctx, tmpDir, nil, nil)
+	fileSys, indexProvider, err := NewENCVFSForRoot(ctx, tmpDir, "/d/automation", nil, nil)
 	if err != nil {
 		t.Fatalf("NewENCVFSForRoot failed: %v", err)
 	}
@@ -35,6 +39,10 @@ func TestNewENCVFSForRoot_ExplicitRoot(t *testing.T) {
 	// 验证 dir = tmpDir（不是 cfg.Webdav.Dir）
 	if indexProvider.Dir() != tmpDir {
 		t.Errorf("Dir() = %q, want %q", indexProvider.Dir(), tmpDir)
+	}
+	// 🆕 2026-06-17：WebdavPrefix 必须跟 urlPrefix 一致（h.Prefix 也用这个值）
+	if indexProvider.WebdavPrefix() != "/d/automation" {
+		t.Errorf("WebdavPrefix() = %q, want %q", indexProvider.WebdavPrefix(), "/d/automation")
 	}
 }
 
@@ -49,12 +57,72 @@ func TestNewENCVFSForRoot_EmptyRootFallback(t *testing.T) {
 	}
 	ctx := config.NewContext(t.Context(), cfg)
 
-	_, indexProvider, err := NewENCVFSForRoot(ctx, "", nil, nil)
+	_, indexProvider, err := NewENCVFSForRoot(ctx, "", "/webdav", nil, nil)
 	if err != nil {
 		t.Fatalf("NewENCVFSForRoot failed: %v", err)
 	}
 	if indexProvider.Dir() != tmpDir {
 		t.Errorf("Dir() with empty root should fallback to cfg.Webdav.Dir, got %q want %q", indexProvider.Dir(), tmpDir)
+	}
+	if indexProvider.WebdavPrefix() != "/webdav" {
+		t.Errorf("WebdavPrefix() = %q, want %q", indexProvider.WebdavPrefix(), "/webdav")
+	}
+}
+
+// TestNewENCVFSForRoot_EmptyUrlPrefixFallback 验证 urlPrefix="" 时兜底用 cfg.Webdav.Root。
+//
+// 🆕 2026-06-17：修 405 必走的回归测试 — urlPrefix 跟 cfg.Webdav.Root 必须适配
+func TestNewENCVFSForRoot_EmptyUrlPrefixFallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.Config{
+		Password: "test-password",
+		Webdav: types.WebdavServer{
+			Dir:  tmpDir,
+			Root: "/webdav",
+		},
+	}
+	ctx := config.NewContext(t.Context(), cfg)
+
+	_, indexProvider, err := NewENCVFSForRoot(ctx, tmpDir, "", nil, nil)
+	if err != nil {
+		t.Fatalf("NewENCVFSForRoot failed: %v", err)
+	}
+	// urlPrefix="" → 兜底用 cfg.Webdav.Root = "/webdav"
+	if indexProvider.WebdavPrefix() != "/webdav" {
+		t.Errorf("WebdavPrefix() with empty urlPrefix should fallback to cfg.Webdav.Root, got %q want %q",
+			indexProvider.WebdavPrefix(), "/webdav")
+	}
+}
+
+// TestNewENCVFSForRoot_TrailingSlashNormalized 验证 urlPrefix 末尾斜杠被规范化。
+func TestNewENCVFSForRoot_TrailingSlashNormalized(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.Config{Password: "test-password"}
+	ctx := config.NewContext(t.Context(), cfg)
+
+	_, indexProvider, err := NewENCVFSForRoot(ctx, tmpDir, "/d/automation/", nil, nil)
+	if err != nil {
+		t.Fatalf("NewENCVFSForRoot failed: %v", err)
+	}
+	// 末尾 "/" 应被 TrimSuffix
+	if indexProvider.WebdavPrefix() != "/d/automation" {
+		t.Errorf("WebdavPrefix() = %q, want %q (trailing slash should be stripped)", indexProvider.WebdavPrefix(), "/d/automation")
+	}
+}
+
+// TestNewENCVFSForRoot_LeadingSlashNormalized 验证 urlPrefix 前导斜杠被规范化。
+func TestNewENCVFSForRoot_LeadingSlashNormalized(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.Config{Password: "test-password"}
+	ctx := config.NewContext(t.Context(), cfg)
+
+	_, indexProvider, err := NewENCVFSForRoot(ctx, tmpDir, "d/automation", nil, nil)
+	if err != nil {
+		t.Fatalf("NewENCVFSForRoot failed: %v", err)
+	}
+	// 无前导 "/" 时应加上
+	if indexProvider.WebdavPrefix() != "/d/automation" {
+		t.Errorf("WebdavPrefix() = %q, want %q (missing leading slash should be added)", indexProvider.WebdavPrefix(), "/d/automation")
 	}
 }
 
@@ -75,6 +143,75 @@ func TestNewENCVFS_BackwardCompat(t *testing.T) {
 	}
 	if indexProvider.Dir() != tmpDir {
 		t.Errorf("backward compat Dir() = %q, want %q", indexProvider.Dir(), tmpDir)
+	}
+}
+
+// TestGoWebdavHandler_PropfindWithCorrectPrefix 验证修 405 根因 —
+// goWebdav.Handler 在 h.Prefix 正确设置时返回 207（PROPFIND 成功），
+// 而 h.Prefix 错配（空字符串）时会返回 405（Method Not Allowed）。
+//
+// 🆕 2026-06-17：multi-mount 405 修复 — 这是端到端核心回归测试
+//   - 真实场景：mount URL = "/d/automation"
+//   - 旧实现：h.Prefix 永远空 → stripPrefix 透传 /d/automation/foo 给 FS
+//     → webdavPathToIndexKey 不匹配 /webdav prefix → 405
+//   - 新实现：h.Prefix = "/d/automation" → stripPrefix 正确剥离 → 207
+func TestGoWebdavHandler_PropfindWithCorrectPrefix(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// 1. 在 tmpDir 下创建一些 fixture 文件
+	subdir := filepath.Join(tmpDir, "subdir")
+	if err := os.MkdirAll(subdir, 0755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(subdir, "test.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	cfg := &config.Config{
+		Password: "test-password",
+		Webdav: types.WebdavServer{
+			Dir: tmpDir,
+		},
+	}
+	ctx := config.NewContext(t.Context(), cfg)
+
+	// 3. 用 NewENCVFSForRoot 创建 webdavFS + goWebdav.Handler
+	fileSysRaw, indexProvider, err := NewENCVFSForRoot(ctx, tmpDir, "/d/automation", nil, nil)
+	if err != nil {
+		t.Fatalf("NewENCVFSForRoot failed: %v", err)
+	}
+	fileSys, ok := fileSysRaw.(goWebdav.FileSystem)
+	if !ok {
+		t.Fatalf("fileSys does not implement goWebdav.FileSystem")
+	}
+
+	// ✅ 关键：h.Prefix 必须跟 fs.WebdavPrefix() 一致
+	webdavHandler := &goWebdav.Handler{
+		Prefix:     indexProvider.WebdavPrefix(),
+		FileSystem: fileSys,
+		LockSystem: goWebdav.NewMemLS(),
+	}
+
+	// 4. PROPFIND 请求 /d/automation/subdir/test.txt
+	// 正确实现 → 207 Multi-Status
+	// 错误实现（h.Prefix=""）→ 405 Method Not Allowed
+	req := httptest.NewRequest("PROPFIND", "/d/automation/subdir/test.txt", nil)
+	req.Header.Set("Depth", "0")
+	rr := httptest.NewRecorder()
+	webdavHandler.ServeHTTP(rr, req)
+
+	if rr.Code == http.StatusMethodNotAllowed {
+		t.Errorf("PROPFIND returned 405 — h.Prefix may not be set correctly. "+
+			"WebdavPrefix()=%q, h.Prefix=%q, want status < 400 or 207",
+			indexProvider.WebdavPrefix(), webdavHandler.Prefix)
+	}
+
+	// 5. OPTIONS 也应该 OK
+	reqOpts := httptest.NewRequest("OPTIONS", "/d/automation/", nil)
+	rrOpts := httptest.NewRecorder()
+	webdavHandler.ServeHTTP(rrOpts, reqOpts)
+	if rrOpts.Code == http.StatusMethodNotAllowed {
+		t.Errorf("OPTIONS returned 405 — handler prefix mismatch")
 	}
 }
 
