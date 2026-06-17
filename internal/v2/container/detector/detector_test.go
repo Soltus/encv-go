@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Soltus/encv-go/internal/v2/crypto"
+	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/Soltus/encv-go/internal/v2/types"
 )
 
@@ -132,7 +133,7 @@ func TestIsEncvContainerFromBytes_Nil(t *testing.T) {
 }
 
 func TestDetectContainerType_NonExistent(t *testing.T) {
-	ct, err := DetectContainerType("/tmp/nonexistent_encv_file_xyz.encv")
+	ct, err := DetectContainerType("/tmp/nonexistent_encv_file_xyz" + pluginsext.VideoExt)
 	if err == nil {
 		t.Fatal("expected error for non-existent file, got nil")
 	}

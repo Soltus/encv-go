@@ -13,6 +13,7 @@ import (
 
 	"github.com/Soltus/encv-go/internal/v2/container/detector"
 	"github.com/Soltus/encv-go/internal/v2/crypto"
+	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/Soltus/encv-go/internal/v2/reader"
 	"github.com/Soltus/encv-go/internal/v2/types"
 )
@@ -48,7 +49,7 @@ func writeAndOpenContainer(t *testing.T, password string, manifest *types.Manife
 func writeAndOpenContainerWithCipherMode(t *testing.T, password string, manifest *types.Manifest_v4, segResults []*crypto.SegmentEncryptionResult, cipherMode crypto.CipherMode_v4) (*reader.V4ContainerInfo, string) {
 	t.Helper()
 
-	tmpFile, err := os.CreateTemp("", "v4test-*.encv")
+	tmpFile, err := os.CreateTemp("", "v4test-*"+pluginsext.VideoExt)
 	if err != nil {
 		t.Fatalf("CreateTemp: %v", err)
 	}
@@ -193,7 +194,7 @@ func TestV4ContainerEmptyContainer(t *testing.T) {
 
 	manifest := makeTestManifest(salt, []types.Segment_v4{}, []string{})
 
-	tmpFile, err := os.CreateTemp("", "v4test-empty-*.encv")
+	tmpFile, err := os.CreateTemp("", "v4test-empty-*"+pluginsext.VideoExt)
 	if err != nil {
 		t.Fatalf("CreateTemp: %v", err)
 	}
@@ -532,7 +533,7 @@ func readSegmentHeaderAt(t *testing.T, rawData []byte, offset int) *types.Segmen
 // 设置 params.OutputPath 为临时路径后调用 WriteV4Container。
 func writeV4ContainerToTemp(t *testing.T, params *V4WriteParams) string {
 	t.Helper()
-	tmp, err := os.CreateTemp("", "v4task11-*.encv")
+	tmp, err := os.CreateTemp("", "v4task11-*"+pluginsext.VideoExt)
 	if err != nil {
 		t.Fatalf("CreateTemp: %v", err)
 	}

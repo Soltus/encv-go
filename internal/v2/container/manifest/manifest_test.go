@@ -12,6 +12,7 @@ import (
 
 	"github.com/Soltus/encv-go/internal/v2/container/block"
 	"github.com/Soltus/encv-go/internal/v2/crypto"
+	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/Soltus/encv-go/internal/v2/types"
 )
 
@@ -74,7 +75,7 @@ func createMinimalV3Fixture(t testing.TB, dataSize int64) string {
 func createMinimalV4Fixture(t testing.TB, dataSize int64) string {
 	t.Helper()
 	tempDir := t.TempDir()
-	containerPath := filepath.Join(tempDir, "fixture_v4.encv")
+	containerPath := filepath.Join(tempDir, "fixture_v4"+pluginsext.VideoExt)
 
 	salt, _ := crypto.GenerateSalt_v2(types.SaltSize_v2)
 	key := crypto.GenerateKey(testPassword, salt, types.KeySize_v2)

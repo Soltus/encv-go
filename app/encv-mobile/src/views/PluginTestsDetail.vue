@@ -1140,7 +1140,12 @@ function buildDynamicWorkflow(): void {
           // encrypt 步骤把 spec.relativePath basename 加密成 basename + containerExt
           // 加密后文件名由 plugin 内部决定 → 后端 outputExt = ext + containerExt
           // 之前硬编码 sample.${sourceExt}.${containerExt} → 对 mp3/mkv/jpg 等 mock 实际名不一致 → "文件不存在"
-          const containerExt = plugin.containerExtension || `${sourceExt}.encv`
+          // ⚠️ plugin.containerExtension 是后端从 plugin.GetContainerExtension() 返回的权威值
+          //    不允许任何硬编码 fallback（用户原则：任何硬编码都错）
+          if (!plugin.containerExtension) {
+            throw new Error(`Plugin ${plugin.name} 缺少 containerExtension（后端 plugin.GetContainerExtension() 返回空）`)
+          }
+          const containerExt = plugin.containerExtension
           const sourceBasename = sourcePath.split('/').pop() ?? `sample.${sourceExt}`
           const encryptedFileName = `${sourceBasename}.${containerExt}`
           const sourcePathForDecrypt = `${mockRoot.value}02-test-output/${baseSafeId}/${encryptedFileName}`

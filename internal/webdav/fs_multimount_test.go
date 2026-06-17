@@ -13,6 +13,7 @@ import (
 
 	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/utils"
+	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/Soltus/encv-go/internal/v2/types"
 )
 
@@ -310,10 +311,10 @@ func TestGetManifest_WithEntries(t *testing.T) {
 		mimeType: "video/mp4",
 		etag:     `"abc"`,
 	}
-	fs.indexes.pathMap["video/sample.mp4"] = filepath.Join(tmpDir, "video/sample.mp4.encv")
+	fs.indexes.pathMap["video/sample.mp4"] = filepath.Join(tmpDir, "video/sample.mp4"+pluginsext.VideoExt)
 	fs.indexes.fileInfoMap["video/sample.mp4"] = mockInfo
 	fs.indexes.dirMap["video"] = []string{"sample.mp4"}
-	fs.indexes.reversePathMap[filepath.Join(tmpDir, "video/sample.mp4.encv")] = "video/sample.mp4"
+	fs.indexes.reversePathMap[filepath.Join(tmpDir, "video/sample.mp4"+pluginsext.VideoExt)] = "video/sample.mp4"
 
 	snap := fs.GetManifest()
 
@@ -356,8 +357,8 @@ func TestGetManifest_WithEntries(t *testing.T) {
 	if cMap.VirtualPath != "video/sample.mp4" {
 		t.Errorf("ContainerMap.VirtualPath = %q, want %q", cMap.VirtualPath, "video/sample.mp4")
 	}
-	if !strings.HasSuffix(cMap.ContainerPath, "sample.mp4.encv") {
-		t.Errorf("ContainerMap.ContainerPath = %q, want suffix sample.mp4.encv", cMap.ContainerPath)
+	if !strings.HasSuffix(cMap.ContainerPath, "sample.mp4"+pluginsext.VideoExt) {
+		t.Errorf("ContainerMap.ContainerPath = %q, want suffix sample.mp4%s", cMap.ContainerPath, pluginsext.VideoExt)
 	}
 }
 
@@ -425,19 +426,21 @@ func TestResolvePath_ValidPath(t *testing.T) {
 // TestIsContainerExtension 注册扩展名过滤。
 func TestIsContainerExtension_Registered(t *testing.T) {
 	fs := createMinimalWebDAVFS(t.TempDir())
+	alistExt := pluginsext.AlistExt
+	textExt := pluginsext.TextExt
 	fs.containerExtensions = map[string]bool{
-		".encv": true,
-		".sccgt": true,
+		alistExt: true,
+		textExt: true,
 	}
-	fs.registeredContainerExts = []string{".encv", ".sccgt"}
+	fs.registeredContainerExts = []string{alistExt, textExt}
 
 	cases := []struct {
 		filename string
 		want     bool
 	}{
-		{"test.encv", true},
-		{"test.ENCV", true}, // case-insensitive
-		{"test.sccgt", true},
+		{"test" + alistExt, true},
+		{"test" + strings.ToUpper(alistExt), true}, // case-insensitive
+		{"test" + textExt, true},
 		{"test.mp4", false},
 		{"test.txt", false},
 	}
