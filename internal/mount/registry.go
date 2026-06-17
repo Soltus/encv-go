@@ -348,7 +348,7 @@ func (r *MountRegistry) AbsToVirtual(absPath string) (string, error) {
 	absClean := filepath.Clean(absPath)
 
 	var match *Mount
-	var rel string
+	var matchRel string
 	matchLen := -1
 	for _, m := range r.mounts {
 		root := filepath.Clean(m.RootPath)
@@ -356,6 +356,7 @@ func (r *MountRegistry) AbsToVirtual(absPath string) (string, error) {
 			continue
 		}
 		// 必须是 root 本身或 root/... 的子路径
+		var rel string
 		if absClean == root {
 			rel = ""
 		} else if strings.HasPrefix(absClean, root+string(filepath.Separator)) {
@@ -364,8 +365,10 @@ func (r *MountRegistry) AbsToVirtual(absPath string) (string, error) {
 			continue
 		}
 		// 选 RootPath 最长（最具体）的 mount
+		// 注意：rel 必须与 match 同步更新，避免被后续非最优 mount 覆盖
 		if len(root) > matchLen {
 			match = m
+			matchRel = rel
 			matchLen = len(root)
 		}
 	}
@@ -374,13 +377,13 @@ func (r *MountRegistry) AbsToVirtual(absPath string) (string, error) {
 		return "", fmt.Errorf("mount: no mount matches abs path %q", absPath)
 	}
 
-	// 构造虚拟路径：match.MountPath + "/" + rel
-	// 注意：MountPath 形如 /d/primary，rel 是相对子路径（可能为空）
-	if rel == "" {
+	// 构造虚拟路径：match.MountPath + "/" + matchRel
+	// 注意：MountPath 形如 /d/primary，matchRel 是相对子路径（可能为空）
+	if matchRel == "" {
 		return match.MountPath, nil
 	}
 	// MountPath 已是 /d/<name> 形式，无需再加 /d 前缀
-	virtual := match.MountPath + "/" + rel
+	virtual := match.MountPath + "/" + matchRel
 	// clean 一下防止 // 等
 	virtual = filepath.Clean(virtual)
 	return virtual, nil
