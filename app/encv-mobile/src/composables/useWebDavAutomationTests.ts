@@ -19,7 +19,10 @@
  */
 
 import { computed, ref, type ComputedRef, type Ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+// 🆕 2026-06-17：原 import { useI18n } from 'vue-i18n' 是幻觉代码
+// 项目用自己的 i18n 系统：composables/useI18n.ts + @/i18n/*（无 vue-i18n 依赖）
+// package.json 没装 vue-i18n，整个项目 9 个 composables + 所有 views 都用 @/composables/useI18n
+import { useI18n } from '@/composables/useI18n'
 import { useWebDavManifest } from '@/composables/useWebDavManifest'
 import { useWebDavTestRunner } from '@/composables/useWebDavTestRunner'
 import { WEBDAV_TEST_MODULES, getModuleById } from '@/composables/useWebDavTestModules'
