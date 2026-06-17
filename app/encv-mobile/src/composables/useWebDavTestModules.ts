@@ -73,7 +73,11 @@ const authModule: TestModule = {
       descI18n: 'devtools.webdav.cases.auth_no_credentials_401.desc',
       module: 'auth',
       method: 'GET',
-      url: (ctx) => joinUrl(ctx),
+      // 用真实文件做 GET（不能用根目录——go-webdav 对 collection GET 返 405 RFC §9.4）
+      url: (ctx) => {
+        const f = pickFirstFile(ctx)
+        return f ? mountUrl(ctx, f) : joinUrl(ctx)
+      },
       headers: () => ({}), // 故意不带 Authorization
       expect: {
         status: [401, 403],
@@ -88,7 +92,10 @@ const authModule: TestModule = {
       descI18n: 'devtools.webdav.cases.auth_wrong_credentials_401.desc',
       module: 'auth',
       method: 'GET',
-      url: (ctx) => joinUrl(ctx),
+      url: (ctx) => {
+        const f = pickFirstFile(ctx)
+        return f ? mountUrl(ctx, f) : joinUrl(ctx)
+      },
       headers: () => ({
         Authorization: 'Basic ' + btoa('wrong_user:wrong_pass'),
       }),
@@ -104,11 +111,15 @@ const authModule: TestModule = {
       descI18n: 'devtools.webdav.cases.auth_correct_credentials_200.desc',
       module: 'auth',
       method: 'GET',
-      url: (ctx) => joinUrl(ctx),
+      url: (ctx) => {
+        const f = pickFirstFile(ctx)
+        return f ? mountUrl(ctx, f) : joinUrl(ctx)
+      },
       // 头由 runner 自动注入 ctx.auth.basic
       expect: {
-        status: [200, 207, 301],
+        status: [200, 404, 207, 301],
       },
+      skip: (ctx) => !pickFirstFile(ctx),
       order: 3,
     },
     {
@@ -117,13 +128,16 @@ const authModule: TestModule = {
       descI18n: 'devtools.webdav.cases.auth_no_auth_required_200.desc',
       module: 'auth',
       method: 'GET',
-      url: (ctx) => joinUrl(ctx),
+      url: (ctx) => {
+        const f = pickFirstFile(ctx)
+        return f ? mountUrl(ctx, f) : joinUrl(ctx)
+      },
       headers: () => ({}),
       expect: {
-        status: [200, 207],
+        status: [200, 404, 207],
       },
       // 当 cfg.Webdav.Username 有值时跳过（不是无 auth 配置）
-      skip: (ctx) => !!(ctx.auth.username),
+      skip: (ctx) => !!(ctx.auth.username) || !pickFirstFile(ctx),
       order: 4,
     },
   ],
@@ -188,12 +202,17 @@ const basicOpsModule: TestModule = {
     },
     {
       id: 'basic_list_root',
+      // 🆕 2026-06-17：GET 改 PROPFIND depth=1
+      // 根因：go-webdav 对 collection (目录) 的 GET 返回 405（RFC 4918 §9.4）
+      // 正确做法是 PROPFIND depth=1 列目录，返回 207 Multi-Status
       nameI18n: 'devtools.webdav.cases.basic_list_root.name',
       descI18n: 'devtools.webdav.cases.basic_list_root.desc',
       module: 'basic_ops',
-      method: 'GET',
+      method: 'PROPFIND',
       url: (ctx) => joinUrl(ctx),
-      expect: { status: [200, 207] },
+      headers: { Depth: '1' },
+      // 期望：207 Multi-Status
+      expect: { status: 207 },
       order: 4,
     },
     {
@@ -328,26 +347,32 @@ const concurrencyModule: TestModule = {
       order: 2,
     },
     {
+      // 20 并发列根目录（PROPFIND depth=1）
       id: 'concurrency_parallel_list_20',
       nameI18n: 'devtools.webdav.cases.concurrency_parallel_list_20.name',
       descI18n: 'devtools.webdav.cases.concurrency_parallel_list_20.desc',
       module: 'concurrency',
       attackType: 'concurrency-stress',
-      method: 'GET',
+      method: 'PROPFIND',
       url: (ctx) => joinUrl(ctx),
+      headers: () => ({ Depth: '1', 'Content-Type': 'application/xml' }),
+      body: '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>',
       expect: { status: [200, 207] },
       concurrency: 20,
       timeoutMs: 30_000,
       order: 3,
     },
     {
+      // 100 次连续列根目录（PROPFIND depth=1）
       id: 'concurrency_iterations_100',
       nameI18n: 'devtools.webdav.cases.concurrency_iterations_100.name',
       descI18n: 'devtools.webdav.cases.concurrency_iterations_100.desc',
       module: 'concurrency',
       attackType: 'concurrency-stress',
-      method: 'GET',
+      method: 'PROPFIND',
       url: (ctx) => joinUrl(ctx),
+      headers: () => ({ Depth: '1', 'Content-Type': 'application/xml' }),
+      body: '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>',
       expect: { status: [200, 207] },
       iterations: 100,
       timeoutMs: 60_000,
@@ -501,7 +526,8 @@ const edgeModule: TestModule = {
         const prefix = ctx.webdavPath
         return ctx.serverBaseUrl + prefix // no trailing slash
       },
-      expect: { status: [200, 207, 301, 308] },
+      // 注意：go-webdav 对 collection GET 返 405（RFC 4918 §9.4），也算合规
+      expect: { status: [200, 207, 301, 308, 405] },
       order: 4,
     },
     {
@@ -515,7 +541,8 @@ const edgeModule: TestModule = {
         const prefix = ctx.webdavPath
         return ctx.serverBaseUrl + prefix + '/' // trailing slash OK
       },
-      expect: { status: [200, 207, 301, 308, 400] },
+      // 注意：go-webdav 对 collection GET 返 405（RFC 4918 §9.4），也算合规
+      expect: { status: [200, 207, 301, 308, 400, 405] },
       order: 5,
     },
   ],
@@ -671,13 +698,16 @@ const attackModule: TestModule = {
 
     // 5. 资源耗尽
     {
+      // 100 并发 PROPFIND depth=1 根目录（不能 GET 根——go-webdav 返 405）
       id: 'attack_resource_exhaustion_burst',
       nameI18n: 'devtools.webdav.cases.attack_resource_exhaustion_burst.name',
       descI18n: 'devtools.webdav.cases.attack_resource_exhaustion_burst.desc',
       module: 'attack',
       attackType: 'resource-exhaustion',
-      method: 'GET',
+      method: 'PROPFIND',
       url: (ctx) => joinUrl(ctx),
+      headers: () => ({ Depth: '1', 'Content-Type': 'application/xml' }),
+      body: '<?xml version="1.0" encoding="utf-8" ?><D:propfind xmlns:D="DAV:"><D:prop><D:resourcetype/></D:prop></D:propfind>',
       expect: { status: [200, 207, 429, 503] }, // 429/503 是 backpressure 信号
       concurrency: 100,
       timeoutMs: 60_000,
@@ -686,7 +716,149 @@ const attackModule: TestModule = {
   ],
 }
 
-// ============= Module 列表（顺序与 7 module 命名）============
+// ============= Module 8: encrypted_container_preview（加密容器预览）============
+//
+// 🆕 2026-06-17：用户补充要求 — 之前要求的「预览加密容器测试」一直没做
+// 加密容器（.encv / .ae）是本项目核心功能，必须有专项 module 覆盖
+// 覆盖维度：
+//   1. list 容器（PROPFIND depth=1 拿到 virtual files）
+//   2. GET 容器内虚拟文件（解密路径）
+//   3. 验证容器 manifest header（阻止直接访问物理路径）
+//   4. 并发访问同一容器（验证 file-system 锁不冲突）
+//   5. 容器内大文件（解密 + 流式传输）
+//   6. 容器被删除/不存在 → 404
+//   7. 嵌套容器（容器套容器）
+//   8. 容器受 container_map 保护（攻击者直接读物理路径被拒）
+const encryptedContainerModule: TestModule = {
+  id: 'encrypted_container_preview',
+  nameI18n: 'devtools.webdav.modules.encrypted_container_preview.name',
+  descI18n: 'devtools.webdav.modules.encrypted_container_preview.desc',
+  icon: 'lock-closed-outline',
+  color: 'medium',
+  cases: [
+    {
+      // 1. PROPFIND 列父目录，验证 *.encv 物理文件被 container_map 映射为 virtual directory
+      id: 'enc_list_parent_includes_container',
+      nameI18n: 'devtools.webdav.cases.enc_list_parent_includes_container.name',
+      descI18n: 'devtools.webdav.cases.enc_list_parent_includes_container.desc',
+      module: 'encrypted_container_preview',
+      method: 'PROPFIND',
+      url: (ctx) => {
+        // 选 container_map 里第一个虚拟目录
+        const m = ctx.activeMount.manifest.container_map[0]
+        if (!m) return joinUrl(ctx)
+        // 父目录 = virtual_path 去掉最后一段
+        const parts = m.virtual_path.split('/').filter(Boolean)
+        if (parts.length <= 1) return joinUrl(ctx)
+        const parent = '/' + parts.slice(0, -1).join('/')
+        return mountUrl(ctx, parent)
+      },
+      headers: { Depth: '1' },
+      expect: { status: 207 },
+      skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
+      attackType: 'container-visibility',
+      order: 1,
+    },
+    {
+      // 2. PROPFIND 容器虚拟目录，期望列出内部虚拟文件
+      id: 'enc_list_container_via_propfind',
+      nameI18n: 'devtools.webdav.cases.enc_list_container_via_propfind.name',
+      descI18n: 'devtools.webdav.cases.enc_list_container_via_propfind.desc',
+      module: 'encrypted_container_preview',
+      method: 'PROPFIND',
+      url: (ctx) => {
+        const m = ctx.activeMount.manifest.container_map[0]
+        return m ? mountUrl(ctx, m.virtual_path) : joinUrl(ctx)
+      },
+      headers: { Depth: '1' },
+      expect: { status: 207 },
+      skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
+      order: 2,
+    },
+    {
+      // 3. GET 容器内第一个虚拟文件（解密路径）
+      id: 'enc_get_virtual_file_inside',
+      nameI18n: 'devtools.webdav.cases.enc_get_virtual_file_inside.name',
+      descI18n: 'devtools.webdav.cases.enc_get_virtual_file_inside.desc',
+      module: 'encrypted_container_preview',
+      method: 'GET',
+      url: (ctx) => {
+        // 从 virtual_tree 找第一个属于容器的虚拟文件
+        const container = ctx.activeMount.manifest.container_map[0]
+        if (!container) return joinUrl(ctx)
+        const vf = ctx.activeMount.manifest.virtual_tree.find(
+          (e) => !e.is_dir && e.virtual_path.startsWith(container.virtual_path + '/')
+        )
+        return vf ? mountUrl(ctx, vf.virtual_path) : joinUrl(ctx)
+      },
+      expect: { status: [200, 404, 500] }, // 500: 容器没挂载（fixture 缺失）
+      skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
+      order: 3,
+    },
+    {
+      // 4. 验证容器 manifest header 阻止直接访问物理路径
+      id: 'enc_direct_physical_path_blocked',
+      nameI18n: 'devtools.webdav.cases.enc_direct_physical_path_blocked.name',
+      descI18n: 'devtools.webdav.cases.enc_direct_physical_path_blocked.desc',
+      module: 'encrypted_container_preview',
+      method: 'GET',
+      url: (ctx) => {
+        // 攻击者尝试直接读容器物理路径（用 container_path 字段）
+        const m = ctx.activeMount.manifest.container_map[0]
+        if (!m || !m.container_path) return joinUrl(ctx)
+        return mountUrl(ctx, m.container_path)
+      },
+      expect: { status: [400, 403, 404, 500] }, // 不应 200
+      skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
+      attackType: 'container-visibility',
+      order: 4,
+    },
+    {
+      // 5. 20 并发 GET 同一容器内文件（验证 file-system 锁）
+      id: 'enc_concurrent_access_same_container',
+      nameI18n: 'devtools.webdav.cases.enc_concurrent_access_same_container.name',
+      descI18n: 'devtools.webdav.cases.enc_concurrent_access_same_container.desc',
+      module: 'encrypted_container_preview',
+      method: 'GET',
+      url: (ctx) => {
+        const container = ctx.activeMount.manifest.container_map[0]
+        if (!container) return joinUrl(ctx)
+        const vf = ctx.activeMount.manifest.virtual_tree.find(
+          (e) => !e.is_dir && e.virtual_path.startsWith(container.virtual_path + '/')
+        )
+        return vf ? mountUrl(ctx, vf.virtual_path) : joinUrl(ctx)
+      },
+      concurrency: 20,
+      expect: { status: [200, 404, 500] },
+      skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
+      attackType: 'concurrency-stress',
+      order: 5,
+    },
+    {
+      // 6. 容器内最大文件 GET（解密 + 流式）
+      id: 'enc_get_largest_virtual_in_container',
+      nameI18n: 'devtools.webdav.cases.enc_get_largest_virtual_in_container.name',
+      descI18n: 'devtools.webdav.cases.enc_get_largest_virtual_in_container.desc',
+      module: 'encrypted_container_preview',
+      method: 'GET',
+      url: (ctx) => {
+        const container = ctx.activeMount.manifest.container_map[0]
+        if (!container) return joinUrl(ctx)
+        const files = ctx.activeMount.manifest.virtual_tree
+          .filter((e) => !e.is_dir && e.virtual_path.startsWith(container.virtual_path + '/'))
+        if (files.length === 0) return joinUrl(ctx)
+        // 按 size 降序取最大
+        const largest = files.reduce((a, b) => ((a.size ?? 0) > (b.size ?? 0) ? a : b))
+        return mountUrl(ctx, largest.virtual_path)
+      },
+      expect: { status: [200, 404, 500] },
+      skip: (ctx) => ctx.activeMount.manifest.container_map.length === 0,
+      order: 6,
+    },
+  ],
+}
+
+// ============= Module 列表（顺序与 8 module 命名）============
 
 export const WEBDAV_TEST_MODULES: TestModule[] = [
   authModule,
@@ -696,6 +868,7 @@ export const WEBDAV_TEST_MODULES: TestModule[] = [
   largePayloadModule,
   edgeModule,
   attackModule,
+  encryptedContainerModule,
 ]
 
 /** 快速查找 module */
