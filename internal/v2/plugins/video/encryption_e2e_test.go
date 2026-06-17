@@ -8,6 +8,9 @@ import (
 
 	"github.com/Soltus/encv-go/internal/testutil"
 	"github.com/Soltus/encv-go/internal/v2/plugins/interfaces"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 const e2eTestDataSize int64 = 32 * 1024

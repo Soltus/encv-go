@@ -6,6 +6,9 @@ import (
 
 	"github.com/Soltus/encv-go/internal/v2/types"
 	"github.com/stretchr/testify/assert"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 // ========== CreateLogicalFragmentsFromSize 测试 ==========

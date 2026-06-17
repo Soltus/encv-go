@@ -8,7 +8,11 @@ import (
 	"testing"
 
 	"github.com/Soltus/encv-go/internal/v2/crypto"
+	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/Soltus/encv-go/internal/v2/types"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 func buildV4Data(t *testing.T) []byte {
@@ -132,7 +136,7 @@ func TestIsEncvContainerFromBytes_Nil(t *testing.T) {
 }
 
 func TestDetectContainerType_NonExistent(t *testing.T) {
-	ct, err := DetectContainerType("/tmp/nonexistent_encv_file_xyz.encv")
+	ct, err := DetectContainerType("/tmp/nonexistent_encv_file_xyz" + pluginsext.VideoExt)
 	if err == nil {
 		t.Fatal("expected error for non-existent file, got nil")
 	}

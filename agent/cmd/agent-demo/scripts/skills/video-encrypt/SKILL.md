@@ -41,8 +41,10 @@ built-in default.
 ## Success / failure handling
 
 * On success, the tool returns the path to the
-  `.encv`-containerised file. Report the path back to the
-  user and suggest running `video_decrypt` if they ever need
-  to recover the original.
+  encrypted container file (extension is decided by
+  `plugin.GetContainerExtension()` — typically `.sccgv` for video,
+  `.sccga` for audio, `.sccgt` for text, etc.). Report the path back to
+  the user and suggest running `video_decrypt` if they ever need to
+  recover the original.
 * On failure, surface the error message verbatim and stop
   the turn — never retry the same call with the same args.

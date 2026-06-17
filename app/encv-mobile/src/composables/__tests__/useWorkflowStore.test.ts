@@ -3,7 +3,7 @@
  *
  * 历史 bug：
  *   createDefinition 内部强制覆盖 partial.id 为 generateId()，
- *   导致 AutomationTestsDetail.vue 的 buildDynamicWorkflow() 传
+ *   导致 PluginTestsDetail.vue 的 buildDynamicWorkflow() 传
  *   { id: 'dynamic-auto-test', ... } 时，实际 store 里的 id 变成
  *   'wf-xxx-yyy' 随机串，runWorkflow('dynamic-auto-test') 找不到 def。
  *
@@ -48,9 +48,9 @@ describe('useWorkflowStore — createDefinition partial.id 行为', () => {
     expect(def.id).toBe('dynamic-auto-test')
   })
 
-  it('AutomationTestsDetail.vue 场景：build→run 必须能 lookup 回来', () => {
+  it('PluginTestsDetail.vue 场景：build→run 必须能 lookup 回来', () => {
     const store = useWorkflowStore()
-    // 模拟 AutomationTestsDetail.vue buildDynamicWorkflow
+    // 模拟 PluginTestsDetail.vue buildDynamicWorkflow
     const existingIdx = store.definitions.value.findIndex((d) => d.id === 'dynamic-auto-test')
     expect(existingIdx).toBe(-1)
     store.createDefinition({ ...baseDef, id: 'dynamic-auto-test' })

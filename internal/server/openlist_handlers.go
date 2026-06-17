@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/injector"
@@ -392,7 +393,8 @@ func (p *ProxyGin) serveDirectStream(c *gin.Context, fileURL string, headers map
 		}
 	}
 
-	client := &http.Client{}
+	// 【P0 修复】默认 30s 超时
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		slog.Error("Error downloading file", "url", fileURL, "error", err)

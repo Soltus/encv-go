@@ -449,7 +449,7 @@ const BUILTIN_TEMPLATES: WorkflowDefinition[] = [
               taskType: 'decrypt',
               pluginName: '${{plugin}}',
               params: {
-                sourcePath: '/storage/emulated/0/encv-automation/02-encrypted/video/sample.mp4.encv',
+                sourcePath: '/storage/emulated/0/encv-automation/02-encrypted/video/sample.mp4.${containerExt}',
                 password: '${{PASSWORD}}',
               },
             },

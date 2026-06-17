@@ -726,6 +726,83 @@ func (s *Server) handleWebDavLocalInfoGin(c *gin.Context) {
 	})
 }
 
+// handleWebDavManifestGin GET /api/webdav/manifest
+//
+// 🆕 2026-06-17：多挂载点 webdav manifest API（multi-mount-storage-refactor spec 续）
+//
+// 返回所有 webdav enabled mounts 的 manifest snapshot（含 virtual tree + container map）。
+// 前端 WebDavAutomationTestsDetail.vue 用此 manifest 动态生成测试用例，
+// 避免硬编码 /webdav/01-plain-media/video/ 等路径。
+//
+// Query params：
+//   - mount (可选): 指定单个 mount name（不指定则返回所有 enabled mounts）
+//
+// Response:
+//   {
+//     "mounts": [
+//       {
+//         "name": "automation",
+//         "mount_path": "/d/automation",
+//         "root_path": "...",
+//         "webdav_path": "/d/automation",
+//         "is_default": false,
+//         "index_ready": true,
+//         "manifest": { ... }   // webdav.ManifestSnapshot
+//       },
+//       ...
+//     ]
+//   }
+func (s *Server) handleWebDavManifestGin(c *gin.Context) {
+	mountNameFilter := c.Query("mount")
+
+	if len(s.webdavFSByMount) == 0 {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error":  "no webdav mounts enabled",
+			"mounts": []any{},
+		})
+		return
+	}
+
+	type mountManifestDTO struct {
+		Name       string                  `json:"name"`
+		MountPath  string                  `json:"mount_path"`
+		RootPath   string                  `json:"root_path"`
+		WebdavPath string                  `json:"webdav_path"`
+		IsDefault  bool                    `json:"is_default"`
+		Manifest   map[string]any          `json:"manifest"`
+	}
+
+	mounts := make([]mountManifestDTO, 0, len(s.webdavFSByMount))
+	for name, entry := range s.webdavFSByMount {
+		if mountNameFilter != "" && name != mountNameFilter {
+			continue
+		}
+		// 拿 manifest snapshot
+		snap := entry.fs.GetManifest()
+		// 序列化为通用 map（避免 import cycle / 复杂类型）
+		b, _ := json.Marshal(snap)
+		var manifestMap map[string]any
+		_ = json.Unmarshal(b, &manifestMap)
+
+		dto := mountManifestDTO{
+			Name:       name,
+			WebdavPath: entry.webdavPath,
+			Manifest:   manifestMap,
+		}
+		if entry.mount != nil {
+			dto.MountPath = entry.mount.MountPath
+			dto.RootPath = entry.mount.RootPath
+			dto.IsDefault = entry.mount.Name == mount.NamePrimary
+		}
+		mounts = append(mounts, dto)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"mounts":      mounts,
+		"server_base": fmt.Sprintf("http://127.0.0.1:%d", s.cfg.Server.Port),
+	})
+}
+
 func (s *Server) handleIndexClearGin(c *gin.Context) {
 	s.mobileSvc.ClearIndex()
 	c.JSON(http.StatusOK, gin.H{"status": "cleared"})
@@ -1290,10 +1367,25 @@ func (s *Server) handlePluginsGin(c *gin.Context) {
 	var metas []PluginMeta
 	for _, p := range plugins.Plugins {
 		opts := p.GetTaskOptions()
+
+		// 🆕 2026-06-17：nil 兜底为 []string{}
+		// alist_encrypt 故意 SupportedExtensions() 返回 nil（"处理所有文件"语义）
+		// 但 JSON 序列化为 null 后，前端模板 `p.supportedExtensions.length` 抛
+		// `Cannot read properties of null (reading 'length')` 崩溃
+		// → 在 API 输出层强制兜底为非 nil 空数组，前端安全访问
+		supportedExts := p.SupportedExtensions()
+		if supportedExts == nil {
+			supportedExts = []string{}
+		}
+		supportedMimes := p.SupportedMimePrefixes()
+		if supportedMimes == nil {
+			supportedMimes = []string{}
+		}
+
 		metas = append(metas, PluginMeta{
 			Name:                  p.Name(),
-			SupportedExtensions:   p.SupportedExtensions(),
-			SupportedMimePrefixes: p.SupportedMimePrefixes(),
+			SupportedExtensions:   supportedExts,
+			SupportedMimePrefixes: supportedMimes,
 			ContainerExtension:    p.GetContainerExtension(),
 			TaskOptions:           taskOptionsToGinH(opts),
 		})

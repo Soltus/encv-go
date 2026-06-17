@@ -104,8 +104,14 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/LogSettingsDetail.vue'),
       },
       {
-        path: 'settings/devtools/automation',
-        component: () => import('@/views/AutomationTestsDetail.vue'),
+        // 🆕 2026-06-17：自动化测试总览（Hub）— 包含 plugin / webdav / sparse 3 个子入口
+        path: 'settings/devtools/automation-hub',
+        component: () => import('@/views/AutomationTestsHub.vue'),
+      },
+      {
+        // 🆕 2026-06-17：重命名 AutomationTestsDetail → PluginTestsDetail（消除 section header 与 ion-item 重名歧义）
+        path: 'settings/devtools/plugin-tests',
+        component: () => import('@/views/PluginTestsDetail.vue'),
       },
       {
         // 🆕 2026-06-11 v6：webdav 服务自动化测试入口
@@ -116,6 +122,11 @@ const routes: RouteRecordRaw[] = [
         // 🆕 2026-06-11：ECv4 容量边界测试（100×128GB sparse 虚拟容器）
         path: 'settings/devtools/sparse-container-test',
         component: () => import('@/views/SparseContainerTestDetail.vue'),
+      },
+      {
+        // 🆕 2026-06-17：Compose UI 原型总览（Hub）— 卡片循环从 DevToolsDetail 迁移
+        path: 'settings/devtools/compose-prototypes-hub',
+        component: () => import('@/views/ComposePrototypesHub.vue'),
       },
       {
         path: 'settings/devtools/prototype/:id',

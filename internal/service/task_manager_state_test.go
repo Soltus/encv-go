@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Soltus/encv-go/internal/config"
+	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -60,7 +61,7 @@ func TestTaskManager_CreateBroadcastsEvent(t *testing.T) {
 	mb.On("Broadcast", "task:created", mock.Anything).Return()
 	tm := newTestTaskManager(mb)
 
-	tm.Create("decrypt", "/test.encv", "", "", 0, "")
+	tm.Create("decrypt", "/test"+pluginsext.VideoExt, "", "", 0, "")
 
 	calls := mb.FindCalls("task:created")
 	assert.Len(t, calls, 1)
@@ -73,7 +74,7 @@ func TestTaskManager_List(t *testing.T) {
 	tm := newTestTaskManager(mb)
 
 	tm.Create("encrypt", "/a.mp4", "", "", 0, "")
-	tm.Create("decrypt", "/b.encv", "", "", 0, "")
+	tm.Create("decrypt", "/b"+pluginsext.VideoExt, "", "", 0, "")
 
 	list := tm.List()
 	assert.Len(t, list, 2)

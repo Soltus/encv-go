@@ -91,7 +91,9 @@ func TestAgentDemoDump_AllBuiltin(t *testing.T) {
 
 		start := time.Now()
 		ctx := context.Background()
-		_ = eng.Run(ctx, s, sess, rec, rec, sc, 1.0, true) // speed=1 真实节奏
+		// 【修复】单测用 speed=0 零延迟。21 个场景若 speed=1 会跑到 10+ 分钟
+		// （每个 ≥30s 拟人节奏）。dumps 只验证事件流完整性，节奏无关。
+		_ = eng.Run(ctx, s, sess, rec, rec, sc, 0, true) // speed=0 零延迟
 		elapsed := time.Since(start).Milliseconds()
 
 		// 统计事件类型
@@ -136,7 +138,10 @@ func dumpScenario(t *testing.T, scenarioID string) {
 
 	start := time.Now()
 	ctx := context.Background()
-	if err := eng.Run(ctx, s, sess, rec, rec, sc, 1.0, true); err != nil { // speed=1 真实节奏
+	// 【修复】单测用 speed=0 零延迟。DelayMs 是给前端 demo 用的"拟人化 ≥30s"
+	// 拟人节奏，单元测试跑 dump 验证事件流完整性时不应被真实等待拖累。
+	// 真 demo 走 streamChat 路径用 cfg.MockSpeed 调速（默认 1.0）。
+	if err := eng.Run(ctx, s, sess, rec, rec, sc, 0, true); err != nil { // speed=0 零延迟
 		t.Fatalf("Run: %v", err)
 	}
 	totalElapsed := time.Since(start).Milliseconds()

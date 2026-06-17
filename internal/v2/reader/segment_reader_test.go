@@ -35,7 +35,11 @@ import (
 	"testing"
 
 	"github.com/Soltus/encv-go/internal/v2/crypto"
+	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/Soltus/encv-go/internal/v2/types"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 	"github.com/Soltus/encv-go/internal/v2/writer"
 )
 
@@ -65,7 +69,7 @@ func makeTestManifest(salt []byte, segments []types.Segment_v4, playlistIDs []st
 // writeV4ContainerToTemp 写出 v4 容器到临时文件，返回路径。
 func writeV4ContainerToTemp(t *testing.T, params *writer.V4WriteParams) string {
 	t.Helper()
-	tmp, err := os.CreateTemp("", "v4readertest-*.encv")
+	tmp, err := os.CreateTemp("", "v4readertest-*"+pluginsext.VideoExt)
 	if err != nil {
 		t.Fatalf("CreateTemp: %v", err)
 	}

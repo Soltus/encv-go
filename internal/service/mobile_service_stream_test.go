@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -162,12 +163,12 @@ func TestListFiles_MockEncryptedDetection(t *testing.T) {
 	absDir, _ := filepath.Abs(dir)
 	mockEntries := []fs.DirEntry{
 		&mockDirEntry{name: "normal.txt", isDir: false, size: 100, modTime: time.Now()},
-		&mockDirEntry{name: "secret.encv", isDir: false, size: 9999, modTime: time.Now()},
+		&mockDirEntry{name: "secret" + pluginsext.VideoExt, isDir: false, size: 9999, modTime: time.Now()},
 	}
 
 	detector := &mockContainerDetector{
 		encryptedPaths: map[string]bool{
-			filepath.Join(absDir, "secret.encv"): true,
+			filepath.Join(absDir, "secret"+pluginsext.VideoExt): true,
 		},
 	}
 
@@ -182,7 +183,7 @@ func TestListFiles_MockEncryptedDetection(t *testing.T) {
 	for i := range files {
 		if files[i].Name == "normal.txt" {
 			normal = &files[i]
-		} else if files[i].Name == "secret.encv" {
+		} else if files[i].Name == "secret"+pluginsext.VideoExt {
 			secret = &files[i]
 		}
 	}
@@ -190,7 +191,7 @@ func TestListFiles_MockEncryptedDetection(t *testing.T) {
 	require.NotNil(t, secret)
 
 	assert.False(t, normal.IsEncrypted, "普通文件不应标记为加密")
-	assert.True(t, secret.IsEncrypted, "encv 容器应标记为加密")
+	assert.True(t, secret.IsEncrypted, "视频容器应标记为加密")
 }
 
 // TestListFiles_EntryInfoErrorFallback 验证 entry.Info() 失败时 fallback 到默认值
@@ -280,7 +281,7 @@ func TestListFiles_DetectContainerOnDeletedFile(t *testing.T) {
 
 	mockEntries := []fs.DirEntry{
 		&mockDirEntry{name: "normal.txt", isDir: false, size: 50, modTime: time.Now()},
-		&mockDirEntry{name: "gone.encv", isDir: false, size: 9999, modTime: time.Now()},
+		&mockDirEntry{name: "gone" + pluginsext.VideoExt, isDir: false, size: 9999, modTime: time.Now()},
 	}
 
 	detector := &mockContainerDetector{
@@ -501,14 +502,14 @@ func TestListFiles_MixedDirAndFileWithEncryption(t *testing.T) {
 		&mockDirEntry{name: "docs", isDir: true},
 		&mockDirEntry{name: "readme.md", isDir: false, size: 256, modTime: now},
 		&mockDirEntry{name: "movie.mp4", isDir: false, size: 1048576, modTime: now},
-		&mockDirEntry{name: "backup.encv", isDir: false, size: 5000000, modTime: now},
+		&mockDirEntry{name: "backup" + pluginsext.VideoExt, isDir: false, size: 5000000, modTime: now},
 		&mockDirEntry{name: ".env", isDir: false},
 		&mockDirEntry{name: "music.flac", isDir: false, size: 30000000, modTime: now},
 	}
 
 	detector := &mockContainerDetector{
 		encryptedPaths: map[string]bool{
-			filepath.Join(absDir, "backup.encv"): true,
+			filepath.Join(absDir, "backup"+pluginsext.VideoExt): true,
 		},
 	}
 
@@ -527,8 +528,8 @@ func TestListFiles_MixedDirAndFileWithEncryption(t *testing.T) {
 	assert.True(t, nameMap["docs"].IsDirectory)
 	assert.False(t, nameMap["readme.md"].IsEncrypted)
 	assert.False(t, nameMap["movie.mp4"].IsEncrypted)
-	assert.True(t, nameMap["backup.encv"].IsEncrypted, "backup.encv 应标记为加密")
-	assert.Equal(t, int64(5000000), nameMap["backup.encv"].Size)
+	assert.True(t, nameMap["backup"+pluginsext.VideoExt].IsEncrypted, "backup 容器应标记为加密")
+	assert.Equal(t, int64(5000000), nameMap["backup"+pluginsext.VideoExt].Size)
 	assert.False(t, nameMap["music.flac"].IsEncrypted)
 	_, hasEnv := nameMap[".env"]
 	assert.False(t, hasEnv, ".env 不应出现在结果中")
@@ -538,14 +539,14 @@ func TestListFiles_MixedDirAndFileWithEncryption(t *testing.T) {
 func TestReadFileContent_MockContainerDetected(t *testing.T) {
 	svc, dir := newTestMobileService(t)
 
-	absPath := filepath.Join(dir, "encrypted.encv")
+	absPath := filepath.Join(dir, "encrypted"+pluginsext.VideoExt)
 	os.WriteFile(absPath, []byte("fake container data"), 0644)
 
 	svc.containerDetector = &mockContainerDetector{
 		encryptedPaths: map[string]bool{absPath: true},
 	}
 
-	result, err := svc.ReadFileContent("/encrypted.encv")
+	result, err := svc.ReadFileContent("/encrypted"+pluginsext.VideoExt)
 	require.Error(t, err, "加密容器应返回 BadRequestError")
 	require.Nil(t, result)
 	var badReq *BadRequestError
@@ -575,14 +576,14 @@ func TestReadFileContent_MockContainerNotDetected(t *testing.T) {
 func TestGetFileInfo_MockContainerDetected(t *testing.T) {
 	svc, dir := newTestMobileService(t)
 
-	absPath := filepath.Join(dir, "container.encv")
+	absPath := filepath.Join(dir, "container"+pluginsext.VideoExt)
 	os.WriteFile(absPath, []byte("not a real container but mock says yes"), 0644)
 
 	svc.containerDetector = &mockContainerDetector{
 		encryptedPaths: map[string]bool{absPath: true},
 	}
 
-	info, err := svc.GetFileInfo("/container.encv")
+	info, err := svc.GetFileInfo("/container"+pluginsext.VideoExt)
 	require.NoError(t, err)
 	require.NotNil(t, info)
 	assert.True(t, info.IsEncvContainer, "mock 标记的容器应被识别")

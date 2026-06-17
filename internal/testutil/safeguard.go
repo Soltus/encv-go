@@ -86,7 +86,7 @@ func safeGo(t *testing.T, name string, fn func(), reportError bool) <-chan struc
 }
 
 // SafeGoWithTimeout 同 SafeGo，但指定单 case 超时（默认 2min）。
-// 超时触发：t.Fatalf + 堆栈落盘。
+// 超时触发：t.Errorf + 堆栈落盘（不用 t.Fatalf 以免 runtime.Goexit 阻塞调用方）。
 func SafeGoWithTimeout(t *testing.T, name string, timeout time.Duration, fn func()) <-chan struct{} {
 	t.Helper()
 	done := SafeGo(t, name, fn)
@@ -95,7 +95,9 @@ func SafeGoWithTimeout(t *testing.T, name string, timeout time.Duration, fn func
 		// 正常完成
 	case <-time.After(timeout):
 		path := DumpStack(name, fmt.Sprintf("watchdog-timeout after %s", timeout))
-		t.Fatalf("[SafeGo] %s exceeded %s (dump: %s)", name, timeout, path)
+		// 【P0-3 修复】不要 t.Fatalf：runtime.Goexit() 会让调用方 <-done 永远阻塞
+		// 改用 t.Errorf：标记失败 + 让 fn 仍可能自然退出 close(done)
+		t.Errorf("[SafeGo] %s exceeded %s (dump: %s)", name, timeout, path)
 	}
 	return done
 }

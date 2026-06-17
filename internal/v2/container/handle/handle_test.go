@@ -9,7 +9,11 @@ import (
 
 	"github.com/Soltus/encv-go/internal/v2/container/block"
 	"github.com/Soltus/encv-go/internal/v2/crypto"
+	"github.com/Soltus/encv-go/internal/v2/pluginsext"
 	"github.com/Soltus/encv-go/internal/v2/types"
+
+	// 强制激活 test-guard：拦截裸 go test 调用
+	_ "github.com/Soltus/encv-go/internal/testguard"
 )
 
 func TestOpen_InvalidMagic(t *testing.T) {
@@ -105,7 +109,7 @@ func TestOpen_V4_ValidContainer(t *testing.T) {
 	copy(containerData[headerSize:headerSize+len(obfuscatedManifest)], obfuscatedManifest)
 	copy(containerData[totalSize-footerSize:], footerBuf.Bytes())
 
-	source := NewBytesSource(containerData, "test.encv")
+	source := NewBytesSource(containerData, "test"+pluginsext.VideoExt)
 
 	h, err := Open(source)
 	if err != nil {
@@ -186,8 +190,8 @@ func TestOpen_V4_ValidContainer(t *testing.T) {
 	if src.Size() != int64(totalSize) {
 		t.Errorf("source Size()=%d, want %d", src.Size(), totalSize)
 	}
-	if src.Name() != "test.encv" {
-		t.Errorf("source Name()='%s', want 'test.encv'", src.Name())
+	if src.Name() != "test"+pluginsext.VideoExt {
+		t.Errorf("source Name()='%s', want 'test%s'", src.Name(), pluginsext.VideoExt)
 	}
 }
 
@@ -200,7 +204,7 @@ func TestOpen_V4_BadHeaderCRC32(t *testing.T) {
 	copy(footerData[0:4], types.MagicFooter_v2[:])
 
 	containerData := append(headerData, footerData...)
-	source := NewBytesSource(containerData, "test-bad-crc.encv")
+	source := NewBytesSource(containerData, "test-bad-crc"+pluginsext.VideoExt)
 
 	_, err := Open(source)
 	if err == nil {
@@ -242,7 +246,7 @@ func TestOpen_V4_BadFooterMagic(t *testing.T) {
 	copy(containerData[types.EnvelopeHeaderSize_v4:types.EnvelopeHeaderSize_v4+len(obfuscatedManifest)], obfuscatedManifest)
 	copy(containerData[totalSize-types.EnvelopeFooterSize_v4:], badFooter)
 
-	source := NewBytesSource(containerData, "test-bad-footer.encv")
+	source := NewBytesSource(containerData, "test-bad-footer"+pluginsext.VideoExt)
 
 	_, err := Open(source)
 	if err == nil {
@@ -363,7 +367,7 @@ func TestOpen_V4_LegacyFormat_Fallback(t *testing.T) {
 	copy(containerData[types.EnvelopeHeaderSize_v4:types.EnvelopeHeaderSize_v4+len(legacyManifestData)], legacyManifestData)
 	copy(containerData[totalSize-int(types.EnvelopeFooterSize_v4):], footerBuf.Bytes())
 
-	source := NewBytesSource(containerData, "test-legacy-v4.encv")
+	source := NewBytesSource(containerData, "test-legacy-v4"+pluginsext.VideoExt)
 
 	h, err := Open(source)
 	if err != nil {

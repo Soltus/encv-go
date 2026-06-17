@@ -221,6 +221,7 @@ import {
 } from 'ionicons/icons'
 import { useTheme } from '@/composables/useTheme'
 import { useI18n } from '@/composables/useI18n'
+import type { Locale } from '@/composables/useI18n'
 
 const {
   isDark, currentColor, currentBgColor, bgBlur, p3Mode,
@@ -263,7 +264,7 @@ const p3Modes = [
 ]
 
 function handleLocaleChange(event: CustomEvent) {
-  setLocale(event.detail.value as 'zh-CN' | 'en')
+  setLocale(event.detail.value as Locale)
 }
 
 function handleBgColorChange(value: string) {

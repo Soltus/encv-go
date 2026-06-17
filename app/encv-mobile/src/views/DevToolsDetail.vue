@@ -30,35 +30,12 @@
 
       <!-- 自动化测试：生产构建也可访问（与沙箱预览的 isDev 限制不同） -->
       <ion-list>
-        <ion-list-header>
-          <ion-label>{{ t('devtools.automationTests') }}</ion-label>
-          <ion-badge slot="end" color="success" class="scope-badge scope-prod">
-            <ion-icon :icon="rocketOutline" class="scope-badge-icon"></ion-icon>
-            <span class="scope-text">{{ t('devtools.availableInProd') }}</span>
-          </ion-badge>
-        </ion-list-header>
-        <p class="section-hint">{{ t('devtools.automationTestsHint') }}</p>
-        <ion-item button detail @click="goAutomationTests">
-          <ion-icon :icon="flaskOutline" slot="start"></ion-icon>
+        <!-- 🆕 2026-06-17：section header 变可点击入口，子项（plugin / webdav / sparse）整体搬到 AutomationTestsHub -->
+        <ion-item button detail @click="goAutomationHub" class="section-entry">
+          <ion-icon :icon="flaskOutline" slot="start" color="primary"></ion-icon>
           <ion-label>
-            <h3>{{ t('devtools.automationTestsEntry') }}</h3>
-            <p>{{ t('devtools.automationTestsEntryDesc') }}</p>
-          </ion-label>
-        </ion-item>
-        <!-- 🆕 2026-06-11 v6：webdav 服务自动化测试入口 -->
-        <ion-item button detail @click="goWebDavTests">
-          <ion-icon :icon="cloudUploadOutline" slot="start" color="primary"></ion-icon>
-          <ion-label>
-            <h3>{{ t('devtools.webdavTests') }}</h3>
-            <p>{{ t('devtools.webdavTestsHint') }}</p>
-          </ion-label>
-        </ion-item>
-        <!-- 🆕 2026-06-11：ECv4 容量边界测试入口（100×128GB sparse 虚拟容器） -->
-        <ion-item button detail @click="goSparseContainerTest">
-          <ion-icon :icon="serverOutline" slot="start" color="warning"></ion-icon>
-          <ion-label>
-            <h3>{{ t('devtools.sparseContainer.title') }}</h3>
-            <p>{{ t('devtools.sparseContainer.entryHint') }}</p>
+            <h3>{{ t('devtools.automationTests') }}</h3>
+            <p>{{ t('devtools.automationTestsHint') }}</p>
           </ion-label>
         </ion-item>
       </ion-list>
@@ -90,35 +67,14 @@
       </ion-list>
 
       <ion-list>
-        <ion-list-header>
-          <ion-label>{{ t('devtools.composePrototypes') }}</ion-label>
-        </ion-list-header>
-        <p class="section-hint">{{ t('devtools.composePrototypesHint') }}</p>
-
-        <div class="prototype-cards">
-          <div
-            v-for="proto in prototypes"
-            :key="proto.id"
-            class="prototype-card"
-            @click="handlePrototypeClick(proto)"
-          >
-            <div class="proto-header">
-              <div class="proto-icon-wrap" :style="{ background: proto.accentColor }">
-                <ion-icon :icon="iconMap[proto.icon]" class="proto-icon"></ion-icon>
-              </div>
-              <div class="proto-title-area">
-                <h3 class="proto-title">{{ proto.name }}</h3>
-                <p class="proto-route">{{ proto.route }}</p>
-              </div>
-              <ion-icon :icon="chevronForward" class="proto-arrow"></ion-icon>
-            </div>
-            <div class="proto-compose-path">
-              <span class="path-label">Compose</span>
-              <code class="path-value">{{ proto.composePath }}</code>
-            </div>
-            <p class="proto-desc">{{ proto.description }}</p>
-          </div>
-        </div>
+        <!-- 🆕 2026-06-17：section header 变可点击入口，原型卡片循环整体搬到 ComposePrototypesHub -->
+        <ion-item button detail @click="goComposePrototypesHub" class="section-entry">
+          <ion-icon :icon="extensionPuzzleOutline" slot="start" color="primary"></ion-icon>
+          <ion-label>
+            <h3>{{ t('devtools.composePrototypes') }}</h3>
+            <p>{{ t('devtools.composePrototypesHint') }}</p>
+          </ion-label>
+        </ion-item>
       </ion-list>
     </ion-content>
   </ion-page>
@@ -128,18 +84,13 @@
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
   IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel, IonToggle,
-  IonBadge,
 } from '@ionic/vue'
 import {
-  bugOutline, chevronForward, playCircleOutline, musicalNotesOutline,
-  colorPaletteOutline, settingsOutline, terminal, eyeOutline, cloudUploadOutline,
-  extensionPuzzleOutline, flaskOutline, rocketOutline,
-  serverOutline,  // 🆕 ECv4 容量边界测试
+  bugOutline, terminal, eyeOutline, extensionPuzzleOutline, flaskOutline,
 } from 'ionicons/icons'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
 import { useDevTools } from '@/composables/useDevTools'
-import { getAllPrototypes } from './prototypes/registry'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -149,17 +100,14 @@ function goLogSettings() {
   router.push('/tabs/settings/devtools/log-settings')
 }
 
-const prototypes = getAllPrototypes()
-
-const iconMap: Record<string, string> = {
-  'play-circle': playCircleOutline,
-  'settings': settingsOutline,
-  'musical-notes': musicalNotesOutline,
-  'color-palette': colorPaletteOutline,
+// 🆕 2026-06-17：自动化测试总览入口（原 section 内 3 个 ion-item 已整体搬到 AutomationTestsHub）
+function goAutomationHub() {
+  router.push('/tabs/settings/devtools/automation-hub')
 }
 
-function handlePrototypeClick(proto: typeof prototypes[0]) {
-  router.push(`/tabs/settings/devtools/prototype/${proto.id}`)
+// 🆕 2026-06-17：Compose UI 原型总览入口（原 prototype 卡片循环已整体搬到 ComposePrototypesHub）
+function goComposePrototypesHub() {
+  router.push('/tabs/settings/devtools/compose-prototypes-hub')
 }
 
 // 沙箱预览：强制整页跳转，绕过 Vue Router 拦截
@@ -188,19 +136,6 @@ function openPreviewOpenList() {
 // - 跟 openPreviewOpenList（/openlist-ui/）保持同一种风格：相对路径 + 整页跳转
 function openPreviewOpenListPlugin() {
   window.location.assign('/api/preview/plugin-openlist/')
-}
-
-function goAutomationTests() {
-  router.push('/tabs/settings/devtools/automation')
-}
-
-function goWebDavTests() {
-  router.push('/tabs/settings/devtools/webdav-tests')
-}
-
-// 🆕 2026-06-11：ECv4 容量边界测试入口（sparse 虚拟容器，验证 physical_used ≪ virtual_total）
-function goSparseContainerTest() {
-  router.push('/tabs/settings/devtools/sparse-container-test')
 }
 
 function handleVConsoleToggle(event: CustomEvent) {
@@ -242,115 +177,5 @@ function handleVConsoleToggle(event: CustomEvent) {
 .scope-prod {
   --background: rgba(var(--ion-color-success-rgb), 0.16);
   --color: var(--ion-color-success-shade);
-}
-</style>
-
-<style scoped>
-.prototype-cards {
-  padding: 0 12px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.prototype-card {
-  background: var(--ion-card-background, var(--ion-item-background, #fff));
-  border-radius: 14px;
-  padding: 14px 16px;
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  border: 1px solid rgba(var(--ion-color-medium-rgb, 128, 128, 128), 0.12);
-}
-
-.prototype-card:active {
-  transform: scale(0.98);
-}
-
-.proto-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.proto-icon-wrap {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.proto-icon {
-  font-size: 22px;
-  color: var(--ion-text-color, #333);
-}
-
-.proto-title-area {
-  flex: 1;
-  min-width: 0;
-}
-
-.proto-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--ion-text-color, #333);
-  margin: 0;
-}
-
-.proto-route {
-  font-size: 11px;
-  color: var(--encv-text-secondary, #999);
-  margin: 2px 0 0;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.proto-arrow {
-  font-size: 18px;
-  color: var(--ion-color-medium, #999);
-  flex-shrink: 0;
-}
-
-.proto-compose-path {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-  padding: 6px 10px;
-  background: rgba(var(--ion-color-medium-rgb, 128, 128, 128), 0.08);
-  border-radius: 8px;
-}
-
-.path-label {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--ion-color-primary, #3880ff);
-  flex-shrink: 0;
-}
-
-.path-value {
-  font-size: 11px;
-  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-  color: var(--ion-text-color, #333);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: none;
-  padding: 0;
-  margin: 0;
-}
-
-.proto-desc {
-  font-size: 12px;
-  color: var(--encv-text-secondary, #999);
-  margin: 8px 0 0;
-  line-height: 1.4;
 }
 </style>
