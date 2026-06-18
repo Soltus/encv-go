@@ -662,6 +662,11 @@ const loading = ref(false)
 const refreshing = ref(false)
 const connecting = ref(false)
 let firstLoad = true
+// 🆕 v4 Bug1 修复（v2）：记录上次成功加载的 path，只有真正切换路径才清空列表
+//   之前用 files.value[0]?.path !== currentPath.value 判断是错的：
+//   files[0] 是当前目录下的子文件，path 永远不等于 currentPath，
+//   导致 file:change 自动刷新也走 path-change 分支 → 清空列表 → 闪 loading。
+const lastLoadedPath = ref<string>('')
 
 // 🆕 v3 2026-06-18 Task 8：route.query 驱动的文件高亮
 //   - TaskDetailModal.locateOutput 跳转 /tabs/files?path=<dir>&highlight=<name>
@@ -746,7 +751,7 @@ async function loadFiles() {
   //   - 首次加载（isInitialLoad）才显示全屏 loading + 清空老数据
   //   - 自动 reload（isRefresh）保留老数据 + 显示顶部小 spinner 指示器
   //   - 切换路径（currentPath 变化）才真正清空（isPathChange）
-  const isPathChange = !files.value.length || files.value[0]?.path !== currentPath.value
+  const isPathChange = currentPath.value !== lastLoadedPath.value
   const isInitialLoad = files.value.length === 0 && firstLoad === true
   if (isPathChange || isInitialLoad) {
     loading.value = true
@@ -778,6 +783,7 @@ async function loadFiles() {
       connecting.value = false
       console.info('[Files] Stream complete, total:', result.files.length, 'files')
 
+      lastLoadedPath.value = currentPath.value
       loadFileTagsForCurrentDir()
 
       // 🆕 v3 2026-06-18 Task 8：loadFiles 完成后处理 pendingHighlight
