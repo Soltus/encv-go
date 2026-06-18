@@ -439,6 +439,7 @@ export default {
     'devtools.automationTestsEntryDesc': 'Generate mock data + derive test cases + submit tasks',
     // 🆕 2026-06-17：PluginTestsDetail.vue 页面 title 使用
     'devtools.pluginTests': 'Plugin Tests',
+    'devtools.clickToViewInTasks': 'Click to view report in Tasks',
     // 🆕 2026-06-17：AutomationTestsHub.vue 内部子项 i18n key
     'devtools.automationHub.testEntries': 'Test Entries',
     'devtools.automationHub.pluginTests': 'Plugin Tests',

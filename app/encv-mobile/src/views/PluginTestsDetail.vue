@@ -6,20 +6,6 @@
           <ion-back-button default-href="/tabs/settings/devtools"></ion-back-button>
         </ion-buttons>
         <ion-title>{{ t('devtools.pluginTests') }}</ion-title>
-        <ion-buttons slot="end">
-          <!-- 视图切换 -->
-          <button
-            class="view-toggle"
-            :class="{ 'view-toggle--active': viewMode === 'pipeline' }"
-            @click="viewMode = 'pipeline'"
-          >Pipeline</button>
-          <span class="view-toggle-sep">|</span>
-          <button
-            class="view-toggle"
-            :class="{ 'view-toggle--active': viewMode === 'tree' }"
-            @click="viewMode = 'tree'"
-          >Tree</button>
-        </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
@@ -205,75 +191,21 @@
         </div>
       </ion-list>
 
-      <!-- ========== 测试报告 ========== -->
-
-      <template v-if="currentRun">
-        <!-- 报告头部 -->
-        <TestReportHeader
-          :run-id="currentRun.id"
-          :opened-at="currentRun.createdAt"
-          :duration-ms="reportDurationMs"
-          :total="totalSteps"
-          :passed="successSteps"
-          :failed="failedSteps"
-          :skipped="0"
-          :pending="totalSteps - completedSteps"
-          :platform="platform"
-        />
-
-        <!-- Pipeline 视图 -->
-        <template v-if="viewMode === 'pipeline'">
-          <JobPipelineCard
-            v-for="job in currentRun.jobs"
-            :key="job.id"
-            :job="job"
-            :step-names="stepNameMap"
-            :display-name="getJobDisplayName(job.jobDefId)"
-          />
-        </template>
-
-        <!-- Tree 视图 -->
-        <template v-else>
-          <TreeView
-            :workflow-run="currentRun"
-            :step-names="stepNameMap"
-            :job-display-names="jobDisplayNameMap"
-            @select-node="onSelectNode"
-          >
-            <!-- 🆕 Task 14：step 节点展开时内联渲染时间线 + 深度诊断二级展开 -->
-            <template #node-detail="{ node }">
-              <div v-if="findStepByNodeId(node.id)" class="tree-node-detail">
-                <StepInlineTimeline :step="findStepByNodeId(node.id)!" />
-                <button
-                  class="deep-diagnosis-toggle"
-                  @click="toggleDeepDiagnosis(node.id)"
-                >
-                  {{ deepDiagnosisExpanded.has(node.id) ? '收起深度诊断' : '展开深度诊断' }}
-                </button>
-                <StepDetailPanel
-                  v-if="deepDiagnosisExpanded.has(node.id) && findJobByNodeId(node.id)"
-                  :step-run="findStepByNodeId(node.id)!"
-                  :job-run="findJobByNodeId(node.id)!"
-                />
-              </div>
-            </template>
-          </TreeView>
-        </template>
-      </template>
-
-      <!-- 历史运行 -->
-      <ion-list v-if="serviceRuns.length > 1 && !currentRun">
-        <ion-list-header><ion-label>PAST RUNS</ion-label></ion-list-header>
+      <!-- ========== 历史运行 ========== -->
+      <!-- 🆕 2026-06-18 v5-bug3fix：测试报告已并入任务系统 group card（Tasks L1）+ GroupDetail L2 -->
+      <!-- 历史 run 列表点击 → push 到 L2 GroupDetail，PluginTestsDetail 不再本地渲染报告 -->
+      <ion-list v-if="serviceRuns.length > 0">
+        <ion-list-header><ion-label>PAST RUNS · {{ t('devtools.clickToViewInTasks') }}</ion-label></ion-list-header>
         <ion-item
-          v-for="record in serviceRuns.slice(1, 11)"
+          v-for="record in serviceRuns.slice(0, 10)"
           :key="record.id"
           button
           detail
-          @click="selectHistoryRun(record)"
+          @click="openGroupDetail(record.id)"
         >
           <ion-label>
-            <h3>{{ record.id.slice(4, 16) }}...</h3>
-            <p>{{ record.workflowRun?.status ?? 'unknown' }} · {{ record.workflowRun?.jobs.length ?? 0 }} jobs · {{ formatTime(record.startedAt) }}</p>
+            <h3>{{ record.id.slice(0, 12) }}...</h3>
+            <p>{{ record.workflowRun?.status ?? 'unknown' }} · {{ record.workflowRun?.jobs.length ?? 0 }} jobs · {{ formatTime(record.startedAt) }} · {{ record.passed }} ✓ / {{ record.failed }} ✗</p>
           </ion-label>
           <StepMiniBadge :status="(record.workflowRun?.status === 'running' ? 'queued' : record.workflowRun?.status) ?? 'queued'" :show-name="false" slot="end" />
         </ion-item>
@@ -284,8 +216,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 
 // 🆕 2026-06-12 崩溃根因修复：后端 crash 完全静默 → 监听 MainActivity 推送的 window CustomEvent
 //   链路：EncvGoService.sendBroadcast (Android system broadcast)
@@ -342,17 +274,11 @@ import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
 // 🆕 2026-06-18 Task 13：抽取 FFMPEG 流程日志为独立 composable + 组件
 import { useMockGenLog } from '@/composables/useMockGenLog'
 import MockGenLogCard from '@/components/developer/MockGenLogCard.vue'
-import type { WorkflowDefinition, JobRun, StepRun, StepDefinition, UnifiedRunRecord, UnifiedTreeNode } from '@/lib/workflow/types'
-import TestReportHeader from '@/components/automation/TestReportHeader.vue'
+import type { WorkflowDefinition, StepDefinition } from '@/lib/workflow/types'
 import StepMiniBadge from '@/components/automation/StepMiniBadge.vue'
-import JobPipelineCard from '@/components/automation/JobPipelineCard.vue'
-import TreeView from '@/components/automation/TreeView.vue'
-import StepDetailPanel from '@/components/automation/StepDetailPanel.vue'
-// 🆕 Task 14：step 节点内联时间线（从 StepRun 派生 UnifiedTimelineEntry[]）
-import StepInlineTimeline from '@/components/automation/StepInlineTimeline.vue'
 
 const { t } = useI18n()
-const route = useRoute()
+const router = useRouter()
 
 // ---- Mock 数据 ----
 // 🆕 2026-06-15 声明式：mockRoot = AUTOMATION_MOUNT_PATH + '/'（常量，不再 split/slice）
@@ -436,63 +362,14 @@ const {
   cancelRun,
 } = service
 
-const viewMode = ref<'pipeline' | 'tree'>('pipeline')
-const selectedStep = ref<StepRun | null>(null)
-const _tickNow = ref(Date.now())
-let tickHandle: ReturnType<typeof setInterval> | null = null
+// 🆕 2026-06-18 v5-bug3fix：测试报告 UI 块（TestReportHeader/JobPipelineCard/StepDetailPanel）已并入任务系统
+//   - L1 Tasks tab group card：智能显示自身状态 + 命中计数器
+//   - L2 GroupDetail 页：ion-segment 3 tab (Pipeline / Tasks / Diagnostics)
+//   - L3 TaskDetail modal：单 task 详情
+// 此页面只保留：mock 数据管理 + 触发测试 + 实时 workflow 进度 + 历史 run 列表
+// 历史 run 列表点击 → push 到 L2 GroupDetail，**不在本地渲染报告**
 
-// 🆕 Task 14：深度诊断二级展开状态（按 node id 跟踪）
-//   默认折叠，用户点击"展开深度诊断"按钮后展开 StepDetailPanel 的 5 个诊断区块
-const deepDiagnosisExpanded = ref<Set<string>>(new Set())
-function toggleDeepDiagnosis(nodeId: string) {
-  // 必须重新赋值 Set 以触发 Vue 响应式更新
-  const next = new Set(deepDiagnosisExpanded.value)
-  if (next.has(nodeId)) {
-    next.delete(nodeId)
-  } else {
-    next.add(nodeId)
-  }
-  deepDiagnosisExpanded.value = next
-}
-
-/**
- * 🆕 Task 14：从 UnifiedTreeNode.id 反查 StepRun
- *   TreeView 的 node-detail slot 传入的 node 是子节点（step 节点），
- *   其 id 即 StepRun.id，在 currentRun.jobs[].steps[] 中查找。
- */
-function findStepByNodeId(nodeId: string): StepRun | undefined {
-  if (!currentRun.value) return undefined
-  for (const job of currentRun.value.jobs) {
-    const step = job.steps.find((s) => s.id === nodeId)
-    if (step) return step
-  }
-  return undefined
-}
-
-/**
- * 🆕 Task 14：从 UnifiedTreeNode.id 反查 JobRun
- *   找到 step 所属的 job，用于 StepDetailPanel 的 JOB CONTEXT 区块。
- */
-function findJobByNodeId(nodeId: string): JobRun | undefined {
-  if (!currentRun.value) return undefined
-  return currentRun.value.jobs.find((j) => j.steps.some((s) => s.id === nodeId))
-}
-
-const platform = computed(() => {
-  if (typeof navigator === 'undefined') return 'node'
-  const ua = navigator.userAgent || ''
-  if (/android/i.test(ua)) return 'android'
-  if (/iphone|ipad|ipod/i.test(ua)) return 'ios'
-  return 'web'
-})
-
-const reportDurationMs = computed(() => {
-  if (!currentRun.value) return 0
-  if (isRunning.value) return _tickNow.value - (currentRun.value.startedAt ? new Date(currentRun.value.startedAt).getTime() : Date.now())
-  return currentRun.value.durationMs ?? 0
-})
-
-// 兼容旧接口名
+// 兼容模板：实时进度（用 useWorkflowTaskService 暴露的 counters 派生）
 const progress = computed(() => ({
   total: totalSteps.value,
   completed: completedSteps.value,
@@ -500,50 +377,6 @@ const progress = computed(() => ({
   failed: failedSteps.value,
   pending: Math.max(0, totalSteps.value - completedSteps.value),
 }))
-
-/** 从当前运行的 workflow definition 构建 step 名映射 */
-const stepNameMap = computed(() => {
-  const map = new Map<string, string>()
-  const def = currentRun.value
-    ? wfDefs.value.find((d: WorkflowDefinition) => d.id === currentRun.value!.workflowDefId)
-    : null
-  if (def) {
-    for (const job of def.jobs) {
-      for (const step of job.steps) {
-        map.set(step.id, step.name)
-      }
-    }
-  }
-  // 如果没有 definition（历史运行），从 stepDefId 推断名称
-  if (map.size === 0 && currentRun.value) {
-    for (const job of currentRun.value.jobs) {
-      for (const step of job.steps) {
-        if (!map.has(step.stepDefId)) {
-          map.set(step.stepDefId, step.stepDefId)
-        }
-      }
-    }
-  }
-  return map
-})
-
-const jobDisplayNameMap = computed(() => {
-  const map = new Map<string, string>()
-  const def = currentRun.value
-    ? wfDefs.value.find((d: WorkflowDefinition) => d.id === currentRun.value!.workflowDefId)
-    : null
-  if (def) {
-    for (const job of def.jobs) map.set(job.id, job.name)
-  }
-  return map
-})
-
-function getJobDisplayName(jobDefId: string): string {
-  return jobDisplayNameMap.value.get(jobDefId) ?? jobDefId
-}
-
-// 🆕 Task 14：findJobForStep / selectedStepJob 已移除（StepDetailPanel 改为
-//   在 TreeView node-detail slot 内联渲染，不再依赖 selectedStepJob）
 
 // ---- Handlers ----
 
@@ -1130,26 +963,14 @@ async function handleCancel() {
 }
 
 /**
- * TreeView select-node 回调：从 UnifiedTreeNode.id 反查 StepRun
- *（TreeView 重构为通用 UnifiedTreeView 后 emit select-node，
- *  消费方在此把节点 id 映射回 StepRun 以驱动 StepDetailPanel）
+ * 🆕 2026-06-18 v5-bug3fix：历史 run 列表点击 → push 到 L2 GroupDetail
+ *   - 不在本地渲染报告（TestReportHeader/JobPipelineCard/StepDetailPanel 已迁移到 GroupDetail）
+ *   - 解耦 PluginTestsDetail 与报告 UI
+ *   - 解耦 Tasks.vue L1 与 PluginTestsDetail（用户在 L1 group card 直接进入 GroupDetail，不经过此页）
  */
-function onSelectNode(node: UnifiedTreeNode) {
-  if (!currentRun.value) return
-  for (const job of currentRun.value.jobs) {
-    const step = job.steps.find((s) => s.id === node.id)
-    if (step) {
-      selectedStep.value = step
-      return
-    }
-  }
-}
-
-/** 从历史记录恢复到 currentRun（UI 回放历史运行） */
-function selectHistoryRun(record: UnifiedRunRecord) {
-  if (record.workflowRun) {
-    currentRun.value = record.workflowRun
-  }
+async function openGroupDetail(runId: string) {
+  if (!runId) return
+  await router.push(`/tabs/tasks/group/${encodeURIComponent(runId)}`)
 }
 
 function formatTime(iso: string): string {
@@ -1172,48 +993,12 @@ function humanSize(bytes: number): string {
 }
 
 onMounted(() => {
-  tickHandle = setInterval(() => { _tickNow.value = Date.now() }, 1000)
   // useWorkflowTaskService 内部通过 useTaskEventBridge 自动订阅 WS 4 件套事件
   // 🆕 2026-06-12：监听 MainActivity 推送的 CustomEvent，显示 lastError
   window.addEventListener('encv:backend-status', onBackendStatus)
-  // 🆕 v3 2026-06-18 Task 10：从 Tasks.vue group card 跳转过来时，自动选中对应 run
-  //   链路：Tasks.vue viewGroupReport(runId) → router.push query.runId → 这里读取
-  //   serviceRuns 可能还没加载完，用 nextTick + 重试机制兜底
-  const queryRunId = route.query.runId
-  if (typeof queryRunId === 'string' && queryRunId) {
-    selectHistoryRunByRunId(queryRunId)
-  }
 })
 
-/**
- * 🆕 v3 2026-06-18 Task 10：按 runId 从 serviceRuns 中查找并选中历史 run
- *
- * serviceRuns 在 useWorkflowTaskService 初始化时从 localStorage 异步加载，
- * onMounted 时可能还没就绪 → 用 watch + nextTick 兜底重试。
- */
-function selectHistoryRunByRunId(runId: string) {
-  const record = serviceRuns.value.find((r) => r.id === runId)
-  if (record) {
-    selectHistoryRun(record)
-    return
-  }
-  // 兜底：serviceRuns 可能还在加载，watch 一次（5s 超时）
-  const stop = watch(
-    serviceRuns,
-    (runs) => {
-      const rec = runs.find((r) => r.id === runId)
-      if (rec) {
-        selectHistoryRun(rec)
-        stop()
-      }
-    },
-    { deep: false },
-  )
-  setTimeout(() => stop(), 5000)
-}
-
 onUnmounted(() => {
-  if (tickHandle) clearInterval(tickHandle)
   // useWorkflowTaskService 内部通过 useTaskEventBridge 自动取消订阅
   window.removeEventListener('encv:backend-status', onBackendStatus)
 })
@@ -1247,46 +1032,8 @@ onUnmounted(() => {
 
 /* 🆕 2026-06-18 Task 13：mock-gen-log-* 样式已迁移到 MockGenLogCard.vue */
 
-/* 🆕 Task 14：测试报告树节点内联时间线 + 深度诊断二级展开 */
-.tree-node-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.deep-diagnosis-toggle {
-  align-self: flex-start;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  background: var(--ion-color-light, #f4f5f8);
-  color: var(--ion-color-medium, #92949c);
-  border: 1px solid var(--ion-color-step-200, #d3d3d3);
-  border-radius: 3px;
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.deep-diagnosis-toggle:hover {
-  background: var(--ion-color-primary, #4f8cff);
-  color: #ffffff;
-  border-color: var(--ion-color-primary, #4f8cff);
-}
-
-/* 暗黑模式适配 */
-:global(body.dark) .deep-diagnosis-toggle {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.7);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-:global(body.dark) .deep-diagnosis-toggle:hover {
-  background: var(--ion-color-primary, #4f8cff);
-  color: #ffffff;
-  border-color: var(--ion-color-primary, #4f8cff);
-}
-
-.view-toggle { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 11px; background: none; border: none; color: #6B5D4C; cursor: pointer; padding: 2px 6px; border-radius: 3px; }
-.view-toggle--active { background: #1A1A1A; color: #F4EFE6; }
-.view-toggle-sep { color: #C9BBA1; }
+/* 🆕 2026-06-18 v5-bug3fix：测试报告 UI 块（TestReportHeader/JobPipelineCard/StepDetailPanel）
+ *   已迁移到 GroupDetail.vue，本页不再需要 tree-node-detail / deep-diagnosis-toggle / view-toggle 样式 */
 
 /* 🆕 2026-06-11 内联错误卡（饱和调试原则：禁用 Toast，错误必须持久可见） */
 .inline-error-card {

@@ -33,6 +33,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Tasks.vue'),
       },
       {
+        // 🆕 2026-06-18 v5-bug3fix：L2 GroupDetail 页面
+        //   - Tasks L1 group card 整张 clickable → push 到此页
+        //   - ion-segment 3 tab：Pipeline / Tasks / Diagnostics
+        //   - 不与 PluginTestsDetail 耦合（插件测试在设置 tab 独立）
+        //   - 设计理由：100+ 任务的 group 不应在一级页面直接展开
+        path: 'tasks/group/:runId',
+        component: () => import('@/views/GroupDetail.vue'),
+        props: true,
+      },
+      {
         path: 'remote',
         component: () => import('@/views/Remote.vue'),
       },

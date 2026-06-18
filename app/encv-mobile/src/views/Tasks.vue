@@ -257,10 +257,16 @@
 
           <!-- ============== Group card（聚合模式，1 个 run = 1 张卡片） ============== -->
           <!-- 未命中 group（hitAny=false）按用户选择 C 隐藏 -->
+          <!-- 🆕 2026-06-18 v5-bug3fix：整张 card clickable → push 到 L2 GroupDetail，移除展开态 -->
           <div
             v-else-if="item.kind === 'group' && item.counters.hitAny"
             :key="item.key"
-            :class="['tl-group-card', `tl-group-card--${getGroupTone(item.runId, item.tasks)}`]"
+            :class="['tl-group-card', 'tl-group-card--clickable', `tl-group-card--${getGroupTone(item.runId, item.tasks)}`, groupCardMoodClass(item.tasks)]"
+            role="button"
+            :aria-label="t('tasks.groupCard.openDetail')"
+            @click="openGroupDetail(item.runId)"
+            @keydown.enter.prevent="openGroupDetail(item.runId)"
+            @keydown.space.prevent="openGroupDetail(item.runId)"
           >
             <!-- 左侧 4px 状态色边 -->
             <div
@@ -268,7 +274,7 @@
             ></div>
 
             <div class="tl-group-card__main">
-              <!-- 标题行：tone icon + 触发器名 + N 个任务 + view report + 展开 chevron -->
+              <!-- 标题行：tone icon + 触发器名 + N 个任务 + 报告导出按钮 + 进入箭头 -->
               <div class="tl-group-card__head">
                 <div :class="['tl-bubble', 'tl-bubble--md', `tl-tone--${getGroupTone(item.runId, item.tasks)}`]">
                   <ion-icon :icon="getGroupTone(item.runId, item.tasks) === 'ai_agent' ? hardwareChipOutline : cogOutline"></ion-icon>
@@ -294,6 +300,7 @@
                     fill="clear"
                     size="small"
                     @click.stop="exportGroupReport(item.runId, item.tasks)"
+                    @keydown.enter.stop
                     :disabled="exporting[item.runId]"
                     :title="t('tasks.exportReport')"
                     class="group-report-btn"
@@ -309,24 +316,18 @@
                       slot="icon-only"
                     ></ion-icon>
                   </ion-button>
-                  <ion-button
-                    fill="clear"
-                    size="small"
-                    @click="toggleGroupExpanded(item.key)"
-                    :title="isGroupExpanded(item.key) ? t('tasks.collapse') : t('tasks.expand')"
-                    class="tl-chevron-btn"
-                  >
-                    <ion-icon
-                      :icon="isGroupExpanded(item.key) ? chevronBack : chevronForward"
-                      slot="icon-only"
-                    ></ion-icon>
-                  </ion-button>
+                  <!-- 🆕 v5-bug3fix：进入箭头（替代 chevron 展开/折叠） -->
+                  <ion-icon
+                    :icon="chevronForward"
+                    class="tl-group-card__chevron"
+                    :title="t('tasks.groupCard.openDetail')"
+                  ></ion-icon>
                 </div>
               </div>
 
-              <!-- 状态汇总 + 进度条 -->
+              <!-- 自身状态行（智能行：passed/failed/running/pending 紧凑展示） -->
               <div class="tl-group-card__body">
-                <div class="tl-meta-row">
+                <div class="tl-meta-row tl-group-card__self">
                   <ion-badge v-if="getGroupSummary(item.tasks).passed > 0" color="success" class="tl-status-badge">
                     <ion-icon :icon="checkmarkCircle" class="tl-badge-icon"></ion-icon>
                     {{ getGroupSummary(item.tasks).passed }}
@@ -342,6 +343,10 @@
                   <ion-badge v-if="getGroupSummary(item.tasks).pending > 0" color="medium" class="tl-status-badge">
                     {{ getGroupSummary(item.tasks).pending }}
                   </ion-badge>
+                  <span v-if="getGroupDuration(item.tasks)" class="tl-group-card__duration">
+                    <ion-icon :icon="timer" class="tl-group-card__duration-icon"></ion-icon>
+                    {{ getGroupDuration(item.tasks) }}
+                  </span>
                 </div>
                 <div class="tl-progress tl-progress--md">
                   <div
@@ -351,94 +356,19 @@
                 </div>
                 <p class="tl-time-info">
                   <span class="tl-time-info__created">{{ formatDateTime(new Date(item.startedAt).toISOString()) }}</span>
-                  <span v-if="getGroupDuration(item.tasks)" class="tl-time-info__duration">{{ getGroupDuration(item.tasks) }}</span>
                   <span class="tl-time-info__percent">{{ getGroupSummary(item.tasks).percent }}%</span>
                 </p>
               </div>
 
-              <!-- Hit counter chips（点击 = toggle 对应筛选） -->
-              <!-- 用户选择 A：plugin × N + type × M + status × 6 + date hit -->
-              <div class="tl-counter-chips">
-                <!-- plugin chips -->
-                <button
-                  v-for="(p, pkey) in item.counters.plugins"
-                  :key="'p-' + pkey"
-                  type="button"
-                  :class="['tl-counter-chip', counterHitClass(p.hit, p.total, filterPlugins.includes(pkey as string))]"
-                  @click.stop="toggleFilterFromCounter('plugin', pkey as string)"
-                >
-                  <ion-icon :icon="extensionPuzzle" class="tl-counter-chip__icon"></ion-icon>
-                  <span class="tl-counter-chip__name">{{ pkey }}</span>
-                  <span class="tl-counter-chip__ratio">{{ p.hit }}/{{ p.total }}</span>
-                </button>
-                <!-- type chips -->
-                <button
-                  v-for="(ty, tykey) in item.counters.types"
-                  :key="'ty-' + tykey"
-                  type="button"
-                  :class="['tl-counter-chip', counterHitClass(ty.hit, ty.total, filterTypes.includes(tykey as any))]"
-                  @click.stop="toggleFilterFromCounter('type', tykey as string)"
-                >
-                  <span class="tl-counter-chip__name">{{ tykey === 'encrypt' ? t('tasks.encrypt') : t('tasks.decrypt') }}</span>
-                  <span class="tl-counter-chip__ratio">{{ ty.hit }}/{{ ty.total }}</span>
-                </button>
-                <!-- status chips -->
-                <button
-                  v-for="(st, stkey) in item.counters.statuses"
-                  :key="'st-' + stkey"
-                  type="button"
-                  :class="['tl-counter-chip', counterHitClass(st.hit, st.total, filterStatuses.includes(stkey as any))]"
-                  @click.stop="toggleFilterFromCounter('status', stkey as string)"
-                >
-                  <span class="tl-counter-chip__name">{{ getStatusLabel(stkey as any) }}</span>
-                  <span class="tl-counter-chip__ratio">{{ st.hit }}/{{ st.total }}</span>
-                </button>
-                <!-- date chip -->
-                <button
-                  type="button"
-                  :class="['tl-counter-chip', counterHitClass(item.counters.date.hit, item.counters.date.total, filterDatePreset !== 'all')]"
-                  @click.stop="openDatePopover($event)"
-                >
-                  <ion-icon :icon="calendarOutline" class="tl-counter-chip__icon"></ion-icon>
-                  <span class="tl-counter-chip__name">{{ dateRangeChipLabel() }}</span>
-                  <span class="tl-counter-chip__ratio">{{ item.counters.date.hit }}/{{ item.counters.date.total }}</span>
-                </button>
-              </div>
-            </div>
-
-            <!-- 展开后插入子 task 列表（in-line，避免虚拟列表 measure 问题） -->
-            <div v-if="isGroupExpanded(item.key)" class="tl-group-card__children">
-              <ion-item-sliding
-                v-for="child in item.tasks"
-                :key="'gc-' + child.id"
+              <!-- 🆕 v5-bug3fix 智能命中行：仅在筛选/搜索激活时显示，与自身状态不冲突 -->
+              <!-- 4 维度 (plugin/type/status/date) 折叠为单行：命中数 + 当前激活的筛选提示 -->
+              <div
+                v-if="isGroupFilterActive"
+                class="tl-group-card__hit"
               >
-                <ion-item
-                  class="tl-item-card tl-item-card--child"
-                  button
-                  detail
-                  @click="openTaskDetail(child)"
-                >
-                  <ion-icon
-                    :icon="getTaskIcon(child)"
-                    :color="getTaskColor(child)"
-                    slot="start"
-                  ></ion-icon>
-                  <ion-label>
-                    <h2>{{ getTaskName(child) }}</h2>
-                    <p class="tl-meta-row">
-                      <span class="task-id">#{{ child.id.slice(0, 6) }}</span>
-                      <ion-badge :color="getStatusColor(child.status)" class="tl-status-badge">
-                        {{ getStatusLabel(child.status) }}
-                      </ion-badge>
-                      <span class="task-type">{{ child.type === 'encrypt' ? t('tasks.encrypt') : t('tasks.decrypt') }}</span>
-                    </p>
-                    <p class="tl-time-info">
-                      <span class="tl-time-info__created">{{ formatDateTime(child.createdAt) }}</span>
-                      <span v-if="getTaskDuration(child)" class="tl-time-info__duration">{{ getTaskDuration(child) }}</span>
-                    </p>
-                  </ion-label>
-                </ion-item>
-              </ion-item-sliding>
+                <ion-icon :icon="funnel" class="tl-group-card__hit-icon"></ion-icon>
+                <span class="tl-group-card__hit-text">{{ getGroupHitSummary(item) }}</span>
+              </div>
             </div>
           </div>
 
@@ -570,7 +500,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onIonViewWillEnter } from '@ionic/vue'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
@@ -581,11 +511,10 @@ import {
   IonPopover, IonCheckbox, alertController, modalController, toastController,
 } from '@ionic/vue'
 import { Share } from '@capacitor/share'
-import {
-  add, closeCircle, checkmarkCircle, timer, sync,
+import { add, closeCircle, checkmarkCircle, timer, sync,
   warningOutline, lockClosed, lockClosedOutline, search, funnel, trashBin,
   extensionPuzzle, swapVertical, chevronDown,
-  hardwareChipOutline, cogOutline, person, chevronForward, chevronBack,
+  hardwareChipOutline, cogOutline, person, chevronForward,
   downloadOutline,
   albumsOutline, listOutline, calendarOutline,
 } from 'ionicons/icons'
@@ -691,7 +620,7 @@ const {
   // 🆕 v4 M3
   viewMode, filterDatePreset, filterDateRange,
   displayedItems,
-  applyDatePreset, setCustomDateRange, toggleFilterFromCounter, toggleViewMode,
+  applyDatePreset, setCustomDateRange, toggleViewMode,
   // 🆕 v4 M5：单例 workflowService 数据源（groupedItems 已通过 serviceRuns 派生，这里只消费）
   workflowService,
 } = useTasksList()
@@ -810,39 +739,126 @@ function onCustomToChange(event: Event) {
   setCustomDateRange(customFromInput.value || undefined, v || undefined)
 }
 
-// 🆕 v4 M3：group 展开/折叠状态（每个 group 卡片可独立展开看 task 详情）
-// 持久化到 localStorage — 切回 tab 不丢
-const EXPANDED_GROUPS_KEY = 'encv_tasks_expanded_groups_v1'
-function loadExpandedGroups(): Set<string> {
-  try {
-    const raw = localStorage.getItem(EXPANDED_GROUPS_KEY)
-    if (!raw) return new Set()
-    const arr = JSON.parse(raw) as string[]
-    return new Set(Array.isArray(arr) ? arr : [])
-  } catch {
-    return new Set()
-  }
+// 🆕 2026-06-18 v5-bug3fix：L1 group card 智能状态行 + 命中行
+//   - 整张 card clickable → push 到 L2 GroupDetail（移除展开态）
+//   - 自身状态（passed/failed/running/pending）始终显示
+//   - 命中行（hit N/M + 当前激活的筛选提示）仅在 isGroupFilterActive=true 时显示
+//   - 二者智能共存，不拥挤不冲突
+const isGroupFilterActive = computed(() => {
+  return (
+    hasActiveFilters.value ||
+    searchQuery.value.trim().length > 0
+  )
+})
+
+/** L1 group card 状态色调（mood class）：
+ *  - 100% passed → 淡绿 tint（视觉奖励）
+ *  - 失败率 > 50% → 红色警告（视觉警示）
+ *  - 其他 → 默认
+ */
+function groupCardMoodClass(tasks: EncvTask[]): string {
+  const s = summarizeGroup(tasks)
+  if (tasks.length === 0) return 'tl-group-card--mood-neutral'
+  if (s.failed === 0 && s.passed > 0) return 'tl-group-card--mood-success'
+  if (s.failed / tasks.length > 0.5) return 'tl-group-card--mood-danger'
+  return 'tl-group-card--mood-neutral'
 }
-const expandedGroupKeys = ref<Set<string>>(loadExpandedGroups())
-watch(
-  expandedGroupKeys,
-  (v) => {
-    try {
-      localStorage.setItem(EXPANDED_GROUPS_KEY, JSON.stringify(Array.from(v)))
-    } catch {
-      // silent
+
+/** L1 group card 智能命中行文本
+ *  - 4 维度 (plugin/type/status/date) 折叠为单行
+ *  - 命中 0 → 显示 "无匹配"（red）
+ *  - 命中 = total → 显示 "全部 N"（green）
+ *  - 否则 "命中 N/M" + 搜索词（truncated 12 chars）+ 日期 preset
+ */
+function getGroupHitSummary(item: { tasks: EncvTask[] }): string {
+  const total = item.tasks.length
+  const hit = computeGroupHit(item.tasks)
+  const q = searchQuery.value.trim()
+  const dateLabel = dateRangeChipLabel()
+  const hasDate = filterDatePreset.value !== 'all'
+  const hasSearch = q.length > 0
+
+  if (hit === 0) return t('tasks.groupCard.hitZero')
+  if (hit === total) {
+    if (hasSearch || hasDate) {
+      // 全部命中但有搜索/日期过滤 → 显示"全部 + 过滤条件"
+      return formatHitSummaryWithExtras(total, q, dateLabel, hasSearch, hasDate)
     }
-  },
-  { deep: true },
-)
-function toggleGroupExpanded(key: string) {
-  const next = new Set(expandedGroupKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  expandedGroupKeys.value = next
+    return t('tasks.groupCard.hitFull', { total: String(total) })
+  }
+  return formatHitSummaryWithExtras(hit, q, dateLabel, hasSearch, hasDate, total)
 }
-function isGroupExpanded(key: string): boolean {
-  return expandedGroupKeys.value.has(key)
+
+/** 计算 group 在所有激活筛选下的命中数（plugin/type/status/date/search 交集） */
+function computeGroupHit(tasks: EncvTask[]): number {
+  const q = searchQuery.value.trim().toLowerCase()
+  const hasSearch = q.length > 0
+  const fromTs = filterDateRange.value.from
+  const toTs = filterDateRange.value.to
+  const hasDate = !!fromTs || !!toTs
+  let hit = 0
+  for (const t of tasks) {
+    if (filterPlugins.value.length > 0 && !filterPlugins.value.includes(t.pluginName ?? '')) continue
+    if (filterTypes.value.length > 0 && !filterTypes.value.includes(t.type)) continue
+    if (filterStatuses.value.length > 0 && !filterStatuses.value.includes(t.status)) continue
+    if (hasDate) {
+      if (fromTs && t.createdAt < fromTs) continue
+      if (toTs && t.createdAt >= toTs) continue
+    }
+    if (hasSearch) {
+      const name = getTaskName(t).toLowerCase()
+      const plugin = (t.pluginName || '').toLowerCase()
+      const error = (t.error || '').toLowerCase()
+      const id = t.id.toLowerCase()
+      if (!name.includes(q) && !plugin.includes(q) && !error.includes(q) && !id.includes(q)) continue
+    }
+    hit++
+  }
+  return hit
+}
+
+function formatHitSummaryWithExtras(
+  hit: number,
+  q: string,
+  dateLabel: string,
+  hasSearch: boolean,
+  hasDate: boolean,
+  total?: number,
+): string {
+  const truncatedQuery = q.length > 12 ? q.slice(0, 12) + '…' : q
+  if (hasSearch && hasDate) {
+    return t('tasks.groupCard.hitSummaryFull', {
+      hit: String(hit),
+      total: total !== undefined ? String(total) : String(hit),
+      query: truncatedQuery,
+      datePreset: dateLabel,
+    })
+  }
+  if (hasSearch) {
+    return t('tasks.groupCard.hitSummaryWithSearch', {
+      hit: String(hit),
+      total: total !== undefined ? String(total) : String(hit),
+      query: truncatedQuery,
+    })
+  }
+  if (hasDate) {
+    return t('tasks.groupCard.hitSummaryWithDate', {
+      hit: String(hit),
+      total: total !== undefined ? String(total) : String(hit),
+      datePreset: dateLabel,
+    })
+  }
+  return t('tasks.groupCard.hitSummary', { hit: String(hit), total: total !== undefined ? String(total) : String(hit) })
+}
+
+/** 🆕 2026-06-18 v5-bug3fix：整张 group card clickable → push 到 L2 GroupDetail
+ *  - 不依赖展开态机制（已删除）
+ *  - 不跳转 PluginTestsDetail（解耦：插件测试在设置 tab 开发者选项独立页面）
+ */
+async function openGroupDetail(runId: string) {
+  // __manual__ 前缀的合成 group（user 创建的单个 task）→ 不跳转 L2
+  if (!runId || runId.startsWith('__manual__')) return
+  await router.push(`/tabs/tasks/group/${encodeURIComponent(runId)}`)
 }
 
 // 🆕 v4 Bug3 修复：测试报告导出（group card 右下角按钮触发）
@@ -931,20 +947,12 @@ function blobToDataURL(blob: Blob): Promise<string> {
 }
 
 /**
- * 🆕 v4 M3：group 头部 hit counter chips
- * - plugin：每个 pluginName 展示 "pluginName ×N"（点击 = toggle filterPlugins）
- * - type：encrypt / decrypt 各 1 个 chip
- * - status：6 个状态各 1 个 chip
- * - date：1 个 chip（"今天/7天/30天/全部/自定义 命中"）
- * 点击 chip → toggle 对应筛选（复用 useTasksList.toggleFilterFromCounter）
- *
- * 用户选择 C：未命中 group（hitAny=false）→ 整个 group 隐藏，不渲染 chip
+ * 🆕 v4 M3：group 头部 hit counter chips（v5-bug3fix 智能命中行替代，已移除）
+ * - 历史：4 维度 (plugin/type/status/date) chip 太乱
+ * - 修法：v5-bug3fix 折叠为单行 "命中 N/M"（仅筛选激活时显示）
+ * - 移除 counterHitClass 函数（template 中已不引用）
+ * - 保留 .tl-counter-chip / .tl-counter-chips CSS 以防历史 useTasksList 调用
  */
-function counterHitClass(hit: number, _total: number, active: boolean): string {
-  if (active) return 'tl-counter-chip--active'
-  if (hit === 0) return 'tl-counter-chip--zero'
-  return 'tl-counter-chip--partial'
-}
 
 // 🆕 v4 M3：group summary（passed/failed/running/pending/percent）— 给 template 复用
 function summarizeGroup(tasks: EncvTask[]) {
@@ -1687,6 +1695,112 @@ onIonViewWillEnter(() => {
   gap: 6px;
   padding: 8px 12px 12px;
   border-top: 1px solid var(--ion-color-step-100, rgba(128, 128, 128, 0.1));
+}
+
+/* ============================================================
+   🆕 2026-06-18 v5-bug3fix L1 group card 智能样式
+   - 整张 card clickable（cursor pointer + hover lift）
+   - mood class：100% passed → 淡绿；失败率 > 50% → 红色警告
+   - 智能命中行：仅筛选激活时显示，紧凑单行
+   - 移除展开态（chevron btn / 子 task 列表 → 进入箭头）
+   ============================================================ */
+.tl-group-card--clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+  -webkit-tap-highlight-color: rgba(var(--ion-color-primary-rgb), 0.1);
+}
+.tl-group-card--clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.tl-group-card--clickable:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.tl-group-card--clickable:focus-visible {
+  outline: 2px solid var(--ion-color-primary);
+  outline-offset: 2px;
+}
+
+/* mood 色调（不冲突：基础 tone（automation/ai_agent）保持，仅背景微调） */
+.tl-group-card--mood-success {
+  background: linear-gradient(135deg,
+    rgba(var(--ion-color-success-rgb, 16, 185, 129), 0.04) 0%,
+    rgba(var(--ion-color-success-rgb, 16, 185, 129), 0.08) 100%);
+}
+.tl-group-card--mood-danger {
+  background: linear-gradient(135deg,
+    rgba(var(--ion-color-danger-rgb, 239, 68, 68), 0.04) 0%,
+    rgba(var(--ion-color-danger-rgb, 239, 68, 68), 0.1) 100%);
+  border-color: rgba(var(--ion-color-danger-rgb, 239, 68, 68), 0.3);
+}
+.tl-group-card--mood-neutral {
+  /* 默认无变化 */
+}
+
+/* 进入箭头（替代展开 chevron） */
+.tl-group-card__chevron {
+  color: var(--ion-color-medium);
+  font-size: 22px;
+  margin: 0 4px 0 0;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.tl-group-card--clickable:hover .tl-group-card__chevron {
+  color: var(--ion-color-primary);
+  transform: translateX(2px);
+}
+
+/* 自身状态行（紧凑展示 + duration） */
+.tl-group-card__self {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.tl-group-card__duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--tl-card-text-secondary, var(--ion-color-medium-shade));
+  margin-left: auto;
+  font-family: var(--tl-card-font-mono, monospace);
+  white-space: nowrap;
+}
+.tl-group-card__duration-icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* 智能命中行（仅筛选激活时显示） */
+.tl-group-card__hit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(var(--ion-color-primary-rgb, 59, 130, 246), 0.08);
+  border-left: 3px solid var(--ion-color-primary);
+  font-size: 11px;
+  color: var(--ion-color-primary-shade, #1e40af);
+  font-weight: 500;
+  line-height: 1.4;
+}
+.tl-group-card__hit-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+  color: var(--ion-color-primary);
+}
+.tl-group-card__hit-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .date-range-label {
   display: flex;
