@@ -152,6 +152,8 @@ function makeEmptyWorkflow(): WorkflowDefinition {
 beforeEach(() => {
   // 清空 localStorage
   localStorage.clear()
+  // 🆕 v4 M5：重置单例（每个测试拿到全新 service 实例，避免 isRunning 状态串扰）
+  __resetServiceForTests()
   // 重置 mock 回调
   mockBridge.options = {}
   // 重置 createTask mock（每次返回不同 taskId）
@@ -179,7 +181,7 @@ beforeEach(() => {
 // ==================== 测试用例 ====================
 
 // 需要 import useWorkflowTaskService（在 mock 之后）
-import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
+import { useWorkflowTaskService, __resetServiceForTests } from '@/composables/useWorkflowTaskService'
 
 describe('useWorkflowTaskService — submitRun 基本流程', () => {
   it('submitRun 创建 WorkflowRun + 设置 currentRun', async () => {

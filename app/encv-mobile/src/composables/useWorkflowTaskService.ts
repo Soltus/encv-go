@@ -118,10 +118,45 @@ function saveRunsToStorage(key: string, data: UnifiedRunRecord[]): void {
   }
 }
 
+// ==================== 🆕 v4 2026-06-18 M5：模块级单例 ====================
+/**
+ * 把 useWorkflowTaskService 改为单例。
+ *
+ * 历史问题：每个组件调用 `useWorkflowTaskService()` 都会重新创建一份 `runs` ref +
+ *   重新从 localStorage 加载一遍历史记录 + 重新注册一份 WS 事件回调（虽然
+ *   useTaskEventBridge 内部会去重，但服务本身的 in-memory runs ref 是各组件独立的）。
+ *
+ * 修复：模块级 cached instance，首次调用时创建 options 化的实例，后续复用。
+ *   - 优点：Tasks.vue / PluginTestsDetail.vue / WorkflowDashboard.vue 共享同一份 runs 数据
+ *   - 优点：取消订阅时不会影响其他组件
+ *   - 缺点：options（maxRuns / storageKey）只在首次调用时生效（这是合理 trade-off）
+ *
+ * 升级指南：测试可调用 `__resetServiceForTests()` 重置单例。
+ */
+let _cachedInstance: WorkflowTaskService | null = null
+let _cachedOptions: WorkflowTaskServiceOptions | null = null
+
+export function __resetServiceForTests(): void {
+  _cachedInstance = null
+  _cachedOptions = null
+}
+
 // ==================== 主 composable ====================
 
 export function useWorkflowTaskService(
   options: WorkflowTaskServiceOptions = {},
+): WorkflowTaskService {
+  // 单例模式：首次调用创建并缓存
+  if (_cachedInstance && _cachedOptions) {
+    return _cachedInstance
+  }
+  _cachedOptions = options
+  _cachedInstance = createService(options)
+  return _cachedInstance
+}
+
+function createService(
+  options: WorkflowTaskServiceOptions,
 ): WorkflowTaskService {
   const storageKey = options.storageKey ?? 'encv_workflow_tasks_v1'
   const maxRuns = options.maxRuns ?? 50

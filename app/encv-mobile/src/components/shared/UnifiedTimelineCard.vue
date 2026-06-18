@@ -9,13 +9,24 @@
       },
     ]"
   >
-    <!-- 左侧时间线轴 -->
+    <!-- 左侧时间线轴：状态 icon bubble + 连续连接线 -->
     <div class="utc__axis">
-      <div class="utc__dot" />
+      <div :class="['utc__icon-bubble', `utc__icon-bubble--${entry.status}`]">
+        <ion-spinner
+          v-if="isRunningLike"
+          name="dots"
+          class="utc__icon utc__icon--spin"
+        />
+        <ion-icon
+          v-else
+          :icon="statusIcon"
+          class="utc__icon"
+        />
+      </div>
       <div class="utc__line" />
     </div>
 
-    <!-- 右侧卡片 -->
+    <!-- 右侧卡片（左侧 4px 状态色边） -->
     <div class="utc__card">
       <!-- 头部行 -->
       <div
@@ -126,19 +137,44 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { IonIcon } from '@ionic/vue'
-import { chevronUp, chevronDown, alertCircleOutline, flashOutline, hourglassOutline } from 'ionicons/icons'
+import {
+  chevronUp,
+  chevronDown,
+  alertCircleOutline,
+  flashOutline,
+  hourglassOutline,
+  checkmarkCircle,
+  closeCircle,
+  ban,
+  ellipseOutline,
+  hourglass,
+  syncOutline,
+  timerOutline,
+} from 'ionicons/icons'
 import PhaseIcon from './PhaseIcon.vue'
-import type { UnifiedTimelineEntry } from '@/lib/workflow/types'
+import type { UnifiedTimelineEntry, StepStatus } from '@/lib/workflow/types'
 
 /**
- * 通用时间线卡片组件
+ * 🆕 v4 2026-06-18 M4：行业标准时间线视觉
  *
- * 作为任务时间线（TaskTimeline）和 FFMPEG 日志条目（MockGenLogCard）的共用骨架。
- * 调用方负责从 StepRun / MockGenLogEntry 等领域模型转换为 UnifiedTimelineEntry。
+ * 设计原则（用户原话）：
+ *   - 垂直（不是水平 — 水平展示不了）
+ *   - 不能有中断间隔（条目间连续连接，无 margin 隔开）
+ *   - 整体铺满宽度（不是传统时间线左侧只占 16-32px 浪费）
+ *   - 左侧 4px 边框色高亮（不是顶部 2px 色条）
+ *   - 状态图标（不是纯色圆点）：
+ *     · success   → 绿色对勾 checkmarkCircle（静态）
+ *     · running   → 黄色转圈 ion-spinner dots（持续旋转）
+ *     · failure   → 红色叉号 closeCircle
+ *     · cancelled → 灰色禁止 ban
+ *     · pending   → 灰色空心圆 ellipseOutline
+ *     · queued    → 灰色排队 syncOutline
+ *     · timed_out → 黄色时钟 hourglass
+ *     · skipped   → 灰色 removeCircle
+ *     · default   → 灰色 playCircle
  *
- * 展开状态支持两种模式：
- * - 受控模式：父组件传 v-model:expanded，由父组件管理状态
- * - 非受控模式：父组件不传 expanded，组件内部管理（可通过 defaultExpanded 设置初始值）
+ * 视觉对齐目标：GitHub Actions workflow runs / Linear activity / Datadog logs / Vercel
+ * 部署时间线。
  */
 const props = withDefaults(defineProps<{
   entry: UnifiedTimelineEntry
@@ -179,6 +215,33 @@ function toggleExpand() {
   emit('update:expanded', newValue)
   emit('toggle', newValue)
 }
+
+// ==================== 🆕 v4 M4：状态图标 + 颜色映射 ====================
+
+/** 是否「running-like」（用旋转 spinner 替代静态 icon） */
+const isRunningLike = computed(() => {
+  const s: StepStatus = props.entry.status
+  return s === 'running' || s === 'cancelling'
+})
+
+/**
+ * 状态 → ionicon 名称
+ * 注意：running 走 ion-spinner 路径（isRunningLike），不进这里
+ */
+const statusIcon = computed(() => {
+  const s: StepStatus = props.entry.status
+  switch (s) {
+    case 'success': return checkmarkCircle
+    case 'failure': return closeCircle
+    case 'cancelled':
+    case 'skipped': return ban
+    case 'pending': return ellipseOutline
+    case 'queued':
+    case 'submitted': return syncOutline
+    case 'timed_out': return hourglass
+    default: return timerOutline
+  }
+})
 </script>
 
 <style scoped>
@@ -187,42 +250,100 @@ function toggleExpand() {
   align-items: stretch;
   gap: 0;
   position: relative;
+  /* 🆕 v4 M4：去掉行间 margin，让条目连续铺满（无中断间隔） */
+  margin: 0;
+  padding: 0;
 }
 
-/* ==================== 左侧时间线轴 ==================== */
+/* ==================== 🆕 v4 M4：左侧时间线轴 ==================== */
+/* 整条竖线贯穿所有 entry，由每个 entry 自己的 .utc__line 片段拼接 */
 .utc__axis {
   display: flex;
   flex-direction: column;
   align-items: center;
   flex-shrink: 0;
-  width: 16px;
-  padding-top: 14px;
+  width: 28px;  /* 🆕 加宽到 28px 容纳 icon bubble + 1px 居中连接线 */
+  padding: 8px 0 0;
+  position: relative;
 }
 
-.utc__dot {
-  width: 10px;
-  height: 10px;
+/* 状态 icon bubble（替代旧版纯色圆点） */
+.utc__icon-bubble {
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: var(--tl-state-created);
-  border: 2px solid var(--tl-state-created);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  z-index: 1;
+  z-index: 2;
+  background: var(--tl-state-created);
+  color: #fff;
+  box-shadow: 0 0 0 3px var(--tl-card-bg-gradient-start, #FAFBFC);
+  transition: transform 0.2s ease;
 }
 
+.utc__icon {
+  font-size: 14px;
+  line-height: 1;
+  color: #fff;
+}
+.utc__icon--spin {
+  width: 14px;
+  height: 14px;
+}
+
+/* 各状态颜色 — 与 design token 对齐 */
+.utc__icon-bubble--success { background: var(--tl-state-completed); }
+.utc__icon-bubble--failure { background: var(--tl-state-failed); }
+.utc__icon-bubble--running {
+  background: var(--tl-state-analyzing);
+  /* 黄色 / 蓝色光晕脉冲（提示活跃） */
+  animation: utc-running-pulse 1.4s ease-in-out infinite;
+}
+.utc__icon-bubble--cancelling {
+  background: var(--tl-state-failed);
+  animation: utc-running-pulse 1.4s ease-in-out infinite;
+}
+.utc__icon-bubble--cancelled { background: var(--tl-state-cancelled); }
+.utc__icon-bubble--skipped { background: var(--tl-state-cancelled); }
+.utc__icon-bubble--timed_out { background: var(--tl-state-preprocessing); }
+.utc__icon-bubble--pending,
+.utc__icon-bubble--queued,
+.utc__icon-bubble--submitted {
+  background: var(--tl-state-created);
+}
+
+@keyframes utc-running-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px var(--tl-card-bg-gradient-start, #FAFBFC),
+                        0 0 0 5px rgba(var(--tl-state-analyzing-rgb), 0); }
+  50% { box-shadow: 0 0 0 3px var(--tl-card-bg-gradient-start, #FAFBFC),
+                0 0 0 8px rgba(var(--tl-state-analyzing-rgb), 0.25); }
+}
+
+/* 连接线：贯穿整个 entry，延伸到下一 entry（视觉上连续） */
 .utc__line {
   flex: 1;
   width: 2px;
   background: var(--tl-card-border-strong);
   margin-top: 2px;
-  min-height: 8px;
+  min-height: 0;  /* 允许收缩，最后一个由 :last-child 隐藏 */
+  /* 让连续线视觉上不被 icon 切断 */
+  position: relative;
+  z-index: 1;
 }
 
-/* 最后一个条目隐藏连接线（由父组件通过 :last-child 控制） */
+/* 最后一个条目隐藏连接线 */
 .utc:last-child .utc__line {
   display: none;
 }
 
-/* ==================== 右侧卡片（顶部 2px 渐变状态色条 + design token 背景） ==================== */
+/* ==================== 🆕 v4 M4：右侧卡片（左侧 4px 状态色边） ====================
+ * 关键改动：
+ *   1. 顶部 2px 渐变条 → 左侧 4px 实色边（贴轴，铺满高度）
+ *   2. 去掉 margin-bottom: 8px（消除「中断间隔」）
+ *   3. 圆角收紧到左上 0（与 icon 气泡视觉衔接）
+ */
 .utc__card {
   flex: 1;
   min-width: 0;
@@ -231,96 +352,63 @@ function toggleExpand() {
     var(--tl-card-bg-gradient-start),
     var(--tl-card-bg-gradient-end)
   );
-  border-radius: var(--tl-card-radius);
+  border-radius: 0 var(--tl-card-radius) var(--tl-card-radius) 0;
   border: 1px solid var(--tl-card-border);
-  padding: 12px;
-  margin-left: 8px;
-  margin-bottom: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-left: none;
+  padding: 10px 12px 10px 14px;
+  margin: 0 0 0 4px;  /* 🆕 左 4px gap（让 icon bubble 留呼吸空间），右下 0（与下条连接线对齐） */
+  box-shadow: var(--tl-shadow-card);
   transition: box-shadow 0.2s ease;
   position: relative;
   overflow: hidden;
 }
 
-/* 顶部 2px 渐变状态色条（替代左侧 4px 边框） */
+/* 左侧 4px 状态色边（顶部 2px → 改左侧 4px 贴轴） */
 .utc__card::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
+  left: -1px;  /* 抵消 card 左边框 1px */
+  top: -1px;
+  bottom: -1px;
+  width: 4px;
   background: var(--tl-state-created);
-  opacity: 0.8;
 }
 
-/* ==================== 状态色（顶部条 + dot） ==================== */
-.utc--success .utc__card::before {
-  background: var(--tl-state-completed);
-}
-.utc--success .utc__dot {
-  background: var(--tl-state-completed);
-  border-color: var(--tl-state-completed);
-}
+/* ==================== 状态色（左侧 4px 边 + icon bubble） ==================== */
+.utc--success .utc__card::before { background: var(--tl-state-completed); }
+.utc--success .utc__icon-bubble { background: var(--tl-state-completed); }
 
-.utc--failure .utc__card::before {
-  background: var(--tl-state-failed);
-}
-.utc--failure .utc__dot {
-  background: var(--tl-state-failed);
-  border-color: var(--tl-state-failed);
-}
+.utc--failure .utc__card::before { background: var(--tl-state-failed); }
+.utc--failure .utc__icon-bubble { background: var(--tl-state-failed); }
 
 .utc--running .utc__card::before {
   background: linear-gradient(
-    90deg,
+    180deg,
     var(--tl-state-analyzing),
     var(--tl-state-encrypting)
   );
 }
-.utc--running .utc__dot {
-  background: var(--tl-state-analyzing);
-  border-color: var(--tl-state-analyzing);
-  animation: utc-pulse 1.5s ease-in-out infinite;
-}
+.utc--running .utc__icon-bubble { background: var(--tl-state-analyzing); }
+
+.utc--cancelling .utc__card::before { background: var(--tl-state-failed); }
+.utc--cancelling .utc__icon-bubble { background: var(--tl-state-failed); }
 
 .utc--cancelled .utc__card::before,
-.utc--skipped .utc__card::before {
-  background: var(--tl-state-cancelled);
-}
-.utc--cancelled .utc__dot,
-.utc--skipped .utc__dot {
-  background: var(--tl-state-cancelled);
-  border-color: var(--tl-state-cancelled);
-}
+.utc--skipped .utc__card::before { background: var(--tl-state-cancelled); }
+.utc--cancelled .utc__icon-bubble,
+.utc--skipped .utc__icon-bubble { background: var(--tl-state-cancelled); }
 
-.utc--timed_out .utc__card::before {
-  background: var(--tl-state-preprocessing);
-}
-.utc--timed_out .utc__dot {
-  background: var(--tl-state-preprocessing);
-  border-color: var(--tl-state-preprocessing);
-}
+.utc--timed_out .utc__card::before { background: var(--tl-state-preprocessing); }
+.utc--timed_out .utc__icon-bubble { background: var(--tl-state-preprocessing); }
 
 .utc--queued .utc__card::before,
 .utc--submitted .utc__card::before,
-.utc--pending .utc__card::before {
-  background: var(--tl-state-created);
-}
-
-@keyframes utc-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 0 rgba(var(--tl-state-analyzing-rgb), 0.4);
-  }
-  50% {
-    box-shadow: 0 0 0 5px rgba(var(--tl-state-analyzing-rgb), 0.1);
-  }
-}
+.utc--pending .utc__card::before { background: var(--tl-state-created); }
 
 /* ==================== current 状态高亮 ==================== */
 .utc--current .utc__card {
   box-shadow: 0 0 0 2px rgba(var(--tl-state-analyzing-rgb), 0.25),
-    0 1px 3px rgba(0, 0, 0, 0.04);
+    var(--tl-shadow-card);
 }
 
 /* ==================== highlight 状态（最长耗时等） ==================== */

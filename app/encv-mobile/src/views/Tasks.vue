@@ -27,6 +27,16 @@
 
       <ion-toolbar v-if="showFilters" class="filter-toolbar">
         <div class="filter-chips">
+          <!-- 🆕 v4 M5：数据源指示器（有多少个 workflow run 正在跑） -->
+          <ion-chip
+            v-if="workflowService.isRunning.value"
+            color="warning"
+            class="active-run-chip"
+            :title="t('tasks.activeRunIndicator')"
+          >
+            <ion-spinner name="dots" class="active-run-spinner"></ion-spinner>
+            <ion-label>{{ t('tasks.activeRunRunning') }} · {{ workflowService.totalSteps.value }}</ion-label>
+          </ion-chip>
           <ion-chip :color="filterPlugins.length > 0 ? 'primary' : 'medium'" @click="openPluginPopover($event)">
             <ion-icon :icon="extensionPuzzle" size="small"></ion-icon>
             <ion-label>{{ getPluginChipLabel() }}</ion-label>
@@ -669,6 +679,8 @@ const {
   viewMode, filterDatePreset, filterDateRange,
   displayedItems,
   applyDatePreset, setCustomDateRange, toggleFilterFromCounter, toggleViewMode,
+  // 🆕 v4 M5：单例 workflowService 数据源（groupedItems 已通过 serviceRuns 派生，这里只消费）
+  workflowService,
 } = useTasksList()
 
 useTaskEventBridge({
@@ -1032,6 +1044,29 @@ onIonViewWillEnter(() => {
 .filter-chips {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 4px 0;
+}
+
+/* 🆕 v4 M5：active run chip 样式（与 filter chip 视觉区分） */
+.active-run-chip {
+  font-weight: 600;
+  --color: var(--ion-color-warning);
+  background: rgba(var(--ion-color-warning-rgb), 0.1);
+  flex-shrink: 0;
+}
+.active-run-spinner {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+}
+
+.filter-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
   padding: 4px 8px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;

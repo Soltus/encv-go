@@ -16,6 +16,8 @@ import type { EncvTask, TaskType, TaskStatus } from '@/api/encv'
 import { useI18n } from '@/composables/useI18n'
 import { formatDuration } from '@/composables/useDateFormat'
 import { showToast } from '@/composables/useToast'
+import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
+import type { UnifiedRunRecord } from '@/lib/workflow/types'
 import { getTaskMetadata } from './useTaskTrigger'
 
 export type SortBy = 'activity' | 'created'
@@ -158,6 +160,44 @@ export function useTasksList() {
     return map
   })
 
+  // 🆕 v4 M5：按 taskId 查表（O(1)）
+  const tasksById = computed(() => {
+    const map = new Map<string, EncvTask>()
+    for (const t of tasks.value) map.set(t.id, t)
+    return map
+  })
+
+  // 🆕 v4 M5：单例 useWorkflowTaskService — 共享 runs / currentRun
+  //   - Tasks.vue 显示 group card 时，run 卡片元数据来自 serviceRuns（工作流服务）
+  //   - 每个 step 的实时进度 / phase 来自 EncvTask（runtime task）
+  //   - 共享同一份数据，避免 PluginTestsDetail / Tasks.vue 各自拉一份导致数据不同步
+  const workflowService = useWorkflowTaskService()
+  const serviceRuns = workflowService.runs
+  const currentServiceRun = workflowService.currentRun
+
+  /** 🆕 v4 M5：从 UnifiedRunRecord 提取所有 step.taskId（扁平） */
+  function getRunTaskIds(run: UnifiedRunRecord): string[] {
+    const ids: string[] = []
+    if (!run.workflowRun) return ids
+    for (const job of run.workflowRun.jobs) {
+      for (const step of job.steps) {
+        if (step.taskId) ids.push(step.taskId)
+      }
+    }
+    return ids
+  }
+
+  /** 🆕 v4 M5：从 UnifiedRunRecord 拿到所有 step 关联的 EncvTask（按 taskId 查表） */
+  function getRunTasks(run: UnifiedRunRecord): EncvTask[] {
+    const ids = getRunTaskIds(run)
+    const result: EncvTask[] = []
+    for (const id of ids) {
+      const t = tasksById.value.get(id)
+      if (t) result.push(t)
+    }
+    return result
+  }
+
   const filteredTasks = computed(() => {
     let result = sortedTasks.value
 
@@ -295,57 +335,69 @@ export function useTasksList() {
     | { kind: 'task'; task: EncvTask; key: string }
 
   const groupedItems = computed<DisplayItem[]>(() => {
-    // 聚合：先按 runId 分组；没有 runId 的 user 触发 task 视为单独的"无 runId"组（按 createdAt 排）
-    const groupsByRun = new Map<string, EncvTask[]>()
-    const ungrouped: EncvTask[] = []
-    for (const t of filteredTasks.value) {
-      if (t.runId) {
-        const arr = groupsByRun.get(t.runId) ?? []
-        arr.push(t)
-        groupsByRun.set(t.runId, arr)
-      } else {
-        ungrouped.push(t)
-      }
-    }
-    // 排序 group：sortBy 决定
-    //  - activity: 取 group 内最新 completedAt || max createdAt
-    //  - createdAt: 取 group 内 min createdAt
-    const items: { runId: string; tasks: EncvTask[]; sortKey: number }[] = []
-    for (const [runId, tasks] of groupsByRun) {
-      let sortKey: number
-      if (sortBy.value === 'activity') {
-        // 平铺模式状态更新就重排 → 这里聚合模式 follow 平铺模式（同语义）
-        const maxCompleted = Math.max(
-          ...tasks.filter((t) => t.completedAt).map((t) => new Date(t.completedAt!).getTime()),
-        )
-        const maxCreated = Math.max(...tasks.map((t) => new Date(t.createdAt).getTime()))
-        sortKey = isFinite(maxCompleted) && maxCompleted > 0 ? maxCompleted : maxCreated
-      } else {
-        sortKey = Math.max(...tasks.map((t) => new Date(t.createdAt).getTime()))
-      }
-      items.push({ runId, tasks, sortKey })
-    }
-    items.sort((a, b) => b.sortKey - a.sortKey)
-
+    // 🆕 v4 M5：数据源切换为 useWorkflowTaskService.runs（单例）
+    //   - 每个 serviceRun = 1 张 group card
+    //   - group 内的 tasks = run 关联的 EncvTask（按 taskId 查表）
+    //   - 没有 runId 的 user 触发 task → 仍然作为单独 singleton 拼到列表尾部
+    //
+    // 历史问题：之前 groupedItems 用 filteredTasks 分组，当 workflow 还在 pending
+    //   （没有 taskId）时，整个 run 不可见 → 用户感觉 "明明跑了 5 个 plugin，列表里啥也没"
+    // 修复：serviceRuns 是工作流层的数据源（持久化在 localStorage），即使没 taskId 也显示
+    //   出来。taskId 创建后从 tasks.value 反查，hit counter chips 就有了。
     const result: DisplayItem[] = []
     let lastSection: DateSection | null = null
-    for (const { runId, tasks } of items) {
-      const counters = computeGroupCounters(tasks)
-      // 决定 group 的 startedAt
-      const createdTimes = tasks.map((t) => new Date(t.createdAt).getTime())
-      const startedAt = Math.min(...createdTimes)
-      const completedTimes = tasks
-        .filter((t) => t.completedAt)
-        .map((t) => new Date(t.completedAt!).getTime())
-      const completedAt = completedTimes.length > 0 ? Math.max(...completedTimes) : 0
-      const section = dateSectionFor(startedAt)
+
+    // 1. 遍历 serviceRuns
+    const runSortKeys: { run: UnifiedRunRecord; sortKey: number }[] = []
+    for (const run of serviceRuns.value) {
+      const startedAtMs = new Date(run.startedAt).getTime()
+      const completedAtMs = run.completedAt ? new Date(run.completedAt).getTime() : 0
+      let sortKey: number
+      if (sortBy.value === 'activity') {
+        // 平铺模式状态更新就重排；这里也用「最近活动」语义
+        sortKey = completedAtMs > 0 ? completedAtMs : startedAtMs
+      } else {
+        // createdAt 模式：按最早 startedAt
+        sortKey = startedAtMs
+      }
+      runSortKeys.push({ run, sortKey })
+    }
+    runSortKeys.sort((a, b) => b.sortKey - a.sortKey)
+
+    for (const { run } of runSortKeys) {
+      if (!run.workflowRun) continue
+      const runTasks = getRunTasks(run)
+      const counters = computeGroupCounters(runTasks)
+      const startedAtMs = new Date(run.startedAt).getTime()
+      const completedAtMs = run.completedAt ? new Date(run.completedAt).getTime() : 0
+      const section = dateSectionFor(startedAtMs)
       if (section !== lastSection) {
-        result.push({ kind: 'date', section, label: DATE_SECTION_LABELS[section], key: `date-${section}` })
+        result.push({ kind: 'date', section, label: DATE_SECTION_LABELS[section], key: `date-${section}-run-${run.id}` })
         lastSection = section
       }
-      result.push({ kind: 'group', runId, tasks, counters, startedAt, completedAt, key: `group-${runId}` })
+      result.push({
+        kind: 'group',
+        runId: run.id,
+        tasks: runTasks,
+        counters,
+        startedAt: startedAtMs,
+        completedAt: completedAtMs,
+        key: `group-${run.id}`,
+      })
     }
-    // 无 runId 的 task 拼到最后（user 触发任务），按 createdAt 倒序
+
+    // 2. 拼 user-triggered task（filteredTasks 里没有 runId 的）
+    //   - 这些是直接调 createTask 的，没有走 workflow service
+    const taskIdsInRuns = new Set<string>()
+    for (const run of serviceRuns.value) {
+      for (const id of getRunTaskIds(run)) taskIdsInRuns.add(id)
+    }
+    const ungrouped: EncvTask[] = []
+    for (const t of filteredTasks.value) {
+      if (t.runId) continue  // 已经在某个 run 里了
+      if (taskIdsInRuns.has(t.id)) continue  // 被 service run 接管
+      ungrouped.push(t)
+    }
     const ungroupedSorted = [...ungrouped].sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
     )
@@ -356,7 +408,6 @@ export function useTasksList() {
         result.push({ kind: 'date', section, label: DATE_SECTION_LABELS[section], key: `date-${section}-manual` })
         lastSection = section
       }
-      // 单独 task 也作为 kind:'group'（runId = '__manual__'，方便统一渲染）
       result.push({
         kind: 'group',
         runId: '__manual__' + t.id,
@@ -370,7 +421,9 @@ export function useTasksList() {
     return result
   })
 
-  // 🆕 v4 M3：平铺模式 items（含日期 header）
+  // 🆕 v4 M3 + M5：平铺模式 items（含日期 header）
+  //   - M5：扁平化所有 task（service run 内的 step + user 触发的 standalone task）
+  //   - 按 sortBy（activity = max(completedAt, createdAt) 倒序）排序
   const flatItems = computed<DisplayItem[]>(() => {
     const result: DisplayItem[] = []
     let lastSection: DateSection | null = null
@@ -378,7 +431,7 @@ export function useTasksList() {
       const ts = new Date(t.createdAt).getTime()
       const section = dateSectionFor(ts)
       if (section !== lastSection) {
-        result.push({ kind: 'date', section, label: DATE_SECTION_LABELS[section], key: `date-${section}` })
+        result.push({ kind: 'date', section, label: DATE_SECTION_LABELS[section], key: `date-${section}-${t.id}` })
         lastSection = section
       }
       result.push({ kind: 'task', task: t, key: `task-${t.id}` })
@@ -896,6 +949,10 @@ export function useTasksList() {
     toggleViewMode() {
       viewMode.value = viewMode.value === 'group' ? 'flat' : 'group'
     },
+    // 🆕 v4 M5：暴露单例 workflowService 数据源
+    serviceRuns,
+    currentServiceRun,
+    workflowService,
     openDatePopover(event: Event) {
       datePopoverEvent.value = event
       datePopoverOpen.value = true
