@@ -1,4 +1,4 @@
-import { ref, shallowRef, computed } from 'vue'
+import { ref, shallowRef, computed, watch } from 'vue'
 import {
   timer,
   sync,
@@ -52,9 +52,15 @@ export function useTasksList() {
 
   // 🆕 Task 12：shallowRef 替代 ref（避免深层响应式，提升性能）
   const tasks = shallowRef<EncvTask[]>([])
-  const loading = ref(false)
+  // 🆕 v4 2026-06-18 M2：拆分为 isInitialLoad（首屏占位）+ isRefreshing（下拉刷新专用）
+  //   - 旧 loading 在 fetchTasks in-flight 期间会替换整个列表为 spinner → 闪动
+  //   - isInitialLoad 只在 tasks.length===0 时显示 → 已有内容时不闪
+  //   - isRefreshing 走 ion-refresher 自身的 spinner
+  const isInitialLoad = ref(true)
+  const isRefreshing = ref(false)
+  // 兼容 Tasks.vue 老模板仍引用 loading
+  const loading = computed(() => isInitialLoad.value || isRefreshing.value)
   const expandedWarningDetail = ref<string | null>(null)
-  const sortBy = ref<SortBy>('activity')
 
   const showSearch = ref(false)
   const searchQuery = ref('')
@@ -63,11 +69,33 @@ export function useTasksList() {
   const filterTypes = ref<TaskType[]>([])
   const filterStatuses = ref<TaskStatus[]>([])
 
+  // 🆕 v4 2026-06-18 M3：视图模式 + 日期筛选 + 排序
+  type ViewMode = 'group' | 'flat'
+  type DatePreset = 'today' | '7d' | '30d' | 'all' | 'custom'
+  // 视图模式：聚合（按 runId 折叠为 group card）/ 平铺（每 task 一行）
+  const VIEW_MODE_KEY = 'encv-tasks-viewmode'
+  const initialViewMode: ViewMode =
+    (typeof localStorage !== 'undefined' &&
+      (localStorage.getItem(VIEW_MODE_KEY) as ViewMode)) || 'group'
+  const viewMode = ref<ViewMode>(initialViewMode)
+  // 日期区间筛选
+  const filterDatePreset = ref<DatePreset>('all')
+  const filterDateRange = ref<{ from?: string; to?: string }>({})
+  // 排序键
+  const sortBy = ref<SortBy>('activity')
+  // 排序键 persistence
+  watch(viewMode, (v) => {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(VIEW_MODE_KEY, v)
+  })
+
   const statusOptions: TaskStatus[] = ['queued', 'running', 'completed', 'failed', 'cancelled']
 
   const pluginPopoverOpen = ref(false)
   const typePopoverOpen = ref(false)
   const statusPopoverOpen = ref(false)
+  // 🆕 v4 M3：日期 popover
+  const datePopoverOpen = ref(false)
+  const datePopoverEvent = ref<Event | null>(null)
   const pluginPopoverEvent = ref<Event | null>(null)
   const typePopoverEvent = ref<Event | null>(null)
   const statusPopoverEvent = ref<Event | null>(null)
@@ -156,8 +184,266 @@ export function useTasksList() {
       result = result.filter((task) => filterStatuses.value.includes(task.status))
     }
 
+    // 🆕 v4 M3：日期区间筛选（与 plugin/type/status 并列的平级筛选）
+    if (filterDateRange.value.from || filterDateRange.value.to) {
+      const fromTs = filterDateRange.value.from ? new Date(filterDateRange.value.from).getTime() : -Infinity
+      const toTs = filterDateRange.value.to ? new Date(filterDateRange.value.to).getTime() + 86400000 : Infinity
+      result = result.filter((task) => {
+        const ts = new Date(task.createdAt).getTime()
+        return ts >= fromTs && ts < toTs
+      })
+    }
+
     return result
   })
+
+  // 🆕 v4 M3：日期分隔 header 段（聚合 + 平铺模式都用）
+  //   段名：今 / 昨 / 本周 / 本月 / 更早
+  type DateSection = 'today' | 'yesterday' | 'thisWeek' | 'thisMonth' | 'earlier'
+  const DATE_SECTION_LABELS: Record<DateSection, string> = {
+    today: '今天',
+    yesterday: '昨天',
+    thisWeek: '本周',
+    thisMonth: '本月',
+    earlier: '更早',
+  }
+  const _today = new Date()
+  const _startOfToday = new Date(_today.getFullYear(), _today.getMonth(), _today.getDate()).getTime()
+  const _startOfYesterday = _startOfToday - 86400000
+  const _startOfThisWeek = _startOfToday - _today.getDay() * 86400000
+  const _startOfThisMonth = new Date(_today.getFullYear(), _today.getMonth(), 1).getTime()
+  function dateSectionFor(ts: number): DateSection {
+    if (ts >= _startOfToday) return 'today'
+    if (ts >= _startOfYesterday) return 'yesterday'
+    if (ts >= _startOfThisWeek) return 'thisWeek'
+    if (ts >= _startOfThisMonth) return 'thisMonth'
+    return 'earlier'
+  }
+
+  // 🆕 v4 M3：聚合模式 group items
+  //   - 按 runId 分组 → 1 个 group = 1 个 run
+  //   - group 排序：与平铺模式一致的"最新/最近完成"切换（最新默认）
+  //   - 每个 group 计算：plugin × N / type × M / status × 6 / 日期命中
+  //   - group 内部不排序：保持任务添加顺序
+  type GroupHitCounters = {
+    plugins: Record<string, { hit: number; total: number }>
+    types: Record<TaskType, { hit: number; total: number }>
+    statuses: Record<TaskStatus, { hit: number; total: number }>
+    date: { hit: number; total: number }
+    // 命中筛选条件
+    hitAny: boolean
+  }
+  function computeGroupCounters(groupTasks: EncvTask[]): GroupHitCounters {
+    const counters: GroupHitCounters = {
+      plugins: {},
+      types: {} as any,
+      statuses: {} as any,
+      date: { hit: 0, total: groupTasks.length },
+      hitAny: false,
+    }
+    for (const t of groupTasks) {
+      if (t.pluginName) {
+        const p = counters.plugins[t.pluginName] ?? { hit: 0, total: 0 }
+        p.total++
+        if (filterPlugins.value.length === 0 || filterPlugins.value.includes(t.pluginName)) p.hit++
+        counters.plugins[t.pluginName] = p
+      }
+      const ty = counters.types[t.type] ?? { hit: 0, total: 0 }
+      ty.total++
+      if (filterTypes.value.length === 0 || filterTypes.value.includes(t.type)) ty.hit++
+      counters.types[t.type] = ty
+      const st = counters.statuses[t.status] ?? { hit: 0, total: 0 }
+      st.total++
+      if (filterStatuses.value.length === 0 || filterStatuses.value.includes(t.status)) st.hit++
+      counters.statuses[t.status] = st
+      if (
+        (filterDateRange.value.from || filterDateRange.value.to) &&
+        t.createdAt >= (filterDateRange.value.from ?? '') &&
+        t.createdAt < (filterDateRange.value.to ?? '~')
+      ) {
+        counters.date.hit++
+      }
+    }
+    // hitAny: 在所有筛选条件下至少一项命中
+    const pluginHit = filterPlugins.value.length === 0 || Object.values(counters.plugins).some((p) => p.hit > 0)
+    const typeHit = filterTypes.value.length === 0 || Object.values(counters.types).some((p) => p.hit > 0)
+    const statusHit = filterStatuses.value.length === 0 || Object.values(counters.statuses).some((p) => p.hit > 0)
+    const dateHit =
+      !filterDateRange.value.from && !filterDateRange.value.to
+        ? true
+        : counters.date.hit > 0
+    counters.hitAny = pluginHit && typeHit && statusHit && dateHit
+    return counters
+  }
+
+  // 🆕 v4 M3：聚合/平铺模式共用的 display item（TaskVirtualList 泛型 T extends { key: string } 要求单一类型）
+  //   - 'date'         → 日期分隔 header（今/昨/本周/本月/更早）
+  //   - 'group'        → 1 个 run 的 group card（带 hit counter chips + 展开后的子 task）
+  //   - 'task'         → 平铺模式下的单 task 卡片
+  type DisplayItem =
+    | { kind: 'date'; section: DateSection; label: string; key: string }
+    | {
+        kind: 'group'
+        runId: string
+        /** 真实 runId；'__manual__'+taskId 表示 user 触发的单 task group */
+        tasks: EncvTask[]
+        counters: GroupHitCounters
+        startedAt: number
+        completedAt: number
+        key: string
+      }
+    | { kind: 'task'; task: EncvTask; key: string }
+
+  const groupedItems = computed<DisplayItem[]>(() => {
+    // 聚合：先按 runId 分组；没有 runId 的 user 触发 task 视为单独的"无 runId"组（按 createdAt 排）
+    const groupsByRun = new Map<string, EncvTask[]>()
+    const ungrouped: EncvTask[] = []
+    for (const t of filteredTasks.value) {
+      if (t.runId) {
+        const arr = groupsByRun.get(t.runId) ?? []
+        arr.push(t)
+        groupsByRun.set(t.runId, arr)
+      } else {
+        ungrouped.push(t)
+      }
+    }
+    // 排序 group：sortBy 决定
+    //  - activity: 取 group 内最新 completedAt || max createdAt
+    //  - createdAt: 取 group 内 min createdAt
+    const items: { runId: string; tasks: EncvTask[]; sortKey: number }[] = []
+    for (const [runId, tasks] of groupsByRun) {
+      let sortKey: number
+      if (sortBy.value === 'activity') {
+        // 平铺模式状态更新就重排 → 这里聚合模式 follow 平铺模式（同语义）
+        const maxCompleted = Math.max(
+          ...tasks.filter((t) => t.completedAt).map((t) => new Date(t.completedAt!).getTime()),
+        )
+        const maxCreated = Math.max(...tasks.map((t) => new Date(t.createdAt).getTime()))
+        sortKey = isFinite(maxCompleted) && maxCompleted > 0 ? maxCompleted : maxCreated
+      } else {
+        sortKey = Math.max(...tasks.map((t) => new Date(t.createdAt).getTime()))
+      }
+      items.push({ runId, tasks, sortKey })
+    }
+    items.sort((a, b) => b.sortKey - a.sortKey)
+
+    const result: DisplayItem[] = []
+    let lastSection: DateSection | null = null
+    for (const { runId, tasks } of items) {
+      const counters = computeGroupCounters(tasks)
+      // 决定 group 的 startedAt
+      const createdTimes = tasks.map((t) => new Date(t.createdAt).getTime())
+      const startedAt = Math.min(...createdTimes)
+      const completedTimes = tasks
+        .filter((t) => t.completedAt)
+        .map((t) => new Date(t.completedAt!).getTime())
+      const completedAt = completedTimes.length > 0 ? Math.max(...completedTimes) : 0
+      const section = dateSectionFor(startedAt)
+      if (section !== lastSection) {
+        result.push({ kind: 'date', section, label: DATE_SECTION_LABELS[section], key: `date-${section}` })
+        lastSection = section
+      }
+      result.push({ kind: 'group', runId, tasks, counters, startedAt, completedAt, key: `group-${runId}` })
+    }
+    // 无 runId 的 task 拼到最后（user 触发任务），按 createdAt 倒序
+    const ungroupedSorted = [...ungrouped].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    )
+    for (const t of ungroupedSorted) {
+      const ts = new Date(t.createdAt).getTime()
+      const section = dateSectionFor(ts)
+      if (section !== lastSection) {
+        result.push({ kind: 'date', section, label: DATE_SECTION_LABELS[section], key: `date-${section}-manual` })
+        lastSection = section
+      }
+      // 单独 task 也作为 kind:'group'（runId = '__manual__'，方便统一渲染）
+      result.push({
+        kind: 'group',
+        runId: '__manual__' + t.id,
+        tasks: [t],
+        counters: computeGroupCounters([t]),
+        startedAt: ts,
+        completedAt: t.completedAt ? new Date(t.completedAt).getTime() : 0,
+        key: `group-manual-${t.id}`,
+      })
+    }
+    return result
+  })
+
+  // 🆕 v4 M3：平铺模式 items（含日期 header）
+  const flatItems = computed<DisplayItem[]>(() => {
+    const result: DisplayItem[] = []
+    let lastSection: DateSection | null = null
+    for (const t of filteredTasks.value) {
+      const ts = new Date(t.createdAt).getTime()
+      const section = dateSectionFor(ts)
+      if (section !== lastSection) {
+        result.push({ kind: 'date', section, label: DATE_SECTION_LABELS[section], key: `date-${section}` })
+        lastSection = section
+      }
+      result.push({ kind: 'task', task: t, key: `task-${t.id}` })
+    }
+    return result
+  })
+
+  // 当前模式 items
+  const displayedItems = computed(() =>
+    viewMode.value === 'group' ? groupedItems.value : flatItems.value,
+  )
+
+  // 🆕 v4 M3：应用日期 preset → 展开为 filterDateRange
+  function applyDatePreset(preset: DatePreset) {
+    filterDatePreset.value = preset
+    if (preset === 'all') {
+      filterDateRange.value = {}
+      return
+    }
+    const now = new Date()
+    if (preset === 'today') {
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      filterDateRange.value = { from: today.toISOString(), to: today.toISOString() }
+      return
+    }
+    if (preset === '7d') {
+      const d = new Date(now.getTime() - 7 * 86400000)
+      filterDateRange.value = { from: d.toISOString(), to: now.toISOString() }
+      return
+    }
+    if (preset === '30d') {
+      const d = new Date(now.getTime() - 30 * 86400000)
+      filterDateRange.value = { from: d.toISOString(), to: now.toISOString() }
+      return
+    }
+    // custom：保持当前 range 不变（由 date popover 内部 datepicker 决定）
+  }
+
+  /**
+   * 🆕 v4 M3：直接设置自定义日期范围（绑定到 date popover 内的 2 个 <input type="date">）
+   * - from: YYYY-MM-DD 或 undefined
+   * - to:   YYYY-MM-DD 或 undefined
+   * - 自动联动 filterDatePreset = 'custom'（让 popover 高亮「自定义」）
+   */
+  function setCustomDateRange(from: string | undefined, to: string | undefined) {
+    filterDatePreset.value = 'custom'
+    filterDateRange.value = { from, to }
+  }
+
+  // 🆕 v4 M3：计数器点击 → toggle 筛选条件
+  function toggleFilterFromCounter(dimension: 'plugin' | 'type' | 'status', value: string) {
+    if (dimension === 'plugin') {
+      const idx = filterPlugins.value.indexOf(value)
+      if (idx >= 0) filterPlugins.value.splice(idx, 1)
+      else filterPlugins.value.push(value)
+    } else if (dimension === 'type') {
+      const idx = filterTypes.value.indexOf(value as TaskType)
+      if (idx >= 0) filterTypes.value.splice(idx, 1)
+      else filterTypes.value.push(value as TaskType)
+    } else if (dimension === 'status') {
+      const idx = filterStatuses.value.indexOf(value as TaskStatus)
+      if (idx >= 0) filterStatuses.value.splice(idx, 1)
+      else filterStatuses.value.push(value as TaskStatus)
+    }
+  }
 
   function openPluginPopover(event: Event) {
     pluginPopoverEvent.value = event
@@ -248,16 +534,31 @@ export function useTasksList() {
     })
   }
 
-  async function fetchTasks() {
-    loading.value = true
+  async function fetchTasks(opts?: { refresh?: boolean }) {
+    const isRefresh = !!opts?.refresh
+    if (isRefresh) {
+      isRefreshing.value = true
+    }
+    // 首屏占位只在首次且 tasks 为空时
+    const showInitialPlaceholder = tasks.value.length === 0
+    if (showInitialPlaceholder) {
+      isInitialLoad.value = true
+    }
     try {
       const data = await getTasks()
       const enriched = mergeWithLocalState(data)
+      // 🆕 v4 M2：dirty-write 成功后立刻覆盖；失败时保留旧数据
       tasks.value = enriched
-    } catch {
-      tasks.value = []
+    } catch (err) {
+      // 失败：保留旧 tasks.value（不抹除）；只在空状态下才回退到 []
+      console.warn('[useTasksList] fetchTasks failed, keeping previous tasks:', err)
+      if (tasks.value.length === 0) {
+        tasks.value = []
+      }
+    } finally {
+      isInitialLoad.value = false
+      isRefreshing.value = false
     }
-    loading.value = false
   }
 
   async function refresh() {
@@ -421,7 +722,7 @@ export function useTasksList() {
   async function cancelTaskById(id: string) {
     try {
       await cancelTask(id)
-      await fetchTasks()
+      await fetchTasks({ refresh: true })
     } catch {
       showToast({ message: t('tasks.taskCancelFailed'), duration: 2000, color: 'danger' })
     }
@@ -430,7 +731,7 @@ export function useTasksList() {
   async function retryTaskById(id: string) {
     try {
       await retryTask(id)
-      await fetchTasks()
+      await fetchTasks({ refresh: true })
     } catch {
       showToast({ message: t('tasks.taskRetryFailed'), duration: 2000, color: 'danger' })
     }
@@ -439,7 +740,7 @@ export function useTasksList() {
   async function removeTaskById(id: string) {
     try {
       await removeTask(id)
-      await fetchTasks()
+      await fetchTasks({ refresh: true })
     } catch {
       showToast({ message: t('tasks.taskRemoveFailed'), duration: 2000, color: 'danger' })
     }
@@ -569,6 +870,9 @@ export function useTasksList() {
   return {
     tasks,
     loading,
+    // 🆕 v4 M2：拆分 isInitialLoad（首屏占位）+ isRefreshing（下拉刷新专用）
+    isInitialLoad,
+    isRefreshing,
     expandedWarningDetail,
     sortBy,
     showSearch,
@@ -577,6 +881,25 @@ export function useTasksList() {
     filterPlugins,
     filterTypes,
     filterStatuses,
+    // 🆕 v4 M3：视图模式 + 日期筛选 + 分组 items
+    viewMode,
+    filterDatePreset,
+    filterDateRange,
+    datePopoverOpen,
+    datePopoverEvent,
+    groupedItems,
+    flatItems,
+    displayedItems,
+    applyDatePreset,
+    setCustomDateRange,
+    toggleFilterFromCounter,
+    toggleViewMode() {
+      viewMode.value = viewMode.value === 'group' ? 'flat' : 'group'
+    },
+    openDatePopover(event: Event) {
+      datePopoverEvent.value = event
+      datePopoverOpen.value = true
+    },
     statusOptions,
     pluginPopoverOpen,
     typePopoverOpen,

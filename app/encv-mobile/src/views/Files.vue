@@ -499,6 +499,7 @@ import type { FileItem, PluginMeta, TagInfo } from '@/api/encv'
 import { eventBus } from '@/composables/useEventBus'
 import { useI18n } from '@/composables/useI18n'
 import { formatDateTime } from '@/composables/useDateFormat'
+import { useRealtimeTransport } from '@/composables/useRealtimeTransport'
 import { useThumbnailCache } from '@/composables/useThumbnailCache'
 import { useFileFeatures, findClickHandler, isAnyContainerFile, getFeatureIcon } from '@/composables/useFileFeatures'
 import { preloadSubtitles } from '@/features/alist-encrypt'
@@ -1393,9 +1394,21 @@ async function doDelete(file: FileItem) {
   }
 }
 
+// 🆕 v4 2026-06-18 M1：file:change 防抖聚合
+//   - 插件测试一次会产出 N 个文件 → 后端连发 N 条 file:change → 老逻辑 loadFiles() N 次 → 整页狂闪
+//   - 新逻辑：把 300ms 内的多次 file:change 合并成 1 次 loadFiles
+//   - tab 不可见时由 transport 的 setFileChangeGate 拦截，Files.vue 收不到事件
+//   - 切回 Files tab 时 transport 自动触发 onActive 回调，兜底刷一次
+let fileChangeDebounceTimer: number | null = null
 function onFileChange() {
   searchCache.clear()
-  loadFiles()
+  if (fileChangeDebounceTimer !== null) {
+    clearTimeout(fileChangeDebounceTimer)
+  }
+  fileChangeDebounceTimer = window.setTimeout(() => {
+    fileChangeDebounceTimer = null
+    loadFiles()
+  }, 300)
 }
 
 async function loadPlugins() {
@@ -1624,6 +1637,15 @@ onMounted(() => {
   loadTags()
   eventBus.on('file:change', onFileChange)
   window.addEventListener('encv:backend-ready', onBackendReadyWindow as EventListener)
+  // 🆕 v4 M1：注册 file:change tab active gate（默认 active=true，Files 切到非可见时设 false）
+  useRealtimeTransport().setFileChangeGate(true, () => {
+    // 切回 Files tab 时兜底刷一次（防抖 timer 内可能还有 pending 事件 → 一起 flush）
+    if (fileChangeDebounceTimer !== null) {
+      clearTimeout(fileChangeDebounceTimer)
+      fileChangeDebounceTimer = null
+    }
+    loadFiles()
+  })
   if (import.meta.env.DEV) {
     import('@/composables/useTestBackdoor').then(({ useTestBackdoor }) => {
       import('@/composables/useNewTaskModal').then(({ useNewTaskModal: createNewTaskModal }) => {
@@ -1681,12 +1703,36 @@ onUnmounted(() => {
     clearTimeout(highlightTimer)
     highlightTimer = null
   }
+  // 🆕 v4 M1：清 file:change 防抖 timer
+  if (fileChangeDebounceTimer !== null) {
+    clearTimeout(fileChangeDebounceTimer)
+    fileChangeDebounceTimer = null
+  }
 })
 
 function onBackendReadyWindow(event: Event) {
   const detail = (event as CustomEvent).detail || {}
   onBackendReady(detail)
 }
+
+// 🆕 v4 M1：根据 route path 变化同步 file:change gate
+//   - 当前 path 是 /tabs/files/* → gate=true（Files tab 可见，接收 file:change）
+//   - 其他 → gate=false（Tasks/Settings tab 可见时丢 file:change，避免后台狂刷）
+watch(
+  () => route.path,
+  (newPath) => {
+    const isFilesActive = newPath.startsWith('/tabs/files')
+    useRealtimeTransport().setFileChangeGate(isFilesActive, () => {
+      // 切回时兜底（onMounted 注册的 onActive 也会触发；这里再覆盖一次保险）
+      if (fileChangeDebounceTimer !== null) {
+        clearTimeout(fileChangeDebounceTimer)
+        fileChangeDebounceTimer = null
+      }
+      loadFiles()
+    })
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>

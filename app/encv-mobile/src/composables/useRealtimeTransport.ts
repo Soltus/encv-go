@@ -56,6 +56,14 @@ export interface RealtimeTransport {
   readonly transportMode: Readonly<Ref<TransportMode>>
   /** 当前是否在 OpenPreview 浏览器（只读） */
   readonly isSandboxBrowser: Readonly<Ref<boolean>>
+  /**
+   * 🆕 v4 2026-06-18 M1：file:change 事件 tab active gate
+   * - true（默认）：转发 file:change 给消费者
+   * - false：丢弃 file:change（tab 不可见时用，避免 Files tab 在后台被狂刷）
+   * @param active tab 是否可见
+   * @param onActive 切回可见时的回调（用于触发一次性 loadFiles）
+   */
+  setFileChangeGate(active: boolean, onActive?: () => void): void
   /** 测试用：强制 transport 模式（传 null 恢复默认选举） */
   __forceMode(mode: TransportMode | null): void
   /** 测试用：重置单例（仅在测试 setup/teardown 用） */
@@ -142,6 +150,12 @@ function createTransport(): RealtimeTransport {
   const isSandboxBrowser = ref(isOpenPreviewBrowser())
   let backend: Backend | null = null
   let cleanupListeners: (() => void) | null = null
+  // 🆕 v4 2026-06-18 M1：file:change 事件 tab active gate
+  //   - 默认 true（tab 未注册 gate 时不丢事件，向后兼容）
+  //   - Files.vue 切到不可见时调 setFileChangeGate(false) → emit 时丢 file:change
+  //   - 切回时 setFileChangeGate(true) → 立刻补一次 onTabActive 回调（由 caller 实现）
+  let fileChangeGateActive = true
+  let onFilesTabActiveCallback: (() => void) | null = null
 
   // 2026-06-14 增强：自动降级状态
   // 注意：这些 state 闭包在 ensureBackend 内被引用，ensureBackend 又是 createTransport 内
@@ -222,6 +236,10 @@ function createTransport(): RealtimeTransport {
     const mode = resolveMode()
     transportMode.value = mode
     const emit = (type: string, data: any) => {
+      // 🆕 v4 M1：tab 不在 Files 时丢 file:change（Files.vue 300ms 防抖兜底）
+      if (type === 'file:change' && !fileChangeGateActive) {
+        return
+      }
       eventBus.emit(type as any, data)
       // 2026-06-14 增强：ws 模式下的关闭事件 → 记录失败，可能触发降级
       if (type === 'server:connection-error' && mode === 'ws') {
@@ -253,6 +271,7 @@ function createTransport(): RealtimeTransport {
     cleanupListeners = ensureApiBaseListeners({
       connect: () => {}, disconnect: () => {}, forceReconnect: () => {},
       connectionState, transportMode, isSandboxBrowser,
+      setFileChangeGate: () => {},
       __forceMode: () => {}, __resetForTesting: () => {},
     })
   }
@@ -303,6 +322,26 @@ function createTransport(): RealtimeTransport {
     connectionState: connectionState as Readonly<Ref<ConnectionState>>,
     transportMode: transportMode as Readonly<Ref<TransportMode>>,
     isSandboxBrowser: isSandboxBrowser as Readonly<Ref<boolean>>,
+    /**
+     * 🆕 v4 M1：设置 file:change 事件 tab active gate
+     * - true（默认）：转发 file:change 给消费者
+     * - false：丢弃 file:change（tab 不可见时用，避免 Files tab 在后台被狂刷）
+     * @param active tab 是否可见
+     * @param onActive 切回可见时的回调（用于触发一次性 loadFiles）
+     */
+    setFileChangeGate(active: boolean, onActive?: () => void) {
+      const wasActive = fileChangeGateActive
+      fileChangeGateActive = active
+      onFilesTabActiveCallback = onActive ?? null
+      // 切回 true 立即触发 onActive（让 caller 补一次 reload）
+      if (!wasActive && active && onFilesTabActiveCallback) {
+        try {
+          onFilesTabActiveCallback()
+        } catch (e) {
+          console.warn('[RealtimeTransport] onFilesTabActive callback error:', e)
+        }
+      }
+    },
     __forceMode: doForceMode,
     __resetForTesting() {
       backend?.stop()

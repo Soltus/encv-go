@@ -107,6 +107,57 @@
           </ion-item>
         </div>
       </ion-popover>
+
+      <!-- 🆕 v4 M3：日期区间筛选 popover（不占页面空间，preset + 自定义都内嵌） -->
+      <ion-popover
+        :is-open="datePopoverOpen"
+        :event="datePopoverEvent"
+        @didDismiss="datePopoverOpen = false"
+        side="bottom"
+        alignment="end"
+        class="date-popover"
+      >
+        <div class="date-popover-content">
+          <div class="popover-filter-title">{{ t('tasks.filterByDate') }}</div>
+          <ion-item
+            v-for="preset in datePresets"
+            :key="preset.key"
+            lines="none"
+            button
+            class="popover-filter-item"
+            :class="{ 'date-preset-active': filterDatePreset === preset.key }"
+            @click="onDatePresetClick(preset.key)"
+          >
+            <ion-icon
+              :icon="preset.key === 'custom' ? calendarOutline : timer"
+              slot="start"
+              :color="filterDatePreset === preset.key ? 'primary' : 'medium'"
+            ></ion-icon>
+            <ion-label>{{ preset.label }}</ion-label>
+          </ion-item>
+          <!-- 自定义日期：两个原生 input 紧凑排版，不占大块空间 -->
+          <div v-if="filterDatePreset === 'custom'" class="date-custom-range">
+            <label class="date-range-label">
+              <span>{{ t('tasks.dateFrom') }}</span>
+              <input
+                type="date"
+                :value="customFromInput"
+                @change="onCustomFromChange"
+                class="date-input"
+              />
+            </label>
+            <label class="date-range-label">
+              <span>{{ t('tasks.dateTo') }}</span>
+              <input
+                type="date"
+                :value="customToInput"
+                @change="onCustomToChange"
+                class="date-input"
+              />
+            </label>
+          </div>
+        </div>
+      </ion-popover>
     </ion-header>
 
     <ion-content ref="contentRef">
@@ -118,12 +169,41 @@
         <ion-button fill="clear" size="small" @click="showSearch = !showSearch" class="action-btn">
           <ion-icon :icon="search" slot="icon-only"></ion-icon>
         </ion-button>
+        <!-- 🆕 v4 M3：日期筛选按钮（与 search / filter 平级） -->
+        <ion-button
+          fill="clear"
+          size="small"
+          @click="openDatePopover($event)"
+          class="action-btn"
+          :title="t('tasks.filterByDate')"
+        >
+          <ion-icon
+            :icon="calendarOutline"
+            slot="icon-only"
+            :color="filterDatePreset !== 'all' ? 'primary' : undefined"
+          ></ion-icon>
+        </ion-button>
         <ion-button fill="clear" size="small" @click="showFilters = !showFilters" class="action-btn">
           <ion-icon :icon="funnel" slot="icon-only" :color="hasActiveFilters ? 'primary' : undefined"></ion-icon>
         </ion-button>
+        <!-- 🆕 v4 M3：视图模式切换（聚合 / 平铺） -->
+        <ion-button
+          fill="clear"
+          size="small"
+          @click="toggleViewMode"
+          class="action-btn"
+          :title="viewMode === 'group' ? t('tasks.viewModeFlat') : t('tasks.viewModeGroup')"
+        >
+          <ion-icon
+            :icon="viewMode === 'group' ? albumsOutline : listOutline"
+            slot="icon-only"
+            :color="viewMode === 'group' ? 'primary' : undefined"
+          ></ion-icon>
+        </ion-button>
       </div>
 
-      <div v-if="loading" class="loading-container">
+      <!-- 🆕 v4 M2：仅首屏占位（tasks 为空 + isInitialLoad）显示 loading，已有内容时不闪 -->
+      <div v-if="isInitialLoad && tasks.length === 0" class="loading-container">
         <ion-spinner name="crescent"></ion-spinner>
         <p>{{ t('tasks.loading') }}</p>
       </div>
@@ -143,8 +223,8 @@
 
       <!-- 🆕 Task 15：用 TaskVirtualList 替换 ion-list + v-for -->
       <!-- 历史：ion-list + v-for 渲染所有 displayedItems → 200+ task 时 DOM 节点爆炸 -->
-      <!-- 修复：TaskVirtualList 用 @tanstack/vue-virtual 仅渲染可见窗口 + overscan 20 个 item -->
-      <!-- 注意：collapsed sub_section 的 task 不在 displayedItems 里（v-show 与虚拟滚动冲突） -->
+      <!-- 修复：TaskVirtualList 用 @tanstack/vue-virtual 仅渲染可见窗口 + overscan 10 个 item -->
+      <!-- 🆕 v4 M3：displayedItems 是聚合/平铺二选一，包含 date / group / task 3 种 kind -->
       <TaskVirtualList
         v-else
         :items="displayedItems"
@@ -153,137 +233,197 @@
         class="tasks-virtual-list"
       >
         <template #default="{ item }">
-          <!-- 🆕 2026-06-10 修复：自动化测试 / AI agent 任务组折叠 -->
-          <!-- 历史：自动化测试一次跑 N 个用例 → 污染 task 列表（用户截图的"浪费屏幕空间"）-->
-          <!-- 修复：连续 ≥2 个 triggeredBy != 'user' 的 task → 折叠成 1 张 group card -->
-          <!--       点 group card 右侧 chevron 展开/折叠详情 -->
-          <!-- 🆕 2026-06-10 修复 v2：2 级嵌套 — group 展开时按 pluginName 插 plugin_section 段头 -->
-          <ion-item-sliding v-if="item.kind === 'group'">
-            <ion-item button detail @click="toggleTaskGroup(item.groupKey!)" :class="['tl-item-card', 'tl-item-card--group', `tl-tone--${item.tone}`]">
-              <div :class="['tl-bubble', 'tl-bubble--lg', `tl-tone--${item.tone}`]" slot="start">
-                <ion-icon :icon="item.tone === 'ai_agent' ? hardwareChipOutline : cogOutline"></ion-icon>
+          <!-- ============== Date section header（今/昨/本周/本月/更早） ============== -->
+          <!-- 聚合 + 平铺两种模式都显示，按 createdAt 分段 -->
+          <div
+            v-if="item.kind === 'date'"
+            :key="item.key"
+            class="tl-date-section"
+          >
+            <div class="tl-date-section__line"></div>
+            <span class="tl-date-section__label">{{ item.label }}</span>
+            <div class="tl-date-section__line"></div>
+          </div>
+
+          <!-- ============== Group card（聚合模式，1 个 run = 1 张卡片） ============== -->
+          <!-- 未命中 group（hitAny=false）按用户选择 C 隐藏 -->
+          <div
+            v-else-if="item.kind === 'group' && item.counters.hitAny"
+            :key="item.key"
+            :class="['tl-group-card', `tl-group-card--${getGroupTone(item.runId, item.tasks)}`]"
+          >
+            <!-- 左侧 4px 状态色边 -->
+            <div
+              :class="['tl-group-card__border', `tl-group-border--${getGroupDominantStatus(item.tasks)}`]"
+            ></div>
+
+            <div class="tl-group-card__main">
+              <!-- 标题行：tone icon + 触发器名 + N 个任务 + view report + 展开 chevron -->
+              <div class="tl-group-card__head">
+                <div :class="['tl-bubble', 'tl-bubble--md', `tl-tone--${getGroupTone(item.runId, item.tasks)}`]">
+                  <ion-icon :icon="getGroupTone(item.runId, item.tasks) === 'ai_agent' ? hardwareChipOutline : cogOutline"></ion-icon>
+                </div>
+                <div class="tl-group-card__title-block">
+                  <h2 class="tl-group-card__title">
+                    {{ getGroupTone(item.runId, item.tasks) === 'ai_agent' ? t('tasks.triggeredBy_ai_agent') : t('tasks.triggeredBy_automation') }}
+                    <span class="tl-group-card__count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</span>
+                  </h2>
+                  <!-- plugin badges（前 3 个，超过省略） -->
+                  <div class="tl-group-card__plugins">
+                    <ion-badge
+                      v-for="p in getGroupPluginBadges(item.tasks, 3)"
+                      :key="p"
+                      color="primary"
+                      class="tl-group-card__plugin-badge"
+                    >{{ p }}</ion-badge>
+                  </div>
+                </div>
+                <div class="tl-group-card__actions">
+                  <ion-button
+                    v-if="item.runId && !item.runId.startsWith('__manual__')"
+                    fill="clear"
+                    size="small"
+                    @click="viewGroupReport(item.runId)"
+                    :title="t('tasks.viewReport')"
+                    class="group-report-btn"
+                  >
+                    <ion-icon :icon="documentTextOutline" slot="icon-only"></ion-icon>
+                  </ion-button>
+                  <ion-button
+                    fill="clear"
+                    size="small"
+                    @click="toggleGroupExpanded(item.key)"
+                    :title="isGroupExpanded(item.key) ? t('tasks.collapse') : t('tasks.expand')"
+                    class="tl-chevron-btn"
+                  >
+                    <ion-icon
+                      :icon="isGroupExpanded(item.key) ? chevronBack : chevronForward"
+                      slot="icon-only"
+                    ></ion-icon>
+                  </ion-button>
+                </div>
               </div>
-              <ion-label>
-                <h2 :class="['tl-title', 'tl-title--lg']">
-                  {{ item.tone === 'ai_agent' ? t('tasks.triggeredBy_ai_agent') : t('tasks.triggeredBy_automation') }}
-                  <span class="tl-title__count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</span>
-                </h2>
-                <p class="tl-meta-row">
-                  <ion-badge v-if="item.summary.passed > 0" color="success" class="tl-status-badge">
+
+              <!-- 状态汇总 + 进度条 -->
+              <div class="tl-group-card__body">
+                <div class="tl-meta-row">
+                  <ion-badge v-if="getGroupSummary(item.tasks).passed > 0" color="success" class="tl-status-badge">
                     <ion-icon :icon="checkmarkCircle" class="tl-badge-icon"></ion-icon>
-                    {{ item.summary.passed }}
+                    {{ getGroupSummary(item.tasks).passed }}
                   </ion-badge>
-                  <ion-badge v-if="item.summary.failed > 0" color="danger" class="tl-status-badge">
+                  <ion-badge v-if="getGroupSummary(item.tasks).failed > 0" color="danger" class="tl-status-badge">
                     <ion-icon :icon="closeCircle" class="tl-badge-icon"></ion-icon>
-                    {{ item.summary.failed }}
+                    {{ getGroupSummary(item.tasks).failed }}
                   </ion-badge>
-                  <ion-badge v-if="item.summary.running > 0" color="warning" class="tl-status-badge">
+                  <ion-badge v-if="getGroupSummary(item.tasks).running > 0" color="warning" class="tl-status-badge">
                     <ion-spinner name="dots" class="tl-badge-spinner"></ion-spinner>
-                    {{ item.summary.running }}
+                    {{ getGroupSummary(item.tasks).running }}
                   </ion-badge>
-                  <ion-badge v-if="item.summary.pending > 0" color="medium" class="tl-status-badge">
-                    {{ item.summary.pending }}
+                  <ion-badge v-if="getGroupSummary(item.tasks).pending > 0" color="medium" class="tl-status-badge">
+                    {{ getGroupSummary(item.tasks).pending }}
                   </ion-badge>
-                </p>
-                <div :class="['tl-progress', 'tl-progress--lg', `tl-tone--${item.tone}`]">
+                </div>
+                <div class="tl-progress tl-progress--md">
                   <div
                     class="tl-progress__fill"
-                    :style="{ width: item.summary.percent + '%' }"
+                    :style="{ width: getGroupSummary(item.tasks).percent + '%' }"
                   ></div>
                 </div>
-                <p :class="['tl-time-info', `tl-tone--${item.tone}`]">
-                  <span class="tl-time-info__created">{{ formatDateTime(item.summary.latestCreatedAt) }}</span>
-                  <span class="tl-time-info__percent">{{ item.summary.percent }}%</span>
+                <p class="tl-time-info">
+                  <span class="tl-time-info__created">{{ formatDateTime(new Date(item.startedAt).toISOString()) }}</span>
+                  <span v-if="getGroupDuration(item.tasks)" class="tl-time-info__duration">{{ getGroupDuration(item.tasks) }}</span>
+                  <span class="tl-time-info__percent">{{ getGroupSummary(item.tasks).percent }}%</span>
                 </p>
-              </ion-label>
-              <ion-button
-                v-if="item.runId"
-                slot="end"
-                fill="clear"
-                size="small"
-                @click.stop="viewGroupReport(item.runId)"
-                :title="t('tasks.viewReport')"
-                class="group-report-btn"
-              >
-                <ion-icon
-                  :icon="documentTextOutline"
-                  slot="icon-only"
-                ></ion-icon>
-              </ion-button>
-              <ion-button
-                slot="end"
-                fill="clear"
-                size="small"
-                @click.stop="toggleTaskGroup(item.groupKey!)"
-                :title="isTaskGroupExpanded(item.groupKey!) ? t('tasks.collapse') : t('tasks.expand')"
-                class="tl-chevron-btn"
-              >
-                <ion-icon
-                  :icon="isTaskGroupExpanded(item.groupKey!) ? chevronBack : chevronForward"
-                  slot="icon-only"
-                ></ion-icon>
-              </ion-button>
-            </ion-item>
-          </ion-item-sliding>
+              </div>
 
-          <!-- 🆕 2026-06-11 v5：sub_section 段头（可独立折叠） -->
-          <!-- 🆕 Task 15：移除 position: sticky（与虚拟滚动 absolute 定位冲突） -->
-          <ion-item
-            v-else-if="item.kind === 'sub_section_header'"
-            button
-            :detail="false"
-            @click="toggleSubSection(item.subKey)"
-            :class="['tl-item-card', 'tl-item-card--subsection', `tl-tone--${item.meta.dimension}`, { 'is-collapsed': item.isCollapsed }]"
-            :lines="'none'"
-          >
-            <div :class="['tl-bubble', 'tl-bubble--md', `tl-tone--${item.meta.dimension}`]" slot="start">
-              <ion-icon :icon="getSubSectionIcon(item.meta.icon)"></ion-icon>
+              <!-- Hit counter chips（点击 = toggle 对应筛选） -->
+              <!-- 用户选择 A：plugin × N + type × M + status × 6 + date hit -->
+              <div class="tl-counter-chips">
+                <!-- plugin chips -->
+                <button
+                  v-for="(p, pkey) in item.counters.plugins"
+                  :key="'p-' + pkey"
+                  type="button"
+                  :class="['tl-counter-chip', counterHitClass(p.hit, p.total, filterPlugins.includes(pkey as string))]"
+                  @click.stop="toggleFilterFromCounter('plugin', pkey as string)"
+                >
+                  <ion-icon :icon="extensionPuzzle" class="tl-counter-chip__icon"></ion-icon>
+                  <span class="tl-counter-chip__name">{{ pkey }}</span>
+                  <span class="tl-counter-chip__ratio">{{ p.hit }}/{{ p.total }}</span>
+                </button>
+                <!-- type chips -->
+                <button
+                  v-for="(ty, tykey) in item.counters.types"
+                  :key="'ty-' + tykey"
+                  type="button"
+                  :class="['tl-counter-chip', counterHitClass(ty.hit, ty.total, filterTypes.includes(tykey as any))]"
+                  @click.stop="toggleFilterFromCounter('type', tykey as string)"
+                >
+                  <span class="tl-counter-chip__name">{{ tykey === 'encrypt' ? t('tasks.encrypt') : t('tasks.decrypt') }}</span>
+                  <span class="tl-counter-chip__ratio">{{ ty.hit }}/{{ ty.total }}</span>
+                </button>
+                <!-- status chips -->
+                <button
+                  v-for="(st, stkey) in item.counters.statuses"
+                  :key="'st-' + stkey"
+                  type="button"
+                  :class="['tl-counter-chip', counterHitClass(st.hit, st.total, filterStatuses.includes(stkey as any))]"
+                  @click.stop="toggleFilterFromCounter('status', stkey as string)"
+                >
+                  <span class="tl-counter-chip__name">{{ getStatusLabel(stkey as any) }}</span>
+                  <span class="tl-counter-chip__ratio">{{ st.hit }}/{{ st.total }}</span>
+                </button>
+                <!-- date chip -->
+                <button
+                  type="button"
+                  :class="['tl-counter-chip', counterHitClass(item.counters.date.hit, item.counters.date.total, filterDatePreset !== 'all')]"
+                  @click.stop="openDatePopover($event)"
+                >
+                  <ion-icon :icon="calendarOutline" class="tl-counter-chip__icon"></ion-icon>
+                  <span class="tl-counter-chip__name">{{ dateRangeChipLabel() }}</span>
+                  <span class="tl-counter-chip__ratio">{{ item.counters.date.hit }}/{{ item.counters.date.total }}</span>
+                </button>
+              </div>
             </div>
-            <ion-label class="sub-section-label">
-              <h3 :class="['tl-title', 'tl-title--md']">{{ item.meta.label }}</h3>
-              <p class="tl-title__count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</p>
-            </ion-label>
-            <div class="sub-section-badges" slot="end">
-              <ion-badge v-if="item.subSummary.passed > 0" color="success" class="tl-status-badge tl-status-badge--sm">
-                <ion-icon :icon="checkmarkCircle" class="tl-badge-icon"></ion-icon>
-                {{ item.subSummary.passed }}
-              </ion-badge>
-              <ion-badge v-if="item.subSummary.failed > 0" color="danger" class="tl-status-badge tl-status-badge--sm">
-                <ion-icon :icon="closeCircle" class="tl-badge-icon"></ion-icon>
-                {{ item.subSummary.failed }}
-              </ion-badge>
-              <ion-badge v-if="item.subSummary.running > 0" color="warning" class="tl-status-badge tl-status-badge--sm">
-                <ion-spinner name="dots" class="tl-badge-spinner"></ion-spinner>
-                {{ item.subSummary.running }}
-              </ion-badge>
-              <ion-badge v-if="item.subSummary.pending > 0" color="medium" class="tl-status-badge tl-status-badge--sm">
-                {{ item.subSummary.pending }}
-              </ion-badge>
-            </div>
-            <ion-button
-              slot="end"
-              fill="clear"
-              size="small"
-              :title="item.isCollapsed ? t('tasks.expand') : t('tasks.collapse')"
-              class="tl-chevron-btn"
-              @click.stop="toggleSubSection(item.subKey)"
-            >
-              <ion-icon
-                :icon="item.isCollapsed ? chevronForward : chevronDown"
-                slot="icon-only"
-              ></ion-icon>
-            </ion-button>
-            <div :class="['tl-progress', 'tl-progress--sm', `tl-tone--${item.meta.dimension}`, 'sub-section-progress-track']">
-              <div
-                class="tl-progress__fill"
-                :style="{ width: item.subSummary.percent + '%' }"
-              ></div>
-            </div>
-          </ion-item>
 
-          <!-- 🆕 Task 15：移除 v-show（虚拟滚动下 display:none 会导致 measureElement 测量 0px） -->
-          <!-- collapsed sub_section 的 task 不在 displayedItems 里（buildDisplayedItems 过滤） -->
-          <ion-item-sliding v-else>
+            <!-- 展开后插入子 task 列表（in-line，避免虚拟列表 measure 问题） -->
+            <div v-if="isGroupExpanded(item.key)" class="tl-group-card__children">
+              <ion-item-sliding
+                v-for="child in item.tasks"
+                :key="'gc-' + child.id"
+              >
+                <ion-item
+                  class="tl-item-card tl-item-card--child"
+                  button
+                  detail
+                  @click="openTaskDetail(child)"
+                >
+                  <ion-icon
+                    :icon="getTaskIcon(child)"
+                    :color="getTaskColor(child)"
+                    slot="start"
+                  ></ion-icon>
+                  <ion-label>
+                    <h2>{{ getTaskName(child) }}</h2>
+                    <p class="tl-meta-row">
+                      <span class="task-id">#{{ child.id.slice(0, 6) }}</span>
+                      <ion-badge :color="getStatusColor(child.status)" class="tl-status-badge">
+                        {{ getStatusLabel(child.status) }}
+                      </ion-badge>
+                      <span class="task-type">{{ child.type === 'encrypt' ? t('tasks.encrypt') : t('tasks.decrypt') }}</span>
+                    </p>
+                    <p class="tl-time-info">
+                      <span class="tl-time-info__created">{{ formatDateTime(child.createdAt) }}</span>
+                      <span v-if="getTaskDuration(child)" class="tl-time-info__duration">{{ getTaskDuration(child) }}</span>
+                    </p>
+                  </ion-label>
+                </ion-item>
+              </ion-item-sliding>
+            </div>
+          </div>
+
+          <!-- ============== Single task card（平铺模式 / 不成组的 task） ============== -->
+          <ion-item-sliding v-else-if="item.kind === 'task'" :key="item.key">
             <ion-item
               :class="['tl-item-card']"
               @click="openTaskDetail(item.task)"
@@ -306,7 +446,6 @@
                   <ion-badge v-if="item.task.pluginName" color="primary" class="plugin-badge">
                     {{ item.task.pluginName }}
                   </ion-badge>
-                  <!-- 🆕 2026-06-18 Task 18：crypto params 摘要 badge（仅当有 cipherMode/compressionMode 时显示） -->
                   <span v-if="getCryptoSummary(item.task)" class="crypto-summary">
                     <ion-icon :icon="lockClosedOutline" class="crypto-summary-icon"></ion-icon>
                     {{ getCryptoSummary(item.task) }}
@@ -411,7 +550,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onIonViewWillEnter } from '@ionic/vue'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
@@ -426,25 +565,20 @@ import {
   warningOutline, lockClosed, lockClosedOutline, search, funnel, trashBin,
   extensionPuzzle, swapVertical, chevronDown,
   hardwareChipOutline, cogOutline, person, chevronForward, chevronBack,
-  folderOutline, ellipsisHorizontalCircleOutline,
   documentTextOutline,
+  albumsOutline, listOutline, calendarOutline,
 } from 'ionicons/icons'
 import { useRoute, useRouter } from 'vue-router'
-import type { EncvTask, TaskType } from '@/api/encv'
+import type { EncvTask, TaskType, TaskStatus } from '@/api/encv'
 import { clearCompletedTasks } from '@/api/encv'
 import { useI18n } from '@/composables/useI18n'
-import { formatDateTime } from '@/composables/useDateFormat'
+import { formatDateTime, formatDuration } from '@/composables/useDateFormat'
 import { showToast } from '@/composables/useToast'
 import { useNewTaskModal } from '@/composables/useNewTaskModal'
 import { useTasksList } from '@/composables/useTasksList'
 import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
-import { getTriggeredBy, getRunIdForTask } from '@/composables/useTaskTrigger'
+import { getTriggeredBy } from '@/composables/useTaskTrigger'
 import { formatContainerVersion } from '@/constants/containerVersion'
-import {
-  deriveSubSection,
-  type SectionDimension,
-  type SectionMeta,
-} from '@/composables/useSectionDerivation'
 // 🆕 Task 15：虚拟滚动组件
 import TaskVirtualList from '@/components/tasks/TaskVirtualList.vue'
 
@@ -515,14 +649,14 @@ function initScrollElWithRetry(): void {
 }
 
 const {
-  tasks, loading, expandedWarningDetail, sortBy,
+  tasks, isInitialLoad, expandedWarningDetail, sortBy,
   showSearch, searchQuery, showFilters,
   filterPlugins, filterTypes, filterStatuses, statusOptions,
-  pluginPopoverOpen, typePopoverOpen, statusPopoverOpen,
+  pluginPopoverOpen, typePopoverOpen, statusPopoverOpen, datePopoverOpen, datePopoverEvent,
   pluginPopoverEvent, typePopoverEvent, statusPopoverEvent,
   availablePlugins, hasActiveFilters, hasCompletedTasks, filteredTasks,
   fetchTasks, refresh,
-  openPluginPopover, openTypePopover, openStatusPopover,
+  openPluginPopover, openTypePopover, openStatusPopover, openDatePopover,
   togglePluginFilter, toggleTypeFilter, toggleStatusFilter, clearFilters,
   onSearchInput, toggleSort,
   applyTaskUpdate, applyTaskProgress, applyTaskCreated, applyTaskCompleted,
@@ -531,6 +665,10 @@ const {
   getPluginChipLabel, getTypeChipLabel, getStatusChipLabel, getStatusLabel,
   isPasswordError, toggleWarningDetail, formatWarningDetail,
   getTaskIcon, getTaskColor, getStatusColor, getPhaseLabel,
+  // 🆕 v4 M3
+  viewMode, filterDatePreset, filterDateRange,
+  displayedItems,
+  applyDatePreset, setCustomDateRange, toggleFilterFromCounter, toggleViewMode,
 } = useTasksList()
 
 useTaskEventBridge({
@@ -564,19 +702,6 @@ function getCryptoSummary(task: EncvTask): string {
     parts.push(t('tasks.compressionNone'))
   }
   return parts.join(' · ')
-}
-
-// 🆕 2026-06-11 v5：sub_section icon name → ionicon 映射
-// 升级指南：未来加 dimension 在 SECTION_META 加 icon name 字符串，
-//   然后在这个 map 加一条就行，不用动模板
-const SUB_SECTION_ICON_MAP: Record<string, string> = {
-  'extension-puzzle': extensionPuzzle,
-  'swap-vertical': swapVertical,
-  'folder': folderOutline,
-  'ellipsis-horizontal-circle': ellipsisHorizontalCircleOutline,
-}
-function getSubSectionIcon(name: string): string {
-  return SUB_SECTION_ICON_MAP[name] ?? ellipsisHorizontalCircleOutline
 }
 
 async function openTaskDetail(task: EncvTask) {
@@ -626,143 +751,42 @@ async function handleClearCompleted() {
   await alert.present()
 }
 
-// 🆕 2026-06-10 修复：自动化测试 / AI agent 任务组折叠
-// 历史：useAutomationTests.runTests() 串行 for 循环逐个调 createTask()，
-//   一次跑 N 个用例 → 后端 task 列表被 N 张 task 卡片污染
-//   （用户截图"浪费屏幕空间"）。
-// 修复思路：纯前端 UI 折叠，**不动后端 API**（后端根本没有 GroupID 概念）。
-//   - 扫描 filteredTasks，连续 ≥2 个 triggeredBy != 'user' 的 task → 折叠成 1 张 group card
-//   - 用户点 chevron 展开/折叠详情（展开时插入 N 张原始 task card）
-//   - 单个非用户 task 不折叠（避免 UI 抖动）
-//   - 用户手动搜/筛不受影响（filteredTasks 是折叠前数据）
-const GROUP_FOLD_THRESHOLD = 2
+// 🆕 v4 M3：日期筛选 popover 的 preset 列表 + 自定义日期输入框 v-model
+// 预设：今天 / 7天 / 30天 / 全部 / 自定义（4+1 选项）
+const datePresets: { key: 'today' | '7d' | '30d' | 'all' | 'custom'; label: string }[] = [
+  { key: 'today', label: t('tasks.datePresetToday') },
+  { key: '7d', label: t('tasks.datePreset7d') },
+  { key: '30d', label: t('tasks.datePreset30d') },
+  { key: 'all', label: t('tasks.datePresetAll') },
+  { key: 'custom', label: t('tasks.datePresetCustom') },
+]
 
-// 🆕 2026-06-10 修复 v2：2 级嵌套（Run group card → plugin sub-section → N 张 task 卡片）
-// 历史：group 内部只展示扁平 task 列表 → 用户：「单个插件任务下面聚合子任务的显示」
-// 修复：group 展开时按 pluginName 再分桶，每个 plugin 渲染一个 plugin_section 段头
-//       段头下方是该 plugin 的所有 task 卡片
-//
-// 🆕 2026-06-10 修复 v3：plugin_section 携带 runId
-// 历史：plugin_section key = `plugin-section-${tone}-${pluginName}-${tasks[0]?.id}`
-//   → 第一个 task 变化（如新增 / 排序调整）就触发整段 Vue 重建 → 闪烁/消失
-// 修复：key 改用 `plugin-section-${runId}-${pluginName}`（runId+pluginName 都稳定）
-// 🆕 2026-06-11 修复 v5：section 维度抽象（架构向上兼容）
-// 历史：buildPluginSectionItem 硬编码 pluginName → 未来加「下载 / 同步 / 清理」等
-//   非 plugin 任务时，task.pluginName 为空 → 全部归到 '(unknown plugin)' → 烂成一锅
-// 修复：引入 SubSectionKey 抽象维度（dimension + value），按 task 属性动态派生
-//   - 当前支持 4 种 dimension：plugin / type / category / none
-//   - 未来加新维度：只需要在 SECTION_META 加一行 + deriveSubSection 加一个 case
-//   - task 没 pluginName → fallback 到 'none'（不会丢失，归到「其他任务」section）
-//
-// 🆕 2026-06-18 Task 6：deriveSubSection / SectionDimension / SectionMeta 已抽取到
-//   @/composables/useSectionDerivation，这里只保留 Tasks.vue 专用的 UI 元数据
-//   （SubSectionMeta + SECTION_META + sectionKeyToString + buildSubSectionMeta）。
+/** 自定义日期输入框的值（YYYY-MM-DD） — 与 filterDateRange.from/to 双向同步 */
+const customFromInput = ref<string>('')
+const customToInput = ref<string>('')
+watch(
+  [() => filterDateRange.value.from, () => filterDateRange.value.to],
+  ([from, to]) => {
+    customFromInput.value = from ? from.slice(0, 10) : ''
+    customToInput.value = to ? to.slice(0, 10) : ''
+  },
+  { immediate: true },
+)
 
-interface SubSectionMeta {
-  dimension: SectionDimension
-  value: string
-  /** 显示名（默认就是 value，特殊 case 可覆盖） */
-  label: string
-  /** ionicon 名称（用于 sub_section_header 左侧 icon bubble） */
-  icon: string
-  /** CSS tone class（决定颜色/背景） */
-  tone: SectionDimension
+function onDatePresetClick(key: 'today' | '7d' | '30d' | 'all' | 'custom') {
+  applyDatePreset(key)
+}
+function onCustomFromChange(event: Event) {
+  const v = (event.target as HTMLInputElement).value
+  setCustomDateRange(v || undefined, customToInput.value || undefined)
+}
+function onCustomToChange(event: Event) {
+  const v = (event.target as HTMLInputElement).value
+  setCustomDateRange(customFromInput.value || undefined, v || undefined)
 }
 
-const SECTION_META: Record<SectionDimension, { icon: string; toneClass: string }> = {
-  plugin: { icon: 'extension-puzzle', toneClass: 'plugin' },
-  type: { icon: 'swap-vertical', toneClass: 'type' },
-  category: { icon: 'folder', toneClass: 'category' },
-  none: { icon: 'ellipsis-horizontal-circle', toneClass: 'none' },
-}
-
-function sectionKeyToString(meta: SectionMeta): string {
-  return `${meta.dimension}:${meta.key}`
-}
-
-/**
- * 🆕 2026-06-11 v5：从 task 派生 SubSection（架构核心）
- * 当前规则（按优先级）：
- *   1. task.pluginName 存在 → 'plugin' 维度（按插件分桶）
- *   2. 未来扩展：task.category / task.subType 等可在中间插入 case
- *   3. 都没 → 'none' 维度（统一归到「其他任务」section，不会丢失）
- *
- * 🆕 2026-06-18 Task 6：实际派生逻辑已迁移到 @/composables/useSectionDerivation
- *   deriveSubSection(task, dimension)。这里只保留「按 task 字段 pick 维度」的本地策略，
- *   因为 Tasks.vue 的维度选择是 per-task 的（不是 per-component），不适合用
- *   useSectionDerivation(dimension) 单维度 composable。
- *
- * 升级指南：未来加新维度时
- *   - SECTION_META 加一条（icon + toneClass）
- *   - pickSectionDimension 加一个 if 分支
- *   - i18n 加 'tasks.dimensionXxx' 文案
- *   不需要改 displayedItems / 模板 / CSS
- */
-function pickSectionDimension(task: EncvTask): SectionDimension {
-  if (task.pluginName) {
-    return 'plugin'
-  }
-  // 未来扩展预留：
-  // if (task.category) return 'category'
-  // if (task.subType) return 'type'
-  return 'none'
-}
-
-function buildSubSectionMeta(meta: SectionMeta): SubSectionMeta {
-  const sectionMeta = SECTION_META[meta.dimension]
-  // label 默认用 composable 派生的 label，特殊 case 可覆盖
-  let label = meta.label
-  if (meta.dimension === 'none' && meta.key === 'all') {
-    label = '其他任务'  // fallback section 标签（i18n key 在模板里覆盖）
-  }
-  if (meta.dimension === 'type') {
-    label = meta.key === 'encrypt' ? '加密任务' : meta.key === 'decrypt' ? '解密任务' : meta.label
-  }
-  return {
-    dimension: meta.dimension,
-    value: meta.key,
-    label,
-    icon: sectionMeta.icon,
-    tone: meta.dimension,
-  }
-}
-
-type DisplayItem =
-  | {
-      kind: 'group'
-      key: string
-      groupKey: string
-      runId: string
-      tone: 'automation' | 'ai_agent'
-      tasks: EncvTask[]
-      /** 内部 section 桶（用于 sub_section 展开时按桶渲染） */
-      sections: Array<{ sectionKeyStr: string; meta: SubSectionMeta; tasks: EncvTask[] }>
-      summary: { passed: number; failed: number; running: number; pending: number; percent: number; latestCreatedAt: string }
-    }
-  | {
-      kind: 'sub_section_header'
-      key: string
-      subKey: string
-      runId: string
-      meta: SubSectionMeta
-      tasks: EncvTask[]
-      isCollapsed: boolean
-      subSummary: { passed: number; failed: number; running: number; pending: number; percent: number }
-    }
-  | {
-      kind: 'task'
-      key: string
-      task: EncvTask
-      /** 所属 sub_section key（决定 v-show 是否隐藏） */
-      subKey: string | null
-      /** 所属 group key（决定 v-show 是否隐藏 — group 折叠时整段隐藏） */
-      groupKey: string | null
-    }
-
-// 🆕 2026-06-10 修复 v2：expandedGroupKeys 持久化到 localStorage
-// 历史：ref<Set<string>> 是组件级 state，组件 unmount/remount（如 tab 切换、抽屉开关）会丢
-//   → 用户展开 group 后一切 tab 回来，发现 group 又折叠了 → 「展开后一会就消失了」
-// 修复：localStorage 持久化 + 启动时恢复 + watch 同步
+// 🆕 v4 M3：group 展开/折叠状态（每个 group 卡片可独立展开看 task 详情）
+// 持久化到 localStorage — 切回 tab 不丢
 const EXPANDED_GROUPS_KEY = 'encv_tasks_expanded_groups_v1'
 function loadExpandedGroups(): Set<string> {
   try {
@@ -775,232 +799,54 @@ function loadExpandedGroups(): Set<string> {
   }
 }
 const expandedGroupKeys = ref<Set<string>>(loadExpandedGroups())
-// 同步到 localStorage（用 deep watch 让 Set 内部 add/delete 也能触发）
 watch(
   expandedGroupKeys,
   (v) => {
     try {
       localStorage.setItem(EXPANDED_GROUPS_KEY, JSON.stringify(Array.from(v)))
     } catch {
-      // quota exceed 等 → silent
+      // silent
     }
   },
   { deep: true },
 )
-
-function toggleTaskGroup(key: string) {
+function toggleGroupExpanded(key: string) {
   const next = new Set(expandedGroupKeys.value)
   if (next.has(key)) next.delete(key)
   else next.add(key)
   expandedGroupKeys.value = next
 }
-
-function isTaskGroupExpanded(key: string): boolean {
+function isGroupExpanded(key: string): boolean {
   return expandedGroupKeys.value.has(key)
 }
 
-// 🆕 v3 2026-06-18 Task 10：group card 跳转按钮 → PluginTestsDetail（带 runId query）
-// 把任务系统的 group card 与插件测试报告系统打通：用户点击「查看报告」直接跳到
-// /tabs/settings/devtools/plugin-tests?runId=xxx，PluginTestsDetail 读取 query 自动选中 run
+// 🆕 v4 M3：group card 跳转报告（仅当有真实 runId 时显示）
 function viewGroupReport(runId: string) {
+  if (!runId || runId.startsWith('__manual__')) return
   router.push({
     path: '/tabs/settings/devtools/plugin-tests',
     query: { runId },
   })
 }
 
-// 🆕 2026-06-11 v5：sub_section 折叠状态（每个 section header 可独立折叠）
-// 持久化 key v2（v1 用 plugin-section 前缀，已废弃）
-const COLLAPSED_SUBSECTIONS_KEY = 'encv_tasks_collapsed_subsections_v1'
-function loadCollapsedSubSections(): Set<string> {
-  try {
-    const raw = localStorage.getItem(COLLAPSED_SUBSECTIONS_KEY)
-    if (!raw) return new Set()
-    const arr = JSON.parse(raw) as string[]
-    return new Set(Array.isArray(arr) ? arr : [])
-  } catch {
-    return new Set()
-  }
-}
-const collapsedSubSectionKeys = ref<Set<string>>(loadCollapsedSubSections())
-watch(
-  collapsedSubSectionKeys,
-  (v) => {
-    try {
-      localStorage.setItem(COLLAPSED_SUBSECTIONS_KEY, JSON.stringify(Array.from(v)))
-    } catch {
-      // silent
-    }
-  },
-  { deep: true },
-)
-function toggleSubSection(key: string) {
-  const next = new Set(collapsedSubSectionKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  collapsedSubSectionKeys.value = next
-}
-
-const displayedItems = computed<DisplayItem[]>(() => {
-  const tasks = filteredTasks.value
-  if (tasks.length === 0) return []
-
-  // 🆕 2026-06-11 v5：按 SubSection 维度分桶（不再硬编码 pluginName）
-  // 历史：之前 plugins: Map<pluginName, tasks[]> 假设 task.pluginName 必存在
-  // 修复：sections: Map<sectionKeyStr, { meta, tasks }> 通用化，未来加 category 维度
-  //   只需要在 deriveSubSection 加一个 case
-  interface Group {
-    runId: string
-    tone: 'automation' | 'ai_agent'
-    sections: Array<{ sectionKeyStr: string; meta: SubSectionMeta; tasks: EncvTask[] }>
-  }
-  const groupsByRun = new Map<string, Group>()
-  const singletonTasks: EncvTask[] = []
-
-  for (const t of tasks) {
-    // 🆕 2026-06-10 修复 v4：直接读 task 对象上的 triggeredBy / runId
-    const by = t.triggeredBy ?? getTriggeredBy(t.id)
-    if (by === 'user') {
-      singletonTasks.push(t)
-      continue
-    }
-    const runId = t.runId ?? getRunIdForTask(t.id)
-    if (!runId) {
-      singletonTasks.push(t)
-      continue
-    }
-    const tone: 'automation' | 'ai_agent' = by === 'ai_agent' ? 'ai_agent' : 'automation'
-    // 🆕 v5：用 deriveSubSection 动态派生（兼容 task 没 pluginName 的情况）
-    // 🆕 2026-06-18 Task 6：deriveSubSection 从 composable 导入，pickSectionDimension 决定维度
-    const section = deriveSubSection(t, pickSectionDimension(t))
-    const sectionKeyStr = sectionKeyToString(section)
-    const meta = buildSubSectionMeta(section)
-    const g = groupsByRun.get(runId)
-    if (g) {
-      const sec = g.sections.find((s) => s.sectionKeyStr === sectionKeyStr)
-      if (sec) sec.tasks.push(t)
-      else g.sections.push({ sectionKeyStr, meta, tasks: [t] })
-    } else {
-      groupsByRun.set(runId, {
-        runId,
-        tone,
-        sections: [{ sectionKeyStr, meta, tasks: [t] }],
-      })
-    }
-  }
-
-  // 把 singletonTasks 按 filteredTasks 顺序插入；group 按最早 createdAt 排序
-  const allGroups: Group[] = Array.from(groupsByRun.values())
-  allGroups.sort((a, b) => {
-    const aEarliest = Math.min(
-      ...a.sections.flatMap((s) => s.tasks.map((t) => new Date(t.createdAt).getTime())),
-    )
-    const bEarliest = Math.min(
-      ...b.sections.flatMap((s) => s.tasks.map((t) => new Date(t.createdAt).getTime())),
-    )
-    return bEarliest - aEarliest
-  })
-
-  // 输出：singleton tasks + group cards
-  const result: DisplayItem[] = []
-  for (const t of singletonTasks) {
-    result.push({ kind: 'task', key: t.id, task: t, subKey: null, groupKey: null })
-  }
-  for (const g of allGroups) {
-    // 拉平 group 内所有 task 用于 group summary
-    const allGroupTasks: EncvTask[] = g.sections.flatMap((s) => s.tasks)
-    if (allGroupTasks.length >= GROUP_FOLD_THRESHOLD) {
-      const groupKey = `${g.tone}-${g.runId}`
-      const groupExpanded = expandedGroupKeys.value.has(groupKey)
-      // 始终构造 group card
-      result.push(buildGroupItem(groupKey, g.runId, allGroupTasks, g.tone, g.sections))
-      if (groupExpanded) {
-        // 🆕 v5：group 展开时按 section 维度插 sub_section_header（可独立折叠）
-        // 🆕 Task 15：collapsed sub_section 的 task 不放入 displayedItems
-        //   历史：v-show 隐藏 task → 虚拟滚动 measureElement 测到 display:none 元素高度为 0
-        //   修复：collapsed 时只输出 sub_section_header，不输出其下 task
-        //   用户展开 sub_section 时 collapsedSubSectionKeys 变化 → displayedItems 重算 → task 出现
-        for (const sec of g.sections) {
-          const subKey = `sub-${groupKey}-${sec.sectionKeyStr}`
-          const isCollapsed = collapsedSubSectionKeys.value.has(subKey)
-          result.push(buildSubSectionHeader(subKey, g.runId, sec.meta, sec.tasks, isCollapsed))
-          if (!isCollapsed) {
-            // sub_section 展开时才输出其下 task
-            for (const t of sec.tasks) {
-              result.push({ kind: 'task', key: t.id, task: t, subKey, groupKey })
-            }
-          }
-        }
-      }
-    } else {
-      // 不足阈值 → 全部展开为 task（保留顺序 + sub_section header 让用户看到分组）
-      for (const sec of g.sections) {
-        const subKey = `sub-${g.tone}-${g.runId}-${sec.sectionKeyStr}`
-        result.push(buildSubSectionHeader(subKey, g.runId, sec.meta, sec.tasks, false))
-        for (const t of sec.tasks) {
-          result.push({ kind: 'task', key: t.id, task: t, subKey, groupKey: null })
-        }
-      }
-    }
-  }
-  return result
-})
-
 /**
- * 构造 group card item（外层折叠段，≥2 个 task 折叠为 1 张卡片）
+ * 🆕 v4 M3：group 头部 hit counter chips
+ * - plugin：每个 pluginName 展示 "pluginName ×N"（点击 = toggle filterPlugins）
+ * - type：encrypt / decrypt 各 1 个 chip
+ * - status：6 个状态各 1 个 chip
+ * - date：1 个 chip（"今天/7天/30天/全部/自定义 命中"）
+ * 点击 chip → toggle 对应筛选（复用 useTasksList.toggleFilterFromCounter）
+ *
+ * 用户选择 C：未命中 group（hitAny=false）→ 整个 group 隐藏，不渲染 chip
  */
-function buildGroupItem(
-  groupKey: string,
-  runId: string,  // 🆕 用于上层 buildPluginSectionItem
-  seg: EncvTask[],
-  tone: 'automation' | 'ai_agent',
-  sections: Array<{ sectionKeyStr: string; meta: SubSectionMeta; tasks: EncvTask[] }>,
-): DisplayItem {
-  let passed = 0, failed = 0, running = 0, pending = 0
-  let latest = seg[0]
-  for (const t of seg) {
-    if (t.status === 'completed') passed++
-    else if (t.status === 'failed') failed++
-    else if (t.status === 'running' || t.status === 'cancelling') running++
-    else pending++
-    if (new Date(t.createdAt).getTime() > new Date(latest.createdAt).getTime()) {
-      latest = t
-    }
-  }
-  // 完成度 = (passed + failed) / total（不算 running/pending）
-  const finished = passed + failed
-  const percent = seg.length > 0 ? Math.round((finished / seg.length) * 100) : 0
-  return {
-    kind: 'group',
-    key: groupKey,
-    groupKey,
-    runId,  // 🆕 携带 runId 给模板 / 子项用
-    tone,
-    tasks: seg,
-    sections,  // 🆕 v5：携带 sections 给子 sub_section_header
-    summary: { passed, failed, running, pending, percent, latestCreatedAt: latest.createdAt },
-  }
+function counterHitClass(hit: number, _total: number, active: boolean): string {
+  if (active) return 'tl-counter-chip--active'
+  if (hit === 0) return 'tl-counter-chip--zero'
+  return 'tl-counter-chip--partial'
 }
 
-/**
- * 🆕 2026-06-11 v5：构造 sub_section_header item（取代 v4 buildPluginSectionItem）
- *
- * 通用 section 段头（不再硬编码 pluginName），按 section 维度（plugin/type/category/none）渲染：
- *   - 左侧 icon bubble（按 dimension 显示对应 icon）
- *   - 中间：section 名称 + task 数
- *   - 右侧：4 个 status badge + 折叠 chevron
- *   - 整段可点击 → toggle 折叠/展开该 section 内的 task
- *   - sticky 行为：滚动时冻结在 group card 顶部
- *
- * 升级：未来加新维度只需要在 SECTION_META + deriveSubSection 加一行
- */
-function buildSubSectionHeader(
-  subKey: string,
-  runId: string,
-  meta: SubSectionMeta,
-  tasks: EncvTask[],
-  isCollapsed: boolean,
-): DisplayItem {
+// 🆕 v4 M3：group summary（passed/failed/running/pending/percent）— 给 template 复用
+function summarizeGroup(tasks: EncvTask[]) {
   let passed = 0, failed = 0, running = 0, pending = 0
   for (const t of tasks) {
     if (t.status === 'completed') passed++
@@ -1010,24 +856,68 @@ function buildSubSectionHeader(
   }
   const finished = passed + failed
   const percent = tasks.length > 0 ? Math.round((finished / tasks.length) * 100) : 0
-  return {
-    kind: 'sub_section_header',
-    key: subKey,
-    subKey,
-    runId,
-    meta,
-    tasks,
-    isCollapsed,
-    subSummary: { passed, failed, running, pending, percent },
-  }
+  return { passed, failed, running, pending, percent }
 }
 
-// 🆕 2026-06-10 修复：测试报告卡运行中（Tasks 页面卡 running）
-// 根因：Tasks.vue 之前**完全没订阅 WS 事件**。task:update / task:progress / task:completed
-//   推过来时没人调 applyTask*，tasks.value 永远是首次拉取的快照。
-// 修复：useTaskEventBridge 已在 line 374-380 订阅 4 件套 WS 事件（mount 注册，unmount 注销），
-//   **不要在这里再写一份 eventBus.on**，否则同一个事件会被触发 2 次，state 错乱。
-// 修复 v2（2026-06-10 同日）：删除下方手写的 handleTask* + onMounted 重复订阅块。
+/** 🆕 v4 M3：模板辅助 - group summary 包装（与 summarizeGroup 等价，简短名字） */
+function getGroupSummary(tasks: EncvTask[]) {
+  return summarizeGroup(tasks)
+}
+
+/** 🆕 v4 M3：模板辅助 - group 主色（按 triggeredBy 决定） */
+function getGroupTone(_runId: string, tasks: EncvTask[]): 'automation' | 'ai_agent' {
+  for (const t of tasks) {
+    const by = t.triggeredBy ?? getTriggeredBy(t.id)
+    if (by === 'ai_agent') return 'ai_agent'
+  }
+  return 'automation'
+}
+
+/** 🆕 v4 M3：模板辅助 - group dominant status（左侧 4px 色边） */
+function getGroupDominantStatus(tasks: EncvTask[]): TaskStatus {
+  if (tasks.some((t) => t.status === 'failed')) return 'failed'
+  if (tasks.some((t) => t.status === 'running' || t.status === 'cancelling')) return 'running'
+  if (tasks.some((t) => t.status === 'queued')) return 'queued'
+  if (tasks.every((t) => t.status === 'completed')) return 'completed'
+  if (tasks.every((t) => t.status === 'cancelled')) return 'cancelled'
+  return 'completed'
+}
+
+/** 🆕 v4 M3：模板辅助 - group 总耗时（最早 createdAt → 最晚 completedAt 或 now） */
+function getGroupDuration(tasks: EncvTask[]): string {
+  if (tasks.length === 0) return ''
+  const createdTimes = tasks.map((t) => new Date(t.createdAt).getTime())
+  const completedTimes = tasks
+    .filter((t) => t.completedAt)
+    .map((t) => new Date(t.completedAt!).getTime())
+  const start = Math.min(...createdTimes)
+  const end =
+    completedTimes.length > 0 ? Math.max(...completedTimes) : Date.now()
+  return formatDuration(end - start)
+}
+
+/** 🆕 v4 M3：模板辅助 - group 内 plugin badges（去重 + 限前 N 个） */
+function getGroupPluginBadges(tasks: EncvTask[], limit: number): string[] {
+  const set = new Set<string>()
+  for (const t of tasks) {
+    if (t.pluginName) set.add(t.pluginName)
+  }
+  return Array.from(set).slice(0, limit)
+}
+
+// 🆕 v4 M3：把 filterDateRange 转成 YYYY-MM-DD 形式（用于 chip 显示）
+function dateRangeChipLabel(): string {
+  if (filterDatePreset.value === 'all') return t('tasks.datePresetAll')
+  if (filterDatePreset.value === 'today') return t('tasks.datePresetToday')
+  if (filterDatePreset.value === '7d') return t('tasks.datePreset7d')
+  if (filterDatePreset.value === '30d') return t('tasks.datePreset30d')
+  if (filterDatePreset.value === 'custom') {
+    const f = customFromInput.value || '?'
+    const t2 = customToInput.value || '?'
+    return `${f} → ${t2}`
+  }
+  return t('tasks.datePresetAll')
+}
 
 // 🆕 onMounted：只处理路由 query（长按菜单跳转过来时打开 new task modal）
 // 首次 fetchTasks 由 onIonViewWillEnter 接管（每次切回 tab 智能刷新）。
@@ -1429,5 +1319,272 @@ onIonViewWillEnter(() => {
   /* 给虚拟列表一点底部留白，避免 FAB 遮挡最后一个 item */
   padding-bottom: 80px;
   box-sizing: border-box;
+}
+
+/* ============================================================
+   🆕 v4 2026-06-18 M3：group card / date section / hit counter chips
+   替代 v3 的 sub_section_header + 双层折叠；按用户反馈"看 group 整体状态"
+   把 status / 进度 / hit counter 平铺在 group card 头部。
+   ============================================================ */
+
+/* Date section header（今/昨/本周/本月/更早） */
+.tl-date-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px 6px;
+  position: relative;
+  pointer-events: none;
+}
+.tl-date-section__line {
+  flex: 1;
+  height: 1px;
+  background: var(--ion-color-step-200, rgba(128, 128, 128, 0.2));
+}
+.tl-date-section__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ion-color-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+/* Group card 容器 */
+.tl-group-card {
+  display: flex;
+  position: relative;
+  margin: 8px 8px 10px;
+  border-radius: 10px;
+  background: var(--ion-color-step-50, #fafafa);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  min-height: 80px;
+}
+.tl-group-card--ai_agent {
+  background: linear-gradient(135deg,
+    rgba(139, 92, 246, 0.06) 0%,
+    var(--ion-color-step-50, #fafafa) 50%);
+}
+.tl-group-card--automation {
+  background: linear-gradient(135deg,
+    rgba(79, 140, 255, 0.06) 0%,
+    var(--ion-color-step-50, #fafafa) 50%);
+}
+
+/* 左侧 4px 状态色边（group 主态决定） */
+.tl-group-card__border {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+.tl-group-border--failed { background: var(--ion-color-danger, #ef4444); }
+.tl-group-border--running {
+  background: var(--ion-color-warning, #f59e0b);
+  /* 运行时呼吸效果（避免静态感） */
+  animation: tl-group-border-pulse 1.5s ease-in-out infinite;
+}
+.tl-group-border--completed { background: var(--ion-color-success, #10b981); }
+.tl-group-border--cancelled { background: var(--ion-color-medium, #6b7280); }
+.tl-group-border--queued { background: var(--ion-color-primary, #3b82f6); }
+
+@keyframes tl-group-border-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.tl-group-card__main {
+  flex: 1;
+  padding: 10px 12px 8px 14px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 标题行 */
+.tl-group-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tl-group-card__title-block {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tl-group-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ion-color-dark, #111);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-group-card__count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ion-color-medium);
+  margin-left: 4px;
+}
+.tl-group-card__plugins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tl-group-card__plugin-badge {
+  font-size: 9px;
+  --padding-start: 5px;
+  --padding-end: 5px;
+  --padding-top: 1px;
+  --padding-bottom: 1px;
+}
+.tl-group-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+/* 状态汇总 + 进度条 */
+.tl-group-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tl-group-card__children {
+  border-top: 1px solid var(--ion-color-step-200, rgba(128, 128, 128, 0.15));
+  padding: 4px 0 0;
+  margin: 4px -12px -8px -14px;
+  background: rgba(0, 0, 0, 0.02);
+}
+.tl-item-card--child {
+  --background: transparent;
+  --min-height: 56px;
+}
+.tl-item-card--child h2 {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Hit counter chips（点击 toggle 筛选） */
+.tl-counter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.tl-counter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--ion-color-step-200, rgba(128, 128, 128, 0.25));
+  background: var(--ion-color-step-50, #fafafa);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ion-color-dark, #111);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.tl-counter-chip:hover {
+  background: var(--ion-color-step-100, #f0f0f0);
+  border-color: var(--ion-color-step-300, rgba(128, 128, 128, 0.4));
+}
+.tl-counter-chip__icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.tl-counter-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 80px;
+}
+.tl-counter-chip__ratio {
+  font-family: var(--tl-card-font-mono, monospace);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--ion-color-medium);
+  flex-shrink: 0;
+}
+/* hit 状态 */
+.tl-counter-chip--zero {
+  opacity: 0.5;
+}
+.tl-counter-chip--zero .tl-counter-chip__ratio {
+  color: var(--ion-color-danger);
+}
+.tl-counter-chip--partial {
+  background: var(--ion-color-step-100, #fff5e6);
+}
+.tl-counter-chip--partial .tl-counter-chip__ratio {
+  color: var(--ion-color-warning-shade);
+}
+/* active（已选中筛选） */
+.tl-counter-chip--active {
+  background: var(--ion-color-primary);
+  color: #fff;
+  border-color: var(--ion-color-primary);
+}
+.tl-counter-chip--active .tl-counter-chip__ratio {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 适配 group report 按钮颜色（与 tone 对应） */
+.tl-group-card--ai_agent .group-report-btn {
+  --color: var(--tl-trigger-ai-agent, #8b5cf6);
+}
+.tl-group-card--automation .group-report-btn {
+  --color: var(--tl-trigger-automation, #4f8cff);
+}
+
+/* date popover 自定义范围紧凑排版 */
+.date-custom-range {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--ion-color-step-100, rgba(128, 128, 128, 0.1));
+}
+.date-range-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  gap: 8px;
+}
+.date-range-label span {
+  flex-shrink: 0;
+  min-width: 40px;
+}
+.date-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--ion-color-step-200, rgba(128, 128, 128, 0.25));
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--tl-card-font-mono, monospace);
+  background: var(--ion-color-step-50, #fafafa);
+  color: var(--ion-color-dark, #111);
+  outline: none;
+  min-width: 0;
+}
+.date-input:focus {
+  border-color: var(--ion-color-primary);
+}
+.date-preset-active {
+  --background: var(--ion-color-primary-tint, rgba(79, 140, 255, 0.1));
+  font-weight: 600;
 }
 </style>
