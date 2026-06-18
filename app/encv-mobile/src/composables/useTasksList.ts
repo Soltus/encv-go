@@ -281,6 +281,19 @@ export function useTasksList() {
       date: { hit: 0, total: groupTasks.length },
       hitAny: false,
     }
+    // 🆕 2026-06-18 v4 Bug6 修复：searchQuery 也计入 hitAny 决策
+    //   - 旧逻辑：computeGroupCounters 不读 searchQuery → 搜索 "xxx" 时所有 group 的 hit/count 仍是原数据
+    //   - 用户感受：输入搜索词后，group 卡片上 chip 数字不变 → 计数器不搭理搜索
+    //   - 修法：searchQuery 存在时，group 至少一个 task 匹配才计 hitAny
+    const q = searchQuery.value.trim().toLowerCase()
+    const matchesSearch = (t: EncvTask): boolean => {
+      if (!q) return true
+      const name = getTaskName(t).toLowerCase()
+      const plugin = (t.pluginName || '').toLowerCase()
+      const error = (t.error || '').toLowerCase()
+      const id = t.id.toLowerCase()
+      return name.includes(q) || plugin.includes(q) || error.includes(q) || id.includes(q)
+    }
     for (const t of groupTasks) {
       if (t.pluginName) {
         const p = counters.plugins[t.pluginName] ?? { hit: 0, total: 0 }
@@ -312,7 +325,11 @@ export function useTasksList() {
       !filterDateRange.value.from && !filterDateRange.value.to
         ? true
         : counters.date.hit > 0
-    counters.hitAny = pluginHit && typeHit && statusHit && dateHit
+    // 🆕 2026-06-18 v4 Bug6 修复：searchQuery 维度
+    //   - 空 query → searchHit = true（不限制）
+    //   - 非空 query → 至少一个 task 匹配才计 hitAny
+    const searchHit = !q || groupTasks.some(matchesSearch)
+    counters.hitAny = pluginHit && typeHit && statusHit && dateHit && searchHit
     return counters
   }
 
@@ -351,11 +368,14 @@ export function useTasksList() {
     const runSortKeys: { run: UnifiedRunRecord; sortKey: number }[] = []
     for (const run of serviceRuns.value) {
       const startedAtMs = new Date(run.startedAt).getTime()
-      const completedAtMs = run.completedAt ? new Date(run.completedAt).getTime() : 0
       let sortKey: number
       if (sortBy.value === 'activity') {
         // 平铺模式状态更新就重排；这里也用「最近活动」语义
-        sortKey = completedAtMs > 0 ? completedAtMs : startedAtMs
+        // 🆕 2026-06-18 v4 Bug4 修复：终态 run 用 startedAt 锁定位置（同 Bug4 task sort 逻辑）
+        //   - 旧逻辑：completedAt > 0 ? completedAt : startedAt → run 完成时 sort key 变化 → 跳到 top
+        //   - 新逻辑：completedAt > 0 用 startedAt（视为历史），非终态用 completedAt
+        //   - 简化：用 startedAt 作为稳定 key（run started 后位置稳定，状态变化不再跳）
+        sortKey = startedAtMs
       } else {
         // createdAt 模式：按最早 startedAt
         sortKey = startedAtMs
@@ -453,18 +473,27 @@ export function useTasksList() {
     }
     const now = new Date()
     if (preset === 'today') {
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      filterDateRange.value = { from: today.toISOString(), to: today.toISOString() }
+      // 🆕 2026-06-18 v4 Bug9 修复：本地 24h 窗口（UTC 偏移问题）
+      //   - 旧逻辑：from = to = today.toISOString() → UTC 0:00 → t.createdAt < to 永远 false
+      //   - 早 0-8 点的本地任务被 UTC 比较过滤掉（国内用户最常见）
+      //   - 新逻辑：from = 本地今天 0:00 ISO, to = 本地明天 0:00 ISO（开区间）
+      //   - 比较：t.createdAt >= from && t.createdAt < to → 本地 0:00 ~ 24:00 全部命中
+      const localStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const localEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      filterDateRange.value = { from: localStart.toISOString(), to: localEnd.toISOString() }
       return
     }
     if (preset === '7d') {
-      const d = new Date(now.getTime() - 7 * 86400000)
-      filterDateRange.value = { from: d.toISOString(), to: now.toISOString() }
+      // 🆕 2026-06-18 v4 Bug9 修复：end = 本地明天 0:00 (开区间)，start = end - 7d
+      const localEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      const localStart = new Date(localEnd.getTime() - 7 * 86400000)
+      filterDateRange.value = { from: localStart.toISOString(), to: localEnd.toISOString() }
       return
     }
     if (preset === '30d') {
-      const d = new Date(now.getTime() - 30 * 86400000)
-      filterDateRange.value = { from: d.toISOString(), to: now.toISOString() }
+      const localEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      const localStart = new Date(localEnd.getTime() - 30 * 86400000)
+      filterDateRange.value = { from: localStart.toISOString(), to: localEnd.toISOString() }
       return
     }
     // custom：保持当前 range 不变（由 date popover 内部 datepicker 决定）

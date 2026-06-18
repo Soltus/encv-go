@@ -1644,6 +1644,14 @@ onIonViewWillEnter(() => {
 /* hit 状态 */
 .tl-counter-chip--zero {
   opacity: 0.5;
+  /* 🆕 2026-06-18 v4 Bug7 修复：0-hit chip 不可点击
+   *   - 旧行为：0-hit chip 点击触发 toggleFilterFromCounter，但因无 task 命中 filter，UI 无变化
+   *   - 用户感受："点 chip 没反应"
+   *   - 修法：pointer-events: none + cursor: not-allowed
+   *   - 保留 active 状态可点击（已选中的筛选条件可点击取消）
+   */
+  pointer-events: none;
+  cursor: not-allowed;
 }
 .tl-counter-chip--zero .tl-counter-chip__ratio {
   color: var(--ion-color-danger);
