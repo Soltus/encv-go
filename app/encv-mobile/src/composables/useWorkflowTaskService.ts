@@ -591,9 +591,14 @@ function createService(
       try {
         const action = applyEnvToAction(stepDef.action, env, binding)
         const task = await submitAction(action)
+        // 🆕 v6 2026-06-18：直接把 runId / triggeredBy 写进 task 对象
+        //   之前只写 useTaskTrigger(localStorage)，导致 taskStore 里的 task 没有 runId，
+        //   聚合模式按 runId 分组失败 → 每个 task 单独成组 → 100+ 张"自动化"卡片。
+        task.runId = runId
+        task.triggeredBy = taskTriggeredBy
         stepRun.taskId = task.id
         stepRun.status = 'running' // 已提交，等 WS 回调
-        // 集成 useTaskTrigger：关联 taskId ↔ runId + triggeredBy
+        // 保留 useTaskTrigger 给还需要它的旧代码（后续彻底废弃）
         setTaskMetadata(task.id, taskTriggeredBy, runId)
       } catch (e) {
         // 提交失败 → 直接标记 failure

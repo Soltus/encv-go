@@ -23,6 +23,7 @@ import {
   bulkPutTasks as persistBulkPut,
   deleteTask as persistDelete,
 } from '@/lib/taskPersistence'
+import { getTaskMetadata } from '@/composables/useTaskTrigger'
 
 /** 终态保护集合 */
 const TERMINAL_STATUSES: Set<TaskStatus> = new Set([
@@ -135,12 +136,22 @@ export const useTaskStore = defineStore('task', () => {
    * 注意：用 tasks.value = newArr 触发响应；shallowRef 不深代理每个 task
    */
   function bulkSetTasks(newTasks: EncvTask[]): void {
-    tasks.value = newTasks
-    hasAnyTask.value = newTasks.length > 0
+    // 后端 task 通常不带 runId / triggeredBy，但 useTaskTrigger 里有当前 session 的关联
+    const enriched = newTasks.map((t) => {
+      if (t.runId && t.triggeredBy) return t
+      const meta = getTaskMetadata(t.id)
+      return {
+        ...t,
+        runId: t.runId || meta?.runId,
+        triggeredBy: t.triggeredBy || meta?.triggeredBy,
+      }
+    })
+    tasks.value = enriched
+    hasAnyTask.value = enriched.length > 0
     // 立即 persist（不走 debounce，避免后端拉的新数据被旧 debounce 覆盖）
     if (hydrated.value) {
       try {
-        persistBulkPut(newTasks)
+        persistBulkPut(enriched)
       } catch (err) {
         console.warn('[useTaskStore.bulkSetTasks.persist] failed:', err)
       }
@@ -280,11 +291,20 @@ export const useTaskStore = defineStore('task', () => {
 
   function applyTaskCreated(data: Partial<EncvTask> & { id: string }): void {
     if (tasks.value.some((t) => t.id === data.id)) {
-      // 已有则 patch
-      patchTask(data.id, data)
+      // 已有则 patch；保留已有的 runId / triggeredBy（避免 WS 无 runId payload 覆盖）
+      const existing = tasks.value.find((t) => t.id === data.id)!
+      patchTask(data.id, {
+        ...data,
+        runId: data.runId || existing.runId,
+        triggeredBy: data.triggeredBy || existing.triggeredBy,
+      })
       replayPendingEvents(data.id)
       return
     }
+    // 后端 WS payload 通常不带 runId / triggeredBy，从 useTaskTrigger 补一次
+    const meta = getTaskMetadata(data.id)
+    const runId = data.runId || meta?.runId
+    const triggeredBy = data.triggeredBy || meta?.triggeredBy
     const newTask: EncvTask = {
       id: data.id,
       type: (data.type ?? 'encrypt') as any,
@@ -299,8 +319,8 @@ export const useTaskStore = defineStore('task', () => {
       createdAt: data.createdAt ?? new Date().toISOString(),
       containerVersion: data.containerVersion,
       targetPath: data.targetPath,
-      runId: data.runId,
-      triggeredBy: data.triggeredBy,
+      runId,
+      triggeredBy,
       outputPath: data.outputPath,
       cipherMode: data.cipherMode,
       compressionMode: data.compressionMode,

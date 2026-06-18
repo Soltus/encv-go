@@ -736,6 +736,10 @@ const sortedFiles = computed(() => {
 })
 
 let loadGeneration = 0
+/** stream 进行中标志：避免 file:change 在 stream 未完成时触发清空重载 */
+let isStreamLoading = false
+/** stream 期间收到 file:change，当前 stream 完成后自动重刷 */
+let pendingFileChange = false
 
 // 🆕 2026-06-15 multi-mount 适配：根目录 /d 由后端 handleListFilesGin 返 mount 列表
 //   旧前端逻辑：currentPath='/' → 后端列 serving dir 子目录
@@ -747,6 +751,8 @@ async function loadFiles() {
   //   让前端只需维护一个 loadFiles 路径
   console.info('[Files] Loading files (stream), path:', currentPath.value)
   const gen = ++loadGeneration
+  isStreamLoading = true
+  pendingFileChange = false
   // 🆕 v4 Bug1 修复：自动更新（file:change）下不立刻清空 files.value，避免视觉闪
   //   - 首次加载（isInitialLoad）才显示全屏 loading + 清空老数据
   //   - 自动 reload（isRefresh）保留老数据 + 显示顶部小 spinner 指示器
@@ -793,6 +799,11 @@ async function loadFiles() {
         // nextTick 等 ion-item 渲染完再滚动 + 高亮
         nextTick(() => highlightFile(name))
       }
+      // stream 期间收到 file:change，自动补一次重刷
+      if (pendingFileChange) {
+        pendingFileChange = false
+        void loadFiles()
+      }
       return
     } catch (error) {
       if (error instanceof PermissionDeniedError) {
@@ -801,6 +812,7 @@ async function loadFiles() {
         loading.value = false
         refreshing.value = false
         connecting.value = false
+        if (pendingFileChange) { pendingFileChange = false; void loadFiles() }
         return
       }
       if (error instanceof NotFoundError) {
@@ -812,11 +824,17 @@ async function loadFiles() {
           showToast({ message: t('files.pathNotFound'), duration: 2000, color: 'warning' })
           goUp()
         }
+        if (pendingFileChange) { pendingFileChange = false; void loadFiles() }
         return
       }
       if (attempt < MAX_RETRIES) {
         connecting.value = true
         await new Promise(r => setTimeout(r, RETRY_DELAY))
+      }
+    } finally {
+      // 只有当前 generation 的 stream 才清理标志，避免老 callback 误清
+      if (gen === loadGeneration) {
+        isStreamLoading = false
       }
     }
   }
@@ -1436,6 +1454,12 @@ function onFileChange() {
   }
   fileChangeDebounceTimer = window.setTimeout(() => {
     fileChangeDebounceTimer = null
+    // 🆕 v4 M1+ 2026-06-18：stream 进行中不直接重载，避免清空正在流式加载的列表
+    if (isStreamLoading) {
+      pendingFileChange = true
+      console.info('[Files] file:change suppressed, will reload after current stream')
+      return
+    }
     loadFiles()
   }, 300)
 }

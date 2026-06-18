@@ -2,7 +2,20 @@
  * 复现：自动化测试任务聚合模式显示 100+ 张"自动化"卡片
  * 根因验证：task.runId 缺失时，useTasksList.groupedItems 会把每个 task 单独成组
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+
+// 提供一个隔离的 localStorage，避免污染其他并行测试
+const testStorage = new Map<string, string>()
+const mockLocalStorage: Storage = {
+  get length() { return testStorage.size },
+  key: (index: number) => Array.from(testStorage.keys())[index] ?? null,
+  getItem: (key: string) => testStorage.get(key) ?? null,
+  setItem: (key: string, value: string) => { testStorage.set(key, value) },
+  removeItem: (key: string) => { testStorage.delete(key) },
+  clear: () => { testStorage.clear() },
+} as unknown as Storage
+vi.stubGlobal('localStorage', mockLocalStorage)
+
 import { setActivePinia, createPinia } from 'pinia'
 import { useTaskStore } from '@/stores/taskStore'
 import { useTasksList } from '@/composables/useTasksList'
@@ -38,9 +51,12 @@ function makeTask(id: string, sourcePath: string): EncvTask {
 
 describe('useTasksList — 自动化测试任务分组', () => {
   beforeEach(() => {
-    localStorage.clear()
+    testStorage.clear()
     _reloadTriggeredByCache()
     setActivePinia(createPinia())
+  })
+  afterEach(() => {
+    testStorage.clear()
   })
 
   it('同一 runId 的 12 个 task 应该聚合成 1 个 group', () => {

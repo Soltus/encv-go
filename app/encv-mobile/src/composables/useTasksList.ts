@@ -295,7 +295,7 @@ function createUseTasksList() {
     return getStatusColorInner(task.status)
   }
   function getStatusLabel(status: TaskStatus): string {
-    return t(`tasks.status.${status}`)
+    return t(`tasks.${status}`)
   }
   function getStatusColor(status: TaskStatus): string {
     return getStatusColorInner(status)
