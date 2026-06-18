@@ -734,10 +734,21 @@ async function loadFiles() {
   //   让前端只需维护一个 loadFiles 路径
   console.info('[Files] Loading files (stream), path:', currentPath.value)
   const gen = ++loadGeneration
-  loading.value = true
+  // 🆕 v4 Bug1 修复：自动更新（file:change）下不立刻清空 files.value，避免视觉闪
+  //   - 首次加载（isInitialLoad）才显示全屏 loading + 清空老数据
+  //   - 自动 reload（isRefresh）保留老数据 + 显示顶部小 spinner 指示器
+  //   - 切换路径（currentPath 变化）才真正清空（isPathChange）
+  const isPathChange = !files.value.length || files.value[0]?.parent !== currentPath.value
+  const isInitialLoad = files.value.length === 0 && firstLoad === true
+  if (isPathChange || isInitialLoad) {
+    loading.value = true
+    files.value = []
+  } else {
+    refreshing.value = true  // 顶部小 indicator（不阻塞老数据渲染）
+  }
+  firstLoad = false
   connecting.value = false
   noPermission.value = false
-  files.value = []
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (gen !== loadGeneration) return
