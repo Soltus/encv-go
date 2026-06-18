@@ -116,8 +116,9 @@ const routes: RouteRecordRaw[] = [
       },
       {
         // 🆕 2026-06-11 v6：webdav 服务自动化测试入口
+        // 2026-06-18 v5：WebDAVAutoDetail.vue 详情页未实装，路由重定向到 automation-hub
         path: 'settings/devtools/webdav-auto',
-        component: () => import('@/views/WebDAVAutoDetail.vue'),
+        redirect: '/tabs/settings/devtools/automation-hub',
       },
       {
         // 🆕 2026-06-11：ECv4 容量边界测试（100×128GB sparse 虚拟容器）

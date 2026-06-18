@@ -102,9 +102,10 @@ describe('path-chain — 配置文件防回归（跨链路一致）', () => {
   // 2026-06-18 spec unify-workflow-task-service：AutomationTestsDetail.vue 已删除，
   //   自动化测试视图拆分为 AutomationTestsHub.vue（hub 页，无需 mockRoot）+
   //   PluginTestsDetail.vue（实际测试页，import MOCK_GENERATE_ROOT）。
+  // 2026-06-18 v5-bug3：PluginTestsDetail.vue 已删除（测试报告并入 Tasks 任务聚合展示），
+  //   路由 redirect 到 /tabs/tasks。防回归测试改验 WorkflowDashboard.vue 即可。
   it.each([
     'WorkflowDashboard.vue',
-    'PluginTestsDetail.vue',
   ])('【防回归】%s 必须 import MOCK_GENERATE_ROOT 声明式常量（禁 split/slice 推导）', (viewFile) => {
     const src = readFileSync(
       resolve(REPO_ROOT, `app/encv-mobile/src/views/${viewFile}`),

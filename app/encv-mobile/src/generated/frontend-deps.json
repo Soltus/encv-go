@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-18T01:56:40.836Z",
+  "generated_at": "2026-06-18T03:33:38.661Z",
   "source_file": "package.json",
   "items": [
     {
@@ -145,6 +145,17 @@
       "description": "Ionicons — Ionic 官方图标库",
       "icon": "image",
       "license": "MIT"
+    },
+    {
+      "name": "jszip",
+      "version": "3.10.1",
+      "version_range": "^3.10.1",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "markstream-vue",

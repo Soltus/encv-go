@@ -746,7 +746,7 @@ async function loadFiles() {
   //   - 首次加载（isInitialLoad）才显示全屏 loading + 清空老数据
   //   - 自动 reload（isRefresh）保留老数据 + 显示顶部小 spinner 指示器
   //   - 切换路径（currentPath 变化）才真正清空（isPathChange）
-  const isPathChange = !files.value.length || files.value[0]?.parent !== currentPath.value
+  const isPathChange = !files.value.length || files.value[0]?.path !== currentPath.value
   const isInitialLoad = files.value.length === 0 && firstLoad === true
   if (isPathChange || isInitialLoad) {
     loading.value = true

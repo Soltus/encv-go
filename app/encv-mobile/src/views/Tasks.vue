@@ -293,11 +293,21 @@
                     v-if="item.runId && !item.runId.startsWith('__manual__')"
                     fill="clear"
                     size="small"
-                    @click="viewGroupReport(item.runId)"
-                    :title="t('tasks.viewReport')"
+                    @click.stop="exportGroupReport(item.runId, item.tasks)"
+                    :disabled="exporting[item.runId]"
+                    :title="t('tasks.exportReport')"
                     class="group-report-btn"
                   >
-                    <ion-icon :icon="documentTextOutline" slot="icon-only"></ion-icon>
+                    <ion-spinner
+                      v-if="exporting[item.runId]"
+                      name="dots"
+                      class="group-report-btn__spinner"
+                    ></ion-spinner>
+                    <ion-icon
+                      v-else
+                      :icon="downloadOutline"
+                      slot="icon-only"
+                    ></ion-icon>
                   </ion-button>
                   <ion-button
                     fill="clear"
@@ -568,14 +578,15 @@ import {
   IonItemSliding, IonItemOptions, IonItemOption, IonIcon,
   IonLabel, IonBadge, IonProgressBar, IonFab, IonFabButton,
   IonSpinner, IonButton, IonButtons, IonSearchbar, IonChip,
-  IonPopover, IonCheckbox, alertController, modalController,
+  IonPopover, IonCheckbox, alertController, modalController, toastController,
 } from '@ionic/vue'
+import { Share } from '@capacitor/share'
 import {
   add, closeCircle, checkmarkCircle, timer, sync,
   warningOutline, lockClosed, lockClosedOutline, search, funnel, trashBin,
   extensionPuzzle, swapVertical, chevronDown,
   hardwareChipOutline, cogOutline, person, chevronForward, chevronBack,
-  documentTextOutline,
+  downloadOutline,
   albumsOutline, listOutline, calendarOutline,
 } from 'ionicons/icons'
 import { useRoute, useRouter } from 'vue-router'
@@ -591,6 +602,8 @@ import { getTriggeredBy } from '@/composables/useTaskTrigger'
 import { formatContainerVersion } from '@/constants/containerVersion'
 // 🆕 Task 15：虚拟滚动组件
 import TaskVirtualList from '@/components/tasks/TaskVirtualList.vue'
+// 🆕 v4 Bug3 修复：测试报告 zip 导出
+import { buildReportZip } from '@/lib/buildReportZip'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -859,7 +872,7 @@ async function exportGroupReport(runId: string, runTasks: EncvTask[]) {
       const dataUrl = await blobToDataURL(file)
       await Share.share({
         title: filename,
-        text: t('tasks.exportShareText', { runId, passed: run.passed, failed: run.failed }),
+        text: t('tasks.exportShareText', { runId, passed: String(run.passed), failed: String(run.failed) }),
         files: undefined,  // Capacitor Files API requires Filesystem write first
         url: dataUrl,
         dialogTitle: t('tasks.exportShareDialogTitle'),
@@ -896,6 +909,26 @@ async function exportGroupReport(runId: string, runTasks: EncvTask[]) {
 
 // 🆕 v4 Bug3 修复：exporting map 状态
 const exporting = ref<Record<string, boolean>>({})
+
+/**
+ * 🆕 v4 Bug3 修复：把 Blob 转为 base64 dataURL
+ *
+ * 用途：Capacitor Share API 的 url 字段在 Android 端推荐传 file:// URI 或 dataURL
+ * 实现：FileReader.readAsDataURL（标准 Web API，所有平台可用）
+ *
+ * 为什么不用 CapacitorFilesystem.writeFile：
+ *   - 多一个 filesystem 依赖
+ *   - 流程更复杂（写文件 → 拿 URI → share → 删除临时文件）
+ *   - dataURL 体积大但移动端几百 KB 可接受
+ */
+function blobToDataURL(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(String(reader.result ?? ''))
+    reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'))
+    reader.readAsDataURL(blob)
+  })
+}
 
 /**
  * 🆕 v4 M3：group 头部 hit counter chips
