@@ -109,15 +109,19 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/AutomationTestsHub.vue'),
       },
       {
-        // 🆕 2026-06-18 v5：PluginTestsDetail 已删除（测试报告并入任务系统 group card）
-        // 路由保留仅作为占位（避免外链 404），但重定向到 Tasks tab
+        // 🆕 2026-06-11 v6：插件测试运行/管理页面（Mock 数据 + 触发测试 + Pipeline/Tree 视图）
+        // 历史：1730866 commit 曾错误删除（误以为是"测试报告"页），2026-06-18 v5-bug3fix 恢复
+        // 测试报告 section 已并入任务系统 group card 的 exportGroupReport（zip 导出）
         path: 'settings/devtools/plugin-tests',
-        redirect: '/tabs/tasks',
+        component: () => import('@/views/PluginTestsDetail.vue'),
       },
       {
-        // 🆕 2026-06-11 v6：webdav 服务自动化测试入口（独立页面，不是测试报告）
-        path: 'settings/devtools/webdav-auto',
-        component: () => import('@/views/WebDAVAutoDetail.vue'),
+        // 🆕 2026-06-11 v6：webdav 服务自动化测试入口
+        // 历史：v4 commit 1730866 错误改为 redirect 到 automation-hub + 单数 path 'webdav-auto'
+        //       与 AutomationTestsHub.vue:67 的 'webdav-tests' 跳转不一致
+        // 2026-06-18 v5-bug3fix 恢复成 v4 之前的可用状态
+        path: 'settings/devtools/webdav-tests',
+        component: () => import('@/views/WebDavAutomationTestsDetail.vue'),
       },
       {
         // 🆕 2026-06-11：ECv4 容量边界测试（100×128GB sparse 虚拟容器）
