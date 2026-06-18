@@ -84,6 +84,12 @@
         <ion-refresher-content></ion-refresher-content>
       </ion-refresher>
 
+      <!-- 🆕 v4 Bug1 修复：自动更新顶栏细 indicator（不阻塞老数据渲染，不清空列表） -->
+      <div v-if="refreshing" class="files-refresh-bar" aria-live="polite">
+        <ion-spinner name="dots" class="files-refresh-bar__spinner"></ion-spinner>
+        <span class="files-refresh-bar__label">{{ t('files.autoRefreshing') }}</span>
+      </div>
+
       <!-- 播放错误展示区域 -->
       <div v-if="playError" class="play-error-banner">
         <div class="play-error-header">
@@ -653,7 +659,9 @@ const renameAlertInputs = computed(() => {
 const MOUNT_ROOT = '/d'
 const currentPath = ref(MOUNT_ROOT)
 const loading = ref(false)
+const refreshing = ref(false)
 const connecting = ref(false)
+let firstLoad = true
 
 // 🆕 v3 2026-06-18 Task 8：route.query 驱动的文件高亮
 //   - TaskDetailModal.locateOutput 跳转 /tabs/files?path=<dir>&highlight=<name>
@@ -766,6 +774,7 @@ async function loadFiles() {
       serverOnline.value = true
       noPermission.value = false
       loading.value = false
+      refreshing.value = false
       connecting.value = false
       console.info('[Files] Stream complete, total:', result.files.length, 'files')
 
@@ -784,12 +793,14 @@ async function loadFiles() {
         serverOnline.value = true
         noPermission.value = true
         loading.value = false
+        refreshing.value = false
         connecting.value = false
         return
       }
       if (error instanceof NotFoundError) {
         serverOnline.value = true
         loading.value = false
+        refreshing.value = false
         connecting.value = false
         if (currentPath.value !== '/d') {
           showToast({ message: t('files.pathNotFound'), duration: 2000, color: 'warning' })
@@ -807,6 +818,7 @@ async function loadFiles() {
   if (gen !== loadGeneration) return
   serverOnline.value = false
   loading.value = false
+  refreshing.value = false
   connecting.value = false
 }
 
@@ -1764,6 +1776,35 @@ watch(
   border-radius: 6px;
   margin: 8px 12px;
   padding: 10px 12px;
+}
+
+/* 🆕 v4 Bug1 修复：自动更新顶栏细 indicator（不阻塞老数据渲染） */
+.files-refresh-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--ion-color-primary-tint);
+  color: var(--ion-color-primary-contrast);
+  font-size: 11px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--ion-color-primary-shade);
+  animation: files-refresh-bar-enter 0.15s ease-out;
+}
+.files-refresh-bar__spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+.files-refresh-bar__label {
+  white-space: nowrap;
+}
+@keyframes files-refresh-bar-enter {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .play-error-header {

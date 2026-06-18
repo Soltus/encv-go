@@ -832,14 +832,70 @@ function isGroupExpanded(key: string): boolean {
   return expandedGroupKeys.value.has(key)
 }
 
-// 🆕 v4 M3：group card 跳转报告（仅当有真实 runId 时显示）
-function viewGroupReport(runId: string) {
-  if (!runId || runId.startsWith('__manual__')) return
-  router.push({
-    path: '/tabs/settings/devtools/plugin-tests',
-    query: { runId },
-  })
+// 🆕 v4 Bug3 修复：测试报告导出（group card 右下角按钮触发）
+//   - 不再跳到独立报告页面（PluginTestsDetail 已删除）
+//   - 改为 zip 导出（5 个文件，AI 友好）
+//   - 走 Capacitor Share API 弹原生分享菜单
+async function exportGroupReport(runId: string, runTasks: EncvTask[]) {
+  const run = workflowService.runs.value.find((r) => r.id === runId)
+  if (!run) {
+    // 🆕 v4 Bug3 修复：找不到 run 时给用户清晰提示
+    const alert = await alertController.create({
+      header: t('tasks.exportNotFoundHeader'),
+      message: t('tasks.exportNotFoundMessage'),
+      buttons: [t('common.ok')],
+    })
+    await alert.present()
+    return
+  }
+  try {
+    exporting.value[runId] = true
+    const zipBlob = await buildReportZip(run, runTasks, t)
+    const filename = `encvreport-${runId.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.zip`
+    // 🆕 v4 Bug3 修复：Capacitor Share API 弹原生分享菜单（用户选择分享到 IM / 网盘 / 本地）
+    const isNative = !!(window as any).Capacitor?.isNativePlatform?.()
+    if (isNative && Share) {
+      const file = new File([zipBlob], filename, { type: 'application/zip' })
+      const dataUrl = await blobToDataURL(file)
+      await Share.share({
+        title: filename,
+        text: t('tasks.exportShareText', { runId, passed: run.passed, failed: run.failed }),
+        files: undefined,  // Capacitor Files API requires Filesystem write first
+        url: dataUrl,
+        dialogTitle: t('tasks.exportShareDialogTitle'),
+      })
+    } else {
+      // 浏览器 fallback：触发下载
+      const url = URL.createObjectURL(zipBlob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }
+    const toast = await toastController.create({
+      message: t('tasks.exportSuccess', { filename }),
+      duration: 2500,
+      color: 'success',
+    })
+    await toast.present()
+  } catch (error) {
+    console.error('[exportGroupReport] failed:', error)
+    const alert = await alertController.create({
+      header: t('tasks.exportFailedHeader'),
+      message: String((error as any)?.message ?? error),
+      buttons: [t('common.ok')],
+    })
+    await alert.present()
+  } finally {
+    exporting.value[runId] = false
+  }
 }
+
+// 🆕 v4 Bug3 修复：exporting map 状态
+const exporting = ref<Record<string, boolean>>({})
 
 /**
  * 🆕 v4 M3：group 头部 hit counter chips

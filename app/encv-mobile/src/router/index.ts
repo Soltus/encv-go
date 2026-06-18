@@ -109,14 +109,15 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/AutomationTestsHub.vue'),
       },
       {
-        // 🆕 2026-06-17：重命名 AutomationTestsDetail → PluginTestsDetail（消除 section header 与 ion-item 重名歧义）
+        // 🆕 2026-06-18 v5：PluginTestsDetail 已删除（测试报告并入任务系统 group card）
+        // 路由保留仅作为占位（避免外链 404），但重定向到 Tasks tab
         path: 'settings/devtools/plugin-tests',
-        component: () => import('@/views/PluginTestsDetail.vue'),
+        redirect: '/tabs/tasks',
       },
       {
         // 🆕 2026-06-11 v6：webdav 服务自动化测试入口
-        path: 'settings/devtools/webdav-tests',
-        component: () => import('@/views/WebDavAutomationTestsDetail.vue'),
+        path: 'settings/devtools/webdav-auto',
+        component: () => import('@/views/WebDAVAutoDetail.vue'),
       },
       {
         // 🆕 2026-06-11：ECv4 容量边界测试（100×128GB sparse 虚拟容器）
