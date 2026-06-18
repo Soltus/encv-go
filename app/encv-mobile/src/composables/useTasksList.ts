@@ -33,7 +33,8 @@
  * - workflowService
  * - cancelRun (v6 新增)
  */
-import { computed, ref, type ShallowRef } from 'vue'
+import { computed, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useTaskStore } from '@/stores/taskStore'
 import { useTaskFilter } from '@/composables/useTaskFilter'
 import {
@@ -78,6 +79,13 @@ let _instance: ReturnType<typeof createUseTasksList> | null = null
 
 function createUseTasksList() {
   const store = useTaskStore()
+  // 🆕 v6 2026-06-18：storeToRefs 保留 state 的 ref 包装（Pinia setup store
+  //   会把 ref/computed 自动解包给消费者，普通属性访问会丢失响应性）
+  //   - store.tasks 是 shallowRef，store.tasks 直接读会得到 EncvTask[]（无 .value）
+  //   - storeToRefs(store).tasks 才是真正的 ShallowRef<EncvTask[]>
+  //   - 之前用 `as unknown as ShallowRef<EncvTask[]>` 是类型谎言，运行时 tasks.value === undefined
+  //   - Tasks.vue 在 onIonViewWillEnter 访问 tasks.value.length 抛 TypeError → tab 崩溃
+  const storeRefs = storeToRefs(store)
   const filter = useTaskFilter()
   const workflowService = useWorkflowTaskService()
   const { t } = useI18n()
@@ -524,13 +532,13 @@ function createUseTasksList() {
   function applyTaskCompleted(data: any) { store.applyTaskCompleted(data) }
 
   return {
-    // ============ store state ============
-    tasks: store.tasks as unknown as ShallowRef<EncvTask[]>,
+    // ============ store state（通过 storeToRefs 保留 ref，避免 Pinia 自动解包丢失响应性） ============
+    tasks: storeRefs.tasks,
     loading: computed(() => false),
-    isInitialLoad: computed(() => !store.hydrated),
-    isRefreshing: store.isRefreshing,
-    hydrated: store.hydrated,
-    hasAnyTask: store.hasAnyTask,
+    isInitialLoad: computed(() => !storeRefs.hydrated.value),
+    isRefreshing: storeRefs.isRefreshing,
+    hydrated: storeRefs.hydrated,
+    hasAnyTask: storeRefs.hasAnyTask,
 
     // ============ filter state ============
     searchQuery: filter.searchQuery,
@@ -557,12 +565,12 @@ function createUseTasksList() {
     statusOptions,
 
     // ============ 派生 ============
-    availablePlugins: store.availablePlugins,
+    availablePlugins: storeRefs.availablePlugins,
     hasActiveFilters: filter.hasActiveFilters,
     activeFilterCount: filter.activeFilterCount,
     sortedIndices: computed(() => sortedTasks.value.map((t) => t.id)),
-    tasksByRunId: store.tasksByRunId,
-    tasksById: store.tasksById,
+    tasksByRunId: storeRefs.tasksByRunId,
+    tasksById: storeRefs.tasksById,
     hasCompletedTasks,
     filteredTasks,
     groupedItems,

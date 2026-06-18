@@ -280,8 +280,8 @@
             @keydown.enter.prevent="openGroupDetail(item.runId)"
             @keydown.space.prevent="openGroupDetail(item.runId)"
             @contextmenu.prevent="openGroupActionSheet(item)"
-            @touchstart.passive="onGroupTouchStart($event, item)"
-            @touchend.passive="onGroupTouchEnd($event, item)"
+            @touchstart="onGroupTouchStart($event, item)"
+            @touchend="onGroupTouchEnd($event, item)"
           >
             <!-- 左侧 4px 状态色边 -->
             <div
@@ -1139,17 +1139,28 @@ onBeforeUnmount(() => {
 // 🆕 onIonViewWillEnter：参考 Files.vue 实现切回 tab 自动刷新
 //   智能条件：如果存在 running/queued task 立即拉一次最新列表；否则只靠 WS 增量更新
 //   避免无谓的 GET /api/tasks 调用
+//   2026-06-18：套 try/catch + console.error 防御 — 历史教训：useTasksList 内部
+//   store.tasks 自动解包曾导致 tasks.value 抛 TypeError 把 tab 冻住
 onIonViewWillEnter(() => {
-  if (tasks.value.length === 0) {
-    fetchTasks()
-    return
-  }
-  // 存在 running/queued → 立即拉一次最新
-  const hasActive = tasks.value.some(
-    (t) => t.status === 'running' || t.status === 'queued' || t.status === 'cancelling',
-  )
-  if (hasActive) {
-    fetchTasks()
+  try {
+    const arr = tasks.value
+    if (!Array.isArray(arr)) {
+      console.error('[Tasks.onIonViewWillEnter] tasks.value is not array:', typeof arr, arr)
+      return
+    }
+    if (arr.length === 0) {
+      void fetchTasks()
+      return
+    }
+    // 存在 running/queued → 立即拉一次最新
+    const hasActive = arr.some(
+      (t) => t.status === 'running' || t.status === 'queued' || t.status === 'cancelling',
+    )
+    if (hasActive) {
+      void fetchTasks()
+    }
+  } catch (err) {
+    console.error('[Tasks.onIonViewWillEnter] crashed (caught, do not block tab):', err)
   }
 })
 </script>
