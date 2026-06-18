@@ -50,6 +50,13 @@ export const useTaskStore = defineStore('task', () => {
   /** 加载状态：true = 空状态；false = 有数据（即使 isRefreshing=true 也不显示空态） */
   const hasAnyTask = ref(false)
 
+  /** 🆕 v6 2026-06-18：置顶 runId 集合（左滑置顶操作）
+   *  - Set 保证 O(1) add/delete/has
+   *  - 用户置顶的 run 在分组列表中排到最前
+   *  - 持久化到 IndexedDB meta 表
+   */
+  const pinnedRunIds = ref<Set<string>>(new Set())
+
   // ============ 乱序事件缓冲 ============
   const pendingEvents = new Map<string, PendingEvent[]>()
 
@@ -197,6 +204,53 @@ export const useTaskStore = defineStore('task', () => {
     persistRemove(id)
   }
 
+  /**
+   * 🆕 v6 2026-06-18：删除整个 run 的所有 task（左滑删除操作）
+   *  - 返回被删的 task 列表（调用方遍历调后端 API）
+   *  - 同时解除 runId 的置顶（避免僵尸 pinned 引用）
+   */
+  function removeRunTasks(runId: string): EncvTask[] {
+    const targets: EncvTask[] = []
+    for (const t of tasks.value) {
+      if (t.runId === runId) targets.push(t)
+    }
+    if (targets.length === 0) return targets
+    const targetIds = new Set(targets.map((t) => t.id))
+    tasks.value = tasks.value.filter((t) => !targetIds.has(t.id))
+    hasAnyTask.value = tasks.value.length > 0
+    // 同步 persist
+    for (const t of targets) persistRemove(t.id)
+    // 解除置顶
+    if (pinnedRunIds.value.has(runId)) {
+      const next = new Set(pinnedRunIds.value)
+      next.delete(runId)
+      pinnedRunIds.value = next
+    }
+    return targets
+  }
+
+  /**
+   * 🆕 v6 2026-06-18：置顶 / 取消置顶 run
+   *  - toggle 语义：已置顶则取消置顶
+   */
+  function togglePinRun(runId: string): boolean {
+    const next = new Set(pinnedRunIds.value)
+    if (next.has(runId)) {
+      next.delete(runId)
+      pinnedRunIds.value = next
+      return false
+    } else {
+      next.add(runId)
+      pinnedRunIds.value = next
+      return true
+    }
+  }
+
+  /** 读取置顶状态（O(1)） */
+  function isRunPinned(runId: string): boolean {
+    return pinnedRunIds.value.has(runId)
+  }
+
   // ============ WS 4 件套统一入口 ============
 
   function applyTaskUpdate(data: { id: string; type?: string; status?: string; progress?: number }): void {
@@ -309,13 +363,22 @@ export const useTaskStore = defineStore('task', () => {
     return map
   })
 
-  /** 出现的 plugin 列表（去重 + 排序） */
+  /**
+   * 出现的 plugin 列表（去重 + 排序）
+   * - 🆕 v6 2026-06-18：空 pluginName 任务映射到 `__unknown__` sentinel
+   *   - 让用户能主动筛选"未知插件"任务（之前空 pluginName 永远命中失败 → bug）
+   *   - UI 在 chip 标签上把 `__unknown__` 翻译为"未知插件"
+   */
   const availablePlugins = computed(() => {
     const set = new Set<string>()
+    let hasUnknown = false
     for (const t of tasks.value) {
       if (t.pluginName) set.add(t.pluginName)
+      else hasUnknown = true
     }
-    return Array.from(set).sort()
+    const list = Array.from(set).sort()
+    if (hasUnknown) list.push('__unknown__')
+    return list
   })
 
   // ============ Reset（测试用） ============
@@ -325,6 +388,7 @@ export const useTaskStore = defineStore('task', () => {
     hydrated.value = false
     hasAnyTask.value = false
     isRefreshing.value = false
+    pinnedRunIds.value = new Set()
   }
 
   return {
@@ -333,6 +397,7 @@ export const useTaskStore = defineStore('task', () => {
     hydrated,
     isRefreshing,
     hasAnyTask,
+    pinnedRunIds,
     // getters
     tasksById,
     tasksByRunId,
@@ -343,7 +408,10 @@ export const useTaskStore = defineStore('task', () => {
     patchTask,
     appendTask,
     removeTask,
+    removeRunTasks,
     cancelRunTasks,
+    togglePinRun,
+    isRunPinned,
     applyTaskUpdate,
     applyTaskProgress,
     applyTaskCreated,

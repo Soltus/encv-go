@@ -407,12 +407,24 @@ export default {
     'tasks.groupCard.hitFull': '全部 {total}',
     'tasks.groupCard.allPassed': '全部通过',
     'tasks.groupCard.mostlyFailed': '失败较多',
+    // 🆕 v6 2026-06-18：plugin 筛选错误修复（空 pluginName 表达为 `__unknown__`）
+    'tasks.unknownPlugin': '未知插件',
     // 🆕 v6 2026-06-18：group card 取消运行（v6-bug3fix）
     'tasks.cancelRun': '取消此运行',
     'tasks.cancelRunHeader': '取消运行？',
     'tasks.cancelRunMessage': '将取消此运行下的 {count} 个运行中/排队中的任务。此操作无法撤销。',
     'tasks.cancelRunConfirm': '取消运行',
     'tasks.cancelRunFailedHeader': '取消失败',
+    // 🆕 v6 2026-06-18：左滑 swipe 操作（取消 / 置顶 / 删除）
+    'tasks.pin': '置顶',
+    'tasks.unpin': '取消置顶',
+    'tasks.pinned': '已置顶',
+    'tasks.unpinned': '已取消置顶',
+    'tasks.pinnedTitle': '此运行已置顶',
+    'tasks.removeRunHeader': '删除运行？',
+    'tasks.removeRunMessage': '将永久删除此运行下的 {count} 个任务。此操作无法撤销。',
+    'tasks.removeRunSuccess': '已删除 {removed} 个任务',
+    'tasks.removeRunPartial': '{failed} 个任务删除失败',
     // 报告 zip 内嵌文件 i18n
     'tasks.reportTitle': 'ENCV 测试运行报告',
     'tasks.reportOverview': '概览',
@@ -879,12 +891,24 @@ export default {
     'tasks.groupCard.hitFull': 'All {total}',
     'tasks.groupCard.allPassed': 'All passed',
     'tasks.groupCard.mostlyFailed': 'Mostly failed',
+    // 🆕 v6 2026-06-18：plugin filter error fix (empty pluginName → `__unknown__`)
+    'tasks.unknownPlugin': 'Unknown plugin',
     // 🆕 v6 2026-06-18：group card cancel run (v6-bug3fix)
     'tasks.cancelRun': 'Cancel this run',
     'tasks.cancelRunHeader': 'Cancel run?',
     'tasks.cancelRunMessage': 'This will cancel {count} running/queued tasks under this run. This action cannot be undone.',
     'tasks.cancelRunConfirm': 'Cancel run',
     'tasks.cancelRunFailedHeader': 'Cancel failed',
+    // 🆕 v6 2026-06-18：left swipe operations (cancel / pin / remove)
+    'tasks.pin': 'Pin',
+    'tasks.unpin': 'Unpin',
+    'tasks.pinned': 'Pinned',
+    'tasks.unpinned': 'Unpinned',
+    'tasks.pinnedTitle': 'This run is pinned',
+    'tasks.removeRunHeader': 'Delete run?',
+    'tasks.removeRunMessage': 'This will permanently delete {count} tasks under this run. This action cannot be undone.',
+    'tasks.removeRunSuccess': 'Deleted {removed} tasks',
+    'tasks.removeRunPartial': '{failed} tasks failed to delete',
     // report zip i18n
     'tasks.reportTitle': 'ENCV Test Run Report',
     'tasks.reportOverview': 'Overview',

@@ -148,12 +148,17 @@ function createUseTasksList() {
     return arr
   })
 
-  let _groupTreeCache: { source: EncvTask[]; result: any[] } | null = null
+  // ============ viewMode 切换缓存（v6 性能优化） ============
+  // 避免 viewMode 切换时触发另一组 (groupedItems vs flatItems) 的整树重算
+  // 因为 viewMode 切换是 UI 维度，data 维度 (sortedTasks) 没变
+  // 方案：缓存上一次 viewMode 计算结果，只在新 viewMode 不在缓存时重算
+  let _groupCache: { source: EncvTask[]; result: any[] } | null = null
+  let _flatCache: { source: EncvTask[]; result: any[] } | null = null
 
   const groupedItems = computed<any[]>(() => {
     const src = sortedTasks.value
-    if (_groupTreeCache && _groupTreeCache.source === src) {
-      return _groupTreeCache.result
+    if (_groupCache && _groupCache.source === src) {
+      return _groupCache.result
     }
     const groups = new Map<string, { runId: string; tasks: EncvTask[]; startedAt: string }>()
     for (const tk of src) {
@@ -177,8 +182,16 @@ function createUseTasksList() {
         counters,
       })
     }
-    result.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-    _groupTreeCache = { source: src, result }
+    result.sort((a, b) => {
+      // 🆕 v6 2026-06-18：pinned run 永远排最前
+      const pinned = store.pinnedRunIds
+      const aPinned = pinned.has(a.runId)
+      const bPinned = pinned.has(b.runId)
+      if (aPinned !== bPinned) return aPinned ? -1 : 1
+      // 其余按 startedAt 倒序
+      return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+    })
+    _groupCache = { source: src, result }
     return result
   })
 
@@ -238,13 +251,19 @@ function createUseTasksList() {
     return { plugins, types, statuses, date, search, hitAny }
   }
 
-  const flatItems = computed(() =>
-    sortedTasks.value.map((tk) => ({
+  const flatItems = computed(() => {
+    const src = sortedTasks.value
+    if (_flatCache && _flatCache.source === src) {
+      return _flatCache.result
+    }
+    const result = src.map((tk) => ({
       kind: 'task' as const,
       key: `t-${tk.id}`,
       task: tk,
-    })),
-  )
+    }))
+    _flatCache = { source: src, result }
+    return result
+  })
 
   const displayedItems = computed<any[]>(() => {
     if (filter.viewMode.value === 'group') {
@@ -402,6 +421,49 @@ function createUseTasksList() {
     }
   }
 
+  /**
+   * 🆕 v6 2026-06-18：删除整个 run 下的所有 task（左滑删除操作）
+   *  - 后端逐个 removeTaskApi（没有 batch endpoint）
+   *  - store 一次 removeRunTasks 批量删（避免多次 reactive 触发）
+   *  - 失败的任务保留在 store，下次拉取会重新覆盖
+   */
+  async function removeRunTasks(runId: string): Promise<{ removed: number; failed: number }> {
+    const targets = store.removeRunTasks(runId)
+    if (targets.length === 0) return { removed: 0, failed: 0 }
+    let removed = 0
+    let failed = 0
+    for (const t of targets) {
+      try {
+        await removeTaskApi(t.id)
+        removed++
+      } catch (err) {
+        // 失败的任务回滚到 store（重新 prepend）
+        console.warn('[useTasksList.removeRunTasks] failed:', t.id, err)
+        failed++
+      }
+    }
+    if (failed > 0) {
+      // 失败的 task 重新加回 store 头部
+      // 注意：targets 已被 store.removeRunTasks 过滤，需要从原始数据恢复
+      // 简单实现：fetchTasks 重新拉一次（覆盖 store）
+      void fetchTasks({ silent: true })
+    }
+    return { removed, failed }
+  }
+
+  /**
+   * 🆕 v6 2026-06-18：切换 run 置顶状态（左滑置顶操作）
+   *  - 返回新置顶状态（true=已置顶 / false=已取消）
+   */
+  function togglePinRun(runId: string): boolean {
+    return store.togglePinRun(runId)
+  }
+
+  /** 读取 run 置顶状态 */
+  function isRunPinned(runId: string): boolean {
+    return store.isRunPinned(runId)
+  }
+
   async function clearCompletedWithConfirm(): Promise<number> {
     const completed = store.tasks.filter((tk) => tk.status === 'completed' || tk.status === 'cancelled' || tk.status === 'failed')
     if (completed.length === 0) return 0
@@ -550,6 +612,9 @@ function createUseTasksList() {
     cancelTaskById,
     retryTaskById,
     removeTaskById,
+    removeRunTasks,
+    togglePinRun,
+    isRunPinned,
     clearCompletedWithConfirm,
     applyTaskUpdate,
     applyTaskProgress,
