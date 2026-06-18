@@ -295,28 +295,20 @@
                   </div>
                 </div>
                 <div class="tl-group-card__actions">
+                  <!-- 🆕 v6-bug3fix 2026-06-18：移除 [📦] 按钮（L2 GroupDetail toolbar 已有，避免重复） -->
+                  <!-- 🆕 v6-bug3fix 2026-06-18：取消按钮（仅 running group 显示，task 已实现 swipe） -->
                   <ion-button
-                    v-if="item.runId && !item.runId.startsWith('__manual__')"
+                    v-if="hasRunningTasks(item.tasks)"
                     fill="clear"
                     size="small"
-                    @click.stop="exportGroupReport(item.runId, item.tasks)"
-                    @keydown.enter.stop
-                    :disabled="exporting[item.runId]"
-                    :title="t('tasks.exportReport')"
-                    class="group-report-btn"
+                    color="warning"
+                    @click.stop="confirmCancelGroup(item.runId, item.tasks)"
+                    :title="t('tasks.cancelRun')"
+                    class="group-cancel-btn"
                   >
-                    <ion-spinner
-                      v-if="exporting[item.runId]"
-                      name="dots"
-                      class="group-report-btn__spinner"
-                    ></ion-spinner>
-                    <ion-icon
-                      v-else
-                      :icon="downloadOutline"
-                      slot="icon-only"
-                    ></ion-icon>
+                    <ion-icon :icon="close" slot="icon-only"></ion-icon>
                   </ion-button>
-                  <!-- 🆕 v5-bug3fix：进入箭头（替代 chevron 展开/折叠） -->
+                  <!-- 进入箭头（替代展开 chevron） -->
                   <ion-icon
                     :icon="chevronForward"
                     class="tl-group-card__chevron"
@@ -508,14 +500,12 @@ import {
   IonItemSliding, IonItemOptions, IonItemOption, IonIcon,
   IonLabel, IonBadge, IonProgressBar, IonFab, IonFabButton,
   IonSpinner, IonButton, IonButtons, IonSearchbar, IonChip,
-  IonPopover, IonCheckbox, alertController, modalController, toastController,
+  IonPopover, IonCheckbox, alertController, modalController,
 } from '@ionic/vue'
-import { Share } from '@capacitor/share'
-import { add, closeCircle, checkmarkCircle, timer, sync,
+import { add, close, closeCircle, checkmarkCircle, timer, sync,
   warningOutline, lockClosed, lockClosedOutline, search, funnel, trashBin,
   extensionPuzzle, swapVertical, chevronDown,
   hardwareChipOutline, cogOutline, person, chevronForward,
-  downloadOutline,
   albumsOutline, listOutline, calendarOutline,
 } from 'ionicons/icons'
 import { useRoute, useRouter } from 'vue-router'
@@ -531,8 +521,6 @@ import { getTriggeredBy } from '@/composables/useTaskTrigger'
 import { formatContainerVersion } from '@/constants/containerVersion'
 // 🆕 Task 15：虚拟滚动组件
 import TaskVirtualList from '@/components/tasks/TaskVirtualList.vue'
-// 🆕 v4 Bug3 修复：测试报告 zip 导出
-import { buildReportZip } from '@/lib/buildReportZip'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -623,6 +611,8 @@ const {
   applyDatePreset, setCustomDateRange, toggleViewMode,
   // 🆕 v4 M5：单例 workflowService 数据源（groupedItems 已通过 serviceRuns 派生，这里只消费）
   workflowService,
+  // 🆕 v6-bug3fix 2026-06-18：hydrate + cancelRun（group card 取消用）
+  hydrate, cancelRun,
 } = useTasksList()
 
 useTaskEventBridge({
@@ -861,89 +851,41 @@ async function openGroupDetail(runId: string) {
   await router.push(`/tabs/tasks/group/${encodeURIComponent(runId)}`)
 }
 
-// 🆕 v4 Bug3 修复：测试报告导出（group card 右下角按钮触发）
-//   - 不再跳到独立报告页面（PluginTestsDetail 已删除）
-//   - 改为 zip 导出（5 个文件，AI 友好）
-//   - 走 Capacitor Share API 弹原生分享菜单
-async function exportGroupReport(runId: string, runTasks: EncvTask[]) {
-  const run = workflowService.runs.value.find((r) => r.id === runId)
-  if (!run) {
-    // 🆕 v4 Bug3 修复：找不到 run 时给用户清晰提示
-    const alert = await alertController.create({
-      header: t('tasks.exportNotFoundHeader'),
-      message: t('tasks.exportNotFoundMessage'),
-      buttons: [t('common.ok')],
-    })
-    await alert.present()
-    return
-  }
-  try {
-    exporting.value[runId] = true
-    const zipBlob = await buildReportZip(run, runTasks, t)
-    const filename = `encvreport-${runId.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.zip`
-    // 🆕 v4 Bug3 修复：Capacitor Share API 弹原生分享菜单（用户选择分享到 IM / 网盘 / 本地）
-    const isNative = !!(window as any).Capacitor?.isNativePlatform?.()
-    if (isNative && Share) {
-      const file = new File([zipBlob], filename, { type: 'application/zip' })
-      const dataUrl = await blobToDataURL(file)
-      await Share.share({
-        title: filename,
-        text: t('tasks.exportShareText', { runId, passed: String(run.passed), failed: String(run.failed) }),
-        files: undefined,  // Capacitor Files API requires Filesystem write first
-        url: dataUrl,
-        dialogTitle: t('tasks.exportShareDialogTitle'),
-      })
-    } else {
-      // 浏览器 fallback：触发下载
-      const url = URL.createObjectURL(zipBlob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-    }
-    const toast = await toastController.create({
-      message: t('tasks.exportSuccess', { filename }),
-      duration: 2500,
-      color: 'success',
-    })
-    await toast.present()
-  } catch (error) {
-    console.error('[exportGroupReport] failed:', error)
-    const alert = await alertController.create({
-      header: t('tasks.exportFailedHeader'),
-      message: String((error as any)?.message ?? error),
-      buttons: [t('common.ok')],
-    })
-    await alert.present()
-  } finally {
-    exporting.value[runId] = false
-  }
+/** 🆕 v6-bug3fix 2026-06-18：group card 取消操作
+ *  - 仅 running group 显示取消按钮
+ *  - 弹 alert 确认 → cancelRun → 乐观更新 + 失败回滚
+ */
+function hasRunningTasks(tasks: EncvTask[]): boolean {
+  return tasks.some((tk) => tk.status === 'running' || tk.status === 'queued' || tk.status === 'cancelling')
 }
 
-// 🆕 v4 Bug3 修复：exporting map 状态
-const exporting = ref<Record<string, boolean>>({})
-
-/**
- * 🆕 v4 Bug3 修复：把 Blob 转为 base64 dataURL
- *
- * 用途：Capacitor Share API 的 url 字段在 Android 端推荐传 file:// URI 或 dataURL
- * 实现：FileReader.readAsDataURL（标准 Web API，所有平台可用）
- *
- * 为什么不用 CapacitorFilesystem.writeFile：
- *   - 多一个 filesystem 依赖
- *   - 流程更复杂（写文件 → 拿 URI → share → 删除临时文件）
- *   - dataURL 体积大但移动端几百 KB 可接受
- */
-function blobToDataURL(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(String(reader.result ?? ''))
-    reader.onerror = () => reject(reader.error ?? new Error('FileReader failed'))
-    reader.readAsDataURL(blob)
+async function confirmCancelGroup(runId: string, tasks: EncvTask[]): Promise<void> {
+  if (!runId || runId.startsWith('__manual__')) return
+  const runningCount = tasks.filter((tk) => tk.status === 'running' || tk.status === 'queued').length
+  const alert = await alertController.create({
+    header: t('tasks.cancelRunHeader'),
+    message: t('tasks.cancelRunMessage', { count: String(runningCount) }),
+    buttons: [
+      { text: t('common.cancel'), role: 'cancel' },
+      {
+        text: t('tasks.cancelRunConfirm'),
+        role: 'destructive',
+        handler: async () => {
+          try {
+            await cancelRun(runId)
+          } catch (err) {
+            const a = await alertController.create({
+              header: t('tasks.cancelRunFailedHeader'),
+              message: String((err as any)?.message ?? err),
+              buttons: [t('common.ok')],
+            })
+            await a.present()
+          }
+        },
+      },
+    ],
   })
+  await alert.present()
 }
 
 /**
@@ -1031,6 +973,12 @@ function dateRangeChipLabel(): string {
 // 🆕 onMounted：只处理路由 query（长按菜单跳转过来时打开 new task modal）
 // 首次 fetchTasks 由 onIonViewWillEnter 接管（每次切回 tab 智能刷新）。
 onMounted(() => {
+  // 🆕 v6 2026-06-18：冷启动从 IndexedDB 同步加载 tasks（v6 核心改造点）
+  //   - 之前用 localStorage 存，每次启动同步读取几百个 task 字符串 → 阻塞 main thread
+  //   - 现在用 IndexedDB 异步加载，主线程 0 阻塞
+  //   - store 暴露 hydrate()；失败回退空数组 + 后续 fetchTasks
+  void hydrate()
+
   // 🆕 Task 15：初始化虚拟滚动所需的 ion-content .inner-scroll 引用
   // ion-content shadow DOM 异步渲染，需要重试 + ResizeObserver 兜底
   initScrollElWithRetry()

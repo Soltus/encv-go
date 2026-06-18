@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-18T05:26:34.477Z",
+  "generated_at": "2026-06-18T06:45:23.731Z",
   "source_file": "package.json",
   "items": [
     {
@@ -136,6 +136,17 @@
       "license": "MIT"
     },
     {
+      "name": "dexie",
+      "version": "4.4.4",
+      "version_range": "^4.4.4",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
       "name": "ionicons",
       "version": "8.0.13",
       "version_range": "^8.0.13",
@@ -161,6 +172,17 @@
       "name": "markstream-vue",
       "version": "1.0.1-beta.5",
       "version_range": "1.0.1-beta.5",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
+      "name": "pinia",
+      "version": "3.0.4",
+      "version_range": "^3.0.4",
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
