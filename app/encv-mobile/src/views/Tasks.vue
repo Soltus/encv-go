@@ -268,138 +268,109 @@
 
           <!-- ============== Group card（聚合模式，1 个 run = 1 张卡片） ============== -->
           <!-- 未命中 group（hitAny=false）按用户选择 C 隐藏 -->
-          <!-- 🆕 2026-06-18 v5-bug3fix：整张 card clickable → push 到 L2 GroupDetail，移除展开态 -->
-          <!-- 🆕 v6 2026-06-18：包 ion-item-sliding，左滑=取消+删除+置顶（行业惯例） -->
-          <ion-item-sliding
+          <!-- 🆕 2026-06-18 v5-bug3fix：整张 card clickable → push 到 L2 GroupDetail -->
+          <!-- 🆕 v6 2026-06-18：长按弹出 action-sheet 取消/置顶/删除（TaskVirtualList slot 不支持 ion-item-sliding） -->
+          <div
             v-else-if="item.kind === 'group' && item.counters.hitAny"
-            :key="`sliding-${item.key}`"
-            class="tl-group-sliding"
+            :key="item.key"
+            :class="['tl-group-card', 'tl-group-card--clickable', `tl-group-card--${getGroupTone(item.runId, item.tasks)}`, groupCardMoodClass(item.tasks), isRunPinned(item.runId) ? 'tl-group-card--pinned' : '']"
+            role="button"
+            :aria-label="t('tasks.groupCard.openDetail')"
+            @click="openGroupDetail(item.runId)"
+            @keydown.enter.prevent="openGroupDetail(item.runId)"
+            @keydown.space.prevent="openGroupDetail(item.runId)"
+            @contextmenu.prevent="openGroupActionSheet(item)"
+            @touchstart.passive="onGroupTouchStart($event, item)"
+            @touchend.passive="onGroupTouchEnd($event, item)"
           >
-            <ion-item
-              :class="['tl-group-card', 'tl-group-card--clickable', `tl-group-card--${getGroupTone(item.runId, item.tasks)}`, groupCardMoodClass(item.tasks), isRunPinned(item.runId) ? 'tl-group-card--pinned' : '']"
-              button
-              :aria-label="t('tasks.groupCard.openDetail')"
-              @click="openGroupDetail(item.runId)"
-            >
-              <!-- 左侧 4px 状态色边 -->
-              <div
-                :class="['tl-group-card__border', `tl-group-border--${getGroupDominantStatus(item.tasks)}`]"
-              ></div>
+            <!-- 左侧 4px 状态色边 -->
+            <div
+              :class="['tl-group-card__border', `tl-group-border--${getGroupDominantStatus(item.tasks)}`]"
+            ></div>
 
-              <div class="tl-group-card__main">
-                <!-- 标题行：tone icon + 触发器名 + N 个任务 + 进入箭头 -->
-                <div class="tl-group-card__head">
-                  <div :class="['tl-bubble', 'tl-bubble--md', `tl-tone--${getGroupTone(item.runId, item.tasks)}`]">
-                    <ion-icon :icon="getGroupTone(item.runId, item.tasks) === 'ai_agent' ? hardwareChipOutline : cogOutline"></ion-icon>
-                  </div>
-                  <div class="tl-group-card__title-block">
-                    <h2 class="tl-group-card__title">
-                      {{ getGroupTone(item.runId, item.tasks) === 'ai_agent' ? t('tasks.triggeredBy_ai_agent') : t('tasks.triggeredBy_automation') }}
-                      <span class="tl-group-card__count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</span>
-                      <!-- 🆕 v6 置顶标记 -->
-                      <ion-icon
-                        v-if="isRunPinned(item.runId)"
-                        :icon="pin"
-                        class="tl-group-card__pin"
-                        :title="t('tasks.pinnedTitle')"
-                      ></ion-icon>
-                    </h2>
-                    <!-- plugin badges（前 3 个，超过省略） -->
-                    <div class="tl-group-card__plugins">
-                      <ion-badge
-                        v-for="p in getGroupPluginBadges(item.tasks, 3)"
-                        :key="p"
-                        color="primary"
-                        class="tl-group-card__plugin-badge"
-                      >{{ p }}</ion-badge>
-                    </div>
-                  </div>
-                  <div class="tl-group-card__actions">
-                    <!-- 进入箭头 -->
+            <div class="tl-group-card__main">
+              <!-- 标题行：tone icon + 触发器名 + N 个任务 + 进入箭头 -->
+              <div class="tl-group-card__head">
+                <div :class="['tl-bubble', 'tl-bubble--md', `tl-tone--${getGroupTone(item.runId, item.tasks)}`]">
+                  <ion-icon :icon="getGroupTone(item.runId, item.tasks) === 'ai_agent' ? hardwareChipOutline : cogOutline"></ion-icon>
+                </div>
+                <div class="tl-group-card__title-block">
+                  <h2 class="tl-group-card__title">
+                    {{ getGroupTone(item.runId, item.tasks) === 'ai_agent' ? t('tasks.triggeredBy_ai_agent') : t('tasks.triggeredBy_automation') }}
+                    <span class="tl-group-card__count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</span>
+                    <!-- 🆕 v6 置顶标记 -->
                     <ion-icon
-                      :icon="chevronForward"
-                      class="tl-group-card__chevron"
-                      :title="t('tasks.groupCard.openDetail')"
+                      v-if="isRunPinned(item.runId)"
+                      :icon="pin"
+                      class="tl-group-card__pin"
+                      :title="t('tasks.pinnedTitle')"
                     ></ion-icon>
+                  </h2>
+                  <!-- plugin badges（前 3 个，超过省略） -->
+                  <div class="tl-group-card__plugins">
+                    <ion-badge
+                      v-for="p in getGroupPluginBadges(item.tasks, 3)"
+                      :key="p"
+                      color="primary"
+                      class="tl-group-card__plugin-badge"
+                    >{{ p }}</ion-badge>
                   </div>
                 </div>
-
-                <!-- 自身状态行（智能行：passed/failed/running/pending 紧凑展示） -->
-                <div class="tl-group-card__body">
-                  <div class="tl-meta-row tl-group-card__self">
-                    <ion-badge v-if="getGroupSummary(item.tasks).passed > 0" color="success" class="tl-status-badge">
-                      <ion-icon :icon="checkmarkCircle" class="tl-badge-icon"></ion-icon>
-                      {{ getGroupSummary(item.tasks).passed }}
-                    </ion-badge>
-                    <ion-badge v-if="getGroupSummary(item.tasks).failed > 0" color="danger" class="tl-status-badge">
-                      <ion-icon :icon="closeCircle" class="tl-badge-icon"></ion-icon>
-                      {{ getGroupSummary(item.tasks).failed }}
-                    </ion-badge>
-                    <ion-badge v-if="getGroupSummary(item.tasks).running > 0" color="warning" class="tl-status-badge">
-                      <ion-spinner name="dots" class="tl-badge-spinner"></ion-spinner>
-                      {{ getGroupSummary(item.tasks).running }}
-                    </ion-badge>
-                    <ion-badge v-if="getGroupSummary(item.tasks).pending > 0" color="medium" class="tl-status-badge">
-                      {{ getGroupSummary(item.tasks).pending }}
-                    </ion-badge>
-                    <span v-if="getGroupDuration(item.tasks)" class="tl-group-card__duration">
-                      <ion-icon :icon="timer" class="tl-group-card__duration-icon"></ion-icon>
-                      {{ getGroupDuration(item.tasks) }}
-                    </span>
-                  </div>
-                  <div class="tl-progress tl-progress--md">
-                    <div
-                      class="tl-progress__fill"
-                      :style="{ width: getGroupSummary(item.tasks).percent + '%' }"
-                    ></div>
-                  </div>
-                  <p class="tl-time-info">
-                    <span class="tl-time-info__created">{{ formatDateTime(new Date(item.startedAt).toISOString()) }}</span>
-                    <span class="tl-time-info__percent">{{ getGroupSummary(item.tasks).percent }}%</span>
-                  </p>
-                </div>
-
-                <!-- 智能命中行：仅在筛选/搜索激活时显示 -->
-                <div
-                  v-if="isGroupFilterActive"
-                  class="tl-group-card__hit"
-                >
-                  <ion-icon :icon="funnel" class="tl-group-card__hit-icon"></ion-icon>
-                  <span class="tl-group-card__hit-text">{{ getGroupHitSummary(item) }}</span>
+                <div class="tl-group-card__actions">
+                  <!-- 进入箭头 -->
+                  <ion-icon
+                    :icon="chevronForward"
+                    class="tl-group-card__chevron"
+                    :title="t('tasks.groupCard.openDetail')"
+                  ></ion-icon>
                 </div>
               </div>
-            </ion-item>
 
-            <!-- 🆕 v6 2026-06-18：左滑操作（取消 / 置顶 / 删除） -->
-            <ion-item-options side="end" class="tl-group-sliding__options">
-              <!-- 取消：仅 running group 显示 -->
-              <ion-item-option
-                v-if="hasRunningTasks(item.tasks)"
-                color="warning"
-                @click="handleGroupSwipeAction('cancel', item)"
+              <!-- 自身状态行（智能行：passed/failed/running/pending 紧凑展示） -->
+              <div class="tl-group-card__body">
+                <div class="tl-meta-row tl-group-card__self">
+                  <ion-badge v-if="getGroupSummary(item.tasks).passed > 0" color="success" class="tl-status-badge">
+                    <ion-icon :icon="checkmarkCircle" class="tl-badge-icon"></ion-icon>
+                    {{ getGroupSummary(item.tasks).passed }}
+                  </ion-badge>
+                  <ion-badge v-if="getGroupSummary(item.tasks).failed > 0" color="danger" class="tl-status-badge">
+                    <ion-icon :icon="closeCircle" class="tl-badge-icon"></ion-icon>
+                    {{ getGroupSummary(item.tasks).failed }}
+                  </ion-badge>
+                  <ion-badge v-if="getGroupSummary(item.tasks).running > 0" color="warning" class="tl-status-badge">
+                    <ion-spinner name="dots" class="tl-badge-spinner"></ion-spinner>
+                    {{ getGroupSummary(item.tasks).running }}
+                  </ion-badge>
+                  <ion-badge v-if="getGroupSummary(item.tasks).pending > 0" color="medium" class="tl-status-badge">
+                    {{ getGroupSummary(item.tasks).pending }}
+                  </ion-badge>
+                  <span v-if="getGroupDuration(item.tasks)" class="tl-group-card__duration">
+                    <ion-icon :icon="timer" class="tl-group-card__duration-icon"></ion-icon>
+                    {{ getGroupDuration(item.tasks) }}
+                  </span>
+                </div>
+                <div class="tl-progress tl-progress--md">
+                  <div
+                    class="tl-progress__fill"
+                    :style="{ width: getGroupSummary(item.tasks).percent + '%' }"
+                  ></div>
+                </div>
+                <p class="tl-time-info">
+                  <span class="tl-time-info__created">{{ formatDateTime(new Date(item.startedAt).toISOString()) }}</span>
+                  <span class="tl-time-info__percent">{{ getGroupSummary(item.tasks).percent }}%</span>
+                </p>
+              </div>
+
+              <!-- 智能命中行：仅在筛选/搜索激活时显示 -->
+              <div
+                v-if="isGroupFilterActive"
+                class="tl-group-card__hit"
               >
-                <ion-icon :icon="close" slot="top"></ion-icon>
-                {{ t('tasks.cancel') }}
-              </ion-item-option>
-              <!-- 置顶/取消置顶 -->
-              <ion-item-option
-                :color="isRunPinned(item.runId) ? 'medium' : 'primary'"
-                @click="handleGroupSwipeAction('pin', item)"
-              >
-                <ion-icon :icon="pin" slot="top"></ion-icon>
-                {{ isRunPinned(item.runId) ? t('tasks.unpin') : t('tasks.pin') }}
-              </ion-item-option>
-              <!-- 删除：仅终态 group 显示（避免误删 running 任务） -->
-              <ion-item-option
-                v-if="!hasRunningTasks(item.tasks)"
-                color="danger"
-                @click="handleGroupSwipeAction('remove', item)"
-              >
-                <ion-icon :icon="trashBin" slot="top"></ion-icon>
-                {{ t('tasks.remove') }}
-              </ion-item-option>
-            </ion-item-options>
-          </ion-item-sliding>
+                <ion-icon :icon="funnel" class="tl-group-card__hit-icon"></ion-icon>
+                <span class="tl-group-card__hit-text">{{ getGroupHitSummary(item) }}</span>
+              </div>
+            </div>
+          </div>
 
           <!-- ============== Single task card（平铺模式 / 不成组的 task） ============== -->
           <ion-item-sliding v-else-if="item.kind === 'task'" :key="item.key">
@@ -537,9 +508,9 @@ import {
   IonItemSliding, IonItemOptions, IonItemOption, IonIcon,
   IonLabel, IonBadge, IonProgressBar, IonFab, IonFabButton,
   IonSpinner, IonButton, IonButtons, IonSearchbar, IonChip,
-  IonPopover, IonCheckbox, alertController, modalController,
+  IonPopover, IonCheckbox, alertController, actionSheetController, modalController,
 } from '@ionic/vue'
-import { add, close, closeCircle, checkmarkCircle, timer, sync,
+import { add, closeCircle, checkmarkCircle, timer, sync,
   warningOutline, lockClosed, lockClosedOutline, search, funnel, trashBin,
   extensionPuzzle, swapVertical, chevronDown,
   hardwareChipOutline, cogOutline, person, chevronForward,
@@ -928,67 +899,120 @@ async function confirmCancelGroup(runId: string, tasks: EncvTask[]): Promise<voi
   await alert.present()
 }
 
-/**
- * 🆕 v6 2026-06-18：左滑操作分发（取消 / 置顶 / 删除）
- *  - 取消：弹 alert 确认 → cancelRun
- *  - 置顶：toggle 立即生效，无确认
- *  - 删除：弹 alert 确认 → removeRunTasks
- */
-async function handleGroupSwipeAction(
-  action: 'cancel' | 'pin' | 'remove',
-  item: { runId: string; tasks: EncvTask[] },
-): Promise<void> {
-  if (!item.runId || item.runId.startsWith('__manual__')) return
-  if (action === 'cancel') {
-    await confirmCancelGroup(item.runId, item.tasks)
-  } else if (action === 'pin') {
-    const pinned = togglePinRun(item.runId)
-    showToast({
-      message: pinned ? t('tasks.pinned') : t('tasks.unpinned'),
-      duration: 1500,
-      color: 'medium',
-    })
-  } else if (action === 'remove') {
-    const taskCount = item.tasks.length
-    const alert = await alertController.create({
-      header: t('tasks.removeRunHeader'),
-      message: t('tasks.removeRunMessage', { count: String(taskCount) }),
-      buttons: [
-        { text: t('common.cancel'), role: 'cancel' },
-        {
-          text: t('tasks.remove'),
-          role: 'destructive',
-          handler: async () => {
-            try {
-              const { removed, failed } = await removeRunTasks(item.runId)
-              if (removed > 0) {
-                showToast({
-                  message: t('tasks.removeRunSuccess', { removed: String(removed) }),
-                  duration: 2000,
-                  color: 'success',
-                })
-              }
-              if (failed > 0) {
-                showToast({
-                  message: t('tasks.removeRunPartial', { failed: String(failed) }),
-                  duration: 2500,
-                  color: 'warning',
-                })
-              }
-            } catch (err) {
-              const a = await alertController.create({
-                header: t('common.error'),
-                message: String((err as any)?.message ?? err),
-                buttons: [t('common.ok')],
-              })
-              await a.present()
-            }
-          },
-        },
-      ],
-    })
-    await alert.present()
+// ============ 长按/右键 action-sheet（v6）============
+
+/** 长按计时器：key=item.key → timer id */
+const _longPressTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const LONG_PRESS_MS = 500
+
+function onGroupTouchStart(_e: TouchEvent, item: { key: string }): void {
+  if (item.key.startsWith('__manual__') || item.key.startsWith('date-')) return
+  const timer = setTimeout(() => {
+    // 触发 action-sheet（仅当 touch 持续 500ms 时）
+    const groupItem = (item as any)
+    if (groupItem.runId) void openGroupActionSheet(groupItem)
+  }, LONG_PRESS_MS)
+  _longPressTimers.set(item.key, timer)
+}
+
+function onGroupTouchEnd(_e: TouchEvent, item: { key: string }): void {
+  const timer = _longPressTimers.get(item.key)
+  if (timer) {
+    clearTimeout(timer)
+    _longPressTimers.delete(item.key)
   }
+}
+
+/**
+ * 弹出 group action-sheet（长按或右键触发）
+ * - 取消：仅 running group
+ * - 置顶/取消置顶
+ * - 删除：仅终态 group
+ * - 查看详情：始终显示
+ */
+async function openGroupActionSheet(item: { runId: string; tasks: EncvTask[] }): Promise<void> {
+  if (!item.runId || item.runId.startsWith('__manual__')) return
+  const hasRunning = hasRunningTasks(item.tasks)
+  const isPinned = isRunPinned(item.runId)
+  const buttons: any[] = [
+    {
+      text: t('tasks.groupCard.openDetail'),
+      role: undefined,
+      handler: () => { void openGroupDetail(item.runId) },
+    },
+    {
+      text: isPinned ? t('tasks.unpin') : t('tasks.pin'),
+      role: undefined,
+      handler: () => {
+        const pinned = togglePinRun(item.runId)
+        showToast({
+          message: pinned ? t('tasks.pinned') : t('tasks.unpinned'),
+          duration: 1500,
+          color: 'medium',
+        })
+      },
+    },
+  ]
+  if (hasRunning) {
+    buttons.push({
+      text: t('tasks.cancelRun'),
+      role: 'destructive',
+      handler: () => { void confirmCancelGroup(item.runId, item.tasks) },
+    })
+  }
+  if (!hasRunning) {
+    buttons.push({
+      text: t('tasks.remove'),
+      role: 'destructive',
+      handler: () => { void confirmRemoveGroup(item.runId, item.tasks) },
+    })
+  }
+  buttons.push({ text: t('common.cancel'), role: 'cancel' })
+  const sheet = await actionSheetController.create({ buttons })
+  await sheet.present()
+}
+
+/** 删除确认 alert（从 openGroupActionSheet 复用） */
+async function confirmRemoveGroup(runId: string, tasks: EncvTask[]): Promise<void> {
+  const taskCount = tasks.length
+  const alert = await alertController.create({
+    header: t('tasks.removeRunHeader'),
+    message: t('tasks.removeRunMessage', { count: String(taskCount) }),
+    buttons: [
+      { text: t('common.cancel'), role: 'cancel' },
+      {
+        text: t('tasks.remove'),
+        role: 'destructive',
+        handler: async () => {
+          try {
+            const { removed, failed } = await removeRunTasks(runId)
+            if (removed > 0) {
+              showToast({
+                message: t('tasks.removeRunSuccess', { removed: String(removed) }),
+                duration: 2000,
+                color: 'success',
+              })
+            }
+            if (failed > 0) {
+              showToast({
+                message: t('tasks.removeRunPartial', { failed: String(failed) }),
+                duration: 2500,
+                color: 'warning',
+              })
+            }
+          } catch (err) {
+            const a = await alertController.create({
+              header: t('common.error'),
+              message: String((err as any)?.message ?? err),
+              buttons: [t('common.ok')],
+            })
+            await a.present()
+          }
+        },
+      },
+    ],
+  })
+  await alert.present()
 }
 
 /**
