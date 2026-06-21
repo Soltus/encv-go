@@ -130,7 +130,7 @@ func (s *Store) CreateTask(task tasksystem.TaskData) error {
 			target_mount_id, target_mount_sub_path,
 			password, secondary_password,
 			created_at, completed_at, rollback_of, original_path
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, string(task.Type), string(task.Status),
 		task.SourcePath, task.TargetPath, task.OutputPath,
 		task.PluginName, task.TriggeredBy, task.RunID, task.Progress, task.Phase,

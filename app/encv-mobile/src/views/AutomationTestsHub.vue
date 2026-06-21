@@ -40,6 +40,14 @@
             <p>{{ t('devtools.sparseContainer.entryHint') }}</p>
           </ion-label>
         </ion-item>
+
+        <ion-item button detail @click="goFsTests">
+          <ion-icon :icon="folderOpenOutline" slot="start" color="success"></ion-icon>
+          <ion-label>
+            <h3>{{ t('devtools.automationHub.fsTests') }}</h3>
+            <p>{{ t('devtools.automationHub.fsTestsDesc') }}</p>
+          </ion-label>
+        </ion-item>
       </ion-list>
     </ion-content>
   </ion-page>
@@ -50,7 +58,7 @@ import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
   IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
 } from '@ionic/vue'
-import { flaskOutline, cloudUploadOutline, serverOutline } from 'ionicons/icons'
+import { flaskOutline, cloudUploadOutline, serverOutline, folderOpenOutline } from 'ionicons/icons'
 import { useRouter } from 'vue-router'
 import { useI18n } from '@/composables/useI18n'
 
@@ -68,6 +76,11 @@ function goWebDavTests() {
 
 function goSparseContainerTest() {
   router.push('/tabs/settings/devtools/sparse-container-test')
+}
+
+// 🆕 2026-06-22：文件系统任务测试（move/copy/rename/delete + rollback + trash 边界）
+function goFsTests() {
+  router.push('/tabs/settings/devtools/fs-tests')
 }
 </script>
 

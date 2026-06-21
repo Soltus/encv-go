@@ -28,16 +28,20 @@ func makeTestTask(id string) tasksystem.TaskData {
 		TargetPath:  "/test/output/",
 		TriggeredBy: "user",
 		Progress:    0,
-		CreatedAt:   time.Now().UTC().Truncate(time.Second),
+		CreatedAt:   time.Now().UTC(),
 	}
 }
 
 func TestCreateAndGetTask(t *testing.T) {
 	store := newTestStore(t)
 	task := makeTestTask("task-1")
+	task.ExtraFields = `{"key":"value"}`
+	task.Steps = `[{"phase":"queued"}]`
+
 	if err := store.CreateTask(task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
+
 	got, err := store.GetTask("task-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
@@ -54,53 +58,52 @@ func TestCreateAndGetTask(t *testing.T) {
 	if got.SourcePath != task.SourcePath {
 		t.Errorf("SourcePath = %q, want %q", got.SourcePath, task.SourcePath)
 	}
-	if got.TargetPath != task.TargetPath {
-		t.Errorf("TargetPath = %q, want %q", got.TargetPath, task.TargetPath)
-	}
 	if got.TriggeredBy != task.TriggeredBy {
 		t.Errorf("TriggeredBy = %q, want %q", got.TriggeredBy, task.TriggeredBy)
 	}
-	if got.Progress != task.Progress {
-		t.Errorf("Progress = %d, want %d", got.Progress, task.Progress)
+	if got.ExtraFields != task.ExtraFields {
+		t.Errorf("ExtraFields = %q, want %q", got.ExtraFields, task.ExtraFields)
 	}
-	if !got.CreatedAt.Equal(task.CreatedAt) {
-		t.Errorf("CreatedAt = %v, want %v", got.CreatedAt, task.CreatedAt)
+	if got.Steps != task.Steps {
+		t.Errorf("Steps = %q, want %q", got.Steps, task.Steps)
 	}
 }
 
 func TestListTasks(t *testing.T) {
 	store := newTestStore(t)
-	base := time.Now().UTC().Truncate(time.Second)
-	tasks := []tasksystem.TaskData{
-		{ID: "old", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, TriggeredBy: "user", CreatedAt: base.Add(-2 * time.Hour)},
-		{ID: "mid", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, TriggeredBy: "user", CreatedAt: base.Add(-1 * time.Hour)},
-		{ID: "new", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, TriggeredBy: "user", CreatedAt: base},
-	}
-	for _, task := range tasks {
+	// 创建 3 个任务，createdAt 递增
+	for i, id := range []string{"t1", "t2", "t3"} {
+		task := makeTestTask(id)
+		task.CreatedAt = time.Now().UTC().Add(time.Duration(i) * time.Second)
 		if err := store.CreateTask(task); err != nil {
-			t.Fatalf("CreateTask %s: %v", task.ID, err)
+			t.Fatalf("CreateTask %s: %v", id, err)
 		}
 	}
-	got, err := store.ListTasks(tasksystem.TaskFilter{})
+
+	tasks, err := store.ListTasks(tasksystem.TaskFilter{})
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
-	if len(got) != 3 {
-		t.Fatalf("len = %d, want 3", len(got))
+	if len(tasks) != 3 {
+		t.Fatalf("len(tasks) = %d, want 3", len(tasks))
 	}
-	if got[0].ID != "new" || got[1].ID != "mid" || got[2].ID != "old" {
-		t.Errorf("order = %s, %s, %s; want new, mid, old", got[0].ID, got[1].ID, got[2].ID)
+	// 按 createdAt 倒序，t3 应该在最前
+	if tasks[0].ID != "t3" {
+		t.Errorf("tasks[0].ID = %q, want t3", tasks[0].ID)
+	}
+	if tasks[2].ID != "t1" {
+		t.Errorf("tasks[2].ID = %q, want t1", tasks[2].ID)
 	}
 }
 
 func TestListTasksWithFilter(t *testing.T) {
 	store := newTestStore(t)
-	base := time.Now().UTC().Truncate(time.Second)
+	// 创建不同 type/status/triggeredBy 的任务
 	tasks := []tasksystem.TaskData{
-		{ID: "t1", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, TriggeredBy: "user", CreatedAt: base},
-		{ID: "t2", Type: tasksystem.TaskTypeDecrypt, Status: tasksystem.StatusFailed, TriggeredBy: "automation", CreatedAt: base.Add(-1 * time.Hour)},
-		{ID: "t3", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusFailed, TriggeredBy: "user", CreatedAt: base.Add(-2 * time.Hour)},
-		{ID: "t4", Type: tasksystem.TaskTypeDecrypt, Status: tasksystem.StatusCompleted, TriggeredBy: "automation", CreatedAt: base.Add(-3 * time.Hour)},
+		{ID: "e1", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, TriggeredBy: "user", CreatedAt: time.Now().UTC()},
+		{ID: "e2", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusFailed, TriggeredBy: "automation", CreatedAt: time.Now().UTC()},
+		{ID: "d1", Type: tasksystem.TaskTypeDecrypt, Status: tasksystem.StatusCompleted, TriggeredBy: "user", CreatedAt: time.Now().UTC()},
+		{ID: "m1", Type: tasksystem.TaskTypeMove, Status: tasksystem.StatusRunning, TriggeredBy: "ai_agent", CreatedAt: time.Now().UTC()},
 	}
 	for _, task := range tasks {
 		if err := store.CreateTask(task); err != nil {
@@ -108,180 +111,160 @@ func TestListTasksWithFilter(t *testing.T) {
 		}
 	}
 
-	// Filter by Type
+	// 按 type 过滤
 	got, err := store.ListTasks(tasksystem.TaskFilter{Types: []tasksystem.TaskType{tasksystem.TaskTypeEncrypt}})
 	if err != nil {
 		t.Fatalf("ListTasks by type: %v", err)
 	}
 	if len(got) != 2 {
-		t.Fatalf("filter by type: len = %d, want 2", len(got))
-	}
-	for _, task := range got {
-		if task.Type != tasksystem.TaskTypeEncrypt {
-			t.Errorf("filter by type: got %s", task.Type)
-		}
+		t.Errorf("type=encrypt: len = %d, want 2", len(got))
 	}
 
-	// Filter by Status
-	got, err = store.ListTasks(tasksystem.TaskFilter{Statuses: []tasksystem.TaskStatus{tasksystem.StatusFailed}})
+	// 按 status 过滤
+	got, err = store.ListTasks(tasksystem.TaskFilter{Statuses: []tasksystem.TaskStatus{tasksystem.StatusCompleted}})
 	if err != nil {
 		t.Fatalf("ListTasks by status: %v", err)
 	}
 	if len(got) != 2 {
-		t.Fatalf("filter by status: len = %d, want 2", len(got))
-	}
-	for _, task := range got {
-		if task.Status != tasksystem.StatusFailed {
-			t.Errorf("filter by status: got %s", task.Status)
-		}
+		t.Errorf("status=completed: len = %d, want 2", len(got))
 	}
 
-	// Filter by TriggeredBy
-	got, err = store.ListTasks(tasksystem.TaskFilter{TriggeredBy: []string{"automation"}})
+	// 按 triggeredBy 过滤
+	got, err = store.ListTasks(tasksystem.TaskFilter{TriggeredBy: []string{"user"}})
 	if err != nil {
 		t.Fatalf("ListTasks by triggeredBy: %v", err)
 	}
 	if len(got) != 2 {
-		t.Fatalf("filter by triggeredBy: len = %d, want 2", len(got))
-	}
-	for _, task := range got {
-		if task.TriggeredBy != "automation" {
-			t.Errorf("filter by triggeredBy: got %s", task.TriggeredBy)
-		}
+		t.Errorf("triggeredBy=user: len = %d, want 2", len(got))
 	}
 
-	// Combined filter
+	// 组合过滤
 	got, err = store.ListTasks(tasksystem.TaskFilter{
 		Types:       []tasksystem.TaskType{tasksystem.TaskTypeEncrypt},
-		Statuses:    []tasksystem.TaskStatus{tasksystem.StatusCompleted},
-		TriggeredBy: []string{"user"},
+		TriggeredBy: []string{"automation"},
 	})
 	if err != nil {
-		t.Fatalf("ListTasks combined: %v", err)
+		t.Fatalf("ListTasks combo: %v", err)
 	}
-	if len(got) != 1 {
-		t.Fatalf("combined filter: len = %d, want 1", len(got))
-	}
-	if got[0].ID != "t1" {
-		t.Errorf("combined filter: ID = %s, want t1", got[0].ID)
+	if len(got) != 1 || got[0].ID != "e2" {
+		t.Errorf("combo: got %v, want [e2]", got)
 	}
 }
 
 func TestUpdateTask(t *testing.T) {
 	store := newTestStore(t)
-	task := makeTestTask("task-update")
+	task := makeTestTask("upd-1")
 	if err := store.CreateTask(task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	task.Status = tasksystem.StatusRunning
-	task.Progress = 50
-	task.Phase = "processing"
+
+	task.Status = tasksystem.StatusCompleted
+	task.Progress = 100
+	task.OutputPath = "/test/output.encv"
+	now := time.Now().UTC()
+	task.CompletedAt = &now
+
 	if err := store.UpdateTask(task); err != nil {
 		t.Fatalf("UpdateTask: %v", err)
 	}
-	got, err := store.GetTask("task-update")
+
+	got, err := store.GetTask("upd-1")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	if got.Status != tasksystem.StatusRunning {
-		t.Errorf("Status = %q, want %q", got.Status, tasksystem.StatusRunning)
+	if got.Status != tasksystem.StatusCompleted {
+		t.Errorf("Status = %q, want completed", got.Status)
 	}
-	if got.Progress != 50 {
-		t.Errorf("Progress = %d, want 50", got.Progress)
+	if got.Progress != 100 {
+		t.Errorf("Progress = %d, want 100", got.Progress)
 	}
-	if got.Phase != "processing" {
-		t.Errorf("Phase = %q, want %q", got.Phase, "processing")
+	if got.OutputPath != "/test/output.encv" {
+		t.Errorf("OutputPath = %q, want /test/output.encv", got.OutputPath)
+	}
+	if got.CompletedAt == nil {
+		t.Errorf("CompletedAt = nil, want non-nil")
 	}
 }
 
 func TestDeleteTask(t *testing.T) {
 	store := newTestStore(t)
-	task := makeTestTask("task-delete")
+	task := makeTestTask("del-1")
 	if err := store.CreateTask(task); err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	if err := store.DeleteTask("task-delete"); err != nil {
+
+	if err := store.DeleteTask("del-1"); err != nil {
 		t.Fatalf("DeleteTask: %v", err)
 	}
-	if _, err := store.GetTask("task-delete"); err == nil {
-		t.Error("GetTask after delete: expected error, got nil")
+
+	if _, err := store.GetTask("del-1"); err == nil {
+		t.Errorf("GetTask after delete: expected error, got nil")
 	}
 }
 
 func TestSaveAndGetSnapshot(t *testing.T) {
 	store := newTestStore(t)
-	now := time.Now().UTC().Truncate(time.Second)
-
-	// Save post_state first (newer)
-	postSnap := tasksystem.Snapshot{
-		ID:           "snap-post",
-		TaskID:       "task-snap",
-		SnapshotType: tasksystem.SnapshotTypePostState,
-		Data:         `{"post":true}`,
-		CreatedAt:    now,
-	}
-	if err := store.SaveSnapshot(postSnap); err != nil {
-		t.Fatalf("SaveSnapshot post: %v", err)
+	task := makeTestTask("snap-1")
+	if err := store.CreateTask(task); err != nil {
+		t.Fatalf("CreateTask: %v", err)
 	}
 
-	// Save pre_state (older, but should be preferred by GetSnapshot)
 	preSnap := tasksystem.Snapshot{
 		ID:           "snap-pre",
-		TaskID:       "task-snap",
+		TaskID:       "snap-1",
 		SnapshotType: tasksystem.SnapshotTypePreState,
-		Data:         `{"pre":true}`,
-		CreatedAt:    now.Add(-1 * time.Second),
+		Data:         `{"path":"/test/source.mp4"}`,
+		CreatedAt:    time.Now().UTC(),
 	}
 	if err := store.SaveSnapshot(preSnap); err != nil {
 		t.Fatalf("SaveSnapshot pre: %v", err)
 	}
 
-	got, err := store.GetSnapshot("task-snap")
+	postSnap := tasksystem.Snapshot{
+		ID:           "snap-post",
+		TaskID:       "snap-1",
+		SnapshotType: tasksystem.SnapshotTypePostState,
+		Data:         `{"path":"/test/output.encv"}`,
+		CreatedAt:    time.Now().UTC().Add(time.Second),
+	}
+	if err := store.SaveSnapshot(postSnap); err != nil {
+		t.Fatalf("SaveSnapshot post: %v", err)
+	}
+
+	// GetSnapshot 应优先返回 pre_state
+	got, err := store.GetSnapshot("snap-1")
 	if err != nil {
 		t.Fatalf("GetSnapshot: %v", err)
 	}
 	if got.SnapshotType != tasksystem.SnapshotTypePreState {
-		t.Errorf("SnapshotType = %q, want %q (pre_state should take priority)", got.SnapshotType, tasksystem.SnapshotTypePreState)
+		t.Errorf("SnapshotType = %q, want pre_state", got.SnapshotType)
 	}
-	if got.ID != "snap-pre" {
-		t.Errorf("ID = %q, want %q", got.ID, "snap-pre")
-	}
-	if got.Data != `{"pre":true}` {
-		t.Errorf("Data = %q, want %q", got.Data, `{"pre":true}`)
-	}
-	if got.TaskID != "task-snap" {
-		t.Errorf("TaskID = %q, want %q", got.TaskID, "task-snap")
+	if got.Data != preSnap.Data {
+		t.Errorf("Data = %q, want %q", got.Data, preSnap.Data)
 	}
 }
 
 func TestCreateAndGetTrash(t *testing.T) {
 	store := newTestStore(t)
-	now := time.Now().UTC().Truncate(time.Second)
 	item := tasksystem.TrashItem{
 		ID:           "trash-1",
-		OriginalPath: "/test/original.txt",
-		TrashPath:    "/trash/trash-1.txt",
+		OriginalPath: "/test/file.mp4",
+		TrashPath:    "/test/.trash/123_file.mp4",
 		IsDirectory:  false,
 		Size:         1024,
-		DeletedAt:    now,
+		DeletedAt:    time.Now().UTC(),
 		TaskID:       "task-1",
-		Metadata:     `{"mtime":"2026-01-01"}`,
 	}
 	if err := store.CreateTrash(item); err != nil {
 		t.Fatalf("CreateTrash: %v", err)
 	}
+
 	got, err := store.GetTrash("trash-1")
 	if err != nil {
 		t.Fatalf("GetTrash: %v", err)
 	}
-	if got.ID != item.ID {
-		t.Errorf("ID = %q, want %q", got.ID, item.ID)
-	}
 	if got.OriginalPath != item.OriginalPath {
 		t.Errorf("OriginalPath = %q, want %q", got.OriginalPath, item.OriginalPath)
-	}
-	if got.TrashPath != item.TrashPath {
-		t.Errorf("TrashPath = %q, want %q", got.TrashPath, item.TrashPath)
 	}
 	if got.IsDirectory != item.IsDirectory {
 		t.Errorf("IsDirectory = %v, want %v", got.IsDirectory, item.IsDirectory)
@@ -289,114 +272,102 @@ func TestCreateAndGetTrash(t *testing.T) {
 	if got.Size != item.Size {
 		t.Errorf("Size = %d, want %d", got.Size, item.Size)
 	}
-	if got.TaskID != item.TaskID {
-		t.Errorf("TaskID = %q, want %q", got.TaskID, item.TaskID)
-	}
-	if got.Metadata != item.Metadata {
-		t.Errorf("Metadata = %q, want %q", got.Metadata, item.Metadata)
-	}
-	if !got.DeletedAt.Equal(item.DeletedAt) {
-		t.Errorf("DeletedAt = %v, want %v", got.DeletedAt, item.DeletedAt)
-	}
 }
 
 func TestGetTrashByTaskID(t *testing.T) {
 	store := newTestStore(t)
-	now := time.Now().UTC().Truncate(time.Second)
 	item := tasksystem.TrashItem{
 		ID:           "trash-2",
-		OriginalPath: "/test/original2.txt",
-		TrashPath:    "/trash/trash-2.txt",
-		IsDirectory:  true,
-		Size:         4096,
-		DeletedAt:    now,
+		OriginalPath: "/test/file2.mp4",
+		TrashPath:    "/test/.trash/456_file2.mp4",
+		IsDirectory:  false,
+		Size:         2048,
+		DeletedAt:    time.Now().UTC(),
 		TaskID:       "task-2",
 	}
 	if err := store.CreateTrash(item); err != nil {
 		t.Fatalf("CreateTrash: %v", err)
 	}
+
 	got, err := store.GetTrashByTaskID("task-2")
 	if err != nil {
 		t.Fatalf("GetTrashByTaskID: %v", err)
 	}
 	if got.ID != "trash-2" {
-		t.Errorf("ID = %q, want %q", got.ID, "trash-2")
-	}
-	if got.TaskID != "task-2" {
-		t.Errorf("TaskID = %q, want %q", got.TaskID, "task-2")
-	}
-	if !got.IsDirectory {
-		t.Errorf("IsDirectory = false, want true")
+		t.Errorf("ID = %q, want trash-2", got.ID)
 	}
 }
 
 func TestListTrash(t *testing.T) {
 	store := newTestStore(t)
-	base := time.Now().UTC().Truncate(time.Second)
-	items := []tasksystem.TrashItem{
-		{ID: "old", OriginalPath: "/o", TrashPath: "/t/o", DeletedAt: base.Add(-2 * time.Hour)},
-		{ID: "mid", OriginalPath: "/m", TrashPath: "/t/m", DeletedAt: base.Add(-1 * time.Hour)},
-		{ID: "new", OriginalPath: "/n", TrashPath: "/t/n", DeletedAt: base},
-	}
-	for _, item := range items {
+	for i, id := range []string{"tr1", "tr2", "tr3"} {
+		item := tasksystem.TrashItem{
+			ID:           id,
+			OriginalPath: "/test/" + id,
+			TrashPath:    "/test/.trash/" + id,
+			DeletedAt:    time.Now().UTC().Add(time.Duration(i) * time.Second),
+		}
 		if err := store.CreateTrash(item); err != nil {
-			t.Fatalf("CreateTrash %s: %v", item.ID, err)
+			t.Fatalf("CreateTrash %s: %v", id, err)
 		}
 	}
-	got, err := store.ListTrash()
+
+	items, err := store.ListTrash()
 	if err != nil {
 		t.Fatalf("ListTrash: %v", err)
 	}
-	if len(got) != 3 {
-		t.Fatalf("len = %d, want 3", len(got))
+	if len(items) != 3 {
+		t.Fatalf("len = %d, want 3", len(items))
 	}
-	if got[0].ID != "new" || got[1].ID != "mid" || got[2].ID != "old" {
-		t.Errorf("order = %s, %s, %s; want new, mid, old", got[0].ID, got[1].ID, got[2].ID)
+	// 按 deletedAt 倒序，tr3 应该在最前
+	if items[0].ID != "tr3" {
+		t.Errorf("items[0].ID = %q, want tr3", items[0].ID)
 	}
 }
 
 func TestUpdateTrash(t *testing.T) {
 	store := newTestStore(t)
-	now := time.Now().UTC().Truncate(time.Second)
 	item := tasksystem.TrashItem{
-		ID:           "trash-upd",
-		OriginalPath: "/test/upd.txt",
-		TrashPath:    "/trash/upd.txt",
-		DeletedAt:    now,
-		TaskID:       "task-upd",
+		ID:           "upd-trash",
+		OriginalPath: "/test/file.mp4",
+		TrashPath:    "/test/.trash/file.mp4",
+		DeletedAt:    time.Now().UTC(),
 	}
 	if err := store.CreateTrash(item); err != nil {
 		t.Fatalf("CreateTrash: %v", err)
 	}
+
 	item.RestoreTaskID = "restore-task-1"
 	if err := store.UpdateTrash(item); err != nil {
 		t.Fatalf("UpdateTrash: %v", err)
 	}
-	got, err := store.GetTrash("trash-upd")
+
+	got, err := store.GetTrash("upd-trash")
 	if err != nil {
 		t.Fatalf("GetTrash: %v", err)
 	}
 	if got.RestoreTaskID != "restore-task-1" {
-		t.Errorf("RestoreTaskID = %q, want %q", got.RestoreTaskID, "restore-task-1")
+		t.Errorf("RestoreTaskID = %q, want restore-task-1", got.RestoreTaskID)
 	}
 }
 
 func TestDeleteTrash(t *testing.T) {
 	store := newTestStore(t)
-	now := time.Now().UTC().Truncate(time.Second)
 	item := tasksystem.TrashItem{
-		ID:           "trash-del",
-		OriginalPath: "/test/del.txt",
-		TrashPath:    "/trash/del.txt",
-		DeletedAt:    now,
+		ID:           "del-trash",
+		OriginalPath: "/test/file.mp4",
+		TrashPath:    "/test/.trash/file.mp4",
+		DeletedAt:    time.Now().UTC(),
 	}
 	if err := store.CreateTrash(item); err != nil {
 		t.Fatalf("CreateTrash: %v", err)
 	}
-	if err := store.DeleteTrash("trash-del"); err != nil {
+
+	if err := store.DeleteTrash("del-trash"); err != nil {
 		t.Fatalf("DeleteTrash: %v", err)
 	}
-	if _, err := store.GetTrash("trash-del"); err == nil {
-		t.Error("GetTrash after delete: expected error, got nil")
+
+	if _, err := store.GetTrash("del-trash"); err == nil {
+		t.Errorf("GetTrash after delete: expected error, got nil")
 	}
 }

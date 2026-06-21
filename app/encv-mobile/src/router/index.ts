@@ -139,6 +139,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/SparseContainerTestDetail.vue'),
       },
       {
+        // 🆕 2026-06-22：文件系统任务测试（move/copy/rename/delete + rollback + trash 边界）
+        path: 'settings/devtools/fs-tests',
+        component: () => import('@/views/FileSystemTestsDetail.vue'),
+      },
+      {
         // 🆕 2026-06-17：Compose UI 原型总览（Hub）— 卡片循环从 DevToolsDetail 迁移
         path: 'settings/devtools/compose-prototypes-hub',
         component: () => import('@/views/ComposePrototypesHub.vue'),
