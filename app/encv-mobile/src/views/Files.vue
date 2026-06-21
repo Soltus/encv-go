@@ -753,18 +753,17 @@ async function loadFiles() {
   const gen = ++loadGeneration
   isStreamLoading = true
   pendingFileChange = false
-  // 🆕 v4 Bug1 修复：自动更新（file:change）下不立刻清空 files.value，避免视觉闪
-  //   - 首次加载（isInitialLoad）才显示全屏 loading + 清空老数据
-  //   - 自动 reload（isRefresh）保留老数据 + 显示顶部小 spinner 指示器
-  //   - 切换路径（currentPath 变化）才真正清空（isPathChange）
+  // 🆕 v4 Bug1 修复：自动更新（file:change）下不闪全屏 loading
+  //   - 首次加载（isInitialLoad）/ 路径切换 → 全屏 loading + 清空
+  //   - 自动 reload（isRefresh）→ 顶部 spinner + 清空（不闪全屏 loading，但避免 stream 追加导致重复）
   const isPathChange = currentPath.value !== lastLoadedPath.value
   const isInitialLoad = files.value.length === 0 && firstLoad === true
   if (isPathChange || isInitialLoad) {
     loading.value = true
-    files.value = []
   } else {
-    refreshing.value = true  // 顶部小 indicator（不阻塞老数据渲染）
+    refreshing.value = true  // 顶部小 indicator（不闪全屏 loading）
   }
+  files.value = []  // 🆕 始终清空：避免 stream push 追加到老数据后面导致重复
   firstLoad = false
   connecting.value = false
   noPermission.value = false

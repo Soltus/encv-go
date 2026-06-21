@@ -133,12 +133,32 @@ export const useTaskStore = defineStore('task', () => {
 
   /**
    * 批量替换 tasks（用于 fetchTasks / hydrate）
-   * 注意：用 tasks.value = newArr 触发响应；shallowRef 不深代理每个 task
+   *
+   * 🆕 v6 2026-06-18：merge 模式 — 不完全替换，保留已有 task 的 runId/triggeredBy
+   *   根因：后端 task 不带 runId，完全替换会丢失 store 里已有 task 的 runId → 聚合逃逸
+   *   修复：对 store 里已有的 task，保留 runId/triggeredBy，只更新后端返回的字段
+   *        对新 task，从 useTaskTrigger 回填
    */
   function bulkSetTasks(newTasks: EncvTask[]): void {
-    // 后端 task 通常不带 runId / triggeredBy，但 useTaskTrigger 里有当前 session 的关联
+    // 从当前 store 建 id → task 索引（保留已有 runId）
+    const existingMap = new Map<string, EncvTask>()
+    for (const t of tasks.value) {
+      if (t.runId) existingMap.set(t.id, t)
+    }
     const enriched = newTasks.map((t) => {
+      // 1. 后端 task 自带 runId → 直接用
       if (t.runId && t.triggeredBy) return t
+      // 2. store 里已有此 task → 保留 runId/triggeredBy，merge 其他字段
+      const existing = existingMap.get(t.id)
+      if (existing) {
+        return {
+          ...existing,
+          ...t,
+          runId: t.runId || existing.runId,
+          triggeredBy: t.triggeredBy || existing.triggeredBy,
+        }
+      }
+      // 3. 新 task → 从 useTaskTrigger 回填
       const meta = getTaskMetadata(t.id)
       return {
         ...t,
