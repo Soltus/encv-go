@@ -25,6 +25,7 @@
         </div>
       </div>
 
+      <TaskPerformanceSection :task="task" />
       <TaskOutputInfo :task="task" @open="openOutput" @locate="locateOutput" />
       <TaskErrorSection :task="task" />
       <TaskWarningSection :task="task" />
@@ -72,6 +73,7 @@ import TaskOutputInfo from './TaskOutputInfo.vue'
 import TaskErrorSection from './TaskErrorSection.vue'
 import TaskWarningSection from './TaskWarningSection.vue'
 import TaskActionButtons from './TaskActionButtons.vue'
+import TaskPerformanceSection from './TaskPerformanceSection.vue'
 
 const props = defineProps<{ task: EncvTask }>()
 const emit = defineEmits<{

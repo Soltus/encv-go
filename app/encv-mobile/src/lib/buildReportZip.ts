@@ -31,7 +31,7 @@
 
 import JSZip from 'jszip'
 import type { UnifiedRunRecord, JobRun, StepRun } from './workflow/types'
-import type { EncvTask } from '@/api/encv'
+import type { EncvTask, PerformanceSummary, CalibrationResult } from '@/api/encv'
 import type { TFunction } from '@/composables/useI18n'
 
 // ==================== Public API ====================
@@ -56,15 +56,17 @@ export async function buildReportZip(
       osVersion?: string
       appVersion?: string
     }
+    /** 🆕 2026-06-22 硬件校准结果（写入 report.json 顶层 + performance.md） */
+    calibration?: CalibrationResult | null
   },
 ): Promise<Blob> {
   const zip = new JSZip()
 
   // 1. report.json — AI 解析主入口
-  zip.file('report.json', buildReportJson(run, runTasks))
+  zip.file('report.json', buildReportJson(run, runTasks, options))
 
   // 2. summary.md — 人类可读概览
-  zip.file('summary.md', buildSummaryMd(run, runTasks, t))
+  zip.file('summary.md', buildSummaryMd(run, runTasks, t, options))
 
   // 3. cases.md — case 索引
   const casesByStatus = groupCasesByStatus(run, runTasks)
@@ -76,7 +78,10 @@ export async function buildReportZip(
   // 5. timeline.txt — 任务时间线（按时间戳排序）
   zip.file('timeline.txt', buildTimelineTxt(run))
 
-  // 6. cases/*.md — 单 case 详情（cases 目录）
+  // 6. performance.md — 🆕 性能报告（硬件校准 + plugin 聚合 + phase 分布）
+  zip.file('performance.md', buildPerformanceMd(run, runTasks, t, options))
+
+  // 7. cases/*.md — 单 case 详情（cases 目录）
   const casesFolder = zip.folder('cases')
   if (casesFolder) {
     const cases = flattenCases(run, runTasks)
@@ -124,6 +129,8 @@ interface CaseDetail {
   eta?: string
   /** 错误信息 */
   error?: string
+  /** 🆕 性能摘要（来自 live task.performanceSummary，仅 completed 状态有值） */
+  performance?: PerformanceSummary
   /** step 原始数据 */
   step: StepRun
   /** 关联的 job 原始数据 */
@@ -179,6 +186,7 @@ function flattenCases(run: UnifiedRunRecord, runTasks: EncvTask[]): CaseDetail[]
         speed: live?.speed,
         eta: live?.eta,
         error: step.error ?? live?.error,
+        performance: live?.performanceSummary,
         step,
         job,
       })
@@ -251,7 +259,11 @@ function formatDuration(ms?: number): string {
 // ==================== File Generators ====================
 
 /** 1. report.json — AI 解析主入口 */
-function buildReportJson(run: UnifiedRunRecord, runTasks: EncvTask[]): string {
+function buildReportJson(
+  run: UnifiedRunRecord,
+  runTasks: EncvTask[],
+  options?: { calibration?: CalibrationResult | null },
+): string {
   const wRun = run.workflowRun
   const cases = flattenCases(run, runTasks)
 
@@ -284,7 +296,41 @@ function buildReportJson(run: UnifiedRunRecord, runTasks: EncvTask[]): string {
       completedAt: c.completedAt,
     }))
 
-  return JSON.stringify({
+  // 🆕 性能聚合（按 pluginName 分组）
+  const perfByPlugin: Record<string, {
+    count: number
+    avgThroughput: number
+    avgGradeScore: number
+    gradeDistribution: { excellent: number; good: number; warn: number }
+  }> = {}
+  for (const c of cases) {
+    if (!c.performance) continue
+    const key = c.pluginName
+    if (!perfByPlugin[key]) {
+      perfByPlugin[key] = {
+        count: 0,
+        avgThroughput: 0,
+        avgGradeScore: 0,
+        gradeDistribution: { excellent: 0, good: 0, warn: 0 },
+      }
+    }
+    const p = perfByPlugin[key]
+    p.count += 1
+    p.avgThroughput += c.performance.avgThroughput
+    p.avgGradeScore += c.performance.gradeScore
+    if (c.performance.grade === 'excellent') p.gradeDistribution.excellent += 1
+    else if (c.performance.grade === 'good') p.gradeDistribution.good += 1
+    else p.gradeDistribution.warn += 1
+  }
+  // 计算平均值
+  for (const p of Object.values(perfByPlugin)) {
+    if (p.count > 0) {
+      p.avgThroughput = Math.round((p.avgThroughput / p.count) * 10) / 10
+      p.avgGradeScore = Math.round(p.avgGradeScore / p.count)
+    }
+  }
+
+  const report: Record<string, unknown> = {
     schema: 'encv-report/v1',
     run: {
       id: run.id,
@@ -307,22 +353,65 @@ function buildReportJson(run: UnifiedRunRecord, runTasks: EncvTask[]): string {
     },
     plugins: Object.entries(pluginStats).map(([name, s]) => ({ name, ...s })),
     failures,
-    cases: cases.map((c) => ({
-      caseId: c.id,
-      caseFile: `cases/${String(c.index).padStart(3, '0')}-${c.status}-${sanitizeFilename(c.name)}.md`,
-      status: c.status,
-      plugin: c.pluginName,
-      taskType: c.taskType,
-      sourcePath: c.sourcePath,
-      durationMs: c.durationMs,
-      progress: c.progress,
-      phase: c.phase,
-    })),
-  }, null, 2)
+    cases: cases.map((c) => {
+      const caseEntry: Record<string, unknown> = {
+        caseId: c.id,
+        caseFile: `cases/${String(c.index).padStart(3, '0')}-${c.status}-${sanitizeFilename(c.name)}.md`,
+        status: c.status,
+        plugin: c.pluginName,
+        taskType: c.taskType,
+        sourcePath: c.sourcePath,
+        durationMs: c.durationMs,
+        progress: c.progress,
+        phase: c.phase,
+      }
+      // 🆕 可选 performance 字段（向后兼容 v1）
+      if (c.performance) {
+        caseEntry.performance = {
+          avgThroughput: c.performance.avgThroughput,
+          grade: c.performance.grade,
+          gradeScore: c.performance.gradeScore,
+          totalDurationMs: c.performance.totalDurationMs,
+          sourceSize: c.performance.sourceSize,
+          outputSize: c.performance.outputSize,
+        }
+      }
+      return caseEntry
+    }),
+  }
+
+  // 🆕 顶层 performance 聚合（如果有任何 case 含性能数据）
+  if (Object.keys(perfByPlugin).length > 0) {
+    report.performance = Object.entries(perfByPlugin).map(([name, p]) => ({
+      plugin: name,
+      ...p,
+    }))
+  }
+
+  // 🆕 顶层 calibration（如果调用方提供）
+  if (options?.calibration) {
+    report.calibration = {
+      cpuScore: options.calibration.cpuScore,
+      aesThroughput: options.calibration.aesThroughput,
+      cpuLabel: options.calibration.cpuLabel,
+      calibratedAt: options.calibration.calibratedAt,
+      goVersion: options.calibration.goVersion,
+      os: options.calibration.os,
+      arch: options.calibration.arch,
+      numCpu: options.calibration.numCpu,
+    }
+  }
+
+  return JSON.stringify(report, null, 2)
 }
 
 /** 2. summary.md — 人类可读概览 */
-function buildSummaryMd(run: UnifiedRunRecord, runTasks: EncvTask[], t: TFunction): string {
+function buildSummaryMd(
+  run: UnifiedRunRecord,
+  runTasks: EncvTask[],
+  t: TFunction,
+  options?: { calibration?: CalibrationResult | null },
+): string {
   const wRun = run.workflowRun
   const cases = flattenCases(run, runTasks)
   const triggeredByLabel = wRun?.triggeredBy
@@ -368,6 +457,27 @@ function buildSummaryMd(run: UnifiedRunRecord, runTasks: EncvTask[], t: TFunctio
     lines.push(`| ${name} | ${s.total} | ${s.passed} | ${s.failed} |`)
   }
   lines.push('')
+
+  // 🆕 性能聚合表格（如果有性能数据）
+  const perfByPlugin = aggregatePerformanceByPlugin(cases)
+  if (Object.keys(perfByPlugin).length > 0) {
+    lines.push(`## ${t('tasks.performance.reportAggregation')}`)
+    lines.push('')
+    lines.push(`| ${t('tasks.reportPlugin')} | ${t('tasks.performance.caseCount')} | ${t('tasks.performance.avgThroughput')} | ${t('tasks.performance.grade')} |`)
+    lines.push(`| --- | ---: | ---: | :--- |`)
+    for (const [name, p] of Object.entries(perfByPlugin)) {
+      const gradeStr = formatGradeDistribution(p.gradeDistribution, t)
+      lines.push(`| ${name} | ${p.count} | ${p.avgThroughput.toFixed(1)} MB/s | ${gradeStr} |`)
+    }
+    lines.push('')
+    if (options?.calibration) {
+      lines.push(`- ${t('tasks.performance.calibrationTitle')}: CPUScore ${options.calibration.cpuScore.toFixed(2)} (${options.calibration.cpuLabel})`)
+      lines.push(`- ${t('tasks.performance.calibratedAt')}: ${formatLocalTime(options.calibration.calibratedAt)}`)
+      lines.push('')
+    }
+    lines.push(`> ${t('tasks.performance.reportSeeDetail')}: [performance.md](performance.md)`)
+    lines.push('')
+  }
 
   // 失败 case 摘要
   const failures = cases.filter((c) => c.status === 'failure')
@@ -494,6 +604,147 @@ function buildTimelineTxt(run: UnifiedRunRecord): string {
   return lines.join('\n') + '\n'
 }
 
+/** 🆕 6.5. performance.md — 性能报告（硬件校准 + plugin 聚合 + phase 分布） */
+function buildPerformanceMd(
+  run: UnifiedRunRecord,
+  runTasks: EncvTask[],
+  t: TFunction,
+  options?: { calibration?: CalibrationResult | null },
+): string {
+  const cases = flattenCases(run, runTasks)
+  const perfByPlugin = aggregatePerformanceByPlugin(cases)
+  const lines: string[] = []
+
+  lines.push(`# ${t('tasks.performance.reportTitle')}`)
+  lines.push('')
+
+  // 硬件校准信息
+  if (options?.calibration) {
+    const cal = options.calibration
+    lines.push(`## ${t('tasks.performance.calibrationTitle')}`)
+    lines.push('')
+    lines.push(`- CPUScore: **${cal.cpuScore.toFixed(2)}** (${cal.cpuLabel})`)
+    lines.push(`- AES-CTR ${t('tasks.performance.throughput')}: ${cal.aesThroughput.toFixed(0)} MB/s`)
+    lines.push(`- ${t('tasks.performance.calibratedAt')}: ${formatLocalTime(cal.calibratedAt)}`)
+    lines.push(`- ${t('tasks.performance.platform')}: ${cal.os}/${cal.arch} (${cal.numCpu} CPU)`)
+    lines.push(`- Go: ${cal.goVersion}`)
+    lines.push('')
+  }
+
+  // Plugin 性能详情
+  if (Object.keys(perfByPlugin).length === 0) {
+    lines.push(`> ${t('tasks.performance.noData')}`)
+    lines.push('')
+    return lines.join('\n')
+  }
+
+  lines.push(`## ${t('tasks.performance.pluginAggregation')}`)
+  lines.push('')
+  lines.push(`| ${t('tasks.reportPlugin')} | ${t('tasks.performance.caseCount')} | ${t('tasks.performance.avgThroughput')} | ${t('tasks.performance.grade')} |`)
+  lines.push(`| --- | ---: | ---: | :--- |`)
+  for (const [name, p] of Object.entries(perfByPlugin)) {
+    const gradeStr = formatGradeDistribution(p.gradeDistribution, t)
+    lines.push(`| ${name} | ${p.count} | ${p.avgThroughput.toFixed(1)} MB/s | ${gradeStr} |`)
+  }
+  lines.push('')
+
+  // 每个 plugin 的 case 明细
+  lines.push(`## ${t('tasks.performance.caseDetails')}`)
+  lines.push('')
+  for (const pluginName of Object.keys(perfByPlugin)) {
+    lines.push(`### ${pluginName}`)
+    lines.push('')
+    lines.push(`| # | ${t('tasks.performance.avgThroughput')} | ${t('tasks.performance.grade')} | ${t('tasks.performance.totalDuration')} | ${t('tasks.performance.sourceSize')} | ${t('tasks.performance.outputSize')} |`)
+    lines.push(`| ---: | ---: | :--- | ---: | ---: | ---: |`)
+    const pluginCases = cases.filter((c) => c.pluginName === pluginName && c.performance)
+    for (const c of pluginCases) {
+      const p = c.performance!
+      const gradeLabel = gradeLabelLocalized(p.grade, t)
+      lines.push(`| ${String(c.index).padStart(3, '0')} | ${p.avgThroughput.toFixed(1)} MB/s | ${gradeLabel} (${p.gradeScore.toFixed(0)}) | ${formatDuration(p.totalDurationMs)} | ${formatBytes(p.sourceSize)} | ${formatBytes(p.outputSize)} |`)
+    }
+    lines.push('')
+  }
+
+  lines.push('---')
+  lines.push('')
+  lines.push(`[${t('tasks.reportCaseBackToIndex')}](summary.md)`)
+
+  return lines.join('\n')
+}
+
+/** 🆕 按 pluginName 聚合性能数据 */
+function aggregatePerformanceByPlugin(cases: CaseDetail[]): Record<string, {
+  count: number
+  avgThroughput: number
+  avgGradeScore: number
+  gradeDistribution: { excellent: number; good: number; warn: number }
+}> {
+  const result: Record<string, {
+    count: number
+    avgThroughput: number
+    avgGradeScore: number
+    gradeDistribution: { excellent: number; good: number; warn: number }
+  }> = {}
+  for (const c of cases) {
+    if (!c.performance) continue
+    const key = c.pluginName
+    if (!result[key]) {
+      result[key] = {
+        count: 0,
+        avgThroughput: 0,
+        avgGradeScore: 0,
+        gradeDistribution: { excellent: 0, good: 0, warn: 0 },
+      }
+    }
+    const p = result[key]
+    p.count += 1
+    p.avgThroughput += c.performance.avgThroughput
+    p.avgGradeScore += c.performance.gradeScore
+    if (c.performance.grade === 'excellent') p.gradeDistribution.excellent += 1
+    else if (c.performance.grade === 'good') p.gradeDistribution.good += 1
+    else p.gradeDistribution.warn += 1
+  }
+  for (const p of Object.values(result)) {
+    if (p.count > 0) {
+      p.avgThroughput = p.avgThroughput / p.count
+      p.avgGradeScore = p.avgGradeScore / p.count
+    }
+  }
+  return result
+}
+
+/** 🆕 格式化评级分布为字符串 */
+function formatGradeDistribution(
+  dist: { excellent: number; good: number; warn: number },
+  t: TFunction,
+): string {
+  const parts: string[] = []
+  if (dist.excellent > 0) parts.push(`${dist.excellent} ${t('tasks.performance.grade.excellent')}`)
+  if (dist.good > 0) parts.push(`${dist.good} ${t('tasks.performance.grade.good')}`)
+  if (dist.warn > 0) parts.push(`${dist.warn} ${t('tasks.performance.grade.warn')}`)
+  return parts.length > 0 ? parts.join(' / ') : '-'
+}
+
+/** 🆕 评级本地化标签 */
+function gradeLabelLocalized(grade: 'excellent' | 'good' | 'warn', t: TFunction): string {
+  if (grade === 'excellent') return t('tasks.performance.grade.excellent')
+  if (grade === 'good') return t('tasks.performance.grade.good')
+  return t('tasks.performance.grade.warn')
+}
+
+/** 🆕 格式化字节数为人类可读（KB/MB/GB） */
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  let v = bytes
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024
+    i += 1
+  }
+  return `${v.toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
 /** 6. cases/*.md — 单 case 详情 */
 function buildCaseDetailMd(c: CaseDetail, caseNumber: number, t: TFunction): string {
   const lines: string[] = []
@@ -530,6 +781,25 @@ function buildCaseDetailMd(c: CaseDetail, caseNumber: number, t: TFunction): str
     if (c.progress != null) lines.push(`- ${t('tasks.reportCaseProgress')}: **${c.progress}%**`)
     if (c.speed) lines.push(`- ${t('tasks.reportCaseSpeed')}: \`${c.speed}\``)
     if (c.eta) lines.push(`- ${t('tasks.reportCaseEta')}: \`${c.eta}\``)
+    lines.push('')
+  }
+
+  // 🆕 性能指标区块（如果有 performanceSummary）
+  if (c.performance) {
+    const p = c.performance
+    lines.push(`## ${t('tasks.performance.caseMetricsTitle')}`)
+    lines.push('')
+    lines.push(`| ${t('tasks.performance.metric')} | ${t('tasks.performance.value')} |`)
+    lines.push(`| :--- | :--- |`)
+    lines.push(`| ${t('tasks.performance.avgThroughput')} | **${p.avgThroughput.toFixed(1)} MB/s** |`)
+    lines.push(`| ${t('tasks.performance.grade')} | ${gradeLabelLocalized(p.grade, t)} (${p.gradeScore.toFixed(0)}/100) |`)
+    lines.push(`| ${t('tasks.performance.totalDuration')} | ${formatDuration(p.totalDurationMs)} |`)
+    lines.push(`| ${t('tasks.performance.sourceSize')} | ${formatBytes(p.sourceSize)} |`)
+    lines.push(`| ${t('tasks.performance.outputSize')} | ${formatBytes(p.outputSize)} |`)
+    if (p.sourceSize > 0 && p.outputSize > 0) {
+      const ratio = (p.outputSize / p.sourceSize * 100).toFixed(1)
+      lines.push(`| ${t('tasks.performance.sizeRatio')} | ${ratio}% |`)
+    }
     lines.push('')
   }
 

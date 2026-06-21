@@ -575,6 +575,11 @@ func (s *Server) Start(version string) (string, error) {
 	r.POST("/api/trash/restore", s.handleRestoreTrashGin)
 	r.DELETE("/api/trash/:id", s.handlePurgeTrashGin)
 	r.DELETE("/api/trash", s.handleEmptyTrashGin)
+	// 🆕 性能指标 API
+	r.GET("/api/tasks/:id/performance", s.handleGetTaskPerformance)
+	r.GET("/api/performance/calibration", s.handleGetCalibration)
+	r.POST("/api/performance/calibration", s.handleRecalibrate)
+	r.GET("/api/performance/history", s.handleGetPerformanceHistory)
 	r.POST("/api/webdav/test", s.handleTestWebDAVGin)
 	r.GET("/api/webdav/test-local", s.handleTestLocalWebDAVGin)
 	r.GET("/api/webdav/local-info", s.handleWebDavLocalInfoGin)

@@ -20,6 +20,8 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/plugins/video"
 	"github.com/Soltus/encv-go/internal/v2/types"
 	"github.com/Soltus/encv-go/pkg/tasksystem"
+	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
+	"github.com/Soltus/encv-go/pkg/tasksystem/store/sqlite"
 	"github.com/google/uuid"
 )
 
@@ -118,6 +120,51 @@ type TaskManager struct {
 	//   - 非 nil → sourcePath 是 /d/<mount>/... 时走 mount 解析
 	//   - 用 interface 而不是 *mount.MountRegistry：避免 service → mount 反向依赖
 	mountResolver MountResolver
+}
+
+// perfStore 返回 SQLite Store 的性能指标存储接口（如果 store 是 *sqlite.Store）。
+// 如果 store 不是 SQLite Store（如 nil 或 mock），返回 nil。
+func (tm *TaskManager) perfStore() *sqlite.Store {
+	if tm.store == nil {
+		return nil
+	}
+	if s, ok := tm.store.(*sqlite.Store); ok {
+		return s
+	}
+	return nil
+}
+
+// GetPerfStore 返回 SQLite Store 的性能指标存储接口（导出版本，供 server 包调用）。
+// 如果 store 不是 SQLite Store，返回 nil。
+func (tm *TaskManager) GetPerfStore() *sqlite.Store {
+	return tm.perfStore()
+}
+
+// EnsureCalibration 确保硬件校准已执行（启动时调用一次）。
+// 如果 calibration 表为空，运行校准并保存。
+func (tm *TaskManager) EnsureCalibration() {
+	ps := tm.perfStore()
+	if ps == nil {
+		return
+	}
+	// 检查是否已校准
+	existing, err := ps.GetCalibration()
+	if err != nil {
+		slog.Warn("EnsureCalibration: GetCalibration failed", "error", err)
+		return
+	}
+	if existing != nil {
+		slog.Info("EnsureCalibration: already calibrated", "cpuScore", existing.CPUScore, "label", existing.CPULabel)
+		return
+	}
+	// 运行校准
+	slog.Info("EnsureCalibration: running calibration...")
+	cal := performance.RunCalibration()
+	if err := ps.SaveCalibration(cal); err != nil {
+		slog.Warn("EnsureCalibration: SaveCalibration failed", "error", err)
+		return
+	}
+	slog.Info("EnsureCalibration: done", "cpuScore", cal.CPUScore, "label", cal.CPULabel, "aesThroughput", cal.AESThroughput)
 }
 
 // MountResolver 是 mount.MountRegistry 的子集接口（service 包不依赖 mount 包）
@@ -221,6 +268,10 @@ func NewTaskManagerWithStore(servingDir string, cfg *config.Config, broadcaster 
 
 	tm.wg.Add(1)
 	go tm.worker()
+
+	// 🆕 启动时确保硬件校准已执行
+	go tm.EnsureCalibration()
+
 	return tm
 }
 
@@ -1045,7 +1096,12 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 	stopMonitor := make(chan struct{})
 	go tm.monitorFileProgress(taskID, outputDir, fileSize, stopMonitor)
 
-	outputPath, err := plugins.EncryptFileWithPlugin(passwordCtx, plugin, absPath, tm.servingDir, outputDir)
+	// 🆕 性能采集
+	collector := performance.NewCollector(task.ID, "encrypt")
+	collector.StartPhase("initializing")
+
+	outputPath, err := plugins.EncryptFileWithPlugin(passwordCtx, plugin, absPath, tm.servingDir, outputDir, collector)
+	collector.EndPhase("initializing", 0)
 	close(stopMonitor)
 
 	if err != nil {
@@ -1098,13 +1154,58 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 
 	tm.saveTasks()
 
+	// 🆕 性能指标 Finalize + 持久化
+	var perfSummary map[string]interface{}
+	if task.Status == "completed" {
+		sourceSize := int64(0)
+		if info, err := os.Stat(absPath); err == nil {
+			sourceSize = info.Size()
+		}
+		outputSize := int64(0)
+		if outputPath != "" {
+			if info, err := os.Stat(outputPath); err == nil {
+				outputSize = info.Size()
+			}
+		}
+		var cpuScore float64
+		var cpuLabel string
+		if ps := tm.perfStore(); ps != nil {
+			if cal, _ := ps.GetCalibration(); cal != nil {
+				cpuScore = cal.CPUScore
+				cpuLabel = cal.CPULabel
+			}
+		}
+		metrics := collector.Finalize(sourceSize, outputSize, cpuScore, cpuLabel)
+		metrics.PluginName = task.PluginName
+		metrics.ContainerVer = task.ContainerVersion
+		thresholds := performance.GetThresholds("encrypt", task.PluginName, cpuScore)
+		grade, score, reason := performance.CalculateGrade(metrics, thresholds)
+		metrics.Grade = grade
+		metrics.GradeScore = score
+		metrics.GradeReason = reason
+		if ps := tm.perfStore(); ps != nil {
+			if err := ps.SaveMetrics(metrics); err != nil {
+				slog.Warn("SaveMetrics failed", "taskId", task.ID, "error", err)
+			}
+		}
+		perfSummary = map[string]interface{}{
+			"avgThroughput":   metrics.AvgThroughput,
+			"grade":           string(metrics.Grade),
+			"gradeScore":      metrics.GradeScore,
+			"totalDurationMs": metrics.TotalDurationMs,
+			"sourceSize":      metrics.SourceSize,
+			"outputSize":      metrics.OutputSize,
+		}
+	}
+
 	slog.Info("Task completed", "id", task.ID, "type", task.Type)
 	if tm.broadcaster != nil {
 		// v3 2026-06-18：task:completed 事件增加 outputPath（前端无需下拉刷新即可显示产物）
 		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
-			"id":         task.ID,
-			"status":     "completed",
-			"outputPath": task.OutputPath,
+			"id":                  task.ID,
+			"status":              "completed",
+			"outputPath":          task.OutputPath,
+			"performanceSummary":  perfSummary,
 		})
 		// 🆕 v6 2026-06-18：file:change 加 action 字段，前端按 action 增量更新
 		//   - 加密/解密完成 → 源文件 modify（mtime 变化）+ 输出文件 create
@@ -1287,7 +1388,12 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 	stopMonitor := make(chan struct{})
 	go tm.monitorFileProgress(taskID, outputDir, fileSize, stopMonitor)
 
-	outputPath, err := plugins.DecryptContainerWithPlugin(passwordCtx, plugin, absPath, outputDir)
+	// 🆕 性能采集
+	collector := performance.NewCollector(task.ID, "decrypt")
+	collector.StartPhase("initializing")
+
+	outputPath, err := plugins.DecryptContainerWithPlugin(passwordCtx, plugin, absPath, outputDir, collector)
+	collector.EndPhase("initializing", 0)
 	close(stopMonitor)
 
 	if err != nil {
@@ -1331,13 +1437,58 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 
 	tm.saveTasks()
 
+	// 🆕 性能指标 Finalize + 持久化
+	var perfSummary map[string]interface{}
+	if task.Status == "completed" {
+		sourceSize := int64(0)
+		if info, err := os.Stat(absPath); err == nil {
+			sourceSize = info.Size()
+		}
+		outputSize := int64(0)
+		if outputPath != "" {
+			if info, err := os.Stat(outputPath); err == nil {
+				outputSize = info.Size()
+			}
+		}
+		var cpuScore float64
+		var cpuLabel string
+		if ps := tm.perfStore(); ps != nil {
+			if cal, _ := ps.GetCalibration(); cal != nil {
+				cpuScore = cal.CPUScore
+				cpuLabel = cal.CPULabel
+			}
+		}
+		metrics := collector.Finalize(sourceSize, outputSize, cpuScore, cpuLabel)
+		metrics.PluginName = task.PluginName
+		metrics.ContainerVer = task.ContainerVersion
+		thresholds := performance.GetThresholds("decrypt", task.PluginName, cpuScore)
+		grade, score, reason := performance.CalculateGrade(metrics, thresholds)
+		metrics.Grade = grade
+		metrics.GradeScore = score
+		metrics.GradeReason = reason
+		if ps := tm.perfStore(); ps != nil {
+			if err := ps.SaveMetrics(metrics); err != nil {
+				slog.Warn("SaveMetrics failed", "taskId", task.ID, "error", err)
+			}
+		}
+		perfSummary = map[string]interface{}{
+			"avgThroughput":   metrics.AvgThroughput,
+			"grade":           string(metrics.Grade),
+			"gradeScore":      metrics.GradeScore,
+			"totalDurationMs": metrics.TotalDurationMs,
+			"sourceSize":      metrics.SourceSize,
+			"outputSize":      metrics.OutputSize,
+		}
+	}
+
 	slog.Info("Task completed", "id", task.ID, "type", task.Type, "output", task.OutputPath)
 	if tm.broadcaster != nil {
 		// v3 2026-06-18：task:completed 事件增加 outputPath（前端无需下拉刷新即可显示产物）
 		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
-			"id":         task.ID,
-			"status":     "completed",
-			"outputPath": task.OutputPath,
+			"id":                  task.ID,
+			"status":              "completed",
+			"outputPath":          task.OutputPath,
+			"performanceSummary":  perfSummary,
 		})
 		// 🆕 v6 2026-06-18：file:change 加 action 字段（同上）
 		if task.SourcePath != "" {

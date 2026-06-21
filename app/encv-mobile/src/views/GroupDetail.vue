@@ -31,6 +31,9 @@
           <ion-segment-button value="diagnostics">
             <ion-label>{{ t('tasks.groupDetail.tabDiagnostics') }}</ion-label>
           </ion-segment-button>
+          <ion-segment-button value="performance">
+            <ion-label>{{ t('tasks.groupDetail.tabPerformance') }}</ion-label>
+          </ion-segment-button>
         </ion-segment>
       </ion-toolbar>
     </ion-header>
@@ -69,6 +72,10 @@
           :running-tasks="runningTasks"
           :jobs="run.jobs"
         />
+        <PerformanceTab
+          v-else-if="activeTab === 'performance'"
+          :run-tasks="runTasks"
+        />
       </template>
     </ion-content>
   </ion-page>
@@ -88,10 +95,12 @@ import { useI18n } from '@/composables/useI18n'
 import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
 import { useTasksList } from '@/composables/useTasksList'
 import type { EncvTask } from '@/api/encv'
+import { getCalibration } from '@/api/encv'
 import type { JobRun } from '@/lib/workflow/types'
 import PipelineTab from '@/components/group-detail/PipelineTab.vue'
 import TasksTab from '@/components/group-detail/TasksTab.vue'
 import DiagnosticsTab from '@/components/group-detail/DiagnosticsTab.vue'
+import PerformanceTab from '@/components/group-detail/PerformanceTab.vue'
 import { buildReportZip } from '@/lib/buildReportZip'
 
 const { t } = useI18n()
@@ -104,8 +113,8 @@ const { tasks: allTasks } = useTasksList()
 const runId = computed(() => decodeURIComponent(String(route.params.runId ?? '')))
 
 // ============ Tab 状态（持久化） ============
-const activeTab = ref<'pipeline' | 'tasks' | 'diagnostics'>(
-  (loadStoredTab() as 'pipeline' | 'tasks' | 'diagnostics' | null) ?? 'pipeline',
+const activeTab = ref<'pipeline' | 'tasks' | 'diagnostics' | 'performance'>(
+  (loadStoredTab() as 'pipeline' | 'tasks' | 'diagnostics' | 'performance' | null) ?? 'pipeline',
 )
 const TAB_STORAGE_KEY = 'encv_group_detail_active_tab_v1'
 function loadStoredTab(): string | null {
@@ -194,7 +203,9 @@ async function exportGroupReport() {
       })),
       workflowRun: r,
     } as any
-    const zipBlob = await buildReportZip(unifiedLike, runTasks.value, t)
+    const zipBlob = await buildReportZip(unifiedLike, runTasks.value, t, {
+      calibration: await getCalibration().catch(() => null),
+    })
     const filename = `encvreport-${r.id.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.zip`
     const isNative = !!(window as any).Capacitor?.isNativePlatform?.()
     if (isNative) {

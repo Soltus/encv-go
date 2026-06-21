@@ -6,6 +6,7 @@ package sqlite
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	_ "modernc.org/sqlite" // pure-Go SQLite driver
 
 	"github.com/Soltus/encv-go/pkg/tasksystem"
+	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
 )
 
 // Store SQLite 存储实现。
@@ -111,6 +113,46 @@ CREATE TABLE IF NOT EXISTS rollback_snapshots (
     FOREIGN KEY (task_id) REFERENCES tasks(id)
 );
 CREATE INDEX IF NOT EXISTS idx_snapshots_task_id ON rollback_snapshots(task_id);
+
+CREATE TABLE IF NOT EXISTS performance_metrics (
+    task_id TEXT PRIMARY KEY,
+    task_type TEXT NOT NULL,
+    plugin_name TEXT,
+    container_version INTEGER,
+    cipher_mode INTEGER,
+    compression_mode TEXT,
+    source_size INTEGER,
+    output_size INTEGER,
+    size_ratio REAL,
+    avg_throughput REAL,
+    peak_throughput REAL,
+    p50_throughput REAL,
+    p99_throughput REAL,
+    total_duration_ms INTEGER,
+    phase_timings_json TEXT,
+    grade TEXT,
+    grade_score REAL,
+    grade_reason TEXT,
+    cpu_score REAL,
+    cpu_label TEXT,
+    created_at DATETIME NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES tasks(id)
+);
+CREATE INDEX IF NOT EXISTS idx_perf_plugin_type ON performance_metrics(plugin_name, task_type);
+CREATE INDEX IF NOT EXISTS idx_perf_created_at ON performance_metrics(created_at);
+CREATE INDEX IF NOT EXISTS idx_perf_grade ON performance_metrics(grade);
+
+CREATE TABLE IF NOT EXISTS calibration (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    cpu_score REAL NOT NULL,
+    aes_throughput REAL NOT NULL,
+    cpu_label TEXT NOT NULL,
+    calibrated_at DATETIME NOT NULL,
+    go_version TEXT,
+    os TEXT,
+    arch TEXT,
+    num_cpu INTEGER
+);
 `
 
 // Close 关闭数据库连接。
@@ -439,4 +481,163 @@ var _ tasksystem.Store = (*Store)(nil)
 // Now 返回当前时间（方便测试 mock）。
 func Now() time.Time {
 	return time.Now().UTC()
+}
+
+// ========== Performance Metrics ==========
+
+// SaveMetrics 保存性能指标。
+func (s *Store) SaveMetrics(m performance.PerformanceMetrics) error {
+	phaseTimingsJSON, err := json.Marshal(m.PhaseTimings)
+	if err != nil {
+		return fmt.Errorf("marshal phase timings: %w", err)
+	}
+	_, err = s.db.Exec(`
+		INSERT OR REPLACE INTO performance_metrics (
+			task_id, task_type, plugin_name, container_version, cipher_mode, compression_mode,
+			source_size, output_size, size_ratio,
+			avg_throughput, peak_throughput, p50_throughput, p99_throughput,
+			total_duration_ms, phase_timings_json,
+			grade, grade_score, grade_reason,
+			cpu_score, cpu_label, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.TaskID, m.TaskType, m.PluginName, m.ContainerVer, m.CipherMode, m.CompressionMode,
+		m.SourceSize, m.OutputSize, m.SizeRatio,
+		m.AvgThroughput, m.PeakThroughput, m.P50Throughput, m.P99Throughput,
+		m.TotalDurationMs, string(phaseTimingsJSON),
+		string(m.Grade), m.GradeScore, m.GradeReason,
+		m.CPUScore, m.CPULabel, m.CreatedAt,
+	)
+	return err
+}
+
+// GetMetrics 按 task_id 查询性能指标。
+func (s *Store) GetMetrics(taskID string) (performance.PerformanceMetrics, error) {
+	row := s.db.QueryRow(`
+		SELECT task_id, task_type, plugin_name, container_version, cipher_mode, compression_mode,
+			source_size, output_size, size_ratio,
+			avg_throughput, peak_throughput, p50_throughput, p99_throughput,
+			total_duration_ms, phase_timings_json,
+			grade, grade_score, grade_reason,
+			cpu_score, cpu_label, created_at
+		FROM performance_metrics WHERE task_id = ?`, taskID)
+	return scanMetrics(row)
+}
+
+// ListMetricsByPlugin 按 plugin + taskType 查询历史性能指标（按 created_at 倒序，limit 条）。
+func (s *Store) ListMetricsByPlugin(pluginName string, taskType string, limit int) ([]performance.PerformanceMetrics, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	rows, err := s.db.Query(`
+		SELECT task_id, task_type, plugin_name, container_version, cipher_mode, compression_mode,
+			source_size, output_size, size_ratio,
+			avg_throughput, peak_throughput, p50_throughput, p99_throughput,
+			total_duration_ms, phase_timings_json,
+			grade, grade_score, grade_reason,
+			cpu_score, cpu_label, created_at
+		FROM performance_metrics
+		WHERE plugin_name = ? AND task_type = ?
+		ORDER BY created_at DESC
+		LIMIT ?`, pluginName, taskType, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []performance.PerformanceMetrics
+	for rows.Next() {
+		m, err := scanMetrics(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, m)
+	}
+	return result, rows.Err()
+}
+
+// GetLatestMetrics 获取同 plugin + taskType 的上一次运行（用于历史对比）。
+func (s *Store) GetLatestMetrics(pluginName string, taskType string) (*performance.PerformanceMetrics, error) {
+	rows, err := s.db.Query(`
+		SELECT task_id, task_type, plugin_name, container_version, cipher_mode, compression_mode,
+			source_size, output_size, size_ratio,
+			avg_throughput, peak_throughput, p50_throughput, p99_throughput,
+			total_duration_ms, phase_timings_json,
+			grade, grade_score, grade_reason,
+			cpu_score, cpu_label, created_at
+		FROM performance_metrics
+		WHERE plugin_name = ? AND task_type = ?
+		ORDER BY created_at DESC
+		LIMIT 1`, pluginName, taskType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, nil
+	}
+	m, err := scanMetrics(rows)
+	if err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// scanMetrics 从 sql.Row 或 sql.Rows 扫描性能指标。
+// 接受 interface{} 是因为 *sql.Row 和 *sql.Rows 都有 Scan 方法但无公共接口。
+func scanMetrics(scanner interface{ Scan(dest ...interface{}) error }) (performance.PerformanceMetrics, error) {
+	var m performance.PerformanceMetrics
+	var phaseTimingsJSON string
+	var grade string
+	err := scanner.Scan(
+		&m.TaskID, &m.TaskType, &m.PluginName, &m.ContainerVer, &m.CipherMode, &m.CompressionMode,
+		&m.SourceSize, &m.OutputSize, &m.SizeRatio,
+		&m.AvgThroughput, &m.PeakThroughput, &m.P50Throughput, &m.P99Throughput,
+		&m.TotalDurationMs, &phaseTimingsJSON,
+		&grade, &m.GradeScore, &m.GradeReason,
+		&m.CPUScore, &m.CPULabel, &m.CreatedAt,
+	)
+	if err != nil {
+		return m, err
+	}
+	m.Grade = performance.Grade(grade)
+	if phaseTimingsJSON != "" {
+		if err := json.Unmarshal([]byte(phaseTimingsJSON), &m.PhaseTimings); err != nil {
+			return m, fmt.Errorf("unmarshal phase timings: %w", err)
+		}
+	}
+	return m, nil
+}
+
+// ========== Calibration ==========
+
+// SaveCalibration 保存硬件校准结果（单行表，id=1，INSERT OR REPLACE）。
+func (s *Store) SaveCalibration(cal performance.CalibrationResult) error {
+	_, err := s.db.Exec(`
+		INSERT OR REPLACE INTO calibration (
+			id, cpu_score, aes_throughput, cpu_label, calibrated_at,
+			go_version, os, arch, num_cpu
+		) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		cal.CPUScore, cal.AESThroughput, cal.CPULabel, cal.CalibratedAt,
+		cal.GoVersion, cal.OS, cal.Arch, cal.NumCPU,
+	)
+	return err
+}
+
+// GetCalibration 获取硬件校准结果。返回 nil 表示尚未校准。
+func (s *Store) GetCalibration() (*performance.CalibrationResult, error) {
+	row := s.db.QueryRow(`
+		SELECT cpu_score, aes_throughput, cpu_label, calibrated_at,
+			go_version, os, arch, num_cpu
+		FROM calibration WHERE id = 1`)
+	var cal performance.CalibrationResult
+	err := row.Scan(
+		&cal.CPUScore, &cal.AESThroughput, &cal.CPULabel, &cal.CalibratedAt,
+		&cal.GoVersion, &cal.OS, &cal.Arch, &cal.NumCPU,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &cal, nil
 }

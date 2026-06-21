@@ -633,6 +633,8 @@ export interface EncvTask {
   // 🆕 回滚特性：rollbackOf 指向原任务 ID，originalPath 为原始路径（回滚用）
   rollbackOf?: string
   originalPath?: string
+  // 🆕 性能指标摘要（task:completed 事件推送，仅 completed 状态有值）
+  performanceSummary?: PerformanceSummary
 }
 
 export async function getTasks(): Promise<EncvTask[]> {
@@ -1742,4 +1744,110 @@ export async function fetchMountUsage(id: string): Promise<MountUsageResponse> {
     throw new Error(msg)
   }
   return response.json()
+}
+
+// ========== 🆕 性能指标 ==========
+
+/** 性能指标摘要（task:completed 事件推送） */
+export interface PerformanceSummary {
+  avgThroughput: number
+  grade: 'excellent' | 'good' | 'warn'
+  gradeScore: number
+  totalDurationMs: number
+  sourceSize: number
+  outputSize: number
+}
+
+/** Phase 耗时 */
+export interface PhaseTiming {
+  phase: string
+  durationMs: number
+  bytesProcessed?: number
+  throughputMBps?: number
+}
+
+/** 完整性能指标（GET /api/tasks/:id/performance 返回） */
+export interface PerformanceMetrics {
+  taskId: string
+  taskType: string
+  pluginName?: string
+  containerVersion?: number
+  cipherMode?: number
+  compressionMode?: string
+  sourceSize: number
+  outputSize: number
+  sizeRatio: number
+  avgThroughput: number
+  peakThroughput: number
+  p50Throughput: number
+  p99Throughput: number
+  phaseTimings: PhaseTiming[]
+  totalDurationMs: number
+  grade: 'excellent' | 'good' | 'warn'
+  gradeScore: number
+  gradeReason?: string
+  cpuScore: number
+  cpuLabel: string
+  createdAt: string
+}
+
+/** 硬件校准结果 */
+export interface CalibrationResult {
+  cpuScore: number
+  aesThroughput: number
+  cpuLabel: string
+  calibratedAt: string
+  goVersion: string
+  os: string
+  arch: string
+  numCpu: number
+}
+
+/** 获取指定任务的完整性能指标 */
+export async function getTaskPerformance(taskId: string): Promise<PerformanceMetrics> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(taskId)}/performance`)
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP error! status: ${response.status}`)
+  }
+  const data = await response.json()
+  return data.metrics
+}
+
+/** 获取当前硬件校准结果 */
+export async function getCalibration(): Promise<CalibrationResult | null> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/performance/calibration`)
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  const data = await response.json()
+  return data.calibration
+}
+
+/** 手动重跑硬件校准（dev-only） */
+export async function recalibrateCalibration(): Promise<CalibrationResult> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/performance/calibration`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP error! status: ${response.status}`)
+  }
+  const data = await response.json()
+  return data.calibration
+}
+
+/** 获取指定 plugin + taskType 的历史性能指标 */
+export async function getPerformanceHistory(
+  plugin: string,
+  type: string,
+  limit: number = 10,
+): Promise<PerformanceMetrics[]> {
+  const baseUrl = getApiBaseUrl()
+  const params = new URLSearchParams({ plugin, type, limit: String(limit) })
+  const response = await fetch(`${baseUrl}/api/performance/history?${params}`)
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  const data = await response.json()
+  return data.history || []
 }

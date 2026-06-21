@@ -334,7 +334,7 @@ func runPluginEncrypt(ctx context.Context, def pluginToolDef, argsJSON string) (
 	injectExtraFields(p, args.ExtraFields)
 
 	inputRootDir := filepath.Dir(inputPath)
-	outputPath, err := plugins.EncryptFileWithPlugin(ctx, p, inputPath, inputRootDir, args.OutputPath)
+	outputPath, err := plugins.EncryptFileWithPlugin(ctx, p, inputPath, inputRootDir, args.OutputPath, nil)
 	if err != nil {
 		slog.Warn("agent: plugin encrypt failed", "plugin", p.Name(), "input", inputPath, "error", err)
 		return errJSON("encrypt_failed", err.Error()), nil
@@ -384,7 +384,7 @@ func runPluginDecrypt(ctx context.Context, def pluginToolDef, argsJSON string) (
 	// 注入 extra_fields
 	injectExtraFields(p, args.ExtraFields)
 
-	outputPath, err := plugins.DecryptContainerWithPlugin(ctx, p, args.ContainerPath, args.OutputDir)
+	outputPath, err := plugins.DecryptContainerWithPlugin(ctx, p, args.ContainerPath, args.OutputDir, nil)
 	if err != nil {
 		slog.Warn("agent: plugin decrypt failed", "plugin", p.Name(), "input", args.ContainerPath, "error", err)
 		return errJSON("decrypt_failed", err.Error()), nil
