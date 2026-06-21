@@ -519,7 +519,7 @@ import { add, closeCircle, checkmarkCircle, timer, sync,
   pin,
 } from 'ionicons/icons'
 import { useRoute, useRouter } from 'vue-router'
-import type { EncvTask, TaskType } from '@/api/encv'
+import type { EncvTask } from '@/api/encv'
 import { clearCompletedTasks } from '@/api/encv'
 import { useI18n } from '@/composables/useI18n'
 import { formatDateTime } from '@/composables/useDateFormat'
@@ -1066,7 +1066,7 @@ onMounted(() => {
 
   if (route.query.action === 'new') {
     const sourcePath = route.query.source as string
-    const taskType = (route.query.type || 'encrypt') as TaskType
+    const taskType = (route.query.type || 'encrypt') as 'encrypt' | 'decrypt'
     router.replace({ path: '/tabs/tasks', query: {} })
     if (sourcePath) {
       openNewTask(sourcePath, taskType)

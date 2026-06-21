@@ -442,7 +442,7 @@ export function getPersistedBackendIdentity(): { instanceId: string; version: st
   return { instanceId: id, version: localStorage.getItem(SERVER_VERSION_KEY) || '' }
 }
 
-export async function deleteFile(path: string): Promise<void> {
+export async function deleteFile(path: string): Promise<{ taskId: string }> {
   // 🆕 2026-06-10 修复 #1：deleteFile 500 错误没有可读 message
   // 历史 bug：只 throw "HTTP error! status: 500" → 用户看到红色 toast 不知道为啥
   // 修复：把 response body 的 error 字段也读出来，throw 带详细 message
@@ -467,6 +467,7 @@ export async function deleteFile(path: string): Promise<void> {
     console.error(fullMsg, { path, status: response.status })
     throw new Error(detail || `HTTP error! status: ${response.status}`)
   }
+  return response.json()
 }
 
 export async function createDirectory(parentPath: string, name: string): Promise<void> {
@@ -581,7 +582,8 @@ export async function readFileContent(path: string): Promise<FileContentResponse
   return data
 }
 
-export type TaskType = 'encrypt' | 'decrypt'
+export type TaskType = 'encrypt' | 'decrypt' | 'move' | 'copy' | 'rename' | 'delete'
+  | 'rollback_encrypt' | 'rollback_decrypt' | 'rollback_move' | 'rollback_copy' | 'rollback_rename' | 'rollback_delete'
 export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'cancelling'
 
 export interface TaskStep {
@@ -628,6 +630,9 @@ export interface EncvTask {
   // extraFields 已存在于 EncvTask 之外（createTask body 传），但后端 MobileTask 也有这个字段
   // 这里加上让前端能读到后端回传的 extraFields（如 plugin_password 等自定义参数）
   extraFields?: Record<string, string>
+  // 🆕 回滚特性：rollbackOf 指向原任务 ID，originalPath 为原始路径（回滚用）
+  rollbackOf?: string
+  originalPath?: string
 }
 
 export async function getTasks(): Promise<EncvTask[]> {
@@ -757,6 +762,71 @@ export async function clearCompletedTasks(): Promise<{ removed: number }> {
   }
   const data = await response.json()
   return { removed: data.removed ?? 0 }
+}
+
+/**
+ * 🆕 回滚特性：触发指定任务的回滚操作。
+ * 后端创建一个 rollback_* 类型的反向任务，返回新 task ID。
+ */
+export async function rollbackTask(taskId: string): Promise<{ taskId: string }> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(taskId)}/rollback`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP error! status: ${response.status}`)
+  }
+  return response.json()
+}
+
+/** 🆕 回滚特性：回收站项（删除任务移入 trash 后的元数据） */
+export interface TrashItem {
+  id: string
+  originalPath: string
+  trashPath: string
+  isDirectory: boolean
+  size: number
+  deletedAt: string
+  taskId?: string
+  restoreTaskId?: string
+}
+
+/** 列出回收站所有项 */
+export async function listTrash(): Promise<TrashItem[]> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/trash`)
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  const data = await response.json()
+  return data.items || []
+}
+
+/** 从回收站恢复（可选指定目标路径） */
+export async function restoreTrash(trashId: string, destPath?: string): Promise<{ taskId: string }> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/trash/restore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trashId, destPath }),
+  })
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  return response.json()
+}
+
+/** 永久删除回收站中的指定项 */
+export async function purgeTrash(trashId: string): Promise<void> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/trash/${encodeURIComponent(trashId)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+}
+
+/** 清空整个回收站 */
+export async function emptyTrash(): Promise<void> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/trash`, { method: 'DELETE' })
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 }
 
 export interface WebDAVConfig {
@@ -1244,7 +1314,7 @@ export function isWrongPasswordError(error: unknown): boolean {
   return msg.includes('wrong password') || msg.includes('密码')
 }
 
-export async function renameFile(oldPath: string, newName: string): Promise<void> {
+export async function renameFile(oldPath: string, newName: string): Promise<{ taskId: string }> {
   console.info('[API] renameFile:', oldPath, '→', newName)
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/file/rename`, {
@@ -1256,6 +1326,7 @@ export async function renameFile(oldPath: string, newName: string): Promise<void
     console.error('[API] renameFile failed:', response.status)
     throw new Error(`HTTP error! status: ${response.status}`)
   }
+  return response.json()
 }
 
 export interface RenameOriginalNameResponse {
@@ -1280,7 +1351,7 @@ export async function renameOriginalName(path: string, newName: string, password
   return response.json()
 }
 
-export async function copyFile(srcPath: string, destPath: string): Promise<void> {
+export async function copyFile(srcPath: string, destPath: string): Promise<{ taskId: string }> {
   console.info('[API] copyFile:', srcPath, '→', destPath)
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/file/copy`, {
@@ -1292,9 +1363,10 @@ export async function copyFile(srcPath: string, destPath: string): Promise<void>
     console.error('[API] copyFile failed:', response.status)
     throw new Error(`HTTP error! status: ${response.status}`)
   }
+  return response.json()
 }
 
-export async function moveFile(srcPath: string, destPath: string): Promise<void> {
+export async function moveFile(srcPath: string, destPath: string): Promise<{ taskId: string }> {
   console.info('[API] moveFile:', srcPath, '→', destPath)
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/file/move`, {
@@ -1306,6 +1378,7 @@ export async function moveFile(srcPath: string, destPath: string): Promise<void>
     console.error('[API] moveFile failed:', response.status)
     throw new Error(`HTTP error! status: ${response.status}`)
   }
+  return response.json()
 }
 
 export interface PluginMeta {

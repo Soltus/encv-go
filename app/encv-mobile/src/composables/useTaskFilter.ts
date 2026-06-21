@@ -35,6 +35,7 @@ export function useTaskFilter() {
   const filterTypes = ref<TaskType[]>([])
   const filterStatuses = ref<TaskStatus[]>([])
   const searchQuery = ref('')
+  const filterTriggeredBy = ref<('user' | 'automation' | 'ai_agent')[]>([])
 
   // ============ 派生 ============
 
@@ -46,6 +47,7 @@ export function useTaskFilter() {
     if (filterStatuses.value.length > 0) n++
     if (filterDatePreset.value !== 'all') n++
     if (searchQuery.value.trim().length > 0) n++
+    if (filterTriggeredBy.value.length > 0) n++
     return n
   })
 
@@ -64,6 +66,7 @@ export function useTaskFilter() {
     filterDatePreset.value = 'all'
     filterDateRange.value = {}
     searchQuery.value = ''
+    filterTriggeredBy.value = []
   }
 
   function togglePluginFilter(plugin: string): void {
@@ -82,6 +85,15 @@ export function useTaskFilter() {
     const idx = filterStatuses.value.indexOf(status)
     if (idx === -1) filterStatuses.value.push(status)
     else filterStatuses.value.splice(idx, 1)
+  }
+
+  function toggleTriggeredByFilter(value: 'user' | 'automation' | 'ai_agent') {
+    const idx = filterTriggeredBy.value.indexOf(value)
+    if (idx >= 0) {
+      filterTriggeredBy.value = filterTriggeredBy.value.filter((_, i) => i !== idx)
+    } else {
+      filterTriggeredBy.value = [...filterTriggeredBy.value, value]
+    }
   }
 
   function setSearchQuery(q: string): void {
@@ -150,6 +162,7 @@ export function useTaskFilter() {
     filterTypes,
     filterStatuses,
     searchQuery,
+    filterTriggeredBy,
     // getters
     activeFilterCount,
     hasActiveFilters,
@@ -158,6 +171,7 @@ export function useTaskFilter() {
     togglePluginFilter,
     toggleTypeFilter,
     toggleStatusFilter,
+    toggleTriggeredByFilter,
     setSearchQuery,
     setViewMode,
     setSortBy,

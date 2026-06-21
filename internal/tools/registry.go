@@ -51,6 +51,28 @@ type ToolDeps struct {
 	// 留空时由 handler 内部调 DetectPlatform() 推断。
 	// 主要用于 high-level 跨平台 bash 工具。
 	Platform string
+
+	// 🆕 v6 2026-06-22：TrashManager 注入（AI agent delete_file 工具统一走回收站）
+	//   - nil → 退回旧逻辑（硬编码 .trash 目录，向后兼容）
+	//   - 非 nil → trash 模式调 TrashManager.MoveToTrash，记录到 trash 表
+	//   用 interface 避免循环依赖（tools 包不 import service 包）
+	TrashMover TrashMover
+}
+
+// TrashMover 是 TrashManager 的最小化接口（供 AI agent delete_file 工具使用）。
+// 与 tasksystem.TrashManager 的 MoveToTrash 签名一致。
+type TrashMover interface {
+	MoveToTrash(originalPath string, taskID string) (TrashItem, error)
+}
+
+// TrashItem 是回收站条目的最小化结构（供 AI agent delete_file 工具返回结果）。
+// 与 tasksystem.TrashItem 字段对齐。
+type TrashItem struct {
+	ID           string
+	OriginalPath string
+	TrashPath    string
+	IsDirectory  bool
+	Size         int64
 }
 
 // ToolResult 是 handler 的统一返回结构。

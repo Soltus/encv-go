@@ -209,6 +209,10 @@ function createUseTasksList() {
       if (filter.filterPlugins.value.length > 0 && !filter.filterPlugins.value.includes(t.pluginName || '__unknown__')) continue
       if (filter.filterTypes.value.length > 0 && !filter.filterTypes.value.includes(t.type)) continue
       if (filter.filterStatuses.value.length > 0 && !filter.filterStatuses.value.includes(t.status)) continue
+      if (filter.filterTriggeredBy.value.length > 0) {
+        const by = t.triggeredBy ?? 'user'
+        if (!filter.filterTriggeredBy.value.includes(by as any)) continue
+      }
       if (hasDate) {
         if (fromTs && t.createdAt < fromTs) continue
         if (toTs && t.createdAt >= toTs) continue

@@ -1231,15 +1231,17 @@ async function handleLongPress(file: FileItem) {
 }
 
 async function handleCopy(file: FileItem) {
+  const baseName = file.name.replace(/\.[^.]+$/, '')
   const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : ''
-  const baseName = ext ? file.name.slice(0, -ext.length) : file.name
   const destName = `${baseName}_copy${ext}`
-  // 🆕 2026-06-15 multi-mount 适配：根目录 /d 而不是 /
   const destPath = currentPath.value === '/d' ? `/d/${destName}` : `${currentPath.value}/${destName}`
   try {
     await copyFile(file.path, destPath)
-    await loadFiles()
-  } catch (e) { showToast({ message: `复制失败: ${e}` }) }
+    showToast({ message: t('tasks.copy') + ' ' + t('tasks.taskCreated'), duration: 1500, color: 'success' })
+    // 不调 loadFiles()，依赖 file:change 增量更新
+  } catch (err: any) {
+    showToast({ message: err.message || 'Copy failed', duration: 2000, color: 'danger' })
+  }
 }
 
 function onRenameConfirm(d: any) {
@@ -1252,27 +1254,41 @@ async function handleRename(file: FileItem) {
   if (!renameValue.value.trim() || renameValue.value === file.name) return
   try {
     if (file.isEncrypted) {
+      // 加密容器元数据重命名仍走旧 PATCH API（同步），不接入任务系统
       const result = await renameOriginalName(file.path, renameValue.value.trim(), renamePassword.value.trim() || undefined)
       if (result.success) {
-        showToast({ message: '原始文件名已更新' })
+        showToast({ message: '原始文件名已更新', duration: 1500, color: 'success' })
       }
     } else {
+      // 普通文件重命名走任务系统
       await renameFile(file.path, renameValue.value.trim())
+      showToast({ message: t('tasks.rename') + ' ' + t('tasks.taskCreated'), duration: 1500, color: 'success' })
     }
     showRenameDialog.value = false
     renamePassword.value = ''
-    await loadFiles()
-  } catch (e) { showToast({ message: `重命名失败: ${e}` }) }
+    // 加密容器重命名后仍需 loadFiles（同步操作不广播 file:change）
+    if (file.isEncrypted) {
+      await loadFiles()
+    }
+    // 普通文件重命名不调 loadFiles()，依赖 file:change
+  } catch (err: any) {
+    showToast({ message: err.message || 'Rename failed', duration: 2000, color: 'danger' })
+  }
 }
 
 async function handleMove(file: FileItem) {
   if (!moveTargetPath.value || moveTargetPath.value === file.path) return
+  const destPath = moveTargetPath.value.endsWith('/')
+    ? `${moveTargetPath.value}${file.name}`
+    : `${moveTargetPath.value}/${file.name}`
   try {
-    const destPath = moveTargetPath.value.endsWith('/') ? `${moveTargetPath.value}${file.name}` : `${moveTargetPath.value}/${file.name}`
     await moveFile(file.path, destPath)
     showMoveDialog.value = false
-    await loadFiles()
-  } catch (e) { showToast({ message: `移动失败: ${e}` }) }
+    showToast({ message: t('tasks.move') + ' ' + t('tasks.taskCreated'), duration: 1500, color: 'success' })
+    // 不调 loadFiles()，依赖 file:change 增量更新
+  } catch (err: any) {
+    showToast({ message: err.message || 'Move failed', duration: 2000, color: 'danger' })
+  }
 }
 
 async function handleShare(file: FileItem) {
@@ -1429,13 +1445,10 @@ async function handleDeleteFile(file: FileItem) {
 async function doDelete(file: FileItem) {
   try {
     await deleteFile(file.path)
-    await loadFiles()
-    showToast({ message: `已删除 ${file.name}`, duration: 1500, color: 'success' })
-  } catch (e) {
-    // 🆕 把后端 error message 完整透传给用户（不只说"删除失败"）
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error('[Files] deleteFile failed:', file.path, msg)
-    showToast({ message: `${t('files.deleteFailed')}: ${msg}`, duration: 3500, color: 'danger' })
+    showToast({ message: t('tasks.delete') + ' ' + t('tasks.taskCreated'), duration: 1500, color: 'success' })
+    // 不调 loadFiles()，依赖 file:change 增量更新（delete action → splice 移除）
+  } catch (err: any) {
+    showToast({ message: err.message || 'Delete failed', duration: 2000, color: 'danger' })
   }
 }
 

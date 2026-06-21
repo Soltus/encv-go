@@ -19,6 +19,7 @@ import (
 	pluginInterfaces "github.com/Soltus/encv-go/internal/v2/plugins/interfaces"
 	"github.com/Soltus/encv-go/internal/v2/plugins/video"
 	"github.com/Soltus/encv-go/internal/v2/types"
+	"github.com/Soltus/encv-go/pkg/tasksystem"
 	"github.com/google/uuid"
 )
 
@@ -66,6 +67,12 @@ type MobileTask struct {
 	RunId        string `json:"runId,omitempty"`
 	TriggeredBy  string `json:"triggeredBy,omitempty"`
 
+	// 🆕 回滚相关字段
+	//   - RollbackOf：回滚任务指向原任务 ID（仅 rollback_* 任务有值）
+	//   - OriginalPath：原始路径（回滚时恢复用，仅 rollback_* 任务有值）
+	RollbackOf   string `json:"rollbackOf,omitempty"`
+	OriginalPath string `json:"originalPath,omitempty"`
+
 	// 🆕 2026-06-15 multi-mount（spec Phase C1）
 	//   - SourcePath 是 /d/<mount>/... 形式时，记录解析后的 mount_id + sub_path
 	//   - SourcePath 是旧绝对路径且能匹配到 mount 时同样记录
@@ -90,6 +97,21 @@ type TaskManager struct {
 	wg          sync.WaitGroup
 	broadcaster Broadcaster
 	persistPath string
+
+	// 🆕 SQLite 权威持久化层（双写策略）
+	//   - nil → 走旧 JSON 持久化（向后兼容旧测试）
+	//   - 非 nil → saveTasks/loadTasks 走 store，内存 map 作为性能缓存
+	store tasksystem.Store
+
+	// 🆕 v6 2026-06-22：文件操作任务处理器（move/copy/rename/delete）
+	//   - nil → 文件操作任务会 failTask（未配置 FileTaskHandler）
+	//   - 非 nil → processTask switch 的 move/copy/rename/delete case 调用对应方法
+	fileTaskHandler *FileTaskHandler
+
+	// 🆕 2026-06-22 回滚管理器
+	//   - nil → rollback_* 任务会 failTask（未配置 RollbackManager）
+	//   - 非 nil → processTask switch 的 rollback_* case 调用 ProcessRollbackTask
+	rollbackManager *RollbackManagerImpl
 
 	// 🆕 2026-06-15 multi-mount（spec Phase C1）
 	//   - nil → 旧行为，所有 sourcePath 走 SafeResolveToAbsPath(servingDir, ...)
@@ -176,6 +198,32 @@ func NewTaskManager(servingDir string, cfg *config.Config, broadcaster Broadcast
 	return tm
 }
 
+// NewTaskManagerWithStore 创建接入 SQLite Store 作为权威持久化层的 TaskManager。
+//
+// 双写策略：
+//   - store != nil → saveTasks/loadTasks 走 store（SQLite 为权威层）
+//   - 内存 map 仍作为性能缓存（List/Get 等读路径不查 DB）
+//   - store == nil 等价于 NewTaskManager（走旧 JSON 持久化，向后兼容）
+func NewTaskManagerWithStore(servingDir string, cfg *config.Config, broadcaster Broadcaster, store tasksystem.Store) *TaskManager {
+	persistPath := filepath.Join(servingDir, ".encv-tasks.json")
+
+	tm := &TaskManager{
+		tasks:       make(map[string]*MobileTask),
+		servingDir:  servingDir,
+		cfg:         cfg,
+		stopCh:      make(chan struct{}),
+		broadcaster: broadcaster,
+		persistPath: persistPath,
+		store:       store,
+	}
+
+	tm.loadTasks()
+
+	tm.wg.Add(1)
+	go tm.worker()
+	return tm
+}
+
 func (tm *TaskManager) saveTasks() {
 	tm.mu.RLock()
 	taskList := make([]*MobileTask, 0, len(tm.tasks))
@@ -183,6 +231,23 @@ func (tm *TaskManager) saveTasks() {
 		taskList = append(taskList, t)
 	}
 	tm.mu.RUnlock()
+
+	// 🆕 SQLite 权威持久化层（双写策略）
+	//   - store != nil → 逐条 UPSERT 到 store，内存 map 作为性能缓存
+	//   - store == nil → 走旧 JSON 持久化（向后兼容）
+	if tm.store != nil {
+		for _, t := range taskList {
+			data := mobileTaskToData(t)
+			// UPSERT 语义：先尝试 Create，失败（行已存在）则 Update
+			if err := tm.store.CreateTask(data); err != nil {
+				if err := tm.store.UpdateTask(data); err != nil {
+					slog.Warn("Failed to upsert task in store",
+						"id", t.ID, "error", err)
+				}
+			}
+		}
+		return
+	}
 
 	data, err := json.MarshalIndent(taskList, "", "  ")
 	if err != nil {
@@ -203,6 +268,42 @@ func (tm *TaskManager) saveTasks() {
 }
 
 func (tm *TaskManager) loadTasks() {
+	// 🆕 SQLite 权威持久化层
+	//   - store != nil → 从 store.ListTasks 加载
+	//   - store == nil → 走旧 JSON 持久化（向后兼容）
+	if tm.store != nil {
+		tasks, err := tm.store.ListTasks(tasksystem.TaskFilter{})
+		if err != nil {
+			slog.Warn("Failed to list tasks from store", "error", err)
+			return
+		}
+
+		for _, d := range tasks {
+			t := dataToMobileTask(d)
+			// 与旧 JSON 路径一致的状态恢复：重启后未完成任务标记为 failed
+			switch t.Status {
+			case "running", "queued":
+				t.Status = "failed"
+				t.Error = "interrupted by restart"
+				now := time.Now()
+				t.CompletedAt = &now
+			case "cancelling":
+				t.Status = "cancelled"
+				if t.CompletedAt == nil {
+					now := time.Now()
+					t.CompletedAt = &now
+				}
+			}
+			t.cancelFn = nil
+			t.Speed = ""
+			t.Eta = ""
+			tm.tasks[t.ID] = t
+		}
+
+		slog.Info("Loaded persisted tasks from store", "count", len(tasks))
+		return
+	}
+
 	data, err := os.ReadFile(tm.persistPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -238,6 +339,111 @@ func (tm *TaskManager) loadTasks() {
 	}
 
 	slog.Info("Loaded persisted tasks", "count", len(taskList))
+}
+
+// mobileTaskToData 把应用层 MobileTask 转换为 tasksystem.TaskData（Store 持久化用）。
+//
+// 字段映射说明：
+//   - ExtraFields (map[string]string) → JSON 编码为字符串存入 TaskData.ExtraFields
+//   - Steps ([]TaskStep) → JSON 编码为字符串存入 TaskData.Steps
+//   - Speed / Eta / cancelFn 是运行时字段，不持久化（loadTasks 时清空）
+//   - RollbackOf / OriginalPath 是回滚字段，rollback_* 任务有值
+func mobileTaskToData(t *MobileTask) tasksystem.TaskData {
+	var extraFieldsJSON string
+	if len(t.ExtraFields) > 0 {
+		if b, err := json.Marshal(t.ExtraFields); err == nil {
+			extraFieldsJSON = string(b)
+		}
+	}
+
+	var stepsJSON string
+	if len(t.Steps) > 0 {
+		if b, err := json.Marshal(t.Steps); err == nil {
+			stepsJSON = string(b)
+		}
+	}
+
+	return tasksystem.TaskData{
+		ID:                 t.ID,
+		Type:               tasksystem.TaskType(t.Type),
+		Status:             tasksystem.TaskStatus(t.Status),
+		SourcePath:         t.SourcePath,
+		TargetPath:         t.TargetPath,
+		OutputPath:         t.OutputPath,
+		PluginName:         t.PluginName,
+		TriggeredBy:        t.TriggeredBy,
+		RunID:              t.RunId,
+		Progress:           t.Progress,
+		Phase:              t.Phase,
+		Error:              t.Error,
+		ErrorDetail:        t.ErrorDetail,
+		Warning:            t.Warning,
+		WarningDetail:      t.WarningDetail,
+		ContainerVersion:   t.ContainerVersion,
+		CipherMode:         t.CipherMode,
+		CompressionMode:    t.CompressionMode,
+		ExtraFields:        extraFieldsJSON,
+		Steps:              stepsJSON,
+		MountID:            t.MountID,
+		MountSubPath:       t.MountSubPath,
+		TargetMountID:      t.TargetMountID,
+		TargetMountSubPath: t.TargetMountSubPath,
+		Password:           t.Password,
+		SecondaryPassword:  t.SecondaryPassword,
+		CreatedAt:          t.CreatedAt,
+		CompletedAt:        t.CompletedAt,
+		RollbackOf:         t.RollbackOf,
+		OriginalPath:       t.OriginalPath,
+	}
+}
+
+// dataToMobileTask 把 tasksystem.TaskData 转换回应用层 MobileTask（Store 加载用）。
+//
+// 反序列化说明：
+//   - TaskData.ExtraFields (string) → JSON 解码为 map[string]string
+//   - TaskData.Steps (string) → JSON 解码为 []TaskStep
+//   - 解码失败时保留空值（不报错，向后兼容旧数据）
+//   - Speed / Eta / cancelFn 留空（运行时字段，由调用方按需填充）
+func dataToMobileTask(d tasksystem.TaskData) *MobileTask {
+	t := &MobileTask{
+		ID:                 d.ID,
+		Type:               string(d.Type),
+		Status:             string(d.Status),
+		SourcePath:         d.SourcePath,
+		TargetPath:         d.TargetPath,
+		OutputPath:         d.OutputPath,
+		PluginName:         d.PluginName,
+		Progress:           d.Progress,
+		Phase:              d.Phase,
+		Error:              d.Error,
+		ErrorDetail:        d.ErrorDetail,
+		Warning:            d.Warning,
+		WarningDetail:      d.WarningDetail,
+		ContainerVersion:   d.ContainerVersion,
+		CipherMode:         d.CipherMode,
+		CompressionMode:    d.CompressionMode,
+		MountID:            d.MountID,
+		MountSubPath:       d.MountSubPath,
+		TargetMountID:      d.TargetMountID,
+		TargetMountSubPath: d.TargetMountSubPath,
+		Password:           d.Password,
+		SecondaryPassword:  d.SecondaryPassword,
+		CreatedAt:          d.CreatedAt,
+		CompletedAt:        d.CompletedAt,
+		RunId:              d.RunID,
+		TriggeredBy:        d.TriggeredBy,
+		RollbackOf:         d.RollbackOf,
+		OriginalPath:       d.OriginalPath,
+	}
+
+	if d.ExtraFields != "" {
+		_ = json.Unmarshal([]byte(d.ExtraFields), &t.ExtraFields)
+	}
+	if d.Steps != "" {
+		_ = json.Unmarshal([]byte(d.Steps), &t.Steps)
+	}
+
+	return t
 }
 
 func (tm *TaskManager) Stop() {
@@ -613,10 +819,38 @@ func (tm *TaskManager) absToVirtualPath(absPath string) string {
 	return virtual
 }
 
+// SetFileTaskHandler 注入文件操作任务处理器。
+// 不在构造函数中传入是为了保持 NewTaskManager 签名向后兼容。
+func (tm *TaskManager) SetFileTaskHandler(h *FileTaskHandler) {
+	tm.fileTaskHandler = h
+}
+
+// SetRollbackManager 注入回滚管理器。
+// 不在构造函数中传入是为了保持 NewTaskManager 签名向后兼容，
+// 同时避免 RollbackManagerImpl ↔ TaskManager 构造循环依赖。
+func (tm *TaskManager) SetRollbackManager(rm *RollbackManagerImpl) {
+	tm.rollbackManager = rm
+}
+
 func (tm *TaskManager) processTask(task *MobileTask) {
 	slog.Info("Processing task", "id", task.ID, "type", task.Type, "source", task.SourcePath)
 
 	tm.updateProgress(task.ID, 0, "queued", "", "")
+
+	// 文件操作任务（move/copy/rename/delete）不需要 absPath 解析，
+	// FileTaskHandler 内部直接用 task.SourcePath/TargetPath
+	switch task.Type {
+	case "rollback_encrypt", "rollback_decrypt", "rollback_move", "rollback_copy", "rollback_rename", "rollback_delete":
+		if tm.rollbackManager != nil {
+			tm.rollbackManager.ProcessRollbackTask(task)
+		} else {
+			tm.failTask(task.ID, "rollback manager not configured")
+		}
+		return
+	case "move", "copy", "rename", "delete":
+		tm.processFileTask(task)
+		return
+	}
 
 	absPath := tm.resolveAbsPath(task.SourcePath)
 	if absPath == "" {
@@ -633,6 +867,65 @@ func (tm *TaskManager) processTask(task *MobileTask) {
 		tm.processDecrypt(task, absPath)
 	default:
 		tm.failTask(task.ID, fmt.Sprintf("unknown task type: %s", task.Type))
+	}
+}
+
+// processFileTask 处理文件操作任务（move/copy/rename/delete）。
+// 委托给 FileTaskHandler 执行，完成后调用 completeTask 或 failTask。
+func (tm *TaskManager) processFileTask(task *MobileTask) {
+	if tm.fileTaskHandler == nil {
+		tm.failTask(task.ID, "file task handler not configured")
+		return
+	}
+
+	tm.updateProgress(task.ID, 10, "processing", "", "")
+
+	var err error
+	switch task.Type {
+	case "move":
+		err = tm.fileTaskHandler.ProcessMove(task)
+	case "copy":
+		err = tm.fileTaskHandler.ProcessCopy(task)
+	case "rename":
+		err = tm.fileTaskHandler.ProcessRename(task)
+	case "delete":
+		err = tm.fileTaskHandler.ProcessDelete(task)
+	default:
+		tm.failTask(task.ID, fmt.Sprintf("unknown file task type: %s", task.Type))
+		return
+	}
+
+	if err != nil {
+		tm.failTask(task.ID, err.Error())
+		return
+	}
+
+	// 文件操作完成，设置 outputPath 并标记 completed
+	tm.mu.Lock()
+	task.Status = "completed"
+	task.Progress = 100
+	task.Phase = "completed"
+	task.Speed = ""
+	task.Eta = ""
+	now := time.Now()
+	task.CompletedAt = &now
+	switch task.Type {
+	case "move", "rename", "copy":
+		task.OutputPath = task.TargetPath
+	case "delete":
+		task.OutputPath = ""
+	}
+	tm.mu.Unlock()
+
+	tm.saveTasks()
+
+	slog.Info("File task completed", "id", task.ID, "type", task.Type)
+	if tm.broadcaster != nil {
+		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
+			"id":         task.ID,
+			"status":     "completed",
+			"outputPath": task.OutputPath,
+		})
 	}
 }
 

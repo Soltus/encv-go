@@ -413,8 +413,19 @@ func deleteFileHandler(ctx context.Context, argsJSON string, deps *ToolDeps) (To
 		return errResult("mode must be 'trash' or 'hard'"), nil
 	}
 
-	// trash 模式：移到 mount 根下的 .trash/<timestamp>_<name>
+	// trash 模式：优先调 TrashManager（统一回收站），fallback 到旧硬编码逻辑
 	if mode == "trash" {
+		// 🆕 v6 2026-06-22：统一走 TrashManager（与 mobile 前端回收站共用 trash 表）
+		if deps.TrashMover != nil {
+			item, err := deps.TrashMover.MoveToTrash(absPath, "")
+			if err != nil {
+				return errResult(fmt.Sprintf("trash move failed: %v", err)), nil
+			}
+			res := DeleteFileResult{Success: true, TrashedTo: item.TrashPath}
+			b, _ := json.Marshal(res)
+			return ToolResult{Result: string(b), Status: "success"}, nil
+		}
+		// 旧逻辑 fallback（TrashManager 未注入时）
 		trashDir := filepath.Join(rootAbs, ".trash")
 		_ = os.MkdirAll(trashDir, 0o755)
 		trashPath := filepath.Join(trashDir, fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(absPath)))

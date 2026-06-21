@@ -177,13 +177,16 @@ func (s *Server) handleDeleteFileGin(c *gin.Context) {
 	queryPath := utils.DecodeGinQueryParam(c.Query("path"))
 	slog.Warn("API: delete file", "path", queryPath)
 
-	err := s.mobileSvc.DeleteFile(queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
-		writeServiceErrorGin(c, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	task := s.mobileSvc.GetTaskManager().Create("delete", absPath, "", "", 0, "")
+	task.OriginalPath = absPath
+
+	c.JSON(http.StatusAccepted, gin.H{"taskId": task.ID})
 }
 
 func (s *Server) handleCreateDirectoryGin(c *gin.Context) {

@@ -123,34 +123,20 @@ export async function loadAllTasks(): Promise<EncvTask[]> {
 }
 
 /**
- * 🆕 v6 2026-06-22 性能优化：清理过量 terminal tasks
- *   - 保留所有非终态 task（running/queued/cancelling）
- *   - 终态 task（completed/failed/cancelled）按 completedAt/createdAt 倒序保留前 maxTerminal 个
- *   - 返回被清理的 id 列表（调用方可选 log）
- *   - 默认 maxTerminal=200（防止 IndexedDB 无限膨胀）
+ * 🆕 LRU 缓存：保留最新 200 条任务，删除多余的。
+ * 后端 SQLite 已是权威存储，IndexedDB 降级为纯缓存。
+ * 按 createdAt 倒序保留（最新的留下），删除旧条目。
  */
-export async function pruneTerminalTasks(maxTerminal = 200): Promise<string[]> {
+export async function ensureLRUCache(maxItems = 200): Promise<void> {
   try {
     const db = await getDB()
-    const all = await db.tasks.toArray()
-    const terminal = all.filter((t) =>
-      t.status === 'completed' || t.status === 'failed' || t.status === 'cancelled'
-    )
-    if (terminal.length <= maxTerminal) return []
-    // 按 completedAt（fallback createdAt）倒序，保留最新的 maxTerminal 个
-    terminal.sort((a, b) => {
-      const aT = a.completedAt || a.createdAt || ''
-      const bT = b.completedAt || b.createdAt || ''
-      return bT.localeCompare(aT)
-    })
-    const toRemove = terminal.slice(maxTerminal)
-    const ids = toRemove.map((t) => t.id)
-    await db.tasks.bulkDelete(ids)
-    console.info('[useTaskPersistence] pruned', ids.length, 'terminal tasks (kept', maxTerminal, 'of', terminal.length, ')')
-    return ids
+    const all = await db.tasks.orderBy('createdAt').reverse().toArray()
+    if (all.length <= maxItems) return
+    const toDelete = all.slice(maxItems)
+    await db.tasks.bulkDelete(toDelete.map((t) => t.id))
+    console.info('[useTaskPersistence] LRU evicted', toDelete.length, 'tasks (kept', maxItems, 'of', all.length, ')')
   } catch (err) {
-    console.warn('[useTaskPersistence] pruneTerminalTasks failed:', err)
-    return []
+    console.warn('[useTaskPersistence] ensureLRUCache failed:', err)
   }
 }
 

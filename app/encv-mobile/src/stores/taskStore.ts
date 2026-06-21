@@ -22,10 +22,9 @@ import {
   loadAllTasks,
   bulkPutTasks as persistBulkPut,
   putTask as persistPut,
-  putTaskThrottled,
   deleteTask as persistDelete,
   clearPutThrottle,
-  pruneTerminalTasks,
+  ensureLRUCache,
 } from '@/lib/taskPersistence'
 
 /** 终态保护集合 */
@@ -112,7 +111,7 @@ export const useTaskStore = defineStore('task', () => {
    * 冷启动时从 IndexedDB 加载 tasks。
    * - 仅在首次打开 Tasks 视图时调一次（避免重复 IO）
    * - 失败时静默回退到空数组（UI 仍可通过 fetchTasks 拉后端）
-   * - 🆕 v6 2026-06-22：hydrate 后异步清理过量 terminal tasks
+   * - 🆕 hydrate 后调 ensureLRUCache 清理过量缓存（保留最新 200 条）
    */
   async function hydrate(): Promise<void> {
     if (hydrated.value) return
@@ -123,15 +122,8 @@ export const useTaskStore = defineStore('task', () => {
       rebuildIndex()  // 🆕 v6 2026-06-22：重建 id→index 索引
       hydrated.value = true
       console.info('[useTaskStore] hydrated from IndexedDB:', list.length)
-      // 异步清理过量 terminal tasks（不阻塞 UI）
-      void pruneTerminalTasks().then((pruned) => {
-        if (pruned.length > 0) {
-          // 从内存也移除被清理的 task
-          const prunedSet = new Set(pruned)
-          tasks.value = tasks.value.filter((t) => !prunedSet.has(t.id))
-          rebuildIndex()  // 🆕 重建索引
-        }
-      })
+      // 🆕 LRU 缓存清理：保留最新 200 条（后端 SQLite 已是权威存储，IndexedDB 降级为纯缓存）
+      void ensureLRUCache()
     } catch (err) {
       console.warn('[useTaskStore.hydrate] failed:', err)
       hydrated.value = true  // 标记已尝试（避免反复重试）
@@ -145,7 +137,7 @@ export const useTaskStore = defineStore('task', () => {
   //          - appendTask → putTask（新 task）
   //          - applyTaskUpdate → putTask（status 变更，重要）
   //          - applyTaskCompleted → putTask（终态，重要）
-  //          - applyTaskProgress → putTaskThrottled（progress 2s 一次，可接受丢失）
+  //          - applyTaskProgress → 不持久化（progress 高频 transient，后端 SQLite 已存）
   //          - bulkSetTasks → persistBulkPut（全量同步，少见）
   //          - removeTask / removeRunTasks → persistDelete（已有）
 
@@ -360,16 +352,7 @@ export const useTaskStore = defineStore('task', () => {
       speed: data.speed,
       eta: data.eta,
     })
-    // 🆕 v6 2026-06-22：progress 高频更新 → 节流持久化（2s 一次，避免 IndexedDB 写爆）
-    //   用 getTaskById O(1) 替代 find O(n)
-    if (hydrated.value) {
-      const updated = getTaskById(data.id)
-      if (updated) {
-        try { putTaskThrottled(updated) } catch (err) {
-          console.warn('[useTaskStore.applyTaskProgress.persist] failed:', err)
-        }
-      }
-    }
+    // 🆕 progress 是高频 transient 状态，后端 SQLite 已持久化，前端不再写 IndexedDB
   }
 
   function applyTaskCreated(data: Partial<EncvTask> & { id: string }): void {

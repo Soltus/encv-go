@@ -241,9 +241,9 @@ type TaskFilter struct {
 - **AND** 注册自定义 `RollbackStrategy`（如有特殊操作类型）
 - **AND** 不依赖 encv 的 `internal/service/` 任何代码
 
-### Requirement: SQLite 数据库存储（glebarez/sqlite）
+### Requirement: SQLite 数据库存储（modernc.org/sqlite）
 
-系统 SHALL 使用 `github.com/glebarez/sqlite`（pure-Go，CGO_ENABLED=0）作为后端权威数据库，符合 android.md §五 gomobile+sqlite 铁律。
+系统 SHALL 使用 `modernc.org/sqlite`（pure-Go，CGO_ENABLED=0，不依赖 gorm）作为后端权威数据库，符合 android.md §五 gomobile+sqlite 铁律（禁止 mattn/go-sqlite3 CGO 驱动）。
 
 #### Scenario: 数据库初始化
 - **WHEN** 后端启动
