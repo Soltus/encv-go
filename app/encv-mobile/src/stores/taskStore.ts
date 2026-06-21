@@ -15,15 +15,18 @@
  * - 派生 computed (groupedItems, flatItems, displayedItems) 仍在 useTasksList
  *   因为这些是 UI 层关注点，store 只管数据
  */
-import { computed, ref, shallowRef, watch, triggerRef } from 'vue'
+import { computed, ref, shallowRef, triggerRef } from 'vue'
 import { defineStore } from 'pinia'
 import type { EncvTask, TaskStatus } from '@/api/encv'
 import {
   loadAllTasks,
   bulkPutTasks as persistBulkPut,
+  putTask as persistPut,
+  putTaskThrottled,
   deleteTask as persistDelete,
+  clearPutThrottle,
+  pruneTerminalTasks,
 } from '@/lib/taskPersistence'
-import { getTaskMetadata } from '@/composables/useTaskTrigger'
 
 /** 终态保护集合 */
 const TERMINAL_STATUSES: Set<TaskStatus> = new Set([
@@ -61,6 +64,29 @@ export const useTaskStore = defineStore('task', () => {
   // ============ 乱序事件缓冲 ============
   const pendingEvents = new Map<string, PendingEvent[]>()
 
+  // ============ 🆕 v6 2026-06-22 性能优化：id → index 索引 ============
+  // 之前：patchTask 用 findIndex O(n)、applyTaskUpdate/Progress/Completed 用 find O(n)
+  //   高频 WS progress 事件 × 100+ tasks = O(n²) 累积
+  // 现在：维护 _taskIndex Map，patchTask / getTaskById 用 O(1) Map lookup
+  //   - appendTask / removeTask / bulkSetTasks / hydrate 等改变数组长度时重建索引（O(n)）
+  //   - patchTask / cancelRunTasks 不改变数组长度，索引保持有效
+  const _taskIndex = new Map<string, number>()
+
+  function rebuildIndex(): void {
+    _taskIndex.clear()
+    const arr = tasks.value
+    for (let i = 0; i < arr.length; i++) {
+      _taskIndex.set(arr[i].id, i)
+    }
+  }
+
+  /** O(1) 按 id 查 task（替代 tasks.value.find O(n)） */
+  function getTaskById(id: string): EncvTask | undefined {
+    const idx = _taskIndex.get(id)
+    if (idx === undefined) return undefined
+    return tasks.value[idx]
+  }
+
   function bufferPendingEvent(taskId: string, type: PendingEventType, data: any): void {
     const arr = pendingEvents.get(taskId)
     if (arr) arr.push({ type, data })
@@ -86,6 +112,7 @@ export const useTaskStore = defineStore('task', () => {
    * 冷启动时从 IndexedDB 加载 tasks。
    * - 仅在首次打开 Tasks 视图时调一次（避免重复 IO）
    * - 失败时静默回退到空数组（UI 仍可通过 fetchTasks 拉后端）
+   * - 🆕 v6 2026-06-22：hydrate 后异步清理过量 terminal tasks
    */
   async function hydrate(): Promise<void> {
     if (hydrated.value) return
@@ -93,38 +120,41 @@ export const useTaskStore = defineStore('task', () => {
       const list = await loadAllTasks()
       tasks.value = list
       hasAnyTask.value = list.length > 0
+      rebuildIndex()  // 🆕 v6 2026-06-22：重建 id→index 索引
       hydrated.value = true
       console.info('[useTaskStore] hydrated from IndexedDB:', list.length)
+      // 异步清理过量 terminal tasks（不阻塞 UI）
+      void pruneTerminalTasks().then((pruned) => {
+        if (pruned.length > 0) {
+          // 从内存也移除被清理的 task
+          const prunedSet = new Set(pruned)
+          tasks.value = tasks.value.filter((t) => !prunedSet.has(t.id))
+          rebuildIndex()  // 🆕 重建索引
+        }
+      })
     } catch (err) {
       console.warn('[useTaskStore.hydrate] failed:', err)
       hydrated.value = true  // 标记已尝试（避免反复重试）
     }
   }
 
-  /**
-   * 自动持久化：debounced bulk put
-   * - watch(tasks) 浅引用变化触发
-   * - 500ms debounce 合并连续 patch
-   * - 失败静默（用户无感）
-   */
-  let persistTimer: ReturnType<typeof setTimeout> | null = null
-  watch(tasks, () => {
-    if (!hydrated.value) return
-    if (persistTimer) clearTimeout(persistTimer)
-    persistTimer = setTimeout(() => {
-      try {
-        persistBulkPut(tasks.value)
-      } catch (err) {
-        console.warn('[useTaskStore.persist] failed:', err)
-      }
-    }, 500)
-  })
+  // 🆕 v6 2026-06-22 性能优化：移除 watch(tasks) 自动持久化
+  //   旧逻辑：watch(tasks, debounced persistBulkPut) → 每次 patchTask（含 progress 高频更新）
+  //          都触发全量 bulkPut（100+ tasks × 每秒多次 progress = 大量 IndexedDB 写入）
+  //   新逻辑：显式持久化 — 只在有意义的状态变更时写单行（putTask）
+  //          - appendTask → putTask（新 task）
+  //          - applyTaskUpdate → putTask（status 变更，重要）
+  //          - applyTaskCompleted → putTask（终态，重要）
+  //          - applyTaskProgress → putTaskThrottled（progress 2s 一次，可接受丢失）
+  //          - bulkSetTasks → persistBulkPut（全量同步，少见）
+  //          - removeTask / removeRunTasks → persistDelete（已有）
 
   /**
    * 删除单个 task 时同步从 IndexedDB 移除（不等 debounce）
    */
   function persistRemove(id: string): void {
     try {
+      clearPutThrottle(id)
       void persistDelete(id)
     } catch (err) {
       console.warn('[useTaskStore.persistRemove] failed:', err)
@@ -134,44 +164,16 @@ export const useTaskStore = defineStore('task', () => {
   /**
    * 批量替换 tasks（用于 fetchTasks / hydrate）
    *
-   * 🆕 v6 2026-06-18：merge 模式 — 不完全替换，保留已有 task 的 runId/triggeredBy
-   *   根因：后端 task 不带 runId，完全替换会丢失 store 里已有 task 的 runId → 聚合逃逸
-   *   修复：对 store 里已有的 task，保留 runId/triggeredBy，只更新后端返回的字段
-   *        对新 task，从 useTaskTrigger 回填
+   * 🆕 v6 2026-06-18：单一数据源 — 后端 MobileTask 已持久化 runId/triggeredBy
+   *   不再需要 merge / getTaskMetadata 回填，直接用后端数据
    */
   function bulkSetTasks(newTasks: EncvTask[]): void {
-    // 从当前 store 建 id → task 索引（保留已有 runId）
-    const existingMap = new Map<string, EncvTask>()
-    for (const t of tasks.value) {
-      if (t.runId) existingMap.set(t.id, t)
-    }
-    const enriched = newTasks.map((t) => {
-      // 1. 后端 task 自带 runId → 直接用
-      if (t.runId && t.triggeredBy) return t
-      // 2. store 里已有此 task → 保留 runId/triggeredBy，merge 其他字段
-      const existing = existingMap.get(t.id)
-      if (existing) {
-        return {
-          ...existing,
-          ...t,
-          runId: t.runId || existing.runId,
-          triggeredBy: t.triggeredBy || existing.triggeredBy,
-        }
-      }
-      // 3. 新 task → 从 useTaskTrigger 回填
-      const meta = getTaskMetadata(t.id)
-      return {
-        ...t,
-        runId: t.runId || meta?.runId,
-        triggeredBy: t.triggeredBy || meta?.triggeredBy,
-      }
-    })
-    tasks.value = enriched
-    hasAnyTask.value = enriched.length > 0
-    // 立即 persist（不走 debounce，避免后端拉的新数据被旧 debounce 覆盖）
+    tasks.value = newTasks
+    hasAnyTask.value = newTasks.length > 0
+    rebuildIndex()  // 🆕 v6 2026-06-22：重建 id→index 索引
     if (hydrated.value) {
       try {
-        persistBulkPut(enriched)
+        persistBulkPut(newTasks)
       } catch (err) {
         console.warn('[useTaskStore.bulkSetTasks.persist] failed:', err)
       }
@@ -184,11 +186,15 @@ export const useTaskStore = defineStore('task', () => {
    * 关键优化：保留 array 引用，仅修改 task 对象；
    * 但 shallowRef 不深代理 task 对象，所以需要 triggerRef 强制更新
    * （Vue 3.5+ triggerRef 直接可用，旧版本用 tasks.value = [...tasks.value]）
+   *
+   * 🆕 v6 2026-06-22：patchTask 本身不持久化（避免 progress 高频写爆 IndexedDB）
+   *   - 需要持久化的调用方调 patchTask 后调 persistTaskById
+   *   - 或直接用 applyTaskUpdate / applyTaskCompleted（已内置持久化）
    */
   function patchTask(id: string, partial: Partial<EncvTask>): boolean {
+    const idx = _taskIndex.get(id)  // 🆕 v6 2026-06-22：O(1) Map lookup 替代 O(n) findIndex
+    if (idx === undefined) return false
     const arr = tasks.value
-    const idx = arr.findIndex((t) => t.id === id)
-    if (idx === -1) return false
     // 终态保护
     if (TERMINAL_STATUSES.has(arr[idx].status) && partial.status) {
       return false
@@ -200,13 +206,35 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   /**
+   * 🆕 v6 2026-06-22：显式持久化指定 task（patchTask 后调用方按需调）
+   *   - 用于 cancelTaskById 等外部 patchTask 调用后的持久化
+   *   - 内部 applyTaskUpdate / applyTaskCompleted 等已内置持久化，无需再调
+   */
+  function persistTaskById(id: string): void {
+    if (!hydrated.value) return
+    const task = getTaskById(id)  // 🆕 v6 2026-06-22：O(1) 替代 find O(n)
+    if (task) {
+      try { void persistPut(task) } catch (err) {
+        console.warn('[useTaskStore.persistTaskById] failed:', err)
+      }
+    }
+  }
+
+  /**
    * 追加新 task（applyTaskCreated 用）
    * 已有同 id → 跳过
    */
   function appendTask(task: EncvTask): void {
-    if (tasks.value.some((t) => t.id === task.id)) return
+    if (_taskIndex.has(task.id)) return  // 🆕 v6 2026-06-22：O(1) 替代 some O(n)
     tasks.value = [task, ...tasks.value]
     hasAnyTask.value = true
+    rebuildIndex()  // 🆕 v6 2026-06-22：prepend 改变了所有索引，需重建
+    // 🆕 v6 2026-06-22：显式持久化单行（替代旧 watch 全量 bulkPut）
+    if (hydrated.value) {
+      try { void persistPut(task) } catch (err) {
+        console.warn('[useTaskStore.appendTask.persist] failed:', err)
+      }
+    }
   }
 
   /**
@@ -226,12 +254,26 @@ export const useTaskStore = defineStore('task', () => {
     for (const t of targets) {
       patchTask(t.id, { status: 'cancelling' })
     }
+    // 🆕 v6 2026-06-22：cancelling 是重要状态变更 → 显式持久化
+    //   用 getTaskById O(1) 替代 find O(n)
+    if (hydrated.value) {
+      for (const t of targets) {
+        const updated = getTaskById(t.id)
+        if (updated) {
+          try { void persistPut(updated) } catch (err) {
+            console.warn('[useTaskStore.cancelRunTasks.persist] failed:', err)
+          }
+        }
+      }
+    }
     return targets
   }
 
   function removeTask(id: string): void {
+    if (!_taskIndex.has(id)) return  // 🆕 v6 2026-06-22：O(1) 检查避免无谓 filter
     tasks.value = tasks.value.filter((t) => t.id !== id)
     hasAnyTask.value = tasks.value.length > 0
+    rebuildIndex()  // 🆕 v6 2026-06-22：重建索引
     persistRemove(id)
   }
 
@@ -249,6 +291,7 @@ export const useTaskStore = defineStore('task', () => {
     const targetIds = new Set(targets.map((t) => t.id))
     tasks.value = tasks.value.filter((t) => !targetIds.has(t.id))
     hasAnyTask.value = tasks.value.length > 0
+    rebuildIndex()  // 🆕 v6 2026-06-22：重建索引
     // 同步 persist
     for (const t of targets) persistRemove(t.id)
     // 解除置顶
@@ -298,6 +341,16 @@ export const useTaskStore = defineStore('task', () => {
         progress: data.progress ?? 0,
       })
     }
+    // 🆕 v6 2026-06-22：status 变更 → 显式持久化单行（重要状态，立即写）
+    //   用 getTaskById O(1) 替代 find O(n)
+    if (hydrated.value && data.status) {
+      const updated = getTaskById(data.id)
+      if (updated) {
+        try { void persistPut(updated) } catch (err) {
+          console.warn('[useTaskStore.applyTaskUpdate.persist] failed:', err)
+        }
+      }
+    }
   }
 
   function applyTaskProgress(data: { id: string; progress: number; phase?: string; speed?: string; eta?: string }): void {
@@ -307,24 +360,41 @@ export const useTaskStore = defineStore('task', () => {
       speed: data.speed,
       eta: data.eta,
     })
+    // 🆕 v6 2026-06-22：progress 高频更新 → 节流持久化（2s 一次，避免 IndexedDB 写爆）
+    //   用 getTaskById O(1) 替代 find O(n)
+    if (hydrated.value) {
+      const updated = getTaskById(data.id)
+      if (updated) {
+        try { putTaskThrottled(updated) } catch (err) {
+          console.warn('[useTaskStore.applyTaskProgress.persist] failed:', err)
+        }
+      }
+    }
   }
 
   function applyTaskCreated(data: Partial<EncvTask> & { id: string }): void {
-    if (tasks.value.some((t) => t.id === data.id)) {
+    // 🆕 v6 2026-06-22：用 _taskIndex.has O(1) 替代 some O(n)
+    if (_taskIndex.has(data.id)) {
       // 已有则 patch；保留已有的 runId / triggeredBy（避免 WS 无 runId payload 覆盖）
-      const existing = tasks.value.find((t) => t.id === data.id)!
+      const existing = getTaskById(data.id)!  // 🆕 O(1) 替代 find O(n)
       patchTask(data.id, {
         ...data,
         runId: data.runId || existing.runId,
         triggeredBy: data.triggeredBy || existing.triggeredBy,
       })
       replayPendingEvents(data.id)
+      // 🆕 v6 2026-06-22：patch 后显式持久化单行
+      if (hydrated.value) {
+        const updated = getTaskById(data.id)  // 🆕 O(1) 替代 find O(n)
+        if (updated) {
+          try { void persistPut(updated) } catch (err) {
+            console.warn('[useTaskStore.applyTaskCreated.persist] failed:', err)
+          }
+        }
+      }
       return
     }
-    // 后端 WS payload 通常不带 runId / triggeredBy，从 useTaskTrigger 补一次
-    const meta = getTaskMetadata(data.id)
-    const runId = data.runId || meta?.runId
-    const triggeredBy = data.triggeredBy || meta?.triggeredBy
+    // 🆕 v6 2026-06-18：后端 task 自带 runId/triggeredBy（单一数据源），不再回填
     const newTask: EncvTask = {
       id: data.id,
       type: (data.type ?? 'encrypt') as any,
@@ -339,8 +409,8 @@ export const useTaskStore = defineStore('task', () => {
       createdAt: data.createdAt ?? new Date().toISOString(),
       containerVersion: data.containerVersion,
       targetPath: data.targetPath,
-      runId,
-      triggeredBy,
+      runId: data.runId,
+      triggeredBy: data.triggeredBy,
       outputPath: data.outputPath,
       cipherMode: data.cipherMode,
       compressionMode: data.compressionMode,
@@ -350,12 +420,12 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   function applyTaskCompleted(data: { id: string; error?: string; outputPath?: string }): void {
-    const arr = tasks.value
-    const idx = arr.findIndex((t) => t.id === data.id)
-    if (idx === -1) {
+    const idx = _taskIndex.get(data.id)  // 🆕 v6 2026-06-22：O(1) 替代 findIndex O(n)
+    if (idx === undefined) {
       bufferPendingEvent(data.id, 'completed', data)
       return
     }
+    const arr = tasks.value
     if (TERMINAL_STATUSES.has(arr[idx].status)) return
 
     const prev = arr[idx]
@@ -380,6 +450,12 @@ export const useTaskStore = defineStore('task', () => {
       steps: nextSteps,
     }
     triggerRef(tasks)
+    // 🆕 v6 2026-06-22：终态 → 显式持久化单行（重要状态，立即写）
+    if (hydrated.value) {
+      try { void persistPut(arr[idx]) } catch (err) {
+        console.warn('[useTaskStore.applyTaskCompleted.persist] failed:', err)
+      }
+    }
   }
 
   // ============ Getters（缓存的派生） ============
@@ -424,6 +500,7 @@ export const useTaskStore = defineStore('task', () => {
   // ============ Reset（测试用） ============
   function $reset(): void {
     tasks.value = []
+    _taskIndex.clear()  // 🆕 v6 2026-06-22：清空索引
     pendingEvents.clear()
     hydrated.value = false
     hasAnyTask.value = false
@@ -446,6 +523,7 @@ export const useTaskStore = defineStore('task', () => {
     hydrate,
     bulkSetTasks,
     patchTask,
+    persistTaskById,
     appendTask,
     removeTask,
     removeRunTasks,

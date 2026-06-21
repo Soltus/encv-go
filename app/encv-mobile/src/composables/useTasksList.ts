@@ -49,7 +49,7 @@ import {
 import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
 import { useI18n } from '@/composables/useI18n'
 import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
-import { formatDateTime as dateFormat } from '@/composables/useDateFormat'
+import { formatDateTime as dateFormat, formatDuration } from '@/composables/useDateFormat'
 
 // ============ 内部 helper 函数 ============
 
@@ -73,6 +73,90 @@ function formatTaskDuration(task: EncvTask): string {
 }
 
 const STATUS_OPTIONS: TaskStatus[] = ['queued', 'running', 'cancelling', 'completed', 'failed', 'cancelled']
+
+// ============ 🆕 v6 2026-06-22 性能优化：group display data 预计算 ============
+// 之前：Tasks.vue 模板中每个 group card 调用 13 次函数（getGroupSummary × 6 +
+//   getGroupTone × 3 + getGroupDominantStatus/getGroupDuration/getGroupPluginBadges/
+//   groupCardMoodClass 各 × 1），每次都遍历 tasks 数组
+// 现在：在 groupedItems computed 里一次性计算所有派生数据，模板直接读 item.displayData.xxx
+
+export interface GroupDisplayData {
+  tone: 'automation' | 'ai_agent'
+  summary: { passed: number; failed: number; running: number; pending: number; percent: number }
+  dominantStatus: TaskStatus
+  duration: string
+  pluginBadges: string[]
+  moodClass: string
+}
+
+function computeGroupTone(tasks: EncvTask[]): 'automation' | 'ai_agent' {
+  for (const t of tasks) {
+    const by = t.triggeredBy ?? 'user'
+    if (by === 'ai_agent') return 'ai_agent'
+  }
+  return 'automation'
+}
+
+function computeGroupSummary(tasks: EncvTask[]): GroupDisplayData['summary'] {
+  let passed = 0, failed = 0, running = 0, pending = 0
+  for (const t of tasks) {
+    if (t.status === 'completed') passed++
+    else if (t.status === 'failed') failed++
+    else if (t.status === 'running' || t.status === 'cancelling') running++
+    else pending++
+  }
+  const finished = passed + failed
+  const percent = tasks.length > 0 ? Math.round((finished / tasks.length) * 100) : 0
+  return { passed, failed, running, pending, percent }
+}
+
+function computeGroupDominantStatus(tasks: EncvTask[]): TaskStatus {
+  if (tasks.some((t) => t.status === 'failed')) return 'failed'
+  if (tasks.some((t) => t.status === 'running' || t.status === 'cancelling')) return 'running'
+  if (tasks.some((t) => t.status === 'queued')) return 'queued'
+  if (tasks.every((t) => t.status === 'completed')) return 'completed'
+  if (tasks.every((t) => t.status === 'cancelled')) return 'cancelled'
+  return 'completed'
+}
+
+function computeGroupDuration(tasks: EncvTask[]): string {
+  if (tasks.length === 0) return ''
+  const createdTimes = tasks.map((t) => new Date(t.createdAt).getTime())
+  const completedTimes = tasks
+    .filter((t) => t.completedAt)
+    .map((t) => new Date(t.completedAt!).getTime())
+  const start = Math.min(...createdTimes)
+  const end = completedTimes.length > 0 ? Math.max(...completedTimes) : Date.now()
+  return formatDuration(end - start)
+}
+
+function computeGroupPluginBadges(tasks: EncvTask[], limit: number): string[] {
+  const set = new Set<string>()
+  for (const t of tasks) {
+    if (t.pluginName && t.pluginName !== '__unknown__') set.add(t.pluginName)
+  }
+  return Array.from(set).slice(0, limit)
+}
+
+function computeGroupMoodClass(tasks: EncvTask[]): string {
+  const s = computeGroupSummary(tasks)
+  if (tasks.length === 0) return 'tl-group-card--mood-neutral'
+  if (s.failed === 0 && s.passed > 0) return 'tl-group-card--mood-success'
+  if (s.failed / tasks.length > 0.5) return 'tl-group-card--mood-danger'
+  return 'tl-group-card--mood-neutral'
+}
+
+/** 🆕 一次性计算 group 的所有派生展示数据（tone/summary/dominantStatus/duration/pluginBadges/moodClass） */
+function computeGroupDisplayData(tasks: EncvTask[]): GroupDisplayData {
+  return {
+    tone: computeGroupTone(tasks),
+    summary: computeGroupSummary(tasks),
+    dominantStatus: computeGroupDominantStatus(tasks),
+    duration: computeGroupDuration(tasks),
+    pluginBadges: computeGroupPluginBadges(tasks, 3),
+    moodClass: computeGroupMoodClass(tasks),
+  }
+}
 
 /** 单例 */
 let _instance: ReturnType<typeof createUseTasksList> | null = null
@@ -157,17 +241,14 @@ function createUseTasksList() {
   })
 
   // ============ viewMode 切换缓存（v6 性能优化） ============
-  // 避免 viewMode 切换时触发另一组 (groupedItems vs flatItems) 的整树重算
-  // 因为 viewMode 切换是 UI 维度，data 维度 (sortedTasks) 没变
-  // 方案：缓存上一次 viewMode 计算结果，只在新 viewMode 不在缓存时重算
-  let _groupCache: { source: EncvTask[]; result: any[] } | null = null
-  let _flatCache: { source: EncvTask[]; result: any[] } | null = null
+  // 🆕 v6 2026-06-22：移除 _groupCache / _flatCache
+  //   - 旧实现用引用相等判断缓存命中，但 sortedTasks.value 每次都返回新数组
+  //     （`[...filteredTasks.value]` + sort），引用永远不等 → 缓存永远 miss
+  //   - computed 本身已有缓存（依赖不变就不重算），_groupCache/_flatCache 是冗余的
+  //   - 移除后代码更简单，性能不降反升（少一次引用比较）
 
   const groupedItems = computed<any[]>(() => {
     const src = sortedTasks.value
-    if (_groupCache && _groupCache.source === src) {
-      return _groupCache.result
-    }
     const groups = new Map<string, { runId: string; tasks: EncvTask[]; startedAt: string }>()
     for (const tk of src) {
       const key = tk.runId || `__manual__${tk.id}`
@@ -181,6 +262,10 @@ function createUseTasksList() {
     const result: any[] = []
     for (const [key, g] of groups) {
       const counters = computeGroupCounters(g.tasks)
+      // 🆕 v6 2026-06-22 性能优化：一次性预计算所有派生展示数据
+      //   - 之前：Tasks.vue 模板中每个 group card 调用 13 次函数，每次遍历 tasks
+      //   - 现在：这里调一次 computeGroupDisplayData，模板直接读 item.displayData.xxx
+      const displayData = computeGroupDisplayData(g.tasks)
       result.push({
         kind: 'group',
         key,
@@ -188,6 +273,7 @@ function createUseTasksList() {
         startedAt: g.startedAt,
         tasks: g.tasks,
         counters,
+        displayData,
       })
     }
     result.sort((a, b) => {
@@ -199,7 +285,6 @@ function createUseTasksList() {
       // 其余按 startedAt 倒序
       return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
     })
-    _groupCache = { source: src, result }
     return result
   })
 
@@ -261,15 +346,11 @@ function createUseTasksList() {
 
   const flatItems = computed(() => {
     const src = sortedTasks.value
-    if (_flatCache && _flatCache.source === src) {
-      return _flatCache.result
-    }
     const result = src.map((tk) => ({
       kind: 'task' as const,
       key: `t-${tk.id}`,
       task: tk,
     }))
-    _flatCache = { source: src, result }
     return result
   })
 
@@ -385,10 +466,12 @@ function createUseTasksList() {
     if (!task) return
     const prevStatus = task.status
     store.patchTask(id, { status: 'cancelling' })
+    store.persistTaskById(id)  // 🆕 v6 2026-06-22：显式持久化 status 变更
     try {
       await cancelTask(id)
     } catch (err) {
       store.patchTask(id, { status: prevStatus })
+      store.persistTaskById(id)  // 回滚也要持久化
       throw err
     }
   }
@@ -406,6 +489,7 @@ function createUseTasksList() {
     if (errors.length > 0) {
       for (const t of previous) {
         store.patchTask(t.id, { status: t.status })
+        store.persistTaskById(t.id)  // 🆕 v6 2026-06-22：回滚也要持久化
       }
       throw errors[0]
     }

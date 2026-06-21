@@ -155,7 +155,6 @@ import {
 import { useI18n } from '@/composables/useI18n'
 import { showToast } from '@/composables/useToast'
 import type { EncvTask } from '@/api/encv'
-import { getTriggeredBy, getRunIdForTask } from '@/composables/useTaskTrigger'
 import { formatContainerVersion } from '@/constants/containerVersion'
 import {
   useSectionDerivation,
@@ -243,8 +242,8 @@ function formatExtraFieldValue(value: string): string {
   return v
 }
 
-const triggeredBy = computed(() => props.task.triggeredBy ?? getTriggeredBy(props.task.id))
-const runId = computed(() => props.task.runId ?? getRunIdForTask(props.task.id))
+const triggeredBy = computed(() => props.task.triggeredBy ?? 'user')
+const runId = computed(() => props.task.runId)
 const triggeredByIcon = computed(() => {
   const v = triggeredBy.value
   return v === 'automation' ? cogOutline : v === 'ai_agent' ? hardwareChipOutline : person

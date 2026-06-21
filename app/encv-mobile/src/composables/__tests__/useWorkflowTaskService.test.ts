@@ -220,17 +220,20 @@ describe('useWorkflowTaskService — submitRun 基本流程', () => {
     expect(createTaskMock).toHaveBeenCalledTimes(3)
   })
 
-  it('submitRun 调用 setTaskMetadata 关联 taskId ↔ runId', async () => {
+  it('submitRun 调用 createTask 时传入 runId 和 triggeredBy（单一数据源）', async () => {
     const service = useWorkflowTaskService()
     const run = await service.submitRun({
       workflow: makeSimpleWorkflow(),
       triggeredBy: 'automation',
     })
-    expect(setTaskMetadataMock).toHaveBeenCalledTimes(1)
-    const [taskId, triggeredBy, runId] = setTaskMetadataMock.mock.calls[0]
-    expect(taskId).toMatch(/^task-/)
-    expect(triggeredBy).toBe('automation')
-    expect(runId).toBe(run.id)
+    // 🆕 v6 2026-06-22：runId/triggeredBy 直接传给 createTask（不再用 setTaskMetadata）
+    // createTask 签名：(..., runId?, triggeredBy?) — 倒数第 2、第 1 参数
+    expect(createTaskMock).toHaveBeenCalledTimes(1)
+    const callArgs = (createTaskMock as any).mock.calls[0]
+    const passedRunId = callArgs[callArgs.length - 2]   // runId
+    const passedTriggeredBy = callArgs[callArgs.length - 1]  // triggeredBy
+    expect(passedRunId).toBe(run.id)
+    expect(passedTriggeredBy).toBe('automation')
   })
 
   it('submitRun 拒绝重复运行（isRunning 时抛错）', async () => {

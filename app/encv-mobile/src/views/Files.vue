@@ -500,6 +500,7 @@ import {
   addTag,
   removeTag,
   listFilesByTag,
+  getFileInfo,
 } from '@/api/encv'
 import type { FileItem, PluginMeta, TagInfo } from '@/api/encv'
 import { eventBus } from '@/composables/useEventBus'
@@ -738,8 +739,6 @@ const sortedFiles = computed(() => {
 let loadGeneration = 0
 /** stream 进行中标志：避免 file:change 在 stream 未完成时触发清空重载 */
 let isStreamLoading = false
-/** stream 期间收到 file:change，当前 stream 完成后自动重刷 */
-let pendingFileChange = false
 
 // 🆕 2026-06-15 multi-mount 适配：根目录 /d 由后端 handleListFilesGin 返 mount 列表
 //   旧前端逻辑：currentPath='/' → 后端列 serving dir 子目录
@@ -752,7 +751,8 @@ async function loadFiles() {
   console.info('[Files] Loading files (stream), path:', currentPath.value)
   const gen = ++loadGeneration
   isStreamLoading = true
-  pendingFileChange = false
+  // 🆕 v6 2026-06-22：stream 启动时清空累积的 file:change（stream 会拉全量，增量无意义）
+  pendingFileChanges.clear()
   // 🆕 v4 Bug1 修复：自动更新（file:change）下不闪全屏 loading
   //   - 首次加载（isInitialLoad）/ 路径切换 → 全屏 loading + 清空
   //   - 自动 reload（isRefresh）→ 顶部 spinner + 清空（不闪全屏 loading，但避免 stream 追加导致重复）
@@ -798,10 +798,9 @@ async function loadFiles() {
         // nextTick 等 ion-item 渲染完再滚动 + 高亮
         nextTick(() => highlightFile(name))
       }
-      // stream 期间收到 file:change，自动补一次重刷
-      if (pendingFileChange) {
-        pendingFileChange = false
-        void loadFiles()
+      // 🆕 v6 2026-06-22：stream 完成后 flush 累积的 file:change 增量更新（不全量 reload）
+      if (pendingFileChanges.size > 0) {
+        void applyFileChanges()
       }
       return
     } catch (error) {
@@ -811,7 +810,7 @@ async function loadFiles() {
         loading.value = false
         refreshing.value = false
         connecting.value = false
-        if (pendingFileChange) { pendingFileChange = false; void loadFiles() }
+        if (pendingFileChanges.size > 0) { void applyFileChanges() }
         return
       }
       if (error instanceof NotFoundError) {
@@ -823,7 +822,7 @@ async function loadFiles() {
           showToast({ message: t('files.pathNotFound'), duration: 2000, color: 'warning' })
           goUp()
         }
-        if (pendingFileChange) { pendingFileChange = false; void loadFiles() }
+        if (pendingFileChanges.size > 0) { void applyFileChanges() }
         return
       }
       if (attempt < MAX_RETRIES) {
@@ -1440,27 +1439,96 @@ async function doDelete(file: FileItem) {
   }
 }
 
-// 🆕 v4 2026-06-18 M1：file:change 防抖聚合
-//   - 插件测试一次会产出 N 个文件 → 后端连发 N 条 file:change → 老逻辑 loadFiles() N 次 → 整页狂闪
-//   - 新逻辑：把 300ms 内的多次 file:change 合并成 1 次 loadFiles
-//   - tab 不可见时由 transport 的 setFileChangeGate 拦截，Files.vue 收不到事件
-//   - 切回 Files tab 时 transport 自动触发 onActive 回调，兜底刷一次
+// 🆕 v6 2026-06-22：file:change 增量更新（真正的文件变更，不全量 reload）
+//   - 后端 payload: { path, action: 'create'|'delete'|'modify' }
+//   - 防抖 300ms 内合并多次事件（latest action per path wins）
+//   - delete: 直接从 files.value 移除（无 API 调用）
+//   - create/modify: 仅当文件父目录 === currentPath 时，调 getFileInfo 拿单文件 metadata 增删改
+//   - stream 进行中时延后应用（pendingFileChanges），避免与 stream push 冲突
 let fileChangeDebounceTimer: number | null = null
-function onFileChange() {
+/** 防抖窗口内累积的事件：path → latest action */
+const pendingFileChanges = new Map<string, 'create' | 'delete' | 'modify'>()
+
+function onFileChange(payload: { path: string; action: 'create' | 'delete' | 'modify' }) {
+  // searchCache 仍需清空（搜索结果可能过期）
   searchCache.clear()
+  pendingFileChanges.set(payload.path, payload.action)
   if (fileChangeDebounceTimer !== null) {
     clearTimeout(fileChangeDebounceTimer)
   }
   fileChangeDebounceTimer = window.setTimeout(() => {
     fileChangeDebounceTimer = null
-    // 🆕 v4 M1+ 2026-06-18：stream 进行中不直接重载，避免清空正在流式加载的列表
+    // stream 进行中：延后到 stream 完成后再 apply（loadFiles 末尾会 flush）
     if (isStreamLoading) {
-      pendingFileChange = true
-      console.info('[Files] file:change suppressed, will reload after current stream')
+      console.info('[Files] file:change deferred, stream loading', pendingFileChanges.size, 'changes')
       return
     }
-    loadFiles()
+    void applyFileChanges()
   }, 300)
+}
+
+/**
+ * 应用累积的 file:change 增量更新到 files.value
+ * - delete: 直接 splice 移除
+ * - create/modify: 仅处理父目录 === currentPath 的文件，调 getFileInfo 拿 metadata
+ *   - 已存在 → 替换（modify）
+ *   - 不存在 → push（create）
+ *   - 404 → 移除（文件在 fetch 前已被删）
+ */
+async function applyFileChanges() {
+  if (pendingFileChanges.size === 0) return
+  // 取出并清空（避免 apply 期间新事件丢失——新事件会重新进 map 并启新 timer）
+  const changes = new Map(pendingFileChanges)
+  pendingFileChanges.clear()
+
+  // 1) 先处理 delete（纯客户端，无 API）
+  for (const [path, action] of changes) {
+    if (action === 'delete') {
+      const idx = files.value.findIndex((f) => f.path === path)
+      if (idx >= 0) {
+        files.value.splice(idx, 1)
+        console.info('[Files] incremental delete:', path)
+      }
+    }
+  }
+
+  // 2) 处理 create/modify：只 fetch 父目录 === currentPath 的文件
+  const visiblePaths: string[] = []
+  for (const [path, action] of changes) {
+    if (action === 'delete') continue
+    // 判断父目录是否 === currentPath（文件在当前视图才需要更新）
+    const parent = path.substring(0, path.lastIndexOf('/')) || '/d'
+    if (parent !== currentPath.value) continue
+    visiblePaths.push(path)
+  }
+  if (visiblePaths.length === 0) return
+
+  // 并发 fetch 所有可见文件的 metadata
+  const results = await Promise.allSettled(visiblePaths.map((p) => getFileInfo(p)))
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i]
+    const path = visiblePaths[i]
+    if (r.status === 'fulfilled') {
+      const fileItem = r.value
+      const idx = files.value.findIndex((f) => f.path === path)
+      if (idx >= 0) {
+        // modify：替换原条目（保留位置，更新 metadata）
+        files.value[idx] = fileItem
+        console.info('[Files] incremental modify:', path)
+      } else {
+        // create：追加
+        files.value.push(fileItem)
+        console.info('[Files] incremental create:', path)
+      }
+    } else {
+      // fetch 失败（404 等）：从列表移除（文件已不存在）
+      const idx = files.value.findIndex((f) => f.path === path)
+      if (idx >= 0) {
+        files.value.splice(idx, 1)
+        console.info('[Files] incremental remove (fetch failed):', path)
+      }
+    }
+  }
 }
 
 async function loadPlugins() {

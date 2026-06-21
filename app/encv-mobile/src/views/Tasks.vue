@@ -270,10 +270,11 @@
           <!-- 未命中 group（hitAny=false）按用户选择 C 隐藏 -->
           <!-- 🆕 2026-06-18 v5-bug3fix：整张 card clickable → push 到 L2 GroupDetail -->
           <!-- 🆕 v6 2026-06-18：长按弹出 action-sheet 取消/置顶/删除（TaskVirtualList slot 不支持 ion-item-sliding） -->
+          <!-- 🆕 v6 2026-06-22 性能优化：用 item.displayData.xxx 替代 13 次函数调用（预计算） -->
           <div
             v-else-if="item.kind === 'group' && item.counters.hitAny"
             :key="item.key"
-            :class="['tl-group-card', 'tl-group-card--clickable', `tl-group-card--${getGroupTone(item.runId, item.tasks)}`, groupCardMoodClass(item.tasks), isRunPinned(item.runId) ? 'tl-group-card--pinned' : '']"
+            :class="['tl-group-card', 'tl-group-card--clickable', `tl-group-card--${item.displayData.tone}`, item.displayData.moodClass, isRunPinned(item.runId) ? 'tl-group-card--pinned' : '']"
             role="button"
             :aria-label="t('tasks.groupCard.openDetail')"
             @click="openGroupDetail(item.runId)"
@@ -285,18 +286,18 @@
           >
             <!-- 左侧 4px 状态色边 -->
             <div
-              :class="['tl-group-card__border', `tl-group-border--${getGroupDominantStatus(item.tasks)}`]"
+              :class="['tl-group-card__border', `tl-group-border--${item.displayData.dominantStatus}`]"
             ></div>
 
             <div class="tl-group-card__main">
               <!-- 标题行：tone icon + 触发器名 + N 个任务 + 进入箭头 -->
               <div class="tl-group-card__head">
-                <div :class="['tl-bubble', 'tl-bubble--md', `tl-tone--${getGroupTone(item.runId, item.tasks)}`]">
-                  <ion-icon :icon="getGroupTone(item.runId, item.tasks) === 'ai_agent' ? hardwareChipOutline : cogOutline"></ion-icon>
+                <div :class="['tl-bubble', 'tl-bubble--md', `tl-tone--${item.displayData.tone}`]">
+                  <ion-icon :icon="item.displayData.tone === 'ai_agent' ? hardwareChipOutline : cogOutline"></ion-icon>
                 </div>
                 <div class="tl-group-card__title-block">
                   <h2 class="tl-group-card__title">
-                    {{ getGroupTone(item.runId, item.tasks) === 'ai_agent' ? t('tasks.triggeredBy_ai_agent') : t('tasks.triggeredBy_automation') }}
+                    {{ item.displayData.tone === 'ai_agent' ? t('tasks.triggeredBy_ai_agent') : t('tasks.triggeredBy_automation') }}
                     <span class="tl-group-card__count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</span>
                     <!-- 🆕 v6 置顶标记 -->
                     <ion-icon
@@ -309,7 +310,7 @@
                   <!-- plugin badges（前 3 个，超过省略） -->
                   <div class="tl-group-card__plugins">
                     <ion-badge
-                      v-for="p in getGroupPluginBadges(item.tasks, 3)"
+                      v-for="p in item.displayData.pluginBadges"
                       :key="p"
                       color="primary"
                       class="tl-group-card__plugin-badge"
@@ -329,35 +330,35 @@
               <!-- 自身状态行（智能行：passed/failed/running/pending 紧凑展示） -->
               <div class="tl-group-card__body">
                 <div class="tl-meta-row tl-group-card__self">
-                  <ion-badge v-if="getGroupSummary(item.tasks).passed > 0" color="success" class="tl-status-badge">
+                  <ion-badge v-if="item.displayData.summary.passed > 0" color="success" class="tl-status-badge">
                     <ion-icon :icon="checkmarkCircle" class="tl-badge-icon"></ion-icon>
-                    {{ getGroupSummary(item.tasks).passed }}
+                    {{ item.displayData.summary.passed }}
                   </ion-badge>
-                  <ion-badge v-if="getGroupSummary(item.tasks).failed > 0" color="danger" class="tl-status-badge">
+                  <ion-badge v-if="item.displayData.summary.failed > 0" color="danger" class="tl-status-badge">
                     <ion-icon :icon="closeCircle" class="tl-badge-icon"></ion-icon>
-                    {{ getGroupSummary(item.tasks).failed }}
+                    {{ item.displayData.summary.failed }}
                   </ion-badge>
-                  <ion-badge v-if="getGroupSummary(item.tasks).running > 0" color="warning" class="tl-status-badge">
+                  <ion-badge v-if="item.displayData.summary.running > 0" color="warning" class="tl-status-badge">
                     <ion-spinner name="dots" class="tl-badge-spinner"></ion-spinner>
-                    {{ getGroupSummary(item.tasks).running }}
+                    {{ item.displayData.summary.running }}
                   </ion-badge>
-                  <ion-badge v-if="getGroupSummary(item.tasks).pending > 0" color="medium" class="tl-status-badge">
-                    {{ getGroupSummary(item.tasks).pending }}
+                  <ion-badge v-if="item.displayData.summary.pending > 0" color="medium" class="tl-status-badge">
+                    {{ item.displayData.summary.pending }}
                   </ion-badge>
-                  <span v-if="getGroupDuration(item.tasks)" class="tl-group-card__duration">
+                  <span v-if="item.displayData.duration" class="tl-group-card__duration">
                     <ion-icon :icon="timer" class="tl-group-card__duration-icon"></ion-icon>
-                    {{ getGroupDuration(item.tasks) }}
+                    {{ item.displayData.duration }}
                   </span>
                 </div>
                 <div class="tl-progress tl-progress--md">
                   <div
                     class="tl-progress__fill"
-                    :style="{ width: getGroupSummary(item.tasks).percent + '%' }"
+                    :style="{ width: item.displayData.summary.percent + '%' }"
                   ></div>
                 </div>
                 <p class="tl-time-info">
                   <span class="tl-time-info__created">{{ formatDateTime(new Date(item.startedAt).toISOString()) }}</span>
-                  <span class="tl-time-info__percent">{{ getGroupSummary(item.tasks).percent }}%</span>
+                  <span class="tl-time-info__percent">{{ item.displayData.summary.percent }}%</span>
                 </p>
               </div>
 
@@ -401,13 +402,13 @@
                     {{ getCryptoSummary(item.task) }}
                   </span>
                   <ion-badge
-                    v-if="getTriggeredBy(item.task.id) !== 'user'"
-                    :color="getTriggeredByColor(item.task.id)"
+                    v-if="item.task.triggeredBy && item.task.triggeredBy !== 'user'"
+                    :color="getTriggeredByColor(item.task)"
                     class="triggered-by-badge"
-                    :title="t('tasks.triggeredBy') + ': ' + t('tasks.triggeredBy_' + getTriggeredBy(item.task.id))"
+                    :title="t('tasks.triggeredBy') + ': ' + t('tasks.triggeredBy_' + item.task.triggeredBy)"
                   >
-                    <ion-icon :icon="getTriggeredByIcon(item.task.id)" class="triggered-by-icon"></ion-icon>
-                    {{ t('tasks.triggeredBy_' + getTriggeredBy(item.task.id)) }}
+                    <ion-icon :icon="getTriggeredByIcon(item.task)" class="triggered-by-icon"></ion-icon>
+                    {{ t('tasks.triggeredBy_' + item.task.triggeredBy) }}
                   </ion-badge>
                 </p>
                 <p class="tl-time-info">
@@ -518,15 +519,14 @@ import { add, closeCircle, checkmarkCircle, timer, sync,
   pin,
 } from 'ionicons/icons'
 import { useRoute, useRouter } from 'vue-router'
-import type { EncvTask, TaskType, TaskStatus } from '@/api/encv'
+import type { EncvTask, TaskType } from '@/api/encv'
 import { clearCompletedTasks } from '@/api/encv'
 import { useI18n } from '@/composables/useI18n'
-import { formatDateTime, formatDuration } from '@/composables/useDateFormat'
+import { formatDateTime } from '@/composables/useDateFormat'
 import { showToast } from '@/composables/useToast'
 import { useNewTaskModal } from '@/composables/useNewTaskModal'
 import { useTasksList } from '@/composables/useTasksList'
 import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
-import { getTriggeredBy } from '@/composables/useTaskTrigger'
 import { formatContainerVersion } from '@/constants/containerVersion'
 // 🆕 Task 15：虚拟滚动组件
 import TaskVirtualList from '@/components/tasks/TaskVirtualList.vue'
@@ -634,13 +634,13 @@ useTaskEventBridge({
   onRefresh: fetchTasks,
 })
 
-// 任务触发者标签 helpers — Tasks.vue 直接用 useTaskTrigger（因为这是 task 显示的主视图）
-function getTriggeredByColor(taskId: string): string {
-  const v = getTriggeredBy(taskId)
+// 任务触发者标签 helpers — 🆕 v6 2026-06-18：从 task 对象读（单一数据源）
+function getTriggeredByColor(task: EncvTask): string {
+  const v = task.triggeredBy ?? 'user'
   return v === 'automation' ? 'primary' : v === 'ai_agent' ? 'secondary' : 'medium'
 }
-function getTriggeredByIcon(taskId: string): string {
-  const v = getTriggeredBy(taskId)
+function getTriggeredByIcon(task: EncvTask): string {
+  const v = task.triggeredBy ?? 'user'
   return v === 'automation' ? cogOutline : v === 'ai_agent' ? hardwareChipOutline : person
 }
 
@@ -757,13 +757,10 @@ const isGroupFilterActive = computed(() => {
  *  - 失败率 > 50% → 红色警告（视觉警示）
  *  - 其他 → 默认
  */
-function groupCardMoodClass(tasks: EncvTask[]): string {
-  const s = summarizeGroup(tasks)
-  if (tasks.length === 0) return 'tl-group-card--mood-neutral'
-  if (s.failed === 0 && s.passed > 0) return 'tl-group-card--mood-success'
-  if (s.failed / tasks.length > 0.5) return 'tl-group-card--mood-danger'
-  return 'tl-group-card--mood-neutral'
-}
+// 🆕 v6 2026-06-22 性能优化：groupCardMoodClass / summarizeGroup / getGroupSummary /
+//   getGroupTone / getGroupDominantStatus / getGroupDuration / getGroupPluginBadges
+//   已移除，改为在 useTasksList.ts 的 groupedItems computed 里预计算 displayData
+//   模板直接读 item.displayData.xxx（一次性计算，避免 13 次重复遍历）
 
 /** L1 group card 智能命中行文本
  *  - 4 维度 (plugin/type/status/date) 折叠为单行
@@ -1024,66 +1021,21 @@ async function confirmRemoveGroup(runId: string, tasks: EncvTask[]): Promise<voi
  */
 
 // 🆕 v4 M3：group summary（passed/failed/running/pending/percent）— 给 template 复用
-function summarizeGroup(tasks: EncvTask[]) {
-  let passed = 0, failed = 0, running = 0, pending = 0
-  for (const t of tasks) {
-    if (t.status === 'completed') passed++
-    else if (t.status === 'failed') failed++
-    else if (t.status === 'running' || t.status === 'cancelling') running++
-    else pending++
-  }
-  const finished = passed + failed
-  const percent = tasks.length > 0 ? Math.round((finished / tasks.length) * 100) : 0
-  return { passed, failed, running, pending, percent }
-}
-
-/** 🆕 v4 M3：模板辅助 - group summary 包装（与 summarizeGroup 等价，简短名字） */
-function getGroupSummary(tasks: EncvTask[]) {
-  return summarizeGroup(tasks)
-}
+// 🆕 v6 2026-06-22：summarizeGroup / getGroupSummary / getGroupTone / getGroupDominantStatus /
+//   getGroupDuration / getGroupPluginBadges 已移除（预计算到 item.displayData）
+//   保留 hasRunningTasks（openGroupActionSheet 用）
 
 /** 🆕 v4 M3：模板辅助 - group 主色（按 triggeredBy 决定） */
-function getGroupTone(_runId: string, tasks: EncvTask[]): 'automation' | 'ai_agent' {
-  for (const t of tasks) {
-    const by = t.triggeredBy ?? getTriggeredBy(t.id)
-    if (by === 'ai_agent') return 'ai_agent'
-  }
-  return 'automation'
-}
+// 已移除：getGroupTone → item.displayData.tone
 
 /** 🆕 v4 M3：模板辅助 - group dominant status（左侧 4px 色边） */
-function getGroupDominantStatus(tasks: EncvTask[]): TaskStatus {
-  if (tasks.some((t) => t.status === 'failed')) return 'failed'
-  if (tasks.some((t) => t.status === 'running' || t.status === 'cancelling')) return 'running'
-  if (tasks.some((t) => t.status === 'queued')) return 'queued'
-  if (tasks.every((t) => t.status === 'completed')) return 'completed'
-  if (tasks.every((t) => t.status === 'cancelled')) return 'cancelled'
-  return 'completed'
-}
+// 已移除：getGroupDominantStatus → item.displayData.dominantStatus
 
 /** 🆕 v4 M3：模板辅助 - group 总耗时（最早 createdAt → 最晚 completedAt 或 now） */
-function getGroupDuration(tasks: EncvTask[]): string {
-  if (tasks.length === 0) return ''
-  const createdTimes = tasks.map((t) => new Date(t.createdAt).getTime())
-  const completedTimes = tasks
-    .filter((t) => t.completedAt)
-    .map((t) => new Date(t.completedAt!).getTime())
-  const start = Math.min(...createdTimes)
-  const end =
-    completedTimes.length > 0 ? Math.max(...completedTimes) : Date.now()
-  return formatDuration(end - start)
-}
+// 已移除：getGroupDuration → item.displayData.duration
 
-/** 🆕 v4 M3：模板辅助 - group 内 plugin badges（去重 + 限前 N 个）
- *  - 🆕 v6：过滤掉 `__unknown__` sentinel，避免显示 "未知插件" badge
- */
-function getGroupPluginBadges(tasks: EncvTask[], limit: number): string[] {
-  const set = new Set<string>()
-  for (const t of tasks) {
-    if (t.pluginName && t.pluginName !== '__unknown__') set.add(t.pluginName)
-  }
-  return Array.from(set).slice(0, limit)
-}
+/** 🆕 v4 M3：模板辅助 - group 内 plugin badges（去重 + 限前 N 个） */
+// 已移除：getGroupPluginBadges → item.displayData.pluginBadges
 
 // 🆕 v4 M3：把 filterDateRange 转成 YYYY-MM-DD 形式（用于 chip 显示）
 function dateRangeChipLabel(): string {

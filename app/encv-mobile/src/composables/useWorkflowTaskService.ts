@@ -24,7 +24,7 @@
  */
 import { ref, computed, type Ref, type ComputedRef } from 'vue'
 import { createTask, cancelTask, type EncvTask } from '@/api/encv'
-import { setTaskMetadata, type TriggeredBy } from '@/composables/useTaskTrigger'
+import { type TriggeredBy } from '@/composables/useTaskTrigger'
 import { analyzeError } from '@/composables/useErrorAnalyzer'
 import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
 import { applyTerminalGuard, validateTransition } from '@/lib/workflow/state-machine'
@@ -590,16 +590,12 @@ function createService(
       const { stepDef, binding, stepRun } = ex
       try {
         const action = applyEnvToAction(stepDef.action, env, binding)
-        const task = await submitAction(action)
-        // 🆕 v6 2026-06-18：直接把 runId / triggeredBy 写进 task 对象
-        //   之前只写 useTaskTrigger(localStorage)，导致 taskStore 里的 task 没有 runId，
-        //   聚合模式按 runId 分组失败 → 每个 task 单独成组 → 100+ 张"自动化"卡片。
-        task.runId = runId
-        task.triggeredBy = taskTriggeredBy
+        // 🆕 v6 2026-06-18：runId / triggeredBy 直接通过 createTask API 传给后端
+        //   后端 MobileTask struct 持久化这两个字段 → 单一数据源
+        //   前端不再需要 useTaskTrigger localStorage 维护关联
+        const task = await submitAction(action, runId, taskTriggeredBy)
         stepRun.taskId = task.id
         stepRun.status = 'running' // 已提交，等 WS 回调
-        // 保留 useTaskTrigger 给还需要它的旧代码（后续彻底废弃）
-        setTaskMetadata(task.id, taskTriggeredBy, runId)
       } catch (e) {
         // 提交失败 → 直接标记 failure
         stepRun.status = 'failure'
@@ -637,7 +633,7 @@ function createService(
   }
 
   /** 将 ActionSpec 提交为 EncvTask（调用 createTask API） */
-  async function submitAction(action: ActionSpec): Promise<EncvTask> {
+  async function submitAction(action: ActionSpec, runId?: string, triggeredBy?: TriggeredBy): Promise<EncvTask> {
     if (action.type !== 'encv_task') {
       throw new Error(`Unsupported action type: ${action.type}`)
     }
@@ -653,6 +649,8 @@ function createService(
       spec.params.secondaryPassword,
       spec.params.cipherMode,
       spec.params.compressionMode,
+      runId,
+      triggeredBy,
     )
   }
 

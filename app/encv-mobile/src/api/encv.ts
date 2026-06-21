@@ -505,6 +505,33 @@ export async function uploadFile(targetPath: string, file: File): Promise<FileIt
   return result
 }
 
+/**
+ * 🆕 v6 2026-06-22：单文件 metadata 查询（file:change 增量更新用）
+ *   - 调 /api/file/info?path=... 拿单个文件的 FileItem（含 size/modified/isDirectory/isEncrypted）
+ *   - 404 → 抛 NotFoundError（调用方据此从 files.value 移除）
+ *   - 用于 file:change action=create|modify 的增量更新，避免全量 listFiles
+ */
+export async function getFileInfo(path: string): Promise<FileItem> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/file/info?path=${proxySafeEncode(path)}`)
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new NotFoundError('File not found')
+    }
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  const data = await response.json()
+  return {
+    name: data.name,
+    display_name: data.display_name,
+    path: data.path,
+    isDirectory: data.is_directory,
+    isEncrypted: data.is_encrypted,
+    size: data.size,
+    modified: data.modified,
+  }
+}
+
 export interface ServiceGuardResult {
   ready: boolean
   servingDir: string
@@ -653,6 +680,8 @@ export async function createTask(
   secondaryPassword?: string,
   cipherMode?: number,
   compressionMode?: 'none' | 'zstd',
+  runId?: string,
+  triggeredBy?: 'user' | 'automation' | 'ai_agent',
 ): Promise<EncvTask> {
   console.info('[API] createTask:', type, sourcePath, targetPath || '',
     'hasPassword:', !!password, 'version:', version ?? 'default',
@@ -660,7 +689,9 @@ export async function createTask(
     'hasExtraFields:', extraFields && Object.keys(extraFields).length > 0,
     'hasSecondaryPassword:', !!secondaryPassword,
     'cipherMode:', cipherMode ?? 0,
-    'compressionMode:', compressionMode ?? 'none')
+    'compressionMode:', compressionMode ?? 'none',
+    'runId:', runId ?? '',
+    'triggeredBy:', triggeredBy ?? 'user')
   const baseUrl = getApiBaseUrl()
   const body: Record<string, unknown> = { type, sourcePath }
   if (targetPath) body.targetPath = targetPath
@@ -671,6 +702,8 @@ export async function createTask(
   if (secondaryPassword) body.secondaryPassword = secondaryPassword
   if (cipherMode !== undefined) body.cipherMode = cipherMode
   if (compressionMode !== undefined) body.compressionMode = compressionMode
+  if (runId) body.runId = runId
+  if (triggeredBy) body.triggeredBy = triggeredBy
   const response = await fetch(`${baseUrl}/api/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

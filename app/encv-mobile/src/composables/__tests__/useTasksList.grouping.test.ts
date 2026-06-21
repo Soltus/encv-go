@@ -1,6 +1,8 @@
 /**
  * 复现：自动化测试任务聚合模式显示 100+ 张"自动化"卡片
  * 根因验证：task.runId 缺失时，useTasksList.groupedItems 会把每个 task 单独成组
+ *
+ * 🆕 v6 2026-06-22：runId 现在是 task 一等字段（后端持久化），不再需要 setTaskMetadata
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
@@ -19,7 +21,6 @@ vi.stubGlobal('localStorage', mockLocalStorage)
 import { setActivePinia, createPinia } from 'pinia'
 import { useTaskStore } from '@/stores/taskStore'
 import { useTasksList } from '@/composables/useTasksList'
-import { setTaskMetadata, _reloadTriggeredByCache } from '@/composables/useTaskTrigger'
 import type { EncvTask } from '@/api/encv'
 
 vi.mock('@/composables/useTaskEventBridge', () => ({
@@ -37,7 +38,7 @@ vi.mock('@/api/encv', async () => {
   }
 })
 
-function makeTask(id: string, sourcePath: string): EncvTask {
+function makeTask(id: string, sourcePath: string, runId?: string, triggeredBy?: EncvTask['triggeredBy']): EncvTask {
   return {
     id,
     type: 'encrypt',
@@ -46,13 +47,14 @@ function makeTask(id: string, sourcePath: string): EncvTask {
     progress: 100,
     createdAt: '2026-06-18T10:00:00.000Z',
     completedAt: '2026-06-18T10:01:00.000Z',
+    runId,
+    triggeredBy,
   }
 }
 
 describe('useTasksList — 自动化测试任务分组', () => {
   beforeEach(() => {
     testStorage.clear()
-    _reloadTriggeredByCache()
     setActivePinia(createPinia())
   })
   afterEach(() => {
@@ -62,22 +64,17 @@ describe('useTasksList — 自动化测试任务分组', () => {
   it('同一 runId 的 12 个 task 应该聚合成 1 个 group', () => {
     const store = useTaskStore()
     const runId = 'run-automation-001'
+    // 🆕 v6 2026-06-22：runId 直接设在 task 上（后端持久化，单一数据源）
     const tasks: EncvTask[] = Array.from({ length: 12 }, (_, i) =>
-      makeTask(`task-${i}`, `/mock/sample-${i}.mp4`),
+      makeTask(`task-${i}`, `/mock/sample-${i}.mp4`, runId, 'automation'),
     )
-
-    // 模拟 workflow service 提交时做的关联：setTaskMetadata(taskId, 'automation', runId)
-    for (const t of tasks) {
-      setTaskMetadata(t.id, 'automation', runId)
-    }
 
     store.bulkSetTasks(tasks)
 
     const list = useTasksList()
     const groups = list.groupedItems.value
 
-    // ❌ 当前行为：12 个 group（每个 task 单独一组，因为 task.runId undefined）
-    // ✅ 期望行为：1 个 group
+    // ✅ 期望行为：1 个 group（runId 是 task 一等字段，groupedItems 按 runId 聚合）
     expect(groups.length).toBe(1)
     expect(groups[0].runId).toBe(runId)
     expect(groups[0].tasks.length).toBe(12)

@@ -457,9 +457,11 @@ func (s *Server) handleCreateTaskGin(c *gin.Context) {
 		PluginName        string            `json:"pluginName,omitempty"`
 		ExtraFields       map[string]string `json:"extraFields,omitempty"`
 		// 🆕 2026-06-18 Task 16：加解密参数持久化
-		// 前端 createTask 传 cipherMode (0|1) + compressionMode ('none'|'zstd')
 		CipherMode      int    `json:"cipherMode,omitempty"`
 		CompressionMode string `json:"compressionMode,omitempty"`
+		// 🆕 v6 2026-06-18：runId + triggeredBy（单一数据源）
+		RunId        string `json:"runId,omitempty"`
+		TriggeredBy  string `json:"triggeredBy,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
@@ -473,30 +475,23 @@ func (s *Server) handleCreateTaskGin(c *gin.Context) {
 		"hasSecondaryPassword", req.SecondaryPassword != "",
 		"hasExtraFields", len(req.ExtraFields) > 0,
 		"cipherMode", req.CipherMode,
-		"compressionMode", req.CompressionMode)
+		"compressionMode", req.CompressionMode,
+		"runId", req.RunId,
+		"triggeredBy", req.TriggeredBy)
 
-	// 🆕 Task 16：前端传 cipherMode/compressionMode 时走 CreateWithCryptoParams 持久化
-	// 兼容旧调用方（不传这两个字段）→ 走 CreateWithExtras（cipherMode=0, compressionMode=""）
-	var task *mobileservice.MobileTask
-	if req.CipherMode != 0 || req.CompressionMode != "" {
-		// 前端显式传了 crypto 参数 → 持久化
-		// compressionMode 默认 'none'（前端不传时 fallback）
-		compressionMode := req.CompressionMode
-		if compressionMode == "" {
-			compressionMode = "none"
-		}
-		task = s.mobileSvc.GetTaskManager().CreateWithCryptoParams(
-			req.Type, req.SourcePath, req.TargetPath,
-			req.Password, req.SecondaryPassword, req.Version, req.PluginName, req.ExtraFields,
-			req.CipherMode, compressionMode,
-		)
-	} else {
-		// 旧调用方或无 crypto 参数 → 走原 CreateWithExtras（向后兼容）
-		task = s.mobileSvc.GetTaskManager().CreateWithExtras(
-			req.Type, req.SourcePath, req.TargetPath,
-			req.Password, req.SecondaryPassword, req.Version, req.PluginName, req.ExtraFields,
-		)
+	// 🆕 v6 2026-06-18：统一走 CreateWithRunMeta（含 crypto params + run meta）
+	//   - runId 非空 → 自动化测试/AI agent 任务，前端按 runId 聚合
+	//   - runId 空 → 手动创建，triggeredBy 默认 'user'
+	compressionMode := req.CompressionMode
+	if compressionMode == "" {
+		compressionMode = "none"
 	}
+	task := s.mobileSvc.GetTaskManager().CreateWithRunMeta(
+		req.Type, req.SourcePath, req.TargetPath,
+		req.Password, req.SecondaryPassword, req.Version, req.PluginName, req.ExtraFields,
+		req.CipherMode, compressionMode,
+		req.RunId, req.TriggeredBy,
+	)
 
 	c.JSON(http.StatusCreated, task)
 }

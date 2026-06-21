@@ -58,6 +58,14 @@ type MobileTask struct {
 	CipherMode      int    `json:"cipherMode,omitempty"`
 	CompressionMode string `json:"compressionMode,omitempty"`
 
+	// 🆕 v6 2026-06-18：runId + triggeredBy 作为 task 一等字段（单一数据源）
+	//   - runId：自动化测试/AI agent 产生的 task 共享同一个 runId，前端按 runId 聚合
+	//   - triggeredBy：'user' | 'automation' | 'ai_agent'
+	//   - omitempty：旧任务（无这两个字段）反序列化时自动空值，向后兼容
+	//   - 前端不再需要 useTaskTrigger localStorage 维护关联
+	RunId        string `json:"runId,omitempty"`
+	TriggeredBy  string `json:"triggeredBy,omitempty"`
+
 	// 🆕 2026-06-15 multi-mount（spec Phase C1）
 	//   - SourcePath 是 /d/<mount>/... 形式时，记录解析后的 mount_id + sub_path
 	//   - SourcePath 是旧绝对路径且能匹配到 mount 时同样记录
@@ -290,29 +298,33 @@ func (tm *TaskManager) CreateWithExtras(taskType, sourcePath, targetPath, passwo
 	return task
 }
 
-// 🆕 2026-06-18 Task 16：CreateWithCryptoParams 接受 cipherMode / compressionMode 持久化
+// 🆕 v6 2026-06-18：CreateWithRunMeta 接受 runId / triggeredBy 持久化
 //
-// 前端 createTask API 传 cipherMode (0=AES-128-GCM, 1=AES-256-GCM) + compressionMode ('none'|'zstd')
-// 后端持久化让任务列表刷新后仍能回显参数（Task 18 任务卡片展示用）。
+// 前端 createTask API 传 runId（自动化测试/AI agent run 的关联 ID）+ triggeredBy ('user'|'automation'|'ai_agent')
+// 后端持久化让任务列表刷新后仍能聚合（前端按 runId 分组）。
 //
 // 设计取舍：
-//   - 不修改 CreateWithExtras 签名（保持向后兼容，已有 3 个测试依赖旧签名）
-//   - 新增独立方法让调用方显式选择是否传 crypto 参数
-//   - cipherMode=0 / compressionMode='none' 仍持久化（用户主动选了默认值，回显时需要知道）
-//     用 omitempty + 显式判断：调用方传 0/'none' 时仍写入字段（前端会显式传）
-//
-// 调用方：internal/server/mobile_api.go handleCreateTaskGin
-func (tm *TaskManager) CreateWithCryptoParams(
+//   - 不修改 CreateWithExtras 签名（保持向后兼容）
+//   - 新增独立方法，由 handleCreateTaskGin 按需调用
+//   - runId="" 时视为手动创建（triggeredBy 默认 'user'）
+func (tm *TaskManager) CreateWithRunMeta(
 	taskType, sourcePath, targetPath, password, secondaryPassword string,
 	version int, pluginName string,
 	extras map[string]string,
 	cipherMode int,
 	compressionMode string,
+	runId string,
+	triggeredBy string,
 ) *MobileTask {
 	task := tm.CreateWithExtras(taskType, sourcePath, targetPath, password, secondaryPassword,
 		version, pluginName, extras)
 	task.CipherMode = cipherMode
 	task.CompressionMode = compressionMode
+	task.RunId = runId
+	if triggeredBy == "" {
+		triggeredBy = "user"
+	}
+	task.TriggeredBy = triggeredBy
 	tm.saveTasks()
 	return task
 }
@@ -801,9 +813,21 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 			"status":     "completed",
 			"outputPath": task.OutputPath,
 		})
-		tm.broadcaster.Broadcast("file:change", map[string]interface{}{
-			"path": task.SourcePath,
-		})
+		// 🆕 v6 2026-06-18：file:change 加 action 字段，前端按 action 增量更新
+		//   - 加密/解密完成 → 源文件 modify（mtime 变化）+ 输出文件 create
+		//   - 前端收到后按 action 增删改 files 数组，不再全量 reload
+		if task.SourcePath != "" {
+			tm.broadcaster.Broadcast("file:change", map[string]interface{}{
+				"path":   task.SourcePath,
+				"action": "modify",
+			})
+		}
+		if task.OutputPath != "" && task.OutputPath != task.SourcePath {
+			tm.broadcaster.Broadcast("file:change", map[string]interface{}{
+				"path":   task.OutputPath,
+				"action": "create",
+			})
+		}
 	}
 }
 
@@ -1022,9 +1046,19 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 			"status":     "completed",
 			"outputPath": task.OutputPath,
 		})
-		tm.broadcaster.Broadcast("file:change", map[string]interface{}{
-			"path": task.SourcePath,
-		})
+		// 🆕 v6 2026-06-18：file:change 加 action 字段（同上）
+		if task.SourcePath != "" {
+			tm.broadcaster.Broadcast("file:change", map[string]interface{}{
+				"path":   task.SourcePath,
+				"action": "modify",
+			})
+		}
+		if task.OutputPath != "" && task.OutputPath != task.SourcePath {
+			tm.broadcaster.Broadcast("file:change", map[string]interface{}{
+				"path":   task.OutputPath,
+				"action": "create",
+			})
+		}
 	}
 }
 

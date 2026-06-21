@@ -122,6 +122,38 @@ export async function loadAllTasks(): Promise<EncvTask[]> {
   }
 }
 
+/**
+ * 🆕 v6 2026-06-22 性能优化：清理过量 terminal tasks
+ *   - 保留所有非终态 task（running/queued/cancelling）
+ *   - 终态 task（completed/failed/cancelled）按 completedAt/createdAt 倒序保留前 maxTerminal 个
+ *   - 返回被清理的 id 列表（调用方可选 log）
+ *   - 默认 maxTerminal=200（防止 IndexedDB 无限膨胀）
+ */
+export async function pruneTerminalTasks(maxTerminal = 200): Promise<string[]> {
+  try {
+    const db = await getDB()
+    const all = await db.tasks.toArray()
+    const terminal = all.filter((t) =>
+      t.status === 'completed' || t.status === 'failed' || t.status === 'cancelled'
+    )
+    if (terminal.length <= maxTerminal) return []
+    // 按 completedAt（fallback createdAt）倒序，保留最新的 maxTerminal 个
+    terminal.sort((a, b) => {
+      const aT = a.completedAt || a.createdAt || ''
+      const bT = b.completedAt || b.createdAt || ''
+      return bT.localeCompare(aT)
+    })
+    const toRemove = terminal.slice(maxTerminal)
+    const ids = toRemove.map((t) => t.id)
+    await db.tasks.bulkDelete(ids)
+    console.info('[useTaskPersistence] pruned', ids.length, 'terminal tasks (kept', maxTerminal, 'of', terminal.length, ')')
+    return ids
+  } catch (err) {
+    console.warn('[useTaskPersistence] pruneTerminalTasks failed:', err)
+    return []
+  }
+}
+
 /** 写单个 task（patchTask 用） */
 export async function putTask(task: EncvTask): Promise<void> {
   try {
@@ -134,24 +166,44 @@ export async function putTask(task: EncvTask): Promise<void> {
 
 /**
  * 批量写 tasks（bulkSetTasks 用）
- * - debounce 100ms 避免频繁写
+ * 🆕 v6 2026-06-22 性能优化：移除内部 100ms debounce
+ *   - taskStore 已在调用点控制时机（bulkSetTasks / hydrate）
+ *   - 双重 debounce 是冗余的（500ms + 100ms = 实际 600ms 延迟）
+ *   - 现在直接写，由 taskStore 决定何时调
  */
-let _bulkWriteTimer: ReturnType<typeof setTimeout> | null = null
-let _pendingTasks: EncvTask[] = []
-
 export function bulkPutTasks(tasks: EncvTask[]): void {
-  _pendingTasks = tasks
-  if (_bulkWriteTimer) clearTimeout(_bulkWriteTimer)
-  _bulkWriteTimer = setTimeout(async () => {
+  if (tasks.length === 0) return
+  void (async () => {
     try {
       const db = await getDB()
-      const rows = _pendingTasks.map((t) => ({ ...t, _persistedAt: Date.now() }))
+      const rows = tasks.map((t) => ({ ...t, _persistedAt: Date.now() }))
       await db.tasks.bulkPut(rows)
-      _pendingTasks = []
     } catch (err) {
       console.warn('[useTaskPersistence] bulkPutTasks failed:', err)
     }
-  }, 100)
+  })()
+}
+
+/**
+ * 🆕 v6 2026-06-22 性能优化：单 task 节流写入（progress 更新用）
+ *   - 同一 task 2s 内只写一次（progress 高频更新不需要每次都持久化）
+ *   - 不同 task 独立节流（避免一个 task 的 progress 阻塞另一个）
+ *   - app 崩溃最多丢 2s progress（可接受，重启后从后端拉最新）
+ */
+const _putThrottleMap = new Map<string, number>()
+const PUT_THROTTLE_MS = 2000
+
+export function putTaskThrottled(task: EncvTask): void {
+  const now = Date.now()
+  const last = _putThrottleMap.get(task.id) ?? 0
+  if (now - last < PUT_THROTTLE_MS) return
+  _putThrottleMap.set(task.id, now)
+  void putTask(task)
+}
+
+/** 清理 task 的节流记录（task 删除时调，防内存泄漏） */
+export function clearPutThrottle(taskId: string): void {
+  _putThrottleMap.delete(taskId)
 }
 
 /** 删除 task */
