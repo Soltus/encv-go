@@ -31,6 +31,11 @@ export type SortBy = 'activity' | 'created'
 const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set(['completed', 'failed', 'cancelled'])
 const STATUS_OPTIONS: TaskStatus[] = ['queued', 'running', 'cancelling', 'completed', 'failed', 'cancelled']
 
+// 🆕 2026-06-23 Task 7.2：WS task:created 事件在 store 已满时不再 push（等分页加载时再获取）
+//   - 仅对 WS 路径（applyEvent('created', ...)）生效，不影响 workflow service 直接调 appendTask
+//   - 仅在 hydrated 后生效（避免破坏测试：测试不调 hydrate，hydrated=false → 全部 push）
+export const MAX_LOADED_TASKS = 100
+
 export const useTaskStore = defineStore('task', () => {
   // ============ 原始数据 ============
   const tasks = shallowRef<EncvTask[]>([])
@@ -189,6 +194,23 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
+  // 🆕 2026-06-23 Task 6.2：分页加载 — 追加下一页 task 到 store 末尾（不替换已有）
+  //   - loadMore() 调用此方法，把后端返回的下一页 task 追加到 store
+  //   - 去重：已在 store 中的 task 跳过（WS 事件可能已 push）
+  //   - 不走 appendTask（appendTask 是 prepend，分页需要 append 到末尾）
+  function appendTasksPage(newTasks: EncvTask[]): void {
+    if (newTasks.length === 0) return
+    const existing = _taskIndex
+    const toAdd = newTasks.filter((t) => !existing.has(t.id))
+    if (toAdd.length === 0) return
+    tasks.value = [...tasks.value, ...toAdd]
+    rebuildIndex()
+    hasAnyTask.value = tasks.value.length > 0
+    if (hydrated.value) {
+      try { void persistBulkPut(toAdd) } catch {}
+    }
+  }
+
   function removeTask(id: string): void {
     if (!_taskIndex.has(id)) return
     tasks.value = tasks.value.filter((t) => t.id !== id)
@@ -245,19 +267,32 @@ export const useTaskStore = defineStore('task', () => {
    * - created:  新建或 patch
    * - update / progress: patch 后端提供的字段
    * - completed: patch 终态 + completedAt + progress=100
+   *
+   * 🆕 2026-06-23 Task 7.2：分页模式下 WS task:created 节流
+   *   - hydrated 后 + store 已满（>= MAX_LOADED_TASKS）+ task 不在 store → 跳过 push
+   *   - 原因：10 万 task 场景下，WS 持续 push 新 task 会让 store 无限膨胀，破坏分页
+   *   - 跳过的 task 会在 loadMore() 分页加载时获取最新状态
+   *   - update/progress/completed 天然只 patch 已加载的 task（patchTaskById 不在 store 则 return false）
    */
   function applyEvent(type: 'created' | 'update' | 'progress' | 'completed', data: any): void {
     if (!data || !data.id) return
     const id = data.id
     if (type === 'created') {
+      // 🆕 Task 7.2：store 已满 + task 不在 store → 跳过（等分页加载）
+      //   仅 hydrated 后生效（测试不调 hydrate → hydrated=false → 全部 push，向后兼容）
+      if (hydrated.value && tasks.value.length >= MAX_LOADED_TASKS && !_taskIndex.has(id)) {
+        return
+      }
       appendTask(data as EncvTask)
       persistPutTask(id)
     } else if (type === 'update' || type === 'progress') {
+      // patchTaskById 不在 store 则 return false（天然只 patch 已加载的 task）
       patchTaskById(id, data)
       if (type === 'update' && data.status) persistPutTask(id)
     } else if (type === 'completed') {
       // 失败 → status='failed'，progress 保留 prev（patchTaskById 只 merge 提供的字段）
       // 成功 → status='completed', progress=100, completedAt=now
+      // patchTaskById 不在 store 则 return false（天然只 patch 已加载的 task）
       patchTaskById(id, {
         ...data,
         status: data.error ? 'failed' : 'completed',
@@ -489,7 +524,7 @@ export const useTaskStore = defineStore('task', () => {
     filteredTasks, sortedTasks, groupedTasksByRunId, flatTaskList,
     activeFilterCount, hasActiveFilters,
     // 原始操作
-    hydrate, bulkSetTasks, patchTaskById, appendTask, removeTask, removeRunTasks, cancelRunTasks,
+    hydrate, bulkSetTasks, patchTaskById, appendTask, appendTasksPage, removeTask, removeRunTasks, cancelRunTasks,
     getTaskById,
     togglePinRun, isRunPinned,
     // WS 入口

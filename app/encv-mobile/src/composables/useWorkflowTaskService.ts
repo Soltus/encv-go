@@ -5,7 +5,7 @@
  * - DAG 工作流编排（分层 + Promise.all + worker 池并发）
  * - 通过 useTaskEventBridge 订阅 WS 4 件套事件，路由到 StepRun 更新
  * - 持久化到 localStorage key `encv_workflow_tasks_v1`（UnifiedRunRecord 格式）
- * - 取消运行（cancelRun → cancelTask API）
+ * - 取消运行（cancelRun → cancelRunApi 一次批量取消）
  * - 集成 useTaskTrigger（setTaskMetadata 关联 taskId ↔ runId）
  *
  * 设计原则（spec unify-workflow-task-service Task 4）：
@@ -23,7 +23,7 @@
  * - cancelCurrentRun → cancelRun
  */
 import { ref, computed, type Ref, type ComputedRef } from 'vue'
-import { batchCreateTasks, cancelTask, type EncvTask, type BatchTaskSpec } from '@/api/encv'
+import { batchCreateTasks, cancelRun as cancelRunApi, type EncvTask, type BatchTaskSpec } from '@/api/encv'
 import { useTaskStore } from '@/stores/taskStore'
 import { type TriggeredBy } from '@/composables/useTaskTrigger'
 import { analyzeError } from '@/composables/useErrorAnalyzer'
@@ -433,11 +433,16 @@ function createService(
   /**
    * 提交一次工作流运行
    *
+   * 🆕 2026-06-23 Task 3：非阻塞 fire-and-forget 架构
+   *
    * 流程：
-   * 1. 创建 WorkflowRun → 设置 currentRun
-   * 2. 持久化（提交阶段）
-   * 3. DAG 分层 → 逐层 Promise.all → 每层内 worker 池并发提交
-   * 4. 持久化（末尾）
+   * 1. 创建 WorkflowRun → 设置 currentRun → 持久化 → notifySubscribers → 立即返回 run
+   * 2. executeJob 改为后台异步执行（不 await），submitRun 立即返回 run 对象
+   *    - UI toast 在 submitRun 返回后立即显示（不再等 batchCreateTasks API）
+   *    - isRunning 由 currentRun.status === 'running' 派生，run 创建时即为 true
+   *    - IIFE 结束时根据结果设置 run.status（success/failure），isRunning 自动变 false
+   *
+   * 注意：空 workflow（无 jobs）仍同步标记 success 后返回（保持兼容）。
    */
   async function submitRun(params: SubmitRunParams): Promise<WorkflowRun> {
     const { workflow, triggeredBy = 'user', persist = true } = params
@@ -456,57 +461,66 @@ function createService(
     currentRun.value = run
     currentDef.value = workflow
 
-    // 提交阶段持久化
+    // 提交阶段持久化 + 通知订阅者（UI 立刻看到 run 创建）
     if (persist) persistCurrentRun()
+    notifySubscribers()
 
-    try {
-      // DAG 分层
-      const layers = resolveExecutionOrder(workflow.jobs)
-      if (layers.length === 0) {
-        run.status = 'success'
-        run.completedAt = new Date().toISOString()
-        run.durationMs = Date.now() - new Date(run.startedAt!).getTime()
-        if (persist) persistCurrentRun()
-        notifySubscribers()
-        return run
-      }
-
-      // 逐层执行（layer 内 Promise.all 并行提交）
-      for (const layerJobIds of layers) {
-        const jobPromises = layerJobIds.map((jobId) => {
-          const jobDef = workflow.jobs.find((j) => j.id === jobId)!
-          // jobRun 创建后立即 push 到 run.jobs（UI 立刻可见）
-          const jobRun: JobRun = {
-            id: genId(),
-            jobDefId: jobDef.id,
-            status: 'running',
-            startedAt: new Date().toISOString(),
-            steps: [],
-          }
-          run.jobs.push(jobRun)
-          return executeJob(jobDef, workflow.env ?? {}, jobRun, run.id).then(() => jobRun)
-        })
-        await Promise.all(jobPromises)
-      }
-
-      // 空 workflow（有 job 但无 step）→ 直接标记完成
-      if (run.jobs.every((j) => j.steps.length === 0)) {
-        run.status = 'success'
-        run.completedAt = new Date().toISOString()
-        run.durationMs = Date.now() - new Date(run.startedAt!).getTime()
-      }
-
-      // 末尾持久化
+    // DAG 分层
+    const layers = resolveExecutionOrder(workflow.jobs)
+    if (layers.length === 0) {
+      // 空 workflow（无 jobs）→ 同步标记 success（保持兼容，无需 fire-and-forget）
+      run.status = 'success'
+      run.completedAt = new Date().toISOString()
+      run.durationMs = Date.now() - new Date(run.startedAt!).getTime()
       if (persist) persistCurrentRun()
       notifySubscribers()
       return run
-    } catch (e) {
-      run.status = 'failure'
-      run.completedAt = new Date().toISOString()
-      if (persist) persistCurrentRun()
-      notifySubscribers()
-      throw e
     }
+
+    // 🆕 Task 3：fire-and-forget 执行（不阻塞 submitRun 返回）
+    // executeJob 调 batchCreateTasks API 可能较慢，改为后台异步执行。
+    // submitRun 立即返回 run 对象，UI toast 立即显示。
+    // isRunning 是 computed(currentRun.status === 'running')，run 创建时即为 true；
+    // IIFE 结束时 run.status 变为终态，isRunning 自动变 false。
+    ;(async () => {
+      try {
+        // 逐层执行（layer 内 Promise.all 并行提交）
+        for (const layerJobIds of layers) {
+          const jobPromises = layerJobIds.map((jobId) => {
+            const jobDef = workflow.jobs.find((j) => j.id === jobId)!
+            // jobRun 创建后立即 push 到 run.jobs（UI 立刻可见）
+            const jobRun: JobRun = {
+              id: genId(),
+              jobDefId: jobDef.id,
+              status: 'running',
+              startedAt: new Date().toISOString(),
+              steps: [],
+            }
+            run.jobs.push(jobRun)
+            return executeJob(jobDef, workflow.env ?? {}, jobRun, run.id).then(() => jobRun)
+          })
+          await Promise.all(jobPromises)
+        }
+
+        // 空 workflow（有 job 但无 step）→ 直接标记完成
+        if (run.jobs.every((j) => j.steps.length === 0)) {
+          run.status = 'success'
+          run.completedAt = new Date().toISOString()
+          run.durationMs = Date.now() - new Date(run.startedAt!).getTime()
+        }
+
+        // 末尾持久化
+        if (persist) persistCurrentRun()
+        notifySubscribers()
+      } catch (e) {
+        run.status = 'failure'
+        run.completedAt = new Date().toISOString()
+        if (persist) persistCurrentRun()
+        notifySubscribers()
+      }
+    })()
+
+    return run
   }
 
   /**
@@ -754,9 +768,11 @@ function createService(
   /**
    * 取消运行
    *
+   * 🆕 2026-06-23 Task 4：批量取消（一次 API 替代逐个 cancelTask）
+   *
    * 流程：
-   * 1. 找到所有非终态且有 taskId 的 step → 标记 cancelling
-   * 2. 调用 cancelTask API
+   * 1. 标记所有非终态 step 为 cancelling
+   * 2. 调用 cancelRunApi(runId) 一次 API 取消整个 run（后端批量取消该 runId 所有非终态 task）
    * 3. 标记所有非终态 step 为 cancelled
    * 4. 更新 run.status = 'cancelled'
    */
@@ -764,26 +780,21 @@ function createService(
     if (!currentRun.value || currentRun.value.id !== runId) return
     if (currentRun.value.status !== 'running') return
 
-    // 标记 cancelling + 调用 cancel API
-    const cancelPromises: Promise<void>[] = []
+    // 标记所有非终态 step 为 cancelling
     for (const job of currentRun.value.jobs) {
       for (const step of job.steps) {
-        if (!isTerminalStep(step.status) && step.taskId) {
-          if (validateTransition(step.status, 'cancelling')) {
-            step.status = 'cancelling'
-          }
-          cancelPromises.push(
-            cancelTask(step.taskId).catch((e) => {
-              console.warn(
-                `[useWorkflowTaskService] cancelTask failed for ${step.taskId}:`,
-                e,
-              )
-            }),
-          )
+        if (!isTerminalStep(step.status) && validateTransition(step.status, 'cancelling')) {
+          step.status = 'cancelling'
         }
       }
     }
-    await Promise.all(cancelPromises)
+
+    // 🆕 2026-06-23 Task 4：一次 API 取消整个 run（不再逐个 cancelTask）
+    try {
+      await cancelRunApi(runId)
+    } catch (e) {
+      console.warn('[useWorkflowTaskService] cancelRun API failed:', e)
+    }
 
     // 标记所有非终态 step 为 cancelled
     for (const job of currentRun.value.jobs) {

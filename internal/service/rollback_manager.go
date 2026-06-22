@@ -150,8 +150,14 @@ func (rm *RollbackManagerImpl) Rollback(taskID string, triggeredBy string) (stri
 	task.RollbackOf = rollbackData.RollbackOf
 	task.OriginalPath = rollbackData.OriginalPath
 	task.TriggeredBy = triggeredBy
+	// 🆕 2026-06-23 WS 时序修复：Create 不再内部设 RunId，回滚任务也补 RunId 兜底
+	if task.RunId == "" {
+		task.RunId = "manual-" + task.ID
+	}
 	rm.tm.mu.Unlock()
 	rm.tm.saveTasks()
+	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补广播（payload 带 RunId + RollbackOf）
+	rm.tm.BroadcastCreated(task)
 
 	slog.Info("Rollback task created",
 		"rollbackTaskId", task.ID,

@@ -637,14 +637,28 @@ export interface EncvTask {
   performanceSummary?: PerformanceSummary
 }
 
-export async function getTasks(): Promise<EncvTask[]> {
+// 🆕 2026-06-23 Task 6.1：支持分页参数（runId / offset / limit）
+//   - 不传 params → 行为与旧版一致（GET /api/tasks，后端默认 offset=0 limit=100）
+//   - 传 params → 拼接 query string
+//   - 返回格式兼容：后端返回 { tasks: [...] }，旧代码可能期望数组 → 两种都处理
+export async function getTasks(params?: {
+  runId?: string
+  offset?: number
+  limit?: number
+}): Promise<EncvTask[]> {
   const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/tasks`)
+  const query = new URLSearchParams()
+  if (params?.runId) query.set('runId', params.runId)
+  if (params?.offset !== undefined) query.set('offset', String(params.offset))
+  if (params?.limit !== undefined) query.set('limit', String(params.limit))
+  const qs = query.toString()
+  const url = qs ? `${baseUrl}/api/tasks?${qs}` : `${baseUrl}/api/tasks`
+  const response = await fetch(url)
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`)
   }
   const data = await response.json()
-  return data.tasks || []
+  return Array.isArray(data) ? data : (data.tasks ?? [])
 }
 
 /**
@@ -771,6 +785,20 @@ export async function cancelTask(id: string): Promise<void> {
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/tasks/${id}/cancel`, {
     method: 'POST',
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+}
+
+// 🆕 2026-06-23 Task 4：批量取消整个 run 的所有 task（一次 API 替代逐个 cancelTask）
+// 后端路由：POST /api/runs/:runId/cancel（Task 2 实现）
+// 调用方：useWorkflowTaskService.cancelRun
+export async function cancelRun(runId: string): Promise<void> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
   })
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`)

@@ -92,6 +92,9 @@ const batchCallLog: Array<{ specCount: number; runId?: string; triggeredBy?: str
 let batchDelayMs = 50  // 模拟网络延迟
 let batchShouldFail = false
 
+// 🆕 2026-06-23 Task 8：cancelRun API mock（批量取消整个 run）
+const cancelRunCallLog: string[] = []
+
 vi.mock('@/api/encv', async () => {
   const actual = await vi.importActual<typeof encvApi>('@/api/encv')
   return {
@@ -121,6 +124,10 @@ vi.mock('@/api/encv', async () => {
     getTasks: vi.fn().mockResolvedValue([]),
     cancelTask: vi.fn().mockResolvedValue(undefined),
     removeTask: vi.fn().mockResolvedValue(undefined),
+    // 🆕 Task 8：cancelRun mock — 批量取消整个 run（一次 API）
+    cancelRun: vi.fn(async (runId: string): Promise<void> => {
+      cancelRunCallLog.push(runId)
+    }),
   }
 })
 
@@ -166,6 +173,8 @@ const noopHandlers = {
   openNewTask: vi.fn(),
   handleRefresh: vi.fn(),
   handleClearCompleted: vi.fn(),
+  // 🆕 Task 9.1：group card 取消按钮回调
+  cancelRun: vi.fn(),
 }
 
 // ==================== 构造测试用 WorkflowDefinition ====================
@@ -196,6 +205,11 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
     uuidCounter = 0
     batchDelayMs = 50
     batchShouldFail = false
+    // 🆕 Task 8：清空 cancelRun 调用日志 + 重置 mock 调用记录
+    cancelRunCallLog.length = 0
+    vi.mocked(encvApi.cancelRun).mockClear()
+    vi.mocked(encvApi.cancelTask).mockClear()
+    vi.mocked(encvApi.batchCreateTasks).mockClear()
     for (const key of Object.keys(noopHandlers) as (keyof typeof noopHandlers)[]) {
       noopHandlers[key].mockClear()
     }
@@ -218,15 +232,41 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
     })
   }
 
+  /**
+   * 🆕 2026-06-23：等待 submitRun 的 fire-and-forget IIFE 完成
+   *
+   * Task 3 将 submitRun 改为 fire-and-forget（IIFE 后台执行 batchCreateTasks），
+   * submitRun 立即返回 run 对象。测试需要显式等待 IIFE 完成才能检查 store/batchCallLog。
+   *
+   * 两阶段等待：
+   *   1. 等待所有 batchCreateTasks 调用被发起（batchCallLog.length === jobCount）
+   *   2. 等待所有 task 被 push 到 store（store.tasks.length === totalSpecs）
+   *
+   * 只等阶段 1 不够——mock 的 batchCallLog.push() 在 delay 之前执行，
+   * 但 task 在 delay 之后才返回并 appendTask 到 store。
+   * 如果不等阶段 2，IIFE 会泄漏到下一个 test，导致跨 test 数据污染。
+   */
+  async function waitForSubmitRunComplete(jobCount: number): Promise<void> {
+    // 阶段 1：等待所有 batchCreateTasks 调用被发起
+    await vi.waitFor(() => {
+      expect(batchCallLog.length, `等待 batchCreateTasks 调用 ${jobCount} 次`).toBe(jobCount)
+    }, { timeout: 3000, interval: 10 })
+    // 阶段 2：等待所有 task 被 push 到 store（batchCreateTasks mock 有 50ms 延迟）
+    const totalSpecs = batchCallLog.reduce((sum, c) => sum + c.specCount, 0)
+    await vi.waitFor(() => {
+      expect(store.tasks.length, `等待 store 有所有 ${totalSpecs} 个 task（IIFE 完成）`).toBe(totalSpecs)
+    }, { timeout: 3000, interval: 10 })
+  }
+
   // ==================== T1: batchCreateTasks 只调 1 次，所有 task 一次性 push ====================
   it('T1: submitRun 后 batchCreateTasks 只调 1 次，store 一次性有 N 个真实 task（不慢慢累加）', async () => {
     const wfDef = buildTestWorkflowDef(buildRealPlugins())
     workflowStore.createDefinition(wfDef)
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
-
-    // 1. batchCreateTasks 调用次数 == job 数（每个 job 一次性批量提交自己的 step）
     const jobCount = wfDef.jobs.length
+    // 🆕 Task 3 fire-and-forget：等待 IIFE 完成（batchCreateTasks mock 有 50ms 延迟）
+    await waitForSubmitRunComplete(jobCount)
     expect(batchCallLog.length, `batchCreateTasks 调用 ${jobCount} 次（每个 job 1 次，不是每个 step 1 次）`).toBe(jobCount)
 
     // 2. store 一次性有所有 task（不慢慢累加）
@@ -252,6 +292,8 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
     workflowStore.createDefinition(wfDef)
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
+    // 🆕 Task 3 fire-and-forget：等待 IIFE 完成
+    await waitForSubmitRunComplete(wfDef.jobs.length)
 
     // 所有 task ID 都不以 client- 开头（后端生成 UUID）
     for (const t of store.tasks) {
@@ -271,6 +313,8 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
     workflowStore.createDefinition(wfDef)
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
+    // 🆕 Task 3 fire-and-forget：等待 IIFE 完成
+    await waitForSubmitRunComplete(wfDef.jobs.length)
 
     const tasksBefore = store.tasks.length
 
@@ -287,6 +331,8 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
     workflowStore.createDefinition(wfDef)
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
+    // 🆕 Task 3 fire-and-forget：等待 IIFE 完成
+    await waitForSubmitRunComplete(wfDef.jobs.length)
     wrapper = mountDiag()
     await nextTick()
 
@@ -300,5 +346,173 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
     expect(realGroupCount, '1 个真 group（所有 task 共享 runId）').toBe(1)
     expect(fakeGroupCount, '0 伪 group（所有 task 都有 runId）').toBe(0)
     expect(escapeTaskCount, '0 逃逸').toBe(0)
+  })
+
+  // ==================== 阶段一 WS 时序测试（T5-T6）====================
+
+  // ==================== T5: WS task:created 广播带 runId（后端时序修复验证）====================
+  it('T5: WS task:created 广播带 runId——store 中所有 task runId 非空 + appendTask 不触发 warn', async () => {
+    const wfDef = buildTestWorkflowDef(buildRealPlugins())
+    workflowStore.createDefinition(wfDef)
+
+    // 捕获 console.warn（appendTask 在 runId 为空时会 warn）
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
+    await waitForSubmitRunComplete(wfDef.jobs.length)
+
+    // 1. 所有 task 的 runId 非空（后端 CreateWithRunMeta 广播时序修复后 runId 必带）
+    const emptyRunIdTasks = store.tasks.filter((t) => !t.runId)
+    expect(emptyRunIdTasks.length, `所有 task runId 非空（实际空 runId task 数: ${emptyRunIdTasks.length}）`).toBe(0)
+
+    // 2. taskStore.appendTask 的 warn 日志不出现（runId 为空的 warn）
+    //    taskStore.appendTask 在 runId 为空时打印 '[taskStore.appendTask] 新 task runId 为空'
+    const appendTaskWarns = warnSpy.mock.calls.filter(
+      (args) => typeof args[0] === 'string' && args[0].includes('[taskStore.appendTask]'),
+    )
+    expect(appendTaskWarns.length, 'appendTask 不应触发 runId 为空的 warn').toBe(0)
+
+    warnSpy.mockRestore()
+  })
+
+  // ==================== T6: WS task:created 不产生孤儿 group ====================
+  it('T6: WS task:created 不产生孤儿 group——groupedTasksByRunId 只有 1 个真 group + 0 伪 group', async () => {
+    const wfDef = buildTestWorkflowDef(buildRealPlugins())
+    workflowStore.createDefinition(wfDef)
+
+    await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
+    await waitForSubmitRunComplete(wfDef.jobs.length)
+
+    // 1. groupedTasksByRunId 只有 1 个 group（所有 task 共享同一个 runId）
+    const groups = store.groupedTasksByRunId
+    expect(groups.length, `只有 1 个 group（实际: ${groups.length}）`).toBe(1)
+
+    // 2. 没有 __manual__ 前缀的 group（孤儿 group）
+    const orphanGroups = groups.filter((g) => g.runId.startsWith('__manual__'))
+    expect(orphanGroups.length, '0 个孤儿 group（__manual__ 前缀）').toBe(0)
+
+    // 3. 唯一的 group 是真 group（runId 非 __manual__ 前缀）
+    expect(groups[0].runId, 'group runId 不以 __manual__ 开头').not.toMatch(/^__manual__/)
+
+    // 4. 所有 task 都在该 group 内（无散落 task）
+    expect(groups[0].tasks.length, '所有 task 都在唯一 group 内').toBe(store.tasks.length)
+  })
+
+  // ==================== 阶段二 非阻塞 submitRun + 批量取消测试（T7-T8）====================
+
+  // ==================== T7: submitRun 非阻塞（fire-and-forget）====================
+  it('T7: submitRun 非阻塞——< 100ms 返回 run 对象，batchCreateTasks 后台异步完成', async () => {
+    const wfDef = buildTestWorkflowDef(buildRealPlugins())
+    workflowStore.createDefinition(wfDef)
+
+    // 把 batchCreateTasks 延迟调大到 200ms，确保 submitRun 不等它完成
+    batchDelayMs = 200
+
+    const t0 = Date.now()
+    const run = await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
+    const elapsed = Date.now() - t0
+
+    // 1. submitRun 返回时间 < 100ms（fire-and-forget，不等 batchCreateTasks 完成）
+    expect(elapsed, `submitRun 应 < 100ms 返回（实际: ${elapsed}ms）`).toBeLessThan(100)
+
+    // 2. run 对象已创建（run.id 非空）
+    expect(run.id, 'run.id 非空').toBeTruthy()
+    expect(run.status, 'run.status === running（已启动）').toBe('running')
+
+    // 3. service.currentRun 已设置
+    expect(service.currentRun.value, 'service.currentRun 已设置').not.toBeNull()
+    expect(service.currentRun.value!.id, 'currentRun.id === run.id').toBe(run.id)
+
+    // 4. batchCreateTasks 还在后台执行（此时 store 应该还没有 task）
+    //    等 batchDelayMs=200ms 过后 task 才会 push 到 store
+    expect(store.tasks.length, 'batchCreateTasks 后台执行中，store 暂无 task').toBe(0)
+
+    // 5. 等待 IIFE 完成（batchCreateTasks 200ms 延迟后 task 才到 store）
+    await waitForSubmitRunComplete(wfDef.jobs.length)
+    expect(store.tasks.length, 'IIFE 完成后 store 有所有 task').toBeGreaterThan(0)
+  })
+
+  // ==================== T8: cancelRun 批量取消（一次 API）====================
+  it('T8: cancelRun 批量取消——只调 1 次 cancelRun API，cancelTask 不被调用', async () => {
+    const wfDef = buildTestWorkflowDef(buildRealPlugins())
+    workflowStore.createDefinition(wfDef)
+
+    const run = await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
+    await waitForSubmitRunComplete(wfDef.jobs.length)
+
+    // 取消前：所有 task 都是 queued 状态（非终态）
+    const tasksBefore = store.tasks.length
+    expect(tasksBefore, '取消前 store 有 task').toBeGreaterThan(0)
+
+    // 调 service.cancelRun（批量取消整个 run）
+    await service.cancelRun(run.id)
+
+    // 1. cancelRun API 只被调 1 次（不是 N 次 cancelTask）
+    expect(encvApi.cancelRun, 'cancelRun API 只调 1 次').toHaveBeenCalledTimes(1)
+    expect(encvApi.cancelRun, 'cancelRun API 参数是 runId').toHaveBeenCalledWith(run.id)
+
+    // 2. cancelTask API 没被调用（批量取消不逐个 cancelTask）
+    expect(encvApi.cancelTask, 'cancelTask API 不应被调用').not.toHaveBeenCalled()
+
+    // 3. run 状态变为 cancelled
+    expect(service.currentRun.value!.status, 'run.status === cancelled').toBe('cancelled')
+    expect(service.isRunning.value, 'isRunning === false').toBe(false)
+  })
+
+  // ==================== 阶段三 10 万虚拟滚动测试（T9）====================
+
+  // ==================== T9: 10 万 task store 容量（模拟器不虚拟滚动，验证 store 容量）====================
+  it('T9: 10 万 task store 容量——store.tasks.length === 100000 + visible-task-count 派生正确', async () => {
+    // 📝 注意：TaskListDiagSimulator 本身不虚拟滚动（v-for 渲染所有 item）。
+    //   真机 UI 用 TaskVirtualList.vue（@tanstack/vue-virtual）虚拟滚动，
+    //   DOM 节点数恒定 ≤ 30（可见窗口 + overscan）。
+    //   本测试验证 store 能容纳 10 万 task + 模拟器 visible-task-count 派生值正确。
+    //   真机虚拟滚动行为由 TaskVirtualList.test.ts 覆盖。
+
+    // 1. 往 store 中 push 10 万个 mock task（同一 runId）
+    const RUN_ID = 'run-100k-test'
+    const TOTAL = 100000
+    const mockTasks: EncvTask[] = []
+    for (let i = 0; i < TOTAL; i++) {
+      mockTasks.push({
+        id: `task-100k-${i}`,
+        type: 'encrypt',
+        sourcePath: `/mock/file-${i}.mp4`,
+        status: 'queued',
+        progress: 0,
+        runId: RUN_ID,
+        triggeredBy: 'automation',
+        createdAt: new Date().toISOString(),
+      })
+    }
+    // 用 appendTasksPage 批量追加（分页加载路径，不走 appendTask 单个 push）
+    store.appendTasksPage(mockTasks)
+
+    // 2. store 容量验证
+    expect(store.tasks.length, `store 容纳 10 万 task（实际: ${store.tasks.length}）`).toBe(TOTAL)
+
+    // 3. 挂载模拟器
+    wrapper = mountDiag()
+    await nextTick()
+
+    // 4. store-tasks-count 显示 10 万
+    const storeCount = Number(wrapper.find('[data-testid="store-tasks-count"]').text())
+    expect(storeCount, `store-tasks-count === 100000（实际: ${storeCount}）`).toBe(TOTAL)
+
+    // 5. groupedTasksByRunId 只有 1 个真 group（10 万 task 共享同一 runId）
+    const realGroupCount = Number(wrapper.find('[data-testid="real-group-count"]').text())
+    const fakeGroupCount = Number(wrapper.find('[data-testid="fake-group-count"]').text())
+    expect(realGroupCount, '1 个真 group（10 万 task 共享 runId）').toBe(1)
+    expect(fakeGroupCount, '0 伪 group').toBe(0)
+
+    // 6. virtual-scroll-container + visible-task-count 标记存在
+    expect(wrapper.find('[data-testid="virtual-scroll-container"]').exists(), 'virtual-scroll-container 标记存在').toBe(true)
+    const visibleTaskCount = Number(wrapper.find('[data-testid="visible-task-count"]').text())
+    expect(visibleTaskCount, `visible-task-count > 0（实际: ${visibleTaskCount}）`).toBeGreaterThan(0)
+
+    // 7. 📝 真机虚拟滚动验证（DOM task card 数 ≤ 30）由 TaskVirtualList.test.ts 覆盖
+    //    模拟器不虚拟滚动，visible-task-count 等于 displayedItems 中 kind==='task' 的数量
+    // eslint-disable-next-line no-console
+    console.log(`[T9] 10万 task: store=${storeCount} / 真 group=${realGroupCount} / visible-task-count=${visibleTaskCount}`)
   })
 })

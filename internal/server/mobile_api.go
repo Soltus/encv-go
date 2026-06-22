@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -185,6 +186,8 @@ func (s *Server) handleDeleteFileGin(c *gin.Context) {
 
 	task := s.mobileSvc.GetTaskManager().Create("delete", absPath, "", "", 0, "")
 	task.OriginalPath = absPath
+	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补 RunId 兜底 + 持久化 + 广播
+	s.mobileSvc.GetTaskManager().FinalizeCreatedTask(task)
 
 	c.JSON(http.StatusAccepted, gin.H{"taskId": task.ID})
 }
@@ -445,8 +448,33 @@ func (s *Server) handleRenameFileGin(c *gin.Context) {
 }
 
 func (s *Server) handleGetTasksGin(c *gin.Context) {
-	taskList := s.mobileSvc.GetTaskManager().List()
-	c.JSON(http.StatusOK, gin.H{"tasks": taskList})
+	// 🆕 2026-06-23 Task 5：分页 API（10 万任务虚拟滚动支撑）
+	//   - ?runId=xxx  → 只返回 task.RunId == runId 的 task（空则不过滤）
+	//   - &offset=0   → 默认 0
+	//   - &limit=100  → 默认 100，最大 500（防滥用）
+	//   - 响应头 X-Total-Count = 过滤后、分页前的总数
+	runId := c.Query("runId")
+
+	offset := 0
+	if v := c.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	limit := 100
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	tasks, totalCount := s.mobileSvc.GetTaskManager().ListPaginated(runId, offset, limit)
+	c.Header("X-Total-Count", strconv.Itoa(totalCount))
+	c.JSON(http.StatusOK, gin.H{"tasks": tasks})
 }
 
 func (s *Server) handleCreateTaskGin(c *gin.Context) {
@@ -582,6 +610,25 @@ func (s *Server) handleCancelTaskGin(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, task)
+}
+
+// handleCancelRunGin 批量取消指定 runId 下所有非终态 task。
+//
+// 🆕 2026-06-23 spec ws-timing-batch-throughput-100k Task 2.2：
+//   - 前端 cancelRun 一次 API 调用取消整个 run（替代逐个 cancelTask 循环）
+//   - 路由：POST /api/runs/:runId/cancel
+func (s *Server) handleCancelRunGin(c *gin.Context) {
+	runId := c.Param("runId")
+	if runId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "runId is required"})
+		return
+	}
+	err := s.mobileSvc.GetTaskManager().CancelByRunId(runId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "cancelled", "runId": runId})
 }
 
 func (s *Server) handleRetryTaskGin(c *gin.Context) {

@@ -35,6 +35,9 @@ import type { useTasksList } from '@/composables/useTasksList'
 import type { useTaskStore } from '@/stores/taskStore'
 import type { EncvTask, TaskStatus } from '@/api/encv'
 
+/** 终态 status 集合（用于判断 group 是否还有可取消的 task） */
+const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set(['completed', 'failed', 'cancelled'])
+
 /** 真机 1:1 复刻的 TaskList 模拟器（不含样式细节，保留所有控件 + handler + data-testid） */
 export const TaskListDiagSimulator = defineComponent({
   name: 'TaskListDiagSimulator',
@@ -51,6 +54,8 @@ export const TaskListDiagSimulator = defineComponent({
         openNewTask?: () => void | Promise<void>
         handleRefresh?: () => void | Promise<void>
         handleClearCompleted?: () => void | Promise<void>
+        /** 🆕 2026-06-23 Task 9.1：group card 上的取消按钮回调（批量取消整个 run） */
+        cancelRun?: (runId: string) => void | Promise<void>
       }>,
       default: () => ({}),
     },
@@ -85,6 +90,14 @@ export const TaskListDiagSimulator = defineComponent({
     const datePopoverOpen = computed(() => c.datePopoverOpen.value)
     const filteredTasks = computed(() => c.filteredTasks.value)
     const isGroupFilterActive = computed(() => hasActiveFilters.value || (searchQuery.value?.trim().length ?? 0) > 0)
+
+    // 🆕 2026-06-23 Task 9.2/9.3：分页加载 + 虚拟滚动容器派生
+    const isLoadingMore = computed(() => c.isLoadingMore.value)
+    const hasMore = computed(() => c.hasMore.value)
+    /** 当前虚拟滚动容器内的 item 数（date/group/task 三种 kind 总和）。
+     *  模拟器不虚拟滚动，等于 displayedItems.length；
+     *  真机 UI 用 TaskVirtualList.vue 虚拟滚动，DOM 节点数恒定 ≤ 30（可见窗口 + overscan）。 */
+    const visibleTaskCount = computed(() => (displayedItems.value as any[]).length)
 
     // ========== 真 group / 伪 group 数（诊断用） ==========
     const realGroupCount = computed(() =>
@@ -342,8 +355,14 @@ export const TaskListDiagSimulator = defineComponent({
             : null,
 
           // 5.3 displayedItems 列表：date / group / task 3 种 kind
-          h('div', { 'data-testid': 'displayed-items-list' },
-            (displayedItems.value as any[]).map((item: any) => {
+          // 🆕 2026-06-23 Task 9.3：加 virtual-scroll-container 标记 + visible-task-count
+          //   注意：模拟器本身不虚拟滚动（v-for 渲染所有 item），真机 UI 用 TaskVirtualList.vue
+          //   虚拟滚动（DOM 节点数恒定 ≤ 30）。这里加标记是为了让测试能验证 store 容量 +
+          //   visible-task-count 派生值，真机虚拟滚动行为由 TaskVirtualList.test.ts 覆盖。
+          h('div', { 'data-testid': 'virtual-scroll-container', class: 'virtual-scroll-container' }, [
+            h('div', { 'data-testid': 'visible-task-count' }, String(visibleTaskCount.value)),
+            h('div', { 'data-testid': 'displayed-items-list' },
+              (displayedItems.value as any[]).map((item: any) => {
               if (item.kind === 'date') {
                 return h('div', {
                   'data-testid': `date-section-${item.key}`,
@@ -424,6 +443,22 @@ export const TaskListDiagSimulator = defineComponent({
                   // 命中行（v-if isGroupFilterActive）
                   isGroupFilterActive.value
                     ? h('div', { class: 'group-card__hit' }, `hit ${item.tasks.length}`)
+                    : null,
+                  // 🆕 2026-06-23 Task 9.1：group card 取消按钮（只在 group 有非终态 task 时显示）
+                  //   - 真机 UI：长按 group → action sheet → "取消整组"
+                  //   - 模拟器：直接渲染按钮，方便测试点击
+                  //   - __manual__ 伪 group 不显示取消按钮（没有真实 runId 可取消）
+                  !isFake && (item.tasks as EncvTask[]).some((tk) => !TERMINAL_STATUSES.has(tk.status))
+                    ? h('button', {
+                        'data-testid': 'group-cancel-btn',
+                        'data-run-id': item.runId,
+                        class: 'group-cancel-btn',
+                        title: 'Cancel all tasks in this run',
+                        onClick: (e: Event) => {
+                          e.stopPropagation()
+                          void props.handlers.cancelRun?.(item.runId)
+                        },
+                      }, 'Cancel run')
                     : null,
                 ])
               }
@@ -508,7 +543,21 @@ export const TaskListDiagSimulator = defineComponent({
               }
               return h('div', { class: 'unknown' }, JSON.stringify(item))
             }),
-          ),
+            ),
+            // 🆕 2026-06-23 Task 9.2：分页加载指示器（列表底部）
+            //   - load-more-spinner：isLoadingMore 时显示
+            //   - load-more-btn：hasMore && !isLoadingMore 时显示，点击调 c.loadMore()
+            isLoadingMore.value
+              ? h('div', { 'data-testid': 'load-more-spinner', class: 'load-more-spinner' }, 'Loading more...')
+              : null,
+            hasMore.value && !isLoadingMore.value
+              ? h('button', {
+                  'data-testid': 'load-more-btn',
+                  class: 'load-more-btn',
+                  onClick: () => { void c.loadMore() },
+                }, 'Load more')
+              : null,
+          ]),
         ]),
       )
 

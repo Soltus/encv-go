@@ -279,6 +279,8 @@ func (s *Server) handleFileRenameGin(c *gin.Context) {
 
 	task := s.mobileSvc.GetTaskManager().Create("rename", oldAbsPath, newAbsPath, "", 0, "")
 	task.OriginalPath = oldAbsPath
+	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补 RunId 兜底 + 持久化 + 广播
+	s.mobileSvc.GetTaskManager().FinalizeCreatedTask(task)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"taskId": task.ID,
@@ -320,6 +322,8 @@ func (s *Server) handleFileCopyGin(c *gin.Context) {
 	}
 
 	task := s.mobileSvc.GetTaskManager().Create("copy", srcAbsPath, destAbsPath, "", 0, "")
+	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补 RunId 兜底 + 持久化 + 广播
+	s.mobileSvc.GetTaskManager().FinalizeCreatedTask(task)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"taskId": task.ID,
@@ -362,6 +366,8 @@ func (s *Server) handleFileMoveGin(c *gin.Context) {
 
 	task := s.mobileSvc.GetTaskManager().Create("move", srcAbsPath, destAbsPath, "", 0, "")
 	task.OriginalPath = srcAbsPath
+	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补 RunId 兜底 + 持久化 + 广播
+	s.mobileSvc.GetTaskManager().FinalizeCreatedTask(task)
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"taskId": task.ID,

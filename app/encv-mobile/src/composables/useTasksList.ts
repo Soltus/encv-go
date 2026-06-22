@@ -279,12 +279,24 @@ function createUseTasksList() {
   }
   function formatWarningDetail(detail: string): string { return detail }
 
-  // ============ fetch / refresh（直接调 store） ============
+  // ============ fetch / refresh / loadMore（分页加载） ============
+  // 🆕 2026-06-23 Task 6.2/6.3：分页加载（首屏 100，滚动到底部 loadMore）
+  //   - fetchTasks：首屏 offset=0 limit=100 → rebuildFromBackend（替换 store）
+  //   - loadMore：offset+=100 limit=100 → appendTasksPage（追加到 store 末尾）
+  //   - hasMore：list.length >= PAGE_SIZE → 可能还有更多
+  //   - refresh = fetchTasks（重置 offset=0）
+  const PAGE_SIZE = 100
+  const _paginationOffset = ref(0)
+  const hasMore = ref(false)
+  const isLoadingMore = ref(false)
+
   async function fetchTasks(_opts?: { silent?: boolean }): Promise<void> {
     store.isRefreshing = true
     try {
-      const list = await apiGetTasks()
+      const list = await apiGetTasks({ offset: 0, limit: PAGE_SIZE })
       store.rebuildFromBackend(list)
+      _paginationOffset.value = 0
+      hasMore.value = list.length >= PAGE_SIZE
     } catch (err) {
       console.warn('[useTasksList.fetchTasks] failed:', err)
     } finally {
@@ -292,6 +304,23 @@ function createUseTasksList() {
     }
   }
   function refresh(): Promise<void> { return fetchTasks({ silent: true }) }
+
+  // 🆕 Task 6.3：滚动到底部增量加载下一页（UI 层监听滚动，调此函数）
+  async function loadMore(): Promise<void> {
+    if (isLoadingMore.value || !hasMore.value) return
+    isLoadingMore.value = true
+    try {
+      const nextOffset = _paginationOffset.value + PAGE_SIZE
+      const list = await apiGetTasks({ offset: nextOffset, limit: PAGE_SIZE })
+      store.appendTasksPage(list)
+      _paginationOffset.value = nextOffset
+      hasMore.value = list.length >= PAGE_SIZE
+    } catch (err) {
+      console.warn('[useTasksList.loadMore] failed:', err)
+    } finally {
+      isLoadingMore.value = false
+    }
+  }
 
   // ============ 任务操作 ============
   async function cancelTaskById(id: string): Promise<void> {
@@ -395,7 +424,8 @@ function createUseTasksList() {
     getStatusChipLabel, isPasswordError, toggleWarningDetail, formatWarningDetail,
     formatDateTime: dateFormat,
     // 操作
-    fetchTasks, refresh,
+    fetchTasks, refresh, loadMore,
+    hasMore, isLoadingMore,
     cancelRun, cancelTaskById, retryTaskById, removeTaskById, removeRunTasks, clearCompletedWithConfirm,
     onSearchInput, toggleSort, toggleViewMode,
     openPluginPopover, openTypePopover, openStatusPopover, openDatePopover,

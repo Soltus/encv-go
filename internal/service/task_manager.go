@@ -564,15 +564,17 @@ func (tm *TaskManager) Create(taskType, sourcePath, targetPath, password string,
 	tm.tasks[task.ID] = task
 	tm.mu.Unlock()
 
-	tm.saveTasks()
+	// 🆕 2026-06-23 WS 时序修复（spec ws-timing-batch-throughput-100k Task 1）：
+	//   - Create 不再内部广播 task:created（避免 admin_handlers / mobile_api / rollback_manager
+	//     等直接调 Create 的路径在 runId 未设置时就广播 → 前端收到无 runId 的 task 变孤儿）
+	//   - 改由 CreateWithRunMeta（设置 runId 之后）或外部调用方（补 RunId 兜底后）负责广播
+	//   - 持久化改用 saveTaskSingle（O(1) 单行写），替代 saveTasks（全表写）
+	tm.saveTaskSingle(task)
 
 	slog.Info("Task created", "id", task.ID, "type", taskType, "source", sourcePath,
 		"target", targetPath, "version", version,
 		"mountId", task.MountID, "mountSubPath", task.MountSubPath,
 		"targetMountId", task.TargetMountID)
-	if tm.broadcaster != nil {
-		tm.broadcaster.Broadcast("task:created", task)
-	}
 	return task
 }
 
@@ -581,6 +583,33 @@ func (tm *TaskManager) CreateWithExtras(taskType, sourcePath, targetPath, passwo
 	task.SecondaryPassword = secondaryPassword
 	task.ExtraFields = extras
 	return task
+}
+
+// BroadcastCreated 广播 task:created 事件。
+//
+// 🆕 2026-06-23 WS 时序修复（spec ws-timing-batch-throughput-100k Task 1）：
+//   - Create 不再内部广播，外部调用方（admin_handlers / mobile_api / rollback_manager）
+//     在补完 RunId 兜底后调本 helper 触发广播
+//   - 保证前端收到的 task:created payload 一定带 runId（不会产生孤儿 group）
+//   - broadcaster 为 nil 时静默跳过（向后兼容无 WS 的测试场景）
+func (tm *TaskManager) BroadcastCreated(task *MobileTask) {
+	if tm.broadcaster != nil {
+		tm.broadcaster.Broadcast("task:created", task)
+	}
+}
+
+// FinalizeCreatedTask 补 RunId 兜底 + 单行持久化 + 广播 task:created。
+//
+// 🆕 2026-06-23 WS 时序修复（spec ws-timing-batch-throughput-100k Task 1）：
+//   - 供外部包（server）调用——Create 不再内部广播也不再内部设 RunId
+//   - 外部调用方在设置完 task 业务字段（OriginalPath 等）后调本方法收尾
+//   - 内部封装 saveTaskSingle（O(1) 单行写），不暴露未导出的 saveTaskSingle
+func (tm *TaskManager) FinalizeCreatedTask(task *MobileTask) {
+	if task.RunId == "" {
+		task.RunId = "manual-" + task.ID
+	}
+	tm.saveTaskSingle(task)
+	tm.BroadcastCreated(task)
 }
 
 // 🆕 v6 2026-06-18：CreateWithRunMeta 接受 runId / triggeredBy 持久化
@@ -624,6 +653,12 @@ func (tm *TaskManager) CreateWithRunMeta(
 	task.TriggeredBy = triggeredBy
 	// 🆕 2026-06-22 Q6A：单行写（O(1)），替代 saveTasks() 全表写
 	tm.saveTaskSingle(task)
+	// 🆕 2026-06-23 WS 时序修复（spec ws-timing-batch-throughput-100k Task 1）：
+	//   - Create 不再内部广播，改由 CreateWithRunMeta 在 runId 设置之后广播
+	//   - 保证前端收到的 task:created payload 一定带 runId（不会产生孤儿 group）
+	if tm.broadcaster != nil {
+		tm.broadcaster.Broadcast("task:created", task)
+	}
 	return task
 }
 
@@ -695,6 +730,43 @@ func (tm *TaskManager) List() []*MobileTask {
 	return result
 }
 
+// ListPaginated 按 runId 过滤后做 offset/limit 分页，返回分页后的切片和过滤后的总数。
+//
+// 🆕 2026-06-23 Task 5：后端分页 API（10 万任务虚拟滚动支撑）
+//   - runId 非空 → 只保留 task.RunId == runId 的 task
+//   - runId 为空 → 不过滤（返回全部）
+//   - offset/limit 由调用方（handler）解析 + clamp，此处再做一次边界保护
+//   - 返回 totalCount = 过滤后、分页前的总数（供 handler 写 X-Total-Count 响应头）
+func (tm *TaskManager) ListPaginated(runId string, offset, limit int) ([]*MobileTask, int) {
+	all := tm.List()
+
+	filtered := all
+	if runId != "" {
+		filtered = make([]*MobileTask, 0, len(all))
+		for _, t := range all {
+			if t.RunId == runId {
+				filtered = append(filtered, t)
+			}
+		}
+	}
+	totalCount := len(filtered)
+
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > totalCount {
+		offset = totalCount
+	}
+	if limit < 0 {
+		limit = 0
+	}
+	end := offset + limit
+	if end > totalCount {
+		end = totalCount
+	}
+	return filtered[offset:end], totalCount
+}
+
 func (tm *TaskManager) Get(id string) (*MobileTask, error) {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
@@ -732,6 +804,62 @@ func (tm *TaskManager) Cancel(id string) (*MobileTask, error) {
 		})
 	}
 	return task, nil
+}
+
+// CancelByRunId 批量取消指定 runId 下所有非终态的 task。
+//
+// 🆕 2026-06-23 spec ws-timing-batch-throughput-100k Task 2.1：
+//   - 前端 cancelRun 一次 API 调用取消整个 run（替代逐个 cancelTask 循环 N 次）
+//   - 终态 task（success/failure/cancelled/timed_out/completed/failed）跳过不取消
+//   - running task → cancelling + 调 cancelFn（与 Cancel 一致）
+//   - 其他非终态 task（queued/cancelling 等）→ 直接 cancelled
+//   - 每个取消的 task 广播 task:update + saveTaskSingle 持久化
+//   - 返回 nil 表示成功（即使部分 task 取消失败也只记日志，不阻断整体）
+func (tm *TaskManager) CancelByRunId(runId string) error {
+	if runId == "" {
+		return errors.New("runId is required")
+	}
+
+	// 锁内收集需要取消的 task ID（避免长时间持锁，Cancel 会自己加锁）
+	tm.mu.RLock()
+	var toCancel []string
+	for id, task := range tm.tasks {
+		if task.RunId != runId {
+			continue
+		}
+		if isTerminalStatus(task.Status) {
+			continue
+		}
+		toCancel = append(toCancel, id)
+	}
+	tm.mu.RUnlock()
+
+	for _, id := range toCancel {
+		// 复用 Cancel 逻辑：状态转换 + cancelFn + 广播 task:update
+		cancelledTask, err := tm.Cancel(id)
+		if err != nil {
+			// 单个取消失败不阻断整体（task 可能已被 worker 并发处理）
+			slog.Warn("CancelByRunId: cancel task failed", "taskId", id, "runId", runId, "error", err)
+			continue
+		}
+		// Cancel 不持久化，这里补单行持久化（与 failTask 模式一致）
+		tm.saveTaskSingle(cancelledTask)
+	}
+
+	return nil
+}
+
+// isTerminalStatus 判断 task 状态是否为终态（不可再变更）。
+//
+// 终态集合同时覆盖 spec 术语（success/failure/timed_out）和实际代码库状态
+// （completed/failed），保证测试场景（用 "success"）和生产场景（用 "completed"/"failed"）
+// 都正确识别终态、跳过取消。
+func isTerminalStatus(status string) bool {
+	switch status {
+	case "success", "failure", "cancelled", "timed_out", "completed", "failed":
+		return true
+	}
+	return false
 }
 
 func (tm *TaskManager) updateProgress(id string, progress int, phase, speed, eta string) {

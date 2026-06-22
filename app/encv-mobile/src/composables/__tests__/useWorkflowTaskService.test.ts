@@ -6,7 +6,7 @@
  * 2. 4 件套事件回调正确更新 StepRun（mock useTaskEventBridge）
  * 3. 终态保护：已终态 StepRun 不被 onTaskUpdate 覆盖
  * 4. 持久化裁剪：超过 50 条时按 startedAt 倒序保留最新 50 条
- * 5. cancelRun 标记 cancelling → cancelled + 调用 cancelTask API
+ * 5. cancelRun 标记 cancelling → cancelled + 调用 cancelRun API（一次批量取消）
  * 6. listRuns / clearRuns / getRun
  * 7. subscribeRun 订阅运行更新
  * 8. submitRun 拒绝重复运行
@@ -28,13 +28,15 @@ vi.mock('@/composables/useTaskEventBridge', () => ({
   },
 }))
 
-/** mock batchCreateTasks / cancelTask（用 any 类型避免 Mock 不可调用问题） */
+/** mock batchCreateTasks / cancelTask / cancelRun（用 any 类型避免 Mock 不可调用问题） */
 let batchCreateTasksMock: (...args: any[]) => any
 let cancelTaskMock: (...args: any[]) => any
+let cancelRunMock: (...args: any[]) => any
 
 vi.mock('@/api/encv', () => ({
   batchCreateTasks: (...args: any[]) => batchCreateTasksMock(...args),
   cancelTask: (...args: any[]) => cancelTaskMock(...args),
+  cancelRun: (...args: any[]) => cancelRunMock(...args),
 }))
 
 /** mock setTaskMetadata */
@@ -172,6 +174,7 @@ beforeEach(() => {
     }))
   })
   cancelTaskMock = vi.fn().mockResolvedValue(undefined)
+  cancelRunMock = vi.fn().mockResolvedValue(undefined)
   setTaskMetadataMock.mockClear()
   vi.restoreAllMocks()
   // 重新设置 mock（vi.restoreAllMocks 会清除实现）
@@ -187,6 +190,7 @@ beforeEach(() => {
     }))
   })
   cancelTaskMock = vi.fn().mockResolvedValue(undefined)
+  cancelRunMock = vi.fn().mockResolvedValue(undefined)
 })
 
 // ==================== 测试用例 ====================
@@ -446,7 +450,7 @@ describe('useWorkflowTaskService — 持久化裁剪', () => {
 })
 
 describe('useWorkflowTaskService — cancelRun', () => {
-  it('cancelRun 标记 cancelling → cancelled + 调用 cancelTask API', async () => {
+  it('cancelRun 标记 cancelling → cancelled + 调用 cancelRun API（一次批量取消）', async () => {
     const service = useWorkflowTaskService()
     const run = await service.submitRun({ workflow: makeSimpleWorkflow() })
     const step = service.currentRun.value!.jobs[0].steps[0]
@@ -454,7 +458,10 @@ describe('useWorkflowTaskService — cancelRun', () => {
 
     await service.cancelRun(run.id)
 
-    expect(cancelTaskMock).toHaveBeenCalledWith(step.taskId)
+    // 🆕 2026-06-23 Task 4：一次 API 取消整个 run（不再逐个 cancelTask）
+    expect(cancelRunMock).toHaveBeenCalledTimes(1)
+    expect(cancelRunMock).toHaveBeenCalledWith(run.id)
+    expect(cancelTaskMock).not.toHaveBeenCalled()
     expect(step.status).toBe('cancelled')
     expect(service.currentRun.value!.status).toBe('cancelled')
     expect(service.isRunning.value).toBe(false)
@@ -464,7 +471,7 @@ describe('useWorkflowTaskService — cancelRun', () => {
     const service = useWorkflowTaskService()
     await service.submitRun({ workflow: makeSimpleWorkflow() })
     await service.cancelRun('nonexistent-run-id')
-    expect(cancelTaskMock).not.toHaveBeenCalled()
+    expect(cancelRunMock).not.toHaveBeenCalled()
     expect(service.currentRun.value!.status).toBe('running')
   })
 
@@ -477,7 +484,7 @@ describe('useWorkflowTaskService — cancelRun', () => {
     expect(service.currentRun.value!.status).toBe('success')
     // 尝试取消
     await service.cancelRun(run.id)
-    expect(cancelTaskMock).not.toHaveBeenCalled()
+    expect(cancelRunMock).not.toHaveBeenCalled()
     expect(service.currentRun.value!.status).toBe('success')
   })
 })

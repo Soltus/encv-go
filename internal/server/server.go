@@ -567,6 +567,7 @@ func (s *Server) Start(version string) (string, error) {
 	r.POST("/api/tasks/batch", s.handleCreateTaskBatchGin) // 🆕 2026-06-23 批量创建（真实架构实现）
 	r.POST("/api/tasks/predict-plugin", s.handlePredictPluginGin)
 	r.POST("/api/tasks/:id/cancel", s.handleCancelTaskGin)
+	r.POST("/api/runs/:runId/cancel", s.handleCancelRunGin) // 🆕 2026-06-23 批量取消整个 run
 	r.POST("/api/tasks/:id/retry", s.handleRetryTaskGin)
 	r.POST("/api/tasks/:id/rollback", s.handleRollbackTaskGin)
 	r.DELETE("/api/tasks/:id", s.handleRemoveTaskGin)
