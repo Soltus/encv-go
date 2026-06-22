@@ -150,6 +150,8 @@ describe('逃逸反向测试（5 个假设，按顺序跑，看哪些红）', ()
     // 把断言写宽松：r-A group 里必须有 10 个 task
     const tIdsInRealGroup = realGroup!.findAll('.group-task').map((el) => el.attributes('data-id'))
     expect(tIdsInRealGroup.length).toBe(10)
+    // 显式消费 tIdsInRealGroup（保留断言意图）
+    expect(tIdsInRealGroup.every((id) => id?.startsWith('t-'))).toBe(true)
   })
 
   // ============ 假设 B：WS 推 update payload 含 runId=null（不是 undefined）→ 覆盖 prev.runId ============

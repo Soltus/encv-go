@@ -271,6 +271,16 @@ describe('真机"任务逃逸"e2e — 对齐真实路径（buildDynamicWorkflowP
 
     // 3. 跑 100 轮 WS update 事件（每个 task 推 1 次 progress 0→100 + status running→completed）
     //    update payload 里 runId="" 字符串（Go omitempty 仍输出 ""）
+    //
+    // 🆕 2026-06-22 全程追踪（user 反馈"逃逸是状态更新导致的"）：
+    //    每轮 update 后立刻检查 composable.groupedTasksByRunId.value，
+    //    记录任何瞬时 fake group 到 escapeTimeline，确保不是只在终态断言
+    const escapeTimeline: Array<{
+      round: number
+      fakeGroupCount: number
+      escapeTaskCount: number
+      sampleFakeRunIds: string[]
+    }> = []
     let totalUpdates = 0
     for (let round = 0; round < 100; round++) {
       // 每次更新 10% task
@@ -285,12 +295,32 @@ describe('真机"任务逃逸"e2e — 对齐真实路径（buildDynamicWorkflowP
         store.patchTaskById(t.id, partial)
         totalUpdates++
       }
+      // 全程追踪：每轮 update 完立刻检查 fake group 数量
+      const grouped = composable.groupedTasksByRunId.value
+      const fakeGroups = grouped.filter((g) => g.runId.startsWith('__manual__'))
+      if (fakeGroups.length > 0) {
+        escapeTimeline.push({
+          round,
+          fakeGroupCount: fakeGroups.length,
+          escapeTaskCount: fakeGroups.reduce((acc, g) => acc + g.tasks.length, 0),
+          sampleFakeRunIds: fakeGroups.slice(0, 3).map((g) => g.runId),
+        })
+      }
     }
     await nextTick()
     wrapper = mount(TaskListDiag)
     await nextTick()
 
-    // === 关键断言：1000+ task 100 轮 WS update 后应该 1 个真 group + 0 伪 group + 0 逃逸 ===
+    // === 关键断言 1：100 轮 update 全程 0 瞬时逃逸（不是只在终态断言） ===
+    // eslint-disable-next-line no-console
+    console.log(`[E2E-REAL] T2 escapeTimeline: ${escapeTimeline.length} rounds 出现瞬时逃逸`)
+    if (escapeTimeline.length > 0) {
+      // eslint-disable-next-line no-console
+      console.log(`[E2E-REAL] T2 escapeTimeline[0..3]:`, escapeTimeline.slice(0, 3))
+    }
+    expect(escapeTimeline.length, 'B 方向修复：100 轮 update 全程 0 瞬时逃逸（不是只在终态断言）').toBe(0)
+
+    // === 关键断言 2：1000+ task 100 轮 WS update 后应该 1 个真 group + 0 伪 group + 0 逃逸 ===
     const realGroupCount = Number(wrapper.find('[data-testid="real-group-count"]').text())
     const fakeGroupCount = Number(wrapper.find('[data-testid="fake-group-count"]').text())
     const escapeTaskCount = Number(wrapper.find('[data-testid="escape-task-count"]').text())

@@ -326,6 +326,16 @@
                       :title="t('tasks.pinnedTitle')"
                     ></ion-icon>
                   </h2>
+                  <!-- 🆕 2026-06-22 逃逸诊断：group card 标题下方显示 runId（user 反馈"截图中连 runId 都没显示"） -->
+                  <!-- 关键：4 个 group card 显示 4 个不同 runId → 是 4 个独立 run（合理） -->
+                  <!--        4 个 group card 显示同一个 runId → 任务逃逸（bug） -->
+                  <!-- 伪 group（__manual__${id}）红字标，一眼能看出"逃逸 task 散落" -->
+                  <code
+                    class="tl-group-card__runid"
+                    :class="item.runId.startsWith('__manual__') ? 'tl-group-card__runid--fake' : ''"
+                    :title="item.runId.startsWith('__manual__') ? '⚠️ 逃逸 task（runId 丢失）' : 'runId: ' + item.runId"
+                    data-testid="group-card-runid"
+                  >{{ item.runId }}</code>
                   <!-- plugin badges（前 3 个，超过省略） -->
                   <div class="tl-group-card__plugins">
                     <ion-badge
@@ -1637,6 +1647,28 @@ onIonViewWillEnter(() => {
   --padding-end: 5px;
   --padding-top: 1px;
   --padding-bottom: 1px;
+}
+
+/* 🆕 2026-06-22 逃逸诊断：group card 显示 runId（user 反馈"截图中连 runId 都没显示"） */
+.tl-group-card__runid {
+  display: inline-block;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  color: var(--ion-color-medium-shade);
+  background: var(--ion-color-light-shade, #e6e7eb);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-top: 2px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.tl-group-card__runid--fake {
+  color: var(--ion-color-danger-shade, #b30000);
+  background: var(--ion-color-danger-tint, #f5b3b3);
+  font-weight: 700;
 }
 .tl-group-card__actions {
   display: flex;
