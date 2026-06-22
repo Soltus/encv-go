@@ -371,3 +371,220 @@ func TestDeleteTrash(t *testing.T) {
 		t.Errorf("GetTrash after delete: expected error, got nil")
 	}
 }
+
+// 🆕 2026-06-23 Task 13.1：CountByRunId SQL 验证
+//   - 按 runId 统计各状态的任务数（SELECT status, COUNT(*) GROUP BY status）
+//   - runId 为空时返回空 map
+//   - 不存在的 runId 返回空 map
+//   - 多状态混合时正确分组
+func TestCountByRunId(t *testing.T) {
+	store := newTestStore(t)
+
+	// 创建 run-A：3 completed + 2 failed + 1 running
+	runA := "run-a-20260623"
+	tasksA := []tasksystem.TaskData{
+		{ID: "a1", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, RunID: runA, TriggeredBy: "automation", CreatedAt: time.Now().UTC()},
+		{ID: "a2", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, RunID: runA, TriggeredBy: "automation", CreatedAt: time.Now().UTC()},
+		{ID: "a3", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, RunID: runA, TriggeredBy: "automation", CreatedAt: time.Now().UTC()},
+		{ID: "a4", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusFailed, RunID: runA, TriggeredBy: "automation", CreatedAt: time.Now().UTC()},
+		{ID: "a5", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusFailed, RunID: runA, TriggeredBy: "automation", CreatedAt: time.Now().UTC()},
+		{ID: "a6", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusRunning, RunID: runA, TriggeredBy: "automation", CreatedAt: time.Now().UTC()},
+	}
+	for _, task := range tasksA {
+		if err := store.CreateTask(task); err != nil {
+			t.Fatalf("CreateTask %s: %v", task.ID, err)
+		}
+	}
+
+	// 创建 run-B：2 queued + 1 cancelled
+	runB := "run-b-20260623"
+	tasksB := []tasksystem.TaskData{
+		{ID: "b1", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusQueued, RunID: runB, TriggeredBy: "user", CreatedAt: time.Now().UTC()},
+		{ID: "b2", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusQueued, RunID: runB, TriggeredBy: "user", CreatedAt: time.Now().UTC()},
+		{ID: "b3", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCancelled, RunID: runB, TriggeredBy: "user", CreatedAt: time.Now().UTC()},
+	}
+	for _, task := range tasksB {
+		if err := store.CreateTask(task); err != nil {
+			t.Fatalf("CreateTask %s: %v", task.ID, err)
+		}
+	}
+
+	// 创建一个无 runId 的 task（不应被统计）
+	manualTask := tasksystem.TaskData{
+		ID: "manual-1", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted,
+		TriggeredBy: "user", CreatedAt: time.Now().UTC(),
+	}
+	if err := store.CreateTask(manualTask); err != nil {
+		t.Fatalf("CreateTask manual-1: %v", err)
+	}
+
+	// 1) run-A 统计：completed=3, failed=2, running=1
+	countsA, err := store.CountByRunId(runA)
+	if err != nil {
+		t.Fatalf("CountByRunId runA: %v", err)
+	}
+	if len(countsA) != 3 {
+		t.Errorf("runA: len(counts) = %d, want 3 (completed/failed/running)", len(countsA))
+	}
+	if countsA["completed"] != 3 {
+		t.Errorf("runA completed = %d, want 3", countsA["completed"])
+	}
+	if countsA["failed"] != 2 {
+		t.Errorf("runA failed = %d, want 2", countsA["failed"])
+	}
+	if countsA["running"] != 1 {
+		t.Errorf("runA running = %d, want 1", countsA["running"])
+	}
+
+	// 2) run-B 统计：queued=2, cancelled=1
+	countsB, err := store.CountByRunId(runB)
+	if err != nil {
+		t.Fatalf("CountByRunId runB: %v", err)
+	}
+	if countsB["queued"] != 2 {
+		t.Errorf("runB queued = %d, want 2", countsB["queued"])
+	}
+	if countsB["cancelled"] != 1 {
+		t.Errorf("runB cancelled = %d, want 1", countsB["cancelled"])
+	}
+
+	// 3) runId 为空 → 空 map
+	emptyCounts, err := store.CountByRunId("")
+	if err != nil {
+		t.Fatalf("CountByRunId empty: %v", err)
+	}
+	if len(emptyCounts) != 0 {
+		t.Errorf("empty runId: len(counts) = %d, want 0", len(emptyCounts))
+	}
+
+	// 4) 不存在的 runId → 空 map
+	missingCounts, err := store.CountByRunId("nonexistent-run")
+	if err != nil {
+		t.Fatalf("CountByRunId missing: %v", err)
+	}
+	if len(missingCounts) != 0 {
+		t.Errorf("missing runId: len(counts) = %d, want 0", len(missingCounts))
+	}
+}
+
+// 🆕 2026-06-23 Task 13.2：ListRuns SQL 验证
+//   - 列出所有 run（去重 runId），带最早创建时间和 triggeredBy
+//   - 按 startedAt 倒序排列
+//   - 不包含 runId 为空的 task
+func TestListRuns(t *testing.T) {
+	store := newTestStore(t)
+
+	// 时间递增创建 3 个 run
+	baseTime := time.Date(2026, 6, 23, 10, 0, 0, 0, time.UTC)
+	runOld := "run-old"
+	runMid := "run-mid"
+	runNew := "run-new"
+
+	// run-old：2 个 task，最早创建
+	oldTasks := []tasksystem.TaskData{
+		{ID: "old1", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, RunID: runOld, TriggeredBy: "automation", CreatedAt: baseTime},
+		{ID: "old2", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, RunID: runOld, TriggeredBy: "automation", CreatedAt: baseTime.Add(1 * time.Second)},
+	}
+	// run-mid：1 个 task
+	midTasks := []tasksystem.TaskData{
+		{ID: "mid1", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusRunning, RunID: runMid, TriggeredBy: "ai_agent", CreatedAt: baseTime.Add(10 * time.Second)},
+	}
+	// run-new：3 个 task，最新创建
+	newTasks := []tasksystem.TaskData{
+		{ID: "new1", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusQueued, RunID: runNew, TriggeredBy: "user", CreatedAt: baseTime.Add(100 * time.Second)},
+		{ID: "new2", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusQueued, RunID: runNew, TriggeredBy: "user", CreatedAt: baseTime.Add(101 * time.Second)},
+		{ID: "new3", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusQueued, RunID: runNew, TriggeredBy: "user", CreatedAt: baseTime.Add(102 * time.Second)},
+	}
+	// 无 runId 的 task（不应出现在 ListRuns 中）
+	manualTask := tasksystem.TaskData{
+		ID: "manual-1", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted,
+		TriggeredBy: "user", CreatedAt: baseTime.Add(200 * time.Second),
+	}
+
+	for _, task := range append(append(append(oldTasks, midTasks...), newTasks...), manualTask) {
+		if err := store.CreateTask(task); err != nil {
+			t.Fatalf("CreateTask %s: %v", task.ID, err)
+		}
+	}
+
+	runs, err := store.ListRuns()
+	if err != nil {
+		t.Fatalf("ListRuns: %v", err)
+	}
+
+	// 应该返回 3 个 run（不含 manual）
+	if len(runs) != 3 {
+		t.Fatalf("len(runs) = %d, want 3", len(runs))
+	}
+
+	// 按 startedAt 倒序：run-new > run-mid > run-old
+	if runs[0].RunID != runNew {
+		t.Errorf("runs[0].RunID = %q, want %q", runs[0].RunID, runNew)
+	}
+	if runs[1].RunID != runMid {
+		t.Errorf("runs[1].RunID = %q, want %q", runs[1].RunID, runMid)
+	}
+	if runs[2].RunID != runOld {
+		t.Errorf("runs[2].RunID = %q, want %q", runs[2].RunID, runOld)
+	}
+
+	// run-new 的 startedAt 应该是 baseTime+100s（最早 task）
+	if !runs[0].StartedAt.Equal(baseTime.Add(100 * time.Second)) {
+		t.Errorf("runNew StartedAt = %v, want %v", runs[0].StartedAt, baseTime.Add(100*time.Second))
+	}
+	// run-old 的 startedAt 应该是 baseTime（最早 task）
+	if !runs[2].StartedAt.Equal(baseTime) {
+		t.Errorf("runOld StartedAt = %v, want %v", runs[2].StartedAt, baseTime)
+	}
+
+	// triggeredBy 正确
+	if runs[0].TriggeredBy != "user" {
+		t.Errorf("runNew TriggeredBy = %q, want user", runs[0].TriggeredBy)
+	}
+	if runs[1].TriggeredBy != "ai_agent" {
+		t.Errorf("runMid TriggeredBy = %q, want ai_agent", runs[1].TriggeredBy)
+	}
+	if runs[2].TriggeredBy != "automation" {
+		t.Errorf("runOld TriggeredBy = %q, want automation", runs[2].TriggeredBy)
+	}
+}
+
+// 🆕 2026-06-23 Task 13.2：ListRuns 空表场景
+func TestListRuns_Empty(t *testing.T) {
+	store := newTestStore(t)
+
+	runs, err := store.ListRuns()
+	if err != nil {
+		t.Fatalf("ListRuns empty: %v", err)
+	}
+	if runs != nil && len(runs) != 0 {
+		t.Errorf("empty store: len(runs) = %d, want 0", len(runs))
+	}
+}
+
+// 🆕 2026-06-23 Task 13.2：ListRuns 只统计有 runId 的 task
+func TestListRuns_OnlyRunIdTasks(t *testing.T) {
+	store := newTestStore(t)
+
+	// 创建 2 个有 runId + 3 个无 runId
+	tasks := []tasksystem.TaskData{
+		{ID: "r1", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, RunID: "run-1", TriggeredBy: "user", CreatedAt: time.Now().UTC()},
+		{ID: "r2", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, RunID: "run-2", TriggeredBy: "user", CreatedAt: time.Now().UTC().Add(time.Second)},
+		{ID: "m1", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, TriggeredBy: "user", CreatedAt: time.Now().UTC()},
+		{ID: "m2", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, TriggeredBy: "user", CreatedAt: time.Now().UTC()},
+		{ID: "m3", Type: tasksystem.TaskTypeEncrypt, Status: tasksystem.StatusCompleted, TriggeredBy: "user", CreatedAt: time.Now().UTC()},
+	}
+	for _, task := range tasks {
+		if err := store.CreateTask(task); err != nil {
+			t.Fatalf("CreateTask %s: %v", task.ID, err)
+		}
+	}
+
+	runs, err := store.ListRuns()
+	if err != nil {
+		t.Fatalf("ListRuns: %v", err)
+	}
+	if len(runs) != 2 {
+		t.Errorf("len(runs) = %d, want 2 (only tasks with runId)", len(runs))
+	}
+}

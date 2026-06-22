@@ -330,6 +330,11 @@ func (s *Store) CountByRunId(runId string) (map[string]int, error) {
 // SQL：SELECT run_id, MIN(created_at), triggered_by FROM tasks WHERE run_id != '' GROUP BY run_id ORDER BY MIN(created_at) DESC
 // 返回所有 run 的基本信息（runId + 最早创建时间 + triggeredBy），不带 summary。
 // 前端再调 /api/runs/:runId/summary 拿详细计数（或后端在 handler 层 JOIN 避免 N+1）。
+//
+// 🆕 2026-06-23 Task 13.2 修复：SQLite 的 MIN(created_at) 返回 string 而非 time.Time
+//   - 原因：SQLite 聚合函数（MIN/MAX）对 DATETIME 列返回 string
+//   - 修复：先 Scan 到 string，再 time.Parse(time.RFC3339Nano)
+//   - 兼容：RFC3339Nano 解析失败时尝试其他常见格式
 func (s *Store) ListRuns() ([]tasksystem.RunInfo, error) {
 	rows, err := s.db.Query(`
 		SELECT run_id, MIN(created_at), triggered_by
@@ -346,12 +351,50 @@ func (s *Store) ListRuns() ([]tasksystem.RunInfo, error) {
 	var result []tasksystem.RunInfo
 	for rows.Next() {
 		var info tasksystem.RunInfo
-		if err := rows.Scan(&info.RunID, &info.StartedAt, &info.TriggeredBy); err != nil {
+		var startedAtStr string
+		if err := rows.Scan(&info.RunID, &startedAtStr, &info.TriggeredBy); err != nil {
 			return nil, err
 		}
+		// 解析时间字符串（SQLite MIN() 返回 string）
+		parsed, err := parseSQLiteTime(startedAtStr)
+		if err != nil {
+			return nil, fmt.Errorf("ListRuns: parse startedAt %q: %w", startedAtStr, err)
+		}
+		info.StartedAt = parsed
 		result = append(result, info)
 	}
 	return result, rows.Err()
+}
+
+// parseSQLiteTime 解析 SQLite 返回的时间字符串。
+// SQLite 的 DATETIME 列经 MIN/MAX 聚合后返回 string，格式可能是：
+//   - "2026-06-23T10:00:00Z"（RFC3339，go-sqlite3 写入 time.Time 时用此格式）
+//   - "2026-06-23 10:00:00+00:00"（SQLite 原生 datetime 格式）
+//   - "2026-06-23 10:00:00"（无时区）
+//   - "2026-06-23 10:01:40 +0000 UTC"（Go time.Time.String() 格式，modernc.org/sqlite 用此格式）
+//   - "2026-06-22 23:16:33.141110435 +0000 UTC"（带纳秒）
+func parseSQLiteTime(s string) (time.Time, error) {
+	// 优先 RFC3339Nano（go-sqlite3 默认写入格式）
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t, nil
+	}
+	// 尝试 Go time.Time.String() 格式（modernc.org/sqlite 用此格式）
+	// 格式："2006-01-02 15:04:05.999999999 -0700 MST" 或 "2006-01-02 15:04:05 -0700 MST"
+	if t, err := time.Parse("2006-01-02 15:04:05.999999999 -0700 MST", s); err == nil {
+		return t, nil
+	}
+	if t, err := time.Parse("2006-01-02 15:04:05 -0700 MST", s); err == nil {
+		return t, nil
+	}
+	// 尝试 SQLite 原生 datetime 格式（带时区）
+	if t, err := time.Parse("2006-01-02 15:04:05-07:00", s); err == nil {
+		return t, nil
+	}
+	// 尝试 SQLite 原生 datetime 格式（无时区，按 UTC 处理）
+	if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
+		return t.UTC(), nil
+	}
+	return time.Time{}, fmt.Errorf("unrecognized time format: %q", s)
 }
 
 // SaveSnapshot 保存任务快照。
