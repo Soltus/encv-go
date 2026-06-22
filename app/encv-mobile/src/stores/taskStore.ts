@@ -103,16 +103,23 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   /**
-   * 局部 patch：只 merge 后端实际提供的字段（跳过 undefined）
+   * 局部 patch：只 merge 后端实际提供的字段（跳过 undefined 和 null）
    *
-   * 为什么必须跳过 undefined：
+   * 为什么必须跳过 null：
+   * - Go 后端结构体未设置字段 JSON 序列化为 null（不是 undefined）
    * - 后端 WS 事件（task:update / task:progress）通常只发"变化的字段"
-   *   payload = {id, type, status, progress}，没有 runId/triggeredBy/pluginName 等元数据
-   * - 如果 spread 时把 undefined 字段也覆盖 prev → task 失去 runId → groupedTasksByRunId 把
-   *   它分到 __manual__${id} key → 整组自动化 task 视觉上"逃"成独立 task row（逃逸根因）
-   * - 这是**正确的默认行为**，不是防护：
-   *   后端少发字段 ≠ 字段被清空；只有显式 null 才视为"清空"
+   *   payload = {id, type, status, progress}，其他字段是 nil → null
+   * - 如果 spread 时把 null 字段也覆盖 prev → task 失去 runId → groupedTasksByRunId
+   *   把整组自动化 task 拆成 9 + 1，1 个逃成独立 group（逃逸根因）
+   *
+   * 业务字段 vs 标识字段：
+   * - 标识字段（runId / triggeredBy / pluginName / type）：null 一律跳过（"未提供"≠"清空"）
+   * - 业务字段（status / progress / error / outputPath / completedAt）：正常 merge
+   *
+   * 这是**正确的默认行为**，不是防护：
+   *   后端少发字段 ≠ 字段被清空；只有显式空字符串才视为"清空"
    */
+  const IDENTITY_FIELDS = new Set<keyof EncvTask>(['runId', 'triggeredBy', 'pluginName', 'type'])
   function patchTaskById(id: string, partial: Partial<EncvTask>): boolean {
     const idx = _taskIndex.get(id)
     if (idx === undefined) return false
@@ -120,7 +127,10 @@ export const useTaskStore = defineStore('task', () => {
     const merged: EncvTask = { ...prev }
     for (const k of Object.keys(partial) as (keyof EncvTask)[]) {
       const v = partial[k]
-      if (v !== undefined) (merged as any)[k] = v
+      if (v === undefined) continue
+      // 标识字段：null 也跳过（保护 runId 等不被清空导致逃逸）
+      if (v === null && IDENTITY_FIELDS.has(k)) continue
+      ;(merged as any)[k] = v
     }
     tasks.value[idx] = merged
     triggerRef(tasks)
