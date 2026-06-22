@@ -46,8 +46,8 @@
             :title="t('tasks.filterTitle')"
             class="top-icon-btn"
           >
-            <ion-icon :icon="filterOutline" slot="icon-only" :color="filter.activeFilterCount.value > 0 ? 'primary' : 'medium'"></ion-icon>
-            <ion-badge v-if="filter.activeFilterCount.value > 0" color="primary" class="filter-badge">{{ filter.activeFilterCount.value }}</ion-badge>
+            <ion-icon :icon="filterOutline" slot="icon-only" :color="activeFilterCount > 0 ? 'primary' : 'medium'"></ion-icon>
+            <ion-badge v-if="activeFilterCount > 0" color="primary" class="filter-badge">{{ activeFilterCount }}</ion-badge>
           </ion-button>
           <ion-button
             fill="clear"
@@ -174,7 +174,6 @@ import {
 import { useI18n } from '@/composables/useI18n'
 import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
 import { useTasksList } from '@/composables/useTasksList'
-import { useTaskFilter } from '@/composables/useTaskFilter'
 import { useBatchOperations } from '@/composables/useBatchOperations'
 import type { EncvTask } from '@/api/encv'
 import { getCalibration } from '@/api/encv'
@@ -189,9 +188,8 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const workflowService = useWorkflowTaskService()
-const { tasks: allTasks, filteredTasks, searchQuery, filterStatuses, filterTypes, filterPlugins } = useTasksList()
+const { tasks: allTasks, filteredTasks, searchQuery, filterStatuses, filterTypes, filterPlugins, activeFilterCount, clearFilters } = useTasksList()
 const batchOps = useBatchOperations()
-const filter = useTaskFilter() // 同 reactive scope，filter.state 共享
 
 // ============ UI 局部状态（selection 是 per-view，不进 store） ============
 const selectedIds = ref<Set<string>>(new Set())
@@ -317,7 +315,7 @@ async function batchDeleteSelected() {
 function onFilterStatus(v: string[]) { filterStatuses.value = v as any }
 function onFilterType(v: string[]) { filterTypes.value = v as any }
 function onFilterPlugin(v: string[]) { filterPlugins.value = v }
-function onFilterReset() { filter.clearFilters() }
+function onFilterReset() { clearFilters() }
 
 // ============ 导出报告（🆕 Q7C native Filesystem + web download） ============
 const exporting = ref(false)

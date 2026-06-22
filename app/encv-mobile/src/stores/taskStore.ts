@@ -1,23 +1,19 @@
 /**
- * v6 2026-06-18 任务系统重设计
+ * taskStore — 唯一任务数据 + 视图状态 owner
  *
- * useTaskStore - 任务数据 Pinia setup store
+ * 设计原则（v7 2026-06-22 重构）：
+ * 1. 后端是权威，WS 推什么用什么 — 单一 applyEvent 入口，不做"防护"
+ * 2. 视图状态（viewMode/sortBy/filter/search）合并进 store，computed 自动追踪
+ * 3. 派生（filteredTasks/sortedTasks/groupedItems/flatItems/displayedItems）在 store
+ * 4. 不持久化 filter/sort/view（避免与任务数据耦合）
  *
- * 设计原则（替代 useTasksList.ts 1038 行 monolith）：
- * 1. shallowRef + Map 索引 → 100+ task 无 deep reactive 开销
- * 2. patchTask(id, partial) → 局部修改，不重建 array
- * 3. applyEvent(ev) → WS 4 件套统一入口，终态保护 + 乱序缓冲
- * 4. tasksByRunId / tasksById / availablePlugins 缓存为 getter，不重复 build
- * 5. 取消 run = patchTask 每个 run task 为 cancelling → Tasks UI 立即反应
- *
- * 与 useTasksList 协作：
- * - useTasksList 改为读 store（tasks, filterState）
- * - 派生 computed (groupedItems, flatItems, displayedItems) 仍在 useTasksList
- *   因为这些是 UI 层关注点，store 只管数据
+ * 与视图组件的边界：
+ * - 视图只 import useTaskStore（通过 useTasksList 薄壳 re-export）
+ * - 不需要 useTaskFilter / useTaskFiltering 等独立 composable
  */
 import { computed, ref, shallowRef, triggerRef } from 'vue'
 import { defineStore } from 'pinia'
-import type { EncvTask, TaskStatus } from '@/api/encv'
+import type { EncvTask, TaskStatus, TaskType } from '@/api/encv'
 import {
   loadAllTasks,
   bulkPutTasks as persistBulkPut,
@@ -27,48 +23,23 @@ import {
   ensureLRUCache,
 } from '@/lib/taskPersistence'
 
-/** 终态保护集合 */
-const TERMINAL_STATUSES: Set<TaskStatus> = new Set([
-  'completed', 'failed', 'cancelled',
-])
+export type ViewMode = 'group' | 'flat'
+export type DatePreset = 'today' | '7d' | '30d' | 'all' | 'custom'
+export type TriggeredBy = 'user' | 'automation' | 'ai_agent'
+export type SortBy = 'activity' | 'created'
 
-/** 乱序事件缓冲 */
-type PendingEventType = 'update' | 'progress' | 'completed'
-interface PendingEvent {
-  type: PendingEventType
-  data: any
-}
+const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set(['completed', 'failed', 'cancelled'])
+const STATUS_OPTIONS: TaskStatus[] = ['queued', 'running', 'cancelling', 'completed', 'failed', 'cancelled']
 
 export const useTaskStore = defineStore('task', () => {
-  // ============ 核心状态 ============
-  /** shallowRef：避免深响应式开销；patchTask 内部触发整个 ref 替换但每个 task 对象本身不变 */
+  // ============ 原始数据 ============
   const tasks = shallowRef<EncvTask[]>([])
-
-  /** 应用启动时 tasks 是否已从 IndexedDB 加载完成 */
   const hydrated = ref(false)
-
-  /** 正在拉取后端列表（pull-to-refresh 专用） */
   const isRefreshing = ref(false)
-
-  /** 加载状态：true = 空状态；false = 有数据（即使 isRefreshing=true 也不显示空态） */
   const hasAnyTask = ref(false)
-
-  /** 🆕 v6 2026-06-18：置顶 runId 集合（左滑置顶操作）
-   *  - Set 保证 O(1) add/delete/has
-   *  - 用户置顶的 run 在分组列表中排到最前
-   *  - 持久化到 IndexedDB meta 表
-   */
   const pinnedRunIds = ref<Set<string>>(new Set())
 
-  // ============ 乱序事件缓冲 ============
-  const pendingEvents = new Map<string, PendingEvent[]>()
-
-  // ============ 🆕 v6 2026-06-22 性能优化：id → index 索引 ============
-  // 之前：patchTask 用 findIndex O(n)、applyTaskUpdate/Progress/Completed 用 find O(n)
-  //   高频 WS progress 事件 × 100+ tasks = O(n²) 累积
-  // 现在：维护 _taskIndex Map，patchTask / getTaskById 用 O(1) Map lookup
-  //   - appendTask / removeTask / bulkSetTasks / hydrate 等改变数组长度时重建索引（O(n)）
-  //   - patchTask / cancelRunTasks 不改变数组长度，索引保持有效
+  // O(1) id→index 索引（patch / getTaskById 性能优化）
   const _taskIndex = new Map<string, number>()
 
   function rebuildIndex(): void {
@@ -79,210 +50,88 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
-  /** O(1) 按 id 查 task（替代 tasks.value.find O(n)） */
   function getTaskById(id: string): EncvTask | undefined {
     const idx = _taskIndex.get(id)
     if (idx === undefined) return undefined
     return tasks.value[idx]
   }
 
-  function bufferPendingEvent(taskId: string, type: PendingEventType, data: any): void {
-    const arr = pendingEvents.get(taskId)
-    if (arr) arr.push({ type, data })
-    else pendingEvents.set(taskId, [{ type, data }])
-  }
+  // ============ 视图状态（统一 owner） ============
+  const viewMode = ref<ViewMode>('group')
+  const sortBy = ref<SortBy>('activity')
+  const filterPlugins = ref<string[]>([])
+  const filterTypes = ref<TaskType[]>([])
+  const filterStatuses = ref<TaskStatus[]>([])
+  const filterTriggeredBy = ref<TriggeredBy[]>([])
+  const searchQuery = ref('')
+  const filterDatePreset = ref<DatePreset>('all')
+  const filterDateRange = ref<{ from?: string; to?: string }>({})
 
-  function replayPendingEvents(taskId: string): void {
-    const arr = pendingEvents.get(taskId)
-    if (!arr || arr.length === 0) return
-    for (const event of arr) {
-      if (event.type === 'update') applyTaskUpdate(event.data)
-      else if (event.type === 'progress') applyTaskProgress(event.data)
-      else if (event.type === 'completed') applyTaskCompleted(event.data)
-    }
-    pendingEvents.delete(taskId)
-  }
-
-  // ============ 核心操作 ============
-
-  // ============ 持久化（IndexedDB） ============
-
-  /**
-   * 冷启动时从 IndexedDB 加载 tasks。
-   * - 仅在首次打开 Tasks 视图时调一次（避免重复 IO）
-   * - 失败时静默回退到空数组（UI 仍可通过 fetchTasks 拉后端）
-   * - 🆕 hydrate 后调 ensureLRUCache 清理过量缓存（保留最新 200 条）
-   */
+  // ============ Hydrate ============
   async function hydrate(): Promise<void> {
     if (hydrated.value) return
     try {
       const list = await loadAllTasks()
       tasks.value = list
       hasAnyTask.value = list.length > 0
-      rebuildIndex()  // 🆕 v6 2026-06-22：重建 id→index 索引
+      rebuildIndex()
       hydrated.value = true
-      console.info('[useTaskStore] hydrated from IndexedDB:', list.length)
-      // 🆕 LRU 缓存清理：保留最新 200 条（后端 SQLite 已是权威存储，IndexedDB 降级为纯缓存）
       void ensureLRUCache()
     } catch (err) {
-      console.warn('[useTaskStore.hydrate] failed:', err)
-      hydrated.value = true  // 标记已尝试（避免反复重试）
+      hydrated.value = true
     }
   }
 
-  // 🆕 v6 2026-06-22 性能优化：移除 watch(tasks) 自动持久化
-  //   旧逻辑：watch(tasks, debounced persistBulkPut) → 每次 patchTask（含 progress 高频更新）
-  //          都触发全量 bulkPut（100+ tasks × 每秒多次 progress = 大量 IndexedDB 写入）
-  //   新逻辑：显式持久化 — 只在有意义的状态变更时写单行（putTask）
-  //          - appendTask → putTask（新 task）
-  //          - applyTaskUpdate → putTask（status 变更，重要）
-  //          - applyTaskCompleted → putTask（终态，重要）
-  //          - applyTaskProgress → 不持久化（progress 高频 transient，后端 SQLite 已存）
-  //          - bulkSetTasks → persistBulkPut（全量同步，少见）
-  //          - removeTask / removeRunTasks → persistDelete（已有）
-
-  /**
-   * 删除单个 task 时同步从 IndexedDB 移除（不等 debounce）
-   */
+  // ============ 持久化 ============
   function persistRemove(id: string): void {
-    try {
-      clearPutThrottle(id)
-      void persistDelete(id)
-    } catch (err) {
-      console.warn('[useTaskStore.persistRemove] failed:', err)
-    }
+    try { clearPutThrottle(id); void persistDelete(id) } catch {}
+  }
+  function persistPutTask(id: string): void {
+    if (!hydrated.value) return
+    const t = getTaskById(id)
+    if (t) try { void persistPut(t) } catch {}
   }
 
-  /**
-   * 批量替换 tasks（用于 fetchTasks / hydrate）
-   *
-   * 🆕 v6 2026-06-18：单一数据源 — 后端 MobileTask 已持久化 runId/triggeredBy
-   *   不再需要 merge / getTaskMetadata 回填，直接用后端数据
-   */
+  // ============ 原始数据操作 ============
   function bulkSetTasks(newTasks: EncvTask[]): void {
     tasks.value = newTasks
     hasAnyTask.value = newTasks.length > 0
-    rebuildIndex()  // 🆕 v6 2026-06-22：重建 id→index 索引
+    rebuildIndex()
     if (hydrated.value) {
-      try {
-        persistBulkPut(newTasks)
-      } catch (err) {
-        console.warn('[useTaskStore.bulkSetTasks.persist] failed:', err)
-      }
+      try { void persistBulkPut(newTasks) } catch {}
     }
   }
 
-  /**
-   * 局部 patch：只改指定 id 的 task 字段，不重建 array
-   *
-   * 关键优化：保留 array 引用，仅修改 task 对象；
-   * 但 shallowRef 不深代理 task 对象，所以需要 triggerRef 强制更新
-   * （Vue 3.5+ triggerRef 直接可用，旧版本用 tasks.value = [...tasks.value]）
-   *
-   * 🆕 v6 2026-06-22：patchTask 本身不持久化（避免 progress 高频写爆 IndexedDB）
-   *   - 需要持久化的调用方调 patchTask 后调 persistTaskById
-   *   - 或直接用 applyTaskUpdate / applyTaskCompleted（已内置持久化）
-   */
-  function patchTask(id: string, partial: Partial<EncvTask>): boolean {
-    const idx = _taskIndex.get(id)  // 🆕 v6 2026-06-22：O(1) Map lookup 替代 O(n) findIndex
+  /** 局部 patch：后端给的字段直接覆盖 */
+  function patchTaskById(id: string, partial: Partial<EncvTask>): boolean {
+    const idx = _taskIndex.get(id)
     if (idx === undefined) return false
-    const arr = tasks.value
-    // 🆕 2026-06-22 Bug Fix #3+#4：终态保护改为"只阻止 status 实际变化"
-    //   旧实现 `partial.status`（truthy 判断）会把 "completed" → undefined 也放行
-    //   后果：WS created 事件 payload 不全时（只有 id）→ status 被覆盖成 undefined
-    //   修复：要求 partial.status 真的定义、且与当前不同 才拦截
-    //   副作用收益：
-    //     - 允许相同 status 重复写（completed → completed）
-    //     - 允许非 status 字段更新（progress / outputPath / completedAt）
-    //     - 允许 retry（completed → queued 重置）
-    if (TERMINAL_STATUSES.has(arr[idx].status)
-        && partial.status !== undefined
-        && partial.status !== arr[idx].status) {
-      return false
-    }
-    arr[idx] = { ...arr[idx], ...partial }
-    // 强制触发 shallowRef 更新（因为我们直接修改了数组元素）
+    tasks.value[idx] = { ...tasks.value[idx], ...partial }
     triggerRef(tasks)
     return true
   }
 
-  /**
-   * 🆕 v6 2026-06-22：显式持久化指定 task（patchTask 后调用方按需调）
-   *   - 用于 cancelTaskById 等外部 patchTask 调用后的持久化
-   *   - 内部 applyTaskUpdate / applyTaskCompleted 等已内置持久化，无需再调
-   */
-  function persistTaskById(id: string): void {
-    if (!hydrated.value) return
-    const task = getTaskById(id)  // 🆕 v6 2026-06-22：O(1) 替代 find O(n)
-    if (task) {
-      try { void persistPut(task) } catch (err) {
-        console.warn('[useTaskStore.persistTaskById] failed:', err)
-      }
-    }
-  }
-
-  /**
-   * 追加新 task（applyTaskCreated 用）
-   * 已有同 id → 跳过
-   */
   function appendTask(task: EncvTask): void {
-    if (_taskIndex.has(task.id)) return  // 🆕 v6 2026-06-22：O(1) 替代 some O(n)
+    if (_taskIndex.has(task.id)) {
+      patchTaskById(task.id, task)
+      return
+    }
     tasks.value = [task, ...tasks.value]
     hasAnyTask.value = true
-    rebuildIndex()  // 🆕 v6 2026-06-22：prepend 改变了所有索引，需重建
-    // 🆕 v6 2026-06-22：显式持久化单行（替代旧 watch 全量 bulkPut）
+    rebuildIndex()
     if (hydrated.value) {
-      try { void persistPut(task) } catch (err) {
-        console.warn('[useTaskStore.appendTask.persist] failed:', err)
-      }
+      try { void persistPut(task) } catch {}
     }
-  }
-
-  /**
-   * 取消整个 run 的所有 task
-   *  - 找到 runId 关联的所有 task
-   *  - 乐观更新 status = 'cancelling'（UI 立即反应）
-   *  - 调后端 cancelRun
-   *  - 失败回滚
-   */
-  function cancelRunTasks(runId: string): EncvTask[] {
-    const targets: EncvTask[] = []
-    for (const t of tasks.value) {
-      if (t.runId === runId && (t.status === 'running' || t.status === 'queued')) {
-        targets.push(t)
-      }
-    }
-    for (const t of targets) {
-      patchTask(t.id, { status: 'cancelling' })
-    }
-    // 🆕 v6 2026-06-22：cancelling 是重要状态变更 → 显式持久化
-    //   用 getTaskById O(1) 替代 find O(n)
-    if (hydrated.value) {
-      for (const t of targets) {
-        const updated = getTaskById(t.id)
-        if (updated) {
-          try { void persistPut(updated) } catch (err) {
-            console.warn('[useTaskStore.cancelRunTasks.persist] failed:', err)
-          }
-        }
-      }
-    }
-    return targets
   }
 
   function removeTask(id: string): void {
-    if (!_taskIndex.has(id)) return  // 🆕 v6 2026-06-22：O(1) 检查避免无谓 filter
+    if (!_taskIndex.has(id)) return
     tasks.value = tasks.value.filter((t) => t.id !== id)
     hasAnyTask.value = tasks.value.length > 0
-    rebuildIndex()  // 🆕 v6 2026-06-22：重建索引
+    rebuildIndex()
     persistRemove(id)
   }
 
-  /**
-   * 🆕 v6 2026-06-18：删除整个 run 的所有 task（左滑删除操作）
-   *  - 返回被删的 task 列表（调用方遍历调后端 API）
-   *  - 同时解除 runId 的置顶（避免僵尸 pinned 引用）
-   */
   function removeRunTasks(runId: string): EncvTask[] {
     const targets: EncvTask[] = []
     for (const t of tasks.value) {
@@ -292,10 +141,8 @@ export const useTaskStore = defineStore('task', () => {
     const targetIds = new Set(targets.map((t) => t.id))
     tasks.value = tasks.value.filter((t) => !targetIds.has(t.id))
     hasAnyTask.value = tasks.value.length > 0
-    rebuildIndex()  // 🆕 v6 2026-06-22：重建索引
-    // 同步 persist
+    rebuildIndex()
     for (const t of targets) persistRemove(t.id)
-    // 解除置顶
     if (pinnedRunIds.value.has(runId)) {
       const next = new Set(pinnedRunIds.value)
       next.delete(runId)
@@ -304,249 +151,74 @@ export const useTaskStore = defineStore('task', () => {
     return targets
   }
 
-  /**
-   * 🆕 v6 2026-06-18：置顶 / 取消置顶 run
-   *  - toggle 语义：已置顶则取消置顶
-   */
-  function togglePinRun(runId: string): boolean {
-    const next = new Set(pinnedRunIds.value)
-    if (next.has(runId)) {
-      next.delete(runId)
-      pinnedRunIds.value = next
-      return false
-    } else {
-      next.add(runId)
-      pinnedRunIds.value = next
-      return true
+  function cancelRunTasks(runId: string): EncvTask[] {
+    const targets: EncvTask[] = []
+    for (const t of tasks.value) {
+      if (t.runId === runId && (t.status === 'running' || t.status === 'queued')) {
+        targets.push(t)
+      }
     }
+    for (const t of targets) {
+      patchTaskById(t.id, { status: 'cancelling' })
+      persistPutTask(t.id)
+    }
+    return targets
   }
 
-  /** 读取置顶状态（O(1)） */
+  function togglePinRun(runId: string): boolean {
+    const next = new Set(pinnedRunIds.value)
+    if (next.has(runId)) { next.delete(runId); pinnedRunIds.value = next; return false }
+    next.add(runId); pinnedRunIds.value = next; return true
+  }
   function isRunPinned(runId: string): boolean {
     return pinnedRunIds.value.has(runId)
   }
 
-  // ============ WS 4 件套统一入口 ============
-
-  function applyTaskUpdate(data: { id: string; type?: string; status?: string; progress?: number }): void {
-    // 🆕 2026-06-22 Bug Fix #5：task 不存在时 buffer 乱序事件
-    //   场景：WS 顺序 created(后到) → update(先到)；update 先到达时 task 还没建
-    if (!_taskIndex.has(data.id)) {
-      bufferPendingEvent(data.id, 'update', data)
-      return
-    }
-    // 关键：只 patch 后端实际提供的字段，绝不传 undefined
-    // 否则 patchTask 的 spread 会用 undefined 覆盖现有 status
-    // → 终态保护短路（partial.status 是 falsy）→ 覆盖发生 → 任务"逃出"聚合
-    const partial: Partial<EncvTask> = {}
-    if (data.type !== undefined) partial.type = data.type as any
-    if (data.status !== undefined) partial.status = data.status as TaskStatus
-    if (data.progress !== undefined) partial.progress = data.progress
-    if (Object.keys(partial).length === 0) return  // 空 patch 直接返回
-    patchTask(data.id, partial)
-    // status 变更 → 显式持久化单行（重要状态，立即写）
-    if (hydrated.value && partial.status) {
-      const updated = getTaskById(data.id)
-      if (updated) {
-        try { void persistPut(updated) } catch (err) {
-          console.warn('[useTaskStore.applyTaskUpdate.persist] failed:', err)
-        }
-      }
-    }
-  }
-
-  function applyTaskProgress(data: { id: string; progress: number; phase?: string; speed?: string; eta?: string }): void {
-    // 🆕 2026-06-22 Bug Fix #5：task 不存在时 buffer 乱序事件
-    //   场景：WS 顺序 created(后到) → progress(先到)；progress 先到达时 task 还没建
-    if (!_taskIndex.has(data.id)) {
-      bufferPendingEvent(data.id, 'progress', data)
-      return
-    }
-    // 🆕 2026-06-22 Bug Fix #2：只 patch data 中实际提供的字段
-    //   旧实现直接传 {phase, speed, eta} → undefined 也会 spread 进去 → 覆盖现有值
-    //   后果：progress 事件不带 phase 时把上一次 phase 抹掉（UI phase label 闪烁）
-    const partial: Partial<EncvTask> = { progress: data.progress }
-    if (data.phase !== undefined) partial.phase = data.phase
-    if (data.speed !== undefined) partial.speed = data.speed
-    if (data.eta !== undefined) partial.eta = data.eta
-    patchTask(data.id, partial)
-    // 🆕 progress 是高频 transient 状态，后端 SQLite 已持久化，前端不再写 IndexedDB
-  }
-
-  function applyTaskCreated(data: Partial<EncvTask> & { id: string }): void {
-    // 🆕 v6 2026-06-22：用 _taskIndex.has O(1) 替代 some O(n)
-    if (_taskIndex.has(data.id)) {
-      // 已有则 patch；保留已有的 runId / triggeredBy（避免 WS 无 runId payload 覆盖）
-      const existing = getTaskById(data.id)!  // 🆕 O(1) 替代 find O(n)
-      // 🆕 2026-06-22 Bug Fix #1：只 patch data 中实际提供的字段
-      //   旧实现 `{ ...data }` 展开会让 undefined 也 spread 进去 → 覆盖现有 status/progress
-      //   后果：WS created payload 不全时（只有 id）→ status 被 undefined 覆盖 → 任务"逃出"聚合
-      const partial: Partial<EncvTask> = {}
-      for (const k of Object.keys(data) as (keyof EncvTask)[]) {
-        const v = (data as any)[k]
-        if (v !== undefined) partial[k] = v
-      }
-      // 保留 runId / triggeredBy（避免 WS 无 payload 覆盖本地 metadata）
-      if (!partial.runId && existing.runId) partial.runId = existing.runId
-      if (!partial.triggeredBy && existing.triggeredBy) partial.triggeredBy = existing.triggeredBy
-      patchTask(data.id, partial)
-      replayPendingEvents(data.id)
-      // 🆕 v6 2026-06-22：patch 后显式持久化单行
-      if (hydrated.value) {
-        const updated = getTaskById(data.id)  // 🆕 O(1) 替代 find O(n)
-        if (updated) {
-          try { void persistPut(updated) } catch (err) {
-            console.warn('[useTaskStore.applyTaskCreated.persist] failed:', err)
-          }
-        }
-      }
-      return
-    }
-    // 🆕 v6 2026-06-18：后端 task 自带 runId/triggeredBy（单一数据源），不再回填
-    const newTask: EncvTask = {
-      id: data.id,
-      type: (data.type ?? 'encrypt') as any,
-      sourcePath: data.sourcePath ?? '',
-      pluginName: data.pluginName,
-      status: (data.status ?? 'queued') as TaskStatus,
-      progress: data.progress ?? 0,
-      phase: data.phase,
-      speed: data.speed,
-      eta: data.eta,
-      error: data.error,
-      createdAt: data.createdAt ?? new Date().toISOString(),
-      containerVersion: data.containerVersion,
-      targetPath: data.targetPath,
-      runId: data.runId,
-      triggeredBy: data.triggeredBy,
-      outputPath: data.outputPath,
-      cipherMode: data.cipherMode,
-      compressionMode: data.compressionMode,
-    }
-    appendTask(newTask)
-    replayPendingEvents(data.id)
-  }
-
+  // ============ WS 4 件套 → 单一 applyEvent ============
   /**
-   * 🆕 2026-06-22 v2 架构重写：删除 removeTaskLocal
-   *
-   * 历史背景：Q6A 临时引入 removeTaskLocal（仅前端 hide 不删后端），
-   *   但导致架构混乱：删除路径有 2 套（removeTask 调 persistDelete / removeTaskLocal 不调）
-   *   → reconcileWithBackend 还要特殊处理"前端 hide 但后端还在"
-   *   → 1000+ task 重建时容易把已 hide 的 task 拉回来
-   *
-   * 修法：删除 removeTaskLocal。统一用 removeTask 走正常路径：
-   *   - store 移除 + IndexedDB 删除 + 后端调 DELETE /api/tasks/:id
-   *   - 1000+ 自动化测试场景，task 不需要前端 hide 语义（测试后清空就行）
+   * 单一事件入口：后端推什么用什么，不加防护
+   * - created:  新建或 patch
+   * - update / progress: patch 后端提供的字段
+   * - completed: patch 终态 + completedAt + progress=100
    */
+  function applyEvent(type: 'created' | 'update' | 'progress' | 'completed', data: any): void {
+    if (!data || !data.id) return
+    const id = data.id
+    if (type === 'created') {
+      appendTask(data as EncvTask)
+      persistPutTask(id)
+    } else if (type === 'update' || type === 'progress') {
+      patchTaskById(id, data)
+      if (type === 'update' && data.status) persistPutTask(id)
+    } else if (type === 'completed') {
+      patchTaskById(id, {
+        ...data,
+        status: data.error ? 'failed' : 'completed',
+        completedAt: new Date().toISOString(),
+        progress: data.error ? undefined : 100,
+      })
+      persistPutTask(id)
+    }
+  }
 
-  /**
-   * 🆕 2026-06-22 v2 架构重写：rebuildFromBackend（全量重建）
-   *
-   * 取代旧的 reconcileWithBackend（增量 patch 易遗漏状态）。
-   *
-   * 语义：
-   *   - serverTasks 是后端权威状态（含 runId / triggeredBy / status / createdAt 等）
-   *   - 启动时：直接以 serverTasks 替换 store.tasks（不与 IndexedDB merge）
-   *   - 已 IndexedDB 持久化的 task 也会被 server 取代
-   *   - 1000+ 自动化测试场景下保证"无孤儿"
-   *
-   * 调用方：
-   *   - useTasksList onMounted 拉一次
-   *   - 切换 server / 重连后调一次
-   */
+  // 兼容旧 API：4 个独立函数（如果外部还在用）
+  function applyTaskUpdate(data: any) { applyEvent('update', data) }
+  function applyTaskProgress(data: any) { applyEvent('progress', data) }
+  function applyTaskCreated(data: any) { applyEvent('created', data) }
+  function applyTaskCompleted(data: any) { applyEvent('completed', data) }
+
+  /** 后端权威：直接覆盖 */
   function rebuildFromBackend(serverTasks: EncvTask[]): void {
-    if (serverTasks.length === 0) {
-      // 保留现有 store（不要清空，避免闪烁）
-      return
-    }
-    // 🆕 2026-06-22 Bug Fix #6：合并而非全量替换
-    //   旧实现 bulkSetTasks(serverTasks) 整批覆盖 → 任务逃逸
-    //   场景：UI 已乐观更新到 running（WS update 到达）→ fetchTasks 拉后端旧数据（queued）
-    //         → bulkSetTasks 覆盖 → UI 回退到 queued → "任务逃出"聚合
-    //   修复策略：
-    //     - 以 server 为权威（server 提供完整初始数据）
-    //     - 但保留本地"已终态"task（completed / failed / cancelled）
-    //       终态不可能被后端回退（后端 SQLite 写完就是终态）→ 本地已终态说明后端已 commit
-    //     - 本地有但 server 没有的 task 也保留（防御性：理论上不该发生）
-    const localById = new Map<string, EncvTask>()
-    for (const t of tasks.value) {
-      localById.set(t.id, t)
-    }
-    const merged: EncvTask[] = []
-    const seen = new Set<string>()
-    for (const server of serverTasks) {
-      seen.add(server.id)
-      const local = localById.get(server.id)
-      if (local && TERMINAL_STATUSES.has(local.status)) {
-        // 本地已终态 → 保留本地（即使 server 是旧 running/queued，也是后端慢半拍）
-        merged.push(local)
-      } else {
-        merged.push(server)
-      }
-    }
-    // 保留本地有但 server 没有的 task（防御性：罕见的本地独享 task）
-    for (const local of tasks.value) {
-      if (!seen.has(local.id)) {
-        merged.push(local)
-      }
-    }
-    bulkSetTasks(merged)
+    bulkSetTasks(serverTasks)
   }
 
-  function applyTaskCompleted(data: { id: string; error?: string; outputPath?: string }): void {
-    const idx = _taskIndex.get(data.id)  // 🆕 v6 2026-06-22：O(1) 替代 findIndex O(n)
-    if (idx === undefined) {
-      bufferPendingEvent(data.id, 'completed', data)
-      return
-    }
-    const arr = tasks.value
-    if (TERMINAL_STATUSES.has(arr[idx].status)) return
-
-    const prev = arr[idx]
-    const wsOutputPath = data.outputPath ?? ''
-    const prevSteps = prev.steps ?? []
-    const nextSteps = wsOutputPath && prevSteps.length > 0
-      ? prevSteps.map((step, i) =>
-          i === prevSteps.length - 1 ? { ...step, detail: wsOutputPath } : step,
-        )
-      : prev.steps
-
-    arr[idx] = {
-      ...prev,
-      status: data.error ? 'failed' : 'completed',
-      progress: data.error ? prev.progress : 100,
-      phase: data.error ? prev.phase : 'completed',
-      // 🆕 2026-06-22 Bug Fix #7：不强制 speed/eta 为空
-      //   旧实现 `speed: '' / eta: ''` 会：
-      //     1) 立即把 UI 进度条/速率 label 抹掉（视觉跳跃）
-      //     2) 与 #3 终态保护"联动 bug"：speed 是 '' → 后续 patchTask({speed: undefined}) 仍放行
-      //        但如果未来 strict mode 改用 !== undefined 检查会出问题
-      //   修复：保留 prev.speed / prev.eta（完成瞬间的最终速率/ETA 是有意义的）
-      error: data.error,
-      completedAt: new Date().toISOString(),
-      outputPath: wsOutputPath || prev.outputPath,
-      steps: nextSteps,
-    }
-    triggerRef(tasks)
-    // 🆕 v6 2026-06-22：终态 → 显式持久化单行（重要状态，立即写）
-    if (hydrated.value) {
-      try { void persistPut(arr[idx]) } catch (err) {
-        console.warn('[useTaskStore.applyTaskCompleted.persist] failed:', err)
-      }
-    }
-  }
-
-  // ============ Getters（缓存的派生） ============
-
-  /** 按 id 索引 O(1) 查表 */
+  // ============ 派生 computed（统一 owner） ============
   const tasksById = computed(() => {
     const map = new Map<string, EncvTask>()
     for (const t of tasks.value) map.set(t.id, t)
     return map
   })
 
-  /** 按 runId 分组（O(n) 分组，避免内层 find 退化 O(n²)） */
   const tasksByRunId = computed(() => {
     const map = new Map<string, EncvTask[]>()
     for (const task of tasks.value) {
@@ -558,12 +230,6 @@ export const useTaskStore = defineStore('task', () => {
     return map
   })
 
-  /**
-   * 出现的 plugin 列表（去重 + 排序）
-   * - 🆕 v6 2026-06-18：空 pluginName 任务映射到 `__unknown__` sentinel
-   *   - 让用户能主动筛选"未知插件"任务（之前空 pluginName 永远命中失败 → bug）
-   *   - UI 在 chip 标签上把 `__unknown__` 翻译为"未知插件"
-   */
   const availablePlugins = computed(() => {
     const set = new Set<string>()
     let hasUnknown = false
@@ -576,44 +242,200 @@ export const useTaskStore = defineStore('task', () => {
     return list
   })
 
-  // ============ Reset（测试用） ============
+  const hasCompletedTasks = computed(() =>
+    tasks.value.some((tk) => TERMINAL_STATUSES.has(tk.status)),
+  )
+
+  const filteredTasks = computed<EncvTask[]>(() => {
+    const q = searchQuery.value.trim().toLowerCase()
+    const fromTs = filterDateRange.value.from
+    const toTs = filterDateRange.value.to
+    const hasDate = !!fromTs || !!toTs
+    const hasSearch = q.length > 0
+    const plugins = filterPlugins.value
+    const types = filterTypes.value
+    const statuses = filterStatuses.value
+    const triggeredBy = filterTriggeredBy.value
+    const out: EncvTask[] = []
+    for (const t of tasks.value) {
+      if (plugins.length > 0 && !plugins.includes(t.pluginName || '__unknown__')) continue
+      if (types.length > 0 && !types.includes(t.type)) continue
+      if (statuses.length > 0 && !statuses.includes(t.status)) continue
+      if (triggeredBy.length > 0) {
+        const by = t.triggeredBy ?? 'user'
+        if (!triggeredBy.includes(by as any)) continue
+      }
+      if (hasDate) {
+        if (fromTs && t.createdAt < fromTs) continue
+        if (toTs && t.createdAt >= toTs) continue
+      }
+      if (hasSearch) {
+        const name = (t.targetPath?.split('/').pop() ?? t.sourcePath?.split('/').pop() ?? t.id.slice(0, 8)).toLowerCase()
+        const plugin = (t.pluginName || '').toLowerCase()
+        const error = (t.error || '').toLowerCase()
+        const id = t.id.toLowerCase()
+        if (!name.includes(q) && !plugin.includes(q) && !error.includes(q) && !id.includes(q)) continue
+      }
+      out.push(t)
+    }
+    return out
+  })
+
+  const sortedTasks = computed<EncvTask[]>(() => {
+    const arr = [...filteredTasks.value]
+    if (sortBy.value === 'activity') {
+      // activity 模式：按"最近活动时刻"——max(createdAt, completedAt) 即可
+      // 不分支判断（终态/非终态用同一个 key），task 状态变化时位置自然更新
+      arr.sort((a, b) => {
+        const aKey = Math.max(
+          new Date(a.createdAt).getTime(),
+          a.completedAt ? new Date(a.completedAt).getTime() : 0,
+        )
+        const bKey = Math.max(
+          new Date(b.createdAt).getTime(),
+          b.completedAt ? new Date(b.completedAt).getTime() : 0,
+        )
+        return bKey - aKey
+      })
+    } else {
+      arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    }
+    return arr
+  })
+
+  // ============ 聚合显示（统一 owner） ============
+  const groupedItems = computed<any[]>(() => {
+    const groups = new Map<string, { runId: string; tasks: EncvTask[]; startedAt: string }>()
+    for (const tk of sortedTasks.value) {
+      const key = tk.runId || `__manual__${tk.id}`
+      const g = groups.get(key)
+      if (g) g.tasks.push(tk)
+      else groups.set(key, { runId: tk.runId || '', tasks: [tk], startedAt: tk.createdAt })
+    }
+    const result: any[] = []
+    for (const [key, g] of groups) {
+      result.push({ key, runId: g.runId, startedAt: g.startedAt, tasks: g.tasks })
+    }
+    result.sort((a, b) => {
+      const aPinned = pinnedRunIds.value.has(a.runId)
+      const bPinned = pinnedRunIds.value.has(b.runId)
+      if (aPinned !== bPinned) return aPinned ? -1 : 1
+      return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+    })
+    return result
+  })
+
+  const flatItems = computed<any[]>(() =>
+    sortedTasks.value.map((tk) => ({ key: `t-${tk.id}`, task: tk })),
+  )
+
+  const displayedItems = computed<any[]>(() =>
+    viewMode.value === 'group' ? groupedItems.value : flatItems.value,
+  )
+
+  // ============ Filter 操作 ============
+  const activeFilterCount = computed(() => {
+    let n = 0
+    if (filterPlugins.value.length > 0) n++
+    if (filterTypes.value.length > 0) n++
+    if (filterStatuses.value.length > 0) n++
+    if (filterTriggeredBy.value.length > 0) n++
+    if (filterDatePreset.value !== 'all') n++
+    if (searchQuery.value.trim().length > 0) n++
+    return n
+  })
+  const hasActiveFilters = computed(() => activeFilterCount.value > 0)
+
+  function clearFilters(): void {
+    filterPlugins.value = []
+    filterTypes.value = []
+    filterStatuses.value = []
+    filterTriggeredBy.value = []
+    filterDatePreset.value = 'all'
+    filterDateRange.value = {}
+    searchQuery.value = ''
+  }
+
+  function togglePluginFilter(p: string): void {
+    const i = filterPlugins.value.indexOf(p)
+    if (i === -1) filterPlugins.value.push(p)
+    else filterPlugins.value.splice(i, 1)
+  }
+  function toggleTypeFilter(t: TaskType): void {
+    const i = filterTypes.value.indexOf(t)
+    if (i === -1) filterTypes.value.push(t)
+    else filterTypes.value.splice(i, 1)
+  }
+  function toggleStatusFilter(s: TaskStatus): void {
+    const i = filterStatuses.value.indexOf(s)
+    if (i === -1) filterStatuses.value.push(s)
+    else filterStatuses.value.splice(i, 1)
+  }
+  function toggleTriggeredByFilter(b: TriggeredBy): void {
+    const i = filterTriggeredBy.value.indexOf(b)
+    if (i === -1) filterTriggeredBy.value.push(b)
+    else filterTriggeredBy.value.splice(i, 1)
+  }
+  function setSearchQuery(q: string): void { searchQuery.value = q }
+  function setViewMode(m: ViewMode): void { viewMode.value = m }
+  function setSortBy(s: SortBy): void { sortBy.value = s }
+  function applyDatePreset(preset: DatePreset): void {
+    filterDatePreset.value = preset
+    if (preset === 'all') { filterDateRange.value = {}; return }
+    const now = new Date()
+    if (preset === 'today') {
+      const s = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const e = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      filterDateRange.value = { from: s.toISOString(), to: e.toISOString() }
+    } else if (preset === '7d' || preset === '30d') {
+      const days = preset === '7d' ? 7 : 30
+      const e = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      const s = new Date(e.getTime() - days * 86400000)
+      filterDateRange.value = { from: s.toISOString(), to: e.toISOString() }
+    }
+  }
+  function setCustomDateRange(from: string | undefined, to: string | undefined): void {
+    filterDatePreset.value = 'custom'
+    filterDateRange.value = { from, to }
+  }
+  function toggleViewMode(): void { viewMode.value = viewMode.value === 'group' ? 'flat' : 'group' }
+  function toggleSort(): void { sortBy.value = sortBy.value === 'activity' ? 'created' : 'activity' }
+
+  // ============ Reset ============
   function $reset(): void {
     tasks.value = []
-    _taskIndex.clear()  // 🆕 v6 2026-06-22：清空索引
-    pendingEvents.clear()
+    _taskIndex.clear()
     hydrated.value = false
     hasAnyTask.value = false
     isRefreshing.value = false
     pinnedRunIds.value = new Set()
+    viewMode.value = 'group'
+    sortBy.value = 'activity'
+    clearFilters()
   }
 
   return {
-    // state
-    tasks,
-    hydrated,
-    isRefreshing,
-    hasAnyTask,
-    pinnedRunIds,
-    // getters
-    tasksById,
-    tasksByRunId,
-    availablePlugins,
-    // actions
-    hydrate,
-    bulkSetTasks,
-    patchTask,
-    persistTaskById,
-    appendTask,
-    removeTask,
-    removeRunTasks,
-    cancelRunTasks,
-    togglePinRun,
-    isRunPinned,
-    applyTaskUpdate,
-    applyTaskProgress,
-    applyTaskCreated,
-    applyTaskCompleted,
-    rebuildFromBackend,  // 🆕 v2 架构
+    // 原始 state
+    tasks, hydrated, isRefreshing, hasAnyTask, pinnedRunIds,
+    // 视图 state
+    viewMode, sortBy, filterPlugins, filterTypes, filterStatuses, filterTriggeredBy,
+    searchQuery, filterDatePreset, filterDateRange,
+    // 派生
+    tasksById, tasksByRunId, availablePlugins, hasCompletedTasks,
+    filteredTasks, sortedTasks, groupedItems, flatItems, displayedItems,
+    activeFilterCount, hasActiveFilters,
+    // 原始操作
+    hydrate, bulkSetTasks, patchTaskById, appendTask, removeTask, removeRunTasks, cancelRunTasks,
+    getTaskById,
+    togglePinRun, isRunPinned,
+    // WS 入口
+    applyEvent, applyTaskUpdate, applyTaskProgress, applyTaskCreated, applyTaskCompleted,
+    rebuildFromBackend,
+    // filter 操作
+    clearFilters, togglePluginFilter, toggleTypeFilter, toggleStatusFilter, toggleTriggeredByFilter,
+    setSearchQuery, setViewMode, setSortBy, applyDatePreset, setCustomDateRange, toggleViewMode, toggleSort,
+    // 常量
+    statusOptions: STATUS_OPTIONS,
     $reset,
   }
 })
