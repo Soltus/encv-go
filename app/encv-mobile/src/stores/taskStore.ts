@@ -94,11 +94,34 @@ export const useTaskStore = defineStore('task', () => {
 
   // ============ 原始数据操作 ============
   function bulkSetTasks(newTasks: EncvTask[]): void {
-    tasks.value = newTasks
-    hasAnyTask.value = newTasks.length > 0
+    // 🆕 2026-06-22 A 方向修复根治"任务逃逸"：
+    //   merge 模式 — 对每个 newTask，如果 store 已有同 id 的 prev，
+    //   保留 prev 的 IDENTITY_FIELDS（runId/triggeredBy/pluginName/type/createdAt）当 newTask 缺这些字段时。
+    //   解决：fetchTasks 返回的 task.RunId="" → Go omitempty 省略 → 前端 task.runId=undefined
+    //   之前直接覆盖 → store 里 runId 丢失 → groupedTasksByRunId 兜底成 __manual__${id} 伪 group
+    //   现在保留 prev.runId → 不会变孤儿
+    const _IDENTITY_FIELDS: (keyof EncvTask)[] = [
+      'runId', 'triggeredBy', 'pluginName', 'type', 'createdAt',
+    ]
+    const merged: EncvTask[] = newTasks.map((newTk) => {
+      const idx = _taskIndex.get(newTk.id)
+      if (idx === undefined) return newTk
+      const prev = tasks.value[idx]
+      const result: EncvTask = { ...newTk }
+      for (const k of _IDENTITY_FIELDS) {
+        const newVal = (newTk as any)[k]
+        // newTask 缺这个字段（null/undefined/空字符串）→ 保留 prev 的
+        if (newVal === undefined || newVal === null || newVal === '') {
+          ;(result as any)[k] = (prev as any)[k]
+        }
+      }
+      return result
+    })
+    tasks.value = merged
+    hasAnyTask.value = merged.length > 0
     rebuildIndex()
     if (hydrated.value) {
-      try { void persistBulkPut(newTasks) } catch {}
+      try { void persistBulkPut(merged) } catch {}
     }
   }
 
