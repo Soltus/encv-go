@@ -453,23 +453,12 @@ function createUseTasksList() {
     store.isRefreshing = true
     try {
       const list = await apiGetTasks()
-      // 🆕 2026-06-22 Q6A：先 reconcile 补全孤儿 task 的 runId/triggeredBy，再 bulkSet
-      //   - 避免 bulkSet 覆盖了 store 中已有的 task
-      //   - 优先 reconcile（不丢已有数据）
-      const { added, updated } = store.reconcileWithBackend(list)
-      if (added === 0 && updated === 0) {
-        // 没有孤儿要补 → 走原 bulkSet 覆盖
-        store.bulkSetTasks(list)
-      } else {
-        // 有孤儿已补 → 单独 patch 增量
-        for (const st of list) {
-          const local = store.tasks.find((t) => t.id === st.id)
-          if (local && (local.createdAt !== st.createdAt || local.status !== st.status)) {
-            // 后端数据更新了 → patch（保留 store 的 runId/triggeredBy 兜底）
-            store.patchTask(st.id, { ...st, runId: st.runId || local.runId, triggeredBy: st.triggeredBy || local.triggeredBy })
-          }
-        }
-      }
+      // 🆕 2026-06-22 v2 架构：rebuildFromBackend（全量替换，不增量 patch）
+      //   历史：旧 reconcileWithBackend 增量逻辑 + bulkSet 双路径
+      //   → 1000+ 任务时多次 O(n) patch 累积 O(n²) 卡顿
+      //   → 增量 patch 易遗漏状态（如 createdAt 不一致）
+      //   改：直接以 serverTasks 全量替换 store（一次 O(n) 完成）
+      store.rebuildFromBackend(list)
     } catch (err) {
       console.warn('[useTasksList.fetchTasks] failed:', err)
     } finally {

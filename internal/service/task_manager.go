@@ -588,10 +588,13 @@ func (tm *TaskManager) CreateWithExtras(taskType, sourcePath, targetPath, passwo
 // 前端 createTask API 传 runId（自动化测试/AI agent run 的关联 ID）+ triggeredBy ('user'|'automation'|'ai_agent')
 // 后端持久化让任务列表刷新后仍能聚合（前端按 runId 分组）。
 //
-// 设计取舍：
-//   - 不修改 CreateWithExtras 签名（保持向后兼容）
-//   - 新增独立方法，由 handleCreateTaskGin 按需调用
-//   - runId="" 时视为手动创建（triggeredBy 默认 'user'）
+// 🆕 2026-06-22 v2 架构重写：runId 永不为空的兜底（根治"任务逃逸"）
+//   - 历史 bug：前端 createTask 漏传 runId（移动端 Capacitor 调用时偶发丢参）→ task.RunId = ''
+//     → 前端按 runId 分组时这个 task 变孤儿（不入任何 group）
+//     → 重启后 SQLite 仍存但 runId 为空 → 列表展示混乱
+//   - 修法：后端兜底。runId 为空 → 用 "manual-" + taskID 派生稳定 runId
+//     （保证每个 task 都有非空 runId，前端按 runId 分组永远有归属）
+//   - triggeredBy 已有兜底（'' → 'user'）
 func (tm *TaskManager) CreateWithRunMeta(
 	taskType, sourcePath, targetPath, password, secondaryPassword string,
 	version int, pluginName string,
@@ -605,6 +608,10 @@ func (tm *TaskManager) CreateWithRunMeta(
 		version, pluginName, extras)
 	task.CipherMode = cipherMode
 	task.CompressionMode = compressionMode
+	// 🆕 2026-06-22 v2 架构：runId 永不为空兜底
+	if runId == "" {
+		runId = "manual-" + task.ID
+	}
 	task.RunId = runId
 	if triggeredBy == "" {
 		triggeredBy = "user"

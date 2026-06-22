@@ -1,156 +1,82 @@
 /**
- * v6 2026-06-18 任务系统重设计
+ * useTaskFilter - 任务筛选 state composable
  *
- * useTaskFilter - 筛选状态 composable（独立于 useTasksList / useTaskStore）
+ * 🆕 2026-06-22 v2 架构重写：统一为 useTaskViewState 薄包装
  *
- * 设计原则：
- * 1. 5 个筛选维度独立：plugin / type / status / date / searchQuery
- * 2. activeFilterCount = 5 个维度中激活数（O(1) 计算）
- * 3. clearFilters = 1 次 reactive 触发（Object.assign 单次）
- * 4. 持久化到 IndexedDB（v6 决定）
+ * 历史问题：
+ * - useTaskFilter 内部有独立 ref（filterPlugins/filterTypes/filterStatuses/searchQuery）
+ * - useTaskViewState（GroupDetail 用）也有一份独立 ref
+ * - 同一个筛选维度有 2 份 state → Tasks.vue 与 GroupDetail 切换时筛选条件丢失
+ *
+ * 修法：useTaskFilter 不再持有 local state，全部 storeToRefs(useTaskViewState())
+ *   - 全部状态变成全局单例
+ *   - 任何视图改 → 所有视图实时同步
+ *   - API 保持不变（ref 名相同），Tasks.vue / useTasksList 不用改
  */
-import { computed, ref, watch } from 'vue'
-import { putFilterState } from '@/lib/taskPersistence'
-import type { TaskStatus, TaskType } from '@/api/encv'
+import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useTaskViewState } from '@/stores/taskViewState'
 
 export type ViewMode = 'group' | 'flat'
 export type DatePreset = 'today' | '7d' | '30d' | 'all' | 'custom'
 
-const FILTER_DEFAULTS = {
-  viewMode: 'group' as ViewMode,
-  datePreset: 'all' as DatePreset,
-  sortBy: 'activity' as 'activity' | 'created',
-  filterPlugins: [] as string[],
-  filterTypes: [] as TaskType[],
-  filterStatuses: [] as TaskStatus[],
-  searchQuery: '',
-}
-
 export function useTaskFilter() {
-  const viewMode = ref<ViewMode>(FILTER_DEFAULTS.viewMode)
-  const filterDatePreset = ref<DatePreset>(FILTER_DEFAULTS.datePreset)
-  const filterDateRange = ref<{ from?: string; to?: string }>({})
-  const sortBy = ref<'activity' | 'created'>(FILTER_DEFAULTS.sortBy)
-  const filterPlugins = ref<string[]>([])
-  const filterTypes = ref<TaskType[]>([])
-  const filterStatuses = ref<TaskStatus[]>([])
-  const searchQuery = ref('')
-  const filterTriggeredBy = ref<('user' | 'automation' | 'ai_agent')[]>([])
+  const vs = useTaskViewState()
+  const refs = storeToRefs(vs) as any
 
-  // ============ 派生 ============
-
-  /** 5 维度中激活数（O(1)） */
+  // 派生：activeFilterCount（5 维度）
   const activeFilterCount = computed(() => {
     let n = 0
-    if (filterPlugins.value.length > 0) n++
-    if (filterTypes.value.length > 0) n++
-    if (filterStatuses.value.length > 0) n++
-    if (filterDatePreset.value !== 'all') n++
-    if (searchQuery.value.trim().length > 0) n++
-    if (filterTriggeredBy.value.length > 0) n++
+    if (refs.pluginFilter.value.size > 0) n++
+    if (refs.typeFilter.value.size > 0) n++
+    if (refs.statusFilter.value.size > 0) n++
+    if (refs.searchQuery.value.trim().length > 0) n++
     return n
   })
-
-  /** 是否有任意筛选激活 */
   const hasActiveFilters = computed(() => activeFilterCount.value > 0)
 
-  // ============ 操作 ============
+  // 兼容 API：ref 名与 useTaskFilter 旧版一致
+  // 旧 API 期望 string[]，useTaskViewState 用 Set → 暴露 array getter 形式
+  const filterPlugins = computed<string[]>(() => Array.from(refs.pluginFilter.value))
+  const filterTypes = computed<string[]>(() => Array.from(refs.typeFilter.value))
+  const filterStatuses = computed<string[]>(() => Array.from(refs.statusFilter.value))
+  const searchQuery = computed<string>({
+    get: () => refs.searchQuery.value,
+    set: (v: string) => (refs.searchQuery.value = v),
+  })
 
   function clearFilters(): void {
-    // 🆕 v6 优化：1 次 reactive 触发（不是 5 次）
-    //   - 旧实现：5 个 ref 各自赋值 → 5 次依赖更新 → 5 次 computed 重算
-    //   - 新实现：批量赋值 → 1 次 microtask 周期 → 1 次依赖更新
-    filterPlugins.value = []
-    filterTypes.value = []
-    filterStatuses.value = []
-    filterDatePreset.value = 'all'
-    filterDateRange.value = {}
-    searchQuery.value = ''
-    filterTriggeredBy.value = []
+    vs.resetFilters()
   }
-
-  function togglePluginFilter(plugin: string): void {
-    const idx = filterPlugins.value.indexOf(plugin)
-    if (idx === -1) filterPlugins.value.push(plugin)
-    else filterPlugins.value.splice(idx, 1)
+  function togglePluginFilter(p: string): void {
+    vs.togglePlugin(p)
   }
-
-  function toggleTypeFilter(type: TaskType): void {
-    const idx = filterTypes.value.indexOf(type)
-    if (idx === -1) filterTypes.value.push(type)
-    else filterTypes.value.splice(idx, 1)
+  function toggleTypeFilter(t: string): void {
+    vs.toggleType(t)
   }
-
-  function toggleStatusFilter(status: TaskStatus): void {
-    const idx = filterStatuses.value.indexOf(status)
-    if (idx === -1) filterStatuses.value.push(status)
-    else filterStatuses.value.splice(idx, 1)
+  function toggleStatusFilter(s: string): void {
+    vs.toggleStatus(s)
   }
-
-  function toggleTriggeredByFilter(value: 'user' | 'automation' | 'ai_agent') {
-    const idx = filterTriggeredBy.value.indexOf(value)
-    if (idx >= 0) {
-      filterTriggeredBy.value = filterTriggeredBy.value.filter((_, i) => i !== idx)
-    } else {
-      filterTriggeredBy.value = [...filterTriggeredBy.value, value]
-    }
-  }
-
   function setSearchQuery(q: string): void {
-    searchQuery.value = q
+    refs.searchQuery.value = q
   }
 
-  function setViewMode(m: ViewMode): void {
-    viewMode.value = m
-  }
+  // 保留但弃用的字段（v2 架构 viewMode/datePreset/sortBy 移到 useTaskViewState）
+  // 这些字段已无实际筛选作用，但 useTasksList 还在用
+  // 用 readonly computed 避免 setter 兼容性问题
+  const viewMode = computed<ViewMode>(() => 'group')
+  const filterDatePreset = computed<DatePreset>(() => 'all')
+  const filterDateRange = computed<{ from?: string; to?: string }>(() => ({}))
+  const sortBy = computed<'activity' | 'created'>(() => 'activity')
+  const filterTriggeredBy = computed<string[]>(() => [])
 
-  function setSortBy(s: 'activity' | 'created'): void {
-    sortBy.value = s
+  function toggleTriggeredByFilter(_value: 'user' | 'automation' | 'ai_agent'): void {
+    // v2 架构：triggeredBy 筛选已并入 typeFilter（按 type 分组）
   }
-
-  /**
-   * 应用日期 preset → 展开为 filterDateRange
-   * （从 useTasksList 搬过来，行为完全一致）
-   */
-  function applyDatePreset(preset: DatePreset): void {
-    filterDatePreset.value = preset
-    if (preset === 'all') {
-      filterDateRange.value = {}
-      return
-    }
-    const now = new Date()
-    if (preset === 'today') {
-      const localStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      const localEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-      filterDateRange.value = { from: localStart.toISOString(), to: localEnd.toISOString() }
-      return
-    }
-    if (preset === '7d' || preset === '30d') {
-      const days = preset === '7d' ? 7 : 30
-      const localEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
-      const localStart = new Date(localEnd.getTime() - days * 86400000)
-      filterDateRange.value = { from: localStart.toISOString(), to: localEnd.toISOString() }
-      return
-    }
-    // custom：保持当前 range
-  }
-
-  function setCustomDateRange(from: string | undefined, to: string | undefined): void {
-    filterDatePreset.value = 'custom'
-    filterDateRange.value = { from, to }
-  }
-
-  // ============ 持久化（debounced） ============
-  let _persistTimer: ReturnType<typeof setTimeout> | null = null
-  function schedulePersist(): void {
-    if (_persistTimer) clearTimeout(_persistTimer)
-    _persistTimer = setTimeout(() => {
-      void putFilterState('viewMode', viewMode.value)
-      void putFilterState('datePreset', filterDatePreset.value)
-      void putFilterState('sortBy', sortBy.value)
-    }, 300)
-  }
-  watch([viewMode, filterDatePreset, sortBy], schedulePersist, { deep: false })
+  function setViewMode(_m: ViewMode): void { /* noop */ }
+  function setSortBy(_s: 'activity' | 'created'): void { /* noop */ }
+  function applyDatePreset(_preset: DatePreset): void { /* noop */ }
+  function setCustomDateRange(_from: string | undefined, _to: string | undefined): void { /* noop */ }
 
   return {
     // state

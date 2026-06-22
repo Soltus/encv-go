@@ -94,13 +94,13 @@
             <ion-chip
               v-for="chip in activeFilterChips"
               :key="chip.key"
-              @click="removeFilter(chip.key)"
+              @click="chip.remove()"
               :title="t('tasks.filterRemoveChip')"
             >
               <ion-label>{{ chip.label }}</ion-label>
               <ion-icon :icon="closeCircle"></ion-icon>
             </ion-chip>
-            <ion-button fill="clear" size="small" @click="clearFilters">
+            <ion-button fill="clear" size="small" @click="viewState.resetFilters()">
               {{ t('tasks.filterClearAll') }}
             </ion-button>
           </div>
@@ -111,7 +111,7 @@
             :selected-ids="selectedIds"
             :search-query="searchQuery"
             @select-task="openTaskDetail"
-            @toggle-select="toggleSelect"
+            @toggle-select="(id) => viewState.toggleSelect(id)"
             @open-performance="performanceSectionOpen = !performanceSectionOpen"
           />
 
@@ -135,7 +135,7 @@
     <ion-footer v-if="multiSelectMode && selectedIds.size > 0" class="batch-action-bar">
       <ion-toolbar color="light">
         <ion-buttons slot="start">
-          <ion-button fill="clear" size="small" @click="clearSelection">
+          <ion-button fill="clear" size="small" @click="viewState.clearSelection()">
             <ion-icon :icon="closeOutline" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-buttons>
@@ -143,27 +143,30 @@
           {{ t('tasks.batchSelected', { count: String(selectedIds.size) }) }}
         </ion-title>
         <ion-buttons slot="end">
-          <ion-button fill="clear" size="small" @click="batchRetry" :title="t('tasks.batchRetry')">
+          <ion-button fill="clear" size="small" @click="batchRetrySelected" :title="t('tasks.batchRetry')">
             <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
           </ion-button>
-          <ion-button fill="clear" size="small" @click="batchCancel" :title="t('tasks.batchCancel')" color="warning">
+          <ion-button fill="clear" size="small" @click="batchCancelSelected" :title="t('tasks.batchCancel')" color="warning">
             <ion-icon :icon="stopCircleOutline" slot="icon-only"></ion-icon>
           </ion-button>
-          <ion-button fill="clear" size="small" @click="batchDelete" :title="t('tasks.batchDelete')" color="danger">
+          <ion-button fill="clear" size="small" @click="batchDeleteSelected" :title="t('tasks.batchDelete')" color="danger">
             <ion-icon :icon="trashOutline" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-buttons>
       </ion-toolbar>
     </ion-footer>
 
-    <!-- 🆕 Q4：筛选 drawer（ion-modal 内嵌筛选 UI） -->
+    <!-- 🆕 Q4：筛选 drawer（ion-modal 内嵌筛选 UI），绑到 viewState（与 Tasks.vue 共享） -->
     <ion-modal :is-open="showFilterDrawer" @did-dismiss="showFilterDrawer = false" class="filter-modal">
       <FilterDrawer
-        v-model:status="filterStatus"
-        v-model:task-type="filterTaskType"
-        v-model:plugin="filterPlugin"
+        :status="statusFilter"
+        :task-type="typeFilter"
+        :plugin="pluginFilter"
         :available-plugins="availablePlugins"
-        @reset="resetFilters"
+        @update:status="(v: Set<string>) => viewState.statusFilter = v"
+        @update:task-type="(v: Set<string>) => viewState.typeFilter = v"
+        @update:plugin="(v: Set<string>) => viewState.pluginFilter = v"
+        @reset="viewState.resetFilters()"
         @apply="showFilterDrawer = false"
       />
     </ion-modal>
@@ -190,7 +193,8 @@ import { useI18n } from '@/composables/useI18n'
 import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
 import { useTasksList } from '@/composables/useTasksList'
 import { useBatchOperations } from '@/composables/useBatchOperations'
-import { useTaskFiltering } from '@/composables/useTaskFiltering'
+import { useTaskViewState } from '@/stores/taskViewState'
+import { storeToRefs } from 'pinia'
 import type { EncvTask } from '@/api/encv'
 import { getCalibration } from '@/api/encv'
 import type { JobRun } from '@/lib/workflow/types'
@@ -207,6 +211,20 @@ const workflowService = useWorkflowTaskService()
 const { tasks: allTasks } = useTasksList()
 const batchOps = useBatchOperations()
 
+// 🆕 2026-06-22 v2 架构：filter / search / selection 共享 state（与 Tasks.vue 主视图同步）
+//   历史：GroupDetail 顶层 + Tasks.vue 各自有 local filter state
+//   → 用户在 GroupDetail 选筛选条件切到主视图看不到（或反过来）
+//   → 选中态在两个视图不共享
+//   修法：所有视图统一 useTaskViewState()，底层 Pinia 单例
+const viewState = useTaskViewState()
+const {
+  searchQuery,
+  statusFilter, typeFilter, pluginFilter,
+  selectedIds, multiSelectMode,
+  filteredTasks, filterChipCount, activeFilterChips,
+  availablePlugins,
+} = storeToRefs(viewState) as any
+
 // ============ 路由参数 ============
 const runId = computed(() => decodeURIComponent(String(route.params.runId ?? '')))
 
@@ -222,44 +240,30 @@ watch(activeTab, (v) => {
   try { localStorage.setItem(TAB_STORAGE_KEY, v) } catch { /* silent */ }
 })
 
-// ============ 🆕 Q4：搜索 / 筛选 / 多选 状态 ============
-const searchQuery = ref('')
+// ============ 🆕 Q4：UI 局部状态（filter/selection 已用 useTaskViewState） ============
 const showFilterDrawer = ref(false)
-const multiSelectMode = ref(false)
-const selectedIds = ref<Set<string>>(new Set())
 const performanceSectionOpen = ref(false)
-
-// 筛选状态
-const filterStatus = ref<Set<string>>(new Set())
-const filterTaskType = ref<Set<string>>(new Set())
-const filterPlugin = ref<Set<string>>(new Set())
 
 // 衍生数据
 const run = computed(() => workflowService.getRun(runId.value))
 
+// 🆕 v2 架构：runTasks 走 useTaskViewState.filteredTasks
+//   - filteredTasks 已经是 viewState 应用 filter+search 后的列表
+//   - 在 GroupDetail 上下文：再筛一次只显示当前 run 的
 const runTasks = computed<EncvTask[]>(() => {
   const id = runId.value
   if (!id) return []
-  return allTasks.value
-    .filter((t) => t.runId === id)
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-})
-
-const availablePlugins = computed<string[]>(() => {
-  const set = new Set<string>()
-  for (const t of runTasks.value) {
-    if (t.pluginName) set.add(t.pluginName)
+  const list: EncvTask[] = filteredTasks.value
+  if (list === allTasks.value) {
+    // 快速路径：未应用 filter → 直接过滤 runId
+    return allTasks.value
+      .filter((t: EncvTask) => t.runId === id)
+      .sort((a: EncvTask, b: EncvTask) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
   }
-  return Array.from(set).sort()
-})
-
-// 🆕 Q4：useTaskFiltering 应用筛选 + 搜索
-const { filteredTasks, filterChipCount, activeFilterChips } = useTaskFiltering({
-  tasks: runTasks,
-  searchQuery,
-  statusFilter: filterStatus,
-  taskTypeFilter: filterTaskType,
-  pluginFilter: filterPlugin,
+  // 已 filter：直接遍历（list 已较小）
+  return list
+    .filter((t: EncvTask) => t.runId === id)
+    .sort((a: EncvTask, b: EncvTask) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 })
 
 const totals = computed(() => {
@@ -293,33 +297,21 @@ function goBack() {
   router.replace('/tabs/tasks')
 }
 
-// ============ 🆕 Q4：多选 / 批量操作 ============
-function toggleSelect(taskId: string) {
-  const next = new Set(selectedIds.value)
-  if (next.has(taskId)) next.delete(taskId)
-  else next.add(taskId)
-  selectedIds.value = next
-}
-
-function clearSelection() {
-  selectedIds.value = new Set()
-  multiSelectMode.value = false
-}
-
-async function batchRetry() {
-  const ids = Array.from(selectedIds.value)
+// ============ 🆕 v2 架构：多选 / 批量操作（统一用 viewState） ============
+//   viewState 内已暴露 toggleSelect / clearSelection / batchRetry 通过 batchOps
+//   GroupDetail 不再持有 local state，仅转发到 viewState + batchOps
+async function batchRetrySelected() {
+  const ids = Array.from(selectedIds.value) as string[]
   await batchOps.batchRetry(ids)
-  clearSelection()
+  viewState.clearSelection()
 }
-
-async function batchCancel() {
-  const ids = Array.from(selectedIds.value)
+async function batchCancelSelected() {
+  const ids = Array.from(selectedIds.value) as string[]
   await batchOps.batchCancel(ids)
-  clearSelection()
+  viewState.clearSelection()
 }
-
-async function batchDelete() {
-  const ids = Array.from(selectedIds.value)
+async function batchDeleteSelected() {
+  const ids = Array.from(selectedIds.value) as string[]
   const confirm = await alertController.create({
     header: t('tasks.batchDeleteConfirmHeader'),
     message: t('tasks.batchDeleteConfirmMessage', { count: String(ids.length) }),
@@ -327,33 +319,16 @@ async function batchDelete() {
       { text: t('common.cancel'), role: 'cancel' },
       { text: t('common.confirm'), role: 'destructive', handler: async () => {
         await batchOps.batchDelete(ids)
-        clearSelection()
+        viewState.clearSelection()
       } },
     ],
   })
   await confirm.present()
 }
 
-// ============ 🆕 Q4：筛选操作 ============
-function removeFilter(key: string) {
-  if (key.startsWith('status:')) filterStatus.value.delete(key.slice(7))
-  else if (key.startsWith('type:')) filterTaskType.value.delete(key.slice(5))
-  else if (key.startsWith('plugin:')) filterPlugin.value.delete(key.slice(7))
-  // 触发响应式更新
-  filterStatus.value = new Set(filterStatus.value)
-  filterTaskType.value = new Set(filterTaskType.value)
-  filterPlugin.value = new Set(filterPlugin.value)
-}
-
-function clearFilters() {
-  filterStatus.value = new Set()
-  filterTaskType.value = new Set()
-  filterPlugin.value = new Set()
-}
-
-function resetFilters() {
-  clearFilters()
-}
+// 模板里用：v-model:status → toggleStatus, v-model:task-type → toggleType, etc.
+// 实际 chip 行是 activeFilterChips，removeFilter 通过 emit/click 触发
+// 简化：删除 local removeFilter/clearFilters/resetFilters，全部用 viewState.resetFilters()
 
 // ============ 导出报告（🆕 Q7C native Filesystem + web download） ============
 const exporting = ref(false)
@@ -369,6 +344,41 @@ async function blobToBase64(blob: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error('blobToBase64 failed'))
     reader.readAsDataURL(blob)
   })
+}
+
+/**
+ * 🆕 v2 架构：share / download 兜底
+ *
+ * 三级降级：
+ * 1. Share.share({url: dataUrl}) — Capacitor 5 兼容，但 Android 11+ 拒收大 data URL
+ * 2. a.download + blob URL — web 通用
+ * 3. 错误抛出 → 上面 catch 捕获 → toast 提示
+ */
+async function shareOrDownloadFallback(blob: Blob, filename: string): Promise<void> {
+  // 1) 试 Share.share({url: dataURL})（老 Capacitor 兼容）
+  try {
+    const reader = new FileReader()
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      reader.onload = () => resolve(String(reader.result ?? ''))
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(blob)
+    })
+    if ((window as any).Capacitor?.isNativePlatform?.()) {
+      await Share.share({ url: dataUrl, dialogTitle: filename, title: filename })
+      return
+    }
+  } catch (e) {
+    console.warn('[shareOrDownloadFallback] Share.url 失败:', e)
+  }
+  // 2) a.download（web 通用）
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 async function exportGroupReport() {
@@ -400,34 +410,35 @@ async function exportGroupReport() {
     const filename = `encvreport-${r.id.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.zip`
     const isNative = !!(window as any).Capacitor?.isNativePlatform?.()
     if (isNative) {
-      // 🆕 Q7C：native 走 Filesystem → content:// URI → Share.files
-      const base64 = await blobToBase64(zipBlob)
-      const writeResult = await Filesystem.writeFile({
-        path: filename,
-        data: base64,
-        directory: Directory.Cache,
-      })
-      // writeResult.uri 是 string | undefined，兜底重读
-      const fileUri = (writeResult.uri ?? `content://${filename}`) as string
-      await Share.share({
-        title: filename,
-        text: t('tasks.exportShareText', {
-          runId: r.id.slice(0, 8),
-          passed: String(totals.value.passed),
-          failed: String(totals.value.failed),
-        }),
-        files: [fileUri],
-        dialogTitle: t('tasks.exportShareDialogTitle'),
-      })
+      // 🆕 v2 架构：native 双轨 + 探测
+      //   - 主路径：Filesystem.writeFile → content:// URI → Share.files（Android 11+ StrictMode 拒收大 data URL）
+      //   - 兜底 1：Filesystem 抛 "plugin is not implemented on android" → Share.share({url: dataURL})
+      //     （老 Capacitor 5 兼容，data URL 在 Share Intent 实际工作）
+      //   - 兜底 2：Share 不可用 → a.download（web 视图）
+      try {
+        const base64 = await blobToBase64(zipBlob)
+        const writeResult = await Filesystem.writeFile({
+          path: filename,
+          data: base64,
+          directory: Directory.Cache,
+        })
+        const fileUri = (writeResult.uri ?? `content://${filename}`) as string
+        await Share.share({
+          title: filename,
+          text: t('tasks.exportShareText', {
+            runId: r.id.slice(0, 8),
+            passed: String(totals.value.passed),
+            failed: String(totals.value.failed),
+          }),
+          files: [fileUri],
+          dialogTitle: t('tasks.exportShareDialogTitle'),
+        })
+      } catch (nativeErr) {
+        console.warn('[exportGroupReport] Filesystem 路径失败，fallback 到 Share.url / a.download:', nativeErr)
+        await shareOrDownloadFallback(zipBlob, filename)
+      }
     } else {
-      const url = URL.createObjectURL(zipBlob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      await shareOrDownloadFallback(zipBlob, filename)
     }
     const toast = await toastController.create({
       message: t('tasks.exportSuccess', { filename }),

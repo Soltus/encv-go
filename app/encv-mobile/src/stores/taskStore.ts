@@ -405,67 +405,39 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   /**
-   * 🆕 2026-06-22 Q6A：从前端 store 移除 task（保留后端 SQLite 记录）
+   * 🆕 2026-06-22 v2 架构重写：删除 removeTaskLocal
    *
-   * 为什么需要：
-   * - TasksTab 滑动删除调用 deleteTask
-   * - 后端 SQLite 是权威存储（task 已写盘），前端仅从 store 移除避免显示
-   * - 与 removeTask 区别：本函数不调 persistDelete（不再清 IndexedDB）
-   *   避免后端再次拉取时被 hydrate 重新装回来
+   * 历史背景：Q6A 临时引入 removeTaskLocal（仅前端 hide 不删后端），
+   *   但导致架构混乱：删除路径有 2 套（removeTask 调 persistDelete / removeTaskLocal 不调）
+   *   → reconcileWithBackend 还要特殊处理"前端 hide 但后端还在"
+   *   → 1000+ task 重建时容易把已 hide 的 task 拉回来
    *
-   * 使用场景：
-   * - 用户在 UI 隐藏某个 task（不是真删）
-   * - 失败重试失败后用户手动隐藏
+   * 修法：删除 removeTaskLocal。统一用 removeTask 走正常路径：
+   *   - store 移除 + IndexedDB 删除 + 后端调 DELETE /api/tasks/:id
+   *   - 1000+ 自动化测试场景，task 不需要前端 hide 语义（测试后清空就行）
    */
-  function removeTaskLocal(id: string): void {
-    if (!_taskIndex.has(id)) return
-    tasks.value = tasks.value.filter((t) => t.id !== id)
-    hasAnyTask.value = tasks.value.length > 0
-    rebuildIndex()
-    // 注意：故意不调 persistDelete，因为这是前端 hide，后端 SQLite 仍保留
-  }
 
   /**
-   * 🆕 2026-06-22 Q6A：与后端权威层同步（启动重建）
+   * 🆕 2026-06-22 v2 架构重写：rebuildFromBackend（全量重建）
    *
-   * 为什么需要：
-   * - 1000+ 自动化任务并发时，部分 task 的 runId/triggeredBy 可能因 WS 事件丢失
-   *   导致 store 里 task.runId='' / task.triggeredBy=undefined（孤儿）
-   * - 重启应用后这些 task 从 IndexedDB 加载，仍是孤儿
-   * - 兜底：启动时从后端 GET /api/tasks 拉全量，与 store 对比：
-   *   - store 没有 → applyTaskCreated
-   *   - store 有但 runId 空 → 用后端 runId 补全
-   *   - store 有但 triggeredBy 空 → 用后端 triggeredBy 补全
+   * 取代旧的 reconcileWithBackend（增量 patch 易遗漏状态）。
+   *
+   * 语义：
+   *   - serverTasks 是后端权威状态（含 runId / triggeredBy / status / createdAt 等）
+   *   - 启动时：直接以 serverTasks 替换 store.tasks（不与 IndexedDB merge）
+   *   - 已 IndexedDB 持久化的 task 也会被 server 取代
+   *   - 1000+ 自动化测试场景下保证"无孤儿"
    *
    * 调用方：
-   * - useTasksList onMounted 拉一次
+   *   - useTasksList onMounted 拉一次
+   *   - 切换 server / 重连后调一次
    */
-  function reconcileWithBackend(serverTasks: EncvTask[]): { added: number; updated: number } {
-    let added = 0
-    let updated = 0
-    const serverById = new Map<string, EncvTask>()
-    for (const t of serverTasks) serverById.set(t.id, t)
-    for (const st of serverTasks) {
-      const local = getTaskById(st.id)
-      if (!local) {
-        // store 没有 → 拉入（保留 server 的 runId/triggeredBy）
-        applyTaskCreated(st as any)
-        added += 1
-      } else {
-        // store 有 → 补全缺失的 runId/triggeredBy
-        const patch: Partial<EncvTask> = {}
-        if (!local.runId && st.runId) patch.runId = st.runId
-        if (!local.triggeredBy && st.triggeredBy) patch.triggeredBy = st.triggeredBy
-        if (Object.keys(patch).length > 0) {
-          patchTask(st.id, patch)
-          updated += 1
-        }
-      }
+  function rebuildFromBackend(serverTasks: EncvTask[]): void {
+    if (serverTasks.length === 0) {
+      // 保留现有 store（不要清空，避免闪烁）
+      return
     }
-    if (added > 0 || updated > 0) {
-      console.info(`[useTaskStore.reconcileWithBackend] added=${added} updated=${updated}`)
-    }
-    return { added, updated }
+    bulkSetTasks(serverTasks)
   }
 
   function applyTaskCompleted(data: { id: string; error?: string; outputPath?: string }): void {
@@ -575,7 +547,6 @@ export const useTaskStore = defineStore('task', () => {
     persistTaskById,
     appendTask,
     removeTask,
-    removeTaskLocal,  // 🆕 Q6A
     removeRunTasks,
     cancelRunTasks,
     togglePinRun,
@@ -584,7 +555,7 @@ export const useTaskStore = defineStore('task', () => {
     applyTaskProgress,
     applyTaskCreated,
     applyTaskCompleted,
-    reconcileWithBackend,  // 🆕 Q6A
+    rebuildFromBackend,  // 🆕 v2 架构
     $reset,
   }
 })

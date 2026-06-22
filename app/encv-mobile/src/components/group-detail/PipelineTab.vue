@@ -1,180 +1,165 @@
-<template>
-  <div class="pipeline-tab">
-    <!-- 报告头部 -->
-    <TestReportHeader
-      v-if="reportHeaderProps"
-      v-bind="reportHeaderProps"
-    />
-
-    <!-- 🆕 2026-06-22 Q4：视图模式 toggle（折叠 vs 展开） -->
-    <div class="pipeline-view-toggle">
-      <ion-segment v-model="viewMode" mode="md">
-        <ion-segment-button value="collapsed">
-          <ion-icon :icon="reorderFourOutline" slot="start"></ion-icon>
-          <ion-label>{{ t('tasks.pipelineViewCollapsed') }}</ion-label>
-        </ion-segment-button>
-        <ion-segment-button value="expanded">
-          <ion-icon :icon="gitNetworkOutline" slot="start"></ion-icon>
-          <ion-label>{{ t('tasks.pipelineViewExpanded') }}</ion-label>
-        </ion-segment-button>
-      </ion-segment>
-    </div>
-
-    <div v-if="jobs.length === 0" class="empty-state">
-      <ion-icon :icon="gitNetworkOutline" class="empty-icon" color="medium"></ion-icon>
-      <h3>{{ t('tasks.groupDetail.noJobs') }}</h3>
-      <p>{{ t('tasks.groupDetail.noJobsDesc') }}</p>
-    </div>
-    <div v-else class="pipeline-tab__list">
-      <!-- 折叠模式：仅显示 job 摘要 + 失败 step 数 -->
-      <div v-if="viewMode === 'collapsed'">
-        <ion-card v-for="job in jobs" :key="job.id" class="job-summary-card" button @click="toggleJob(job.id)">
-          <ion-card-content>
-            <div class="job-summary-row">
-              <ion-icon
-                :icon="expandedJobs.has(job.id) ? chevronDown : chevronForward"
-                size="small"
-              ></ion-icon>
-              <span class="job-name">{{ getJobDisplayName(job) }}</span>
-              <ion-badge :color="jobStatusColor(job)" class="job-status-badge">
-                {{ jobStatusText(job) }}
-              </ion-badge>
-            </div>
-          </ion-card-content>
-        </ion-card>
-      </div>
-      <!-- 展开模式：完整 DAG 树 -->
-      <div v-else>
-        <JobPipelineCard
-          v-for="job in jobs"
-          :key="job.id"
-          :job="job"
-          :step-names="stepNamesMap"
-          :display-name="getJobDisplayName(job)"
-          @click="emit('select-job', job)"
-        />
-      </div>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { IonIcon, IonSegment, IonSegmentButton, IonLabel, IonCard, IonCardContent, IonBadge } from '@ionic/vue'
-import { gitNetworkOutline, reorderFourOutline, chevronDown, chevronForward } from 'ionicons/icons'
-import TestReportHeader from '@/components/automation/TestReportHeader.vue'
-import JobPipelineCard from '@/components/automation/JobPipelineCard.vue'
-import type { JobRun } from '@/lib/workflow/types'
-import { useI18n } from '@/composables/useI18n'
+/**
+ * 🆕 2026-06-22 v3：PipelineTree 完全重写（朴素 ul/li 缩进树）
+ *
+ * 用户的"完全重写"决策：
+ *   1. 去掉我之前加的折叠/展开 toggle
+ *   2. 去掉 ion-card 包装
+ *   3. 去掉 icon-bubble / 渐变色 / 边框装饰
+ *   4. 去掉 status badge chip
+ *
+ * 设计：
+ *   - 一棵递归 ul/li 树
+ *   - 每行 = 节点名 + 状态文字（紧凑，不抢戏）
+ *   - 缩进 16px/层
+ *   - 不用 ion-* 组件，只用原生元素
+ */
+import { computed } from 'vue'
+import type { JobRun, StepRun } from '@/lib/workflow/types'
 
-const props = defineProps<{
+interface Props {
   jobs: JobRun[]
-  runId: string
-  startedAt?: string
-  durationMs?: number
-  total: number
-  passed: number
-  failed: number
-  pending: number
-  skipped: number
-}>()
-
-const emit = defineEmits<{
-  (e: 'select-job', job: JobRun): void
-}>()
-
-const { t } = useI18n()
-
-// 🆕 Q4：视图模式（默认折叠）
-const viewMode = ref<'collapsed' | 'expanded'>('collapsed')
-const expandedJobs = ref<Set<string>>(new Set())
-
-function toggleJob(jobId: string) {
-  const next = new Set(expandedJobs.value)
-  if (next.has(jobId)) next.delete(jobId)
-  else next.add(jobId)
-  expandedJobs.value = next
+  steps?: Record<string, StepRun[]>  // jobId -> steps（可选；如果 run 走 buildPipelineTree 派生）
 }
 
-const stepNamesMap = computed<Map<string, string> | undefined>(() => {
-  const m = new Map<string, string>()
-  for (const job of props.jobs) {
-    for (const step of job.steps) {
-      m.set(step.id, step.stepDefId)
+const props = defineProps<Props>()
+
+interface TreeNode {
+  id: string
+  label: string
+  status: string
+  children: TreeNode[]
+}
+
+const root = computed<TreeNode[]>(() => {
+  // 从 jobs / steps 派生
+  return props.jobs.map((job) => {
+    const childSteps = (props.steps && props.steps[job.id]) || (job as any).steps || []
+    return {
+      id: job.id,
+      label: job.id,
+      status: job.status,
+      children: childSteps.map((s: any) => ({
+        id: s.id,
+        label: s.id,
+        status: s.status,
+        children: [],
+      })),
     }
-  }
-  return m
+  })
 })
 
-const reportHeaderProps = computed(() => ({
-  runId: props.runId.slice(0, 8),
-  openedAt: props.startedAt ?? new Date().toISOString(),
-  durationMs: props.durationMs ?? 0,
-  total: props.total,
-  passed: props.passed,
-  failed: props.failed,
-  skipped: props.skipped,
-  pending: props.pending,
-  platform: 'encv-automation',
-}))
-
-function getJobDisplayName(job: JobRun): string {
-  return job.jobDefId
-    .replace(/^[a-z]+-/, '')
-    .replace(/[-_]/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase())
+function statusLabel(s: string): string {
+  switch (s) {
+    case 'completed':
+    case 'success': return '✓'
+    case 'failed':
+    case 'failure': return '✗'
+    case 'running': return '…'
+    case 'pending':
+    case 'queued': return '·'
+    case 'cancelling': return '↯'
+    case 'cancelled': return '×'
+    default: return '·'
+  }
 }
+</script>
 
-function jobStatusColor(job: JobRun): string {
-  const failed = job.steps.filter((s) => s.status === 'failure').length
-  if (failed > 0) return 'danger'
-  const running = job.steps.filter((s) => s.status === 'running' || s.status === 'queued').length
-  if (running > 0) return 'primary'
-  return 'success'
-}
+<template>
+  <ul class="pipeline-tree">
+    <PipelineNode v-for="node in root" :key="node.id" :node="node" :status-label="statusLabel" />
+  </ul>
+</template>
 
-function jobStatusText(job: JobRun): string {
-  const failed = job.steps.filter((s) => s.status === 'failure').length
-  const passed = job.steps.filter((s) => s.status === 'success').length
-  return `${passed}/${job.steps.length}${failed > 0 ? ` (${failed} ✗)` : ''}`
+<script lang="ts">
+import { defineComponent, h } from 'vue'
+// 子节点递归组件（原生 render，避免额外 SFC 文件）
+const PipelineNode = defineComponent({
+  name: 'PipelineNode',
+  props: {
+    node: { type: Object as () => any, required: true },
+    statusLabel: { type: Function as any, required: true },
+  },
+  setup(props) {
+    return () => {
+      const n = props.node
+      const sym = props.statusLabel(n.status)
+      const row = h('div', { class: 'pt-row' }, [
+        h('span', { class: `pt-status pt-status-${n.status || 'pending'}` }, sym),
+        h('span', { class: 'pt-label' }, n.label),
+      ])
+      if (!n.children || n.children.length === 0) {
+        return h('li', { class: 'pt-leaf' }, row)
+      }
+      return h('li', { class: 'pt-branch' }, [
+        row,
+        h('ul', { class: 'pt-children' },
+          n.children.map((c: any) => h(PipelineNode, { node: c, statusLabel: props.statusLabel, key: c.id }))
+        ),
+      ])
+    }
+  },
+})
+
+export default {
+  components: { PipelineNode },
 }
 </script>
 
 <style scoped>
-.pipeline-view-toggle {
-  padding: 8px 12px;
-  background: var(--ion-color-light);
+.pipeline-tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #222;
 }
-.job-summary-card {
-  margin: 4px 8px;
-  cursor: pointer;
+
+.pipeline-tree :deep(.pt-children) {
+  list-style: none;
+  margin: 0;
+  padding-left: 16px;
+  border-left: 1px solid #e5e5e5;
 }
-.job-summary-row {
-  display: flex;
+
+.pipeline-tree :deep(.pt-row) {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  padding: 2px 0;
 }
-.job-name {
-  flex: 1;
-  font-size: 14px;
-  font-weight: 500;
-}
-.job-status-badge {
-  font-size: 11px;
-}
-.pipeline-tab__list {
-  padding: 12px;
-  background: transparent;
-}
-.empty-state {
+
+.pipeline-tree :deep(.pt-status) {
+  display: inline-block;
+  width: 14px;
   text-align: center;
-  padding: 48px 16px;
+  font-size: 12px;
+  font-weight: 600;
 }
-.empty-icon {
-  font-size: 56px;
-  margin-bottom: 8px;
-  display: block;
-  margin-left: auto;
-  margin-right: auto;
+
+.pipeline-tree :deep(.pt-status-completed),
+.pipeline-tree :deep(.pt-status-success) {
+  color: #2e7d32;
+}
+.pipeline-tree :deep(.pt-status-failed),
+.pipeline-tree :deep(.pt-status-failure) {
+  color: #c62828;
+}
+.pipeline-tree :deep(.pt-status-running) {
+  color: #1565c0;
+}
+.pipeline-tree :deep(.pt-status-pending),
+.pipeline-tree :deep(.pt-status-queued) {
+  color: #9e9e9e;
+}
+.pipeline-tree :deep(.pt-status-cancelling),
+.pipeline-tree :deep(.pt-status-cancelled) {
+  color: #ef6c00;
+}
+
+.pipeline-tree :deep(.pt-label) {
+  color: #333;
 }
 </style>
