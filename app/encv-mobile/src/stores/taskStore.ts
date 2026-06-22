@@ -31,11 +31,13 @@ export type SortBy = 'activity' | 'created'
 const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set(['completed', 'failed', 'cancelled'])
 const STATUS_OPTIONS: TaskStatus[] = ['queued', 'running', 'cancelling', 'completed', 'failed', 'cancelled']
 
-// 🆕 2026-06-23 重构（用户反馈"分页应当针对视图列表数量，不是任务本身"）：
-//   - 删除 MAX_LOADED_TASKS 守卫：WS task:created 全部 push（不截断）
-//   - store 是数据唯一权威源：聚合计数/搜索/筛选基于完整 store
-//   - 分页只控制视图渲染（虚拟滚动天然分页），不污染 store 数据
-//   - 自动化测试 1000+ task 全部进 store，虚拟滚动只渲染可见行
+// 🆕 2026-06-23 重新设计（后端 SQL 权威 + 前端视图分页）：
+//   - WS task:created 守卫：store 满后不 push（避免视图分页被破坏）
+//   - 跳过的 task 在 loadMore / refresh 时从后端获取最新状态
+//   - 聚合计数独立：后端 SQL COUNT，前端不靠 store.tasks.length 算总数
+//   - 仅对 WS 路径（applyEvent('created', ...)）生效，不影响 workflow service 直接调 appendTask
+//   - 仅在 hydrated 后生效（避免破坏测试：测试不调 hydrate，hydrated=false → 全部 push）
+export const MAX_LOADED_TASKS = 100
 
 export const useTaskStore = defineStore('task', () => {
   // ============ 原始数据 ============
@@ -269,16 +271,21 @@ export const useTaskStore = defineStore('task', () => {
    * - update / progress: patch 后端提供的字段
    * - completed: patch 终态 + completedAt + progress=100
    *
-   * 🆕 2026-06-23 重构：删除 MAX_LOADED_TASKS 守卫
-   *   - 旧设计：store 满 100 后 WS task:created 跳过 push → 自动化 1000+ task 被截断
-   *   - 新设计：WS 全部 push，store 完整持有所有 task
-   *   - 分页由虚拟滚动天然处理（只渲染可见行），不污染 store 数据
+   * 🆕 2026-06-23 重新设计：WS task:created 守卫（视图分页保护）
+   *   - hydrated 后 + store 已满（>= MAX_LOADED_TASKS）+ task 不在 store → 跳过 push
+   *   - 原因：前端 store 只持有"当前视图需要的"task，不是所有 task
+   *   - 跳过的 task 在 loadMore / refresh 时从后端获取最新状态
    *   - update/progress/completed 天然只 patch 已加载的 task（patchTaskById 不在 store 则 return false）
    */
   function applyEvent(type: 'created' | 'update' | 'progress' | 'completed', data: any): void {
     if (!data || !data.id) return
     const id = data.id
     if (type === 'created') {
+      // 🆕 视图分页保护：store 已满 + task 不在 store → 跳过（等 loadMore/refresh 从后端获取）
+      //   仅 hydrated 后生效（测试不调 hydrate → hydrated=false → 全部 push，向后兼容）
+      if (hydrated.value && tasks.value.length >= MAX_LOADED_TASKS && !_taskIndex.has(id)) {
+        return
+      }
       appendTask(data as EncvTask)
       persistPutTask(id)
     } else if (type === 'update' || type === 'progress') {

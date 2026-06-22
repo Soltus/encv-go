@@ -279,17 +279,25 @@ function createUseTasksList() {
   }
   function formatWarningDetail(detail: string): string { return detail }
 
-  // ============ fetch / refresh（全量加载，分页由虚拟滚动处理） ============
-  // 🆕 2026-06-23 重构（用户反馈"分页应当针对视图列表数量，不是任务本身"）：
-  //   - 删除 fetchTasks/loadMore/hasMore/isLoadingMore/_paginationOffset/PAGE_SIZE
-  //   - store 是数据唯一权威源：全量加载所有 task，WS 全部 push
-  //   - 分页由虚拟滚动天然处理（只渲染可见行），不污染 store 数据
-  //   - 聚合计数/搜索/筛选基于完整 store，不被分页截断
+  // ============ fetch / refresh / loadMore（视图分页加载） ============
+  // 🆕 2026-06-23 重新设计（后端 SQL 权威 + 前端视图分页）：
+  //   - 后端是唯一权威：GET /api/tasks?runId=&offset=&limit= + X-Total-Count
+  //   - 前端 store 只持有"当前视图需要的"task（不是所有 task）
+  //   - 聚合计数独立：后端 SQL COUNT，前端不靠 store.tasks.length 算总数
+  //   - WS task:created 守卫：store 满后不 push（避免视图分页被破坏）
+  //     跳过的 task 在 loadMore / refresh 时从后端获取最新状态
+  const PAGE_SIZE = 100
+  const _paginationOffset = ref(0)
+  const hasMore = ref(false)
+  const isLoadingMore = ref(false)
+
   async function fetchTasks(_opts?: { silent?: boolean }): Promise<void> {
     store.isRefreshing = true
     try {
-      const list = await apiGetTasks()
+      const list = await apiGetTasks({ offset: 0, limit: PAGE_SIZE })
       store.rebuildFromBackend(list)
+      _paginationOffset.value = 0
+      hasMore.value = list.length >= PAGE_SIZE
     } catch (err) {
       console.warn('[useTasksList.fetchTasks] failed:', err)
     } finally {
@@ -297,6 +305,22 @@ function createUseTasksList() {
     }
   }
   function refresh(): Promise<void> { return fetchTasks({ silent: true }) }
+
+  async function loadMore(): Promise<void> {
+    if (isLoadingMore.value || !hasMore.value) return
+    isLoadingMore.value = true
+    try {
+      const nextOffset = _paginationOffset.value + PAGE_SIZE
+      const list = await apiGetTasks({ offset: nextOffset, limit: PAGE_SIZE })
+      store.appendTasksPage(list)
+      _paginationOffset.value = nextOffset
+      hasMore.value = list.length >= PAGE_SIZE
+    } catch (err) {
+      console.warn('[useTasksList.loadMore] failed:', err)
+    } finally {
+      isLoadingMore.value = false
+    }
+  }
 
   // ============ 任务操作 ============
   async function cancelTaskById(id: string): Promise<void> {
@@ -400,7 +424,8 @@ function createUseTasksList() {
     getStatusChipLabel, isPasswordError, toggleWarningDetail, formatWarningDetail,
     formatDateTime: dateFormat,
     // 操作
-    fetchTasks, refresh,
+    fetchTasks, refresh, loadMore,
+    hasMore, isLoadingMore,
     cancelRun, cancelTaskById, retryTaskById, removeTaskById, removeRunTasks, clearCompletedWithConfirm,
     onSearchInput, toggleSort, toggleViewMode,
     openPluginPopover, openTypePopover, openStatusPopover, openDatePopover,
