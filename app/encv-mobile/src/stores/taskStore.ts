@@ -320,22 +320,17 @@ export const useTaskStore = defineStore('task', () => {
   // ============ WS 4 件套统一入口 ============
 
   function applyTaskUpdate(data: { id: string; type?: string; status?: string; progress?: number }): void {
-    if (data.type) {
-      patchTask(data.id, {
-        type: data.type as any,
-        status: data.status as TaskStatus,
-        progress: data.progress ?? 0,
-      })
-    } else {
-      // 兼容老 payload：只 patch status/progress
-      patchTask(data.id, {
-        status: data.status as TaskStatus,
-        progress: data.progress ?? 0,
-      })
-    }
-    // 🆕 v6 2026-06-22：status 变更 → 显式持久化单行（重要状态，立即写）
-    //   用 getTaskById O(1) 替代 find O(n)
-    if (hydrated.value && data.status) {
+    // 关键：只 patch 后端实际提供的字段，绝不传 undefined
+    // 否则 patchTask 的 spread 会用 undefined 覆盖现有 status
+    // → 终态保护短路（partial.status 是 falsy）→ 覆盖发生 → 任务"逃出"聚合
+    const partial: Partial<EncvTask> = {}
+    if (data.type !== undefined) partial.type = data.type as any
+    if (data.status !== undefined) partial.status = data.status as TaskStatus
+    if (data.progress !== undefined) partial.progress = data.progress
+    if (Object.keys(partial).length === 0) return  // 空 patch 直接返回
+    patchTask(data.id, partial)
+    // status 变更 → 显式持久化单行（重要状态，立即写）
+    if (hydrated.value && partial.status) {
       const updated = getTaskById(data.id)
       if (updated) {
         try { void persistPut(updated) } catch (err) {
