@@ -46,8 +46,8 @@
             :title="t('tasks.filterTitle')"
             class="top-icon-btn"
           >
-            <ion-icon :icon="filterOutline" slot="icon-only" :color="filterChipCount > 0 ? 'primary' : 'medium'"></ion-icon>
-            <ion-badge v-if="filterChipCount > 0" color="primary" class="filter-badge">{{ filterChipCount }}</ion-badge>
+            <ion-icon :icon="filterOutline" slot="icon-only" :color="filter.activeFilterCount.value > 0 ? 'primary' : 'medium'"></ion-icon>
+            <ion-badge v-if="filter.activeFilterCount.value > 0" color="primary" class="filter-badge">{{ filter.activeFilterCount.value }}</ion-badge>
           </ion-button>
           <ion-button
             fill="clear"
@@ -76,10 +76,8 @@
         <!-- 🆕 Q4：PerformanceTab 折叠在 tasks tab 内（不再是独立 tab） -->
         <div v-if="activeTab === 'pipeline'" class="tab-content">
           <PipelineTab
+            :run="run"
             :jobs="run.jobs"
-            :run-id="run.id"
-            :started-at="run.startedAt ?? run.createdAt"
-            :duration-ms="run.durationMs ?? 0"
             :total="totals.total"
             :passed="totals.passed"
             :failed="totals.failed"
@@ -89,29 +87,13 @@
           />
         </div>
         <div v-else-if="activeTab === 'tasks'" class="tab-content">
-          <!-- 已应用的筛选 chip 行 -->
-          <div v-if="filterChipCount > 0" class="filter-chip-row">
-            <ion-chip
-              v-for="chip in activeFilterChips"
-              :key="chip.key"
-              @click="chip.remove()"
-              :title="t('tasks.filterRemoveChip')"
-            >
-              <ion-label>{{ chip.label }}</ion-label>
-              <ion-icon :icon="closeCircle"></ion-icon>
-            </ion-chip>
-            <ion-button fill="clear" size="small" @click="viewState.resetFilters()">
-              {{ t('tasks.filterClearAll') }}
-            </ion-button>
-          </div>
-
           <TasksTab
             :run-tasks="filteredTasks"
             :multi-select-mode="multiSelectMode"
             :selected-ids="selectedIds"
             :search-query="searchQuery"
             @select-task="openTaskDetail"
-            @toggle-select="(id) => viewState.toggleSelect(id)"
+            @toggle-select="toggleSelect"
             @open-performance="performanceSectionOpen = !performanceSectionOpen"
           />
 
@@ -135,7 +117,7 @@
     <ion-footer v-if="multiSelectMode && selectedIds.size > 0" class="batch-action-bar">
       <ion-toolbar color="light">
         <ion-buttons slot="start">
-          <ion-button fill="clear" size="small" @click="viewState.clearSelection()">
+          <ion-button fill="clear" size="small" @click="clearSelection()">
             <ion-icon :icon="closeOutline" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-buttons>
@@ -156,17 +138,17 @@
       </ion-toolbar>
     </ion-footer>
 
-    <!-- 🆕 Q4：筛选 drawer（ion-modal 内嵌筛选 UI），绑到 viewState（与 Tasks.vue 共享） -->
+    <!-- 筛选 drawer（ion-modal 内嵌筛选 UI），绑到 useTaskFilter 状态 -->
     <ion-modal :is-open="showFilterDrawer" @did-dismiss="showFilterDrawer = false" class="filter-modal">
       <FilterDrawer
-        :status="statusFilter"
-        :task-type="typeFilter"
-        :plugin="pluginFilter"
+        :status="filterStatuses"
+        :task-type="filterTypes"
+        :plugin="filterPlugins"
         :available-plugins="availablePlugins"
-        @update:status="(v: Set<string>) => viewState.statusFilter = v"
-        @update:task-type="(v: Set<string>) => viewState.typeFilter = v"
-        @update:plugin="(v: Set<string>) => viewState.pluginFilter = v"
-        @reset="viewState.resetFilters()"
+        @update:status="onFilterStatus"
+        @update:task-type="onFilterType"
+        @update:plugin="onFilterPlugin"
+        @reset="onFilterReset"
         @apply="showFilterDrawer = false"
       />
     </ion-modal>
@@ -179,22 +161,21 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons,
   IonBackButton, IonButton, IonSegment, IonSegmentButton, IonLabel,
-  IonIcon, IonSpinner, IonSearchbar, IonChip, IonBadge, IonFooter,
+  IonIcon, IonSpinner, IonSearchbar, IonBadge, IonFooter,
   IonModal, alertController, modalController, toastController,
 } from '@ionic/vue'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import {
   downloadOutline, alertCircleOutline, filterOutline, checkboxOutline,
-  closeCircle, chevronDown, chevronForward, closeOutline, refreshOutline,
+  chevronDown, chevronForward, closeOutline, refreshOutline,
   stopCircleOutline, trashOutline,
 } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
 import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
 import { useTasksList } from '@/composables/useTasksList'
+import { useTaskFilter } from '@/composables/useTaskFilter'
 import { useBatchOperations } from '@/composables/useBatchOperations'
-import { useTaskViewState } from '@/stores/taskViewState'
-import { storeToRefs } from 'pinia'
 import type { EncvTask } from '@/api/encv'
 import { getCalibration } from '@/api/encv'
 import type { JobRun } from '@/lib/workflow/types'
@@ -208,22 +189,31 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const workflowService = useWorkflowTaskService()
-const { tasks: allTasks } = useTasksList()
+const { tasks: allTasks, filteredTasks, searchQuery, filterStatuses, filterTypes, filterPlugins } = useTasksList()
 const batchOps = useBatchOperations()
+const filter = useTaskFilter() // 同 reactive scope，filter.state 共享
 
-// 🆕 2026-06-22 v2 架构：filter / search / selection 共享 state（与 Tasks.vue 主视图同步）
-//   历史：GroupDetail 顶层 + Tasks.vue 各自有 local filter state
-//   → 用户在 GroupDetail 选筛选条件切到主视图看不到（或反过来）
-//   → 选中态在两个视图不共享
-//   修法：所有视图统一 useTaskViewState()，底层 Pinia 单例
-const viewState = useTaskViewState()
-const {
-  searchQuery,
-  statusFilter, typeFilter, pluginFilter,
-  selectedIds, multiSelectMode,
-  filteredTasks, filterChipCount, activeFilterChips,
-  availablePlugins,
-} = storeToRefs(viewState) as any
+// ============ UI 局部状态（selection 是 per-view，不进 store） ============
+const selectedIds = ref<Set<string>>(new Set())
+const multiSelectMode = ref(false)
+function toggleSelect(id: string) {
+  if (selectedIds.value.has(id)) selectedIds.value.delete(id)
+  else selectedIds.value.add(id)
+  // 触发响应式（Set mutation 不会自动触发）
+  selectedIds.value = new Set(selectedIds.value)
+}
+function clearSelection() {
+  selectedIds.value = new Set()
+}
+
+// ============ 派生 ============
+const availablePlugins = computed(() => {
+  const set = new Set<string>()
+  for (const t of allTasks.value) {
+    if (t.pluginName) set.add(t.pluginName)
+  }
+  return Array.from(set).sort()
+})
 
 // ============ 路由参数 ============
 const runId = computed(() => decodeURIComponent(String(route.params.runId ?? '')))
@@ -240,16 +230,15 @@ watch(activeTab, (v) => {
   try { localStorage.setItem(TAB_STORAGE_KEY, v) } catch { /* silent */ }
 })
 
-// ============ 🆕 Q4：UI 局部状态（filter/selection 已用 useTaskViewState） ============
+// ============ UI 局部状态 ============
 const showFilterDrawer = ref(false)
 const performanceSectionOpen = ref(false)
 
 // 衍生数据
 const run = computed(() => workflowService.getRun(runId.value))
 
-// 🆕 v2 架构：runTasks 走 useTaskViewState.filteredTasks
-//   - filteredTasks 已经是 viewState 应用 filter+search 后的列表
-//   - 在 GroupDetail 上下文：再筛一次只显示当前 run 的
+// runTasks 走 useTasksList.filteredTasks（已经是 filter+search 应用后的列表）
+//   在 GroupDetail 上下文：再筛一次只显示当前 run 的
 const runTasks = computed<EncvTask[]>(() => {
   const id = runId.value
   if (!id) return []
@@ -297,18 +286,16 @@ function goBack() {
   router.replace('/tabs/tasks')
 }
 
-// ============ 🆕 v2 架构：多选 / 批量操作（统一用 viewState） ============
-//   viewState 内已暴露 toggleSelect / clearSelection / batchRetry 通过 batchOps
-//   GroupDetail 不再持有 local state，仅转发到 viewState + batchOps
+// ============ 多选 / 批量操作（local state + batchOps） ============
 async function batchRetrySelected() {
   const ids = Array.from(selectedIds.value) as string[]
   await batchOps.batchRetry(ids)
-  viewState.clearSelection()
+  clearSelection()
 }
 async function batchCancelSelected() {
   const ids = Array.from(selectedIds.value) as string[]
   await batchOps.batchCancel(ids)
-  viewState.clearSelection()
+  clearSelection()
 }
 async function batchDeleteSelected() {
   const ids = Array.from(selectedIds.value) as string[]
@@ -319,16 +306,18 @@ async function batchDeleteSelected() {
       { text: t('common.cancel'), role: 'cancel' },
       { text: t('common.confirm'), role: 'destructive', handler: async () => {
         await batchOps.batchDelete(ids)
-        viewState.clearSelection()
+        clearSelection()
       } },
     ],
   })
   await confirm.present()
 }
 
-// 模板里用：v-model:status → toggleStatus, v-model:task-type → toggleType, etc.
-// 实际 chip 行是 activeFilterChips，removeFilter 通过 emit/click 触发
-// 简化：删除 local removeFilter/clearFilters/resetFilters，全部用 viewState.resetFilters()
+// FilterDrawer 操作转发
+function onFilterStatus(v: string[]) { filterStatuses.value = v as any }
+function onFilterType(v: string[]) { filterTypes.value = v as any }
+function onFilterPlugin(v: string[]) { filterPlugins.value = v }
+function onFilterReset() { filter.clearFilters() }
 
 // ============ 导出报告（🆕 Q7C native Filesystem + web download） ============
 const exporting = ref(false)

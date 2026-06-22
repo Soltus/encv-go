@@ -639,6 +639,7 @@ function createUseTasksList() {
     filterPlugins: filter.filterPlugins,
     filterTypes: filter.filterTypes,
     filterStatuses: filter.filterStatuses,
+    filterTriggeredBy: filter.filterTriggeredBy,
     filterDatePreset: filter.filterDatePreset,
     filterDateRange: filter.filterDateRange,
     viewMode: filter.viewMode,
