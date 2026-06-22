@@ -263,4 +263,94 @@ describe('逃逸反向测试（5 个假设，按顺序跑，看哪些红）', ()
     expect(t7!.status).toBe('running')
     expect(t7!.runId).toBe(RUN_ID)  // 关键：runId 不能丢
   })
+
+  // ============ 假设 F：groupedTasksByRunId 兜底让孤儿 task 独立成伪 group ============
+  // 逃逸真因：图中 3 个 group（1+1+365），应该是 1 个 group（367）+ 2 个 row
+  it('F: 10 task 共享 runId + 2 个 orphan（runId 缺失）→ orphan 应该是 row，不是伪 group', async () => {
+    const { useTaskStore, useTasksList } = await freshModules()
+    const store = useTaskStore()
+    const list = useTasksList()
+    list.viewMode.value = 'group'
+
+    // 10 个正常 task
+    const RUN_ID = `r-F-${Date.now()}`
+    for (let i = 0; i < 10; i++) {
+      store.applyEvent('created', makeTask(`t-${i}`, RUN_ID, 'queued'))
+    }
+    // 2 个 orphan：runId 是 undefined（后端 created payload 漏字段 / 后端 bug）
+    store.applyEvent('created', makeTask('orphan-1', null, 'queued') as any)
+    store.applyEvent('created', makeTask('orphan-2', null, 'queued') as any)
+
+    const Component = createTestListComponent()
+    const wrapper = mount(Component, { props: { displayedItemsRef: list.displayedItems } })
+
+    const groups = wrapper.findAll('.task-group')
+    const rows = wrapper.findAll('.task-row')
+
+    // 期望 1：r-F group 存在，10 个 task
+    const realGroup = groups.find((g) => g.attributes('data-run-id') === RUN_ID)
+    expect(realGroup, 'r-F group 必须存在').toBeTruthy()
+    expect(realGroup!.attributes('data-tasks-count')).toBe('10')
+
+    // 期望 2：orphan 不应该成伪 group（不应该有 data-run-id="__no_runid__" 的 group）
+    const fakeGroups = groups.filter((g) => g.attributes('data-run-id') === '__no_runid__')
+    expect(fakeGroups.length, 'orphan 不应该变成伪 group').toBe(0)
+
+    // 期望 3：orphan 应该显示成 task-row（兜底到 flat 路径）
+    expect(rows.length, 'orphan 应该显示成 row').toBe(2)
+  })
+
+  // ============ 假设 G：367 拆 1+1+365 复现真机逃逸 ============
+  it('G: 真机场景 367 拆 1+1+365 → 应该是 1 个 group (365) + 2 个 row', async () => {
+    const { useTaskStore, useTasksList } = await freshModules()
+    const store = useTaskStore()
+    const list = useTasksList()
+    list.viewMode.value = 'group'
+
+    // 365 个 task 共享 runId='X'
+    const RUN_ID = `r-G-${Date.now()}`
+    for (let i = 0; i < 365; i++) {
+      store.applyEvent('created', makeTask(`t-${i}`, RUN_ID, 'queued'))
+    }
+    // 2 个 orphan（后端某种事件让 runId 丢失）
+    // 模拟：先正常 created 共享 runId='X'，后被某种 update 改成 null
+    // 但 IDENTITY_FIELDS 修了 null runId 不被清空
+    // 所以这里模拟另一种：appendTask 走的"新 task 对象 runId 是 undefined"路径
+    store.applyEvent('created', {
+      id: 'orphan-real-1',
+      type: 'encrypt',
+      sourcePath: '/mock/orphan1.mp4',
+      status: 'queued',
+      progress: 0,
+      createdAt: '2026-06-22T14:00:00.000Z',
+      triggeredBy: 'automation',
+      pluginName: 'mp4-encrypt',
+      // ← 没有 runId 字段
+    } as EncvTask)
+    store.applyEvent('created', {
+      id: 'orphan-real-2',
+      type: 'encrypt',
+      sourcePath: '/mock/orphan2.mp4',
+      status: 'queued',
+      progress: 0,
+      createdAt: '2026-06-22T14:00:00.000Z',
+      triggeredBy: 'automation',
+      pluginName: 'mp4-encrypt',
+    } as EncvTask)
+
+    const Component = createTestListComponent()
+    const wrapper = mount(Component, { props: { displayedItemsRef: list.displayedItems } })
+
+    const groups = wrapper.findAll('.task-group')
+    const rows = wrapper.findAll('.task-row')
+
+    // 期望 1：只有 1 个 group，365 task
+    expect(groups.length, '应该是 1 个 group').toBe(1)
+    const realGroup = groups.find((g) => g.attributes('data-run-id') === RUN_ID)
+    expect(realGroup, `r-G group 必须存在（找到: ${groups.map(g => g.attributes('data-run-id'))}）`).toBeTruthy()
+    expect(realGroup!.attributes('data-tasks-count')).toBe('365')
+
+    // 期望 2：orphan 是 row，不是 group
+    expect(rows.length, '2 个 orphan 应该是 row').toBe(2)
+  })
 })

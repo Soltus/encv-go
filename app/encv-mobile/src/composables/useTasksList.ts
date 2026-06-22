@@ -216,6 +216,7 @@ function createUseTasksList() {
       items.push({ kind: 'date', key: `date-${key}`, label: t(`tasks.date.${key}`, { defaultValue: key }) })
     }
     if (isGroupMode) {
+      // 1. 真实 group（runId 存在）
       for (const g of storeRefs.groupedTasksByRunId.value) {
         pushDateHeader(dateSectionKey(g.startedAt))
         const counters = computeGroupCounters(g.tasks, storeRefs)
@@ -229,6 +230,12 @@ function createUseTasksList() {
           counters,
           displayData: buildGroupDisplayData(g.tasks, g.startedAt),
         })
+      }
+      // 2. 孤儿 task（runId 缺失）→ 渲染成 row，不变伪 group
+      // 真机逃逸根因：兜底逻辑让孤儿 task 变成 `__manual__${id}` 伪 group
+      for (const tk of storeRefs.orphanTasks.value) {
+        pushDateHeader(dateSectionKey(tk.createdAt))
+        items.push({ kind: 'task', key: `orphan-${tk.id}`, task: tk })
       }
     } else {
       for (const ft of storeRefs.flatTaskList.value) {
