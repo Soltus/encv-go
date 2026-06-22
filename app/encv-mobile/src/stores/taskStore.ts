@@ -31,10 +31,11 @@ export type SortBy = 'activity' | 'created'
 const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set(['completed', 'failed', 'cancelled'])
 const STATUS_OPTIONS: TaskStatus[] = ['queued', 'running', 'cancelling', 'completed', 'failed', 'cancelled']
 
-// 🆕 2026-06-23 Task 7.2：WS task:created 事件在 store 已满时不再 push（等分页加载时再获取）
-//   - 仅对 WS 路径（applyEvent('created', ...)）生效，不影响 workflow service 直接调 appendTask
-//   - 仅在 hydrated 后生效（避免破坏测试：测试不调 hydrate，hydrated=false → 全部 push）
-export const MAX_LOADED_TASKS = 100
+// 🆕 2026-06-23 重构（用户反馈"分页应当针对视图列表数量，不是任务本身"）：
+//   - 删除 MAX_LOADED_TASKS 守卫：WS task:created 全部 push（不截断）
+//   - store 是数据唯一权威源：聚合计数/搜索/筛选基于完整 store
+//   - 分页只控制视图渲染（虚拟滚动天然分页），不污染 store 数据
+//   - 自动化测试 1000+ task 全部进 store，虚拟滚动只渲染可见行
 
 export const useTaskStore = defineStore('task', () => {
   // ============ 原始数据 ============
@@ -268,21 +269,16 @@ export const useTaskStore = defineStore('task', () => {
    * - update / progress: patch 后端提供的字段
    * - completed: patch 终态 + completedAt + progress=100
    *
-   * 🆕 2026-06-23 Task 7.2：分页模式下 WS task:created 节流
-   *   - hydrated 后 + store 已满（>= MAX_LOADED_TASKS）+ task 不在 store → 跳过 push
-   *   - 原因：10 万 task 场景下，WS 持续 push 新 task 会让 store 无限膨胀，破坏分页
-   *   - 跳过的 task 会在 loadMore() 分页加载时获取最新状态
+   * 🆕 2026-06-23 重构：删除 MAX_LOADED_TASKS 守卫
+   *   - 旧设计：store 满 100 后 WS task:created 跳过 push → 自动化 1000+ task 被截断
+   *   - 新设计：WS 全部 push，store 完整持有所有 task
+   *   - 分页由虚拟滚动天然处理（只渲染可见行），不污染 store 数据
    *   - update/progress/completed 天然只 patch 已加载的 task（patchTaskById 不在 store 则 return false）
    */
   function applyEvent(type: 'created' | 'update' | 'progress' | 'completed', data: any): void {
     if (!data || !data.id) return
     const id = data.id
     if (type === 'created') {
-      // 🆕 Task 7.2：store 已满 + task 不在 store → 跳过（等分页加载）
-      //   仅 hydrated 后生效（测试不调 hydrate → hydrated=false → 全部 push，向后兼容）
-      if (hydrated.value && tasks.value.length >= MAX_LOADED_TASKS && !_taskIndex.has(id)) {
-        return
-      }
       appendTask(data as EncvTask)
       persistPutTask(id)
     } else if (type === 'update' || type === 'progress') {

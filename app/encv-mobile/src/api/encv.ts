@@ -637,22 +637,14 @@ export interface EncvTask {
   performanceSummary?: PerformanceSummary
 }
 
-// 🆕 2026-06-23 Task 6.1：支持分页参数（runId / offset / limit）
-//   - 不传 params → 行为与旧版一致（GET /api/tasks，后端默认 offset=0 limit=100）
-//   - 传 params → 拼接 query string
-//   - 返回格式兼容：后端返回 { tasks: [...] }，旧代码可能期望数组 → 两种都处理
-export async function getTasks(params?: {
-  runId?: string
-  offset?: number
-  limit?: number
-}): Promise<EncvTask[]> {
+// 🆕 2026-06-23 重构：删除分页参数，全量加载所有 task
+//   - 用户反馈"分页应当针对视图列表数量，不是任务本身"
+//   - store 是数据唯一权威源：全量加载，WS 全部 push
+//   - 分页由虚拟滚动天然处理（只渲染可见行），不污染 store 数据
+//   - 后端仍支持 ?runId=&offset=&limit= 参数（向后兼容），但前端不用
+export async function getTasks(): Promise<EncvTask[]> {
   const baseUrl = getApiBaseUrl()
-  const query = new URLSearchParams()
-  if (params?.runId) query.set('runId', params.runId)
-  if (params?.offset !== undefined) query.set('offset', String(params.offset))
-  if (params?.limit !== undefined) query.set('limit', String(params.limit))
-  const qs = query.toString()
-  const url = qs ? `${baseUrl}/api/tasks?${qs}` : `${baseUrl}/api/tasks`
+  const url = `${baseUrl}/api/tasks`
   const response = await fetch(url)
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`)

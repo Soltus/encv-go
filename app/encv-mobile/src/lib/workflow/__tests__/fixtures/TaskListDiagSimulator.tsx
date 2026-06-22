@@ -91,9 +91,9 @@ export const TaskListDiagSimulator = defineComponent({
     const filteredTasks = computed(() => c.filteredTasks.value)
     const isGroupFilterActive = computed(() => hasActiveFilters.value || (searchQuery.value?.trim().length ?? 0) > 0)
 
-    // 🆕 2026-06-23 Task 9.2/9.3：分页加载 + 虚拟滚动容器派生
-    const isLoadingMore = computed(() => c.isLoadingMore.value)
-    const hasMore = computed(() => c.hasMore.value)
+    // 🆕 2026-06-23 重构：删除分页控件（分页由虚拟滚动天然处理）
+    //   - 旧设计：isLoadingMore/hasMore/loadMore 分页加载 task 到 store
+    //   - 新设计：store 全量持有所有 task，虚拟滚动只渲染可见行
     /** 当前虚拟滚动容器内的 item 数（date/group/task 三种 kind 总和）。
      *  模拟器不虚拟滚动，等于 displayedItems.length；
      *  真机 UI 用 TaskVirtualList.vue 虚拟滚动，DOM 节点数恒定 ≤ 30（可见窗口 + overscan）。 */
@@ -544,19 +544,6 @@ export const TaskListDiagSimulator = defineComponent({
               return h('div', { class: 'unknown' }, JSON.stringify(item))
             }),
             ),
-            // 🆕 2026-06-23 Task 9.2：分页加载指示器（列表底部）
-            //   - load-more-spinner：isLoadingMore 时显示
-            //   - load-more-btn：hasMore && !isLoadingMore 时显示，点击调 c.loadMore()
-            isLoadingMore.value
-              ? h('div', { 'data-testid': 'load-more-spinner', class: 'load-more-spinner' }, 'Loading more...')
-              : null,
-            hasMore.value && !isLoadingMore.value
-              ? h('button', {
-                  'data-testid': 'load-more-btn',
-                  class: 'load-more-btn',
-                  onClick: () => { void c.loadMore() },
-                }, 'Load more')
-              : null,
           ]),
         ]),
       )
