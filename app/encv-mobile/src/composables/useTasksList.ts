@@ -22,6 +22,8 @@ import {
 import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
 import { useI18n } from '@/composables/useI18n'
 import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
+import { useRunSummariesSingleton } from '@/composables/useRunSummaries'
+import { useTaskViewCompute } from '@/composables/useTaskViewCompute'
 import { formatDateTime as dateFormat } from '@/composables/useDateFormat'
 import { getTaskTypeLabel } from '@/lib/taskTypeLabel'
 
@@ -138,12 +140,45 @@ function createUseTasksList() {
   const workflowService = useWorkflowTaskService()
   const view = _viewInstance ?? (_viewInstance = createView())
 
-  // ============ WS 4 件套桥接（统一走 store.applyEvent） ============
+  // ============ WS 4 件套桥接（按视图上下文过滤） ============
+  // 🆕 2026-06-23 Task 9：WS 事件按视图上下文过滤（spec §2.3）
+  //   - Tasks 列表页是"视图分页"：store 只持有当前页的 task（~100 个）
+  //   - WS task:created 不进 store（task 可能不属于当前页；手动创建走 task:refresh）
+  //     → 只触发 runSummaries 刷新（group card 计数从后端 SQL 拿）
+  //   - WS task:update / task:progress / task:completed：只 patch 已加载的 task
+  //     → patchTaskById 不在 store 则 return false（天然过滤）
+  //   - WS task:completed：额外刷新对应 runId 的 summary（计数变化）
+  //   - 离开 Tasks 页时 useTaskEventBridge 的 onUnmounted 自动 stopListening
+  const runSummaries = useRunSummariesSingleton()
   useTaskEventBridge({
     onUpdate: (payload) => store.applyEvent('update', payload),
     onProgress: (payload) => store.applyEvent('progress', payload),
-    onCreate: (payload) => store.applyEvent('created', payload),
-    onComplete: (payload) => store.applyEvent('completed', payload),
+    // 🆕 Task 9：task:created 不进 store，只刷新 summary
+    //   - 手动创建任务走 eventBus.emit('task:refresh') → fetchTasks 从后端加载
+    //   - 自动化/workflow 创建的 task 属于 run，用户通过 group card → GroupDetail 查看
+    //   - 这里只刷新 summary，让 group card 计数实时更新
+    onCreate: (payload) => {
+      const runId = (payload as any)?.runId
+      if (runId) {
+        void runSummaries.refreshOnTaskCompleted(runId)
+      } else {
+        // 没有 runId（旧任务）→ fetchAll 刷新所有 run summary
+        void runSummaries.fetchAll()
+      }
+    },
+    onComplete: (payload) => {
+      store.applyEvent('completed', payload)
+      // 🆕 Task 9：task 完成后刷新对应 runId 的 summary（计数变化）
+      //   - patchTaskById 只 patch 已加载的 task，不在 store 则 return false
+      //   - 但 summary 必须刷新（group card 显示的 passed/failed 计数）
+      //   - 从 store 查找 task 拿 runId（payload 可能不带 runId）
+      const taskId = payload?.id
+      const task = taskId ? store.getTaskById(taskId) : undefined
+      const runId = task?.runId
+      if (runId) {
+        void runSummaries.refreshOnTaskCompleted(runId)
+      }
+    },
   })
 
   // ============ displayedItems（视图层包装：注入 kind/counters/displayData） ============
@@ -151,94 +186,32 @@ function createUseTasksList() {
   //   - date: { kind:'date', key, label }
   //   - group: { kind:'group', key, runId, startedAt, tasks, counters, displayData }
   //   - task: { kind:'task', key, task }
-  function dateSectionKey(date: string): string {
-    const d = new Date(date)
-    const now = new Date()
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-    const yesterdayStart = todayStart - 86400000
-    const weekStart = todayStart - 7 * 86400000
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
-    const ts = d.getTime()
-    if (ts >= todayStart) return 'today'
-    if (ts >= yesterdayStart) return 'yesterday'
-    if (ts >= weekStart) return 'thisWeek'
-    if (ts >= monthStart) return 'thisMonth'
-    return 'earlier'
-  }
+  // 🆕 2026-06-23 Task 10：dateSectionKey / buildGroupDisplayData 已迁移到
+  //   useTaskViewCompute（worker + computeSync 内联），此处不再保留
 
-  function buildGroupDisplayData(groupTasks: EncvTask[], startedAt: string): any {
-    const summary = { total: groupTasks.length, passed: 0, failed: 0, running: 0, pending: 0, percent: 0 }
-    let dominantStatus: TaskStatus = 'running'
-    const plugins = new Set<string>()
-    for (const tk of groupTasks) {
-      if (tk.status === 'completed') summary.passed++
-      else if (tk.status === 'failed') summary.failed++
-      else if (tk.status === 'running' || tk.status === 'cancelling') summary.running++
-      else if (tk.status === 'queued') summary.pending++
-      if (tk.pluginName) plugins.add(tk.pluginName)
-    }
-    const finished = summary.passed + summary.failed
-    if (groupTasks.length > 0) summary.percent = Math.round((finished / groupTasks.length) * 100)
-    if (summary.failed > 0) dominantStatus = 'failed'
-    else if (summary.running > 0) dominantStatus = 'running'
-    else if (summary.pending > 0) dominantStatus = 'queued'
-    else if (summary.passed > 0) dominantStatus = 'completed'
-
-    const tone = groupTasks[0]?.triggeredBy === 'ai_agent' ? 'ai_agent'
-              : groupTasks[0]?.triggeredBy === 'automation' ? 'automation'
-              : 'user'
-    const moodClass = summary.failed > 0 ? 'tl-mood--fail'
-                    : summary.running > 0 ? 'tl-mood--running'
-                    : (summary.passed === groupTasks.length && groupTasks.length > 0) ? 'tl-mood--success'
-                    : ''
-    const pluginBadges = Array.from(plugins).slice(0, 3)
-    let duration = ''
-    const completed = groupTasks.filter((tk) => tk.completedAt)
-    if (completed.length > 0) {
-      const maxEnd = Math.max(...completed.map((tk) => new Date(tk.completedAt!).getTime()))
-      const ms = maxEnd - new Date(startedAt).getTime()
-      if (ms > 0) {
-        const minutes = Math.floor(ms / 60000)
-        const seconds = Math.floor((ms % 60000) / 1000)
-        duration = minutes > 0 ? `${minutes}m ${seconds}s` : `${(ms / 1000).toFixed(1)}s`
-      }
-    }
-    return { summary, dominantStatus, tone, moodClass, pluginBadges, duration }
-  }
-
-  const displayedItems = computed<any[]>(() => {
-    const isGroupMode = storeRefs.viewMode.value === 'group'
-    const items: any[] = []
-    let lastDateKey = ''
-    function pushDateHeader(key: string) {
-      if (key === lastDateKey) return
-      lastDateKey = key
-      items.push({ kind: 'date', key: `date-${key}`, label: t(`tasks.date.${key}`, { defaultValue: key }) })
-    }
-    if (isGroupMode) {
-      // 1. 真实 group（runId 存在）
-      for (const g of storeRefs.groupedTasksByRunId.value) {
-        pushDateHeader(dateSectionKey(g.startedAt))
-        const counters = computeGroupCounters(g.tasks, storeRefs)
-        if (!counters.hitAny) continue
-        items.push({
-          kind: 'group',
-          key: g.key,
-          runId: g.runId,
-          startedAt: g.startedAt,
-          tasks: g.tasks,
-          counters,
-          displayData: buildGroupDisplayData(g.tasks, g.startedAt),
-        })
-      }
-    } else {
-      for (const ft of storeRefs.flatTaskList.value) {
-        pushDateHeader(dateSectionKey(ft.task.createdAt))
-        items.push({ kind: 'task', key: ft.key, task: ft.task })
-      }
-    }
-    return items
+  // ============ displayedItems（Web Worker 委托计算） ============
+  // 🆕 2026-06-23 Task 10：把 O(N) 视图计算委托给 Web Worker，避免阻塞 UI 主线程
+  //   - 1000+ task 时 displayedItems computed 遍历会卡顿
+  //   - Worker 接收 tasks 快照 + filter/sort/view 状态，返回 displayedItems 数组
+  //   - debounce 16ms（1 帧）→ postMessage → 接收结果 → 更新 ref
+  //   - 降级：Worker 不可用 → 主线程同步计算（computeSync）
+  //   - date section label：worker 返回 dateKey，主线程映射为 i18n label
+  //   - 旧的 dateSectionKey / buildGroupDisplayData / computeGroupCounters 函数保留
+  //     作为 fallback（computeSync 内联了相同逻辑，但保留这些函数供测试 _computeGroupCounters 用）
+  const { displayedItems: workerDisplayedItems } = useTaskViewCompute({
+    tasks: storeRefs.tasks,
+    viewMode: storeRefs.viewMode,
+    sortBy: storeRefs.sortBy,
+    searchQuery: storeRefs.searchQuery,
+    filterPlugins: storeRefs.filterPlugins,
+    filterTypes: storeRefs.filterTypes,
+    filterStatuses: storeRefs.filterStatuses,
+    filterTriggeredBy: storeRefs.filterTriggeredBy,
+    filterDateRange: storeRefs.filterDateRange,
+    pinnedRunIds: storeRefs.pinnedRunIds,
   })
+  // 暴露为 ref（与原 computed 接口兼容，模板用 displayedItems.value 访问）
+  const displayedItems = workerDisplayedItems as any
 
   // ============ Helper：状态显示 ============
   function getTaskName(task: EncvTask): string { return getTaskDisplayName(task) }

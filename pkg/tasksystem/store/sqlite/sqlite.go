@@ -295,6 +295,65 @@ func (s *Store) DeleteTask(id string) error {
 	return err
 }
 
+// 🆕 2026-06-23 后端 SQL 权威：CountByRunId 按 runId 统计各状态的任务数
+//
+// SQL：SELECT status, COUNT(*) FROM tasks WHERE run_id = ? GROUP BY status
+// 返回 map[status]count，例如 {"completed": 1040, "failed": 15, "running": 5}
+// runId 为空时返回空 map（不统计 runId 为空的 task）。
+func (s *Store) CountByRunId(runId string) (map[string]int, error) {
+	if runId == "" {
+		return map[string]int{}, nil
+	}
+	rows, err := s.db.Query(
+		"SELECT status, COUNT(*) FROM tasks WHERE run_id = ? GROUP BY status",
+		runId,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string]int)
+	for rows.Next() {
+		var status string
+		var count int
+		if err := rows.Scan(&status, &count); err != nil {
+			return nil, err
+		}
+		result[status] = count
+	}
+	return result, rows.Err()
+}
+
+// 🆕 2026-06-23 后端 SQL 权威：ListRuns 列出所有 run（去重 runId）
+//
+// SQL：SELECT run_id, MIN(created_at), triggered_by FROM tasks WHERE run_id != '' GROUP BY run_id ORDER BY MIN(created_at) DESC
+// 返回所有 run 的基本信息（runId + 最早创建时间 + triggeredBy），不带 summary。
+// 前端再调 /api/runs/:runId/summary 拿详细计数（或后端在 handler 层 JOIN 避免 N+1）。
+func (s *Store) ListRuns() ([]tasksystem.RunInfo, error) {
+	rows, err := s.db.Query(`
+		SELECT run_id, MIN(created_at), triggered_by
+		FROM tasks
+		WHERE run_id != ''
+		GROUP BY run_id
+		ORDER BY MIN(created_at) DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []tasksystem.RunInfo
+	for rows.Next() {
+		var info tasksystem.RunInfo
+		if err := rows.Scan(&info.RunID, &info.StartedAt, &info.TriggeredBy); err != nil {
+			return nil, err
+		}
+		result = append(result, info)
+	}
+	return result, rows.Err()
+}
+
 // SaveSnapshot 保存任务快照。
 func (s *Store) SaveSnapshot(snapshot tasksystem.Snapshot) error {
 	_, err := s.db.Exec(`

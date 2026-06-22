@@ -88,7 +88,7 @@
         </div>
         <div v-else-if="activeTab === 'tasks'" class="tab-content">
           <TasksTab
-            :run-tasks="filteredTasks"
+            :run-tasks="runTasks"
             :multi-select-mode="multiSelectMode"
             :selected-ids="selectedIds"
             :search-query="searchQuery"
@@ -156,7 +156,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons,
@@ -173,8 +173,10 @@ import {
 } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
 import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
-import { useTasksList } from '@/composables/useTasksList'
 import { useBatchOperations } from '@/composables/useBatchOperations'
+import { useRunTasksStoreSingleton } from '@/stores/runTasksStore'
+import { useRunSummariesSingleton } from '@/composables/useRunSummaries'
+import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
 import type { EncvTask } from '@/api/encv'
 import { getCalibration } from '@/api/encv'
 import type { JobRun } from '@/lib/workflow/types'
@@ -188,7 +190,12 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const workflowService = useWorkflowTaskService()
-const { tasks: allTasks, filteredTasks, searchQuery, filterStatuses, filterTypes, filterPlugins, activeFilterCount, clearFilters } = useTasksList()
+// 🆕 2026-06-23 spec backend-sql-authority-view-pagination Task 6：
+//   GroupDetail 独立加载 runId 的 task（不再共享 useTasksList 的全局 store）
+//   - useRunTasksStoreSingleton：按 runId 独立加载，WS 不守卫
+//   - useRunSummariesSingleton：聚合计数从后端 SQL 拿（不靠 store.tasks 算）
+const runTasksStore = useRunTasksStoreSingleton()
+const runSummaries = useRunSummariesSingleton()
 const batchOps = useBatchOperations()
 
 // ============ UI 局部状态（selection 是 per-view，不进 store） ============
@@ -204,10 +211,28 @@ function clearSelection() {
   selectedIds.value = new Set()
 }
 
+// ============ 本地 filter/search 状态（GroupDetail 自己的视图状态） ============
+// 🆕 2026-06-23 Task 6.4：删除从 useTasksList 继承的 filter 状态，改为本地 ref
+//   原因：GroupDetail 是独立路由，filter 状态不应该污染 Tasks 页
+//   控件样式保持不变（同样用 FilterDrawer 组件），只是数据源独立了
+const searchQuery = ref('')
+const filterStatuses = ref<string[]>([])
+const filterTypes = ref<string[]>([])
+const filterPlugins = ref<string[]>([])
+const activeFilterCount = computed(() =>
+  filterStatuses.value.length + filterTypes.value.length + filterPlugins.value.length,
+)
+function clearFilters() {
+  filterStatuses.value = []
+  filterTypes.value = []
+  filterPlugins.value = []
+  searchQuery.value = ''
+}
+
 // ============ 派生 ============
 const availablePlugins = computed(() => {
   const set = new Set<string>()
-  for (const t of allTasks.value) {
+  for (const t of runTasksStore.tasks.value) {
     if (t.pluginName) set.add(t.pluginName)
   }
   return Array.from(set).sort()
@@ -235,25 +260,56 @@ const performanceSectionOpen = ref(false)
 // 衍生数据
 const run = computed(() => workflowService.getRun(runId.value))
 
-// runTasks 走 useTasksList.filteredTasks（已经是 filter+search 应用后的列表）
-//   在 GroupDetail 上下文：再筛一次只显示当前 run 的
+// 🆕 2026-06-23 Task 6.1：runTasks 从 runTasksStore.tasks 派生（应用本地 filter/search）
+//   - 数据源：runTasksStore.tasks（独立加载 GET /api/tasks?runId=xxx）
+//   - 不再从 useTasksList.filteredTasks 过滤（避免依赖 Tasks 页 store）
+//   - 本地 filter/search 应用后排序
 const runTasks = computed<EncvTask[]>(() => {
   const id = runId.value
   if (!id) return []
-  const list: EncvTask[] = filteredTasks.value
-  if (list === allTasks.value) {
-    // 快速路径：未应用 filter → 直接过滤 runId
-    return allTasks.value
-      .filter((t: EncvTask) => t.runId === id)
-      .sort((a: EncvTask, b: EncvTask) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+  let list = runTasksStore.tasks.value
+
+  // 应用本地 search
+  const q = searchQuery.value.trim().toLowerCase()
+  if (q) {
+    list = list.filter((t) =>
+      t.sourcePath.toLowerCase().includes(q) ||
+      t.pluginName?.toLowerCase().includes(q) ||
+      t.id.toLowerCase().includes(q),
+    )
   }
-  // 已 filter：直接遍历（list 已较小）
-  return list
-    .filter((t: EncvTask) => t.runId === id)
-    .sort((a: EncvTask, b: EncvTask) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+
+  // 应用本地 filter
+  if (filterStatuses.value.length > 0) {
+    list = list.filter((t) => filterStatuses.value.includes(t.status))
+  }
+  if (filterTypes.value.length > 0) {
+    list = list.filter((t) => filterTypes.value.includes(t.type))
+  }
+  if (filterPlugins.value.length > 0) {
+    list = list.filter((t) => filterPlugins.value.includes(t.pluginName ?? ''))
+  }
+
+  // 按 createdAt 升序
+  return [...list].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 })
 
+// 🆕 2026-06-23 Task 6：totals 从后端 SQL summary 拿（不靠 store.tasks 算）
+//   - 后端是唯一权威，聚合计数由 SQL COUNT + GROUP BY status 出
+//   - store 只持有"当前视图需要的"task（视图分页），不是所有 task
+//   - fallback：summary 未加载时用 runTasks.length 估算
 const totals = computed(() => {
+  const summary = runSummaries.getSummary(runId.value)
+  if (summary) {
+    return {
+      total: summary.total,
+      passed: summary.passed,
+      failed: summary.failed,
+      pending: summary.running + summary.pending,
+      skipped: summary.cancelled,
+    }
+  }
+  // fallback：summary 未加载时用当前已加载的 task 估算
   const list = runTasks.value
   return {
     total: list.length,
@@ -453,10 +509,44 @@ async function exportGroupReport() {
   }
 }
 
-onMounted(() => {
+// 🆕 2026-06-23 Task 9：WS 事件按视图上下文过滤（GroupDetail 页只处理当前 runId）
+//   - task:created → 只 push 属于 currentRunId 的 task（runTasksStore.applyEvent 内部过滤）
+//   - task:update / task:progress / task:completed → 只 patch 已加载的 task
+//   - task:completed → 额外刷新 summary（计数变化）
+//   - 离开 GroupDetail 时 useTaskEventBridge 的 onUnmounted 自动 stopListening
+useTaskEventBridge({
+  onUpdate: (payload) => runTasksStore.applyEvent('update', payload),
+  onProgress: (payload) => runTasksStore.applyEvent('progress', payload),
+  onCreate: (payload) => {
+    runTasksStore.applyEvent('created', payload)
+    // 新 task 创建时也刷新 summary（total +1）
+    const runId = (payload as any)?.runId
+    if (runId) void runSummaries.refreshOnTaskCompleted(runId)
+  },
+  onComplete: (payload) => {
+    runTasksStore.applyEvent('completed', payload)
+    // task 完成后刷新 summary（passed/failed 计数变化）
+    const runId = runTasksStore.currentRunId.value
+    if (runId) void runSummaries.refreshOnTaskCompleted(runId)
+  },
+})
+
+onMounted(async () => {
   if (!runId.value) {
     router.replace('/tabs/tasks')
+    return
   }
+  // 🆕 2026-06-23 Task 6.1：进入时独立加载该 runId 的 task
+  //   - 不依赖 Tasks 页 store（避免视图分页污染）
+  //   - WS 事件由 useRunTasksStore 处理（只处理当前 runId 的 task）
+  await runTasksStore.loadRun(runId.value)
+  // 同时刷新 summary（后端 SQL 权威）
+  await runSummaries.fetchOne(runId.value)
+})
+
+// 🆕 2026-06-23 Task 6：离开时清空 runTasksStore（释放内存）
+onUnmounted(() => {
+  runTasksStore.clear()
 })
 </script>
 

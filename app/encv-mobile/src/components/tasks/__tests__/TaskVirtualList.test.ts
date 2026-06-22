@@ -1,11 +1,15 @@
 /**
  * TaskVirtualList 单元测试
  *
+ * 🆕 2026-06-23 Task 8：适配 count + getItem + getKey 接口
+ *   - 旧：:items="items" + :get-key="(item) => item.key"
+ *   - 新：:count="items.length" + :get-item="(i) => items[i]" + :get-key="(i) => items[i].key"
+ *
  * 覆盖：
- * - 基础渲染：items 非空 + scrollEl ready → 渲染 slot 内容
+ * - 基础渲染：count > 0 + scrollEl ready → 渲染 slot 内容
  * - scrollEl null → 列表不渲染（virtualizer 拿不到 scrollElement）
  * - forceMeasure 暴露给父级
- * - content-visibility: auto CSS 应用到 item wrapper
+ * - item wrapper class 应用
  * - slot props 传递 item + index
  * - getKey 自定义 key 函数
  *
@@ -57,7 +61,13 @@ function makeMockScrollEl(): HTMLElement {
 const SlotWrapper = {
   components: { TaskVirtualList },
   template: `
-    <TaskVirtualList :items="items" :scroll-el="scrollEl" ref="listRef">
+    <TaskVirtualList
+      :count="items.length"
+      :get-item="(i) => items[i]"
+      :get-key="(i) => items[i].key"
+      :scroll-el="scrollEl"
+      ref="listRef"
+    >
       <template #default="{ item, index }">
         <div class="test-item" :data-key="item.key">
           {{ item.label }} @ {{ index }}
@@ -123,7 +133,7 @@ describe('TaskVirtualList', () => {
     expect(firstItem.text()).toContain('@')
   })
 
-  it('item wrapper 应用 content-visibility: auto（白屏优化）', async () => {
+  it('item wrapper 应用 task-virtual-item class', async () => {
     const scrollEl = makeMockScrollEl()
     const wrapper = mount(SlotWrapper, {
       props: { items: makeItems(5), scrollEl },
@@ -131,7 +141,6 @@ describe('TaskVirtualList', () => {
     await flushPromises()
     const itemWrapper = wrapper.find('.task-virtual-item')
     expect(itemWrapper.exists()).toBe(true)
-    // jsdom 不解析 content-visibility，检查 class 存在即可（CSS 规则在组件 scoped style 内）
     expect(itemWrapper.classes()).toContain('task-virtual-item')
   })
 
@@ -174,7 +183,12 @@ describe('TaskVirtualList', () => {
     const CustomKeyWrapper = {
       components: { TaskVirtualList },
       template: `
-        <TaskVirtualList :items="items" :scroll-el="scrollEl" :get-key="getKey">
+        <TaskVirtualList
+          :count="items.length"
+          :get-item="(i) => items[i]"
+          :get-key="getKey"
+          :scroll-el="scrollEl"
+        >
           <template #default="{ item }">
             <div class="test-item">{{ item.name }}</div>
           </template>
@@ -187,7 +201,8 @@ describe('TaskVirtualList', () => {
             name: `Name ${i}`,
           })),
           scrollEl,
-          getKey: (item: any) => `custom-${item.name}`,
+          // 🆕 Task 8：getKey 接收 index，返回 key
+          getKey: (i: number) => `custom-${i}`,
         }
       },
     }

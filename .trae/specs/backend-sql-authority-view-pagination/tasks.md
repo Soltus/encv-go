@@ -41,7 +41,7 @@
   - [ ] SubTask 7.2: `@ionInfinite` 事件触发 `loadMore`
   - [ ] SubTask 7.3: `hasMore=false` 时禁用 infinite-scroll
 
-## 阶段三：虚拟滚动重构 + WS 上下文过滤
+## 阶段三：虚拟滚动重构 + WS 上下文过滤 + Web Worker 委托
 
 - [ ] Task 8: TaskVirtualList 重构为 `count + getItem`
   - [ ] SubTask 8.1: `TaskVirtualList.vue` props 改为 `count` + `getItem(index)` + `getKey(index)`
@@ -53,32 +53,41 @@
   - [ ] SubTask 9.2: Tasks 页：WS `task:update`/`task:completed` 只 patch 已加载的 task
   - [ ] SubTask 9.3: GroupDetail 页：WS 事件只处理当前 runId 的 task
   - [ ] SubTask 9.4: 离开视图时停止处理（onUnmounted 取消订阅）
+- [ ] Task 10: Web Worker 委托视图计算（避免阻塞 UI 进程）
+  - [ ] SubTask 10.1: `src/workers/taskViewCompute.worker.ts` — 视图计算 worker
+  - [ ] SubTask 10.2: worker 实现 `filteredTasks` / `sortedTasks` / `groupedTasksByRunId` / `displayedItems` 计算
+  - [ ] SubTask 10.3: `src/composables/useTaskViewCompute.ts` — 主线程封装（postMessage/onmessage + debounce）
+  - [ ] SubTask 10.4: watch store.tasks + viewMode/sortBy/filter 变化 → postMessage 给 worker
+  - [ ] SubTask 10.5: 接收 worker 结果 → 更新 `displayedItems` ref（触发虚拟滚动重渲染）
+  - [ ] SubTask 10.6: 降级策略：Worker 不可用时主线程同步计算（向后兼容）
+  - [ ] SubTask 10.7: 通信优化：debounce + Transferable 对象减少拷贝
 
 ## 阶段四：测试升级（完全用真机组件测试）
 
-- [ ] Task 10: 真机组件测试
-  - [ ] SubTask 10.1: 挂载真 `Tasks.vue` + mock API + mock WS
-  - [ ] SubTask 10.2: 验证 DOM 节点数 ≤ 30（虚拟滚动核心指标）
-  - [ ] SubTask 10.3: 验证 `ion-infinite-scroll` 触发 `loadMore`
-  - [ ] SubTask 10.4: 验证 1000+ task 时 group card 计数正确（从 summary 获取）
-  - [ ] SubTask 10.5: 验证切换 viewMode 不卡顿（count + getItem 接口）
-- [ ] Task 11: GroupDetail 真机组件测试
-  - [ ] SubTask 11.1: 挂载真 `GroupDetail.vue` + mock API + mock WS
-  - [ ] SubTask 11.2: 验证进入时调 `GET /api/tasks?runId=xxx`
-  - [ ] SubTask 11.3: 验证 WS 事件只处理当前 runId 的 task
-  - [ ] SubTask 11.4: 验证复用 Tasks 顶层 filter/sort/viewMode 控件
-- [ ] Task 12: 后端测试
-  - [ ] SubTask 12.1: `GetRunSummary` SQL 查询正确
-  - [ ] SubTask 12.2: `ListRuns` 返回所有 run（带 summary）
-  - [ ] SubTask 12.3: `ListPaginated` 走 SQL（不是内存过滤）
+- [ ] Task 11: 真机组件测试
+  - [ ] SubTask 11.1: 挂载真 `Tasks.vue` + mock API + mock WS
+  - [ ] SubTask 11.2: 验证 DOM 节点数 ≤ 30（虚拟滚动核心指标）
+  - [ ] SubTask 11.3: 验证 `ion-infinite-scroll` 触发 `loadMore`
+  - [ ] SubTask 11.4: 验证 1000+ task 时 group card 计数正确（从 summary 获取）
+  - [ ] SubTask 11.5: 验证切换 viewMode 不卡顿（count + getItem 接口）
+  - [ ] SubTask 11.6: 验证 Web Worker 委托计算不阻塞 UI（主线程 frame 时间 < 16ms）
+- [ ] Task 12: GroupDetail 真机组件测试
+  - [ ] SubTask 12.1: 挂载真 `GroupDetail.vue` + mock API + mock WS
+  - [ ] SubTask 12.2: 验证进入时调 `GET /api/tasks?runId=xxx`
+  - [ ] SubTask 12.3: 验证 WS 事件只处理当前 runId 的 task
+  - [ ] SubTask 12.4: 验证复用 Tasks 顶层 filter/sort/viewMode 控件
+- [ ] Task 13: 后端测试
+  - [ ] SubTask 13.1: `GetRunSummary` SQL 查询正确
+  - [ ] SubTask 13.2: `ListRuns` 返回所有 run（带 summary）
+  - [ ] SubTask 13.3: `ListPaginated` 走 SQL（不是内存过滤）
 
 ## 阶段五：全量回归验证
 
-- [ ] Task 13: 全量回归
-  - [ ] SubTask 13.1: `go build ./...` 通过
-  - [ ] SubTask 13.2: `go test ./internal/service/...` 通过
-  - [ ] SubTask 13.3: `vue-tsc --noEmit` 通过
-  - [ ] SubTask 13.4: `pnpm test:run` 通过（pre-existing fail 除外）
+- [ ] Task 14: 全量回归
+  - [ ] SubTask 14.1: `go build ./...` 通过
+  - [ ] SubTask 14.2: `go test ./internal/service/...` 通过
+  - [ ] SubTask 14.3: `vue-tsc --noEmit` 通过
+  - [ ] SubTask 14.4: `pnpm test:run` 通过（pre-existing fail 除外）
 
 # Task Dependencies
 
@@ -90,12 +99,14 @@
 - Task 7 独立（可并行）
 - Task 8 依赖 Task 5/6（虚拟重构依赖 store 拆分）
 - Task 9 依赖 Task 5/6/8（WS 过滤依赖 store 拆分 + 虚拟重构）
-- Task 10/11 依赖 Task 1-9
-- Task 12 依赖 Task 1/2/3
-- Task 13 依赖 Task 1-12
+- Task 10 依赖 Task 8/9（Worker 委托依赖虚拟重构 + WS 过滤）
+- Task 11/12 依赖 Task 1-10
+- Task 13 依赖 Task 1/2/3
+- Task 14 依赖 Task 1-13
 
 # 可并行
 
 - Task 1（后端 summary）与 Task 3（ListPaginated 走 SQL）可并行
 - Task 4（前端 summary composable）与 Task 7（ion-infinite-scroll）可并行（都依赖后端）
 - Task 8（虚拟重构）与 Task 9（WS 过滤）可并行（都依赖 store 拆分）
+- Task 10（Web Worker）依赖 Task 8/9，但实现可与其他并行编写

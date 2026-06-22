@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -24,6 +25,10 @@ import (
 	"github.com/Soltus/encv-go/pkg/tasksystem/store/sqlite"
 	"github.com/google/uuid"
 )
+
+// 🆕 2026-06-23 后端 SQL 权威：RunSummary 别名（service 包直接用 tasksystem.RunSummary）
+//   避免在 service 包重复定义，保持类型单一来源。
+type RunSummary = tasksystem.RunSummary
 
 type TaskStep struct {
 	Phase       string     `json:"phase"`
@@ -737,7 +742,56 @@ func (tm *TaskManager) List() []*MobileTask {
 //   - runId 为空 → 不过滤（返回全部）
 //   - offset/limit 由调用方（handler）解析 + clamp，此处再做一次边界保护
 //   - 返回 totalCount = 过滤后、分页前的总数（供 handler 写 X-Total-Count 响应头）
+//
+// 🆕 2026-06-23 重构：优先走 SQLite store SQL（不是内存过滤）
+//   - store != nil → store.ListTasks(TaskFilter{RunID, Limit, Offset}) 走 SQL
+//   - store == nil → 降级为内存过滤（向后兼容旧测试）
+//   - totalCount：store 路径走 CountByRunId（SQL COUNT），内存路径走 len(filtered)
 func (tm *TaskManager) ListPaginated(runId string, offset, limit int) ([]*MobileTask, int) {
+	// 🆕 优先走 SQLite store SQL
+	if tm.store != nil {
+		filter := tasksystem.TaskFilter{
+			RunID:  runId,
+			Limit:  limit,
+			Offset: offset,
+		}
+		datas, err := tm.store.ListTasks(filter)
+		if err != nil {
+			slog.Warn("ListPaginated: store.ListTasks failed, fallback to in-memory",
+				"runId", runId, "offset", offset, "limit", limit, "error", err)
+		} else {
+			// totalCount：runId 非空时走 CountByRunId（SQL COUNT），runId 为空时走 ListTasks 全量
+			totalCount := 0
+			if runId != "" {
+				counts, err := tm.store.CountByRunId(runId)
+				if err != nil {
+					slog.Warn("ListPaginated: store.CountByRunId failed", "runId", runId, "error", err)
+					// 降级：用当前页长度估算（不精确但避免崩溃）
+					totalCount = len(datas)
+				} else {
+					for _, c := range counts {
+						totalCount += c
+					}
+				}
+			} else {
+				// runId 为空：totalCount 用 ListTasks(filter{Limit:0}) 拿全量长度
+				allDatas, err := tm.store.ListTasks(tasksystem.TaskFilter{})
+				if err != nil {
+					slog.Warn("ListPaginated: store.ListTasks (count) failed", "error", err)
+					totalCount = len(datas)
+				} else {
+					totalCount = len(allDatas)
+				}
+			}
+			result := make([]*MobileTask, 0, len(datas))
+			for _, d := range datas {
+				result = append(result, dataToMobileTask(d))
+			}
+			return result, totalCount
+		}
+	}
+
+	// 降级：内存过滤（store == nil 或 store 查询失败）
 	all := tm.List()
 
 	filtered := all
@@ -765,6 +819,135 @@ func (tm *TaskManager) ListPaginated(runId string, offset, limit int) ([]*Mobile
 		end = totalCount
 	}
 	return filtered[offset:end], totalCount
+}
+
+// 🆕 2026-06-23 后端 SQL 权威：GetRunSummary 返回指定 run 的聚合计数
+//
+// 用于 GET /api/runs/:runId/summary 响应。
+// 前端 group card 显示这些数字，不靠 store.tasks 算（store 只持有视图分页的 task）。
+//
+// 实现策略：
+//   - store != nil → store.CountByRunId(runId) 走 SQL（SELECT status, COUNT(*) GROUP BY status）
+//   - store == nil → 降级为内存遍历（tm.List() filter runId + count by status）
+//
+// 状态映射（后端 status → RunSummary 字段）：
+//   - "completed" → Passed
+//   - "failed" → Failed
+//   - "running" → Running
+//   - "queued" / "pending" → Pending
+//   - "cancelled" → Cancelled
+//   - 其他 → 归入 Total 但不归入细分（避免漏算）
+func (tm *TaskManager) GetRunSummary(runId string) RunSummary {
+	summary := RunSummary{RunID: runId}
+
+	if runId == "" {
+		return summary
+	}
+
+	var counts map[string]int
+
+	// 优先走 SQLite store SQL
+	if tm.store != nil {
+		c, err := tm.store.CountByRunId(runId)
+		if err != nil {
+			slog.Warn("GetRunSummary: store.CountByRunId failed, fallback to in-memory",
+				"runId", runId, "error", err)
+		} else {
+			counts = c
+		}
+	}
+
+	// 降级：内存遍历
+	if counts == nil {
+		counts = make(map[string]int)
+		for _, t := range tm.List() {
+			if t.RunId == runId {
+				counts[t.Status]++
+			}
+		}
+	}
+
+	// 汇总
+	for status, c := range counts {
+		summary.Total += c
+		switch status {
+		case "completed":
+			summary.Passed += c
+		case "failed":
+			summary.Failed += c
+		case "running":
+			summary.Running += c
+		case "queued", "pending":
+			summary.Pending += c
+		case "cancelled":
+			summary.Cancelled += c
+		}
+	}
+
+	// 完成百分比（终态 task / total * 100）
+	if summary.Total > 0 {
+		terminal := summary.Passed + summary.Failed + summary.Cancelled
+		summary.Percent = terminal * 100 / summary.Total
+	}
+
+	return summary
+}
+
+// 🆕 2026-06-23 后端 SQL 权威：ListRuns 列出所有 run（带基本信息）
+//
+// 用于 GET /api/runs 响应。
+// 返回所有 run 的 runId + startedAt + triggeredBy，不带 summary。
+// 前端再调 /api/runs/:runId/summary 拿详细计数（或 handler 层批量补 summary）。
+//
+// 实现策略：
+//   - store != nil → store.ListRuns() 走 SQL（GROUP BY run_id）
+//   - store == nil → 降级为内存遍历（tm.List() 去重 runId）
+func (tm *TaskManager) ListRuns() []tasksystem.RunInfo {
+	// 优先走 SQLite store SQL
+	if tm.store != nil {
+		runs, err := tm.store.ListRuns()
+		if err != nil {
+			slog.Warn("ListRuns: store.ListRuns failed, fallback to in-memory", "error", err)
+		} else {
+			return runs
+		}
+	}
+
+	// 降级：内存遍历
+	all := tm.List()
+	runMap := make(map[string]*tasksystem.RunInfo)
+	for _, t := range all {
+		if t.RunId == "" {
+			continue
+		}
+		if existing, ok := runMap[t.RunId]; ok {
+			// 取最早的 created_at 作为 startedAt
+			if t.CreatedAt.Before(existing.StartedAt) {
+				existing.StartedAt = t.CreatedAt
+			}
+			// triggeredBy 取第一个非空的
+			if existing.TriggeredBy == "" && t.TriggeredBy != "" {
+				existing.TriggeredBy = t.TriggeredBy
+			}
+		} else {
+			info := &tasksystem.RunInfo{
+				RunID:       t.RunId,
+				StartedAt:   t.CreatedAt,
+				TriggeredBy: t.TriggeredBy,
+			}
+			runMap[t.RunId] = info
+		}
+	}
+
+	result := make([]tasksystem.RunInfo, 0, len(runMap))
+	for _, info := range runMap {
+		result = append(result, *info)
+	}
+	// 按 startedAt 倒序
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].StartedAt.After(result[j].StartedAt)
+	})
+	return result
 }
 
 func (tm *TaskManager) Get(id string) (*MobileTask, error) {

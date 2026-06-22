@@ -191,8 +191,48 @@ type Store interface {
 	// DeleteTrash 按 ID 删除回收站条目（硬删除，不删文件）。
 	DeleteTrash(id string) error
 
+	// 🆕 2026-06-23 后端 SQL 权威：聚合查询接口（供 /api/runs/:runId/summary 和 /api/runs 用）
+	//   - CountByRunId：SELECT status, COUNT(*) FROM tasks WHERE run_id=? GROUP BY status
+	//   - ListRuns：SELECT run_id, MIN(created_at), triggered_by FROM tasks WHERE run_id != '' GROUP BY run_id
+	//   - 这两个接口让后端聚合查询走 SQL，不依赖内存遍历
+	//   - 任务系统 API 提供给第三方调用，必须支持 SQL 查询
+
+	// CountByRunId 按 runId 统计各状态的任务数。
+	// 返回 map[status]count，例如 {"completed": 1040, "failed": 15, "running": 5}
+	// runId 为空时返回空 map（不统计 runId 为空的 task）。
+	CountByRunId(runId string) (map[string]int, error)
+
+	// ListRuns 列出所有 run（去重 runId），带最早创建时间和 triggeredBy。
+	// 按 startedAt 倒序排列（最早的 task 的 created_at 代表 run 的启动时间）。
+	ListRuns() ([]RunInfo, error)
+
 	// Close 关闭存储连接。
 	Close() error
+}
+
+// RunSummary run 的聚合计数（SQL COUNT + GROUP BY status 出）
+//
+// 用于 /api/runs/:runId/summary 响应。
+// 前端 group card 显示这些数字，不靠 store.tasks 算（store 只持有视图分页的 task）。
+type RunSummary struct {
+	RunID     string `json:"runId"`
+	Total     int    `json:"total"`
+	Passed    int    `json:"passed"`
+	Failed    int    `json:"failed"`
+	Running   int    `json:"running"`
+	Pending   int    `json:"pending"`
+	Cancelled int    `json:"cancelled"`
+	Percent   int    `json:"percent"` // 完成百分比（终态 task / total * 100）
+}
+
+// RunInfo run 列表项（带 summary，避免 N+1 查询）
+//
+// 用于 /api/runs 响应。
+// ListRuns 返回所有 run 的基本信息，前端再决定是否调 /summary 拿详细计数。
+type RunInfo struct {
+	RunID       string    `json:"runId"`
+	StartedAt   time.Time `json:"startedAt"`
+	TriggeredBy string    `json:"triggeredBy"`
 }
 
 // RollbackStrategy 回滚策略接口。

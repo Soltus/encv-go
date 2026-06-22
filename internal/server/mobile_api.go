@@ -631,6 +631,53 @@ func (s *Server) handleCancelRunGin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "cancelled", "runId": runId})
 }
 
+// handleGetRunSummaryGin 返回指定 run 的聚合计数（SQL COUNT + GROUP BY status）。
+//
+// 🆕 2026-06-23 spec backend-sql-authority-view-pagination Task 1.4：
+//   - 后端是唯一权威，聚合计数由 SQL 出，不依赖前端 store
+//   - 前端 group card 显示 summary.total/passed/failed（不靠 store.tasks 算）
+//   - 路由：GET /api/runs/:runId/summary
+//   - 响应：{runId, total, passed, failed, running, pending, cancelled, percent}
+func (s *Server) handleGetRunSummaryGin(c *gin.Context) {
+	runId := c.Param("runId")
+	if runId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "runId is required"})
+		return
+	}
+	summary := s.mobileSvc.GetTaskManager().GetRunSummary(runId)
+	c.JSON(http.StatusOK, summary)
+}
+
+// handleListRunsGin 返回所有 run 列表（带 summary，避免 N+1 查询）。
+//
+// 🆕 2026-06-23 spec backend-sql-authority-view-pagination Task 2.4：
+//   - 后端是唯一权威，run 列表由 SQL GROUP BY 出
+//   - 每个 run 带 summary（handler 层批量补，避免前端 N+1 调用 /summary）
+//   - 路由：GET /api/runs
+//   - 响应：{runs: [{runId, startedAt, triggeredBy, summary: {...}}, ...]}
+func (s *Server) handleListRunsGin(c *gin.Context) {
+	tm := s.mobileSvc.GetTaskManager()
+	runs := tm.ListRuns()
+	// 批量补 summary（避免前端 N+1 调用 /summary）
+	type runWithSummary struct {
+		RunID       string                   `json:"runId"`
+		StartedAt   time.Time                `json:"startedAt"`
+		TriggeredBy string                   `json:"triggeredBy"`
+		Summary     mobileservice.RunSummary `json:"summary"`
+	}
+	result := make([]runWithSummary, 0, len(runs))
+	for _, r := range runs {
+		summary := tm.GetRunSummary(r.RunID)
+		result = append(result, runWithSummary{
+			RunID:       r.RunID,
+			StartedAt:   r.StartedAt,
+			TriggeredBy: r.TriggeredBy,
+			Summary:     summary,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"runs": result})
+}
+
 func (s *Server) handleRetryTaskGin(c *gin.Context) {
 	id := c.Param("id")
 

@@ -265,9 +265,15 @@
       <!-- 历史：ion-list + v-for 渲染所有 displayedItems → 200+ task 时 DOM 节点爆炸 -->
       <!-- 修复：TaskVirtualList 用 @tanstack/vue-virtual 仅渲染可见窗口 + overscan 10 个 item -->
       <!-- 🆕 v4 M3：displayedItems 是聚合/平铺二选一，包含 date / group / task 3 种 kind -->
+      <!-- 🆕 2026-06-23 Task 8：重构为 count + getItem + getKey 接口
+        - 旧：:items="displayedItems"（传整个数组，virtualizer 内部 O(N) 遍历）
+        - 新：:count + :get-item + :get-key（virtualizer 只对可见窗口调 getItem，O(1)）
+        - 配合 Task 10 Web Worker 委托视图计算，主线程不卡顿 -->
       <TaskVirtualList
         v-else
-        :items="displayedItems"
+        :count="displayedItems.length"
+        :get-item="(i: number) => displayedItems[i]"
+        :get-key="(i: number) => displayedItems[i].key"
         :scroll-el="scrollEl"
         ref="virtualListRef"
         class="tasks-virtual-list"
@@ -519,6 +525,23 @@
         </template>
       </TaskVirtualList>
 
+      <!-- 🆕 2026-06-23 Task 7：ion-infinite-scroll 触发 loadMore
+        - 滚动到底部时触发 loadMore 加载下一页
+        - hasMore=false 时禁用（没有更多数据）
+        - isLoadingMore 时显示 loading spinner
+        - ionInfinite 事件回调 complete() 让 infinite-scroll 重置 -->
+      <ion-infinite-scroll
+        v-if="hasMore"
+        @ionInfinite="onInfinite"
+        threshold="100px"
+      >
+        <ion-infinite-scroll-content
+          :loading-spinner="isLoadingMore ? 'circular' : undefined"
+          :loading-text="isLoadingMore ? t('common.loading') : ''"
+        >
+        </ion-infinite-scroll-content>
+      </ion-infinite-scroll>
+
       <ion-fab vertical="bottom" horizontal="end" slot="fixed">
         <ion-fab-button @click="openNewTask()">
           <ion-icon :icon="add"></ion-icon>
@@ -539,6 +562,7 @@ import {
   IonLabel, IonBadge, IonProgressBar, IonFab, IonFabButton,
   IonSpinner, IonButton, IonButtons, IonSearchbar, IonChip,
   IonPopover, IonCheckbox, alertController, actionSheetController, modalController,
+  IonInfiniteScroll, IonInfiniteScrollContent,
 } from '@ionic/vue'
 import { add, closeCircle, checkmarkCircle, timer, sync,
   warningOutline, lockClosed, lockClosedOutline, search, funnel, trashBin,
@@ -643,7 +667,7 @@ const {
   pluginPopoverOpen, typePopoverOpen, statusPopoverOpen, datePopoverOpen, datePopoverEvent,
   pluginPopoverEvent, typePopoverEvent, statusPopoverEvent,
   availablePlugins, hasActiveFilters, hasCompletedTasks, filteredTasks,
-  fetchTasks, refresh,
+  fetchTasks, refresh, loadMore, hasMore, isLoadingMore,
   openPluginPopover, openTypePopover, openStatusPopover, openDatePopover,
   togglePluginFilter, toggleTypeFilter, toggleStatusFilter, clearFilters,
   onSearchInput, toggleSort,
@@ -709,6 +733,14 @@ async function openTaskDetail(task: EncvTask) {
 
 async function handleRefresh(event: CustomEvent) {
   await refresh()
+  ;(event.target as any)?.complete?.()
+}
+
+// 🆕 2026-06-23 Task 7.2：ion-infinite-scroll 触发 loadMore
+//   - 滚动到底部时触发，加载下一页 task
+//   - complete() 让 infinite-scroll 重置（可以再次触发）
+async function onInfinite(event: CustomEvent) {
+  await loadMore()
   ;(event.target as any)?.complete?.()
 }
 

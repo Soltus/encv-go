@@ -807,6 +807,53 @@ export async function cancelRun(runId: string): Promise<void> {
   }
 }
 
+// 🆕 2026-06-23 spec backend-sql-authority-view-pagination Task 4.1：
+//   后端 SQL 权威——聚合计数由后端 SQL COUNT + GROUP BY status 出，不依赖前端 store。
+//   前端 group card 显示 summary.total/passed/failed（不靠 store.tasks 算）。
+//   store 只持有"当前视图需要的"task（视图分页），不是所有 task。
+
+/** Run 聚合计数（后端 SQL COUNT + GROUP BY status 出） */
+export interface RunSummary {
+  runId: string
+  total: number
+  passed: number
+  failed: number
+  running: number
+  pending: number
+  cancelled: number
+  /** 完成百分比（终态 task / total * 100） */
+  percent: number
+}
+
+/** Run 列表项（带 summary，避免前端 N+1 调用 /summary） */
+export interface RunInfo {
+  runId: string
+  startedAt: string
+  triggeredBy: string
+  summary: RunSummary
+}
+
+/** GET /api/runs/:runId/summary — 返回指定 run 的聚合计数 */
+export async function getRunSummary(runId: string): Promise<RunSummary> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/summary`)
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  return (await response.json()) as RunSummary
+}
+
+/** GET /api/runs — 返回所有 run 列表（带 summary） */
+export async function listRuns(): Promise<RunInfo[]> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/runs`)
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  const data = await response.json()
+  return data.runs ?? []
+}
+
 export async function retryTask(id: string): Promise<void> {
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/tasks/${id}/retry`, {

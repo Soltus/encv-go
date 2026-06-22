@@ -178,6 +178,46 @@
 - group card 显示 `summary.total` / `summary.passed` / `summary.failed`（不靠 store.tasks 算）
 - WS `task:completed` 时刷新对应 runId 的 summary（调 `GET /api/runs/:runId/summary`）
 
+### 4.6 Web Worker 委托计算（避免阻塞 UI 进程）
+
+**问题**：即使后端 SQL 权威，前端仍有以下计算会阻塞 UI 主线程：
+- `displayedItems` computed：按 viewMode/sortBy/filter 构建异构列表（date/group/task）
+- `filteredTasks` computed：按 plugin/type/status/triggeredBy/date/search 过滤
+- `sortedTasks` computed：按 activity/created 排序
+- `groupedTasksByRunId` computed：按 runId 聚合
+- 1000+ task 时这些 computed 遍历会卡顿（即使虚拟滚动只渲染可见行）
+
+**设计**：把 O(N) 计算委托给 Web Worker，主线程只接收结果
+
+**Worker 职责**：
+- 接收 store.tasks 快照 + viewMode/sortBy/filter 状态
+- 计算 `filteredTasks` / `sortedTasks` / `groupedTasksByRunId` / `displayedItems`
+- 返回结果（item 数组或 count + getItem 索引）
+
+**主线程职责**：
+- 持有 store.tasks（响应式）
+- 持有 viewMode/sortBy/filter 状态（响应式）
+- watch 状态变化 → postMessage 给 worker
+- 接收 worker 结果 → 更新 `displayedItems` ref（触发虚拟滚动重渲染）
+
+**通信优化**：
+- 用 `Transferable` 对象（ArrayBuffer/structuredClone）减少拷贝开销
+- debounce：连续 filter 变化时只发最后一次（避免 worker 队列积压）
+- 增量更新：task patch 时只传 patch 数据（不传整个 store.tasks）
+
+**Worker 文件**：
+- `src/workers/taskViewCompute.worker.ts` — 视图计算 worker
+- `src/composables/useTaskViewCompute.ts` — 主线程封装（postMessage/onmessage + debounce）
+
+**降级策略**：
+- Web Worker 不可用（SSR / 旧浏览器）→ 主线程同步计算（向后兼容）
+- Worker 初始化失败 → 主线程同步计算 + warn 日志
+
+**Capacitor 兼容**：
+- Android WebView 支持 Web Worker（API 21+）
+- iOS WKWebView 支持 Web Worker（iOS 10+）
+- 无需 polyfill
+
 ---
 
 ## 五、测试设计

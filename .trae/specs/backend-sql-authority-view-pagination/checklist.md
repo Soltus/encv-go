@@ -30,7 +30,7 @@
 - [ ] Tasks.vue `@ionInfinite` 事件触发 `loadMore`
 - [ ] Tasks.vue `hasMore=false` 时禁用 infinite-scroll
 
-## 阶段三：虚拟滚动重构 + WS 上下文过滤
+## 阶段三：虚拟滚动重构 + WS 上下文过滤 + Web Worker 委托
 
 - [ ] `TaskVirtualList.vue` props 改为 `count` + `getItem(index)` + `getKey(index)`
 - [ ] virtualizer 只调 `getItem` 获取可见窗口的 item
@@ -41,6 +41,13 @@
 - [ ] Tasks 页：WS `task:update`/`task:completed` 只 patch 已加载的 task
 - [ ] GroupDetail 页：WS 事件只处理当前 runId 的 task
 - [ ] 离开视图时停止处理（onUnmounted 取消订阅）
+- [ ] `src/workers/taskViewCompute.worker.ts` 视图计算 worker 已创建
+- [ ] worker 实现 `filteredTasks` / `sortedTasks` / `groupedTasksByRunId` / `displayedItems` 计算
+- [ ] `src/composables/useTaskViewCompute.ts` 主线程封装已创建
+- [ ] watch store.tasks + viewMode/sortBy/filter 变化 → postMessage 给 worker
+- [ ] 接收 worker 结果 → 更新 `displayedItems` ref
+- [ ] 降级策略：Worker 不可用时主线程同步计算
+- [ ] 通信优化：debounce + Transferable 对象减少拷贝
 
 ## 阶段四：测试升级
 
@@ -49,6 +56,7 @@
 - [ ] 验证 `ion-infinite-scroll` 触发 `loadMore`
 - [ ] 验证 1000+ task 时 group card 计数正确（从 summary 获取）
 - [ ] 验证切换 viewMode 不卡顿（count + getItem 接口）
+- [ ] 验证 Web Worker 委托计算不阻塞 UI（主线程 frame 时间 < 16ms）
 - [ ] 挂载真 `GroupDetail.vue` + mock API + mock WS
 - [ ] 验证进入时调 `GET /api/tasks?runId=xxx`
 - [ ] 验证 WS 事件只处理当前 runId 的 task
