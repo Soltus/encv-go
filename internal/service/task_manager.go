@@ -311,11 +311,39 @@ func (tm *TaskManager) saveTasks() {
 		slog.Warn("Failed to write tasks temp file", "error", err)
 		return
 	}
-
 	if err := os.Rename(tmpPath, tm.persistPath); err != nil {
 		slog.Warn("Failed to rename tasks file", "error", err)
 		return
 	}
+}
+
+// 🆕 2026-06-22 Q6A：高频单行持久化（避免 saveTasks 写全表）
+//
+// 为什么需要：
+//   - 自动化测试 1000+ 并发创建 task 时，每个 CreateWithRunMeta 走 saveTasks
+//     写全表 N 行 → IO 抖动 + 锁竞争
+//   - 改用 saveTaskSingle 只写一行（O(1)），适合高频路径
+//
+// 调用方：
+//   - CreateWithRunMeta（1000+ 并发主入口）
+//   - failTask（失败标记）
+//   - updateProgress（高频 transient，不调用，避免 IO 风暴）
+func (tm *TaskManager) saveTaskSingle(task *MobileTask) {
+	if task == nil {
+		return
+	}
+	if tm.store != nil {
+		data := mobileTaskToData(task)
+		if err := tm.store.CreateTask(data); err != nil {
+			if err := tm.store.UpdateTask(data); err != nil {
+				slog.Warn("Failed to upsert single task in store",
+					"id", task.ID, "error", err)
+			}
+		}
+		return
+	}
+	// 无 store：降级为全表写（保持向后兼容）
+	tm.saveTasks()
 }
 
 func (tm *TaskManager) loadTasks() {
@@ -582,7 +610,8 @@ func (tm *TaskManager) CreateWithRunMeta(
 		triggeredBy = "user"
 	}
 	task.TriggeredBy = triggeredBy
-	tm.saveTasks()
+	// 🆕 2026-06-22 Q6A：单行写（O(1)），替代 saveTasks() 全表写
+	tm.saveTaskSingle(task)
 	return task
 }
 
@@ -1508,29 +1537,38 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 
 func (tm *TaskManager) failTask(id, errMsg string) {
 	tm.mu.Lock()
-	defer tm.mu.Unlock()
 
 	friendlyMsg := simplifyErrorMessage(errMsg)
 
+	var taskToPersist *MobileTask
 	if task, ok := tm.tasks[id]; ok {
 		task.Status = "failed"
 		task.Error = friendlyMsg
-		task.ErrorDetail = errMsg
+		// 🆕 2026-06-22 Q2B：写结构化 errorDetail JSON，驱动前端分类/建议/phase 链
+		task.ErrorDetail = classifyError(errMsg)
 		now := time.Now()
 		task.CompletedAt = &now
-		slog.Error("Task failed", "id", id, "error", errMsg)
-		if tm.broadcaster != nil {
-			tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
-				"id":          id,
-				"status":      "failed",
-				"error":       friendlyMsg,
-				"errorDetail": errMsg,
-			})
-			tm.broadcaster.Broadcast("log", map[string]interface{}{
-				"level":   "error",
-				"message": fmt.Sprintf("[Task %s] %s", id, errMsg),
-			})
-		}
+		taskToPersist = task
+	}
+	tm.mu.Unlock()
+
+	// 🆕 2026-06-22 Q6A：单行写（在锁外，避免持久化阻塞其他 task 操作）
+	if taskToPersist != nil {
+		tm.saveTaskSingle(taskToPersist)
+	}
+
+	slog.Error("Task failed", "id", id, "error", errMsg)
+	if tm.broadcaster != nil {
+		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
+			"id":          id,
+			"status":      "failed",
+			"error":       friendlyMsg,
+			"errorDetail": classifyError(errMsg),
+		})
+		tm.broadcaster.Broadcast("log", map[string]interface{}{
+			"level":   "error",
+			"message": fmt.Sprintf("[Task %s] %s", id, errMsg),
+		})
 	}
 }
 
@@ -1563,6 +1601,73 @@ func simplifyErrorMessage(errMsg string) string {
 		return errMsg[:120] + "..."
 	}
 	return errMsg
+}
+
+// 🆕 2026-06-22 Q2B：错误分类 → 结构化 errorDetail JSON
+//
+// 为什么需要：
+//   - 前端 TaskErrorSection 需要展示「分类 + 修复建议 + phase 时间链」
+//   - 仅靠 task.Error 字符串无法驱动 useErrorAnalyzer（需要 reason 字段）
+//   - 把分类结果以 JSON 写入 task.ErrorDetail，前端折叠展开可读
+//
+// JSON schema（前端友好）：
+//   {
+//     "phase": "submission" | "network" | "http" | "backend" | "plugin",
+//     "reason": "source_missing" | "permission_denied" | "engine_unavailable" |
+//               "ffprobe_failed" | "ffmpeg_failed" | "plugin_panic" |
+//               "auth_failed" | "container_corrupted" | "disk_full" | "unknown",
+//     "raw": "<原始错误字符串，便于展开查看>",
+//     "at": "<ISO8601>"
+//   }
+func classifyError(errMsg string) string {
+	reason := "unknown"
+	phase := "backend"
+
+	switch {
+	case strings.Contains(errMsg, "ENGINE_LOAD_FAILED"), strings.Contains(errMsg, "ENGINE_SYMBOL_MISSING"), strings.Contains(errMsg, "video engine unavailable"):
+		reason = "engine_unavailable"
+		phase = "plugin"
+	case strings.Contains(errMsg, "cannot access file"):
+		reason = "source_missing"
+		phase = "submission"
+	case strings.Contains(errMsg, "No such file"), strings.Contains(errMsg, "source file not found"):
+		reason = "source_missing"
+		phase = "submission"
+	case strings.Contains(errMsg, "Permission denied"):
+		reason = "permission_denied"
+		phase = "submission"
+	case strings.Contains(errMsg, "ffprobe failed"):
+		reason = "ffprobe_failed"
+		phase = "plugin"
+	case strings.Contains(errMsg, "ffmpeg failed"):
+		reason = "ffmpeg_failed"
+		phase = "plugin"
+	case strings.Contains(errMsg, "encryption failed"), strings.Contains(errMsg, "plugin failed"), strings.Contains(errMsg, "panic"):
+		reason = "plugin_panic"
+		phase = "plugin"
+	case strings.Contains(errMsg, "wrong password"), strings.Contains(errMsg, "auth"):
+		reason = "auth_failed"
+		phase = "plugin"
+	case strings.Contains(errMsg, "container"), strings.Contains(errMsg, "header"):
+		reason = "container_corrupted"
+		phase = "plugin"
+	case strings.Contains(errMsg, "no space left"):
+		reason = "disk_full"
+		phase = "backend"
+	}
+
+	payload := map[string]interface{}{
+		"phase":  phase,
+		"reason": reason,
+		"raw":    errMsg,
+		"at":     time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		// fallback：序列化失败时退化为原始字符串
+		return errMsg
+	}
+	return string(b)
 }
 
 func getAvailableDiskSpace(path string) (int64, error) {

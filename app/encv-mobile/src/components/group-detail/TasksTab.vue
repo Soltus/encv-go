@@ -6,50 +6,124 @@
       <p>{{ t('tasks.groupDetail.emptyTasksDesc') }}</p>
     </div>
     <ion-list v-else class="tasks-tab__list">
+      <!-- 🆕 2026-06-22 Q4：ion-item-sliding 包裹（Q5A 滑动操作） -->
       <ion-item-sliding v-for="tk in runTasks" :key="tk.id">
+        <ion-item-options side="start">
+          <ion-item-option
+            v-if="canCancel(tk)"
+            color="warning"
+            @click="onCancel(tk)"
+          >
+            <ion-icon slot="icon-only" :icon="stopCircleOutline"></ion-icon>
+            {{ t('tasks.cancel') }}
+          </ion-item-option>
+        </ion-item-options>
+
         <ion-item
           class="tasks-tab__item"
-          button
-          detail
-          @click="emit('select-task', tk)"
+          :button="!multiSelectMode"
+          :detail="!multiSelectMode"
+          :color="selectedIds.has(tk.id) ? 'primary' : ''"
+          @click="onItemClick(tk)"
         >
+          <!-- 🆕 Q4：多选模式时显示 checkbox -->
+          <ion-checkbox
+            v-if="multiSelectMode"
+            slot="start"
+            :checked="selectedIds.has(tk.id)"
+            @ion-change="emit('toggle-select', tk.id)"
+          />
           <ion-icon
+            v-else
             :icon="getTaskIcon(tk)"
             :color="getStatusColor(tk.status)"
             slot="start"
           ></ion-icon>
+
           <ion-label>
-            <h2>{{ getTaskName(tk) }}</h2>
+            <h2>
+              {{ getTaskName(tk) }}
+              <ion-badge v-if="isEncrypted(tk)" color="warning" class="encrypted-badge">
+                <ion-icon :icon="lockClosed" size="small"></ion-icon>
+                {{ t('tasks.encrypted') }}
+              </ion-badge>
+            </h2>
             <p class="tasks-tab__meta">
               <ion-badge :color="getStatusColor(tk.status)" class="tl-status-badge">
                 {{ getStatusLabel(tk.status) }}
               </ion-badge>
-              <span class="tasks-tab__type">{{ tk.type === 'encrypt' ? t('tasks.encrypt') : t('tasks.decrypt') }}</span>
+              <!-- 🆕 Q8B：typeMap 查表 -->
+              <span class="tasks-tab__type">{{ getTaskTypeLabel(tk.type, t) }}</span>
               <ion-badge v-if="tk.pluginName" color="primary" class="tasks-tab__plugin">{{ tk.pluginName }}</ion-badge>
             </p>
             <p class="tasks-tab__time">
               <span>{{ formatDateTime(tk.createdAt) }}</span>
               <span v-if="getTaskDuration(tk)">· {{ getTaskDuration(tk) }}</span>
+              <span v-if="tk.performanceSummary?.avgThroughput">· {{ tk.performanceSummary.avgThroughput.toFixed(1) }} MB/s</span>
             </p>
-            <p v-if="tk.error" class="tasks-tab__error">{{ tk.error }}</p>
+            <p v-if="tk.error" class="tasks-tab__error">
+              <ion-icon :icon="alertCircle" size="small"></ion-icon>
+              {{ tk.error }}
+            </p>
           </ion-label>
         </ion-item>
+
+        <ion-item-options side="end">
+          <ion-item-option
+            color="primary"
+            @click="onRetry(tk)"
+            v-if="canRetry(tk)"
+          >
+            <ion-icon slot="icon-only" :icon="refreshOutline"></ion-icon>
+          </ion-item-option>
+          <ion-item-option
+            color="danger"
+            @click="onDelete(tk)"
+          >
+            <ion-icon slot="icon-only" :icon="trashOutline"></ion-icon>
+          </ion-item-option>
+        </ion-item-options>
       </ion-item-sliding>
     </ion-list>
   </div>
 </template>
 
 <script setup lang="ts">
-import { IonIcon, IonList, IonItem, IonItemSliding, IonBadge, IonLabel } from '@ionic/vue'
-import { listOutline } from 'ionicons/icons'
+import { IonIcon, IonList, IonItem, IonItemSliding, IonItemOptions, IonItemOption, IonBadge, IonLabel, IonCheckbox, toastController } from '@ionic/vue'
+import { listOutline, lockClosed, alertCircle, stopCircleOutline, refreshOutline, trashOutline } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
 import { formatDateTime } from '@/composables/useDateFormat'
+import { getTaskTypeLabel } from '@/lib/taskTypeLabel'
 import type { EncvTask } from '@/api/encv'
+import { cancelTask, retryTask, deleteTask } from '@/api/encv'
 
 const { t } = useI18n()
 
-defineProps<{ runTasks: EncvTask[] }>()
-const emit = defineEmits<{ (e: 'select-task', task: EncvTask): void }>()
+// 🆕 Q4：接收多选参数
+const props = withDefaults(defineProps<{
+  runTasks: EncvTask[]
+  multiSelectMode?: boolean
+  selectedIds?: Set<string>
+  searchQuery?: string
+}>(), {
+  multiSelectMode: false,
+  selectedIds: () => new Set<string>(),
+  searchQuery: '',
+})
+
+const emit = defineEmits<{
+  (e: 'select-task', task: EncvTask): void
+  (e: 'toggle-select', taskId: string): void
+  (e: 'open-performance'): void
+}>()
+
+function onItemClick(tk: EncvTask) {
+  if (props.multiSelectMode) {
+    emit('toggle-select', tk.id)
+  } else {
+    emit('select-task', tk)
+  }
+}
 
 function getTaskName(task: EncvTask): string {
   if (task.targetPath) return task.targetPath.split('/').pop() || task.targetPath
@@ -58,7 +132,17 @@ function getTaskName(task: EncvTask): string {
 }
 
 function getTaskIcon(task: EncvTask): string {
-  return task.type === 'encrypt' ? 'lock-closed' : 'lock-open'
+  if (task.type === 'encrypt') return 'lock-closed'
+  if (task.type === 'decrypt') return 'lock-open'
+  if (task.type === 'delete') return 'trash'
+  if (task.type === 'move' || task.type === 'rename') return 'swap-horizontal'
+  if (task.type === 'copy') return 'copy'
+  if (task.type.startsWith('rollback_')) return 'arrow-undo'
+  return 'document'
+}
+
+function isEncrypted(task: EncvTask): boolean {
+  return task.type === 'encrypt' || (task.targetPath?.endsWith('.encv') ?? false)
 }
 
 function getStatusLabel(status: EncvTask['status']): string {
@@ -82,6 +166,46 @@ function getTaskDuration(task: EncvTask): string {
   if (ms < 1000) return `${ms}ms`
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`
+}
+
+function canCancel(tk: EncvTask): boolean {
+  return tk.status === 'running' || tk.status === 'queued'
+}
+function canRetry(tk: EncvTask): boolean {
+  return tk.status === 'failed' || tk.status === 'cancelled'
+}
+
+async function onCancel(tk: EncvTask) {
+  try {
+    await cancelTask(tk.id)
+    const toast = await toastController.create({ message: t('tasks.cancelSuccess'), duration: 1500, color: 'success' })
+    await toast.present()
+  } catch (err: any) {
+    const toast = await toastController.create({ message: err.message ?? t('common.failed'), duration: 2000, color: 'danger' })
+    await toast.present()
+  }
+}
+
+async function onRetry(tk: EncvTask) {
+  try {
+    await retryTask(tk.id)
+    const toast = await toastController.create({ message: t('tasks.retrySuccess'), duration: 1500, color: 'success' })
+    await toast.present()
+  } catch (err: any) {
+    const toast = await toastController.create({ message: err.message ?? t('common.failed'), duration: 2000, color: 'danger' })
+    await toast.present()
+  }
+}
+
+async function onDelete(tk: EncvTask) {
+  try {
+    await deleteTask(tk.id)
+    const toast = await toastController.create({ message: t('tasks.deleteSuccess'), duration: 1500, color: 'success' })
+    await toast.present()
+  } catch (err: any) {
+    const toast = await toastController.create({ message: err.message ?? t('common.failed'), duration: 2000, color: 'danger' })
+    await toast.present()
+  }
 }
 </script>
 
@@ -120,6 +244,9 @@ function getTaskDuration(task: EncvTask): string {
   font-family: monospace;
 }
 .tasks-tab__error {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: 11px;
   color: var(--ion-color-danger-shade);
   margin-top: 4px;
@@ -128,6 +255,15 @@ function getTaskDuration(task: EncvTask): string {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+.encrypted-badge {
+  font-size: 10px;
+  margin-left: 4px;
+  --padding-start: 4px;
+  --padding-end: 4px;
+}
+.tl-status-badge {
+  font-size: 10px;
 }
 .empty-state {
   text-align: center;

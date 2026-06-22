@@ -141,13 +141,29 @@ export async function ensureLRUCache(maxItems = 200): Promise<void> {
 }
 
 /** 写单个 task（patchTask 用） */
+/**
+ * 🆕 2026-06-22 Q6A：单行写带指数退避重试
+ *
+ * 为什么需要：
+ * - 1000+ 并发提交时 IndexedDB 偶发 "QuotaExceededError" / "DatabaseClosedError"
+ * - 失败时丢失 task 持久化 → 重启后 runId 变孤儿
+ * - 兜底：失败后 50/100/200ms 重试 3 次
+ */
 export async function putTask(task: EncvTask): Promise<void> {
-  try {
-    const db = await getDB()
-    await db.tasks.put({ ...task, _persistedAt: Date.now() })
-  } catch (err) {
-    console.warn('[useTaskPersistence] putTask failed:', err)
+  const delays = [0, 50, 100, 200] // 第一次立即 + 3 次重试
+  let lastErr: unknown
+  for (const delay of delays) {
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay))
+    try {
+      const db = await getDB()
+      await db.tasks.put({ ...task, _persistedAt: Date.now() })
+      return  // 成功直接返回
+    } catch (err) {
+      lastErr = err
+      console.warn(`[useTaskPersistence] putTask failed (will retry in ${delay}ms):`, err)
+    }
   }
+  console.error('[useTaskPersistence] putTask final failure after 3 retries:', lastErr)
 }
 
 /**

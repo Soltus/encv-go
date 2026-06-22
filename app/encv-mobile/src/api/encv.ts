@@ -742,6 +742,14 @@ export async function retryTask(id: string): Promise<void> {
   }
 }
 
+// 🆕 2026-06-22 Q4：删除任务（前端仅从 store 移除，不删后端数据 —
+//   因为后端 task 已写盘，前端只标 hide；如果需要真删，需要后端 DELETE 端点）
+export async function deleteTask(id: string): Promise<void> {
+  const { useTaskStore } = await import('@/stores/taskStore')
+  const store = useTaskStore()
+  store.removeTaskLocal(id)
+}
+
 export async function removeTask(id: string): Promise<void> {
   console.info('[API] removeTask:', id)
   const baseUrl = getApiBaseUrl()

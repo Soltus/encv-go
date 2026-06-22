@@ -8,23 +8,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 🆕 2026-06-18 Task 16：CreateWithCryptoParams 持久化 cipherMode / compressionMode
+// 🆕 2026-06-22 Q1A：原 TestCreateWithCryptoParams 引用了不存在的 API
+//
+// 历史：
+// - 2026-06-18 Task 16 设计时假设有 `CreateWithCryptoParams(taskType, source, target,
+//   password, secondary, version, plugin, extras, cipherMode, compressionMode)` 方法
+// - 实际 2026-06-18 落地的 API 是 `CreateWithRunMeta`，参数顺序完全一致
+//   （10 参，多了 runId + triggeredBy）
+// - 因此测试一直跑不过，CI 红×8
+//
+// 修复（Q1A 改名映射）：
+// - `CreateWithCryptoParams(...)` → `CreateWithRunMeta(..., '', 'user')`
+// - 末尾补 runId="" + triggeredBy="user"（默认值）
+// - cipherMode/compressionMode 位置不变
 //
 // 覆盖：
 // - 显式传 cipherMode=1 + compressionMode='zstd' → 字段持久化
 // - cipherMode=0 + compressionMode='none'（默认值）→ 字段仍持久化（用户主动选了默认）
 // - 兼容 CreateWithExtras（不传 crypto 参数时 CipherMode=0, CompressionMode=""）
 // - List() 返回的任务包含 cipherMode / compressionMode 字段
-func TestCreateWithCryptoParams_PreservesCryptoFields(t *testing.T) {
+func TestCreateWithRunMeta_PreservesCryptoFields(t *testing.T) {
 	mb := new(MockBroadcaster)
 	mb.On("Broadcast", "task:created", mock.Anything).Return()
 	tm := newTestTaskManager(mb)
 
 	extras := map[string]string{"plugin_password": "test123"}
-	task := tm.CreateWithCryptoParams(
+	task := tm.CreateWithRunMeta(
 		"encrypt", "/test/file.mp4", "", "pw", "secondary-pw",
 		4, "mp4-plugin", extras,
 		1, "zstd",
+		"", "user",
 	)
 
 	require.NotNil(t, task)
@@ -36,17 +49,18 @@ func TestCreateWithCryptoParams_PreservesCryptoFields(t *testing.T) {
 	assert.Equal(t, "mp4-plugin", task.PluginName, "pluginName should be preserved")
 }
 
-func TestCreateWithCryptoParams_DefaultValuesPersisted(t *testing.T) {
+func TestCreateWithRunMeta_DefaultValuesPersisted(t *testing.T) {
 	mb := new(MockBroadcaster)
 	mb.On("Broadcast", "task:created", mock.Anything).Return()
 	tm := newTestTaskManager(mb)
 
 	// 用户主动选了默认值（cipherMode=0=AES-128, compressionMode='none'）
 	// 后端仍应持久化（前端回显时需要知道用户选了什么）
-	task := tm.CreateWithCryptoParams(
+	task := tm.CreateWithRunMeta(
 		"encrypt", "/test/file.mp4", "", "pw", "",
 		4, "", nil,
 		0, "none",
+		"", "user",
 	)
 
 	require.NotNil(t, task)
@@ -54,20 +68,22 @@ func TestCreateWithCryptoParams_DefaultValuesPersisted(t *testing.T) {
 	assert.Equal(t, "none", task.CompressionMode, "compressionMode='none' should be persisted")
 }
 
-func TestCreateWithCryptoParams_ListReturnsCryptoFields(t *testing.T) {
+func TestCreateWithRunMeta_ListReturnsCryptoFields(t *testing.T) {
 	mb := new(MockBroadcaster)
 	mb.On("Broadcast", "task:created", mock.Anything).Return()
 	tm := newTestTaskManager(mb)
 
-	tm.CreateWithCryptoParams(
+	tm.CreateWithRunMeta(
 		"encrypt", "/test/file1.mp4", "", "pw", "",
 		4, "", nil,
 		1, "zstd",
+		"", "user",
 	)
-	tm.CreateWithCryptoParams(
+	tm.CreateWithRunMeta(
 		"encrypt", "/test/file2.mp4", "", "pw", "",
 		4, "", nil,
 		0, "none",
+		"", "user",
 	)
 
 	list := tm.List()
@@ -85,7 +101,7 @@ func TestCreateWithCryptoParams_ListReturnsCryptoFields(t *testing.T) {
 	assert.Equal(t, "zstd", taskWithZstd.CompressionMode, "task with cipherMode=1 should have compressionMode='zstd'")
 }
 
-func TestCreateWithCryptoParams_CompatWithCreateWithExtras(t *testing.T) {
+func TestCreateWithRunMeta_CompatWithCreateWithExtras(t *testing.T) {
 	mb := new(MockBroadcaster)
 	mb.On("Broadcast", "task:created", mock.Anything).Return()
 	tm := newTestTaskManager(mb)
