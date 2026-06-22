@@ -206,7 +206,9 @@ function createUseTasksList() {
     const hasDate = !!fromTs || !!toTs
     const hasSearch = q.length > 0
     const out: EncvTask[] = []
-    for (const t of store.tasks) {
+    // 🆕 2026-06-22 Bug Fix：必须用 storeRefs.tasks.value，否则 Pinia 自动 unwrap
+    //   ref → 拿到的是普通 array 引用 → computed 不重算 → 任务"逃出"聚合
+    for (const t of storeRefs.tasks.value) {
       if (filter.filterPlugins.value.length > 0 && !filter.filterPlugins.value.includes(t.pluginName || '__unknown__')) continue
       if (filter.filterTypes.value.length > 0 && !filter.filterTypes.value.includes(t.type)) continue
       if (filter.filterStatuses.value.length > 0 && !filter.filterStatuses.value.includes(t.status)) continue
@@ -367,7 +369,8 @@ function createUseTasksList() {
   })
 
   const hasCompletedTasks = computed(() =>
-    store.tasks.some((tk) => tk.status === 'completed' || tk.status === 'failed' || tk.status === 'cancelled'),
+    // 🆕 2026-06-22 Bug Fix：storeRefs.tasks.value 保留响应性
+    storeRefs.tasks.value.some((tk) => tk.status === 'completed' || tk.status === 'failed' || tk.status === 'cancelled'),
   )
 
   // ============ 工具函数 ============
