@@ -303,8 +303,9 @@ export const useTaskStore = defineStore('task', () => {
     return arr
   })
 
-  // ============ 聚合显示（统一 owner） ============
-  const groupedItems = computed<any[]>(() => {
+  // ============ Raw 派生（仅数据，不含视图 kind/counters/displayData） ============
+  // ⚠️ 视图组件需要 kind/counters/displayData 等字段，由 useTasksList 包装
+  const groupedTasksByRunId = computed<any[]>(() => {
     const groups = new Map<string, { runId: string; tasks: EncvTask[]; startedAt: string }>()
     for (const tk of sortedTasks.value) {
       const key = tk.runId || `__manual__${tk.id}`
@@ -325,12 +326,8 @@ export const useTaskStore = defineStore('task', () => {
     return result
   })
 
-  const flatItems = computed<any[]>(() =>
+  const flatTaskList = computed<any[]>(() =>
     sortedTasks.value.map((tk) => ({ key: `t-${tk.id}`, task: tk })),
-  )
-
-  const displayedItems = computed<any[]>(() =>
-    viewMode.value === 'group' ? groupedItems.value : flatItems.value,
   )
 
   // ============ Filter 操作 ============
@@ -420,9 +417,9 @@ export const useTaskStore = defineStore('task', () => {
     // 视图 state
     viewMode, sortBy, filterPlugins, filterTypes, filterStatuses, filterTriggeredBy,
     searchQuery, filterDatePreset, filterDateRange,
-    // 派生
+    // 派生（raw，不含视图 kind/counters/displayData）
     tasksById, tasksByRunId, availablePlugins, hasCompletedTasks,
-    filteredTasks, sortedTasks, groupedItems, flatItems, displayedItems,
+    filteredTasks, sortedTasks, groupedTasksByRunId, flatTaskList,
     activeFilterCount, hasActiveFilters,
     // 原始操作
     hydrate, bulkSetTasks, patchTaskById, appendTask, removeTask, removeRunTasks, cancelRunTasks,

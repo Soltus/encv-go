@@ -86,27 +86,27 @@ describe('任务逃逸复现', () => {
   })
 
   it('初始状态：12 个 task 聚合成 1 个 group', () => {
-    const groups = list.groupedItems.value
+    const groups = list.groupedTasksByRunId.value
     expect(groups.length).toBe(1)
     expect(groups[0].tasks.length).toBe(12)
   })
 
   it('WS task:update 不应导致逃逸', () => {
     store.applyTaskUpdate({ id: 'task-0', type: 'encrypt', status: 'completed', progress: 100 })
-    const groups = list.groupedItems.value
+    const groups = list.groupedTasksByRunId.value
     expect(groups.length).toBe(1)
     expect(groups[0].tasks.length).toBe(12)
   })
 
   it('WS task:progress 不应导致逃逸', () => {
     store.applyTaskProgress({ id: 'task-0', progress: 80, phase: 'encoding', speed: '12MB/s', eta: '5s' })
-    const groups = list.groupedItems.value
+    const groups = list.groupedTasksByRunId.value
     expect(groups.length).toBe(1)
   })
 
   it('WS task:completed 不应导致逃逸', () => {
     store.applyTaskCompleted({ id: 'task-0' })
-    const groups = list.groupedItems.value
+    const groups = list.groupedTasksByRunId.value
     expect(groups.length).toBe(1)
   })
 
@@ -114,7 +114,7 @@ describe('任务逃逸复现', () => {
     // 模拟 fetchTasks：后端返回的 task 无 runId，bulkSetTasks merge 模式保留 store 里已有 runId
     const backendTasks = Array.from({ length: 12 }, (_, i) => makeBackendTask(`task-${i}`, 'completed'))
     store.bulkSetTasks(backendTasks)
-    const groups = list.groupedItems.value
+    const groups = list.groupedTasksByRunId.value
     expect(groups.length).toBe(1)
     expect(groups[0].tasks.length).toBe(12)
     expect(groups[0].runId).toBe(RUN_ID)
@@ -128,7 +128,7 @@ describe('任务逃逸复现', () => {
     store.applyTaskUpdate({ id: 'task-0', type: 'encrypt', status: 'completed', progress: 100 })
     // 3. 再次 fetchTasks
     store.bulkSetTasks(backendTasks.map((t, i) => ({ ...t, status: i === 0 ? 'completed' : 'running' })))
-    const groups = list.groupedItems.value
+    const groups = list.groupedTasksByRunId.value
     expect(groups.length).toBe(1)
     expect(groups[0].tasks.length).toBe(12)
   })
@@ -141,7 +141,7 @@ describe('任务逃逸复现', () => {
     // fetchTasks → bulkSetTasks → merge 模式从 store 回填
     const backendTasks = Array.from({ length: 12 }, (_, i) => makeBackendTask(`task-${i}`, 'completed'))
     store.bulkSetTasks(backendTasks)
-    const groups = list.groupedItems.value
+    const groups = list.groupedTasksByRunId.value
     expect(groups.length).toBe(1)
     expect(groups[0].runId).toBe(RUN_ID)
   })
@@ -156,7 +156,7 @@ describe('任务逃逸复现', () => {
     // 4. fetchTasks
     const backendTasks = Array.from({ length: 12 }, (_, i) => makeBackendTask(`task-${i}`, i <= 2 ? 'completed' : 'running'))
     store.bulkSetTasks(backendTasks)
-    const groups = list.groupedItems.value
+    const groups = list.groupedTasksByRunId.value
     expect(groups.length).toBe(1)
     expect(groups[0].tasks.length).toBe(12)
   })
@@ -165,7 +165,7 @@ describe('任务逃逸复现', () => {
     // 模拟 HttpPollBackend emit task:created，payload 是后端完整 task（无 runId）
     const backendTask = makeBackendTask('task-0', 'completed')
     store.applyTaskCreated(backendTask as any)
-    const groups = list.groupedItems.value
+    const groups = list.groupedTasksByRunId.value
     expect(groups.length).toBe(1)
     expect(groups[0].tasks.length).toBe(12)
   })

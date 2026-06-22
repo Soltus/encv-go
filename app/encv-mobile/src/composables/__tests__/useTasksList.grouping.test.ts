@@ -1,6 +1,6 @@
 /**
  * 复现：自动化测试任务聚合模式显示 100+ 张"自动化"卡片
- * 根因验证：task.runId 缺失时，useTasksList.groupedItems 会把每个 task 单独成组
+ * 根因验证：task.runId 缺失时，useTasksList.groupedTasksByRunId 会把每个 task 单独成组
  *
  * 🆕 v6 2026-06-22：runId 现在是 task 一等字段（后端持久化），不再需要 setTaskMetadata
  */
@@ -72,9 +72,9 @@ describe('useTasksList — 自动化测试任务分组', () => {
     store.bulkSetTasks(tasks)
 
     const list = useTasksList()
-    const groups = list.groupedItems.value
+    const groups = list.groupedTasksByRunId.value
 
-    // ✅ 期望行为：1 个 group（runId 是 task 一等字段，groupedItems 按 runId 聚合）
+    // ✅ 期望行为：1 个 group（runId 是 task 一等字段，按 runId 聚合）
     expect(groups.length).toBe(1)
     expect(groups[0].runId).toBe(runId)
     expect(groups[0].tasks.length).toBe(12)

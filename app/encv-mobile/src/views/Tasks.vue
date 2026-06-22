@@ -526,7 +526,6 @@ import { formatDateTime } from '@/composables/useDateFormat'
 import { showToast } from '@/composables/useToast'
 import { useNewTaskModal } from '@/composables/useNewTaskModal'
 import { useTasksList } from '@/composables/useTasksList'
-import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
 import { formatContainerVersion } from '@/constants/containerVersion'
 // 🆕 Task 15：虚拟滚动组件
 import TaskVirtualList from '@/components/tasks/TaskVirtualList.vue'
@@ -608,7 +607,6 @@ const {
   openPluginPopover, openTypePopover, openStatusPopover, openDatePopover,
   togglePluginFilter, toggleTypeFilter, toggleStatusFilter, clearFilters,
   onSearchInput, toggleSort,
-  applyTaskUpdate, applyTaskProgress, applyTaskCreated, applyTaskCompleted,
   cancelTaskById, retryTaskById, removeTaskById, clearCompletedWithConfirm,
   getTaskName, getTaskDuration,
   getPluginChipLabel, getTypeChipLabel, getStatusChipLabel, getStatusLabel,
@@ -625,14 +623,6 @@ const {
   // 🆕 v6 2026-06-18：左滑删除 + 置顶（group card 操作）
   removeRunTasks, togglePinRun, isRunPinned,
 } = useTasksList()
-
-useTaskEventBridge({
-  onUpdate: applyTaskUpdate,
-  onProgress: applyTaskProgress,
-  onCreate: applyTaskCreated,
-  onComplete: applyTaskCompleted,
-  onRefresh: fetchTasks,
-})
 
 // 任务触发者标签 helpers — 🆕 v6 2026-06-18：从 task 对象读（单一数据源）
 function getTriggeredByColor(task: EncvTask): string {

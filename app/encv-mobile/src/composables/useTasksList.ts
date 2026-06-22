@@ -146,6 +146,99 @@ function createUseTasksList() {
     onComplete: (payload) => store.applyEvent('completed', payload),
   })
 
+  // ============ displayedItems（视图层包装：注入 kind/counters/displayData） ============
+  // ⚠️ 模板 TaskVirtualList 期望 item.kind === 'date' | 'group' | 'task' 三种
+  //   - date: { kind:'date', key, label }
+  //   - group: { kind:'group', key, runId, startedAt, tasks, counters, displayData }
+  //   - task: { kind:'task', key, task }
+  function dateSectionKey(date: string): string {
+    const d = new Date(date)
+    const now = new Date()
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const yesterdayStart = todayStart - 86400000
+    const weekStart = todayStart - 7 * 86400000
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+    const ts = d.getTime()
+    if (ts >= todayStart) return 'today'
+    if (ts >= yesterdayStart) return 'yesterday'
+    if (ts >= weekStart) return 'thisWeek'
+    if (ts >= monthStart) return 'thisMonth'
+    return 'earlier'
+  }
+
+  function buildGroupDisplayData(groupTasks: EncvTask[], startedAt: string): any {
+    const summary = { total: groupTasks.length, passed: 0, failed: 0, running: 0, pending: 0, percent: 0 }
+    let dominantStatus: TaskStatus = 'running'
+    const plugins = new Set<string>()
+    for (const tk of groupTasks) {
+      if (tk.status === 'completed') summary.passed++
+      else if (tk.status === 'failed') summary.failed++
+      else if (tk.status === 'running' || tk.status === 'cancelling') summary.running++
+      else if (tk.status === 'queued') summary.pending++
+      if (tk.pluginName) plugins.add(tk.pluginName)
+    }
+    const finished = summary.passed + summary.failed
+    if (groupTasks.length > 0) summary.percent = Math.round((finished / groupTasks.length) * 100)
+    if (summary.failed > 0) dominantStatus = 'failed'
+    else if (summary.running > 0) dominantStatus = 'running'
+    else if (summary.pending > 0) dominantStatus = 'queued'
+    else if (summary.passed > 0) dominantStatus = 'completed'
+
+    const tone = groupTasks[0]?.triggeredBy === 'ai_agent' ? 'ai_agent'
+              : groupTasks[0]?.triggeredBy === 'automation' ? 'automation'
+              : 'user'
+    const moodClass = summary.failed > 0 ? 'tl-mood--fail'
+                    : summary.running > 0 ? 'tl-mood--running'
+                    : (summary.passed === groupTasks.length && groupTasks.length > 0) ? 'tl-mood--success'
+                    : ''
+    const pluginBadges = Array.from(plugins).slice(0, 3)
+    let duration = ''
+    const completed = groupTasks.filter((tk) => tk.completedAt)
+    if (completed.length > 0) {
+      const maxEnd = Math.max(...completed.map((tk) => new Date(tk.completedAt!).getTime()))
+      const ms = maxEnd - new Date(startedAt).getTime()
+      if (ms > 0) {
+        const minutes = Math.floor(ms / 60000)
+        const seconds = Math.floor((ms % 60000) / 1000)
+        duration = minutes > 0 ? `${minutes}m ${seconds}s` : `${(ms / 1000).toFixed(1)}s`
+      }
+    }
+    return { summary, dominantStatus, tone, moodClass, pluginBadges, duration }
+  }
+
+  const displayedItems = computed<any[]>(() => {
+    const isGroupMode = storeRefs.viewMode.value === 'group'
+    const items: any[] = []
+    let lastDateKey = ''
+    function pushDateHeader(key: string) {
+      if (key === lastDateKey) return
+      lastDateKey = key
+      items.push({ kind: 'date', key: `date-${key}`, label: t(`tasks.date.${key}`, { defaultValue: key }) })
+    }
+    if (isGroupMode) {
+      for (const g of storeRefs.groupedTasksByRunId.value) {
+        pushDateHeader(dateSectionKey(g.startedAt))
+        const counters = computeGroupCounters(g.tasks, storeRefs)
+        if (!counters.hitAny) continue
+        items.push({
+          kind: 'group',
+          key: g.key,
+          runId: g.runId,
+          startedAt: g.startedAt,
+          tasks: g.tasks,
+          counters,
+          displayData: buildGroupDisplayData(g.tasks, g.startedAt),
+        })
+      }
+    } else {
+      for (const ft of storeRefs.flatTaskList.value) {
+        pushDateHeader(dateSectionKey(ft.task.createdAt))
+        items.push({ kind: 'task', key: ft.key, task: ft.task })
+      }
+    }
+    return items
+  })
+
   // ============ Helper：状态显示 ============
   function getTaskName(task: EncvTask): string { return getTaskDisplayName(task) }
   function getTaskIcon(task: EncvTask): string { return task.type === 'encrypt' ? 'lock-closed' : 'lock-open' }
@@ -291,6 +384,8 @@ function createUseTasksList() {
     // 兼容旧 computed
     loading,
     isInitialLoad,
+    // 🆕 v7：视图层包装的 displayedItems（带 kind/counters/displayData）
+    displayedItems,
     // UI state
     ...view,
     // helper
