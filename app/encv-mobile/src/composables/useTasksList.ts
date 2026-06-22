@@ -475,7 +475,8 @@ function createUseTasksList() {
 
   // ============ Task 取消 / 重试 / 删除 / 清空已完成 ============
   async function cancelTaskById(id: string): Promise<void> {
-    const task = store.tasks.find((t) => t.id === id)
+    // 🆕 2026-06-22 Bug Fix：storeRefs.tasks.value 保留响应性（否则取到 unwrap 后的快照）
+    const task = storeRefs.tasks.value.find((t) => t.id === id)
     if (!task) return
     const prevStatus = task.status
     store.patchTask(id, { status: 'cancelling' })
@@ -570,7 +571,8 @@ function createUseTasksList() {
   }
 
   async function clearCompletedWithConfirm(): Promise<number> {
-    const completed = store.tasks.filter((tk) => tk.status === 'completed' || tk.status === 'cancelled' || tk.status === 'failed')
+    // 🆕 2026-06-22 Bug Fix：storeRefs.tasks.value 保留响应性
+    const completed = storeRefs.tasks.value.filter((tk) => tk.status === 'completed' || tk.status === 'cancelled' || tk.status === 'failed')
     if (completed.length === 0) return 0
     let deletedCount = 0
     for (const tk of completed) {
