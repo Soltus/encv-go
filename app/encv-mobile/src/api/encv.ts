@@ -689,6 +689,10 @@ export async function createTask(
   compressionMode?: 'none' | 'zstd',
   runId?: string,
   triggeredBy?: 'user' | 'automation' | 'ai_agent',
+  // 🆕 2026-06-22：客户端预占位 ID（前端 submitRun 同步阶段 push 1000+ placeholder 用）
+  //   后端用这个 ID 覆盖默认 UUID，确保 placeholder id == 返回 task.id == WS 推 task.id
+  //   不传则后端自动生成 UUID（向后兼容 + 手动 + 按钮创建的 task 不需要预占位）
+  clientTaskId?: string,
 ): Promise<EncvTask> {
   console.info('[API] createTask:', type, sourcePath, targetPath || '',
     'hasPassword:', !!password, 'version:', version ?? 'default',
@@ -698,7 +702,8 @@ export async function createTask(
     'cipherMode:', cipherMode ?? 0,
     'compressionMode:', compressionMode ?? 'none',
     'runId:', runId ?? '',
-    'triggeredBy:', triggeredBy ?? 'user')
+    'triggeredBy:', triggeredBy ?? 'user',
+    'clientTaskId:', clientTaskId ?? '(server-generated)')
   const baseUrl = getApiBaseUrl()
   const body: Record<string, unknown> = { type, sourcePath }
   if (targetPath) body.targetPath = targetPath
@@ -711,6 +716,8 @@ export async function createTask(
   if (compressionMode !== undefined) body.compressionMode = compressionMode
   if (runId) body.runId = runId
   if (triggeredBy) body.triggeredBy = triggeredBy
+  // 🆕 2026-06-22：传 client ID 让后端用客户端 ID 覆盖默认 UUID
+  if (clientTaskId) body.id = clientTaskId
   const response = await fetch(`${baseUrl}/api/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

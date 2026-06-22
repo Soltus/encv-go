@@ -24,6 +24,7 @@
  */
 import { ref, computed, type Ref, type ComputedRef } from 'vue'
 import { createTask, cancelTask, type EncvTask } from '@/api/encv'
+import { useTaskStore } from '@/stores/taskStore'
 import { type TriggeredBy } from '@/composables/useTaskTrigger'
 import { analyzeError } from '@/composables/useErrorAnalyzer'
 import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
@@ -545,11 +546,23 @@ function createService(
     }
 
     // 评估条件 + 构造 stepRun（同步 push 到 jobRun.steps，UI 立刻可见）
-    type ExecutableStep = { stepDef: StepDefinition; binding?: MatrixBinding; stepRun: StepRun }
+    type ExecutableStep = { stepDef: StepDefinition; binding?: MatrixBinding; stepRun: StepRun; clientTaskId: string }
     const executableSteps: ExecutableStep[] = []
     let prevStatus: StepStatus | undefined
 
-    for (const exec of stepExecutions) {
+    // 🆕 2026-06-22：直接用顶层 import 的 useTaskStore 来预占位 placeholder（同步 push 1000+ task 到 store）
+    //   场景：自动化测试一次提交 1000+ step → 用户期望 UI 立即显示 1 个 group 1000+ task
+    //   修法：submitRun 阶段同步 push 1000+ placeholder EncvTask 到 store（client 生成 ID，runId 已绑）
+    //   → 调 createTask API 时把 client ID 传给后端 → 后端用 client ID 覆盖默认 UUID
+    //   → WS 推 task:created 时 task.id == placeholder.id → 找到 placeholder patch 更新（不是 append）
+    //   → submitRun 同步阶段 store 里就有 1000+ placeholder，UI 立即显示 1 个 group 1000+ task
+    //   → 没有"1000+ task 慢慢累加"的视觉延迟
+    // 注意：必须用顶层 import 的 useTaskStore（不能用 await import，那是 microtask 异步）
+    const taskStore = useTaskStore()
+    const placeholderIdByStepIdx = new Map<number, string>()
+
+    for (let stepIdx = 0; stepIdx < stepExecutions.length; stepIdx++) {
+      const exec = stepExecutions[stepIdx]!
       const { stepDef, binding } = exec
       // 评估 if 条件
       if (stepDef.if) {
@@ -577,7 +590,32 @@ function createService(
         matrixVars: binding,
       }
       jobRun.steps.push(stepRun)
-      executableSteps.push({ stepDef, binding, stepRun })
+      // 🆕 2026-06-22：同步预占位 placeholder EncvTask 到 store
+      //   用 client 生成的 UUID 作为 taskId，确保后续 createTask 返回的 task.id 跟 placeholder.id 一致
+      const clientTaskId = `client-${(crypto as any)?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
+      placeholderIdByStepIdx.set(executableSteps.length, clientTaskId)
+      // 推 placeholder 到 store（status='queued'，runId 已绑，pluginName/type/sourcePath 从 action 推）
+      // 注意：必须从 stepDef.action 推 pluginName（matrix binding 还没 apply）
+      const actionForPlaceholder = stepDef.action
+      const placeholderTask: EncvTask = {
+        id: clientTaskId,
+        type: actionForPlaceholder.type === 'encv_task'
+          ? (actionForPlaceholder as EncvTaskActionSpec).taskType
+          : 'encrypt',
+        sourcePath: actionForPlaceholder.type === 'encv_task'
+          ? ((actionForPlaceholder as EncvTaskActionSpec).params.sourcePath ?? '')
+          : '',
+        status: 'queued',
+        progress: 0,
+        runId: runId,
+        triggeredBy: currentRun.value?.triggeredBy ?? 'user',
+        pluginName: actionForPlaceholder.type === 'encv_task'
+          ? (actionForPlaceholder as EncvTaskActionSpec).pluginName
+          : undefined,
+        createdAt: new Date().toISOString(),
+      }
+      taskStore.appendTask(placeholderTask)
+      executableSteps.push({ stepDef, binding, stepRun, clientTaskId })
     }
 
     // 并发限流：jobDef.strategy.max 优先，否则用 concurrency 选项
@@ -587,17 +625,18 @@ function createService(
     // 执行单个 step（提交 + 状态更新）
     const taskTriggeredBy: TriggeredBy = currentRun.value?.triggeredBy ?? 'user'
     const runOneStep = async (ex: ExecutableStep): Promise<void> => {
-      const { stepDef, binding, stepRun } = ex
+      const { stepDef, binding, stepRun, clientTaskId } = ex
       try {
         const action = applyEnvToAction(stepDef.action, env, binding)
-        // 🆕 v6 2026-06-18：runId / triggeredBy 直接通过 createTask API 传给后端
-        //   后端 MobileTask struct 持久化这两个字段 → 单一数据源
-        //   前端不再需要 useTaskTrigger localStorage 维护关联
-        const task = await submitAction(action, runId, taskTriggeredBy)
+        // 🆕 2026-06-22：传 clientTaskId 给 createTask API → 后端用 client ID 覆盖默认 UUID
+        //   → WS 推 task:created 时 task.id == placeholder.id → 找到 placeholder patch 更新（不 append）
+        const task = await submitAction(action, clientTaskId, runId, taskTriggeredBy)
         stepRun.taskId = task.id
         stepRun.status = 'running' // 已提交，等 WS 回调
       } catch (e) {
         // 提交失败 → 直接标记 failure
+        // 注意：placeholder 还在 store 里（status='queued'），WS 不会来更新它
+        // 用户应该能 retry → placeholder 会被 patchTaskById 找到更新
         stepRun.status = 'failure'
         stepRun.error = e instanceof Error ? e.message : String(e)
         stepRun.errorAnalysis = analyzeError(stepRun.error, { phase: 'submission' })
@@ -633,7 +672,12 @@ function createService(
   }
 
   /** 将 ActionSpec 提交为 EncvTask（调用 createTask API） */
-  async function submitAction(action: ActionSpec, runId?: string, triggeredBy?: TriggeredBy): Promise<EncvTask> {
+  async function submitAction(
+    action: ActionSpec,
+    clientTaskId?: string, // 🆕 2026-06-22：客户端预占位 ID
+    runId?: string,
+    triggeredBy?: TriggeredBy,
+  ): Promise<EncvTask> {
     if (action.type !== 'encv_task') {
       throw new Error(`Unsupported action type: ${action.type}`)
     }
@@ -651,6 +695,7 @@ function createService(
       spec.params.compressionMode,
       runId,
       triggeredBy,
+      clientTaskId, // 🆕 2026-06-22
     )
   }
 

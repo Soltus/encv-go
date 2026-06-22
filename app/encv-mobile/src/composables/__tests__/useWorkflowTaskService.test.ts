@@ -12,6 +12,7 @@
  * 8. submitRun 拒绝重复运行
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { setActivePinia, createPinia } from 'pinia'
 import type { WorkflowDefinition, UnifiedRunRecord } from '@/lib/workflow/types'
 
 // ==================== Mock 设置 ====================
@@ -150,6 +151,8 @@ function makeEmptyWorkflow(): WorkflowDefinition {
 // ==================== beforeEach ====================
 
 beforeEach(() => {
+  // 🆕 2026-06-22：v6 架构重写后 useTaskStore 在 executeJob 内部被调用，需要 active Pinia
+  setActivePinia(createPinia())
   // 清空 localStorage
   localStorage.clear()
   // 🆕 v4 M5：重置单例（每个测试拿到全新 service 实例，避免 isRunning 状态串扰）
@@ -227,13 +230,16 @@ describe('useWorkflowTaskService — submitRun 基本流程', () => {
       triggeredBy: 'automation',
     })
     // 🆕 v6 2026-06-22：runId/triggeredBy 直接传给 createTask（不再用 setTaskMetadata）
-    // createTask 签名：(..., runId?, triggeredBy?) — 倒数第 2、第 1 参数
+    // createTask 签名：(..., runId?, triggeredBy?, clientTaskId?) — 倒数第 3、2、1 参数
     expect(createTaskMock).toHaveBeenCalledTimes(1)
     const callArgs = (createTaskMock as any).mock.calls[0]
-    const passedRunId = callArgs[callArgs.length - 2]   // runId
-    const passedTriggeredBy = callArgs[callArgs.length - 1]  // triggeredBy
+    const passedClientTaskId = callArgs[callArgs.length - 1]  // clientTaskId（v7 新增）
+    const passedTriggeredBy = callArgs[callArgs.length - 2]  // triggeredBy
+    const passedRunId = callArgs[callArgs.length - 3]        // runId
     expect(passedRunId).toBe(run.id)
     expect(passedTriggeredBy).toBe('automation')
+    // 🆕 v7 2026-06-22：clientTaskId 必传且以 client- 开头（pre-population 预占位 ID）
+    expect(passedClientTaskId).toMatch(/^client-/)
   })
 
   it('submitRun 拒绝重复运行（isRunning 时抛错）', async () => {

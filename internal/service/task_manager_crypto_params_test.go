@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,7 @@ func TestCreateWithRunMeta_PreservesCryptoFields(t *testing.T) {
 
 	extras := map[string]string{"plugin_password": "test123"}
 	task := tm.CreateWithRunMeta(
+		"", // 🆕 2026-06-22 taskID
 		"encrypt", "/test/file.mp4", "", "pw", "secondary-pw",
 		4, "mp4-plugin", extras,
 		1, "zstd",
@@ -57,6 +59,7 @@ func TestCreateWithRunMeta_DefaultValuesPersisted(t *testing.T) {
 	// 用户主动选了默认值（cipherMode=0=AES-128, compressionMode='none'）
 	// 后端仍应持久化（前端回显时需要知道用户选了什么）
 	task := tm.CreateWithRunMeta(
+		"", // 🆕 2026-06-22 taskID
 		"encrypt", "/test/file.mp4", "", "pw", "",
 		4, "", nil,
 		0, "none",
@@ -74,12 +77,14 @@ func TestCreateWithRunMeta_ListReturnsCryptoFields(t *testing.T) {
 	tm := newTestTaskManager(mb)
 
 	tm.CreateWithRunMeta(
+		"", // 🆕 2026-06-22 taskID
 		"encrypt", "/test/file1.mp4", "", "pw", "",
 		4, "", nil,
 		1, "zstd",
 		"", "user",
 	)
 	tm.CreateWithRunMeta(
+		"", // 🆕 2026-06-22 taskID
 		"encrypt", "/test/file2.mp4", "", "pw", "",
 		4, "", nil,
 		0, "none",
@@ -111,4 +116,59 @@ func TestCreateWithRunMeta_CompatWithCreateWithExtras(t *testing.T) {
 
 	assert.Equal(t, 0, taskViaExtras.CipherMode, "CreateWithExtras should leave CipherMode as zero value")
 	assert.Equal(t, "", taskViaExtras.CompressionMode, "CreateWithExtras should leave CompressionMode as empty string")
+}
+
+// 🆕 2026-06-22：客户端预占位 ID（前端 submitRun 同步阶段 push 1000+ placeholder 用）
+// 场景：自动化测试一次提交 1000+ step → 后端用 client ID 覆盖默认 UUID
+//   → 前端 placeholder id == 返回 task.id == WS 推 task.id → 找到 placeholder patch 更新
+//   → 不再有"1000+ task 慢慢累加"视觉延迟
+func TestCreateWithRunMeta_WithClientTaskID(t *testing.T) {
+	mb := new(MockBroadcaster)
+	mb.On("Broadcast", "task:created", mock.Anything).Return()
+	tm := newTestTaskManager(mb)
+
+	const clientTaskID = "client-pre-populated-uuid-001"
+	task := tm.CreateWithRunMeta(
+		clientTaskID, // 🆕 客户端预占位 ID
+		"encrypt", "/test/file.mp4", "", "pw", "",
+		4, "mp4-plugin", nil,
+		1, "zstd",
+		"run-abc", "automation",
+	)
+
+	require.NotNil(t, task)
+	// 1. 任务 ID 必须是 client ID（不是后端生成的 UUID）
+	assert.Equal(t, clientTaskID, task.ID, "客户端预占位 ID 必须覆盖后端默认 UUID")
+	// 2. tm.tasks map 必须用 client ID 索引
+	looked, err := tm.Get(clientTaskID)
+	require.NoError(t, err, "用 client ID 必须能查到这个 task")
+	assert.Equal(t, clientTaskID, looked.ID, "查到的 task ID 必须 == client ID")
+	// 3. runId 仍然正确持久化
+	assert.Equal(t, "run-abc", task.RunId, "runId 必须仍然持久化")
+	assert.Equal(t, "automation", task.TriggeredBy, "triggeredBy 必须仍然持久化")
+}
+
+// 🆕 2026-06-22：runId 为空时后端兜底派生 "manual-${taskID}"
+// 场景：移动端 Capacitor 偶发丢 runId 参数（前端 createTask 调用时漏传）
+//   → 后端不能用空 runId 持久化（前端按 runId 分组时 task 变孤儿）
+//   → 用 "manual-${id}" 派生稳定 runId → 前端按 runId 分组永远有归属
+func TestCreateWithRunMeta_RunIdEmptyFallback(t *testing.T) {
+	mb := new(MockBroadcaster)
+	mb.On("Broadcast", "task:created", mock.Anything).Return()
+	tm := newTestTaskManager(mb)
+
+	task := tm.CreateWithRunMeta(
+		"",
+		"encrypt", "/test/file.mp4", "", "pw", "",
+		4, "", nil,
+		0, "none",
+		"", // 🆕 runId 为空 → 兜底
+		"", // triggeredBy 为空 → 兜底 'user'
+	)
+
+	require.NotNil(t, task)
+	assert.NotEmpty(t, task.RunId, "runId 为空时后端必须兜底派生")
+	assert.True(t, strings.HasPrefix(task.RunId, "manual-"), "兜底 runId 必须以 'manual-' 开头，实际: %s", task.RunId)
+	assert.Equal(t, task.ID, strings.TrimPrefix(task.RunId, "manual-"), "兜底 runId 必须是 'manual-' + task.ID")
+	assert.Equal(t, "user", task.TriggeredBy, "triggeredBy 为空时后端必须兜底 'user'")
 }

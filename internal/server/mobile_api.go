@@ -465,6 +465,9 @@ func (s *Server) handleCreateTaskGin(c *gin.Context) {
 		// 🆕 v6 2026-06-18：runId + triggeredBy（单一数据源）
 		RunId        string `json:"runId,omitempty"`
 		TriggeredBy  string `json:"triggeredBy,omitempty"`
+		// 🆕 2026-06-22：客户端预占位 ID（前端 submitRun 同步阶段 push 1000+ placeholder 用）
+		//   空 = 后端自动生成 UUID；非空 = 后端用客户端 ID 覆盖
+		ID string `json:"id,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
@@ -480,16 +483,20 @@ func (s *Server) handleCreateTaskGin(c *gin.Context) {
 		"cipherMode", req.CipherMode,
 		"compressionMode", req.CompressionMode,
 		"runId", req.RunId,
-		"triggeredBy", req.TriggeredBy)
+		"triggeredBy", req.TriggeredBy,
+		"clientTaskId", req.ID) // 🆕 2026-06-22
 
 	// 🆕 v6 2026-06-18：统一走 CreateWithRunMeta（含 crypto params + run meta）
 	//   - runId 非空 → 自动化测试/AI agent 任务，前端按 runId 聚合
-	//   - runId 空 → 手动创建，triggeredBy 默认 'user'
+	//   - runId 空 → 后端兜底派生 "manual-${id}"（2026-06-22），不再有孤儿 task
+	//   - triggeredBy 空 → 后端兜底 'user'（2026-06-22）
+	//   - ID 非空 → 用客户端预占位 ID，覆盖默认 UUID（2026-06-22）
 	compressionMode := req.CompressionMode
 	if compressionMode == "" {
 		compressionMode = "none"
 	}
 	task := s.mobileSvc.GetTaskManager().CreateWithRunMeta(
+		req.ID, // 🆕 2026-06-22
 		req.Type, req.SourcePath, req.TargetPath,
 		req.Password, req.SecondaryPassword, req.Version, req.PluginName, req.ExtraFields,
 		req.CipherMode, compressionMode,
