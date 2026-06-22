@@ -47,7 +47,7 @@
 
 ## 全量回归
 
-- [ ] `go test ./internal/service/...` 通过
-- [ ] `go build ./...` 通过
-- [ ] `vue-tsc --noEmit` 通过
-- [ ] `pnpm test:run` 通过（pre-existing fail 除外）
+- [x] `go test ./internal/service/...` 通过
+- [x] `go build ./...` 通过
+- [x] `vue-tsc --noEmit` 通过
+- [x] `pnpm test:run` 通过（pre-existing fail 除外）

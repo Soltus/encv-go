@@ -51,11 +51,11 @@
   - [x] SubTask 9.1: 补取消按钮（group card 上的取消控件）
   - [x] SubTask 9.2: 补分页加载指示器（底部 loading spinner）
   - [x] SubTask 9.3: 补虚拟滚动容器（data-testid 标记可见行数）
-- [ ] Task 10: 全量回归验证
-  - [ ] SubTask 10.1: `go test ./internal/service/...` 通过
-  - [ ] SubTask 10.2: `go build ./...` 通过
-  - [ ] SubTask 10.3: `vue-tsc --noEmit` 通过
-  - [ ] SubTask 10.4: `pnpm test:run` 通过（pre-existing fail 除外）
+- [x] Task 10: 全量回归验证
+  - [x] SubTask 10.1: `go test ./internal/service/...` 通过
+  - [x] SubTask 10.2: `go build ./...` 通过
+  - [x] SubTask 10.3: `vue-tsc --noEmit` 通过
+  - [x] SubTask 10.4: `pnpm test:run` 通过（pre-existing fail 除外）
 
 # Task Dependencies
 
