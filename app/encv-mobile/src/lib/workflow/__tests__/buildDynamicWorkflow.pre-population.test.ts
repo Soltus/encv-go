@@ -1,20 +1,26 @@
 /**
- * 🆕 2026-06-22 真因修复 5：submitRun 同步阶段预占位 1000+ placeholder task
+ * 🆕 2026-06-23 真实架构实现：批量创建 task（替代 client 预占位野路子）
  *
  * 核心问题（user 反馈）：
  *   "聚合任务数量缓慢增加到1000+本身就是问题你没发现吗？运行自动化插件测试应当一下子就显示所有聚会任务才对！"
  *
  *   历史 bug：submitRun 逐个 await createTask → 1000+ task 慢慢累加到 UI 上
- *   修法：submitRun 阶段同步 push 1000+ placeholder EncvTask 到 store（client 生成 ID）→
- *         调 createTask API 把 client ID 传给后端 → 后端用 client ID 覆盖默认 UUID →
- *         WS 推 task:created 时 task.id == placeholder.id → 找到 placeholder patch 更新（不 append）
- *         → submitRun 同步阶段 UI 立即显示 1 个 group 1000+ task
+ *
+ *   旧方案（client 预占位野路子，已废弃）：
+ *     前端生成 client UUID → push placeholder → 传给后端 → 后端用 client ID 覆盖 UUID
+ *     问题：破坏后端作为 ID 权威源的原则
+ *
+ *   新方案（真实架构实现）：
+ *     前端收集本层所有 step 的 task 定义 → 一次性调 batchCreateTasks API
+ *     → 后端批量创建所有 task（后端生成 UUID 作为唯一权威源）→ 一次性返回所有 task
+ *     → 前端拿到后一次性 push 到 store → UI 立即显示 1 个 group N task（不慢慢累加）
  *
  * 关键验证点：
- *   1. submitRun 同步阶段（不 await）store.tasks 已经有 N 个 placeholder（不依赖 createTask API）
- *   2. placeholder.id 跟 createTask API 返回的 task.id 完全一致（client UUID 覆盖）
- *   3. WS task:created 推送不产生重复 task（_taskIndex.has 找到 placeholder → patch 而非 append）
- *   4. UI groupedTasksByRunId 在 submitRun 同步阶段后已经 1 个真 group N task
+ *   1. batchCreateTasks 只调 1 次（不是 N 次 createTask）
+ *   2. 后端返回的 task ID 是后端生成的 UUID（不是 client- 前缀）
+ *   3. 所有 task 一次性 push 到 store（不慢慢累加）
+ *   4. WS task:created 推送不产生重复 task（patch 而非 append）
+ *   5. UI groupedTasksByRunId 立即显示 1 个真 group N task
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { nextTick } from 'vue'
@@ -48,12 +54,10 @@ vi.stubGlobal('localStorage', mockLocalStorage)
 
 // Mock crypto.randomUUID（vitest 环境 crypto.randomUUID 不可靠）
 let uuidCounter = 0
-const uuidByIndex = new Map<number, string>()
 const mockCrypto = {
   randomUUID: () => {
     uuidCounter++
     const id = `00000000-0000-4000-8000-${String(uuidCounter).padStart(12, '0')}`
-    uuidByIndex.set(uuidCounter, id)
     return id
   },
 }
@@ -61,7 +65,6 @@ const mockCrypto = {
 try {
   Object.defineProperty(globalThis, 'crypto', { value: mockCrypto, writable: true, configurable: true })
 } catch {
-  // jsdom / happy-dom 可能拦截 → 改用 globalThis 顶层覆盖
   ;(globalThis as any).crypto = mockCrypto
 }
 
@@ -84,46 +87,36 @@ vi.mock('@/composables/useDateFormat', () => ({
   formatDateTime: (d: string) => d,
 }))
 
-// ==================== Mock createTask API（追踪 clientTaskId + 延迟 + 返回同 ID）====================
-const createTaskCallLog: Array<{ clientTaskId?: string; type: TaskType; sourcePath: string; runId?: string }> = []
-let createTaskDelayMs = 50  // 每个 createTask 50ms 延迟（模拟网络）
-let createTaskShouldFail = false
+// ==================== Mock batchCreateTasks API（后端生成 UUID，一次性返回所有 task）====================
+const batchCallLog: Array<{ specCount: number; runId?: string; triggeredBy?: string }> = []
+let batchDelayMs = 50  // 模拟网络延迟
+let batchShouldFail = false
 
 vi.mock('@/api/encv', async () => {
   const actual = await vi.importActual<typeof encvApi>('@/api/encv')
   return {
     ...actual,
-    createTask: vi.fn(async (
-      type: TaskType,
-      sourcePath: string,
-      _targetPath?: string,
-      _password?: string,
-      _version?: number,
-      _pluginName?: string,
-      _extraFields?: Record<string, string>,
-      _secondaryPassword?: string,
-      _cipherMode?: number,
-      _compressionMode?: 'none' | 'zstd',
+    batchCreateTasks: vi.fn(async (
+      specs: any[],
       runId?: string,
-      _triggeredBy?: 'user' | 'automation' | 'ai_agent',
-      clientTaskId?: string,
-    ): Promise<EncvTask> => {
-      createTaskCallLog.push({ clientTaskId, type, sourcePath, runId })
-      await new Promise((r) => setTimeout(r, createTaskDelayMs))
-      if (createTaskShouldFail) {
-        throw new Error('mock-createTask-failure')
+      triggeredBy?: string,
+    ): Promise<EncvTask[]> => {
+      batchCallLog.push({ specCount: specs.length, runId, triggeredBy })
+      await new Promise((r) => setTimeout(r, batchDelayMs))
+      if (batchShouldFail) {
+        throw new Error('mock-batchCreateTasks-failure')
       }
-      // 返回 task 时 ID 必须 == clientTaskId（模拟后端用 client ID 覆盖默认 UUID）
-      return {
-        id: clientTaskId ?? `server-generated-${createTaskCallLog.length}`,
-        type,
-        sourcePath,
-        status: 'running',
+      // 后端生成 UUID（不是 client- 前缀）——后端是 ID 唯一权威源
+      return specs.map((spec: any, i: number) => ({
+        id: `server-uuid-${i}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        type: spec.type as TaskType,
+        sourcePath: spec.sourcePath,
+        status: 'queued' as const,
         progress: 0,
-        runId,
-        triggeredBy: 'automation',
+        runId: runId ?? '',
+        triggeredBy: (triggeredBy ?? 'user') as 'user' | 'automation' | 'ai_agent',
         createdAt: new Date().toISOString(),
-      }
+      }))
     }),
     getTasks: vi.fn().mockResolvedValue([]),
     cancelTask: vi.fn().mockResolvedValue(undefined),
@@ -184,7 +177,7 @@ function buildTestWorkflowDef(plugins: PluginMeta[]): WorkflowDefinition {
   return wfDef
 }
 
-describe('真机"任务逃逸"e2e — submitRun 同步预占位 1000+ placeholder', () => {
+describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）', () => {
   let store: ReturnType<typeof useTaskStore>
   let composable: ReturnType<typeof useTasksList>
   let workflowStore: ReturnType<typeof useWorkflowStore>
@@ -199,11 +192,10 @@ describe('真机"任务逃逸"e2e — submitRun 同步预占位 1000+ placeholde
     service = useWorkflowTaskService()
     _resetTasksListSingletonForTests()
     testStorage.clear()
-    createTaskCallLog.length = 0
+    batchCallLog.length = 0
     uuidCounter = 0
-    uuidByIndex.clear()
-    createTaskDelayMs = 50
-    createTaskShouldFail = false
+    batchDelayMs = 50
+    batchShouldFail = false
     for (const key of Object.keys(noopHandlers) as (keyof typeof noopHandlers)[]) {
       noopHandlers[key].mockClear()
     }
@@ -215,7 +207,6 @@ describe('真机"任务逃逸"e2e — submitRun 同步预占位 1000+ placeholde
       wrapper = null
     }
     _resetTasksListSingletonForTests()
-    // 🆕 2026-06-22
     const { __resetServiceForTests: resetService } = await import('@/composables/useWorkflowTaskService')
     resetService()
   })
@@ -227,91 +218,75 @@ describe('真机"任务逃逸"e2e — submitRun 同步预占位 1000+ placeholde
     })
   }
 
-  // ==================== T1: 核心场景：submitRun 同步阶段 placeholder 已就位 ====================
-  it('T1: submitRun 同步阶段后，store 立即有 N 个 placeholder（不依赖 createTask API 返回）', async () => {
-    const wfDef = buildTestWorkflowDef(buildRealPlugins())
-    // 注册 wfDef 到 store（executeJob 内部会用）
-    workflowStore.createDefinition(wfDef)
-
-    // 调 submitRun（不要 await，让它跑）
-    const runPromise = service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
-    // 关键断言：submitRun 同步阶段后（microtask 之前）就 push 1000+ placeholder
-    //   submitRun 是 async function，调用立即进入 Promise 构造函数 → 同步代码到第一个 await
-    //   我们的 placeholder 推入代码在 submitRun 同步阶段（for 循环 + taskStore.appendTask）
-    //   第一次 await 是 Promise.all(workers) → 所以 placeholder 数量在同步阶段就确定
-    await nextTick()  // 让 microtask 跑（submitRun 内部第一个 await 之前）
-    const placeholderCountAfterSync = store.tasks.length
-    // eslint-disable-next-line no-console
-    console.log(`[T1] placeholder 同步阶段数量: ${placeholderCountAfterSync}, jobs: ${wfDef.jobs.length}`)
-    for (const j of wfDef.jobs) {
-      // eslint-disable-next-line no-console
-      console.log(`  job ${j.id}: strategy=${JSON.stringify(j.strategy)}, steps=${j.steps.length}`)
-    }
-    expect(placeholderCountAfterSync, 'submitRun 同步阶段后 store 立即有 placeholder（不依赖 createTask API）').toBeGreaterThanOrEqual(50)
-    // 同步阶段所有 placeholder 都应该有 runId + status='queued'
-    const allHaveRunId = store.tasks.every((t) => !!t.runId)
-    const allQueued = store.tasks.every((t) => t.status === 'queued')
-    expect(allHaveRunId, '同步阶段 placeholder 都应该有 runId').toBe(true)
-    expect(allQueued, '同步阶段 placeholder 都应该是 queued').toBe(true)
-
-    // 等等 runPromise 完成
-    await runPromise
-    // eslint-disable-next-line no-console
-    console.log(`[T1] 全部完成后 store 任务数: ${store.tasks.length} / createTask API 调用次数: ${createTaskCallLog.length}`)
-  })
-
-  // ==================== T2: placeholder.id == createTask API 返回的 task.id ====================
-  it('T2: placeholder.id 跟 createTask API 返回的 task.id 完全一致（client UUID 覆盖后端默认 UUID）', async () => {
+  // ==================== T1: batchCreateTasks 只调 1 次，所有 task 一次性 push ====================
+  it('T1: submitRun 后 batchCreateTasks 只调 1 次，store 一次性有 N 个真实 task（不慢慢累加）', async () => {
     const wfDef = buildTestWorkflowDef(buildRealPlugins())
     workflowStore.createDefinition(wfDef)
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
-    await new Promise((r) => setTimeout(r, 500))  // 等等所有 createTask 完成
 
-    // 1. createTask 都被调用，且都传了 clientTaskId
-    expect(createTaskCallLog.length).toBeGreaterThan(0)
-    const allCallsWithClientId = createTaskCallLog.every((c) => !!c.clientTaskId)
-    expect(allCallsWithClientId, '所有 createTask 调用都必须传 clientTaskId').toBe(true)
+    // 1. batchCreateTasks 调用次数 == job 数（每个 job 一次性批量提交自己的 step）
+    const jobCount = wfDef.jobs.length
+    expect(batchCallLog.length, `batchCreateTasks 调用 ${jobCount} 次（每个 job 1 次，不是每个 step 1 次）`).toBe(jobCount)
 
-    // 2. createTask 返回的 task.id 跟 placeholder.id 完全一致（client UUID 覆盖后端默认 UUID）
-    //    我们 mock createTask 返回 { id: clientTaskId }，验证 store 里 placeholder 没被 append 重复
-    //    实际上 store.tasks.length 应该 == createTaskCallLog.length（不重复）
-    //    因为 placeholder 被 patch（不是 append）→ store 里没多出来的 task
-    expect(store.tasks.length, 'placeholder 跟返回 task 是同一个 ID，store 里没重复').toBe(createTaskCallLog.length)
+    // 2. store 一次性有所有 task（不慢慢累加）
+    const totalTasks = store.tasks.length
+    const totalSpecs = batchCallLog.reduce((sum, c) => sum + c.specCount, 0)
+    // eslint-disable-next-line no-console
+    console.log(`[T1] batchCreateTasks 调用 ${batchCallLog.length} 次, store 任务数: ${totalTasks}, total specs: ${totalSpecs}`)
+    expect(totalTasks, 'store 一次性有所有 task').toBeGreaterThan(0)
+    expect(totalTasks, 'store 任务数 == 所有 batch specs 总数').toBe(totalSpecs)
 
-    // 3. 每个 store.tasks 里的 task 的 id 都来自 placeholder（client-${uuid}）
-    const allClientIds = store.tasks.every((t) => t.id.startsWith('client-'))
-    expect(allClientIds, 'store 里所有 task.id 都以 client- 开头（placeholder ID）').toBe(true)
+    // 3. 所有 task 都有后端生成的 UUID（不是 client- 前缀）
+    const allServerIds = store.tasks.every((t) => !t.id.startsWith('client-'))
+    expect(allServerIds, '所有 task ID 是后端生成的（不是 client- 前缀）').toBe(true)
+
+    // 4. 所有 task 共享同一个 runId
+    const runIds = new Set(store.tasks.map((t) => t.runId))
+    expect(runIds.size, '所有 task 共享同一个 runId').toBe(1)
+  })
+
+  // ==================== T2: 后端是 ID 唯一权威源（task ID 不以 client- 开头）====================
+  it('T2: 后端是 ID 唯一权威源——store 里所有 task ID 都是后端生成的 UUID', async () => {
+    const wfDef = buildTestWorkflowDef(buildRealPlugins())
+    workflowStore.createDefinition(wfDef)
+
+    await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
+
+    // 所有 task ID 都不以 client- 开头（后端生成 UUID）
+    for (const t of store.tasks) {
+      expect(t.id, `task ID "${t.id}" 不应以 client- 开头`).not.toMatch(/^client-/)
+      expect(t.id, `task ID "${t.id}" 应非空`).not.toBe('')
+    }
+
+    // 所有 task ID 互不相同
+    const ids = store.tasks.map((t) => t.id)
+    const uniqueIds = new Set(ids)
+    expect(uniqueIds.size, '所有 task ID 互不相同').toBe(ids.length)
   })
 
   // ==================== T3: WS task:created 推相同 id → 不重复 append ====================
-  it('T3: 模拟 WS 推 task:created（用 placeholder.id）→ 不重复 append（patch 而非 append）', async () => {
+  it('T3: 模拟 WS 推 task:created（用后端 ID）→ 不重复 append（patch 而非 append）', async () => {
     const wfDef = buildTestWorkflowDef(buildRealPlugins())
     workflowStore.createDefinition(wfDef)
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
-    await new Promise((r) => setTimeout(r, 500))
 
-    // 此时 store.tasks.length == createTaskCallLog.length（已确认 T2）
     const tasksBefore = store.tasks.length
 
-    // 模拟后端 WS 推 task:created（用 placeholder.id）—— 模拟客户端 HTTP poll 收到的 task
-    // 这个场景：后端 createTask 返回后，WS 又推一次 task:created（带同样 id）
-    //   store.applyEvent('created', task) → appendTask → _taskIndex.has(id) === true → patchTaskById
-    //   store.tasks.length 不变
+    // 模拟后端 WS 推 task:created（用后端生成的 ID）
     for (const t of [...store.tasks]) {
       store.applyEvent('created', { ...t, status: 'running' })
     }
     expect(store.tasks.length, 'WS 重推 task:created 不应该 append 重复（patch 而非 append）').toBe(tasksBefore)
   })
 
-  // ==================== T4: UI 1:1 复刻模拟器 — submitRun 同步阶段后立即显示 1 个真 group 1000+ task ====================
-  it('T4: submitRun 同步阶段后，1:1 复刻 UI 立即显示 1 个真 group N task（不再"慢慢累加"）', async () => {
+  // ==================== T4: UI 1:1 复刻模拟器 — 立即显示 1 个真 group N task ====================
+  it('T4: submitRun 后，1:1 复刻 UI 立即显示 1 个真 group N task（不再"慢慢累加"）', async () => {
     const wfDef = buildTestWorkflowDef(buildRealPlugins())
     workflowStore.createDefinition(wfDef)
 
-    const runPromise = service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
-    await nextTick()
+    await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
     wrapper = mountDiag()
     await nextTick()
 
@@ -320,18 +295,10 @@ describe('真机"任务逃逸"e2e — submitRun 同步预占位 1000+ placeholde
     const escapeTaskCount = Number(wrapper.find('[data-testid="escape-task-count"]').text())
     const totalTaskCount = Number(wrapper.find('[data-testid="store-tasks-count"]').text())
     // eslint-disable-next-line no-console
-    console.log(`[T4] submitRun 同步阶段后: totalTask=${totalTaskCount} / 真 group=${realGroupCount} / 伪 group=${fakeGroupCount} / 逃逸=${escapeTaskCount}`)
-    expect(totalTaskCount, '同步阶段后 store 立即有 placeholder 任务').toBeGreaterThanOrEqual(50)
-    expect(realGroupCount, '同步阶段后 1 个真 group（所有 placeholder 共享 runId）').toBe(1)
-    expect(fakeGroupCount, '同步阶段后 0 伪 group（placeholder 都有 runId）').toBe(0)
-    expect(escapeTaskCount, '同步阶段后 0 逃逸').toBe(0)
-
-    await runPromise
-    await new Promise((r) => setTimeout(r, 200))
-    // 等等 createTask 完成后仍 0 逃逸
-    const fakeGroupCountAfter = Number(wrapper.find('[data-testid="fake-group-count"]').text())
-    const escapeTaskCountAfter = Number(wrapper.find('[data-testid="escape-task-count"]').text())
-    expect(fakeGroupCountAfter, 'createTask 完成后仍 0 伪 group').toBe(0)
-    expect(escapeTaskCountAfter, 'createTask 完成后仍 0 逃逸').toBe(0)
+    console.log(`[T4] submitRun 后: totalTask=${totalTaskCount} / 真 group=${realGroupCount} / 伪 group=${fakeGroupCount} / 逃逸=${escapeTaskCount}`)
+    expect(totalTaskCount, 'store 一次性有所有 task').toBeGreaterThan(0)
+    expect(realGroupCount, '1 个真 group（所有 task 共享 runId）').toBe(1)
+    expect(fakeGroupCount, '0 伪 group（所有 task 都有 runId）').toBe(0)
+    expect(escapeTaskCount, '0 逃逸').toBe(0)
   })
 })

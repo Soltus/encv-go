@@ -689,10 +689,6 @@ export async function createTask(
   compressionMode?: 'none' | 'zstd',
   runId?: string,
   triggeredBy?: 'user' | 'automation' | 'ai_agent',
-  // 🆕 2026-06-22：客户端预占位 ID（前端 submitRun 同步阶段 push 1000+ placeholder 用）
-  //   后端用这个 ID 覆盖默认 UUID，确保 placeholder id == 返回 task.id == WS 推 task.id
-  //   不传则后端自动生成 UUID（向后兼容 + 手动 + 按钮创建的 task 不需要预占位）
-  clientTaskId?: string,
 ): Promise<EncvTask> {
   console.info('[API] createTask:', type, sourcePath, targetPath || '',
     'hasPassword:', !!password, 'version:', version ?? 'default',
@@ -702,8 +698,7 @@ export async function createTask(
     'cipherMode:', cipherMode ?? 0,
     'compressionMode:', compressionMode ?? 'none',
     'runId:', runId ?? '',
-    'triggeredBy:', triggeredBy ?? 'user',
-    'clientTaskId:', clientTaskId ?? '(server-generated)')
+    'triggeredBy:', triggeredBy ?? 'user')
   const baseUrl = getApiBaseUrl()
   const body: Record<string, unknown> = { type, sourcePath }
   if (targetPath) body.targetPath = targetPath
@@ -716,8 +711,6 @@ export async function createTask(
   if (compressionMode !== undefined) body.compressionMode = compressionMode
   if (runId) body.runId = runId
   if (triggeredBy) body.triggeredBy = triggeredBy
-  // 🆕 2026-06-22：传 client ID 让后端用客户端 ID 覆盖默认 UUID
-  if (clientTaskId) body.id = clientTaskId
   const response = await fetch(`${baseUrl}/api/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -727,6 +720,51 @@ export async function createTask(
     throw new Error(`HTTP error! status: ${response.status}`)
   }
   return await response.json()
+}
+
+// 🆕 2026-06-23 真实架构实现：批量创建 task API
+//
+// 架构原则（替代 client 预占位野路子）：
+//   - 前端 submitRun 阶段收集本层所有 step 的 task 定义 → 一次性调 batchCreateTasks
+//   - 后端批量创建所有 task（后端生成 UUID 作为唯一权威源）→ 一次性返回所有 task
+//   - 前端拿到后一次性 push 到 store → UI 立即显示 1 个 group N task（不慢慢累加）
+//   - 不存在 client ID 覆盖后端 ID 的野路子
+//
+// 调用方：useWorkflowTaskService.executeJob（每层一次性批量提交）
+export async function batchCreateTasks(
+  specs: BatchTaskSpec[],
+  runId?: string,
+  triggeredBy?: 'user' | 'automation' | 'ai_agent',
+): Promise<EncvTask[]> {
+  console.info('[API] batchCreateTasks:', specs.length, 'tasks',
+    'runId:', runId ?? '', 'triggeredBy:', triggeredBy ?? 'user')
+  const baseUrl = getApiBaseUrl()
+  const body: Record<string, unknown> = { tasks: specs }
+  if (runId) body.runId = runId
+  if (triggeredBy) body.triggeredBy = triggeredBy
+  const response = await fetch(`${baseUrl}/api/tasks/batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  return await response.json()
+}
+
+// 🆕 2026-06-23：批量创建 task 的输入定义（不含 ID——ID 由后端统一生成）
+export interface BatchTaskSpec {
+  type: TaskType
+  sourcePath: string
+  targetPath?: string
+  password?: string
+  secondaryPassword?: string
+  version?: number
+  pluginName?: string
+  extraFields?: Record<string, string>
+  cipherMode?: number
+  compressionMode?: 'none' | 'zstd'
 }
 
 export async function cancelTask(id: string): Promise<void> {

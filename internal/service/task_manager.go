@@ -596,7 +596,6 @@ func (tm *TaskManager) CreateWithExtras(taskType, sourcePath, targetPath, passwo
 //     （保证每个 task 都有非空 runId，前端按 runId 分组永远有归属）
 //   - triggeredBy 已有兜底（'' → 'user'）
 func (tm *TaskManager) CreateWithRunMeta(
-	taskID string, // 🆕 2026-06-22：客户端预占位 ID（空 = 后端自动生成 UUID）
 	taskType, sourcePath, targetPath, password, secondaryPassword string,
 	version int, pluginName string,
 	extras map[string]string,
@@ -607,30 +606,18 @@ func (tm *TaskManager) CreateWithRunMeta(
 ) *MobileTask {
 	task := tm.CreateWithExtras(taskType, sourcePath, targetPath, password, secondaryPassword,
 		version, pluginName, extras)
-	// 🆕 2026-06-22：覆盖 client 预占位 ID（必须在 saveTaskSingle / broadcast 之前）
-	//   场景：自动化测试一次提交 1000+ step → 如果每个 step 等后端 createTask 返回再 push 到 store，
-	//   1000+ task 会慢慢累加到 UI（每次 await createTask 几百毫秒），
-	//   修法：前端 submitRun 阶段同步 push 1000+ placeholder 到 store（带 client ID）→
-	//   createTask API 把 client ID 传过来 → 后端用 client ID 覆盖默认 UUID → WS 用 client ID 推 → 前端找到 placeholder 更新。
-	if taskID != "" && taskID != task.ID {
-		tm.mu.Lock()
-		delete(tm.tasks, task.ID)
-		task.ID = taskID
-		tm.tasks[taskID] = task
-		tm.mu.Unlock()
-	}
 	task.CipherMode = cipherMode
 	task.CompressionMode = compressionMode
 	// 🆕 2026-06-22 v2 架构重写：runId 永不为空的兜底（根治"任务逃逸"）
 	//   历史 bug：前端 createTask 漏传 runId（移动端 Capacitor 调用时偶发丢参）→ task.RunId = ''
 	//     → 前端按 runId 分组时这个 task 变孤儿（不入任何 group）
 	//   修法：后端兜底。runId 为空 → 用 "manual-" + task.ID 派生稳定 runId
-	//   （保证每个 task 都有非空 runId，前端按 runId 分组永远有归属）
+	//     （保证每个 task 都有非空 runId，前端按 runId 分组永远有归属）
+	//   triggeredBy 已有兜底（'' → 'user'）
 	if runId == "" {
 		runId = "manual-" + task.ID
 	}
 	task.RunId = runId
-	// triggeredBy 已有兜底（'' → 'user'）
 	if triggeredBy == "" {
 		triggeredBy = "user"
 	}
@@ -638,6 +625,63 @@ func (tm *TaskManager) CreateWithRunMeta(
 	// 🆕 2026-06-22 Q6A：单行写（O(1)），替代 saveTasks() 全表写
 	tm.saveTaskSingle(task)
 	return task
+}
+
+// BatchTaskSpec 是批量创建 task 的输入定义（不含 ID——ID 由后端统一生成）。
+//
+// 🆕 2026-06-23 真实架构实现（替代 client 预占位野路子）：
+//   - 前端 submitRun 阶段收集本层所有 step 的 task 定义 → 一次性调 POST /api/tasks/batch
+//   - 后端批量创建所有 task（后端生成 UUID）→ 一次性返回所有 task
+//   - 前端拿到后一次性 push 到 store → UI 立即显示 1 个 group N task（不慢慢累加）
+//   - 后端是 ID 的唯一权威源（不存在 client ID 覆盖后端 ID 的野路子）
+type BatchTaskSpec struct {
+	Type              string
+	SourcePath        string
+	TargetPath        string
+	Password          string
+	SecondaryPassword string
+	Version           int
+	PluginName        string
+	ExtraFields       map[string]string
+	CipherMode        int
+	CompressionMode   string
+}
+
+// CreateBatch 批量创建 task，共享同一个 runId + triggeredBy。
+//
+// 架构原则：
+//   - 后端是 task ID 的唯一权威源（uuid.New()），前端不传 ID
+//   - 批量创建后一次性返回所有 task，前端一次性 push 到 store
+//   - 每个 task 走 saveTaskSingle（O(1) 单行写），不走 saveTasks（全表写）
+//   - WS task:created 在 Create 内部逐条 broadcast（前端 store.applyEvent 收到后 patch 而非 append）
+//
+// 性能：1000+ task 批量创建时，锁竞争最小化（每条 task 独立加锁），持久化走单行 UPSERT。
+func (tm *TaskManager) CreateBatch(specs []BatchTaskSpec, runId string, triggeredBy string) []*MobileTask {
+	if len(specs) == 0 {
+		return nil
+	}
+	// runId / triggeredBy 兜底（跟 CreateWithRunMeta 一致）
+	if runId == "" {
+		runId = "manual-batch-" + uuid.New().String()[:8]
+	}
+	if triggeredBy == "" {
+		triggeredBy = "user"
+	}
+	tasks := make([]*MobileTask, 0, len(specs))
+	for _, spec := range specs {
+		compressionMode := spec.CompressionMode
+		if compressionMode == "" {
+			compressionMode = "none"
+		}
+		task := tm.CreateWithRunMeta(
+			spec.Type, spec.SourcePath, spec.TargetPath,
+			spec.Password, spec.SecondaryPassword, spec.Version, spec.PluginName, spec.ExtraFields,
+			spec.CipherMode, compressionMode,
+			runId, triggeredBy,
+		)
+		tasks = append(tasks, task)
+	}
+	return tasks
 }
 
 func (tm *TaskManager) List() []*MobileTask {

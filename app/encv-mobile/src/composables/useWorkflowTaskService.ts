@@ -23,7 +23,7 @@
  * - cancelCurrentRun → cancelRun
  */
 import { ref, computed, type Ref, type ComputedRef } from 'vue'
-import { createTask, cancelTask, type EncvTask } from '@/api/encv'
+import { batchCreateTasks, cancelTask, type EncvTask, type BatchTaskSpec } from '@/api/encv'
 import { useTaskStore } from '@/stores/taskStore'
 import { type TriggeredBy } from '@/composables/useTaskTrigger'
 import { analyzeError } from '@/composables/useErrorAnalyzer'
@@ -161,7 +161,6 @@ function createService(
 ): WorkflowTaskService {
   const storageKey = options.storageKey ?? 'encv_workflow_tasks_v1'
   const maxRuns = options.maxRuns ?? 50
-  const concurrency = options.concurrency ?? 5
 
   // ==================== 响应式状态 ====================
 
@@ -546,20 +545,9 @@ function createService(
     }
 
     // 评估条件 + 构造 stepRun（同步 push 到 jobRun.steps，UI 立刻可见）
-    type ExecutableStep = { stepDef: StepDefinition; binding?: MatrixBinding; stepRun: StepRun; clientTaskId: string }
+    type ExecutableStep = { stepDef: StepDefinition; binding?: MatrixBinding; stepRun: StepRun }
     const executableSteps: ExecutableStep[] = []
     let prevStatus: StepStatus | undefined
-
-    // 🆕 2026-06-22：直接用顶层 import 的 useTaskStore 来预占位 placeholder（同步 push 1000+ task 到 store）
-    //   场景：自动化测试一次提交 1000+ step → 用户期望 UI 立即显示 1 个 group 1000+ task
-    //   修法：submitRun 阶段同步 push 1000+ placeholder EncvTask 到 store（client 生成 ID，runId 已绑）
-    //   → 调 createTask API 时把 client ID 传给后端 → 后端用 client ID 覆盖默认 UUID
-    //   → WS 推 task:created 时 task.id == placeholder.id → 找到 placeholder patch 更新（不是 append）
-    //   → submitRun 同步阶段 store 里就有 1000+ placeholder，UI 立即显示 1 个 group 1000+ task
-    //   → 没有"1000+ task 慢慢累加"的视觉延迟
-    // 注意：必须用顶层 import 的 useTaskStore（不能用 await import，那是 microtask 异步）
-    const taskStore = useTaskStore()
-    const placeholderIdByStepIdx = new Map<number, string>()
 
     for (let stepIdx = 0; stepIdx < stepExecutions.length; stepIdx++) {
       const exec = stepExecutions[stepIdx]!
@@ -590,72 +578,68 @@ function createService(
         matrixVars: binding,
       }
       jobRun.steps.push(stepRun)
-      // 🆕 2026-06-22：同步预占位 placeholder EncvTask 到 store
-      //   用 client 生成的 UUID 作为 taskId，确保后续 createTask 返回的 task.id 跟 placeholder.id 一致
-      const clientTaskId = `client-${(crypto as any)?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`
-      placeholderIdByStepIdx.set(executableSteps.length, clientTaskId)
-      // 推 placeholder 到 store（status='queued'，runId 已绑，pluginName/type/sourcePath 从 action 推）
-      // 注意：必须从 stepDef.action 推 pluginName（matrix binding 还没 apply）
-      const actionForPlaceholder = stepDef.action
-      const placeholderTask: EncvTask = {
-        id: clientTaskId,
-        type: actionForPlaceholder.type === 'encv_task'
-          ? (actionForPlaceholder as EncvTaskActionSpec).taskType
-          : 'encrypt',
-        sourcePath: actionForPlaceholder.type === 'encv_task'
-          ? ((actionForPlaceholder as EncvTaskActionSpec).params.sourcePath ?? '')
-          : '',
-        status: 'queued',
-        progress: 0,
-        runId: runId,
-        triggeredBy: currentRun.value?.triggeredBy ?? 'user',
-        pluginName: actionForPlaceholder.type === 'encv_task'
-          ? (actionForPlaceholder as EncvTaskActionSpec).pluginName
-          : undefined,
-        createdAt: new Date().toISOString(),
-      }
-      taskStore.appendTask(placeholderTask)
-      executableSteps.push({ stepDef, binding, stepRun, clientTaskId })
+      executableSteps.push({ stepDef, binding, stepRun })
     }
 
-    // 并发限流：jobDef.strategy.max 优先，否则用 concurrency 选项
-    const max =
-      jobDef.strategy && 'max' in jobDef.strategy ? jobDef.strategy.max : concurrency
-
-    // 执行单个 step（提交 + 状态更新）
+    // 🆕 2026-06-23 真实架构实现：批量创建 task（替代 client 预占位野路子）
+    //
+    // 架构原则：
+    //   - 后端是 task ID 的唯一权威源（uuid.New()），前端不传 ID
+    //   - 收集本层所有 executableSteps 的 task 定义 → 一次性调 batchCreateTasks API
+    //   - 后端批量创建所有 task（后端生成 UUID）→ 一次性返回所有 task
+    //   - 前端拿到后一次性 push 到 store → UI 立即显示 1 个 group N task（不慢慢累加）
+    //
+    // 对比旧方案（client 预占位野路子）：
+    //   - 旧：前端生成 client UUID → push placeholder → 传给后端 → 后端用 client ID 覆盖 UUID
+    //   - 新：前端不生成 ID → 批量提交 task 定义 → 后端生成 UUID → 前端一次性 push 真实 task
+    //   - 新方案后端是 ID 唯一权威源，不存在 ID 覆盖的野路子
     const taskTriggeredBy: TriggeredBy = currentRun.value?.triggeredBy ?? 'user'
-    const runOneStep = async (ex: ExecutableStep): Promise<void> => {
-      const { stepDef, binding, stepRun, clientTaskId } = ex
-      try {
-        const action = applyEnvToAction(stepDef.action, env, binding)
-        // 🆕 2026-06-22：传 clientTaskId 给 createTask API → 后端用 client ID 覆盖默认 UUID
-        //   → WS 推 task:created 时 task.id == placeholder.id → 找到 placeholder patch 更新（不 append）
-        const task = await submitAction(action, clientTaskId, runId, taskTriggeredBy)
-        stepRun.taskId = task.id
-        stepRun.status = 'running' // 已提交，等 WS 回调
-      } catch (e) {
-        // 提交失败 → 直接标记 failure
-        // 注意：placeholder 还在 store 里（status='queued'），WS 不会来更新它
-        // 用户应该能 retry → placeholder 会被 patchTaskById 找到更新
-        stepRun.status = 'failure'
-        stepRun.error = e instanceof Error ? e.message : String(e)
-        stepRun.errorAnalysis = analyzeError(stepRun.error, { phase: 'submission' })
-        stepRun.completedAt = new Date().toISOString()
-        stepRun.durationMs = Date.now() - new Date(stepRun.startedAt!).getTime()
-      }
-    }
 
-    // worker 池：N 个 worker 共享 cursor 轮转拉取
-    let cursor = 0
-    const worker = async (): Promise<void> => {
-      while (cursor < executableSteps.length) {
-        const idx = cursor++
-        const ex = executableSteps[idx]
-        if (ex) await runOneStep(ex)
+    if (executableSteps.length > 0) {
+      // 1. 收集所有 executableSteps 的 BatchTaskSpec
+      const batchSpecs: BatchTaskSpec[] = executableSteps.map((ex) => {
+        const action = applyEnvToAction(ex.stepDef.action, env, ex.binding) as EncvTaskActionSpec
+        return {
+          type: action.taskType,
+          sourcePath: action.params.sourcePath ?? '',
+          targetPath: action.params.targetPath,
+          password: action.params.password ?? '',
+          secondaryPassword: action.params.secondaryPassword,
+          version: action.params.version,
+          pluginName: action.pluginName,
+          extraFields: action.params.extraFields ?? {},
+          cipherMode: action.params.cipherMode,
+          compressionMode: action.params.compressionMode,
+        }
+      })
+
+      // 2. 一次性批量提交（后端生成 UUID）
+      try {
+        const tasks: EncvTask[] = await batchCreateTasks(batchSpecs, runId, taskTriggeredBy)
+
+        // 3. 一次性 push 所有真实 task 到 store（UI 立即显示 1 个 group N task）
+        const taskStore = useTaskStore()
+        for (const task of tasks) {
+          taskStore.appendTask(task)
+        }
+
+        // 4. 把后端返回的 task.id 赋给对应的 stepRun
+        for (let i = 0; i < executableSteps.length && i < tasks.length; i++) {
+          const ex = executableSteps[i]!
+          ex.stepRun.taskId = tasks[i]!.id
+          ex.stepRun.status = 'running' // 已提交，等 WS 回调
+        }
+      } catch (e) {
+        // 批量提交失败 → 所有 step 标记 failure
+        for (const ex of executableSteps) {
+          ex.stepRun.status = 'failure'
+          ex.stepRun.error = e instanceof Error ? e.message : String(e)
+          ex.stepRun.errorAnalysis = analyzeError(ex.stepRun.error, { phase: 'submission' })
+          ex.stepRun.completedAt = new Date().toISOString()
+          ex.stepRun.durationMs = Date.now() - new Date(ex.stepRun.startedAt!).getTime()
+        }
       }
     }
-    const workerCount = Math.min(max, executableSteps.length)
-    await Promise.all(Array.from({ length: workerCount }, () => worker()))
 
     // 检查 Job 是否已全部完成
     const allDone = jobRun.steps.every((s) => isTerminalStep(s.status))
@@ -669,34 +653,6 @@ function createService(
     }
 
     return jobRun
-  }
-
-  /** 将 ActionSpec 提交为 EncvTask（调用 createTask API） */
-  async function submitAction(
-    action: ActionSpec,
-    clientTaskId?: string, // 🆕 2026-06-22：客户端预占位 ID
-    runId?: string,
-    triggeredBy?: TriggeredBy,
-  ): Promise<EncvTask> {
-    if (action.type !== 'encv_task') {
-      throw new Error(`Unsupported action type: ${action.type}`)
-    }
-    const spec = action as EncvTaskActionSpec
-    return createTask(
-      spec.taskType,
-      spec.params.sourcePath ?? '',
-      spec.params.targetPath,
-      spec.params.password ?? '',
-      spec.params.version,
-      spec.pluginName,
-      spec.params.extraFields ?? {},
-      spec.params.secondaryPassword,
-      spec.params.cipherMode,
-      spec.params.compressionMode,
-      runId,
-      triggeredBy,
-      clientTaskId, // 🆕 2026-06-22
-    )
   }
 
   /** 将 env 变量和 matrix 绑定注入到 ActionSpec 中（${{ varName }} 模板替换） */

@@ -28,12 +28,12 @@ vi.mock('@/composables/useTaskEventBridge', () => ({
   },
 }))
 
-/** mock createTask / cancelTask（用 any 类型避免 Mock 不可调用问题） */
-let createTaskMock: (...args: any[]) => any
+/** mock batchCreateTasks / cancelTask（用 any 类型避免 Mock 不可调用问题） */
+let batchCreateTasksMock: (...args: any[]) => any
 let cancelTaskMock: (...args: any[]) => any
 
 vi.mock('@/api/encv', () => ({
-  createTask: (...args: any[]) => createTaskMock(...args),
+  batchCreateTasks: (...args: any[]) => batchCreateTasksMock(...args),
   cancelTask: (...args: any[]) => cancelTaskMock(...args),
 }))
 
@@ -159,25 +159,33 @@ beforeEach(() => {
   __resetServiceForTests()
   // 重置 mock 回调
   mockBridge.options = {}
-  // 重置 createTask mock（每次返回不同 taskId）
-  createTaskMock = vi.fn().mockImplementation(async (_type: string, sourcePath: string) => ({
-    id: `task-${Math.random().toString(36).slice(2, 10)}`,
-    type: _type,
-    sourcePath,
-    status: 'queued',
-    progress: 0,
-  }))
+  // 重置 batchCreateTasks mock（返回 task 数组，每个 task 有后端生成的 UUID）
+  batchCreateTasksMock = vi.fn().mockImplementation(async (specs: any[], runId?: string, triggeredBy?: string) => {
+    return specs.map((spec: any, i: number) => ({
+      id: `task-${i}-${Math.random().toString(36).slice(2, 10)}`,
+      type: spec.type,
+      sourcePath: spec.sourcePath,
+      status: 'queued',
+      progress: 0,
+      runId: runId ?? '',
+      triggeredBy: triggeredBy ?? 'user',
+    }))
+  })
   cancelTaskMock = vi.fn().mockResolvedValue(undefined)
   setTaskMetadataMock.mockClear()
   vi.restoreAllMocks()
   // 重新设置 mock（vi.restoreAllMocks 会清除实现）
-  createTaskMock = vi.fn().mockImplementation(async (_type: string, sourcePath: string) => ({
-    id: `task-${Math.random().toString(36).slice(2, 10)}`,
-    type: _type,
-    sourcePath,
-    status: 'queued',
-    progress: 0,
-  }))
+  batchCreateTasksMock = vi.fn().mockImplementation(async (specs: any[], runId?: string, triggeredBy?: string) => {
+    return specs.map((spec: any, i: number) => ({
+      id: `task-${i}-${Math.random().toString(36).slice(2, 10)}`,
+      type: spec.type,
+      sourcePath: spec.sourcePath,
+      status: 'queued',
+      progress: 0,
+      runId: runId ?? '',
+      triggeredBy: triggeredBy ?? 'user',
+    }))
+  })
   cancelTaskMock = vi.fn().mockResolvedValue(undefined)
 })
 
@@ -217,29 +225,29 @@ describe('useWorkflowTaskService — submitRun 基本流程', () => {
     expect(service.isRunning.value).toBe(false)
   })
 
-  it('submitRun 调用 createTask 为每个 step 提交任务', async () => {
+  it('submitRun 调用 batchCreateTasks 一次性提交所有 step（批量创建）', async () => {
     const service = useWorkflowTaskService()
     await service.submitRun({ workflow: makeMultiStepWorkflow() })
-    expect(createTaskMock).toHaveBeenCalledTimes(3)
+    // 🆕 2026-06-23：批量创建——3 个 step 一次性提交，batchCreateTasks 只调 1 次
+    expect(batchCreateTasksMock).toHaveBeenCalledTimes(1)
+    const callArgs = (batchCreateTasksMock as any).mock.calls[0]
+    const passedSpecs = callArgs[0]  // 第 1 参数：BatchTaskSpec[]
+    expect(passedSpecs).toHaveLength(3)  // 3 个 step = 3 个 spec
   })
 
-  it('submitRun 调用 createTask 时传入 runId 和 triggeredBy（单一数据源）', async () => {
+  it('submitRun 调用 batchCreateTasks 时传入 runId 和 triggeredBy（单一数据源）', async () => {
     const service = useWorkflowTaskService()
     const run = await service.submitRun({
       workflow: makeSimpleWorkflow(),
       triggeredBy: 'automation',
     })
-    // 🆕 v6 2026-06-22：runId/triggeredBy 直接传给 createTask（不再用 setTaskMetadata）
-    // createTask 签名：(..., runId?, triggeredBy?, clientTaskId?) — 倒数第 3、2、1 参数
-    expect(createTaskMock).toHaveBeenCalledTimes(1)
-    const callArgs = (createTaskMock as any).mock.calls[0]
-    const passedClientTaskId = callArgs[callArgs.length - 1]  // clientTaskId（v7 新增）
-    const passedTriggeredBy = callArgs[callArgs.length - 2]  // triggeredBy
-    const passedRunId = callArgs[callArgs.length - 3]        // runId
+    // 🆕 2026-06-23：batchCreateTasks 签名：(specs, runId?, triggeredBy?)
+    expect(batchCreateTasksMock).toHaveBeenCalledTimes(1)
+    const callArgs = (batchCreateTasksMock as any).mock.calls[0]
+    const passedRunId = callArgs[1]        // runId
+    const passedTriggeredBy = callArgs[2]  // triggeredBy
     expect(passedRunId).toBe(run.id)
     expect(passedTriggeredBy).toBe('automation')
-    // 🆕 v7 2026-06-22：clientTaskId 必传且以 client- 开头（pre-population 预占位 ID）
-    expect(passedClientTaskId).toMatch(/^client-/)
   })
 
   it('submitRun 拒绝重复运行（isRunning 时抛错）', async () => {

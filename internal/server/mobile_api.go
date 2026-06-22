@@ -463,11 +463,8 @@ func (s *Server) handleCreateTaskGin(c *gin.Context) {
 		CipherMode      int    `json:"cipherMode,omitempty"`
 		CompressionMode string `json:"compressionMode,omitempty"`
 		// 🆕 v6 2026-06-18：runId + triggeredBy（单一数据源）
-		RunId        string `json:"runId,omitempty"`
-		TriggeredBy  string `json:"triggeredBy,omitempty"`
-		// 🆕 2026-06-22：客户端预占位 ID（前端 submitRun 同步阶段 push 1000+ placeholder 用）
-		//   空 = 后端自动生成 UUID；非空 = 后端用客户端 ID 覆盖
-		ID string `json:"id,omitempty"`
+		RunId       string `json:"runId,omitempty"`
+		TriggeredBy string `json:"triggeredBy,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
@@ -483,20 +480,17 @@ func (s *Server) handleCreateTaskGin(c *gin.Context) {
 		"cipherMode", req.CipherMode,
 		"compressionMode", req.CompressionMode,
 		"runId", req.RunId,
-		"triggeredBy", req.TriggeredBy,
-		"clientTaskId", req.ID) // 🆕 2026-06-22
+		"triggeredBy", req.TriggeredBy)
 
 	// 🆕 v6 2026-06-18：统一走 CreateWithRunMeta（含 crypto params + run meta）
 	//   - runId 非空 → 自动化测试/AI agent 任务，前端按 runId 聚合
 	//   - runId 空 → 后端兜底派生 "manual-${id}"（2026-06-22），不再有孤儿 task
 	//   - triggeredBy 空 → 后端兜底 'user'（2026-06-22）
-	//   - ID 非空 → 用客户端预占位 ID，覆盖默认 UUID（2026-06-22）
 	compressionMode := req.CompressionMode
 	if compressionMode == "" {
 		compressionMode = "none"
 	}
 	task := s.mobileSvc.GetTaskManager().CreateWithRunMeta(
-		req.ID, // 🆕 2026-06-22
 		req.Type, req.SourcePath, req.TargetPath,
 		req.Password, req.SecondaryPassword, req.Version, req.PluginName, req.ExtraFields,
 		req.CipherMode, compressionMode,
@@ -504,6 +498,78 @@ func (s *Server) handleCreateTaskGin(c *gin.Context) {
 	)
 
 	c.JSON(http.StatusCreated, task)
+}
+
+// 🆕 2026-06-23 真实架构实现：批量创建 task endpoint
+//
+// 架构原则（替代 client 预占位野路子）：
+//   - 前端 submitRun 阶段收集本层所有 step 的 task 定义 → 一次性 POST /api/tasks/batch
+//   - 后端批量创建所有 task（后端生成 UUID 作为唯一权威源）→ 一次性返回所有 task
+//   - 前端拿到后一次性 push 到 store → UI 立即显示 1 个 group N task（不慢慢累加）
+//   - 不存在 client ID 覆盖后端 ID 的野路子
+//
+// 请求体：
+//
+//	{
+//	  "runId": "run-xxx",
+//	  "triggeredBy": "automation",
+//	  "tasks": [
+//	    { "type": "encrypt", "sourcePath": "/mock/sample.mp4", "pluginName": "video", ... },
+//	    ...
+//	  ]
+//	}
+//
+// 返回：HTTP 201，body 是 task 数组
+func (s *Server) handleCreateTaskBatchGin(c *gin.Context) {
+	var req struct {
+		RunId       string `json:"runId,omitempty"`
+		TriggeredBy string `json:"triggeredBy,omitempty"`
+		Tasks       []struct {
+			Type              string            `json:"type"`
+			SourcePath        string            `json:"sourcePath"`
+			TargetPath        string            `json:"targetPath,omitempty"`
+			Password          string            `json:"password,omitempty"`
+			SecondaryPassword string            `json:"secondaryPassword,omitempty"`
+			Version           int               `json:"version,omitempty"`
+			PluginName        string            `json:"pluginName,omitempty"`
+			ExtraFields       map[string]string `json:"extraFields,omitempty"`
+			CipherMode        int               `json:"cipherMode,omitempty"`
+			CompressionMode   string            `json:"compressionMode,omitempty"`
+		} `json:"tasks"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		return
+	}
+	if len(req.Tasks) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tasks array is empty"})
+		return
+	}
+
+	slog.Info("API: batch create tasks",
+		"count", len(req.Tasks),
+		"runId", req.RunId,
+		"triggeredBy", req.TriggeredBy)
+
+	specs := make([]mobileservice.BatchTaskSpec, 0, len(req.Tasks))
+	for _, t := range req.Tasks {
+		specs = append(specs, mobileservice.BatchTaskSpec{
+			Type:              t.Type,
+			SourcePath:        t.SourcePath,
+			TargetPath:        t.TargetPath,
+			Password:          t.Password,
+			SecondaryPassword: t.SecondaryPassword,
+			Version:           t.Version,
+			PluginName:        t.PluginName,
+			ExtraFields:       t.ExtraFields,
+			CipherMode:        t.CipherMode,
+			CompressionMode:   t.CompressionMode,
+		})
+	}
+
+	tasks := s.mobileSvc.GetTaskManager().CreateBatch(specs, req.RunId, req.TriggeredBy)
+
+	c.JSON(http.StatusCreated, tasks)
 }
 
 func (s *Server) handleCancelTaskGin(c *gin.Context) {
