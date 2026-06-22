@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-22T00:26:53.212Z",
+  "generated_at": "2026-06-22T00:45:07.310Z",
   "source_file": "package.json",
   "items": [
     {
@@ -46,6 +46,17 @@
       "description": "Capacitor 设备信息插件（型号/OS/平台）",
       "icon": "phone-portrait",
       "license": "MIT"
+    },
+    {
+      "name": "@capacitor/filesystem",
+      "version": "8.1.2",
+      "version_range": "^8.1.2",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "@capacitor/screen-orientation",

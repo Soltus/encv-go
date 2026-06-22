@@ -20,6 +20,9 @@ importers:
       '@capacitor/device':
         specifier: ^8.0.2
         version: 8.0.2(@capacitor/core@8.4.0)
+      '@capacitor/filesystem':
+        specifier: ^8.1.2
+        version: 8.1.2(@capacitor/core@8.4.0)
       '@capacitor/screen-orientation':
         specifier: ^8.0.1
         version: 8.0.1(@capacitor/core@8.4.0)
@@ -209,6 +212,11 @@ packages:
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
 
+  '@capacitor/filesystem@8.1.2':
+    resolution: {integrity: sha512-doaaMfGoFR2hWU6aV6u83I+5ZsGyJVq+Gz4r9lMpJzUKMm1eMu0hLnFdV1aXZlU9FlK/RndFrVD8oRZfNOqWgQ==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
+
   '@capacitor/screen-orientation@8.0.1':
     resolution: {integrity: sha512-DPz/1YGmlAUDMg2ON+AGJp1eFn9IfVNP9VKI5zIU+jD5xAZ4JGxUDlY9MDCvEPQs7UCD53NduJpqvqhcnb32Kw==}
     peerDependencies:
@@ -223,6 +231,9 @@ packages:
     resolution: {integrity: sha512-WXs8YB8B9eEaPZz+bcdY6t2nForF1FLoj/JU0Dl9RRgQnddnS98FEEyDooQhaY7wivr000j4+SC1FyeJkrFO7A==}
     peerDependencies:
       '@capacitor/core': '>=8.0.0'
+
+  '@capacitor/synapse@1.0.4':
+    resolution: {integrity: sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw==}
 
   '@chenglou/pretext@0.0.5':
     resolution: {integrity: sha512-A8GZN10REdFGsyuiUgLV8jjPDDFMg5GmgxGWV0I3igxBOnzj+jgz2VMmVD7g+SFyoctfeqHFxbNatKSzVRWtRg==}
@@ -2697,6 +2708,11 @@ snapshots:
     dependencies:
       '@capacitor/core': 8.4.0
 
+  '@capacitor/filesystem@8.1.2(@capacitor/core@8.4.0)':
+    dependencies:
+      '@capacitor/core': 8.4.0
+      '@capacitor/synapse': 1.0.4
+
   '@capacitor/screen-orientation@8.0.1(@capacitor/core@8.4.0)':
     dependencies:
       '@capacitor/core': 8.4.0
@@ -2708,6 +2724,8 @@ snapshots:
   '@capacitor/status-bar@8.0.2(@capacitor/core@8.4.0)':
     dependencies:
       '@capacitor/core': 8.4.0
+
+  '@capacitor/synapse@1.0.4': {}
 
   '@chenglou/pretext@0.0.5': {}
 
