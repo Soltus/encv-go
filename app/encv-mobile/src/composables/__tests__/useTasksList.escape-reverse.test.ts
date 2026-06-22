@@ -14,7 +14,7 @@
  * 跑法：先跑 → 看哪些红 → 修代码 → 再跑 → 全绿才是真修复
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { defineComponent, h, nextTick } from 'vue'
+import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
 
 const testStorage = new Map<string, string>()
@@ -137,7 +137,6 @@ describe('逃逸反向测试（5 个假设，按顺序跑，看哪些红）', ()
 
     // 期望：10 个共享 runId 的 task 还是 1 个 group；orphan 单独显示（group 或 row）
     const groups = wrapper.findAll('.task-group')
-    const rows = wrapper.findAll('.task-row')
 
     // 关键断言：runId='r-A' 的 group 仍然存在，tasks 数量是 10
     const realGroup = groups.find((g) => g.attributes('data-run-id') === RUN_ID)
