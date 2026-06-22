@@ -422,3 +422,9 @@ export function useTasksList() {
   _tasksListInstance = createUseTasksList()
   return _tasksListInstance
 }
+
+/** 🆕 测试用：重置 module-level singleton（让下一次 useTasksList() 重新创建 instance） */
+export function _resetTasksListSingletonForTests(): void {
+  _tasksListInstance = null
+  _viewInstance = null
+}
