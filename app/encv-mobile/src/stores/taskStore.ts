@@ -102,11 +102,27 @@ export const useTaskStore = defineStore('task', () => {
     }
   }
 
-  /** 局部 patch：后端给的字段直接覆盖 */
+  /**
+   * 局部 patch：只 merge 后端实际提供的字段（跳过 undefined）
+   *
+   * 为什么必须跳过 undefined：
+   * - 后端 WS 事件（task:update / task:progress）通常只发"变化的字段"
+   *   payload = {id, type, status, progress}，没有 runId/triggeredBy/pluginName 等元数据
+   * - 如果 spread 时把 undefined 字段也覆盖 prev → task 失去 runId → groupedTasksByRunId 把
+   *   它分到 __manual__${id} key → 整组自动化 task 视觉上"逃"成独立 task row（逃逸根因）
+   * - 这是**正确的默认行为**，不是防护：
+   *   后端少发字段 ≠ 字段被清空；只有显式 null 才视为"清空"
+   */
   function patchTaskById(id: string, partial: Partial<EncvTask>): boolean {
     const idx = _taskIndex.get(id)
     if (idx === undefined) return false
-    tasks.value[idx] = { ...tasks.value[idx], ...partial }
+    const prev = tasks.value[idx]
+    const merged: EncvTask = { ...prev }
+    for (const k of Object.keys(partial) as (keyof EncvTask)[]) {
+      const v = partial[k]
+      if (v !== undefined) (merged as any)[k] = v
+    }
+    tasks.value[idx] = merged
     triggerRef(tasks)
     return true
   }
@@ -191,11 +207,13 @@ export const useTaskStore = defineStore('task', () => {
       patchTaskById(id, data)
       if (type === 'update' && data.status) persistPutTask(id)
     } else if (type === 'completed') {
+      // 失败 → status='failed'，progress 保留 prev（patchTaskById 只 merge 提供的字段）
+      // 成功 → status='completed', progress=100, completedAt=now
       patchTaskById(id, {
         ...data,
         status: data.error ? 'failed' : 'completed',
         completedAt: new Date().toISOString(),
-        progress: data.error ? undefined : 100,
+        ...(data.error ? {} : { progress: 100 }),
       })
       persistPutTask(id)
     }

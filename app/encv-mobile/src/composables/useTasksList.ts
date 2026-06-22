@@ -218,17 +218,6 @@ function createUseTasksList() {
     if (isGroupMode) {
       for (const g of storeRefs.groupedTasksByRunId.value) {
         pushDateHeader(dateSectionKey(g.startedAt))
-        // 🆕 v7 2026-06-22：伪 group 拆解
-        //   手动 task（runId 为空）被 groupedTasksByRunId 分到 __manual__${id} key，
-        //   每个手动 task 单独成 group → 显示成 group card 看着像聚合，实际只能点 1 个 task
-        //   修复：runId 空 → 显示成 task row（kind='task'），不走 group card
-        //   自动化 task（runId 非空 + 多 task）→ 走 group card
-        if (!g.runId) {
-          for (const tk of g.tasks) {
-            items.push({ kind: 'task', key: `t-${tk.id}`, task: tk })
-          }
-          continue
-        }
         const counters = computeGroupCounters(g.tasks, storeRefs)
         if (!counters.hitAny) continue
         items.push({
