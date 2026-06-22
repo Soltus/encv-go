@@ -543,13 +543,6 @@ func (tm *TaskManager) Create(taskType, sourcePath, targetPath, password string,
 		PluginName:       pluginName,
 		CreatedAt:        time.Now(),
 	}
-	// 🆕 2026-06-22 v2 架构重写根治"任务逃逸"：
-	//   Create 没传 runId/triggeredBy → 派生稳定值，避免空字符串/omitempty 导致前端成孤儿
-	//   - runId = "manual-" + task.ID  → 前端按 runId 分组时 task 不会变孤儿
-	//   - triggeredBy = "user"        → 符合 rollback/rename/copy/move/delete 的语义（不是 automation）
-	// 注意：自动化测试入口（CreateWithRunMeta）会覆盖这两个值
-	task.RunId = "manual-" + task.ID
-	task.TriggeredBy = "user"
 
 	// 🆕 2026-06-15 multi-mount（spec Phase C1+C2）
 	//   两种 sourcePath 形式都尝试 mount 解析：
@@ -615,14 +608,7 @@ func (tm *TaskManager) CreateWithRunMeta(
 		version, pluginName, extras)
 	task.CipherMode = cipherMode
 	task.CompressionMode = compressionMode
-	// 🆕 2026-06-22 v2 架构：runId 永不为空兜底
-	if runId == "" {
-		runId = "manual-" + task.ID
-	}
 	task.RunId = runId
-	if triggeredBy == "" {
-		triggeredBy = "user"
-	}
 	task.TriggeredBy = triggeredBy
 	// 🆕 2026-06-22 Q6A：单行写（O(1)），替代 saveTasks() 全表写
 	tm.saveTaskSingle(task)

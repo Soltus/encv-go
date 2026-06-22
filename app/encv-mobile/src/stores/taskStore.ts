@@ -336,14 +336,10 @@ export const useTaskStore = defineStore('task', () => {
   const groupedTasksByRunId = computed<any[]>(() => {
     const groups = new Map<string, { runId: string; tasks: EncvTask[]; startedAt: string }>()
     for (const tk of sortedTasks.value) {
-      // 关键：runId 缺失的 task（孤儿）不进 group，让 useTasksList 在 group 模式下
-      // 单独渲染成 task-row，避免变成 `__manual__${id}` 伪 group
-      // 伪 group 现象：点不进去（group detail 按 runId 查不到）、重启后视觉消失
-      if (!tk.runId) continue
-      const key = tk.runId
+      const key = tk.runId || `__manual__${tk.id}`
       const g = groups.get(key)
       if (g) g.tasks.push(tk)
-      else groups.set(key, { runId: tk.runId, tasks: [tk], startedAt: tk.createdAt })
+      else groups.set(key, { runId: tk.runId || key, tasks: [tk], startedAt: tk.createdAt })
     }
     const result: any[] = []
     for (const [key, g] of groups) {
@@ -356,11 +352,6 @@ export const useTaskStore = defineStore('task', () => {
       return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
     })
     return result
-  })
-
-  // 孤儿 task：runId 缺失的 task（group 模式下不变成 group，单独渲染成 row）
-  const orphanTasks = computed<EncvTask[]>(() => {
-    return sortedTasks.value.filter((tk) => !tk.runId)
   })
 
   const flatTaskList = computed<any[]>(() =>
@@ -456,7 +447,7 @@ export const useTaskStore = defineStore('task', () => {
     searchQuery, filterDatePreset, filterDateRange,
     // 派生（raw，不含视图 kind/counters/displayData）
     tasksById, tasksByRunId, availablePlugins, hasCompletedTasks,
-    filteredTasks, sortedTasks, groupedTasksByRunId, orphanTasks, flatTaskList,
+    filteredTasks, sortedTasks, groupedTasksByRunId, flatTaskList,
     activeFilterCount, hasActiveFilters,
     // 原始操作
     hydrate, bulkSetTasks, patchTaskById, appendTask, removeTask, removeRunTasks, cancelRunTasks,

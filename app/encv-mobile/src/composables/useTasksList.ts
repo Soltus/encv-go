@@ -231,12 +231,6 @@ function createUseTasksList() {
           displayData: buildGroupDisplayData(g.tasks, g.startedAt),
         })
       }
-      // 2. 孤儿 task（runId 缺失）→ 渲染成 row，不变伪 group
-      // 真机逃逸根因：兜底逻辑让孤儿 task 变成 `__manual__${id}` 伪 group
-      for (const tk of storeRefs.orphanTasks.value) {
-        pushDateHeader(dateSectionKey(tk.createdAt))
-        items.push({ kind: 'task', key: `orphan-${tk.id}`, task: tk })
-      }
     } else {
       for (const ft of storeRefs.flatTaskList.value) {
         pushDateHeader(dateSectionKey(ft.task.createdAt))
