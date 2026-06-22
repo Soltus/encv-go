@@ -187,8 +187,17 @@ export const useTaskStore = defineStore('task', () => {
     const idx = _taskIndex.get(id)  // 🆕 v6 2026-06-22：O(1) Map lookup 替代 O(n) findIndex
     if (idx === undefined) return false
     const arr = tasks.value
-    // 终态保护
-    if (TERMINAL_STATUSES.has(arr[idx].status) && partial.status) {
+    // 🆕 2026-06-22 Bug Fix #3+#4：终态保护改为"只阻止 status 实际变化"
+    //   旧实现 `partial.status`（truthy 判断）会把 "completed" → undefined 也放行
+    //   后果：WS created 事件 payload 不全时（只有 id）→ status 被覆盖成 undefined
+    //   修复：要求 partial.status 真的定义、且与当前不同 才拦截
+    //   副作用收益：
+    //     - 允许相同 status 重复写（completed → completed）
+    //     - 允许非 status 字段更新（progress / outputPath / completedAt）
+    //     - 允许 retry（completed → queued 重置）
+    if (TERMINAL_STATUSES.has(arr[idx].status)
+        && partial.status !== undefined
+        && partial.status !== arr[idx].status) {
       return false
     }
     arr[idx] = { ...arr[idx], ...partial }
@@ -320,6 +329,12 @@ export const useTaskStore = defineStore('task', () => {
   // ============ WS 4 件套统一入口 ============
 
   function applyTaskUpdate(data: { id: string; type?: string; status?: string; progress?: number }): void {
+    // 🆕 2026-06-22 Bug Fix #5：task 不存在时 buffer 乱序事件
+    //   场景：WS 顺序 created(后到) → update(先到)；update 先到达时 task 还没建
+    if (!_taskIndex.has(data.id)) {
+      bufferPendingEvent(data.id, 'update', data)
+      return
+    }
     // 关键：只 patch 后端实际提供的字段，绝不传 undefined
     // 否则 patchTask 的 spread 会用 undefined 覆盖现有 status
     // → 终态保护短路（partial.status 是 falsy）→ 覆盖发生 → 任务"逃出"聚合
@@ -341,12 +356,20 @@ export const useTaskStore = defineStore('task', () => {
   }
 
   function applyTaskProgress(data: { id: string; progress: number; phase?: string; speed?: string; eta?: string }): void {
-    patchTask(data.id, {
-      progress: data.progress,
-      phase: data.phase,
-      speed: data.speed,
-      eta: data.eta,
-    })
+    // 🆕 2026-06-22 Bug Fix #5：task 不存在时 buffer 乱序事件
+    //   场景：WS 顺序 created(后到) → progress(先到)；progress 先到达时 task 还没建
+    if (!_taskIndex.has(data.id)) {
+      bufferPendingEvent(data.id, 'progress', data)
+      return
+    }
+    // 🆕 2026-06-22 Bug Fix #2：只 patch data 中实际提供的字段
+    //   旧实现直接传 {phase, speed, eta} → undefined 也会 spread 进去 → 覆盖现有值
+    //   后果：progress 事件不带 phase 时把上一次 phase 抹掉（UI phase label 闪烁）
+    const partial: Partial<EncvTask> = { progress: data.progress }
+    if (data.phase !== undefined) partial.phase = data.phase
+    if (data.speed !== undefined) partial.speed = data.speed
+    if (data.eta !== undefined) partial.eta = data.eta
+    patchTask(data.id, partial)
     // 🆕 progress 是高频 transient 状态，后端 SQLite 已持久化，前端不再写 IndexedDB
   }
 
@@ -355,18 +378,23 @@ export const useTaskStore = defineStore('task', () => {
     if (_taskIndex.has(data.id)) {
       // 已有则 patch；保留已有的 runId / triggeredBy（避免 WS 无 runId payload 覆盖）
       const existing = getTaskById(data.id)!  // 🆕 O(1) 替代 find O(n)
-      patchTask(data.id, {
-        ...data,
-        runId: data.runId || existing.runId,
-        triggeredBy: data.triggeredBy || existing.triggeredBy,
-      })
+      // 🆕 2026-06-22 Bug Fix #1：只 patch data 中实际提供的字段
+      //   旧实现 `{ ...data }` 展开会让 undefined 也 spread 进去 → 覆盖现有 status/progress
+      //   后果：WS created payload 不全时（只有 id）→ status 被 undefined 覆盖 → 任务"逃出"聚合
+      const partial: Partial<EncvTask> = {}
+      for (const k of Object.keys(data) as (keyof EncvTask)[]) {
+        const v = (data as any)[k]
+        if (v !== undefined) partial[k] = v
+      }
+      // 保留 runId / triggeredBy（避免 WS 无 payload 覆盖本地 metadata）
+      if (!partial.runId && existing.runId) partial.runId = existing.runId
+      if (!partial.triggeredBy && existing.triggeredBy) partial.triggeredBy = existing.triggeredBy
+      patchTask(data.id, partial)
       replayPendingEvents(data.id)
       // 🆕 v6 2026-06-22：patch 后显式持久化单行
-      // 🆕 2026-06-22 Q6A：await 同步持久化（避免 escape — 1000+ 并发丢 runId）
       if (hydrated.value) {
         const updated = getTaskById(data.id)  // 🆕 O(1) 替代 find O(n)
         if (updated) {
-          // 注意：persistPut 内部已带 try/catch + 失败重试（2026-06-22 Q6A 升级）
           try { void persistPut(updated) } catch (err) {
             console.warn('[useTaskStore.applyTaskCreated.persist] failed:', err)
           }
@@ -432,7 +460,38 @@ export const useTaskStore = defineStore('task', () => {
       // 保留现有 store（不要清空，避免闪烁）
       return
     }
-    bulkSetTasks(serverTasks)
+    // 🆕 2026-06-22 Bug Fix #6：合并而非全量替换
+    //   旧实现 bulkSetTasks(serverTasks) 整批覆盖 → 任务逃逸
+    //   场景：UI 已乐观更新到 running（WS update 到达）→ fetchTasks 拉后端旧数据（queued）
+    //         → bulkSetTasks 覆盖 → UI 回退到 queued → "任务逃出"聚合
+    //   修复策略：
+    //     - 以 server 为权威（server 提供完整初始数据）
+    //     - 但保留本地"已终态"task（completed / failed / cancelled）
+    //       终态不可能被后端回退（后端 SQLite 写完就是终态）→ 本地已终态说明后端已 commit
+    //     - 本地有但 server 没有的 task 也保留（防御性：理论上不该发生）
+    const localById = new Map<string, EncvTask>()
+    for (const t of tasks.value) {
+      localById.set(t.id, t)
+    }
+    const merged: EncvTask[] = []
+    const seen = new Set<string>()
+    for (const server of serverTasks) {
+      seen.add(server.id)
+      const local = localById.get(server.id)
+      if (local && TERMINAL_STATUSES.has(local.status)) {
+        // 本地已终态 → 保留本地（即使 server 是旧 running/queued，也是后端慢半拍）
+        merged.push(local)
+      } else {
+        merged.push(server)
+      }
+    }
+    // 保留本地有但 server 没有的 task（防御性：罕见的本地独享 task）
+    for (const local of tasks.value) {
+      if (!seen.has(local.id)) {
+        merged.push(local)
+      }
+    }
+    bulkSetTasks(merged)
   }
 
   function applyTaskCompleted(data: { id: string; error?: string; outputPath?: string }): void {
@@ -458,8 +517,12 @@ export const useTaskStore = defineStore('task', () => {
       status: data.error ? 'failed' : 'completed',
       progress: data.error ? prev.progress : 100,
       phase: data.error ? prev.phase : 'completed',
-      speed: '',
-      eta: '',
+      // 🆕 2026-06-22 Bug Fix #7：不强制 speed/eta 为空
+      //   旧实现 `speed: '' / eta: ''` 会：
+      //     1) 立即把 UI 进度条/速率 label 抹掉（视觉跳跃）
+      //     2) 与 #3 终态保护"联动 bug"：speed 是 '' → 后续 patchTask({speed: undefined}) 仍放行
+      //        但如果未来 strict mode 改用 !== undefined 检查会出问题
+      //   修复：保留 prev.speed / prev.eta（完成瞬间的最终速率/ETA 是有意义的）
       error: data.error,
       completedAt: new Date().toISOString(),
       outputPath: wsOutputPath || prev.outputPath,
