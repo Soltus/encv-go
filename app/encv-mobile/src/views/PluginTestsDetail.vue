@@ -266,15 +266,17 @@ import {
   type PluginMeta,
 } from '@/api/encv'
 import { generateMockFilesViaBackend, resetMockFilesViaBackend } from '@/api/mockGenerator'
-import { extToRelativePath } from '@/lib/mockDataGenerator'
+// 🆕 2026-06-22：extToRelativePath / formatContainerVersion 移到 pure 函数（src/lib/workflow/buildDynamicWorkflow.ts）
 import { MOCK_GENERATE_ROOT } from '@/lib/mockConstants'
-import { formatContainerVersion } from '@/constants/containerVersion'
+// 🆕 2026-06-22：buildDynamicWorkflow 派生逻辑抽到 pure 函数（0 行为变化）
+import { buildDynamicWorkflowPure } from '@/lib/workflow/buildDynamicWorkflow'
 import { useWorkflowStore } from '@/composables/useWorkflowStore'
 import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
 // 🆕 2026-06-18 Task 13：抽取 FFMPEG 流程日志为独立 composable + 组件
 import { useMockGenLog } from '@/composables/useMockGenLog'
 import MockGenLogCard from '@/components/developer/MockGenLogCard.vue'
-import type { WorkflowDefinition, StepDefinition } from '@/lib/workflow/types'
+// 🆕 2026-06-22：buildDynamicWorkflowPure 返回 wfDef（已含 WorkflowDefinition 类型）
+// StepDefinition 不再需要（派生逻辑在 pure 函数里）
 import StepMiniBadge from '@/components/automation/StepMiniBadge.vue'
 
 const { t } = useI18n()
@@ -609,26 +611,7 @@ async function handleLoadPlugins() {
 }
 
 /**
- * 把 ext 映射到 mock 目录分类
- *   mp4/mkv/avi/mov → 'video'
- *   mp3/flac/ogg/m4a/wav → 'audio'
- *   png/jpg/jpeg/gif/webp → 'image'
- *   pdf → 'pdf'
- *   doc/docx/xls/xlsx/ppt/pptx → 'wps'
- *   txt/md → 'text'
- *   encv → 'alist-encrypted'
- */
-function categoryForExt(ext: string): string {
-  const e = ext.toLowerCase().replace(/^\./, '')
-  if (['mp4', 'mkv', 'avi', 'mov', 'webm', 'flv', 'wmv'].includes(e)) return 'video'
-  if (['mp3', 'flac', 'ogg', 'm4a', 'wav', 'aac', 'opus'].includes(e)) return 'audio'
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff'].includes(e)) return 'image'
-  if (['pdf'].includes(e)) return 'pdf'
-  if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(e)) return 'wps'
-  if (['txt', 'md', 'rtf', 'log'].includes(e)) return 'text'
-  if (['encv', 'ae'].includes(e)) return 'alist-encrypted'
-  return 'misc'
-}
+ * categoryForExt 已抽到 src/lib/workflow/buildDynamicWorkflow.ts（pure 函数内部 helper）
 
 /**
  * 根据已加载的插件，动态构建 WorkflowDefinition。
@@ -649,282 +632,25 @@ function buildDynamicWorkflow(): void {
     return
   }
 
-  const encryptSteps: StepDefinition[] = []
-  const decryptSteps: StepDefinition[] = []
-
-  for (const plugin of plugins.value) {
-    const opts = plugin.taskOptions
-    if (!opts) continue
-
-    // 🆕 2026-06-15 修 #4：按 plugin.supportedExtensions[0] + mock spec 实际路径派生 sourcePath
-    // （不再硬编码 sample.{ext}，跟 mock 真相对齐：mp3→music.mp3 / mkv→comedy.mkv / jpg→photo.jpg）
-    const supportedExts = plugin.supportedExtensions ?? []
-    if (supportedExts.length === 0) continue
-    const sourceExt = supportedExts[0]
-    const specRelPath = extToRelativePath(sourceExt)
-    const sourcePath = specRelPath
-      ? `${mockRoot.value}${specRelPath}`
-      : `${mockRoot.value}01-plain-media/${categoryForExt(sourceExt)}/sample.${sourceExt}`
-
-    const versions: number[] = opts.supportVersionSelect && opts.supportedVersions
-      ? opts.supportedVersions
-      : [opts.defaultVersion]
-
-    // ====== 修 #5：遍历 plugin.taskOptions.ExtraFields ======
-    const selectFields: { field: any; values: string[] }[] = []
-    const boolFields: { field: any }[] = []
-    for (const f of opts.extraFields ?? []) {
-      if (f.type === 'select' && Array.isArray(f.options) && f.options.length > 1) {
-        selectFields.push({ field: f, values: f.options })
-      } else if (f.type === 'bool') {
-        boolFields.push({ field: f })
-      }
-    }
-
-    for (const version of versions) {
-      // encrypt / decrypt 各自的 ExtraFields
-      const encryptSelectFields = selectFields.filter(
-        (sf) => !sf.field.condition || sf.field.condition === 'encrypt',
-      )
-      const encryptBoolFields = boolFields.filter(
-        (bf) => !bf.field.condition || bf.field.condition === 'encrypt',
-      )
-      const decryptSelectFields = selectFields.filter(
-        (sf) => !sf.field.condition || sf.field.condition === 'decrypt',
-      )
-      const decryptBoolFields = boolFields.filter(
-        (bf) => !bf.field.condition || bf.field.condition === 'decrypt',
-      )
-
-      // encrypt 笛卡尔积展开
-      const encryptSelectCombos = cartesianExpand(
-        encryptSelectFields.map((sf) => sf.values),
-      )
-      const encryptBoolCombos: boolean[][] = []
-      if (encryptBoolFields.length === 0) {
-        encryptBoolCombos.push([])
-      } else {
-        const n = encryptBoolFields.length
-        for (let mask = 0; mask < 1 << n; mask++) {
-          encryptBoolCombos.push(Array.from({ length: n }, (_, i) => Boolean(mask & (1 << i))))
-        }
-      }
-
-      // decrypt 笛卡尔积展开
-      const decryptSelectCombos = cartesianExpand(
-        decryptSelectFields.map((sf) => sf.values),
-      )
-      const decryptBoolCombos: boolean[][] = []
-      if (decryptBoolFields.length === 0) {
-        decryptBoolCombos.push([])
-      } else {
-        const n = decryptBoolFields.length
-        for (let mask = 0; mask < 1 << n; mask++) {
-          decryptBoolCombos.push(Array.from({ length: n }, (_, i) => Boolean(mask & (1 << i))))
-        }
-      }
-
-      // 🆕 安全 ID 工具：把 plugin + version + ext + extraFields 转成文件系统安全的子目录名
-      const makeSafeId = (extraFields: Record<string, string>): string => {
-        const sortedKeys = Object.keys(extraFields).sort()
-        const parts: string[] = [plugin.name, formatContainerVersion(version), sourceExt]
-        for (const k of sortedKeys) {
-          parts.push(`${k}-${extraFields[k]}`)
-        }
-        return parts.join('_').replace(/[^\w.-]/g, '_').replace(/_+/g, '_')
-      }
-
-      // ============== Encrypt 步骤生成 ==============
-      for (const selectCombo of encryptSelectCombos) {
-        for (const boolCombo of encryptBoolCombos) {
-          const extraFields: Record<string, string> = {}
-          encryptSelectFields.forEach((sf, i) => {
-            const val = selectCombo[i]
-            if (val !== undefined) extraFields[sf.field.key] = val
-          })
-          encryptBoolFields.forEach((bf, i) => {
-            extraFields[bf.field.key] = boolCombo[i] ? 'true' : 'false'
-          })
-
-          const safeId = makeSafeId(extraFields)
-          // 🆕 修 #5：每个 safeId 唯一子目录 → 多次加密不会互相覆盖
-          const targetPath = `${mockRoot.value}02-test-output/${safeId}/`
-
-          const stepId = `enc_${safeId}`
-          const nameParts: string[] = [plugin.name, 'ENCRYPT', formatContainerVersion(version), sourceExt]
-          for (const sf of encryptSelectFields) {
-            const v = extraFields[sf.field.key]
-            if (v) {
-              const label = sf.field.optionLabels?.[v] ?? v
-              nameParts.push(`${sf.field.key}=${label}`)
-            }
-          }
-          for (const bf of encryptBoolFields) {
-            const v = extraFields[bf.field.key]
-            if (v) nameParts.push(`${bf.field.key}=${v}`)
-          }
-
-          encryptSteps.push({
-            id: stepId,
-            name: nameParts.join(' · '),
-            action: {
-              type: 'encv_task',
-              taskType: 'encrypt',
-              pluginName: plugin.name,
-              params: {
-                sourcePath,
-                targetPath,
-                password: 'automation-test-pwd',
-                version,
-                extraFields: Object.keys(extraFields).length > 0 ? extraFields : undefined,
-              },
-            },
-          })
-
-          dynamicTestCases.value.push({
-            id: stepId,
-            phase: 'encrypt',
-            pluginName: plugin.name,
-            taskType: 'encrypt',
-            version,
-            sourcePath,
-            sourceExt,
-            targetPath,
-            safeId,
-            extraFields: { ...extraFields },
-          })
-        }
-      }
-
-      // ============== Decrypt 步骤生成（依赖 encrypt-all 完成后） ==============
-      for (const selectCombo of decryptSelectCombos) {
-        for (const boolCombo of decryptBoolCombos) {
-          const extraFields: Record<string, string> = {}
-          decryptSelectFields.forEach((sf, i) => {
-            const val = selectCombo[i]
-            if (val !== undefined) extraFields[sf.field.key] = val
-          })
-          decryptBoolFields.forEach((bf, i) => {
-            extraFields[bf.field.key] = boolCombo[i] ? 'true' : 'false'
-          })
-
-          // 复用 encrypt 阶段产物的 safeId（decrypt 只读，不写入）
-          // decrypt 自己的 extraFields 不影响产物路径 → 沿用 plugin+version+ext 作为子目录
-          // 但 decrypt 的 extraFields 会影响解密参数（如果 plugin decrypt 需要）
-          // 安全做法：decrypt 用 {plugin+version+ext} 作为目录基础，+ dec- 前缀
-          const baseSafeId = makeSafeId({})
-          const safeId = `dec_${baseSafeId}` + (Object.keys(extraFields).length > 0
-            ? '_' + Object.keys(extraFields).sort().map(k => `${k}-${extraFields[k]}`).join('_').replace(/[^\w.-]/g, '_')
-            : '')
-
-          // 🆕 修 #5：解密读 encrypt 阶段写出的产物
-          // encrypt 步骤把 spec.relativePath basename 加密成 basename + containerExt
-          // 加密后文件名由 plugin 内部决定 → 后端 outputExt = ext + containerExt
-          // 之前硬编码 sample.${sourceExt}.${containerExt} → 对 mp3/mkv/jpg 等 mock 实际名不一致 → "文件不存在"
-          // ⚠️ plugin.containerExtension 是后端从 plugin.GetContainerExtension() 返回的权威值
-          //    不允许任何硬编码 fallback（用户原则：任何硬编码都错）
-          if (!plugin.containerExtension) {
-            throw new Error(`Plugin ${plugin.name} 缺少 containerExtension（后端 plugin.GetContainerExtension() 返回空）`)
-          }
-          const containerExt = plugin.containerExtension
-          const sourceBasename = sourcePath.split('/').pop() ?? `sample.${sourceExt}`
-          const encryptedFileName = `${sourceBasename}.${containerExt}`
-          const sourcePathForDecrypt = `${mockRoot.value}02-test-output/${baseSafeId}/${encryptedFileName}`
-
-          const stepId = `dec_${safeId.replace(/^dec_/, '')}`
-          const nameParts: string[] = [plugin.name, 'DECRYPT', formatContainerVersion(version), sourceExt]
-          for (const sf of decryptSelectFields) {
-            const v = extraFields[sf.field.key]
-            if (v) {
-              const label = sf.field.optionLabels?.[v] ?? v
-              nameParts.push(`${sf.field.key}=${label}`)
-            }
-          }
-          for (const bf of decryptBoolFields) {
-            const v = extraFields[bf.field.key]
-            if (v) nameParts.push(`${bf.field.key}=${v}`)
-          }
-
-          decryptSteps.push({
-            id: stepId,
-            name: nameParts.join(' · '),
-            action: {
-              type: 'encv_task',
-              taskType: 'decrypt',
-              pluginName: plugin.name,
-              params: {
-                sourcePath: sourcePathForDecrypt,
-                // decrypt 写到原 01-plain-media 旁边（用 .dec.{ext} 后缀避免覆盖原文件）
-                targetPath: `${mockRoot.value}02-test-output/${safeId}/`,
-                password: 'automation-test-pwd',
-                version,
-                extraFields: Object.keys(extraFields).length > 0 ? extraFields : undefined,
-              },
-            },
-          })
-
-          dynamicTestCases.value.push({
-            id: stepId,
-            phase: 'decrypt',
-            pluginName: plugin.name,
-            taskType: 'decrypt',
-            version,
-            sourcePath: sourcePathForDecrypt,
-            sourceExt,
-            targetPath: `${mockRoot.value}02-test-output/${safeId}/`,
-            safeId,
-            extraFields: { ...extraFields },
-          })
-        }
-      }
-    }
-  }
+  // 2026-06-22: 抽到 pure 函数（0 行为变化）
+  // 派生逻辑在 src/lib/workflow/buildDynamicWorkflow.ts：
+  //   - 按 plugin.taskOptions.extraFields 派生 select/bool 笛卡尔积
+  //   - encrypt / decrypt 各一组 -> encrypt-all -> decrypt-all DAG
+  //   - sourcePath 用 extToRelativePath -> 真 mock 相对路径
+  //   - safeId / containerExt / 命名规则全部一致
+  // 这里只负责：调 pure 函数 -> 写入 dynamicTestCases -> 注册 wfDef
+  const { testCases, wfDef } = buildDynamicWorkflowPure(plugins.value, mockRoot.value)
+  dynamicTestCases.value = testCases
 
   // 构建或更新工作流定义
-  const existingIdx = wfDefs.value.findIndex((d) => d.id === 'dynamic-auto-test')
-  const wfDef: WorkflowDefinition = {
-    id: 'dynamic-auto-test',
-    name: '自动化测试套件（动态）',
-    description: `${plugins.value.length} 插件 × 源扩展名 × 版本 × 加密选项笛卡尔积
-（encrypt-all 全部并行 → decrypt-all 等 encrypt 完成后并行）`,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    trigger: 'manual',
-    env: { PASSWORD: 'automation-test-pwd' },
-    jobs: [
-      // 🆕 DAG 拆 2 个 job
-      {
-        id: 'encrypt-all',
-        name: '🔒 Encrypt All (parallel)',
-        strategy: { type: 'parallel', max: 5 },
-        steps: encryptSteps,
-      },
-      {
-        id: 'decrypt-all',
-        name: '🔓 Decrypt All (parallel, after encrypt-all)',
-        needs: ['encrypt-all'],  // 🆕 关键：DAG 依赖
-        strategy: { type: 'parallel', max: 5 },
-        steps: decryptSteps,
-      },
-    ],
-  }
-
+  const existingIdx = wfDefs.value.findIndex((d) => d.id === wfDef.id)
   if (existingIdx >= 0) {
-    updateDefinition('dynamic-auto-test', wfDef)
+    updateDefinition(wfDef.id, wfDef)
   } else {
     createDefinition(wfDef)
   }
 }
 
-/** 笛卡尔积展开：输入 [[1,2],[a,b,c]] → 输出 [[1,a],[1,b],[1,c],[2,a],[2,b],[2,c]] */
-function cartesianExpand(arrays: string[][]): string[][] {
-  if (arrays.length === 0) return [[]]
-  if (arrays.some((a) => a.length === 0)) return [[]]
-  return arrays.reduce<string[][]>(
-    (acc, curr) => acc.flatMap((a) => curr.map((c) => [...a, c])),
-    [[]],
-  )
-}
 
 async function handleRunWorkflow() {
   if (isRunning.value || dynamicTestCases.value.length === 0) return

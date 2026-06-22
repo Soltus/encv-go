@@ -186,8 +186,8 @@
         <ion-refresher-content></ion-refresher-content>
       </ion-refresher>
 
-      <!-- 🆕 2026-06-22 任务诊断面板：?debug=tasks 启用，真机可见 -->
-      <!-- 嵌在 ion-content 顶部（折叠 <details> 默认收起），显示逃逸 task / 视图状态 / runId 聚合 -->
+      <!-- 🆕 2026-06-22 任务诊断面板（真机可见） -->
+      <!-- user 反馈"加到哪去了"：默认显示 + 默认展开（?debug=tasks 仍可强制显示） -->
       <TaskDebugPanel
         v-if="debugEnabled"
         :tasks="tasks"
@@ -202,7 +202,7 @@
         :filter-triggered-by="filterTriggeredBy"
         :filter-date-preset="filterDatePreset"
         :pinned-run-ids="pinnedRunIds"
-        :default-open="false"
+        :default-open="true"
       />
 
       <div class="toolbar-actions">
@@ -556,8 +556,14 @@ const route = useRoute()
 const router = useRouter()
 const { openNewTask } = useNewTaskModal()
 
-// 🆕 2026-06-22 任务诊断面板：URL 加 ?debug=tasks 启用真机可见的诊断 UI
-const debugEnabled = computed(() => route.query.debug === 'tasks')
+// 🆕 2026-06-22 任务诊断面板：dev 环境默认显示 + 默认展开
+//   - dev 模式（vite/沙箱）：直接显示（user 一打开 Tasks 页面就能看到逃逸诊断）
+//   - production：需要 ?debug=tasks query 才显示（避免遮挡正常 task 列表）
+// user 反馈"加到哪去了"——dev 模式直接默认显示
+const debugEnabled = computed(() => {
+  if (import.meta.env.DEV) return true
+  return route.query.debug === 'tasks'
+})
 
 // 🆕 Task 15：虚拟滚动所需的 ion-content 滚动容器引用
 // ion-content 内部用 shadow DOM 渲染 .inner-scroll，需要通过 shadowRoot.querySelector 获取

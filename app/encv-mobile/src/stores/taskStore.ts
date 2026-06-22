@@ -151,8 +151,13 @@ export const useTaskStore = defineStore('task', () => {
     for (const k of Object.keys(partial) as (keyof EncvTask)[]) {
       const v = partial[k]
       if (v === undefined) continue
-      // 标识字段：null 也跳过（保护 runId 等不被清空导致逃逸）
-      if (v === null && IDENTITY_FIELDS.has(k)) continue
+      // 🆕 2026-06-22 真因修复（B 方向）：IDENTITY_FIELDS 跳过 null + 空字符串
+      //   历史 bug：WS update 事件 payload 里 task.RunId='' 字符串
+      //   （Go 端 omitempty 没省略 → JSON 序列化为 "" 而非 null）
+      //   patchTaskById 之前只跳过 null → 空字符串覆盖 prev.runId
+      //   → 1000+ task 散成多个 group（"任务逃逸"动态变化）
+      //   修法：IDENTITY_FIELDS 字段值是 null 或空字符串 → 跳过（保留 prev 的）
+      if (IDENTITY_FIELDS.has(k) && (v === null || v === '')) continue
       ;(merged as any)[k] = v
     }
     tasks.value[idx] = merged
