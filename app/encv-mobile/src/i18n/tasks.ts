@@ -598,6 +598,9 @@ export default {
     'tasks.errorFixesTitle': '修复建议',
     'tasks.errorChainTitle': '阶段链',
     'tasks.errorRawTitle': '原始错误',
+    // 🆕 2026-06-22 v2：错误详情折叠按钮
+    'tasks.errorShowDetail': '详情',
+    'tasks.errorHideDetail': '收起',
   },
   en: {
     'tasks.title': 'Tasks',
@@ -1196,5 +1199,8 @@ export default {
     'tasks.errorFixesTitle': 'Fix suggestions',
     'tasks.errorChainTitle': 'Phase chain',
     'tasks.errorRawTitle': 'Raw error',
+    // 🆕 2026-06-22 v2：错误详情折叠按钮
+    'tasks.errorShowDetail': 'Details',
+    'tasks.errorHideDetail': 'Hide',
   },
 }

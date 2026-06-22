@@ -1558,7 +1558,10 @@ func (tm *TaskManager) failTask(id, errMsg string) {
 	}
 
 	slog.Error("Task failed", "id", id, "error", errMsg)
-	if tm.broadcaster != nil {
+	// 🆕 2026-06-22 修复：broadcaster broadcast 必须在 task 存在分支内
+	//   历史 bug：原代码 defer tm.mu.Unlock() + if 合并，broadcast 一定执行
+	//   即使 task 不存在也广播 → 触发 mock 失败（TestTaskManager_FailTask_NonExistent 期望 0 calls）
+	if taskToPersist != nil && tm.broadcaster != nil {
 		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
 			"id":          id,
 			"status":      "failed",

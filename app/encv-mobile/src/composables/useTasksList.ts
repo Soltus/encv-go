@@ -50,6 +50,7 @@ import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
 import { useI18n } from '@/composables/useI18n'
 import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
 import { formatDateTime as dateFormat, formatDuration } from '@/composables/useDateFormat'
+import { getTaskTypeLabel } from '@/lib/taskTypeLabel'
 
 // ============ 内部 helper 函数 ============
 
@@ -401,10 +402,10 @@ function createUseTasksList() {
     return `${filter.filterPlugins.value.length}`
   }
   function getTypeChipLabel(type?: string): string {
-    if (type) return t(`tasks.${type === 'encrypt' ? 'encrypt' : 'decrypt'}`)
+    if (type) return getTaskTypeLabel(type, t)
     // 无参调用：返回当前 chip label
     if (filter.filterTypes.value.length === 0) return t('tasks.allTypes')
-    if (filter.filterTypes.value.length === 1) return t(`tasks.${filter.filterTypes.value[0] === 'encrypt' ? 'encrypt' : 'decrypt'}`)
+    if (filter.filterTypes.value.length === 1) return getTaskTypeLabel(filter.filterTypes.value[0], t)
     return `${filter.filterTypes.value.length}`
   }
   function getStatusChipLabel(status?: string): string {

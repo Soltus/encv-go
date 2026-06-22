@@ -169,11 +169,27 @@ func (s *MobileService) resolveUserPath(userPath string) (string, error) {
 
 func NewMobileService(servingDir string, cfg *config.Config) *MobileService {
 	wsHub := NewWSHub()
+	taskManager := NewTaskManager(servingDir, cfg, wsHub)
+
+	// 🆕 2026-06-22 修复：file/rollback handler 必须在 NewMobileService 内部注入。
+	//   历史 bug：SetFileTaskHandler/SetRollbackManager 暴露但无任何调用方，
+	//   导致 move/copy/rename/delete 任务永远 failTask("file task handler not configured")。
+	//   修法：NewMobileService 内部构造 trash + fileTaskHandler + rollbackManager 并注入到 taskManager。
+	//   store 在 server 启动后通过 NewMobileServiceWithStore 注入（不影响本构造函数）。
+	trash := NewTrashManager(servingDir, nil, wsHub)
+	fileTaskHandler := NewFileTaskHandler(trash, wsHub)
+	taskManager.SetFileTaskHandler(fileTaskHandler)
+
+	rollbackMgr := NewRollbackManager(nil, taskManager, trash)
+	taskManager.SetRollbackManager(rollbackMgr)
+
 	return &MobileService{
-		servingDir:  servingDir,
-		taskManager: NewTaskManager(servingDir, cfg, wsHub),
-		wsHub:       wsHub,
-		cfg:         cfg,
+		servingDir:    servingDir,
+		taskManager:   taskManager,
+		wsHub:         wsHub,
+		cfg:           cfg,
+		trashManager:  trash,
+		rollbackManager: rollbackMgr,
 	}
 }
 

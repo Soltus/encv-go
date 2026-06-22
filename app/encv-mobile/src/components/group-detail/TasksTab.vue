@@ -93,7 +93,7 @@ import { IonIcon, IonList, IonItem, IonItemSliding, IonItemOptions, IonItemOptio
 import { listOutline, lockClosed, alertCircle, stopCircleOutline, refreshOutline, trashOutline } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
 import { formatDateTime } from '@/composables/useDateFormat'
-import { getTaskTypeLabel } from '@/lib/taskTypeLabel'
+import { getTaskTypeLabel, getTaskTypeIcon } from '@/lib/taskTypeLabel'
 import type { EncvTask } from '@/api/encv'
 import { cancelTask, retryTask, deleteTask } from '@/api/encv'
 
@@ -132,13 +132,7 @@ function getTaskName(task: EncvTask): string {
 }
 
 function getTaskIcon(task: EncvTask): string {
-  if (task.type === 'encrypt') return 'lock-closed'
-  if (task.type === 'decrypt') return 'lock-open'
-  if (task.type === 'delete') return 'trash'
-  if (task.type === 'move' || task.type === 'rename') return 'swap-horizontal'
-  if (task.type === 'copy') return 'copy'
-  if (task.type.startsWith('rollback_')) return 'arrow-undo'
-  return 'document'
+  return getTaskTypeIcon(task.type)
 }
 
 function isEncrypted(task: EncvTask): boolean {
