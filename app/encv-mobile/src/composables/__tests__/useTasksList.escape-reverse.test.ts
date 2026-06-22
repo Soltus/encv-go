@@ -264,93 +264,143 @@ describe('逃逸反向测试（5 个假设，按顺序跑，看哪些红）', ()
     expect(t7!.runId).toBe(RUN_ID)  // 关键：runId 不能丢
   })
 
-  // ============ 假设 F：groupedTasksByRunId 兜底让孤儿 task 独立成伪 group ============
-  // 逃逸真因：图中 3 个 group（1+1+365），应该是 1 个 group（367）+ 2 个 row
-  it('F: 10 task 共享 runId + 2 个 orphan（runId 缺失）→ orphan 应该是 row，不是伪 group', async () => {
+  // ============ 假设 F：A 方向修复回归测试 — bulkSetTasks merge 模式保 runId ============
+  // 2026-06-22 重写：原假设 "orphan 应该是 row" 基于前端 orphanTasks 兜底逻辑（user 已否决）。
+  //                改为 A 方向修复（merge 模式）回归测试：bulkSetTasks 丢 runId 时，
+  //                store 里 prev.runId 保留 → task 不变 orphan → 不出现 __manual__ 伪 group。
+  it('F: bulkSetTasks 丢 runId → A 方向 merge 模式保留 store 里 runId，10 个 task 仍聚合 1 group', async () => {
     const { useTaskStore, useTasksList } = await freshModules()
     const store = useTaskStore()
     const list = useTasksList()
     list.viewMode.value = 'group'
 
-    // 10 个正常 task
+    // 10 个正常 task 共享 runId
     const RUN_ID = `r-F-${Date.now()}`
     for (let i = 0; i < 10; i++) {
       store.applyEvent('created', makeTask(`t-${i}`, RUN_ID, 'queued'))
     }
-    // 2 个 orphan：runId 是 undefined（后端 created payload 漏字段 / 后端 bug）
-    store.applyEvent('created', makeTask('orphan-1', null, 'queued') as any)
-    store.applyEvent('created', makeTask('orphan-2', null, 'queued') as any)
 
+    // 模拟 fetchTasks / rebuildFromBackend：后端 SQLite run_id 字段空字符串 → Go omitempty 省略
+    // → 前端拿到的 task.runId 是 undefined（10 个 task 都丢 runId）
+    const noRunIdTasks: EncvTask[] = []
+    for (let i = 0; i < 10; i++) {
+      noRunIdTasks.push({
+        id: `t-${i}`,
+        type: 'encrypt',
+        sourcePath: `/mock/t-${i}.mp4`,
+        status: 'queued',
+        progress: 0,
+        createdAt: '2026-06-22T14:00:00.000Z',
+        triggeredBy: 'automation',
+        // 故意不传 runId
+      } as EncvTask)
+    }
+    store.bulkSetTasks(noRunIdTasks)
+
+    // A 方向修复验证：store 里 prev 的 runId 保留
+    const storeTasks = store.tasks as EncvTask[]
+    let preservedRunIdCount = 0
+    let lostRunIdCount = 0
+    for (const t of storeTasks) {
+      if (t.runId === RUN_ID) preservedRunIdCount++
+      else lostRunIdCount++
+    }
+    expect(preservedRunIdCount, 'A 方向修复：merge 模式保 10 个 runId').toBe(10)
+    expect(lostRunIdCount, 'A 方向修复：丢 runId 数为 0').toBe(0)
+
+    // 验证 DOM：1 个真 group，无 __manual__ 伪 group
     const Component = createTestListComponent()
     const wrapper = mount(Component, { props: { displayedItemsRef: list.displayedItems } })
-
     const groups = wrapper.findAll('.task-group')
-    const rows = wrapper.findAll('.task-row')
-
-    // 期望 1：r-F group 存在，10 个 task
     const realGroup = groups.find((g) => g.attributes('data-run-id') === RUN_ID)
-    expect(realGroup, 'r-F group 必须存在').toBeTruthy()
+    expect(realGroup, 'A 方向修复：10 个 task 仍聚合 1 个 group').toBeTruthy()
     expect(realGroup!.attributes('data-tasks-count')).toBe('10')
-
-    // 期望 2：orphan 不应该成伪 group（不应该有 data-run-id="__no_runid__" 的 group）
-    const fakeGroups = groups.filter((g) => g.attributes('data-run-id') === '__no_runid__')
-    expect(fakeGroups.length, 'orphan 不应该变成伪 group').toBe(0)
-
-    // 期望 3：orphan 应该显示成 task-row（兜底到 flat 路径）
-    expect(rows.length, 'orphan 应该显示成 row').toBe(2)
+    // 关键：__manual__ 伪 group 数 = 0
+    const fakeGroups = groups.filter((g) => g.attributes('data-run-id')?.startsWith('__manual__'))
+    expect(fakeGroups.length, 'A 方向修复：__manual__ 伪 group = 0').toBe(0)
   })
 
-  // ============ 假设 G：367 拆 1+1+365 复现真机逃逸 ============
-  it('G: 真机场景 367 拆 1+1+365 → 应该是 1 个 group (365) + 2 个 row', async () => {
+  // ============ 假设 G：A 方向修复 + 真机 1+1+1000 规模 ============
+  // 2026-06-22 重写：原假设 "1 个 group (365) + 2 个 row" 基于 orphanTasks 兜底。
+  //                改为 A 方向修复 + 1000 task 规模回归：fetchTasks 丢 runId 后，
+  //                store 里 prev.runId 全保留 → 真 group 数 = submitRun 数，0 伪 group。
+  it('G: 真机 1+1+1000 规模 + bulkSetTasks 丢 50% runId → A 方向修复后 0 伪 group', async () => {
     const { useTaskStore, useTasksList } = await freshModules()
     const store = useTaskStore()
     const list = useTasksList()
     list.viewMode.value = 'group'
 
-    // 365 个 task 共享 runId='X'
-    const RUN_ID = `r-G-${Date.now()}`
-    for (let i = 0; i < 365; i++) {
-      store.applyEvent('created', makeTask(`t-${i}`, RUN_ID, 'queued'))
+    // 1+1+1000 模拟真机 3 次 submitRun
+    const RUNS = [
+      { id: 'auto-run-1', stepCount: 1 },
+      { id: 'auto-run-2', stepCount: 1 },
+      { id: 'auto-run-3', stepCount: 1000 },
+    ]
+    let idx = 0
+    for (const run of RUNS) {
+      for (let i = 0; i < run.stepCount; i++) {
+        store.applyEvent('created', makeTask(`t-${idx++}`, run.id, 'queued'))
+      }
     }
-    // 2 个 orphan（后端某种事件让 runId 丢失）
-    // 模拟：先正常 created 共享 runId='X'，后被某种 update 改成 null
-    // 但 IDENTITY_FIELDS 修了 null runId 不被清空
-    // 所以这里模拟另一种：appendTask 走的"新 task 对象 runId 是 undefined"路径
-    store.applyEvent('created', {
-      id: 'orphan-real-1',
-      type: 'encrypt',
-      sourcePath: '/mock/orphan1.mp4',
-      status: 'queued',
-      progress: 0,
-      createdAt: '2026-06-22T14:00:00.000Z',
-      triggeredBy: 'automation',
-      pluginName: 'mp4-encrypt',
-      // ← 没有 runId 字段
-    } as EncvTask)
-    store.applyEvent('created', {
-      id: 'orphan-real-2',
-      type: 'encrypt',
-      sourcePath: '/mock/orphan2.mp4',
-      status: 'queued',
-      progress: 0,
-      createdAt: '2026-06-22T14:00:00.000Z',
-      triggeredBy: 'automation',
-      pluginName: 'mp4-encrypt',
-    } as EncvTask)
 
+    // fetchTasks 模拟：50% task 丢 runId（random.seed 让结果稳定）
+    let seed = 42
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff
+      return seed / 0x7fffffff
+    }
+    const noRunIdTasks: EncvTask[] = []
+    idx = 0
+    for (const run of RUNS) {
+      for (let i = 0; i < run.stepCount; i++) {
+        const t = rnd() < 0.5
+          ? {
+              id: `t-${idx++}`,
+              type: 'encrypt',
+              sourcePath: `/mock/t-${idx}.mp4`,
+              status: 'queued',
+              progress: 0,
+              createdAt: '2026-06-22T14:00:00.000Z',
+              triggeredBy: 'automation' as const,
+            } as EncvTask
+          : makeTask(`t-${idx++}`, run.id, 'queued')
+        noRunIdTasks.push(t)
+      }
+    }
+    store.bulkSetTasks(noRunIdTasks)
+
+    // A 方向修复验证：所有 1002 task 的 runId 都保留（merge 模式生效）
+    const storeTasks = store.tasks as EncvTask[]
+    let preservedRunIdCount = 0
+    let lostRunIdCount = 0
+    for (const t of storeTasks) {
+      if (t.runId === 'auto-run-1' || t.runId === 'auto-run-2' || t.runId === 'auto-run-3') {
+        preservedRunIdCount++
+      } else {
+        lostRunIdCount++
+      }
+    }
+    expect(preservedRunIdCount, 'A 方向修复：1002 task 全部保留 runId').toBe(1002)
+    expect(lostRunIdCount, 'A 方向修复：丢 runId 数为 0').toBe(0)
+
+    // 验证 DOM：3 个真 group + 0 伪 group
     const Component = createTestListComponent()
     const wrapper = mount(Component, { props: { displayedItemsRef: list.displayedItems } })
-
     const groups = wrapper.findAll('.task-group')
-    const rows = wrapper.findAll('.task-row')
 
-    // 期望 1：只有 1 个 group，365 task
-    expect(groups.length, '应该是 1 个 group').toBe(1)
-    const realGroup = groups.find((g) => g.attributes('data-run-id') === RUN_ID)
-    expect(realGroup, `r-G group 必须存在（找到: ${groups.map(g => g.attributes('data-run-id'))}）`).toBeTruthy()
-    expect(realGroup!.attributes('data-tasks-count')).toBe('365')
+    // 3 个真 group（auto-run-1, auto-run-2, auto-run-3）
+    const realRun1 = groups.find((g) => g.attributes('data-run-id') === 'auto-run-1')
+    const realRun2 = groups.find((g) => g.attributes('data-run-id') === 'auto-run-2')
+    const realRun3 = groups.find((g) => g.attributes('data-run-id') === 'auto-run-3')
+    expect(realRun1, 'A 方向修复：auto-run-1 group 存在').toBeTruthy()
+    expect(realRun1!.attributes('data-tasks-count')).toBe('1')
+    expect(realRun2, 'A 方向修复：auto-run-2 group 存在').toBeTruthy()
+    expect(realRun2!.attributes('data-tasks-count')).toBe('1')
+    expect(realRun3, 'A 方向修复：auto-run-3 group 存在').toBeTruthy()
+    expect(realRun3!.attributes('data-tasks-count')).toBe('1000')
 
-    // 期望 2：orphan 是 row，不是 group
-    expect(rows.length, '2 个 orphan 应该是 row').toBe(2)
+    // 关键：__manual__ 伪 group 数 = 0
+    const fakeGroups = groups.filter((g) => g.attributes('data-run-id')?.startsWith('__manual__'))
+    expect(fakeGroups.length, 'A 方向修复：1000 规模下 0 伪 group').toBe(0)
   })
 })

@@ -186,6 +186,25 @@
         <ion-refresher-content></ion-refresher-content>
       </ion-refresher>
 
+      <!-- 🆕 2026-06-22 任务诊断面板：?debug=tasks 启用，真机可见 -->
+      <!-- 嵌在 ion-content 顶部（折叠 <details> 默认收起），显示逃逸 task / 视图状态 / runId 聚合 -->
+      <TaskDebugPanel
+        v-if="debugEnabled"
+        :tasks="tasks"
+        :displayed-items="displayedItems"
+        :grouped-tasks-by-run-id="groupedTasksByRunId"
+        :view-mode="viewMode"
+        :sort-by="sortBy"
+        :search-query="searchQuery"
+        :filter-plugins="filterPlugins"
+        :filter-types="filterTypes"
+        :filter-statuses="filterStatuses"
+        :filter-triggered-by="filterTriggeredBy"
+        :filter-date-preset="filterDatePreset"
+        :pinned-run-ids="pinnedRunIds"
+        :default-open="false"
+      />
+
       <div class="toolbar-actions">
         <ion-button fill="clear" size="small" @click="showSearch = !showSearch" class="action-btn">
           <ion-icon :icon="search" slot="icon-only"></ion-icon>
@@ -529,11 +548,16 @@ import { useTasksList } from '@/composables/useTasksList'
 import { formatContainerVersion } from '@/constants/containerVersion'
 // 🆕 Task 15：虚拟滚动组件
 import TaskVirtualList from '@/components/tasks/TaskVirtualList.vue'
+// 🆕 2026-06-22 任务诊断面板（真机可见版）：?debug=tasks 启用，显示逃逸诊断 / 视图状态 / runId 聚合
+import TaskDebugPanel from '@/components/tasks/TaskDebugPanel.vue'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const { openNewTask } = useNewTaskModal()
+
+// 🆕 2026-06-22 任务诊断面板：URL 加 ?debug=tasks 启用真机可见的诊断 UI
+const debugEnabled = computed(() => route.query.debug === 'tasks')
 
 // 🆕 Task 15：虚拟滚动所需的 ion-content 滚动容器引用
 // ion-content 内部用 shadow DOM 渲染 .inner-scroll，需要通过 shadowRoot.querySelector 获取
@@ -599,7 +623,7 @@ function initScrollElWithRetry(): void {
 const {
   tasks, isInitialLoad, expandedWarningDetail, sortBy,
   showSearch, searchQuery, showFilters,
-  filterPlugins, filterTypes, filterStatuses, statusOptions,
+  filterPlugins, filterTypes, filterStatuses, filterTriggeredBy, statusOptions,
   pluginPopoverOpen, typePopoverOpen, statusPopoverOpen, datePopoverOpen, datePopoverEvent,
   pluginPopoverEvent, typePopoverEvent, statusPopoverEvent,
   availablePlugins, hasActiveFilters, hasCompletedTasks, filteredTasks,
@@ -615,6 +639,8 @@ const {
   // 🆕 v4 M3
   viewMode, filterDatePreset, filterDateRange,
   displayedItems,
+  // 🆕 2026-06-22 任务诊断面板需要的派生 + 状态
+  groupedTasksByRunId, pinnedRunIds,
   applyDatePreset, setCustomDateRange, toggleViewMode,
   // 🆕 v4 M5：单例 workflowService 数据源（groupedItems 已通过 serviceRuns 派生，这里只消费）
   workflowService,
