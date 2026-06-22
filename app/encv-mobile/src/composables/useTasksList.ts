@@ -54,11 +54,6 @@ import { getTaskTypeLabel } from '@/lib/taskTypeLabel'
 
 // ============ 内部 helper 函数 ============
 
-const TERMINAL_STATUSES: Set<TaskStatus> = new Set(['completed', 'failed', 'cancelled'])
-function isTerminalTaskStatus(status: TaskStatus): boolean {
-  return TERMINAL_STATUSES.has(status)
-}
-
 function getTaskDisplayName(task: EncvTask): string {
   if (task.targetPath) return task.targetPath.split('/').pop() || task.targetPath
   if (task.sourcePath) return task.sourcePath.split('/').pop() || task.sourcePath
@@ -236,10 +231,21 @@ function createUseTasksList() {
     const arr = [...filteredTasks.value]
     arr.sort((a, b) => {
       if (filter.sortBy.value === 'activity') {
-        const aFinal = isTerminalTaskStatus(a.status)
-        const bFinal = isTerminalTaskStatus(b.status)
-        const aKey = aFinal ? new Date(a.createdAt).getTime() : (a.completedAt ? new Date(a.completedAt).getTime() : new Date(a.createdAt).getTime())
-        const bKey = bFinal ? new Date(b.createdAt).getTime() : (b.completedAt ? new Date(b.completedAt).getTime() : new Date(b.createdAt).getTime())
+        // 🆕 2026-06-22 Bug Fix：activity 模式 = "按最近活动时刻" 排
+        //   旧实现把终态用 createdAt → 跟 created 模式没区别
+        //   → task 从 running→completed 时位置不变 → "任务逃出"聚合视野
+        //   修复：统一用 max(createdAt, completedAt) 作为活动时刻
+        //     - 终态 task：有 completedAt → 按完成时间排
+        //     - 非终态 task：completedAt 为空 → 退回 createdAt
+        //   这样 task 状态变化时位置会更新（completedAt 越来越新 → 排前面）
+        const aKey = Math.max(
+          new Date(a.createdAt).getTime(),
+          a.completedAt ? new Date(a.completedAt).getTime() : 0,
+        )
+        const bKey = Math.max(
+          new Date(b.createdAt).getTime(),
+          b.completedAt ? new Date(b.completedAt).getTime() : 0,
+        )
         return bKey - aKey
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
