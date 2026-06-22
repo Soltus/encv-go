@@ -170,6 +170,17 @@ export const useTaskStore = defineStore('task', () => {
       patchTaskById(task.id, task)
       return
     }
+    // 🆕 2026-06-22 真因修复 4：appendTask 推入新 task 时，runId 是空 → warn 抓数据
+    //   场景：HttpPollBackend list 第一次拉到 task，t.runId 已经是空（后端 MobileTask.RunId="" + omitempty），
+    //   此时 lastFullTask cache 还没建过 → 无法回填 → push 进 store 就成孤儿
+    //   warn 让 user 在真机复现时能抓到具体是哪个 task 触发
+    if (!task.runId) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        '[taskStore.appendTask] 新 task runId 为空 → 推入 store 后会成孤儿 group（__manual__${id}）:',
+        { id: task.id, type: task.type, sourcePath: task.sourcePath, pluginName: task.pluginName, triggeredBy: task.triggeredBy, createdAt: task.createdAt },
+      )
+    }
     tasks.value = [task, ...tasks.value]
     hasAnyTask.value = true
     rebuildIndex()
