@@ -324,12 +324,22 @@ jobs:
             ls -lh "$KEYSTORE"
           fi
 
-      # android/ is in git — cap copy copies web assets (dist/ → assets/public/). Required for BOTH debug and release because we use gradlew directly instead of npx cap build
-      - name: Copy web assets to Android project
+      # android/ is in git — cap sync copies web assets (dist/ → assets/public/) AND regenerates capacitor.plugins.json
+      # 🆕 2026-06-22 修复：必须用 cap sync 而非 cap copy
+      #   - cap copy: 只复制 web assets，**不会**重新发现新装的 @capacitor/* npm 包
+      #     → 新装 @capacitor/filesystem 后 plugins.json 不更新 → native Android 工程不注册
+      #     → 真机调 Filesystem.writeFile 报 "plugin is not implemented on android"
+      #   - cap sync: copy + 重新扫描 node_modules/@capacitor/* 写 capacitor.plugins.json
+      #     + 更新 Android Gradle dependency + (iOS) pod install
+      #   症状：Filesystem.writeFile / Share.files 在 CI 出的 APK 上都报 "plugin is not implemented on android"
+      - name: Sync web assets + Capacitor plugins to Android project
         run: |
           cd ${{ env.MONOREPO_MOBILE_DIR }}
-          npx cap copy android
-          echo "Android project ready:"
+          npx cap sync android
+          echo "=== After cap sync: capacitor.plugins.json ==="
+          cat android/app/src/main/assets/capacitor.plugins.json
+          echo ""
+          echo "=== Android project ready: ==="
           ls -la android/*.gradle android/app/*.gradle
 
       # === Non-Gradle customizations ===
