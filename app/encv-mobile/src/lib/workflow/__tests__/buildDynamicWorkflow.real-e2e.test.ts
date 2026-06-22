@@ -16,7 +16,7 @@
  *   5. 验证：1000+ task 全在 1 个真 group + 0 伪 group + 0 逃逸
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { defineComponent, h, nextTick, computed } from 'vue'
+import { nextTick } from 'vue'
 import { mount, type VueWrapper } from '@vue/test-utils'
 
 // ==================== Setup mocks ====================
@@ -36,6 +36,7 @@ import { useTaskStore } from '@/stores/taskStore'
 import { useTasksList, _resetTasksListSingletonForTests } from '@/composables/useTasksList'
 import type { EncvTask, PluginMeta, TaskStatus } from '@/api/encv'
 import { buildDynamicWorkflowPure, type DynamicTestCase } from '@/lib/workflow/buildDynamicWorkflow'
+import { TaskListDiagSimulator } from './fixtures/TaskListDiagSimulator'
 
 vi.mock('@/composables/useTaskEventBridge', () => ({
   useTaskEventBridge: () => {},
@@ -176,50 +177,20 @@ describe('真机"任务逃逸"e2e — 对齐真实路径（buildDynamicWorkflowP
   let wrapper: VueWrapper<any> | null = null
   let realPlugins: PluginMeta[]
 
-  // 简化版 TaskListDiag：显示真 group 数 / 伪 group 数 / 逃逸 task 数 / displayedItems 数量
-  const TaskListDiag = defineComponent({
-    name: 'TaskListDiag',
-    setup() {
-      const tasks = computed(() => store.tasks)
-      const displayedItems = computed(() => composable.displayedItems.value)
-      const groupedTasksByRunId = computed(() => composable.groupedTasksByRunId.value)
-      const viewMode = computed(() => composable.viewMode.value)
-      const sortBy = computed(() => composable.sortBy.value)
-      const searchQuery = computed(() => composable.searchQuery.value)
-      const filterPlugins = computed(() => composable.filterPlugins.value)
-      const filterTypes = computed(() => composable.filterTypes.value)
-      const filterStatuses = computed(() => composable.filterStatuses.value)
-      const filterTriggeredBy = computed(() => composable.filterTriggeredBy.value)
-      const filterDatePreset = computed(() => composable.filterDatePreset.value)
-      const pinnedRunIds = computed(() => composable.pinnedRunIds.value)
-      return () =>
-        h('div', { 'data-testid': 'task-list-diag' }, [
-          h('div', { 'data-testid': 'store-tasks-count' }, String(tasks.value.length)),
-          h('div', { 'data-testid': 'displayed-items-count' }, String(displayedItems.value.length)),
-          h('div', { 'data-testid': 'grouped-count' }, String(groupedTasksByRunId.value.length)),
-          h('div', { 'data-testid': 'real-group-count' }, String(
-            groupedTasksByRunId.value.filter((g) => !g.runId.startsWith('__manual__')).length,
-          )),
-          h('div', { 'data-testid': 'fake-group-count' }, String(
-            groupedTasksByRunId.value.filter((g) => g.runId.startsWith('__manual__')).length,
-          )),
-          h('div', { 'data-testid': 'escape-task-count' }, String(
-            groupedTasksByRunId.value
-              .filter((g) => g.runId.startsWith('__manual__'))
-              .reduce((acc, g) => acc + g.tasks.length, 0),
-          )),
-          h('div', { 'data-testid': 'view-mode' }, String(viewMode.value)),
-          h('div', { 'data-testid': 'sort-by' }, String(sortBy.value)),
-          h('div', { 'data-testid': 'search-query' }, String(searchQuery.value)),
-          h('div', { 'data-testid': 'filter-plugins' }, (filterPlugins.value ?? []).join(',')),
-          h('div', { 'data-testid': 'filter-types' }, (filterTypes.value ?? []).join(',')),
-          h('div', { 'data-testid': 'filter-statuses' }, (filterStatuses.value ?? []).join(',')),
-          h('div', { 'data-testid': 'filter-triggered-by' }, (filterTriggeredBy.value ?? []).join(',')),
-          h('div', { 'data-testid': 'filter-date-preset' }, String(filterDatePreset.value)),
-          h('div', { 'data-testid': 'pinned-run-ids' }, Array.from(pinnedRunIds.value).join(',')),
-        ])
-    },
-  })
+  // ============ 🆕 2026-06-22 1:1 复刻真机 UI 模拟器 ============
+  // user 反馈"你确定完整复刻了整个任务tab吗（不含样式细节），比如右上角第二个控件切换排序，不要嫌麻烦"
+  // 之前 TaskListDiag 只是 18 个 data-testid div 拼成的诊断面板，根本不是 UI。
+  // 现在用 TaskListDiagSimulator 1:1 复刻整个 Tasks page 控件（toolbar / search / 4 popover / 5 chip /
+  //   4 action btn / 完整 group card / 完整 task card / ion-fab / ion-refresher），
+  // 每个 click handler 真调 composable 方法，data-testid 让测试可交互。
+  const noopHandlers = {
+    openGroupDetail: vi.fn(),
+    openTaskDetail: vi.fn(),
+    openGroupActionSheet: vi.fn(),
+    openNewTask: vi.fn(),
+    handleRefresh: vi.fn(),
+    handleClearCompleted: vi.fn(),
+  }
 
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -227,6 +198,10 @@ describe('真机"任务逃逸"e2e — 对齐真实路径（buildDynamicWorkflowP
     composable = useTasksList()
     realPlugins = buildRealPlugins()
     _resetTasksListSingletonForTests()
+    // 重置所有 noop handlers（防止上一个 test 的 mock 状态泄漏）
+    for (const key of Object.keys(noopHandlers) as (keyof typeof noopHandlers)[]) {
+      noopHandlers[key].mockClear()
+    }
   })
 
   afterEach(() => {
@@ -236,6 +211,13 @@ describe('真机"任务逃逸"e2e — 对齐真实路径（buildDynamicWorkflowP
     }
     _resetTasksListSingletonForTests()
   })
+
+  /** 挂载 1:1 复刻真机 UI 模拟器（带诊断 panel + 完整控件） */
+  function mountDiag(): VueWrapper<any> {
+    return mount(TaskListDiagSimulator, {
+      props: { store, composable, handlers: noopHandlers },
+    })
+  }
 
   // ==================== T1: 真 buildDynamicWorkflowPure 派生量级 ====================
   it('T1: 真 buildDynamicWorkflowPure 派生 7 个 plugin → 100+ step（真机 1000+ 量级基于真 ext 展开）', () => {
@@ -308,7 +290,7 @@ describe('真机"任务逃逸"e2e — 对齐真实路径（buildDynamicWorkflowP
       }
     }
     await nextTick()
-    wrapper = mount(TaskListDiag)
+    wrapper = mountDiag()
     await nextTick()
 
     // === 关键断言 1：100 轮 update 全程 0 瞬时逃逸（不是只在终态断言） ===
@@ -361,7 +343,7 @@ describe('真机"任务逃逸"e2e — 对齐真实路径（buildDynamicWorkflowP
       await nextTick()
     }
 
-    wrapper = mount(TaskListDiag)
+    wrapper = mountDiag()
     await nextTick()
     const realGroupCount = Number(wrapper.find('[data-testid="real-group-count"]').text())
     const fakeGroupCount = Number(wrapper.find('[data-testid="fake-group-count"]').text())
@@ -400,7 +382,7 @@ describe('真机"任务逃逸"e2e — 对齐真实路径（buildDynamicWorkflowP
       await nextTick()
     }
 
-    wrapper = mount(TaskListDiag)
+    wrapper = mountDiag()
     await nextTick()
     const realGroupCount = Number(wrapper.find('[data-testid="real-group-count"]').text())
     const fakeGroupCount = Number(wrapper.find('[data-testid="fake-group-count"]').text())
@@ -462,7 +444,7 @@ describe('真机"任务逃逸"e2e — 对齐真实路径（buildDynamicWorkflowP
       await nextTick()
     }
 
-    wrapper = mount(TaskListDiag)
+    wrapper = mountDiag()
     await nextTick()
     const realGroupCount = Number(wrapper.find('[data-testid="real-group-count"]').text())
     const fakeGroupCount = Number(wrapper.find('[data-testid="fake-group-count"]').text())
@@ -474,5 +456,113 @@ describe('真机"任务逃逸"e2e — 对齐真实路径（buildDynamicWorkflowP
     expect(realGroupCount, 'B 方向修复：1000+ task + 200 轮 WS update + 切换后 9 个真 group').toBe(9)
     expect(fakeGroupCount, 'B 方向修复：1000+ task + 200 轮 WS update + 切换后 0 伪 group').toBe(0)
     expect(escapeTaskCount, 'B 方向修复：1000+ task + 200 轮 WS update + 切换后 0 逃逸').toBe(0)
+  })
+
+  // ==================== T6: 1:1 复刻真机 UI 控件存在性 + 真实交互链路 ====================
+  // 2026-06-22 user 反馈"你确定完整复刻了整个任务tab吗（不含样式细节），比如右上角第二个控件切换排序，不要嫌麻烦"
+  // 这里验证：1:1 复刻模拟器渲染后，所有真机控件都在（toolbar 2 个 / search bar / 4 popover / 5 chip /
+  //   4 action btn / 完整 group card / 完整 task card / ion-fab），且 click 真实触发 composable 方法。
+  it('T6: 1:1 复刻真机 UI 控件存在性 + 真实交互链路（toolbar / search / popover / chip / action / fab / group / task）', async () => {
+    const result = buildDynamicWorkflowPure(realPlugins, '/mock/')
+    const RUN_ID = 'run-real-T6'
+    const initialTasks = simulateBackendCreateSteps(result.testCases, RUN_ID)
+    store.bulkSetTasks(initialTasks)
+    await nextTick()
+    wrapper = mountDiag()
+    await nextTick()
+
+    // ============ A. 控件存在性检查（每个 data-testid 必须找到）============
+    const requiredTestIds = [
+      // 1. 顶部 toolbar ion-buttons slot=end（右上角 2 个）
+      'toolbar-sort-btn',
+      'toolbar-clear-completed-btn',
+      // 2. search/filter toolbar（默认 v-if=false，但 toggle 后要渲染）
+      // 3. toolbar-actions（4 个 action btn）
+      'action-search-toggle',
+      'action-date-popover',
+      'action-filter-toggle',
+      'action-viewmode-toggle',
+      // 4. 完整 group card（每个 run 一个）+ runId 显示
+      `group-card-${RUN_ID}`,
+      'group-card-runid',
+      // 5. ion-fab
+      'fab-new-task',
+      'fab-new-task-btn',
+      // 6. 诊断 panel
+      'task-list-diag',
+      'store-tasks-count',
+      'real-group-count',
+      'fake-group-count',
+      'escape-task-count',
+    ]
+    for (const tid of requiredTestIds) {
+      expect(wrapper.find(`[data-testid="${tid}"]`).exists(), `控件 ${tid} 必须在 simulator 渲染`).toBe(true)
+    }
+
+    // ============ B. 真机交互链路（每个 click 真调 composable 方法）============
+    // ① 右上角第 1 控件：sort toggle
+    const sortBtn = wrapper.find('[data-testid="toolbar-sort-btn"]')
+    expect(sortBtn.exists(), 'sort toggle 按钮存在').toBe(true)
+    const sortBefore = wrapper.find('[data-testid="sort-by"]').text()
+    await sortBtn.trigger('click')
+    await nextTick()
+    const sortAfter = wrapper.find('[data-testid="sort-by"]').text()
+    expect(sortBefore !== sortAfter, 'sort 按钮点击后 sortBy 必须变化').toBe(true)
+
+    // ② search toggle（点击 → 显示 search bar）
+    const searchToggle = wrapper.find('[data-testid="action-search-toggle"]')
+    expect(searchToggle.exists(), 'search toggle 按钮存在').toBe(true)
+    await searchToggle.trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="search-toolbar"]').exists(), 'showSearch=true 后 search bar 必须渲染').toBe(true)
+    // search input 输入
+    const searchInput = wrapper.find('[data-testid="search-input"]')
+    expect(searchInput.exists(), 'search input 存在').toBe(true)
+    await searchInput.setValue('task-0')
+    await nextTick()
+    expect(wrapper.find('[data-testid="search-query"]').text()).toBe('task-0')
+
+    // ③ viewMode toggle
+    const viewModeBtn = wrapper.find('[data-testid="action-viewmode-toggle"]')
+    const viewModeBefore = wrapper.find('[data-testid="view-mode"]').text()
+    await viewModeBtn.trigger('click')
+    await nextTick()
+    const viewModeAfter = wrapper.find('[data-testid="view-mode"]').text()
+    expect(viewModeBefore !== viewModeAfter, 'viewMode 按钮点击后 viewMode 必须变化').toBe(true)
+
+    // ④ filter toggle → 显示 filter toolbar（5 个 chip）
+    const filterToggle = wrapper.find('[data-testid="action-filter-toggle"]')
+    await filterToggle.trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="filter-toolbar"]').exists(), 'showFilters=true 后 filter bar 必须渲染').toBe(true)
+    // 5 个 chip 渲染（active run 取决于 workflow state，但其他 4 个必须有）
+    expect(wrapper.find('[data-testid="chip-plugin"]').exists(), 'plugin chip 存在').toBe(true)
+    expect(wrapper.find('[data-testid="chip-type"]').exists(), 'type chip 存在').toBe(true)
+    expect(wrapper.find('[data-testid="chip-status"]').exists(), 'status chip 存在').toBe(true)
+    expect(wrapper.find('[data-testid="chip-clear-filters"]').exists(), 'clear filters chip 存在').toBe(true)
+
+    // ⑤ date popover → 显示 date preset 列表
+    const datePopoverBtn = wrapper.find('[data-testid="action-date-popover"]')
+    await datePopoverBtn.trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="popover-date"]').exists(), 'date popover 打开后必须渲染').toBe(true)
+    // 5 个 preset
+    expect(wrapper.find('[data-testid="popover-date-preset-today"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="popover-date-preset-7d"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="popover-date-preset-30d"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="popover-date-preset-all"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="popover-date-preset-custom"]').exists()).toBe(true)
+    // 点击 today preset
+    await wrapper.find('[data-testid="popover-date-preset-today"]').trigger('click')
+    await nextTick()
+    expect(wrapper.find('[data-testid="filter-date-preset"]').text() === 'today', 'date preset 点击后 filterDatePreset 必须变化').toBe(true)
+
+    // ⑥ 验证 1000+ task + 全部控件交互后仍 0 逃逸
+    const finalFake = Number(wrapper.find('[data-testid="fake-group-count"]').text())
+    const finalEscape = Number(wrapper.find('[data-testid="escape-task-count"]').text())
+    // eslint-disable-next-line no-console
+    console.log(`[E2E-REAL] T6: 1:1 复刻 UI 控件全渲染 + 5 类交互链路 → 伪 group=${finalFake} / 逃逸=${finalEscape}`)
+    expect(finalFake, '1:1 复刻 + 5 类交互后 0 伪 group').toBe(0)
+    expect(finalEscape, '1:1 复刻 + 5 类交互后 0 逃逸').toBe(0)
   })
 })
