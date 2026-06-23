@@ -31,13 +31,16 @@ export type SortBy = 'activity' | 'created'
 const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set(['completed', 'failed', 'cancelled'])
 const STATUS_OPTIONS: TaskStatus[] = ['queued', 'running', 'cancelling', 'completed', 'failed', 'cancelled']
 
-// 🆕 2026-06-23 重新设计（后端 SQL 权威 + 前端视图分页）：
-//   - WS task:created 守卫：store 满后不 push（避免视图分页被破坏）
-//   - 跳过的 task 在 loadMore / refresh 时从后端获取最新状态
-//   - 聚合计数独立：后端 SQL COUNT，前端不靠 store.tasks.length 算总数
-//   - 仅对 WS 路径（applyEvent('created', ...)）生效，不影响 workflow service 直接调 appendTask
-//   - 仅在 hydrated 后生效（避免破坏测试：测试不调 hydrate，hydrated=false → 全部 push）
-export const MAX_LOADED_TASKS = 100
+// 2026-06-23 初始版本：MAX_LOADED_TASKS=100 用于 WS 视图分页保护
+// 2026-06-24 移除原因：
+//   - TaskVirtualList 虚拟滚动保证 DOM 节点数恒定（~14 个）
+//   - useTaskViewCompute Worker 保证过滤/排序/分组在后台线程
+//   - 1000+ 任务量级下内存占用可忽略（~1MB）
+//   - 保留导致严重 UX bug：自动化批量创建 1000 个任务，用户只看到 100 个
+// 如未来需要极端场景优化（10 万+任务），可考虑：
+//   - "新任务通知" 模式：被跳过时显示 "有 N 个新任务" 按钮
+//   - 智能批量检测：短时间大量 created 时自动 refresh
+export const MAX_LOADED_TASKS = 10000
 
 export const useTaskStore = defineStore('task', () => {
   // ============ 原始数据 ============

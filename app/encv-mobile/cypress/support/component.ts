@@ -17,6 +17,17 @@ import '@ionic/vue/css/typography.css'
 // 导入自定义命令（cy.dataCy 等）
 import './commands'
 
+// 容错 ResizeObserver loop 错误（虚拟滚动 + Ionic 常见问题）
+// 根因：RO 回调中修改 DOM 触发新一轮布局 → 新一轮 RO 回调 → 浏览器报错
+// 不影响功能，只是浏览器的安全机制告警，在测试中忽略它
+Cypress.on('uncaught:exception', (err) => {
+  if (err.message.includes('ResizeObserver loop completed with undelivered notifications')) {
+    return false
+  }
+  // 其他错误正常抛出
+  return true
+})
+
 // 每个测试前重置 pinia + 共享 router
 beforeEach(() => {
   _resetTestPinia()
