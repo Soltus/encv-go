@@ -444,7 +444,7 @@ import {
   lockClosedOutline, listOutline, gitNetworkOutline, flashOutline, cubeOutline,
 } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
-import { useWebDavAutomationTests } from '@/composables/useWebDavAutomationTests'
+import { useWebDavAutomationTests } from '@/composables/useWebDavWorkflowAdapter'
 import { useWebDavManifest } from '@/composables/useWebDavManifest'
 import { showToast } from '@/composables/useToast'
 import { fetchWebDavLocalInfo, type WebDavLocalInfo } from '@/api/encv'
@@ -655,7 +655,7 @@ const showHistory = ref(false)
 const detailRun = ref<TestRun | null>(null)
 
 function refreshHistory() {
-  // 触发响应式更新：useWebDavAutomationTests 内部 historyRuns 是 ref
+  // 触发响应式更新：useWebDavWorkflowAdapter 内部 historyRuns 是 ref
   automation.historyRuns.value = [...automation.historyRuns.value]
 }
 

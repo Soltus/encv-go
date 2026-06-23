@@ -27,6 +27,16 @@
 
       <ion-toolbar v-if="showFilters" class="filter-toolbar">
         <div class="filter-chips">
+          <!-- 🆕 v4 M5：数据源指示器（有多少个 workflow run 正在跑） -->
+          <ion-chip
+            v-if="workflowService.isRunning.value"
+            color="warning"
+            class="active-run-chip"
+            :title="t('tasks.activeRunIndicator')"
+          >
+            <ion-spinner name="dots" class="active-run-spinner"></ion-spinner>
+            <ion-label>{{ t('tasks.activeRunRunning') }} · {{ workflowService.totalSteps.value }}</ion-label>
+          </ion-chip>
           <ion-chip :color="filterPlugins.length > 0 ? 'primary' : 'medium'" @click="openPluginPopover($event)">
             <ion-icon :icon="extensionPuzzle" size="small"></ion-icon>
             <ion-label>{{ getPluginChipLabel() }}</ion-label>
@@ -41,6 +51,17 @@
             <ion-icon :icon="funnel" size="small"></ion-icon>
             <ion-label>{{ getStatusChipLabel() }}</ion-label>
             <ion-icon :icon="chevronDown" size="small"></ion-icon>
+          </ion-chip>
+          <!-- 🆕 v6 2026-06-18：常驻清空筛选按钮（行业惯例：清空操作常驻可见） -->
+          <ion-chip
+            :color="hasActiveFilters ? 'danger' : 'medium'"
+            :disabled="!hasActiveFilters"
+            @click="clearFilters"
+            :title="t('tasks.clearFilters')"
+            class="filter-clear-chip"
+          >
+            <ion-icon :icon="closeCircle" size="small"></ion-icon>
+            <ion-label>{{ t('tasks.clearFilters') }}</ion-label>
           </ion-chip>
         </div>
       </ion-toolbar>
@@ -66,7 +87,7 @@
               slot="start"
               @ionChange="togglePluginFilter(plugin)"
             ></ion-checkbox>
-            <ion-label>{{ plugin }}</ion-label>
+            <ion-label>{{ plugin === '__unknown__' ? t('tasks.unknownPlugin') : plugin }}</ion-label>
           </ion-item>
           <div v-if="availablePlugins.length === 0" class="popover-empty">{{ t('tasks.noPluginsFound') }}</div>
         </div>
@@ -107,23 +128,122 @@
           </ion-item>
         </div>
       </ion-popover>
+
+      <!-- 🆕 v4 M3：日期区间筛选 popover（不占页面空间，preset + 自定义都内嵌） -->
+      <ion-popover
+        :is-open="datePopoverOpen"
+        :event="datePopoverEvent"
+        @didDismiss="datePopoverOpen = false"
+        side="bottom"
+        alignment="end"
+        class="date-popover"
+      >
+        <div class="date-popover-content">
+          <div class="popover-filter-title">{{ t('tasks.filterByDate') }}</div>
+          <ion-item
+            v-for="preset in datePresets"
+            :key="preset.key"
+            lines="none"
+            button
+            class="popover-filter-item"
+            :class="{ 'date-preset-active': filterDatePreset === preset.key }"
+            @click="onDatePresetClick(preset.key)"
+          >
+            <ion-icon
+              :icon="preset.key === 'custom' ? calendarOutline : timer"
+              slot="start"
+              :color="filterDatePreset === preset.key ? 'primary' : 'medium'"
+            ></ion-icon>
+            <ion-label>{{ preset.label }}</ion-label>
+          </ion-item>
+          <!-- 自定义日期：两个原生 input 紧凑排版，不占大块空间 -->
+          <div v-if="filterDatePreset === 'custom'" class="date-custom-range">
+            <label class="date-range-label">
+              <span>{{ t('tasks.dateFrom') }}</span>
+              <input
+                type="date"
+                :value="customFromInput"
+                @change="onCustomFromChange"
+                class="date-input"
+              />
+            </label>
+            <label class="date-range-label">
+              <span>{{ t('tasks.dateTo') }}</span>
+              <input
+                type="date"
+                :value="customToInput"
+                @change="onCustomToChange"
+                class="date-input"
+              />
+            </label>
+          </div>
+        </div>
+      </ion-popover>
     </ion-header>
 
-    <ion-content>
+    <ion-content ref="contentRef">
       <ion-refresher slot="fixed" @ionRefresh="handleRefresh">
         <ion-refresher-content></ion-refresher-content>
       </ion-refresher>
+
+      <!-- 🆕 2026-06-22 任务诊断面板（真机可见） -->
+      <!-- user 反馈"加到哪去了"：默认显示 + 默认展开（?debug=tasks 仍可强制显示） -->
+      <TaskDebugPanel
+        v-if="debugEnabled"
+        :tasks="tasks"
+        :displayed-items="displayedItems"
+        :grouped-tasks-by-run-id="groupedTasksByRunId"
+        :view-mode="viewMode"
+        :sort-by="sortBy"
+        :search-query="searchQuery"
+        :filter-plugins="filterPlugins"
+        :filter-types="filterTypes"
+        :filter-statuses="filterStatuses"
+        :filter-triggered-by="filterTriggeredBy"
+        :filter-date-preset="filterDatePreset"
+        :pinned-run-ids="pinnedRunIds"
+        :default-open="true"
+      />
 
       <div class="toolbar-actions">
         <ion-button fill="clear" size="small" @click="showSearch = !showSearch" class="action-btn">
           <ion-icon :icon="search" slot="icon-only"></ion-icon>
         </ion-button>
+        <!-- 🆕 v4 M3：日期筛选按钮（与 search / filter 平级） -->
+        <ion-button
+          fill="clear"
+          size="small"
+          @click="openDatePopover($event)"
+          class="action-btn"
+          :title="t('tasks.filterByDate')"
+        >
+          <ion-icon
+            :icon="calendarOutline"
+            slot="icon-only"
+            :color="filterDatePreset !== 'all' ? 'primary' : undefined"
+          ></ion-icon>
+        </ion-button>
         <ion-button fill="clear" size="small" @click="showFilters = !showFilters" class="action-btn">
           <ion-icon :icon="funnel" slot="icon-only" :color="hasActiveFilters ? 'primary' : undefined"></ion-icon>
         </ion-button>
+        <!-- 🆕 v4 M3：视图模式切换（聚合 / 平铺） -->
+        <ion-button
+          fill="clear"
+          size="small"
+          @click="toggleViewMode"
+          class="action-btn"
+          :title="viewMode === 'group' ? t('tasks.viewModeFlat') : t('tasks.viewModeGroup')"
+        >
+          <ion-icon
+            :icon="viewMode === 'group' ? albumsOutline : listOutline"
+            slot="icon-only"
+            :color="viewMode === 'group' ? 'primary' : undefined"
+          ></ion-icon>
+        </ion-button>
       </div>
 
-      <div v-if="loading" class="loading-container">
+      <!-- 🆕 v4 M2：仅首屏占位（tasks 为空 + isInitialLoad）显示 loading，已有内容时不闪 -->
+      <div v-if="isInitialLoad && tasks.length === 0" class="loading-container">
         <ion-spinner name="crescent"></ion-spinner>
         <p>{{ t('tasks.loading') }}</p>
       </div>
@@ -141,158 +261,160 @@
         <p>{{ t('tasks.noTasksDesc') }}</p>
       </div>
 
-      <ion-list v-else>
-        <!-- 🆕 2026-06-10 修复 v4：可见的调试计数（让用户能确认 grouping 是否在工作） -->
-        <div class="grouping-debug-bar">
-          <span>共 <strong>{{ tasks.length }}</strong> 个 task</span>
-          <span class="grouping-debug-sep">·</span>
-          <span><strong>{{ debugGroupCount }}</strong> 个 run 分组</span>
-          <span class="grouping-debug-sep">·</span>
-          <span><strong>{{ debugSingletonCount }}</strong> 个单条</span>
-          <span class="grouping-debug-sep">·</span>
-          <span><strong>{{ debugByTriggeredBy.automation }}</strong> auto / <strong>{{ debugByTriggeredBy.ai_agent }}</strong> ai / <strong>{{ debugByTriggeredBy.user }}</strong> user</span>
-          <ion-button size="small" fill="clear" @click="resetGrouping" class="grouping-reset-btn">
-            <ion-icon :icon="sync" slot="start"></ion-icon>
-            重置分组
-          </ion-button>
-          <ion-button size="small" fill="clear" @click="showAutomationReports" class="grouping-reset-btn" title="查看所有自动化测试历史报告（localStorage 持久化）">
-            <ion-icon :icon="archiveOutline" slot="start"></ion-icon>
-            查看报告
-          </ion-button>
-        </div>
-        <template v-for="item in displayedItems" :key="item.key">
-          <!-- 🆕 2026-06-10 修复：自动化测试 / AI agent 任务组折叠 -->
-          <!-- 历史：自动化测试一次跑 N 个用例 → 污染 task 列表（用户截图的"浪费屏幕空间"）-->
-          <!-- 修复：连续 ≥2 个 triggeredBy != 'user' 的 task → 折叠成 1 张 group card -->
-          <!--       点 group card 右侧 chevron 展开/折叠详情 -->
-          <!-- 🆕 2026-06-10 修复 v2：2 级嵌套 — group 展开时按 pluginName 插 plugin_section 段头 -->
-          <ion-item-sliding v-if="item.kind === 'group'">
-            <ion-item button detail @click="toggleTaskGroup(item.groupKey!)" :class="['task-group-card', `group-tone-${item.tone}`]">
-              <div class="group-icon-bubble" :class="`group-tone-${item.tone}`" slot="start">
-                <ion-icon :icon="item.tone === 'ai_agent' ? hardwareChipOutline : cogOutline"></ion-icon>
+      <!-- 🆕 Task 15：用 TaskVirtualList 替换 ion-list + v-for -->
+      <!-- 历史：ion-list + v-for 渲染所有 displayedItems → 200+ task 时 DOM 节点爆炸 -->
+      <!-- 修复：TaskVirtualList 用 @tanstack/vue-virtual 仅渲染可见窗口 + overscan 10 个 item -->
+      <!-- 🆕 v4 M3：displayedItems 是聚合/平铺二选一，包含 date / group / task 3 种 kind -->
+      <!-- 🆕 2026-06-23 Task 8：重构为 count + getItem + getKey 接口
+        - 旧：:items="displayedItems"（传整个数组，virtualizer 内部 O(N) 遍历）
+        - 新：:count + :get-item + :get-key（virtualizer 只对可见窗口调 getItem，O(1)）
+        - 配合 Task 10 Web Worker 委托视图计算，主线程不卡顿 -->
+      <TaskVirtualList
+        v-else
+        :count="displayedItems.length"
+        :get-item="(i: number) => displayedItems[i]"
+        :get-key="(i: number) => displayedItems[i].key"
+        :scroll-el="scrollEl"
+        ref="virtualListRef"
+        class="tasks-virtual-list"
+      >
+        <template #default="{ item }">
+          <!-- ============== Date section header（今/昨/本周/本月/更早） ============== -->
+          <!-- 聚合 + 平铺两种模式都显示，按 createdAt 分段 -->
+          <div
+            v-if="item.kind === 'date'"
+            :key="item.key"
+            class="tl-date-section"
+          >
+            <div class="tl-date-section__line"></div>
+            <span class="tl-date-section__label">{{ item.label }}</span>
+            <div class="tl-date-section__line"></div>
+          </div>
+
+          <!-- ============== Group card（聚合模式，1 个 run = 1 张卡片） ============== -->
+          <!-- 未命中 group（hitAny=false）按用户选择 C 隐藏 -->
+          <!-- 🆕 2026-06-18 v5-bug3fix：整张 card clickable → push 到 L2 GroupDetail -->
+          <!-- 🆕 v6 2026-06-18：长按弹出 action-sheet 取消/置顶/删除（TaskVirtualList slot 不支持 ion-item-sliding） -->
+          <!-- 🆕 v6 2026-06-22 性能优化：用 item.displayData.xxx 替代 13 次函数调用（预计算） -->
+          <div
+            v-else-if="item.kind === 'group' && item.counters.hitAny"
+            :key="item.key"
+            :class="['tl-group-card', 'tl-group-card--clickable', `tl-group-card--${item.displayData.tone}`, item.displayData.moodClass, isRunPinned(item.runId) ? 'tl-group-card--pinned' : '']"
+            role="button"
+            :aria-label="t('tasks.groupCard.openDetail')"
+            @click="openGroupDetail(item.runId)"
+            @keydown.enter.prevent="openGroupDetail(item.runId)"
+            @keydown.space.prevent="openGroupDetail(item.runId)"
+            @contextmenu.prevent="openGroupActionSheet(item)"
+            @touchstart="onGroupTouchStart($event, item)"
+            @touchend="onGroupTouchEnd($event, item)"
+          >
+            <!-- 左侧 4px 状态色边 -->
+            <div
+              :class="['tl-group-card__border', `tl-group-border--${item.displayData.dominantStatus}`]"
+            ></div>
+
+            <div class="tl-group-card__main">
+              <!-- 标题行：tone icon + 触发器名 + N 个任务 + 进入箭头 -->
+              <div class="tl-group-card__head">
+                <div :class="['tl-bubble', 'tl-bubble--md', `tl-tone--${item.displayData.tone}`]">
+                  <ion-icon :icon="item.displayData.tone === 'ai_agent' ? hardwareChipOutline : cogOutline"></ion-icon>
+                </div>
+                <div class="tl-group-card__title-block">
+                  <h2 class="tl-group-card__title">
+                    {{ item.displayData.tone === 'ai_agent' ? t('tasks.triggeredBy_ai_agent') : t('tasks.triggeredBy_automation') }}
+                    <span class="tl-group-card__count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</span>
+                    <!-- 🆕 v6 置顶标记 -->
+                    <ion-icon
+                      v-if="isRunPinned(item.runId)"
+                      :icon="pin"
+                      class="tl-group-card__pin"
+                      :title="t('tasks.pinnedTitle')"
+                    ></ion-icon>
+                  </h2>
+                  <!-- 🆕 2026-06-22 逃逸诊断：group card 标题下方显示 runId（user 反馈"截图中连 runId 都没显示"） -->
+                  <!-- 关键：4 个 group card 显示 4 个不同 runId → 是 4 个独立 run（合理） -->
+                  <!--        4 个 group card 显示同一个 runId → 任务逃逸（bug） -->
+                  <!-- 伪 group（__manual__${id}）红字标，一眼能看出"逃逸 task 散落" -->
+                  <code
+                    class="tl-group-card__runid"
+                    :class="item.runId.startsWith('__manual__') ? 'tl-group-card__runid--fake' : ''"
+                    :title="item.runId.startsWith('__manual__') ? '⚠️ 逃逸 task（runId 丢失）' : 'runId: ' + item.runId"
+                    data-testid="group-card-runid"
+                  >{{ item.runId }}</code>
+                  <!-- plugin badges（前 3 个，超过省略） -->
+                  <div class="tl-group-card__plugins">
+                    <ion-badge
+                      v-for="p in item.displayData.pluginBadges"
+                      :key="p"
+                      color="primary"
+                      class="tl-group-card__plugin-badge"
+                    >{{ p }}</ion-badge>
+                  </div>
+                </div>
+                <div class="tl-group-card__actions">
+                  <!-- 进入箭头 -->
+                  <ion-icon
+                    :icon="chevronForward"
+                    class="tl-group-card__chevron"
+                    :title="t('tasks.groupCard.openDetail')"
+                  ></ion-icon>
+                </div>
               </div>
-              <ion-label>
-                <h2 class="group-title">
-                  {{ item.tone === 'ai_agent' ? t('tasks.triggeredBy_ai_agent') : t('tasks.triggeredBy_automation') }}
-                  <span class="group-count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</span>
-                </h2>
-                <p class="card-meta-row group-meta-row">
-                  <ion-badge v-if="item.summary.passed > 0" color="success" class="status-badge">
-                    <ion-icon :icon="checkmarkCircle" class="badge-icon"></ion-icon>
-                    {{ item.summary.passed }}
+
+              <!-- 自身状态行（智能行：passed/failed/running/pending 紧凑展示） -->
+              <div class="tl-group-card__body">
+                <div class="tl-meta-row tl-group-card__self">
+                  <ion-badge v-if="item.displayData.summary.passed > 0" color="success" class="tl-status-badge">
+                    <ion-icon :icon="checkmarkCircle" class="tl-badge-icon"></ion-icon>
+                    {{ item.displayData.summary.passed }}
                   </ion-badge>
-                  <ion-badge v-if="item.summary.failed > 0" color="danger" class="status-badge">
-                    <ion-icon :icon="closeCircle" class="badge-icon"></ion-icon>
-                    {{ item.summary.failed }}
+                  <ion-badge v-if="item.displayData.summary.failed > 0" color="danger" class="tl-status-badge">
+                    <ion-icon :icon="closeCircle" class="tl-badge-icon"></ion-icon>
+                    {{ item.displayData.summary.failed }}
                   </ion-badge>
-                  <ion-badge v-if="item.summary.running > 0" color="warning" class="status-badge">
-                    <ion-spinner name="dots" class="badge-spinner"></ion-spinner>
-                    {{ item.summary.running }}
+                  <ion-badge v-if="item.displayData.summary.running > 0" color="warning" class="tl-status-badge">
+                    <ion-spinner name="dots" class="tl-badge-spinner"></ion-spinner>
+                    {{ item.displayData.summary.running }}
                   </ion-badge>
-                  <ion-badge v-if="item.summary.pending > 0" color="medium" class="status-badge">
-                    {{ item.summary.pending }}
+                  <ion-badge v-if="item.displayData.summary.pending > 0" color="medium" class="tl-status-badge">
+                    {{ item.displayData.summary.pending }}
                   </ion-badge>
-                </p>
-                <div class="group-progress-track">
+                  <span v-if="item.displayData.duration" class="tl-group-card__duration">
+                    <ion-icon :icon="timer" class="tl-group-card__duration-icon"></ion-icon>
+                    {{ item.displayData.duration }}
+                  </span>
+                </div>
+                <div class="tl-progress tl-progress--md">
                   <div
-                    class="group-progress-fill"
-                    :style="{ width: item.summary.percent + '%' }"
+                    class="tl-progress__fill"
+                    :style="{ width: item.displayData.summary.percent + '%' }"
                   ></div>
                 </div>
-                <p class="task-time-info group-time-info">
-                  <span class="time-created">{{ formatDateTime(item.summary.latestCreatedAt) }}</span>
-                  <span class="group-percent-label">{{ item.summary.percent }}%</span>
+                <p class="tl-time-info">
+                  <span class="tl-time-info__created">{{ formatDateTime(new Date(item.startedAt).toISOString()) }}</span>
+                  <span class="tl-time-info__percent">{{ item.displayData.summary.percent }}%</span>
                 </p>
-              </ion-label>
-              <ion-button
-                slot="end"
-                fill="clear"
-                size="small"
-                @click.stop="toggleTaskGroup(item.groupKey!)"
-                :title="isTaskGroupExpanded(item.groupKey!) ? t('tasks.collapse') : t('tasks.expand')"
-                class="group-chevron-btn"
-              >
-                <ion-icon
-                  :icon="isTaskGroupExpanded(item.groupKey!) ? chevronBack : chevronForward"
-                  slot="icon-only"
-                ></ion-icon>
-              </ion-button>
-            </ion-item>
-          </ion-item-sliding>
+              </div>
 
-          <!-- 🆕 2026-06-10 修复 v2：2 级嵌套的 sub_section 段头 -->
-          <!-- 在 group card 展开后插入，按 section 维度（v5）桶里每个 section 1 个段头 -->
-          <!-- 段头下方是该 section 的所有 task 卡片（紧随其后的 kind='task' 项） -->
-          <!-- 🆕 2026-06-11 v5：sub_section 可独立折叠 + sticky 滚动冻结 -->
-          <!--
-            🆕 2026-06-10 修复 v3：改用 <ion-item> 而不是裸 <div>
-            历史：<div> 在 <ion-list> 里 → Ionic 把 <div> 当普通子节点，但 <ion-list> 有自己的
-              列表 CSS（display 规则、滚动容器、虚拟化），<div> 子节点不参与，导致：
-              - 段头高度计算异常（被压成 0 或被列表 padding 吃掉）
-              - 任务卡和段头之间没分隔线
-              - "插件没正确识别，任务依旧全部平铺"
-            修复：用 <ion-item> + 自定义 class，禁用 button/clickable，让 Ionic 当作「装饰 item」
-            🆕 2026-06-11 v5：恢复 button + clickable（要可折叠），用 sticky CSS 解决冻结
-          -->
-          <ion-item
-            v-else-if="item.kind === 'sub_section_header'"
-            button
-            :detail="false"
-            @click="toggleSubSection(item.subKey)"
-            :class="['sub-section-header', `sub-dim-${item.meta.dimension}`, `sub-tone-${item.meta.tone}`, { 'is-sticky': true, 'is-collapsed': item.isCollapsed }]"
-            :lines="'none'"
-          >
-            <div class="sub-section-icon-bubble" :class="`sub-tone-${item.meta.tone}`" slot="start">
-              <ion-icon :icon="getSubSectionIcon(item.meta.icon)"></ion-icon>
-            </div>
-            <ion-label class="sub-section-label">
-              <h3 class="sub-section-name">{{ item.meta.label }}</h3>
-              <p class="sub-section-count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</p>
-            </ion-label>
-            <div class="sub-section-badges" slot="end">
-              <ion-badge v-if="item.subSummary.passed > 0" color="success" class="status-badge">
-                <ion-icon :icon="checkmarkCircle" class="badge-icon"></ion-icon>
-                {{ item.subSummary.passed }}
-              </ion-badge>
-              <ion-badge v-if="item.subSummary.failed > 0" color="danger" class="status-badge">
-                <ion-icon :icon="closeCircle" class="badge-icon"></ion-icon>
-                {{ item.subSummary.failed }}
-              </ion-badge>
-              <ion-badge v-if="item.subSummary.running > 0" color="warning" class="status-badge">
-                <ion-spinner name="dots" class="badge-spinner"></ion-spinner>
-                {{ item.subSummary.running }}
-              </ion-badge>
-              <ion-badge v-if="item.subSummary.pending > 0" color="medium" class="status-badge">
-                {{ item.subSummary.pending }}
-              </ion-badge>
-            </div>
-            <ion-button
-              slot="end"
-              fill="clear"
-              size="small"
-              :title="item.isCollapsed ? t('tasks.expand') : t('tasks.collapse')"
-              class="sub-section-chevron-btn"
-              @click.stop="toggleSubSection(item.subKey)"
-            >
-              <ion-icon
-                :icon="item.isCollapsed ? chevronForward : chevronDown"
-                slot="icon-only"
-              ></ion-icon>
-            </ion-button>
-            <div class="sub-section-progress-track">
+              <!-- 智能命中行：仅在筛选/搜索激活时显示 -->
               <div
-                class="sub-section-progress-fill"
-                :style="{ width: item.subSummary.percent + '%' }"
-              ></div>
+                v-if="isGroupFilterActive"
+                class="tl-group-card__hit"
+              >
+                <ion-icon :icon="funnel" class="tl-group-card__hit-icon"></ion-icon>
+                <span class="tl-group-card__hit-text">{{ getGroupHitSummary(item) }}</span>
+              </div>
             </div>
-          </ion-item>
+          </div>
 
-          <ion-item-sliding v-else>
+          <!-- ============== Single task card（平铺模式 / 不成组的 task） ============== -->
+          <ion-item-sliding v-else-if="item.kind === 'task'" :key="item.key">
             <ion-item
+              :class="['tl-item-card']"
               @click="openTaskDetail(item.task)"
               button
               detail
-              v-show="!item.subKey || !isSubSectionCollapsed(item.subKey)"
             >
               <ion-icon
                 :icon="getTaskIcon(item.task)"
@@ -301,28 +423,32 @@
               ></ion-icon>
               <ion-label>
                 <h2>{{ getTaskName(item.task) }}</h2>
-                <p class="card-meta-row">
+                <p class="tl-meta-row">
                   <span class="task-id">#{{ item.task.id.slice(0, 6) }}</span>
-                  <ion-badge :color="getStatusColor(item.task.status)" class="status-badge">
+                  <ion-badge :color="getStatusColor(item.task.status)" class="tl-status-badge">
                     {{ getStatusLabel(item.task.status) }}
                   </ion-badge>
                   <span class="task-type">{{ item.task.type === 'encrypt' ? t('tasks.encrypt') : t('tasks.decrypt') }}</span>
                   <ion-badge v-if="item.task.pluginName" color="primary" class="plugin-badge">
                     {{ item.task.pluginName }}
                   </ion-badge>
+                  <span v-if="getCryptoSummary(item.task)" class="crypto-summary">
+                    <ion-icon :icon="lockClosedOutline" class="crypto-summary-icon"></ion-icon>
+                    {{ getCryptoSummary(item.task) }}
+                  </span>
                   <ion-badge
-                    v-if="getTriggeredBy(item.task.id) !== 'user'"
-                    :color="getTriggeredByColor(item.task.id)"
+                    v-if="item.task.triggeredBy && item.task.triggeredBy !== 'user'"
+                    :color="getTriggeredByColor(item.task)"
                     class="triggered-by-badge"
-                    :title="t('tasks.triggeredBy') + ': ' + t('tasks.triggeredBy_' + getTriggeredBy(item.task.id))"
+                    :title="t('tasks.triggeredBy') + ': ' + t('tasks.triggeredBy_' + item.task.triggeredBy)"
                   >
-                    <ion-icon :icon="getTriggeredByIcon(item.task.id)" class="triggered-by-icon"></ion-icon>
-                    {{ t('tasks.triggeredBy_' + getTriggeredBy(item.task.id)) }}
+                    <ion-icon :icon="getTriggeredByIcon(item.task)" class="triggered-by-icon"></ion-icon>
+                    {{ t('tasks.triggeredBy_' + item.task.triggeredBy) }}
                   </ion-badge>
                 </p>
-                <p class="task-time-info">
-                  <span class="time-created">{{ formatDateTime(item.task.createdAt) }}</span>
-                  <span v-if="getTaskDuration(item.task)" class="time-duration">{{ getTaskDuration(item.task) }}</span>
+                <p class="tl-time-info">
+                  <span class="tl-time-info__created">{{ formatDateTime(item.task.createdAt) }}</span>
+                  <span v-if="getTaskDuration(item.task)" class="tl-time-info__duration">{{ getTaskDuration(item.task) }}</span>
                 </p>
                 <div v-if="item.task.status === 'running' || item.task.status === 'cancelling'" class="progress-section">
                   <ion-progress-bar
@@ -397,7 +523,24 @@
             </ion-item-options>
           </ion-item-sliding>
         </template>
-      </ion-list>
+      </TaskVirtualList>
+
+      <!-- 🆕 2026-06-23 Task 7：ion-infinite-scroll 触发 loadMore
+        - 滚动到底部时触发 loadMore 加载下一页
+        - hasMore=false 时禁用（没有更多数据）
+        - isLoadingMore 时显示 loading spinner
+        - ionInfinite 事件回调 complete() 让 infinite-scroll 重置 -->
+      <ion-infinite-scroll
+        v-if="hasMore"
+        @ionInfinite="onInfinite"
+        threshold="100px"
+      >
+        <ion-infinite-scroll-content
+          :loading-spinner="isLoadingMore ? 'circular' : undefined"
+          :loading-text="isLoadingMore ? t('common.loading') : ''"
+        >
+        </ion-infinite-scroll-content>
+      </ion-infinite-scroll>
 
       <ion-fab vertical="bottom" horizontal="end" slot="fixed">
         <ion-fab-button @click="openNewTask()">
@@ -410,88 +553,166 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onIonViewWillEnter } from '@ionic/vue'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonRefresher, IonRefresherContent, IonList, IonItem,
+  IonRefresher, IonRefresherContent, IonItem,
   IonItemSliding, IonItemOptions, IonItemOption, IonIcon,
   IonLabel, IonBadge, IonProgressBar, IonFab, IonFabButton,
   IonSpinner, IonButton, IonButtons, IonSearchbar, IonChip,
-  IonPopover, IonCheckbox, alertController, modalController,
+  IonPopover, IonCheckbox, alertController, actionSheetController, modalController,
+  IonInfiniteScroll, IonInfiniteScrollContent,
 } from '@ionic/vue'
-import {
-  add, closeCircle, checkmarkCircle, timer, sync,
-  warningOutline, lockClosed, search, funnel, trashBin,
+import { add, closeCircle, checkmarkCircle, timer, sync,
+  warningOutline, lockClosed, lockClosedOutline, search, funnel, trashBin,
   extensionPuzzle, swapVertical, chevronDown,
-  hardwareChipOutline, cogOutline, person, chevronForward, chevronBack,
-  folderOutline, ellipsisHorizontalCircleOutline, archiveOutline,
+  hardwareChipOutline, cogOutline, person, chevronForward,
+  albumsOutline, listOutline, calendarOutline,
+  pin,
 } from 'ionicons/icons'
 import { useRoute, useRouter } from 'vue-router'
-import type { EncvTask, TaskType } from '@/api/encv'
+import type { EncvTask } from '@/api/encv'
 import { clearCompletedTasks } from '@/api/encv'
 import { useI18n } from '@/composables/useI18n'
 import { formatDateTime } from '@/composables/useDateFormat'
 import { showToast } from '@/composables/useToast'
 import { useNewTaskModal } from '@/composables/useNewTaskModal'
 import { useTasksList } from '@/composables/useTasksList'
-import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
-import { getTriggeredBy, getRunIdForTask } from '@/composables/useTaskTrigger'
 import { formatContainerVersion } from '@/constants/containerVersion'
+// 🆕 Task 15：虚拟滚动组件
+import TaskVirtualList from '@/components/tasks/TaskVirtualList.vue'
+// 🆕 2026-06-22 任务诊断面板（真机可见版）：?debug=tasks 启用，显示逃逸诊断 / 视图状态 / runId 聚合
+import TaskDebugPanel from '@/components/tasks/TaskDebugPanel.vue'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const { openNewTask } = useNewTaskModal()
 
+// 🆕 2026-06-22 任务诊断面板：dev 环境默认显示 + 默认展开
+//   - dev 模式（vite/沙箱）：直接显示（user 一打开 Tasks 页面就能看到逃逸诊断）
+//   - production：需要 ?debug=tasks query 才显示（避免遮挡正常 task 列表）
+// user 反馈"加到哪去了"——dev 模式直接默认显示
+const debugEnabled = computed(() => {
+  if (import.meta.env.DEV) return true
+  return route.query.debug === 'tasks'
+})
+
+// 🆕 Task 15：虚拟滚动所需的 ion-content 滚动容器引用
+// ion-content 内部用 shadow DOM 渲染 .inner-scroll，需要通过 shadowRoot.querySelector 获取
+// 参考 DevLogs.vue 的 ensureScrollEl() 模式
+const contentRef = ref<any>(null)
+const scrollEl = ref<HTMLElement | null>(null)
+const virtualListRef = ref<{ forceMeasure: () => void } | null>(null)
+
+/**
+ * 🆕 Task 15：从 ion-content shadow DOM 获取 .inner-scroll 滚动容器
+ *
+ * ion-content 是 Ionic 的 shadow DOM 组件，实际滚动发生在内部 .inner-scroll 元素上，
+ * 不是 ion-content host 本身。@tanstack/vue-virtual 需要拿到这个真实滚动元素才能
+ * 监听 scroll 事件 + 测量视口高度。
+ *
+ * 时序问题：onMounted 时 ion-content 可能还没完成 shadow DOM 渲染 → scrollEl=null
+ * 修法：多次重试（rAF + setTimeout 指数退避）+ ResizeObserver 兜底监听 host 尺寸变化
+ */
+function ensureScrollEl(): HTMLElement | null {
+  if (!contentRef.value) return null
+  const hostEl = (contentRef.value.$el || contentRef.value) as HTMLElement | undefined
+  if (!hostEl || !hostEl.shadowRoot) return null
+  const el = hostEl.shadowRoot.querySelector('.inner-scroll') as HTMLElement | null
+  if (el && el !== scrollEl.value) scrollEl.value = el
+  return scrollEl.value
+}
+
+let scrollElRetryTimer: ReturnType<typeof setTimeout> | null = null
+let scrollElRO: ResizeObserver | null = null
+
+function initScrollElWithRetry(): void {
+  let retryCount = 0
+  const maxRetries = 8
+  const tryInit = (): void => {
+    const el = ensureScrollEl()
+    if (el) {
+      // 拿到 .inner-scroll 后，强制 virtualizer 重算（首次 watch 已触发 measure()，
+      // 这里再 measure 一次确保虚拟列表渲染首屏 items）
+      virtualListRef.value?.forceMeasure?.()
+      return
+    }
+    retryCount++
+    if (retryCount < maxRetries) {
+      // 指数退避：50ms → 100ms → 150ms → 200ms → 250ms → 300ms
+      const delay = Math.min(50 * retryCount, 300)
+      scrollElRetryTimer = setTimeout(tryInit, delay)
+    }
+  }
+  tryInit()
+
+  // 兜底：ResizeObserver 监听 contentRef 尺寸变化（ion-content 完成渲染时会触发）
+  if (typeof ResizeObserver !== 'undefined' && contentRef.value) {
+    const hostEl = (contentRef.value.$el || contentRef.value) as HTMLElement | undefined
+    if (hostEl) {
+      scrollElRO = new ResizeObserver(() => {
+        if (!scrollEl.value) tryInit()
+      })
+      scrollElRO.observe(hostEl)
+    }
+  }
+}
+
 const {
-  tasks, loading, expandedWarningDetail, sortBy,
+  tasks, isInitialLoad, expandedWarningDetail, sortBy,
   showSearch, searchQuery, showFilters,
-  filterPlugins, filterTypes, filterStatuses, statusOptions,
-  pluginPopoverOpen, typePopoverOpen, statusPopoverOpen,
+  filterPlugins, filterTypes, filterStatuses, filterTriggeredBy, statusOptions,
+  pluginPopoverOpen, typePopoverOpen, statusPopoverOpen, datePopoverOpen, datePopoverEvent,
   pluginPopoverEvent, typePopoverEvent, statusPopoverEvent,
   availablePlugins, hasActiveFilters, hasCompletedTasks, filteredTasks,
-  fetchTasks, refresh,
-  openPluginPopover, openTypePopover, openStatusPopover,
+  fetchTasks, refresh, loadMore, hasMore, isLoadingMore,
+  openPluginPopover, openTypePopover, openStatusPopover, openDatePopover,
   togglePluginFilter, toggleTypeFilter, toggleStatusFilter, clearFilters,
   onSearchInput, toggleSort,
-  applyTaskUpdate, applyTaskProgress, applyTaskCreated, applyTaskCompleted,
   cancelTaskById, retryTaskById, removeTaskById, clearCompletedWithConfirm,
   getTaskName, getTaskDuration,
   getPluginChipLabel, getTypeChipLabel, getStatusChipLabel, getStatusLabel,
   isPasswordError, toggleWarningDetail, formatWarningDetail,
   getTaskIcon, getTaskColor, getStatusColor, getPhaseLabel,
+  // 🆕 v4 M3
+  viewMode, filterDatePreset, filterDateRange,
+  displayedItems,
+  // 🆕 2026-06-22 任务诊断面板需要的派生 + 状态
+  groupedTasksByRunId, pinnedRunIds,
+  applyDatePreset, setCustomDateRange, toggleViewMode,
+  // 🆕 v4 M5：单例 workflowService 数据源（groupedItems 已通过 serviceRuns 派生，这里只消费）
+  workflowService,
+  // 🆕 v6-bug3fix 2026-06-18：hydrate + cancelRun（group card 取消用）
+  hydrate, cancelRun,
+  // 🆕 v6 2026-06-18：左滑删除 + 置顶（group card 操作）
+  removeRunTasks, togglePinRun, isRunPinned,
 } = useTasksList()
 
-useTaskEventBridge({
-  onUpdate: applyTaskUpdate,
-  onProgress: applyTaskProgress,
-  onCreate: applyTaskCreated,
-  onComplete: applyTaskCompleted,
-  onRefresh: fetchTasks,
-})
-
-// 任务触发者标签 helpers — Tasks.vue 直接用 useTaskTrigger（因为这是 task 显示的主视图）
-function getTriggeredByColor(taskId: string): string {
-  const v = getTriggeredBy(taskId)
+// 任务触发者标签 helpers — 🆕 v6 2026-06-18：从 task 对象读（单一数据源）
+function getTriggeredByColor(task: EncvTask): string {
+  const v = task.triggeredBy ?? 'user'
   return v === 'automation' ? 'primary' : v === 'ai_agent' ? 'secondary' : 'medium'
 }
-function getTriggeredByIcon(taskId: string): string {
-  const v = getTriggeredBy(taskId)
+function getTriggeredByIcon(task: EncvTask): string {
+  const v = task.triggeredBy ?? 'user'
   return v === 'automation' ? cogOutline : v === 'ai_agent' ? hardwareChipOutline : person
 }
 
-// 🆕 2026-06-11 v5：sub_section icon name → ionicon 映射
-// 升级指南：未来加 dimension 在 SECTION_META 加 icon name 字符串，
-//   然后在这个 map 加一条就行，不用动模板
-const SUB_SECTION_ICON_MAP: Record<string, string> = {
-  'extension-puzzle': extensionPuzzle,
-  'swap-vertical': swapVertical,
-  'folder': folderOutline,
-  'ellipsis-horizontal-circle': ellipsisHorizontalCircleOutline,
-}
-function getSubSectionIcon(name: string): string {
-  return SUB_SECTION_ICON_MAP[name] ?? ellipsisHorizontalCircleOutline
+// 🆕 2026-06-18 Task 18：任务卡片副标题 crypto params 摘要
+// 返回 "AES-256 · zstd" / "AES-128" / "zstd" / ""（旧任务无 crypto 字段时返回空串）
+function getCryptoSummary(task: EncvTask): string {
+  const parts: string[] = []
+  if (task.cipherMode !== undefined && task.cipherMode !== null) {
+    parts.push(task.cipherMode === 1 ? t('tasks.cipherMode256') : t('tasks.cipherMode128'))
+  }
+  if (task.compressionMode === 'zstd') {
+    parts.push('Zstd')
+  } else if (task.compressionMode === 'none') {
+    parts.push(t('tasks.compressionNone'))
+  }
+  return parts.join(' · ')
 }
 
 async function openTaskDetail(task: EncvTask) {
@@ -512,6 +733,14 @@ async function openTaskDetail(task: EncvTask) {
 
 async function handleRefresh(event: CustomEvent) {
   await refresh()
+  ;(event.target as any)?.complete?.()
+}
+
+// 🆕 2026-06-23 Task 7.2：ion-infinite-scroll 触发 loadMore
+//   - 滚动到底部时触发，加载下一页 task
+//   - complete() 让 infinite-scroll 重置（可以再次触发）
+async function onInfinite(event: CustomEvent) {
+  await loadMore()
   ;(event.target as any)?.complete?.()
 }
 
@@ -541,398 +770,367 @@ async function handleClearCompleted() {
   await alert.present()
 }
 
-// 🆕 2026-06-10 修复：自动化测试 / AI agent 任务组折叠
-// 历史：useAutomationTests.runTests() 串行 for 循环逐个调 createTask()，
-//   一次跑 N 个用例 → 后端 task 列表被 N 张 task 卡片污染
-//   （用户截图"浪费屏幕空间"）。
-// 修复思路：纯前端 UI 折叠，**不动后端 API**（后端根本没有 GroupID 概念）。
-//   - 扫描 filteredTasks，连续 ≥2 个 triggeredBy != 'user' 的 task → 折叠成 1 张 group card
-//   - 用户点 chevron 展开/折叠详情（展开时插入 N 张原始 task card）
-//   - 单个非用户 task 不折叠（避免 UI 抖动）
-//   - 用户手动搜/筛不受影响（filteredTasks 是折叠前数据）
-const GROUP_FOLD_THRESHOLD = 2
+// 🆕 v4 M3：日期筛选 popover 的 preset 列表 + 自定义日期输入框 v-model
+// 预设：今天 / 7天 / 30天 / 全部 / 自定义（4+1 选项）
+const datePresets: { key: 'today' | '7d' | '30d' | 'all' | 'custom'; label: string }[] = [
+  { key: 'today', label: t('tasks.datePresetToday') },
+  { key: '7d', label: t('tasks.datePreset7d') },
+  { key: '30d', label: t('tasks.datePreset30d') },
+  { key: 'all', label: t('tasks.datePresetAll') },
+  { key: 'custom', label: t('tasks.datePresetCustom') },
+]
 
-// 🆕 2026-06-10 修复 v2：2 级嵌套（Run group card → plugin sub-section → N 张 task 卡片）
-// 历史：group 内部只展示扁平 task 列表 → 用户：「单个插件任务下面聚合子任务的显示」
-// 修复：group 展开时按 pluginName 再分桶，每个 plugin 渲染一个 plugin_section 段头
-//       段头下方是该 plugin 的所有 task 卡片
-//
-// 🆕 2026-06-10 修复 v3：plugin_section 携带 runId
-// 历史：plugin_section key = `plugin-section-${tone}-${pluginName}-${tasks[0]?.id}`
-//   → 第一个 task 变化（如新增 / 排序调整）就触发整段 Vue 重建 → 闪烁/消失
-// 修复：key 改用 `plugin-section-${runId}-${pluginName}`（runId+pluginName 都稳定）
-// 🆕 2026-06-11 修复 v5：section 维度抽象（架构向上兼容）
-// 历史：buildPluginSectionItem 硬编码 pluginName → 未来加「下载 / 同步 / 清理」等
-//   非 plugin 任务时，task.pluginName 为空 → 全部归到 '(unknown plugin)' → 烂成一锅
-// 修复：引入 SubSectionKey 抽象维度（dimension + value），按 task 属性动态派生
-//   - 当前支持 4 种 dimension：plugin / type / category / none
-//   - 未来加新维度：只需要在 SECTION_META 加一行 + deriveSubSection 加一个 case
-//   - task 没 pluginName → fallback 到 'none'（不会丢失，归到「其他任务」section）
-type SectionDimension = 'plugin' | 'type' | 'category' | 'none'
-
-interface SubSectionKey {
-  dimension: SectionDimension
-  value: string  // 'AES-256' / 'encrypt' / 'download' / '__none__'
-}
-
-interface SubSectionMeta {
-  dimension: SectionDimension
-  value: string
-  /** 显示名（默认就是 value，特殊 case 可覆盖） */
-  label: string
-  /** ionicon 名称（用于 sub_section_header 左侧 icon bubble） */
-  icon: string
-  /** CSS tone class（决定颜色/背景） */
-  tone: SectionDimension
-}
-
-const SECTION_META: Record<SectionDimension, { icon: string; toneClass: string }> = {
-  plugin: { icon: 'extension-puzzle', toneClass: 'plugin' },
-  type: { icon: 'swap-vertical', toneClass: 'type' },
-  category: { icon: 'folder', toneClass: 'category' },
-  none: { icon: 'ellipsis-horizontal-circle', toneClass: 'none' },
-}
-
-function sectionKeyToString(k: SubSectionKey): string {
-  return `${k.dimension}:${k.value}`
-}
-
-/**
- * 🆕 2026-06-11 v5：从 task 派生 SubSection（架构核心）
- * 当前规则（按优先级）：
- *   1. task.pluginName 存在 → 'plugin' 维度（按插件分桶）
- *   2. 未来扩展：task.category / task.subType 等可在中间插入 case
- *   3. 都没 → 'none' 维度（统一归到「其他任务」section，不会丢失）
- *
- * 升级指南：未来加新维度时
- *   - SECTION_META 加一条（icon + toneClass）
- *   - deriveSubSection 加一个 if 分支
- *   - i18n 加 'tasks.dimensionXxx' 文案
- *   不需要改 displayedItems / 模板 / CSS
- */
-function deriveSubSection(task: EncvTask): SubSectionKey {
-  if (task.pluginName) {
-    return { dimension: 'plugin', value: task.pluginName }
-  }
-  // 未来扩展预留：
-  // if (task.category) return { dimension: 'category', value: task.category }
-  // if (task.subType) return { dimension: 'type', value: task.subType }
-  return { dimension: 'none', value: '__none__' }
-}
-
-function buildSubSectionMeta(key: SubSectionKey): SubSectionMeta {
-  const meta = SECTION_META[key.dimension]
-  // label 默认用 value 本身，特殊 case 可覆盖
-  let label = key.value
-  if (key.dimension === 'none' && key.value === '__none__') {
-    label = '其他任务'  // fallback section 标签（i18n key 在模板里覆盖）
-  }
-  if (key.dimension === 'type') {
-    label = key.value === 'encrypt' ? '加密任务' : key.value === 'decrypt' ? '解密任务' : key.value
-  }
-  return {
-    dimension: key.dimension,
-    value: key.value,
-    label,
-    icon: meta.icon,
-    tone: key.dimension,
-  }
-}
-
-type DisplayItem =
-  | {
-      kind: 'group'
-      key: string
-      groupKey: string
-      runId: string
-      tone: 'automation' | 'ai_agent'
-      tasks: EncvTask[]
-      /** 内部 section 桶（用于 sub_section 展开时按桶渲染） */
-      sections: Array<{ sectionKeyStr: string; meta: SubSectionMeta; tasks: EncvTask[] }>
-      summary: { passed: number; failed: number; running: number; pending: number; percent: number; latestCreatedAt: string }
-    }
-  | {
-      kind: 'sub_section_header'
-      key: string
-      subKey: string
-      runId: string
-      meta: SubSectionMeta
-      tasks: EncvTask[]
-      isCollapsed: boolean
-      subSummary: { passed: number; failed: number; running: number; pending: number; percent: number }
-    }
-  | {
-      kind: 'task'
-      key: string
-      task: EncvTask
-      /** 所属 sub_section key（决定 v-show 是否隐藏） */
-      subKey: string | null
-      /** 所属 group key（决定 v-show 是否隐藏 — group 折叠时整段隐藏） */
-      groupKey: string | null
-    }
-
-// 🆕 2026-06-10 修复 v2：expandedGroupKeys 持久化到 localStorage
-// 历史：ref<Set<string>> 是组件级 state，组件 unmount/remount（如 tab 切换、抽屉开关）会丢
-//   → 用户展开 group 后一切 tab 回来，发现 group 又折叠了 → 「展开后一会就消失了」
-// 修复：localStorage 持久化 + 启动时恢复 + watch 同步
-const EXPANDED_GROUPS_KEY = 'encv_tasks_expanded_groups_v1'
-function loadExpandedGroups(): Set<string> {
-  try {
-    const raw = localStorage.getItem(EXPANDED_GROUPS_KEY)
-    if (!raw) return new Set()
-    const arr = JSON.parse(raw) as string[]
-    return new Set(Array.isArray(arr) ? arr : [])
-  } catch {
-    return new Set()
-  }
-}
-const expandedGroupKeys = ref<Set<string>>(loadExpandedGroups())
-// 同步到 localStorage（用 deep watch 让 Set 内部 add/delete 也能触发）
+/** 自定义日期输入框的值（YYYY-MM-DD） — 与 filterDateRange.from/to 双向同步 */
+const customFromInput = ref<string>('')
+const customToInput = ref<string>('')
 watch(
-  expandedGroupKeys,
-  (v) => {
-    try {
-      localStorage.setItem(EXPANDED_GROUPS_KEY, JSON.stringify(Array.from(v)))
-    } catch {
-      // quota exceed 等 → silent
-    }
+  [() => filterDateRange.value.from, () => filterDateRange.value.to],
+  ([from, to]) => {
+    customFromInput.value = from ? from.slice(0, 10) : ''
+    customToInput.value = to ? to.slice(0, 10) : ''
   },
-  { deep: true },
+  { immediate: true },
 )
 
-function toggleTaskGroup(key: string) {
-  const next = new Set(expandedGroupKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  expandedGroupKeys.value = next
+function onDatePresetClick(key: 'today' | '7d' | '30d' | 'all' | 'custom') {
+  applyDatePreset(key)
+}
+function onCustomFromChange(event: Event) {
+  const v = (event.target as HTMLInputElement).value
+  setCustomDateRange(v || undefined, customToInput.value || undefined)
+}
+function onCustomToChange(event: Event) {
+  const v = (event.target as HTMLInputElement).value
+  setCustomDateRange(customFromInput.value || undefined, v || undefined)
 }
 
-function isTaskGroupExpanded(key: string): boolean {
-  return expandedGroupKeys.value.has(key)
-}
-
-// 🆕 2026-06-11 v5：sub_section 折叠状态（每个 section header 可独立折叠）
-// 持久化 key v2（v1 用 plugin-section 前缀，已废弃）
-const COLLAPSED_SUBSECTIONS_KEY = 'encv_tasks_collapsed_subsections_v1'
-function loadCollapsedSubSections(): Set<string> {
-  try {
-    const raw = localStorage.getItem(COLLAPSED_SUBSECTIONS_KEY)
-    if (!raw) return new Set()
-    const arr = JSON.parse(raw) as string[]
-    return new Set(Array.isArray(arr) ? arr : [])
-  } catch {
-    return new Set()
-  }
-}
-const collapsedSubSectionKeys = ref<Set<string>>(loadCollapsedSubSections())
-watch(
-  collapsedSubSectionKeys,
-  (v) => {
-    try {
-      localStorage.setItem(COLLAPSED_SUBSECTIONS_KEY, JSON.stringify(Array.from(v)))
-    } catch {
-      // silent
-    }
-  },
-  { deep: true },
-)
-function toggleSubSection(key: string) {
-  const next = new Set(collapsedSubSectionKeys.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  collapsedSubSectionKeys.value = next
-}
-function isSubSectionCollapsed(key: string): boolean {
-  return collapsedSubSectionKeys.value.has(key)
-}
-
-const displayedItems = computed<DisplayItem[]>(() => {
-  const tasks = filteredTasks.value
-  if (tasks.length === 0) return []
-
-  // 🆕 2026-06-11 v5：按 SubSection 维度分桶（不再硬编码 pluginName）
-  // 历史：之前 plugins: Map<pluginName, tasks[]> 假设 task.pluginName 必存在
-  // 修复：sections: Map<sectionKeyStr, { meta, tasks }> 通用化，未来加 category 维度
-  //   只需要在 deriveSubSection 加一个 case
-  interface Group {
-    runId: string
-    tone: 'automation' | 'ai_agent'
-    sections: Array<{ sectionKeyStr: string; meta: SubSectionMeta; tasks: EncvTask[] }>
-  }
-  const groupsByRun = new Map<string, Group>()
-  const singletonTasks: EncvTask[] = []
-
-  for (const t of tasks) {
-    // 🆕 2026-06-10 修复 v4：直接读 task 对象上的 triggeredBy / runId
-    const by = t.triggeredBy ?? getTriggeredBy(t.id)
-    if (by === 'user') {
-      singletonTasks.push(t)
-      continue
-    }
-    const runId = t.runId ?? getRunIdForTask(t.id)
-    if (!runId) {
-      singletonTasks.push(t)
-      continue
-    }
-    const tone: 'automation' | 'ai_agent' = by === 'ai_agent' ? 'ai_agent' : 'automation'
-    // 🆕 v5：用 deriveSubSection 动态派生（兼容 task 没 pluginName 的情况）
-    const section = deriveSubSection(t)
-    const sectionKeyStr = sectionKeyToString(section)
-    const meta = buildSubSectionMeta(section)
-    const g = groupsByRun.get(runId)
-    if (g) {
-      const sec = g.sections.find((s) => s.sectionKeyStr === sectionKeyStr)
-      if (sec) sec.tasks.push(t)
-      else g.sections.push({ sectionKeyStr, meta, tasks: [t] })
-    } else {
-      groupsByRun.set(runId, {
-        runId,
-        tone,
-        sections: [{ sectionKeyStr, meta, tasks: [t] }],
-      })
-    }
-  }
-
-  // 把 singletonTasks 按 filteredTasks 顺序插入；group 按最早 createdAt 排序
-  const allGroups: Group[] = Array.from(groupsByRun.values())
-  allGroups.sort((a, b) => {
-    const aEarliest = Math.min(
-      ...a.sections.flatMap((s) => s.tasks.map((t) => new Date(t.createdAt).getTime())),
-    )
-    const bEarliest = Math.min(
-      ...b.sections.flatMap((s) => s.tasks.map((t) => new Date(t.createdAt).getTime())),
-    )
-    return bEarliest - aEarliest
-  })
-
-  // 输出：singleton tasks + group cards
-  const result: DisplayItem[] = []
-  for (const t of singletonTasks) {
-    result.push({ kind: 'task', key: t.id, task: t, subKey: null, groupKey: null })
-  }
-  for (const g of allGroups) {
-    // 拉平 group 内所有 task 用于 group summary
-    const allGroupTasks: EncvTask[] = g.sections.flatMap((s) => s.tasks)
-    if (allGroupTasks.length >= GROUP_FOLD_THRESHOLD) {
-      const groupKey = `${g.tone}-${g.runId}`
-      const groupExpanded = expandedGroupKeys.value.has(groupKey)
-      // 始终构造 group card
-      result.push(buildGroupItem(groupKey, g.runId, allGroupTasks, g.tone, g.sections))
-      if (groupExpanded) {
-        // 🆕 v5：group 展开时按 section 维度插 sub_section_header（可折叠 + sticky）
-        for (const sec of g.sections) {
-          const subKey = `sub-${groupKey}-${sec.sectionKeyStr}`
-          const isCollapsed = collapsedSubSectionKeys.value.has(subKey)
-          result.push(buildSubSectionHeader(subKey, g.runId, sec.meta, sec.tasks, isCollapsed))
-          // sub_section 内的 task 跟随折叠
-          for (const t of sec.tasks) {
-            result.push({ kind: 'task', key: t.id, task: t, subKey, groupKey })
-          }
-        }
-      }
-    } else {
-      // 不足阈值 → 全部展开为 task（保留顺序 + sub_section header 让用户看到分组）
-      for (const sec of g.sections) {
-        const subKey = `sub-${g.tone}-${g.runId}-${sec.sectionKeyStr}`
-        result.push(buildSubSectionHeader(subKey, g.runId, sec.meta, sec.tasks, false))
-        for (const t of sec.tasks) {
-          result.push({ kind: 'task', key: t.id, task: t, subKey, groupKey: null })
-        }
-      }
-    }
-  }
-  return result
+// 🆕 2026-06-18 v5-bug3fix：L1 group card 智能状态行 + 命中行
+//   - 整张 card clickable → push 到 L2 GroupDetail（移除展开态）
+//   - 自身状态（passed/failed/running/pending）始终显示
+//   - 命中行（hit N/M + 当前激活的筛选提示）仅在 isGroupFilterActive=true 时显示
+//   - 二者智能共存，不拥挤不冲突
+const isGroupFilterActive = computed(() => {
+  return (
+    hasActiveFilters.value ||
+    searchQuery.value.trim().length > 0
+  )
 })
 
-/**
- * 构造 group card item（外层折叠段，≥2 个 task 折叠为 1 张卡片）
+/** L1 group card 状态色调（mood class）：
+ *  - 100% passed → 淡绿 tint（视觉奖励）
+ *  - 失败率 > 50% → 红色警告（视觉警示）
+ *  - 其他 → 默认
  */
-function buildGroupItem(
-  groupKey: string,
-  runId: string,  // 🆕 用于上层 buildPluginSectionItem
-  seg: EncvTask[],
-  tone: 'automation' | 'ai_agent',
-  sections: Array<{ sectionKeyStr: string; meta: SubSectionMeta; tasks: EncvTask[] }>,
-): DisplayItem {
-  let passed = 0, failed = 0, running = 0, pending = 0
-  let latest = seg[0]
-  for (const t of seg) {
-    if (t.status === 'completed') passed++
-    else if (t.status === 'failed') failed++
-    else if (t.status === 'running' || t.status === 'cancelling') running++
-    else pending++
-    if (new Date(t.createdAt).getTime() > new Date(latest.createdAt).getTime()) {
-      latest = t
+// 🆕 v6 2026-06-22 性能优化：groupCardMoodClass / summarizeGroup / getGroupSummary /
+//   getGroupTone / getGroupDominantStatus / getGroupDuration / getGroupPluginBadges
+//   已移除，改为在 useTasksList.ts 的 groupedItems computed 里预计算 displayData
+//   模板直接读 item.displayData.xxx（一次性计算，避免 13 次重复遍历）
+
+/** L1 group card 智能命中行文本
+ *  - 4 维度 (plugin/type/status/date) 折叠为单行
+ *  - 命中 0 → 显示 "无匹配"（red）
+ *  - 命中 = total → 显示 "全部 N"（green）
+ *  - 否则 "命中 N/M" + 搜索词（truncated 12 chars）+ 日期 preset
+ */
+function getGroupHitSummary(item: { tasks: EncvTask[] }): string {
+  const total = item.tasks.length
+  const hit = computeGroupHit(item.tasks)
+  const q = searchQuery.value.trim()
+  const dateLabel = dateRangeChipLabel()
+  const hasDate = filterDatePreset.value !== 'all'
+  const hasSearch = q.length > 0
+
+  if (hit === 0) return t('tasks.groupCard.hitZero')
+  if (hit === total) {
+    if (hasSearch || hasDate) {
+      // 全部命中但有搜索/日期过滤 → 显示"全部 + 过滤条件"
+      return formatHitSummaryWithExtras(total, q, dateLabel, hasSearch, hasDate)
     }
+    return t('tasks.groupCard.hitFull', { total: String(total) })
   }
-  // 完成度 = (passed + failed) / total（不算 running/pending）
-  const finished = passed + failed
-  const percent = seg.length > 0 ? Math.round((finished / seg.length) * 100) : 0
-  return {
-    kind: 'group',
-    key: groupKey,
-    groupKey,
-    runId,  // 🆕 携带 runId 给模板 / 子项用
-    tone,
-    tasks: seg,
-    sections,  // 🆕 v5：携带 sections 给子 sub_section_header
-    summary: { passed, failed, running, pending, percent, latestCreatedAt: latest.createdAt },
+  return formatHitSummaryWithExtras(hit, q, dateLabel, hasSearch, hasDate, total)
+}
+
+/** 计算 group 在所有激活筛选下的命中数（plugin/type/status/date/search 交集） */
+function computeGroupHit(tasks: EncvTask[]): number {
+  const q = searchQuery.value.trim().toLowerCase()
+  const hasSearch = q.length > 0
+  const fromTs = filterDateRange.value.from
+  const toTs = filterDateRange.value.to
+  const hasDate = !!fromTs || !!toTs
+  let hit = 0
+  for (const t of tasks) {
+    if (filterPlugins.value.length > 0 && !filterPlugins.value.includes(t.pluginName || '__unknown__')) continue
+    if (filterTypes.value.length > 0 && !filterTypes.value.includes(t.type)) continue
+    if (filterStatuses.value.length > 0 && !filterStatuses.value.includes(t.status)) continue
+    if (hasDate) {
+      if (fromTs && t.createdAt < fromTs) continue
+      if (toTs && t.createdAt >= toTs) continue
+    }
+    if (hasSearch) {
+      const name = getTaskName(t).toLowerCase()
+      const plugin = (t.pluginName || '').toLowerCase()
+      const error = (t.error || '').toLowerCase()
+      const id = t.id.toLowerCase()
+      if (!name.includes(q) && !plugin.includes(q) && !error.includes(q) && !id.includes(q)) continue
+    }
+    hit++
+  }
+  return hit
+}
+
+function formatHitSummaryWithExtras(
+  hit: number,
+  q: string,
+  dateLabel: string,
+  hasSearch: boolean,
+  hasDate: boolean,
+  total?: number,
+): string {
+  const truncatedQuery = q.length > 12 ? q.slice(0, 12) + '…' : q
+  if (hasSearch && hasDate) {
+    return t('tasks.groupCard.hitSummaryFull', {
+      hit: String(hit),
+      total: total !== undefined ? String(total) : String(hit),
+      query: truncatedQuery,
+      datePreset: dateLabel,
+    })
+  }
+  if (hasSearch) {
+    return t('tasks.groupCard.hitSummaryWithSearch', {
+      hit: String(hit),
+      total: total !== undefined ? String(total) : String(hit),
+      query: truncatedQuery,
+    })
+  }
+  if (hasDate) {
+    return t('tasks.groupCard.hitSummaryWithDate', {
+      hit: String(hit),
+      total: total !== undefined ? String(total) : String(hit),
+      datePreset: dateLabel,
+    })
+  }
+  return t('tasks.groupCard.hitSummary', { hit: String(hit), total: total !== undefined ? String(total) : String(hit) })
+}
+
+/** 🆕 2026-06-18 v5-bug3fix：整张 group card clickable → push 到 L2 GroupDetail
+ *  - 不依赖展开态机制（已删除）
+ *  - 不跳转 PluginTestsDetail（解耦：插件测试在设置 tab 开发者选项独立页面）
+ */
+async function openGroupDetail(runId: string) {
+  // __manual__ 前缀的合成 group（user 创建的单个 task）→ 不跳转 L2
+  if (!runId || runId.startsWith('__manual__')) return
+  await router.push(`/tabs/tasks/group/${encodeURIComponent(runId)}`)
+}
+
+/** 🆕 v6-bug3fix 2026-06-18：group card 取消操作
+ *  - 仅 running group 显示取消按钮
+ *  - 弹 alert 确认 → cancelRun → 乐观更新 + 失败回滚
+ */
+function hasRunningTasks(tasks: EncvTask[]): boolean {
+  return tasks.some((tk) => tk.status === 'running' || tk.status === 'queued' || tk.status === 'cancelling')
+}
+
+async function confirmCancelGroup(runId: string, tasks: EncvTask[]): Promise<void> {
+  if (!runId || runId.startsWith('__manual__')) return
+  const runningCount = tasks.filter((tk) => tk.status === 'running' || tk.status === 'queued').length
+  const alert = await alertController.create({
+    header: t('tasks.cancelRunHeader'),
+    message: t('tasks.cancelRunMessage', { count: String(runningCount) }),
+    buttons: [
+      { text: t('common.cancel'), role: 'cancel' },
+      {
+        text: t('tasks.cancelRunConfirm'),
+        role: 'destructive',
+        handler: async () => {
+          try {
+            await cancelRun(runId)
+          } catch (err) {
+            const a = await alertController.create({
+              header: t('tasks.cancelRunFailedHeader'),
+              message: String((err as any)?.message ?? err),
+              buttons: [t('common.ok')],
+            })
+            await a.present()
+          }
+        },
+      },
+    ],
+  })
+  await alert.present()
+}
+
+// ============ 长按/右键 action-sheet（v6）============
+
+/** 长按计时器：key=item.key → timer id */
+const _longPressTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const LONG_PRESS_MS = 500
+
+function onGroupTouchStart(_e: TouchEvent, item: { key: string }): void {
+  if (item.key.startsWith('__manual__') || item.key.startsWith('date-')) return
+  const timer = setTimeout(() => {
+    // 触发 action-sheet（仅当 touch 持续 500ms 时）
+    const groupItem = (item as any)
+    if (groupItem.runId) void openGroupActionSheet(groupItem)
+  }, LONG_PRESS_MS)
+  _longPressTimers.set(item.key, timer)
+}
+
+function onGroupTouchEnd(_e: TouchEvent, item: { key: string }): void {
+  const timer = _longPressTimers.get(item.key)
+  if (timer) {
+    clearTimeout(timer)
+    _longPressTimers.delete(item.key)
   }
 }
 
 /**
- * 🆕 2026-06-11 v5：构造 sub_section_header item（取代 v4 buildPluginSectionItem）
- *
- * 通用 section 段头（不再硬编码 pluginName），按 section 维度（plugin/type/category/none）渲染：
- *   - 左侧 icon bubble（按 dimension 显示对应 icon）
- *   - 中间：section 名称 + task 数
- *   - 右侧：4 个 status badge + 折叠 chevron
- *   - 整段可点击 → toggle 折叠/展开该 section 内的 task
- *   - sticky 行为：滚动时冻结在 group card 顶部
- *
- * 升级：未来加新维度只需要在 SECTION_META + deriveSubSection 加一行
+ * 弹出 group action-sheet（长按或右键触发）
+ * - 取消：仅 running group
+ * - 置顶/取消置顶
+ * - 删除：仅终态 group
+ * - 查看详情：始终显示
  */
-function buildSubSectionHeader(
-  subKey: string,
-  runId: string,
-  meta: SubSectionMeta,
-  tasks: EncvTask[],
-  isCollapsed: boolean,
-): DisplayItem {
-  let passed = 0, failed = 0, running = 0, pending = 0
-  for (const t of tasks) {
-    if (t.status === 'completed') passed++
-    else if (t.status === 'failed') failed++
-    else if (t.status === 'running' || t.status === 'cancelling') running++
-    else pending++
+async function openGroupActionSheet(item: { runId: string; tasks: EncvTask[] }): Promise<void> {
+  if (!item.runId || item.runId.startsWith('__manual__')) return
+  const hasRunning = hasRunningTasks(item.tasks)
+  const isPinned = isRunPinned(item.runId)
+  const buttons: any[] = [
+    {
+      text: t('tasks.groupCard.openDetail'),
+      role: undefined,
+      handler: () => { void openGroupDetail(item.runId) },
+    },
+    {
+      text: isPinned ? t('tasks.unpin') : t('tasks.pin'),
+      role: undefined,
+      handler: () => {
+        const pinned = togglePinRun(item.runId)
+        showToast({
+          message: pinned ? t('tasks.pinned') : t('tasks.unpinned'),
+          duration: 1500,
+          color: 'medium',
+        })
+      },
+    },
+  ]
+  if (hasRunning) {
+    buttons.push({
+      text: t('tasks.cancelRun'),
+      role: 'destructive',
+      handler: () => { void confirmCancelGroup(item.runId, item.tasks) },
+    })
   }
-  const finished = passed + failed
-  const percent = tasks.length > 0 ? Math.round((finished / tasks.length) * 100) : 0
-  return {
-    kind: 'sub_section_header',
-    key: subKey,
-    subKey,
-    runId,
-    meta,
-    tasks,
-    isCollapsed,
-    subSummary: { passed, failed, running, pending, percent },
+  if (!hasRunning) {
+    buttons.push({
+      text: t('tasks.remove'),
+      role: 'destructive',
+      handler: () => { void confirmRemoveGroup(item.runId, item.tasks) },
+    })
   }
+  buttons.push({ text: t('common.cancel'), role: 'cancel' })
+  const sheet = await actionSheetController.create({ buttons })
+  await sheet.present()
 }
 
-// 🆕 2026-06-10 修复：测试报告卡运行中（Tasks 页面卡 running）
-// 根因：Tasks.vue 之前**完全没订阅 WS 事件**。task:update / task:progress / task:completed
-//   推过来时没人调 applyTask*，tasks.value 永远是首次拉取的快照。
-// 修复：useTaskEventBridge 已在 line 374-380 订阅 4 件套 WS 事件（mount 注册，unmount 注销），
-//   **不要在这里再写一份 eventBus.on**，否则同一个事件会被触发 2 次，state 错乱。
-// 修复 v2（2026-06-10 同日）：删除下方手写的 handleTask* + onMounted 重复订阅块。
+/** 删除确认 alert（从 openGroupActionSheet 复用） */
+async function confirmRemoveGroup(runId: string, tasks: EncvTask[]): Promise<void> {
+  const taskCount = tasks.length
+  const alert = await alertController.create({
+    header: t('tasks.removeRunHeader'),
+    message: t('tasks.removeRunMessage', { count: String(taskCount) }),
+    buttons: [
+      { text: t('common.cancel'), role: 'cancel' },
+      {
+        text: t('tasks.remove'),
+        role: 'destructive',
+        handler: async () => {
+          try {
+            const { removed, failed } = await removeRunTasks(runId)
+            if (removed > 0) {
+              showToast({
+                message: t('tasks.removeRunSuccess', { removed: String(removed) }),
+                duration: 2000,
+                color: 'success',
+              })
+            }
+            if (failed > 0) {
+              showToast({
+                message: t('tasks.removeRunPartial', { failed: String(failed) }),
+                duration: 2500,
+                color: 'warning',
+              })
+            }
+          } catch (err) {
+            const a = await alertController.create({
+              header: t('common.error'),
+              message: String((err as any)?.message ?? err),
+              buttons: [t('common.ok')],
+            })
+            await a.present()
+          }
+        },
+      },
+    ],
+  })
+  await alert.present()
+}
+
+/**
+ * 🆕 v4 M3：group 头部 hit counter chips（v5-bug3fix 智能命中行替代，已移除）
+ * - 历史：4 维度 (plugin/type/status/date) chip 太乱
+ * - 修法：v5-bug3fix 折叠为单行 "命中 N/M"（仅筛选激活时显示）
+ * - 移除 counterHitClass 函数（template 中已不引用）
+ * - 保留 .tl-counter-chip / .tl-counter-chips CSS 以防历史 useTasksList 调用
+ */
+
+// 🆕 v4 M3：group summary（passed/failed/running/pending/percent）— 给 template 复用
+// 🆕 v6 2026-06-22：summarizeGroup / getGroupSummary / getGroupTone / getGroupDominantStatus /
+//   getGroupDuration / getGroupPluginBadges 已移除（预计算到 item.displayData）
+//   保留 hasRunningTasks（openGroupActionSheet 用）
+
+/** 🆕 v4 M3：模板辅助 - group 主色（按 triggeredBy 决定） */
+// 已移除：getGroupTone → item.displayData.tone
+
+/** 🆕 v4 M3：模板辅助 - group dominant status（左侧 4px 色边） */
+// 已移除：getGroupDominantStatus → item.displayData.dominantStatus
+
+/** 🆕 v4 M3：模板辅助 - group 总耗时（最早 createdAt → 最晚 completedAt 或 now） */
+// 已移除：getGroupDuration → item.displayData.duration
+
+/** 🆕 v4 M3：模板辅助 - group 内 plugin badges（去重 + 限前 N 个） */
+// 已移除：getGroupPluginBadges → item.displayData.pluginBadges
+
+// 🆕 v4 M3：把 filterDateRange 转成 YYYY-MM-DD 形式（用于 chip 显示）
+function dateRangeChipLabel(): string {
+  if (filterDatePreset.value === 'all') return t('tasks.datePresetAll')
+  if (filterDatePreset.value === 'today') return t('tasks.datePresetToday')
+  if (filterDatePreset.value === '7d') return t('tasks.datePreset7d')
+  if (filterDatePreset.value === '30d') return t('tasks.datePreset30d')
+  if (filterDatePreset.value === 'custom') {
+    const f = customFromInput.value || '?'
+    const t2 = customToInput.value || '?'
+    return `${f} → ${t2}`
+  }
+  return t('tasks.datePresetAll')
+}
 
 // 🆕 onMounted：只处理路由 query（长按菜单跳转过来时打开 new task modal）
 // 首次 fetchTasks 由 onIonViewWillEnter 接管（每次切回 tab 智能刷新）。
 onMounted(() => {
+  // 🆕 v6 2026-06-18：冷启动从 IndexedDB 同步加载 tasks（v6 核心改造点）
+  //   - 之前用 localStorage 存，每次启动同步读取几百个 task 字符串 → 阻塞 main thread
+  //   - 现在用 IndexedDB 异步加载，主线程 0 阻塞
+  //   - store 暴露 hydrate()；失败回退空数组 + 后续 fetchTasks
+  void hydrate()
+
+  // 🆕 Task 15：初始化虚拟滚动所需的 ion-content .inner-scroll 引用
+  // ion-content shadow DOM 异步渲染，需要重试 + ResizeObserver 兜底
+  initScrollElWithRetry()
+
   if (route.query.action === 'new') {
     const sourcePath = route.query.source as string
-    const taskType = (route.query.type || 'encrypt') as TaskType
+    const taskType = (route.query.type || 'encrypt') as 'encrypt' | 'decrypt'
     router.replace({ path: '/tabs/tasks', query: {} })
     if (sourcePath) {
       openNewTask(sourcePath, taskType)
@@ -942,193 +1140,45 @@ onMounted(() => {
   }
 })
 
+// 🆕 Task 15：组件卸载时清理 scrollEl 重试定时器 + ResizeObserver
+onBeforeUnmount(() => {
+  if (scrollElRetryTimer) {
+    clearTimeout(scrollElRetryTimer)
+    scrollElRetryTimer = null
+  }
+  if (scrollElRO) {
+    scrollElRO.disconnect()
+    scrollElRO = null
+  }
+})
+
 // 🆕 onIonViewWillEnter：参考 Files.vue 实现切回 tab 自动刷新
 //   智能条件：如果存在 running/queued task 立即拉一次最新列表；否则只靠 WS 增量更新
 //   避免无谓的 GET /api/tasks 调用
+//   2026-06-18：套 try/catch + console.error 防御 — 历史教训：useTasksList 内部
+//   store.tasks 自动解包曾导致 tasks.value 抛 TypeError 把 tab 冻住
 onIonViewWillEnter(() => {
-  if (tasks.value.length === 0) {
-    fetchTasks()
-    return
-  }
-  // 存在 running/queued → 立即拉一次最新
-  const hasActive = tasks.value.some(
-    (t) => t.status === 'running' || t.status === 'queued' || t.status === 'cancelling',
-  )
-  if (hasActive) {
-    fetchTasks()
-  }
-})
-
-// 🆕 2026-06-10 修复 v4：可见的调试计数（让用户能直接看到 grouping 是否在工作）
-// 历史：用户报「毫无变化，我非常失望」—— HMR 没生效 / localStorage v2 数据 stale / 用户没刷新页面
-// 修复：在 task 列表顶部显示 group / singleton / by triggeredBy 计数，让用户一眼看出问题在哪
-const debugGroupCount = computed(() => {
-  // 统计当前 displayedItems 里 group card 数量
-  return displayedItems.value.filter((i) => i.kind === 'group').length
-})
-const debugSingletonCount = computed(() => {
-  return displayedItems.value.filter((i) => i.kind === 'task').length
-})
-const debugByTriggeredBy = computed(() => {
-  const acc: { automation: number; ai_agent: number; user: number } = {
-    automation: 0,
-    ai_agent: 0,
-    user: 0,
-  }
-  for (const t of tasks.value) {
-    const by = t.triggeredBy ?? getTriggeredBy(t.id)
-    if (by === 'automation') acc.automation++
-    else if (by === 'ai_agent') acc.ai_agent++
-    else acc.user++
-  }
-  return acc
-})
-
-// 🆕 2026-06-10 修复 v4：手动重置分组（强制清空 localStorage + 重新拉取）
-// 用法：调试栏右上「重置分组」按钮 → 调这个 → 所有 task 变 'user' → 重新跑 workflow
-//   强制丢弃 stale localStorage（v2 数据残留让 task 分散到不同 runId，永远凑不到 1 个 group）
-async function resetGrouping() {
-  const { clearTriggeredBy } = await import('@/composables/useTaskTrigger')
-  clearTriggeredBy()
-  // 🆕 2026-06-11 v5：同时清 sub_section 折叠状态
   try {
-    localStorage.removeItem(COLLAPSED_SUBSECTIONS_KEY)
-  } catch {
-    // silent
-  }
-  collapsedSubSectionKeys.value = new Set()
-  showToast({ message: '已清空任务触发者缓存，刷新页面后生效', duration: 2000, color: 'medium' })
-  await fetchTasks()
-}
-
-// 🆕 2026-06-11 v7：自动化测试报告分析器
-// 设计原则（用户原话「测试报告是给你看的不是给我看的」）：
-//   - 不弹 alert / showToast 烦用户
-//   - 写 console.group 输出结构化分析（dev console 直接看）
-//   - 自动按失败率 / 错误模式分类，输出可疑 bug 列表
-//   - 关键失败 → 上报后端 /api/dev/automation-report（让后端聚合分析）
-//   - 用户视角：调试栏按钮触发，但**用户不用等结果**，console + 后端都看得到
-function showAutomationReports() {
-  const STORAGE_KEY = 'encv_automation_results_v1'
-  let runs: any[] = []
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) runs = parsed
+    const arr = tasks.value
+    if (!Array.isArray(arr)) {
+      console.error('[Tasks.onIonViewWillEnter] tasks.value is not array:', typeof arr, arr)
+      return
     }
-  } catch (e) {
-    console.error('[automation-report] localStorage parse failed:', e)
-    return
-  }
-  if (runs.length === 0) {
-    console.info('[automation-report] no runs in localStorage (key=' + STORAGE_KEY + ')')
-    return
-  }
-
-  // 自动分析
-  const webdavRuns = runs.filter((r) => r.category === 'webdav')
-  const pluginRuns = runs.filter((r) => r.category !== 'webdav')
-  const totalPassed = runs.reduce((acc, r) => acc + (r.passed ?? 0), 0)
-  const totalFailed = runs.reduce((acc, r) => acc + (r.failed ?? 0), 0)
-  const totalSkipped = runs.reduce((acc, r) => acc + (r.skipped ?? 0), 0)
-  const totalCases = totalPassed + totalFailed + totalSkipped
-  const failureRate = totalCases > 0 ? (totalFailed / totalCases) * 100 : 0
-
-  // 错误聚类：相同 caseName 失败多次 → 可疑 bug
-  const errorMap = new Map<string, { count: number; firstError: string; runs: string[] }>()
-  for (const r of runs) {
-    for (const c of r.results ?? []) {
-      if (c.status === 'failed') {
-        const key = `${c.category ?? '?'}:${c.caseName ?? c.caseId ?? '?'}`
-        const prev = errorMap.get(key)
-        if (prev) {
-          prev.count++
-          prev.runs.push(r.id?.slice(0, 12) ?? '?')
-        } else {
-          errorMap.set(key, { count: 1, firstError: c.error ?? '', runs: [r.id?.slice(0, 12) ?? '?'] })
-        }
-      }
+    if (arr.length === 0) {
+      void fetchTasks()
+      return
     }
-  }
-  const suspiciousBugs = Array.from(errorMap.entries())
-    .filter(([, v]) => v.count >= 2)
-    .sort((a, b) => b[1].count - a[1].count)
-
-  // 最近一次失败的 run
-  const lastRun = runs[0]
-  const lastRunFailed = (lastRun?.results ?? []).filter((c: any) => c.status === 'failed')
-
-  // 输出结构化报告
-  console.group('[automation-report] 自动化测试历史分析')
-  console.log('localStorage key:', STORAGE_KEY)
-  console.log('run 总数:', runs.length, '(webdav=' + webdavRuns.length + ', plugin=' + pluginRuns.length + ')')
-  console.log('总用例:', totalCases, '· 通过:', totalPassed, '· 失败:', totalFailed, '· 跳过:', totalSkipped)
-  console.log('总失败率:', failureRate.toFixed(2) + '%')
-  if (lastRun) {
-    console.log('最近 run:', {
-      id: lastRun.id,
-      startedAt: lastRun.startedAt,
-      totalCases: lastRun.totalCases,
-      passed: lastRun.passed,
-      failed: lastRun.failed,
-      skipped: lastRun.skipped,
-      category: lastRun.category ?? 'plugin',
-      baseUrl: lastRun.baseUrl,
-    })
-    if (lastRunFailed.length > 0) {
-      console.warn('最近 run 失败用例:', lastRunFailed)
+    // 存在 running/queued → 立即拉一次最新
+    const hasActive = arr.some(
+      (t) => t.status === 'running' || t.status === 'queued' || t.status === 'cancelling',
+    )
+    if (hasActive) {
+      void fetchTasks()
     }
+  } catch (err) {
+    console.error('[Tasks.onIonViewWillEnter] crashed (caught, do not block tab):', err)
   }
-  if (suspiciousBugs.length > 0) {
-    console.error('🚨 可疑 bug（多次失败的用例）:')
-    for (const [name, info] of suspiciousBugs) {
-      console.error(`  ${name} — 失败 ${info.count} 次`)
-      console.error(`    错误: ${info.firstError}`)
-      console.error(`    出现在 run: ${info.runs.join(', ')}`)
-    }
-  } else if (totalFailed === 0) {
-    console.info('✅ 所有 run 均无失败')
-  }
-  console.groupEnd()
-
-  // 上报后端（fire-and-forget，不阻塞 UI）
-  reportAutomationToBackend({
-    storageKey: STORAGE_KEY,
-    runCount: runs.length,
-    webdavRunCount: webdavRuns.length,
-    pluginRunCount: pluginRuns.length,
-    totalCases,
-    totalPassed,
-    totalFailed,
-    totalSkipped,
-    failureRate: Number(failureRate.toFixed(2)),
-    suspiciousBugs: suspiciousBugs.map(([name, info]) => ({ name, count: info.count, firstError: info.firstError })),
-    lastRunFailed: lastRunFailed.map((c: any) => ({ caseName: c.caseName, error: c.error, httpStatus: c.httpStatus, errorKind: c.errorKind })),
-    timestamp: new Date().toISOString(),
-  }).catch((e) => {
-    console.debug('[automation-report] backend report failed (silent):', e)
-  })
-}
-
-/**
- * 上报自动化测试分析结果到后端（fire-and-forget）
- * 失败不阻塞 UI，silent
- */
-async function reportAutomationToBackend(payload: object): Promise<void> {
-  try {
-    const { getApiBaseUrl } = await import('@/api/encv')
-    const baseUrl = getApiBaseUrl()
-    await fetch(`${baseUrl}/api/dev/automation-report`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-  } catch {
-    // 后端没接这个 endpoint 没关系，console 已经输出了
-    throw new Error('backend report endpoint unavailable')
-  }
-}
+})
 </script>
 
 <style scoped>
@@ -1195,6 +1245,29 @@ async function reportAutomationToBackend(payload: object): Promise<void> {
 .filter-chips {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 4px 0;
+}
+
+/* 🆕 v4 M5：active run chip 样式（与 filter chip 视觉区分） */
+.active-run-chip {
+  font-weight: 600;
+  --color: var(--ion-color-warning);
+  background: rgba(var(--ion-color-warning-rgb), 0.1);
+  flex-shrink: 0;
+}
+.active-run-spinner {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+}
+
+.filter-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
   padding: 4px 8px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -1209,28 +1282,16 @@ async function reportAutomationToBackend(payload: object): Promise<void> {
 
 .task-id {
   font-size: 11px;
-  font-family: monospace;
-  color: var(--encv-text-secondary);
+  font-family: var(--tl-card-font-mono);
+  color: var(--tl-card-text-secondary);
   opacity: 0.7;
   margin-right: 2px;
 }
 
-.status-badge {
-  margin-right: 8px;
-  font-size: 11px;
-}
-
 .task-type {
   font-size: 12px;
-  color: var(--encv-text-secondary);
+  color: var(--tl-card-text-secondary);
   margin-left: 6px;
-}
-
-.card-meta-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
 }
 
 .plugin-badge {
@@ -1257,223 +1318,46 @@ async function reportAutomationToBackend(payload: object): Promise<void> {
   vertical-align: middle;
 }
 
-.task-time-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--encv-text-secondary);
-}
-
-/* ============================================================
-   🆕 2026-06-10 修复：自动化测试 / AI agent 任务组卡片美化
-   ============================================================ */
-.task-group-card {
-  --background: var(--ion-color-light);
-  border-left: 4px solid var(--ion-color-primary);
-  margin: 8px 0;
-  border-radius: 8px;
-  overflow: hidden;
-  transition: background 0.2s ease;
-}
-.task-group-card.group-tone-ai_agent {
-  border-left-color: var(--ion-color-secondary);
-  --background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(139, 92, 246, 0.02));
-}
-.task-group-card.group-tone-automation {
-  border-left-color: var(--ion-color-primary);
-  --background: linear-gradient(135deg, rgba(79, 140, 255, 0.08), rgba(79, 140, 255, 0.02));
-}
-
-.group-icon-bubble {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  margin-right: 4px;
-}
-.group-icon-bubble.group-tone-ai_agent {
-  background: var(--ion-color-secondary);
-  color: white;
-}
-.group-icon-bubble.group-tone-automation {
-  background: var(--ion-color-primary);
-  color: white;
-}
-.group-icon-bubble ion-icon {
-  font-size: 22px;
-}
-
-.group-title {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0 0 4px;
-  color: var(--ion-color-dark);
-}
-.group-count {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--ion-color-medium-shade);
-  margin-left: 4px;
-}
-
-.group-meta-row {
-  margin: 6px 0;
-}
-.group-meta-row .status-badge {
-  font-size: 11px;
-  padding: 3px 8px;
-  margin-right: 4px;
+/* 🆕 2026-06-18 Task 18：crypto params 摘要 badge */
+.crypto-summary {
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  font-size: 10px;
+  font-family: var(--tl-card-font-mono);
+  color: var(--tl-card-text-secondary);
+  background: rgba(var(--tl-state-created-rgb), 0.1);
+  padding: 2px 6px;
+  border-radius: var(--tl-card-radius-sm);
+  margin-left: 4px;
+  white-space: nowrap;
 }
-.badge-icon {
-  font-size: 12px;
-}
-.badge-spinner {
-  width: 10px;
-  height: 10px;
-  --color: currentColor;
-}
-
-.group-progress-track {
-  height: 6px;
-  background: var(--ion-color-step-100, rgba(0, 0, 0, 0.06));
-  border-radius: 3px;
-  overflow: hidden;
-  margin: 6px 0 4px;
-}
-.group-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--ion-color-primary), var(--ion-color-primary-shade));
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-.group-tone-ai_agent .group-progress-fill {
-  background: linear-gradient(90deg, var(--ion-color-secondary), var(--ion-color-secondary-shade));
-}
-
-.group-time-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 2px 0 0;
+.crypto-summary-icon {
   font-size: 11px;
-}
-.group-percent-label {
-  font-weight: 600;
-  color: var(--ion-color-primary);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-}
-.group-tone-ai_agent .group-percent-label {
-  color: var(--ion-color-secondary);
-}
-
-.group-chevron-btn {
-  --color: var(--ion-color-medium-shade);
-  margin: 0;
+  flex-shrink: 0;
 }
 
 /* ============================================================
-   🆕 2026-06-11 v5：sub_section_header（取代 v4 plugin-sub-section）
-   - 4 种 dimension tone：plugin / type / category / none
-   - sticky 滚动冻结（top: 0）
-   - 商业级视觉：subtle shadow + 1px border + backdrop-filter
-   - 可折叠：整段 button + 右侧 chevron
+   🆕 v3 2026-06-18 Task 4：group / sub_section / task card 视觉
+   已迁移到 timeline-utilities.css 的 .tl-item-card / .tl-bubble /
+   .tl-status-badge / .tl-progress / .tl-title / .tl-time-info /
+   .tl-meta-row / .tl-chevron-btn utility class。
+   本文件只保留 Tasks.vue 特有的布局覆盖。
    ============================================================ */
-ion-item.sub-section-header {
-  --padding-start: 56px;       /* 左侧缩进（对应 group card 4px border + 40px icon + 12px 间距） */
-  --padding-end: 12px;
-  --padding-top: 10px;
-  --padding-bottom: 12px;
-  --min-height: 52px;
-  --background: var(--sub-bg, rgba(79, 140, 255, 0.05));
-  --background-hover: var(--sub-bg-hover, rgba(79, 140, 255, 0.08));
-  --background-activated: var(--sub-bg-activated, rgba(79, 140, 255, 0.12));
-  --border-color: var(--sub-border, rgba(79, 140, 255, 0.12));
-  --color: var(--ion-color-dark);
-  --inner-padding-end: 0;
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  font-size: 13px;
-  /* 商业级视觉：backdrop-filter 让 sticky 时半透明 */
-  backdrop-filter: blur(10px) saturate(140%);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
-  background-color: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 4px 12px -4px rgba(0, 0, 0, 0.06);
-  transition: background 0.18s ease, box-shadow 0.18s ease;
+
+/* 🆕 v3 2026-06-18 Task 10：group card 查看报告按钮 */
+.group-report-btn {
+  --color: var(--tl-trigger-automation);
+  margin: 0 4px 0 0;
 }
-ion-item.sub-section-header.is-collapsed {
-  /* 折叠时视觉上「轻」一点：subtle hint 让用户知道里面有内容 */
-  background-color: rgba(250, 250, 252, 0.92);
+.group-report-btn:hover {
+  --color: var(--tl-state-analyzing);
+}
+.tl-tone--ai_agent .group-report-btn {
+  --color: var(--tl-trigger-ai-agent);
 }
 
-/* 4 种 dimension tone：plugin (primary 蓝) / type (warning 黄) / category (success 绿) / none (medium 灰) */
-ion-item.sub-section-header.sub-tone-plugin {
-  --sub-bg: rgba(79, 140, 255, 0.05);
-  --sub-bg-hover: rgba(79, 140, 255, 0.08);
-  --sub-bg-activated: rgba(79, 140, 255, 0.12);
-  --sub-border: rgba(79, 140, 255, 0.14);
-}
-ion-item.sub-section-header.sub-tone-type {
-  --sub-bg: rgba(255, 167, 38, 0.05);
-  --sub-bg-hover: rgba(255, 167, 38, 0.08);
-  --sub-bg-activated: rgba(255, 167, 38, 0.12);
-  --sub-border: rgba(255, 167, 38, 0.14);
-}
-ion-item.sub-section-header.sub-tone-category {
-  --sub-bg: rgba(54, 175, 110, 0.05);
-  --sub-bg-hover: rgba(54, 175, 110, 0.08);
-  --sub-bg-activated: rgba(54, 175, 110, 0.12);
-  --sub-border: rgba(54, 175, 110, 0.14);
-}
-ion-item.sub-section-header.sub-tone-none {
-  --sub-bg: rgba(158, 158, 158, 0.04);
-  --sub-bg-hover: rgba(158, 158, 158, 0.07);
-  --sub-bg-activated: rgba(158, 158, 158, 0.1);
-  --sub-border: rgba(158, 158, 158, 0.12);
-}
-
-.sub-section-icon-bubble {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;          /* 商业级：圆角方形（vs 圆形） */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  flex-shrink: 0;
-  margin-left: -40px;
-  background: var(--ion-color-primary);
-  color: white;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
-.sub-section-icon-bubble.sub-tone-plugin {
-  background: linear-gradient(135deg, #5b9dff, #2f7ce0);
-  color: white;
-}
-.sub-section-icon-bubble.sub-tone-type {
-  background: linear-gradient(135deg, #ffb74d, #f57c00);
-  color: white;
-}
-.sub-section-icon-bubble.sub-tone-category {
-  background: linear-gradient(135deg, #66bb6a, #388e3c);
-  color: white;
-}
-.sub-section-icon-bubble.sub-tone-none {
-  background: linear-gradient(135deg, #bdbdbd, #9e9e9e);
-  color: white;
-}
-.sub-section-icon-bubble ion-icon {
-  font-size: 16px;
-}
-
+/* sub_section 布局覆盖（utility class 不含的特定布局） */
 .sub-section-label {
   margin: 0 !important;
   display: flex;
@@ -1481,25 +1365,6 @@ ion-item.sub-section-header.sub-tone-none {
   gap: 0;
   min-width: 0;
 }
-.sub-section-label h3.sub-section-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ion-color-dark);
-  margin: 0;
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  letter-spacing: -0.01em;       /* 商业级：tight letter-spacing 提升精致感 */
-}
-.sub-section-label p.sub-section-count {
-  font-size: 11px;
-  color: var(--encv-text-secondary);
-  margin: 0;
-  line-height: 1.3;
-  font-weight: 500;
-}
-
 .sub-section-badges {
   display: flex;
   gap: 4px;
@@ -1507,70 +1372,13 @@ ion-item.sub-section-header.sub-tone-none {
   align-items: center;
   margin-right: 4px;
 }
-.sub-section-badges .status-badge {
-  font-size: 10px;
-  --padding-start: 5px;
-  --padding-end: 6px;
-  --padding-top: 1px;
-  --padding-bottom: 1px;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-weight: 600;             /* 商业级：徽章文字加粗 */
-}
-.sub-section-badges .badge-icon {
-  font-size: 10px;
-}
-.sub-section-badges .badge-spinner {
-  width: 8px;
-  height: 8px;
-  --color: currentColor;
-}
-
-.sub-section-chevron-btn {
-  --color: var(--ion-color-medium-shade);
-  margin: 0;
-  transition: transform 0.2s ease;   /* 商业级：旋转动画 */
-}
-.sub-section-chevron-btn ion-icon {
-  transition: transform 0.2s ease;
-}
-.is-collapsed .sub-section-chevron-btn ion-icon {
-  transform: rotate(-90deg);
-}
-
+/* sub_section 底部进度条需要 absolute 定位（贴底） */
 .sub-section-progress-track {
   position: absolute;
-  left: 56px;
-  right: 12px;
+  left: var(--tl-item-padding-start-subsection, 56px);
+  right: var(--tl-space-lg, 12px);
   bottom: 0;
-  height: 2px;
-  background: rgba(0, 0, 0, 0.05);
-  overflow: hidden;
   pointer-events: none;
-}
-.sub-section-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--ion-color-primary), var(--ion-color-primary-shade));
-  transition: width 0.3s ease;
-}
-.sub-tone-type .sub-section-progress-fill {
-  background: linear-gradient(90deg, #ffb74d, #f57c00);
-}
-.sub-tone-category .sub-section-progress-fill {
-  background: linear-gradient(90deg, #66bb6a, #388e3c);
-}
-.sub-tone-none .sub-section-progress-fill {
-  background: linear-gradient(90deg, #bdbdbd, #9e9e9e);
-}
-
-.time-created {
-  color: var(--encv-text-secondary);
-}
-
-.time-duration {
-  color: var(--ion-color-primary);
-  font-weight: 500;
 }
 
 .progress-section {
@@ -1591,26 +1399,26 @@ ion-item.sub-section-header.sub-tone-none {
   gap: 8px;
   margin-top: 4px;
   font-size: 11px;
-  color: var(--encv-text-secondary);
+  color: var(--tl-card-text-secondary);
   flex-wrap: wrap;
 }
 
 .phase-label {
-  color: var(--ion-color-primary);
+  color: var(--tl-state-analyzing);
   font-weight: 500;
 }
 
 .progress-percent {
   font-weight: 600;
-  color: var(--encv-text-secondary);
+  color: var(--tl-card-text-secondary);
 }
 
 .speed-label {
-  color: var(--encv-text-secondary);
+  color: var(--tl-card-text-secondary);
 }
 
 .eta-label {
-  color: var(--encv-text-secondary);
+  color: var(--tl-card-text-secondary);
 }
 
 .completed-info {
@@ -1738,42 +1546,417 @@ ion-item.sub-section-header.sub-tone-none {
 }
 
 /* ============================================================
-   🆕 2026-06-10 修复 v4：可见的调试计数栏
-   用途：让用户能直接看到 grouping 是否在工作
-   历史：用户报「毫无变化，我非常失望」时排查卡住 — HMR 没生效 / localStorage v2 stale
-        都没法让用户自查。修这个栏 → 任何时候用户都能看到 group / singleton / by 计数。
+   🆕 Task 15：TaskVirtualList 容器样式
+   - 虚拟列表接管 ion-content 内的滚动渲染
+   - 移除 ion-list 默认 padding（虚拟列表自己管理布局）
    ============================================================ */
-.grouping-debug-bar {
+.tasks-virtual-list {
+  width: 100%;
+  /* 给虚拟列表一点底部留白，避免 FAB 遮挡最后一个 item */
+  padding-bottom: 80px;
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   🆕 v4 2026-06-18 M3：group card / date section / hit counter chips
+   替代 v3 的 sub_section_header + 双层折叠；按用户反馈"看 group 整体状态"
+   把 status / 进度 / hit counter 平铺在 group card 头部。
+   ============================================================ */
+
+/* Date section header（今/昨/本周/本月/更早） */
+.tl-date-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px 6px;
+  position: relative;
+  pointer-events: none;
+}
+.tl-date-section__line {
+  flex: 1;
+  height: 1px;
+  background: var(--ion-color-step-200, rgba(128, 128, 128, 0.2));
+}
+.tl-date-section__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ion-color-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+/* Group card 容器 */
+.tl-group-card {
+  display: flex;
+  position: relative;
+  margin: 8px 8px 10px;
+  border-radius: 10px;
+  background: var(--ion-color-step-50, #fafafa);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  min-height: 80px;
+}
+.tl-group-card--ai_agent {
+  background: linear-gradient(135deg,
+    rgba(139, 92, 246, 0.06) 0%,
+    var(--ion-color-step-50, #fafafa) 50%);
+}
+.tl-group-card--automation {
+  background: linear-gradient(135deg,
+    rgba(79, 140, 255, 0.06) 0%,
+    var(--ion-color-step-50, #fafafa) 50%);
+}
+
+/* 左侧 4px 状态色边（group 主态决定） */
+.tl-group-card__border {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+.tl-group-border--failed { background: var(--ion-color-danger, #ef4444); }
+.tl-group-border--running {
+  background: var(--ion-color-warning, #f59e0b);
+  /* 运行时呼吸效果（避免静态感） */
+  animation: tl-group-border-pulse 1.5s ease-in-out infinite;
+}
+.tl-group-border--completed { background: var(--ion-color-success, #10b981); }
+.tl-group-border--cancelled { background: var(--ion-color-medium, #6b7280); }
+.tl-group-border--queued { background: var(--ion-color-primary, #3b82f6); }
+
+@keyframes tl-group-border-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.tl-group-card__main {
+  flex: 1;
+  padding: 10px 12px 8px 14px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 标题行 */
+.tl-group-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tl-group-card__title-block {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tl-group-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--ion-color-dark, #111);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tl-group-card__count {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ion-color-medium);
+  margin-left: 4px;
+}
+.tl-group-card__plugins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tl-group-card__plugin-badge {
+  font-size: 9px;
+  --padding-start: 5px;
+  --padding-end: 5px;
+  --padding-top: 1px;
+  --padding-bottom: 1px;
+}
+
+/* 🆕 2026-06-22 逃逸诊断：group card 显示 runId（user 反馈"截图中连 runId 都没显示"） */
+.tl-group-card__runid {
+  display: inline-block;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+  color: var(--ion-color-medium-shade);
+  background: var(--ion-color-light-shade, #e6e7eb);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-top: 2px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.tl-group-card__runid--fake {
+  color: var(--ion-color-danger-shade, #b30000);
+  background: var(--ion-color-danger-tint, #f5b3b3);
+  font-weight: 700;
+}
+.tl-group-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+/* 状态汇总 + 进度条 */
+.tl-group-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tl-group-card__children {
+  border-top: 1px solid var(--ion-color-step-200, rgba(128, 128, 128, 0.15));
+  padding: 4px 0 0;
+  margin: 4px -12px -8px -14px;
+  background: rgba(0, 0, 0, 0.02);
+}
+.tl-item-card--child {
+  --background: transparent;
+  --min-height: 56px;
+}
+.tl-item-card--child h2 {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* Hit counter chips（点击 toggle 筛选） */
+.tl-counter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.tl-counter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--ion-color-step-200, rgba(128, 128, 128, 0.25));
+  background: var(--ion-color-step-50, #fafafa);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ion-color-dark, #111);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+  font-family: inherit;
+}
+.tl-counter-chip:hover {
+  background: var(--ion-color-step-100, #f0f0f0);
+  border-color: var(--ion-color-step-300, rgba(128, 128, 128, 0.4));
+}
+.tl-counter-chip__icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.tl-counter-chip__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 80px;
+}
+.tl-counter-chip__ratio {
+  font-family: var(--tl-card-font-mono, monospace);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--ion-color-medium);
+  flex-shrink: 0;
+}
+/* hit 状态 */
+.tl-counter-chip--zero {
+  opacity: 0.5;
+  /* 🆕 2026-06-18 v4 Bug7 修复：0-hit chip 不可点击
+   *   - 旧行为：0-hit chip 点击触发 toggleFilterFromCounter，但因无 task 命中 filter，UI 无变化
+   *   - 用户感受："点 chip 没反应"
+   *   - 修法：pointer-events: none + cursor: not-allowed
+   *   - 保留 active 状态可点击（已选中的筛选条件可点击取消）
+   */
+  pointer-events: none;
+  cursor: not-allowed;
+}
+.tl-counter-chip--zero .tl-counter-chip__ratio {
+  color: var(--ion-color-danger);
+}
+.tl-counter-chip--partial {
+  background: var(--ion-color-step-100, #fff5e6);
+}
+.tl-counter-chip--partial .tl-counter-chip__ratio {
+  color: var(--ion-color-warning-shade);
+}
+/* active（已选中筛选） */
+.tl-counter-chip--active {
+  background: var(--ion-color-primary);
+  color: #fff;
+  border-color: var(--ion-color-primary);
+}
+.tl-counter-chip--active .tl-counter-chip__ratio {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* 适配 group report 按钮颜色（与 tone 对应） */
+.tl-group-card--ai_agent .group-report-btn {
+  --color: var(--tl-trigger-ai-agent, #8b5cf6);
+}
+.tl-group-card--automation .group-report-btn {
+  --color: var(--tl-trigger-automation, #4f8cff);
+}
+
+/* date popover 自定义范围紧凑排版 */
+.date-custom-range {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--ion-color-step-100, rgba(128, 128, 128, 0.1));
+}
+
+/* ============================================================
+   🆕 2026-06-18 v5-bug3fix L1 group card 智能样式
+   - 整张 card clickable（cursor pointer + hover lift）
+   - mood class：100% passed → 淡绿；失败率 > 50% → 红色警告
+   - 智能命中行：仅筛选激活时显示，紧凑单行
+   - 移除展开态（chevron btn / 子 task 列表 → 进入箭头）
+   ============================================================ */
+.tl-group-card--clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+  -webkit-tap-highlight-color: rgba(var(--ion-color-primary-rgb), 0.1);
+}
+.tl-group-card--clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+.tl-group-card--clickable:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+.tl-group-card--clickable:focus-visible {
+  outline: 2px solid var(--ion-color-primary);
+  outline-offset: 2px;
+}
+
+/* mood 色调（不冲突：基础 tone（automation/ai_agent）保持，仅背景微调） */
+.tl-group-card--mood-success {
+  background: linear-gradient(135deg,
+    rgba(var(--ion-color-success-rgb, 16, 185, 129), 0.04) 0%,
+    rgba(var(--ion-color-success-rgb, 16, 185, 129), 0.08) 100%);
+}
+.tl-group-card--mood-danger {
+  background: linear-gradient(135deg,
+    rgba(var(--ion-color-danger-rgb, 239, 68, 68), 0.04) 0%,
+    rgba(var(--ion-color-danger-rgb, 239, 68, 68), 0.1) 100%);
+  border-color: rgba(var(--ion-color-danger-rgb, 239, 68, 68), 0.3);
+}
+.tl-group-card--mood-neutral {
+  /* 默认无变化 */
+}
+
+/* 进入箭头（替代展开 chevron） */
+.tl-group-card__chevron {
+  color: var(--ion-color-medium);
+  font-size: 22px;
+  margin: 0 4px 0 0;
+  flex-shrink: 0;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+.tl-group-card--clickable:hover .tl-group-card__chevron {
+  color: var(--ion-color-primary);
+  transform: translateX(2px);
+}
+
+/* 自身状态行（紧凑展示 + duration） */
+.tl-group-card__self {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 6px 10px;
-  padding: 8px 14px;
-  margin: 8px 12px 4px;
-  background: linear-gradient(135deg, rgba(79, 140, 255, 0.06), rgba(139, 92, 246, 0.06));
-  border: 1px dashed rgba(79, 140, 255, 0.3);
-  border-radius: 6px;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.tl-group-card__duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 11px;
-  color: var(--encv-text-secondary);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  color: var(--tl-card-text-secondary, var(--ion-color-medium-shade));
+  margin-left: auto;
+  font-family: var(--tl-card-font-mono, monospace);
+  white-space: nowrap;
+}
+.tl-group-card__duration-icon {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* 智能命中行（仅筛选激活时显示） */
+.tl-group-card__hit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(var(--ion-color-primary-rgb, 59, 130, 246), 0.08);
+  border-left: 3px solid var(--ion-color-primary);
+  font-size: 11px;
+  color: var(--ion-color-primary-shade, #1e40af);
+  font-weight: 500;
   line-height: 1.4;
 }
-.grouping-debug-bar strong {
-  color: var(--ion-color-dark);
-  font-weight: 700;
-  font-family: inherit;
-  margin: 0 2px;
+.tl-group-card__hit-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+  color: var(--ion-color-primary);
 }
-.grouping-debug-sep {
-  color: var(--ion-color-medium-shade);
-  opacity: 0.5;
-  font-weight: 300;
+.tl-group-card__hit-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.grouping-reset-btn {
-  margin-left: auto;
-  --padding-start: 8px;
-  --padding-end: 8px;
-  font-size: 11px;
-  height: 28px;
+.date-range-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  gap: 8px;
+}
+.date-range-label span {
+  flex-shrink: 0;
+  min-width: 40px;
+}
+.date-input {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid var(--ion-color-step-200, rgba(128, 128, 128, 0.25));
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: var(--tl-card-font-mono, monospace);
+  background: var(--ion-color-step-50, #fafafa);
+  color: var(--ion-color-dark, #111);
+  outline: none;
+  min-width: 0;
+}
+.date-input:focus {
+  border-color: var(--ion-color-primary);
+}
+.date-preset-active {
+  --background: var(--ion-color-primary-tint, rgba(79, 140, 255, 0.1));
+  font-weight: 600;
 }
 </style>

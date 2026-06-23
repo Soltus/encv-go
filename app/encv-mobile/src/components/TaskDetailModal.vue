@@ -25,32 +25,94 @@
         </div>
       </div>
 
+      <TaskPerformanceSection :task="task" />
       <TaskOutputInfo :task="task" @open="openOutput" @locate="locateOutput" />
       <TaskErrorSection :task="task" />
       <TaskWarningSection :task="task" />
       <TaskActionButtons :task="task" @cancel="dismiss('cancel')" @retry="dismiss('retry')" @remove="dismiss('remove')" />
+
+      <ion-button
+        v-if="canRollback"
+        expand="block"
+        color="warning"
+        fill="outline"
+        @click="showRollbackConfirm = true"
+      >
+        <ion-icon :icon="arrowUndoOutline" slot="start"></ion-icon>
+        {{ t('tasks.rollbackButton') }}
+      </ion-button>
     </ion-content>
+
+    <ion-alert
+      :is-open="showRollbackConfirm"
+      :header="t('tasks.rollbackConfirm')"
+      :message="t('tasks.rollbackConfirmMessage', { taskId: props.task?.id?.slice(0, 8) })"
+      :buttons="[
+        { text: t('common.cancel'), role: 'cancel' },
+        { text: t('tasks.rollbackConfirm'), handler: doRollback }
+      ]"
+      @did-dismiss="showRollbackConfirm = false"
+    ></ion-alert>
   </ion-page>
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton,
-  IonContent, IonProgressBar, modalController,
+  IonContent, IonProgressBar, IonAlert, IonIcon, modalController,
 } from '@ionic/vue'
 import { useI18n } from '@/composables/useI18n'
-import type { EncvTask } from '@/api/encv'
+import { showToast } from '@/composables/useToast'
+import { rollbackTask, type EncvTask } from '@/api/encv'
+import { arrowUndoOutline } from 'ionicons/icons'
 import TaskBasicInfo from './TaskBasicInfo.vue'
 import TaskTimeline from './TaskTimeline.vue'
 import TaskOutputInfo from './TaskOutputInfo.vue'
 import TaskErrorSection from './TaskErrorSection.vue'
 import TaskWarningSection from './TaskWarningSection.vue'
 import TaskActionButtons from './TaskActionButtons.vue'
+import TaskPerformanceSection from './TaskPerformanceSection.vue'
 
 const props = defineProps<{ task: EncvTask }>()
+const emit = defineEmits<{
+  (e: 'rollback', taskId: string): void
+}>()
 const { t } = useI18n()
 const router = useRouter()
+
+const showRollbackConfirm = ref(false)
+
+const canRollback = computed(() => {
+  const task = props.task
+  if (!task) return false
+  // 必须是 completed 状态
+  if (task.status !== 'completed') return false
+  // 必须是可回滚类型（非 rollback_*）
+  const type = task.type
+  if (type.startsWith('rollback_')) return false
+  // 必须是 encrypt/decrypt/move/copy/rename/delete 之一
+  const rollbackableTypes = ['encrypt', 'decrypt', 'move', 'copy', 'rename', 'delete']
+  if (!rollbackableTypes.includes(type)) return false
+  // 不能是已被回滚过的任务（rollbackOf 为空）
+  if (task.rollbackOf) return false
+  return true
+})
+
+async function doRollback() {
+  if (!props.task) return
+  try {
+    const result = await rollbackTask(props.task.id)
+    showToast({ message: t('tasks.rollbackSuccess'), duration: 2000, color: 'success' })
+    showRollbackConfirm.value = false
+    // 关闭 modal 或刷新任务详情
+    emit('rollback', result.taskId)
+  } catch (err: any) {
+    showToast({ message: err.message || t('tasks.rollbackFailed'), duration: 3000, color: 'danger' })
+    showRollbackConfirm.value = false
+  }
+}
 
 function dismiss(action: 'cancel' | 'retry' | 'remove') {
   return modalController.dismiss({ action, id: props.task.id })
@@ -62,9 +124,15 @@ function openOutput(outputPath: string) {
   modalController.dismiss({ action: 'opened', id: props.task.id, outputPath })
 }
 
+// 🆕 v3 2026-06-18 Task 8：locateOutput 不再做路径转换
+//   - 后端 task.outputPath 已统一为虚拟路径 /d/<mount>/<sub>（task_manager.absToVirtualPath）
+//   - 前端直接拆 dir + name 塞 route.query，Files.vue onIonViewWillEnter 消费
+//   - 旧版逻辑（物理绝对路径 → 前端无法解析）已废弃
 function locateOutput(outputPath: string) {
-  const name = outputPath.split('/').pop() || outputPath
-  const dir = outputPath.substring(0, outputPath.lastIndexOf('/')) || '/'
+  const trimmed = outputPath.replace(/\/+$/, '')
+  const lastSlash = trimmed.lastIndexOf('/')
+  const name = lastSlash >= 0 ? trimmed.substring(lastSlash + 1) : trimmed
+  const dir = lastSlash >= 0 ? trimmed.substring(0, lastSlash) : '/d'
   router.push({ path: '/tabs/files', query: { path: dir, highlight: name } })
   modalController.dismiss({ action: 'located', id: props.task.id, outputPath })
 }

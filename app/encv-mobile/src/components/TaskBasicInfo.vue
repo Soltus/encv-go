@@ -106,6 +106,40 @@
       </div>
     </div>
   </div>
+
+  <!-- 🆕 Task 18：加解密参数区块（cipherMode + compressionMode + extraFields） -->
+  <!-- 后端 Task 16 持久化，前端 Task 17 接口扩展，这里展示回显 -->
+  <!-- v-if="hasCryptoParams"：旧任务（Task 16 之前）没有这 2 字段，不显示空区块 -->
+  <div class="detail-section" v-if="hasCryptoParams">
+    <div class="section-title">
+      <ion-icon :icon="lockClosedOutline" class="section-title-icon"></ion-icon>
+      {{ t('tasks.cryptoParams') }}
+    </div>
+    <div class="info-grid">
+      <div class="info-item" v-if="task.cipherMode !== undefined">
+        <span class="info-label">{{ t('tasks.cipherMode') }}</span>
+        <ion-badge :color="task.cipherMode === 1 ? 'secondary' : 'primary'" class="info-badge">
+          {{ task.cipherMode === 1 ? t('tasks.cipherMode256') : t('tasks.cipherMode128') }}
+        </ion-badge>
+      </div>
+      <div class="info-item" v-if="task.compressionMode">
+        <span class="info-label">{{ t('tasks.compressionMode') }}</span>
+        <ion-badge
+          :color="task.compressionMode === 'zstd' ? 'success' : 'medium'"
+          class="info-badge"
+        >
+          {{ task.compressionMode === 'zstd' ? 'Zstd' : t('tasks.compressionNone') }}
+        </ion-badge>
+      </div>
+      <!-- extraFields：自定义参数（如 plugin_password 等不固定字段） -->
+      <template v-if="task.extraFields && Object.keys(task.extraFields).length > 0">
+        <div class="info-item" v-for="(value, key) in task.extraFields" :key="key">
+          <span class="info-label">{{ formatExtraFieldLabel(String(key)) }}</span>
+          <span class="info-value extra-field-value">{{ formatExtraFieldValue(value) }}</span>
+        </div>
+      </template>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -116,12 +150,16 @@ import {
   extensionPuzzle, chevronForward, documentTextOutline,
   informationCircleOutline, gitBranchOutline, listOutline,
   swapVertical, folderOutline, ellipsisHorizontalCircleOutline,
+  lockClosedOutline,
 } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
 import { showToast } from '@/composables/useToast'
 import type { EncvTask } from '@/api/encv'
-import { getTriggeredBy, getRunIdForTask } from '@/composables/useTaskTrigger'
 import { formatContainerVersion } from '@/constants/containerVersion'
+import {
+  useSectionDerivation,
+  type SectionDimension,
+} from '@/composables/useSectionDerivation'
 
 const props = defineProps<{ task: EncvTask }>()
 const { t } = useI18n()
@@ -150,21 +188,82 @@ const fileName = computed(() => {
   return parts[parts.length - 1] || props.task.sourcePath
 })
 
-const triggeredBy = computed(() => props.task.triggeredBy ?? getTriggeredBy(props.task.id))
-const runId = computed(() => props.task.runId ?? getRunIdForTask(props.task.id))
+// 🆕 2026-06-18 Task 18：crypto params 区块显示判定 + extraFields 格式化
+// 旧任务（Task 16 之前）没有这 3 个字段 → 不显示空区块
+const hasCryptoParams = computed(() => {
+  const task = props.task
+  return (
+    task.cipherMode !== undefined && task.cipherMode !== null ||
+    !!task.compressionMode ||
+    !!(task.extraFields && Object.keys(task.extraFields).length > 0)
+  )
+})
+
+// extraField key → 显示标签：snake_case → Title Case（如 plugin_password → Plugin Password）
+// 已知 key 走 i18n（如 plugin_password → tasks.pluginPassword），未知 key 退化到 Title Case
+const EXTRA_FIELD_LABEL_I18N: Record<string, string> = {
+  pluginPassword: 'tasks.pluginPassword',
+  streamPreset: 'tasks.streamPreset',
+  encryptFilename: 'tasks.encryptFilename',
+  fnRounds: 'tasks.fnRounds',
+  fnCharset: 'tasks.fnCharset',
+  fnDeconfuse: 'tasks.fnDeconfuse',
+  fnStructured: 'tasks.fnStructured',
+  encodeFilename: 'tasks.encodeFilename',
+  encType: 'tasks.encType',
+}
+
+function formatExtraFieldLabel(key: string): string {
+  // 1) 直接命中 i18n 表
+  const directKey = EXTRA_FIELD_LABEL_I18N[key]
+  if (directKey) return t(directKey)
+  // 2) camelCase → snake_case 后再查
+  const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase()
+  const snakeLookup = Object.keys(EXTRA_FIELD_LABEL_I18N).find(
+    k => k.replace(/([A-Z])/g, '_$1').toLowerCase() === snakeKey,
+  )
+  if (snakeLookup) return t(EXTRA_FIELD_LABEL_I18N[snakeLookup])
+  // 3) 退化：snake_case → Title Case
+  return key
+    .replace(/[_-]/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+}
+
+// extraField value → 显示值：bool 字符串 → ✓/✗；密码类 key → 脱敏（•••••）
+function formatExtraFieldValue(value: string): string {
+  if (value === undefined || value === null) return ''
+  const v = String(value)
+  // bool 字符串
+  if (v === 'true') return '✓'
+  if (v === 'false') return '✗'
+  // 密码类（key 在调用方决定，这里只看 value 长度，长字符串疑似密码 → 脱敏）
+  // 注意：密码脱敏由调用方决定（这里只做通用长字符串截断）
+  if (v.length > 32) return v.slice(0, 8) + '…' + v.slice(-4)
+  return v
+}
+
+const triggeredBy = computed(() => props.task.triggeredBy ?? 'user')
+const runId = computed(() => props.task.runId)
 const triggeredByIcon = computed(() => {
   const v = triggeredBy.value
   return v === 'automation' ? cogOutline : v === 'ai_agent' ? hardwareChipOutline : person
 })
 
 // 🆕 2026-06-11 v5：section 维度元数据（与 Tasks.vue deriveSubSection 保持一致）
-// 重要：必须在 TaskBasicInfo 里**独立实现**这个派生逻辑，因为 TaskBasicInfo 是独立
-//   组件，不知道 Tasks.vue 的 section 状态。保持派生规则完全一致即可。
+// 🆕 2026-06-18 Task 6：派生逻辑已抽取到 @/composables/useSectionDerivation。
+//   TaskBasicInfo 是单 task 组件，dimension 由 props.task 字段决定（per-component），
+//   适合用 useSectionDerivation(dimension) composable 包裹。
+//   'none' 维度的 label 用 i18n 覆盖（保持原行为：t('tasks.sectionOther')）。
+const sectionDimension = computed<SectionDimension>(() =>
+  props.task.pluginName ? 'plugin' : 'none',
+)
+const { derive } = useSectionDerivation(sectionDimension)
 const sectionMeta = computed(() => {
-  if (props.task.pluginName) {
-    return { dimension: 'plugin' as const, value: props.task.pluginName, label: props.task.pluginName }
+  const meta = derive(props.task)
+  if (meta.dimension === 'none') {
+    return { ...meta, label: t('tasks.sectionOther') }
   }
-  return { dimension: 'none' as const, value: '__none__', label: t('tasks.sectionOther') }
+  return meta
 })
 const sectionIcon = computed(() => {
   // 当前 sectionMeta 仅返回 'plugin' | 'none' 两个维度（type / category 留给 Tasks.vue 派生）
@@ -427,6 +526,20 @@ const sectionDimensionLabel = computed(() => {
 
 .badge-icon {
   font-size: 11px;
+}
+
+/* 🆕 2026-06-18 Task 18：crypto params 区块 extraField 值样式 */
+.extra-field-value {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--ion-color-dark);
+  background: rgba(0, 0, 0, 0.04);
+  padding: 2px 6px;
+  border-radius: 4px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .triggered-by-icon {

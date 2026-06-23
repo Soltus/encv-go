@@ -323,3 +323,68 @@ func (r *MountRegistry) Resolve(virtualPath string) (*ResolveResult, error) {
 
 	return &ResolveResult{Mount: match, AbsPath: abs, RelPath: rel}, nil
 }
+
+// AbsToVirtual 把物理绝对路径反向解析为虚拟路径 /d/<mount_path>/<sub_path>。
+//
+// 🆕 v3 2026-06-18 Task 8：后端统一虚拟路径
+//   - task.OutputPath / step.Detail 存虚拟路径，前端 Files.vue 直接消费
+//   - 找不到匹配 mount → 返回 ("", ErrNoMount) — 调用方 fallback 到原 absPath
+//
+// 规则：
+//   - 遍历所有 mount，找 RootPath 是 absPath 的最长前缀的 mount
+//   - 校验 absPath 仍在 mount.RootPath 内（防 ../ 逃逸）
+//   - disabled mount 仍可匹配（产物路径回显不应因 mount 被禁用而丢失）
+func (r *MountRegistry) AbsToVirtual(absPath string) (string, error) {
+	if absPath == "" {
+		return "", ErrInvalidPath
+	}
+	if !filepath.IsAbs(absPath) {
+		return "", fmt.Errorf("mount: AbsToVirtual requires absolute path, got %q", absPath)
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// clean 一次，确保后续前缀比较稳定
+	absClean := filepath.Clean(absPath)
+
+	var match *Mount
+	var matchRel string
+	matchLen := -1
+	for _, m := range r.mounts {
+		root := filepath.Clean(m.RootPath)
+		if root == "" {
+			continue
+		}
+		// 必须是 root 本身或 root/... 的子路径
+		var rel string
+		if absClean == root {
+			rel = ""
+		} else if strings.HasPrefix(absClean, root+string(filepath.Separator)) {
+			rel = strings.TrimPrefix(absClean, root+string(filepath.Separator))
+		} else {
+			continue
+		}
+		// 选 RootPath 最长（最具体）的 mount
+		// 注意：rel 必须与 match 同步更新，避免被后续非最优 mount 覆盖
+		if len(root) > matchLen {
+			match = m
+			matchRel = rel
+			matchLen = len(root)
+		}
+	}
+
+	if match == nil {
+		return "", fmt.Errorf("mount: no mount matches abs path %q", absPath)
+	}
+
+	// 构造虚拟路径：match.MountPath + "/" + matchRel
+	// 注意：MountPath 形如 /d/primary，matchRel 是相对子路径（可能为空）
+	if matchRel == "" {
+		return match.MountPath, nil
+	}
+	// MountPath 已是 /d/<name> 形式，无需再加 /d 前缀
+	virtual := match.MountPath + "/" + matchRel
+	// clean 一下防止 // 等
+	virtual = filepath.Clean(virtual)
+	return virtual, nil
+}

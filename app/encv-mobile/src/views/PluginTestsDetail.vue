@@ -6,20 +6,6 @@
           <ion-back-button default-href="/tabs/settings/devtools"></ion-back-button>
         </ion-buttons>
         <ion-title>{{ t('devtools.pluginTests') }}</ion-title>
-        <ion-buttons slot="end">
-          <!-- 视图切换 -->
-          <button
-            class="view-toggle"
-            :class="{ 'view-toggle--active': viewMode === 'pipeline' }"
-            @click="viewMode = 'pipeline'"
-          >Pipeline</button>
-          <span class="view-toggle-sep">|</span>
-          <button
-            class="view-toggle"
-            :class="{ 'view-toggle--active': viewMode === 'tree' }"
-            @click="viewMode = 'tree'"
-          >Tree</button>
-        </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
@@ -111,80 +97,16 @@
             3. 一键复制全部日志（带时间戳）—— 用户贴给开发者排查
             4. 流程每一步带：序号 / 状态 / relativePath / encoder / ffmpegArgs / exitCode / stderr
             5. 静态字节文件（JPEG/PNG/PDF/TXT/CSV）也展示（ffmpegArgs=[] 表明无 ffmpeg 调用）
+          🆕 2026-06-18 Task 13：抽取为独立 MockGenLogCard 组件 + useMockGenLog composable，
+             使用 UnifiedTimelineCard 骨架统一视觉风格。
         -->
-        <div v-if="mockGenLog.length > 0" class="mock-gen-log-card">
-          <div class="mock-gen-log-header">
-            <div class="mock-gen-log-title">
-              <ion-icon :icon="terminalOutline" color="primary"></ion-icon>
-              <span>FFMPEG 流程日志</span>
-              <span class="mock-gen-log-count">{{ mockGenLog.length }} / {{ mockGenLogTotal }}</span>
-            </div>
-            <button
-              class="mock-gen-log-copy"
-              :class="{ 'mock-gen-log-copy--copied': mockGenLogCopied }"
-              @click="copyMockGenLog"
-              :aria-label="mockGenLogCopied ? '已复制' : '复制全部日志'"
-            >
-              <ion-icon :icon="mockGenLogCopied ? checkmarkCircleOutline : copyOutline" slot="icon-only"></ion-icon>
-              <span>{{ mockGenLogCopied ? '已复制' : '复制全部' }}</span>
-            </button>
-          </div>
-          <div class="mock-gen-log-summary" v-if="mockGenLogSummary">
-            <ion-icon :icon="mockGenLogSummary.failed > 0 ? warningOutline : checkmarkCircleOutline"
-                      :color="mockGenLogSummary.failed > 0 ? 'warning' : 'success'"></ion-icon>
-            <span>{{ mockGenLogSummary.text }}</span>
-            <span v-if="mockGenLogSummary.disconnected" class="mock-gen-log-disconnect">
-              ⚠ 后端连接已断开 — 下面 {{ mockGenLog.length }} 行是「处理到这步」
-            </span>
-          </div>
-          <ol class="mock-gen-log-list">
-            <li
-              v-for="entry in mockGenLog"
-              :key="entry.key"
-              class="mock-gen-log-entry"
-              :class="{
-                'mock-gen-log-entry--failed': entry.status === 'failed',
-                'mock-gen-log-entry--success': entry.status === 'ok',
-                'mock-gen-log-entry--expanded': entry.expanded,
-              }"
-            >
-              <div class="mock-gen-log-row" @click="toggleMockGenLogEntry(entry.key)">
-                <span class="mock-gen-log-status">
-                  <ion-icon
-                    :icon="entry.status === 'failed' ? closeCircleOutline : entry.status === 'ok' ? checkmarkCircleOutline : ellipsisHorizontalOutline"
-                    :color="entry.status === 'failed' ? 'danger' : entry.status === 'ok' ? 'success' : 'medium'"
-                  ></ion-icon>
-                </span>
-                <!-- 🆕 2026-06-12：runner 标识（mediacodec=⚡硬件 / ffmpeg=⚙软件 / static=📄静态） -->
-                <span class="mock-gen-log-runner" :class="`mock-gen-log-runner--${entry.runner}`">
-                  {{ entry.runner === 'mediacodec' ? '⚡' : entry.runner === 'static' ? '📄' : '⚙' }}
-                </span>
-                <span class="mock-gen-log-idx">[{{ entry.index }}/{{ entry.total }}]</span>
-                <span class="mock-gen-log-path">{{ entry.relativePath }}</span>
-                <span class="mock-gen-log-encoder">{{ entry.encoder }}</span>
-                <span v-if="entry.status === 'failed'" class="mock-gen-log-exitcode">exit={{ entry.exitCode }}</span>
-                <ion-icon :icon="entry.expanded ? chevronUpOutline : chevronDownOutline" color="medium"></ion-icon>
-              </div>
-              <pre v-if="entry.expanded" class="mock-gen-log-detail">
-<span class="lbl">ffmpeg args:</span>
-{{ entry.ffmpegArgs.length > 0 ? entry.ffmpegArgs.join(' ') : '(静态字节 - 无 ffmpeg 调用)' }}
-<span class="lbl">exit code:</span> {{ entry.exitCode }}
-<span class="lbl">stderr:</span>
-{{ entry.stderr || '(empty)' }}
-<span class="lbl">at:</span> {{ entry.at }}
-<!-- 🆕 修复 B1 + B2 (2026-06-17)：context 块（5 字段），失败时核心调试信息 -->
-<span v-if="entry.srcSize !== undefined || entry.dstSize !== undefined || entry.workerTmpDir || entry.workerError || entry.contextInfo" class="lbl">context:</span>
-<span v-if="entry.workerError">worker error: {{ entry.workerError }}
-</span>
-<span v-if="entry.workerTmpDir">worker tmp_dir: {{ entry.workerTmpDir }}
-</span>
-<span v-if="entry.srcSize !== undefined || entry.dstSize !== undefined">file sizes: src={{ entry.srcSize ?? 0 }} bytes, dst={{ entry.dstSize ?? 0 }} bytes
-</span>
-<span v-if="entry.contextInfo">{{ entry.contextInfo }}
-</span></pre>
-            </li>
-          </ol>
-        </div>
+        <MockGenLogCard
+          :log="mockGenLog"
+          :summary="mockGenLogSummary"
+          :copied="mockGenLogCopied"
+          @toggle="toggleMockGenLogEntry"
+          @copy="copyMockGenLog"
+        />
       </ion-list>
 
       <!-- ========== 工作流引擎运行器 ========== -->
@@ -269,64 +191,23 @@
         </div>
       </ion-list>
 
-      <!-- ========== 测试报告 ========== -->
-
-      <template v-if="currentRun">
-        <!-- 报告头部 -->
-        <TestReportHeader
-          :run-id="currentRun.id"
-          :opened-at="currentRun.createdAt"
-          :duration-ms="reportDurationMs"
-          :total="totalSteps"
-          :passed="successSteps"
-          :failed="failedSteps"
-          :skipped="0"
-          :pending="totalSteps - completedSteps"
-          :platform="platform"
-        />
-
-        <!-- Pipeline 视图 -->
-        <template v-if="viewMode === 'pipeline'">
-          <JobPipelineCard
-            v-for="job in currentRun.jobs"
-            :key="job.id"
-            :job="job"
-            :step-names="stepNameMap"
-            :display-name="getJobDisplayName(job.jobDefId)"
-          />
-        </template>
-
-        <!-- Tree 视图 -->
-        <template v-else>
-          <TreeView
-            :workflow-run="currentRun"
-            :step-names="stepNameMap"
-            :job-display-names="jobDisplayNameMap"
-            @select-step="onSelectStep"
-          />
-          <StepDetailPanel
-            v-if="selectedStep"
-            :step-run="selectedStep"
-            :job-run="selectedStepJob!"
-          />
-        </template>
-      </template>
-
-      <!-- 历史运行 -->
-      <ion-list v-if="runs.length > 1 && !currentRun">
-        <ion-list-header><ion-label>PAST RUNS</ion-label></ion-list-header>
+      <!-- ========== 历史运行 ========== -->
+      <!-- 🆕 2026-06-18 v5-bug3fix：测试报告已并入任务系统 group card（Tasks L1）+ GroupDetail L2 -->
+      <!-- 历史 run 列表点击 → push 到 L2 GroupDetail，PluginTestsDetail 不再本地渲染报告 -->
+      <ion-list v-if="serviceRuns.length > 0">
+        <ion-list-header><ion-label>PAST RUNS · {{ t('devtools.clickToViewInTasks') }}</ion-label></ion-list-header>
         <ion-item
-          v-for="run in runs.slice(1, 11)"
-          :key="run.id"
+          v-for="record in serviceRuns.slice(0, 10)"
+          :key="record.id"
           button
           detail
-          @click="currentRun = run"
+          @click="openGroupDetail(record.id)"
         >
           <ion-label>
-            <h3>{{ run.id.slice(4, 16) }}...</h3>
-            <p>{{ run.status }} · {{ run.jobs.length }} jobs · {{ formatTime(run.createdAt) }}</p>
+            <h3>{{ record.id.slice(0, 12) }}...</h3>
+            <p>{{ record.workflowRun?.status ?? 'unknown' }} · {{ record.workflowRun?.jobs.length ?? 0 }} jobs · {{ formatTime(record.startedAt) }} · {{ record.passed }} ✓ / {{ record.failed }} ✗</p>
           </ion-label>
-          <StepMiniBadge :status="run.status === 'running' ? 'queued' : run.status" :show-name="false" slot="end" />
+          <StepMiniBadge :status="(record.workflowRun?.status === 'running' ? 'queued' : record.workflowRun?.status) ?? 'queued'" :show-name="false" slot="end" />
         </ion-item>
       </ion-list>
 
@@ -336,6 +217,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 
 // 🆕 2026-06-12 崩溃根因修复：后端 crash 完全静默 → 监听 MainActivity 推送的 window CustomEvent
 //   链路：EncvGoService.sendBroadcast (Android system broadcast)
@@ -375,8 +257,7 @@ import {
 } from '@ionic/vue'
 import {
   addCircleOutline, trashOutline, syncOutline, playCircleOutline, closeCircleOutline,
-  checkmarkCircleOutline, warningOutline, copyOutline, terminalOutline,
-  chevronUpOutline, chevronDownOutline, ellipsisHorizontalOutline,
+  checkmarkCircleOutline,
 } from 'ionicons/icons'
 import { useI18n } from '@/composables/useI18n'
 import { showToast } from '@/composables/useToast'
@@ -385,18 +266,21 @@ import {
   type PluginMeta,
 } from '@/api/encv'
 import { generateMockFilesViaBackend, resetMockFilesViaBackend } from '@/api/mockGenerator'
-import { extToRelativePath } from '@/lib/mockDataGenerator'
+// 🆕 2026-06-22：extToRelativePath / formatContainerVersion 移到 pure 函数（src/lib/workflow/buildDynamicWorkflow.ts）
 import { MOCK_GENERATE_ROOT } from '@/lib/mockConstants'
-import { formatContainerVersion } from '@/constants/containerVersion'
-import { useWorkflowEngine } from '@/composables/useWorkflowEngine'
-import type { WorkflowDefinition, WorkflowRun, JobRun, StepRun, StepDefinition } from '@/lib/workflow/types'
-import TestReportHeader from '@/components/automation/TestReportHeader.vue'
+// 🆕 2026-06-22：buildDynamicWorkflow 派生逻辑抽到 pure 函数（0 行为变化）
+import { buildDynamicWorkflowPure } from '@/lib/workflow/buildDynamicWorkflow'
+import { useWorkflowStore } from '@/composables/useWorkflowStore'
+import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
+// 🆕 2026-06-18 Task 13：抽取 FFMPEG 流程日志为独立 composable + 组件
+import { useMockGenLog } from '@/composables/useMockGenLog'
+import MockGenLogCard from '@/components/developer/MockGenLogCard.vue'
+// 🆕 2026-06-22：buildDynamicWorkflowPure 返回 wfDef（已含 WorkflowDefinition 类型）
+// StepDefinition 不再需要（派生逻辑在 pure 函数里）
 import StepMiniBadge from '@/components/automation/StepMiniBadge.vue'
-import JobPipelineCard from '@/components/automation/JobPipelineCard.vue'
-import TreeView from '@/components/automation/TreeView.vue'
-import StepDetailPanel from '@/components/automation/StepDetailPanel.vue'
 
 const { t } = useI18n()
+const router = useRouter()
 
 // ---- Mock 数据 ----
 // 🆕 2026-06-15 声明式：mockRoot = AUTOMATION_MOUNT_PATH + '/'（常量，不再 split/slice）
@@ -407,52 +291,30 @@ const mockRoot = computed(() => MOCK_GENERATE_ROOT)
 const isGenerating = ref(false)
 const isResetting = ref(false)
 const mockStats = ref<{ count: number; totalSize: number; skipped?: number } | null>(null)
-const generateProgressText = ref('')
 const mockGenerated = ref(false)
 
 // 🆕 2026-06-12 饱和调试：流程日志（每个 spec 一行，含完整 ffmpeg 诊断）
 //   - 即使后端 cgo 阻塞导致 SSE 中断，最后收到的 spec_diag 也会被记录
 //   - 用户可点开看 stderr / 一键复制
 //   - 失败行红色高亮 + 自动展开
-interface MockGenLogEntry {
-  key: string
-  index: number
-  total: number
-  relativePath: string
-  status: 'ok' | 'failed' | 'pending'
-  encoder: string
-  /**
-   * 🆕 2026-06-12：runner 标识
-   *   - "ffmpeg": 软件编（沙箱 / 真机兜底）
-   *   - "mediacodec": 硬件编（Phase 3.3 实装，UI 显示 ⚡）
-   *   - "static": 静态字节（PNG/JPEG/PDF/TXT 等，UI 显示 📄）
-   */
-  runner: 'ffmpeg' | 'mediacodec' | 'static' | string
-  ffmpegArgs: string[]
-  exitCode: number
-  stderr: string
-  at: string
-  expanded: boolean
-  _marked?: boolean // onProgress 标记过 ok 的不重复 mark
-  // 🆕 修复 B1 + B2 (2026-06-17)：增强调试字段
-  srcSize?: number
-  dstSize?: number
-  workerTmpDir?: string
-  workerError?: string
-  contextInfo?: string
-}
-const mockGenLog = ref<MockGenLogEntry[]>([])
-const mockGenLogTotal = ref(0)
-const mockGenLogCopied = ref(false)
-const mockGenLogSummary = computed(() => {
-  const failed = mockGenLog.value.filter((e) => e.status === 'failed').length
-  const ok = mockGenLog.value.filter((e) => e.status === 'ok').length
-  const pending = mockGenLog.value.filter((e) => e.status === 'pending').length
-  const disconnected = mockGenLogTotal.value > 0 && mockGenLog.value.length < mockGenLogTotal.value && (failed + ok) < mockGenLogTotal.value
-  let text = `${ok} ✓ / ${failed} ✗ / ${pending} ◌`
-  if (disconnected) text = `${text}（流中断于 ${mockGenLog.value.length}/${mockGenLogTotal.value}）`
-  return { failed, ok, pending, text, disconnected }
-})
+// 🆕 2026-06-18 Task 13：抽取为 useMockGenLog composable，状态 / SSE 回调 / 交互函数全部迁移
+const {
+  mockGenLog,
+  mockGenLogCopied,
+  mockGenLogSummary,
+  progressText: generateProgressText,
+  skippedFiles,
+  lastCount,
+  lastSize,
+  toggleMockGenLogEntry,
+  copyMockGenLog,
+  resetMockGenLog,
+  onSpecDiag,
+  onSpecPlan,
+  onProgress,
+  onSpecFailed,
+  onSkipped,
+} = useMockGenLog({ getRoot: () => mockRoot.value })
 
 // 🆕 2026-06-11 修复：内联错误卡（替代 showToast，饱和调试原则：禁用 Toast）
 // 历史：用户反馈「真机 mock 生成 ffmpeg 失败 / 后端崩溃 → 弹个 toast 就没了，根本看不到」
@@ -484,40 +346,32 @@ const dynamicTestCases = ref<any[]>([])
 const pluginCount = computed(() => plugins.value.length)
 
 // ---- 工作流引擎 ----
-const engine = useWorkflowEngine()
+// 🆕 Task 7：useWorkflowEngine 已退役，拆分为：
+//   - useWorkflowStore：definitions CRUD（createDefinition / updateDefinition / getDefinition）
+//   - useWorkflowTaskService：运行执行 + WS 事件 + 持久化
+const store = useWorkflowStore()
+const { definitions: wfDefs, createDefinition, updateDefinition, getDefinition } = store
+const service = useWorkflowTaskService()
 const {
-  definitions: wfDefs,
-  runs,
   currentRun,
   isRunning,
   totalSteps,
   completedSteps,
   successSteps,
   failedSteps,
-  startListening: wsStart,
-  stopListening: wsStop,
-} = engine
+  runs: serviceRuns,
+  submitRun,
+  cancelRun,
+} = service
 
-const viewMode = ref<'pipeline' | 'tree'>('pipeline')
-const selectedStep = ref<StepRun | null>(null)
-const _tickNow = ref(Date.now())
-let tickHandle: ReturnType<typeof setInterval> | null = null
+// 🆕 2026-06-18 v5-bug3fix：测试报告 UI 块（TestReportHeader/JobPipelineCard/StepDetailPanel）已并入任务系统
+//   - L1 Tasks tab group card：智能显示自身状态 + 命中计数器
+//   - L2 GroupDetail 页：ion-segment 3 tab (Pipeline / Tasks / Diagnostics)
+//   - L3 TaskDetail modal：单 task 详情
+// 此页面只保留：mock 数据管理 + 触发测试 + 实时 workflow 进度 + 历史 run 列表
+// 历史 run 列表点击 → push 到 L2 GroupDetail，**不在本地渲染报告**
 
-const platform = computed(() => {
-  if (typeof navigator === 'undefined') return 'node'
-  const ua = navigator.userAgent || ''
-  if (/android/i.test(ua)) return 'android'
-  if (/iphone|ipad|ipod/i.test(ua)) return 'ios'
-  return 'web'
-})
-
-const reportDurationMs = computed(() => {
-  if (!currentRun.value) return 0
-  if (isRunning.value) return _tickNow.value - (currentRun.value.startedAt ? new Date(currentRun.value.startedAt).getTime() : Date.now())
-  return currentRun.value.durationMs ?? 0
-})
-
-// 兼容旧接口名
+// 兼容模板：实时进度（用 useWorkflowTaskService 暴露的 counters 派生）
 const progress = computed(() => ({
   total: totalSteps.value,
   completed: completedSteps.value,
@@ -526,72 +380,15 @@ const progress = computed(() => ({
   pending: Math.max(0, totalSteps.value - completedSteps.value),
 }))
 
-/** 从当前运行的 workflow definition 构建 step 名映射 */
-const stepNameMap = computed(() => {
-  const map = new Map<string, string>()
-  const def = currentRun.value
-    ? wfDefs.value.find((d: WorkflowDefinition) => d.id === currentRun.value!.workflowDefId)
-    : null
-  if (def) {
-    for (const job of def.jobs) {
-      for (const step of job.steps) {
-        map.set(step.id, step.name)
-      }
-    }
-  }
-  // 如果没有 definition（历史运行），从 stepDefId 推断名称
-  if (map.size === 0 && currentRun.value) {
-    for (const job of currentRun.value.jobs) {
-      for (const step of job.steps) {
-        if (!map.has(step.stepDefId)) {
-          map.set(step.stepDefId, step.stepDefId)
-        }
-      }
-    }
-  }
-  return map
-})
-
-const jobDisplayNameMap = computed(() => {
-  const map = new Map<string, string>()
-  const def = currentRun.value
-    ? wfDefs.value.find((d: WorkflowDefinition) => d.id === currentRun.value!.workflowDefId)
-    : null
-  if (def) {
-    for (const job of def.jobs) map.set(job.id, job.name)
-  }
-  return map
-})
-
-function getJobDisplayName(jobDefId: string): string {
-  return jobDisplayNameMap.value.get(jobDefId) ?? jobDefId
-}
-
-function findJobForStep(run: WorkflowRun, step: StepRun): JobRun | undefined {
-  return run.jobs.find((j: JobRun) => j.steps.some((s: StepRun) => s.id === step.id))
-}
-
-const selectedStepJob = computed(() =>
-  currentRun.value && selectedStep.value
-    ? findJobForStep(currentRun.value, selectedStep.value)
-    : null,
-)
-
 // ---- Handlers ----
 
 async function handleGenerateMock() {
   if (isGenerating.value) return
   isGenerating.value = true
-  generateProgressText.value = ''
   mockStats.value = null
   // 🆕 2026-06-12 饱和调试：清空 + 准备流程日志
-  mockGenLog.value = []
-  mockGenLogTotal.value = 0
-  mockGenLogCopied.value = false
-  let lastCount = 0
-  let lastSize = 0
-  // 🆕 2026-06-11 v4：跟踪被跳过的文件（real device 上 ffmpeg 没编 mp3/flac encoder 常见）
-  const skippedFiles: { relativePath: string; reason: string; exitCode: number; stderr: string }[] = []
+  // 🆕 2026-06-18 Task 13：改用 useMockGenLog.resetMockGenLog() 统一重置所有状态
+  resetMockGenLog()
   try {
     const result = await generateMockFilesViaBackend({
       root: mockRoot.value,
@@ -605,111 +402,23 @@ async function handleGenerateMock() {
       // 但**仍保留**：如果 worker 启动慢 / SIGKILL 在 cgo OS thread 卡住内核调度，
       // 前端 abort 至少断 SSE 让用户看到错误（不再 spinner 永远）。
       timeoutMs: 30000,
-      onSpecDiag: (diag) => {
-        // 🆕 2026-06-12 饱和调试：每个 spec 处理前先记一行
-        //   哪怕 progress 事件因 cgo 阻塞没收到，至少能看到「处理到这步」
-        //   关键：用 relativePath + index 找已有 row（spec_plan 时已 push pending），
-        //         替换为完整诊断版（status / stderr / exitCode）
-        //   真机 cgo 阻塞时只有 plan 行（pending），诊断版（ok/failed）永远到不了 → 前端仍能看到 pending 行
-        if (diag.relativePath === '__starting__') {
-          // starting 事件：更新 total 即可
-          mockGenLogTotal.value = diag.total
-          return
-        }
-        // 找同 relativePath 已有 row（plan 阶段 push 过）
-        const existing = mockGenLog.value.findIndex((e) => e.relativePath === diag.relativePath && e.index === diag.index)
-        const entry: MockGenLogEntry = {
-          key: `${diag.index}-${diag.relativePath}-${diag.status}`,
-          index: diag.index,
-          total: diag.total,
-          relativePath: diag.relativePath,
-          status: diag.status,
-          encoder: diag.encoder,
-          runner: diag.runner, // 🆕 2026-06-12
-          ffmpegArgs: diag.ffmpegArgs,
-          exitCode: diag.exitCode,
-          stderr: diag.stderr,
-          at: new Date().toISOString(),
-          expanded: diag.status === 'failed', // 失败自动展开
-          // 🆕 修复 B1 + B2 (2026-06-17)：保留 5 字段到 entry（UI 渲染 context 块用）
-          srcSize: diag.srcSize,
-          dstSize: diag.dstSize,
-          workerTmpDir: diag.workerTmpDir,
-          workerError: diag.workerError,
-          contextInfo: diag.contextInfo,
-        }
-        if (existing >= 0) {
-          mockGenLog.value[existing] = entry
-        } else {
-          mockGenLog.value.push(entry)
-        }
-        generateProgressText.value = `[${diag.index}/${diag.total}] ${diag.relativePath} (${diag.status})`
-      },
-      onSpecPlan: (diag) => {
-        // 🆕 2026-06-12 饱和调试：handler 入口发的"待跑"列表（pending 状态）
-        //   真机 cgo 阻塞时只有这些行能到达 → 前端能定位"卡在哪个 spec"
-        if (diag.relativePath === '__starting__') {
-          mockGenLogTotal.value = diag.total
-          return
-        }
-        // 找同 relativePath 已有 row，避免重复 push
-        const existing = mockGenLog.value.findIndex((e) => e.relativePath === diag.relativePath && e.index === diag.index)
-        const entry: MockGenLogEntry = {
-          key: `${diag.index}-${diag.relativePath}-plan`,
-          index: diag.index,
-          total: diag.total,
-          relativePath: diag.relativePath,
-          status: 'pending',
-          encoder: diag.encoder,
-          runner: diag.runner, // 🆕 2026-06-12
-          ffmpegArgs: diag.ffmpegArgs,
-          exitCode: 0,
-          stderr: '',
-          at: new Date().toISOString(),
-          expanded: false,
-        }
-        if (existing >= 0) {
-          // 保留已有行（plan 后已被 diag 替换过），不动
-        } else {
-          mockGenLog.value.push(entry)
-        }
-        mockGenLogTotal.value = diag.total
-      },
-      onProgress: (p) => {
-        lastCount++
-        lastSize += p.size
-        generateProgressText.value = `(${lastCount}) ${p.relativePath}`
-        // 🆕 2026-06-12：把对应 spec_diag 行标记为 ok
-        const e = mockGenLog.value.find((e) => e.relativePath === p.relativePath && e.status === 'ok' && e.exitCode === 0 && !e._marked)
-        if (e) {
-          e._marked = true
-        }
-      },
-      onSpecFailed: (fail) => {
-        // 🆕 2026-06-12 饱和调试：spec 失败带完整 ffmpeg 诊断
-        skippedFiles.push({ relativePath: fail.relativePath, reason: fail.reason, exitCode: fail.exitCode, stderr: fail.stderr })
-        // 找对应的 spec_diag 行，更新状态 + 附加 stderr
-        const e = mockGenLog.value.find((e) => e.relativePath === fail.relativePath && e.status !== 'failed')
-        if (e) {
-          e.status = 'failed'
-          e.exitCode = fail.exitCode
-          e.stderr = fail.stderr || e.stderr
-          e.expanded = true // 自动展开失败行
-        }
-        generateProgressText.value = `⚠️ 失败 ${fail.relativePath} (exit=${fail.exitCode})`
-        console.warn('[mock-gen] spec failed', fail)
-      },
-      onSkipped: (info) => {
-        skippedFiles.push({ relativePath: info.relativePath, reason: info.reason, exitCode: -1, stderr: '' })
-        generateProgressText.value = `⚠️ 跳过 ${info.relativePath}（${info.reason}）`
-        console.warn('[mock-gen] skipped', info)
-      },
+      // 🆕 2026-06-18 Task 13：5 个 SSE 回调全部从 useMockGenLog composable 获取
+      //   行为与原 608-707 行内联实现完全一致（状态转移 / 自动展开 / _marked 标记）
+      onSpecDiag,
+      onSpecPlan,
+      onProgress,
+      onSpecFailed,
+      onSkipped,
     })
-    mockStats.value = { count: result.count || lastCount, totalSize: result.totalSize || lastSize, skipped: result.skipped ?? skippedFiles.length }
+    mockStats.value = {
+      count: result.count || lastCount.value,
+      totalSize: result.totalSize || lastSize.value,
+      skipped: result.skipped ?? skippedFiles.value.length,
+    }
     mockGenerated.value = true
     // 🆕 v4：如果有 skipped 文件，inline error card 显示（warning 风格而非 error）
-    if (result.skipped > 0 || skippedFiles.length > 0) {
-      const reasonList = skippedFiles.map((s) => {
+    if (result.skipped > 0 || skippedFiles.value.length > 0) {
+      const reasonList = skippedFiles.value.map((s) => {
         const tail = s.stderr ? `\n     stderr: ${s.stderr.split('\n')[0]}` : ''
         return `  - ${s.relativePath} (exit=${s.exitCode}): ${s.reason}${tail}`
       }).join('\n')
@@ -747,52 +456,7 @@ async function handleGenerateMock() {
 }
 
 // ---- 🆕 2026-06-12 饱和调试：流程日志卡操作 ----
-
-function toggleMockGenLogEntry(key: string) {
-  const e = mockGenLog.value.find((e) => e.key === key)
-  if (e) e.expanded = !e.expanded
-}
-
-function copyMockGenLog() {
-  if (mockGenLog.value.length === 0) return
-  const lines: string[] = []
-  lines.push(`# ENCV Mock 生成流程日志`)
-  lines.push(`# at: ${new Date().toISOString()}`)
-  lines.push(`# total: ${mockGenLogTotal.value}`)
-  lines.push(`# entries: ${mockGenLog.value.length}`)
-  lines.push(`# root: ${mockRoot.value}`)
-  lines.push(``)
-  for (const e of mockGenLog.value) {
-    const status = e.status === 'ok' ? '✓' : e.status === 'failed' ? '✗' : '◌'
-    lines.push(`[${status}] [${e.index}/${e.total}] ${e.relativePath}`)
-    lines.push(`    runner: ${e.runner}  (mediacodec=硬件⚡ / ffmpeg=软件⚙ / static=静态📄)`)
-    lines.push(`    encoder: ${e.encoder}`)
-    lines.push(`    ffmpeg args: ${e.ffmpegArgs.length > 0 ? e.ffmpegArgs.join(' ') : '(静态字节 - 无 ffmpeg 调用)'}`)
-    lines.push(`    exit code: ${e.exitCode}`)
-    lines.push(`    at: ${e.at}`)
-    // 🆕 修复 B1 + B2 (2026-06-17)：复制时附带 context 信息（便于问题反馈时粘贴到 issue）
-    if (e.workerTmpDir) lines.push(`    worker tmp_dir: ${e.workerTmpDir}`)
-    if (e.workerError) lines.push(`    worker error: ${e.workerError}`)
-    if (e.srcSize !== undefined || e.dstSize !== undefined) {
-      lines.push(`    file sizes: src=${e.srcSize ?? 0} bytes, dst=${e.dstSize ?? 0} bytes`)
-    }
-    if (e.contextInfo) lines.push(`    context: ${e.contextInfo}`)
-    if (e.stderr) {
-      lines.push(`    stderr:`)
-      for (const ln of e.stderr.split('\n')) lines.push(`      ${ln}`)
-    }
-    lines.push(``)
-  }
-  const text = lines.join('\n')
-  navigator.clipboard?.writeText(text).then(() => {
-    mockGenLogCopied.value = true
-    setTimeout(() => { mockGenLogCopied.value = false }, 2000)
-  }).catch((e) => {
-    console.error('[mock-gen] copy failed', e)
-    // fallback: 弹 prompt 让用户手动复制
-    window.prompt('复制以下日志', text)
-  })
-}
+// 🆕 2026-06-18 Task 13：toggleMockGenLogEntry / copyMockGenLog 已迁移到 useMockGenLog composable
 
 // classifyMockError 把后端 throw 出来的错误分类，给出精确的排查 hint。
 // 后端错误源（cmd/ffmpeg-worker/ + internal/server/mock_generator.go）：
@@ -947,26 +611,7 @@ async function handleLoadPlugins() {
 }
 
 /**
- * 把 ext 映射到 mock 目录分类
- *   mp4/mkv/avi/mov → 'video'
- *   mp3/flac/ogg/m4a/wav → 'audio'
- *   png/jpg/jpeg/gif/webp → 'image'
- *   pdf → 'pdf'
- *   doc/docx/xls/xlsx/ppt/pptx → 'wps'
- *   txt/md → 'text'
- *   encv → 'alist-encrypted'
- */
-function categoryForExt(ext: string): string {
-  const e = ext.toLowerCase().replace(/^\./, '')
-  if (['mp4', 'mkv', 'avi', 'mov', 'webm', 'flv', 'wmv'].includes(e)) return 'video'
-  if (['mp3', 'flac', 'ogg', 'm4a', 'wav', 'aac', 'opus'].includes(e)) return 'audio'
-  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff'].includes(e)) return 'image'
-  if (['pdf'].includes(e)) return 'pdf'
-  if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(e)) return 'wps'
-  if (['txt', 'md', 'rtf', 'log'].includes(e)) return 'text'
-  if (['encv', 'ae'].includes(e)) return 'alist-encrypted'
-  return 'misc'
-}
+ * categoryForExt 已抽到 src/lib/workflow/buildDynamicWorkflow.ts（pure 函数内部 helper）
 
 /**
  * 根据已加载的插件，动态构建 WorkflowDefinition。
@@ -987,282 +632,25 @@ function buildDynamicWorkflow(): void {
     return
   }
 
-  const encryptSteps: StepDefinition[] = []
-  const decryptSteps: StepDefinition[] = []
-
-  for (const plugin of plugins.value) {
-    const opts = plugin.taskOptions
-    if (!opts) continue
-
-    // 🆕 2026-06-15 修 #4：按 plugin.supportedExtensions[0] + mock spec 实际路径派生 sourcePath
-    // （不再硬编码 sample.{ext}，跟 mock 真相对齐：mp3→music.mp3 / mkv→comedy.mkv / jpg→photo.jpg）
-    const supportedExts = plugin.supportedExtensions ?? []
-    if (supportedExts.length === 0) continue
-    const sourceExt = supportedExts[0]
-    const specRelPath = extToRelativePath(sourceExt)
-    const sourcePath = specRelPath
-      ? `${mockRoot.value}${specRelPath}`
-      : `${mockRoot.value}01-plain-media/${categoryForExt(sourceExt)}/sample.${sourceExt}`
-
-    const versions: number[] = opts.supportVersionSelect && opts.supportedVersions
-      ? opts.supportedVersions
-      : [opts.defaultVersion]
-
-    // ====== 修 #5：遍历 plugin.taskOptions.ExtraFields ======
-    const selectFields: { field: any; values: string[] }[] = []
-    const boolFields: { field: any }[] = []
-    for (const f of opts.extraFields ?? []) {
-      if (f.type === 'select' && Array.isArray(f.options) && f.options.length > 1) {
-        selectFields.push({ field: f, values: f.options })
-      } else if (f.type === 'bool') {
-        boolFields.push({ field: f })
-      }
-    }
-
-    for (const version of versions) {
-      // encrypt / decrypt 各自的 ExtraFields
-      const encryptSelectFields = selectFields.filter(
-        (sf) => !sf.field.condition || sf.field.condition === 'encrypt',
-      )
-      const encryptBoolFields = boolFields.filter(
-        (bf) => !bf.field.condition || bf.field.condition === 'encrypt',
-      )
-      const decryptSelectFields = selectFields.filter(
-        (sf) => !sf.field.condition || sf.field.condition === 'decrypt',
-      )
-      const decryptBoolFields = boolFields.filter(
-        (bf) => !bf.field.condition || bf.field.condition === 'decrypt',
-      )
-
-      // encrypt 笛卡尔积展开
-      const encryptSelectCombos = cartesianExpand(
-        encryptSelectFields.map((sf) => sf.values),
-      )
-      const encryptBoolCombos: boolean[][] = []
-      if (encryptBoolFields.length === 0) {
-        encryptBoolCombos.push([])
-      } else {
-        const n = encryptBoolFields.length
-        for (let mask = 0; mask < 1 << n; mask++) {
-          encryptBoolCombos.push(Array.from({ length: n }, (_, i) => Boolean(mask & (1 << i))))
-        }
-      }
-
-      // decrypt 笛卡尔积展开
-      const decryptSelectCombos = cartesianExpand(
-        decryptSelectFields.map((sf) => sf.values),
-      )
-      const decryptBoolCombos: boolean[][] = []
-      if (decryptBoolFields.length === 0) {
-        decryptBoolCombos.push([])
-      } else {
-        const n = decryptBoolFields.length
-        for (let mask = 0; mask < 1 << n; mask++) {
-          decryptBoolCombos.push(Array.from({ length: n }, (_, i) => Boolean(mask & (1 << i))))
-        }
-      }
-
-      // 🆕 安全 ID 工具：把 plugin + version + ext + extraFields 转成文件系统安全的子目录名
-      const makeSafeId = (extraFields: Record<string, string>): string => {
-        const sortedKeys = Object.keys(extraFields).sort()
-        const parts: string[] = [plugin.name, formatContainerVersion(version), sourceExt]
-        for (const k of sortedKeys) {
-          parts.push(`${k}-${extraFields[k]}`)
-        }
-        return parts.join('_').replace(/[^\w.-]/g, '_').replace(/_+/g, '_')
-      }
-
-      // ============== Encrypt 步骤生成 ==============
-      for (const selectCombo of encryptSelectCombos) {
-        for (const boolCombo of encryptBoolCombos) {
-          const extraFields: Record<string, string> = {}
-          encryptSelectFields.forEach((sf, i) => {
-            const val = selectCombo[i]
-            if (val !== undefined) extraFields[sf.field.key] = val
-          })
-          encryptBoolFields.forEach((bf, i) => {
-            extraFields[bf.field.key] = boolCombo[i] ? 'true' : 'false'
-          })
-
-          const safeId = makeSafeId(extraFields)
-          // 🆕 修 #5：每个 safeId 唯一子目录 → 多次加密不会互相覆盖
-          const targetPath = `${mockRoot.value}02-test-output/${safeId}/`
-
-          const stepId = `enc_${safeId}`
-          const nameParts: string[] = [plugin.name, 'ENCRYPT', formatContainerVersion(version), sourceExt]
-          for (const sf of encryptSelectFields) {
-            const v = extraFields[sf.field.key]
-            if (v) {
-              const label = sf.field.optionLabels?.[v] ?? v
-              nameParts.push(`${sf.field.key}=${label}`)
-            }
-          }
-          for (const bf of encryptBoolFields) {
-            const v = extraFields[bf.field.key]
-            if (v) nameParts.push(`${bf.field.key}=${v}`)
-          }
-
-          encryptSteps.push({
-            id: stepId,
-            name: nameParts.join(' · '),
-            action: {
-              type: 'encv_task',
-              taskType: 'encrypt',
-              pluginName: plugin.name,
-              params: {
-                sourcePath,
-                targetPath,
-                password: 'automation-test-pwd',
-                version,
-                extraFields: Object.keys(extraFields).length > 0 ? extraFields : undefined,
-              },
-            },
-          })
-
-          dynamicTestCases.value.push({
-            id: stepId,
-            phase: 'encrypt',
-            pluginName: plugin.name,
-            taskType: 'encrypt',
-            version,
-            sourcePath,
-            sourceExt,
-            targetPath,
-            safeId,
-            extraFields: { ...extraFields },
-          })
-        }
-      }
-
-      // ============== Decrypt 步骤生成（依赖 encrypt-all 完成后） ==============
-      for (const selectCombo of decryptSelectCombos) {
-        for (const boolCombo of decryptBoolCombos) {
-          const extraFields: Record<string, string> = {}
-          decryptSelectFields.forEach((sf, i) => {
-            const val = selectCombo[i]
-            if (val !== undefined) extraFields[sf.field.key] = val
-          })
-          decryptBoolFields.forEach((bf, i) => {
-            extraFields[bf.field.key] = boolCombo[i] ? 'true' : 'false'
-          })
-
-          // 复用 encrypt 阶段产物的 safeId（decrypt 只读，不写入）
-          // decrypt 自己的 extraFields 不影响产物路径 → 沿用 plugin+version+ext 作为子目录
-          // 但 decrypt 的 extraFields 会影响解密参数（如果 plugin decrypt 需要）
-          // 安全做法：decrypt 用 {plugin+version+ext} 作为目录基础，+ dec- 前缀
-          const baseSafeId = makeSafeId({})
-          const safeId = `dec_${baseSafeId}` + (Object.keys(extraFields).length > 0
-            ? '_' + Object.keys(extraFields).sort().map(k => `${k}-${extraFields[k]}`).join('_').replace(/[^\w.-]/g, '_')
-            : '')
-
-          // 🆕 修 #5：解密读 encrypt 阶段写出的产物
-          // encrypt 步骤把 spec.relativePath basename 加密成 basename + containerExt
-          // 加密后文件名由 plugin 内部决定 → 后端 outputExt = ext + containerExt
-          // 之前硬编码 sample.${sourceExt}.${containerExt} → 对 mp3/mkv/jpg 等 mock 实际名不一致 → "文件不存在"
-          // ⚠️ plugin.containerExtension 是后端从 plugin.GetContainerExtension() 返回的权威值
-          //    不允许任何硬编码 fallback（用户原则：任何硬编码都错）
-          if (!plugin.containerExtension) {
-            throw new Error(`Plugin ${plugin.name} 缺少 containerExtension（后端 plugin.GetContainerExtension() 返回空）`)
-          }
-          const containerExt = plugin.containerExtension
-          const sourceBasename = sourcePath.split('/').pop() ?? `sample.${sourceExt}`
-          const encryptedFileName = `${sourceBasename}.${containerExt}`
-          const sourcePathForDecrypt = `${mockRoot.value}02-test-output/${baseSafeId}/${encryptedFileName}`
-
-          const stepId = `dec_${safeId.replace(/^dec_/, '')}`
-          const nameParts: string[] = [plugin.name, 'DECRYPT', formatContainerVersion(version), sourceExt]
-          for (const sf of decryptSelectFields) {
-            const v = extraFields[sf.field.key]
-            if (v) {
-              const label = sf.field.optionLabels?.[v] ?? v
-              nameParts.push(`${sf.field.key}=${label}`)
-            }
-          }
-          for (const bf of decryptBoolFields) {
-            const v = extraFields[bf.field.key]
-            if (v) nameParts.push(`${bf.field.key}=${v}`)
-          }
-
-          decryptSteps.push({
-            id: stepId,
-            name: nameParts.join(' · '),
-            action: {
-              type: 'encv_task',
-              taskType: 'decrypt',
-              pluginName: plugin.name,
-              params: {
-                sourcePath: sourcePathForDecrypt,
-                // decrypt 写到原 01-plain-media 旁边（用 .dec.{ext} 后缀避免覆盖原文件）
-                targetPath: `${mockRoot.value}02-test-output/${safeId}/`,
-                password: 'automation-test-pwd',
-                version,
-                extraFields: Object.keys(extraFields).length > 0 ? extraFields : undefined,
-              },
-            },
-          })
-
-          dynamicTestCases.value.push({
-            id: stepId,
-            phase: 'decrypt',
-            pluginName: plugin.name,
-            taskType: 'decrypt',
-            version,
-            sourcePath: sourcePathForDecrypt,
-            sourceExt,
-            targetPath: `${mockRoot.value}02-test-output/${safeId}/`,
-            safeId,
-            extraFields: { ...extraFields },
-          })
-        }
-      }
-    }
-  }
+  // 2026-06-22: 抽到 pure 函数（0 行为变化）
+  // 派生逻辑在 src/lib/workflow/buildDynamicWorkflow.ts：
+  //   - 按 plugin.taskOptions.extraFields 派生 select/bool 笛卡尔积
+  //   - encrypt / decrypt 各一组 -> encrypt-all -> decrypt-all DAG
+  //   - sourcePath 用 extToRelativePath -> 真 mock 相对路径
+  //   - safeId / containerExt / 命名规则全部一致
+  // 这里只负责：调 pure 函数 -> 写入 dynamicTestCases -> 注册 wfDef
+  const { testCases, wfDef } = buildDynamicWorkflowPure(plugins.value, mockRoot.value)
+  dynamicTestCases.value = testCases
 
   // 构建或更新工作流定义
-  const existingIdx = wfDefs.value.findIndex((d) => d.id === 'dynamic-auto-test')
-  const wfDef: WorkflowDefinition = {
-    id: 'dynamic-auto-test',
-    name: '自动化测试套件（动态）',
-    description: `${plugins.value.length} 插件 × 源扩展名 × 版本 × 加密选项笛卡尔积
-（encrypt-all 全部并行 → decrypt-all 等 encrypt 完成后并行）`,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    trigger: 'manual',
-    env: { PASSWORD: 'automation-test-pwd' },
-    jobs: [
-      // 🆕 DAG 拆 2 个 job
-      {
-        id: 'encrypt-all',
-        name: '🔒 Encrypt All (parallel)',
-        strategy: { type: 'parallel', max: 5 },
-        steps: encryptSteps,
-      },
-      {
-        id: 'decrypt-all',
-        name: '🔓 Decrypt All (parallel, after encrypt-all)',
-        needs: ['encrypt-all'],  // 🆕 关键：DAG 依赖
-        strategy: { type: 'parallel', max: 5 },
-        steps: decryptSteps,
-      },
-    ],
-  }
-
+  const existingIdx = wfDefs.value.findIndex((d) => d.id === wfDef.id)
   if (existingIdx >= 0) {
-    engine.updateDefinition('dynamic-auto-test', wfDef)
+    updateDefinition(wfDef.id, wfDef)
   } else {
-    engine.createDefinition(wfDef)
+    createDefinition(wfDef)
   }
 }
 
-/** 笛卡尔积展开：输入 [[1,2],[a,b,c]] → 输出 [[1,a],[1,b],[1,c],[2,a],[2,b],[2,c]] */
-function cartesianExpand(arrays: string[][]): string[][] {
-  if (arrays.length === 0) return [[]]
-  if (arrays.some((a) => a.length === 0)) return [[]]
-  return arrays.reduce<string[][]>(
-    (acc, curr) => acc.flatMap((a) => curr.map((c) => [...a, c])),
-    [[]],
-  )
-}
 
 async function handleRunWorkflow() {
   if (isRunning.value || dynamicTestCases.value.length === 0) return
@@ -1272,7 +660,10 @@ async function handleRunWorkflow() {
   }
 
   try {
-    await engine.runWorkflow('dynamic-auto-test', 'automation')
+    // 🆕 Task 7：runWorkflow(defId, triggeredBy) → submitRun({ workflow, triggeredBy })
+    const def = getDefinition('dynamic-auto-test')
+    if (!def) throw new Error('Workflow definition "dynamic-auto-test" not found')
+    await submitRun({ workflow: def, triggeredBy: 'automation' })
     showToast({
       message: `Workflow started: ${dynamicTestCases.value.length} steps`,
       color: 'success',
@@ -1289,13 +680,23 @@ async function handleRunWorkflow() {
   }
 }
 
-function handleCancel() {
-  engine.cancelCurrentRun()
+async function handleCancel() {
+  // 🆕 Task 7：cancelCurrentRun() → cancelRun(currentRun.value.id)
+  if (currentRun.value) {
+    await cancelRun(currentRun.value.id)
+  }
   showToast({ message: 'Workflow cancelled', color: 'warning', duration: 1500 })
 }
 
-function onSelectStep(step: StepRun) {
-  selectedStep.value = step
+/**
+ * 🆕 2026-06-18 v5-bug3fix：历史 run 列表点击 → push 到 L2 GroupDetail
+ *   - 不在本地渲染报告（TestReportHeader/JobPipelineCard/StepDetailPanel 已迁移到 GroupDetail）
+ *   - 解耦 PluginTestsDetail 与报告 UI
+ *   - 解耦 Tasks.vue L1 与 PluginTestsDetail（用户在 L1 group card 直接进入 GroupDetail，不经过此页）
+ */
+async function openGroupDetail(runId: string) {
+  if (!runId) return
+  await router.push(`/tabs/tasks/group/${encodeURIComponent(runId)}`)
 }
 
 function formatTime(iso: string): string {
@@ -1318,15 +719,13 @@ function humanSize(bytes: number): string {
 }
 
 onMounted(() => {
-  tickHandle = setInterval(() => { _tickNow.value = Date.now() }, 1000)
-  wsStart()
+  // useWorkflowTaskService 内部通过 useTaskEventBridge 自动订阅 WS 4 件套事件
   // 🆕 2026-06-12：监听 MainActivity 推送的 CustomEvent，显示 lastError
   window.addEventListener('encv:backend-status', onBackendStatus)
 })
 
 onUnmounted(() => {
-  if (tickHandle) clearInterval(tickHandle)
-  wsStop()
+  // useWorkflowTaskService 内部通过 useTaskEventBridge 自动取消订阅
   window.removeEventListener('encv:backend-status', onBackendStatus)
 })
 </script>
@@ -1357,127 +756,10 @@ onUnmounted(() => {
 .progress-stats .failed { color: var(--ion-color-danger); }
 .progress-stats .pending { color: #B8860B; }
 
-/* ========== 🆕 2026-06-12 饱和调试：FFMPEG 流程日志卡 ========== */
-.mock-gen-log-card {
-  margin: 8px 16px 12px;
-  padding: 12px 14px;
-  background: linear-gradient(180deg, #0F1419 0%, #0A0E12 100%);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  color: #E0E0E0;
-}
-.mock-gen-log-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-.mock-gen-log-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #F4EFE6; }
-.mock-gen-log-title ion-icon { font-size: 14px; }
-.mock-gen-log-count { color: #6B7280; font-size: 11px; margin-left: 4px; }
-.mock-gen-log-copy {
-  display: inline-flex; align-items: center; gap: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #E0E0E0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  padding: 3px 8px;
-  font-size: 11px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.mock-gen-log-copy:hover { background: rgba(255, 255, 255, 0.1); }
-.mock-gen-log-copy ion-icon { font-size: 12px; }
-.mock-gen-log-copy--copied { background: rgba(34, 197, 94, 0.15); color: #4ADE80; border-color: rgba(34, 197, 94, 0.3); }
+/* 🆕 2026-06-18 Task 13：mock-gen-log-* 样式已迁移到 MockGenLogCard.vue */
 
-.mock-gen-log-summary {
-  display: flex; align-items: center; gap: 6px;
-  padding: 6px 0;
-  font-size: 12px;
-  color: #9CA3AF;
-  flex-wrap: wrap;
-}
-.mock-gen-log-summary ion-icon { font-size: 14px; }
-.mock-gen-log-disconnect { color: #F59E0B; font-weight: 600; }
-
-.mock-gen-log-list { list-style: none; margin: 0; padding: 0; }
-.mock-gen-log-entry {
-  border-left: 2px solid transparent;
-  padding: 4px 0 4px 8px;
-  margin: 1px 0;
-  transition: background 0.15s;
-}
-.mock-gen-log-entry--success { border-left-color: rgba(34, 197, 94, 0.4); }
-.mock-gen-log-entry--failed {
-  border-left-color: var(--ion-color-danger);
-  background: rgba(220, 38, 38, 0.06);
-}
-.mock-gen-log-row {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 11.5px;
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: 3px;
-  user-select: none;
-}
-.mock-gen-log-row:hover { background: rgba(255, 255, 255, 0.04); }
-.mock-gen-log-status { display: flex; align-items: center; }
-.mock-gen-log-status ion-icon { font-size: 13px; }
-.mock-gen-log-idx { color: #6B7280; font-weight: 600; }
-.mock-gen-log-path { color: #E0E0E0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mock-gen-log-encoder { color: #8B5CF6; font-size: 10.5px; }
-
-/* 🆕 2026-06-12：runner 标识（mediacodec=硬件 / ffmpeg=软件 / static=静态） */
-.mock-gen-log-runner {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: bold;
-  margin-right: 4px;
-  flex-shrink: 0;
-}
-.mock-gen-log-runner--ffmpeg {
-  background: rgba(139, 92, 246, 0.15);
-  color: #8B5CF6;
-}
-.mock-gen-log-runner--mediacodec {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22C55E;
-}
-.mock-gen-log-runner--static {
-  background: rgba(100, 116, 139, 0.15);
-  color: #64748B;
-}
-.mock-gen-log-exitcode { color: #FCA5A5; font-weight: 600; font-size: 10.5px; }
-.mock-gen-log-row ion-icon:last-child { font-size: 12px; color: #6B7280; }
-
-.mock-gen-log-detail {
-  margin: 4px 0 0;
-  padding: 8px 10px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
-  font-size: 11px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: #C9D1D9;
-  max-height: 240px;
-  overflow-y: auto;
-}
-.mock-gen-log-detail .lbl { color: #58A6FF; font-weight: 600; display: block; margin-top: 4px; }
-.mock-gen-log-detail .lbl:first-child { margin-top: 0; }
-
-.view-toggle { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 11px; background: none; border: none; color: #6B5D4C; cursor: pointer; padding: 2px 6px; border-radius: 3px; }
-.view-toggle--active { background: #1A1A1A; color: #F4EFE6; }
-.view-toggle-sep { color: #C9BBA1; }
+/* 🆕 2026-06-18 v5-bug3fix：测试报告 UI 块（TestReportHeader/JobPipelineCard/StepDetailPanel）
+ *   已迁移到 GroupDetail.vue，本页不再需要 tree-node-detail / deep-diagnosis-toggle / view-toggle 样式 */
 
 /* 🆕 2026-06-11 内联错误卡（饱和调试原则：禁用 Toast，错误必须持久可见） */
 .inline-error-card {

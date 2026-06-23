@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-16T22:43:14.738Z",
+  "generated_at": "2026-06-23T00:24:40.404Z",
   "source_file": "package.json",
   "items": [
     {
@@ -46,6 +46,17 @@
       "description": "Capacitor 设备信息插件（型号/OS/平台）",
       "icon": "phone-portrait",
       "license": "MIT"
+    },
+    {
+      "name": "@capacitor/filesystem",
+      "version": "8.1.2",
+      "version_range": "^8.1.2",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "@capacitor/screen-orientation",
@@ -136,6 +147,17 @@
       "license": "MIT"
     },
     {
+      "name": "dexie",
+      "version": "4.4.4",
+      "version_range": "^4.4.4",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
       "name": "ionicons",
       "version": "8.0.13",
       "version_range": "^8.0.13",
@@ -147,9 +169,31 @@
       "license": "MIT"
     },
     {
+      "name": "jszip",
+      "version": "3.10.1",
+      "version_range": "^3.10.1",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
       "name": "markstream-vue",
       "version": "1.0.1-beta.5",
       "version_range": "1.0.1-beta.5",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
+      "name": "pinia",
+      "version": "3.0.4",
+      "version_range": "^3.0.4",
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
@@ -244,6 +288,17 @@
       "description": "Vue Test Utils — Vue 组件测试工具",
       "icon": "flask",
       "license": "MIT"
+    },
+    {
+      "name": "cypress",
+      "version": "15.17.0",
+      "version_range": "^15.17.0",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "jsdom",

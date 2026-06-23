@@ -218,7 +218,7 @@ import { useRealtimeTransport } from '@/composables/useRealtimeTransport'
 import { useFrontendLogs, type LogEntry } from '@/composables/useFrontendLogs'
 import { showToast } from '@/composables/useToast'
 import { copyToClipboard } from '@/composables/useClipboard'
-import { checkServerStatus, getRecentBackendLogs } from '@/api/encv'
+import { checkServerStatus, getRecentBackendLogs, type BackendLogEntry } from '@/api/encv'
 import { IncrementalFilter, type Level } from '@/utils/IncrementalFilter'
 
 const { t } = useI18n()
@@ -291,22 +291,74 @@ const unsubBackendFilter = backendFilter.subscribe(() => {
 })
 
 // 🆕 2026-06-15 rAF coalesce 后端日志：把单帧内多条 WS 消息合并为 1 次 filter.pushMany
-let pendingBackendLogs: LogEntry[] = []
-let flushScheduled = false
-function queueBackendLog(entry: LogEntry) {
-  pendingBackendLogs.push(entry)
-  if (flushScheduled) return
-  flushScheduled = true
-  requestAnimationFrame(flushPendingBackendLogs)
-}
-function flushPendingBackendLogs() {
-  flushScheduled = false
-  if (pendingBackendLogs.length === 0) return
-  const toAdd = pendingBackendLogs
-  pendingBackendLogs = []
-  // 🆕 1M 容量：直接 pushMany，O(toAdd) 而非 O(MAX)
-  backendFilter.pushMany(toAdd)
-}
+  let pendingBackendLogs: LogEntry[] = []
+  let flushScheduled = false
+  function queueBackendLog(entry: LogEntry) {
+    pendingBackendLogs.push(entry)
+    if (flushScheduled) return
+    flushScheduled = true
+    requestAnimationFrame(flushPendingBackendLogs)
+  }
+  function flushPendingBackendLogs() {
+    flushScheduled = false
+    if (pendingBackendLogs.length === 0) return
+    const toAdd = pendingBackendLogs
+    pendingBackendLogs = []
+    // 🆕 1M 容量：直接 pushMany，O(toAdd) 而非 O(MAX)
+    backendFilter.pushMany(toAdd)
+  }
+
+  /**
+   * 🆕 2026-06-18 v4 Bug2 修复：冷启动拉历史日志分块（避免大 list 一次性 pushMany 卡 UI）
+   *   - 旧逻辑：for (const e of resp.logs) queueBackendLog(e) → 单帧内触发 1 次 rAF → pushMany(arr) O(N)
+   *   - 10K+ 历史日志时单帧推完仍可能超 16ms（1 帧预算），导致 tab 切换卡顿
+   *   - 修法：每帧最多 200 条，分多帧推完（实测 5K log/帧 = 1 帧内 200 条 O(200) ≈ 0.5ms）
+   *   - 配合 requestIdleCallback（推迟到 main thread idle），首次切到 DevLogs tab 渲染后再拉
+   */
+  const PUSH_CHUNK_SIZE = 200
+  async function pushLogsInChunks(logs: BackendLogEntry[]): Promise<void> {
+    if (logs.length === 0) return
+    let i = 0
+    const pushNextChunk = (): Promise<void> => {
+      return new Promise((resolve) => {
+        requestAnimationFrame(() => {
+          const chunk = logs.slice(i, i + PUSH_CHUNK_SIZE)
+          i += chunk.length
+          if (chunk.length > 0) {
+            for (const e of chunk) {
+              const lvl: Level = ['debug', 'info', 'warn', 'error'].includes(e.level)
+                ? (e.level as Level)
+                : 'info'
+              backendFilter.push({
+                id: ++nextId,
+                timestamp: e.timestamp || new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+                level: lvl,
+                message: e.message,
+              })
+            }
+          }
+          if (i < logs.length) {
+            // 继续下一帧
+            void pushNextChunk().then(resolve)
+          } else {
+            resolve()
+          }
+        })
+      })
+    }
+    await pushNextChunk()
+  }
+
+  /** 冷启动拉历史日志入口（推迟到 idle + 分块推） */
+  async function coldStartLoadRecentLogs(): Promise<void> {
+    if (!serverOnline.value) return
+    try {
+      const resp = await getRecentBackendLogs()
+      await pushLogsInChunks(resp.logs || [])
+    } catch (err) {
+      console.warn('[DevLogs] cold-start fetch recent logs failed:', err instanceof Error ? err.message : String(err))
+    }
+  }
 
 const selectedLevels = ref<Set<string>>(new Set(['debug', 'info', 'warn', 'error']))
 const levelOptions = [
@@ -701,21 +753,20 @@ onMounted(async () => {
   // 不依赖 WS / http-poll 模式：HTTP 拉一次 GET /api/logs/recent
   // 真机 WS 模式：历史日志（启动前）补齐；WS 推的实时日志仍通过 onWsMessage 收
   // OpenPreview 沙箱：http-poll 模式也调用 getRecentBackendLogs，但这是冷启动多拉一次（幂等）
+  // 🆕 2026-06-18 v4 Bug2 修复：推迟到 requestIdleCallback + pushLogsInChunks 分块推
+  //   - 旧行为：onMounted 同步 for 循环 queueBackendLog + rAF 一次性 pushMany(arr) → 大 list 卡 UI
+  //   - 新行为：requestIdleCallback 推迟到 main thread idle（首次切 tab 渲染后）→ 分块 200 条/帧推
   if (serverOnline.value) {
-    try {
-      const resp = await getRecentBackendLogs()
-      for (const e of resp.logs || []) {
-        const lvl: Level = ['debug', 'info', 'warn', 'error'].includes(e.level) ? (e.level as Level) : 'info'
-        queueBackendLog({
-          id: ++nextId,
-          timestamp: e.timestamp || new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-          level: lvl,
-          message: e.message,
-        })
+    const scheduleIdle = (cb: () => void) => {
+      if (typeof window !== 'undefined' && typeof (window as any).requestIdleCallback === 'function') {
+        (window as any).requestIdleCallback(cb, { timeout: 1500 })
+      } else {
+        setTimeout(cb, 200)
       }
-    } catch (err) {
-      console.warn('[DevLogs] cold-start fetch recent logs failed:', err instanceof Error ? err.message : String(err))
     }
+    scheduleIdle(() => {
+      void coldStartLoadRecentLogs()
+    })
   }
 
   // 写入一条启动日志（INFO/WARN 取决于 server 状态）——首条直接 push 即可

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -19,8 +20,15 @@ import (
 	pluginInterfaces "github.com/Soltus/encv-go/internal/v2/plugins/interfaces"
 	"github.com/Soltus/encv-go/internal/v2/plugins/video"
 	"github.com/Soltus/encv-go/internal/v2/types"
+	"github.com/Soltus/encv-go/pkg/tasksystem"
+	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
+	"github.com/Soltus/encv-go/pkg/tasksystem/store/sqlite"
 	"github.com/google/uuid"
 )
+
+// 🆕 2026-06-23 后端 SQL 权威：RunSummary 别名（service 包直接用 tasksystem.RunSummary）
+//   避免在 service 包重复定义，保持类型单一来源。
+type RunSummary = tasksystem.RunSummary
 
 type TaskStep struct {
 	Phase       string     `json:"phase"`
@@ -51,6 +59,27 @@ type MobileTask struct {
 	OutputPath        string            `json:"outputPath,omitempty"`
 	Steps             []TaskStep        `json:"steps,omitempty"`
 
+	// 🆕 2026-06-18 Task 16：加解密参数持久化
+	//   前端 createTask 传 cipherMode (0=AES-128-GCM, 1=AES-256-GCM) + compressionMode ('none'|'zstd')
+	//   后端持久化让任务列表刷新后仍能回显参数（Task 18 展示用）
+	//   omitempty：旧任务（无这两个字段）反序列化时自动空值，向后兼容
+	CipherMode      int    `json:"cipherMode,omitempty"`
+	CompressionMode string `json:"compressionMode,omitempty"`
+
+	// 🆕 v6 2026-06-18：runId + triggeredBy 作为 task 一等字段（单一数据源）
+	//   - runId：自动化测试/AI agent 产生的 task 共享同一个 runId，前端按 runId 聚合
+	//   - triggeredBy：'user' | 'automation' | 'ai_agent'
+	//   - omitempty：旧任务（无这两个字段）反序列化时自动空值，向后兼容
+	//   - 前端不再需要 useTaskTrigger localStorage 维护关联
+	RunId        string `json:"runId,omitempty"`
+	TriggeredBy  string `json:"triggeredBy,omitempty"`
+
+	// 🆕 回滚相关字段
+	//   - RollbackOf：回滚任务指向原任务 ID（仅 rollback_* 任务有值）
+	//   - OriginalPath：原始路径（回滚时恢复用，仅 rollback_* 任务有值）
+	RollbackOf   string `json:"rollbackOf,omitempty"`
+	OriginalPath string `json:"originalPath,omitempty"`
+
 	// 🆕 2026-06-15 multi-mount（spec Phase C1）
 	//   - SourcePath 是 /d/<mount>/... 形式时，记录解析后的 mount_id + sub_path
 	//   - SourcePath 是旧绝对路径且能匹配到 mount 时同样记录
@@ -76,11 +105,71 @@ type TaskManager struct {
 	broadcaster Broadcaster
 	persistPath string
 
+	// 🆕 SQLite 权威持久化层（双写策略）
+	//   - nil → 走旧 JSON 持久化（向后兼容旧测试）
+	//   - 非 nil → saveTasks/loadTasks 走 store，内存 map 作为性能缓存
+	store tasksystem.Store
+
+	// 🆕 v6 2026-06-22：文件操作任务处理器（move/copy/rename/delete）
+	//   - nil → 文件操作任务会 failTask（未配置 FileTaskHandler）
+	//   - 非 nil → processTask switch 的 move/copy/rename/delete case 调用对应方法
+	fileTaskHandler *FileTaskHandler
+
+	// 🆕 2026-06-22 回滚管理器
+	//   - nil → rollback_* 任务会 failTask（未配置 RollbackManager）
+	//   - 非 nil → processTask switch 的 rollback_* case 调用 ProcessRollbackTask
+	rollbackManager *RollbackManagerImpl
+
 	// 🆕 2026-06-15 multi-mount（spec Phase C1）
 	//   - nil → 旧行为，所有 sourcePath 走 SafeResolveToAbsPath(servingDir, ...)
 	//   - 非 nil → sourcePath 是 /d/<mount>/... 时走 mount 解析
 	//   - 用 interface 而不是 *mount.MountRegistry：避免 service → mount 反向依赖
 	mountResolver MountResolver
+}
+
+// perfStore 返回 SQLite Store 的性能指标存储接口（如果 store 是 *sqlite.Store）。
+// 如果 store 不是 SQLite Store（如 nil 或 mock），返回 nil。
+func (tm *TaskManager) perfStore() *sqlite.Store {
+	if tm.store == nil {
+		return nil
+	}
+	if s, ok := tm.store.(*sqlite.Store); ok {
+		return s
+	}
+	return nil
+}
+
+// GetPerfStore 返回 SQLite Store 的性能指标存储接口（导出版本，供 server 包调用）。
+// 如果 store 不是 SQLite Store，返回 nil。
+func (tm *TaskManager) GetPerfStore() *sqlite.Store {
+	return tm.perfStore()
+}
+
+// EnsureCalibration 确保硬件校准已执行（启动时调用一次）。
+// 如果 calibration 表为空，运行校准并保存。
+func (tm *TaskManager) EnsureCalibration() {
+	ps := tm.perfStore()
+	if ps == nil {
+		return
+	}
+	// 检查是否已校准
+	existing, err := ps.GetCalibration()
+	if err != nil {
+		slog.Warn("EnsureCalibration: GetCalibration failed", "error", err)
+		return
+	}
+	if existing != nil {
+		slog.Info("EnsureCalibration: already calibrated", "cpuScore", existing.CPUScore, "label", existing.CPULabel)
+		return
+	}
+	// 运行校准
+	slog.Info("EnsureCalibration: running calibration...")
+	cal := performance.RunCalibration()
+	if err := ps.SaveCalibration(cal); err != nil {
+		slog.Warn("EnsureCalibration: SaveCalibration failed", "error", err)
+		return
+	}
+	slog.Info("EnsureCalibration: done", "cpuScore", cal.CPUScore, "label", cal.CPULabel, "aesThroughput", cal.AESThroughput)
 }
 
 // MountResolver 是 mount.MountRegistry 的子集接口（service 包不依赖 mount 包）
@@ -89,8 +178,14 @@ type TaskManager struct {
 //   - input "/d/<mount>/<sub>" → Resolver 用最长前缀匹配找到 mount
 //   - output MountResolveResult：MountID + AbsPath + SubPath
 //   - 找不到 / mount 禁用 / mount 只读：返回错误
+//
+// 🆕 v3 2026-06-18 Task 8：新增 AbsToVirtual 反向解析
+//   - 物理绝对路径 → 虚拟路径 /d/<mount>/<sub>
+//   - 用于 task.OutputPath / step.Detail 统一存虚拟路径
 type MountResolver interface {
 	Resolve(virtualPath string) (*MountResolveResult, error)
+	// 🆕 Task 8：absPath → virtualPath（找不到匹配 mount 返回 error）
+	AbsToVirtual(absPath string) (string, error)
 }
 
 // MountResolveResult 是 mount.ResolveResult 的 service 包本地副本
@@ -155,6 +250,36 @@ func NewTaskManager(servingDir string, cfg *config.Config, broadcaster Broadcast
 	return tm
 }
 
+// NewTaskManagerWithStore 创建接入 SQLite Store 作为权威持久化层的 TaskManager。
+//
+// 双写策略：
+//   - store != nil → saveTasks/loadTasks 走 store（SQLite 为权威层）
+//   - 内存 map 仍作为性能缓存（List/Get 等读路径不查 DB）
+//   - store == nil 等价于 NewTaskManager（走旧 JSON 持久化，向后兼容）
+func NewTaskManagerWithStore(servingDir string, cfg *config.Config, broadcaster Broadcaster, store tasksystem.Store) *TaskManager {
+	persistPath := filepath.Join(servingDir, ".encv-tasks.json")
+
+	tm := &TaskManager{
+		tasks:       make(map[string]*MobileTask),
+		servingDir:  servingDir,
+		cfg:         cfg,
+		stopCh:      make(chan struct{}),
+		broadcaster: broadcaster,
+		persistPath: persistPath,
+		store:       store,
+	}
+
+	tm.loadTasks()
+
+	tm.wg.Add(1)
+	go tm.worker()
+
+	// 🆕 启动时确保硬件校准已执行
+	go tm.EnsureCalibration()
+
+	return tm
+}
+
 func (tm *TaskManager) saveTasks() {
 	tm.mu.RLock()
 	taskList := make([]*MobileTask, 0, len(tm.tasks))
@@ -162,6 +287,23 @@ func (tm *TaskManager) saveTasks() {
 		taskList = append(taskList, t)
 	}
 	tm.mu.RUnlock()
+
+	// 🆕 SQLite 权威持久化层（双写策略）
+	//   - store != nil → 逐条 UPSERT 到 store，内存 map 作为性能缓存
+	//   - store == nil → 走旧 JSON 持久化（向后兼容）
+	if tm.store != nil {
+		for _, t := range taskList {
+			data := mobileTaskToData(t)
+			// UPSERT 语义：先尝试 Create，失败（行已存在）则 Update
+			if err := tm.store.CreateTask(data); err != nil {
+				if err := tm.store.UpdateTask(data); err != nil {
+					slog.Warn("Failed to upsert task in store",
+						"id", t.ID, "error", err)
+				}
+			}
+		}
+		return
+	}
 
 	data, err := json.MarshalIndent(taskList, "", "  ")
 	if err != nil {
@@ -174,14 +316,78 @@ func (tm *TaskManager) saveTasks() {
 		slog.Warn("Failed to write tasks temp file", "error", err)
 		return
 	}
-
 	if err := os.Rename(tmpPath, tm.persistPath); err != nil {
 		slog.Warn("Failed to rename tasks file", "error", err)
 		return
 	}
 }
 
+// 🆕 2026-06-22 Q6A：高频单行持久化（避免 saveTasks 写全表）
+//
+// 为什么需要：
+//   - 自动化测试 1000+ 并发创建 task 时，每个 CreateWithRunMeta 走 saveTasks
+//     写全表 N 行 → IO 抖动 + 锁竞争
+//   - 改用 saveTaskSingle 只写一行（O(1)），适合高频路径
+//
+// 调用方：
+//   - CreateWithRunMeta（1000+ 并发主入口）
+//   - failTask（失败标记）
+//   - updateProgress（高频 transient，不调用，避免 IO 风暴）
+func (tm *TaskManager) saveTaskSingle(task *MobileTask) {
+	if task == nil {
+		return
+	}
+	if tm.store != nil {
+		data := mobileTaskToData(task)
+		if err := tm.store.CreateTask(data); err != nil {
+			if err := tm.store.UpdateTask(data); err != nil {
+				slog.Warn("Failed to upsert single task in store",
+					"id", task.ID, "error", err)
+			}
+		}
+		return
+	}
+	// 无 store：降级为全表写（保持向后兼容）
+	tm.saveTasks()
+}
+
 func (tm *TaskManager) loadTasks() {
+	// 🆕 SQLite 权威持久化层
+	//   - store != nil → 从 store.ListTasks 加载
+	//   - store == nil → 走旧 JSON 持久化（向后兼容）
+	if tm.store != nil {
+		tasks, err := tm.store.ListTasks(tasksystem.TaskFilter{})
+		if err != nil {
+			slog.Warn("Failed to list tasks from store", "error", err)
+			return
+		}
+
+		for _, d := range tasks {
+			t := dataToMobileTask(d)
+			// 与旧 JSON 路径一致的状态恢复：重启后未完成任务标记为 failed
+			switch t.Status {
+			case "running", "queued":
+				t.Status = "failed"
+				t.Error = "interrupted by restart"
+				now := time.Now()
+				t.CompletedAt = &now
+			case "cancelling":
+				t.Status = "cancelled"
+				if t.CompletedAt == nil {
+					now := time.Now()
+					t.CompletedAt = &now
+				}
+			}
+			t.cancelFn = nil
+			t.Speed = ""
+			t.Eta = ""
+			tm.tasks[t.ID] = t
+		}
+
+		slog.Info("Loaded persisted tasks from store", "count", len(tasks))
+		return
+	}
+
 	data, err := os.ReadFile(tm.persistPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -217,6 +423,111 @@ func (tm *TaskManager) loadTasks() {
 	}
 
 	slog.Info("Loaded persisted tasks", "count", len(taskList))
+}
+
+// mobileTaskToData 把应用层 MobileTask 转换为 tasksystem.TaskData（Store 持久化用）。
+//
+// 字段映射说明：
+//   - ExtraFields (map[string]string) → JSON 编码为字符串存入 TaskData.ExtraFields
+//   - Steps ([]TaskStep) → JSON 编码为字符串存入 TaskData.Steps
+//   - Speed / Eta / cancelFn 是运行时字段，不持久化（loadTasks 时清空）
+//   - RollbackOf / OriginalPath 是回滚字段，rollback_* 任务有值
+func mobileTaskToData(t *MobileTask) tasksystem.TaskData {
+	var extraFieldsJSON string
+	if len(t.ExtraFields) > 0 {
+		if b, err := json.Marshal(t.ExtraFields); err == nil {
+			extraFieldsJSON = string(b)
+		}
+	}
+
+	var stepsJSON string
+	if len(t.Steps) > 0 {
+		if b, err := json.Marshal(t.Steps); err == nil {
+			stepsJSON = string(b)
+		}
+	}
+
+	return tasksystem.TaskData{
+		ID:                 t.ID,
+		Type:               tasksystem.TaskType(t.Type),
+		Status:             tasksystem.TaskStatus(t.Status),
+		SourcePath:         t.SourcePath,
+		TargetPath:         t.TargetPath,
+		OutputPath:         t.OutputPath,
+		PluginName:         t.PluginName,
+		TriggeredBy:        t.TriggeredBy,
+		RunID:              t.RunId,
+		Progress:           t.Progress,
+		Phase:              t.Phase,
+		Error:              t.Error,
+		ErrorDetail:        t.ErrorDetail,
+		Warning:            t.Warning,
+		WarningDetail:      t.WarningDetail,
+		ContainerVersion:   t.ContainerVersion,
+		CipherMode:         t.CipherMode,
+		CompressionMode:    t.CompressionMode,
+		ExtraFields:        extraFieldsJSON,
+		Steps:              stepsJSON,
+		MountID:            t.MountID,
+		MountSubPath:       t.MountSubPath,
+		TargetMountID:      t.TargetMountID,
+		TargetMountSubPath: t.TargetMountSubPath,
+		Password:           t.Password,
+		SecondaryPassword:  t.SecondaryPassword,
+		CreatedAt:          t.CreatedAt,
+		CompletedAt:        t.CompletedAt,
+		RollbackOf:         t.RollbackOf,
+		OriginalPath:       t.OriginalPath,
+	}
+}
+
+// dataToMobileTask 把 tasksystem.TaskData 转换回应用层 MobileTask（Store 加载用）。
+//
+// 反序列化说明：
+//   - TaskData.ExtraFields (string) → JSON 解码为 map[string]string
+//   - TaskData.Steps (string) → JSON 解码为 []TaskStep
+//   - 解码失败时保留空值（不报错，向后兼容旧数据）
+//   - Speed / Eta / cancelFn 留空（运行时字段，由调用方按需填充）
+func dataToMobileTask(d tasksystem.TaskData) *MobileTask {
+	t := &MobileTask{
+		ID:                 d.ID,
+		Type:               string(d.Type),
+		Status:             string(d.Status),
+		SourcePath:         d.SourcePath,
+		TargetPath:         d.TargetPath,
+		OutputPath:         d.OutputPath,
+		PluginName:         d.PluginName,
+		Progress:           d.Progress,
+		Phase:              d.Phase,
+		Error:              d.Error,
+		ErrorDetail:        d.ErrorDetail,
+		Warning:            d.Warning,
+		WarningDetail:      d.WarningDetail,
+		ContainerVersion:   d.ContainerVersion,
+		CipherMode:         d.CipherMode,
+		CompressionMode:    d.CompressionMode,
+		MountID:            d.MountID,
+		MountSubPath:       d.MountSubPath,
+		TargetMountID:      d.TargetMountID,
+		TargetMountSubPath: d.TargetMountSubPath,
+		Password:           d.Password,
+		SecondaryPassword:  d.SecondaryPassword,
+		CreatedAt:          d.CreatedAt,
+		CompletedAt:        d.CompletedAt,
+		RunId:              d.RunID,
+		TriggeredBy:        d.TriggeredBy,
+		RollbackOf:         d.RollbackOf,
+		OriginalPath:       d.OriginalPath,
+	}
+
+	if d.ExtraFields != "" {
+		_ = json.Unmarshal([]byte(d.ExtraFields), &t.ExtraFields)
+	}
+	if d.Steps != "" {
+		_ = json.Unmarshal([]byte(d.Steps), &t.Steps)
+	}
+
+	return t
 }
 
 func (tm *TaskManager) Stop() {
@@ -258,15 +569,17 @@ func (tm *TaskManager) Create(taskType, sourcePath, targetPath, password string,
 	tm.tasks[task.ID] = task
 	tm.mu.Unlock()
 
-	tm.saveTasks()
+	// 🆕 2026-06-23 WS 时序修复（spec ws-timing-batch-throughput-100k Task 1）：
+	//   - Create 不再内部广播 task:created（避免 admin_handlers / mobile_api / rollback_manager
+	//     等直接调 Create 的路径在 runId 未设置时就广播 → 前端收到无 runId 的 task 变孤儿）
+	//   - 改由 CreateWithRunMeta（设置 runId 之后）或外部调用方（补 RunId 兜底后）负责广播
+	//   - 持久化改用 saveTaskSingle（O(1) 单行写），替代 saveTasks（全表写）
+	tm.saveTaskSingle(task)
 
 	slog.Info("Task created", "id", task.ID, "type", taskType, "source", sourcePath,
 		"target", targetPath, "version", version,
 		"mountId", task.MountID, "mountSubPath", task.MountSubPath,
 		"targetMountId", task.TargetMountID)
-	if tm.broadcaster != nil {
-		tm.broadcaster.Broadcast("task:created", task)
-	}
 	return task
 }
 
@@ -277,6 +590,140 @@ func (tm *TaskManager) CreateWithExtras(taskType, sourcePath, targetPath, passwo
 	return task
 }
 
+// BroadcastCreated 广播 task:created 事件。
+//
+// 🆕 2026-06-23 WS 时序修复（spec ws-timing-batch-throughput-100k Task 1）：
+//   - Create 不再内部广播，外部调用方（admin_handlers / mobile_api / rollback_manager）
+//     在补完 RunId 兜底后调本 helper 触发广播
+//   - 保证前端收到的 task:created payload 一定带 runId（不会产生孤儿 group）
+//   - broadcaster 为 nil 时静默跳过（向后兼容无 WS 的测试场景）
+func (tm *TaskManager) BroadcastCreated(task *MobileTask) {
+	if tm.broadcaster != nil {
+		tm.broadcaster.Broadcast("task:created", task)
+	}
+}
+
+// FinalizeCreatedTask 补 RunId 兜底 + 单行持久化 + 广播 task:created。
+//
+// 🆕 2026-06-23 WS 时序修复（spec ws-timing-batch-throughput-100k Task 1）：
+//   - 供外部包（server）调用——Create 不再内部广播也不再内部设 RunId
+//   - 外部调用方在设置完 task 业务字段（OriginalPath 等）后调本方法收尾
+//   - 内部封装 saveTaskSingle（O(1) 单行写），不暴露未导出的 saveTaskSingle
+func (tm *TaskManager) FinalizeCreatedTask(task *MobileTask) {
+	if task.RunId == "" {
+		task.RunId = "manual-" + task.ID
+	}
+	tm.saveTaskSingle(task)
+	tm.BroadcastCreated(task)
+}
+
+// 🆕 v6 2026-06-18：CreateWithRunMeta 接受 runId / triggeredBy 持久化
+//
+// 前端 createTask API 传 runId（自动化测试/AI agent run 的关联 ID）+ triggeredBy ('user'|'automation'|'ai_agent')
+// 后端持久化让任务列表刷新后仍能聚合（前端按 runId 分组）。
+//
+// 🆕 2026-06-22 v2 架构重写：runId 永不为空的兜底（根治"任务逃逸"）
+//   - 历史 bug：前端 createTask 漏传 runId（移动端 Capacitor 调用时偶发丢参）→ task.RunId = ''
+//     → 前端按 runId 分组时这个 task 变孤儿（不入任何 group）
+//     → 重启后 SQLite 仍存但 runId 为空 → 列表展示混乱
+//   - 修法：后端兜底。runId 为空 → 用 "manual-" + taskID 派生稳定 runId
+//     （保证每个 task 都有非空 runId，前端按 runId 分组永远有归属）
+//   - triggeredBy 已有兜底（'' → 'user'）
+func (tm *TaskManager) CreateWithRunMeta(
+	taskType, sourcePath, targetPath, password, secondaryPassword string,
+	version int, pluginName string,
+	extras map[string]string,
+	cipherMode int,
+	compressionMode string,
+	runId string,
+	triggeredBy string,
+) *MobileTask {
+	task := tm.CreateWithExtras(taskType, sourcePath, targetPath, password, secondaryPassword,
+		version, pluginName, extras)
+	task.CipherMode = cipherMode
+	task.CompressionMode = compressionMode
+	// 🆕 2026-06-22 v2 架构重写：runId 永不为空的兜底（根治"任务逃逸"）
+	//   历史 bug：前端 createTask 漏传 runId（移动端 Capacitor 调用时偶发丢参）→ task.RunId = ''
+	//     → 前端按 runId 分组时这个 task 变孤儿（不入任何 group）
+	//   修法：后端兜底。runId 为空 → 用 "manual-" + task.ID 派生稳定 runId
+	//     （保证每个 task 都有非空 runId，前端按 runId 分组永远有归属）
+	//   triggeredBy 已有兜底（'' → 'user'）
+	if runId == "" {
+		runId = "manual-" + task.ID
+	}
+	task.RunId = runId
+	if triggeredBy == "" {
+		triggeredBy = "user"
+	}
+	task.TriggeredBy = triggeredBy
+	// 🆕 2026-06-22 Q6A：单行写（O(1)），替代 saveTasks() 全表写
+	tm.saveTaskSingle(task)
+	// 🆕 2026-06-23 WS 时序修复（spec ws-timing-batch-throughput-100k Task 1）：
+	//   - Create 不再内部广播，改由 CreateWithRunMeta 在 runId 设置之后广播
+	//   - 保证前端收到的 task:created payload 一定带 runId（不会产生孤儿 group）
+	if tm.broadcaster != nil {
+		tm.broadcaster.Broadcast("task:created", task)
+	}
+	return task
+}
+
+// BatchTaskSpec 是批量创建 task 的输入定义（不含 ID——ID 由后端统一生成）。
+//
+// 🆕 2026-06-23 真实架构实现（替代 client 预占位野路子）：
+//   - 前端 submitRun 阶段收集本层所有 step 的 task 定义 → 一次性调 POST /api/tasks/batch
+//   - 后端批量创建所有 task（后端生成 UUID）→ 一次性返回所有 task
+//   - 前端拿到后一次性 push 到 store → UI 立即显示 1 个 group N task（不慢慢累加）
+//   - 后端是 ID 的唯一权威源（不存在 client ID 覆盖后端 ID 的野路子）
+type BatchTaskSpec struct {
+	Type              string
+	SourcePath        string
+	TargetPath        string
+	Password          string
+	SecondaryPassword string
+	Version           int
+	PluginName        string
+	ExtraFields       map[string]string
+	CipherMode        int
+	CompressionMode   string
+}
+
+// CreateBatch 批量创建 task，共享同一个 runId + triggeredBy。
+//
+// 架构原则：
+//   - 后端是 task ID 的唯一权威源（uuid.New()），前端不传 ID
+//   - 批量创建后一次性返回所有 task，前端一次性 push 到 store
+//   - 每个 task 走 saveTaskSingle（O(1) 单行写），不走 saveTasks（全表写）
+//   - WS task:created 在 Create 内部逐条 broadcast（前端 store.applyEvent 收到后 patch 而非 append）
+//
+// 性能：1000+ task 批量创建时，锁竞争最小化（每条 task 独立加锁），持久化走单行 UPSERT。
+func (tm *TaskManager) CreateBatch(specs []BatchTaskSpec, runId string, triggeredBy string) []*MobileTask {
+	if len(specs) == 0 {
+		return nil
+	}
+	// runId / triggeredBy 兜底（跟 CreateWithRunMeta 一致）
+	if runId == "" {
+		runId = "manual-batch-" + uuid.New().String()[:8]
+	}
+	if triggeredBy == "" {
+		triggeredBy = "user"
+	}
+	tasks := make([]*MobileTask, 0, len(specs))
+	for _, spec := range specs {
+		compressionMode := spec.CompressionMode
+		if compressionMode == "" {
+			compressionMode = "none"
+		}
+		task := tm.CreateWithRunMeta(
+			spec.Type, spec.SourcePath, spec.TargetPath,
+			spec.Password, spec.SecondaryPassword, spec.Version, spec.PluginName, spec.ExtraFields,
+			spec.CipherMode, compressionMode,
+			runId, triggeredBy,
+		)
+		tasks = append(tasks, task)
+	}
+	return tasks
+}
+
 func (tm *TaskManager) List() []*MobileTask {
 	tm.mu.RLock()
 	defer tm.mu.RUnlock()
@@ -285,6 +732,221 @@ func (tm *TaskManager) List() []*MobileTask {
 	for _, t := range tm.tasks {
 		result = append(result, t)
 	}
+	return result
+}
+
+// ListPaginated 按 runId 过滤后做 offset/limit 分页，返回分页后的切片和过滤后的总数。
+//
+// 🆕 2026-06-23 Task 5：后端分页 API（10 万任务虚拟滚动支撑）
+//   - runId 非空 → 只保留 task.RunId == runId 的 task
+//   - runId 为空 → 不过滤（返回全部）
+//   - offset/limit 由调用方（handler）解析 + clamp，此处再做一次边界保护
+//   - 返回 totalCount = 过滤后、分页前的总数（供 handler 写 X-Total-Count 响应头）
+//
+// 🆕 2026-06-23 重构：优先走 SQLite store SQL（不是内存过滤）
+//   - store != nil → store.ListTasks(TaskFilter{RunID, Limit, Offset}) 走 SQL
+//   - store == nil → 降级为内存过滤（向后兼容旧测试）
+//   - totalCount：store 路径走 CountByRunId（SQL COUNT），内存路径走 len(filtered)
+func (tm *TaskManager) ListPaginated(runId string, offset, limit int) ([]*MobileTask, int) {
+	// 🆕 优先走 SQLite store SQL
+	if tm.store != nil {
+		filter := tasksystem.TaskFilter{
+			RunID:  runId,
+			Limit:  limit,
+			Offset: offset,
+		}
+		datas, err := tm.store.ListTasks(filter)
+		if err != nil {
+			slog.Warn("ListPaginated: store.ListTasks failed, fallback to in-memory",
+				"runId", runId, "offset", offset, "limit", limit, "error", err)
+		} else {
+			// totalCount：runId 非空时走 CountByRunId（SQL COUNT），runId 为空时走 ListTasks 全量
+			totalCount := 0
+			if runId != "" {
+				counts, err := tm.store.CountByRunId(runId)
+				if err != nil {
+					slog.Warn("ListPaginated: store.CountByRunId failed", "runId", runId, "error", err)
+					// 降级：用当前页长度估算（不精确但避免崩溃）
+					totalCount = len(datas)
+				} else {
+					for _, c := range counts {
+						totalCount += c
+					}
+				}
+			} else {
+				// runId 为空：totalCount 用 ListTasks(filter{Limit:0}) 拿全量长度
+				allDatas, err := tm.store.ListTasks(tasksystem.TaskFilter{})
+				if err != nil {
+					slog.Warn("ListPaginated: store.ListTasks (count) failed", "error", err)
+					totalCount = len(datas)
+				} else {
+					totalCount = len(allDatas)
+				}
+			}
+			result := make([]*MobileTask, 0, len(datas))
+			for _, d := range datas {
+				result = append(result, dataToMobileTask(d))
+			}
+			return result, totalCount
+		}
+	}
+
+	// 降级：内存过滤（store == nil 或 store 查询失败）
+	all := tm.List()
+
+	filtered := all
+	if runId != "" {
+		filtered = make([]*MobileTask, 0, len(all))
+		for _, t := range all {
+			if t.RunId == runId {
+				filtered = append(filtered, t)
+			}
+		}
+	}
+	totalCount := len(filtered)
+
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > totalCount {
+		offset = totalCount
+	}
+	if limit < 0 {
+		limit = 0
+	}
+	end := offset + limit
+	if end > totalCount {
+		end = totalCount
+	}
+	return filtered[offset:end], totalCount
+}
+
+// 🆕 2026-06-23 后端 SQL 权威：GetRunSummary 返回指定 run 的聚合计数
+//
+// 用于 GET /api/runs/:runId/summary 响应。
+// 前端 group card 显示这些数字，不靠 store.tasks 算（store 只持有视图分页的 task）。
+//
+// 实现策略：
+//   - store != nil → store.CountByRunId(runId) 走 SQL（SELECT status, COUNT(*) GROUP BY status）
+//   - store == nil → 降级为内存遍历（tm.List() filter runId + count by status）
+//
+// 状态映射（后端 status → RunSummary 字段）：
+//   - "completed" → Passed
+//   - "failed" → Failed
+//   - "running" → Running
+//   - "queued" / "pending" → Pending
+//   - "cancelled" → Cancelled
+//   - 其他 → 归入 Total 但不归入细分（避免漏算）
+func (tm *TaskManager) GetRunSummary(runId string) RunSummary {
+	summary := RunSummary{RunID: runId}
+
+	if runId == "" {
+		return summary
+	}
+
+	var counts map[string]int
+
+	// 优先走 SQLite store SQL
+	if tm.store != nil {
+		c, err := tm.store.CountByRunId(runId)
+		if err != nil {
+			slog.Warn("GetRunSummary: store.CountByRunId failed, fallback to in-memory",
+				"runId", runId, "error", err)
+		} else {
+			counts = c
+		}
+	}
+
+	// 降级：内存遍历
+	if counts == nil {
+		counts = make(map[string]int)
+		for _, t := range tm.List() {
+			if t.RunId == runId {
+				counts[t.Status]++
+			}
+		}
+	}
+
+	// 汇总
+	for status, c := range counts {
+		summary.Total += c
+		switch status {
+		case "completed":
+			summary.Passed += c
+		case "failed":
+			summary.Failed += c
+		case "running":
+			summary.Running += c
+		case "queued", "pending":
+			summary.Pending += c
+		case "cancelled":
+			summary.Cancelled += c
+		}
+	}
+
+	// 完成百分比（终态 task / total * 100）
+	if summary.Total > 0 {
+		terminal := summary.Passed + summary.Failed + summary.Cancelled
+		summary.Percent = terminal * 100 / summary.Total
+	}
+
+	return summary
+}
+
+// 🆕 2026-06-23 后端 SQL 权威：ListRuns 列出所有 run（带基本信息）
+//
+// 用于 GET /api/runs 响应。
+// 返回所有 run 的 runId + startedAt + triggeredBy，不带 summary。
+// 前端再调 /api/runs/:runId/summary 拿详细计数（或 handler 层批量补 summary）。
+//
+// 实现策略：
+//   - store != nil → store.ListRuns() 走 SQL（GROUP BY run_id）
+//   - store == nil → 降级为内存遍历（tm.List() 去重 runId）
+func (tm *TaskManager) ListRuns() []tasksystem.RunInfo {
+	// 优先走 SQLite store SQL
+	if tm.store != nil {
+		runs, err := tm.store.ListRuns()
+		if err != nil {
+			slog.Warn("ListRuns: store.ListRuns failed, fallback to in-memory", "error", err)
+		} else {
+			return runs
+		}
+	}
+
+	// 降级：内存遍历
+	all := tm.List()
+	runMap := make(map[string]*tasksystem.RunInfo)
+	for _, t := range all {
+		if t.RunId == "" {
+			continue
+		}
+		if existing, ok := runMap[t.RunId]; ok {
+			// 取最早的 created_at 作为 startedAt
+			if t.CreatedAt.Before(existing.StartedAt) {
+				existing.StartedAt = t.CreatedAt
+			}
+			// triggeredBy 取第一个非空的
+			if existing.TriggeredBy == "" && t.TriggeredBy != "" {
+				existing.TriggeredBy = t.TriggeredBy
+			}
+		} else {
+			info := &tasksystem.RunInfo{
+				RunID:       t.RunId,
+				StartedAt:   t.CreatedAt,
+				TriggeredBy: t.TriggeredBy,
+			}
+			runMap[t.RunId] = info
+		}
+	}
+
+	result := make([]tasksystem.RunInfo, 0, len(runMap))
+	for _, info := range runMap {
+		result = append(result, *info)
+	}
+	// 按 startedAt 倒序
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].StartedAt.After(result[j].StartedAt)
+	})
 	return result
 }
 
@@ -327,6 +989,62 @@ func (tm *TaskManager) Cancel(id string) (*MobileTask, error) {
 	return task, nil
 }
 
+// CancelByRunId 批量取消指定 runId 下所有非终态的 task。
+//
+// 🆕 2026-06-23 spec ws-timing-batch-throughput-100k Task 2.1：
+//   - 前端 cancelRun 一次 API 调用取消整个 run（替代逐个 cancelTask 循环 N 次）
+//   - 终态 task（success/failure/cancelled/timed_out/completed/failed）跳过不取消
+//   - running task → cancelling + 调 cancelFn（与 Cancel 一致）
+//   - 其他非终态 task（queued/cancelling 等）→ 直接 cancelled
+//   - 每个取消的 task 广播 task:update + saveTaskSingle 持久化
+//   - 返回 nil 表示成功（即使部分 task 取消失败也只记日志，不阻断整体）
+func (tm *TaskManager) CancelByRunId(runId string) error {
+	if runId == "" {
+		return errors.New("runId is required")
+	}
+
+	// 锁内收集需要取消的 task ID（避免长时间持锁，Cancel 会自己加锁）
+	tm.mu.RLock()
+	var toCancel []string
+	for id, task := range tm.tasks {
+		if task.RunId != runId {
+			continue
+		}
+		if isTerminalStatus(task.Status) {
+			continue
+		}
+		toCancel = append(toCancel, id)
+	}
+	tm.mu.RUnlock()
+
+	for _, id := range toCancel {
+		// 复用 Cancel 逻辑：状态转换 + cancelFn + 广播 task:update
+		cancelledTask, err := tm.Cancel(id)
+		if err != nil {
+			// 单个取消失败不阻断整体（task 可能已被 worker 并发处理）
+			slog.Warn("CancelByRunId: cancel task failed", "taskId", id, "runId", runId, "error", err)
+			continue
+		}
+		// Cancel 不持久化，这里补单行持久化（与 failTask 模式一致）
+		tm.saveTaskSingle(cancelledTask)
+	}
+
+	return nil
+}
+
+// isTerminalStatus 判断 task 状态是否为终态（不可再变更）。
+//
+// 终态集合同时覆盖 spec 术语（success/failure/timed_out）和实际代码库状态
+// （completed/failed），保证测试场景（用 "success"）和生产场景（用 "completed"/"failed"）
+// 都正确识别终态、跳过取消。
+func isTerminalStatus(status string) bool {
+	switch status {
+	case "success", "failure", "cancelled", "timed_out", "completed", "failed":
+		return true
+	}
+	return false
+}
+
 func (tm *TaskManager) updateProgress(id string, progress int, phase, speed, eta string) {
 	tm.mu.Lock()
 	if task, ok := tm.tasks[id]; ok {
@@ -338,9 +1056,11 @@ func (tm *TaskManager) updateProgress(id string, progress int, phase, speed, eta
 					break
 				}
 			}
+			// v3 2026-06-18：为新 step 填充有意义的 phase 描述（前端时间线展开显示）
 			task.Steps = append(task.Steps, TaskStep{
 				Phase:     phase,
 				StartedAt: now,
+				Detail:    phaseDetailDescription(phase),
 			})
 		}
 		task.Progress = progress
@@ -357,6 +1077,29 @@ func (tm *TaskManager) updateProgress(id string, progress int, phase, speed, eta
 			"speed":    speed,
 			"eta":      eta,
 		})
+	}
+}
+
+// phaseDetailDescription 返回 phase 对应的人类可读描述（前端时间线展开显示）。
+// v3 2026-06-18：每个 phase 切换时为新 TaskStep 填充有意义的 Detail。
+func phaseDetailDescription(phase string) string {
+	switch phase {
+	case "analyzing":
+		return "分析源文件格式与流信息"
+	case "initializing":
+		return "初始化加密引擎"
+	case "preprocessing":
+		return "预处理源数据"
+	case "encrypting":
+		return "加密数据流"
+	case "decrypting":
+		return "解密数据流"
+	case "packing":
+		return "打包加密产物"
+	case "verifying":
+		return "校验产物完整性"
+	default:
+		return ""
 	}
 }
 
@@ -515,10 +1258,59 @@ func (tm *TaskManager) resolveAbsPath(sourcePath string) string {
 	return abs
 }
 
+// absToVirtualPath 把物理绝对路径转换为前端可消费的虚拟路径 /d/<mount>/<sub>。
+//
+// 🆕 v3 2026-06-18 Task 8：后端统一虚拟路径
+//   - mountResolver 未注入或解析失败 → fallback 返回原 absPath（向后兼容）
+//   - 用于 task.OutputPath / step.Detail，让前端 Files.vue 直接用 route.query 跳转
+func (tm *TaskManager) absToVirtualPath(absPath string) string {
+	if absPath == "" {
+		return ""
+	}
+	if tm.mountResolver == nil {
+		return absPath
+	}
+	virtual, err := tm.mountResolver.AbsToVirtual(absPath)
+	if err != nil {
+		slog.Warn("absToVirtualPath: mount resolve failed, fallback to absPath",
+			"absPath", absPath, "error", err)
+		return absPath
+	}
+	return virtual
+}
+
+// SetFileTaskHandler 注入文件操作任务处理器。
+// 不在构造函数中传入是为了保持 NewTaskManager 签名向后兼容。
+func (tm *TaskManager) SetFileTaskHandler(h *FileTaskHandler) {
+	tm.fileTaskHandler = h
+}
+
+// SetRollbackManager 注入回滚管理器。
+// 不在构造函数中传入是为了保持 NewTaskManager 签名向后兼容，
+// 同时避免 RollbackManagerImpl ↔ TaskManager 构造循环依赖。
+func (tm *TaskManager) SetRollbackManager(rm *RollbackManagerImpl) {
+	tm.rollbackManager = rm
+}
+
 func (tm *TaskManager) processTask(task *MobileTask) {
 	slog.Info("Processing task", "id", task.ID, "type", task.Type, "source", task.SourcePath)
 
 	tm.updateProgress(task.ID, 0, "queued", "", "")
+
+	// 文件操作任务（move/copy/rename/delete）不需要 absPath 解析，
+	// FileTaskHandler 内部直接用 task.SourcePath/TargetPath
+	switch task.Type {
+	case "rollback_encrypt", "rollback_decrypt", "rollback_move", "rollback_copy", "rollback_rename", "rollback_delete":
+		if tm.rollbackManager != nil {
+			tm.rollbackManager.ProcessRollbackTask(task)
+		} else {
+			tm.failTask(task.ID, "rollback manager not configured")
+		}
+		return
+	case "move", "copy", "rename", "delete":
+		tm.processFileTask(task)
+		return
+	}
 
 	absPath := tm.resolveAbsPath(task.SourcePath)
 	if absPath == "" {
@@ -538,6 +1330,65 @@ func (tm *TaskManager) processTask(task *MobileTask) {
 	}
 }
 
+// processFileTask 处理文件操作任务（move/copy/rename/delete）。
+// 委托给 FileTaskHandler 执行，完成后调用 completeTask 或 failTask。
+func (tm *TaskManager) processFileTask(task *MobileTask) {
+	if tm.fileTaskHandler == nil {
+		tm.failTask(task.ID, "file task handler not configured")
+		return
+	}
+
+	tm.updateProgress(task.ID, 10, "processing", "", "")
+
+	var err error
+	switch task.Type {
+	case "move":
+		err = tm.fileTaskHandler.ProcessMove(task)
+	case "copy":
+		err = tm.fileTaskHandler.ProcessCopy(task)
+	case "rename":
+		err = tm.fileTaskHandler.ProcessRename(task)
+	case "delete":
+		err = tm.fileTaskHandler.ProcessDelete(task)
+	default:
+		tm.failTask(task.ID, fmt.Sprintf("unknown file task type: %s", task.Type))
+		return
+	}
+
+	if err != nil {
+		tm.failTask(task.ID, err.Error())
+		return
+	}
+
+	// 文件操作完成，设置 outputPath 并标记 completed
+	tm.mu.Lock()
+	task.Status = "completed"
+	task.Progress = 100
+	task.Phase = "completed"
+	task.Speed = ""
+	task.Eta = ""
+	now := time.Now()
+	task.CompletedAt = &now
+	switch task.Type {
+	case "move", "rename", "copy":
+		task.OutputPath = task.TargetPath
+	case "delete":
+		task.OutputPath = ""
+	}
+	tm.mu.Unlock()
+
+	tm.saveTasks()
+
+	slog.Info("File task completed", "id", task.ID, "type", task.Type)
+	if tm.broadcaster != nil {
+		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
+			"id":         task.ID,
+			"status":     "completed",
+			"outputPath": task.OutputPath,
+		})
+	}
+}
+
 func (tm *TaskManager) getPasswordContext(ctx context.Context, primaryPassword string) context.Context {
 	if primaryPassword != "" {
 		cfgCopy := *tm.cfg
@@ -554,7 +1405,7 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 	task.cancelFn = cancel
 	defer cancel()
 
-	tm.updateProgress(taskID, 5, "analyzing", "", "")
+	tm.updateProgress(taskID, 5, string(PhaseAnalyzing), "", "")
 
 	info, err := os.Stat(absPath)
 	if err != nil {
@@ -598,7 +1449,7 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 		return
 	}
 
-	tm.updateProgress(taskID, 10, "initializing", "", "")
+	tm.updateProgress(taskID, 10, string(PhaseInitializing), "", "")
 
 	var plugin plugins.Plugin
 	if task.PluginName != "" {
@@ -648,13 +1499,18 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 			"taskId", taskID)
 	}
 
-	tm.updateProgress(taskID, 15, "preprocessing", "", "")
+	tm.updateProgress(taskID, 15, string(PhasePreprocessing), "", "")
 
 	fileSize := info.Size()
 	stopMonitor := make(chan struct{})
 	go tm.monitorFileProgress(taskID, outputDir, fileSize, stopMonitor)
 
-	outputPath, err := plugins.EncryptFileWithPlugin(passwordCtx, plugin, absPath, tm.servingDir, outputDir)
+	// 🆕 性能采集
+	collector := performance.NewCollector(task.ID, "encrypt")
+	collector.StartPhase("initializing")
+
+	outputPath, err := plugins.EncryptFileWithPlugin(passwordCtx, plugin, absPath, tm.servingDir, outputDir, collector)
+	collector.EndPhase("initializing", 0)
 	close(stopMonitor)
 
 	if err != nil {
@@ -671,25 +1527,30 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 	if task.Status != "cancelling" {
 		task.Status = "completed"
 		task.Progress = 100
-		task.Phase = "completed"
+		task.Phase = string(PhaseCompleted)
 		task.Speed = ""
 		task.Eta = ""
 		now := time.Now()
 		task.CompletedAt = &now
 
+		// 🆕 v3 2026-06-18 Task 8：outputPath 转虚拟路径再存储
+		//   - EncryptFileWithPlugin 返回物理绝对路径
+		//   - 前端 Files.vue 需要虚拟路径 /d/<mount>/... 才能定位
+		virtualOutput := tm.absToVirtualPath(outputPath)
+
 		for i := len(task.Steps) - 1; i >= 0; i-- {
 			if task.Steps[i].CompletedAt == nil {
 				task.Steps[i].CompletedAt = &now
-				if outputPath != "" {
-					task.Steps[i].Detail = outputPath
+				if virtualOutput != "" {
+					task.Steps[i].Detail = virtualOutput
 				}
 				break
 			}
 		}
 
-		if outputPath != "" {
+		if virtualOutput != "" {
 			task.ContainerVersion = detectContainerVersion(outputPath)
-			task.OutputPath = outputPath
+			task.OutputPath = virtualOutput
 		}
 
 		if warnings := video.LastVerifyWarnings(); len(warnings) > 0 {
@@ -702,15 +1563,74 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 
 	tm.saveTasks()
 
+	// 🆕 性能指标 Finalize + 持久化
+	var perfSummary map[string]interface{}
+	if task.Status == "completed" {
+		sourceSize := int64(0)
+		if info, err := os.Stat(absPath); err == nil {
+			sourceSize = info.Size()
+		}
+		outputSize := int64(0)
+		if outputPath != "" {
+			if info, err := os.Stat(outputPath); err == nil {
+				outputSize = info.Size()
+			}
+		}
+		var cpuScore float64
+		var cpuLabel string
+		if ps := tm.perfStore(); ps != nil {
+			if cal, _ := ps.GetCalibration(); cal != nil {
+				cpuScore = cal.CPUScore
+				cpuLabel = cal.CPULabel
+			}
+		}
+		metrics := collector.Finalize(sourceSize, outputSize, cpuScore, cpuLabel)
+		metrics.PluginName = task.PluginName
+		metrics.ContainerVer = task.ContainerVersion
+		thresholds := performance.GetThresholds("encrypt", task.PluginName, cpuScore)
+		grade, score, reason := performance.CalculateGrade(metrics, thresholds)
+		metrics.Grade = grade
+		metrics.GradeScore = score
+		metrics.GradeReason = reason
+		if ps := tm.perfStore(); ps != nil {
+			if err := ps.SaveMetrics(metrics); err != nil {
+				slog.Warn("SaveMetrics failed", "taskId", task.ID, "error", err)
+			}
+		}
+		perfSummary = map[string]interface{}{
+			"avgThroughput":   metrics.AvgThroughput,
+			"grade":           string(metrics.Grade),
+			"gradeScore":      metrics.GradeScore,
+			"totalDurationMs": metrics.TotalDurationMs,
+			"sourceSize":      metrics.SourceSize,
+			"outputSize":      metrics.OutputSize,
+		}
+	}
+
 	slog.Info("Task completed", "id", task.ID, "type", task.Type)
 	if tm.broadcaster != nil {
+		// v3 2026-06-18：task:completed 事件增加 outputPath（前端无需下拉刷新即可显示产物）
 		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
-			"id":     task.ID,
-			"status": "completed",
+			"id":                  task.ID,
+			"status":              "completed",
+			"outputPath":          task.OutputPath,
+			"performanceSummary":  perfSummary,
 		})
-		tm.broadcaster.Broadcast("file:change", map[string]interface{}{
-			"path": task.SourcePath,
-		})
+		// 🆕 v6 2026-06-18：file:change 加 action 字段，前端按 action 增量更新
+		//   - 加密/解密完成 → 源文件 modify（mtime 变化）+ 输出文件 create
+		//   - 前端收到后按 action 增删改 files 数组，不再全量 reload
+		if task.SourcePath != "" {
+			tm.broadcaster.Broadcast("file:change", map[string]interface{}{
+				"path":   task.SourcePath,
+				"action": "modify",
+			})
+		}
+		if task.OutputPath != "" && task.OutputPath != task.SourcePath {
+			tm.broadcaster.Broadcast("file:change", map[string]interface{}{
+				"path":   task.OutputPath,
+				"action": "create",
+			})
+		}
 	}
 }
 
@@ -790,9 +1710,9 @@ func (tm *TaskManager) monitorFileProgress(taskID, outputDir string, totalSize i
 			}
 			tm.mu.RUnlock()
 
-			phase := "encrypting"
-			if currentPhase == "preprocessing" {
-				phase = "preprocessing"
+			phase := string(PhaseEncrypting)
+			if currentPhase == string(PhasePreprocessing) {
+				phase = string(PhasePreprocessing)
 			}
 
 			tm.updateProgress(taskID, progress, phase, speedStr, etaStr)
@@ -810,7 +1730,7 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 	task.cancelFn = cancel
 	defer cancel()
 
-	tm.updateProgress(taskID, 5, "analyzing", "", "")
+	tm.updateProgress(taskID, 5, string(PhaseAnalyzing), "", "")
 
 	task.ContainerVersion = detectContainerVersion(absPath)
 
@@ -837,7 +1757,7 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 		}
 	}
 
-	tm.updateProgress(taskID, 10, "initializing", "", "")
+	tm.updateProgress(taskID, 10, string(PhaseInitializing), "", "")
 
 	plugin, err := plugins.FindDecryptingPlugin(absPath)
 	if err != nil {
@@ -871,13 +1791,18 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 			"taskId", taskID, "context", "decrypt")
 	}
 
-	tm.updateProgress(taskID, 15, "preprocessing", "", "")
+	tm.updateProgress(taskID, 15, string(PhasePreprocessing), "", "")
 
 	fileSize := info.Size()
 	stopMonitor := make(chan struct{})
 	go tm.monitorFileProgress(taskID, outputDir, fileSize, stopMonitor)
 
-	outputPath, err := plugins.DecryptContainerWithPlugin(passwordCtx, plugin, absPath, outputDir)
+	// 🆕 性能采集
+	collector := performance.NewCollector(task.ID, "decrypt")
+	collector.StartPhase("initializing")
+
+	outputPath, err := plugins.DecryptContainerWithPlugin(passwordCtx, plugin, absPath, outputDir, collector)
+	collector.EndPhase("initializing", 0)
 	close(stopMonitor)
 
 	if err != nil {
@@ -894,67 +1819,139 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 	if task.Status != "cancelling" {
 		task.Status = "completed"
 		task.Progress = 100
-		task.Phase = "completed"
+		task.Phase = string(PhaseCompleted)
 		task.Speed = ""
 		task.Eta = ""
 		now := time.Now()
 		task.CompletedAt = &now
 
+		// 🆕 v3 2026-06-18 Task 8：outputPath 转虚拟路径再存储（与 processEncrypt 一致）
+		virtualOutput := tm.absToVirtualPath(outputPath)
+
 		for i := len(task.Steps) - 1; i >= 0; i-- {
 			if task.Steps[i].CompletedAt == nil {
 				task.Steps[i].CompletedAt = &now
-				if outputPath != "" {
-					task.Steps[i].Detail = outputPath
+				if virtualOutput != "" {
+					task.Steps[i].Detail = virtualOutput
 				}
 				break
 			}
 		}
 
-		if outputPath != "" {
-			task.OutputPath = outputPath
+		if virtualOutput != "" {
+			task.OutputPath = virtualOutput
 		}
 	}
 	tm.mu.Unlock()
 
 	tm.saveTasks()
 
+	// 🆕 性能指标 Finalize + 持久化
+	var perfSummary map[string]interface{}
+	if task.Status == "completed" {
+		sourceSize := int64(0)
+		if info, err := os.Stat(absPath); err == nil {
+			sourceSize = info.Size()
+		}
+		outputSize := int64(0)
+		if outputPath != "" {
+			if info, err := os.Stat(outputPath); err == nil {
+				outputSize = info.Size()
+			}
+		}
+		var cpuScore float64
+		var cpuLabel string
+		if ps := tm.perfStore(); ps != nil {
+			if cal, _ := ps.GetCalibration(); cal != nil {
+				cpuScore = cal.CPUScore
+				cpuLabel = cal.CPULabel
+			}
+		}
+		metrics := collector.Finalize(sourceSize, outputSize, cpuScore, cpuLabel)
+		metrics.PluginName = task.PluginName
+		metrics.ContainerVer = task.ContainerVersion
+		thresholds := performance.GetThresholds("decrypt", task.PluginName, cpuScore)
+		grade, score, reason := performance.CalculateGrade(metrics, thresholds)
+		metrics.Grade = grade
+		metrics.GradeScore = score
+		metrics.GradeReason = reason
+		if ps := tm.perfStore(); ps != nil {
+			if err := ps.SaveMetrics(metrics); err != nil {
+				slog.Warn("SaveMetrics failed", "taskId", task.ID, "error", err)
+			}
+		}
+		perfSummary = map[string]interface{}{
+			"avgThroughput":   metrics.AvgThroughput,
+			"grade":           string(metrics.Grade),
+			"gradeScore":      metrics.GradeScore,
+			"totalDurationMs": metrics.TotalDurationMs,
+			"sourceSize":      metrics.SourceSize,
+			"outputSize":      metrics.OutputSize,
+		}
+	}
+
 	slog.Info("Task completed", "id", task.ID, "type", task.Type, "output", task.OutputPath)
 	if tm.broadcaster != nil {
+		// v3 2026-06-18：task:completed 事件增加 outputPath（前端无需下拉刷新即可显示产物）
 		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
-			"id":     task.ID,
-			"status": "completed",
+			"id":                  task.ID,
+			"status":              "completed",
+			"outputPath":          task.OutputPath,
+			"performanceSummary":  perfSummary,
 		})
-		tm.broadcaster.Broadcast("file:change", map[string]interface{}{
-			"path": task.SourcePath,
-		})
+		// 🆕 v6 2026-06-18：file:change 加 action 字段（同上）
+		if task.SourcePath != "" {
+			tm.broadcaster.Broadcast("file:change", map[string]interface{}{
+				"path":   task.SourcePath,
+				"action": "modify",
+			})
+		}
+		if task.OutputPath != "" && task.OutputPath != task.SourcePath {
+			tm.broadcaster.Broadcast("file:change", map[string]interface{}{
+				"path":   task.OutputPath,
+				"action": "create",
+			})
+		}
 	}
 }
 
 func (tm *TaskManager) failTask(id, errMsg string) {
 	tm.mu.Lock()
-	defer tm.mu.Unlock()
 
 	friendlyMsg := simplifyErrorMessage(errMsg)
 
+	var taskToPersist *MobileTask
 	if task, ok := tm.tasks[id]; ok {
 		task.Status = "failed"
 		task.Error = friendlyMsg
-		task.ErrorDetail = errMsg
+		// 🆕 2026-06-22 Q2B：写结构化 errorDetail JSON，驱动前端分类/建议/phase 链
+		task.ErrorDetail = classifyError(errMsg)
 		now := time.Now()
 		task.CompletedAt = &now
-		slog.Error("Task failed", "id", id, "error", errMsg)
-		if tm.broadcaster != nil {
-			tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
-				"id":          id,
-				"status":      "failed",
-				"error":       friendlyMsg,
-				"errorDetail": errMsg,
-			})
-			tm.broadcaster.Broadcast("log", map[string]interface{}{
-				"level":   "error",
-				"message": fmt.Sprintf("[Task %s] %s", id, errMsg),
-			})
-		}
+		taskToPersist = task
+	}
+	tm.mu.Unlock()
+
+	// 🆕 2026-06-22 Q6A：单行写（在锁外，避免持久化阻塞其他 task 操作）
+	if taskToPersist != nil {
+		tm.saveTaskSingle(taskToPersist)
+	}
+
+	slog.Error("Task failed", "id", id, "error", errMsg)
+	// 🆕 2026-06-22 修复：broadcaster broadcast 必须在 task 存在分支内
+	//   历史 bug：原代码 defer tm.mu.Unlock() + if 合并，broadcast 一定执行
+	//   即使 task 不存在也广播 → 触发 mock 失败（TestTaskManager_FailTask_NonExistent 期望 0 calls）
+	if taskToPersist != nil && tm.broadcaster != nil {
+		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
+			"id":          id,
+			"status":      "failed",
+			"error":       friendlyMsg,
+			"errorDetail": classifyError(errMsg),
+		})
+		tm.broadcaster.Broadcast("log", map[string]interface{}{
+			"level":   "error",
+			"message": fmt.Sprintf("[Task %s] %s", id, errMsg),
+		})
 	}
 }
 
@@ -987,6 +1984,73 @@ func simplifyErrorMessage(errMsg string) string {
 		return errMsg[:120] + "..."
 	}
 	return errMsg
+}
+
+// 🆕 2026-06-22 Q2B：错误分类 → 结构化 errorDetail JSON
+//
+// 为什么需要：
+//   - 前端 TaskErrorSection 需要展示「分类 + 修复建议 + phase 时间链」
+//   - 仅靠 task.Error 字符串无法驱动 useErrorAnalyzer（需要 reason 字段）
+//   - 把分类结果以 JSON 写入 task.ErrorDetail，前端折叠展开可读
+//
+// JSON schema（前端友好）：
+//   {
+//     "phase": "submission" | "network" | "http" | "backend" | "plugin",
+//     "reason": "source_missing" | "permission_denied" | "engine_unavailable" |
+//               "ffprobe_failed" | "ffmpeg_failed" | "plugin_panic" |
+//               "auth_failed" | "container_corrupted" | "disk_full" | "unknown",
+//     "raw": "<原始错误字符串，便于展开查看>",
+//     "at": "<ISO8601>"
+//   }
+func classifyError(errMsg string) string {
+	reason := "unknown"
+	phase := "backend"
+
+	switch {
+	case strings.Contains(errMsg, "ENGINE_LOAD_FAILED"), strings.Contains(errMsg, "ENGINE_SYMBOL_MISSING"), strings.Contains(errMsg, "video engine unavailable"):
+		reason = "engine_unavailable"
+		phase = "plugin"
+	case strings.Contains(errMsg, "cannot access file"):
+		reason = "source_missing"
+		phase = "submission"
+	case strings.Contains(errMsg, "No such file"), strings.Contains(errMsg, "source file not found"):
+		reason = "source_missing"
+		phase = "submission"
+	case strings.Contains(errMsg, "Permission denied"):
+		reason = "permission_denied"
+		phase = "submission"
+	case strings.Contains(errMsg, "ffprobe failed"):
+		reason = "ffprobe_failed"
+		phase = "plugin"
+	case strings.Contains(errMsg, "ffmpeg failed"):
+		reason = "ffmpeg_failed"
+		phase = "plugin"
+	case strings.Contains(errMsg, "encryption failed"), strings.Contains(errMsg, "plugin failed"), strings.Contains(errMsg, "panic"):
+		reason = "plugin_panic"
+		phase = "plugin"
+	case strings.Contains(errMsg, "wrong password"), strings.Contains(errMsg, "auth"):
+		reason = "auth_failed"
+		phase = "plugin"
+	case strings.Contains(errMsg, "container"), strings.Contains(errMsg, "header"):
+		reason = "container_corrupted"
+		phase = "plugin"
+	case strings.Contains(errMsg, "no space left"):
+		reason = "disk_full"
+		phase = "backend"
+	}
+
+	payload := map[string]interface{}{
+		"phase":  phase,
+		"reason": reason,
+		"raw":    errMsg,
+		"at":     time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		// fallback：序列化失败时退化为原始字符串
+		return errMsg
+	}
+	return string(b)
 }
 
 func getAvailableDiskSpace(path string) (int64, error) {

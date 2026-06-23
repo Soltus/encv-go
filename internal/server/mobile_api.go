@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -177,13 +178,18 @@ func (s *Server) handleDeleteFileGin(c *gin.Context) {
 	queryPath := utils.DecodeGinQueryParam(c.Query("path"))
 	slog.Warn("API: delete file", "path", queryPath)
 
-	err := s.mobileSvc.DeleteFile(queryPath)
+	absPath, err := s.resolveUserPath(queryPath)
 	if err != nil {
-		writeServiceErrorGin(c, err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+	task := s.mobileSvc.GetTaskManager().Create("delete", absPath, "", "", 0, "")
+	task.OriginalPath = absPath
+	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补 RunId 兜底 + 持久化 + 广播
+	s.mobileSvc.GetTaskManager().FinalizeCreatedTask(task)
+
+	c.JSON(http.StatusAccepted, gin.H{"taskId": task.ID})
 }
 
 func (s *Server) handleCreateDirectoryGin(c *gin.Context) {
@@ -442,8 +448,33 @@ func (s *Server) handleRenameFileGin(c *gin.Context) {
 }
 
 func (s *Server) handleGetTasksGin(c *gin.Context) {
-	taskList := s.mobileSvc.GetTaskManager().List()
-	c.JSON(http.StatusOK, gin.H{"tasks": taskList})
+	// 🆕 2026-06-23 Task 5：分页 API（10 万任务虚拟滚动支撑）
+	//   - ?runId=xxx  → 只返回 task.RunId == runId 的 task（空则不过滤）
+	//   - &offset=0   → 默认 0
+	//   - &limit=100  → 默认 100，最大 500（防滥用）
+	//   - 响应头 X-Total-Count = 过滤后、分页前的总数
+	runId := c.Query("runId")
+
+	offset := 0
+	if v := c.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	limit := 100
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	tasks, totalCount := s.mobileSvc.GetTaskManager().ListPaginated(runId, offset, limit)
+	c.Header("X-Total-Count", strconv.Itoa(totalCount))
+	c.JSON(http.StatusOK, gin.H{"tasks": tasks})
 }
 
 func (s *Server) handleCreateTaskGin(c *gin.Context) {
@@ -456,6 +487,12 @@ func (s *Server) handleCreateTaskGin(c *gin.Context) {
 		Version           int               `json:"version,omitempty"`
 		PluginName        string            `json:"pluginName,omitempty"`
 		ExtraFields       map[string]string `json:"extraFields,omitempty"`
+		// 🆕 2026-06-18 Task 16：加解密参数持久化
+		CipherMode      int    `json:"cipherMode,omitempty"`
+		CompressionMode string `json:"compressionMode,omitempty"`
+		// 🆕 v6 2026-06-18：runId + triggeredBy（单一数据源）
+		RunId       string `json:"runId,omitempty"`
+		TriggeredBy string `json:"triggeredBy,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
@@ -467,13 +504,100 @@ func (s *Server) handleCreateTaskGin(c *gin.Context) {
 		"pluginName", req.PluginName,
 		"hasPassword", req.Password != "",
 		"hasSecondaryPassword", req.SecondaryPassword != "",
-		"hasExtraFields", len(req.ExtraFields) > 0)
-	task := s.mobileSvc.GetTaskManager().CreateWithExtras(
+		"hasExtraFields", len(req.ExtraFields) > 0,
+		"cipherMode", req.CipherMode,
+		"compressionMode", req.CompressionMode,
+		"runId", req.RunId,
+		"triggeredBy", req.TriggeredBy)
+
+	// 🆕 v6 2026-06-18：统一走 CreateWithRunMeta（含 crypto params + run meta）
+	//   - runId 非空 → 自动化测试/AI agent 任务，前端按 runId 聚合
+	//   - runId 空 → 后端兜底派生 "manual-${id}"（2026-06-22），不再有孤儿 task
+	//   - triggeredBy 空 → 后端兜底 'user'（2026-06-22）
+	compressionMode := req.CompressionMode
+	if compressionMode == "" {
+		compressionMode = "none"
+	}
+	task := s.mobileSvc.GetTaskManager().CreateWithRunMeta(
 		req.Type, req.SourcePath, req.TargetPath,
 		req.Password, req.SecondaryPassword, req.Version, req.PluginName, req.ExtraFields,
+		req.CipherMode, compressionMode,
+		req.RunId, req.TriggeredBy,
 	)
 
 	c.JSON(http.StatusCreated, task)
+}
+
+// 🆕 2026-06-23 真实架构实现：批量创建 task endpoint
+//
+// 架构原则（替代 client 预占位野路子）：
+//   - 前端 submitRun 阶段收集本层所有 step 的 task 定义 → 一次性 POST /api/tasks/batch
+//   - 后端批量创建所有 task（后端生成 UUID 作为唯一权威源）→ 一次性返回所有 task
+//   - 前端拿到后一次性 push 到 store → UI 立即显示 1 个 group N task（不慢慢累加）
+//   - 不存在 client ID 覆盖后端 ID 的野路子
+//
+// 请求体：
+//
+//	{
+//	  "runId": "run-xxx",
+//	  "triggeredBy": "automation",
+//	  "tasks": [
+//	    { "type": "encrypt", "sourcePath": "/mock/sample.mp4", "pluginName": "video", ... },
+//	    ...
+//	  ]
+//	}
+//
+// 返回：HTTP 201，body 是 task 数组
+func (s *Server) handleCreateTaskBatchGin(c *gin.Context) {
+	var req struct {
+		RunId       string `json:"runId,omitempty"`
+		TriggeredBy string `json:"triggeredBy,omitempty"`
+		Tasks       []struct {
+			Type              string            `json:"type"`
+			SourcePath        string            `json:"sourcePath"`
+			TargetPath        string            `json:"targetPath,omitempty"`
+			Password          string            `json:"password,omitempty"`
+			SecondaryPassword string            `json:"secondaryPassword,omitempty"`
+			Version           int               `json:"version,omitempty"`
+			PluginName        string            `json:"pluginName,omitempty"`
+			ExtraFields       map[string]string `json:"extraFields,omitempty"`
+			CipherMode        int               `json:"cipherMode,omitempty"`
+			CompressionMode   string            `json:"compressionMode,omitempty"`
+		} `json:"tasks"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		return
+	}
+	if len(req.Tasks) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tasks array is empty"})
+		return
+	}
+
+	slog.Info("API: batch create tasks",
+		"count", len(req.Tasks),
+		"runId", req.RunId,
+		"triggeredBy", req.TriggeredBy)
+
+	specs := make([]mobileservice.BatchTaskSpec, 0, len(req.Tasks))
+	for _, t := range req.Tasks {
+		specs = append(specs, mobileservice.BatchTaskSpec{
+			Type:              t.Type,
+			SourcePath:        t.SourcePath,
+			TargetPath:        t.TargetPath,
+			Password:          t.Password,
+			SecondaryPassword: t.SecondaryPassword,
+			Version:           t.Version,
+			PluginName:        t.PluginName,
+			ExtraFields:       t.ExtraFields,
+			CipherMode:        t.CipherMode,
+			CompressionMode:   t.CompressionMode,
+		})
+	}
+
+	tasks := s.mobileSvc.GetTaskManager().CreateBatch(specs, req.RunId, req.TriggeredBy)
+
+	c.JSON(http.StatusCreated, tasks)
 }
 
 func (s *Server) handleCancelTaskGin(c *gin.Context) {
@@ -486,6 +610,72 @@ func (s *Server) handleCancelTaskGin(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, task)
+}
+
+// handleCancelRunGin 批量取消指定 runId 下所有非终态 task。
+//
+// 🆕 2026-06-23 spec ws-timing-batch-throughput-100k Task 2.2：
+//   - 前端 cancelRun 一次 API 调用取消整个 run（替代逐个 cancelTask 循环）
+//   - 路由：POST /api/runs/:runId/cancel
+func (s *Server) handleCancelRunGin(c *gin.Context) {
+	runId := c.Param("runId")
+	if runId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "runId is required"})
+		return
+	}
+	err := s.mobileSvc.GetTaskManager().CancelByRunId(runId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "cancelled", "runId": runId})
+}
+
+// handleGetRunSummaryGin 返回指定 run 的聚合计数（SQL COUNT + GROUP BY status）。
+//
+// 🆕 2026-06-23 spec backend-sql-authority-view-pagination Task 1.4：
+//   - 后端是唯一权威，聚合计数由 SQL 出，不依赖前端 store
+//   - 前端 group card 显示 summary.total/passed/failed（不靠 store.tasks 算）
+//   - 路由：GET /api/runs/:runId/summary
+//   - 响应：{runId, total, passed, failed, running, pending, cancelled, percent}
+func (s *Server) handleGetRunSummaryGin(c *gin.Context) {
+	runId := c.Param("runId")
+	if runId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "runId is required"})
+		return
+	}
+	summary := s.mobileSvc.GetTaskManager().GetRunSummary(runId)
+	c.JSON(http.StatusOK, summary)
+}
+
+// handleListRunsGin 返回所有 run 列表（带 summary，避免 N+1 查询）。
+//
+// 🆕 2026-06-23 spec backend-sql-authority-view-pagination Task 2.4：
+//   - 后端是唯一权威，run 列表由 SQL GROUP BY 出
+//   - 每个 run 带 summary（handler 层批量补，避免前端 N+1 调用 /summary）
+//   - 路由：GET /api/runs
+//   - 响应：{runs: [{runId, startedAt, triggeredBy, summary: {...}}, ...]}
+func (s *Server) handleListRunsGin(c *gin.Context) {
+	tm := s.mobileSvc.GetTaskManager()
+	runs := tm.ListRuns()
+	// 批量补 summary（避免前端 N+1 调用 /summary）
+	type runWithSummary struct {
+		RunID       string                   `json:"runId"`
+		StartedAt   time.Time                `json:"startedAt"`
+		TriggeredBy string                   `json:"triggeredBy"`
+		Summary     mobileservice.RunSummary `json:"summary"`
+	}
+	result := make([]runWithSummary, 0, len(runs))
+	for _, r := range runs {
+		summary := tm.GetRunSummary(r.RunID)
+		result = append(result, runWithSummary{
+			RunID:       r.RunID,
+			StartedAt:   r.StartedAt,
+			TriggeredBy: r.TriggeredBy,
+			Summary:     summary,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"runs": result})
 }
 
 func (s *Server) handleRetryTaskGin(c *gin.Context) {

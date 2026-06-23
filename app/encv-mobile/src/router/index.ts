@@ -33,6 +33,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/Tasks.vue'),
       },
       {
+        // 🆕 2026-06-18 v5-bug3fix：L2 GroupDetail 页面
+        //   - Tasks L1 group card 整张 clickable → push 到此页
+        //   - ion-segment 3 tab：Pipeline / Tasks / Diagnostics
+        //   - 不与 PluginTestsDetail 耦合（插件测试在设置 tab 独立）
+        //   - 设计理由：100+ 任务的 group 不应在一级页面直接展开
+        path: 'tasks/group/:runId',
+        component: () => import('@/views/GroupDetail.vue'),
+        props: true,
+      },
+      {
         path: 'remote',
         component: () => import('@/views/Remote.vue'),
       },
@@ -109,12 +119,17 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/AutomationTestsHub.vue'),
       },
       {
-        // 🆕 2026-06-17：重命名 AutomationTestsDetail → PluginTestsDetail（消除 section header 与 ion-item 重名歧义）
+        // 🆕 2026-06-11 v6：插件测试运行/管理页面（Mock 数据 + 触发测试 + Pipeline/Tree 视图）
+        // 历史：1730866 commit 曾错误删除（误以为是"测试报告"页），2026-06-18 v5-bug3fix 恢复
+        // 测试报告 section 已并入任务系统 group card 的 exportGroupReport（zip 导出）
         path: 'settings/devtools/plugin-tests',
         component: () => import('@/views/PluginTestsDetail.vue'),
       },
       {
         // 🆕 2026-06-11 v6：webdav 服务自动化测试入口
+        // 历史：v4 commit 1730866 错误改为 redirect 到 automation-hub + 单数 path 'webdav-auto'
+        //       与 AutomationTestsHub.vue:67 的 'webdav-tests' 跳转不一致
+        // 2026-06-18 v5-bug3fix 恢复成 v4 之前的可用状态
         path: 'settings/devtools/webdav-tests',
         component: () => import('@/views/WebDavAutomationTestsDetail.vue'),
       },
@@ -122,6 +137,11 @@ const routes: RouteRecordRaw[] = [
         // 🆕 2026-06-11：ECv4 容量边界测试（100×128GB sparse 虚拟容器）
         path: 'settings/devtools/sparse-container-test',
         component: () => import('@/views/SparseContainerTestDetail.vue'),
+      },
+      {
+        // 🆕 2026-06-22：文件系统任务测试（move/copy/rename/delete + rollback + trash 边界）
+        path: 'settings/devtools/fs-tests',
+        component: () => import('@/views/FileSystemTestsDetail.vue'),
       },
       {
         // 🆕 2026-06-17：Compose UI 原型总览（Hub）— 卡片循环从 DevToolsDetail 迁移

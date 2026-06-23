@@ -100,6 +100,12 @@ type MobileService struct {
 	//   - 由 SetMountRegistry 第二个参数注入（同一来源 = taskManager 的 resolver）
 	mountResolver MountResolver
 
+	// 🆕 2026-06-22 回收站 / 回滚管理器
+	//   - 由 server 层注入（需要 tasksystem.Store 依赖，MobileService 构造时不持有 store）
+	//   - nil 时 trash / rollback API 返回 503 Service Unavailable
+	trashManager    *TrashManagerImpl
+	rollbackManager *RollbackManagerImpl
+
 	// --- 可选依赖注入（用于测试） ---
 	dirReader         DirReader         // nil = 使用 os.ReadDir
 	containerDetector ContainerDetector // nil = 使用 detector.DetectContainer
@@ -163,11 +169,27 @@ func (s *MobileService) resolveUserPath(userPath string) (string, error) {
 
 func NewMobileService(servingDir string, cfg *config.Config) *MobileService {
 	wsHub := NewWSHub()
+	taskManager := NewTaskManager(servingDir, cfg, wsHub)
+
+	// 🆕 2026-06-22 修复：file/rollback handler 必须在 NewMobileService 内部注入。
+	//   历史 bug：SetFileTaskHandler/SetRollbackManager 暴露但无任何调用方，
+	//   导致 move/copy/rename/delete 任务永远 failTask("file task handler not configured")。
+	//   修法：NewMobileService 内部构造 trash + fileTaskHandler + rollbackManager 并注入到 taskManager。
+	//   store 在 server 启动后通过 NewMobileServiceWithStore 注入（不影响本构造函数）。
+	trash := NewTrashManager(servingDir, nil, wsHub)
+	fileTaskHandler := NewFileTaskHandler(trash, wsHub)
+	taskManager.SetFileTaskHandler(fileTaskHandler)
+
+	rollbackMgr := NewRollbackManager(nil, taskManager, trash)
+	taskManager.SetRollbackManager(rollbackMgr)
+
 	return &MobileService{
-		servingDir:  servingDir,
-		taskManager: NewTaskManager(servingDir, cfg, wsHub),
-		wsHub:       wsHub,
-		cfg:         cfg,
+		servingDir:    servingDir,
+		taskManager:   taskManager,
+		wsHub:         wsHub,
+		cfg:           cfg,
+		trashManager:  trash,
+		rollbackManager: rollbackMgr,
 	}
 }
 
@@ -962,6 +984,30 @@ func (s *MobileService) TestWebDAV(urlStr, username, password string) (*WebDAVTe
 
 func (s *MobileService) GetTaskManager() *TaskManager {
 	return s.taskManager
+}
+
+// GetTrashManager 返回回收站管理器。
+// 未注入时返回 nil，调用方需 nil 检查（trash API 返回 503）。
+func (s *MobileService) GetTrashManager() *TrashManagerImpl {
+	return s.trashManager
+}
+
+// SetTrashManager 注入回收站管理器。
+// 由 server 层在构造完 tasksystem.Store 后调用。
+func (s *MobileService) SetTrashManager(tm *TrashManagerImpl) {
+	s.trashManager = tm
+}
+
+// GetRollbackManager 返回回滚管理器。
+// 未注入时返回 nil，调用方需 nil 检查（rollback API 返回 503）。
+func (s *MobileService) GetRollbackManager() *RollbackManagerImpl {
+	return s.rollbackManager
+}
+
+// SetRollbackManager 注入回滚管理器。
+// 由 server 层在构造完 tasksystem.Store 后调用。
+func (s *MobileService) SetRollbackManager(rm *RollbackManagerImpl) {
+	s.rollbackManager = rm
 }
 
 func (s *MobileService) GetWSHub() *WSHub {

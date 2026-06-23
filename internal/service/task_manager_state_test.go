@@ -53,9 +53,15 @@ func TestTaskManager_Create(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, task.ID, stored.ID)
 
-	mb.AssertCalled(t, "Broadcast", "task:created", mock.Anything)
+	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播 task:created
+	//   广播职责改由 CreateWithRunMeta / FinalizeCreatedTask 负责
+	mb.AssertNotCalled(t, "Broadcast", "task:created", mock.Anything)
 }
 
+// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播
+//   原 TestTaskManager_CreateBroadcastsEvent 测试 Create 广播 task:created（旧行为）。
+//   修复后 Create 不广播，改由 CreateWithRunMeta / FinalizeCreatedTask 负责。
+//   本测试更新为验证 Create 不广播（与新 TestCreate_DoesNotBroadcast 一致）。
 func TestTaskManager_CreateBroadcastsEvent(t *testing.T) {
 	mb := new(MockBroadcaster)
 	mb.On("Broadcast", "task:created", mock.Anything).Return()
@@ -63,9 +69,9 @@ func TestTaskManager_CreateBroadcastsEvent(t *testing.T) {
 
 	tm.Create("decrypt", "/test"+pluginsext.VideoExt, "", "", 0, "")
 
+	// Create 不应触发 task:created 广播（WS 时序修复后）
 	calls := mb.FindCalls("task:created")
-	assert.Len(t, calls, 1)
-	assert.Equal(t, "task:created", calls[0].MsgType)
+	assert.Empty(t, calls, "Create() 不应广播 task:created")
 }
 
 func TestTaskManager_List(t *testing.T) {
@@ -350,6 +356,21 @@ func (f *fakeMountResolver) Resolve(virtualPath string) (*MountResolveResult, er
 		}
 	}
 	return nil, errors.New("fakeMountResolver: no mount")
+}
+
+// 🆕 v3 2026-06-18 Task 8：AbsToVirtual 反向解析 stub
+//   - 简化实现：遍历 mounts，找 absPath 是 m.absPath 子路径的 mount
+func (f *fakeMountResolver) AbsToVirtual(absPath string) (string, error) {
+	for mp, m := range f.mounts {
+		if absPath == m.absPath {
+			return mp, nil
+		}
+		if strings.HasPrefix(absPath, m.absPath+"/") {
+			sub := strings.TrimPrefix(absPath, m.absPath+"/")
+			return mp + "/" + sub, nil
+		}
+	}
+	return "", errors.New("fakeMountResolver: no mount matches abs path")
 }
 
 func TestTaskManager_FailTask(t *testing.T) {

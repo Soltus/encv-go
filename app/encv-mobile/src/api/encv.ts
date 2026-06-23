@@ -442,7 +442,7 @@ export function getPersistedBackendIdentity(): { instanceId: string; version: st
   return { instanceId: id, version: localStorage.getItem(SERVER_VERSION_KEY) || '' }
 }
 
-export async function deleteFile(path: string): Promise<void> {
+export async function deleteFile(path: string): Promise<{ taskId: string }> {
   // 🆕 2026-06-10 修复 #1：deleteFile 500 错误没有可读 message
   // 历史 bug：只 throw "HTTP error! status: 500" → 用户看到红色 toast 不知道为啥
   // 修复：把 response body 的 error 字段也读出来，throw 带详细 message
@@ -467,6 +467,7 @@ export async function deleteFile(path: string): Promise<void> {
     console.error(fullMsg, { path, status: response.status })
     throw new Error(detail || `HTTP error! status: ${response.status}`)
   }
+  return response.json()
 }
 
 export async function createDirectory(parentPath: string, name: string): Promise<void> {
@@ -503,6 +504,33 @@ export async function uploadFile(targetPath: string, file: File): Promise<FileIt
   const result: FileItem = await response.json()
   console.info('[API] uploadFile success:', result.path, 'size:', result.size)
   return result
+}
+
+/**
+ * 🆕 v6 2026-06-22：单文件 metadata 查询（file:change 增量更新用）
+ *   - 调 /api/file/info?path=... 拿单个文件的 FileItem（含 size/modified/isDirectory/isEncrypted）
+ *   - 404 → 抛 NotFoundError（调用方据此从 files.value 移除）
+ *   - 用于 file:change action=create|modify 的增量更新，避免全量 listFiles
+ */
+export async function getFileInfo(path: string): Promise<FileItem> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/file/info?path=${proxySafeEncode(path)}`)
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new NotFoundError('File not found')
+    }
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  const data = await response.json()
+  return {
+    name: data.name,
+    display_name: data.display_name,
+    path: data.path,
+    isDirectory: data.is_directory,
+    isEncrypted: data.is_encrypted,
+    size: data.size,
+    modified: data.modified,
+  }
 }
 
 export interface ServiceGuardResult {
@@ -554,7 +582,8 @@ export async function readFileContent(path: string): Promise<FileContentResponse
   return data
 }
 
-export type TaskType = 'encrypt' | 'decrypt'
+export type TaskType = 'encrypt' | 'decrypt' | 'move' | 'copy' | 'rename' | 'delete'
+  | 'rollback_encrypt' | 'rollback_decrypt' | 'rollback_move' | 'rollback_copy' | 'rollback_rename' | 'rollback_delete'
 export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'cancelling'
 
 export interface TaskStep {
@@ -592,16 +621,46 @@ export interface EncvTask {
   //   - 跨 session：localStorage 作 fallback（旧 task 没有这 2 字段，try useTaskTrigger）
   triggeredBy?: 'user' | 'automation' | 'ai_agent'
   runId?: string
+  // 🆕 2026-06-18 Task 17：加解密参数回显字段
+  // 后端 Task 16 持久化 cipherMode (0=AES-128-GCM, 1=AES-256-GCM) + compressionMode ('none'|'zstd')
+  // 前端 Task 18 任务卡片展示用 — 刷新页面后仍能回显参数
+  // optional：旧任务（Task 16 之前创建的）没有这 2 字段，反序列化时 undefined
+  cipherMode?: number
+  compressionMode?: 'none' | 'zstd'
+  // extraFields 已存在于 EncvTask 之外（createTask body 传），但后端 MobileTask 也有这个字段
+  // 这里加上让前端能读到后端回传的 extraFields（如 plugin_password 等自定义参数）
+  extraFields?: Record<string, string>
+  // 🆕 回滚特性：rollbackOf 指向原任务 ID，originalPath 为原始路径（回滚用）
+  rollbackOf?: string
+  originalPath?: string
+  // 🆕 性能指标摘要（task:completed 事件推送，仅 completed 状态有值）
+  performanceSummary?: PerformanceSummary
 }
 
-export async function getTasks(): Promise<EncvTask[]> {
+// 🆕 2026-06-23 Task 6.1：支持分页参数（runId / offset / limit）
+//   - 后端是唯一权威，任务系统 API 提供给第三方调用，必须支持 SQL 查询
+//   - 不传 params → 行为与旧版一致（GET /api/tasks，后端默认 offset=0 limit=100）
+//   - 传 params → 拼接 query string
+//   - 返回格式兼容：后端返回 { tasks: [...] }，旧代码可能期望数组 → 两种都处理
+//   - X-Total-Count 响应头：过滤后、分页前的总数（第三方调用方用于分页 UI）
+export async function getTasks(params?: {
+  runId?: string
+  offset?: number
+  limit?: number
+}): Promise<EncvTask[]> {
   const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/tasks`)
+  const query = new URLSearchParams()
+  if (params?.runId) query.set('runId', params.runId)
+  if (params?.offset !== undefined) query.set('offset', String(params.offset))
+  if (params?.limit !== undefined) query.set('limit', String(params.limit))
+  const qs = query.toString()
+  const url = qs ? `${baseUrl}/api/tasks?${qs}` : `${baseUrl}/api/tasks`
+  const response = await fetch(url)
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`)
   }
   const data = await response.json()
-  return data.tasks || []
+  return Array.isArray(data) ? data : (data.tasks ?? [])
 }
 
 /**
@@ -644,6 +703,8 @@ export async function createTask(
   secondaryPassword?: string,
   cipherMode?: number,
   compressionMode?: 'none' | 'zstd',
+  runId?: string,
+  triggeredBy?: 'user' | 'automation' | 'ai_agent',
 ): Promise<EncvTask> {
   console.info('[API] createTask:', type, sourcePath, targetPath || '',
     'hasPassword:', !!password, 'version:', version ?? 'default',
@@ -651,7 +712,9 @@ export async function createTask(
     'hasExtraFields:', extraFields && Object.keys(extraFields).length > 0,
     'hasSecondaryPassword:', !!secondaryPassword,
     'cipherMode:', cipherMode ?? 0,
-    'compressionMode:', compressionMode ?? 'none')
+    'compressionMode:', compressionMode ?? 'none',
+    'runId:', runId ?? '',
+    'triggeredBy:', triggeredBy ?? 'user')
   const baseUrl = getApiBaseUrl()
   const body: Record<string, unknown> = { type, sourcePath }
   if (targetPath) body.targetPath = targetPath
@@ -662,6 +725,8 @@ export async function createTask(
   if (secondaryPassword) body.secondaryPassword = secondaryPassword
   if (cipherMode !== undefined) body.cipherMode = cipherMode
   if (compressionMode !== undefined) body.compressionMode = compressionMode
+  if (runId) body.runId = runId
+  if (triggeredBy) body.triggeredBy = triggeredBy
   const response = await fetch(`${baseUrl}/api/tasks`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -671,6 +736,51 @@ export async function createTask(
     throw new Error(`HTTP error! status: ${response.status}`)
   }
   return await response.json()
+}
+
+// 🆕 2026-06-23 真实架构实现：批量创建 task API
+//
+// 架构原则（替代 client 预占位野路子）：
+//   - 前端 submitRun 阶段收集本层所有 step 的 task 定义 → 一次性调 batchCreateTasks
+//   - 后端批量创建所有 task（后端生成 UUID 作为唯一权威源）→ 一次性返回所有 task
+//   - 前端拿到后一次性 push 到 store → UI 立即显示 1 个 group N task（不慢慢累加）
+//   - 不存在 client ID 覆盖后端 ID 的野路子
+//
+// 调用方：useWorkflowTaskService.executeJob（每层一次性批量提交）
+export async function batchCreateTasks(
+  specs: BatchTaskSpec[],
+  runId?: string,
+  triggeredBy?: 'user' | 'automation' | 'ai_agent',
+): Promise<EncvTask[]> {
+  console.info('[API] batchCreateTasks:', specs.length, 'tasks',
+    'runId:', runId ?? '', 'triggeredBy:', triggeredBy ?? 'user')
+  const baseUrl = getApiBaseUrl()
+  const body: Record<string, unknown> = { tasks: specs }
+  if (runId) body.runId = runId
+  if (triggeredBy) body.triggeredBy = triggeredBy
+  const response = await fetch(`${baseUrl}/api/tasks/batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  return await response.json()
+}
+
+// 🆕 2026-06-23：批量创建 task 的输入定义（不含 ID——ID 由后端统一生成）
+export interface BatchTaskSpec {
+  type: TaskType
+  sourcePath: string
+  targetPath?: string
+  password?: string
+  secondaryPassword?: string
+  version?: number
+  pluginName?: string
+  extraFields?: Record<string, string>
+  cipherMode?: number
+  compressionMode?: 'none' | 'zstd'
 }
 
 export async function cancelTask(id: string): Promise<void> {
@@ -683,6 +793,67 @@ export async function cancelTask(id: string): Promise<void> {
   }
 }
 
+// 🆕 2026-06-23 Task 4：批量取消整个 run 的所有 task（一次 API 替代逐个 cancelTask）
+// 后端路由：POST /api/runs/:runId/cancel（Task 2 实现）
+// 调用方：useWorkflowTaskService.cancelRun
+export async function cancelRun(runId: string): Promise<void> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+}
+
+// 🆕 2026-06-23 spec backend-sql-authority-view-pagination Task 4.1：
+//   后端 SQL 权威——聚合计数由后端 SQL COUNT + GROUP BY status 出，不依赖前端 store。
+//   前端 group card 显示 summary.total/passed/failed（不靠 store.tasks 算）。
+//   store 只持有"当前视图需要的"task（视图分页），不是所有 task。
+
+/** Run 聚合计数（后端 SQL COUNT + GROUP BY status 出） */
+export interface RunSummary {
+  runId: string
+  total: number
+  passed: number
+  failed: number
+  running: number
+  pending: number
+  cancelled: number
+  /** 完成百分比（终态 task / total * 100） */
+  percent: number
+}
+
+/** Run 列表项（带 summary，避免前端 N+1 调用 /summary） */
+export interface RunInfo {
+  runId: string
+  startedAt: string
+  triggeredBy: string
+  summary: RunSummary
+}
+
+/** GET /api/runs/:runId/summary — 返回指定 run 的聚合计数 */
+export async function getRunSummary(runId: string): Promise<RunSummary> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/summary`)
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  return (await response.json()) as RunSummary
+}
+
+/** GET /api/runs — 返回所有 run 列表（带 summary） */
+export async function listRuns(): Promise<RunInfo[]> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/runs`)
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  const data = await response.json()
+  return data.runs ?? []
+}
+
 export async function retryTask(id: string): Promise<void> {
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/tasks/${id}/retry`, {
@@ -691,6 +862,15 @@ export async function retryTask(id: string): Promise<void> {
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`)
   }
+}
+
+// 🆕 2026-06-22 v2 架构重写：删除任务（统一走 store.removeTask）
+//   历史 Q4 临时引入 removeTaskLocal（仅前端 hide）→ 删了。
+//   修法：直接调 store.removeTask，走完整删除流程（store + IndexedDB + 后端 DELETE）
+export async function deleteTask(id: string): Promise<void> {
+  const { useTaskStore } = await import('@/stores/taskStore')
+  const store = useTaskStore()
+  await store.removeTask(id)
 }
 
 export async function removeTask(id: string): Promise<void> {
@@ -715,6 +895,71 @@ export async function clearCompletedTasks(): Promise<{ removed: number }> {
   }
   const data = await response.json()
   return { removed: data.removed ?? 0 }
+}
+
+/**
+ * 🆕 回滚特性：触发指定任务的回滚操作。
+ * 后端创建一个 rollback_* 类型的反向任务，返回新 task ID。
+ */
+export async function rollbackTask(taskId: string): Promise<{ taskId: string }> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(taskId)}/rollback`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP error! status: ${response.status}`)
+  }
+  return response.json()
+}
+
+/** 🆕 回滚特性：回收站项（删除任务移入 trash 后的元数据） */
+export interface TrashItem {
+  id: string
+  originalPath: string
+  trashPath: string
+  isDirectory: boolean
+  size: number
+  deletedAt: string
+  taskId?: string
+  restoreTaskId?: string
+}
+
+/** 列出回收站所有项 */
+export async function listTrash(): Promise<TrashItem[]> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/trash`)
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  const data = await response.json()
+  return data.items || []
+}
+
+/** 从回收站恢复（可选指定目标路径） */
+export async function restoreTrash(trashId: string, destPath?: string): Promise<{ taskId: string }> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/trash/restore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trashId, destPath }),
+  })
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  return response.json()
+}
+
+/** 永久删除回收站中的指定项 */
+export async function purgeTrash(trashId: string): Promise<void> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/trash/${encodeURIComponent(trashId)}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+}
+
+/** 清空整个回收站 */
+export async function emptyTrash(): Promise<void> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/trash`, { method: 'DELETE' })
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
 }
 
 export interface WebDAVConfig {
@@ -1202,7 +1447,7 @@ export function isWrongPasswordError(error: unknown): boolean {
   return msg.includes('wrong password') || msg.includes('密码')
 }
 
-export async function renameFile(oldPath: string, newName: string): Promise<void> {
+export async function renameFile(oldPath: string, newName: string): Promise<{ taskId: string }> {
   console.info('[API] renameFile:', oldPath, '→', newName)
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/file/rename`, {
@@ -1214,6 +1459,7 @@ export async function renameFile(oldPath: string, newName: string): Promise<void
     console.error('[API] renameFile failed:', response.status)
     throw new Error(`HTTP error! status: ${response.status}`)
   }
+  return response.json()
 }
 
 export interface RenameOriginalNameResponse {
@@ -1238,7 +1484,7 @@ export async function renameOriginalName(path: string, newName: string, password
   return response.json()
 }
 
-export async function copyFile(srcPath: string, destPath: string): Promise<void> {
+export async function copyFile(srcPath: string, destPath: string): Promise<{ taskId: string }> {
   console.info('[API] copyFile:', srcPath, '→', destPath)
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/file/copy`, {
@@ -1250,9 +1496,10 @@ export async function copyFile(srcPath: string, destPath: string): Promise<void>
     console.error('[API] copyFile failed:', response.status)
     throw new Error(`HTTP error! status: ${response.status}`)
   }
+  return response.json()
 }
 
-export async function moveFile(srcPath: string, destPath: string): Promise<void> {
+export async function moveFile(srcPath: string, destPath: string): Promise<{ taskId: string }> {
   console.info('[API] moveFile:', srcPath, '→', destPath)
   const baseUrl = getApiBaseUrl()
   const response = await fetch(`${baseUrl}/api/file/move`, {
@@ -1264,6 +1511,7 @@ export async function moveFile(srcPath: string, destPath: string): Promise<void>
     console.error('[API] moveFile failed:', response.status)
     throw new Error(`HTTP error! status: ${response.status}`)
   }
+  return response.json()
 }
 
 export interface PluginMeta {
@@ -1627,4 +1875,110 @@ export async function fetchMountUsage(id: string): Promise<MountUsageResponse> {
     throw new Error(msg)
   }
   return response.json()
+}
+
+// ========== 🆕 性能指标 ==========
+
+/** 性能指标摘要（task:completed 事件推送） */
+export interface PerformanceSummary {
+  avgThroughput: number
+  grade: 'excellent' | 'good' | 'warn'
+  gradeScore: number
+  totalDurationMs: number
+  sourceSize: number
+  outputSize: number
+}
+
+/** Phase 耗时 */
+export interface PhaseTiming {
+  phase: string
+  durationMs: number
+  bytesProcessed?: number
+  throughputMBps?: number
+}
+
+/** 完整性能指标（GET /api/tasks/:id/performance 返回） */
+export interface PerformanceMetrics {
+  taskId: string
+  taskType: string
+  pluginName?: string
+  containerVersion?: number
+  cipherMode?: number
+  compressionMode?: string
+  sourceSize: number
+  outputSize: number
+  sizeRatio: number
+  avgThroughput: number
+  peakThroughput: number
+  p50Throughput: number
+  p99Throughput: number
+  phaseTimings: PhaseTiming[]
+  totalDurationMs: number
+  grade: 'excellent' | 'good' | 'warn'
+  gradeScore: number
+  gradeReason?: string
+  cpuScore: number
+  cpuLabel: string
+  createdAt: string
+}
+
+/** 硬件校准结果 */
+export interface CalibrationResult {
+  cpuScore: number
+  aesThroughput: number
+  cpuLabel: string
+  calibratedAt: string
+  goVersion: string
+  os: string
+  arch: string
+  numCpu: number
+}
+
+/** 获取指定任务的完整性能指标 */
+export async function getTaskPerformance(taskId: string): Promise<PerformanceMetrics> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(taskId)}/performance`)
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP error! status: ${response.status}`)
+  }
+  const data = await response.json()
+  return data.metrics
+}
+
+/** 获取当前硬件校准结果 */
+export async function getCalibration(): Promise<CalibrationResult | null> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/performance/calibration`)
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  const data = await response.json()
+  return data.calibration
+}
+
+/** 手动重跑硬件校准（dev-only） */
+export async function recalibrateCalibration(): Promise<CalibrationResult> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/performance/calibration`, {
+    method: 'POST',
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP error! status: ${response.status}`)
+  }
+  const data = await response.json()
+  return data.calibration
+}
+
+/** 获取指定 plugin + taskType 的历史性能指标 */
+export async function getPerformanceHistory(
+  plugin: string,
+  type: string,
+  limit: number = 10,
+): Promise<PerformanceMetrics[]> {
+  const baseUrl = getApiBaseUrl()
+  const params = new URLSearchParams({ plugin, type, limit: String(limit) })
+  const response = await fetch(`${baseUrl}/api/performance/history?${params}`)
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  const data = await response.json()
+  return data.history || []
 }

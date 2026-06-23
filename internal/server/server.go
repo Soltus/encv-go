@@ -564,11 +564,26 @@ func (s *Server) Start(version string) (string, error) {
 	r.PATCH("/api/file/rename", s.handleRenameFileGin)
 	r.GET("/api/tasks", s.handleGetTasksGin)
 	r.POST("/api/tasks", s.handleCreateTaskGin)
+	r.POST("/api/tasks/batch", s.handleCreateTaskBatchGin) // 🆕 2026-06-23 批量创建（真实架构实现）
 	r.POST("/api/tasks/predict-plugin", s.handlePredictPluginGin)
 	r.POST("/api/tasks/:id/cancel", s.handleCancelTaskGin)
+	r.POST("/api/runs/:runId/cancel", s.handleCancelRunGin) // 🆕 2026-06-23 批量取消整个 run
+	r.GET("/api/runs/:runId/summary", s.handleGetRunSummaryGin) // 🆕 2026-06-23 run 聚合计数（SQL COUNT）
+	r.GET("/api/runs", s.handleListRunsGin)                    // 🆕 2026-06-23 run 列表（带 summary）
 	r.POST("/api/tasks/:id/retry", s.handleRetryTaskGin)
+	r.POST("/api/tasks/:id/rollback", s.handleRollbackTaskGin)
 	r.DELETE("/api/tasks/:id", s.handleRemoveTaskGin)
 	r.DELETE("/api/tasks", s.handleClearCompletedTasksGin)
+	// Trash
+	r.GET("/api/trash", s.handleListTrashGin)
+	r.POST("/api/trash/restore", s.handleRestoreTrashGin)
+	r.DELETE("/api/trash/:id", s.handlePurgeTrashGin)
+	r.DELETE("/api/trash", s.handleEmptyTrashGin)
+	// 🆕 性能指标 API
+	r.GET("/api/tasks/:id/performance", s.handleGetTaskPerformance)
+	r.GET("/api/performance/calibration", s.handleGetCalibration)
+	r.POST("/api/performance/calibration", s.handleRecalibrate)
+	r.GET("/api/performance/history", s.handleGetPerformanceHistory)
 	r.POST("/api/webdav/test", s.handleTestWebDAVGin)
 	r.GET("/api/webdav/test-local", s.handleTestLocalWebDAVGin)
 	r.GET("/api/webdav/local-info", s.handleWebDavLocalInfoGin)

@@ -2,7 +2,6 @@ package server
 
 import (
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -278,52 +277,13 @@ func (s *Server) handleFileRenameGin(c *gin.Context) {
 
 	newAbsPath := filepath.Join(filepath.Dir(oldAbsPath), req.NewName)
 
-	if _, err := os.Stat(newAbsPath); err == nil {
-		slog.Warn("rename failed, destination already exists", "path", newAbsPath)
-		c.JSON(http.StatusConflict, gin.H{
-			"code":    52,
-			"message": "Conflict: a file with that name already exists",
-			"data":    nil,
-		})
-		return
-	}
+	task := s.mobileSvc.GetTaskManager().Create("rename", oldAbsPath, newAbsPath, "", 0, "")
+	task.OriginalPath = oldAbsPath
+	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补 RunId 兜底 + 持久化 + 广播
+	s.mobileSvc.GetTaskManager().FinalizeCreatedTask(task)
 
-	slog.Debug("attempting rename", "old", oldAbsPath, "new", newAbsPath)
-	err = os.Rename(oldAbsPath, newAbsPath)
-	if err != nil {
-		slog.Error("failed to rename file", "error", err)
-		if os.IsNotExist(err) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"code":    44,
-				"message": "Not found: the original file does not exist",
-				"data":    nil,
-			})
-			return
-		} else if os.IsPermission(err) {
-			c.JSON(http.StatusForbidden, gin.H{
-				"code":    40,
-				"message": "Forbidden: permission denied",
-				"data":    nil,
-			})
-			return
-		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"code":    50,
-				"message": "Internal server error: could not rename file",
-				"data":    nil,
-			})
-			return
-		}
-	}
-
-	slog.Debug("successfully renamed", "path", newAbsPath)
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "File renamed successfully.",
-		"data": gin.H{
-			"status":  "success",
-			"message": "File renamed successfully.",
-		},
+	c.JSON(http.StatusAccepted, gin.H{
+		"taskId": task.ID,
 	})
 }
 
@@ -361,82 +321,12 @@ func (s *Server) handleFileCopyGin(c *gin.Context) {
 		return
 	}
 
-	if _, err := os.Stat(destAbsPath); err == nil {
-		slog.Warn("copy failed, destination already exists", "path", destAbsPath)
-		c.JSON(http.StatusConflict, gin.H{
-			"code":    52,
-			"message": "Conflict: destination file already exists",
-			"data":    nil,
-		})
-		return
-	}
+	task := s.mobileSvc.GetTaskManager().Create("copy", srcAbsPath, destAbsPath, "", 0, "")
+	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补 RunId 兜底 + 持久化 + 广播
+	s.mobileSvc.GetTaskManager().FinalizeCreatedTask(task)
 
-	srcFile, err := os.Open(srcAbsPath)
-	if err != nil {
-		slog.Error("failed to open source file for copy", "error", err)
-		if os.IsNotExist(err) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"code":    44,
-				"message": "Not found: the source file does not exist",
-				"data":    nil,
-			})
-			return
-		} else if os.IsPermission(err) {
-			c.JSON(http.StatusForbidden, gin.H{
-				"code":    40,
-				"message": "Forbidden: permission denied",
-				"data":    nil,
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    50,
-			"message": "Internal server error: could not open source file",
-			"data":    nil,
-		})
-		return
-	}
-	defer srcFile.Close()
-
-	destFile, err := os.Create(destAbsPath)
-	if err != nil {
-		slog.Error("failed to create destination file for copy", "error", err)
-		if os.IsPermission(err) {
-			c.JSON(http.StatusForbidden, gin.H{
-				"code":    40,
-				"message": "Forbidden: permission denied",
-				"data":    nil,
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    50,
-			"message": "Internal server error: could not create destination file",
-			"data":    nil,
-		})
-		return
-	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, srcFile)
-	if err != nil {
-		slog.Error("failed to copy file data", "error", err)
-		os.Remove(destAbsPath)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    50,
-			"message": "Internal server error: could not copy file data",
-			"data":    nil,
-		})
-		return
-	}
-
-	slog.Debug("successfully copied file", "src", srcAbsPath, "dest", destAbsPath)
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "File copied",
-		"data": gin.H{
-			"destPath": req.DestPath,
-		},
+	c.JSON(http.StatusAccepted, gin.H{
+		"taskId": task.ID,
 	})
 }
 
@@ -474,109 +364,13 @@ func (s *Server) handleFileMoveGin(c *gin.Context) {
 		return
 	}
 
-	if _, err := os.Stat(destAbsPath); err == nil {
-		slog.Warn("move failed, destination already exists", "path", destAbsPath)
-		c.JSON(http.StatusConflict, gin.H{
-			"code":    52,
-			"message": "Conflict: destination file already exists",
-			"data":    nil,
-		})
-		return
-	}
+	task := s.mobileSvc.GetTaskManager().Create("move", srcAbsPath, destAbsPath, "", 0, "")
+	task.OriginalPath = srcAbsPath
+	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补 RunId 兜底 + 持久化 + 广播
+	s.mobileSvc.GetTaskManager().FinalizeCreatedTask(task)
 
-	slog.Debug("attempting move", "src", srcAbsPath, "dest", destAbsPath)
-	err = os.Rename(srcAbsPath, destAbsPath)
-	if err == nil {
-		slog.Debug("successfully moved file (rename)", "src", srcAbsPath, "dest", destAbsPath)
-		c.JSON(http.StatusOK, gin.H{
-			"code":    0,
-			"message": "File moved",
-			"data": gin.H{
-				"destPath": req.DestPath,
-			},
-		})
-		return
-	}
-
-	slog.Warn("os.Rename failed, falling back to copy+remove", "error", err)
-
-	srcFile, err := os.Open(srcAbsPath)
-	if err != nil {
-		slog.Error("failed to open source file for move fallback", "error", err)
-		if os.IsNotExist(err) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"code":    44,
-				"message": "Not found: the source file does not exist",
-				"data":    nil,
-			})
-			return
-		} else if os.IsPermission(err) {
-			c.JSON(http.StatusForbidden, gin.H{
-				"code":    40,
-				"message": "Forbidden: permission denied",
-				"data":    nil,
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    50,
-			"message": "Internal server error: could not open source file",
-			"data":    nil,
-		})
-		return
-	}
-	defer srcFile.Close()
-
-	destFile, err := os.Create(destAbsPath)
-	if err != nil {
-		slog.Error("failed to create destination file for move fallback", "error", err)
-		if os.IsPermission(err) {
-			c.JSON(http.StatusForbidden, gin.H{
-				"code":    40,
-				"message": "Forbidden: permission denied",
-				"data":    nil,
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    50,
-			"message": "Internal server error: could not create destination file",
-			"data":    nil,
-		})
-		return
-	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, srcFile)
-	if err != nil {
-		slog.Error("failed to copy file data in move fallback", "error", err)
-		os.Remove(destAbsPath)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    50,
-			"message": "Internal server error: could not copy file data",
-			"data":    nil,
-		})
-		return
-	}
-
-	err = os.Remove(srcAbsPath)
-	if err != nil {
-		slog.Error("failed to remove source file after copy in move fallback", "error", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"code":    50,
-			"message": "Internal server error: could not remove source file after move",
-			"data":    nil,
-		})
-		return
-	}
-
-	slog.Debug("successfully moved file (copy+remove)", "src", srcAbsPath, "dest", destAbsPath)
-	c.JSON(http.StatusOK, gin.H{
-		"code":    0,
-		"message": "File moved",
-		"data": gin.H{
-			"destPath": req.DestPath,
-		},
+	c.JSON(http.StatusAccepted, gin.H{
+		"taskId": task.ID,
 	})
 }
 

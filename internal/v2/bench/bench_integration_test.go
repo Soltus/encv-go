@@ -132,7 +132,7 @@ func BenchmarkVideoPlugin_Encrypt(b *testing.B) {
 			b.ResetTimer()
 
 			for b.Loop() {
-				if _, err := plugins.EncryptFileWithPlugin(ctx, p, videoPath, filepath.Dir(videoPath), outputDir); err != nil {
+				if _, err := plugins.EncryptFileWithPlugin(ctx, p, videoPath, filepath.Dir(videoPath), outputDir, nil); err != nil {
 					b.Fatalf("加密失败: %v", err)
 				}
 				os.RemoveAll(outputDir)
@@ -159,7 +159,7 @@ func BenchmarkVideoPlugin_Decrypt(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			if _, err := plugins.EncryptFileWithPlugin(ctx, p, videoPath, filepath.Dir(videoPath), encryptDir); err != nil {
+			if _, err := plugins.EncryptFileWithPlugin(ctx, p, videoPath, filepath.Dir(videoPath), encryptDir, nil); err != nil {
 				b.Fatalf("加密失败: %v", err)
 			}
 
@@ -176,7 +176,7 @@ func BenchmarkVideoPlugin_Decrypt(b *testing.B) {
 			for b.Loop() {
 				decryptDir := b.TempDir()
 				dp, _ := plugins.FindDecryptingPlugin(containerPath)
-				if _, err := plugins.DecryptContainerWithPlugin(ctx, dp, containerPath, decryptDir); err != nil {
+				if _, err := plugins.DecryptContainerWithPlugin(ctx, dp, containerPath, decryptDir, nil); err != nil {
 					b.Fatal(err)
 				}
 				os.RemoveAll(decryptDir)
@@ -210,13 +210,13 @@ func BenchmarkVideoPlugin_FullRoundTrip(b *testing.B) {
 				encryptDir := b.TempDir()
 				decryptDir := b.TempDir()
 
-				if _, err := plugins.EncryptFileWithPlugin(ctx, p, videoPath, filepath.Dir(videoPath), encryptDir); err != nil {
+				if _, err := plugins.EncryptFileWithPlugin(ctx, p, videoPath, filepath.Dir(videoPath), encryptDir, nil); err != nil {
 					b.Fatal(err)
 				}
 
 				containerPath := findContainerFile(encryptDir)
 				dp, _ := plugins.FindDecryptingPlugin(containerPath)
-				if _, err := plugins.DecryptContainerWithPlugin(ctx, dp, containerPath, decryptDir); err != nil {
+				if _, err := plugins.DecryptContainerWithPlugin(ctx, dp, containerPath, decryptDir, nil); err != nil {
 					b.Fatal(err)
 				}
 
@@ -244,7 +244,7 @@ func BenchmarkVideoPlugin_SeekableStream(b *testing.B) {
 				b.Fatal(err)
 			}
 
-			if _, err := plugins.EncryptFileWithPlugin(ctx, p, videoPath, filepath.Dir(videoPath), encryptDir); err != nil {
+			if _, err := plugins.EncryptFileWithPlugin(ctx, p, videoPath, filepath.Dir(videoPath), encryptDir, nil); err != nil {
 				b.Fatalf("加密失败: %v", err)
 			}
 

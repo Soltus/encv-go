@@ -84,6 +84,12 @@
         <ion-refresher-content></ion-refresher-content>
       </ion-refresher>
 
+      <!-- 🆕 v4 Bug1 修复：自动更新顶栏细 indicator（不阻塞老数据渲染，不清空列表） -->
+      <div v-if="refreshing" class="files-refresh-bar" aria-live="polite">
+        <ion-spinner name="dots" class="files-refresh-bar__spinner"></ion-spinner>
+        <span class="files-refresh-bar__label">{{ t('files.autoRefreshing') }}</span>
+      </div>
+
       <!-- 播放错误展示区域 -->
       <div v-if="playError" class="play-error-banner">
         <div class="play-error-header">
@@ -289,6 +295,8 @@
             :key="file.path"
             @click="handleFileClick(file)"
             v-longpress="() => handleLongPress(file)"
+            :data-highlight-path="file.path"
+            :class="{ 'file-highlight': highlightedPath === file.path }"
           >
             <div slot="start" class="file-thumbnail-slot lazy-thumb-target" :data-file-path="file.path">
                 <img
@@ -405,8 +413,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { onIonViewWillEnter } from '@ionic/vue'
 import {
   IonPage,
@@ -492,11 +500,13 @@ import {
   addTag,
   removeTag,
   listFilesByTag,
+  getFileInfo,
 } from '@/api/encv'
 import type { FileItem, PluginMeta, TagInfo } from '@/api/encv'
 import { eventBus } from '@/composables/useEventBus'
 import { useI18n } from '@/composables/useI18n'
 import { formatDateTime } from '@/composables/useDateFormat'
+import { useRealtimeTransport } from '@/composables/useRealtimeTransport'
 import { useThumbnailCache } from '@/composables/useThumbnailCache'
 import { useFileFeatures, findClickHandler, isAnyContainerFile, getFeatureIcon } from '@/composables/useFileFeatures'
 import { preloadSubtitles } from '@/features/alist-encrypt'
@@ -612,6 +622,7 @@ const mainSortLabel = computed(() => {
   return (map[sortBy.value] || '名称') + (sortDesc.value ? '↓' : '↑')
 })
 const router = useRouter()
+const route = useRoute()
 const serverOnline = ref(false)
 const noPermission = ref(false)
 const files = ref<FileItem[]>([])
@@ -649,7 +660,22 @@ const renameAlertInputs = computed(() => {
 const MOUNT_ROOT = '/d'
 const currentPath = ref(MOUNT_ROOT)
 const loading = ref(false)
+const refreshing = ref(false)
 const connecting = ref(false)
+let firstLoad = true
+// 🆕 v4 Bug1 修复（v2）：记录上次成功加载的 path，只有真正切换路径才清空列表
+//   之前用 files.value[0]?.path !== currentPath.value 判断是错的：
+//   files[0] 是当前目录下的子文件，path 永远不等于 currentPath，
+//   导致 file:change 自动刷新也走 path-change 分支 → 清空列表 → 闪 loading。
+const lastLoadedPath = ref<string>('')
+
+// 🆕 v3 2026-06-18 Task 8：route.query 驱动的文件高亮
+//   - TaskDetailModal.locateOutput 跳转 /tabs/files?path=<dir>&highlight=<name>
+//   - onIonViewWillEnter 读取 query，导航到目录后等待 loadFiles 完成，再滚动 + 高亮
+//   - highlightedPath 保存当前要高亮的 file.path（用于 ion-item class 绑定）
+const pendingHighlight = ref<string | null>(null)
+const highlightedPath = ref<string | null>(null)
+let highlightTimer: ReturnType<typeof setTimeout> | null = null
 
 // 🆕 2026-06-15 multi-mount 适配：mount 根 /d 由后端 handleListFilesGin 返 mount 列表
 //   - 后端响应里 mount 伪 item 含 mount_driver / mount_path / mount_root 字段
@@ -711,6 +737,8 @@ const sortedFiles = computed(() => {
 })
 
 let loadGeneration = 0
+/** stream 进行中标志：避免 file:change 在 stream 未完成时触发清空重载 */
+let isStreamLoading = false
 
 // 🆕 2026-06-15 multi-mount 适配：根目录 /d 由后端 handleListFilesGin 返 mount 列表
 //   旧前端逻辑：currentPath='/' → 后端列 serving dir 子目录
@@ -722,10 +750,23 @@ async function loadFiles() {
   //   让前端只需维护一个 loadFiles 路径
   console.info('[Files] Loading files (stream), path:', currentPath.value)
   const gen = ++loadGeneration
-  loading.value = true
+  isStreamLoading = true
+  // 🆕 v6 2026-06-22：stream 启动时清空累积的 file:change（stream 会拉全量，增量无意义）
+  pendingFileChanges.clear()
+  // 🆕 v4 Bug1 修复：自动更新（file:change）下不闪全屏 loading
+  //   - 首次加载（isInitialLoad）/ 路径切换 → 全屏 loading + 清空
+  //   - 自动 reload（isRefresh）→ 顶部 spinner + 清空（不闪全屏 loading，但避免 stream 追加导致重复）
+  const isPathChange = currentPath.value !== lastLoadedPath.value
+  const isInitialLoad = files.value.length === 0 && firstLoad === true
+  if (isPathChange || isInitialLoad) {
+    loading.value = true
+  } else {
+    refreshing.value = true  // 顶部小 indicator（不闪全屏 loading）
+  }
+  files.value = []  // 🆕 始终清空：避免 stream push 追加到老数据后面导致重复
+  firstLoad = false
   connecting.value = false
   noPermission.value = false
-  files.value = []
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (gen !== loadGeneration) return
@@ -743,32 +784,55 @@ async function loadFiles() {
       serverOnline.value = true
       noPermission.value = false
       loading.value = false
+      refreshing.value = false
       connecting.value = false
       console.info('[Files] Stream complete, total:', result.files.length, 'files')
 
+      lastLoadedPath.value = currentPath.value
       loadFileTagsForCurrentDir()
+
+      // 🆕 v3 2026-06-18 Task 8：loadFiles 完成后处理 pendingHighlight
+      if (pendingHighlight.value) {
+        const name = pendingHighlight.value
+        pendingHighlight.value = null
+        // nextTick 等 ion-item 渲染完再滚动 + 高亮
+        nextTick(() => highlightFile(name))
+      }
+      // 🆕 v6 2026-06-22：stream 完成后 flush 累积的 file:change 增量更新（不全量 reload）
+      if (pendingFileChanges.size > 0) {
+        void applyFileChanges()
+      }
       return
     } catch (error) {
       if (error instanceof PermissionDeniedError) {
         serverOnline.value = true
         noPermission.value = true
         loading.value = false
+        refreshing.value = false
         connecting.value = false
+        if (pendingFileChanges.size > 0) { void applyFileChanges() }
         return
       }
       if (error instanceof NotFoundError) {
         serverOnline.value = true
         loading.value = false
+        refreshing.value = false
         connecting.value = false
         if (currentPath.value !== '/d') {
           showToast({ message: t('files.pathNotFound'), duration: 2000, color: 'warning' })
           goUp()
         }
+        if (pendingFileChanges.size > 0) { void applyFileChanges() }
         return
       }
       if (attempt < MAX_RETRIES) {
         connecting.value = true
         await new Promise(r => setTimeout(r, RETRY_DELAY))
+      }
+    } finally {
+      // 只有当前 generation 的 stream 才清理标志，避免老 callback 误清
+      if (gen === loadGeneration) {
+        isStreamLoading = false
       }
     }
   }
@@ -776,6 +840,7 @@ async function loadFiles() {
   if (gen !== loadGeneration) return
   serverOnline.value = false
   loading.value = false
+  refreshing.value = false
   connecting.value = false
 }
 
@@ -828,6 +893,39 @@ function navigateTo(path: string) {
   searchQuery.value = ''
   searchResults.value = null
   loadFiles()
+}
+
+// 🆕 v3 2026-06-18 Task 8：高亮指定文件（route.query.highlight 驱动）
+//   - 在 files.value 中按 name 找匹配项（basename 匹配，避免路径前缀差异）
+//   - scrollIntoView 滚动到目标 ion-item
+//   - 临时加 file-highlight class（2 秒后移除）
+function highlightFile(name: string) {
+  if (!name) return
+  // 在已加载的 files 中找 basename 匹配
+  const target = files.value.find((f) => f.name === name)
+  if (!target) {
+    console.info('[Files] highlightFile: target not found in current dir:', name)
+    return
+  }
+  highlightedPath.value = target.path
+  // 滚动到目标 ion-item（用 data-file-path 属性定位）
+  nextTick(() => {
+    const el = document.querySelector<HTMLElement>(
+      `ion-item[data-highlight-path="${CSS.escape(target.path)}"]`,
+    )
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      console.info('[Files] highlightFile: scrolled to', target.path)
+    } else {
+      console.info('[Files] highlightFile: element not found for path:', target.path)
+    }
+  })
+  // 2 秒后移除高亮
+  if (highlightTimer) clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => {
+    highlightedPath.value = null
+    highlightTimer = null
+  }, 2000)
 }
 
 function openContainingFolder(file: FileItem) {
@@ -1133,15 +1231,17 @@ async function handleLongPress(file: FileItem) {
 }
 
 async function handleCopy(file: FileItem) {
+  const baseName = file.name.replace(/\.[^.]+$/, '')
   const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : ''
-  const baseName = ext ? file.name.slice(0, -ext.length) : file.name
   const destName = `${baseName}_copy${ext}`
-  // 🆕 2026-06-15 multi-mount 适配：根目录 /d 而不是 /
   const destPath = currentPath.value === '/d' ? `/d/${destName}` : `${currentPath.value}/${destName}`
   try {
     await copyFile(file.path, destPath)
-    await loadFiles()
-  } catch (e) { showToast({ message: `复制失败: ${e}` }) }
+    showToast({ message: t('tasks.copy') + ' ' + t('tasks.taskCreated'), duration: 1500, color: 'success' })
+    // 不调 loadFiles()，依赖 file:change 增量更新
+  } catch (err: any) {
+    showToast({ message: err.message || 'Copy failed', duration: 2000, color: 'danger' })
+  }
 }
 
 function onRenameConfirm(d: any) {
@@ -1154,27 +1254,41 @@ async function handleRename(file: FileItem) {
   if (!renameValue.value.trim() || renameValue.value === file.name) return
   try {
     if (file.isEncrypted) {
+      // 加密容器元数据重命名仍走旧 PATCH API（同步），不接入任务系统
       const result = await renameOriginalName(file.path, renameValue.value.trim(), renamePassword.value.trim() || undefined)
       if (result.success) {
-        showToast({ message: '原始文件名已更新' })
+        showToast({ message: '原始文件名已更新', duration: 1500, color: 'success' })
       }
     } else {
+      // 普通文件重命名走任务系统
       await renameFile(file.path, renameValue.value.trim())
+      showToast({ message: t('tasks.rename') + ' ' + t('tasks.taskCreated'), duration: 1500, color: 'success' })
     }
     showRenameDialog.value = false
     renamePassword.value = ''
-    await loadFiles()
-  } catch (e) { showToast({ message: `重命名失败: ${e}` }) }
+    // 加密容器重命名后仍需 loadFiles（同步操作不广播 file:change）
+    if (file.isEncrypted) {
+      await loadFiles()
+    }
+    // 普通文件重命名不调 loadFiles()，依赖 file:change
+  } catch (err: any) {
+    showToast({ message: err.message || 'Rename failed', duration: 2000, color: 'danger' })
+  }
 }
 
 async function handleMove(file: FileItem) {
   if (!moveTargetPath.value || moveTargetPath.value === file.path) return
+  const destPath = moveTargetPath.value.endsWith('/')
+    ? `${moveTargetPath.value}${file.name}`
+    : `${moveTargetPath.value}/${file.name}`
   try {
-    const destPath = moveTargetPath.value.endsWith('/') ? `${moveTargetPath.value}${file.name}` : `${moveTargetPath.value}/${file.name}`
     await moveFile(file.path, destPath)
     showMoveDialog.value = false
-    await loadFiles()
-  } catch (e) { showToast({ message: `移动失败: ${e}` }) }
+    showToast({ message: t('tasks.move') + ' ' + t('tasks.taskCreated'), duration: 1500, color: 'success' })
+    // 不调 loadFiles()，依赖 file:change 增量更新
+  } catch (err: any) {
+    showToast({ message: err.message || 'Move failed', duration: 2000, color: 'danger' })
+  }
 }
 
 async function handleShare(file: FileItem) {
@@ -1331,19 +1445,103 @@ async function handleDeleteFile(file: FileItem) {
 async function doDelete(file: FileItem) {
   try {
     await deleteFile(file.path)
-    await loadFiles()
-    showToast({ message: `已删除 ${file.name}`, duration: 1500, color: 'success' })
-  } catch (e) {
-    // 🆕 把后端 error message 完整透传给用户（不只说"删除失败"）
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error('[Files] deleteFile failed:', file.path, msg)
-    showToast({ message: `${t('files.deleteFailed')}: ${msg}`, duration: 3500, color: 'danger' })
+    showToast({ message: t('tasks.delete') + ' ' + t('tasks.taskCreated'), duration: 1500, color: 'success' })
+    // 不调 loadFiles()，依赖 file:change 增量更新（delete action → splice 移除）
+  } catch (err: any) {
+    showToast({ message: err.message || 'Delete failed', duration: 2000, color: 'danger' })
   }
 }
 
-function onFileChange() {
+// 🆕 v6 2026-06-22：file:change 增量更新（真正的文件变更，不全量 reload）
+//   - 后端 payload: { path, action: 'create'|'delete'|'modify' }
+//   - 防抖 300ms 内合并多次事件（latest action per path wins）
+//   - delete: 直接从 files.value 移除（无 API 调用）
+//   - create/modify: 仅当文件父目录 === currentPath 时，调 getFileInfo 拿单文件 metadata 增删改
+//   - stream 进行中时延后应用（pendingFileChanges），避免与 stream push 冲突
+let fileChangeDebounceTimer: number | null = null
+/** 防抖窗口内累积的事件：path → latest action */
+const pendingFileChanges = new Map<string, 'create' | 'delete' | 'modify'>()
+
+function onFileChange(payload: { path: string; action: 'create' | 'delete' | 'modify' }) {
+  // searchCache 仍需清空（搜索结果可能过期）
   searchCache.clear()
-  loadFiles()
+  pendingFileChanges.set(payload.path, payload.action)
+  if (fileChangeDebounceTimer !== null) {
+    clearTimeout(fileChangeDebounceTimer)
+  }
+  fileChangeDebounceTimer = window.setTimeout(() => {
+    fileChangeDebounceTimer = null
+    // stream 进行中：延后到 stream 完成后再 apply（loadFiles 末尾会 flush）
+    if (isStreamLoading) {
+      console.info('[Files] file:change deferred, stream loading', pendingFileChanges.size, 'changes')
+      return
+    }
+    void applyFileChanges()
+  }, 300)
+}
+
+/**
+ * 应用累积的 file:change 增量更新到 files.value
+ * - delete: 直接 splice 移除
+ * - create/modify: 仅处理父目录 === currentPath 的文件，调 getFileInfo 拿 metadata
+ *   - 已存在 → 替换（modify）
+ *   - 不存在 → push（create）
+ *   - 404 → 移除（文件在 fetch 前已被删）
+ */
+async function applyFileChanges() {
+  if (pendingFileChanges.size === 0) return
+  // 取出并清空（避免 apply 期间新事件丢失——新事件会重新进 map 并启新 timer）
+  const changes = new Map(pendingFileChanges)
+  pendingFileChanges.clear()
+
+  // 1) 先处理 delete（纯客户端，无 API）
+  for (const [path, action] of changes) {
+    if (action === 'delete') {
+      const idx = files.value.findIndex((f) => f.path === path)
+      if (idx >= 0) {
+        files.value.splice(idx, 1)
+        console.info('[Files] incremental delete:', path)
+      }
+    }
+  }
+
+  // 2) 处理 create/modify：只 fetch 父目录 === currentPath 的文件
+  const visiblePaths: string[] = []
+  for (const [path, action] of changes) {
+    if (action === 'delete') continue
+    // 判断父目录是否 === currentPath（文件在当前视图才需要更新）
+    const parent = path.substring(0, path.lastIndexOf('/')) || '/d'
+    if (parent !== currentPath.value) continue
+    visiblePaths.push(path)
+  }
+  if (visiblePaths.length === 0) return
+
+  // 并发 fetch 所有可见文件的 metadata
+  const results = await Promise.allSettled(visiblePaths.map((p) => getFileInfo(p)))
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i]
+    const path = visiblePaths[i]
+    if (r.status === 'fulfilled') {
+      const fileItem = r.value
+      const idx = files.value.findIndex((f) => f.path === path)
+      if (idx >= 0) {
+        // modify：替换原条目（保留位置，更新 metadata）
+        files.value[idx] = fileItem
+        console.info('[Files] incremental modify:', path)
+      } else {
+        // create：追加
+        files.value.push(fileItem)
+        console.info('[Files] incremental create:', path)
+      }
+    } else {
+      // fetch 失败（404 等）：从列表移除（文件已不存在）
+      const idx = files.value.findIndex((f) => f.path === path)
+      if (idx >= 0) {
+        files.value.splice(idx, 1)
+        console.info('[Files] incremental remove (fetch failed):', path)
+      }
+    }
+  }
 }
 
 async function loadPlugins() {
@@ -1572,6 +1770,15 @@ onMounted(() => {
   loadTags()
   eventBus.on('file:change', onFileChange)
   window.addEventListener('encv:backend-ready', onBackendReadyWindow as EventListener)
+  // 🆕 v4 M1：注册 file:change tab active gate（默认 active=true，Files 切到非可见时设 false）
+  useRealtimeTransport().setFileChangeGate(true, () => {
+    // 切回 Files tab 时兜底刷一次（防抖 timer 内可能还有 pending 事件 → 一起 flush）
+    if (fileChangeDebounceTimer !== null) {
+      clearTimeout(fileChangeDebounceTimer)
+      fileChangeDebounceTimer = null
+    }
+    loadFiles()
+  })
   if (import.meta.env.DEV) {
     import('@/composables/useTestBackdoor').then(({ useTestBackdoor }) => {
       import('@/composables/useNewTaskModal').then(({ useNewTaskModal: createNewTaskModal }) => {
@@ -1590,6 +1797,31 @@ onMounted(() => {
 })
 
 onIonViewWillEnter(() => {
+  // 🆕 v3 2026-06-18 Task 8：读取 route.query.path / route.query.highlight
+  //   - TaskDetailModal.locateOutput 跳转 /tabs/files?path=<dir>&highlight=<name>
+  //   - 若 path 与 currentPath 不同 → 导航到目标目录，loadFiles 完成后高亮
+  //   - 若 path 与 currentPath 相同 → 直接高亮（不重新 loadFiles）
+  //   - 若无 query → 旧行为（仅在 files 为空时 reload）
+  const qPath = typeof route.query.path === 'string' ? route.query.path : ''
+  const qHighlight = typeof route.query.highlight === 'string' ? route.query.highlight : ''
+
+  if (qPath && qHighlight) {
+    if (qPath !== currentPath.value) {
+      // 切换目录 + 延迟高亮（loadFiles 完成后触发）
+      pendingHighlight.value = qHighlight
+      currentPath.value = qPath
+      searchQuery.value = ''
+      searchResults.value = null
+      loadFiles()
+    } else {
+      // 同目录直接高亮
+      highlightFile(qHighlight)
+    }
+    // 消费完 query 后清掉，避免下次进入 tab 又触发
+    router.replace({ path: route.path, query: {} })
+    return
+  }
+
   if (files.value.length === 0 && !loading.value && !connecting.value) {
     loadFiles()
   }
@@ -1599,15 +1831,54 @@ onUnmounted(() => {
   eventBus.off('file:change', onFileChange)
   window.removeEventListener('encv:backend-ready', onBackendReadyWindow as EventListener)
   if (searchTimer) clearTimeout(searchTimer)
+  // 🆕 v3 2026-06-18 Task 8：清理高亮定时器
+  if (highlightTimer) {
+    clearTimeout(highlightTimer)
+    highlightTimer = null
+  }
+  // 🆕 v4 M1：清 file:change 防抖 timer
+  if (fileChangeDebounceTimer !== null) {
+    clearTimeout(fileChangeDebounceTimer)
+    fileChangeDebounceTimer = null
+  }
 })
 
 function onBackendReadyWindow(event: Event) {
   const detail = (event as CustomEvent).detail || {}
   onBackendReady(detail)
 }
+
+// 🆕 v4 M1：根据 route path 变化同步 file:change gate
+//   - 当前 path 是 /tabs/files/* → gate=true（Files tab 可见，接收 file:change）
+//   - 其他 → gate=false（Tasks/Settings tab 可见时丢 file:change，避免后台狂刷）
+watch(
+  () => route.path,
+  (newPath) => {
+    const isFilesActive = newPath.startsWith('/tabs/files')
+    useRealtimeTransport().setFileChangeGate(isFilesActive, () => {
+      // 切回时兜底（onMounted 注册的 onActive 也会触发；这里再覆盖一次保险）
+      if (fileChangeDebounceTimer !== null) {
+        clearTimeout(fileChangeDebounceTimer)
+        fileChangeDebounceTimer = null
+      }
+      loadFiles()
+    })
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>
+/* 🆕 v3 2026-06-18 Task 8：route.query.highlight 驱动的文件高亮 */
+/*   - 2 秒临时高亮（highlightFile 函数控制 highlightedPath）
+/*   - 用 ion-color-primary 浅底 + 左侧 3px 边条，视觉锚点清晰 */
+.file-highlight {
+  --background: rgba(var(--ion-color-primary-rgb), 0.12);
+  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  box-shadow: inset 3px 0 0 var(--ion-color-primary);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
 /* 播放错误展示区域 */
 .play-error-banner {
   background: rgba(var(--ion-color-danger-rgb), 0.08);
@@ -1615,6 +1886,35 @@ function onBackendReadyWindow(event: Event) {
   border-radius: 6px;
   margin: 8px 12px;
   padding: 10px 12px;
+}
+
+/* 🆕 v4 Bug1 修复：自动更新顶栏细 indicator（不阻塞老数据渲染） */
+.files-refresh-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--ion-color-primary-tint);
+  color: var(--ion-color-primary-contrast);
+  font-size: 11px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--ion-color-primary-shade);
+  animation: files-refresh-bar-enter 0.15s ease-out;
+}
+.files-refresh-bar__spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+.files-refresh-bar__label {
+  white-space: nowrap;
+}
+@keyframes files-refresh-bar-enter {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .play-error-header {

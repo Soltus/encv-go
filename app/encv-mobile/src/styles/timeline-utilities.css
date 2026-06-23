@@ -1,0 +1,353 @@
+/**
+ * Timeline / Tasks Utility Classes
+ *
+ * v3 2026-06-18 Task 3：抽象 Tasks.vue 三种 item kind（group / sub_section / task）
+ * 共用的视觉元素为 utility class，屏蔽 ion-item 内部 `--background` / `--padding-*`
+ * 变量冲突，统一使用 `--tl-*` design token。
+ *
+ * 设计目标：
+ *   1. ion-item 双层背景冲突 → 用 `--background`（shadow DOM 内部 .item-native）+ `background-color`（host）双层显式置 transparent / token
+ *   2. 三种 icon-bubble 尺寸（40/28/20）→ `.tl-bubble--lg/md/sm` + tone 变体
+ *   3. status badge 字号 / padding 统一 → `.tl-status-badge`
+ *   4. 进度条高度（6px group / 2px sub_section / 4px task）→ `.tl-progress--lg/sm` + `__fill`
+ *   5. 所有颜色走 `--tl-*` token，light/dark 自动切换
+ *
+ * 依赖：timeline-tokens.css 必须先于本文件加载（main.ts 中 import 顺序）
+ */
+
+/* ============================================================
+   .tl-item-card — ion-item 卡片基类
+   ============================================================
+   ion-item 的背景色有两层：
+     - `--background`：shadow DOM 内部 .item-native 的背景
+     - `background-color`：host 元素本身的背景
+   只设其中一个会导致另一层透出来 → 必须两层都显式设置
+   ============================================================ */
+ion-item.tl-item-card {
+  --background: transparent;
+  --background-hover: transparent;
+  --background-activated: transparent;
+  background-color: transparent;
+  --padding-start: var(--tl-item-padding-start, 16px);
+  --padding-end: var(--tl-space-lg, 12px);
+  --inner-padding-end: 0;
+  --min-height: var(--tl-item-min-height, 52px);
+  position: relative;
+  overflow: hidden;
+  --border-color: transparent;
+  border-radius: var(--tl-card-radius, 8px);
+  margin: var(--tl-space-sm, 4px) 0;
+  transition: background-color 0.18s ease;
+}
+
+/* group card 变体：4px 左侧 tone 边 + 渐变背景 */
+ion-item.tl-item-card--group {
+  --padding-start: var(--tl-item-padding-start-group, 20px);
+  --min-height: var(--tl-item-min-height-group, 64px);
+  border-left: 4px solid var(--tl-trigger-automation);
+  background-color: rgba(var(--tl-trigger-automation-rgb), 0.04);
+  --background: linear-gradient(
+    135deg,
+    rgba(var(--tl-trigger-automation-rgb), 0.06),
+    rgba(var(--tl-trigger-automation-rgb), 0.01)
+  );
+  box-shadow: var(--tl-shadow-card);
+}
+ion-item.tl-item-card--group.tl-tone--ai_agent {
+  border-left-color: var(--tl-trigger-ai-agent);
+  background-color: rgba(var(--tl-trigger-ai-agent-rgb), 0.04);
+  --background: linear-gradient(
+    135deg,
+    rgba(var(--tl-trigger-ai-agent-rgb), 0.06),
+    rgba(var(--tl-trigger-ai-agent-rgb), 0.01)
+  );
+}
+
+/* sub_section 变体：缩进 + 半透明背景 + backdrop-filter */
+ion-item.tl-item-card--subsection {
+  --padding-start: var(--tl-item-padding-start-subsection, 56px);
+  --min-height: var(--tl-item-min-height, 52px);
+  --background: rgba(var(--tl-dim-plugin-rgb), 0.05);
+  --background-hover: rgba(var(--tl-dim-plugin-rgb), 0.08);
+  --background-activated: rgba(var(--tl-dim-plugin-rgb), 0.12);
+  background-color: rgba(255, 255, 255, 0.92);
+  --border-color: rgba(var(--tl-dim-plugin-rgb), 0.14);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  box-shadow: var(--tl-shadow-card-elevated);
+}
+ion-item.tl-item-card--subsection.tl-tone--type {
+  --background: rgba(var(--tl-dim-type-rgb), 0.05);
+  --background-hover: rgba(var(--tl-dim-type-rgb), 0.08);
+  --background-activated: rgba(var(--tl-dim-type-rgb), 0.12);
+  --border-color: rgba(var(--tl-dim-type-rgb), 0.14);
+}
+ion-item.tl-item-card--subsection.tl-tone--category {
+  --background: rgba(var(--tl-dim-category-rgb), 0.05);
+  --background-hover: rgba(var(--tl-dim-category-rgb), 0.08);
+  --background-activated: rgba(var(--tl-dim-category-rgb), 0.12);
+  --border-color: rgba(var(--tl-dim-category-rgb), 0.14);
+}
+ion-item.tl-item-card--subsection.tl-tone--none {
+  --background: rgba(var(--tl-dim-none-rgb), 0.04);
+  --background-hover: rgba(var(--tl-dim-none-rgb), 0.07);
+  --background-activated: rgba(var(--tl-dim-none-rgb), 0.1);
+  --border-color: rgba(var(--tl-dim-none-rgb), 0.12);
+}
+ion-item.tl-item-card--subsection.is-collapsed {
+  background-color: rgba(250, 250, 252, 0.92);
+}
+
+/* dark 模式：sub_section 背景适配 */
+body.dark ion-item.tl-item-card--subsection {
+  background-color: rgba(30, 30, 35, 0.92);
+}
+body.dark ion-item.tl-item-card--subsection.is-collapsed {
+  background-color: rgba(25, 25, 30, 0.92);
+}
+
+/* ============================================================
+   .tl-bubble — icon-bubble 统一基类
+   ============================================================
+   三种尺寸：
+     - lg (40px, 圆形)：group card icon
+     - md (28px, 圆角方形)：sub_section icon
+     - sm (20px, 圆角方形)：task / runner icon
+   tone 变体通过 `--tl-trigger-*` / `--tl-dim-*` token 派生
+   ============================================================ */
+.tl-bubble {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: var(--tl-shadow-icon-bubble);
+}
+
+.tl-bubble--lg {
+  width: var(--tl-bubble-size-lg, 40px);
+  height: var(--tl-bubble-size-lg, 40px);
+  border-radius: var(--tl-bubble-radius-circle, 50%);
+  font-size: 20px;
+  margin-right: var(--tl-space-md, 8px);
+}
+.tl-bubble--lg ion-icon {
+  font-size: 22px;
+}
+
+.tl-bubble--md {
+  width: var(--tl-bubble-size-md, 28px);
+  height: var(--tl-bubble-size-md, 28px);
+  border-radius: var(--tl-bubble-radius-rounded, 8px);
+  font-size: 15px;
+  margin-left: -40px;
+}
+.tl-bubble--md ion-icon {
+  font-size: 16px;
+}
+
+.tl-bubble--sm {
+  width: var(--tl-bubble-size-sm, 20px);
+  height: var(--tl-bubble-size-sm, 20px);
+  border-radius: var(--tl-bubble-radius-rounded, 8px);
+  font-size: 12px;
+}
+.tl-bubble--sm ion-icon {
+  font-size: 13px;
+}
+
+/* tone 变体：trigger（group card） */
+.tl-bubble.tl-tone--automation {
+  background: var(--tl-trigger-automation);
+  color: #ffffff;
+}
+.tl-bubble.tl-tone--ai_agent {
+  background: var(--tl-trigger-ai-agent);
+  color: #ffffff;
+}
+
+/* tone 变体：dimension（sub_section）— 用渐变提升精致感 */
+.tl-bubble.tl-tone--plugin {
+  background: linear-gradient(135deg, #5b9dff, #2f7ce0);
+  color: #ffffff;
+}
+.tl-bubble.tl-tone--type {
+  background: linear-gradient(135deg, #ffb74d, #f57c00);
+  color: #ffffff;
+}
+.tl-bubble.tl-tone--category {
+  background: linear-gradient(135deg, #66bb6a, #388e3c);
+  color: #ffffff;
+}
+.tl-bubble.tl-tone--none {
+  background: linear-gradient(135deg, #bdbdbd, #9e9e9e);
+  color: #ffffff;
+}
+
+/* ============================================================
+   .tl-status-badge — 统一 status badge
+   ============================================================
+   ion-badge 的 `--padding-*` 是 shadow DOM 内部变量
+   字号 / 字重 / 圆角统一，颜色由 Ionic color 属性控制
+   ============================================================ */
+.tl-status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  --padding-start: 6px;
+  --padding-end: 8px;
+  --padding-top: 2px;
+  --padding-bottom: 2px;
+  border-radius: var(--tl-card-radius-sm, 4px);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: var(--tl-space-sm, 4px);
+}
+.tl-status-badge .tl-badge-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.tl-status-badge .tl-badge-spinner {
+  width: 10px;
+  height: 10px;
+  --color: currentColor;
+}
+
+/* sm 变体：sub_section 内更紧凑的 badge */
+.tl-status-badge--sm {
+  font-size: 10px;
+  --padding-start: 5px;
+  --padding-end: 6px;
+  --padding-top: 1px;
+  --padding-bottom: 1px;
+}
+.tl-status-badge--sm .tl-badge-icon {
+  font-size: 10px;
+}
+.tl-status-badge--sm .tl-badge-spinner {
+  width: 8px;
+  height: 8px;
+}
+
+/* ============================================================
+   .tl-progress — 统一进度条
+   ============================================================
+   三种高度：
+     - lg (6px)：group card
+     - 默认 (4px)：task card
+     - sm (2px)：sub_section 底部细条
+   结构：.tl-progress（track） > .tl-progress__fill（fill）
+   ============================================================ */
+.tl-progress {
+  background: var(--tl-progress-bg);
+  border-radius: var(--tl-progress-radius);
+  overflow: hidden;
+  position: relative;
+}
+.tl-progress__fill {
+  height: 100%;
+  background: var(--tl-progress-fill);
+  border-radius: var(--tl-progress-radius);
+  transition: width 0.3s ease;
+}
+
+.tl-progress--lg {
+  height: var(--tl-progress-height-lg, 6px);
+  margin: var(--tl-space-sm, 4px) 0;
+}
+.tl-progress--sm {
+  height: var(--tl-progress-height-sm, 2px);
+}
+
+/* tone 变体：fill 颜色随 tone 切换 */
+.tl-progress.tl-tone--ai_agent .tl-progress__fill {
+  background: var(--tl-trigger-ai-agent);
+}
+.tl-progress.tl-tone--type .tl-progress__fill {
+  background: linear-gradient(90deg, #ffb74d, #f57c00);
+}
+.tl-progress.tl-tone--category .tl-progress__fill {
+  background: linear-gradient(90deg, #66bb6a, #388e3c);
+}
+.tl-progress.tl-tone--none .tl-progress__fill {
+  background: linear-gradient(90deg, #bdbdbd, #9e9e9e);
+}
+
+/* ============================================================
+   .tl-meta-row — 元信息行（badge 容器）
+   ============================================================ */
+.tl-meta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--tl-space-sm, 4px);
+  flex-wrap: wrap;
+  margin: var(--tl-space-sm, 4px) 0;
+}
+
+/* ============================================================
+   .tl-time-info — 时间信息行
+   ============================================================ */
+.tl-time-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tl-space-md, 8px);
+  margin-top: var(--tl-space-sm, 4px);
+  font-size: 11px;
+  color: var(--tl-card-text-secondary);
+  font-family: var(--tl-card-font-mono);
+}
+.tl-time-info__created {
+  color: var(--tl-card-text-secondary);
+}
+.tl-time-info__duration {
+  color: var(--tl-state-analyzing);
+  font-weight: 500;
+}
+.tl-time-info__percent {
+  font-weight: 600;
+  color: var(--tl-state-analyzing);
+}
+.tl-time-info.tl-tone--ai_agent .tl-time-info__percent {
+  color: var(--tl-trigger-ai-agent);
+}
+
+/* ============================================================
+   .tl-title — 标题（group / sub_section）
+   ============================================================ */
+.tl-title {
+  font-weight: 600;
+  margin: 0 0 var(--tl-space-sm, 4px);
+  color: var(--tl-card-text-primary);
+  line-height: 1.3;
+}
+.tl-title--lg {
+  font-size: 15px;
+}
+.tl-title--md {
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+.tl-title__count {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--tl-card-text-secondary);
+  margin-left: var(--tl-space-sm, 4px);
+}
+.tl-title--md .tl-title__count {
+  font-size: 11px;
+}
+
+/* ============================================================
+   .tl-chevron-btn — chevron 按钮统一
+   ============================================================ */
+.tl-chevron-btn {
+  --color: var(--tl-card-text-tertiary);
+  margin: 0;
+  transition: transform 0.2s ease;
+}
+.tl-chevron-btn ion-icon {
+  transition: transform 0.2s ease;
+}
+.is-collapsed .tl-chevron-btn ion-icon {
+  transform: rotate(-90deg);
+}

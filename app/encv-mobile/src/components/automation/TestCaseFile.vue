@@ -134,7 +134,7 @@
 import { computed, ref } from 'vue'
 import ErrorChainNode from './ErrorChainNode.vue'
 import { CATEGORY_META } from '@/composables/useErrorAnalyzer'
-import type { TestCaseResult } from '@/composables/useAutomationTests'
+import type { TestCaseResult } from '@/lib/workflow/types'
 
 const props = defineProps<{
   result: TestCaseResult

@@ -81,6 +81,11 @@ export function createHttpPollBackend(
   let firstTickResolved = false
 
   const lastSnapshot = new Map<string, TaskSnapshot>()
+  // 🆕 2026-06-22 真因修复 3：cache 完整 task（含 runId）
+  //   历史 bug：list snapshot 只存 {status, progress, phase, speed, eta, error} → 后端 list 漏 runId 时（Go MobileTask.RunId="" + omitempty），
+  //   前端无法回填 prev runId → store.appendTask 推入孤儿 task → 1000+ task 散成多个 group
+  //   修法：cache 完整 EncvTask，emit 前如果 t.runId 空 → 从 cache 补
+  const lastFullTask = new Map<string, EncvTask>()
 
   const _fetchTasks = options.fetchTasks ?? getTasks
   const _fetchLogs = options.fetchLogs ?? getRecentBackendLogs
@@ -96,6 +101,17 @@ export function createHttpPollBackend(
   function diffAndEmit(tasks: EncvTask[]): void {
     const seen = new Set<string>()
     for (const t of tasks) {
+      // 🆕 2026-06-22：emit 之前先从 cache 补 runId（防后端 list 漏字段波动）
+      //   如果之前 cache 过完整 task（lastFullTask.has(t.id)）但 t.runId 现在空 → 补
+      if (!t.runId) {
+        const cached = lastFullTask.get(t.id)
+        if (cached?.runId) {
+          t.runId = cached.runId
+        }
+      }
+      // 同步 cache 完整 task（保留 runId + 其他 IDENTITY_FIELDS 字段）
+      // 注意：浅拷贝避免污染 prev 对象
+      lastFullTask.set(t.id, { ...t })
       seen.add(t.id)
       const prev = lastSnapshot.get(t.id)
       if (!prev) {
@@ -116,7 +132,8 @@ export function createHttpPollBackend(
       }
       // status 变化
       if (prev.status !== t.status) {
-        emit('task:update', { id: t.id, type: t.type, status: t.status, progress: t.progress })
+        // 🆕 2026-06-22：emit task:update 时也带 runId（防后端波动 + 让 store 不用依赖 B 方向修复的 prev 保护）
+        emit('task:update', { id: t.id, type: t.type, status: t.status, progress: t.progress, runId: t.runId })
         if (isTerminal(t.status)) {
           emit('task:completed', { id: t.id, error: t.error })
         }
@@ -128,7 +145,8 @@ export function createHttpPollBackend(
         prev.speed !== t.speed ||
         prev.eta !== t.eta
       ) {
-        emit('task:progress', { id: t.id, progress: t.progress, phase: t.phase, speed: t.speed, eta: t.eta })
+        // 🆕 2026-06-22：emit task:progress 时也带 runId（同上）
+        emit('task:progress', { id: t.id, progress: t.progress, phase: t.phase, speed: t.speed, eta: t.eta, runId: t.runId })
       }
       lastSnapshot.set(t.id, snapshotOf(t))
     }
@@ -141,6 +159,8 @@ export function createHttpPollBackend(
           emit('task:completed', { id, error: 'server-list-missing' })
         }
         lastSnapshot.delete(id)
+        // 🆕 2026-06-22：同步清 lastFullTask（避免 stale cache）
+        lastFullTask.delete(id)
       }
     }
   }
@@ -222,6 +242,8 @@ export function createHttpPollBackend(
     reset() {
       this.stop()
       lastSnapshot.clear()
+      // 🆕 2026-06-22：同步清 lastFullTask
+      lastFullTask.clear()
       backoffMs = 1000
       firstTickResolved = false
       lastLogTimestamp = ''
