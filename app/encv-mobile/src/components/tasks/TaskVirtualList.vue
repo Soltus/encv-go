@@ -22,7 +22,29 @@
         DevLogs.vue ensureScrollEl()（ion-content shadowRoot .inner-scroll 获取模式）
 -->
 <template>
+  <!--
+    🆕 2026-06-23 修复真机空白：scrollEl=null 时降级渲染首屏（不虚拟化）
+      - 真机时序：ion-content shadow DOM 异步渲染 → onMounted 时 scrollEl=null
+      - 旧逻辑：virtualizer.getVirtualItems() 返回 [] → 页面空白（非空态）
+      - 修法：scrollEl=null 时用 fallbackItems 渲染前 N 个 item（N=overscan*2+20）
+      - scrollEl 就绪后自动切回虚拟滚动
+      - jsdom 测试环境也走此路径（无 shadow DOM）
+  -->
   <div
+    v-if="!scrollEl"
+    class="task-virtual-list task-virtual-list--fallback"
+  >
+    <div
+      v-for="i in fallbackCount"
+      :key="getKey(i - 1)"
+      :data-index="i - 1"
+      class="task-virtual-item"
+    >
+      <slot :item="getItem(i - 1)" :index="i - 1" />
+    </div>
+  </div>
+  <div
+    v-else
     class="task-virtual-list"
     :style="{ height: `${totalSize}px`, position: 'relative', width: '100%' }"
   >
@@ -97,6 +119,11 @@ const virtualizer = useVirtualizer(virtualizerOptions)
 
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
 const totalSize = computed(() => virtualizer.value.getTotalSize())
+
+// 🆕 2026-06-23 修复真机空白：scrollEl=null 时降级渲染前 N 个 item
+//   - N = overscan*2 + 20（足够覆盖首屏视口，避免空白）
+//   - 不超过 count（item 总数）
+const fallbackCount = computed(() => Math.min(props.count, props.overscan * 2 + 20))
 
 /**
  * measureElement ref callback — 交给 virtualizer 自动测量每个 item 的实际高度。

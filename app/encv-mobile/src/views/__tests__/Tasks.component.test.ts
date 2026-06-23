@@ -157,32 +157,10 @@ vi.mock('@/components/tasks/TaskDebugPanel.vue', () => ({
   default: defineComponent({ name: 'TaskDebugPanel', template: '<div class="task-debug-panel-stub" />' }),
 }))
 
-// mock @/components/tasks/TaskVirtualList：jsdom 无法提供 ion-content shadowRoot 的 .inner-scroll
-//   - 真 TaskVirtualList 依赖 scrollEl（ion-content shadowRoot.querySelector('.inner-scroll')）
-//   - jsdom 不支持 shadow DOM → scrollEl=null → virtualizer 渲染 0 个 item
-//   - 测试用 stub：渲染所有 item（不虚拟化），验证 Tasks.vue 模板逻辑
-//   - 暴露 forceMeasure 空函数（Tasks.vue 会调用）
-const TaskVirtualListStub = defineComponent({
-  name: 'TaskVirtualList',
-  props: ['count', 'getItem', 'getKey', 'scrollEl', 'estimateSize', 'overscan'],
-  emits: ['scroll'],
-  setup(props, { slots, expose }) {
-    expose({ forceMeasure: () => {} })
-    return () => {
-      // 渲染所有 item（不虚拟化）— 让测试能验证 group card / task row 逻辑
-      const items = []
-      const defaultSlot = slots.default
-      for (let i = 0; i < props.count; i++) {
-        const item = props.getItem(i)
-        if (defaultSlot) items.push(defaultSlot({ item, index: i }))
-      }
-      return items
-    }
-  },
-})
-vi.mock('@/components/tasks/TaskVirtualList.vue', () => ({
-  default: TaskVirtualListStub,
-}))
+// 🆕 2026-06-23 修复：不再 mock TaskVirtualList，用真组件验证
+//   - 真 TaskVirtualList 在 scrollEl=null 时走 fallback 渲染前 N 个 item
+//   - 这样测试能覆盖真机的"scrollEl 异步就绪"场景
+//   - 暴露 forceMeasure 给 Tasks.vue 调用
 
 // mock @/composables/useWorkflowTaskService：避免 workflow 链
 vi.mock('@/composables/useWorkflowTaskService', () => ({
@@ -329,7 +307,7 @@ describe('Tasks.vue 真机组件测试', () => {
     expect(taskRows.length).toBe(0)
   })
 
-  it('flat 模式：1000 task → 渲染 1000 个 .tl-item-card（stub 不虚拟化）', async () => {
+  it('flat 模式：1000 task → scrollEl=null 降级渲染 fallbackCount 个 .tl-item-card（非空白）', async () => {
     const { wrapper, store, list } = await mountTasksVue()
     list.viewMode.value = 'flat'
 
@@ -341,13 +319,16 @@ describe('Tasks.vue 真机组件测试', () => {
     await nextTick()
 
     // flat 模式下：每个 task 是 1 个 ion-item-sliding > ion-item.tl-item-card
-    //   - 真 TaskVirtualList 会虚拟化（只渲染可见窗口）
-    //   - 测试 stub 不虚拟化（渲染所有）→ 1000 个 tl-item-card
+    //   - 真 TaskVirtualList 在 scrollEl=null（jsdom 无 shadow DOM）时走 fallback
+    //   - fallback 渲染前 fallbackCount = min(count, overscan*2+20) = min(1000, 40) = 40 个
     //   - 关键：不应该有 group card
     const groupCards = wrapper.findAll('.tl-group-card')
     expect(groupCards.length).toBe(0)
     const itemCards = wrapper.findAll('.tl-item-card')
-    expect(itemCards.length).toBe(1000)
+    // fallbackCount = min(1000, 10*2+20) = 40，但 date section header 占位 → 实际 item card < 40
+    //   - 关键断言：> 0（非空白）且 <= 40（fallback 上限）
+    expect(itemCards.length).toBeGreaterThan(0)
+    expect(itemCards.length).toBeLessThanOrEqual(40)
   })
 
   it('切换 viewMode group→flat→group 后 DOM 稳定', async () => {
@@ -431,5 +412,55 @@ describe('Tasks.vue 真机组件测试', () => {
     await nextTick()
     // complete() 应被调用（onInfinite 内部调 event.target.complete()）
     expect(completeSpy).toHaveBeenCalled()
+  })
+
+  // 🆕 2026-06-23 修复真机空白：验证 worker 未就绪时 sync 兜底不空白
+  //   - 真机场景：worker 异步计算期间 displayedItems 不应为空
+  //   - useTaskViewCompute 在 workerHasResult=false 时用 syncDisplayedItems 兜底
+  //   - 测试环境 isFallback=true（VITEST）→ 直接走 sync → 立即有数据
+  it('真机空白修复：worker 未就绪时 displayedItems 用 sync 兜底（非空白）', async () => {
+    const { wrapper, store, list } = await mountTasksVue()
+    list.viewMode.value = 'group'
+
+    const RUN_ID = `r-blank-fix-${Date.now()}`
+    // 注入 5 个 task（模拟自动化测试创建）
+    for (let i = 0; i < 5; i++) {
+      store.applyEvent('created', makeTask(`t-${i}`, RUN_ID, 'queued'))
+    }
+    await flushPromises()
+    await nextTick()
+
+    // 关键断言：displayedItems 不为空（sync 兜底立即计算）
+    //   - 旧 bug：worker 异步计算期间 workerDisplayedItems=[] → 页面空白
+    //   - 修复：workerHasResult=false 时用 syncDisplayedItems 兜底
+    expect(list.displayedItems.value.length).toBeGreaterThan(0)
+
+    // DOM 应有 1 个 group card（5 task 聚合）
+    expect(wrapper.findAll('.tl-group-card').length).toBe(1)
+  })
+
+  // 🆕 2026-06-23 修复真机空白：验证 TaskVirtualList scrollEl=null 降级渲染
+  //   - 真机场景：ion-content shadow DOM 异步渲染 → scrollEl=null → 旧逻辑空白
+  //   - 修复：scrollEl=null 时 TaskVirtualList 走 fallback 渲染前 N 个 item
+  it('真机空白修复：scrollEl=null 时 TaskVirtualList 降级渲染（非空白）', async () => {
+    const { wrapper, store, list } = await mountTasksVue()
+    list.viewMode.value = 'group'
+
+    const RUN_ID = `r-scroll-null-${Date.now()}`
+    store.bulkSetTasks(Array.from({ length: 50 }, (_, i) => makeTask(`t-${i}`, RUN_ID, 'queued')))
+    await flushPromises()
+    await nextTick()
+
+    // jsdom 无 shadow DOM → scrollEl=null → TaskVirtualList 走 fallback
+    //   - fallback 渲染前 fallbackCount = min(50, 40) = 40 个 item
+    //   - 50 task 共享 1 runId → 1 个 group card + 1 个 date header
+    //   - fallback 渲染的 item 包含 group card（kind='group'）
+    const groupCards = wrapper.findAll('.tl-group-card')
+    expect(groupCards.length).toBe(1)
+
+    // 验证不是空白：task-virtual-list 容器存在且有子元素
+    const virtualList = wrapper.find('.task-virtual-list')
+    expect(virtualList.exists()).toBe(true)
+    expect(virtualList.element.children.length).toBeGreaterThan(0)
   })
 })

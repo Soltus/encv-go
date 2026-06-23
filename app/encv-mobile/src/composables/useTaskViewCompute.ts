@@ -299,9 +299,12 @@ export function useTaskViewCompute(options: UseTaskViewComputeOptions): UseTaskV
     isFallback.value = true
   }
 
-  // ============ 降级路径：同步 computed（测试环境 + Worker 不可用） ============
+  // ============ 降级路径：同步 computed（测试环境 + Worker 不可用 + Worker 未就绪兜底） ============
   //   - 用 computed 保持同步语义（与原 displayedItems computed 行为一致）
-  //   - 测试不需要 debounce，store 变化立即反映到 displayedItems
+  //   - 🆕 2026-06-23 修复真机空白：worker 异步计算期间用 sync 兜底
+  //     - worker 首次计算前 workerDisplayedItems=[] → 页面空白
+  //     - worker onerror 后 isFallback=true 但旧逻辑不切回 sync
+  //     - 修法：displayedItems 用 computed，worker 未就绪/fallback 时用 sync
   const syncDisplayedItems = computed<any[]>(() => {
     const input = {
       tasks: options.tasks.value,
@@ -320,12 +323,16 @@ export function useTaskViewCompute(options: UseTaskViewComputeOptions): UseTaskV
 
   // ============ Worker 路径：异步 ref（debounce 16ms） ============
   const workerDisplayedItems = ref<any[]>([])
+  // 🆕 worker 是否已返回过有效结果（首次计算前为 false → 用 sync 兜底）
+  //   - 必须是 ref：displayedItems computed 依赖此值，worker 返回结果后切到 workerDisplayedItems
+  const workerHasResult = ref(false)
 
   if (worker) {
     worker.onmessage = (e: MessageEvent<ComputeOutput>) => {
       const output = e.data
       if (!output || output.type !== 'result') return
       isComputing.value = false
+      workerHasResult.value = true
       // date section: dateKey → i18n label
       const items = output.items.map((item: any) => {
         if (item.kind === 'date' && item.dateKey) {
@@ -338,6 +345,7 @@ export function useTaskViewCompute(options: UseTaskViewComputeOptions): UseTaskV
     worker.onerror = (e) => {
       console.warn('[useTaskViewCompute] Worker error, fallback to sync:', e)
       isFallback.value = true
+      workerHasResult.value = false
     }
   }
 
@@ -397,10 +405,17 @@ export function useTaskViewCompute(options: UseTaskViewComputeOptions): UseTaskV
     )
   }
 
-  // 统一出口：fallback 用 syncDisplayedItems（computed），worker 用 workerDisplayedItems（ref）
-  const displayedItems = isFallback.value
-    ? syncDisplayedItems
-    : workerDisplayedItems
+  // 🆕 2026-06-23 修复真机空白：统一出口改为 computed
+  //   - isFallback=true（测试/worker 不可用/worker onerror）→ syncDisplayedItems
+  //   - isFallback=false 但 worker 尚未返回结果（workerHasResult=false）→ syncDisplayedItems 兜底
+  //   - isFallback=false 且 worker 已返回结果 → workerDisplayedItems
+  //   - 这样 worker 异步计算期间不会空白（sync 立即给出结果），worker 返回后切换
+  const displayedItems = computed<any[]>(() => {
+    if (isFallback.value || !workerHasResult.value) {
+      return syncDisplayedItems.value
+    }
+    return workerDisplayedItems.value
+  })
 
   return {
     displayedItems,

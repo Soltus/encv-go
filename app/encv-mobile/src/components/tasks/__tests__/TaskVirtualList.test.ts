@@ -217,8 +217,10 @@ describe('TaskVirtualList', () => {
       props: { items: makeItems(20), scrollEl: null },
     })
     await flushPromises()
-    // 初始 scrollEl=null → 0 个 item
-    expect(wrapper.findAll('.test-item')).toHaveLength(0)
+    // 🆕 2026-06-23 修复真机空白：scrollEl=null 时走 fallback 渲染前 N 个 item（非 0）
+    //   - 旧逻辑：scrollEl=null → virtualizer 返回 [] → 0 个 item → 页面空白
+    //   - 新逻辑：scrollEl=null → fallback 渲染 min(count, overscan*2+20) 个 item
+    expect(wrapper.findAll('.test-item').length).toBeGreaterThan(0)
     // 切换到非 null
     const scrollEl = makeMockScrollEl()
     await wrapper.setProps({ scrollEl })
