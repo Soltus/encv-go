@@ -323,7 +323,7 @@
                 <div class="tl-group-card__title-block">
                   <h2 class="tl-group-card__title">
                     {{ item.displayData.tone === 'ai_agent' ? t('tasks.triggeredBy_ai_agent') : t('tasks.triggeredBy_automation') }}
-                    <span class="tl-group-card__count">· {{ item.tasks.length }} {{ t('tasks.tasksCount') }}</span>
+                    <span class="tl-group-card__count">· {{ item._summaryTotal ?? item.tasks.length }} {{ t('tasks.tasksCount') }}</span>
                     <!-- 🆕 v6 置顶标记 -->
                     <ion-icon
                       v-if="isRunPinned(item.runId)"

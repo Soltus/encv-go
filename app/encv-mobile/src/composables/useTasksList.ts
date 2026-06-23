@@ -24,6 +24,7 @@ import { useI18n } from '@/composables/useI18n'
 import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
 import { useRunSummariesSingleton } from '@/composables/useRunSummaries'
 import { useTaskViewCompute } from '@/composables/useTaskViewCompute'
+import type { RunSummary } from '@/api/encv'
 import { formatDateTime as dateFormat } from '@/composables/useDateFormat'
 import { getTaskTypeLabel } from '@/lib/taskTypeLabel'
 
@@ -210,8 +211,66 @@ function createUseTasksList() {
     filterDateRange: storeRefs.filterDateRange,
     pinnedRunIds: storeRefs.pinnedRunIds,
   })
-  // 暴露为 ref（与原 computed 接口兼容，模板用 displayedItems.value 访问）
-  const displayedItems = workerDisplayedItems as any
+
+  // 🆕 2026-06-24 修复：group card 计数使用 runSummaries（后端 SQL 权威）而非 store.tasks.length
+  //   - 旧问题：Tasks 页视图分页只加载 100 条任务，group card 显示 "100 个任务"
+  //   - 新逻辑：如果 runSummaries 中有该 runId 的 summary，用 summary.total 覆盖显示总数
+  //   - 保持 item.tasks 数组不变（用于过滤命中计算 / 点击进入详情等）
+  const displayedItems = computed(() => {
+    const items = workerDisplayedItems.value
+    if (!items || items.length === 0) return items
+    const summaries = runSummaries.summaries.value
+    let hasGroupWithSummary = false
+    for (const item of items) {
+      if (item.kind === 'group' && item.runId && !item.runId.startsWith('__manual__')) {
+        const summary = summaries.get(item.runId)
+        if (summary) {
+          hasGroupWithSummary = true
+          break
+        }
+      }
+    }
+    if (!hasGroupWithSummary) return items
+    return items.map((item: any) => {
+      if (item.kind !== 'group' || !item.runId || item.runId.startsWith('__manual__')) {
+        return item
+      }
+      const summary = summaries.get(item.runId)
+      if (!summary) return item
+      return mergeGroupWithSummary(item, summary)
+    })
+  })
+
+  function mergeGroupWithSummary(item: any, summary: RunSummary): any {
+    const total = summary.total
+    const passed = summary.passed
+    const failed = summary.failed
+    const running = summary.running
+    const pending = summary.pending
+    const finished = passed + failed
+    const percent = summary.percent ?? (total > 0 ? Math.round((finished / total) * 100) : 0)
+    let dominantStatus = 'running'
+    if (failed > 0) dominantStatus = 'failed'
+    else if (running > 0) dominantStatus = 'running'
+    else if (pending > 0) dominantStatus = 'queued'
+    else if (passed > 0) dominantStatus = 'completed'
+
+    const moodClass = failed > 0 ? 'tl-mood--fail'
+                    : running > 0 ? 'tl-mood--running'
+                    : (passed === total && total > 0) ? 'tl-mood--success'
+                    : (item.displayData?.moodClass ?? '')
+
+    return {
+      ...item,
+      displayData: {
+        ...item.displayData,
+        summary: { total, passed, failed, running, pending, percent },
+        dominantStatus,
+        moodClass,
+      },
+      _summaryTotal: total,
+    }
+  }
 
   // ============ Helper：状态显示 ============
   function getTaskName(task: EncvTask): string { return getTaskDisplayName(task) }
@@ -267,7 +326,10 @@ function createUseTasksList() {
   async function fetchTasks(_opts?: { silent?: boolean }): Promise<void> {
     store.isRefreshing = true
     try {
-      const list = await apiGetTasks({ offset: 0, limit: PAGE_SIZE })
+      const [list] = await Promise.all([
+        apiGetTasks({ offset: 0, limit: PAGE_SIZE }),
+        runSummaries.fetchAll().catch(() => {}),
+      ])
       store.rebuildFromBackend(list)
       _paginationOffset.value = 0
       hasMore.value = list.length >= PAGE_SIZE

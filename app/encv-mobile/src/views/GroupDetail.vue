@@ -177,6 +177,8 @@ import { useBatchOperations } from '@/composables/useBatchOperations'
 import { useRunTasksStoreSingleton } from '@/stores/runTasksStore'
 import { useRunSummariesSingleton } from '@/composables/useRunSummaries'
 import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
+import { useTaskStore } from '@/stores/taskStore'
+import { storeToRefs } from 'pinia'
 import type { EncvTask } from '@/api/encv'
 import { getCalibration } from '@/api/encv'
 import type { JobRun } from '@/lib/workflow/types'
@@ -197,6 +199,8 @@ const workflowService = useWorkflowTaskService()
 const runTasksStore = useRunTasksStoreSingleton()
 const runSummaries = useRunSummariesSingleton()
 const batchOps = useBatchOperations()
+const taskStore = useTaskStore()
+const { searchQuery, filterStatuses, filterTypes, filterPlugins, activeFilterCount } = storeToRefs(taskStore)
 
 // ============ UI 局部状态（selection 是 per-view，不进 store） ============
 const selectedIds = ref<Set<string>>(new Set())
@@ -209,24 +213,6 @@ function toggleSelect(id: string) {
 }
 function clearSelection() {
   selectedIds.value = new Set()
-}
-
-// ============ 本地 filter/search 状态（GroupDetail 自己的视图状态） ============
-// 🆕 2026-06-23 Task 6.4：删除从 useTasksList 继承的 filter 状态，改为本地 ref
-//   原因：GroupDetail 是独立路由，filter 状态不应该污染 Tasks 页
-//   控件样式保持不变（同样用 FilterDrawer 组件），只是数据源独立了
-const searchQuery = ref('')
-const filterStatuses = ref<string[]>([])
-const filterTypes = ref<string[]>([])
-const filterPlugins = ref<string[]>([])
-const activeFilterCount = computed(() =>
-  filterStatuses.value.length + filterTypes.value.length + filterPlugins.value.length,
-)
-function clearFilters() {
-  filterStatuses.value = []
-  filterTypes.value = []
-  filterPlugins.value = []
-  searchQuery.value = ''
 }
 
 // ============ 派生 ============
@@ -260,34 +246,36 @@ const performanceSectionOpen = ref(false)
 // 衍生数据
 const run = computed(() => workflowService.getRun(runId.value))
 
-// 🆕 2026-06-23 Task 6.1：runTasks 从 runTasksStore.tasks 派生（应用本地 filter/search）
+// 🆕 2026-06-24 修复：runTasks 从 runTasksStore.tasks 派生（应用顶层 taskStore 的 filter/search）
 //   - 数据源：runTasksStore.tasks（独立加载 GET /api/tasks?runId=xxx）
-//   - 不再从 useTasksList.filteredTasks 过滤（避免依赖 Tasks 页 store）
-//   - 本地 filter/search 应用后排序
+//   - filter/search 状态与顶层 taskStore 共享（用户要求统一搜索筛选）
+//   - 过滤逻辑与 Tasks 页保持一致（__unknown__ 处理）
 const runTasks = computed<EncvTask[]>(() => {
   const id = runId.value
   if (!id) return []
   let list = runTasksStore.tasks.value
 
-  // 应用本地 search
+  // 应用 search（与 Tasks 页逻辑一致：name + plugin + error + id）
   const q = searchQuery.value.trim().toLowerCase()
   if (q) {
-    list = list.filter((t) =>
-      t.sourcePath.toLowerCase().includes(q) ||
-      t.pluginName?.toLowerCase().includes(q) ||
-      t.id.toLowerCase().includes(q),
-    )
+    list = list.filter((t) => {
+      const name = (t.targetPath?.split('/').pop() ?? t.sourcePath?.split('/').pop() ?? t.id.slice(0, 8)).toLowerCase()
+      const plugin = (t.pluginName || '').toLowerCase()
+      const error = (t.error || '').toLowerCase()
+      const tid = t.id.toLowerCase()
+      return name.includes(q) || plugin.includes(q) || error.includes(q) || tid.includes(q)
+    })
   }
 
-  // 应用本地 filter
-  if (filterStatuses.value.length > 0) {
-    list = list.filter((t) => filterStatuses.value.includes(t.status))
+  // 应用 filter（与 Tasks 页逻辑一致）
+  if (filterPlugins.value.length > 0) {
+    list = list.filter((t) => filterPlugins.value.includes(t.pluginName || '__unknown__'))
   }
   if (filterTypes.value.length > 0) {
     list = list.filter((t) => filterTypes.value.includes(t.type))
   }
-  if (filterPlugins.value.length > 0) {
-    list = list.filter((t) => filterPlugins.value.includes(t.pluginName ?? ''))
+  if (filterStatuses.value.length > 0) {
+    list = list.filter((t) => filterStatuses.value.includes(t.status))
   }
 
   // 按 createdAt 升序
@@ -367,11 +355,16 @@ async function batchDeleteSelected() {
   await confirm.present()
 }
 
-// FilterDrawer 操作转发
+// FilterDrawer 操作转发（状态共享自 taskStore，直接赋值即可）
 function onFilterStatus(v: string[]) { filterStatuses.value = v as any }
 function onFilterType(v: string[]) { filterTypes.value = v as any }
 function onFilterPlugin(v: string[]) { filterPlugins.value = v }
-function onFilterReset() { clearFilters() }
+function onFilterReset() {
+  // FilterDrawer 只包含 status/type/plugin 三个维度，只重置这三个
+  filterStatuses.value = []
+  filterTypes.value = []
+  filterPlugins.value = []
+}
 
 // ============ 导出报告（🆕 Q7C native Filesystem + web download） ============
 const exporting = ref(false)

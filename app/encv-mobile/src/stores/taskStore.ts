@@ -315,9 +315,63 @@ export const useTaskStore = defineStore('task', () => {
   function applyTaskCreated(data: any) { applyEvent('created', data) }
   function applyTaskCompleted(data: any) { applyEvent('completed', data) }
 
-  /** 后端权威：直接覆盖 */
+  /**
+   * 后端刷新：upsert 模式（更新已有 + 追加新的，不删除旧任务）
+   *
+   * 🆕 2026-06-23 修复：从"全量覆盖"改为 upsert
+   *   旧问题：fetchTasks 只拉 PAGE_SIZE=100 条，rebuildFromBackend 直接覆盖
+   *          → 1000+ 任务的场景下，切 tab 回来只剩 100 条
+   *   新逻辑：遍历新任务，已有则 patch（保留 identity fields），没有则 append
+   *          旧任务全部保留（删除靠 DELETE API + WS 事件，不靠 refresh 同步）
+   */
   function rebuildFromBackend(serverTasks: EncvTask[]): void {
-    bulkSetTasks(serverTasks)
+    if (serverTasks.length === 0) return
+    const _IDENTITY_FIELDS: (keyof EncvTask)[] = [
+      'runId', 'triggeredBy', 'pluginName', 'type', 'createdAt',
+    ]
+    let changed = false
+    const toAdd: EncvTask[] = []
+    for (const newTk of serverTasks) {
+      const idx = _taskIndex.get(newTk.id)
+      if (idx === undefined) {
+        toAdd.push(newTk)
+        changed = true
+      } else {
+        const prev = tasks.value[idx]
+        // 检查是否有字段变化（避免无意义的 trigger）
+        let hasChange = false
+        const merged: EncvTask = { ...prev }
+        for (const k of Object.keys(newTk) as (keyof EncvTask)[]) {
+          const newVal = (newTk as any)[k]
+          // identity fields：newTask 缺 → 保留 prev 的；有 → 用 newTask 的
+          if (_IDENTITY_FIELDS.includes(k)) {
+            if (newVal === undefined || newVal === null || newVal === '') {
+              continue // 保留 prev
+            }
+          }
+          if ((merged as any)[k] !== newVal) {
+            ;(merged as any)[k] = newVal
+            hasChange = true
+          }
+        }
+        if (hasChange) {
+          tasks.value[idx] = merged
+          changed = true
+        }
+      }
+    }
+    if (toAdd.length > 0) {
+      tasks.value = [...tasks.value, ...toAdd]
+      changed = true
+    }
+    if (changed) {
+      rebuildIndex()
+      hasAnyTask.value = tasks.value.length > 0
+      triggerRef(tasks)
+      if (hydrated.value) {
+        try { void persistBulkPut(serverTasks) } catch {}
+      }
+    }
   }
 
   // ============ 派生 computed（统一 owner） ============
