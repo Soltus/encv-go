@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-22T04:37:42.249Z",
+  "generated_at": "2026-06-23T00:24:40.404Z",
   "source_file": "package.json",
   "items": [
     {
@@ -288,6 +288,17 @@
       "description": "Vue Test Utils — Vue 组件测试工具",
       "icon": "flask",
       "license": "MIT"
+    },
+    {
+      "name": "cypress",
+      "version": "15.17.0",
+      "version_range": "^15.17.0",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "jsdom",
