@@ -68,7 +68,7 @@ export default defineConfig({
 
   // ============ E2E Testing ============
   e2e: {
-    baseUrl: 'http://localhost:5173',
+    baseUrl: process.env.CYPRESS_BASE_URL || 'http://localhost:5173',
     specPattern: 'cypress/e2e/**/*.cy.ts',
     supportFile: 'cypress/support/e2e.ts',
     includeShadowDom: true,

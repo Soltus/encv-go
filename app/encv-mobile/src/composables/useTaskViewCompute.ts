@@ -21,7 +21,7 @@
  *   - iOS WKWebView 支持 Web Worker（iOS 10+）
  *   - 无需 polyfill
  */
-import { ref, computed, watch, type Ref, type ComputedRef } from 'vue'
+import { ref, computed, watch, toRaw, type Ref, type ComputedRef } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import type { EncvTask } from '@/api/encv'
 // 🆕 Vite 原生支持 ?worker import（dev 用 esbuild，build 用 rollup 单独打包）
@@ -357,16 +357,20 @@ export function useTaskViewCompute(options: UseTaskViewComputeOptions): UseTaskV
   function scheduleWorkerCompute(): void {
     if (!worker) return
     // 收集当前输入
+    // ⚠️ 关键：tasks 用 toRaw 剥掉 Pinia reactive Proxy
+    //   - worker.postMessage 走 structured clone 算法，不能 clone Proxy
+    //   - 否则抛 DataCloneError: Failed to execute 'postMessage' on 'Worker'
+    //   - 生产环境会导致页面空白（worker 永远不返回结果）
     lastInput = {
-      tasks: options.tasks.value,
+      tasks: toRaw(options.tasks.value),
       viewMode: options.viewMode.value,
       sortBy: options.sortBy.value,
       searchQuery: options.searchQuery.value,
-      filterPlugins: options.filterPlugins.value,
-      filterTypes: options.filterTypes.value,
-      filterStatuses: options.filterStatuses.value,
-      filterTriggeredBy: options.filterTriggeredBy.value,
-      filterDateRange: options.filterDateRange.value,
+      filterPlugins: toRaw(options.filterPlugins.value),
+      filterTypes: toRaw(options.filterTypes.value),
+      filterStatuses: toRaw(options.filterStatuses.value),
+      filterTriggeredBy: toRaw(options.filterTriggeredBy.value),
+      filterDateRange: toRaw(options.filterDateRange.value),
       pinnedRunIds: Array.from(options.pinnedRunIds.value),
     }
 

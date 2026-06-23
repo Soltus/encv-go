@@ -47,6 +47,59 @@ step() { echo ""; printf "${C}==>${N} %s\n" "$*"; }
 FAILED=0
 
 # ============================================================================
+# 步骤 pre-0: 安装 Cypress / Electron 系统依赖（沙箱无 GUI 需 xvfb + GTK 库）
+# ============================================================================
+step "pre-0/6 安装 Cypress/Electron 系统依赖（xvfb + GTK + ATK）"
+
+CYPRESS_DEPS=(
+  xvfb
+  libatk1.0-0
+  libatk-bridge2.0-0
+  libgtk-3-0
+  libgbm1
+  libxdamage1
+  libxcomposite1
+  libxcursor1
+  libxi6
+  libxtst6
+  libxrandr2
+  libxss1
+  libasound2
+  libpango-1.0-0
+  libcairo2
+  libdbus-1-3
+  libdbus-glib-1-2
+  libnss3
+  libx11-xcb1
+)
+
+# 检查哪些缺
+MISSING_DEPS=()
+for pkg in "${CYPRESS_DEPS[@]}"; do
+  if ! dpkg -l "$pkg" >/dev/null 2>&1; then
+    MISSING_DEPS+=("$pkg")
+  fi
+done
+
+if [[ ${#MISSING_DEPS[@]} -eq 0 ]]; then
+  ok "Cypress/Electron 系统依赖全部就绪（${#CYPRESS_DEPS[@]} 个包）"
+else
+  log "缺失 ${#MISSING_DEPS[@]} 个包，apt-get install ..."
+  log "  缺失: ${MISSING_DEPS[*]}"
+  if apt-get update -qq 2>&1 | tail -3; then
+    if DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${MISSING_DEPS[@]}" 2>&1 | tail -10; then
+      ok "Cypress/Electron 系统依赖安装完成"
+    else
+      warn "Cypress 系统依赖安装失败（测试可能跑不起来）"
+      FAILED=$((FAILED+1))
+    fi
+  else
+    warn "apt-get update 失败（跳过 Cypress 系统依赖安装）"
+    FAILED=$((FAILED+1))
+  fi
+fi
+
+# ============================================================================
 # 步骤 pre-0: 清理沙箱内残留 orphan 进程（必须）
 # ============================================================================
 # 沙箱特有：上次 preview 跑过留下 zombie air / go build / vite 进程

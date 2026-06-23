@@ -54,14 +54,6 @@ describe('Tasks.vue 真实组件 (Cypress Component)', () => {
     cy.intercept('GET', '**/api/tasks*', { body: [], statusCode: 200 }).as('getTasks')
     cy.intercept('GET', '**/api/runs/summary*', { body: {}, statusCode: 200 }).as('getSummary')
     cy.intercept('DELETE', '**/api/tasks*', { body: { removed: 0 }, statusCode: 200 }).as('deleteTasks')
-
-    // 容错 Worker postMessage 错误
-    cy.on('uncaught:exception', (err) => {
-      if (err.message.includes('postMessage') && err.message.includes('could not be cloned')) {
-        return false
-      }
-      return false
-    })
   })
 
   /**
