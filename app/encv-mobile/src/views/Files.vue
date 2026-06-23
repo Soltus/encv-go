@@ -1790,6 +1790,9 @@ onMounted(() => {
           openNewTask: (sourcePath?: string, taskType?: 'encrypt' | 'decrypt') => {
             return openNewTask(sourcePath, taskType)
           },
+          __debugOnFileChange: onFileChange,
+          __debugGetPendingChanges: () => pendingFileChanges.size,
+          __debugIsStreamLoading: () => isStreamLoading,
         })
       })
     })

@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 import type { FileItem } from '@/api/encv'
+import { eventBus } from './useEventBus'
 
 export interface TestBackdoorAPI {
   simulateLongPress: (fileName: string) => Promise<void>
@@ -8,6 +9,16 @@ export interface TestBackdoorAPI {
   getCurrentFiles: () => FileItem[]
   triggerActionSheet: (fileName: string) => Promise<void>
   openNewTaskModal: (sourcePath?: string, taskType?: 'encrypt' | 'decrypt') => Promise<void>
+  /** @internal 调试用：直接设置文件列表，验证响应式更新 */
+  __debugSetFiles?: (files: FileItem[]) => void
+  /** @internal 调试用：检查 eventBus 实例是否与 spec 里的一致 */
+  __debugGetEventBusMarker?: () => string | null
+  /** @internal 调试用：直接触发 file:change 处理函数 */
+  __debugTriggerFileChange?: (payload: { path: string; action: 'create' | 'delete' | 'modify' }) => void
+  /** @internal 调试用：获取待处理的 file change 数量 */
+  __debugGetPendingChanges?: () => number
+  /** @internal 调试用：是否正在 stream loading */
+  __debugIsStreamLoading?: () => boolean
 }
 
 declare global {
@@ -23,6 +34,12 @@ export function useTestBackdoor(
     onClick: (file: FileItem) => Promise<void>
     navigateTo: (path: string) => void
     openNewTask?: (sourcePath?: string, taskType?: 'encrypt' | 'decrypt') => Promise<void>
+    /** @internal 调试用：file change 处理函数 */
+    __debugOnFileChange?: (payload: { path: string; action: 'create' | 'delete' | 'modify' }) => void
+    /** @internal 调试用：获取待处理的 file change 数量 */
+    __debugGetPendingChanges?: () => number
+    /** @internal 调试用：是否正在 stream loading */
+    __debugIsStreamLoading?: () => boolean
   }
 ): TestBackdoorAPI | null {
   if (!import.meta.env.DEV) return null
@@ -61,6 +78,34 @@ export function useTestBackdoor(
       }
       console.warn(`[TEST-BACKDOOR] openNewTaskModal(${sourcePath}, ${taskType})`)
       await options.openNewTask(sourcePath, taskType)
+    },
+
+    __debugSetFiles: (newFiles: FileItem[]) => {
+      console.warn('[TEST-BACKDOOR] __debugSetFiles called, newFiles.length:', newFiles.length)
+      files.value = newFiles
+    },
+
+    /** @internal 调试用：检查 eventBus 实例是否与 spec 里的一致 */
+    __debugGetEventBusMarker: () => {
+      return (eventBus as any).__testMarker ?? null
+    },
+
+    /** @internal 调试用：直接触发 file:change 处理函数 */
+    __debugTriggerFileChange: (payload: { path: string; action: 'create' | 'delete' | 'modify' }) => {
+      console.warn('[TEST-BACKDOOR] __debugTriggerFileChange:', payload)
+      if (options.__debugOnFileChange) {
+        options.__debugOnFileChange(payload)
+      }
+    },
+
+    /** @internal 调试用：获取待处理的 file change 数量 */
+    __debugGetPendingChanges: () => {
+      return options.__debugGetPendingChanges ? options.__debugGetPendingChanges() : -1
+    },
+
+    /** @internal 调试用：是否正在 stream loading */
+    __debugIsStreamLoading: () => {
+      return options.__debugIsStreamLoading ? options.__debugIsStreamLoading() : false
     },
   }
 

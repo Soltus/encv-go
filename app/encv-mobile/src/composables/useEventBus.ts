@@ -86,4 +86,8 @@ export const eventBus = {
   off,
   emit,
   clear,
+  /** @internal 调试用：获取指定事件的监听器数量 */
+  __debugGetListenerCount: (event: string) => {
+    return listeners.get(event)?.size ?? 0
+  },
 }
