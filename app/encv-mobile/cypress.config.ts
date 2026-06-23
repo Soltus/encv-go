@@ -56,6 +56,10 @@ export default defineConfig({
         },
         // cypress 内部 Vite 不需要 hmr/port
         server: { hmr: false },
+        // i18n 严格模式：缺 key 直接抛错，避免测试用 class 选择器漏测 i18n
+        define: {
+          'import.meta.env.VITE_I18N_STRICT': JSON.stringify('true'),
+        },
       }),
     },
     indexHtmlFile: 'cypress/support/component-index.html',

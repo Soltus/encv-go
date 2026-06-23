@@ -130,12 +130,27 @@ function injectParams(msg: string, params: MessageParams): string {
 // DEV 下 missing key 只警告一次（避免循环 render 刷屏）
 let tMissingWarned: Set<string> | null = null
 
+// 严格模式：测试环境缺 key 直接抛错，避免测试用 class 选择器漏测 i18n
+// 用 VITE_I18N_STRICT=true 开启（Cypress 自动注入）
+const isStrictMode = import.meta.env.VITE_I18N_STRICT === 'true'
+
 function t(key: string, params?: MessageParams): string {
   const lookup = messages[currentLocale.value]
   if (!lookup || !(key in lookup)) {
     // 回退链：zh-CN → en → key
-    const fallback = messages.en[key] ?? key
-    if (import.meta.env.DEV) {
+    const fallback = messages.en[key]
+
+    if (isStrictMode && !fallback) {
+      const msg = `[i18n] MISSING KEY: "${key}" (locale: ${currentLocale.value}, no en fallback)`
+      // eslint-disable-next-line no-console
+      console.error(msg)
+      // 抛错让测试挂掉，同时返回醒目占位符让 DOM 断言也能发现
+      throw new Error(msg)
+    }
+
+    const displayValue = fallback ?? `[MISSING: ${key}]`
+
+    if (import.meta.env.DEV && !isStrictMode) {
       const warned = (tMissingWarned ??= new Set<string>())
       if (!warned.has(key)) {
         warned.add(key)
@@ -143,7 +158,8 @@ function t(key: string, params?: MessageParams): string {
         console.warn(`[i18n] missing key: ${key} (locale: ${currentLocale.value})`)
       }
     }
-    return params ? injectParams(fallback, params) : fallback
+
+    return params ? injectParams(displayValue, params) : displayValue
   }
   const msg = lookup[key]
   return params ? injectParams(msg, params) : msg
