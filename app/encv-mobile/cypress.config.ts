@@ -18,6 +18,11 @@
  *   - 不需要 mock Worker（Electron 有完整 Web Worker 支持）
  *   - 不需要 mock IndexedDB（Electron 真实支持）
  *
+ * ⚠️ 关键：viteConfig 必须是函数（不读项目根 vite.config.ts）
+ *   - 项目 vite.config.ts 第一个 plugin 是 devStartGuard()，拦截 !PM2_HOME 启动
+ *   - cypress 内部 Vite 加载项目 vite.config.ts 时 devStartGuard 会抛错
+ *   - 用 viteConfig 函数返回最小配置，绕过项目 vite.config.ts
+ *
  * 注意：
  *   - Cypress 15.17.0 + Electron 37.6.0（已 bundled，无需下载）
  *   - defaultBrowser: 'electron' 全局生效，无需每次 --browser electron
@@ -25,6 +30,8 @@
  *   - baseUrl: Vite dev server（cypress 启动前需手动起，或用 devServer 自动起）
  */
 import { defineConfig } from 'cypress'
+import vue from '@vitejs/plugin-vue'
+import path from 'node:path'
 
 export default defineConfig({
   // 全局默认用 Electron（避免 Chrome 下载）
@@ -35,6 +42,21 @@ export default defineConfig({
     devServer: {
       framework: 'vue',
       bundler: 'vite',
+      // 关键：用内联函数返回最小 vite 配置，完全不走项目 vite.config.ts
+      //   - 避开 devStartGuard 拦截（项目 vite.config.ts 第一个 plugin）
+      //   - 避开 dynamicHmrHostPlugin（不需要）
+      //   - 避开 frontendDepsManifestPlugin（不需要）
+      //   - 只需 @vitejs/plugin-vue（解析 .vue 文件）+ @ alias（spec import @/...）
+      viteConfig: async () => ({
+        plugins: [vue()],
+        resolve: {
+          alias: {
+            '@': path.resolve(__dirname, 'src'),
+          },
+        },
+        // cypress 内部 Vite 不需要 hmr/port
+        server: { hmr: false },
+      }),
     },
     indexHtmlFile: 'cypress/support/component-index.html',
     specPattern: 'cypress/component/**/*.cy.ts',
