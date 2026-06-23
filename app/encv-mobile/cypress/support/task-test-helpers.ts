@@ -182,6 +182,94 @@ export const taskStore = {
     })
   },
 
+  /** 设置搜索关键词 */
+  setSearchQuery(q: string): Cypress.Chainable<void> {
+    return cy.then(() => {
+      const store = _getTaskStore()
+      store.setSearchQuery(q)
+    })
+  },
+
+  /** 获取搜索关键词 */
+  getSearchQuery(): Cypress.Chainable<string> {
+    return cy.then(() => {
+      const store = _getTaskStore()
+      return store.searchQuery
+    })
+  },
+
+  /** 切换 plugin 筛选 */
+  togglePluginFilter(plugin: string): Cypress.Chainable<void> {
+    return cy.then(() => {
+      const store = _getTaskStore()
+      store.togglePluginFilter(plugin)
+    })
+  },
+
+  /** 设置 plugin 筛选 */
+  setPluginFilter(plugins: string[]): Cypress.Chainable<void> {
+    return cy.then(() => {
+      const store = _getTaskStore()
+      store.filterPlugins = plugins as any
+    })
+  },
+
+  /** 切换 type 筛选 */
+  toggleTypeFilter(type: string): Cypress.Chainable<void> {
+    return cy.then(() => {
+      const store = _getTaskStore()
+      store.toggleTypeFilter(type as any)
+    })
+  },
+
+  /** 设置 type 筛选 */
+  setTypeFilter(types: string[]): Cypress.Chainable<void> {
+    return cy.then(() => {
+      const store = _getTaskStore()
+      store.filterTypes = types as any
+    })
+  },
+
+  /** 切换 status 筛选 */
+  toggleStatusFilter(status: string): Cypress.Chainable<void> {
+    return cy.then(() => {
+      const store = _getTaskStore()
+      store.toggleStatusFilter(status as any)
+    })
+  },
+
+  /** 设置 status 筛选 */
+  setStatusFilter(statuses: string[]): Cypress.Chainable<void> {
+    return cy.then(() => {
+      const store = _getTaskStore()
+      store.filterStatuses = statuses as any
+    })
+  },
+
+  /** 清空所有筛选 */
+  clearFilters(): Cypress.Chainable<void> {
+    return cy.then(() => {
+      const store = _getTaskStore()
+      store.clearFilters()
+    })
+  },
+
+  /** 获取活跃筛选数 */
+  getActiveFilterCount(): Cypress.Chainable<number> {
+    return cy.then(() => {
+      const store = _getTaskStore()
+      return store.activeFilterCount
+    })
+  },
+
+  /** 获取过滤后的任务数 */
+  getFilteredTaskCount(): Cypress.Chainable<number> {
+    return cy.then(() => {
+      const store = _getTaskStore()
+      return store.filteredTasks.length
+    })
+  },
+
   /** 应用 WS 事件（模拟后端推送） */
   applyEvent(
     type: 'created' | 'update' | 'progress' | 'completed',
