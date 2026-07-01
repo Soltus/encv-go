@@ -21,6 +21,7 @@ import (
 	"github.com/Soltus/encv-go/internal/logger"
 	"github.com/Soltus/encv-go/internal/mount"
 	mobileservice "github.com/Soltus/encv-go/internal/service"
+	"github.com/Soltus/encv-go/internal/search"
 	"github.com/Soltus/encv-go/internal/utils"
 	"github.com/Soltus/encv-go/internal/v2/container/detector"
 	"github.com/Soltus/encv-go/internal/v2/plugins"
@@ -526,6 +527,8 @@ func (s *Server) handleCreateTaskGin(c *gin.Context) {
 		req.RunId, req.TriggeredBy,
 	)
 
+	s.UpdateTaskSearchIndex(task.ID, task.SourcePath, task.Type, task.SourcePath, task.Status)
+
 	c.JSON(http.StatusCreated, task)
 }
 
@@ -597,6 +600,24 @@ func (s *Server) handleCreateTaskBatchGin(c *gin.Context) {
 	}
 
 	tasks := s.mobileSvc.GetTaskManager().CreateBatch(specs, req.RunId, req.TriggeredBy)
+
+	// 增量更新搜索索引
+	if s.searchSvc != nil {
+		ctx := context.Background()
+		batch := make([]vectorsearch.TaskIndexItem, 0, len(tasks))
+		for _, t := range tasks {
+			batch = append(batch, vectorsearch.TaskIndexItem{
+				ID:         t.ID,
+				Name:       t.SourcePath,
+				TaskType:   t.Type,
+				SourcePath: t.SourcePath,
+				Status:     t.Status,
+			})
+		}
+		if err := s.searchSvc.IndexTasksBatch(ctx, batch); err != nil {
+			slog.Warn("batch update task search index failed", "error", err)
+		}
+	}
 
 	c.JSON(http.StatusCreated, tasks)
 }
@@ -2162,5 +2183,181 @@ func (s *Server) handleDatabaseRestore(c *gin.Context) {
 			"snapshots": len(dump.Snapshots),
 			"metrics":   len(dump.Metrics),
 		},
+	})
+}
+
+// ─── 向量搜索 API（Turso 原生向量检索 + 中文 bigram）────────────
+
+// handleVectorSearchTasksGin 任务语义搜索。
+//
+// 基于 Turso 原生向量检索（vector_distance_cos），支持中文模糊搜索。
+// 相比简单的字符串匹配，向量搜索能找到语义相近的结果。
+//
+// Query 参数：
+//   - q: 搜索关键词
+//   - limit: 返回数量（默认 50）
+func (s *Server) handleVectorSearchTasksGin(c *gin.Context) {
+	query := c.Query("q")
+	limit := 50
+	if l := c.Query("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	if query == "" {
+		c.JSON(http.StatusOK, gin.H{"tasks": []gin.H{}, "vector_search": false})
+		return
+	}
+
+	if s.searchSvc == nil {
+		// 向量搜索不可用时，降级为普通字符串匹配
+		tasks, _ := s.mobileSvc.GetTaskManager().ListPaginated("", 0, 200)
+		var matched []mobileservice.MobileTask
+		q := strings.ToLower(query)
+		for _, t := range tasks {
+			if strings.Contains(strings.ToLower(t.SourcePath), q) ||
+				strings.Contains(strings.ToLower(t.Type), q) {
+				matched = append(matched, *t)
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"tasks": matched, "vector_search": false})
+		return
+	}
+
+	ctx := context.Background()
+	results, err := s.searchSvc.SearchTasks(ctx, query, limit)
+	if err != nil {
+		writeServiceErrorGin(c, err)
+		return
+	}
+
+	// 把搜索结果转换成前端能识别的任务格式
+	// 从 TaskManager 获取完整任务信息
+	tm := s.mobileSvc.GetTaskManager()
+	var tasks []*mobileservice.MobileTask
+	for _, r := range results {
+		if r.Score < 0.05 {
+			continue // 过滤掉相似度太低的结果
+		}
+		if task, err := tm.Get(r.RefID); err == nil && task != nil {
+			tasks = append(tasks, task)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"tasks":         tasks,
+		"vector_search": true,
+		"total":         len(results),
+	})
+}
+
+// handleVectorSearchFilesGin 文件语义搜索。
+//
+// 结合现有文件系统搜索 + 向量重排序，提升中文搜索效果。
+//
+// Query 参数：
+//   - q: 搜索关键词
+//   - path: 搜索路径
+//   - limit: 返回数量
+func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
+	query := c.Query("q")
+	path := utils.DecodeGinQueryParam(c.Query("path"))
+	limit := 50
+	if l := c.Query("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	if query == "" {
+		c.JSON(http.StatusOK, gin.H{"files": []gin.H{}, "vector_search": false})
+		return
+	}
+
+	// 先调用现有文件搜索拿到候选结果
+	files, err := s.mobileSvc.SearchFiles(path, query, true)
+	if err != nil {
+		writeServiceErrorGin(c, err)
+		return
+	}
+
+	// 如果向量搜索可用，且结果数量较多，用向量重排序
+	if s.searchSvc != nil && len(files) > 3 {
+		ctx := context.Background()
+		// 先把结果批量索引到向量搜索
+		batch := make([]vectorsearch.FileIndexItem, 0, len(files))
+		for _, f := range files {
+			batch = append(batch, vectorsearch.FileIndexItem{
+				Path:  f.Path,
+				Name:  f.Name,
+				Size:  f.Size,
+				MTime: f.Modified,
+			})
+		}
+		s.searchSvc.IndexFilesBatch(ctx, batch)
+
+		// 然后用向量搜索重新排序
+		results, vErr := s.searchSvc.SearchFiles(ctx, query, limit)
+		if vErr == nil && len(results) > 0 {
+			// 按向量搜索结果重排序
+			fileMap := make(map[string]mobileservice.FileInfo)
+			for _, f := range files {
+				fileMap[f.Path] = f
+			}
+
+			var sortedFiles []mobileservice.FileInfo
+			for _, r := range results {
+				if r.Score < 0.05 {
+					continue
+				}
+				if f, ok := fileMap[r.RefID]; ok {
+					sortedFiles = append(sortedFiles, f)
+				}
+			}
+
+			// 把没进向量结果的文件也附在后面
+			if len(sortedFiles) < len(files) {
+				sortedSet := make(map[string]bool)
+				for _, f := range sortedFiles {
+					sortedSet[f.Path] = true
+				}
+				for _, f := range files {
+					if !sortedSet[f.Path] {
+						sortedFiles = append(sortedFiles, f)
+					}
+				}
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"files":         sortedFiles,
+				"vector_search": true,
+				"total":         len(sortedFiles),
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"files":         files,
+		"vector_search": false,
+		"total":         len(files),
+	})
+}
+
+// handleSearchStatsGin 获取搜索索引统计信息。
+func (s *Server) handleSearchStatsGin(c *gin.Context) {
+	if s.searchSvc == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"available": false,
+			"engine":    "none",
+		})
+		return
+	}
+
+	stats := s.searchSvc.Stats()
+	c.JSON(http.StatusOK, gin.H{
+		"available": true,
+		"stats":     stats,
 	})
 }

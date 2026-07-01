@@ -384,7 +384,7 @@ import { useRouter } from 'vue-router'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton,
   IonContent, IonList, IonListHeader, IonItem, IonItemDivider,
-  IonIcon, IonLabel, IonBadge, IonSpinner, IonNote,
+  IonIcon, IonLabel, IonBadge, IonSpinner,
   IonSelect, IonSelectOption, modalController, alertController,
 } from '@ionic/vue'
 import {
@@ -409,7 +409,7 @@ import { showToast } from '@/composables/useToast'
 import { isNative, pickFolder, getPluginFullState, ensurePluginLoaded } from '@/plugins/GoProcess'
 import { registerFileFeature, unregisterFileFeature } from '@/composables/useFileFeatures'
 import { createAlistEncryptFeature } from '@/features/alist-encrypt'
-import { getIndexStats, fetchConfig, updateConfig, getDatabaseInfo, exportDatabase, importDatabase, backupDatabase } from '@/api/encv'
+import { getIndexStats, fetchConfig, updateConfig, getDatabaseInfo } from '@/api/encv'
 import type { IndexStats, DatabaseInfo } from '@/api/encv'
 import { PLAY_MODE, isMpvSubMode } from '@/constants/player'
 import FilePickerModal from '@/components/FilePickerModal.vue'

@@ -144,7 +144,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { useI18n } from '@/composables/useI18n'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton,
   IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
@@ -223,11 +223,11 @@ function handleFieldChange(key: string, value: unknown) {
   setFieldValue(['database', key], value)
 }
 
-function handleInput(key: string, field: FieldDef, value: unknown) {
+function handleInput(key: string, _field: FieldDef, value: unknown) {
   setFieldValue(['database', key], value)
 }
 
-function handleBrowsePath(key: string, field: FieldDef) {
+function handleBrowsePath(key: string, _field: FieldDef) {
   // 移动端路径选择暂不实现
   console.warn('[DatabaseDetail] browse path not implemented for:', key)
 }
@@ -248,7 +248,7 @@ function isFieldVisible(field: FieldDef): boolean {
   return true
 }
 
-function fieldLabel(key: string, required?: boolean): string {
+function fieldLabel(key: string, _required?: boolean): string {
   // 直接用字段 key 作为 label（schema 驱动）
   return key
   // TODO: 接入 i18n
@@ -258,7 +258,7 @@ function tField(key: string): string {
   return key
 }
 
-function getFieldIcon(key: string, type: string): string {
+function getFieldIcon(_key: string, _type: string): string {
   // 简单映射，不需要复杂图标
   return ''
 }

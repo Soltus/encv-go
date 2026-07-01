@@ -485,6 +485,7 @@ import {
   listFilesStream,
   listPluginFilesStream,
   searchFiles,
+  searchFilesVector,
   formatFileSize,
   getFileCategory,
   PermissionDeniedError,
@@ -1063,7 +1064,16 @@ async function performSearch() {
 
   isSearching.value = true
   try {
-    const results = await searchFiles(currentPath.value, query, searchRecursive.value)
+    // 优先使用向量搜索（语义搜索 + 中文优化）
+    let results: FileItem[] = []
+    try {
+      const vecResult = await searchFilesVector(currentPath.value, query, 200)
+      results = vecResult.results
+    } catch {
+      // 向量搜索失败，fallback 到原有搜索
+      results = await searchFiles(currentPath.value, query, searchRecursive.value)
+    }
+
     if (gen !== searchGeneration) return
     searchResults.value = results
     searchCache.set(cacheKey, { timestamp: Date.now(), results })

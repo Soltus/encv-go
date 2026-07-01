@@ -29,6 +29,7 @@ import (
 	"github.com/Soltus/encv-go/internal/register"
 	"github.com/Soltus/encv-go/internal/routes"
 	mobileservice "github.com/Soltus/encv-go/internal/service"
+	"github.com/Soltus/encv-go/internal/search"
 	"github.com/Soltus/encv-go/internal/tools"
 	"github.com/Soltus/encv-go/internal/utils"
 	// 🆕 2026-06-14 移除 internal/utils/ffmpeg import：心跳改内存版，不再调 ffmpeg.StartHeartbeatLoop
@@ -109,6 +110,8 @@ type Server struct {
 	// atomic.LoadInt64 无锁读，atomic.StoreInt64 写。
 	// HeartbeatStaleThreshold = 30s，见 runtime_api.go
 	lastHeartbeatMs int64
+	// 🆕 2026-07-03：向量搜索服务（Turso 原生向量检索 + 中文 bigram 分词）
+	searchSvc *vectorsearch.SearchService
 }
 
 // mountRegistryDataPath 返回 mounts.json 的持久化路径。
@@ -354,6 +357,26 @@ func NewServer(ctx context.Context, configPath string) *Server {
 			}
 			slog.Info("database store initialized", "engine", engine, "path", dbPath)
 		}
+	}
+
+	// 🆕 2026-07-03：向量搜索服务初始化
+	// 利用 Turso 原生向量检索能力（vector_distance_cos），提升中文搜索体验
+	// 即使使用 SQLite 引擎，也能用纯 Go 实现的余弦相似度计算做 fallback
+	searchDriver := cfg.Database.Engine
+	if searchDriver == "" {
+		searchDriver = "sqlite"
+	}
+	if searchDriver == "libsql" {
+		searchDriver = "turso"
+	}
+	searchSvc, err := vectorsearch.NewSearchServiceFromPath(dbPath, searchDriver)
+	if err != nil {
+		slog.Warn("failed to init vector search service, continuing without it", "err", err)
+	} else {
+		s.searchSvc = searchSvc
+		slog.Info("vector search service initialized", "driver", searchDriver)
+		// 后台异步重建任务索引（从 task store 加载）
+		go s.rebuildTaskSearchIndex()
 	}
 
 	// 剧本外置 spec：若 agent_settings.mock_scenarios_dir 非空，
@@ -651,6 +674,10 @@ func (s *Server) Start(version string) (string, error) {
 	r.GET("/api/files/search", s.handleSearchFilesGin)
 	r.GET("/api/files/tags", s.handleTagsListGin)
 	r.POST("/api/files/tags", s.handleTagsMutateGin)
+	// 🆕 2026-07-03：向量搜索 API（Turso 原生向量检索 + 中文 bigram 分词）
+	r.GET("/api/search/tasks", s.handleVectorSearchTasksGin)   // 任务语义搜索
+	r.GET("/api/search/files", s.handleVectorSearchFilesGin)    // 文件语义搜索（向量排序）
+	r.GET("/api/search/stats", s.handleSearchStatsGin)    // 搜索索引状态
 	r.GET("/api/index/stats", s.handleIndexStatsGin)
 	r.POST("/api/index/rebuild", s.handleIndexRebuildGin)
 	r.POST("/api/index/clear", s.handleIndexClearGin)
@@ -1238,4 +1265,74 @@ func (s *Server) listFilesInDir(w http.ResponseWriter, r *http.Request, dirPath,
 	if err := t.Execute(w, data); err != nil {
 		slog.Error("Error executing template", "error", err)
 	}
+}
+
+// ─── 向量搜索（Turso 原生向量检索）───────────────────────────────
+
+// rebuildTaskSearchIndex 后台重建任务搜索索引。
+func (s *Server) rebuildTaskSearchIndex() {
+	if s.searchSvc == nil {
+		return
+	}
+
+	tm := s.mobileSvc.GetTaskManager()
+	if tm == nil {
+		return
+	}
+
+	// 从 TaskManager 获取所有任务
+	tasks := tm.List()
+	if len(tasks) == 0 {
+		return
+	}
+
+	ctx := context.Background()
+
+	// 分批索引
+	batchSize := 100
+	for i := 0; i < len(tasks); i += batchSize {
+		end := i + batchSize
+		if end > len(tasks) {
+			end = len(tasks)
+		}
+
+		batch := make([]vectorsearch.TaskIndexItem, 0, end-i)
+		for _, t := range tasks[i:end] {
+			name := t.SourcePath
+			if name == "" {
+				name = t.ID
+			}
+			batch = append(batch, vectorsearch.TaskIndexItem{
+				ID:         t.ID,
+				Name:       name,
+				TaskType:   t.Type,
+				SourcePath: t.SourcePath,
+				Status:     string(t.Status),
+			})
+		}
+
+		if err := s.searchSvc.IndexTasksBatch(ctx, batch); err != nil {
+			slog.Warn("rebuild task search index batch failed", "start", i, "error", err)
+		}
+	}
+
+	slog.Info("task search index rebuilt", "count", len(tasks))
+}
+
+// UpdateTaskSearchIndex 增量更新任务搜索索引（任务创建/状态变化时调用）。
+func (s *Server) UpdateTaskSearchIndex(taskID, name, taskType, sourcePath, status string) {
+	if s.searchSvc == nil {
+		return
+	}
+	ctx := context.Background()
+	s.searchSvc.IndexTask(ctx, taskID, name, taskType, sourcePath, status)
+}
+
+// RemoveTaskFromSearchIndex 从搜索索引中删除任务。
+func (s *Server) RemoveTaskFromSearchIndex(taskID string) {
+	if s.searchSvc == nil {
+		return
+	}
+	ctx := context.Background()
+	s.searchSvc.DeleteTask(ctx, taskID)
 }

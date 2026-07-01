@@ -1277,6 +1277,60 @@ export async function searchFiles(path: string, keyword: string, recursive = fal
   return data.files || []
 }
 
+// ─── 向量搜索 API（Turso 原生向量检索 + 中文 bigram 分词）───
+
+export interface VectorSearchResult<T> {
+  results: T[]
+  vector_search: boolean
+  total: number
+}
+
+/**
+ * 任务向量搜索（语义搜索，支持中文模糊匹配）
+ */
+export async function searchTasksVector(query: string, limit = 50): Promise<VectorSearchResult<EncvTask>> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/search/tasks?q=${encodeURIComponent(query)}&limit=${limit}`)
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  const data = await response.json()
+  return {
+    results: data.tasks || [],
+    vector_search: data.vector_search || false,
+    total: data.total || 0,
+  }
+}
+
+/**
+ * 文件向量搜索（语义搜索 + 现有搜索结果重排序）
+ */
+export async function searchFilesVector(path: string, query: string, limit = 50): Promise<VectorSearchResult<FileItem>> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/search/files?q=${encodeURIComponent(query)}&path=${proxySafeEncode(path)}&limit=${limit}`)
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  const data = await response.json()
+  return {
+    results: data.files || [],
+    vector_search: data.vector_search || false,
+    total: data.total || 0,
+  }
+}
+
+/**
+ * 获取搜索索引状态
+ */
+export async function getSearchStats(): Promise<{ available: boolean; stats?: { files: number; tasks: number } }> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/search/stats`)
+  if (!response.ok) {
+    return { available: false }
+  }
+  return await response.json()
+}
+
 export interface IndexStats {
   totalFiles: number
   totalDirs: number
