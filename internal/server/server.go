@@ -584,6 +584,12 @@ func (s *Server) Start(version string) (string, error) {
 	r.GET("/api/performance/calibration", s.handleGetCalibration)
 	r.POST("/api/performance/calibration", s.handleRecalibrate)
 	r.GET("/api/performance/history", s.handleGetPerformanceHistory)
+	// 🆕 数据库管理 API（备份/恢复/导入/导出/跨引擎迁移）
+	r.GET("/api/database/info", s.handleDatabaseInfo)           // 获取当前引擎信息
+	r.GET("/api/database/export", s.handleDatabaseExport)       // 导出数据库为 JSON
+	r.POST("/api/database/import", s.handleDatabaseImport)      // 从 JSON 导入数据库（全量替换）
+	r.POST("/api/database/backup", s.handleDatabaseBackup)      // 备份到本地文件
+	r.POST("/api/database/restore", s.handleDatabaseRestore)    // 从本地备份文件恢复
 	r.POST("/api/webdav/test", s.handleTestWebDAVGin)
 	r.GET("/api/webdav/test-local", s.handleTestLocalWebDAVGin)
 	r.GET("/api/webdav/local-info", s.handleWebDavLocalInfoGin)

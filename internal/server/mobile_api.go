@@ -28,6 +28,7 @@ import (
 	alistencrypt "github.com/Soltus/encv-go/internal/v2/plugins/alistencrypt"
 	pluginInterfaces "github.com/Soltus/encv-go/internal/v2/plugins/interfaces"
 	"github.com/Soltus/encv-go/internal/v2/types"
+	"github.com/Soltus/encv-go/pkg/tasksystem"
 	"github.com/gin-gonic/gin"
 )
 
@@ -1936,4 +1937,226 @@ func (s *Server) handlePluginFilesStreamGin(c *gin.Context) {
 	}
 
 	s.writeSSEEvent(c, flusher, `[DONE]`)
+}
+
+// ========== 数据库管理 API（备份/恢复/导入/导出/跨引擎迁移） ==========
+
+// handleDatabaseInfo 获取当前数据库引擎信息。
+//
+// 返回：
+//
+//	{
+//	  "engine": "sqlite",          // 当前引擎名
+//	  "concurrency": 1,             // 推荐并发度
+//	  "taskCount": 1234,            // 任务总数
+//	  "hasCalibration": true        // 是否有校准数据
+//	}
+func (s *Server) handleDatabaseInfo(c *gin.Context) {
+	tm := s.mobileSvc.GetTaskManager()
+	engine := tm.GetStoreEngine()
+	concurrency := tm.GetStoreConcurrency()
+
+	// 统计任务数
+	totalTasks := 0
+	if tasks, err := tm.GetStore().ListTasks(tasksystem.TaskFilter{Limit: 0}); err == nil {
+		totalTasks = len(tasks)
+	}
+
+	// 检查校准
+	hasCalibration := false
+	if cal, err := tm.GetStore().GetCalibration(); err == nil && cal != nil {
+		hasCalibration = true
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"engine":        engine,
+		"concurrency":   concurrency,
+		"taskCount":     totalTasks,
+		"hasCalibration": hasCalibration,
+	})
+}
+
+// handleDatabaseExport 导出数据库为 JSON。
+//
+// 直接返回 JSON 格式的 DatabaseDump，可用于：
+//   - 下载备份
+//   - 跨引擎迁移（从 SQLite 导出，导入到 Turso）
+func (s *Server) handleDatabaseExport(c *gin.Context) {
+	tm := s.mobileSvc.GetTaskManager()
+
+	dump, err := tm.ExportDatabase()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 设置下载文件名
+	filename := fmt.Sprintf("encv-db-%s-%s.json",
+		dump.Engine,
+		dump.ExportedAt.Format("20060102-150405"),
+	)
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Header("Content-Type", "application/json")
+
+	c.JSON(http.StatusOK, dump)
+}
+
+// handleDatabaseImport 从 JSON 导入数据库（全量替换）。
+//
+// 用于：
+//   - 恢复备份
+//   - 跨引擎迁移（从 SQLite 迁移到 Turso）
+//
+// 警告：导入会清空所有现有数据！
+func (s *Server) handleDatabaseImport(c *gin.Context) {
+	tm := s.mobileSvc.GetTaskManager()
+
+	var dump tasksystem.DatabaseDump
+	if err := c.ShouldBindJSON(&dump); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+
+	if dump.Version == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid dump: missing version"})
+		return
+	}
+
+	slog.Info("API: database import",
+		"sourceEngine", dump.Engine,
+		"taskCount", len(dump.Tasks),
+		"trashCount", len(dump.Trash),
+		"snapshotCount", len(dump.Snapshots),
+		"metricCount", len(dump.Metrics),
+	)
+
+	if err := tm.ImportDatabase(&dump); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	slog.Info("API: database import completed")
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "ok",
+		"imported": gin.H{
+			"tasks":     len(dump.Tasks),
+			"trash":     len(dump.Trash),
+			"snapshots": len(dump.Snapshots),
+			"metrics":   len(dump.Metrics),
+		},
+	})
+}
+
+// handleDatabaseBackup 备份数据库到本地文件。
+//
+// 不同于 export（返回 JSON 给前端），backup 直接在后端写入备份文件，
+// 适合大数据库不经过前端内存中转。
+func (s *Server) handleDatabaseBackup(c *gin.Context) {
+	tm := s.mobileSvc.GetTaskManager()
+
+	dump, err := tm.ExportDatabase()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 生成备份文件路径（在 servingDir 下的 .backups 目录）
+	backupDir := filepath.Join(s.servingDir, ".encv-backups")
+	if err := os.MkdirAll(backupDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "create backup dir: " + err.Error()})
+		return
+	}
+
+	filename := fmt.Sprintf("encv-db-%s-%s.json",
+		dump.Engine,
+		dump.ExportedAt.Format("20060102-150405"),
+	)
+	filePath := filepath.Join(backupDir, filename)
+
+	data, err := json.MarshalIndent(dump, "", "  ")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "marshal: " + err.Error()})
+		return
+	}
+
+	if err := os.WriteFile(filePath, data, 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "write file: " + err.Error()})
+		return
+	}
+
+	slog.Info("API: database backup created", "path", filePath, "size", len(data))
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ok",
+		"path":   filePath,
+		"size":   len(data),
+		"name":   filename,
+	})
+}
+
+// handleDatabaseRestore 从本地备份文件恢复数据库。
+//
+// 请求体：{"path": "/path/to/backup.json"}
+// 警告：恢复会清空所有现有数据！
+func (s *Server) handleDatabaseRestore(c *gin.Context) {
+	tm := s.mobileSvc.GetTaskManager()
+
+	var req struct {
+		Path string `json:"path"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON"})
+		return
+	}
+	if req.Path == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "path is required"})
+		return
+	}
+
+	// 安全检查：路径必须在 servingDir 内（防止路径穿越）
+	absPath, err := filepath.Abs(req.Path)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})
+		return
+	}
+	absServingDir, _ := filepath.Abs(s.servingDir)
+	if !strings.HasPrefix(absPath, absServingDir) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "path outside serving directory"})
+		return
+	}
+
+	// 读取文件
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "read file: " + err.Error()})
+		return
+	}
+
+	var dump tasksystem.DatabaseDump
+	if err := json.Unmarshal(data, &dump); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+
+	slog.Info("API: database restore",
+		"path", absPath,
+		"sourceEngine", dump.Engine,
+		"taskCount", len(dump.Tasks),
+	)
+
+	if err := tm.ImportDatabase(&dump); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	slog.Info("API: database restore completed")
+	c.JSON(http.StatusOK, gin.H{
+		"status": "ok",
+		"restored": gin.H{
+			"tasks":     len(dump.Tasks),
+			"trash":     len(dump.Trash),
+			"snapshots": len(dump.Snapshots),
+			"metrics":   len(dump.Metrics),
+		},
+	})
 }

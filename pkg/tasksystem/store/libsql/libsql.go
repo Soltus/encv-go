@@ -205,6 +205,12 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+// ConcurrencyHint 返回推荐的并发写入协程数。
+// LibSQL 支持一定并发，但比 Turso 正统弱一些，返回 4。
+func (s *Store) ConcurrencyHint() int {
+	return 4
+}
+
 // CreateTask 创建任务。
 func (s *Store) CreateTask(task tasksystem.TaskData) error {
 	_, err := s.db.Exec(`
@@ -757,4 +763,231 @@ func (s *Store) GetCalibration() (*performance.CalibrationResult, error) {
 		return nil, err
 	}
 	return &cal, nil
+}
+
+// ========== 导入 / 导出（跨引擎迁移） ==========
+
+// ExportAll 导出全部数据为通用 DatabaseDump 格式。
+func (s *Store) ExportAll() (*tasksystem.DatabaseDump, error) {
+	dump := &tasksystem.DatabaseDump{
+		Version:    1,
+		Engine:     "libsql",
+		ExportedAt: time.Now(),
+	}
+
+	// 导出 tasks
+	tasks, err := s.ListTasks(tasksystem.TaskFilter{})
+	if err != nil {
+		return nil, fmt.Errorf("export tasks: %w", err)
+	}
+	dump.Tasks = tasks
+
+	// 导出 trash
+	trash, err := s.ListTrash()
+	if err != nil {
+		return nil, fmt.Errorf("export trash: %w", err)
+	}
+	dump.Trash = trash
+
+	// 导出 snapshots：遍历所有 task 查快照
+	var allSnapshots []tasksystem.Snapshot
+	for _, t := range tasks {
+		snap, err := s.GetSnapshot(t.ID)
+		if err == nil {
+			allSnapshots = append(allSnapshots, snap)
+		}
+	}
+	dump.Snapshots = allSnapshots
+
+	// 导出 metrics：全量查
+	metrics, err := s.exportAllMetrics()
+	if err != nil {
+		return nil, fmt.Errorf("export metrics: %w", err)
+	}
+	dump.Metrics = metrics
+
+	// 导出 calibration
+	cal, err := s.GetCalibration()
+	if err != nil {
+		return nil, fmt.Errorf("export calibration: %w", err)
+	}
+	dump.Calibration = cal
+
+	return dump, nil
+}
+
+// exportAllMetrics 导出所有性能指标。
+func (s *Store) exportAllMetrics() ([]performance.PerformanceMetrics, error) {
+	rows, err := s.db.Query(`
+		SELECT task_id, task_type, plugin_name, container_version, cipher_mode, compression_mode,
+			source_size, output_size, size_ratio,
+			avg_throughput, peak_throughput, p50_throughput, p99_throughput,
+			total_duration_ms, phase_timings_json,
+			grade, grade_score, grade_reason,
+			cpu_score, cpu_label, created_at
+		FROM performance_metrics
+		ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []performance.PerformanceMetrics
+	for rows.Next() {
+		m, err := scanMetrics(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, m)
+	}
+	return result, rows.Err()
+}
+
+// ImportAll 导入全部数据（全量替换）。
+// 导入前会清空所有现有数据。
+func (s *Store) ImportAll(dump *tasksystem.DatabaseDump) error {
+	if dump == nil {
+		return fmt.Errorf("dump is nil")
+	}
+
+	// 开启事务，确保原子性
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	// 清空所有表
+	tables := []string{"tasks", "trash", "rollback_snapshots", "performance_metrics", "calibration"}
+	for _, table := range tables {
+		if _, err := tx.Exec(fmt.Sprintf("DELETE FROM %s", table)); err != nil {
+			return fmt.Errorf("clear table %s: %w", table, err)
+		}
+	}
+
+	// 导入 tasks
+	for _, task := range dump.Tasks {
+		if err := s.createTaskTx(tx, task); err != nil {
+			return fmt.Errorf("import task %s: %w", task.ID, err)
+		}
+	}
+
+	// 导入 trash
+	for _, item := range dump.Trash {
+		if err := s.createTrashTx(tx, item); err != nil {
+			return fmt.Errorf("import trash %s: %w", item.ID, err)
+		}
+	}
+
+	// 导入 snapshots
+	for _, snap := range dump.Snapshots {
+		if err := s.saveSnapshotTx(tx, snap); err != nil {
+			return fmt.Errorf("import snapshot %s: %w", snap.ID, err)
+		}
+	}
+
+	// 导入 metrics
+	for _, m := range dump.Metrics {
+		if err := s.saveMetricsTx(tx, m); err != nil {
+			return fmt.Errorf("import metrics %s: %w", m.TaskID, err)
+		}
+	}
+
+	// 导入 calibration
+	if dump.Calibration != nil {
+		if err := s.saveCalibrationTx(tx, *dump.Calibration); err != nil {
+			return fmt.Errorf("import calibration: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// createTaskTx 在事务中创建任务（复用 CreateTask 的 SQL）。
+func (s *Store) createTaskTx(tx *sql.Tx, task tasksystem.TaskData) error {
+	_, err := tx.Exec(`
+		INSERT INTO tasks (
+			id, type, status, source_path, target_path, output_path,
+			plugin_name, triggered_by, run_id, progress, phase,
+			error, error_detail, warning, warning_detail,
+			container_version, cipher_mode, compression_mode,
+			extra_fields, steps, mount_id, mount_sub_path,
+			target_mount_id, target_mount_sub_path,
+			password, secondary_password,
+			created_at, completed_at, rollback_of, original_path
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		task.ID, string(task.Type), string(task.Status),
+		task.SourcePath, task.TargetPath, task.OutputPath,
+		task.PluginName, task.TriggeredBy, task.RunID, task.Progress, task.Phase,
+		task.Error, task.ErrorDetail, task.Warning, task.WarningDetail,
+		task.ContainerVersion, task.CipherMode, task.CompressionMode,
+		task.ExtraFields, task.Steps, task.MountID, task.MountSubPath,
+		task.TargetMountID, task.TargetMountSubPath,
+		task.Password, task.SecondaryPassword,
+		task.CreatedAt, task.CompletedAt, task.RollbackOf, task.OriginalPath,
+	)
+	return err
+}
+
+// createTrashTx 在事务中创建回收站条目。
+func (s *Store) createTrashTx(tx *sql.Tx, item tasksystem.TrashItem) error {
+	isDir := 0
+	if item.IsDirectory {
+		isDir = 1
+	}
+	_, err := tx.Exec(`
+		INSERT INTO trash (id, original_path, trash_path, is_directory, size, deleted_at, task_id, restore_task_id, metadata)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		item.ID, item.OriginalPath, item.TrashPath, isDir, item.Size,
+		item.DeletedAt, item.TaskID, item.RestoreTaskID, item.Metadata,
+	)
+	return err
+}
+
+// saveSnapshotTx 在事务中保存快照。
+func (s *Store) saveSnapshotTx(tx *sql.Tx, snapshot tasksystem.Snapshot) error {
+	_, err := tx.Exec(`
+		INSERT INTO rollback_snapshots (id, task_id, snapshot_type, snapshot_data, created_at)
+		VALUES (?, ?, ?, ?, ?)`,
+		snapshot.ID, snapshot.TaskID, snapshot.SnapshotType, snapshot.Data, snapshot.CreatedAt,
+	)
+	return err
+}
+
+// saveMetricsTx 在事务中保存性能指标。
+func (s *Store) saveMetricsTx(tx *sql.Tx, m performance.PerformanceMetrics) error {
+	phaseTimingsJSON, err := json.Marshal(m.PhaseTimings)
+	if err != nil {
+		return fmt.Errorf("marshal phase timings: %w", err)
+	}
+	_, err = tx.Exec(`
+		INSERT OR REPLACE INTO performance_metrics (
+			task_id, task_type, plugin_name, container_version, cipher_mode, compression_mode,
+			source_size, output_size, size_ratio,
+			avg_throughput, peak_throughput, p50_throughput, p99_throughput,
+			total_duration_ms, phase_timings_json,
+			grade, grade_score, grade_reason,
+			cpu_score, cpu_label, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.TaskID, m.TaskType, m.PluginName, m.ContainerVer, m.CipherMode, m.CompressionMode,
+		m.SourceSize, m.OutputSize, m.SizeRatio,
+		m.AvgThroughput, m.PeakThroughput, m.P50Throughput, m.P99Throughput,
+		m.TotalDurationMs, string(phaseTimingsJSON),
+		string(m.Grade), m.GradeScore, m.GradeReason,
+		m.CPUScore, m.CPULabel, m.CreatedAt,
+	)
+	return err
+}
+
+// saveCalibrationTx 在事务中保存校准结果。
+func (s *Store) saveCalibrationTx(tx *sql.Tx, cal performance.CalibrationResult) error {
+	_, err := tx.Exec(`
+		INSERT OR REPLACE INTO calibration (
+			id, cpu_score, aes_throughput, cpu_label, calibrated_at,
+			go_version, os, arch, num_cpu
+		) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		cal.CPUScore, cal.AESThroughput, cal.CPULabel, cal.CalibratedAt,
+		cal.GoVersion, cal.OS, cal.Arch, cal.NumCPU,
+	)
+	return err
 }

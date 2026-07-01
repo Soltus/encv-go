@@ -11,7 +11,11 @@
 //   - 零应用耦合：本包不依赖任何应用层代码（internal/service 等）
 package tasksystem
 
-import "time"
+import (
+	"time"
+
+	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
+)
 
 // TaskType 任务类型枚举。
 // 包含加解密任务和文件操作任务，以及对应的回滚任务类型。
@@ -148,7 +152,7 @@ type TrashItem struct {
 }
 
 // Store 任务存储接口。
-// 可插拔，支持 SQLite/PostgreSQL/内存等实现。
+// 可插拔，支持 SQLite/Turso/LibSQL 等实现。
 type Store interface {
 	// CreateTask 创建任务。
 	CreateTask(task TaskData) error
@@ -191,12 +195,6 @@ type Store interface {
 	// DeleteTrash 按 ID 删除回收站条目（硬删除，不删文件）。
 	DeleteTrash(id string) error
 
-	// 🆕 2026-06-23 后端 SQL 权威：聚合查询接口（供 /api/runs/:runId/summary 和 /api/runs 用）
-	//   - CountByRunId：SELECT status, COUNT(*) FROM tasks WHERE run_id=? GROUP BY status
-	//   - ListRuns：SELECT run_id, MIN(created_at), triggered_by FROM tasks WHERE run_id != '' GROUP BY run_id
-	//   - 这两个接口让后端聚合查询走 SQL，不依赖内存遍历
-	//   - 任务系统 API 提供给第三方调用，必须支持 SQL 查询
-
 	// CountByRunId 按 runId 统计各状态的任务数。
 	// 返回 map[status]count，例如 {"completed": 1040, "failed": 15, "running": 5}
 	// runId 为空时返回空 map（不统计 runId 为空的 task）。
@@ -206,8 +204,55 @@ type Store interface {
 	// 按 startedAt 倒序排列（最早的 task 的 created_at 代表 run 的启动时间）。
 	ListRuns() ([]RunInfo, error)
 
+	// ConcurrencyHint 返回推荐的并发写入协程数。
+	//   - SQLite 返回 1（单连接串行写，避免 database is locked）
+	//   - Turso 返回 8（MVCC 支持多 writer 并发写）
+	ConcurrencyHint() int
+
+	// SaveMetrics 保存性能指标。
+	SaveMetrics(m performance.PerformanceMetrics) error
+
+	// GetMetrics 按 task_id 查询性能指标。
+	GetMetrics(taskID string) (performance.PerformanceMetrics, error)
+
+	// ListMetricsByPlugin 按 plugin + taskType 查询历史性能指标。
+	// 按 created_at 倒序，最多返回 limit 条。
+	ListMetricsByPlugin(pluginName string, taskType string, limit int) ([]performance.PerformanceMetrics, error)
+
+	// GetLatestMetrics 获取同 plugin + taskType 的上一次运行指标。
+	GetLatestMetrics(pluginName string, taskType string) (*performance.PerformanceMetrics, error)
+
+	// SaveCalibration 保存硬件校准结果。
+	SaveCalibration(cal performance.CalibrationResult) error
+
+	// GetCalibration 获取硬件校准结果。返回 nil 表示尚未校准。
+	GetCalibration() (*performance.CalibrationResult, error)
+
+	// ExportAll 导出全部数据（tasks + trash + snapshots + metrics + calibration）。
+	// 返回通用 JSON 格式，用于跨引擎迁移和备份。
+	ExportAll() (*DatabaseDump, error)
+
+	// ImportAll 导入全部数据（全量替换）。
+	// 导入前会清空现有数据。用于跨引擎迁移和恢复备份。
+	ImportAll(dump *DatabaseDump) error
+
 	// Close 关闭存储连接。
 	Close() error
+}
+
+// DatabaseDump 数据库全量导出格式（跨引擎迁移的通用格式）。
+//
+// 所有引擎都导出为这个统一的 JSON 结构，导入时再转换回各自的存储格式。
+// 支持 SQLite ↔ Turso ↔ LibSQL 之间的无缝迁移。
+type DatabaseDump struct {
+	Version     int                          `json:"version"`     // 格式版本，当前为 1
+	Engine      string                       `json:"engine"`      // 导出时的引擎名（sqlite/turso/libsql）
+	ExportedAt  time.Time                    `json:"exportedAt"`  // 导出时间
+	Tasks       []TaskData                   `json:"tasks"`       // 任务列表
+	Trash       []TrashItem                  `json:"trash"`       // 回收站
+	Snapshots   []Snapshot                   `json:"snapshots"`   // 回滚快照
+	Metrics     []performance.PerformanceMetrics `json:"metrics"`  // 性能指标
+	Calibration *performance.CalibrationResult  `json:"calibration,omitempty"` // 硬件校准
 }
 
 // RunSummary run 的聚合计数（SQL COUNT + GROUP BY status 出）

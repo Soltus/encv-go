@@ -335,6 +335,10 @@ export default {
     'settings.mockRoundTimeout': '多轮暂停超时',
     // ── multi-mount 挂载点管理（spec multi-mount-storage-refactor Phase E）───
     'settings.storage': '存储',
+    'settings.database': '数据库',
+    'settings.engine': '引擎',
+    'settings.tasks': '个任务',
+    'settings.loading': '加载中...',
     'settings.mountsTitle': '挂载点',
     'settings.mountsHelp': '多根存储（primary / appdata / sandbox）',
     'settings.mountsIntro': '多挂载点存储',
@@ -741,6 +745,10 @@ export default {
     'settings.mockRoundTimeout': 'Round pause timeout',
     // ── multi-mount mount point management (spec multi-mount-storage-refactor Phase E) ───
     'settings.storage': 'Storage',
+    'settings.database': 'Database',
+    'settings.engine': 'Engine',
+    'settings.tasks': 'tasks',
+    'settings.loading': 'Loading...',
     'settings.mountsTitle': 'Mount Points',
     'settings.mountsHelp': 'Multi-root storage (primary / appdata / sandbox)',
     'settings.mountsIntro': 'Multi-mount Storage',
