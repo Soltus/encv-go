@@ -152,10 +152,6 @@ func (s *MobileService) primaryRootPath() string {
 //  2. 否则 → 走旧 SafeResolveToAbsPath(servingDir, ...) 兜底（向后兼容）
 //
 // 返回 raw err；调用方负责 wrap 成 ForbiddenError / BadRequestError。
-//
-// 2026-06-15 Phase D：替换 mobile_service.go 中 13 处 SafeResolveToAbsPath 调用，
-// 让 /d/automation/... /d/primary/... 等虚拟路径走 mount 解析，/foo/bar.bin
-// 等传统相对路径保持旧行为。
 func (s *MobileService) resolveUserPath(userPath string) (string, error) {
 	if s.mountResolver != nil && strings.HasPrefix(userPath, "/d/") {
 		res, err := s.mountResolver.Resolve(userPath)
@@ -165,6 +161,40 @@ func (s *MobileService) resolveUserPath(userPath string) (string, error) {
 		return res.AbsPath, nil
 	}
 	return utils.SafeResolveToAbsPath(s.servingDir, userPath)
+}
+
+// relIndexPathForVirtual 把虚拟路径转成 fileIndex 的路径前缀（相对于 servingDir，带前导斜杠）。
+// 仅对 primary mount（RootPath = servingDir）有效；其他挂载点的文件不在 fileIndex 里。
+func (s *MobileService) relIndexPathForVirtual(virtualPath string) (string, error) {
+	absPath, err := s.resolveUserPath(virtualPath)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(s.servingDir, absPath)
+	if err != nil {
+		return "", fmt.Errorf("rel to servingDir: %w", err)
+	}
+	if strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("path outside servingDir: %s", virtualPath)
+	}
+	result := "/" + filepath.ToSlash(rel)
+	if result == "/." {
+		result = "/"
+	}
+	return result, nil
+}
+
+// virtualPathForIndex 把 fileIndex 中的相对路径（带前导斜杠）转成虚拟路径。
+func (s *MobileService) virtualPathForIndex(indexPath string, queryPath string) string {
+	if s.mountResolver == nil {
+		return indexPath
+	}
+	absPath := filepath.Join(s.servingDir, indexPath)
+	virtual, err := s.mountResolver.AbsToVirtual(absPath)
+	if err != nil {
+		return indexPath
+	}
+	return virtual
 }
 
 func NewMobileService(servingDir string, cfg *config.Config) *MobileService {
@@ -1189,31 +1219,49 @@ func (s *MobileService) SearchFiles(queryPath string, keyword string, recursive 
 		s.fileIndex.mu.RUnlock()
 
 		if hasIndex {
-			s.fileIndex.mu.RLock()
-			for _, entry := range s.fileIndex.entries {
-				if len(results) >= maxResults {
-					break
+			indexPrefix := queryPath
+			isVirtualPath := strings.HasPrefix(queryPath, "/d/")
+			if isVirtualPath {
+				rel, err := s.relIndexPathForVirtual(queryPath)
+				if err != nil {
+					slog.Warn("SearchFiles: cannot resolve virtual path to index prefix", "path", queryPath, "error", err)
+					hasIndex = false
+				} else {
+					indexPrefix = rel
 				}
-				if !strings.Contains(strings.ToLower(entry.Name), keyword) {
-					continue
-				}
-				if !strings.HasPrefix(entry.Path, queryPath) && queryPath != "/" {
-					continue
-				}
-				if queryPath == "/" && !strings.HasPrefix(entry.Path, "/") {
-					continue
-				}
-				results = append(results, FileInfo{
-					Name:        entry.Name,
-					Path:        entry.Path,
-					IsDirectory: entry.IsDirectory,
-					Size:        entry.Size,
-					Modified:    entry.Modified,
-				})
 			}
-			s.fileIndex.mu.RUnlock()
-			slog.Info("SearchFiles using index", "path", queryPath, "keyword", keyword, "count", len(results))
-			return results, nil
+
+			if hasIndex {
+				s.fileIndex.mu.RLock()
+				for _, entry := range s.fileIndex.entries {
+					if len(results) >= maxResults {
+						break
+					}
+					if !strings.Contains(strings.ToLower(entry.Name), keyword) {
+						continue
+					}
+					if indexPrefix != "" && indexPrefix != "/" && !strings.HasPrefix(entry.Path, indexPrefix) {
+						continue
+					}
+					if indexPrefix == "/" && !strings.HasPrefix(entry.Path, "/") {
+						continue
+					}
+					resultPath := entry.Path
+					if isVirtualPath {
+						resultPath = s.virtualPathForIndex(entry.Path, queryPath)
+					}
+					results = append(results, FileInfo{
+						Name:        entry.Name,
+						Path:        resultPath,
+						IsDirectory: entry.IsDirectory,
+						Size:        entry.Size,
+						Modified:    entry.Modified,
+					})
+				}
+				s.fileIndex.mu.RUnlock()
+				slog.Info("SearchFiles using index", "path", queryPath, "keyword", keyword, "count", len(results))
+				return results, nil
+			}
 		}
 	}
 

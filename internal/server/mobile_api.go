@@ -795,14 +795,14 @@ func (s *Server) handleSearchFilesGin(c *gin.Context) {
 
 	slog.Info("API: search files", "path", queryPath, "keyword", keyword, "recursive", recursive)
 
-	if recursive && keyword != "" {
-		isMountRoot := queryPath == "/d" || queryPath == "/d/"
-		hasWebdav := s.canUseWebdavIndex() || len(s.webdavFSByMount) > 0
+	isMountRoot := queryPath == "/d" || queryPath == "/d/"
+	hasWebdav := s.canUseWebdavIndex() || len(s.webdavFSByMount) > 0
 
+	if keyword != "" {
 		var files []mobileservice.FileInfo
 
 		if isMountRoot {
-			allMountFiles, allWebdavFiles := s.searchAcrossAllMounts(keyword, 200)
+			allMountFiles, allWebdavFiles := s.searchAcrossAllMounts(keyword, 200, recursive)
 
 			if hasWebdav {
 				containerExts := make(map[string]bool)
@@ -820,13 +820,13 @@ func (s *Server) handleSearchFilesGin(c *gin.Context) {
 				files = allMountFiles
 			}
 		} else {
-			mobileFiles, err := s.mobileSvc.SearchFiles(queryPath, keyword, true)
+			mobileFiles, err := s.mobileSvc.SearchFiles(queryPath, keyword, recursive)
 			if err != nil {
 				writeServiceErrorGin(c, err)
 				return
 			}
 
-			if hasWebdav {
+			if hasWebdav && recursive {
 				containerExts := make(map[string]bool)
 				for _, ext := range plugins.GetAllRegisteredContainerExtensions() {
 					containerExts[strings.ToLower(ext)] = true
@@ -859,7 +859,7 @@ func (s *Server) handleSearchFilesGin(c *gin.Context) {
 
 // searchAcrossAllMounts 在所有挂载点中搜索物理文件和 webdav 虚拟文件。
 // 用于首页（/d）的全局搜索。
-func (s *Server) searchAcrossAllMounts(keyword string, maxPerMount int) ([]mobileservice.FileInfo, []mobileservice.FileInfo) {
+func (s *Server) searchAcrossAllMounts(keyword string, maxPerMount int, recursive bool) ([]mobileservice.FileInfo, []mobileservice.FileInfo) {
 	var physicalFiles []mobileservice.FileInfo
 	var webdavFiles []mobileservice.FileInfo
 
@@ -873,7 +873,7 @@ func (s *Server) searchAcrossAllMounts(keyword string, maxPerMount int) ([]mobil
 		}
 		mountQueryPath := "/d/" + m.Name
 
-		results, err := s.mobileSvc.SearchFiles(mountQueryPath, keyword, true)
+		results, err := s.mobileSvc.SearchFiles(mountQueryPath, keyword, recursive)
 		if err != nil {
 			slog.Warn("Search in mount failed", "mount", m.Name, "error", err)
 			continue
@@ -882,8 +882,15 @@ func (s *Server) searchAcrossAllMounts(keyword string, maxPerMount int) ([]mobil
 		physicalFiles = append(physicalFiles, results...)
 
 		if entry, ok := s.webdavFSByMount[m.Name]; ok {
-			entries := entry.fs.SearchInIndex(keyword, "", maxPerMount)
+			prefix := ""
+			if !recursive {
+				prefix = ""
+			}
+			entries := entry.fs.SearchInIndex(keyword, prefix, maxPerMount)
 			for _, e := range entries {
+				if !recursive && strings.Contains(e.Path, "/") {
+					continue
+				}
 				virtualPath := e.Path
 				if strings.HasPrefix(virtualPath, "./") {
 					virtualPath = strings.TrimPrefix(virtualPath, ".")
