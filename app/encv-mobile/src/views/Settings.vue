@@ -381,8 +381,12 @@
               <ion-label>当前状态</ion-label>
             </ion-list-header>
             <ion-item>
-              <ion-label>引擎</ion-label>
-              <ion-note slot="end">{{ dbInfo?.engine || '—' }}</ion-note>
+              <ion-label>运行引擎</ion-label>
+              <ion-note slot="end">
+                <ion-badge :color="dbInfo?.engine === 'turso' || dbInfo?.engine === 'libsql' ? 'success' : (dbInfo?.engine === 'sqlite' ? 'primary' : 'medium')">
+                  {{ dbInfo?.engine || '—' }}
+                </ion-badge>
+              </ion-note>
             </ion-item>
             <ion-item>
               <ion-label>并发度</ion-label>
@@ -395,6 +399,37 @@
             <ion-item>
               <ion-label>校准数据</ion-label>
               <ion-note slot="end">{{ dbInfo?.hasCalibration ? '已校准' : '未校准' }}</ion-note>
+            </ion-item>
+          </ion-list>
+
+          <ion-list>
+            <ion-list-header>
+              <ion-label>引擎切换</ion-label>
+              <ion-badge slot="end" color="warning" class="scope-badge">
+                <span class="scope-text">需重启</span>
+              </ion-badge>
+            </ion-list-header>
+            <ion-item>
+              <ion-select
+                :value="dbEngine"
+                @ionChange="handleEngineChange"
+                label="存储引擎"
+                label-placement="stacked"
+                interface="action-sheet"
+                mode="ios"
+              >
+                <ion-select-option value="memory">内存模式（不持久化）</ion-select-option>
+                <ion-select-option value="sqlite">SQLite（推荐，稳定可靠）</ion-select-option>
+                <ion-select-option value="turso">Turso / LibSQL（高性能，MVCC 并发）</ion-select-option>
+              </ion-select>
+            </ion-item>
+            <ion-item>
+              <ion-label class="ion-text-wrap">
+                <p class="ion-text-wrap" style="font-size: 0.8em; color: var(--ion-color-medium);">
+                  切换引擎后需要重启应用生效。数据不会自动迁移，
+                  请先导出数据，切换引擎后再导入。
+                </p>
+              </ion-label>
             </ion-item>
           </ion-list>
 
@@ -906,6 +941,8 @@ onUnmounted(() => {
 
 // ========== 数据库管理 ==========
 
+const dbEngine = computed(() => getFieldValue(['database', 'engine']) as string || 'memory')
+
 async function loadDatabaseInfo() {
   try {
     dbInfo.value = await getDatabaseInfo()
@@ -916,6 +953,22 @@ async function loadDatabaseInfo() {
 
 function openDatabaseModal() {
   dbModalOpen.value = true
+  // 打开时刷新一次
+  loadDatabaseInfo().catch(() => {})
+}
+
+async function handleEngineChange(event: Event) {
+  const target = event.target as HTMLIonSelectElement
+  const newEngine = target.value as string
+  setFieldValue(['database', 'engine'], newEngine)
+  // 保存配置
+  try {
+    await saveConfig()
+    showToast({ message: `已切换到 ${newEngine} 引擎，重启后生效`, color: 'warning' })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    showToast({ message: '保存失败: ' + msg, color: 'danger' })
+  }
 }
 
 async function handleExportDatabase() {

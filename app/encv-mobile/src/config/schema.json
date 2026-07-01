@@ -131,6 +131,10 @@
           "$ref": "#/$defs/LogConfig",
           "description": "--- 日志设置 ---\nLog 配置结构化日志的输出级别和文件路径。"
         },
+        "database": {
+          "$ref": "#/$defs/DatabaseConfig",
+          "description": "--- 数据库设置 ---\nDatabase 数据库存储引擎配置，支持 SQLite / Turso / LibSQL。"
+        },
         "agent_settings": {
           "properties": {
             "openai_api_key": {
@@ -211,7 +215,8 @@
         "admin",
         "webdav",
         "proxy",
-        "log"
+        "log",
+        "database"
       ],
       "description": "Config 是应用程序的顶层配置结构，包含所有子模块的配置。"
     },
@@ -278,6 +283,41 @@
         "file"
       ],
       "description": "--- 日志配置 ---"
+    },
+    "DatabaseConfig": {
+      "properties": {
+        "engine": {
+          "type": "string",
+          "enum": ["memory", "sqlite", "turso", "libsql"],
+          "x-enum-labels": {
+            "memory": "内存模式（不持久化）",
+            "sqlite": "SQLite（推荐，稳定可靠）",
+            "turso": "Turso / LibSQL（高性能，支持 MVCC 并发）",
+            "libsql": "LibSQL（同 Turso 引擎）"
+          },
+          "default": "sqlite",
+          "description": "存储引擎：\n- memory: 纯内存，重启后数据丢失\n- sqlite: SQLite，稳定可靠，单写者\n- turso: Turso / LibSQL，高性能，支持 MVCC 并发写入\n切换引擎后需要重启应用生效。"
+        },
+        "path": {
+          "type": "string",
+          "description": "数据库文件路径（仅 sqlite/turso 本地模式）\n留空则使用默认路径。"
+        },
+        "turso_sync_url": {
+          "type": "string",
+          "description": "Turso 同步 URL（仅 turso 远程模式）\n例如：libsql://your-db.turso.io"
+        },
+        "turso_auth_token": {
+          "type": "string",
+          "secret": true,
+          "description": "Turso 认证令牌（仅 turso 远程模式）"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": [
+        "engine"
+      ],
+      "description": "--- 数据库配置 ---"
     },
     "OpenlistProxyServer": {
       "properties": {

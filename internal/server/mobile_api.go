@@ -1958,14 +1958,18 @@ func (s *Server) handleDatabaseInfo(c *gin.Context) {
 
 	// 统计任务数
 	totalTasks := 0
-	if tasks, err := tm.GetStore().ListTasks(tasksystem.TaskFilter{Limit: 0}); err == nil {
-		totalTasks = len(tasks)
-	}
-
-	// 检查校准
 	hasCalibration := false
-	if cal, err := tm.GetStore().GetCalibration(); err == nil && cal != nil {
-		hasCalibration = true
+	if store := tm.GetStore(); store != nil {
+		if tasks, err := store.ListTasks(tasksystem.TaskFilter{Limit: 0}); err == nil {
+			totalTasks = len(tasks)
+		}
+		if cal, err := store.GetCalibration(); err == nil && cal != nil {
+			hasCalibration = true
+		}
+	} else {
+		// memory 模式：从内存中统计
+		tasks, _ := tm.ListPaginated("", 0, 0)
+		totalTasks = len(tasks)
 	}
 
 	c.JSON(http.StatusOK, gin.H{

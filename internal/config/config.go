@@ -53,6 +53,9 @@ type Config struct {
 	// --- 日志设置 ---
 	// Log 配置结构化日志的输出级别和文件路径。
 	Log types.LogConfig `json:"log"`
+	// --- 数据库设置 ---
+	// Database 数据库存储引擎配置。
+	Database DatabaseConfig `json:"database"`
 	// --- 预览设置 ---
 	Preview *PreviewConfig      `json:"preview,omitempty"`
 	Mobile  *types.MobileConfig `json:"mobile,omitempty"`
@@ -127,6 +130,21 @@ type Agent struct {
 	// true → 检测到目录内 *.yaml / *.json 变更时自动 reload（500ms 防抖）。
 	// 仅在 MockScenariosDir 非空时生效。
 	MockScenariosHotReload bool `json:"mock_scenarios_hot_reload,omitempty"`
+}
+
+// DatabaseConfig 数据库存储引擎配置。
+type DatabaseConfig struct {
+	// Engine 存储引擎类型："memory" | "sqlite" | "turso" | "libsql"
+	// 默认 "sqlite"
+	Engine string `json:"engine"`
+	// Path 数据库文件路径（仅 sqlite/turso 本地模式使用）
+	// 留空则使用默认路径：{data_dir}/encv.db
+	Path string `json:"path,omitempty"`
+	// TursoSyncURL Turso 同步 URL（仅 turso 模式使用）
+	// 例如 "libsql://your-db.turso.io"
+	TursoSyncURL string `json:"turso_sync_url,omitempty"`
+	// TursoAuthToken Turso 认证令牌（仅 turso 模式使用）
+	TursoAuthToken string `json:"turso_auth_token,omitempty"`
 }
 
 // MockScenario — 自定义 mock 剧本配置项（与 internal/server/agent_mock.go 中的同名类型语义一致）
