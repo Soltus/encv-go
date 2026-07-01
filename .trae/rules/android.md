@@ -156,6 +156,29 @@ LibSQL 通过 CGO 动态链接原生库，产物放在 `jniLibs/arm64-v8a/libsql
 - 驱动代码：`pkg/libsql/driver.go`
 - 预编译库目录：`pkg/libsql/libs/android_arm64/`
 
+### 5.4 LibSQL 可选性与 Fallback 规则
+
+**重要：libsql 是「可选增强」功能，不是核心功能。**
+
+| 维度 | 说明 |
+|------|------|
+| **功能定位** | 可选增强（向量搜索） |
+| **默认引擎** | glebarez/sqlite（纯 Go，零依赖） |
+| **启用条件** | 编译时存在 `libsql` build tag + 原生库可用 |
+| **Fallback 策略** | 合法，但必须显式可观测（见 [ci-workflow.md §四](./ci-workflow.md#四静默-fallback-禁令违反--功能幻觉)） |
+
+**Fallback 合法性要求（必须同时满足）：**
+
+1. ✅ **编译时**：`libsql` build tag 控制，无 tag 时用 glebarez/sqlite
+2. ✅ **CI 构建**：libsql 原生库编译失败时，写入 `$GITHUB_STEP_SUMMARY` 高亮警告 + `::warning::`
+3. ✅ **运行时**：通过 `/api/runtime` 或 `/health` 接口能看到当前使用的数据库引擎
+4. ❌ **禁止**：静默失败、只在日志深处打一行 warning、用户完全不知道功能被降级
+
+**运行时检测方法：**
+- 调用 `/api/runtime` 接口，查看 `dbEngine` 字段
+- `sqlite` = glebarez/sqlite（纯 Go，无向量搜索）
+- `libsql` = libsql（有向量搜索）
+
 > **历史背景（已废弃）**：gomobile bind 方案详见 [详情文档 §五](../rule-library/android.md#五gomobile--sqlite-选型铁律plugin-openlist-必读-历史)
 
 ---

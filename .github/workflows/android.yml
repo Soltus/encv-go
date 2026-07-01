@@ -286,145 +286,179 @@ jobs:
 
       - name: Prepare libsql native library for Android
         run: |
-          set +e  # libsql 编译失败不阻断主流程，优雅降级
+          set -e
           echo "═══ Preparing LibSQL for Android arm64-v8a ═══"
           
           LIBSQL_DIR="pkg/libsql/libs/android_arm64"
           mkdir -p "$LIBSQL_DIR"
           
+          LIBSQL_READY=0
+          FAIL_REASON=""
+          
           # 方案1：检查是否已经有预编译库（可能来自 cache 或之前的步骤）
           if [ -f "$LIBSQL_DIR/libsql_experimental.a" ] || [ -f "$LIBSQL_DIR/libsql_experimental.so" ]; then
             echo "✅ libsql already present:"
             ls -lh "$LIBSQL_DIR/"
-            echo "LIBSQL_READY=1" >> "$GITHUB_ENV"
-            exit 0
+            LIBSQL_READY=1
           fi
           
           # 方案2：从 tursodatabase/libsql 下载预编译的 release
-          echo "Attempting to download pre-built libsql from GitHub releases..."
-          
-          # 获取最新的 libsql 版本
-          LIBSQL_VERSION="${LIBSQL_VERSION:-latest}"
-          if [ "$LIBSQL_VERSION" = "latest" ]; then
-            LIBSQL_TAG=$(curl -sfL "https://api.github.com/repos/tursodatabase/libsql/releases/latest" 2>/dev/null | jq -r '.tag_name' 2>/dev/null || echo "")
-          else
-            LIBSQL_TAG="$LIBSQL_VERSION"
-          fi
-          
-          if [ -n "$LIBSQL_TAG" ]; then
-            echo "  libsql version: $LIBSQL_TAG"
+          if [ $LIBSQL_READY -eq 0 ]; then
+            echo "Attempting to download pre-built libsql from GitHub releases..."
             
-            # 尝试下载 Android arm64 的预编译库
-            # libsql release 中的 C API 库通常叫 libsql-experimental-<target>.tar.gz
-            ASSET_URL=$(curl -sfL "https://api.github.com/repos/tursodatabase/libsql/releases/tags/$LIBSQL_TAG" 2>/dev/null \
-              | jq -r '.assets[] | select(.name | test("libsql.*aarch64.*android|aarch64.*linux.*android"; "i")) | .browser_download_url' 2>/dev/null | head -1)
-            
-            if [ -z "$ASSET_URL" ]; then
-              # 试试其他命名格式
-              ASSET_URL=$(curl -sfL "https://api.github.com/repos/tursodatabase/libsql/releases/tags/$LIBSQL_TAG" 2>/dev/null \
-                | jq -r '.assets[] | select(.name | test("android.*arm64|arm64.*android"; "i")) | .browser_download_url' 2>/dev/null | head -1)
+            # 获取最新的 libsql 版本
+            LIBSQL_VERSION="${LIBSQL_VERSION:-latest}"
+            if [ "$LIBSQL_VERSION" = "latest" ]; then
+              LIBSQL_TAG=$(curl -sfL "https://api.github.com/repos/tursodatabase/libsql/releases/latest" 2>/dev/null | jq -r '.tag_name' 2>/dev/null || echo "")
+            else
+              LIBSQL_TAG="$LIBSQL_VERSION"
             fi
             
-            if [ -n "$ASSET_URL" ]; then
-              echo "  Downloading: $ASSET_URL"
-              if curl -fSL -o /tmp/libsql-android.tar.gz "$ASSET_URL" 2>/dev/null; then
-                # 解压并提取库文件
-                cd /tmp
-                tar -xzf libsql-android.tar.gz 2>/dev/null || tar -xf libsql-android.tar.gz 2>/dev/null || unzip -o libsql-android.tar.gz 2>/dev/null || true
-                
-                # 查找 libsql_experimental.a 或 .so
-                FOUND_LIB=$(find /tmp -maxdepth 5 -name "libsql_experimental.*" -type f 2>/dev/null | head -1)
-                if [ -z "$FOUND_LIB" ]; then
-                  FOUND_LIB=$(find /tmp -maxdepth 5 -name "libsql*.a" -type f 2>/dev/null | head -1)
+            if [ -n "$LIBSQL_TAG" ]; then
+              echo "  libsql version: $LIBSQL_TAG"
+              
+              # 尝试下载 Android arm64 的预编译库
+              ASSET_URL=$(curl -sfL "https://api.github.com/repos/tursodatabase/libsql/releases/tags/$LIBSQL_TAG" 2>/dev/null \
+                | jq -r '.assets[] | select(.name | test("libsql.*aarch64.*android|aarch64.*linux.*android"; "i")) | .browser_download_url' 2>/dev/null | head -1)
+              
+              if [ -z "$ASSET_URL" ]; then
+                ASSET_URL=$(curl -sfL "https://api.github.com/repos/tursodatabase/libsql/releases/tags/$LIBSQL_TAG" 2>/dev/null \
+                  | jq -r '.assets[] | select(.name | test("android.*arm64|arm64.*android"; "i")) | .browser_download_url' 2>/dev/null | head -1)
+              fi
+              
+              if [ -n "$ASSET_URL" ]; then
+                echo "  Downloading: $ASSET_URL"
+                if curl -fSL -o /tmp/libsql-android.tar.gz "$ASSET_URL" 2>/dev/null; then
+                  cd /tmp
+                  tar -xzf libsql-android.tar.gz 2>/dev/null || tar -xf libsql-android.tar.gz 2>/dev/null || unzip -o libsql-android.tar.gz 2>/dev/null || true
+                  
+                  FOUND_LIB=$(find /tmp -maxdepth 5 -name "libsql_experimental.*" -type f 2>/dev/null | head -1)
+                  if [ -z "$FOUND_LIB" ]; then
+                    FOUND_LIB=$(find /tmp -maxdepth 5 -name "libsql*.a" -type f 2>/dev/null | head -1)
+                  fi
+                  
+                  if [ -n "$FOUND_LIB" ]; then
+                    cp "$FOUND_LIB" "$LIBSQL_DIR/"
+                    echo "✅ libsql downloaded and installed:"
+                    ls -lh "$LIBSQL_DIR/"
+                    LIBSQL_READY=1
+                  else
+                    FAIL_REASON="Download succeeded but no libsql library found in archive"
+                  fi
+                else
+                  FAIL_REASON="Failed to download libsql from $ASSET_URL"
                 fi
+              else
+                FAIL_REASON="No Android arm64 asset found in release $LIBSQL_TAG"
+              fi
+            else
+              FAIL_REASON="Could not determine latest libsql release version"
+            fi
+          fi
+          
+          # 方案3：从源码编译（不用 cargo-ndk，直接用 NDK clang + 标准 cargo build）
+          if [ $LIBSQL_READY -eq 0 ]; then
+            echo "Pre-built libsql not available, attempting source build..."
+            
+            # 检查 Rust 是否可用
+            if ! command -v rustc &> /dev/null; then
+              echo "  Installing Rust..."
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>&1 | tail -5
+              source "$HOME/.cargo/env"
+            fi
+            
+            if ! command -v rustc &> /dev/null; then
+              FAIL_REASON="Rust not available after installation attempt"
+            else
+              rustup target add aarch64-linux-android 2>&1 | tail -3
+              
+              # 克隆 libsql 源码
+              cd /tmp
+              if [ ! -d "libsql-src" ]; then
+                git clone --depth 1 --branch main https://github.com/tursodatabase/libsql.git libsql-src 2>&1 | tail -5
+              fi
+              cd libsql-src
+              
+              # 找到 libsql 的 C API crate
+              CRATE_DIR=""
+              for d in "libsql-sync" "crates/libsql-sync" "libsql" "crates/libsql"; do
+                if [ -d "$d/Cargo.toml" ]; then
+                  CRATE_DIR="$d"
+                  echo "  Found crate: $CRATE_DIR"
+                  break
+                fi
+              done
+              
+              if [ -z "$CRATE_DIR" ]; then
+                FAIL_REASON="Could not find libsql crate in source (checked: libsql-sync, crates/libsql-sync, libsql, crates/libsql)"
+              else
+                cd "$CRATE_DIR"
                 
-                if [ -n "$FOUND_LIB" ]; then
-                  cp "$FOUND_LIB" "$LIBSQL_DIR/"
-                  echo "✅ libsql downloaded and installed:"
-                  ls -lh "$LIBSQL_DIR/"
-                  echo "LIBSQL_READY=1" >> "$GITHUB_ENV"
-                  exit 0
+                # 直接用 NDK clang 编译，不用 cargo-ndk
+                NDK_BIN="${ANDROID_HOME}/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+                export CC_aarch64_linux_android="${NDK_BIN}/aarch64-linux-android24-clang"
+                export AR_aarch64_linux_android="${NDK_BIN}/llvm-ar"
+                export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="${NDK_BIN}/aarch64-linux-android24-clang"
+                
+                echo "  Building libsql with NDK clang..."
+                set +e
+                cargo build --target aarch64-linux-android --release --lib 2>&1 | tail -20
+                BUILD_EXIT=$?
+                set -e
+                
+                if [ $BUILD_EXIT -ne 0 ]; then
+                  FAIL_REASON="libsql source build failed (exit=$BUILD_EXIT)"
+                else
+                  # 复制编译产物
+                  BUILT_LIB=$(find /tmp/libsql-src/target/aarch64-linux-android/release -name "libsql_experimental.*" -type f 2>/dev/null | head -1)
+                  if [ -z "$BUILT_LIB" ]; then
+                    BUILT_LIB=$(find /tmp/libsql-src/target/aarch64-linux-android/release -name "libsql*.a" -type f 2>/dev/null | head -1)
+                  fi
+                  
+                  if [ -n "$BUILT_LIB" ]; then
+                    cp "$BUILT_LIB" "$LIBSQL_DIR/"
+                    echo "✅ libsql built from source:"
+                    ls -lh "$LIBSQL_DIR/"
+                    LIBSQL_READY=1
+                  else
+                    FAIL_REASON="libsql build succeeded but output library not found"
+                  fi
                 fi
               fi
             fi
           fi
           
-          # 方案3：从源码编译（不用 cargo-ndk，直接用 NDK clang + 标准 cargo build）
-          echo "Pre-built libsql not available, attempting source build..."
+          # 设置结果
+          echo "LIBSQL_READY=$LIBSQL_READY" >> "$GITHUB_ENV"
           
-          # 检查 Rust 是否可用
-          if ! command -v rustc &> /dev/null; then
-            echo "  Installing Rust..."
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>&1 | tail -5
-            source "$HOME/.cargo/env"
-          fi
-          
-          if ! command -v rustc &> /dev/null; then
-            echo "⚠️  Rust not available, skipping libsql build"
-            echo "LIBSQL_READY=0" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          
-          rustup target add aarch64-linux-android 2>&1 | tail -3
-          
-          # 克隆 libsql 源码
-          cd /tmp
-          if [ ! -d "libsql-src" ]; then
-            git clone --depth 1 --branch main https://github.com/tursodatabase/libsql.git libsql-src 2>&1 | tail -5
-          fi
-          cd libsql-src
-          
-          # 找到 libsql 的 C API crate
-          # 遍历可能的路径
-          CRATE_DIR=""
-          for d in "libsql-sync" "crates/libsql-sync" "libsql" "crates/libsql"; do
-            if [ -d "$d/Cargo.toml" ]; then
-              CRATE_DIR="$d"
-              echo "  Found crate: $CRATE_DIR"
-              break
-            fi
-          done
-          
-          if [ -z "$CRATE_DIR" ]; then
-            echo "⚠️  Could not find libsql crate, skipping source build"
-            echo "LIBSQL_READY=0" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          
-          cd "$CRATE_DIR"
-          
-          # 直接用 NDK clang 编译，不用 cargo-ndk
-          NDK_BIN="${ANDROID_HOME}/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin"
-          export CC_aarch64_linux_android="${NDK_BIN}/aarch64-linux-android24-clang"
-          export AR_aarch64_linux_android="${NDK_BIN}/llvm-ar"
-          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="${NDK_BIN}/aarch64-linux-android24-clang"
-          
-          echo "  Building libsql with NDK clang..."
-          cargo build --target aarch64-linux-android --release --lib 2>&1 | tail -20
-          BUILD_EXIT=$?
-          
-          if [ $BUILD_EXIT -ne 0 ]; then
-            echo "⚠️  libsql build failed (exit=$BUILD_EXIT), falling back to SQLite"
-            echo "LIBSQL_READY=0" >> "$GITHUB_ENV"
-            exit 0
-          fi
-          
-          # 复制编译产物
-          BUILT_LIB=$(find /tmp/libsql-src/target/aarch64-linux-android/release -name "libsql_experimental.*" -type f 2>/dev/null | head -1)
-          if [ -z "$BUILT_LIB" ]; then
-            BUILT_LIB=$(find /tmp/libsql-src/target/aarch64-linux-android/release -name "libsql*.a" -type f 2>/dev/null | head -1)
-          fi
-          
-          if [ -n "$BUILT_LIB" ]; then
-            cp "$BUILT_LIB" "$LIBSQL_DIR/"
-            echo "✅ libsql built from source:"
-            ls -lh "$LIBSQL_DIR/"
-            echo "LIBSQL_READY=1" >> "$GITHUB_ENV"
+          # 写入 Step Summary（显式可观测）
+          if [ $LIBSQL_READY -eq 1 ]; then
+            echo "## ✅ libsql 构建成功" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "libsql 原生库已就绪，将在 Go 二进制中启用向量搜索支持。" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            ls -lh "$LIBSQL_DIR/" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
           else
-            echo "⚠️  libsql build succeeded but output library not found"
-            echo "   Available files:"
-            ls -lh /tmp/libsql-src/target/aarch64-linux-android/release/ 2>/dev/null | head -20
-            echo "LIBSQL_READY=0" >> "$GITHUB_ENV"
+            echo "::warning::libsql 构建失败，将降级为 SQLite-only（无向量搜索）"
+            echo "::warning::失败原因: $FAIL_REASON"
+            
+            echo "## ⚠️ libsql 构建失败（降级为 SQLite-only）" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**libsql 原生库未包含在此构建中**，将使用纯 SQLite（无向量搜索功能）。" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 失败原因" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$FAIL_REASON" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 影响" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ 加密/解密、文件管理、任务系统等核心功能正常" >> $GITHUB_STEP_SUMMARY
+            echo "- ❌ 向量搜索功能不可用" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔄 运行时自动使用 glebarez/sqlite（纯 Go）" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen + libsql)

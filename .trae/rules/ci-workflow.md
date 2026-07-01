@@ -104,9 +104,111 @@ gh pr edit <PR-number> --add-label ci:full,ci:e2e
 
 ---
 
-## 四、应急（恶意消耗 attack 应对）
+## 四、静默 Fallback 禁令（违反 = 功能幻觉）
 
-### 4.1 一键关停 workflow
+> **核心原则：宣称支持的功能必须真的可用，不能默默降级让用户以为有但实际没有。**
+> **Fallback 必须显式、可观测、有决策记录。**
+
+### 4.1 什么是「无脑静默 Fallback」（禁止）
+
+**定义**：某功能编译/初始化失败时，`set +e` 吞掉错误，默默切换到降级方案，既不报错也不高亮警告，最终产出的二进制/APK 缺少该功能，但用户从表面完全看不出来。
+
+**典型反面案例**：
+```bash
+set +e  # ❌ 整个步骤都吞错误
+build-libsql || true  # ❌ 失败了当没事
+echo "LIBSQL_READY=0" >> $GITHUB_ENV  # ⚠️ 只设变量但不醒目
+# 后面继续构建，最终 APK 没有 libsql，但没人知道
+```
+
+**危害**：
+- **功能幻觉**：开发者以为"libsql 已经集成了"，实际每次 CI 出的包都是 SQLite-only
+- **问题被延迟发现**：直到线上出问题才发现"怎么没有向量搜索？"
+- **技术债务累积**：失败的构建一直在静默失败，没人修，最后变成"历史遗留问题"
+
+### 4.2 Fallback 合法性判断标准
+
+| 判断维度 | ✅ 合法 Fallback | ❌ 无脑静默 Fallback |
+|---------|----------------|-------------------|
+| **声明方式** | 代码/配置中显式声明"这是可选功能" | 文档/代码宣称"支持 X"，但实际偷偷降级 |
+| **失败可见性** | CI 总结中**红色/橙色高亮**显示"X 功能未包含" | 只有翻日志才能看到一行不起眼的 warning |
+| **失败计数** | 计入 CI 警告/失败统计，有追踪 | 静默失败，无任何统计 |
+| **决策记录** | 有明确的"为什么允许降级"的注释 | 不知道谁加的、为什么加 |
+| **用户感知** | 运行时能明确看到"当前使用的是降级方案" | 用户完全不知道功能被降级了 |
+
+### 4.3 合法 Fallback 的 3 个必要条件
+
+**SHALL** 满足全部 3 条才算合法：
+
+1. **显式声明可选**：在代码注释 / 配置文件 / 文档中明确说明"该功能是可选的，失败时降级到 X"
+2. **CI 高亮可见**：
+   - 使用 `::warning::` 或 `::error::` 输出（GitHub Actions 会高亮显示）
+   - 写入 `$GITHUB_STEP_SUMMARY`，在 workflow 总结页面一眼可见
+   - 步骤显示为黄色（warning）而非绿色（success）
+3. **有追踪机制**：
+   - 输出明确的"为什么失败"的诊断信息
+   - 有对应的 issue / TODO 跟踪修复
+   - 不能无限期静默失败
+
+### 4.4 核心功能 vs 可选功能
+
+| 功能类型 | 定义 | Fallback 策略 |
+|---------|------|-------------|
+| **核心功能** | 产品主要价值所在，用户默认认为应该有 | **禁止静默 fallback**，失败直接让 CI 红 |
+| **可选增强** | 锦上添花的功能，没有也能用 | 允许 fallback，但必须满足 4.3 的 3 个条件 |
+| **实验性功能** | 还在开发中，默认关闭 | 允许 fallback，但必须明确标记为实验性 |
+
+**本项目当前分类**：
+- ✅ **核心功能**：加密/解密、文件管理、任务系统
+- ⚠️ **可选增强**：libsql 向量搜索、MPV 插件、OpenList 插件
+- 🧪 **实验性功能**：AI Agent、自动化测试
+
+### 4.5 CI 脚本编写规范
+
+**错误写法（静默失败）**：
+```bash
+set +e
+build-something || true
+echo "done"
+```
+
+**正确写法（显式 fallback）**：
+```bash
+set -e
+
+# 尝试构建可选功能
+BUILD_SUCCESS=0
+build-something && BUILD_SUCCESS=1 || BUILD_SUCCESS=0
+
+if [ $BUILD_SUCCESS -eq 0 ]; then
+  echo "::warning::可选功能 X 构建失败，将使用降级方案"
+  echo "::warning::失败原因: $(tail -5 /tmp/build.log)"
+  echo "## ⚠️ 可选功能 X 构建失败" >> $GITHUB_STEP_SUMMARY
+  echo "将使用降级方案 Y。" >> $GITHUB_STEP_SUMMARY
+  echo "" >> $GITHUB_STEP_SUMMARY
+  echo "失败原因：" >> $GITHUB_STEP_SUMMARY
+  echo '```' >> $GITHUB_STEP_SUMMARY
+  tail -20 /tmp/build.log >> $GITHUB_STEP_SUMMARY
+  echo '```' >> $GITHUB_STEP_SUMMARY
+fi
+```
+
+### 4.6 本项目已知的静默 Fallback 清单
+
+| 位置 | 功能 | 当前状态 | 需修复 |
+|------|------|---------|-------|
+| `android.yml` libsql 步骤 | libsql 向量搜索 | 静默失败 + 降级 SQLite | ✅ 是 |
+| `android.yml` MPV 插件步骤 | MPV 视频播放器 | `continue-on-error: true` + 有日志 | ⚠️ 半合法（插件本身是可选的） |
+| `android.yml` OpenList 插件步骤 | OpenList 插件 | `continue-on-error: true` + 有日志 | ⚠️ 半合法 |
+
+> **原则**：插件类的可选功能可以用 `continue-on-error: true`，但**核心/宣称支持的功能不能静默失败**。
+> libsql 是"宣称支持的功能"（文档里写了支持），所以不能静默失败。
+
+---
+
+## 五、应急（恶意消耗 attack 应对）
+
+### 5.1 一键关停 workflow
 
 ```bash
 gh workflow disable pr-check.yml
@@ -119,7 +221,7 @@ gh workflow enable full-regression.yml
 gh workflow enable e2e-integration.yml
 ```
 
-### 4.2 cancel 正在跑的恶意 run
+### 5.2 cancel 正在跑的恶意 run
 
 ```bash
 # 列出所有 running runs
@@ -129,25 +231,25 @@ gh run list --status in_progress
 gh run cancel <run-id>
 ```
 
-### 4.3 应急 commit 直接走 Layer1
+### 5.3 应急 commit 直接走 Layer1
 
 恶意 PR 触发 Layer1 → 红灯 → 无法 merge → 自然终止（无需手动干预）。
 
 ---
 
-## 五、与其他规则交叉
+## 六、与其他规则交叉
 
 | 规则 | 关系 |
 |------|------|
 | [test-orchestration.md](file:///workspace/.trae/rules/test-orchestration.md) | **强相关** — CI 必须走 scripts/test-go.sh / test-all-go.sh |
 | [development.md](file:///workspace/.trae/rules/development.md) | 弱相关（沙箱开发环境规范，与 CI 分离） |
+| [android.md](file:///workspace/.trae/rules/android.md) | **强相关** — libsql fallback 规则、Android 构建规范 |
 | [combolite.md](file:///workspace/.trae/rules/combolite.md) | 无关 |
 | [capacitor.md](file:///workspace/.trae/rules/capacitor.md) | 无关 |
-| [android.md](file:///workspace/.trae/rules/android.md) | 无关 |
 
 ---
 
-## 六、引用
+## 七、引用
 
 - [scripts/test-go.sh](file:///workspace/scripts/test-go.sh) — Go 测试唯一入口
 - [scripts/test-all-go.sh](file:///workspace/scripts/test-all-go.sh) — 模块化测试编排
