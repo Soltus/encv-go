@@ -70,6 +70,24 @@ func NewLocal(path string) (*Store, error) {
 		return nil, fmt.Errorf("open turso local: %w", err)
 	}
 
+	// 性能优化配置：
+	// - WAL 模式：Turso 默认已启用，显式设置确保一致性
+	// - synchronous=NORMAL：WAL 模式下安全且性能提升显著（~10x 写入）
+	// - busy_timeout=30000：避免并发写入时的 database is locked 错误
+	// - 注意：Turso MVCC 多 writer 不依赖 WAL，但这些 pragma 仍影响单连接性能
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA busy_timeout=30000",
+		"PRAGMA foreign_keys=ON",
+	}
+	for _, p := range pragmas {
+		if _, err := db.Exec(p); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("set pragma %q: %w", p, err)
+		}
+	}
+
 	// Turso 支持 MVCC 并发写，可安全地增加连接数
 	db.SetMaxOpenConns(8)
 	db.SetMaxIdleConns(4)
@@ -102,6 +120,20 @@ func NewSync(cfg SyncConfig) (*Store, error) {
 	db, err := syncDb.Connect(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("connect turso sync db: %w", err)
+	}
+
+	// 性能优化配置（同 NewLocal）
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA busy_timeout=30000",
+		"PRAGMA foreign_keys=ON",
+	}
+	for _, p := range pragmas {
+		if _, err := db.Exec(p); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("set pragma %q: %w", p, err)
+		}
 	}
 
 	db.SetMaxOpenConns(8)
