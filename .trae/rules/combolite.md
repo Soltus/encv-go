@@ -145,7 +145,7 @@ android {
 
 ## 五、引用其他规则
 
-- [android.md](./android.md) — gomobile + sqlite 选型、仓库顺序铁律
+- [android.md](./android.md) — SQLite / LibSQL 选型、仓库顺序铁律
 - [combolite-core 升级注意事项](./android.md#二版本管理)
 
 > 拆分：2026-06-11

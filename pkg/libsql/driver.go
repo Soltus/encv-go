@@ -1,5 +1,5 @@
-//go:build cgo
-// +build cgo
+//go:build cgo && libsql
+// +build cgo,libsql
 
 package libsql
 

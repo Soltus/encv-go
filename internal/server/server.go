@@ -41,7 +41,6 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/service"
 	"github.com/Soltus/encv-go/internal/webdav"
 	"github.com/Soltus/encv-go/pkg/tasksystem"
-	libsqlstore "github.com/Soltus/encv-go/pkg/tasksystem/store/libsql"
 	sqlitestore "github.com/Soltus/encv-go/pkg/tasksystem/store/sqlite"
 	tursostore "github.com/Soltus/encv-go/pkg/tasksystem/store/tursogo"
 	"github.com/dustin/go-humanize"
@@ -353,14 +352,16 @@ func NewServer(ctx context.Context, configPath string) *Server {
 					}
 				}
 			}()
-			dbStore, err = libsqlstore.NewLocal(dbPath)
-			if err != nil {
-				slog.Error("failed to init libsql store, falling back to sqlite", "err", err)
-				actualEngine = "sqlite"
-				dbStore, err = sqlitestore.New(dbPath)
-				if err != nil {
-					slog.Error("failed to init sqlite fallback", "err", err)
+			store, initErr := initLibsqlStoreWithFallback(dbPath, &actualEngine)
+			if initErr != nil || store == nil {
+				if actualEngine == "sqlite" {
+					dbStore, err = sqlitestore.New(dbPath)
+					if err != nil {
+						slog.Error("failed to init sqlite fallback", "err", err)
+					}
 				}
+			} else {
+				dbStore = store
 			}
 		}()
 	case "turso":

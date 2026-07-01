@@ -284,19 +284,162 @@ jobs:
           echo "═══ Go Test Summary ═══"
           go test ./internal/service/ ./internal/v2/plugins/video/ -count=1 -timeout 120s 2>&1 | tail -5
 
-      - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen)
+      - name: Prepare libsql native library for Android
+        run: |
+          set -e
+          echo "═══ Preparing LibSQL for Android arm64-v8a ═══"
+          
+          LIBSQL_DIR="pkg/libsql/libs/android_arm64"
+          mkdir -p "$LIBSQL_DIR"
+          
+          # 方案1：检查是否已经有预编译库（可能来自 cache 或之前的步骤）
+          if [ -f "$LIBSQL_DIR/libsql_experimental.a" ] || [ -f "$LIBSQL_DIR/libsql_experimental.so" ]; then
+            echo "✅ libsql already present:"
+            ls -lh "$LIBSQL_DIR/"
+            echo "LIBSQL_READY=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          
+          # 方案2：从 tursodatabase/libsql 下载预编译的 release
+          # 尝试从 GitHub releases 下载（libsql 官方提供预编译的 Android 库）
+          echo "Attempting to download pre-built libsql from GitHub releases..."
+          
+          # 获取最新的 libsql 版本
+          LIBSQL_VERSION="${LIBSQL_VERSION:-latest}"
+          if [ "$LIBSQL_VERSION" = "latest" ]; then
+            LIBSQL_TAG=$(curl -sfL "https://api.github.com/repos/tursodatabase/libsql/releases/latest" | jq -r '.tag_name' || echo "")
+          else
+            LIBSQL_TAG="$LIBSQL_VERSION"
+          fi
+          
+          if [ -n "$LIBSQL_TAG" ]; then
+            echo "  libsql version: $LIBSQL_TAG"
+            
+            # 尝试下载 Android arm64 的预编译库
+            # 注意：实际的 asset 名称需要根据 libsql 的 release 格式调整
+            ASSET_URL=$(curl -sfL "https://api.github.com/repos/tursodatabase/libsql/releases/tags/$LIBSQL_TAG" \
+              | jq -r '.assets[] | select(.name | test("android.*aarch64|aarch64.*android|arm64.*android|android.*arm64"; "i")) | .browser_download_url' | head -1)
+            
+            if [ -n "$ASSET_URL" ]; then
+              echo "  Downloading: $ASSET_URL"
+              curl -fSL -o /tmp/libsql-android.tar.gz "$ASSET_URL"
+              
+              # 解压并提取库文件
+              cd /tmp
+              tar -xzf libsql-android.tar.gz 2>/dev/null || unzip -o libsql-android.tar.gz 2>/dev/null || true
+              
+              # 查找 libsql_experimental.a 或 .so
+              FOUND_LIB=$(find /tmp -name "libsql_experimental.*" -type f | head -1)
+              if [ -n "$FOUND_LIB" ]; then
+                cp "$FOUND_LIB" "$LIBSQL_DIR/"
+                echo "✅ libsql downloaded and installed:"
+                ls -lh "$LIBSQL_DIR/"
+                echo "LIBSQL_READY=1" >> "$GITHUB_ENV"
+                exit 0
+              fi
+            fi
+          fi
+          
+          # 方案3：从源码编译（需要 Rust + cargo-ndk）
+          echo "Pre-built libsql not available, building from source..."
+          echo "  (this will take a few minutes)"
+          
+          # 安装 Rust
+          if ! command -v rustc &> /dev/null; then
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source "$HOME/.cargo/env"
+          fi
+          
+          # 安装 cargo-ndk
+          if ! command -v cargo-ndk &> /dev/null; then
+            cargo install cargo-ndk --quiet
+          fi
+          
+          # 添加 Android target
+          rustup target add aarch64-linux-android
+          
+          # 克隆 libsql 源码
+          cd /tmp
+          git clone --depth 1 --branch main https://github.com/tursodatabase/libsql.git libsql-src
+          cd libsql-src
+          
+          # 找到 libsql 的 C API crate 并编译
+          # libsql 的 cbindings 通常在 libsql-sync 或类似的 crate
+          if [ -d "libsql-sync" ]; then
+            cd "libsql-sync"
+          elif [ -d "crates/libsql-sync" ]; then
+            cd "crates/libsql-sync"
+          fi
+          
+          # 用 cargo-ndk 编译
+          export NDK_HOME="${ANDROID_HOME}/ndk/${NDK_VERSION}"
+          export NDK_STD="24"
+          
+          cargo ndk -t aarch64-linux-android -p 24 build --release --lib
+          
+          # 复制编译产物
+          BUILT_LIB=$(find /tmp/libsql-src/target/aarch64-linux-android/release -name "libsql_experimental.*" -type f | head -1)
+          if [ -z "$BUILT_LIB" ]; then
+            BUILT_LIB=$(find /tmp/libsql-src/target/aarch64-linux-android/release -name "libsql*.a" -o -name "libsql*.so" | head -1)
+          fi
+          
+          if [ -n "$BUILT_LIB" ]; then
+            cp "$BUILT_LIB" "$LIBSQL_DIR/"
+            echo "✅ libsql built from source:"
+            ls -lh "$LIBSQL_DIR/"
+            echo "LIBSQL_READY=1" >> "$GITHUB_ENV"
+          else
+            echo "⚠️  Failed to build libsql from source"
+            echo "   libsql engine will not be available, falling back to SQLite"
+            echo "LIBSQL_READY=0" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen + libsql)
         env:
           CGO_ENABLED: "1"
           GOOS: android
           GOARCH: arm64
           CC: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+          CGO_LDFLAGS: "-L${GITHUB_WORKSPACE}/pkg/libsql/libs/android_arm64"
         run: |
+          # 构建参数
+          BUILD_TAGS=""
+          if [ "${LIBSQL_READY:-0}" = "1" ]; then
+            BUILD_TAGS="-tags libsql"
+            echo "✅ Building with libsql support"
+          else
+            echo "⚠️  Building WITHOUT libsql support (fallback to SQLite only)"
+          fi
+          
           go build \
+            $BUILD_TAGS \
             -ldflags="-s -w -X main.version=${{ inputs.version || 'dev' }}" \
             -o ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64 \
             ./cmd/encv-mobile
           echo "Go binary size:"
           ls -lh ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64
+          
+          # 如果是动态链接 libsql，把 .so 复制到 jniLibs
+          if [ "${LIBSQL_READY:-0}" = "1" ]; then
+            if [ -f "pkg/libsql/libs/android_arm64/libsql_experimental.so" ]; then
+              mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
+              cp pkg/libsql/libs/android_arm64/libsql_experimental.so \
+                 ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
+              echo "✅ Copied libsql_experimental.so to jniLibs/arm64-v8a/"
+            fi
+          fi
+          
+          # 检查二进制是否链接了 libsql
+          NM="/usr/local/lib/android/sdk/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          if [ -x "$NM" ]; then
+            if $NM -D "${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64" 2>/dev/null | grep -q "libsql"; then
+              echo "✅ Go binary dynamically links libsql"
+            elif $NM "${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64" 2>/dev/null | grep -q "libsql"; then
+              echo "✅ Go binary statically links libsql"
+            else
+              echo "ℹ️  Go binary does not contain libsql symbols (SQLite-only build)"
+            fi
+          fi
 
       # Keystore stored outside android/app to avoid accidental commit
       - name: Restore release keystore from cache
@@ -560,9 +703,9 @@ jobs:
 
       - name: Verify native libraries
         run: |
-          echo "═══ HOST APP jniLibs (Go backend only) ═══"
+          echo "═══ HOST APP jniLibs (Go backend + native libs) ═══"
           HOST_LIBS="${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a"
-          for lib in libencv-go.so libffmpeg.so libffprobe.so; do
+          for lib in libencv-go.so libffmpeg.so libffprobe.so libsql_experimental.so; do
             if [ -f "$HOST_LIBS/$lib" ]; then
               echo "  ✅ $lib $(ls -lh "$HOST_LIBS/$lib" | awk '{print $5}')"
             else

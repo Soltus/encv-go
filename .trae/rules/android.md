@@ -127,20 +127,36 @@ dependencyResolutionManagement {
 
 ---
 
-## 五、gomobile + sqlite 选型铁律
+## 五、SQLite 选型铁律（libsql / glebarez）
 
-> ⚠️ **plugin-openlist 必读**：gomobile bind 产物（AAR 内的 libgojni.so）若引入 sqlite，**必须用 `github.com/glebarez/sqlite`（pure-Go）**，禁止 `gorm.io/driver/sqlite` / `mattn/go-sqlite3`（CGO）。
+> **2026-07-01 更新：本项目已不再使用 gomobile。**
+> 
+> 当前架构：Go 后端以独立可执行文件（`libencv-go.so`）运行，通过 ProcessBuilder 启动，
+> 不走 gomobile bind / JNI 桥接路径。
 
-**核心铁律**：
-1. **SHALL** 导入 `github.com/glebarez/sqlite`
-2. **SHALL NOT** 导入 `gorm.io/driver/sqlite`（其内部链入 mattn）
-3. **SHALL NOT** 直接导入 `github.com/mattn/go-sqlite3`
+### 5.1 引擎对比
 
-**为什么 mattn 是雷**：`mattn/go-sqlite3` 是 CGO 绑定驱动——通过 `#cgo` 指令桥接 C 语言版的 `sqlite3.c`，编译要求 `CGO_ENABLED=1` + 主机 gcc/clang，gomobile bind 表现必须配 NDK clang（常见 `-fPIC` / `setresuid` / musl 报错），AAR 体积 ~42 MB。
+| 引擎 | 实现方式 | Android 支持 | 向量搜索 | 说明 |
+|------|---------|------------|---------|------|
+| **glebarez/sqlite** | 纯 Go transpile | ✅ 原生支持 | ❌ 不支持 | 轻量、零依赖 |
+| **libsql** | CGO + 原生 .so | ✅ 需 NDK 编译 | ✅ 支持 | Turso 官方 fork，高性能 |
+| **turso** | purego | ❌ 移动端不支持 | ✅ 支持 | 桌面端可用 |
 
-**glebarez 优势**：纯 Go 字节码，`CGO_ENABLED=0` 也可，零系统依赖，arm64-v8a ELF 跨设备一致，AAR ~30 MB，写性能 70-80%（元数据场景不可感知）。
+### 5.2 铁律
 
-**完整对比 + 验证命令 + 历史踩坑** → 详见 [详情文档 §五](../rule-library/android.md#五gomobile--sqlite-选型铁律plugin-openlist-必读)
+1. **SHALL** 默认使用 `glebarez/sqlite`（纯 Go，零依赖）
+2. **SHALL** 如需向量搜索，桌面端用 `turso`（purego），移动端用 `libsql`（CGO）
+3. **SHALL NOT** 移动端使用 turso（purego 方案不兼容 Android）
+4. **SHALL NOT** 使用 `mattn/go-sqlite3` / `gorm.io/driver/sqlite`（CGO 版本）
+
+### 5.3 LibSQL Android 集成
+
+LibSQL 通过 CGO 动态链接原生库，产物放在 `jniLibs/arm64-v8a/libsql_experimental.so`：
+- 编译脚本：`scripts/build-libsql-android.sh`
+- 驱动代码：`pkg/libsql/driver.go`
+- 预编译库目录：`pkg/libsql/libs/android_arm64/`
+
+> **历史背景（已废弃）**：gomobile bind 方案详见 [详情文档 §五](../rule-library/android.md#五gomobile--sqlite-选型铁律plugin-openlist-必读-历史)
 
 ---
 

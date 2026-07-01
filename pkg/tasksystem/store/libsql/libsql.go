@@ -1,3 +1,6 @@
+//go:build libsql
+// +build libsql
+
 // Package libsql 提供 tasksystem.Store 的 LibSQL 引擎实现。
 //
 // LibSQL 是 SQLite 的 fork，核心特性：

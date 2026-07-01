@@ -2065,7 +2065,13 @@ func (s *Server) getAvailableEngines() []EngineInfo {
 		{
 			Name:      "libsql",
 			Label:     "LibSQL",
-			Available: true,
+			Available: isLibsqlAvailable(),
+			Reason: func() string {
+				if !isLibsqlAvailable() {
+					return "当前构建未包含 LibSQL 引擎"
+				}
+				return ""
+			}(),
 		},
 		{
 			Name:      "turso",

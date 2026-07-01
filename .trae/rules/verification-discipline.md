@@ -173,8 +173,10 @@ go test ./internal/... ./cmd/... -count=1 -timeout 120s
 
 **任何一项不过** → 不允许 commit。
 
-## 九、gomobile Go→Java 命名 + 类型映射铁律
+## 九、gomobile Go→Java 命名 + 类型映射铁律（历史）
 
+> **⚠️ 已废弃：本项目不再使用 gomobile。保留此节供历史参考。**
+>
 > **`ForceDBSync` → `forceDBSync`**（gomobile `lowerFirst` 只动首字符，保留 `DBSync` 全大写子词）。
 
 | Go 类型 | Java 类型 | 备注 |
