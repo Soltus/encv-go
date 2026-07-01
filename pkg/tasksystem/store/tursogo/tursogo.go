@@ -1,58 +1,79 @@
-// Package turso 提供 tasksystem.Store 的 Turso (libSQL) 实现。
+// Package tursogo 提供 tasksystem.Store 的 Turso 正统引擎实现。
 //
-// Turso 是基于 libSQL（SQLite 的 fork）的分布式边缘数据库，
-// 支持 embedded replica（本地副本 + 远程同步），语法与 SQLite 高度兼容。
-// 本实现直接复用 sqlite 包的表结构和 SQL 逻辑，仅替换驱动层。
+// Turso Database 是从底层重写的 SQLite 兼容引擎，核心特性：
+//   - MVCC 并发写（多 writer 不阻塞，告别 "database is locked"）
+//   - 异步 I/O
+//   - Turso Sync（本地 + 云端 push/pull 同步）
+//   - 纯 Go + purego，无 CGO 依赖
+//
+// 本实现支持三种模式：
+//  1. 本地文件模式（`turso://path/to/file.db`）
+//  2. 内存模式（`:memory:`）
+//  3. Turso Sync 模式（本地 + 云端同步，支持 Push/Pull）
 //
 // 使用方式：
 //
-//	// 远程连接（HTTP）
-//	store, err := turso.New("libsql://your-db.turso.io", "your-auth-token")
+//	// 本地文件模式
+//	store, err := tursogo.NewLocal("app.db")
 //
-//	// 本地 embedded replica（推荐，性能接近本地 SQLite）
-//	store, err := turso.NewWithReplica(
-//	    "libsql://your-db.turso.io",
-//	    "your-auth-token",
-//	    "/path/to/local/replica.db",
-//	)
-package turso
+//	// Turso Sync 模式（推荐：本地读写 + 云端同步）
+//	store, err := tursogo.NewSync(tursogo.SyncConfig{
+//	    Path:       "local.db",
+//	    RemoteURL:  "libsql://your-db.turso.io",
+//	    AuthToken:  "your-auth-token",
+//	})
+//
+//	// 手动同步
+//	store.Push(ctx)  // 本地 → 云端
+//	store.Pull(ctx)  // 云端 → 本地
+package tursogo
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
-	_ "github.com/tursodatabase/go-libsql" // Turso/libSQL driver
+	turso "turso.tech/database/tursogo"
 
 	"github.com/Soltus/encv-go/pkg/tasksystem"
 	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
 )
 
-// Store Turso 存储实现。
+// Store Turso 正统引擎存储实现。
 //
-// 由于 Turso/libSQL 与 SQLite 语法高度兼容，
-// 大部分 SQL 逻辑与 sqlite.Store 一致，仅驱动和连接方式不同。
+// 相比 libsql 兼容层，tursogo 提供：
+//   - MVCC 并发写（多 goroutine 同时写不锁库）
+//   - 更高的读性能（异步 I/O）
+//   - Turso Sync（显式 push/pull）
+//   - 更活跃的开发迭代
 type Store struct {
-	db *sql.DB
+	db     *sql.DB
+	syncDb *turso.TursoSyncDb // 仅 Sync 模式下非 nil
 }
 
-// New 创建 Turso Store（远程 HTTP 连接）。
+// SyncConfig Turso Sync 模式配置。
+type SyncConfig struct {
+	Path      string // 本地数据库文件路径
+	RemoteURL string // Turso Cloud 数据库 URL（libsql://...）
+	AuthToken string // 认证 token
+}
+
+// NewLocal 创建本地文件模式的 Turso Store（无云端同步）。
 //
-// url: Turso 数据库 URL，格式为 "libsql://your-db.turso.io"
-// authToken: 认证 token（从 Turso 控制台获取）
-func New(url, authToken string) (*Store, error) {
-	dsn := fmt.Sprintf("%s?authToken=%s", url, authToken)
-	db, err := sql.Open("libsql", dsn)
+// path: 本地数据库文件路径，使用 `:memory:` 可创建内存数据库。
+func NewLocal(path string) (*Store, error) {
+	db, err := sql.Open("turso", path)
 	if err != nil {
-		return nil, fmt.Errorf("open turso: %w", err)
+		return nil, fmt.Errorf("open turso local: %w", err)
 	}
 
-	// Turso 远程连接可适当增加并发数（不像本地 SQLite 有单连接限制）
-	db.SetMaxOpenConns(4)
-	db.SetMaxIdleConns(2)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	// Turso 支持 MVCC 并发写，可安全地增加连接数
+	db.SetMaxOpenConns(8)
+	db.SetMaxIdleConns(4)
+	db.SetConnMaxLifetime(10 * time.Minute)
 
 	store := &Store{db: db}
 	if err := store.initSchema(); err != nil {
@@ -62,37 +83,64 @@ func New(url, authToken string) (*Store, error) {
 	return store, nil
 }
 
-// NewWithReplica 创建带本地副本的 Turso Store（embedded replica）。
+// NewSync 创建带 Turso Sync 的 Store（本地读写 + 云端同步）。
 //
-// 适用于需要高性能读的场景（如移动端），写入同步到远程 Turso 数据库，
-// 读取优先从本地副本走，延迟接近本地 SQLite。
-//
-// url: Turso 数据库 URL
-// authToken: 认证 token
-// replicaPath: 本地副本数据库文件路径
-func NewWithReplica(url, authToken, replicaPath string) (*Store, error) {
-	dsn := fmt.Sprintf("%s?authToken=%s&replica=%s", url, authToken, replicaPath)
-	db, err := sql.Open("libsql", dsn)
+// 所有读写均走本地数据库（低延迟、离线可用），
+// 通过 Push()/Pull() 显式与云端同步。
+func NewSync(cfg SyncConfig) (*Store, error) {
+	ctx := context.Background()
+
+	syncDb, err := turso.NewTursoSyncDb(ctx, turso.TursoSyncDbConfig{
+		Path:      cfg.Path,
+		RemoteUrl: cfg.RemoteURL,
+		AuthToken: cfg.AuthToken,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("open turso replica: %w", err)
+		return nil, fmt.Errorf("create turso sync db: %w", err)
 	}
 
-	db.SetMaxOpenConns(4)
-	db.SetMaxIdleConns(2)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	db, err := syncDb.Connect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("connect turso sync db: %w", err)
+	}
 
-	store := &Store{db: db}
+	db.SetMaxOpenConns(8)
+	db.SetMaxIdleConns(4)
+	db.SetConnMaxLifetime(10 * time.Minute)
+
+	store := &Store{db: db, syncDb: syncDb}
 	if err := store.initSchema(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
 	return store, nil
+}
+
+// Push 将本地变更推送到 Turso Cloud。
+// 仅 Sync 模式下有效；本地模式返回 nil（no-op）。
+func (s *Store) Push(ctx context.Context) error {
+	if s.syncDb == nil {
+		return nil
+	}
+	return s.syncDb.Push(ctx)
+}
+
+// Pull 从 Turso Cloud 拉取远程变更到本地。
+// 仅 Sync 模式下有效；本地模式返回 nil（no-op）。
+func (s *Store) Pull(ctx context.Context) error {
+	if s.syncDb == nil {
+		return nil
+	}
+	_, err := s.syncDb.Pull(ctx)
+	return err
+}
+
+// IsSyncMode 返回是否为 Sync 模式。
+func (s *Store) IsSyncMode() bool {
+	return s.syncDb != nil
 }
 
 // initSchema 创建表和索引（IF NOT EXISTS，幂等）。
-//
-// 注意：Turso/libSQL 支持 SQLite 的大部分 DDL 语法，
-// 但不支持某些 SQLite 特有的 pragma（如 WAL mode 在 Turso 中由服务端管理）。
 func (s *Store) initSchema() error {
 	_, err := s.db.Exec(schemaSQL)
 	return err
@@ -368,9 +416,6 @@ func (s *Store) CountByRunId(runId string) (map[string]int, error) {
 }
 
 // ListRuns 列出所有 run（去重 runId），带最早创建时间和 triggeredBy。
-//
-// Turso/libSQL 的 MIN(created_at) 返回 DATETIME 格式字符串，
-// 需要解析为 time.Time。
 func (s *Store) ListRuns() ([]tasksystem.RunInfo, error) {
 	rows, err := s.db.Query(`
 		SELECT run_id, MIN(created_at), triggered_by
@@ -401,8 +446,7 @@ func (s *Store) ListRuns() ([]tasksystem.RunInfo, error) {
 	return result, rows.Err()
 }
 
-// parseTime 解析 Turso/libSQL 返回的时间字符串。
-// Turso 服务端通常返回 RFC3339 格式，但为兼容性尝试多种格式。
+// parseTime 解析时间字符串（兼容多种格式）。
 func parseTime(s string) (time.Time, error) {
 	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
 		return t, nil

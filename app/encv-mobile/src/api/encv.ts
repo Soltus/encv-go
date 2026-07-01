@@ -746,6 +746,11 @@ export async function createTask(
 //   - 前端拿到后一次性 push 到 store → UI 立即显示 1 个 group N task（不慢慢累加）
 //   - 不存在 client ID 覆盖后端 ID 的野路子
 //
+// 🆕 2026-07-01 P1 修复：
+//   - 大批量任务分批提交（每批 50 个），避免单次请求体过大超时
+//   - 增加 120s 超时（之前无超时，浏览器默认 30s 容易超时）
+//   - 分批之间不 await 所有结果，聚合后统一返回（保持 API 签名不变）
+//
 // 调用方：useWorkflowTaskService.executeJob（每层一次性批量提交）
 export async function batchCreateTasks(
   specs: BatchTaskSpec[],
@@ -754,19 +759,60 @@ export async function batchCreateTasks(
 ): Promise<EncvTask[]> {
   console.info('[API] batchCreateTasks:', specs.length, 'tasks',
     'runId:', runId ?? '', 'triggeredBy:', triggeredBy ?? 'user')
+
+  // 分批：每批 50 个，避免单次请求体过大或处理时间过长
+  const BATCH_SIZE = 50
+  if (specs.length <= BATCH_SIZE) {
+    return batchCreateTasksSingle(specs, runId, triggeredBy)
+  }
+
+  // 分批并行提交（Promise.all），最后聚合结果
+  const batches: BatchTaskSpec[][] = []
+  for (let i = 0; i < specs.length; i += BATCH_SIZE) {
+    batches.push(specs.slice(i, i + BATCH_SIZE))
+  }
+  console.info('[API] batchCreateTasks: split into', batches.length, 'batches')
+
+  const results = await Promise.all(
+    batches.map((batch) => batchCreateTasksSingle(batch, runId, triggeredBy)),
+  )
+  return results.flat()
+}
+
+/** 单批批量创建（内部函数） */
+async function batchCreateTasksSingle(
+  specs: BatchTaskSpec[],
+  runId?: string,
+  triggeredBy?: 'user' | 'automation' | 'ai_agent',
+): Promise<EncvTask[]> {
   const baseUrl = getApiBaseUrl()
   const body: Record<string, unknown> = { tasks: specs }
   if (runId) body.runId = runId
   if (triggeredBy) body.triggeredBy = triggeredBy
-  const response = await fetch(`${baseUrl}/api/tasks/batch`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+
+  // 120s 超时：大批量任务后端可能需要较长处理时间
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 120_000)
+
+  try {
+    const response = await fetch(`${baseUrl}/api/tasks/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+    return await response.json()
+  } catch (e: unknown) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error(`batchCreateTasks timed out after 120s (${specs.length} tasks)`)
+    }
+    throw e
+  } finally {
+    clearTimeout(timeoutId)
   }
-  return await response.json()
 }
 
 // 🆕 2026-06-23：批量创建 task 的输入定义（不含 ID——ID 由后端统一生成）

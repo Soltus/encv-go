@@ -161,13 +161,12 @@ function flattenCases(run: UnifiedRunRecord, runTasks: EncvTask[]): CaseDetail[]
   for (const job of wRun.jobs) {
     for (const step of job.steps) {
       counter += 1
-      const action = inferAction(step)
+      // 关联实时数据：step.taskId 是 EncvTask.id
+      const live = step.taskId ? liveById.get(step.taskId) : undefined
+      const action = inferAction(step, live)
       const status = step.status === 'success' ? 'success'
         : step.status === 'skipped' ? 'skipped'
         : 'failure'
-
-      // 关联实时数据：step.taskId 是 EncvTask.id
-      const live = step.taskId ? liveById.get(step.taskId) : undefined
 
       cases.push({
         id: step.id,
@@ -203,12 +202,20 @@ function groupCasesByStatus(run: UnifiedRunRecord, runTasks: EncvTask[]): CasesB
   return grouped
 }
 
-/** 从 step 推断 ActionSpec（pluginName / taskType / params） */
-function inferAction(step: StepRun): {
+/** 从 step 推断 ActionSpec（pluginName / taskType / params）
+ *
+ * 按优先级尝试多种 fallback：
+ *   1. step.matrixVars（matrix 策略，最完整）
+ *   2. step.stepDef.action（parallel/sequential 策略的 action 定义）
+ *   3. step.stepDefId 正则匹配（从 ID 中提取 plugin 和 type）
+ *   4. step.taskId + live task 数据（从 EncvTask.pluginName/type 反推）
+ */
+function inferAction(step: StepRun, liveTask?: EncvTask): {
   pluginName: string
   taskType: 'encrypt' | 'decrypt'
   params?: { sourcePath?: string; targetPath?: string }
 } | null {
+  // 1. matrixVars（matrix 策略）
   const matrixVars = (step as any).matrixVars
   if (matrixVars && typeof matrixVars === 'object') {
     return {
@@ -220,6 +227,44 @@ function inferAction(step: StepRun): {
       },
     }
   }
+
+  // 2. stepDef.action（parallel / sequential 策略）
+  const stepDef = (step as any).stepDef
+  if (stepDef?.action && typeof stepDef.action === 'object') {
+    const action = stepDef.action
+    return {
+      pluginName: String(action.pluginName ?? action.plugin ?? 'unknown'),
+      taskType: action.taskType === 'decrypt' ? 'decrypt' : 'encrypt',
+      params: {
+        sourcePath: action.sourcePath ?? action.path,
+        targetPath: action.targetPath,
+      },
+    }
+  }
+
+  // 3. stepDefId 正则匹配（enc_{plugin}_{type}_... 格式）
+  const stepDefId = step.stepDefId ?? ''
+  const m = stepDefId.match(/^enc_(\w+?)_(\w+?)_/)
+  if (m) {
+    return {
+      pluginName: m[1],
+      taskType: m[2] === 'decrypt' ? 'decrypt' : 'encrypt',
+      params: {},
+    }
+  }
+
+  // 4. 从 live EncvTask 反推
+  if (liveTask) {
+    return {
+      pluginName: liveTask.pluginName ?? 'unknown',
+      taskType: liveTask.type === 'decrypt' ? 'decrypt' : 'encrypt',
+      params: {
+        sourcePath: liveTask.sourcePath,
+        targetPath: liveTask.targetPath,
+      },
+    }
+  }
+
   return null
 }
 
