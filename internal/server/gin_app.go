@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Soltus/encv-go/internal/config"
@@ -42,23 +43,14 @@ func NewGinApp(cfg *config.Config) *gin.Engine {
 	r.Use(gin.Recovery())
 
 	r.Use(cors.New(cors.Config{
-		AllowOrigins: []string{
-			// Capacitor WebView（APK 生产构建）默认 origin
-			"https://localhost",
-			// 本地开发 / Web SPA
-			"http://localhost",
-			"http://localhost:8100",  // Ionic dev server
-			"http://localhost:16666", // preview-gateway
-			"http://127.0.0.1:2025",
-			"http://127.0.0.1:2026", // EncvGoService 端口扫描备用
-			"http://127.0.0.1:2027",
-			"http://127.0.0.1:2028",
-			"http://127.0.0.1:2029",
-			"http://127.0.0.1:2030",
-			"http://127.0.0.1:2031",
-			"http://127.0.0.1:2032",
-			"http://127.0.0.1:2033",
-			"http://127.0.0.1:2034",
+		AllowOriginFunc: func(origin string) bool {
+			// 允许所有 localhost / 127.0.0.1 来源（本地开发/测试）
+			if strings.HasPrefix(origin, "http://localhost") ||
+				strings.HasPrefix(origin, "http://127.0.0.1") ||
+				strings.HasPrefix(origin, "https://localhost") {
+				return true
+			}
+			return false
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"},
 		AllowHeaders:     []string{"*"},

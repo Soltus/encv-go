@@ -42,6 +42,9 @@ func init() {
 	addServersCommands(rootCmd)
 	addPlatformSpecificCommands(rootCmd)
 
+	// 全局标志
+	rootCmd.PersistentFlags().StringP("config", "c", "", "Path to config file")
+
 	// 为命令添加标志
 	manifestV2Cmd.Flags().StringP("save", "s", "", "Save Manifest content to a specified JSON file.")
 	kviV2Cmd.Flags().StringP("save", "s", "", "Save KVI content to a specified JSON file.")
@@ -83,7 +86,7 @@ var rootCmd = &cobra.Command{
 			configPath, _ = config.FindConfigPath("")
 		}
 
-		cfg, err = config.Load("")
+		cfg, err = config.Load(configPath)
 		if err != nil {
 			log.Fatalf("Failed to load base config: %v", err)
 		}
