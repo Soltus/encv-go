@@ -796,32 +796,51 @@ func (s *Server) handleSearchFilesGin(c *gin.Context) {
 	slog.Info("API: search files", "path", queryPath, "keyword", keyword, "recursive", recursive)
 
 	if recursive && keyword != "" {
-		var files []mobileservice.FileInfo
-
-		mobileFiles, err := s.mobileSvc.SearchFiles(queryPath, keyword, true)
-		if err != nil {
-			writeServiceErrorGin(c, err)
-			return
-		}
-
+		isMountRoot := queryPath == "/d" || queryPath == "/d/"
 		hasWebdav := s.canUseWebdavIndex() || len(s.webdavFSByMount) > 0
 
-		if hasWebdav {
-			containerExts := make(map[string]bool)
-			for _, ext := range plugins.GetAllRegisteredContainerExtensions() {
-				containerExts[strings.ToLower(ext)] = true
-			}
+		var files []mobileservice.FileInfo
 
-			for _, f := range mobileFiles {
-				ext := strings.ToLower(filepath.Ext(f.Name))
-				if !containerExts[ext] {
-					files = append(files, f)
+		if isMountRoot {
+			allMountFiles, allWebdavFiles := s.searchAcrossAllMounts(keyword, 200)
+
+			if hasWebdav {
+				containerExts := make(map[string]bool)
+				for _, ext := range plugins.GetAllRegisteredContainerExtensions() {
+					containerExts[strings.ToLower(ext)] = true
 				}
+				for _, f := range allMountFiles {
+					ext := strings.ToLower(filepath.Ext(f.Name))
+					if !containerExts[ext] {
+						files = append(files, f)
+					}
+				}
+				files = append(files, allWebdavFiles...)
+			} else {
+				files = allMountFiles
+			}
+		} else {
+			mobileFiles, err := s.mobileSvc.SearchFiles(queryPath, keyword, true)
+			if err != nil {
+				writeServiceErrorGin(c, err)
+				return
 			}
 
-			files = append(files, s.searchWebdavMounts(keyword, queryPath, 200)...)
-		} else {
-			files = mobileFiles
+			if hasWebdav {
+				containerExts := make(map[string]bool)
+				for _, ext := range plugins.GetAllRegisteredContainerExtensions() {
+					containerExts[strings.ToLower(ext)] = true
+				}
+				for _, f := range mobileFiles {
+					ext := strings.ToLower(filepath.Ext(f.Name))
+					if !containerExts[ext] {
+						files = append(files, f)
+					}
+				}
+				files = append(files, s.searchWebdavMounts(keyword, queryPath, 200)...)
+			} else {
+				files = mobileFiles
+			}
 		}
 
 		slog.Info("API: search files result", "path", queryPath, "keyword", keyword, "count", len(files))
@@ -836,6 +855,55 @@ func (s *Server) handleSearchFilesGin(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"files": files})
+}
+
+// searchAcrossAllMounts 在所有挂载点中搜索物理文件和 webdav 虚拟文件。
+// 用于首页（/d）的全局搜索。
+func (s *Server) searchAcrossAllMounts(keyword string, maxPerMount int) ([]mobileservice.FileInfo, []mobileservice.FileInfo) {
+	var physicalFiles []mobileservice.FileInfo
+	var webdavFiles []mobileservice.FileInfo
+
+	if s.mountRegistry == nil {
+		return physicalFiles, webdavFiles
+	}
+
+	for _, m := range s.mountRegistry.List() {
+		if !m.Enabled {
+			continue
+		}
+		mountQueryPath := "/d/" + m.Name
+
+		results, err := s.mobileSvc.SearchFiles(mountQueryPath, keyword, true)
+		if err != nil {
+			slog.Warn("Search in mount failed", "mount", m.Name, "error", err)
+			continue
+		}
+
+		physicalFiles = append(physicalFiles, results...)
+
+		if entry, ok := s.webdavFSByMount[m.Name]; ok {
+			entries := entry.fs.SearchInIndex(keyword, "", maxPerMount)
+			for _, e := range entries {
+				virtualPath := e.Path
+				if strings.HasPrefix(virtualPath, "./") {
+					virtualPath = strings.TrimPrefix(virtualPath, ".")
+				}
+				if !strings.HasPrefix(virtualPath, "/") {
+					virtualPath = "/" + virtualPath
+				}
+				displayPath := "/d/" + m.Name + virtualPath
+				webdavFiles = append(webdavFiles, mobileservice.FileInfo{
+					Name:        e.Name,
+					Path:        displayPath,
+					IsDirectory: e.IsDir,
+					Size:        e.Size,
+					Modified:    e.ModTime,
+				})
+			}
+		}
+	}
+
+	return physicalFiles, webdavFiles
 }
 
 // searchWebdavMounts 在所有 webdav 挂载点中搜索文件。
@@ -866,13 +934,7 @@ func (s *Server) searchWebdavMounts(keyword, queryPath string, maxPerMount int) 
 			continue
 		}
 
-		searchPrefix := subPath
-		if searchPrefix == "" {
-			searchPrefix = "/"
-		}
-		if !strings.HasPrefix(searchPrefix, "/") {
-			searchPrefix = "/" + searchPrefix
-		}
+		searchPrefix := strings.TrimPrefix(subPath, "/")
 
 		entries := entry.fs.SearchInIndex(keyword, searchPrefix, maxPerMount)
 
