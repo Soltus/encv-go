@@ -43,7 +43,15 @@
             <ion-label>任务总数</ion-label>
             <ion-note slot="end">{{ dbInfo?.taskCount ?? '—' }}</ion-note>
           </ion-item>
-          <ion-item v-if="configEngine !== dbInfo?.engine && dbInfo" class="engine-mismatch-item">
+          <ion-item v-if="dbInfo?.fallbackReason" class="engine-mismatch-item">
+            <ion-label class="ion-text-wrap">
+              <p class="mismatch-warning">
+                <ion-icon :icon="warningOutline" class="warn-icon"></ion-icon>
+                {{ dbInfo.fallbackReason }}
+              </p>
+            </ion-label>
+          </ion-item>
+          <ion-item v-else-if="configEngine !== dbInfo?.engine && dbInfo" class="engine-mismatch-item">
             <ion-label class="ion-text-wrap">
               <p class="mismatch-warning">
                 <ion-icon :icon="warningOutline" class="warn-icon"></ion-icon>
@@ -64,7 +72,41 @@
           </ion-list-header>
 
           <template v-for="child in databaseSection.properties" :key="child.key">
-            <template v-if="isFieldVisible(child)">
+            <template v-if="child.key === 'engine'">
+              <div class="config-field config-field-card" :class="{ 'field-modified': isEngineModified }">
+                <div class="field-label-row">
+                  <ion-icon :icon="getFieldIcon(child.key, child.type)" class="field-icon"></ion-icon>
+                  <span class="field-label-text">
+                    {{ fieldLabel(child.key, child.required) }}
+                    <span v-if="child.required" class="required-mark">*</span>
+                  </span>
+                  <ion-button v-if="isEngineModified" fill="clear" size="small" class="reset-btn" @click="resetField(child.key, child)">
+                    <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
+                  </ion-button>
+                </div>
+                <p v-if="child.description" class="field-description-text">{{ child.description }}</p>
+                <div class="preset-cards">
+                  <div
+                    v-for="opt in engineOptions"
+                    :key="opt.value"
+                    class="preset-card"
+                    :class="{
+                      'preset-card-active': configEngine === opt.value,
+                      'preset-card-disabled': opt.disabled
+                    }"
+                    @click="!opt.disabled && handleFieldChange(child.key, opt.value)"
+                  >
+                    <div class="preset-card-title">{{ opt.label }}</div>
+                    <div v-if="opt.disabled" class="preset-card-disabled-text">暂不支持</div>
+                    <div v-else-if="opt.description" class="preset-card-desc">{{ opt.description }}</div>
+                  </div>
+                </div>
+                <div v-if="hasEngineDefault" class="default-hint-row">
+                  {{ t('settings.default') }}: {{ engineDefaultLabel }}
+                </div>
+              </div>
+            </template>
+            <template v-else-if="isFieldVisible(child)">
               <ConfigFieldItem
                 :field="child"
                 :model-value="getFieldValue(['database', child.key])"
@@ -152,8 +194,9 @@ import {
 } from '@ionic/vue'
 import {
   downloadOutline, cloudUploadOutline, saveOutline, warningOutline,
-  save as saveIcon,
+  save as saveIcon, refreshOutline,
 } from 'ionicons/icons'
+import { Capacitor } from '@capacitor/core'
 import { useConfig } from '@/composables/useConfig'
 import {
   getDatabaseInfo, exportDatabase, importDatabase, backupDatabase,
@@ -186,6 +229,41 @@ const engineBadgeColor = computed(() => {
   if (eng === 'turso' || eng === 'libsql') return 'success'
   if (eng === 'sqlite') return 'primary'
   return 'medium'
+})
+
+const isTursoAvailable = computed(() => {
+  return !Capacitor.isNativePlatform()
+})
+
+const engineField = computed<FieldDef | undefined>(() => {
+  return databaseSection.value?.properties?.find(p => p.key === 'engine')
+})
+
+const engineOptions = computed(() => {
+  const opts = engineField.value?.selectOptions ?? []
+  return opts.map(opt => ({
+    ...opt,
+    disabled: (opt.value === 'turso' || opt.value === 'libsql') && !isTursoAvailable.value
+  }))
+})
+
+const isEngineModified = computed(() => {
+  const current = configEngine.value
+  const def = engineField.value?.default
+  if (current === def) return false
+  if (current == null && (def === '' || def === 0 || def === false)) return false
+  return String(current) !== String(def)
+})
+
+const hasEngineDefault = computed(() => {
+  return engineField.value?.default !== undefined
+})
+
+const engineDefaultLabel = computed(() => {
+  const def = engineField.value?.default
+  if (def === undefined) return '-'
+  const opt = engineOptions.value.find(o => o.value === String(def))
+  return opt ? opt.label : String(def)
 })
 
 onMounted(async () => {
@@ -355,5 +433,115 @@ async function handleBackupDatabase() {
   padding: 40px;
   gap: 12px;
   color: var(--ion-color-medium);
+}
+
+.config-field-card {
+  display: block;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  background: transparent;
+}
+
+body.dark .config-field-card {
+  border-bottom-color: #2a2a2c;
+}
+
+.config-field-card.field-modified {
+  border-left: 3px solid var(--ion-color-primary);
+  padding-left: 13px;
+}
+
+.field-icon {
+  font-size: 18px;
+  color: var(--ion-color-medium);
+  flex-shrink: 0;
+}
+
+.field-label-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.field-label-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field-description-text {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+  white-space: normal;
+  margin: 2px 0 0;
+}
+
+.default-hint-row {
+  font-size: 11px;
+  color: var(--ion-color-medium);
+  margin-top: 6px;
+}
+
+.required-mark {
+  color: var(--ion-color-danger);
+  margin-left: 2px;
+}
+
+.reset-btn {
+  --padding-start: 4px;
+  --padding-end: 4px;
+  min-width: 28px;
+  min-height: 28px;
+  margin: 0;
+}
+
+.reset-btn ion-icon {
+  font-size: 16px;
+}
+
+.preset-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.preset-card {
+  padding: 10px 8px;
+  border: 2px solid var(--ion-color-light-shade, #e0e0e0);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  background: var(--ion-background-color, transparent);
+}
+
+.preset-card-active {
+  border-color: var(--ion-color-primary);
+  background: rgba(var(--ion-color-primary-rgb), 0.08);
+}
+
+.preset-card-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+
+.preset-card-disabled-text {
+  font-size: 10px;
+  color: var(--ion-color-medium);
+  margin-top: 2px;
+}
+
+.preset-card-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.preset-card-desc {
+  font-size: 10px;
+  color: var(--ion-color-medium);
+  margin-top: 2px;
 }
 </style>

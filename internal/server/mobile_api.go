@@ -653,6 +653,35 @@ func (s *Server) handleCancelRunGin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "cancelled", "runId": runId})
 }
 
+// handleResumeRunGin 恢复指定 runId 下所有 paused 的 task。
+//
+// 路由：POST /api/runs/:runId/resume
+func (s *Server) handleResumeRunGin(c *gin.Context) {
+	runId := c.Param("runId")
+	if runId == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "runId is required"})
+		return
+	}
+	count, err := s.mobileSvc.GetTaskManager().ResumePausedByRunId(runId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "resumed", "runId": runId, "resumed": count})
+}
+
+// handleResumeAllPausedGin 恢复所有 paused 状态的 task。
+//
+// 路由：POST /api/tasks/resume-all
+func (s *Server) handleResumeAllPausedGin(c *gin.Context) {
+	count, err := s.mobileSvc.GetTaskManager().ResumeAllPaused()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "resumed", "resumed": count})
+}
+
 // handleGetRunSummaryGin 返回指定 run 的聚合计数（SQL COUNT + GROUP BY status）。
 //
 // 🆕 2026-06-23 spec backend-sql-authority-view-pagination Task 1.4：
@@ -1974,8 +2003,21 @@ func (s *Server) handlePluginFilesStreamGin(c *gin.Context) {
 //	}
 func (s *Server) handleDatabaseInfo(c *gin.Context) {
 	tm := s.mobileSvc.GetTaskManager()
-	engine := tm.GetStoreEngine()
+	actualEngine := tm.GetStoreEngine()
+	requestedEngine := s.cfg.Database.Engine
+	if requestedEngine == "" {
+		requestedEngine = "sqlite"
+	}
 	concurrency := tm.GetStoreConcurrency()
+
+	fallbackReason := ""
+	if requestedEngine != actualEngine {
+		if requestedEngine == "turso" || requestedEngine == "libsql" {
+			fallbackReason = "当前平台不支持 Turso/LibSQL 引擎，已自动回退到 SQLite"
+		} else {
+			fallbackReason = "引擎初始化失败，已自动回退到 SQLite"
+		}
+	}
 
 	// 统计任务数
 	totalTasks := 0
@@ -1994,10 +2036,12 @@ func (s *Server) handleDatabaseInfo(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"engine":        engine,
-		"concurrency":   concurrency,
-		"taskCount":     totalTasks,
-		"hasCalibration": hasCalibration,
+		"engine":           actualEngine,
+		"requestedEngine":  requestedEngine,
+		"fallbackReason":   fallbackReason,
+		"concurrency":      concurrency,
+		"taskCount":        totalTasks,
+		"hasCalibration":   hasCalibration,
 	})
 }
 

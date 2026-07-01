@@ -496,7 +496,7 @@ func (tm *TaskManager) loadTasks() {
 				now := time.Now()
 				t.CompletedAt = &now
 			case "queued":
-				// 保持 queued，worker 会自动取出执行
+				t.Status = "paused"
 			}
 			t.cancelFn = nil
 			t.Speed = ""
@@ -530,7 +530,7 @@ func (tm *TaskManager) loadTasks() {
 			now := time.Now()
 			t.CompletedAt = &now
 		case "queued":
-			// 保持 queued，worker 会自动取出执行
+			t.Status = "paused"
 		}
 		t.cancelFn = nil
 		t.Speed = ""
@@ -1074,7 +1074,7 @@ func (tm *TaskManager) GetRunSummary(runId string) RunSummary {
 			summary.Failed += c
 		case "running":
 			summary.Running += c
-		case "queued", "pending":
+		case "queued", "pending", "paused":
 			summary.Pending += c
 		case "cancelled":
 			summary.Cancelled += c
@@ -1227,6 +1227,82 @@ func (tm *TaskManager) CancelByRunId(runId string) error {
 	}
 
 	return nil
+}
+
+// ResumeTask 恢复单个暂停的任务（paused → queued）。
+func (tm *TaskManager) ResumeTask(id string) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	task, ok := tm.tasks[id]
+	if !ok {
+		return errors.New("task not found")
+	}
+
+	if task.Status != "paused" {
+		return fmt.Errorf("cannot resume task with status %q", task.Status)
+	}
+
+	task.Status = "queued"
+	task.Error = ""
+
+	if tm.broadcaster != nil {
+		tm.broadcaster.Broadcast("task:update", map[string]interface{}{
+			"id":     id,
+			"status": "queued",
+		})
+	}
+
+	tm.saveTaskSingle(task)
+	return nil
+}
+
+// ResumePausedByRunId 恢复指定 runId 下所有 paused 的 task。
+func (tm *TaskManager) ResumePausedByRunId(runId string) (int, error) {
+	if runId == "" {
+		return 0, errors.New("runId is required")
+	}
+
+	tm.mu.Lock()
+	var toResume []*MobileTask
+	for _, task := range tm.tasks {
+		if task.RunId != runId {
+			continue
+		}
+		if task.Status != "paused" {
+			continue
+		}
+		toResume = append(toResume, task)
+	}
+	tm.mu.Unlock()
+
+	for _, task := range toResume {
+		if err := tm.ResumeTask(task.ID); err != nil {
+			slog.Warn("ResumePausedByRunId: resume task failed", "taskId", task.ID, "runId", runId, "error", err)
+		}
+	}
+
+	return len(toResume), nil
+}
+
+// ResumeAllPaused 恢复所有 paused 状态的 task。
+func (tm *TaskManager) ResumeAllPaused() (int, error) {
+	tm.mu.RLock()
+	var toResume []string
+	for id, task := range tm.tasks {
+		if task.Status == "paused" {
+			toResume = append(toResume, id)
+		}
+	}
+	tm.mu.RUnlock()
+
+	for _, id := range toResume {
+		if err := tm.ResumeTask(id); err != nil {
+			slog.Warn("ResumeAllPaused: resume task failed", "taskId", id, "error", err)
+		}
+	}
+
+	return len(toResume), nil
 }
 
 // isTerminalStatus 判断 task 状态是否为终态（不可再变更）。

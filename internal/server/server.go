@@ -669,6 +669,8 @@ func (s *Server) Start(version string) (string, error) {
 	r.POST("/api/tasks/predict-plugin", s.handlePredictPluginGin)
 	r.POST("/api/tasks/:id/cancel", s.handleCancelTaskGin)
 	r.POST("/api/runs/:runId/cancel", s.handleCancelRunGin) // 🆕 2026-06-23 批量取消整个 run
+	r.POST("/api/runs/:runId/resume", s.handleResumeRunGin) // 恢复指定 run 下所有暂停任务
+	r.POST("/api/tasks/resume-all", s.handleResumeAllPausedGin) // 恢复所有暂停任务
 	r.GET("/api/runs/:runId/summary", s.handleGetRunSummaryGin) // 🆕 2026-06-23 run 聚合计数（SQL COUNT）
 	r.GET("/api/runs", s.handleListRunsGin)                    // 🆕 2026-06-23 run 列表（带 summary）
 	r.POST("/api/tasks/:id/retry", s.handleRetryTaskGin)
