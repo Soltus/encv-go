@@ -180,6 +180,23 @@ func (tm *TaskManager) GetStoreConcurrency() int {
 	return tm.store.ConcurrencyHint()
 }
 
+// ReplaceStore 替换底层存储引擎。
+// 用于启动时调用，将内存中的任务持久化到新 store。
+// 注意：调用时需确保任务处理已暂停。
+func (tm *TaskManager) ReplaceStore(store tasksystem.Store) error {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	// 将内存中现有任务持久化到新 store
+	if store != nil && len(tm.tasks) > 0 {
+		for _, task := range tm.tasks {
+			td := mobileTaskToData(task)
+			_ = store.CreateTask(td)
+		}
+	}
+	tm.store = store
+	return nil
+}
+
 // GetStore 返回底层 Store 接口（供高级操作使用）。
 // 返回 nil 表示未启用持久化（内存模式）。
 func (tm *TaskManager) GetStore() tasksystem.Store {

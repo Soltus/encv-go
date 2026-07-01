@@ -39,6 +39,9 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/plugins"
 	"github.com/Soltus/encv-go/internal/v2/service"
 	"github.com/Soltus/encv-go/internal/webdav"
+	"github.com/Soltus/encv-go/pkg/tasksystem"
+	sqlitestore "github.com/Soltus/encv-go/pkg/tasksystem/store/sqlite"
+	tursostore "github.com/Soltus/encv-go/pkg/tasksystem/store/tursogo"
 	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	goWebdav "golang.org/x/net/webdav"
@@ -312,6 +315,42 @@ func NewServer(ctx context.Context, configPath string) *Server {
 		&primaryRootProvider{reg: s.mountRegistry},
 		&taskMountResolver{reg: s.mountRegistry},
 	)
+
+	// 🆕 2026-07-01：数据库存储引擎初始化
+	// 根据 config.database.engine 选择存储引擎：
+	//   - memory / "": 内存模式（默认，向后兼容）
+	//   - sqlite: SQLite 本地文件
+	//   - turso / libsql: Turso 本地文件（MVCC 并发写）
+	if cfg.Database.Engine != "" && cfg.Database.Engine != "memory" {
+		var dbStore tasksystem.Store
+		var err error
+		dbPath := cfg.Database.Path
+		if dbPath == "" {
+			dbPath = filepath.Join(s.servingDir, "encv-tasks.db")
+		}
+		switch cfg.Database.Engine {
+		case "sqlite":
+			dbStore, err = sqlitestore.New(dbPath)
+			if err != nil {
+				slog.Error("failed to init sqlite store, falling back to memory", "err", err)
+			}
+		case "turso", "libsql":
+			dbStore, err = tursostore.NewLocal(dbPath)
+			if err != nil {
+				slog.Error("failed to init turso store, falling back to memory", "err", err)
+			}
+		default:
+			slog.Warn("unknown database engine, using memory", "engine", cfg.Database.Engine)
+		}
+		if dbStore != nil {
+			tm := mobileSvc.GetTaskManager()
+			if err := tm.ReplaceStore(dbStore); err != nil {
+				slog.Error("failed to replace store", "err", err)
+			} else {
+				slog.Info("database store initialized", "engine", cfg.Database.Engine, "path", dbPath)
+			}
+		}
+	}
 
 	// 剧本外置 spec：若 agent_settings.mock_scenarios_dir 非空，
 	// 用 ScenarioLoader 加载 YAML/JSON 剧本，注入到 MockEngine。
