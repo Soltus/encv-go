@@ -386,15 +386,17 @@ jobs:
             fi
           fi
           
-          # 检查二进制是否链接了 libsql
-          NM="/usr/local/lib/android/sdk/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
-          if [ -x "$NM" ]; then
-            if $NM -D "${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64" 2>/dev/null | grep -q "libsql"; then
-              echo "✅ Go binary dynamically links libsql"
-            elif $NM "${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64" 2>/dev/null | grep -q "libsql"; then
-              echo "✅ Go binary statically links libsql"
+          # 检查二进制是否包含 libsql
+          # 注意：-ldflags="-s -w" 会 strip 符号表，nm 找不到符号。
+          # 用 strings 搜索 libsql_ 前缀的函数名作为替代检测方式。
+          BIN_PATH="${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64"
+          if [ -f "$BIN_PATH" ]; then
+            if strings "$BIN_PATH" 2>/dev/null | grep -q "libsql_open_file\|libsql_sync2\|libsql_column_count"; then
+              echo "✅ Go binary contains libsql symbols (statically linked)"
+            elif strings "$BIN_PATH" 2>/dev/null | grep -q "sql_experimental\|libsql\.so"; then
+              echo "✅ Go binary references libsql (dynamically linked)"
             else
-              echo "ℹ️  Go binary does not contain libsql symbols (SQLite-only build)"
+              echo "ℹ️  Go binary does not contain libsql strings (SQLite-only build)"
             fi
           fi
 

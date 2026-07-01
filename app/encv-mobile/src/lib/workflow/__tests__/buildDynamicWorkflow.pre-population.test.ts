@@ -239,17 +239,20 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
    * submitRun 立即返回 run 对象。测试需要显式等待 IIFE 完成才能检查 store/batchCallLog。
    *
    * 两阶段等待：
-   *   1. 等待所有 batchCreateTasks 调用被发起（batchCallLog.length === jobCount）
-   *   2. 等待所有 task 被 push 到 store（store.tasks.length === totalSpecs）
+   *   1. 等待第一层所有 batchCreateTasks 调用被发起
+   *   2. 等待所有 task 被 push 到 store（batchCreateTasks mock 有 50ms 延迟）
    *
    * 只等阶段 1 不够——mock 的 batchCallLog.push() 在 delay 之前执行，
    * 但 task 在 delay 之后才返回并 appendTask 到 store。
    * 如果不等阶段 2，IIFE 会泄漏到下一个 test，导致跨 test 数据污染。
+   *
+   * 📝 注意：submitRun 只启动第一层 jobs（DAG 分层），第二层由 scheduleDependentJobs
+   *   在前一层完成后驱动。所以默认 batchCallLog.length === 第一层 job 数。
    */
-  async function waitForSubmitRunComplete(jobCount: number): Promise<void> {
-    // 阶段 1：等待所有 batchCreateTasks 调用被发起
+  async function waitForSubmitRunComplete(firstLayerJobCount: number = 1): Promise<void> {
+    // 阶段 1：等待第一层所有 batchCreateTasks 调用被发起
     await vi.waitFor(() => {
-      expect(batchCallLog.length, `等待 batchCreateTasks 调用 ${jobCount} 次`).toBe(jobCount)
+      expect(batchCallLog.length, `等待 batchCreateTasks 调用 ${firstLayerJobCount} 次（第一层）`).toBe(firstLayerJobCount)
     }, { timeout: 3000, interval: 10 })
     // 阶段 2：等待所有 task 被 push 到 store（batchCreateTasks mock 有 50ms 延迟）
     const totalSpecs = batchCallLog.reduce((sum, c) => sum + c.specCount, 0)
@@ -259,15 +262,16 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
   }
 
   // ==================== T1: batchCreateTasks 只调 1 次，所有 task 一次性 push ====================
-  it('T1: submitRun 后 batchCreateTasks 只调 1 次，store 一次性有 N 个真实 task（不慢慢累加）', async () => {
+  it('T1: submitRun 后 batchCreateTasks 只调 1 次（第一层），store 一次性有 N 个真实 task（不慢慢累加）', async () => {
     const wfDef = buildTestWorkflowDef(buildRealPlugins())
     workflowStore.createDefinition(wfDef)
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
-    const jobCount = wfDef.jobs.length
     // 🆕 Task 3 fire-and-forget：等待 IIFE 完成（batchCreateTasks mock 有 50ms 延迟）
-    await waitForSubmitRunComplete(jobCount)
-    expect(batchCallLog.length, `batchCreateTasks 调用 ${jobCount} 次（每个 job 1 次，不是每个 step 1 次）`).toBe(jobCount)
+    await waitForSubmitRunComplete()
+    // submitRun 只启动第一层 jobs（DAG 分层），encrypt-all 是第一层（1 个 job）
+    const firstLayerJobCount = 1
+    expect(batchCallLog.length, `batchCreateTasks 调用 ${firstLayerJobCount} 次（第一层 jobs，不是全部 jobs）`).toBe(firstLayerJobCount)
 
     // 2. store 一次性有所有 task（不慢慢累加）
     const totalTasks = store.tasks.length
@@ -293,7 +297,7 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
     // 🆕 Task 3 fire-and-forget：等待 IIFE 完成
-    await waitForSubmitRunComplete(wfDef.jobs.length)
+    await waitForSubmitRunComplete()
 
     // 所有 task ID 都不以 client- 开头（后端生成 UUID）
     for (const t of store.tasks) {
@@ -314,7 +318,7 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
     // 🆕 Task 3 fire-and-forget：等待 IIFE 完成
-    await waitForSubmitRunComplete(wfDef.jobs.length)
+    await waitForSubmitRunComplete()
 
     const tasksBefore = store.tasks.length
 
@@ -332,7 +336,7 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
     // 🆕 Task 3 fire-and-forget：等待 IIFE 完成
-    await waitForSubmitRunComplete(wfDef.jobs.length)
+    await waitForSubmitRunComplete()
     wrapper = mountDiag()
     await nextTick()
 
@@ -359,7 +363,7 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
-    await waitForSubmitRunComplete(wfDef.jobs.length)
+    await waitForSubmitRunComplete()
 
     // 1. 所有 task 的 runId 非空（后端 CreateWithRunMeta 广播时序修复后 runId 必带）
     const emptyRunIdTasks = store.tasks.filter((t) => !t.runId)
@@ -381,7 +385,7 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
     workflowStore.createDefinition(wfDef)
 
     await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
-    await waitForSubmitRunComplete(wfDef.jobs.length)
+    await waitForSubmitRunComplete()
 
     // 1. groupedTasksByRunId 只有 1 个 group（所有 task 共享同一个 runId）
     const groups = store.groupedTasksByRunId
@@ -428,7 +432,7 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
     expect(store.tasks.length, 'batchCreateTasks 后台执行中，store 暂无 task').toBe(0)
 
     // 5. 等待 IIFE 完成（batchCreateTasks 200ms 延迟后 task 才到 store）
-    await waitForSubmitRunComplete(wfDef.jobs.length)
+    await waitForSubmitRunComplete()
     expect(store.tasks.length, 'IIFE 完成后 store 有所有 task').toBeGreaterThan(0)
   })
 
@@ -438,7 +442,7 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
     workflowStore.createDefinition(wfDef)
 
     const run = await service.submitRun({ workflow: wfDef, triggeredBy: 'automation' })
-    await waitForSubmitRunComplete(wfDef.jobs.length)
+    await waitForSubmitRunComplete()
 
     // 取消前：所有 task 都是 queued 状态（非终态）
     const tasksBefore = store.tasks.length
