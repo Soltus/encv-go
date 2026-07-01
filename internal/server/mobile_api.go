@@ -2259,10 +2259,12 @@ func (s *Server) handleVectorSearchTasksGin(c *gin.Context) {
 // Query 参数：
 //   - q: 搜索关键词
 //   - path: 搜索路径
+//   - recursive: 是否递归搜索（true/false）
 //   - limit: 返回数量
 func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 	query := c.Query("q")
 	path := utils.DecodeGinQueryParam(c.Query("path"))
+	recursive := c.Query("recursive") == "true"
 	limit := 50
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
@@ -2275,8 +2277,8 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 		return
 	}
 
-	// 先调用现有文件搜索拿到候选结果
-	files, err := s.mobileSvc.SearchFiles(path, query, true)
+	// 先调用现有文件搜索拿到候选结果（遵守递归设置）
+	files, err := s.mobileSvc.SearchFiles(path, query, recursive)
 	if err != nil {
 		writeServiceErrorGin(c, err)
 		return

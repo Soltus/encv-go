@@ -1305,9 +1305,9 @@ export async function searchTasksVector(query: string, limit = 50): Promise<Vect
 /**
  * 文件向量搜索（语义搜索 + 现有搜索结果重排序）
  */
-export async function searchFilesVector(path: string, query: string, limit = 50): Promise<VectorSearchResult<FileItem>> {
+export async function searchFilesVector(path: string, query: string, recursive = true, limit = 50): Promise<VectorSearchResult<FileItem>> {
   const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/search/files?q=${encodeURIComponent(query)}&path=${proxySafeEncode(path)}&limit=${limit}`)
+  const response = await fetch(`${baseUrl}/api/search/files?q=${encodeURIComponent(query)}&path=${proxySafeEncode(path)}&recursive=${recursive}&limit=${limit}`)
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`)
   }

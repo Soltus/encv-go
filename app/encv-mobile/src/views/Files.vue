@@ -1067,7 +1067,7 @@ async function performSearch() {
     // 优先使用向量搜索（语义搜索 + 中文优化）
     let results: FileItem[] = []
     try {
-      const vecResult = await searchFilesVector(currentPath.value, query, 200)
+      const vecResult = await searchFilesVector(currentPath.value, query, searchRecursive.value, 200)
       results = vecResult.results
     } catch {
       // 向量搜索失败，fallback 到原有搜索

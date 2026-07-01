@@ -11,9 +11,10 @@
  * - 视图只 import useTaskStore（通过 useTasksList 薄壳 re-export）
  * - 不需要 useTaskFilter / useTaskFiltering 等独立 composable
  */
-import { computed, ref, shallowRef, triggerRef } from 'vue'
+import { computed, ref, shallowRef, triggerRef, watch } from 'vue'
 import { defineStore } from 'pinia'
 import type { EncvTask, TaskStatus, TaskType } from '@/api/encv'
+import { searchTasksVector } from '@/api/encv'
 import {
   loadAllTasks,
   bulkPutTasks as persistBulkPut,
@@ -77,6 +78,45 @@ export const useTaskStore = defineStore('task', () => {
   const searchQuery = ref('')
   const filterDatePreset = ref<DatePreset>('all')
   const filterDateRange = ref<{ from?: string; to?: string }>({})
+
+  // ============ 后端向量搜索 ============
+  const isBackendSearching = ref(false)
+  const backendSearchResultIds = ref<Set<string> | null>(null)
+  let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+  let searchGen = 0
+
+  async function runBackendSearch(q: string): Promise<void> {
+    const gen = ++searchGen
+    if (!q.trim()) {
+      backendSearchResultIds.value = null
+      isBackendSearching.value = false
+      return
+    }
+    isBackendSearching.value = true
+    try {
+      const result = await searchTasksVector(q, 500)
+      if (gen !== searchGen) return
+      const idSet = new Set<string>()
+      for (const t of result.results) {
+        idSet.add(t.id)
+      }
+      backendSearchResultIds.value = idSet
+    } catch {
+      if (gen !== searchGen) return
+      backendSearchResultIds.value = null
+    } finally {
+      if (gen === searchGen) {
+        isBackendSearching.value = false
+      }
+    }
+  }
+
+  watch(searchQuery, (q) => {
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+    searchDebounceTimer = setTimeout(() => {
+      runBackendSearch(q)
+    }, 200)
+  })
 
   // ============ Hydrate ============
   async function hydrate(): Promise<void> {
@@ -418,6 +458,7 @@ export const useTaskStore = defineStore('task', () => {
     const types = filterTypes.value
     const statuses = filterStatuses.value
     const triggeredBy = filterTriggeredBy.value
+    const useBackendSearch = hasSearch && backendSearchResultIds.value !== null
     const out: EncvTask[] = []
     for (const t of tasks.value) {
       if (plugins.length > 0 && !plugins.includes(t.pluginName || '__unknown__')) continue
@@ -432,11 +473,15 @@ export const useTaskStore = defineStore('task', () => {
         if (toTs && t.createdAt >= toTs) continue
       }
       if (hasSearch) {
-        const name = (t.targetPath?.split('/').pop() ?? t.sourcePath?.split('/').pop() ?? t.id.slice(0, 8)).toLowerCase()
-        const plugin = (t.pluginName || '').toLowerCase()
-        const error = (t.error || '').toLowerCase()
-        const id = t.id.toLowerCase()
-        if (!name.includes(q) && !plugin.includes(q) && !error.includes(q) && !id.includes(q)) continue
+        if (useBackendSearch) {
+          if (!backendSearchResultIds.value!.has(t.id)) continue
+        } else {
+          const name = (t.targetPath?.split('/').pop() ?? t.sourcePath?.split('/').pop() ?? t.id.slice(0, 8)).toLowerCase()
+          const plugin = (t.pluginName || '').toLowerCase()
+          const error = (t.error || '').toLowerCase()
+          const id = t.id.toLowerCase()
+          if (!name.includes(q) && !plugin.includes(q) && !error.includes(q) && !id.includes(q)) continue
+        }
       }
       out.push(t)
     }
@@ -579,6 +624,8 @@ export const useTaskStore = defineStore('task', () => {
     // 视图 state
     viewMode, sortBy, filterPlugins, filterTypes, filterStatuses, filterTriggeredBy,
     searchQuery, filterDatePreset, filterDateRange,
+    // 后端向量搜索
+    isBackendSearching,
     // 派生（raw，不含视图 kind/counters/displayData）
     tasksById, tasksByRunId, availablePlugins, hasCompletedTasks,
     filteredTasks, sortedTasks, groupedTasksByRunId, flatTaskList,
