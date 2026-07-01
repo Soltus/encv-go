@@ -230,20 +230,6 @@ const engineBadgeColor = computed(() => {
   return 'medium'
 })
 
-const isTursoAvailable = computed(() => {
-  const engines = dbInfo.value?.availableEngines
-  if (!engines) return false
-  const turso = engines.find((e: any) => e.name === 'turso')
-  return turso?.available ?? false
-})
-
-const isLibsqlAvailable = computed(() => {
-  const engines = dbInfo.value?.availableEngines
-  if (!engines) return false
-  const libsql = engines.find((e: any) => e.name === 'libsql')
-  return libsql?.available ?? false
-})
-
 const engineField = computed<FieldDef | undefined>(() => {
   return databaseSection.value?.properties?.find(p => p.key === 'engine')
 })

@@ -1,9 +1,15 @@
-// Package libsql 提供 tasksystem.Store 的 libSQL（Turso 兼容层）实现。
+// Package libsql 提供 tasksystem.Store 的 LibSQL 引擎实现。
 //
-// libSQL 是 SQLite 的 fork，支持 embedded replica（本地副本 + 远程同步）。
-// 本实现是 Turso 生态的兼容层驱动，推荐新项目使用 tursogo 正统引擎。
+// LibSQL 是 SQLite 的 fork，核心特性：
+//   - MVCC 并发写（多 writer 不阻塞，告别 "database is locked"）
+//   - 异步 I/O
+//   - 支持本地文件、远程连接、Embedded Replicas
+//   - CGO 绑定，支持桌面和 Android 平台
 //
 // 使用方式：
+//
+//	// 本地文件模式
+//	store, err := libsql.NewLocal("app.db")
 //
 //	// 远程连接（HTTP）
 //	store, err := libsql.New("libsql://your-db.turso.io", "your-auth-token")
@@ -23,23 +29,57 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/tursodatabase/go-libsql" // Turso/libSQL driver
+	_ "github.com/Soltus/encv-go/pkg/libsql" // LibSQL CGO driver
 
 	"github.com/Soltus/encv-go/pkg/tasksystem"
 	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
 )
 
-// Store Turso 存储实现。
+// Store LibSQL 存储实现。
 //
-// 由于 Turso/libSQL 与 SQLite 语法高度兼容，
+// 由于 LibSQL 与 SQLite 语法高度兼容，
 // 大部分 SQL 逻辑与 sqlite.Store 一致，仅驱动和连接方式不同。
 type Store struct {
 	db *sql.DB
 }
 
-// New 创建 Turso Store（远程 HTTP 连接）。
+// NewLocal 创建本地文件模式的 LibSQL Store。
 //
-// url: Turso 数据库 URL，格式为 "libsql://your-db.turso.io"
+// path: 本地数据库文件路径，使用 `:memory:` 可创建内存数据库。
+func NewLocal(path string) (*Store, error) {
+	db, err := sql.Open("libsql", path)
+	if err != nil {
+		return nil, fmt.Errorf("open libsql local: %w", err)
+	}
+
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA busy_timeout=30000",
+		"PRAGMA foreign_keys=ON",
+	}
+	for _, p := range pragmas {
+		if _, err := db.Exec(p); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("set pragma %q: %w", p, err)
+		}
+	}
+
+	db.SetMaxOpenConns(8)
+	db.SetMaxIdleConns(4)
+	db.SetConnMaxLifetime(10 * time.Minute)
+
+	store := &Store{db: db}
+	if err := store.initSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("init schema: %w", err)
+	}
+	return store, nil
+}
+
+// New 创建 LibSQL Store（远程 HTTP 连接）。
+//
+// url: LibSQL 数据库 URL，格式为 "libsql://your-db.turso.io"
 // authToken: 认证 token（从 Turso 控制台获取）
 func New(url, authToken string) (*Store, error) {
 	dsn := fmt.Sprintf("%s?authToken=%s", url, authToken)

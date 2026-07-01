@@ -2065,19 +2065,18 @@ func (s *Server) getAvailableEngines() []EngineInfo {
 		{
 			Name:      "libsql",
 			Label:     "LibSQL",
-			Available: !isMobile,
-			Reason:    func() string {
-				if isMobile {
-					return "移动端暂不支持 LibSQL 引擎"
-				}
-				return ""
-			}(),
+			Available: true,
 		},
 		{
 			Name:      "turso",
 			Label:     "Turso",
-			Available: false,
-			Reason:    "Turso 云服务暂未开放",
+			Available: !isMobile,
+			Reason: func() string {
+				if isMobile {
+					return "移动端暂不支持 Turso 引擎"
+				}
+				return ""
+			}(),
 		},
 	}
 }

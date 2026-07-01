@@ -41,6 +41,7 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/service"
 	"github.com/Soltus/encv-go/internal/webdav"
 	"github.com/Soltus/encv-go/pkg/tasksystem"
+	libsqlstore "github.com/Soltus/encv-go/pkg/tasksystem/store/libsql"
 	sqlitestore "github.com/Soltus/encv-go/pkg/tasksystem/store/sqlite"
 	tursostore "github.com/Soltus/encv-go/pkg/tasksystem/store/tursogo"
 	"github.com/dustin/go-humanize"
@@ -340,7 +341,29 @@ func NewServer(ctx context.Context, configPath string) *Server {
 		if err != nil {
 			slog.Error("failed to init sqlite store", "err", err)
 		}
-	case "turso", "libsql":
+	case "libsql":
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("libsql store init panicked, falling back to sqlite", "panic", r)
+					actualEngine = "sqlite"
+					dbStore, err = sqlitestore.New(dbPath)
+					if err != nil {
+						slog.Error("failed to init sqlite fallback", "err", err)
+					}
+				}
+			}()
+			dbStore, err = libsqlstore.NewLocal(dbPath)
+			if err != nil {
+				slog.Error("failed to init libsql store, falling back to sqlite", "err", err)
+				actualEngine = "sqlite"
+				dbStore, err = sqlitestore.New(dbPath)
+				if err != nil {
+					slog.Error("failed to init sqlite fallback", "err", err)
+				}
+			}
+		}()
+	case "turso":
 		if runtime.GOOS == "android" || runtime.GOOS == "ios" {
 			slog.Warn("turso engine not supported on mobile, falling back to sqlite", "os", runtime.GOOS)
 			actualEngine = "sqlite"
