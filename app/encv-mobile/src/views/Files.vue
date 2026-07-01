@@ -331,6 +331,7 @@
                 <ion-chip v-for="tag in file._tags" :key="tag" size="small" color="tertiary" outline>{{ tag }}</ion-chip>
               </div>
             </ion-label>
+            <RelevanceBadge v-if="searchQuery && file.score" :score="file.score" slot="end" />
             <ion-badge v-if="file.isEncrypted" color="warning" slot="end">
               ENCV
             </ion-badge>
@@ -510,6 +511,7 @@ import { formatDateTime } from '@/composables/useDateFormat'
 import { useRealtimeTransport } from '@/composables/useRealtimeTransport'
 import { useThumbnailCache } from '@/composables/useThumbnailCache'
 import { useFileFeatures, findClickHandler, isAnyContainerFile, getFeatureIcon } from '@/composables/useFileFeatures'
+import RelevanceBadge from '@/components/shared/RelevanceBadge.vue'
 import { preloadSubtitles } from '@/features/alist-encrypt'
 import { isAlistEncrypted, getSessionPassword, setSessionPassword, loadDecodedName, getDecodedName } from '@/features/alist-encrypt/useAlistEncrypt'
 import { promptPassword } from '@/features/alist-encrypt/password-dialog'

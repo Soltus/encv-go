@@ -490,6 +490,12 @@
               >
                 <ion-icon :icon="closeCircle" slot="icon-only"></ion-icon>
               </ion-button>
+              <!-- 🆕 2026-07-02：向量搜索相关度徽章（搜索激活 + 命中时显示，复用 Files.vue 同款组件） -->
+              <RelevanceBadge
+                v-if="searchQuery && getTaskSearchScore(item.task.id)"
+                :score="getTaskSearchScore(item.task.id)!"
+                slot="end"
+              />
               <ion-spinner
                 v-if="item.task.status === 'cancelling'"
                 slot="end"
@@ -584,6 +590,8 @@ import { formatContainerVersion } from '@/constants/containerVersion'
 import TaskVirtualList from '@/components/tasks/TaskVirtualList.vue'
 // 🆕 2026-06-22 任务诊断面板（真机可见版）：?debug=tasks 启用，显示逃逸诊断 / 视图状态 / runId 聚合
 import TaskDebugPanel from '@/components/tasks/TaskDebugPanel.vue'
+// 🆕 2026-07-02：向量搜索相关度徽章（与 Files.vue 复用同一组件）
+import RelevanceBadge from '@/components/shared/RelevanceBadge.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -676,6 +684,8 @@ const {
   getPluginChipLabel, getTypeChipLabel, getStatusChipLabel, getStatusLabel,
   isPasswordError, toggleWarningDetail, formatWarningDetail,
   getTaskIcon, getTaskColor, getStatusColor, getPhaseLabel,
+  // 🆕 2026-07-02：向量搜索相关度（前端 RelevanceBadge 用）
+  getTaskSearchScore,
   // 🆕 v4 M3
   viewMode, filterDatePreset, filterDateRange,
   displayedItems,

@@ -458,6 +458,8 @@ function createUseTasksList() {
     getPhaseLabel, getTaskDuration, getPluginChipLabel, getTypeChipLabel,
     getStatusChipLabel, isPasswordError, toggleWarningDetail, formatWarningDetail,
     formatDateTime: dateFormat,
+    // 🆕 2026-07-02：向量搜索相关度（前端 RelevanceBadge 用）
+    getTaskSearchScore: store.getTaskSearchScore,
     // 操作
     fetchTasks, refresh, loadMore,
     hasMore, isLoadingMore,

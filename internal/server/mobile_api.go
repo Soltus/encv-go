@@ -2474,7 +2474,10 @@ func (s *Server) handleVectorSearchTasksGin(c *gin.Context) {
 			continue // 过滤掉相似度太低的结果
 		}
 		if task, err := tm.Get(r.RefID); err == nil && task != nil {
-			tasks = append(tasks, task)
+			// 复制一份再设置 score，避免修改 TaskManager 中的原始 task（指针共享）
+			taskCopy := *task
+			taskCopy.SearchScore = r.Score
+			tasks = append(tasks, &taskCopy)
 		}
 	}
 
@@ -2517,6 +2520,26 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 		return
 	}
 
+	// 关键词搜索返回 0 结果时，若向量搜索可用，fallback 到纯向量搜索。
+	//
+	// 场景：搜索 "在线高清"（无空格）应匹配 "在线播放-高清视频.mp4"。
+	// 关键词 "在线高清" 不是文件名字串 → SearchFiles 返回 0 候选；
+	// 但向量搜索 bigram 分词让两者共享 token（在线/高清/在/线/高/清），
+	// 余弦相似度高 → 能匹配。
+	//
+	// 流程：列出搜索路径下所有文件 → 批量索引到向量库 → 向量搜索。
+	if s.searchSvc != nil && len(files) == 0 {
+		vectorResults := s.vectorSearchFallback(path, query, recursive, limit)
+		if len(vectorResults) > 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"files":         vectorResults,
+				"vector_search": true,
+				"total":         len(vectorResults),
+			})
+			return
+		}
+	}
+
 	// 如果向量搜索可用，且结果数量较多，用向量重排序
 	if s.searchSvc != nil && len(files) > 3 {
 		ctx := context.Background()
@@ -2547,6 +2570,7 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 					continue
 				}
 				if f, ok := fileMap[r.RefID]; ok {
+					f.Score = r.Score
 					sortedFiles = append(sortedFiles, f)
 				}
 			}
@@ -2578,6 +2602,81 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 		"vector_search": false,
 		"total":         len(files),
 	})
+}
+
+// vectorSearchFallback 关键词搜索返回 0 结果时的纯向量搜索 fallback。
+//
+// 流程：
+//  1. 列出搜索路径下的所有文件（递归，最多 500 个）
+//  2. 批量索引到向量库
+//  3. 向量搜索 + 过滤 score < 0.05
+//  4. 返回带 score 的 FileInfo 列表
+//
+// 详见 handleVectorSearchFilesGin 中的 fallback 注释。
+func (s *Server) vectorSearchFallback(path, query string, recursive bool, limit int) []mobileservice.FileInfo {
+	if s.searchSvc == nil {
+		return nil
+	}
+
+	// 1. 列出搜索路径下的所有文件
+	var allFiles []mobileservice.FileInfo
+	isMountRoot := path == "/d" || path == "/d/"
+	if isMountRoot {
+		// 遍历所有挂载点
+		for _, m := range s.mountRegistry.List() {
+			if !m.Enabled {
+				continue
+			}
+			files := s.mobileSvc.ListAllFilesForVectorIndex("/d/"+m.Name, recursive, 500-len(allFiles))
+			allFiles = append(allFiles, files...)
+			if len(allFiles) >= 500 {
+				break
+			}
+		}
+	} else {
+		allFiles = s.mobileSvc.ListAllFilesForVectorIndex(path, recursive, 500)
+	}
+
+	if len(allFiles) == 0 {
+		return nil
+	}
+
+	// 2. 批量索引到向量库
+	ctx := context.Background()
+	batch := make([]vectorsearch.FileIndexItem, 0, len(allFiles))
+	for _, f := range allFiles {
+		batch = append(batch, vectorsearch.FileIndexItem{
+			Path:  f.Path,
+			Name:  f.Name,
+			Size:  f.Size,
+			MTime: f.Modified,
+		})
+	}
+	s.searchSvc.IndexFilesBatch(ctx, batch)
+
+	// 3. 向量搜索
+	results, err := s.searchSvc.SearchFiles(ctx, query, limit)
+	if err != nil || len(results) == 0 {
+		return nil
+	}
+
+	// 4. 映射回 FileInfo，附带 score
+	fileMap := make(map[string]mobileservice.FileInfo, len(allFiles))
+	for _, f := range allFiles {
+		fileMap[f.Path] = f
+	}
+
+	var matched []mobileservice.FileInfo
+	for _, r := range results {
+		if r.Score < 0.05 {
+			continue
+		}
+		if f, ok := fileMap[r.RefID]; ok {
+			f.Score = r.Score
+			matched = append(matched, f)
+		}
+	}
+	return matched
 }
 
 // handleSearchStatsGin 获取搜索索引统计信息。

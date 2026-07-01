@@ -88,6 +88,8 @@ export interface FileItem {
   isEncrypted?: boolean
   size?: number
   modified?: string
+  /** 向量搜索相关度分数（0-1，越大越相似）。仅 /api/search/files 返回时填充。 */
+  score?: number
 }
 
 export interface FileListResponse {
@@ -635,6 +637,8 @@ export interface EncvTask {
   originalPath?: string
   // 🆕 性能指标摘要（task:completed 事件推送，仅 completed 状态有值）
   performanceSummary?: PerformanceSummary
+  /** 向量搜索相关度分数（0-1，越大越相似）。仅 /api/search/tasks 返回时填充。 */
+  searchScore?: number
 }
 
 // 🆕 2026-06-23 Task 6.1：支持分页参数（runId / offset / limit）

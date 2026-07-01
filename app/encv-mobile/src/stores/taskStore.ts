@@ -82,6 +82,11 @@ export const useTaskStore = defineStore('task', () => {
   // ============ 后端向量搜索 ============
   const isBackendSearching = ref(false)
   const backendSearchResultIds = ref<Set<string> | null>(null)
+  // 🆕 2026-07-02：保存向量搜索返回的相关度分数（task.id → score）
+  //   - 仅在向量搜索激活（searchQuery 非空且 backendSearchResultIds !== null）时填充
+  //   - 前端 RelevanceBadge 组件据此显示百分比徽章
+  //   - 与 backendSearchResultIds 同生命周期（搜索清空时一起重置）
+  const backendSearchScores = ref<Map<string, number>>(new Map())
   let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let searchGen = 0
 
@@ -89,6 +94,7 @@ export const useTaskStore = defineStore('task', () => {
     const gen = ++searchGen
     if (!q.trim()) {
       backendSearchResultIds.value = null
+      backendSearchScores.value = new Map()
       isBackendSearching.value = false
       return
     }
@@ -97,18 +103,30 @@ export const useTaskStore = defineStore('task', () => {
       const result = await searchTasksVector(q, 500)
       if (gen !== searchGen) return
       const idSet = new Set<string>()
+      const scoreMap = new Map<string, number>()
       for (const t of result.results) {
         idSet.add(t.id)
+        // 🆕 保存 score（API 在向量搜索时填充 searchScore 字段）
+        if (typeof t.searchScore === 'number' && t.searchScore > 0) {
+          scoreMap.set(t.id, t.searchScore)
+        }
       }
       backendSearchResultIds.value = idSet
+      backendSearchScores.value = scoreMap
     } catch {
       if (gen !== searchGen) return
       backendSearchResultIds.value = null
+      backendSearchScores.value = new Map()
     } finally {
       if (gen === searchGen) {
         isBackendSearching.value = false
       }
     }
+  }
+
+  /** 读取 task 在当前向量搜索中的相关度分数（无搜索/未命中返回 undefined） */
+  function getTaskSearchScore(id: string): number | undefined {
+    return backendSearchScores.value.get(id)
   }
 
   watch(searchQuery, (q) => {
@@ -615,6 +633,8 @@ export const useTaskStore = defineStore('task', () => {
     pinnedRunIds.value = new Set()
     viewMode.value = 'group'
     sortBy.value = 'activity'
+    backendSearchResultIds.value = null
+    backendSearchScores.value = new Map()
     clearFilters()
   }
 
@@ -626,6 +646,8 @@ export const useTaskStore = defineStore('task', () => {
     searchQuery, filterDatePreset, filterDateRange,
     // 后端向量搜索
     isBackendSearching,
+    backendSearchScores,
+    getTaskSearchScore,
     // 派生（raw，不含视图 kind/counters/displayData）
     tasksById, tasksByRunId, availablePlugins, hasCompletedTasks,
     filteredTasks, sortedTasks, groupedTasksByRunId, flatTaskList,

@@ -92,6 +92,12 @@ type MobileTask struct {
 
 	CreatedAt   time.Time  `json:"createdAt"`
 	CompletedAt *time.Time `json:"completedAt,omitempty"`
+
+	// 🆕 2026-07-02：向量搜索相关度分数（0-1，越大越相似）。
+	// 仅在向量搜索（/api/search/tasks）返回时填充，普通列表查询不填。
+	// 前端可据此显示相关度徽章（与文件搜索复用 RelevanceBadge 组件）。
+	SearchScore float64 `json:"searchScore,omitempty"`
+
 	cancelFn    context.CancelFunc
 }
 
