@@ -134,13 +134,6 @@
             <p>{{ t('settings.mountsHelp') }}</p>
           </ion-label>
         </ion-item>
-        <ion-item button @click="goDatabase" detail>
-          <ion-icon :icon="hardwareChipOutline" slot="start"></ion-icon>
-          <ion-label>
-            <h3>{{ t('settings.database') }}</h3>
-            <p>{{ dbInfo ? t('settings.engine') + ': ' + dbInfo.engine + ' · ' + dbInfo.taskCount + ' ' + t('settings.tasks') : t('settings.loading') }}</p>
-          </ion-label>
-        </ion-item>
       </ion-list>
 
       <div v-if="configLoading && !configLoaded" class="loading-container">
@@ -150,8 +143,8 @@
 
       <template v-else-if="configLoaded">
         <template v-for="section in schemaFields" :key="section.key">
-          <!-- 过滤掉 server/admin/webdav/proxy/log 配置项，这些有独立页面或冗余 -->
-        <template v-if="!['server', 'admin', 'webdav', 'proxy', 'log'].includes(section.key)">
+          <!-- 过滤掉 server/admin/webdav/proxy/log/database 配置项，这些有独立页面 -->
+        <template v-if="!['server', 'admin', 'webdav', 'proxy', 'log', 'database'].includes(section.key)">
           <ion-list v-if="section.key === 'plugin_settings'">
             <ion-list-header>
               <ion-label>{{ section.sectionTitle ? tSectionTitle(section.sectionTitle) : tField(section.key) }}</ion-label>
@@ -164,6 +157,23 @@
               <ion-icon :icon="settingsOutline" slot="start"></ion-icon>
               <ion-label>
                 <h3>{{ tField(section.key) }}</h3>
+              </ion-label>
+            </ion-item>
+          </ion-list>
+
+          <ion-list v-else-if="section.key === 'database'">
+            <ion-list-header>
+              <ion-label>{{ section.sectionTitle ? tSectionTitle(section.sectionTitle) : tField(section.key) }}</ion-label>
+              <ion-badge slot="end" color="primary" class="scope-badge scope-synced">
+                <ion-icon :icon="cloudOutline" class="scope-badge-icon"></ion-icon>
+                <span class="scope-text">{{ t('settings.synced') }}</span>
+              </ion-badge>
+            </ion-list-header>
+            <ion-item button @click="goDatabase" detail>
+              <ion-icon :icon="hardwareChipOutline" slot="start"></ion-icon>
+              <ion-label>
+                <h3>{{ tField(section.key) }}</h3>
+                <p>{{ dbInfo ? t('settings.engine') + ': ' + dbInfo.engine + ' · ' + dbInfo.taskCount + ' ' + t('settings.tasks') : t('settings.loading') }}</p>
               </ion-label>
             </ion-item>
           </ion-list>

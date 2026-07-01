@@ -318,37 +318,41 @@ func NewServer(ctx context.Context, configPath string) *Server {
 
 	// 🆕 2026-07-01：数据库存储引擎初始化
 	// 根据 config.database.engine 选择存储引擎：
-	//   - memory / "": 内存模式（默认，向后兼容）
-	//   - sqlite: SQLite 本地文件
+	//   - sqlite: SQLite 本地文件（默认，持久化可靠）
 	//   - turso / libsql: Turso 本地文件（MVCC 并发写）
-	if cfg.Database.Engine != "" && cfg.Database.Engine != "memory" {
-		var dbStore tasksystem.Store
-		var err error
-		dbPath := cfg.Database.Path
-		if dbPath == "" {
-			dbPath = filepath.Join(s.servingDir, "encv-tasks.db")
+	// 注意：memory 模式已移除，默认必须持久化
+	dbPath := cfg.Database.Path
+	if dbPath == "" {
+		dbPath = filepath.Join(s.servingDir, "encv-tasks.db")
+	}
+	var dbStore tasksystem.Store
+	var err error
+	switch cfg.Database.Engine {
+	case "", "sqlite":
+		dbStore, err = sqlitestore.New(dbPath)
+		if err != nil {
+			slog.Error("failed to init sqlite store", "err", err)
 		}
-		switch cfg.Database.Engine {
-		case "sqlite":
+	case "turso", "libsql":
+		dbStore, err = tursostore.NewLocal(dbPath)
+		if err != nil {
+			slog.Error("failed to init turso store, falling back to sqlite", "err", err)
 			dbStore, err = sqlitestore.New(dbPath)
-			if err != nil {
-				slog.Error("failed to init sqlite store, falling back to memory", "err", err)
-			}
-		case "turso", "libsql":
-			dbStore, err = tursostore.NewLocal(dbPath)
-			if err != nil {
-				slog.Error("failed to init turso store, falling back to memory", "err", err)
-			}
-		default:
-			slog.Warn("unknown database engine, using memory", "engine", cfg.Database.Engine)
 		}
-		if dbStore != nil {
-			tm := mobileSvc.GetTaskManager()
-			if err := tm.ReplaceStore(dbStore); err != nil {
-				slog.Error("failed to replace store", "err", err)
-			} else {
-				slog.Info("database store initialized", "engine", cfg.Database.Engine, "path", dbPath)
+	default:
+		slog.Warn("unknown database engine, falling back to sqlite", "engine", cfg.Database.Engine)
+		dbStore, err = sqlitestore.New(dbPath)
+	}
+	if dbStore != nil {
+		tm := mobileSvc.GetTaskManager()
+		if err := tm.ReplaceStore(dbStore); err != nil {
+			slog.Error("failed to replace store", "err", err)
+		} else {
+			engine := cfg.Database.Engine
+			if engine == "" {
+				engine = "sqlite"
 			}
+			slog.Info("database store initialized", "engine", engine, "path", dbPath)
 		}
 	}
 

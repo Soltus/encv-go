@@ -288,15 +288,14 @@
       "properties": {
         "engine": {
           "type": "string",
-          "enum": ["memory", "sqlite", "turso", "libsql"],
+          "enum": ["sqlite", "turso", "libsql"],
           "x-enum-labels": {
-            "memory": "内存模式（不持久化）",
             "sqlite": "SQLite（推荐，稳定可靠）",
             "turso": "Turso / LibSQL（高性能，支持 MVCC 并发）",
             "libsql": "LibSQL（同 Turso 引擎）"
           },
           "default": "sqlite",
-          "description": "存储引擎：\n- memory: 纯内存，重启后数据丢失\n- sqlite: SQLite，稳定可靠，单写者\n- turso: Turso / LibSQL，高性能，支持 MVCC 并发写入\n切换引擎后需要重启应用生效。"
+          "description": "存储引擎：\n- sqlite: SQLite，稳定可靠，单写者\n- turso: Turso / LibSQL，高性能，支持 MVCC 并发写入\n切换引擎后需要重启应用生效。"
         },
         "path": {
           "type": "string",

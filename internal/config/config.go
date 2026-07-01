@@ -134,7 +134,7 @@ type Agent struct {
 
 // DatabaseConfig 数据库存储引擎配置。
 type DatabaseConfig struct {
-	// Engine 存储引擎类型："memory" | "sqlite" | "turso" | "libsql"
+	// Engine 存储引擎类型："sqlite" | "turso" | "libsql"
 	// 默认 "sqlite"
 	Engine string `json:"engine"`
 	// Path 数据库文件路径（仅 sqlite/turso 本地模式使用）
@@ -261,6 +261,9 @@ func DefaultConfig() *Config {
 		Log: types.LogConfig{
 			Level: "info",
 			File:  "",
+		},
+		Database: DatabaseConfig{
+			Engine: "sqlite", // 默认 SQLite，持久化可靠
 		},
 	}
 }

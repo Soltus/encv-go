@@ -155,10 +155,10 @@ func (tm *TaskManager) GetPerfStore() *sqlite.Store {
 // ========== 数据库导入 / 导出（跨引擎迁移） ==========
 
 // GetStoreEngine 返回当前使用的存储引擎名称。
-// 可能的值："sqlite" | "turso" | "libsql" | "memory" | "unknown"
+// 可能的值："sqlite" | "turso" | "libsql" | "unknown"
 func (tm *TaskManager) GetStoreEngine() string {
 	if tm.store == nil {
-		return "memory"
+		return "unknown"
 	}
 	switch tm.store.(type) {
 	case *sqlite.Store:
