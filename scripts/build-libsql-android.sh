@@ -163,10 +163,12 @@ build_with_cargo() {
   target_upper=$(echo "$target" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
 
   export "CC_${target//-/_}=${ndk_bin}/${cc_prefix}${api_level}-clang"
+  export "CXX_${target//-/_}=${ndk_bin}/${cc_prefix}${api_level}-clang++"
   export "AR_${target//-/_}=${ndk_bin}/llvm-ar"
   export "CARGO_TARGET_${target_upper}_LINKER=${ndk_bin}/${cc_prefix}${api_level}-clang"
 
   echo "     CC_${target//-/_}=${ndk_bin}/${cc_prefix}${api_level}-clang"
+  echo "     CXX_${target//-/_}=${ndk_bin}/${cc_prefix}${api_level}-clang++"
 
   local build_cmd="cargo build --target $target --release --lib"
   if [[ -n "$toolchain" ]] && [[ "$toolchain" != "none" ]]; then
@@ -346,9 +348,8 @@ for arch in "${ARCHS[@]}"; do
     fi
 
     if [[ -n "$BUILT_LIB" ]]; then
-      local basename
-      basename=$(basename "$BUILT_LIB")
-      cp "$BUILT_LIB" "$out_dir/$basename"
+      lib_basename=$(basename "$BUILT_LIB")
+      cp "$BUILT_LIB" "$out_dir/$lib_basename"
       echo "  ✅ 输出:"
       ls -lh "$out_dir/" | sed 's/^/     /'
       ARCH_SUCCESS=1
