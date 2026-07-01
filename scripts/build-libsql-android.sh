@@ -322,9 +322,10 @@ for arch in "${ARCHS[@]}"; do
     fi
 
     # 查找输出（crate 名 sql-experimental → libsql_experimental.a/.so）
+    # 注意：target 目录在 workspace 根目录（$LIBSQL_SRC_DIR），不在 crate 子目录
     BUILT_LIB=""
     for lib_name in "libsql_experimental.a" "libsql_experimental.so"; do
-      found=$(find "$CRATE_DIR/target/$target/release" -name "$lib_name" -type f 2>/dev/null | head -1)
+      found=$(find "$LIBSQL_SRC_DIR/target/$target/release" -name "$lib_name" -type f 2>/dev/null | head -1)
       if [[ -n "$found" ]]; then
         BUILT_LIB="$found"
         break
@@ -333,24 +334,28 @@ for arch in "${ARCHS[@]}"; do
 
     if [[ -z "$BUILT_LIB" ]]; then
       # 更广泛搜索
-      BUILT_LIB=$(find "$CRATE_DIR/target/$target/release" -name "libsql*.a" -type f 2>/dev/null | head -1)
+      BUILT_LIB=$(find "$LIBSQL_SRC_DIR/target/$target/release" -name "libsql*.a" -type f 2>/dev/null | head -1)
       if [[ -z "$BUILT_LIB" ]]; then
-        BUILT_LIB=$(find "$CRATE_DIR/target/$target/release" -name "libsql*.so" -type f 2>/dev/null | head -1)
+        BUILT_LIB=$(find "$LIBSQL_SRC_DIR/target/$target/release" -name "libsql*.so" -type f 2>/dev/null | head -1)
       fi
     fi
 
+    if [[ -z "$BUILT_LIB" ]]; then
+      # 兜底：也搜一下 crate 目录下的 target（以防不是 workspace）
+      BUILT_LIB=$(find "$CRATE_DIR/target/$target/release" -name "libsql*" -type f 2>/dev/null | head -1)
+    fi
+
     if [[ -n "$BUILT_LIB" ]]; then
-      cp "$BUILT_LIB" "$out_dir/libsql_experimental.a"
-      if [[ "$BUILT_LIB" == *.so ]]; then
-        cp "$BUILT_LIB" "$out_dir/libsql_experimental.so"
-      fi
+      local basename
+      basename=$(basename "$BUILT_LIB")
+      cp "$BUILT_LIB" "$out_dir/$basename"
       echo "  ✅ 输出:"
       ls -lh "$out_dir/" | sed 's/^/     /'
       ARCH_SUCCESS=1
     else
       echo "  ❌ 编译成功但未找到输出库"
       echo "     target/$target/release 目录内容:"
-      ls -lh "$CRATE_DIR/target/$target/release/" 2>/dev/null | sed 's/^/       /' || echo "       (目录不存在)"
+      ls -lh "$LIBSQL_SRC_DIR/target/$target/release/" 2>/dev/null | sed 's/^/       /' | head -30 || echo "       (目录不存在)"
     fi
   fi
 
