@@ -30,6 +30,8 @@ export default {
     'devlogs.logDetailTimestamp': '时间',
     'devlogs.logDetailLevel': '级别',
     'devlogs.logDetailMessage': '内容',
+    'devlogs.logDetailSource': '来源',
+    'devlogs.logDetailStack': '堆栈',
     'devlogs.logDetailCopy': '复制',
     'devlogs.logDetailCopied': '已复制',
     'devlogs.logDetailClose': '关闭',

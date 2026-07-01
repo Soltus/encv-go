@@ -301,6 +301,24 @@ export default {
     // 耗时：ms 占位符会被 formatDuration(毫秒) 替换为 "1.2s" / "850ms" 友好格式
     'agent.toolDuration': '耗时 {ms}',
     'agent.toolDurationLong': '耗时较长',
+
+    // FileReferenceChip 操作
+    'agent.fileRefCopyPath': '复制路径',
+    'agent.fileRefCopyRelative': '复制相对路径',
+    'agent.fileRefOpenInFiles': '在文件中打开',
+
+    // 滚动到底部按钮
+    'agent.scrollToBottom': '滚动到底部',
+
+    // 关闭按钮
+    'agent.close': '关闭',
+
+    // Tool cards 标题
+    'agent.toolCards.fileContentTitle': '文件内容',
+    'agent.toolCards.fileListTitle': '文件列表',
+    'agent.toolCards.fileStatTitle': '文件信息',
+    'agent.toolCards.mountsTitle': '挂载点',
+    'agent.toolCards.parseFailed': '数据解析失败',
   },
   en: {
     'agent.title': 'AI Assistant',
@@ -587,5 +605,23 @@ export default {
     // e.g. "1.2s" / "850ms" / "1m 23s"
     'agent.toolDuration': 'took {ms}',
     'agent.toolDurationLong': 'took a long time',
+
+    // FileReferenceChip actions
+    'agent.fileRefCopyPath': 'Copy path',
+    'agent.fileRefCopyRelative': 'Copy relative path',
+    'agent.fileRefOpenInFiles': 'Open in Files',
+
+    // Scroll to bottom button
+    'agent.scrollToBottom': 'Scroll to bottom',
+
+    // Close button
+    'agent.close': 'Close',
+
+    // Tool cards titles
+    'agent.toolCards.fileContentTitle': 'File Content',
+    'agent.toolCards.fileListTitle': 'File List',
+    'agent.toolCards.fileStatTitle': 'File Info',
+    'agent.toolCards.mountsTitle': 'Mounts',
+    'agent.toolCards.parseFailed': 'Parse failed',
   },
 }

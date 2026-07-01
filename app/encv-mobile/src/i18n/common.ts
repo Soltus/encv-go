@@ -186,12 +186,15 @@ export default {
     'devtools.testCasesGenerated': '个用例（已动态生成）',
     'devtools.runAllTests': '运行全部测试',
     'devtools.runAllTestsDesc': '逐个提交任务到后端，触发者标签登记为「自动化」',
+    'devtools.clickToViewInTasks': '点击在任务中查看报告',
+    'virtualLogList.clickToExpand': '点击展开',
 
     'filePreview.loading': '正在加载文件...',
     'filePreview.loadError': '加载失败',
     'filePreview.retry': '重试',
     'filePreview.noPath': '未指定文件路径',
     'filePreview.copied': '已复制到剪贴板',
+    'filePreview.unsupported': '不支持预览该文件类型',
 
     'fileInfo.name': '文件名',
     'fileInfo.path': '路径',
@@ -462,6 +465,7 @@ export default {
     // 🆕 2026-06-17：PluginTestsDetail.vue 页面 title 使用
     'devtools.pluginTests': 'Plugin Tests',
     'devtools.clickToViewInTasks': 'Click to view report in Tasks',
+    'virtualLogList.clickToExpand': 'Click to expand',
     // 🆕 2026-06-17：AutomationTestsHub.vue 内部子项 i18n key
     'devtools.automationHub.testEntries': 'Test Entries',
     'devtools.automationHub.pluginTests': 'Plugin Tests',
@@ -505,6 +509,7 @@ export default {
     'filePreview.retry': 'Retry',
     'filePreview.noPath': 'No file path specified',
     'filePreview.copied': 'Copied to clipboard',
+    'filePreview.unsupported': 'Preview not supported for this file type',
 
     'fileInfo.name': 'Name',
     'fileInfo.path': 'Path',

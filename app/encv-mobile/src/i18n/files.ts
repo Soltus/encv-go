@@ -46,6 +46,8 @@ export default {
     'files.noSearchResultsDesc': '未找到匹配的文件，尝试切换递归搜索。',
     'files.newFolderName': '文件夹名称',
     'files.createFolderFailed': '创建文件夹失败',
+    'files.pathNotFound': '路径不存在',
+    'files.yes': '是',
   },
   en: {
     'files.title': 'Files',
@@ -94,5 +96,7 @@ export default {
     'files.noSearchResultsDesc': 'No matching files found. Try enabling recursive search.',
     'files.newFolderName': 'Folder name',
     'files.createFolderFailed': 'Failed to create folder',
+    'files.pathNotFound': 'Path not found',
+    'files.yes': 'Yes',
   },
 }
