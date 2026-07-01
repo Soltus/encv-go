@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# 交叉编译 LibSQL 为 Android 平台的动态库
+# 交叉编译 LibSQL 为 Android 平台的静态库
 #
 # 用法：
 #   ./scripts/build-libsql-android.sh [--ndk <path>] [--api <level>] [--arch <arch>]
 #
 # 支持的架构：arm64-v8a, armeabi-v7a, x86_64
 #
-# 输出：pkg/libsql/libs/android_<arch>/libsql_experimental.so
+# 输出：pkg/libsql/libs/android_<arch>/libsql_experimental.a
 #
 # 依赖：
 #   - Android NDK r25+
 #   - Rust 工具链（rustup）
-#   - cargo-ndk（cargo install cargo-ndk）
 #
 # 环境变量：
 #   ANDROID_NDK_HOME - NDK 根目录
@@ -60,8 +59,18 @@ done
 
 # 检查 NDK
 if [[ -z "${ANDROID_NDK_HOME:-}" ]]; then
-  echo "错误：请设置 ANDROID_NDK_HOME 环境变量，或使用 --ndk 参数"
-  exit 1
+  if [[ -n "${ANDROID_HOME:-}" ]] && [[ -d "${ANDROID_HOME}/ndk" ]]; then
+    # 自动查找最新的 NDK
+    ANDROID_NDK_HOME="$(ls -d "${ANDROID_HOME}"/ndk/*/ 2>/dev/null | sort -V | tail -1)"
+    if [[ -z "$ANDROID_NDK_HOME" ]]; then
+      echo "错误：请设置 ANDROID_NDK_HOME 环境变量，或使用 --ndk 参数"
+      exit 1
+    fi
+    echo "自动检测到 NDK: $ANDROID_NDK_HOME"
+  else
+    echo "错误：请设置 ANDROID_NDK_HOME 环境变量，或使用 --ndk 参数"
+    exit 1
+  fi
 fi
 
 if [[ ! -d "$ANDROID_NDK_HOME" ]]; then
@@ -69,16 +78,33 @@ if [[ ! -d "$ANDROID_NDK_HOME" ]]; then
   exit 1
 fi
 
-# 检查 cargo-ndk
-if ! command -v cargo-ndk &> /dev/null; then
-  echo "错误：请先安装 cargo-ndk：cargo install cargo-ndk"
+NDK_BIN="${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin"
+if [[ ! -d "$NDK_BIN" ]]; then
+  echo "错误：NDK bin 目录不存在: $NDK_BIN"
   exit 1
 fi
 
-# Rust target 映射
+# 检查 Rust
+if ! command -v rustc &> /dev/null; then
+  echo "错误：请先安装 Rust: https://rustup.rs/"
+  exit 1
+fi
+
+if ! command -v cargo &> /dev/null; then
+  echo "错误：cargo 不可用"
+  exit 1
+fi
+
+# Rust target 与 NDK 工具映射
 declare -A RUST_TARGETS=(
   ["arm64-v8a"]="aarch64-linux-android"
   ["armeabi-v7a"]="armv7-linux-androideabi"
+  ["x86_64"]="x86_64-linux-android"
+)
+
+declare -A CC_PREFIX=(
+  ["arm64-v8a"]="aarch64-linux-android"
+  ["armeabi-v7a"]="armv7a-linux-androideabi"
   ["x86_64"]="x86_64-linux-android"
 )
 
@@ -93,52 +119,103 @@ declare -A OUTPUT_DIRS=(
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-echo "==> 下载 libsql 源码..."
+echo "==> 下载 libsql 源码 ($LIBSQL_VERSION)..."
 cd "$TMP_DIR"
-git clone --depth 1 --branch "$LIBSQL_VERSION" https://github.com/tursodatabase/libsql.git
-cd libsql
+if [[ -d "libsql-src" ]]; then
+  cd libsql-src
+  git fetch --depth 1 origin "$LIBSQL_VERSION" 2>&1 | tail -3
+  git checkout FETCH_HEAD 2>&1 | tail -3
+else
+  git clone --depth 1 --branch "$LIBSQL_VERSION" https://github.com/tursodatabase/libsql.git libsql-src 2>&1 | tail -10
+  cd libsql-src
+fi
 
-echo "==> 安装 Rust targets..."
+echo "==> 编译 libsql for Android..."
+BUILD_FAILED=0
 for arch in "${ARCHS[@]}"; do
   target="${RUST_TARGETS[$arch]}"
-  rustup target add "$target"
-done
-
-echo "==> 编译 libsql..."
-for arch in "${ARCHS[@]}"; do
-  target="${RUST_TARGETS[$arch]}"
+  cc_prefix="${CC_PREFIX[$arch]}"
   out_dir="$OUTPUT_BASE/${OUTPUT_DIRS[$arch]}"
 
-  echo "  -> $arch ($target)"
+  echo ""
+  echo "  -> $arch ($target, API $API_LEVEL)"
+
+  # 添加 Rust target
+  rustup target add "$target" 2>&1 | tail -3
+
+  # 找到 libsql 的 C API crate
+  CRATE_DIR=""
+  for d in "libsql-sync" "crates/libsql-sync" "libsql" "crates/libsql" "bindings/c" "crates/bindings-c"; do
+    if [[ -d "$d" ]] && [[ -f "$d/Cargo.toml" ]]; then
+      CRATE_DIR="$d"
+      break
+    fi
+  done
+
+  if [[ -z "$CRATE_DIR" ]]; then
+    echo "     ❌ 错误：无法找到 libsql C API crate"
+    BUILD_FAILED=1
+    continue
+  fi
+  echo "     使用 crate: $CRATE_DIR"
+
+  # 设置 NDK 交叉编译环境变量（不用 cargo-ndk）
+  export CC_${target//-/_}="${NDK_BIN}/${cc_prefix}${API_LEVEL}-clang"
+  export AR_${target//-/_}="${NDK_BIN}/llvm-ar"
+  export CARGO_TARGET_${target^^}_LINKER="${NDK_BIN}/${cc_prefix}${API_LEVEL}-clang"
+
   mkdir -p "$out_dir"
 
-  # 使用 cargo-ndk 交叉编译
-  # 编译 libsql 的 C API 部分（libsql_experimental）
-  # 注意：实际编译命令可能需要根据 libsql 的源码结构调整
-  cd "$TMP_DIR/libsql"
+  # 编译
+  echo "     编译中..."
+  set +e
+  (cd "$CRATE_DIR" && cargo build --target "$target" --release --lib 2>&1) | tail -20
+  BUILD_EXIT=${PIPESTATUS[0]}
+  set -e
 
-  # 如果 libsql 有对应的 crate，用 cargo ndk build
-  # 这里假设 libsql 的 cbindings 在 crates/libsql-c 或类似位置
-  if [[ -d "libsql-c" ]]; then
-    cd "libsql-c"
-  elif [[ -d "crates/libsql-c" ]]; then
-    cd "crates/libsql-c"
-  elif [[ -d "libsql-sync" ]]; then
-    cd "libsql-sync"
+  if [ $BUILD_EXIT -ne 0 ]; then
+    echo "     ❌ 编译失败 (exit=$BUILD_EXIT)"
+    BUILD_FAILED=1
+    continue
   fi
 
-  cargo ndk -t "$target" -p "$API_LEVEL" build --release
+  # 查找静态库（优先 .a）
+  BUILT_LIB=""
+  for lib_name in "libsql_experimental.a" "libsql_experimental.so" "libsql.a" "libsql.so"; do
+    found=$(find "target/$target/release" -name "$lib_name" -type f 2>/dev/null | head -1)
+    if [[ -n "$found" ]]; then
+      BUILT_LIB="$found"
+      break
+    fi
+  done
 
-  # 找到生成的 .so 文件并复制
-  so_file="$(find "$TMP_DIR/libsql/target/$target/release" -name "libsql_experimental.so" -o -name "libsql.so" | head -1)"
-  if [[ -n "$so_file" ]]; then
-    cp "$so_file" "$out_dir/libsql_experimental.so"
-    echo "     输出: $out_dir/libsql_experimental.so"
+  if [[ -z "$BUILT_LIB" ]]; then
+    # 更广泛的搜索
+    BUILT_LIB=$(find "target/$target/release" -name "libsql*.a" -o -name "libsql*.so" -type f 2>/dev/null | head -1)
+  fi
+
+  if [[ -n "$BUILT_LIB" ]]; then
+    cp "$BUILT_LIB" "$out_dir/libsql_experimental.a"
+    # 如果是 .so，也保留一份
+    if [[ "$BUILT_LIB" == *.so ]]; then
+      cp "$BUILT_LIB" "$out_dir/libsql_experimental.so"
+    fi
+    echo "     ✅ 输出: $out_dir/$(basename "$BUILT_LIB")"
+    ls -lh "$out_dir/"
   else
-    echo "     警告：未找到生成的 .so 文件"
-    echo "     请检查 libsql 源码结构，调整编译脚本"
+    echo "     ❌ 编译成功但未找到输出库"
+    echo "     target/$target/release 目录内容:"
+    ls -lh "target/$target/release/" 2>/dev/null || echo "     (目录不存在)"
+    BUILD_FAILED=1
   fi
 done
 
-echo "==> 完成！"
-echo "输出目录: $OUTPUT_BASE"
+echo ""
+if [ $BUILD_FAILED -ne 0 ]; then
+  echo "==> ⚠️  部分架构编译失败"
+  exit 1
+else
+  echo "==> ✅ 全部编译完成！"
+  echo "输出目录: $OUTPUT_BASE"
+  ls -lh "$OUTPUT_BASE"/android_* 2>/dev/null || true
+fi
