@@ -922,10 +922,10 @@ async function handleExportDatabase() {
   try {
     dbLoading.value = true
     await exportDatabase()
-    showToast('数据库导出成功', 'success')
+    showToast({ message: '数据库导出成功', color: 'success' })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
-    showToast('导出失败: ' + msg, 'error')
+    showToast({ message: '导出失败: ' + msg, color: 'danger' })
   } finally {
     dbLoading.value = false
   }
@@ -949,13 +949,13 @@ async function handleImportFileSelected(event: Event) {
   try {
     dbLoading.value = true
     const result = await importDatabase(file)
-    showToast(`导入成功：${result.imported.tasks} 个任务`, 'success')
+    showToast({ message: `导入成功：${result.imported.tasks} 个任务`, color: 'success' })
     await loadDatabaseInfo()
     // 通知任务列表刷新
     window.dispatchEvent(new CustomEvent('tasks:reload'))
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
-    showToast('导入失败: ' + msg, 'error')
+    showToast({ message: '导入失败: ' + msg, color: 'danger' })
   } finally {
     dbLoading.value = false
     input.value = ''
@@ -966,10 +966,10 @@ async function handleBackupDatabase() {
   try {
     dbLoading.value = true
     const result = await backupDatabase()
-    showToast(`备份成功：${result.name}`, 'success')
+    showToast({ message: `备份成功：${result.name}`, color: 'success' })
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
-    showToast('备份失败: ' + msg, 'error')
+    showToast({ message: '备份失败: ' + msg, color: 'danger' })
   } finally {
     dbLoading.value = false
   }
