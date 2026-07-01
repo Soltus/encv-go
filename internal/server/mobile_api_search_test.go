@@ -367,3 +367,61 @@ func TestSearch_RootMount_NonRecursive_NoDeepFile(t *testing.T) {
 	}
 	t.Log("✅ non-recursive search correctly excludes deep files")
 }
+
+// TestSearch_VectorSearchEndpoint_RootMount 验证 /api/search/files 端点（前端实际调用的）
+// 在 /d 顶层搜索时能搜到挂载点下的文件。
+// Bug：handleVectorSearchFilesGin 直接调用 SearchFiles("/d", ...) 没有遍历挂载点。
+// 修复：改为调用 searchFilesWithMounts，与 handleSearchFilesGin 行为一致。
+func TestSearch_VectorSearchEndpoint_RootMount(t *testing.T) {
+	_, baseURL, teardown := setupSearchTestServer(t)
+	defer teardown()
+
+	searchURL := fmt.Sprintf("%s/api/search/files?q=%s&path=%s&recursive=true&limit=200",
+		baseURL,
+		url.QueryEscape("思源笔记"),
+		url.QueryEscape("/d"))
+
+	resp, err := http.Get(searchURL)
+	if err != nil {
+		t.Fatalf("GET search: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("search status = %d, want 200", resp.StatusCode)
+	}
+
+	var result struct {
+		Files []struct {
+			Name        string `json:"name"`
+			Path        string `json:"path"`
+			IsDirectory bool   `json:"isDirectory"`
+		} `json:"files"`
+		VectorSearch bool `json:"vector_search"`
+		Total        int  `json:"total"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	t.Logf("vector search endpoint result count: %d (vector_search=%v)", len(result.Files), result.VectorSearch)
+	for _, f := range result.Files {
+		t.Logf("  - %s", f.Path)
+	}
+
+	if len(result.Files) == 0 {
+		t.Fatal("BUG: /api/search/files at /d returned 0 results — frontend search is broken!")
+	}
+
+	found := false
+	for _, f := range result.Files {
+		if f.Name == "思源笔记shortcuts-Test.zip" {
+			found = true
+			t.Logf("✅ found target file via vector search endpoint: path=%s", f.Path)
+			break
+		}
+	}
+	if !found {
+		t.Error("❌ /api/search/files at /d should contain 思源笔记shortcuts-Test.zip")
+	}
+}

@@ -795,6 +795,19 @@ func (s *Server) handleSearchFilesGin(c *gin.Context) {
 
 	slog.Info("API: search files", "path", queryPath, "keyword", keyword, "recursive", recursive)
 
+	files, err := s.searchFilesWithMounts(queryPath, keyword, recursive)
+	if err != nil {
+		writeServiceErrorGin(c, err)
+		return
+	}
+
+	slog.Info("API: search files result", "path", queryPath, "keyword", keyword, "count", len(files))
+	c.JSON(http.StatusOK, gin.H{"files": files})
+}
+
+// searchFilesWithMounts 是文件搜索的核心逻辑，处理 /d 多挂载点遍历和 webdav 虚拟文件合并。
+// handleSearchFilesGin 和 handleVectorSearchFilesGin 共用此方法。
+func (s *Server) searchFilesWithMounts(queryPath, keyword string, recursive bool) ([]mobileservice.FileInfo, error) {
 	isMountRoot := queryPath == "/d" || queryPath == "/d/"
 	hasWebdav := s.canUseWebdavIndex() || len(s.webdavFSByMount) > 0
 
@@ -822,8 +835,7 @@ func (s *Server) handleSearchFilesGin(c *gin.Context) {
 		} else {
 			mobileFiles, err := s.mobileSvc.SearchFiles(queryPath, keyword, recursive)
 			if err != nil {
-				writeServiceErrorGin(c, err)
-				return
+				return nil, err
 			}
 
 			if hasWebdav && recursive {
@@ -843,18 +855,11 @@ func (s *Server) handleSearchFilesGin(c *gin.Context) {
 			}
 		}
 
-		slog.Info("API: search files result", "path", queryPath, "keyword", keyword, "count", len(files))
-		c.JSON(http.StatusOK, gin.H{"files": files})
-		return
+		return files, nil
 	}
 
-	files, err := s.mobileSvc.SearchFiles(queryPath, keyword, recursive)
-	if err != nil {
-		writeServiceErrorGin(c, err)
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"files": files})
+	// keyword 为空时，退化为 ListFiles
+	return s.mobileSvc.SearchFiles(queryPath, keyword, recursive)
 }
 
 // searchAcrossAllMounts 在所有挂载点中搜索物理文件和 webdav 虚拟文件。
@@ -2495,8 +2500,8 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 		return
 	}
 
-	// 先调用现有文件搜索拿到候选结果（遵守递归设置）
-	files, err := s.mobileSvc.SearchFiles(path, query, recursive)
+	// 先调用现有文件搜索拿到候选结果（遵守递归设置 + /d 多挂载点遍历）
+	files, err := s.searchFilesWithMounts(path, query, recursive)
 	if err != nil {
 		writeServiceErrorGin(c, err)
 		return
