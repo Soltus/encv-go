@@ -97,7 +97,7 @@
                     @click="!opt.disabled && handleFieldChange(child.key, opt.value)"
                   >
                     <div class="preset-card-title">{{ opt.label }}</div>
-                    <div v-if="opt.disabled" class="preset-card-disabled-text">暂不支持</div>
+                    <div v-if="opt.disabled" class="preset-card-disabled-text">{{ opt.disabledReason || '暂不支持' }}</div>
                     <div v-else-if="opt.description" class="preset-card-desc">{{ opt.description }}</div>
                   </div>
                 </div>
@@ -196,7 +196,6 @@ import {
   downloadOutline, cloudUploadOutline, saveOutline, warningOutline,
   save as saveIcon, refreshOutline,
 } from 'ionicons/icons'
-import { Capacitor } from '@capacitor/core'
 import { useConfig } from '@/composables/useConfig'
 import {
   getDatabaseInfo, exportDatabase, importDatabase, backupDatabase,
@@ -232,7 +231,17 @@ const engineBadgeColor = computed(() => {
 })
 
 const isTursoAvailable = computed(() => {
-  return !Capacitor.isNativePlatform()
+  const engines = dbInfo.value?.availableEngines
+  if (!engines) return false
+  const turso = engines.find((e: any) => e.name === 'turso')
+  return turso?.available ?? false
+})
+
+const isLibsqlAvailable = computed(() => {
+  const engines = dbInfo.value?.availableEngines
+  if (!engines) return false
+  const libsql = engines.find((e: any) => e.name === 'libsql')
+  return libsql?.available ?? false
 })
 
 const engineField = computed<FieldDef | undefined>(() => {
@@ -241,10 +250,23 @@ const engineField = computed<FieldDef | undefined>(() => {
 
 const engineOptions = computed(() => {
   const opts = engineField.value?.selectOptions ?? []
-  return opts.map(opt => ({
-    ...opt,
-    disabled: (opt.value === 'turso' || opt.value === 'libsql') && !isTursoAvailable.value
-  }))
+  const engines = dbInfo.value?.availableEngines
+  return opts.map(opt => {
+    let disabled = false
+    let disabledReason = ''
+    if (engines) {
+      const info = engines.find((e: any) => e.name === opt.value)
+      if (info) {
+        disabled = !info.available
+        disabledReason = info.reason || ''
+      }
+    }
+    return {
+      ...opt,
+      disabled,
+      disabledReason
+    }
+  })
 })
 
 const isEngineModified = computed(() => {

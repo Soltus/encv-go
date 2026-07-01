@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -2019,7 +2020,8 @@ func (s *Server) handleDatabaseInfo(c *gin.Context) {
 		}
 	}
 
-	// 统计任务数
+	availableEngines := s.getAvailableEngines()
+
 	totalTasks := 0
 	hasCalibration := false
 	if store := tm.GetStore(); store != nil {
@@ -2030,7 +2032,6 @@ func (s *Server) handleDatabaseInfo(c *gin.Context) {
 			hasCalibration = true
 		}
 	} else {
-		// memory 模式：从内存中统计
 		tasks, _ := tm.ListPaginated("", 0, 0)
 		totalTasks = len(tasks)
 	}
@@ -2039,10 +2040,46 @@ func (s *Server) handleDatabaseInfo(c *gin.Context) {
 		"engine":           actualEngine,
 		"requestedEngine":  requestedEngine,
 		"fallbackReason":   fallbackReason,
+		"availableEngines": availableEngines,
 		"concurrency":      concurrency,
 		"taskCount":        totalTasks,
 		"hasCalibration":   hasCalibration,
 	})
+}
+
+type EngineInfo struct {
+	Name      string `json:"name"`
+	Label     string `json:"label"`
+	Available bool   `json:"available"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+func (s *Server) getAvailableEngines() []EngineInfo {
+	isMobile := runtime.GOOS == "android" || runtime.GOOS == "ios"
+	return []EngineInfo{
+		{
+			Name:      "sqlite",
+			Label:     "SQLite",
+			Available: true,
+		},
+		{
+			Name:      "libsql",
+			Label:     "LibSQL",
+			Available: !isMobile,
+			Reason:    func() string {
+				if isMobile {
+					return "移动端暂不支持 LibSQL 引擎"
+				}
+				return ""
+			}(),
+		},
+		{
+			Name:      "turso",
+			Label:     "Turso",
+			Available: false,
+			Reason:    "Turso 云服务暂未开放",
+		},
+	}
 }
 
 // handleDatabaseExport 导出数据库为 JSON。
