@@ -804,21 +804,22 @@ func (s *Server) handleSearchFilesGin(c *gin.Context) {
 			return
 		}
 
-		if s.canUseWebdavIndex() {
+		hasWebdav := s.canUseWebdavIndex() || len(s.webdavFSByMount) > 0
+
+		if hasWebdav {
+			containerExts := make(map[string]bool)
+			for _, ext := range plugins.GetAllRegisteredContainerExtensions() {
+				containerExts[strings.ToLower(ext)] = true
+			}
+
 			for _, f := range mobileFiles {
-				if !s.webdavFS.IsContainerExtension(f.Name) {
+				ext := strings.ToLower(filepath.Ext(f.Name))
+				if !containerExts[ext] {
 					files = append(files, f)
 				}
 			}
-			entries := s.webdavFS.SearchInIndex(keyword, queryPath, 200)
-			for _, e := range entries {
-				files = append(files, mobileservice.FileInfo{
-					Name:        e.Name,
-					Path:        e.Path,
-					IsDirectory: e.IsDir,
-					Size:        e.Size,
-				})
-			}
+
+			files = append(files, s.searchWebdavMounts(keyword, queryPath, 200)...)
 		} else {
 			files = mobileFiles
 		}
@@ -835,6 +836,68 @@ func (s *Server) handleSearchFilesGin(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"files": files})
+}
+
+// searchWebdavMounts 在所有 webdav 挂载点中搜索文件。
+// queryPath 是前端路径（如 "/d"、"/d/mount-name/sub/path"）。
+// 返回的文件路径会加上 "/d/<mount-name>/" 前缀，与前端路径一致。
+func (s *Server) searchWebdavMounts(keyword, queryPath string, maxPerMount int) []mobileservice.FileInfo {
+	var results []mobileservice.FileInfo
+
+	// 解析查询路径属于哪个挂载点
+	// "/d" 或 "/d/" → 所有挂载点
+	// "/d/<name>/..." → 只搜指定挂载点，子路径去掉 /d/<name>/ 前缀
+	targetMount := ""
+	subPath := ""
+	if strings.HasPrefix(queryPath, "/d/") {
+		rest := strings.TrimPrefix(queryPath, "/d/")
+		slashIdx := strings.Index(rest, "/")
+		if slashIdx > 0 {
+			targetMount = rest[:slashIdx]
+			subPath = rest[slashIdx:]
+		} else if rest != "" {
+			targetMount = rest
+			subPath = ""
+		}
+	}
+
+	for name, entry := range s.webdavFSByMount {
+		if targetMount != "" && name != targetMount {
+			continue
+		}
+
+		searchPrefix := subPath
+		if searchPrefix == "" {
+			searchPrefix = "/"
+		}
+		if !strings.HasPrefix(searchPrefix, "/") {
+			searchPrefix = "/" + searchPrefix
+		}
+
+		entries := entry.fs.SearchInIndex(keyword, searchPrefix, maxPerMount)
+
+		for _, e := range entries {
+			virtualPath := e.Path
+			if strings.HasPrefix(virtualPath, "./") {
+				virtualPath = strings.TrimPrefix(virtualPath, ".")
+			}
+			if !strings.HasPrefix(virtualPath, "/") {
+				virtualPath = "/" + virtualPath
+			}
+
+			displayPath := "/d/" + name + virtualPath
+
+			results = append(results, mobileservice.FileInfo{
+				Name:        e.Name,
+				Path:        displayPath,
+				IsDirectory: e.IsDir,
+				Size:        e.Size,
+				Modified:    e.ModTime,
+			})
+		}
+	}
+
+	return results
 }
 
 func (s *Server) handleIndexStatsGin(c *gin.Context) {
