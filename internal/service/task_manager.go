@@ -110,6 +110,13 @@ type TaskManager struct {
 	//   - 非 nil → saveTasks/loadTasks 走 store，内存 map 作为性能缓存
 	store tasksystem.Store
 
+	// 🆕 进度节流持久化
+	//   - dirtyTasks: 进度有变化需要持久化的任务 ID 集合
+	//   - persistTicker: 定期批量持久化进度的 ticker
+	dirtyTasks   map[string]struct{}
+	dirtyMu      sync.Mutex
+	persistDone  chan struct{}
+
 	// 🆕 v6 2026-06-22：文件操作任务处理器（move/copy/rename/delete）
 	//   - nil → 文件操作任务会 failTask（未配置 FileTaskHandler）
 	//   - 非 nil → processTask switch 的 move/copy/rename/delete case 调用对应方法
@@ -344,12 +351,16 @@ func NewTaskManager(servingDir string, cfg *config.Config, broadcaster Broadcast
 		stopCh:      make(chan struct{}),
 		broadcaster: broadcaster,
 		persistPath: persistPath,
+		dirtyTasks:  make(map[string]struct{}),
 	}
 
 	tm.loadTasks()
 
-	tm.wg.Add(1)
-	go tm.worker()
+	workerCount := 1
+	tm.wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go tm.worker()
+	}
 	return tm
 }
 
@@ -370,14 +381,31 @@ func NewTaskManagerWithStore(servingDir string, cfg *config.Config, broadcaster 
 		broadcaster: broadcaster,
 		persistPath: persistPath,
 		store:       store,
+		dirtyTasks:  make(map[string]struct{}),
+		persistDone: make(chan struct{}),
 	}
 
 	tm.loadTasks()
 
-	tm.wg.Add(1)
-	go tm.worker()
+	workerCount := 1
+	if store != nil {
+		workerCount = store.ConcurrencyHint()
+	}
+	if workerCount < 1 {
+		workerCount = 1
+	}
+	tm.wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go tm.worker()
+	}
+	slog.Info("TaskManager workers started", "count", workerCount)
 
-	// 🆕 启动时确保硬件校准已执行
+	if store != nil {
+		tm.wg.Add(1)
+		go tm.progressPersister()
+		slog.Info("Progress persister started")
+	}
+
 	go tm.EnsureCalibration()
 
 	return tm
@@ -441,13 +469,7 @@ func (tm *TaskManager) saveTaskSingle(task *MobileTask) {
 		return
 	}
 	if tm.store != nil {
-		data := mobileTaskToData(task)
-		if err := tm.store.CreateTask(data); err != nil {
-			if err := tm.store.UpdateTask(data); err != nil {
-				slog.Warn("Failed to upsert single task in store",
-					"id", task.ID, "error", err)
-			}
-		}
+		tm.persistTaskWithRetry(task)
 		return
 	}
 	// 无 store：降级为全表写（保持向后兼容）
@@ -1240,7 +1262,6 @@ func (tm *TaskManager) updateProgress(id string, progress int, phase, speed, eta
 					break
 				}
 			}
-			// v3 2026-06-18：为新 step 填充有意义的 phase 描述（前端时间线展开显示）
 			task.Steps = append(task.Steps, TaskStep{
 				Phase:     phase,
 				StartedAt: now,
@@ -1253,6 +1274,12 @@ func (tm *TaskManager) updateProgress(id string, progress int, phase, speed, eta
 		task.Eta = eta
 	}
 	tm.mu.Unlock()
+
+	// 标记为脏任务，由进度持久化 goroutine 批量写入
+	if tm.store != nil {
+		tm.markDirty(id)
+	}
+
 	if tm.broadcaster != nil {
 		tm.broadcaster.Broadcast("task:progress", map[string]interface{}{
 			"id":       id,
@@ -1285,6 +1312,93 @@ func phaseDetailDescription(phase string) string {
 	default:
 		return ""
 	}
+}
+
+// markDirty 标记任务进度有变化，需要持久化。
+// 仅当 store 存在时才标记（无 store 时走 JSON 全量持久化，不需要脏任务机制）。
+func (tm *TaskManager) markDirty(taskID string) {
+	if tm.store == nil {
+		return
+	}
+	tm.dirtyMu.Lock()
+	tm.dirtyTasks[taskID] = struct{}{}
+	tm.dirtyMu.Unlock()
+}
+
+// progressPersister 进度持久化 goroutine，每 5 秒批量持久化一次脏任务的进度。
+// 崩溃后最多丢失 5 秒进度，可接受。
+func (tm *TaskManager) progressPersister() {
+	defer tm.wg.Done()
+
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-tm.stopCh:
+			tm.flushDirtyTasks()
+			return
+		case <-ticker.C:
+			tm.flushDirtyTasks()
+		}
+	}
+}
+
+// flushDirtyTasks 批量持久化所有脏任务的进度到 store。
+func (tm *TaskManager) flushDirtyTasks() {
+	tm.dirtyMu.Lock()
+	if len(tm.dirtyTasks) == 0 {
+		tm.dirtyMu.Unlock()
+		return
+	}
+	ids := make([]string, 0, len(tm.dirtyTasks))
+	for id := range tm.dirtyTasks {
+		ids = append(ids, id)
+	}
+	tm.dirtyTasks = make(map[string]struct{})
+	tm.dirtyMu.Unlock()
+
+	tm.mu.RLock()
+	tasksToPersist := make([]*MobileTask, 0, len(ids))
+	for _, id := range ids {
+		if task, ok := tm.tasks[id]; ok {
+			if !isTerminalStatus(task.Status) {
+				tasksToPersist = append(tasksToPersist, task)
+			}
+		}
+	}
+	tm.mu.RUnlock()
+
+	if len(tasksToPersist) == 0 {
+		return
+	}
+
+	for _, task := range tasksToPersist {
+		tm.persistTaskWithRetry(task)
+	}
+}
+
+// persistTaskWithRetry 带重试的任务持久化（指数退避，最多 3 次）。
+func (tm *TaskManager) persistTaskWithRetry(task *MobileTask) {
+	if tm.store == nil || task == nil {
+		return
+	}
+	data := mobileTaskToData(task)
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		err = tm.store.CreateTask(data)
+		if err == nil {
+			return
+		}
+		if err = tm.store.UpdateTask(data); err == nil {
+			return
+		}
+		if attempt < 2 {
+			time.Sleep(time.Duration(10*(attempt+1)) * time.Millisecond)
+		}
+	}
+	slog.Warn("Failed to persist task after retries",
+		"id", task.ID, "error", err)
 }
 
 func formatSpeed(bytesPerSec float64) string {

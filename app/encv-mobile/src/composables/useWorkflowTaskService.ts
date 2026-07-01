@@ -481,26 +481,26 @@ function createService(
     // executeJob 调 batchCreateTasks API 可能较慢，改为后台异步执行。
     // submitRun 立即返回 run 对象，UI toast 立即显示。
     // isRunning 是 computed(currentRun.status === 'running')，run 创建时即为 true；
-    // IIFE 结束时 run.status 变为终态，isRunning 自动变 false。
+    // 所有 job 完成后 run.status 变为终态，isRunning 自动变 false。
+    //
+    // ⚠️ 重要：只启动第一层 jobs，后续 jobs 由 checkJobCompletion → scheduleDependentJobs 驱动
+    //   （原 for-await 循环会立即启动所有层，导致 DAG 依赖失效）
     ;(async () => {
       try {
-        // 逐层执行（layer 内 Promise.all 并行提交）
-        for (const layerJobIds of layers) {
-          const jobPromises = layerJobIds.map((jobId) => {
-            const jobDef = workflow.jobs.find((j) => j.id === jobId)!
-            // jobRun 创建后立即 push 到 run.jobs（UI 立刻可见）
-            const jobRun: JobRun = {
-              id: genId(),
-              jobDefId: jobDef.id,
-              status: 'running',
-              startedAt: new Date().toISOString(),
-              steps: [],
-            }
-            run.jobs.push(jobRun)
-            return executeJob(jobDef, workflow.env ?? {}, jobRun, run.id).then(() => jobRun)
-          })
-          await Promise.all(jobPromises)
-        }
+        const firstLayerIds = layers[0]!
+        const jobPromises = firstLayerIds.map((jobId) => {
+          const jobDef = workflow.jobs.find((j) => j.id === jobId)!
+          const jobRun: JobRun = {
+            id: genId(),
+            jobDefId: jobDef.id,
+            status: 'running',
+            startedAt: new Date().toISOString(),
+            steps: [],
+          }
+          run.jobs.push(jobRun)
+          return executeJob(jobDef, workflow.env ?? {}, jobRun, run.id).then(() => jobRun)
+        })
+        await Promise.all(jobPromises)
 
         // 空 workflow（有 job 但无 step）→ 直接标记完成
         if (run.jobs.every((j) => j.steps.length === 0)) {
@@ -509,7 +509,6 @@ function createService(
           run.durationMs = Date.now() - new Date(run.startedAt!).getTime()
         }
 
-        // 末尾持久化
         if (persist) persistCurrentRun()
         notifySubscribers()
       } catch (e) {

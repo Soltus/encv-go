@@ -27,13 +27,17 @@ type Store struct {
 func New(dbPath string) (*Store, error) {
 	// _pragma=foreign_keys(1) 启用外键约束
 	// _pragma=journal_mode(WAL) 启用 WAL 模式提升并发
-	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)", dbPath)
+	// _pragma=busy_timeout(30000)  busy 超时 30s（避免 database is locked）
+	// _pragma=synchronous(NORMAL)  同步级别 NORMAL（WAL 模式下安全且性能好）
+	dsn := fmt.Sprintf(
+		"file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(30000)&_pragma=synchronous(NORMAL)",
+		dbPath,
+	)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 
-	// 单连接，避免 SQLite 并发写冲突（WAL 模式下读可并发）
 	db.SetMaxOpenConns(1)
 
 	store := &Store{db: db}
