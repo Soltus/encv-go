@@ -7,14 +7,15 @@ package libsql
 #cgo CFLAGS: -I${SRCDIR}/include
 #cgo darwin,amd64 LDFLAGS: -L${SRCDIR}/libs/darwin_amd64
 #cgo darwin,arm64 LDFLAGS: -L${SRCDIR}/libs/darwin_arm64
-#cgo linux,amd64 LDFLAGS: -L${SRCDIR}/libs/linux_amd64
-#cgo linux,arm64 LDFLAGS: -L${SRCDIR}/libs/linux_arm64
+#cgo linux,amd64,!android LDFLAGS: -L${SRCDIR}/libs/linux_amd64
+#cgo linux,arm64,!android LDFLAGS: -L${SRCDIR}/libs/linux_arm64
 #cgo android,arm64 LDFLAGS: -L${SRCDIR}/libs/android_arm64
 #cgo android,arm LDFLAGS: -L${SRCDIR}/libs/android_armv7
 #cgo android,386 LDFLAGS: -L${SRCDIR}/libs/android_x86
 #cgo android,amd64 LDFLAGS: -L${SRCDIR}/libs/android_x86_64
 #cgo LDFLAGS: -lsql_experimental
 #cgo LDFLAGS: -lm
+#cgo android LDFLAGS: -lc
 #cgo darwin LDFLAGS: -framework Security
 #cgo darwin LDFLAGS: -framework CoreFoundation
 #include <libsql.h>
