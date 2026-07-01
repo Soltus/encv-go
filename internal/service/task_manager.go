@@ -489,19 +489,14 @@ func (tm *TaskManager) loadTasks() {
 
 		for _, d := range tasks {
 			t := dataToMobileTask(d)
-			// 与旧 JSON 路径一致的状态恢复：重启后未完成任务标记为 failed
 			switch t.Status {
-			case "running", "queued":
+			case "running", "cancelling":
 				t.Status = "failed"
 				t.Error = "interrupted by restart"
 				now := time.Now()
 				t.CompletedAt = &now
-			case "cancelling":
-				t.Status = "cancelled"
-				if t.CompletedAt == nil {
-					now := time.Now()
-					t.CompletedAt = &now
-				}
+			case "queued":
+				// 保持 queued，worker 会自动取出执行
 			}
 			t.cancelFn = nil
 			t.Speed = ""
@@ -529,17 +524,13 @@ func (tm *TaskManager) loadTasks() {
 
 	for _, t := range taskList {
 		switch t.Status {
-		case "running", "queued":
+		case "running", "cancelling":
 			t.Status = "failed"
 			t.Error = "interrupted by restart"
 			now := time.Now()
 			t.CompletedAt = &now
-		case "cancelling":
-			t.Status = "cancelled"
-			if t.CompletedAt == nil {
-				now := time.Now()
-				t.CompletedAt = &now
-			}
+		case "queued":
+			// 保持 queued，worker 会自动取出执行
 		}
 		t.cancelFn = nil
 		t.Speed = ""

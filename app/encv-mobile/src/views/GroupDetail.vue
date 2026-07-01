@@ -20,7 +20,7 @@
         </ion-buttons>
       </ion-toolbar>
 
-      <!-- 🆕 2026-06-22 Q4：顶层 action bar（segment + 搜索 + 筛选 + 多选） -->
+      <!-- 顶层 action bar（segment + 多选） -->
       <ion-toolbar class="top-action-bar">
         <ion-segment v-model="activeTab" mode="md" class="group-detail-segment">
           <ion-segment-button value="pipeline">
@@ -31,24 +31,8 @@
           </ion-segment-button>
         </ion-segment>
 
-        <!-- tasks tab 才显示搜索 + 筛选 + 多选 -->
+        <!-- tasks tab 才显示多选 -->
         <div v-if="activeTab === 'tasks'" class="top-actions">
-          <ion-searchbar
-            v-model="searchQuery"
-            :placeholder="t('tasks.searchPlaceholder')"
-            class="top-searchbar"
-            :debounce="200"
-          />
-          <ion-button
-            fill="clear"
-            size="small"
-            @click="showFilterDrawer = true"
-            :title="t('tasks.filterTitle')"
-            class="top-icon-btn"
-          >
-            <ion-icon :icon="filterOutline" slot="icon-only" :color="activeFilterCount > 0 ? 'primary' : 'medium'"></ion-icon>
-            <ion-badge v-if="activeFilterCount > 0" color="primary" class="filter-badge">{{ activeFilterCount }}</ion-badge>
-          </ion-button>
           <ion-button
             fill="clear"
             size="small"
@@ -91,7 +75,6 @@
             :run-tasks="runTasks"
             :multi-select-mode="multiSelectMode"
             :selected-ids="selectedIds"
-            :search-query="searchQuery"
             @select-task="openTaskDetail"
             @toggle-select="toggleSelect"
             @open-performance="performanceSectionOpen = !performanceSectionOpen"
@@ -137,21 +120,6 @@
         </ion-buttons>
       </ion-toolbar>
     </ion-footer>
-
-    <!-- 筛选 drawer（ion-modal 内嵌筛选 UI），绑到 useTaskFilter 状态 -->
-    <ion-modal :is-open="showFilterDrawer" @did-dismiss="showFilterDrawer = false" class="filter-modal">
-      <FilterDrawer
-        :status="filterStatuses"
-        :task-type="filterTypes"
-        :plugin="filterPlugins"
-        :available-plugins="availablePlugins"
-        @update:status="onFilterStatus"
-        @update:task-type="onFilterType"
-        @update:plugin="onFilterPlugin"
-        @reset="onFilterReset"
-        @apply="showFilterDrawer = false"
-      />
-    </ion-modal>
   </ion-page>
 </template>
 
@@ -161,13 +129,13 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons,
   IonBackButton, IonButton, IonSegment, IonSegmentButton, IonLabel,
-  IonIcon, IonSpinner, IonSearchbar, IonBadge, IonFooter,
-  IonModal, alertController, modalController, toastController,
+  IonIcon, IonSpinner, IonFooter,
+  alertController, modalController, toastController,
 } from '@ionic/vue'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory } from '@capacitor/filesystem'
 import {
-  downloadOutline, alertCircleOutline, filterOutline, checkboxOutline,
+  downloadOutline, alertCircleOutline, checkboxOutline,
   chevronDown, chevronForward, closeOutline, refreshOutline,
   stopCircleOutline, trashOutline,
 } from 'ionicons/icons'
@@ -177,30 +145,21 @@ import { useBatchOperations } from '@/composables/useBatchOperations'
 import { useRunTasksStoreSingleton } from '@/stores/runTasksStore'
 import { useRunSummariesSingleton } from '@/composables/useRunSummaries'
 import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
-import { useTaskStore } from '@/stores/taskStore'
-import { storeToRefs } from 'pinia'
 import type { EncvTask } from '@/api/encv'
 import { getCalibration } from '@/api/encv'
 import type { JobRun } from '@/lib/workflow/types'
 import PipelineTab from '@/components/group-detail/PipelineTab.vue'
 import TasksTab from '@/components/group-detail/TasksTab.vue'
 import PerformanceTab from '@/components/group-detail/PerformanceTab.vue'
-import FilterDrawer from '@/components/group-detail/FilterDrawer.vue'
 import { buildReportZip } from '@/lib/buildReportZip'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const workflowService = useWorkflowTaskService()
-// 🆕 2026-06-23 spec backend-sql-authority-view-pagination Task 6：
-//   GroupDetail 独立加载 runId 的 task（不再共享 useTasksList 的全局 store）
-//   - useRunTasksStoreSingleton：按 runId 独立加载，WS 不守卫
-//   - useRunSummariesSingleton：聚合计数从后端 SQL 拿（不靠 store.tasks 算）
 const runTasksStore = useRunTasksStoreSingleton()
 const runSummaries = useRunSummariesSingleton()
 const batchOps = useBatchOperations()
-const taskStore = useTaskStore()
-const { searchQuery, filterStatuses, filterTypes, filterPlugins, activeFilterCount } = storeToRefs(taskStore)
 
 // ============ UI 局部状态（selection 是 per-view，不进 store） ============
 const selectedIds = ref<Set<string>>(new Set())
@@ -208,26 +167,16 @@ const multiSelectMode = ref(false)
 function toggleSelect(id: string) {
   if (selectedIds.value.has(id)) selectedIds.value.delete(id)
   else selectedIds.value.add(id)
-  // 触发响应式（Set mutation 不会自动触发）
   selectedIds.value = new Set(selectedIds.value)
 }
 function clearSelection() {
   selectedIds.value = new Set()
 }
 
-// ============ 派生 ============
-const availablePlugins = computed(() => {
-  const set = new Set<string>()
-  for (const t of runTasksStore.tasks.value) {
-    if (t.pluginName) set.add(t.pluginName)
-  }
-  return Array.from(set).sort()
-})
-
 // ============ 路由参数 ============
 const runId = computed(() => decodeURIComponent(String(route.params.runId ?? '')))
 
-// ============ Tab 状态（持久化）🆕 Q4：4→2 ============
+// ============ Tab 状态（持久化） ============
 const activeTab = ref<'pipeline' | 'tasks'>(
   (loadStoredTab() as 'pipeline' | 'tasks' | null) ?? 'pipeline',
 )
@@ -239,47 +188,16 @@ watch(activeTab, (v) => {
   try { localStorage.setItem(TAB_STORAGE_KEY, v) } catch { /* silent */ }
 })
 
-// ============ UI 局部状态 ============
-const showFilterDrawer = ref(false)
 const performanceSectionOpen = ref(false)
 
 // 衍生数据
 const run = computed(() => workflowService.getRun(runId.value))
 
-// 🆕 2026-06-24 修复：runTasks 从 runTasksStore.tasks 派生（应用顶层 taskStore 的 filter/search）
-//   - 数据源：runTasksStore.tasks（独立加载 GET /api/tasks?runId=xxx）
-//   - filter/search 状态与顶层 taskStore 共享（用户要求统一搜索筛选）
-//   - 过滤逻辑与 Tasks 页保持一致（__unknown__ 处理）
 const runTasks = computed<EncvTask[]>(() => {
   const id = runId.value
   if (!id) return []
-  let list = runTasksStore.tasks.value
-
-  // 应用 search（与 Tasks 页逻辑一致：name + plugin + error + id）
-  const q = searchQuery.value.trim().toLowerCase()
-  if (q) {
-    list = list.filter((t) => {
-      const name = (t.targetPath?.split('/').pop() ?? t.sourcePath?.split('/').pop() ?? t.id.slice(0, 8)).toLowerCase()
-      const plugin = (t.pluginName || '').toLowerCase()
-      const error = (t.error || '').toLowerCase()
-      const tid = t.id.toLowerCase()
-      return name.includes(q) || plugin.includes(q) || error.includes(q) || tid.includes(q)
-    })
-  }
-
-  // 应用 filter（与 Tasks 页逻辑一致）
-  if (filterPlugins.value.length > 0) {
-    list = list.filter((t) => filterPlugins.value.includes(t.pluginName || '__unknown__'))
-  }
-  if (filterTypes.value.length > 0) {
-    list = list.filter((t) => filterTypes.value.includes(t.type))
-  }
-  if (filterStatuses.value.length > 0) {
-    list = list.filter((t) => filterStatuses.value.includes(t.status))
-  }
-
-  // 按 createdAt 升序
-  return [...list].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+  // 按 createdAt 升序排列
+  return [...runTasksStore.tasks.value].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
 })
 
 // 🆕 2026-06-23 Task 6：totals 从后端 SQL summary 拿（不靠 store.tasks 算）
@@ -355,18 +273,7 @@ async function batchDeleteSelected() {
   await confirm.present()
 }
 
-// FilterDrawer 操作转发（状态共享自 taskStore，直接赋值即可）
-function onFilterStatus(v: string[]) { filterStatuses.value = v as any }
-function onFilterType(v: string[]) { filterTypes.value = v as any }
-function onFilterPlugin(v: string[]) { filterPlugins.value = v }
-function onFilterReset() {
-  // FilterDrawer 只包含 status/type/plugin 三个维度，只重置这三个
-  filterStatuses.value = []
-  filterTypes.value = []
-  filterPlugins.value = []
-}
-
-// ============ 导出报告（🆕 Q7C native Filesystem + web download） ============
+// ============ 导出报告 ============
 const exporting = ref(false)
 async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

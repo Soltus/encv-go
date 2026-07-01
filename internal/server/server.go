@@ -330,6 +330,10 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	}
 	var dbStore tasksystem.Store
 	var err error
+	actualEngine := cfg.Database.Engine
+	if actualEngine == "" {
+		actualEngine = "sqlite"
+	}
 	switch cfg.Database.Engine {
 	case "", "sqlite":
 		dbStore, err = sqlitestore.New(dbPath)
@@ -337,13 +341,39 @@ func NewServer(ctx context.Context, configPath string) *Server {
 			slog.Error("failed to init sqlite store", "err", err)
 		}
 	case "turso", "libsql":
-		dbStore, err = tursostore.NewLocal(dbPath)
-		if err != nil {
-			slog.Error("failed to init turso store, falling back to sqlite", "err", err)
+		if runtime.GOOS == "android" || runtime.GOOS == "ios" {
+			slog.Warn("turso engine not supported on mobile, falling back to sqlite", "os", runtime.GOOS)
+			actualEngine = "sqlite"
 			dbStore, err = sqlitestore.New(dbPath)
+			if err != nil {
+				slog.Error("failed to init sqlite fallback", "err", err)
+			}
+			break
 		}
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("turso store init panicked, falling back to sqlite", "panic", r)
+					actualEngine = "sqlite"
+					dbStore, err = sqlitestore.New(dbPath)
+					if err != nil {
+						slog.Error("failed to init sqlite fallback", "err", err)
+					}
+				}
+			}()
+			dbStore, err = tursostore.NewLocal(dbPath)
+			if err != nil {
+				slog.Error("failed to init turso store, falling back to sqlite", "err", err)
+				actualEngine = "sqlite"
+				dbStore, err = sqlitestore.New(dbPath)
+				if err != nil {
+					slog.Error("failed to init sqlite fallback", "err", err)
+				}
+			}
+		}()
 	default:
 		slog.Warn("unknown database engine, falling back to sqlite", "engine", cfg.Database.Engine)
+		actualEngine = "sqlite"
 		dbStore, err = sqlitestore.New(dbPath)
 	}
 	if dbStore != nil {
@@ -351,28 +381,33 @@ func NewServer(ctx context.Context, configPath string) *Server {
 		if err := tm.ReplaceStore(dbStore); err != nil {
 			slog.Error("failed to replace store", "err", err)
 		} else {
-			engine := cfg.Database.Engine
-			if engine == "" {
-				engine = "sqlite"
-			}
-			slog.Info("database store initialized", "engine", engine, "path", dbPath)
+			slog.Info("database store initialized", "engine", actualEngine, "path", dbPath)
 		}
 	}
 
 	// 🆕 2026-07-03：向量搜索服务初始化
 	// 利用 Turso 原生向量检索能力（vector_distance_cos），提升中文搜索体验
 	// 即使使用 SQLite 引擎，也能用纯 Go 实现的余弦相似度计算做 fallback
-	searchDriver := cfg.Database.Engine
-	if searchDriver == "" {
-		searchDriver = "sqlite"
-	}
+	searchDriver := actualEngine
 	if searchDriver == "libsql" {
 		searchDriver = "turso"
 	}
-	searchSvc, err := vectorsearch.NewSearchServiceFromPath(dbPath, searchDriver)
-	if err != nil {
-		slog.Warn("failed to init vector search service, continuing without it", "err", err)
-	} else {
+	var searchSvc *vectorsearch.SearchService
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Warn("vector search init panicked, continuing without it", "panic", r)
+				searchSvc = nil
+			}
+		}()
+		svc, initErr := vectorsearch.NewSearchServiceFromPath(dbPath, searchDriver)
+		if initErr != nil {
+			slog.Warn("failed to init vector search service, continuing without it", "err", initErr)
+		} else {
+			searchSvc = svc
+		}
+	}()
+	if searchSvc != nil {
 		s.searchSvc = searchSvc
 		slog.Info("vector search service initialized", "driver", searchDriver)
 		// 后台异步重建任务索引（从 task store 加载）
