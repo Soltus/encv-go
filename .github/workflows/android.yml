@@ -367,10 +367,23 @@ jobs:
               source "$HOME/.cargo/env"
             fi
             
+            # 确保 rustup 在 PATH 中
+            if command -v rustup &> /dev/null; then
+              echo "  Rust version: $(rustc --version)"
+              echo "  Default toolchain: $(rustup default 2>&1 || echo unknown)"
+              echo "  Installing aarch64-linux-android target..."
+              rustup target add aarch64-linux-android
+              echo "  Installed targets:"
+              rustup target list --installed
+            fi
+            
             if ! command -v rustc &> /dev/null; then
               FAIL_REASON="Rust not available after installation attempt"
+            elif ! command -v rustup &> /dev/null; then
+              FAIL_REASON="rustup not available"
+            elif ! rustup target list --installed | grep -q aarch64-linux-android; then
+              FAIL_REASON="aarch64-linux-android target not installed"
             else
-              rustup target add aarch64-linux-android 2>&1 | tail -3
               
               # 克隆 libsql 源码
               cd /tmp
@@ -389,7 +402,53 @@ jobs:
               if [ -z "$CRATE_DIR" ]; then
                 FAIL_REASON="Could not find libsql C bindings crate (expected: bindings/c/Cargo.toml)"
               else
+                cd /tmp/libsql-src
+                
+                # 优先从 rust-toolchain.toml 读取 toolchain 版本（最准确）
+                TOOLCHAIN_FROM_TOML=""
+                if [ -f "rust-toolchain.toml" ]; then
+                  TOOLCHAIN_FROM_TOML=$(grep -E '^channel\s*=' rust-toolchain.toml 2>/dev/null | sed 's/.*=\s*//' | tr -d '"' | tr -d "'" | xargs || echo "")
+                  if [ -z "$TOOLCHAIN_FROM_TOML" ]; then
+                    TOOLCHAIN_FROM_TOML=$(grep -E '^channel' rust-toolchain.toml 2>/dev/null | head -1 | awk -F'=' '{print $2}' | tr -d '"' | tr -d "'" | xargs || echo "")
+                  fi
+                  echo "  rust-toolchain.toml channel: $TOOLCHAIN_FROM_TOML"
+                fi
+                if [ -f "rust-toolchain" ] && [ -z "$TOOLCHAIN_FROM_TOML" ]; then
+                  TOOLCHAIN_FROM_TOML=$(cat rust-toolchain | xargs)
+                  echo "  rust-toolchain file: $TOOLCHAIN_FROM_TOML"
+                fi
+                
+                # 用 rustup show active-toolchain 确认
+                ACTIVE_TOOLCHAIN=$(rustup show active-toolchain 2>&1 | head -1 | awk '{print $1}')
+                echo "  Active toolchain (rustup show): $ACTIVE_TOOLCHAIN"
+                
+                # 确定要用的 toolchain 名（优先 toml 里的，其次 active）
+                TARGET_TOOLCHAIN="${TOOLCHAIN_FROM_TOML:-$ACTIVE_TOOLCHAIN}"
+                echo "  Target toolchain for install: $TARGET_TOOLCHAIN"
+                
+                # 给指定的 toolchain 装 target（多次调用是幂等的）
+                if [ -n "$TARGET_TOOLCHAIN" ] && [ "$TARGET_TOOLCHAIN" != "none" ]; then
+                  echo "  Installing aarch64-linux-android target for toolchain: $TARGET_TOOLCHAIN"
+                  rustup target add aarch64-linux-android --toolchain "$TARGET_TOOLCHAIN" 2>&1
+                  echo "  Installed targets for $TARGET_TOOLCHAIN:"
+                  rustup target list --installed --toolchain "$TARGET_TOOLCHAIN" 2>&1
+                fi
+                
+                # 编译前验证：用 rustc 检查 target 是否真的可用
+                echo "  Verifying aarch64-linux-android target..."
                 cd "$CRATE_DIR"
+                set +e
+                SYSROOT=$(rustc --target aarch64-linux-android --print sysroot 2>&1)
+                SYSROOT_EXIT=$?
+                set -e
+                if [ $SYSROOT_EXIT -ne 0 ]; then
+                  echo "  ⚠️  rustc --print sysroot failed, trying explicit toolchain..."
+                  if [ -n "$TARGET_TOOLCHAIN" ] && [ "$TARGET_TOOLCHAIN" != "none" ]; then
+                    rustup target add aarch64-linux-android --toolchain "$TARGET_TOOLCHAIN" 2>&1 || true
+                    SYSROOT=$(rustup run "$TARGET_TOOLCHAIN" rustc --target aarch64-linux-android --print sysroot 2>&1) || true
+                  fi
+                fi
+                echo "  Sysroot: $SYSROOT"
                 
                 # 直接用 NDK clang 编译，不用 cargo-ndk
                 NDK_BIN="${ANDROID_HOME}/ndk/${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64/bin"
@@ -398,10 +457,20 @@ jobs:
                 export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="${NDK_BIN}/aarch64-linux-android24-clang"
                 
                 echo "  Building libsql with NDK clang..."
+                echo "  CC_aarch64_linux_android=$CC_aarch64_linux_android"
                 set +e
-                cargo build --target aarch64-linux-android --release --lib 2>&1 | tail -20
+                cargo build --target aarch64-linux-android --release --lib 2>&1 | tail -60
                 BUILD_EXIT=$?
                 set -e
+                
+                # 如果第一次编译失败且报错是 target/core 相关，用 rustup run 重试
+                if [ $BUILD_EXIT -ne 0 ] && [ -n "$TARGET_TOOLCHAIN" ] && [ "$TARGET_TOOLCHAIN" != "none" ]; then
+                  echo "  ⚠️  First build failed (exit=$BUILD_EXIT), retrying with rustup run $TARGET_TOOLCHAIN..."
+                  set +e
+                  rustup run "$TARGET_TOOLCHAIN" cargo build --target aarch64-linux-android --release --lib 2>&1 | tail -60
+                  BUILD_EXIT=$?
+                  set -e
+                fi
                 
                 if [ $BUILD_EXIT -ne 0 ]; then
                   FAIL_REASON="libsql source build failed (exit=$BUILD_EXIT)"

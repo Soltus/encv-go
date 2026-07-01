@@ -155,21 +155,81 @@ for arch in "${ARCHS[@]}"; do
     BUILD_FAILED=1
     continue
   fi
-  echo "     使用 crate: $CRATE_DIR"
+
+  # 回到 libsql 根目录读取 rust-toolchain.toml
+  cd "$TMP_DIR/libsql-src"
+
+  # 优先从 rust-toolchain.toml 读取 toolchain 版本（最准确）
+  TOOLCHAIN_FROM_TOML=""
+  if [[ -f "rust-toolchain.toml" ]]; then
+    TOOLCHAIN_FROM_TOML=$(grep -E '^channel\s*=' rust-toolchain.toml 2>/dev/null | sed 's/.*=\s*//' | tr -d '"' | tr -d "'" | xargs || echo "")
+    if [[ -z "$TOOLCHAIN_FROM_TOML" ]]; then
+      TOOLCHAIN_FROM_TOML=$(grep -E '^channel' rust-toolchain.toml 2>/dev/null | head -1 | awk -F'=' '{print $2}' | tr -d '"' | tr -d "'" | xargs || echo "")
+    fi
+    echo "     rust-toolchain.toml channel: $TOOLCHAIN_FROM_TOML"
+  fi
+  if [[ -f "rust-toolchain" ]] && [[ -z "$TOOLCHAIN_FROM_TOML" ]]; then
+    TOOLCHAIN_FROM_TOML=$(cat rust-toolchain | xargs)
+    echo "     rust-toolchain file: $TOOLCHAIN_FROM_TOML"
+  fi
+
+  # 用 rustup show active-toolchain 确认
+  ACTIVE_TOOLCHAIN=$(rustup show active-toolchain 2>&1 | head -1 | awk '{print $1}')
+  echo "     Active toolchain (rustup show): $ACTIVE_TOOLCHAIN"
+
+  # 确定要用的 toolchain 名（优先 toml 里的，其次 active）
+  TARGET_TOOLCHAIN="${TOOLCHAIN_FROM_TOML:-$ACTIVE_TOOLCHAIN}"
+  echo "     Target toolchain for install: $TARGET_TOOLCHAIN"
+
+  # 给指定的 toolchain 装 target（多次调用是幂等的）
+  if [[ -n "$TARGET_TOOLCHAIN" ]] && [[ "$TARGET_TOOLCHAIN" != "none" ]]; then
+    echo "     给 toolchain 安装 target: $TARGET_TOOLCHAIN"
+    rustup target add "$target" --toolchain "$TARGET_TOOLCHAIN" 2>&1
+    echo "     已安装的 targets:"
+    rustup target list --installed --toolchain "$TARGET_TOOLCHAIN" 2>&1
+  fi
+
+  cd "$CRATE_DIR"
+
+  # 编译前验证：用 rustc 检查 target 是否真的可用
+  echo "     验证 $target target..."
+  set +e
+  SYSROOT=$(rustc --target "$target" --print sysroot 2>&1)
+  SYSROOT_EXIT=$?
+  set -e
+  if [[ $SYSROOT_EXIT -ne 0 ]]; then
+    echo "     ⚠️  rustc --print sysroot failed, trying explicit toolchain..."
+    if [[ -n "$TARGET_TOOLCHAIN" ]] && [[ "$TARGET_TOOLCHAIN" != "none" ]]; then
+      rustup target add "$target" --toolchain "$TARGET_TOOLCHAIN" 2>&1 || true
+      SYSROOT=$(rustup run "$TARGET_TOOLCHAIN" rustc --target "$target" --print sysroot 2>&1) || true
+    fi
+  fi
+  echo "     Sysroot: $SYSROOT"
 
   # 设置 NDK 交叉编译环境变量（不用 cargo-ndk）
   export CC_${target//-/_}="${NDK_BIN}/${cc_prefix}${API_LEVEL}-clang"
   export AR_${target//-/_}="${NDK_BIN}/llvm-ar"
-  export CARGO_TARGET_${target^^}_LINKER="${NDK_BIN}/${cc_prefix}${API_LEVEL}-clang"
+  target_upper=$(echo "$target" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
+  export "CARGO_TARGET_${target_upper}_LINKER"="${NDK_BIN}/${cc_prefix}${API_LEVEL}-clang"
 
   mkdir -p "$out_dir"
 
   # 编译
   echo "     编译中..."
+  echo "     CC_${target//-/_}=${NDK_BIN}/${cc_prefix}${API_LEVEL}-clang"
   set +e
-  (cd "$CRATE_DIR" && cargo build --target "$target" --release --lib 2>&1) | tail -20
-  BUILD_EXIT=${PIPESTATUS[0]}
+  cargo build --target "$target" --release --lib 2>&1 | tail -30
+  BUILD_EXIT=$?
   set -e
+
+  # 如果第一次编译失败，用 rustup run 显式指定 toolchain 重试
+  if [[ $BUILD_EXIT -ne 0 ]] && [[ -n "$TARGET_TOOLCHAIN" ]] && [[ "$TARGET_TOOLCHAIN" != "none" ]]; then
+    echo "     ⚠️  第一次编译失败 (exit=$BUILD_EXIT), 使用 rustup run $TARGET_TOOLCHAIN 重试..."
+    set +e
+    rustup run "$TARGET_TOOLCHAIN" cargo build --target "$target" --release --lib 2>&1 | tail -30
+    BUILD_EXIT=$?
+    set -e
+  fi
 
   if [ $BUILD_EXIT -ne 0 ]; then
     echo "     ❌ 编译失败 (exit=$BUILD_EXIT)"
