@@ -2150,7 +2150,17 @@ func (s *Server) handleDatabaseInfo(c *gin.Context) {
 
 	fallbackReason := ""
 	if requestedEngine != actualEngine {
-		if requestedEngine == "turso" || requestedEngine == "libsql" {
+		// 🆕 2026-07-02 修复：优先使用 InitDatabase 记录的真实失败原因
+		//
+		// 历史：硬编码"当前平台不支持 Turso/LibSQL 引擎"，但真实原因可能是
+		//       C 库加载失败 / PRAGMA 失败 / schema 失败 / panic / 未编译 libsql 标签等。
+		//       这违反 graceful-degradation.md L2 规范："降级原因明确"。
+		//
+		// 现在：InitDatabase 把真实失败原因写入 s.dbFallbackReason，这里直接透传给前端。
+		//       如果 s.dbFallbackReason 为空（理论上不应该，但作为兜底），才用旧的硬编码消息。
+		if s.dbFallbackReason != "" {
+			fallbackReason = s.dbFallbackReason
+		} else if requestedEngine == "turso" || requestedEngine == "libsql" {
 			fallbackReason = "当前平台不支持 Turso/LibSQL 引擎，已自动回退到 SQLite"
 		} else {
 			fallbackReason = "引擎初始化失败，已自动回退到 SQLite"

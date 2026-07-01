@@ -62,10 +62,20 @@ func NewLocal(path string) (*Store, error) {
 		"PRAGMA foreign_keys=ON",
 	}
 	for _, p := range pragmas {
-		if _, err := db.Exec(p); err != nil {
+		// 🆕 2026-07-02 修复：用 Query 而非 Exec 执行 PRAGMA
+		//
+		// 历史 bug：libsql driver 的 executeNoArgs 在 exec=true 时调用 C.libsql_execute，
+		// 该函数不期望返回行。但 PRAGMA journal_mode=WAL 会返回一行（显示新 mode），
+		// 导致 "Execute returned rows" 错误，让所有 PRAGMA 设置失败，InitDatabase 降级到 sqlite。
+		//
+		// 修复：用 db.Query 执行 PRAGMA，能正确处理返回行（即使某些 PRAGMA 不返回行也兼容）。
+		// 这是 libsql driver 与 glebarez/sqlite 的行为差异 — glebarez 能用 Exec 处理返回行的 PRAGMA。
+		rows, qerr := db.Query(p)
+		if qerr != nil {
 			db.Close()
-			return nil, fmt.Errorf("set pragma %q: %w", p, err)
+			return nil, fmt.Errorf("set pragma %q (query): %w", p, qerr)
 		}
+		rows.Close()
 	}
 
 	db.SetMaxOpenConns(8)

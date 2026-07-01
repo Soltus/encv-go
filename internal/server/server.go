@@ -93,6 +93,15 @@ type Server struct {
 	lastHeartbeatMs int64
 	// 🆕 2026-07-03：向量搜索服务（Turso 原生向量检索 + 中文 bigram 分词）
 	searchSvc *vectorsearch.SearchService
+	// 🆕 2026-07-02：数据库引擎降级真实原因（修复 handleDatabaseInfo 硬编码"当前平台不支持"的问题）
+	//
+	// 历史：InitDatabase 通过 slog.Error 记录错误，但没保存到 Server，
+	//       handleDatabaseInfo 只能硬编码"当前平台不支持 Turso/LibSQL 引擎"，
+	//       误导用户和调试 — 真实原因可能是 C 库加载失败、PRAGMA 失败、schema 失败、panic 等。
+	//
+	// 修复：InitDatabase 在降级时把真实失败原因写入此字段，handleDatabaseInfo 优先使用它。
+	// 参见 .trae/rules/graceful-degradation.md L2 降级规范："降级原因明确"。
+	dbFallbackReason string
 }
 
 // mountRegistryDataPath 返回 mounts.json 的持久化路径。

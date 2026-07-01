@@ -216,6 +216,13 @@ func (d driver) OpenConnector(dbAddress string) (sqldriver.Connector, error) {
 	switch u.Scheme {
 	case "file":
 		return openLocalConnector(dbAddress)
+	case "": // 🆕 2026-07-02 修复：纯文件路径（无 scheme）当作本地文件处理
+		// 历史bug：libsqlstore.NewLocal(path) 直接传文件路径（如 "/tmp/encv-tasks.db"），
+		// url.Parse 后 u.Scheme 为空，落入 default 分支报 "unsupported URL scheme"。
+		// 这导致所有用 NewLocal 的调用都失败，InitDatabase 降级到 sqlite。
+		// 修复：空 scheme 视为本地文件路径，走 openLocalConnector。
+		// libsql_open_file C 函数接受纯路径，不需要 file: 前缀。
+		return openLocalConnector(dbAddress)
 	case "http":
 		fallthrough
 	case "https":
