@@ -379,18 +379,15 @@ jobs:
               fi
               cd libsql-src
               
-              # 找到 libsql 的 C API crate
+              # 找到 libsql 的 C API crate（bindings/c，crate 名是 sql-experimental）
               CRATE_DIR=""
-              for d in "libsql-sync" "crates/libsql-sync" "libsql" "crates/libsql"; do
-                if [ -d "$d/Cargo.toml" ]; then
-                  CRATE_DIR="$d"
-                  echo "  Found crate: $CRATE_DIR"
-                  break
-                fi
-              done
+              if [ -f "bindings/c/Cargo.toml" ]; then
+                CRATE_DIR="bindings/c"
+                echo "  Found crate: bindings/c (sql-experimental)"
+              fi
               
               if [ -z "$CRATE_DIR" ]; then
-                FAIL_REASON="Could not find libsql crate in source (checked: libsql-sync, crates/libsql-sync, libsql, crates/libsql)"
+                FAIL_REASON="Could not find libsql C bindings crate (expected: bindings/c/Cargo.toml)"
               else
                 cd "$CRATE_DIR"
                 
@@ -409,10 +406,10 @@ jobs:
                 if [ $BUILD_EXIT -ne 0 ]; then
                   FAIL_REASON="libsql source build failed (exit=$BUILD_EXIT)"
                 else
-                  # 复制编译产物
-                  BUILT_LIB=$(find /tmp/libsql-src/target/aarch64-linux-android/release -name "libsql_experimental.*" -type f 2>/dev/null | head -1)
+                  # 复制编译产物（crate 名 sql-experimental → libsql_experimental.a/.so）
+                  BUILT_LIB=$(find /tmp/libsql-src/target/aarch64-linux-android/release -name "libsql_experimental.a" -type f 2>/dev/null | head -1)
                   if [ -z "$BUILT_LIB" ]; then
-                    BUILT_LIB=$(find /tmp/libsql-src/target/aarch64-linux-android/release -name "libsql*.a" -type f 2>/dev/null | head -1)
+                    BUILT_LIB=$(find /tmp/libsql-src/target/aarch64-linux-android/release -name "libsql_experimental.so" -type f 2>/dev/null | head -1)
                   fi
                   
                   if [ -n "$BUILT_LIB" ]; then
@@ -421,7 +418,7 @@ jobs:
                     ls -lh "$LIBSQL_DIR/"
                     LIBSQL_READY=1
                   else
-                    FAIL_REASON="libsql build succeeded but output library not found"
+                    FAIL_REASON="libsql build succeeded but output library not found (expected: libsql_experimental.a or .so)"
                   fi
                 fi
               fi

@@ -143,14 +143,12 @@ for arch in "${ARCHS[@]}"; do
   # 添加 Rust target
   rustup target add "$target" 2>&1 | tail -3
 
-  # 找到 libsql 的 C API crate
+  # 找到 libsql 的 C API crate（bindings/c，crate 名是 sql-experimental）
   CRATE_DIR=""
-  for d in "libsql-sync" "crates/libsql-sync" "libsql" "crates/libsql" "bindings/c" "crates/bindings-c"; do
-    if [[ -d "$d" ]] && [[ -f "$d/Cargo.toml" ]]; then
-      CRATE_DIR="$d"
-      break
-    fi
-  done
+  if [[ -f "bindings/c/Cargo.toml" ]]; then
+    CRATE_DIR="bindings/c"
+    echo "     使用 crate: bindings/c (sql-experimental)"
+  fi
 
   if [[ -z "$CRATE_DIR" ]]; then
     echo "     ❌ 错误：无法找到 libsql C API crate"
