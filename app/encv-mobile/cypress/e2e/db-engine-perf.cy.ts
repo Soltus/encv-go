@@ -110,14 +110,15 @@ describe('数据库引擎性能对比测试（真实页面流程）', () => {
       })
   }
 
-  /** 等待前 N 个任务完成 */
-  function waitForFirstNTasksCompleted(n: number, timeoutMs: number) {
+  /** 等待工作流全部完成 */
+  function waitForWorkflowCompleted(timeoutMs: number) {
     cy.get('.progress-card .progress-stats', { timeout: timeoutMs }).should(($stats) => {
       const text = $stats.text()
       const match = text.match(/(\d+)\s*\/\s*(\d+)/)
       expect(match).to.not.be.null
       const completed = parseInt(match![1], 10)
-      expect(completed).to.be.at.least(n)
+      const total = parseInt(match![2], 10)
+      expect(completed).to.equal(total)
     })
   }
 
@@ -194,11 +195,9 @@ describe('数据库引擎性能对比测试（真实页面流程）', () => {
   })
 
   // ==========================================================================
-  // 测试 4：工作流运行性能（端到端，真实页面交互）
+  // 测试 4：完整工作流运行性能（端到端，真实页面交互，完整跑完）
   // ==========================================================================
-  it('工作流运行性能（端到端，真实页面交互）', () => {
-    const SAMPLE_SIZE = 20
-
+  it('完整工作流运行性能（端到端，真实页面交互，完整跑完）', () => {
     navigateToPluginTests()
 
     // ---- 步骤 1：生成 Mock 数据 ----
@@ -227,24 +226,24 @@ describe('数据库引擎性能对比测试（真实页面流程）', () => {
     cy.get('.progress-card', { timeout: 30000 }).should('exist')
     cy.get('.progress-card .progress-stats', { timeout: 30000 }).should('exist')
 
-    // ---- 步骤 4：等待前 N 个任务完成 ----
-    cy.log(`=== 步骤 4：等待前 ${SAMPLE_SIZE} 个任务完成 ===`)
+    // ---- 步骤 4：等待所有任务完成 ----
+    cy.log('=== 步骤 4：等待工作流完成 ===')
 
-    // 超时时间：每个任务 30 秒
-    const maxWaitMs = SAMPLE_SIZE * 30000
-    waitForFirstNTasksCompleted(SAMPLE_SIZE, maxWaitMs)
+    // 超时时间：每个用例 30 秒（加密任务需要时间）
+    const maxWaitMs = Math.max(30 * 60 * 1000, totalCases * 30000)
 
-    const sampleDuration = performance.now() - workflowStartTime
+    waitForWorkflowCompleted(maxWaitMs)
+
+    const workflowDuration = performance.now() - workflowStartTime
 
     // ---- 步骤 5：记录性能指标 ----
     cy.log('=== 步骤 5：性能指标 ===')
-    cy.log(`测试用例总数: ${totalCases}`)
-    cy.log(`采样数量: ${SAMPLE_SIZE}`)
-    cy.log(`前 ${SAMPLE_SIZE} 个任务耗时: ${sampleDuration.toFixed(0)}ms`)
-    if (sampleDuration > 0) {
-      const throughput = (SAMPLE_SIZE / sampleDuration) * 1000
+    cy.log(`工作流总耗时: ${workflowDuration.toFixed(0)}ms`)
+    cy.log(`测试用例数: ${totalCases}`)
+    if (totalCases > 0 && workflowDuration > 0) {
+      const throughput = (totalCases / workflowDuration) * 1000
       cy.log(`吞吐率: ${throughput.toFixed(3)} tasks/sec`)
-      cy.log(`单任务平均耗时: ${(sampleDuration / SAMPLE_SIZE).toFixed(2)}ms/task`)
+      cy.log(`单任务平均耗时: ${(workflowDuration / totalCases).toFixed(2)}ms/task`)
     }
 
     // 读取通过/失败数

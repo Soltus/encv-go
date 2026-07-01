@@ -1546,6 +1546,7 @@ func (tm *TaskManager) processFileTask(task *MobileTask) {
 
 	// 文件操作完成，设置 outputPath 并标记 completed
 	tm.mu.Lock()
+	var taskToPersist *MobileTask
 	task.Status = "completed"
 	task.Progress = 100
 	task.Phase = "completed"
@@ -1559,9 +1560,12 @@ func (tm *TaskManager) processFileTask(task *MobileTask) {
 	case "delete":
 		task.OutputPath = ""
 	}
+	taskToPersist = task
 	tm.mu.Unlock()
 
-	tm.saveTasks()
+	if taskToPersist != nil {
+		tm.saveTaskSingle(taskToPersist)
+	}
 
 	slog.Info("File task completed", "id", task.ID, "type", task.Type)
 	if tm.broadcaster != nil {
@@ -1708,6 +1712,7 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 	}
 
 	tm.mu.Lock()
+	var taskToPersist *MobileTask
 	if task.Status != "cancelling" {
 		task.Status = "completed"
 		task.Progress = 100
@@ -1717,9 +1722,6 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 		now := time.Now()
 		task.CompletedAt = &now
 
-		// 🆕 v3 2026-06-18 Task 8：outputPath 转虚拟路径再存储
-		//   - EncryptFileWithPlugin 返回物理绝对路径
-		//   - 前端 Files.vue 需要虚拟路径 /d/<mount>/... 才能定位
 		virtualOutput := tm.absToVirtualPath(outputPath)
 
 		for i := len(task.Steps) - 1; i >= 0; i-- {
@@ -1742,10 +1744,13 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 			detailBytes, _ := json.Marshal(warnings)
 			task.WarningDetail = string(detailBytes)
 		}
+		taskToPersist = task
 	}
 	tm.mu.Unlock()
 
-	tm.saveTasks()
+	if taskToPersist != nil {
+		tm.saveTaskSingle(taskToPersist)
+	}
 
 	// 🆕 性能指标 Finalize + 持久化
 	var perfSummary map[string]interface{}
@@ -2000,6 +2005,7 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 	}
 
 	tm.mu.Lock()
+	var taskToPersist *MobileTask
 	if task.Status != "cancelling" {
 		task.Status = "completed"
 		task.Progress = 100
@@ -2009,7 +2015,6 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 		now := time.Now()
 		task.CompletedAt = &now
 
-		// 🆕 v3 2026-06-18 Task 8：outputPath 转虚拟路径再存储（与 processEncrypt 一致）
 		virtualOutput := tm.absToVirtualPath(outputPath)
 
 		for i := len(task.Steps) - 1; i >= 0; i-- {
@@ -2025,10 +2030,13 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 		if virtualOutput != "" {
 			task.OutputPath = virtualOutput
 		}
+		taskToPersist = task
 	}
 	tm.mu.Unlock()
 
-	tm.saveTasks()
+	if taskToPersist != nil {
+		tm.saveTaskSingle(taskToPersist)
+	}
 
 	// 🆕 性能指标 Finalize + 持久化
 	var perfSummary map[string]interface{}
