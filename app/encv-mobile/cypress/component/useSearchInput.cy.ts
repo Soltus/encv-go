@@ -208,4 +208,93 @@ describe('useSearchInput 搜索框交互', () => {
       cy.log('Final query:', text)
     })
   })
+
+  // ===========================================================================
+  // Bug 复现：回车键行为
+  // ===========================================================================
+  describe('回车键行为 (Bug 复现)', () => {
+    it('按 Enter 应该触发 onEnter 回调，而不是插入换行', () => {
+      const onEnterSpy = cy.spy().as('onEnter')
+
+      mount(SearchInputTestHarness, {
+        props: {
+          initialQuery: 'hello',
+          onEnter: onEnterSpy,
+        },
+      })
+
+      cy.wait(50)
+
+      // 点击输入框，按回车
+      cy.get('[data-testid="search-input"]').click()
+      cy.get('[data-testid="search-input"]').type('{enter}')
+      cy.wait(50)
+
+      // 断言：onEnter 被调用
+      cy.get('@onEnter').should('have.been.calledOnce')
+
+      // 断言：enterCount 增加
+      cy.get('[data-testid="enter-count"]').should('contain.text', 'enter: 1')
+
+      // 断言：没有换行（query 没有换行符）
+      cy.get('[data-testid="query-display"]').then(($el) => {
+        const text = $el.text()
+        expect(text).to.equal('hello')
+        expect(text).not.to.include('\n')
+      })
+    })
+
+    it('按 Escape 应该触发 onEscape 回调', () => {
+      const onEscapeSpy = cy.spy().as('onEscape')
+
+      mount(SearchInputTestHarness, {
+        props: {
+          initialQuery: 'test',
+          onEscape: onEscapeSpy,
+        },
+      })
+
+      cy.wait(50)
+
+      cy.get('[data-testid="search-input"]').click()
+      cy.get('[data-testid="search-input"]').type('{esc}')
+      cy.wait(50)
+
+      cy.get('@onEscape').should('have.been.calledOnce')
+      cy.get('[data-testid="escape-count"]').should('contain.text', 'escape: 1')
+    })
+
+    it('插入 AND 逻辑符后按回车 → 序列化包含 AND', () => {
+      const onEnterSpy = cy.spy().as('onEnter')
+
+      mount(SearchInputTestHarness, {
+        props: {
+          initialQuery: '在线 高清',
+          onEnter: onEnterSpy,
+        },
+      })
+
+      cy.wait(50)
+
+      // 光标移到中间，插入 AND
+      cy.get('[data-testid="search-input"]').click().type('{home}')
+      cy.get('[data-testid="search-input"]').type('{rightarrow}'.repeat(2))
+      cy.get('[data-testid="btn-and"]').click()
+      cy.wait(50)
+
+      // 按回车
+      cy.get('[data-testid="search-input"]').type('{enter}')
+      cy.wait(50)
+
+      // 断言：onEnter 被调用
+      cy.get('@onEnter').should('have.been.calledOnce')
+
+      // 断言：序列化结果包含 AND
+      cy.get('[data-testid="query-display"]').then(($el) => {
+        const text = $el.text()
+        cy.log('Query after AND + enter:', text)
+        expect(text).to.include('AND')
+      })
+    })
+  })
 })

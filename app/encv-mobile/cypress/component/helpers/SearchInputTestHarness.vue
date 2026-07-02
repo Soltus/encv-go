@@ -20,6 +20,10 @@
 
     <div class="query-display" data-testid="query-display">{{ queryValue }}</div>
     <div class="error-display" data-testid="error-display">{{ errorMsg }}</div>
+    <div class="counter-display">
+      <span data-testid="enter-count">enter: {{ enterCount }}</span>
+      <span data-testid="escape-count">escape: {{ escapeCount }}</span>
+    </div>
   </div>
 </template>
 
@@ -30,17 +34,30 @@ import { useSearchInput } from '@/composables/useSearchInput'
 const props = defineProps<{
   initialQuery?: string
   onChange?: (query: string) => void
+  onEnter?: () => void
+  onEscape?: () => void
 }>()
 
 const errorMsg = ref('')
+const enterCount = ref(0)
+const escapeCount = ref(0)
 
-// 包装 onChange，捕获错误
 function handleChange(query: string) {
   try {
     props.onChange?.(query)
   } catch (e) {
     errorMsg.value = e instanceof Error ? e.message : String(e)
   }
+}
+
+function handleEnter() {
+  enterCount.value++
+  props.onEnter?.()
+}
+
+function handleEscape() {
+  escapeCount.value++
+  props.onEscape?.()
 }
 
 const {
@@ -52,6 +69,8 @@ const {
   clearInput,
 } = useSearchInput({
   onChange: handleChange,
+  onEnter: handleEnter,
+  onEscape: handleEscape,
 })
 
 const inputRef = queryInputRef as any
