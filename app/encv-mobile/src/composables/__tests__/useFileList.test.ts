@@ -76,14 +76,14 @@ describe('sortFiles', () => {
 
 describe('cycleSortState', () => {
   it('name asc → name desc → size asc → size desc → time asc → time desc → name asc', () => {
-    let s = { by: 'name' as const, desc: false }
-    const expectSeq = [
-      { by: 'name' as const, desc: true },
-      { by: 'size' as const, desc: false },
-      { by: 'size' as const, desc: true },
-      { by: 'time' as const, desc: false },
-      { by: 'time' as const, desc: true },
-      { by: 'name' as const, desc: false }, // 回环
+    let s: { by: 'name' | 'size' | 'time' | 'relevance'; desc: boolean } = { by: 'name', desc: false }
+    const expectSeq: Array<{ by: 'name' | 'size' | 'time' | 'relevance'; desc: boolean }> = [
+      { by: 'name', desc: true },
+      { by: 'size', desc: false },
+      { by: 'size', desc: true },
+      { by: 'time', desc: false },
+      { by: 'time', desc: true },
+      { by: 'name', desc: false }, // 回环
     ]
     for (const exp of expectSeq) {
       s = cycleSortState(s)

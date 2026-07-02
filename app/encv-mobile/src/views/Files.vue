@@ -300,7 +300,7 @@
                   @click.stop="setSortBy('relevance')">
                   {{ t('files.sortByRelevance') || '相关度' }}
                 </ion-chip>
-                <ion-chip v-for="s in (searchQuery ? ['name', 'size', 'time'] : ['name', 'size', 'time']) as const" :key="s"
+                <ion-chip v-for="s in (['name', 'size', 'time'] as const)" :key="s"
                   :button="true" :outline="sortBy !== s" :color="sortBy === s ? 'primary' : undefined"
                   @click.stop="setSortBy(s)">
                   {{ s === 'name' ? t('files.sortByName') || '名称' : s === 'size' ? t('files.sortBySize') || '大小' : t('files.sortByTime') || '时间' }}

@@ -423,9 +423,15 @@ func TestSearch_VectorSearch_FiltersIrrelevantResults(t *testing.T) {
 		t.Logf("  - %s score=%.4f", f.Name, f.Score)
 	}
 
-	// 1. 应为 greedy 模式（关键词无匹配 → 纯向量 fallback）
-	if result.SearchMode != "greedy" {
-		t.Errorf("search_mode = %q, want %q (关键词无匹配应走 greedy)", result.SearchMode, "greedy")
+	// 1. 应为 combined 模式（关键词扩展后能召回 → 走混合评分重排）
+	//
+	// 历史：2026-07-01 之前这个测试期望走 greedy（因为 "在线视频" 整体子串匹配 "在线播放-高清视频.mp4" 失败），
+	//   目标文件只能靠向量 fallback 召回。2026-07-02 修复了"长文件名稀释"问题：
+	//   handler 注入 expandCJKQueryForSearch，把 CJK 连续查询拆为单字 AND 序列，
+	//   "在线视频" → "在 线 视 频" 让关键词搜索也能召回长文件名 → 走 combined 模式。
+	//   这是修复后的预期行为（更精准），不是回退。
+	if result.SearchMode != "combined" {
+		t.Errorf("search_mode = %q, want %q (CJK 扩展后关键词能命中，应走 combined 混合评分)", result.SearchMode, "combined")
 	}
 
 	// 2. 目标文件应在结果中

@@ -10,7 +10,7 @@
  * 2026-06-22 新增：嵌在 Tasks 页面顶部，URL ?debug=tasks 启用，
  * 让 user 在真机屏幕上一眼看到逃逸 task 数 + 各 runId 聚合。
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TaskDebugPanel from '@/components/tasks/TaskDebugPanel.vue'
 import type { EncvTask, TaskStatus } from '@/api/encv'

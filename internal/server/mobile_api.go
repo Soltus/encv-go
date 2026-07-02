@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/logger"
@@ -2513,8 +2514,16 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 		return
 	}
 
+	// 🆕 2026-07-02 修复长文件名被关键词搜索漏掉：
+	//   连续 CJK 查询（如"在线视频"）做整体子串匹配时，
+	//   "在线"和"视频"被分隔开的长文件名（如"在线播放-高清视频-2026-07-02-最终版.mp4"）
+	//   不包含"在线视频"完整子串 → 漏掉。
+	//   拆为单字 AND 序列后，matchKeyword 会对每个单字都做子串匹配，
+	//   召回所有包含"在/线/视/频"任一字的文件，再交给向量搜索 + 混合评分精排。
+	expandedQuery := expandCJKQueryForSearch(query)
+
 	// 先调用现有文件搜索拿到候选结果（遵守递归设置 + /d 多挂载点遍历）
-	files, err := s.searchFilesWithMounts(path, query, recursive)
+	files, err := s.searchFilesWithMounts(path, expandedQuery, recursive)
 	if err != nil {
 		writeServiceErrorGin(c, err)
 		return
@@ -2526,7 +2535,11 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 	//   - 关键词匹配 0 → greedy 模式，纯向量 fallback（bigram 过滤可放宽）
 	//
 	// 前端据 search_mode 字段对 greedy 结果加视觉标记，让用户看出是宽松匹配。
-	const strictThreshold = 20
+	//
+	// strict 阈值 50（不是默认 20）的原因：
+	//   - CJK 连续查询扩展为单字 AND 后候选会变多（如"在线视频" → "在/线/视/频" 会命中 5~20 个文件）
+	//   - 把阈值提高到 50 避免扩展后误触发 strict 模式（strict 只返回关键词结果不精排）
+	const strictThreshold = 50
 
 	if len(files) >= strictThreshold {
 		// strict 模式：结果过多，只返回关键词匹配（可能按名称排序）
@@ -2755,6 +2768,54 @@ func (s *Server) vectorSearchFallback(path, query string, recursive bool, limit 
 	}
 
 	return matched
+}
+
+// expandCJKQueryForSearch 把连续 CJK 查询扩展为单字 AND 序列。
+//
+// 解决"长文件名稀释"问题的第一步（关键词候选召回阶段）：
+//   - matchKeyword 用 strings.Contains(lowerName, lowerTok) 做子串匹配（AND 逻辑）
+//   - 单 token CJK 查询（如"在线视频"）只匹配包含完整子串的文件名
+//   - 长文件名（如"在线播放-高清视频-2026-07-02-最终版.mp4"）"在线"和"视频"被分隔开
+//     → 不包含"在线视频"整体子串 → 漏掉
+//
+// 修复：CJK 连续查询 → 拆为单字 + 空格连接（如"在线视频" → "在 线 视 频"）
+//   - matchKeyword 对每个单字都做子串匹配
+//   - 包含所有单字的文件名才能命中 → 召回被分隔的长文件名
+//   - 单字 AND 还能过滤掉只包含部分单字的弱相关文件：
+//     例：搜索"在线视频" → "在线文档.pdf"（缺"视"和"频"）被过滤 ✅
+//
+// 已有空格分隔的查询、纯英文/数字查询、单字符查询保持原样（用户已显式分词）。
+//
+// 返回值只用于 searchFilesWithMounts 的 keyword 过滤，向量搜索和混合评分仍用原 query
+// （原 query 算 bigram 重叠更稳定，扩展 query 反而会噪声化）。
+func expandCJKQueryForSearch(query string) string {
+	// 已有空格分隔的查询不动（用户已显式分词）
+	if strings.ContainsAny(query, " \t\n\r") {
+		return query
+	}
+	runes := []rune(query)
+	if len(runes) < 2 {
+		return query
+	}
+	// 检测是否包含 CJK 字符（汉/日/韩）；纯英文/数字查询不动
+	hasCJK := false
+	for _, r := range runes {
+		if unicode.Is(unicode.Han, r) ||
+			(r >= 0x3040 && r <= 0x30FF) || // 日文假名
+			(r >= 0xAC00 && r <= 0xD7AF) { // 韩文
+			hasCJK = true
+			break
+		}
+	}
+	if !hasCJK {
+		return query
+	}
+	// 拆为单字，空格连接
+	parts := make([]string, len(runes))
+	for i, r := range runes {
+		parts[i] = string(r)
+	}
+	return strings.Join(parts, " ")
 }
 
 // extractBigrams 提取查询中的非单字 token（CJK bigram + 英文单词）。

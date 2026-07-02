@@ -1,6 +1,6 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { eventBus } from './useEventBus'
-import { useProxiedFetch } from './useProxiedFetch'
+import { getApiBaseUrl } from '@/api/encv'
 
 /**
  * 向量搜索可用性状态。
@@ -33,13 +33,18 @@ async function probeOnce(): Promise<void> {
   if (pollInFlight) return
   pollInFlight = true
   try {
-    const { request } = useProxiedFetch()
-    const resp = await request<{
+    // 用全局 fetch（native 模式下 useProxiedFetch.installProxiedFetch() 已自动覆盖）
+    const url = getApiBaseUrl() + '/api/runtime'
+    const resp = await fetch(url, { method: 'GET' })
+    if (!resp.ok) {
+      return
+    }
+    const data = (await resp.json()) as {
       vector_search_available?: boolean
       vector_search_degraded?: boolean
-    }>('/api/runtime', { method: 'GET' })
-    const available = resp.vector_search_available === true
-    const degraded = resp.vector_search_degraded === true
+    }
+    const available = data.vector_search_available === true
+    const degraded = data.vector_search_degraded === true
     if (!available) {
       status.value = 'unavailable'
     } else if (degraded) {

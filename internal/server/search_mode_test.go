@@ -195,36 +195,41 @@ func TestSearchMode_None_EmptyQuery(t *testing.T) {
 	})
 }
 
-// TestSearchMode_Strict_ManyKeywordMatches 验证关键词匹配 >= 20 时返回 strict 模式。
+// TestSearchMode_Strict_ManyKeywordMatches 验证关键词匹配 >= strictThreshold 时返回 strict 模式。
 //
-// 触发条件：len(files) >= strictThreshold(20) → strict 模式，只返回关键词结果，不做向量重排序。
+// 触发条件：len(files) >= strictThreshold → strict 模式，只返回关键词结果，不做向量重排序。
 // 这是 handleVectorSearchFilesGin 的第二个分支（行 2531-2540）。
+//
+// strictThreshold 历史：20 → 50（2026-07-02 修复长文件名稀释时提升）。
+//   原因：CJK 连续查询扩展为单字 AND 后候选数翻倍（"在线视频" → 4 个 token 会命中 5~20 个文件），
+//   旧阈值 20 误触发 strict 模式（不做混合评分），修复后阈值 50 留出 buffer。
 func TestSearchMode_Strict_ManyKeywordMatches(t *testing.T) {
-	// 用例 1：25 个文件含 "test" 关键词 → 25 匹配 >= 20 → strict 模式
-	t.Run("twenty_five_matches", func(t *testing.T) {
-		s, baseURL, teardown := setupSearchModeTestServer(t, 25)
+	// 用例 1：55 个文件含 "test" 关键词 → 55 匹配 >= 50 → strict 模式
+	// 阈值 50 下的边界上方用例（25 已不足以触发 strict）
+	t.Run("fifty_five_matches", func(t *testing.T) {
+		s, baseURL, teardown := setupSearchModeTestServer(t, 55)
 		defer teardown()
 
-		// 构建索引确保搜索能找到全部 25 个文件
+		// 构建索引确保搜索能找到全部 55 个文件
 		s.mobileSvc.RebuildIndex()
 		waitForIndexReady(s)
 
 		result := doSearchModeRequest(t, baseURL, "test", "/d", true, "")
 		if result.SearchMode != "strict" {
-			t.Errorf("search_mode = %q, want %q (25 个关键词匹配应走 strict)", result.SearchMode, "strict")
+			t.Errorf("search_mode = %q, want %q (55 个关键词匹配应走 strict)", result.SearchMode, "strict")
 		}
 		if result.VectorSearch {
 			t.Errorf("vector_search = true, want false (strict 模式不做向量重排序)")
 		}
-		if len(result.Files) < 20 {
-			t.Errorf("files count = %d, want >= 20 (strict 模式应返回全部关键词匹配)", len(result.Files))
+		if len(result.Files) < 50 {
+			t.Errorf("files count = %d, want >= 50 (strict 模式应返回全部关键词匹配)", len(result.Files))
 		}
-		t.Logf("25 个匹配正确返回 strict 模式, files=%d, total=%d", len(result.Files), result.Total)
+		t.Logf("55 个匹配正确返回 strict 模式, files=%d, total=%d", len(result.Files), result.Total)
 	})
 
-	// 用例 2：20 个文件（边界值 >= 20）→ strict 模式
-	t.Run("twenty_matches_boundary", func(t *testing.T) {
-		s, baseURL, teardown := setupSearchModeTestServer(t, 20)
+	// 用例 2：50 个文件（边界值 >= 50）→ strict 模式
+	t.Run("fifty_matches_boundary", func(t *testing.T) {
+		s, baseURL, teardown := setupSearchModeTestServer(t, 50)
 		defer teardown()
 
 		s.mobileSvc.RebuildIndex()
@@ -232,15 +237,15 @@ func TestSearchMode_Strict_ManyKeywordMatches(t *testing.T) {
 
 		result := doSearchModeRequest(t, baseURL, "test", "/d", true, "")
 		if result.SearchMode != "strict" {
-			t.Errorf("search_mode = %q, want %q (20 个关键词匹配 = 阈值边界应走 strict)", result.SearchMode, "strict")
+			t.Errorf("search_mode = %q, want %q (50 个关键词匹配 = 阈值边界应走 strict)", result.SearchMode, "strict")
 		}
 		if result.VectorSearch {
 			t.Errorf("vector_search = true, want false (strict 模式不做向量重排序)")
 		}
-		if len(result.Files) < 20 {
-			t.Errorf("files count = %d, want >= 20", len(result.Files))
+		if len(result.Files) < 50 {
+			t.Errorf("files count = %d, want >= 50", len(result.Files))
 		}
-		t.Logf("20 个匹配（边界）正确返回 strict 模式, files=%d", len(result.Files))
+		t.Logf("50 个匹配（边界）正确返回 strict 模式, files=%d", len(result.Files))
 	})
 }
 
@@ -308,9 +313,14 @@ func TestSearchMode_Combined_FewMatches(t *testing.T) {
 // 触发条件：len(files) == 0 且 searchSvc != nil 且 vectorSearchFallback 返回非空 → greedy 模式。
 // 这是 handleVectorSearchFilesGin 的第四个分支（行 2611-2622）。
 func TestSearchMode_Greedy_NoKeywordMatch(t *testing.T) {
-	// 用例 1：搜索 "在线视频"（无子串匹配）→ 0 关键词匹配 → greedy fallback
-	// "在线视频" 不是 "在线播放-高清视频.mp4" 的子串，但向量 bigram 共享 "在线"+"视频"
-	t.Run("zaixian_shipin_greedy", func(t *testing.T) {
+	// 用例 1：搜索 "在线视频"（CJK 连续，无空格）→ CJK 扩展为单字 AND 后能命中长文件名 → combined
+	//
+	// 历史：2026-07-01 之前这个测试期望走 greedy（因为 "在线视频" 不是 "在线播放-高清视频.mp4" 的整体子串），
+	//   目标文件只能靠向量 fallback 召回。2026-07-02 修复"长文件名稀释"问题：
+	//   handler 注入 expandCJKQueryForSearch 把 CJK 连续查询拆为单字 AND 序列，
+	//   "在线视频" → "在 线 视 频" 让关键词搜索也能命中 → 走 combined 模式。
+	//   这是修复后的预期行为（更精准），不是回退。
+	t.Run("zaixian_shipin_combined_via_cjk_expansion", func(t *testing.T) {
 		s, baseURL, teardown := setupMultiTokenSearchServer(t)
 		defer teardown()
 
@@ -318,46 +328,45 @@ func TestSearchMode_Greedy_NoKeywordMatch(t *testing.T) {
 		waitForIndexReady(s)
 
 		if s.searchSvc == nil {
-			t.Skip("searchSvc == nil：向量搜索服务未初始化，greedy 模式无法触发，跳过此用例")
+			t.Skip("searchSvc == nil：向量搜索服务未初始化，跳过此用例")
 		}
 
 		result := doSearchModeRequest(t, baseURL, "在线视频", "/d", true, "")
-		if result.SearchMode != "greedy" {
-			t.Errorf("search_mode = %q, want %q (0 关键词匹配应走 greedy)", result.SearchMode, "greedy")
+		if result.SearchMode != "combined" {
+			t.Errorf("search_mode = %q, want %q (CJK 扩展后关键词能命中，应走 combined)", result.SearchMode, "combined")
 		}
 		if !result.VectorSearch {
-			t.Errorf("vector_search = false, want true (greedy 模式启用了向量 fallback)")
-		}
-		if len(result.Files) < 1 {
-			t.Errorf("files count = %d, want >= 1 (greedy fallback 应返回向量匹配结果)", len(result.Files))
-		}
-		t.Logf("0 关键词匹配正确返回 greedy 模式, files=%d, vector_search=%v", len(result.Files), result.VectorSearch)
-	})
-
-	// 用例 2：搜索 "在线高清"（无空格，无子串匹配）→ 0 关键词匹配 → greedy fallback
-	// "在线高清" 不是 "在线播放-高清视频.mp4" 的子串，但向量 bigram 共享 "在线"+"高清"
-	t.Run("zaixian_gaoqing_greedy", func(t *testing.T) {
-		s, baseURL, teardown := setupMultiTokenSearchServer(t)
-		defer teardown()
-
-		s.mobileSvc.RebuildIndex()
-		waitForIndexReady(s)
-
-		if s.searchSvc == nil {
-			t.Skip("searchSvc == nil：向量搜索服务未初始化，greedy 模式无法触发，跳过此用例")
-		}
-
-		result := doSearchModeRequest(t, baseURL, "在线高清", "/d", true, "")
-		if result.SearchMode != "greedy" {
-			t.Errorf("search_mode = %q, want %q (0 关键词匹配应走 greedy)", result.SearchMode, "greedy")
-		}
-		if !result.VectorSearch {
-			t.Errorf("vector_search = false, want true (greedy 模式启用了向量 fallback)")
+			t.Errorf("vector_search = false, want true (combined 模式启用了向量重排序)")
 		}
 		if len(result.Files) < 1 {
 			t.Errorf("files count = %d, want >= 1", len(result.Files))
 		}
-		t.Logf("0 关键词匹配正确返回 greedy 模式, files=%d, vector_search=%v", len(result.Files), result.VectorSearch)
+		t.Logf("CJK 扩展后正确走 combined 模式, files=%d, vector_search=%v", len(result.Files), result.VectorSearch)
+	})
+
+	// 用例 2：搜索 "在线高清"（CJK 连续，无空格）→ CJK 扩展后能命中长文件名 → combined
+	t.Run("zaixian_gaoqing_combined_via_cjk_expansion", func(t *testing.T) {
+		s, baseURL, teardown := setupMultiTokenSearchServer(t)
+		defer teardown()
+
+		s.mobileSvc.RebuildIndex()
+		waitForIndexReady(s)
+
+		if s.searchSvc == nil {
+			t.Skip("searchSvc == nil：向量搜索服务未初始化，跳过此用例")
+		}
+
+		result := doSearchModeRequest(t, baseURL, "在线高清", "/d", true, "")
+		if result.SearchMode != "combined" {
+			t.Errorf("search_mode = %q, want %q (CJK 扩展后关键词能命中，应走 combined)", result.SearchMode, "combined")
+		}
+		if !result.VectorSearch {
+			t.Errorf("vector_search = false, want true (combined 模式启用了向量重排序)")
+		}
+		if len(result.Files) < 1 {
+			t.Errorf("files count = %d, want >= 1", len(result.Files))
+		}
+		t.Logf("CJK 扩展后正确走 combined 模式, files=%d, vector_search=%v", len(result.Files), result.VectorSearch)
 	})
 }
 
@@ -454,19 +463,21 @@ func TestSearchMode_SearchSvcNil_AllModesFallback(t *testing.T) {
 		s.searchSvc = nil
 		defer func() { s.searchSvc = originalSvc }()
 
-		// "在线视频" 无子串匹配 → 0 关键词匹配，searchSvc==nil → 跳过 greedy → 兜底 none
+		// "在线视频" 经 CJK 扩展后能命中 "在线播放-高清视频.mp4"（包含"在""线""视""频"所有单字）
+		// → 关键词搜索返回 1 个匹配，searchSvc==nil 时跳过 combined/greedy
+		// → 兜底 none 模式直接返回这 1 个关键词结果（不做向量重排序）
 		result := doSearchModeRequest(t, baseURL, "在线视频", "/d", true, "")
 		if result.SearchMode != "none" {
-			t.Errorf("search_mode = %q, want %q (searchSvc==nil 时 0 匹配应跳过 greedy 落到 none)",
+			t.Errorf("search_mode = %q, want %q (searchSvc==nil + CJK 扩展后有匹配应跳过 combined/greedy 落到 none)",
 				result.SearchMode, "none")
 		}
 		if result.VectorSearch {
 			t.Errorf("vector_search = true, want false (searchSvc==nil 时不应启用向量搜索)")
 		}
-		// 0 关键词匹配 + 无向量 fallback → 兜底返回空列表
-		if len(result.Files) != 0 {
-			t.Errorf("files count = %d, want 0 (0 匹配 + searchSvc==nil 应返回空)", len(result.Files))
+		// CJK 扩展后命中 1 个关键词结果（不是 0）
+		if len(result.Files) != 1 {
+			t.Errorf("files count = %d, want 1 (CJK 扩展后命中 1 个长文件名)", len(result.Files))
 		}
-		t.Logf("searchSvc==nil + 0 匹配正确降级到 none 模式, files=%d", len(result.Files))
+		t.Logf("searchSvc==nil + CJK 扩展命中 1 个, 兜底 none 模式, files=%d", len(result.Files))
 	})
 }

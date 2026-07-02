@@ -4,7 +4,8 @@
   "description": "ENCV-go Mobile Frontend (Capacitor + Ionic Vue)",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
     "capacitor:copy:after": "node scripts/sync-native.mjs",
     "check:kotlin": "node scripts/check-kotlin.mjs",
@@ -20,6 +21,7 @@
     "test:cypress:e2e": "PM2_HOME=/tmp/cypress-pm2 CYPRESS_INSTALL_BINARY=0 xvfb-run -a --server-args=\"-screen 0 1024x768x24\" cypress run --e2e --browser electron",
     "check:i18n": "node scripts/find-missing-i18n-keys.mjs",
     "prebuild": "pnpm check:i18n",
+    "pretypecheck": "pnpm check:i18n",
     "pretest:unit": "pnpm check:i18n",
     "pretest": "pnpm check:i18n"
   },
