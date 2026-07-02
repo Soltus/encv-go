@@ -123,3 +123,90 @@ export async function rebuildIndex(): Promise<void> {
     throw new Error(`HTTP error! status: ${response.status}`)
   }
 }
+
+// ─── 全文搜索 API（FTS5，2026-07-02 新增）───
+
+/**
+ * 全文搜索结果（Go 端 FTS5 返回）。
+ * - snippet: 命中片段，用 `<<...>>` 包裹命中词
+ * - hitCount: 命中次数
+ * - score: bm25 相关度（负数，越小越相关）
+ */
+export interface FullTextSearchResult extends FileItem {
+  snippet: string
+  hitCount: number
+}
+
+export interface FullTextSearchResponse {
+  results: FullTextSearchResult[]
+  total: number
+  query: string
+  dbEngine: 'sqlite' | 'libsql' | 'none'
+  indexSize: number
+}
+
+/**
+ * 全文搜索（FTS5）。
+ *
+ * 支持查询语法（详见 Go 端 internal/fts/query.go）：
+ *   - 空格分隔（隐式 AND）
+ *   - AND / OR / NOT（必须大写）
+ *   - "exact phrase"（双引号短语）
+ *   - regex:^pattern  或  regex:/^pattern/（正则）
+ *   - \ 转义下一个字符
+ *
+ * @param query 用户查询字符串
+ * @param limit 最大返回数（默认 200）
+ * @param pathPrefix 路径前缀过滤（可选）
+ */
+export async function searchFilesFullText(
+  query: string,
+  limit = 200,
+  pathPrefix?: string,
+): Promise<FullTextSearchResponse> {
+  const baseUrl = getApiBaseUrl()
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(limit),
+  })
+  if (pathPrefix) {
+    params.set('path_prefix', pathPrefix)
+  }
+  const response = await fetch(`${baseUrl}/api/files/search-fulltext?${params.toString()}`)
+  if (!response.ok) {
+    if (response.status === 503) {
+      return { results: [], total: 0, query, dbEngine: 'none', indexSize: 0 }
+    }
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+  return await response.json()
+}
+
+/**
+ * 获取全文索引统计信息。
+ */
+export interface FullTextIndexStats {
+  totalFiles: number
+  totalDirs: number
+  totalSize: number
+  indexedAt: string
+  isIndexing: boolean
+  lastBuildMs: number
+  dbPath: string
+  fts5Enabled: boolean
+  tokenizer: string
+  indexVersion: number
+}
+
+export async function getFullTextIndexStats(): Promise<{
+  available: boolean
+  stats?: FullTextIndexStats
+  error?: string
+}> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/files/search-fulltext/stats`)
+  if (!response.ok) {
+    return { available: false, error: `HTTP ${response.status}` }
+  }
+  return await response.json()
+}

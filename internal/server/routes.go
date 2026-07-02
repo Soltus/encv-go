@@ -80,6 +80,8 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.GET("/api/files/exists", s.handleFileExistsGin)
 	r.GET("/api/files/encrypt-output-exists", s.handleEncryptOutputExistsGin)
 	r.GET("/api/files/search", s.handleSearchFilesGin)
+	r.GET("/api/files/search-fulltext", s.handleSearchFilesFullTextGin)
+	r.GET("/api/files/search-fulltext/stats", s.handleFullTextIndexStatsGin)
 	r.GET("/api/files/tags", s.handleTagsListGin)
 	r.POST("/api/files/tags", s.handleTagsMutateGin)
 	r.GET("/api/search/tasks", s.handleVectorSearchTasksGin)

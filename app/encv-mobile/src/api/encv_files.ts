@@ -14,6 +14,12 @@ export interface FileItem {
   modified?: string
   /** 向量搜索相关度分数（0-1，越大越相似）。仅 /api/search/files 返回时填充。 */
   score?: number
+  /** 🆕 全文搜索命中片段（高亮 <<...>> 包裹）。仅全文搜索时填充。 */
+  snippet?: string
+  /** 🆕 全文搜索命中次数。仅全文搜索时填充。 */
+  hitCount?: number
+  /** 🆕 标记为全文搜索结果。 */
+  isFullText?: boolean
 }
 
 export interface FileListResponse {

@@ -35,11 +35,11 @@
         <ion-toggle
           v-if="searchQuery"
           slot="end"
-          v-model="searchRecursive"
+          v-model="searchFullText"
           @ionChange="handleSearchToggle"
           class="recursive-toggle"
         >
-          {{ t('files.recursive') }}
+          {{ t('files.fullText') || '全文' }}
         </ion-toggle>
       </ion-toolbar>
     </ion-header>
@@ -360,6 +360,21 @@
               <h2>{{ file.display_name || file.name }}</h2>
               <p v-if="searchQuery && !file.isDirectory" class="search-path">{{ file.path }}</p>
               <p v-if="!file.isDirectory && file.size">{{ formatFileSize(file.size) }}<span v-if="file.modified && !searchQuery"> · {{ formatDateTime(file.modified) }}</span></p>
+              <!-- 🆕 2026-07-02 全文搜索命中预览框：snippet 高亮 + hitCount 计数 + 导航按钮 -->
+              <div v-if="searchFullText && file.snippet" class="fulltext-preview">
+                <div class="fulltext-preview-header">
+                  <ion-badge color="primary" class="hit-count-badge">
+                    {{ file.hitCount || 0 }} 命中
+                  </ion-badge>
+                  <span class="fulltext-preview-source">在内容中</span>
+                </div>
+                <div class="fulltext-snippet">
+                  <template v-for="(part, idx) in renderSnippet(file.snippet)" :key="idx">
+                    <mark v-if="part.highlight" class="snippet-highlight">{{ part.text }}</mark>
+                    <span v-else>{{ part.text }}</span>
+                  </template>
+                </div>
+              </div>
               <!-- 🆕 2026-06-15 multi-mount 适配：mount 伪 item 在根目录展示
                    driver badge + 真实 mount_path + resolved root_path
                    让用户能看到 "这是个 mount，不是普通目录" -->
@@ -493,8 +508,9 @@ const {
   currentPath, pathSegments, navigateTo, goUp, highlightedPath, mainContentRef,
   openContainingFolder,
   // search state
-  searchQuery, searchRecursive, searchResults, isSearching, searchMode,
+  searchQuery, searchFullText, searchResults, isSearching, searchMode,
   handleSearchInput, handleSearchClear, handleSearchToggle,
+  renderSnippet,
   // play error state
   playError, playErrorDetail, playErrorFile,
   clearPlayError, togglePlayErrorDetail,
@@ -521,4 +537,62 @@ const {
   add,
 } = useFilesView()
 </script>
+
+<style scoped>
+/* 🆕 2026-07-02 全文搜索命中预览框 */
+.fulltext-preview {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: var(--ion-color-light-shade, #f4f4f4);
+  border-left: 3px solid var(--ion-color-primary, #4f8cff);
+  border-radius: 4px;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.fulltext-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.hit-count-badge {
+  font-size: 0.75em;
+  padding: 2px 6px;
+}
+
+.fulltext-preview-source {
+  color: var(--ion-color-medium, #666);
+  font-size: 0.8em;
+}
+
+.fulltext-snippet {
+  word-break: break-word;
+  white-space: pre-wrap;
+  color: var(--ion-text-color, #333);
+}
+
+.fulltext-snippet .snippet-highlight {
+  background: var(--ion-color-primary-tint, #cce0ff);
+  color: var(--ion-color-primary-shade, #2962cc);
+  font-weight: 600;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* 暗黑模式适配 */
+@media (prefers-color-scheme: dark) {
+  .fulltext-preview {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .fulltext-snippet {
+    color: var(--ion-text-color, #ddd);
+  }
+  .fulltext-snippet .snippet-highlight {
+    background: rgba(79, 140, 255, 0.3);
+    color: #cce0ff;
+  }
+}
+</style>
 

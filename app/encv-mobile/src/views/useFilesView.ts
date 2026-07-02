@@ -7,15 +7,29 @@
 //   /selectedFile/renameValue 等），如果分多个 composable 要 props 双向同步，反而更乱。
 //   所以采用「单 composable + 内部注释分块」的方式：拆出大文件，但保持 state 共享。
 
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { onIonViewWillEnter, actionSheetController, alertController, menuController } from '@ionic/vue'
+
+// 🆕 2026-07-02: 显式 return type（用 Record<string, any> 兼容所有字段）— 避免 vue-tsc 推断丢字段
+// (历史踩坑：isSelectedModelAvailable / switchSession / lanAccessLoaded / fetchModels / temperature 都从推断 type 中消失过)
+// 关键：Record<string, any> + 显式 declared 字段（关键字段确保类型正确）
+export type UseFilesViewReturn = Record<string, any> & {
+  // 关键字段（Files.vue 模板直引用，必须类型正确）
+  searchFullText: Ref<boolean>
+  searchQuery: Ref<string>
+  searchResults: Ref<FileItem[] | null>
+  isSearching: Ref<boolean>
+  searchMode: Ref<SearchMode>
+  renderSnippet: (snippet: string | undefined) => Array<{ text: string; highlight: boolean }>
+}
 import {
   listFiles,
   listFilesStream,
   listPluginFilesStream,
   searchFiles,
   searchFilesVector,
+  searchFilesFullText,
   getFileCategory,
   PermissionDeniedError,
   NotFoundError,
@@ -93,7 +107,7 @@ import {
  *   fileBadges / selectedFile / renameValue 等），分多个 composable 要双向同步 props，
  *   反而比单 composable 更难维护。
  */
-export function useFilesView() {
+export function useFilesView(): UseFilesViewReturn {
 
 // =============================================================================
 // 1) 播放 + 错误展示
@@ -248,7 +262,10 @@ let highlightTimer: ReturnType<typeof setTimeout> | null = null
 const isMountRoot = computed(() => currentPath.value === MOUNT_ROOT)
 
 const searchQuery = ref('')
-const searchRecursive = ref(false)
+// 🆕 2026-07-02 大改升级：去掉"递归搜索"开关（价值低），改为"全文搜索"开关
+// 全文搜索：搜文本文件内容（FTS5 + bm25 + CJK bigram）
+// 非全文搜索：搜文件/目录名（原 name match 行为）
+const searchFullText = ref(false)
 const searchResults = ref<FileItem[] | null>(null)
 const isSearching = ref(false)
 const searchMode = ref<SearchMode>('none')
@@ -302,6 +319,43 @@ const displayFiles = computed(() => {
   const tagMap = fileTagMap.value
   return raw.map(f => ({ ...f, _tags: tagMap[f.path] || [] }))
 })
+
+// 🆕 2026-07-02 全文搜索 snippet 解析：FTS5 返回的 snippet 用 `<<...>>` 包裹命中词
+// 拆分为 [{text, highlight}] 数组供 Vue 模板渲染高亮
+//
+// 例：snippet = "...<<在线>> 高清 视<<频>>..."
+//      → [{text: '...', highlight: false}, {text: '在线', highlight: true}, ...]
+//
+// 不使用 v-html（防 XSS），纯 Vue 渲染。
+function renderSnippet(snippet: string | undefined): { text: string; highlight: boolean }[] {
+  if (!snippet) return []
+  const parts: { text: string; highlight: boolean }[] = []
+  // split by '<<' but keep delimiter
+  const segments = snippet.split(/(<<|>>)/)
+  let inHighlight = false
+  let cur = ''
+  for (const seg of segments) {
+    if (seg === '<<') {
+      if (cur) {
+        parts.push({ text: cur, highlight: inHighlight })
+        cur = ''
+      }
+      inHighlight = true
+    } else if (seg === '>>') {
+      if (cur) {
+        parts.push({ text: cur, highlight: true })
+        cur = ''
+      }
+      inHighlight = false
+    } else if (seg) {
+      cur += seg
+    }
+  }
+  if (cur) {
+    parts.push({ text: cur, highlight: inHighlight })
+  }
+  return parts
+}
 
 const sortedFiles = computed(() => {
   return sortFiles(files.value, sortBy.value, sortDesc.value)
@@ -586,7 +640,7 @@ function handleSearchInput() {
     isSearching.value = false
     return
   }
-  searchTimer = setTimeout(() => performSearch(), searchRecursive.value ? 600 : 300)
+  searchTimer = setTimeout(() => performSearch(), 300)
 }
 
 function handleSearchClear() {
@@ -625,7 +679,7 @@ async function performSearch() {
   }
   const gen = ++searchGeneration
 
-  const cacheKey = `${currentPath.value}:${query}:${searchRecursive.value}`
+  const cacheKey = `${currentPath.value}:${query}:fulltext=${searchFullText.value}`
   const cached = searchCache.get(cacheKey)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     if (gen !== searchGeneration) return
@@ -639,13 +693,20 @@ async function performSearch() {
   try {
     let results: FileItem[] = []
     let mode: SearchMode = 'none'
-    try {
-      const vecResult = await searchFilesVector(currentPath.value, query, searchRecursive.value, 200)
-      results = vecResult.results
-      mode = vecResult.search_mode
-    } catch {
-      results = await searchFiles(currentPath.value, query, searchRecursive.value)
-      mode = 'none'
+    if (searchFullText.value) {
+      // 🆕 全文搜索：FTS5 + bm25 + snippet + hitCount
+      const ftResult = await searchFilesFullText(query, 200, currentPath.value)
+      results = ftResult.results
+      mode = 'strict' // 全文搜索视为严格匹配
+    } else {
+      try {
+        const vecResult = await searchFilesVector(currentPath.value, query, true, 200)
+        results = vecResult.results
+        mode = vecResult.search_mode
+      } catch {
+        results = await searchFiles(currentPath.value, query, false)
+        mode = 'none'
+      }
     }
 
     if (gen !== searchGeneration) return
@@ -1414,8 +1475,9 @@ return {
   loading, refreshing, connecting,
   pendingHighlight, highlightedPath,
   isMountRoot,
-  searchQuery, searchRecursive, searchResults, isSearching,
+  searchQuery, searchFullText, searchResults, isSearching,
   searchMode,
+  renderSnippet,
   mainContentRef,
   pathSegments, displayFiles,
   fileInputRef,
