@@ -8,6 +8,12 @@ import (
 )
 
 func (s *Server) InitVectorSearch(dbPath, actualEngine string) {
+	// 初始化搜索结果 LRU 缓存（256 条 / 30s TTL，详见 search_cache.go）。
+	// 在 NewServer 已经做过的，这里幂等保护（多次调用不重建）。
+	if s.searchCache == nil {
+		s.searchCache = newSearchResultCache(256, 30*1_000_000_000) // 30s
+	}
+
 	// searchDriver 直接用 actualEngine。
 	// libSQL 原生支持 vector_distance_cos 等 SQL 向量函数（无需扩展），
 	// 参考 https://docs.turso.tech/features/ai-and-embeddings

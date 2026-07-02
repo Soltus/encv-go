@@ -3,6 +3,8 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -2514,6 +2516,26 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 		return
 	}
 
+	// 🆕 2026-07-02 搜索结果 LRU 缓存（详见 search_cache.go）：
+	//   解决用户反馈"先搜'在线'，再搜'在线 视频'重新 loading 几秒"问题。
+	//   连续搜索同一 query 直接命中缓存（< 1ms 返回），不走 DB/向量/混合评分。
+	//   缓存 key 包含所有影响结果的因素（path/recursive/limit）以避免错配。
+	cacheKey := buildSearchCacheKey(path, query, recursive, limit)
+	if s.searchCache != nil {
+		if entry, ok := s.searchCache.Get(cacheKey); ok {
+			// 缓存命中：直接返回上次结果（前端无需重新 loading）
+			c.Header("X-Search-Cache", "HIT")
+			c.JSON(http.StatusOK, gin.H{
+				"files":         entry.files,
+				"vector_search": entry.vectorSearch,
+				"search_mode":   entry.searchMode,
+				"total":         entry.total,
+			})
+			return
+		}
+		c.Header("X-Search-Cache", "MISS")
+	}
+
 	// 🆕 2026-07-02 修复长文件名被关键词搜索漏掉：
 	//   连续 CJK 查询（如"在线视频"）做整体子串匹配时，
 	//   "在线"和"视频"被分隔开的长文件名（如"在线播放-高清视频-2026-07-02-最终版.mp4"）
@@ -2543,12 +2565,7 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 
 	if len(files) >= strictThreshold {
 		// strict 模式：结果过多，只返回关键词匹配（可能按名称排序）
-		c.JSON(http.StatusOK, gin.H{
-			"files":         files,
-			"vector_search": false,
-			"search_mode":   "strict",
-			"total":         len(files),
-		})
+		writeSearchResponseGin(c, s, cacheKey, files, false, "strict", len(files))
 		return
 	}
 
@@ -2607,6 +2624,19 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 				"search_mode":   "combined",
 				"total":         len(sortedFiles),
 			})
+			// 🆕 2026-07-02 写缓存（combined 模式重排序结果）
+			if s.searchCache != nil {
+				cp := make([]mobileservice.FileInfo, len(sortedFiles))
+				copy(cp, sortedFiles)
+				s.searchCache.Set(cacheKey, &searchResultCacheEntry{
+					files:        cp,
+					vectorSearch: true,
+					searchMode:   "combined",
+					total:        len(sortedFiles),
+					cachedAt:     time.Now(),
+					fromQuery:    c.Query("q"),
+				})
+			}
 			return
 		}
 	}
@@ -2631,6 +2661,19 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 				"search_mode":   "greedy",
 				"total":         len(vectorResults),
 			})
+			// 🆕 2026-07-02 写缓存（greedy 模式 fallback 结果）
+			if s.searchCache != nil {
+				cp := make([]mobileservice.FileInfo, len(vectorResults))
+				copy(cp, vectorResults)
+				s.searchCache.Set(cacheKey, &searchResultCacheEntry{
+					files:        cp,
+					vectorSearch: true,
+					searchMode:   "greedy",
+					total:        len(vectorResults),
+					cachedAt:     time.Now(),
+					fromQuery:    c.Query("q"),
+				})
+			}
 			return
 		}
 	}
@@ -2641,6 +2684,19 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 		"search_mode":   "none",
 		"total":         len(files),
 	})
+	// 🆕 2026-07-02 写缓存（none 模式兜底结果）
+	if s.searchCache != nil {
+		cp := make([]mobileservice.FileInfo, len(files))
+		copy(cp, files)
+		s.searchCache.Set(cacheKey, &searchResultCacheEntry{
+			files:        cp,
+			vectorSearch: false,
+			searchMode:   "none",
+			total:        len(files),
+			cachedAt:     time.Now(),
+			fromQuery:    c.Query("q"),
+		})
+	}
 }
 
 // vectorSearchFallback 关键词搜索返回 0 结果时的纯向量搜索 fallback。
@@ -2816,6 +2872,61 @@ func expandCJKQueryForSearch(query string) string {
 		parts[i] = string(r)
 	}
 	return strings.Join(parts, " ")
+}
+
+// buildSearchCacheKey 构造搜索缓存 key。
+//
+// key 包含所有影响结果的因素：
+//   - path：不同目录的同名文件不应该缓存共享
+//   - query：核心搜索词
+//   - recursive：是否递归（影响结果集）
+//   - limit：返回数量（影响截断）
+//
+// 用 SHA-1 而非纯字符串拼接：
+//   - 避免 key 中出现路径分隔符等特殊字符
+//   - 长度固定，LRU 链表查找更高效
+func buildSearchCacheKey(path, query string, recursive bool, limit int) string {
+	h := sha1.New()
+	h.Write([]byte(path))
+	h.Write([]byte{0x00}) // null 分隔避免 path+query 拼接歧义
+	h.Write([]byte(query))
+	h.Write([]byte{0x00})
+	var recByte byte
+	if recursive {
+		recByte = 1
+	}
+	h.Write([]byte{recByte})
+	h.Write([]byte{0x00})
+	h.Write([]byte(strconv.Itoa(limit)))
+	return "search:" + hex.EncodeToString(h.Sum(nil))
+}
+
+// writeSearchResponseGin 统一出口：写缓存 + 返回 JSON。
+//
+// 4 个搜索模式（strict / combined / greedy / none）共用此出口：
+//   - 先写缓存（拷贝 slice 避免外部修改影响缓存）
+//   - 再 c.JSON 返回（响应头 X-Search-Cache=MISS 表示刚写）
+//
+// 缓存写入失败不影响响应返回（缓存是辅助优化，不是关键路径）。
+func writeSearchResponseGin(c *gin.Context, s *Server, cacheKey string, files []mobileservice.FileInfo, vectorSearch bool, searchMode string, total int) {
+	if s.searchCache != nil {
+		cp := make([]mobileservice.FileInfo, len(files))
+		copy(cp, files)
+		s.searchCache.Set(cacheKey, &searchResultCacheEntry{
+			files:        cp,
+			vectorSearch: vectorSearch,
+			searchMode:   searchMode,
+			total:        total,
+			cachedAt:     time.Now(),
+			fromQuery:    c.Query("q"),
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"files":         files,
+		"vector_search": vectorSearch,
+		"search_mode":   searchMode,
+		"total":         total,
+	})
 }
 
 // extractBigrams 提取查询中的非单字 token（CJK bigram + 英文单词）。

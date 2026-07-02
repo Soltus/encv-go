@@ -93,6 +93,10 @@ type Server struct {
 	lastHeartbeatMs int64
 	// 🆕 2026-07-03：向量搜索服务（Turso 原生向量检索 + 中文 bigram 分词）
 	searchSvc *vectorsearch.SearchService
+	// 🆕 2026-07-02：搜索结果内存 LRU 缓存（解决连续搜索重新加载慢的问题）
+	//   连续搜"在线" → "在线 视频" → "在线视频" 时，第二、三次直接命中缓存
+	//   避免每次都走 DB + 向量搜索 + 混合评分（综合 ~500ms+）
+	searchCache *searchResultCache
 	// 🆕 2026-07-02：数据库引擎降级真实原因（修复 handleDatabaseInfo 硬编码"当前平台不支持"的问题）
 	//
 	// 历史：InitDatabase 通过 slog.Error 记录错误，但没保存到 Server，

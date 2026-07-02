@@ -79,7 +79,7 @@
       </ion-content>
     </ion-menu>
 
-    <ion-content id="main-content">
+    <ion-content id="main-content" ref="mainContentRef">
       <ion-refresher slot="fixed" @ionRefresh="handleRefresh" v-if="!searchQuery">
         <ion-refresher-content></ion-refresher-content>
       </ion-refresher>
@@ -565,6 +565,7 @@ import {
   getFileIconColor,
   useFileListSort,
   sortFiles,
+  clientFilterFiles,
 } from '@/composables/useFileList'
 import { vLongpress } from '@/directives/longpress'
 import { isNative, requestStoragePermission, openPlayer, openExternal, getLocalFilePath } from '@/plugins/GoProcess'
@@ -755,11 +756,45 @@ const isSearching = ref(false)
 // 🆕 2026-07-02 搜索模式（见 debug-discipline.md §3.5）：
 //   - greedy 时前端对结果加视觉标记，让用户看出是宽松匹配
 const searchMode = ref<SearchMode>('none')
+// 🆕 2026-07-02 全量搜索结果缓存（用于客户端预过滤）。
+//   - lastFullResults 保存上一次后端 searchFilesVector 完整结果（limit=200）
+//   - 用户连续搜索时（如"在线"→"在线 视频"），先在 lastFullResults 客户端过滤
+//   - 客户端过滤命中则立即更新结果（无 loading），同时异步调后端（可能命中缓存或获取更准确结果）
+//   - 用户感知：100ms 内看到过滤结果（vs 之前 500ms+ 重新 loading）
+//   - 内存：最多保留 200 个 FileItem，约 ~100KB
+const lastFullResults = ref<FileItem[]>([])
+// 🆕 2026-07-02 搜索切换时保留滚动位置（解决"连续搜索时列表重置滚动到顶部"问题）
+//   - 搜索切换前保存当前 scrollTop
+//   - 搜索结果更新后用 nextTick 恢复（避免同步恢复导致 VirtualList 还没渲染）
+//   - 用户体验：连续搜索时保持在原位置
+const lastScrollTop = ref(0)
+const mainContentRef = ref<any>(null)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let searchGeneration = 0
 
+// restoreScrollTop 恢复滚动位置到 lastScrollTop（在 nextTick 后执行以等 VirtualList 渲染完）。
+//
+// 设计：搜索切换时 VirtualList 重新渲染，ion-content 的 scrollTop 可能被重置为 0。
+// 用户体验：连续搜索时保持在原位置（vs 重置到顶部）。
+//
+// nextTick 后恢复：Vue 异步更新队列 + VirtualList 完成渲染后再设 scrollTop，
+// 避免同步恢复时被新的 DOM 节点覆盖。
+async function restoreScrollTop() {
+  await nextTick()
+  // 再等一帧，确保 VirtualList 完成虚拟滚动布局
+  requestAnimationFrame(() => {
+    if (mainContentRef.value && mainContentRef.value.$el && lastScrollTop.value > 0) {
+      const scrollEl = mainContentRef.value.$el
+      if (scrollEl && scrollEl.scrollTop !== undefined) {
+        scrollEl.scrollTop = lastScrollTop.value
+      }
+    }
+  })
+}
+
 const searchCache = new Map<string, { timestamp: number; results: FileItem[] }>()
 const CACHE_TTL = 30000
+
 
 const MAX_RETRIES = isNative() ? 15 : 3
 const RETRY_DELAY = 1000
@@ -1117,6 +1152,28 @@ async function performSearch() {
   if (!query) return
   if (selectedPlugin.value) return
 
+  // 🆕 2026-07-02 搜索前保存滚动位置（搜索切换后用 nextTick 恢复）
+  //   用户连续搜索"在线"→"在线 视频"时保持在原位置，不重置到顶部
+  if (mainContentRef.value && mainContentRef.value.$el) {
+    const scrollEl = mainContentRef.value.$el
+    if (scrollEl && scrollEl.scrollTop !== undefined) {
+      lastScrollTop.value = scrollEl.scrollTop
+    }
+  }
+
+  // 🆕 2026-07-02 客户端预过滤（解决"先搜'在线'再搜'在线 视频'重新 loading 几秒"问题）：
+  //   1. 先在 lastFullResults 上做客户端过滤 → 命中则立即更新结果（无 loading，~1ms）
+  //   2. 异步调后端 searchFilesVector（命中后端 30s LRU 缓存 → 更快；或获取更准确结果）
+  //   3. 后端结果与客户端结果用 generation 防过期（防止新搜索覆盖旧结果）
+  //
+  // 用户感知：100ms 内看到结果（vs 之前 500ms+ 重新 loading）
+  const clientHits = clientFilterFiles(lastFullResults.value, query)
+  if (clientHits.length > 0) {
+    searchResults.value = clientHits
+    // 客户端命中时不显示 loading（用户体验：连续搜索"在线"→"在线 视频"时无 loading 闪烁）
+    restoreScrollTop()
+  }
+
   if (isSearching.value) {
     searchGeneration++
   }
@@ -1125,11 +1182,15 @@ async function performSearch() {
   const cacheKey = `${currentPath.value}:${query}:${searchRecursive.value}`
   const cached = searchCache.get(cacheKey)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    if (gen !== searchGeneration) return
     searchResults.value = cached.results
+    lastFullResults.value = cached.results
+    restoreScrollTop()
     return
   }
 
-  isSearching.value = true
+  // 客户端已经有结果时不显示 loading（避免视觉闪烁）
+  isSearching.value = clientHits.length === 0
   try {
     // 优先使用向量搜索（语义搜索 + 中文优化）
     let results: FileItem[] = []
@@ -1146,6 +1207,8 @@ async function performSearch() {
 
     if (gen !== searchGeneration) return
     searchResults.value = results
+    // 🆕 保存全量结果供下次 clientFilter 使用
+    lastFullResults.value = results
     searchMode.value = mode
     // 搜索时自动切到「相关度」排序（混合相关度，非纯向量）
     // 后端在 strict / combined / greedy 模式下都用 hybrid score 填充 score 字段
@@ -1154,6 +1217,7 @@ async function performSearch() {
       sortDesc.value = true
     }
     searchCache.set(cacheKey, { timestamp: Date.now(), results })
+    restoreScrollTop()
   } catch {
     if (gen !== searchGeneration) return
     searchResults.value = []
