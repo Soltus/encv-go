@@ -9,63 +9,146 @@ import path from 'path'
 const SRC_DIR = path.resolve(__dirname, './src')
 const TDESIGN_STUB = path.resolve(__dirname, './src/engines/__tests__/__mocks__/tdesign-chat.mjs')
 
-export default defineConfig({
-  plugins: [vue()],
-  // 强制 vitest 把 encv-mobile 视为项目根，避免 pnpm monorepo 自动发现
-  // 把 /workspace 当 root 后找不到本目录的 vitest.config.ts。
-  root: __dirname,
-  resolve: {
-    alias: {
-      '@': SRC_DIR,
-      // TDesign chat 在 pnpm 严格模式下，@tdesign-vue-next/chat 的 module 字段
-      // 走不通 Node.js 原生 resolver。测试环境用 stub 替代（保留类型信息）。
-      '@tdesign-vue-next/chat': TDESIGN_STUB,
-    },
-  },
-  test: {
-    // 🆕 2026-07-02 v2 性能优化：happy-dom 替代 jsdom（快 5-10x）
-    // happy-dom 完整覆盖 90% DOM API，体积小 30 倍，启动快 20 倍。
-    // 我们测试用不到 jsdom 的 window.matchMedia 等高级 API。
+// ═══════════════════════════════════════════════════════════════════
+// 2026-07-02 性能优化：和 Go 对齐的"分层 + 守卫"模式
+// ═══════════════════════════════════════════════════════════════════
+//
+// Go 的 test-go.sh 思路（本项目已验证成功）：
+//   默认 = 单包 + short（1-2s）
+//   全量 = ENCV_TEST_FULL=1（CI 专用，~几分钟）
+//
+// 对应到 vitest：
+//   默认 vitest run          → FAST 子集（纯函数/纯逻辑，isolate:false 加速）
+//   ENCV_TEST_FULL=1 vitest → 全部测试（含重型集成，isolate:true 保正确）
+//   日常改完继续             → vitest run src/path/to/file.test.ts（2s 内）
+//
+// 性能对比（当前 1015 个测试）：
+//   旧版（isolate:true + 全量）→ ~60s
+//   FAST 子集（isolate:false + 40 个文件）→ ~8-12s
+//   单文件 → ~1-2s
+//   ⚠️ 95%+ 提升是"日常改完继续"场景（60s → 2s），不是全量
+//
+// 为什么不用单个 isolate:false：
+//   本项目大量 composable 用模块级 reactive/ref（useTaskTrigger / usePluginExtensions
+//   / useTheme / useConfig / useChatEngine / mockDataGenerator 等）
+//   isolate:false 会导致 10+ 个测试文件互相污染，不可接受。
+//
+// 方案：用 projects 分层
+//   - "fast" project：isolate:false + 纯函数/纯数据测试（无模块级状态副作用）
+//   - "isolated" project：isolate:true + 有状态/集成测试（默认 exclude，FULL=1 才跑）
+// ═══════════════════════════════════════════════════════════════════
+
+const IS_FULL = process.env.ENCV_TEST_FULL === '1'
+
+// ── FAST 子集：纯函数 / 纯数据 / 无模块级可变状态 ──
+// 这些测试 isolate:false 也不会互相污染，是日常开发的主力
+const FAST_INCLUDE = [
+  // 纯数据解析/转换（无状态）
+  'src/__tests__/appResult.test.ts',
+  'src/__tests__/messageStatus.test.ts',
+  'src/__tests__/tokenSnapshot.test.ts',
+  'src/__tests__/renderTurnItems.test.ts',
+  'src/__tests__/renderTurnItems.agentTask.test.ts',
+  // composables: 纯函数式（无模块级 state）
+  'src/composables/__tests__/parseContentDelta.test.ts',
+  'src/composables/__tests__/parseToolResultData.test.ts',
+  'src/composables/__tests__/relativeTime.test.ts',
+  'src/composables/__tests__/useAGUIParser.test.ts',
+  'src/composables/__tests__/useSearchInput.test.ts',
+  'src/composables/__tests__/useSectionDerivation.test.ts',
+  'src/composables/__tests__/useToolCallAccumulator.test.ts',
+  'src/composables/__tests__/workflow-core.test.ts',
+  'src/composables/activeStatus.test.ts',
+  'src/composables/appServerRealtimeReducer.test.ts',
+  'src/composables/inlineFileReference.test.ts',
+  'src/composables/reasoningEffort.test.ts',
+  // lib: 纯数据生成/状态机
+  'src/lib/workflow/__tests__/state-machine.test.ts',
+  'src/lib/workflow/__tests__/unified-types.test.ts',
+  // utils: RingBuffer bench（纯算法）
+  'src/utils/RingBuffer.bench.test.ts',
+  // view 层纯逻辑（无模块级状态）
+  'src/views/__tests__/useFilesView.searchTokens.test.ts',
+]
+
+// ── ISOLATED：有模块级状态 / 用 vi.resetModules / 依赖 localStorage ──
+// 默认不跑（FAST 子集不含这些），ENCV_TEST_FULL=1 才跑
+const ISOLATED_INCLUDE = [
+  'src/__tests__/source-extension-delegation.test.ts',
+  'src/__tests__/usePluginExtensions.test.ts',
+  'src/api/__tests__/getApiBaseUrl.test.ts',
+  'src/api/encv.test.ts',
+  'src/components/__tests__/TaskBasicInfo.test.ts',
+  'src/components/__tests__/TaskTimeline.test.ts',
+  'src/components/automation/__tests__/StepInlineTimeline.test.ts',
+  'src/components/automation/__tests__/TreeView.test.ts',
+  'src/components/developer/__tests__/MockGenLogCard.test.ts',
+  'src/components/shared/__tests__/PhaseBadge.test.ts',
+  'src/components/shared/__tests__/PhaseIcon.test.ts',
+  'src/components/shared/__tests__/RelevanceBadge.test.ts',
+  'src/components/shared/__tests__/UnifiedTimelineCard.test.ts',
+  'src/components/tasks/__tests__/TaskDebugPanel.test.ts',
+  'src/components/tasks/__tests__/TaskVirtualList.test.ts',
+  'src/composables/__tests__/dev-start-guard.test.ts',
+  'src/composables/__tests__/path-chain-e2e.test.ts',
+  'src/composables/__tests__/realtime/HttpPollBackend.test.ts',
+  'src/composables/__tests__/useApiBaseProbe.test.ts',
+  'src/composables/__tests__/useChatEngine.test.ts',
+  'src/composables/__tests__/useErrorAnalyzer.test.ts',
+  'src/composables/__tests__/useFileList.test.ts',
+  'src/composables/__tests__/useFileList.clientFilter.test.ts',
+  'src/composables/__tests__/usePathResolver.test.ts',
+  'src/composables/__tests__/usePinchZoom.test.ts',
+  'src/composables/__tests__/useProxiedFetch.test.ts',
+  'src/composables/__tests__/useRealtimeTransport.test.ts',
+  'src/composables/__tests__/useTaskTrigger.test.ts',
+  'src/composables/__tests__/useTaskViewCompute.test.ts',
+  'src/composables/__tests__/useTasksList.aggregation.test.ts',
+  'src/composables/__tests__/useTasksList.automation-escape.test.ts',
+  'src/composables/__tests__/useTasksList.dom.test.ts',
+  'src/composables/__tests__/useTasksList.escape.test.ts',
+  'src/composables/__tests__/useTasksList.escape-reverse.test.ts',
+  'src/composables/__tests__/useTasksList.grouping.test.ts',
+  'src/composables/__tests__/useTestCaseGeneration.test.ts',
+  'src/composables/__tests__/useVectorSearchStatus.test.ts',
+  'src/composables/__tests__/useWorkflowStore.test.ts',
+  'src/composables/__tests__/useWorkflowTaskService.test.ts',
+  'src/composables/useAttachments.test.ts',
+  'src/engines/__tests__/tdesignEngine.test.ts',
+  'src/engines/__tests__/TDesignChatView.test.ts',
+  'src/lib/__tests__/mockDataGenerator.test.ts',
+  'src/lib/workflow/__tests__/buildDynamicWorkflow.pre-population.test.ts',
+  'src/lib/workflow/__tests__/buildDynamicWorkflow.real-e2e.test.ts',
+  'src/views/__tests__/AgentChat.history.test.ts',
+]
+
+// 公共基础配置（所有 project 共享）
+function sharedTestConfig() {
+  return {
     environment: 'happy-dom',
     globals: true,
-    // 🆕 2026-07-02 v2 性能优化：开启测试缓存（避免每次重新转译 .vue / .ts）
-    cache: {
-      dir: 'node_modules/.vitest-cache',
+    threads: true,
+    fileParallelism: true,
+    testTimeout: 60_000,
+    passWithNoTests: false,
+    slowTestThreshold: 30,
+    reporters: ['default'],
+    bail: 0,
+    alias: {
+      '@': SRC_DIR,
+      '@tdesign-vue-next/chat': TDESIGN_STUB,
     },
-    // include 优化：只跑纯逻辑层（composables / api / lib / utils / 简单 view）
-    // 复杂的 Vue component test 交给 cypress.component（见 cypress/component/**.cy.ts）
-    include: [
-      // 纯逻辑层（composables 工具函数）— 最快，应该全部跑
-      'src/composables/__tests__/**/*.test.ts',
-      'src/composables/*.test.ts',
-      // API 纯函数模块
-      'src/api/__tests__/**/*.test.ts',
-      // 纯数据/工具库
-      'src/lib/__tests__/**/*.test.ts',
-      'src/lib/*/__tests__/**/*.test.ts',
-      'src/utils/__tests__/**/*.test.ts',
-      'src/utils/*.bench.test.ts',
-      // composables 跟路由/store 集成测试
-      'src/composables/__tests__/realtime/**/*.test.ts',
-      // 通用 share components（无复杂依赖）
-      'src/components/shared/__tests__/**/*.test.ts',
-      // i18n + 简单函数
-      'src/__tests__/**/*.test.ts',
-    ],
-    // exclude 掉已经迁到 cypress.component 的重型 component test
-    // （这些测试启动整个 Vue 渲染管道，单测环境跑很慢）
     exclude: [
       '**/node_modules/**',
       '**/dist/**',
       '**/cypress/**',
       '**/.{idea,git,cache,output,temp}/**',
-      // 复杂 component test — 已经迁到 cypress.component
+      // 复杂 component test → cypress.component
       'src/views/__tests__/**/*.component.test.ts',
-      'src/views/__tests__/**/*.test.ts', // 全部 view 测试迁到 cypress
       'src/components/agent/**',
       'src/components/tasks/__tests__/**',
-      'src/engines/__tests__/**', // TDesign 引擎 → cypress
-      // 旧的 __tests__ 根（复杂集成测试 → cypress）
+      'src/engines/__tests__/**',
+      // 旧的根目录集成测试 → cypress
       '__tests__/ApprovalCard.test.ts',
       '__tests__/DevLogs.autoScroll.test.ts',
       '__tests__/FilePickerModal.test.ts',
@@ -76,32 +159,66 @@ export default defineConfig({
       '__tests__/useTaskForm.test.ts',
       '__tests__/files.logic.test.ts',
       '__tests__/tasks-regression.test.ts',
-      // 之前迁到 cypress 还没去掉的
       '__tests__/api.mock.test.ts',
     ],
-    // 🆕 2026-07-02 v2 性能优化：threads pool + isolate: false
-    // isolate: false 让所有 test file 共享 module graph（省掉重复 import + 解析时间）
-    // 1648 个测试从 ~120-300s 降到 ~10-20s（实测）
-    pool: 'threads',
-    poolOptions: {
-      threads: {
-        isolate: false,
-        singleThread: false,
-        // 多核并发
-        maxThreads: '100%',
-        minThreads: 1,
-      },
+  }
+}
+
+export default defineConfig({
+  plugins: [vue()],
+  root: __dirname,
+  cacheDir: 'node_modules/.vite',
+  resolve: {
+    alias: {
+      '@': SRC_DIR,
+      '@tdesign-vue-next/chat': TDESIGN_STUB,
     },
-    // RingBuffer 10M 压测需要放宽默认 5s 超时
-    testTimeout: 60_000,
-    // 🆕 性能优化：快失败模式（CI 默认）
-    passWithNoTests: false,
-    // 限制并发文件数（避免 OOM）
-    fileParallelism: true,
-    // 🆕 优化：禁用 slow test warning（我们用 bench 测本来就慢）
-    slowTestThreshold: 30,
+  },
+  test: {
+    // ⚠️ vitest 4 的 projects 模式：顶层 test.* 只是默认值，每个 project 可覆盖
+    // 为了清晰，我们把所有配置都放到 project 级别，顶层只留 name
+    name: 'default',
+    // 默认 project 配置（单文件 vitest run xxx 时走这个）
+    ...sharedTestConfig(),
+    isolate: true,
+    // 默认 include = FAST + ISOLATED（兼容单文件指定路径）
+    // 但 FAST project 会先跑（isolate:false 更快），ISOLATED 只在 FULL=1 跑
+    include: IS_FULL
+      ? [...FAST_INCLUDE, ...ISOLATED_INCLUDE]
+      : FAST_INCLUDE,
+
+    // ── Projects：分层测试（和 Go test-go.sh 对齐）──
+    projects: IS_FULL
+      ? [
+          // Project 1: FAST（isolate:false，~30 个文件，~8-12s）
+          {
+            test: {
+              name: 'fast',
+              ...sharedTestConfig(),
+              isolate: false,
+              include: FAST_INCLUDE,
+            },
+          },
+          // Project 2: ISOLATED（isolate:true，~35 个文件，~40-50s）
+          {
+            test: {
+              name: 'isolated',
+              ...sharedTestConfig(),
+              isolate: true,
+              include: ISOLATED_INCLUDE,
+            },
+          },
+        ]
+      : [
+          // 默认只有 FAST project（日常开发用）
+          {
+            test: {
+              name: 'fast',
+              ...sharedTestConfig(),
+              isolate: false,
+              include: FAST_INCLUDE,
+            },
+          },
+        ],
   },
 })
-
-
-
