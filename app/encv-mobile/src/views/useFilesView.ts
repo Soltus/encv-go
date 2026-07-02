@@ -277,7 +277,7 @@ const MAX_RETRIES = isNative() ? 15 : 3
 const RETRY_DELAY = 1000
 
 const pathSegments = computed(() => {
-  if (currentPath.value === '/d') return []
+  if (!currentPath.value || currentPath.value === '/d') return []
   if (currentPath.value === MOUNT_ROOT) return []
   const parts = currentPath.value.split('/').filter(Boolean)
   return parts.map((name, index) => {
@@ -477,6 +477,12 @@ function highlightFile(name: string) {
 }
 
 function openContainingFolder(file: FileItem) {
+  if (!file || !file.path) {
+    // 搜索结果可能没有完整 path，防御性处理
+    searchQuery.value = ''
+    searchResults.value = null
+    return
+  }
   const parts = file.path.split('/').filter(Boolean)
   let parentDir: string
   if (parts.length >= 2 && parts[0] === 'd') {
@@ -491,6 +497,13 @@ function openContainingFolder(file: FileItem) {
 
 function goUp() {
   if (isMountRoot.value) return
+  if (!currentPath.value) {
+    currentPath.value = MOUNT_ROOT
+    searchQuery.value = ''
+    searchResults.value = null
+    loadFiles()
+    return
+  }
   const parts = currentPath.value.split('/').filter(Boolean)
   if (parts.length === 2 && parts[0] === 'd') {
     currentPath.value = MOUNT_ROOT
@@ -524,9 +537,13 @@ async function handleFileClick(file: FileItem) {
   }
 
   if (file.isDirectory) {
-    const base = currentPath.value === '/d' ? '/d' : currentPath.value
-    const newPath = base + '/' + file.name
-    navigateTo(newPath)
+    // 修复：搜索结果（递归）的文件夹可能在任意位置，必须用 file.path 而不是 currentPath + '/' + file.name。
+    // 原写法对非当前目录的搜索结果文件夹会导航到错误路径导致 404 / render crash。
+    const targetPath = file.path || (currentPath.value === '/d' ? '/d' : currentPath.value) + '/' + file.name
+    if (!file.path) {
+      console.warn('[Files] Folder click missing path, falling back to currentPath + name', file)
+    }
+    navigateTo(targetPath)
     return
   }
 

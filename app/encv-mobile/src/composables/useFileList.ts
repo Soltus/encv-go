@@ -40,15 +40,19 @@ const LABEL_MAP: Record<SortBy, string> = {
 }
 
 export function isImageFile(file: FileItem): boolean {
-  if (file.isDirectory) return false
-  const ext = '.' + file.name.split('.').pop()?.toLowerCase()
-  return IMAGE_EXTENSIONS.has(ext || '')
+  if (!file || file.isDirectory) return false
+  if (!file.name) return false
+  const dotIdx = file.name.lastIndexOf('.')
+  if (dotIdx === -1) return false
+  const ext = '.' + file.name.substring(dotIdx + 1).toLowerCase()
+  return IMAGE_EXTENSIONS.has(ext)
 }
 
 export function getFileIcon(file: FileItem) {
+  if (!file) return documentText
   if (file.isDirectory) return folder
   if (file.isEncrypted) return lockClosed
-  const category = getFileCategory(file.name)
+  const category = getFileCategory(file.name || '')
   switch (category) {
     case 'video': return videocam
     case 'audio': return musicalNotes
@@ -59,9 +63,10 @@ export function getFileIcon(file: FileItem) {
 }
 
 export function getFileIconColor(file: FileItem): string {
+  if (!file) return 'medium'
   if (file.isDirectory) return 'primary'
   if (file.isEncrypted) return 'warning'
-  const category = getFileCategory(file.name)
+  const category = getFileCategory(file.name || '')
   switch (category) {
     case 'video': return 'danger'
     case 'audio': return 'tertiary'
