@@ -2509,7 +2509,7 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 	}
 
 	if query == "" {
-		c.JSON(http.StatusOK, gin.H{"files": []gin.H{}, "vector_search": false})
+		c.JSON(http.StatusOK, gin.H{"files": []gin.H{}, "vector_search": false, "search_mode": "none"})
 		return
 	}
 
@@ -2520,28 +2520,27 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 		return
 	}
 
-	// 关键词搜索返回 0 结果时，若向量搜索可用，fallback 到纯向量搜索。
+	// 🆕 2026-07-02 智能搜索策略（见 debug-discipline.md §3.5）：
+	//   - 关键词精确匹配 ≥ 20 → strict 模式，只返回关键词结果（避免向量噪声）
+	//   - 关键词匹配 1~19 → combined 模式，关键词结果 + 向量重排序
+	//   - 关键词匹配 0 → greedy 模式，纯向量 fallback（bigram 过滤可放宽）
 	//
-	// 场景：搜索 "在线高清"（无空格）应匹配 "在线播放-高清视频.mp4"。
-	// 关键词 "在线高清" 不是文件名字串 → SearchFiles 返回 0 候选；
-	// 但向量搜索 bigram 分词让两者共享 token（在线/高清/在/线/高/清），
-	// 余弦相似度高 → 能匹配。
-	//
-	// 流程：列出搜索路径下所有文件 → 批量索引到向量库 → 向量搜索。
-	if s.searchSvc != nil && len(files) == 0 {
-		vectorResults := s.vectorSearchFallback(path, query, recursive, limit)
-		if len(vectorResults) > 0 {
-			c.JSON(http.StatusOK, gin.H{
-				"files":         vectorResults,
-				"vector_search": true,
-				"total":         len(vectorResults),
-			})
-			return
-		}
+	// 前端据 search_mode 字段对 greedy 结果加视觉标记，让用户看出是宽松匹配。
+	const strictThreshold = 20
+
+	if len(files) >= strictThreshold {
+		// strict 模式：结果过多，只返回关键词匹配（可能按名称排序）
+		c.JSON(http.StatusOK, gin.H{
+			"files":         files,
+			"vector_search": false,
+			"search_mode":   "strict",
+			"total":         len(files),
+		})
+		return
 	}
 
-	// 如果向量搜索可用，且结果数量较多，用向量重排序
-	if s.searchSvc != nil && len(files) > 3 {
+	// combined 模式：1~19 个关键词结果，用向量重排序
+	if s.searchSvc != nil && len(files) > 0 {
 		ctx := context.Background()
 		// 先把结果批量索引到向量搜索
 		batch := make([]vectorsearch.FileIndexItem, 0, len(files))
@@ -2591,7 +2590,32 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"files":         sortedFiles,
 				"vector_search": true,
+				"search_mode":   "combined",
 				"total":         len(sortedFiles),
+			})
+			return
+		}
+	}
+
+	// greedy 模式：关键词搜索返回 0 结果，若向量搜索可用，fallback 到纯向量搜索。
+	//
+	// 场景：搜索 "在线高清"（无空格）应匹配 "在线播放-高清视频.mp4"。
+	// 关键词 "在线高清" 不是文件名字串 → SearchFiles 返回 0 候选；
+	// 但向量搜索 bigram 分词让两者共享 token（在线/高清/在/线/高/清），
+	// 余弦相似度高 → 能匹配。
+	//
+	// greedy 模式的 bigram 过滤强度根据结果数量动态调整：
+	//   - 结果 < 5：放宽（共享 ≥ 1 个 bigram 即可，宁多勿少）
+	//   - 结果 5~20：中等（共享 ≥ 一半 bigram）
+	//   - 结果 > 20：收紧（共享全部 bigram 或 score ≥ 0.5）
+	if s.searchSvc != nil && len(files) == 0 {
+		vectorResults := s.vectorSearchFallback(path, query, recursive, limit)
+		if len(vectorResults) > 0 {
+			c.JSON(http.StatusOK, gin.H{
+				"files":         vectorResults,
+				"vector_search": true,
+				"search_mode":   "greedy",
+				"total":         len(vectorResults),
 			})
 			return
 		}
@@ -2600,6 +2624,7 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"files":         files,
 		"vector_search": false,
+		"search_mode":   "none",
 		"total":         len(files),
 	})
 }
@@ -2670,26 +2695,49 @@ func (s *Server) vectorSearchFallback(path, query string, recursive bool, limit 
 	//    用于过滤只共享单个 bigram 的弱相关结果
 	queryBigrams := extractBigrams(query)
 
-	// 5. 映射回 FileInfo，附带 score + bigram 重叠过滤
+	// 5. 映射回 FileInfo，附带 score + bigram 重叠过滤（动态强度）
 	fileMap := make(map[string]mobileservice.FileInfo, len(allFiles))
 	for _, f := range allFiles {
 		fileMap[f.Path] = f
 	}
 
-	var matched []mobileservice.FileInfo
+	// 先收集候选结果（score >= 0.05），用于判断结果数量级决定过滤强度
+	type candidate struct {
+		file  mobileservice.FileInfo
+		score float64
+	}
+	var candidates []candidate
 	for _, r := range results {
 		if r.Score < 0.05 {
 			continue
 		}
 		if f, ok := fileMap[r.RefID]; ok {
-			// bigram 重叠过滤：如果查询有 bigram，要求文件名与查询共享
-			// 至少一半的 bigram，避免只共享一个常见 bigram（如"在线"）的弱相关结果
-			if !hasSufficientBigramOverlap(f.Name, queryBigrams) {
-				continue
-			}
-			f.Score = r.Score
-			matched = append(matched, f)
+			candidates = append(candidates, candidate{file: f, score: r.Score})
 		}
+	}
+
+	// 根据候选数量决定 bigram 过滤强度（见 debug-discipline.md §3.5）
+	//   - 候选 < 5：relaxed（共享 ≥ 1 个 bigram 即可，宁多勿少）
+	//   - 候选 5~20：medium（共享 ≥ 一半 bigram）
+	//   - 候选 > 20：strict（共享全部 bigram）
+	var strictness BigramStrictness
+	switch {
+	case len(candidates) < 5:
+		strictness = BigramRelaxed
+	case len(candidates) <= 20:
+		strictness = BigramMedium
+	default:
+		strictness = BigramStrict
+	}
+
+	var matched []mobileservice.FileInfo
+	for _, c := range candidates {
+		if !hasSufficientBigramOverlapEx(c.file.Name, queryBigrams, strictness) {
+			continue
+		}
+		f := c.file
+		f.Score = c.score
+		matched = append(matched, f)
 	}
 	return matched
 }
@@ -2708,21 +2756,46 @@ func extractBigrams(query string) []string {
 	return bigrams
 }
 
-// hasSufficientBigramOverlap 检查文件名是否与查询共享足够的 bigram。
+// BigramStrictness bigram 重叠过滤强度（见 debug-discipline.md §3.5）。
+type BigramStrictness int
+
+const (
+	// BigramRelaxed 放宽：共享 ≥ 1 个 bigram 即可（结果过少时，宁多勿少）
+	BigramRelaxed BigramStrictness = iota
+	// BigramMedium 中等：共享 ≥ 一半 bigram（默认强度）
+	BigramMedium
+	// BigramStrict 严格：共享全部 bigram（结果过多时，收紧过滤）
+	BigramStrict
+)
+
+// hasSufficientBigramOverlap 检查文件名是否与查询共享足够的 bigram（中等强度）。
+//
+// 兼容旧调用点，等价于 hasSufficientBigramOverlapEx(name, bigrams, BigramMedium)。
+func hasSufficientBigramOverlap(fileName string, queryBigrams []string) bool {
+	return hasSufficientBigramOverlapEx(fileName, queryBigrams, BigramMedium)
+}
+
+// hasSufficientBigramOverlapEx 检查文件名是否与查询共享足够的 bigram（可指定强度）。
 //
 // 规则：
 //   - 查询无 bigram（纯单字或空）→ 不过滤（返回 true）
-//   - 文件名共享 bigram 数量 >= 查询 bigram 数量的一半 → 返回 true
-//   - 否则 → 返回 false（过滤掉）
+//   - BigramRelaxed：共享 ≥ 1 个 bigram（结果过少时放宽）
+//   - BigramMedium：共享 ≥ 一半 bigram（向上取整，默认强度）
+//   - BigramStrict：共享全部 bigram（结果过多时收紧）
 //
-// 例：查询 "在线视频" bigrams=["在线","线视","视频"]（3 个，阈值=2）
-//   - "在线播放-高清视频.mp4" 共享 ["在线","视频"]（2 个）→ 2>=2 → true
-//   - "在线文档.pdf" 共享 ["在线"]（1 个）→ 1<2 → false
-func hasSufficientBigramOverlap(fileName string, queryBigrams []string) bool {
+// 例：查询 "在线视频" bigrams=["在线","线视","视频"]（3 个）
+//   - "在线播放-高清视频.mp4" 共享 ["在线","视频"]（2 个）
+//     - Relaxed: 2>=1 → true
+//     - Medium: 2>=2 → true
+//     - Strict: 2<3 → false
+//   - "在线文档.pdf" 共享 ["在线"]（1 个）
+//     - Relaxed: 1>=1 → true
+//     - Medium: 1<2 → false
+//     - Strict: 1<3 → false
+func hasSufficientBigramOverlapEx(fileName string, queryBigrams []string, strictness BigramStrictness) bool {
 	if len(queryBigrams) == 0 {
 		return true
 	}
-	threshold := (len(queryBigrams) + 1) / 2 // 向上取整
 	lowerName := strings.ToLower(fileName)
 	shared := 0
 	for _, bg := range queryBigrams {
@@ -2730,7 +2803,15 @@ func hasSufficientBigramOverlap(fileName string, queryBigrams []string) bool {
 			shared++
 		}
 	}
-	return shared >= threshold
+	switch strictness {
+	case BigramRelaxed:
+		return shared >= 1
+	case BigramStrict:
+		return shared >= len(queryBigrams)
+	default: // BigramMedium
+		threshold := (len(queryBigrams) + 1) / 2 // 向上取整
+		return shared >= threshold
+	}
 }
 
 // handleSearchStatsGin 获取搜索索引统计信息。

@@ -460,6 +460,8 @@ function createUseTasksList() {
     formatDateTime: dateFormat,
     // 🆕 2026-07-02：向量搜索相关度（前端 RelevanceBadge 用）
     getTaskSearchScore: store.getTaskSearchScore,
+    // 🆕 2026-07-02：搜索模式（strict/combined/greedy/none，前端横幅用）
+    searchMode: store.searchMode,
     // 操作
     fetchTasks, refresh, loadMore,
     hasMore, isLoadingMore,

@@ -13,7 +13,7 @@
  */
 import { computed, ref, shallowRef, triggerRef, watch } from 'vue'
 import { defineStore } from 'pinia'
-import type { EncvTask, TaskStatus, TaskType } from '@/api/encv'
+import type { EncvTask, SearchMode, TaskStatus, TaskType } from '@/api/encv'
 import { searchTasksVector } from '@/api/encv'
 import {
   loadAllTasks,
@@ -87,6 +87,10 @@ export const useTaskStore = defineStore('task', () => {
   //   - 前端 RelevanceBadge 组件据此显示百分比徽章
   //   - 与 backendSearchResultIds 同生命周期（搜索清空时一起重置）
   const backendSearchScores = ref<Map<string, number>>(new Map())
+  // 🆕 2026-07-02：保存后端搜索模式（strict/combined/greedy/none）
+  //   - 详见 debug-discipline.md §3.5 智能搜索策略
+  //   - greedy 模式下前端需显示横幅告知用户结果是语义近似
+  const searchMode = ref<SearchMode>('none')
   let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
   let searchGen = 0
 
@@ -95,6 +99,7 @@ export const useTaskStore = defineStore('task', () => {
     if (!q.trim()) {
       backendSearchResultIds.value = null
       backendSearchScores.value = new Map()
+      searchMode.value = 'none'
       isBackendSearching.value = false
       return
     }
@@ -113,10 +118,12 @@ export const useTaskStore = defineStore('task', () => {
       }
       backendSearchResultIds.value = idSet
       backendSearchScores.value = scoreMap
+      searchMode.value = result.search_mode || 'none'
     } catch {
       if (gen !== searchGen) return
       backendSearchResultIds.value = null
       backendSearchScores.value = new Map()
+      searchMode.value = 'none'
     } finally {
       if (gen === searchGen) {
         isBackendSearching.value = false
@@ -635,6 +642,7 @@ export const useTaskStore = defineStore('task', () => {
     sortBy.value = 'activity'
     backendSearchResultIds.value = null
     backendSearchScores.value = new Map()
+    searchMode.value = 'none'
     clearFilters()
   }
 
@@ -647,6 +655,7 @@ export const useTaskStore = defineStore('task', () => {
     // 后端向量搜索
     isBackendSearching,
     backendSearchScores,
+    searchMode,
     getTaskSearchScore,
     // 派生（raw，不含视图 kind/counters/displayData）
     tasksById, tasksByRunId, availablePlugins, hasCompletedTasks,

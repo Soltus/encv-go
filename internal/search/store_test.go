@@ -140,17 +140,17 @@ func TestSQLiteStore(t *testing.T) {
 
 // TestNewStore_DriverMapping 验证 NewStore 根据 driver 正确选择 Store 实现。
 //
-// 关键：libsql 应该走 SQLiteStore（Go 层计算），而非 TursoStore。
-// 原因：本地嵌入式 libsql（CGO .so）不支持 vector_distance_cos 函数，
-// 该函数是 Turso Cloud / libSQL Server 的特性。
+// 关键：libsql 走 TursoStore（用原生 vector_distance_cos SQL 函数），
+// 因为 libSQL 原生支持向量搜索（https://docs.turso.tech/features/ai-and-embeddings）。
+// 只有 sqlite（glebarez 纯 Go transpile）走 SQLiteStore（Go 层计算）。
 func TestNewStore_DriverMapping(t *testing.T) {
 	cases := []struct {
 		driver      string
 		expectTurso bool // true=TursoStore, false=SQLiteStore
 	}{
 		{"turso", true},
-		{"libsql", false}, // libsql 必须走 SQLiteStore
-		{"sqlite", false},
+		{"libsql", true},  // libsql 原生支持向量，走 TursoStore
+		{"sqlite", false}, // glebarez 纯 Go，走 SQLiteStore
 	}
 
 	for _, tc := range cases {

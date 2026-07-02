@@ -1283,10 +1283,22 @@ export async function searchFiles(path: string, keyword: string, recursive = fal
 
 // ─── 向量搜索 API（Turso 原生向量检索 + 中文 bigram 分词）───
 
+/**
+ * 搜索模式（见 debug-discipline.md §3.5）：
+ *   - none：无搜索（空查询）
+ *   - strict：关键词精确匹配 ≥ 20，只返回关键词结果
+ *   - combined：关键词匹配 1~19，向量重排序
+ *   - greedy：关键词匹配 0，纯向量 fallback（bigram 过滤放宽）
+ *
+ * 前端据 searchMode 对 greedy 结果加视觉标记，让用户看出是宽松匹配。
+ */
+export type SearchMode = 'none' | 'strict' | 'combined' | 'greedy'
+
 export interface VectorSearchResult<T> {
   results: T[]
   vector_search: boolean
   total: number
+  search_mode: SearchMode
 }
 
 /**
@@ -1303,6 +1315,7 @@ export async function searchTasksVector(query: string, limit = 50): Promise<Vect
     results: data.tasks || [],
     vector_search: data.vector_search || false,
     total: data.total || 0,
+    search_mode: (data.search_mode as SearchMode) || 'none',
   }
 }
 
@@ -1320,6 +1333,7 @@ export async function searchFilesVector(path: string, query: string, recursive =
     results: data.files || [],
     vector_search: data.vector_search || false,
     total: data.total || 0,
+    search_mode: (data.search_mode as SearchMode) || 'none',
   }
 }
 

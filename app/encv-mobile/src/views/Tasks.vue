@@ -261,6 +261,24 @@
         <p>{{ t('tasks.noTasksDesc') }}</p>
       </div>
 
+      <!-- 🆕 2026-07-02 搜索模式提示（见 debug-discipline.md §3.5）：
+           独立 v-if 块（不参与上方 v-if/v-else-if/v-else 链）
+           greedy 模式时显示徽章，告知用户结果是语义近似（可能不完全相关） -->
+      <div
+        v-if="searchQuery.trim() && filteredTasks.length > 0 && searchMode === 'greedy'"
+        class="search-mode-banner search-mode-greedy"
+      >
+        <ion-icon :icon="pricetagOutline" class="search-mode-icon"></ion-icon>
+        <span>{{ t('tasks.searchModeGreedy', { defaultValue: '贪婪匹配：结果为语义近似，可能不完全相关' }) }}</span>
+      </div>
+      <div
+        v-else-if="searchQuery.trim() && filteredTasks.length > 0 && searchMode === 'combined'"
+        class="search-mode-banner search-mode-combined"
+      >
+        <ion-icon :icon="pricetagOutline" class="search-mode-icon"></ion-icon>
+        <span>{{ t('tasks.searchModeCombined', { defaultValue: '综合匹配：关键词 + 语义重排序' }) }}</span>
+      </div>
+
       <!-- 🆕 Task 15：用 TaskVirtualList 替换 ion-list + v-for -->
       <!-- 历史：ion-list + v-for 渲染所有 displayedItems → 200+ task 时 DOM 节点爆炸 -->
       <!-- 修复：TaskVirtualList 用 @tanstack/vue-virtual 仅渲染可见窗口 + overscan 10 个 item -->
@@ -575,7 +593,7 @@ import { add, closeCircle, checkmarkCircle, timer, sync,
   extensionPuzzle, swapVertical, chevronDown,
   hardwareChipOutline, cogOutline, person, chevronForward,
   albumsOutline, listOutline, calendarOutline,
-  pin,
+  pin, pricetagOutline,
 } from 'ionicons/icons'
 import { useRoute, useRouter } from 'vue-router'
 import type { EncvTask } from '@/api/encv'
@@ -686,6 +704,8 @@ const {
   getTaskIcon, getTaskColor, getStatusColor, getPhaseLabel,
   // 🆕 2026-07-02：向量搜索相关度（前端 RelevanceBadge 用）
   getTaskSearchScore,
+  // 🆕 2026-07-02：搜索模式（strict/combined/greedy/none，前端横幅用）
+  searchMode,
   // 🆕 v4 M3
   viewMode, filterDatePreset, filterDateRange,
   displayedItems,
@@ -1199,6 +1219,46 @@ onIonViewWillEnter(() => {
   justify-content: center;
   height: 50%;
   color: var(--encv-text-secondary);
+}
+
+/* 🆕 2026-07-02 搜索模式提示横幅（见 debug-discipline.md §3.5）
+   - greedy：橙色调，虚线边框，告知用户结果是语义近似
+   - combined：蓝绿色调，实线边框，告知用户是关键词+向量综合 */
+.search-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.search-mode-banner .search-mode-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.search-mode-greedy {
+  background: rgba(var(--ion-color-warning-rgb), 0.12);
+  border: 1px dashed var(--ion-color-warning);
+  color: var(--ion-color-warning-shade);
+}
+
+.search-mode-combined {
+  background: rgba(var(--ion-color-tertiary-rgb), 0.10);
+  border: 1px solid var(--ion-color-tertiary);
+  color: var(--ion-color-tertiary-shade);
+}
+
+@media (prefers-color-scheme: dark) {
+  .search-mode-greedy {
+    color: var(--ion-color-warning-tint);
+  }
+  .search-mode-combined {
+    color: var(--ion-color-tertiary-tint);
+  }
 }
 
 .empty-state {

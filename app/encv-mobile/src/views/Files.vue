@@ -289,6 +289,17 @@
           </ion-list>
         </div>
 
+        <!-- 🆕 2026-07-02 搜索模式提示（见 debug-discipline.md §3.5）：
+             greedy 模式时显示徽章，告知用户结果是宽松匹配（可能不完全相关） -->
+        <div v-if="searchQuery && searchResults && searchResults.length > 0 && searchMode === 'greedy'" class="search-mode-banner search-mode-greedy">
+          <ion-icon :icon="pricetagOutline" class="search-mode-icon"></ion-icon>
+          <span>{{ t('files.searchModeGreedy', { defaultValue: '贪婪匹配：结果为语义近似，可能不完全相关' }) }}</span>
+        </div>
+        <div v-else-if="searchQuery && searchResults && searchResults.length > 0 && searchMode === 'combined'" class="search-mode-banner search-mode-combined">
+          <ion-icon :icon="pricetagOutline" class="search-mode-icon"></ion-icon>
+          <span>{{ t('files.searchModeCombined', { defaultValue: '综合匹配：关键词 + 语义重排序' }) }}</span>
+        </div>
+
         <ion-list>
           <ion-item
             v-for="file in displayFiles"
@@ -296,7 +307,7 @@
             @click="handleFileClick(file)"
             v-longpress="() => handleLongPress(file)"
             :data-highlight-path="file.path"
-            :class="{ 'file-highlight': highlightedPath === file.path }"
+            :class="{ 'file-highlight': highlightedPath === file.path, 'greedy-match': searchMode === 'greedy' }"
           >
             <div slot="start" class="file-thumbnail-slot lazy-thumb-target" :data-file-path="file.path">
                 <img
@@ -504,7 +515,7 @@ import {
   listFilesByTag,
   getFileInfo,
 } from '@/api/encv'
-import type { FileItem, PluginMeta, TagInfo } from '@/api/encv'
+import type { FileItem, PluginMeta, TagInfo, SearchMode } from '@/api/encv'
 import { eventBus } from '@/composables/useEventBus'
 import { useI18n } from '@/composables/useI18n'
 import { formatDateTime } from '@/composables/useDateFormat'
@@ -690,6 +701,9 @@ const searchQuery = ref('')
 const searchRecursive = ref(false)
 const searchResults = ref<FileItem[] | null>(null)
 const isSearching = ref(false)
+// 🆕 2026-07-02 搜索模式（见 debug-discipline.md §3.5）：
+//   - greedy 时前端对结果加视觉标记，让用户看出是宽松匹配
+const searchMode = ref<SearchMode>('none')
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let searchGeneration = 0
 
@@ -1068,20 +1082,25 @@ async function performSearch() {
   try {
     // 优先使用向量搜索（语义搜索 + 中文优化）
     let results: FileItem[] = []
+    let mode: SearchMode = 'none'
     try {
       const vecResult = await searchFilesVector(currentPath.value, query, searchRecursive.value, 200)
       results = vecResult.results
+      mode = vecResult.search_mode
     } catch {
       // 向量搜索失败，fallback 到原有搜索
       results = await searchFiles(currentPath.value, query, searchRecursive.value)
+      mode = 'none'
     }
 
     if (gen !== searchGeneration) return
     searchResults.value = results
+    searchMode.value = mode
     searchCache.set(cacheKey, { timestamp: Date.now(), results })
   } catch {
     if (gen !== searchGeneration) return
     searchResults.value = []
+    searchMode.value = 'none'
   }
   isSearching.value = false
 }
@@ -2024,6 +2043,52 @@ watch(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 🆕 2026-07-02 搜索模式提示横幅（见 debug-discipline.md §3.5）
+   - greedy：橙色调，虚线边框，告知用户结果是语义近似
+   - combined：蓝绿色调，实线边框，告知用户是关键词+向量综合 */
+.search-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.search-mode-banner .search-mode-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.search-mode-greedy {
+  background: rgba(var(--ion-color-warning-rgb), 0.12);
+  border: 1px dashed var(--ion-color-warning);
+  color: var(--ion-color-warning-shade);
+}
+
+.search-mode-combined {
+  background: rgba(var(--ion-color-tertiary-rgb), 0.10);
+  border: 1px solid var(--ion-color-tertiary);
+  color: var(--ion-color-tertiary-shade);
+}
+
+/* greedy 模式下，结果项加左侧橙色虚线条，让用户一眼区分 */
+.greedy-match {
+  --background: rgba(var(--ion-color-warning-rgb), 0.06);
+  box-shadow: inset 3px 0 0 var(--ion-color-warning);
+}
+
+@media (prefers-color-scheme: dark) {
+  .search-mode-greedy {
+    color: var(--ion-color-warning-tint);
+  }
+  .search-mode-combined {
+    color: var(--ion-color-tertiary-tint);
+  }
 }
 
 .open-folder-btn {

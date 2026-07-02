@@ -11,10 +11,18 @@ import (
 // SearchService 向量搜索服务。
 //
 // 提供文件和任务的语义搜索能力，基于 Turso 原生向量检索。
+//
+// 降级机制（L2 级，见 graceful-degradation.md）：
+//   - turso/libsql 驱动首选 TursoStore（用原生 vector_distance_cos）
+//   - 若运行时实测 vector_distance_cos 不可用（极少数自定义编译），
+//     Search 第一次出错时自动切换到 SQLiteStore（Go 层计算）
+//   - 降级后通过 degraded=true 暴露状态，调用方可查询
 type SearchService struct {
-	store       Store
-	db          *sql.DB
-	mu          sync.RWMutex
+	store        Store
+	fallbackStore Store // 仅 turso/libsql 时非 nil（SQLiteStore 实例）
+	degraded     bool   // 是否已降级到 fallbackStore
+	db           *sql.DB
+	mu           sync.RWMutex
 	indexedFiles int
 	indexedTasks int
 }
@@ -28,10 +36,16 @@ func NewSearchService(db *sql.DB, driver string) (*SearchService, error) {
 
 	svc := &SearchService{store: store, db: db}
 
+	// turso/libsql 准备 fallbackStore（SQLiteStore），运行时降级用
+	if driver == "turso" || driver == "libsql" {
+		svc.fallbackStore = &SQLiteStore{db: db}
+	}
+
 	ctx := context.Background()
 	if err := store.Init(ctx); err != nil {
 		return nil, fmt.Errorf("init search store: %w", err)
 	}
+	// fallbackStore 共享同一 db，schema 相同，无需重复 Init
 
 	slog.Info("[vectorsearch] service initialized", "driver", driver)
 	return svc, nil
@@ -180,7 +194,7 @@ func (s *SearchService) SearchFiles(ctx context.Context, query string, limit int
 	if limit <= 0 {
 		limit = 50
 	}
-	return s.store.Search(ctx, IndexTypeFile, query, limit)
+	return s.searchWithFallback(ctx, IndexTypeFile, query, limit)
 }
 
 // SearchTasks 搜索任务。
@@ -188,7 +202,55 @@ func (s *SearchService) SearchTasks(ctx context.Context, query string, limit int
 	if limit <= 0 {
 		limit = 50
 	}
-	return s.store.Search(ctx, IndexTypeTask, query, limit)
+	return s.searchWithFallback(ctx, IndexTypeTask, query, limit)
+}
+
+// searchWithFallback 执行搜索，若主 store 出错且 fallbackStore 可用则降级。
+//
+// 降级场景：turso/libsql 的 .so 编译时未启用向量支持 → vector_distance_cos 报错。
+// 降级是 L2 级体验（见 graceful-degradation.md）：
+//   - 第一次出错时 WARN 日志记录原因
+//   - 后续请求直接走 fallbackStore（避免每次都试错）
+//   - IsDegraded() 暴露状态给调用方
+func (s *SearchService) searchWithFallback(ctx context.Context, indexType IndexType, query string, limit int) ([]SearchResult, error) {
+	s.mu.RLock()
+	degraded := s.degraded
+	store := s.store
+	fallback := s.fallbackStore
+	s.mu.RUnlock()
+
+	if degraded && fallback != nil {
+		return fallback.Search(ctx, indexType, query, limit)
+	}
+
+	results, err := store.Search(ctx, indexType, query, limit)
+	if err == nil {
+		return results, nil
+	}
+
+	// 主 store 出错，尝试降级
+	if fallback == nil {
+		return nil, err
+	}
+
+	slog.Warn("[vectorsearch] primary store search failed, degrading to SQLiteStore",
+		"error", err, "indexType", indexType, "query", query)
+
+	s.mu.Lock()
+	if !s.degraded {
+		s.degraded = true
+	}
+	s.mu.Unlock()
+
+	return fallback.Search(ctx, indexType, query, limit)
+}
+
+// IsDegraded 返回是否已降级到 fallbackStore。
+// 调用方（如 /api/runtime）应暴露此状态，让用户知道向量搜索走了降级路径。
+func (s *SearchService) IsDegraded() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.degraded
 }
 
 // DeleteTask 从索引中删除任务。
