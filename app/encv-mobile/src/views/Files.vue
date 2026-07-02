@@ -34,6 +34,7 @@
             ref="queryInputRef"
             class="query-input"
             contenteditable="true"
+            data-testid="search-input"
             :data-empty="!searchQuery"
             :placeholder="t('files.searchPlaceholder')"
             @input="onQueryInput($event)"
@@ -54,11 +55,11 @@
         <!-- 🆕 2026-07-02 v2 插入操作符按钮行：点击即在光标位置插入 symbol span（不是字符串） -->
         <div v-if="searchQuery" class="search-insert-bar">
           <span class="insert-label">{{ t('files.insertOp') || '插入:' }}</span>
-          <button class="insert-btn op-and" @click="insertOperator('AND')" type="button" :title="t('files.insertAndTitle')">＆</button>
-          <button class="insert-btn op-or" @click="insertOperator('OR')" type="button" :title="t('files.insertOrTitle')">｜</button>
-          <button class="insert-btn op-not" @click="insertOperator('NOT')" type="button" :title="t('files.insertNotTitle')">￢</button>
-          <button class="insert-btn op-phrase" @click="insertOperator('__phrase_open__')" type="button" :title="t('files.insertPhraseTitle')">「」</button>
-          <button class="insert-btn op-regex" @click="insertOperator('__regex_prefix__')" type="button" :title="t('files.insertRegexTitle')">/ /</button>
+          <button class="insert-btn op-and" data-testid="btn-and" @click="insertOperator('AND')" type="button" :title="t('files.insertAndTitle')">＆</button>
+          <button class="insert-btn op-or" data-testid="btn-or" @click="insertOperator('OR')" type="button" :title="t('files.insertOrTitle')">｜</button>
+          <button class="insert-btn op-not" data-testid="btn-not" @click="insertOperator('NOT')" type="button" :title="t('files.insertNotTitle')">￢</button>
+          <button class="insert-btn op-phrase" data-testid="btn-phrase" @click="insertOperator('__phrase_open__')" type="button" :title="t('files.insertPhraseTitle')">「」</button>
+          <button class="insert-btn op-regex" data-testid="btn-regex" @click="insertOperator('__regex_prefix__')" type="button" :title="t('files.insertRegexTitle')">/ /</button>
         </div>
         <ion-toggle
           v-if="searchQuery"
