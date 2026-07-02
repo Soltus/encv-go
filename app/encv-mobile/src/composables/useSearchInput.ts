@@ -116,9 +116,34 @@ function mergeAdjacentTextSpans(div: HTMLElement) {
       a.textContent = (a.textContent || '') + (b.textContent || '')
       div.removeChild(b)
       children.splice(i + 1, 1)
-      i-- // 重新检查
+      i--
     }
   }
+}
+
+function normalizeAfterEnter(div: HTMLElement) {
+  const children = Array.from(div.childNodes)
+  for (const node of children) {
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const el = node as HTMLElement
+      const tag = el.tagName.toLowerCase()
+      if (tag === 'div' || tag === 'p') {
+        const textSpan = document.createElement('span')
+        textSpan.dataset.kind = 'text'
+        textSpan.classList.add('syntax-text-span')
+        textSpan.textContent = el.textContent || ''
+        el.parentNode?.replaceChild(textSpan, el)
+      } else if (tag === 'br') {
+        const brSpan = document.createElement('span')
+        brSpan.dataset.kind = 'text'
+        brSpan.classList.add('syntax-text-span')
+        brSpan.innerHTML = '<br>'
+        el.parentNode?.replaceChild(brSpan, el)
+      }
+    }
+  }
+  wrapOrphanTextNodes(div)
+  mergeAdjacentTextSpans(div)
 }
 
 /**
@@ -190,8 +215,6 @@ function placeCaretAtEnd(div: HTMLElement) {
 export function useSearchInput(options: {
   externalQuery?: Ref<string>
   onChange?: (query: string) => void
-  onEnter?: () => void
-  onEscape?: () => void
 } = {}) {
   const queryInputRef = ref<HTMLElement | null>(null)
   const queryValue = ref('')
@@ -229,15 +252,15 @@ export function useSearchInput(options: {
     if (!queryInputRef.value) return
 
     if (e.key === 'Enter') {
-      e.preventDefault()
-      syncFromDiv()
-      options.onEnter?.()
-      return
-    }
-
-    if (e.key === 'Escape') {
-      e.preventDefault()
-      options.onEscape?.()
+      const div = queryInputRef.value
+      const beforeOffset = getCaretOffset(div)
+      requestAnimationFrame(() => {
+        if (!queryInputRef.value) return
+        normalizeAfterEnter(queryInputRef.value)
+        const newOffset = beforeOffset + 1
+        setCaretOffset(queryInputRef.value, newOffset)
+        syncFromDiv()
+      })
       return
     }
 

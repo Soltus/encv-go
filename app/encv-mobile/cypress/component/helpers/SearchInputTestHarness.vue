@@ -69,8 +69,6 @@ const {
   clearInput,
 } = useSearchInput({
   onChange: handleChange,
-  onEnter: handleEnter,
-  onEscape: handleEscape,
 })
 
 const inputRef = queryInputRef as any

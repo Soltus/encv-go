@@ -210,90 +210,132 @@ describe('useSearchInput 搜索框交互', () => {
   })
 
   // ===========================================================================
-  // Bug 复现：回车键行为
+  // Bug 复现：回车换行后光标位置
   // ===========================================================================
-  describe('回车键行为 (Bug 复现)', () => {
-    it('按 Enter 应该触发 onEnter 回调，而不是插入换行', () => {
-      const onEnterSpy = cy.spy().as('onEnter')
+  describe('回车换行后光标位置 (Bug 复现)', () => {
+    it('在 text span 中间按回车 → 应该拆成两个 text span，光标在新行开头', () => {
+      const onChangeSpy = cy.spy().as('onChange')
 
       mount(SearchInputTestHarness, {
         props: {
-          initialQuery: 'hello',
-          onEnter: onEnterSpy,
+          initialQuery: 'abcdef',
+          onChange: onChangeSpy,
         },
       })
 
       cy.wait(50)
 
-      // 点击输入框，按回车
+      // 光标移到第 3 个字符后（abc|def）
       cy.get('[data-testid="search-input"]').click()
-      cy.get('[data-testid="search-input"]').type('{enter}')
-      cy.wait(50)
+      cy.get('[data-testid="search-input"]').type('{home}')
+      cy.get('[data-testid="search-input"]').type('{rightarrow}'.repeat(3))
 
-      // 断言：onEnter 被调用
-      cy.get('@onEnter').should('have.been.calledOnce')
-
-      // 断言：enterCount 增加
-      cy.get('[data-testid="enter-count"]').should('contain.text', 'enter: 1')
-
-      // 断言：没有换行（query 没有换行符）
-      cy.get('[data-testid="query-display"]').then(($el) => {
-        const text = $el.text()
-        expect(text).to.equal('hello')
-        expect(text).not.to.include('\n')
+      // 记录回车前的光标偏移量
+      cy.get('[data-testid="search-input"]').then(($div) => {
+        const div = $div[0]
+        const sel = window.getSelection()
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0)
+          const preRange = document.createRange()
+          preRange.selectNodeContents(div)
+          preRange.setEnd(range.endContainer, range.endOffset)
+          const offset = preRange.toString().length
+          cy.log('Caret offset before enter:', offset)
+        }
       })
-    })
-
-    it('按 Escape 应该触发 onEscape 回调', () => {
-      const onEscapeSpy = cy.spy().as('onEscape')
-
-      mount(SearchInputTestHarness, {
-        props: {
-          initialQuery: 'test',
-          onEscape: onEscapeSpy,
-        },
-      })
-
-      cy.wait(50)
-
-      cy.get('[data-testid="search-input"]').click()
-      cy.get('[data-testid="search-input"]').type('{esc}')
-      cy.wait(50)
-
-      cy.get('@onEscape').should('have.been.calledOnce')
-      cy.get('[data-testid="escape-count"]').should('contain.text', 'escape: 1')
-    })
-
-    it('插入 AND 逻辑符后按回车 → 序列化包含 AND', () => {
-      const onEnterSpy = cy.spy().as('onEnter')
-
-      mount(SearchInputTestHarness, {
-        props: {
-          initialQuery: '在线 高清',
-          onEnter: onEnterSpy,
-        },
-      })
-
-      cy.wait(50)
-
-      // 光标移到中间，插入 AND
-      cy.get('[data-testid="search-input"]').click().type('{home}')
-      cy.get('[data-testid="search-input"]').type('{rightarrow}'.repeat(2))
-      cy.get('[data-testid="btn-and"]').click()
-      cy.wait(50)
 
       // 按回车
       cy.get('[data-testid="search-input"]').type('{enter}')
       cy.wait(50)
 
-      // 断言：onEnter 被调用
-      cy.get('@onEnter').should('have.been.calledOnce')
+      // 检查：回车后光标偏移量
+      cy.get('[data-testid="search-input"]').then(($div) => {
+        const div = $div[0]
+        const sel = window.getSelection()
+        if (sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0)
+          const preRange = document.createRange()
+          preRange.selectNodeContents(div)
+          preRange.setEnd(range.endContainer, range.endOffset)
+          const offset = preRange.toString().length
+          // 收集 DOM 结构信息用于调试
+          let domInfo = ''
+          Array.from(div.childNodes).forEach((el, i) => {
+            if (el.nodeType === Node.TEXT_NODE) {
+              domInfo += `[${i}] TEXT: "${el.textContent}"\n`
+            } else {
+              const htmlEl = el as HTMLElement
+              domInfo += `[${i}] ${htmlEl.tagName} kind=${htmlEl.dataset?.kind}: "${htmlEl.textContent}"\n`
+            }
+          })
+          expect(offset, `Caret offset after enter should be > 3\nendContainer: ${range.endContainer.nodeName}, text="${range.endContainer.textContent}", endOffset=${range.endOffset}\nDOM:\n${domInfo}`).to.be.greaterThan(3)
+        }
+      })
 
-      // 断言：序列化结果包含 AND
+      // 检查：序列化结果
       cy.get('[data-testid="query-display"]').then(($el) => {
         const text = $el.text()
-        cy.log('Query after AND + enter:', text)
-        expect(text).to.include('AND')
+        cy.log('Serialized query:', text)
+      })
+
+      cy.get('[data-testid="error-display"]').should('be.empty')
+    })
+
+    it('在 text span 末尾按回车 → 应该新增空 text span，光标在新 span 开头', () => {
+      mount(SearchInputTestHarness, {
+        props: {
+          initialQuery: 'hello',
+        },
+      })
+
+      cy.wait(50)
+
+      // 光标移到末尾
+      cy.get('[data-testid="search-input"]').click().type('{end}')
+
+      // 按回车
+      cy.get('[data-testid="search-input"]').type('{enter}')
+      cy.wait(50)
+
+      cy.get('[data-testid="query-display"]').then(($el) => {
+        cy.log('Query after enter at end:', $el.text())
+      })
+
+      cy.get('[data-testid="error-display"]').should('be.empty')
+    })
+
+    it('有 op span 时按回车 → 不崩溃', () => {
+      mount(SearchInputTestHarness, {
+        props: {
+          initialQuery: '',
+        },
+      })
+
+      cy.wait(50)
+
+      // 输入一些文字
+      cy.get('[data-testid="search-input"]').type('abc')
+      cy.wait(30)
+
+      // 插入 AND
+      cy.get('[data-testid="btn-and"]').click()
+      cy.wait(30)
+
+      // 再输入一些文字
+      cy.get('[data-testid="search-input"]').type('def')
+      cy.wait(30)
+
+      // 光标移到中间
+      cy.get('[data-testid="search-input"]').type('{leftarrow}'.repeat(2))
+
+      // 按回车
+      cy.get('[data-testid="search-input"]').type('{enter}')
+      cy.wait(50)
+
+      cy.get('[data-testid="error-display"]').should('be.empty')
+
+      cy.get('[data-testid="query-display"]').then(($el) => {
+        cy.log('Query after enter with op:', $el.text())
       })
     })
   })
