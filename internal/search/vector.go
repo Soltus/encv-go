@@ -81,22 +81,33 @@ func isCJK(r rune) bool {
 		(r >= '\uAC00' && r <= '\uD7AF') // 韩文
 }
 
-// TextToVector 将文本转换为固定维度的 TF 向量。
+// TextToVector 将文本转换为固定维度的 sublinear TF 向量。
 //
 // 使用哈希 trick 将 token 映射到固定维度，避免维度爆炸。
-// 向量值为 token 的词频（term frequency）。
+// 使用 sublinear TF（1 + log(tf)）而非原始词频，降低长文本的稀释效应：
+//   - 短文件名和长文件名中，相同关键词的权重差异更小
+//   - 避免 token 数量越多，每个 token 的归一化权重越低的问题
 func TextToVector(text string) []float32 {
 	tokens := Tokenize(text)
 	if len(tokens) == 0 {
 		return make([]float32, VectorDim)
 	}
 
-	vec := make([]float32, VectorDim)
+	// 先统计每个维度的频次
+	counts := make([]float32, VectorDim)
 	for _, token := range tokens {
 		h := fnv.New32a()
 		h.Write([]byte(token))
 		idx := h.Sum32() % uint32(VectorDim)
-		vec[idx] += 1.0
+		counts[idx] += 1.0
+	}
+
+	// sublinear TF: 1 + log(tf)，降低长文本稀释
+	vec := make([]float32, VectorDim)
+	for i, c := range counts {
+		if c > 0 {
+			vec[i] = 1.0 + float32(math.Log(float64(c)))
+		}
 	}
 
 	// L2 归一化（方便余弦距离计算）
@@ -136,20 +147,30 @@ func EncodeVector(vec []float32) []byte {
 
 // BuildQueryVector 构建查询向量，带关键词权重增强。
 //
-// 对查询文本中的每个 token 赋予更高权重，提升精确匹配的优先级。
+// 使用 sublinear TF + 查询权重增强，提升精确匹配的优先级。
+// 与 TextToVector 保持一致的 sublinear 缩放，确保评分尺度一致。
 func BuildQueryVector(text string) []float32 {
 	tokens := Tokenize(text)
 	if len(tokens) == 0 {
 		return make([]float32, VectorDim)
 	}
 
-	vec := make([]float32, VectorDim)
-	weight := float32(2.0) // 查询关键词权重
+	// 先统计频次
+	counts := make([]float32, VectorDim)
 	for _, token := range tokens {
 		h := fnv.New32a()
 		h.Write([]byte(token))
 		idx := h.Sum32() % uint32(VectorDim)
-		vec[idx] += weight
+		counts[idx] += 1.0
+	}
+
+	// sublinear TF + 查询权重增强（权重 2.0）
+	vec := make([]float32, VectorDim)
+	queryBoost := float32(2.0)
+	for i, c := range counts {
+		if c > 0 {
+			vec[i] = queryBoost * (1.0 + float32(math.Log(float64(c))))
+		}
 	}
 
 	normalize(vec)

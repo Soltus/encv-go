@@ -7,7 +7,7 @@
  *
  * 覆盖：
  * - 基础渲染：count > 0 + scrollEl ready → 渲染 slot 内容
- * - scrollEl null → 列表不渲染（virtualizer 拿不到 scrollElement）
+ * - scrollEl null → 降级渲染前 N 个 fallback item（修复真机空白）
  * - forceMeasure 暴露给父级
  * - item wrapper class 应用
  * - slot props 传递 item + index
@@ -98,13 +98,18 @@ describe('TaskVirtualList', () => {
     global.ResizeObserver = MockResizeObserver as any
   })
 
-  it('scrollEl 为 null 时不渲染任何 item（virtualizer 拿不到 scrollElement）', async () => {
+  it('scrollEl 为 null 时降级渲染 fallback item（修复真机空白）', async () => {
     const wrapper = mount(SlotWrapper, {
       props: { items: makeItems(10), scrollEl: null },
     })
     await flushPromises()
-    // scrollEl=null → virtualizer.getVirtualItems() 返回空数组
-    expect(wrapper.findAll('.test-item')).toHaveLength(0)
+    // scrollEl=null → 降级渲染前 N 个 fallback item（overscan*2+20 = 40，不超过 count=10）
+    const rendered = wrapper.findAll('.test-item')
+    expect(rendered.length).toBeGreaterThan(0)
+    expect(rendered.length).toBeLessThanOrEqual(10)
+    // 验证有 fallback class
+    const list = wrapper.find('.task-virtual-list--fallback')
+    expect(list.exists()).toBe(true)
   })
 
   it('scrollEl ready 后渲染可见 slot 内容', async () => {

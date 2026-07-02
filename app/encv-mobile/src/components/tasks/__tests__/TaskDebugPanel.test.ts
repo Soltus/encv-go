@@ -10,7 +10,7 @@
  * 2026-06-22 新增：嵌在 Tasks 页面顶部，URL ?debug=tasks 启用，
  * 让 user 在真机屏幕上一眼看到逃逸 task 数 + 各 runId 聚合。
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TaskDebugPanel from '@/components/tasks/TaskDebugPanel.vue'
 import type { EncvTask, TaskStatus } from '@/api/encv'
@@ -212,23 +212,33 @@ describe('TaskDebugPanel — 任务逃逸真机诊断 UI', () => {
   })
 
   it('⑩ 时间桶分布：5 个 task 跨 5 个时间桶 → 各 1', () => {
-    const now = Date.now()
-    const tasks = [
-      makeTask('t-1', { createdAt: new Date(now - 3600 * 1000).toISOString() }),
-      makeTask('t-2', { createdAt: new Date(now - 86400 * 1000).toISOString() }),
-      makeTask('t-3', { createdAt: new Date(now - 3 * 86400 * 1000).toISOString() }),
-      makeTask('t-4', { createdAt: new Date(now - 15 * 86400 * 1000).toISOString() }),
-      makeTask('t-5', { createdAt: new Date(now - 60 * 86400 * 1000).toISOString() }),
-    ]
-    const wrapper = mount(TaskDebugPanel, {
-      props: makeProps({ tasks, defaultOpen: true }),
-    })
-    const text = wrapper.text()
-    expect(text).toMatch(/today: 1/)
-    expect(text).toMatch(/yesterday: 1/)
-    expect(text).toMatch(/thisWeek: 1/)
-    expect(text).toMatch(/thisMonth: 1/)
-    expect(text).toMatch(/earlier: 1/)
+    // 用固定时间 mock，避免月初/月末导致测试不稳定
+    // 选择月中（15号）作为"今天"，确保 5 个时间桶各有 1 个
+    const fakeNow = new Date(2026, 5, 15, 12, 0, 0) // 2026-06-15 中午
+    vi.useFakeTimers()
+    vi.setSystemTime(fakeNow)
+
+    try {
+      const now = fakeNow.getTime()
+      const tasks = [
+        makeTask('t-1', { createdAt: new Date(now - 3600 * 1000).toISOString() }), // 1小时前 → today
+        makeTask('t-2', { createdAt: new Date(now - 86400 * 1000).toISOString() }), // 1天前 → yesterday
+        makeTask('t-3', { createdAt: new Date(now - 3 * 86400 * 1000).toISOString() }), // 3天前 → thisWeek
+        makeTask('t-4', { createdAt: new Date(now - 10 * 86400 * 1000).toISOString() }), // 10天前 → thisMonth
+        makeTask('t-5', { createdAt: new Date(now - 40 * 86400 * 1000).toISOString() }), // 40天前 → earlier
+      ]
+      const wrapper = mount(TaskDebugPanel, {
+        props: makeProps({ tasks, defaultOpen: true }),
+      })
+      const text = wrapper.text()
+      expect(text).toMatch(/today: 1/)
+      expect(text).toMatch(/yesterday: 1/)
+      expect(text).toMatch(/thisWeek: 1/)
+      expect(text).toMatch(/thisMonth: 1/)
+      expect(text).toMatch(/earlier: 1/)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('⑪ 自我诊断 — 缺 runId task 数 > 0 → warn 级别', () => {

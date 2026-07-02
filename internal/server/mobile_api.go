@@ -2539,7 +2539,7 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 		return
 	}
 
-	// combined 模式：1~19 个关键词结果，用向量重排序
+	// combined 模式：1~19 个关键词结果，用混合评分重排序
 	if s.searchSvc != nil && len(files) > 0 {
 		ctx := context.Background()
 		// 先把结果批量索引到向量搜索
@@ -2554,35 +2554,36 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 		}
 		s.searchSvc.IndexFilesBatch(ctx, batch)
 
-		// 然后用向量搜索重新排序
+		// 然后用向量搜索 + 混合评分重排序
 		results, vErr := s.searchSvc.SearchFiles(ctx, query, limit)
+		queryBigrams := extractBigrams(query)
 		if vErr == nil && len(results) > 0 {
-			// 按向量搜索结果重排序
-			fileMap := make(map[string]mobileservice.FileInfo)
-			for _, f := range files {
-				fileMap[f.Path] = f
-			}
-
-			var sortedFiles []mobileservice.FileInfo
+			// 构建向量 score map
+			vectorScoreMap := make(map[string]float64)
 			for _, r := range results {
-				if r.Score < 0.05 {
-					continue
-				}
-				if f, ok := fileMap[r.RefID]; ok {
-					f.Score = r.Score
-					sortedFiles = append(sortedFiles, f)
+				if r.Score >= 0.05 {
+					vectorScoreMap[r.RefID] = r.Score
 				}
 			}
 
-			// 把没进向量结果的文件也附在后面
-			if len(sortedFiles) < len(files) {
-				sortedSet := make(map[string]bool)
-				for _, f := range sortedFiles {
-					sortedSet[f.Path] = true
+			// 用混合评分重排序所有文件
+			sortedFiles := make([]mobileservice.FileInfo, len(files))
+			copy(sortedFiles, files)
+
+			// 计算混合评分
+			for i := range sortedFiles {
+				vecScore, ok := vectorScoreMap[sortedFiles[i].Path]
+				if !ok {
+					vecScore = 0
 				}
-				for _, f := range files {
-					if !sortedSet[f.Path] {
-						sortedFiles = append(sortedFiles, f)
+				sortedFiles[i].Score = computeHybridScore(sortedFiles[i].Name, queryBigrams, vecScore)
+			}
+
+			// 按混合评分排序
+			for i := 0; i < len(sortedFiles); i++ {
+				for j := i + 1; j < len(sortedFiles); j++ {
+					if sortedFiles[j].Score > sortedFiles[i].Score {
+						sortedFiles[i], sortedFiles[j] = sortedFiles[j], sortedFiles[i]
 					}
 				}
 			}
@@ -2730,15 +2731,29 @@ func (s *Server) vectorSearchFallback(path, query string, recursive bool, limit 
 		strictness = BigramStrict
 	}
 
+	// 6. bigram 过滤 + 混合评分重排序
+	//    用混合评分（bigram重叠率 + 向量相似度 + 命中密度）替代纯向量评分，
+	//    解决长文件名相关性稀释问题。
 	var matched []mobileservice.FileInfo
 	for _, c := range candidates {
 		if !hasSufficientBigramOverlapEx(c.file.Name, queryBigrams, strictness) {
 			continue
 		}
 		f := c.file
-		f.Score = c.score
+		// 使用混合评分替代纯向量评分
+		f.Score = computeHybridScore(f.Name, queryBigrams, c.score)
 		matched = append(matched, f)
 	}
+
+	// 按混合评分重新排序
+	for i := 0; i < len(matched); i++ {
+		for j := i + 1; j < len(matched); j++ {
+			if matched[j].Score > matched[i].Score {
+				matched[i], matched[j] = matched[j], matched[i]
+			}
+		}
+	}
+
 	return matched
 }
 
@@ -2812,6 +2827,69 @@ func hasSufficientBigramOverlapEx(fileName string, queryBigrams []string, strict
 		threshold := (len(queryBigrams) + 1) / 2 // 向上取整
 		return shared >= threshold
 	}
+}
+
+// countSharedBigrams 统计文件名与查询共享的 bigram 数量。
+func countSharedBigrams(fileName string, queryBigrams []string) int {
+	if len(queryBigrams) == 0 {
+		return 0
+	}
+	lowerName := strings.ToLower(fileName)
+	shared := 0
+	for _, bg := range queryBigrams {
+		if strings.Contains(lowerName, bg) {
+			shared++
+		}
+	}
+	return shared
+}
+
+// computeHybridScore 计算混合相关性评分，解决长文件名稀释问题。
+//
+// 综合三个维度：
+//   1. bigram 重叠率（50%）— 直接、可解释，不受文件名长度影响
+//   2. 向量相似度（30%）— 捕捉语义近似
+//   3. 关键词命中密度（20%）— 查询关键词在文件名中的密度，避免长文本稀释
+//
+// 为什么需要混合评分：
+//   - 纯余弦相似度受 L2 归一化影响，长文件名的关键词权重被稀释
+//   - bigram 重叠率是定性判断（有/无），对长度不敏感
+//   - 关键词命中密度 = 共享bigram数 / 文件名bigram数，奖励短而精准的匹配
+//
+// 返回值范围 [0, 1]，越大越相关。
+func computeHybridScore(fileName string, queryBigrams []string, vectorScore float64) float64 {
+	nQuery := len(queryBigrams)
+	if nQuery == 0 {
+		return vectorScore
+	}
+
+	shared := countSharedBigrams(fileName, queryBigrams)
+
+	// 1. bigram 重叠率（召回导向：查询中有多少出现在文件里）
+	bigramRecall := float64(shared) / float64(nQuery)
+
+	// 2. 关键词命中密度（精准导向：共享 bigram 占文件 bigram 的比例）
+	fileBigrams := extractBigrams(fileName)
+	nFile := len(fileBigrams)
+	bigramPrecision := 0.0
+	if nFile > 0 {
+		bigramPrecision = float64(shared) / float64(nFile)
+	}
+
+	// 3. 混合评分（加权平均）
+	//    - bigramRecall 权重最高（用户最关心"查询词是否都命中"）
+	//    - bigramPrecision 辅助（短而精准的匹配更好，惩罚长文件名噪音）
+	//    - vectorScore 补充（捕捉语义近似）
+	hybrid := 0.5*bigramRecall + 0.3*bigramPrecision + 0.2*vectorScore
+
+	// 确保在 [0, 1] 范围内
+	if hybrid < 0 {
+		hybrid = 0
+	}
+	if hybrid > 1 {
+		hybrid = 1
+	}
+	return hybrid
 }
 
 // handleSearchStatsGin 获取搜索索引统计信息。
