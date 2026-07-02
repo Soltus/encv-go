@@ -32,6 +32,36 @@
           @ionInput="handleSearchInput"
           @ionClear="handleSearchClear"
         ></ion-searchbar>
+        <!-- 🆕 2026-07-02 搜索语法高亮：把 AND/OR/NOT/"phrase"/regex: 渲染为彩色 token -->
+        <div v-if="searchQuery && searchFullText" class="search-syntax-tokens" :title="t('files.fullTextHint')">
+          <template v-for="(tok, idx) in tokenizeQuery(searchQuery)" :key="idx">
+            <ion-chip
+              v-if="tok.kind === 'op'"
+              size="small"
+              color="warning"
+              class="syntax-token syntax-op"
+            >{{ tok.text }}</ion-chip>
+            <ion-chip
+              v-else-if="tok.kind === 'phrase'"
+              size="small"
+              color="success"
+              class="syntax-token syntax-phrase"
+            >"{{ tok.text }}"</ion-chip>
+            <ion-chip
+              v-else-if="tok.kind === 'regex'"
+              size="small"
+              color="tertiary"
+              class="syntax-token syntax-regex"
+            >/{{ tok.text }}/</ion-chip>
+            <ion-chip
+              v-else
+              size="small"
+              color="medium"
+              outline
+              class="syntax-token syntax-word"
+            >{{ tok.text }}</ion-chip>
+          </template>
+        </div>
         <ion-toggle
           v-if="searchQuery"
           slot="end"
@@ -510,7 +540,7 @@ const {
   // search state
   searchQuery, searchFullText, searchResults, isSearching, searchMode,
   handleSearchInput, handleSearchClear, handleSearchToggle,
-  renderSnippet,
+  renderSnippet, tokenizeQuery,
   // play error state
   playError, playErrorDetail, playErrorFile,
   clearPlayError, togglePlayErrorDetail,
@@ -549,6 +579,45 @@ const {
   font-size: 0.85em;
   line-height: 1.4;
 }
+
+/* 🆕 2026-07-02 搜索语法高亮 token 行 */
+.search-syntax-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  background: var(--ion-color-light-tint, #fafafa);
+  min-height: 28px;
+  align-items: center;
+}
+
+.syntax-token {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.8em;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  margin: 0;
+  height: 22px;
+}
+
+.syntax-op {
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.syntax-phrase {
+  font-style: italic;
+}
+
+.syntax-regex {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.syntax-word {
+  font-weight: 400;
+}
+
 
 .fulltext-preview-header {
   display: flex;

@@ -413,6 +413,11 @@ func (f *FileIndex) Search(ctx context.Context, query string, opts SearchOptions
 		results = filtered
 	}
 
+	// 5. 截断到 limit（regex 过滤可能过滤掉部分，截断保上限）
+	if len(results) > opts.Limit {
+		results = results[:opts.Limit]
+	}
+
 	return results, nil
 }
 

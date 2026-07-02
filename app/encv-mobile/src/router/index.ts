@@ -96,6 +96,10 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/DatabaseDetail.vue'),
       },
       {
+        path: 'settings/fulltext-index',
+        component: () => import('@/views/FullTextIndexDetail.vue'),
+      },
+      {
         path: 'settings/plugins',
         component: () => import('@/views/PluginSettings.vue'),
       },

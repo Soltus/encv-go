@@ -10,18 +10,22 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { onIonViewWillEnter, actionSheetController, alertController, menuController } from '@ionic/vue'
+import { tokenizeQuery, renderSnippet, type QueryToken } from '@/views/useFilesView.searchTokens'
 
 // 🆕 2026-07-02: 显式 return type（用 Record<string, any> 兼容所有字段）— 避免 vue-tsc 推断丢字段
 // (历史踩坑：isSelectedModelAvailable / switchSession / lanAccessLoaded / fetchModels / temperature 都从推断 type 中消失过)
-// 关键：Record<string, any> + 显式 declared 字段（关键字段确保类型正确）
-export type UseFilesViewReturn = Record<string, any> & {
-  // 关键字段（Files.vue 模板直引用，必须类型正确）
+// 关键：Record<string, any> 索引签名让 declared 字段可推断
+export type UseFilesViewReturn = {
+  // 关键字段（Files.vue 模板直引用，类型 partial 以兼容 vue-tsc 推断）
   searchFullText: Ref<boolean>
   searchQuery: Ref<string>
   searchResults: Ref<FileItem[] | null>
   isSearching: Ref<boolean>
   searchMode: Ref<SearchMode>
   renderSnippet: (snippet: string | undefined) => Array<{ text: string; highlight: boolean }>
+  tokenizeQuery: (query: string) => QueryToken[]  // 🆕 语法高亮
+  // 索引签名：允许 return 对象包含任意额外字段
+  [key: string]: any
 }
 import {
   listFiles,
@@ -320,42 +324,7 @@ const displayFiles = computed(() => {
   return raw.map(f => ({ ...f, _tags: tagMap[f.path] || [] }))
 })
 
-// 🆕 2026-07-02 全文搜索 snippet 解析：FTS5 返回的 snippet 用 `<<...>>` 包裹命中词
-// 拆分为 [{text, highlight}] 数组供 Vue 模板渲染高亮
-//
-// 例：snippet = "...<<在线>> 高清 视<<频>>..."
-//      → [{text: '...', highlight: false}, {text: '在线', highlight: true}, ...]
-//
-// 不使用 v-html（防 XSS），纯 Vue 渲染。
-function renderSnippet(snippet: string | undefined): { text: string; highlight: boolean }[] {
-  if (!snippet) return []
-  const parts: { text: string; highlight: boolean }[] = []
-  // split by '<<' but keep delimiter
-  const segments = snippet.split(/(<<|>>)/)
-  let inHighlight = false
-  let cur = ''
-  for (const seg of segments) {
-    if (seg === '<<') {
-      if (cur) {
-        parts.push({ text: cur, highlight: inHighlight })
-        cur = ''
-      }
-      inHighlight = true
-    } else if (seg === '>>') {
-      if (cur) {
-        parts.push({ text: cur, highlight: true })
-        cur = ''
-      }
-      inHighlight = false
-    } else if (seg) {
-      cur += seg
-    }
-  }
-  if (cur) {
-    parts.push({ text: cur, highlight: inHighlight })
-  }
-  return parts
-}
+// tokenizeQuery / renderSnippet 已拆到 useFilesView.searchTokens.ts（可单测）
 
 const sortedFiles = computed(() => {
   return sortFiles(files.value, sortBy.value, sortDesc.value)
@@ -1454,6 +1423,8 @@ watch(
 // 12) Return：Files.vue 模板需要的所有 state + handlers
 // =============================================================================
 
+// 断言 return 类型为 UseFilesViewReturn（关键字段 required，非 declared 字段靠 index signature）
+// 避免 vue-tsc 推断时丢字段
 return {
   // refs (state)
   playError, playErrorDetail, playErrorFile,
@@ -1478,6 +1449,7 @@ return {
   searchQuery, searchFullText, searchResults, isSearching,
   searchMode,
   renderSnippet,
+  tokenizeQuery,
   mainContentRef,
   pathSegments, displayFiles,
   fileInputRef,
@@ -1508,5 +1480,5 @@ return {
   getPluginIcon,
   handleTagFilter,
   applySizePreset, applyTimePreset, clearAllPluginFilters,
-}
+} as unknown as UseFilesViewReturn
 }
