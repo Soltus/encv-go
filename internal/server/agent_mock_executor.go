@@ -1,11 +1,11 @@
 // internal/server/agent_mock_executor.go
 //
 // 剧本执行器 — 核心职责：
-//   1. 接收一个 step 的 events 列表
-//   2. 遇到 tool_call → 自动调 ToolRegistry.Execute(name, args)
-//   3. 自动生成 tool_result 事件（id / name / isError / result 全部来自真实执行）
-//   4. 把 tool_result 推入流（**不**依赖 YAML 里的声明）
-//   5. YAML 里的 events 列表**不**包含 tool_result（schema 校验已拒绝）
+//  1. 接收一个 step 的 events 列表
+//  2. 遇到 tool_call → 自动调 ToolRegistry.Execute(name, args)
+//  3. 自动生成 tool_result 事件（id / name / isError / result 全部来自真实执行）
+//  4. 把 tool_result 推入流（**不**依赖 YAML 里的声明）
+//  5. YAML 里的 events 列表**不**包含 tool_result（schema 校验已拒绝）
 //
 // 与原 agent_mock.go §Run 关系：
 //   - 原 Run 仍保留作为"事件序列 → SSE 推送"的统一通道
@@ -57,10 +57,10 @@ type ToolExecutorResult struct {
 // 每次 Run() 调用前构造一个（绑定 ctx / s / sess / writer），
 // step 内 tool_call 事件用 exec.Execute() 触发真实工具。
 type MockExecutor struct {
-	ctx    context.Context
-	s      *Server
-	sess   *agentSession
-	w      http.ResponseWriter
+	ctx     context.Context
+	s       *Server
+	sess    *agentSession
+	w       http.ResponseWriter
 	flusher http.Flusher
 
 	// 收集所有已完成 tool_result（id → JSON 结果），供动态文本模板使用
@@ -128,11 +128,11 @@ func (e *MockExecutor) executeStep(step MockStep, scenario *MockScenario, stepId
 // handleToolCall 处理 tool_call 事件：调真实工具 + 推送完整事件序列。
 //
 // 事件序列：
-//   1. tool_call (声明)
-//   2. tool_status(running)
-//   3. [execute_real=true] 真实执行：
-//      - tool_status(success/failed)
-//      - tool_result (id / name / result / isError / status / durationMs)
+//  1. tool_call (声明)
+//  2. tool_status(running)
+//  3. [execute_real=true] 真实执行：
+//     - tool_status(success/failed)
+//     - tool_result (id / name / result / isError / status / durationMs)
 //
 // execute_real 默认为 true（v2 YAML 模式），保持向后兼容。
 // 显式 execute_real=false 才跳过真实执行（用于演示失败路径 / mock 错误信息）。

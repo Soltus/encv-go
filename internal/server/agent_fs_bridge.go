@@ -303,9 +303,9 @@ func (s *Server) fsListMounts(argsJSON string) (string, error) {
 
 	mounts := s.ListFSMounts()
 	out := map[string]interface{}{
-		"count":  len(mounts),
-		"items":  mounts,
-		"note":   "接下来调用 list_files / read_file / stat_file 时，用 mount_id 字段指向上面 items[].id",
+		"count": len(mounts),
+		"items": mounts,
+		"note":  "接下来调用 list_files / read_file / stat_file 时，用 mount_id 字段指向上面 items[].id",
 		"server": map[string]string{
 			"goos": runtime.GOOS,
 		},
@@ -456,13 +456,13 @@ func (s *Server) fsReadFile(argsJSON string) (string, error) {
 		}
 	}
 	out := map[string]interface{}{
-		"mount_id":   args.MountID,
-		"rel_path":   args.RelPath,
-		"size":       len(content),
-		"encoding":   "utf-8",
-		"is_binary":  !isText,
+		"mount_id":    args.MountID,
+		"rel_path":    args.RelPath,
+		"size":        len(content),
+		"encoding":    "utf-8",
+		"is_binary":   !isText,
 		"content_b64": "", // 占位，下面按需填充
-		"content":    "",
+		"content":     "",
 	}
 	if isText {
 		out["content"] = string(content)

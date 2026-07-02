@@ -100,8 +100,8 @@ func TestReadAgentConfig_DefaultBaseURL(t *testing.T) {
 
 // recordedRequest 记录 handleAgentChat 发出的上游 HTTP 请求
 type recordedRequest struct {
-	URL    string            `json:"-"`
-	Header map[string][]string `json:"-"`
+	URL    string                 `json:"-"`
+	Header map[string][]string    `json:"-"`
 	Body   map[string]interface{} `json:"body"`
 }
 

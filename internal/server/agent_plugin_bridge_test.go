@@ -1294,7 +1294,7 @@ func toolMetaFor(toolName string) map[string]map[string]interface{} {
 	return map[string]map[string]interface{}{
 		toolName: {
 			"name":        toolName,
-			"needConfirm": true,  // 加密/解密 plugin 默认需 confirm
+			"needConfirm": true, // 加密/解密 plugin 默认需 confirm
 			"kind":        "fileChange",
 		},
 	}

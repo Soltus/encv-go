@@ -452,8 +452,8 @@ func TestHandleAgentContextUsage_WithSession(t *testing.T) {
 	resetSessionsForTest()
 	sessionMu.Lock()
 	sess := &agentSession{
-		SessionID:    "test-sess",
-		LastModel:    "gpt-4o",
+		SessionID: "test-sess",
+		LastModel: "gpt-4o",
 		Messages: []chatMsg{
 			{Role: "user", Content: "hello"},
 			{Role: "assistant", Content: "hi there"},

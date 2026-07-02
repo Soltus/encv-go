@@ -3,10 +3,10 @@
 // Mock LLM 引擎 — 不计费的剧本驱动 SSE 输出。
 //
 // 核心目标：
-//   1. **零成本**：本地生成 SSE 事件流，不调真实 OpenAI，节省 API 费用
-//   2. **确定性**：相同输入 → 相同输出，可做 e2e 断言
-//   3. **场景覆盖**：内置 12 个剧本覆盖所有代码分支（工具/错误/截断/reasoning/并行/中文/无匹配）
-//   4. **UI 0 改动**：mock 输出与真实输出走同一 s.sendAndCache 通道，事件结构字节级一致
+//  1. **零成本**：本地生成 SSE 事件流，不调真实 OpenAI，节省 API 费用
+//  2. **确定性**：相同输入 → 相同输出，可做 e2e 断言
+//  3. **场景覆盖**：内置 12 个剧本覆盖所有代码分支（工具/错误/截断/reasoning/并行/中文/无匹配）
+//  4. **UI 0 改动**：mock 输出与真实输出走同一 s.sendAndCache 通道，事件结构字节级一致
 //
 // 触发匹配优先级：精确匹配 > 关键词 > 正则 > fallback
 //   - builtin 模式无匹配 → 返回 default_friendly
@@ -35,10 +35,10 @@ import (
 
 // MockScenario 定义一个剧本化模拟对话。
 // 触发匹配规则按以下优先级（第一个命中即返回）：
-//   1. ExactMatch（精确匹配）
-//   2. Keywords（任一关键词命中，不区分大小写）
-//   3. Regex（正则编译后匹配）
-//   4. fallback：ID == "default_friendly"
+//  1. ExactMatch（精确匹配）
+//  2. Keywords（任一关键词命中，不区分大小写）
+//  3. Regex（正则编译后匹配）
+//  4. fallback：ID == "default_friendly"
 //
 // v2 字段（agent-tools-scenarios-v2 spec）：
 //   - Branches       分支选择列表（v2 mock_branch_choice 事件数据源）
@@ -58,19 +58,19 @@ type MockScenario struct {
 	// 此初始列表（实现「随剧本进度更新」的多轮会话交互）。
 	Presets []MockPreset
 	// ── v2 多轮 / 分支字段 ──
-	Branches     []Branch          // 可选的分支列表（mock_branch_choice 推送）
-	Rounds       int               // 剧本总轮数（0 = v1 线性行为）
-	RoundContext map[string]any    // 跨轮共享变量（user 文本写入 → 后续 step 读取）
-	TotalRounds  int               // 同 Rounds（spec 兼容字段）
+	Branches     []Branch       // 可选的分支列表（mock_branch_choice 推送）
+	Rounds       int            // 剧本总轮数（0 = v1 线性行为）
+	RoundContext map[string]any // 跨轮共享变量（user 文本写入 → 后续 step 读取）
+	TotalRounds  int            // 同 Rounds（spec 兼容字段）
 }
 
 // Branch 表示剧本内的一个分支选项。
 //
 // 触发匹配（PickBranch 时按此优先级）：
-//   1. 精确匹配：branch.ID == userText
-//   2. 关键词匹配：任一 TriggerKeyword 出现在 userText
-//   3. 正则匹配：TriggerRegex 编译后 MatchString
-//   4. 都不匹配 → 引擎重新推送 mock_branch_choice 提示
+//  1. 精确匹配：branch.ID == userText
+//  2. 关键词匹配：任一 TriggerKeyword 出现在 userText
+//  3. 正则匹配：TriggerRegex 编译后 MatchString
+//  4. 都不匹配 → 引擎重新推送 mock_branch_choice 提示
 //
 // 匹配后跳到 OnMatch 子剧本（独立 stream + EventCache）。
 // InitialStepID 可选：在新 stream 中从哪个 step 开始。
@@ -476,170 +476,170 @@ func (e *MockEngine) Run(ctx context.Context, s *Server, sess *agentSession, w h
 			}
 
 			switch ev.Type {
-		case "mid_stream_disconnect":
-			// 推 2 个 text_delta 后关闭 SSE（模拟客户端断连）
-			textSeq++
-			emitEvent(MockEvent{Type: "text_delta", Data: map[string]interface{}{"seq": textSeq, "text": "我先说一半..."}}, stepIdx, evIdx)
-			textSeq++
-			emitEvent(MockEvent{Type: "text_delta", Data: map[string]interface{}{"seq": textSeq, "text": "嗯"}}, stepIdx, evIdx)
-			slog.Info("mock: mid_stream_disconnect triggered",
-				"scenario", scenario.ID)
-			return nil // SSE 由调用方关闭
-
-		case "sse_corrupt_chunk":
-			// 推一段非 JSON 的 SSE 数据（验证前端 JSON 解析容错）
-			sendCorruptChunk(w)
-			slog.Info("mock: sse_corrupt_chunk injected", "scenario", scenario.ID)
-			continue
-
-		case "tool_call":
-			// 验证必填字段
-			name, _ := ev.Data["name"].(string)
-			id, _ := ev.Data["id"].(string)
-			if name == "" || id == "" {
-				slog.Warn("mock: skip tool_call event (missing name or id)",
-					"scenario", scenario.ID, "step", stepIdx, "ev", evIdx)
-				continue
-			}
-			// execute_real 字段：true 时把 (id → name+args) 登记到 pendingRealCalls，
-			// 后续匹配 tool_result 时实际调 realExecutor 拿真实结果。
-			// 缺省 false（保持向后兼容：单测/无 executor 时按硬编码剧本走）。
-			if execReal, _ := ev.Data["execute_real"].(bool); execReal {
-				args, _ := ev.Data["args"].(string)
-				pendingRealCalls[id] = pendingRealCall{name: name, args: args}
-				slog.Debug("mock: tool_call marked execute_real=true, will call real handler at result",
-					"scenario", scenario.ID, "id", id, "name", name)
-			}
-			emitEvent(ev, stepIdx, evIdx)
-			writeDebug(stepIdx, evIdx, "tool_call", fmt.Sprintf("id=%s name=%s", id, name))
-
-		case "stream_start":
-			// 首个 stream_start 注入 mock: true 字段（前端用来显示「模拟模式」徽章）
-			if mockFlag && !streamStartEmitted {
-				merged := make(map[string]interface{}, len(ev.Data)+1)
-				for k, v := range ev.Data {
-					merged[k] = v
-				}
-				merged["mock"] = true
-				merged["scenario"] = scenario.ID
-				emitEvent(MockEvent{Type: "stream_start", Data: merged}, stepIdx, evIdx)
-				streamStartEmitted = true
-				writeDebug(stepIdx, evIdx, "stream_start", fmt.Sprintf("mock=%v scenario=%s", mockFlag, scenario.ID))
-
-				// 紧随 stream_start 推送初始预设按钮（如果有）。
-				// 前端 MockPresetBar 监听到 mock_presets 事件即渲染 chip。
-				// mid-scenario 期间的预设更新通过单独的 mock_presets 事件
-				// 在 steps 内推（见下方 switch case）。
-				if len(scenario.Presets) > 0 {
-					emitEvent(MockEvent{Type: "mock_presets", Data: map[string]interface{}{
-						"scenario": scenario.ID,
-						"phase":    "initial",
-						"presets":  scenario.Presets,
-					}}, stepIdx, evIdx)
-				}
-			} else {
-				emitEvent(ev, stepIdx, evIdx)
-			}
-
-		case "mock_presets":
-			// mid-scenario 预设更新（高级剧本多轮会话）：
-			// 剧本可在任意 step 推一个 mock_presets 事件，data.presets 覆盖
-			// 当前激活的预设列表。前端基于此实时刷新 chip 按钮。
-			// data.phase 字段由剧本作者标记当前阶段（initial/middle/followup），
-			// 仅做调试 / 埋点用，前端不强依赖。
-			emitEvent(ev, stepIdx, evIdx)
-
-		case "text_delta":
-			textSeq++
-			text, _ := ev.Data["text"].(string)
-			emitEvent(MockEvent{Type: "text_delta", Data: map[string]interface{}{"seq": textSeq, "text": text}}, stepIdx, evIdx)
-			writeDebug(stepIdx, evIdx, "text_delta", text[:min(80, len(text))])
-
-		case "text_delta_templated":
-			// 动态文本模板：data.text 中可包含 {%id%} 占位符，
-			// Run 方法从 collectedResults 中取对应 tool_result 的 JSON 替换。
-			// 用途：Step 7 总结文本从真实工具返回值动态生成文件名/大小等，
-			// 避免硬编码数值与实际数据不一致。
-			textSeq++
-			template, _ := ev.Data["text"].(string)
-			rendered := renderTextTemplate(template, collectedResults)
-			emitEvent(MockEvent{Type: "text_delta_templated", Data: map[string]interface{}{"seq": textSeq, "text": rendered}}, stepIdx, evIdx)
-			writeDebug(stepIdx, evIdx, "text_delta_templated", rendered[:min(100, len(rendered))])
-
-		case "reasoning_delta":
-			reasoningSeq++
-			text, _ := ev.Data["text"].(string)
-			emitEvent(MockEvent{Type: "reasoning_delta", Data: map[string]interface{}{"seq": reasoningSeq, "text": text}}, stepIdx, evIdx)
-
-		case "stream_status":
-			emitEvent(ev, stepIdx, evIdx)
-			// 错误状态：自动追加 stream_end(finishReason=error) 终止流
-			if isErrorStatus(ev.Data) {
-				emitEvent(MockEvent{Type: "stream_end", Data: map[string]interface{}{"finishReason": "error"}}, stepIdx, evIdx)
-				s.endMockPresets(sess, w, flusher, scenario.ID, "stream_status_error")
-				slog.Info("mock: stream_status=error injected auto stream_end",
+			case "mid_stream_disconnect":
+				// 推 2 个 text_delta 后关闭 SSE（模拟客户端断连）
+				textSeq++
+				emitEvent(MockEvent{Type: "text_delta", Data: map[string]interface{}{"seq": textSeq, "text": "我先说一半..."}}, stepIdx, evIdx)
+				textSeq++
+				emitEvent(MockEvent{Type: "text_delta", Data: map[string]interface{}{"seq": textSeq, "text": "嗯"}}, stepIdx, evIdx)
+				slog.Info("mock: mid_stream_disconnect triggered",
 					"scenario", scenario.ID)
-				return nil
-			}
+				return nil // SSE 由调用方关闭
 
-		case "tool_result":
-			// 铁律检查：YAML auto-injected tool_result（__yaml_auto_generated=true）
-			// 必须由真实工具执行覆盖。Run 阶段直接调 executor 调真实工具。
-			if autoGen, _ := ev.Data["__yaml_auto_generated"].(bool); autoGen {
-				id, _ := ev.Data["id"].(string)
-				if err := e.executeAutoToolResult(ctx, s, sess, w, flusher, ev, pendingRealCalls, id, writeDebug, emitEvent, stepIdx, evIdx); err != nil {
-					return err
-				}
+			case "sse_corrupt_chunk":
+				// 推一段非 JSON 的 SSE 数据（验证前端 JSON 解析容错）
+				sendCorruptChunk(w)
+				slog.Info("mock: sse_corrupt_chunk injected", "scenario", scenario.ID)
 				continue
-			}
-			// 若对应的 tool_call 标记了 execute_real=true 且 realExecutor 已注入，
-			// 实际调用以拿真实结果，覆盖剧本的硬编码 result。
-			// 否则按剧本硬编码 data 原样推送。
-			id, _ := ev.Data["id"].(string)
-			name, _ := ev.Data["name"].(string)
-			if pending, ok := pendingRealCalls[id]; ok {
-				delete(pendingRealCalls, id)
-				if e.realExecutor != nil {
-					// 先检查 ctx 取消（避免 realExecutor 长耗时后做无用功）
-					select {
-					case <-ctx.Done():
-						slog.Info("mock: ctx cancelled before real tool exec",
-							"scenario", scenario.ID, "id", id, "name", pending.name)
-						return ctx.Err()
-					default:
-					}
-					// 关键：把 emitEvent 闭包传进去，让真实工具结果也走 AG-UI mapper
-					// 否则 useAGUI=true 时 executeRealAndEmit 走 sendAndCache
-					// 推 legacy tool_result 格式 → 前端 AG-UI parser 无法解析
-					realResult := e.executeRealAndEmit(ctx, s, sess, w, flusher, pending, id, name, writeDebug, emitEvent, stepIdx, evIdx)
-					collectedResults[id] = toolResultInfo{id: id, name: name, result: realResult}
+
+			case "tool_call":
+				// 验证必填字段
+				name, _ := ev.Data["name"].(string)
+				id, _ := ev.Data["id"].(string)
+				if name == "" || id == "" {
+					slog.Warn("mock: skip tool_call event (missing name or id)",
+						"scenario", scenario.ID, "step", stepIdx, "ev", evIdx)
 					continue
 				}
-				// realExecutor == nil：单测/容灾路径，硬编码剧本 result
-				slog.Debug("mock: execute_real=true but realExecutor nil, falling back to hardcoded result",
-					"scenario", scenario.ID, "id", id)
-			}
-			// 收集结果（硬编码路径 + realExecutor=nil fallback）
-			resultStr, _ := ev.Data["result"].(string)
-			if resultStr != "" && id != "" {
-				collectedResults[id] = toolResultInfo{id: id, name: name, result: resultStr}
-			}
-			emitEvent(ev, stepIdx, evIdx)
-			writeDebug(stepIdx, evIdx, "tool_result", fmt.Sprintf("id=%s name=%s", id, name))
+				// execute_real 字段：true 时把 (id → name+args) 登记到 pendingRealCalls，
+				// 后续匹配 tool_result 时实际调 realExecutor 拿真实结果。
+				// 缺省 false（保持向后兼容：单测/无 executor 时按硬编码剧本走）。
+				if execReal, _ := ev.Data["execute_real"].(bool); execReal {
+					args, _ := ev.Data["args"].(string)
+					pendingRealCalls[id] = pendingRealCall{name: name, args: args}
+					slog.Debug("mock: tool_call marked execute_real=true, will call real handler at result",
+						"scenario", scenario.ID, "id", id, "name", name)
+				}
+				emitEvent(ev, stepIdx, evIdx)
+				writeDebug(stepIdx, evIdx, "tool_call", fmt.Sprintf("id=%s name=%s", id, name))
 
-		case "stream_end":
-			// 推送 stream_end 后**不再**清空 chip —— 用户视角的"覆盖显示"语义：
-			// chip 在 mock 模式开启期间永远覆盖在输入框上方，剧本结束后保留
-			// 当前阶段 chip（mid-scenario 推过的话保留 mid；没推过保留 initial），
-			// 下次 stream_start 后推的 mock_presets 会**覆盖**当前 chip。
-			// 仅当用户**主动**退出 mock 模式（前端点 "🧪 模拟" 切换）才发
-			// mock_presets_clear。
-			emitEvent(ev, stepIdx, evIdx)
-			writeDebug(stepIdx, evIdx, "stream_end", "")
+			case "stream_start":
+				// 首个 stream_start 注入 mock: true 字段（前端用来显示「模拟模式」徽章）
+				if mockFlag && !streamStartEmitted {
+					merged := make(map[string]interface{}, len(ev.Data)+1)
+					for k, v := range ev.Data {
+						merged[k] = v
+					}
+					merged["mock"] = true
+					merged["scenario"] = scenario.ID
+					emitEvent(MockEvent{Type: "stream_start", Data: merged}, stepIdx, evIdx)
+					streamStartEmitted = true
+					writeDebug(stepIdx, evIdx, "stream_start", fmt.Sprintf("mock=%v scenario=%s", mockFlag, scenario.ID))
 
-		default:
-			// 其他类型：原样推送
-			emitEvent(ev, stepIdx, evIdx)
+					// 紧随 stream_start 推送初始预设按钮（如果有）。
+					// 前端 MockPresetBar 监听到 mock_presets 事件即渲染 chip。
+					// mid-scenario 期间的预设更新通过单独的 mock_presets 事件
+					// 在 steps 内推（见下方 switch case）。
+					if len(scenario.Presets) > 0 {
+						emitEvent(MockEvent{Type: "mock_presets", Data: map[string]interface{}{
+							"scenario": scenario.ID,
+							"phase":    "initial",
+							"presets":  scenario.Presets,
+						}}, stepIdx, evIdx)
+					}
+				} else {
+					emitEvent(ev, stepIdx, evIdx)
+				}
+
+			case "mock_presets":
+				// mid-scenario 预设更新（高级剧本多轮会话）：
+				// 剧本可在任意 step 推一个 mock_presets 事件，data.presets 覆盖
+				// 当前激活的预设列表。前端基于此实时刷新 chip 按钮。
+				// data.phase 字段由剧本作者标记当前阶段（initial/middle/followup），
+				// 仅做调试 / 埋点用，前端不强依赖。
+				emitEvent(ev, stepIdx, evIdx)
+
+			case "text_delta":
+				textSeq++
+				text, _ := ev.Data["text"].(string)
+				emitEvent(MockEvent{Type: "text_delta", Data: map[string]interface{}{"seq": textSeq, "text": text}}, stepIdx, evIdx)
+				writeDebug(stepIdx, evIdx, "text_delta", text[:min(80, len(text))])
+
+			case "text_delta_templated":
+				// 动态文本模板：data.text 中可包含 {%id%} 占位符，
+				// Run 方法从 collectedResults 中取对应 tool_result 的 JSON 替换。
+				// 用途：Step 7 总结文本从真实工具返回值动态生成文件名/大小等，
+				// 避免硬编码数值与实际数据不一致。
+				textSeq++
+				template, _ := ev.Data["text"].(string)
+				rendered := renderTextTemplate(template, collectedResults)
+				emitEvent(MockEvent{Type: "text_delta_templated", Data: map[string]interface{}{"seq": textSeq, "text": rendered}}, stepIdx, evIdx)
+				writeDebug(stepIdx, evIdx, "text_delta_templated", rendered[:min(100, len(rendered))])
+
+			case "reasoning_delta":
+				reasoningSeq++
+				text, _ := ev.Data["text"].(string)
+				emitEvent(MockEvent{Type: "reasoning_delta", Data: map[string]interface{}{"seq": reasoningSeq, "text": text}}, stepIdx, evIdx)
+
+			case "stream_status":
+				emitEvent(ev, stepIdx, evIdx)
+				// 错误状态：自动追加 stream_end(finishReason=error) 终止流
+				if isErrorStatus(ev.Data) {
+					emitEvent(MockEvent{Type: "stream_end", Data: map[string]interface{}{"finishReason": "error"}}, stepIdx, evIdx)
+					s.endMockPresets(sess, w, flusher, scenario.ID, "stream_status_error")
+					slog.Info("mock: stream_status=error injected auto stream_end",
+						"scenario", scenario.ID)
+					return nil
+				}
+
+			case "tool_result":
+				// 铁律检查：YAML auto-injected tool_result（__yaml_auto_generated=true）
+				// 必须由真实工具执行覆盖。Run 阶段直接调 executor 调真实工具。
+				if autoGen, _ := ev.Data["__yaml_auto_generated"].(bool); autoGen {
+					id, _ := ev.Data["id"].(string)
+					if err := e.executeAutoToolResult(ctx, s, sess, w, flusher, ev, pendingRealCalls, id, writeDebug, emitEvent, stepIdx, evIdx); err != nil {
+						return err
+					}
+					continue
+				}
+				// 若对应的 tool_call 标记了 execute_real=true 且 realExecutor 已注入，
+				// 实际调用以拿真实结果，覆盖剧本的硬编码 result。
+				// 否则按剧本硬编码 data 原样推送。
+				id, _ := ev.Data["id"].(string)
+				name, _ := ev.Data["name"].(string)
+				if pending, ok := pendingRealCalls[id]; ok {
+					delete(pendingRealCalls, id)
+					if e.realExecutor != nil {
+						// 先检查 ctx 取消（避免 realExecutor 长耗时后做无用功）
+						select {
+						case <-ctx.Done():
+							slog.Info("mock: ctx cancelled before real tool exec",
+								"scenario", scenario.ID, "id", id, "name", pending.name)
+							return ctx.Err()
+						default:
+						}
+						// 关键：把 emitEvent 闭包传进去，让真实工具结果也走 AG-UI mapper
+						// 否则 useAGUI=true 时 executeRealAndEmit 走 sendAndCache
+						// 推 legacy tool_result 格式 → 前端 AG-UI parser 无法解析
+						realResult := e.executeRealAndEmit(ctx, s, sess, w, flusher, pending, id, name, writeDebug, emitEvent, stepIdx, evIdx)
+						collectedResults[id] = toolResultInfo{id: id, name: name, result: realResult}
+						continue
+					}
+					// realExecutor == nil：单测/容灾路径，硬编码剧本 result
+					slog.Debug("mock: execute_real=true but realExecutor nil, falling back to hardcoded result",
+						"scenario", scenario.ID, "id", id)
+				}
+				// 收集结果（硬编码路径 + realExecutor=nil fallback）
+				resultStr, _ := ev.Data["result"].(string)
+				if resultStr != "" && id != "" {
+					collectedResults[id] = toolResultInfo{id: id, name: name, result: resultStr}
+				}
+				emitEvent(ev, stepIdx, evIdx)
+				writeDebug(stepIdx, evIdx, "tool_result", fmt.Sprintf("id=%s name=%s", id, name))
+
+			case "stream_end":
+				// 推送 stream_end 后**不再**清空 chip —— 用户视角的"覆盖显示"语义：
+				// chip 在 mock 模式开启期间永远覆盖在输入框上方，剧本结束后保留
+				// 当前阶段 chip（mid-scenario 推过的话保留 mid；没推过保留 initial），
+				// 下次 stream_start 后推的 mock_presets 会**覆盖**当前 chip。
+				// 仅当用户**主动**退出 mock 模式（前端点 "🧪 模拟" 切换）才发
+				// mock_presets_clear。
+				emitEvent(ev, stepIdx, evIdx)
+				writeDebug(stepIdx, evIdx, "stream_end", "")
+
+			default:
+				// 其他类型：原样推送
+				emitEvent(ev, stepIdx, evIdx)
 				writeDebug(stepIdx, evIdx, ev.Type, "")
 			}
 		}
@@ -698,6 +698,7 @@ type toolResultInfo struct {
 // emitEvent 闭包：传入 Run 上下文的统一事件出口，
 //   - useAGUI=false → sendAndCache（legacy SSE 格式 + EventCache 缓存）
 //   - useAGUI=true  → aguiMapper.MapEvent（AG-UI 标准格式）
+//
 // 这样真实工具路径与剧本路径走完全相同的 emit 通道，AG-UI mapper 不会被旁路。
 func (e *MockEngine) executeRealAndEmit(
 	ctx context.Context,
@@ -757,10 +758,10 @@ func (e *MockEngine) executeRealAndEmit(
 // executeAutoToolResult 处理 YAML auto-injected tool_result（剧本外置 spec）。
 //
 // 在 Run() 阶段遇到 __yaml_auto_generated=true 的 tool_result 时调用：
-//   1. 从 tool_call event (在 pendingRealCalls 中) 取 name + args
-//   2. 调 realExecutor（或 s.executeAgentToolAsExecutor）拿真实结果
-//   3. 推送真实 tool_status(success/failed) + tool_result
-//   4. 写入 collectedResults
+//  1. 从 tool_call event (在 pendingRealCalls 中) 取 name + args
+//  2. 调 realExecutor（或 s.executeAgentToolAsExecutor）拿真实结果
+//  3. 推送真实 tool_status(success/failed) + tool_result
+//  4. 写入 collectedResults
 //
 // 与原 executeRealAndEmit 的区别：
 //   - executeRealAndEmit 要求 tool_call event 显式标 execute_real=true
@@ -831,8 +832,9 @@ func (e *MockEngine) executeAutoToolResult(
 //   - {%call_id:mounts%}    → list_mounts 结果的挂载点列表摘要
 //
 // 示例模板：
-//   "发现文件：{%call_files2:files%}"
-//   → "发现文件：comedy.mkv (11.4 KB) / sample.mp4 (21.5 KB)"
+//
+//	"发现文件：{%call_files2:files%}"
+//	→ "发现文件：comedy.mkv (11.4 KB) / sample.mp4 (21.5 KB)"
 func renderTextTemplate(template string, results map[string]toolResultInfo) string {
 	// 快速路径：无占位符直接返回
 	if !strings.Contains(template, "{%") {
@@ -926,7 +928,7 @@ func extractField(jsonStr, callID, field string) string {
 		// 通用字段提取
 		val, exists := obj[field]
 		if !exists {
-			return fmt.Sprintf( "(无字段:%s)", field)
+			return fmt.Sprintf("(无字段:%s)", field)
 		}
 		return fmt.Sprintf("%v", val)
 	}

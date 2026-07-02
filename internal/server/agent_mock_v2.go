@@ -244,10 +244,10 @@ func (e *MockEngineV2) Resume(
 }
 
 // PickBranch 处理分支选择。先按优先级尝试匹配：
-//   1. 精确匹配 branch.ID
-//   2. 关键词匹配（任一 keyword 出现在 userText）
-//   3. 正则匹配
-//   4. 都不匹配 → 重新推 mock_branch_choice 并等待再次选择
+//  1. 精确匹配 branch.ID
+//  2. 关键词匹配（任一 keyword 出现在 userText）
+//  3. 正则匹配
+//  4. 都不匹配 → 重新推 mock_branch_choice 并等待再次选择
 //
 // 匹配后跳到 Branch.OnMatch（独立子剧本），从头开始推 events。
 func (e *MockEngineV2) PickBranch(
@@ -278,10 +278,10 @@ func (e *MockEngineV2) PickBranch(
 
 	// 推 mock_branch_picked 事件（前端据此收卡片 / 跳转）
 	s.sendAndCache(sess, w, flusher, "mock_branch_picked", map[string]interface{}{
-		"scenario":   sc.ID,
-		"branch_id":  branch.ID,
-		"label":      branch.Label,
-		"icon":       branch.Icon,
+		"scenario":    sc.ID,
+		"branch_id":   branch.ID,
+		"label":       branch.Label,
+		"icon":        branch.Icon,
 		"description": branch.Description,
 	})
 
@@ -682,10 +682,10 @@ func (e *MockEngineV2) debugRoundCtxJSON() string {
 // matchScenarioSimple 简易匹配（用于 v2 场景的 fallback lookup）。
 //
 // 匹配规则（与 MockEngine.Match 简化版等价）：
-//   1. ExactMatch
-//   2. Keywords 任一命中
-//   3. Regex
-//   4. 默认返回 false（不命中）
+//  1. ExactMatch
+//  2. Keywords 任一命中
+//  3. Regex
+//  4. 默认返回 false（不命中）
 //
 // 不走 fallback / priority 重排——只做「是否命中」布尔判断。
 func matchScenarioSimple(userText string, sc *MockScenario) bool {

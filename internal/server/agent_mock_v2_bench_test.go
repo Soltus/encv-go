@@ -1,6 +1,6 @@
 // internal/server/agent_mock_v2_bench_test.go
 //
-// T16 性能与压力测试 — MockEngineV2 引擎
+// # T16 性能与压力测试 — MockEngineV2 引擎
 //
 // 包含：
 //   - T16.2 5 并发剧本测试（无 panic / 无 goroutine 泄漏 / 内存 < 100MB 增长）

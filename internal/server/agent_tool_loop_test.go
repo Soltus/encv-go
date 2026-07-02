@@ -1,6 +1,6 @@
 // internal/server/agent_tool_loop_test.go
 //
-// Phase 2 测试：streamChat 真实 LLM 路径 AG-UI 透传
+// # Phase 2 测试：streamChat 真实 LLM 路径 AG-UI 透传
 //
 // 覆盖范围（来自 spec tasks.md §2.4）：
 //   - TestStreamChat_AGUIMode_EmitsTextMessageStartBeforeContent

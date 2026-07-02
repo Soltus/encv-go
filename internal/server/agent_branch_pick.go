@@ -3,10 +3,10 @@
 // POST /api/agent/branch-pick — 剧本外置 spec 的分支选择端点。
 //
 // 核心约束（用户原话反复强调）：
-//   1. ❌ 严禁接收自由文本（user_text / option_text / free_text）
-//   2. ✅ 只接受 option_id（chip 预设选项的 ID）
-//   3. ✅ 校验 option_id 必须存在于剧本的 mock_branch_choice.options 列表
-//   4. ✅ 推进到该 option 对应的 step / branch
+//  1. ❌ 严禁接收自由文本（user_text / option_text / free_text）
+//  2. ✅ 只接受 option_id（chip 预设选项的 ID）
+//  3. ✅ 校验 option_id 必须存在于剧本的 mock_branch_choice.options 列表
+//  4. ✅ 推进到该 option 对应的 step / branch
 //
 // 设计原则：
 //   - 入参严格白名单（拒绝未知字段）
@@ -91,7 +91,7 @@ func (s *Server) handleAgentBranchPick(c *gin.Context) {
 	sc := s.mockEngine.GetScenarioByID(req.ScenarioID)
 	if sc == nil {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error":   "branch-pick: scenario not found",
+			"error":       "branch-pick: scenario not found",
 			"scenario_id": req.ScenarioID,
 		})
 		return
@@ -101,16 +101,16 @@ func (s *Server) handleAgentBranchPick(c *gin.Context) {
 	branch, option := findBranchAndOption(sc, req.BranchID, req.OptionID)
 	if branch == nil {
 		c.JSON(http.StatusNotFound, gin.H{
-			"error":   "branch-pick: branch not found in scenario",
+			"error":       "branch-pick: branch not found in scenario",
 			"scenario_id": req.ScenarioID,
-			"branch_id": req.BranchID,
+			"branch_id":   req.BranchID,
 		})
 		return
 	}
 	if option == nil {
 		// 拒绝：option_id 不在合法列表
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error":   "branch-pick: option_id not in branch options",
+			"error":     "branch-pick: option_id not in branch options",
 			"branch_id": req.BranchID,
 			"option_id": req.OptionID,
 		})
@@ -139,8 +139,8 @@ func (s *Server) handleAgentBranchPick(c *gin.Context) {
 // findBranchAndOption 在剧本中查找 branch + option（不区分大小写）。
 //
 // Branch 匹配策略：
-//   1. Branches 列表里 ID 匹配
-//   2. mock_branch_choice 事件里 data.branch_id 匹配（不推荐但兼容）
+//  1. Branches 列表里 ID 匹配
+//  2. mock_branch_choice 事件里 data.branch_id 匹配（不推荐但兼容）
 //
 // Option 匹配策略：branch 内的 OnMatch 子剧本中，搜索 mock_branch_choice 事件
 // 对应的 options 列表（v2 模式：选项在子剧本的 step 内声明）。

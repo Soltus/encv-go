@@ -306,14 +306,14 @@ func TestMockEngineV2_8ScenariosLoad(t *testing.T) {
 		t.Fatalf("len(mockScenariosV2) = %d, want 8", len(mockScenariosV2))
 	}
 	required := map[string]bool{
-		"search_recursive_mp4":       false,
-		"search_logical_query":       false,
-		"search_content_regex":       false,
-		"edit_metadata_wizard":       false,
-		"batch_rename_with_preview":  false,
-		"branch_encrypt_or_decrypt":  false,
-		"branch_video_or_audio":      false,
-		"command_run_ffprobe":        false,
+		"search_recursive_mp4":      false,
+		"search_logical_query":      false,
+		"search_content_regex":      false,
+		"edit_metadata_wizard":      false,
+		"batch_rename_with_preview": false,
+		"branch_encrypt_or_decrypt": false,
+		"branch_video_or_audio":     false,
+		"command_run_ffprobe":       false,
 	}
 	for _, sc := range mockScenariosV2 {
 		if _, ok := required[sc.ID]; !ok {
@@ -338,7 +338,7 @@ func TestMockEngineV2_8ScenariosLoad(t *testing.T) {
 func TestMockEngineV2_CompatWithV1Scenarios(t *testing.T) {
 	eng := NewMockEngine() // v1 engine
 	sc := &MockScenario{
-		ID:     "v1_compat_test",
+		ID: "v1_compat_test",
 		Steps: []MockStep{
 			{DelayMs: 0, Events: []MockEvent{
 				{Type: "stream_start", Data: map[string]any{"scenario": "v1_compat_test"}},
