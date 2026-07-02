@@ -172,6 +172,99 @@
           <ion-icon :icon="searchQuery ? search : folderOpen" class="empty-icon"></ion-icon>
           <h3>{{ searchQuery ? t('files.noSearchResults') : t('files.emptyDir') }}</h3>
           <p>{{ searchQuery ? t('files.noSearchResultsDesc') : t('files.emptyDirDesc') }}</p>
+
+          <!-- 🆕 2026-07-03 搜索诊断卡片（仅搜索结果为空时显示）
+                背景：安卓真机 FTS5 可能异常，但用户进不去 /settings/fulltext-index（classList bug）
+                无法在那查看 FTS 状态。所以搜索界面直接显示诊断信息辅助排查。
+                数据源：refreshSearchDiagnostics() 在 performSearch 空结果时自动调用 -->
+          <div v-if="searchQuery && searchDiagnostics" class="search-diagnostics-card" data-testid="search-diagnostics-card">
+            <div class="diag-card-header">
+              <ion-icon :icon="alertCircle" class="diag-card-icon"></ion-icon>
+              <span>搜索诊断</span>
+              <span class="diag-card-time">{{ searchDiagnostics.searchedAt }}</span>
+            </div>
+
+            <div class="diag-grid">
+              <div class="diag-item">
+                <span class="diag-label">FTS5</span>
+                <ion-badge
+                  :color="searchDiagnostics.ftsAvailable ? 'success' : 'danger'"
+                  data-testid="diag-fts-badge"
+                >
+                  {{ searchDiagnostics.ftsAvailable ? '可用' : '不可用' }}
+                </ion-badge>
+              </div>
+
+              <div class="diag-item">
+                <span class="diag-label">向量搜索</span>
+                <ion-badge
+                  :color="searchDiagnostics.vectorSearch === 'available' ? 'success' : (searchDiagnostics.vectorSearch === 'degraded' ? 'warning' : 'danger')"
+                >
+                  {{ searchDiagnostics.vectorSearch }}
+                </ion-badge>
+              </div>
+
+              <div class="diag-item">
+                <span class="diag-label">FTS 索引</span>
+                <span class="diag-value" data-testid="diag-fts-index-size">{{ searchDiagnostics.ftsIndexSize ?? '-' }} 文件</span>
+              </div>
+
+              <div class="diag-item">
+                <span class="diag-label">普通索引</span>
+                <span class="diag-value">{{ searchDiagnostics.totalFiles ?? '-' }} 文件</span>
+              </div>
+
+              <div class="diag-item" v-if="searchDiagnostics.isIndexing">
+                <span class="diag-label">状态</span>
+                <ion-badge color="warning">
+                  <ion-spinner name="dots" class="diag-spinner"></ion-spinner>
+                  索引中
+                </ion-badge>
+              </div>
+
+              <div class="diag-item" v-if="searchDiagnostics.ftsTokenizer">
+                <span class="diag-label">分词器</span>
+                <span class="diag-value mono">{{ searchDiagnostics.ftsTokenizer }}</span>
+              </div>
+            </div>
+
+            <!-- FTS 不可用原因 / 错误信息 -->
+            <div v-if="searchDiagnostics.ftsError || !searchDiagnostics.ftsAvailable" class="diag-error-row">
+              <ion-icon :icon="warningOutline" class="diag-error-icon"></ion-icon>
+              <span class="diag-error-text">
+                {{ searchDiagnostics.ftsError || 'FTS5 未启用' }}
+              </span>
+            </div>
+
+            <!-- 上次搜索元信息 -->
+            <div v-if="searchDiagnostics.lastQuery" class="diag-meta-row">
+              <span class="diag-meta-item">
+                查询: <code>{{ searchDiagnostics.lastQuery }}</code>
+              </span>
+              <span class="diag-meta-item" v-if="searchDiagnostics.lastNormalCount !== undefined">
+                普通匹配: {{ searchDiagnostics.lastNormalCount }}
+              </span>
+              <span class="diag-meta-item" v-if="searchDiagnostics.lastFtsCount !== undefined">
+                FTS 匹配: {{ searchDiagnostics.lastFtsCount }}
+              </span>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="diag-actions">
+              <ion-button size="small" fill="outline" @click="retrySearch" data-testid="diag-retry-btn">
+                <ion-icon :icon="refresh" slot="start"></ion-icon>
+                重试
+              </ion-button>
+              <ion-button size="small" fill="outline" @click="refreshSearchDiagnostics()" data-testid="diag-refresh-btn">
+                <ion-icon :icon="alertCircle" slot="start"></ion-icon>
+                刷新状态
+              </ion-button>
+              <ion-button size="small" fill="outline" color="tertiary" @click="goFullTextIndexFromSearch" data-testid="diag-goto-index-btn">
+                <ion-icon :icon="search" slot="start"></ion-icon>
+                全文索引页
+              </ion-button>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -553,6 +646,8 @@ const {
   queryInputRef, onQueryInput, onQueryKeydown,
   // 🆕 A6 FTS 降级 banner
   fulltextBanner, dismissFulltextBanner,
+  // 🆕 2026-07-03 搜索空结果诊断
+  searchDiagnostics, refreshSearchDiagnostics, retrySearch, goFullTextIndexFromSearch,
   // 🆕 旧 handleSearchInput 不再需要（onQueryInput 自动触发）
   handleSearchClear, handleSearchToggle, insertOperator,
   renderSnippet,
@@ -930,6 +1025,140 @@ function onQueryBlur() {
   font-size: 64px;
   color: var(--ion-color-medium, #999);
   margin-bottom: 8px;
+}
+
+/* 🆕 2026-07-03 搜索诊断卡片样式（搜索结果为空时显示 FTS/索引状态辅助排查） */
+.search-diagnostics-card {
+  width: 100%;
+  max-width: 560px;
+  margin: 16px auto 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.06);
+  border: 1px solid rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.18);
+  text-align: left;
+  font-size: 13px;
+}
+body.dark .search-diagnostics-card {
+  background: rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.12);
+  border-color: rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.3);
+}
+
+.diag-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13.5px;
+  margin-bottom: 10px;
+  color: var(--ion-color-warning, #ff9800);
+}
+.diag-card-icon { font-size: 16px; }
+.diag-card-time {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ion-color-medium, #999);
+  font-family: 'SFMono-Regular', Consolas, monospace;
+}
+
+.diag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+.diag-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.5);
+  border: 1px solid rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.1);
+}
+body.dark .diag-item {
+  background: rgba(var(--ion-background-color-rgb, 30, 30, 30), 0.5);
+}
+.diag-label {
+  font-size: 11px;
+  color: var(--ion-color-medium, #666);
+  font-weight: 500;
+}
+.diag-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ion-text-color, #333);
+}
+.diag-value.mono {
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 11.5px;
+  word-break: break-all;
+}
+.diag-spinner {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.diag-error-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background: rgba(var(--ion-color-danger-rgb, 240, 60, 60), 0.08);
+  border-left: 3px solid var(--ion-color-danger, #f53d3d);
+}
+.diag-error-icon {
+  font-size: 14px;
+  color: var(--ion-color-danger, #f53d3d);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.diag-error-text {
+  font-size: 12px;
+  color: var(--ion-color-danger, #f53d3d);
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.diag-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 0;
+  margin-bottom: 8px;
+  border-top: 1px dashed rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.15);
+  font-size: 11.5px;
+  color: var(--ion-color-medium, #666);
+}
+.diag-meta-item code {
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  background: rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.diag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+.diag-actions ion-button {
+  --padding-start: 8px;
+  --padding-end: 12px;
+  font-size: 12px;
+  height: 32px;
+}
+.diag-actions ion-button ion-icon {
+  font-size: 14px;
+  margin-right: 2px;
 }
 
 

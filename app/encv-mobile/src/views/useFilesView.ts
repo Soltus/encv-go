@@ -52,8 +52,12 @@ import {
   listFilesByTag,
   getFileInfo,
   getExternalStreamUrl,
+  // 🆕 2026-07-03：搜索空结果时主动查询索引状态，便于诊断（FTS 是否可用、索引了多少文件）
+  getIndexStats,
+  getFullTextIndexStats,
 } from '@/api/encv'
-import type { FileItem, PluginMeta, TagInfo, SearchMode } from '@/api/encv'
+import type { FileItem, PluginMeta, TagInfo, SearchMode, IndexStats } from '@/api/encv'
+import type { FullTextIndexStats } from '@/api/encv_search'
 import { eventBus } from '@/composables/useEventBus'
 import { useI18n } from '@/composables/useI18n'
 import { useVectorSearchStatus } from '@/composables/useVectorSearchStatus'
@@ -287,11 +291,6 @@ const {
   clearInput,
 } = useSearchInput({
   onChange: handleSearchInput,
-  onEnter: () => {
-    if (searchTimer) clearTimeout(searchTimer)
-    performSearch()
-  },
-  onEscape: handleSearchClear,
 })
 
 // 兼容旧代码：searchQuery 仍指向 queryValue（Files.vue 其它处也读 searchQuery.value）
@@ -310,6 +309,84 @@ let searchGeneration = 0
 
 // 🆕 A6：FTS 失败 banner 提示（不抛错、不清空结果）
 const fulltextBanner = ref<{ type: 'unavailable' | 'error'; message: string } | null>(null)
+
+// 🆕 2026-07-03：搜索诊断信息（搜索结果为空时主动查询，UI 显示给用户辅助诊断）
+//   背景：安卓真机 FTS5 可能因 SQLite 编译选项异常，但前端搜索空状态只有 1 行文案，
+//   无法告诉用户"为什么没结果"。用户进不去 /settings/fulltext-index 页面（classList bug）
+//   也无法在那查看 FTS 状态。所以搜索界面直接显示诊断信息。
+interface SearchDiagnostics {
+  ftsAvailable: boolean
+  ftsError?: string
+  fts5Enabled?: boolean
+  ftsIndexSize?: number       // FTS 索引的文件数（如果是 0 说明索引为空）
+  ftsTokenizer?: string
+  totalFiles?: number         // 普通索引的文件数（与 ftsIndexSize 对比可判断 FTS 是否漏索引）
+  isIndexing?: boolean
+  vectorSearch: string        // 'unknown' | 'available' | 'degraded' | 'unavailable'
+  lastQuery?: string
+  lastMode?: SearchMode
+  lastNormalCount?: number
+  lastFtsCount?: number
+  searchedAt?: string
+}
+const searchDiagnostics = ref<SearchDiagnostics | null>(null)
+
+/**
+ * 🆕 2026-07-03：主动查询 FTS + 索引状态，用于搜索空结果时显示诊断卡片。
+ *
+ * 并发拉取两个接口：
+ *   - GET /api/files/search-fulltext/stats  → FTS5 可用性 + 索引文件数 + 分词器
+ *   - GET /api/index/stats                  → 普通索引文件数 + 是否正在索引
+ *
+ * 任一接口失败不抛错（降级为 undefined，UI 显示 '-'）。
+ */
+async function refreshSearchDiagnostics(context?: {
+  query?: string
+  mode?: SearchMode
+  normalCount?: number
+  ftsCount?: number
+}): Promise<void> {
+  // 分别 try/catch，避免一个失败影响另一个
+  let ftsStats: { available: boolean; stats?: FullTextIndexStats; error?: string }
+  try {
+    ftsStats = await getFullTextIndexStats()
+  } catch (e) {
+    ftsStats = { available: false, error: e instanceof Error ? e.message : String(e) }
+  }
+
+  let indexStats: IndexStats | null = null
+  try {
+    indexStats = await getIndexStats()
+  } catch {
+    // 降级为 null（UI 显示 '-'）
+  }
+
+  try {
+    searchDiagnostics.value = {
+      ftsAvailable: ftsStats.available,
+      ftsError: ftsStats.error,
+      fts5Enabled: ftsStats.stats?.fts5Enabled,
+      ftsIndexSize: ftsStats.stats?.totalFiles,
+      ftsTokenizer: ftsStats.stats?.tokenizer,
+      totalFiles: indexStats?.totalFiles,
+      isIndexing: indexStats?.isIndexing,
+      vectorSearch: vectorSearchStatus.value,
+      lastQuery: context?.query,
+      lastMode: context?.mode,
+      lastNormalCount: context?.normalCount,
+      lastFtsCount: context?.ftsCount,
+      searchedAt: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    }
+    console.info('[Search] diagnostics refreshed', {
+      ftsAvailable: ftsStats.available,
+      ftsIndexSize: ftsStats.stats?.totalFiles,
+      totalFiles: indexStats?.totalFiles,
+      vectorSearch: vectorSearchStatus.value,
+    })
+  } catch (e) {
+    console.warn('[Search] refresh diagnostics failed', e)
+  }
+}
 
 async function restoreScrollTop() {
   await nextTick()
@@ -668,6 +745,31 @@ function dismissFulltextBanner() {
 }
 
 /**
+ * 🆕 2026-07-03：搜索空结果诊断卡片 - 重试按钮
+ *   清空搜索结果缓存 + 重新执行搜索（避免缓存命中导致一直空）
+ */
+function retrySearch() {
+  // 清空该 query 的所有缓存（不同 fulltext 模式分别有缓存 key）
+  for (const key of Array.from(searchCache.keys())) {
+    if (key.includes(`:${searchQuery.value.trim()}:`)) {
+      searchCache.delete(key)
+    }
+  }
+  console.info('[Search] retry triggered by user', { query: searchQuery.value })
+  performSearch()
+}
+
+/**
+ * 🆕 2026-07-03：搜索空结果诊断卡片 - 跳转全文索引页
+ *   直接 router.push（绕过三级导航 classList bug，直接打开独立路由）
+ *   路径：/tabs/settings/fulltext-index（router/index.ts 已注册）
+ */
+function goFullTextIndexFromSearch() {
+  console.info('[Search] navigate to fulltext-index page from empty state')
+  router.push('/tabs/settings/fulltext-index')
+}
+
+/**
  * 🆕 2026-07-02 重写：插入 symbol span 到 contenteditable div 的光标位置。
  *
  * 之前：插入 " AND " 字符串（用户强烈反对：要求插入的是符号 ＆，不是英文 AND）
@@ -720,6 +822,15 @@ async function performSearch() {
   }
 
   isSearching.value = clientHits.length === 0
+  // 🆕 2026-07-03：搜索流程打日志（hijackConsole 已 hook，会自动镜像到 DevLogs frontend tab）
+  //   背景：用户反馈"devlogs 也没有日志输出"——根因是搜索代码完全没打 console，不是 DevLogs 坏了
+  console.info('[Search] performSearch start', {
+    query,
+    useFullText,
+    hasBooleanSyntax,
+    path: currentPath.value,
+    vectorSearch: vectorSearchStatus.value,
+  })
   try {
     // A4 设计：普通搜索（name + vector）始终跑，FTS 是增量增强
     let normalResults: FileItem[] = []
@@ -728,7 +839,8 @@ async function performSearch() {
       const vecResult = await searchFilesVector(currentPath.value, query, true, 200)
       normalResults = vecResult.results
       mode = vecResult.search_mode
-    } catch {
+    } catch (e) {
+      console.warn('[Search] searchFilesVector failed, fallback to searchFiles', e)
       normalResults = await searchFiles(currentPath.value, query, true)
       mode = 'none'
     }
@@ -741,12 +853,14 @@ async function performSearch() {
       lastFullResults.value = normalResults
       searchMode.value = mode
       fulltextBanner.value = null
+      console.info('[Search] normal mode done', { count: normalResults.length, mode })
     } else {
       // A4：FTS 开启 → merge + 去重（普通结果 ∪ FTS 结果，按 path 去重）
       // A6：FTS 失败时静默降级 + banner 提示（不破坏普通结果）
       let ftsResults: FileItem[] = []
       let ftsAvailable = true
       let ftsErrorMessage = ''
+      let ftsDbEngine: 'sqlite' | 'libsql' | 'none' = 'none'
       try {
         // 包成 phrase 防 AND/OR/NOT 被误解析（仅当用户没手动写布尔语法时）
         let ftsQuery = query
@@ -757,13 +871,24 @@ async function performSearch() {
         }
         const ftResult = await searchFilesFullText(ftsQuery, 200, currentPath.value)
         ftsResults = ftResult.results
+        ftsDbEngine = ftResult.dbEngine
         if (ftResult.dbEngine === 'none') {
           ftsAvailable = false
           ftsErrorMessage = '全文索引未初始化'
         }
+        console.info('[Search] FTS query done', {
+          ftsQuery,
+          ftsCount: ftsResults.length,
+          dbEngine: ftResult.dbEngine,
+          indexSize: ftResult.indexSize,
+        })
       } catch (e) {
         ftsAvailable = false
         ftsErrorMessage = e instanceof Error ? e.message : String(e)
+        console.warn('[Search] FTS query failed', {
+          error: ftsErrorMessage,
+          query,
+        })
       }
 
       if (gen !== searchGeneration) return
@@ -797,6 +922,13 @@ async function performSearch() {
       } else {
         fulltextBanner.value = null
       }
+      console.info('[Search] FTS merge done', {
+        normalCount: normalResults.length,
+        ftsCount: ftsResults.length,
+        mergedCount: merged.length,
+        ftsAvailable,
+        ftsDbEngine,
+      })
     }
 
     if (searchResults.value.length > 0 && sortBy.value !== 'relevance') {
@@ -805,11 +937,30 @@ async function performSearch() {
     }
     searchCache.set(cacheKey, { timestamp: Date.now(), results: searchResults.value })
     restoreScrollTop()
-  } catch {
+
+    // 🆕 2026-07-03：搜索结果为空时主动查询诊断信息（FTS 状态 + 索引统计）
+    //   UI 会显示诊断卡片，让用户知道"为什么没结果"（FTS 不可用？索引为空？正在索引？）
+    if (searchResults.value.length === 0) {
+      console.info('[Search] empty results, fetching diagnostics for UI', {
+        query,
+        useFullText,
+        mode: searchMode.value,
+      })
+      await refreshSearchDiagnostics({
+        query,
+        mode: searchMode.value,
+        normalCount: normalResults.length,
+        ftsCount: useFullText ? (searchResults.value.length as number) : undefined,
+      })
+    }
+  } catch (e) {
+    console.warn('[Search] performSearch failed', { query, error: e })
     if (gen !== searchGeneration) return
     searchResults.value = []
     searchMode.value = 'none'
     fulltextBanner.value = null
+    // 🆕 2026-07-03：搜索失败时也查询诊断信息，便于用户排查
+    await refreshSearchDiagnostics({ query, mode: 'none' }).catch(() => {})
   }
   isSearching.value = false
 }
@@ -1567,6 +1718,10 @@ return {
   searchQuery, searchFullText, searchResults, isSearching,
   searchMode,
   fulltextBanner,         // 🆕 A6: FTS 降级 banner
+  searchDiagnostics,      // 🆕 2026-07-03: 搜索空结果时的诊断信息（FTS 状态 + 索引统计）
+  refreshSearchDiagnostics, // 🆕 2026-07-03: 手动刷新诊断信息（重试按钮用）
+  retrySearch,            // 🆕 2026-07-03: 重试搜索（清缓存 + 重新 performSearch）
+  goFullTextIndexFromSearch, // 🆕 2026-07-03: 跳转全文索引页（绕过三级导航 classList bug）
   queryInputRef,          // 🆕 A3: 绑到 <div contenteditable> 的 ref
   onQueryInput,           // 🆕 A3: @input 处理器
   onQueryKeydown,         // 🆕 A3: @keydown 处理器

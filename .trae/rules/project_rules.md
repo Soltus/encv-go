@@ -156,6 +156,9 @@ config.user.json (持久化, 不被修改)
 
 **测试优先级**：路由/导航（最高）→ API 调用链（高）→ computed 派生（中）→ 样式/CSS（低）
 
+> **🚨 Bug 复现铁律（最高优先级）**：任何 bug 修复必须先用 Cypress E2E 测试复现问题，再修复。严禁盲改。
+> 详见 [test-master-plan.md §五](./test-master-plan.md#五bug-复现铁律cypress-e2e-先行最高优先级)
+
 ## 十二、编译产物铁律
 
 - **SHALL NOT** 提交 `go build` 产物到仓库根目录或子目录

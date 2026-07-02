@@ -184,7 +184,108 @@ internal/
 
 ---
 
-## 五、相关规则索引
+## 五、Bug 复现铁律：Cypress E2E 先行（最高优先级）
+
+> **用户原话（2026-07-03）："严禁猜测修改，必须先用 Cypress e2e 测试复现问题再修复。"**
+>
+> **任何 bug 修复 PR 必须先有复现该 bug 的 Cypress E2E 测试。先复现，再修复。不允许盲改。**
+
+### 5.1 铁律（违反 = 严重错误）
+
+| 步骤 | 行为 | 禁止 |
+|------|------|------|
+| ① 接到 bug 报告 | 读相关源码，理解数据流 | ❌ 直接改代码 |
+| ② 写复现测试 | 在 `cypress/e2e/` 写 `.cy.ts`，断言期望行为 | ❌ 凭猜测改代码 |
+| ③ 跑测试确认 RED | 测试失败 = 成功复现 bug | ❌ 跳过确认直接改 |
+| ④ 修复代码 | 最小改动修复 | ❌ 顺手重构/加功能 |
+| ⑤ 跑测试确认 GREEN | 测试通过 = 修复验证 | ❌ 不跑测试就提交 |
+
+### 5.2 反模式（禁止）
+
+- ❌ **盲改修复**：不写测试，直接改代码，"我觉得这样改对"
+- ❌ **猜测根因**：不读源码，凭 bug 描述猜原因
+- ❌ **改完不验证**：改了代码但不跑 Cypress 验证
+- ❌ **复现测试写太弱**：只测 `cy.visit()` 不报错，不测实际 bug 行为
+
+### 5.3 Cypress E2E 测试环境配置（沙箱踩坑）
+
+> **测试环境没有 preview-gateway :16666，必须手动配置 API base URL。**
+
+#### 5.3.1 设置 API base URL（必做）
+
+前端 `getApiBaseUrl()` 在 dev 模式默认返回 `DEV_SANDBOX_ENTRY='http://127.0.0.1:16666'`（preview-gateway 端口）。测试环境没有网关，fetch 会 `ECONNREFUSED`。
+
+**修复**：在 `beforeEach` 用 `window:before:load` 写 localStorage：
+
+```typescript
+beforeEach(() => {
+  cy.on('window:before:load', (win) => {
+    win.localStorage.setItem('encv-server-url', 'http://localhost:2025')
+  })
+})
+```
+
+> ⚠️ 必须在 `window:before:load`（页面脚本执行前）设置，不能在 `cy.visit` 之后设置。
+
+#### 5.3.2 dismiss ErrorCaptureOverlay（WebSocket 失败浮窗）
+
+测试环境没有 `/ws` 代理，WebSocket 连接失败 → `useErrorCapture.addError` → `<ErrorCaptureOverlay>` 浮窗显示，遮挡搜索框等交互元素。
+
+**修复**：写 helper 在 `cy.visit` 后 dismiss 浮窗：
+
+```typescript
+function dismissErrorOverlay() {
+  cy.get('body').then(($body) => {
+    const closeBtn = $body.find('.error-overlay-close')
+    if (closeBtn.length > 0) {
+      cy.wrap(closeBtn).first().click({ force: true })
+      cy.wait(300)
+    }
+  })
+}
+```
+
+> 搜索功能走 HTTP API（不依赖 WS），所以 dismiss 浮窗不影响测试有效性。
+
+#### 5.3.3 contenteditable 搜索框输入
+
+`cy.type()` 在 contenteditable div 上可正常触发 Vue `onQueryInput`（包括 `{enter}`）。
+
+```typescript
+cy.get('[data-testid="search-input"]').click({ force: true })
+cy.get('[data-testid="search-input"]').type('keyword{enter}', { delay: 50, force: true })
+```
+
+> `force: true` 防止 ErrorCaptureOverlay 残留时遮挡报 "cannot be interacted with"。
+
+#### 5.3.4 cy.intercept spy 断言陷阱
+
+`cy.get('@alias').should('have.been.called')` 在某些情况下报 "is not a spy or a call to a spy"，即使请求确实匹配了 intercept。
+
+**原因**：Cypress intercept 的 spy 注册时机与请求匹配时机有竞态。
+
+**修复**：优先用 UI 层断言（`cy.get('[data-testid="..."]').should('exist')`），不依赖 `@alias` spy 断言。如果必须验证 API 调用，用 `cy.wait('@alias')` 代替 `should('have.been.called')`。
+
+### 5.4 启动 Cypress E2E 测试的命令
+
+```bash
+# 1. 启动后端（已运行则跳过）
+# 2. 启动 Vite dev server（PM2_HOME 绕过 dev-start-guard）
+PM2_HOME=/tmp/cypress-pm2 pm2 start "npm run dev" --name encv-dev --no-autorestart
+sleep 6  # 等 vite ready
+
+# 3. 跑 Cypress E2E（xvfb-run headless）
+cd app/encv-mobile
+CYPRESS_BASE_URL=http://localhost:8100 xvfb-run -a npx cypress run \
+  --spec cypress/e2e/<spec>.cy.ts --browser electron
+
+# 4. 清理
+PM2_HOME=/tmp/cypress-pm2 pm2 delete encv-dev
+```
+
+---
+
+## 六、相关规则索引
 
 | 规则文件 | 内容 |
 |---------|------|
@@ -196,7 +297,7 @@ internal/
 
 ---
 
-## 六、演进方向
+## 七、演进方向
 
 - [ ] Cypress E2E 测试报告自动生成（Mochawesome + 自定义 reporter）
 - [ ] 性能基线存储（每次发版自动跑，对比历史基线）
@@ -204,4 +305,5 @@ internal/
 - [ ] 前端 vitest 沙箱合法化（条件成熟后）
 
 > 创建：2026-07-01
-> 核心原则：Cypress 真实测试为性能结论唯一依据，Go bench 仅作补充参考
+> 更新：2026-07-03（新增 §五 Bug 复现铁律：Cypress E2E 先行）
+> 核心原则：Cypress 真实测试为性能结论唯一依据，Go bench 仅作补充参考；Bug 修复必须先 Cypress 复现

@@ -174,13 +174,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onUnmounted, onErrorCaptured } from 'vue'
+import { ref, onMounted, onUnmounted, onErrorCaptured } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { refreshOutline, warningOutline, bugOutline } from 'ionicons/icons'
 import { getFullTextIndexStats, type FullTextIndexStats } from '@/api/encv_search'
 import { formatDateTime } from '@/composables/useDateFormat'
 import { errorStore } from '@/composables/useErrorCapture'
-import { onIonViewDidEnter } from '@ionic/vue'
+// 🆕 2026-07-03 修复 classList 错误：必须显式 import Ionic 组件
+//   根因（cypress e2e DOM log 确认）：未显式 import 时，<ion-page> 标签未被 Vue 编译器
+//   识别为 Ionic Vue 组件，渲染成原生 <ION-PAGE> 自闭合元素，缺失 .ion-page class
+//   和 z-index 样式，导致页面被前一个 CacheDetail（z-index:101）覆盖。
+//   对比 ServerDetail.vue / DatabaseDetail.vue / CacheDetail.vue 都显式 import。
+import {
+  IonPage,
+  IonHeader,
+  IonToolbar,
+  IonTitle,
+  IonButtons,
+  IonBackButton,
+  IonButton,
+  IonIcon,
+  IonContent,
+  IonList,
+  IonListHeader,
+  IonItem,
+  IonLabel,
+  IonNote,
+  IonBadge,
+  IonSpinner,
+} from '@ionic/vue'
 
 const { t } = useI18n()
 
