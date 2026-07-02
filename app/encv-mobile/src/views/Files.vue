@@ -26,48 +26,39 @@
         </div>
       </ion-toolbar>
       <ion-toolbar>
-        <ion-searchbar
-          v-model="searchQuery"
-          :placeholder="t('files.searchPlaceholder')"
-          @ionInput="handleSearchInput"
-          @ionClear="handleSearchClear"
-        ></ion-searchbar>
-        <!-- 🆕 2026-07-02 搜索语法符号 overlay：把 AND/OR/NOT 渲染为符号（＆/｜/￢）而不是英文 -->
-        <!-- 关键设计：用户输入的所有内容（含 AND/OR/NOT）全部当普通文本搜索 -->
-        <!-- 这里只做视觉高亮（text → 符号），不改变实际查询字符串 -->
-        <div v-if="searchQuery" class="search-syntax-preview" :title="t('files.fullTextHint')">
-          <template v-for="(tok, idx) in tokenizeQuery(searchQuery)" :key="idx">
-            <span
-              v-if="tok.kind === 'op'"
-              class="syntax-token-text"
-              :class="{
-                'syntax-op': tok.text === 'AND',
-                'syntax-or': tok.text === 'OR',
-                'syntax-not': tok.text === 'NOT',
-              }"
-            >{{ tok.display || tok.text }}</span>
-            <span
-              v-else-if="tok.kind === 'phrase'"
-              class="syntax-token-text syntax-phrase"
-            >"{{ tok.text }}"</span>
-            <span
-              v-else-if="tok.kind === 'regex'"
-              class="syntax-token-text syntax-regex"
-            >/{{ tok.text }}/</span>
-            <span
-              v-else
-              class="syntax-token-text syntax-word"
-            >{{ tok.text }}</span>
-          </template>
+        <!-- 🆕 2026-07-02 v2 重写：contenteditable div + span units（替换 ion-searchbar） -->
+        <!-- 用户强反馈：之前 ion-searchbar + 外部 overlay div 是"在输入框外高亮"，不符合预期 -->
+        <!-- 现在高亮在 input 内部（每个 token 都是 <span>），插入按钮插入 symbol span（&/｜/￢） -->
+        <div class="search-input-wrapper">
+          <div
+            ref="queryInputRef"
+            class="query-input"
+            contenteditable="true"
+            :data-empty="!searchQuery"
+            :placeholder="t('files.searchPlaceholder')"
+            @input="onQueryInput($event)"
+            @keydown="onQueryKeydown($event)"
+            @focus="onQueryFocus"
+            @blur="onQueryBlur"
+            role="searchbox"
+            aria-label="Search"
+          ></div>
+          <button
+            v-if="searchQuery"
+            class="query-clear-btn"
+            type="button"
+            :title="t('files.clear') || '清空'"
+            @click="handleSearchClear"
+          >×</button>
         </div>
-        <!-- 🆕 2026-07-02 插入操作符按钮行：点击即在搜索框内插入对应符号（替代英文） -->
+        <!-- 🆕 2026-07-02 v2 插入操作符按钮行：点击即在光标位置插入 symbol span（不是字符串） -->
         <div v-if="searchQuery" class="search-insert-bar">
           <span class="insert-label">{{ t('files.insertOp') || '插入:' }}</span>
-          <button class="insert-btn op-and" @click="insertOperator(' AND ')" type="button" :title="t('files.insertAndTitle')">＆</button>
-          <button class="insert-btn op-or" @click="insertOperator(' OR ')" type="button" :title="t('files.insertOrTitle')">｜</button>
-          <button class="insert-btn op-not" @click="insertOperator(' NOT ')" type="button" :title="t('files.insertNotTitle')">￢</button>
-          <button class="insert-btn op-phrase" @click="insertOperator(phraseInsertion)" type="button" :title="t('files.insertPhraseTitle')">「」</button>
-          <button class="insert-btn op-regex" @click="insertOperator('regex:')" type="button" :title="t('files.insertRegexTitle')">/ /</button>
+          <button class="insert-btn op-and" @click="insertOperator('AND')" type="button" :title="t('files.insertAndTitle')">＆</button>
+          <button class="insert-btn op-or" @click="insertOperator('OR')" type="button" :title="t('files.insertOrTitle')">｜</button>
+          <button class="insert-btn op-not" @click="insertOperator('NOT')" type="button" :title="t('files.insertNotTitle')">￢</button>
+          <button class="insert-btn op-phrase" @click="insertOperator('__phrase_open__')" type="button" :title="t('files.insertPhraseTitle')">「」</button>
+          <button class="insert-btn op-regex" @click="insertOperator('__regex_prefix__')" type="button" :title="t('files.insertRegexTitle')">/ /</button>
         </div>
         <ion-toggle
           v-if="searchQuery"
@@ -369,6 +360,13 @@
           <span>{{ t('files.searchModeCombined', { defaultValue: '综合匹配：关键词 + 语义重排序' }) }}</span>
         </div>
 
+        <!-- 🆕 2026-07-02 A6：FTS 失败降级 banner（不破坏现有结果） -->
+        <div v-if="fulltextBanner" :class="['fulltext-banner', `fulltext-banner-${fulltextBanner.type}`]">
+          <ion-icon :icon="warningOutline" class="fulltext-banner-icon"></ion-icon>
+          <span class="fulltext-banner-msg">{{ fulltextBanner.message }}</span>
+          <button class="fulltext-banner-dismiss" type="button" @click="dismissFulltextBanner">×</button>
+        </div>
+
         <ion-list>
           <ion-item
             v-for="file in displayFiles"
@@ -429,6 +427,10 @@
             <RelevanceBadge v-if="searchQuery && file.score" :score="file.score" slot="end" />
             <ion-badge v-if="file.isEncrypted" color="warning" slot="end">
               ENCV
+            </ion-badge>
+            <!-- 🆕 2026-07-02 A4：FTS 增强模式：FTS-only 命中（非普通搜索结果）的项打"全文"角标 -->
+            <ion-badge v-if="file._fulltextHit" color="tertiary" slot="end" class="fulltext-hit-badge">
+              全文
             </ion-badge>
             <ion-badge v-for="badge in fileBadges[file.path]" :key="'badge-' + badge.text" :color="badge.color" slot="end">
               {{ badge.text }}
@@ -516,14 +518,14 @@
 
 import {
   IonPage, IonHeader, IonToolbar, IonButtons, IonButton, IonTitle, IonContent,
-  IonList, IonItem, IonIcon, IonLabel, IonBadge, IonSpinner, IonSearchbar, IonToggle,
+  IonList, IonItem, IonIcon, IonLabel, IonBadge, IonSpinner, IonToggle,
   IonMenu, IonRefresher, IonRefresherContent, IonAlert, IonModal, IonInput,
   IonFab, IonFabButton, IonSegment, IonSegmentButton, IonListHeader, IonChip,
 } from '@ionic/vue'
 import {
   arrowBack, chevronForward, menuOutline, folder, folderOpen, lockClosed,
   cloudOffline, refresh, search, pricetagOutline, closeCircle, closeCircleOutline,
-  filterOutline, swapVerticalOutline, alertCircle, close,
+  filterOutline, swapVerticalOutline, alertCircle, close, warningOutline,
 } from 'ionicons/icons'
 
 import { useFilesView } from './useFilesView'
@@ -546,8 +548,13 @@ const {
   openContainingFolder,
   // search state
   searchQuery, searchFullText, searchResults, isSearching, searchMode,
-  handleSearchInput, handleSearchClear, handleSearchToggle, insertOperator,
-  renderSnippet, tokenizeQuery,
+  // 🆕 A3 contenteditable ref + handlers
+  queryInputRef, onQueryInput, onQueryKeydown,
+  // 🆕 A6 FTS 降级 banner
+  fulltextBanner, dismissFulltextBanner,
+  // 🆕 旧 handleSearchInput 不再需要（onQueryInput 自动触发）
+  handleSearchClear, handleSearchToggle, insertOperator,
+  renderSnippet,
   // play error state
   playError, playErrorDetail, playErrorFile,
   clearPlayError, togglePlayErrorDetail,
@@ -574,8 +581,14 @@ const {
   add,
 } = useFilesView()
 
-// 🆕 2026-07-02 插入操作符：phrase 引号需要单独 const（避免模板里转义 ""）
-const phraseInsertion = '""'
+// 🆕 2026-07-02 v2 简化：不需要 phraseInsertion 常量（直接调 insertSymbol('__phrase_open__')）
+// 占位：保留空的占位 hooks（focus/blur 事件，可后续加视觉反馈）
+function onQueryFocus() {
+  // 占位：input 聚焦时可以让插入按钮行高亮
+}
+function onQueryBlur() {
+  // 占位：input 失焦时不立即清空（用户可能想看高亮结果）
+}
 </script>
 
 <style scoped>
@@ -693,6 +706,164 @@ const phraseInsertion = '""'
 .search-insert-bar .insert-btn.op-not { color: var(--ion-color-danger-shade, #b00020); }
 .search-insert-bar .insert-btn.op-phrase { color: var(--ion-color-success-shade, #1b6b1b); }
 .search-insert-bar .insert-btn.op-regex { color: var(--ion-color-tertiary-shade, #6b3aa0); }
+
+/* 🆕 2026-07-02 A3：contenteditable 搜索输入框 + span units（替换 ion-searchbar） */
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ion-color-light-shade, #e0e0e0);
+}
+
+.query-input {
+  flex: 1;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 0.95em;
+  line-height: 1.4;
+  border: 1px solid var(--ion-color-light-shade, #d0d0d0);
+  border-radius: 4px;
+  background: var(--ion-color-light, #ffffff);
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: text;
+  user-select: text;
+}
+
+.query-input:focus {
+  border-color: var(--ion-color-primary, #4f8cff);
+  box-shadow: 0 0 0 2px var(--ion-color-primary-tint, #d6e4ff);
+}
+
+/* 空内容时显示 placeholder（用 :empty + ::before） */
+.query-input:empty::before,
+.query-input[data-empty="true"]::before {
+  content: attr(placeholder);
+  color: var(--ion-color-medium, #999);
+  pointer-events: none;
+}
+
+/* 输入框内的 span unit 样式 */
+.query-input :deep(.syntax-text-span) {
+  color: var(--ion-text-color, #333);
+}
+
+.query-input :deep(.syntax-op-span) {
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  cursor: default;
+  user-select: none;
+}
+
+.query-input :deep(.syntax-op-span.syntax-op) {
+  background: var(--ion-color-warning-tint, #fff4d6);
+  color: var(--ion-color-warning-shade, #b07a00);
+}
+
+.query-input :deep(.syntax-op-span.syntax-or) {
+  background: var(--ion-color-primary-tint, #d6e4ff);
+  color: var(--ion-color-primary-shade, #2962cc);
+}
+
+.query-input :deep(.syntax-op-span.syntax-not) {
+  background: var(--ion-color-danger-tint, #fbd6d6);
+  color: var(--ion-color-danger-shade, #b00020);
+}
+
+.query-input :deep(.syntax-op-span.syntax-phrase) {
+  background: var(--ion-color-success-tint, #d6f5d6);
+  color: var(--ion-color-success-shade, #1b6b1b);
+  font-style: italic;
+}
+
+.query-input :deep(.syntax-op-span.syntax-regex) {
+  background: var(--ion-color-tertiary-tint, #e6d6f5);
+  color: var(--ion-color-tertiary-shade, #6b3aa0);
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.query-clear-btn {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: var(--ion-color-medium, #999);
+  color: white;
+  border-radius: 50%;
+  font-size: 1.1em;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.query-clear-btn:hover {
+  background: var(--ion-color-medium-shade, #666);
+}
+
+/* 🆕 2026-07-02 A6：FTS 失败降级 banner（不破坏现有结果） */
+.fulltext-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.fulltext-banner-unavailable {
+  background: var(--ion-color-warning-tint, #fff4d6);
+  border-left: 4px solid var(--ion-color-warning, #ffc409);
+  color: var(--ion-color-warning-shade, #b07a00);
+}
+
+.fulltext-banner-error {
+  background: var(--ion-color-danger-tint, #fbd6d6);
+  border-left: 4px solid var(--ion-color-danger, #eb445a);
+  color: var(--ion-color-danger-shade, #b00020);
+}
+
+.fulltext-banner-icon {
+  font-size: 1.2em;
+  flex-shrink: 0;
+}
+
+.fulltext-banner-msg {
+  flex: 1;
+}
+
+.fulltext-banner-dismiss {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 1.2em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.fulltext-banner-dismiss:hover {
+  opacity: 0.7;
+}
+
+/* 🆕 2026-07-02 A4：FTS 命中角标（merge 后非普通结果的项） */
+.fulltext-hit-badge {
+  font-size: 0.7em;
+  font-weight: 700;
+  margin-left: 4px;
+}
 
 /* 🆕 2026-07-02 修复 loading 样式丢失 */
 .loading-container {

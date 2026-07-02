@@ -319,6 +319,7 @@ export default {
     'common.cancel': 'Cancel',
     'common.retry': 'Retry',
     'common.refresh': 'Refresh',
+    'common.reload': 'Reload',
     'common.error': 'Error',
     'common.close': 'Close',
     'common.back': 'Back',

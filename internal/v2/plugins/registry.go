@@ -298,6 +298,25 @@ func GetAllRegisteredChunkNamers() []namer.ChunkNamer {
 	return allChunkNamers
 }
 
+// GetAllRegisteredSearchableExtractors 返回所有实现了 SearchableContentsExtractor 的插件。
+// 2026-07-02 用户反馈：插件自主声明容器内可被全文搜索的内容。
+// FTS5 索引构建会调本函数拿到所有可提取器，对每个容器调 ExtractSearchableContents()。
+// 未实现 SearchableContentsExtractor 的插件被自动跳过（容器不参与全文搜索）。
+func GetAllRegisteredSearchableExtractors() []pluginInterfaces.SearchableContentsExtractor {
+	var out []pluginInterfaces.SearchableContentsExtractor
+	for _, p := range Plugins {
+		ext, ok := p.(pluginInterfaces.SearchableContentsExtractor)
+		if !ok {
+			continue
+		}
+		if !ext.GetSearchableContentsManifest().Enabled {
+			continue
+		}
+		out = append(out, ext)
+	}
+	return out
+}
+
 // BuildFullPluginSettings 构建一个完整的插件配置映射
 // userSettings: 从用户配置文件中读取的原始 map
 // 返回一个包含所有插件配置（用户+默认）的完整 map

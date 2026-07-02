@@ -11,6 +11,8 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick, type Ref } from
 import { useRouter, useRoute } from 'vue-router'
 import { onIonViewWillEnter, actionSheetController, alertController, menuController } from '@ionic/vue'
 import { tokenizeQuery, renderSnippet, type QueryToken } from '@/views/useFilesView.searchTokens'
+// 🆕 2026-07-02: contenteditable 搜索框 + span units（替换原 ion-searchbar + 外部 overlay）
+import { useSearchInput } from '@/composables/useSearchInput'
 
 // 🆕 2026-07-02: 显式 return type（用 Record<string, any> 兼容所有字段）— 避免 vue-tsc 推断丢字段
 // (历史踩坑：isSelectedModelAvailable / switchSession / lanAccessLoaded / fetchModels / temperature 都从推断 type 中消失过)
@@ -265,10 +267,30 @@ let highlightTimer: ReturnType<typeof setTimeout> | null = null
 
 const isMountRoot = computed(() => currentPath.value === MOUNT_ROOT)
 
-const searchQuery = ref('')
-// 🆕 2026-07-02 大改升级：去掉"递归搜索"开关（价值低），改为"全文搜索"开关
-// 全文搜索：搜文本文件内容（FTS5 + bm25 + CJK bigram）
-// 非全文搜索：搜文件/目录名（原 name match 行为）
+// =============================================================================
+// 5) 搜索（2026-07-02 重写：contenteditable + span units + 默认关闭 FTS + 降级）
+// =============================================================================
+//
+// 核心改进（用户强反馈）：
+//   - 输入框改用 <div contenteditable>，span units（text/op）在 input 内部高亮
+//   - 插入按钮插入 symbol span 到光标位置（不是字符串 " AND "）
+//   - FTS 搜索默认关闭（普通搜索走 searchFilesVector）
+//   - FTS 失败时静默降级 + banner 提示，不破坏现有结果
+//   - FTS 增强模式：merge + 去重 + 全文 badge（不替换普通结果）
+
+const {
+  queryInputRef,        // 绑到 <div contenteditable> 的 ref
+  queryValue,           // 当前 query 字符串（响应式）
+  onQueryInput,         // @input 处理器
+  onQueryKeydown,       // @keydown 处理器
+  insertSymbol,         // 插入 symbol span（AND/OR/NOT/phrase/regex）
+  clearInput,           // 清空输入框
+} = useSearchInput({})
+
+// 兼容旧代码：searchQuery 仍指向 queryValue（Files.vue 其它处也读 searchQuery.value）
+const searchQuery = queryValue
+
+// 🆕 2026-07-02：用户反馈"默认关闭 + merge" → searchFullText 默认 false
 const searchFullText = ref(false)
 const searchResults = ref<FileItem[] | null>(null)
 const isSearching = ref(false)
@@ -278,6 +300,9 @@ const lastScrollTop = ref(0)
 const mainContentRef = ref<any>(null)
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 let searchGeneration = 0
+
+// 🆕 A6：FTS 失败 banner 提示（不抛错、不清空结果）
+const fulltextBanner = ref<{ type: 'unavailable' | 'error'; message: string } | null>(null)
 
 async function restoreScrollTop() {
   await nextTick()
@@ -607,16 +632,19 @@ function handleSearchInput() {
     searchGeneration++
     searchResults.value = null
     isSearching.value = false
+    fulltextBanner.value = null // 清空 banner
     return
   }
+  if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => performSearch(), 300)
 }
 
 function handleSearchClear() {
   searchGeneration++
-  searchQuery.value = ''
+  clearInput()
   searchResults.value = null
   isSearching.value = false
+  fulltextBanner.value = null
 }
 
 function handleSearchToggle() {
@@ -626,26 +654,23 @@ function handleSearchToggle() {
 }
 
 /**
- * 🆕 2026-07-02 插入操作符到搜索框（在光标位置）。
+ * 🆕 A6：用户手动关闭 FTS 降级 banner（不重试 FTS，仅 UI 提示关闭）
+ */
+function dismissFulltextBanner() {
+  fulltextBanner.value = null
+}
+
+/**
+ * 🆕 2026-07-02 重写：插入 symbol span 到 contenteditable div 的光标位置。
  *
- * 用法：用户点击语法高亮下方的 [＆] [｜] [￢] 按钮 → 在 searchQuery 末尾（或光标处）插入对应英文关键字。
+ * 之前：插入 " AND " 字符串（用户强烈反对：要求插入的是符号 ＆，不是英文 AND）
+ * 现在：调 useSearchInput.insertSymbol，插入 `<span data-kind="op" data-op="AND">＆</span>`
  *
- * 设计要点：
- *   - 插入的是英文（AND/OR/NOT/quote/regex:），因为后端 FTS5 只认这些
- *   - UI 层会把它们渲染成符号（&/｜/￢），不影响实际查询
- *   - 触发 onIonInput 让 tokenize 重新解析 + 触发 performSearch
+ * 触发：useSearchInput.insertSymbol 自动 syncFromDiv → searchQuery.value 更新 → 触发 performSearch
  */
 function insertOperator(op: string) {
-  const cur = searchQuery.value || ''
-  // 简化：插入到末尾（ion-searchbar 没有暴露光标位置 API）
-  // 自动补空格：phrase 引号特殊处理
-  let insertion = op
-  if (op === '""') {
-    // 光标放在两个引号之间
-    insertion = '""'
-  }
-  searchQuery.value = cur + insertion
-  handleSearchInput()
+  // op 是 opKey（'AND' | 'OR' | 'NOT' | '__phrase_open__' | '__regex_prefix__'）
+  insertSymbol(op)
 }
 
 async function performSearch() {
@@ -683,49 +708,96 @@ async function performSearch() {
 
   isSearching.value = clientHits.length === 0
   try {
-    let results: FileItem[] = []
+    // A4 设计：普通搜索（name + vector）始终跑，FTS 是增量增强
+    let normalResults: FileItem[] = []
     let mode: SearchMode = 'none'
-    if (searchFullText.value) {
-      // 🆕 2026-07-02 用户反馈：所有用户输入（含 AND/OR/NOT）全部当普通文本搜索
-      // 解决方案：把整段 query 包成 phrase "..."，FTS5 phrase 模式会把所有内容当字面量
-      //   - 用户输入 "在线 AND 高清" → FTS5 搜 "在线 AND 高清" 整体（phrase match）
-      //   - FTS5 bigram 在 phrase 内部仍生效（"在"+"线" "高"+"清" 都能命中）
-      //   - AND/OR/NOT 不再被解析为操作符
-      // 例外：如果用户用了 phrase 语法 "..." 自己的，我们不再嵌套（避免 ""..." 语法错误）
-      //  - 检测：query 已经含 "..." 则不再包
-      let ftsQuery = query
-      if (!query.includes('"') && !query.toLowerCase().startsWith('regex:')) {
-        // 转义内部 "（防止用户输入里含未闭合 quote）
-        ftsQuery = `"${query.replace(/"/g, '\\"')}"`
-      }
-      const ftResult = await searchFilesFullText(ftsQuery, 200, currentPath.value)
-      results = ftResult.results
-      mode = 'strict' // 全文搜索视为严格匹配
-    } else {
-      try {
-        const vecResult = await searchFilesVector(currentPath.value, query, true, 200)
-        results = vecResult.results
-        mode = vecResult.search_mode
-      } catch {
-        results = await searchFiles(currentPath.value, query, false)
-        mode = 'none'
-      }
+    try {
+      const vecResult = await searchFilesVector(currentPath.value, query, true, 200)
+      normalResults = vecResult.results
+      mode = vecResult.search_mode
+    } catch {
+      normalResults = await searchFiles(currentPath.value, query, false)
+      mode = 'none'
     }
 
     if (gen !== searchGeneration) return
-    searchResults.value = results
-    lastFullResults.value = results
-    searchMode.value = mode
-    if (results.length > 0 && sortBy.value !== 'relevance') {
+
+    // A4：FTS 关闭时只显示普通结果
+    if (!searchFullText.value) {
+      searchResults.value = normalResults
+      lastFullResults.value = normalResults
+      searchMode.value = mode
+      fulltextBanner.value = null // 关闭时清空 banner
+    } else {
+      // A4：FTS 开启 → merge + 去重（普通结果 ∪ FTS 结果，按 path 去重）
+      // A6：FTS 失败时静默降级 + banner 提示（不破坏普通结果）
+      let ftsResults: FileItem[] = []
+      let ftsAvailable = true
+      let ftsErrorMessage = ''
+      try {
+        // 包成 phrase 防 AND/OR/NOT 被误解析（与之前一致）
+        let ftsQuery = query
+        if (!query.includes('"') && !query.toLowerCase().startsWith('regex:')) {
+          ftsQuery = `"${query.replace(/"/g, '\\"')}"`
+        }
+        const ftResult = await searchFilesFullText(ftsQuery, 200, currentPath.value)
+        ftsResults = ftResult.results
+        if (ftResult.dbEngine === 'none') {
+          ftsAvailable = false
+          ftsErrorMessage = '全文索引未初始化'
+        }
+      } catch (e) {
+        ftsAvailable = false
+        ftsErrorMessage = e instanceof Error ? e.message : String(e)
+      }
+
+      if (gen !== searchGeneration) return
+
+      // 去重：normal + fts，按 path
+      const seen = new Set<string>()
+      const merged: FileItem[] = []
+      // 普通结果优先（FTS 命中再补）
+      for (const f of normalResults) {
+        if (!seen.has(f.path)) {
+          seen.add(f.path)
+          merged.push(f)
+        }
+      }
+      for (const f of ftsResults) {
+        if (!seen.has(f.path)) {
+          seen.add(f.path)
+          // 标记为 FTS 命中（template 用 isFulltextHit 渲染 badge）
+          merged.push({ ...f, _fulltextHit: true } as FileItem)
+        }
+      }
+
+      searchResults.value = merged
+      lastFullResults.value = merged
+      // 模式：greedy/combined/strict 按 vector 模式
+      searchMode.value = mode
+
+      // A6 banner：FTS 不可用时静默降级 + 提示原因
+      if (!ftsAvailable) {
+        fulltextBanner.value = {
+          type: ftsErrorMessage.includes('not initialized') ? 'unavailable' : 'error',
+          message: `全文搜索不可用：${ftsErrorMessage}，已降级到普通搜索`,
+        }
+      } else {
+        fulltextBanner.value = null
+      }
+    }
+
+    if (searchResults.value.length > 0 && sortBy.value !== 'relevance') {
       sortBy.value = 'relevance'
       sortDesc.value = true
     }
-    searchCache.set(cacheKey, { timestamp: Date.now(), results })
+    searchCache.set(cacheKey, { timestamp: Date.now(), results: searchResults.value })
     restoreScrollTop()
   } catch {
     if (gen !== searchGeneration) return
     searchResults.value = []
     searchMode.value = 'none'
+    fulltextBanner.value = null
   }
   isSearching.value = false
 }
@@ -1482,6 +1554,10 @@ return {
   isMountRoot,
   searchQuery, searchFullText, searchResults, isSearching,
   searchMode,
+  fulltextBanner,         // 🆕 A6: FTS 降级 banner
+  queryInputRef,          // 🆕 A3: 绑到 <div contenteditable> 的 ref
+  onQueryInput,           // 🆕 A3: @input 处理器
+  onQueryKeydown,         // 🆕 A3: @keydown 处理器
   renderSnippet,
   tokenizeQuery,
   mainContentRef,
@@ -1505,6 +1581,7 @@ return {
   navigateTo, goUp, handleFileClick, highlightFile, openContainingFolder,
   handleSearchInput, handleSearchClear, handleSearchToggle,
   insertOperator,
+  dismissFulltextBanner,  // 🆕 A6: 用户手动关掉 banner
   handleLongPress,
   handleCopy, onRenameConfirm, handleRename, handleMove, handleShare,
   handleUpload, handleFileSelected,

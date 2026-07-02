@@ -18,6 +18,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	"time"
 
 	"github.com/Soltus/encv-go/internal/fts"
+	pluginInterfaces "github.com/Soltus/encv-go/internal/v2/plugins/interfaces"
 	"github.com/gin-gonic/gin"
 )
 
@@ -161,8 +163,20 @@ func (s *Server) InitFullTextIndexWithBuild(servingDir string) error {
 // 文件过滤：
 //   - 目录：生成 is_dir=true 条目，content=""
 //   - 普通文件：尝试读前 64KB 作为 content（错误则 content=""）
-//   - .encv 容器：跳过
-//   - 二进制文件（读取失败）：content=""（name 仍可被 FTS5 搜到）
+//   - 跳过目录：.encv（应用配置目录，无索引价值）、.git、node_modules、.DS_Store
+//   - 加密容器（.sccgv/.ae/.encvgo 等）：调对应插件的 SearchableContentsExtractor 提取可搜索内容
+//   - binary 文件（读取失败）：content=""（name 仍可被 FTS5 搜到）
+//
+// 2026-07-02 修正（用户反馈幻觉修复）：
+//   - 旧版用 strings.HasSuffix(name, ".encv") 跳过文件 → 错误！项目里**没有** .encv 文件后缀名
+//   - 正确做法是跳过 .encv 目录（项目配置目录，不属于用户文件）
+//   - 类似的 .git / node_modules / .DS_Store 也应跳过
+//
+// 2026-07-02 v2：插件自主声明可搜索内容
+//   - 检测到加密容器时，遍历已注册插件，找到能处理该扩展名的插件
+//   - 调插件的 SearchableContentsExtractor.ExtractSearchableContents()
+//   - 把每条 SearchableContentItem 合并为单个 content 字符串（用 \n 分隔）
+//   - 用 "container:<containerPath>:<itemName>" 作为 Name 区分不同容器内的不同内容
 func scanDirForIndex(ctx context.Context, dir string, depth, maxDepth int) ([]fts.FileEntry, error) {
 	if dir == "" {
 		return nil, nil
@@ -188,9 +202,13 @@ func scanDirForIndex(ctx context.Context, dir string, depth, maxDepth int) ([]ft
 		name := entry.Name()
 		fullPath := filepath.Join(dir, name)
 
-		// 跳过 .encv 容器
-		if strings.HasSuffix(name, ".encv") {
-			continue
+		// 跳过不需要索引的目录（2026-07-02 修正：之前误判 .encv 为文件后缀名）
+		if entry.IsDir() {
+			lower := strings.ToLower(name)
+			if lower == ".encv" || lower == ".git" || lower == "node_modules" ||
+				lower == ".ds_store" || lower == ".svn" || lower == ".idea" {
+				continue
+			}
 		}
 
 		info, err := entry.Info()
@@ -215,6 +233,14 @@ func scanDirForIndex(ctx context.Context, dir string, depth, maxDepth int) ([]ft
 
 		// 普通文件：尝试读前 64KB
 		content := readFileHead(fullPath, 64*1024)
+		// 2026-07-02 v2：如果是加密容器，叠加插件可搜索内容（字幕等）
+		if containerContent := extractContainerSearchableContent(fullPath); containerContent != "" {
+			if content == "" {
+				content = containerContent
+			} else {
+				content = content + "\n" + containerContent
+			}
+		}
 		entries = append(entries, fts.FileEntry{
 			Path:        fullPath,
 			Name:        name,
@@ -225,6 +251,66 @@ func scanDirForIndex(ctx context.Context, dir string, depth, maxDepth int) ([]ft
 		})
 	}
 	return entries, nil
+}
+
+// extractContainerSearchableContent 调插件 SearchableContentsExtractor 从容器里抽可搜索内容。
+//
+// 返回值：合并后的纯文本（多 item 用 \n 分隔），失败返回 ""
+func extractContainerSearchableContent(containerPath string) string {
+	extractors := getRegisteredExtractors()
+	if len(extractors) == 0 {
+		return ""
+	}
+	ext := strings.ToLower(filepath.Ext(containerPath))
+	var parts []string
+	for _, extractor := range extractors {
+		// 用 manifest.Enabled 已经在 getRegisteredExtractors 里筛过
+		items, err := extractor.ExtractSearchableContents(containerPath)
+		if err != nil || len(items) == 0 {
+			continue
+		}
+		// 只在扩展名匹配该插件时采用
+		manifest := extractor.GetSearchableContentsManifest()
+		if !shouldExtractorHandle(manifest, ext) {
+			continue
+		}
+		for _, it := range items {
+			if it.Text == "" {
+				continue
+			}
+			parts = append(parts, fmt.Sprintf("[%s:%s] %s", it.Type, it.Name, it.Text))
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+// shouldExtractorHandle 决定该 extractor 是否能处理该扩展名的容器。
+// 当前实现：只要 extractor 实现了接口，所有 .sccgv/.ae 等容器文件都尝试。
+// 插件内部根据自己关心的扩展名过滤。
+func shouldExtractorHandle(manifest pluginInterfaces.SearchableContentsManifest, ext string) bool {
+	return manifest.Enabled && ext != ""
+}
+
+// 注册的 extractors（避免每次都遍历 plugins.Plugins）
+var (
+	registeredExtractorsMu sync.RWMutex
+	registeredExtractors   []pluginInterfaces.SearchableContentsExtractor
+)
+
+func getRegisteredExtractors() []pluginInterfaces.SearchableContentsExtractor {
+	registeredExtractorsMu.RLock()
+	defer registeredExtractorsMu.RUnlock()
+	out := make([]pluginInterfaces.SearchableContentsExtractor, len(registeredExtractors))
+	copy(out, registeredExtractors)
+	return out
+}
+
+// RegisterSearchableExtractors 供 NewServer 调用，把 plugins.GetAllRegisteredSearchableExtractors
+// 注册进来。FTS5 扫描时直接遍历。
+func RegisterSearchableExtractors(extractors []pluginInterfaces.SearchableContentsExtractor) {
+	registeredExtractorsMu.Lock()
+	defer registeredExtractorsMu.Unlock()
+	registeredExtractors = extractors
 }
 
 // readFileHead 读文件前 N 字节作为 content（用于 FTS5 索引）。

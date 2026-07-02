@@ -5,6 +5,10 @@ import router from './router'
 import { IonicVue } from '@ionic/vue'
 import { installProxiedFetch } from './composables/useProxiedFetch'
 import { clearLegacyLocalStorage } from './lib/taskPersistence'
+// 🆕 2026-07-02 A5：三管齐下错误捕获
+//   用户强反馈："ion-page 警告 = 更底层错误没有捕获，比如不支持安卓端的调用"
+//   三管齐下：Vue errorHandler + window.onerror/unhandledrejection + console.error 重定向
+import { installErrorCapture, bindVueErrorHandler } from './composables/useErrorCapture'
 
 // TDesign Chat 组件库不再做全局注册：
 //   早期版本用 <Chatbot> + ChatService 自行消费 SSE 流，与 useAgent
@@ -29,9 +33,18 @@ import './styles/timeline-utilities.css'
 const pinia = createPinia()
 const app = createApp(App).use(IonicVue).use(router).use(pinia)
 
+// 🆕 2026-07-02 A5：在 Vue app 创建后挂 errorHandler
+// 类型签名差异：Vue 的 errorHandler 第 2 参数是 ComponentPublicInstance 类型，
+// 我们只需要 err/info → 用 any cast 简化（实际语义不影响）
+bindVueErrorHandler(app as unknown as { config: { errorHandler?: (err: unknown, instance: unknown, info: string) => void } })
+
 // Phase X1: 在 native 模式下把 window.fetch 路由到 ApiProxy 插件，
 // 绕开 WebView CORS preflight。dev / web 平台 no-op。
 installProxiedFetch()
+
+// 🆕 2026-07-02 A5：安装 window.onerror / unhandledrejection / console.error 三件套
+//   必须在 app 创建后调，确保覆盖完整
+installErrorCapture()
 
 // 🆕 v6 2026-06-18：清理旧 localStorage key（v6 决定：清空迁移，从零开始）
 clearLegacyLocalStorage()

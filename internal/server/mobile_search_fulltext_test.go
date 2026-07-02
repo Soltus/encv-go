@@ -9,15 +9,17 @@ package server
 // 关键测试点：
 //   1. InitFullTextIndexWithBuild 在空 servingDir 下不报错
 //   2. scanDirForIndex 递归扫到目录 + 普通文件
-//   3. scanDirForIndex 跳过 .encv 容器
-//   4. scanDirForIndex 遵守 maxDepth 限制
-//   5. readFileHead 读不到 binary 文件（返回空）
-//   6. isBinaryContent 正确识别 binary / text
+//   3. scanDirForIndex 跳过 .encv 目录 + .git 目录（应用配置目录）
+//   4. scanDirForIndex **不**跳过 .encv.zip 文件（项目里没有 .encv 文件后缀名）
+//   5. scanDirForIndex 遵守 maxDepth 限制
+//   6. readFileHead 读不到 binary 文件（返回空）
+//   7. isBinaryContent 正确识别 binary / text
 
 import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -53,28 +55,53 @@ func TestScanDirForIndex_FilesAndDirs(t *testing.T) {
 	//     dir1/
 	//       file1.txt (content: "在线播放")
 	//     file2.txt (content: "高清视频")
-	//     secret.encv (应被跳过)
+	//     .encv/           (应被跳过——应用配置目录，非用户文件)
+	//       config.json    (应被跳过)
+	//     .git/             (应被跳过)
+	//       HEAD            (应被跳过)
+	//     .encv.zip         (合法文件，**不应**被跳过——项目里没有 .encv 文件后缀名)
 	_ = os.MkdirAll(filepath.Join(tmp, "dir1"), 0o755)
 	_ = os.WriteFile(filepath.Join(tmp, "dir1", "file1.txt"), []byte("在线播放"), 0o644)
 	_ = os.WriteFile(filepath.Join(tmp, "file2.txt"), []byte("高清视频"), 0o644)
-	_ = os.WriteFile(filepath.Join(tmp, "secret.encv"), []byte("encrypted data"), 0o644)
+	_ = os.MkdirAll(filepath.Join(tmp, ".encv"), 0o755)
+	_ = os.WriteFile(filepath.Join(tmp, ".encv", "config.json"), []byte("{}"), 0o644)
+	_ = os.MkdirAll(filepath.Join(tmp, ".git"), 0o755)
+	_ = os.WriteFile(filepath.Join(tmp, ".git", "HEAD"), []byte("ref: refs/heads/main"), 0o644)
+	_ = os.WriteFile(filepath.Join(tmp, ".encv.zip"), []byte("real zip file"), 0o644)
 
 	entries, err := scanDirForIndex(context.Background(), tmp, 0, 5)
 	if err != nil {
 		t.Fatalf("scanDirForIndex: %v", err)
 	}
 
-	// 期望：dir1 (dir) + dir1/file1.txt + file2.txt = 3
-	// secret.encv 跳过
-	if len(entries) != 3 {
-		t.Errorf("expected 3 entries (1 dir + 2 files, .encv skipped), got %d: %+v", len(entries), entries)
+	// 期望：dir1 (dir) + dir1/file1.txt + file2.txt + .encv.zip = 4
+	// .encv/、.git/ 目录下的文件全部跳过
+	if len(entries) != 4 {
+		t.Errorf("expected 4 entries (1 dir + 3 files, .encv/.git dirs skipped), got %d: %+v", len(entries), entries)
+		for _, e := range entries {
+			t.Logf("  - %s (isDir=%v, contentLen=%d)", e.Path, e.IsDirectory, len(e.Content))
+		}
 	}
 
-	// 验证 .encv 被跳过
+	// 验证 .encv/ 目录下的文件被跳过
 	for _, e := range entries {
-		if filepath.Ext(e.Name) == ".encv" {
-			t.Errorf("scanDirForIndex should skip .encv, got entry: %+v", e)
+		if strings.Contains(e.Path, "/.encv/") || strings.Contains(e.Path, "/.git/") {
+			t.Errorf("scanDirForIndex should skip .encv/ and .git/ dirs, got entry: %+v", e)
 		}
+	}
+
+	// 验证 .encv.zip（**文件**，非目录）不应被跳过
+	foundZip := false
+	for _, e := range entries {
+		if e.Name == ".encv.zip" {
+			foundZip = true
+			if e.Content != "real zip file" {
+				t.Errorf(".encv.zip content = %q, want %q", e.Content, "real zip file")
+			}
+		}
+	}
+	if !foundZip {
+		t.Errorf(".encv.zip file should NOT be skipped (it's not .encv dir, no .encv file extension exists)")
 	}
 
 	// 验证 content 被读到
@@ -253,7 +280,11 @@ func TestInitFullTextIndexWithBuild_Populates(t *testing.T) {
 	_ = os.MkdirAll(subDir, 0o755)
 	_ = os.WriteFile(filepath.Join(servingDir, "a.txt"), []byte("在线 高清"), 0o644)
 	_ = os.WriteFile(filepath.Join(subDir, "b.txt"), []byte("在线 视频"), 0o644)
-	_ = os.WriteFile(filepath.Join(servingDir, "x.encv"), []byte("skip me"), 0o644)
+	// 之前的 .encv 文件后缀名幻觉测试：现在改为 .encv 目录
+	_ = os.MkdirAll(filepath.Join(servingDir, ".encv"), 0o755)
+	_ = os.WriteFile(filepath.Join(servingDir, ".encv", "config.json"), []byte("{}"), 0o644)
+	// 真正的 .encv.zip 文件：应被索引
+	_ = os.WriteFile(filepath.Join(servingDir, "movie.encv.zip"), []byte("encrypted movie"), 0o644)
 
 	// 2. Init (synchronous part)
 	dbPath := fulltextDBPath(servingDir)
@@ -271,9 +302,10 @@ func TestInitFullTextIndexWithBuild_Populates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scanDirForIndex: %v", err)
 	}
-	// 期望：sub (dir) + a.txt + sub/b.txt = 3 (x.encv 跳过)
-	if len(entries) != 3 {
-		t.Errorf("expected 3 entries, got %d: %+v", len(entries), entries)
+	// 期望：sub (dir) + a.txt + sub/b.txt + movie.encv.zip = 4 (4 entries)
+	// .encv/ 目录下的 config.json 跳过
+	if len(entries) != 4 {
+		t.Errorf("expected 4 entries, got %d: %+v", len(entries), entries)
 	}
 
 	if err := idx.BulkInsert(context.Background(), entries); err != nil {
@@ -282,8 +314,9 @@ func TestInitFullTextIndexWithBuild_Populates(t *testing.T) {
 	idx.MarkBuilt(100 * 1e6) // 100ms
 
 	stats := idx.Stats()
-	if stats.TotalFiles != 2 { // a.txt + b.txt (dir 不算 file)
-		t.Errorf("expected TotalFiles=2 (txt only), got %d", stats.TotalFiles)
+	// a.txt + b.txt + movie.encv.zip = 3 个文件（sub 是目录不算）
+	if stats.TotalFiles != 3 {
+		t.Errorf("expected TotalFiles=3 (a.txt + b.txt + movie.encv.zip), got %d", stats.TotalFiles)
 	}
 	if stats.LastBuildMs <= 0 {
 		t.Errorf("expected LastBuildMs > 0, got %d", stats.LastBuildMs)

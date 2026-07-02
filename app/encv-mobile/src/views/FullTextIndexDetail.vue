@@ -15,8 +15,22 @@
     </ion-header>
 
     <ion-content>
+      <!-- 🆕 2026-07-02 A5：Vue 顶层 try-catch + 错误卡片（用户反馈"ion-page 警告 = 更底层错误"） -->
+      <!-- 任何未捕获的异常都显示在这里（不是空白页） -->
+      <div v-if="renderError" class="unavailable-container render-error">
+        <ion-icon :icon="bugOutline" class="unavailable-icon" color="danger"></ion-icon>
+        <h2>{{ t('settings.renderErrorTitle') || '组件渲染错误' }}</h2>
+        <p class="error-reason">{{ renderError.message || String(renderError) }}</p>
+        <pre v-if="renderError.stack" class="render-error-stack">{{ renderError.stack }}</pre>
+        <p class="hint">
+          {{ t('settings.renderErrorHint') || '此错误已被自动上报到错误捕获系统。点击下方按钮重新加载页面。' }}
+        </p>
+        <ion-button @click="reloadPage" fill="outline" color="primary" class="render-error-reload">
+          {{ t('common.reload') || '重新加载' }}
+        </ion-button>
+      </div>
       <!-- 加载中 -->
-      <div v-if="loading && !stats" class="loading-container">
+      <div v-else-if="loading && !stats" class="loading-container">
         <ion-spinner name="crescent"></ion-spinner>
         <p>{{ t('settings.loading') || '加载中…' }}</p>
       </div>
@@ -164,11 +178,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onErrorCaptured } from 'vue'
 import { useI18n } from '@/composables/useI18n'
-import { refreshOutline, warningOutline } from 'ionicons/icons'
+import { refreshOutline, warningOutline, bugOutline } from 'ionicons/icons'
 import { getFullTextIndexStats, type FullTextIndexStats } from '@/api/encv_search'
 import { formatDateTime } from '@/composables/useDateFormat'
+// 🆕 2026-07-02 A5：错误捕获系统（与 useErrorCapture 联动）
+import { errorStore } from '@/composables/useErrorCapture'
 
 const { t } = useI18n()
 const refreshIcon = ref(refreshOutline)
@@ -178,6 +194,29 @@ const loading = ref(false)
 const available = ref(false)
 const error = ref<string | null>(null)
 const stats = ref<FullTextIndexStats | null>(null)
+
+// 🆕 A5：渲染错误捕获（onErrorCaptured 兜底，把"更底层错误"显式显示给用户）
+const renderError = ref<Error | null>(null)
+onErrorCaptured((err: unknown) => {
+  const e = err instanceof Error ? err : new Error(String(err))
+  renderError.value = e
+  // 同时上报到全局 errorStore（让 ErrorCaptureOverlay 也显示）
+  errorStore.addError({
+    source: 'vue',
+    message: e.message,
+    stack: e.stack,
+    componentName: 'FullTextIndexDetail',
+    url: typeof window !== 'undefined' ? window.location.pathname : undefined,
+  })
+  // 阻止冒泡（避免连锁 crash）
+  return false
+})
+
+function reloadPage() {
+  if (typeof window !== 'undefined') {
+    window.location.reload()
+  }
+}
 
 async function loadStats() {
   loading.value = true
@@ -192,6 +231,13 @@ async function loadStats() {
   } catch (e) {
     available.value = false
     error.value = e instanceof Error ? e.message : String(e)
+    // 抛到全局 errorStore（让 A5 浮窗也显示）
+    errorStore.addError({
+      source: 'console',
+      message: `FullTextIndexDetail: ${error.value}`,
+      stack: e instanceof Error ? e.stack : undefined,
+      url: typeof window !== 'undefined' ? window.location.pathname : undefined,
+    })
   } finally {
     loading.value = false
   }
@@ -274,5 +320,36 @@ onMounted(() => {
 .indexing-spinner {
   width: 20px;
   height: 20px;
+}
+
+/* 🆕 2026-07-02 A5：渲染错误卡片样式 */
+.render-error .error-reason {
+  color: var(--ion-color-danger);
+  font-family: monospace;
+  font-size: 0.95em;
+  margin: 8px 0;
+  word-break: break-all;
+  white-space: pre-wrap;
+  max-width: 90vw;
+}
+
+.render-error-stack {
+  max-width: 90vw;
+  max-height: 30vh;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 0.75em;
+  background: rgba(var(--ion-color-danger-rgb), 0.08);
+  border: 1px solid rgba(var(--ion-color-danger-rgb), 0.2);
+  border-radius: 6px;
+  padding: 8px 12px;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--ion-color-danger-shade, #b00020);
+}
+
+.render-error-reload {
+  margin-top: 12px;
 }
 </style>

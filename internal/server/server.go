@@ -323,6 +323,11 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	//   修复：InitFullTextIndex 之前定义但从未调用，导致全文搜索 0 结果。
 	//   现在启动时 init + 后台 scan servingDir 写入索引。
 	//   失败不阻断（log warn + 标 available=false，调用方走降级路径）
+	// 2026-07-02 v2：注册可搜索内容提取器（插件自主声明字幕/歌词等可被搜的内容）
+	extractors := plugins.GetAllRegisteredSearchableExtractors()
+	RegisterSearchableExtractors(extractors)
+	slog.Info("FTS5 registered searchable extractors", "count", len(extractors))
+
 	if err := s.InitFullTextIndexWithBuild(s.servingDir); err != nil {
 		slog.Warn("FTS5 full-text index init failed, full-text search will be unavailable", "err", err)
 	}

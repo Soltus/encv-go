@@ -101,3 +101,59 @@ type TaskExtraFieldsSetter interface {
 type TaskStateResetter interface {
 	ResetTaskState()
 }
+
+// ─── 全文搜索内容声明（2026-07-02 用户反馈：插件自主声明容器内可被全文搜索的内容）──
+
+// SearchableContentType 预定义的搜索内容类型。
+// 插件可在 SearchableContentsManifest.Types 里引用这些常量。
+const (
+	SearchableTypeSubtitle  = "subtitle"  // 字幕
+	SearchableTypeTitle     = "title"     // 标题
+	SearchableTypeLyrics    = "lyrics"    // 歌词
+	SearchableTypeMetadata  = "metadata"  // 元数据
+	SearchableTypeBody      = "body"      // 正文（如 text 插件整文）
+	SearchableTypeChapters  = "chapters"  // 章节
+	SearchableTypeOCR       = "ocr"       // OCR 文本（图片插件）
+	SearchableTypeTranscript = "transcript" // 语音转写（音频/视频）
+)
+
+// SearchableContentsManifest 声明插件**支持**哪些类型的可搜索内容。
+//
+// 用户层面意义：UI 显示「此插件可全文搜索: 字幕、标题、章节」
+// （透明告知用户加密容器可以被搜到什么内容）
+//
+// 插件实现示例（video 插件）：
+//   func (p *VideoPlugin) GetSearchableContentsManifest() SearchableContentsManifest {
+//     return SearchableContentsManifest{Enabled: true, Types: []string{
+//       SearchableTypeSubtitle, SearchableTypeTitle, SearchableTypeChapters,
+//     }}
+//   }
+type SearchableContentsManifest struct {
+	Enabled bool     // false = 插件不参与全文搜索（容器内任何内容都不进 FTS5）
+	Types   []string // 插件支持的可搜索内容类型（见 SearchableType* 常量）
+}
+
+// SearchableContentItem 插件从容器里提取出来的单条可搜索内容。
+// 多条可以返回：例如视频可能有 zh-CN/EN/JP 多个字幕轨道。
+type SearchableContentItem struct {
+	Type string // 对应 SearchableContentsManifest.Types 里的某一项
+	Name string // 详细名称（如 "subtitle:zh-CN"、"title"、"metadata:artist"）
+	Text string // 实际可搜索的纯文本（去除二进制/格式化符号）
+}
+
+// SearchableContentsExtractor 定义从加密容器中提取可搜索内容的能力。
+//
+// FTS5 索引构建（mobile_search_fulltext.go）会：
+//   1. 扫描到 .sccgv/.ae 等容器文件
+//   2. 调 ExtractSearchableContents() 拿到 SearchableContentItem 列表
+//   3. 把每条 item 写成 FileEntry{Content: item.Text, ...} 进 FTS5
+//
+// 返回 error 表示该容器提取失败（跳过该文件即可，不阻断）
+type SearchableContentsExtractor interface {
+	// GetSearchableContentsManifest 声明插件支持哪些类型
+	GetSearchableContentsManifest() SearchableContentsManifest
+	// ExtractSearchableContents 从容器文件中提取可被搜索的内容
+	// containerPath: 容器文件绝对路径
+	// 返回: 多个 item + error（失败时 error != nil，但 item 可能部分成功）
+	ExtractSearchableContents(containerPath string) ([]SearchableContentItem, error)
+}

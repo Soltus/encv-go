@@ -109,6 +109,14 @@
       </div>
     </div>
     <ion-router-outlet v-else />
+    <!--
+      🆕 2026-07-02 A5：三管齐下错误捕获浮窗
+      - 监听 errorStore.latestError + showOverlay
+      - 显示最近一个错误的卡片（点击展开 / 关闭按钮 dismiss）
+      - 与 App.vue 顶层 onErrorCaptured 错误页（rootError fallback）不冲突：
+        rootError 是渲染错误熔断器；ErrorCaptureOverlay 是底层错误通知
+    -->
+    <ErrorCaptureOverlay />
   </ion-app>
 </template>
 
@@ -127,6 +135,8 @@ import { checkServiceGuard } from '@/api/encv'
 import type { ServiceGuardResult } from '@/api/encv'
 import { useI18n } from '@/composables/useI18n'
 import { initHighRefreshRate } from '@/composables/useHighRefreshRate'
+// 🆕 2026-07-02 A5：错误捕获浮窗（三管齐下的第 3 件：console 重定向 + 浮窗）
+import ErrorCaptureOverlay from '@/components/shared/ErrorCaptureOverlay.vue'
 
 const { initTheme, detectP3Support } = useTheme()
 const { t } = useI18n()
