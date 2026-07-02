@@ -8,15 +8,13 @@
         <ion-title>{{ t('settings.fullTextIndex') || '全文索引' }}</ion-title>
         <ion-buttons slot="end">
           <ion-button @click="loadStats" :disabled="loading">
-            <ion-icon :icon="refreshIcon" slot="icon-only"></ion-icon>
+            <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
           </ion-button>
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
     <ion-content>
-      <!-- 🆕 2026-07-02 A5：Vue 顶层 try-catch + 错误卡片（用户反馈"ion-page 警告 = 更底层错误"） -->
-      <!-- 任何未捕获的异常都显示在这里（不是空白页） -->
       <div v-if="renderError" class="unavailable-container render-error">
         <ion-icon :icon="bugOutline" class="unavailable-icon" color="danger"></ion-icon>
         <h2>{{ t('settings.renderErrorTitle') || '组件渲染错误' }}</h2>
@@ -29,15 +27,14 @@
           {{ t('common.reload') || '重新加载' }}
         </ion-button>
       </div>
-      <!-- 加载中 -->
-      <div v-else-if="loading && !stats" class="loading-container">
+
+      <div v-else-if="loading" class="loading-container">
         <ion-spinner name="crescent"></ion-spinner>
         <p>{{ t('settings.loading') || '加载中…' }}</p>
       </div>
 
-      <!-- 索引不可用 -->
       <div v-else-if="!available" class="unavailable-container">
-        <ion-icon :icon="warningIcon" class="unavailable-icon"></ion-icon>
+        <ion-icon :icon="warningOutline" class="unavailable-icon"></ion-icon>
         <h2>{{ t('settings.fullTextIndexUnavailable') || '全文索引不可用' }}</h2>
         <p class="error-reason">{{ error || 'FTS5 not initialized' }}</p>
         <p class="hint">
@@ -45,31 +42,30 @@
         </p>
       </div>
 
-      <!-- 索引统计 -->
-      <template v-else-if="stats">
+      <template v-else>
         <ion-list>
           <ion-list-header>
             <ion-label>{{ t('settings.basicInfo') || '基础信息' }}</ion-label>
           </ion-list-header>
           <ion-item>
             <ion-label>{{ t('settings.dbPath') || '数据库路径' }}</ion-label>
-            <ion-note slot="end" class="tokenizer-text">{{ stats.dbPath }}</ion-note>
+            <ion-note slot="end" class="tokenizer-text">{{ stats?.dbPath || '-' }}</ion-note>
           </ion-item>
           <ion-item>
             <ion-label>{{ t('settings.fts5Enabled') || 'FTS5 已启用' }}</ion-label>
             <ion-note slot="end">
-              <ion-badge :color="stats.fts5Enabled ? 'success' : 'danger'">
-                {{ stats.fts5Enabled ? 'YES' : 'NO' }}
+              <ion-badge :color="stats?.fts5Enabled ? 'success' : 'danger'">
+                {{ stats?.fts5Enabled ? 'YES' : 'NO' }}
               </ion-badge>
             </ion-note>
           </ion-item>
           <ion-item>
             <ion-label>{{ t('settings.tokenizer') || '分词器' }}</ion-label>
-            <ion-note slot="end" class="tokenizer-text">{{ stats.tokenizer }}</ion-note>
+            <ion-note slot="end" class="tokenizer-text">{{ stats?.tokenizer || '-' }}</ion-note>
           </ion-item>
           <ion-item>
             <ion-label>{{ t('settings.indexVersion') || '索引版本' }}</ion-label>
-            <ion-note slot="end">v{{ stats.indexVersion }}</ion-note>
+            <ion-note slot="end">v{{ stats?.indexVersion ?? 0 }}</ion-note>
           </ion-item>
         </ion-list>
 
@@ -79,25 +75,25 @@
           </ion-list-header>
           <ion-item>
             <ion-label>{{ t('settings.totalFiles') || '文件总数' }}</ion-label>
-            <ion-note slot="end" class="stat-number">{{ formatNumber(stats.totalFiles) }}</ion-note>
+            <ion-note slot="end" class="stat-number">{{ formatNumber(stats?.totalFiles ?? 0) }}</ion-note>
           </ion-item>
           <ion-item>
             <ion-label>{{ t('settings.totalDirs') || '目录总数' }}</ion-label>
-            <ion-note slot="end" class="stat-number">{{ formatNumber(stats.totalDirs) }}</ion-note>
+            <ion-note slot="end" class="stat-number">{{ formatNumber(stats?.totalDirs ?? 0) }}</ion-note>
           </ion-item>
           <ion-item>
             <ion-label>{{ t('settings.totalSize') || '索引大小' }}</ion-label>
-            <ion-note slot="end" class="stat-number">{{ formatBytes(stats.totalSize) }}</ion-note>
+            <ion-note slot="end" class="stat-number">{{ formatBytes(stats?.totalSize ?? 0) }}</ion-note>
           </ion-item>
-          <ion-item v-if="stats.lastBuildMs > 0">
+          <ion-item v-if="stats?.lastBuildMs && stats.lastBuildMs > 0">
             <ion-label>{{ t('settings.lastBuildTime') || '上次构建耗时' }}</ion-label>
             <ion-note slot="end">{{ stats.lastBuildMs }} ms</ion-note>
           </ion-item>
-          <ion-item v-if="stats.indexedAt">
+          <ion-item v-if="stats?.indexedAt">
             <ion-label>{{ t('settings.indexedAt') || '索引时间' }}</ion-label>
             <ion-note slot="end" class="time-text">{{ formatDateTime(stats.indexedAt) }}</ion-note>
           </ion-item>
-          <ion-item v-if="stats.isIndexing">
+          <ion-item v-if="stats?.isIndexing">
             <ion-label>{{ t('settings.isIndexing') || '正在索引' }}</ion-label>
             <ion-note slot="end">
               <ion-spinner name="dots" class="indexing-spinner"></ion-spinner>
@@ -178,17 +174,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, onErrorCaptured } from 'vue'
+import { ref, nextTick, onMounted, onUnmounted, onErrorCaptured } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { refreshOutline, warningOutline, bugOutline } from 'ionicons/icons'
 import { getFullTextIndexStats, type FullTextIndexStats } from '@/api/encv_search'
 import { formatDateTime } from '@/composables/useDateFormat'
-// 🆕 2026-07-02 A5：错误捕获系统（与 useErrorCapture 联动）
 import { errorStore } from '@/composables/useErrorCapture'
+import { onIonViewDidEnter } from '@ionic/vue'
 
 const { t } = useI18n()
-const refreshIcon = ref(refreshOutline)
-const warningIcon = ref(warningOutline)
 
 const loading = ref(false)
 const available = ref(false)

@@ -688,6 +688,12 @@ async function performSearch() {
     }
   }
 
+  // 🐛 2026-07-02 修复：插入逻辑符（AND/OR/NOT/phrase/regex）后搜索无结果
+  //   根因：普通搜索（searchFilesVector）不支持布尔语法，只有 FTS 全文搜索支持。
+  //   修复：检测到 query 包含布尔操作符时，自动启用全文搜索。
+  const hasBooleanSyntax = /\b(AND|OR|NOT)\b|^regex:|"/.test(query)
+  const useFullText = searchFullText.value || hasBooleanSyntax
+
   const clientHits = clientFilterFiles(lastFullResults.value, query)
   if (clientHits.length > 0) {
     searchResults.value = clientHits
@@ -699,7 +705,7 @@ async function performSearch() {
   }
   const gen = ++searchGeneration
 
-  const cacheKey = `${currentPath.value}:${query}:fulltext=${searchFullText.value}`
+  const cacheKey = `${currentPath.value}:${query}:fulltext=${useFullText}`
   const cached = searchCache.get(cacheKey)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     if (gen !== searchGeneration) return
@@ -725,12 +731,12 @@ async function performSearch() {
 
     if (gen !== searchGeneration) return
 
-    // A4：FTS 关闭时只显示普通结果
-    if (!searchFullText.value) {
+    // A4：FTS 关闭时只显示普通结果（但如果 query 有布尔语法，自动走 FTS）
+    if (!useFullText) {
       searchResults.value = normalResults
       lastFullResults.value = normalResults
       searchMode.value = mode
-      fulltextBanner.value = null // 关闭时清空 banner
+      fulltextBanner.value = null
     } else {
       // A4：FTS 开启 → merge + 去重（普通结果 ∪ FTS 结果，按 path 去重）
       // A6：FTS 失败时静默降级 + banner 提示（不破坏普通结果）
@@ -738,10 +744,12 @@ async function performSearch() {
       let ftsAvailable = true
       let ftsErrorMessage = ''
       try {
-        // 包成 phrase 防 AND/OR/NOT 被误解析（与之前一致）
+        // 包成 phrase 防 AND/OR/NOT 被误解析（仅当用户没手动写布尔语法时）
         let ftsQuery = query
-        if (!query.includes('"') && !query.toLowerCase().startsWith('regex:')) {
-          ftsQuery = `"${query.replace(/"/g, '\\"')}"`
+        if (!hasBooleanSyntax) {
+          if (!query.includes('"') && !query.toLowerCase().startsWith('regex:')) {
+            ftsQuery = `"${query.replace(/"/g, '\\"')}"`
+          }
         }
         const ftResult = await searchFilesFullText(ftsQuery, 200, currentPath.value)
         ftsResults = ftResult.results
@@ -759,7 +767,6 @@ async function performSearch() {
       // 去重：normal + fts，按 path
       const seen = new Set<string>()
       const merged: FileItem[] = []
-      // 普通结果优先（FTS 命中再补）
       for (const f of normalResults) {
         if (!seen.has(f.path)) {
           seen.add(f.path)
@@ -769,14 +776,12 @@ async function performSearch() {
       for (const f of ftsResults) {
         if (!seen.has(f.path)) {
           seen.add(f.path)
-          // 标记为 FTS 命中（template 用 isFulltextHit 渲染 badge）
           merged.push({ ...f, _fulltextHit: true } as FileItem)
         }
       }
 
       searchResults.value = merged
       lastFullResults.value = merged
-      // 模式：greedy/combined/strict 按 vector 模式
       searchMode.value = mode
 
       // A6 banner：FTS 不可用时静默降级 + 提示原因
