@@ -159,8 +159,15 @@ func readSubtitleText(path string, maxSize int64) (string, error) {
 		if line == "" {
 			continue
 		}
-		// 跳过 ASS 格式头（[Script Info] 等）
+		// 跳过 ASS section 头（如 [Script Info] / [V4+ Styles] / [Events]）
 		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			continue
+		}
+		// 跳过 ASS section 内的元数据行（key: value 形式，且 key 在白名单内）
+		//  - Script Info: Title/ScriptType/PlayResX/PlayResY/WrapStyle/Audio Format/...
+		//  - Styles: Format/Style
+		//  - Events: Format（Dialogue/Comment/Marked 不是元数据，是真内容，保留）
+		if isASSMetadataLine(line) {
 			continue
 		}
 		// 去掉 ASS 样式覆盖（{\b1} 等）
@@ -197,21 +204,74 @@ func isSRTTimestampLine(line string) bool {
 }
 
 // stripASSTags 去掉 ASS 样式覆盖标签（如 {\b1}、{\i1}、{\fnMicrosoft YaHei}）
+//
+// 处理规则：
+//   - 正常标签 {\xxx} → 完全去除
+//   - 未闭合标签 {xxx（行末） → 去除
+//   - 未开始标签 xxx}（行首） → 去除到 }
+//   - 多个标签 → 全部去除
 func stripASSTags(line string) string {
 	var sb strings.Builder
 	sb.Grow(len(line))
-	inTag := false
-	for _, c := range line {
-		switch {
-		case c == '{':
-			inTag = true
-		case c == '}':
-			inTag = false
-		case !inTag:
-			sb.WriteRune(c)
+	i := 0
+	for i < len(line) {
+		switch line[i] {
+		case '{':
+			// 找到匹配的 }（如有）；未闭合则到行末
+			j := strings.IndexByte(line[i:], '}')
+			if j < 0 {
+				// 未闭合：丢掉剩余
+				return sb.String()
+			}
+			// 跳过整个 {...}
+			i += j + 1
+		case '}':
+			// 孤儿 }（前面没有 {）→ 跳过
+			i++
+		default:
+			sb.WriteByte(line[i])
+			i++
 		}
 	}
 	return sb.String()
+}
+
+// isASSMetadataLine 检测 ASS section 内的元数据行（key: value 形式）
+//
+// 必须跳过的 key：
+//   - [Script Info] 段：Title / ScriptType / PlayResX / PlayResY / WrapStyle / ScaledBorderAndShadow
+//                      Timer / Video Aspect Ratio / Video Zoom / Video Position / Audio Format
+//                      Audio Bitrate / Audio Sampling Rate / Audio Channels / Last Style Storage
+//                      3D Mode / Collision / Language / VobSub /
+//   - [V4+ Styles] 段：Format / Style
+//   - [Events] 段：Format（Dialogue / Comment / Marked 是真内容，必须保留！）
+//
+// 检测方法：冒号前 token 出现在白名单 → 视为元数据，跳过
+func isASSMetadataLine(line string) bool {
+	colon := strings.IndexByte(line, ':')
+	if colon < 0 {
+		return false
+	}
+	key := strings.TrimSpace(line[:colon])
+
+	// [Script Info] 段元数据
+	scriptInfoKeys := map[string]bool{
+		"Title": true, "Original Script": true, "Original Translation": true, "Original Editing": true,
+		"ScriptType": true, "Collisions": true, "PlayResX": true, "PlayResY": true, "PlayDepth": true,
+		"Timer": true, "WrapStyle": true, "ScaledBorderAndShadow": true, "Video Aspect Ratio": true,
+		"Video Zoom": true, "Video Position": true, "Audio Format": true, "Audio Bitrate": true,
+		"Audio Sampling Rate": true, "Audio Channels": true, "Last Style Storage": true,
+		"3D Mode": true, "Collision": true, "Language": true, "VobSub": true, "YCbCr Matrix": true,
+	}
+	// [V4+ Styles] / [Events] 段元数据
+	//  - Format: 是元数据（描述字段）
+	//  - Style: 是 [V4+ Styles] 段的具体样式定义
+	//  - 注意：Dialogue / Comment / Marked / Picture / Sound / Movie / Command 是真内容！
+	otherKeys := map[string]bool{
+		"Format": true, "Style": true,
+	}
+
+	return scriptInfoKeys[key] || otherKeys[key]
 }
 
 // splitExtList 把逗号分隔的扩展名列表拆成数组
