@@ -196,10 +196,9 @@ func TestServiceContext_FromContext(t *testing.T) {
 
 // mockService 用于测试
 type mockService struct {
-	name    string
-	health  error
-	calls   *uint64
-	lastMth string
+	name   string
+	health error
+	calls  *uint64
 }
 
 func (m *mockService) Name() string                    { return m.name }
@@ -208,7 +207,6 @@ func (m *mockService) Health(ctx ServiceContext) error { return m.health }
 
 func (m *mockService) Call(ctx ServiceContext, method string, payload json.RawMessage) (json.RawMessage, error) {
 	atomic.AddUint64(m.calls, 1)
-	m.lastMth = method
 	resp := map[string]any{
 		"service":     ctx.Service(),
 		"requestID":   ctx.RequestID(),
