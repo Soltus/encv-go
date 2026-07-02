@@ -19,6 +19,7 @@
     "test:cypress": "PM2_HOME=/tmp/cypress-pm2 CYPRESS_INSTALL_BINARY=0 xvfb-run -a --server-args=\"-screen 0 1024x768x24\" cypress run --browser electron",
     "test:cypress:open": "PM2_HOME=/tmp/cypress-pm2 CYPRESS_INSTALL_BINARY=0 xvfb-run -a --server-args=\"-screen 0 1024x768x24\" cypress open --browser electron",
     "test:cypress:component": "PM2_HOME=/tmp/cypress-pm2 CYPRESS_INSTALL_BINARY=0 xvfb-run -a --server-args=\"-screen 0 1024x768x24\" cypress run --component --browser electron",
+    "test:cypress:full": "ENCV_TEST_FULL=1 PM2_HOME=/tmp/cypress-pm2 CYPRESS_INSTALL_BINARY=0 xvfb-run -a --server-args=\"-screen 0 1024x768x24\" cypress run --component --browser electron",
     "test:cypress:e2e": "PM2_HOME=/tmp/cypress-pm2 CYPRESS_INSTALL_BINARY=0 xvfb-run -a --server-args=\"-screen 0 1024x768x24\" cypress run --e2e --browser electron",
     "check:i18n": "node scripts/find-missing-i18n-keys.mjs",
     "prebuild": "pnpm check:i18n",

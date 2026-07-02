@@ -33,6 +33,38 @@ import { defineConfig } from 'cypress'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
 
+const IS_FULL = process.env.ENCV_TEST_FULL === '1'
+
+// 快速组件测试（默认跑）— 简单展示组件 + 核心交互
+const FAST_INCLUDE = [
+  'cypress/component/_smoke.cy.ts',
+  'cypress/component/shared/*.cy.ts',
+  'cypress/component/useSearchInput.cy.ts',
+  'cypress/component/user-reported-bugs.cy.ts',
+  'cypress/component/TaskActionButtons.cy.ts',
+  'cypress/component/TaskBasicInfo.cy.ts',
+  'cypress/component/TaskOutputInfo.cy.ts',
+  'cypress/component/TaskDebugPanel.cy.ts',
+]
+
+// 慢速集成测试（ENCV_TEST_FULL=1 才跑）— 大规模数据 + WS + 虚拟列表 + file watcher
+const SLOW_INCLUDE = [
+  'cypress/component/Files-file-change.cy.ts',
+  'cypress/component/Tasks.cy.ts',
+  'cypress/component/Tasks-1000-scale.cy.ts',
+  'cypress/component/Tasks-ws-batch.cy.ts',
+  'cypress/component/Tasks-search-filter.cy.ts',
+  'cypress/component/Tasks-group-card-summary.cy.ts',
+  'cypress/component/TaskTimeline.cy.ts',
+  'cypress/component/TaskVirtualList.cy.ts',
+  'cypress/component/GroupDetail.cy.ts',
+  'cypress/component/GroupDetail-search-filter.cy.ts',
+]
+
+const COMPONENT_SPECS = IS_FULL
+  ? [...FAST_INCLUDE, ...SLOW_INCLUDE]
+  : FAST_INCLUDE
+
 export default defineConfig({
   // 全局默认用 Electron（避免 Chrome 下载）
   defaultBrowser: 'electron',
@@ -63,7 +95,7 @@ export default defineConfig({
       }),
     },
     indexHtmlFile: 'cypress/support/component-index.html',
-    specPattern: 'cypress/component/**/*.cy.ts',
+    specPattern: COMPONENT_SPECS,
     supportFile: 'cypress/support/component.ts',
     includeShadowDom: true,
     video: false,

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-01T06:23:59.185Z",
+  "generated_at": "2026-07-02T12:18:26.868Z",
   "source_file": "package.json",
   "items": [
     {
@@ -293,6 +293,17 @@
       "name": "cypress",
       "version": "15.17.0",
       "version_range": "^15.17.0",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
+      "name": "happy-dom",
+      "version": "20.10.6",
+      "version_range": "^20.10.6",
       "source": "package.json",
       "kind": "devDependency",
       "importance": "light",

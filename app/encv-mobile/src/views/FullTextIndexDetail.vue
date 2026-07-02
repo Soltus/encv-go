@@ -204,7 +204,6 @@ const renderError = ref<Error | null>(null)
 onErrorCaptured((err: unknown) => {
   const e = err instanceof Error ? err : new Error(String(err))
   renderError.value = e
-  // 同时上报到全局 errorStore（让 ErrorCaptureOverlay 也显示）
   errorStore.addError({
     source: 'vue',
     message: e.message,
@@ -212,7 +211,6 @@ onErrorCaptured((err: unknown) => {
     componentName: 'FullTextIndexDetail',
     url: typeof window !== 'undefined' ? window.location.pathname : undefined,
   })
-  // 阻止冒泡（避免连锁 crash）
   return false
 })
 
