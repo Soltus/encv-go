@@ -280,11 +280,86 @@ export function useSearchInput(options: {
         const range = sel.getRangeAt(0)
         if (div.contains(range.commonAncestorContainer)) {
           range.deleteContents()
-          range.insertNode(node)
-          range.setStartAfter(node)
-          range.setEndAfter(node)
+
+          // 🐛 2026-07-02 修复：range.insertNode 会把节点插到 span 内部
+          //   （光标在 span text node 里时），导致节点嵌套层级错乱。
+          //   修复：找到光标对应的 div 直接子节点，用 insertBefore 在正确层级插入。
+          let targetChild: Node | null = null
+          let offsetInChild = 0
+
+          // 向上找到 div 的直接子节点
+          let cur: Node | null = range.startContainer
+          while (cur && cur.parentNode !== div) {
+            cur = cur.parentNode
+          }
+          if (cur) {
+            targetChild = cur
+            // 计算在 targetChild 内的字符偏移（粗略：如果 startContainer 是 text node 且在 targetChild 内）
+            if (range.startContainer.nodeType === Node.TEXT_NODE) {
+              // 遍历 targetChild 的文本内容累计长度
+              let textLen = 0
+              const walker = document.createTreeWalker(targetChild, NodeFilter.SHOW_TEXT)
+              let tn: Node | null
+              while ((tn = walker.nextNode())) {
+                if (tn === range.startContainer) {
+                  textLen += range.startOffset
+                  break
+                }
+                textLen += (tn.textContent || '').length
+              }
+              offsetInChild = textLen
+            } else if (range.startContainer === targetChild) {
+              offsetInChild = 0
+            } else {
+              offsetInChild = (targetChild.textContent || '').length
+            }
+          }
+
+          if (targetChild) {
+            const childLen = (targetChild.textContent || '').length
+            if (offsetInChild === 0) {
+              // 在 targetChild 前面插入
+              div.insertBefore(node, targetChild)
+            } else if (offsetInChild >= childLen) {
+              // 在 targetChild 后面插入
+              div.insertBefore(node, targetChild.nextSibling)
+            } else {
+              // 在中间 → 拆分 text span
+              if (
+                targetChild.nodeType === Node.ELEMENT_NODE &&
+                (targetChild as HTMLElement).dataset.kind === 'text'
+              ) {
+                const text = targetChild.textContent || ''
+                const beforeText = text.slice(0, offsetInChild)
+                const afterText = text.slice(offsetInChild)
+                const beforeSpan = document.createElement('span')
+                beforeSpan.dataset.kind = 'text'
+                beforeSpan.classList.add('syntax-text-span')
+                beforeSpan.textContent = beforeText
+                const afterSpan = document.createElement('span')
+                afterSpan.dataset.kind = 'text'
+                afterSpan.classList.add('syntax-text-span')
+                afterSpan.textContent = afterText
+                div.insertBefore(beforeSpan, targetChild)
+                div.insertBefore(node, targetChild)
+                div.insertBefore(afterSpan, targetChild)
+                div.removeChild(targetChild)
+              } else {
+                // op span 等不可拆分 → 在后面插入
+                div.insertBefore(node, targetChild.nextSibling)
+              }
+            }
+          } else {
+            // 没找到（空 div）→ 追加
+            div.appendChild(node)
+          }
+
+          // 设置光标到插入节点之后
+          const r2 = document.createRange()
+          r2.setStartAfter(node)
+          r2.collapse(true)
           sel.removeAllRanges()
-          sel.addRange(range)
+          sel.addRange(r2)
           return true
         }
       }
@@ -307,7 +382,7 @@ export function useSearchInput(options: {
       closeSpan.textContent = OP_SYMBOLS.__phrase_close__.display
 
       insertAtCaret(openSpan)
-      // openSpan 现在是 div 的 child，找到 openSpan 之后插入 text + close
+      // insertAtCaret 保证 openSpan 是 div 的直接子节点
       const ref = openSpan.nextSibling
       div.insertBefore(textSpan, ref)
       div.insertBefore(closeSpan, textSpan.nextSibling)

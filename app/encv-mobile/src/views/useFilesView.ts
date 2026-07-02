@@ -285,7 +285,10 @@ const {
   onQueryKeydown,       // @keydown 处理器
   insertSymbol,         // 插入 symbol span（AND/OR/NOT/phrase/regex）
   clearInput,           // 清空输入框
-} = useSearchInput({})
+} = useSearchInput({
+  // 🐛 2026-07-02 修复：之前没传 onChange → 输入变化时根本不触发搜索！
+  onChange: handleSearchInput,
+})
 
 // 兼容旧代码：searchQuery 仍指向 queryValue（Files.vue 其它处也读 searchQuery.value）
 const searchQuery = queryValue
