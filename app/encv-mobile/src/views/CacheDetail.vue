@@ -83,6 +83,15 @@
         </button>
       </div>
 
+      <!-- 🆕 2026-07-02 全文索引（FTS5）入口 -->
+      <ion-item button @click="goFullTextIndex" detail lines="full" class="fulltext-entry">
+        <ion-icon :icon="searchOutline" slot="start" color="tertiary"></ion-icon>
+        <ion-label>
+          <h3>{{ t('settings.fullTextIndex') || '全文索引' }}</h3>
+          <p>{{ t('settings.fullTextIndexDesc') || 'FTS5 + bm25 + CJK bigram 全文搜索引擎' }}</p>
+        </ion-label>
+      </ion-item>
+
       <!-- 缓存详情 -->
       <ion-list lines="full">
         <ion-list-header>
@@ -162,7 +171,9 @@ import type { IndexStats } from '@/api/encv'
 import { useI18n } from '@/composables/useI18n'
 import { showToast } from '@/composables/useToast'
 import { getThumbCacheSize, clearThumbCache, THUMB_CACHE_MAX } from '@/composables/useThumbnailCache'
+import { useRouter } from 'vue-router'
 
+const router = useRouter()
 const { t } = useI18n()
 const stats = ref<IndexStats | null>(null)
 const searchCacheSize = ref(0)
@@ -175,6 +186,11 @@ async function loadStats() {
   } catch {
     stats.value = null
   }
+}
+
+// 🆕 2026-07-02 跳转全文索引二级页（FTS5 详情）
+function goFullTextIndex() {
+  router.push('/tabs/settings/fulltext-index')
 }
 
 function updateSearchCacheSize() {

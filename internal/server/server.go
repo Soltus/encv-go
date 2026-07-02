@@ -319,6 +319,14 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	// 🆕 2026-07-03：向量搜索服务初始化
 	s.InitVectorSearch(dbPath, actualEngine)
 
+	// 🆕 2026-07-02：FTS5 全文索引初始化（异步后台 build，不阻塞启动）
+	//   修复：InitFullTextIndex 之前定义但从未调用，导致全文搜索 0 结果。
+	//   现在启动时 init + 后台 scan servingDir 写入索引。
+	//   失败不阻断（log warn + 标 available=false，调用方走降级路径）
+	if err := s.InitFullTextIndexWithBuild(s.servingDir); err != nil {
+		slog.Warn("FTS5 full-text index init failed, full-text search will be unavailable", "err", err)
+	}
+
 	// 剧本外置 spec：若 agent_settings.mock_scenarios_dir 非空，
 	// 用 ScenarioLoader 加载 YAML/JSON 剧本，注入到 MockEngine。
 	// 详见 internal/server/mock_scenarios/SCHEMA.md。

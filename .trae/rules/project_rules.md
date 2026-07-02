@@ -184,7 +184,56 @@ config.user.json (持久化, 不被修改)
 - ✅ first-party skill 应放置到 `.trae/skills/` 或新建 `app/encv-mobile/scripts/agents-skills/` 目录
 > 完整 awk 验证脚本 + 例外条款（手动 sync Capacitor / Lynx skill）→ [详情文档 §14](../rule-library/project_rules.md#十四skill-目录归属铁律)
 
-## 十四、相关规则
+## 十四、新功能入口铁律（先全貌勘察，再决定放哪）
+
+> **核心原则：新增任何「设置项 / 子功能 / 二级页面」之前，**必须**先 `grep` 已有页面找最契合的归属位置，**禁止**直接在 `Settings.vue` 等一级页面堆叠 `ion-item button @click="goXxx"`。**
+
+### 14.1 必做调研（不调研 = 擅自堆入口）
+
+新增任何「设置/子页面/详情页」之前，**必须**先做以下查询：
+
+```bash
+# 1. 找现有最相关的页面（避免重复造轮子）
+grep -r "searchIcon\|cloudIcon\|cacheIcon\|databaseIcon" src --include="*.vue" | head -10
+
+# 2. 找现有二级页面的入口位置
+grep -n "ion-item button.*@click=\"go" src/views/Settings.vue | head -10
+
+# 3. 找现有 nav 跳转函数
+grep -n "function go.*router.push" src/views/Settings.vue
+```
+
+### 14.2 三类归属（按场景）
+
+| 场景 | 归属位置 | 反例（禁止） |
+|------|---------|------------|
+| **数据库/索引/缓存相关** | `CacheDetail.vue` (cache + index 已有) 或 `DatabaseDetail.vue` | ❌ 单独在 Settings.vue 加「全文索引」ion-item |
+| **AI/Agent 相关** | `AgentSettingsDetail.vue` | ❌ 在 Settings.vue 顶层加 Agent 入口 |
+| **插件相关** | `PluginSettings.vue` | ❌ 散落到 Settings 列表 |
+| **其他独立子页面** | 在 Settings.vue 顶层但**需有明确分组/标题** | ❌ 重复造轮子（已有类似页面） |
+
+### 14.3 必须就近添加的场景（Settings 顶层违规清单）
+
+**严禁在 Settings.vue 顶层加 ion-item 入口**（这些都有专属二级页）：
+
+| 拟添加的功能 | 正确位置 |
+|------------|---------|
+| 「全文索引」 | `CacheDetail.vue` 加 ion-item button |
+| 「数据库引擎详情」 | `DatabaseDetail.vue` 已有 |
+| 「Agent 配置」 | `AgentSettingsDetail.vue` 已有 |
+| 「插件设置」 | `PluginSettings.vue` 已有 |
+
+### 14.4 违规检测（开发期自检）
+
+每完成一个 Settings.vue 的 ion-item 添加前，**必须**自问：
+
+1. 是否 grep 过现有 page 列表找到归属位置？
+2. 是否阅读了至少 3 个类似二级页面的结构？
+3. 是否有强语义化理由（而非「找不到地方就放这」）？
+
+> **历史踩坑（2026-07-02）**：assistant 擅自给「全文索引」在 Settings.vue 一级页面加 ion-item 入口，没去 CacheDetail.vue 找归属。已写入本规则强制后续复盘。
+
+## 十五、相关规则
 
 - [trae_web_sandbox_network.md](./trae_web_sandbox_network.md) — 沙箱网络诊断
 - [compose-reference.md](./compose-reference.md) — Compose 权威参考

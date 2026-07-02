@@ -32,35 +32,42 @@
           @ionInput="handleSearchInput"
           @ionClear="handleSearchClear"
         ></ion-searchbar>
-        <!-- 🆕 2026-07-02 搜索语法高亮：把 AND/OR/NOT/"phrase"/regex: 渲染为彩色 token -->
-        <div v-if="searchQuery && searchFullText" class="search-syntax-tokens" :title="t('files.fullTextHint')">
+        <!-- 🆕 2026-07-02 搜索语法符号 overlay：把 AND/OR/NOT 渲染为符号（＆/｜/￢）而不是英文 -->
+        <!-- 关键设计：用户输入的所有内容（含 AND/OR/NOT）全部当普通文本搜索 -->
+        <!-- 这里只做视觉高亮（text → 符号），不改变实际查询字符串 -->
+        <div v-if="searchQuery" class="search-syntax-preview" :title="t('files.fullTextHint')">
           <template v-for="(tok, idx) in tokenizeQuery(searchQuery)" :key="idx">
-            <ion-chip
+            <span
               v-if="tok.kind === 'op'"
-              size="small"
-              color="warning"
-              class="syntax-token syntax-op"
-            >{{ tok.text }}</ion-chip>
-            <ion-chip
+              class="syntax-token-text"
+              :class="{
+                'syntax-op': tok.text === 'AND',
+                'syntax-or': tok.text === 'OR',
+                'syntax-not': tok.text === 'NOT',
+              }"
+            >{{ tok.display || tok.text }}</span>
+            <span
               v-else-if="tok.kind === 'phrase'"
-              size="small"
-              color="success"
-              class="syntax-token syntax-phrase"
-            >"{{ tok.text }}"</ion-chip>
-            <ion-chip
+              class="syntax-token-text syntax-phrase"
+            >"{{ tok.text }}"</span>
+            <span
               v-else-if="tok.kind === 'regex'"
-              size="small"
-              color="tertiary"
-              class="syntax-token syntax-regex"
-            >/{{ tok.text }}/</ion-chip>
-            <ion-chip
+              class="syntax-token-text syntax-regex"
+            >/{{ tok.text }}/</span>
+            <span
               v-else
-              size="small"
-              color="medium"
-              outline
-              class="syntax-token syntax-word"
-            >{{ tok.text }}</ion-chip>
+              class="syntax-token-text syntax-word"
+            >{{ tok.text }}</span>
           </template>
+        </div>
+        <!-- 🆕 2026-07-02 插入操作符按钮行：点击即在搜索框内插入对应符号（替代英文） -->
+        <div v-if="searchQuery" class="search-insert-bar">
+          <span class="insert-label">{{ t('files.insertOp') || '插入:' }}</span>
+          <button class="insert-btn op-and" @click="insertOperator(' AND ')" type="button" :title="t('files.insertAndTitle')">＆</button>
+          <button class="insert-btn op-or" @click="insertOperator(' OR ')" type="button" :title="t('files.insertOrTitle')">｜</button>
+          <button class="insert-btn op-not" @click="insertOperator(' NOT ')" type="button" :title="t('files.insertNotTitle')">￢</button>
+          <button class="insert-btn op-phrase" @click="insertOperator(phraseInsertion)" type="button" :title="t('files.insertPhraseTitle')">「」</button>
+          <button class="insert-btn op-regex" @click="insertOperator('regex:')" type="button" :title="t('files.insertRegexTitle')">/ /</button>
         </div>
         <ion-toggle
           v-if="searchQuery"
@@ -539,7 +546,7 @@ const {
   openContainingFolder,
   // search state
   searchQuery, searchFullText, searchResults, isSearching, searchMode,
-  handleSearchInput, handleSearchClear, handleSearchToggle,
+  handleSearchInput, handleSearchClear, handleSearchToggle, insertOperator,
   renderSnippet, tokenizeQuery,
   // play error state
   playError, playErrorDetail, playErrorFile,
@@ -566,6 +573,9 @@ const {
   // icons (template 用)
   add,
 } = useFilesView()
+
+// 🆕 2026-07-02 插入操作符：phrase 引号需要单独 const（避免模板里转义 ""）
+const phraseInsertion = '""'
 </script>
 
 <style scoped>
@@ -580,42 +590,174 @@ const {
   line-height: 1.4;
 }
 
-/* 🆕 2026-07-02 搜索语法高亮 token 行 */
-.search-syntax-tokens {
+/* 🆕 2026-07-02 搜索语法高亮：符号 overlay（在搜索框下方展示输入） */
+.search-syntax-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  background: var(--ion-color-light-tint, #fafafa);
+  min-height: 32px;
+  align-items: center;
+  font-size: 0.85em;
+  line-height: 1.4;
+  color: var(--ion-text-color, #333);
+}
+
+.syntax-token-text {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  color: var(--ion-text-color, #333);
+}
+
+.syntax-token-text.syntax-word {
+  color: var(--ion-text-color, #333);
+}
+
+.syntax-token-text.syntax-op {
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ion-color-warning-tint, #fff4d6);
+  color: var(--ion-color-warning-shade, #b07a00);
+}
+
+.syntax-token-text.syntax-or {
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ion-color-primary-tint, #d6e6ff);
+  color: var(--ion-color-primary-shade, #2962cc);
+}
+
+.syntax-token-text.syntax-not {
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ion-color-danger-tint, #ffd6d6);
+  color: var(--ion-color-danger-shade, #b00020);
+}
+
+.syntax-token-text.syntax-phrase {
+  font-style: italic;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ion-color-success-tint, #d6f5d6);
+  color: var(--ion-color-success-shade, #1b6b1b);
+}
+
+.syntax-token-text.syntax-regex {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ion-color-tertiary-tint, #e6d6f5);
+  color: var(--ion-color-tertiary-shade, #6b3aa0);
+}
+
+/* 🆕 2026-07-02 插入操作符按钮行（搜索框内操作） */
+.search-insert-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   padding: 4px 12px;
   border-top: 1px solid var(--ion-color-light-shade, #e0e0e0);
-  background: var(--ion-color-light-tint, #fafafa);
-  min-height: 28px;
+  background: var(--ion-color-light, #ffffff);
   align-items: center;
+  min-height: 36px;
 }
 
-.syntax-token {
+.search-insert-bar .insert-label {
+  font-size: 0.75em;
+  color: var(--ion-color-medium, #666);
+  margin-right: 4px;
+}
+
+.search-insert-bar .insert-btn {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  font-size: 0.8em;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  margin: 0;
-  height: 22px;
-}
-
-.syntax-op {
+  font-size: 0.85em;
   font-weight: 700;
-  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  background: var(--ion-color-light-tint, #fafafa);
+  cursor: pointer;
+  transition: background 0.15s;
 }
 
-.syntax-phrase {
-  font-style: italic;
+.search-insert-bar .insert-btn:hover {
+  background: var(--ion-color-light-shade, #f0f0f0);
 }
 
-.syntax-regex {
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+.search-insert-bar .insert-btn.op-and { color: var(--ion-color-warning-shade, #b07a00); }
+.search-insert-bar .insert-btn.op-or { color: var(--ion-color-primary-shade, #2962cc); }
+.search-insert-bar .insert-btn.op-not { color: var(--ion-color-danger-shade, #b00020); }
+.search-insert-bar .insert-btn.op-phrase { color: var(--ion-color-success-shade, #1b6b1b); }
+.search-insert-bar .insert-btn.op-regex { color: var(--ion-color-tertiary-shade, #6b3aa0); }
+
+/* 🆕 2026-07-02 修复 loading 样式丢失 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  min-height: 200px;
+  color: var(--ion-text-color, #333);
 }
 
-.syntax-word {
-  font-weight: 400;
+.loading-container ion-spinner {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 12px;
+  color: var(--ion-color-primary, #4f8cff);
+}
+
+.loading-container p {
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--ion-color-medium, #666);
+}
+
+.search-spinner-pulse {
+  animation: search-spinner-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes search-spinner-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* 🆕 2026-07-02 修复 empty-state 样式丢失 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  min-height: 200px;
+  color: var(--ion-text-color, #333);
+}
+
+.empty-state h3 {
+  margin: 12px 0 6px;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--ion-text-color, #333);
+}
+
+.empty-state p {
+  margin: 0 0 16px;
+  font-size: 0.9em;
+  color: var(--ion-color-medium, #666);
+  max-width: 320px;
+}
+
+.empty-state .empty-icon {
+  font-size: 64px;
+  color: var(--ion-color-medium, #999);
+  margin-bottom: 8px;
 }
 
 

@@ -159,14 +159,6 @@
                 <p>{{ dbInfo ? t('settings.engine') + ': ' + dbInfo.engine + ' · ' + dbInfo.taskCount + ' ' + t('settings.tasks') : t('settings.loading') }}</p>
               </ion-label>
             </ion-item>
-            <!-- 🆕 2026-07-02 全文索引设置二级页面入口 -->
-            <ion-item button @click="goFullTextIndex" detail>
-              <ion-icon :icon="searchIcon" slot="start"></ion-icon>
-              <ion-label>
-                <h3>{{ t('settings.fullTextIndex') || '全文索引' }}</h3>
-                <p>{{ t('settings.fullTextIndexDesc') || 'FTS5 + bm25 + CJK bigram 全文搜索引擎' }}</p>
-              </ion-label>
-            </ion-item>
           </ion-list>
 
           <!-- 过滤掉 server/admin/webdav/proxy/log 配置项，这些有独立页面 -->
@@ -409,7 +401,6 @@ import {
   colorPaletteOutline, layersOutline, globeOutline,
   fileTrayFull as databaseIcon,
   hardwareChipOutline,
-  searchOutline as searchIcon,
 } from 'ionicons/icons'
 import { useServerStatus } from '@/composables/useServerStatus'
 import { useConfig } from '@/composables/useConfig'
@@ -583,10 +574,6 @@ function goCache() {
 
 function goDatabase() {
   router.push('/tabs/settings/database')
-}
-
-function goFullTextIndex() {
-  router.push('/tabs/settings/fulltext-index')
 }
 
 function goMounts() {

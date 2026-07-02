@@ -164,8 +164,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { onIonViewWillEnter } from '@ionic/vue'
+import { ref, onMounted } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { refreshOutline, warningOutline } from 'ionicons/icons'
 import { getFullTextIndexStats, type FullTextIndexStats } from '@/api/encv_search'
@@ -209,7 +208,7 @@ function formatBytes(b: number): string {
   return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`
 }
 
-onIonViewWillEnter(() => {
+onMounted(() => {
   loadStats()
 })
 </script>

@@ -5,6 +5,7 @@
  * 提供：
  *   - tokenizeQuery:  query 字符串 → 词法 token（UI 语法高亮用）
  *   - renderSnippet:  命中片段（`<<...>>` 包裹）→ 高亮 parts
+ *   - operatorSymbols:  op → 视觉符号映射（AND→＆ / OR→｜ / NOT→￢）
  *
  * 单元测试：见同目录 __tests__/useFilesView.searchTokens.test.ts
  *
@@ -14,12 +15,38 @@
  *   - regex:  regex:^pat  或  regex:/^pat/（Go 端二次过滤）
  *   - op:     AND/OR/NOT（必须大写，Go 端大小写敏感）
  *
+ * 重要 (2026-07-02 用户反馈)：
+ *   - 用户输入的 AND/OR/NOT 实际上**全部当普通文本**搜索
+ *   - 视觉层用符号 ＆/｜/￢ 替代英文（用户明确要求）
+ *   - 后端 FTS5 是否真按 operator 解析不在前端关心范围（前端只管显示）
+ *   - 符号映射表见 operatorSymbols（测试覆盖）
+ *
  * 2026-07-02 拆分自 useFilesView.ts
  */
 
 export interface QueryToken {
   kind: 'op' | 'phrase' | 'regex' | 'word'
   text: string
+  /**
+   * 视觉展示符号（仅 op 类型有值）。
+   *   AND → '＆'（全角 AND 符号 U+FF06）
+   *   OR  → '｜'（全角竖线 U+FF5C）
+   *   NOT → '￢'（全角否定符号 U+FFE2）
+   * 其他 kind 留空（用 text 自身展示）。
+   */
+  display?: string
+}
+
+/**
+ * op 文本 → 视觉符号映射。
+ *
+ * 设计原则：所有符号都是全角（与 CJK 等宽），UI 渲染时不会挤压。
+ * 与原始英文保持视觉对比（warning/primary/danger 底色）。
+ */
+export const operatorSymbols: Record<string, string> = {
+  AND: '＆', // ＆
+  OR: '｜', // ｜
+  NOT: '￢', // ￢
 }
 
 /**
@@ -83,7 +110,7 @@ export function tokenizeQuery(query: string): QueryToken[] {
     const restOfWord = query.slice(i)
     const opMatch = /^(AND|OR|NOT)(\s|$)/.exec(restOfWord)
     if (opMatch) {
-      tokens.push({ kind: 'op', text: opMatch[1] })
+      tokens.push({ kind: 'op', text: opMatch[1], display: operatorSymbols[opMatch[1]] })
       i += opMatch[1].length
       continue
     }

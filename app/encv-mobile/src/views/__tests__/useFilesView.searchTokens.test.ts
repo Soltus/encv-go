@@ -36,7 +36,25 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { tokenizeQuery, renderSnippet } from '@/views/useFilesView.searchTokens'
+import { tokenizeQuery, renderSnippet, operatorSymbols } from '@/views/useFilesView.searchTokens'
+
+describe('operatorSymbols - 符号映射表', () => {
+  it('TestOS_BasicMapping: AND/OR/NOT 必须映射到全角符号', () => {
+    // 用户明确要求：显示符号而不是英文
+    expect(operatorSymbols.AND).toBe('＆')
+    expect(operatorSymbols.OR).toBe('｜')
+    expect(operatorSymbols.NOT).toBe('￢')
+  })
+
+  it('TestOS_AllFullWidth: 所有符号必须全角（与 CJK 等宽）', () => {
+    // 全角字符在 BMP 内 Unicode 范围 [0xFF00, 0xFFEF]
+    for (const sym of Object.values(operatorSymbols)) {
+      const code = sym.codePointAt(0)!
+      expect(code).toBeGreaterThanOrEqual(0xff00)
+      expect(code).toBeLessThanOrEqual(0xffef)
+    }
+  })
+})
 
 describe('tokenizeQuery - 基础场景', () => {
   it('TestTQ_Empty: 空字符串 / undefined / 全空白 → []', () => {
@@ -145,31 +163,32 @@ describe('tokenizeQuery - regex 场景', () => {
 })
 
 describe('tokenizeQuery - 布尔操作符', () => {
-  it('TestTQ_OpIsolated: 独立大写 AND/OR/NOT → op', () => {
-    expect(tokenizeQuery('AND')).toEqual([{ kind: 'op', text: 'AND' }])
-    expect(tokenizeQuery('OR')).toEqual([{ kind: 'op', text: 'OR' }])
-    expect(tokenizeQuery('NOT')).toEqual([{ kind: 'op', text: 'NOT' }])
+  it('TestTQ_OpIsolated: 独立大写 AND/OR/NOT → op（含 display 符号）', () => {
+    // 2026-07-02 升级：op token 现在带 display 字段（符号映射）
+    expect(tokenizeQuery('AND')).toEqual([{ kind: 'op', text: 'AND', display: '＆' }])
+    expect(tokenizeQuery('OR')).toEqual([{ kind: 'op', text: 'OR', display: '｜' }])
+    expect(tokenizeQuery('NOT')).toEqual([{ kind: 'op', text: 'NOT', display: '￢' }])
   })
 
-  it('TestTQ_OpInMiddle: word op word', () => {
+  it('TestTQ_OpInMiddle: word op word（含 display）', () => {
     expect(tokenizeQuery('hello AND world')).toEqual([
       { kind: 'word', text: 'hello' },
-      { kind: 'op', text: 'AND' },
+      { kind: 'op', text: 'AND', display: '＆' },
       { kind: 'word', text: 'world' },
     ])
   })
 
-  it('TestTQ_OpAtStart: 以 op 开头', () => {
+  it('TestTQ_OpAtStart: 以 op 开头（含 display）', () => {
     expect(tokenizeQuery('NOT hello')).toEqual([
-      { kind: 'op', text: 'NOT' },
+      { kind: 'op', text: 'NOT', display: '￢' },
       { kind: 'word', text: 'hello' },
     ])
   })
 
-  it('TestTQ_OpAtEnd: 以 op 结尾', () => {
+  it('TestTQ_OpAtEnd: 以 op 结尾（含 display）', () => {
     expect(tokenizeQuery('hello OR')).toEqual([
       { kind: 'word', text: 'hello' },
-      { kind: 'op', text: 'OR' },
+      { kind: 'op', text: 'OR', display: '｜' },
     ])
   })
 
@@ -195,36 +214,36 @@ describe('tokenizeQuery - 布尔操作符', () => {
     ])
   })
 
-  it('TestTQ_MultipleOps: 连续 op + word + op + word', () => {
+  it('TestTQ_MultipleOps: 连续 op + word + op + word（含 display）', () => {
     expect(tokenizeQuery('a AND b OR c NOT d')).toEqual([
       { kind: 'word', text: 'a' },
-      { kind: 'op', text: 'AND' },
+      { kind: 'op', text: 'AND', display: '＆' },
       { kind: 'word', text: 'b' },
-      { kind: 'op', text: 'OR' },
+      { kind: 'op', text: 'OR', display: '｜' },
       { kind: 'word', text: 'c' },
-      { kind: 'op', text: 'NOT' },
+      { kind: 'op', text: 'NOT', display: '￢' },
       { kind: 'word', text: 'd' },
     ])
   })
 })
 
 describe('tokenizeQuery - 复杂混合场景', () => {
-  it('TestTQ_AllMixed: word + op + phrase + regex 全部混用', () => {
+  it('TestTQ_AllMixed: word + op + phrase + regex 全部混用（含 display）', () => {
     expect(tokenizeQuery('在线 AND "高清视频" OR regex:/^test/')).toEqual([
       { kind: 'word', text: '在线' },
-      { kind: 'op', text: 'AND' },
+      { kind: 'op', text: 'AND', display: '＆' },
       { kind: 'phrase', text: '高清视频' },
-      { kind: 'op', text: 'OR' },
+      { kind: 'op', text: 'OR', display: '｜' },
       { kind: 'regex', text: '^test' },
     ])
   })
 
-  it('TestTQ_RealQuery: 用户典型查询 - 多 word + NOT', () => {
+  it('TestTQ_RealQuery: 用户典型查询 - 多 word + NOT（含 display）', () => {
     const result = tokenizeQuery('在线 高清 NOT "广告"')
     expect(result).toEqual([
       { kind: 'word', text: '在线' },
       { kind: 'word', text: '高清' },
-      { kind: 'op', text: 'NOT' },
+      { kind: 'op', text: 'NOT', display: '￢' },
       { kind: 'phrase', text: '广告' },
     ])
   })

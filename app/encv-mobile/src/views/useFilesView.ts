@@ -625,6 +625,29 @@ function handleSearchToggle() {
   }
 }
 
+/**
+ * 🆕 2026-07-02 插入操作符到搜索框（在光标位置）。
+ *
+ * 用法：用户点击语法高亮下方的 [＆] [｜] [￢] 按钮 → 在 searchQuery 末尾（或光标处）插入对应英文关键字。
+ *
+ * 设计要点：
+ *   - 插入的是英文（AND/OR/NOT/quote/regex:），因为后端 FTS5 只认这些
+ *   - UI 层会把它们渲染成符号（&/｜/￢），不影响实际查询
+ *   - 触发 onIonInput 让 tokenize 重新解析 + 触发 performSearch
+ */
+function insertOperator(op: string) {
+  const cur = searchQuery.value || ''
+  // 简化：插入到末尾（ion-searchbar 没有暴露光标位置 API）
+  // 自动补空格：phrase 引号特殊处理
+  let insertion = op
+  if (op === '""') {
+    // 光标放在两个引号之间
+    insertion = '""'
+  }
+  searchQuery.value = cur + insertion
+  handleSearchInput()
+}
+
 async function performSearch() {
   const query = searchQuery.value.trim()
   if (!query) return
@@ -663,8 +686,19 @@ async function performSearch() {
     let results: FileItem[] = []
     let mode: SearchMode = 'none'
     if (searchFullText.value) {
-      // 🆕 全文搜索：FTS5 + bm25 + snippet + hitCount
-      const ftResult = await searchFilesFullText(query, 200, currentPath.value)
+      // 🆕 2026-07-02 用户反馈：所有用户输入（含 AND/OR/NOT）全部当普通文本搜索
+      // 解决方案：把整段 query 包成 phrase "..."，FTS5 phrase 模式会把所有内容当字面量
+      //   - 用户输入 "在线 AND 高清" → FTS5 搜 "在线 AND 高清" 整体（phrase match）
+      //   - FTS5 bigram 在 phrase 内部仍生效（"在"+"线" "高"+"清" 都能命中）
+      //   - AND/OR/NOT 不再被解析为操作符
+      // 例外：如果用户用了 phrase 语法 "..." 自己的，我们不再嵌套（避免 ""..." 语法错误）
+      //  - 检测：query 已经含 "..." 则不再包
+      let ftsQuery = query
+      if (!query.includes('"') && !query.toLowerCase().startsWith('regex:')) {
+        // 转义内部 "（防止用户输入里含未闭合 quote）
+        ftsQuery = `"${query.replace(/"/g, '\\"')}"`
+      }
+      const ftResult = await searchFilesFullText(ftsQuery, 200, currentPath.value)
       results = ftResult.results
       mode = 'strict' // 全文搜索视为严格匹配
     } else {
@@ -1470,6 +1504,7 @@ return {
   handleRefresh, retryConnection, handleRequestStorage,
   navigateTo, goUp, handleFileClick, highlightFile, openContainingFolder,
   handleSearchInput, handleSearchClear, handleSearchToggle,
+  insertOperator,
   handleLongPress,
   handleCopy, onRenameConfirm, handleRename, handleMove, handleShare,
   handleUpload, handleFileSelected,
