@@ -782,6 +782,57 @@ function insertOperator(op: string) {
   insertSymbol(op)
 }
 
+/**
+ * 🆕 2026-07-03 优化2：把 FTS5 布尔查询转换为向量搜索关键词。
+ *
+ * 应用场景（用户原话）：
+ *   "即使搜索有逻辑符 FTS 搜索没有匹配结果，结果也不应当为空。
+ *    同样遵守增量合并原则，以及匹配过少智能贪婪，转换逻辑符进行普通向量搜索。"
+ *
+ * 转换规则（与后端 internal/fts/query.go 语法对齐）：
+ *   - 在线 AND 高清       → "在线 高清"      （AND 视为空格，两个词都保留）
+ *   - 在线 OR 播放        → "在线 播放"       （OR 视为空格，两个词都保留，反正向量搜有相关度排序）
+ *   - 在线 NOT 视频       → "在线"           （NOT 后的词丢弃）
+ *   - "exact phrase" 高清 → "exact phrase 高清" （去引号，phrase 当作单个关键词）
+ *   - regex:^photo.*      → "photo"          （去 regex: 前缀和 /.../ 边界，提取词项）
+ *   - 在线 AND (高清 OR 视频) → "在线 高清 视频"（去括号，扁平化）
+ *
+ * 边界处理：
+ *   - 用户原始 query 没有布尔语法 → 返回原 query（fallback 不会触发，但函数本身安全）
+ *   - cleanedQuery 为空（如 "NOT 视频"）→ 返回空字符串，调用方需判空
+ *   - 转义双引号 \" 也按双引号处理
+ */
+function convertBooleanQueryToVectorKeywords(query: string): string {
+  let s = query
+  // 1. 去 regex: 前缀（regex:^foo 或 regex:/^foo/），保留词项
+  s = s.replace(/\bregex:\S+/g, ' ')
+  // 2. 去 /pattern/ 边界斜杠，保留 pattern 内的词
+  s = s.replace(/\/([^/\s]+)\//g, ' $1 ')
+  // 3. 去所有双引号（含转义 \"），phrase 内容当作普通词
+  s = s.replace(/\\"/g, ' ').replace(/"/g, ' ')
+  // 4. 去括号
+  s = s.replace(/[()]/g, ' ')
+  // 5. 切词，丢 AND/OR，丢 NOT 后的下一个词
+  const tokens = s.split(/\s+/).filter(t => t.length > 0)
+  const keywords: string[] = []
+  let skipNext = false
+  for (const tok of tokens) {
+    if (tok === 'NOT') {
+      skipNext = true
+      continue
+    }
+    if (tok === 'AND' || tok === 'OR') {
+      continue
+    }
+    if (skipNext) {
+      skipNext = false
+      continue
+    }
+    keywords.push(tok)
+  }
+  return keywords.join(' ')
+}
+
 async function performSearch() {
   const query = searchQuery.value.trim()
   if (!query) return
@@ -912,6 +963,54 @@ async function performSearch() {
       searchResults.value = merged
       lastFullResults.value = merged
       searchMode.value = mode
+
+      // 🆕 2026-07-03 优化2：FTS + 普通 都为 0 时，转换布尔查询为关键词重试向量搜索
+      //   用户原话：「即使搜索有逻辑符 FTS 搜索没有匹配结果，结果也不应当为空」
+      //             「合并结果为0才触发贪婪」「都要做，反正有相关度排序」
+      //
+      // 触发条件：merged.length === 0 且 query 含布尔语法
+      //   - 把 "在线 AND 高清" → "在线 高清"（NOT 后的词丢弃，regex 前缀去掉，引号去掉）
+      //   - 用 cleanedQuery 重跑向量搜索
+      //   - 命中：标记 searchMode='greedy' 让 UI 显示橙色"语义近似"banner
+      //   - 仍 0：标记 searchMode='greedy' 让用户看到"已尝试贪婪匹配"
+      //
+      // 为什么不直接走后端 greedy 模式？
+      //   - 后端 greedy 是关键词 0 命中时 bigram 放宽，但传入的 query 含 AND/OR/NOT 大写词
+      //     会被后端当普通关键词处理 → 命中文件名含 "AND" 字符的文件 → 干扰结果
+      //   - 必须先在前端清洗 query 才能正确触发后端向量搜索
+      if (merged.length === 0 && hasBooleanSyntax) {
+        const cleanedQuery = convertBooleanQueryToVectorKeywords(query)
+        console.info('[Search] FTS+vector empty, retry with cleaned keywords', {
+          originalQuery: query,
+          cleanedQuery,
+        })
+        if (cleanedQuery && cleanedQuery !== query) {
+          try {
+            const retryVec = await searchFilesVector(currentPath.value, cleanedQuery, true, 200)
+            if (gen !== searchGeneration) return
+            if (retryVec.results.length > 0) {
+              // 命中：用清洗后关键词的向量结果（语义近似，非精确布尔匹配）
+              searchResults.value = retryVec.results
+              lastFullResults.value = retryVec.results
+              searchMode.value = 'greedy' // 触发橙色 banner
+              console.info('[Search] retry vector found results via cleaned keywords', {
+                count: retryVec.results.length,
+                backendMode: retryVec.search_mode,
+              })
+            } else {
+              // 仍 0：标记 greedy 让 UI 显示"已尝试贪婪匹配但无结果"
+              searchMode.value = 'greedy'
+              console.info('[Search] retry vector still empty, set greedy mode for UI')
+            }
+          } catch (e) {
+            console.warn('[Search] retry vector failed', e)
+            searchMode.value = 'greedy'
+          }
+        } else {
+          // cleanedQuery 为空（如 "NOT 视频"）或等于原 query：仍标 greedy 让用户知道已尝试
+          searchMode.value = 'greedy'
+        }
+      }
 
       // A6 banner：FTS 不可用时静默降级 + 提示原因
       if (!ftsAvailable) {

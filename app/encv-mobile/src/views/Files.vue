@@ -961,6 +961,358 @@ function onQueryBlur() {
   margin-left: 4px;
 }
 
+/* 🆕 2026-07-03 从 git history (commit 08c5b63) 恢复 Files.vue 拆分时丢失的样式
+ *   背景：Files.vue script 拆到 useFilesView.ts 时 <style> 块丢失了 40+ 个 class。
+ *   之前只在 2026-07-02 补了 loading-container / empty-state，其余仍丢失。
+ *   本次完整恢复（面包屑 / 长按菜单 action sheet / 文件缩略图 / 标签 / plugin 视图等）。
+ */
+
+/* === v3 2026-06-18 Task 8：route.query.highlight 驱动的文件高亮 === */
+.file-highlight {
+  --background: rgba(var(--ion-color-primary-rgb), 0.12);
+  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  box-shadow: inset 3px 0 0 var(--ion-color-primary);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* === 播放错误展示区域 === */
+.play-error-banner {
+  background: rgba(var(--ion-color-danger-rgb), 0.08);
+  border-left: 3px solid var(--ion-color-danger);
+  border-radius: 6px;
+  margin: 8px 12px;
+  padding: 10px 12px;
+}
+.play-error-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.play-error-file {
+  font-weight: 500;
+  color: var(--ion-color-danger);
+  font-size: 14px;
+}
+.play-error-message {
+  color: var(--ion-color-danger);
+  font-size: 12px;
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+.play-error-detail-row {
+  margin-top: 6px;
+}
+
+/* === v4 Bug1 修复：自动更新顶栏细 indicator === */
+.files-refresh-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--ion-color-primary-tint);
+  color: var(--ion-color-primary-contrast);
+  font-size: 11px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--ion-color-primary-shade);
+  animation: files-refresh-bar-enter 0.15s ease-out;
+}
+.files-refresh-bar__spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+.files-refresh-bar__label {
+  white-space: nowrap;
+}
+@keyframes files-refresh-bar-enter {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* === 面包屑 === */
+.breadcrumb-scroll {
+  --background: transparent;
+}
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  white-space: nowrap;
+}
+.breadcrumb-item {
+  cursor: pointer;
+  color: var(--ion-color-primary);
+  font-size: 14px;
+}
+.breadcrumb-item:hover {
+  text-decoration: underline;
+}
+.breadcrumb-sep {
+  font-size: 14px;
+  margin: 0 4px;
+  color: var(--encv-text-secondary);
+}
+.breadcrumb-segment {
+  display: flex;
+  align-items: center;
+}
+
+/* === 搜索框旁的全文搜索开关 === */
+.recursive-toggle {
+  margin-right: 8px;
+  font-size: 12px;
+}
+
+/* === 搜索路径提示 === */
+.search-path {
+  font-size: 11px;
+  color: var(--encv-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* === 2026-07-02 搜索模式提示横幅 === */
+.search-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.search-mode-banner .search-mode-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.search-mode-greedy {
+  background: rgba(var(--ion-color-warning-rgb), 0.12);
+  border: 1px dashed var(--ion-color-warning);
+  color: var(--ion-color-warning-shade);
+}
+.search-mode-combined {
+  background: rgba(var(--ion-color-tertiary-rgb), 0.10);
+  border: 1px solid var(--ion-color-tertiary);
+  color: var(--ion-color-tertiary-shade);
+}
+/* greedy 模式下，结果项加左侧橙色虚线条 */
+.greedy-match {
+  --background: rgba(var(--ion-color-warning-rgb), 0.06);
+  box-shadow: inset 3px 0 0 var(--ion-color-warning);
+}
+@media (prefers-color-scheme: dark) {
+  .search-mode-greedy {
+    color: var(--ion-color-warning-tint);
+  }
+  .search-mode-combined {
+    color: var(--ion-color-tertiary-tint);
+  }
+}
+
+/* === 打开文件夹按钮 === */
+.open-folder-btn {
+  --padding-start: 8px;
+  --padding-end: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+}
+.open-folder-icon {
+  font-size: 20px;
+  color: var(--ion-color-primary);
+}
+
+/* === Tag 编辑器 === */
+.tag-editor-content {
+  padding: 16px;
+}
+.existing-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.no-tags-hint {
+  color: var(--ion-text-secondary);
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+.tag-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.tag-input-row .input-with-history {
+  flex: 1;
+}
+.tag-input-row .input-with-history ion-input {
+  --padding-start: 12px;
+}
+.file-tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  contain: content;
+}
+
+/* === 文件缩略图 === */
+.file-thumbnail-slot {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.file-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.thumb-fallback {
+  opacity: 0.4;
+}
+ion-item {
+  contain: layout style;
+}
+
+/* === 筛选 chips === */
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.filter-chips ion-chip {
+  font-size: 12px;
+  --padding-start: 8px;
+  --padding-end: 8px;
+  cursor: pointer;
+}
+
+/* === Plugin 视图 === */
+.plugin-header {
+  padding: 0 4px;
+}
+.plugin-header-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px 4px;
+}
+.plugin-back-btn {
+  --padding-start: 4px;
+  --padding-end: 4px;
+  --padding-top: 4px;
+  --padding-bottom: 4px;
+  min-width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+.plugin-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ion-color-dark);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+.plugin-segment {
+  flex-shrink: 0;
+  --segment-height: 28px;
+  margin: 0;
+}
+.plugin-segment ion-segment-button {
+  --padding-start: 10px;
+  --padding-end: 10px;
+  font-size: 12px;
+  min-height: 28px;
+  line-height: 1;
+}
+.filter-toggle-item {
+  --padding-start: 12px;
+  --padding-end: 12px;
+  --min-height: 40px;
+}
+.main-sort-bar {
+  padding: 0 4px;
+}
+
+/* === 真实文件名（alist 加密解码后）=== */
+.real-name {
+  color: var(--ion-color-danger);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* === 2026-06-15 multi-mount 适配：mount 伪 item 样式 === */
+.mount-driver-badge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  text-transform: lowercase;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.mount-path-inline {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--ion-color-primary);
+  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.mount-root-inline {
+  font-size: 10px;
+  color: var(--encv-text-secondary, rgba(127, 127, 127, 0.7));
+  margin-left: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ===== 长按菜单分区样式 (action-sheet overlay，需 :global) ===== */
+:global(.file-action-sheet .action-button) {
+  padding: 12px 16px;
+  font-size: 15px;
+}
+:global(.file-action-sheet .action-section_view),
+:global(.file-action-sheet .action-section-view) {
+  --color: var(--ion-color-primary);
+}
+:global(.file-action-sheet .action-section_view .action-button-icon),
+:global(.file-action-sheet .action-section-view .action-button-icon) {
+  color: var(--ion-color-primary) !important;
+}
+:global(.file-action-sheet .action-section-crypto) {
+  --color: var(--ion-color-warning);
+}
+:global(.file-action-sheet .action-section-crypto .action-button-icon) {
+  color: #e6a000 !important;
+}
+:global(.file-action-sheet .action-section-manage) {
+  --color: var(--ion-color-medium);
+}
+:global(.file-action-sheet .action-section-manage .action-button-icon) {
+  color: var(--ion-color-medium-shade) !important;
+}
+:global(.file-action-sheet .action-section-danger) {
+  --color: var(--ion-color-danger);
+}
+:global(.file-action-sheet .action-section-danger .action-button-icon) {
+  color: var(--ion-color-danger) !important;
+}
+
 /* 🆕 2026-07-02 修复 loading 样式丢失 */
 .loading-container {
   display: flex;
