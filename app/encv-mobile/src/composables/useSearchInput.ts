@@ -144,8 +144,8 @@ function setCaretOffset(div: HTMLElement, offset: number) {
   const sel = window.getSelection()
   if (!sel) return
 
+  const selection = sel
   let remaining = offset
-  let found = false
 
   function walkNodes(node: Node): boolean {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -154,8 +154,8 @@ function setCaretOffset(div: HTMLElement, offset: number) {
         const range = document.createRange()
         range.setStart(node, remaining)
         range.collapse(true)
-        sel.removeAllRanges()
-        sel.addRange(range)
+        selection.removeAllRanges()
+        selection.addRange(range)
         return true
       }
       remaining -= len
