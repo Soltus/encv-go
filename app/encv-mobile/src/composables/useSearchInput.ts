@@ -188,15 +188,14 @@ function placeCaretAtEnd(div: HTMLElement) {
 }
 
 export function useSearchInput(options: {
-  /** 外部响应式 query（双向同步） */
   externalQuery?: Ref<string>
-  /** 内容变化回调 */
   onChange?: (query: string) => void
+  onEnter?: () => void
+  onEscape?: () => void
 } = {}) {
   const queryInputRef = ref<HTMLElement | null>(null)
   const queryValue = ref('')
 
-  // 同步锁：避免外部→内部 和 input 事件 互相递归
   let syncing = false
 
   function syncFromDiv() {
@@ -228,18 +227,27 @@ export function useSearchInput(options: {
 
   function onQueryKeydown(e: KeyboardEvent) {
     if (!queryInputRef.value) return
+
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      syncFromDiv()
+      options.onEnter?.()
+      return
+    }
+
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      options.onEscape?.()
+      return
+    }
+
     if (e.key === 'Backspace' || e.key === 'Delete') {
-      // 浏览器删除一个 span 时会留下 2 个 text span（拆开的）→ 合并
-      // 同时保存光标位置（相对于删除前）
       const div = queryInputRef.value
       const beforeOffset = getCaretOffset(div)
       requestAnimationFrame(() => {
         if (!queryInputRef.value) return
         mergeAdjacentTextSpans(queryInputRef.value)
-        // 删除后光标可能前移 1 格，用 beforeOffset - 1 作为估计
-        // 但更准确的是：浏览器已经自动处理了光标，我们只负责合并后的微调
         const afterOffset = getCaretOffset(queryInputRef.value)
-        // 如果合并后光标位置没变，就不动；否则尝试恢复
         setCaretOffset(queryInputRef.value, Math.max(0, Math.min(afterOffset, beforeOffset)))
         syncFromDiv()
       })

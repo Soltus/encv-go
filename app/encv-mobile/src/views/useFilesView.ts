@@ -279,15 +279,19 @@ const isMountRoot = computed(() => currentPath.value === MOUNT_ROOT)
 //   - FTS 增强模式：merge + 去重 + 全文 badge（不替换普通结果）
 
 const {
-  queryInputRef,        // 绑到 <div contenteditable> 的 ref
-  queryValue,           // 当前 query 字符串（响应式）
-  onQueryInput,         // @input 处理器
-  onQueryKeydown,       // @keydown 处理器
-  insertSymbol,         // 插入 symbol span（AND/OR/NOT/phrase/regex）
-  clearInput,           // 清空输入框
+  queryInputRef,
+  queryValue,
+  onQueryInput,
+  onQueryKeydown,
+  insertSymbol,
+  clearInput,
 } = useSearchInput({
-  // 🐛 2026-07-02 修复：之前没传 onChange → 输入变化时根本不触发搜索！
   onChange: handleSearchInput,
+  onEnter: () => {
+    if (searchTimer) clearTimeout(searchTimer)
+    performSearch()
+  },
+  onEscape: handleSearchClear,
 })
 
 // 兼容旧代码：searchQuery 仍指向 queryValue（Files.vue 其它处也读 searchQuery.value）
