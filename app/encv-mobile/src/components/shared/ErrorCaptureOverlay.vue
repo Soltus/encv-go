@@ -2,16 +2,17 @@
   <!--
     错误捕获浮窗（2026-07-02 A5 三管齐下）
     显示在屏幕底部（避开 tab bar），点击展开详情，点击关闭按钮消失
+    🆕 2026-07-02：点击展开显示完整原始堆栈（用户要求 devlogs 支持原始堆栈）
   -->
   <Transition name="error-fade">
-    <div v-if="errorStore.showOverlay.value && errorStore.latestError.value" class="error-overlay" @click="onClick">
+    <div v-if="errorStore.showOverlay.value && errorStore.latestError.value" class="error-overlay" :class="{ expanded }" @click="onClick">
       <div class="error-overlay-header">
         <ion-icon :icon="alertCircle" class="error-overlay-icon" color="danger"></ion-icon>
         <span class="error-overlay-title">{{ title }}</span>
         <button class="error-overlay-close" type="button" @click.stop="errorStore.dismissOverlay()">×</button>
       </div>
       <div class="error-overlay-body">
-        <code class="error-overlay-msg">{{ truncate(errorStore.latestError.value.message, 200) }}</code>
+        <code class="error-overlay-msg">{{ truncate(errorStore.latestError.value.message, expanded ? 500 : 200) }}</code>
         <div v-if="errorStore.latestError.value.componentName" class="error-overlay-meta">
           组件: {{ errorStore.latestError.value.componentName }}
         </div>
@@ -21,15 +22,25 @@
         <div class="error-overlay-meta">
           来源: {{ sourceLabel }} · {{ formatTime(errorStore.latestError.value.timestamp) }}
         </div>
+        <!-- 🆕 展开时显示完整原始堆栈 -->
+        <div v-if="expanded && errorStore.latestError.value.stack" class="error-overlay-stack-section">
+          <div class="error-overlay-stack-title">原始堆栈</div>
+          <pre class="error-overlay-stack">{{ errorStore.latestError.value.stack }}</pre>
+        </div>
+        <div v-if="!expanded" class="error-overlay-hint">
+          点击查看完整堆栈 →
+        </div>
       </div>
     </div>
   </Transition>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { alertCircle } from 'ionicons/icons'
 import { errorStore } from '@/composables/useErrorCapture'
+
+const expanded = ref(false)
 
 const title = computed(() => {
   const src = errorStore.latestError.value?.source
@@ -57,9 +68,10 @@ function formatTime(ts: number) {
 }
 
 function onClick() {
-  // 点击展开：可以跳转到 DevTools → 错误查看器
-  // 现在简化：仅 console.warn
-  console.warn('[ErrorCapture] 点击错误卡片 → 查看完整堆栈:', errorStore.latestError.value)
+  // 点击展开/收起堆栈
+  expanded.value = !expanded.value
+  // 同时在 devtools 也能看到
+  console.warn('[ErrorCapture] 点击错误卡片 → 展开堆栈:', errorStore.latestError.value)
 }
 </script>
 
@@ -128,6 +140,47 @@ function onClick() {
   margin-top: 4px;
   font-size: 0.8em;
   color: var(--ion-color-medium, #666);
+}
+
+/* 🆕 2026-07-02：展开时显示完整堆栈 */
+.error-overlay-stack-section {
+  margin-top: 8px;
+  border-top: 1px solid rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.2);
+  padding-top: 8px;
+}
+
+.error-overlay-stack-title {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: var(--ion-color-danger, #eb445a);
+  margin-bottom: 4px;
+}
+
+.error-overlay-stack {
+  margin: 0;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.7em;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 30vh;
+  overflow-y: auto;
+  background: rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.05);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: var(--ion-color-danger-shade, #b00020);
+}
+
+.error-overlay-hint {
+  margin-top: 6px;
+  font-size: 0.75em;
+  color: var(--ion-color-medium, #666);
+  text-align: right;
+}
+
+.error-overlay.expanded {
+  max-height: 80vh;
+  overflow-y: auto;
 }
 
 .error-fade-enter-active,

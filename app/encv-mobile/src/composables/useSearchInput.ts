@@ -122,6 +122,58 @@ function mergeAdjacentTextSpans(div: HTMLElement) {
 }
 
 /**
+ * 计算光标在 div 中的字符偏移量（考虑所有子节点的 textContent）。
+ * 用于 DOM 修改前后保存/恢复光标位置。
+ */
+function getCaretOffset(div: HTMLElement): number {
+  const sel = window.getSelection()
+  if (!sel || sel.rangeCount === 0) return 0
+  const range = sel.getRangeAt(0)
+  if (!div.contains(range.endContainer)) return 0
+
+  const preRange = document.createRange()
+  preRange.selectNodeContents(div)
+  preRange.setEnd(range.endContainer, range.endOffset)
+  return preRange.toString().length
+}
+
+/**
+ * 根据字符偏移量设置光标位置。
+ */
+function setCaretOffset(div: HTMLElement, offset: number) {
+  const sel = window.getSelection()
+  if (!sel) return
+
+  let remaining = offset
+  let found = false
+
+  function walkNodes(node: Node): boolean {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const len = (node.textContent || '').length
+      if (remaining <= len) {
+        const range = document.createRange()
+        range.setStart(node, remaining)
+        range.collapse(true)
+        sel.removeAllRanges()
+        sel.addRange(range)
+        return true
+      }
+      remaining -= len
+      return false
+    }
+    for (const child of Array.from(node.childNodes)) {
+      if (walkNodes(child)) return true
+    }
+    return false
+  }
+
+  if (!walkNodes(div)) {
+    // 偏移超出范围 → 放末尾
+    placeCaretAtEnd(div)
+  }
+}
+
+/**
  * 把光标放到 div 末尾。
  */
 function placeCaretAtEnd(div: HTMLElement) {
@@ -164,8 +216,13 @@ export function useSearchInput(options: {
 
   function onQueryInput(_e: Event) {
     if (!queryInputRef.value) return
-    wrapOrphanTextNodes(queryInputRef.value)
-    mergeAdjacentTextSpans(queryInputRef.value)
+    const div = queryInputRef.value
+    // 🆕 修复光标定位：DOM 修改前保存偏移量
+    const caretOffset = getCaretOffset(div)
+    wrapOrphanTextNodes(div)
+    mergeAdjacentTextSpans(div)
+    // 🆕 修复光标定位：DOM 修改后恢复偏移量
+    setCaretOffset(div, caretOffset)
     syncFromDiv()
   }
 
@@ -173,9 +230,17 @@ export function useSearchInput(options: {
     if (!queryInputRef.value) return
     if (e.key === 'Backspace' || e.key === 'Delete') {
       // 浏览器删除一个 span 时会留下 2 个 text span（拆开的）→ 合并
+      // 同时保存光标位置（相对于删除前）
+      const div = queryInputRef.value
+      const beforeOffset = getCaretOffset(div)
       requestAnimationFrame(() => {
         if (!queryInputRef.value) return
         mergeAdjacentTextSpans(queryInputRef.value)
+        // 删除后光标可能前移 1 格，用 beforeOffset - 1 作为估计
+        // 但更准确的是：浏览器已经自动处理了光标，我们只负责合并后的微调
+        const afterOffset = getCaretOffset(queryInputRef.value)
+        // 如果合并后光标位置没变，就不动；否则尝试恢复
+        setCaretOffset(queryInputRef.value, Math.max(0, Math.min(afterOffset, beforeOffset)))
         syncFromDiv()
       })
     }

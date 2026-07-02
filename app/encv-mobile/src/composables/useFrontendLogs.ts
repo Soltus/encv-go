@@ -94,6 +94,23 @@ function addLog(level: string, args: any[], source?: string) {
   }
 }
 
+// 🆕 2026-07-02：暴露给 useErrorCapture 等其他系统的直接写入接口
+//   错误捕获系统抓到的异常 → 也写到 DevLogs 前端日志里（带堆栈）
+export function addFrontendLog(level: string, message: string, options?: { source?: string; stack?: string }) {
+  const entry: LogEntry = {
+    id: ++nextId,
+    timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    level,
+    message,
+  }
+  if (options?.source) entry.source = options.source
+  if (options?.stack) entry.stack = options.stack
+  logs.value.push(entry)
+  if (logs.value.length > 2000) {
+    logs.value = logs.value.slice(-1500)
+  }
+}
+
 export function hijackConsole() {
   if (origConsole) return
   const saved = {

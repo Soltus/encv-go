@@ -1,4 +1,4 @@
-import { createApp } from 'vue'
+import { createApp, watch } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
@@ -8,7 +8,9 @@ import { clearLegacyLocalStorage } from './lib/taskPersistence'
 // 🆕 2026-07-02 A5：三管齐下错误捕获
 //   用户强反馈："ion-page 警告 = 更底层错误没有捕获，比如不支持安卓端的调用"
 //   三管齐下：Vue errorHandler + window.onerror/unhandledrejection + console.error 重定向
-import { installErrorCapture, bindVueErrorHandler } from './composables/useErrorCapture'
+import { errorStore, installErrorCapture, bindVueErrorHandler } from './composables/useErrorCapture'
+// 🆕 2026-07-02：DevLogs 前端日志（错误捕获系统的错误同步写入这里）
+import { addFrontendLog } from './composables/useFrontendLogs'
 
 // TDesign Chat 组件库不再做全局注册：
 //   早期版本用 <Chatbot> + ChatService 自行消费 SSE 流，与 useAgent
@@ -45,6 +47,21 @@ installProxiedFetch()
 // 🆕 2026-07-02 A5：安装 window.onerror / unhandledrejection / console.error 三件套
 //   必须在 app 创建后调，确保覆盖完整
 installErrorCapture()
+
+// 🆕 2026-07-02：错误捕获系统 ↔ DevLogs 前端日志 桥接
+//   - 错误捕获系统抓到的异常 → 写入 DevLogs 前端日志（带原始堆栈）
+//   - 用户要求："devlogs 支持原始堆栈，应当补充发送"
+watch(
+  () => errorStore.latestError.value,
+  (err) => {
+    if (err) {
+      addFrontendLog('error', `[${err.source.toUpperCase()}] ${err.message}`, {
+        source: `error_capture:${err.source}`,
+        stack: err.stack,
+      })
+    }
+  },
+)
 
 // 🆕 v6 2026-06-18：清理旧 localStorage key（v6 决定：清空迁移，从零开始）
 clearLegacyLocalStorage()

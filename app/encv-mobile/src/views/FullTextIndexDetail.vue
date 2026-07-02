@@ -178,7 +178,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onErrorCaptured } from 'vue'
+import { ref, onMounted, onUnmounted, onErrorCaptured } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { refreshOutline, warningOutline, bugOutline } from 'ionicons/icons'
 import { getFullTextIndexStats, type FullTextIndexStats } from '@/api/encv_search'
@@ -194,6 +194,10 @@ const loading = ref(false)
 const available = ref(false)
 const error = ref<string | null>(null)
 const stats = ref<FullTextIndexStats | null>(null)
+
+// 🆕 2026-07-02：防止卸载后异步回调继续更新状态
+//   虽然不会直接导致 classList 错误，但这是防御性编程最佳实践
+let isMounted = true
 
 // 🆕 A5：渲染错误捕获（onErrorCaptured 兜底，把"更底层错误"显式显示给用户）
 const renderError = ref<Error | null>(null)
@@ -222,6 +226,8 @@ async function loadStats() {
   loading.value = true
   try {
     const result = await getFullTextIndexStats()
+    // 🆕 2026-07-02：组件卸载后不再更新状态（防止竞态条件）
+    if (!isMounted) return
     available.value = result.available
     if (result.available && result.stats) {
       stats.value = result.stats
@@ -229,6 +235,7 @@ async function loadStats() {
       error.value = result.error || 'unknown'
     }
   } catch (e) {
+    if (!isMounted) return
     available.value = false
     error.value = e instanceof Error ? e.message : String(e)
     // 抛到全局 errorStore（让 A5 浮窗也显示）
@@ -239,7 +246,9 @@ async function loadStats() {
       url: typeof window !== 'undefined' ? window.location.pathname : undefined,
     })
   } finally {
-    loading.value = false
+    if (isMounted) {
+      loading.value = false
+    }
   }
 }
 
@@ -256,6 +265,10 @@ function formatBytes(b: number): string {
 
 onMounted(() => {
   loadStats()
+})
+
+onUnmounted(() => {
+  isMounted = false
 })
 </script>
 

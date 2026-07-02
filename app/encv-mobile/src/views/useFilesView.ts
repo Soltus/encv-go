@@ -716,7 +716,7 @@ async function performSearch() {
       normalResults = vecResult.results
       mode = vecResult.search_mode
     } catch {
-      normalResults = await searchFiles(currentPath.value, query, false)
+      normalResults = await searchFiles(currentPath.value, query, true)
       mode = 'none'
     }
 

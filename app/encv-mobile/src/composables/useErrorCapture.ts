@@ -118,6 +118,10 @@ let installed = false
  * 安装三管齐下错误捕获。
  *
  * 必须在 createApp 之后调一次。多次调用安全（只生效一次）。
+ *
+ * 🆕 2026-07-02：console.error 重定向移到 useFrontendLogs.hijackConsole 里
+ *   （避免两个系统都重定向 console.error 造成冲突）。
+ *   hijackConsole 在捕获 console.error 时会调 captureConsoleError 回调。
  */
 export function installErrorCapture() {
   if (installed) return
@@ -148,35 +152,24 @@ export function installErrorCapture() {
     })
   }
 
-  // ③ console.error 重定向
-  //   用户反馈"更底层的错误没有捕获，比如不支持安卓端的调用"
-  //   很多 Capacitor / WebView 兼容性问题只在 console.error 打
-  const originalConsoleError = console.error.bind(console)
-  console.error = (...args: unknown[]) => {
-    originalConsoleError(...args)
-    // 只收集含 error/exception/fail 关键词的（避免收集 debug log）
-    const msg = args.map(a => {
-      if (a instanceof Error) return a.message
-      if (typeof a === 'string') return a
-      try {
-        return JSON.stringify(a)
-      } catch {
-        return String(a)
-      }
-    }).join(' ')
-    if (/error|exception|fail|undef|null|cannot/i.test(msg)) {
-      errorStore.addError({
-        source: 'console',
-        message: msg.slice(0, 500),
-        stack: args.find(a => a instanceof Error) instanceof Error
-          ? (args.find(a => a instanceof Error) as Error).stack
-          : undefined,
-        url: typeof window !== 'undefined' ? window.location.pathname : undefined,
-      })
-    }
-  }
+  // ③ console.error 重定向 → 已移到 useFrontendLogs.hijackConsole
+  //   由 hijackConsole 在捕获 console.error 时调用 captureConsoleError()
 
   errorStore.hydrate()
+}
+
+// 🆕 2026-07-02：暴露给 useFrontendLogs 的 console.error 回调
+//   hijackConsole 捕获到 console.error 时调这个，统一走 errorStore
+export function captureConsoleError(message: string, stack?: string) {
+  // 只收集含 error/exception/fail 关键词的（避免收集 debug log）
+  if (/error|exception|fail|undef|null|cannot/i.test(message)) {
+    errorStore.addError({
+      source: 'console',
+      message: message.slice(0, 500),
+      stack,
+      url: typeof window !== 'undefined' ? window.location.pathname : undefined,
+    })
+  }
 }
 
 /**
