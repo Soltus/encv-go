@@ -210,3 +210,46 @@ export async function getFullTextIndexStats(): Promise<{
   }
   return await response.json()
 }
+
+/**
+ * 触发 FTS 索引重建任务。
+ *
+ * 2026-07-03 新增（spec fts-rebuild-task）
+ *
+ * 返回 taskId，前端通过 WS 事件 task:progress / task:completed 跟踪进度。
+ * 任务走任务系统，自带进度百分比、phase、speed、eta、取消能力。
+ *
+ * 返回：
+ *   - 200: { taskId, status: "queued", runId }
+ *   - 409: { error, code: "REBUILD_IN_PROGRESS", taskId, status }  — 已有重建任务在跑
+ *   - 503: { error, code: "FULLTEXT_UNAVAILABLE" }  — FTS 索引未初始化
+ */
+export interface FTSRebuildResponse {
+  taskId: string
+  status: string
+  runId?: string
+}
+
+export interface FTSRebuildErrorResponse {
+  error: string
+  code: string
+  taskId?: string
+  status?: string
+}
+
+export async function rebuildFullTextIndex(): Promise<FTSRebuildResponse> {
+  const baseUrl = getApiBaseUrl()
+  const response = await fetch(`${baseUrl}/api/files/search-fulltext/rebuild`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!response.ok) {
+    const errData = await response.json().catch(() => ({}) as FTSRebuildErrorResponse)
+    const err = new Error(errData.error || `HTTP ${response.status}`) as Error & FTSRebuildErrorResponse
+    err.code = errData.code
+    err.taskId = errData.taskId
+    err.status = errData.status
+    throw err
+  }
+  return await response.json()
+}

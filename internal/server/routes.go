@@ -82,6 +82,10 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.GET("/api/files/search", s.handleSearchFilesGin)
 	r.GET("/api/files/search-fulltext", s.handleSearchFilesFullTextGin)
 	r.GET("/api/files/search-fulltext/stats", s.handleFullTextIndexStatsGin)
+	// 🆕 2026-07-03：FTS 索引重建任务化（spec fts-rebuild-task）
+	//   - POST 创建 rebuild_fts_index 任务，走任务系统（自带进度/耗时/取消）
+	//   - 返回 taskId 供前端订阅 task:progress / task:completed WS 事件
+	r.POST("/api/files/search-fulltext/rebuild", s.handleFullTextIndexRebuildGin)
 	r.GET("/api/files/tags", s.handleTagsListGin)
 	r.POST("/api/files/tags", s.handleTagsMutateGin)
 	r.GET("/api/search/tasks", s.handleVectorSearchTasksGin)

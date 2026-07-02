@@ -107,6 +107,16 @@ func (tm *TaskManager) SetRollbackManager(rm *RollbackManagerImpl) {
 	tm.rollbackManager = rm
 }
 
+// SetFTSRebuilder 注入 FTS 索引重建器。
+//
+// 2026-07-03 新增（spec fts-rebuild-task）
+//   - 调用方：server 层 NewServer 后注入实现
+//   - nil 时 rebuild_fts_index 任务会 failTask("fts rebuilder not configured")
+//   - 非 nil 时 processTask switch 的 rebuild_fts_index case 调用 RebuildWithProgress
+func (tm *TaskManager) SetFTSRebuilder(r FTSRebuilder) {
+	tm.ftsRebuilder = r
+}
+
 func (tm *TaskManager) processTask(task *MobileTask) {
 	slog.Info("Processing task", "id", task.ID, "type", task.Type, "source", task.SourcePath)
 
@@ -124,6 +134,12 @@ func (tm *TaskManager) processTask(task *MobileTask) {
 		return
 	case "move", "copy", "rename", "delete":
 		tm.processFileTask(task)
+		return
+	case "rebuild_fts_index":
+		// 🆕 2026-07-03：FTS 索引重建任务
+		//   - 无 sourcePath（不是文件操作），必须放第一层 switch 避免 resolveAbsPath 拦截
+		//   - 通过 FTSRebuilder interface 注入（避免 service → server 反向依赖）
+		tm.processRebuildFTSIndex(task)
 		return
 	}
 

@@ -36,6 +36,10 @@ const (
 	TaskTypeRollbackCopy    TaskType = "rollback_copy"
 	TaskTypeRollbackRename  TaskType = "rollback_rename"
 	TaskTypeRollbackDelete  TaskType = "rollback_delete"
+
+	// 系统维护任务类型（非文件操作，走任务系统以利用进度/耗时/取消能力）
+	// 2026-07-03：FTS 索引重建任务化（spec fts-rebuild-task）
+	TaskTypeRebuildFTSIndex TaskType = "rebuild_fts_index"
 )
 
 // IsRollback 判断任务类型是否为回滚任务。

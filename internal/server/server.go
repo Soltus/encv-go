@@ -332,6 +332,13 @@ func NewServer(ctx context.Context, configPath string) *Server {
 		slog.Warn("FTS5 full-text index init failed, full-text search will be unavailable", "err", err)
 	}
 
+	// 🆕 2026-07-03：FTS 索引重建器注入（spec fts-rebuild-task）
+	//   - 把 server 层的 FTSRebuilder 实现注入到 taskManager
+	//   - 让 POST /api/files/search-fulltext/rebuild 能创建 rebuild_fts_index 任务
+	//   - 任务走 worker pool，自带进度推送（task:progress WS）+ 持久化 + 取消能力
+	s.mobileSvc.GetTaskManager().SetFTSRebuilder(NewFTSRebuilder(s.servingDir))
+	slog.Info("FTS rebuilder injected into task manager")
+
 	// 剧本外置 spec：若 agent_settings.mock_scenarios_dir 非空，
 	// 用 ScenarioLoader 加载 YAML/JSON 剧本，注入到 MockEngine。
 	// 详见 internal/server/mock_scenarios/SCHEMA.md。

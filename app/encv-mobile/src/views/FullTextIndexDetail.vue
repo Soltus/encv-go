@@ -69,6 +69,75 @@
           </ion-item>
         </ion-list>
 
+        <!-- 🆕 2026-07-03：FTS 索引重建任务卡片（spec fts-rebuild-task）-->
+        <ion-list>
+          <ion-list-header>
+            <ion-label>{{ t('settings.rebuildIndex') || '索引重建' }}</ion-label>
+          </ion-list-header>
+          <ion-item v-if="!rebuildTask" data-testid="rebuild-idle-item" class="rebuild-idle">
+            <ion-label class="ion-text-wrap">
+              <h3>{{ t('settings.rebuildAction') || '重建全文索引' }}</h3>
+              <p class="rebuild-hint">
+                {{ t('settings.rebuildHint') || '扫描所有文件并重新构建 FTS5 索引。任务走系统队列，自带进度和耗时。' }}
+              </p>
+            </ion-label>
+            <ion-button
+              slot="end"
+              fill="solid"
+              color="primary"
+              data-testid="rebuild-trigger-btn"
+              :disabled="rebuildSubmitting"
+              @click="triggerRebuild"
+            >
+              <ion-icon :icon="refreshOutline" slot="start"></ion-icon>
+              {{ t('common.rebuild') || '重建' }}
+            </ion-button>
+          </ion-item>
+
+          <!-- 任务进行中卡片 -->
+          <ion-item v-else data-testid="rebuild-active-item" class="rebuild-active">
+            <ion-label class="ion-text-wrap">
+              <h3>
+                <ion-spinner v-if="rebuildTask.status === 'running' || rebuildTask.status === 'queued'" name="crescent" class="rebuild-spinner"></ion-spinner>
+                <span data-testid="rebuild-status-label">{{ rebuildStatusLabel }}</span>
+              </h3>
+              <p v-if="rebuildTask.phase" data-testid="rebuild-phase" class="rebuild-phase">{{ rebuildTask.phase }}</p>
+              <ion-progress-bar
+                data-testid="rebuild-progress-bar"
+                :value="(rebuildTask.progress || 0) / 100"
+                :color="rebuildTask.status === 'failed' ? 'danger' : 'primary'"
+                class="rebuild-progress"
+              ></ion-progress-bar>
+              <p class="rebuild-meta">
+                <span v-if="rebuildTask.progress !== undefined" data-testid="rebuild-progress-text">{{ rebuildTask.progress }}%</span>
+                <span v-if="rebuildTask.speed" class="rebuild-speed">{{ rebuildTask.speed }}</span>
+                <span v-if="rebuildTask.eta" class="rebuild-eta">ETA: {{ rebuildTask.eta }}</span>
+              </p>
+              <p v-if="rebuildTask.error" data-testid="rebuild-error" class="rebuild-error">{{ rebuildTask.error }}</p>
+            </ion-label>
+            <ion-button
+              v-if="rebuildTask.status === 'running' || rebuildTask.status === 'queued'"
+              slot="end"
+              fill="clear"
+              color="danger"
+              data-testid="rebuild-cancel-btn"
+              @click="cancelRebuild"
+            >
+              {{ t('common.cancel') || '取消' }}
+            </ion-button>
+            <ion-button
+              v-else
+              slot="end"
+              fill="clear"
+              color="medium"
+              data-testid="rebuild-dismiss-btn"
+              @click="dismissRebuildCard"
+            >
+              {{ t('common.dismiss') || '关闭' }}
+            </ion-button>
+          </ion-item>
+        </ion-list>
+
         <ion-list>
           <ion-list-header>
             <ion-label>{{ t('settings.indexStats') || '索引统计' }}</ion-label>
@@ -174,12 +243,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, onErrorCaptured } from 'vue'
+import { ref, computed, onMounted, onUnmounted, onErrorCaptured } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 import { refreshOutline, warningOutline, bugOutline } from 'ionicons/icons'
-import { getFullTextIndexStats, type FullTextIndexStats } from '@/api/encv_search'
+import { getFullTextIndexStats, rebuildFullTextIndex, type FullTextIndexStats } from '@/api/encv_search'
 import { formatDateTime } from '@/composables/useDateFormat'
 import { errorStore } from '@/composables/useErrorCapture'
+import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
+import { getApiBaseUrl } from '@/api/encv_core'
 // 🆕 2026-07-03 修复 classList 错误：必须显式 import Ionic 组件
 //   根因（cypress e2e DOM log 确认）：未显式 import 时，<ion-page> 标签未被 Vue 编译器
 //   识别为 Ionic Vue 组件，渲染成原生 <ION-PAGE> 自闭合元素，缺失 .ion-page class
@@ -202,6 +273,7 @@ import {
   IonNote,
   IonBadge,
   IonSpinner,
+  IonProgressBar,
 } from '@ionic/vue'
 
 const { t } = useI18n()
@@ -210,6 +282,31 @@ const loading = ref(false)
 const available = ref(false)
 const error = ref<string | null>(null)
 const stats = ref<FullTextIndexStats | null>(null)
+
+// 🆕 2026-07-03：FTS 索引重建任务状态（spec fts-rebuild-task）
+interface RebuildTaskState {
+  id: string
+  status: string  // queued / running / cancelling / completed / failed / cancelled
+  progress?: number
+  phase?: string
+  speed?: string
+  eta?: string
+  error?: string
+}
+const rebuildTask = ref<RebuildTaskState | null>(null)
+const rebuildSubmitting = ref(false)
+
+const rebuildStatusLabel = computed(() => {
+  if (!rebuildTask.value) return ''
+  const s = rebuildTask.value.status
+  if (s === 'queued') return t('settings.rebuildQueued') || '重建任务排队中'
+  if (s === 'running') return t('settings.rebuildRunning') || '正在重建索引'
+  if (s === 'cancelling') return t('settings.rebuildCancelling') || '正在取消'
+  if (s === 'completed') return t('settings.rebuildCompleted') || '重建完成'
+  if (s === 'failed') return t('settings.rebuildFailed') || '重建失败'
+  if (s === 'cancelled') return t('settings.rebuildCancelled') || '已取消'
+  return s
+})
 
 // 🆕 2026-07-02：防止卸载后异步回调继续更新状态
 //   虽然不会直接导致 classList 错误，但这是防御性编程最佳实践
@@ -228,6 +325,47 @@ onErrorCaptured((err: unknown) => {
     url: typeof window !== 'undefined' ? window.location.pathname : undefined,
   })
   return false
+})
+
+// 🆕 2026-07-03：订阅任务 4 件套 WS 事件（automation-workflow 规则 §二）
+//   只关心 rebuild_fts_index 任务的进度，过滤其他任务的事件
+useTaskEventBridge({
+  onProgress: (data) => {
+    if (!rebuildTask.value || data.id !== rebuildTask.value.id) return
+    if (!isMounted) return
+    rebuildTask.value = {
+      ...rebuildTask.value,
+      progress: data.progress,
+      phase: data.phase,
+      speed: data.speed,
+      eta: data.eta,
+      status: 'running',
+    }
+  },
+  onUpdate: (data) => {
+    if (!rebuildTask.value || data.id !== rebuildTask.value.id) return
+    if (!isMounted) return
+    rebuildTask.value = {
+      ...rebuildTask.value,
+      status: data.status,
+      progress: data.progress,
+    }
+  },
+  onComplete: (data) => {
+    if (!rebuildTask.value || data.id !== rebuildTask.value.id) return
+    if (!isMounted) return
+    const status = data.error ? 'failed' : 'completed'
+    rebuildTask.value = {
+      ...rebuildTask.value,
+      status,
+      error: data.error,
+      progress: 100,
+    }
+    // 重建完成后刷新 stats（显示新的 totalFiles 等）
+    if (!data.error) {
+      setTimeout(() => loadStats(), 500)
+    }
+  },
 })
 
 function reloadPage() {
@@ -264,6 +402,61 @@ async function loadStats() {
       loading.value = false
     }
   }
+}
+
+// 🆕 2026-07-03：触发 FTS 索引重建
+async function triggerRebuild() {
+  if (rebuildSubmitting.value) return
+  rebuildSubmitting.value = true
+  try {
+    const resp = await rebuildFullTextIndex()
+    if (!isMounted) return
+    rebuildTask.value = {
+      id: resp.taskId,
+      status: resp.status,
+      progress: 0,
+    }
+  } catch (e: any) {
+    if (!isMounted) return
+    const errMsg = e?.message || String(e)
+    // 409 Conflict：已有重建任务在跑，复用其 taskId
+    if (e?.code === 'REBUILD_IN_PROGRESS' && e?.taskId) {
+      rebuildTask.value = {
+        id: e.taskId,
+        status: e.status || 'running',
+        progress: 0,
+      }
+    } else {
+      errorStore.addError({
+        source: 'console',
+        message: `FTS rebuild trigger failed: ${errMsg}`,
+        url: typeof window !== 'undefined' ? window.location.pathname : undefined,
+      })
+    }
+  } finally {
+    if (isMounted) rebuildSubmitting.value = false
+  }
+}
+
+// 🆕 2026-07-03：取消重建任务
+async function cancelRebuild() {
+  if (!rebuildTask.value) return
+  try {
+    const baseUrl = getApiBaseUrl()
+    await fetch(`${baseUrl}/api/tasks/${rebuildTask.value.id}/cancel`, { method: 'POST' })
+    if (!isMounted) return
+    rebuildTask.value = {
+      ...rebuildTask.value,
+      status: 'cancelling',
+    }
+  } catch (e) {
+    // 取消失败不阻断，用户可重试
+  }
+}
+
+// 🆕 2026-07-03：关闭重建卡片（终态后）
+function dismissRebuildCard() {
+  rebuildTask.value = null
 }
 
 function formatNumber(n: number): string {
@@ -347,6 +540,62 @@ onUnmounted(() => {
 .indexing-spinner {
   width: 20px;
   height: 20px;
+}
+
+/* 🆕 2026-07-03：FTS 索引重建任务卡片样式 */
+.rebuild-idle .rebuild-hint {
+  font-size: 0.85em;
+  color: var(--ion-color-medium);
+  margin-top: 4px;
+}
+
+.rebuild-active h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rebuild-spinner {
+  width: 16px;
+  height: 16px;
+}
+
+.rebuild-phase {
+  font-size: 0.85em;
+  color: var(--ion-color-primary);
+  margin: 4px 0;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+}
+
+.rebuild-progress {
+  margin: 8px 0;
+  height: 6px;
+  border-radius: 3px;
+}
+
+.rebuild-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 0.8em;
+  color: var(--ion-color-medium);
+  margin: 4px 0;
+}
+
+.rebuild-meta > span:first-child {
+  font-weight: 600;
+  color: var(--ion-color-dark);
+}
+
+.rebuild-speed,
+.rebuild-eta {
+  font-family: 'SFMono-Regular', Consolas, monospace;
+}
+
+.rebuild-error {
+  color: var(--ion-color-danger);
+  font-size: 0.85em;
+  margin: 4px 0;
+  word-break: break-word;
 }
 
 /* 🆕 2026-07-02 A5：渲染错误卡片样式 */

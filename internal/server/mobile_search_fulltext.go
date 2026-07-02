@@ -31,6 +31,7 @@ import (
 
 	"github.com/Soltus/encv-go/internal/fts"
 	pluginInterfaces "github.com/Soltus/encv-go/internal/v2/plugins/interfaces"
+	"github.com/Soltus/encv-go/pkg/tasksystem"
 	"github.com/gin-gonic/gin"
 )
 
@@ -466,5 +467,77 @@ func (s *Server) handleFullTextIndexStatsGin(c *gin.Context) {
 			"tokenizer":   stats.Tokenizer,
 			"indexVersion": stats.IndexVersion,
 		},
+	})
+}
+
+// handleFullTextIndexRebuildGin 触发 FTS 索引重建任务。
+//
+// 2026-07-03 新增（spec fts-rebuild-task）
+//
+// POST /api/files/search-fulltext/rebuild
+//
+// 返回：
+//   - 200: { taskId, status: "queued" }  — 任务已创建，前端订阅 WS 事件跟踪进度
+//   - 503: { error, code: "FULLTEXT_UNAVAILABLE" }  — FTS 索引未初始化
+//
+// 设计：
+//   - 立即返回 taskId，不阻塞 HTTP 请求（任务在 worker pool 异步执行）
+//   - 前端通过 task:progress / task:completed WS 事件跟踪进度
+//   - 任务系统自带：进度百分比、phase、speed、eta、取消能力
+//   - 与 encrypt/decrypt 任务走同一套任务系统，前端可复用任务卡片组件
+//
+// 与启动时 InitFullTextIndexWithBuild 的区别：
+//   - InitFullTextIndexWithBuild：启动时一次性 build，无进度推送，无法取消
+//   - handleFullTextIndexRebuildGin：用户主动触发，有进度推送，可取消，可重试
+//
+// 重复触发保护：
+//   - 检查是否已有 rebuild_fts_index 任务在 running/queued 状态
+//   - 有则返回 409 Conflict + 现有 taskId
+func (s *Server) handleFullTextIndexRebuildGin(c *gin.Context) {
+	idx := GetFullTextIndex()
+	if idx == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "fulltext index not initialized",
+			"code":  "FULLTEXT_UNAVAILABLE",
+		})
+		return
+	}
+
+	tm := s.mobileSvc.GetTaskManager()
+
+	// 重复触发保护：检查是否已有 rebuild_fts_index 任务在 running/queued 状态
+	for _, t := range tm.List() {
+		if t.Type != string(tasksystem.TaskTypeRebuildFTSIndex) {
+			continue
+		}
+		if t.Status == "running" || t.Status == "queued" {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":   "FTS rebuild already in progress",
+				"code":    "REBUILD_IN_PROGRESS",
+				"taskId":  t.ID,
+				"status":  t.Status,
+			})
+			return
+		}
+	}
+
+	// 创建重建任务（SourcePath 为空，task type 在 processTask 第一层 switch 处理）
+	task := tm.Create(
+		string(tasksystem.TaskTypeRebuildFTSIndex),
+		"", // sourcePath
+		"", // targetPath
+		"", // password
+		0,  // version
+		"", // pluginName
+	)
+	// FinalizeCreatedTask：补 RunId 兜底 + 持久化 + 广播 task:created
+	tm.FinalizeCreatedTask(task)
+
+	slog.Info("FTS rebuild task created", "taskId", task.ID)
+
+	c.JSON(http.StatusOK, gin.H{
+		"taskId": task.ID,
+		"status": "queued",
+		"runId":  task.RunId,
 	})
 }

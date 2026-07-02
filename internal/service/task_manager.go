@@ -126,6 +126,12 @@ type TaskManager struct {
 	//   - 非 nil → processTask switch 的 rollback_* case 调用 ProcessRollbackTask
 	rollbackManager *RollbackManagerImpl
 
+	// 🆕 2026-07-03 FTS 索引重建器（spec fts-rebuild-task）
+	//   - nil → rebuild_fts_index 任务会 failTask（未配置 FTSRebuilder）
+	//   - 非 nil → processTask switch 的 rebuild_fts_index case 调用 RebuildWithProgress
+	//   - 用 interface 而不是 *server.FTSRebuilderImpl：避免 service → server 反向依赖
+	ftsRebuilder FTSRebuilder
+
 	// 🆕 2026-06-15 multi-mount（spec Phase C1）
 	//   - nil → 旧行为，所有 sourcePath 走 SafeResolveToAbsPath(servingDir, ...)
 	//   - 非 nil → sourcePath 是 /d/<mount>/... 时走 mount 解析
