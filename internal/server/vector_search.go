@@ -8,10 +8,11 @@ import (
 )
 
 func (s *Server) InitVectorSearch(dbPath, actualEngine string) {
+	// searchDriver 直接用 actualEngine，不再把 libsql 转成 turso。
+	// 原因：本地嵌入式 libsql（CGO .so）不支持 vector_distance_cos 函数，
+	// 该函数是 Turso Cloud / libSQL Server 的特性。libsql 走 SQLiteStore
+	// 在 Go 层计算余弦相似度。
 	searchDriver := actualEngine
-	if searchDriver == "libsql" {
-		searchDriver = "turso"
-	}
 	var searchSvc *vectorsearch.SearchService
 	func() {
 		defer func() {

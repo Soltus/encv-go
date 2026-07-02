@@ -390,10 +390,23 @@ export function useTaskViewCompute(options: UseTaskViewComputeOptions): UseTaskV
   }
 
   // Worker 模式：watch 所有依赖 → debounce → postMessage
+  //
+  // 🆕 2026-07-02 性能修复：拆分 watch，避免 searchQuery 变化时深度遍历 tasks 数组
+  //   - 原问题：watch([tasks, searchQuery, ...], cb, { deep: true }) 会在 searchQuery
+  //     变化时对 tasks（可能几千个任务）做深度遍历，阻塞 UI 主线程
+  //   - 修复：tasks 单独 deep watch（任务对象会被局部 patch，需 deep 检测）
+  //           其他 filter/search 状态单独 watch（数组/字符串，deep 遍历成本低）
+  //   - 效果：搜索输入时只触发 filter watch（浅遍历），不遍历 tasks 数组
   if (worker) {
+    // tasks 变化：deep watch（检测任务对象的局部 patch，如 status/progress 变化）
+    watch(
+      options.tasks,
+      () => scheduleWorkerCompute(),
+      { deep: true, immediate: true },
+    )
+    // filter/search/view 状态变化：这些是短数组或字符串，deep 遍历成本低
     watch(
       [
-        options.tasks,
         options.viewMode,
         options.sortBy,
         options.searchQuery,
@@ -405,7 +418,7 @@ export function useTaskViewCompute(options: UseTaskViewComputeOptions): UseTaskV
         options.pinnedRunIds,
       ],
       () => scheduleWorkerCompute(),
-      { deep: true, immediate: true },
+      { deep: true },
     )
   }
 

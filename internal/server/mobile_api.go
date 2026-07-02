@@ -2610,7 +2610,13 @@ func (s *Server) handleVectorSearchFilesGin(c *gin.Context) {
 //  1. 列出搜索路径下的所有文件（递归，最多 500 个）
 //  2. 批量索引到向量库
 //  3. 向量搜索 + 过滤 score < 0.05
-//  4. 返回带 score 的 FileInfo 列表
+//  4. bigram 重叠过滤：要求文件名与查询共享至少一半的 bigram
+//  5. 返回带 score 的 FileInfo 列表
+//
+// bigram 重叠过滤的原因：
+//   - 向量搜索基于 TF-IDF 哈希向量，共享单个 bigram（如"在线"）就会产生较高 score
+//   - 但用户搜索 "在线视频" 时，期望结果包含 "视频" 相关内容，而非仅仅 "在线"
+//   - 要求共享 bigram 比例 >= 0.5 能过滤掉只共享一个 bigram 的弱相关结果
 //
 // 详见 handleVectorSearchFilesGin 中的 fallback 注释。
 func (s *Server) vectorSearchFallback(path, query string, recursive bool, limit int) []mobileservice.FileInfo {
@@ -2660,7 +2666,11 @@ func (s *Server) vectorSearchFallback(path, query string, recursive bool, limit 
 		return nil
 	}
 
-	// 4. 映射回 FileInfo，附带 score
+	// 4. 计算查询的 bigram 集合（非单字 CJK bigram + 英文单词）
+	//    用于过滤只共享单个 bigram 的弱相关结果
+	queryBigrams := extractBigrams(query)
+
+	// 5. 映射回 FileInfo，附带 score + bigram 重叠过滤
 	fileMap := make(map[string]mobileservice.FileInfo, len(allFiles))
 	for _, f := range allFiles {
 		fileMap[f.Path] = f
@@ -2672,11 +2682,55 @@ func (s *Server) vectorSearchFallback(path, query string, recursive bool, limit 
 			continue
 		}
 		if f, ok := fileMap[r.RefID]; ok {
+			// bigram 重叠过滤：如果查询有 bigram，要求文件名与查询共享
+			// 至少一半的 bigram，避免只共享一个常见 bigram（如"在线"）的弱相关结果
+			if !hasSufficientBigramOverlap(f.Name, queryBigrams) {
+				continue
+			}
 			f.Score = r.Score
 			matched = append(matched, f)
 		}
 	}
 	return matched
+}
+
+// extractBigrams 提取查询中的非单字 token（CJK bigram + 英文单词）。
+// 用于向量搜索结果的 bigram 重叠过滤。
+func extractBigrams(query string) []string {
+	tokens := vectorsearch.Tokenize(query)
+	var bigrams []string
+	for _, tok := range tokens {
+		// 只保留长度 >= 2 的 token（CJK bigram 或英文单词），过滤单字
+		if len([]rune(tok)) >= 2 {
+			bigrams = append(bigrams, strings.ToLower(tok))
+		}
+	}
+	return bigrams
+}
+
+// hasSufficientBigramOverlap 检查文件名是否与查询共享足够的 bigram。
+//
+// 规则：
+//   - 查询无 bigram（纯单字或空）→ 不过滤（返回 true）
+//   - 文件名共享 bigram 数量 >= 查询 bigram 数量的一半 → 返回 true
+//   - 否则 → 返回 false（过滤掉）
+//
+// 例：查询 "在线视频" bigrams=["在线","线视","视频"]（3 个，阈值=2）
+//   - "在线播放-高清视频.mp4" 共享 ["在线","视频"]（2 个）→ 2>=2 → true
+//   - "在线文档.pdf" 共享 ["在线"]（1 个）→ 1<2 → false
+func hasSufficientBigramOverlap(fileName string, queryBigrams []string) bool {
+	if len(queryBigrams) == 0 {
+		return true
+	}
+	threshold := (len(queryBigrams) + 1) / 2 // 向上取整
+	lowerName := strings.ToLower(fileName)
+	shared := 0
+	for _, bg := range queryBigrams {
+		if strings.Contains(lowerName, bg) {
+			shared++
+		}
+	}
+	return shared >= threshold
 }
 
 // handleSearchStatsGin 获取搜索索引统计信息。

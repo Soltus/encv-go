@@ -137,3 +137,45 @@ func TestSQLiteStore(t *testing.T) {
 		t.Errorf("top result should be ref 1, got ref %s", results[0].RefID)
 	}
 }
+
+// TestNewStore_DriverMapping 验证 NewStore 根据 driver 正确选择 Store 实现。
+//
+// 关键：libsql 应该走 SQLiteStore（Go 层计算），而非 TursoStore。
+// 原因：本地嵌入式 libsql（CGO .so）不支持 vector_distance_cos 函数，
+// 该函数是 Turso Cloud / libSQL Server 的特性。
+func TestNewStore_DriverMapping(t *testing.T) {
+	cases := []struct {
+		driver      string
+		expectTurso bool // true=TursoStore, false=SQLiteStore
+	}{
+		{"turso", true},
+		{"libsql", false}, // libsql 必须走 SQLiteStore
+		{"sqlite", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.driver, func(t *testing.T) {
+			// NewStore 不打开 db，只创建 Store 实例
+			store, err := NewStore(nil, tc.driver)
+			if err != nil {
+				t.Fatalf("NewStore(%q) error: %v", tc.driver, err)
+			}
+
+			_, isTurso := store.(*TursoStore)
+			_, isSQLite := store.(*SQLiteStore)
+
+			if tc.expectTurso && !isTurso {
+				t.Errorf("driver=%q: expected TursoStore, got %T", tc.driver, store)
+			}
+			if !tc.expectTurso && !isSQLite {
+				t.Errorf("driver=%q: expected SQLiteStore, got %T", tc.driver, store)
+			}
+			t.Logf("✅ driver=%q → %T", tc.driver, store)
+		})
+	}
+
+	// 不支持的 driver 应报错
+	if _, err := NewStore(nil, "unknown"); err == nil {
+		t.Error("expected error for unknown driver")
+	}
+}

@@ -62,13 +62,17 @@ type Store interface {
 // NewStore 创建向量搜索存储。
 //
 // 根据驱动自动选择实现：
-//   - turso / libsql：使用原生 vector_distance_cos 函数
-//   - sqlite：使用纯 Go 实现的余弦相似度计算
+//   - turso：使用原生 vector_distance_cos 函数（Turso Cloud / libSQL Server）
+//   - libsql / sqlite：使用纯 Go 实现的余弦相似度计算
+//
+// 注意：本地嵌入式 libsql（CGO .so）不支持 vector_distance_cos 函数，
+// 该函数是 Turso Cloud / libSQL Server 的特性。因此 libsql 走 SQLiteStore
+// 在 Go 层计算余弦相似度，避免 SQL 函数不存在的错误。
 func NewStore(db *sql.DB, driver string) (Store, error) {
 	switch driver {
-	case "turso", "libsql":
+	case "turso":
 		return &TursoStore{db: db}, nil
-	case "sqlite":
+	case "libsql", "sqlite":
 		return &SQLiteStore{db: db}, nil
 	default:
 		return nil, fmt.Errorf("unsupported driver: %s", driver)

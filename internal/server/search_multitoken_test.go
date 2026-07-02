@@ -364,3 +364,75 @@ func TestSearch_VectorSearch_ReturnsScore(t *testing.T) {
 		t.Error("target file not found in vector search results")
 	}
 }
+
+// TestSearch_VectorSearch_FiltersIrrelevantResults 验证向量搜索 fallback 路径
+// 应过滤掉与查询无任何 bigram 重叠的结果。
+//
+// 场景：搜索 "在线视频"（无空格）。
+//   - "在线播放-高清视频.mp4" 应匹配（共享 bigram: 在线/视频 + 单字 在/线/视/频）
+//   - "在线文档.pdf" 不应匹配（只共享 在线/在/线，不含 视频/视/频/线视）
+//
+// Bug：当前 vectorSearchFallback 只过滤 score < 0.05，而 "在线文档.pdf"
+// 因共享 "在线" bigram 导致 score ~0.5，被错误返回。
+//
+// 期望：fallback 路径应要求结果文件名至少包含查询的一个非单字 bigram，
+// 或采用更高阈值/相对阈值过滤掉弱相关结果。
+func TestSearch_VectorSearch_FiltersIrrelevantResults(t *testing.T) {
+	s, baseURL, teardown := setupMultiTokenSearchServer(t)
+	defer teardown()
+
+	s.mobileSvc.RebuildIndex()
+	waitForIndexReady(s)
+
+	searchURL := fmt.Sprintf("%s/api/search/files?q=%s&path=%s&recursive=true&limit=50",
+		baseURL,
+		url.QueryEscape("在线视频"),
+		url.QueryEscape("/d"))
+
+	resp, err := http.Get(searchURL)
+	if err != nil {
+		t.Fatalf("GET vector search: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("vector search status = %d, want 200", resp.StatusCode)
+	}
+
+	var result struct {
+		Files []struct {
+			Name  string  `json:"name"`
+			Path  string  `json:"path"`
+			Score float64 `json:"score"`
+		} `json:"files"`
+		VectorSearch bool `json:"vector_search"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	t.Logf("vector search '在线视频' result count: %d (vector_search=%v)", len(result.Files), result.VectorSearch)
+	for _, f := range result.Files {
+		t.Logf("  - %s score=%.4f", f.Name, f.Score)
+	}
+
+	// 1. 目标文件应在结果中
+	foundTarget := false
+	for _, f := range result.Files {
+		if f.Name == "在线播放-高清视频.mp4" {
+			foundTarget = true
+			break
+		}
+	}
+	if !foundTarget {
+		t.Errorf("❌ target '在线播放-高清视频.mp4' should match '在线视频' via shared bigrams (在线/视频)")
+	}
+
+	// 2. 不相关文件 "在线文档.pdf" 不应在结果中
+	//    它只共享 "在线" bigram，不含 "视频" 相关 token
+	for _, f := range result.Files {
+		if f.Name == "在线文档.pdf" {
+			t.Errorf("❌ irrelevant '在线文档.pdf' should NOT be returned for '在线视频' query (no 视频/视/频/线视 bigram overlap, score=%.4f)", f.Score)
+		}
+	}
+}
