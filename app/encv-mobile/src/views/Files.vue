@@ -109,7 +109,16 @@
 
       <template v-if="(loading || isSearching || noPermission || !serverOnline || displayFiles.length === 0) && !selectedPlugin">
         <div v-if="loading || isSearching" class="loading-container">
-          <ion-spinner name="crescent"></ion-spinner>
+          <!--
+            搜索中 loading 三态区分（debug-discipline.md §1.6）：
+              - 'available'   → spinner（旋转，索引完全可用）
+              - 'degraded'    → dots（安静等待，部分降级）
+              - 'unavailable' / 'unknown' → pulse（脉冲闪动，索引不可用，仅关键词）
+          -->
+          <ion-spinner v-if="isSearching && vectorSearchStatus === 'available'" name="crescent"></ion-spinner>
+          <ion-spinner v-else-if="isSearching && vectorSearchStatus === 'degraded'" name="dots"></ion-spinner>
+          <ion-spinner v-else-if="isSearching" name="lines" class="search-spinner-pulse"></ion-spinner>
+          <ion-spinner v-else name="crescent"></ion-spinner>
           <p>{{ isSearching ? t('files.searching') : (connecting ? t('files.connecting') : t('files.loading')) }}</p>
         </div>
         <div v-else-if="noPermission" class="empty-state">
@@ -265,25 +274,48 @@
           </template>
         </div>
 
-        <div v-if="!selectedPlugin && !searchQuery" class="main-sort-bar">
+        <!--
+          排序控件显示条件：
+          - 非插件模式：始终显示
+          - 搜索时：仅在有搜索结果时显示（避免空结果时显示无意义控件）
+        -->
+        <div v-if="!selectedPlugin && (!searchQuery || (searchQuery && displayFiles.length > 0))" class="main-sort-bar">
           <ion-item button detail @click="showMainSort = !showMainSort">
             <ion-icon :icon="swapVerticalOutline" slot="start"></ion-icon>
-            <ion-label>排序</ion-label>
+            <ion-label>{{ t('files.sortBy') || '排序' }}</ion-label>
             <ion-badge slot="end" color="medium">{{ mainSortLabel }}</ion-badge>
           </ion-item>
           <ion-list v-if="showMainSort" :inset="true">
             <ion-item>
-              <ion-label position="stacked">排序方式</ion-label>
+              <ion-label position="stacked">{{ t('files.sortMethod') || '排序方式' }}</ion-label>
               <div class="filter-chips">
-                <ion-chip v-for="s in ['name', 'size', 'time'] as const" :key="s"
+                <!--
+                  排序选项：
+                  - 搜索时：额外提供「相关度」选项（用后端返回的 hybrid score）
+                    默认选中，且是降序（高相关度在前）
+                  - 非搜索：name / size / time 三选一
+                -->
+                <ion-chip v-if="searchQuery && searchResults && searchResults.length > 0"
+                  :button="true" :outline="sortBy !== 'relevance'" :color="sortBy === 'relevance' ? 'primary' : undefined"
+                  @click.stop="setSortBy('relevance')">
+                  {{ t('files.sortByRelevance') || '相关度' }}
+                </ion-chip>
+                <ion-chip v-for="s in (searchQuery ? ['name', 'size', 'time'] : ['name', 'size', 'time']) as const" :key="s"
                   :button="true" :outline="sortBy !== s" :color="sortBy === s ? 'primary' : undefined"
-                  @click.stop="sortBy = s">
-                  {{ s === 'name' ? '名称' : s === 'size' ? '大小' : '时间' }}
+                  @click.stop="setSortBy(s)">
+                  {{ s === 'name' ? t('files.sortByName') || '名称' : s === 'size' ? t('files.sortBySize') || '大小' : t('files.sortByTime') || '时间' }}
                 </ion-chip>
               </div>
-              <div class="filter-chips" style="margin-top:4px">
-                <ion-chip :button="true" :outline="!!sortDesc" :color="!sortDesc ? 'primary' : undefined" @click.stop="sortDesc = false">升序 ↑</ion-chip>
-                <ion-chip :button="true" :outline="!sortDesc" :color="!!sortDesc ? 'primary' : undefined" @click.stop="sortDesc = true">降序 ↓</ion-chip>
+              <!--
+                相关度排序强制为降序（高相关度在前），不显示升降选择器。
+                非相关度排序才显示升/降切换。
+              -->
+              <div v-if="sortBy !== 'relevance'" class="filter-chips" style="margin-top:4px">
+                <ion-chip :button="true" :outline="!!sortDesc" :color="!sortDesc ? 'primary' : undefined" @click.stop="sortDesc = false">{{ t('files.sortAsc') || '升序 ↑' }}</ion-chip>
+                <ion-chip :button="true" :outline="!sortDesc" :color="!!sortDesc ? 'primary' : undefined" @click.stop="sortDesc = true">{{ t('files.sortDesc') || '降序 ↓' }}</ion-chip>
+              </div>
+              <div v-else class="filter-chips" style="margin-top:4px">
+                <ion-chip :button="false" :outline="false" color="primary">{{ t('files.sortDesc') || '降序 ↓' }}（{{ t('files.sortByRelevance') || '相关度' }}）</ion-chip>
               </div>
             </ion-item>
           </ion-list>
@@ -518,6 +550,7 @@ import {
 import type { FileItem, PluginMeta, TagInfo, SearchMode } from '@/api/encv'
 import { eventBus } from '@/composables/useEventBus'
 import { useI18n } from '@/composables/useI18n'
+import { useVectorSearchStatus } from '@/composables/useVectorSearchStatus'
 import { formatDateTime } from '@/composables/useDateFormat'
 import { useRealtimeTransport } from '@/composables/useRealtimeTransport'
 import { useThumbnailCache } from '@/composables/useThumbnailCache'
@@ -627,11 +660,29 @@ function togglePlayErrorDetail() {
 }
 
 const { t } = useI18n()
+const { status: vectorSearchStatus } = useVectorSearchStatus()
 const { thumbnailUrls, setupLazyThumbnails, onThumbError } = useThumbnailCache()
 const { sortBy, sortDesc } = useFileListSort()
 const showMainSort = ref(false)
 
+/**
+ * setSortBy 排序变更封装：
+ *   - 选择「相关度」时强制 sortDesc=true（高相关度在前）
+ *   - 选择其他排序时保持当前升降序
+ *   - 搜索时「相关度」是默认选项
+ */
+function setSortBy(value: 'name' | 'size' | 'time' | 'relevance') {
+  sortBy.value = value
+  if (value === 'relevance') {
+    sortDesc.value = true
+  }
+}
+
 const mainSortLabel = computed(() => {
+  // 相关度排序强制降序
+  if (sortBy.value === 'relevance') {
+    return '相关度↓'
+  }
   const map: Record<string, string> = { name: '名称', size: '大小', time: '时间' }
   return (map[sortBy.value] || '名称') + (sortDesc.value ? '↓' : '↑')
 })
@@ -1096,6 +1147,12 @@ async function performSearch() {
     if (gen !== searchGeneration) return
     searchResults.value = results
     searchMode.value = mode
+    // 搜索时自动切到「相关度」排序（混合相关度，非纯向量）
+    // 后端在 strict / combined / greedy 模式下都用 hybrid score 填充 score 字段
+    if (results.length > 0 && sortBy.value !== 'relevance') {
+      sortBy.value = 'relevance'
+      sortDesc.value = true
+    }
     searchCache.set(cacheKey, { timestamp: Date.now(), results })
   } catch {
     if (gen !== searchGeneration) return
@@ -1981,6 +2038,16 @@ watch(
   justify-content: center;
   height: 50%;
   color: var(--encv-text-secondary);
+}
+
+/* 三态搜索 loading 之「脉冲」状态（索引不可用） */
+@keyframes encv-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.9); }
+  50%      { opacity: 1.0; transform: scale(1.1); }
+}
+.search-spinner-pulse {
+  animation: encv-pulse 1.2s ease-in-out infinite !important;
+  color: var(--ion-color-warning);
 }
 
 .empty-state {

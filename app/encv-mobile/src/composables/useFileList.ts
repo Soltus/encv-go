@@ -16,7 +16,7 @@ export const IMAGE_EXTENSIONS = new Set([
   '.bmp', '.svg', '.heic', '.heif', '.avif',
 ])
 
-export type SortBy = 'name' | 'size' | 'time'
+export type SortBy = 'name' | 'size' | 'time' | 'relevance'
 
 export interface SortState {
   by: SortBy
@@ -36,6 +36,7 @@ const LABEL_MAP: Record<SortBy, string> = {
   name: '名字',
   size: '大小',
   time: '时间',
+  relevance: '相关度',
 }
 
 export function isImageFile(file: FileItem): boolean {
@@ -93,6 +94,11 @@ export function sortFiles(files: FileItem[], sortBy: SortBy, desc: boolean): Fil
         break
       case 'time':
         cmp = (Number(a.modified) || 0) - (Number(b.modified) || 0)
+        break
+      case 'relevance':
+        // 混合相关度：score 越大越相关（降序）。无 score 的项（未走向量搜索）
+        // 排到末尾，避免干扰相关度排序。
+        cmp = (a.score ?? -1) - (b.score ?? -1)
         break
     }
     return desc ? -cmp : cmp
