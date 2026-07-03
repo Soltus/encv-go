@@ -351,21 +351,85 @@ jobs:
             echo "- 🔄 运行时自动使用 glebarez/sqlite（纯 Go）" >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen + libsql)
+      - name: Prepare ObjectBox native library for Android
+        run: |
+          echo "═══ Preparing ObjectBox for Android arm64-v8a ═══"
+          
+          OB_DIR="pkg/tasksystem/store/objectbox/libs/android_arm64"
+          mkdir -p "$OB_DIR"
+          
+          # 调用统一脚本（从 Maven Central 的 objectbox-android-db AAR 提取）
+          set +e
+          bash scripts/build-objectbox-android.sh \
+            --arch arm64-v8a \
+            2>&1
+          BUILD_EXIT=$?
+          set -e
+          
+          echo ""
+          echo "═══ ObjectBox build result: exit=$BUILD_EXIT ═══"
+          
+          # 检查产物
+          OBJECTBOX_READY=0
+          if [ -f "$OB_DIR/libobjectbox.so" ]; then
+            OBJECTBOX_READY=1
+            echo "✅ ObjectBox native library found:"
+            ls -lh "$OB_DIR/"
+          else
+            echo "⚠️  ObjectBox native library NOT found (will use SQLite-only)"
+          fi
+          
+          # 设置结果供后续步骤使用
+          echo "OBJECTBOX_READY=$OBJECTBOX_READY" >> "$GITHUB_ENV"
+          
+          # 写入 Step Summary（显式可观测，禁止静默降级）
+          if [ $OBJECTBOX_READY -eq 1 ]; then
+            echo "## ✅ ObjectBox 构建成功" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "ObjectBox 原生库已就绪，将在 Go 二进制中启用高性能对象存储引擎。" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            ls -lh "$OB_DIR/" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::ObjectBox 构建失败，将不包含 ObjectBox 引擎"
+            
+            echo "## ⚠️ ObjectBox 构建失败（不包含该引擎）" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**ObjectBox 原生库未包含在此构建中**，将使用默认 SQLite 引擎。" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### 影响" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- ✅ 加密/解密、文件管理、任务系统等核心功能正常" >> "$GITHUB_STEP_SUMMARY"
+            echo "- ❌ ObjectBox 高性能对象存储引擎不可用" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 🔄 运行时自动使用 glebarez/sqlite（纯 Go）" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen + libsql + objectbox)
         env:
           CGO_ENABLED: "1"
           GOOS: android
           GOARCH: arm64
           CC: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
-          CGO_LDFLAGS: "-L${GITHUB_WORKSPACE}/pkg/libsql/libs/android_arm64"
+          CGO_LDFLAGS: "-L${GITHUB_WORKSPACE}/pkg/libsql/libs/android_arm64 -L${GITHUB_WORKSPACE}/pkg/tasksystem/store/objectbox/libs/android_arm64"
         run: |
           # 构建参数
           BUILD_TAGS=""
           if [ "${LIBSQL_READY:-0}" = "1" ]; then
-            BUILD_TAGS="-tags libsql"
+            BUILD_TAGS="$BUILD_TAGS libsql"
             echo "✅ Building with libsql support"
           else
             echo "⚠️  Building WITHOUT libsql support (fallback to SQLite only)"
+          fi
+          if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
+            BUILD_TAGS="$BUILD_TAGS objectbox"
+            echo "✅ Building with objectbox support"
+          else
+            echo "⚠️  Building WITHOUT objectbox support"
+          fi
+          BUILD_TAGS="${BUILD_TAGS# }"  # 去除开头空格
+          if [ -n "$BUILD_TAGS" ]; then
+            BUILD_TAGS="-tags $BUILD_TAGS"
           fi
           
           go build \
@@ -383,6 +447,16 @@ jobs:
               cp pkg/libsql/libs/android_arm64/libsql_experimental.so \
                  ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
               echo "✅ Copied libsql_experimental.so to jniLibs/arm64-v8a/"
+            fi
+          fi
+
+          # 如果是动态链接 objectbox，把 .so 复制到 jniLibs
+          if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
+            if [ -f "pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox.so" ]; then
+              mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
+              cp pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox.so \
+                 ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
+              echo "✅ Copied libobjectbox.so to jniLibs/arm64-v8a/"
             fi
           fi
           
@@ -664,7 +738,7 @@ jobs:
         run: |
           echo "═══ HOST APP jniLibs (Go backend + native libs) ═══"
           HOST_LIBS="${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a"
-          for lib in libencv-go.so libffmpeg.so libffprobe.so libsql_experimental.so; do
+          for lib in libencv-go.so libffmpeg.so libffprobe.so libsql_experimental.so libobjectbox.so; do
             if [ -f "$HOST_LIBS/$lib" ]; then
               echo "  ✅ $lib $(ls -lh "$HOST_LIBS/$lib" | awk '{print $5}')"
             else
