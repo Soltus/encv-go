@@ -102,6 +102,8 @@ github.com/golang/geo v0.0.0-20210211234256-740aa86cb551 h1:gtexQ/VGyN+VVFRXSFig
 github.com/golang/geo v0.0.0-20210211234256-740aa86cb551/go.mod h1:QZ0nwyI2jOfgRAoBvP+ab5aRr7c9x7lhGEJrKvBwjWI=
 github.com/google/flatbuffers v1.12.0 h1:/PtAHvnBY4Kqnx/xCQ3OIV9uYcSFGScBsWI3Oogeh6w=
 github.com/google/flatbuffers v1.12.0/go.mod h1:1AeVuKshWv4vARoZatz6mlQ0JxURH0Kv5+zNeJKJCa8=
+github.com/google/flatbuffers v23.5.26+incompatible h1:M9dgRyhJemaM4Sw8+66GHBu8ioaQmyPLg1b8VwK5WJg=
+github.com/google/flatbuffers v23.5.26+incompatible/go.mod h1:1AeVuKshWv4vARoZatz6mlQ0JxURH0Kv5+zNeJKJCa8=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
 github.com/google/gofuzz v1.0.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
@@ -162,8 +164,12 @@ github.com/ncruces/go-strftime v1.0.0 h1:HMFp8mLCTPp341M/ZnA4qaf7ZlsbTc+miZjCLOF
 github.com/ncruces/go-strftime v1.0.0/go.mod h1:Fwc5htZGVVkseilnfgOVb9mKy6w1naJmn9CehxcKcls=
 github.com/objectbox/objectbox-generator v0.13.0 h1:WyI97psLk3FLw/qGsVIMl49HCSyuFwVekBdIbQDrxXE=
 github.com/objectbox/objectbox-generator v0.13.0/go.mod h1:kanX8YAsG9Fi9tufV0iLMAKfV+d4WLAvSj5rtL01WhQ=
+github.com/objectbox/objectbox-generator/v4 v4.0.0 h1:7V7t7mkGfZ0fSNhaOuOQWKNfPnq8Q7mC+Uzo9ciq5To=
+github.com/objectbox/objectbox-generator/v4 v4.0.0/go.mod h1:paUROSAShse/S8vIhpCyg6leDlZR/C7zOusTeK5YOEY=
 github.com/objectbox/objectbox-go v1.8.0 h1:GET5viHpFz+HijboeGYAXmj67xZ37wCdc7yZg32xkHA=
 github.com/objectbox/objectbox-go v1.8.0/go.mod h1:310SfpcNMThWSrpdcClXWiayVMu59xxA3RZdk5x8ay0=
+github.com/objectbox/objectbox-go v1.9.0 h1:ubyUlgx+9Y1hkf+q0cmBN01VZFhpqOEwWE5xgrIvCpM=
+github.com/objectbox/objectbox-go v1.9.0/go.mod h1:hvJc0nI2o3x2uTrWZYlrZ/t8xsQIhNUrEiou732FmJg=
 github.com/orcaman/writerseeker v0.0.0-20200621085525-1d3f536ff85e h1:s2RNOM/IGdY0Y6qfTeUKhDawdHDpK9RGBdx80qN4Ttw=
 github.com/orcaman/writerseeker v0.0.0-20200621085525-1d3f536ff85e/go.mod h1:nBdnFKj15wFbf94Rwfq4m30eAcyY9V/IyKAGQFtqkW0=
 github.com/pelletier/go-toml/v2 v2.2.4 h1:mye9XuhQ6gvn5h28+VilKrrPoQVanw5PMw/TB0t5Ec4=

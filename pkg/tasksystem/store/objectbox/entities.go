@@ -2,7 +2,7 @@
 
 package objectbox
 
-//go:generate go run github.com/objectbox/objectbox-go/cmd/objectbox-gogen entities.go
+//go:generate bash -c "go run github.com/objectbox/objectbox-go/cmd/objectbox-gogen entities.go && for f in entities.obx.go objectbox-model.go; do if [ -f \"$f\" ] && ! head -1 \"$f\" | grep -q '^//go:build'; then sed -i '1i //go:build objectbox\\n' \"$f\"; fi; done"
 
 // TaskEntity 任务实体（对应 tasksystem.TaskData）。
 type TaskEntity struct {

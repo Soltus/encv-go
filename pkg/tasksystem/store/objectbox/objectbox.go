@@ -3,6 +3,10 @@
 package objectbox
 
 /*
+#cgo android,arm64 LDFLAGS: -L${SRCDIR}/libs/android_arm64
+#cgo android,arm LDFLAGS: -L${SRCDIR}/libs/android_armv7
+#cgo android,386 LDFLAGS: -L${SRCDIR}/libs/android_x86
+#cgo android,amd64 LDFLAGS: -L${SRCDIR}/libs/android_x86_64
 #cgo LDFLAGS: -lobjectbox
 #include <stdlib.h>
 */
