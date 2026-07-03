@@ -207,6 +207,8 @@ import { useConfig } from "@/composables/useConfig";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import type { FieldDef } from "@/config/schemaParser";
+import { alertController } from "@ionic/vue";
+import { restartBackend } from "@/plugins/GoProcess";
 
 const { t } = useI18n();
 const {
@@ -275,12 +277,51 @@ async function loadDatabaseInfo() {
 
 async function handleSaveConfig() {
   try {
+    const before = getFieldValue(["database", "enable_engines"]);
+    const beforeEngine = getFieldValue(["database", "engine"]);
     await saveConfig();
     showToast({ message: t("settings.saveSuccess"), color: "success" });
+
+    const after = getFieldValue(["database", "enable_engines"]);
+    const afterEngine = getFieldValue(["database", "engine"]);
+    const enginesChanged = JSON.stringify(before) !== JSON.stringify(after);
+    const engineChanged = beforeEngine !== afterEngine;
+
+    if (enginesChanged || engineChanged) {
+      await askRestart();
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     showToast({ message: t("settings.saveFailed") + ": " + msg, color: "danger" });
   }
+}
+
+async function askRestart() {
+  const alert = await alertController.create({
+    header: "需要重启生效",
+    message: "数据库引擎配置已修改，需要重启后端才能生效。是否立即重启？",
+    buttons: [
+      {
+        text: "稍后再说",
+        role: "cancel",
+      },
+      {
+        text: "立即重启",
+        handler: async () => {
+          showToast({ message: "正在重启后端...", color: "primary" });
+          try {
+            await restartBackend();
+            showToast({ message: "后端重启成功", color: "success" });
+            loadDatabaseInfo().catch(() => {});
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            showToast({ message: "重启失败: " + msg, color: "danger" });
+          }
+        },
+      },
+    ],
+  });
+  await alert.present();
 }
 
 function handleResetConfig() {

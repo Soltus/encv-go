@@ -69,6 +69,7 @@ interface Props {
   selectAllText?: string;
   clearAllText?: string;
   showActions?: boolean;
+  emptyMeansAll?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -79,6 +80,7 @@ const props = withDefaults(defineProps<Props>(), {
   selectAllText: "全选",
   clearAllText: "清空",
   showActions: true,
+  emptyMeansAll: false,
 });
 
 const emit = defineEmits<{
@@ -92,10 +94,27 @@ const dropdownRef = ref<HTMLElement | null>(null);
 const searchInputRef = ref<HTMLInputElement | null>(null);
 const listRef = ref<HTMLElement | null>(null);
 
-const selectedSet = computed(() => new Set(props.modelValue));
-const selectedCount = computed(() => props.modelValue.length);
+const isEmptyAll = computed(() =>
+  props.emptyMeansAll && props.modelValue.length === 0
+);
+
+const selectedSet = computed(() => {
+  if (isEmptyAll.value) {
+    return new Set(props.options.map(o => o.value));
+  }
+  return new Set(props.modelValue);
+});
+
+const selectedCount = computed(() => {
+  if (isEmptyAll.value) return props.options.length;
+  return props.modelValue.length;
+});
 
 const triggerLabel = computed(() => {
+  if (isEmptyAll.value) {
+    if (props.options.length <= 1) return props.label;
+    return `${props.label} (${props.options.length})`;
+  }
   if (props.modelValue.length === 0) return props.label;
   if (props.modelValue.length === 1) {
     const opt = props.options.find(o => o.value === props.modelValue[0]);

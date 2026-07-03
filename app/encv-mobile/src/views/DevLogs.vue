@@ -37,6 +37,7 @@
             :show-actions="true"
             :select-all-text="t('devlogs.selectAll')"
             :clear-all-text="t('devlogs.clearAll')"
+            :empty-means-all="true"
             @change="onTagsChange"
           />
         </div>

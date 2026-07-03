@@ -17,7 +17,7 @@
 
       <ion-list>
         <ion-list-header>
-          <ion-label>当前引擎</ion-label>
+          <ion-label>当前运行状态</ion-label>
         </ion-list-header>
         <ion-item>
           <ion-label>
@@ -26,6 +26,48 @@
           </ion-label>
           <ion-badge slot="end" :color="dbInfo?.engine === 'sqlite' ? 'primary' : 'success'">
             {{ dbInfo?.engine || '—' }}
+          </ion-badge>
+        </ion-item>
+        <ion-item v-if="dbInfo?.fallbackReason" class="engine-mismatch-item">
+          <ion-label class="ion-text-wrap">
+            <p class="mismatch-warning">
+              <ion-icon :icon="warningOutline" class="warn-icon"></ion-icon>
+              {{ dbInfo.fallbackReason }}
+            </p>
+            <p class="mismatch-detail">
+              配置的引擎：{{ dbInfo.requestedEngine || 'sqlite' }}
+              → 实际运行：{{ dbInfo.engine }}
+            </p>
+          </ion-label>
+        </ion-item>
+      </ion-list>
+
+      <ion-list>
+        <ion-list-header>
+          <ion-label>可用引擎（构建）</ion-label>
+          <ion-note slot="end" class="build-tag-note">build tags</ion-note>
+        </ion-list-header>
+        <ion-item
+          v-for="eng in dbInfo?.availableEngines || []"
+          :key="eng.name"
+          class="engine-small-item"
+          :class="{
+            'engine-active': eng.name === dbInfo?.engine,
+            'engine-unavailable': !eng.available,
+          }"
+        >
+          <ion-label>
+            <h3>{{ eng.label }}
+              <ion-badge v-if="eng.is_base" class="base-badge" color="primary">底座</ion-badge>
+              <ion-badge v-else-if="eng.available && eng.enabled" color="success">已启用</ion-badge>
+              <ion-badge v-else-if="eng.available" color="medium">未启用</ion-badge>
+              <ion-badge v-else color="danger">不可用</ion-badge>
+            </h3>
+            <p v-if="eng.available" class="engine-desc">{{ eng.description }}</p>
+            <p v-else class="engine-unavailable-text">{{ eng.reason || '暂不支持' }}</p>
+          </ion-label>
+          <ion-badge v-if="eng.available && eng.name !== 'sqlite'" slot="end" color="warning">
+            {{ eng.capabilities?.length || 0 }} 项能力
           </ion-badge>
         </ion-item>
       </ion-list>
@@ -169,7 +211,7 @@ import {
   IonTitle,
   IonToolbar,
 } from "@ionic/vue";
-import { checkmarkCircleOutline, closeCircleOutline, listOutline, playCircleOutline, starOutline } from "ionicons/icons";
+import { checkmarkCircleOutline, closeCircleOutline, listOutline, playCircleOutline, starOutline, warningOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { getDatabaseInfo, runDatabaseTests, type DBTestProgress } from "@/api/encv_perf";
 import { showToast } from "@/composables/useToast";
@@ -333,6 +375,76 @@ async function handleRunTests() {
 
 .scenario-group {
   margin-top: 12px;
+}
+
+.engine-small-item {
+  --padding-start: 16px;
+  --inner-padding-end: 16px;
+}
+
+.engine-small-item.engine-active {
+  --background: rgba(var(--ion-color-primary-rgb, 79, 140, 255), 0.08);
+}
+
+.engine-small-item.engine-unavailable {
+  opacity: 0.6;
+}
+
+.engine-small-item h3 {
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.engine-desc {
+  font-size: 12px;
+  color: var(--ion-color-medium, #999);
+  margin: 4px 0 0 0;
+  white-space: normal;
+}
+
+.engine-unavailable-text {
+  font-size: 12px;
+  color: var(--ion-color-danger, #eb445a);
+  margin: 4px 0 0 0;
+}
+
+.base-badge {
+  font-size: 10px;
+  --padding-start: 6px;
+  --padding-end: 6px;
+}
+
+.build-tag-note {
+  font-size: 11px;
+  color: var(--ion-color-medium, #999);
+}
+
+.engine-mismatch-item {
+  --background: rgba(var(--ion-color-warning-rgb, 255, 193, 7), 0.08);
+}
+
+.mismatch-warning {
+  font-size: 13px;
+  color: var(--ion-color-warning, #ffc107);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.warn-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.mismatch-detail {
+  font-size: 12px;
+  color: var(--ion-color-medium, #999);
+  margin: 6px 0 0 0;
 }
 
 .group-header {
