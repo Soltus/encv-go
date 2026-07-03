@@ -36,17 +36,27 @@ export interface FilterState {
   levels: ReadonlySet<Level>
   /** 搜索文本（小写，空字符串表示不过滤） */
   searchLower: string
+  /** 🆕 2026-07-03：标签筛选集合（OR 匹配：任一标签命中即通过）
+   * 空 set 表示不过滤（所有标签都通过） */
+  tags: ReadonlySet<string>
 }
 
 export function buildPredicate(state: FilterState): FilterPredicate {
-  const { levels, searchLower } = state
-  // 🆕 修复 A2: 移除 `|| levels.size === 0` 短路
-  // 空 set 必须 0 通过（用户已取消全选，预期看不到任何日志）
-  // 'all' 必须显式在 set 中（由 toggleLevel 在 select-all 时 push 进 set）
+  const { levels, searchLower, tags } = state
   const allLevels = levels.has('all')
+  const hasTagFilter = tags.size > 0
   return (entry: LogEntry): boolean => {
     if (!allLevels && !levels.has(entry.level as Level)) return false
     if (searchLower && !entry.message.toLowerCase().includes(searchLower)) return false
+    if (hasTagFilter) {
+      const entryTags = entry.tags
+      if (!entryTags || entryTags.length === 0) return false
+      let hit = false
+      for (const t of entryTags) {
+        if (tags.has(t)) { hit = true; break }
+      }
+      if (!hit) return false
+    }
     return true
   }
 }
@@ -55,7 +65,7 @@ export class IncrementalFilter {
   /** 源数据（ring buffer） */
   readonly source: RingBuffer<LogEntry>
   /** 当前 filter 状态（用于判断是否需要 rebuild） */
-  private state: FilterState = { levels: new Set<Level>(['all']), searchLower: '' }
+  private state: FilterState = { levels: new Set<Level>(['all']), searchLower: '', tags: new Set<string>() }
   /** 当前 predicate */
   private predicate: FilterPredicate = buildPredicate(this.state)
   /** 缓存的过滤结果（数组，仅追加） */
@@ -169,8 +179,12 @@ export class IncrementalFilter {
   private isSameState(s: FilterState): boolean {
     if (s.searchLower !== this.state.searchLower) return false
     if (s.levels.size !== this.state.levels.size) return false
+    if (s.tags.size !== this.state.tags.size) return false
     for (const lvl of s.levels) {
       if (!this.state.levels.has(lvl)) return false
+    }
+    for (const tag of s.tags) {
+      if (!this.state.tags.has(tag)) return false
     }
     return true
   }

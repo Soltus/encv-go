@@ -95,7 +95,7 @@ describe('IncrementalFilter 正确性', () => {
     const f = new IncrementalFilter(100)
     for (let i = 0; i < 10; i++) f.push(makeLogEntry(i))
     // entries 0,4,8 是 info（i%4 === 0）
-    f.setFilter({ levels: new Set(['info']), searchLower: '' })
+    f.setFilter({ levels: new Set(['info']), searchLower: '', tags: new Set() })
     expect(f.length).toBe(3)
   })
 
@@ -103,13 +103,13 @@ describe('IncrementalFilter 正确性', () => {
     const f = new IncrementalFilter(100)
     f.push({ id: 1, timestamp: '', level: 'info', message: 'hello world' })
     f.push({ id: 2, timestamp: '', level: 'info', message: 'goodbye' })
-    f.setFilter({ levels: new Set(['all']), searchLower: 'hello' })
+    f.setFilter({ levels: new Set(['all']), searchLower: 'hello', tags: new Set() })
     expect(f.length).toBe(1)
   })
 
   it('增量：新 item 自动按当前 filter 评估', () => {
     const f = new IncrementalFilter(100)
-    f.setFilter({ levels: new Set(['error']), searchLower: '' })
+    f.setFilter({ levels: new Set(['error']), searchLower: '', tags: new Set() })
     f.push({ id: 1, timestamp: '', level: 'info', message: 'x' })
     f.push({ id: 2, timestamp: '', level: 'error', message: 'x' })
     expect(f.length).toBe(1)
@@ -180,7 +180,7 @@ describe('🔥 极限能力实测（关键验收）', () => {
     for (let i = 0; i < N; i++) f.push(makeLogEntry(i))
 
     const m1 = measure('rebuild filter to error-only', () => {
-      f.setFilter({ levels: new Set(['error']), searchLower: '' })
+      f.setFilter({ levels: new Set(['error']), searchLower: '', tags: new Set() })
     })
     // eslint-disable-next-line no-console
     console.log(`\n=== 1M filter rebuild ===`)
@@ -245,7 +245,7 @@ describe('🔥 极限能力实测（关键验收）', () => {
 
     // 模拟过滤切换（用户点击 level 按钮）
     const filterStart = performance.now()
-    f.setFilter({ levels: new Set(['info', 'warn']), searchLower: '' })
+    f.setFilter({ levels: new Set(['info', 'warn']), searchLower: '', tags: new Set() })
     const filterMs = performance.now() - filterStart
 
     // 模拟 60 帧的 read + 渲染

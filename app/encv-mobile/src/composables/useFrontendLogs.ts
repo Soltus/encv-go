@@ -5,11 +5,16 @@ export interface LogEntry {
   timestamp: string
   level: string
   message: string
-  /** 🆕 2026-06-16：来源标签（哪个 console.* 通道 / 哪个 WS 事件 / 哪个 transport）
+  /** 来源标签（哪个 console.* 通道 / 哪个 WS 事件 / 哪个 transport）
    *  · 前端：'console.error' / 'console.warn' / 'console.info' / 'console.debug' / 'console.log'
    *  · 后端：http-poll 拉过来的写 'backend_http_poll'；WS 推过来的由 onWsMessage 写 'ws_log_handler' */
   source?: string
-  /** 🆕 2026-06-16：错误级别原始堆栈（仅 Error 对象 + 显式含 stack 的字符串）
+  /** 🆕 2026-07-03：多维度标签数组，用于筛选
+   *  · 前端标签示例：['frontend', 'main-thread', 'console', 'error']
+   *  · 后端标签示例：['backend', 'api', 'service.task', 'has-error']
+   *  · 一条日志可以有任意多个标签，筛选时按 OR 匹配（任一选中标签命中即通过） */
+  tags?: string[]
+  /** 错误级别原始堆栈（仅 Error 对象 + 显式含 stack 的字符串）
    *  · 前端：safeStringify 提取 v.stack 写到这字段
    *  · 后端：slog 当前没把 stack 推到 ring buffer（按需后续扩展） */
   stack?: string
@@ -71,8 +76,6 @@ function safeStringify(v: any): { text: string; stack?: string } {
 }
 
 function addLog(level: string, args: any[], source?: string) {
-  // 多参数：第一个参数是 message，后面的拼到同一行（兼容原行为）
-  // 同时把 Error.stack 从任一参数里挑出来合并到最终 stack
   const textParts: string[] = []
   const stackParts: string[] = []
   for (const a of args) {
@@ -85,6 +88,7 @@ function addLog(level: string, args: any[], source?: string) {
     timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     level,
     message: textParts.join(' '),
+    tags: deriveFrontendTags(level, source),
   }
   if (source) entry.source = source
   if (stackParts.length > 0) entry.stack = stackParts.join('\n\n')
@@ -94,14 +98,41 @@ function addLog(level: string, args: any[], source?: string) {
   }
 }
 
+/**
+ * 从 level + source 派生出多维度标签。
+ * 维度包括：
+ *   - 来源大类：frontend
+ *   - 线程维度：main-thread / worker
+ *   - 子系统：console / error-capture / hmr / network / vue 等
+ *   - 级别：error / warn / info / log / debug
+ */
+function deriveFrontendTags(level: string, source?: string): string[] {
+  const tags: string[] = ['frontend', 'main-thread']
+  if (source) {
+    if (source.startsWith('console.')) {
+      tags.push('console')
+    } else if (source.startsWith('error-capture') || source.startsWith('vue-error') || source.startsWith('window-error')) {
+      tags.push('error-capture')
+    } else if (source.includes('hmr') || source.includes('vite')) {
+      tags.push('hmr')
+    } else if (source.includes('worker')) {
+      tags.pop() // 移除 main-thread
+      tags.push('worker')
+    }
+  }
+  tags.push(level)
+  return tags
+}
+
 // 🆕 2026-07-02：暴露给 useErrorCapture 等其他系统的直接写入接口
 //   错误捕获系统抓到的异常 → 也写到 DevLogs 前端日志里（带堆栈）
-export function addFrontendLog(level: string, message: string, options?: { source?: string; stack?: string }) {
+export function addFrontendLog(level: string, message: string, options?: { source?: string; stack?: string; tags?: string[] }) {
   const entry: LogEntry = {
     id: ++nextId,
     timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     level,
     message,
+    tags: options?.tags ?? deriveFrontendTags(level, options?.source),
   }
   if (options?.source) entry.source = options.source
   if (options?.stack) entry.stack = options.stack

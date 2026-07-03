@@ -15,14 +15,30 @@
         </ion-segment>
       </ion-toolbar>
       <div class="toolbar-row">
-        <div class="level-filters">
-          <button
-            v-for="lvl in levelOptions"
-            :key="lvl.value"
-            class="level-btn"
-            :class="{ active: selectedLevels.has(lvl.value), [lvl.value]: true }"
-            @click="toggleLevel(lvl.value)"
-          >{{ lvl.label }}</button>
+        <div class="filter-dropdowns">
+          <FilterDropdown
+            :options="levelDropdownOptions"
+            v-model="selectedLevelsArray"
+            :label="t('devlogs.level')"
+            :multi-select="true"
+            :show-actions="true"
+            :select-all-text="t('devlogs.selectAll')"
+            :clear-all-text="t('devlogs.clearAll')"
+            @change="onLevelsChange"
+          />
+          <FilterDropdown
+            :options="tagDropdownOptions"
+            v-model="selectedTags"
+            :label="t('devlogs.source')"
+            :multi-select="true"
+            :searchable="true"
+            :search-placeholder="t('devlogs.searchTag')"
+            :empty-text="t('devlogs.noTags')"
+            :show-actions="true"
+            :select-all-text="t('devlogs.selectAll')"
+            :clear-all-text="t('devlogs.clearAll')"
+            @change="onTagsChange"
+          />
         </div>
         <div class="toolbar-actions">
           <!-- v6 纯手动挡：▶ 跟随 / ⏸ 暂停 开关按钮 -->
@@ -73,6 +89,9 @@
         </div>
         <VirtualLogList :key="'frontend'" v-if="filteredFrontend.length > 0" :items="filteredFrontend" :scroll-el="scrollEl" @select="onLogSelect">
           <template #default="{ item }">
+            <span class="log-source-icon" :title="getSourceIconTitle(item)">
+              {{ getSourceIcon(item) }}
+            </span>
             <span class="log-time">[{{ item.timestamp }}]</span>
             <ion-badge :color="getBadgeColor(item.level)" class="level-badge">{{ item.level.toUpperCase() }}</ion-badge>
             <span class="log-msg" v-html="highlightMatch(item.message, searchText)"></span>
@@ -92,6 +111,9 @@
         </div>
         <VirtualLogList :key="'backend'" v-if="backendFilteredItems.length > 0" :items="backendFilteredItems" :scroll-el="scrollEl" @select="onLogSelect">
           <template #default="{ item }">
+            <span class="log-source-icon" :title="getSourceIconTitle(item)">
+              {{ getSourceIcon(item) }}
+            </span>
             <span class="log-time">[{{ item.timestamp }}]</span>
             <ion-badge :color="getBadgeColor(item.level)" class="level-badge">{{ item.level.toUpperCase() }}</ion-badge>
             <span class="log-msg" v-html="highlightMatch(item.message, searchText)"></span>
@@ -178,6 +200,17 @@
             <span class="log-detail-label">{{ t('devlogs.logDetailSource') }}</span>
             <span class="log-detail-value log-source-detail">{{ selectedLog.source }}</span>
           </div>
+          <div v-if="selectedLog.tags && selectedLog.tags.length > 0" class="log-detail-row">
+            <span class="log-detail-label">{{ t('devlogs.logDetailTags') }}</span>
+            <div class="log-detail-tags">
+              <span
+                v-for="tag in selectedLog.tags"
+                :key="tag"
+                class="log-tag-chip"
+                @click="onTagClick(tag)"
+              >{{ tag }}</span>
+            </div>
+          </div>
           <div class="log-detail-row log-detail-message-row">
             <span class="log-detail-label">{{ t('devlogs.logDetailMessage') }}</span>
             <pre class="log-detail-message">{{ selectedLog.message }}</pre>
@@ -212,6 +245,8 @@ import {
 } from '@ionic/vue'
 import { trashOutline, copyOutline, arrowDownOutline, arrowUpOutline, playOutline, pauseOutline, closeOutline } from 'ionicons/icons'
 import VirtualLogList from '@/components/VirtualLogList.vue'
+import FilterDropdown from '@/components/shared/FilterDropdown.vue'
+import type { DropdownOption } from '@/components/shared/FilterDropdown.vue'
 import { eventBus } from '@/composables/useEventBus'
 import { useI18n } from '@/composables/useI18n'
 import { useRealtimeTransport } from '@/composables/useRealtimeTransport'
@@ -304,7 +339,9 @@ const unsubBackendFilter = backendFilter.subscribe(() => {
     if (pendingBackendLogs.length === 0) return
     const toAdd = pendingBackendLogs
     pendingBackendLogs = []
-    // 🆕 1M 容量：直接 pushMany，O(toAdd) 而非 O(MAX)
+    for (const entry of toAdd) {
+      updateTagCounts(entry, backendTagCounts)
+    }
     backendFilter.pushMany(toAdd)
   }
 
@@ -329,12 +366,15 @@ const unsubBackendFilter = backendFilter.subscribe(() => {
               const lvl: Level = ['debug', 'info', 'warn', 'error'].includes(e.level)
                 ? (e.level as Level)
                 : 'info'
-              backendFilter.push({
+              const entry: LogEntry = {
                 id: ++nextId,
                 timestamp: e.timestamp || new Date().toLocaleTimeString('zh-CN', { hour12: false }),
                 level: lvl,
                 message: e.message,
-              })
+                tags: (e as any).tags ? (e as any).tags : undefined,
+              }
+              updateTagCounts(entry, backendTagCounts)
+              backendFilter.push(entry)
             }
           }
           if (i < logs.length) {
@@ -360,14 +400,40 @@ const unsubBackendFilter = backendFilter.subscribe(() => {
     }
   }
 
-const selectedLevels = ref<Set<string>>(new Set(['debug', 'info', 'warn', 'error']))
-const levelOptions = [
-  { value: 'all', label: t('devlogs.all') },
+const selectedLevelsArray = ref<string[]>(['debug', 'info', 'warn', 'error'])
+const levelDropdownOptions: DropdownOption[] = [
   { value: 'debug', label: 'DEBUG' },
   { value: 'info', label: 'INFO' },
   { value: 'warn', label: 'WARN' },
   { value: 'error', label: 'ERROR' },
 ]
+
+const selectedTags = ref<string[]>([])
+
+const backendTagCounts = new Map<string, number>()
+
+function updateTagCounts(entry: LogEntry, counts: Map<string, number>) {
+  if (entry.tags && entry.tags.length > 0) {
+    for (const tag of entry.tags) {
+      counts.set(tag, (counts.get(tag) || 0) + 1)
+    }
+  }
+}
+
+const tagDropdownOptions = computed<DropdownOption[]>(() => {
+  if (activeTab.value === 'frontend') {
+    const counts = new Map<string, number>()
+    for (const entry of frontendLogs.value) {
+      updateTagCounts(entry, counts)
+    }
+    return Array.from(counts.entries())
+      .map(([value, count]) => ({ value, label: value, count }))
+      .sort((a, b) => b.count - a.count)
+  }
+  return Array.from(backendTagCounts.entries())
+    .map(([value, count]) => ({ value, label: value, count }))
+    .sort((a, b) => b.count - a.count)
+})
 
 /**
  * 🆕 2026-06-15 搜索高亮：转义 HTML 特殊字符 + 把 query 用 <mark> 包起来
@@ -388,17 +454,48 @@ function highlightMatch(text: string, query: string): string {
   }
 }
 
-function toggleLevel(level: string) {
-  const s = new Set(selectedLevels.value)
-  if (level === 'all') {
-    if (s.has('all')) { s.clear() }
-    else { s.add('all'); for (const o of levelOptions) if (o.value !== 'all') s.add(o.value) }
-  } else {
-    if (s.has(level)) { s.delete(level); s.delete('all') }
-    else { s.add(level); if (s.size === levelOptions.length - 1) s.add('all') }
-    if (s.size === levelOptions.length - 1) s.add('all')
+function onLevelsChange(_values: string[]) {
+  // levels 变化时，watch 会自动触发 filter 更新
+}
+
+function onTagsChange(_values: string[]) {
+  // tags 变化时，watch 会自动触发 filter 更新
+}
+
+function onTagClick(tag: string) {
+  if (!selectedTags.value.includes(tag)) {
+    selectedTags.value = [...selectedTags.value, tag]
   }
-  selectedLevels.value = s
+  closeLogDetail()
+}
+
+function getSourceIcon(entry: LogEntry): string {
+  const tags = entry.tags || []
+  if (tags.includes('frontend')) {
+    if (tags.includes('worker')) return '⚙'
+    if (tags.includes('error-capture')) return '⚠'
+    if (tags.includes('hmr')) return '🔥'
+    if (tags.includes('console')) return '◉'
+    return '◉'
+  }
+  if (tags.includes('backend')) {
+    if (tags.includes('api')) return '🌐'
+    if (tags.includes('websocket')) return '⚡'
+    if (tags.includes('task')) return '📋'
+    if (tags.includes('db')) return '🗄'
+    if (tags.includes('mount')) return '📁'
+    if (tags.includes('kernel') || tags.includes('plugin')) return '🔌'
+    if (tags.includes('agent')) return '🤖'
+    if (tags.includes('service')) return '⚙'
+    return '●'
+  }
+  return '●'
+}
+
+function getSourceIconTitle(entry: LogEntry): string {
+  const tags = entry.tags || []
+  if (tags.length === 0) return entry.source || 'unknown'
+  return tags.join(' · ')
 }
 
 let nextId = 0
@@ -443,22 +540,29 @@ function getBadgeColor(level: string): string {
  * 1M rebuild 实测 27ms（< 60FPS 单帧预算 16.67ms × 2，仍在用户可感知阈值外）
  */
 watch(
-  [searchText, selectedLevels],
+  [searchText, selectedLevelsArray, selectedTags],
   () => {
     backendFilter.setFilter({
-      levels: new Set<Level>([...selectedLevels.value] as Level[]),
+      levels: new Set<Level>([...selectedLevelsArray.value] as Level[]),
       searchLower: searchText.value.toLowerCase(),
+      tags: new Set<string>(selectedTags.value),
     })
   },
   { flush: 'post' },
 )
 
 const filteredFrontend = computed(() => {
-  // 前端用 useFrontendLogs 自己的 2000 cap；保持原 Array.filter 实现（2000 项下完全 OK）
   let logs = frontendLogs.value
-  if (!selectedLevels.value.has('all')) {
-    const lvls = Array.from(selectedLevels.value)
+  const lvls = selectedLevelsArray.value
+  if (lvls.length > 0) {
     logs = logs.filter((l) => lvls.includes(l.level))
+  }
+  if (selectedTags.value.length > 0) {
+    const tagSet = new Set(selectedTags.value)
+    logs = logs.filter((l) => {
+      if (!l.tags || l.tags.length === 0) return false
+      return l.tags.some((t) => tagSet.has(t))
+    })
   }
   if (searchText.value) logs = logs.filter((l) => l.message.toLowerCase().includes(searchText.value.toLowerCase()))
   return logs
@@ -663,8 +767,12 @@ async function handleClear() {
       {
         text: t('common.confirm'), role: 'destructive',
         handler: () => {
-          if (activeTab.value === 'frontend') clearFrontendLogs()
-          else backendFilter.clear()  // 🆕 1M+ 容量：filter.clear() O(1)
+          if (activeTab.value === 'frontend') {
+            clearFrontendLogs()
+          } else {
+            backendFilter.clear()
+            backendTagCounts.clear()
+          }
         },
       },
     ],
@@ -678,22 +786,33 @@ function onWsMessage(data: any) {
     const level = ['debug', 'info', 'warn', 'error'].includes(logData.level) ? logData.level : 'info'
     const message = String(logData.message || logData.msg || '')
     if (!message && !logData.message) return
+    let tags: string[] | undefined
+    if (Array.isArray(logData.tags)) {
+      tags = logData.tags.filter((t: any) => typeof t === 'string')
+    } else if (typeof logData.tags === 'string') {
+      tags = logData.tags.split(',').filter(Boolean)
+    }
     queueBackendLog({
       id: ++nextId,
       timestamp: logData.timestamp || new Date().toLocaleTimeString('zh-CN', { hour12: false }),
       level,
       message,
-      // 🆕 2026-06-16：来源 + 堆栈透传
-      //  WS 推来的 → 'ws_log_handler'（真机主路径）
-      //  透传 stack（如果后端 slog 后续扩展推 stack，这里自动显示）
       source: typeof logData.source === 'string' ? logData.source : 'ws_log_handler',
       stack: typeof logData.stack === 'string' ? logData.stack : undefined,
+      tags,
     })
     return
   }
   if (data && data.type && data.type !== 'log' && data.type !== 'pong' && data.type !== 'server:status') {
     const msg = typeof data === 'string' ? data : JSON.stringify(data)
-    queueBackendLog({ id: ++nextId, timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }), level: 'debug', message: msg, source: 'ws_log_handler' })
+    queueBackendLog({
+      id: ++nextId,
+      timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      level: 'debug',
+      message: msg,
+      source: 'ws_log_handler',
+      tags: ['backend', 'websocket', 'debug'],
+    })
   }
 }
 
@@ -1178,5 +1297,60 @@ defineExpose({
   gap: 8px;
   padding: 10px 16px;
   border-top: 1px solid var(--ion-border-color, rgba(0, 0, 0, 0.08));
+}
+
+.filter-dropdowns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.log-source-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 12px;
+  flex-shrink: 0;
+  line-height: 1;
+  user-select: none;
+}
+
+.log-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.log-tag-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 12px;
+  background: var(--ion-color-light-shade, #eee);
+  color: var(--ion-color-dark, #333);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--ion-font-family, sans-serif);
+}
+
+.log-tag-chip:hover {
+  background: var(--ion-color-primary-tint, #e8f0fe);
+  color: var(--ion-color-primary, #3880ff);
+}
+
+@media (prefers-color-scheme: dark) {
+  .log-tag-chip {
+    background: var(--ion-color-dark-shade, #2a2a2a);
+    color: var(--ion-color-light, #ddd);
+  }
+
+  .log-tag-chip:hover {
+    background: rgba(56, 128, 255, 0.2);
+    color: var(--ion-color-primary, #6ba3ff);
+  }
 }
 </style>
