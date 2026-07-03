@@ -48,12 +48,15 @@
               'scenario-passed': scenario.status === 'passed',
               'scenario-failed': scenario.status === 'failed',
               'scenario-running': scenario.status === 'running',
-              'scenario-capability': cat === '引擎特殊能力',
+              'scenario-engine-specific': scenario.isEngineSpecific,
             }"
           >
             <div class="scenario-content">
               <div class="scenario-header">
                 <span class="scenario-name">{{ scenario.name }}</span>
+                <ion-badge v-if="scenario.isEngineSpecific" color="warning" class="capability-badge">
+                  引擎专属
+                </ion-badge>
                 <ion-badge
                   v-if="scenario.status === 'passed'"
                   color="success"
@@ -177,6 +180,8 @@ interface ScenarioItem {
   description: string;
   status: "pending" | "running" | "passed" | "failed";
   category?: string;
+  capability?: string;
+  isEngineSpecific?: boolean;
   durationMs?: number;
   metrics?: Record<string, any>;
   error?: string;
@@ -186,16 +191,7 @@ const dbInfo = ref<any>(null);
 const isRunning = ref(false);
 const currentPhase = ref("");
 
-const scenarios = ref<ScenarioItem[]>([
-  { id: "crud", name: "CRUD 基础操作", description: "创建、读取、更新、删除任务", status: "pending", category: "基础" },
-  { id: "batch_write", name: "批量写入性能", description: "批量创建 1000 条任务，测写入吞吐", status: "pending", category: "基础" },
-  { id: "query_filter", name: "查询过滤", description: "按类型、状态、触发器、runId 等多维度过滤", status: "pending", category: "基础" },
-  { id: "concurrency", name: "并发压测", description: "5 协程并发写入，测事务隔离性", status: "pending", category: "基础" },
-  { id: "export_import", name: "导出导入一致性", description: "导出 JSON → 删除 → 导入 → 验证数据一致", status: "pending", category: "基础" },
-  { id: "large_table_query", name: "大表查询性能", description: "5000 条数据下的单条件/多条件/分页查询，测索引优化能力", status: "pending", category: "引擎特殊能力" },
-  { id: "concurrent_rw", name: "并发读写分离", description: "3 写 + 5 读同时跑 5s，测 MVCC / 读写不阻塞能力", status: "pending", category: "引擎特殊能力" },
-  { id: "transaction", name: "ACID 事务验证", description: "导入导出一致性 / 回滚 / 更新原子性，测事务 ACID 完整性", status: "pending", category: "引擎特殊能力" },
-]);
+const scenarios = ref<ScenarioItem[]>([]);
 
 const summary = ref<{
   total: number;
@@ -228,6 +224,7 @@ function formatMetricValue(v: any): string {
 }
 
 onMounted(async () => {
+  resetScenarios();
   try {
     dbInfo.value = await getDatabaseInfo();
   } catch (e) {
@@ -236,12 +233,16 @@ onMounted(async () => {
 });
 
 function resetScenarios() {
-  for (const s of scenarios.value) {
-    s.status = "pending";
-    s.durationMs = undefined;
-    s.metrics = undefined;
-    s.error = undefined;
-  }
+  scenarios.value = [
+    { id: "crud", name: "CRUD 基础操作", description: "创建、读取、更新、删除任务", status: "pending", category: "基础功能" },
+    { id: "batch_write", name: "批量写入性能", description: "批量创建 1000 条任务，测写入吞吐", status: "pending", category: "基础功能" },
+    { id: "query_filter", name: "查询过滤", description: "按类型、状态、触发器、runId 等多维度过滤", status: "pending", category: "基础功能" },
+    { id: "concurrency", name: "并发压测", description: "5 协程并发写入，测事务隔离性", status: "pending", category: "基础功能" },
+    { id: "export_import", name: "导出导入一致性", description: "导出 JSON → 删除 → 导入 → 验证数据一致", status: "pending", category: "基础功能" },
+    { id: "large_table_query", name: "大表查询性能", description: "5000 条数据下的单条件/多条件/分页查询", status: "pending", category: "基础功能" },
+    { id: "concurrent_rw", name: "并发读写分离", description: "3 写 + 5 读同时跑，测读写阻塞情况", status: "pending", category: "基础功能" },
+    { id: "transaction", name: "ACID 事务验证", description: "导入导出一致性 / 回滚 / 更新原子性", status: "pending", category: "基础功能" },
+  ];
   summary.value = null;
 }
 
@@ -249,18 +250,42 @@ function handleProgress(p: DBTestProgress) {
   currentPhase.value = p.message;
 
   if (p.phase === "started") {
-    const scenario = scenarios.value.find(s => s.id === p.scenario);
-    if (scenario) {
+    let scenario = scenarios.value.find(s => s.id === p.scenario);
+    if (!scenario) {
+      const capName = p.capability || "引擎专属能力";
+      const isFeature = capName === "feature";
+      scenario = {
+        id: p.scenario,
+        name: p.scenario,
+        description: isFeature ? "引擎特有功能验证" : "引擎性能特性测试",
+        status: "running",
+        category: p.isEngineSpecific ? "引擎专属能力" : "基础功能",
+        capability: p.capability,
+        isEngineSpecific: p.isEngineSpecific,
+      };
+      scenarios.value.push(scenario);
+    } else {
       scenario.status = "running";
     }
   } else if (p.phase === "passed" || p.phase === "failed") {
-    const scenario = scenarios.value.find(s => s.id === p.scenario);
-    if (scenario) {
+    let scenario = scenarios.value.find(s => s.id === p.scenario);
+    if (!scenario) {
+      scenario = {
+        id: p.scenario,
+        name: p.scenario,
+        description: "引擎能力测试",
+        status: p.phase as "passed" | "failed",
+        category: p.isEngineSpecific ? "引擎专属能力" : "基础功能",
+        capability: p.capability,
+        isEngineSpecific: p.isEngineSpecific,
+      };
+      scenarios.value.push(scenario);
+    } else {
       scenario.status = p.phase as "passed" | "failed";
-      scenario.durationMs = p.durationMs;
-      scenario.metrics = p.metrics;
-      scenario.error = p.error;
     }
+    scenario.durationMs = p.durationMs;
+    scenario.metrics = p.metrics;
+    scenario.error = p.error;
   } else if (p.phase === "completed") {
     const passed = (p.metrics?.passed as string[] | undefined)?.length ?? 0;
     const failed = (p.metrics?.failed as string[] | undefined)?.length ?? 0;
@@ -333,6 +358,17 @@ async function handleRunTests() {
 .scenario-capability {
   --background: var(--ion-color-warning-rgb, 255, 193, 7);
   --background-opacity: 0.05;
+}
+
+.scenario-engine-specific {
+  --background: rgba(255, 193, 7, 0.08);
+  border-left: 3px solid var(--ion-color-warning, #ffc107);
+}
+
+.capability-badge {
+  font-size: 10px;
+  --padding-start: 6px;
+  --padding-end: 6px;
 }
 
 .scenario-content {

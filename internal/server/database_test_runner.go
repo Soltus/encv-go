@@ -50,12 +50,15 @@ const (
 
 // dbTestProgress SSE 进度事件
 type dbTestProgress struct {
-	Phase    string  `json:"phase"`    // "started" | "running" | "passed" | "failed"
-	Scenario string  `json:"scenario"` // 当前场景名
-	Message  string  `json:"message"`  // 描述信息
-	DurationMs int64  `json:"duration_ms,omitempty"`
-	Metrics  map[string]any `json:"metrics,omitempty"`
-	Error    string  `json:"error,omitempty"`
+	Phase      string         `json:"phase"`      // "started" | "running" | "passed" | "failed"
+	Scenario   string         `json:"scenario"`   // 当前场景名
+	Message    string         `json:"message"`    // 描述信息
+	DurationMs int64          `json:"duration_ms,omitempty"`
+	Metrics    map[string]any `json:"metrics,omitempty"`
+	Error      string         `json:"error,omitempty"`
+	Category   string         `json:"category,omitempty"`   // "basic" | "capability"
+	Capability string         `json:"capability,omitempty"` // 能力分类: "feature" | "performance" | "consistency"
+	IsEngineSpecific bool   `json:"is_engine_specific,omitempty"`
 }
 
 // dbTestRequest 测试请求体
@@ -102,7 +105,13 @@ func (s *Server) handleDatabaseTestRun(c *gin.Context) {
 	}
 
 	// 开始测试
-	slog.Info("db test: starting", "scenarios", len(scenarios), "engine", store.EngineName())
+	engineName := store.EngineName()
+	capTests := tasksystem.GetCapabilityTests(engineName)
+	slog.Info("db test: starting",
+		"basic_scenarios", len(scenarios),
+		"capability_tests", len(capTests),
+		"engine", engineName,
+	)
 
 	totalStart := time.Now()
 	var failed []string
@@ -112,12 +121,15 @@ func (s *Server) handleDatabaseTestRun(c *gin.Context) {
 	cleanupTestData(store)
 	defer cleanupTestData(store)
 
+	// ─── 第一部分：基础测试（所有引擎通用） ───
 	for _, scenario := range scenarios {
 		scenarioStart := time.Now()
 		sendEvent(dbTestProgress{
-			Phase:    "started",
-			Scenario: string(scenario),
-			Message:  fmt.Sprintf("开始测试: %s", scenario),
+			Phase:      "started",
+			Scenario:   string(scenario),
+			Message:    fmt.Sprintf("开始测试: %s", scenario),
+			Category:   "basic",
+			Capability: "基础功能",
 		})
 
 		var metrics map[string]any
@@ -145,49 +157,107 @@ func (s *Server) handleDatabaseTestRun(c *gin.Context) {
 		duration := time.Since(scenarioStart).Milliseconds()
 
 		if err != nil {
-			slog.Warn("db test: scenario failed", "scenario", scenario, "err", err, "duration_ms", duration)
+			slog.Warn("db test: basic scenario failed", "scenario", scenario, "err", err, "duration_ms", duration)
 			failed = append(failed, string(scenario))
 			sendEvent(dbTestProgress{
-				Phase:      "failed",
-				Scenario:   string(scenario),
-				Message:    fmt.Sprintf("测试失败: %v", err),
-				DurationMs: duration,
-				Error:      err.Error(),
+				Phase:            "failed",
+				Scenario:         string(scenario),
+				Message:          fmt.Sprintf("测试失败: %v", err),
+				DurationMs:       duration,
+				Error:            err.Error(),
+				Category:         "basic",
+				IsEngineSpecific: false,
 			})
 		} else {
 			passed = append(passed, string(scenario))
 			sendEvent(dbTestProgress{
-				Phase:      "passed",
-				Scenario:   string(scenario),
-				Message:    "测试通过",
-				DurationMs: duration,
-				Metrics:    metrics,
+				Phase:            "passed",
+				Scenario:         string(scenario),
+				Message:          "测试通过",
+				DurationMs:       duration,
+				Metrics:          metrics,
+				Category:         "basic",
+				IsEngineSpecific: false,
 			})
 		}
 
-		// 每个场景后清理一次，避免数据累积
+		cleanupTestData(store)
+	}
+
+	// ─── 第二部分：引擎专属能力测试（核心价值） ───
+	for _, capTest := range capTests {
+		scenarioStart := time.Now()
+		sendEvent(dbTestProgress{
+			Phase:            "started",
+			Scenario:         capTest.ID,
+			Message:          fmt.Sprintf("[引擎专属] 开始测试: %s", capTest.Name),
+			Category:         "capability",
+			Capability:       capTest.Category,
+			IsEngineSpecific: true,
+		})
+
+		metrics, err := capTest.Run(store)
+		duration := time.Since(scenarioStart).Milliseconds()
+
+		if err != nil {
+			slog.Warn("db test: capability test failed",
+				"test", capTest.ID,
+				"engine", engineName,
+				"err", err,
+				"duration_ms", duration,
+			)
+			failed = append(failed, capTest.ID)
+			sendEvent(dbTestProgress{
+				Phase:            "failed",
+				Scenario:         capTest.ID,
+				Message:          fmt.Sprintf("[引擎专属] 测试失败: %v", err),
+				DurationMs:       duration,
+				Error:            err.Error(),
+				Category:         "capability",
+				Capability:       capTest.Category,
+				IsEngineSpecific: true,
+			})
+		} else {
+			passed = append(passed, capTest.ID)
+			sendEvent(dbTestProgress{
+				Phase:            "passed",
+				Scenario:         capTest.ID,
+				Message:          "[引擎专属] 测试通过",
+				DurationMs:       duration,
+				Metrics:          metrics,
+				Category:         "capability",
+				Capability:       capTest.Category,
+				IsEngineSpecific: true,
+			})
+		}
+
 		cleanupTestData(store)
 	}
 
 	// 汇总
+	totalCount := len(scenarios) + len(capTests)
 	totalDuration := time.Since(totalStart).Milliseconds()
 	sendEvent(dbTestProgress{
 		Phase:    "completed",
 		Scenario: "summary",
-		Message:  fmt.Sprintf("测试完成: %d 通过, %d 失败", len(passed), len(failed)),
+		Message:  fmt.Sprintf("测试完成: %d 通过, %d 失败（含 %d 项引擎专属能力）", len(passed), len(failed), len(capTests)),
 		DurationMs: totalDuration,
 		Metrics: map[string]any{
-			"passed": passed,
-			"failed": failed,
-			"total":  len(scenarios),
-			"engine": store.EngineName(),
+			"passed":             passed,
+			"failed":             failed,
+			"total":              totalCount,
+			"basic_count":        len(scenarios),
+			"capability_count":   len(capTests),
+			"engine":             engineName,
 		},
 	})
 
 	slog.Info("db test: completed",
-		"engine", store.EngineName(),
+		"engine", engineName,
 		"passed", len(passed),
 		"failed", len(failed),
+		"basic_count", len(scenarios),
+		"capability_count", len(capTests),
 		"total_ms", totalDuration,
 	)
 }

@@ -222,6 +222,9 @@ export interface DBTestProgress {
   durationMs?: number;
   metrics?: Record<string, any>;
   error?: string;
+  category?: "basic" | "capability";
+  capability?: string;
+  isEngineSpecific?: boolean;
 }
 
 export interface DBTestRequest {
