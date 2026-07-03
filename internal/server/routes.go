@@ -19,6 +19,13 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.GET("/health", s.handleHealthGin)
 	r.GET("/api/runtime", s.handleRuntimeAPI)
 	r.GET("/api/diagnose", s.handleDiagnoseGin)
+	// 🆕 2026-07-03：特色微服务内核 HTTP API（spec kernel-integration）
+	//   - GET  /api/kernel/services  : 列出已注册的 kernel.Service
+	//   - GET  /api/kernel/health    : 聚合 Health（任一失败返回 503）
+	//   - POST /api/kernel/call      : 通过 kernel.Call 调用 service.method（dev only）
+	r.GET("/api/kernel/services", s.handleKernelServicesGin)
+	r.GET("/api/kernel/health", s.handleKernelHealthGin)
+	r.POST("/api/kernel/call", s.handleKernelCallGin)
 	r.GET("/stream", gin.WrapF(s.handleStreamRequest))
 	r.GET("/decrypt", gin.WrapF(s.handleStreamRequest))
 	r.GET("/preview/*filepath", gin.WrapH(http.StripPrefix("/preview", web.PreviewHandler())))

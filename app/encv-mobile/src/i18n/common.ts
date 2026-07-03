@@ -2,6 +2,9 @@ export default {
   'zh-CN': {
     'common.confirm': '确认',
     'common.cancel': '取消',
+    'common.dismiss': '关闭',
+    'common.rebuild': '重建',
+    'common.reload': '重新加载',
     'common.retry': '重试',
     'common.refresh': '刷新',
     'common.error': '错误',
@@ -317,6 +320,8 @@ export default {
   en: {
     'common.confirm': 'Confirm',
     'common.cancel': 'Cancel',
+    'common.dismiss': 'Dismiss',
+    'common.rebuild': 'Rebuild',
     'common.retry': 'Retry',
     'common.refresh': 'Refresh',
     'common.reload': 'Reload',

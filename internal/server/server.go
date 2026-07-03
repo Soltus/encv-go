@@ -21,6 +21,7 @@ import (
 
 	"github.com/Soltus/encv-go/internal/auth"
 	"github.com/Soltus/encv-go/internal/config"
+	"github.com/Soltus/encv-go/internal/kernel"
 	"github.com/Soltus/encv-go/internal/mount"
 	"github.com/Soltus/encv-go/internal/mount/drivers"
 	"github.com/Soltus/encv-go/internal/openlist"
@@ -93,6 +94,14 @@ type Server struct {
 	lastHeartbeatMs int64
 	// 🆕 2026-07-03：向量搜索服务（Turso 原生向量检索 + 中文 bigram 分词）
 	searchSvc *vectorsearch.SearchService
+	// 🆕 2026-07-03：特色微服务内核 Lifecycle（启停编排 + 内存守卫）
+	//   - Start/Stop 受控：满足"启动 ≤500ms / 停止 ≤200ms"硬指标
+	//   - 不消耗 TCP 端口（纯进程内）
+	//   - 内存守卫：接近阈值时触发 Stop
+	//   - 受管的 Pool 在 Stop 时把 in-flight job 委托给 Ledger
+	//   - 可选：nil = 未启用（dev/test 场景）
+	kernelLifecycle *kernel.Lifecycle
+	kernelPool      *kernel.Pool
 	// 🆕 2026-07-02：搜索结果内存 LRU 缓存（解决连续搜索重新加载慢的问题）
 	//   连续搜"在线" → "在线 视频" → "在线视频" 时，第二、三次直接命中缓存
 	//   避免每次都走 DB + 向量搜索 + 混合评分（综合 ~500ms+）
@@ -336,8 +345,29 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	//   - 把 server 层的 FTSRebuilder 实现注入到 taskManager
 	//   - 让 POST /api/files/search-fulltext/rebuild 能创建 rebuild_fts_index 任务
 	//   - 任务走 worker pool，自带进度推送（task:progress WS）+ 持久化 + 取消能力
-	s.mobileSvc.GetTaskManager().SetFTSRebuilder(NewFTSRebuilder(s.servingDir))
+	//   - 同一实例也注入 kernel（让 AI agent / kernel Bus 可触发重建，不重复构造）
+	ftsRebuilderImpl := NewFTSRebuilder(s.servingDir)
+	s.mobileSvc.GetTaskManager().SetFTSRebuilder(ftsRebuilderImpl)
 	slog.Info("FTS rebuilder injected into task manager")
+
+	// 🆕 2026-07-03：特色微服务内核接入（spec kernel-integration）
+	//   - 把 SearchService / WSHub / FTSRebuilder 注册为 kernel.Service
+	//   - 暴露 /api/kernel/services / /api/kernel/health / /api/kernel/call（dev only）
+	//   - 不破坏现有直接 method call 路径（新旧两条路径并存，渐进式迁移）
+	//   - kernel 包从孤儿状态盘活：868 行测试 + 完整设计此前零生产引用
+	if initErrs := RegisterKernelAdapters(
+		s.searchSvc,
+		s.mobileSvc.GetWSHub(),
+		ftsRebuilderImpl,
+	); len(initErrs) > 0 {
+		// 不阻断启动 — kernel service init 失败属 L2 降级
+		// （Health 端点会暴露，前端可看到具体哪个 service 不可用）
+		slog.Warn("kernel: some services failed to init (continuing in degraded mode)",
+			"failed", initErrs)
+	} else {
+		slog.Info("kernel: all adapters registered and initialized",
+			"services", kernelListNames())
+	}
 
 	// 剧本外置 spec：若 agent_settings.mock_scenarios_dir 非空，
 	// 用 ScenarioLoader 加载 YAML/JSON 剧本，注入到 MockEngine。
