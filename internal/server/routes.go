@@ -246,6 +246,10 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	//   - GET  /api/simverse/focus          : 焦点 NPC 列表
 	//   - POST /api/simverse/focus         : 设置焦点 NPC
 	//   - GET  /api/simverse/perf/metrics  : 性能指标（tick 速率/内存等）
+	//   - GET  /api/simverse/chronicle/world : 世界编年史
+	//   - GET  /api/simverse/chronicle/npc/:id : NPC 个人编年史
+	//   - GET  /api/simverse/chronicle/event/:id : 事件详情 + 因果链
+	//   - GET  /api/simverse/ws            : 事件推送
 	simGroup := r.Group("/api/simverse")
 	{
 		simGroup.GET("/world/state", s.handleSimverseWorldState)
@@ -257,6 +261,9 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 		simGroup.GET("/focus", s.handleSimverseFocusList)
 		simGroup.POST("/focus", s.handleSimverseSetFocus)
 		simGroup.GET("/perf/metrics", s.handleSimversePerfMetrics)
+		simGroup.GET("/chronicle/world", s.handleSimverseChronicleWorld)
+		simGroup.GET("/chronicle/npc/:id", s.handleSimverseChronicleNPC)
+		simGroup.GET("/chronicle/event/:id", s.handleSimverseChronicleEvent)
 		simGroup.GET("/ws", s.handleSimverseWebSocket)
 	}
 }

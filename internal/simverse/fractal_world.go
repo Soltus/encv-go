@@ -38,6 +38,7 @@ type FractalWorld struct {
 	worldTick     uint32
 	perfTier      PerformanceTier
 	perfSched     *PerfScheduler
+	chronicle     *ChronicleManager
 
 	npcCache      *EntityCache[*NPCV3]
 	cellCache     map[uint64]*EntityCache[*Cell]
@@ -50,6 +51,7 @@ type FractalWorld struct {
 func NewFractalWorld() *FractalWorld {
 	fw := &FractalWorld{
 		perfSched:     NewPerfScheduler(),
+		chronicle:     NewChronicleManager("world"),
 		npcCache:      NewEntityCache[*NPCV3](10000),
 		cellCache:     make(map[uint64]*EntityCache[*Cell]),
 		brainCache:    make(map[uint64]*Brain),
@@ -202,9 +204,20 @@ func (fw *FractalWorld) MemoryStats() map[string]float64 {
 	stats["brain_cache_mb"] = float64(len(fw.brainCache)) * 256 / 1024
 
 	stats["focus_npc_count"] = float64(len(fw.focusNPCs))
-	stats["total_mb"] = stats["npc_cache_mb"] + stats["cell_cache_mb"] + stats["brain_cache_mb"]
+
+	chronStats := fw.chronicle.MemoryStats()
+	for k, v := range chronStats {
+		stats["chron_"+k] = v
+	}
+	stats["chron_mb"] = chronStats["total_bytes"] / 1024 / 1024
+
+	stats["total_mb"] = stats["npc_cache_mb"] + stats["cell_cache_mb"] + stats["brain_cache_mb"] + stats["chron_mb"]
 
 	return stats
+}
+
+func (fw *FractalWorld) Chronicle() *ChronicleManager {
+	return fw.chronicle
 }
 
 func (fw *FractalWorld) WorldTick() uint32 {

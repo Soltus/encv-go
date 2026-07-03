@@ -743,3 +743,139 @@ func (s *Server) handleSimverseWebSocket(c *gin.Context) {
 	go client.WritePump()
 	client.ReadPump()
 }
+
+func chronicleEventToJSON(evt simverse.ChronicleEvent) gin.H {
+	return gin.H{
+		"id":          evt.ID,
+		"tick":        evt.Tick,
+		"level":       evt.Level.String(),
+		"level_cn":    evt.Level.CN(),
+		"type":        evt.Type.String(),
+		"type_cn":     evt.Type.CN(),
+		"importance":  evt.Importance,
+		"imp_name":    evt.Importance.String(),
+		"imp_cn":      evt.Importance.CN(),
+		"entity_id":   evt.EntityID,
+		"target_id":   evt.TargetID,
+		"data_tag":    evt.DataTag,
+		"cause1_id":   evt.Cause1ID,
+		"cause2_id":   evt.Cause2ID,
+		"cause3_id":   evt.Cause3ID,
+	}
+}
+
+func (s *Server) handleSimverseChronicleWorld(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	chron := world.Chronicle()
+
+	minImp := 0
+	if v := c.Query("min_importance"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n < int(simverse.ImpMax) {
+			minImp = n
+		}
+	}
+
+	limit := 50
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 500 {
+			limit = n
+		}
+	}
+
+	events := chron.WorldTimeline(simverse.ChronicleImportance(minImp), limit)
+
+	result := make([]gin.H, 0, len(events))
+	for _, evt := range events {
+		result = append(result, chronicleEventToJSON(evt))
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"count":    len(result),
+		"era":      chron.CurrentEra(),
+		"total_events": chron.Count(),
+		"items":    result,
+	})
+}
+
+func (s *Server) handleSimverseChronicleNPC(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	chron := world.Chronicle()
+
+	limit := 50
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+
+	events := chron.NPCHistory(id, limit)
+
+	result := make([]gin.H, 0, len(events))
+	for _, evt := range events {
+		result = append(result, chronicleEventToJSON(evt))
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"npc_id": id,
+		"count":  len(result),
+		"items":  result,
+	})
+}
+
+func (s *Server) handleSimverseChronicleEvent(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	chron := world.Chronicle()
+
+	evt, ok := chron.GetEvent(id)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "event not found"})
+		return
+	}
+
+	causes := chron.Causes(id)
+	causesJSON := make([]gin.H, 0, len(causes))
+	for _, c := range causes {
+		causesJSON = append(causesJSON, chronicleEventToJSON(c))
+	}
+
+	effects := chron.Effects(id, 10)
+	effectsJSON := make([]gin.H, 0, len(effects))
+	for _, e := range effects {
+		effectsJSON = append(effectsJSON, chronicleEventToJSON(e))
+	}
+
+	result := chronicleEventToJSON(evt)
+	result["causes"] = causesJSON
+	result["effects"] = effectsJSON
+
+	c.JSON(http.StatusOK, result)
+}

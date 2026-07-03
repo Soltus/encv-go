@@ -57,12 +57,12 @@ func (m MemoryType) CN() string {
 type MemoryImportance uint8
 
 const (
-	ImpTrivial   MemoryImportance = 0
-	ImpMinor     MemoryImportance = 1
-	ImpModerate  MemoryImportance = 2
-	ImpMajor     MemoryImportance = 3
-	ImpCritical  MemoryImportance = 4
-	ImpMax                       = 5
+	MemImpTrivial   MemoryImportance = 0
+	MemImpMinor     MemoryImportance = 1
+	MemImpModerate  MemoryImportance = 2
+	MemImpMajor     MemoryImportance = 3
+	MemImpCritical  MemoryImportance = 4
+	MemImpMax                       = 5
 )
 
 type Memory struct {
@@ -143,15 +143,15 @@ func NewLongTermMemory() LongTermMemory {
 func (ltm *LongTermMemory) Add(m Memory) {
 	baseStrength := float32(0.0)
 	switch m.Importance {
-	case ImpTrivial:
+	case MemImpTrivial:
 		baseStrength = 0.3
-	case ImpMinor:
+	case MemImpMinor:
 		baseStrength = 0.5
-	case ImpModerate:
+	case MemImpModerate:
 		baseStrength = 0.7
-	case ImpMajor:
+	case MemImpMajor:
 		baseStrength = 0.85
-	case ImpCritical:
+	case MemImpCritical:
 		baseStrength = 0.95
 	}
 	m.Strength = baseStrength
@@ -168,15 +168,15 @@ func (ltm *LongTermMemory) Decay(currentTick uint32, decayRate float32) {
 
 		baseStr := float32(0.0)
 		switch m.Importance {
-		case ImpTrivial:
+		case MemImpTrivial:
 			baseStr = 0.3
-		case ImpMinor:
+		case MemImpMinor:
 			baseStr = 0.5
-		case ImpModerate:
+		case MemImpModerate:
 			baseStr = 0.7
-		case ImpMajor:
+		case MemImpMajor:
 			baseStr = 0.85
-		case ImpCritical:
+		case MemImpCritical:
 			baseStr = 0.95
 		}
 
@@ -246,7 +246,7 @@ func NewMemorySystem() MemorySystem {
 
 func (ms *MemorySystem) Record(m Memory) {
 	ms.ShortTerm.Add(m)
-	if m.Importance >= ImpModerate {
+	if m.Importance >= MemImpModerate {
 		ms.LongTerm.Add(m)
 	}
 }

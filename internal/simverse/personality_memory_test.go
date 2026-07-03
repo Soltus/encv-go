@@ -137,7 +137,7 @@ func TestMemory_ShortTerm(t *testing.T) {
 		stm.Add(Memory{
 			ID:          uint32(i),
 			Type:        MemInteraction,
-			Importance:  ImpModerate,
+			Importance:  MemImpModerate,
 			TargetID:    uint64(100 + i),
 			CreatedTick: uint32(i * 10),
 		})
@@ -159,7 +159,7 @@ func TestMemory_ShortTerm(t *testing.T) {
 		stm.Add(Memory{
 			ID:          uint32(i),
 			Type:        MemFact,
-			Importance:  ImpMinor,
+			Importance:  MemImpMinor,
 			TargetID:    uint64(100 + i),
 			CreatedTick: uint32(i * 10),
 		})
@@ -191,13 +191,13 @@ func TestMemory_LongTerm(t *testing.T) {
 	ltm.Add(Memory{
 		ID:          1,
 		Type:        MemAchievement,
-		Importance:  ImpCritical,
+		Importance:  MemImpCritical,
 		CreatedTick: 100,
 	})
 	ltm.Add(Memory{
 		ID:          2,
 		Type:        MemInteraction,
-		Importance:  ImpTrivial,
+		Importance:  MemImpTrivial,
 		CreatedTick: 200,
 	})
 
@@ -209,7 +209,7 @@ func TestMemory_LongTerm(t *testing.T) {
 
 	items := ltm.Items()
 	for _, m := range items {
-		if m.Importance == ImpCritical && m.Strength < 0.5 {
+		if m.Importance == MemImpCritical && m.Strength < 0.5 {
 			t.Errorf("Critical memory shouldn't decay much: strength=%.2f", m.Strength)
 		}
 		t.Logf("Mem %d (imp=%d): strength=%.3f", m.ID, m.Importance, m.Strength)
@@ -222,19 +222,19 @@ func TestMemory_System(t *testing.T) {
 	ms.Record(Memory{
 		ID:          1,
 		Type:        MemInteraction,
-		Importance:  ImpTrivial,
+		Importance:  MemImpTrivial,
 		CreatedTick: 10,
 	})
 	ms.Record(Memory{
 		ID:          2,
 		Type:        MemAchievement,
-		Importance:  ImpMajor,
+		Importance:  MemImpMajor,
 		CreatedTick: 20,
 	})
 	ms.Record(Memory{
 		ID:          3,
 		Type:        MemTrauma,
-		Importance:  ImpCritical,
+		Importance:  MemImpCritical,
 		CreatedTick: 30,
 	})
 
