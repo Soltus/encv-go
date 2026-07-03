@@ -357,6 +357,33 @@ func (s *Server) handleSimverseNPCDetail(c *gin.Context) {
 		bank[i.String()] = npc.Bank[i]
 	}
 
+	bigFive := make(map[string]uint8)
+	for i := simverse.BigFiveTrait(0); i < simverse.BigFiveMax; i++ {
+		bigFive[i.String()] = npc.Personality.BigFive[i]
+	}
+
+	values := make(map[string]uint8)
+	for i := simverse.ValueType(0); i < simverse.ValueMax; i++ {
+		values[i.String()] = npc.Personality.Values[i]
+	}
+
+	interests := make(map[string]uint8)
+	for i := simverse.InterestType(0); i < simverse.InterestMax; i++ {
+		interests[i.String()] = npc.Personality.Interests[i]
+	}
+
+	topValues := npc.Personality.Values.Top3()
+	topValueNames := make([]string, len(topValues))
+	for i, v := range topValues {
+		topValueNames[i] = v.String()
+	}
+
+	topInterests := npc.Personality.Interests.TopN(5)
+	topInterestNames := make([]string, len(topInterests))
+	for i, v := range topInterests {
+		topInterestNames[i] = v.String()
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"id":              npc.ID,
 		"name":            npc.Name,
@@ -388,6 +415,11 @@ func (s *Server) handleSimverseNPCDetail(c *gin.Context) {
 		"skills":          skills,
 		"inventory":       inventory,
 		"bank":            bank,
+		"big_five":        bigFive,
+		"values":          values,
+		"interests":       interests,
+		"top_values":      topValueNames,
+		"top_interests":   topInterestNames,
 		"life_events":     npc.LifeEvents,
 		"born_at":         npc.BornAt,
 		"died_at":         npc.DiedAt,

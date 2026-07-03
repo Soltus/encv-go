@@ -9,9 +9,10 @@ name: SimVerse Long Stability Test
 #   - 运行时间长（30-40 分钟），不占用常规 PR 检查资源
 #
 # 触发（任一）：
-#   1. schedule — 每日 UTC 0:00（北京时间早 8:00）
-#   2. workflow_dispatch — 手动触发
-#   3. PR 上加 ci:stability 标签（maintainer 决策）
+#   1. workflow_dispatch — 手动触发
+#   2. PR 上加 ci:stability 标签（maintainer 决策）
+#
+# 注意：已移除 schedule 定时触发 — GitHub Actions 时长宝贵，长稳测试按需手动跑
 #
 # 跑什么：
 #   - TestStability_Full30Min — 30 分钟完整长稳测试
@@ -24,8 +25,6 @@ name: SimVerse Long Stability Test
 # =====================================================
 
 on:
-  schedule:
-    - cron: '0 0 * * *'  # 每日 UTC 0:00
   pull_request:
     types: [labeled]
     branches: [main, dev]

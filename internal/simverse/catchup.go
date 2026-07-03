@@ -42,12 +42,14 @@ type NPCV3 struct {
 	NumMarriages   uint8
 	FactionRep     [8]int16
 	LifeEvents     uint32
+	Personality    Personality
+	ShortTermMem   ShortTermMemory
 }
 
 const NPCV3BaseSize = 160
 
 func NPCV3Size() float64 {
-	return float64(NPCV3BaseSize) + 20
+	return float64(NPCV3BaseSize) + 20 + PersonalitySize() + ShortTermMemorySize()
 }
 
 type CatchUpResult struct {

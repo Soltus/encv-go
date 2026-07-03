@@ -240,6 +240,8 @@ func GenerateNPCV3(id uint64, rng *rand.Rand) *NPCV3 {
 	bank[ResGold] = startGold
 	inventory[ResFood] = uint32(10 + rng.Intn(20))
 
+	personality := GeneratePersonality(rng, species, prof, gender)
+
 	return &NPCV3{
 		ID:             id,
 		Name:           name,
@@ -277,6 +279,7 @@ func GenerateNPCV3(id uint64, rng *rand.Rand) *NPCV3 {
 		NumMarriages:   0,
 		FactionRep:     [8]int16{},
 		LifeEvents:     uint32(stage),
+		Personality:    personality,
 	}
 }
 
