@@ -142,12 +142,64 @@ go test -bench "BenchmarkSQLite|BenchmarkObjectBox" -benchmem ./internal/simvers
 
 ### 5.2 长稳测试
 
-| 测试项 | 时长 | 指标 |
-|--------|------|------|
-| 内存泄漏检测 | 30 分钟 | HeapInuse 增长 < 5% |
-| 性能退化检测 | 30 分钟 | tick 速率下降 < 10% |
-| 数据库膨胀检测 | 30 分钟 | DB 文件增长 < 10% |
-| 资源泄漏检测 | 30 分钟 | goroutine 数稳定 |
+长稳测试（Stability Test）是验证系统在持续运行下是否存在内存泄漏、性能退化、资源泄漏等问题的关键手段。
+
+#### 5.2.1 测试分类
+
+| 测试项 | 时长 | 指标阈值 | 触发方式 |
+|--------|------|---------|---------|
+| 内存泄漏检测 | 30 分钟 | HeapInuse 增长 < 5% | CI 定时 + 手动 |
+| 性能退化检测 | 30 分钟 | tick 速率下降 < 10% | CI 定时 + 手动 |
+| 数据库膨胀检测 | 30 分钟 | DB 文件增长 < 10% | CI 定时 + 手动 |
+| Goroutine 泄漏检测 | 30 分钟 | goroutine 数波动 < 20% | CI 定时 + 手动 |
+| 句柄泄漏检测 | 30 分钟 | 打开文件句柄稳定 | 手动 / 真机 |
+| 长周期仿真 | 8 小时 | 世界生态不崩溃 | 手动 / 夜间 |
+
+#### 5.2.2 测试方法
+
+```bash
+# 方式一：内置长稳测试（3 分钟，快速验证）
+go test -run TestStability_3MinuteRun -timeout 5m ./internal/simverse/ -v
+
+# 方式二：30 分钟完整长稳测试（CI 用）
+ENCV_STABILITY_FULL=1 go test -run TestStability_Full30Min -timeout 45m ./internal/simverse/ -v
+
+# 方式三：Go 内置 pprof 持续采样
+go test -run TestStability_Full30Min -memprofile mem.prof -cpuprofile cpu.prof ./internal/simverse/
+```
+
+#### 5.2.3 观测指标
+
+每 30 秒采样一次，记录以下指标：
+
+| 指标类 | 具体指标 | 获取方式 |
+|--------|---------|---------|
+| 内存 | HeapInuse / HeapAlloc / HeapObjects | runtime.ReadMemStats |
+| 内存 | GC 次数 / GC 停顿时间 | runtime.ReadMemStats |
+| CPU | tick 耗时 / 每 tick 事件数 | 内部计时 |
+| 协程 | goroutine 数量 | runtime.NumGoroutine |
+| 缓存 | NPC 缓存命中率 / 大小 | cache.HitRate() / cache.Len() |
+| 世界 | 存活 NPC 数 / 组织数 / 事件数 | world.Stats() |
+| 数据库 | DB 文件大小 / 读写次数 | SQLite / ObjectBox stats |
+
+#### 5.2.4 通过标准
+
+1. **内存泄漏**：30 分钟内 HeapInuse 增长 < 5%（排除 GC 周期波动）
+2. **性能退化**：前 5 分钟平均 tick 耗时 vs 最后 5 分钟，下降 < 10%
+3. **Goroutine 泄漏**：稳定阶段 goroutine 数波动 < 20%
+4. **数据一致性**：随机抽查 100 个 NPC，数据符合统计分布
+5. **世界自洽**：人口/经济/组织数量不出现指数级爆炸或归零
+
+#### 5.2.5 CI 工作流
+
+独立工作流：`.github/workflows/simverse-stability.yml`
+
+- **触发方式**：`schedule`（每日凌晨） + `workflow_dispatch`（手动） + `ci:stability` 标签
+- **运行时长**：约 35 分钟（含准备 + 清理）
+- **失败处理**：发 issue + 标记 `stability-fail` 标签
+- **产物**：pprof 文件 + 测试报告 + 内存趋势图
+
+详见 [simverse-stability.yml](file:///workspace/.github/workflows/simverse-stability.yml)
 
 ### 5.3 Android 真机验证
 
