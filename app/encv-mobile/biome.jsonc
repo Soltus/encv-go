@@ -60,38 +60,111 @@
     "enabled": true,
     "rules": {
       "recommended": true,
+
+      // ═══════════════════════════════════════════════════════════
+      // suspicious — 可疑代码检测
+      // ═══════════════════════════════════════════════════════════
       "suspicious": {
+        // 项目中大量使用 any（与 Go 互操作 / 动态数据），完全禁用以避免误报
         "noExplicitAny": "off",
+
+        // 异步 Promise executor 在某些流式处理场景下是合理的
         "noAsyncPromiseExecutor": "off",
+
+        // 隐式 any 的 let 声明 — 警告级别，提醒但不阻塞
         "noImplicitAnyLet": "warn",
+
+        // 降级为 warn：二进制内容检测正则（如 [\x00-\x08]）合理需要匹配控制字符
+        // 详见 src/components/agent/FileContentCard.vue 的 looksBinary 检测
         "noControlCharactersInRegex": "warn",
+
+        // 降级为 warn：while ((idx = buffer.indexOf(...)) >= 0) 是常见且清晰的模式
+        // SSE 解析 / 流式处理中广泛使用，可读性好且无逻辑错误
         "noAssignInExpressions": "warn",
+
+        // 降级为 warn：部分数组方法的回调确实不需要返回值
+        // 如 forEach / some 仅用于副作用时，return 是多余的
         "useIterableCallbackReturn": "warn"
       },
+
+      // ═══════════════════════════════════════════════════════════
+      // performance — 性能相关
+      // ═══════════════════════════════════════════════════════════
       "performance": {
+        // delete 操作在清理对象属性时是合理的，不强制用 Reflect.deleteProperty
         "noDelete": "off"
       },
+
+      // ═══════════════════════════════════════════════════════════
+      // style — 代码风格
+      // ═══════════════════════════════════════════════════════════
       "style": {
+        // 字符串模板不是万能的，有些场景拼接更清晰
         "useTemplate": "off",
+
+        // 用 const 是好习惯，但不强求（旧代码迁移成本高）
         "useConst": "warn",
+
+        // 默认参数放最后 — 部分场景下放在前面更符合 API 设计
         "useDefaultParameterLast": "off",
+
+        // 无用的 else — 警告，不阻塞
         "noUselessElse": "warn",
+
+        // 不允许重新赋值参数 — 警告，某些场景下（如默认值填充）是合理的
         "noParameterAssign": "warn",
+
+        // 不强制使用 node: 协议导入，兼容旧代码
         "useNodejsImportProtocol": "off",
+
+        // 非空断言 (!) 在 Vue ref / 与 Go 互操作中是必要的
         "noNonNullAssertion": "off"
       },
+
+      // ═══════════════════════════════════════════════════════════
+      // complexity — 复杂度检测
+      // ═══════════════════════════════════════════════════════════
       "complexity": {
+        // 简化逻辑表达式不是必须的，有些显式写法更清晰
         "useSimplifiedLogicExpression": "off",
+
+        // 用字面量 key 而非动态计算 — 警告级别
         "useLiteralKeys": "warn",
+
+        // 可选链 (?.) 是好习惯，但不强求
         "useOptionalChain": "warn",
+
+        // forEach 没问题，不强制用 for...of
         "noForEach": "off"
       },
+
+      // ═══════════════════════════════════════════════════════════
+      // correctness — 正确性检测
+      // ═══════════════════════════════════════════════════════════
       "correctness": {
+        // 不可达代码 — 警告，不阻塞（调试时可能临时保留）
         "noUnreachable": "warn",
+
+        // 降级为 warn：未使用的变量太多（1193处），主要是：
+        //   - Vue 组件的 defineProps / defineEmits 解构变量
+        //   - 开发中预留的变量
+        //   - 大型组件中部分逻辑尚未实现
+        // 后续可以渐进式清理，不应该阻塞 CI
         "noUnusedVariables": "warn",
+
+        // 降级为 warn：未使用的导入（287处）
+        // 原因同上，渐进式清理
         "noUnusedImports": "warn",
+
+        // 降级为 warn：Biome 2.x 的 Vue template lint 还是 experimental
+        // 对 v-for 的 key 检测存在误报（如 MessageAuthor.vue / PhaseBadge.vue 中根本没有 v-for）
+        // 等 Biome Vue 支持稳定后再升回 error
         "noVueDuplicateKeys": "warn"
       },
+
+      // ═══════════════════════════════════════════════════════════
+      // security — 安全检测
+      // ═══════════════════════════════════════════════════════════
       "security": {}
     }
   }

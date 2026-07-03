@@ -113,6 +113,8 @@ dependencies {
     debugImplementation(libs.logcat)
     implementation(libs.okhttp)
     implementation(libs.androidx.work.runtime.ktx)
+    // WorkManager 返回 ListenableFuture，需要 listenablefuture 接口在编译 classpath
+    implementation("com.google.guava:listenablefuture:1.0")
     implementation(libs.bugly.crashreport)
 
     implementation(libs.combolite.core)

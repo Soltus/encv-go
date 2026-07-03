@@ -14,6 +14,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
 
 /**
@@ -82,31 +83,47 @@ class EncvTaskCancelWorker(
         /**
          * Go 进程重启后，触发所有 pending 的 cancel Worker 立即重试。
          * 由 GoProcessRestartReceiver 调用。
+         *
+         * 实现说明：
+         *   WorkManager.getWorkInfosByTag() 返回 ListenableFuture，
+         *   为避免阻塞主线程（广播接收器 onReceive 只有 10s 超时），
+         *   使用 addListener + 后台线程获取结果。
+         *   即使查询失败也不影响功能 — WorkManager 的 LinearBackoff
+         *   本身就是持久化的，退避时间到了会自动重试。
          */
         fun enqueueAllPending(ctx: Context) {
-            // WorkManager 没有"立即重试所有 ENQUEUED + retryCount>0"的直接 API，
-            // 但因为我们用 LinearBackoff，retry 已经在队列里，只是还没到时间。
-            // 这里直接查所有 work info 并 re-enqueue 会重复，所以用一个变通方案：
-            // 发一条自定义广播，Worker 自己在 doWork 里查 Go 状态。
-            //
-            // 实际上 WorkManager 的 retry 机制已经是持久化的，
-            // 下次退避时间到了会自动重试。GoProcessRestartReceiver 的作用
-            // 是**提前**触发，不用等退避时间。
-            //
-            // 实现方式：遍历所有 WorkInfo，找到符合条件的，直接再入队一个新的
-            // （因为 ExistingWorkPolicy.REPLACE 会替换旧的，新的立即执行）。
             val wm = WorkManager.getInstance(ctx)
-            wm.getWorkInfosByTag(EncvTaskCancelWorker::class.java.name).get()?.forEach { info ->
-                if (info.state.isFinished) return@forEach
-                val taskId = info.inputData.getString(KEY_TASK_ID) ?: return@forEach
-                // REPLACE 旧的，新的立即执行
-                val workName = "$WORK_NAME_PREFIX$taskId"
-                val request = OneTimeWorkRequestBuilder<EncvTaskCancelWorker>()
-                    .setInputData(workDataOf(KEY_TASK_ID to taskId))
-                    .build()
-                wm.enqueueUniqueWork(workName, ExistingWorkPolicy.REPLACE, request)
-                Log.d(TAG, "re-triggered cancel worker for task=$taskId (go restart)")
+            val future = wm.getWorkInfosByTag(EncvTaskCancelWorker::class.java.name)
+
+            // 用后台线程执行，避免阻塞主线程
+            val bgExecutor = Executor { runnable ->
+                Thread(runnable, "encv-cancel-worker-retrigger").start()
             }
+
+            future.addListener(
+                {
+                    try {
+                        val infos = future.get()
+                        var retriggered = 0
+                        for (info in infos) {
+                            if (info.state.isFinished) continue
+                            val taskId = info.inputData.getString(KEY_TASK_ID) ?: continue
+                            // REPLACE 旧的，新的立即执行
+                            val workName = "$WORK_NAME_PREFIX$taskId"
+                            val request = OneTimeWorkRequestBuilder<EncvTaskCancelWorker>()
+                                .setInputData(workDataOf(KEY_TASK_ID to taskId))
+                                .build()
+                            wm.enqueueUniqueWork(workName, ExistingWorkPolicy.REPLACE, request)
+                            retriggered++
+                        }
+                        Log.d(TAG, "re-triggered $retriggered cancel workers (go restart)")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "enqueueAllPending: failed: ${e.javaClass.simpleName}")
+                        // 失败不影响功能，WorkManager 会按退避策略自动重试
+                    }
+                },
+                bgExecutor
+            )
         }
     }
 
