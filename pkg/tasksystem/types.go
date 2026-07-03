@@ -12,10 +12,16 @@
 package tasksystem
 
 import (
+	"errors"
 	"time"
 
 	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
 )
+
+// ErrNotFound 记录不存在（替代 sql.ErrNoRows，引擎无关）。
+// Store 接口的 GetTask / GetMetrics / GetSnapshot / GetTrash / GetCalibration
+// 在记录不存在时应返回此错误。
+var ErrNotFound = errors.New("tasksystem: not found")
 
 // TaskType 任务类型枚举。
 // 包含加解密任务和文件操作任务，以及对应的回滚任务类型。
@@ -264,6 +270,10 @@ type Store interface {
 	//   - SQLite 返回 1（单连接串行写，避免 database is locked）
 	//   - Turso 返回 8（MVCC 支持多 writer 并发写）
 	ConcurrencyHint() int
+
+	// EngineName 返回引擎名称（如 "sqlite"、"libsql"、"turso"、"objectbox"）。
+	// 用于前端展示、日志记录、降级原因说明等，完全引擎无关。
+	EngineName() string
 
 	// SaveMetrics 保存性能指标。
 	SaveMetrics(m performance.PerformanceMetrics) error

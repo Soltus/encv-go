@@ -1,12 +1,12 @@
 package server
 
 import (
-	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/Soltus/encv-go/pkg/tasksystem"
 )
 
 // handleRollbackTaskGin POST /api/tasks/:id/rollback
@@ -35,7 +35,7 @@ func (s *Server) handleRollbackTaskGin(c *gin.Context) {
 	// 先校验是否可回滚
 	if err := rm.CanRollback(id); err != nil {
 		// 区分"任务不存在"（404）和"校验失败"（400）
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, tasksystem.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
 			return
 		}

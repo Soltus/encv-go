@@ -258,6 +258,11 @@ func (s *Store) ConcurrencyHint() int {
 	return 1
 }
 
+// EngineName 返回引擎名称。
+func (s *Store) EngineName() string {
+	return "sqlite"
+}
+
 // CreateTask 创建任务。
 func (s *Store) CreateTask(task tasksystem.TaskData) error {
 	_, err := s.db.Exec(`
@@ -288,10 +293,23 @@ func (s *Store) CreateTask(task tasksystem.TaskData) error {
 	return err
 }
 
+// convertNotFoundErr 将 sql.ErrNoRows 转换为 tasksystem.ErrNotFound。
+// 保持引擎无关的错误语义，让上层代码不依赖 database/sql。
+func convertNotFoundErr(err error) error {
+	if err == sql.ErrNoRows {
+		return tasksystem.ErrNotFound
+	}
+	return err
+}
+
 // GetTask 按 ID 查询任务。
 func (s *Store) GetTask(id string) (tasksystem.TaskData, error) {
 	row := s.db.QueryRow(tasksSelectAll+" WHERE id = ?", id)
-	return scanTask(row)
+	task, err := scanTask(row)
+	if err != nil {
+		return tasksystem.TaskData{}, convertNotFoundErr(err)
+	}
+	return task, nil
 }
 
 // ListTasks 按过滤条件查询任务列表，按 CreatedAt 倒序。
@@ -533,7 +551,7 @@ func (s *Store) GetSnapshot(taskID string) (tasksystem.Snapshot, error) {
 	var snapshotType string
 	err := row.Scan(&snap.ID, &snap.TaskID, &snapshotType, &snap.Data, &snap.CreatedAt)
 	if err != nil {
-		return tasksystem.Snapshot{}, err
+		return tasksystem.Snapshot{}, convertNotFoundErr(err)
 	}
 	snap.SnapshotType = snapshotType
 	return snap, nil
@@ -559,7 +577,11 @@ func (s *Store) GetTrash(id string) (tasksystem.TrashItem, error) {
 	row := s.db.QueryRow(`
 		SELECT id, original_path, trash_path, is_directory, size, deleted_at, task_id, restore_task_id, metadata
 		FROM trash WHERE id = ?`, id)
-	return scanTrash(row)
+	item, err := scanTrash(row)
+	if err != nil {
+		return tasksystem.TrashItem{}, convertNotFoundErr(err)
+	}
+	return item, nil
 }
 
 // GetTrashByTaskID 按任务 ID 查询回收站条目。
@@ -567,7 +589,11 @@ func (s *Store) GetTrashByTaskID(taskID string) (tasksystem.TrashItem, error) {
 	row := s.db.QueryRow(`
 		SELECT id, original_path, trash_path, is_directory, size, deleted_at, task_id, restore_task_id, metadata
 		FROM trash WHERE task_id = ?`, taskID)
-	return scanTrash(row)
+	item, err := scanTrash(row)
+	if err != nil {
+		return tasksystem.TrashItem{}, convertNotFoundErr(err)
+	}
+	return item, nil
 }
 
 // ListTrash 查询回收站列表，按 DeletedAt 倒序。
@@ -740,7 +766,11 @@ func (s *Store) GetMetrics(taskID string) (performance.PerformanceMetrics, error
 			grade, grade_score, grade_reason,
 			cpu_score, cpu_label, created_at
 		FROM performance_metrics WHERE task_id = ?`, taskID)
-	return scanMetrics(row)
+	m, err := scanMetrics(row)
+	if err != nil {
+		return performance.PerformanceMetrics{}, convertNotFoundErr(err)
+	}
+	return m, nil
 }
 
 // ListMetricsByPlugin 按 plugin + taskType 查询历史性能指标（按 created_at 倒序，limit 条）。

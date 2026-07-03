@@ -412,8 +412,8 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 		}
 		var cpuScore float64
 		var cpuLabel string
-		if ps := tm.perfStore(); ps != nil {
-			if cal, _ := ps.GetCalibration(); cal != nil {
+		if tm.store != nil {
+			if cal, _ := tm.store.GetCalibration(); cal != nil {
 				cpuScore = cal.CPUScore
 				cpuLabel = cal.CPULabel
 			}
@@ -426,8 +426,8 @@ func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
 		metrics.Grade = grade
 		metrics.GradeScore = score
 		metrics.GradeReason = reason
-		if ps := tm.perfStore(); ps != nil {
-			if err := ps.SaveMetrics(metrics); err != nil {
+		if tm.store != nil {
+			if err := tm.store.SaveMetrics(metrics); err != nil {
 				slog.Warn("SaveMetrics failed", "taskId", task.ID, "error", err)
 			}
 		}
@@ -698,8 +698,8 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 		}
 		var cpuScore float64
 		var cpuLabel string
-		if ps := tm.perfStore(); ps != nil {
-			if cal, _ := ps.GetCalibration(); cal != nil {
+		if tm.store != nil {
+			if cal, _ := tm.store.GetCalibration(); cal != nil {
 				cpuScore = cal.CPUScore
 				cpuLabel = cal.CPULabel
 			}
@@ -712,8 +712,8 @@ func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
 		metrics.Grade = grade
 		metrics.GradeScore = score
 		metrics.GradeReason = reason
-		if ps := tm.perfStore(); ps != nil {
-			if err := ps.SaveMetrics(metrics); err != nil {
+		if tm.store != nil {
+			if err := tm.store.SaveMetrics(metrics); err != nil {
 				slog.Warn("SaveMetrics failed", "taskId", task.ID, "error", err)
 			}
 		}

@@ -18,7 +18,6 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/types"
 	"github.com/Soltus/encv-go/pkg/tasksystem"
 	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
-	"github.com/Soltus/encv-go/pkg/tasksystem/store/sqlite"
 )
 
 type RunSummary = tasksystem.RunSummary
@@ -139,41 +138,18 @@ type TaskManager struct {
 	mountResolver MountResolver
 }
 
-func (tm *TaskManager) perfStore() *sqlite.Store {
-	if tm.store == nil {
-		return nil
-	}
-	if s, ok := tm.store.(*sqlite.Store); ok {
-		return s
-	}
-	return nil
-}
-
-func (tm *TaskManager) GetPerfStore() *sqlite.Store {
-	return tm.perfStore()
+// GetStore 返回底层 tasksystem.Store（引擎无关）。
+func (tm *TaskManager) GetStore() tasksystem.Store {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	return tm.store
 }
 
 func (tm *TaskManager) GetStoreEngine() string {
 	if tm.store == nil {
 		return "unknown"
 	}
-	switch tm.store.(type) {
-	case *sqlite.Store:
-		return "sqlite"
-	default:
-		// 通过类型名推断（兼容 turso/libsql 等其他实现）
-		typeName := fmt.Sprintf("%T", tm.store)
-		// 提取包名最后一段
-		// 例如: *tursogo.Store → "turso"
-		//      *libsql.Store → "libsql"
-		if strings.Contains(typeName, "tursogo") || strings.Contains(typeName, "turso") {
-			return "turso"
-		}
-		if strings.Contains(typeName, "libsql") {
-			return "libsql"
-		}
-		return "unknown"
-	}
+	return tm.store.EngineName()
 }
 
 func (tm *TaskManager) GetStoreConcurrency() int {
@@ -184,9 +160,6 @@ func (tm *TaskManager) GetStoreConcurrency() int {
 }
 
 func (tm *TaskManager) ReplaceStore(store tasksystem.Store) error {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-	// 将内存中现有任务持久化到新 store
 	if store != nil && len(tm.tasks) > 0 {
 		for _, task := range tm.tasks {
 			td := mobileTaskToData(task)
@@ -195,10 +168,6 @@ func (tm *TaskManager) ReplaceStore(store tasksystem.Store) error {
 	}
 	tm.store = store
 	return nil
-}
-
-func (tm *TaskManager) GetStore() tasksystem.Store {
-	return tm.store
 }
 
 func (tm *TaskManager) ExportDatabase() (*tasksystem.DatabaseDump, error) {
@@ -242,12 +211,11 @@ func (tm *TaskManager) ImportDatabase(dump *tasksystem.DatabaseDump) error {
 }
 
 func (tm *TaskManager) EnsureCalibration() {
-	ps := tm.perfStore()
-	if ps == nil {
+	if tm.store == nil {
 		return
 	}
 	// 检查是否已校准
-	existing, err := ps.GetCalibration()
+	existing, err := tm.store.GetCalibration()
 	if err != nil {
 		slog.Warn("EnsureCalibration: GetCalibration failed", "error", err)
 		return
@@ -259,7 +227,7 @@ func (tm *TaskManager) EnsureCalibration() {
 	// 运行校准
 	slog.Info("EnsureCalibration: running calibration...")
 	cal := performance.RunCalibration()
-	if err := ps.SaveCalibration(cal); err != nil {
+	if err := tm.store.SaveCalibration(cal); err != nil {
 		slog.Warn("EnsureCalibration: SaveCalibration failed", "error", err)
 		return
 	}

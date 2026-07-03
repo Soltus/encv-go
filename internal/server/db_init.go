@@ -9,6 +9,7 @@ import (
 	"github.com/Soltus/encv-go/internal/kernel"
 	"github.com/Soltus/encv-go/pkg/tasksystem"
 	sqlitestore "github.com/Soltus/encv-go/pkg/tasksystem/store/sqlite"
+	objectboxstore "github.com/Soltus/encv-go/pkg/tasksystem/store/objectbox"
 	tursostore "github.com/Soltus/encv-go/pkg/tasksystem/store/tursogo"
 )
 
@@ -39,6 +40,39 @@ func (s *Server) InitDatabase(servingDir string) (string, string) {
 			slog.Error("failed to init sqlite store", "err", err)
 			s.dbFallbackReason = fmt.Sprintf("SQLite 初始化失败: %v", err)
 		}
+	case "objectbox":
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("objectbox store init panicked, falling back to sqlite", "panic", r)
+					s.dbFallbackReason = fmt.Sprintf("ObjectBox 初始化 panic: %v", r)
+					actualEngine = "sqlite"
+					dbStore, err = sqlitestore.New(dbPath)
+					if err != nil {
+						slog.Error("failed to init sqlite fallback", "err", err)
+						s.dbFallbackReason = fmt.Sprintf("ObjectBox panic 后 SQLite fallback 也失败: %v", err)
+					}
+				}
+			}()
+			store, initErr := objectboxstore.New(filepath.Join(filepath.Dir(dbPath), "objectbox"))
+			if initErr != nil {
+				// stub 路径（未编译 objectbox 标签）或真实初始化失败
+				if initErr == objectboxstore.ErrObjectBoxUnavailable {
+					s.dbFallbackReason = "当前构建未包含 ObjectBox 引擎（编译时未加 -tags objectbox）"
+				} else {
+					s.dbFallbackReason = fmt.Sprintf("ObjectBox 初始化失败: %v", initErr)
+				}
+				slog.Warn("objectbox fallback to sqlite", "reason", s.dbFallbackReason)
+				actualEngine = "sqlite"
+				dbStore, err = sqlitestore.New(dbPath)
+				if err != nil {
+					slog.Error("failed to init sqlite fallback", "err", err)
+					s.dbFallbackReason = fmt.Sprintf("ObjectBox 降级后 SQLite fallback 也失败: %v", err)
+				}
+			} else {
+				dbStore = store
+			}
+		}()
 	case "libsql":
 		func() {
 			defer func() {

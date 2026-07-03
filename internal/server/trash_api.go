@@ -1,12 +1,13 @@
 package server
 
 import (
-	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/Soltus/encv-go/pkg/tasksystem"
 )
 
 // handleListTrashGin GET /api/trash
@@ -69,7 +70,7 @@ func (s *Server) handleRestoreTrashGin(c *gin.Context) {
 
 	taskID, err := tm.Restore(req.TrashID, req.DestPath, "user")
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, tasksystem.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "trash item not found"})
 			return
 		}
@@ -106,7 +107,7 @@ func (s *Server) handlePurgeTrashGin(c *gin.Context) {
 	slog.Info("API: purge trash", "id", id)
 
 	if err := tm.Purge(id); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, tasksystem.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "trash item not found"})
 			return
 		}

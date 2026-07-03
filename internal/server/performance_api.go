@@ -1,7 +1,6 @@
 package server
 
 import (
-	"database/sql"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Soltus/encv-go/pkg/tasksystem"
 	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
 )
 
@@ -26,8 +26,8 @@ func (s *Server) handleGetTaskPerformance(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "task manager not configured"})
 		return
 	}
-	ps := tm.GetPerfStore()
-	if ps == nil {
+	store := tm.GetStore()
+	if store == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "performance store not configured"})
 		return
 	}
@@ -38,9 +38,9 @@ func (s *Server) handleGetTaskPerformance(c *gin.Context) {
 		return
 	}
 
-	metrics, err := ps.GetMetrics(taskID)
+	metrics, err := store.GetMetrics(taskID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if errors.Is(err, tasksystem.ErrNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "no performance metrics for this task"})
 			return
 		}
@@ -63,13 +63,13 @@ func (s *Server) handleGetCalibration(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "task manager not configured"})
 		return
 	}
-	ps := tm.GetPerfStore()
-	if ps == nil {
+	store := tm.GetStore()
+	if store == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "performance store not configured"})
 		return
 	}
 
-	cal, err := ps.GetCalibration()
+	cal, err := store.GetCalibration()
 	if err != nil {
 		slog.Error("API: get calibration failed", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -89,15 +89,15 @@ func (s *Server) handleRecalibrate(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "task manager not configured"})
 		return
 	}
-	ps := tm.GetPerfStore()
-	if ps == nil {
+	store := tm.GetStore()
+	if store == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "performance store not configured"})
 		return
 	}
 
 	slog.Info("API: recalibrating...")
 	cal := performance.RunCalibration()
-	if err := ps.SaveCalibration(cal); err != nil {
+	if err := store.SaveCalibration(cal); err != nil {
 		slog.Error("API: save calibration failed", "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -116,8 +116,8 @@ func (s *Server) handleGetPerformanceHistory(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "task manager not configured"})
 		return
 	}
-	ps := tm.GetPerfStore()
-	if ps == nil {
+	store := tm.GetStore()
+	if store == nil {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "performance store not configured"})
 		return
 	}
@@ -136,7 +136,7 @@ func (s *Server) handleGetPerformanceHistory(c *gin.Context) {
 		}
 	}
 
-	history, err := ps.ListMetricsByPlugin(plugin, taskType, limit)
+	history, err := store.ListMetricsByPlugin(plugin, taskType, limit)
 	if err != nil {
 		slog.Error("API: get performance history failed", "plugin", plugin, "type", taskType, "error", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
