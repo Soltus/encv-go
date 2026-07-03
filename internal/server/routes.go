@@ -115,6 +115,7 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.POST("/api/database/import", s.handleDatabaseImport)
 	r.POST("/api/database/backup", s.handleDatabaseBackup)
 	r.POST("/api/database/restore", s.handleDatabaseRestore)
+	r.POST("/api/database/test/run", s.handleDatabaseTestRun)
 	r.POST("/api/webdav/test", s.handleTestWebDAVGin)
 	r.GET("/api/webdav/test-local", s.handleTestLocalWebDAVGin)
 	r.GET("/api/webdav/local-info", s.handleWebDavLocalInfoGin)

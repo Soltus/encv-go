@@ -212,3 +212,83 @@ export async function restoreDatabase(path: string): Promise<{
   }
   return await response.json();
 }
+
+// ========== 数据库自动化测试 API ==========
+
+export interface DBTestProgress {
+  phase: "started" | "running" | "passed" | "failed" | "completed";
+  scenario: string;
+  message: string;
+  durationMs?: number;
+  metrics?: Record<string, any>;
+  error?: string;
+}
+
+export interface DBTestRequest {
+  scenarios?: string[];
+}
+
+/**
+ * 运行数据库自动化测试（SSE 流式）
+ * @param onProgress 进度回调
+ * @returns Promise，测试完成时 resolve
+ */
+export function runDatabaseTests(
+  scenarios?: string[],
+  onProgress?: (p: DBTestProgress) => void,
+): Promise<DBTestProgress> {
+  return new Promise((resolve, reject) => {
+    const baseUrl = getApiBaseUrl();
+    const url = `${baseUrl}/api/database/test/run`;
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.setRequestHeader("Accept", "text/event-stream");
+
+    let lastIndex = 0;
+    let lastProgress: DBTestProgress | null = null;
+
+    xhr.onprogress = () => {
+      const text = xhr.responseText;
+      while (lastIndex < text.length) {
+        const newlineIdx = text.indexOf("\n\n", lastIndex);
+        if (newlineIdx === -1) break;
+
+        const chunk = text.slice(lastIndex, newlineIdx);
+        lastIndex = newlineIdx + 2;
+
+        const lines = chunk.split("\n");
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6)) as DBTestProgress;
+              lastProgress = data;
+              onProgress?.(data);
+            } catch {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        if (lastProgress) {
+          resolve(lastProgress);
+        } else {
+          reject(new Error("no progress data received"));
+        }
+      } else {
+        reject(new Error(`HTTP error! status: ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error("network error"));
+    };
+
+    xhr.send(JSON.stringify({ scenarios }));
+  });
+}

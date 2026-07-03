@@ -1042,8 +1042,10 @@ func (s *Store) createTaskTx(tx *sql.Tx, task tasksystem.TaskData) error {
 			extra_fields, steps, mount_id, mount_sub_path,
 			target_mount_id, target_mount_sub_path,
 			password, secondary_password,
-			created_at, completed_at, rollback_of, original_path
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			created_at, completed_at, rollback_of, original_path,
+			service_name, method_name, tenant_id, duration_ms,
+			input_json, output_json, attempts, priority, tags_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, string(task.Type), string(task.Status),
 		task.SourcePath, task.TargetPath, task.OutputPath,
 		task.PluginName, task.TriggeredBy, task.RunID, task.Progress, task.Phase,
@@ -1053,6 +1055,8 @@ func (s *Store) createTaskTx(tx *sql.Tx, task tasksystem.TaskData) error {
 		task.TargetMountID, task.TargetMountSubPath,
 		task.Password, task.SecondaryPassword,
 		task.CreatedAt, task.CompletedAt, task.RollbackOf, task.OriginalPath,
+		task.ServiceName, task.MethodName, task.TenantID, task.DurationMs,
+		task.InputJSON, task.OutputJSON, task.Attempts, task.Priority, task.TagsJSON,
 	)
 	return err
 }

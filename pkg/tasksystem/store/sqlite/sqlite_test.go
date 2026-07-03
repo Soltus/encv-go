@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Soltus/encv-go/pkg/tasksystem"
+	"github.com/Soltus/encv-go/pkg/tasksystem/store/storetest"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -587,4 +588,19 @@ func TestListRuns_OnlyRunIdTasks(t *testing.T) {
 	if len(runs) != 2 {
 		t.Errorf("len(runs) = %d, want 2 (only tasks with runId)", len(runs))
 	}
+}
+
+// 🆕 2026-07-03：通用 Store 接口一致性测试套件
+// 确保 SQLite 实现与所有引擎的行为一致。
+func TestStoreSuite(t *testing.T) {
+	storetest.RunStoreTests(t, func(t *testing.T) tasksystem.Store {
+		tmpDir := t.TempDir()
+		dbPath := filepath.Join(tmpDir, "suite-test.db")
+		store, err := New(dbPath)
+		if err != nil {
+			t.Fatalf("New store: %v", err)
+		}
+		t.Cleanup(func() { store.Close() })
+		return store
+	})
 }

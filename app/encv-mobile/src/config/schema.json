@@ -265,14 +265,20 @@
       "properties": {
         "engine": {
           "type": "string",
-          "enum": ["sqlite", "turso", "libsql"],
+          "enum": ["sqlite", "turso", "libsql", "objectbox"],
           "x-enum-labels": {
-            "sqlite": "SQLite（推荐，稳定可靠）",
+            "sqlite": "SQLite（默认底座，稳定可靠）",
             "turso": "Turso / LibSQL（高性能，支持 MVCC 并发）",
-            "libsql": "LibSQL（同 Turso 引擎）"
+            "libsql": "LibSQL（同 Turso 引擎）",
+            "objectbox": "ObjectBox（对象数据库，高性能写入）"
           },
           "default": "sqlite",
-          "description": "存储引擎：\n- sqlite: SQLite，稳定可靠，单写者\n- turso: Turso / LibSQL，高性能，支持 MVCC 并发写入\n切换引擎后需要重启应用生效。"
+          "description": "主存储引擎（底座）：\n- sqlite: SQLite，稳定可靠，全平台兼容\n- turso: Turso / LibSQL，高性能，支持 MVCC 并发写入\n- libsql: LibSQL（同 Turso 引擎）\n- objectbox: ObjectBox 对象数据库\n切换引擎后需要重启应用生效。"
+        },
+        "enable_engines": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" },
+          "description": "可选引擎启用开关（除 sqlite 外的引擎）\nkey = 引擎名，value = 是否启用"
         },
         "path": {
           "type": "string",

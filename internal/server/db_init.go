@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"runtime"
 
@@ -12,6 +13,42 @@ import (
 	objectboxstore "github.com/Soltus/encv-go/pkg/tasksystem/store/objectbox"
 	tursostore "github.com/Soltus/encv-go/pkg/tasksystem/store/tursogo"
 )
+
+// initObjectBoxAvailability 检测当前构建是否包含 ObjectBox 引擎。
+//
+// 通过尝试调用 objectboxstore.New 并检查错误类型来判断：
+//   - stub 构建（无 objectbox tag）：返回 ErrObjectBoxUnavailable
+//   - 真实构建（有 objectbox tag）：会尝试打开数据库文件
+//
+// 为了不真的创建数据库文件，我们用临时目录 + 立即清理的方式。
+func initObjectBoxAvailability() {
+	tmpDir, err := os.MkdirTemp("", "encv-objectbox-probe-*")
+	if err != nil {
+		// 临时目录创建失败，保守认为不可用
+		slog.Warn("objectbox probe: failed to create temp dir", "err", err)
+		objectBoxAvailable = false
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+
+	store, err := objectboxstore.New(tmpDir)
+	if err != nil {
+		if err == objectboxstore.ErrObjectBoxUnavailable {
+			// stub 构建 — 正常情况
+			objectBoxAvailable = false
+		} else {
+			// 真实构建但初始化失败（可能 C 库没装等），也算可用（只是有问题）
+			slog.Warn("objectbox probe: init failed but engine is available", "err", err)
+			objectBoxAvailable = true
+		}
+		return
+	}
+	// 真实构建且初始化成功
+	objectBoxAvailable = true
+	if store != nil {
+		_ = store.Close()
+	}
+}
 
 // InitDatabase 初始化数据库 store，根据 cfg.Database.Engine 选择 sqlite / libsql / turso。
 //
@@ -23,6 +60,9 @@ import (
 // 2026-07-02 修复：此前 handleDatabaseInfo 把所有 libsql/turso 降级都说成"当前平台不支持"，
 // 但真实原因可能是 C 库加载失败、PRAGMA 失败、schema 失败、panic 等，严重误导调试。
 func (s *Server) InitDatabase(servingDir string) (string, string) {
+	// 先检测各引擎可用性（设置全局变量供 getAvailableEngines 使用）
+	initObjectBoxAvailability()
+
 	dbPath := s.cfg.Database.Path
 	if dbPath == "" {
 		dbPath = filepath.Join(servingDir, "encv-tasks.db")

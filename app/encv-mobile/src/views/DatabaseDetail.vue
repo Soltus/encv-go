@@ -51,62 +51,72 @@
               </p>
             </ion-label>
           </ion-item>
-          <ion-item v-else-if="configEngine !== dbInfo?.engine && dbInfo" class="engine-mismatch-item">
-            <ion-label class="ion-text-wrap">
-              <p class="mismatch-warning">
-                <ion-icon :icon="warningOutline" class="warn-icon"></ion-icon>
-                配置值「{{ configEngine }}」与当前运行引擎「{{ dbInfo.engine }}」不一致，
-                重启应用后生效。
-              </p>
-            </ion-label>
-          </ion-item>
         </ion-list>
 
-        <!-- schema 驱动的配置字段 -->
+        <!-- 可用引擎列表 -->
         <ion-list>
           <ion-list-header>
-            <ion-label>引擎配置</ion-label>
+            <ion-label>数据库引擎</ion-label>
             <ion-badge slot="end" color="warning" class="scope-badge">
               <span class="scope-text">需重启</span>
             </ion-badge>
           </ion-list-header>
 
-          <template v-for="child in databaseSection.properties" :key="child.key">
-            <template v-if="child.key === 'engine'">
-              <div class="config-field config-field-card" :class="{ 'field-modified': isEngineModified }">
-                <div class="field-label-row">
-                  <ion-icon :icon="getFieldIcon(child.key, child.type)" class="field-icon"></ion-icon>
-                  <span class="field-label-text">
-                    {{ fieldLabel(child.key, child.required) }}
-                    <span v-if="child.required" class="required-mark">*</span>
-                  </span>
-                  <ion-button v-if="isEngineModified" fill="clear" size="small" class="reset-btn" @click="resetField(child.key, child)">
-                    <ion-icon :icon="refreshOutline" slot="icon-only"></ion-icon>
-                  </ion-button>
+          <ion-item
+            v-for="engine in availableEngines"
+            :key="engine.name"
+            class="engine-item"
+            :class="{ 'engine-item-base': engine.is_base }"
+          >
+            <div class="engine-item-content">
+              <div class="engine-header">
+                <div class="engine-title-row">
+                  <span class="engine-title">{{ engine.label }}</span>
+                  <ion-badge v-if="engine.is_base" class="base-badge" color="primary">底座</ion-badge>
+                  <ion-badge v-else-if="engine.enabled" class="status-badge" color="success">已启用</ion-badge>
+                  <ion-badge v-else-if="engine.available" class="status-badge" color="medium">未启用</ion-badge>
+                  <ion-badge v-else class="status-badge" color="danger">不可用</ion-badge>
                 </div>
-                <p v-if="child.description" class="field-description-text">{{ child.description }}</p>
-                <div class="preset-cards">
-                  <div
-                    v-for="opt in engineOptions"
-                    :key="opt.value"
-                    class="preset-card"
-                    :class="{
-                      'preset-card-active': configEngine === opt.value,
-                      'preset-card-disabled': opt.disabled
-                    }"
-                    @click="!opt.disabled && handleFieldChange(child.key, opt.value)"
-                  >
-                    <div class="preset-card-title">{{ opt.label }}</div>
-                    <div v-if="opt.disabled" class="preset-card-disabled-text">{{ opt.disabledReason || '暂不支持' }}</div>
-                    <div v-else-if="opt.description" class="preset-card-desc">{{ opt.description }}</div>
-                  </div>
-                </div>
-                <div v-if="hasEngineDefault" class="default-hint-row">
-                  {{ t('settings.default') }}: {{ engineDefaultLabel }}
-                </div>
+                <p v-if="engine.description" class="engine-desc">{{ engine.description }}</p>
               </div>
-            </template>
-            <template v-else-if="isFieldVisible(child)">
+
+              <!-- 能力标签 -->
+              <div v-if="engine.capabilities?.length" class="capability-tags">
+                <span
+                  v-for="cap in engine.capabilities"
+                  :key="cap"
+                  class="cap-tag"
+                >{{ cap }}</span>
+              </div>
+
+              <!-- 开关 / 状态提示 -->
+              <div class="engine-action-row">
+                <template v-if="engine.is_base">
+                  <span class="base-hint">默认底座，始终启用，不可切换</span>
+                </template>
+                <template v-else-if="!engine.available">
+                  <span class="unavailable-hint">{{ engine.reason || '暂不支持' }}</span>
+                </template>
+                <template v-else>
+                  <ion-toggle
+                    :checked="isEngineEnabled(engine.name)"
+                    @ion-change="toggleEngine(engine.name, $event)"
+                    :disabled="!engine.available"
+                  ></ion-toggle>
+                </template>
+              </div>
+            </div>
+          </ion-item>
+        </ion-list>
+
+        <!-- 其他配置字段（path / turso 相关） -->
+        <ion-list>
+          <ion-list-header>
+            <ion-label>引擎配置</ion-label>
+          </ion-list-header>
+
+          <template v-for="child in databaseSection.properties" :key="child.key">
+            <template v-if="child.key !== 'engine' && child.key !== 'enable_engines' && isFieldVisible(child)">
               <ConfigFieldItem
                 :field="child"
                 :model-value="getFieldValue(['database', child.key])"
@@ -164,21 +174,6 @@
             </ion-label>
           </ion-item>
         </ion-list>
-
-        <!-- 跨引擎迁移说明 -->
-        <ion-list>
-          <ion-list-header>
-            <ion-label color="danger">跨引擎迁移</ion-label>
-          </ion-list-header>
-          <ion-item>
-            <ion-label class="ion-text-wrap">
-              <p class="ion-text-wrap" style="font-size: 0.85em; color: var(--ion-color-medium);">
-                支持 SQLite ↔ Turso ↔ LibSQL 之间的数据迁移。
-                迁移步骤：先从旧引擎导出 JSON → 切换到新引擎 → 导入 JSON。
-              </p>
-            </ion-label>
-          </ion-item>
-        </ion-list>
       </template>
     </ion-content>
   </ion-page>
@@ -201,9 +196,10 @@ import {
   IonPage,
   IonSpinner,
   IonTitle,
+  IonToggle,
   IonToolbar,
 } from "@ionic/vue";
-import { cloudUploadOutline, downloadOutline, refreshOutline, save as saveIcon, saveOutline, warningOutline } from "ionicons/icons";
+import { cloudUploadOutline, downloadOutline, save as saveIcon, saveOutline, warningOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { backupDatabase, exportDatabase, getDatabaseInfo, importDatabase } from "@/api/encv";
 import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
@@ -231,8 +227,6 @@ const databaseSection = computed<FieldDef | undefined>(() => {
   return schemaFields.value.find(s => s.key === "database");
 });
 
-const configEngine = computed(() => getFieldValue(["database", "engine"]) as string);
-
 const dbInfo = ref<any>(null);
 const dbLoading = ref(false);
 const importFileInput = ref<HTMLInputElement | null>(null);
@@ -241,52 +235,26 @@ const engineBadgeColor = computed(() => {
   const eng = dbInfo.value?.engine;
   if (eng === "turso" || eng === "libsql") return "success";
   if (eng === "sqlite") return "primary";
+  if (eng === "objectbox") return "tertiary";
   return "medium";
 });
 
-const engineField = computed<FieldDef | undefined>(() => {
-  return databaseSection.value?.properties?.find(p => p.key === "engine");
+const availableEngines = computed(() => {
+  return dbInfo.value?.availableEngines || [];
 });
 
-const engineOptions = computed(() => {
-  const opts = engineField.value?.selectOptions ?? [];
-  const engines = dbInfo.value?.availableEngines;
-  return opts.map(opt => {
-    let disabled = false;
-    let disabledReason = "";
-    if (engines) {
-      const info = engines.find((e: any) => e.name === opt.value);
-      if (info) {
-        disabled = !info.available;
-        disabledReason = info.reason || "";
-      }
-    }
-    return {
-      ...opt,
-      disabled,
-      disabledReason,
-    };
-  });
-});
+function isEngineEnabled(name: string): boolean {
+  const enableMap = getFieldValue(["database", "enable_engines"]) as Record<string, boolean> | undefined;
+  if (name === "sqlite") return true;
+  return enableMap?.[name] ?? false;
+}
 
-const isEngineModified = computed(() => {
-  const current = configEngine.value;
-  const def = engineField.value?.default;
-  if (current === def) return false;
-  if (current == null && (def === "" || def === 0 || def === false)) return false;
-  return String(current) !== String(def);
-});
-
-const hasEngineDefault = computed(() => {
-  return engineField.value?.default !== undefined;
-});
-
-const engineDefaultLabel = computed(() => {
-  const def = engineField.value?.default;
-  if (def === undefined) return "-";
-  const opt = engineOptions.value.find(o => o.value === String(def));
-  return opt ? opt.label : String(def);
-});
+function toggleEngine(name: string, event: any) {
+  const checked = event.detail.checked;
+  const current = (getFieldValue(["database", "enable_engines"]) as Record<string, boolean> | undefined) || {};
+  const next = { ...current, [name]: checked };
+  setFieldValue(["database", "enable_engines"], next);
+}
 
 onMounted(async () => {
   try {
@@ -457,113 +425,89 @@ async function handleBackupDatabase() {
   color: var(--ion-color-medium);
 }
 
-.config-field-card {
-  display: block;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--ion-color-light-shade, #e0e0e0);
-  background: transparent;
+.engine-item {
+  --inner-padding-end: 0;
 }
 
-body.dark .config-field-card {
-  border-bottom-color: #2a2a2c;
+.engine-item-content {
+  width: 100%;
+  padding: 12px 0;
 }
 
-.config-field-card.field-modified {
-  border-left: 3px solid var(--ion-color-primary);
-  padding-left: 13px;
+.engine-header {
+  margin-bottom: 8px;
 }
 
-.field-icon {
-  font-size: 18px;
-  color: var(--ion-color-medium);
-  flex-shrink: 0;
-}
-
-.field-label-row {
+.engine-title-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
-.field-label-text {
-  flex: 1 1 auto;
-  min-width: 0;
+.engine-title {
+  font-size: 15px;
+  font-weight: 600;
 }
 
-.field-description-text {
+.base-badge {
+  font-size: 0.65em;
+  --padding-start: 6px;
+  --padding-end: 6px;
+}
+
+.status-badge {
+  font-size: 0.65em;
+  --padding-start: 6px;
+  --padding-end: 6px;
+}
+
+.engine-desc {
   font-size: 12px;
   color: var(--ion-color-medium);
-  white-space: normal;
-  margin: 2px 0 0;
+  margin: 4px 0 0;
+  line-height: 1.4;
 }
 
-.default-hint-row {
-  font-size: 11px;
+.capability-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.cap-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--ion-color-light, #f4f5f8);
+  color: var(--ion-color-medium, #92949c);
+  white-space: nowrap;
+}
+
+body.dark .cap-tag {
+  background: #2a2a2c;
+  color: #92949c;
+}
+
+.engine-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.base-hint {
+  font-size: 12px;
   color: var(--ion-color-medium);
-  margin-top: 6px;
 }
 
-.required-mark {
+.unavailable-hint {
+  font-size: 12px;
   color: var(--ion-color-danger);
-  margin-left: 2px;
 }
 
-.reset-btn {
-  --padding-start: 4px;
-  --padding-end: 4px;
-  min-width: 28px;
-  min-height: 28px;
-  margin: 0;
-}
-
-.reset-btn ion-icon {
-  font-size: 16px;
-}
-
-.preset-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-  gap: 8px;
-  margin-top: 10px;
-  width: 100%;
-}
-
-.preset-card {
-  padding: 10px 8px;
-  border: 2px solid var(--ion-color-light-shade, #e0e0e0);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: center;
-  background: var(--ion-background-color, transparent);
-}
-
-.preset-card-active {
-  border-color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-}
-
-.preset-card-disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  filter: grayscale(0.5);
-}
-
-.preset-card-disabled-text {
-  font-size: 10px;
-  color: var(--ion-color-medium);
-  margin-top: 2px;
-}
-
-.preset-card-title {
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.preset-card-desc {
-  font-size: 10px;
-  color: var(--ion-color-medium);
-  margin-top: 2px;
+.engine-item-base {
+  --background: var(--ion-color-primary-50, rgba(79, 140, 255, 0.08));
 }
 </style>

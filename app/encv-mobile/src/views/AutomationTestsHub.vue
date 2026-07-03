@@ -48,6 +48,14 @@
             <p>{{ t('devtools.automationHub.fsTestsDesc') }}</p>
           </ion-label>
         </ion-item>
+
+        <ion-item button detail @click="goDatabaseTests">
+          <ion-icon :icon="serverOutline" slot="start" color="tertiary"></ion-icon>
+          <ion-label>
+            <h3>数据库自动化测试</h3>
+            <p>CRUD / 批量写入 / 查询过滤 / 并发压测 / 导出导入一致性</p>
+          </ion-label>
+        </ion-item>
       </ion-list>
     </ion-content>
   </ion-page>
@@ -91,6 +99,11 @@ function goSparseContainerTest() {
 // 🆕 2026-06-22：文件系统任务测试（move/copy/rename/delete + rollback + trash 边界）
 function goFsTests() {
   router.push("/tabs/settings/devtools/fs-tests");
+}
+
+// 🆕 2026-07-03：数据库自动化测试
+function goDatabaseTests() {
+  router.push("/tabs/settings/devtools/database-tests");
 }
 </script>
 

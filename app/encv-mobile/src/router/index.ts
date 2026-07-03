@@ -152,6 +152,11 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@/views/FileSystemTestsDetail.vue"),
       },
       {
+        // 🆕 2026-07-03：数据库自动化测试（CRUD/批量/查询/并发/导出导入）
+        path: "settings/devtools/database-tests",
+        component: () => import("@/views/DatabaseTests.vue"),
+      },
+      {
         // 🆕 2026-06-17：Compose UI 原型总览（Hub）— 卡片循环从 DevToolsDetail 迁移
         path: "settings/devtools/compose-prototypes-hub",
         component: () => import("@/views/ComposePrototypesHub.vue"),
