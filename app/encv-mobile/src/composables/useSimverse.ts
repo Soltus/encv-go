@@ -60,10 +60,27 @@ export interface SimverseNPCDetail extends SimverseNPC {
   skills: Record<string, number>;
   inventory: Record<string, number>;
   bank: Record<string, number>;
+  big_five: Record<string, number>;
+  values: Record<string, number>;
+  interests: Record<string, number>;
+  top_values: string[];
+  top_interests: string[];
+  short_term_mem: SimverseMemory[];
   life_events: number;
   born_at: number;
   died_at: number;
   last_update: number;
+}
+
+export interface SimverseMemory {
+  id: number;
+  type: string;
+  importance: number;
+  target_id: number;
+  content_tag: number;
+  emotion_tag: number;
+  created_at: number;
+  strength: number;
 }
 
 export interface SimverseFocusNPC {

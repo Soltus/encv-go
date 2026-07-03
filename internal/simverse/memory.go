@@ -90,10 +90,10 @@ func NewShortTermMemory() ShortTermMemory {
 
 func (stm *ShortTermMemory) Add(mem Memory) {
 	if stm.count < ShortTermMemoryCapacity {
-		stm.items[stm.count] = m
+		stm.items[stm.count] = mem
 		stm.count++
 	} else {
-		stm.items[stm.head] = m
+		stm.items[stm.head] = mem
 		stm.head = (stm.head + 1) % ShortTermMemoryCapacity
 	}
 }
@@ -180,8 +180,8 @@ func (ltm *LongTermMemory) Decay(currentTick uint32, decayRate float32) {
 			baseStr = 0.95
 		}
 
-		halfLife := float32(100.0) * (1 + float32(m.Importance)*2)
-		m.Strength = baseStr * float32(math.Exp2(float64(-elapsed/(halfLife*(1.0+decayRate))))
+		halfLife := float32(1000.0) * (1 + float32(m.Importance)*2)
+		m.Strength = baseStr * float32(math.Exp2(float64(-elapsed/(halfLife*(1.0+decayRate)))))
 		if m.Strength < 0.01 {
 			m.Strength = 0.01
 		}

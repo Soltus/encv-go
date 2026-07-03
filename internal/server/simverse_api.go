@@ -384,6 +384,21 @@ func (s *Server) handleSimverseNPCDetail(c *gin.Context) {
 		topInterestNames[i] = v.String()
 	}
 
+	stmItems := npc.ShortTermMem.Items()
+	shortTermMem := make([]gin.H, 0, len(stmItems))
+	for _, m := range stmItems {
+		shortTermMem = append(shortTermMem, gin.H{
+			"id":          m.ID,
+			"type":        m.Type.String(),
+			"importance":  m.Importance,
+			"target_id":   m.TargetID,
+			"content_tag": m.ContentTag,
+			"emotion_tag": m.EmotionTag,
+			"created_at":  m.CreatedTick,
+			"strength":    m.Strength,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"id":              npc.ID,
 		"name":            npc.Name,
@@ -420,6 +435,7 @@ func (s *Server) handleSimverseNPCDetail(c *gin.Context) {
 		"interests":       interests,
 		"top_values":      topValueNames,
 		"top_interests":   topInterestNames,
+		"short_term_mem":  shortTermMem,
 		"life_events":     npc.LifeEvents,
 		"born_at":         npc.BornAt,
 		"died_at":         npc.DiedAt,
