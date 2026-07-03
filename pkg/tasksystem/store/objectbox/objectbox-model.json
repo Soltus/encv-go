@@ -2,9 +2,506 @@
   "_note1": "KEEP THIS FILE! Check it into a version control system (VCS) like git.",
   "_note2": "ObjectBox manages crucial IDs for your object model. See docs for details.",
   "_note3": "If you have VCS merge conflicts, you must resolve them according to ObjectBox docs.",
-  "entities": [],
-  "lastEntityId": "",
-  "lastIndexId": "",
+  "entities": [
+    {
+      "id": "1:3872424929271192139",
+      "lastPropertyId": "40:740773247956381701",
+      "name": "TaskEntity",
+      "properties": [
+        {
+          "id": "1:6356774954063249018",
+          "name": "Id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:7782672555938078943",
+          "name": "TaskID",
+          "indexId": "1:7288931818110734776",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:4196086546543272800",
+          "name": "Type",
+          "indexId": "2:2156776453276150285",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:933472216561257892",
+          "name": "Status",
+          "indexId": "3:1473501042027205721",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:3484493931947194807",
+          "name": "ServiceName",
+          "indexId": "4:6225769746588797307",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "6:9106938143946264532",
+          "name": "MethodName",
+          "type": 9
+        },
+        {
+          "id": "7:7465114826411893203",
+          "name": "TenantID",
+          "indexId": "5:4329779724931812305",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "8:1433004948313476956",
+          "name": "TriggeredBy",
+          "indexId": "6:8841522549793960955",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "9:1281365753301381027",
+          "name": "RunID",
+          "indexId": "7:5902307568500261331",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "10:7727372032310844269",
+          "name": "SourcePath",
+          "type": 9
+        },
+        {
+          "id": "11:4833882453150190830",
+          "name": "TargetPath",
+          "type": 9
+        },
+        {
+          "id": "12:5511193677958308079",
+          "name": "OutputPath",
+          "type": 9
+        },
+        {
+          "id": "13:8500546850499555832",
+          "name": "PluginName",
+          "type": 9
+        },
+        {
+          "id": "14:2588419120235336682",
+          "name": "Progress",
+          "type": 6
+        },
+        {
+          "id": "15:4735891242203566472",
+          "name": "Phase",
+          "type": 9
+        },
+        {
+          "id": "16:7806430845164012537",
+          "name": "Error",
+          "type": 9
+        },
+        {
+          "id": "17:3959366264539708150",
+          "name": "ErrorDetail",
+          "type": 9
+        },
+        {
+          "id": "18:2770800395604205615",
+          "name": "Warning",
+          "type": 9
+        },
+        {
+          "id": "19:3846086568100666795",
+          "name": "WarningDetail",
+          "type": 9
+        },
+        {
+          "id": "20:31103192969301327",
+          "name": "ContainerVersion",
+          "type": 6
+        },
+        {
+          "id": "21:2980545116198229546",
+          "name": "CipherMode",
+          "type": 6
+        },
+        {
+          "id": "22:3439897940379117835",
+          "name": "CompressionMode",
+          "type": 9
+        },
+        {
+          "id": "23:4335356112774501400",
+          "name": "ExtraFields",
+          "type": 9
+        },
+        {
+          "id": "24:7695923046418929121",
+          "name": "Steps",
+          "type": 9
+        },
+        {
+          "id": "25:9155186803592324401",
+          "name": "MountID",
+          "type": 9
+        },
+        {
+          "id": "26:8957803834348069074",
+          "name": "MountSubPath",
+          "type": 9
+        },
+        {
+          "id": "27:6227634391272163949",
+          "name": "TargetMountID",
+          "type": 9
+        },
+        {
+          "id": "28:4527076409012129884",
+          "name": "TargetMountSubPath",
+          "type": 9
+        },
+        {
+          "id": "29:6635233644248406630",
+          "name": "Password",
+          "type": 9
+        },
+        {
+          "id": "30:5856414071571624129",
+          "name": "SecondaryPassword",
+          "type": 9
+        },
+        {
+          "id": "31:8801909662171453388",
+          "name": "DurationMs",
+          "type": 6
+        },
+        {
+          "id": "32:226385159758727035",
+          "name": "InputJSON",
+          "type": 9
+        },
+        {
+          "id": "33:1101285261197770158",
+          "name": "OutputJSON",
+          "type": 9
+        },
+        {
+          "id": "34:3550905774183277267",
+          "name": "Attempts",
+          "type": 6
+        },
+        {
+          "id": "35:2594379740903007324",
+          "name": "Priority",
+          "type": 6
+        },
+        {
+          "id": "36:8618734516176708981",
+          "name": "TagsJSON",
+          "type": 9
+        },
+        {
+          "id": "37:6415792073686850356",
+          "name": "CreatedAt",
+          "type": 6
+        },
+        {
+          "id": "38:5610687314652308119",
+          "name": "CompletedAt",
+          "type": 6
+        },
+        {
+          "id": "39:5108582749272267198",
+          "name": "RollbackOf",
+          "type": 9
+        },
+        {
+          "id": "40:740773247956381701",
+          "name": "OriginalPath",
+          "type": 9
+        }
+      ]
+    },
+    {
+      "id": "2:4101703234515892546",
+      "lastPropertyId": "5:4789039437043571342",
+      "name": "SnapshotEntity",
+      "properties": [
+        {
+          "id": "1:4552075918254647397",
+          "name": "Id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:325826554806887577",
+          "name": "TaskID",
+          "indexId": "8:3984301413854355923",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "3:578890115553415874",
+          "name": "SnapshotType",
+          "type": 9
+        },
+        {
+          "id": "4:1367550697488280667",
+          "name": "Data",
+          "type": 23
+        },
+        {
+          "id": "5:4789039437043571342",
+          "name": "CreatedAt",
+          "type": 6
+        }
+      ]
+    },
+    {
+      "id": "3:3922460418110320008",
+      "lastPropertyId": "10:7559313960195856527",
+      "name": "TrashEntity",
+      "properties": [
+        {
+          "id": "1:4433775962367837885",
+          "name": "Id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:1199237736179682193",
+          "name": "TrashID",
+          "indexId": "9:8390895468056829695",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:5263088786399774760",
+          "name": "OriginalPath",
+          "type": 9
+        },
+        {
+          "id": "4:3558552140035052876",
+          "name": "TrashPath",
+          "type": 9
+        },
+        {
+          "id": "5:6556432139543300165",
+          "name": "IsDirectory",
+          "type": 1
+        },
+        {
+          "id": "6:8201979443432824967",
+          "name": "Size",
+          "type": 6
+        },
+        {
+          "id": "7:2732412092154596195",
+          "name": "DeletedAt",
+          "type": 6
+        },
+        {
+          "id": "8:4918017697601404189",
+          "name": "TaskID",
+          "indexId": "10:7694352498625880187",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "9:6283088300805847177",
+          "name": "RestoreTaskID",
+          "type": 9
+        },
+        {
+          "id": "10:7559313960195856527",
+          "name": "Metadata",
+          "type": 9
+        }
+      ]
+    },
+    {
+      "id": "4:6701245365849373038",
+      "lastPropertyId": "22:8637201032127292611",
+      "name": "PerformanceMetricsEntity",
+      "properties": [
+        {
+          "id": "1:3478443943288228331",
+          "name": "Id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:2582838948699545871",
+          "name": "TaskID",
+          "indexId": "11:2942812111776427904",
+          "type": 9,
+          "flags": 2080
+        },
+        {
+          "id": "3:844484565504130539",
+          "name": "TaskType",
+          "indexId": "12:3786334623736522575",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "4:356560710875604842",
+          "name": "PluginName",
+          "indexId": "13:9034625844184433334",
+          "type": 9,
+          "flags": 2048
+        },
+        {
+          "id": "5:5920863055305217924",
+          "name": "ContainerVersion",
+          "type": 6
+        },
+        {
+          "id": "6:6345984456985952081",
+          "name": "CipherMode",
+          "type": 6
+        },
+        {
+          "id": "7:6669900452949758945",
+          "name": "CompressionMode",
+          "type": 9
+        },
+        {
+          "id": "8:4368730564403379573",
+          "name": "SourceSize",
+          "type": 6
+        },
+        {
+          "id": "9:3850003096240927383",
+          "name": "OutputSize",
+          "type": 6
+        },
+        {
+          "id": "10:4871189218234678467",
+          "name": "SizeRatio",
+          "type": 8
+        },
+        {
+          "id": "11:1438959083647762731",
+          "name": "AvgThroughput",
+          "type": 8
+        },
+        {
+          "id": "12:4054367023234514699",
+          "name": "PeakThroughput",
+          "type": 8
+        },
+        {
+          "id": "13:7272538587778825212",
+          "name": "P50Throughput",
+          "type": 8
+        },
+        {
+          "id": "14:6719009594476137291",
+          "name": "P99Throughput",
+          "type": 8
+        },
+        {
+          "id": "15:4390926293987710302",
+          "name": "TotalDurationMs",
+          "type": 6
+        },
+        {
+          "id": "16:5850218311428713298",
+          "name": "PhaseTimingsJSON",
+          "type": 9
+        },
+        {
+          "id": "17:3765767044010309736",
+          "name": "Grade",
+          "type": 9
+        },
+        {
+          "id": "18:2919910620581844374",
+          "name": "GradeScore",
+          "type": 8
+        },
+        {
+          "id": "19:4817663710232761664",
+          "name": "GradeReason",
+          "type": 9
+        },
+        {
+          "id": "20:2817260017100801783",
+          "name": "CPUScore",
+          "type": 8
+        },
+        {
+          "id": "21:3064202451484119303",
+          "name": "CPULabel",
+          "type": 9
+        },
+        {
+          "id": "22:8637201032127292611",
+          "name": "CreatedAt",
+          "type": 6
+        }
+      ]
+    },
+    {
+      "id": "5:5288715128295696624",
+      "lastPropertyId": "9:593601434248276002",
+      "name": "CalibrationEntity",
+      "properties": [
+        {
+          "id": "1:7594416637098841766",
+          "name": "Id",
+          "type": 6,
+          "flags": 1
+        },
+        {
+          "id": "2:5254556915900638771",
+          "name": "CPUScore",
+          "type": 8
+        },
+        {
+          "id": "3:2800342198479135936",
+          "name": "AESThroughput",
+          "type": 8
+        },
+        {
+          "id": "4:4689142423969570699",
+          "name": "CPULabel",
+          "type": 9
+        },
+        {
+          "id": "5:2581522366689497910",
+          "name": "CalibratedAt",
+          "type": 6
+        },
+        {
+          "id": "6:2848123836301742031",
+          "name": "GoVersion",
+          "type": 9
+        },
+        {
+          "id": "7:1080424273025926597",
+          "name": "OS",
+          "type": 9
+        },
+        {
+          "id": "8:5999572475397474896",
+          "name": "Arch",
+          "type": 9
+        },
+        {
+          "id": "9:593601434248276002",
+          "name": "NumCPU",
+          "type": 6
+        }
+      ]
+    }
+  ],
+  "lastEntityId": "5:5288715128295696624",
+  "lastIndexId": "13:9034625844184433334",
   "lastRelationId": "",
   "modelVersion": 5,
   "modelVersionParserMinimum": 5,

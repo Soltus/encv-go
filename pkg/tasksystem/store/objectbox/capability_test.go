@@ -5,11 +5,9 @@ package objectbox
 
 import (
 	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/Soltus/encv-go/pkg/tasksystem"
-	objectbox "github.com/objectbox/objectbox-go/objectbox"
 )
 
 func init() {
@@ -55,7 +53,6 @@ func testBoxPutBatch(store tasksystem.Store) (map[string]any, error) {
 
 	const batchSize = 1000
 	const batches = 5
-	totalTasks := batchSize * batches
 
 	entities := make([]*TaskEntity, batchSize)
 	start := time.Now()
@@ -128,23 +125,23 @@ func testQueryIndex(store tasksystem.Store) (map[string]any, error) {
 
 	start := time.Now()
 	for i := 0; i < iterations; i++ {
-		qb := s.tasks.Query(
-			objectbox.PropertyEqString(TaskEntity_.Type, "encrypt"),
-			objectbox.PropertyEqString(TaskEntity_.Status, "completed"),
+		q := s.tasks.Query(
+			TaskEntity_.Type.Equals("encrypt", false),
+			TaskEntity_.Status.Equals("completed", false),
 		)
-		results, _ := qb.Find()
-		qb.Close()
+		results, _ := q.Find()
+		q.Close()
 		_ = results
 	}
 	queryMs := time.Since(start).Milliseconds()
 
-	var count int64
-	qb := s.tasks.Query(
-		objectbox.PropertyEqString(TaskEntity_.Type, "encrypt"),
-		objectbox.PropertyEqString(TaskEntity_.Status, "completed"),
+	var count uint64
+	q := s.tasks.Query(
+		TaskEntity_.Type.Equals("encrypt", false),
+		TaskEntity_.Status.Equals("completed", false),
 	)
-	count, _ = qb.Count()
-	qb.Close()
+	count, _ = q.Count()
+	q.Close()
 
 	return map[string]any{
 		"total_docs":   numDocs,
@@ -191,11 +188,10 @@ func testObjectNative(store tasksystem.Store) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get native object: %w", err)
 	}
-	gotEntity := got.(*TaskEntity)
 
 	return map[string]any{
 		"object_id":         id,
-		"roundtrip_ok":      gotEntity.TaskID == entity.TaskID && gotEntity.Progress == 42,
+		"roundtrip_ok":      got.TaskID == entity.TaskID && got.Progress == 42,
 		"storage_model":     "object-oriented",
 		"no_orm_mapping":    true,
 		"no_sql":            true,
