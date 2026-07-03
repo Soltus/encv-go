@@ -430,295 +430,324 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel, IonBadge,
-  IonButton, IonModal, IonInput, alertController,
-} from '@ionic/vue'
+  alertController,
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonInput,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonModal,
+  IonPage,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
 import {
-  playCircle, stopCircle, timeOutline, sync, checkmarkCircle, closeCircle,
-  warningOutline, removeCircle, trashOutline, cloudDoneOutline, archiveOutline,
-  ellipseOutline, keyOutline, cloudDownloadOutline, chevronUp, chevronDown,
-  serverOutline, folderOutline, starOutline, shieldCheckmarkOutline,
-  lockClosedOutline, listOutline, gitNetworkOutline, flashOutline, cubeOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { useWebDavAutomationTests } from '@/composables/useWebDavWorkflowAdapter'
-import { useWebDavManifest } from '@/composables/useWebDavManifest'
-import { showToast } from '@/composables/useToast'
-import { fetchWebDavLocalInfo, type WebDavLocalInfo } from '@/api/encv'
-import type { TestRun, TestCaseStatus } from '@/types/webdav-test'
+  archiveOutline,
+  checkmarkCircle,
+  chevronDown,
+  chevronUp,
+  closeCircle,
+  cloudDoneOutline,
+  cloudDownloadOutline,
+  cubeOutline,
+  ellipseOutline,
+  flashOutline,
+  folderOutline,
+  gitNetworkOutline,
+  keyOutline,
+  listOutline,
+  lockClosedOutline,
+  playCircle,
+  removeCircle,
+  serverOutline,
+  shieldCheckmarkOutline,
+  starOutline,
+  stopCircle,
+  sync,
+  timeOutline,
+  trashOutline,
+  warningOutline,
+} from "ionicons/icons";
+import { computed, onMounted, ref, watch } from "vue";
+import { fetchWebDavLocalInfo, type WebDavLocalInfo } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
+import { useWebDavManifest } from "@/composables/useWebDavManifest";
+import { useWebDavAutomationTests } from "@/composables/useWebDavWorkflowAdapter";
+import type { TestCaseStatus, TestRun } from "@/types/webdav-test";
 
-const { t } = useI18n()
-const automation = useWebDavAutomationTests()
-const { modules, moduleStates, historyRuns, isAnyRunning, runModule, runAll, cancelModule, clearHistory } = automation
+const { t } = useI18n();
+const automation = useWebDavAutomationTests();
+const { modules, moduleStates, historyRuns, isAnyRunning, runModule, runAll, cancelModule, clearHistory } = automation;
 
 // 🆕 2026-06-17: 8 module grid 使用 manifest composable（独立拉取 + mount 选择）
-const manifest = useWebDavManifest()
+const manifest = useWebDavManifest();
 
-const totalCases = computed(() => modules.reduce((sum, m) => sum + m.cases.length, 0))
+const totalCases = computed(() => modules.reduce((sum, m) => sum + m.cases.length, 0));
 
 // ============= manifest tone =============
 const manifestTone = computed(() => {
-  if (manifest.error.value) return 'tone-error'
-  if (manifest.loading.value) return 'tone-loading'
-  if (availableMounts.value.length === 0) return 'tone-empty'
-  return 'tone-ready'
-})
+  if (manifest.error.value) return "tone-error";
+  if (manifest.loading.value) return "tone-loading";
+  if (availableMounts.value.length === 0) return "tone-empty";
+  return "tone-ready";
+});
 
-const availableMounts = computed(() => manifest.availableMounts.value)
-const baseUrl = computed(() => manifest.serverBaseUrl.value || (typeof window !== 'undefined' ? window.location.origin : ''))
-const webdavPath = computed(() => manifest.webdavPath.value)
+const availableMounts = computed(() => manifest.availableMounts.value);
+const baseUrl = computed(() => manifest.serverBaseUrl.value || (typeof window !== "undefined" ? window.location.origin : ""));
+const webdavPath = computed(() => manifest.webdavPath.value);
 
-const attackCountTotal = computed(() =>
-  modules.reduce((sum, m) => sum + m.cases.filter((c) => !!c.attackType).length, 0)
-)
+const attackCountTotal = computed(() => modules.reduce((sum, m) => sum + m.cases.filter(c => !!c.attackType).length, 0));
 
 function getAttackCount(moduleId: string): number {
-  const m = modules.find((mm) => mm.id === moduleId)
-  if (!m) return 0
-  return m.cases.filter((c) => !!c.attackType).length
+  const m = modules.find(mm => mm.id === moduleId);
+  if (!m) return 0;
+  return m.cases.filter(c => !!c.attackType).length;
 }
 
 // ============= module helpers =============
 function isModuleRunning(moduleId: string): boolean {
-  const s = moduleStates[moduleId]?.value
-  return s?.status === 'running' || s?.status === 'cancelling'
+  const s = moduleStates[moduleId]?.value;
+  return s?.status === "running" || s?.status === "cancelling";
 }
 function isModuleDone(moduleId: string): boolean {
-  const s = moduleStates[moduleId]?.value
-  return s?.status === 'done' || s?.status === 'cancelled' || s?.status === 'error'
+  const s = moduleStates[moduleId]?.value;
+  return s?.status === "done" || s?.status === "cancelled" || s?.status === "error";
 }
 function getModuleState(moduleId: string) {
-  return moduleStates[moduleId]?.value ?? { status: 'idle' as const, results: [] }
+  return moduleStates[moduleId]?.value ?? { status: "idle" as const, results: [] };
 }
 function getModulePassed(moduleId: string): number {
-  return getModuleState(moduleId).results.filter((r) => r.status === 'success').length
+  return getModuleState(moduleId).results.filter(r => r.status === "success").length;
 }
 
 function getCaseResult(moduleId: string, caseId: string) {
-  return getModuleState(moduleId).results.find((r) => r.id === caseId)
+  return getModuleState(moduleId).results.find(r => r.id === caseId);
 }
 function getCaseStatus(moduleId: string, caseId: string): TestCaseStatus {
-  return getCaseResult(moduleId, caseId)?.status ?? 'pending'
+  return getCaseResult(moduleId, caseId)?.status ?? "pending";
 }
 function getCaseStatusColor(moduleId: string, caseId: string): string {
-  const st = getCaseStatus(moduleId, caseId)
-  if (st === 'success') return 'success'
-  if (st === 'failure' || st === 'timed_out') return 'danger'
-  return 'medium'
+  const st = getCaseStatus(moduleId, caseId);
+  if (st === "success") return "success";
+  if (st === "failure" || st === "timed_out") return "danger";
+  return "medium";
 }
 
-const expandedModules = ref<Set<string>>(new Set())
+const expandedModules = ref<Set<string>>(new Set());
 function toggleModule(id: string) {
-  if (expandedModules.value.has(id)) expandedModules.value.delete(id)
-  else expandedModules.value.add(id)
+  if (expandedModules.value.has(id)) expandedModules.value.delete(id);
+  else expandedModules.value.add(id);
   // 触发响应式更新
-  expandedModules.value = new Set(expandedModules.value)
+  expandedModules.value = new Set(expandedModules.value);
 }
 
 // ============= icon resolver =============
 const ICON_MAP: Record<string, string> = {
-  'lock-closed-outline': lockClosedOutline,
-  'list-outline': listOutline,
-  'git-network-outline': gitNetworkOutline,
-  'flash-outline': flashOutline,
-  'cube-outline': cubeOutline,
-  'warning-outline': warningOutline,
-  'shield-checkmark-outline': shieldCheckmarkOutline,
-}
+  "lock-closed-outline": lockClosedOutline,
+  "list-outline": listOutline,
+  "git-network-outline": gitNetworkOutline,
+  "flash-outline": flashOutline,
+  "cube-outline": cubeOutline,
+  "warning-outline": warningOutline,
+  "shield-checkmark-outline": shieldCheckmarkOutline,
+};
 function resolveIcon(iconName: string): string {
-  return ICON_MAP[iconName] ?? warningOutline
+  return ICON_MAP[iconName] ?? warningOutline;
 }
 
 // ============= 顶部 WebDAV 健康检查 =============
-const webDavEnabled = ref<boolean | null>(null)
+const webDavEnabled = ref<boolean | null>(null);
 async function checkWebDavHealth() {
   try {
-    const path = manifest.webdavPath.value || '/webdav/'
-    const url = `${baseUrl.value}${path}`.replace(/\/+$/, '/')
-    const res = await fetch(url, { method: 'OPTIONS' })
-    webDavEnabled.value = res.status < 500
+    const path = manifest.webdavPath.value || "/webdav/";
+    const url = `${baseUrl.value}${path}`.replace(/\/+$/, "/");
+    const res = await fetch(url, { method: "OPTIONS" });
+    webDavEnabled.value = res.status < 500;
   } catch {
-    webDavEnabled.value = false
+    webDavEnabled.value = false;
   }
 }
 
 // ============= 账号配置 =============
-const showAuthPanel = ref(false)
-const credsUsername = ref('')
-const credsPassword = ref('')
-const backendUsername = ref('')
-const authRequired = ref(false)
-const localInfo = ref<WebDavLocalInfo | null>(null)
+const showAuthPanel = ref(false);
+const credsUsername = ref("");
+const credsPassword = ref("");
+const backendUsername = ref("");
+const authRequired = ref(false);
+const localInfo = ref<WebDavLocalInfo | null>(null);
 
-const CRED_STORAGE_KEY = 'encv_webdav_creds_v1'
+const CRED_STORAGE_KEY = "encv_webdav_creds_v1";
 
 async function loadWebDavLocalInfo() {
   try {
-    const info = await fetchWebDavLocalInfo()
-    localInfo.value = info
-    backendUsername.value = info.username
-    authRequired.value = info.authRequired
-    const stored = localStorage.getItem(CRED_STORAGE_KEY)
+    const info = await fetchWebDavLocalInfo();
+    localInfo.value = info;
+    backendUsername.value = info.username;
+    authRequired.value = info.authRequired;
+    const stored = localStorage.getItem(CRED_STORAGE_KEY);
     if (!stored && info.authRequired) {
-      credsUsername.value = info.username
-      credsPassword.value = info.password
+      credsUsername.value = info.username;
+      credsPassword.value = info.password;
     } else if (stored) {
       try {
-        const parsed = JSON.parse(stored) as { username?: string; password?: string }
-        if (parsed.username) credsUsername.value = parsed.username
-        if (parsed.password) credsPassword.value = parsed.password
+        const parsed = JSON.parse(stored) as { username?: string; password?: string };
+        if (parsed.username) credsUsername.value = parsed.username;
+        if (parsed.password) credsPassword.value = parsed.password;
       } catch {
         // ignore
       }
     }
   } catch (e) {
-    console.debug('[webdav] loadWebDavLocalInfo failed', e)
+    console.debug("[webdav] loadWebDavLocalInfo failed", e);
   }
 }
 
 const maskedUsername = computed(() => {
-  if (credsUsername.value) return credsUsername.value
-  if (backendUsername.value) return `${backendUsername.value} (${t('devtools.webdavAuth.fromBackend')})`
-  return t('devtools.webdavAuth.notSet')
-})
+  if (credsUsername.value) return credsUsername.value;
+  if (backendUsername.value) return `${backendUsername.value} (${t("devtools.webdavAuth.fromBackend")})`;
+  return t("devtools.webdavAuth.notSet");
+});
 
 function saveCreds() {
-  localStorage.setItem(
-    CRED_STORAGE_KEY,
-    JSON.stringify({ username: credsUsername.value, password: credsPassword.value }),
-  )
-  showToast({ message: t('devtools.webdavAuth.saved'), color: 'success' })
+  localStorage.setItem(CRED_STORAGE_KEY, JSON.stringify({ username: credsUsername.value, password: credsPassword.value }));
+  showToast({ message: t("devtools.webdavAuth.saved"), color: "success" });
 }
 
 function resetToBackend() {
-  if (!localInfo.value) return
-  credsUsername.value = localInfo.value.username
-  credsPassword.value = localInfo.value.password
-  showToast({ message: t('devtools.webdavAuth.resetToBackendHint'), color: 'medium' })
+  if (!localInfo.value) return;
+  credsUsername.value = localInfo.value.username;
+  credsPassword.value = localInfo.value.password;
+  showToast({ message: t("devtools.webdavAuth.resetToBackendHint"), color: "medium" });
 }
 
 // ============= 批量运行 =============
 async function handleRunAllModules() {
-  if (isAnyRunning.value) return
+  if (isAnyRunning.value) return;
   try {
-    await runAll()
+    await runAll();
     showToast({
       message: `WebDAV 全部 module 完成: ${totalCases.value} cases`,
       duration: 3000,
-      color: 'success',
-    })
+      color: "success",
+    });
   } catch (e) {
     showToast({
       message: `WebDAV 测试失败: ${e instanceof Error ? e.message : String(e)}`,
       duration: 3000,
-      color: 'danger',
-    })
+      color: "danger",
+    });
   }
 }
 
 function handleCancelAll() {
   for (const m of modules) {
-    cancelModule(m.id)
+    cancelModule(m.id);
   }
-  showToast({ message: '已请求取消所有 module', duration: 1500, color: 'medium' })
+  showToast({ message: "已请求取消所有 module", duration: 1500, color: "medium" });
 }
 
 async function runSingleModule(moduleId: string) {
-  if (isAnyRunning.value) return
+  if (isAnyRunning.value) return;
   try {
-    await runModule(moduleId)
+    await runModule(moduleId);
   } catch (e) {
     showToast({
       message: `${moduleId} 失败: ${e instanceof Error ? e.message : String(e)}`,
-      color: 'danger',
-    })
+      color: "danger",
+    });
   }
 }
 
 function cancelSingleModule(moduleId: string) {
-  cancelModule(moduleId)
+  cancelModule(moduleId);
 }
 
 // ============= manifest refresh =============
 async function refreshManifest() {
-  await manifest.refresh()
+  await manifest.refresh();
   if (availableMounts.value.length === 0) {
-    showToast({ message: t('devtools.webdav.manifestEmpty'), color: 'warning', duration: 2000 })
+    showToast({ message: t("devtools.webdav.manifestEmpty"), color: "warning", duration: 2000 });
   }
 }
 
 // ============= 历史 =============
-const showHistory = ref(false)
-const detailRun = ref<TestRun | null>(null)
+const showHistory = ref(false);
+const detailRun = ref<TestRun | null>(null);
 
 function refreshHistory() {
   // 触发响应式更新：useWebDavWorkflowAdapter 内部 historyRuns 是 ref
-  automation.historyRuns.value = [...automation.historyRuns.value]
+  automation.historyRuns.value = [...automation.historyRuns.value];
 }
 
 async function handleClearHistory() {
   const alert = await alertController.create({
-    header: t('devtools.confirmClearHistory'),
-    message: t('devtools.confirmClearHistoryMsg'),
+    header: t("devtools.confirmClearHistory"),
+    message: t("devtools.confirmClearHistoryMsg"),
     buttons: [
-      { text: t('common.cancel'), role: 'cancel' },
+      { text: t("common.cancel"), role: "cancel" },
       {
-        text: t('common.confirm'),
-        role: 'confirm',
+        text: t("common.confirm"),
+        role: "confirm",
         handler: () => {
-          clearHistory()
-          showToast({ message: t('devtools.historyCleared'), duration: 1500, color: 'success' })
+          clearHistory();
+          showToast({ message: t("devtools.historyCleared"), duration: 1500, color: "success" });
         },
       },
     ],
-  })
-  await alert.present()
+  });
+  await alert.present();
 }
 
 function openRunDetail(run: TestRun) {
-  detailRun.value = run
+  detailRun.value = run;
 }
 
 function formatTime(iso: string): string {
-  if (!iso) return '-'
-  const d = new Date(iso)
-  return d.toLocaleString('zh-CN', { hour12: false })
+  if (!iso) return "-";
+  const d = new Date(iso);
+  return d.toLocaleString("zh-CN", { hour12: false });
 }
 function formatDuration(start?: string, end?: string): string {
-  if (!start || !end) return '-'
-  const ms = new Date(end).getTime() - new Date(start).getTime()
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(2)}s`
+  if (!start || !end) return "-";
+  const ms = new Date(end).getTime() - new Date(start).getTime();
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
 }
 
 // ============= lifecycle =============
 onMounted(async () => {
-  await loadWebDavLocalInfo()
-  await manifest.refresh()
+  await loadWebDavLocalInfo();
+  await manifest.refresh();
   // 同步 webdavPath → 顶部 banner
   if (localInfo.value && !manifest.webdavPath.value) {
-    manifest.webdavPath.value = localInfo.value.webdavPath
+    manifest.webdavPath.value = localInfo.value.webdavPath;
   }
   if (localInfo.value && !manifest.auth.value.username) {
     manifest.auth.value = {
       username: localInfo.value.username,
       password: localInfo.value.password,
-    }
+    };
   }
-  checkWebDavHealth()
-})
+  checkWebDavHealth();
+});
 
 // 监听 manifest 变化自动重检健康
 watch(
   () => manifest.webdavPath.value,
   () => {
-    webDavEnabled.value = null
-    checkWebDavHealth()
-  },
-)
+    webDavEnabled.value = null;
+    checkWebDavHealth();
+  }
+);
 </script>
 
 <style scoped>

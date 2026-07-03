@@ -91,108 +91,107 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed } from "vue";
 
 interface Props {
   /** 原始字符串（args 或 result 序列化后的 JSON 字符串） */
-  raw: string
+  raw: string;
   /** 'args' 或 'result' — 影响解析策略和样式 */
-  kind: 'args' | 'result'
+  kind: "args" | "result";
   /** 工具名（仅 result 模式使用，便于 mount list 识别） */
-  toolName?: string
+  toolName?: string;
 }
 
-const props = defineProps<Props>()
+const props = defineProps<Props>();
 
 /** 解析结果（可能为 null 表示解析失败） */
 const parsed = computed<unknown>(() => {
-  if (!props.raw) return null
-  const s = String(props.raw).trim()
-  if (!s) return null
+  if (!props.raw) return null;
+  const s = String(props.raw).trim();
+  if (!s) return null;
   try {
-    return JSON.parse(s)
+    return JSON.parse(s);
   } catch {
-    return null
+    return null;
   }
-})
+});
 
 function isObject(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null && !Array.isArray(v)
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 /** mount list 检测：mounts[] / mounts[].id+type */
 const isMountList = computed(() => {
   if (Array.isArray(parsed.value)) {
-    return parsed.value.length > 0 && parsed.value.every(
-      (m) => isObject(m) && ('id' in m || 'name' in m) && ('type' in m || 'path' in m || 'label' in m),
-    )
+    return (
+      parsed.value.length > 0 &&
+      parsed.value.every(m => isObject(m) && ("id" in m || "name" in m) && ("type" in m || "path" in m || "label" in m))
+    );
   }
   if (isObject(parsed.value) && Array.isArray((parsed.value as any).mounts)) {
-    return true
+    return true;
   }
-  return false
-})
+  return false;
+});
 
 const mountItems = computed<unknown[]>(() => {
-  if (Array.isArray(parsed.value)) return parsed.value
+  if (Array.isArray(parsed.value)) return parsed.value;
   if (isObject(parsed.value) && Array.isArray((parsed.value as any).mounts)) {
-    return (parsed.value as any).mounts
+    return (parsed.value as any).mounts;
   }
-  return []
-})
+  return [];
+});
 
 /** file list 检测：files[] / items[] / entries[] */
 const isFileList = computed(() => {
   if (Array.isArray(parsed.value)) {
-    return parsed.value.length > 0 && parsed.value.every(
-      (f) => isObject(f) || typeof f === 'string',
-    ) && !isMountList.value
+    return parsed.value.length > 0 && parsed.value.every(f => isObject(f) || typeof f === "string") && !isMountList.value;
   }
-  for (const k of ['files', 'items', 'entries', 'results']) {
+  for (const k of ["files", "items", "entries", "results"]) {
     if (isObject(parsed.value) && Array.isArray((parsed.value as any)[k])) {
       // 排除 count/ok 字段共存的 mount list 包装
-      if (k === 'files' || k === 'items' || k === 'entries') return true
+      if (k === "files" || k === "items" || k === "entries") return true;
     }
   }
-  return false
-})
+  return false;
+});
 
 const fileItems = computed<unknown[]>(() => {
-  if (Array.isArray(parsed.value)) return parsed.value
+  if (Array.isArray(parsed.value)) return parsed.value;
   if (isObject(parsed.value)) {
-    for (const k of ['files', 'items', 'entries', 'results']) {
+    for (const k of ["files", "items", "entries", "results"]) {
       if (Array.isArray((parsed.value as any)[k])) {
-        return (parsed.value as any)[k]
+        return (parsed.value as any)[k];
       }
     }
   }
-  return []
-})
+  return [];
+});
 
 /** file content 检测：content / text / contentSnippet 字段 */
 const isFileContent = computed(() => {
-  if (!isObject(parsed.value)) return false
-  const p = parsed.value as any
-  return typeof p.content === 'string' || typeof p.text === 'string' || typeof p.contentSnippet === 'string'
-})
+  if (!isObject(parsed.value)) return false;
+  const p = parsed.value as any;
+  return typeof p.content === "string" || typeof p.text === "string" || typeof p.contentSnippet === "string";
+});
 
 const fileContentText = computed(() => {
-  if (!isObject(parsed.value)) return ''
-  const p = parsed.value as any
-  return p.content || p.text || p.contentSnippet || ''
-})
+  if (!isObject(parsed.value)) return "";
+  const p = parsed.value as any;
+  return p.content || p.text || p.contentSnippet || "";
+});
 
 /** 解析失败的展示文本（去除外层引号） */
 const displayText = computed(() => {
-  if (parsed.value !== null) return String(parsed.value)
-  return props.raw || ''
-})
+  if (parsed.value !== null) return String(parsed.value);
+  return props.raw || "";
+});
 
 function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 </script>
 

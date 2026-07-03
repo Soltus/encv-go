@@ -5,19 +5,19 @@
 // ──────────────────────────────────────────────────────────────
 
 export const FILE_REFERENCE_EXTENSIONS =
-  'tsx?|jsx?|mjs|cjs|css|scss|sass|less|mdx?|jsonc?|ya?ml|toml|lock|html?|xml|svg|png|jpe?g|gif|webp|bmp|ico|pdf|docx?|xlsx?|xlsm|pptx?|txt|csv|tsv|log|py|ps1|sh|bat|cmd|rs|go|java|cs|cpp|c|h|hpp|sql|env|ini'
+  "tsx?|jsx?|mjs|cjs|css|scss|sass|less|mdx?|jsonc?|ya?ml|toml|lock|html?|xml|svg|png|jpe?g|gif|webp|bmp|ico|pdf|docx?|xlsx?|xlsm|pptx?|txt|csv|tsv|log|py|ps1|sh|bat|cmd|rs|go|java|cs|cpp|c|h|hpp|sql|env|ini";
 
-export const FILE_REFERENCE_LOCATION_SUFFIX = '(?::\\d+(?::\\d+)?)?'
+export const FILE_REFERENCE_LOCATION_SUFFIX = "(?::\\d+(?::\\d+)?)?";
 
 export interface FileReference {
-  start: number
-  end: number
-  path: string
-  line?: number
-  col?: number
+  start: number;
+  end: number;
+  path: string;
+  line?: number;
+  col?: number;
 }
 
-const URL_PREFIX_PATTERN = /(?:https?|file):\/\/[^\s]*$/i
+const URL_PREFIX_PATTERN = /(?:https?|file):\/\/[^\s]*$/i;
 
 /**
  * 单条 file ref 匹配模式（global + case-insensitive, per spec 约束）。
@@ -37,18 +37,18 @@ const INLINE_FILE_REFERENCE_PATTERN = new RegExp(
     `(?:\\.{1,2}[\\\\/])?(?:[\\w.-]+[\\\\/])+[\\w .-]+\\.(?:${FILE_REFERENCE_EXTENSIONS})\\b${FILE_REFERENCE_LOCATION_SUFFIX}`,
     // 3) 纯文件名
     `\\b[\\w.-]+\\.(?:${FILE_REFERENCE_EXTENSIONS})\\b${FILE_REFERENCE_LOCATION_SUFFIX}`,
-  ].join('|'),
-  'gi',
-)
+  ].join("|"),
+  "gi"
+);
 
 function stripLocationSuffix(value: string): { path: string; line?: number; col?: number } {
-  const match = /^(.*\.[a-z0-9]{1,12})(?::(\d+)(?::(\d+))?)$/i.exec(value)
-  if (!match) return { path: value }
+  const match = /^(.*\.[a-z0-9]{1,12})(?::(\d+)(?::(\d+))?)$/i.exec(value);
+  if (!match) return { path: value };
   return {
     path: match[1] ?? value,
     line: match[2] ? Number(match[2]) : undefined,
     col: match[3] ? Number(match[3]) : undefined,
-  }
+  };
 }
 
 /**
@@ -58,28 +58,28 @@ function stripLocationSuffix(value: string): { path: string; line?: number; col?
  * - 保留原始文本中的 start/end 索引，供上层切分 segments 使用
  */
 export function parseFileReferences(text: string): FileReference[] {
-  if (!text) return []
-  const out: FileReference[] = []
+  if (!text) return [];
+  const out: FileReference[] = [];
   // 必须重置 lastIndex 状态（全局正则属性）
-  INLINE_FILE_REFERENCE_PATTERN.lastIndex = 0
+  INLINE_FILE_REFERENCE_PATTERN.lastIndex = 0;
   for (const m of text.matchAll(INLINE_FILE_REFERENCE_PATTERN)) {
-    const raw = m[0]
-    const index = m.index ?? 0
+    const raw = m[0];
+    const index = m.index ?? 0;
     // URL 防护：
     // 1) match 自身包含 `://` → 显然是 URL 内部段，丢弃
     // 2) match 前 24 字符以 URL scheme 结尾 → 是 URL 路径段，丢弃
-    if (raw.includes('://')) continue
+    if (raw.includes("://")) continue;
     if (index > 0 && URL_PREFIX_PATTERN.test(text.slice(Math.max(0, index - 24), index))) {
-      continue
+      continue;
     }
-    const { path, line, col } = stripLocationSuffix(raw)
+    const { path, line, col } = stripLocationSuffix(raw);
     out.push({
       start: index,
       end: index + raw.length,
       path,
       ...(line !== undefined ? { line } : {}),
       ...(col !== undefined ? { col } : {}),
-    })
+    });
   }
-  return out
+  return out;
 }

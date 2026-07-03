@@ -290,13 +290,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, type ComputedRef } from 'vue'
 // TDesign Chat 自家组件：ChatThinking + ChatMarkdown（cherry-markdown 引擎）
 // 统一 TDesign 视觉风格
-import { ChatThinking, ChatMarkdown } from '@tdesign-vue-next/chat'
-import { useRenderTurnItems } from '@/composables/renderTurnItems'
-import ToolDetailContent from './ToolDetailContent.vue'
-import type { Message, ToolCall, ToolResult, AgentStatus } from '@/composables/useAgent'
+import { ChatMarkdown, ChatThinking } from "@tdesign-vue-next/chat";
+import { type ComputedRef, computed, ref } from "vue";
+import { useRenderTurnItems } from "@/composables/renderTurnItems";
+import type { AgentStatus, Message, ToolCall, ToolResult } from "@/composables/useAgent";
+import ToolDetailContent from "./ToolDetailContent.vue";
 
 /**
  * 适配 TDesign 视觉的 turn-items 渲染器
@@ -305,22 +305,22 @@ import type { Message, ToolCall, ToolResult, AgentStatus } from '@/composables/u
  */
 
 interface Props {
-  messages: readonly Message[]
-  status: AgentStatus | string
-  streaming: boolean
-  onSend?: (text: string) => Promise<void>
-  onStop?: () => void
-  onConfirmTool?: (toolCallId: string, decision: string) => Promise<void>
-  onCopyMessage?: (messageId: string) => Promise<void>
-  onPresetClick?: (userText: string) => void
+  messages: readonly Message[];
+  status: AgentStatus | string;
+  streaming: boolean;
+  onSend?: (text: string) => Promise<void>;
+  onStop?: () => void;
+  onConfirmTool?: (toolCallId: string, decision: string) => Promise<void>;
+  onCopyMessage?: (messageId: string) => Promise<void>;
+  onPresetClick?: (userText: string) => void;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   messages: () => [] as readonly Message[],
-})
+});
 
-const welcomeTitle = 'TDesign 风格引擎'
-const welcomeSubtitle = '使用腾讯 TDesign 视觉组件渲染 Agent 对话。'
+const welcomeTitle = "TDesign 风格引擎";
+const welcomeSubtitle = "使用腾讯 TDesign 视觉组件渲染 Agent 对话。";
 
 /**
  * 按 eventLog 时间轴拆分 messages 为 RenderedItem[]。
@@ -331,64 +331,64 @@ const welcomeSubtitle = '使用腾讯 TDesign 视觉组件渲染 Agent 对话。
  *
  * SPEC: /workspace/.trae/specs/agui-real-llm-path-completion/ Phase 4
  */
-const messagesRef = computed(() => [...props.messages]) as ComputedRef<Message[]>
-const statusRef = computed(() => props.status as AgentStatus)
-const renderedItems = useRenderTurnItems(messagesRef, statusRef)
+const messagesRef = computed(() => [...props.messages]) as ComputedRef<Message[]>;
+const statusRef = computed(() => props.status as AgentStatus);
+const renderedItems = useRenderTurnItems(messagesRef, statusRef);
 
 /** O(1) 工具调用查找：跨 messages 全局 id 索引 */
 const allToolCalls = computed<Map<string, ToolCall>>(() => {
-  const m = new Map<string, ToolCall>()
+  const m = new Map<string, ToolCall>();
   for (const msg of props.messages) {
-    if (!msg.tool_calls) continue
+    if (!msg.tool_calls) continue;
     for (const tc of msg.tool_calls) {
-      m.set(tc.id, tc)
+      m.set(tc.id, tc);
     }
   }
-  return m
-})
+  return m;
+});
 
 /** O(1) 工具结果查找 */
 const allToolResults = computed<Map<string, ToolResult>>(() => {
-  const m = new Map<string, ToolResult>()
+  const m = new Map<string, ToolResult>();
   for (const msg of props.messages) {
-    if (!msg.tool_results) continue
+    if (!msg.tool_results) continue;
     for (const tr of msg.tool_results) {
-      m.set(tr.id, tr)
+      m.set(tr.id, tr);
     }
   }
-  return m
-})
+  return m;
+});
 
 function findToolCallById(id: string): ToolCall | undefined {
-  return allToolCalls.value.get(id)
+  return allToolCalls.value.get(id);
 }
 
 function findToolResultById(id: string): ToolResult | undefined {
-  return allToolResults.value.get(id)
+  return allToolResults.value.get(id);
 }
 
 function statusText(status: string | undefined): string {
   switch (status) {
-    case 'pending':
-      return '待执行'
-    case 'running':
-      return '执行中...'
-    case 'success':
-      return '完成'
-    case 'error':
-    case 'failed':
-      return '失败'
-    case 'cancelled':
-      return '已取消'
+    case "pending":
+      return "待执行";
+    case "running":
+      return "执行中...";
+    case "success":
+      return "完成";
+    case "error":
+    case "failed":
+      return "失败";
+    case "cancelled":
+      return "已取消";
     default:
-      return status || ''
+      return status || "";
   }
 }
 
 function formatFooterTime(timestamp: number): string {
-  const d = new Date(timestamp)
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const d = new Date(timestamp);
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 // ── 工具卡片展开状态管理 ─────────────────────────────────
@@ -397,17 +397,17 @@ function formatFooterTime(timestamp: number): string {
 //   - 初始状态：running/pending → 自动展开；success/error → 默认折叠
 //   - 一个 set 存用户主动展开的 ids；一个 set 存用户主动折叠的 ids
 //     （避免被自动规则覆盖）
-const userExpandedIds = ref(new Set<string>())
-const userCollapsedIds = ref(new Set<string>())
+const userExpandedIds = ref(new Set<string>());
+const userCollapsedIds = ref(new Set<string>());
 
 /** 当前 id 是否展开 */
 function isOpen(toolCallId: string): boolean {
-  if (userExpandedIds.value.has(toolCallId)) return true
-  if (userCollapsedIds.value.has(toolCallId)) return false
+  if (userExpandedIds.value.has(toolCallId)) return true;
+  if (userCollapsedIds.value.has(toolCallId)) return false;
   // 默认规则：running/pending → 展开
-  const tc = findToolCallById(toolCallId)
-  if (!tc) return false
-  return tc.status === 'running' || tc.status === 'pending'
+  const tc = findToolCallById(toolCallId);
+  if (!tc) return false;
+  return tc.status === "running" || tc.status === "pending";
 }
 
 /**
@@ -417,16 +417,16 @@ function isOpen(toolCallId: string): boolean {
  * 解决：检查 event.target.open 与 isOpen(id) 一致才记为用户操作。
  */
 function onToolToggle(toolCallId: string, e: Event) {
-  const target = e.target as HTMLDetailsElement
-  if (!target) return
+  const target = e.target as HTMLDetailsElement;
+  if (!target) return;
   // 首次挂载导致的 toggle 不记
   // （依靠 userExpandedIds/userCollapsedIds 初始为空来过滤）
   if (target.open) {
-    userCollapsedIds.value.delete(toolCallId)
-    userExpandedIds.value.add(toolCallId)
+    userCollapsedIds.value.delete(toolCallId);
+    userExpandedIds.value.add(toolCallId);
   } else {
-    userExpandedIds.value.delete(toolCallId)
-    userCollapsedIds.value.add(toolCallId)
+    userExpandedIds.value.delete(toolCallId);
+    userCollapsedIds.value.add(toolCallId);
   }
 }
 </script>

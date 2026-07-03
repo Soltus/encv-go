@@ -111,134 +111,133 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { bugOutline } from 'ionicons/icons'
-import type { EncvTask } from '@/api/encv'
+import { IonIcon } from "@ionic/vue";
+import { bugOutline } from "ionicons/icons";
+import { computed } from "vue";
+import type { EncvTask } from "@/api/encv";
 
 const props = defineProps<{
-  tasks: EncvTask[]
-  displayedItems: any[]
-  groupedTasksByRunId: Array<{ key: string; runId: string; tasks: EncvTask[]; startedAt: string }>
-  viewMode: string
-  sortBy: string
-  searchQuery: string
-  filterPlugins: string[]
-  filterTypes: string[]
-  filterStatuses: string[]
-  filterTriggeredBy: string[]
-  filterDatePreset: string
-  pinnedRunIds: Set<string>
-  defaultOpen?: boolean
-}>()
+  tasks: EncvTask[];
+  displayedItems: any[];
+  groupedTasksByRunId: Array<{ key: string; runId: string; tasks: EncvTask[]; startedAt: string }>;
+  viewMode: string;
+  sortBy: string;
+  searchQuery: string;
+  filterPlugins: string[];
+  filterTypes: string[];
+  filterStatuses: string[];
+  filterTriggeredBy: string[];
+  filterDatePreset: string;
+  pinnedRunIds: Set<string>;
+  defaultOpen?: boolean;
+}>();
 
 // ============ 派生统计 ============
-const realGroupCount = computed(() =>
-  props.groupedTasksByRunId.filter((g) => !g.runId.startsWith('__manual__')).length,
-)
-const fakeGroupCount = computed(() =>
-  props.groupedTasksByRunId.filter((g) => g.runId.startsWith('__manual__')).length,
-)
+const realGroupCount = computed(() => props.groupedTasksByRunId.filter(g => !g.runId.startsWith("__manual__")).length);
+const fakeGroupCount = computed(() => props.groupedTasksByRunId.filter(g => g.runId.startsWith("__manual__")).length);
 const escapeTaskCount = computed(() =>
-  props.groupedTasksByRunId
-    .filter((g) => g.runId.startsWith('__manual__'))
-    .reduce((acc, g) => acc + g.tasks.length, 0),
-)
-const pinnedSet = computed(() => props.pinnedRunIds)
+  props.groupedTasksByRunId.filter(g => g.runId.startsWith("__manual__")).reduce((acc, g) => acc + g.tasks.length, 0)
+);
+const pinnedSet = computed(() => props.pinnedRunIds);
 
 const sortedGroups = computed(() => {
   return props.groupedTasksByRunId
-    .map((g) => {
-      const isFake = g.runId.startsWith('__manual__')
+    .map(g => {
+      const isFake = g.runId.startsWith("__manual__");
       // 状态汇总
-      const statusMap: Record<string, number> = {}
+      const statusMap: Record<string, number> = {};
       for (const t of g.tasks) {
-        statusMap[t.status] = (statusMap[t.status] ?? 0) + 1
+        statusMap[t.status] = (statusMap[t.status] ?? 0) + 1;
       }
-      const statusSummary = Object.entries(statusMap)
-        .map(([s, n]) => `${s}:${n}`)
-        .join(' / ') || '—'
-      return { runId: g.runId, taskCount: g.tasks.length, statusSummary, isFake }
+      const statusSummary =
+        Object.entries(statusMap)
+          .map(([s, n]) => `${s}:${n}`)
+          .join(" / ") || "—";
+      return { runId: g.runId, taskCount: g.tasks.length, statusSummary, isFake };
     })
     .sort((a, b) => {
-      if (a.isFake !== b.isFake) return a.isFake ? 1 : -1
-      return b.taskCount - a.taskCount
-    })
-})
+      if (a.isFake !== b.isFake) return a.isFake ? 1 : -1;
+      return b.taskCount - a.taskCount;
+    });
+});
 
 // 时间桶
 function dateSectionKey(date: string): string {
-  const d = new Date(date)
-  const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const yesterdayStart = todayStart - 86400000
-  const weekStart = todayStart - 7 * 86400000
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
-  const ts = d.getTime()
-  if (ts >= todayStart) return 'today'
-  if (ts >= yesterdayStart) return 'yesterday'
-  if (ts >= weekStart) return 'thisWeek'
-  if (ts >= monthStart) return 'thisMonth'
-  return 'earlier'
+  const d = new Date(date);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yesterdayStart = todayStart - 86400000;
+  const weekStart = todayStart - 7 * 86400000;
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const ts = d.getTime();
+  if (ts >= todayStart) return "today";
+  if (ts >= yesterdayStart) return "yesterday";
+  if (ts >= weekStart) return "thisWeek";
+  if (ts >= monthStart) return "thisMonth";
+  return "earlier";
 }
 const bucketCounts = computed(() => {
-  const out = { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0, earlier: 0 }
+  const out = { today: 0, yesterday: 0, thisWeek: 0, thisMonth: 0, earlier: 0 };
   for (const t of props.tasks) {
-    const k = dateSectionKey(t.createdAt)
-    out[k as keyof typeof out]++
+    const k = dateSectionKey(t.createdAt);
+    out[k as keyof typeof out]++;
   }
-  return out
-})
+  return out;
+});
 
 // 自我诊断
-type Diag = { level: 'ok' | 'warn' | 'error' | 'info'; text: string }
+type Diag = { level: "ok" | "warn" | "error" | "info"; text: string };
 const diagnostics = computed<Diag[]>(() => {
-  const out: Diag[] = []
+  const out: Diag[] = [];
   if (props.tasks.length === 0) {
-    out.push({ level: 'info', text: 'store.tasks 是空（首次进入或已清空）' })
-    return out
+    out.push({ level: "info", text: "store.tasks 是空（首次进入或已清空）" });
+    return out;
   }
   // 1. 逃逸检测
   if (fakeGroupCount.value > 0) {
     out.push({
-      level: 'error',
-      text: `检测到 ${fakeGroupCount.value} 个 __manual__ 伪 group（${escapeTaskCount.value} 个 task 失去 runId）。`
-        + '真因：fetchTasks 返回的 task.runId 字段是空字符串 → Go json omitempty → 前端 merge 模式未生效。',
-    })
+      level: "error",
+      text:
+        `检测到 ${fakeGroupCount.value} 个 __manual__ 伪 group（${escapeTaskCount.value} 个 task 失去 runId）。` +
+        "真因：fetchTasks 返回的 task.runId 字段是空字符串 → Go json omitempty → 前端 merge 模式未生效。",
+    });
   } else if (escapeTaskCount.value > 0) {
-    out.push({ level: 'warn', text: `有 ${escapeTaskCount.value} 个逃逸 task 但未聚合到伪 group（异常状态）` })
+    out.push({ level: "warn", text: `有 ${escapeTaskCount.value} 个逃逸 task 但未聚合到伪 group（异常状态）` });
   } else {
-    out.push({ level: 'ok', text: '无逃逸 task（merge 模式生效，prev.runId 保留成功）' })
+    out.push({ level: "ok", text: "无逃逸 task（merge 模式生效，prev.runId 保留成功）" });
   }
   // 2. runId 缺失统计
-  const taskWithRunId = props.tasks.filter((t) => t.runId && !t.runId.startsWith('__manual__')).length
-  const taskWithoutRunId = props.tasks.length - taskWithRunId
+  const taskWithRunId = props.tasks.filter(t => t.runId && !t.runId.startsWith("__manual__")).length;
+  const taskWithoutRunId = props.tasks.length - taskWithRunId;
   if (taskWithoutRunId > 0) {
-    out.push({ level: 'warn', text: `store 里 ${taskWithoutRunId}/${props.tasks.length} task 没有 runId（merge 模式会保留 prev）` })
+    out.push({ level: "warn", text: `store 里 ${taskWithoutRunId}/${props.tasks.length} task 没有 runId（merge 模式会保留 prev）` });
   }
   // 3. triggeredBy 缺失
-  const taskWithTriggeredBy = props.tasks.filter((t) => t.triggeredBy).length
+  const taskWithTriggeredBy = props.tasks.filter(t => t.triggeredBy).length;
   if (taskWithTriggeredBy < props.tasks.length) {
-    out.push({ level: 'warn', text: `store 里 ${props.tasks.length - taskWithTriggeredBy} task 缺 triggeredBy（默认为 user）` })
+    out.push({ level: "warn", text: `store 里 ${props.tasks.length - taskWithTriggeredBy} task 缺 triggeredBy（默认为 user）` });
   }
   // 4. viewMode + sortBy 一致性
-  if (props.viewMode === 'group' && props.groupedTasksByRunId.length > 0 && props.displayedItems.length === 0) {
-    out.push({ level: 'error', text: 'group 模式有 group 数据但 displayedItems.length=0（filter 把所有 group 过滤了）' })
+  if (props.viewMode === "group" && props.groupedTasksByRunId.length > 0 && props.displayedItems.length === 0) {
+    out.push({ level: "error", text: "group 模式有 group 数据但 displayedItems.length=0（filter 把所有 group 过滤了）" });
   }
   // 5. displayedItems 比例
-  const dateCount = props.displayedItems.filter((it: any) => it.kind === 'date').length
-  const groupCount = props.displayedItems.filter((it: any) => it.kind === 'group').length
-  const taskCount = props.displayedItems.filter((it: any) => it.kind === 'task').length
+  const dateCount = props.displayedItems.filter((it: any) => it.kind === "date").length;
+  const groupCount = props.displayedItems.filter((it: any) => it.kind === "group").length;
+  const taskCount = props.displayedItems.filter((it: any) => it.kind === "task").length;
   out.push({
-    level: 'info',
+    level: "info",
     text: `displayedItems 拆解：date=${dateCount} / group=${groupCount} / task=${taskCount}（合计 ${dateCount + groupCount + taskCount}）`,
-  })
+  });
   // 6. 时间桶异常
   if (bucketCounts.value.earlier > bucketCounts.value.today * 5) {
-    out.push({ level: 'warn', text: `earlier 桶有 ${bucketCounts.value.earlier} task（远多于 today ${bucketCounts.value.today}）→ 时间分布异常` })
+    out.push({
+      level: "warn",
+      text: `earlier 桶有 ${bucketCounts.value.earlier} task（远多于 today ${bucketCounts.value.today}）→ 时间分布异常`,
+    });
   }
-  return out
-})
+  return out;
+});
 </script>
 
 <style scoped>

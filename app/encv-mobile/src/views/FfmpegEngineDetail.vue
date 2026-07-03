@@ -269,61 +269,87 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
-  IonBadge, IonButton, IonSpinner, IonAccordion, IonAccordionGroup,
-} from '@ionic/vue'
+  IonAccordion,
+  IonAccordionGroup,
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
 import {
-  videocamOutline, searchOutline, refresh as refreshIcon,
-  constructOutline, phonePortraitOutline,
-  settingsOutline, linkOutline, calendarOutline, codeSlashOutline,
-  downloadOutline, cloudUploadOutline, filmOutline, documentOutline,
-  globeOutline, filterOutline, cubeOutline, codeWorkingOutline,
+  calendarOutline,
+  cloudUploadOutline,
+  codeSlashOutline,
+  codeWorkingOutline,
+  constructOutline,
+  cubeOutline,
+  documentOutline,
+  downloadOutline,
+  filmOutline,
+  filterOutline,
+  globeOutline,
+  linkOutline,
+  phonePortraitOutline,
+  refresh as refreshIcon,
+  searchOutline,
+  settingsOutline,
+  videocamOutline,
   warningOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { fetchFFmpegStatus, fetchBuildInfo, type FFmpegStatus, type BuildInfo } from '@/api/encv'
+} from "ionicons/icons";
+import { onMounted, ref } from "vue";
+import { type BuildInfo, type FFmpegStatus, fetchBuildInfo, fetchFFmpegStatus } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const engineStatus = ref<FFmpegStatus | null>(null)
-const buildInfo = ref<BuildInfo | null>(null)
-const buildInfoLoading = ref(true)
-const buildInfoError = ref(false)
-const buildInfoErrorMessage = ref('')  // ✅ 新增：保存详细错误信息
+const engineStatus = ref<FFmpegStatus | null>(null);
+const buildInfo = ref<BuildInfo | null>(null);
+const buildInfoLoading = ref(true);
+const buildInfoError = ref(false);
+const buildInfoErrorMessage = ref(""); // ✅ 新增：保存详细错误信息
 
 function formatDate(dateStr: string): string {
-  if (!dateStr) return ''
+  if (!dateStr) return "";
   try {
-    const d = new Date(dateStr)
-    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString()
+    const d = new Date(dateStr);
+    return d.toLocaleDateString() + " " + d.toLocaleTimeString();
   } catch {
-    return dateStr
+    return dateStr;
   }
 }
 
 async function handleRefresh() {
   try {
-    engineStatus.value = await fetchFFmpegStatus()
+    engineStatus.value = await fetchFFmpegStatus();
   } catch {}
 }
 
 onMounted(async () => {
   try {
-    engineStatus.value = await fetchFFmpegStatus()
+    engineStatus.value = await fetchFFmpegStatus();
   } catch {}
   try {
-    buildInfo.value = await fetchBuildInfo()
+    buildInfo.value = await fetchBuildInfo();
   } catch (e) {
-    buildInfoError.value = true
-    buildInfoErrorMessage.value = (e as Error)?.message || String(e) || 'Unknown error'
-    console.error('[FfmpegEngineDetail] build info load error:', e)  // ✅ 控制台也打出来
+    buildInfoError.value = true;
+    buildInfoErrorMessage.value = (e as Error)?.message || String(e) || "Unknown error";
+    console.error("[FfmpegEngineDetail] build info load error:", e); // ✅ 控制台也打出来
   } finally {
-    buildInfoLoading.value = false
+    buildInfoLoading.value = false;
   }
-})
+});
 </script>
 
 <style scoped>

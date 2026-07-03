@@ -208,107 +208,137 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel, IonToggle,
-  IonBadge, IonButton, IonSelect, IonSelectOption,
-} from '@ionic/vue'
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonSelect,
+  IonSelectOption,
+  IonTitle,
+  IonToggle,
+  IonToolbar,
+} from "@ionic/vue";
 import {
-  globeOutline, colorPaletteOutline,
-  layersOutline, eyeOutline, closeCircleOutline,
-  sparklesOutline, trendingUpOutline,
-} from 'ionicons/icons'
-import { useTheme } from '@/composables/useTheme'
-import { useI18n } from '@/composables/useI18n'
-import type { Locale } from '@/composables/useI18n'
+  closeCircleOutline,
+  colorPaletteOutline,
+  eyeOutline,
+  globeOutline,
+  layersOutline,
+  sparklesOutline,
+  trendingUpOutline,
+} from "ionicons/icons";
+import { computed, ref } from "vue";
+import type { Locale } from "@/composables/useI18n";
+import { useI18n } from "@/composables/useI18n";
+import { useTheme } from "@/composables/useTheme";
 
 const {
-  isDark, currentColor, currentBgColor, bgBlur, p3Mode,
-  vividMode, vividIntensity, isP3Supported,
-  THEME_PRESETS, BG_PRESETS,
-  setThemeColor, setBgColor, setBgBlur, setP3Mode,
-  setVividMode, setVividIntensity, setBgGradient,
-} = useTheme()
-const { t, locale, setLocale } = useI18n()
+  isDark,
+  currentColor,
+  currentBgColor,
+  bgBlur,
+  p3Mode,
+  vividMode,
+  vividIntensity,
+  isP3Supported,
+  THEME_PRESETS,
+  BG_PRESETS,
+  setThemeColor,
+  setBgColor,
+  setBgBlur,
+  setP3Mode,
+  setVividMode,
+  setVividIntensity,
+  setBgGradient,
+} = useTheme();
+const { t, locale, setLocale } = useI18n();
 
-const currentGradient = ref<string | null>(null)
+const currentGradient = ref<string | null>(null);
 
 const bgCategories = computed(() => [
   {
-    key: 'light',
-    label: 'settings.bgLight',
-    presets: BG_PRESETS.filter(p => p.category === 'light'),
+    key: "light",
+    label: "settings.bgLight",
+    presets: BG_PRESETS.filter(p => p.category === "light"),
   },
   {
-    key: 'eye',
-    label: 'settings.bgEyeCare',
-    presets: BG_PRESETS.filter(p => p.category === 'eye'),
+    key: "eye",
+    label: "settings.bgEyeCare",
+    presets: BG_PRESETS.filter(p => p.category === "eye"),
   },
   {
-    key: 'dark',
-    label: 'settings.bgDark',
-    presets: BG_PRESETS.filter(p => p.category === 'dark'),
+    key: "dark",
+    label: "settings.bgDark",
+    presets: BG_PRESETS.filter(p => p.category === "dark"),
   },
   {
-    key: 'gradient',
-    label: 'settings.bgGradient',
-    presets: BG_PRESETS.filter(p => p.category === 'gradient'),
+    key: "gradient",
+    label: "settings.bgGradient",
+    presets: BG_PRESETS.filter(p => p.category === "gradient"),
   },
-])
+]);
 
 const p3Modes = [
-  { value: 'auto', label: 'settings.p3Auto', description: '' },
-  { value: 'on', label: 'settings.p3On', description: '' },
-  { value: 'off', label: 'settings.p3Off', description: '' },
-]
+  { value: "auto", label: "settings.p3Auto", description: "" },
+  { value: "on", label: "settings.p3On", description: "" },
+  { value: "off", label: "settings.p3Off", description: "" },
+];
 
 function handleLocaleChange(event: CustomEvent) {
-  setLocale(event.detail.value as Locale)
+  setLocale(event.detail.value as Locale);
 }
 
 function handleBgColorChange(value: string) {
-  setBgColor(value)
-  currentGradient.value = null
+  setBgColor(value);
+  currentGradient.value = null;
 }
 
-function handleGradientSelect(preset: typeof BG_PRESETS[number]) {
+function handleGradientSelect(preset: (typeof BG_PRESETS)[number]) {
   if (preset.gradientColors) {
-    setBgGradient(preset.gradientColors)
-    currentGradient.value = preset.name
+    setBgGradient(preset.gradientColors);
+    currentGradient.value = preset.name;
   }
 }
 
-function getPresetStyle(preset: typeof BG_PRESETS[number]) {
+function getPresetStyle(preset: (typeof BG_PRESETS)[number]) {
   if (preset.gradientColors) {
     return {
-      background: `linear-gradient(135deg, ${preset.gradientColors.join(', ')})`,
+      background: `linear-gradient(135deg, ${preset.gradientColors.join(", ")})`,
       color: preset.textColor,
-      '--gradient-colors': preset.gradientColors.join(', '),
-    } as Record<string, string>
+      "--gradient-colors": preset.gradientColors.join(", "),
+    } as Record<string, string>;
   }
   return {
-    backgroundColor: preset.value ?? '#ffffff',
+    backgroundColor: preset.value ?? "#ffffff",
     color: preset.textColor,
-  }
+  };
 }
 
 function handleBgBlurChange(event: Event) {
-  const target = event.target as HTMLInputElement
-  setBgBlur(parseInt(target.value, 10))
+  const target = event.target as HTMLInputElement;
+  setBgBlur(parseInt(target.value, 10));
 }
 
 function handleP3ModeChange(value: string) {
-  setP3Mode(value as 'off' | 'on' | 'auto')
+  setP3Mode(value as "off" | "on" | "auto");
 }
 
 function handleVividToggle(event: CustomEvent) {
-  setVividMode(event.detail.checked ? 'on' : 'off')
+  setVividMode(event.detail.checked ? "on" : "off");
 }
 
 function handleVividIntensityChange(event: Event) {
-  const target = event.target as HTMLInputElement
-  setVividIntensity(parseInt(target.value, 10))
+  const target = event.target as HTMLInputElement;
+  setVividIntensity(parseInt(target.value, 10));
 }
 </script>
 

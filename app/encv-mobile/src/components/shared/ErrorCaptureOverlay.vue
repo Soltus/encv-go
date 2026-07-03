@@ -36,42 +36,42 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { alertCircle } from 'ionicons/icons'
-import { errorStore } from '@/composables/useErrorCapture'
+import { alertCircle } from "ionicons/icons";
+import { computed, ref } from "vue";
+import { errorStore } from "@/composables/useErrorCapture";
 
-const expanded = ref(false)
+const expanded = ref(false);
 
 const title = computed(() => {
-  const src = errorStore.latestError.value?.source
-  if (src === 'vue') return 'Vue 渲染错误'
-  if (src === 'promise') return '未捕获的异步错误'
-  if (src === 'console') return '底层错误（控制台）'
-  return '应用错误'
-})
+  const src = errorStore.latestError.value?.source;
+  if (src === "vue") return "Vue 渲染错误";
+  if (src === "promise") return "未捕获的异步错误";
+  if (src === "console") return "底层错误（控制台）";
+  return "应用错误";
+});
 
 const sourceLabel = computed(() => {
-  const src = errorStore.latestError.value?.source
-  if (src === 'vue') return 'Vue'
-  if (src === 'promise') return 'Promise'
-  if (src === 'console') return 'console'
-  return 'window'
-})
+  const src = errorStore.latestError.value?.source;
+  if (src === "vue") return "Vue";
+  if (src === "promise") return "Promise";
+  if (src === "console") return "console";
+  return "window";
+});
 
 function truncate(s: string, n: number) {
-  return s.length > n ? s.slice(0, n) + '…' : s
+  return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
 function formatTime(ts: number) {
-  const d = new Date(ts)
-  return d.toLocaleTimeString()
+  const d = new Date(ts);
+  return d.toLocaleTimeString();
 }
 
 function onClick() {
   // 点击展开/收起堆栈
-  expanded.value = !expanded.value
+  expanded.value = !expanded.value;
   // 同时在 devtools 也能看到
-  console.warn('[ErrorCapture] 点击错误卡片 → 展开堆栈:', errorStore.latestError.value)
+  console.warn("[ErrorCapture] 点击错误卡片 → 展开堆栈:", errorStore.latestError.value);
 }
 </script>
 

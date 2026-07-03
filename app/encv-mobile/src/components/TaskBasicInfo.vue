@@ -143,148 +143,156 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonBadge, IonIcon } from '@ionic/vue'
+import { IonBadge, IonIcon } from "@ionic/vue";
 import {
-  copyOutline, hardwareChipOutline, cogOutline, person,
-  extensionPuzzle, chevronForward, documentTextOutline,
-  informationCircleOutline, gitBranchOutline, listOutline,
-  swapVertical, folderOutline, ellipsisHorizontalCircleOutline,
+  chevronForward,
+  cogOutline,
+  copyOutline,
+  documentTextOutline,
+  ellipsisHorizontalCircleOutline,
+  extensionPuzzle,
+  folderOutline,
+  gitBranchOutline,
+  hardwareChipOutline,
+  informationCircleOutline,
+  listOutline,
   lockClosedOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import type { EncvTask } from '@/api/encv'
-import { formatContainerVersion } from '@/constants/containerVersion'
-import {
-  useSectionDerivation,
-  type SectionDimension,
-} from '@/composables/useSectionDerivation'
+  person,
+  swapVertical,
+} from "ionicons/icons";
+import { computed } from "vue";
+import type { EncvTask } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
+import { type SectionDimension, useSectionDerivation } from "@/composables/useSectionDerivation";
+import { showToast } from "@/composables/useToast";
+import { formatContainerVersion } from "@/constants/containerVersion";
 
-const props = defineProps<{ task: EncvTask }>()
-const { t } = useI18n()
+const props = defineProps<{ task: EncvTask }>();
+const { t } = useI18n();
 
 async function copyTaskId() {
   try {
-    await navigator.clipboard.writeText(props.task.id)
-    showToast({ message: t('tasks.idCopied'), duration: 1500, color: 'success' })
+    await navigator.clipboard.writeText(props.task.id);
+    showToast({ message: t("tasks.idCopied"), duration: 1500, color: "success" });
   } catch {
-    showToast({ message: t('tasks.idCopyFailed'), duration: 1500, color: 'danger' })
+    showToast({ message: t("tasks.idCopyFailed"), duration: 1500, color: "danger" });
   }
 }
 
 async function copyRunId() {
-  if (!runId.value) return
+  if (!runId.value) return;
   try {
-    await navigator.clipboard.writeText(runId.value)
-    showToast({ message: t('tasks.runIdCopied'), duration: 1500, color: 'success' })
+    await navigator.clipboard.writeText(runId.value);
+    showToast({ message: t("tasks.runIdCopied"), duration: 1500, color: "success" });
   } catch {
-    showToast({ message: t('tasks.runIdCopyFailed'), duration: 1500, color: 'danger' })
+    showToast({ message: t("tasks.runIdCopyFailed"), duration: 1500, color: "danger" });
   }
 }
 
 const fileName = computed(() => {
-  const parts = props.task.sourcePath.split('/')
-  return parts[parts.length - 1] || props.task.sourcePath
-})
+  const parts = props.task.sourcePath.split("/");
+  return parts[parts.length - 1] || props.task.sourcePath;
+});
 
 // 🆕 2026-06-18 Task 18：crypto params 区块显示判定 + extraFields 格式化
 // 旧任务（Task 16 之前）没有这 3 个字段 → 不显示空区块
 const hasCryptoParams = computed(() => {
-  const task = props.task
+  const task = props.task;
   return (
-    task.cipherMode !== undefined && task.cipherMode !== null ||
+    (task.cipherMode !== undefined && task.cipherMode !== null) ||
     !!task.compressionMode ||
     !!(task.extraFields && Object.keys(task.extraFields).length > 0)
-  )
-})
+  );
+});
 
 // extraField key → 显示标签：snake_case → Title Case（如 plugin_password → Plugin Password）
 // 已知 key 走 i18n（如 plugin_password → tasks.pluginPassword），未知 key 退化到 Title Case
 const EXTRA_FIELD_LABEL_I18N: Record<string, string> = {
-  pluginPassword: 'tasks.pluginPassword',
-  streamPreset: 'tasks.streamPreset',
-  encryptFilename: 'tasks.encryptFilename',
-  fnRounds: 'tasks.fnRounds',
-  fnCharset: 'tasks.fnCharset',
-  fnDeconfuse: 'tasks.fnDeconfuse',
-  fnStructured: 'tasks.fnStructured',
-  encodeFilename: 'tasks.encodeFilename',
-  encType: 'tasks.encType',
-}
+  pluginPassword: "tasks.pluginPassword",
+  streamPreset: "tasks.streamPreset",
+  encryptFilename: "tasks.encryptFilename",
+  fnRounds: "tasks.fnRounds",
+  fnCharset: "tasks.fnCharset",
+  fnDeconfuse: "tasks.fnDeconfuse",
+  fnStructured: "tasks.fnStructured",
+  encodeFilename: "tasks.encodeFilename",
+  encType: "tasks.encType",
+};
 
 function formatExtraFieldLabel(key: string): string {
   // 1) 直接命中 i18n 表
-  const directKey = EXTRA_FIELD_LABEL_I18N[key]
-  if (directKey) return t(directKey)
+  const directKey = EXTRA_FIELD_LABEL_I18N[key];
+  if (directKey) return t(directKey);
   // 2) camelCase → snake_case 后再查
-  const snakeKey = key.replace(/([A-Z])/g, '_$1').toLowerCase()
-  const snakeLookup = Object.keys(EXTRA_FIELD_LABEL_I18N).find(
-    k => k.replace(/([A-Z])/g, '_$1').toLowerCase() === snakeKey,
-  )
-  if (snakeLookup) return t(EXTRA_FIELD_LABEL_I18N[snakeLookup])
+  const snakeKey = key.replace(/([A-Z])/g, "_$1").toLowerCase();
+  const snakeLookup = Object.keys(EXTRA_FIELD_LABEL_I18N).find(k => k.replace(/([A-Z])/g, "_$1").toLowerCase() === snakeKey);
+  if (snakeLookup) return t(EXTRA_FIELD_LABEL_I18N[snakeLookup]);
   // 3) 退化：snake_case → Title Case
-  return key
-    .replace(/[_-]/g, ' ')
-    .replace(/\b\w/g, c => c.toUpperCase())
+  return key.replace(/[_-]/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
 // extraField value → 显示值：bool 字符串 → ✓/✗；密码类 key → 脱敏（•••••）
 function formatExtraFieldValue(value: string): string {
-  if (value === undefined || value === null) return ''
-  const v = String(value)
+  if (value === undefined || value === null) return "";
+  const v = String(value);
   // bool 字符串
-  if (v === 'true') return '✓'
-  if (v === 'false') return '✗'
+  if (v === "true") return "✓";
+  if (v === "false") return "✗";
   // 密码类（key 在调用方决定，这里只看 value 长度，长字符串疑似密码 → 脱敏）
   // 注意：密码脱敏由调用方决定（这里只做通用长字符串截断）
-  if (v.length > 32) return v.slice(0, 8) + '…' + v.slice(-4)
-  return v
+  if (v.length > 32) return v.slice(0, 8) + "…" + v.slice(-4);
+  return v;
 }
 
-const triggeredBy = computed(() => props.task.triggeredBy ?? 'user')
-const runId = computed(() => props.task.runId)
+const triggeredBy = computed(() => props.task.triggeredBy ?? "user");
+const runId = computed(() => props.task.runId);
 const triggeredByIcon = computed(() => {
-  const v = triggeredBy.value
-  return v === 'automation' ? cogOutline : v === 'ai_agent' ? hardwareChipOutline : person
-})
+  const v = triggeredBy.value;
+  return v === "automation" ? cogOutline : v === "ai_agent" ? hardwareChipOutline : person;
+});
 
 // 🆕 2026-06-11 v5：section 维度元数据（与 Tasks.vue deriveSubSection 保持一致）
 // 🆕 2026-06-18 Task 6：派生逻辑已抽取到 @/composables/useSectionDerivation。
 //   TaskBasicInfo 是单 task 组件，dimension 由 props.task 字段决定（per-component），
 //   适合用 useSectionDerivation(dimension) composable 包裹。
 //   'none' 维度的 label 用 i18n 覆盖（保持原行为：t('tasks.sectionOther')）。
-const sectionDimension = computed<SectionDimension>(() =>
-  props.task.pluginName ? 'plugin' : 'none',
-)
-const { derive } = useSectionDerivation(sectionDimension)
+const sectionDimension = computed<SectionDimension>(() => (props.task.pluginName ? "plugin" : "none"));
+const { derive } = useSectionDerivation(sectionDimension);
 const sectionMeta = computed(() => {
-  const meta = derive(props.task)
-  if (meta.dimension === 'none') {
-    return { ...meta, label: t('tasks.sectionOther') }
+  const meta = derive(props.task);
+  if (meta.dimension === "none") {
+    return { ...meta, label: t("tasks.sectionOther") };
   }
-  return meta
-})
+  return meta;
+});
 const sectionIcon = computed(() => {
   // 当前 sectionMeta 仅返回 'plugin' | 'none' 两个维度（type / category 留给 Tasks.vue 派生）
   // 为兼容历史 case 分支不报错，这里也覆盖 'type' | 'category'
-  const dim = sectionMeta.value.dimension as 'plugin' | 'type' | 'category' | 'none'
+  const dim = sectionMeta.value.dimension as "plugin" | "type" | "category" | "none";
   switch (dim) {
-    case 'plugin': return extensionPuzzle
-    case 'type': return swapVertical
-    case 'category': return folderOutline
-    default: return ellipsisHorizontalCircleOutline
+    case "plugin":
+      return extensionPuzzle;
+    case "type":
+      return swapVertical;
+    case "category":
+      return folderOutline;
+    default:
+      return ellipsisHorizontalCircleOutline;
   }
-})
+});
 const sectionDimensionLabel = computed(() => {
-  const dim = sectionMeta.value.dimension as 'plugin' | 'type' | 'category' | 'none'
+  const dim = sectionMeta.value.dimension as "plugin" | "type" | "category" | "none";
   switch (dim) {
-    case 'plugin': return t('tasks.dimensionPlugin')
-    case 'type': return t('tasks.dimensionType')
-    case 'category': return t('tasks.dimensionCategory')
-    default: return t('tasks.dimensionNone')
+    case "plugin":
+      return t("tasks.dimensionPlugin");
+    case "type":
+      return t("tasks.dimensionType");
+    case "category":
+      return t("tasks.dimensionCategory");
+    default:
+      return t("tasks.dimensionNone");
   }
-})
+});
 </script>
 
 <style scoped>

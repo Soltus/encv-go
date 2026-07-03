@@ -104,72 +104,67 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import {
-  IonItem,
-  IonLabel,
-  IonSelect,
-  IonSelectOption,
-  IonToggle,
-  IonNote,
-  modalController,
-} from '@ionic/vue'
-import { documentText, lockClosed, folderOpen } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import FilePickerModal from '@/components/FilePickerModal.vue'
-import InputWithHistory from '@/components/InputWithHistory.vue'
-import type { TaskField } from '@/api/encv'
-import type { NewTaskState } from '@/components/NewTaskState'
+import { IonItem, IonLabel, IonNote, IonSelect, IonSelectOption, IonToggle, modalController } from "@ionic/vue";
+import { documentText, folderOpen, lockClosed } from "ionicons/icons";
+import { computed } from "vue";
+import type { TaskField } from "@/api/encv";
+import FilePickerModal from "@/components/FilePickerModal.vue";
+import InputWithHistory from "@/components/InputWithHistory.vue";
+import type { NewTaskState } from "@/components/NewTaskState";
+import { useI18n } from "@/composables/useI18n";
 
-const props = withDefaults(defineProps<{
-  state: NewTaskState
-  onUpdateSourcePath?: (v: string) => void
-  onUpdateTargetPath?: (v: string) => void
-  onUpdatePrimaryOverride?: (v: string) => void
-  onUpdateSecondaryPassword?: (v: string) => void
-  onUpdateExtraValue?: (payload: { key: string; value: string }) => void
-}>(), {
-  onUpdateSourcePath: undefined,
-  onUpdateTargetPath: undefined,
-  onUpdatePrimaryOverride: undefined,
-  onUpdateSecondaryPassword: undefined,
-  onUpdateExtraValue: undefined,
-})
+const props = withDefaults(
+  defineProps<{
+    state: NewTaskState;
+    onUpdateSourcePath?: (v: string) => void;
+    onUpdateTargetPath?: (v: string) => void;
+    onUpdatePrimaryOverride?: (v: string) => void;
+    onUpdateSecondaryPassword?: (v: string) => void;
+    onUpdateExtraValue?: (payload: { key: string; value: string }) => void;
+  }>(),
+  {
+    onUpdateSourcePath: undefined,
+    onUpdateTargetPath: undefined,
+    onUpdatePrimaryOverride: undefined,
+    onUpdateSecondaryPassword: undefined,
+    onUpdateExtraValue: undefined,
+  }
+);
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 const decryptExtraFields = computed<TaskField[]>(() => {
-  const arr = Array.isArray(props.state.filteredExtraFields) ? props.state.filteredExtraFields : []
-  return arr.filter((f) => !f.condition || f.condition === 'decrypt')
-})
+  const arr = Array.isArray(props.state.filteredExtraFields) ? props.state.filteredExtraFields : [];
+  return arr.filter(f => !f.condition || f.condition === "decrypt");
+});
 
 function getExtra(key: string): string {
-  const ev = props.state?.extraValues
-  if (!ev || typeof ev !== 'object') return ''
-  return ev[key] || ''
+  const ev = props.state?.extraValues;
+  if (!ev || typeof ev !== "object") return "";
+  return ev[key] || "";
 }
 
 async function handleBrowseSource() {
   const modal = await modalController.create({
     component: FilePickerModal,
-    componentProps: { mode: 'file' as const },
-  })
-  await modal.present()
-  const { data, role } = await modal.onDidDismiss()
-  if (role === 'select' && data) {
-    props.onUpdateSourcePath?.(data.path)
+    componentProps: { mode: "file" as const },
+  });
+  await modal.present();
+  const { data, role } = await modal.onDidDismiss();
+  if (role === "select" && data) {
+    props.onUpdateSourcePath?.(data.path);
   }
 }
 
 async function handleBrowseTarget() {
   const modal = await modalController.create({
     component: FilePickerModal,
-    componentProps: { mode: 'folder' as const },
-  })
-  await modal.present()
-  const { data, role } = await modal.onDidDismiss()
-  if (role === 'select' && data) {
-    props.onUpdateTargetPath?.(data.path)
+    componentProps: { mode: "folder" as const },
+  });
+  await modal.present();
+  const { data, role } = await modal.onDidDismiss();
+  if (role === "select" && data) {
+    props.onUpdateTargetPath?.(data.path);
   }
 }
 </script>

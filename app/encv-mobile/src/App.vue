@@ -121,43 +121,43 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onErrorCaptured, onUnmounted } from 'vue'
-import { IonApp, IonRouterOutlet, IonIcon, IonButton } from '@ionic/vue'
-import { warningOutline, refreshOutline, bugOutline, alertCircleOutline, codeSlashOutline, copyOutline } from 'ionicons/icons'
-import { useTheme } from '@/composables/useTheme'
-import { useRealtimeTransport } from '@/composables/useRealtimeTransport'
-import { isNative, requestNotificationPermission, requestStoragePermission } from '@/plugins/GoProcess'
-import { hijackConsole } from '@/composables/useFrontendLogs'
-import { autoInitVConsole } from '@/composables/useDevTools'
-import { registerFileFeature } from '@/composables/useFileFeatures'
-import { createAlistEncryptFeature } from '@/features/alist-encrypt'
-import { checkServiceGuard } from '@/api/encv'
-import type { ServiceGuardResult } from '@/api/encv'
-import { useI18n } from '@/composables/useI18n'
-import { initHighRefreshRate } from '@/composables/useHighRefreshRate'
+import { IonApp, IonButton, IonIcon, IonRouterOutlet } from "@ionic/vue";
+import { alertCircleOutline, bugOutline, codeSlashOutline, copyOutline, refreshOutline, warningOutline } from "ionicons/icons";
+import { onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
+import type { ServiceGuardResult } from "@/api/encv";
+import { checkServiceGuard } from "@/api/encv";
 // 🆕 2026-07-02 A5：错误捕获浮窗（三管齐下的第 3 件：console 重定向 + 浮窗）
-import ErrorCaptureOverlay from '@/components/shared/ErrorCaptureOverlay.vue'
+import ErrorCaptureOverlay from "@/components/shared/ErrorCaptureOverlay.vue";
+import { autoInitVConsole } from "@/composables/useDevTools";
+import { registerFileFeature } from "@/composables/useFileFeatures";
+import { hijackConsole } from "@/composables/useFrontendLogs";
+import { initHighRefreshRate } from "@/composables/useHighRefreshRate";
+import { useI18n } from "@/composables/useI18n";
+import { useRealtimeTransport } from "@/composables/useRealtimeTransport";
+import { useTheme } from "@/composables/useTheme";
+import { createAlistEncryptFeature } from "@/features/alist-encrypt";
+import { isNative, requestNotificationPermission, requestStoragePermission } from "@/plugins/GoProcess";
 
-const { initTheme, detectP3Support } = useTheme()
-const { t } = useI18n()
-const transport = useRealtimeTransport()
-const { connect, disconnect } = transport
+const { initTheme, detectP3Support } = useTheme();
+const { t } = useI18n();
+const transport = useRealtimeTransport();
+const { connect, disconnect } = transport;
 
-const serviceGuardBlocked = ref(false)
-const serviceGuardDetail = ref('')
-const serviceGuardHint = ref('')
+const serviceGuardBlocked = ref(false);
+const serviceGuardDetail = ref("");
+const serviceGuardHint = ref("");
 
 // ============ Vue 错误边界 ============
-const rootError = ref(false)
-const rootErrorSummary = ref('')
-const rootErrorDetails = ref('')
-const rootErrorInfo = ref('')           // 触发阶段：'mounted hook' / 'render function' / ...
-const rootErrorTime = ref('')           // ISO 时间戳，方便用户截图给 agent 时同步时间
-const rootErrorStack = ref('')          // 原始堆栈（独立显示在下方 stack panel）
+const rootError = ref(false);
+const rootErrorSummary = ref("");
+const rootErrorDetails = ref("");
+const rootErrorInfo = ref(""); // 触发阶段：'mounted hook' / 'render function' / ...
+const rootErrorTime = ref(""); // ISO 时间戳，方便用户截图给 agent 时同步时间
+const rootErrorStack = ref(""); // 原始堆栈（独立显示在下方 stack panel）
 const rootErrorContext = ref<{ mode: string; location: string }>({
-  mode: 'unknown',
-  location: '',
-})
+  mode: "unknown",
+  location: "",
+});
 
 /**
  * 把 `err.message` 拆成 "summary + details" 两部分，避免 UI 上下两栏内容重复。
@@ -170,13 +170,13 @@ const rootErrorContext = ref<{ mode: string; location: string }>({
  * 没找到 " | trace: " 标记时，details 为空（普通错误只显示 summary）。
  */
 function splitErrorMessage(msg: string): { summary: string; details: string } {
-  const MARKER = ' | trace: '
-  const idx = msg.indexOf(MARKER)
-  if (idx < 0) return { summary: msg, details: '' }
+  const MARKER = " | trace: ";
+  const idx = msg.indexOf(MARKER);
+  if (idx < 0) return { summary: msg, details: "" };
   return {
     summary: msg.slice(0, idx),
     details: msg.slice(idx + MARKER.length),
-  }
+  };
 }
 
 /**
@@ -191,45 +191,45 @@ function splitErrorMessage(msg: string): { summary: string; details: string } {
  *   - 优先级：mock-browser > capacitor > browser-dev > browser-prod
  */
 function detectErrorContext(): { mode: string; location: string } {
-  let mode = 'unknown'
-  if (typeof window !== 'undefined') {
-    const proto = window.location.protocol
-    const host = window.location.host || ''
-    const ua = navigator.userAgent || ''
-    const isTraeMockHost = /agent-sandbox.*\.trae\.cn$/i.test(host) || /run-agent-.*\.trae\.cn$/i.test(host)
-    const isCapacitor = proto === 'capacitor:' || proto === 'file:' || proto === 'cdvfile:'
-    const uaHintsMock = ua.includes('Trae') || ua.includes('Volo')
-    if (isTraeMockHost || (uaHintsMock && proto === 'https:')) {
-      mode = 'mock-browser'
+  let mode = "unknown";
+  if (typeof window !== "undefined") {
+    const proto = window.location.protocol;
+    const host = window.location.host || "";
+    const ua = navigator.userAgent || "";
+    const isTraeMockHost = /agent-sandbox.*\.trae\.cn$/i.test(host) || /run-agent-.*\.trae\.cn$/i.test(host);
+    const isCapacitor = proto === "capacitor:" || proto === "file:" || proto === "cdvfile:";
+    const uaHintsMock = ua.includes("Trae") || ua.includes("Volo");
+    if (isTraeMockHost || (uaHintsMock && proto === "https:")) {
+      mode = "mock-browser";
     } else if (isCapacitor) {
-      mode = 'capacitor'
-    } else if (proto === 'http:' || proto === 'https:') {
-      mode = 'browser-dev'
+      mode = "capacitor";
+    } else if (proto === "http:" || proto === "https:") {
+      mode = "browser-dev";
     }
   }
-  const location = (typeof window !== 'undefined') ? window.location.origin : ''
-  return { mode, location }
+  const location = typeof window !== "undefined" ? window.location.origin : "";
+  return { mode, location };
 }
 
 onErrorCaptured((err: any, _instance: unknown, info: string) => {
   // 防止无限递归：如果已经是 error 状态，不再捕获（fallback 自己崩了）
-  if (rootError.value) return false
+  if (rootError.value) return false;
 
-  console.error('[App] Vue error captured:', err, '| info:', info)
-  rootError.value = true
+  console.error("[App] Vue error captured:", err, "| info:", info);
+  rootError.value = true;
   // 🆕 拆 message：summary 简短显示，details（trace）作为 hint 单独成行
   // —— 避免 UI 上下两栏内容重复
-  const rawMsg = err?.message || String(err) || 'Unknown render error'
-  const { summary, details } = splitErrorMessage(rawMsg)
-  rootErrorSummary.value = summary
-  rootErrorDetails.value = details
-  rootErrorInfo.value = info || 'unknown'
-  rootErrorTime.value = new Date().toISOString()
-  rootErrorStack.value = err?.stack || ''
-  rootErrorContext.value = detectErrorContext()
+  const rawMsg = err?.message || String(err) || "Unknown render error";
+  const { summary, details } = splitErrorMessage(rawMsg);
+  rootErrorSummary.value = summary;
+  rootErrorDetails.value = details;
+  rootErrorInfo.value = info || "unknown";
+  rootErrorTime.value = new Date().toISOString();
+  rootErrorStack.value = err?.stack || "";
+  rootErrorContext.value = detectErrorContext();
   // 不阻止冒泡：让 Vue 仍然 console.error（包含完整 stack），方便 DevTools 调试
-  return false
-})
+  return false;
+});
 
 /**
  * Task 9: 错误状态页 viewport meta 锁死
@@ -247,147 +247,143 @@ onErrorCaptured((err: any, _instance: unknown, info: string) => {
  * mock 浏览器无 Network 面板，截图+文本是唯一能贴出诊断信息的途径
  */
 async function copyToClipboard(text: string): Promise<void> {
-  if (!text) return
+  if (!text) return;
   try {
     if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(text);
     } else {
       // fallback：textarea + execCommand（兼容旧 mock 浏览器）
-      const ta = document.createElement('textarea')
-      ta.value = text
-      ta.style.position = 'fixed'
-      ta.style.left = '-9999px'
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
     }
   } catch (e) {
-    console.warn('[App] copyToClipboard failed:', e)
+    console.warn("[App] copyToClipboard failed:", e);
   }
 }
 
 function copyErrorSummary() {
-  const ctx = rootErrorContext.value
+  const ctx = rootErrorContext.value;
   const lines = [
     `类型: ${rootErrorSummary.value}`,
     `触发阶段: ${rootErrorInfo.value}`,
     `时间: ${rootErrorTime.value}`,
     `模式: ${ctx.mode} @ ${ctx.location}`,
-    rootErrorDetails.value ? `trace: ${rootErrorDetails.value}` : '',
-  ].filter(Boolean)
-  copyToClipboard(lines.join('\n'))
+    rootErrorDetails.value ? `trace: ${rootErrorDetails.value}` : "",
+  ].filter(Boolean);
+  copyToClipboard(lines.join("\n"));
 }
 
 function copyErrorStack() {
-  const lines = [
-    `STACK (${rootErrorSummary.value} @ ${rootErrorTime.value}):`,
-    rootErrorStack.value,
-  ]
-  copyToClipboard(lines.join('\n'))
+  const lines = [`STACK (${rootErrorSummary.value} @ ${rootErrorTime.value}):`, rootErrorStack.value];
+  copyToClipboard(lines.join("\n"));
 }
 
 function reloadPage() {
-  if (typeof window !== 'undefined') {
-    window.location.reload()
+  if (typeof window !== "undefined") {
+    window.location.reload();
   }
 }
 // ======================================
 
 class ServiceGuardError extends Error {
-  code: string
-  payload: ServiceGuardResult
+  code: string;
+  payload: ServiceGuardResult;
 
   constructor(message: string, code: string, payload: ServiceGuardResult) {
-    super(message)
-    this.name = 'ServiceGuardError'
-    this.code = code
-    this.payload = payload
+    super(message);
+    this.name = "ServiceGuardError";
+    this.code = code;
+    this.payload = payload;
   }
 }
 
 async function runServiceGuard(): Promise<void> {
   try {
-    await checkServiceGuard()
+    await checkServiceGuard();
   } catch (e: any) {
-    if (e?.code === 'SERVICE_GUARD_BLOCKED' || e instanceof ServiceGuardError) {
-      const payload: ServiceGuardResult = e.payload || {}
-      serviceGuardDetail.value = payload.detail || e.message || 'Unknown guard error'
+    if (e?.code === "SERVICE_GUARD_BLOCKED" || e instanceof ServiceGuardError) {
+      const payload: ServiceGuardResult = e.payload || {};
+      serviceGuardDetail.value = payload.detail || e.message || "Unknown guard error";
       // 2026-06-10 改造：service-guard 不再返回 hint 字段（remediation 是结构化数组，不是单 string）
-      serviceGuardHint.value = ''
-      serviceGuardBlocked.value = true
-      throw e
+      serviceGuardHint.value = "";
+      serviceGuardBlocked.value = true;
+      throw e;
     }
-    console.warn('[App] Service guard: API error, allowing entry —', e?.message)
+    console.warn("[App] Service guard: API error, allowing entry —", e?.message);
   }
 }
 
 async function retryServiceGuard() {
   try {
-    await runServiceGuard()
-    serviceGuardBlocked.value = false
-    connect()
-  } catch {
-  }
+    await runServiceGuard();
+    serviceGuardBlocked.value = false;
+    connect();
+  } catch {}
 }
 
-const FIRST_LAUNCH_KEY = 'encv-first-launch-done'
+const FIRST_LAUNCH_KEY = "encv-first-launch-done";
 
 async function requestEssentialPermissions() {
-  if (!isNative()) return
+  if (!isNative()) return;
 
-  const done = localStorage.getItem(FIRST_LAUNCH_KEY)
-  if (done) return
+  const done = localStorage.getItem(FIRST_LAUNCH_KEY);
+  if (done) return;
 
-  console.info('[App] First launch, requesting essential permissions')
-  const notifResult = await requestNotificationPermission()
-  console.info('[App] Notification permission:', notifResult.granted ? 'granted' : 'denied')
-  const storageResult = await requestStoragePermission()
-  console.info('[App] Storage permission:', storageResult.granted ? 'granted' : 'denied')
-  localStorage.setItem(FIRST_LAUNCH_KEY, '1')
+  console.info("[App] First launch, requesting essential permissions");
+  const notifResult = await requestNotificationPermission();
+  console.info("[App] Notification permission:", notifResult.granted ? "granted" : "denied");
+  const storageResult = await requestStoragePermission();
+  console.info("[App] Storage permission:", storageResult.granted ? "granted" : "denied");
+  localStorage.setItem(FIRST_LAUNCH_KEY, "1");
 }
 
 async function applyScreenOrientation() {
-  if (!isNative()) return
-  const orientation = localStorage.getItem('encv_screen_orientation') || 'auto'
+  if (!isNative()) return;
+  const orientation = localStorage.getItem("encv_screen_orientation") || "auto";
   try {
-    const { ScreenOrientation } = await import('@capacitor/screen-orientation')
-    if (orientation === 'portrait') {
-      await ScreenOrientation.lock({ orientation: 'portrait' })
-    } else if (orientation === 'landscape') {
-      await ScreenOrientation.lock({ orientation: 'landscape' })
+    const { ScreenOrientation } = await import("@capacitor/screen-orientation");
+    if (orientation === "portrait") {
+      await ScreenOrientation.lock({ orientation: "portrait" });
+    } else if (orientation === "landscape") {
+      await ScreenOrientation.lock({ orientation: "landscape" });
     } else {
-      await ScreenOrientation.unlock()
+      await ScreenOrientation.unlock();
     }
   } catch (e) {
-    console.debug('[App] Failed to apply screen orientation:', e)
+    console.debug("[App] Failed to apply screen orientation:", e);
   }
 }
 
 onMounted(async () => {
-  hijackConsole()
-  initTheme()
-  detectP3Support()
-  autoInitVConsole()
-  initHighRefreshRate()
-  registerFileFeature(createAlistEncryptFeature())
+  hijackConsole();
+  initTheme();
+  detectP3Support();
+  autoInitVConsole();
+  initHighRefreshRate();
+  registerFileFeature(createAlistEncryptFeature());
 
   if (!isNative()) {
     try {
-      await runServiceGuard()
+      await runServiceGuard();
     } catch {
-      return
+      return;
     }
   }
 
-  connect()
-  await requestEssentialPermissions()
-  applyScreenOrientation()
-})
+  connect();
+  await requestEssentialPermissions();
+  applyScreenOrientation();
+});
 
 onUnmounted(() => {
-  disconnect()
-})
+  disconnect();
+});
 </script>
 
 <style scoped>

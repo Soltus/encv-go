@@ -81,42 +81,36 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { IonBadge, IonButton } from '@ionic/vue'
-import { useI18n } from '@/composables/useI18n'
-import {
-  getTaskPerformance,
-  type EncvTask,
-  type PerformanceSummary,
-  type PerformanceMetrics,
-  type PhaseTiming,
-} from '@/api/encv'
+import { IonBadge, IonButton } from "@ionic/vue";
+import { computed, ref } from "vue";
+import { type EncvTask, getTaskPerformance, type PerformanceMetrics, type PerformanceSummary, type PhaseTiming } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
 
 interface DisplayMetrics {
-  sourceSize: number
-  outputSize: number
-  sizeRatio: number
-  avgThroughput: number
-  peakThroughput: number
-  p50Throughput: number
-  p99Throughput: number
-  totalDurationMs: number
-  cpuScore: number
-  cpuLabel: string
+  sourceSize: number;
+  outputSize: number;
+  sizeRatio: number;
+  avgThroughput: number;
+  peakThroughput: number;
+  p50Throughput: number;
+  p99Throughput: number;
+  totalDurationMs: number;
+  cpuScore: number;
+  cpuLabel: string;
 }
 
-const props = defineProps<{ task: EncvTask }>()
-const { t } = useI18n()
+const props = defineProps<{ task: EncvTask }>();
+const { t } = useI18n();
 
-const metrics = ref<PerformanceMetrics | null>(null)
-const loading = ref(false)
+const metrics = ref<PerformanceMetrics | null>(null);
+const loading = ref(false);
 
-const summary = computed<PerformanceSummary | undefined>(() => props.task.performanceSummary)
+const summary = computed<PerformanceSummary | undefined>(() => props.task.performanceSummary);
 
 // 显示用的指标：优先用完整 metrics，否则用 summary
 const displayMetrics = computed<DisplayMetrics | null>(() => {
   if (metrics.value) {
-    const m = metrics.value
+    const m = metrics.value;
     return {
       sourceSize: m.sourceSize,
       outputSize: m.outputSize,
@@ -128,10 +122,10 @@ const displayMetrics = computed<DisplayMetrics | null>(() => {
       totalDurationMs: m.totalDurationMs,
       cpuScore: m.cpuScore,
       cpuLabel: m.cpuLabel,
-    }
+    };
   }
   if (summary.value) {
-    const s = summary.value
+    const s = summary.value;
     return {
       sourceSize: s.sourceSize,
       outputSize: s.outputSize,
@@ -142,62 +136,66 @@ const displayMetrics = computed<DisplayMetrics | null>(() => {
       p99Throughput: 0,
       totalDurationMs: s.totalDurationMs,
       cpuScore: 0,
-      cpuLabel: '',
-    }
+      cpuLabel: "",
+    };
   }
-  return null
-})
+  return null;
+});
 
 const displayGrade = computed(() => {
-  if (metrics.value) return metrics.value.grade
-  if (summary.value) return summary.value.grade
-  return ''
-})
+  if (metrics.value) return metrics.value.grade;
+  if (summary.value) return summary.value.grade;
+  return "";
+});
 
 const displayGradeScore = computed(() => {
-  if (metrics.value) return metrics.value.gradeScore.toFixed(0)
-  if (summary.value) return summary.value.gradeScore.toFixed(0)
-  return ''
-})
+  if (metrics.value) return metrics.value.gradeScore.toFixed(0);
+  if (summary.value) return summary.value.gradeScore.toFixed(0);
+  return "";
+});
 
 const gradeColor = computed(() => {
   switch (displayGrade.value) {
-    case 'excellent': return 'success'
-    case 'good': return 'primary'
-    case 'warn': return 'warning'
-    default: return 'medium'
+    case "excellent":
+      return "success";
+    case "good":
+      return "primary";
+    case "warn":
+      return "warning";
+    default:
+      return "medium";
   }
-})
+});
 
 const phaseTimings = computed<PhaseTiming[]>(() => {
-  return metrics.value?.phaseTimings || []
-})
+  return metrics.value?.phaseTimings || [];
+});
 
 const maxPhaseDuration = computed(() => {
-  if (phaseTimings.value.length === 0) return 1
-  return Math.max(...phaseTimings.value.map(p => p.durationMs), 1)
-})
+  if (phaseTimings.value.length === 0) return 1;
+  return Math.max(...phaseTimings.value.map(p => p.durationMs), 1);
+});
 
 function phaseBarWidth(durationMs: number): number {
-  return (durationMs / maxPhaseDuration.value) * 100
+  return (durationMs / maxPhaseDuration.value) * 100;
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / k ** i).toFixed(2)) + " " + sizes[i];
 }
 
 async function loadFullMetrics() {
-  loading.value = true
+  loading.value = true;
   try {
-    metrics.value = await getTaskPerformance(props.task.id)
+    metrics.value = await getTaskPerformance(props.task.id);
   } catch (err) {
-    console.error('loadFullMetrics failed:', err)
+    console.error("loadFullMetrics failed:", err);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 </script>

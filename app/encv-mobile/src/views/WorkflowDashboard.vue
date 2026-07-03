@@ -174,338 +174,347 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonLabel, IonIcon,
-  IonSpinner, IonSelect, IonSelectOption,
-} from '@ionic/vue'
-import {
-  addCircleOutline, trashOutline, playCircleOutline, closeCircleOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import { generateMockFilesViaBackend, resetMockFilesViaBackend } from '@/api/mockGenerator'
-import { MOCK_GENERATE_ROOT } from '@/lib/mockConstants'
-import { useWorkflowStore } from '@/composables/useWorkflowStore'
-import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
-import type { WorkflowDefinition, WorkflowRun, JobRun, StepRun } from '@/lib/workflow/types'
-import type { UnifiedRunRecord } from '@/lib/workflow/types'
-import TestReportHeader from './TestReportHeader.vue'
-import StepMiniBadge from './StepMiniBadge.vue'
-import JobPipelineCard from './JobPipelineCard.vue'
-import TreeView from './TreeView.vue'
-import StepDetailPanel from './StepDetailPanel.vue'
+  IonBackButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonSelect,
+  IonSelectOption,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { addCircleOutline, closeCircleOutline, playCircleOutline, trashOutline } from "ionicons/icons";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { generateMockFilesViaBackend, resetMockFilesViaBackend } from "@/api/mockGenerator";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
+import { useWorkflowStore } from "@/composables/useWorkflowStore";
+import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
+import { MOCK_GENERATE_ROOT } from "@/lib/mockConstants";
+import type { JobRun, StepRun, UnifiedRunRecord, WorkflowDefinition, WorkflowRun } from "@/lib/workflow/types";
+import JobPipelineCard from "./JobPipelineCard.vue";
+import StepDetailPanel from "./StepDetailPanel.vue";
+import StepMiniBadge from "./StepMiniBadge.vue";
+import TestReportHeader from "./TestReportHeader.vue";
+import TreeView from "./TreeView.vue";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 // ---- Legacy: Mock 数据 / 自动化测试 ----
 // 🆕 2026-06-15 声明式：mockRoot = AUTOMATION_MOUNT_PATH + '/'（常量，不再 split/slice）
 //   之前 .slice(0, 5) 隐式推导：DEFAULT_AUTOMATION_SOURCE 改前缀 → UI 静默选错 → 403
 //   现在改 mount path = 改 src/lib/mockConstants.ts + 后端 mount.go，两个源，不会漏
-const mockRoot = MOCK_GENERATE_ROOT
-const isGenerating = ref(false)
-const isResetting = ref(false)
-const mockStats = ref<{ count: number; totalSize: number } | null>(null)
-const generateProgressText = ref('')
+const mockRoot = MOCK_GENERATE_ROOT;
+const isGenerating = ref(false);
+const isResetting = ref(false);
+const mockStats = ref<{ count: number; totalSize: number } | null>(null);
+const generateProgressText = ref("");
 
 // ---- Workflow Engine ----
 // 🆕 Task 7：useWorkflowEngine 已退役，拆分为：
 //   - useWorkflowStore：definitions CRUD + 内置模板注册
 //   - useWorkflowTaskService：运行执行 + WS 事件 + 持久化
-const store = useWorkflowStore()
+const store = useWorkflowStore();
+const { definitions, getDefinition, registerBuiltinTemplates } = store;
 const {
-  definitions, getDefinition, registerBuiltinTemplates,
-} = store
-const {
-  currentRun, isRunning,
-  totalSteps, completedSteps, successSteps, failedSteps,
-  runs: serviceRuns, submitRun, cancelRun,
-} = useWorkflowTaskService()
+  currentRun,
+  isRunning,
+  totalSteps,
+  completedSteps,
+  successSteps,
+  failedSteps,
+  runs: serviceRuns,
+  submitRun,
+  cancelRun,
+} = useWorkflowTaskService();
 
-const selectedDefId = ref<string>('')
-const viewMode = ref<'pipeline' | 'tree'>('pipeline')
-const selectedStep = ref<StepRun | null>(null)
-const _tickNow = ref(Date.now())
-let tickHandle: ReturnType<typeof setInterval> | null = null
+const selectedDefId = ref<string>("");
+const viewMode = ref<"pipeline" | "tree">("pipeline");
+const selectedStep = ref<StepRun | null>(null);
+const _tickNow = ref(Date.now());
+let tickHandle: ReturnType<typeof setInterval> | null = null;
 
 const platform = computed(() => {
-  if (typeof navigator === 'undefined') return 'node'
-  const ua = navigator.userAgent || ''
-  if (/android/i.test(ua)) return 'android'
-  if (/iphone|ipad|ipod/i.test(ua)) return 'ios'
-  return 'web'
-})
+  if (typeof navigator === "undefined") return "node";
+  const ua = navigator.userAgent || "";
+  if (/android/i.test(ua)) return "android";
+  if (/iphone|ipad|ipod/i.test(ua)) return "ios";
+  return "web";
+});
 
 const reportDurationMs = computed(() => {
-  if (!currentRun.value) return 0
-  if (isRunning.value) return _tickNow.value - (currentRun.value.startedAt ? new Date(currentRun.value.startedAt).getTime() : Date.now())
-  return currentRun.value.durationMs ?? 0
-})
+  if (!currentRun.value) return 0;
+  if (isRunning.value) return _tickNow.value - (currentRun.value.startedAt ? new Date(currentRun.value.startedAt).getTime() : Date.now());
+  return currentRun.value.durationMs ?? 0;
+});
 
-const selectedDef = computed(() =>
-  definitions.value.find((d) => d.id === selectedDefId.value),
-)
+const selectedDef = computed(() => definitions.value.find(d => d.id === selectedDefId.value));
 
 /** 构建 stepDefId → step name 的映射 */
 const stepNameMap = computed(() => {
-  const map = new Map<string, string>()
-  const def = selectedDef.value ?? currentRun.value
-    ? definitions.value.find((d) => d.id === currentRun.value!.workflowDefId)
-    : null
+  const map = new Map<string, string>();
+  const def = (selectedDef.value ?? currentRun.value) ? definitions.value.find(d => d.id === currentRun.value!.workflowDefId) : null;
   if (def) {
     for (const job of def.jobs) {
       for (const step of job.steps) {
-        map.set(step.id, step.name)
+        map.set(step.id, step.name);
       }
     }
   }
-  return map
-})
+  return map;
+});
 
 /** 构建 jobDefId → display name 的映射 */
 const jobDisplayNameMap = computed(() => {
-  const map = new Map<string, string>()
-  const def = currentRun.value
-    ? definitions.value.find((d) => d.id === currentRun.value!.workflowDefId)
-    : null
+  const map = new Map<string, string>();
+  const def = currentRun.value ? definitions.value.find(d => d.id === currentRun.value!.workflowDefId) : null;
   if (def) {
     for (const job of def.jobs) {
-      map.set(job.id, job.name)
+      map.set(job.id, job.name);
     }
   }
-  return map
-})
+  return map;
+});
 
 function getJobDisplayName(jobDefId: string): string {
-  return jobDisplayNameMap.value.get(jobDefId) ?? jobDefId
+  return jobDisplayNameMap.value.get(jobDefId) ?? jobDefId;
 }
 
 function findJobForStep(run: WorkflowRun, step: StepRun): JobRun | undefined {
-  return run.jobs.find((j: JobRun) => j.steps.some((s: StepRun) => s.id === step.id))
+  return run.jobs.find((j: JobRun) => j.steps.some((s: StepRun) => s.id === step.id));
 }
 
 // ---- Handlers ----
 
 async function handleGenerateMock() {
-  if (isGenerating.value) return
-  isGenerating.value = true
-  generateProgressText.value = ''
-  mockStats.value = null
-  let lastCount = 0
-  let lastSize = 0
+  if (isGenerating.value) return;
+  isGenerating.value = true;
+  generateProgressText.value = "";
+  mockStats.value = null;
+  let lastCount = 0;
+  let lastSize = 0;
   try {
     const result = await generateMockFilesViaBackend({
       root: mockRoot,
-      type: 'all',
-      onProgress: (p) => {
-        lastCount++
-        lastSize += p.size
-        generateProgressText.value = `(${lastCount}) ${p.relativePath}`
+      type: "all",
+      onProgress: p => {
+        lastCount++;
+        lastSize += p.size;
+        generateProgressText.value = `(${lastCount}) ${p.relativePath}`;
       },
-    })
-    mockStats.value = { count: result.count || lastCount, totalSize: result.totalSize || lastSize }
-    showToast({ message: `${t('devtools.generateMock')}: ${mockStats.value.count}`, color: 'success', duration: 1500 })
+    });
+    mockStats.value = { count: result.count || lastCount, totalSize: result.totalSize || lastSize };
+    showToast({ message: `${t("devtools.generateMock")}: ${mockStats.value.count}`, color: "success", duration: 1500 });
   } catch (e) {
-    showToast({ message: `${t('devtools.generateMock')} failed: ${e instanceof Error ? e.message : e}`, color: 'danger', duration: 2500 })
+    showToast({ message: `${t("devtools.generateMock")} failed: ${e instanceof Error ? e.message : e}`, color: "danger", duration: 2500 });
   } finally {
-    isGenerating.value = false
-    generateProgressText.value = ''
+    isGenerating.value = false;
+    generateProgressText.value = "";
   }
 }
 
 async function handleResetMock() {
-  if (isResetting.value) return
-  isResetting.value = true
+  if (isResetting.value) return;
+  isResetting.value = true;
   try {
-    const r = await resetMockFilesViaBackend(mockRoot)
-    mockStats.value = null
-    showToast({ message: `Reset: ${r.removed} files`, color: 'success', duration: 1500 })
+    const r = await resetMockFilesViaBackend(mockRoot);
+    mockStats.value = null;
+    showToast({ message: `Reset: ${r.removed} files`, color: "success", duration: 1500 });
   } catch (e) {
-    showToast({ message: `Reset failed: ${e instanceof Error ? e.message : e}`, color: 'danger', duration: 2500 })
+    showToast({ message: `Reset failed: ${e instanceof Error ? e.message : e}`, color: "danger", duration: 2500 });
   } finally {
-    isResetting.value = false
+    isResetting.value = false;
   }
 }
 
 async function handleRunWorkflow() {
-  if (!selectedDefId.value || isRunning.value) return
-  const def = getDefinition(selectedDefId.value)
-  if (!def) return
+  if (!selectedDefId.value || isRunning.value) return;
+  const def = getDefinition(selectedDefId.value);
+  if (!def) return;
   try {
-    await submitRun({ workflow: def, triggeredBy: 'automation' })
-    showToast({ message: `Workflow started`, color: 'success', duration: 1500 })
+    await submitRun({ workflow: def, triggeredBy: "automation" });
+    showToast({ message: `Workflow started`, color: "success", duration: 1500 });
   } catch (e) {
-    showToast({ message: `${e instanceof Error ? e.message : e}`, color: 'danger', duration: 2500 })
+    showToast({ message: `${e instanceof Error ? e.message : e}`, color: "danger", duration: 2500 });
   }
 }
 
 async function handleCancel() {
   if (currentRun.value) {
-    await cancelRun(currentRun.value.id)
+    await cancelRun(currentRun.value.id);
   }
-  showToast({ message: 'Workflow cancelled', color: 'warning', duration: 1500 })
+  showToast({ message: "Workflow cancelled", color: "warning", duration: 1500 });
 }
 
 function selectHistoryRun(record: UnifiedRunRecord) {
   // 从 UnifiedRunRecord.workflowRun 快照恢复到 currentRun（UI 回放历史运行）
   if (record.workflowRun) {
-    currentRun.value = record.workflowRun
+    currentRun.value = record.workflowRun;
   }
 }
 
 function onSelectStep(step: StepRun) {
-  selectedStep.value = step
+  selectedStep.value = step;
 }
 
 const selectedStepJob = computed(() =>
-  currentRun.value && selectedStep.value
-    ? findJobForStep(currentRun.value, selectedStep.value)
-    : null,
-)
+  currentRun.value && selectedStep.value ? findJobForStep(currentRun.value, selectedStep.value) : null
+);
 
 // ---- Lifecycle ----
 
 onMounted(() => {
-  tickHandle = setInterval(() => { _tickNow.value = Date.now() }, 1000)
+  tickHandle = setInterval(() => {
+    _tickNow.value = Date.now();
+  }, 1000);
   // useWorkflowTaskService 内部通过 useTaskEventBridge 自动订阅 WS 4 件套事件
-  registerBuiltinTemplates(BUILTIN_TEMPLATES)
+  registerBuiltinTemplates(BUILTIN_TEMPLATES);
   // 默认选中第一个模板
   if (definitions.value.length > 0 && !selectedDefId.value) {
-    selectedDefId.value = definitions.value[0].id
+    selectedDefId.value = definitions.value[0].id;
   }
-})
+});
 onUnmounted(() => {
-  if (tickHandle) clearInterval(tickHandle)
+  if (tickHandle) clearInterval(tickHandle);
   // useWorkflowTaskService 内部通过 useTaskEventBridge 自动取消订阅
-})
+});
 
 // ---- Utils ----
 
 function humanSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
 function formatTime(iso: string): string {
   try {
-    return new Date(iso).toLocaleTimeString()
-  } catch { return iso }
+    return new Date(iso).toLocaleTimeString();
+  } catch {
+    return iso;
+  }
 }
 
 // ==================== 内置模板定义 ====================
 
 const BUILTIN_TEMPLATES: WorkflowDefinition[] = [
   {
-    id: 'builtin-auto-test',
-    name: '自动化测试套件',
-    description: '生成 Mock → 矩阵加密测试 → 解密验证',
+    id: "builtin-auto-test",
+    name: "自动化测试套件",
+    description: "生成 Mock → 矩阵加密测试 → 解密验证",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    trigger: 'manual',
-    env: { PASSWORD: 'automation-test-pwd' },
+    trigger: "manual",
+    env: { PASSWORD: "automation-test-pwd" },
     builtin: true,
     jobs: [
       {
-        id: 'setup-mock',
-        name: '生成 Mock 数据',
+        id: "setup-mock",
+        name: "生成 Mock 数据",
         steps: [
           {
-            id: 'gen-mock',
-            name: 'Generate Mock Files',
-            action: { type: 'encv_task', taskType: 'encrypt', pluginName: 'mock-generator', params: {} },
+            id: "gen-mock",
+            name: "Generate Mock Files",
+            action: { type: "encv_task", taskType: "encrypt", pluginName: "mock-generator", params: {} },
           },
         ],
       },
       {
-        id: 'test-encrypt',
-        name: '加密测试矩阵',
-        needs: ['setup-mock'],
+        id: "test-encrypt",
+        name: "加密测试矩阵",
+        needs: ["setup-mock"],
         strategy: {
-          type: 'matrix',
+          type: "matrix",
           axes: {
-            plugin: ['video-v4', 'audio-v4'],
-            cipher: ['0', '1'],
-            compression: ['none', 'zstd'],
+            plugin: ["video-v4", "audio-v4"],
+            cipher: ["0", "1"],
+            compression: ["none", "zstd"],
           },
         },
         steps: [
           {
-            id: 'enc-step',
-            name: 'Encrypt (${{plugin}}, c${{cipher}}, ${{compression}})',
+            id: "enc-step",
+            name: "Encrypt (${{plugin}}, c${{cipher}}, ${{compression}})",
             action: {
-              type: 'encv_task',
-              taskType: 'encrypt',
-              pluginName: '${{plugin}}',
+              type: "encv_task",
+              taskType: "encrypt",
+              pluginName: "${{plugin}}",
               params: {
-                sourcePath: '/storage/emulated/0/encv-automation/01-plain-media/video/sample.mp4',
-                password: '${{PASSWORD}}',
+                sourcePath: "/storage/emulated/0/encv-automation/01-plain-media/video/sample.mp4",
+                password: "${{PASSWORD}}",
                 version: 4,
-                cipherMode: Number('${{cipher}}'),
-                compressionMode: '${{compression}}' as any,
+                cipherMode: Number("${{cipher}}"),
+                compressionMode: "${{compression}}" as any,
               },
             },
           },
         ],
       },
       {
-        id: 'test-decrypt',
-        name: '解密验证',
-        needs: ['test-encrypt'],
+        id: "test-decrypt",
+        name: "解密验证",
+        needs: ["test-encrypt"],
         steps: [
           {
-            id: 'dec-step',
-            name: 'Decrypt Verification',
+            id: "dec-step",
+            name: "Decrypt Verification",
             action: {
-              type: 'encv_task',
-              taskType: 'decrypt',
-              pluginName: '${{plugin}}',
+              type: "encv_task",
+              taskType: "decrypt",
+              pluginName: "${{plugin}}",
               params: {
-                sourcePath: '/storage/emulated/0/encv-automation/02-encrypted/video/sample.mp4.${containerExt}',
-                password: '${{PASSWORD}}',
+                sourcePath: "/storage/emulated/0/encv-automation/02-encrypted/video/sample.mp4.${containerExt}",
+                password: "${{PASSWORD}}",
               },
             },
-            if: { op: 'success' }, // 仅在加密成功后执行
+            if: { op: "success" }, // 仅在加密成功后执行
           },
         ],
       },
     ],
   },
   {
-    id: 'builtin-batch-transcode',
-    name: '批量转码',
-    description: '并行转码多个文件',
+    id: "builtin-batch-transcode",
+    name: "批量转码",
+    description: "并行转码多个文件",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    trigger: 'manual',
+    trigger: "manual",
     builtin: true,
     jobs: [
       {
-        id: 'transcode-all',
-        name: '批量转码',
-        strategy: { type: 'parallel', max: 3 },
+        id: "transcode-all",
+        name: "批量转码",
+        strategy: { type: "parallel", max: 3 },
         steps: [
           {
-            id: 'tc-1',
-            name: 'Transcode File 1',
-            action: { type: 'encv_task', taskType: 'encrypt', pluginName: 'ffmpeg', params: {} },
+            id: "tc-1",
+            name: "Transcode File 1",
+            action: { type: "encv_task", taskType: "encrypt", pluginName: "ffmpeg", params: {} },
           },
         ],
       },
     ],
   },
   {
-    id: 'builtin-custom',
-    name: '自定义流水线',
-    description: '空白模板，自由编排',
+    id: "builtin-custom",
+    name: "自定义流水线",
+    description: "空白模板，自由编排",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    trigger: 'manual',
+    trigger: "manual",
     builtin: true,
     jobs: [],
   },
-]
+];
 </script>
 
 <style scoped>

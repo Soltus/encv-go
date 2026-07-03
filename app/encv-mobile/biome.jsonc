@@ -63,7 +63,10 @@
       "suspicious": {
         "noExplicitAny": "off",
         "noAsyncPromiseExecutor": "off",
-        "noImplicitAnyLet": "warn"
+        "noImplicitAnyLet": "warn",
+        "noControlCharactersInRegex": "warn",
+        "noAssignInExpressions": "warn",
+        "useIterableCallbackReturn": "warn"
       },
       "performance": {
         "noDelete": "off"
@@ -86,7 +89,8 @@
       "correctness": {
         "noUnreachable": "warn",
         "noUnusedVariables": "warn",
-        "noUnusedImports": "warn"
+        "noUnusedImports": "warn",
+        "noVueDuplicateKeys": "warn"
       },
       "security": {}
     }

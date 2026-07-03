@@ -57,22 +57,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
-import { useI18n } from '@/composables/useI18n'
-import { formatDateTime, formatDuration } from '@/composables/useDateFormat'
-import type { EncvTask } from '@/api/encv'
-import UnifiedTimelineCard from '@/components/shared/UnifiedTimelineCard.vue'
-import {
-  Phase,
-  type StepStatus,
-  type UnifiedTimelineEntry,
-} from '@/lib/workflow/types'
+import { computed, reactive } from "vue";
+import type { EncvTask } from "@/api/encv";
+import UnifiedTimelineCard from "@/components/shared/UnifiedTimelineCard.vue";
+import { formatDateTime, formatDuration } from "@/composables/useDateFormat";
+import { useI18n } from "@/composables/useI18n";
+import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
 
-const props = defineProps<{ task: EncvTask }>()
-const { t } = useI18n()
+const props = defineProps<{ task: EncvTask }>();
+const { t } = useI18n();
 
 // 展开状态映射：entry.id → 是否展开（受控模式）
-const expandedMap = reactive<Record<string, boolean>>({})
+const expandedMap = reactive<Record<string, boolean>>({});
 
 // ==================== Phase 映射表 ====================
 
@@ -89,32 +85,32 @@ const PHASE_MAP: Record<string, Phase> = {
   completed: Phase.Completed,
   // 兼容旧值
   done: Phase.Completed,
-}
+};
 
 /** Phase 枚举 → i18n key（替代旧版 switch + 裸字符串） */
 const PHASE_I18N_KEY: Record<Phase, string> = {
-  [Phase.Created]: 'tasks.timelineCreated',
-  [Phase.Analyzing]: 'tasks.phaseAnalyzing',
-  [Phase.Initializing]: 'tasks.phaseInitializing',
-  [Phase.Preprocessing]: 'tasks.phasePreprocessing',
-  [Phase.Encrypting]: 'tasks.phaseEncrypting',
-  [Phase.Decrypting]: 'tasks.phaseDecrypting',
-  [Phase.Packing]: 'tasks.phasePacking',
-  [Phase.Verifying]: 'tasks.phaseVerifying',
-  [Phase.Completed]: 'tasks.phaseCompleted',
-}
+  [Phase.Created]: "tasks.timelineCreated",
+  [Phase.Analyzing]: "tasks.phaseAnalyzing",
+  [Phase.Initializing]: "tasks.phaseInitializing",
+  [Phase.Preprocessing]: "tasks.phasePreprocessing",
+  [Phase.Encrypting]: "tasks.phaseEncrypting",
+  [Phase.Decrypting]: "tasks.phaseDecrypting",
+  [Phase.Packing]: "tasks.phasePacking",
+  [Phase.Verifying]: "tasks.phaseVerifying",
+  [Phase.Completed]: "tasks.phaseCompleted",
+};
 
 /** 根据 phase 字符串获取 i18n 标签 */
 function getPhaseLabel(phase: string): string {
-  const phaseEnum = PHASE_MAP[phase]
-  if (!phaseEnum) return phase
-  return t(PHASE_I18N_KEY[phaseEnum])
+  const phaseEnum = PHASE_MAP[phase];
+  if (!phaseEnum) return phase;
+  return t(PHASE_I18N_KEY[phaseEnum]);
 }
 
 /** 把 phase 字符串转为 Phase 枚举（未知值降级为 Created） */
 function toPhase(phase: string | undefined | null): Phase {
-  if (!phase) return Phase.Created
-  return PHASE_MAP[phase] ?? Phase.Created
+  if (!phase) return Phase.Created;
+  return PHASE_MAP[phase] ?? Phase.Created;
 }
 
 // ==================== 内部构建类型 ====================
@@ -124,18 +120,18 @@ function toPhase(phase: string | undefined | null): Phase {
  * 不暴露给 UnifiedTimelineCard，仅用于 computed 内部排序
  */
 interface InternalTimelineEntry extends UnifiedTimelineEntry {
-  _durationMs?: number
+  _durationMs?: number;
 }
 
 // ==================== 耗时计算 ====================
 
 /** 计算两个 ISO 时间字符串之间的毫秒数（无效返回 0） */
 function calcDurationMs(startedAt?: string, completedAt?: string): number {
-  if (!startedAt || !completedAt) return 0
-  const start = new Date(startedAt).getTime()
-  const end = new Date(completedAt).getTime()
-  if (isNaN(start) || isNaN(end) || end < start) return 0
-  return end - start
+  if (!startedAt || !completedAt) return 0;
+  const start = new Date(startedAt).getTime();
+  const end = new Date(completedAt).getTime();
+  if (isNaN(start) || isNaN(end) || end < start) return 0;
+  return end - start;
 }
 
 // ==================== 时间线构建 ====================
@@ -143,121 +139,123 @@ function calcDurationMs(startedAt?: string, completedAt?: string): number {
 // 🆕 2026-06-18 Task 18：crypto params 摘要（显示在 "created" 条目的 meta slot）
 // 返回 "AES-256 · zstd" / "AES-128" / "zstd" / ""（旧任务无 crypto 字段时返回空串）
 function getCryptoSummary(): string {
-  const task = props.task
-  const parts: string[] = []
+  const task = props.task;
+  const parts: string[] = [];
   if (task.cipherMode !== undefined && task.cipherMode !== null) {
-    parts.push(task.cipherMode === 1 ? 'AES-256' : 'AES-128')
+    parts.push(task.cipherMode === 1 ? "AES-256" : "AES-128");
   }
-  if (task.compressionMode === 'zstd') {
-    parts.push('Zstd')
-  } else if (task.compressionMode === 'none') {
-    parts.push('none')
+  if (task.compressionMode === "zstd") {
+    parts.push("Zstd");
+  } else if (task.compressionMode === "none") {
+    parts.push("none");
   }
-  return parts.join(' · ')
+  return parts.join(" · ");
 }
 
 const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
-  const entries: InternalTimelineEntry[] = []
-  const steps = props.task.steps ?? []
-  const isTerminal = ['completed', 'failed', 'cancelled'].includes(props.task.status)
-  const cryptoMeta = getCryptoSummary()
+  const entries: InternalTimelineEntry[] = [];
+  const steps = props.task.steps ?? [];
+  const isTerminal = ["completed", "failed", "cancelled"].includes(props.task.status);
+  const cryptoMeta = getCryptoSummary();
 
   // 1. 始终推送 "created" 事件
   // 🆕 v3 2026-06-18 Task 7：created 条目展开显示源文件路径
-  const createdHasExpand = !!props.task.sourcePath
-  const createdExpandDetail: UnifiedTimelineEntry['expandDetail'] | undefined = createdHasExpand
+  const createdHasExpand = !!props.task.sourcePath;
+  const createdExpandDetail: UnifiedTimelineEntry["expandDetail"] | undefined = createdHasExpand
     ? { sourcePath: props.task.sourcePath }
-    : undefined
+    : undefined;
   entries.push({
     id: `created-${props.task.createdAt}`,
     phase: Phase.Created,
-    label: t('tasks.timelineCreated'),
+    label: t("tasks.timelineCreated"),
     time: formatDateTime(props.task.createdAt),
-    status: 'success',
+    status: "success",
     isCurrent: false,
     hasExpandableDetail: createdHasExpand,
     meta: cryptoMeta || undefined,
     expandDetail: createdExpandDetail,
-  })
+  });
 
   // 2. 从 task.steps 派生（如果存在）
   if (steps.length > 0) {
     for (const step of steps) {
-      const phaseEnum = toPhase(step.phase)
-      const isCurrent = step.phase === props.task.phase && !step.completedAt && props.task.status === 'running'
-      const completed = !!step.completedAt
-      const durationMs = calcDurationMs(step.startedAt, step.completedAt)
-      const durationStr = completed && durationMs > 0 ? formatDuration(durationMs) : undefined
+      const phaseEnum = toPhase(step.phase);
+      const isCurrent = step.phase === props.task.phase && !step.completedAt && props.task.status === "running";
+      const completed = !!step.completedAt;
+      const durationMs = calcDurationMs(step.startedAt, step.completedAt);
+      const durationStr = completed && durationMs > 0 ? formatDuration(durationMs) : undefined;
 
       // 状态映射：current → running, completed → success, 否则 pending
-      let status: StepStatus
+      let status: StepStatus;
       if (isCurrent) {
-        status = 'running'
+        status = "running";
       } else if (completed) {
-        status = 'success'
+        status = "success";
       } else {
-        status = 'pending'
+        status = "pending";
       }
 
       // 派生 progress / speed / eta（仅当前 step 从 task 级别字段继承）
-      const progress = isCurrent ? props.task.progress : undefined
-      const speed = isCurrent ? props.task.speed : undefined
-      const eta = isCurrent ? props.task.eta : undefined
+      const progress = isCurrent ? props.task.progress : undefined;
+      const speed = isCurrent ? props.task.speed : undefined;
+      const eta = isCurrent ? props.task.eta : undefined;
 
       // 时间显示：进行中显示"进行中..."；完成显示耗时；否则空
-      const timeStr = isCurrent
-        ? t('tasks.timelineInProgress')
-        : completed
-          ? durationStr ?? t('tasks.timelineDone')
-          : ''
+      const timeStr = isCurrent ? t("tasks.timelineInProgress") : completed ? (durationStr ?? t("tasks.timelineDone")) : "";
 
       // 🆕 v3 2026-06-18 Task 7：展开详情
       // - step.detail 同时承载 phase 描述和 outputPath（后端任务完成时覆写最后一步 detail）
       // - 前端判断：若 step.detail === task.outputPath 则视为 outputPath，否则视为 phase 描述
       // - 加密参数摘要：仅 encrypting/decrypting step 显示
       // - outputPath：优先用 task.outputPath（WS 推送），step.detail 作 fallback
-      const expandDetail: UnifiedTimelineEntry['expandDetail'] = {}
-      let hasExpand = false
+      const expandDetail: UnifiedTimelineEntry["expandDetail"] = {};
+      let hasExpand = false;
       if (step.startedAt) {
-        expandDetail.startedAt = formatDateTime(step.startedAt)
-        hasExpand = true
+        expandDetail.startedAt = formatDateTime(step.startedAt);
+        hasExpand = true;
       }
       if (step.completedAt) {
-        expandDetail.completedAt = formatDateTime(step.completedAt)
-        hasExpand = true
+        expandDetail.completedAt = formatDateTime(step.completedAt);
+        hasExpand = true;
       }
       if (durationStr) {
-        expandDetail.duration = durationStr
-        hasExpand = true
+        expandDetail.duration = durationStr;
+        hasExpand = true;
       }
 
       // 加密参数摘要（仅 encrypting/decrypting step）
       if (phaseEnum === Phase.Encrypting || phaseEnum === Phase.Decrypting) {
         if (cryptoMeta) {
-          expandDetail.cryptoSummary = cryptoMeta
-          hasExpand = true
+          expandDetail.cryptoSummary = cryptoMeta;
+          hasExpand = true;
         }
       }
 
       // phase 描述 vs outputPath 区分
-      const stepDetail = step.detail ?? ''
-      const taskOutputPath = props.task.outputPath ?? ''
+      const stepDetail = step.detail ?? "";
+      const taskOutputPath = props.task.outputPath ?? "";
       if (stepDetail) {
         if (taskOutputPath && stepDetail === taskOutputPath) {
           // step.detail 是 outputPath（后端任务完成时覆写最后一步）
-          expandDetail.outputPath = stepDetail
-          hasExpand = true
+          expandDetail.outputPath = stepDetail;
+          hasExpand = true;
         } else {
           // step.detail 是 phase 描述
-          expandDetail.phaseDetail = stepDetail
-          hasExpand = true
+          expandDetail.phaseDetail = stepDetail;
+          hasExpand = true;
         }
       }
 
       // outputPath：若 step.detail 未承载，且当前 step 是最后一步 + 任务已完成，从 task.outputPath 取
-      if (!expandDetail.outputPath && taskOutputPath && completed && step === steps[steps.length - 1] && props.task.status === 'completed') {
-        expandDetail.outputPath = taskOutputPath
-        hasExpand = true
+      if (
+        !expandDetail.outputPath &&
+        taskOutputPath &&
+        completed &&
+        step === steps[steps.length - 1] &&
+        props.task.status === "completed"
+      ) {
+        expandDetail.outputPath = taskOutputPath;
+        hasExpand = true;
       }
 
       entries.push({
@@ -274,35 +272,35 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
         hasExpandableDetail: hasExpand,
         expandDetail: hasExpand ? expandDetail : undefined,
         _durationMs: durationMs,
-      })
+      });
     }
   } else {
     // 3. fallback：task.steps 为空时从 phase 序列派生（保留旧版行为）
-    const phases = ['analyzing', 'initializing', 'preprocessing', 'encrypting', 'decrypting', 'packing', 'verifying']
-    const phaseOrder = phases.indexOf(props.task.phase ?? '')
+    const phases = ["analyzing", "initializing", "preprocessing", "encrypting", "decrypting", "packing", "verifying"];
+    const phaseOrder = phases.indexOf(props.task.phase ?? "");
 
     for (let i = 0; i < phases.length; i++) {
-      const p = phases[i]
-      const isCurrent = p === props.task.phase && props.task.status === 'running'
-      const isPast = !isCurrent && (phaseOrder > i || isTerminal)
+      const p = phases[i];
+      const isCurrent = p === props.task.phase && props.task.status === "running";
+      const isPast = !isCurrent && (phaseOrder > i || isTerminal);
 
-      let status: StepStatus
+      let status: StepStatus;
       if (isCurrent) {
-        status = 'running'
+        status = "running";
       } else if (isPast) {
-        status = 'success'
+        status = "success";
       } else {
-        status = 'pending'
+        status = "pending";
       }
 
       // 🆕 v3 2026-06-18 Task 7：fallback 模式也补充加密参数摘要
-      const phaseEnum = toPhase(p)
-      const fallbackExpand: UnifiedTimelineEntry['expandDetail'] = {}
-      let hasFallbackExpand = false
+      const phaseEnum = toPhase(p);
+      const fallbackExpand: UnifiedTimelineEntry["expandDetail"] = {};
+      let hasFallbackExpand = false;
       if (phaseEnum === Phase.Encrypting || phaseEnum === Phase.Decrypting) {
         if (cryptoMeta) {
-          fallbackExpand.cryptoSummary = cryptoMeta
-          hasFallbackExpand = true
+          fallbackExpand.cryptoSummary = cryptoMeta;
+          hasFallbackExpand = true;
         }
       }
 
@@ -310,7 +308,7 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
         id: `${p}-fallback-${i}`,
         phase: phaseEnum,
         label: getPhaseLabel(p),
-        time: isCurrent ? t('tasks.timelineInProgress') : isPast ? t('tasks.timelineDone') : '',
+        time: isCurrent ? t("tasks.timelineInProgress") : isPast ? t("tasks.timelineDone") : "",
         progress: isCurrent ? props.task.progress : undefined,
         speed: isCurrent ? props.task.speed : undefined,
         eta: isCurrent ? props.task.eta : undefined,
@@ -318,66 +316,66 @@ const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
         isCurrent,
         hasExpandableDetail: hasFallbackExpand,
         expandDetail: hasFallbackExpand ? fallbackExpand : undefined,
-      })
+      });
     }
   }
 
   // 4. 完成态：追加 "completed" 事件
   // 🆕 v3 2026-06-18 Task 7：completed 条目展开显示 outputPath（用 task.outputPath，不依赖 step.detail）
-  if (props.task.status === 'completed') {
-    const completedHasExpand = !!props.task.outputPath
-    const completedExpandDetail: UnifiedTimelineEntry['expandDetail'] | undefined = completedHasExpand
+  if (props.task.status === "completed") {
+    const completedHasExpand = !!props.task.outputPath;
+    const completedExpandDetail: UnifiedTimelineEntry["expandDetail"] | undefined = completedHasExpand
       ? { outputPath: props.task.outputPath }
-      : undefined
+      : undefined;
     entries.push({
-      id: `completed-${props.task.completedAt ?? ''}`,
+      id: `completed-${props.task.completedAt ?? ""}`,
       phase: Phase.Completed,
-      label: t('tasks.phaseCompleted'),
-      time: props.task.completedAt ? formatDateTime(props.task.completedAt) : '',
-      status: 'success',
+      label: t("tasks.phaseCompleted"),
+      time: props.task.completedAt ? formatDateTime(props.task.completedAt) : "",
+      status: "success",
       isCurrent: false,
       hasExpandableDetail: completedHasExpand,
       expandDetail: completedExpandDetail,
-    })
+    });
   }
 
   // 5. 失败 / 取消态：标记最后一个事件为 failure，并附加错误信息
-  if (props.task.status === 'failed' || props.task.status === 'cancelled') {
-    const last = entries[entries.length - 1]
+  if (props.task.status === "failed" || props.task.status === "cancelled") {
+    const last = entries[entries.length - 1];
     if (last) {
-      last.status = 'failure'
-      last.label = props.task.status === 'failed' ? t('tasks.failed') : t('tasks.cancelled')
+      last.status = "failure";
+      last.label = props.task.status === "failed" ? t("tasks.failed") : t("tasks.cancelled");
       if (props.task.error) {
-        last.hasExpandableDetail = true
+        last.hasExpandableDetail = true;
         last.expandDetail = {
           ...(last.expandDetail ?? {}),
           error: props.task.error,
-        }
+        };
       }
     }
   }
 
   // 6. 计算最长耗时 phase 并高亮
-  let maxDurationMs = 0
-  let maxEntryId: string | null = null
+  let maxDurationMs = 0;
+  let maxEntryId: string | null = null;
   for (const entry of entries) {
     if (entry._durationMs && entry._durationMs > maxDurationMs) {
-      maxDurationMs = entry._durationMs
-      maxEntryId = entry.id
+      maxDurationMs = entry._durationMs;
+      maxEntryId = entry.id;
     }
   }
   if (maxEntryId) {
-    const maxEntry = entries.find((e) => e.id === maxEntryId)
-    if (maxEntry) maxEntry.isHighlight = true
+    const maxEntry = entries.find(e => e.id === maxEntryId);
+    if (maxEntry) maxEntry.isHighlight = true;
   }
 
   // 7. 剥离内部字段，返回 UnifiedTimelineEntry[]
-  return entries.map((entry) => {
-    const { _durationMs: _ignored, ...rest } = entry
-    void _ignored
-    return rest
-  })
-})
+  return entries.map(entry => {
+    const { _durationMs: _ignored, ...rest } = entry;
+    void _ignored;
+    return rest;
+  });
+});
 </script>
 
 <style scoped>

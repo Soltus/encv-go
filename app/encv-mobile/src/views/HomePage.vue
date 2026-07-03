@@ -60,44 +60,36 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonIcon,
-} from '@ionic/vue'
-import { playCircle, folder, lockClosed, globe, layersOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { useRouter } from 'vue-router'
-import { onIonViewWillEnter } from '@ionic/vue'
-import AgentEntry from '@/components/agent/AgentEntry.vue'
+import { IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar, onIonViewWillEnter } from "@ionic/vue";
+import { folder, globe, layersOutline, lockClosed, playCircle } from "ionicons/icons";
+import { useRouter } from "vue-router";
+import AgentEntry from "@/components/agent/AgentEntry.vue";
+import { useI18n } from "@/composables/useI18n";
 
-const { t } = useI18n()
-const router = useRouter()
+const { t } = useI18n();
+const router = useRouter();
 
 function handleOpenPlayer() {
-  router.push('/player')
+  router.push("/player");
 }
 
 function handleOpenFiles() {
-  router.push('/tabs/files')
+  router.push("/tabs/files");
 }
 
 function handleOpenTasks() {
-  router.push('/tabs/tasks')
+  router.push("/tabs/tasks");
 }
 
 function handleOpenRemote() {
-  router.push('/tabs/remote')
+  router.push("/tabs/remote");
 }
 
 function handleOpenExtensions() {
-  router.push('/tabs/extensions')
+  router.push("/tabs/extensions");
 }
 
-onIonViewWillEnter(() => {})
+onIonViewWillEnter(() => {});
 </script>
 
 <style scoped>

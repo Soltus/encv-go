@@ -29,36 +29,34 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import {
-  IonRadioGroup,
-  IonBadge,
-} from '@ionic/vue'
-import type { ContainerVersionInfo } from '@/api/encv'
-import { useI18n } from '@/composables/useI18n'
-import { CONTAINER_VERSIONS, DEFAULT_CONTAINER_VERSION } from '@/constants/containerVersion'
-import RadioItem from './RadioItem.vue'
+import { IonBadge, IonRadioGroup } from "@ionic/vue";
+import { computed } from "vue";
+import type { ContainerVersionInfo } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
+import { CONTAINER_VERSIONS, DEFAULT_CONTAINER_VERSION } from "@/constants/containerVersion";
+import RadioItem from "./RadioItem.vue";
 
-const props = withDefaults(defineProps<{
-  modelValue: number
-  versions?: ContainerVersionInfo[]
-}>(), {
-  modelValue: DEFAULT_CONTAINER_VERSION,
-})
+const props = withDefaults(
+  defineProps<{
+    modelValue: number;
+    versions?: ContainerVersionInfo[];
+  }>(),
+  {
+    modelValue: DEFAULT_CONTAINER_VERSION,
+  }
+);
 
-const emit = defineEmits<{
-  (e: 'update:modelValue', value: number): void
-}>()
+const emit = defineEmits<(e: "update:modelValue", value: number) => void>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 // 🆕 2026-06-11 v2 cleanup：版本列表从 constants/containerVersion.ts 统一派生
 // 命名规则：ECv = ENCV Container，大写 EC，小写 v，避免与项目内 v2 架构命名混淆。
 // 注：ECV2 已在 SupportedVersions 中移除，不再可选。
-const versions = computed<ContainerVersionInfo[]>(() => props.versions ?? [...CONTAINER_VERSIONS])
+const versions = computed<ContainerVersionInfo[]>(() => props.versions ?? [...CONTAINER_VERSIONS]);
 
 function handleChange(event: CustomEvent) {
-  emit('update:modelValue', event.detail.value as number)
+  emit("update:modelValue", event.detail.value as number);
 }
 </script>
 

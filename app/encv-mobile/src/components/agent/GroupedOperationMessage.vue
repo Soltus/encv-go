@@ -103,185 +103,176 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { IonIcon } from '@ionic/vue'
+import { IonIcon } from "@ionic/vue";
 import {
-  terminalOutline,
-  ellipsisHorizontalCircleOutline,
-  documentTextOutline,
-  eyeOutline,
-  searchOutline,
-  helpCircleOutline,
   chevronForward as chevronIcon,
-} from 'ionicons/icons'
-import StatusBadge from './StatusBadge.vue'
-import FileChangeSummaryMessage from './FileChangeSummaryMessage.vue'
-import MountListCard from './MountListCard.vue'
-import FileListCard from './FileListCard.vue'
-import FileContentCard from './FileContentCard.vue'
-import { OPERATION_COLLAPSE_INITIAL_COUNT } from './twoLevelGrouping'
-import { useI18n } from '@/composables/useI18n'
-import type { ToolCall, ToolKind, ToolResult, ToolStatus } from '@/composables/useAgent'
+  documentTextOutline,
+  ellipsisHorizontalCircleOutline,
+  eyeOutline,
+  helpCircleOutline,
+  searchOutline,
+  terminalOutline,
+} from "ionicons/icons";
+import { computed, ref } from "vue";
+import type { ToolCall, ToolKind, ToolResult, ToolStatus } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
+import FileChangeSummaryMessage from "./FileChangeSummaryMessage.vue";
+import FileContentCard from "./FileContentCard.vue";
+import FileListCard from "./FileListCard.vue";
+import MountListCard from "./MountListCard.vue";
+import StatusBadge from "./StatusBadge.vue";
+import { OPERATION_COLLAPSE_INITIAL_COUNT } from "./twoLevelGrouping";
 
 const props = defineProps<{
-  items: ToolCall[]
+  items: ToolCall[];
   /**
    * toolCallId → ToolResult 的映射（由 AgentChat 用 findToolResult 配对后传过来）。
    * 用于在每个 item 下方条件渲染结构化卡片（MountListCard / FileListCard / FileContentCard）。
    * 可选：未传 / 没结果时不渲染卡片，原有 row 保留。
    */
-  resultsByCallId?: Record<string, ToolResult>
-  forceComplete?: boolean
-}>()
+  resultsByCallId?: Record<string, ToolResult>;
+  forceComplete?: boolean;
+}>();
 
-const { t } = useI18n()
-const groupExpanded = ref(false)
-const expandedItems = ref<Set<number>>(new Set())
+const { t } = useI18n();
+const groupExpanded = ref(false);
+const expandedItems = ref<Set<number>>(new Set());
 
 /**
  * 取 item 对应的 ToolResult。
  * 返回 null 时模板不渲染结构化卡片（item 仍按原 row 显示）。
  */
 function resultFor(id: string, name: string | undefined): ToolResult | null {
-  if (!props.resultsByCallId || !name) return null
+  if (!props.resultsByCallId || !name) return null;
   // 只对"已知支持结构化卡片"的工具名查 result —— 其他工具（video_encrypt 等）
   // 的 result 不在 resultsByCallId 也不影响 row 渲染。
-  if (
-    name !== 'list_mounts' &&
-    name !== 'list_files' &&
-    name !== 'stat_file' &&
-    name !== 'read_file'
-  ) {
-    return null
+  if (name !== "list_mounts" && name !== "list_files" && name !== "stat_file" && name !== "read_file") {
+    return null;
   }
-  return props.resultsByCallId[id] ?? null
+  return props.resultsByCallId[id] ?? null;
 }
 
 function toggleGroup() {
-  groupExpanded.value = !groupExpanded.value
+  groupExpanded.value = !groupExpanded.value;
 }
 
 function toggleItem(idx: number) {
   if (expandedItems.value.has(idx)) {
-    expandedItems.value.delete(idx)
+    expandedItems.value.delete(idx);
   } else {
-    expandedItems.value.add(idx)
+    expandedItems.value.add(idx);
   }
   // trigger reactivity
-  expandedItems.value = new Set(expandedItems.value)
+  expandedItems.value = new Set(expandedItems.value);
 }
 
-const kinds = computed(() => props.items.map((it) => it.kind))
-const allFileChange = computed(() => kinds.value.length > 0 && kinds.value.every((k) => k === 'fileChange'))
-const allCommand = computed(() => kinds.value.length > 0 && kinds.value.every((k) => k === 'command'))
+const kinds = computed(() => props.items.map(it => it.kind));
+const allFileChange = computed(() => kinds.value.length > 0 && kinds.value.every(k => k === "fileChange"));
+const allCommand = computed(() => kinds.value.length > 0 && kinds.value.every(k => k === "command"));
 
-const fileItems = computed(() => props.items)
+const fileItems = computed(() => props.items);
 
 const lastItem = computed<ToolCall | null>(() => {
-  return props.items.length > 0 ? props.items[props.items.length - 1] : null
-})
+  return props.items.length > 0 ? props.items[props.items.length - 1] : null;
+});
 
 const totalDuration = computed(() => {
   // 累加 args.durationMs（如有）作为粗略估计；无值则按 0 显示
-  let total = 0
+  let total = 0;
   for (const it of props.items) {
     try {
-      const parsed = JSON.parse(it.args)
-      const v = (parsed as Record<string, unknown>).durationMs
-      if (typeof v === 'number') total += v
+      const parsed = JSON.parse(it.args);
+      const v = (parsed as Record<string, unknown>).durationMs;
+      if (typeof v === "number") total += v;
     } catch {
       // ignore
     }
   }
-  return total
-})
+  return total;
+});
 
 const summary = computed(() => {
-  const n = props.items.length
-  const cmd = props.items.filter((i) => i.kind === 'command').length
-  const file = props.items.filter((i) => i.kind === 'fileChange').length
+  const n = props.items.length;
+  const cmd = props.items.filter(i => i.kind === "command").length;
+  const file = props.items.filter(i => i.kind === "fileChange").length;
   if (allCommand.value) {
-    return t('agent.ops.commands', { n: String(n), ms: String(totalDuration.value || 0) })
+    return t("agent.ops.commands", { n: String(n), ms: String(totalDuration.value || 0) });
   }
   if (allFileChange.value) {
-    return t('agent.ops.files', { n: String(n) })
+    return t("agent.ops.files", { n: String(n) });
   }
   if (cmd > 0 && file > 0) {
-    return t('agent.ops.mixed', { n: String(n), cmd: String(cmd), file: String(file) })
+    return t("agent.ops.mixed", { n: String(n), cmd: String(cmd), file: String(file) });
   }
-  return t('agent.ops.toolOutputs', { n: String(n) })
-})
+  return t("agent.ops.toolOutputs", { n: String(n) });
+});
 
 const icon = computed(() => {
-  if (allCommand.value) return terminalOutline
-  return ellipsisHorizontalCircleOutline
-})
+  if (allCommand.value) return terminalOutline;
+  return ellipsisHorizontalCircleOutline;
+});
 
 const status = computed(() => {
-  const s = lastItem.value?.status
-  if (!s) return ''
-  if (s === 'success') return t('agent.completed')
-  if (s === 'failed') return t('agent.failed')
-  if (s === 'cancelled') return t('agent.cancelled')
-  if (s === 'running') return t('agent.running')
-  return ''
-})
+  const s = lastItem.value?.status;
+  if (!s) return "";
+  if (s === "success") return t("agent.completed");
+  if (s === "failed") return t("agent.failed");
+  if (s === "cancelled") return t("agent.cancelled");
+  if (s === "running") return t("agent.running");
+  return "";
+});
 
-const statusTone = computed<'ready' | 'warn' | 'idle'>(() => {
-  const s: ToolStatus | undefined = lastItem.value?.status
-  if (s === 'success') return 'ready'
-  if (s === 'failed' || s === 'cancelled') return 'warn'
-  if (s === 'running' || s === 'pending') return 'idle'
-  return 'idle'
-})
+const statusTone = computed<"ready" | "warn" | "idle">(() => {
+  const s: ToolStatus | undefined = lastItem.value?.status;
+  if (s === "success") return "ready";
+  if (s === "failed" || s === "cancelled") return "warn";
+  if (s === "running" || s === "pending") return "idle";
+  return "idle";
+});
 
-const isActive = computed(() => lastItem.value?.status === 'running' || lastItem.value?.status === 'pending')
+const isActive = computed(() => lastItem.value?.status === "running" || lastItem.value?.status === "pending");
 
 // 两级折叠：hasDetail / visibleItems / canExpand / canCollapse
-const hasDetail = computed(() => props.items.length > 0)
+const hasDetail = computed(() => props.items.length > 0);
 const visibleItems = computed(() => {
-  if (groupExpanded.value) return props.items
-  return props.items.slice(0, OPERATION_COLLAPSE_INITIAL_COUNT)
-})
-const canExpand = computed(
-  () => !groupExpanded.value && props.items.length > OPERATION_COLLAPSE_INITIAL_COUNT,
-)
-const canCollapse = computed(
-  () => groupExpanded.value && props.items.length > OPERATION_COLLAPSE_INITIAL_COUNT,
-)
+  if (groupExpanded.value) return props.items;
+  return props.items.slice(0, OPERATION_COLLAPSE_INITIAL_COUNT);
+});
+const canExpand = computed(() => !groupExpanded.value && props.items.length > OPERATION_COLLAPSE_INITIAL_COUNT);
+const canCollapse = computed(() => groupExpanded.value && props.items.length > OPERATION_COLLAPSE_INITIAL_COUNT);
 const showMoreLabel = computed(() =>
-  t('agent.ops.showMore', {
+  t("agent.ops.showMore", {
     n: String(props.items.length - OPERATION_COLLAPSE_INITIAL_COUNT),
-  }),
-)
+  })
+);
 
 function expandGroup() {
-  groupExpanded.value = true
+  groupExpanded.value = true;
 }
 
 function collapseGroup() {
-  groupExpanded.value = false
+  groupExpanded.value = false;
 }
 
 function itemIcon(kind: ToolKind | undefined) {
   switch (kind) {
-    case 'command':
-      return terminalOutline
-    case 'fileChange':
-      return documentTextOutline
-    case 'readOnly':
-      return eyeOutline
-    case 'webSearch':
-      return searchOutline
+    case "command":
+      return terminalOutline;
+    case "fileChange":
+      return documentTextOutline;
+    case "readOnly":
+      return eyeOutline;
+    case "webSearch":
+      return searchOutline;
     default:
-      return helpCircleOutline
+      return helpCircleOutline;
   }
 }
 
 function truncateArgs(raw: string): string {
-  if (!raw) return ''
-  if (raw.length <= 80) return raw
-  return raw.slice(0, 77) + '…'
+  if (!raw) return "";
+  if (raw.length <= 80) return raw;
+  return raw.slice(0, 77) + "…";
 }
 </script>
 

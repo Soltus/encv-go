@@ -5,40 +5,40 @@
  * 三个多选分组：状态 / 任务类型 / 插件
  * 双向绑定到父组件的数组（与 useTaskFilter 形状一致）
  */
-import { computed } from 'vue'
-import { useI18n } from '@/composables/useI18n'
+import { computed } from "vue";
+import { useI18n } from "@/composables/useI18n";
 
 interface Props {
-  status: string[]
-  taskType: string[]
-  plugin: string[]
-  availablePlugins: string[]
+  status: string[];
+  taskType: string[];
+  plugin: string[];
+  availablePlugins: string[];
 }
-const props = defineProps<Props>()
+const props = defineProps<Props>();
 const emit = defineEmits<{
-  (e: 'update:status', v: string[]): void
-  (e: 'update:taskType', v: string[]): void
-  (e: 'update:plugin', v: string[]): void
-  (e: 'reset'): void
-  (e: 'apply'): void
-}>()
+  (e: "update:status", v: string[]): void;
+  (e: "update:taskType", v: string[]): void;
+  (e: "update:plugin", v: string[]): void;
+  (e: "reset"): void;
+  (e: "apply"): void;
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled', 'cancelling']
-const TASK_TYPES = ['encrypt', 'decrypt', 'move', 'copy', 'rename', 'delete']
+const STATUSES = ["pending", "running", "completed", "failed", "cancelled", "cancelling"];
+const TASK_TYPES = ["encrypt", "decrypt", "move", "copy", "rename", "delete"];
 
-function toggleArray(arr: string[], key: string, emitKey: 'status' | 'taskType' | 'plugin') {
-  const idx = arr.indexOf(key)
-  const next = idx === -1 ? [...arr, key] : arr.filter((k) => k !== key)
-  emit(`update:${emitKey}` as any, next)
+function toggleArray(arr: string[], key: string, emitKey: "status" | "taskType" | "plugin") {
+  const idx = arr.indexOf(key);
+  const next = idx === -1 ? [...arr, key] : arr.filter(k => k !== key);
+  emit(`update:${emitKey}` as any, next);
 }
 
 function isChecked(arr: string[], key: string): boolean {
-  return arr.includes(key)
+  return arr.includes(key);
 }
 
-const hasAny = computed(() => props.status.length > 0 || props.taskType.length > 0 || props.plugin.length > 0)
+const hasAny = computed(() => props.status.length > 0 || props.taskType.length > 0 || props.plugin.length > 0);
 </script>
 
 <template>

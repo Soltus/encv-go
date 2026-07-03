@@ -47,80 +47,79 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { IonIcon, IonPopover } from '@ionic/vue'
-import { copyOutline, documentTextOutline, folderOpenOutline, gitBranchOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { copyToClipboard } from '@/composables/useClipboard'
-import { showToast } from '@/composables/useToast'
+import { IonIcon, IonPopover } from "@ionic/vue";
+import { copyOutline, documentTextOutline, folderOpenOutline, gitBranchOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
+import { copyToClipboard } from "@/composables/useClipboard";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
 
 const props = defineProps<{
-  path: string
-  line?: number
-  col?: number
-}>()
+  path: string;
+  line?: number;
+  col?: number;
+}>();
 
-const { t } = useI18n()
-const router = useRouter()
+const { t } = useI18n();
+const router = useRouter();
 
-const popoverOpen = ref(false)
-const popoverEvent = ref<Event | undefined>(undefined)
-const wrapRef = ref<HTMLElement | null>(null)
+const popoverOpen = ref(false);
+const popoverEvent = ref<Event | undefined>(undefined);
+const wrapRef = ref<HTMLElement | null>(null);
 
 // 显示文本：取最后一段（basename）；若与 path 相同则直接显示
 const displayLabel = computed(() => {
-  const segs = props.path.split(/[\\/]/).filter(Boolean)
-  return segs[segs.length - 1] || props.path
-})
+  const segs = props.path.split(/[\\/]/).filter(Boolean);
+  return segs[segs.length - 1] || props.path;
+});
 
 const fullPath = computed(() => {
-  let s = props.path
-  if (props.line !== undefined) s += `:${props.line}`
-  if (props.col !== undefined) s += `:${props.col}`
-  return s
-})
+  let s = props.path;
+  if (props.line !== undefined) s += `:${props.line}`;
+  if (props.col !== undefined) s += `:${props.col}`;
+  return s;
+});
 
 // 相对路径：去掉开头的 ./ 或 ../ （简化版，相对项目根）
 const relativePath = computed(() => {
-  return props.path.replace(/^\.{1,2}[\\/]/, '')
-})
+  return props.path.replace(/^\.{1,2}[\\/]/, "");
+});
 
 function togglePopover(event: MouseEvent) {
-  popoverEvent.value = event
-  popoverOpen.value = !popoverOpen.value
+  popoverEvent.value = event;
+  popoverOpen.value = !popoverOpen.value;
 }
 
 async function onCopyPath() {
-  const ok = await copyToClipboard(fullPath.value)
+  const ok = await copyToClipboard(fullPath.value);
   showToast({
-    message: ok ? t('agent.copied') : t('agent.copyFailed'),
-    color: ok ? 'success' : 'danger',
+    message: ok ? t("agent.copied") : t("agent.copyFailed"),
+    color: ok ? "success" : "danger",
     duration: 1500,
-  })
-  popoverOpen.value = false
+  });
+  popoverOpen.value = false;
 }
 
 async function onCopyRelativePath() {
-  const text = props.line !== undefined
-    ? `${relativePath.value}:${props.line}${props.col !== undefined ? `:${props.col}` : ''}`
-    : relativePath.value
-  const ok = await copyToClipboard(text)
+  const text =
+    props.line !== undefined ? `${relativePath.value}:${props.line}${props.col !== undefined ? `:${props.col}` : ""}` : relativePath.value;
+  const ok = await copyToClipboard(text);
   showToast({
-    message: ok ? t('agent.copied') : t('agent.copyFailed'),
-    color: ok ? 'success' : 'danger',
+    message: ok ? t("agent.copied") : t("agent.copyFailed"),
+    color: ok ? "success" : "danger",
     duration: 1500,
-  })
-  popoverOpen.value = false
+  });
+  popoverOpen.value = false;
 }
 
 function onOpenInFiles() {
-  popoverOpen.value = false
+  popoverOpen.value = false;
   // 跳转到 Files tab，path 作为 query param
   router.push({
-    path: '/tabs/files',
+    path: "/tabs/files",
     query: { path: props.path },
-  })
+  });
 }
 </script>
 

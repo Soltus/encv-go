@@ -20,23 +20,23 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from '@ionic/vue'
-import { arrowDownOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
+import { IonIcon } from "@ionic/vue";
+import { arrowDownOutline } from "ionicons/icons";
+import { useI18n } from "@/composables/useI18n";
 
 withDefaults(
   defineProps<{
-    visible: boolean
-    onClick: () => void
-    unreadCount?: number
+    visible: boolean;
+    onClick: () => void;
+    unreadCount?: number;
   }>(),
   {
     unreadCount: 0,
-  },
-)
+  }
+);
 
-const { t } = useI18n()
-const arrowDownIcon = arrowDownOutline
+const { t } = useI18n();
+const arrowDownIcon = arrowDownOutline;
 </script>
 
 <style scoped>

@@ -224,257 +224,261 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, shallowRef, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { chatbubblesOutline, copyOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import { useRenderTurnItems } from '@/composables/renderTurnItems'
-import type { Message, ToolCall, ToolResult, Decision } from '@/composables/useAgent'
-import type { EngineRenderProps } from '@/composables/chatEngine'
-import UserMessageBubble from '@/components/agent/UserMessageBubble.vue'
-import AssistantMessage from '@/components/agent/AssistantMessage.vue'
-import ApprovalCard from '@/components/agent/ApprovalCard.vue'
-import GroupedOperationMessage from '@/components/agent/GroupedOperationMessage.vue'
-import OperationCard from '@/components/agent/OperationCard.vue'
-import MountListCard from '@/components/agent/MountListCard.vue'
-import FileListCard from '@/components/agent/FileListCard.vue'
-import FileContentCard from '@/components/agent/FileContentCard.vue'
-import ReasoningMessage from '@/components/agent/ReasoningMessage.vue'
-import ErrorMessage from '@/components/agent/ErrorMessage.vue'
-import WebSearchSummaryMessage from '@/components/agent/WebSearchSummaryMessage.vue'
-import MessageVirtualList from '@/components/agent/MessageVirtualList.vue'
-import PlanBlock from '@/components/agent/PlanBlock.vue'
-import ContextCompactionDivider from '@/components/agent/ContextCompactionDivider.vue'
-import AgentTaskMessage from '@/components/agent/AgentTaskMessage.vue'
+import { IonIcon } from "@ionic/vue";
+import { chatbubblesOutline, copyOutline } from "ionicons/icons";
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
+import AgentTaskMessage from "@/components/agent/AgentTaskMessage.vue";
+import ApprovalCard from "@/components/agent/ApprovalCard.vue";
+import AssistantMessage from "@/components/agent/AssistantMessage.vue";
+import ContextCompactionDivider from "@/components/agent/ContextCompactionDivider.vue";
+import ErrorMessage from "@/components/agent/ErrorMessage.vue";
+import FileContentCard from "@/components/agent/FileContentCard.vue";
+import FileListCard from "@/components/agent/FileListCard.vue";
+import GroupedOperationMessage from "@/components/agent/GroupedOperationMessage.vue";
+import MessageVirtualList from "@/components/agent/MessageVirtualList.vue";
+import MountListCard from "@/components/agent/MountListCard.vue";
+import OperationCard from "@/components/agent/OperationCard.vue";
+import PlanBlock from "@/components/agent/PlanBlock.vue";
+import ReasoningMessage from "@/components/agent/ReasoningMessage.vue";
+import UserMessageBubble from "@/components/agent/UserMessageBubble.vue";
+import WebSearchSummaryMessage from "@/components/agent/WebSearchSummaryMessage.vue";
+import type { EngineRenderProps } from "@/composables/chatEngine";
+import { useRenderTurnItems } from "@/composables/renderTurnItems";
+import type { Decision, Message, ToolCall, ToolResult } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
 
-const props = defineProps<EngineRenderProps>()
-const { t } = useI18n()
+const props = defineProps<EngineRenderProps>();
+const { t } = useI18n();
 
 // ── 图标常量 ──────────────────────────────────────────────
-const chatbubblesIcon = chatbubblesOutline
-const copyIconVar = copyOutline
+const chatbubblesIcon = chatbubblesOutline;
+const copyIconVar = copyOutline;
 
 // ── 内部状态 ──────────────────────────────────────────────
 /** 把 readonly Message[] 包装为 shallowRef，供 useRenderTurnItems 和辅助方法使用 */
-const messagesRef = shallowRef<Message[]>([...props.messages])
-const mainRef = ref<HTMLDivElement | null>(null)
-const virtualListRef = ref<{ scrollToBottom: (behavior?: 'auto' | 'smooth') => void } | null>(null)
-const nearBottom = ref(true)
+const messagesRef = shallowRef<Message[]>([...props.messages]);
+const mainRef = ref<HTMLDivElement | null>(null);
+const virtualListRef = ref<{ scrollToBottom: (behavior?: "auto" | "smooth") => void } | null>(null);
+const nearBottom = ref(true);
 
 /** 触发虚拟滚动的阈值（renderedItems 数量 > 此值时切换） */
-const VIRTUAL_LIST_THRESHOLD = 120
+const VIRTUAL_LIST_THRESHOLD = 120;
 
 // 同步外部 messages 变化到内部 ref
 watch(
   () => props.messages,
-  (newMessages) => {
-    messagesRef.value = [...newMessages]
+  newMessages => {
+    messagesRef.value = [...newMessages];
   },
-  { deep: true },
-)
+  { deep: true }
+);
 
 // ── 渲染项计算 ────────────────────────────────────────────
-const compactionText = computed(() => t('agent.contextCompaction'))
+const compactionText = computed(() => t("agent.contextCompaction"));
 const renderedItems = useRenderTurnItems(
   computed(() => messagesRef.value),
   computed(() => props.status),
-  compactionText,
-)
+  compactionText
+);
 
 // ── 工具调用 / 结果查找 ───────────────────────────────────
 function findToolCall(id: string): ToolCall | null {
   for (const msg of messagesRef.value) {
-    const tc = msg.tool_calls.find((t: ToolCall) => t.id === id)
-    if (tc) return tc
+    const tc = msg.tool_calls.find((t: ToolCall) => t.id === id);
+    if (tc) return tc;
   }
-  return null
+  return null;
 }
 
 function findToolResult(id: string): ToolResult | null {
   for (const msg of messagesRef.value) {
-    const tr = msg.tool_results.find((r: ToolResult) => r.id === id)
-    if (tr) return tr
+    const tr = msg.tool_results.find((r: ToolResult) => r.id === id);
+    if (tr) return tr;
   }
-  return null
+  return null;
 }
 
-function findToolCallById(id: string): ToolCall | null { return findToolCall(id) }
-function findToolResultById(id: string): ToolResult | null { return findToolResult(id) }
+function findToolCallById(id: string): ToolCall | null {
+  return findToolCall(id);
+}
+function findToolResultById(id: string): ToolResult | null {
+  return findToolResult(id);
+}
 
 /** 格式化 Footer 固定时间戳为 HH:mm */
 function formatFooterTime(timestamp: number): string {
-  const d = new Date(timestamp)
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
+  const d = new Date(timestamp);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
 }
 
 /** 复制 messageFooter 对应消息的全文内容 */
 async function copyMessageContent(messageId: string): Promise<void> {
-  const idx = parseInt(messageId.replace(/^[au]-/, ''), 10)
-  const msg = messagesRef.value[idx]
-  if (!msg?.content) return
-  const text = typeof msg.content === 'string' ? msg.content : ''
+  const idx = parseInt(messageId.replace(/^[au]-/, ""), 10);
+  const msg = messagesRef.value[idx];
+  if (!msg?.content) return;
+  const text = typeof msg.content === "string" ? msg.content : "";
   try {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
+      await navigator.clipboard.writeText(text);
     } else {
-      const ta = document.createElement('textarea')
-      ta.value = text
-      ta.style.position = 'fixed'
-      ta.style.left = '-9999px'
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
     }
-    showToast({ message: '已复制', duration: 1200, color: 'success' })
+    showToast({ message: "已复制", duration: 1200, color: "success" });
   } catch {
-    showToast({ message: '复制失败', duration: 1600, color: 'danger' })
+    showToast({ message: "复制失败", duration: 1600, color: "danger" });
   }
 }
 
 function resolveToolCalls(ids: string[]): ToolCall[] {
-  const out: ToolCall[] = []
+  const out: ToolCall[] = [];
   for (const id of ids) {
-    const tc = findToolCall(id)
-    if (tc) out.push(tc)
+    const tc = findToolCall(id);
+    if (tc) out.push(tc);
   }
-  return out
+  return out;
 }
 
 /** 按 id 查 tool result，构造成 name→Result 的 record 给结构化卡片用 */
 function resolveToolResultsByCallId(ids: string[]): Record<string, ToolResult> {
-  const out: Record<string, ToolResult> = {}
+  const out: Record<string, ToolResult> = {};
   for (const id of ids) {
-    const tr = findToolResult(id)
-    if (tr) out[id] = tr
+    const tr = findToolResult(id);
+    if (tr) out[id] = tr;
   }
-  return out
+  return out;
 }
 
 // ── 事件处理 ──────────────────────────────────────────────
 function handleDecide(toolCallId: string, decision: Decision) {
-  props.onConfirmTool(toolCallId, decision)
+  props.onConfirmTool(toolCallId, decision);
 }
 
 /**
  * 重试一条出错的消息：清除 error 标记 + 删除关联的 assistant 消息 + 重新发送
  */
-function handleRetryError(item: { type: 'error'; messageIndex: number }) {
-  const idx = item.messageIndex
-  if (idx < 0 || idx >= messagesRef.value.length) return
+function handleRetryError(item: { type: "error"; messageIndex: number }) {
+  const idx = item.messageIndex;
+  if (idx < 0 || idx >= messagesRef.value.length) return;
 
-  const targetMsg = messagesRef.value[idx]
-  if (!targetMsg || targetMsg.role !== 'user') return
+  const targetMsg = messagesRef.value[idx];
+  if (!targetMsg || targetMsg.role !== "user") return;
 
-  let text = ''
-  if (typeof targetMsg.content === 'string') {
-    text = targetMsg.content
+  let text = "";
+  if (typeof targetMsg.content === "string") {
+    text = targetMsg.content;
   } else {
     for (const part of targetMsg.content) {
-      if (part.type === 'text') {
-        text += part.text
+      if (part.type === "text") {
+        text += part.text;
       }
     }
-    text = text.trim()
+    text = text.trim();
   }
 
-  delete targetMsg.error
-  messagesRef.value.splice(idx)
-  props.onSend(text)
-  nextTick(() => scrollToBottom())
+  delete targetMsg.error;
+  messagesRef.value.splice(idx);
+  props.onSend(text);
+  nextTick(() => scrollToBottom());
 }
 
 // ── 滚动管理 ──────────────────────────────────────────────
-function scrollToBottom(behavior: 'auto' | 'smooth' = 'smooth') {
+function scrollToBottom(behavior: "auto" | "smooth" = "smooth") {
   nextTick(() => {
     if (renderedItems.value.length > VIRTUAL_LIST_THRESHOLD && virtualListRef.value) {
-      virtualListRef.value.scrollToBottom(behavior)
-      return
+      virtualListRef.value.scrollToBottom(behavior);
+      return;
     }
-    const el = mainRef.value
-    if (!el) return
-    el.scrollTo({ top: el.scrollHeight, behavior })
-  })
+    const el = mainRef.value;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  });
 }
 
 function onMainScroll() {
-  const el = mainRef.value
-  if (!el) return
-  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-  nearBottom.value = distanceFromBottom < 80
+  const el = mainRef.value;
+  if (!el) return;
+  const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+  nearBottom.value = distanceFromBottom < 80;
 }
 
 /** IntersectionObserver：追踪当前视口中最接近中心的消息项 */
-let dotObserver: IntersectionObserver | null = null
+let dotObserver: IntersectionObserver | null = null;
 
 function setupDotObserver() {
-  cleanupDotObserver()
-  const el = mainRef.value
-  if (!el) return
+  cleanupDotObserver();
+  const el = mainRef.value;
+  if (!el) return;
   dotObserver = new IntersectionObserver(
-    (entries) => {
-      let maxRatio = 0
-      let targetIdx = activeMessageIndex.value
+    entries => {
+      let maxRatio = 0;
+      let targetIdx = activeMessageIndex.value;
       for (const entry of entries) {
         if (entry.intersectionRatio > maxRatio) {
-          maxRatio = entry.intersectionRatio
-          const idx = Number((entry.target as HTMLElement).dataset.msgIdx ?? -1)
-          if (idx >= 0) targetIdx = idx
+          maxRatio = entry.intersectionRatio;
+          const idx = Number((entry.target as HTMLElement).dataset.msgIdx ?? -1);
+          if (idx >= 0) targetIdx = idx;
         }
       }
-      if (maxRatio > 0) activeMessageIndex.value = targetIdx
+      if (maxRatio > 0) activeMessageIndex.value = targetIdx;
     },
-    { root: el, threshold: [0, 0.25, 0.5, 0.75, 1] },
-  )
+    { root: el, threshold: [0, 0.25, 0.5, 0.75, 1] }
+  );
   nextTick(() => {
-    el.querySelectorAll('.renderedItemWrap').forEach((wrap) => {
-      dotObserver?.observe(wrap)
-    })
-  })
+    el.querySelectorAll(".renderedItemWrap").forEach(wrap => {
+      dotObserver?.observe(wrap);
+    });
+  });
 }
 
 function cleanupDotObserver() {
-  dotObserver?.disconnect()
-  dotObserver = null
+  dotObserver?.disconnect();
+  dotObserver = null;
 }
 
-const activeMessageIndex = ref(0)
+const activeMessageIndex = ref(0);
 
-watch(renderedItems, () => nextTick(setupDotObserver), { flush: 'post' })
-onMounted(() => nextTick(setupDotObserver))
-onUnmounted(cleanupDotObserver)
+watch(renderedItems, () => nextTick(setupDotObserver), { flush: "post" });
+onMounted(() => nextTick(setupDotObserver));
+onUnmounted(cleanupDotObserver);
 
 // 监听 status 变化 → streaming 开始时滚动到底部
 watch(
   () => props.status,
-  (newStatus) => {
-    if (newStatus === 'streaming') {
-      scrollToBottom()
+  newStatus => {
+    if (newStatus === "streaming") {
+      scrollToBottom();
     }
-  },
-)
+  }
+);
 
 // 监听 messages 变化 → 接近底部时自动滚
 watch(
   () => messagesRef.value.length,
   () => {
-    if (nearBottom.value) scrollToBottom()
-  },
-)
+    if (nearBottom.value) scrollToBottom();
+  }
+);
 
 watch(
   () => messagesRef.value[messagesRef.value.length - 1]?.content,
   () => {
-    if (nearBottom.value) scrollToBottom('auto')
-  },
-)
+    if (nearBottom.value) scrollToBottom("auto");
+  }
+);
 
 defineExpose({
   scrollToBottom,
-})
+});
 </script>
 
 <style scoped>

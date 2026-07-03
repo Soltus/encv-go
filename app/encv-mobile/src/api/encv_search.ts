@@ -1,27 +1,26 @@
-import { EncvTask } from './encv_tasks'
+import { getApiBaseUrl, proxySafeEncode } from "./encv_core";
 
-import { FileItem, PermissionDeniedError } from './encv_files'
-
-import { getApiBaseUrl, proxySafeEncode } from './encv_core'
+import { type FileItem, PermissionDeniedError } from "./encv_files";
+import type { EncvTask } from "./encv_tasks";
 
 // encv_search.ts - 拆分自 encv.ts
 
-
-
 export async function searchFiles(path: string, keyword: string, recursive = false): Promise<FileItem[]> {
-  const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/files/search?path=${proxySafeEncode(path)}&keyword=${encodeURIComponent(keyword)}&recursive=${recursive}`)
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${baseUrl}/api/files/search?path=${proxySafeEncode(path)}&keyword=${encodeURIComponent(keyword)}&recursive=${recursive}`
+  );
   if (!response.ok) {
     if (response.status === 403) {
-      const data = await response.json().catch(() => ({}))
-      if (data.code === 'PERMISSION_DENIED') {
-        throw new PermissionDeniedError(data.error || 'Permission denied')
+      const data = await response.json().catch(() => ({}));
+      if (data.code === "PERMISSION_DENIED") {
+        throw new PermissionDeniedError(data.error || "Permission denied");
       }
     }
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
-  const data = await response.json()
-  return data.files || []
+  const data = await response.json();
+  return data.files || [];
 }
 
 // ─── 向量搜索 API（Turso 原生向量检索 + 中文 bigram 分词）───
@@ -36,13 +35,13 @@ export async function searchFiles(path: string, keyword: string, recursive = fal
  * 前端据 searchMode 对 greedy 结果加视觉标记，让用户看出是宽松匹配。
  */
 
-export type SearchMode = 'none' | 'strict' | 'combined' | 'greedy'
+export type SearchMode = "none" | "strict" | "combined" | "greedy";
 
 export interface VectorSearchResult<T> {
-  results: T[]
-  vector_search: boolean
-  total: number
-  search_mode: SearchMode
+  results: T[];
+  vector_search: boolean;
+  total: number;
+  search_mode: SearchMode;
 }
 
 /**
@@ -50,18 +49,18 @@ export interface VectorSearchResult<T> {
  */
 
 export async function searchTasksVector(query: string, limit = 50): Promise<VectorSearchResult<EncvTask>> {
-  const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/search/tasks?q=${encodeURIComponent(query)}&limit=${limit}`)
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(`${baseUrl}/api/search/tasks?q=${encodeURIComponent(query)}&limit=${limit}`);
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
-  const data = await response.json()
+  const data = await response.json();
   return {
     results: data.tasks || [],
     vector_search: data.vector_search || false,
     total: data.total || 0,
-    search_mode: (data.search_mode as SearchMode) || 'none',
-  }
+    search_mode: (data.search_mode as SearchMode) || "none",
+  };
 }
 
 /**
@@ -69,18 +68,20 @@ export async function searchTasksVector(query: string, limit = 50): Promise<Vect
  */
 
 export async function searchFilesVector(path: string, query: string, recursive = true, limit = 50): Promise<VectorSearchResult<FileItem>> {
-  const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/search/files?q=${encodeURIComponent(query)}&path=${proxySafeEncode(path)}&recursive=${recursive}&limit=${limit}`)
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(
+    `${baseUrl}/api/search/files?q=${encodeURIComponent(query)}&path=${proxySafeEncode(path)}&recursive=${recursive}&limit=${limit}`
+  );
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
-  const data = await response.json()
+  const data = await response.json();
   return {
     results: data.files || [],
     vector_search: data.vector_search || false,
     total: data.total || 0,
-    search_mode: (data.search_mode as SearchMode) || 'none',
-  }
+    search_mode: (data.search_mode as SearchMode) || "none",
+  };
 }
 
 /**
@@ -88,39 +89,39 @@ export async function searchFilesVector(path: string, query: string, recursive =
  */
 
 export async function getSearchStats(): Promise<{ available: boolean; stats?: { files: number; tasks: number } }> {
-  const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/search/stats`)
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(`${baseUrl}/api/search/stats`);
   if (!response.ok) {
-    return { available: false }
+    return { available: false };
   }
-  return await response.json()
+  return await response.json();
 }
 
 export interface IndexStats {
-  totalFiles: number
-  totalDirs: number
-  totalSize: number
-  indexedAt: string
-  isIndexing: boolean
-  lastBuildMs: number
-  source?: string
-  containers?: number
+  totalFiles: number;
+  totalDirs: number;
+  totalSize: number;
+  indexedAt: string;
+  isIndexing: boolean;
+  lastBuildMs: number;
+  source?: string;
+  containers?: number;
 }
 
 export async function getIndexStats(): Promise<IndexStats> {
-  const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/index/stats`)
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(`${baseUrl}/api/index/stats`);
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
-  return await response.json()
+  return await response.json();
 }
 
 export async function rebuildIndex(): Promise<void> {
-  const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/index/rebuild`, { method: 'POST' })
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(`${baseUrl}/api/index/rebuild`, { method: "POST" });
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
 }
 
@@ -133,16 +134,16 @@ export async function rebuildIndex(): Promise<void> {
  * - score: bm25 相关度（负数，越小越相关）
  */
 export interface FullTextSearchResult extends FileItem {
-  snippet: string
-  hitCount: number
+  snippet: string;
+  hitCount: number;
 }
 
 export interface FullTextSearchResponse {
-  results: FullTextSearchResult[]
-  total: number
-  query: string
-  dbEngine: 'sqlite' | 'libsql' | 'none'
-  indexSize: number
+  results: FullTextSearchResult[];
+  total: number;
+  query: string;
+  dbEngine: "sqlite" | "libsql" | "none";
+  indexSize: number;
 }
 
 /**
@@ -159,56 +160,52 @@ export interface FullTextSearchResponse {
  * @param limit 最大返回数（默认 200）
  * @param pathPrefix 路径前缀过滤（可选）
  */
-export async function searchFilesFullText(
-  query: string,
-  limit = 200,
-  pathPrefix?: string,
-): Promise<FullTextSearchResponse> {
-  const baseUrl = getApiBaseUrl()
+export async function searchFilesFullText(query: string, limit = 200, pathPrefix?: string): Promise<FullTextSearchResponse> {
+  const baseUrl = getApiBaseUrl();
   const params = new URLSearchParams({
     q: query,
     limit: String(limit),
-  })
+  });
   if (pathPrefix) {
-    params.set('path_prefix', pathPrefix)
+    params.set("path_prefix", pathPrefix);
   }
-  const response = await fetch(`${baseUrl}/api/files/search-fulltext?${params.toString()}`)
+  const response = await fetch(`${baseUrl}/api/files/search-fulltext?${params.toString()}`);
   if (!response.ok) {
     if (response.status === 503) {
-      return { results: [], total: 0, query, dbEngine: 'none', indexSize: 0 }
+      return { results: [], total: 0, query, dbEngine: "none", indexSize: 0 };
     }
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
-  return await response.json()
+  return await response.json();
 }
 
 /**
  * 获取全文索引统计信息。
  */
 export interface FullTextIndexStats {
-  totalFiles: number
-  totalDirs: number
-  totalSize: number
-  indexedAt: string
-  isIndexing: boolean
-  lastBuildMs: number
-  dbPath: string
-  fts5Enabled: boolean
-  tokenizer: string
-  indexVersion: number
+  totalFiles: number;
+  totalDirs: number;
+  totalSize: number;
+  indexedAt: string;
+  isIndexing: boolean;
+  lastBuildMs: number;
+  dbPath: string;
+  fts5Enabled: boolean;
+  tokenizer: string;
+  indexVersion: number;
 }
 
 export async function getFullTextIndexStats(): Promise<{
-  available: boolean
-  stats?: FullTextIndexStats
-  error?: string
+  available: boolean;
+  stats?: FullTextIndexStats;
+  error?: string;
 }> {
-  const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/files/search-fulltext/stats`)
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(`${baseUrl}/api/files/search-fulltext/stats`);
   if (!response.ok) {
-    return { available: false, error: `HTTP ${response.status}` }
+    return { available: false, error: `HTTP ${response.status}` };
   }
-  return await response.json()
+  return await response.json();
 }
 
 /**
@@ -225,31 +222,31 @@ export async function getFullTextIndexStats(): Promise<{
  *   - 503: { error, code: "FULLTEXT_UNAVAILABLE" }  — FTS 索引未初始化
  */
 export interface FTSRebuildResponse {
-  taskId: string
-  status: string
-  runId?: string
+  taskId: string;
+  status: string;
+  runId?: string;
 }
 
 export interface FTSRebuildErrorResponse {
-  error: string
-  code: string
-  taskId?: string
-  status?: string
+  error: string;
+  code: string;
+  taskId?: string;
+  status?: string;
 }
 
 export async function rebuildFullTextIndex(): Promise<FTSRebuildResponse> {
-  const baseUrl = getApiBaseUrl()
+  const baseUrl = getApiBaseUrl();
   const response = await fetch(`${baseUrl}/api/files/search-fulltext/rebuild`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  })
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
   if (!response.ok) {
-    const errData = await response.json().catch(() => ({}) as FTSRebuildErrorResponse)
-    const err = new Error(errData.error || `HTTP ${response.status}`) as Error & FTSRebuildErrorResponse
-    err.code = errData.code
-    err.taskId = errData.taskId
-    err.status = errData.status
-    throw err
+    const errData = await response.json().catch(() => ({}) as FTSRebuildErrorResponse);
+    const err = new Error(errData.error || `HTTP ${response.status}`) as Error & FTSRebuildErrorResponse;
+    err.code = errData.code;
+    err.taskId = errData.taskId;
+    err.status = errData.status;
+    throw err;
   }
-  return await response.json()
+  return await response.json();
 }

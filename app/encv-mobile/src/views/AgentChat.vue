@@ -542,85 +542,147 @@
 // template 内直接使用的 state/handler 都在此解构到局部变量，
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
-import { IonIcon } from '@ionic/vue'
-
-import { useAgentChatView } from './useAgentChatView'
-// 多渲染引擎架构：引擎渲染包装组件
-import EngineRenderer from '@/components/agent/EngineRenderer.vue'
+import { IonIcon } from "@ionic/vue";
+import AgentDebugPanel from "@/components/agent/AgentDebugPanel.vue";
 // 以下组件现在由 DefaultMessagesView.vue 内部导入（引擎渲染路径）
-import AttachmentTray from '@/components/agent/AttachmentTray.vue'
-import MockPresetBar from '@/components/agent/MockPresetBar.vue'
-import MockBranchChoiceBar from '@/components/agent/MockBranchChoiceBar.vue'
-import AgentDebugPanel from '@/components/agent/AgentDebugPanel.vue'
-import V2QuickActions from '@/components/agent/V2QuickActions.vue'
-import V2ScenariosMenu from '@/components/agent/V2ScenariosMenu.vue'
-import SlashMenu from '@/components/agent/SlashMenu.vue'
-import ContextIcon from '@/components/agent/ContextIcon.vue'
+import AttachmentTray from "@/components/agent/AttachmentTray.vue";
+import ContextIcon from "@/components/agent/ContextIcon.vue";
+// 多渲染引擎架构：引擎渲染包装组件
+import EngineRenderer from "@/components/agent/EngineRenderer.vue";
+import MockBranchChoiceBar from "@/components/agent/MockBranchChoiceBar.vue";
+import MockPresetBar from "@/components/agent/MockPresetBar.vue";
+import SlashMenu from "@/components/agent/SlashMenu.vue";
+import V2QuickActions from "@/components/agent/V2QuickActions.vue";
+import V2ScenariosMenu from "@/components/agent/V2ScenariosMenu.vue";
+import { useAgentChatView } from "./useAgentChatView";
 
 const {
   // i18n
   t,
   // 引擎系统
-  currentEngine, currentEngineId, engineList,
-  enginePickerOpen, enginePickerRef, currentEngineDisplayName,
-  engineRenderProps, handleSwitchEngine,
+  currentEngine,
+  currentEngineId,
+  engineList,
+  enginePickerOpen,
+  enginePickerRef,
+  currentEngineDisplayName,
+  engineRenderProps,
+  handleSwitchEngine,
   // mock preset / scenario
-  mockPresetBarScenario, mockPresetBarPhase,
+  mockPresetBarScenario,
+  mockPresetBarPhase,
   // API base
   goToApiKeySettings,
   // useAgent re-exposed values
-  messages, status,
-  sessions, currentSessionId,
-  contextUsage, lastErrorCode, dismissError,
-  isMockMode, isDebugAgent, currentMockMode,
-  mockPresets, pickMockPreset,
-  rawSSEEvents, mockBranchChoices, mockBranchPrompt, mockRoundState,
-  mockScenarioPaused, currentMockScenario, pickMockBranch,
+  messages,
+  status,
+  sessions,
+  currentSessionId,
+  contextUsage,
+  lastErrorCode,
+  dismissError,
+  isMockMode,
+  isDebugAgent,
+  currentMockMode,
+  mockPresets,
+  pickMockPreset,
+  rawSSEEvents,
+  mockBranchChoices,
+  mockBranchPrompt,
+  mockRoundState,
+  mockScenarioPaused,
+  currentMockScenario,
+  pickMockBranch,
   // attachments
-  attachments, removeAttachment,
+  attachments,
+  removeAttachment,
   // renderTurnItems
   renderedItems,
   // input refs
-  inputText, inputRef, mainRef,
+  inputText,
+  inputRef,
+  mainRef,
   // pinch
   pinch,
   // icons
-  closeIcon, sparkleIcon, addIcon, sendIcon, stopIcon, keyIcon, chatbubblesIcon,
-  timeIcon, attachIcon, globeIcon, clipboardIcon, refreshCircleIcon, chevronDownIcon,
-  flaskIcon, trashIcon, checkmarkIcon,
+  closeIcon,
+  sparkleIcon,
+  addIcon,
+  sendIcon,
+  stopIcon,
+  keyIcon,
+  chatbubblesIcon,
+  timeIcon,
+  attachIcon,
+  globeIcon,
+  clipboardIcon,
+  refreshCircleIcon,
+  chevronDownIcon,
+  flaskIcon,
+  trashIcon,
+  checkmarkIcon,
   // history / LAN
   historyOpen,
-  lanAccessOpen, lanAccesses, lanAccessLoading,
-  handleRefreshLanAccess, handleUseLanAddress, handleCopyLanAccess,
+  lanAccessOpen,
+  lanAccesses,
+  lanAccessLoading,
+  handleRefreshLanAccess,
+  handleUseLanAddress,
+  handleCopyLanAccess,
   // file input
-  fileInputRef, triggerAttach, handleAttachChange,
+  fileInputRef,
+  triggerAttach,
+  handleAttachChange,
   // send
   canSend,
   // slash menu
-  slashMenu, onTextareaInput, onTextareaKeydown,
+  slashMenu,
+  onTextareaInput,
+  onTextareaKeydown,
   // models
-  availableModels, modelsLoading, modelsError,
-  selectedModel, isSelectedModelAvailable,
-  modelPickerOpen, modelPickerRef, currentModelDisplayName, selectModel,
+  availableModels,
+  modelsLoading,
+  modelsError,
+  selectedModel,
+  isSelectedModelAvailable,
+  modelPickerOpen,
+  modelPickerRef,
+  currentModelDisplayName,
+  selectModel,
   // mock mode toggle
-  mockBadgeText, mockBadgeTitle, toggleMockMode,
+  mockBadgeText,
+  mockBadgeTitle,
+  toggleMockMode,
   // session meta / send / stop / v2
-  formatSessionMeta, handleSend, handleStop,
-  onPickV2QuickAction, onPickV2Scenario,
+  formatSessionMeta,
+  handleSend,
+  handleStop,
+  onPickV2QuickAction,
+  onPickV2Scenario,
   // history
-  handleNewSessionFromHistory, handleOpenHistory, handleDeleteSession, switchSession,
+  handleNewSessionFromHistory,
+  handleOpenHistory,
+  handleDeleteSession,
+  switchSession,
   // close modal
-  handleCloseModal, handleClose,
+  handleCloseModal,
+  handleClose,
   // scroll / dot observer
   onMainScroll,
   // dot nav
-  userMessageItems, activeUserMessageIdx, onDotClick,
-  dotNavRef, isDotDragging, draggedDotIdx,
-  onDotNavPointerDown, onDotNavPointerMove, onDotNavPointerUp,
-} = useAgentChatView()
+  userMessageItems,
+  activeUserMessageIdx,
+  onDotClick,
+  dotNavRef,
+  isDotDragging,
+  draggedDotIdx,
+  onDotNavPointerDown,
+  onDotNavPointerMove,
+  onDotNavPointerUp,
+} = useAgentChatView();
 
 // 暴露给 modal container（可选）
-defineExpose({})
+defineExpose({});
 </script>
 
 <style scoped>

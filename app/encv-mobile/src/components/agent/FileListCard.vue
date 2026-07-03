@@ -61,101 +61,107 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { folderOutline, documentOutline, listOutline, hourglassOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
+import { IonIcon } from "@ionic/vue";
+import { documentOutline, folderOutline, hourglassOutline, listOutline } from "ionicons/icons";
+import { computed } from "vue";
+import { useI18n } from "@/composables/useI18n";
 
 const props = defineProps<{
   /** 后端 tool_result.result 的 JSON 字符串 */
-  resultJson: string
+  resultJson: string;
   /** 工具执行状态 */
-  status?: 'pending' | 'running' | 'success' | 'failed'
-}>()
+  status?: "pending" | "running" | "success" | "failed";
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const folderIcon = folderOutline
-const fileIcon = documentOutline
-const listIcon = listOutline
-const hourglassIcon = hourglassOutline
+const folderIcon = folderOutline;
+const fileIcon = documentOutline;
+const listIcon = listOutline;
+const hourglassIcon = hourglassOutline;
 
 interface FileRow {
-  name: string
-  size?: number
-  is_dir: boolean
-  mtime?: string
+  name: string;
+  size?: number;
+  is_dir: boolean;
+  mtime?: string;
 }
 
 const parsed = computed<{ rows: FileRow[]; error: string; isStat: boolean }>(() => {
   if (!props.resultJson) {
-    return { rows: [], error: 'empty result', isStat: false }
+    return { rows: [], error: "empty result", isStat: false };
   }
   try {
-    const raw = JSON.parse(props.resultJson)
+    const raw = JSON.parse(props.resultJson);
     // 真实 list_files handler 返回 { count, items: [...] }
     // 历史/mock 数据可能用 { files: [...] } 或裸数组
     if (Array.isArray(raw)) {
-      return { rows: raw.filter((r: FileRow) => r && typeof r.name === 'string'), error: '', isStat: false }
+      return { rows: raw.filter((r: FileRow) => r && typeof r.name === "string"), error: "", isStat: false };
     }
-    const obj = raw as { files?: FileRow[]; items?: FileRow[]; count?: number; name?: string; size?: number; is_dir?: boolean; mtime?: string }
-    const fileArray = Array.isArray(obj.files) ? obj.files
-      : Array.isArray(obj.items) ? obj.items
-      : []
+    const obj = raw as {
+      files?: FileRow[];
+      items?: FileRow[];
+      count?: number;
+      name?: string;
+      size?: number;
+      is_dir?: boolean;
+      mtime?: string;
+    };
+    const fileArray = Array.isArray(obj.files) ? obj.files : Array.isArray(obj.items) ? obj.items : [];
     if (fileArray.length > 0) {
-      return { rows: fileArray.filter((r) => r && typeof r.name === 'string'), error: '', isStat: false }
+      return { rows: fileArray.filter(r => r && typeof r.name === "string"), error: "", isStat: false };
     }
-    if (typeof obj.name === 'string') {
+    if (typeof obj.name === "string") {
       // stat_file 返回单条记录
       return {
         rows: [
           {
             name: obj.name,
-            size: typeof obj.size === 'number' ? obj.size : undefined,
+            size: typeof obj.size === "number" ? obj.size : undefined,
             is_dir: obj.is_dir === true,
-            mtime: typeof obj.mtime === 'string' ? obj.mtime : undefined,
+            mtime: typeof obj.mtime === "string" ? obj.mtime : undefined,
           },
         ],
-        error: '',
+        error: "",
         isStat: true,
-      }
+      };
     }
-    return { rows: [], error: 'unrecognized shape', isStat: false }
+    return { rows: [], error: "unrecognized shape", isStat: false };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.debug('[FileListCard] parse failed:', msg, props.resultJson)
-    return { rows: [], error: msg, isStat: false }
+    const msg = e instanceof Error ? e.message : String(e);
+    console.debug("[FileListCard] parse failed:", msg, props.resultJson);
+    return { rows: [], error: msg, isStat: false };
   }
-})
+});
 
-const rows = computed(() => parsed.value.rows)
-const visibleRows = computed(() => rows.value.slice(0, 20))
-const rawResult = computed(() => (parsed.value.error ? props.resultJson : ''))
+const rows = computed(() => parsed.value.rows);
+const visibleRows = computed(() => rows.value.slice(0, 20));
+const rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
 
 const titleText = computed(() => {
-  if (props.status === 'pending' || props.status === 'running') return t('agent.toolCards.fileListTitle') || '文件列表（查询中）'
-  if (parsed.value.error) return t('agent.toolCards.parseFailed') || '文件列表（数据异常）'
-  if (parsed.value.isStat) return t('agent.toolCards.fileStatTitle') || '文件信息'
-  return t('agent.toolCards.fileListTitle') || '文件列表'
-})
+  if (props.status === "pending" || props.status === "running") return t("agent.toolCards.fileListTitle") || "文件列表（查询中）";
+  if (parsed.value.error) return t("agent.toolCards.parseFailed") || "文件列表（数据异常）";
+  if (parsed.value.isStat) return t("agent.toolCards.fileStatTitle") || "文件信息";
+  return t("agent.toolCards.fileListTitle") || "文件列表";
+});
 
 const dataSourceTag = computed(() => {
-  if (!props.resultJson) return ''
-  const s = props.resultJson
-  if (s.includes('"FAKE":true') || s.includes('"FAKE": true')) return 'mock 数据'
-  if (s.includes('studio_video_')) return '历史 mock'
-  return ''
-})
+  if (!props.resultJson) return "";
+  const s = props.resultJson;
+  if (s.includes('"FAKE":true') || s.includes('"FAKE": true')) return "mock 数据";
+  if (s.includes("studio_video_")) return "历史 mock";
+  return "";
+});
 
 function formatSize(bytes?: number): string {
-  if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return '—'
-  if (bytes < 1024) return `${bytes} B`
-  const kb = bytes / 1024
-  if (kb < 1024) return `${kb.toFixed(1)} KB`
-  const mb = kb / 1024
-  if (mb < 1024) return `${mb.toFixed(1)} MB`
-  const gb = mb / 1024
-  return `${gb.toFixed(2)} GB`
+  if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  const gb = mb / 1024;
+  return `${gb.toFixed(2)} GB`;
 }
 </script>
 

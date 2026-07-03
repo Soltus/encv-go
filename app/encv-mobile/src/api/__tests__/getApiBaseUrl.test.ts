@@ -19,65 +19,69 @@
  * 保证 import.meta.env.DEV 真的等于预期。
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 beforeEach(() => {
-  try { localStorage.clear() } catch { /* ignore */ }
-})
+  try {
+    localStorage.clear();
+  } catch {
+    /* ignore */
+  }
+});
 
-describe('常量契约', () => {
-  it('DEFAULT_API_BASE_URL 是 encv-go 直连 :2025（APK 模式用）', async () => {
-    const mod = await import('@/api/encv')
-    expect(mod.DEFAULT_API_BASE_URL).toBe('http://127.0.0.1:2025')
-  })
+describe("常量契约", () => {
+  it("DEFAULT_API_BASE_URL 是 encv-go 直连 :2025（APK 模式用）", async () => {
+    const mod = await import("@/api/encv");
+    expect(mod.DEFAULT_API_BASE_URL).toBe("http://127.0.0.1:2025");
+  });
 
-  it('DEV_SANDBOX_ENTRY 是 preview-gateway 入口 :16666（沙箱 dev 浏览器用）', async () => {
-    const mod = await import('@/api/encv')
-    expect(mod.DEV_SANDBOX_ENTRY).toBe('http://127.0.0.1:16666')
-  })
-})
+  it("DEV_SANDBOX_ENTRY 是 preview-gateway 入口 :16666（沙箱 dev 浏览器用）", async () => {
+    const mod = await import("@/api/encv");
+    expect(mod.DEV_SANDBOX_ENTRY).toBe("http://127.0.0.1:16666");
+  });
+});
 
-describe('getApiBaseUrl — DEV 模式（沙箱 dev 浏览器）', () => {
+describe("getApiBaseUrl — DEV 模式（沙箱 dev 浏览器）", () => {
   beforeEach(async () => {
-    vi.resetModules()
-    vi.stubEnv('DEV', true)
-  })
+    vi.resetModules();
+    vi.stubEnv("DEV", true);
+  });
 
-  it('localStorage 有值 → 用 localStorage（probe commit 后）', async () => {
-    const mod = await import('@/api/encv')
-    mod.setApiBaseUrl('http://127.0.0.1:16666')
-    expect(mod.getApiBaseUrl()).toBe('http://127.0.0.1:16666')
-  })
+  it("localStorage 有值 → 用 localStorage（probe commit 后）", async () => {
+    const mod = await import("@/api/encv");
+    mod.setApiBaseUrl("http://127.0.0.1:16666");
+    expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:16666");
+  });
 
-  it('localStorage 空 → fallback 到 DEV_SANDBOX_ENTRY (:16666)，不是空字符串', async () => {
-    const mod = await import('@/api/encv')
+  it("localStorage 空 → fallback 到 DEV_SANDBOX_ENTRY (:16666)，不是空字符串", async () => {
+    const mod = await import("@/api/encv");
     // ❌ 旧 dev 行为：返回空字符串 → fetch 走相对路径 → origin 是 trae 域名 → 403
     // ✅ 新 dev 行为：fallback 到 :16666 → fetch 走沙箱内 preview-gateway 入口 → 200
-    expect(mod.getApiBaseUrl()).toBe('http://127.0.0.1:16666')
-    expect(mod.getApiBaseUrl()).not.toBe('')
-  })
+    expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:16666");
+    expect(mod.getApiBaseUrl()).not.toBe("");
+  });
 
-  it('localStorage 写任何 URL → 用 localStorage（不限制必须 :16666）', async () => {
-    const mod = await import('@/api/encv')
-    mod.setApiBaseUrl('http://10.0.0.5:9999')
-    expect(mod.getApiBaseUrl()).toBe('http://10.0.0.5:9999')
-  })
-})
+  it("localStorage 写任何 URL → 用 localStorage（不限制必须 :16666）", async () => {
+    const mod = await import("@/api/encv");
+    mod.setApiBaseUrl("http://10.0.0.5:9999");
+    expect(mod.getApiBaseUrl()).toBe("http://10.0.0.5:9999");
+  });
+});
 
-describe('getApiBaseUrl — 非 DEV 模式（生产/真机）', () => {
+describe("getApiBaseUrl — 非 DEV 模式（生产/真机）", () => {
   beforeEach(async () => {
-    vi.resetModules()
-    vi.stubEnv('DEV', false)
-  })
+    vi.resetModules();
+    vi.stubEnv("DEV", false);
+  });
 
-  it('localStorage 有值 → 用 localStorage', async () => {
-    const mod = await import('@/api/encv')
-    mod.setApiBaseUrl('http://192.168.1.99:2025')
-    expect(mod.getApiBaseUrl()).toBe('http://192.168.1.99:2025')
-  })
+  it("localStorage 有值 → 用 localStorage", async () => {
+    const mod = await import("@/api/encv");
+    mod.setApiBaseUrl("http://192.168.1.99:2025");
+    expect(mod.getApiBaseUrl()).toBe("http://192.168.1.99:2025");
+  });
 
-  it('localStorage 空 → fallback 到 DEFAULT_API_BASE_URL (:2025)', async () => {
-    const mod = await import('@/api/encv')
-    expect(mod.getApiBaseUrl()).toBe('http://127.0.0.1:2025')
-  })
-})
+  it("localStorage 空 → fallback 到 DEFAULT_API_BASE_URL (:2025)", async () => {
+    const mod = await import("@/api/encv");
+    expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2025");
+  });
+});

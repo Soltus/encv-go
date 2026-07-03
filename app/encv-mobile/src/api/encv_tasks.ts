@@ -1,93 +1,101 @@
-import { PerformanceSummary } from './encv_perf'
-
-import { getApiBaseUrl } from './encv_core'
+import { getApiBaseUrl } from "./encv_core";
+import type { PerformanceSummary } from "./encv_perf";
 
 // encv_tasks.ts - 拆分自 encv.ts
 
-
-
-export type TaskType = 'encrypt' | 'decrypt' | 'move' | 'copy' | 'rename' | 'delete'
-  | 'rollback_encrypt' | 'rollback_decrypt' | 'rollback_move' | 'rollback_copy' | 'rollback_rename' | 'rollback_delete'
-  | string
+export type TaskType =
+  | "encrypt"
+  | "decrypt"
+  | "move"
+  | "copy"
+  | "rename"
+  | "delete"
+  | "rollback_encrypt"
+  | "rollback_decrypt"
+  | "rollback_move"
+  | "rollback_copy"
+  | "rollback_rename"
+  | "rollback_delete"
+  | string;
 
 // 微服务任务类型判断：{service}.{method} 格式
 export function isMicroserviceTask(type: string): boolean {
-  return type.includes('.') && !type.startsWith('rollback_')
+  return type.includes(".") && !type.startsWith("rollback_");
 }
 
-export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'cancelling'
+export type TaskStatus = "queued" | "running" | "completed" | "failed" | "cancelled" | "cancelling";
 
 export interface TaskStep {
-  phase: string
-  startedAt: string
-  completedAt?: string
-  detail?: string
+  phase: string;
+  startedAt: string;
+  completedAt?: string;
+  detail?: string;
 }
 
 export interface EncvTask {
-  id: string
-  type: TaskType
-  sourcePath: string
-  targetPath?: string
-  pluginName?: string
-  status: TaskStatus
-  progress: number
-  phase?: string
-  speed?: string
-  eta?: string
-  error?: string
-  errorDetail?: string
-  warning?: string
-  warningDetail?: string
-  containerVersion?: number
-  outputPath?: string
-  steps?: TaskStep[]
-  createdAt: string
-  completedAt?: string
+  id: string;
+  type: TaskType;
+  sourcePath: string;
+  targetPath?: string;
+  pluginName?: string;
+  status: TaskStatus;
+  progress: number;
+  phase?: string;
+  speed?: string;
+  eta?: string;
+  error?: string;
+  errorDetail?: string;
+  warning?: string;
+  warningDetail?: string;
+  containerVersion?: number;
+  outputPath?: string;
+  steps?: TaskStep[];
+  createdAt: string;
+  completedAt?: string;
   // 🆕 2026-06-10 修复 v4：triggeredBy + runId 直接放 task 对象上
   // 历史：分组依赖 localStorage.useTaskTrigger，跨 session / localStorage 清空后全失效
   //   → 「任务组只在一开始的时候正确显示」+「插件没正确识别，任务依旧全部平铺」
   // 修复：这两个字段在 submitAction 返回时就写到 task 对象上，不再只存 localStorage
   //   - 当前 session：直接读 t.triggeredBy / t.runId（O(1) 内存访问）
   //   - 跨 session：localStorage 作 fallback（旧 task 没有这 2 字段，try useTaskTrigger）
-  triggeredBy?: 'user' | 'automation' | 'ai_agent'
-  runId?: string
+  triggeredBy?: "user" | "automation" | "ai_agent";
+  runId?: string;
   // 🆕 2026-06-18 Task 17：加解密参数回显字段
   // 后端 Task 16 持久化 cipherMode (0=AES-128-GCM, 1=AES-256-GCM) + compressionMode ('none'|'zstd')
   // 前端 Task 18 任务卡片展示用 — 刷新页面后仍能回显参数
   // optional：旧任务（Task 16 之前创建的）没有这 2 字段，反序列化时 undefined
-  cipherMode?: number
-  compressionMode?: 'none' | 'zstd'
+  cipherMode?: number;
+  compressionMode?: "none" | "zstd";
   // extraFields 已存在于 EncvTask 之外（createTask body 传），但后端 MobileTask 也有这个字段
   // 这里加上让前端能读到后端回传的 extraFields（如 plugin_password 等自定义参数）
-  extraFields?: Record<string, string>
+  extraFields?: Record<string, string>;
   // 🆕 回滚特性：rollbackOf 指向原任务 ID，originalPath 为原始路径（回滚用）
-  rollbackOf?: string
-  originalPath?: string
+  rollbackOf?: string;
+  originalPath?: string;
   // 🆕 性能指标摘要（task:completed 事件推送，仅 completed 状态有值）
-  performanceSummary?: PerformanceSummary
+  performanceSummary?: PerformanceSummary;
   /** 向量搜索相关度分数（0-1，越大越相似）。仅 /api/search/tasks 返回时填充。 */
-  searchScore?: number
+  searchScore?: number;
 
   // ─── 微服务任务字段（2026-07-03 spec microservice-kernel-task-system） ───
   /** 微服务名（如 "fts"、"vector"、"cache"、"db"、"plugin"、"tool"、"system"）。仅微服务任务有值。 */
-  serviceName?: string
+  serviceName?: string;
   /** 方法名（如 "rebuild"、"search"、"clean"、"backup"）。仅微服务任务有值。 */
-  methodName?: string
+  methodName?: string;
   /** 租户 ID（多租户隔离用）。仅微服务任务有值。 */
-  tenantId?: string
+  tenantId?: string;
   /** 执行耗时（毫秒）。仅微服务任务有值。 */
-  durationMs?: number
+  durationMs?: number;
   /** 输入参数 JSON。仅微服务任务有值。 */
-  inputJSON?: string
+  inputJSON?: string;
   /** 输出结果 JSON。仅微服务任务有值。 */
-  outputJSON?: string
+  outputJSON?: string;
   /** 重试次数。仅微服务任务有值。 */
-  attempts?: number
+  attempts?: number;
   /** 优先级（数字越大越优先）。仅微服务任务有值。 */
-  priority?: number
+  priority?: number;
   /** 自定义标签 JSON（灵活扩展）。仅微服务任务有值。 */
-  tagsJSON?: string
+  tagsJSON?: string;
 }
 
 // 🆕 2026-06-23 Task 6.1：支持分页参数（runId / offset / limit）
@@ -97,24 +105,20 @@ export interface EncvTask {
 //   - 返回格式兼容：后端返回 { tasks: [...] }，旧代码可能期望数组 → 两种都处理
 //   - X-Total-Count 响应头：过滤后、分页前的总数（第三方调用方用于分页 UI）
 
-export async function getTasks(params?: {
-  runId?: string
-  offset?: number
-  limit?: number
-}): Promise<EncvTask[]> {
-  const baseUrl = getApiBaseUrl()
-  const query = new URLSearchParams()
-  if (params?.runId) query.set('runId', params.runId)
-  if (params?.offset !== undefined) query.set('offset', String(params.offset))
-  if (params?.limit !== undefined) query.set('limit', String(params.limit))
-  const qs = query.toString()
-  const url = qs ? `${baseUrl}/api/tasks?${qs}` : `${baseUrl}/api/tasks`
-  const response = await fetch(url)
+export async function getTasks(params?: { runId?: string; offset?: number; limit?: number }): Promise<EncvTask[]> {
+  const baseUrl = getApiBaseUrl();
+  const query = new URLSearchParams();
+  if (params?.runId) query.set("runId", params.runId);
+  if (params?.offset !== undefined) query.set("offset", String(params.offset));
+  if (params?.limit !== undefined) query.set("limit", String(params.limit));
+  const qs = query.toString();
+  const url = qs ? `${baseUrl}/api/tasks?${qs}` : `${baseUrl}/api/tasks`;
+  const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
-  const data = await response.json()
-  return Array.isArray(data) ? data : (data.tasks ?? [])
+  const data = await response.json();
+  return Array.isArray(data) ? data : (data.tasks ?? []);
 }
 
 /**
@@ -134,40 +138,55 @@ export async function createTask(
   extraFields?: Record<string, string>,
   secondaryPassword?: string,
   cipherMode?: number,
-  compressionMode?: 'none' | 'zstd',
+  compressionMode?: "none" | "zstd",
   runId?: string,
-  triggeredBy?: 'user' | 'automation' | 'ai_agent',
+  triggeredBy?: "user" | "automation" | "ai_agent"
 ): Promise<EncvTask> {
-  console.info('[API] createTask:', type, sourcePath, targetPath || '',
-    'hasPassword:', !!password, 'version:', version ?? 'default',
-    'pluginName:', pluginName ?? 'auto',
-    'hasExtraFields:', extraFields && Object.keys(extraFields).length > 0,
-    'hasSecondaryPassword:', !!secondaryPassword,
-    'cipherMode:', cipherMode ?? 0,
-    'compressionMode:', compressionMode ?? 'none',
-    'runId:', runId ?? '',
-    'triggeredBy:', triggeredBy ?? 'user')
-  const baseUrl = getApiBaseUrl()
-  const body: Record<string, unknown> = { type, sourcePath }
-  if (targetPath) body.targetPath = targetPath
-  if (password) body.password = password
-  if (version) body.version = version
-  if (pluginName) body.pluginName = pluginName
-  if (extraFields && Object.keys(extraFields).length > 0) body.extraFields = extraFields
-  if (secondaryPassword) body.secondaryPassword = secondaryPassword
-  if (cipherMode !== undefined) body.cipherMode = cipherMode
-  if (compressionMode !== undefined) body.compressionMode = compressionMode
-  if (runId) body.runId = runId
-  if (triggeredBy) body.triggeredBy = triggeredBy
+  console.info(
+    "[API] createTask:",
+    type,
+    sourcePath,
+    targetPath || "",
+    "hasPassword:",
+    !!password,
+    "version:",
+    version ?? "default",
+    "pluginName:",
+    pluginName ?? "auto",
+    "hasExtraFields:",
+    extraFields && Object.keys(extraFields).length > 0,
+    "hasSecondaryPassword:",
+    !!secondaryPassword,
+    "cipherMode:",
+    cipherMode ?? 0,
+    "compressionMode:",
+    compressionMode ?? "none",
+    "runId:",
+    runId ?? "",
+    "triggeredBy:",
+    triggeredBy ?? "user"
+  );
+  const baseUrl = getApiBaseUrl();
+  const body: Record<string, unknown> = { type, sourcePath };
+  if (targetPath) body.targetPath = targetPath;
+  if (password) body.password = password;
+  if (version) body.version = version;
+  if (pluginName) body.pluginName = pluginName;
+  if (extraFields && Object.keys(extraFields).length > 0) body.extraFields = extraFields;
+  if (secondaryPassword) body.secondaryPassword = secondaryPassword;
+  if (cipherMode !== undefined) body.cipherMode = cipherMode;
+  if (compressionMode !== undefined) body.compressionMode = compressionMode;
+  if (runId) body.runId = runId;
+  if (triggeredBy) body.triggeredBy = triggeredBy;
   const response = await fetch(`${baseUrl}/api/tasks`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  })
+  });
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
-  return await response.json()
+  return await response.json();
 }
 
 // 🆕 2026-06-23 真实架构实现：批量创建 task API
@@ -188,88 +207,85 @@ export async function createTask(
 export async function batchCreateTasks(
   specs: BatchTaskSpec[],
   runId?: string,
-  triggeredBy?: 'user' | 'automation' | 'ai_agent',
+  triggeredBy?: "user" | "automation" | "ai_agent"
 ): Promise<EncvTask[]> {
-  console.info('[API] batchCreateTasks:', specs.length, 'tasks',
-    'runId:', runId ?? '', 'triggeredBy:', triggeredBy ?? 'user')
+  console.info("[API] batchCreateTasks:", specs.length, "tasks", "runId:", runId ?? "", "triggeredBy:", triggeredBy ?? "user");
 
   // 分批：每批 50 个，避免单次请求体过大或处理时间过长
-  const BATCH_SIZE = 50
+  const BATCH_SIZE = 50;
   if (specs.length <= BATCH_SIZE) {
-    return batchCreateTasksSingle(specs, runId, triggeredBy)
+    return batchCreateTasksSingle(specs, runId, triggeredBy);
   }
 
   // 分批并行提交（Promise.all），最后聚合结果
-  const batches: BatchTaskSpec[][] = []
+  const batches: BatchTaskSpec[][] = [];
   for (let i = 0; i < specs.length; i += BATCH_SIZE) {
-    batches.push(specs.slice(i, i + BATCH_SIZE))
+    batches.push(specs.slice(i, i + BATCH_SIZE));
   }
-  console.info('[API] batchCreateTasks: split into', batches.length, 'batches')
+  console.info("[API] batchCreateTasks: split into", batches.length, "batches");
 
-  const results = await Promise.all(
-    batches.map((batch) => batchCreateTasksSingle(batch, runId, triggeredBy)),
-  )
-  return results.flat()
+  const results = await Promise.all(batches.map(batch => batchCreateTasksSingle(batch, runId, triggeredBy)));
+  return results.flat();
 }
 
 /** 单批批量创建（内部函数） */
 async function batchCreateTasksSingle(
   specs: BatchTaskSpec[],
   runId?: string,
-  triggeredBy?: 'user' | 'automation' | 'ai_agent',
+  triggeredBy?: "user" | "automation" | "ai_agent"
 ): Promise<EncvTask[]> {
-  const baseUrl = getApiBaseUrl()
-  const body: Record<string, unknown> = { tasks: specs }
-  if (runId) body.runId = runId
-  if (triggeredBy) body.triggeredBy = triggeredBy
+  const baseUrl = getApiBaseUrl();
+  const body: Record<string, unknown> = { tasks: specs };
+  if (runId) body.runId = runId;
+  if (triggeredBy) body.triggeredBy = triggeredBy;
 
   // 120s 超时：大批量任务后端可能需要较长处理时间
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 120_000)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
 
   try {
     const response = await fetch(`${baseUrl}/api/tasks/batch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: controller.signal,
-    })
+    });
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return await response.json()
+    return await response.json();
   } catch (e: unknown) {
-    if (e instanceof Error && e.name === 'AbortError') {
-      throw new Error(`batchCreateTasks timed out after 120s (${specs.length} tasks)`)
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error(`batchCreateTasks timed out after 120s (${specs.length} tasks)`);
     }
-    throw e
+    throw e;
   } finally {
-    clearTimeout(timeoutId)
+    clearTimeout(timeoutId);
   }
 }
 
 // 🆕 2026-06-23：批量创建 task 的输入定义（不含 ID——ID 由后端统一生成）
 
 export interface BatchTaskSpec {
-  type: TaskType
-  sourcePath: string
-  targetPath?: string
-  password?: string
-  secondaryPassword?: string
-  version?: number
-  pluginName?: string
-  extraFields?: Record<string, string>
-  cipherMode?: number
-  compressionMode?: 'none' | 'zstd'
+  type: TaskType;
+  sourcePath: string;
+  targetPath?: string;
+  password?: string;
+  secondaryPassword?: string;
+  version?: number;
+  pluginName?: string;
+  extraFields?: Record<string, string>;
+  cipherMode?: number;
+  compressionMode?: "none" | "zstd";
 }
 
 export async function cancelTask(id: string): Promise<void> {
-  const baseUrl = getApiBaseUrl()
+  const baseUrl = getApiBaseUrl();
   const response = await fetch(`${baseUrl}/api/tasks/${id}/cancel`, {
-    method: 'POST',
-  })
+    method: "POST",
+  });
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
 }
 
@@ -278,13 +294,13 @@ export async function cancelTask(id: string): Promise<void> {
 // 调用方：useWorkflowTaskService.cancelRun
 
 export async function cancelRun(runId: string): Promise<void> {
-  const baseUrl = getApiBaseUrl()
+  const baseUrl = getApiBaseUrl();
   const response = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/cancel`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-  })
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
 }
 
@@ -296,56 +312,56 @@ export async function cancelRun(runId: string): Promise<void> {
 /** Run 聚合计数（后端 SQL COUNT + GROUP BY status 出） */
 
 export interface RunSummary {
-  runId: string
-  total: number
-  passed: number
-  failed: number
-  running: number
-  pending: number
-  cancelled: number
+  runId: string;
+  total: number;
+  passed: number;
+  failed: number;
+  running: number;
+  pending: number;
+  cancelled: number;
   /** 完成百分比（终态 task / total * 100） */
-  percent: number
+  percent: number;
 }
 
 /** Run 列表项（带 summary，避免前端 N+1 调用 /summary） */
 
 export interface RunInfo {
-  runId: string
-  startedAt: string
-  triggeredBy: string
-  summary: RunSummary
+  runId: string;
+  startedAt: string;
+  triggeredBy: string;
+  summary: RunSummary;
 }
 
 /** GET /api/runs/:runId/summary — 返回指定 run 的聚合计数 */
 
 export async function getRunSummary(runId: string): Promise<RunSummary> {
-  const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/summary`)
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(`${baseUrl}/api/runs/${encodeURIComponent(runId)}/summary`);
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
-  return (await response.json()) as RunSummary
+  return (await response.json()) as RunSummary;
 }
 
 /** GET /api/runs — 返回所有 run 列表（带 summary） */
 
 export async function listRuns(): Promise<RunInfo[]> {
-  const baseUrl = getApiBaseUrl()
-  const response = await fetch(`${baseUrl}/api/runs`)
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(`${baseUrl}/api/runs`);
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
-  const data = await response.json()
-  return data.runs ?? []
+  const data = await response.json();
+  return data.runs ?? [];
 }
 
 export async function retryTask(id: string): Promise<void> {
-  const baseUrl = getApiBaseUrl()
+  const baseUrl = getApiBaseUrl();
   const response = await fetch(`${baseUrl}/api/tasks/${id}/retry`, {
-    method: 'POST',
-  })
+    method: "POST",
+  });
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
 }
 
@@ -354,33 +370,33 @@ export async function retryTask(id: string): Promise<void> {
 //   修法：直接调 store.removeTask，走完整删除流程（store + IndexedDB + 后端 DELETE）
 
 export async function deleteTask(id: string): Promise<void> {
-  const { useTaskStore } = await import('@/stores/taskStore')
-  const store = useTaskStore()
-  await store.removeTask(id)
+  const { useTaskStore } = await import("@/stores/taskStore");
+  const store = useTaskStore();
+  await store.removeTask(id);
 }
 
 export async function removeTask(id: string): Promise<void> {
-  console.info('[API] removeTask:', id)
-  const baseUrl = getApiBaseUrl()
+  console.info("[API] removeTask:", id);
+  const baseUrl = getApiBaseUrl();
   const response = await fetch(`${baseUrl}/api/tasks/${id}`, {
-    method: 'DELETE',
-  })
+    method: "DELETE",
+  });
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
 }
 
 export async function clearCompletedTasks(): Promise<{ removed: number }> {
-  console.info('[API] clearCompletedTasks')
-  const baseUrl = getApiBaseUrl()
+  console.info("[API] clearCompletedTasks");
+  const baseUrl = getApiBaseUrl();
   const response = await fetch(`${baseUrl}/api/tasks`, {
-    method: 'DELETE',
-  })
+    method: "DELETE",
+  });
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`)
+    throw new Error(`HTTP error! status: ${response.status}`);
   }
-  const data = await response.json()
-  return { removed: data.removed ?? 0 }
+  const data = await response.json();
+  return { removed: data.removed ?? 0 };
 }
 
 /**
@@ -389,15 +405,15 @@ export async function clearCompletedTasks(): Promise<{ removed: number }> {
  */
 
 export async function rollbackTask(taskId: string): Promise<{ taskId: string }> {
-  const baseUrl = getApiBaseUrl()
+  const baseUrl = getApiBaseUrl();
   const response = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(taskId)}/rollback`, {
-    method: 'POST',
-  })
+    method: "POST",
+  });
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP error! status: ${response.status}`)
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `HTTP error! status: ${response.status}`);
   }
-  return response.json()
+  return response.json();
 }
 
 /** 🆕 回滚特性：回收站项（删除任务移入 trash 后的元数据） */

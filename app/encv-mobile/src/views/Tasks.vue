@@ -583,73 +583,164 @@
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonRefresher, IonRefresherContent, IonItem,
-  IonItemSliding, IonItemOptions, IonItemOption, IonIcon,
-  IonLabel, IonBadge, IonProgressBar, IonFab, IonFabButton,
-  IonSpinner, IonButton, IonButtons, IonSearchbar, IonChip,
-  IonPopover, IonCheckbox, IonInfiniteScroll, IonInfiniteScrollContent,
-} from '@ionic/vue'
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonCheckbox,
+  IonChip,
+  IonContent,
+  IonFab,
+  IonFabButton,
+  IonHeader,
+  IonIcon,
+  IonInfiniteScroll,
+  IonInfiniteScrollContent,
+  IonItem,
+  IonItemOption,
+  IonItemOptions,
+  IonItemSliding,
+  IonLabel,
+  IonPage,
+  IonPopover,
+  IonProgressBar,
+  IonRefresher,
+  IonRefresherContent,
+  IonSearchbar,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
 import {
-  add, closeCircle, checkmarkCircle, timer, sync,
-  warningOutline, lockClosed, lockClosedOutline, search, funnel, trashBin,
-  extensionPuzzle, swapVertical, chevronDown,
+  add,
+  albumsOutline,
+  calendarOutline,
+  checkmarkCircle,
+  chevronDown,
   chevronForward,
-  albumsOutline, listOutline, calendarOutline,
-  pin, pricetagOutline,
-} from 'ionicons/icons'
-
-import { useTasksView } from './useTasksView'
-import { formatDateTime } from '@/composables/useDateFormat'
-import { formatContainerVersion } from '@/constants/containerVersion'
-// 🆕 Task 15：虚拟滚动组件
-import TaskVirtualList from '@/components/tasks/TaskVirtualList.vue'
-// 🆕 2026-06-22 任务诊断面板（真机可见版）：?debug=tasks 启用
-import TaskDebugPanel from '@/components/tasks/TaskDebugPanel.vue'
+  closeCircle,
+  extensionPuzzle,
+  funnel,
+  listOutline,
+  lockClosed,
+  lockClosedOutline,
+  pin,
+  pricetagOutline,
+  search,
+  swapVertical,
+  sync,
+  timer,
+  trashBin,
+  warningOutline,
+} from "ionicons/icons";
 // 🆕 2026-07-02：向量搜索相关度徽章（与 Files.vue 复用同一组件）
-import RelevanceBadge from '@/components/shared/RelevanceBadge.vue'
+import RelevanceBadge from "@/components/shared/RelevanceBadge.vue";
+// 🆕 2026-06-22 任务诊断面板（真机可见版）：?debug=tasks 启用
+import TaskDebugPanel from "@/components/tasks/TaskDebugPanel.vue";
+// 🆕 Task 15：虚拟滚动组件
+import TaskVirtualList from "@/components/tasks/TaskVirtualList.vue";
+import { formatDateTime } from "@/composables/useDateFormat";
+import { formatContainerVersion } from "@/constants/containerVersion";
+import { useTasksView } from "./useTasksView";
 
 const {
   // i18n
   t,
   // virtual scroll
-  contentRef, scrollEl, virtualListRef,
+  contentRef,
+  scrollEl,
+  virtualListRef,
   // useTasksList re-exposed values
-  tasks, isInitialLoad, expandedWarningDetail, sortBy,
-  showSearch, searchQuery, showFilters,
-  filterPlugins, filterTypes, filterStatuses, filterTriggeredBy, statusOptions,
-  pluginPopoverOpen, typePopoverOpen, statusPopoverOpen, datePopoverOpen, datePopoverEvent,
-  pluginPopoverEvent, typePopoverEvent, statusPopoverEvent,
-  availablePlugins, hasActiveFilters, hasCompletedTasks, filteredTasks,
-  openPluginPopover, openTypePopover, openStatusPopover, openDatePopover,
-  togglePluginFilter, toggleTypeFilter, toggleStatusFilter, clearFilters,
-  onSearchInput, toggleSort,
-  cancelTaskById, retryTaskById, removeTaskById,
-  getTaskName, getTaskDuration,
-  getPluginChipLabel, getTypeChipLabel, getStatusChipLabel, getStatusLabel,
-  isPasswordError, toggleWarningDetail, formatWarningDetail,
-  getTaskIcon, getTaskColor, getStatusColor, getPhaseLabel,
-  getTaskSearchScore, searchMode,
-  viewMode, filterDatePreset, displayedItems,
-  groupedTasksByRunId, pinnedRunIds,
+  tasks,
+  isInitialLoad,
+  expandedWarningDetail,
+  sortBy,
+  showSearch,
+  searchQuery,
+  showFilters,
+  filterPlugins,
+  filterTypes,
+  filterStatuses,
+  filterTriggeredBy,
+  statusOptions,
+  pluginPopoverOpen,
+  typePopoverOpen,
+  statusPopoverOpen,
+  datePopoverOpen,
+  datePopoverEvent,
+  pluginPopoverEvent,
+  typePopoverEvent,
+  statusPopoverEvent,
+  availablePlugins,
+  hasActiveFilters,
+  hasCompletedTasks,
+  filteredTasks,
+  openPluginPopover,
+  openTypePopover,
+  openStatusPopover,
+  openDatePopover,
+  togglePluginFilter,
+  toggleTypeFilter,
+  toggleStatusFilter,
+  clearFilters,
+  onSearchInput,
+  toggleSort,
+  cancelTaskById,
+  retryTaskById,
+  removeTaskById,
+  getTaskName,
+  getTaskDuration,
+  getPluginChipLabel,
+  getTypeChipLabel,
+  getStatusChipLabel,
+  getStatusLabel,
+  isPasswordError,
+  toggleWarningDetail,
+  formatWarningDetail,
+  getTaskIcon,
+  getTaskColor,
+  getStatusColor,
+  getPhaseLabel,
+  getTaskSearchScore,
+  searchMode,
+  viewMode,
+  filterDatePreset,
+  displayedItems,
+  groupedTasksByRunId,
+  pinnedRunIds,
   toggleViewMode,
   workflowService,
   // infinite scroll
-  hasMore, isLoadingMore,
+  hasMore,
+  isLoadingMore,
   // group card actions
   isRunPinned,
   // modal / new task
   openNewTask,
   // triggeredBy icons
-  hardwareChipOutline, cogOutline,
+  hardwareChipOutline,
+  cogOutline,
   // inline helpers
-  debugEnabled, getTriggeredByColor, getTriggeredByIcon, getCryptoSummary,
-  openTaskDetail, handleRefresh, onInfinite, handleClearCompleted,
-  datePresets, customFromInput, customToInput,
-  onDatePresetClick, onCustomFromChange, onCustomToChange,
-  isGroupFilterActive, getGroupHitSummary,
-  openGroupDetail, onGroupTouchStart, onGroupTouchEnd, openGroupActionSheet,
-} = useTasksView()
+  debugEnabled,
+  getTriggeredByColor,
+  getTriggeredByIcon,
+  getCryptoSummary,
+  openTaskDetail,
+  handleRefresh,
+  onInfinite,
+  handleClearCompleted,
+  datePresets,
+  customFromInput,
+  customToInput,
+  onDatePresetClick,
+  onCustomFromChange,
+  onCustomToChange,
+  isGroupFilterActive,
+  getGroupHitSummary,
+  openGroupDetail,
+  onGroupTouchStart,
+  onGroupTouchEnd,
+  openGroupActionSheet,
+} = useTasksView();
 </script>
 
 

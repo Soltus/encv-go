@@ -311,137 +311,178 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonSegment, IonSegmentButton, IonLabel,
-  IonList, IonItem, IonItemSliding, IonItemOptions, IonItemOption,
-  IonIcon, IonBadge, IonFab, IonFabButton,
-  IonModal, IonButtons, IonButton,
-  IonToggle, IonNote, IonChip,
-} from '@ionic/vue'
-import { add, cloud, flash, save as saveIcon, home, globe, folderOpen, person, lockClosed, documentText, fingerPrint } from 'ionicons/icons'
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonChip,
+  IonContent,
+  IonFab,
+  IonFabButton,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonItemOption,
+  IonItemOptions,
+  IonItemSliding,
+  IonLabel,
+  IonList,
+  IonModal,
+  IonNote,
+  IonPage,
+  IonSegment,
+  IonSegmentButton,
+  IonTitle,
+  IonToggle,
+  IonToolbar,
+} from "@ionic/vue";
 import {
-  getWebDAVConfigs, saveWebDAVConfigs, testWebDAVConnection,
-  fetchRemoteInfo, addOpenlistSite, updateOpenlistSite, deleteOpenlistSite,
-} from '@/api/encv'
-import type { WebDAVConfig, RemoteWebDAVInfo, OpenlistSiteInfo, WebDAVTestResult } from '@/api/encv'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import { copyToClipboard as clipboardWrite } from '@/composables/useClipboard'
-import InputWithHistory from '@/components/InputWithHistory.vue'
-import LocalOpenListStatusCard from '@/components/LocalOpenListStatusCard.vue'
+  add,
+  cloud,
+  documentText,
+  fingerPrint,
+  flash,
+  folderOpen,
+  globe,
+  home,
+  lockClosed,
+  person,
+  save as saveIcon,
+} from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
+import type { OpenlistSiteInfo, RemoteWebDAVInfo, WebDAVConfig, WebDAVTestResult } from "@/api/encv";
+import {
+  addOpenlistSite,
+  deleteOpenlistSite,
+  fetchRemoteInfo,
+  getWebDAVConfigs,
+  saveWebDAVConfigs,
+  testWebDAVConnection,
+  updateOpenlistSite,
+} from "@/api/encv";
+import InputWithHistory from "@/components/InputWithHistory.vue";
+import LocalOpenListStatusCard from "@/components/LocalOpenListStatusCard.vue";
+import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const activeTab = ref<'webdav' | 'openlist'>('webdav')
-const webdavConfigs = ref<WebDAVConfig[]>([])
-const builtInWebdav = ref<RemoteWebDAVInfo | null>(null)
-const openlistSites = ref<Record<string, OpenlistSiteInfo>>({})
-const disabledSites = ref<Set<string>>(new Set())
+const activeTab = ref<"webdav" | "openlist">("webdav");
+const webdavConfigs = ref<WebDAVConfig[]>([]);
+const builtInWebdav = ref<RemoteWebDAVInfo | null>(null);
+const openlistSites = ref<Record<string, OpenlistSiteInfo>>({});
+const disabledSites = ref<Set<string>>(new Set());
 const openlistSiteKeys = computed(() => {
-  const all = Object.keys(openlistSites.value)
-  return [...all.filter(k => k === 'local-loopback'), ...all.filter(k => k !== 'local-loopback')]
-})
+  const all = Object.keys(openlistSites.value);
+  return [...all.filter(k => k === "local-loopback"), ...all.filter(k => k !== "local-loopback")];
+});
 
 function isLocalLoopback(key: string): boolean {
-  return key === 'local-loopback'
+  return key === "local-loopback";
 }
 
 function isSiteBuiltIn(key: string): boolean {
-  return !!openlistSites.value[key]?.isBuiltIn || isLocalLoopback(key)
+  return !!openlistSites.value[key]?.isBuiltIn || isLocalLoopback(key);
 }
 
 function isSiteDisabled(key: string): boolean {
-  return disabledSites.value.has(key)
+  return disabledSites.value.has(key);
 }
 
 function onSiteToggleChange(key: string, event: CustomEvent) {
-  const checked = !!event.detail.checked
-  const next = new Set(disabledSites.value)
+  const checked = !!event.detail.checked;
+  const next = new Set(disabledSites.value);
   if (checked) {
-    next.delete(key)
+    next.delete(key);
   } else {
-    next.add(key)
+    next.add(key);
   }
-  disabledSites.value = next
+  disabledSites.value = next;
 }
 
-const showWebdavModal = ref(false)
-const editingId = ref('')
-const testing = ref(false)
-const testingId = ref('')
-const testResult = ref<WebDAVTestResult | null>(null)
-const listTestResults = ref<Record<string, WebDAVTestResult>>({})
-const formName = ref('')
-const formUrl = ref('')
-const formUsername = ref('')
-const formPassword = ref('')
-const formMountPath = ref('')
+const showWebdavModal = ref(false);
+const editingId = ref("");
+const testing = ref(false);
+const testingId = ref("");
+const testResult = ref<WebDAVTestResult | null>(null);
+const listTestResults = ref<Record<string, WebDAVTestResult>>({});
+const formName = ref("");
+const formUrl = ref("");
+const formUsername = ref("");
+const formPassword = ref("");
+const formMountPath = ref("");
 
-const showSiteModal = ref(false)
-const editingSiteId = ref('')
-const formSiteId = ref('')
-const formHost = ref('')
-const formDescription = ref('')
-const formSiteIdError = ref('')
-const formHostError = ref('')
+const showSiteModal = ref(false);
+const editingSiteId = ref("");
+const formSiteId = ref("");
+const formHost = ref("");
+const formDescription = ref("");
+const formSiteIdError = ref("");
+const formHostError = ref("");
 
 function onTabChange() {
-  if (activeTab.value === 'openlist') {
-    loadRemoteInfo()
+  if (activeTab.value === "openlist") {
+    loadRemoteInfo();
   }
 }
 
 async function loadRemoteInfo() {
   try {
-    const info = await fetchRemoteInfo()
+    const info = await fetchRemoteInfo();
     if (info.webdav && info.webdav.enabled) {
-      builtInWebdav.value = info.webdav
+      builtInWebdav.value = info.webdav;
     } else {
-      builtInWebdav.value = null
+      builtInWebdav.value = null;
     }
-    openlistSites.value = info.openlistSites || {}
+    openlistSites.value = info.openlistSites || {};
   } catch {
     // silent
   }
 }
 
 function loadConfigs() {
-  webdavConfigs.value = getWebDAVConfigs()
+  webdavConfigs.value = getWebDAVConfigs();
 }
 
 function openNewConfig() {
-  editingId.value = ''
-  formName.value = ''
-  formUrl.value = ''
-  formUsername.value = ''
-  formPassword.value = ''
-  formMountPath.value = '/webdav'
-  testResult.value = null
-  showWebdavModal.value = true
+  editingId.value = "";
+  formName.value = "";
+  formUrl.value = "";
+  formUsername.value = "";
+  formPassword.value = "";
+  formMountPath.value = "/webdav";
+  testResult.value = null;
+  showWebdavModal.value = true;
 }
 
 function editConfig(config: WebDAVConfig) {
-  editingId.value = config.id
-  formName.value = config.name
-  formUrl.value = config.url
-  formUsername.value = config.username
-  formPassword.value = config.password
-  formMountPath.value = config.mountPath
-  testResult.value = null
-  showWebdavModal.value = true
+  editingId.value = config.id;
+  formName.value = config.name;
+  formUrl.value = config.url;
+  formUsername.value = config.username;
+  formPassword.value = config.password;
+  formMountPath.value = config.mountPath;
+  testResult.value = null;
+  showWebdavModal.value = true;
 }
 
 function saveConfig() {
-  if (!formName.value || !formUrl.value) return
-  let updated: WebDAVConfig[]
+  if (!formName.value || !formUrl.value) return;
+  let updated: WebDAVConfig[];
   if (editingId.value) {
     updated = webdavConfigs.value.map(c =>
       c.id === editingId.value
-        ? { ...c, name: formName.value, url: formUrl.value, username: formUsername.value, password: formPassword.value, mountPath: formMountPath.value }
+        ? {
+            ...c,
+            name: formName.value,
+            url: formUrl.value,
+            username: formUsername.value,
+            password: formPassword.value,
+            mountPath: formMountPath.value,
+          }
         : c
-    )
+    );
   } else {
     const newConfig: WebDAVConfig = {
       id: Date.now().toString(),
@@ -450,129 +491,164 @@ function saveConfig() {
       username: formUsername.value,
       password: formPassword.value,
       mountPath: formMountPath.value,
-    }
-    updated = [...webdavConfigs.value, newConfig]
+    };
+    updated = [...webdavConfigs.value, newConfig];
   }
-  saveWebDAVConfigs(updated)
-  webdavConfigs.value = updated
-  showWebdavModal.value = false
-  showToast({ message: t('webdav.configSaved'), duration: 1500, color: 'success' })
+  saveWebDAVConfigs(updated);
+  webdavConfigs.value = updated;
+  showWebdavModal.value = false;
+  showToast({ message: t("webdav.configSaved"), duration: 1500, color: "success" });
 }
 
 async function testConfig(config: WebDAVConfig) {
-  testingId.value = config.id
-  listTestResults.value[config.id] = { success: false, reachable: false, is_webdav: false, auth_ok: false, dir_readable: false, status_code: 0 }
+  testingId.value = config.id;
+  listTestResults.value[config.id] = {
+    success: false,
+    reachable: false,
+    is_webdav: false,
+    auth_ok: false,
+    dir_readable: false,
+    status_code: 0,
+  };
   try {
-    const result = await testWebDAVConnection({ name: config.name, url: config.url, username: config.username, password: config.password, mountPath: config.mountPath })
-    testingId.value = ''
-    listTestResults.value[config.id] = result
+    const result = await testWebDAVConnection({
+      name: config.name,
+      url: config.url,
+      username: config.username,
+      password: config.password,
+      mountPath: config.mountPath,
+    });
+    testingId.value = "";
+    listTestResults.value[config.id] = result;
   } catch (e) {
-    testingId.value = ''
-    listTestResults.value[config.id] = { success: false, reachable: false, is_webdav: false, auth_ok: false, dir_readable: false, status_code: 0, error: e instanceof Error ? e.message : String(e) }
+    testingId.value = "";
+    listTestResults.value[config.id] = {
+      success: false,
+      reachable: false,
+      is_webdav: false,
+      auth_ok: false,
+      dir_readable: false,
+      status_code: 0,
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
 }
 
 async function testConnection() {
-  if (!formUrl.value) return
-  testing.value = true
-  testResult.value = null
+  if (!formUrl.value) return;
+  testing.value = true;
+  testResult.value = null;
   try {
-    const result = await testWebDAVConnection({ name: formName.value, url: formUrl.value, username: formUsername.value, password: formPassword.value, mountPath: formMountPath.value })
-    testing.value = false
-    testResult.value = result
+    const result = await testWebDAVConnection({
+      name: formName.value,
+      url: formUrl.value,
+      username: formUsername.value,
+      password: formPassword.value,
+      mountPath: formMountPath.value,
+    });
+    testing.value = false;
+    testResult.value = result;
   } catch (e) {
-    testing.value = false
-    testResult.value = { success: false, reachable: false, is_webdav: false, auth_ok: false, dir_readable: false, status_code: 0, error: e instanceof Error ? e.message : String(e) }
+    testing.value = false;
+    testResult.value = {
+      success: false,
+      reachable: false,
+      is_webdav: false,
+      auth_ok: false,
+      dir_readable: false,
+      status_code: 0,
+      error: e instanceof Error ? e.message : String(e),
+    };
   }
 }
 
 function deleteConfig(id: string) {
-  const updated = webdavConfigs.value.filter(c => c.id !== id)
-  saveWebDAVConfigs(updated)
-  webdavConfigs.value = updated
+  const updated = webdavConfigs.value.filter(c => c.id !== id);
+  saveWebDAVConfigs(updated);
+  webdavConfigs.value = updated;
 }
 
 function validateSiteId() {
-  const val = formSiteId.value.trim()
+  const val = formSiteId.value.trim();
   if (!val) {
-    formSiteIdError.value = t('tasks.pathRequired')
+    formSiteIdError.value = t("tasks.pathRequired");
   } else if (!/^[a-zA-Z0-9_]+$/.test(val)) {
-    formSiteIdError.value = t('remote.siteIdInvalid')
+    formSiteIdError.value = t("remote.siteIdInvalid");
   } else {
-    formSiteIdError.value = ''
+    formSiteIdError.value = "";
   }
 }
 
 function validateHost() {
-  const val = formHost.value.trim()
+  const val = formHost.value.trim();
   if (!val) {
-    formHostError.value = t('tasks.pathRequired')
+    formHostError.value = t("tasks.pathRequired");
   } else {
-    formHostError.value = ''
+    formHostError.value = "";
   }
 }
 
 function openNewSite() {
-  editingSiteId.value = ''
-  formSiteId.value = ''
-  formHost.value = ''
-  formDescription.value = ''
-  formSiteIdError.value = ''
-  formHostError.value = ''
-  showSiteModal.value = true
+  editingSiteId.value = "";
+  formSiteId.value = "";
+  formHost.value = "";
+  formDescription.value = "";
+  formSiteIdError.value = "";
+  formHostError.value = "";
+  showSiteModal.value = true;
 }
 
 function editSite(key: string) {
-  editingSiteId.value = key
-  formSiteId.value = key
-  formHost.value = openlistSites.value[key]?.host || ''
-  formDescription.value = openlistSites.value[key]?.description || ''
-  formSiteIdError.value = ''
-  formHostError.value = ''
-  showSiteModal.value = true
+  editingSiteId.value = key;
+  formSiteId.value = key;
+  formHost.value = openlistSites.value[key]?.host || "";
+  formDescription.value = openlistSites.value[key]?.description || "";
+  formSiteIdError.value = "";
+  formHostError.value = "";
+  showSiteModal.value = true;
 }
 
 async function saveSite() {
-  if (!formSiteId.value || !formHost.value) return
+  if (!formSiteId.value || !formHost.value) return;
   try {
     if (editingSiteId.value) {
-      await updateOpenlistSite(editingSiteId.value, formHost.value.trim(), formDescription.value.trim())
+      await updateOpenlistSite(editingSiteId.value, formHost.value.trim(), formDescription.value.trim());
     } else {
-      await addOpenlistSite(formSiteId.value.trim(), formHost.value.trim(), formDescription.value.trim())
+      await addOpenlistSite(formSiteId.value.trim(), formHost.value.trim(), formDescription.value.trim());
     }
-    showSiteModal.value = false
-    showToast({ message: t('webdav.configSaved'), duration: 1500, color: 'success' })
-    await loadRemoteInfo()
+    showSiteModal.value = false;
+    showToast({ message: t("webdav.configSaved"), duration: 1500, color: "success" });
+    await loadRemoteInfo();
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
-    showToast({ message: detail, duration: 3000, color: 'danger' })
+    const detail = e instanceof Error ? e.message : String(e);
+    showToast({ message: detail, duration: 3000, color: "danger" });
   }
 }
 
 async function handleDeleteSite(key: string) {
   try {
-    await deleteOpenlistSite(key)
-    showToast({ message: t('webdav.configSaved'), duration: 1500, color: 'success' })
-    await loadRemoteInfo()
+    await deleteOpenlistSite(key);
+    showToast({ message: t("webdav.configSaved"), duration: 1500, color: "success" });
+    await loadRemoteInfo();
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
-    showToast({ message: detail, duration: 3000, color: 'danger' })
+    const detail = e instanceof Error ? e.message : String(e);
+    showToast({ message: detail, duration: 3000, color: "danger" });
   }
 }
 
 async function copyProxyUrl(url: string) {
-  const ok = await clipboardWrite(url)
+  const ok = await clipboardWrite(url);
   if (ok) {
-    showToast({ message: t('remote.copied'), duration: 1500, color: 'success' })
+    showToast({ message: t("remote.copied"), duration: 1500, color: "success" });
   } else {
-    showToast({ message: url, duration: 3000, color: 'medium' })
+    showToast({ message: url, duration: 3000, color: "medium" });
   }
 }
 
 onMounted(() => {
-  loadConfigs()
-  loadRemoteInfo()
-})
+  loadConfigs();
+  loadRemoteInfo();
+});
 </script>
 
 <style scoped>

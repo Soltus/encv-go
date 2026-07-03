@@ -31,85 +31,85 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from '@ionic/vue'
+import { IonIcon } from "@ionic/vue";
 import {
-  searchOutline,
   documentTextOutline,
   informationCircleOutline,
   pricetagOutline,
+  searchOutline,
   swapHorizontalOutline,
   terminalOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
+} from "ionicons/icons";
+import { useI18n } from "@/composables/useI18n";
 
 export interface V2QuickAction {
-  id: string
-  label: string
-  title: string
-  icon: string
+  id: string;
+  label: string;
+  title: string;
+  icon: string;
   /** 注入到输入框的 prompt（中文示例，会调对应 v2 工具） */
-  prompt: string
+  prompt: string;
 }
 
 defineProps<{
   /** streaming / confirming 时禁用 */
-  disabled?: boolean
-}>()
+  disabled?: boolean;
+}>();
 
 const emit = defineEmits<{
-  pick: [action: V2QuickAction]
-}>()
+  pick: [action: V2QuickAction];
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 /** 6 个 v2 工具快捷入口（按用户使用频率排序：搜索 > 读 > 元数据 > 写 > 跑命令） */
 const actions: V2QuickAction[] = [
   {
-    id: 'search',
-    label: t('agent.v2Chip.search'),
-    title: t('agent.v2Chip.searchTitle'),
+    id: "search",
+    label: t("agent.v2Chip.search"),
+    title: t("agent.v2Chip.searchTitle"),
     icon: searchOutline,
-    prompt: t('agent.v2Chip.searchPrompt'),
+    prompt: t("agent.v2Chip.searchPrompt"),
   },
   {
-    id: 'read',
-    label: t('agent.v2Chip.read'),
-    title: t('agent.v2Chip.readTitle'),
+    id: "read",
+    label: t("agent.v2Chip.read"),
+    title: t("agent.v2Chip.readTitle"),
     icon: documentTextOutline,
-    prompt: t('agent.v2Chip.readPrompt'),
+    prompt: t("agent.v2Chip.readPrompt"),
   },
   {
-    id: 'metadata',
-    label: t('agent.v2Chip.metadata'),
-    title: t('agent.v2Chip.metadataTitle'),
+    id: "metadata",
+    label: t("agent.v2Chip.metadata"),
+    title: t("agent.v2Chip.metadataTitle"),
     icon: informationCircleOutline,
-    prompt: t('agent.v2Chip.metadataPrompt'),
+    prompt: t("agent.v2Chip.metadataPrompt"),
   },
   {
-    id: 'editMetadata',
-    label: t('agent.v2Chip.editMetadata'),
-    title: t('agent.v2Chip.editMetadataTitle'),
+    id: "editMetadata",
+    label: t("agent.v2Chip.editMetadata"),
+    title: t("agent.v2Chip.editMetadataTitle"),
     icon: pricetagOutline,
-    prompt: t('agent.v2Chip.editMetadataPrompt'),
+    prompt: t("agent.v2Chip.editMetadataPrompt"),
   },
   {
-    id: 'batchRename',
-    label: t('agent.v2Chip.batchRename'),
-    title: t('agent.v2Chip.batchRenameTitle'),
+    id: "batchRename",
+    label: t("agent.v2Chip.batchRename"),
+    title: t("agent.v2Chip.batchRenameTitle"),
     icon: swapHorizontalOutline,
-    prompt: t('agent.v2Chip.batchRenamePrompt'),
+    prompt: t("agent.v2Chip.batchRenamePrompt"),
   },
   {
-    id: 'command',
-    label: t('agent.v2Chip.command'),
-    title: t('agent.v2Chip.commandTitle'),
+    id: "command",
+    label: t("agent.v2Chip.command"),
+    title: t("agent.v2Chip.commandTitle"),
     icon: terminalOutline,
-    prompt: t('agent.v2Chip.commandPrompt'),
+    prompt: t("agent.v2Chip.commandPrompt"),
   },
-]
+];
 
 function emitPick(a: V2QuickAction): void {
-  emit('pick', a)
+  emit("pick", a);
 }
 </script>
 

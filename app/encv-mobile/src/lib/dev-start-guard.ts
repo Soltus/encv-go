@@ -21,33 +21,33 @@
  *   唯一权威 = PM2 进程树。CI 永远不应跑 vite dev（应跑 build/lint/test）。
  */
 
-import type { Plugin } from 'vite'
+import type { Plugin } from "vite";
 
 export interface DevStartGuardOptions {
   /** 自定义错误信息（测试可注入） */
-  errorMessage?: string
+  errorMessage?: string;
 }
 
 export function devStartGuard(opts: DevStartGuardOptions = {}): Plugin {
   return {
-    name: 'dev-start-guard',
+    name: "dev-start-guard",
     config(_config, env) {
       // ① build 模式直接跳过 — 产线打包任何时候都应可执行
-      if (env?.command !== 'serve') return
+      if (env?.command !== "serve") return;
 
       // ② preview-gateway spawn 合法
-      if (process.env.SPAWN_VITE === '1') return
+      if (process.env.SPAWN_VITE === "1") return;
 
       // ③ PM2 管理下合法（PM2_HOME 由 agent-tool-host 或 pm2 daemon 设）
-      const isPm2 = !!process.env.PM2_HOME
+      const isPm2 = !!process.env.PM2_HOME;
 
       // ④ 唯一权威 = PM2 进程树。其他一切（CI / PPA_SPAWNED / nohup / bash -c）一律拒绝
       if (!isPm2) {
-        const msg = opts.errorMessage ?? DEFAULT_ERROR_MESSAGE
-        throw new Error(msg)
+        const msg = opts.errorMessage ?? DEFAULT_ERROR_MESSAGE;
+        throw new Error(msg);
       }
     },
-  }
+  };
 }
 
 const DEFAULT_ERROR_MESSAGE = `
@@ -73,4 +73,4 @@ const DEFAULT_ERROR_MESSAGE = `
 ║                                                          ║
 ║  预览地址：http://localhost:16666/                        ║
 ╚══════════════════════════════════════════════════════════╝
-`.trim()
+`.trim();

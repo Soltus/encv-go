@@ -99,45 +99,45 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { IonIcon, IonButton } from '@ionic/vue'
+import { IonButton, IonIcon } from "@ionic/vue";
 import {
-  terminalOutline,
-  documentTextOutline,
-  eyeOutline,
-  searchOutline,
-  ellipsisHorizontalCircleOutline,
+  alertCircleOutline,
   chevronDownOutline,
   chevronUpOutline,
-  alertCircleOutline,
   copyOutline,
-} from 'ionicons/icons'
-import StatusBadge from './StatusBadge.vue'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import type { ToolCall } from '@/composables/useAgent'
+  documentTextOutline,
+  ellipsisHorizontalCircleOutline,
+  eyeOutline,
+  searchOutline,
+  terminalOutline,
+} from "ionicons/icons";
+import { computed, ref } from "vue";
+import type { ToolCall } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
+import StatusBadge from "./StatusBadge.vue";
 
 const props = defineProps<{
-  toolCall: ToolCall
+  toolCall: ToolCall;
   /** 流式状态（running/pending 时显示脉冲动画 + 强制展开） */
-  streaming?: boolean
-}>()
+  streaming?: boolean;
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 // 折叠态：默认折叠（有内容时），streaming 强制展开
-const isCollapsed = ref(true)
+const isCollapsed = ref(true);
 // 错误详情展开态：默认折叠
-const showErrorDetails = ref(false)
+const showErrorDetails = ref(false);
 
 function toggleCollapse() {
   if (!props.streaming) {
-    isCollapsed.value = !isCollapsed.value
+    isCollapsed.value = !isCollapsed.value;
   }
 }
 
 function toggleErrorDetails() {
-  showErrorDetails.value = !showErrorDetails.value
+  showErrorDetails.value = !showErrorDetails.value;
 }
 
 /**
@@ -145,79 +145,77 @@ function toggleErrorDetails() {
  * 失败时弹 toast（不静默吞错）。
  */
 async function copyError() {
-  if (!props.toolCall.errorMessage) return
-  const text = props.toolCall.errorCode
-    ? `[${props.toolCall.errorCode}] ${props.toolCall.errorMessage}`
-    : props.toolCall.errorMessage
+  if (!props.toolCall.errorMessage) return;
+  const text = props.toolCall.errorCode ? `[${props.toolCall.errorCode}] ${props.toolCall.errorMessage}` : props.toolCall.errorMessage;
   try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
     } else {
       // fallback：textarea + execCommand
-      const ta = document.createElement('textarea')
-      ta.value = text
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.focus()
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
     }
-    showToast({ message: t('agent.copied'), color: 'success' })
+    showToast({ message: t("agent.copied"), color: "success" });
   } catch (e) {
-    console.warn('[OperationCard] copy error failed:', e)
-    showToast({ message: t('agent.copyFailed'), color: 'danger' })
+    console.warn("[OperationCard] copy error failed:", e);
+    showToast({ message: t("agent.copyFailed"), color: "danger" });
   }
 }
 
 /** 按 kind 选图标 */
 const toolIcon = computed(() => {
   switch (props.toolCall.kind) {
-    case 'command':
-      return terminalOutline
-    case 'fileChange':
-      return documentTextOutline
-    case 'readOnly':
-      return eyeOutline
-    case 'webSearch':
-      return searchOutline
+    case "command":
+      return terminalOutline;
+    case "fileChange":
+      return documentTextOutline;
+    case "readOnly":
+      return eyeOutline;
+    case "webSearch":
+      return searchOutline;
     default:
-      return ellipsisHorizontalCircleOutline
+      return ellipsisHorizontalCircleOutline;
   }
-})
+});
 
 /** ToolStatus → StatusBadge tone 映射 */
-const statusTone = computed<'ready' | 'warn' | 'idle'>(() => {
+const statusTone = computed<"ready" | "warn" | "idle">(() => {
   switch (props.toolCall.status) {
-    case 'success':
-      return 'ready'
-    case 'failed':
-    case 'cancelled':
-      return 'warn'
+    case "success":
+      return "ready";
+    case "failed":
+    case "cancelled":
+      return "warn";
     default:
       // pending / running / 其他 → idle（pulse 动画提示进行中）
-      return 'idle'
+      return "idle";
   }
-})
+});
 
 /** ToolStatus → 状态文案（覆盖 raw 英文 tag，状态语义化） */
 const statusLabel = computed(() => {
   switch (props.toolCall.status) {
-    case 'pending':
-      return t('agent.toolStatusPending')
-    case 'running':
-      return t('agent.toolStatusRunning')
-    case 'success':
-      return t('agent.toolStatusSuccess')
-    case 'failed':
-      return t('agent.toolStatusFailed')
-    case 'cancelled':
-      return t('agent.toolStatusCancelled')
+    case "pending":
+      return t("agent.toolStatusPending");
+    case "running":
+      return t("agent.toolStatusRunning");
+    case "success":
+      return t("agent.toolStatusSuccess");
+    case "failed":
+      return t("agent.toolStatusFailed");
+    case "cancelled":
+      return t("agent.toolStatusCancelled");
     default:
-      return props.toolCall.status
+      return props.toolCall.status;
   }
-})
+});
 
 /**
  * 计算耗时（毫秒）。优先级：
@@ -227,62 +225,62 @@ const statusLabel = computed(() => {
  * 返回 null 表示「非终态 / 不可计算」，不显示耗时行。
  */
 const durationMs = computed<number | null>(() => {
-  const tc = props.toolCall
+  const tc = props.toolCall;
   // 优先：用最近一条 tool_result 的 duration_ms（来自 useAgent.m.tool_results）
   // 这里用 props 没传 result，所以只能从 tc 自身找。
   // 实际上后端在 tool_result 中带了 duration_ms，但 ToolCall 类型没存。
   // 退而求其次：finishedAt - startedAt
-  if (tc.status === 'pending' || tc.status === 'running') return null
+  if (tc.status === "pending" || tc.status === "running") return null;
   if (tc.startedAt !== undefined && tc.finishedAt !== undefined) {
-    return Math.max(0, tc.finishedAt - tc.startedAt)
+    return Math.max(0, tc.finishedAt - tc.startedAt);
   }
   // 单点 finishedAt 但缺 startedAt：无法计算（避免显示 0s 误导）
-  return null
-})
+  return null;
+});
 
 /** 超过该阈值时显示"耗时较长"红色提示（spec: 5s） */
-const LONG_DURATION_MS = 5_000
+const LONG_DURATION_MS = 5_000;
 
 /** 毫秒 → "1.2s" / "850ms" 友好格式 */
 function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  const s = ms / 1000
-  if (s < 10) return `${s.toFixed(2)}s`
-  if (s < 60) return `${s.toFixed(1)}s`
-  const m = Math.floor(s / 60)
-  const rem = Math.round(s % 60)
-  return `${m}m ${rem}s`
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  if (s < 10) return `${s.toFixed(2)}s`;
+  if (s < 60) return `${s.toFixed(1)}s`;
+  const m = Math.floor(s / 60);
+  const rem = Math.round(s % 60);
+  return `${m}m ${rem}s`;
 }
 
 /** 错误 output 可能为对象/字符串，统一格式化 */
 function formatErrorOutput(output: unknown): string {
-  if (output === null || output === undefined) return '(empty)'
-  if (typeof output === 'string') return output
+  if (output === null || output === undefined) return "(empty)";
+  if (typeof output === "string") return output;
   try {
-    return JSON.stringify(output, null, 2)
+    return JSON.stringify(output, null, 2);
   } catch {
-    return String(output)
+    return String(output);
   }
 }
 
 function truncateArgs(args: string): string {
-  if (!args || args.length <= 120) return args || ''
-  return args.slice(0, 120) + '…'
+  if (!args || args.length <= 120) return args || "";
+  return args.slice(0, 120) + "…";
 }
 
 /** v2 工具名集合：7 个 v2 工具 + 它们的 v1 名称（向后兼容） */
 const V2_TOOL_NAMES = new Set<string>([
-  'search_files',
-  'read_file_v2',
-  'get_metadata',
-  'edit_metadata',
-  'batch_rename',
-  'delete_file',
-  'command_run',
-])
+  "search_files",
+  "read_file_v2",
+  "get_metadata",
+  "edit_metadata",
+  "batch_rename",
+  "delete_file",
+  "command_run",
+]);
 
 /** 当前 toolCall 是否是 v2 工具（用于显示 v2 badge） */
-const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name))
+const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
 </script>
 
 <style scoped>

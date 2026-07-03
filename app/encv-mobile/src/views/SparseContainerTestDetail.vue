@@ -196,89 +196,100 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonLabel, IonInput,
-  IonIcon, IonSpinner, IonBadge, alertController,
-} from '@ionic/vue'
+  alertController,
+  IonBackButton,
+  IonBadge,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonInput,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { createOutline, informationCircleOutline, searchOutline, trashOutline, warningOutline } from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
 import {
-  createOutline, searchOutline, trashOutline,
-  informationCircleOutline, warningOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import { isNative } from '@/plugins/GoProcess'
-import {
-  writeSparseContainer, probeSparseContainer, cleanupSparseContainer,
-  type SparseContainerResponse, type SparseContainerProbeResponse,
-} from '@/api/sparseContainer'
+  cleanupSparseContainer,
+  probeSparseContainer,
+  type SparseContainerProbeResponse,
+  type SparseContainerResponse,
+  writeSparseContainer,
+} from "@/api/sparseContainer";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
+import { isNative } from "@/plugins/GoProcess";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 // 默认值与 Go testutil.DefaultSparseConfig 对齐
 // 🆕 2026-06-11 v3 修正：物理分片 = 128GB (131072 MB) — 真机 ECv4 实际场景
 //   沙箱仍可用 0 (sparse main file) 验证，但真机要测的就是 100 个 128G .part 物理分片
-const DEFAULT_FRAGMENT_COUNT = 100
-const DEFAULT_FRAGMENT_SIZE_GB = 128
-const DEFAULT_PHYSICAL_CHUNK_MB = 131072  // 128GB = 128 × 1024 MB
-const DEFAULT_OUTPUT_DIR = '/tmp/encv-sparse-test'
+const DEFAULT_FRAGMENT_COUNT = 100;
+const DEFAULT_FRAGMENT_SIZE_GB = 128;
+const DEFAULT_PHYSICAL_CHUNK_MB = 131072; // 128GB = 128 × 1024 MB
+const DEFAULT_OUTPUT_DIR = "/tmp/encv-sparse-test";
 
 const cfg = ref({
   fragmentCount: DEFAULT_FRAGMENT_COUNT,
   fragmentSizeGB: DEFAULT_FRAGMENT_SIZE_GB,
   physicalChunkMB: DEFAULT_PHYSICAL_CHUNK_MB,
   outputDir: DEFAULT_OUTPUT_DIR,
-  baseName: 'huge-100x128gb',
-})
+  baseName: "huge-100x128gb",
+});
 
-const isWriting = ref(false)
-const isProbing = ref(false)
-const isCleaning = ref(false)
-const lastResult = ref<SparseContainerResponse | null>(null)
-const lastProbe = ref<SparseContainerProbeResponse | null>(null)
-const storageEstimate = ref<{ quota: number; usage: number } | null>(null)
+const isWriting = ref(false);
+const isProbing = ref(false);
+const isCleaning = ref(false);
+const lastResult = ref<SparseContainerResponse | null>(null);
+const lastProbe = ref<SparseContainerProbeResponse | null>(null);
+const storageEstimate = ref<{ quota: number; usage: number } | null>(null);
 
-const proposedBytes = computed(
-  () => Number(cfg.value.fragmentCount || 0) * Number(cfg.value.fragmentSizeGB || 0) * (1024 ** 3),
-)
+const proposedBytes = computed(() => Number(cfg.value.fragmentCount || 0) * Number(cfg.value.fragmentSizeGB || 0) * 1024 ** 3);
 
 const isHighRisk = computed(() => {
   // 浏览器 / Capacitor web fallback 都没有 quota 字段：> 1TB 视为高风险
   if (!storageEstimate.value || !storageEstimate.value.quota) {
-    return proposedBytes.value > 1024 ** 4
+    return proposedBytes.value > 1024 ** 4;
   }
-  return proposedBytes.value > storageEstimate.value.quota * 0.5
-})
+  return proposedBytes.value > storageEstimate.value.quota * 0.5;
+});
 
 const sparseRatioText = computed(() => {
-  if (!lastResult.value) return ''
-  const { virtualTotalBytes, physicalUsedBytes } = lastResult.value
-  if (physicalUsedBytes === 0) return `∞ (${formatBytes(virtualTotalBytes)} / 0 B)`
-  const ratio = virtualTotalBytes / physicalUsedBytes
-  const left = formatBytes(virtualTotalBytes)
-  const right = formatBytes(physicalUsedBytes)
-  if (ratio > 1e6) return `${(ratio / 1e6).toFixed(2)}M× (${left} / ${right})`
-  if (ratio > 1e3) return `${(ratio / 1e3).toFixed(2)}K× (${left} / ${right})`
-  return `${ratio.toFixed(2)}× (${left} / ${right})`
-})
+  if (!lastResult.value) return "";
+  const { virtualTotalBytes, physicalUsedBytes } = lastResult.value;
+  if (physicalUsedBytes === 0) return `∞ (${formatBytes(virtualTotalBytes)} / 0 B)`;
+  const ratio = virtualTotalBytes / physicalUsedBytes;
+  const left = formatBytes(virtualTotalBytes);
+  const right = formatBytes(physicalUsedBytes);
+  if (ratio > 1e6) return `${(ratio / 1e6).toFixed(2)}M× (${left} / ${right})`;
+  if (ratio > 1e3) return `${(ratio / 1e3).toFixed(2)}K× (${left} / ${right})`;
+  return `${ratio.toFixed(2)}× (${left} / ${right})`;
+});
 
 function formatBytes(n: number | string | undefined | null): string {
-  const v = Number(n)
-  if (!Number.isFinite(v) || v < 0) return '?'
-  if (v >= 1024 ** 4) return `${(v / 1024 ** 4).toFixed(2)} TB`
-  if (v >= 1024 ** 3) return `${(v / 1024 ** 3).toFixed(2)} GB`
-  if (v >= 1024 ** 2) return `${(v / 1024 ** 2).toFixed(2)} MB`
-  if (v >= 1024) return `${(v / 1024).toFixed(2)} KB`
-  return `${v} B`
+  const v = Number(n);
+  if (!Number.isFinite(v) || v < 0) return "?";
+  if (v >= 1024 ** 4) return `${(v / 1024 ** 4).toFixed(2)} TB`;
+  if (v >= 1024 ** 3) return `${(v / 1024 ** 3).toFixed(2)} GB`;
+  if (v >= 1024 ** 2) return `${(v / 1024 ** 2).toFixed(2)} MB`;
+  if (v >= 1024) return `${(v / 1024).toFixed(2)} KB`;
+  return `${v} B`;
 }
 
 onMounted(async () => {
   // 真机降级：拉 storage estimate
-  if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
+  if (typeof navigator !== "undefined" && navigator.storage?.estimate) {
     try {
-      const est = await navigator.storage.estimate()
-      storageEstimate.value = { quota: est.quota ?? 0, usage: est.usage ?? 0 }
+      const est = await navigator.storage.estimate();
+      storageEstimate.value = { quota: est.quota ?? 0, usage: est.usage ?? 0 };
     } catch {
       // 浏览器可能无 StorageManager
     }
@@ -286,33 +297,33 @@ onMounted(async () => {
   // 沙箱（isNative=false）：用 sparse main file 验证（physicalChunkMB=0，物理占用 ~16KB）
   // 真机（isNative=true）：默认 128GB 物理分片（131072 MB）—— 这就是 ECv4 真机要测的
   if (!isNative() && Number(cfg.value.physicalChunkMB) === 131072) {
-    cfg.value.physicalChunkMB = 0
+    cfg.value.physicalChunkMB = 0;
   }
-})
+});
 
 async function confirmIfHighRisk(): Promise<boolean> {
-  if (!isHighRisk.value) return true
+  if (!isHighRisk.value) return true;
   const alert = await alertController.create({
-    header: t('devtools.sparseContainer.highRiskTitle'),
-    message: t('devtools.sparseContainer.highRiskMessage', {
+    header: t("devtools.sparseContainer.highRiskTitle"),
+    message: t("devtools.sparseContainer.highRiskMessage", {
       proposed: formatBytes(proposedBytes.value),
       quota: formatBytes(storageEstimate.value?.quota ?? 0),
     }),
     buttons: [
-      { text: t('common.cancel'), role: 'cancel' },
-      { text: t('common.confirm'), role: 'confirm' },
+      { text: t("common.cancel"), role: "cancel" },
+      { text: t("common.confirm"), role: "confirm" },
     ],
-  })
-  await alert.present()
-  const { role } = await alert.onDidDismiss()
-  return role === 'confirm'
+  });
+  await alert.present();
+  const { role } = await alert.onDidDismiss();
+  return role === "confirm";
 }
 
 async function handleWrite() {
-  if (isWriting.value) return
-  if (!await confirmIfHighRisk()) return
-  isWriting.value = true
-  lastProbe.value = null
+  if (isWriting.value) return;
+  if (!(await confirmIfHighRisk())) return;
+  isWriting.value = true;
+  lastProbe.value = null;
   try {
     lastResult.value = await writeSparseContainer({
       outputDir: cfg.value.outputDir,
@@ -322,90 +333,90 @@ async function handleWrite() {
       physicalChunkMB: Number(cfg.value.physicalChunkMB),
       cipherMode: 0,
       containerType: 1,
-    })
+    });
     showToast({
-      message: t('devtools.sparseContainer.writeSuccess', {
+      message: t("devtools.sparseContainer.writeSuccess", {
         virtual: formatBytes(lastResult.value.virtualTotalBytes),
         physical: formatBytes(lastResult.value.physicalUsedBytes),
       }),
       duration: 3000,
-      color: 'success',
-    })
+      color: "success",
+    });
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
+    const detail = e instanceof Error ? e.message : String(e);
     showToast({
-      message: `${t('devtools.sparseContainer.writeFailed')}: ${detail}`,
+      message: `${t("devtools.sparseContainer.writeFailed")}: ${detail}`,
       duration: 4000,
-      color: 'danger',
-    })
+      color: "danger",
+    });
   } finally {
-    isWriting.value = false
+    isWriting.value = false;
   }
 }
 
 async function handleProbe() {
-  if (isProbing.value || !lastResult.value) return
-  isProbing.value = true
+  if (isProbing.value || !lastResult.value) return;
+  isProbing.value = true;
   try {
     lastProbe.value = await probeSparseContainer({
       mainPath: lastResult.value.mainFilePath,
       fragmentIdx: 0,
       fragmentSizeGB: Number(cfg.value.fragmentSizeGB),
-    })
+    });
     showToast({
-      message: t('devtools.sparseContainer.probeSuccess'),
+      message: t("devtools.sparseContainer.probeSuccess"),
       duration: 2000,
-      color: 'success',
-    })
+      color: "success",
+    });
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
+    const detail = e instanceof Error ? e.message : String(e);
     showToast({
-      message: `${t('devtools.sparseContainer.probeFailed')}: ${detail}`,
+      message: `${t("devtools.sparseContainer.probeFailed")}: ${detail}`,
       duration: 4000,
-      color: 'danger',
-    })
+      color: "danger",
+    });
   } finally {
-    isProbing.value = false
+    isProbing.value = false;
   }
 }
 
 async function handleCleanup() {
-  if (isCleaning.value || !lastResult.value) return
+  if (isCleaning.value || !lastResult.value) return;
   const alert = await alertController.create({
-    header: t('devtools.sparseContainer.cleanupConfirm'),
-    message: t('devtools.sparseContainer.cleanupConfirmMessage', {
+    header: t("devtools.sparseContainer.cleanupConfirm"),
+    message: t("devtools.sparseContainer.cleanupConfirmMessage", {
       path: lastResult.value.mainFilePath,
     }),
     buttons: [
-      { text: t('common.cancel'), role: 'cancel' },
-      { text: t('common.confirm'), role: 'confirm' },
+      { text: t("common.cancel"), role: "cancel" },
+      { text: t("common.confirm"), role: "confirm" },
     ],
-  })
-  await alert.present()
-  const { role } = await alert.onDidDismiss()
-  if (role !== 'confirm') return
-  isCleaning.value = true
+  });
+  await alert.present();
+  const { role } = await alert.onDidDismiss();
+  if (role !== "confirm") return;
+  isCleaning.value = true;
   try {
     await cleanupSparseContainer({
       outputDir: cfg.value.outputDir,
       baseName: cfg.value.baseName,
-    })
+    });
     showToast({
-      message: t('devtools.sparseContainer.cleanupSuccess'),
+      message: t("devtools.sparseContainer.cleanupSuccess"),
       duration: 2000,
-      color: 'success',
-    })
-    lastResult.value = null
-    lastProbe.value = null
+      color: "success",
+    });
+    lastResult.value = null;
+    lastProbe.value = null;
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
+    const detail = e instanceof Error ? e.message : String(e);
     showToast({
-      message: `${t('devtools.sparseContainer.cleanupFailed')}: ${detail}`,
+      message: `${t("devtools.sparseContainer.cleanupFailed")}: ${detail}`,
       duration: 4000,
-      color: 'danger',
-    })
+      color: "danger",
+    });
   } finally {
-    isCleaning.value = false
+    isCleaning.value = false;
   }
 }
 </script>

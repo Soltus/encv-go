@@ -18,29 +18,29 @@
  *   - 所以走 console 路线 + 在 helper 里加结构化前缀
  */
 
-import { getAgentApiBaseContext } from './useAgentApiBase'
+import { getAgentApiBaseContext } from "./useAgentApiBase";
 
 export type ApiErrorKind =
-  | 'encrypt'         // POST /api/encrypt-key
-  | 'decrypt'         // POST /api/decrypt-key
-  | 'fetch-models'    // GET  /api/models
-  | 'test'            // GET  /test
-  | 'roundtrip'       // 本地合成：encrypt → decrypt 验证一致性
-  | 'sync-doctor'     // GET  /api/sync/doctor
-  | 'sync-doctor-copy' // 用户点击 "复制诊断 JSON" 失败
-  | 'lan-access'      // GET  /api/network/lan-access
-  | 'fork'            // POST /api/agent/fork
-  | 'replay'          // POST /api/agent/replay
-  | 'skills'          // GET  /api/skills
-  | 'unknown'
+  | "encrypt" // POST /api/encrypt-key
+  | "decrypt" // POST /api/decrypt-key
+  | "fetch-models" // GET  /api/models
+  | "test" // GET  /test
+  | "roundtrip" // 本地合成：encrypt → decrypt 验证一致性
+  | "sync-doctor" // GET  /api/sync/doctor
+  | "sync-doctor-copy" // 用户点击 "复制诊断 JSON" 失败
+  | "lan-access" // GET  /api/network/lan-access
+  | "fork" // POST /api/agent/fork
+  | "replay" // POST /api/agent/replay
+  | "skills" // GET  /api/skills
+  | "unknown";
 
 export interface ApiErrorContext {
-  kind: ApiErrorKind
-  endpoint: string          // 如 '/api/encrypt-key'
-  status?: number           // HTTP status
-  body?: string             // response body 文本
-  deviceId?: string         // 设备指纹
-  extra?: Record<string, unknown>
+  kind: ApiErrorKind;
+  endpoint: string; // 如 '/api/encrypt-key'
+  status?: number; // HTTP status
+  body?: string; // response body 文本
+  deviceId?: string; // 设备指纹
+  extra?: Record<string, unknown>;
 }
 
 /**
@@ -49,8 +49,8 @@ export interface ApiErrorContext {
  * 字符串格式：固定前缀 [AGENT-API] 便于 DevLogs 搜索过滤
  */
 export function devlogApiError(err: unknown, ctx: ApiErrorContext): void {
-  const base = getAgentApiBaseContext()
-  const errMsg = err instanceof Error ? err.message : String(err)
+  const base = getAgentApiBaseContext();
+  const errMsg = err instanceof Error ? err.message : String(err);
   const payload = {
     kind: ctx.kind,
     endpoint: ctx.endpoint,
@@ -58,30 +58,28 @@ export function devlogApiError(err: unknown, ctx: ApiErrorContext): void {
     baseSource: base.source,
     isNative: base.isNative,
     env: base.env,
-    deviceId: ctx.deviceId ? `${ctx.deviceId.slice(0, 8)}…` : 'n/a',
-    status: ctx.status ?? 'n/a',
-    body: ctx.body ? ctx.body.slice(0, 200) : 'n/a',
+    deviceId: ctx.deviceId ? `${ctx.deviceId.slice(0, 8)}…` : "n/a",
+    status: ctx.status ?? "n/a",
+    body: ctx.body ? ctx.body.slice(0, 200) : "n/a",
     err: errMsg.slice(0, 200),
     ...ctx.extra,
-  }
+  };
   // 拼成单行 JSON：DevLogs 表格 / logcat 都更易解析
   console.error(
     `[AGENT-API] ${ctx.kind} failed → ${ctx.endpoint}\n` +
-    `  base=${base.base} (${base.source})\n` +
-    `  status=${payload.status} device=${payload.deviceId} env=${base.env} native=${base.isNative}\n` +
-    `  err=${payload.err}\n` +
-    `  body=${payload.body}` +
-    (ctx.extra ? `\n  extra=${JSON.stringify(ctx.extra)}` : ''),
-  )
+      `  base=${base.base} (${base.source})\n` +
+      `  status=${payload.status} device=${payload.deviceId} env=${base.env} native=${base.isNative}\n` +
+      `  err=${payload.err}\n` +
+      `  body=${payload.body}` +
+      (ctx.extra ? `\n  extra=${JSON.stringify(ctx.extra)}` : "")
+  );
 }
 
 /**
  * 推一条 info 级日志（如 round-trip OK）
  */
 export function devlogApiInfo(msg: string, ctx?: Partial<ApiErrorContext>): void {
-  const base = getAgentApiBaseContext()
-  const tag = ctx?.kind ? `[AGENT-API] ${ctx.kind}` : '[AGENT-API]'
-  console.info(
-    `${tag} ${msg}\n  base=${base.base} (${base.source})${ctx?.status ? ` status=${ctx.status}` : ''}`,
-  )
+  const base = getAgentApiBaseContext();
+  const tag = ctx?.kind ? `[AGENT-API] ${ctx.kind}` : "[AGENT-API]";
+  console.info(`${tag} ${msg}\n  base=${base.base} (${base.source})${ctx?.status ? ` status=${ctx.status}` : ""}`);
 }

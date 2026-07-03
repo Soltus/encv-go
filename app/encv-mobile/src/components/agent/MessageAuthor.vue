@@ -17,19 +17,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import type { Component } from 'vue'
+import { IonIcon } from "@ionic/vue";
+import type { Component } from "vue";
+import { computed } from "vue";
 
 const props = defineProps<{
-  icon: Component | string
-  label: string
-  meta?: string
+  icon: Component | string;
+  label: string;
+  meta?: string;
   /** 控制头像底色变体（可选） */
-  variant?: 'default' | 'streaming' | 'error' | 'tool'
-}>()
+  variant?: "default" | "streaming" | "error" | "tool";
+}>();
 
-const variant = computed(() => props.variant || 'default')
+const variant = computed(() => props.variant || "default");
 </script>
 
 <style scoped>

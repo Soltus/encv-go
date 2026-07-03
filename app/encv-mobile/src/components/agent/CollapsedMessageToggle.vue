@@ -23,21 +23,21 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from '@ionic/vue'
-import { chevronUpOutline, chevronDownOutline } from 'ionicons/icons'
-import type { Component } from 'vue'
+import { IonIcon } from "@ionic/vue";
+import { chevronDownOutline, chevronUpOutline } from "ionicons/icons";
+import type { Component } from "vue";
 
 defineProps<{
-  icon: Component | string
-  label: string
-  meta?: string
-  expanded: boolean
-  active?: boolean
-  onToggle: () => void
-}>()
+  icon: Component | string;
+  label: string;
+  meta?: string;
+  expanded: boolean;
+  active?: boolean;
+  onToggle: () => void;
+}>();
 
-const chevronUp = chevronUpOutline
-const chevronDown = chevronDownOutline
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
 </script>
 
 <style scoped>

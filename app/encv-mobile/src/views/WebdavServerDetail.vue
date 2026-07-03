@@ -51,56 +51,49 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
 import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
   IonBackButton,
+  IonButton,
+  IonButtons,
   IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
   IonList,
   IonListHeader,
-  IonLabel,
-  IonButton,
-  IonItem,
-  IonIcon,
+  IonPage,
   IonSpinner,
-} from '@ionic/vue'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import { useConfig } from '@/composables/useConfig'
-import { parseSchema } from '@/config/schemaParser'
-import type { FieldDef } from '@/config/schemaParser'
-import { modalController } from '@ionic/vue'
-import { testLocalWebDAV } from '@/api/encv'
-import FilePickerModal from '@/components/FilePickerModal.vue'
-import ConfigFieldItem from '@/components/ConfigFieldItem.vue'
-import {
-  globeOutline,
-  lockClosed,
-  personOutline,
-  folderOpen,
-  documentText,
-  settingsOutline,
-} from 'ionicons/icons'
+  IonTitle,
+  IonToolbar,
+  modalController,
+} from "@ionic/vue";
+import { documentText, folderOpen, globeOutline, lockClosed, personOutline, settingsOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
+import { testLocalWebDAV } from "@/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
+import FilePickerModal from "@/components/FilePickerModal.vue";
+import { useConfig } from "@/composables/useConfig";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
+import type { FieldDef } from "@/config/schemaParser";
+import { parseSchema } from "@/config/schemaParser";
 
-const { t } = useI18n()
-const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig()
+const { t } = useI18n();
+const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig();
 
-const SECTION_KEY = 'webdav'
+const SECTION_KEY = "webdav";
 
-const sectionDef = computed(() => parseSchema().find(s => s.key === SECTION_KEY))
-const childFields = computed(() => sectionDef.value?.properties ?? [])
-const webdavTesting = ref(false)
+const sectionDef = computed(() => parseSchema().find(s => s.key === SECTION_KEY));
+const childFields = computed(() => sectionDef.value?.properties ?? []);
+const webdavTesting = ref(false);
 
 function tField(key: string): string {
-  return t(`settings.${key}`)
+  return t(`settings.${key}`);
 }
 
 function fieldLabel(key: string, required?: boolean): string {
-  return tField(key) + (required ? ' *' : '')
+  return tField(key) + (required ? " *" : "");
 }
 
 const fieldIconMap: Record<string, string> = {
@@ -108,96 +101,96 @@ const fieldIconMap: Record<string, string> = {
   dir: folderOpen,
   username: personOutline,
   password: lockClosed,
-}
+};
 
 function getFieldIcon(fieldKey: string, fieldType: string): string {
-  if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey]
-  if (fieldType === 'boolean') return settingsOutline
-  if (fieldType === 'integer') return globeOutline
-  if (fieldKey.includes('password')) return lockClosed
-  return globeOutline
+  if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey];
+  if (fieldType === "boolean") return settingsOutline;
+  if (fieldType === "integer") return globeOutline;
+  if (fieldKey.includes("password")) return lockClosed;
+  return globeOutline;
 }
 
 function setValue(path: string[], value: unknown) {
-  setFieldValue(path, value)
+  setFieldValue(path, value);
 }
 
 function handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
-  const val = (event.target as HTMLInputElement).value
-  if (path.length >= 2 && path[1] === 'root' && val) {
-    const err = validateWebdavRoute(val)
+  const val = (event.target as HTMLInputElement).value;
+  if (path.length >= 2 && path[1] === "root" && val) {
+    const err = validateWebdavRoute(val);
     if (err) {
-      showToast({ message: err, duration: 3000, color: 'danger' })
-      return
+      showToast({ message: err, duration: 3000, color: "danger" });
+      return;
     }
   }
-  if (_field.type === 'integer') {
-    setFieldValue(path, val ? Number(val) : 0)
+  if (_field.type === "integer") {
+    setFieldValue(path, val ? Number(val) : 0);
   } else {
-    setFieldValue(path, val)
+    setFieldValue(path, val);
   }
 }
 
 function validateWebdavRoute(val: string): string | null {
-  if (!val.startsWith('/')) return t('settings.webdavRootMustStartSlash')
-  const invalidChars = /[^\w\-./]/
-  if (invalidChars.test(val)) return t('settings.webdavRootInvalidChars')
-  return null
+  if (!val.startsWith("/")) return t("settings.webdavRootMustStartSlash");
+  const invalidChars = /[^\w\-./]/;
+  if (invalidChars.test(val)) return t("settings.webdavRootInvalidChars");
+  return null;
 }
 
 async function handleBrowsePath(path: string[], field: FieldDef) {
-  const isFolder = field.key !== 'file'
-  const currentVal = String(getFieldValue(path) || '/')
+  const isFolder = field.key !== "file";
+  const currentVal = String(getFieldValue(path) || "/");
   const modal = await modalController.create({
     component: FilePickerModal,
     componentProps: {
       initialPath: currentVal,
-      mode: isFolder ? 'folder' : 'file',
-      title: `Select ${isFolder ? 'Directory' : 'File'}`,
+      mode: isFolder ? "folder" : "file",
+      title: `Select ${isFolder ? "Directory" : "File"}`,
     },
-  })
-  await modal.present()
-  const result = await modal.onDidDismiss<string>()
+  });
+  await modal.present();
+  const result = await modal.onDidDismiss<string>();
   if (result.data && result.data !== currentVal) {
-    setFieldValue(path, result.data)
+    setFieldValue(path, result.data);
   }
 }
 
 async function handleSave() {
   try {
-    await saveConfig()
-    showToast({ message: t('settings.configSaved'), duration: 1500, color: 'success' })
+    await saveConfig();
+    showToast({ message: t("settings.configSaved"), duration: 1500, color: "success" });
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
-    showToast({ message: t('settings.configSaveFailed') + ': ' + detail, duration: 3000, color: 'danger' })
+    const detail = e instanceof Error ? e.message : String(e);
+    showToast({ message: t("settings.configSaveFailed") + ": " + detail, duration: 3000, color: "danger" });
   }
 }
 
 async function handleTestWebdav() {
-  webdavTesting.value = true
+  webdavTesting.value = true;
   try {
-    const result = await testLocalWebDAV()
+    const result = await testLocalWebDAV();
     if (!result.available) {
       showToast({
-        message: t('settings.webdavTestFailed') + ': ' + (result.error || 'WebDAV not enabled'),
+        message: t("settings.webdavTestFailed") + ": " + (result.error || "WebDAV not enabled"),
         duration: 4000,
-        color: 'danger',
-      })
+        color: "danger",
+      });
     } else {
       showToast({
-        message: t('settings.webdavTestSuccess') + ` (${result.url})`,
+        message: t("settings.webdavTestSuccess") + ` (${result.url})`,
         duration: 3000,
-        color: 'success',
-      })
+        color: "success",
+      });
     }
   } catch (e) {
     showToast({
-      message: t('settings.webdavTestFailed') + ': ' + (e instanceof Error ? e.message : String(e)),
+      message: t("settings.webdavTestFailed") + ": " + (e instanceof Error ? e.message : String(e)),
       duration: 4000,
-      color: 'danger',
-    })
+      color: "danger",
+    });
   } finally {
-    webdavTesting.value = false
+    webdavTesting.value = false;
   }
 }
 </script>

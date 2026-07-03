@@ -68,8 +68,8 @@
 </template>
 
 <script setup lang="ts" generic="T">
-import { computed, watch } from 'vue'
-import { useVirtualizer } from '@tanstack/vue-virtual'
+import { useVirtualizer } from "@tanstack/vue-virtual";
+import { computed, watch } from "vue";
 
 /**
  * 🆕 2026-06-23 Task 8：重构为 count + getItem 接口
@@ -86,17 +86,17 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
  */
 interface Props {
   /** 显示项总数（virtualizer 用此值计算滚动范围） */
-  count: number
+  count: number;
   /** 按 index 获取 item（virtualizer 只对可见窗口调用，O(1)） */
-  getItem: (index: number) => T
+  getItem: (index: number) => T;
   /** 按 index 获取 key（用于 virtualizer measure cache 复用，key 稳定） */
-  getKey: (index: number) => string | number
+  getKey: (index: number) => string | number;
   /** 滚动容器（ion-content 的 .inner-scroll） */
-  scrollEl: HTMLElement | null
+  scrollEl: HTMLElement | null;
   /** 单条 item 估计高度（px），measureElement 会用实际高度覆盖 */
-  estimateSize?: number
+  estimateSize?: number;
   /** 视口外额外预渲染条数（上下各 overscan 条）— 加大可减少快速滚动白屏 */
-  overscan?: number
+  overscan?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -104,7 +104,7 @@ const props = withDefaults(defineProps<Props>(), {
   estimateSize: 120,
   // v3：从 20 降到 10（20 对异构列表过大，增加 RO 测量负担；10 足以覆盖快速滚动）
   overscan: 10,
-})
+});
 
 const virtualizerOptions = computed(() => ({
   count: props.count,
@@ -113,17 +113,17 @@ const virtualizerOptions = computed(() => ({
   overscan: props.overscan,
   // v3：启用 rAF 调度 RO 回调，避免与 Vue patch 竞争导致测量时序不确定
   useAnimationFrameWithResizeObserver: true,
-}))
+}));
 
-const virtualizer = useVirtualizer(virtualizerOptions)
+const virtualizer = useVirtualizer(virtualizerOptions);
 
-const virtualItems = computed(() => virtualizer.value.getVirtualItems())
-const totalSize = computed(() => virtualizer.value.getTotalSize())
+const virtualItems = computed(() => virtualizer.value.getVirtualItems());
+const totalSize = computed(() => virtualizer.value.getTotalSize());
 
 // 🆕 2026-06-23 修复真机空白：scrollEl=null 时降级渲染前 N 个 item
 //   - N = overscan*2 + 20（足够覆盖首屏视口，避免空白）
 //   - 不超过 count（item 总数）
-const fallbackCount = computed(() => Math.min(props.count, props.overscan * 2 + 20))
+const fallbackCount = computed(() => Math.min(props.count, props.overscan * 2 + 20));
 
 /**
  * measureElement ref callback — 交给 virtualizer 自动测量每个 item 的实际高度。
@@ -132,9 +132,9 @@ const fallbackCount = computed(() => Math.min(props.count, props.overscan * 2 + 
  */
 function setItemRef(el: Element | unknown | null): void {
   if (el instanceof HTMLElement) {
-    virtualizer.value.measureElement(el)
+    virtualizer.value.measureElement(el);
   } else {
-    virtualizer.value.measureElement(null)
+    virtualizer.value.measureElement(null);
   }
 }
 
@@ -143,19 +143,19 @@ watch(
   () => props.scrollEl,
   (newEl, oldEl) => {
     if (!oldEl && newEl) {
-      virtualizer.value.measure()
+      virtualizer.value.measure();
     }
-  },
-)
+  }
+);
 
 /**
  * 暴露给父级 Tasks.vue 用 — 当 .inner-scroll 异步 ready 时父级主动调一次
  */
 function forceMeasure(): void {
-  virtualizer.value.measure()
+  virtualizer.value.measure();
 }
 
-defineExpose({ forceMeasure })
+defineExpose({ forceMeasure });
 </script>
 
 <style scoped>

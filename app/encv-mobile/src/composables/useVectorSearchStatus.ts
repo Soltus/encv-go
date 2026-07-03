@@ -1,6 +1,6 @@
-import { ref, onMounted, onUnmounted } from 'vue'
-import { eventBus } from './useEventBus'
-import { getApiBaseUrl } from '@/api/encv'
+import { onMounted, onUnmounted, ref } from "vue";
+import { getApiBaseUrl } from "@/api/encv";
+import { eventBus } from "./useEventBus";
 
 /**
  * 向量搜索可用性状态。
@@ -22,41 +22,41 @@ import { getApiBaseUrl } from '@/api/encv'
  *
  * 轮询策略：App 启动时探测一次；后端 server:status 事件触发重探测。
  */
-export type VectorSearchStatus = 'unknown' | 'available' | 'degraded' | 'unavailable'
+export type VectorSearchStatus = "unknown" | "available" | "degraded" | "unavailable";
 
-const status = ref<VectorSearchStatus>('unknown')
-const lastCheckedAt = ref<Date | null>(null)
-let pollInFlight = false
-let pollTimer: ReturnType<typeof setInterval> | null = null
+const status = ref<VectorSearchStatus>("unknown");
+const lastCheckedAt = ref<Date | null>(null);
+let pollInFlight = false;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 async function probeOnce(): Promise<void> {
-  if (pollInFlight) return
-  pollInFlight = true
+  if (pollInFlight) return;
+  pollInFlight = true;
   try {
     // 用全局 fetch（native 模式下 useProxiedFetch.installProxiedFetch() 已自动覆盖）
-    const url = getApiBaseUrl() + '/api/runtime'
-    const resp = await fetch(url, { method: 'GET' })
+    const url = getApiBaseUrl() + "/api/runtime";
+    const resp = await fetch(url, { method: "GET" });
     if (!resp.ok) {
-      return
+      return;
     }
     const data = (await resp.json()) as {
-      vector_search_available?: boolean
-      vector_search_degraded?: boolean
-    }
-    const available = data.vector_search_available === true
-    const degraded = data.vector_search_degraded === true
+      vector_search_available?: boolean;
+      vector_search_degraded?: boolean;
+    };
+    const available = data.vector_search_available === true;
+    const degraded = data.vector_search_degraded === true;
     if (!available) {
-      status.value = 'unavailable'
+      status.value = "unavailable";
     } else if (degraded) {
-      status.value = 'degraded'
+      status.value = "degraded";
     } else {
-      status.value = 'available'
+      status.value = "available";
     }
-    lastCheckedAt.value = new Date()
+    lastCheckedAt.value = new Date();
   } catch {
     // 探测失败（后端未就绪）→ 保持 unknown，不报错
   } finally {
-    pollInFlight = false
+    pollInFlight = false;
   }
 }
 
@@ -74,34 +74,34 @@ async function probeOnce(): Promise<void> {
  */
 export function useVectorSearchStatus() {
   function start(): void {
-    if (pollTimer) return
-    void probeOnce()
-    pollTimer = setInterval(() => void probeOnce(), 60_000)
+    if (pollTimer) return;
+    void probeOnce();
+    pollTimer = setInterval(() => void probeOnce(), 60_000);
   }
 
   function stop(): void {
     if (pollTimer) {
-      clearInterval(pollTimer)
-      pollTimer = null
+      clearInterval(pollTimer);
+      pollTimer = null;
     }
   }
 
   function refresh(): Promise<void> {
-    return probeOnce()
+    return probeOnce();
   }
 
   onMounted(() => {
-    start()
-    eventBus.on('server:status', refresh)
-  })
+    start();
+    eventBus.on("server:status", refresh);
+  });
   onUnmounted(() => {
-    stop()
-    eventBus.off('server:status', refresh)
-  })
+    stop();
+    eventBus.off("server:status", refresh);
+  });
 
   return {
     status,
     lastCheckedAt,
     refresh,
-  }
+  };
 }

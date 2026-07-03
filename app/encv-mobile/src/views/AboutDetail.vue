@@ -124,28 +124,36 @@
 
 <script setup lang="ts">
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
-  IonBadge, IonSpinner,
-} from '@ionic/vue'
-import {
-  informationCircle, codeSlash, logoGithub, openOutline, videocamOutline,
-  warningOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { fetchBuildInfo, type BuildInfo } from '@/api/encv'
-import { useLibraries, type LibraryItem } from '@/composables/useLibraries'
-import { ref, onMounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import LibraryRow from '@/components/LibraryRow.vue'
+  IonBackButton,
+  IonBadge,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { codeSlash, informationCircle, logoGithub, openOutline, videocamOutline, warningOutline } from "ionicons/icons";
+import { onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
+import { type BuildInfo, fetchBuildInfo } from "@/api/encv";
+import LibraryRow from "@/components/LibraryRow.vue";
+import { useI18n } from "@/composables/useI18n";
+import { type LibraryItem, useLibraries } from "@/composables/useLibraries";
 
-const { t } = useI18n()
-const router = useRouter()
+const { t } = useI18n();
+const router = useRouter();
 
-const buildInfo = ref<BuildInfo | null>(null)
-const buildInfoLoading = ref(true)
-const buildInfoError = ref(false)
-const appVersion = ref('v1.0.0')
+const buildInfo = ref<BuildInfo | null>(null);
+const buildInfoLoading = ref(true);
+const buildInfoError = ref(false);
+const appVersion = ref("v1.0.0");
 
 const {
   androidItems,
@@ -155,55 +163,55 @@ const {
   error: libsError,
   load: loadLibraries,
   resolveDescription,
-} = useLibraries()
+} = useLibraries();
 
 onMounted(async () => {
   // 加载 buildInfo
   try {
-    const info = await fetchBuildInfo()
-    buildInfo.value = info
+    const info = await fetchBuildInfo();
+    buildInfo.value = info;
     if (info.app_version) {
-      appVersion.value = info.app_version
+      appVersion.value = info.app_version;
     }
   } catch {
-    buildInfoError.value = true
+    buildInfoError.value = true;
   } finally {
-    buildInfoLoading.value = false
+    buildInfoLoading.value = false;
   }
   // 加载库列表
-  loadLibraries()
-})
+  loadLibraries();
+});
 
 /**
  * 触发 description 解析
  * 监听所有 items 的变化,逐个处理无 description 的项
  */
 async function onLibMounted(item: LibraryItem) {
-  if (item.description) return  // 已有显式描述
-  if (item.descriptionStatus === 'fetched' || item.descriptionStatus === 'placeholder') return  // 已尝试过
+  if (item.description) return; // 已有显式描述
+  if (item.descriptionStatus === "fetched" || item.descriptionStatus === "placeholder") return; // 已尝试过
   // 异步解析（fire-and-forget）
   resolveDescription(item).catch(() => {
-    item.descriptionStatus = 'placeholder'
-  })
+    item.descriptionStatus = "placeholder";
+  });
 }
 
 watch([androidItems, frontendItems, backendItems], () => {
   for (const list of [androidItems.value, frontendItems.value, backendItems.value]) {
     for (const item of list) {
-      if (!item.description && item.descriptionStatus === 'placeholder') {
-        onLibMounted(item)
+      if (!item.description && item.descriptionStatus === "placeholder") {
+        onLibMounted(item);
       }
     }
   }
-})
+});
 
 function openGitHub() {
-  window.open('https://github.com/Soltus/encv-go', '_blank')
+  window.open("https://github.com/Soltus/encv-go", "_blank");
 }
 
 function goFfmpegEngine() {
   // 三级页：FFmpeg 引擎详情（runtime status + build info + 7 类 components）
-  router.push('/tabs/settings/about/engine')
+  router.push("/tabs/settings/about/engine");
 }
 </script>
 

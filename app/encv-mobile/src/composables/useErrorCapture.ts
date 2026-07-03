@@ -21,65 +21,65 @@
  *   - "Console 重定向 + 浮窗显示"  → ③ + <ErrorCaptureOverlay> 浮窗
  */
 
-import { reactive, ref, type Ref } from 'vue'
+import { type Ref, reactive, ref } from "vue";
 
 export interface CapturedError {
-  id: string
-  timestamp: number
-  source: 'vue' | 'window' | 'promise' | 'console'
-  message: string
-  stack?: string
-  componentName?: string
+  id: string;
+  timestamp: number;
+  source: "vue" | "window" | "promise" | "console";
+  message: string;
+  stack?: string;
+  componentName?: string;
   /** 错误发生时的 URL 路径（Ionic router） */
-  url?: string
+  url?: string;
 }
 
-const STORAGE_KEY = 'encv_error_capture_v1'
-const MAX_ERRORS = 50
+const STORAGE_KEY = "encv_error_capture_v1";
+const MAX_ERRORS = 50;
 
 class ErrorStoreImpl {
-  errors = reactive<CapturedError[]>([])
+  errors = reactive<CapturedError[]>([]);
   /** 是否显示浮窗 */
-  showOverlay = ref(false)
+  showOverlay = ref(false);
   /** 浮窗上最近一个错误（高亮） */
-  latestError: Ref<CapturedError | null> = ref(null)
+  latestError: Ref<CapturedError | null> = ref(null);
 
-  private seen = new Set<string>() // 去重 fingerprint
+  private seen = new Set<string>(); // 去重 fingerprint
 
-  addError(err: Omit<CapturedError, 'id' | 'timestamp'>) {
+  addError(err: Omit<CapturedError, "id" | "timestamp">) {
     // 简单 fingerprint 去重（同一消息 + 同一 stack 10s 内不重复）
-    const fp = `${err.source}:${err.message}:${(err.stack || '').slice(0, 200)}`
-    if (this.seen.has(fp)) return
-    this.seen.add(fp)
-    setTimeout(() => this.seen.delete(fp), 10000)
+    const fp = `${err.source}:${err.message}:${(err.stack || "").slice(0, 200)}`;
+    if (this.seen.has(fp)) return;
+    this.seen.add(fp);
+    setTimeout(() => this.seen.delete(fp), 10000);
 
     const entry: CapturedError = {
       id: `err_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       timestamp: Date.now(),
       ...err,
-    }
-    this.errors.unshift(entry)
+    };
+    this.errors.unshift(entry);
     if (this.errors.length > MAX_ERRORS) {
-      this.errors.length = MAX_ERRORS
+      this.errors.length = MAX_ERRORS;
     }
-    this.latestError.value = entry
-    this.showOverlay.value = true
-    this.persist()
+    this.latestError.value = entry;
+    this.showOverlay.value = true;
+    this.persist();
   }
 
   clear() {
-    this.errors.length = 0
-    this.latestError.value = null
-    this.seen.clear()
+    this.errors.length = 0;
+    this.latestError.value = null;
+    this.seen.clear();
     try {
-      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(STORAGE_KEY);
     } catch {
       // ignore (e.g. private mode)
     }
   }
 
   dismissOverlay() {
-    this.showOverlay.value = false
+    this.showOverlay.value = false;
   }
 
   private persist() {
@@ -89,8 +89,8 @@ class ErrorStoreImpl {
         ...e,
         // 不持久化完整 stack（体积大）
         stack: e.stack ? e.stack.slice(0, 500) : undefined,
-      }))
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(subset))
+      }));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(subset));
     } catch {
       // localStorage 满了或不可用 → 忽略
     }
@@ -98,11 +98,11 @@ class ErrorStoreImpl {
 
   hydrate() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (!raw) return
-      const arr = JSON.parse(raw) as CapturedError[]
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const arr = JSON.parse(raw) as CapturedError[];
       if (Array.isArray(arr)) {
-        this.errors.push(...arr)
+        this.errors.push(...arr);
       }
     } catch {
       // ignore
@@ -110,9 +110,9 @@ class ErrorStoreImpl {
   }
 }
 
-export const errorStore = new ErrorStoreImpl()
+export const errorStore = new ErrorStoreImpl();
 
-let installed = false
+let installed = false;
 
 /**
  * 安装三管齐下错误捕获。
@@ -124,38 +124,38 @@ let installed = false
  *   hijackConsole 在捕获 console.error 时会调 captureConsoleError 回调。
  */
 export function installErrorCapture() {
-  if (installed) return
-  installed = true
+  if (installed) return;
+  installed = true;
 
   // ① Vue 组件渲染错误（用户反馈"真正的渲染错误是有调试页面的"）
   //   通过 app.config.errorHandler 安装（在 main.ts 调 installErrorCapture(app) 时挂上）
   //   ② 全局 JS 错误
-  if (typeof window !== 'undefined') {
-    window.addEventListener('error', (e) => {
+  if (typeof window !== "undefined") {
+    window.addEventListener("error", e => {
       errorStore.addError({
-        source: 'window',
-        message: e.message || String(e.error || 'unknown'),
+        source: "window",
+        message: e.message || String(e.error || "unknown"),
         stack: e.error?.stack,
         url: window.location.pathname,
-      })
-    })
+      });
+    });
 
     // ② 未处理的 Promise 拒绝
-    window.addEventListener('unhandledrejection', (e) => {
-      const reason = e.reason
+    window.addEventListener("unhandledrejection", e => {
+      const reason = e.reason;
       errorStore.addError({
-        source: 'promise',
+        source: "promise",
         message: reason instanceof Error ? reason.message : String(reason),
         stack: reason instanceof Error ? reason.stack : undefined,
         url: window.location.pathname,
-      })
-    })
+      });
+    });
   }
 
   // ③ console.error 重定向 → 已移到 useFrontendLogs.hijackConsole
   //   由 hijackConsole 在捕获 console.error 时调用 captureConsoleError()
 
-  errorStore.hydrate()
+  errorStore.hydrate();
 }
 
 // 🆕 2026-07-02：暴露给 useFrontendLogs 的 console.error 回调
@@ -164,11 +164,11 @@ export function captureConsoleError(message: string, stack?: string) {
   // 只收集含 error/exception/fail 关键词的（避免收集 debug log）
   if (/error|exception|fail|undef|null|cannot/i.test(message)) {
     errorStore.addError({
-      source: 'console',
+      source: "console",
       message: message.slice(0, 500),
       stack,
-      url: typeof window !== 'undefined' ? window.location.pathname : undefined,
-    })
+      url: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
   }
 }
 
@@ -182,15 +182,15 @@ export function captureConsoleError(message: string, stack?: string) {
  */
 export function bindVueErrorHandler(app: { config: { errorHandler?: (err: unknown, instance: unknown, info: string) => void } }) {
   app.config.errorHandler = (err, instance, info) => {
-    const componentName = (instance as { $options?: { name?: string } })?.$options?.name
+    const componentName = (instance as { $options?: { name?: string } })?.$options?.name;
     errorStore.addError({
-      source: 'vue',
+      source: "vue",
       message: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
       componentName,
-      url: typeof window !== 'undefined' ? window.location.pathname : undefined,
-    })
+      url: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
     // 仍然打 console（让 dev tools 能看到）
-    console.error('[Vue error]', err, info)
-  }
+    console.error("[Vue error]", err, info);
+  };
 }

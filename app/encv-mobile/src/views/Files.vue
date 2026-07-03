@@ -611,71 +611,174 @@
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
 import {
-  IonPage, IonHeader, IonToolbar, IonButtons, IonButton, IonTitle, IonContent,
-  IonList, IonItem, IonIcon, IonLabel, IonBadge, IonSpinner, IonToggle,
-  IonMenu, IonRefresher, IonRefresherContent, IonAlert, IonModal, IonInput,
-  IonFab, IonFabButton, IonSegment, IonSegmentButton, IonListHeader, IonChip,
-} from '@ionic/vue'
+  IonAlert,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonChip,
+  IonContent,
+  IonFab,
+  IonFabButton,
+  IonHeader,
+  IonIcon,
+  IonInput,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonMenu,
+  IonModal,
+  IonPage,
+  IonRefresher,
+  IonRefresherContent,
+  IonSegment,
+  IonSegmentButton,
+  IonSpinner,
+  IonTitle,
+  IonToggle,
+  IonToolbar,
+} from "@ionic/vue";
 import {
-  arrowBack, chevronForward, menuOutline, folder, folderOpen, lockClosed,
-  cloudOffline, refresh, search, pricetagOutline, closeCircle, closeCircleOutline,
-  filterOutline, swapVerticalOutline, alertCircle, close, warningOutline,
-} from 'ionicons/icons'
-
-import { useFilesView } from './useFilesView'
-import { isImageFile, getFileIcon, getFileIconColor } from '@/composables/useFileList'
-import { formatFileSize } from '@/api/encv'
-import { formatDateTime } from '@/composables/useDateFormat'
-import RelevanceBadge from '@/components/shared/RelevanceBadge.vue'
-import InputWithHistory from '@/components/InputWithHistory.vue'
+  alertCircle,
+  arrowBack,
+  chevronForward,
+  close,
+  closeCircle,
+  closeCircleOutline,
+  cloudOffline,
+  filterOutline,
+  folder,
+  folderOpen,
+  lockClosed,
+  menuOutline,
+  pricetagOutline,
+  refresh,
+  search,
+  swapVerticalOutline,
+  warningOutline,
+} from "ionicons/icons";
+import { formatFileSize } from "@/api/encv";
+import InputWithHistory from "@/components/InputWithHistory.vue";
+import RelevanceBadge from "@/components/shared/RelevanceBadge.vue";
+import { formatDateTime } from "@/composables/useDateFormat";
+import { getFileIcon, getFileIconColor, isImageFile } from "@/composables/useFileList";
+import { useFilesView } from "./useFilesView";
 
 const {
   // i18n + composable re-exposed values
-  t, vectorSearchStatus, thumbnailUrls, onThumbError,
-  sortBy, sortDesc, mainSortLabel, setSortBy, showMainSort,
+  t,
+  vectorSearchStatus,
+  thumbnailUrls,
+  onThumbError,
+  sortBy,
+  sortDesc,
+  mainSortLabel,
+  setSortBy,
+  showMainSort,
   // connection / loading state
-  serverOnline, noPermission, loading, refreshing, connecting,
+  serverOnline,
+  noPermission,
+  loading,
+  refreshing,
+  connecting,
   // file list + sort state
-  fileBadges, fileSubtitles, displayFiles,
+  fileBadges,
+  fileSubtitles,
+  displayFiles,
   // path / navigation
-  currentPath, pathSegments, navigateTo, goUp, highlightedPath, mainContentRef,
+  currentPath,
+  pathSegments,
+  navigateTo,
+  goUp,
+  highlightedPath,
+  mainContentRef,
   openContainingFolder,
   // search state
-  searchQuery, searchFullText, searchResults, isSearching, searchMode,
+  searchQuery,
+  searchFullText,
+  searchResults,
+  isSearching,
+  searchMode,
   // 🆕 A3 contenteditable ref + handlers
-  queryInputRef, onQueryInput, onQueryKeydown,
+  queryInputRef,
+  onQueryInput,
+  onQueryKeydown,
   // 🆕 A6 FTS 降级 banner
-  fulltextBanner, dismissFulltextBanner,
+  fulltextBanner,
+  dismissFulltextBanner,
   // 🆕 2026-07-03 搜索空结果诊断
-  searchDiagnostics, refreshSearchDiagnostics, retrySearch, goFullTextIndexFromSearch,
+  searchDiagnostics,
+  refreshSearchDiagnostics,
+  retrySearch,
+  goFullTextIndexFromSearch,
   // 🆕 旧 handleSearchInput 不再需要（onQueryInput 自动触发）
-  handleSearchClear, handleSearchToggle, insertOperator,
+  handleSearchClear,
+  handleSearchToggle,
+  insertOperator,
   renderSnippet,
   // play error state
-  playError, playErrorDetail, playErrorFile,
-  clearPlayError, togglePlayErrorDetail,
+  playError,
+  playErrorDetail,
+  playErrorFile,
+  clearPlayError,
+  togglePlayErrorDetail,
   // plugin view state
-  selectedPlugin, pluginTab, pluginFiles, pluginLoaded, showPluginFilters,
-  sizeFilterMin, sizeFilterMax, timeFilterFrom, timeFilterTo,
-  pluginSortBy, pluginSortDesc, pluginSortLabel, activeFilterCount, filteredPluginFiles,
-  applySizePreset, applyTimePreset, clearAllPluginFilters,
-  SIZE_PRESETS, TIME_PRESETS,
+  selectedPlugin,
+  pluginTab,
+  pluginFiles,
+  pluginLoaded,
+  showPluginFilters,
+  sizeFilterMin,
+  sizeFilterMax,
+  timeFilterFrom,
+  timeFilterTo,
+  pluginSortBy,
+  pluginSortDesc,
+  pluginSortLabel,
+  activeFilterCount,
+  filteredPluginFiles,
+  applySizePreset,
+  applyTimePreset,
+  clearAllPluginFilters,
+  SIZE_PRESETS,
+  TIME_PRESETS,
   // dialogs + selected
-  showRenameDialog, showTagDialog, showMoveDialog,
-  selectedFile, moveTargetPath,
-  editingFileTags, newTagInput, renameAlertInputs,
+  showRenameDialog,
+  showTagDialog,
+  showMoveDialog,
+  selectedFile,
+  moveTargetPath,
+  editingFileTags,
+  newTagInput,
+  renameAlertInputs,
   // menu / drawer
-  plugins, tags, openSideDrawer, exitPluginMode, openPluginView, getPluginIcon, handleTagFilter,
+  plugins,
+  tags,
+  openSideDrawer,
+  exitPluginMode,
+  openPluginView,
+  getPluginIcon,
+  handleTagFilter,
   // file actions
-  handleRefresh, retryConnection, handleRequestStorage,
-  handleFileClick, handleLongPress, onRenameConfirm, handleMove,
-  handleAddNewTag, handleRemoveTag,
-  handleUpload, handleFileSelected, fileInputRef,
+  handleRefresh,
+  retryConnection,
+  handleRequestStorage,
+  handleFileClick,
+  handleLongPress,
+  onRenameConfirm,
+  handleMove,
+  handleAddNewTag,
+  handleRemoveTag,
+  handleUpload,
+  handleFileSelected,
+  fileInputRef,
   // multi-mount 字段访问器
-  mountDriverOf, mountPathOf, mountRootOf,
+  mountDriverOf,
+  mountPathOf,
+  mountRootOf,
   // icons (template 用)
   add,
-} = useFilesView()
+} = useFilesView();
 
 // 🆕 2026-07-02 v2 简化：不需要 phraseInsertion 常量（直接调 insertSymbol('__phrase_open__')）
 // 占位：保留空的占位 hooks（focus/blur 事件，可后续加视觉反馈）

@@ -14,26 +14,26 @@
  * - bool 字段不参与（避免 2^N 爆炸，由调用方按需展开）
  * - taskType / versions 由调用方传入，composable 不再自行从 taskOptions 派生
  */
-import type { Ref } from 'vue'
-import type { PluginMeta, TaskType } from '@/api/encv'
+import type { Ref } from "vue";
+import type { PluginMeta, TaskType } from "@/api/encv";
 
 /** 生成的测试用例 */
 export interface GeneratedTestCase {
-  id: string
-  taskType: TaskType
-  pluginName: string
-  sourcePath: string
-  version: number
+  id: string;
+  taskType: TaskType;
+  pluginName: string;
+  sourcePath: string;
+  version: number;
   /** 笛卡尔积展开后的 extraFields 键值对（仅 select 字段） */
-  extraFields: Record<string, string>
-  expectedBehavior: 'success' | 'might-fail'
+  extraFields: Record<string, string>;
+  expectedBehavior: "success" | "might-fail";
 }
 
 export interface UseTestCaseGenerationOptions {
   /** mock 根目录（带尾斜杠），例如 '/d/automation/' */
-  mockRoot: Ref<string>
+  mockRoot: Ref<string>;
   /** 已加载的 plugin 列表 */
-  plugins: Ref<PluginMeta[]>
+  plugins: Ref<PluginMeta[]>;
 }
 
 /**
@@ -49,36 +49,71 @@ export interface UseTestCaseGenerationOptions {
  * ```
  */
 export function useTestCaseGeneration(options: UseTestCaseGenerationOptions) {
-  const { mockRoot, plugins } = options
+  const { mockRoot, plugins } = options;
 
   // ext -> category 映射（对齐 automation-workflow 规则 §三）
   const extToCategory: Record<string, string> = {
-    mp4: 'video', mkv: 'video', avi: 'video', mov: 'video', webm: 'video', flv: 'video', wmv: 'video',
-    mp3: 'audio', flac: 'audio', ogg: 'audio', m4a: 'audio', wav: 'audio', aac: 'audio', opus: 'audio',
-    png: 'image', jpg: 'image', jpeg: 'image', gif: 'image', webp: 'image', bmp: 'image', tiff: 'image',
-    pdf: 'pdf',
-    doc: 'wps', docx: 'wps', xls: 'wps', xlsx: 'wps', ppt: 'wps', pptx: 'wps',
-    txt: 'text', md: 'text', rtf: 'text', log: 'text',
-    encv: 'alist-encrypted', ae: 'alist-encrypted',
-  }
+    mp4: "video",
+    mkv: "video",
+    avi: "video",
+    mov: "video",
+    webm: "video",
+    flv: "video",
+    wmv: "video",
+    mp3: "audio",
+    flac: "audio",
+    ogg: "audio",
+    m4a: "audio",
+    wav: "audio",
+    aac: "audio",
+    opus: "audio",
+    png: "image",
+    jpg: "image",
+    jpeg: "image",
+    gif: "image",
+    webp: "image",
+    bmp: "image",
+    tiff: "image",
+    pdf: "pdf",
+    doc: "wps",
+    docx: "wps",
+    xls: "wps",
+    xlsx: "wps",
+    ppt: "wps",
+    pptx: "wps",
+    txt: "text",
+    md: "text",
+    rtf: "text",
+    log: "text",
+    encv: "alist-encrypted",
+    ae: "alist-encrypted",
+  };
 
   /** ext → category（容错：支持带点前缀如 '.mp4'，未知 ext 返回 'misc'） */
   function categoryForExt(ext: string): string {
-    const e = ext.toLowerCase().replace(/^\./, '')
-    return extToCategory[e] ?? 'misc'
+    const e = ext.toLowerCase().replace(/^\./, "");
+    return extToCategory[e] ?? "misc";
   }
 
   /** category → sample 文件名（每个 category 固定一个 sample，避免笛卡尔积爆炸） */
   function sampleFileForCategory(category: string): string {
     switch (category) {
-      case 'video': return 'sample.mp4'
-      case 'audio': return 'sample.mp3'
-      case 'image': return 'sample.png'
-      case 'pdf': return 'sample.pdf'
-      case 'wps': return 'sample.docx'
-      case 'text': return 'sample.txt'
-      case 'alist-encrypted': return 'sample.encv'
-      default: return 'sample.bin'
+      case "video":
+        return "sample.mp4";
+      case "audio":
+        return "sample.mp3";
+      case "image":
+        return "sample.png";
+      case "pdf":
+        return "sample.pdf";
+      case "wps":
+        return "sample.docx";
+      case "text":
+        return "sample.txt";
+      case "alist-encrypted":
+        return "sample.encv";
+      default:
+        return "sample.bin";
     }
   }
 
@@ -89,10 +124,10 @@ export function useTestCaseGeneration(options: UseTestCaseGenerationOptions) {
    * 例如：/d/automation/01-plain-media/video/sample.mp4
    */
   function selectSourcePath(plugin: PluginMeta): string {
-    const ext = plugin.supportedExtensions?.[0] ?? 'bin'
-    const category = categoryForExt(ext)
-    const sample = sampleFileForCategory(category)
-    return `${mockRoot.value}01-plain-media/${category}/${sample}`
+    const ext = plugin.supportedExtensions?.[0] ?? "bin";
+    const category = categoryForExt(ext);
+    const sample = sampleFileForCategory(category);
+    return `${mockRoot.value}01-plain-media/${category}/${sample}`;
   }
 
   /**
@@ -107,32 +142,32 @@ export function useTestCaseGeneration(options: UseTestCaseGenerationOptions) {
    * 过滤，应在调用前预处理 plugin.taskOptions.extraFields。
    */
   function deriveExtraFieldCombinations(plugin: PluginMeta): Record<string, string>[] {
-    const opts = plugin.taskOptions
-    if (!opts?.extraFields || !Array.isArray(opts.extraFields)) return [{}]
+    const opts = plugin.taskOptions;
+    if (!opts?.extraFields || !Array.isArray(opts.extraFields)) return [{}];
 
-    const selectFields: { fieldName: string; values: string[] }[] = []
+    const selectFields: { fieldName: string; values: string[] }[] = [];
     for (const f of opts.extraFields) {
-      if (f.type === 'select' && Array.isArray(f.options) && f.options.length > 1) {
+      if (f.type === "select" && Array.isArray(f.options) && f.options.length > 1) {
         // TaskField.key 是字段标识符（如 'cipherMode' / 'compressionMode'）
-        selectFields.push({ fieldName: f.key, values: f.options })
+        selectFields.push({ fieldName: f.key, values: f.options });
       }
     }
 
-    if (selectFields.length === 0) return [{}]
+    if (selectFields.length === 0) return [{}];
 
     // 笛卡尔积展开：[{}] × [v1,v2] × [v1,v2] → [{f1:v1,f2:v1}, {f1:v1,f2:v2}, ...]
-    const results: Record<string, string>[] = [{}]
+    const results: Record<string, string>[] = [{}];
     for (const { fieldName, values } of selectFields) {
-      const newResults: Record<string, string>[] = []
+      const newResults: Record<string, string>[] = [];
       for (const r of results) {
         for (const v of values) {
-          newResults.push({ ...r, [fieldName]: v })
+          newResults.push({ ...r, [fieldName]: v });
         }
       }
-      results.length = 0
-      results.push(...newResults)
+      results.length = 0;
+      results.push(...newResults);
     }
-    return results
+    return results;
   }
 
   /**
@@ -143,28 +178,28 @@ export function useTestCaseGeneration(options: UseTestCaseGenerationOptions) {
    * @returns GeneratedTestCase[]
    */
   function generateCases(taskType: TaskType, versions: number[]): GeneratedTestCase[] {
-    const cases: GeneratedTestCase[] = []
+    const cases: GeneratedTestCase[] = [];
     for (const plugin of plugins.value) {
-      const sourcePath = selectSourcePath(plugin)
-      const combinations = deriveExtraFieldCombinations(plugin)
+      const sourcePath = selectSourcePath(plugin);
+      const combinations = deriveExtraFieldCombinations(plugin);
       for (const version of versions) {
         for (const combo of combinations) {
           const comboPart = Object.entries(combo)
             .map(([k, v]) => `${k}=${v}`)
-            .join('-')
+            .join("-");
           cases.push({
-            id: `${plugin.name}-${taskType}-v${version}-${comboPart || 'default'}`,
+            id: `${plugin.name}-${taskType}-v${version}-${comboPart || "default"}`,
             taskType,
             pluginName: plugin.name,
             sourcePath,
             version,
             extraFields: combo,
-            expectedBehavior: 'might-fail',
-          })
+            expectedBehavior: "might-fail",
+          });
         }
       }
     }
-    return cases
+    return cases;
   }
 
   return {
@@ -173,5 +208,5 @@ export function useTestCaseGeneration(options: UseTestCaseGenerationOptions) {
     deriveExtraFieldCombinations,
     categoryForExt,
     sampleFileForCategory,
-  }
+  };
 }

@@ -14,7 +14,7 @@
  * 防回归：__tests__/mount-path.test.ts 验证所有 mount 名都能正确构造路径
  */
 
-export const MOUNT_VIRTUAL_ROOT = '/d' as const
+export const MOUNT_VIRTUAL_ROOT = "/d" as const;
 
 /**
  * 给定 mount 名字，返回完整虚拟路径
@@ -23,7 +23,7 @@ export const MOUNT_VIRTUAL_ROOT = '/d' as const
  *   mountPath('sandbox')    → '/d/sandbox'
  */
 export function mountPath(name: string): string {
-  return `${MOUNT_VIRTUAL_ROOT}/${name}`
+  return `${MOUNT_VIRTUAL_ROOT}/${name}`;
 }
 
 /**
@@ -32,7 +32,7 @@ export function mountPath(name: string): string {
  *   unmountPath('/d')                → ''
  */
 export function unmountPath(virtualPath: string): string {
-  const trimmed = virtualPath.replace(MOUNT_VIRTUAL_ROOT + '/', '')
-  const slash = trimmed.indexOf('/')
-  return slash === -1 ? trimmed : trimmed.slice(0, slash)
+  const trimmed = virtualPath.replace(MOUNT_VIRTUAL_ROOT + "/", "");
+  const slash = trimmed.indexOf("/");
+  return slash === -1 ? trimmed : trimmed.slice(0, slash);
 }

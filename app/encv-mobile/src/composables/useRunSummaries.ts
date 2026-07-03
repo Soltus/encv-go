@@ -18,80 +18,80 @@
  *   - API 失败时保留旧数据 + warn 日志（不阻塞 UI）
  *   - 首次加载失败时返回空 Map（group card 显示 loading 或 0）
  */
-import { ref, computed, type Ref, type ComputedRef } from 'vue'
-import { getRunSummary, listRuns, type RunSummary, type RunInfo } from '@/api/encv'
+import { type ComputedRef, computed, type Ref, ref } from "vue";
+import { getRunSummary, listRuns, type RunInfo, type RunSummary } from "@/api/encv";
 
 export interface UseRunSummaries {
   /** 所有 run 的 summary 缓存（按 runId 索引） */
-  summaries: Ref<Map<string, RunSummary>>
+  summaries: Ref<Map<string, RunSummary>>;
   /** 所有 run 的基本信息（runId + startedAt + triggeredBy） */
-  runs: Ref<RunInfo[]>
+  runs: Ref<RunInfo[]>;
   /** 是否正在加载 */
-  isLoading: ComputedRef<boolean>
+  isLoading: ComputedRef<boolean>;
   /** 最后一次加载错误 */
-  error: Ref<Error | null>
+  error: Ref<Error | null>;
   /** 拉取所有 run 的 summary（GET /api/runs） */
-  fetchAll(): Promise<void>
+  fetchAll(): Promise<void>;
   /** 拉取单个 run 的 summary（GET /api/runs/:runId/summary） */
-  fetchOne(runId: string): Promise<void>
+  fetchOne(runId: string): Promise<void>;
   /** WS task:completed 时刷新对应 runId 的 summary */
-  refreshOnTaskCompleted(runId: string): Promise<void>
+  refreshOnTaskCompleted(runId: string): Promise<void>;
   /** 同步获取缓存的 summary（未加载时返回 undefined） */
-  getSummary(runId: string): RunSummary | undefined
+  getSummary(runId: string): RunSummary | undefined;
 }
 
 export function useRunSummaries(): UseRunSummaries {
-  const summaries = ref<Map<string, RunSummary>>(new Map())
-  const runs = ref<RunInfo[]>([])
-  const error = ref<Error | null>(null)
-  const _isLoading = ref(false)
+  const summaries = ref<Map<string, RunSummary>>(new Map());
+  const runs = ref<RunInfo[]>([]);
+  const error = ref<Error | null>(null);
+  const _isLoading = ref(false);
 
-  const isLoading = computed(() => _isLoading.value)
+  const isLoading = computed(() => _isLoading.value);
 
   /** 拉取所有 run 的 summary（GET /api/runs，带 summary） */
   async function fetchAll(): Promise<void> {
-    _isLoading.value = true
+    _isLoading.value = true;
     try {
-      const list = await listRuns()
-      runs.value = list
-      const map = new Map<string, RunSummary>()
+      const list = await listRuns();
+      runs.value = list;
+      const map = new Map<string, RunSummary>();
       for (const r of list) {
-        map.set(r.runId, r.summary)
+        map.set(r.runId, r.summary);
       }
-      summaries.value = map
-      error.value = null
+      summaries.value = map;
+      error.value = null;
     } catch (e) {
-      console.warn('[useRunSummaries.fetchAll] failed:', e)
-      error.value = e as Error
+      console.warn("[useRunSummaries.fetchAll] failed:", e);
+      error.value = e as Error;
     } finally {
-      _isLoading.value = false
+      _isLoading.value = false;
     }
   }
 
   /** 拉取单个 run 的 summary（GET /api/runs/:runId/summary） */
   async function fetchOne(runId: string): Promise<void> {
-    if (!runId) return
+    if (!runId) return;
     try {
-      const summary = await getRunSummary(runId)
-      const map = new Map(summaries.value)
-      map.set(runId, summary)
-      summaries.value = map
+      const summary = await getRunSummary(runId);
+      const map = new Map(summaries.value);
+      map.set(runId, summary);
+      summaries.value = map;
     } catch (e) {
-      console.warn('[useRunSummaries.fetchOne] failed:', runId, e)
+      console.warn("[useRunSummaries.fetchOne] failed:", runId, e);
       // 保留旧数据，不设置 error（单个失败不阻塞整体）
     }
   }
 
   /** WS task:completed 时刷新对应 runId 的 summary */
   async function refreshOnTaskCompleted(runId: string): Promise<void> {
-    if (!runId) return
+    if (!runId) return;
     // debounce 不需要：WS 事件频率不高，直接刷新
-    await fetchOne(runId)
+    await fetchOne(runId);
   }
 
   /** 同步获取缓存的 summary（未加载时返回 undefined） */
   function getSummary(runId: string): RunSummary | undefined {
-    return summaries.value.get(runId)
+    return summaries.value.get(runId);
   }
 
   return {
@@ -103,19 +103,19 @@ export function useRunSummaries(): UseRunSummaries {
     fetchOne,
     refreshOnTaskCompleted,
     getSummary,
-  }
+  };
 }
 
 /** 模块级单例（跨组件共享 run summary 数据） */
-let _cachedInstance: UseRunSummaries | null = null
+let _cachedInstance: UseRunSummaries | null = null;
 
 export function useRunSummariesSingleton(): UseRunSummaries {
-  if (_cachedInstance) return _cachedInstance
-  _cachedInstance = useRunSummaries()
-  return _cachedInstance
+  if (_cachedInstance) return _cachedInstance;
+  _cachedInstance = useRunSummaries();
+  return _cachedInstance;
 }
 
 /** 测试用：重置单例 */
 export function __resetRunSummariesForTests(): void {
-  _cachedInstance = null
+  _cachedInstance = null;
 }

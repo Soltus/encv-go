@@ -7,23 +7,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonIcon } from '@ionic/vue'
+import { IonIcon } from "@ionic/vue";
 import {
-  cloudUploadOutline,
-  searchOutline,
-  playOutline,
-  codeSlashOutline,
-  lockClosedOutline,
-  lockOpenOutline,
-  cubeOutline,
-  shieldCheckmarkOutline,
+  banOutline,
   checkmarkCircleOutline,
   closeCircleOutline,
-  banOutline,
+  cloudUploadOutline,
+  codeSlashOutline,
+  cubeOutline,
   helpCircleOutline,
-} from 'ionicons/icons'
-import { Phase } from '@/lib/workflow/types'
+  lockClosedOutline,
+  lockOpenOutline,
+  playOutline,
+  searchOutline,
+  shieldCheckmarkOutline,
+} from "ionicons/icons";
+import { computed } from "vue";
+import { Phase } from "@/lib/workflow/types";
 
 /**
  * PhaseIcon 支持的值：
@@ -32,18 +32,18 @@ import { Phase } from '@/lib/workflow/types'
  *
  * 统一用 ion-icon，删除 emoji / Unicode / 自定义 SVG。
  */
-export type PhaseIconValue = Phase | 'failed' | 'cancelled'
+export type PhaseIconValue = Phase | "failed" | "cancelled";
 
 const props = withDefaults(
   defineProps<{
-    phase: PhaseIconValue
+    phase: PhaseIconValue;
     /** 图标尺寸（px），未传则继承父级 font-size */
-    size?: number
+    size?: number;
   }>(),
   {
     size: undefined,
-  },
-)
+  }
+);
 
 // Phase / Status → ion-icon 映射（与后端 Phase 枚举值一一对应）
 const PHASE_ICON_MAP: Record<PhaseIconValue, string> = {
@@ -58,9 +58,9 @@ const PHASE_ICON_MAP: Record<PhaseIconValue, string> = {
   [Phase.Completed]: checkmarkCircleOutline,
   failed: closeCircleOutline,
   cancelled: banOutline,
-}
+};
 
-const icon = computed(() => PHASE_ICON_MAP[props.phase] ?? helpCircleOutline)
+const icon = computed(() => PHASE_ICON_MAP[props.phase] ?? helpCircleOutline);
 </script>
 
 <style scoped>

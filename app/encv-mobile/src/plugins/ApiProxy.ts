@@ -1,4 +1,4 @@
-import { registerPlugin } from '@capacitor/core'
+import { registerPlugin } from "@capacitor/core";
 
 /**
  * ApiProxy — Capacitor 插件，绕过 WebView CORS。
@@ -18,59 +18,59 @@ import { registerPlugin } from '@capacitor/core'
 
 /** 单次 HTTP 调用的入参（与 web fetch 语义对齐） */
 export interface ProxyFetchOptions {
-  url: string
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS'
-  headers?: Record<string, string>
-  body?: string | null
+  url: string;
+  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS";
+  headers?: Record<string, string>;
+  body?: string | null;
   /** true 表示后端用 chunked/SSE，streamStart 才走 streaming 分支 */
-  expectStream?: boolean
+  expectStream?: boolean;
 }
 
 /** fetchOnce 返回的响应（body 为完整字符串，不分块） */
 export interface ProxyFetchResult {
-  status: number
-  statusText: string
-  headers: Record<string, string>
-  body: string
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  body: string;
   /** 后端真实 base URL，便于 DevLogs 诊断（native 端填） */
-  resolvedBaseUrl: string
+  resolvedBaseUrl: string;
 }
 
 /** streamStart 返回的 stream 句柄 */
 export interface ProxyStreamStartResult {
-  streamId: string
-  status: number
-  statusText: string
-  headers: Record<string, string>
-  resolvedBaseUrl: string
+  streamId: string;
+  status: number;
+  statusText: string;
+  headers: Record<string, string>;
+  resolvedBaseUrl: string;
 }
 
 /** plugin 推送给 JS 的 stream chunk 事件 */
 export interface ProxyStreamChunkEvent {
-  streamId: string
+  streamId: string;
   /** 原始字节的 base64 编码（避免 JS 字符串丢字节） */
-  dataBase64: string
+  dataBase64: string;
 }
 
 export interface ProxyStreamEndEvent {
-  streamId: string
-  status?: number
-  error?: string
+  streamId: string;
+  status?: number;
+  error?: string;
 }
 
 /** 插件接口 */
 export interface ApiProxyPlugin {
   /** 单次 fetch，返回完整 body（用于非流式 API） */
-  fetchOnce(options: ProxyFetchOptions): Promise<ProxyFetchResult>
+  fetchOnce(options: ProxyFetchOptions): Promise<ProxyFetchResult>;
   /** 流式 fetch（用于 SSE），通过 events 回传 chunks */
-  streamStart(options: ProxyFetchOptions): Promise<ProxyStreamStartResult>
+  streamStart(options: ProxyFetchOptions): Promise<ProxyStreamStartResult>;
   /** 主动取消一个 stream（SSE 断开 / 切 tab） */
-  streamCancel(options: { streamId: string }): Promise<void>
+  streamCancel(options: { streamId: string }): Promise<void>;
 }
 
-const ApiProxy = registerPlugin<ApiProxyPlugin>('ApiProxy', {
-  web: () => import('./ApiProxy.web').then(m => new m.ApiProxyWeb()),
-})
+const ApiProxy = registerPlugin<ApiProxyPlugin>("ApiProxy", {
+  web: () => import("./ApiProxy.web").then(m => new m.ApiProxyWeb()),
+});
 
-export { ApiProxy }
-export default ApiProxy
+export { ApiProxy };
+export default ApiProxy;

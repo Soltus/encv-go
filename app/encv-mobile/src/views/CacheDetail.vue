@@ -129,165 +129,160 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
 import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
+  alertController,
   IonBackButton,
+  IonButton,
+  IonButtons,
   IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
   IonList,
   IonListHeader,
-  IonItem,
-  IonIcon,
-  IonLabel,
-  IonButton,
+  IonPage,
   IonSpinner,
-  alertController,
-} from '@ionic/vue'
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
 import {
+  cloudOutline,
   documentTextOutline,
   folderOpenOutline,
-  serverOutline,
+  imageOutline,
   lockClosed,
+  refreshCircleOutline,
+  searchOutline,
+  serverOutline,
+  statsChartOutline,
   timeOutline,
   timerOutline,
-  cloudOutline,
-  searchOutline,
-  imageOutline,
   trashOutline,
-  refreshCircleOutline,
-  statsChartOutline,
-} from 'ionicons/icons'
-import {
-  getIndexStats,
-  rebuildIndex,
-  clearIndex,
-  formatFileSize,
-} from '@/api/encv'
-import type { IndexStats } from '@/api/encv'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import { getThumbCacheSize, clearThumbCache, THUMB_CACHE_MAX } from '@/composables/useThumbnailCache'
-import { useRouter } from 'vue-router'
+} from "ionicons/icons";
+import { onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import type { IndexStats } from "@/api/encv";
+import { clearIndex, formatFileSize, getIndexStats, rebuildIndex } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
+import { clearThumbCache, getThumbCacheSize, THUMB_CACHE_MAX } from "@/composables/useThumbnailCache";
+import { showToast } from "@/composables/useToast";
 
-const router = useRouter()
-const { t } = useI18n()
-const stats = ref<IndexStats | null>(null)
-const searchCacheSize = ref(0)
-const thumbCacheSize = ref(0)
-let pollTimer: ReturnType<typeof setInterval> | null = null
+const router = useRouter();
+const { t } = useI18n();
+const stats = ref<IndexStats | null>(null);
+const searchCacheSize = ref(0);
+const thumbCacheSize = ref(0);
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 async function loadStats() {
   try {
-    stats.value = await getIndexStats()
+    stats.value = await getIndexStats();
   } catch {
-    stats.value = null
+    stats.value = null;
   }
 }
 
 // 🆕 2026-07-02 跳转全文索引二级页（FTS5 详情）
 function goFullTextIndex() {
-  router.push('/tabs/settings/fulltext-index')
+  router.push("/tabs/settings/fulltext-index");
 }
 
 function updateSearchCacheSize() {
   try {
-    let count = 0
+    let count = 0;
     for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i)
-      if (key?.startsWith('search-cache:')) count++
+      const key = localStorage.key(i);
+      if (key?.startsWith("search-cache:")) count++;
     }
-    searchCacheSize.value = count
+    searchCacheSize.value = count;
   } catch {
-    searchCacheSize.value = 0
+    searchCacheSize.value = 0;
   }
 }
 
 async function handleRebuild() {
   try {
-    await rebuildIndex()
-    await loadStats()
-    showToast({ message: t('settings.rebuildStarted'), duration: 1500, color: 'success' })
+    await rebuildIndex();
+    await loadStats();
+    showToast({ message: t("settings.rebuildStarted"), duration: 1500, color: "success" });
   } catch {
-    showToast({ message: t('settings.rebuildFailed'), duration: 2000, color: 'danger' })
+    showToast({ message: t("settings.rebuildFailed"), duration: 2000, color: "danger" });
   }
 }
 
 async function handleClearIndex() {
   const alert = await alertController.create({
-    header: t('settings.clearIndex'),
-    message: t('settings.clearIndexConfirm'),
+    header: t("settings.clearIndex"),
+    message: t("settings.clearIndexConfirm"),
     buttons: [
-      { text: t('files.cancelSelect'), role: 'cancel' },
+      { text: t("files.cancelSelect"), role: "cancel" },
       {
-        text: t('settings.clearIndex'),
-        role: 'destructive',
+        text: t("settings.clearIndex"),
+        role: "destructive",
         handler: async () => {
           try {
-            await clearIndex()
-            await loadStats()
+            await clearIndex();
+            await loadStats();
           } catch {
-            showToast({ message: t('settings.clearFailed'), duration: 2000, color: 'danger' })
+            showToast({ message: t("settings.clearFailed"), duration: 2000, color: "danger" });
           }
         },
       },
     ],
-  })
-  await alert.present()
+  });
+  await alert.present();
 }
 
 function handleClearSearchCache() {
-  const keysToRemove: string[] = []
+  const keysToRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i)
-    if (key?.startsWith('search-cache:')) keysToRemove.push(key)
+    const key = localStorage.key(i);
+    if (key?.startsWith("search-cache:")) keysToRemove.push(key);
   }
-  keysToRemove.forEach(key => localStorage.removeItem(key))
-  searchCacheSize.value = 0
-  showToast({ message: t('settings.cleared'), duration: 1200, color: 'medium' })
+  keysToRemove.forEach(key => localStorage.removeItem(key));
+  searchCacheSize.value = 0;
+  showToast({ message: t("settings.cleared"), duration: 1200, color: "medium" });
 }
 
 function updateThumbCacheSize() {
-  thumbCacheSize.value = getThumbCacheSize()
+  thumbCacheSize.value = getThumbCacheSize();
 }
 
 async function handleClearThumbCache() {
   const alert = await alertController.create({
-    header: t('settings.clearThumbCache'),
-    message: t('settings.clearIndexConfirm'),
+    header: t("settings.clearThumbCache"),
+    message: t("settings.clearIndexConfirm"),
     buttons: [
-      { text: t('files.cancelSelect'), role: 'cancel' },
+      { text: t("files.cancelSelect"), role: "cancel" },
       {
-        text: t('settings.clearThumbCache'),
-        role: 'destructive',
+        text: t("settings.clearThumbCache"),
+        role: "destructive",
         handler: () => {
-          clearThumbCache()
-          thumbCacheSize.value = 0
-          showToast({ message: t('settings.cleared'), duration: 1200, color: 'medium' })
+          clearThumbCache();
+          thumbCacheSize.value = 0;
+          showToast({ message: t("settings.cleared"), duration: 1200, color: "medium" });
         },
       },
     ],
-  })
-  await alert.present()
+  });
+  await alert.present();
 }
 
 onMounted(() => {
-  loadStats().catch(() => {})
-  updateSearchCacheSize()
-  updateThumbCacheSize()
+  loadStats().catch(() => {});
+  updateSearchCacheSize();
+  updateThumbCacheSize();
   pollTimer = setInterval(() => {
     if (stats.value?.isIndexing) {
-      loadStats().catch(() => {})
+      loadStats().catch(() => {});
     }
-  }, 2000)
-})
+  }, 2000);
+});
 
 onUnmounted(() => {
-  if (pollTimer) clearInterval(pollTimer)
-})
+  if (pollTimer) clearInterval(pollTimer);
+});
 </script>
 
 <style scoped>

@@ -41,30 +41,27 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonIcon,
-} from '@ionic/vue'
-import { chevronForward, playCircleOutline, musicalNotesOutline, colorPaletteOutline, settingsOutline } from 'ionicons/icons'
-import { useRouter } from 'vue-router'
-import { useI18n } from '@/composables/useI18n'
-import { getAllPrototypes } from './prototypes/registry'
-import './prototypes/prototype-cards.css'
+import { IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from "@ionic/vue";
+import { chevronForward, colorPaletteOutline, musicalNotesOutline, playCircleOutline, settingsOutline } from "ionicons/icons";
+import { useRouter } from "vue-router";
+import { useI18n } from "@/composables/useI18n";
+import { getAllPrototypes } from "./prototypes/registry";
+import "./prototypes/prototype-cards.css";
 
-const { t } = useI18n()
-const router = useRouter()
+const { t } = useI18n();
+const router = useRouter();
 
-const prototypes = getAllPrototypes()
+const prototypes = getAllPrototypes();
 
 const iconMap: Record<string, string> = {
-  'play-circle': playCircleOutline,
-  'settings': settingsOutline,
-  'musical-notes': musicalNotesOutline,
-  'color-palette': colorPaletteOutline,
-}
+  "play-circle": playCircleOutline,
+  settings: settingsOutline,
+  "musical-notes": musicalNotesOutline,
+  "color-palette": colorPaletteOutline,
+};
 
-function handlePrototypeClick(proto: typeof prototypes[0]) {
-  router.push(`/tabs/settings/devtools/prototype/${proto.id}`)
+function handlePrototypeClick(proto: (typeof prototypes)[0]) {
+  router.push(`/tabs/settings/devtools/prototype/${proto.id}`);
 }
 </script>
 

@@ -147,241 +147,255 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { IonBadge, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons,
-  IonButton, IonIcon, IonContent, IonSpinner, IonBadge,
-} from '@ionic/vue'
+  alertCircle,
+  arrowBack,
+  chevronDown,
+  chevronForward,
+  documentTextOutline,
+  helpCircleOutline,
+  informationCircle,
+  lockClosed,
+  returnDownBackOutline,
+  returnDownForwardOutline,
+} from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import {
-  arrowBack, documentTextOutline,
-  alertCircle, informationCircle,
-  helpCircleOutline, lockClosed,
-  chevronDown, chevronForward,
-  returnDownBackOutline, returnDownForwardOutline,
-} from 'ionicons/icons'
-import { getFileStreamUrl, getFileCategory, getFileExtension, formatFileSize, fetchTextPreviewExts, getApiBaseUrl, getFilePreviewUrl, proxySafeEncode } from '@/api/encv'
-import { openPlayer, isNative } from '@/plugins/GoProcess'
-import { useI18n } from '@/composables/useI18n'
-import { formatContainerVersion } from '@/constants/containerVersion'
+  fetchTextPreviewExts,
+  formatFileSize,
+  getApiBaseUrl,
+  getFileCategory,
+  getFileExtension,
+  getFilePreviewUrl,
+  getFileStreamUrl,
+  proxySafeEncode,
+} from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
+import { formatContainerVersion } from "@/constants/containerVersion";
+import { isNative, openPlayer } from "@/plugins/GoProcess";
 
-type PreviewType = 'image' | 'pdf' | 'text' | 'container' | 'unsupported'
+type PreviewType = "image" | "pdf" | "text" | "container" | "unsupported";
 
 interface ContainerInfo {
-  version?: number
-  container_id?: string
-  container_type?: string
-  is_seekable?: boolean
-  original_duration?: number
-  segment_count?: number
-  segments?: unknown[]
-  error?: string
+  version?: number;
+  container_id?: string;
+  container_type?: string;
+  is_seekable?: boolean;
+  original_duration?: number;
+  segment_count?: number;
+  segments?: unknown[];
+  error?: string;
 }
 
-const { t } = useI18n()
-const router = useRouter()
-const route = useRoute()
+const { t } = useI18n();
+const router = useRouter();
+const route = useRoute();
 
-const filePath = ref('')
-const fileName = ref('')
-const fileSize = ref(0)
-const loading = ref(true)
-const error = ref('')
-const previewType = ref<PreviewType>('unsupported')
-const streamUrl = ref('')
-const pdfPreviewUrl = ref('')
-const showManifest = ref(false)
-const containerInfo = ref<ContainerInfo | null>(null)
-const manifestJson = ref('')
-const fileModified = ref('')
-const fileMimeType = ref('')
-const fileCategory = ref('')
+const filePath = ref("");
+const fileName = ref("");
+const fileSize = ref(0);
+const loading = ref(true);
+const error = ref("");
+const previewType = ref<PreviewType>("unsupported");
+const streamUrl = ref("");
+const pdfPreviewUrl = ref("");
+const showManifest = ref(false);
+const containerInfo = ref<ContainerInfo | null>(null);
+const manifestJson = ref("");
+const fileModified = ref("");
+const fileMimeType = ref("");
+const fileCategory = ref("");
 
-const textContent = ref('')
-const textLoading = ref(false)
-const textError = ref('')
-const textErrorDetail = ref<string>('')
-const showTextErrorDetail = ref(false)
-const textWrap = ref(true)
+const textContent = ref("");
+const textLoading = ref(false);
+const textError = ref("");
+const textErrorDetail = ref<string>("");
+const showTextErrorDetail = ref(false);
+const textWrap = ref(true);
 
-const isEncryptedPreview = computed(() => route.query.isEncrypted === 'true')
+const isEncryptedPreview = computed(() => route.query.isEncrypted === "true");
 
 function toggleWrap() {
-  textWrap.value = !textWrap.value
+  textWrap.value = !textWrap.value;
 }
 
 function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 async function determinePreviewType(name: string, isEncrypted?: boolean): Promise<PreviewType> {
-  if (isEncrypted) return 'container'
+  if (isEncrypted) return "container";
 
-  const category = getFileCategory(name)
-  const ext = getFileExtension(name)
+  const category = getFileCategory(name);
+  const ext = getFileExtension(name);
 
-  if (category === 'image') return 'image'
-  if (ext === 'pdf') return 'pdf'
+  if (category === "image") return "image";
+  if (ext === "pdf") return "pdf";
 
-  const textExts = await fetchTextPreviewExts()
-  if (textExts.has(ext)) return 'text'
-  if (category === 'document' || category === 'other') return 'text'
-  return 'unsupported'
+  const textExts = await fetchTextPreviewExts();
+  if (textExts.has(ext)) return "text";
+  if (category === "document" || category === "other") return "text";
+  return "unsupported";
 }
 
 async function loadTextContent() {
-  const path = filePath.value
-  if (!path) return
+  const path = filePath.value;
+  if (!path) return;
 
-  textLoading.value = true
-  textError.value = ''
-  textContent.value = ''
+  textLoading.value = true;
+  textError.value = "";
+  textContent.value = "";
 
   try {
-    const baseUrl = getApiBaseUrl()
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 30000)
+    const baseUrl = getApiBaseUrl();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     const resp = await fetch(`${baseUrl}/decrypt?file=${proxySafeEncode(path)}`, {
       signal: controller.signal,
-    })
-    clearTimeout(timeoutId)
+    });
+    clearTimeout(timeoutId);
 
     if (!resp.ok) {
-      const body = await resp.text().catch(() => '')
-      let detail = ''
+      const body = await resp.text().catch(() => "");
+      let detail = "";
       try {
-        const j = JSON.parse(body)
-        if (j.debug) detail = JSON.stringify(j.debug, null, 2)
-      } catch { /* not json */ }
-      textErrorDetail.value = detail
-      throw new Error(`HTTP ${resp.status}: ${resp.statusText}${body ? ' | ' + body : ''}`)
+        const j = JSON.parse(body);
+        if (j.debug) detail = JSON.stringify(j.debug, null, 2);
+      } catch {
+        /* not json */
+      }
+      textErrorDetail.value = detail;
+      throw new Error(`HTTP ${resp.status}: ${resp.statusText}${body ? " | " + body : ""}`);
     }
 
-    textContent.value = await resp.text()
+    textContent.value = await resp.text();
   } catch (e: any) {
-    if (e.name === 'AbortError') {
-      textError.value = 'Request timed out after 30 seconds'
+    if (e.name === "AbortError") {
+      textError.value = "Request timed out after 30 seconds";
     } else {
-      textError.value = e?.message || String(e)
+      textError.value = e?.message || String(e);
     }
   } finally {
-    textLoading.value = false
+    textLoading.value = false;
   }
 }
 
 async function loadFile() {
-  const path = (route.query.path as string) || ''
-  const name = (route.query.name as string) || ''
+  const path = (route.query.path as string) || "";
+  const name = (route.query.name as string) || "";
   if (!path) {
-    error.value = t('filePreview.noPath')
-    loading.value = false
-    return
+    error.value = t("filePreview.noPath");
+    loading.value = false;
+    return;
   }
-  filePath.value = path
-  fileName.value = name || path.split('/').pop() || path
-  loading.value = true
-  error.value = ''
-  showManifest.value = false
-  containerInfo.value = null
+  filePath.value = path;
+  fileName.value = name || path.split("/").pop() || path;
+  loading.value = true;
+  error.value = "";
+  showManifest.value = false;
+  containerInfo.value = null;
 
-  const isEncrypted = route.query.isEncrypted === 'true'
+  const isEncrypted = route.query.isEncrypted === "true";
 
   if (isEncrypted) {
     try {
-      const baseUrl = getApiBaseUrl()
-      const resp = await fetch(`${baseUrl}/api/file/info?path=${proxySafeEncode(path)}`)
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      const info = await resp.json()
+      const baseUrl = getApiBaseUrl();
+      const resp = await fetch(`${baseUrl}/api/file/info?path=${proxySafeEncode(path)}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const info = await resp.json();
 
-      fileSize.value = info.size || 0
-      fileModified.value = info.modified || ''
-      fileMimeType.value = info.mime_type || ''
-      fileCategory.value = info.category || ''
+      fileSize.value = info.size || 0;
+      fileModified.value = info.modified || "";
+      fileMimeType.value = info.mime_type || "";
+      fileCategory.value = info.category || "";
 
       if (info.is_encv_container && info.container) {
-        const containerType = info.container.container_type
-        containerInfo.value = info.container
+        const containerType = info.container.container_type;
+        containerInfo.value = info.container;
         try {
-          const str = JSON.stringify(info.container.manifest || info.container, null, 2)
-          manifestJson.value = /^[\x20-\x7E\t\n\r]*$/.test(str) ? str : '(contains non-printable characters)'
+          const str = JSON.stringify(info.container.manifest || info.container, null, 2);
+          manifestJson.value = /^[\x20-\x7E\t\n\r]*$/.test(str) ? str : "(contains non-printable characters)";
         } catch {
-          manifestJson.value = '(invalid)'
+          manifestJson.value = "(invalid)";
         }
 
         switch (containerType) {
-          case 'image':
-            previewType.value = 'image'
-            streamUrl.value = getFileStreamUrl(path)
-            break
-          case 'video':
-          case 'audio':
+          case "image":
+            previewType.value = "image";
+            streamUrl.value = getFileStreamUrl(path);
+            break;
+          case "video":
+          case "audio":
             if (isNative()) {
-              const mimeType = containerType === 'video' ? 'video/*' : 'audio/*'
-              openPlayer(path, fileName.value, mimeType)
+              const mimeType = containerType === "video" ? "video/*" : "audio/*";
+              openPlayer(path, fileName.value, mimeType);
             } else {
-              router.push({ path: '/player', query: { path, name: fileName.value } })
+              router.push({ path: "/player", query: { path, name: fileName.value } });
             }
-            loading.value = false
-            return
-          case 'document':
-          case 'text':
-            const ext = getFileExtension(fileName.value)
-            if (ext === 'pdf') {
-              previewType.value = 'pdf'
-              pdfPreviewUrl.value = getFilePreviewUrl('pdf.html', path)
+            loading.value = false;
+            return;
+          case "document":
+          case "text": {
+            const ext = getFileExtension(fileName.value);
+            if (ext === "pdf") {
+              previewType.value = "pdf";
+              pdfPreviewUrl.value = getFilePreviewUrl("pdf.html", path);
             } else {
-              previewType.value = 'text'
+              previewType.value = "text";
             }
-            break
+            break;
+          }
           default:
-            previewType.value = 'container'
+            previewType.value = "container";
         }
       } else {
-        previewType.value = 'unsupported'
+        previewType.value = "unsupported";
       }
     } catch (e: any) {
-      console.error('Failed to load encrypted file:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-      error.value = e?.message || String(e)
+      console.error("Failed to load encrypted file:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      error.value = e?.message || String(e);
     } finally {
-      loading.value = false
+      loading.value = false;
     }
-    if (previewType.value === 'text') {
-      loadTextContent()
+    if (previewType.value === "text") {
+      loadTextContent();
     }
-    return
+    return;
   }
 
-  previewType.value = await determinePreviewType(fileName.value, isEncrypted)
+  previewType.value = await determinePreviewType(fileName.value, isEncrypted);
 
   try {
-    if (previewType.value === 'image') {
-      console.info('Loading stream preview:', fileName.value)
-      streamUrl.value = getFileStreamUrl(path)
-    } else if (previewType.value === 'pdf') {
-      console.info('Loading PDF preview:', fileName.value)
-      pdfPreviewUrl.value = getFilePreviewUrl('pdf.html', path)
-    } else if (previewType.value === 'text') {
-      console.info('Loading text preview:', fileName.value)
+    if (previewType.value === "image") {
+      console.info("Loading stream preview:", fileName.value);
+      streamUrl.value = getFileStreamUrl(path);
+    } else if (previewType.value === "pdf") {
+      console.info("Loading PDF preview:", fileName.value);
+      pdfPreviewUrl.value = getFilePreviewUrl("pdf.html", path);
+    } else if (previewType.value === "text") {
+      console.info("Loading text preview:", fileName.value);
     } else {
-      console.info('Unsupported file type:', fileName.value)
-      fileSize.value = 0
+      console.info("Unsupported file type:", fileName.value);
+      fileSize.value = 0;
     }
   } catch (e: any) {
-    console.error('Failed to load file:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-    error.value = e?.message || String(e)
+    console.error("Failed to load file:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    error.value = e?.message || String(e);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 
-  if (previewType.value === 'text') {
-    loadTextContent()
+  if (previewType.value === "text") {
+    loadTextContent();
   }
 }
 
-onMounted(() => loadFile())
+onMounted(() => loadFile());
 </script>
 
 <style scoped>

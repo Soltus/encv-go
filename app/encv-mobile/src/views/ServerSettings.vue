@@ -132,141 +132,153 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonButton, IonIcon,
-  IonContent, IonSpinner, IonToast,
-} from '@ionic/vue'
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToast,
+  IonToolbar,
+} from "@ionic/vue";
 import {
+  checkmarkOutline as checkmarkIcon,
+  createOutline as createIcon,
+  globeOutline as globeIcon,
+  homeOutline as homeIcon,
   refresh as refreshIcon,
   searchOutline as searchIcon,
-  homeOutline as homeIcon,
-  globeOutline as globeIcon,
-  createOutline as createIcon,
-  checkmarkOutline as checkmarkIcon,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { useServerStatus } from '@/composables/useServerStatus'
-import { useApiBaseProbe, type ProbeResult } from '@/composables/useApiBaseProbe'
-import { DEFAULT_API_BASE_URL, getApiBaseUrl } from '@/api/encv'
-import ServerStatusCard from '@/components/ServerStatusCard.vue'
+} from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
+import { DEFAULT_API_BASE_URL, getApiBaseUrl } from "@/api/encv";
+import ServerStatusCard from "@/components/ServerStatusCard.vue";
+import { type ProbeResult, useApiBaseProbe } from "@/composables/useApiBaseProbe";
+import { useI18n } from "@/composables/useI18n";
+import { useServerStatus } from "@/composables/useServerStatus";
 
-const { t } = useI18n()
-const server = useServerStatus()
-const probe = useApiBaseProbe()
+const { t } = useI18n();
+const server = useServerStatus();
+const probe = useApiBaseProbe();
 
-const manualUrl = ref('')
-const manualError = ref('')
-const toastOpen = ref(false)
-const toastMessage = ref('')
-const toastColor = ref<'success' | 'danger' | 'warning'>('success')
+const manualUrl = ref("");
+const manualError = ref("");
+const toastOpen = ref(false);
+const toastMessage = ref("");
+const toastColor = ref<"success" | "danger" | "warning">("success");
 
 // 当前 baseUrl：优先从 probe.lastResult 取（最新探测结果），否则读 getApiBaseUrl()
 const currentBaseUrl = computed(() => {
-  return probe.lastResult.value?.baseUrl ?? getApiBaseUrl() ?? DEFAULT_API_BASE_URL
-})
+  return probe.lastResult.value?.baseUrl ?? getApiBaseUrl() ?? DEFAULT_API_BASE_URL;
+});
 
 // LAN 候选：来自 probe.lastResult.lanAccess.addresses
 // + 在地址前补 port（如果后端没返 port）
 const lanCandidates = computed<string[]>(() => {
-  const la = probe.lastResult.value?.lanAccess
-  if (!la || la.addresses.length === 0) return []
-  const port = extractPort(currentBaseUrl.value) || 2025
-  return la.addresses
-    .filter((a) => a && a !== '127.0.0.1' && a !== '::1' && a !== 'localhost')
-    .map((a) => ensureHttpPrefix(a, port))
-})
+  const la = probe.lastResult.value?.lanAccess;
+  if (!la || la.addresses.length === 0) return [];
+  const port = extractPort(currentBaseUrl.value) || 2025;
+  return la.addresses.filter(a => a && a !== "127.0.0.1" && a !== "::1" && a !== "localhost").map(a => ensureHttpPrefix(a, port));
+});
 
 function extractPort(url: string): number {
   try {
-    const u = new URL(url)
-    return u.port ? parseInt(u.port, 10) : 2025
+    const u = new URL(url);
+    return u.port ? parseInt(u.port, 10) : 2025;
   } catch {
-    return 2025
+    return 2025;
   }
 }
 
 function ensureHttpPrefix(addr: string, port: number): string {
-  if (/^https?:\/\//i.test(addr)) return addr
-  return `http://${addr}:${port}`
+  if (/^https?:\/\//i.test(addr)) return addr;
+  return `http://${addr}:${port}`;
 }
 
 const isManualValid = computed(() => {
-  const v = manualUrl.value.trim()
-  return /^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(v)
-})
+  const v = manualUrl.value.trim();
+  return /^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(v);
+});
 
-function sourceLabel(s: ProbeResult['source']): string {
+function sourceLabel(s: ProbeResult["source"]): string {
   // 覆盖 ProbeResult['source'] 的全部 4 个 union 值 + default 兜底（TS2366）
   switch (s) {
-    case 'cached': return t('settings.server.sourceCached') || '已缓存'
-    case 'current-origin': return t('settings.server.sourceCurrentOrigin') || '当前页面'
-    case 'loopback': return t('settings.server.sourceLoopback') || 'loopback'
-    case 'lan-candidate': return t('settings.server.sourceLan') || '局域网'
-    default: return s
+    case "cached":
+      return t("settings.server.sourceCached") || "已缓存";
+    case "current-origin":
+      return t("settings.server.sourceCurrentOrigin") || "当前页面";
+    case "loopback":
+      return t("settings.server.sourceLoopback") || "loopback";
+    case "lan-candidate":
+      return t("settings.server.sourceLan") || "局域网";
+    default:
+      return s;
   }
 }
 
-function showToast(msg: string, color: 'success' | 'danger' | 'warning' = 'success'): void {
-  toastMessage.value = msg
-  toastColor.value = color
-  toastOpen.value = true
+function showToast(msg: string, color: "success" | "danger" | "warning" = "success"): void {
+  toastMessage.value = msg;
+  toastColor.value = color;
+  toastOpen.value = true;
 }
 
 async function handleProbeNow(): Promise<void> {
   try {
-    const result = await probe.probe({ force: true })
+    const result = await probe.probe({ force: true });
     if (result.baseUrl) {
-      await server.manualReconnect()
+      await server.manualReconnect();
       showToast(
-        `${t('settings.server.probeSuccess') || '已切换'}：${result.baseUrl}（${result.latencyMs}ms）`,
-        server.isOnline.value ? 'success' : 'warning'
-      )
+        `${t("settings.server.probeSuccess") || "已切换"}：${result.baseUrl}（${result.latencyMs}ms）`,
+        server.isOnline.value ? "success" : "warning"
+      );
     } else {
-      showToast(t('settings.server.probeFailed') || '所有候选都不可达', 'danger')
+      showToast(t("settings.server.probeFailed") || "所有候选都不可达", "danger");
     }
   } catch (e) {
-    showToast(`${t('settings.server.probeError') || '探测失败'}：${e instanceof Error ? e.message : String(e)}`, 'danger')
+    showToast(`${t("settings.server.probeError") || "探测失败"}：${e instanceof Error ? e.message : String(e)}`, "danger");
   }
 }
 
 async function handleReset(): Promise<void> {
   try {
-    const result = await probe.resetToDefault()
-    await server.manualReconnect()
-    showToast(`${t('settings.server.resetSuccess') || '已恢复'}：${result.baseUrl}`)
+    const result = await probe.resetToDefault();
+    await server.manualReconnect();
+    showToast(`${t("settings.server.resetSuccess") || "已恢复"}：${result.baseUrl}`);
   } catch (e) {
-    showToast(`${t('settings.server.probeError') || '恢复失败'}：${e instanceof Error ? e.message : String(e)}`, 'danger')
+    showToast(`${t("settings.server.probeError") || "恢复失败"}：${e instanceof Error ? e.message : String(e)}`, "danger");
   }
 }
 
 async function handleUseLanAddress(addr: string): Promise<void> {
   try {
-    manualUrl.value = addr
-    manualError.value = ''
-    probe.setManual(addr)
+    manualUrl.value = addr;
+    manualError.value = "";
+    probe.setManual(addr);
     server.manualReconnect().then(() => {
-      showToast(`${t('settings.server.useSuccess') || '已切换'}：${addr}`, server.isOnline.value ? 'success' : 'warning')
-    })
+      showToast(`${t("settings.server.useSuccess") || "已切换"}：${addr}`, server.isOnline.value ? "success" : "warning");
+    });
   } catch (e) {
-    manualError.value = e instanceof Error ? e.message : String(e)
+    manualError.value = e instanceof Error ? e.message : String(e);
   }
 }
 
 async function handleUseManual(): Promise<void> {
   if (!isManualValid.value) {
-    manualError.value = t('settings.server.manualUrlInvalid') || 'URL 格式无效'
-    return
+    manualError.value = t("settings.server.manualUrlInvalid") || "URL 格式无效";
+    return;
   }
   try {
-    const v = manualUrl.value.trim()
-    manualError.value = ''
-    probe.setManual(v)
+    const v = manualUrl.value.trim();
+    manualError.value = "";
+    probe.setManual(v);
     server.manualReconnect().then(() => {
-      showToast(`${t('settings.server.useSuccess') || '已切换'}：${v}`, server.isOnline.value ? 'success' : 'warning')
-    })
+      showToast(`${t("settings.server.useSuccess") || "已切换"}：${v}`, server.isOnline.value ? "success" : "warning");
+    });
   } catch (e) {
-    manualError.value = e instanceof Error ? e.message : String(e)
+    manualError.value = e instanceof Error ? e.message : String(e);
   }
 }
 
@@ -274,12 +286,14 @@ onMounted(async () => {
   // 若没有 lastResult，主动跑一次（用 cached 节流，不强制 force）
   if (!probe.lastResult.value) {
     try {
-      await probe.probe()
-    } catch {/* ignore — UI 仍会显示默认 loopback */}
+      await probe.probe();
+    } catch {
+      /* ignore — UI 仍会显示默认 loopback */
+    }
   }
   // 初始化 manualUrl
-  manualUrl.value = currentBaseUrl.value
-})
+  manualUrl.value = currentBaseUrl.value;
+});
 </script>
 
 <style scoped>

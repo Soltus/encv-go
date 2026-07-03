@@ -103,22 +103,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonIcon } from '@ionic/vue'
+import { IonIcon } from "@ionic/vue";
 import {
-  terminalOutline,
-  copyOutline,
   checkmarkCircleOutline,
-  warningOutline,
+  copyOutline,
+  documentTextOutline,
   flashOutline,
   settingsOutline,
-  documentTextOutline,
-} from 'ionicons/icons'
-import UnifiedTimelineCard from '@/components/shared/UnifiedTimelineCard.vue'
-import { Phase, type UnifiedTimelineEntry, type StepStatus } from '@/lib/workflow/types'
-import type { MockGenLogEntry, MockGenLogSummary } from '@/composables/useMockGenLog'
+  terminalOutline,
+  warningOutline,
+} from "ionicons/icons";
+import { computed } from "vue";
+import UnifiedTimelineCard from "@/components/shared/UnifiedTimelineCard.vue";
 // v3 2026-06-18：FFMPEG 日志时间格式化（避免 ISO 字符串撑满宽度导致溢出）
-import { formatDateTime } from '@/composables/useDateFormat'
+import { formatDateTime } from "@/composables/useDateFormat";
+import type { MockGenLogEntry, MockGenLogSummary } from "@/composables/useMockGenLog";
+import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
 
 /**
  * MockGenLogCard — FFMPEG 流程日志卡（Task 13 SubTask 13.2/13.3）
@@ -137,31 +137,31 @@ import { formatDateTime } from '@/composables/useDateFormat'
  */
 const props = defineProps<{
   /** 日志条目列表 */
-  log: MockGenLogEntry[]
+  log: MockGenLogEntry[];
   /** 汇总信息（null 时不渲染汇总行） */
-  summary: MockGenLogSummary | null
+  summary: MockGenLogSummary | null;
   /** 是否已复制（控制复制按钮状态） */
-  copied?: boolean
-}>()
+  copied?: boolean;
+}>();
 
 const emit = defineEmits<{
-  (e: 'toggle', key: string): void
-  (e: 'copy'): void
-}>()
+  (e: "toggle", key: string): void;
+  (e: "copy"): void;
+}>();
 
 /** runner 标识 → ion-icon */
 function runnerIcon(runner: string) {
-  if (runner === 'mediacodec') return flashOutline
-  if (runner === 'static') return documentTextOutline
-  return settingsOutline // ffmpeg / default
+  if (runner === "mediacodec") return flashOutline;
+  if (runner === "static") return documentTextOutline;
+  return settingsOutline; // ffmpeg / default
 }
 
 /** MockGenLogEntry.status → StepStatus 映射 */
-const STATUS_MAP: Record<MockGenLogEntry['status'], StepStatus> = {
-  ok: 'success',
-  failed: 'failure',
-  pending: 'running',
-}
+const STATUS_MAP: Record<MockGenLogEntry["status"], StepStatus> = {
+  ok: "success",
+  failed: "failure",
+  pending: "running",
+};
 
 /**
  * MockGenLogEntry → UnifiedTimelineEntry 转换器
@@ -181,27 +181,25 @@ function toUnifiedTimelineEntry(entry: MockGenLogEntry): UnifiedTimelineEntry {
     hasExpandableDetail: true,
     expandDetail: {
       // error 字段：失败时把 stderr 作为快速预览（UnifiedTimelineCard 会渲染 error-hint）
-      ...(entry.status === 'failed' && entry.stderr
-        ? { error: entry.stderr.split('\n')[0] }
-        : {}),
+      ...(entry.status === "failed" && entry.stderr ? { error: entry.stderr.split("\n")[0] } : {}),
     },
-  }
+  };
 }
 
 /** 汇总文本（保持与原 PluginTestsDetail.vue 一致的格式） */
 const summaryText = computed(() => {
-  if (!props.summary) return ''
-  const { ok, failed, skipped } = props.summary
-  let text = `${ok} ✓ / ${failed} ✗ / ${skipped} ◌`
+  if (!props.summary) return "";
+  const { ok, failed, skipped } = props.summary;
+  let text = `${ok} ✓ / ${failed} ✗ / ${skipped} ◌`;
   if (props.summary.disconnected) {
-    text = `${text}（流中断于 ${props.log.length}/${props.summary.total}）`
+    text = `${text}（流中断于 ${props.log.length}/${props.summary.total}）`;
   }
-  return text
-})
+  return text;
+});
 
 /** UnifiedTimelineCard 的 toggle 事件转发为 toggle(key) */
 function onToggle(key: string, _value: boolean): void {
-  emit('toggle', key)
+  emit("toggle", key);
 }
 </script>
 

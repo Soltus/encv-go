@@ -22,23 +22,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useI18n } from '@/composables/useI18n'
+import { computed, ref } from "vue";
+import { useI18n } from "@/composables/useI18n";
 
 const props = defineProps<{
-  text: string
-}>()
+  text: string;
+}>();
 
-const { t } = useI18n()
-const expanded = ref(false)
+const { t } = useI18n();
+const expanded = ref(false);
 
-const CHAR_LIMIT = 560
-const LINE_LIMIT = 9
+const CHAR_LIMIT = 560;
+const LINE_LIMIT = 9;
 
-const charCount = computed(() => props.text.length)
-const lineCount = computed(() => props.text.split('\n').length)
+const charCount = computed(() => props.text.length);
+const lineCount = computed(() => props.text.split("\n").length);
 
-const shouldCollapse = computed(() => charCount.value > CHAR_LIMIT || lineCount.value > LINE_LIMIT)
+const shouldCollapse = computed(() => charCount.value > CHAR_LIMIT || lineCount.value > LINE_LIMIT);
 </script>
 
 <style scoped>

@@ -1,7 +1,7 @@
-import { ref } from 'vue'
-import { cancelTask } from '@/api/encv_tasks'
-import { getApiBaseUrl } from '@/api/encv_core'
-import { enqueueCancelWorker, isNative } from '@/plugins/GoProcess'
+import { ref } from "vue";
+import { getApiBaseUrl } from "@/api/encv_core";
+import { cancelTask } from "@/api/encv_tasks";
+import { enqueueCancelWorker, isNative } from "@/plugins/GoProcess";
 
 /**
  * useTaskCancel — 任务取消的双写 composable。
@@ -28,7 +28,7 @@ import { enqueueCancelWorker, isNative } from '@/plugins/GoProcess'
  *   - 未来可以把 useTasksList.cancelTaskById 替换为 useTaskCancel.cancel
  */
 export function useTaskCancel() {
-  const isCancelling = ref(false)
+  const isCancelling = ref(false);
 
   /**
    * 取消任务（双写：HTTP + WorkManager）。
@@ -37,36 +37,36 @@ export function useTaskCancel() {
    * @throws 仅在非 native 且 HTTP 失败时抛出（没有 Worker 兜底）
    */
   async function cancel(taskId: string): Promise<boolean> {
-    if (!taskId) return false
-    isCancelling.value = true
+    if (!taskId) return false;
+    isCancelling.value = true;
 
     // 1. 先入队 WorkManager（即使 HTTP 失败也有兜底）
     //    native 平台才有 WorkManager，web 端走 web plugin 返回 success:false 但不影响
     if (isNative()) {
       try {
-        const result = await enqueueCancelWorker(taskId)
-        console.debug('[useTaskCancel] enqueued cancel worker:', result)
+        const result = await enqueueCancelWorker(taskId);
+        console.debug("[useTaskCancel] enqueued cancel worker:", result);
       } catch (e) {
-        console.warn('[useTaskCancel] enqueueCancelWorker failed:', e)
+        console.warn("[useTaskCancel] enqueueCancelWorker failed:", e);
         // Worker 入队失败不影响 HTTP 路径，继续
       }
     }
 
     // 2. 发起 HTTP cancel
     try {
-      await cancelTask(taskId)
-      return true
+      await cancelTask(taskId);
+      return true;
     } catch (err) {
-      console.warn('[useTaskCancel] HTTP cancel failed:', err)
+      console.warn("[useTaskCancel] HTTP cancel failed:", err);
       if (isNative()) {
         // native 模式：HTTP 失败但 Worker 已入队，返回 false 但不抛错
         // （Worker 会在 Go 进程恢复后重试
-        return false
+        return false;
       }
       // web 模式：没有 Worker 兜底，直接抛错
-      throw err
+      throw err;
     } finally {
-      isCancelling.value = false
+      isCancelling.value = false;
     }
   }
 
@@ -77,25 +77,25 @@ export function useTaskCancel() {
   async function pollCancelStatus(taskId: string, maxAttempts = 10, intervalMs = 2000): Promise<boolean> {
     for (let i = 0; i < maxAttempts; i++) {
       try {
-        const baseUrl = getApiBaseUrl()
-        const resp = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(taskId)}`)
+        const baseUrl = getApiBaseUrl();
+        const resp = await fetch(`${baseUrl}/api/tasks/${encodeURIComponent(taskId)}`);
         if (resp.ok) {
-          const data = await resp.json()
-          if (data.status === 'cancelled' || data.status === 'canceled') {
-            return true
+          const data = await resp.json();
+          if (data.status === "cancelled" || data.status === "canceled") {
+            return true;
           }
         }
       } catch {
         // Go 进程可能还没起来，继续等
       }
-      await new Promise(r => setTimeout(r, intervalMs))
+      await new Promise(r => setTimeout(r, intervalMs));
     }
-    return false
+    return false;
   }
 
   return {
     isCancelling,
     cancel,
     pollCancelStatus,
-  }
+  };
 }

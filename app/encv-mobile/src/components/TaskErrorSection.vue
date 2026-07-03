@@ -8,63 +8,67 @@
  * - "详情" 按钮点击展开：技术说明 + 修复建议 + 原始错误
  * - 不再用刺眼红色背景 / border-left 装饰
  */
-import { computed, ref } from 'vue'
-import { useI18n } from '@/composables/useI18n'
-import { analyzeError, type ErrorAnalysis } from '@/composables/useErrorAnalyzer'
+import { computed, ref } from "vue";
+import { analyzeError, type ErrorAnalysis } from "@/composables/useErrorAnalyzer";
+import { useI18n } from "@/composables/useI18n";
 
 interface Props {
   task: {
-    id: string
-    error?: string
-    errorDetail?: string
-  }
+    id: string;
+    error?: string;
+    errorDetail?: string;
+  };
 }
 
-const props = defineProps<Props>()
-const { t } = useI18n()
+const props = defineProps<Props>();
+const { t } = useI18n();
 
 // 🆕 v2：整个组件在没错误时不渲染（避免 UI 永远显示 chip）
-const hasError = computed(() => Boolean(props.task.error || props.task.errorDetail))
+const hasError = computed(() => Boolean(props.task.error || props.task.errorDetail));
 
 const errorAnalysis = computed<ErrorAnalysis | null>(() => {
-  if (!hasError.value) return null
+  if (!hasError.value) return null;
   if (props.task.errorDetail) {
     try {
-      const detail = JSON.parse(props.task.errorDetail)
-      return analyzeError(detail.raw ?? props.task.error ?? '', {
+      const detail = JSON.parse(props.task.errorDetail);
+      return analyzeError(detail.raw ?? props.task.error ?? "", {
         phase: detail.phase,
-      })
+      });
     } catch {
-      return analyzeError(props.task.errorDetail, {})
+      return analyzeError(props.task.errorDetail, {});
     }
   }
   if (props.task.error) {
-    return analyzeError(props.task.error, {})
+    return analyzeError(props.task.error, {});
   }
-  return null
-})
+  return null;
+});
 
 const categoryLabel = computed(() => {
-  const cat = errorAnalysis.value?.category ?? 'unknown'
-  const key = `tasks.error.category.${cat}` as const
-  return t(key) !== key ? t(key) : (errorAnalysis.value?.summary ?? cat)
-})
+  const cat = errorAnalysis.value?.category ?? "unknown";
+  const key = `tasks.error.category.${cat}` as const;
+  return t(key) !== key ? t(key) : (errorAnalysis.value?.summary ?? cat);
+});
 
-const copySuccess = ref(false)
-const expanded = ref(false)
+const copySuccess = ref(false);
+const expanded = ref(false);
 async function copyError() {
-  if (!errorAnalysis.value) return
-  const text = JSON.stringify({
-    taskId: props.task.id,
-    error: props.task.error,
-    errorDetail: props.task.errorDetail,
-  }, null, 2)
+  if (!errorAnalysis.value) return;
+  const text = JSON.stringify(
+    {
+      taskId: props.task.id,
+      error: props.task.error,
+      errorDetail: props.task.errorDetail,
+    },
+    null,
+    2
+  );
   try {
-    await navigator.clipboard.writeText(text)
-    copySuccess.value = true
-    setTimeout(() => (copySuccess.value = false), 2000)
+    await navigator.clipboard.writeText(text);
+    copySuccess.value = true;
+    setTimeout(() => (copySuccess.value = false), 2000);
   } catch (e) {
-    console.warn('Failed to copy to clipboard', e)
+    console.warn("Failed to copy to clipboard", e);
   }
 }
 </script>

@@ -32,21 +32,21 @@
 </template>
 
 <script setup lang="ts">
-import { IonContent, IonPage, modalController } from '@ionic/vue'
-import ContextPopover from './ContextPopover.vue'
-import type { ContextUsageResponse } from '@/composables/useContextUsage'
+import { IonContent, IonPage, modalController } from "@ionic/vue";
+import type { ContextUsageResponse } from "@/composables/useContextUsage";
+import ContextPopover from "./ContextPopover.vue";
 
 export interface ContextPopoverState {
-  data: ContextUsageResponse | null
-  loading: boolean
+  data: ContextUsageResponse | null;
+  loading: boolean;
 }
 
 defineProps<{
-  state: ContextPopoverState
-}>()
+  state: ContextPopoverState;
+}>();
 
 function handleClose() {
-  modalController.dismiss()
+  modalController.dismiss();
 }
 </script>
 

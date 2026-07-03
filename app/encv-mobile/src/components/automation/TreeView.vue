@@ -113,17 +113,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { chevronDown, chevronForward, closeCircleOutline, flashOutline } from 'ionicons/icons'
-import StepMiniBadge from './StepMiniBadge.vue'
-import PhaseIcon from '@/components/shared/PhaseIcon.vue'
-import {
-  isPhase,
-  type UnifiedTreeNode,
-  type WorkflowRun,
-  type StepStatus,
-} from '@/lib/workflow/types'
+import { IonIcon } from "@ionic/vue";
+import { chevronDown, chevronForward, closeCircleOutline, flashOutline } from "ionicons/icons";
+import { computed, ref, watch } from "vue";
+import PhaseIcon from "@/components/shared/PhaseIcon.vue";
+import { isPhase, type StepStatus, type UnifiedTreeNode, type WorkflowRun } from "@/lib/workflow/types";
+import StepMiniBadge from "./StepMiniBadge.vue";
 
 /**
  * 通用树形视图组件（UnifiedTreeView）
@@ -135,70 +130,68 @@ import {
  * 兼容模式：当传入 workflowRun + stepNames + jobDisplayNames 时，内部自动
  * 派生为 UnifiedTreeNode[]（保留对 PluginTestsDetail.vue 旧调用方的兼容）。
  */
-const props = withDefaults(defineProps<{
-  /** 通用树节点数组（推荐用法） */
-  nodes?: UnifiedTreeNode[]
-  /** 兼容字段：从 WorkflowRun 派生 nodes（当 nodes 未传时启用） */
-  workflowRun?: WorkflowRun
-  /** 兼容字段：stepDefId → 显示名映射 */
-  stepNames?: Map<string, string>
-  /** 兼容字段：jobDefId → 显示名映射 */
-  jobDisplayNames?: Map<string, string>
-  /** 是否显示搜索框（默认 true） */
-  searchable?: boolean
-  /** 默认展开有失败子节点的父节点（默认 true） */
-  defaultExpandFailed?: boolean
-}>(), {
-  nodes: () => [],
-  searchable: true,
-  defaultExpandFailed: true,
-})
+const props = withDefaults(
+  defineProps<{
+    /** 通用树节点数组（推荐用法） */
+    nodes?: UnifiedTreeNode[];
+    /** 兼容字段：从 WorkflowRun 派生 nodes（当 nodes 未传时启用） */
+    workflowRun?: WorkflowRun;
+    /** 兼容字段：stepDefId → 显示名映射 */
+    stepNames?: Map<string, string>;
+    /** 兼容字段：jobDefId → 显示名映射 */
+    jobDisplayNames?: Map<string, string>;
+    /** 是否显示搜索框（默认 true） */
+    searchable?: boolean;
+    /** 默认展开有失败子节点的父节点（默认 true） */
+    defaultExpandFailed?: boolean;
+  }>(),
+  {
+    nodes: () => [],
+    searchable: true,
+    defaultExpandFailed: true,
+  }
+);
 
 const emit = defineEmits<{
-  (e: 'select-node', node: UnifiedTreeNode): void
-  (e: 'toggle-node', node: UnifiedTreeNode, expanded: boolean): void
-}>()
+  (e: "select-node", node: UnifiedTreeNode): void;
+  (e: "toggle-node", node: UnifiedTreeNode, expanded: boolean): void;
+}>();
 
-const searchQuery = ref('')
+const searchQuery = ref("");
 /** 跟踪展开的父节点 */
-const expandedSet = ref<Set<string>>(new Set())
+const expandedSet = ref<Set<string>>(new Set());
 /** 跟踪展开详情的子节点 */
-const expandedDetailSet = ref<Set<string>>(new Set())
+const expandedDetailSet = ref<Set<string>>(new Set());
 
 // ==================== 兼容派生：WorkflowRun → UnifiedTreeNode[] ====================
 
 /** 把毫秒耗时格式化为人类可读字符串 */
 function formatDurationMs(ms: number): string {
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-  const m = Math.floor(ms / 60000)
-  const s = Math.floor((ms % 60000) / 1000)
-  return `${m}m${s}s`
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  const m = Math.floor(ms / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return `${m}m${s}s`;
 }
 
 /** 终态 step 状态集合（用于计算 job 完成数） */
-const TERMINAL_STEP_STATUS: Set<StepStatus> = new Set([
-  'success', 'failure', 'cancelled', 'skipped', 'timed_out',
-])
+const TERMINAL_STEP_STATUS: Set<StepStatus> = new Set(["success", "failure", "cancelled", "skipped", "timed_out"]);
 
 /** 从 WorkflowRun 派生 UnifiedTreeNode[]（兼容旧调用方） */
 function deriveNodesFromWorkflowRun(
   run: WorkflowRun,
   stepNames?: Map<string, string>,
-  jobDisplayNames?: Map<string, string>,
+  jobDisplayNames?: Map<string, string>
 ): UnifiedTreeNode[] {
-  return run.jobs.map((job) => {
-    const completedCount = job.steps.filter((s) =>
-      TERMINAL_STEP_STATUS.has(s.status),
-    ).length
-    const meta = `${completedCount}/${job.steps.length}` +
-      (job.conclusion ? ` · ${job.conclusion}` : '')
+  return run.jobs.map(job => {
+    const completedCount = job.steps.filter(s => TERMINAL_STEP_STATUS.has(s.status)).length;
+    const meta = `${completedCount}/${job.steps.length}` + (job.conclusion ? ` · ${job.conclusion}` : "");
     return {
       id: job.id,
       label: jobDisplayNames?.get(job.jobDefId) ?? job.jobDefId,
       status: job.status,
       meta,
-      children: job.steps.map((step) => ({
+      children: job.steps.map(step => ({
         id: step.id,
         label: stepNames?.get(step.stepDefId) ?? step.stepDefId,
         status: step.status,
@@ -207,91 +200,81 @@ function deriveNodesFromWorkflowRun(
         speed: step.speed,
         eta: step.eta,
         duration: step.durationMs != null ? formatDurationMs(step.durationMs) : undefined,
-        errorHint: step.error ? 'error' : undefined,
+        errorHint: step.error ? "error" : undefined,
       })),
-    }
-  })
+    };
+  });
 }
 
 /** 实际渲染用的节点数组：优先用 nodes prop，否则从 workflowRun 派生 */
 const resolvedNodes = computed<UnifiedTreeNode[]>(() => {
-  if (props.nodes && props.nodes.length > 0) return props.nodes
+  if (props.nodes && props.nodes.length > 0) return props.nodes;
   if (props.workflowRun) {
-    return deriveNodesFromWorkflowRun(
-      props.workflowRun,
-      props.stepNames,
-      props.jobDisplayNames,
-    )
+    return deriveNodesFromWorkflowRun(props.workflowRun, props.stepNames, props.jobDisplayNames);
   }
-  return []
-})
+  return [];
+});
 
 // ==================== 默认展开策略 ====================
 
-let initialized = false
+let initialized = false;
 /** 默认展开有失败子节点的父节点 */
 function initExpanded(nodes: UnifiedTreeNode[]) {
-  if (!props.defaultExpandFailed) return
-  const set = new Set<string>()
+  if (!props.defaultExpandFailed) return;
+  const set = new Set<string>();
   for (const node of nodes) {
-    if (node.children?.some(
-      (c) => c.status === 'failure' || c.status === 'timed_out',
-    )) {
-      set.add(node.id)
+    if (node.children?.some(c => c.status === "failure" || c.status === "timed_out")) {
+      set.add(node.id);
     }
   }
-  expandedSet.value = set
+  expandedSet.value = set;
 }
 
 // 监听 resolvedNodes：首次拿到非空数据时初始化展开状态
 watch(
   resolvedNodes,
-  (nodes) => {
+  nodes => {
     if (!initialized && nodes.length > 0) {
-      initExpanded(nodes)
-      initialized = true
+      initExpanded(nodes);
+      initialized = true;
     }
   },
-  { immediate: true },
-)
+  { immediate: true }
+);
 
 // ==================== 搜索过滤 ====================
 
 const filteredNodes = computed(() => {
-  if (!searchQuery.value) return resolvedNodes.value
-  const q = searchQuery.value.toLowerCase()
-  return resolvedNodes.value.filter((node) => {
+  if (!searchQuery.value) return resolvedNodes.value;
+  const q = searchQuery.value.toLowerCase();
+  return resolvedNodes.value.filter(node => {
     // 父节点 label / meta 匹配
-    if (node.label.toLowerCase().includes(q)) return true
-    if (node.meta?.toLowerCase().includes(q)) return true
+    if (node.label.toLowerCase().includes(q)) return true;
+    if (node.meta?.toLowerCase().includes(q)) return true;
     // 子节点 label / meta 匹配
-    return node.children?.some(
-      (c) =>
-        c.label.toLowerCase().includes(q) ||
-        c.meta?.toLowerCase().includes(q),
-    )
-  })
-})
+    return node.children?.some(c => c.label.toLowerCase().includes(q) || c.meta?.toLowerCase().includes(q));
+  });
+});
 
 // ==================== 交互 ====================
 
 /** 切换父节点展开状态 */
 function toggleNode(node: UnifiedTreeNode) {
-  const next = new Set(expandedSet.value)
-  const wasExpanded = next.has(node.id)
-  if (wasExpanded) next.delete(node.id)
-  else next.add(node.id)
-  expandedSet.value = next
-  emit('toggle-node', node, !wasExpanded)
+  const next = new Set(expandedSet.value);
+  const wasExpanded = next.has(node.id);
+  if (wasExpanded) next.delete(node.id);
+  else next.add(node.id);
+  expandedSet.value = next;
+  emit("toggle-node", node, !wasExpanded);
 }
 
 /** 子节点点击：emit select-node + 切换详情展开 */
 function selectNode(node: UnifiedTreeNode) {
-  const next = new Set(expandedDetailSet.value)
-  if (next.has(node.id)) next.delete(node.id)
-  else next.add(node.id)
-  expandedDetailSet.value = next
-  emit('select-node', node)
+  const next = new Set(expandedDetailSet.value);
+  if (next.has(node.id)) next.delete(node.id);
+  else next.add(node.id);
+  expandedDetailSet.value = next;
+  emit("select-node", node);
 }
 </script>
 

@@ -42,77 +42,72 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonButton, IonIcon } from '@ionic/vue'
-import {
-  checkmarkCircle,
-  documentTextOutline,
-  playCircleOutline,
-  folderOpenOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { formatDuration } from '@/composables/useDateFormat'
-import { showToast } from '@/composables/useToast'
-import type { EncvTask } from '@/api/encv'
+import { IonButton, IonIcon } from "@ionic/vue";
+import { checkmarkCircle, documentTextOutline, folderOpenOutline, playCircleOutline } from "ionicons/icons";
+import { computed } from "vue";
+import type { EncvTask } from "@/api/encv";
+import { formatDuration } from "@/composables/useDateFormat";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
 
-const props = defineProps<{ task: EncvTask }>()
+const props = defineProps<{ task: EncvTask }>();
 const emit = defineEmits<{
-  (e: 'open', outputPath: string): void
-  (e: 'locate', outputPath: string): void
-}>()
-const { t } = useI18n()
+  (e: "open", outputPath: string): void;
+  (e: "locate", outputPath: string): void;
+}>();
+const { t } = useI18n();
 
-const PREVIEWABLE_VIDEO = new Set(['mp4', 'webm', 'mov', 'm4v', 'mkv'])
+const PREVIEWABLE_VIDEO = new Set(["mp4", "webm", "mov", "m4v", "mkv"]);
 
 const durationStr = computed(() => {
-  if (!props.task.createdAt) return ''
-  const created = new Date(props.task.createdAt).getTime()
-  if (isNaN(created)) return ''
+  if (!props.task.createdAt) return "";
+  const created = new Date(props.task.createdAt).getTime();
+  if (isNaN(created)) return "";
   if (props.task.completedAt) {
-    const completed = new Date(props.task.completedAt).getTime()
-    if (isNaN(completed)) return ''
-    return formatDuration(completed - created)
+    const completed = new Date(props.task.completedAt).getTime();
+    if (isNaN(completed)) return "";
+    return formatDuration(completed - created);
   }
-  return ''
-})
+  return "";
+});
 
 const outputInfo = computed(() => {
-  const op = props.task.outputPath
-  if (!op) return null
-  const name = op.split('/').pop() || op
+  const op = props.task.outputPath;
+  if (!op) return null;
+  const name = op.split("/").pop() || op;
   return {
     fullPath: op,
     name,
     dirLabel: dirOf(op),
-    sizeLabel: '',
-  }
-})
+    sizeLabel: "",
+  };
+});
 
 const canPreviewOutput = computed(() => {
-  if (!outputInfo.value) return false
-  const ext = outputInfo.value.name.split('.').pop()?.toLowerCase() || ''
-  return PREVIEWABLE_VIDEO.has(ext)
-})
+  if (!outputInfo.value) return false;
+  const ext = outputInfo.value.name.split(".").pop()?.toLowerCase() || "";
+  return PREVIEWABLE_VIDEO.has(ext);
+});
 
 function dirOf(p: string): string {
-  const idx = p.lastIndexOf('/')
-  if (idx < 0) return '/'
-  return p.slice(0, idx) || '/'
+  const idx = p.lastIndexOf("/");
+  if (idx < 0) return "/";
+  return p.slice(0, idx) || "/";
 }
 
 function handleOpenOutput() {
-  if (!outputInfo.value) return
-  const ext = outputInfo.value.name.split('.').pop()?.toLowerCase() || ''
+  if (!outputInfo.value) return;
+  const ext = outputInfo.value.name.split(".").pop()?.toLowerCase() || "";
   if (PREVIEWABLE_VIDEO.has(ext)) {
-    emit('open', outputInfo.value.fullPath)
+    emit("open", outputInfo.value.fullPath);
   } else {
-    showToast({ message: t('tasks.previewUnsupportedExt') + ': ' + ext, duration: 2000, color: 'medium' })
+    showToast({ message: t("tasks.previewUnsupportedExt") + ": " + ext, duration: 2000, color: "medium" });
   }
 }
 
 function handleLocateOutput() {
-  if (!outputInfo.value) return
-  emit('locate', outputInfo.value.fullPath)
+  if (!outputInfo.value) return;
+  emit("locate", outputInfo.value.fullPath);
 }
 </script>
 

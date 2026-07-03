@@ -31,41 +31,41 @@
  */
 
 export type ToolCallStatus =
-  | 'pending'        // 已收到 TOOL_CALL_START，args 还在累积
-  | 'accumulating'   // 至少收到 1 个 TOOL_CALL_ARGS
-  | 'complete'       // 收到 TOOL_CALL_END
-  | 'executed'       // 收到 TOOL_CALL_RESULT（已执行完成）
+  | "pending" // 已收到 TOOL_CALL_START，args 还在累积
+  | "accumulating" // 至少收到 1 个 TOOL_CALL_ARGS
+  | "complete" // 收到 TOOL_CALL_END
+  | "executed"; // 收到 TOOL_CALL_RESULT（已执行完成）
 
 export interface AccumulatedToolCall {
-  id: string
-  name: string
-  args: string           // 累积的 args JSON 字符串
-  status: ToolCallStatus
-  result?: string        // tool 执行结果（仅 executed 状态有值）
-  error?: string         // tool 执行错误（executed + 失败）
+  id: string;
+  name: string;
+  args: string; // 累积的 args JSON 字符串
+  status: ToolCallStatus;
+  result?: string; // tool 执行结果（仅 executed 状态有值）
+  error?: string; // tool 执行错误（executed + 失败）
 }
 
 export interface ToolCallAccumulator {
   /** 收到 TOOL_CALL_START：初始化 entry */
-  feedStart(entry: { id: string; name: string }): void
+  feedStart(entry: { id: string; name: string }): void;
   /** 收到 TOOL_CALL_ARGS：累加 args */
-  feedArgs(entry: { id: string; argsDelta: string }): void
+  feedArgs(entry: { id: string; argsDelta: string }): void;
   /** 收到 TOOL_CALL_END：标记 complete */
-  complete(id: string): void
+  complete(id: string): void;
   /** 收到 TOOL_CALL_RESULT：标记 executed + 记录 result */
-  setResult(entry: { id: string; result: string; error?: string }): void
+  setResult(entry: { id: string; result: string; error?: string }): void;
   /** 获取当前所有 tool call 快照 */
-  getAll(): AccumulatedToolCall[]
+  getAll(): AccumulatedToolCall[];
   /** 获取所有已 complete 的（可执行队列） */
-  getCompleted(): AccumulatedToolCall[]
+  getCompleted(): AccumulatedToolCall[];
   /** 获取所有已 executed 的（含结果） */
-  getExecuted(): AccumulatedToolCall[]
+  getExecuted(): AccumulatedToolCall[];
   /** 是否有未完成（pending/accumulating）的 call */
-  hasPartial(): boolean
+  hasPartial(): boolean;
   /** 清空所有累积状态 */
-  clear(): void
+  clear(): void;
   /** 当前累积数量（调试用） */
-  size(): number
+  size(): number;
 }
 
 /**
@@ -75,91 +75,91 @@ export interface ToolCallAccumulator {
 export function createToolCallAccumulator(): ToolCallAccumulator {
   // Map<id, AccumulatedToolCall> —— nuclear-boy 用 index（OpenAI 流式字段），
   // AG-UI 用 id（已自带），我们跟 AG-UI 协议。
-  const map = new Map<string, AccumulatedToolCall>()
+  const map = new Map<string, AccumulatedToolCall>();
 
   return {
     feedStart({ id, name }) {
-      if (!id) return
+      if (!id) return;
       // nuclear-boy 实战：如果 id 已存在，**不**覆盖（保留累积的 args）
       // 这是 "Clear once per API call" 的另一半 — feedStart 不能毁掉累积
       if (map.has(id)) {
         // 仅更新 name（理论上 LLM 不会改 name，但保险起见）
-        const existing = map.get(id)!
-        existing.name = name || existing.name
-        return
+        const existing = map.get(id)!;
+        existing.name = name || existing.name;
+        return;
       }
       map.set(id, {
         id,
-        name: name || '',
-        args: '',
-        status: 'pending',
-      })
+        name: name || "",
+        args: "",
+        status: "pending",
+      });
     },
 
     feedArgs({ id, argsDelta }) {
-      if (!id) return
-      const entry = map.get(id)
+      if (!id) return;
+      const entry = map.get(id);
       if (!entry) {
         // 收到 args 但没收到 start（protocol 异常），宽容处理
         map.set(id, {
           id,
-          name: '',
-          args: argsDelta || '',
-          status: 'accumulating',
-        })
-        return
+          name: "",
+          args: argsDelta || "",
+          status: "accumulating",
+        });
+        return;
       }
-      entry.args += argsDelta || ''
-      if (entry.status === 'pending') {
-        entry.status = 'accumulating'
+      entry.args += argsDelta || "";
+      if (entry.status === "pending") {
+        entry.status = "accumulating";
       }
     },
 
     complete(id) {
-      if (!id) return
-      const entry = map.get(id)
-      if (!entry) return
-      entry.status = 'complete'
+      if (!id) return;
+      const entry = map.get(id);
+      if (!entry) return;
+      entry.status = "complete";
     },
 
     setResult({ id, result, error }) {
-      if (!id) return
-      const entry = map.get(id)
-      if (!entry) return
-      entry.status = 'executed'
-      entry.result = result
-      entry.error = error
+      if (!id) return;
+      const entry = map.get(id);
+      if (!entry) return;
+      entry.status = "executed";
+      entry.result = result;
+      entry.error = error;
     },
 
     getAll() {
-      return Array.from(map.values())
+      return Array.from(map.values());
     },
 
     getCompleted() {
-      return Array.from(map.values()).filter(e => e.status === 'complete' || e.status === 'executed')
+      return Array.from(map.values()).filter(e => e.status === "complete" || e.status === "executed");
     },
 
     getExecuted() {
-      return Array.from(map.values()).filter(e => e.status === 'executed')
+      return Array.from(map.values()).filter(e => e.status === "executed");
     },
 
     hasPartial() {
       for (const e of map.values()) {
-        if (e.status === 'pending' || e.status === 'accumulating') {
-          return true
+        if (e.status === "pending" || e.status === "accumulating") {
+          return true;
         }
       }
-      return false
+      return false;
     },
 
     clear() {
-      map.clear()
+      map.clear();
     },
 
     size() {
-      return map.size
+      return map.size;
     },
-  }
+  };
 }
 
 /**
@@ -168,11 +168,11 @@ export function createToolCallAccumulator(): ToolCallAccumulator {
  *   JSON 解析失败 → 返回空对象 {}，不抛错。
  */
 export function parseAccumulatedArgs(args: string): Record<string, unknown> {
-  if (!args || !args.trim()) return {}
+  if (!args || !args.trim()) return {};
   try {
-    const parsed = JSON.parse(args)
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+    const parsed = JSON.parse(args);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   } catch {
-    return {}
+    return {};
   }
 }

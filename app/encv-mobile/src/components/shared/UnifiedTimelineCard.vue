@@ -135,24 +135,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { IonIcon } from '@ionic/vue'
+import { IonIcon } from "@ionic/vue";
 import {
-  chevronUp,
-  chevronDown,
   alertCircleOutline,
-  flashOutline,
-  hourglassOutline,
-  checkmarkCircle,
-  closeCircle,
   ban,
+  checkmarkCircle,
+  chevronDown,
+  chevronUp,
+  closeCircle,
   ellipseOutline,
+  flashOutline,
   hourglass,
+  hourglassOutline,
   syncOutline,
   timerOutline,
-} from 'ionicons/icons'
-import PhaseIcon from './PhaseIcon.vue'
-import type { UnifiedTimelineEntry, StepStatus } from '@/lib/workflow/types'
+} from "ionicons/icons";
+import { computed, ref } from "vue";
+import type { StepStatus, UnifiedTimelineEntry } from "@/lib/workflow/types";
+import PhaseIcon from "./PhaseIcon.vue";
 
 /**
  * 🆕 v4 2026-06-18 M4：行业标准时间线视觉
@@ -176,72 +176,80 @@ import type { UnifiedTimelineEntry, StepStatus } from '@/lib/workflow/types'
  * 视觉对齐目标：GitHub Actions workflow runs / Linear activity / Datadog logs / Vercel
  * 部署时间线。
  */
-const props = withDefaults(defineProps<{
-  entry: UnifiedTimelineEntry
-  /** 受控展开状态（可选，未传时组件内部自管理） */
-  expanded?: boolean
-  /** 非受控模式下的默认展开状态 */
-  defaultExpanded?: boolean
-  /** 是否高亮（如最长耗时） */
-  highlight?: boolean
-}>(), {
-  // 显式设为 undefined，覆盖 Vue 3 对可选 boolean prop 默认 false 的类型转换
-  // 这样 expanded 未传时为 undefined，组件进入非受控模式
-  expanded: undefined,
-  defaultExpanded: false,
-  highlight: false,
-})
+const props = withDefaults(
+  defineProps<{
+    entry: UnifiedTimelineEntry;
+    /** 受控展开状态（可选，未传时组件内部自管理） */
+    expanded?: boolean;
+    /** 非受控模式下的默认展开状态 */
+    defaultExpanded?: boolean;
+    /** 是否高亮（如最长耗时） */
+    highlight?: boolean;
+  }>(),
+  {
+    // 显式设为 undefined，覆盖 Vue 3 对可选 boolean prop 默认 false 的类型转换
+    // 这样 expanded 未传时为 undefined，组件进入非受控模式
+    expanded: undefined,
+    defaultExpanded: false,
+    highlight: false,
+  }
+);
 
 const emit = defineEmits<{
-  (e: 'update:expanded', value: boolean): void
-  (e: 'toggle', value: boolean): void
-}>()
+  (e: "update:expanded", value: boolean): void;
+  (e: "toggle", value: boolean): void;
+}>();
 
 // 内部展开状态（仅非受控模式使用）
-const internalExpanded = ref(props.defaultExpanded)
+const internalExpanded = ref(props.defaultExpanded);
 
 // 实际展开状态：受控模式优先用 prop，非受控模式用内部状态
-const isExpanded = computed(() =>
-  props.expanded !== undefined ? props.expanded : internalExpanded.value,
-)
+const isExpanded = computed(() => (props.expanded !== undefined ? props.expanded : internalExpanded.value));
 
 function toggleExpand() {
-  if (!props.entry.hasExpandableDetail) return
-  const newValue = !isExpanded.value
+  if (!props.entry.hasExpandableDetail) return;
+  const newValue = !isExpanded.value;
   // 非受控模式下更新内部状态
   if (props.expanded === undefined) {
-    internalExpanded.value = newValue
+    internalExpanded.value = newValue;
   }
-  emit('update:expanded', newValue)
-  emit('toggle', newValue)
+  emit("update:expanded", newValue);
+  emit("toggle", newValue);
 }
 
 // ==================== 🆕 v4 M4：状态图标 + 颜色映射 ====================
 
 /** 是否「running-like」（用旋转 spinner 替代静态 icon） */
 const isRunningLike = computed(() => {
-  const s: StepStatus = props.entry.status
-  return s === 'running' || s === 'cancelling'
-})
+  const s: StepStatus = props.entry.status;
+  return s === "running" || s === "cancelling";
+});
 
 /**
  * 状态 → ionicon 名称
  * 注意：running 走 ion-spinner 路径（isRunningLike），不进这里
  */
 const statusIcon = computed(() => {
-  const s: StepStatus = props.entry.status
+  const s: StepStatus = props.entry.status;
   switch (s) {
-    case 'success': return checkmarkCircle
-    case 'failure': return closeCircle
-    case 'cancelled':
-    case 'skipped': return ban
-    case 'pending': return ellipseOutline
-    case 'queued':
-    case 'submitted': return syncOutline
-    case 'timed_out': return hourglass
-    default: return timerOutline
+    case "success":
+      return checkmarkCircle;
+    case "failure":
+      return closeCircle;
+    case "cancelled":
+    case "skipped":
+      return ban;
+    case "pending":
+      return ellipseOutline;
+    case "queued":
+    case "submitted":
+      return syncOutline;
+    case "timed_out":
+      return hourglass;
+    default:
+      return timerOutline;
   }
-})
+});
 </script>
 
 <style scoped>

@@ -243,212 +243,212 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, onErrorCaptured } from 'vue'
-import { useI18n } from '@/composables/useI18n'
-import { refreshOutline, warningOutline, bugOutline } from 'ionicons/icons'
-import { getFullTextIndexStats, rebuildFullTextIndex, type FullTextIndexStats } from '@/api/encv_search'
-import { formatDateTime } from '@/composables/useDateFormat'
-import { errorStore } from '@/composables/useErrorCapture'
-import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
-import { getApiBaseUrl } from '@/api/encv_core'
 // 🆕 2026-07-03 修复 classList 错误：必须显式 import Ionic 组件
 //   根因（cypress e2e DOM log 确认）：未显式 import 时，<ion-page> 标签未被 Vue 编译器
 //   识别为 Ionic Vue 组件，渲染成原生 <ION-PAGE> 自闭合元素，缺失 .ion-page class
 //   和 z-index 样式，导致页面被前一个 CacheDetail（z-index:101）覆盖。
 //   对比 ServerDetail.vue / DatabaseDetail.vue / CacheDetail.vue 都显式 import。
 import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
   IonBackButton,
+  IonBadge,
   IonButton,
-  IonIcon,
+  IonButtons,
   IonContent,
-  IonList,
-  IonListHeader,
+  IonHeader,
+  IonIcon,
   IonItem,
   IonLabel,
+  IonList,
+  IonListHeader,
   IonNote,
-  IonBadge,
-  IonSpinner,
+  IonPage,
   IonProgressBar,
-} from '@ionic/vue'
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { bugOutline, refreshOutline, warningOutline } from "ionicons/icons";
+import { computed, onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
+import { getApiBaseUrl } from "@/api/encv_core";
+import { type FullTextIndexStats, getFullTextIndexStats, rebuildFullTextIndex } from "@/api/encv_search";
+import { formatDateTime } from "@/composables/useDateFormat";
+import { errorStore } from "@/composables/useErrorCapture";
+import { useI18n } from "@/composables/useI18n";
+import { useTaskEventBridge } from "@/composables/useTaskEventBridge";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const loading = ref(false)
-const available = ref(false)
-const error = ref<string | null>(null)
-const stats = ref<FullTextIndexStats | null>(null)
+const loading = ref(false);
+const available = ref(false);
+const error = ref<string | null>(null);
+const stats = ref<FullTextIndexStats | null>(null);
 
 // 🆕 2026-07-03：FTS 索引重建任务状态（spec fts-rebuild-task）
 interface RebuildTaskState {
-  id: string
-  status: string  // queued / running / cancelling / completed / failed / cancelled
-  progress?: number
-  phase?: string
-  speed?: string
-  eta?: string
-  error?: string
+  id: string;
+  status: string; // queued / running / cancelling / completed / failed / cancelled
+  progress?: number;
+  phase?: string;
+  speed?: string;
+  eta?: string;
+  error?: string;
 }
-const rebuildTask = ref<RebuildTaskState | null>(null)
-const rebuildSubmitting = ref(false)
+const rebuildTask = ref<RebuildTaskState | null>(null);
+const rebuildSubmitting = ref(false);
 
 const rebuildStatusLabel = computed(() => {
-  if (!rebuildTask.value) return ''
-  const s = rebuildTask.value.status
-  if (s === 'queued') return t('settings.rebuildQueued') || '重建任务排队中'
-  if (s === 'running') return t('settings.rebuildRunning') || '正在重建索引'
-  if (s === 'cancelling') return t('settings.rebuildCancelling') || '正在取消'
-  if (s === 'completed') return t('settings.rebuildCompleted') || '重建完成'
-  if (s === 'failed') return t('settings.rebuildFailed') || '重建失败'
-  if (s === 'cancelled') return t('settings.rebuildCancelled') || '已取消'
-  return s
-})
+  if (!rebuildTask.value) return "";
+  const s = rebuildTask.value.status;
+  if (s === "queued") return t("settings.rebuildQueued") || "重建任务排队中";
+  if (s === "running") return t("settings.rebuildRunning") || "正在重建索引";
+  if (s === "cancelling") return t("settings.rebuildCancelling") || "正在取消";
+  if (s === "completed") return t("settings.rebuildCompleted") || "重建完成";
+  if (s === "failed") return t("settings.rebuildFailed") || "重建失败";
+  if (s === "cancelled") return t("settings.rebuildCancelled") || "已取消";
+  return s;
+});
 
 // 🆕 2026-07-02：防止卸载后异步回调继续更新状态
 //   虽然不会直接导致 classList 错误，但这是防御性编程最佳实践
-let isMounted = true
+let isMounted = true;
 
 // 🆕 A5：渲染错误捕获（onErrorCaptured 兜底，把"更底层错误"显式显示给用户）
-const renderError = ref<Error | null>(null)
+const renderError = ref<Error | null>(null);
 onErrorCaptured((err: unknown) => {
-  const e = err instanceof Error ? err : new Error(String(err))
-  renderError.value = e
+  const e = err instanceof Error ? err : new Error(String(err));
+  renderError.value = e;
   errorStore.addError({
-    source: 'vue',
+    source: "vue",
     message: e.message,
     stack: e.stack,
-    componentName: 'FullTextIndexDetail',
-    url: typeof window !== 'undefined' ? window.location.pathname : undefined,
-  })
-  return false
-})
+    componentName: "FullTextIndexDetail",
+    url: typeof window !== "undefined" ? window.location.pathname : undefined,
+  });
+  return false;
+});
 
 // 🆕 2026-07-03：订阅任务 4 件套 WS 事件（automation-workflow 规则 §二）
 //   只关心 rebuild_fts_index 任务的进度，过滤其他任务的事件
 useTaskEventBridge({
-  onProgress: (data) => {
-    if (!rebuildTask.value || data.id !== rebuildTask.value.id) return
-    if (!isMounted) return
+  onProgress: data => {
+    if (!rebuildTask.value || data.id !== rebuildTask.value.id) return;
+    if (!isMounted) return;
     rebuildTask.value = {
       ...rebuildTask.value,
       progress: data.progress,
       phase: data.phase,
       speed: data.speed,
       eta: data.eta,
-      status: 'running',
-    }
+      status: "running",
+    };
   },
-  onUpdate: (data) => {
-    if (!rebuildTask.value || data.id !== rebuildTask.value.id) return
-    if (!isMounted) return
+  onUpdate: data => {
+    if (!rebuildTask.value || data.id !== rebuildTask.value.id) return;
+    if (!isMounted) return;
     rebuildTask.value = {
       ...rebuildTask.value,
       status: data.status,
       progress: data.progress,
-    }
+    };
   },
-  onComplete: (data) => {
-    if (!rebuildTask.value || data.id !== rebuildTask.value.id) return
-    if (!isMounted) return
-    const status = data.error ? 'failed' : 'completed'
+  onComplete: data => {
+    if (!rebuildTask.value || data.id !== rebuildTask.value.id) return;
+    if (!isMounted) return;
+    const status = data.error ? "failed" : "completed";
     rebuildTask.value = {
       ...rebuildTask.value,
       status,
       error: data.error,
       progress: 100,
-    }
+    };
     // 重建完成后刷新 stats（显示新的 totalFiles 等）
     if (!data.error) {
-      setTimeout(() => loadStats(), 500)
+      setTimeout(() => loadStats(), 500);
     }
   },
-})
+});
 
 function reloadPage() {
-  if (typeof window !== 'undefined') {
-    window.location.reload()
+  if (typeof window !== "undefined") {
+    window.location.reload();
   }
 }
 
 async function loadStats() {
-  loading.value = true
+  loading.value = true;
   try {
-    const result = await getFullTextIndexStats()
+    const result = await getFullTextIndexStats();
     // 🆕 2026-07-02：组件卸载后不再更新状态（防止竞态条件）
-    if (!isMounted) return
-    available.value = result.available
+    if (!isMounted) return;
+    available.value = result.available;
     if (result.available && result.stats) {
-      stats.value = result.stats
+      stats.value = result.stats;
     } else {
-      error.value = result.error || 'unknown'
+      error.value = result.error || "unknown";
     }
   } catch (e) {
-    if (!isMounted) return
-    available.value = false
-    error.value = e instanceof Error ? e.message : String(e)
+    if (!isMounted) return;
+    available.value = false;
+    error.value = e instanceof Error ? e.message : String(e);
     // 抛到全局 errorStore（让 A5 浮窗也显示）
     errorStore.addError({
-      source: 'console',
+      source: "console",
       message: `FullTextIndexDetail: ${error.value}`,
       stack: e instanceof Error ? e.stack : undefined,
-      url: typeof window !== 'undefined' ? window.location.pathname : undefined,
-    })
+      url: typeof window !== "undefined" ? window.location.pathname : undefined,
+    });
   } finally {
     if (isMounted) {
-      loading.value = false
+      loading.value = false;
     }
   }
 }
 
 // 🆕 2026-07-03：触发 FTS 索引重建
 async function triggerRebuild() {
-  if (rebuildSubmitting.value) return
-  rebuildSubmitting.value = true
+  if (rebuildSubmitting.value) return;
+  rebuildSubmitting.value = true;
   try {
-    const resp = await rebuildFullTextIndex()
-    if (!isMounted) return
+    const resp = await rebuildFullTextIndex();
+    if (!isMounted) return;
     rebuildTask.value = {
       id: resp.taskId,
       status: resp.status,
       progress: 0,
-    }
+    };
   } catch (e: any) {
-    if (!isMounted) return
-    const errMsg = e?.message || String(e)
+    if (!isMounted) return;
+    const errMsg = e?.message || String(e);
     // 409 Conflict：已有重建任务在跑，复用其 taskId
-    if (e?.code === 'REBUILD_IN_PROGRESS' && e?.taskId) {
+    if (e?.code === "REBUILD_IN_PROGRESS" && e?.taskId) {
       rebuildTask.value = {
         id: e.taskId,
-        status: e.status || 'running',
+        status: e.status || "running",
         progress: 0,
-      }
+      };
     } else {
       errorStore.addError({
-        source: 'console',
+        source: "console",
         message: `FTS rebuild trigger failed: ${errMsg}`,
-        url: typeof window !== 'undefined' ? window.location.pathname : undefined,
-      })
+        url: typeof window !== "undefined" ? window.location.pathname : undefined,
+      });
     }
   } finally {
-    if (isMounted) rebuildSubmitting.value = false
+    if (isMounted) rebuildSubmitting.value = false;
   }
 }
 
 // 🆕 2026-07-03：取消重建任务
 async function cancelRebuild() {
-  if (!rebuildTask.value) return
+  if (!rebuildTask.value) return;
   try {
-    const baseUrl = getApiBaseUrl()
-    await fetch(`${baseUrl}/api/tasks/${rebuildTask.value.id}/cancel`, { method: 'POST' })
-    if (!isMounted) return
+    const baseUrl = getApiBaseUrl();
+    await fetch(`${baseUrl}/api/tasks/${rebuildTask.value.id}/cancel`, { method: "POST" });
+    if (!isMounted) return;
     rebuildTask.value = {
       ...rebuildTask.value,
-      status: 'cancelling',
-    }
+      status: "cancelling",
+    };
   } catch (e) {
     // 取消失败不阻断，用户可重试
   }
@@ -456,27 +456,27 @@ async function cancelRebuild() {
 
 // 🆕 2026-07-03：关闭重建卡片（终态后）
 function dismissRebuildCard() {
-  rebuildTask.value = null
+  rebuildTask.value = null;
 }
 
 function formatNumber(n: number): string {
-  return n.toLocaleString('en-US')
+  return n.toLocaleString("en-US");
 }
 
 function formatBytes(b: number): string {
-  if (b < 1024) return `${b} B`
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`
-  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`
-  return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
+  return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 onMounted(() => {
-  loadStats()
-})
+  loadStats();
+});
 
 onUnmounted(() => {
-  isMounted = false
-})
+  isMounted = false;
+});
 </script>
 
 <style scoped>

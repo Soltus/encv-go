@@ -297,124 +297,150 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonBackButton,
-  IonContent, IonList, IonItem, IonInput, IonSelect, IonSelectOption, IonToggle,
-  IonBadge, IonIcon, IonSpinner, IonModal,
   alertController,
-} from '@ionic/vue'
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonInput,
+  IonItem,
+  IonList,
+  IonModal,
+  IonPage,
+  IonSelect,
+  IonSelectOption,
+  IonSpinner,
+  IonTitle,
+  IonToggle,
+  IonToolbar,
+} from "@ionic/vue";
 import {
-  addOutline, alertCircleOutline, createOutline, folderOpenOutline,
-  searchOutline, serverOutline, trashOutline,
-} from 'ionicons/icons'
+  addOutline,
+  alertCircleOutline,
+  createOutline,
+  folderOpenOutline,
+  searchOutline,
+  serverOutline,
+  trashOutline,
+} from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
 import {
-  listMounts, createMount, updateMount, deleteMount, resolveMountPath,
-  type Mount, type MountInput, type ResolveMountResponse,
+  createMount,
+  deleteMount,
+  listMounts,
   MOUNT_DRIVERS,
-} from '@/api/encv'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
+  type Mount,
+  type MountInput,
+  type ResolveMountResponse,
+  resolveMountPath,
+  updateMount,
+} from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 // ================== 状态 ==================
-const mounts = ref<Mount[]>([])
-const drivers = ref<string[]>([...MOUNT_DRIVERS])
-const loading = ref(false)
-const loadError = ref('')
-const togglingId = ref<string | null>(null)
+const mounts = ref<Mount[]>([]);
+const drivers = ref<string[]>([...MOUNT_DRIVERS]);
+const loading = ref(false);
+const loadError = ref("");
+const togglingId = ref<string | null>(null);
 
 // 🆕 2026-06-16：mount 启动期错误（从 /api/mounts 响应 bootstrap_errors 字段读取，不再静默）
-const bootstrapErrors = ref<string[]>([])
+const bootstrapErrors = ref<string[]>([]);
 
 // 🆕 2026-06-16：操作错误内联 banner（create/update/delete/toggle 失败持久展示）
 interface OperationError {
-  title: string
-  subtitle: string
-  message: string
-  hint?: string
+  title: string;
+  subtitle: string;
+  message: string;
+  hint?: string;
 }
-const operationError = ref<OperationError | null>(null)
+const operationError = ref<OperationError | null>(null);
 
 // Editor
-const editorOpen = ref(false)
-const editing = ref<Mount | null>(null)
+const editorOpen = ref(false);
+const editing = ref<Mount | null>(null);
 const form = ref<MountInput>({
-  name: '',
-  mount_path: '',
-  driver: 'local',
+  name: "",
+  mount_path: "",
+  driver: "local",
   enabled: true,
   read_only: false,
-})
-const saveError = ref('')
+});
+const saveError = ref("");
 
 // Resolve
-const resolveOpen = ref(false)
-const resolving = ref<Mount | null>(null)
-const resolveSubPath = ref('')
-const resolveResult = ref<ResolveMountResponse | null>(null)
-const resolveError = ref('')
+const resolveOpen = ref(false);
+const resolving = ref<Mount | null>(null);
+const resolveSubPath = ref("");
+const resolveResult = ref<ResolveMountResponse | null>(null);
+const resolveError = ref("");
 
 // ================== 计算属性 ==================
-const availableDrivers = computed(() => (drivers.value.length > 0 ? drivers.value : [...MOUNT_DRIVERS]))
+const availableDrivers = computed(() => (drivers.value.length > 0 ? drivers.value : [...MOUNT_DRIVERS]));
 
 const canSave = computed(() => {
-  const f = form.value
-  if (!f.name.trim()) return false
-  if (!f.mount_path.trim()) return false
-  if (!f.driver) return false
-  if (!f.mount_path.startsWith('/')) return false
-  return true
-})
+  const f = form.value;
+  if (!f.name.trim()) return false;
+  if (!f.mount_path.trim()) return false;
+  if (!f.driver) return false;
+  if (!f.mount_path.startsWith("/")) return false;
+  return true;
+});
 
 // ================== 数据加载 ==================
 async function loadAll() {
-  loading.value = true
-  loadError.value = ''
+  loading.value = true;
+  loadError.value = "";
   try {
-    const resp = await listMounts()
-    mounts.value = resp.mounts ?? []
-    drivers.value = resp.drivers?.length ? resp.drivers : [...MOUNT_DRIVERS]
+    const resp = await listMounts();
+    mounts.value = resp.mounts ?? [];
+    drivers.value = resp.drivers?.length ? resp.drivers : [...MOUNT_DRIVERS];
     // 🆕 2026-06-16：把后端返回的 mount 启动期错误推到 UI（不再静默）
-    bootstrapErrors.value = resp.bootstrap_errors ?? []
+    bootstrapErrors.value = resp.bootstrap_errors ?? [];
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e)
-    mounts.value = []
+    loadError.value = e instanceof Error ? e.message : String(e);
+    mounts.value = [];
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 onMounted(() => {
-  loadAll()
-})
+  loadAll();
+});
 
 // ================== 工具函数 ==================
 function driverColor(d: string): string {
-  if (d === 'local') return 'primary'
-  if (d === 'appdata') return 'success'
-  if (d === 'sandbox') return 'warning'
-  return 'medium'
+  if (d === "local") return "primary";
+  if (d === "appdata") return "success";
+  if (d === "sandbox") return "warning";
+  return "medium";
 }
 
 function tDriver(d: string): string {
-  return t(`settings.mountDriver_${d}` as any, { default: d })
+  return t(`settings.mountDriver_${d}` as any, { default: d });
 }
 
 function formatDriverConfig(cfg: Record<string, unknown>): string {
   return Object.entries(cfg)
-    .map(([k, v]) => `${k} = ${typeof v === 'string' ? v : JSON.stringify(v)}`)
-    .join('\n')
+    .map(([k, v]) => `${k} = ${typeof v === "string" ? v : JSON.stringify(v)}`)
+    .join("\n");
 }
 
 // ================== Enabled 切换 ==================
 async function handleToggleEnabled(m: Mount, enabled: boolean) {
-  if (togglingId.value) return
-  togglingId.value = m.id
+  if (togglingId.value) return;
+  togglingId.value = m.id;
   // 乐观更新
-  const original = m.enabled
-  m.enabled = enabled
+  const original = m.enabled;
+  m.enabled = enabled;
   try {
     await updateMount(m.id, {
       name: m.name,
@@ -423,28 +449,28 @@ async function handleToggleEnabled(m: Mount, enabled: boolean) {
       enabled,
       read_only: m.read_only,
       driver_config: m.driver_config,
-    })
-    showToast({ message: t('settings.mountUpdated'), duration: 1500, color: 'success' })
+    });
+    showToast({ message: t("settings.mountUpdated"), duration: 1500, color: "success" });
   } catch (e) {
     // 回滚
-    m.enabled = original
-    const msg = e instanceof Error ? e.message : String(e)
+    m.enabled = original;
+    const msg = e instanceof Error ? e.message : String(e);
     // 🆕 2026-06-16：内联错误 banner（持久展示，不再依赖 toast 一闪就消失）
     operationError.value = {
-      title: '挂载点切换失败',
+      title: "挂载点切换失败",
       subtitle: `挂载点 ${m.name} (${m.mount_path}) 启用状态切换失败`,
       message: msg,
-      hint: '检查 root_path 目录是否存在 + 是否有写权限（RO 标志）。后端 mount.MountRegistry.Update 也会校验必填字段。',
-    }
-    showToast({ message: t('settings.mountUpdateFailed') + ': ' + msg, duration: 3000, color: 'danger' })
+      hint: "检查 root_path 目录是否存在 + 是否有写权限（RO 标志）。后端 mount.MountRegistry.Update 也会校验必填字段。",
+    };
+    showToast({ message: t("settings.mountUpdateFailed") + ": " + msg, duration: 3000, color: "danger" });
   } finally {
-    togglingId.value = null
+    togglingId.value = null;
   }
 }
 
 // ================== Editor ==================
 function openEditor(target: Mount | null) {
-  editing.value = target
+  editing.value = target;
   if (target) {
     form.value = {
       name: target.name,
@@ -453,118 +479,118 @@ function openEditor(target: Mount | null) {
       enabled: target.enabled,
       read_only: target.read_only,
       driver_config: target.driver_config,
-    }
+    };
   } else {
     form.value = {
-      name: '',
-      mount_path: '',
-      driver: availableDrivers.value[0] ?? 'local',
+      name: "",
+      mount_path: "",
+      driver: availableDrivers.value[0] ?? "local",
       enabled: true,
       read_only: false,
-    }
+    };
   }
-  saveError.value = ''
-  editorOpen.value = true
+  saveError.value = "";
+  editorOpen.value = true;
 }
 
 function closeEditor() {
-  editorOpen.value = false
-  editing.value = null
+  editorOpen.value = false;
+  editing.value = null;
 }
 
 async function handleSave() {
-  if (!canSave.value) return
-  saveError.value = ''
-  const input: MountInput = { ...form.value }
+  if (!canSave.value) return;
+  saveError.value = "";
+  const input: MountInput = { ...form.value };
   try {
     if (editing.value) {
-      await updateMount(editing.value.id, input)
-      showToast({ message: t('settings.mountUpdated'), duration: 1500, color: 'success' })
+      await updateMount(editing.value.id, input);
+      showToast({ message: t("settings.mountUpdated"), duration: 1500, color: "success" });
     } else {
-      await createMount(input)
-      showToast({ message: t('settings.mountCreated'), duration: 1500, color: 'success' })
+      await createMount(input);
+      showToast({ message: t("settings.mountCreated"), duration: 1500, color: "success" });
     }
-    closeEditor()
-    await loadAll()
+    closeEditor();
+    await loadAll();
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    saveError.value = msg
+    const msg = e instanceof Error ? e.message : String(e);
+    saveError.value = msg;
     // 🆕 2026-06-16：内联错误 banner（持久展示）
     // 关闭 modal 后用户仍能看到错误根因（toast 2.5s 后消失）
     operationError.value = {
-      title: editing.value ? '挂载点更新失败' : '挂载点创建失败',
+      title: editing.value ? "挂载点更新失败" : "挂载点创建失败",
       subtitle: editing.value
         ? `挂载点 ${editing.value.name} (${editing.value.mount_path}) 更新失败`
         : `新建挂载点 ${input.name} (${input.mount_path}) 失败`,
       message: msg,
       hint: editing.value
-        ? '检查 root_path 是否仍可写 + driver 工厂是否支持此 mount。primary mount 的 driver 字段不能改。'
-        : '检查 mount_path 路径唯一性（primary/automation/sandbox 已存在）+ driver 名拼写（local/appdata/sandbox）',
-    }
-    showToast({ message: t('settings.mountSaveFailed') + ': ' + msg, duration: 3000, color: 'danger' })
+        ? "检查 root_path 是否仍可写 + driver 工厂是否支持此 mount。primary mount 的 driver 字段不能改。"
+        : "检查 mount_path 路径唯一性（primary/automation/sandbox 已存在）+ driver 名拼写（local/appdata/sandbox）",
+    };
+    showToast({ message: t("settings.mountSaveFailed") + ": " + msg, duration: 3000, color: "danger" });
   }
 }
 
 // ================== Delete ==================
 async function confirmDelete(m: Mount) {
-  if (m.name === 'primary') return
+  if (m.name === "primary") return;
   const alert = await alertController.create({
-    header: t('settings.mountDeleteTitle'),
-    message: t('settings.mountDeleteConfirm', { name: m.name, path: m.mount_path }),
+    header: t("settings.mountDeleteTitle"),
+    message: t("settings.mountDeleteConfirm", { name: m.name, path: m.mount_path }),
     buttons: [
-      { text: t('common.cancel'), role: 'cancel' },
+      { text: t("common.cancel"), role: "cancel" },
       {
-        text: t('common.delete'),
-        role: 'destructive',
+        text: t("common.delete"),
+        role: "destructive",
         handler: async () => {
           try {
-            await deleteMount(m.id)
-            showToast({ message: t('settings.mountDeleted'), duration: 1500, color: 'success' })
-            await loadAll()
+            await deleteMount(m.id);
+            showToast({ message: t("settings.mountDeleted"), duration: 1500, color: "success" });
+            await loadAll();
           } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e)
+            const msg = e instanceof Error ? e.message : String(e);
             // 🆕 2026-06-16：内联错误 banner（持久展示）
             operationError.value = {
-              title: '挂载点删除失败',
+              title: "挂载点删除失败",
               subtitle: `挂载点 ${m.name} (${m.mount_path}) 删除失败`,
               message: msg,
-              hint: 'primary mount 不可删（后端 ErrPrimaryProtected 保护）。其他 mount 删除会校验 root_path 引用计数。',
-            }
-            showToast({ message: t('settings.mountDeleteFailed') + ': ' + msg, duration: 3000, color: 'danger' })
+              hint: "primary mount 不可删（后端 ErrPrimaryProtected 保护）。其他 mount 删除会校验 root_path 引用计数。",
+            };
+            showToast({ message: t("settings.mountDeleteFailed") + ": " + msg, duration: 3000, color: "danger" });
           }
         },
       },
     ],
-  })
-  await alert.present()
+  });
+  await alert.present();
 }
 
 // ================== Resolve (debug) ==================
 function openResolve(m: Mount) {
-  resolving.value = m
-  resolveSubPath.value = ''
-  resolveResult.value = null
-  resolveError.value = ''
-  resolveOpen.value = true
+  resolving.value = m;
+  resolveSubPath.value = "";
+  resolveResult.value = null;
+  resolveError.value = "";
+  resolveOpen.value = true;
 }
 
 function closeResolve() {
-  resolveOpen.value = false
-  resolving.value = null
-  resolveResult.value = null
-  resolveError.value = ''
-  resolveSubPath.value = ''
+  resolveOpen.value = false;
+  resolving.value = null;
+  resolveResult.value = null;
+  resolveError.value = "";
+  resolveSubPath.value = "";
 }
 
 async function runResolve() {
-  if (!resolving.value || !resolveSubPath.value) return
-  resolveError.value = ''
-  resolveResult.value = null
+  if (!resolving.value || !resolveSubPath.value) return;
+  resolveError.value = "";
+  resolveResult.value = null;
   try {
-    resolveResult.value = await resolveMountPath(resolving.value.id, resolveSubPath.value)
+    resolveResult.value = await resolveMountPath(resolving.value.id, resolveSubPath.value);
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    resolveError.value = msg
+    const msg = e instanceof Error ? e.message : String(e);
+    resolveError.value = msg;
   }
 }
 </script>

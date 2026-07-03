@@ -55,32 +55,42 @@
 
 <script setup lang="ts">
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
-} from '@ionic/vue'
-import { flaskOutline, cloudUploadOutline, serverOutline, folderOpenOutline } from 'ionicons/icons'
-import { useRouter } from 'vue-router'
-import { useI18n } from '@/composables/useI18n'
+  IonBackButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { cloudUploadOutline, flaskOutline, folderOpenOutline, serverOutline } from "ionicons/icons";
+import { useRouter } from "vue-router";
+import { useI18n } from "@/composables/useI18n";
 
-const { t } = useI18n()
-const router = useRouter()
+const { t } = useI18n();
+const router = useRouter();
 
 // 2026-06-17：插件加密/解密自动化测试（重命名自 AutomationTestsDetail）
 function goPluginTests() {
-  router.push('/tabs/settings/devtools/plugin-tests')
+  router.push("/tabs/settings/devtools/plugin-tests");
 }
 
 function goWebDavTests() {
-  router.push('/tabs/settings/devtools/webdav-tests')
+  router.push("/tabs/settings/devtools/webdav-tests");
 }
 
 function goSparseContainerTest() {
-  router.push('/tabs/settings/devtools/sparse-container-test')
+  router.push("/tabs/settings/devtools/sparse-container-test");
 }
 
 // 🆕 2026-06-22：文件系统任务测试（move/copy/rename/delete + rollback + trash 边界）
 function goFsTests() {
-  router.push('/tabs/settings/devtools/fs-tests')
+  router.push("/tabs/settings/devtools/fs-tests");
 }
 </script>
 

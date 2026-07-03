@@ -8,37 +8,37 @@
 /** 实时 token 用量快照（来自 SSE token_stats 事件）。 */
 export interface TokenSnapshot {
   /** 当前流式速率（tokens/s） */
-  tokensPerSecond: number
+  tokensPerSecond: number;
   /** 思考 token 速率 */
-  reasoningTokensPerSecond: number
+  reasoningTokensPerSecond: number;
   /** 累计 prompt tokens */
-  promptTokensTotal: number
+  promptTokensTotal: number;
   /** 累计 completion tokens */
-  completionTokensTotal: number
+  completionTokensTotal: number;
   /** 累计缓存命中 tokens */
-  cachedTokensTotal: number
+  cachedTokensTotal: number;
   /** 累计思考 tokens */
-  reasoningTokensTotal: number
+  reasoningTokensTotal: number;
   /** 当前请求 prompt tokens */
-  promptTokensThisRequest: number
+  promptTokensThisRequest: number;
   /** 当前请求 completion tokens */
-  completionTokensThisRequest: number
+  completionTokensThisRequest: number;
   /** 当前请求缓存命中 tokens */
-  cachedTokensThisRequest: number
+  cachedTokensThisRequest: number;
   /** 0.0 - 1.0，per-request 命中率 */
-  cacheHitRate: number
+  cacheHitRate: number;
   /** 当前请求占用 context tokens */
-  contextUsed: number
+  contextUsed: number;
   /** 剩余 context tokens */
-  contextRemaining: number
+  contextRemaining: number;
   /** 0.0 - 1.0+ */
-  contextUsagePercent: number
+  contextUsagePercent: number;
   /** 累计费用 USD */
-  estimatedCostUsd: number
+  estimatedCostUsd: number;
   /** 累计请求数 */
-  requestCount: number
+  requestCount: number;
   /** 平均延迟 ms */
-  averageLatencyMs: number
+  averageLatencyMs: number;
 }
 
 /** 构造空 snapshot（用于初始状态）。 */
@@ -60,17 +60,17 @@ export function emptyTokenSnapshot(): TokenSnapshot {
     estimatedCostUsd: 0,
     requestCount: 0,
     averageLatencyMs: 0,
-  }
+  };
 }
 
 /** 5 级预警等级。 */
-export type TokenWarningLevel = 'ok' | 'green' | 'yellow' | 'red' | 'force'
+export type TokenWarningLevel = "ok" | "green" | "yellow" | "red" | "force";
 
 /** 根据 contextUsagePercent 计算预警等级。 */
 export function tokenWarningLevel(pct: number): TokenWarningLevel {
-  if (pct >= 0.98) return 'force'
-  if (pct >= 0.95) return 'red'
-  if (pct >= 0.8) return 'yellow'
-  if (pct >= 0.3) return 'green'
-  return 'ok'
+  if (pct >= 0.98) return "force";
+  if (pct >= 0.95) return "red";
+  if (pct >= 0.8) return "yellow";
+  if (pct >= 0.3) return "green";
+  return "ok";
 }

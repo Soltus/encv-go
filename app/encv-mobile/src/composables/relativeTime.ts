@@ -22,10 +22,10 @@
  */
 
 // 各档阈值（毫秒）
-const MIN_MS = 60_000
-const HOUR_MS = 3_600_000
-const DAY_MS = 86_400_000
-const WEEK_MS = 604_800_000
+const MIN_MS = 60_000;
+const HOUR_MS = 3_600_000;
+const DAY_MS = 86_400_000;
+const WEEK_MS = 604_800_000;
 
 /**
  * 相对时间格式化（zh-CN 字符串；调用方需要 i18n 时自行 wrap）
@@ -36,23 +36,23 @@ const WEEK_MS = 604_800_000
  */
 export function formatRelativeTime(ts: number, now: number = Date.now()): string {
   // 防御：0 / undefined / null / NaN
-  if (!ts || typeof ts !== 'number' || isNaN(ts)) return ''
-  if (!now || typeof now !== 'number' || isNaN(now)) return ''
+  if (!ts || typeof ts !== "number" || isNaN(ts)) return "";
+  if (!now || typeof now !== "number" || isNaN(now)) return "";
 
-  const diff = now - ts
-  const abs = Math.abs(diff)
+  const diff = now - ts;
+  const abs = Math.abs(diff);
 
-  if (abs < MIN_MS) return '刚刚'
-  if (abs < HOUR_MS) return `${Math.floor(abs / MIN_MS)} 分钟前`
-  if (abs < DAY_MS) return `${Math.floor(abs / HOUR_MS)} 小时前`
-  if (abs < WEEK_MS) return `${Math.floor(abs / DAY_MS)} 天前`
+  if (abs < MIN_MS) return "刚刚";
+  if (abs < HOUR_MS) return `${Math.floor(abs / MIN_MS)} 分钟前`;
+  if (abs < DAY_MS) return `${Math.floor(abs / HOUR_MS)} 小时前`;
+  if (abs < WEEK_MS) return `${Math.floor(abs / DAY_MS)} 天前`;
 
   // >= 7d → 绝对日期 YYYY-MM-DD（避免显示 11 个月前这种精度问题）
-  const d = new Date(ts)
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-export default formatRelativeTime
+export default formatRelativeTime;

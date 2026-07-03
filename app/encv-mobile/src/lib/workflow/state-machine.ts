@@ -19,8 +19,8 @@
  *   中间不发 task:update）。
  */
 
-import type { StepRun, StepStatus } from './types'
-import { isTerminalStep } from './types'
+import type { StepRun, StepStatus } from "./types";
+import { isTerminalStep } from "./types";
 
 // ==================== 合法转换表 ====================
 
@@ -39,18 +39,18 @@ import { isTerminalStep } from './types'
  * （pending → queued / running / skipped 等），以兼容后端事件丢失场景。
  */
 export const VALID_TRANSITIONS: Record<StepStatus, Set<StepStatus>> = {
-  pending: new Set<StepStatus>(['submitted', 'queued', 'running', 'cancelled', 'skipped']),
-  submitted: new Set<StepStatus>(['queued', 'running', 'cancelled', 'skipped']),
-  queued: new Set<StepStatus>(['running', 'cancelling', 'cancelled', 'skipped']),
-  running: new Set<StepStatus>(['cancelling', 'success', 'failure', 'cancelled', 'timed_out']),
-  cancelling: new Set<StepStatus>(['cancelled', 'failure', 'success']),
+  pending: new Set<StepStatus>(["submitted", "queued", "running", "cancelled", "skipped"]),
+  submitted: new Set<StepStatus>(["queued", "running", "cancelled", "skipped"]),
+  queued: new Set<StepStatus>(["running", "cancelling", "cancelled", "skipped"]),
+  running: new Set<StepStatus>(["cancelling", "success", "failure", "cancelled", "timed_out"]),
+  cancelling: new Set<StepStatus>(["cancelled", "failure", "success"]),
   // 终态：不允许转出
   success: new Set<StepStatus>(),
   failure: new Set<StepStatus>(),
   cancelled: new Set<StepStatus>(),
   skipped: new Set<StepStatus>(),
   timed_out: new Set<StepStatus>(),
-}
+};
 
 // ==================== 终态保护 ====================
 
@@ -80,17 +80,17 @@ export const VALID_TRANSITIONS: Record<StepStatus, Set<StepStatus>> = {
  * ```
  */
 export function applyTerminalGuard(
-  current: Pick<StepRun, 'status'> | null | undefined,
-  update: Partial<StepRun> & { status?: StepStatus },
+  current: Pick<StepRun, "status"> | null | undefined,
+  update: Partial<StepRun> & { status?: StepStatus }
 ): Partial<StepRun> & { status?: StepStatus } {
   // current 缺失或非终态 → 不需要保护，原样返回 update
   if (!current || !isTerminalStep(current.status)) {
-    return update
+    return update;
   }
 
   // current 已终态 → 剥离 status 字段，保留其他可更新字段（progress / phase / speed / eta 等元数据）
-  const { status: _ignored, ...rest } = update
-  return rest
+  const { status: _ignored, ...rest } = update;
+  return rest;
 }
 
 // ==================== 状态机校验 ====================
@@ -119,12 +119,12 @@ export function applyTerminalGuard(
  */
 export function validateTransition(from: StepStatus, to: StepStatus): boolean {
   // 同状态幂等：允许
-  if (from === to) return true
+  if (from === to) return true;
 
   // 终态不能转出（到任何其他状态都拒绝）
-  if (isTerminalStep(from)) return false
+  if (isTerminalStep(from)) return false;
 
   // 查表
-  const allowed = VALID_TRANSITIONS[from]
-  return allowed ? allowed.has(to) : false
+  const allowed = VALID_TRANSITIONS[from];
+  return allowed ? allowed.has(to) : false;
 }

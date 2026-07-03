@@ -216,8 +216,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
 
 // 🆕 2026-06-12 崩溃根因修复：后端 crash 完全静默 → 监听 MainActivity 推送的 window CustomEvent
 //   链路：EncvGoService.sendBroadcast (Android system broadcast)
@@ -227,71 +227,78 @@ import { useRouter } from 'vue-router'
 //   真实事件名是 'encv:backend-status' (MainActivity.kt:166 写死)
 //   前端用 WebView 原生 window.addEventListener 订阅，**不需要任何 Capacitor plugin**。
 function onBackendStatus(ev: Event) {
-  const detail = (ev as CustomEvent<{ port: number; running: boolean; error?: string; source?: string }>).detail
-  if (!detail) return
-  const running = detail.running === true
-  const error = detail.error
-  if (running || !error) return  // 只在 running=false + error 有值时显示
-  const raw = (error || '').toString()
+  const detail = (ev as CustomEvent<{ port: number; running: boolean; error?: string; source?: string }>).detail;
+  if (!detail) return;
+  const running = detail.running === true;
+  const error = detail.error;
+  if (running || !error) return; // 只在 running=false + error 有值时显示
+  const raw = (error || "").toString();
   // 🆕 2026-06-12 Phase 4：go_hang（cgo ffmpeg_run 阻塞，Kotlin 端 mtime 探活触发）
   //   与 go_exit 区分：hang 是 Kotlin 主动 kill+restart；exit 是进程真退出
-  const isHang = raw.startsWith('go_hang')
-  const source = raw.startsWith('go_exit') || isHang || raw.startsWith('timeout') ? 'mockGenerate'
-    : raw.startsWith('no_binary') ? 'loadPlugins'
-    : 'loadPlugins'
-  const title = isHang
-    ? '后端无响应（hang 8s+），已自动重启'
-    : '后端服务已退出'
+  const isHang = raw.startsWith("go_hang");
+  const source =
+    raw.startsWith("go_exit") || isHang || raw.startsWith("timeout")
+      ? "mockGenerate"
+      : raw.startsWith("no_binary")
+        ? "loadPlugins"
+        : "loadPlugins";
+  const title = isHang ? "后端无响应（hang 8s+），已自动重启" : "后端服务已退出";
   inlineError.value = {
     source,
     title,
     message: raw,
-    detail: detail.port ? `port=${detail.port}` : '',
+    detail: detail.port ? `port=${detail.port}` : "",
     at: Date.now(),
-  }
+  };
 }
+
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonLabel, IonIcon,
-  IonSpinner, IonProgressBar,
-} from '@ionic/vue'
-import {
-  addCircleOutline, trashOutline, syncOutline, playCircleOutline, closeCircleOutline,
-  checkmarkCircleOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import {
-  fetchPlugins,
-  type PluginMeta,
-} from '@/api/encv'
-import { generateMockFilesViaBackend, resetMockFilesViaBackend } from '@/api/mockGenerator'
-// 🆕 2026-06-22：extToRelativePath / formatContainerVersion 移到 pure 函数（src/lib/workflow/buildDynamicWorkflow.ts）
-import { MOCK_GENERATE_ROOT } from '@/lib/mockConstants'
-// 🆕 2026-06-22：buildDynamicWorkflow 派生逻辑抽到 pure 函数（0 行为变化）
-import { buildDynamicWorkflowPure } from '@/lib/workflow/buildDynamicWorkflow'
-import { useWorkflowStore } from '@/composables/useWorkflowStore'
-import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
-// 🆕 2026-06-18 Task 13：抽取 FFMPEG 流程日志为独立 composable + 组件
-import { useMockGenLog } from '@/composables/useMockGenLog'
-import MockGenLogCard from '@/components/developer/MockGenLogCard.vue'
+  IonBackButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonProgressBar,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { addCircleOutline, checkmarkCircleOutline, closeCircleOutline, playCircleOutline, syncOutline, trashOutline } from "ionicons/icons";
+import { fetchPlugins, type PluginMeta } from "@/api/encv";
+import { generateMockFilesViaBackend, resetMockFilesViaBackend } from "@/api/mockGenerator";
 // 🆕 2026-06-22：buildDynamicWorkflowPure 返回 wfDef（已含 WorkflowDefinition 类型）
 // StepDefinition 不再需要（派生逻辑在 pure 函数里）
-import StepMiniBadge from '@/components/automation/StepMiniBadge.vue'
+import StepMiniBadge from "@/components/automation/StepMiniBadge.vue";
+import MockGenLogCard from "@/components/developer/MockGenLogCard.vue";
+import { useI18n } from "@/composables/useI18n";
+// 🆕 2026-06-18 Task 13：抽取 FFMPEG 流程日志为独立 composable + 组件
+import { useMockGenLog } from "@/composables/useMockGenLog";
+import { showToast } from "@/composables/useToast";
+import { useWorkflowStore } from "@/composables/useWorkflowStore";
+import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
+// 🆕 2026-06-22：extToRelativePath / formatContainerVersion 移到 pure 函数（src/lib/workflow/buildDynamicWorkflow.ts）
+import { MOCK_GENERATE_ROOT } from "@/lib/mockConstants";
+// 🆕 2026-06-22：buildDynamicWorkflow 派生逻辑抽到 pure 函数（0 行为变化）
+import { buildDynamicWorkflowPure } from "@/lib/workflow/buildDynamicWorkflow";
 
-const { t } = useI18n()
-const router = useRouter()
+const { t } = useI18n();
+const router = useRouter();
 
 // ---- Mock 数据 ----
 // 🆕 2026-06-15 声明式：mockRoot = AUTOMATION_MOUNT_PATH + '/'（常量，不再 split/slice）
 //   之前 .slice(0, 5) 隐式推导：DEFAULT_AUTOMATION_SOURCE 改前缀 → UI 静默选错 → 403
 //   现在改 mount path = 改 src/lib/mockConstants.ts + 后端 mount.go，两个源，不会漏
 // 保留 computed() 是因为下方有 `mockRoot.value` 引用，零行为变化
-const mockRoot = computed(() => MOCK_GENERATE_ROOT)
-const isGenerating = ref(false)
-const isResetting = ref(false)
-const mockStats = ref<{ count: number; totalSize: number; skipped?: number } | null>(null)
-const mockGenerated = ref(false)
+const mockRoot = computed(() => MOCK_GENERATE_ROOT);
+const isGenerating = ref(false);
+const isResetting = ref(false);
+const mockStats = ref<{ count: number; totalSize: number; skipped?: number } | null>(null);
+const mockGenerated = ref(false);
 
 // 🆕 2026-06-12 饱和调试：流程日志（每个 spec 一行，含完整 ffmpeg 诊断）
 //   - 即使后端 cgo 阻塞导致 SSE 中断，最后收到的 spec_diag 也会被记录
@@ -314,55 +321,45 @@ const {
   onProgress,
   onSpecFailed,
   onSkipped,
-} = useMockGenLog({ getRoot: () => mockRoot.value })
+} = useMockGenLog({ getRoot: () => mockRoot.value });
 
 // 🆕 2026-06-11 修复：内联错误卡（替代 showToast，饱和调试原则：禁用 Toast）
 // 历史：用户反馈「真机 mock 生成 ffmpeg 失败 / 后端崩溃 → 弹个 toast 就没了，根本看不到」
 // 旧实现：`showToast({ message: '失败: xxx', duration: 2500 })` —— 2.5 秒后消失、且 1 次只 1 行
 // 新实现：内联 card 持久显示，承载：title / message / stack / 关联 action（重试/查看后端日志）
 interface InlineError {
-  source: 'mockGenerate' | 'mockReset' | 'loadPlugins' | 'workflowStart' | 'workflow'
-  title: string
-  message: string
-  detail?: string  // 来自后端的 detail / stack
-  hint?: string    // 排查建议
-  at: number       // Date.now()，用于显示「刚刚」/「N 分钟前」
+  source: "mockGenerate" | "mockReset" | "loadPlugins" | "workflowStart" | "workflow";
+  title: string;
+  message: string;
+  detail?: string; // 来自后端的 detail / stack
+  hint?: string; // 排查建议
+  at: number; // Date.now()，用于显示「刚刚」/「N 分钟前」
 }
-const inlineError = ref<InlineError | null>(null)
-function setInlineError(err: Omit<InlineError, 'at'>): void {
-  inlineError.value = { ...err, at: Date.now() }
+const inlineError = ref<InlineError | null>(null);
+function setInlineError(err: Omit<InlineError, "at">): void {
+  inlineError.value = { ...err, at: Date.now() };
   // 同步 log 到 console 便于开发期排查
   // eslint-disable-next-line no-console
-  console.error('[PluginTestsDetail] inline error', err)
+  console.error("[PluginTestsDetail] inline error", err);
 }
 function clearInlineError(): void {
-  inlineError.value = null
+  inlineError.value = null;
 }
 
 // ---- 插件 & 用例 ----
-const plugins = ref<PluginMeta[]>([])
-const isLoadingPlugins = ref(false)
-const dynamicTestCases = ref<any[]>([])
-const pluginCount = computed(() => plugins.value.length)
+const plugins = ref<PluginMeta[]>([]);
+const isLoadingPlugins = ref(false);
+const dynamicTestCases = ref<any[]>([]);
+const pluginCount = computed(() => plugins.value.length);
 
 // ---- 工作流引擎 ----
 // 🆕 Task 7：useWorkflowEngine 已退役，拆分为：
 //   - useWorkflowStore：definitions CRUD（createDefinition / updateDefinition / getDefinition）
 //   - useWorkflowTaskService：运行执行 + WS 事件 + 持久化
-const store = useWorkflowStore()
-const { definitions: wfDefs, createDefinition, updateDefinition, getDefinition } = store
-const service = useWorkflowTaskService()
-const {
-  currentRun,
-  isRunning,
-  totalSteps,
-  completedSteps,
-  successSteps,
-  failedSteps,
-  runs: serviceRuns,
-  submitRun,
-  cancelRun,
-} = service
+const store = useWorkflowStore();
+const { definitions: wfDefs, createDefinition, updateDefinition, getDefinition } = store;
+const service = useWorkflowTaskService();
+const { currentRun, isRunning, totalSteps, completedSteps, successSteps, failedSteps, runs: serviceRuns, submitRun, cancelRun } = service;
 
 // 🆕 2026-06-18 v5-bug3fix：测试报告 UI 块（TestReportHeader/JobPipelineCard/StepDetailPanel）已并入任务系统
 //   - L1 Tasks tab group card：智能显示自身状态 + 命中计数器
@@ -378,21 +375,21 @@ const progress = computed(() => ({
   passed: successSteps.value,
   failed: failedSteps.value,
   pending: Math.max(0, totalSteps.value - completedSteps.value),
-}))
+}));
 
 // ---- Handlers ----
 
 async function handleGenerateMock() {
-  if (isGenerating.value) return
-  isGenerating.value = true
-  mockStats.value = null
+  if (isGenerating.value) return;
+  isGenerating.value = true;
+  mockStats.value = null;
   // 🆕 2026-06-12 饱和调试：清空 + 准备流程日志
   // 🆕 2026-06-18 Task 13：改用 useMockGenLog.resetMockGenLog() 统一重置所有状态
-  resetMockGenLog()
+  resetMockGenLog();
   try {
     const result = await generateMockFilesViaBackend({
       root: mockRoot.value,
-      type: 'all',
+      type: "all",
       // 🆕 v4：30s 硬超时。后端 hang 时主动 abort → catch 块 → inline error UI
       // 历史 bug：real device 偶发 cgo dlopen 阻塞 → gin SSE 不响应 → spinner 永远转 → 体感"崩溃"
       //
@@ -409,25 +406,27 @@ async function handleGenerateMock() {
       onProgress,
       onSpecFailed,
       onSkipped,
-    })
+    });
     mockStats.value = {
       count: result.count || lastCount.value,
       totalSize: result.totalSize || lastSize.value,
       skipped: result.skipped ?? skippedFiles.value.length,
-    }
-    mockGenerated.value = true
+    };
+    mockGenerated.value = true;
     // 🆕 v4：如果有 skipped 文件，inline error card 显示（warning 风格而非 error）
     if (result.skipped > 0 || skippedFiles.value.length > 0) {
-      const reasonList = skippedFiles.value.map((s) => {
-        const tail = s.stderr ? `\n     stderr: ${s.stderr.split('\n')[0]}` : ''
-        return `  - ${s.relativePath} (exit=${s.exitCode}): ${s.reason}${tail}`
-      }).join('\n')
+      const reasonList = skippedFiles.value
+        .map(s => {
+          const tail = s.stderr ? `\n     stderr: ${s.stderr.split("\n")[0]}` : "";
+          return `  - ${s.relativePath} (exit=${s.exitCode}): ${s.reason}${tail}`;
+        })
+        .join("\n");
       setInlineError({
-        source: 'mockGenerate',
+        source: "mockGenerate",
         title: `Mock 生成完成（${result.count} 成功 / ${result.skipped} 跳过）`,
         message: `以下 ${result.skipped} 个文件因 ffmpeg build 限制被跳过（real device 常见：mp3/flac encoder 未编入 libffmpeg.so）：\n${reasonList}`,
-        hint: '此为 warning，不是 fatal error。mp4/mkv 仍可用。继续跑自动化测试可只勾选支持格式。下方「FFMPEG 流程日志」可点开看完整 stderr / 复制。',
-      })
+        hint: "此为 warning，不是 fatal error。mp4/mkv 仍可用。继续跑自动化测试可只勾选支持格式。下方「FFMPEG 流程日志」可点开看完整 stderr / 复制。",
+      });
     } else {
       // 🆕 2026-06-12：success 时不弹 toast（饱和调试原则），让流程日志卡展示全部 ✓
       // 历史：toast 2.5s 一闪就消失，用户看不到「生成了 9 个文件全 ok」的确认
@@ -435,23 +434,23 @@ async function handleGenerateMock() {
   } catch (e) {
     // 🆕 2026-06-11 修复：用 inline error card 替代 toast
     // 历史：真机 mock 生成 ffmpeg 失败 + 后端崩溃 → toast 2.5s 一闪就消失，用户看不到根因
-    const errMsg = e instanceof Error ? e.message : String(e)
-    const classified = classifyMockError(errMsg)
+    const errMsg = e instanceof Error ? e.message : String(e);
+    const classified = classifyMockError(errMsg);
     // 🆕 2026-06-12：把"已收到但流中断"的 diag 也带过去，前端可显示「在 N/M 处停止」
-    const lastDiag = mockGenLog.value[mockGenLog.value.length - 1]
+    const lastDiag = mockGenLog.value[mockGenLog.value.length - 1];
     const stopHint = lastDiag
-      ? `\n\n📍 最后收到 spec_diag：[${lastDiag.index}/${lastDiag.total}] ${lastDiag.relativePath}\n   ffmpeg 调了：${lastDiag.ffmpegArgs.join(' ') || '(无)'}\n   exit code：${lastDiag.exitCode}\n   stderr：${lastDiag.stderr || '(empty)'}`
-      : ''
+      ? `\n\n📍 最后收到 spec_diag：[${lastDiag.index}/${lastDiag.total}] ${lastDiag.relativePath}\n   ffmpeg 调了：${lastDiag.ffmpegArgs.join(" ") || "(无)"}\n   exit code：${lastDiag.exitCode}\n   stderr：${lastDiag.stderr || "(empty)"}`
+      : "";
     setInlineError({
-      source: 'mockGenerate',
+      source: "mockGenerate",
       title: classified.title,
       message: errMsg + stopHint,
       hint: classified.hint,
-    })
+    });
     // 不弹 toast（饱和调试原则：禁用 Toast），错误卡已持久显示
   } finally {
-    isGenerating.value = false
-    generateProgressText.value = ''
+    isGenerating.value = false;
+    generateProgressText.value = "";
   }
 }
 
@@ -476,80 +475,80 @@ function classifyMockError(errMsg: string): { title: string; hint: string } {
   // 1. ffmpeg worker 启动失败（worker binary 找不到 / 不能 exec）
   if (/ffmpeg-worker binary not found/i.test(errMsg)) {
     return {
-      title: 'Mock 生成失败：ffmpeg-worker 未找到',
-      hint: '真机 Kotlin 端未把 libffmpeg-worker.so 打到 jniLibs/arm64-v8a/，或 ENCV_FFMPEG_WORKER 未设置。\n\n排查：\n  1) 确认 jniLibs/arm64-v8a/libffmpeg-worker.so 存在（应跟 libencv-go.so / libffmpeg.so 一起）\n  2) adb logcat | grep EncvGoService 看启动时 ENCV_FFMPEG_WORKER 实际值\n  3) 沙箱可绕过：用 ExecRunner 直接调系统 ffmpeg（确认 worker 模式正常后）',
-    }
+      title: "Mock 生成失败：ffmpeg-worker 未找到",
+      hint: "真机 Kotlin 端未把 libffmpeg-worker.so 打到 jniLibs/arm64-v8a/，或 ENCV_FFMPEG_WORKER 未设置。\n\n排查：\n  1) 确认 jniLibs/arm64-v8a/libffmpeg-worker.so 存在（应跟 libencv-go.so / libffmpeg.so 一起）\n  2) adb logcat | grep EncvGoService 看启动时 ENCV_FFMPEG_WORKER 实际值\n  3) 沙箱可绕过：用 ExecRunner 直接调系统 ffmpeg（确认 worker 模式正常后）",
+    };
   }
   if (/start worker:/i.test(errMsg)) {
     return {
-      title: 'Mock 生成失败：worker 启动失败',
-      hint: 'ffmpeg-worker binary 找到了但启动失败（权限/架构/链接器错误）。\n\n排查：\n  1) adb shell ls -l $ENCV_FFMPEG_WORKER 看是否可执行\n  2) adb shell chmod +x $ENCV_FFMPEG_WORKER  必要时手动加执行位\n  3) adb logcat | grep ffmpeg-worker 看 stderr 详细错误',
-    }
+      title: "Mock 生成失败：worker 启动失败",
+      hint: "ffmpeg-worker binary 找到了但启动失败（权限/架构/链接器错误）。\n\n排查：\n  1) adb shell ls -l $ENCV_FFMPEG_WORKER 看是否可执行\n  2) adb shell chmod +x $ENCV_FFMPEG_WORKER  必要时手动加执行位\n  3) adb logcat | grep ffmpeg-worker 看 stderr 详细错误",
+    };
   }
   // 2. cgo dlopen libffmpeg.so 失败
   if (/\[ENGINE_LOAD_FAILED\]/i.test(errMsg)) {
     return {
-      title: 'Mock 生成失败：cgo 加载 libffmpeg.so 失败',
-      hint: 'worker 内部 cgo dlopen libffmpeg.so 失败（路径错/架构错/missing lib）。\n\n排查：\n  1) adb shell ls $ENCV_LIB_DIR/libffmpeg.so 是否存在\n  2) adb shell file $ENCV_LIB_DIR/libffmpeg.so 确认是 ARM aarch64\n  3) 重新 build ffmpeg：bash app/encv-mobile/scripts/build-ffmpeg-android.sh',
-    }
+      title: "Mock 生成失败：cgo 加载 libffmpeg.so 失败",
+      hint: "worker 内部 cgo dlopen libffmpeg.so 失败（路径错/架构错/missing lib）。\n\n排查：\n  1) adb shell ls $ENCV_LIB_DIR/libffmpeg.so 是否存在\n  2) adb shell file $ENCV_LIB_DIR/libffmpeg.so 确认是 ARM aarch64\n  3) 重新 build ffmpeg：bash app/encv-mobile/scripts/build-ffmpeg-android.sh",
+    };
   }
   // 3. libffmpeg.so 缺 ffmpeg_run symbol（build 时没编 ffmpeg_run_main.c）
   if (/\[ENGINE_SYMBOL_MISSING\]/i.test(errMsg)) {
     return {
-      title: 'Mock 生成失败：libffmpeg.so 缺 ffmpeg_run symbol',
+      title: "Mock 生成失败：libffmpeg.so 缺 ffmpeg_run symbol",
       hint: 'libffmpeg.so 存在但没编 ffmpeg_run_main() 入口。\n\n排查：\n  1) 重新 build ffmpeg：bash app/encv-mobile/scripts/build-ffmpeg-android.sh\n  2) 确认 build 脚本中 --enable-ffmpeg_run_main 之类选项\n  3) ffmpeg 4.x 之前 ffmpeg_run 是 main()；5.x 之后需 --extra-cflags="-DFFMPEG_RUN_MAIN=1"',
-    }
+    };
   }
   // 4. ffmpeg 内部 exit_code != 0（mp4 转码失败 / 文件权限 / encoder 不支持）
   if (/\[ENGINE_EXIT_ERROR\]/i.test(errMsg)) {
     return {
-      title: 'Mock 生成失败：ffmpeg_run 内部错误',
-      hint: 'ffmpeg 执行失败（exit code != 0）。常见原因：\n  - input file 不可读\n  - encoder 不支持（真机可能没编 libx264/libmp3lame/flac）\n  - output path 无写权限\n\n排查：adb logcat | grep ffmpeg-worker 看完整 stderr',
-    }
+      title: "Mock 生成失败：ffmpeg_run 内部错误",
+      hint: "ffmpeg 执行失败（exit code != 0）。常见原因：\n  - input file 不可读\n  - encoder 不支持（真机可能没编 libx264/libmp3lame/flac）\n  - output path 无写权限\n\n排查：adb logcat | grep ffmpeg-worker 看完整 stderr",
+    };
   }
   // 5. worker 软超时
   if (/exit code? 124|ffmpeg worker exit 124|soft timeout/i.test(errMsg)) {
     return {
-      title: 'Mock 生成失败：ffmpeg 单次执行超时',
-      hint: 'worker 内部 timeoutMs 软超时触发（self-exit 124）。cgo ffmpeg_run 阻塞超过 ctx deadline。\n\n排查：\n  1) 检查 input file 是否太大/有问题\n  2) 增加 mock_generator.go 的 ctx timeout（默认 30s）\n  3) worker 自身 SIGKILL 不需要软超时兜底，前端 abort 即可',
-    }
+      title: "Mock 生成失败：ffmpeg 单次执行超时",
+      hint: "worker 内部 timeoutMs 软超时触发（self-exit 124）。cgo ffmpeg_run 阻塞超过 ctx deadline。\n\n排查：\n  1) 检查 input file 是否太大/有问题\n  2) 增加 mock_generator.go 的 ctx timeout（默认 30s）\n  3) worker 自身 SIGKILL 不需要软超时兜底，前端 abort 即可",
+    };
   }
   // 6. 通用 worker reported 错误（兜底）
   if (/ffmpeg worker reported/i.test(errMsg)) {
     return {
-      title: 'Mock 生成失败：ffmpeg worker 报告错误',
-      hint: 'worker 进程返回了错误但分类没匹配上。检查 adb logcat | grep ffmpeg-worker 完整 stderr。\n\n错误格式：[ENGINE_*] 开头的错误码对应该分类。',
-    }
+      title: "Mock 生成失败：ffmpeg worker 报告错误",
+      hint: "worker 进程返回了错误但分类没匹配上。检查 adb logcat | grep ffmpeg-worker 完整 stderr。\n\n错误格式：[ENGINE_*] 开头的错误码对应该分类。",
+    };
   }
   // 7. 前端 abort / context canceled
   if (/context canceled|abort|timeout/i.test(errMsg)) {
     return {
-      title: 'Mock 生成超时（30s）',
-      hint: '超过 30s 未完成。可能原因：\n  - 父进程 ctx cancel 触发 worker SIGKILL（最常见，Phase 2 之后）\n  - 父进程 mockGenMu 串行化导致排队（10 并发时）\n  - 后端 cgo OS thread 死锁（极少）\n\n排查：adb logcat | grep encv-go | grep mock',
-    }
+      title: "Mock 生成超时（30s）",
+      hint: "超过 30s 未完成。可能原因：\n  - 父进程 ctx cancel 触发 worker SIGKILL（最常见，Phase 2 之后）\n  - 父进程 mockGenMu 串行化导致排队（10 并发时）\n  - 后端 cgo OS thread 死锁（极少）\n\n排查：adb logcat | grep encv-go | grep mock",
+    };
   }
   // 8. 后端崩溃
   if (/502|503|504|connection.*refused|network.*error/i.test(errMsg)) {
     return {
-      title: 'Mock 生成失败：后端无响应',
-      hint: '后端进程可能已崩溃（502/网络拒绝）。\n\n排查：\n  1) adb logcat | grep encv-go | tail -200\n  2) 真机：开发者选项里重启 backend service\n  3) 沙箱：pm2 logs encv-go 看 panic stack',
-    }
+      title: "Mock 生成失败：后端无响应",
+      hint: "后端进程可能已崩溃（502/网络拒绝）。\n\n排查：\n  1) adb logcat | grep encv-go | tail -200\n  2) 真机：开发者选项里重启 backend service\n  3) 沙箱：pm2 logs encv-go 看 panic stack",
+    };
   }
   // 9. mockRoot 路径不在白名单（老 allowlist 错误，保留兼容）
   if (/not in allowlist/i.test(errMsg)) {
     return {
-      title: 'Mock 生成失败：路径不在白名单',
-      hint: '后端 servingDir 校验拒绝。mockRoot 必须是白名单前缀（如 /storage/emulated/0/encv-automation）。\n\n排查：检查 settings.user.json 的 mockRoot 配置。',
-    }
+      title: "Mock 生成失败：路径不在白名单",
+      hint: "后端 servingDir 校验拒绝。mockRoot 必须是白名单前缀（如 /storage/emulated/0/encv-automation）。\n\n排查：检查 settings.user.json 的 mockRoot 配置。",
+    };
   }
   // 🆕 2026-06-15 multi-mount：mount 路径解析失败（最常见）
   //   后端响应：{error: "resolve \"/d/automation/...\"...available mounts: [primary→/d/primary, ...]"}
   if (/invalid mount path|resolve.*no mount matches|available mounts/i.test(errMsg)) {
     // 提取 available_mounts 字段
-    const availMatch = errMsg.match(/available mounts:\s*\[([^\]]*)\]/)
-    const availList = availMatch?.[1]?.trim() || '(unknown — 见后端日志)'
+    const availMatch = errMsg.match(/available mounts:\s*\[([^\]]*)\]/);
+    const availList = availMatch?.[1]?.trim() || "(unknown — 见后端日志)";
     return {
-      title: 'Mock 生成失败：mockRoot 不是有效 mount 路径',
+      title: "Mock 生成失败：mockRoot 不是有效 mount 路径",
       hint:
         `后端 mount registry 找不到 mockRoot。\n\n` +
         `当前可用 mount：[${availList}]\n\n` +
@@ -560,53 +559,53 @@ function classifyMockError(errMsg: string): { title: string; hint: string } {
         `排查：\n` +
         `  1) WorkflowDashboard.vue L201 / PluginTestsDetail.vue L373 → 改 N=3\n` +
         `  2) 后端 slog：grep "Mock generate rejected" /workspace/encv.log`,
-    }
+    };
   }
   // 10. 兜底
   return {
-    title: 'Mock 数据生成失败',
-    hint: '检查 mockRoot 路径权限 / 后端 SSE 响应 / 后端 mock_generator.go 日志（pm2 logs encv-go 或 adb logcat）',
-  }
+    title: "Mock 数据生成失败",
+    hint: "检查 mockRoot 路径权限 / 后端 SSE 响应 / 后端 mock_generator.go 日志（pm2 logs encv-go 或 adb logcat）",
+  };
 }
 
 async function handleResetMock() {
-  if (isResetting.value) return
-  isResetting.value = true
+  if (isResetting.value) return;
+  isResetting.value = true;
   try {
-    const r = await resetMockFilesViaBackend(mockRoot.value)
-    mockStats.value = null
-    mockGenerated.value = false
-    showToast({ message: `Reset: ${r.removed} files`, color: 'success', duration: 1500 })
+    const r = await resetMockFilesViaBackend(mockRoot.value);
+    mockStats.value = null;
+    mockGenerated.value = false;
+    showToast({ message: `Reset: ${r.removed} files`, color: "success", duration: 1500 });
   } catch (e) {
     // 🆕 2026-06-11 修复：inline error card
     setInlineError({
-      source: 'mockReset',
-      title: 'Mock 数据重置失败',
+      source: "mockReset",
+      title: "Mock 数据重置失败",
       message: e instanceof Error ? e.message : String(e),
-      hint: '检查 5 个 mock 目录权限（01-plain-media / 02-alist-encrypt / 03-encv-containers / 04-boundary-test / 02-test-output）',
-    })
+      hint: "检查 5 个 mock 目录权限（01-plain-media / 02-alist-encrypt / 03-encv-containers / 04-boundary-test / 02-test-output）",
+    });
   } finally {
-    isResetting.value = false
+    isResetting.value = false;
   }
 }
 
 async function handleLoadPlugins() {
-  isLoadingPlugins.value = true
+  isLoadingPlugins.value = true;
   try {
-    plugins.value = await fetchPlugins()
+    plugins.value = await fetchPlugins();
     // 自动构建动态测试用例 + 工作流定义
-    buildDynamicWorkflow()
-    showToast({ message: `${plugins.value.length} plugins, ${dynamicTestCases.value.length} cases`, color: 'success', duration: 1500 })
+    buildDynamicWorkflow();
+    showToast({ message: `${plugins.value.length} plugins, ${dynamicTestCases.value.length} cases`, color: "success", duration: 1500 });
   } catch (e) {
     // 🆕 2026-06-11 修复：inline error card
     setInlineError({
-      source: 'loadPlugins',
-      title: '加载插件失败',
+      source: "loadPlugins",
+      title: "加载插件失败",
       message: e instanceof Error ? e.message : String(e),
-      hint: '检查后端 /api/plugins 是否 200；plugin 元数据是否含 supportedExtensions/taskOptions',
-    })
+      hint: "检查后端 /api/plugins 是否 200；plugin 元数据是否含 supportedExtensions/taskOptions",
+    });
   } finally {
-    isLoadingPlugins.value = false
+    isLoadingPlugins.value = false;
   }
 }
 
@@ -628,8 +627,8 @@ async function handleLoadPlugins() {
  */
 function buildDynamicWorkflow(): void {
   if (plugins.value.length === 0) {
-    dynamicTestCases.value = []
-    return
+    dynamicTestCases.value = [];
+    return;
   }
 
   // 2026-06-22: 抽到 pure 函数（0 行为变化）
@@ -639,53 +638,52 @@ function buildDynamicWorkflow(): void {
   //   - sourcePath 用 extToRelativePath -> 真 mock 相对路径
   //   - safeId / containerExt / 命名规则全部一致
   // 这里只负责：调 pure 函数 -> 写入 dynamicTestCases -> 注册 wfDef
-  const { testCases, wfDef } = buildDynamicWorkflowPure(plugins.value, mockRoot.value)
-  dynamicTestCases.value = testCases
+  const { testCases, wfDef } = buildDynamicWorkflowPure(plugins.value, mockRoot.value);
+  dynamicTestCases.value = testCases;
 
   // 构建或更新工作流定义
-  const existingIdx = wfDefs.value.findIndex((d) => d.id === wfDef.id)
+  const existingIdx = wfDefs.value.findIndex(d => d.id === wfDef.id);
   if (existingIdx >= 0) {
-    updateDefinition(wfDef.id, wfDef)
+    updateDefinition(wfDef.id, wfDef);
   } else {
-    createDefinition(wfDef)
+    createDefinition(wfDef);
   }
 }
 
-
 async function handleRunWorkflow() {
-  if (isRunning.value || dynamicTestCases.value.length === 0) return
+  if (isRunning.value || dynamicTestCases.value.length === 0) return;
   if (!mockGenerated.value) {
-    showToast({ message: '请先生成 Mock 数据！', color: 'warning', duration: 2000 })
-    return
+    showToast({ message: "请先生成 Mock 数据！", color: "warning", duration: 2000 });
+    return;
   }
 
   try {
     // 🆕 Task 7：runWorkflow(defId, triggeredBy) → submitRun({ workflow, triggeredBy })
-    const def = getDefinition('dynamic-auto-test')
-    if (!def) throw new Error('Workflow definition "dynamic-auto-test" not found')
-    await submitRun({ workflow: def, triggeredBy: 'automation' })
+    const def = getDefinition("dynamic-auto-test");
+    if (!def) throw new Error('Workflow definition "dynamic-auto-test" not found');
+    await submitRun({ workflow: def, triggeredBy: "automation" });
     showToast({
       message: `Workflow started: ${dynamicTestCases.value.length} steps`,
-      color: 'success',
+      color: "success",
       duration: 1500,
-    })
+    });
   } catch (e) {
     // 🆕 2026-06-11 修复：inline error card
     setInlineError({
-      source: 'workflowStart',
-      title: '启动工作流失败',
+      source: "workflowStart",
+      title: "启动工作流失败",
       message: e instanceof Error ? e.message : String(e),
-      hint: '检查后端 task 队列是否满 / 是否已有运行中的 workflow / mock 数据是否生成',
-    })
+      hint: "检查后端 task 队列是否满 / 是否已有运行中的 workflow / mock 数据是否生成",
+    });
   }
 }
 
 async function handleCancel() {
   // 🆕 Task 7：cancelCurrentRun() → cancelRun(currentRun.value.id)
   if (currentRun.value) {
-    await cancelRun(currentRun.value.id)
+    await cancelRun(currentRun.value.id);
   }
-  showToast({ message: 'Workflow cancelled', color: 'warning', duration: 1500 })
+  showToast({ message: "Workflow cancelled", color: "warning", duration: 1500 });
 }
 
 /**
@@ -695,39 +693,43 @@ async function handleCancel() {
  *   - 解耦 Tasks.vue L1 与 PluginTestsDetail（用户在 L1 group card 直接进入 GroupDetail，不经过此页）
  */
 async function openGroupDetail(runId: string) {
-  if (!runId) return
-  await router.push(`/tabs/tasks/group/${encodeURIComponent(runId)}`)
+  if (!runId) return;
+  await router.push(`/tabs/tasks/group/${encodeURIComponent(runId)}`);
 }
 
 function formatTime(iso: string): string {
-  try { return new Date(iso).toLocaleTimeString() } catch { return iso }
+  try {
+    return new Date(iso).toLocaleTimeString();
+  } catch {
+    return iso;
+  }
 }
 
 function formatInlineErrorTime(at: number): string {
   // 把 Date.now() 渲染成「刚刚 / N 分钟前 / HH:MM:SS」
-  const secAgo = Math.floor((Date.now() - at) / 1000)
-  if (secAgo < 5) return '刚刚'
-  if (secAgo < 60) return `${secAgo} 秒前`
-  if (secAgo < 3600) return `${Math.floor(secAgo / 60)} 分钟前`
-  return new Date(at).toLocaleTimeString()
+  const secAgo = Math.floor((Date.now() - at) / 1000);
+  if (secAgo < 5) return "刚刚";
+  if (secAgo < 60) return `${secAgo} 秒前`;
+  if (secAgo < 3600) return `${Math.floor(secAgo / 60)} 分钟前`;
+  return new Date(at).toLocaleTimeString();
 }
 
 function humanSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
 onMounted(() => {
   // useWorkflowTaskService 内部通过 useTaskEventBridge 自动订阅 WS 4 件套事件
   // 🆕 2026-06-12：监听 MainActivity 推送的 CustomEvent，显示 lastError
-  window.addEventListener('encv:backend-status', onBackendStatus)
-})
+  window.addEventListener("encv:backend-status", onBackendStatus);
+});
 
 onUnmounted(() => {
   // useWorkflowTaskService 内部通过 useTaskEventBridge 自动取消订阅
-  window.removeEventListener('encv:backend-status', onBackendStatus)
-})
+  window.removeEventListener("encv:backend-status", onBackendStatus);
+});
 </script>
 
 <style scoped>

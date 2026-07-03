@@ -64,64 +64,64 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { useI18n } from '@/composables/useI18n'
-import type { LibraryItem } from '@/composables/useLibraries'
-import { addIcons } from 'ionicons'
+import { addIcons } from "ionicons";
 import {
+  analytics,
+  apps,
+  archive,
+  arrowForward,
+  bug,
+  cafe,
+  chatbubbles,
+  checkmarkCircle,
+  code,
+  codeSlash,
+  cog,
+  colorPalette,
+  construct,
+  cube,
+  documentText,
+  eye,
+  film,
+  flash,
+  flask,
+  gitNetwork,
+  globe,
+  grid,
   helpCircle,
+  image,
+  key,
+  layers,
+  list,
+  lockClosed,
   logoAndroid,
   logoGoogle,
   logoIonic,
   logoVue,
-  cube,
-  apps,
-  grid,
-  image,
-  construct,
-  eye,
-  layers,
-  colorPalette,
-  sync,
-  gitNetwork,
-  bug,
-  flask,
-  cafe,
-  speedometer,
   phonePortrait,
   phonePortraitOutline,
-  shareSocial,
-  chatbubbles,
   playCircle,
-  documentText,
-  terminal,
-  list,
-  analytics,
-  globe,
   server,
-  codeSlash,
-  checkmarkCircle,
-  flash,
-  film,
+  shareSocial,
+  speedometer,
+  sync,
+  terminal,
   text,
-  code,
-  key,
-  archive,
-  lockClosed,
-  cog,
-  arrowForward,
-} from 'ionicons/icons'
+} from "ionicons/icons";
+import { computed, ref, watch } from "vue";
+import { useI18n } from "@/composables/useI18n";
+import type { LibraryItem } from "@/composables/useLibraries";
 
-const props = defineProps<{ item: LibraryItem }>()
-const { t } = useI18n()
+const props = defineProps<{ item: LibraryItem }>();
+const { t } = useI18n();
 
 // 注册所有可能用到的 ionicon（避免按需引用导致 svg 缺失）
 addIcons({
-  'help-circle': helpCircle,
-  'logo-android': logoAndroid,
-  'logo-google': logoGoogle,
-  'logo-ionic': logoIonic,
-  'logo-vue': logoVue,
+  "help-circle": helpCircle,
+  "logo-android": logoAndroid,
+  "logo-google": logoGoogle,
+  "logo-ionic": logoIonic,
+  "logo-vue": logoVue,
   cube: cube,
   apps: apps,
   grid: grid,
@@ -129,74 +129,74 @@ addIcons({
   construct: construct,
   eye: eye,
   layers: layers,
-  'color-palette': colorPalette,
+  "color-palette": colorPalette,
   sync: sync,
-  'git-network': gitNetwork,
+  "git-network": gitNetwork,
   bug: bug,
   flask: flask,
   cafe: cafe,
   speedometer: speedometer,
-  'phone-portrait': phonePortrait,
-  'phone-portrait-outline': phonePortraitOutline,
-  'share-social': shareSocial,
+  "phone-portrait": phonePortrait,
+  "phone-portrait-outline": phonePortraitOutline,
+  "share-social": shareSocial,
   chatbubbles: chatbubbles,
-  'play-circle': playCircle,
-  'document-text': documentText,
+  "play-circle": playCircle,
+  "document-text": documentText,
   terminal: terminal,
   list: list,
   analytics: analytics,
   globe: globe,
   server: server,
-  'code-slash': codeSlash,
-  'checkmark-circle': checkmarkCircle,
+  "code-slash": codeSlash,
+  "checkmark-circle": checkmarkCircle,
   flash: flash,
   film: film,
   text: text,
   code: code,
   key: key,
   archive: archive,
-  'lock-closed': lockClosed,
+  "lock-closed": lockClosed,
   cog: cog,
-  'arrow-forward': arrowForward,
-})
+  "arrow-forward": arrowForward,
+});
 
-const resolvedDescription = ref<string>(props.item.descriptionFallback || '')
+const resolvedDescription = ref<string>(props.item.descriptionFallback || "");
 
-const iconName = computed<string>(() => props.item.icon || 'cube')
+const iconName = computed<string>(() => props.item.icon || "cube");
 
 // ion-icon 通过 :icon prop 接受 string（自动查 addIcons 注册的 svg 路径）
-const resolvedIcon = computed<string>(() => iconName.value)
+const resolvedIcon = computed<string>(() => iconName.value);
 
 const sourceLabel = computed(() => {
-  const s = props.item.source
-  if (s === 'package.json') return t('about.libSource.packageJson')
-  if (s === 'libs.versions.toml') return t('about.libSource.libsVersionsToml')
-  if (s === 'build.gradle.kts') return t('about.libSource.buildGradleKts')
-  if (s === 'go.mod') return t('about.libSource.goMod')
-  if (s === 'runtime.Version()') return t('about.libSource.runtimeVersion')
-  return t('about.libSource.unknown')
-})
+  const s = props.item.source;
+  if (s === "package.json") return t("about.libSource.packageJson");
+  if (s === "libs.versions.toml") return t("about.libSource.libsVersionsToml");
+  if (s === "build.gradle.kts") return t("about.libSource.buildGradleKts");
+  if (s === "go.mod") return t("about.libSource.goMod");
+  if (s === "runtime.Version()") return t("about.libSource.runtimeVersion");
+  return t("about.libSource.unknown");
+});
 
 const statusLabel = computed(() => {
-  const s = props.item.status
-  if (s === 'active') return t('about.libStatus.active')
-  if (s === 'broken') return t('about.libStatus.broken')
-  return t('about.libStatus.historical')
-})
+  const s = props.item.status;
+  if (s === "active") return t("about.libStatus.active");
+  if (s === "broken") return t("about.libStatus.broken");
+  return t("about.libStatus.historical");
+});
 
 const importanceLabel = computed(() => {
-  const i = props.item.importance
-  if (i === 'core') return t('about.libImportance.core')
-  if (i === 'light') return t('about.libImportance.light')
-  return t('about.libImportance.transitive')
-})
+  const i = props.item.importance;
+  if (i === "core") return t("about.libImportance.core");
+  if (i === "light") return t("about.libImportance.light");
+  return t("about.libImportance.transitive");
+});
 
 watch(
   () => props.item.descriptionFallback,
-  (v) => {
-    if (v) resolvedDescription.value = v
-  },
-)
+  v => {
+    if (v) resolvedDescription.value = v;
+  }
+);
 </script>
 
 <style scoped>

@@ -63,23 +63,34 @@
 
 <script setup lang="ts">
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
-  IonBadge, IonSpinner,
-} from '@ionic/vue'
-import { playCircleOutline, checkmarkCircle, closeCircle } from 'ionicons/icons'
-import { computed } from 'vue'
-import { useI18n } from '@/composables/useI18n'
-import { useFileSystemTests } from '@/composables/useFileSystemTests'
+  IonBackButton,
+  IonBadge,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { checkmarkCircle, closeCircle, playCircleOutline } from "ionicons/icons";
+import { computed } from "vue";
+import { useFileSystemTests } from "@/composables/useFileSystemTests";
+import { useI18n } from "@/composables/useI18n";
 
-const { t } = useI18n()
-const { results, isRunning, runAllTests } = useFileSystemTests()
+const { t } = useI18n();
+const { results, isRunning, runAllTests } = useFileSystemTests();
 
-const passedCount = computed(() => results.value.filter(r => r.passed).length)
-const failedCount = computed(() => results.value.filter(r => !r.passed).length)
+const passedCount = computed(() => results.value.filter(r => r.passed).length);
+const failedCount = computed(() => results.value.filter(r => !r.passed).length);
 
 async function handleRunAll() {
-  await runAllTests()
+  await runAllTests();
 }
 </script>
 

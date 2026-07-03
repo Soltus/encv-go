@@ -235,47 +235,47 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useI18n } from '@/composables/useI18n'
-import { useServerStatus } from '@/composables/useServerStatus'
-import { formatRelativeTime } from '@/composables/relativeTime'
+import { IonIcon } from "@ionic/vue";
 import {
-  cloudOfflineOutline,
-  speedometerOutline,
-  wifiOutline,
-  layersOutline,
-  refreshCircleOutline as refreshCircleIcon,
   arrowForwardOutline as arrowForwardIcon,
-  refreshOutline as refreshIcon,
+  cloudOfflineOutline,
   syncOutline as flipBackIcon,
-  pulseOutline as pulseIcon,
-  stopCircleOutline as stopIcon,
+  layersOutline,
   playCircleOutline as playIcon,
-} from 'ionicons/icons'
-import { eventBus } from '@/composables/useEventBus'
-import { IonIcon } from '@ionic/vue'
+  pulseOutline as pulseIcon,
+  refreshCircleOutline as refreshCircleIcon,
+  refreshOutline as refreshIcon,
+  speedometerOutline,
+  stopCircleOutline as stopIcon,
+  wifiOutline,
+} from "ionicons/icons";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { formatRelativeTime } from "@/composables/relativeTime";
+import { eventBus } from "@/composables/useEventBus";
+import { useI18n } from "@/composables/useI18n";
+import { useServerStatus } from "@/composables/useServerStatus";
 
 interface Props {
   /** 紧凑模式：省略反面时间戳详情 */
-  compact?: boolean
+  compact?: boolean;
   /** 卡片可点击 → 触发外部 click 事件（注意：内部翻转也走 click，但 emit 仍 fire） */
-  clickable?: boolean
+  clickable?: boolean;
   /** 隐藏内嵌操作按钮（让父级自己渲染） */
-  hideActions?: boolean
+  hideActions?: boolean;
 }
 const props = withDefaults(defineProps<Props>(), {
   compact: false,
   clickable: false,
   hideActions: true, // 默认隐藏操作按钮 — 只有 ServerDetail 这种"健康度 + 操作"场景显式启用
-})
+});
 const emit = defineEmits<{
-  (e: 'click'): void
-  (e: 'check'): void
-  (e: 'restart'): void
-  (e: 'stop'): void
-}>()
+  (e: "click"): void;
+  (e: "check"): void;
+  (e: "restart"): void;
+  (e: "stop"): void;
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 const {
   isOnline,
   lastError,
@@ -290,28 +290,28 @@ const {
   stopBackend,
   isRestarting,
   isStopping,
-} = useServerStatus()
+} = useServerStatus();
 
 // —— refs ——
-const wrapperRef = ref<HTMLElement | null>(null)
-const innerRef = ref<HTMLElement | null>(null)
-const frontRef = ref<HTMLElement | null>(null)
-const backRef = ref<HTMLElement | null>(null)
+const wrapperRef = ref<HTMLElement | null>(null);
+const innerRef = ref<HTMLElement | null>(null);
+const frontRef = ref<HTMLElement | null>(null);
+const backRef = ref<HTMLElement | null>(null);
 
 // —— state machine: online | offline | checking ——
-const checking = computed(() => isRestarting.value) // 重启中 ≡ 检查中
-const state = computed<'online' | 'offline' | 'checking'>(() => {
-  if (checking.value) return 'checking'
-  return isOnline.value ? 'online' : 'offline'
-})
-const stopping = computed(() => isStopping.value)
+const checking = computed(() => isRestarting.value); // 重启中 ≡ 检查中
+const state = computed<"online" | "offline" | "checking">(() => {
+  if (checking.value) return "checking";
+  return isOnline.value ? "online" : "offline";
+});
+const stopping = computed(() => isStopping.value);
 
 // —— 3D 翻转（Android 兼容） ——
-const isFlipped = ref(false)
+const isFlipped = ref(false);
 watch(state, () => {
   // 状态切换时自动回正面（避免误导）
-  isFlipped.value = false
-})
+  isFlipped.value = false;
+});
 
 // —— 3D 翻转（统一逻辑） ——
 //
@@ -326,165 +326,178 @@ watch(state, () => {
 //   - isolation: isolate（独立 stacking context，防 backdrop-filter 抓合成层）
 //   - .error-detail max-height（防离线错误文本撑爆卡片）
 //   - .back-value.monospace max-height（防长 instance_id 撑爆）
-const flipClass = computed(() => isFlipped.value ? 'is-flipped' : '')
+const flipClass = computed(() => (isFlipped.value ? "is-flipped" : ""));
 
 // —— 脉冲 / 光泽动画 ——
-const pulsing = ref(false)
+const pulsing = ref(false);
 watch(state, () => {
-  pulsing.value = false
-  requestAnimationFrame(() => { pulsing.value = true })
-  setTimeout(() => { pulsing.value = false }, 1200)
-})
+  pulsing.value = false;
+  requestAnimationFrame(() => {
+    pulsing.value = true;
+  });
+  setTimeout(() => {
+    pulsing.value = false;
+  }, 1200);
+});
 
 // —— 标签文案 ——
 const statusLabel = computed(() => {
   switch (state.value) {
-    case 'online': return t('serverStatus.online')
-    case 'offline': return t('serverStatus.offline')
-    case 'checking': return t('serverStatus.checking')
+    case "online":
+      return t("serverStatus.online");
+    case "offline":
+      return t("serverStatus.offline");
+    case "checking":
+      return t("serverStatus.checking");
   }
-})
+});
 
 // —— aria ——
 const ariaLabel = computed(() => {
-  const bits: string[] = [statusLabel.value]
-  if (state.value === 'online') {
-    if (version.value) bits.push(`v${version.value}`)
-    if (port.value) bits.push(`port ${port.value}`)
-  } else if (state.value === 'offline' && lastError.value) {
-    bits.push(lastError.value)
+  const bits: string[] = [statusLabel.value];
+  if (state.value === "online") {
+    if (version.value) bits.push(`v${version.value}`);
+    if (port.value) bits.push(`port ${port.value}`);
+  } else if (state.value === "offline" && lastError.value) {
+    bits.push(lastError.value);
   }
-  return bits.join(', ')
-})
+  return bits.join(", ");
+});
 
 // —— detail 字段 ——
-const version = computed(() => backendVersion.value)
-const port = computed(() => backendPort.value)
+const version = computed(() => backendVersion.value);
+const port = computed(() => backendPort.value);
 const shortInstanceId = computed(() => {
-  return backendInstanceId.value ? backendInstanceId.value.slice(0, 8) : ''
-})
-const error = computed(() => lastError.value)
+  return backendInstanceId.value ? backendInstanceId.value.slice(0, 8) : "";
+});
+const error = computed(() => lastError.value);
 
 // —— instance_id 变化检测 → 闪烁 1.5s ——
-const instanceChanged = ref(false)
-const prevInstanceId = ref('')
-watch(backendInstanceId, (newId) => {
+const instanceChanged = ref(false);
+const prevInstanceId = ref("");
+watch(backendInstanceId, newId => {
   if (prevInstanceId.value && newId && prevInstanceId.value !== newId) {
-    instanceChanged.value = true
-    setTimeout(() => { instanceChanged.value = false }, 1500)
+    instanceChanged.value = true;
+    setTimeout(() => {
+      instanceChanged.value = false;
+    }, 1500);
   }
-  prevInstanceId.value = newId
-})
+  prevInstanceId.value = newId;
+});
 
 // —— 监听 useServerStatus 发的 'backend:instance-changed' 事件（4s banner） ——
-let bannerTimer: ReturnType<typeof setTimeout> | null = null
-const instanceChangedBanner = ref<{ previous: string; current: string } | null>(null)
+let bannerTimer: ReturnType<typeof setTimeout> | null = null;
+const instanceChangedBanner = ref<{ previous: string; current: string } | null>(null);
 function onInstanceChanged(data: { previous: string; current: string }) {
-  instanceChangedBanner.value = data
-  if (bannerTimer) clearTimeout(bannerTimer)
+  instanceChangedBanner.value = data;
+  if (bannerTimer) clearTimeout(bannerTimer);
   bannerTimer = setTimeout(() => {
-    instanceChangedBanner.value = null
-    bannerTimer = null
-  }, 4000)
+    instanceChangedBanner.value = null;
+    bannerTimer = null;
+  }, 4000);
 }
 
 // —— latency 分类 / 显示 ——
 const latencyText = computed(() => {
-  if (latencyMs.value <= 0) return '—'
-  if (latencyMs.value < 1000) return `${latencyMs.value}ms`
-  return `${(latencyMs.value / 1000).toFixed(2)}s`
-})
-const latencyQuality = computed<'fast' | 'normal' | 'slow' | 'unknown'>(() => {
-  if (latencyMs.value <= 0) return 'unknown'
-  if (latencyMs.value < 100) return 'fast'
-  if (latencyMs.value < 500) return 'normal'
-  return 'slow'
-})
-const latencyPillVisible = computed(() => state.value === 'online' && latencyMs.value > 0)
+  if (latencyMs.value <= 0) return "—";
+  if (latencyMs.value < 1000) return `${latencyMs.value}ms`;
+  return `${(latencyMs.value / 1000).toFixed(2)}s`;
+});
+const latencyQuality = computed<"fast" | "normal" | "slow" | "unknown">(() => {
+  if (latencyMs.value <= 0) return "unknown";
+  if (latencyMs.value < 100) return "fast";
+  if (latencyMs.value < 500) return "normal";
+  return "slow";
+});
+const latencyPillVisible = computed(() => state.value === "online" && latencyMs.value > 0);
 
 // —— transport 显示 ——
 const transport = computed(() => {
-  const m = transportMode.value
-  return m && m !== 'unknown' ? m.toUpperCase() : ''
-})
+  const m = transportMode.value;
+  return m && m !== "unknown" ? m.toUpperCase() : "";
+});
 const transportFullLabel = computed(() => {
-  const m = transportMode.value
+  const m = transportMode.value;
   switch (m) {
-    case 'ws': return t('serverStatus.transportWs')
-    case 'http-poll': return t('serverStatus.transportHttpPoll')
-    case 'native-bridge': return t('serverStatus.transportNativeBridge')
-    default: return t('serverStatus.transportUnknown')
+    case "ws":
+      return t("serverStatus.transportWs");
+    case "http-poll":
+      return t("serverStatus.transportHttpPoll");
+    case "native-bridge":
+      return t("serverStatus.transportNativeBridge");
+    default:
+      return t("serverStatus.transportUnknown");
   }
-})
+});
 const transportIcon = computed(() => {
-  const m = transportMode.value
+  const m = transportMode.value;
   // 用户要求：HTTP Polling 旁必须有 wifi 图标
-  if (m === 'ws' || m === 'http-poll' || m === 'native-bridge') return wifiOutline
-  return layersOutline
-})
+  if (m === "ws" || m === "http-poll" || m === "native-bridge") return wifiOutline;
+  return layersOutline;
+});
 
 // —— last check 时间（30s 滚动刷新）——
 const lastCheckText = computed(() => {
-  if (!lastCheckedAt.value) return t('serverStatus.never')
-  return formatRelativeTime(lastCheckedAt.value.getTime())
-})
+  if (!lastCheckedAt.value) return t("serverStatus.never");
+  return formatRelativeTime(lastCheckedAt.value.getTime());
+});
 const lastCheckAbsolute = computed(() => {
-  if (!lastCheckedAt.value) return '—'
-  const d = lastCheckedAt.value
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-})
-const lastCheckKey = ref(0)
-const now = ref(Date.now())
-let tickHandle: ReturnType<typeof setInterval> | null = null
+  if (!lastCheckedAt.value) return "—";
+  const d = lastCheckedAt.value;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+});
+const lastCheckKey = ref(0);
+const now = ref(Date.now());
+let tickHandle: ReturnType<typeof setInterval> | null = null;
 
 // —— 高度自适应 + 平滑伸缩 ——
 async function syncHeight() {
-  await nextTick()
-  if (!wrapperRef.value || !frontRef.value || !backRef.value) return
-  const fh = frontRef.value.offsetHeight
-  const bh = backRef.value.offsetHeight
-  const max = Math.max(fh, bh, 160) // 兜底 min-height
-  wrapperRef.value.style.minHeight = `${max}px`
+  await nextTick();
+  if (!wrapperRef.value || !frontRef.value || !backRef.value) return;
+  const fh = frontRef.value.offsetHeight;
+  const bh = backRef.value.offsetHeight;
+  const max = Math.max(fh, bh, 160); // 兜底 min-height
+  wrapperRef.value.style.minHeight = `${max}px`;
 }
 
 onMounted(() => {
   // 初始高度
-  syncHeight()
+  syncHeight();
   // 监听窗口尺寸变化
-  window.addEventListener('resize', syncHeight)
+  window.addEventListener("resize", syncHeight);
   // 30s 滚动刷新
   tickHandle = setInterval(() => {
-    now.value = Date.now()
-    lastCheckKey.value++
-  }, 30_000)
-  eventBus.on('backend:instance-changed', onInstanceChanged)
-})
+    now.value = Date.now();
+    lastCheckKey.value++;
+  }, 30_000);
+  eventBus.on("backend:instance-changed", onInstanceChanged);
+});
 onUnmounted(() => {
-  if (tickHandle) clearInterval(tickHandle)
-  if (bannerTimer) clearTimeout(bannerTimer)
-  window.removeEventListener('resize', syncHeight)
-  eventBus.off('backend:instance-changed', onInstanceChanged)
-})
+  if (tickHandle) clearInterval(tickHandle);
+  if (bannerTimer) clearTimeout(bannerTimer);
+  window.removeEventListener("resize", syncHeight);
+  eventBus.off("backend:instance-changed", onInstanceChanged);
+});
 
 // 翻转时 / 状态切换时 / 关键数据变化时重测高度
 watch([isFlipped, state, isOnline, transportMode, lastError, instanceChangedBanner], () => {
-  syncHeight()
-})
+  syncHeight();
+});
 
 // —— 点击卡片主体翻转 ——
 function onCardClick(event: MouseEvent) {
-  const target = event.target as HTMLElement
+  const target = event.target as HTMLElement;
   // 阻止子元素点击冒泡时翻转（按钮 / pill / 链接 / flip-hint）
-  if (target.closest('button, a, .meta-pill, .flip-hint, .status-actions, ion-button')) {
-    return
+  if (target.closest("button, a, .meta-pill, .flip-hint, .status-actions, ion-button")) {
+    return;
   }
-  isFlipped.value = !isFlipped.value
-  if (props.clickable) emit('click')
+  isFlipped.value = !isFlipped.value;
+  if (props.clickable) emit("click");
 }
 
 // —— expose to parent ——
-defineExpose({ checkStatus, restartBackend, stopBackend })
+defineExpose({ checkStatus, restartBackend, stopBackend });
 </script>
 
 <style scoped>

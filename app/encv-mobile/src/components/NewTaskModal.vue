@@ -104,126 +104,136 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
 import {
+  IonButton,
+  IonButtons,
   IonContent,
   IonHeader,
+  IonIcon,
   IonPage,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonButton,
   IonSelect,
   IonSelectOption,
-  IonIcon,
   IonSpinner,
+  IonTitle,
+  IonToolbar,
   modalController,
-} from '@ionic/vue'
-import { lockClosed, checkmarkCircle } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import EncryptBody from '@/components/EncryptBody.vue'
-import DecryptBody from '@/components/DecryptBody.vue'
-import type { PluginCandidate, ContainerVersionInfo, TaskField, TaskOptions } from '@/api/encv'
-import type { NewTaskState } from '@/components/NewTaskState'
+} from "@ionic/vue";
+import { checkmarkCircle, lockClosed } from "ionicons/icons";
+import { computed, reactive } from "vue";
+import type { ContainerVersionInfo, PluginCandidate, TaskField, TaskOptions } from "@/api/encv";
+import DecryptBody from "@/components/DecryptBody.vue";
+import EncryptBody from "@/components/EncryptBody.vue";
+import type { NewTaskState } from "@/components/NewTaskState";
+import { useI18n } from "@/composables/useI18n";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const props = withDefaults(defineProps<{
-  state?: NewTaskState
-  taskType: string
-  sourcePath: string
-  targetPath: string
-  candidates: PluginCandidate[]
-  predictedPlugin: string | null
-  taskOptions: TaskOptions | null
-  primaryOverride: string
-  secondaryPassword: string
-  version: number
-  versionOptions: ContainerVersionInfo[]
-  extraValues: Record<string, string>
-  filteredExtraFields: TaskField[]
-  selectedPluginIndex: number
-  cipherMode: number
-  compressionMode: 'none' | 'zstd'
-  onUpdateTaskType?: (v: string) => void
-  onUpdateSourcePath?: (v: string) => void
-  onUpdateTargetPath?: (v: string) => void
-  onUpdateVersion?: (v: number) => void
-  onUpdatePrimaryOverride?: (v: string) => void
-  onUpdateSecondaryPassword?: (v: string) => void
-  onUpdateCipherMode?: (v: number) => void
-  onUpdateCompressionMode?: (v: 'none' | 'zstd') => void
-  onUpdateExtraValue?: (payload: { key: string; value: string }) => void
-  onSelectPlugin?: (index: number) => void
-  onSubmit?: () => void
-}>(), {
-  state: undefined,
-  onUpdateTaskType: undefined,
-  onUpdateSourcePath: undefined,
-  onUpdateTargetPath: undefined,
-  onUpdateVersion: undefined,
-  onUpdatePrimaryOverride: undefined,
-  onUpdateSecondaryPassword: undefined,
-  onUpdateCipherMode: undefined,
-  onUpdateCompressionMode: undefined,
-  onUpdateExtraValue: undefined,
-  onSelectPlugin: undefined,
-  onSubmit: undefined,
-})
+const props = withDefaults(
+  defineProps<{
+    state?: NewTaskState;
+    taskType: string;
+    sourcePath: string;
+    targetPath: string;
+    candidates: PluginCandidate[];
+    predictedPlugin: string | null;
+    taskOptions: TaskOptions | null;
+    primaryOverride: string;
+    secondaryPassword: string;
+    version: number;
+    versionOptions: ContainerVersionInfo[];
+    extraValues: Record<string, string>;
+    filteredExtraFields: TaskField[];
+    selectedPluginIndex: number;
+    cipherMode: number;
+    compressionMode: "none" | "zstd";
+    onUpdateTaskType?: (v: string) => void;
+    onUpdateSourcePath?: (v: string) => void;
+    onUpdateTargetPath?: (v: string) => void;
+    onUpdateVersion?: (v: number) => void;
+    onUpdatePrimaryOverride?: (v: string) => void;
+    onUpdateSecondaryPassword?: (v: string) => void;
+    onUpdateCipherMode?: (v: number) => void;
+    onUpdateCompressionMode?: (v: "none" | "zstd") => void;
+    onUpdateExtraValue?: (payload: { key: string; value: string }) => void;
+    onSelectPlugin?: (index: number) => void;
+    onSubmit?: () => void;
+  }>(),
+  {
+    state: undefined,
+    onUpdateTaskType: undefined,
+    onUpdateSourcePath: undefined,
+    onUpdateTargetPath: undefined,
+    onUpdateVersion: undefined,
+    onUpdatePrimaryOverride: undefined,
+    onUpdateSecondaryPassword: undefined,
+    onUpdateCipherMode: undefined,
+    onUpdateCompressionMode: undefined,
+    onUpdateExtraValue: undefined,
+    onSelectPlugin: undefined,
+    onSubmit: undefined,
+  }
+);
 
 const fallbackState = reactive<NewTaskState>({
-  taskType: 'encrypt',
-  sourcePath: '',
-  targetPath: '',
+  taskType: "encrypt",
+  sourcePath: "",
+  targetPath: "",
   candidates: [],
   predictedPlugin: null,
   taskOptions: null,
-  primaryOverride: '',
-  secondaryPassword: '',
+  primaryOverride: "",
+  secondaryPassword: "",
   version: 4,
   versionOptions: [],
   extraValues: {},
   filteredExtraFields: [],
   selectedPluginIndex: 0,
   cipherMode: 0,
-  compressionMode: 'none',
-})
+  compressionMode: "none",
+});
 
 const effectiveState = computed<NewTaskState>(() => {
-  if (props.state) return props.state
-  return fallbackState
-})
+  if (props.state) return props.state;
+  return fallbackState;
+});
 
-const src = computed(() => effectiveState.value.sourcePath ?? props.sourcePath ?? '')
-const taskType = computed(() => effectiveState.value.taskType ?? props.taskType ?? 'encrypt')
+const src = computed(() => effectiveState.value.sourcePath ?? props.sourcePath ?? "");
+const taskType = computed(() => effectiveState.value.taskType ?? props.taskType ?? "encrypt");
 const cands = computed<PluginCandidate[]>(() => {
-  const arr = effectiveState.value.candidates ?? props.candidates
-  return Array.isArray(arr) ? arr : []
-})
-const pluginName = computed(() => effectiveState.value.predictedPlugin ?? props.predictedPlugin ?? '')
+  const arr = effectiveState.value.candidates ?? props.candidates;
+  return Array.isArray(arr) ? arr : [];
+});
+const pluginName = computed(() => effectiveState.value.predictedPlugin ?? props.predictedPlugin ?? "");
 const selectedIdx = computed(() =>
-  typeof effectiveState.value.selectedPluginIndex === 'number'
+  typeof effectiveState.value.selectedPluginIndex === "number"
     ? effectiveState.value.selectedPluginIndex
-    : (typeof props.selectedPluginIndex === 'number' ? props.selectedPluginIndex : 0)
-)
-const taskOpts = computed(() => effectiveState.value.taskOptions ?? props.taskOptions ?? null)
+    : typeof props.selectedPluginIndex === "number"
+      ? props.selectedPluginIndex
+      : 0
+);
+const taskOpts = computed(() => effectiveState.value.taskOptions ?? props.taskOptions ?? null);
 
 const isPredicting = computed(() => {
-  return src.value.length > 0 && cands.value.length === 0 && !pluginName.value
-})
+  return src.value.length > 0 && cands.value.length === 0 && !pluginName.value;
+});
 
 function getMatchTypeLabel(matchType: string): string {
   switch (matchType) {
-    case 'mime': return 'MIME'
-    case 'extension': return 'Extension'
-    case 'general': return 'General'
-    case 'container': return 'Container'
-    default: return matchType
+    case "mime":
+      return "MIME";
+    case "extension":
+      return "Extension";
+    case "general":
+      return "General";
+    case "container":
+      return "Container";
+    default:
+      return matchType;
   }
 }
 
 async function handleClose() {
-  await modalController.dismiss()
+  await modalController.dismiss();
 }
 </script>
 

@@ -76,65 +76,54 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import {
-  IonCard, IonCardHeader, IonCardTitle, IonCardContent,
-  IonBadge, IonIcon, IonSpinner,
-} from '@ionic/vue'
-import { analyticsOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import {
-  getCalibration,
-  getPerformanceHistory,
-  type EncvTask,
-  type CalibrationResult,
-  type PerformanceMetrics,
-} from '@/api/encv'
+import { IonBadge, IonCard, IonCardContent, IonCardHeader, IonCardTitle, IonIcon, IonSpinner } from "@ionic/vue";
+import { analyticsOutline } from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
+import { type CalibrationResult, type EncvTask, getCalibration, getPerformanceHistory, type PerformanceMetrics } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
 
-const props = defineProps<{ runTasks: EncvTask[] }>()
-const { t } = useI18n()
+const props = defineProps<{ runTasks: EncvTask[] }>();
+const { t } = useI18n();
 
-const loading = ref(false)
-const calibration = ref<CalibrationResult | null>(null)
-const historyMap = ref<Map<string, PerformanceMetrics[]>>(new Map())
+const loading = ref(false);
+const calibration = ref<CalibrationResult | null>(null);
+const historyMap = ref<Map<string, PerformanceMetrics[]>>(new Map());
 
 interface PluginAggregation {
-  pluginName: string
-  caseCount: number
-  avgThroughput: number
-  dominantGrade: 'excellent' | 'good' | 'warn'
-  trendPctChange: number
+  pluginName: string;
+  caseCount: number;
+  avgThroughput: number;
+  dominantGrade: "excellent" | "good" | "warn";
+  trendPctChange: number;
 }
 
 const pluginAggregation = computed<PluginAggregation[]>(() => {
-  const map = new Map<string, EncvTask[]>()
+  const map = new Map<string, EncvTask[]>();
   for (const task of props.runTasks) {
-    if (!task.performanceSummary) continue
-    const key = task.pluginName || 'unknown'
-    if (!map.has(key)) map.set(key, [])
-    map.get(key)!.push(task)
+    if (!task.performanceSummary) continue;
+    const key = task.pluginName || "unknown";
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(task);
   }
 
-  const result: PluginAggregation[] = []
+  const result: PluginAggregation[] = [];
   for (const [pluginName, tasks] of map) {
-    const throughputs = tasks.map(t => t.performanceSummary?.avgThroughput || 0).filter(v => v > 0)
-    const avgThroughput = throughputs.length > 0
-      ? throughputs.reduce((a, b) => a + b, 0) / throughputs.length
-      : 0
+    const throughputs = tasks.map(t => t.performanceSummary?.avgThroughput || 0).filter(v => v > 0);
+    const avgThroughput = throughputs.length > 0 ? throughputs.reduce((a, b) => a + b, 0) / throughputs.length : 0;
 
-    const grades = tasks.map(t => t.performanceSummary?.grade || 'good')
-    const gradeCount: Record<string, number> = { excellent: 0, good: 0, warn: 0 }
-    for (const g of grades) gradeCount[g] = (gradeCount[g] || 0) + 1
-    const dominantGrade = (Object.entries(gradeCount).sort((a, b) => b[1] - a[1])[0]?.[0] || 'good') as 'excellent' | 'good' | 'warn'
+    const grades = tasks.map(t => t.performanceSummary?.grade || "good");
+    const gradeCount: Record<string, number> = { excellent: 0, good: 0, warn: 0 };
+    for (const g of grades) gradeCount[g] = (gradeCount[g] || 0) + 1;
+    const dominantGrade = (Object.entries(gradeCount).sort((a, b) => b[1] - a[1])[0]?.[0] || "good") as "excellent" | "good" | "warn";
 
     // 趋势：与历史对比
-    let trendPctChange = 0
-    const history = historyMap.value.get(pluginName)
+    let trendPctChange = 0;
+    const history = historyMap.value.get(pluginName);
     if (history && history.length >= 2) {
-      const current = avgThroughput
-      const previous = history[1].avgThroughput // history[0] 是最新
+      const current = avgThroughput;
+      const previous = history[1].avgThroughput; // history[0] 是最新
       if (previous > 0) {
-        trendPctChange = ((current - previous) / previous) * 100
+        trendPctChange = ((current - previous) / previous) * 100;
       }
     }
 
@@ -144,64 +133,68 @@ const pluginAggregation = computed<PluginAggregation[]>(() => {
       avgThroughput,
       dominantGrade,
       trendPctChange,
-    })
+    });
   }
 
-  return result.sort((a, b) => b.caseCount - a.caseCount)
-})
+  return result.sort((a, b) => b.caseCount - a.caseCount);
+});
 
 function gradeColor(grade: string): string {
   switch (grade) {
-    case 'excellent': return 'success'
-    case 'good': return 'primary'
-    case 'warn': return 'warning'
-    default: return 'medium'
+    case "excellent":
+      return "success";
+    case "good":
+      return "primary";
+    case "warn":
+      return "warning";
+    default:
+      return "medium";
   }
 }
 
 function trendArrow(pct: number): string {
-  return pct > 0 ? '↗' : '↘'
+  return pct > 0 ? "↗" : "↘";
 }
 
 function trendClass(pct: number): string {
-  return pct > 0 ? 'trend-up' : 'trend-down'
+  return pct > 0 ? "trend-up" : "trend-down";
 }
 
 function formatTime(iso: string): string {
   try {
-    return new Date(iso).toLocaleString()
+    return new Date(iso).toLocaleString();
   } catch {
-    return iso
+    return iso;
   }
 }
 
 async function loadData() {
-  loading.value = true
+  loading.value = true;
   try {
-    calibration.value = await getCalibration()
+    calibration.value = await getCalibration();
 
     // 加载每个 plugin 的历史
-    const pluginNames = new Set(props.runTasks.map(t => t.pluginName || 'unknown'))
+    const pluginNames = new Set(props.runTasks.map(t => t.pluginName || "unknown"));
     for (const plugin of pluginNames) {
       try {
-        const history = await getPerformanceHistory(plugin, 'encrypt', 10)
+        const history = await getPerformanceHistory(plugin, "encrypt", 10);
         if (history.length > 0) {
-          historyMap.value.set(plugin, history)
+          historyMap.value.set(plugin, history);
         }
       } catch (err) {
-        console.error(`load history for ${plugin} failed:`, err)
+        console.error(`load history for ${plugin} failed:`, err);
       }
     }
   } catch (err) {
-    console.error('load performance data failed:', err)
+    console.error("load performance data failed:", err);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 onMounted(() => {
-  loadData()
-})
+  loadData();
+});
 </script>
 
 <style scoped>

@@ -184,210 +184,250 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton,
-  IonBackButton, IonContent, IonList, IonListHeader, IonItem, IonItemDivider,
-  IonIcon, IonLabel, IonInput, IonSpinner, IonModal,
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonInput,
+  IonItem,
+  IonItemDivider,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonModal,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
   modalController,
-} from '@ionic/vue'
+} from "@ionic/vue";
 import {
-  save as saveIcon, settingsOutline, shieldCheckmark, speedometerOutline,
-  filmOutline, musicalNotesOutline, imagesOutline, readerOutline,
-  newspaperOutline, eyeOutline, folderOpen,
-  documentText, toggleOutline, lockClosed, textOutline,
-  colorPaletteOutline, layersOutline, warningOutline,
   cloudOutline,
-} from 'ionicons/icons'
-import { useConfig } from '@/composables/useConfig'
-import { usePluginExtensions } from '@/composables/usePluginExtensions'
-import { useServerStatus } from '@/composables/useServerStatus'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import { fetchConfig, updateConfig, fetchTextPreviewExts, invalidateTextExtsCache } from '@/api/encv'
-import type { FieldDef } from '@/config/schemaParser'
-import { isNative } from '@/plugins/GoProcess'
-import FilePickerModal from '@/components/FilePickerModal.vue'
-import ConfigFieldItem from '@/components/ConfigFieldItem.vue'
+  colorPaletteOutline,
+  documentText,
+  eyeOutline,
+  filmOutline,
+  folderOpen,
+  imagesOutline,
+  layersOutline,
+  lockClosed,
+  musicalNotesOutline,
+  newspaperOutline,
+  readerOutline,
+  save as saveIcon,
+  settingsOutline,
+  shieldCheckmark,
+  speedometerOutline,
+  textOutline,
+  toggleOutline,
+  warningOutline,
+} from "ionicons/icons";
+import { computed, onMounted, ref, watch } from "vue";
+import { fetchConfig, fetchTextPreviewExts, invalidateTextExtsCache, updateConfig } from "@/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
+import FilePickerModal from "@/components/FilePickerModal.vue";
+import { useConfig } from "@/composables/useConfig";
+import { useI18n } from "@/composables/useI18n";
+import { usePluginExtensions } from "@/composables/usePluginExtensions";
+import { useServerStatus } from "@/composables/useServerStatus";
+import { showToast } from "@/composables/useToast";
+import type { FieldDef } from "@/config/schemaParser";
+import { isNative } from "@/plugins/GoProcess";
 
-const { isOnline: serverOnline } = useServerStatus()
-const { schemaFields, loading: configLoading, dirty, loadConfig, saveConfig, resetConfig, getFieldValue, setFieldValue, resetFieldToDefault } = useConfig()
-const { getConflictingPlugins, load: loadExtensions, UNAVAILABLE, data: pluginExtData } = usePluginExtensions()
-const { t, tField, tSectionTitle } = useI18n()
+const { isOnline: serverOnline } = useServerStatus();
+const {
+  schemaFields,
+  loading: configLoading,
+  dirty,
+  loadConfig,
+  saveConfig,
+  resetConfig,
+  getFieldValue,
+  setFieldValue,
+  resetFieldToDefault,
+} = useConfig();
+const { getConflictingPlugins, load: loadExtensions, UNAVAILABLE, data: pluginExtData } = usePluginExtensions();
+const { t, tField, tSectionTitle } = useI18n();
 
-const configLoaded = ref(false)
-const suffixConflict = ref<string[]>([])
-const textExtsError = ref('')
-const textExtsConflicts = ref<string[]>([])
-const builtInTextExtsCount = ref(0)
+const configLoaded = ref(false);
+const suffixConflict = ref<string[]>([]);
+const textExtsError = ref("");
+const textExtsConflicts = ref<string[]>([]);
+const builtInTextExtsCount = ref(0);
 
-const showJsonEditor = ref(false)
-const jsonText = ref('')
-const jsonError = ref('')
-const configAnnotations = ref<{ path: string; description: string }[]>([])
+const showJsonEditor = ref(false);
+const jsonText = ref("");
+const jsonError = ref("");
+const configAnnotations = ref<{ path: string; description: string }[]>([]);
 
-function extractAnnotations(schema: any, prefix: string = ''): { path: string; description: string }[] {
-  const result: { path: string; description: string }[] = []
-  if (!schema || typeof schema !== 'object') return result
+function extractAnnotations(schema: any, prefix: string = ""): { path: string; description: string }[] {
+  const result: { path: string; description: string }[] = [];
+  if (!schema || typeof schema !== "object") return result;
   if (schema.properties) {
     for (const [key, val] of Object.entries(schema.properties)) {
-      const prop = val as any
-      const fullPath = prefix ? `${prefix}.${key}` : key
+      const prop = val as any;
+      const fullPath = prefix ? `${prefix}.${key}` : key;
       if (prop.description) {
-        result.push({ path: fullPath, description: prop.description })
+        result.push({ path: fullPath, description: prop.description });
       }
       if (prop.properties) {
-        result.push(...extractAnnotations(prop, fullPath))
+        result.push(...extractAnnotations(prop, fullPath));
       }
     }
   }
   if (schema.$defs) {
     for (const [key, val] of Object.entries(schema.$defs)) {
-      result.push(...extractAnnotations(val, `$defs.${key}`))
+      result.push(...extractAnnotations(val, `$defs.${key}`));
     }
   }
-  return result
+  return result;
 }
 
 async function openJsonEditor() {
   try {
-    const cfg = await fetchConfig()
-    jsonText.value = JSON.stringify(cfg, null, 2)
-    jsonError.value = ''
+    const cfg = await fetchConfig();
+    jsonText.value = JSON.stringify(cfg, null, 2);
+    jsonError.value = "";
     try {
-      const schemaResp = await fetch('/api/config/schema')
+      const schemaResp = await fetch("/api/config/schema");
       if (schemaResp.ok) {
-        const schema = await schemaResp.json()
-        configAnnotations.value = extractAnnotations(schema)
+        const schema = await schemaResp.json();
+        configAnnotations.value = extractAnnotations(schema);
       }
     } catch {}
-    showJsonEditor.value = true
+    showJsonEditor.value = true;
   } catch {
-    showToast({ message: t('settings.configSaveFailed'), duration: 2000, color: 'danger' })
+    showToast({ message: t("settings.configSaveFailed"), duration: 2000, color: "danger" });
   }
 }
 
 function validateJson() {
   try {
-    JSON.parse(jsonText.value)
-    jsonError.value = ''
+    JSON.parse(jsonText.value);
+    jsonError.value = "";
   } catch (e) {
-    jsonError.value = e instanceof Error ? e.message : String(e)
+    jsonError.value = e instanceof Error ? e.message : String(e);
   }
 }
 
 async function handleSaveJson() {
   try {
-    const parsed = JSON.parse(jsonText.value)
-    await updateConfig(parsed)
-    showJsonEditor.value = false
-    showToast({ message: t('settings.configSaved'), duration: 1500, color: 'success' })
-    await loadConfig()
+    const parsed = JSON.parse(jsonText.value);
+    await updateConfig(parsed);
+    showJsonEditor.value = false;
+    showToast({ message: t("settings.configSaved"), duration: 1500, color: "success" });
+    await loadConfig();
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
-    showToast({ message: t('settings.configSaveFailed') + ': ' + detail, duration: 3000, color: 'danger' })
+    const detail = e instanceof Error ? e.message : String(e);
+    showToast({ message: t("settings.configSaveFailed") + ": " + detail, duration: 3000, color: "danger" });
   }
 }
 
 const pluginSection = computed<FieldDef | undefined>(() => {
-  return schemaFields.value.find(s => s.key === 'plugin_settings')
-})
+  return schemaFields.value.find(s => s.key === "plugin_settings");
+});
 
 function getValue(path: string[]): unknown {
-  return getFieldValue(path)
+  return getFieldValue(path);
 }
 
 function setValue(path: string[], value: unknown) {
-  setFieldValue(path, value)
+  setFieldValue(path, value);
 }
 
 function getMapEntries(path: string[]): [string, Record<string, unknown>][] {
-  const val = getFieldValue(path)
-  if (!val || typeof val !== 'object') return []
-  return Object.entries(val as Record<string, unknown>) as [string, Record<string, unknown>][]
+  const val = getFieldValue(path);
+  if (!val || typeof val !== "object") return [];
+  return Object.entries(val as Record<string, unknown>) as [string, Record<string, unknown>][];
 }
 
 function handleInput(path: string[], field: FieldDef, event: CustomEvent) {
-  const val = (event.target as HTMLInputElement).value
-  if (field.type === 'integer') {
-    setFieldValue(path, val ? Number(val) : 0)
+  const val = (event.target as HTMLInputElement).value;
+  if (field.type === "integer") {
+    setFieldValue(path, val ? Number(val) : 0);
   } else {
-    setFieldValue(path, val)
+    setFieldValue(path, val);
   }
 
-  if (path.length === 3 && path[0] === 'plugin_settings' && path[1] === 'alist_encrypt' && path[2] === 'suffix') {
-    checkSuffixConflict(val)
+  if (path.length === 3 && path[0] === "plugin_settings" && path[1] === "alist_encrypt" && path[2] === "suffix") {
+    checkSuffixConflict(val);
   }
 }
 
 function checkSuffixConflict(suffix: string) {
-  if (!suffix || suffix === '.') {
-    suffixConflict.value = []
-    return
+  if (!suffix || suffix === ".") {
+    suffixConflict.value = [];
+    return;
   }
-  const conflicts = getConflictingPlugins(suffix)
-  suffixConflict.value = conflicts
+  const conflicts = getConflictingPlugins(suffix);
+  suffixConflict.value = conflicts;
 }
 
-const TEXT_EXT_PATTERN = /^[a-z0-9](?:[a-z0-9\-\.]*[a-z0-9])?(?:\s*,\s*[a-z0-9](?:[a-z0-9\-\.]*[a-z0-9])?)*$/
+const TEXT_EXT_PATTERN = /^[a-z0-9](?:[a-z0-9\-.]*[a-z0-9])?(?:\s*,\s*[a-z0-9](?:[a-z0-9\-.]*[a-z0-9])?)*$/;
 
 function parseAndValidateTextExts(raw: string): { valid: boolean; error: string; extensions: string[] } {
-  const trimmed = raw.trim()
-  if (!trimmed) return { valid: true, error: '', extensions: [] }
+  const trimmed = raw.trim();
+  if (!trimmed) return { valid: true, error: "", extensions: [] };
 
   if (!TEXT_EXT_PATTERN.test(trimmed)) {
-    return { valid: false, error: t('settings.textExtsFormatError'), extensions: [] }
+    return { valid: false, error: t("settings.textExtsFormatError"), extensions: [] };
   }
 
-  const extensions = trimmed.split(',').map(s => s.trim().toLowerCase()).filter(s => s.length > 0)
-  const dupes = extensions.filter((ext, i) => extensions.indexOf(ext) !== i)
+  const extensions = trimmed
+    .split(",")
+    .map(s => s.trim().toLowerCase())
+    .filter(s => s.length > 0);
+  const dupes = extensions.filter((ext, i) => extensions.indexOf(ext) !== i);
   if (dupes.length > 0) {
-    return { valid: false, error: t('settings.textExtsDuplicateError', { ext: dupes[0] }), extensions: [] }
+    return { valid: false, error: t("settings.textExtsDuplicateError", { ext: dupes[0] }), extensions: [] };
   }
 
-  return { valid: true, error: '', extensions }
+  return { valid: true, error: "", extensions };
 }
 
 function checkTextExtsConflicts(extensions: string[]): string[] {
-  if (!extensions.length || !pluginExtData.value) return []
-  const allExts = Object.keys(pluginExtData.value.extensions)
-  const conflicts = extensions.filter(ext => allExts.includes('.' + ext.toLowerCase()))
-  return conflicts
+  if (!extensions.length || !pluginExtData.value) return [];
+  const allExts = Object.keys(pluginExtData.value.extensions);
+  const conflicts = extensions.filter(ext => allExts.includes("." + ext.toLowerCase()));
+  return conflicts;
 }
 
 async function handleCustomTextExtsInput(event: CustomEvent) {
-  const raw = (event.target as HTMLInputElement).value || ''
-  setValue(['plugin_settings', 'text', 'custom_text_extensions'], raw)
+  const raw = (event.target as HTMLInputElement).value || "";
+  setValue(["plugin_settings", "text", "custom_text_extensions"], raw);
 
-  const result = parseAndValidateTextExts(raw)
-  textExtsError.value = result.error
+  const result = parseAndValidateTextExts(raw);
+  textExtsError.value = result.error;
 
   if (result.valid && result.extensions.length > 0) {
-    textExtsConflicts.value = checkTextExtsConflicts(result.extensions)
+    textExtsConflicts.value = checkTextExtsConflicts(result.extensions);
   } else {
-    textExtsConflicts.value = []
+    textExtsConflicts.value = [];
   }
 }
 
 async function handleBrowsePath(path: string[], field: FieldDef) {
-  const isFolder = field.key !== 'file'
-  const currentVal = String(getFieldValue(path) || '/')
+  const isFolder = field.key !== "file";
+  const currentVal = String(getFieldValue(path) || "/");
   const modal = await modalController.create({
     component: FilePickerModal,
     componentProps: {
-      mode: isFolder ? 'folder' : 'file',
+      mode: isFolder ? "folder" : "file",
       initialPath: currentVal,
     },
-  })
-  await modal.present()
-  const { data, role } = await modal.onDidDismiss()
-  if (role === 'select' && data) {
-    setFieldValue(path, data.path)
+  });
+  await modal.present();
+  const { data, role } = await modal.onDidDismiss();
+  if (role === "select" && data) {
+    setFieldValue(path, data.path);
   }
 }
 
 function fieldLabel(key: string, _required?: boolean): string {
-  return tField(key)
+  return tField(key);
 }
 
 const fieldIconMap: Record<string, string> = {
@@ -408,80 +448,82 @@ const fieldIconMap: Record<string, string> = {
   pdf: newspaperOutline,
   text: textOutline,
   disable_signature_verification: shieldCheckmark,
-}
+};
 
 function getFieldIcon(fieldKey: string, fieldType: string): string {
-  if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey]
-  if (fieldType === 'boolean') return toggleOutline
-  if (fieldType === 'integer') return speedometerOutline
-  if (fieldKey.includes('password')) return lockClosed
-  return settingsOutline
+  if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey];
+  if (fieldType === "boolean") return toggleOutline;
+  if (fieldType === "integer") return speedometerOutline;
+  if (fieldKey.includes("password")) return lockClosed;
+  return settingsOutline;
 }
 
 function isFieldVisible(field: FieldDef): boolean {
-  if (!field.platform || field.platform === 'both') return true
-  if (field.platform === 'mobile') return isNative()
-  if (field.platform === 'desktop') return !isNative()
-  return true
+  if (!field.platform || field.platform === "both") return true;
+  if (field.platform === "mobile") return isNative();
+  if (field.platform === "desktop") return !isNative();
+  return true;
 }
 
 async function handleSaveConfig() {
   try {
-    const textExtsVal = String(getValue(['plugin_settings', 'text', 'custom_text_extensions']) ?? '')
+    const textExtsVal = String(getValue(["plugin_settings", "text", "custom_text_extensions"]) ?? "");
     if (textExtsVal) {
-      const parsed = parseAndValidateTextExts(textExtsVal)
-      if (!parsed.valid) return
-      const cfg = await fetchConfig()
-      if (!cfg.preview) cfg.preview = {}
-      ;(cfg.preview as Record<string, unknown>).text_extensions = parsed.extensions
-      await updateConfig(cfg)
-      invalidateTextExtsCache()
+      const parsed = parseAndValidateTextExts(textExtsVal);
+      if (!parsed.valid) return;
+      const cfg = await fetchConfig();
+      if (!cfg.preview) cfg.preview = {};
+      (cfg.preview as Record<string, unknown>).text_extensions = parsed.extensions;
+      await updateConfig(cfg);
+      invalidateTextExtsCache();
     }
-    await saveConfig()
-    showToast({ message: t('settings.configSaved'), duration: 1500, color: 'success' })
+    await saveConfig();
+    showToast({ message: t("settings.configSaved"), duration: 1500, color: "success" });
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
-    showToast({ message: t('settings.configSaveFailed') + ': ' + detail, duration: 3000, color: 'danger' })
+    const detail = e instanceof Error ? e.message : String(e);
+    showToast({ message: t("settings.configSaveFailed") + ": " + detail, duration: 3000, color: "danger" });
   }
 }
 
 function handleResetConfig() {
-  resetConfig()
+  resetConfig();
 }
 
 onMounted(async () => {
   if (serverOnline.value) {
     try {
-      await loadConfig()
-      configLoaded.value = true
+      await loadConfig();
+      configLoaded.value = true;
     } catch (e) {
       // loadConfig 现在会抛错（不再静默回退到 schema 默认值，
       // 避免"后端挂了"伪装成"已加载、配置全空"的状态机混乱）。
       // PluginSettings 没有像 AgentSettingsDetail 那样专门的错误态 UI，
       // 这里用 toast 提示 + 静默回退到 configLoaded=true 显示空字段，
       // 与 Settings.vue 的降级策略保持一致。
-      console.error('[PluginSettings] loadConfig failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-      configLoaded.value = true
+      console.error("[PluginSettings] loadConfig failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      configLoaded.value = true;
     }
-    try { await loadExtensions() } catch {}
     try {
-      const exts = await fetchTextPreviewExts()
-      builtInTextExtsCount.value = exts.size
+      await loadExtensions();
+    } catch {}
+    try {
+      const exts = await fetchTextPreviewExts();
+      builtInTextExtsCount.value = exts.size;
     } catch {}
   }
-})
+});
 
-watch(serverOnline, async (online) => {
+watch(serverOnline, async online => {
   if (online && !configLoaded.value) {
     try {
-      await loadConfig()
-      configLoaded.value = true
+      await loadConfig();
+      configLoaded.value = true;
     } catch (e) {
-      console.error('[PluginSettings] watch loadConfig failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-      configLoaded.value = true
+      console.error("[PluginSettings] watch loadConfig failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      configLoaded.value = true;
     }
   }
-})
+});
 </script>
 
 <style scoped>

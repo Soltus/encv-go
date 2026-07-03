@@ -89,116 +89,137 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon, IonList, IonItem, IonItemSliding, IonItemOptions, IonItemOption, IonBadge, IonLabel, IonCheckbox, toastController } from '@ionic/vue'
-import { listOutline, lockClosed, alertCircle, stopCircleOutline, refreshOutline, trashOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { formatDateTime } from '@/composables/useDateFormat'
-import { getTaskTypeLabel, getTaskTypeIcon } from '@/lib/taskTypeLabel'
-import type { EncvTask } from '@/api/encv'
-import { cancelTask, retryTask, deleteTask } from '@/api/encv'
+import {
+  IonBadge,
+  IonCheckbox,
+  IonIcon,
+  IonItem,
+  IonItemOption,
+  IonItemOptions,
+  IonItemSliding,
+  IonLabel,
+  IonList,
+  toastController,
+} from "@ionic/vue";
+import { alertCircle, listOutline, lockClosed, refreshOutline, stopCircleOutline, trashOutline } from "ionicons/icons";
+import type { EncvTask } from "@/api/encv";
+import { cancelTask, deleteTask, retryTask } from "@/api/encv";
+import { formatDateTime } from "@/composables/useDateFormat";
+import { useI18n } from "@/composables/useI18n";
+import { getTaskTypeIcon, getTaskTypeLabel } from "@/lib/taskTypeLabel";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 // 🆕 Q4：接收多选参数
-const props = withDefaults(defineProps<{
-  runTasks: EncvTask[]
-  multiSelectMode?: boolean
-  selectedIds?: Set<string>
-  searchQuery?: string
-}>(), {
-  multiSelectMode: false,
-  selectedIds: () => new Set<string>(),
-  searchQuery: '',
-})
+const props = withDefaults(
+  defineProps<{
+    runTasks: EncvTask[];
+    multiSelectMode?: boolean;
+    selectedIds?: Set<string>;
+    searchQuery?: string;
+  }>(),
+  {
+    multiSelectMode: false,
+    selectedIds: () => new Set<string>(),
+    searchQuery: "",
+  }
+);
 
 const emit = defineEmits<{
-  (e: 'select-task', task: EncvTask): void
-  (e: 'toggle-select', taskId: string): void
-  (e: 'open-performance'): void
-}>()
+  (e: "select-task", task: EncvTask): void;
+  (e: "toggle-select", taskId: string): void;
+  (e: "open-performance"): void;
+}>();
 
 function onItemClick(tk: EncvTask) {
   if (props.multiSelectMode) {
-    emit('toggle-select', tk.id)
+    emit("toggle-select", tk.id);
   } else {
-    emit('select-task', tk)
+    emit("select-task", tk);
   }
 }
 
 function getTaskName(task: EncvTask): string {
-  if (task.targetPath) return task.targetPath.split('/').pop() || task.targetPath
-  if (task.sourcePath) return task.sourcePath.split('/').pop() || task.sourcePath
-  return task.id.slice(0, 8)
+  if (task.targetPath) return task.targetPath.split("/").pop() || task.targetPath;
+  if (task.sourcePath) return task.sourcePath.split("/").pop() || task.sourcePath;
+  return task.id.slice(0, 8);
 }
 
 function getTaskIcon(task: EncvTask): string {
-  return getTaskTypeIcon(task.type)
+  return getTaskTypeIcon(task.type);
 }
 
 function isEncrypted(task: EncvTask): boolean {
-  return task.type === 'encrypt' || (task.targetPath?.endsWith('.encv') ?? false)
+  return task.type === "encrypt" || (task.targetPath?.endsWith(".encv") ?? false);
 }
 
-function getStatusLabel(status: EncvTask['status']): string {
-  return t(`tasks.status.${status}`)
+function getStatusLabel(status: EncvTask["status"]): string {
+  return t(`tasks.status.${status}`);
 }
 
-function getStatusColor(status: EncvTask['status']): string {
+function getStatusColor(status: EncvTask["status"]): string {
   switch (status) {
-    case 'completed': return 'success'
-    case 'failed': return 'danger'
-    case 'running': case 'cancelling': return 'warning'
-    case 'cancelled': return 'medium'
-    case 'queued': return 'primary'
-    default: return 'medium'
+    case "completed":
+      return "success";
+    case "failed":
+      return "danger";
+    case "running":
+    case "cancelling":
+      return "warning";
+    case "cancelled":
+      return "medium";
+    case "queued":
+      return "primary";
+    default:
+      return "medium";
   }
 }
 
 function getTaskDuration(task: EncvTask): string {
-  if (!task.completedAt) return ''
-  const ms = new Date(task.completedAt).getTime() - new Date(task.createdAt).getTime()
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-  return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`
+  if (!task.completedAt) return "";
+  const ms = new Date(task.completedAt).getTime() - new Date(task.createdAt).getTime();
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
 }
 
 function canCancel(tk: EncvTask): boolean {
-  return tk.status === 'running' || tk.status === 'queued'
+  return tk.status === "running" || tk.status === "queued";
 }
 function canRetry(tk: EncvTask): boolean {
-  return tk.status === 'failed' || tk.status === 'cancelled'
+  return tk.status === "failed" || tk.status === "cancelled";
 }
 
 async function onCancel(tk: EncvTask) {
   try {
-    await cancelTask(tk.id)
-    const toast = await toastController.create({ message: t('tasks.cancelSuccess'), duration: 1500, color: 'success' })
-    await toast.present()
+    await cancelTask(tk.id);
+    const toast = await toastController.create({ message: t("tasks.cancelSuccess"), duration: 1500, color: "success" });
+    await toast.present();
   } catch (err: any) {
-    const toast = await toastController.create({ message: err.message ?? t('common.failed'), duration: 2000, color: 'danger' })
-    await toast.present()
+    const toast = await toastController.create({ message: err.message ?? t("common.failed"), duration: 2000, color: "danger" });
+    await toast.present();
   }
 }
 
 async function onRetry(tk: EncvTask) {
   try {
-    await retryTask(tk.id)
-    const toast = await toastController.create({ message: t('tasks.retrySuccess'), duration: 1500, color: 'success' })
-    await toast.present()
+    await retryTask(tk.id);
+    const toast = await toastController.create({ message: t("tasks.retrySuccess"), duration: 1500, color: "success" });
+    await toast.present();
   } catch (err: any) {
-    const toast = await toastController.create({ message: err.message ?? t('common.failed'), duration: 2000, color: 'danger' })
-    await toast.present()
+    const toast = await toastController.create({ message: err.message ?? t("common.failed"), duration: 2000, color: "danger" });
+    await toast.present();
   }
 }
 
 async function onDelete(tk: EncvTask) {
   try {
-    await deleteTask(tk.id)
-    const toast = await toastController.create({ message: t('tasks.deleteSuccess'), duration: 1500, color: 'success' })
-    await toast.present()
+    await deleteTask(tk.id);
+    const toast = await toastController.create({ message: t("tasks.deleteSuccess"), duration: 1500, color: "success" });
+    await toast.present();
   } catch (err: any) {
-    const toast = await toastController.create({ message: err.message ?? t('common.failed'), duration: 2000, color: 'danger' })
-    await toast.present()
+    const toast = await toastController.create({ message: err.message ?? t("common.failed"), duration: 2000, color: "danger" });
+    await toast.present();
   }
 }
 </script>

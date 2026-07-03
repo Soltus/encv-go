@@ -181,151 +181,154 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { IonBadge, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons,
-  IonButton, IonIcon, IonContent, IonSpinner, IonBadge,
-} from '@ionic/vue'
-import {
-  arrowBack, documentTextOutline, alertCircle,
-  lockClosed, listOutline, chevronDown, chevronForward,
-  settingsOutline, helpCircleOutline, imageOutline, filmOutline,
-} from 'ionicons/icons'
-import { getApiBaseUrl, formatFileSize, proxySafeEncode, getExternalStreamUrl } from '@/api/encv'
-import { predictPlugin } from '@/api/encv'
-import type { PredictPluginResponse } from '@/api/encv'
-import { useI18n } from '@/composables/useI18n'
-import { formatContainerVersion } from '@/constants/containerVersion'
-import { isAlistEncrypted, loadDecodedName, getDecodedName } from '@/features/alist-encrypt/useAlistEncrypt'
-import type { FileItem } from '@/api/encv'
+  alertCircle,
+  arrowBack,
+  chevronDown,
+  chevronForward,
+  documentTextOutline,
+  filmOutline,
+  helpCircleOutline,
+  imageOutline,
+  listOutline,
+  lockClosed,
+  settingsOutline,
+} from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import type { FileItem, PredictPluginResponse } from "@/api/encv";
+import { formatFileSize, getApiBaseUrl, getExternalStreamUrl, predictPlugin, proxySafeEncode } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
+import { formatContainerVersion } from "@/constants/containerVersion";
+import { getDecodedName, isAlistEncrypted, loadDecodedName } from "@/features/alist-encrypt/useAlistEncrypt";
 
-const { t } = useI18n()
-const router = useRouter()
-const route = useRoute()
+const { t } = useI18n();
+const router = useRouter();
+const route = useRoute();
 
 interface ContainerData {
-  version: number
-  container_id: string
-  container_type: string
-  is_seekable: boolean
-  original_duration?: number | null
-  segment_count?: number | null
-  segments?: unknown[]
-  manifest_size?: number
-  header?: Record<string, unknown>
-  manifest?: unknown
+  version: number;
+  container_id: string;
+  container_type: string;
+  is_seekable: boolean;
+  original_duration?: number | null;
+  segment_count?: number | null;
+  segments?: unknown[];
+  manifest_size?: number;
+  header?: Record<string, unknown>;
+  manifest?: unknown;
 }
 
 interface FileInfo {
-  name: string
-  path: string
-  size: number
-  modified: string
-  mime_type: string
-  category: string
-  is_directory: boolean
-  is_encrypted: boolean
-  is_encv_container: boolean
-  container?: ContainerData
+  name: string;
+  path: string;
+  size: number;
+  modified: string;
+  mime_type: string;
+  category: string;
+  is_directory: boolean;
+  is_encrypted: boolean;
+  is_encv_container: boolean;
+  container?: ContainerData;
 }
 
-const loading = ref(true)
-const error = ref('')
-const info = ref<FileInfo | null>(null)
-const containerData = ref<ContainerData | null>(null)
-const showManifest = ref(false)
-const manifestJson = ref('')
-const decodedName = ref<string | null>(null)
-const isAlistEnc = ref(false)
-const thumbnailError = ref(false)
-const pluginPrediction = ref<PredictPluginResponse | null>(null)
+const loading = ref(true);
+const error = ref("");
+const info = ref<FileInfo | null>(null);
+const containerData = ref<ContainerData | null>(null);
+const showManifest = ref(false);
+const manifestJson = ref("");
+const decodedName = ref<string | null>(null);
+const isAlistEnc = ref(false);
+const thumbnailError = ref(false);
+const pluginPrediction = ref<PredictPluginResponse | null>(null);
 
 const thumbnailUrl = computed(() => {
-  if (!info.value || thumbnailError.value) return ''
-  const path = info.value.path
-  if (!path) return ''
-  return getExternalStreamUrl(path)
-})
+  if (!info.value || thumbnailError.value) return "";
+  const path = info.value.path;
+  if (!path) return "";
+  return getExternalStreamUrl(path);
+});
 
 const isImageFile = computed(() => {
-  const mime = info.value?.mime_type || ''
-  return mime.startsWith('image/')
-})
+  const mime = info.value?.mime_type || "";
+  return mime.startsWith("image/");
+});
 
 const isVideoFile = computed(() => {
-  const mime = info.value?.mime_type || ''
-  return mime.startsWith('video/')
-})
+  const mime = info.value?.mime_type || "";
+  return mime.startsWith("video/");
+});
 
-const isImageOrVideo = computed(() => isImageFile.value || isVideoFile.value)
+const isImageOrVideo = computed(() => isImageFile.value || isVideoFile.value);
 
 function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = Math.floor(seconds % 60)
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 function formatTime(isoStr: string): string {
   try {
-    return new Date(isoStr).toLocaleString()
+    return new Date(isoStr).toLocaleString();
   } catch {
-    return isoStr
+    return isoStr;
   }
 }
 
 function matchTypeLabel(type?: string): string {
   const map: Record<string, string> = {
-    mime: 'MIME',
-    extension: '扩展名',
-    general: '通用',
-    container: '容器',
-  }
-  return type ? (map[type] || type) : '-'
+    mime: "MIME",
+    extension: "扩展名",
+    general: "通用",
+    container: "容器",
+  };
+  return type ? map[type] || type : "-";
 }
 
 const pluginMatchDesc = computed(() => {
-  const p = pluginPrediction.value
-  if (!p?.pluginName) return ''
-  const candidates = p.candidates || []
-  if (candidates.length <= 1) return t('fileInfo.pluginExactMatch') || '精确匹配'
-  return `${t('fileInfo.pluginCandidateCount') || '候选'} ${candidates.length}`
-})
+  const p = pluginPrediction.value;
+  if (!p?.pluginName) return "";
+  const candidates = p.candidates || [];
+  if (candidates.length <= 1) return t("fileInfo.pluginExactMatch") || "精确匹配";
+  return `${t("fileInfo.pluginCandidateCount") || "候选"} ${candidates.length}`;
+});
 
 function handlePreviewClick() {
-  router.push({ path: '/tabs/files', query: { action: 'preview', path: info.value?.path } })
+  router.push({ path: "/tabs/files", query: { action: "preview", path: info.value?.path } });
 }
 
 async function loadInfo() {
-  const path = (route.query.path as string) || ''
+  const path = (route.query.path as string) || "";
   if (!path) {
-    error.value = t('filePreview.noPath')
-    loading.value = false
-    return
+    error.value = t("filePreview.noPath");
+    loading.value = false;
+    return;
   }
 
-  loading.value = true
-  error.value = ''
-  showManifest.value = false
-  thumbnailError.value = false
+  loading.value = true;
+  error.value = "";
+  showManifest.value = false;
+  thumbnailError.value = false;
 
   try {
-    const baseUrl = getApiBaseUrl()
-    const resp = await fetch(`${baseUrl}/api/file/info?path=${proxySafeEncode(path)}`)
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    const data = await resp.json() as FileInfo
-    info.value = data
-    containerData.value = data.container || null
+    const baseUrl = getApiBaseUrl();
+    const resp = await fetch(`${baseUrl}/api/file/info?path=${proxySafeEncode(path)}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = (await resp.json()) as FileInfo;
+    info.value = data;
+    containerData.value = data.container || null;
 
     if (data.container?.manifest) {
       try {
-        const str = JSON.stringify(data.container.manifest, null, 2)
-        manifestJson.value = /^[\x20-\x7E\t\n\r]*$/.test(str) ? str : '(contains non-printable characters)'
+        const str = JSON.stringify(data.container.manifest, null, 2);
+        manifestJson.value = /^[\x20-\x7E\t\n\r]*$/.test(str) ? str : "(contains non-printable characters)";
       } catch {
-        manifestJson.value = '(invalid)'
+        manifestJson.value = "(invalid)";
       }
     } else {
-      manifestJson.value = '(none)'
+      manifestJson.value = "(none)";
     }
 
     const fileItem: FileItem = {
@@ -334,31 +337,33 @@ async function loadInfo() {
       isDirectory: data.is_directory,
       isEncrypted: data.is_encrypted,
       size: data.size,
-    }
-    isAlistEnc.value = isAlistEncrypted(fileItem)
+    };
+    isAlistEnc.value = isAlistEncrypted(fileItem);
     if (isAlistEnc.value) {
-      loadDecodedName(fileItem).then((name) => {
-        decodedName.value = name || getDecodedName(data.path) || null
-      }).catch(() => {})
+      loadDecodedName(fileItem)
+        .then(name => {
+          decodedName.value = name || getDecodedName(data.path) || null;
+        })
+        .catch(() => {});
     } else {
-      decodedName.value = null
+      decodedName.value = null;
     }
 
     try {
-      const taskType = data.is_encv_container ? 'decrypt' as const : 'encrypt' as const
-      pluginPrediction.value = await predictPlugin(path, taskType)
+      const taskType = data.is_encv_container ? ("decrypt" as const) : ("encrypt" as const);
+      pluginPrediction.value = await predictPlugin(path, taskType);
     } catch {
-      pluginPrediction.value = null
+      pluginPrediction.value = null;
     }
   } catch (e: any) {
-    console.error('[FileInfo] failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-    error.value = e?.message || String(e)
+    console.error("[FileInfo] failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    error.value = e?.message || String(e);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
-onMounted(() => loadInfo())
+onMounted(() => loadInfo());
 </script>
 
 <style scoped>

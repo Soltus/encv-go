@@ -39,40 +39,40 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive } from 'vue'
-import { IonButton, IonIcon, IonBadge, modalController } from '@ionic/vue'
-import { layers as layersIcon } from 'ionicons/icons'
-import ContextPopoverModal from './ContextPopoverModal.vue'
-import type { ContextUsageResponse } from '@/composables/useContextUsage'
-import type { ContextPopoverState } from './ContextPopoverModal.vue'
+import { IonBadge, IonButton, IonIcon, modalController } from "@ionic/vue";
+import { layers as layersIcon } from "ionicons/icons";
+import { computed, reactive } from "vue";
+import type { ContextUsageResponse } from "@/composables/useContextUsage";
+import type { ContextPopoverState } from "./ContextPopoverModal.vue";
+import ContextPopoverModal from "./ContextPopoverModal.vue";
 
 const props = defineProps<{
   /** null = 尚未拉到数据；非 null = 已就绪 */
-  data: ContextUsageResponse | null
-  loading?: boolean
+  data: ContextUsageResponse | null;
+  loading?: boolean;
   /** 紧凑模式：只显示图标，不显示百分比 */
-  compact?: boolean
-}>()
+  compact?: boolean;
+}>();
 
 const ariaLabel = computed(() => {
-  if (!props.data) return '上下文使用（加载中）'
-  return `上下文使用 ${props.data.usage.percent.toFixed(1)}%`
-})
+  if (!props.data) return "上下文使用（加载中）";
+  return `上下文使用 ${props.data.usage.percent.toFixed(1)}%`;
+});
 
 const percentText = computed(() => {
-  if (!props.data) return '—'
-  return props.data.usage.percent.toFixed(1) + '%'
-})
+  if (!props.data) return "—";
+  return props.data.usage.percent.toFixed(1) + "%";
+});
 
-const compactions = computed(() => props.data?.compactions ?? 0)
+const compactions = computed(() => props.data?.compactions ?? 0);
 
 const toneClass = computed(() => {
-  if (!props.data) return 'tone-idle'
-  const p = props.data.usage.percent
-  if (p >= 90) return 'tone-danger'
-  if (p >= 70) return 'tone-warn'
-  return 'tone-ok'
-})
+  if (!props.data) return "tone-idle";
+  const p = props.data.usage.percent;
+  if (p >= 90) return "tone-danger";
+  if (p >= 70) return "tone-warn";
+  return "tone-ok";
+});
 
 /**
  * 打开底部弹出面板（modalController.create 模式）
@@ -82,16 +82,16 @@ async function openPopover() {
   const state: ContextPopoverState = reactive({
     data: props.data,
     loading: props.loading ?? false,
-  })
+  });
 
   const modal = await modalController.create({
     component: ContextPopoverModal,
     componentProps: { state },
-    cssClass: 'context-popover-modal',
+    cssClass: "context-popover-modal",
     backdropDismiss: true,
     showBackdrop: true,
-  })
-  await modal.present()
+  });
+  await modal.present();
 }
 </script>
 

@@ -51,43 +51,43 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { TestCaseResult } from '@/lib/workflow/types'
-import { CATEGORY_META, type ErrorCategory } from '@/composables/useErrorAnalyzer'
+import { computed } from "vue";
+import { CATEGORY_META, type ErrorCategory } from "@/composables/useErrorAnalyzer";
+import type { TestCaseResult } from "@/lib/workflow/types";
 
 const props = defineProps<{
-  results: TestCaseResult[]
-  activeStatuses: Set<string>
-  activeCategories: Set<string>
-  filteredCount: number
-  totalCount: number
-}>()
+  results: TestCaseResult[];
+  activeStatuses: Set<string>;
+  activeCategories: Set<string>;
+  filteredCount: number;
+  totalCount: number;
+}>();
 
 const emit = defineEmits<{
-  'update:activeStatuses': [Set<string>]
-  'update:activeCategories': [Set<string>]
-}>()
+  "update:activeStatuses": [Set<string>];
+  "update:activeCategories": [Set<string>];
+}>();
 
 const statusOptions = computed(() => {
-  const counts: Record<string, number> = { passed: 0, failed: 0, skipped: 0, running: 0, pending: 0 }
-  for (const r of props.results) counts[r.status] = (counts[r.status] ?? 0) + 1
+  const counts: Record<string, number> = { passed: 0, failed: 0, skipped: 0, running: 0, pending: 0 };
+  for (const r of props.results) counts[r.status] = (counts[r.status] ?? 0) + 1;
   return [
-    { value: 'failed', label: 'FAILED', count: counts.failed },
-    { value: 'passed', label: 'PASSED', count: counts.passed },
-    { value: 'skipped', label: 'SKIPPED', count: counts.skipped },
-    { value: 'running', label: 'RUNNING', count: counts.running },
-    { value: 'pending', label: 'PENDING', count: counts.pending },
-  ].filter((opt) => opt.count > 0)
-})
+    { value: "failed", label: "FAILED", count: counts.failed },
+    { value: "passed", label: "PASSED", count: counts.passed },
+    { value: "skipped", label: "SKIPPED", count: counts.skipped },
+    { value: "running", label: "RUNNING", count: counts.running },
+    { value: "pending", label: "PENDING", count: counts.pending },
+  ].filter(opt => opt.count > 0);
+});
 
 const categoryOptions = computed(() => {
-  const counts: Partial<Record<ErrorCategory, number>> = {}
+  const counts: Partial<Record<ErrorCategory, number>> = {};
   for (const r of props.results) {
-    if (r.status !== 'failed') continue
-    const cat = r.errorAnalysis?.category ?? 'unknown'
-    counts[cat] = (counts[cat] ?? 0) + 1
+    if (r.status !== "failed") continue;
+    const cat = r.errorAnalysis?.category ?? "unknown";
+    counts[cat] = (counts[cat] ?? 0) + 1;
   }
-  const entries = Object.entries(counts) as [ErrorCategory, number][]
+  const entries = Object.entries(counts) as [ErrorCategory, number][];
   return entries
     .map(([cat, count]) => ({
       value: cat,
@@ -95,30 +95,30 @@ const categoryOptions = computed(() => {
       label: CATEGORY_META[cat].label,
       color: CATEGORY_META[cat].color,
     }))
-    .sort((a, b) => b.count - a.count)
-})
+    .sort((a, b) => b.count - a.count);
+});
 
 const hasAnyFilter = computed(() => {
-  return props.activeStatuses.size > 0 || props.activeCategories.size > 0
-})
+  return props.activeStatuses.size > 0 || props.activeCategories.size > 0;
+});
 
 function toggleStatus(value: string) {
-  const next = new Set(props.activeStatuses)
-  if (next.has(value)) next.delete(value)
-  else next.add(value)
-  emit('update:activeStatuses', next)
+  const next = new Set(props.activeStatuses);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  emit("update:activeStatuses", next);
 }
 
 function toggleCategory(value: string) {
-  const next = new Set(props.activeCategories)
-  if (next.has(value)) next.delete(value)
-  else next.add(value)
-  emit('update:activeCategories', next)
+  const next = new Set(props.activeCategories);
+  if (next.has(value)) next.delete(value);
+  else next.add(value);
+  emit("update:activeCategories", next);
 }
 
 function clearAll() {
-  emit('update:activeStatuses', new Set())
-  emit('update:activeCategories', new Set())
+  emit("update:activeStatuses", new Set());
+  emit("update:activeCategories", new Set());
 }
 </script>
 

@@ -50,104 +50,104 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 export interface DropdownOption {
-  value: string
-  label: string
-  count?: number
+  value: string;
+  label: string;
+  count?: number;
 }
 
 interface Props {
-  options: DropdownOption[]
-  modelValue: string[]
-  label: string
-  multiSelect?: boolean
-  searchable?: boolean
-  searchPlaceholder?: string
-  emptyText?: string
-  selectAllText?: string
-  clearAllText?: string
-  showActions?: boolean
+  options: DropdownOption[];
+  modelValue: string[];
+  label: string;
+  multiSelect?: boolean;
+  searchable?: boolean;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  selectAllText?: string;
+  clearAllText?: string;
+  showActions?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   multiSelect: true,
   searchable: false,
-  searchPlaceholder: '搜索...',
-  emptyText: '无匹配项',
-  selectAllText: '全选',
-  clearAllText: '清空',
+  searchPlaceholder: "搜索...",
+  emptyText: "无匹配项",
+  selectAllText: "全选",
+  clearAllText: "清空",
   showActions: true,
-})
+});
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: string[]): void
-  (e: 'change', value: string[]): void
-}>()
+  (e: "update:modelValue", value: string[]): void;
+  (e: "change", value: string[]): void;
+}>();
 
-const isOpen = ref(false)
-const searchQuery = ref('')
-const dropdownRef = ref<HTMLElement | null>(null)
-const searchInputRef = ref<HTMLInputElement | null>(null)
-const listRef = ref<HTMLElement | null>(null)
+const isOpen = ref(false);
+const searchQuery = ref("");
+const dropdownRef = ref<HTMLElement | null>(null);
+const searchInputRef = ref<HTMLInputElement | null>(null);
+const listRef = ref<HTMLElement | null>(null);
 
-const selectedSet = computed(() => new Set(props.modelValue))
-const selectedCount = computed(() => props.modelValue.length)
+const selectedSet = computed(() => new Set(props.modelValue));
+const selectedCount = computed(() => props.modelValue.length);
 
 const triggerLabel = computed(() => {
-  if (props.modelValue.length === 0) return props.label
+  if (props.modelValue.length === 0) return props.label;
   if (props.modelValue.length === 1) {
-    const opt = props.options.find((o) => o.value === props.modelValue[0])
-    return opt?.label ?? props.label
+    const opt = props.options.find(o => o.value === props.modelValue[0]);
+    return opt?.label ?? props.label;
   }
-  return `${props.label} (${props.modelValue.length})`
-})
+  return `${props.label} (${props.modelValue.length})`;
+});
 
 const filteredOptions = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  if (!q) return props.options
-  return props.options.filter((o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q))
-})
+  const q = searchQuery.value.trim().toLowerCase();
+  if (!q) return props.options;
+  return props.options.filter(o => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q));
+});
 
 function isSelected(value: string): boolean {
-  return selectedSet.value.has(value)
+  return selectedSet.value.has(value);
 }
 
 function toggleOption(value: string) {
   if (props.multiSelect) {
-    const next = new Set(props.modelValue)
-    if (next.has(value)) next.delete(value)
-    else next.add(value)
-    const arr = Array.from(next)
-    emit('update:modelValue', arr)
-    emit('change', arr)
+    const next = new Set(props.modelValue);
+    if (next.has(value)) next.delete(value);
+    else next.add(value);
+    const arr = Array.from(next);
+    emit("update:modelValue", arr);
+    emit("change", arr);
   } else {
-    emit('update:modelValue', [value])
-    emit('change', [value])
-    isOpen.value = false
+    emit("update:modelValue", [value]);
+    emit("change", [value]);
+    isOpen.value = false;
   }
 }
 
 function selectAll() {
-  const all = filteredOptions.value.map((o) => o.value)
-  emit('update:modelValue', all)
-  emit('change', all)
+  const all = filteredOptions.value.map(o => o.value);
+  emit("update:modelValue", all);
+  emit("change", all);
 }
 
 function clearAll() {
-  emit('update:modelValue', [])
-  emit('change', [])
+  emit("update:modelValue", []);
+  emit("change", []);
 }
 
 function toggleOpen() {
-  isOpen.value = !isOpen.value
+  isOpen.value = !isOpen.value;
   if (isOpen.value) {
     nextTick(() => {
       if (props.searchable && searchInputRef.value) {
-        searchInputRef.value.focus()
+        searchInputRef.value.focus();
       }
-    })
+    });
   }
 }
 
@@ -156,31 +156,31 @@ function onSearchInput() {
 }
 
 function handleClickOutside(e: MouseEvent) {
-  if (!dropdownRef.value) return
+  if (!dropdownRef.value) return;
   if (!dropdownRef.value.contains(e.target as Node)) {
-    isOpen.value = false
+    isOpen.value = false;
   }
 }
 
 function handleEscape(e: KeyboardEvent) {
-  if (e.key === 'Escape' && isOpen.value) {
-    isOpen.value = false
+  if (e.key === "Escape" && isOpen.value) {
+    isOpen.value = false;
   }
 }
 
 onMounted(() => {
-  document.addEventListener('mousedown', handleClickOutside)
-  document.addEventListener('keydown', handleEscape)
-})
+  document.addEventListener("mousedown", handleClickOutside);
+  document.addEventListener("keydown", handleEscape);
+});
 
 onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', handleClickOutside)
-  document.removeEventListener('keydown', handleEscape)
-})
+  document.removeEventListener("mousedown", handleClickOutside);
+  document.removeEventListener("keydown", handleEscape);
+});
 
-watch(isOpen, (open) => {
-  if (!open) searchQuery.value = ''
-})
+watch(isOpen, open => {
+  if (!open) searchQuery.value = "";
+});
 </script>
 
 <style scoped>

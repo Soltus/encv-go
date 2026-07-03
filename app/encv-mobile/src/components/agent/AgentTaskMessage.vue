@@ -81,98 +81,90 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { IonIcon } from '@ionic/vue'
+import { IonIcon } from "@ionic/vue";
 import {
-  gitBranchOutline,
-  chevronUpOutline,
-  chevronDownOutline,
   checkmarkCircle,
-  sync,
-  ellipsisHorizontalCircle,
+  chevronDownOutline,
+  chevronUpOutline,
   closeCircle,
-} from 'ionicons/icons'
-import StatusBadge from './StatusBadge.vue'
-import { useI18n } from '@/composables/useI18n'
-import type { SubTask } from '@/composables/renderTurnItems'
-import {
-  AGENT_TASK_COLLAPSE_LINE_COUNT,
-  AGENT_TASK_COLLAPSE_CHAR_COUNT,
-} from '@/composables/renderTurnItems'
+  ellipsisHorizontalCircle,
+  gitBranchOutline,
+  sync,
+} from "ionicons/icons";
+import { computed, ref } from "vue";
+import type { SubTask } from "@/composables/renderTurnItems";
+import { AGENT_TASK_COLLAPSE_CHAR_COUNT, AGENT_TASK_COLLAPSE_LINE_COUNT } from "@/composables/renderTurnItems";
+import { useI18n } from "@/composables/useI18n";
+import StatusBadge from "./StatusBadge.vue";
 
 const props = withDefaults(
   defineProps<{
-    subTasks: SubTask[]
+    subTasks: SubTask[];
     /** 后端 SubagentDispatch 事件附带的"为什么派发子任务"高层说明 */
-    reasoning?: string
+    reasoning?: string;
     /** 是否正在流式追加（后端持续推送 subagent 进度时为 true） */
-    streaming?: boolean
+    streaming?: boolean;
   }>(),
   {
     reasoning: undefined,
     streaming: false,
-  },
-)
+  }
+);
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const icon = gitBranchOutline
-const chevronUp = chevronUpOutline
-const chevronDown = chevronDownOutline
+const icon = gitBranchOutline;
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
 
 const shouldCollapse = computed(() => {
-  if (props.subTasks.length > AGENT_TASK_COLLAPSE_LINE_COUNT) return true
-  const totalChars = props.subTasks.reduce(
-    (acc, t) => acc + (t.description?.length ?? 0),
-    0,
-  )
-  return totalChars > AGENT_TASK_COLLAPSE_CHAR_COUNT
-})
+  if (props.subTasks.length > AGENT_TASK_COLLAPSE_LINE_COUNT) return true;
+  const totalChars = props.subTasks.reduce((acc, t) => acc + (t.description?.length ?? 0), 0);
+  return totalChars > AGENT_TASK_COLLAPSE_CHAR_COUNT;
+});
 
 // streaming 态默认展开（让用户看到"任务正在跑"的进度变化），
 // 非 streaming 态按 shouldCollapse 决定初值。
-const expanded = ref<boolean>(props.streaming || !shouldCollapse.value)
+const expanded = ref<boolean>(props.streaming || !shouldCollapse.value);
 
 function toggleExpanded() {
-  expanded.value = !expanded.value
+  expanded.value = !expanded.value;
 }
 
-const completedCount = computed(
-  () => props.subTasks.filter((s) => s.status === 'completed').length,
-)
-const inProgressCount = computed(
-  () => props.subTasks.filter((s) => s.status === 'in_progress').length,
-)
-const failedCount = computed(
-  () => props.subTasks.filter((s) => s.status === 'failed').length,
-)
+const completedCount = computed(() => props.subTasks.filter(s => s.status === "completed").length);
+const inProgressCount = computed(() => props.subTasks.filter(s => s.status === "in_progress").length);
+const failedCount = computed(() => props.subTasks.filter(s => s.status === "failed").length);
 const progressPct = computed(() => {
-  const total = props.subTasks.length
-  if (total === 0) return 0
-  return Math.round((completedCount.value / total) * 100)
-})
+  const total = props.subTasks.length;
+  if (total === 0) return 0;
+  return Math.round((completedCount.value / total) * 100);
+});
 
 const reasoningText = computed(() => {
-  const r = props.reasoning
-  return typeof r === 'string' && r.trim().length > 0 ? r.trim() : ''
-})
+  const r = props.reasoning;
+  return typeof r === "string" && r.trim().length > 0 ? r.trim() : "";
+});
 
-function statusIcon(status: SubTask['status']) {
+function statusIcon(status: SubTask["status"]) {
   switch (status) {
-    case 'completed': return checkmarkCircle
-    case 'in_progress': return sync
-    case 'failed': return closeCircle
-    case 'pending':
-    default: return ellipsisHorizontalCircle
+    case "completed":
+      return checkmarkCircle;
+    case "in_progress":
+      return sync;
+    case "failed":
+      return closeCircle;
+    case "pending":
+    default:
+      return ellipsisHorizontalCircle;
   }
 }
 
-function statusLabel(status: SubTask['status']): string {
-  if (status === 'in_progress') return t('agent.planStatusInProgress')
-  if (status === 'completed') return t('agent.planStatusCompleted')
-  if (status === 'failed') return t('agent.failed')
-  if (status === 'pending') return t('agent.planStatusPending')
-  return status
+function statusLabel(status: SubTask["status"]): string {
+  if (status === "in_progress") return t("agent.planStatusInProgress");
+  if (status === "completed") return t("agent.planStatusCompleted");
+  if (status === "failed") return t("agent.failed");
+  if (status === "pending") return t("agent.planStatusPending");
+  return status;
 }
 </script>
 

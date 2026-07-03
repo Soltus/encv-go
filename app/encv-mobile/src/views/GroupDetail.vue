@@ -124,88 +124,113 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { Directory, Filesystem } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent, IonButtons,
-  IonBackButton, IonButton, IonSegment, IonSegmentButton, IonLabel,
-  IonIcon, IonSpinner, IonFooter,
-  alertController, modalController, toastController,
-} from '@ionic/vue'
-import { Share } from '@capacitor/share'
-import { Filesystem, Directory } from '@capacitor/filesystem'
+  alertController,
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonFooter,
+  IonHeader,
+  IonIcon,
+  IonLabel,
+  IonPage,
+  IonSegment,
+  IonSegmentButton,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+  modalController,
+  toastController,
+} from "@ionic/vue";
 import {
-  downloadOutline, alertCircleOutline, checkboxOutline,
-  chevronDown, chevronForward, closeOutline, refreshOutline,
-  stopCircleOutline, trashOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { useWorkflowTaskService } from '@/composables/useWorkflowTaskService'
-import { useBatchOperations } from '@/composables/useBatchOperations'
-import { useRunTasksStoreSingleton } from '@/stores/runTasksStore'
-import { useRunSummariesSingleton } from '@/composables/useRunSummaries'
-import { useTaskEventBridge } from '@/composables/useTaskEventBridge'
-import type { EncvTask } from '@/api/encv'
-import { getCalibration } from '@/api/encv'
-import type { JobRun } from '@/lib/workflow/types'
-import PipelineTab from '@/components/group-detail/PipelineTab.vue'
-import TasksTab from '@/components/group-detail/TasksTab.vue'
-import PerformanceTab from '@/components/group-detail/PerformanceTab.vue'
-import { buildReportZip } from '@/lib/buildReportZip'
+  alertCircleOutline,
+  checkboxOutline,
+  chevronDown,
+  chevronForward,
+  closeOutline,
+  downloadOutline,
+  refreshOutline,
+  stopCircleOutline,
+  trashOutline,
+} from "ionicons/icons";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import type { EncvTask } from "@/api/encv";
+import { getCalibration } from "@/api/encv";
+import PerformanceTab from "@/components/group-detail/PerformanceTab.vue";
+import PipelineTab from "@/components/group-detail/PipelineTab.vue";
+import TasksTab from "@/components/group-detail/TasksTab.vue";
+import { useBatchOperations } from "@/composables/useBatchOperations";
+import { useI18n } from "@/composables/useI18n";
+import { useRunSummariesSingleton } from "@/composables/useRunSummaries";
+import { useTaskEventBridge } from "@/composables/useTaskEventBridge";
+import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
+import { buildReportZip } from "@/lib/buildReportZip";
+import type { JobRun } from "@/lib/workflow/types";
+import { useRunTasksStoreSingleton } from "@/stores/runTasksStore";
 
-const { t } = useI18n()
-const route = useRoute()
-const router = useRouter()
-const workflowService = useWorkflowTaskService()
-const runTasksStore = useRunTasksStoreSingleton()
-const runSummaries = useRunSummariesSingleton()
-const batchOps = useBatchOperations()
+const { t } = useI18n();
+const route = useRoute();
+const router = useRouter();
+const workflowService = useWorkflowTaskService();
+const runTasksStore = useRunTasksStoreSingleton();
+const runSummaries = useRunSummariesSingleton();
+const batchOps = useBatchOperations();
 
 // ============ UI 局部状态（selection 是 per-view，不进 store） ============
-const selectedIds = ref<Set<string>>(new Set())
-const multiSelectMode = ref(false)
+const selectedIds = ref<Set<string>>(new Set());
+const multiSelectMode = ref(false);
 function toggleSelect(id: string) {
-  if (selectedIds.value.has(id)) selectedIds.value.delete(id)
-  else selectedIds.value.add(id)
-  selectedIds.value = new Set(selectedIds.value)
+  if (selectedIds.value.has(id)) selectedIds.value.delete(id);
+  else selectedIds.value.add(id);
+  selectedIds.value = new Set(selectedIds.value);
 }
 function clearSelection() {
-  selectedIds.value = new Set()
+  selectedIds.value = new Set();
 }
 
 // ============ 路由参数 ============
-const runId = computed(() => decodeURIComponent(String(route.params.runId ?? '')))
+const runId = computed(() => decodeURIComponent(String(route.params.runId ?? "")));
 
 // ============ Tab 状态（持久化） ============
-const activeTab = ref<'pipeline' | 'tasks'>(
-  (loadStoredTab() as 'pipeline' | 'tasks' | null) ?? 'pipeline',
-)
-const TAB_STORAGE_KEY = 'encv_group_detail_active_tab_v2'
+const activeTab = ref<"pipeline" | "tasks">((loadStoredTab() as "pipeline" | "tasks" | null) ?? "pipeline");
+const TAB_STORAGE_KEY = "encv_group_detail_active_tab_v2";
 function loadStoredTab(): string | null {
-  try { return localStorage.getItem(TAB_STORAGE_KEY) } catch { return null }
+  try {
+    return localStorage.getItem(TAB_STORAGE_KEY);
+  } catch {
+    return null;
+  }
 }
-watch(activeTab, (v) => {
-  try { localStorage.setItem(TAB_STORAGE_KEY, v) } catch { /* silent */ }
-})
+watch(activeTab, v => {
+  try {
+    localStorage.setItem(TAB_STORAGE_KEY, v);
+  } catch {
+    /* silent */
+  }
+});
 
-const performanceSectionOpen = ref(false)
+const performanceSectionOpen = ref(false);
 
 // 衍生数据
-const run = computed(() => workflowService.getRun(runId.value))
+const run = computed(() => workflowService.getRun(runId.value));
 
 const runTasks = computed<EncvTask[]>(() => {
-  const id = runId.value
-  if (!id) return []
+  const id = runId.value;
+  if (!id) return [];
   // 按 createdAt 升序排列
-  return [...runTasksStore.tasks.value].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-})
+  return [...runTasksStore.tasks.value].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+});
 
 // 🆕 2026-06-23 Task 6：totals 从后端 SQL summary 拿（不靠 store.tasks 算）
 //   - 后端是唯一权威，聚合计数由 SQL COUNT + GROUP BY status 出
 //   - store 只持有"当前视图需要的"task（视图分页），不是所有 task
 //   - fallback：summary 未加载时用 runTasks.length 估算
 const totals = computed(() => {
-  const summary = runSummaries.getSummary(runId.value)
+  const summary = runSummaries.getSummary(runId.value);
   if (summary) {
     return {
       total: summary.total,
@@ -213,80 +238,84 @@ const totals = computed(() => {
       failed: summary.failed,
       pending: summary.running + summary.pending,
       skipped: summary.cancelled,
-    }
+    };
   }
   // fallback：summary 未加载时用当前已加载的 task 估算
-  const list = runTasks.value
+  const list = runTasks.value;
   return {
     total: list.length,
-    passed: list.filter((t) => t.status === 'completed').length,
-    failed: list.filter((t) => t.status === 'failed').length,
-    pending: list.filter((t) => t.status === 'running' || t.status === 'queued' || t.status === 'cancelling').length,
-    skipped: list.filter((t) => t.status === 'cancelled').length,
-  }
-})
+    passed: list.filter(t => t.status === "completed").length,
+    failed: list.filter(t => t.status === "failed").length,
+    pending: list.filter(t => t.status === "running" || t.status === "queued" || t.status === "cancelling").length,
+    skipped: list.filter(t => t.status === "cancelled").length,
+  };
+});
 
 // ============ 操作 ============
 async function openTaskDetail(task: EncvTask) {
-  const { default: TaskDetailModal } = await import('@/components/TaskDetailModal.vue')
+  const { default: TaskDetailModal } = await import("@/components/TaskDetailModal.vue");
   const modal = await modalController.create({
     component: TaskDetailModal,
     componentProps: { task },
-    cssClass: 'task-detail-modal',
-  })
-  await modal.present()
+    cssClass: "task-detail-modal",
+  });
+  await modal.present();
 }
 
 function onJobClick(_job: JobRun) {
-  activeTab.value = 'tasks'
+  activeTab.value = "tasks";
   // 默认打开后筛选到 failed + 选中当前 job 的 task
 }
 
 function goBack() {
-  router.replace('/tabs/tasks')
+  router.replace("/tabs/tasks");
 }
 
 // ============ 多选 / 批量操作（local state + batchOps） ============
 async function batchRetrySelected() {
-  const ids = Array.from(selectedIds.value) as string[]
-  await batchOps.batchRetry(ids)
-  clearSelection()
+  const ids = Array.from(selectedIds.value) as string[];
+  await batchOps.batchRetry(ids);
+  clearSelection();
 }
 async function batchCancelSelected() {
-  const ids = Array.from(selectedIds.value) as string[]
-  await batchOps.batchCancel(ids)
-  clearSelection()
+  const ids = Array.from(selectedIds.value) as string[];
+  await batchOps.batchCancel(ids);
+  clearSelection();
 }
 async function batchDeleteSelected() {
-  const ids = Array.from(selectedIds.value) as string[]
+  const ids = Array.from(selectedIds.value) as string[];
   const confirm = await alertController.create({
-    header: t('tasks.batchDeleteConfirmHeader'),
-    message: t('tasks.batchDeleteConfirmMessage', { count: String(ids.length) }),
+    header: t("tasks.batchDeleteConfirmHeader"),
+    message: t("tasks.batchDeleteConfirmMessage", { count: String(ids.length) }),
     buttons: [
-      { text: t('common.cancel'), role: 'cancel' },
-      { text: t('common.confirm'), role: 'destructive', handler: async () => {
-        await batchOps.batchDelete(ids)
-        clearSelection()
-      } },
+      { text: t("common.cancel"), role: "cancel" },
+      {
+        text: t("common.confirm"),
+        role: "destructive",
+        handler: async () => {
+          await batchOps.batchDelete(ids);
+          clearSelection();
+        },
+      },
     ],
-  })
-  await confirm.present()
+  });
+  await confirm.present();
 }
 
 // ============ 导出报告 ============
-const exporting = ref(false)
+const exporting = ref(false);
 async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader()
+    const reader = new FileReader();
     reader.onload = () => {
-      const result = String(reader.result ?? '')
+      const result = String(reader.result ?? "");
       // data:application/zip;base64,XXXX → XXXX
-      const idx = result.indexOf(',')
-      resolve(idx >= 0 ? result.slice(idx + 1) : result)
-    }
-    reader.onerror = () => reject(reader.error ?? new Error('blobToBase64 failed'))
-    reader.readAsDataURL(blob)
-  })
+      const idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("blobToBase64 failed"));
+    reader.readAsDataURL(blob);
+  });
 }
 
 /**
@@ -300,35 +329,35 @@ async function blobToBase64(blob: Blob): Promise<string> {
 async function shareOrDownloadFallback(blob: Blob, filename: string): Promise<void> {
   // 1) 试 Share.share({url: dataURL})（老 Capacitor 兼容）
   try {
-    const reader = new FileReader()
+    const reader = new FileReader();
     const dataUrl: string = await new Promise((resolve, reject) => {
-      reader.onload = () => resolve(String(reader.result ?? ''))
-      reader.onerror = () => reject(reader.error)
-      reader.readAsDataURL(blob)
-    })
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
     if ((window as any).Capacitor?.isNativePlatform?.()) {
-      await Share.share({ url: dataUrl, dialogTitle: filename, title: filename })
-      return
+      await Share.share({ url: dataUrl, dialogTitle: filename, title: filename });
+      return;
     }
   } catch (e) {
-    console.warn('[shareOrDownloadFallback] Share.url 失败:', e)
+    console.warn("[shareOrDownloadFallback] Share.url 失败:", e);
   }
   // 2) a.download（web 通用）
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 async function exportGroupReport() {
-  if (!run.value) return
+  if (!run.value) return;
   try {
-    exporting.value = true
-    const r = run.value
+    exporting.value = true;
+    const r = run.value;
     const unifiedLike = {
       id: r.id,
       startedAt: r.startedAt ?? r.createdAt,
@@ -337,21 +366,22 @@ async function exportGroupReport() {
       passed: totals.value.passed,
       failed: totals.value.failed,
       skipped: totals.value.skipped,
-      results: runTasks.value.map((tk) => ({
+      results: runTasks.value.map(tk => ({
         caseId: tk.id,
-        status: (tk.status === 'completed' ? 'success' : tk.status === 'failed' ? 'failure' : 'skipped') as 'success' | 'failure' | 'skipped',
+        status: (tk.status === "completed" ? "success" : tk.status === "failed" ? "failure" : "skipped") as
+          | "success"
+          | "failure"
+          | "skipped",
         error: tk.error,
-        duration: tk.completedAt
-          ? String(new Date(tk.completedAt).getTime() - new Date(tk.createdAt).getTime()) + 'ms'
-          : undefined,
+        duration: tk.completedAt ? String(new Date(tk.completedAt).getTime() - new Date(tk.createdAt).getTime()) + "ms" : undefined,
       })),
       workflowRun: r,
-    } as any
+    } as any;
     const zipBlob = await buildReportZip(unifiedLike, runTasks.value, t, {
       calibration: await getCalibration().catch(() => null),
-    })
-    const filename = `encvreport-${r.id.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.zip`
-    const isNative = !!(window as any).Capacitor?.isNativePlatform?.()
+    });
+    const filename = `encvreport-${r.id.slice(0, 8)}-${new Date().toISOString().slice(0, 10)}.zip`;
+    const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
     if (isNative) {
       // 🆕 v2 架构：native 双轨 + 探测
       //   - 主路径：Filesystem.writeFile → content:// URI → Share.files（Android 11+ StrictMode 拒收大 data URL）
@@ -359,53 +389,53 @@ async function exportGroupReport() {
       //     （老 Capacitor 5 兼容，data URL 在 Share Intent 实际工作）
       //   - 兜底 2：Share 不可用 → a.download（web 视图）
       try {
-        const base64 = await blobToBase64(zipBlob)
+        const base64 = await blobToBase64(zipBlob);
         const writeResult = await Filesystem.writeFile({
           path: filename,
           data: base64,
           directory: Directory.Cache,
-        })
-        const fileUri = (writeResult.uri ?? `content://${filename}`) as string
+        });
+        const fileUri = (writeResult.uri ?? `content://${filename}`) as string;
         await Share.share({
           title: filename,
-          text: t('tasks.exportShareText', {
+          text: t("tasks.exportShareText", {
             runId: r.id.slice(0, 8),
             passed: String(totals.value.passed),
             failed: String(totals.value.failed),
           }),
           files: [fileUri],
-          dialogTitle: t('tasks.exportShareDialogTitle'),
-        })
+          dialogTitle: t("tasks.exportShareDialogTitle"),
+        });
       } catch (nativeErr) {
-        console.warn('[exportGroupReport] Filesystem 路径失败，fallback 到 Share.url / a.download:', nativeErr)
-        await shareOrDownloadFallback(zipBlob, filename)
+        console.warn("[exportGroupReport] Filesystem 路径失败，fallback 到 Share.url / a.download:", nativeErr);
+        await shareOrDownloadFallback(zipBlob, filename);
       }
     } else {
-      await shareOrDownloadFallback(zipBlob, filename)
+      await shareOrDownloadFallback(zipBlob, filename);
     }
     const toast = await toastController.create({
-      message: t('tasks.exportSuccess', { filename }),
+      message: t("tasks.exportSuccess", { filename }),
       duration: 2500,
-      color: 'success',
-    })
-    await toast.present()
+      color: "success",
+    });
+    await toast.present();
   } catch (error) {
-    console.error('[GroupDetail.exportGroupReport] failed:', error)
+    console.error("[GroupDetail.exportGroupReport] failed:", error);
     // 🆕 Q7C：失败提示更详细（错误分类 + 建议）
-    const message = String((error as any)?.message ?? error)
-    const hint = message.includes('Unsupported')
-      ? t('tasks.exportFailedUnsupportedHint')
-      : message.includes('permission') || message.includes('Permission')
-        ? t('tasks.exportFailedPermissionHint')
-        : ''
+    const message = String((error as any)?.message ?? error);
+    const hint = message.includes("Unsupported")
+      ? t("tasks.exportFailedUnsupportedHint")
+      : message.includes("permission") || message.includes("Permission")
+        ? t("tasks.exportFailedPermissionHint")
+        : "";
     const alert = await alertController.create({
-      header: t('tasks.exportFailedHeader'),
+      header: t("tasks.exportFailedHeader"),
       message: hint ? `${message}\n\n${hint}` : message,
-      buttons: [t('common.ok')],
-    })
-    await alert.present()
+      buttons: [t("common.ok")],
+    });
+    await alert.present();
   } finally {
-    exporting.value = false
+    exporting.value = false;
   }
 }
 
@@ -415,39 +445,39 @@ async function exportGroupReport() {
 //   - task:completed → 额外刷新 summary（计数变化）
 //   - 离开 GroupDetail 时 useTaskEventBridge 的 onUnmounted 自动 stopListening
 useTaskEventBridge({
-  onUpdate: (payload) => runTasksStore.applyEvent('update', payload),
-  onProgress: (payload) => runTasksStore.applyEvent('progress', payload),
-  onCreate: (payload) => {
-    runTasksStore.applyEvent('created', payload)
+  onUpdate: payload => runTasksStore.applyEvent("update", payload),
+  onProgress: payload => runTasksStore.applyEvent("progress", payload),
+  onCreate: payload => {
+    runTasksStore.applyEvent("created", payload);
     // 新 task 创建时也刷新 summary（total +1）
-    const runId = (payload as any)?.runId
-    if (runId) void runSummaries.refreshOnTaskCompleted(runId)
+    const runId = (payload as any)?.runId;
+    if (runId) void runSummaries.refreshOnTaskCompleted(runId);
   },
-  onComplete: (payload) => {
-    runTasksStore.applyEvent('completed', payload)
+  onComplete: payload => {
+    runTasksStore.applyEvent("completed", payload);
     // task 完成后刷新 summary（passed/failed 计数变化）
-    const runId = runTasksStore.currentRunId.value
-    if (runId) void runSummaries.refreshOnTaskCompleted(runId)
+    const runId = runTasksStore.currentRunId.value;
+    if (runId) void runSummaries.refreshOnTaskCompleted(runId);
   },
-})
+});
 
 onMounted(async () => {
   if (!runId.value) {
-    router.replace('/tabs/tasks')
-    return
+    router.replace("/tabs/tasks");
+    return;
   }
   // 🆕 2026-06-23 Task 6.1：进入时独立加载该 runId 的 task
   //   - 不依赖 Tasks 页 store（避免视图分页污染）
   //   - WS 事件由 useRunTasksStore 处理（只处理当前 runId 的 task）
-  await runTasksStore.loadRun(runId.value)
+  await runTasksStore.loadRun(runId.value);
   // 同时刷新 summary（后端 SQL 权威）
-  await runSummaries.fetchOne(runId.value)
-})
+  await runSummaries.fetchOne(runId.value);
+});
 
 // 🆕 2026-06-23 Task 6：离开时清空 runTasksStore（释放内存）
 onUnmounted(() => {
-  runTasksStore.clear()
-})
+  runTasksStore.clear();
+});
 </script>
 
 <style scoped>

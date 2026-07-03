@@ -39,74 +39,75 @@
 </template>
 
 <script setup lang="ts" generic="T extends { id: number; level: string }">
-import { computed, watch } from 'vue'
-import { useVirtualizer } from '@tanstack/vue-virtual'
-import { useI18n } from '@/composables/useI18n'
+import { useVirtualizer } from "@tanstack/vue-virtual";
+import { computed, watch } from "vue";
+import { useI18n } from "@/composables/useI18n";
 
 interface Props {
   /** 🆕 2026-06-15 1M+ 优化：接受 readonly 数组，IncrementalFilter.getResult() 内部结果
    *  不允许外部 mutate 但 props 仍兼容 mutable 调用方（协变） */
-  items: readonly T[]
+  items: readonly T[];
   /** 滚动容器（ion-content 的 .inner-scroll） */
-  scrollEl: HTMLElement | null
+  scrollEl: HTMLElement | null;
   /** 单条 item 估计高度（px），固定行高 */
-  itemSize?: number
+  itemSize?: number;
   /** 视口外额外预渲染条数（上下各 overscan 条） */
-  overscan?: number
+  overscan?: number;
   /** 自定义 key（默认取 item.id） */
-  getKey?: (item: T) => number | string
+  getKey?: (item: T) => number | string;
   /** 自定义 level class 字段（默认取 item.level） */
-  getLevel?: (item: T) => string
+  getLevel?: (item: T) => string;
   /** 搜索关键词（空字符串表示不高亮）；高亮由父级 CSS ::highlight 实现 */
-  searchQuery?: string
+  searchQuery?: string;
   /** 从 item.message 提取纯文本字段（默认 .message） */
-  getText?: (item: T) => string
+  getText?: (item: T) => string;
 }
 const props = withDefaults(defineProps<Props>(), {
   itemSize: 28,
   overscan: 10,
   getKey: (item: T) => item.id,
   getLevel: (item: T) => item.level,
-  searchQuery: '',
+  searchQuery: "",
   getText: (item: any) => item.message,
-})
+});
 
 // 🆕 2026-06-15 修 #2：点击单行日志展开详情
 // 之前 fixed 28px 行高 + ellipsis + nowrap 会把长 log 截断，用户没法看全。
 // 修法：行点击/键盘 enter/space 触发 select 事件，父级弹模态显示完整内容 + 复制。
-const emit = defineEmits<{
-  (e: 'select', item: T): void
-}>()
+const emit = defineEmits<(e: "select", item: T) => void>();
 
 function handleClick(item: T) {
-  emit('select', item)
+  emit("select", item);
 }
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 const virtualizerOptions = computed(() => ({
   count: props.items.length,
   getScrollElement: () => props.scrollEl,
   estimateSize: () => props.itemSize,
   overscan: props.overscan,
-}))
+}));
 
-const virtualizer = useVirtualizer(virtualizerOptions)
+const virtualizer = useVirtualizer(virtualizerOptions);
 
-const virtualItems = computed(() => virtualizer.value.getVirtualItems())
-const totalSize = computed(() => virtualizer.value.getTotalSize())
+const virtualItems = computed(() => virtualizer.value.getVirtualItems());
+const totalSize = computed(() => virtualizer.value.getTotalSize());
 
 // 🆕 修复：scrollEl 首次为 null 时 virtualizer 返回空 items → 列表全空白
 //   根因：Ionic ion-content 的 .inner-scroll 在 shadow DOM 内，onMounted 时可能还没 ready
 //   ensureScrollEl() 需要 querySelector shadow root → 首次渲染时 scrollEl=null
 //   useVirtualizer 拿到 null getScrollElement → getVirtualItems()=[] → v-for 不渲染
 //   修复：watch scrollEl 从 null → 非 null 时触发 measure() 重新计算可见项
-watch(() => props.scrollEl, (newEl, oldEl) => {
-  if (!oldEl && newEl) {
-    // scrollEl 刚从 null 变为可用 → 告诉 virtualizer 重新测量
-    virtualizer.value.measure()
+watch(
+  () => props.scrollEl,
+  (newEl, oldEl) => {
+    if (!oldEl && newEl) {
+      // scrollEl 刚从 null 变为可用 → 告诉 virtualizer 重新测量
+      virtualizer.value.measure();
+    }
   }
-})
+);
 
 /**
  * 🆕 2026-06-16：暴露给父级 DevLogs 用 — 当 .inner-scroll 异步 ready 时父级主动调一次
@@ -118,9 +119,9 @@ watch(() => props.scrollEl, (newEl, oldEl) => {
  * （例如 nextTick 之间的竞争）。父级主动调 forceMeasure 兜底。
  */
 function forceMeasure(): void {
-  virtualizer.value.measure()
+  virtualizer.value.measure();
 }
-defineExpose({ forceMeasure })
+defineExpose({ forceMeasure });
 
 /**
  * 高亮区间 [start, end)（CSS ::highlight 用 Range API 计算得出）
@@ -133,7 +134,7 @@ defineExpose({ forceMeasure })
  *   CSS.highlights.set('log-search', hl)
  */
 function highlightRange(_text: string, _query: string): { start: number; end: number }[] | null {
-  return null
+  return null;
 }
 </script>
 

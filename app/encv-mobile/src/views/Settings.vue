@@ -380,278 +380,331 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton,
-  IonContent, IonList, IonListHeader, IonItem, IonItemDivider,
-  IonIcon, IonLabel, IonBadge, IonSpinner,
-  IonSelect, IonSelectOption, modalController, alertController,
-} from '@ionic/vue'
+  alertController,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonItemDivider,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonSelect,
+  IonSelectOption,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+  modalController,
+} from "@ionic/vue";
 import {
-  server as serverIcon, save as saveIcon,
-  informationCircle,
-  key, lockClosed, documentText, terminal, settingsOutline,
-  cloudOutline, shieldCheckmark, eyeOutline, speedometerOutline,
-  filmOutline, musicalNotesOutline, imagesOutline, readerOutline,
-  newspaperOutline, gitNetworkOutline, toggleOutline,
-  textOutline, personOutline, folderOpen, refreshCircle,
-  trash, bugOutline, sparklesOutline,
-  phonePortraitOutline,
-  colorPaletteOutline, layersOutline, globeOutline,
+  bugOutline,
+  cloudOutline,
+  colorPaletteOutline,
   fileTrayFull as databaseIcon,
+  documentText,
+  eyeOutline,
+  filmOutline,
+  folderOpen,
+  gitNetworkOutline,
+  globeOutline,
   hardwareChipOutline,
-} from 'ionicons/icons'
-import { useServerStatus } from '@/composables/useServerStatus'
-import { useConfig } from '@/composables/useConfig'
-import type { FieldDef } from '@/config/schemaParser'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import { isNative, pickFolder, getPluginFullState, ensurePluginLoaded } from '@/plugins/GoProcess'
-import { registerFileFeature, unregisterFileFeature } from '@/composables/useFileFeatures'
-import { createAlistEncryptFeature } from '@/features/alist-encrypt'
-import { getIndexStats, fetchConfig, updateConfig, getDatabaseInfo } from '@/api/encv'
-import type { IndexStats, DatabaseInfo } from '@/api/encv'
-import { PLAY_MODE, isMpvSubMode } from '@/constants/player'
-import FilePickerModal from '@/components/FilePickerModal.vue'
-import ConfigFieldItem from '@/components/ConfigFieldItem.vue'
+  imagesOutline,
+  informationCircle,
+  key,
+  layersOutline,
+  lockClosed,
+  musicalNotesOutline,
+  newspaperOutline,
+  personOutline,
+  phonePortraitOutline,
+  readerOutline,
+  refreshCircle,
+  save as saveIcon,
+  server as serverIcon,
+  settingsOutline,
+  shieldCheckmark,
+  sparklesOutline,
+  speedometerOutline,
+  terminal,
+  textOutline,
+  toggleOutline,
+  trash,
+} from "ionicons/icons";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
+import type { DatabaseInfo, IndexStats } from "@/api/encv";
+import { fetchConfig, getDatabaseInfo, getIndexStats, updateConfig } from "@/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
+import FilePickerModal from "@/components/FilePickerModal.vue";
+import { useConfig } from "@/composables/useConfig";
+import { registerFileFeature, unregisterFileFeature } from "@/composables/useFileFeatures";
+import { useI18n } from "@/composables/useI18n";
+import { useServerStatus } from "@/composables/useServerStatus";
+import { showToast } from "@/composables/useToast";
+import type { FieldDef } from "@/config/schemaParser";
+import { isMpvSubMode, PLAY_MODE } from "@/constants/player";
+import { createAlistEncryptFeature } from "@/features/alist-encrypt";
+import { ensurePluginLoaded, getPluginFullState, isNative, pickFolder } from "@/plugins/GoProcess";
 
-const router = useRouter()
-const { isOnline: serverOnline, lastError: connectionError, checkStatus, backendPort, backendInstanceId, backendVersion } = useServerStatus()
-const { schemaFields, loading: configLoading, dirty, restartNeeded, loadConfig, saveConfig, resetConfig, getFieldValue, setFieldValue, resetFieldToDefault } = useConfig()
-const { t, tField, tSectionTitle } = useI18n()
+const router = useRouter();
+const {
+  isOnline: serverOnline,
+  lastError: connectionError,
+  checkStatus,
+  backendPort,
+  backendInstanceId,
+  backendVersion,
+} = useServerStatus();
+const {
+  schemaFields,
+  loading: configLoading,
+  dirty,
+  restartNeeded,
+  loadConfig,
+  saveConfig,
+  resetConfig,
+  getFieldValue,
+  setFieldValue,
+  resetFieldToDefault,
+} = useConfig();
+const { t, tField, tSectionTitle } = useI18n();
 
-const configLoaded = ref(false)
-const indexStats = ref<IndexStats | null>(null)
-const dbInfo = ref<DatabaseInfo | null>(null)
+const configLoaded = ref(false);
+const indexStats = ref<IndexStats | null>(null);
+const dbInfo = ref<DatabaseInfo | null>(null);
 
-const videoPlayerMode = ref(localStorage.getItem('encv_player_video') || PLAY_MODE.ARTPLAYER)
-const audioPlayerMode = ref(localStorage.getItem('encv_player_audio') || PLAY_MODE.MPV_PLUGIN)
-const screenOrientation = ref(localStorage.getItem('encv_screen_orientation') || 'auto')
-const mpvPluginStatus = ref<string>('unknown')
-const mpvPluginError = ref('')
+const videoPlayerMode = ref(localStorage.getItem("encv_player_video") || PLAY_MODE.ARTPLAYER);
+const audioPlayerMode = ref(localStorage.getItem("encv_player_audio") || PLAY_MODE.MPV_PLUGIN);
+const screenOrientation = ref(localStorage.getItem("encv_screen_orientation") || "auto");
+const mpvPluginStatus = ref<string>("unknown");
+const mpvPluginError = ref("");
 
 const mpvStatusI18nKey = computed(() => {
   const keyMap: Record<string, string> = {
-    not_installed: 'settings.pluginNotInstalled',
-    disabled: 'settings.pluginDisabled',
-    not_loaded: 'settings.pluginNotLoaded',
-    load_failed: 'settings.pluginLoadFailed',
-    error: 'settings.pluginQueryFailed',
-    framework_not_ready: 'settings.pluginFrameworkNotReady',
-  }
-  return keyMap[mpvPluginStatus.value] || 'settings.pluginQueryFailed'
-})
+    not_installed: "settings.pluginNotInstalled",
+    disabled: "settings.pluginDisabled",
+    not_loaded: "settings.pluginNotLoaded",
+    load_failed: "settings.pluginLoadFailed",
+    error: "settings.pluginQueryFailed",
+    framework_not_ready: "settings.pluginFrameworkNotReady",
+  };
+  return keyMap[mpvPluginStatus.value] || "settings.pluginQueryFailed";
+});
 
 function isMpvMode(mode: string): boolean {
-  return isMpvSubMode(mode) || mode === 'mpv-plugin' || mode === 'mpv'
+  return isMpvSubMode(mode) || mode === "mpv-plugin" || mode === "mpv";
 }
 
 async function handleVideoPlayerChange(event: CustomEvent) {
-  const value = event.detail.value
-  videoPlayerMode.value = value
-  localStorage.setItem('encv_player_video', value)
-  if (isMpvMode(value)) await refreshMpvPluginStatus()
+  const value = event.detail.value;
+  videoPlayerMode.value = value;
+  localStorage.setItem("encv_player_video", value);
+  if (isMpvMode(value)) await refreshMpvPluginStatus();
 }
 
 async function handleAudioPlayerChange(event: CustomEvent) {
-  const value = event.detail.value
-  audioPlayerMode.value = value
-  localStorage.setItem('encv_player_audio', value)
-  if (isMpvMode(value)) await refreshMpvPluginStatus()
+  const value = event.detail.value;
+  audioPlayerMode.value = value;
+  localStorage.setItem("encv_player_audio", value);
+  if (isMpvMode(value)) await refreshMpvPluginStatus();
 }
 
 function handleScreenOrientationChange(event: CustomEvent) {
-  const value = event.detail.value
-  screenOrientation.value = value
-  localStorage.setItem('encv_screen_orientation', value)
-  applyScreenOrientation(value)
+  const value = event.detail.value;
+  screenOrientation.value = value;
+  localStorage.setItem("encv_screen_orientation", value);
+  applyScreenOrientation(value);
 }
 
 async function applyScreenOrientation(orientation: string) {
-  if (!isNative()) return
+  if (!isNative()) return;
   try {
-    const { ScreenOrientation } = await import('@capacitor/screen-orientation')
-    if (orientation === 'portrait') {
-      await ScreenOrientation.lock({ orientation: 'portrait' })
-    } else if (orientation === 'landscape') {
-      await ScreenOrientation.lock({ orientation: 'landscape' })
+    const { ScreenOrientation } = await import("@capacitor/screen-orientation");
+    if (orientation === "portrait") {
+      await ScreenOrientation.lock({ orientation: "portrait" });
+    } else if (orientation === "landscape") {
+      await ScreenOrientation.lock({ orientation: "landscape" });
     } else {
-      await ScreenOrientation.unlock()
+      await ScreenOrientation.unlock();
     }
   } catch (e) {
-    console.debug('Failed to apply screen orientation:', e)
+    console.debug("Failed to apply screen orientation:", e);
   }
 }
 
 function goAppearance() {
-  router.push('/tabs/settings/appearance')
+  router.push("/tabs/settings/appearance");
 }
 
 function goDevTools() {
-  router.push('/tabs/settings/devtools')
+  router.push("/tabs/settings/devtools");
 }
 
-const showJsonEditor = ref(false)
-const jsonText = ref('')
-const jsonError = ref('')
-const configAnnotations = ref<{ path: string; description: string }[]>([])
+const showJsonEditor = ref(false);
+const jsonText = ref("");
+const jsonError = ref("");
+const configAnnotations = ref<{ path: string; description: string }[]>([]);
 
-function extractAnnotations(schema: any, prefix: string = ''): { path: string; description: string }[] {
-  const result: { path: string; description: string }[] = []
-  if (!schema || typeof schema !== 'object') return result
+function extractAnnotations(schema: any, prefix: string = ""): { path: string; description: string }[] {
+  const result: { path: string; description: string }[] = [];
+  if (!schema || typeof schema !== "object") return result;
   if (schema.properties) {
     for (const [key, val] of Object.entries(schema.properties)) {
-      const prop = val as any
-      const fullPath = prefix ? `${prefix}.${key}` : key
+      const prop = val as any;
+      const fullPath = prefix ? `${prefix}.${key}` : key;
       if (prop.description) {
-        result.push({ path: fullPath, description: prop.description })
+        result.push({ path: fullPath, description: prop.description });
       }
       if (prop.properties) {
-        result.push(...extractAnnotations(prop, fullPath))
+        result.push(...extractAnnotations(prop, fullPath));
       }
     }
   }
   if (schema.$defs) {
     for (const [key, val] of Object.entries(schema.$defs)) {
-      result.push(...extractAnnotations(val, `$defs.${key}`))
+      result.push(...extractAnnotations(val, `$defs.${key}`));
     }
   }
-  return result
+  return result;
 }
 
 async function openJsonEditor() {
   try {
-    const cfg = await fetchConfig()
-    jsonText.value = JSON.stringify(cfg, null, 2)
-    jsonError.value = ''
+    const cfg = await fetchConfig();
+    jsonText.value = JSON.stringify(cfg, null, 2);
+    jsonError.value = "";
     try {
-      const schemaResp = await fetch('/api/config/schema')
+      const schemaResp = await fetch("/api/config/schema");
       if (schemaResp.ok) {
-        const schema = await schemaResp.json()
-        configAnnotations.value = extractAnnotations(schema)
+        const schema = await schemaResp.json();
+        configAnnotations.value = extractAnnotations(schema);
       }
     } catch {}
-    showJsonEditor.value = true
+    showJsonEditor.value = true;
   } catch {
-    showToast({ message: t('settings.configSaveFailed'), duration: 2000, color: 'danger' })
+    showToast({ message: t("settings.configSaveFailed"), duration: 2000, color: "danger" });
   }
 }
 
 function validateJson() {
   try {
-    JSON.parse(jsonText.value)
-    jsonError.value = ''
+    JSON.parse(jsonText.value);
+    jsonError.value = "";
   } catch (e) {
-    jsonError.value = e instanceof Error ? e.message : String(e)
+    jsonError.value = e instanceof Error ? e.message : String(e);
   }
 }
 
 async function handleSaveJson() {
   try {
-    const parsed = JSON.parse(jsonText.value)
-    await updateConfig(parsed)
-    showJsonEditor.value = false
-    showToast({ message: t('settings.configSaved'), duration: 1500, color: 'success' })
-    await loadConfig()
+    const parsed = JSON.parse(jsonText.value);
+    await updateConfig(parsed);
+    showJsonEditor.value = false;
+    showToast({ message: t("settings.configSaved"), duration: 1500, color: "success" });
+    await loadConfig();
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
-    showToast({ message: t('settings.configSaveFailed') + ': ' + detail, duration: 3000, color: 'danger' })
+    const detail = e instanceof Error ? e.message : String(e);
+    showToast({ message: t("settings.configSaveFailed") + ": " + detail, duration: 3000, color: "danger" });
   }
 }
 
 function goServer() {
-  router.push('/tabs/settings/server')
+  router.push("/tabs/settings/server");
 }
 
 function goAbout() {
-  router.push('/tabs/settings/about')
+  router.push("/tabs/settings/about");
 }
 
 function goCache() {
-  router.push('/tabs/settings/cache')
+  router.push("/tabs/settings/cache");
 }
 
 function goDatabase() {
-  router.push('/tabs/settings/database')
+  router.push("/tabs/settings/database");
 }
 
 function goMounts() {
-  router.push('/tabs/settings/mounts')
+  router.push("/tabs/settings/mounts");
 }
 
 function goPlugins() {
-  router.push('/tabs/settings/plugins')
+  router.push("/tabs/settings/plugins");
 }
 
 function goAgent() {
-  router.push('/tabs/settings/agent')
+  router.push("/tabs/settings/agent");
 }
 
 function getValue(path: string[]): unknown {
-  return getFieldValue(path)
+  return getFieldValue(path);
 }
 
 function setValue(path: string[], value: unknown) {
-  setFieldValue(path, value)
+  setFieldValue(path, value);
 }
 
 function getMapEntries(path: string[]): [string, Record<string, unknown>][] {
-  const val = getFieldValue(path)
-  if (!val || typeof val !== 'object') return []
-  return Object.entries(val as Record<string, unknown>) as [string, Record<string, unknown>][]
+  const val = getFieldValue(path);
+  if (!val || typeof val !== "object") return [];
+  return Object.entries(val as Record<string, unknown>) as [string, Record<string, unknown>][];
 }
 
 function handleInput(path: string[], field: FieldDef, event: CustomEvent) {
-  const val = (event.target as HTMLInputElement).value
-  if (path.length >= 2 && path[0] === 'webdav' && path[1] === 'root' && val) {
-    const err = validateWebdavRoute(val)
+  const val = (event.target as HTMLInputElement).value;
+  if (path.length >= 2 && path[0] === "webdav" && path[1] === "root" && val) {
+    const err = validateWebdavRoute(val);
     if (err) {
-      showToast({ message: err, duration: 3000, color: 'danger' })
-      return
+      showToast({ message: err, duration: 3000, color: "danger" });
+      return;
     }
   }
-  if (field.type === 'integer') {
-    setFieldValue(path, val ? Number(val) : 0)
+  if (field.type === "integer") {
+    setFieldValue(path, val ? Number(val) : 0);
   } else {
-    setFieldValue(path, val)
+    setFieldValue(path, val);
   }
 }
 
 function validateWebdavRoute(val: string): string | null {
-  const t = val.trim()
-  if (!t) return null
-  if (t === '/' || t === '//') return "WebDAV 路由不能为 \"/\"，这会导致服务崩溃"
-  if (!t.startsWith('/')) return 'WebDAV 路由必须以 "/" 开头'
-  return null
+  const t = val.trim();
+  if (!t) return null;
+  if (t === "/" || t === "//") return 'WebDAV 路由不能为 "/"，这会导致服务崩溃';
+  if (!t.startsWith("/")) return 'WebDAV 路由必须以 "/" 开头';
+  return null;
 }
 
 async function handleBrowsePath(path: string[], field: FieldDef) {
   if (isNative()) {
-    const result = await pickFolder()
+    const result = await pickFolder();
     if (result.path) {
-      setFieldValue(path, result.path)
+      setFieldValue(path, result.path);
     }
-    return
+    return;
   }
-  const isFolder = field.key !== 'file'
-  const currentVal = String(getFieldValue(path) || '/')
+  const isFolder = field.key !== "file";
+  const currentVal = String(getFieldValue(path) || "/");
   const modal = await modalController.create({
     component: FilePickerModal,
     componentProps: {
-      mode: isFolder ? 'folder' : 'file',
+      mode: isFolder ? "folder" : "file",
       initialPath: currentVal,
     },
-  })
-  await modal.present()
-  const { data, role } = await modal.onDidDismiss()
-  if (role === 'select' && data) {
-    setFieldValue(path, data.path)
+  });
+  await modal.present();
+  const { data, role } = await modal.onDidDismiss();
+  if (role === "select" && data) {
+    setFieldValue(path, data.path);
   }
 }
 
 function fieldLabel(key: string, _required?: boolean): string {
-  return tField(key)
+  return tField(key);
 }
 
 const fieldIconMap: Record<string, string> = {
@@ -691,202 +744,221 @@ const fieldIconMap: Record<string, string> = {
   wps: readerOutline,
   pdf: newspaperOutline,
   text: textOutline,
-}
+};
 
 function getFieldIcon(fieldKey: string, fieldType: string): string {
-  if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey]
-  if (fieldType === 'boolean') return toggleOutline
-  if (fieldType === 'integer') return speedometerOutline
-  if (fieldKey.includes('password')) return lockClosed
-  return settingsOutline
+  if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey];
+  if (fieldType === "boolean") return toggleOutline;
+  if (fieldType === "integer") return speedometerOutline;
+  if (fieldKey.includes("password")) return lockClosed;
+  return settingsOutline;
 }
 
 function isFieldVisible(field: FieldDef): boolean {
-  if (field.key === 'console') return false
-  if (!field.platform || field.platform === 'both') return true
-  if (field.platform === 'mobile') return isNative()
-  if (field.platform === 'desktop') return !isNative()
-  return true
+  if (field.key === "console") return false;
+  if (!field.platform || field.platform === "both") return true;
+  if (field.platform === "mobile") return isNative();
+  if (field.platform === "desktop") return !isNative();
+  return true;
 }
 
 async function handleClearCache() {
   const alert = await alertController.create({
-    header: t('settings.clearCache'),
-    message: t('settings.clearCacheConfirm'),
+    header: t("settings.clearCache"),
+    message: t("settings.clearCacheConfirm"),
     buttons: [
-      { text: t('settings.cancel'), role: 'cancel' },
+      { text: t("settings.cancel"), role: "cancel" },
       {
-        text: t('settings.clear'),
-        role: 'destructive',
+        text: t("settings.clear"),
+        role: "destructive",
         handler: () => {
-          const themePref = localStorage.getItem('encv-theme-preference')
-          const serverPref = localStorage.getItem('encv-server-url')
-          const webdavPref = localStorage.getItem('encv-webdav-configs')
-          const localePref = localStorage.getItem('encv-locale')
-          localStorage.clear()
-          if (themePref) localStorage.setItem('encv-theme-preference', themePref)
-          if (serverPref) localStorage.setItem('encv-server-url', serverPref)
-          if (webdavPref) localStorage.setItem('encv-webdav-configs', webdavPref)
-          if (localePref) localStorage.setItem('encv-locale', localePref)
+          const themePref = localStorage.getItem("encv-theme-preference");
+          const serverPref = localStorage.getItem("encv-server-url");
+          const webdavPref = localStorage.getItem("encv-webdav-configs");
+          const localePref = localStorage.getItem("encv-locale");
+          localStorage.clear();
+          if (themePref) localStorage.setItem("encv-theme-preference", themePref);
+          if (serverPref) localStorage.setItem("encv-server-url", serverPref);
+          if (webdavPref) localStorage.setItem("encv-webdav-configs", webdavPref);
+          if (localePref) localStorage.setItem("encv-locale", localePref);
           showToast({
-            message: t('settings.cacheCleared'),
+            message: t("settings.cacheCleared"),
             duration: 1500,
-            color: 'success',
-          })
+            color: "success",
+          });
         },
       },
     ],
-  })
-  await alert.present()
+  });
+  await alert.present();
 }
 
 async function handleResetSettings() {
   const alert = await alertController.create({
-    header: t('settings.resetSettings'),
-    message: t('settings.resetConfirm'),
+    header: t("settings.resetSettings"),
+    message: t("settings.resetConfirm"),
     buttons: [
-      { text: t('settings.cancel'), role: 'cancel' },
+      { text: t("settings.cancel"), role: "cancel" },
       {
-        text: t('settings.reset'),
-        role: 'destructive',
+        text: t("settings.reset"),
+        role: "destructive",
         handler: () => {
-          localStorage.clear()
+          localStorage.clear();
           showToast({
-            message: t('settings.settingsReset'),
+            message: t("settings.settingsReset"),
             duration: 1500,
-            color: 'success',
-          })
+            color: "success",
+          });
         },
       },
     ],
-  })
-  await alert.present()
+  });
+  await alert.present();
 }
 
 async function handleSaveConfig() {
   try {
-    await saveConfig()
+    await saveConfig();
     if (restartNeeded.value) {
       showToast({
-        message: t('settings.configSavedRestartNeeded'),
+        message: t("settings.configSavedRestartNeeded"),
         duration: 4000,
-        color: 'warning',
-      })
+        color: "warning",
+      });
     } else {
       showToast({
-        message: t('settings.configSaved'),
+        message: t("settings.configSaved"),
         duration: 1500,
-        color: 'success',
-      })
+        color: "success",
+      });
     }
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
+    const detail = e instanceof Error ? e.message : String(e);
     showToast({
-      message: t('settings.configSaveFailed') + ': ' + detail,
+      message: t("settings.configSaveFailed") + ": " + detail,
       duration: 3000,
-      color: 'danger',
-    })
+      color: "danger",
+    });
   }
 }
 
 function handleResetConfig() {
-  resetConfig()
+  resetConfig();
 }
 
-let alistFeatureRegistered = false
+let alistFeatureRegistered = false;
 
 function syncAlistEncryptFeature() {
-  const enabled = getFieldValue(['plugin_settings', 'alist_encrypt', 'enabled']) as boolean | undefined
-  if (enabled === alistFeatureRegistered) return
-  alistFeatureRegistered = !!enabled
+  const enabled = getFieldValue(["plugin_settings", "alist_encrypt", "enabled"]) as boolean | undefined;
+  if (enabled === alistFeatureRegistered) return;
+  alistFeatureRegistered = !!enabled;
   if (enabled === true) {
-    registerFileFeature(createAlistEncryptFeature())
+    registerFileFeature(createAlistEncryptFeature());
   } else {
-    unregisterFileFeature('alist-encrypt')
+    unregisterFileFeature("alist-encrypt");
   }
 }
 
 onMounted(() => {
-  checkStatus().catch(() => {})
+  checkStatus().catch(() => {});
   if (serverOnline.value) {
     loadConfig()
-      .then(() => { configLoaded.value = true })
-      .catch(() => { configLoaded.value = true })
-    getIndexStats().then((s) => { indexStats.value = s }).catch(() => {})
-    loadDatabaseInfo().catch(() => {})
+      .then(() => {
+        configLoaded.value = true;
+      })
+      .catch(() => {
+        configLoaded.value = true;
+      });
+    getIndexStats()
+      .then(s => {
+        indexStats.value = s;
+      })
+      .catch(() => {});
+    loadDatabaseInfo().catch(() => {});
     if (isNative()) {
-      refreshMpvPluginStatus().catch(() => {})
+      refreshMpvPluginStatus().catch(() => {});
     }
-    syncAlistEncryptFeature()
+    syncAlistEncryptFeature();
   }
-  window.addEventListener('plugin-state-changed', refreshMpvPluginStatus)
-})
+  window.addEventListener("plugin-state-changed", refreshMpvPluginStatus);
+});
 
 onUnmounted(() => {
-  window.removeEventListener('plugin-state-changed', refreshMpvPluginStatus)
-})
+  window.removeEventListener("plugin-state-changed", refreshMpvPluginStatus);
+});
 
 // ========== 数据库管理 ==========
 
 async function loadDatabaseInfo() {
   try {
-    dbInfo.value = await getDatabaseInfo()
+    dbInfo.value = await getDatabaseInfo();
   } catch (e) {
-    console.warn('[Settings] loadDatabaseInfo failed:', e)
+    console.warn("[Settings] loadDatabaseInfo failed:", e);
   }
 }
 
 async function refreshMpvPluginStatus() {
   try {
-    const state = await getPluginFullState('com.encvgo.plugin.mpv')
-    console.info('[Settings] MPV plugin raw state:', JSON.stringify(state))
-    mpvPluginError.value = ''
-    
-    if (state.status === 'ready') {
-      mpvPluginStatus.value = 'ready'
-      return
+    const state = await getPluginFullState("com.encvgo.plugin.mpv");
+    console.info("[Settings] MPV plugin raw state:", JSON.stringify(state));
+    mpvPluginError.value = "";
+
+    if (state.status === "ready") {
+      mpvPluginStatus.value = "ready";
+      return;
     }
-    
-    if (state.status === 'not_loaded' || state.status === 'not_installed') {
-      console.info('[Settings] MPV plugin status=${state.status}, attempting to load...')
-      const loaded = await ensurePluginLoaded('com.encvgo.plugin.mpv')
+
+    if (state.status === "not_loaded" || state.status === "not_installed") {
+      console.info("[Settings] MPV plugin status=${state.status}, attempting to load...");
+      const loaded = await ensurePluginLoaded("com.encvgo.plugin.mpv");
       if (loaded) {
-        mpvPluginStatus.value = 'ready'
-        console.info('[Settings] MPV plugin loaded successfully')
+        mpvPluginStatus.value = "ready";
+        console.info("[Settings] MPV plugin loaded successfully");
       } else {
-        mpvPluginStatus.value = 'load_failed'
-        mpvPluginError.value = '插件加载失败'
-        console.debug('[Settings] MPV plugin load failed')
+        mpvPluginStatus.value = "load_failed";
+        mpvPluginError.value = "插件加载失败";
+        console.debug("[Settings] MPV plugin load failed");
       }
     } else {
-      mpvPluginStatus.value = state.status
-      console.debug('[Settings] MPV plugin status:', state.status)
+      mpvPluginStatus.value = state.status;
+      console.debug("[Settings] MPV plugin status:", state.status);
     }
   } catch (e: any) {
-    console.error('[Settings] refreshMpvPluginStatus failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-    mpvPluginStatus.value = 'error'
-    mpvPluginError.value = e.message || '查询失败'
+    console.error("[Settings] refreshMpvPluginStatus failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    mpvPluginStatus.value = "error";
+    mpvPluginError.value = e.message || "查询失败";
   }
 }
 
-watch(serverOnline, (online) => {
+watch(serverOnline, online => {
   if (online) {
     if (!configLoaded.value) {
       loadConfig()
-        .then(() => { configLoaded.value = true })
-        .catch(() => { configLoaded.value = true })
+        .then(() => {
+          configLoaded.value = true;
+        })
+        .catch(() => {
+          configLoaded.value = true;
+        });
     }
-    getIndexStats().then((s) => { indexStats.value = s }).catch(() => {})
+    getIndexStats()
+      .then(s => {
+        indexStats.value = s;
+      })
+      .catch(() => {});
   }
-})
+});
 
-watch(() => getFieldValue(['plugin_settings', 'alist_encrypt', 'enabled']), (enabled) => {
-  if (enabled === true) {
-    registerFileFeature(createAlistEncryptFeature())
-  } else {
-    unregisterFileFeature('alist-encrypt')
+watch(
+  () => getFieldValue(["plugin_settings", "alist_encrypt", "enabled"]),
+  enabled => {
+    if (enabled === true) {
+      registerFileFeature(createAlistEncryptFeature());
+    } else {
+      unregisterFileFeature("alist-encrypt");
+    }
   }
-})
+);
 </script>
 
 <style scoped>

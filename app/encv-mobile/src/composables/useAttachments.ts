@@ -23,20 +23,20 @@
  * inline 到本地 message + 通过 serialize() 提供给调用方；后端是否会
  * 解析留作后续 story。本任务严格遵循「严禁修改后端 API」约束。
  */
-import { ref, type Ref } from 'vue'
+import { type Ref, ref } from "vue";
 
 // =============================================================================
 // 类型定义
 // =============================================================================
 
 export interface Attachment {
-  id: string
-  name: string
-  mimeType: string
-  sizeBytes: number
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
   /** base64 data URL（含前缀 data:<mime>;base64,...） */
-  dataUrl: string
-  kind: 'image' | 'file'
+  dataUrl: string;
+  kind: "image" | "file";
 }
 
 /**
@@ -48,13 +48,13 @@ export interface Attachment {
  * - file 元素带 file_data，承载非图片附件（OpenAI 新版字段）
  */
 export type MessageContentPart =
-  | { type: 'text'; text: string }
-  | { type: 'image_url'; image_url: { url: string } }
-  | { type: 'file'; file: { filename: string; file_data: string } }
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } }
+  | { type: "file"; file: { filename: string; file_data: string } };
 
 export interface AddFilesResult {
-  added: Attachment[]
-  rejected: { name: string; reason: string }[]
+  added: Attachment[];
+  rejected: { name: string; reason: string }[];
 }
 
 // =============================================================================
@@ -62,11 +62,11 @@ export interface AddFilesResult {
 // =============================================================================
 
 /** 单张图片上限 5MB */
-export const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+export const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 /** 单个文件上限 20MB */
-export const MAX_FILE_SIZE = 20 * 1024 * 1024
+export const MAX_FILE_SIZE = 20 * 1024 * 1024;
 /** 单次选择最多处理的文件数（防止一次性选择 1000+ 文件卡死） */
-export const MAX_FILES_PER_BATCH = 50
+export const MAX_FILES_PER_BATCH = 50;
 
 // =============================================================================
 // 工具函数
@@ -76,17 +76,17 @@ export const MAX_FILES_PER_BATCH = 50
  * 根据 MIME 判断是否图片。优先用 file.type，缺失时看扩展名兜底。
  */
 function isImageMime(file: File): boolean {
-  if (file.type && file.type.startsWith('image/')) return true
+  if (file.type && file.type.startsWith("image/")) return true;
   // 某些文件选择器在 Android/iOS 上 type 可能为空，用扩展名兜底
-  const name = (file.name || '').toLowerCase()
-  return /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif|avif)$/.test(name)
+  const name = (file.name || "").toLowerCase();
+  return /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif|avif)$/.test(name);
 }
 
 function generateAttachmentId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `att-${crypto.randomUUID()}`
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `att-${crypto.randomUUID()}`;
   }
-  return `att-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  return `att-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -94,20 +94,20 @@ function generateAttachmentId(): string {
  */
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader()
+    const reader = new FileReader();
     reader.onload = () => {
-      const result = reader.result
-      if (typeof result === 'string') {
-        resolve(result)
+      const result = reader.result;
+      if (typeof result === "string") {
+        resolve(result);
       } else {
-        reject(new Error('FileReader returned non-string result'))
+        reject(new Error("FileReader returned non-string result"));
       }
-    }
+    };
     reader.onerror = () => {
-      reject(reader.error || new Error('Failed to read file'))
-    }
-    reader.readAsDataURL(file)
-  })
+      reject(reader.error || new Error("Failed to read file"));
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 // =============================================================================
@@ -116,83 +116,83 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 export interface UseAttachmentsOptions {
   /** 自定义上限；不传则用模块常量 */
-  maxImageSize?: number
-  maxFileSize?: number
+  maxImageSize?: number;
+  maxFileSize?: number;
   /** 单批最多处理文件数；超限部分静默丢弃（防卡死） */
-  maxFilesPerBatch?: number
+  maxFilesPerBatch?: number;
   /** 错误回调（如超限）—— 默认 console.warn，调用方可注入弹 toast */
-  onError?: (message: string) => void
+  onError?: (message: string) => void;
 }
 
 export function useAttachments(options: UseAttachmentsOptions = {}) {
-  const maxImageSize = options.maxImageSize ?? MAX_IMAGE_SIZE
-  const maxFileSize = options.maxFileSize ?? MAX_FILE_SIZE
-  const maxFilesPerBatch = options.maxFilesPerBatch ?? MAX_FILES_PER_BATCH
-  const onError = options.onError ?? ((msg) => console.warn('[useAttachments]', msg))
+  const maxImageSize = options.maxImageSize ?? MAX_IMAGE_SIZE;
+  const maxFileSize = options.maxFileSize ?? MAX_FILE_SIZE;
+  const maxFilesPerBatch = options.maxFilesPerBatch ?? MAX_FILES_PER_BATCH;
+  const onError = options.onError ?? (msg => console.warn("[useAttachments]", msg));
 
-  const attachments: Ref<Attachment[]> = ref([])
+  const attachments: Ref<Attachment[]> = ref([]);
 
   /**
    * 把 FileList / File[] 加进 attachments。超限的文件不会中断整体流程，
    * 而是被收集到 rejected 列表里由调用方决定如何提示。
    */
   async function addFiles(files: FileList | File[] | null | undefined): Promise<AddFilesResult> {
-    if (!files) return { added: [], rejected: [] }
-    const list = Array.from(files)
-    const accepted: Attachment[] = []
-    const rejected: { name: string; reason: string }[] = []
+    if (!files) return { added: [], rejected: [] };
+    const list = Array.from(files);
+    const accepted: Attachment[] = [];
+    const rejected: { name: string; reason: string }[] = [];
 
     // 截断到 maxFilesPerBatch
-    const truncated = list.length > maxFilesPerBatch
+    const truncated = list.length > maxFilesPerBatch;
     if (truncated) {
-      onError(`一次最多选择 ${maxFilesPerBatch} 个文件，多余部分已忽略`)
+      onError(`一次最多选择 ${maxFilesPerBatch} 个文件，多余部分已忽略`);
     }
-    const processList = list.slice(0, maxFilesPerBatch)
+    const processList = list.slice(0, maxFilesPerBatch);
 
     for (const file of processList) {
-      const kind: 'image' | 'file' = isImageMime(file) ? 'image' : 'file'
-      const limit = kind === 'image' ? maxImageSize : maxFileSize
+      const kind: "image" | "file" = isImageMime(file) ? "image" : "file";
+      const limit = kind === "image" ? maxImageSize : maxFileSize;
       if (file.size > limit) {
-        const limitMb = (limit / (1024 * 1024)).toFixed(0)
+        const limitMb = (limit / (1024 * 1024)).toFixed(0);
         rejected.push({
-          name: file.name || '(未命名)',
+          name: file.name || "(未命名)",
           reason: `超过 ${limitMb}MB 限制`,
-        })
-        continue
+        });
+        continue;
       }
       try {
-        const dataUrl = await readFileAsDataUrl(file)
+        const dataUrl = await readFileAsDataUrl(file);
         accepted.push({
           id: generateAttachmentId(),
-          name: file.name || '(未命名)',
-          mimeType: file.type || (kind === 'image' ? 'image/*' : 'application/octet-stream'),
+          name: file.name || "(未命名)",
+          mimeType: file.type || (kind === "image" ? "image/*" : "application/octet-stream"),
           sizeBytes: file.size,
           dataUrl,
           kind,
-        })
+        });
       } catch (e: any) {
         rejected.push({
-          name: file.name || '(未命名)',
-          reason: e?.message || '读取失败',
-        })
+          name: file.name || "(未命名)",
+          reason: e?.message || "读取失败",
+        });
       }
     }
 
     if (accepted.length > 0) {
-      attachments.value.push(...accepted)
+      attachments.value.push(...accepted);
     }
-    return { added: accepted, rejected }
+    return { added: accepted, rejected };
   }
 
   function removeAttachment(id: string): void {
-    const idx = attachments.value.findIndex((a) => a.id === id)
+    const idx = attachments.value.findIndex(a => a.id === id);
     if (idx >= 0) {
-      attachments.value.splice(idx, 1)
+      attachments.value.splice(idx, 1);
     }
   }
 
   function clearAttachments(): void {
-    attachments.value.splice(0, attachments.value.length)
+    attachments.value.splice(0, attachments.value.length);
   }
 
   /**
@@ -204,7 +204,7 @@ export function useAttachments(options: UseAttachmentsOptions = {}) {
    * - file → file 元素（filename + file_data）
    */
   function serialize(text: string): MessageContentPart[] {
-    return serializeAttachments(text, attachments.value)
+    return serializeAttachments(text, attachments.value);
   }
 
   return {
@@ -213,7 +213,7 @@ export function useAttachments(options: UseAttachmentsOptions = {}) {
     removeAttachment,
     clearAttachments,
     serialize,
-  }
+  };
 }
 
 /**
@@ -225,29 +225,26 @@ export function useAttachments(options: UseAttachmentsOptions = {}) {
  *  - image → { type: 'image_url', image_url: { url: dataUrl } }
  *  - file  → { type: 'file', file: { filename, file_data: dataUrl } }
  */
-export function serializeAttachments(
-  text: string,
-  attachments: Attachment[],
-): MessageContentPart[] {
-  const parts: MessageContentPart[] = []
+export function serializeAttachments(text: string, attachments: Attachment[]): MessageContentPart[] {
+  const parts: MessageContentPart[] = [];
   if (text) {
-    parts.push({ type: 'text', text })
+    parts.push({ type: "text", text });
   }
   for (const att of attachments) {
-    if (att.kind === 'image') {
+    if (att.kind === "image") {
       parts.push({
-        type: 'image_url',
+        type: "image_url",
         image_url: { url: att.dataUrl },
-      })
+      });
     } else {
       parts.push({
-        type: 'file',
+        type: "file",
         file: {
           filename: att.name,
           file_data: att.dataUrl,
         },
-      })
+      });
     }
   }
-  return parts
+  return parts;
 }
