@@ -120,9 +120,6 @@ func NewBrain(hostNPCID uint64) *Brain {
 	return b
 }
 
-func (b *Brain) CatchUp(currentTick uint32, rng *rand.Rand, npc *NPCV3) {
-}
-
 func (b *Brain) GetActiveCells(region BrainRegion, count int, npcAge uint16, rng *rand.Rand) []Cell {
 	result := make([]Cell, 0, count)
 	regionStat := b.Stats.RegionStats[region]

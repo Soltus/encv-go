@@ -161,31 +161,7 @@ func (fw *FractalWorld) tickBrains(currentTick uint32, config PerfTierConfig, rn
 }
 
 func (fw *FractalWorld) generateNPC(npcID uint64, rng *rand.Rand) *NPCV3 {
-	species := SpeciesType(npcID % uint64(SpeciesMax))
-	gender := Gender(npcID % uint64(GenderMax))
-	prof := ProfessionType(npcID % uint64(ProfMax))
-	age := uint16(npcID % 80)
-
-	return &NPCV3{
-		ID:             npcID,
-		Name:           GenerateChineseName(rng, gender),
-		Species:        species,
-		Gender:         gender,
-		GenderIdentity: GenderIdentCisMale,
-		SexualOrient:   SexOrientHetero,
-		Profession:     prof,
-		Level:          uint16(npcID % 50),
-		Age:            age,
-		Health:         800 + uint16(npcID%200),
-		MaxHealth:      1000,
-		Energy:         600 + uint16(npcID%200),
-		MaxEnergy:      800,
-		IsAlive:        true,
-		LastUpdateTick: uint32(npcID % 1000),
-		WealthTier:     uint8(npcID % 5),
-		SocialTier:     uint8(npcID % 4),
-		LifeStage:      GetLifeStage(age, species),
-	}
+	return GenerateNPCV3(npcID, rng)
 }
 
 func (fw *FractalWorld) MemoryStats() map[string]float64 {
