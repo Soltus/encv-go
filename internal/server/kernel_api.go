@@ -447,3 +447,211 @@ func (s *Server) handleKernelSubmitGin(c *gin.Context) {
 		"method":   req.Method,
 	})
 }
+
+// ─── 微内核端点（2026-07-03 新增，spec microkernel-split-start-stop Phase 4.6） ──────
+//
+// 这组端点支撑服务级生命周期管理 + 多租户 + AI Agent 工具调用：
+//
+//	GET    /api/kernel/mk/services          — 列出所有微内核服务（含状态 + 引用计数）
+//	POST   /api/kernel/mk/services/:name/activate  — 手动激活服务（dev only）
+//	POST   /api/kernel/mk/services/:name/deactivate — 手动停用服务（dev only）
+//	GET    /api/kernel/mk/tenants           — 列出所有租户（含配额 + 活跃数）
+//	GET    /api/kernel/mk/tools             — 列出所有 AI Agent 工具（含依赖 + 状态）
+//	POST   /api/kernel/mk/tools/invoke      — 调用 AI Agent 工具（按需激活服务）
+//	GET    /api/kernel/mk/stats             — 微内核整体统计（内存 + 服务数 + 租户数）
+//
+// 设计：
+//   - GET 端点对所有模式开放（监控 / 调试）
+//   - POST 激活/停用仅 dev 模式开放（生产模式由空闲超时自动管理）
+//   - microKernel 未启用时返回 503
+
+// kernelMicroOr503 返回 MicroKernel；未启用时写 503 并返回 nil
+func (s *Server) kernelMicroOr503(c *gin.Context) *kernel.MicroKernel {
+	if s.microKernel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "micro kernel not enabled",
+		})
+		return nil
+	}
+	return s.microKernel
+}
+
+// handleKernelMkServicesGin 列出所有微内核服务（含状态 + 引用计数 + 激活耗时）
+func (s *Server) handleKernelMkServicesGin(c *gin.Context) {
+	mk := s.kernelMicroOr503(c)
+	if mk == nil {
+		return
+	}
+	services := mk.ListServices()
+	c.JSON(http.StatusOK, gin.H{
+		"services": services,
+		"count":    len(services),
+	})
+}
+
+// handleKernelMkServiceActivateGin 手动激活服务（dev only）
+func (s *Server) handleKernelMkServiceActivateGin(c *gin.Context) {
+	if !isDevMode() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only available in dev mode"})
+		return
+	}
+	mk := s.kernelMicroOr503(c)
+	if mk == nil {
+		return
+	}
+	name := c.Param("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "service name is required"})
+		return
+	}
+	if err := mk.Activate(c.Request.Context(), name); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	sl, _ := mk.GetServiceLifecycle(name)
+	c.JSON(http.StatusOK, gin.H{
+		"ok":       true,
+		"name":     name,
+		"status":   sl.Status().String(),
+		"refCount": sl.RefCount(),
+	})
+}
+
+// handleKernelMkServiceDeactivateGin 手动停用服务（dev only）
+func (s *Server) handleKernelMkServiceDeactivateGin(c *gin.Context) {
+	if !isDevMode() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only available in dev mode"})
+		return
+	}
+	mk := s.kernelMicroOr503(c)
+	if mk == nil {
+		return
+	}
+	name := c.Param("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "service name is required"})
+		return
+	}
+	graceMs := 100
+	if v := c.Query("graceMs"); v != "" {
+		if ms, err := strconv.Atoi(v); err == nil && ms >= 0 {
+			graceMs = ms
+		}
+	}
+	if err := mk.Deactivate(name, time.Duration(graceMs)*time.Millisecond); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"ok":     true,
+		"name":   name,
+		"status": "inactive",
+	})
+}
+
+// handleKernelMkTenantsGin 列出所有租户（含配额 + 活跃并发）
+func (s *Server) handleKernelMkTenantsGin(c *gin.Context) {
+	mk := s.kernelMicroOr503(c)
+	if mk == nil {
+		return
+	}
+	tenants := mk.ListTenants()
+	c.JSON(http.StatusOK, gin.H{
+		"tenants": tenants,
+		"count":   len(tenants),
+	})
+}
+
+// handleKernelMkToolsGin 列出所有 AI Agent 工具（含依赖的服务状态）
+func (s *Server) handleKernelMkToolsGin(c *gin.Context) {
+	if s.toolKernel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "tool kernel not enabled"})
+		return
+	}
+	tools := s.toolKernel.ListTools()
+	c.JSON(http.StatusOK, gin.H{
+		"tools": tools,
+		"count": len(tools),
+	})
+}
+
+// handleKernelMkToolInvokeGin 调用 AI Agent 工具（按需激活依赖的服务）
+//
+// 请求 body：{"tool": "search_files", "args": {"query": "video", "limit": 10}}
+// 响应：{"ok": true, "result": {...}, "activateMs": 12, "elapsedMs": 45}
+func (s *Server) handleKernelMkToolInvokeGin(c *gin.Context) {
+	if s.toolKernel == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "tool kernel not enabled"})
+		return
+	}
+	var req struct {
+		Tool string          `json:"tool"`
+		Args json.RawMessage `json:"args"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "bad request: " + err.Error()})
+		return
+	}
+	if req.Tool == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tool name is required"})
+		return
+	}
+
+	// 从 header 取 tenantID（如果有）
+	tenantID := c.GetHeader("X-Tenant-ID")
+	reqCtx := c.Request.Context()
+	if tenantID != "" {
+		reqCtx = kernel.WithTenant(reqCtx, tenantID)
+	}
+
+	ctx := kernel.NewContext(reqCtx, kernel.WithServiceName("mk.tool.invoke"))
+	start := time.Now()
+	resp, err := s.toolKernel.InvokeTool(ctx, req.Tool, req.Args)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok":        false,
+			"tool":      req.Tool,
+			"error":     err.Error(),
+			"elapsedMs": elapsed.Milliseconds(),
+		})
+		return
+	}
+
+	c.Data(http.StatusOK, "application/json",
+		[]byte(`{"ok":true,"tool":"`+req.Tool+`","elapsedMs":`+fmt.Sprint(elapsed.Milliseconds())+`,"result":`+string(resp)+`}`))
+}
+
+// handleKernelMkStatsGin 微内核整体统计
+func (s *Server) handleKernelMkStatsGin(c *gin.Context) {
+	mk := s.kernelMicroOr503(c)
+	if mk == nil {
+		return
+	}
+	services := mk.ListServices()
+	tenants := mk.ListTenants()
+
+	activeServices := 0
+	for _, s := range services {
+		if s.Status == "active" {
+			activeServices++
+		}
+	}
+
+	stats := gin.H{
+		"name":            mk.Name,
+		"totalServices":   len(services),
+		"activeServices":  activeServices,
+		"inactiveServices": len(services) - activeServices,
+		"totalTenants":    len(tenants),
+		"memGuardEnabled": mk.MemGuard() != nil,
+	}
+
+	if mk.MemGuard() != nil {
+		stats["mem"] = mk.MemGuard().Stats()
+		stats["memGuardTriggered"] = mk.MemGuard().Triggered()
+	}
+
+	c.JSON(http.StatusOK, stats)
+}

@@ -102,6 +102,13 @@ type Server struct {
 	//   - 可选：nil = 未启用（dev/test 场景）
 	kernelLifecycle *kernel.Lifecycle
 	kernelPool      *kernel.Pool
+	// 🆕 2026-07-03：微内核运行时（服务级生命周期 + 多租户 + 工具调度）
+	//   - 服务按需激活/停用（不是整进程启停）
+	//   - 多租户隔离（并发配额 + 速率限制）
+	//   - AI Agent 工具调用：按需激活依赖的服务
+	//   - 可选：nil = 使用全局 registry（向后兼容）
+	microKernel *kernel.MicroKernel
+	toolKernel  *kernel.ToolKernel
 	// 🆕 2026-07-02：搜索结果内存 LRU 缓存（解决连续搜索重新加载慢的问题）
 	//   连续搜"在线" → "在线 视频" → "在线视频" 时，第二、三次直接命中缓存
 	//   避免每次都走 DB + 向量搜索 + 混合评分（综合 ~500ms+）
@@ -441,6 +448,28 @@ func NewServer(ctx context.Context, configPath string) *Server {
 					"dir", kdir, "pools", 1, "memGuardMB", 256)
 			}
 		}
+	}
+
+	// 🆕 2026-07-03：微内核运行时 + 工具内核（spec microkernel-split-start-stop Phase 4.2/4.4）
+	//
+	// 核心价值：
+	//   - 服务按需激活/停用（不是整进程启停）
+	//   - 多租户隔离（并发配额 + 速率限制）
+	//   - AI Agent 工具调用：只激活需要的服务，用完自动释放
+	//
+	// feature flag：ENCV_USE_MICRO_KERNEL=1 启用（默认关闭，渐进式迁移）
+	// 与 ENCV_USE_KERNEL_POOL 独立：可以只开 lifecycle，也可以两者都开
+	if os.Getenv("ENCV_USE_MICRO_KERNEL") == "1" {
+		s.microKernel = kernel.NewMicroKernel(kernel.MicroKernelConfig{
+			Name:               "main",
+			MemGuardMB:         256,
+			DefaultIdleTimeout: 5 * time.Minute, // 5 分钟空闲自动停用
+			DefaultGraceful:    100 * time.Millisecond,
+		})
+		s.toolKernel = kernel.NewToolKernel(s.microKernel)
+
+		// 注册服务工厂（与 kernel.Register 的 adapter 对应，但用工厂延迟构造）
+		slog.Info("kernel: micro kernel constructed (services registered lazily)")
 	}
 
 	// 剧本外置 spec：若 agent_settings.mock_scenarios_dir 非空，

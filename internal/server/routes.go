@@ -46,6 +46,23 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	// 🆕 异步 job 提交（dev only）— Cypress restart-restore 测试用
 	r.POST("/api/kernel/submit", s.handleKernelSubmitGin)
 
+	// 🆕 2026-07-03：微内核 HTTP API（spec microkernel-split-start-stop Phase 4.6）
+	//   服务级生命周期 + 多租户隔离 + AI Agent 工具调用
+	//   - GET  /api/kernel/mk/services              : 所有微内核服务（状态+引用计数）
+	//   - POST /api/kernel/mk/services/:name/activate   : 手动激活服务（dev only）
+	//   - POST /api/kernel/mk/services/:name/deactivate : 手动停用服务（dev only）
+	//   - GET  /api/kernel/mk/tenants               : 所有租户（配额+活跃数）
+	//   - GET  /api/kernel/mk/tools                 : AI Agent 工具列表（依赖+状态）
+	//   - POST /api/kernel/mk/tools/invoke          : 调用 AI Agent 工具（按需激活）
+	//   - GET  /api/kernel/mk/stats                 : 微内核整体统计
+	r.GET("/api/kernel/mk/services", s.handleKernelMkServicesGin)
+	r.POST("/api/kernel/mk/services/:name/activate", s.handleKernelMkServiceActivateGin)
+	r.POST("/api/kernel/mk/services/:name/deactivate", s.handleKernelMkServiceDeactivateGin)
+	r.GET("/api/kernel/mk/tenants", s.handleKernelMkTenantsGin)
+	r.GET("/api/kernel/mk/tools", s.handleKernelMkToolsGin)
+	r.POST("/api/kernel/mk/tools/invoke", s.handleKernelMkToolInvokeGin)
+	r.GET("/api/kernel/mk/stats", s.handleKernelMkStatsGin)
+
 	// 🆕 2026-07-03：dev-only 进程自杀端点（spec android-workmanager-split-start-stop Phase 1.6.2）
 	//   - POST /api/dev/kill-backend : 触发 os.Exit(1)，pm2 自动重启
 	//   - 用途：Cypress E2E kernel-restart-restore 测试模拟进程崩溃
