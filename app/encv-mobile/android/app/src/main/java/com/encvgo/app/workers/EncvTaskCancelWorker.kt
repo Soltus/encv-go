@@ -14,7 +14,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.Executor
 import java.util.concurrent.TimeUnit
 
 /**
@@ -37,6 +36,13 @@ import java.util.concurrent.TimeUnit
  *   每个 taskId 用 unique work name（"cancel:$taskId"），ExistingWorkPolicy.REPLACE
  *   避免同一任务重复入队。
  *
+ * Pending 任务追踪：
+ *   用 SharedPreferences 维护 pending taskId 集合，避免依赖 WorkManager
+ *   的 ListenableFuture 查询 API（需要 Guava，引入不必要的依赖）。
+ *   - enqueue 时加入集合
+ *   - doWork 结束时（success/failure）从集合移除
+ *   - Go 重启时遍历集合重新入队，提前触发重试
+ *
  * 约束（用户原话）：
  *   - 不 mock backend：Worker 打真实的 127.0.0.1:PORT HTTP 端点
  *   - 业务逻辑在 Go：Worker 只是薄包装，不做加密/解密
@@ -50,6 +56,8 @@ class EncvTaskCancelWorker(
         private const val TAG = "ENCV-CancelWorker"
         private const val KEY_TASK_ID = "task_id"
         private const val WORK_NAME_PREFIX = "encv:cancel:"
+        private const val PREFS_NAME = "encv_cancel_workers"
+        private const val PREFS_KEY_PENDING = "pending_task_ids"
 
         /** 健康检查失败最大次数（连续失败才认为 Go 进程死了） */
         private const val MAX_HEALTH_FAILS = 3
@@ -62,6 +70,30 @@ class EncvTaskCancelWorker(
 
         /** 最大重试次数（WorkManager 默认 24h，这里主动标记失败避免无限重试） */
         private const val MAX_RETRY_COUNT = 10
+
+        private fun getPrefs(ctx: Context) =
+            ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        private fun addPendingTask(ctx: Context, taskId: String) {
+            val prefs = getPrefs(ctx)
+            val set = prefs.getStringSet(PREFS_KEY_PENDING, null)?.toMutableSet()
+                ?: mutableSetOf()
+            if (set.add(taskId)) {
+                prefs.edit().putStringSet(PREFS_KEY_PENDING, set).apply()
+            }
+        }
+
+        private fun removePendingTask(ctx: Context, taskId: String) {
+            val prefs = getPrefs(ctx)
+            val set = prefs.getStringSet(PREFS_KEY_PENDING, null)?.toMutableSet()
+                ?: return
+            if (set.remove(taskId)) {
+                prefs.edit().putStringSet(PREFS_KEY_PENDING, set).apply()
+            }
+        }
+
+        private fun getPendingTasks(ctx: Context): Set<String> =
+            getPrefs(ctx).getStringSet(PREFS_KEY_PENDING, null) ?: emptySet()
 
         /**
          * 入队一个 cancel Worker。
@@ -76,6 +108,7 @@ class EncvTaskCancelWorker(
                 .build()
             WorkManager.getInstance(ctx)
                 .enqueueUniqueWork(workName, ExistingWorkPolicy.REPLACE, request)
+            addPendingTask(ctx, taskId)
             Log.d(TAG, "enqueued cancel worker for task=$taskId (workName=$workName)")
             return workName
         }
@@ -85,45 +118,32 @@ class EncvTaskCancelWorker(
          * 由 GoProcessRestartReceiver 调用。
          *
          * 实现说明：
-         *   WorkManager.getWorkInfosByTag() 返回 ListenableFuture，
-         *   为避免阻塞主线程（广播接收器 onReceive 只有 10s 超时），
-         *   使用 addListener + 后台线程获取结果。
-         *   即使查询失败也不影响功能 — WorkManager 的 LinearBackoff
-         *   本身就是持久化的，退避时间到了会自动重试。
+         *   不使用 WorkManager.getWorkInfosByTag()（返回 ListenableFuture，
+         *   需要 Guava 依赖），而是用 SharedPreferences 维护的 pending 集合。
+         *   遍历集合，用 ExistingWorkPolicy.REPLACE 重新入队，
+         *   新的 request 没有 initialDelay，会立即执行。
+         *
+         *   即使某些任务实际上已经完成（集合没及时清理是小概率事件），
+         *   doWork 里会先查 task 状态，如果已经取消就直接 success noop，
+         *   不会有副作用。
          */
         fun enqueueAllPending(ctx: Context) {
-            val wm = WorkManager.getInstance(ctx)
-            val future = wm.getWorkInfosByTag(EncvTaskCancelWorker::class.java.name)
-
-            // 用后台线程执行，避免阻塞主线程
-            val bgExecutor = Executor { runnable ->
-                Thread(runnable, "encv-cancel-worker-retrigger").start()
+            val pending = getPendingTasks(ctx)
+            if (pending.isEmpty()) {
+                Log.d(TAG, "enqueueAllPending: no pending tasks")
+                return
             }
-
-            future.addListener(
-                {
-                    try {
-                        val infos = future.get()
-                        var retriggered = 0
-                        for (info in infos) {
-                            if (info.state.isFinished) continue
-                            val taskId = info.inputData.getString(KEY_TASK_ID) ?: continue
-                            // REPLACE 旧的，新的立即执行
-                            val workName = "$WORK_NAME_PREFIX$taskId"
-                            val request = OneTimeWorkRequestBuilder<EncvTaskCancelWorker>()
-                                .setInputData(workDataOf(KEY_TASK_ID to taskId))
-                                .build()
-                            wm.enqueueUniqueWork(workName, ExistingWorkPolicy.REPLACE, request)
-                            retriggered++
-                        }
-                        Log.d(TAG, "re-triggered $retriggered cancel workers (go restart)")
-                    } catch (e: Exception) {
-                        Log.w(TAG, "enqueueAllPending: failed: ${e.javaClass.simpleName}")
-                        // 失败不影响功能，WorkManager 会按退避策略自动重试
-                    }
-                },
-                bgExecutor
-            )
+            val wm = WorkManager.getInstance(ctx)
+            var retriggered = 0
+            for (taskId in pending) {
+                val workName = "$WORK_NAME_PREFIX$taskId"
+                val request = OneTimeWorkRequestBuilder<EncvTaskCancelWorker>()
+                    .setInputData(workDataOf(KEY_TASK_ID to taskId))
+                    .build()
+                wm.enqueueUniqueWork(workName, ExistingWorkPolicy.REPLACE, request)
+                retriggered++
+            }
+            Log.d(TAG, "enqueueAllPending: re-triggered $retriggered cancel workers (go restart)")
         }
     }
 
@@ -153,14 +173,16 @@ class EncvTaskCancelWorker(
         val taskStatus = tryGetTaskStatus(port, taskId)
         if (taskStatus == "cancelled" || taskStatus == "canceled") {
             Log.i(TAG, "doWork: task=$taskId already cancelled, success (noop)")
+            removePendingTask(applicationContext, taskId)
             return@withContext Result.success()
         }
 
         // 3. 发送 cancel 请求
-        return@withContext try {
+        val result = try {
             val success = postCancel(port, taskId)
             if (success) {
                 Log.i(TAG, "doWork: task=$taskId cancelled successfully")
+                removePendingTask(applicationContext, taskId)
                 Result.success()
             } else {
                 Log.w(TAG, "doWork: cancel request failed (non-200), retry")
@@ -170,6 +192,8 @@ class EncvTaskCancelWorker(
             Log.w(TAG, "doWork: cancel exception: ${e.javaClass.simpleName}: ${e.message}")
             retryOrFail(taskId, retryCount, "cancel exception: ${e.message}")
         }
+
+        return@withContext result
     }
 
     /**
@@ -240,6 +264,7 @@ class EncvTaskCancelWorker(
     private fun retryOrFail(taskId: String, retryCount: Int, reason: String): Result {
         if (retryCount >= MAX_RETRY_COUNT) {
             Log.e(TAG, "retryOrFail: task=$taskId exceeded max retries ($MAX_RETRY_COUNT), fail. reason=$reason")
+            removePendingTask(applicationContext, taskId)
             return Result.failure(workDataOf("error" to reason))
         }
         Log.d(TAG, "retryOrFail: task=$taskId retry ($retryCount/$MAX_RETRY_COUNT), reason=$reason")
