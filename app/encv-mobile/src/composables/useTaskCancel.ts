@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { cancelTask } from '@/api/encv_tasks'
 import { getApiBaseUrl } from '@/api/encv_core'
-import { GoProcess, isNative } from '@/plugins/GoProcess'
+import { enqueueCancelWorker, isNative } from '@/plugins/GoProcess'
 
 /**
  * useTaskCancel — 任务取消的双写 composable。
@@ -11,7 +11,10 @@ import { GoProcess, isNative } from '@/plugins/GoProcess'
  * 设计：
  *   取消任务时同时发起：
  *     1. HTTP POST /api/tasks/:id/cancel（同步，期望立即生效）
- *     2. Capacitor GoProcess.enqueueCancelWorker(taskId)（WorkManager 持久化，兜底）
+ *     2. enqueueCancelWorker(taskId)（WorkManager 持久化，兜底）
+ *
+ * ⚠️ 注意：不要直接导入 GoProcess plugin 对象，使用包装函数 enqueueCancelWorker
+ *         详见 @/plugins/GoProcess.ts 顶部的架构守卫注释
  *
  * 容错策略：
  *   - HTTP 成功：直接返回成功，Worker 后续执行时发现 task 已取消则 noop
@@ -41,7 +44,7 @@ export function useTaskCancel() {
     //    native 平台才有 WorkManager，web 端走 web plugin 返回 success:false 但不影响
     if (isNative()) {
       try {
-        const result = await (GoProcess as any).enqueueCancelWorker?.({ taskId })
+        const result = await enqueueCancelWorker(taskId)
         console.debug('[useTaskCancel] enqueued cancel worker:', result)
       } catch (e) {
         console.warn('[useTaskCancel] enqueueCancelWorker failed:', e)

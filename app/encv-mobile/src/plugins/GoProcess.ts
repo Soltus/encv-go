@@ -1,5 +1,28 @@
 import { registerPlugin } from '@capacitor/core'
 
+/**
+ * ⚠️ 架构守卫：GoProcess plugin 对象不直接导出
+ *
+ * 设计原则：
+ *   - GoProcess（registerPlugin 返回值）是底层 plugin 句柄，不对外暴露
+ *   - 所有对外能力必须通过本文件的包装函数（restartBackend / stopBackend 等）暴露
+ *   - 新增能力时：在此文件添加 export function，内部调用 GoProcess.xxx()
+ *
+ * 为什么不直接导出 GoProcess：
+ *   1. 类型安全：plugin 方法是动态的，统一包装可提供更严格的类型签名
+ *   2. 错误处理：统一 try/catch + 默认返回值，调用方无需重复写容错
+ *   3. 可追踪：所有 native 调用都经过这一层，方便加日志/埋点
+ *   4. 防止误用：避免调用方直接操作 plugin 内部状态
+ *
+ * 反模式（禁止）：
+ *   import { GoProcess } from '@/plugins/GoProcess'  // ❌ 未导出
+ *   const result = await (GoProcess as any).someMethod()  // ❌ 绕过类型系统
+ *
+ * 正确模式：
+ *   import { someMethod } from '@/plugins/GoProcess'  // ✅ 用包装函数
+ *   const result = await someMethod(args)
+ */
+
 export type {
   GoProcessStatus,
   GoProcessResult,
@@ -36,6 +59,25 @@ export async function stopBackend(): Promise<GoProcessResult> {
   } catch (e) {
     console.error('[ENCV] GoProcess.stop() failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
     return { success: false, lastError: e instanceof Error ? e.message : String(e) }
+  }
+}
+
+/**
+ * 入队取消任务的 WorkManager 持久化请求。
+ *
+ * 设计：HTTP cancel 是同步的但可能失败（Go 进程已死），
+ * WorkManager 入队是持久化的，Go 重启后会自动重试取消。
+ *
+ * @param taskId 任务 ID
+ * @returns { success: boolean } web 端永远返回 success:false（无 WorkManager）
+ */
+export async function enqueueCancelWorker(taskId: string): Promise<{ success: boolean }> {
+  try {
+    const result = await (GoProcess as any).enqueueCancelWorker?.({ taskId })
+    return { success: result?.success === true }
+  } catch (e) {
+    console.error('[ENCV] GoProcess.enqueueCancelWorker() failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
+    return { success: false }
   }
 }
 
