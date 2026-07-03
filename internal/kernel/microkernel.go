@@ -40,6 +40,8 @@ type MicroKernel struct {
 	memGuard *MemoryGuard
 	memGuardMB int
 
+	taskRecorder *TaskRecorder // 任务记录中间件（可选）
+
 	defaultIdleTimeout time.Duration
 	defaultGraceful    time.Duration
 }
@@ -50,6 +52,10 @@ type MicroKernelConfig struct {
 	MemGuardMB         int           // 内存守卫阈值（0 = 不启用）
 	DefaultIdleTimeout time.Duration // 默认空闲超时（0 = 不自动停用）
 	DefaultGraceful    time.Duration // 默认优雅停用窗口
+
+	// 任务记录
+	TaskStore     TaskStore // 任务存储（nil = 不记录）
+	RecordTaskIO  bool      // 是否记录输入输出 payload（默认 false，避免敏感数据）
 }
 
 // NewMicroKernel 构造微内核（初始无服务，占内存极小）
@@ -69,12 +75,20 @@ func NewMicroKernel(cfg MicroKernelConfig) *MicroKernel {
 		mk.memGuard = NewMemoryGuard(cfg.MemGuardMB)
 		mk.memGuard.Start()
 	}
+	if cfg.TaskStore != nil {
+		mk.taskRecorder = NewTaskRecorder(cfg.TaskStore, cfg.RecordTaskIO)
+	}
 	return mk
 }
 
 // Name 返回微内核名称
 func (mk *MicroKernel) Name() string {
 	return mk.name
+}
+
+// TaskRecorder 返回任务记录器（可能为 nil）
+func (mk *MicroKernel) TaskRecorder() *TaskRecorder {
+	return mk.taskRecorder
 }
 
 // RegisterService 注册一个服务工厂（不实例化）。
@@ -115,6 +129,7 @@ func (mk *MicroKernel) GetServiceLifecycle(name string) (*ServiceLifecycle, bool
 //   - 引用计数 +1/-1
 //   - 租户配额检查（如果 ctx 带 tenant）
 //   - ctx 透传 + 子 ctx 派生
+//   - 任务记录（如果配置了 TaskStore）
 func (mk *MicroKernel) Call(ctx ServiceContext, serviceName, method string, payload any) (json.RawMessage, error) {
 	if ctx == nil {
 		return nil, errors.New("kernel: nil context")
@@ -141,6 +156,13 @@ func (mk *MicroKernel) Call(ctx ServiceContext, serviceName, method string, payl
 	mk.servicesMu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrServiceNotFound, serviceName)
+	}
+
+	// 任务记录包装（如启用）
+	if mk.taskRecorder != nil && mk.taskRecorder.Enabled() {
+		return mk.taskRecorder.WrapSyncCall(ctx, serviceName, method, payload, func(callCtx ServiceContext) (json.RawMessage, error) {
+			return sl.CallWithLifecycle(callCtx, method, payload)
+		})
 	}
 
 	resp, err := sl.CallWithLifecycle(ctx, method, payload)

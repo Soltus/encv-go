@@ -63,6 +63,10 @@ type serviceCtx struct {
 	// 可选 checkpoint store（nil = 不支持）
 	store   CheckpointStore
 	storeMu sync.Mutex // 序列化 checkpoint/restore 调用
+
+	// 可选自定义值（用于传递 taskID / triggeredBy / runId 等）
+	values map[any]any
+	valuesMu sync.RWMutex
 }
 
 // ContextOption ctx 构造选项
@@ -118,6 +122,15 @@ func NewContext(parent context.Context, opts ...ContextOption) ServiceContext {
 	if psc, ok := parent.(ServiceContext); ok {
 		c.requestID = nextID()           // RequestID 总是新生成（每次 request 唯一）
 		c.traceID = psc.TraceID()        // TraceID 继承（跨请求追踪）
+		// 继承父 ctx 的自定义 values（从 parent 的内部 values 拷贝）
+		if psc2, ok2 := psc.(*serviceCtx); ok2 && psc2.values != nil {
+			psc2.valuesMu.RLock()
+			c.values = make(map[any]any, len(psc2.values))
+			for k, v := range psc2.values {
+				c.values[k] = v
+			}
+			psc2.valuesMu.RUnlock()
+		}
 	} else {
 		c.requestID = nextID()
 		c.traceID = "trace-" + nextID()
@@ -285,4 +298,50 @@ var ctxSeq uint64
 func init() {
 	// 占位，确保 import 顺序
 	_ = atomic.AddUint64
+}
+
+// ─── ctx 自定义值传递（WithValue / valueFrom） ───────────────────────────
+//
+// 用于在 ServiceContext 中传递额外元数据（taskID / triggeredBy / runId / tags 等）。
+// 与 context.WithValue 类似但针对 ServiceContext 优化，不创建新 ctx 对象。
+//
+// 注意：这些值不参与链路追踪，只用于同一请求内的元数据传递。
+
+// CtxValue 自定义值的 key 类型（避免与其他包的 key 冲突）
+type CtxValueKey struct{ Name string }
+
+// WithValue 设置 ctx 中的自定义值。
+// 如果 ctx 是 serviceCtx 类型，直接设置内部 values  map。
+// 否则返回原 ctx（不报错，但 value 会丢失，调用方应确保传的是 ServiceContext）。
+func WithValue(ctx ServiceContext, key any, value any) ServiceContext {
+	if sc, ok := ctx.(*serviceCtx); ok {
+		sc.valuesMu.Lock()
+		defer sc.valuesMu.Unlock()
+		if sc.values == nil {
+			sc.values = make(map[any]any)
+		}
+		sc.values[key] = value
+		return sc
+	}
+	return ctx
+}
+
+// valueFrom 从 ctx 中读取自定义值。
+// 先查 ServiceContext 内部 values，再查 parent context.Value()。
+func valueFrom(ctx ServiceContext, key any) any {
+	if sc, ok := ctx.(*serviceCtx); ok {
+		sc.valuesMu.RLock()
+		if sc.values != nil {
+			if v, exists := sc.values[key]; exists {
+				sc.valuesMu.RUnlock()
+				return v
+			}
+		}
+		sc.valuesMu.RUnlock()
+	}
+	// fallback：查 parent context
+	if ctx != nil {
+		return ctx.Value(key)
+	}
+	return nil
 }
