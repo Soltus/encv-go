@@ -51,6 +51,14 @@
             <p>{{ t('home.extensionsDesc') }}</p>
           </div>
         </div>
+
+        <div class="home-card simverse-card" @click="handleOpenSimverse">
+          <ion-icon :icon="planet" class="card-icon simverse-icon"></ion-icon>
+          <div class="card-info">
+            <h3>SimVerse 世界</h3>
+            <p>进入横屏模拟世界</p>
+          </div>
+        </div>
       </div>
 
       <!-- 浮动 AI 入口（Phase 7.6） -->
@@ -61,10 +69,12 @@
 
 <script setup lang="ts">
 import { IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar, onIonViewWillEnter } from "@ionic/vue";
-import { folder, globe, layersOutline, lockClosed, playCircle } from "ionicons/icons";
+import { folder, globe, layersOutline, lockClosed, playCircle, planet } from "ionicons/icons";
 import { useRouter } from "vue-router";
 import AgentEntry from "@/components/agent/AgentEntry.vue";
 import { useI18n } from "@/composables/useI18n";
+import { openWorld } from "@/plugins/SimVerse";
+import { isNative } from "@/plugins/GoProcess";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -87,6 +97,14 @@ function handleOpenRemote() {
 
 function handleOpenExtensions() {
   router.push("/tabs/extensions");
+}
+
+function handleOpenSimverse() {
+  if (isNative()) {
+    openWorld("default", "SimVerse");
+  } else {
+    router.push("/simverse/world");
+  }
 }
 
 onIonViewWillEnter(() => {});
@@ -178,6 +196,15 @@ onIonViewWillEnter(() => {});
 
 .extensions-icon {
   color: #8b5cf6;
+}
+
+.simverse-card {
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.12), rgba(139, 92, 246, 0.08));
+  border: 1px solid rgba(20, 184, 166, 0.2);
+}
+
+.simverse-icon {
+  color: #14b8a6;
 }
 
 .card-info {
