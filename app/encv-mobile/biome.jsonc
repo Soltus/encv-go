@@ -1,0 +1,94 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.2/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "maxSize": 5888888,
+    "ignoreUnknown": true,
+    "includes": ["src/**/*.{ts,js,vue,json}"],
+    "experimentalScannerIgnores": [
+      "node_modules",
+      "dist",
+      "android",
+      "ios",
+      "cypress",
+      "public"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 140,
+    "formatWithErrors": true,
+    "attributePosition": "auto"
+  },
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": false
+    },
+    "formatter": {
+      "enabled": true,
+      "arrowParentheses": "asNeeded",
+      "bracketSameLine": false,
+      "bracketSpacing": true,
+      "quoteProperties": "asNeeded",
+      "semicolons": "always",
+      "trailingCommas": "es5",
+      "attributePosition": "auto",
+      "jsxQuoteStyle": "double",
+      "quoteStyle": "double"
+    }
+  },
+  "json": {
+    "parser": {
+      "allowComments": true,
+      "allowTrailingCommas": true
+    },
+    "formatter": {
+      "enabled": true,
+      "indentStyle": "space",
+      "indentWidth": 2,
+      "lineWidth": 140,
+      "trailingCommas": "none"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noExplicitAny": "off",
+        "noAsyncPromiseExecutor": "off",
+        "noImplicitAnyLet": "warn"
+      },
+      "performance": {
+        "noDelete": "off"
+      },
+      "style": {
+        "useTemplate": "off",
+        "useConst": "warn",
+        "useDefaultParameterLast": "off",
+        "noUselessElse": "warn",
+        "noParameterAssign": "warn",
+        "useNodejsImportProtocol": "off",
+        "noNonNullAssertion": "off"
+      },
+      "complexity": {
+        "useSimplifiedLogicExpression": "off",
+        "useLiteralKeys": "warn",
+        "useOptionalChain": "warn",
+        "noForEach": "off"
+      },
+      "correctness": {
+        "noUnreachable": "warn",
+        "noUnusedVariables": "warn",
+        "noUnusedImports": "warn"
+      },
+      "security": {}
+    }
+  }
+}
