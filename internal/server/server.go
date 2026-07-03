@@ -223,6 +223,33 @@ func desktopAppDirName(isDev bool) string {
 	return "encv"
 }
 
+// kernelDataPath 返回 kernel Ledger + CheckpointStore 的持久化目录。
+//
+// 平台/env 矩阵与 mountRegistryDataPath 对齐：
+//
+//	平台    环境              路径
+//	─────  ───────────       ──────────────────────────────────────────
+//	Android 任意              <ENCV_APP_FILES_DIR>/.encv/kernel
+//	Linux   dev               $XDG_DATA_HOME/encv-dev/kernel
+//	Linux   production        $XDG_DATA_HOME/encv/kernel
+//	macOS   dev               $HOME/Library/Application Support/encv-dev/kernel
+//	macOS   production        $HOME/Library/Application Support/encv/kernel
+//	Windows dev               %LOCALAPPDATA%\encv-dev\kernel
+//	Windows production        %LOCALAPPDATA%\encv\kernel
+//
+// 优先级：ENCV_KERNEL_DIR（明确指定） > 派生默认值。
+//
+// 用途：FileJobLedger + FileCheckpointStore 跨进程持久化（WorkManager 风格断点续跑）。
+func kernelDataPath() string {
+	if v := os.Getenv("ENCV_KERNEL_DIR"); v != "" {
+		return v
+	}
+	// 复用 mountRegistryDataPath 的目录派生逻辑，取同级 .encv/kernel 子目录
+	mountsFile := mountRegistryDataPath(nil) // cfg 不影响 env-driven 路径
+	parent := filepath.Dir(mountsFile)        // .../.encv  或 .../encv(-dev)
+	return filepath.Join(parent, "kernel")
+}
+
 // resolveUserPath 解析用户路径为绝对路径（multi-mount-aware）。
 //
 // 优先级：
@@ -367,6 +394,53 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	} else {
 		slog.Info("kernel: all adapters registered and initialized",
 			"services", kernelListNames())
+	}
+
+	// 🆕 2026-07-03：特色微服务内核 Lifecycle 接入（spec android-workmanager-split-start-stop Phase 1.3）
+	//
+	// 用户硬约束：
+	//   - 启动 ≤ 500ms / 停止 ≤ 200ms
+	//   - 内存守卫（避免沙箱 OOM）
+	//   - 不消耗 TCP 端口（纯进程内）
+	//   - Stop 时 in-flight job 委托给 Ledger（下次 Start 时 Restore 续跑）
+	//
+	// feature flag：ENCV_USE_KERNEL_POOL=1 启用（默认关闭，渐进式迁移）
+	// 未启用时 s.kernelLifecycle = nil，HTTP 端点返回 503 Service Unavailable。
+	//
+	// 构造但不启动 —— Start() 在路由注册后调 kernelLifecycle.Start(ctx)，
+	// 让 Restore 跑在端口监听前（避免 Restore 未完成时业务请求打进来）。
+	if os.Getenv("ENCV_USE_KERNEL_POOL") == "1" {
+		kdir := kernelDataPath()
+		ledger, err := kernel.NewFileJobLedger(filepath.Join(kdir, "ledger"))
+		if err != nil {
+			slog.Warn("kernel: FileJobLedger init failed, lifecycle disabled",
+				"dir", kdir, "err", err)
+		} else {
+			store, err := kernel.NewFileCheckpointStore(filepath.Join(kdir, "checkpoints"))
+			if err != nil {
+				slog.Warn("kernel: FileCheckpointStore init failed, lifecycle disabled",
+					"dir", kdir, "err", err)
+			} else {
+				// 单 pool 承载 task-manager 类 job（FTS 重建 / 批量加密 / 向量索引）
+				// worker 数 4：长任务并发上限，避免沙箱 OOM
+				// QueueSize 64：突发请求缓冲
+				// MemGuardMB 256：接近 256MB 时 MemoryGuard 标记 triggered（由 Lifecycle.Stop 决定是否停）
+				s.kernelPool = kernel.NewPool("task-manager", 4, kernel.PoolConfig{
+					QueueSize: 64,
+					Ledger:    ledger,
+				})
+				s.kernelLifecycle = kernel.NewLifecycle(kernel.LifecycleConfig{
+					Name:       "main",
+					Pools:      []*kernel.Pool{s.kernelPool},
+					Ledger:     ledger,
+					Store:      store,
+					MemGuardMB: 256,
+					Graceful:   100 * time.Millisecond,
+				})
+				slog.Info("kernel: lifecycle constructed (not started yet)",
+					"dir", kdir, "pools", 1, "memGuardMB", 256)
+			}
+		}
 	}
 
 	// 剧本外置 spec：若 agent_settings.mock_scenarios_dir 非空，
@@ -591,6 +665,25 @@ func (s *Server) Start(version string) (string, error) {
 	r := NewGinApp(s.cfg)
 
 	RegisterRoutes(s, r)
+
+	// 🆕 2026-07-03：启动 kernel Lifecycle（含 Restore 未完成 job）
+	//
+	// 放在 RegisterRoutes 之后、端口监听之前：
+	//   - 路由已就绪：Restore 失败时 /api/kernel/lifecycle/stats 可查诊断
+	//   - 端口未监听：外部请求还打不进来，Restore 期间不会有业务竞争
+	//
+	// Start 耗时目标 ≤ 500ms（实测通常 < 50ms，Restore 取决于 pending job 数）。
+	// 失败不阻断 HTTP 启动 —— kernel 降级为 not-ready，业务调 kernel.Call 返回 ErrKernelNotReady。
+	if s.kernelLifecycle != nil {
+		startCtx := context.Background()
+		if err := s.kernelLifecycle.Start(startCtx); err != nil {
+			slog.Warn("kernel: lifecycle Start failed (continuing in degraded mode)",
+				"err", err)
+		} else {
+			slog.Info("kernel: lifecycle started",
+				"pools", len(s.kernelLifecycle.Stats().Pools))
+		}
+	}
 
 	s.InitWebDAV(r)
 

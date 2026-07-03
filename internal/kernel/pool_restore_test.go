@@ -300,7 +300,16 @@ func (s *alwaysFailService) Call(ctx ServiceContext, method string, payload json
 	return nil, errors.New("always fails")
 }
 
-func TestPool_CancelMarksCancelled(t *testing.T) {
+// TestPool_Stop_DelegatesInflightToLedger 验证 pool.Stop() 把 in-flight job 委托给 Ledger 为 "submitted"（可 Restore）。
+//
+// 2026-07-03 语义更新（用户硬约束"正确处理停止后续处理委托"）：
+//   - 旧语义：pool.Stop() → in-flight job 标记 "cancelled"（terminal，不 Restore）
+//   - 新语义：pool.Stop() → in-flight job 委托为 "submitted"（pending，下次 Start 时 Restore 续跑）
+//
+// 区分两种 cancel：
+//   1. pool 关闭（p.closed=true）→ ledgerOnDelegate（status=submitted，可 Restore）
+//   2. 用户主动 cancel（CancelJob）→ ledgerOnCancel（status=cancelled，terminal）— 见 TestPool_CancelJob_MarksCancelled
+func TestPool_Stop_DelegatesInflightToLedger(t *testing.T) {
 	Unregister("ledger.cancel")
 	defer Unregister("ledger.cancel")
 	Register(&slowService{name: "ledger.cancel", delay: 30 * time.Second})
@@ -324,7 +333,7 @@ func TestPool_CancelMarksCancelled(t *testing.T) {
 	})
 
 	time.Sleep(100 * time.Millisecond) // 让 worker 拿到 job
-	pool.Stop()                        // cancel in-flight
+	pool.Stop()                        // cancel in-flight → 委托给 Ledger
 
 	select {
 	case <-done:
@@ -337,8 +346,55 @@ func TestPool_CancelMarksCancelled(t *testing.T) {
 	if !ok {
 		t.Fatal("expected job in ledger")
 	}
+	if stored.Status != JobStatusSubmitted {
+		t.Errorf("Status = %q, want submitted (delegated for Restore)", stored.Status)
+	}
+}
+
+// TestPool_CancelJob_MarksCancelled 验证用户主动 CancelJob 立即标记 job 为 "cancelled"（terminal）。
+//
+// 这是与 pool.Stop() 委托语义的对比测试：
+//   - pool.Stop() → submitted（pending，可 Restore）— 见 TestPool_Stop_DelegatesInflightToLedger
+//   - CancelJob() → cancelled（terminal，不 Restore）
+//
+// 注意：CancelJob 是 "best effort"（见 pool.go CancelJob 文档）—— 只标记 ledger，
+// 不真正中断 in-flight job（pool 的 ctx 是 pool 级别，不是 job 级别）。
+// 真正的中断依赖 svc.Call 内部检查 ctx.Done() 或 pool.Stop()。
+// 所以本测试只验证 CancelJob 立即标记 ledger，不等 job 自然完成（30s 太慢）。
+func TestPool_CancelJob_MarksCancelled(t *testing.T) {
+	Unregister("ledger.usercancel")
+	defer Unregister("ledger.usercancel")
+	Register(&slowService{name: "ledger.usercancel", delay: 30 * time.Second})
+
+	ledger := NewMemoryJobLedger()
+	pool := NewPool("test-user-cancel", 1, PoolConfig{
+		QueueSize:    10,
+		Ledger:       ledger,
+	})
+	pool.Start(context.Background())
+	defer pool.Stop() // 清理：cancel in-flight job（会委托为 submitted，但测试已断言完毕）
+
+	ctx := NewContext(context.Background(), WithTraceID("trace-user-cancel"))
+	pool.Submit(ctx, Job{
+		ID:      "juc",
+		Service: "ledger.usercancel",
+		Method:  "m",
+	})
+
+	time.Sleep(100 * time.Millisecond) // 让 worker 拿到 job（ledgerOnStart 标记 running）
+
+	// 用户主动 cancel（不是 pool.Stop）—— 立即标记 ledger 为 cancelled
+	if !pool.CancelJob("trace-user-cancel") {
+		t.Fatal("CancelJob returned false (job not found in ledger)")
+	}
+
+	// 立即读 ledger（不等 job 完成，因为 CancelJob 不中断 in-flight job）
+	stored, ok := ledger.Snapshot()["trace-user-cancel"]
+	if !ok {
+		t.Fatal("expected job in ledger")
+	}
 	if stored.Status != JobStatusCancelled {
-		t.Errorf("Status = %q, want cancelled", stored.Status)
+		t.Errorf("Status = %q, want cancelled (terminal, user-initiated)", stored.Status)
 	}
 }
 

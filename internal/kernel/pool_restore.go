@@ -463,3 +463,31 @@ func (p *Pool) ledgerOnCancel(ctx ServiceContext) {
 		fmt.Printf("[kernel] ledger.MarkStatus(cancelled) failed: traceID=%s err=%v\n", ctx.TraceID(), err)
 	}
 }
+
+// ledgerOnDelegate pool 关闭时把 in-flight job 委托给 Ledger（status=submitted，可 Restore）。
+//
+// 与 ledgerOnCancel 的区别：
+//   - ledgerOnCancel: 用户主动 cancel → status=cancelled（terminal，不 Restore）
+//   - ledgerOnDelegate: pool 关闭 → status=submitted（pending，下次 Start 时 Restore 续跑）
+//
+// 保存完整 job spec（含 attempts），让 Restore 后的续跑能延续重试计数。
+func (p *Pool) ledgerOnDelegate(ctx ServiceContext, env jobEnvelope) {
+	if p.cfg.Ledger == nil {
+		return
+	}
+	traceID := ctx.TraceID()
+	if traceID == "" {
+		return
+	}
+	stored := StoredJob{
+		TraceID:  traceID,
+		PoolName: p.name,
+		Job:      env.job,
+		Status:   JobStatusSubmitted,
+		SavedAt:  time.Now(),
+		Attempts: env.attempts,
+	}
+	if err := p.cfg.Ledger.SaveJob(traceID, stored); err != nil {
+		fmt.Printf("[kernel] ledgerOnDelegate: SaveJob failed: traceID=%s err=%v\n", traceID, err)
+	}
+}

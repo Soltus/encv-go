@@ -26,6 +26,31 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.GET("/api/kernel/services", s.handleKernelServicesGin)
 	r.GET("/api/kernel/health", s.handleKernelHealthGin)
 	r.POST("/api/kernel/call", s.handleKernelCallGin)
+
+	// 🆕 2026-07-03：特色微服务内核 Lifecycle HTTP API（spec android-workmanager-split-start-stop Phase 1.3）
+	//   - GET  /api/kernel/pools              : 列出受管 Pool 状态
+	//   - POST /api/kernel/restore            : 手动触发 Restore（dev only，Stop+Start 循环）
+	//   - GET  /api/kernel/lifecycle/stats    : Lifecycle 启停耗时 + 内存 + MemGuard
+	//   - POST /api/kernel/lifecycle/start    : 启动 Lifecycle（dev only）
+	//   - POST /api/kernel/lifecycle/stop     : 停止 Lifecycle（dev only，委托 in-flight 给 Ledger）
+	//
+	// 用户硬约束（spec §六）：
+	//   - 启动 ≤ 500ms / 停止 ≤ 200ms（lifecycle/stats 暴露 lastStartDurationMs / lastStopDurationMs）
+	//   - 内存守卫（lifecycle/stats 暴露 memGuardEnabled / memGuardTriggered）
+	//   - 不消耗 TCP 端口（Lifecycle 是进程内对象）
+	r.GET("/api/kernel/pools", s.handleKernelPoolsGin)
+	r.POST("/api/kernel/restore", s.handleKernelRestoreGin)
+	r.GET("/api/kernel/lifecycle/stats", s.handleKernelLifecycleStatsGin)
+	r.POST("/api/kernel/lifecycle/start", s.handleKernelLifecycleStartGin)
+	r.POST("/api/kernel/lifecycle/stop", s.handleKernelLifecycleStopGin)
+	// 🆕 异步 job 提交（dev only）— Cypress restart-restore 测试用
+	r.POST("/api/kernel/submit", s.handleKernelSubmitGin)
+
+	// 🆕 2026-07-03：dev-only 进程自杀端点（spec android-workmanager-split-start-stop Phase 1.6.2）
+	//   - POST /api/dev/kill-backend : 触发 os.Exit(1)，pm2 自动重启
+	//   - 用途：Cypress E2E kernel-restart-restore 测试模拟进程崩溃
+	//   - 非 dev 模式返回 403
+	r.POST("/api/dev/kill-backend", s.handleKillBackendGin)
 	r.GET("/stream", gin.WrapF(s.handleStreamRequest))
 	r.GET("/decrypt", gin.WrapF(s.handleStreamRequest))
 	r.GET("/preview/*filepath", gin.WrapH(http.StripPrefix("/preview", web.PreviewHandler())))

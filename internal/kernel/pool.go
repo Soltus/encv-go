@@ -144,9 +144,23 @@ func NewPool(name string, size int, cfg PoolConfig) *Pool {
 }
 
 // Start 启动 worker。ctx 用于控制 pool 整体生命周期。
+//
+// 🆕 2026-07-03 重启支持：如果 pool 之前被 Stop 过（closed=true, jobCh 已关闭），
+// 自动重置内部状态（新 jobCh + clear closed flag），让 pool 可被反复启停。
+// 这满足用户硬约束"频繁启停特色微服务内核"——Lifecycle.Stop + Start 循环时，
+// 受管的 Pool 不需要重新构造，只需 Start() 重置即可。
 func (p *Pool) Start(ctx context.Context) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	// 重启支持：如果 pool 之前被 Stop 过，重置内部状态
+	if p.closed.Load() {
+		queueSize := p.cfg.QueueSize
+		if queueSize < 1 {
+			queueSize = 1
+		}
+		p.jobCh = make(chan jobEnvelope, queueSize)
+		p.closed.Store(false)
 	}
 	p.ctx, p.cancel = context.WithCancel(ctx)
 	for i := 0; i < p.size; i++ {
@@ -174,45 +188,39 @@ func (p *Pool) Stop() {
 //
 // grace ≤ 0 时等价于 Stop()（立即 cancel + 等待 worker drain）。
 // 注意：即使 grace=0，worker 也会因为 ctx 被 cancel 而快速退出（假设 svc 尊重 ctx）。
+//
+// 实现说明（2026-07-03 修复 WaitGroup race）：
+//   - 旧实现 spawn goroutine 调 wg.Wait() + select grace，grace 超时后主路径又调 wg.Wait()
+//     → "sync: WaitGroup is reused before previous Wait has returned" panic
+//   - 新实现 grace 窗口只 sleep（不 spawn wg.Wait goroutine），grace 后统一 cancel + close + wait
+//     workers 在 grace 期间继续处理 job，自然完成的算"完成"；未完成的被 cancel 后退出
 func (p *Pool) StopWithTimeout(grace time.Duration) error {
 	if !p.closed.CompareAndSwap(false, true) {
 		return nil // 已关闭（幂等）
 	}
 
-	// 阶段 1：标记 closed，新 Submit 立即返回 ErrPoolClosed
-	// （closed 已由 CAS 设置）
+	// 阶段 1：标记 closed（新 Submit 被拒绝）— CAS 已做
 
-	// 阶段 2：给 in-flight job 一个 grace 窗口（不 cancel ctx，让它们自然完成）
+	// 阶段 2：grace 窗口 — 给 in-flight job 时间自然完成
+	// 不 spawn goroutine 调 wg.Wait()（会和后面的 wg.Wait() race）
+	// 只 sleep grace，让 worker 有机会处理完当前 job
 	if grace > 0 {
-		waitCh := make(chan struct{})
-		go func() {
-			p.wg.Wait() // 等所有 worker 退出（但 worker 此时还在跑 job，不会退出）
-			close(waitCh)
-		}()
-		// 这里不真的等 wg，而是等 grace 超时
-		// worker 在 grace 期间继续处理 job，自然完成的算"完成"
-		// grace 超时后我们 cancel ctx，worker 收到 ctx.Done() 后退出
-		select {
-		case <-waitCh:
-			// 所有 worker 在 grace 内自然退出（罕见，pool 空闲时）
-			close(p.jobCh)
-			return nil
-		case <-time.After(grace):
-			// 进入强制阶段
-		}
+		time.Sleep(grace)
 	}
 
 	// 阶段 3：把 jobCh 中尚未处理的 job 委托给 Ledger（如果有 Ledger）
+	// 注意：此时 worker 可能还在拉 jobCh，drainPendingToLedger 和 worker 竞争拉取
+	// 谁先拉到谁处理，未拉到的被 ledger 标记为 submitted（下次 Restore 续跑）
 	if p.cfg.Ledger != nil {
 		p.drainPendingToLedger()
 	}
 
-	// 阶段 4：cancel ctx（worker 收到后立即退出）
+	// 阶段 4：cancel ctx（worker 收到 ctx.Done() 后立即退出当前 job）
 	if p.cancel != nil {
 		p.cancel()
 	}
 
-	// 阶段 5：关闭 jobCh + 等 worker
+	// 阶段 5：关闭 jobCh + 等 worker 全部退出
 	close(p.jobCh)
 	p.wg.Wait()
 	return nil
@@ -458,7 +466,17 @@ func (p *Pool) execute(workerID int, env jobEnvelope) {
 
 	// 最终失败：区分 cancel vs 真失败
 	if isCancelled(childCtx) {
-		p.ledgerOnCancel(childCtx)
+		// 🆕 2026-07-03 修复：pool 关闭时的 cancel 应委托给 Ledger（pending），
+		// 而不是标记 "cancelled"（terminal）。这样下次 Start → Restore 能续跑。
+		//
+		// 区分两种 cancel：
+		//   1. pool 关闭（p.closed=true）→ 委托给 Ledger（status=submitted，可 Restore）
+		//   2. 用户主动 cancel（CancelJob）→ 标记 "cancelled"（terminal，不 Restore）
+		if p.closed.Load() {
+			p.ledgerOnDelegate(childCtx, env)
+		} else {
+			p.ledgerOnCancel(childCtx)
+		}
 	} else {
 		p.ledgerOnFinalFailure(childCtx)
 	}
