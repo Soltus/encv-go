@@ -3,9 +3,9 @@ package simverse
 type PerformanceTier int
 
 const (
-	PerfTierForeground PerformanceTier = 0
-	PerfTierIdle       PerformanceTier = 1
-	PerfTierDeepIdle   PerformanceTier = 2
+	PerfTierBackground   PerformanceTier = 0
+	PerfTierForeground   PerformanceTier = 1
+	PerfTierFgIdle       PerformanceTier = 2
 )
 
 type PerfTierConfig struct {
@@ -17,38 +17,42 @@ type PerfTierConfig struct {
 	DetailLevel    int
 	SubSimActive   bool
 	SubSimDepth    int
+	APIBurstLimit  int
 }
 
 var PerfTiers = [...]PerfTierConfig{
 	{
-		Tier:         PerfTierForeground,
-		Name:         "foreground",
+		Tier:         PerfTierBackground,
+		Name:         "background",
 		EventRateMul: 0.6,
 		CatchUpBatch: 100,
-		CacheSize:    10000,
+		CacheSize:    5000,
+		DetailLevel:  1,
+		SubSimActive: false,
+		SubSimDepth:  0,
+		APIBurstLimit: 10,
+	},
+	{
+		Tier:         PerfTierForeground,
+		Name:         "foreground",
+		EventRateMul: 1.0,
+		CatchUpBatch: 500,
+		CacheSize:    15000,
 		DetailLevel:  3,
 		SubSimActive: true,
 		SubSimDepth:  2,
+		APIBurstLimit: 100,
 	},
 	{
-		Tier:         PerfTierIdle,
-		Name:         "idle",
-		EventRateMul: 1.0,
-		CatchUpBatch: 500,
-		CacheSize:    20000,
-		DetailLevel:  2,
-		SubSimActive: true,
-		SubSimDepth:  1,
-	},
-	{
-		Tier:         PerfTierDeepIdle,
-		Name:         "deep_idle",
+		Tier:         PerfTierFgIdle,
+		Name:         "foreground_idle",
 		EventRateMul: 3.0,
 		CatchUpBatch: 2000,
-		CacheSize:    50000,
-		DetailLevel:  1,
+		CacheSize:    30000,
+		DetailLevel:  2,
 		SubSimActive: true,
 		SubSimDepth:  3,
+		APIBurstLimit: 50,
 	},
 }
 

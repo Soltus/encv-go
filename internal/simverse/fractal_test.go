@@ -116,9 +116,9 @@ func TestFractalWorld_PerformanceTiers(t *testing.T) {
 		tier PerformanceTier
 		desc string
 	}{
-		{PerfTierForeground, "前台（用户活跃）"},
-		{PerfTierIdle, "后台闲时（系统充足）"},
-		{PerfTierDeepIdle, "深度闲时（充电/深夜）"},
+		{PerfTierBackground, "后台（60%，降频省电）"},
+		{PerfTierForeground, "前台（100%，正常体验）"},
+		{PerfTierFgIdle, "前台闲时（300%，加速推演）"},
 	}
 
 	for _, tc := range tiers {
@@ -184,7 +184,7 @@ func TestFractalWorld_ScaleSimulation(t *testing.T) {
 
 	t.Logf("")
 	t.Logf("=== 1000 tick 世界推演 ===")
-	world.SetPerformanceTier(PerfTierIdle)
+	world.SetPerformanceTier(PerfTierForeground)
 	runtime.GC()
 	time.Sleep(10 * time.Millisecond)
 
