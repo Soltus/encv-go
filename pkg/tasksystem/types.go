@@ -40,6 +40,25 @@ const (
 	// 系统维护任务类型（非文件操作，走任务系统以利用进度/耗时/取消能力）
 	// 2026-07-03：FTS 索引重建任务化（spec fts-rebuild-task）
 	TaskTypeRebuildFTSIndex TaskType = "rebuild_fts_index"
+
+	// ─── 微服务任务类型（2026-07-03 spec microservice-kernel-task-system） ───
+	//
+	// 所有通过微内核调用的服务都可以记录为任务，用于审计、性能分析、多租户统计。
+	// 命名约定：{service}.{method}
+	//
+	// 常见类型示例（非封闭枚举，服务可动态注册）：
+	TaskTypeFTSRebuild    TaskType = "fts.rebuild"
+	TaskTypeFTSSearch     TaskType = "fts.search"
+	TaskTypeVectorBuild   TaskType = "vector.build_index"
+	TaskTypeVectorSearch  TaskType = "vector.search"
+	TaskTypeCacheClean    TaskType = "cache.clean"
+	TaskTypeDBBackup      TaskType = "db.backup"
+	TaskTypeDBRestore     TaskType = "db.restore"
+	TaskTypeDBVacuum      TaskType = "db.vacuum"
+	TaskTypePluginInstall TaskType = "plugin.install"
+	TaskTypePluginUninstall TaskType = "plugin.uninstall"
+	TaskTypeToolInvoke    TaskType = "tool.invoke"
+	TaskTypeSystemHealth  TaskType = "system.health"
 )
 
 // IsRollback 判断任务类型是否为回滚任务。
@@ -50,6 +69,19 @@ func (t TaskType) IsRollback() bool {
 		TaskTypeRollbackMove, TaskTypeRollbackCopy,
 		TaskTypeRollbackRename, TaskTypeRollbackDelete:
 		return true
+	}
+	return false
+}
+
+// IsMicroservice 判断任务类型是否为微服务任务（{service}.{method} 格式）。
+// 微服务任务通过微内核调用产生，用于审计和性能分析。
+func (t TaskType) IsMicroservice() bool {
+	// 简单判断：包含 "." 的就是微服务任务类型
+	// （加解密任务类型都是单个单词，不含点）
+	for i := 0; i < len(t); i++ {
+		if t[i] == '.' {
+			return true
+		}
 	}
 	return false
 }
@@ -112,6 +144,21 @@ type TaskData struct {
 	// 回滚相关字段
 	RollbackOf   string `json:"rollbackOf,omitempty"`   // 回滚任务指向原任务 ID
 	OriginalPath string `json:"originalPath,omitempty"` // 原始路径（回滚用）
+
+	// ─── 微服务任务字段（2026-07-03 spec microservice-kernel-task-system） ───
+	//
+	// 微服务任务（IsMicroservice() == true）才会填充这些字段。
+	// 加解密/文件操作任务这些字段为空。
+
+	ServiceName  string `json:"serviceName,omitempty"`  // 微服务名（冗余，type 里也有）
+	MethodName   string `json:"methodName,omitempty"`   // 方法名（冗余，type 里也有）
+	TenantID     string `json:"tenantId,omitempty"`     // 租户 ID（多租户场景）
+	DurationMs   int64  `json:"durationMs,omitempty"`   // 执行耗时（毫秒）
+	InputJSON    string `json:"inputJSON,omitempty"`    // 输入参数 JSON（可选，避免敏感数据）
+	OutputJSON   string `json:"outputJSON,omitempty"`   // 输出结果 JSON（可选）
+	Attempts     int    `json:"attempts,omitempty"`     // 重试次数
+	Priority     int    `json:"priority,omitempty"`     // 优先级
+	TagsJSON     string `json:"tagsJSON,omitempty"`     // 自定义标签 JSON（灵活扩展）
 }
 
 // TaskFilter 任务查询过滤。
@@ -122,8 +169,13 @@ type TaskFilter struct {
 	TriggeredBy []string
 	RunID       string
 	RollbackOf  string // 查询某任务的回滚任务
-	Limit       int
-	Offset      int
+
+	// ─── 微服务任务过滤字段（2026-07-03） ───
+	ServiceName string // 按微服务名过滤
+	TenantID    string // 按租户 ID 过滤
+
+	Limit  int
+	Offset int
 }
 
 // Snapshot 任务执行前后的状态快照。

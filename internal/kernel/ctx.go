@@ -217,6 +217,26 @@ func (c *serviceCtx) Restore(name string, dst any) error {
 	return json.Unmarshal(data, dst)
 }
 
+// setValue 设置自定义值（线程安全）。
+func (c *serviceCtx) setValue(key, val any) {
+	c.valuesMu.Lock()
+	defer c.valuesMu.Unlock()
+	if c.values == nil {
+		c.values = make(map[any]any)
+	}
+	c.values[key] = val
+}
+
+// getValue 获取自定义值（线程安全）。
+func (c *serviceCtx) getValue(key any) any {
+	c.valuesMu.RLock()
+	defer c.valuesMu.RUnlock()
+	if c.values == nil {
+		return nil
+	}
+	return c.values[key]
+}
+
 // ─── context.Value key ────────────────────────────────────
 
 type ctxKey int

@@ -48,10 +48,86 @@ func New(dbPath string) (*Store, error) {
 	return store, nil
 }
 
-// initSchema 创建表和索引（IF NOT EXISTS，幂等）。
+// initSchema 创建表和索引（IF NOT EXISTS，幂等），
+// 并执行版本迁移（ALTER TABLE 加新列）。
 func (s *Store) initSchema() error {
-	_, err := s.db.Exec(schemaSQL)
-	return err
+	if _, err := s.db.Exec(schemaSQL); err != nil {
+		return err
+	}
+	return s.migrateSchema()
+}
+
+// migrateSchema 执行 schema 迁移（加新列）。
+// 用 PRAGMA table_info 检查列是否存在，不存在才 ALTER TABLE ADD COLUMN。
+// SQLite 不支持 DROP COLUMN，所以只加不减。
+func (s *Store) migrateSchema() error {
+	// 获取当前所有列名
+	rows, err := s.db.Query("PRAGMA table_info(tasks)")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	cols := make(map[string]bool)
+	for rows.Next() {
+		var (
+			cid       int
+			name      string
+			colType   string
+			notnull   int
+			dfltValue sql.NullString
+			pk        int
+		)
+		if err := rows.Scan(&cid, &name, &colType, &notnull, &dfltValue, &pk); err != nil {
+			return err
+		}
+		cols[name] = true
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// 需要添加的新列（微服务任务字段）
+	newCols := []struct {
+		name string
+		def  string
+	}{
+		{"service_name", "TEXT"},
+		{"method_name", "TEXT"},
+		{"tenant_id", "TEXT"},
+		{"duration_ms", "INTEGER DEFAULT 0"},
+		{"input_json", "TEXT"},
+		{"output_json", "TEXT"},
+		{"attempts", "INTEGER DEFAULT 0"},
+		{"priority", "INTEGER DEFAULT 0"},
+		{"tags_json", "TEXT"},
+	}
+
+	for _, col := range newCols {
+		if !cols[col.name] {
+			_, err := s.db.Exec(fmt.Sprintf("ALTER TABLE tasks ADD COLUMN %s %s", col.name, col.def))
+			if err != nil {
+				return fmt.Errorf("add column %s: %w", col.name, err)
+			}
+		}
+	}
+
+	// 添加新索引
+	indexes := []struct {
+		name string
+		sql  string
+	}{
+		{"idx_tasks_service_name", "CREATE INDEX IF NOT EXISTS idx_tasks_service_name ON tasks(service_name)"},
+		{"idx_tasks_tenant_id", "CREATE INDEX IF NOT EXISTS idx_tasks_tenant_id ON tasks(tenant_id)"},
+		{"idx_tasks_duration_ms", "CREATE INDEX IF NOT EXISTS idx_tasks_duration_ms ON tasks(duration_ms)"},
+	}
+	for _, idx := range indexes {
+		if _, err := s.db.Exec(idx.sql); err != nil {
+			return fmt.Errorf("create index %s: %w", idx.name, err)
+		}
+	}
+
+	return nil
 }
 
 const schemaSQL = `
@@ -85,13 +161,25 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at DATETIME NOT NULL,
     completed_at DATETIME,
     rollback_of TEXT,
-    original_path TEXT
+    original_path TEXT,
+    service_name TEXT,
+    method_name TEXT,
+    tenant_id TEXT,
+    duration_ms INTEGER DEFAULT 0,
+    input_json TEXT,
+    output_json TEXT,
+    attempts INTEGER DEFAULT 0,
+    priority INTEGER DEFAULT 0,
+    tags_json TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_run_id ON tasks(run_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_triggered_by ON tasks(triggered_by);
 CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_rollback_of ON tasks(rollback_of);
+CREATE INDEX IF NOT EXISTS idx_tasks_service_name ON tasks(service_name);
+CREATE INDEX IF NOT EXISTS idx_tasks_tenant_id ON tasks(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_duration_ms ON tasks(duration_ms);
 
 CREATE TABLE IF NOT EXISTS trash (
     id TEXT PRIMARY KEY,
@@ -181,8 +269,10 @@ func (s *Store) CreateTask(task tasksystem.TaskData) error {
 			extra_fields, steps, mount_id, mount_sub_path,
 			target_mount_id, target_mount_sub_path,
 			password, secondary_password,
-			created_at, completed_at, rollback_of, original_path
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			created_at, completed_at, rollback_of, original_path,
+			service_name, method_name, tenant_id, duration_ms,
+			input_json, output_json, attempts, priority, tags_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		task.ID, string(task.Type), string(task.Status),
 		task.SourcePath, task.TargetPath, task.OutputPath,
 		task.PluginName, task.TriggeredBy, task.RunID, task.Progress, task.Phase,
@@ -192,6 +282,8 @@ func (s *Store) CreateTask(task tasksystem.TaskData) error {
 		task.TargetMountID, task.TargetMountSubPath,
 		task.Password, task.SecondaryPassword,
 		task.CreatedAt, task.CompletedAt, task.RollbackOf, task.OriginalPath,
+		task.ServiceName, task.MethodName, task.TenantID, task.DurationMs,
+		task.InputJSON, task.OutputJSON, task.Attempts, task.Priority, task.TagsJSON,
 	)
 	return err
 }
@@ -240,6 +332,14 @@ func (s *Store) ListTasks(filter tasksystem.TaskFilter) ([]tasksystem.TaskData, 
 		where = append(where, "rollback_of = ?")
 		args = append(args, filter.RollbackOf)
 	}
+	if filter.ServiceName != "" {
+		where = append(where, "service_name = ?")
+		args = append(args, filter.ServiceName)
+	}
+	if filter.TenantID != "" {
+		where = append(where, "tenant_id = ?")
+		args = append(args, filter.TenantID)
+	}
 
 	query := tasksSelectAll
 	if len(where) > 0 {
@@ -283,7 +383,9 @@ func (s *Store) UpdateTask(task tasksystem.TaskData) error {
 			extra_fields = ?, steps = ?, mount_id = ?, mount_sub_path = ?,
 			target_mount_id = ?, target_mount_sub_path = ?,
 			password = ?, secondary_password = ?,
-			completed_at = ?, rollback_of = ?, original_path = ?
+			completed_at = ?, rollback_of = ?, original_path = ?,
+			service_name = ?, method_name = ?, tenant_id = ?, duration_ms = ?,
+			input_json = ?, output_json = ?, attempts = ?, priority = ?, tags_json = ?
 		WHERE id = ?`,
 		string(task.Type), string(task.Status),
 		task.SourcePath, task.TargetPath, task.OutputPath,
@@ -294,6 +396,8 @@ func (s *Store) UpdateTask(task tasksystem.TaskData) error {
 		task.TargetMountID, task.TargetMountSubPath,
 		task.Password, task.SecondaryPassword,
 		task.CompletedAt, task.RollbackOf, task.OriginalPath,
+		task.ServiceName, task.MethodName, task.TenantID, task.DurationMs,
+		task.InputJSON, task.OutputJSON, task.Attempts, task.Priority, task.TagsJSON,
 		task.ID,
 	)
 	return err
@@ -519,7 +623,9 @@ const tasksSelectAll = `
 		extra_fields, steps, mount_id, mount_sub_path,
 		target_mount_id, target_mount_sub_path,
 		password, secondary_password,
-		created_at, completed_at, rollback_of, original_path
+		created_at, completed_at, rollback_of, original_path,
+		service_name, method_name, tenant_id, duration_ms,
+		input_json, output_json, attempts, priority, tags_json
 	FROM tasks`
 
 // scanner 兼容 *sql.Row 和 *sql.Rows 的 Scan 方法。
@@ -545,6 +651,8 @@ func scanTask(s scanner) (tasksystem.TaskData, error) {
 		&task.TargetMountID, &task.TargetMountSubPath,
 		&task.Password, &task.SecondaryPassword,
 		&task.CreatedAt, &completedAt, &task.RollbackOf, &task.OriginalPath,
+		&task.ServiceName, &task.MethodName, &task.TenantID, &task.DurationMs,
+		&task.InputJSON, &task.OutputJSON, &task.Attempts, &task.Priority, &task.TagsJSON,
 	)
 	if err != nil {
 		return tasksystem.TaskData{}, err

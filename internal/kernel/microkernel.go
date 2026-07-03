@@ -40,10 +40,12 @@ type MicroKernel struct {
 	memGuard *MemoryGuard
 	memGuardMB int
 
-	taskRecorder *TaskRecorder // 任务记录中间件（可选）
-
 	defaultIdleTimeout time.Duration
 	defaultGraceful    time.Duration
+
+	// taskRecorder 任务记录器配置（nil = 不记录）。
+	// 非 nil 时，所有 Call 调用都会被记录为任务写入 Store。
+	taskRecorder *TaskRecordingConfig
 }
 
 // MicroKernelConfig 微内核配置
@@ -52,10 +54,6 @@ type MicroKernelConfig struct {
 	MemGuardMB         int           // 内存守卫阈值（0 = 不启用）
 	DefaultIdleTimeout time.Duration // 默认空闲超时（0 = 不自动停用）
 	DefaultGraceful    time.Duration // 默认优雅停用窗口
-
-	// 任务记录
-	TaskStore     TaskStore // 任务存储（nil = 不记录）
-	RecordTaskIO  bool      // 是否记录输入输出 payload（默认 false，避免敏感数据）
 }
 
 // NewMicroKernel 构造微内核（初始无服务，占内存极小）
@@ -75,9 +73,6 @@ func NewMicroKernel(cfg MicroKernelConfig) *MicroKernel {
 		mk.memGuard = NewMemoryGuard(cfg.MemGuardMB)
 		mk.memGuard.Start()
 	}
-	if cfg.TaskStore != nil {
-		mk.taskRecorder = NewTaskRecorder(cfg.TaskStore, cfg.RecordTaskIO)
-	}
 	return mk
 }
 
@@ -86,9 +81,18 @@ func (mk *MicroKernel) Name() string {
 	return mk.name
 }
 
-// TaskRecorder 返回任务记录器（可能为 nil）
-func (mk *MicroKernel) TaskRecorder() *TaskRecorder {
-	return mk.taskRecorder
+// EnableTaskRecording 启用任务记录（将所有微服务调用写入任务系统）。
+// store 为 nil 时不启用。可以在运行时调用 nil 来关闭。
+func (mk *MicroKernel) EnableTaskRecording(cfg *TaskRecordingConfig) {
+	if cfg != nil && cfg.Store == nil {
+		return
+	}
+	mk.taskRecorder = cfg
+}
+
+// TaskRecordingEnabled 返回是否启用了任务记录。
+func (mk *MicroKernel) TaskRecordingEnabled() bool {
+	return mk.taskRecorder != nil && mk.taskRecorder.Store != nil
 }
 
 // RegisterService 注册一个服务工厂（不实例化）。
@@ -129,7 +133,6 @@ func (mk *MicroKernel) GetServiceLifecycle(name string) (*ServiceLifecycle, bool
 //   - 引用计数 +1/-1
 //   - 租户配额检查（如果 ctx 带 tenant）
 //   - ctx 透传 + 子 ctx 派生
-//   - 任务记录（如果配置了 TaskStore）
 func (mk *MicroKernel) Call(ctx ServiceContext, serviceName, method string, payload any) (json.RawMessage, error) {
 	if ctx == nil {
 		return nil, errors.New("kernel: nil context")
@@ -158,18 +161,11 @@ func (mk *MicroKernel) Call(ctx ServiceContext, serviceName, method string, payl
 		return nil, fmt.Errorf("%w: %s", ErrServiceNotFound, serviceName)
 	}
 
-	// 任务记录包装（如启用）
-	if mk.taskRecorder != nil && mk.taskRecorder.Enabled() {
-		return mk.taskRecorder.WrapSyncCall(ctx, serviceName, method, payload, func(callCtx ServiceContext) (json.RawMessage, error) {
-			return sl.CallWithLifecycle(callCtx, method, payload)
-		})
+	callFn := func() (json.RawMessage, error) {
+		return sl.CallWithLifecycle(ctx, method, payload)
 	}
 
-	resp, err := sl.CallWithLifecycle(ctx, method, payload)
-	if err != nil {
-		return nil, err
-	}
-	return resp, nil
+	return mk.recordMicroserviceTask(ctx, serviceName, method, payload, callFn)
 }
 
 // MkCallTyped 类型安全的调用 wrapper（MicroKernel 版本）

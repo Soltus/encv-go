@@ -8,6 +8,12 @@ import { getApiBaseUrl } from './encv_core'
 
 export type TaskType = 'encrypt' | 'decrypt' | 'move' | 'copy' | 'rename' | 'delete'
   | 'rollback_encrypt' | 'rollback_decrypt' | 'rollback_move' | 'rollback_copy' | 'rollback_rename' | 'rollback_delete'
+  | string
+
+// 微服务任务类型判断：{service}.{method} 格式
+export function isMicroserviceTask(type: string): boolean {
+  return type.includes('.') && !type.startsWith('rollback_')
+}
 
 export type TaskStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled' | 'cancelling'
 
@@ -62,6 +68,26 @@ export interface EncvTask {
   performanceSummary?: PerformanceSummary
   /** 向量搜索相关度分数（0-1，越大越相似）。仅 /api/search/tasks 返回时填充。 */
   searchScore?: number
+
+  // ─── 微服务任务字段（2026-07-03 spec microservice-kernel-task-system） ───
+  /** 微服务名（如 "fts"、"vector"、"cache"、"db"、"plugin"、"tool"、"system"）。仅微服务任务有值。 */
+  serviceName?: string
+  /** 方法名（如 "rebuild"、"search"、"clean"、"backup"）。仅微服务任务有值。 */
+  methodName?: string
+  /** 租户 ID（多租户隔离用）。仅微服务任务有值。 */
+  tenantId?: string
+  /** 执行耗时（毫秒）。仅微服务任务有值。 */
+  durationMs?: number
+  /** 输入参数 JSON。仅微服务任务有值。 */
+  inputJSON?: string
+  /** 输出结果 JSON。仅微服务任务有值。 */
+  outputJSON?: string
+  /** 重试次数。仅微服务任务有值。 */
+  attempts?: number
+  /** 优先级（数字越大越优先）。仅微服务任务有值。 */
+  priority?: number
+  /** 自定义标签 JSON（灵活扩展）。仅微服务任务有值。 */
+  tagsJSON?: string
 }
 
 // 🆕 2026-06-23 Task 6.1：支持分页参数（runId / offset / limit）

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 
+	"github.com/Soltus/encv-go/internal/kernel"
 	"github.com/Soltus/encv-go/pkg/tasksystem"
 	sqlitestore "github.com/Soltus/encv-go/pkg/tasksystem/store/sqlite"
 	tursostore "github.com/Soltus/encv-go/pkg/tasksystem/store/tursogo"
@@ -129,7 +130,31 @@ func (s *Server) InitDatabase(servingDir string) (string, string) {
 			if actualEngine == s.cfg.Database.Engine || s.cfg.Database.Engine == "" {
 				s.dbFallbackReason = ""
 			}
+			// 将 DB 服务注册到微内核（如果启用了微内核）
+			if s.microKernel != nil {
+				s.registerDBService(actualEngine, dbStore)
+			}
 		}
 	}
 	return actualEngine, dbPath
+}
+
+// registerDBService 将数据库服务注册到微内核，并启用任务记录。
+// 这样所有微服务调用都会自动写入任务表（同一个 SQLite/libsql/Turso 数据库）。
+func (s *Server) registerDBService(engine string, store tasksystem.Store) {
+	dbSvc := &kernel.DBService{}
+	dbSvc.SetStore(store)
+	s.microKernel.RegisterService("db", func() (kernel.Service, error) {
+		return dbSvc, nil
+	})
+	slog.Info("kernel: db service registered", "engine", engine)
+
+	// 启用任务记录（所有微内核调用自动写入 tasks 表）
+	s.microKernel.EnableTaskRecording(&kernel.TaskRecordingConfig{
+		Store:              store,
+		DefaultTriggeredBy: "system",
+		RecordErrors:       true,
+		RecordSuccess:      true,
+	})
+	slog.Info("kernel: task recording enabled")
 }

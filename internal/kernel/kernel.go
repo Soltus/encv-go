@@ -52,6 +52,9 @@ import (
 // ErrServiceNotFound 服务未注册
 var ErrServiceNotFound = errors.New("kernel: service not found")
 
+// ErrMethodNotFound 方法不存在
+var ErrMethodNotFound = errors.New("kernel: method not found")
+
 // ErrToolNotFound 工具未注册
 var ErrToolNotFound = errors.New("kernel: tool not found")
 

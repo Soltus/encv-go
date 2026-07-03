@@ -55,9 +55,6 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	//   - GET  /api/kernel/mk/tools                 : AI Agent 工具列表（依赖+状态）
 	//   - POST /api/kernel/mk/tools/invoke          : 调用 AI Agent 工具（按需激活）
 	//   - GET  /api/kernel/mk/stats                 : 微内核整体统计
-	//   - GET  /api/kernel/mk/tasks                 : 任务列表（多维度过滤）
-	//   - GET  /api/kernel/mk/tasks/:id             : 单条任务详情
-	//   - GET  /api/kernel/mk/tasks/stats           : 任务统计
 	r.GET("/api/kernel/mk/services", s.handleKernelMkServicesGin)
 	r.POST("/api/kernel/mk/services/:name/activate", s.handleKernelMkServiceActivateGin)
 	r.POST("/api/kernel/mk/services/:name/deactivate", s.handleKernelMkServiceDeactivateGin)
@@ -65,9 +62,6 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.GET("/api/kernel/mk/tools", s.handleKernelMkToolsGin)
 	r.POST("/api/kernel/mk/tools/invoke", s.handleKernelMkToolInvokeGin)
 	r.GET("/api/kernel/mk/stats", s.handleKernelMkStatsGin)
-	r.GET("/api/kernel/mk/tasks/stats", s.handleKernelMkTasksStatsGin)
-	r.GET("/api/kernel/mk/tasks", s.handleKernelMkTasksListGin)
-	r.GET("/api/kernel/mk/tasks/:id", s.handleKernelMkTasksGetGin)
 
 	// 🆕 2026-07-03：dev-only 进程自杀端点（spec android-workmanager-split-start-stop Phase 1.6.2）
 	//   - POST /api/dev/kill-backend : 触发 os.Exit(1)，pm2 自动重启

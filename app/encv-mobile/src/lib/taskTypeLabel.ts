@@ -34,7 +34,7 @@ export type TaskTypeMeta = {
   /** 是否文件类（与目录项不同） */
   isFileOp: boolean
   /** 类型分组（用于自动聚合展示） */
-  group: 'crypto' | 'file' | 'rollback'
+  group: 'crypto' | 'file' | 'rollback' | 'microservice'
 }
 
 export const TASK_TYPE_META: Record<string, TaskTypeMeta> = {
@@ -159,9 +159,97 @@ const UNKNOWN_META: TaskTypeMeta = {
 }
 
 /**
+ * 🆕 2026-07-03：微服务任务类型元数据
+ *
+ * 微服务任务类型采用 {service}.{method} 命名规范：
+ *   - fts.rebuild / fts.search
+ *   - vector.build_index / vector.search
+ *   - cache.clean
+ *   - db.backup / db.restore / db.vacuum
+ *   - plugin.install / plugin.uninstall
+ *   - tool.invoke
+ *   - system.health
+ *
+ * 按服务名分组获取图标和颜色，无需为每种组合单独注册。
+ */
+
+// 微服务名 → 元数据映射
+const MICROSERVICE_META: Record<string, { label: string; icon: string; color: string }> = {
+  fts:    { label: '全文索引', icon: 'search',      color: 'primary' },
+  vector: { label: '向量搜索', icon: 'git-network', color: 'tertiary' },
+  cache:  { label: '缓存',     icon: 'cloud',        color: 'warning' },
+  db:     { label: '数据库',   icon: 'server',       color: 'success' },
+  plugin: { label: '插件',     icon: 'puzzle',       color: 'secondary' },
+  tool:   { label: '工具',     icon: 'hammer',       color: 'medium' },
+  system: { label: '系统',     icon: 'settings',     color: 'dark' },
+}
+
+// 微服务方法名 → 中文 label 映射
+const MICROSERVICE_METHOD_LABELS: Record<string, string> = {
+  rebuild:      '重建索引',
+  search:       '搜索',
+  build_index:  '构建索引',
+  clean:        '清理',
+  backup:       '备份',
+  restore:      '恢复',
+  vacuum:       'VACUUM',
+  install:      '安装',
+  uninstall:    '卸载',
+  invoke:       '调用',
+  health:       '健康检查',
+}
+
+/**
+ * 判断是否为微服务任务类型（{service}.{method} 格式）。
+ */
+export function isMicroserviceType(type: string): boolean {
+  return type.includes('.') && !type.startsWith('rollback_')
+}
+
+/**
+ * 解析微服务任务类型，返回 serviceName 和 methodName。
+ */
+export function parseMicroserviceType(type: string): { serviceName: string; methodName: string } {
+  const dotIndex = type.indexOf('.')
+  if (dotIndex < 0) {
+    return { serviceName: type, methodName: '' }
+  }
+  return {
+    serviceName: type.slice(0, dotIndex),
+    methodName: type.slice(dotIndex + 1),
+  }
+}
+
+/**
+ * 获取微服务任务的元数据（动态构造，无需提前注册所有组合）。
+ */
+export function getMicroserviceMeta(type: string): TaskTypeMeta {
+  const { serviceName, methodName } = parseMicroserviceType(type)
+  const svc = MICROSERVICE_META[serviceName] ?? {
+    label: serviceName,
+    icon: 'settings-outline',
+    color: 'medium',
+  }
+  const methodLabel = MICROSERVICE_METHOD_LABELS[methodName] ?? methodName
+  return {
+    labelKey: `tasks.type.${type}`,
+    fallbackLabel: `${svc.label} · ${methodLabel}`,
+    icon: svc.icon,
+    color: svc.color,
+    rollbackable: false,
+    isFileOp: false,
+    group: 'microservice',
+  }
+}
+
+/**
  * 查表获取类型元数据
+ * 🆕 2026-07-03：支持微服务任务类型动态解析
  */
 export function getTaskTypeMeta(type: string): TaskTypeMeta {
+  if (isMicroserviceType(type)) {
+    return getMicroserviceMeta(type)
+  }
   return TASK_TYPE_META[type] ?? UNKNOWN_META
 }
 
