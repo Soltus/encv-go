@@ -18,6 +18,7 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.encvgo.app.workers.EncvTaskCancelWorker
 import com.encvgo.combolite.EncvComboLiteHost
 import com.encvgo.combolite.OpenListStatusBridge
 import com.encvgo.combolite.diagnostic.DiagnosticKit
@@ -639,6 +640,24 @@ class GoProcessPlugin : Plugin() {
     // 🆕 2026-06-17：读取 android-deps.json manifest（由 Gradle task generateAndroidDepsManifest 在
     //   :app:preBuild 阶段生成到 app/src/main/assets/android-deps.json）
     //   用途：About 页"Android 库"section 数据源
+    /**
+     * 2026-07-03 spec android-workmanager-split-start-stop Phase 3.4
+     * 前端取消任务时调用，把 cancel 意图持久化到 WorkManager。
+     * 即使 Go 进程已死，Worker 也会在 Go 重启后重试 cancel。
+     *
+     * 参数：taskId (String, required)
+     * 返回：{ success: Boolean, workName: String }
+     */
+    @PluginMethod
+    fun enqueueCancelWorker(call: PluginCall) {
+        val taskId = call.getString("taskId") ?: run { call.reject("taskId is required"); return }
+        val workName = EncvTaskCancelWorker.enqueue(context, taskId)
+        call.resolve(JSObject().apply {
+            put("success", true)
+            put("workName", workName)
+        })
+    }
+
     @PluginMethod
     fun getAndroidDeps(call: PluginCall) {
         try {

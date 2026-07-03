@@ -23,6 +23,7 @@ mockito = "5.8.0"
 mockitoKotlin = "5.2.1"
 logcat = "13.0"
 okhttp = "4.9.0"
+workRuntimeKtx = "2.10.1"
 googleServices = "4.4.4"
 bugly = "latest.release"
 
@@ -41,6 +42,7 @@ mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mo
 mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version.ref = "mockitoKotlin" }
 combolite-core = { group = "io.github.lnzz123", name = "combolite-core", version.ref = "combolite" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtx" }
 logcat = { group = "com.github.getActivity", name = "Logcat", version.ref = "logcat" }
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 compose-ui = { group = "androidx.compose.ui", name = "ui" }

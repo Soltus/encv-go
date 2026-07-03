@@ -325,5 +325,18 @@
                 <action android:name="com.encvgo.plugin.openlist.BROADCAST_PORT_CONFLICT" />
             </intent-filter>
         </receiver>
+
+        <!--
+            GoProcessRestartReceiver：监听 Go 后端就绪广播，触发 pending Worker 立即重试。
+            2026-07-03 spec android-workmanager-split-start-stop Phase 3.3
+            exported=false，只接收应用内部广播（显式 Intent，不受 Android 8.0 静态注册限制）。
+        -->
+        <receiver
+            android:name="com.encvgo.app.workers.GoProcessRestartReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.encvgo.broadcast.BACKEND_READY" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

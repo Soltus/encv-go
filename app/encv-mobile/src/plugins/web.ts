@@ -75,6 +75,11 @@ export interface GoProcessPlugin {
   // 🆕 2026-06-17：读取 android-deps.json manifest (build 时由 Gradle task 生成)
   // web 端 mock 返回 null（无 Android assets）
   getAndroidDeps(): Promise<{ items: any[] } | null>
+
+  // 🆕 2026-07-03 spec android-workmanager-split-start-stop Phase 3.4
+  // 任务取消持久化：把 cancel 意图入队 WorkManager，Go 进程重启后自动重试
+  // web 端不实现，返回 success:false（浏览器没有 WorkManager）
+  enqueueCancelWorker(options: { taskId: string }): Promise<{ success: boolean; workName?: string }>
 }
 
 export class GoProcessWeb extends WebPlugin implements GoProcessPlugin {
@@ -216,5 +221,10 @@ export class GoProcessWeb extends WebPlugin implements GoProcessPlugin {
   // 🆕 2026-06-17：web 模式 mock — 没有 Android assets，返回 null
   async getAndroidDeps(): Promise<{ items: any[] } | null> {
     return null
+  }
+
+  // 🆕 2026-07-03：web 模式 mock — 浏览器没有 WorkManager
+  async enqueueCancelWorker(_options: { taskId: string }): Promise<{ success: boolean; workName?: string }> {
+    return { success: false }
   }
 }
