@@ -21,6 +21,13 @@ var SpeciesNames = [SpeciesMax]string{
 	"Beastman", "Dragonkin", "Fey", "Undead",
 }
 
+func (s SpeciesType) String() string {
+	if int(s) < int(SpeciesMax) {
+		return SpeciesNames[s]
+	}
+	return "Unknown"
+}
+
 type ProfessionType uint16
 
 const (
@@ -54,6 +61,13 @@ var ProfessionNames = [ProfMax]string{
 	"Slave", "Beggar", "Entertainer", "Cook", "Healer",
 }
 
+func (p ProfessionType) String() string {
+	if int(p) < int(ProfMax) {
+		return ProfessionNames[p]
+	}
+	return "Unknown"
+}
+
 type SkillType uint8
 
 const (
@@ -69,6 +83,18 @@ const (
 	SkillTrading     SkillType = 9
 	SkillMax                    = 10
 )
+
+var SkillNames = [SkillMax]string{
+	"Strength", "Agility", "Intelligence", "Charisma", "Perception",
+	"Endurance", "Magic", "Stealth", "Crafting", "Trading",
+}
+
+func (s SkillType) String() string {
+	if int(s) < int(SkillMax) {
+		return SkillNames[s]
+	}
+	return "Unknown"
+}
 
 type Skills [SkillMax]uint8
 
@@ -97,6 +123,18 @@ const (
 	ResLeather     ResourceType = 9
 	ResMax                      = 10
 )
+
+var ResourceNames = [ResMax]string{
+	"Food", "Wood", "Stone", "Iron", "Gold",
+	"Cloth", "Potion", "ManaCrystal", "Herb", "Leather",
+}
+
+func (r ResourceType) String() string {
+	if int(r) < int(ResMax) {
+		return ResourceNames[r]
+	}
+	return "Unknown"
+}
 
 type Resources [ResMax]uint32
 

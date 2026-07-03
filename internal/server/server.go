@@ -122,6 +122,11 @@ type Server struct {
 	// 修复：InitDatabase 在降级时把真实失败原因写入此字段，handleDatabaseInfo 优先使用它。
 	// 参见 .trae/rules/graceful-degradation.md L2 降级规范："降级原因明确"。
 	dbFallbackReason string
+
+	// 🆕 2026-07-03：SimVerse 模拟世界引擎管理器（Phase 2 前后端联通）
+	//  持有 FractalWorld 实例 + tick 循环 + 性能调度
+	//  可选：nil = 未启用（dev/test 场景可手动创建）
+	simverseMgr *SimverseManager
 }
 
 // mountRegistryDataPath 返回 mounts.json 的持久化路径。

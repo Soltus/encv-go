@@ -15,6 +15,23 @@ const (
 	FocusPlayer   FocusLevel = 4
 )
 
+func (fl FocusLevel) String() string {
+	switch fl {
+	case FocusNone:
+		return "none"
+	case FocusDistant:
+		return "distant"
+	case FocusNear:
+		return "near"
+	case FocusCore:
+		return "core"
+	case FocusPlayer:
+		return "player"
+	default:
+		return "unknown"
+	}
+}
+
 type FractalWorld struct {
 	mu sync.RWMutex
 
@@ -194,4 +211,43 @@ func (fw *FractalWorld) WorldTick() uint32 {
 	fw.mu.RLock()
 	defer fw.mu.RUnlock()
 	return fw.worldTick
+}
+
+func (fw *FractalWorld) CurrentTier() PerformanceTier {
+	fw.mu.RLock()
+	defer fw.mu.RUnlock()
+	return fw.perfTier
+}
+
+func (fw *FractalWorld) PerfTierName() string {
+	tier := fw.CurrentTier()
+	switch tier {
+	case PerfTierBackground:
+		return "background"
+	case PerfTierForeground:
+		return "foreground"
+	case PerfTierFgIdle:
+		return "fg_idle"
+	default:
+		return "unknown"
+	}
+}
+
+func (fw *FractalWorld) ListFocusNPCs() []uint64 {
+	fw.mu.RLock()
+	defer fw.mu.RUnlock()
+	ids := make([]uint64, 0, len(fw.focusNPCs))
+	for id := range fw.focusNPCs {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+func (fw *FractalWorld) FocusLevel(npcID uint64) FocusLevel {
+	fw.mu.RLock()
+	defer fw.mu.RUnlock()
+	if level, ok := fw.focusNPCs[npcID]; ok {
+		return level
+	}
+	return FocusNone
 }

@@ -24,6 +24,19 @@ const (
 	GenderMax              = 3
 )
 
+func (g Gender) String() string {
+	switch g {
+	case GenderMale:
+		return "Male"
+	case GenderFemale:
+		return "Female"
+	case GenderNonBinary:
+		return "NonBinary"
+	default:
+		return "Unknown"
+	}
+}
+
 type GenderIdentity uint8
 
 const (
@@ -35,6 +48,23 @@ const (
 	GenderIdentMax                      = 5
 )
 
+func (g GenderIdentity) String() string {
+	switch g {
+	case GenderIdentCisMale:
+		return "CisMale"
+	case GenderIdentCisFemale:
+		return "CisFemale"
+	case GenderIdentTransMale:
+		return "TransMale"
+	case GenderIdentTransFemale:
+		return "TransFemale"
+	case GenderIdentNonBinary:
+		return "NonBinary"
+	default:
+		return "Unknown"
+	}
+}
+
 type SexualOrientation uint8
 
 const (
@@ -44,6 +74,21 @@ const (
 	SexOrientAsexual SexualOrientation = 3
 	SexOrientMax                   = 4
 )
+
+func (s SexualOrientation) String() string {
+	switch s {
+	case SexOrientHetero:
+		return "Heterosexual"
+	case SexOrientHomo:
+		return "Homosexual"
+	case SexOrientBi:
+		return "Bisexual"
+	case SexOrientAsexual:
+		return "Asexual"
+	default:
+		return "Unknown"
+	}
+}
 
 type LifeStage uint8
 
@@ -57,6 +102,27 @@ const (
 	LifeStageCentenarian LifeStage = 6
 	LifeStageMax                  = 7
 )
+
+func (l LifeStage) String() string {
+	switch l {
+	case LifeStageInfant:
+		return "Infant"
+	case LifeStageChild:
+		return "Child"
+	case LifeStageAdolescent:
+		return "Adolescent"
+	case LifeStageYoungAdult:
+		return "YoungAdult"
+	case LifeStageMiddleAged:
+		return "MiddleAged"
+	case LifeStageElderly:
+		return "Elderly"
+	case LifeStageCentenarian:
+		return "Centenarian"
+	default:
+		return "Unknown"
+	}
+}
 
 var chineseSurnames = [...]string{
 	"王", "李", "张", "刘", "陈", "杨", "赵", "黄", "周", "吴",
