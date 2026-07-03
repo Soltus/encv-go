@@ -100,11 +100,10 @@ function addLog(level: string, args: any[], source?: string) {
 
 /**
  * 从 level + source 派生出多维度标签。
- * 维度包括：
+ * 维度包括（不含级别 — 级别是独立字段，不放在 tags 里）：
  *   - 来源大类：frontend
  *   - 线程维度：main-thread / worker
  *   - 子系统：console / error-capture / hmr / network / vue 等
- *   - 级别：error / warn / info / log / debug
  */
 function deriveFrontendTags(level: string, source?: string): string[] {
   const tags: string[] = ["frontend", "main-thread"];
@@ -120,7 +119,6 @@ function deriveFrontendTags(level: string, source?: string): string[] {
       tags.push("worker");
     }
   }
-  tags.push(level);
   return tags;
 }
 

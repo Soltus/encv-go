@@ -100,12 +100,11 @@ func (h *WSLogHandler) Handle(ctx context.Context, r slog.Record) error {
 
 // deriveBackendTags 从 slog.Record 派生出多维度标签。
 //
-// 标签维度：
+// 标签维度（不含级别 — 级别是独立字段，不放在 tags 里）：
 //   - 来源大类：backend
 //   - 子系统：api / websocket / task / mount / db / kernel / service / agent / general
 //   - 模块包名：pkg.xxx / internal.xxx（从 PC 解析）
 //   - 特殊标记：has-error / has-task
-//   - 级别：error / warn / info / debug
 func deriveBackendTags(r slog.Record, fullMessage string, hasError, hasTask bool) []string {
 	tags := []string{"backend"}
 
@@ -157,18 +156,6 @@ func deriveBackendTags(r slog.Record, fullMessage string, hasError, hasTask bool
 	}
 	if hasTask {
 		tags = append(tags, "has-task")
-	}
-
-	// 级别标签
-	switch {
-	case r.Level >= slog.LevelError:
-		tags = append(tags, "error")
-	case r.Level >= slog.LevelWarn:
-		tags = append(tags, "warn")
-	case r.Level >= slog.LevelInfo:
-		tags = append(tags, "info")
-	case r.Level >= slog.LevelDebug:
-		tags = append(tags, "debug")
 	}
 
 	return tags

@@ -379,7 +379,7 @@ async function pushLogsInChunks(logs: BackendLogEntry[]): Promise<void> {
               timestamp: e.timestamp || new Date().toLocaleTimeString("zh-CN", { hour12: false }),
               level: lvl,
               message: e.message,
-              tags: (e as any).tags ? (e as any).tags : undefined,
+              tags: normalizeTags((e as any).tags),
             };
             updateTagCounts(entry, backendTagCounts);
             backendFilter.push(entry);
@@ -419,6 +419,18 @@ const levelDropdownOptions: DropdownOption[] = [
 const selectedTags = ref<string[]>([]);
 
 const backendTagCounts = new Map<string, number>();
+
+function normalizeTags(raw: any): string[] | undefined {
+  if (Array.isArray(raw)) {
+    const arr = raw.filter((t: any) => typeof t === "string" && t.length > 0 && t.length < 64);
+    return arr.length > 0 ? arr : undefined;
+  }
+  if (typeof raw === "string" && raw.length > 0) {
+    const arr = raw.split(",").filter(t => t.length > 0 && t.length < 64);
+    return arr.length > 0 ? arr : undefined;
+  }
+  return undefined;
+}
 
 function updateTagCounts(entry: LogEntry, counts: Map<string, number>) {
   if (entry.tags && entry.tags.length > 0) {
@@ -475,7 +487,7 @@ function onTagClick(tag: string) {
 }
 
 function getSourceIcon(entry: LogEntry): string {
-  const tags = entry.tags || [];
+  const tags = Array.isArray(entry.tags) ? entry.tags : [];
   if (tags.includes("frontend")) {
     if (tags.includes("worker")) return "⚙";
     if (tags.includes("error-capture")) return "⚠";
@@ -498,7 +510,7 @@ function getSourceIcon(entry: LogEntry): string {
 }
 
 function getSourceIconTitle(entry: LogEntry): string {
-  const tags = entry.tags || [];
+  const tags = Array.isArray(entry.tags) ? entry.tags : [];
   if (tags.length === 0) return entry.source || "unknown";
   return tags.join(" · ");
 }
@@ -802,12 +814,7 @@ function onWsMessage(data: any) {
     const level = ["debug", "info", "warn", "error"].includes(logData.level) ? logData.level : "info";
     const message = String(logData.message || logData.msg || "");
     if (!message && !logData.message) return;
-    let tags: string[] | undefined;
-    if (Array.isArray(logData.tags)) {
-      tags = logData.tags.filter((t: any) => typeof t === "string");
-    } else if (typeof logData.tags === "string") {
-      tags = logData.tags.split(",").filter(Boolean);
-    }
+    const tags = normalizeTags(logData.tags);
     queueBackendLog({
       id: ++nextId,
       timestamp: logData.timestamp || new Date().toLocaleTimeString("zh-CN", { hour12: false }),

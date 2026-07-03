@@ -50,7 +50,7 @@ export function buildPredicate(state: FilterState): FilterPredicate {
     if (searchLower && !entry.message.toLowerCase().includes(searchLower)) return false;
     if (hasTagFilter) {
       const entryTags = entry.tags;
-      if (!entryTags || entryTags.length === 0) return false;
+      if (!Array.isArray(entryTags) || entryTags.length === 0) return false;
       let hit = false;
       for (const t of entryTags) {
         if (tags.has(t)) {
