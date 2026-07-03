@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log/slog"
 	"math/rand"
 	"net/http"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/Soltus/encv-go/internal/simverse"
 	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
 )
 
 type SimverseManager struct {
@@ -20,6 +22,10 @@ type SimverseManager struct {
 	doneCh chan struct{}
 
 	tickHistory []worldTickSample
+
+	wsClients   map[*simverseWSClient]bool
+	wsBroadcast chan simverseWSMessage
+	wsUpgrader  websocket.Upgrader
 }
 
 type worldTickSample struct {
@@ -49,6 +55,15 @@ func NewSimverseManager() *SimverseManager {
 		stopCh:      make(chan struct{}),
 		doneCh:      make(chan struct{}),
 		tickHistory: make([]worldTickSample, 0, 1000),
+		wsClients:   make(map[*simverseWSClient]bool),
+		wsBroadcast: make(chan simverseWSMessage, 256),
+		wsUpgrader: websocket.Upgrader{
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
+			CheckOrigin: func(r *http.Request) bool {
+				return true
+			},
+		},
 	}
 }
 
@@ -285,18 +300,21 @@ func (s *Server) handleSimverseNPCList(c *gin.Context) {
 		id := uint64(startID + i)
 		npc := world.GetNPC(id, s.simverseMgr.rng)
 		npcs = append(npcs, gin.H{
-			"id":       npc.ID,
-			"name":     npc.Name,
-			"species":  npc.Species.String(),
-			"gender":   npc.Gender.String(),
-			"age":      npc.Age,
-			"stage":    npc.Stage.String(),
-			"profession": npc.Profession.String(),
-			"health":   npc.Health,
-			"energy":   npc.Energy,
-			"charisma": npc.Charisma,
-			"intelligence": npc.Intelligence,
-			"strength": npc.Strength,
+			"id":          npc.ID,
+			"name":        npc.Name,
+			"species":     npc.Species.String(),
+			"gender":      npc.Gender.String(),
+			"age":         npc.Age,
+			"life_stage":  npc.LifeStage.String(),
+			"profession":  npc.Profession.String(),
+			"level":       npc.Level,
+			"health":      npc.Health,
+			"max_health":  npc.MaxHealth,
+			"energy":      npc.Energy,
+			"max_energy":  npc.MaxEnergy,
+			"is_alive":    npc.IsAlive,
+			"wealth_tier": npc.WealthTier,
+			"social_tier": npc.SocialTier,
 		})
 	}
 
@@ -324,42 +342,57 @@ func (s *Server) handleSimverseNPCDetail(c *gin.Context) {
 	world := s.simverseMgr.World()
 	npc := world.GetNPC(id, s.simverseMgr.rng)
 
-	skills := make(map[string]uint16)
-	for k, v := range npc.Skills {
-		skills[k.String()] = v
+	skills := make(map[string]uint8)
+	for i := simverse.SkillType(0); i < simverse.SkillMax; i++ {
+		skills[i.String()] = npc.Skills[i]
 	}
 
-	resources := make(map[string]int64)
-	for k, v := range npc.Resources {
-		resources[k.String()] = v
+	inventory := make(map[string]uint32)
+	for i := simverse.ResourceType(0); i < simverse.ResMax; i++ {
+		inventory[i.String()] = npc.Inventory[i]
+	}
+
+	bank := make(map[string]uint32)
+	for i := simverse.ResourceType(0); i < simverse.ResMax; i++ {
+		bank[i.String()] = npc.Bank[i]
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"id":               npc.ID,
-		"name":             npc.Name,
-		"species":          npc.Species.String(),
-		"gender":           npc.Gender.String(),
-		"gender_identity":  npc.GenderIdentity.String(),
-		"sexual_orient":    npc.SexualOrient.String(),
-		"age":              npc.Age,
-		"stage":            npc.Stage.String(),
-		"profession":       npc.Profession.String(),
-		"health":           npc.Health,
-		"max_health":       npc.MaxHealth,
-		"energy":           npc.Energy,
-		"max_energy":       npc.MaxEnergy,
-		"charisma":         npc.Charisma,
-		"intelligence":     npc.Intelligence,
-		"strength":         npc.Strength,
-		"luck":             npc.Luck,
-		"wealth":           npc.Wealth,
-		"reputation":       npc.Reputation,
-		"skills":           skills,
-		"resources":        resources,
-		"life_events":      npc.LifeEvents,
-		"last_tick":        npc.LastTick,
-		"birth_tick":       npc.BirthTick,
-		"is_alive":         npc.IsAlive,
+		"id":              npc.ID,
+		"name":            npc.Name,
+		"species":         npc.Species.String(),
+		"gender":          npc.Gender.String(),
+		"gender_identity": npc.GenderIdentity.String(),
+		"sexual_orient":   npc.SexualOrient.String(),
+		"age":             npc.Age,
+		"life_stage":      npc.LifeStage.String(),
+		"profession":      npc.Profession.String(),
+		"level":           npc.Level,
+		"career_stage":    npc.CareerStage,
+		"health":          npc.Health,
+		"max_health":      npc.MaxHealth,
+		"energy":          npc.Energy,
+		"max_energy":      npc.MaxEnergy,
+		"mana":            npc.Mana,
+		"max_mana":        npc.MaxMana,
+		"mood":            npc.Mood,
+		"satisfaction":    npc.Satisfaction,
+		"wealth_tier":     npc.WealthTier,
+		"social_tier":     npc.SocialTier,
+		"experience":      npc.Experience,
+		"num_children":    npc.NumChildren,
+		"num_marriages":   npc.NumMarriages,
+		"org_id":          npc.OrgID,
+		"region_id":       npc.RegionID,
+		"home_region_id":  npc.HomeRegionID,
+		"skills":          skills,
+		"inventory":       inventory,
+		"bank":            bank,
+		"life_events":     npc.LifeEvents,
+		"born_at":         npc.BornAt,
+		"died_at":         npc.DiedAt,
+		"last_update":     npc.LastUpdateTick,
+		"is_alive":        npc.IsAlive,
 	})
 }
 
@@ -432,10 +465,10 @@ func (s *Server) handleSimverseFocusList(c *gin.Context) {
 		npc := world.GetNPC(id, s.simverseMgr.rng)
 		level := world.FocusLevel(id)
 		npcs = append(npcs, gin.H{
-			"id":    npc.ID,
-			"name":  npc.Name,
-			"level": level.String(),
-			"stage": npc.Stage.String(),
+			"id":         npc.ID,
+			"name":       npc.Name,
+			"level":      level.String(),
+			"life_stage": npc.LifeStage.String(),
 		})
 	}
 
@@ -490,4 +523,175 @@ func (s *Server) handleSimverseSetFocus(c *gin.Context) {
 		"count": len(focusIDs),
 		"items": focusIDs,
 	})
+}
+
+type simverseWSMessage struct {
+	Type string      `json:"type"`
+	Data interface{} `json:"data"`
+}
+
+type simverseWSClient struct {
+	conn  *websocket.Conn
+	send  chan simverseWSMessage
+	mgr   *SimverseManager
+}
+
+func (sm *SimverseManager) wsBroadcastLoop() {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	statsTicker := time.NewTicker(1 * time.Second)
+	defer statsTicker.Stop()
+
+	for {
+		select {
+		case msg, ok := <-sm.wsBroadcast:
+			if !ok {
+				return
+			}
+			sm.mu.RLock()
+			clients := make([]*simverseWSClient, 0, len(sm.wsClients))
+			for c := range sm.wsClients {
+				clients = append(clients, c)
+			}
+			sm.mu.RUnlock()
+
+			for _, c := range clients {
+				select {
+				case c.send <- msg:
+				default:
+				}
+			}
+		case <-ticker.C:
+			sm.mu.RLock()
+			running := sm.running
+			sm.mu.RUnlock()
+			if !running {
+				continue
+			}
+			world := sm.World()
+			sm.wsBroadcast <- simverseWSMessage{
+				Type: "world:tick",
+				Data: gin.H{
+					"tick": world.WorldTick(),
+					"tier": world.PerfTierName(),
+				},
+			}
+		case <-statsTicker.C:
+			sm.mu.RLock()
+			running := sm.running
+			sm.mu.RUnlock()
+			if !running {
+				continue
+			}
+			world := sm.World()
+			stats := world.MemoryStats()
+			sm.wsBroadcast <- simverseWSMessage{
+				Type: "world:stats",
+				Data: gin.H{
+					"npc_count":   stats["npc_cache_count"],
+					"npc_mb":      stats["npc_cache_mb"],
+					"brain_count": stats["brain_cache_count"],
+					"cell_count":  stats["cell_cache_count"],
+					"total_mb":    stats["total_mb"],
+					"focus_count": stats["focus_npc_count"],
+				},
+			}
+		}
+	}
+}
+
+func (sm *SimverseManager) RegisterWS(conn *websocket.Conn) *simverseWSClient {
+	client := &simverseWSClient{
+		conn: conn,
+		send: make(chan simverseWSMessage, 64),
+		mgr:  sm,
+	}
+
+	sm.mu.Lock()
+	sm.wsClients[client] = true
+	if len(sm.wsClients) == 1 {
+		go sm.wsBroadcastLoop()
+	}
+	sm.mu.Unlock()
+
+	slog.Info("simverse WS client connected", "total_clients", len(sm.wsClients))
+	return client
+}
+
+func (sm *SimverseManager) UnregisterWS(client *simverseWSClient) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	if _, ok := sm.wsClients[client]; ok {
+		delete(sm.wsClients, client)
+		close(client.send)
+		slog.Info("simverse WS client disconnected", "total_clients", len(sm.wsClients))
+	}
+}
+
+func (c *simverseWSClient) WritePump() {
+	defer func() {
+		c.mgr.UnregisterWS(c)
+		c.conn.Close()
+	}()
+
+	for msg := range c.send {
+		c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		if err := c.conn.WriteJSON(msg); err != nil {
+			slog.Debug("simverse WS write error", "error", err)
+			return
+		}
+	}
+}
+
+func (c *simverseWSClient) ReadPump() {
+	defer func() {
+		c.mgr.UnregisterWS(c)
+		c.conn.Close()
+	}()
+
+	c.conn.SetReadLimit(4096)
+	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+
+	for {
+		var msg map[string]interface{}
+		if err := c.conn.ReadJSON(&msg); err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+				slog.Debug("simverse WS read error", "error", err)
+			}
+			break
+		}
+
+		msgType, _ := msg["type"].(string)
+		switch msgType {
+		case "ping":
+			select {
+			case c.send <- simverseWSMessage{Type: "pong", Data: gin.H{"ts": time.Now().Unix()}}:
+			default:
+			}
+		}
+	}
+}
+
+func (s *Server) handleSimverseWebSocket(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	conn, err := s.simverseMgr.wsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		slog.Error("simverse WS upgrade failed", "error", err)
+		return
+	}
+
+	client := s.simverseMgr.RegisterWS(conn)
+
+	go client.WritePump()
+	client.ReadPump()
 }

@@ -235,4 +235,28 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 		openlistGroup.PATCH("/:siteId/*path", handleOpenlistProxyGin(proxyGin))
 		openlistGroup.OPTIONS("/:siteId/*path", handleOpenlistProxyGin(proxyGin))
 	}
+
+	// 🆕 2026-07-03：SimVerse 模拟世界引擎 API（Phase 2 前后端联通）
+	//   - GET  /api/simverse/world/state    : 世界状态概览
+	//   - GET  /api/simverse/world/config   : 当前配置（性能层级等）
+	//   - POST /api/simverse/world/config : 修改配置
+	//   - POST /api/simverse/world/control  : 世界控制（启动/停止/单步）
+	//   - GET  /api/simverse/npc/list     : NPC 列表（分页）
+	//   - GET  /api/simverse/npc/:id    : NPC 详情
+	//   - GET  /api/simverse/focus          : 焦点 NPC 列表
+	//   - POST /api/simverse/focus         : 设置焦点 NPC
+	//   - GET  /api/simverse/perf/metrics  : 性能指标（tick 速率/内存等）
+	simGroup := r.Group("/api/simverse")
+	{
+		simGroup.GET("/world/state", s.handleSimverseWorldState)
+		simGroup.GET("/world/config", s.handleSimverseWorldConfig)
+		simGroup.POST("/world/config", s.handleSimverseSetConfig)
+		simGroup.POST("/world/control", s.handleSimverseWorldControl)
+		simGroup.GET("/npc/list", s.handleSimverseNPCList)
+		simGroup.GET("/npc/:id", s.handleSimverseNPCDetail)
+		simGroup.GET("/focus", s.handleSimverseFocusList)
+		simGroup.POST("/focus", s.handleSimverseSetFocus)
+		simGroup.GET("/perf/metrics", s.handleSimversePerfMetrics)
+		simGroup.GET("/ws", s.handleSimverseWebSocket)
+	}
 }
