@@ -39,8 +39,9 @@ type WorldPersistence struct {
 	meta     WorldMetadata
 	metaPath string
 
-	placeholderPath string
-	placeholderSize int64
+	globalPlaceholderPath string
+	placeholderSize       int64
+	placeholderCreated    bool
 }
 
 const (
@@ -50,17 +51,36 @@ const (
 )
 
 const (
-	DefaultPlaceholderSize = 100 * 1024 * 1024 // 100MB
+	StorageReserveRatio     = 0.01                // 1% 相对值（基于磁盘总容量）
+	StorageReserveMinBytes  = 1 * 1024 * 1024 * 1024  // 1GB 绝对值硬下限
+	PlaceholderMaxBytes     = 10 * 1024 * 1024 * 1024 // 占位文件最大 10GB
+	PlaceholderMinBytes     = 10 * 1024 * 1024        // 占位文件最小 10MB
 	StorageLowBytes       = 200 * 1024 * 1024  // 200MB = YELLOW
 	StorageCriticalBytes  = 50 * 1024 * 1024   // 50MB = RED
 )
 
+func calcPlaceholderSize(totalBytes int64, availableBytes int64) (int64, bool) {
+	reserveBytes := int64(float64(totalBytes) * StorageReserveRatio)
+	if reserveBytes < StorageReserveMinBytes {
+		reserveBytes = StorageReserveMinBytes
+	}
+
+	maxPlaceholder := availableBytes - reserveBytes
+	if maxPlaceholder < PlaceholderMinBytes {
+		return 0, false
+	}
+	if maxPlaceholder > PlaceholderMaxBytes {
+		maxPlaceholder = PlaceholderMaxBytes
+	}
+
+	return maxPlaceholder, true
+}
+
 func NewWorldPersistence(dataDir string, worldName string) *WorldPersistence {
 	wp := &WorldPersistence{
-		dataDir:         dataDir,
-		metaPath:        filepath.Join(dataDir, "world_meta.json"),
-		placeholderPath: filepath.Join(dataDir, "storage_reserve.tmp"),
-		placeholderSize: DefaultPlaceholderSize,
+		dataDir:               dataDir,
+		metaPath:              filepath.Join(dataDir, "world_meta.json"),
+		globalPlaceholderPath: filepath.Join(dataDir, ".storage_reserve.tmp"),
 	}
 
 	if data, err := os.ReadFile(wp.metaPath); err == nil {
@@ -169,7 +189,10 @@ type filesystemStats struct {
 
 func getFilesystemStats(path string) filesystemStats {
 	var stats filesystemStats
-
+	stats = getFilesystemStatsFromSys(path)
+	if stats.TotalBytes > 0 {
+		return stats
+	}
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
 		if entries, err := os.ReadDir(path); err == nil {
 			for _, entry := range entries {
@@ -186,6 +209,12 @@ func getFilesystemStats(path string) filesystemStats {
 	stats.AvailableBytes = 10 * 1024 * 1024 * 1024
 	stats.FreeBytes = stats.AvailableBytes
 
+	return stats
+}
+
+func getFilesystemStatsFromSys(path string) filesystemStats {
+	var stats filesystemStats
+	fillFilesystemStats(path, &stats)
 	return stats
 }
 
@@ -223,11 +252,25 @@ func fileExists(path string) bool {
 
 func (wp *WorldPersistence) CreatePlaceholder() error {
 	wp.mu.Lock()
-	path := wp.placeholderPath
-	size := wp.placeholderSize
-	wp.mu.Unlock()
+	defer wp.mu.Unlock()
 
+	if wp.placeholderCreated {
+		return nil
+	}
+
+	path := wp.globalPlaceholderPath
 	if fileExists(path) {
+		fi, err := os.Stat(path)
+		if err == nil {
+			wp.placeholderSize = fi.Size()
+			wp.placeholderCreated = true
+			return nil
+		}
+	}
+
+	fs := getFilesystemStats(wp.dataDir)
+	size, ok := calcPlaceholderSize(fs.TotalBytes, fs.AvailableBytes)
+	if !ok {
 		return nil
 	}
 
@@ -249,29 +292,53 @@ func (wp *WorldPersistence) CreatePlaceholder() error {
 			writeSize = remaining
 		}
 		if _, err := f.Write(buf[:writeSize]); err != nil {
+			f.Close()
+			os.Remove(path)
 			return err
 		}
 		remaining -= writeSize
 	}
 
-	return f.Sync()
+	if err := f.Sync(); err != nil {
+		return err
+	}
+
+	wp.placeholderSize = size
+	wp.placeholderCreated = true
+	return nil
 }
 
 func (wp *WorldPersistence) ReleasePlaceholder() error {
-	wp.mu.RLock()
-	path := wp.placeholderPath
-	wp.mu.RUnlock()
+	wp.mu.Lock()
+	path := wp.globalPlaceholderPath
+	wp.mu.Unlock()
 
 	if !fileExists(path) {
 		return nil
 	}
-	return os.Remove(path)
+	err := os.Remove(path)
+	if err == nil {
+		wp.mu.Lock()
+		wp.placeholderCreated = false
+		wp.placeholderSize = 0
+		wp.mu.Unlock()
+	}
+	return err
 }
 
 func (wp *WorldPersistence) HasPlaceholder() bool {
 	wp.mu.RLock()
 	defer wp.mu.RUnlock()
-	return fileExists(wp.placeholderPath)
+	if wp.placeholderCreated {
+		return true
+	}
+	return fileExists(wp.globalPlaceholderPath)
+}
+
+func (wp *WorldPersistence) PlaceholderSize() int64 {
+	wp.mu.RLock()
+	defer wp.mu.RUnlock()
+	return wp.placeholderSize
 }
 
 type StorageStatus struct {
@@ -320,9 +387,6 @@ func (wp *WorldPersistence) CheckStorageAndAdjust(world *FractalWorld) string {
 		return "storage_low"
 	default:
 		wp.SetSaveState("normal")
-		if !status.PlaceholderActive {
-			wp.CreatePlaceholder()
-		}
 		return "normal"
 	}
 }

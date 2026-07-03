@@ -55,7 +55,7 @@ func NewSimverseManager(dataDir string) *SimverseManager {
 		}
 	}
 
-	return &SimverseManager{
+	mgr := &SimverseManager{
 		world:       world,
 		rng:         rng,
 		running:     false,
@@ -74,6 +74,17 @@ func NewSimverseManager(dataDir string) *SimverseManager {
 			},
 		},
 	}
+
+	go func() {
+		if err := world.Persistence().CreatePlaceholder(); err != nil {
+			slog.Warn("simverse placeholder creation failed", "error", err)
+		} else if world.Persistence().HasPlaceholder() {
+			slog.Info("simverse storage placeholder created",
+				"size_bytes", world.Persistence().PlaceholderSize())
+		}
+	}()
+
+	return mgr
 }
 
 func (sm *SimverseManager) SaveCheckpoint() error {

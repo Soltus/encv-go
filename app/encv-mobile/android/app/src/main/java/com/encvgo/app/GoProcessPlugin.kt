@@ -261,52 +261,6 @@ class GoProcessPlugin : Plugin() {
     }
 
     @PluginMethod
-    fun openWorld(call: PluginCall) {
-        try {
-            val worldId = call.getString("worldId") ?: "default"
-            val worldName = call.getString("worldName") ?: "Default"
-            val intent = WorldActivity.createIntent(activity, worldId, worldName).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_RETAIN_IN_RECENTS)
-            }
-            activity.startActivity(intent)
-            call.resolve()
-        } catch (e: Exception) {
-            call.reject(e.message)
-        }
-    }
-
-    @PluginMethod
-    fun startSimverseHeartbeat(call: PluginCall) {
-        try {
-            com.encvgo.app.workers.SimverseHeartbeatWorker.schedule(activity)
-            call.resolve()
-        } catch (e: Exception) {
-            call.reject(e.message)
-        }
-    }
-
-    @PluginMethod
-    fun stopSimverseHeartbeat(call: PluginCall) {
-        try {
-            com.encvgo.app.workers.SimverseHeartbeatWorker.cancel(activity)
-            call.resolve()
-        } catch (e: Exception) {
-            call.reject(e.message)
-        }
-    }
-
-    @PluginMethod
-    fun setSimverseWorldRunning(call: PluginCall) {
-        try {
-            val running = call.getBoolean("running") ?: false
-            com.encvgo.app.workers.SimverseHeartbeatWorker.setWorldRunning(activity, running)
-            call.resolve()
-        } catch (e: Exception) {
-            call.reject(e.message)
-        }
-    }
-
-    @PluginMethod
     fun openPlayerHome(call: PluginCall) {
         try {
             activity.startActivity(Intent(activity, PlayerActivity::class.java).apply {

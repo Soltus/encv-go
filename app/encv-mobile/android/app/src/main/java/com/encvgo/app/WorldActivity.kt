@@ -61,7 +61,8 @@ class WorldActivity : BridgeActivity() {
 
         try {
             registerPlugin(GoProcessPlugin::class.java)
-            Log.d(TAG, "GoProcessPlugin registered")
+            registerPlugin(SimVersePlugin::class.java)
+            Log.d(TAG, "plugins registered")
         } catch (e: Exception) {
             Log.e(TAG, "registerPlugin failed", e)
         }

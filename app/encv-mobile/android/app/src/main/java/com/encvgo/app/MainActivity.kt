@@ -49,6 +49,7 @@ class MainActivity : BridgeActivity() {
             registerPlugin(GoProcessPlugin::class.java)
             registerPlugin(ApiProxyPlugin::class.java)
             registerPlugin(HighRefreshRatePlugin::class.java)
+            registerPlugin(SimVersePlugin::class.java)
         } catch (e: Exception) {
             Log.e(TAG, "registerPlugin failed", e)
         }

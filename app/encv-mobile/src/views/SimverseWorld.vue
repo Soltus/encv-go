@@ -64,40 +64,29 @@
             <span class="stat-value">{{ formatBytes(storageStatus.available_bytes) }}</span>
           </div>
         </div>
+
+        <div class="panel-section" v-if="shortcutSupported">
+          <h3>Shortcut</h3>
+          <button class="shortcut-btn" @click="handleAddShortcut">
+            <span>＋</span>
+            <span>添加桌面快捷方式</span>
+          </button>
+        </div>
       </aside>
 
       <main class="center-panel">
         <div class="tab-bar">
-          <button class="tab-btn" :class="{ active: activeTab === 'overview' }" @click="activeTab = 'overview'">Overview</button>
+          <button class="tab-btn" :class="{ active: activeTab === 'world' }" @click="activeTab = 'world'">World</button>
           <button class="tab-btn" :class="{ active: activeTab === 'npcs' }" @click="activeTab = 'npcs'">NPCs</button>
           <button class="tab-btn" :class="{ active: activeTab === 'chronicle' }" @click="activeTab = 'chronicle'">Chronicle</button>
         </div>
 
         <div class="tab-content">
-          <div v-if="activeTab === 'overview'" class="overview-tab">
-            <div class="world-map-placeholder">
-              <div class="map-grid">
-                <div
-                  v-for="i in 64"
-                  :key="i"
-                  class="map-cell"
-                  :class="{ filled: Math.random() > 0.7 }"
-                ></div>
-              </div>
-              <div class="map-overlay">
-                <span>Fractal World Map</span>
-                <small>{{ worldState?.tier_name || 'Tier ' + worldState?.tier }}</small>
-              </div>
-            </div>
-
-            <div class="event-feed" v-if="recentEvents.length > 0">
-              <h4>Recent Events</h4>
-              <div class="event-list">
-                <div v-for="ev in recentEvents.slice(0, 8)" :key="ev.id" class="event-item">
-                  <span class="event-tick">T{{ ev.tick }}</span>
-                  <span class="event-text">{{ ev.event_text || ev.description || '...' }}</span>
-                </div>
-              </div>
+          <div v-if="activeTab === 'world'" class="world-tab">
+            <div ref="worldCanvasRef" class="world-canvas"></div>
+            <div class="world-hint">
+              <span>🖱 点击 NPC 查看详情</span>
+              <span>⚡ Matter.js 物理模拟中</span>
             </div>
           </div>
 
@@ -208,7 +197,7 @@
       <div class="menu-panel">
         <h2>Menu</h2>
         <ul class="menu-list">
-          <li @click="menuOpen = false; activeTab = 'overview'">
+          <li @click="menuOpen = false; activeTab = 'world'">
             <span class="menu-icon">🗺</span>
             <span>World Map</span>
           </li>
@@ -245,7 +234,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { closeWorld, addWorldShortcut, isWorldShortcutSupported } from '@/plugins/SimVerse'
+import { useWorldRenderer, type WorldEntity } from '@/composables/useWorldRenderer'
 
 const worldName = ref('SimVerse')
 const worldState = ref<any>(null)
@@ -254,8 +245,167 @@ const npcs = ref<any[]>([])
 const chronicleEvents = ref<any[]>([])
 const recentEvents = ref<any[]>([])
 const selectedNPC = ref<any>(null)
-const activeTab = ref('overview')
+const activeTab = ref('world')
 const menuOpen = ref(false)
+const shortcutSupported = ref(false)
+const worldCanvasRef = ref<HTMLElement | null>(null)
+
+let renderer: ReturnType<typeof useWorldRenderer> | null = null
+let initialized = false
+
+const WORLD_WIDTH = 2000
+const WORLD_HEIGHT = 2000
+const NPC_COLORS = ['#4f8cff', '#8b5cf6', '#22c55e', '#f97316', '#ef4444', '#ec4899', '#14b8a6']
+
+function npcToEntity(npc: any): WorldEntity {
+  const color = NPC_COLORS[Math.abs(hashCode(npc.id)) % NPC_COLORS.length]
+  const x = 100 + Math.abs(hashCode(npc.id + 'x')) % (WORLD_WIDTH - 200)
+  const y = 100 + Math.abs(hashCode(npc.id + 'y')) % (WORLD_HEIGHT - 200)
+  return {
+    id: npc.id,
+    type: 'npc',
+    x,
+    y,
+    width: 24,
+    height: 24,
+    color,
+    label: npc.name,
+    static: false,
+    onClick: () => {
+      selectedNPC.value = npc
+    },
+  }
+}
+
+function hashCode(str: string): number {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash
+  }
+  return hash
+}
+
+function generateStaticEntities(): WorldEntity[] {
+  const entities: WorldEntity[] = []
+  for (let i = 0; i < 15; i++) {
+    entities.push({
+      id: `tree-${i}`,
+      type: 'tree',
+      x: 200 + (i * 137) % (WORLD_WIDTH - 400),
+      y: 200 + (i * 211) % (WORLD_HEIGHT - 400),
+      width: 32,
+      height: 48,
+      color: '#166534',
+      static: true,
+    })
+  }
+  for (let i = 0; i < 8; i++) {
+    entities.push({
+      id: `rock-${i}`,
+      type: 'rock',
+      x: 300 + (i * 193) % (WORLD_WIDTH - 600),
+      y: 300 + (i * 277) % (WORLD_HEIGHT - 600),
+      width: 40,
+      height: 30,
+      color: '#6b7280',
+      static: true,
+    })
+  }
+  for (let i = 0; i < 5; i++) {
+    entities.push({
+      id: `building-${i}`,
+      type: 'building',
+      x: 500 + (i * 300) % (WORLD_WIDTH - 700),
+      y: 500 + (i * 400) % (WORLD_HEIGHT - 700),
+      width: 80,
+      height: 60,
+      color: '#7c3aed',
+      static: true,
+    })
+  }
+  entities.push({
+    id: 'ground',
+    type: 'ground',
+    x: 0,
+    y: WORLD_HEIGHT - 40,
+    width: WORLD_WIDTH,
+    height: 40,
+    color: '#1e3a5f',
+    static: true,
+  })
+  entities.push({
+    id: 'water',
+    type: 'water',
+    x: WORLD_WIDTH / 2 - 150,
+    y: WORLD_HEIGHT / 2 - 80,
+    width: 300,
+    height: 160,
+    color: '#0369a1',
+    static: true,
+  })
+  return entities
+}
+
+async function initRenderer() {
+  if (initialized || !worldCanvasRef.value) return
+  initialized = true
+
+  renderer = useWorldRenderer({
+    container: worldCanvasRef.value,
+    worldWidth: WORLD_WIDTH,
+    worldHeight: WORLD_HEIGHT,
+    gravity: 0,
+  })
+
+  renderer.init()
+
+  for (const ent of generateStaticEntities()) {
+    renderer.addEntity(ent)
+  }
+
+  for (const npc of npcs.value) {
+    renderer.addEntity(npcToEntity(npc))
+    if (Math.random() > 0.3) {
+      setTimeout(() => {
+        renderer?.setVelocity(npc.id, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2)
+      }, Math.random() * 2000)
+    }
+  }
+
+  setInterval(() => {
+    if (!renderer) return
+    for (const npc of npcs.value) {
+      if (Math.random() > 0.92) {
+        renderer.setVelocity(npc.id, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3)
+      }
+    }
+  }, 3000)
+}
+
+watch(npcs, (newNpcs, oldNpcs) => {
+  if (!renderer) return
+  const oldIds = new Set(oldNpcs.map(n => n.id))
+  for (const npc of newNpcs) {
+    if (!oldIds.has(npc.id)) {
+      renderer.addEntity(npcToEntity(npc))
+    }
+  }
+  const newIds = new Set(newNpcs.map(n => n.id))
+  for (const npc of oldNpcs) {
+    if (!newIds.has(npc.id)) {
+      renderer.removeEntity(npc.id)
+    }
+  }
+}, { deep: true })
+
+watch(activeTab, async (tab) => {
+  if (tab === 'world') {
+    await nextTick()
+    initRenderer()
+  }
+})
 
 let pollTimer: number | null = null
 
@@ -355,14 +505,7 @@ function toggleMenu() {
 }
 
 function exitWorld() {
-  try {
-    // @ts-ignore
-    if (window.Capacitor?.Plugins?.GoProcess) {
-      // @ts-ignore
-      window.Capacitor.Plugins.GoProcess.closeWorld()
-    }
-  } catch (e) {}
-  // fallback: try history back
+  closeWorld()
   if (window.history.length > 1) {
     window.history.back()
   }
@@ -383,6 +526,10 @@ function toggleFullscreen() {
   } else {
     document.exitFullscreen()
   }
+}
+
+async function handleAddShortcut() {
+  await addWorldShortcut()
 }
 
 function formatBytes(bytes: number): string {
@@ -409,16 +556,38 @@ function stopPolling() {
   }
 }
 
+let resizeObserver: ResizeObserver | null = null
+
 onMounted(async () => {
   await fetchWorldState()
   await fetchStorageStatus()
   await fetchNPCs()
   await fetchChronicle()
   startPolling()
+  shortcutSupported.value = await isWorldShortcutSupported()
+
+  await nextTick()
+  initRenderer()
+
+  resizeObserver = new ResizeObserver(() => {
+    renderer?.resize()
+  })
+  if (worldCanvasRef.value) {
+    resizeObserver.observe(worldCanvasRef.value)
+  }
 })
 
 onUnmounted(() => {
   stopPolling()
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
+  if (renderer) {
+    renderer.destroy()
+    renderer = null
+    initialized = false
+  }
 })
 </script>
 
@@ -601,6 +770,25 @@ onUnmounted(() => {
 .storage-level.low { color: #f97316; }
 .storage-level.critical { color: #ef4444; }
 
+.shortcut-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, #4f8cff, #8b5cf6);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.shortcut-btn:hover {
+  opacity: 0.9;
+}
+
 .center-panel {
   flex: 1;
   display: flex;
@@ -644,95 +832,34 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.overview-tab {
-  height: 100%;
-  display: flex;
-  gap: 12px;
-  padding: 12px;
-}
-
-.world-map-placeholder {
-  flex: 1;
-  background: rgba(10, 15, 30, 0.8);
-  border-radius: 8px;
-  border: 1px solid rgba(100, 120, 200, 0.15);
+.world-tab {
   position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  height: 100%;
+  width: 100%;
   overflow: hidden;
 }
-.map-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  grid-template-rows: repeat(8, 1fr);
-  gap: 2px;
-  width: 80%;
-  height: 80%;
-  aspect-ratio: 1;
+.world-canvas {
+  width: 100%;
+  height: 100%;
+  cursor: grab;
 }
-.map-cell {
-  background: rgba(30, 50, 90, 0.3);
-  border-radius: 2px;
-  transition: all 0.3s;
+.world-canvas:active {
+  cursor: grabbing;
 }
-.map-cell.filled {
-  background: linear-gradient(135deg, #4f8cff33, #8b5cf633);
-  border: 1px solid rgba(79, 140, 255, 0.4);
-}
-.map-overlay {
+.world-hint {
   position: absolute;
   bottom: 12px;
-  right: 12px;
-  text-align: right;
-}
-.map-overlay span {
-  display: block;
-  font-size: 14px;
-  color: #8b9dc3;
-  font-weight: 600;
-}
-.map-overlay small {
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 16px;
+  padding: 6px 14px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 12px;
   font-size: 11px;
-  color: #6b7db3;
-}
-
-.event-feed {
-  width: 280px;
-  background: rgba(10, 15, 30, 0.6);
-  border-radius: 8px;
-  border: 1px solid rgba(100, 120, 200, 0.15);
-  padding: 10px;
-  overflow-y: auto;
-}
-.event-feed h4 {
-  font-size: 12px;
   color: #8b9dc3;
-  margin: 0 0 8px 0;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-.event-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.event-item {
-  display: flex;
-  gap: 8px;
-  font-size: 12px;
-  padding: 4px 6px;
-  border-radius: 4px;
-  background: rgba(30, 40, 70, 0.4);
-}
-.event-tick {
-  color: #6b7db3;
-  font-family: monospace;
-  flex-shrink: 0;
-}
-.event-text {
-  color: #b0b8d0;
-  line-height: 1.4;
+  backdrop-filter: blur(4px);
+  pointer-events: none;
 }
 
 .npcs-tab {
