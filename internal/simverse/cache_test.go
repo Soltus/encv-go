@@ -1,80 +1,17 @@
 package simverse
 
 import (
-	"container/list"
 	"fmt"
 	"runtime"
-	"sync"
 	"testing"
 	"time"
 )
 
-type EntityCache struct {
-	mu       sync.RWMutex
-	capacity int
-	items    map[uint64]*list.Element
-	lru      *list.List
-}
-
-type cacheEntry struct {
-	key uint64
-	val NPC
-}
-
-func NewEntityCache(capacity int) *EntityCache {
-	return &EntityCache{
-		capacity: capacity,
-		items:    make(map[uint64]*list.Element, capacity),
-		lru:      list.New(),
-	}
-}
-
-func (c *EntityCache) Get(id uint64) (NPC, bool) {
-	c.mu.RLock()
-	elem, ok := c.items[id]
-	c.mu.RUnlock()
-	if !ok {
-		return NPC{}, false
-	}
-	c.mu.Lock()
-	c.lru.MoveToFront(elem)
-	c.mu.Unlock()
-	return elem.Value.(*cacheEntry).val, true
-}
-
-func (c *EntityCache) Put(npc NPC) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if elem, ok := c.items[npc.ID]; ok {
-		elem.Value.(*cacheEntry).val = npc
-		c.lru.MoveToFront(elem)
-		return
-	}
-
-	elem := c.lru.PushFront(&cacheEntry{key: npc.ID, val: npc})
-	c.items[npc.ID] = elem
-
-	if c.lru.Len() > c.capacity {
-		last := c.lru.Back()
-		if last != nil {
-			c.lru.Remove(last)
-			delete(c.items, last.Value.(*cacheEntry).key)
-		}
-	}
-}
-
-func (c *EntityCache) Len() int {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.lru.Len()
-}
-
 func TestEntityCacheLRU(t *testing.T) {
-	cache := NewEntityCache(100)
+	cache := NewEntityCache[NPC](100)
 
 	for i := 0; i < 200; i++ {
-		cache.Put(NPC{ID: uint64(i), Name: fmt.Sprintf("NPC_%d", i)})
+		cache.Put(uint64(i), NPC{ID: uint64(i), Name: fmt.Sprintf("NPC_%d", i)})
 	}
 
 	if cache.Len() != 100 {
@@ -93,9 +30,9 @@ func TestEntityCacheLRU(t *testing.T) {
 }
 
 func BenchmarkEntityCache_Get(b *testing.B) {
-	cache := NewEntityCache(10000)
+	cache := NewEntityCache[NPC](10000)
 	for i := 0; i < 10000; i++ {
-		cache.Put(NPC{ID: uint64(i), Name: fmt.Sprintf("NPC_%d", i)})
+		cache.Put(uint64(i), NPC{ID: uint64(i), Name: fmt.Sprintf("NPC_%d", i)})
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -104,10 +41,10 @@ func BenchmarkEntityCache_Get(b *testing.B) {
 }
 
 func BenchmarkEntityCache_Put(b *testing.B) {
-	cache := NewEntityCache(10000)
+	cache := NewEntityCache[NPC](10000)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		cache.Put(NPC{ID: uint64(i % 20000), Name: "NPC"})
+		cache.Put(uint64(i%20000), NPC{ID: uint64(i % 20000), Name: "NPC"})
 	}
 }
 
@@ -117,7 +54,7 @@ func TestStability_3MinuteRun(t *testing.T) {
 	duration := 3 * time.Minute
 	deadline := time.Now().Add(duration)
 
-	cache := NewEntityCache(10000)
+	cache := NewEntityCache[NPC](10000)
 	scheduler := NewEventScheduler()
 	eventsProcessed := 0
 	ticks := 0
@@ -150,7 +87,7 @@ func TestStability_3MinuteRun(t *testing.T) {
 			if npc.Health > 1000 {
 				npc.Health = 1000
 			}
-			cache.Put(npc)
+			cache.Put(npc.ID, npc)
 		}
 
 		ticks++

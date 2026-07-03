@@ -46,6 +46,10 @@ type NPCV3 struct {
 
 const NPCV3BaseSize = 160
 
+func NPCV3Size() float64 {
+	return float64(NPCV3BaseSize) + 20
+}
+
 type CatchUpResult struct {
 	TicksSimulated uint32
 	EventsOccurred uint32
