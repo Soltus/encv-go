@@ -1,7 +1,10 @@
 package simverse
 
 import (
+	"encoding/json"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 )
@@ -366,4 +369,84 @@ func (cm *ChronicleManager) MemoryStats() map[string]float64 {
 		"world_count":    float64(len(cm.byLevel[ChronLevelWorld])),
 		"entity_indexed": float64(len(cm.byEntity)),
 	}
+}
+
+type chronicleSaveData struct {
+	NextID   uint64           `json:"next_id"`
+	WorldEra uint16           `json:"world_era"`
+	Events   []ChronicleEvent `json:"events"`
+}
+
+func (cm *ChronicleManager) SaveToFile(path string) error {
+	cm.mu.RLock()
+	data := chronicleSaveData{
+		NextID:   cm.nextID,
+		WorldEra: cm.worldEra,
+		Events:   make([]ChronicleEvent, len(cm.events)),
+	}
+	copy(data.Events, cm.events)
+	cm.mu.RUnlock()
+
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, jsonData, 0644); err != nil {
+		return err
+	}
+
+	return os.Rename(tmpPath, path)
+}
+
+func (cm *ChronicleManager) LoadFromFile(path string) error {
+	jsonData, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	var data chronicleSaveData
+	if err := json.Unmarshal(jsonData, &data); err != nil {
+		return err
+	}
+
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	cm.nextID = data.NextID
+	cm.worldEra = data.WorldEra
+	cm.events = make([]ChronicleEvent, len(data.Events))
+	copy(cm.events, data.Events)
+
+	cm.byEntity = make(map[uint64][]uint64)
+	cm.byLevel = [ChronLevelMax][]uint64{}
+	cm.byType = make(map[ChronicleEventType][]uint64)
+
+	for i := range cm.events {
+		evt := &cm.events[i]
+		if evt.ID == 0 {
+			evt.ID = cm.nextID
+			cm.nextID++
+		}
+		if evt.Level == 0 {
+			evt.Level = evt.Type.Level()
+		}
+		if evt.Importance == 0 {
+			evt.Importance = DefaultImportanceForType(evt.Type)
+		}
+
+		cm.byEntity[evt.EntityID] = append(cm.byEntity[evt.EntityID], evt.ID)
+		if evt.Level < ChronLevelMax {
+			cm.byLevel[evt.Level] = append(cm.byLevel[evt.Level], evt.ID)
+		}
+		cm.byType[evt.Type] = append(cm.byType[evt.Type], evt.ID)
+	}
+
+	return nil
 }

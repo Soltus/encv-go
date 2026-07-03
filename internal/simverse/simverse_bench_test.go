@@ -106,7 +106,7 @@ func BenchmarkCache_PutGet_10K(b *testing.B) {
 }
 
 func BenchmarkFractalWorld_Tick_100NPCs(b *testing.B) {
-	world := NewFractalWorld()
+	world := NewFractalWorld(b.TempDir(), "bench")
 	rng := rand.New(rand.NewSource(42))
 	for i := 0; i < 100; i++ {
 		_ = world.GetNPC(uint64(i), rng)
@@ -118,7 +118,7 @@ func BenchmarkFractalWorld_Tick_100NPCs(b *testing.B) {
 }
 
 func BenchmarkFractalWorld_Tick_1000NPCs(b *testing.B) {
-	world := NewFractalWorld()
+	world := NewFractalWorld(b.TempDir(), "bench")
 	rng := rand.New(rand.NewSource(42))
 	for i := 0; i < 1000; i++ {
 		_ = world.GetNPC(uint64(i), rng)
@@ -130,7 +130,7 @@ func BenchmarkFractalWorld_Tick_1000NPCs(b *testing.B) {
 }
 
 func BenchmarkFractalWorld_Tick_10000NPCs(b *testing.B) {
-	world := NewFractalWorld()
+	world := NewFractalWorld(b.TempDir(), "bench")
 	rng := rand.New(rand.NewSource(42))
 	for i := 0; i < 10000; i++ {
 		_ = world.GetNPC(uint64(i), rng)
@@ -142,7 +142,7 @@ func BenchmarkFractalWorld_Tick_10000NPCs(b *testing.B) {
 }
 
 func BenchmarkFractalWorld_GetNPC(b *testing.B) {
-	world := NewFractalWorld()
+	world := NewFractalWorld(b.TempDir(), "bench")
 	rng := rand.New(rand.NewSource(42))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

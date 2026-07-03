@@ -57,7 +57,7 @@ func TestStability_Full30Min(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(42))
 
-	world := NewFractalWorld()
+	world := NewFractalWorld(t.TempDir(), "test")
 	world.SetPerformanceTier(PerfTierBackground)
 
 	for i := 0; i < 100; i++ {
@@ -214,7 +214,7 @@ func TestStability_QuickSanity(t *testing.T) {
 	t.Log("Running quick sanity check (10s)")
 
 	rng := rand.New(rand.NewSource(123))
-	world := NewFractalWorld()
+	world := NewFractalWorld(t.TempDir(), "test")
 	world.SetPerformanceTier(PerfTierBackground)
 
 	for i := 0; i < 10; i++ {

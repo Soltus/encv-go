@@ -2,6 +2,7 @@ package simverse
 
 import (
 	"math/rand"
+	"path/filepath"
 	"sync"
 )
 
@@ -39,6 +40,7 @@ type FractalWorld struct {
 	perfTier      PerformanceTier
 	perfSched     *PerfScheduler
 	chronicle     *ChronicleManager
+	persistence   *WorldPersistence
 
 	npcCache      *EntityCache[*NPCV3]
 	cellCache     map[uint64]*EntityCache[*Cell]
@@ -48,10 +50,14 @@ type FractalWorld struct {
 	cellCoreCount int
 }
 
-func NewFractalWorld() *FractalWorld {
+func NewFractalWorld(dataDir string, worldName string) *FractalWorld {
+	persist := NewWorldPersistence(dataDir, worldName)
+	persist.EnsureDir()
+
 	fw := &FractalWorld{
 		perfSched:     NewPerfScheduler(),
-		chronicle:     NewChronicleManager("world"),
+		chronicle:     NewChronicleManager(worldName),
+		persistence:   persist,
 		npcCache:      NewEntityCache[*NPCV3](10000),
 		cellCache:     make(map[uint64]*EntityCache[*Cell]),
 		brainCache:    make(map[uint64]*Brain),
@@ -59,6 +65,10 @@ func NewFractalWorld() *FractalWorld {
 		cellCoreCount: 1000,
 	}
 	return fw
+}
+
+func (fw *FractalWorld) Persistence() *WorldPersistence {
+	return fw.persistence
 }
 
 func (fw *FractalWorld) SetPerformanceTier(tier PerformanceTier) {
@@ -311,4 +321,92 @@ func (fw *FractalWorld) FocusLevel(npcID uint64) FocusLevel {
 		return level
 	}
 	return FocusNone
+}
+
+type worldSaveData struct {
+	WorldTick  uint32              `json:"world_tick"`
+	PerfTier   PerformanceTier     `json:"perf_tier"`
+	FocusNPCs  map[uint64]uint8    `json:"focus_npcs"`
+	NPCCount   uint32              `json:"npc_count"`
+}
+
+func (fw *FractalWorld) SaveCheckpoint() error {
+	fw.mu.RLock()
+	tick := fw.worldTick
+	tier := fw.perfTier
+	era := fw.chronicle.CurrentEra()
+	npcCount := uint32(fw.npcCache.Len())
+	focusCount := uint32(len(fw.focusNPCs))
+
+	focusNPCs := make(map[uint64]uint8, len(fw.focusNPCs))
+	for id, level := range fw.focusNPCs {
+		focusNPCs[id] = uint8(level)
+	}
+	fw.mu.RUnlock()
+
+	dataDir := fw.persistence.DataDir()
+
+	chronPath := filepath.Join(dataDir, "chronicle.json")
+	if err := fw.chronicle.SaveToFile(chronPath); err != nil {
+		return err
+	}
+
+	worldData := worldSaveData{
+		WorldTick:  tick,
+		PerfTier:   tier,
+		FocusNPCs:  focusNPCs,
+		NPCCount:   npcCount,
+	}
+	worldPath := filepath.Join(dataDir, "world_state.json")
+	if err := writeJSONAtomic(worldPath, worldData); err != nil {
+		return err
+	}
+
+	var tierName string
+	switch tier {
+	case PerfTierBackground:
+		tierName = "background"
+	case PerfTierForeground:
+		tierName = "foreground"
+	case PerfTierFgIdle:
+		tierName = "fg_idle"
+	default:
+		tierName = "unknown"
+	}
+
+	return fw.persistence.SaveMetadata(tick, era, tierName, npcCount, focusCount)
+}
+
+func (fw *FractalWorld) LoadCheckpoint() (bool, error) {
+	dataDir := fw.persistence.DataDir()
+	worldPath := filepath.Join(dataDir, "world_state.json")
+	chronPath := filepath.Join(dataDir, "chronicle.json")
+
+	var worldData worldSaveData
+	if err := readJSON(worldPath, &worldData); err != nil {
+		return false, nil
+	}
+
+	if err := fw.chronicle.LoadFromFile(chronPath); err != nil {
+		return false, err
+	}
+
+	fw.mu.Lock()
+	fw.worldTick = worldData.WorldTick
+	fw.perfTier = worldData.PerfTier
+	fw.perfSched.SetTier(worldData.PerfTier)
+
+	for id, level := range worldData.FocusNPCs {
+		fw.focusNPCs[id] = FocusLevel(level)
+		fw.perfSched.AddFocusNPC(id, level)
+	}
+	fw.mu.Unlock()
+
+	return true, nil
+}
+
+func (fw *FractalWorld) HasCheckpoint() bool {
+	dataDir := fw.persistence.DataDir()
+	worldPath := filepath.Join(dataDir, "world_state.json")
+	return fileExists(worldPath)
 }

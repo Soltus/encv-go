@@ -488,3 +488,13 @@ export function addOpenListStatusListener(
 ): Promise<{ remove: () => Promise<void> }> {
   return (GoProcess as any).addListener("openlist:status", callback);
 }
+
+export async function openWorld(worldId: string = "default", worldName: string = "Default"): Promise<{ success: boolean; error?: string }> {
+  try {
+    await GoProcess.openWorld({ worldId, worldName });
+    return { success: true };
+  } catch (e) {
+    console.error("[GoProcess] openWorld failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    return { success: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}

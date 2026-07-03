@@ -26,6 +26,10 @@ type SimverseManager struct {
 	wsClients   map[*simverseWSClient]bool
 	wsBroadcast chan simverseWSMessage
 	wsUpgrader  websocket.Upgrader
+
+	dataDir  string
+	lastCheckpointTick uint32
+	checkpointInterval uint32
 }
 
 type worldTickSample struct {
@@ -34,18 +38,21 @@ type worldTickSample struct {
 	duration  time.Duration
 }
 
-func NewSimverseManager() *SimverseManager {
-	world := simverse.NewFractalWorld()
+func NewSimverseManager(dataDir string) *SimverseManager {
+	world := simverse.NewFractalWorld(dataDir, "default")
 	world.SetPerformanceTier(simverse.PerfTierBackground)
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	for i := 0; i < 50; i++ {
-		world.AddFocusNPC(uint64(i), simverse.FocusCore)
-		world.GetBrain(uint64(i))
-	}
-	for i := 0; i < 2000; i++ {
-		world.GetNPC(uint64(i), rng)
+	loaded, _ := world.LoadCheckpoint()
+	if !loaded {
+		for i := 0; i < 50; i++ {
+			world.AddFocusNPC(uint64(i), simverse.FocusCore)
+			world.GetBrain(uint64(i))
+		}
+		for i := 0; i < 2000; i++ {
+			world.GetNPC(uint64(i), rng)
+		}
 	}
 
 	return &SimverseManager{
@@ -57,6 +64,8 @@ func NewSimverseManager() *SimverseManager {
 		tickHistory: make([]worldTickSample, 0, 1000),
 		wsClients:   make(map[*simverseWSClient]bool),
 		wsBroadcast: make(chan simverseWSMessage, 256),
+		dataDir:     dataDir,
+		checkpointInterval: 500,
 		wsUpgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -65,6 +74,14 @@ func NewSimverseManager() *SimverseManager {
 			},
 		},
 	}
+}
+
+func (sm *SimverseManager) SaveCheckpoint() error {
+	return sm.world.SaveCheckpoint()
+}
+
+func (sm *SimverseManager) HasCheckpoint() bool {
+	return sm.world.HasCheckpoint()
 }
 
 func (sm *SimverseManager) Start() {
@@ -92,6 +109,10 @@ func (sm *SimverseManager) Stop() {
 	sm.mu.Unlock()
 
 	<-sm.doneCh
+
+	if err := sm.world.SaveCheckpoint(); err != nil {
+		slog.Warn("simverse final checkpoint failed", "error", err)
+	}
 }
 
 func (sm *SimverseManager) runLoop() {
@@ -130,6 +151,20 @@ func (sm *SimverseManager) tickOnce() {
 	})
 	if len(sm.tickHistory) > 1000 {
 		sm.tickHistory = sm.tickHistory[1:]
+	}
+
+	needsCheckpoint := currentTick-sm.lastCheckpointTick >= sm.checkpointInterval
+	if needsCheckpoint {
+		sm.lastCheckpointTick = currentTick
+		go func() {
+			if err := sm.world.SaveCheckpoint(); err != nil {
+				slog.Warn("simverse checkpoint failed", "error", err, "tick", currentTick)
+			}
+			persist := sm.world.Persistence()
+			if action := persist.CheckStorageAndAdjust(sm.world); action != "normal" {
+				slog.Warn("simverse storage adjustment", "action", action, "tick", currentTick)
+			}
+		}()
 	}
 	sm.mu.Unlock()
 }
@@ -878,4 +913,106 @@ func (s *Server) handleSimverseChronicleEvent(c *gin.Context) {
 	result["effects"] = effectsJSON
 
 	c.JSON(http.StatusOK, result)
+}
+
+func (s *Server) handleSimverseWorldSave(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	if err := s.simverseMgr.SaveCheckpoint(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	meta := world.Persistence().Metadata()
+	c.JSON(http.StatusOK, gin.H{
+		"status":    "saved",
+		"tick":      meta.Tick,
+		"era":       meta.CurrentEra,
+		"saved_at":  meta.LastSavedAt,
+	})
+}
+
+func (s *Server) handleSimverseWorldLoad(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	wasRunning := s.simverseMgr.IsRunning()
+	if wasRunning {
+		s.simverseMgr.Stop()
+	}
+
+	loaded, err := s.simverseMgr.World().LoadCheckpoint()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if !loaded {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no save found"})
+		return
+	}
+
+	if wasRunning {
+		s.simverseMgr.Start()
+	}
+
+	world := s.simverseMgr.World()
+	meta := world.Persistence().Metadata()
+	c.JSON(http.StatusOK, gin.H{
+		"status":   "loaded",
+		"tick":     meta.Tick,
+		"era":      meta.CurrentEra,
+		"running":  wasRunning,
+	})
+}
+
+func (s *Server) handleSimverseWorldSaveInfo(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	persist := world.Persistence()
+	meta := persist.Metadata()
+
+	c.JSON(http.StatusOK, gin.H{
+		"has_save":   persist.HasExistingSave(),
+		"tick":       meta.Tick,
+		"era":        meta.CurrentEra,
+		"npc_count":  meta.NPCCount,
+		"focus_count": meta.FocusCount,
+		"perf_tier":  meta.PerfTier,
+		"saved_at":   meta.LastSavedAt,
+		"created_at": meta.CreatedAt,
+		"save_state": meta.SaveState,
+		"world_id":   meta.WorldID,
+		"world_name": meta.WorldName,
+	})
+}
+
+func (s *Server) handleSimverseStorageStatus(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	status := world.Persistence().GetStorageStatus()
+
+	c.JSON(http.StatusOK, gin.H{
+		"level":              status.Level,
+		"total_bytes":        status.TotalBytes,
+		"available_bytes":    status.AvailableBytes,
+		"used_bytes":         status.UsedBytes,
+		"placeholder_active": status.PlaceholderActive,
+		"placeholder_size":   status.PlaceholderSize,
+		"low_threshold":      simverse.StorageLowBytes,
+		"critical_threshold": simverse.StorageCriticalBytes,
+	})
 }

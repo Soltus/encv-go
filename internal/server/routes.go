@@ -250,6 +250,9 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	//   - GET  /api/simverse/chronicle/npc/:id : NPC 个人编年史
 	//   - GET  /api/simverse/chronicle/event/:id : 事件详情 + 因果链
 	//   - GET  /api/simverse/ws            : 事件推送
+	//   - POST /api/simverse/world/save     : 手动触发 checkpoint
+	//   - POST /api/simverse/world/load     : 从存档加载（重新加载）
+	//   - GET  /api/simverse/world/save     : 获取存档元信息
 	simGroup := r.Group("/api/simverse")
 	{
 		simGroup.GET("/world/state", s.handleSimverseWorldState)
@@ -265,5 +268,9 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 		simGroup.GET("/chronicle/npc/:id", s.handleSimverseChronicleNPC)
 		simGroup.GET("/chronicle/event/:id", s.handleSimverseChronicleEvent)
 		simGroup.GET("/ws", s.handleSimverseWebSocket)
+		simGroup.POST("/world/save", s.handleSimverseWorldSave)
+		simGroup.POST("/world/load", s.handleSimverseWorldLoad)
+		simGroup.GET("/world/save", s.handleSimverseWorldSaveInfo)
+		simGroup.GET("/world/storage", s.handleSimverseStorageStatus)
 	}
 }

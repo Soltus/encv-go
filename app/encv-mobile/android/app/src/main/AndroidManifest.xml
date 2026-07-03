@@ -131,6 +131,18 @@
         />
 
         <activity
+            android:name=".WorldActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:taskAffinity="com.encvgo.app.world.task"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="false"
+            android:label="SimVerse World"
+        />
+
+        <activity
             android:name="com.hjq.logcat.LogcatActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:launchMode="singleInstance"

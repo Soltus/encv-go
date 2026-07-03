@@ -290,6 +290,7 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         'debug-decrypt': path.resolve(__dirname, 'public/debug-decrypt.html'),
+        'simverse-world': path.resolve(__dirname, 'simverse-world.html'),
       },
       output: {
         // Vite 8 (rolldown) requires manualChunks to be a function, not an object.

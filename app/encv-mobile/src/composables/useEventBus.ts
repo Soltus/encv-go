@@ -58,6 +58,11 @@ export interface EncvEvents {
    * 历史 bug：之前进 lastError → 永远显示"backend instance changed" → offline 死锁
    */
   "backend:instance-changed": { previous: string; current: string };
+  "simverse:ws:connected": Record<string, never>;
+  "simverse:ws:disconnected": Record<string, never>;
+  "simverse:tick": any;
+  "simverse:stats": any;
+  "simverse:pong": any;
 }
 
 type EventKey = keyof EncvEvents;

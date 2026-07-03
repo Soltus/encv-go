@@ -602,19 +602,80 @@ func RegisterSimverseTools(k *kernel.Kernel) {
 
 ---
 
-## 七、待确认问题
+## 七、用户确认项（2026-07-03）
 
-以下问题需要与您确认后再进入详细设计：
-
-1. **世界规模默认值**：默认创建世界时，NPC 数量定多少？（1 万 / 10 万 / 100 万）影响存储需求和性能
-2. **横屏是否强制**：世界页面是否强制横屏？还是允许用户切换横竖屏？
-3. **独立 Activity vs 单 Activity**：是否确定做独立 Activity？还是在 MainActivity 内通过横屏切换实现？
-4. **后台运行策略**：用户关闭 App 后，世界是否继续在后台运行？还是只在前台运行？（影响电量消耗）
-5. **与 Kernel 的集成优先级**：SimVerse 注册为 Kernel Tool 是近期目标还是远期目标？
+| 问题 | 确认结果 | 说明 |
+|------|----------|------|
+| 世界规模默认值 | **用户自定义 + 动态变化** | 创建世界时让用户选择规模，运行中可动态调整 |
+| 横屏是否强制 | **强制横屏** | 点击卡片入口进入强制横屏模式，首页保持竖屏，不冲突 |
+| 独立 Activity | **必须独立 Activity** | 独立 taskAffinity，类似 PlayerActivity 模式 |
+| 后台运行策略 | **后台继续运行** | 退到后台后世界继续运行，WorkManager 保活 |
+| 小窗模式 | **需要支持** | 安卓自由窗口 / 分屏 / 小窗模式兼容 |
+| Kernel 集成优先级 | **近期做基础版** | 基础 Tool 接入（查询世界状态、搜索编年史） |
 
 ---
 
-## 八、引用
+## 八、小窗模式（自由窗口）支持
+
+### 8.1 安卓小窗模式概述
+
+Android 支持多种多窗口模式：
+- **分屏模式**（Split Screen）：屏幕一分为二
+- **自由窗口**（Freeform / 小窗模式）：应用可在可调整大小的浮动窗口中运行，类似桌面 OS
+- **画中画**（PiP）：视频类应用的小窗口播放
+
+对 SimVerse 的价值：
+- 用户可以把世界模拟器缩小成小窗挂在屏幕角落，边刷微信边看世界演化
+- 类似手游的"小窗挂机"体验
+- 配合后台运行，世界可以持续运行且用户随时可见
+
+### 8.2 支持方案
+
+```xml
+<!-- AndroidManifest.xml 中 WorldActivity 声明 -->
+<activity
+    android:name=".WorldActivity"
+    android:exported="false"
+    android:launchMode="singleTop"
+    android:taskAffinity="com.encvgo.app.world.task"
+    android:documentLaunchMode="always"
+    android:maxRecents="1"
+    android:theme="@style/AppTheme.World.Fullscreen"
+    android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|uiMode|keyboardHidden"
+    android:screenOrientation="sensorLandscape"
+    android:resizeableActivity="true"       
+    android:supportsPictureInPicture="false"
+    android:label="SimVerse">
+    <!-- 
+      resizeableActivity="true" 是关键：
+      - 支持分屏模式
+      - 支持自由窗口（小窗模式）
+      - Android 12+ 自动支持
+      - 厂商定制（小米/OPPO/vivo 等）的小窗模式也兼容
+    -->
+</activity>
+```
+
+### 8.3 小窗模式下的 UI 适配
+
+| 窗口大小 | 布局模式 | 说明 |
+|----------|----------|------|
+| > 800dp（全屏/横屏） | 完整双栏布局 | 左地图 + 右时间线/数据面板 |
+| 600-800dp（中号小窗） | 单栏 + 底部 Tab | 主内容区 + 底部 Tab 切换 |
+| < 600dp（小号小窗） | 精简模式 | 只显示关键数据（tick / 时代 / 事件流） |
+
+前端通过 `window.matchMedia('(min-width: 800px)')` 等 CSS 媒体查询自适应。
+
+### 8.4 小窗模式的生命周期注意
+
+- 小窗模式下 Activity 不会被销毁（跟普通后台不同），世界持续运行
+- 进入小窗 = `onConfigurationChanged`（configChanges 已声明，不会重建）
+- 从小窗切回全屏 = 同样 `onConfigurationChanged`
+- 不需要特殊处理，声明 `resizeableActivity="true"` + `configChanges` 即可
+
+---
+
+## 九、引用
 
 ### 相关代码
 

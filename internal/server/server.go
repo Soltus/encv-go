@@ -262,6 +262,30 @@ func kernelDataPath() string {
 	return filepath.Join(parent, "kernel")
 }
 
+// simverseDataPath 返回 SimVerse 世界数据的持久化目录。
+//
+// 平台/env 矩阵与 mountRegistryDataPath 对齐：
+//
+//	平台    环境              路径
+//	─────  ───────────       ──────────────────────────────────────────
+//	Android 任意              <ENCV_APP_FILES_DIR>/.encv/simverse
+//	Linux   dev               $XDG_DATA_HOME/encv-dev/simverse
+//	Linux   production        $XDG_DATA_HOME/encv/simverse
+//	macOS   dev               $HOME/Library/Application Support/encv-dev/simverse
+//	macOS   production        $HOME/Library/Application Support/encv/simverse
+//	Windows dev               %LOCALAPPDATA%\encv-dev\simverse
+//	Windows production        %LOCALAPPDATA%\encv\simverse
+//
+// 优先级：ENCV_SIMVERSE_DIR（明确指定） > 派生默认值。
+func simverseDataPath() string {
+	if v := os.Getenv("ENCV_SIMVERSE_DIR"); v != "" {
+		return v
+	}
+	mountsFile := mountRegistryDataPath(nil)
+	parent := filepath.Dir(mountsFile)
+	return filepath.Join(parent, "simverse")
+}
+
 // resolveUserPath 解析用户路径为绝对路径（multi-mount-aware）。
 //
 // 优先级：
@@ -481,6 +505,17 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	// 用 ScenarioLoader 加载 YAML/JSON 剧本，注入到 MockEngine。
 	// 详见 internal/server/mock_scenarios/SCHEMA.md。
 	s.loadScenariosFromAgentConfig()
+
+	// 🆕 2026-07-03：SimVerse 模拟世界引擎持久化初始化
+	//   - 持久化目录：与 mountRegistry / kernel 同级 (.encv/simverse)
+	//   - 自动从 checkpoint 恢复（若存在）
+	//   - 运行时每 500 tick 自动 checkpoint
+	//   - 退出时最终 checkpoint
+	simDir := simverseDataPath()
+	s.simverseMgr = NewSimverseManager(simDir)
+	slog.Info("simverse manager initialized", "data_dir", simDir,
+		"has_checkpoint", s.simverseMgr.HasCheckpoint())
+
 	return s
 }
 

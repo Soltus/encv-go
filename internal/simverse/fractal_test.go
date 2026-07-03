@@ -9,7 +9,7 @@ import (
 )
 
 func TestFractalWorld_Basic(t *testing.T) {
-	world := NewFractalWorld()
+	world := NewFractalWorld(t.TempDir(), "test")
 	rng := rand.New(rand.NewSource(42))
 
 	t.Logf("=== 分形嵌套世界基础测试 ===")
@@ -43,7 +43,7 @@ func TestFractalWorld_Basic(t *testing.T) {
 }
 
 func TestFractalWorld_FocusRadiation(t *testing.T) {
-	world := NewFractalWorld()
+	world := NewFractalWorld(t.TempDir(), "test")
 	_ = world
 
 	t.Logf("=== 玩家焦点辐射模型 ===")
@@ -142,7 +142,7 @@ func TestFractalWorld_PerformanceTiers(t *testing.T) {
 }
 
 func TestFractalWorld_ScaleSimulation(t *testing.T) {
-	world := NewFractalWorld()
+	world := NewFractalWorld(t.TempDir(), "test")
 	rng := rand.New(rand.NewSource(42))
 
 	t.Logf("=== 规模推演测试 ===")
@@ -338,7 +338,7 @@ func TestFractalWorld_MemoryBudget(t *testing.T) {
 }
 
 func TestFractalWorld_ChronicleIntegration(t *testing.T) {
-	world := NewFractalWorld()
+	world := NewFractalWorld(t.TempDir(), "test")
 	rng := rand.New(rand.NewSource(42))
 
 	t.Logf("=== 编年史系统集成测试 ===")

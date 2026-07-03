@@ -1,6 +1,6 @@
-import { ref, computed, onMounted, onUnmounted } from "vue";
-import { useProxiedFetch } from "./useProxiedFetch";
+import { ref, computed } from "vue";
 import { eventBus } from "./useEventBus";
+import type { EncvEvents } from "./useEventBus";
 
 export interface SimverseWorldState {
   tick: number;
@@ -161,8 +161,7 @@ function getApiBase(): string {
 }
 
 async function fetchJSON(path: string, options: RequestInit = {}) {
-  const { fetch: proxiedFetch } = useProxiedFetch();
-  const res = await proxiedFetch(`${getApiBase()}${path}`, {
+  const res = await fetch(`${getApiBase()}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -377,7 +376,7 @@ export function useSimverse() {
         eventBus.emit("simverse:pong", msg.data);
         break;
       default:
-        eventBus.emit(`simverse:${msg.type}`, msg.data);
+        eventBus.emit(`simverse:${msg.type}` as keyof EncvEvents, msg.data);
     }
   }
 

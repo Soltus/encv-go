@@ -6,17 +6,19 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/Soltus/encv-go/internal/simverse"
 	"github.com/gin-gonic/gin"
 )
 
-func setupSimverseTestServer() (*gin.Engine, *SimverseManager) {
+func setupSimverseTestServer() (*gin.Engine, *SimverseManager, string) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 
-	mgr := NewSimverseManager()
+	tmpDir, _ := os.MkdirTemp("", "simverse_test_*")
+	mgr := NewSimverseManager(tmpDir)
 	s := &Server{simverseMgr: mgr}
 
 	simGroup := r.Group("/api/simverse")
@@ -32,11 +34,11 @@ func setupSimverseTestServer() (*gin.Engine, *SimverseManager) {
 		simGroup.GET("/perf/metrics", s.handleSimversePerfMetrics)
 	}
 
-	return r, mgr
+	return r, mgr, tmpDir
 }
 
 func TestSimverseAPI_WorldState(t *testing.T) {
-	r, mgr := setupSimverseTestServer()
+	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
 	req := httptest.NewRequest("GET", "/api/simverse/world/state", nil)
@@ -67,7 +69,7 @@ func TestSimverseAPI_WorldState(t *testing.T) {
 }
 
 func TestSimverseAPI_WorldConfig(t *testing.T) {
-	r, mgr := setupSimverseTestServer()
+	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
 	req := httptest.NewRequest("GET", "/api/simverse/world/config", nil)
@@ -98,7 +100,7 @@ func TestSimverseAPI_WorldConfig(t *testing.T) {
 }
 
 func TestSimverseAPI_SetConfig(t *testing.T) {
-	r, mgr := setupSimverseTestServer()
+	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
 	body := bytes.NewBufferString(`{"tier": "foreground"}`)
@@ -147,7 +149,7 @@ func TestSimverseAPI_SetConfig(t *testing.T) {
 }
 
 func TestSimverseAPI_WorldControl(t *testing.T) {
-	r, mgr := setupSimverseTestServer()
+	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
 	body := bytes.NewBufferString(`{"action": "step"}`)
@@ -180,7 +182,7 @@ func TestSimverseAPI_WorldControl(t *testing.T) {
 }
 
 func TestSimverseAPI_NPCList(t *testing.T) {
-	r, mgr := setupSimverseTestServer()
+	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
 	req := httptest.NewRequest("GET", "/api/simverse/npc/list?page=1&page_size=10", nil)
@@ -227,7 +229,7 @@ func TestSimverseAPI_NPCList(t *testing.T) {
 }
 
 func TestSimverseAPI_NPCDetail(t *testing.T) {
-	r, mgr := setupSimverseTestServer()
+	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
 	req := httptest.NewRequest("GET", "/api/simverse/npc/42", nil)
@@ -265,7 +267,7 @@ func TestSimverseAPI_NPCDetail(t *testing.T) {
 }
 
 func TestSimverseAPI_FocusList(t *testing.T) {
-	r, mgr := setupSimverseTestServer()
+	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
 	req := httptest.NewRequest("GET", "/api/simverse/focus", nil)
@@ -288,7 +290,7 @@ func TestSimverseAPI_FocusList(t *testing.T) {
 }
 
 func TestSimverseAPI_SetFocus(t *testing.T) {
-	r, mgr := setupSimverseTestServer()
+	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
 	body := bytes.NewBufferString(`{"npcs": [{"id": 9999, "level": "core"}, {"id": 8888, "level": "player"}]}`)
@@ -319,7 +321,7 @@ func TestSimverseAPI_SetFocus(t *testing.T) {
 }
 
 func TestSimverseAPI_PerfMetrics(t *testing.T) {
-	r, mgr := setupSimverseTestServer()
+	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
 	for i := 0; i < 100; i++ {
@@ -350,7 +352,7 @@ func TestSimverseAPI_PerfMetrics(t *testing.T) {
 }
 
 func TestSimverseAPI_AllEndpoints(t *testing.T) {
-	r, mgr := setupSimverseTestServer()
+	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
 	endpoints := []struct {

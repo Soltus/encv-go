@@ -80,6 +80,11 @@ export interface GoProcessPlugin {
   // 任务取消持久化：把 cancel 意图入队 WorkManager，Go 进程重启后自动重试
   // web 端不实现，返回 success:false（浏览器没有 WorkManager）
   enqueueCancelWorker(options: { taskId: string }): Promise<{ success: boolean; workName?: string }>;
+
+  openWorld(options: { worldId: string; worldName: string }): Promise<void>;
+  startSimverseHeartbeat(): Promise<void>;
+  stopSimverseHeartbeat(): Promise<void>;
+  setSimverseWorldRunning(options: { running: boolean }): Promise<void>;
 }
 
 export class GoProcessWeb extends WebPlugin implements GoProcessPlugin {
@@ -224,5 +229,9 @@ export class GoProcessWeb extends WebPlugin implements GoProcessPlugin {
   // 🆕 2026-07-03：web 模式 mock — 浏览器没有 WorkManager
   async enqueueCancelWorker(_options: { taskId: string }): Promise<{ success: boolean; workName?: string }> {
     return { success: false };
+  }
+
+  async openWorld(_options: { worldId: string; worldName: string }): Promise<void> {
+    console.warn("[GoProcessWeb] openWorld: not available in web mode");
   }
 }

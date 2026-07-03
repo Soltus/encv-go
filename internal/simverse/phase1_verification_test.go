@@ -101,7 +101,7 @@ func TestPhase1_MemoryBaseline(t *testing.T) {
 
 	t.Logf("")
 	t.Logf("--- 测试 1: 10K NPCV3 缓存 ---")
-	world1 := NewFractalWorld()
+	world1 := NewFractalWorld(t.TempDir(), "test")
 	rng := rand.New(rand.NewSource(42))
 	for i := 0; i < 10000; i++ {
 		_ = world1.GetNPC(uint64(i), rng)
@@ -348,7 +348,7 @@ func TestPhase1_PerformanceTiers(t *testing.T) {
 		t.Logf("")
 	}
 
-	world := NewFractalWorld()
+	world := NewFractalWorld(t.TempDir(), "test")
 	rng := rand.New(rand.NewSource(42))
 
 	for _, tc := range tiers {
