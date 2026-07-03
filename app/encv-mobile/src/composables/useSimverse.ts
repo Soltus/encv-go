@@ -103,6 +103,39 @@ export interface SimversePerfMetrics {
   tier: string;
 }
 
+export interface SimverseChronicleEvent {
+  id: number;
+  tick: number;
+  level: string;
+  level_cn: string;
+  type: string;
+  type_cn: string;
+  importance: number;
+  imp_name: string;
+  imp_cn: string;
+  entity_id: number;
+  target_id: number;
+  data_tag: number;
+  cause1_id: number;
+  cause2_id: number;
+  cause3_id: number;
+  causes?: SimverseChronicleEvent[];
+  effects?: SimverseChronicleEvent[];
+}
+
+export interface SimverseChronicleWorldResponse {
+  count: number;
+  era: number;
+  total_events: number;
+  items: SimverseChronicleEvent[];
+}
+
+export interface SimverseChronicleNPCResponse {
+  npc_id: number;
+  count: number;
+  items: SimverseChronicleEvent[];
+}
+
 export type PerfTier = "background" | "foreground" | "fg_idle";
 export type FocusLevel = "none" | "distant" | "near" | "core" | "player";
 export type WorldAction = "start" | "stop" | "pause" | "resume" | "step";
@@ -243,6 +276,40 @@ export function useSimverse() {
       return data;
     } catch (e) {
       console.warn("Failed to load perf metrics:", e);
+      return null;
+    }
+  }
+
+  async function loadChronicleWorld(minImportance = 2, limit = 50) {
+    try {
+      const data = await fetchJSON(
+        `/api/simverse/chronicle/world?min_importance=${minImportance}&limit=${limit}`,
+      );
+      return data as SimverseChronicleWorldResponse;
+    } catch (e) {
+      console.warn("Failed to load world chronicle:", e);
+      return null;
+    }
+  }
+
+  async function loadChronicleNPC(npcID: number, limit = 50) {
+    try {
+      const data = await fetchJSON(
+        `/api/simverse/chronicle/npc/${npcID}?limit=${limit}`,
+      );
+      return data as SimverseChronicleNPCResponse;
+    } catch (e) {
+      console.warn(`Failed to load NPC ${npcID} chronicle:`, e);
+      return null;
+    }
+  }
+
+  async function loadChronicleEvent(eventID: number) {
+    try {
+      const data = await fetchJSON(`/api/simverse/chronicle/event/${eventID}`);
+      return data as SimverseChronicleEvent;
+    } catch (e) {
+      console.warn(`Failed to load chronicle event ${eventID}:`, e);
       return null;
     }
   }
@@ -409,6 +476,9 @@ export function useSimverse() {
     loadFocusNPCs,
     setFocusNPCs,
     loadPerfMetrics,
+    loadChronicleWorld,
+    loadChronicleNPC,
+    loadChronicleEvent,
 
     connectWebSocket,
     disconnectWebSocket,

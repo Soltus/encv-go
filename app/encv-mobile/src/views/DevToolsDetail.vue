@@ -76,6 +76,19 @@
           </ion-label>
         </ion-item>
       </ion-list>
+
+      <ion-list>
+        <ion-list-header>
+          <ion-label>模拟世界</ion-label>
+        </ion-list-header>
+        <ion-item button detail @click="goChronicle">
+          <ion-icon :icon="bookOutline" slot="start" color="tertiary"></ion-icon>
+          <ion-label>
+            <h3>编年史</h3>
+            <p>世界历史事件时间线</p>
+          </ion-label>
+        </ion-item>
+      </ion-list>
     </ion-content>
   </ion-page>
 </template>
@@ -96,7 +109,7 @@ import {
   IonToggle,
   IonToolbar,
 } from "@ionic/vue";
-import { bugOutline, extensionPuzzleOutline, eyeOutline, flaskOutline, terminal } from "ionicons/icons";
+import { bugOutline, extensionPuzzleOutline, eyeOutline, flaskOutline, terminal, bookOutline } from "ionicons/icons";
 import { useRouter } from "vue-router";
 import { useDevTools } from "@/composables/useDevTools";
 import { useI18n } from "@/composables/useI18n";
@@ -117,6 +130,10 @@ function goAutomationHub() {
 // 🆕 2026-06-17：Compose UI 原型总览入口（原 prototype 卡片循环已整体搬到 ComposePrototypesHub）
 function goComposePrototypesHub() {
   router.push("/tabs/settings/devtools/compose-prototypes-hub");
+}
+
+function goChronicle() {
+  router.push("/tabs/settings/chronicle");
 }
 
 // 沙箱预览：强制整页跳转，绕过 Vue Router 拦截

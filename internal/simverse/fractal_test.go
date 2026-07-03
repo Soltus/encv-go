@@ -336,3 +336,76 @@ func TestFractalWorld_MemoryBudget(t *testing.T) {
 	t.Logf("")
 	t.Logf("✅ 经过优化后，10M 格实体可在 <100MB 内存内运行")
 }
+
+func TestFractalWorld_ChronicleIntegration(t *testing.T) {
+	world := NewFractalWorld()
+	rng := rand.New(rand.NewSource(42))
+
+	t.Logf("=== 编年史系统集成测试 ===")
+	t.Logf("")
+
+	chron := world.Chronicle()
+	if chron == nil {
+		t.Fatal("Chronicle manager is nil")
+	}
+
+	t.Logf("生成 5 个 NPC...")
+	for i := 0; i < 5; i++ {
+		npc := world.GetNPC(uint64(i), rng)
+		t.Logf("  NPC %d: %s, age=%d, stage=%s",
+			npc.ID, npc.Name, npc.Age, npc.LifeStage.String())
+	}
+
+	birthCount := chron.CountByLevel(ChronLevelPersonal)
+	t.Logf("")
+	t.Logf("出生事件数: %d", birthCount)
+	if birthCount < 5 {
+		t.Errorf("Expected at least 5 birth events, got %d", birthCount)
+	}
+
+	npc0Hist := chron.NPCHistory(0, 10)
+	t.Logf("")
+	t.Logf("NPC 0 个人史（%d 条）:", len(npc0Hist))
+	for _, evt := range npc0Hist {
+		t.Logf("  tick=%d, type=%s, imp=%s",
+			evt.Tick, evt.Type, evt.Importance)
+	}
+
+	t.Logf("")
+	t.Logf("推进世界 1000 tick...")
+	for i := 0; i < 1000; i++ {
+		world.Tick(rng)
+	}
+
+	stats := world.MemoryStats()
+	totalEvents := int(stats["chron_event_count"])
+	personalEvents := int(stats["chron_personal_count"])
+	t.Logf("")
+	t.Logf("编年史统计:")
+	t.Logf("  总事件数: %d", totalEvents)
+	t.Logf("  个人事件: %d", personalEvents)
+	t.Logf("  内存: %.2f KB", stats["chron_total_bytes"]/1024)
+
+	if totalEvents <= birthCount {
+		t.Error("Expected more events after ticking")
+	}
+
+	npc0After := chron.NPCHistory(0, 20)
+	t.Logf("")
+	t.Logf("NPC 0 1000 tick 后的个人史（%d 条）:", len(npc0After))
+	for _, evt := range npc0After {
+		t.Logf("  tick=%d, type=%s, imp=%s",
+			evt.Tick, evt.Type.CN(), evt.Importance.CN())
+	}
+
+	worldTL := chron.WorldTimeline(ImpModerate, 20)
+	t.Logf("")
+	t.Logf("世界编年史（>=中等重要，最新20条）: %d 条", len(worldTL))
+	for _, evt := range worldTL {
+		t.Logf("  tick=%d, level=%s, type=%s",
+			evt.Tick, evt.Level.CN(), evt.Type.CN())
+	}
+
+	t.Logf("")
+	t.Logf("✅ 编年史系统集成正常工作")
+}

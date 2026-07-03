@@ -502,3 +502,27 @@ func minInt(a, b int) int {
 	}
 	return b
 }
+
+var lifeEventToChronicle = [LifeEventMax]ChronicleEventType{
+	LifeEventBirth:        ChronEventBirth,
+	LifeEventChildhood:    ChronEventChildhood,
+	LifeEventAdolescence:  ChronEventAdolescence,
+	LifeEventComingOfAge:  ChronEventComingOfAge,
+	LifeEventFirstJob:     ChronEventFirstJob,
+	LifeEventPromotion:    ChronEventPromotion,
+	LifeEventCareerChange: ChronEventCareerChange,
+	LifeEventMarriage:     ChronEventMarriage,
+	LifeEventDivorce:      ChronEventDivorce,
+	LifeEventChildBirth:   ChronEventChildBirth,
+	LifeEventRetirement:   ChronEventRetirement,
+	LifeEventAging:        ChronEventAging,
+	LifeEventIllness:      ChronEventIllness,
+	LifeEventDeath:        ChronEventDeath,
+}
+
+func LifeEventToChronicle(evt LifeEventType) ChronicleEventType {
+	if evt < LifeEventMax {
+		return lifeEventToChronicle[evt]
+	}
+	return ChronEventAging
+}

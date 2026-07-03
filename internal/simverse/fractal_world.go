@@ -91,9 +91,15 @@ func (fw *FractalWorld) GetNPC(npcID uint64, rng *rand.Rand) *NPCV3 {
 		fw.mu.RUnlock()
 		return npc
 	}
+	currentTick := fw.worldTick
+	chron := fw.chronicle
 	fw.mu.RUnlock()
 
 	npc := fw.generateNPC(npcID, rng)
+	npc.BornAt = int32(currentTick)
+
+	chron.RecordPersonal(currentTick, npcID, ChronEventBirth, 0)
+
 	fw.mu.Lock()
 	fw.npcCache.Put(npcID, npc)
 	fw.mu.Unlock()
@@ -130,31 +136,73 @@ func (fw *FractalWorld) Tick(rng *rand.Rand) {
 	config := PerfTiers[tier]
 	fw.worldTick++
 	currentTick := fw.worldTick
+	chron := fw.chronicle
 	fw.mu.Unlock()
 
 	fw.tickNPCs(currentTick, config, rng)
 	fw.tickBrains(currentTick, config, rng)
+	fw.tickWorldEvents(currentTick, chron, rng)
+}
+
+func (fw *FractalWorld) tickWorldEvents(currentTick uint32, chron *ChronicleManager, rng *rand.Rand) {
+	if currentTick%100 != 0 {
+		return
+	}
+
+	if rng.Float64() < 0.02 {
+		evtTypes := []ChronicleEventType{
+			ChronEventGreatDisaster,
+			ChronEventDisaster,
+			ChronEventMigration,
+			ChronEventEconomyBoom,
+			ChronEventEconomyRecess,
+		}
+		evt := evtTypes[rng.Intn(len(evtTypes))]
+		chron.RecordWorld(currentTick, evt, uint16(rng.Intn(100)))
+	}
+
+	if currentTick%10000 == 0 {
+		era := chron.CurrentEra()
+		chron.SetEra(era+1, currentTick, "")
+	}
 }
 
 func (fw *FractalWorld) tickNPCs(currentTick uint32, config PerfTierConfig, rng *rand.Rand) {
 	fw.mu.RLock()
 	npcs := fw.npcCache.All()
+	chron := fw.chronicle
 	fw.mu.RUnlock()
 
 	eventRate := config.EventRateMul
 	if eventRate < 1.0 {
 		for _, npc := range npcs {
 			if rng.Float64() < eventRate {
-				npc.CatchUp(currentTick, rng)
+				result := npc.CatchUp(currentTick, rng)
+				fw.recordChronicleEvents(chron, npc, currentTick, result)
 			}
 		}
 	} else {
 		extraTicks := int(eventRate)
 		for i := 0; i < extraTicks; i++ {
 			for _, npc := range npcs {
-				npc.CatchUp(currentTick, rng)
+				result := npc.CatchUp(currentTick, rng)
+				fw.recordChronicleEvents(chron, npc, currentTick, result)
 			}
 		}
+	}
+}
+
+func (fw *FractalWorld) recordChronicleEvents(chron *ChronicleManager, npc *NPCV3, tick uint32, result CatchUpResult) {
+	if len(result.LifeEvents) == 0 {
+		return
+	}
+	for _, evt := range result.LifeEvents {
+		chronType := LifeEventToChronicle(evt)
+		chron.Record(ChronicleEvent{
+			Tick:     tick,
+			Type:     chronType,
+			EntityID: npc.ID,
+		})
 	}
 }
 

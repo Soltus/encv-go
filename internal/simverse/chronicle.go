@@ -52,9 +52,7 @@ func (cm *ChronicleManager) Record(evt ChronicleEvent) uint64 {
 
 	cm.events = append(cm.events, evt)
 
-	if evt.EntityID != 0 {
-		cm.byEntity[evt.EntityID] = append(cm.byEntity[evt.EntityID], evt.ID)
-	}
+	cm.byEntity[evt.EntityID] = append(cm.byEntity[evt.EntityID], evt.ID)
 	if evt.Level < ChronLevelMax {
 		cm.byLevel[evt.Level] = append(cm.byLevel[evt.Level], evt.ID)
 	}
@@ -135,7 +133,9 @@ type ChronicleQuery struct {
 	FromTick      uint32
 	ToTick        uint32
 	EntityID      uint64
+	HasEntity     bool
 	Level         ChronicleLevel
+	HasLevel      bool
 	EventType     ChronicleEventType
 	MinImportance ChronicleImportance
 	Limit         int
@@ -149,11 +149,11 @@ func (cm *ChronicleManager) Query(q ChronicleQuery) []ChronicleEvent {
 	var candidateIDs []uint64
 
 	switch {
-	case q.EntityID != 0:
+	case q.HasEntity:
 		candidateIDs = cm.byEntity[q.EntityID]
 	case q.EventType != 0:
 		candidateIDs = cm.byType[q.EventType]
-	case q.Level < ChronLevelMax:
+	case q.HasLevel:
 		candidateIDs = cm.byLevel[q.Level]
 	default:
 		candidateIDs = make([]uint64, len(cm.events))
@@ -205,6 +205,7 @@ func (cm *ChronicleManager) Query(q ChronicleQuery) []ChronicleEvent {
 func (cm *ChronicleManager) WorldTimeline(minImportance ChronicleImportance, limit int) []ChronicleEvent {
 	return cm.Query(ChronicleQuery{
 		Level:         ChronLevelWorld,
+		HasLevel:      true,
 		MinImportance: minImportance,
 		Limit:         limit,
 		Descending:    true,
@@ -214,6 +215,7 @@ func (cm *ChronicleManager) WorldTimeline(minImportance ChronicleImportance, lim
 func (cm *ChronicleManager) NPCHistory(npcID uint64, limit int) []ChronicleEvent {
 	return cm.Query(ChronicleQuery{
 		EntityID:   npcID,
+		HasEntity:  true,
 		Limit:      limit,
 		Descending: true,
 	})
@@ -222,6 +224,7 @@ func (cm *ChronicleManager) NPCHistory(npcID uint64, limit int) []ChronicleEvent
 func (cm *ChronicleManager) OrgHistory(orgID uint64, limit int) []ChronicleEvent {
 	return cm.Query(ChronicleQuery{
 		EntityID:   orgID,
+		HasEntity:  true,
 		Limit:      limit,
 		Descending: true,
 	})
@@ -230,6 +233,7 @@ func (cm *ChronicleManager) OrgHistory(orgID uint64, limit int) []ChronicleEvent
 func (cm *ChronicleManager) RegionHistory(regionID uint32, limit int) []ChronicleEvent {
 	return cm.Query(ChronicleQuery{
 		EntityID:   uint64(regionID),
+		HasEntity:  true,
 		Limit:      limit,
 		Descending: true,
 	})
