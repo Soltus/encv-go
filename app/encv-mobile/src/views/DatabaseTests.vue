@@ -30,69 +30,76 @@
         </ion-item>
       </ion-list>
 
-      <ion-list>
-        <ion-list-header>
-          <ion-label>测试场景</ion-label>
-        </ion-list-header>
+      <div v-for="(group, cat) in groupedScenarios" :key="cat" class="scenario-group">
+        <div class="group-header">
+          <ion-icon :icon="cat === '引擎特殊能力' ? starOutline : listOutline"
+            :color="cat === '引擎特殊能力' ? 'warning' : 'primary'"
+          ></ion-icon>
+          <span class="group-title">{{ cat }}</span>
+          <span class="group-count">{{ group.length }} 项</span>
+        </div>
 
-        <ion-item
-          v-for="scenario in scenarios"
-          :key="scenario.id"
-          class="scenario-item"
-          :class="{
-            'scenario-passed': scenario.status === 'passed',
-            'scenario-failed': scenario.status === 'failed',
-            'scenario-running': scenario.status === 'running',
-          }"
-        >
-          <div class="scenario-content">
-            <div class="scenario-header">
-              <span class="scenario-name">{{ scenario.name }}</span>
-              <ion-badge
-                v-if="scenario.status === 'passed'"
-                color="success"
-                class="scenario-badge"
-              >通过</ion-badge>
-              <ion-badge
-                v-else-if="scenario.status === 'failed'"
-                color="danger"
-                class="scenario-badge"
-              >失败</ion-badge>
-              <ion-badge
-                v-else-if="scenario.status === 'running'"
-                color="primary"
-                class="scenario-badge"
-              >进行中</ion-badge>
-              <ion-badge
-                v-else
-                color="medium"
-                class="scenario-badge"
-              >待执行</ion-badge>
-            </div>
-            <p class="scenario-desc">{{ scenario.description }}</p>
+        <ion-list>
+          <ion-item
+            v-for="scenario in group"
+            :key="scenario.id"
+            class="scenario-item"
+            :class="{
+              'scenario-passed': scenario.status === 'passed',
+              'scenario-failed': scenario.status === 'failed',
+              'scenario-running': scenario.status === 'running',
+              'scenario-capability': cat === '引擎特殊能力',
+            }"
+          >
+            <div class="scenario-content">
+              <div class="scenario-header">
+                <span class="scenario-name">{{ scenario.name }}</span>
+                <ion-badge
+                  v-if="scenario.status === 'passed'"
+                  color="success"
+                  class="scenario-badge"
+                >通过</ion-badge>
+                <ion-badge
+                  v-else-if="scenario.status === 'failed'"
+                  color="danger"
+                  class="scenario-badge"
+                >失败</ion-badge>
+                <ion-badge
+                  v-else-if="scenario.status === 'running'"
+                  color="primary"
+                  class="scenario-badge"
+                >进行中</ion-badge>
+                <ion-badge
+                  v-else
+                  color="medium"
+                  class="scenario-badge"
+                >待执行</ion-badge>
+              </div>
+              <p class="scenario-desc">{{ scenario.description }}</p>
 
-            <div v-if="scenario.status === 'running'" class="scenario-progress">
-              <ion-progress-bar type="indeterminate"></ion-progress-bar>
-            </div>
+              <div v-if="scenario.status === 'running'" class="scenario-progress">
+                <ion-progress-bar type="indeterminate"></ion-progress-bar>
+              </div>
 
-            <div v-if="scenario.durationMs != null" class="scenario-meta">
-              <span>耗时：{{ (scenario.durationMs / 1000).toFixed(2) }}s</span>
-            </div>
+              <div v-if="scenario.durationMs != null" class="scenario-meta">
+                <span>耗时：{{ (scenario.durationMs / 1000).toFixed(2) }}s</span>
+              </div>
 
-            <div v-if="scenario.metrics" class="metrics-card">
-              <div v-for="(value, key) in scenario.metrics" :key="key" class="metric-row">
-                <span class="metric-key">{{ key }}</span>
-                <span class="metric-value">{{ value }}</span>
+              <div v-if="scenario.metrics" class="metrics-card">
+                <div v-for="(value, key) in scenario.metrics" :key="key" class="metric-row">
+                  <span class="metric-key">{{ key }}</span>
+                  <span class="metric-value">{{ formatMetricValue(value) }}</span>
+                </div>
+              </div>
+
+              <div v-if="scenario.error" class="error-card">
+                <ion-icon :icon="closeCircleOutline" color="danger" class="error-icon"></ion-icon>
+                <span class="error-text">{{ scenario.error }}</span>
               </div>
             </div>
-
-            <div v-if="scenario.error" class="error-card">
-              <ion-icon :icon="closeCircleOutline" color="danger" class="error-icon"></ion-icon>
-              <span class="error-text">{{ scenario.error }}</span>
-            </div>
-          </div>
-        </ion-item>
-      </ion-list>
+          </ion-item>
+        </ion-list>
+      </div>
 
       <div class="action-section">
         <ion-button
@@ -159,7 +166,7 @@ import {
   IonTitle,
   IonToolbar,
 } from "@ionic/vue";
-import { checkmarkCircleOutline, closeCircleOutline, playCircleOutline } from "ionicons/icons";
+import { checkmarkCircleOutline, closeCircleOutline, listOutline, playCircleOutline, starOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { getDatabaseInfo, runDatabaseTests, type DBTestProgress } from "@/api/encv_perf";
 import { showToast } from "@/composables/useToast";
@@ -169,6 +176,7 @@ interface ScenarioItem {
   name: string;
   description: string;
   status: "pending" | "running" | "passed" | "failed";
+  category?: string;
   durationMs?: number;
   metrics?: Record<string, any>;
   error?: string;
@@ -179,11 +187,14 @@ const isRunning = ref(false);
 const currentPhase = ref("");
 
 const scenarios = ref<ScenarioItem[]>([
-  { id: "crud", name: "CRUD 基础操作", description: "创建、读取、更新、删除任务", status: "pending" },
-  { id: "batch_write", name: "批量写入性能", description: "批量创建 1000 条任务，测写入吞吐", status: "pending" },
-  { id: "query_filter", name: "查询过滤", description: "按类型、状态、触发器、runId 等多维度过滤", status: "pending" },
-  { id: "concurrency", name: "并发压测", description: "5 协程并发写入，测事务隔离性", status: "pending" },
-  { id: "export_import", name: "导出导入一致性", description: "导出 JSON → 删除 → 导入 → 验证数据一致", status: "pending" },
+  { id: "crud", name: "CRUD 基础操作", description: "创建、读取、更新、删除任务", status: "pending", category: "基础" },
+  { id: "batch_write", name: "批量写入性能", description: "批量创建 1000 条任务，测写入吞吐", status: "pending", category: "基础" },
+  { id: "query_filter", name: "查询过滤", description: "按类型、状态、触发器、runId 等多维度过滤", status: "pending", category: "基础" },
+  { id: "concurrency", name: "并发压测", description: "5 协程并发写入，测事务隔离性", status: "pending", category: "基础" },
+  { id: "export_import", name: "导出导入一致性", description: "导出 JSON → 删除 → 导入 → 验证数据一致", status: "pending", category: "基础" },
+  { id: "large_table_query", name: "大表查询性能", description: "5000 条数据下的单条件/多条件/分页查询，测索引优化能力", status: "pending", category: "引擎特殊能力" },
+  { id: "concurrent_rw", name: "并发读写分离", description: "3 写 + 5 读同时跑 5s，测 MVCC / 读写不阻塞能力", status: "pending", category: "引擎特殊能力" },
+  { id: "transaction", name: "ACID 事务验证", description: "导入导出一致性 / 回滚 / 更新原子性，测事务 ACID 完整性", status: "pending", category: "引擎特殊能力" },
 ]);
 
 const summary = ref<{
@@ -194,6 +205,27 @@ const summary = ref<{
 } | null>(null);
 
 const failedCount = computed(() => scenarios.value.filter(s => s.status === "failed").length);
+
+const groupedScenarios = computed(() => {
+  const groups: Record<string, ScenarioItem[]> = {};
+  for (const s of scenarios.value) {
+    const cat = s.category || "其他";
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(s);
+  }
+  return groups;
+});
+
+function formatMetricValue(v: any): string {
+  if (typeof v === "number") {
+    if (v > 1000 && Number.isInteger(v)) return v.toLocaleString();
+    if (v < 100) return v.toFixed(2);
+    return Math.round(v).toString();
+  }
+  if (typeof v === "boolean") return v ? "是" : "否";
+  if (Array.isArray(v)) return v.join(", ");
+  return String(v);
+}
 
 onMounted(async () => {
   try {
@@ -272,6 +304,35 @@ async function handleRunTests() {
 
 .scenario-item {
   --inner-padding-end: 0;
+}
+
+.scenario-group {
+  margin-top: 12px;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--encv-text-secondary, #666);
+}
+
+.group-title {
+  flex: 1;
+}
+
+.group-count {
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--encv-text-tertiary, #999);
+}
+
+.scenario-capability {
+  --background: var(--ion-color-warning-rgb, 255, 193, 7);
+  --background-opacity: 0.05;
 }
 
 .scenario-content {

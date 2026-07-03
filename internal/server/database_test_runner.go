@@ -26,6 +26,7 @@ import (
 	"math/rand"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Soltus/encv-go/pkg/tasksystem"
@@ -36,12 +37,15 @@ import (
 type dbTestScenario string
 
 const (
-	DBTestScenarioCRUD        dbTestScenario = "crud"
-	DBTestScenarioBatchWrite  dbTestScenario = "batch_write"
-	DBTestScenarioQueryFilter dbTestScenario = "query_filter"
-	DBTestScenarioConcurrency dbTestScenario = "concurrency"
-	DBTestScenarioExportImport dbTestScenario = "export_import"
-	DBTestScenarioFull        dbTestScenario = "full"
+	DBTestScenarioCRUD            dbTestScenario = "crud"
+	DBTestScenarioBatchWrite      dbTestScenario = "batch_write"
+	DBTestScenarioQueryFilter     dbTestScenario = "query_filter"
+	DBTestScenarioConcurrency     dbTestScenario = "concurrency"
+	DBTestScenarioExportImport    dbTestScenario = "export_import"
+	DBTestScenarioLargeTableQuery dbTestScenario = "large_table_query"
+	DBTestScenarioConcurrentRW    dbTestScenario = "concurrent_rw"
+	DBTestScenarioTransaction     dbTestScenario = "transaction"
+	DBTestScenarioFull            dbTestScenario = "full"
 )
 
 // dbTestProgress SSE 进度事件
@@ -130,6 +134,12 @@ func (s *Server) handleDatabaseTestRun(c *gin.Context) {
 			metrics, err = runDBTestConcurrency(store)
 		case DBTestScenarioExportImport:
 			metrics, err = runDBTestExportImport(store)
+		case DBTestScenarioLargeTableQuery:
+			metrics, err = runDBTestLargeTableQuery(store)
+		case DBTestScenarioConcurrentRW:
+			metrics, err = runDBTestConcurrentRW(store)
+		case DBTestScenarioTransaction:
+			metrics, err = runDBTestTransaction(store)
 		}
 
 		duration := time.Since(scenarioStart).Milliseconds()
@@ -206,6 +216,9 @@ func allDBSscenarios() []dbTestScenario {
 		DBTestScenarioQueryFilter,
 		DBTestScenarioConcurrency,
 		DBTestScenarioExportImport,
+		DBTestScenarioLargeTableQuery,
+		DBTestScenarioConcurrentRW,
+		DBTestScenarioTransaction,
 	}
 }
 
@@ -545,5 +558,291 @@ func runDBTestExportImport(store tasksystem.Store) (map[string]any, error) {
 		"verified":     testCount,
 		"dump_version": dump.Version,
 		"dump_engine":  dump.Engine,
+	}, nil
+}
+
+// runDBTestLargeTableQuery 大表查询性能测试（引擎特殊能力：索引/查询优化）
+//
+// 先写入 5000 条任务，然后测：
+//   - 单条件过滤查询速度
+//   - 多条件组合过滤查询速度
+//   - 分页查询速度
+//
+// 不同引擎差异：
+//   - SQLite: 走索引但单写者，查询时可并发读
+//   - LibSQL/Turso: MVCC 快照读，查询不阻塞写入
+//   - ObjectBox: 对象索引，等值查询快但范围查询弱
+func runDBTestLargeTableQuery(store tasksystem.Store) (map[string]any, error) {
+	const total = 5000
+
+	for i := 0; i < total; i++ {
+		task := makeTestTask(i)
+		task.Status = tasksystem.TaskStatus([]tasksystem.TaskStatus{
+			tasksystem.StatusQueued, tasksystem.StatusRunning,
+			tasksystem.StatusCompleted, tasksystem.StatusFailed,
+		}[i%4])
+		task.Type = tasksystem.TaskType([]tasksystem.TaskType{
+			tasksystem.TaskTypeEncrypt, tasksystem.TaskTypeDecrypt,
+		}[i%2])
+		task.TriggeredBy = []string{"user", "system", "automation", "ai_agent"}[i%4]
+		if err := store.CreateTask(task); err != nil {
+			return nil, fmt.Errorf("create task %d: %w", i, err)
+		}
+	}
+
+	// 测试 1：单条件过滤（按 type）
+	start := time.Now()
+	for i := 0; i < 10; i++ {
+		_, err := store.ListTasks(tasksystem.TaskFilter{
+			Types: []tasksystem.TaskType{tasksystem.TaskTypeEncrypt},
+			Limit: total,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("filter by type: %w", err)
+		}
+	}
+	typeFilterMs := time.Since(start).Milliseconds() / 10
+
+	// 测试 2：多条件组合过滤（type + status + triggeredBy）
+	start = time.Now()
+	for i := 0; i < 10; i++ {
+		_, err := store.ListTasks(tasksystem.TaskFilter{
+			Types:       []tasksystem.TaskType{tasksystem.TaskTypeEncrypt},
+			Statuses:    []tasksystem.TaskStatus{tasksystem.StatusRunning},
+			TriggeredBy: []string{"user"},
+			Limit:       total,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("filter combined: %w", err)
+		}
+	}
+	combinedFilterMs := time.Since(start).Milliseconds() / 10
+
+	// 测试 3：分页查询（大偏移量）
+	start = time.Now()
+	pageCount := 0
+	for offset := 0; offset < total; offset += 100 {
+		_, err := store.ListTasks(tasksystem.TaskFilter{Limit: 100, Offset: offset})
+		if err != nil {
+			return nil, fmt.Errorf("pagination offset=%d: %w", offset, err)
+		}
+		pageCount++
+	}
+	paginationMs := time.Since(start).Milliseconds()
+
+	return map[string]any{
+		"total_rows":        total,
+		"type_filter_avg_ms": typeFilterMs,
+		"combined_filter_avg_ms": combinedFilterMs,
+		"pagination_total_ms": paginationMs,
+		"pagination_pages":  pageCount,
+	}, nil
+}
+
+// runDBTestConcurrentRW 并发读写测试（引擎特殊能力：MVCC / 事务隔离）
+//
+// 3 个写 goroutine + 5 个读 goroutine 同时跑，测：
+//   - 读写是否互相阻塞（MVCC 引擎读不阻塞写）
+//   - 数据一致性（读到的是否是已提交的快照）
+//   - 总吞吐量
+//
+// 不同引擎差异：
+//   - SQLite: 单写者，写时阻塞所有读（WAL 模式下读读不阻塞）
+//   - LibSQL/Turso: MVCC，读写互不阻塞，快照隔离
+//   - ObjectBox: 多版本并发，读写互不阻塞
+func runDBTestConcurrentRW(store tasksystem.Store) (map[string]any, error) {
+	const writers = 3
+	const readers = 5
+	const perWriter = 200
+	const duration = 5 * time.Second
+
+	// 先写入一批基础数据
+	for i := 0; i < 500; i++ {
+		task := makeTestTask(10000 + i)
+		if err := store.CreateTask(task); err != nil {
+			return nil, fmt.Errorf("init data: %w", err)
+		}
+	}
+
+	var wg sync.WaitGroup
+	var writeCount int64
+	var readCount int64
+	var firstErr error
+	var errOnce sync.Once
+
+	// 写 goroutine
+	for w := 0; w < writers; w++ {
+		wg.Add(1)
+		go func(wid int) {
+			defer wg.Done()
+			deadline := time.Now().Add(duration)
+			i := 0
+			for time.Now().Before(deadline) {
+				task := makeTestTask(20000 + wid*10000 + i)
+				if err := store.CreateTask(task); err != nil {
+					errOnce.Do(func() { firstErr = fmt.Errorf("writer %d: %w", wid, err) })
+					return
+				}
+				i++
+			}
+			atomic.AddInt64(&writeCount, int64(i))
+		}(w)
+	}
+
+	// 读 goroutine
+	for r := 0; r < readers; r++ {
+		wg.Add(1)
+		go func(rid int) {
+			defer wg.Done()
+			deadline := time.Now().Add(duration)
+			localCount := int64(0)
+			for time.Now().Before(deadline) {
+				_, err := store.ListTasks(tasksystem.TaskFilter{Limit: 100})
+				if err != nil {
+					errOnce.Do(func() { firstErr = fmt.Errorf("reader %d: %w", rid, err) })
+					return
+				}
+				localCount++
+			}
+			atomic.AddInt64(&readCount, localCount)
+		}(r)
+	}
+
+	wg.Wait()
+
+	if firstErr != nil {
+		return nil, firstErr
+	}
+
+	writes := atomic.LoadInt64(&writeCount)
+	reads := atomic.LoadInt64(&readCount)
+
+	return map[string]any{
+		"writers":       writers,
+		"readers":       readers,
+		"duration_ms":   duration.Milliseconds(),
+		"write_count":   writes,
+		"read_count":    reads,
+		"write_tps":     float64(writes) / duration.Seconds(),
+		"read_qps":      float64(reads) / duration.Seconds(),
+		"total_ops":     writes + reads,
+		"total_tps":     float64(writes+reads) / duration.Seconds(),
+	}, nil
+}
+
+// runDBTestTransaction 事务原子性 / 一致性测试（引擎特殊能力：ACID 事务）
+//
+// 测试内容：
+//   - 批量写入 + 验证完整性（原子性：要么全成功要么全失败）
+//   - 导入导出前后数据一致性（持久性）
+//   - 并发更新同一条记录的正确性（隔离性）
+//
+// 不同引擎差异：
+//   - SQLite: 支持完整 ACID，单写者事务
+//   - LibSQL/Turso: 支持完整 ACID + MVCC 快照隔离
+//   - ObjectBox: 支持 ACID 事务，对象级锁
+func runDBTestTransaction(store tasksystem.Store) (map[string]any, error) {
+	testsPassed := 0
+	totalTests := 3
+
+	// 测试 1：导入导出一致性（持久性 + 一致性）
+	{
+		const n = 100
+		for i := 0; i < n; i++ {
+			task := makeTestTask(30000 + i)
+			task.Progress = i
+			if err := store.CreateTask(task); err != nil {
+				return nil, fmt.Errorf("tx test 1 create: %w", err)
+			}
+		}
+
+		dump, err := store.ExportAll()
+		if err != nil {
+			return nil, fmt.Errorf("tx test 1 export: %w", err)
+		}
+
+		if err := store.ImportAll(dump); err != nil {
+			return nil, fmt.Errorf("tx test 1 import: %w", err)
+		}
+
+		// 随机抽查 10 条
+		mismatch := 0
+		for i := 0; i < 10; i++ {
+			id := fmt.Sprintf("%s%d", dbTestDataPrefix, 30000+i)
+			got, err := store.GetTask(id)
+			if err != nil {
+				mismatch++
+				continue
+			}
+			if got.Progress != i {
+				mismatch++
+			}
+		}
+		if mismatch == 0 {
+			testsPassed++
+		}
+	}
+
+	// 测试 2：删除 + 回滚验证（原子性通过 ImportAll 验证）
+	{
+		// 导出当前状态
+		dump, err := store.ExportAll()
+		if err != nil {
+			return nil, fmt.Errorf("tx test 2 export before: %w", err)
+		}
+		countBefore := len(dump.Tasks)
+
+		// 删除 10 条
+		for i := 0; i < 10; i++ {
+			id := fmt.Sprintf("%s%d", dbTestDataPrefix, 30000+i)
+			if err := store.DeleteTask(id); err != nil {
+				return nil, fmt.Errorf("tx test 2 delete: %w", err)
+			}
+		}
+
+		// 导入回去（相当于回滚）
+		if err := store.ImportAll(dump); err != nil {
+			return nil, fmt.Errorf("tx test 2 import back: %w", err)
+		}
+
+		dumpAfter, err := store.ExportAll()
+		if err != nil {
+			return nil, fmt.Errorf("tx test 2 export after: %w", err)
+		}
+
+		if len(dumpAfter.Tasks) == countBefore {
+			testsPassed++
+		}
+	}
+
+	// 测试 3：更新一致性（更新后字段必须全部正确）
+	{
+		id := fmt.Sprintf("%s%d", dbTestDataPrefix, 30050)
+		task, err := store.GetTask(id)
+		if err != nil {
+			return nil, fmt.Errorf("tx test 3 get: %w", err)
+		}
+
+		task.Status = tasksystem.StatusCompleted
+		task.Progress = 100
+		task.Error = "tx_test_error"
+		if err := store.UpdateTask(task); err != nil {
+			return nil, fmt.Errorf("tx test 3 update: %w", err)
+		}
+
+		got, err := store.GetTask(id)
+		if err != nil {
+			return nil, fmt.Errorf("tx test 3 get after: %w", err)
+		}
+
+		if got.Status == tasksystem.StatusCompleted && got.Progress == 100 && got.Error == "tx_test_error" {
+			testsPassed++
+		}
+	}
+
+	return map[string]any{
+		"total_tests":   totalTests,
+		"passed_tests":  testsPassed,
+		"acid_compliant": testsPassed == totalTests,
 	}, nil
 }

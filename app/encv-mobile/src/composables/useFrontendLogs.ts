@@ -105,7 +105,7 @@ function addLog(level: string, args: any[], source?: string) {
  *   - 线程维度：main-thread / worker
  *   - 子系统：console / error-capture / hmr / network / vue 等
  */
-function deriveFrontendTags(level: string, source?: string): string[] {
+function deriveFrontendTags(_level: string, source?: string): string[] {
   const tags: string[] = ["frontend", "main-thread"];
   if (source) {
     if (source.startsWith("console.")) {
