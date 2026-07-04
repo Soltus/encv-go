@@ -64,7 +64,7 @@ step() { echo ""; echo "==> $*"; }
 
 # ---- Step 1: pnpm install (workspace 依赖) ----
 step "1/4 pnpm install（workspace 依赖）"
-cd "${REPO_DIR}/app/encv-mobile"
+cd "${REPO_DIR}/app"
 pnpm install --no-frozen-lockfile --silent
 # ---- Step 2: 构建 plugin web ----
 step "2/4 pnpm exec vite build ${VITE_ARGS[*]:-}（Vite 构建 plugin-openlist/web，mode=${BUILD_MODE}）"
