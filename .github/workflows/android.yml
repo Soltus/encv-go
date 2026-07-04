@@ -403,46 +403,6 @@ jobs:
             echo "- 🔄 运行时自动使用 glebarez/sqlite（纯 Go）" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      - name: Go build trace capture (diagnostic — always uploads artifact)
-        working-directory: ${{ github.workspace }}
-        env:
-          CGO_ENABLED: "1"
-          GOOS: android
-          GOARCH: arm64
-          CC: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
-          CGO_LDFLAGS: "-L${GITHUB_WORKSPACE}/pkg/libsql/libs/android_arm64 -L${GITHUB_WORKSPACE}/pkg/tasksystem/store/objectbox/libs/android_arm64"
-        run: |
-          set -x
-          mkdir -p /tmp/go-trace
-          BUILD_TAGS="-tags objectbox,libsql"
-          {
-            echo "=== go build diagnostic ==="
-            echo "PWD=$(pwd)"
-            go env GOMOD GO111MODULE GOPATH GOROOT GOMODCACHE GOPROXY GOFLAGS
-            echo "BUILD_TAGS=${BUILD_TAGS}"
-            echo ""
-            echo "=== listing pkg/libsql/ ==="
-            ls -la pkg/libsql/ || echo "no pkg/libsql"
-            echo ""
-            echo "=== go mod download (force fresh) ==="
-            go mod download -x 2>&1 | head -100 || true
-            echo ""
-            echo "=== go build -x ==="
-            go build ${BUILD_TAGS} \
-              -ldflags="-s -w -X main.version=${{ inputs.version || 'dev' }}" \
-              -o /tmp/encv-go-arm64 \
-              ./cmd/encv-mobile
-          } 2>&1 | tee /tmp/go-trace/trace.log ; true
-          echo "=== end of trace ===" >> /tmp/go-trace/trace.log
-
-      - name: Upload go-trace artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-trace-build
-          path: /tmp/go-trace/trace.log
-          retention-days: 1
-
       - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen + libsql + objectbox)
         working-directory: ${{ github.workspace }}
         env:
@@ -463,13 +423,13 @@ jobs:
           # 构建参数
           BUILD_TAGS=""
           if [ "${LIBSQL_READY:-0}" = "1" ]; then
-            BUILD_TAGS="$BUILD_TAGS libsql"
+            BUILD_TAGS="libsql"
             echo "✅ Building with libsql support"
           else
             echo "⚠️  Building WITHOUT libsql support (fallback to SQLite only)"
           fi
           if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
-            BUILD_TAGS="$BUILD_TAGS objectbox"
+            BUILD_TAGS="$BUILD_TAGS,objectbox"
             echo "✅ Building with objectbox support"
           else
             echo "⚠️  Building WITHOUT objectbox support"
