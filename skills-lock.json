@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "skills": {
+    "capacitor-angular": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-angular/SKILL.md",
+      "computedHash": "e12f29257ebfb8cff20972ce3edcf67a848222b5d8a5e6bffcef075d8d7a2a95"
+    },
+    "capacitor-app-creation": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-app-creation/SKILL.md",
+      "computedHash": "7dd7ad406cd57257745057466a21e92e9de0237878a7a9b370ff412a4ca06b57"
+    },
+    "capacitor-app-development": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-app-development/SKILL.md",
+      "computedHash": "613994af8ccf42d9592e40a69e6429cf16cf4d91bee2840a99ca65b0a22ab57e"
+    },
+    "capacitor-app-spm-migration": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-app-spm-migration/SKILL.md",
+      "computedHash": "bddd9c9c43238cae5c71207785056da1576ae08262823854a799ff32b036c64d"
+    },
+    "capacitor-app-upgrades": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-app-upgrades/SKILL.md",
+      "computedHash": "eeec6d9838126b5b6847d48e184fca1de5a84f33c05f82ea960e52c5e93423a7"
+    },
+    "capacitor-expert": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-expert/SKILL.md",
+      "computedHash": "f1be243056a4237a5e0a7f18ebaed48d465c9923326fc2850b42af25e7af28e0"
+    },
+    "capacitor-in-app-purchases": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-in-app-purchases/SKILL.md",
+      "computedHash": "91ebe2a8f487848279506f77340f26768bfeedb371d4779900a18284ef8440de"
+    },
+    "capacitor-plugin-development": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-plugin-development/SKILL.md",
+      "computedHash": "683a5ed80aab0f125a86ca9241064ffa69789a0697aad1c7bedcb76d35a0cab9"
+    },
+    "capacitor-plugin-spm-support": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-plugin-spm-support/SKILL.md",
+      "computedHash": "6fdd7d1facb0e358359e23f9104a550d7e5c6eb5f231e08ae5fed2200cb6404a"
+    },
+    "capacitor-plugin-upgrades": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-plugin-upgrades/SKILL.md",
+      "computedHash": "4967087ebfdb4475162f4299713f7127ba1841b4b38711e0f61148434161f9a0"
+    },
+    "capacitor-plugins": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-plugins/SKILL.md",
+      "computedHash": "0e156ec2525f216a7f0756c966a6026001cbfd80f0c8e467180dd09d976c9126"
+    },
+    "capacitor-push-notifications": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-push-notifications/SKILL.md",
+      "computedHash": "42c79115be38e67f2b31c5e189a2b2443c89cdf5d7dd8e64a0e3da83dacafad6"
+    },
+    "capacitor-react": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-react/SKILL.md",
+      "computedHash": "a21d12e7dfd8196bf3ff59ff320a44af253d545025556caeb13866dcaead7303"
+    },
+    "capacitor-vue": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capacitor-vue/SKILL.md",
+      "computedHash": "e3e944741a91d6f3afbf6f355a3f005efe1694ed7a4d8c0b19ba91f90be382cf"
+    },
+    "capawesome-cli": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capawesome-cli/SKILL.md",
+      "computedHash": "82501cd1263e69fb136b8b1b134201efff4ef50c7071ced3baffb86ba25c61af"
+    },
+    "capawesome-cloud": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/capawesome-cloud/SKILL.md",
+      "computedHash": "e71fcd9780ec7f52fa60777288cf18b73a648d77e1698fcf629e55c2686924ca"
+    },
+    "ionic-angular": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ionic-angular/SKILL.md",
+      "computedHash": "44351bf5dfe0a89334749dafe9f94de416a583f8fb6d5480b83a42dc4755e016"
+    },
+    "ionic-app-creation": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ionic-app-creation/SKILL.md",
+      "computedHash": "0b86c476a6dc6493b0a9a23d7353935cb2b81afe8c3fd17dd79a57e309f8f8aa"
+    },
+    "ionic-app-development": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ionic-app-development/SKILL.md",
+      "computedHash": "ba15c900a69044ec6089a23a79a8e8fda3d5b7efe294914ed3f21d0a36d8a484"
+    },
+    "ionic-app-upgrades": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ionic-app-upgrades/SKILL.md",
+      "computedHash": "d405f6bedaa42d00be3aba7d38ba33e210eb83a868c53d68707e6889ccbbdf74"
+    },
+    "ionic-appflow-migration": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ionic-appflow-migration/SKILL.md",
+      "computedHash": "fa1f80277024e135c1faa98d29de776b28845d4ed33d47e1df521b62f52697d8"
+    },
+    "ionic-enterprise-sdk-migration": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ionic-enterprise-sdk-migration/SKILL.md",
+      "computedHash": "7adff8a367123d89683d53d5311bc0090601ede77bb848476b6c00a64632b085"
+    },
+    "ionic-expert": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ionic-expert/SKILL.md",
+      "computedHash": "0be338c369ec2c5cc3a180c9edd06d5ebb3d401be34434556ea38278f4d73c76"
+    },
+    "ionic-react": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ionic-react/SKILL.md",
+      "computedHash": "f5a63c449f5ed9ffcd2fe46227096c27113c7685623635a2a3517f8f8099b92d"
+    },
+    "ionic-vue": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": "skills/ionic-vue/SKILL.md",
+      "computedHash": "99e57e6a2662e229681808b50975b39beceb561d4a5758e0d8cb46db503550a6"
+    },
+    "skill-creator": {
+      "source": "capawesome-team/skills",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/skill-creator/SKILL.md",
+      "computedHash": "0c00a83adf79c43b95a6adbeebe398d19c208f998f9a752ee0d3a0a10eda43be"
+    }
+  }
+}

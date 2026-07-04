@@ -1,0 +1,10 @@
+{
+  "runId": "run-automation-20260623",
+  "total": 2100,
+  "passed": 1000,
+  "failed": 160,
+  "running": 300,
+  "pending": 500,
+  "cancelled": 140,
+  "percent": 55
+}

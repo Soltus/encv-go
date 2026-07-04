@@ -1,0 +1,4 @@
+- [ ] CI 工作流中 APK 选择使用精确文件名 `app-release-signed.apk`
+- [ ] 签名 APK 不存在时 CI 报错退出（不 fallback 到 unsigned）
+- [ ] `Verify APK contents` 步骤同样使用精确文件名
+- [ ] CI 构建后 `apksigner verify` 通过（需 CI 验证）
