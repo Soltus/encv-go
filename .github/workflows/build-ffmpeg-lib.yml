@@ -1,0 +1,297 @@
+name: Build FFmpeg Native Libraries
+
+# 与 build-mpv-lib.yml 风格一致：workflow_dispatch 手动触发，
+# 编完后上传到固定 release tag "ffmpeg-native-libs"（overwrite_files: true）。
+# 主工作流 android.yml 直接下载该 release 产物，不在主工作流内编 ffmpeg。
+#
+# 为什么单独工作流：
+#   - ffmpeg 交叉编译 30-60min，从主工作流拆出来大幅降低主编译时长
+#   - 失败隔离：ffmpeg 编译失败不阻塞主 APK 构建
+#   - 多 ABI 共享同一 release，避免重复编译
+#   - cache 命中率更高（脚本 + manifest 变化才全量重编）
+#
+# 零硬编码原则：
+#   - MONOREPO_MOBILE_DIR = 唯一集中硬编码（仓内 monorepo 结构）
+#   - 所有 path 用 $GITHUB_WORKSPACE + $MONOREPO_MOBILE_DIR 派生
+#   - GITHUB_WORKSPACE 是 GitHub Actions 自动提供的 checkout 根（跨 runner 一致）
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch / ref to build (default: current)'
+        required: false
+        default: ''
+        type: string
+      ffmpeg_abi:
+        description: 'Android ABI'
+        required: false
+        default: 'arm64-v8a'
+        type: choice
+        options:
+          - arm64-v8a
+          - x86_64
+          - armeabi-v7a
+      ffmpeg_api:
+        description: 'Android API level'
+        required: false
+        default: '24'
+        type: string
+
+env:
+  NDK_VERSION: "26.1.10909125"
+  FFMPEG_LIB_VERSION: "1.0.0"
+  # 唯一 monorepo 子工程硬编码（仓内结构，集中配置 1 处）
+  # 若重构 monorepo 改这里 + android.yml 同名 env 即可
+  MONOREPO_MOBILE_DIR: "app/encv-mobile"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 必需：写 release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref_name }}
+          submodules: false  # 仓库无真实 submodule（曾经误引入 Sillot-KMP/lynx-source gitlink 已清理）
+
+      - name: Setup Go (for libffmpeg-worker.so)
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ./go.mod
+          cache-dependency-path: ./go.sum
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Android NDK
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
+          key: ndk-${{ env.NDK_VERSION }}-v1
+
+      - name: Install Android NDK
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+        run: |
+          echo "y" | sdkmanager --install "ndk;${{ env.NDK_VERSION }}" > /dev/null 2>&1
+          echo "✅ NDK installed"
+
+      # === 派生路径：不重新发明！直接查 ffmpeg-builder 的权威派生 ===
+      # 架构铁律：workflow 不持有命名规则（android-${HOST_ARCH} 之类），
+      #         调 `make show-output-dir` 拿 ffmpeg-builder 内部真实 OUTPUT_LIB_DIR。
+      #         这样 ffmpeg-builder 改命名时，workflow 零改动——不会 drift。
+      - name: Compute monorepo paths
+        id: paths
+        env:
+          ANDROID_ABI: ${{ inputs.ffmpeg_abi }}
+          ANDROID_API: ${{ inputs.ffmpeg_api }}
+        run: |
+          set -e
+          # 仓内子工程结构（仓内 monorepo 布局，集中在顶层 env 1 处）
+          MOBILE_DIR="${GITHUB_WORKSPACE}/${MONOREPO_MOBILE_DIR}"
+          BUILDER_DIR="${MOBILE_DIR}/scripts/ffmpeg-builder"
+
+          [ -d "$BUILDER_DIR" ] || { echo "::error::BUILDER_DIR missing: $BUILDER_DIR"; exit 1; }
+          [ -f "${BUILDER_DIR}/Makefile" ] || { echo "::error::Makefile missing: ${BUILDER_DIR}/Makefile"; exit 1; }
+
+          # 调 ffmpeg-builder 自己的 show-output-dir 拿权威 OUTPUT_LIB_DIR
+          # （默认派生：build/ffmpeg/android-${HOST_ARCH}/out/${ANDROID_ABI}/）
+          # 关键：make 必须在 BUILDER_DIR 跑（Makefile 在那），cd 到 MOBILE_DIR 找不到 Makefile
+          OUTPUT_DIR=$(cd "$BUILDER_DIR" && make --no-print-directory show-output-dir ANDROID_ABI="$ANDROID_ABI" ANDROID_API="$ANDROID_API")
+
+          if [ -z "$OUTPUT_DIR" ]; then
+            echo "::error::make show-output-dir returned empty (ffmpeg-builder init failed?)"
+            exit 1
+          fi
+
+          # BUILD_DIR = OUTPUT_DIR 的父父目录（去掉 /out/<abi> 两层）
+          # 例: .../build/ffmpeg/android-x86_64/out/arm64-v8a → .../build/ffmpeg/android-x86_64
+          # 同样不重新发明命名规则，从权威 OUTPUT_DIR 反推
+          BUILD_DIR=$(dirname "$(dirname "$OUTPUT_DIR")")
+
+          echo "MOBILE_DIR=$MOBILE_DIR"   >> "$GITHUB_OUTPUT"
+          echo "BUILDER_DIR=$BUILDER_DIR" >> "$GITHUB_OUTPUT"
+          echo "BUILD_DIR=$BUILD_DIR"     >> "$GITHUB_OUTPUT"
+          echo "OUTPUT_DIR=$OUTPUT_DIR"   >> "$GITHUB_OUTPUT"
+          echo "✅ paths derived (查 ffmpeg-builder 权威派生，不重新发明命名)"
+          echo "   ANDROID_ABI=$ANDROID_ABI"
+          echo "   BUILD_DIR=$BUILD_DIR (cache path 用)"
+          echo "   OUTPUT_DIR=$OUTPUT_DIR (ffmpeg-builder 内部真实落点)"
+
+      # === ffmpeg-builder 源码 cache（x264 + lame + ffmpeg tarball 复用） ===
+      - name: Cache ffmpeg-builder sources
+        id: cache-src
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.paths.outputs.BUILD_DIR }}/src
+          key: ffmpeg-sources-v1-${{ inputs.ffmpeg_abi }}
+          restore-keys: |
+            ffmpeg-sources-v1-${{ inputs.ffmpeg_abi }}
+            ffmpeg-sources-v1-
+
+      # === ffmpeg-builder build cache（deps-install + ffmpeg-install + fftools-build） ===
+      - name: Cache ffmpeg-builder build intermediates
+        id: cache-build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.paths.outputs.BUILD_DIR }}/deps-install
+            ${{ steps.paths.outputs.BUILD_DIR }}/ffmpeg-install
+            ${{ steps.paths.outputs.BUILD_DIR }}/fftools-build
+          key: >-
+            ffmpeg-build-v${{ env.FFMPEG_LIB_VERSION }}-${{ inputs.ffmpeg_abi }}-${{ inputs.ffmpeg_api }}-
+            ${{
+              hashFiles(
+                format('{0}/scripts/ffmpeg-feature-manifest.json', env.MONOREPO_MOBILE_DIR),
+                format('{0}/scripts/ffmpeg-builder/**/*.sh', env.MONOREPO_MOBILE_DIR),
+                format('{0}/scripts/ffmpeg-builder/Makefile', env.MONOREPO_MOBILE_DIR)
+              )
+            }}
+          restore-keys: |
+            ffmpeg-build-v${{ env.FFMPEG_LIB_VERSION }}-${{ inputs.ffmpeg_abi }}-${{ inputs.ffmpeg_api }}-
+
+      - name: Show disk space before build
+        run: df -h
+
+      - name: Build ffmpeg via ffmpeg-builder
+        env:
+          ANDROID_NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
+          # 显式传 OUT_DIR 强制 ffmpeg-builder 用我们权威派生出来的路径
+          # （resolve_output_lib_dir 走 OUT_DIR 优先分支），不去 mkdir 默认路径
+          OUT_DIR: ${{ steps.paths.outputs.OUTPUT_DIR }}
+        run: |
+          # 关键：make 必须在 BUILDER_DIR 跑（Makefile 在那）。
+          # cd 到 MOBILE_DIR 跑 make 会让 make 找不到 Makefile 但静默
+          # 输出 "Nothing to be done"（exit 0），看似成功实则啥都没编。
+          cd "${{ steps.paths.outputs.BUILDER_DIR }}"
+          set -o pipefail
+          make android \
+            ANDROID_ABI=${{ inputs.ffmpeg_abi }} \
+            ANDROID_API=${{ inputs.ffmpeg_api }} \
+            2>&1 | tee /tmp/ffmpeg-build.log
+        timeout-minutes: 90
+
+      - name: Verify output artifacts
+        if: success()
+        env:
+          OUTPUT_DIR: ${{ steps.paths.outputs.OUTPUT_DIR }}
+        run: |
+          set -e
+          OUT_DIR="$OUTPUT_DIR"
+          [ -d "$OUT_DIR" ] || { echo "::error::OUTPUT_DIR missing: $OUT_DIR"; exit 1; }
+
+          # 1) 必需文件存在
+          for f in libffmpeg.so libffprobe.so libffmpeg-worker.so build-info.json; do
+            if [ ! -f "$OUT_DIR/$f" ]; then
+              echo "::error::Missing artifact: $OUT_DIR/$f"
+              exit 1
+            fi
+            SIZE=$(ls -lh "$OUT_DIR/$f" | awk '{print $5}')
+            echo "  ✅ $f ($SIZE)"
+          done
+
+          # 2) 必需导出符号
+          NM="${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+
+          for sym in ffmpeg_run ffmpeg_reset; do
+            if ! $NM -D "$OUT_DIR/libffmpeg.so" | grep -q " ${sym}$"; then
+              echo "::error::libffmpeg.so missing symbol: $sym"
+              exit 1
+            fi
+            echo "  ✅ libffmpeg.so: $sym"
+          done
+
+          for sym in ffprobe_run ffprobe_reset; do
+            if ! $NM -D "$OUT_DIR/libffprobe.so" | grep -q " ${sym}$"; then
+              echo "::error::libffprobe.so missing symbol: $sym"
+              exit 1
+            fi
+            echo "  ✅ libffprobe.so: $sym"
+          done
+
+          # Go 1.25+ c-shared exports different symbol names, check for exported symbols
+          EXPORTED_COUNT=$($NM -D "$OUT_DIR/libffmpeg-worker.so" 2>/dev/null | grep -c " T " || echo 0)
+          if [ "$EXPORTED_COUNT" -lt 5 ]; then
+            echo "::error::libffmpeg-worker.so has no exported symbols"
+            $NM -D "$OUT_DIR/libffmpeg-worker.so" | head -10
+            exit 1
+          fi
+          echo "  ✅ libffmpeg-worker.so: ${EXPORTED_COUNT} exported symbols (Go 1.25 compatible)"
+
+
+          # 3) build-info.json 关键字段
+          jq -e '.ffmpeg_version, .external_libs, .abi' "$OUT_DIR/build-info.json" > /dev/null
+          echo "  ✅ build-info.json schema valid"
+
+          echo ""
+          echo "=== Summary ==="
+          jq '{
+            ffmpeg_version: .ffmpeg_version,
+            external_libs: .external_libs,
+            abi: .abi,
+            api_level: .api_level,
+            target_os: .target_os,
+            encoders: .enabled_encoders | length,
+            decoders: .enabled_decoders | length,
+            manifest_sha256: .manifest_sha256
+          }' "$OUT_DIR/build-info.json"
+
+      - name: Package artifacts as zip
+        id: package
+        if: success()
+        env:
+          OUTPUT_DIR: ${{ steps.paths.outputs.OUTPUT_DIR }}
+        run: |
+          # 在 OUTPUT_DIR 父目录 (build/ffmpeg/android-<abi>/out/) 打包，
+          # 保留 <abi>/ 子目录结构（与主应用 jniLibs 布局一致，caller 拷过去直接对得上）。
+          OUT_PARENT="$(dirname "$OUTPUT_DIR")"
+          ABI_DIR="$(basename "$OUTPUT_DIR")"
+          cd "$OUT_PARENT"
+          if [ ! -d "$ABI_DIR" ]; then
+              echo "::error::ABI directory not found: $OUT_PARENT/$ABI_DIR"
+              exit 1
+          fi
+          ZIP_NAME="ffmpeg-jniLibs-${{ inputs.ffmpeg_abi }}-v${{ env.FFMPEG_LIB_VERSION }}.zip"
+          zip -r9 "${{ runner.temp }}/$ZIP_NAME" "$ABI_DIR/"
+          echo "📦 Package created:"
+          unzip -l "${{ runner.temp }}/$ZIP_NAME"
+          echo "zip_path=${{ runner.temp }}/$ZIP_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Upload FFmpeg build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-build-logs
+          path: |
+            ${{ steps.paths.outputs.BUILD_DIR }}/logs
+            /tmp/ffmpeg-build.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload to GitHub Release (ffmpeg-native-libs)
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ffmpeg-native-libs
+          name: "FFmpeg Native Libraries (auto-generated)"
+          body: |
+            Auto-generated FFmpeg native libraries for Android.
+            **Do not manually edit this release.**
+
+            - Generated by: `build-ffmpeg-lib` workflow
+            - Commit: `${{ github.sha }}`
+            - ABI: `${{ inputs.ffmpeg_abi }}`
+            - API level: `${{ inputs.ffmpeg_api }}`
+            - Triggered by: `${{ github.actor }}`
+
+            Consumed by `android.yml` workflow via tag `ffmpeg-native-libs`.
+          overwrite_files: true
+          files: ${{ steps.package.outputs.zip_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

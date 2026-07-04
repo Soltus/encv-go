@@ -1,0 +1,46 @@
+# .gitattributes
+# 同步 .github/linguist.yml 规则，并补充 diff / blame 行为配置。
+#
+# GitHub 优先读取 .github/linguist.yml；本文件作为 IDE / 工具链 fallback，
+# 同时控制 diff 折叠与二进制识别。
+
+# === 1. 同步语言统计排除（与 .github/linguist.yml 保持一致） ===
+# linguist-vendored = 不计入语言统计 + 搜索默认不索引
+/.agents/skills/**                                          linguist-vendored
+/app/encv-mobile/.agents/skills/**                          linguist-vendored
+/.trae/skills/**                                           linguist-vendored
+/agent/cmd/agent-demo/scripts/skills/**                    linguist-vendored
+/app/encv-mobile/plugin-openlist/src/main/assets/openlist/assets/** linguist-vendored
+/.trae/documents/**                                        linguist-vendored
+/.trae/specs/**                                            linguist-vendored
+/.trae/rules/**                                            linguist-vendored
+/.trae/scripts/**                                          linguist-vendored
+
+# === 2. 标记生成产物（不计入语言统计；diff 折叠；blame 跳转上一提交） ===
+# linguist-generated = 不计入语言统计，但搜索仍索引
+/app/encv-mobile/android/capacitor-cordova-android-plugins/**      linguist-generated
+/app/encv-mobile/android/capacitor.settings.gradle                 linguist-generated
+/app/encv-mobile/android/app/src/main/assets/capacitor.config.json linguist-generated
+/.github/workflows/**                                       linguist-generated
+
+# === 3. 二进制文件关闭 diff（避免 PR review 卡顿） ===
+/app/encv-mobile/plugin-openlist/src/main/assets/openlist/assets/** binary
+**/*.png     binary
+**/*.jpg     binary
+**/*.jpeg    binary
+**/*.gif     binary
+**/*.jar     binary
+**/*.aar     binary
+**/*.db      binary
+**/*.sccgt   binary
+**/*.tar.gz  binary
+**/*.7z      binary
+**/*.ttf     binary
+**/*.woff2   binary
+
+# === 4. 大体积 JS bundle（Vite / 工具链产物）：关闭 diff，使用上一提交归因 ===
+# diff=skip 让 PR review 跳过这些文件的差异显示
+/app/encv-mobile/plugin-openlist/src/main/assets/openlist/assets/*.js diff=skip
+/app/encv-mobile/.agents/skills/**/*.bundle.cjs              diff=skip
+/app/encv-mobile/.agents/skills/**/*.bundle.mjs              diff=skip
+/app/encv-mobile/.agents/skills/**/*.bundle.js               diff=skip

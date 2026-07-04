@@ -1,0 +1,191 @@
+/**
+ * Timeline / Tree / Card Design Tokens
+ *
+ * 以重构前 MockGenLogCard 深色终端风格为现代审美基准：
+ *   - 深色终端渐变背景（dark）/ 浅色渐变背景（light）
+ *   - 等宽字体（ui-monospace）
+ *   - 极细半透明边框
+ *   - 8px 圆角
+ *   - 紧凑布局
+ *   - 状态色 runner 标识
+ *
+ * 唯一问题修复：硬编码 #0F1419 黑色未适配主题 → 改为 design token 双主题。
+ */
+
+:root {
+  /* ===== 卡片背景渐变（light 模式：浅色） ===== */
+  --tl-card-bg-gradient-start: #FAFBFC;
+  --tl-card-bg-gradient-end: #F4F6F8;
+
+  /* ===== 卡片边框（极细半透明深色） ===== */
+  --tl-card-border: rgba(0, 0, 0, 0.08);
+  --tl-card-border-strong: rgba(0, 0, 0, 0.12);
+
+  /* ===== 卡片文字 ===== */
+  --tl-card-text-primary: #1A1D21;
+  --tl-card-text-secondary: #5F6B7A;
+  --tl-card-text-tertiary: #8B95A5;
+
+  /* ===== 等宽字体栈（与重构前 MockGenLogCard 一致） ===== */
+  --tl-card-font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* ===== 圆角 ===== */
+  --tl-card-radius: 8px;
+  --tl-card-radius-sm: 4px;
+
+  /* ===== 状态色（9 个 phase + failed/cancelled） ===== */
+  /* 与 PhaseBadge 的 Ionic 调色板对齐，但用独立变量方便统一管理 */
+  --tl-state-created: #92949C;
+  --tl-state-created-rgb: 146, 148, 156;
+
+  --tl-state-analyzing: #4f8cff;
+  --tl-state-analyzing-rgb: 79, 140, 255;
+
+  --tl-state-initializing: #4f8cff;
+  --tl-state-initializing-rgb: 79, 140, 255;
+
+  --tl-state-preprocessing: #ffc409;
+  --tl-state-preprocessing-rgb: 255, 196, 9;
+
+  --tl-state-encrypting: #2dd36f;
+  --tl-state-encrypting-rgb: 45, 211, 111;
+
+  --tl-state-decrypting: #2dd36f;
+  --tl-state-decrypting-rgb: 45, 211, 111;
+
+  --tl-state-packing: #7066ff;
+  --tl-state-packing-rgb: 112, 102, 255;
+
+  --tl-state-verifying: #ffc409;
+  --tl-state-verifying-rgb: 255, 196, 9;
+
+  --tl-state-completed: #2dd36f;
+  --tl-state-completed-rgb: 45, 211, 111;
+
+  --tl-state-failed: #eb445a;
+  --tl-state-failed-rgb: 235, 68, 90;
+
+  --tl-state-cancelled: #92949C;
+  --tl-state-cancelled-rgb: 146, 148, 156;
+
+  /* ===== 进度条样式（与 TestReportHeader 统一） ===== */
+  --tl-progress-height: 4px;
+  --tl-progress-radius: 2px;
+  --tl-progress-bg: rgba(0, 0, 0, 0.06);
+  --tl-progress-fill: var(--ion-color-primary, #4f8cff);
+
+  /* ===== 展开详情（左侧 2px 边线 + padding，非嵌套卡片） ===== */
+  --tl-detail-border-left: 2px solid var(--tl-card-border-strong);
+  --tl-detail-padding: 8px 12px;
+
+  /* ===== v3 2026-06-18：间距 token（Tasks.vue 完整设计系统） ===== */
+  --tl-space-xs: 2px;
+  --tl-space-sm: 4px;
+  --tl-space-md: 8px;
+  --tl-space-lg: 12px;
+  --tl-space-xl: 16px;
+  --tl-space-2xl: 20px;
+  --tl-space-3xl: 24px;
+
+  /* ===== v3：阴影 token ===== */
+  --tl-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --tl-shadow-card-elevated: 0 1px 0 rgba(0, 0, 0, 0.04), 0 4px 12px -4px rgba(0, 0, 0, 0.06);
+  --tl-shadow-icon-bubble: 0 1px 2px rgba(0, 0, 0, 0.1);
+
+  /* ===== v3：icon-bubble 尺寸 token（Tasks.vue 三种尺寸） ===== */
+  --tl-bubble-size-lg: 40px;   /* group-icon-bubble */
+  --tl-bubble-size-md: 28px;   /* sub-section-icon-bubble */
+  --tl-bubble-size-sm: 20px;   /* MockGenLogCard runner */
+  --tl-bubble-radius-circle: 50%;
+  --tl-bubble-radius-rounded: 8px;
+
+  /* ===== v3：触发器 tone 色（group card 专用） ===== */
+  --tl-trigger-automation: var(--tl-state-analyzing);
+  --tl-trigger-automation-rgb: var(--tl-state-analyzing-rgb);
+  --tl-trigger-ai-agent: #8b5cf6;
+  --tl-trigger-ai-agent-rgb: 139, 92, 246;
+
+  /* ===== v3：section dimension tone 色（sub_section 专用） ===== */
+  --tl-dim-plugin: var(--tl-state-analyzing);
+  --tl-dim-plugin-rgb: var(--tl-state-analyzing-rgb);
+  --tl-dim-type: #ffa726;
+  --tl-dim-type-rgb: 255, 167, 38;
+  --tl-dim-category: #36af6e;
+  --tl-dim-category-rgb: 54, 175, 110;
+  --tl-dim-none: #9e9e9e;
+  --tl-dim-none-rgb: 158, 158, 158;
+
+  /* ===== v3：进度条高度扩展（group card 6px / sub_section 2px） ===== */
+  --tl-progress-height-lg: 6px;
+  --tl-progress-height-sm: 2px;
+
+  /* ===== v3：ion-item 集成 token（Tasks.vue 特有） ===== */
+  --tl-item-padding-start: 16px;
+  --tl-item-padding-start-group: 20px;       /* group card 4px border + 16px */
+  --tl-item-padding-start-subsection: 56px;  /* sub_section 缩进 */
+  --tl-item-min-height: 52px;
+  --tl-item-min-height-group: 64px;
+}
+
+body.dark {
+  /* ===== 卡片背景渐变（dark 模式：深色终端） ===== */
+  --tl-card-bg-gradient-start: #0F1419;
+  --tl-card-bg-gradient-end: #0A0E12;
+
+  /* ===== 卡片边框（极细半透明浅色） ===== */
+  --tl-card-border: rgba(255, 255, 255, 0.06);
+  --tl-card-border-strong: rgba(255, 255, 255, 0.10);
+
+  /* ===== 卡片文字 ===== */
+  --tl-card-text-primary: #E0E0E0;
+  --tl-card-text-secondary: #8B95A5;
+  --tl-card-text-tertiary: #5F6B7A;
+
+  /* ===== 状态色（dark 模式微调亮度，保留状态色不抹平） ===== */
+  --tl-state-created: #92949C;
+  --tl-state-created-rgb: 146, 148, 156;
+
+  --tl-state-analyzing: #5a9bff;
+  --tl-state-analyzing-rgb: 90, 155, 255;
+
+  --tl-state-initializing: #5a9bff;
+  --tl-state-initializing-rgb: 90, 155, 255;
+
+  --tl-state-preprocessing: #ffd548;
+  --tl-state-preprocessing-rgb: 255, 213, 72;
+
+  --tl-state-encrypting: #2fdf75;
+  --tl-state-encrypting-rgb: 47, 223, 117;
+
+  --tl-state-decrypting: #2fdf75;
+  --tl-state-decrypting-rgb: 47, 223, 117;
+
+  --tl-state-packing: #8a85ff;
+  --tl-state-packing-rgb: 138, 133, 255;
+
+  --tl-state-verifying: #ffd548;
+  --tl-state-verifying-rgb: 255, 213, 72;
+
+  --tl-state-completed: #2fdf75;
+  --tl-state-completed-rgb: 47, 223, 117;
+
+  --tl-state-failed: #ff4961;
+  --tl-state-failed-rgb: 255, 73, 97;
+
+  --tl-state-cancelled: #92949C;
+  --tl-state-cancelled-rgb: 146, 148, 156;
+
+  /* ===== 进度条 ===== */
+  --tl-progress-bg: rgba(255, 255, 255, 0.08);
+  --tl-progress-fill: var(--ion-color-primary, #4f8cff);
+
+  /* ===== v3：dark 模式 tone 色微调 ===== */
+  --tl-trigger-ai-agent: #a78bfa;
+  --tl-trigger-ai-agent-rgb: 167, 139, 250;
+  --tl-dim-type: #ffb74d;
+  --tl-dim-type-rgb: 255, 183, 77;
+  --tl-dim-category: #66bb6a;
+  --tl-dim-category-rgb: 102, 187, 106;
+  --tl-dim-none: #bdbdbd;
+  --tl-dim-none-rgb: 189, 189, 189;
+}

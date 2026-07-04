@@ -1,0 +1,10 @@
+- [x] usePathResolver.ts composable 已创建，normalize/resolveFileItem/isAbsolutePath/getMockPaths 全部实现
+- [x] normalize 单元测试覆盖：空字符串、重复斜杠（`//`）、Windows 路径（`\`）、已规范路径、相对路径补 `/`
+- [x] Files.vue handleEncryptFile/handleDecryptFile 使用 resolveFileItem() 替代直接 file.path
+- [x] Tasks.vue processQueryAction 对 route.query.source 执行 normalize()
+- [x] useTaskForm.ts doPredict 入口有空路径守卫（sourcePath 为空不调 API）
+- [x] useTaskForm.ts doPredict 入口对 sourcePath 执行 normalize
+- [x] vue-tsc --noEmit 零错误
+- [x] vite build 零错误
+- [ ] FAB 按钮打开 modal 无 400 错误
+- [ ] 长按加密打开 modal + 路径预填无 400 错误

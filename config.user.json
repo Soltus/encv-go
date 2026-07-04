@@ -1,0 +1,68 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Soltus/encv-go/main/config.schema.json",
+  "admin": {
+    "password": "123456"
+  },
+  "agent_settings": {
+    "mock_mode": "builtin",
+    "openai_api_key": "enc:2EbMrA05RCjsaOCJ3nDooY7HXKFxXeQiD40trzM9dzLbluXgRgZi95K0YunUlQRPCJd4jQbsUtdy9mlmEXD94fyxH71PAqfHXrK3nsen8B8=",
+    "openai_base_url": "https://api.gptgod.online/v1",
+    "openai_model": "gpt-4o"
+  },
+  "default_container_version": 0,
+  "log": {
+    "file": "encv.log",
+    "level": "info"
+  },
+  "mobile": {
+    "output": {
+      "path": "/storage/emulated/0/encv-output"
+    },
+    "server": {
+      "dir": "/storage/emulated/0"
+    },
+    "webdav": {
+      "dir": ""
+    }
+  },
+  "output_path": "./output",
+  "password": "my-encv_key",
+  "plugin_settings": {
+    "video": {
+      "allow_no_reencode": true
+    }
+  },
+  "proxy": {
+    "disable_signature_verification": false,
+    "sites": {
+      "pc": {
+        "description": "电脑上的openlist",
+        "host": "http://localhost:5244"
+      },
+      "pc_dev": {
+        "description": "电脑上定制版的openlist",
+        "host": "http://localhost:5234"
+      },
+      "vivo": {
+        "description": "手机上的openlist",
+        "host": "http://192.168.31.19:5244"
+      }
+    }
+  },
+  "recover": false,
+  "server": {
+    "dir": "/",
+    "port": 2025
+  },
+  "strict_deprecated_version": false,
+  "v4_cipher_mode": 0,
+  "v4_compression_mode": "",
+  "v4_enable_hmac": false,
+  "v4_zstd_block_size": 0,
+  "webdav": {
+    "dir": "./output",
+    "password": "123456",
+    "root": "/webdav/",
+    "username": "admin"
+  }
+}

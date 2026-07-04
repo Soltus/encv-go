@@ -1,0 +1,12 @@
+- [x] TaskManager.Create/Cancel/Retry/List 方法行为与原包级变量实现一致
+- [x] WSHub.RegisterClient/UnregisterClient/Broadcast/HandlePing 方法行为与原实现一致
+- [x] MobileService.ListFiles 返回与原 handleListFilesAPI 相同的文件列表结构
+- [x] MobileService.DeleteFile 正确删除文件并返回错误
+- [x] MobileService.ReadFileContent 正确读取文件内容并处理 UTF-8 检测
+- [x] MobileService.TestWebDAV 正确测试 WebDAV 连接
+- [x] mobile_api.go 中所有 handler 不再包含直接业务逻辑（无 os.ReadDir/os.Remove/os.ReadFile 等调用）
+- [x] mobile_api.go 中包级全局变量 tasks/tasksMu 已移除
+- [x] mobile_ws.go 中包级全局变量 wsClients/wsClientsMu 已移除
+- [x] Server 结构体持有 mobileService 字段并通过构造函数注入
+- [x] go build ./cmd/encv/ 编译通过无错误
+- [x] 所有 API 端点行为不变（health/files/tasks/webdav/ws）

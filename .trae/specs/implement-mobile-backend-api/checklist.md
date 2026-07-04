@@ -1,0 +1,15 @@
+- [x] GET /health 返回 {"status":"ok"} JSON，HTTP 200
+- [x] GET /api/files?path=/ 返回 JSON 格式文件列表（非 HTML）
+- [x] GET /api/files?path= 子目录正常工作
+- [x] 路径遍历攻击被正确拦截（返回 403）
+- [x] DELETE /api/files?path= 能删除文件并返回 200
+- [x] DELETE 不存在的文件返回 404
+- [x] GET /stream?path= 与 ?file= 行为一致
+- [x] GET /api/tasks 返回任务列表 JSON
+- [x] POST /api/tasks 创建任务成功
+- [x] POST /api/tasks/{id}/cancel 取消任务成功
+- [x] POST /api/tasks/{id}/retry 重试任务成功
+- [x] POST /api/webdav/test 返回连接测试结果
+- [x] GET /ws WebSocket 连接建立成功
+- [x] ping/pong 心跳正常工作
+- [x] go build ./cmd/encv/ 编译通过无错误

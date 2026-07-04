@@ -1,0 +1,327 @@
+id: search_recursive_mp4
+description: "搜索大文件 mp4（递归 + glob）— 拟人化 ≥30s，纯通用 UI 文案，所有具体数据由真实 tool_result 渲染"
+keywords:
+  - "search_recursive_mp4"
+  - "大文件"
+  - "大视频"
+  - "找mp4"
+  - "大mp4"
+exact_match: "search_recursive_mp4"
+rounds: 1
+
+presets:
+  - id: encrypt_largest
+    label: "🔒 加密最大的"
+    user_text: "加密最大的视频"
+    tooltip: "跳到 encrypt_video 剧本"
+  - id: show_details
+    label: "📊 看详细元数据"
+    user_text: "查看元数据"
+    tooltip: "跳到 v2_04 元数据编辑"
+  - id: find_more
+    label: "🔍 找更复杂的"
+    user_text: "再找找其他大文件"
+    tooltip: "触发 search_content_regex 剧本"
+
+steps:
+  # ════════════════════════════════════════════════════════
+  # 阶段 1：思考链（6 段 reasoning × 700-800ms ≈ 4500ms）
+  # 通用思考：说明"我要用工具做什么"，不写具体阈值/具体目录
+  # ════════════════════════════════════════════════════════
+  - id: think_1
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "用户要求：按指定条件搜索视频文件。" }
+  - id: think_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "需要调用搜索工具，配置复合查询条件。" }
+  - id: think_3
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "参数设计：glob 模式匹配 + size 阈值过滤。" }
+  - id: think_4
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "递归扫描所有挂载点，加 result 限额防爆。" }
+  - id: think_5
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "auto_run 直接执行，用户没要求确认。" }
+  - id: think_6
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "准备好调用工具。" }
+
+  # ════════════════════════════════════════════════════════
+  # 阶段 2：过渡文本（5 段 × 500-700ms ≈ 2900ms）
+  # 通用状态描述：仅说明"我在做什么"，不含任何具体结果
+  # ════════════════════════════════════════════════════════
+  - id: intro_1
+    round_idx: 0
+    delay_ms: 400
+    events:
+      - type: stream_start
+        data: { scenario: search_recursive_mp4 }
+      - type: text_delta
+        data: { text: "好的，我来处理。" }
+  - id: intro_2
+    round_idx: 0
+    delay_ms: 500
+    events:
+      - type: text_delta
+        data: { text: "目标：按指定条件搜索视频文件，递归所有挂载点。" }
+  - id: intro_3
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "用复合查询：glob 模式 + size 阈值。" }
+  - id: intro_4
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "挂载点比较多，可能要扫几秒钟。" }
+  - id: intro_5
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "开始调用工具..." }
+
+  # ════════════════════════════════════════════════════════
+  # 阶段 3：工具调用（3000ms）
+  # args 是过滤条件（用户输入），不是数据本身
+  # tool_result 由 MockEngine 自动调用真实工具生成
+  # ════════════════════════════════════════════════════════
+  - id: tool_call
+    round_idx: 0
+    delay_ms: 3000
+    events:
+      - type: tool_call
+        data:
+          id: call_srm_1
+          name: search_files
+          args:
+            expression:
+              and:
+                - type: name_glob
+                  value: "*.mp4"
+                - type: size_gt
+                  value: 104857600
+            recursive: true
+            max_results: 20
+          auto_run: true
+          needsConfirm: false
+          kind: fileSearch
+          execute_real: true
+
+  # ════════════════════════════════════════════════════════
+  # 阶段 4：处理结果（12 段 × 600-800ms ≈ 8400ms）
+  # 纯通用状态：仅说"我在做什么"+"详细见工具结果"
+  # 具体路径/大小/数量由前端从 tool_result 渲染
+  # ════════════════════════════════════════════════════════
+  - id: process_1
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "搜索完成。" }
+  - id: process_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "让我仔细分析返回的结果..." }
+  - id: process_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "工具返回了若干匹配项，详情见上方工具结果。" }
+  - id: process_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在按目录分组统计..." }
+  - id: process_5
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在按文件类型归类..." }
+  - id: process_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在按大小排序..." }
+  - id: process_7
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在筛选出值得重点关注的项..." }
+  - id: process_8
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在计算总占用空间..." }
+  - id: process_9
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "所有匹配项的完整路径、大小、修改时间见上方工具结果。" }
+  - id: process_10
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在准备推荐的下一步操作..." }
+  - id: process_11
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "根据命中情况，建议如下：" }
+  - id: process_12
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选择你想做的，剩下交给我。" }
+
+  # ════════════════════════════════════════════════════════
+  # 阶段 5：总结建议（8 段 × 500-700ms ≈ 4900ms）
+  # 通用建议模板：不含具体数字/具体路径
+  # ════════════════════════════════════════════════════════
+  - id: summary_1
+    round_idx: 0
+    delay_ms: 500
+    events:
+      - type: text_delta
+        data: { text: "## 搜索结果总结\n\n" }
+  - id: summary_2
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "命中若干匹配项，详细路径和大小见上方工具结果。\n\n" }
+  - id: summary_3
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "**建议**（点击 chip 直接执行）：\n\n" }
+  - id: summary_4
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "1. 对文件进行加密处理\n" }
+  - id: summary_5
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "2. 查看文件详细元数据\n" }
+  - id: summary_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "3. 用更复杂条件继续搜索\n" }
+  - id: summary_7
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "4. 按其他条件继续处理\n" }
+  - id: summary_8
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选择你想做的，剩下交给我。" }
+  - id: summary_9
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "如果想查看任意一个的完整元数据，告诉我即可。" }
+  - id: summary_10
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "可以指定只处理某个目录，或扩展搜索条件。" }
+  - id: summary_11
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "也可以跳过本次搜索，保留现状。" }
+  - id: summary_12
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "所有操作都不会立即执行，需要你确认。" }
+  - id: summary_13
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选完后我立即开始执行你指定的操作。" }
+  - id: summary_14
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "如果都不想做，可以直接关闭本对话。" }
+
+  # ════════════════════════════════════════════════════════
+  # 阶段 6：chip 推送 + 收尾（400ms）
+  # ════════════════════════════════════════════════════════
+  - id: push_chips
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: mock_presets
+        data:
+          scenario: search_recursive_mp4
+          phase: after_search
+          presets:
+            - id: encrypt_largest
+              label: "🔒 加密最大的"
+              user_text: "加密最大的视频"
+            - id: show_details
+              label: "📊 查看元数据"
+              user_text: "查看元数据"
+            - id: find_more
+              label: "🔍 找更复杂的"
+              user_text: "再找找其他大文件"
+  - id: end
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 1280 }

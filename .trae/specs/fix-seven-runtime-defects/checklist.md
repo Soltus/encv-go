@@ -1,0 +1,12 @@
+- [x] createDirectory() API URL 包含 /api 前缀，与后端路由匹配
+- [x] 文本预览不再使用 iframe，改用轻量 DOM 渲染（fetch + pre）
+- [x] 文本预览页面返回按钮和手势操作响应正常（无卡顿/无事件拦截）
+- [x] 插件安装完成后 ExtensionsPage 状态从「安装中」变为「已安装」
+- [x] 安装失败时显示具体错误信息（含 120s 超时保护防永久卡死）
+- [x] checkInstalledPlugins fallback 扫描目录修复（去重 + 新增 plugin_install）
+- [x] v4 容器版本号显示为纯数字（如 V4），异常值显示 "?"
+- [x] v4 容器容器 ID 显示为可打印 ASCII，二进制数据显示 "(non-printable data)"
+- [x] 加密预处理失败时后端进程不崩溃（Preprocess + EncryptFileWithPlugin 双层 recover）
+- [x] 临时文件隔离到 .encv_tmp/ 隐藏子目录，用户可见目录无残留
+- [x] 移动端设置界面正确显示 mobile.output_path 合并后的值
+- [x] 后端 GET /api/config 返回经过 ApplyMobileOverrides 处理的配置

@@ -1,0 +1,38 @@
+id: streaming_error
+description: "stream_status(error) + auto stream_end — 验证错误处理路径"
+keywords:
+  - "触发错误"
+  - "测试错误"
+  - "出错"
+  - "上游超时"
+  - "error"
+
+presets:
+  - id: p_retry
+    label: "🔁 重试"
+    user_text: "重试一下"
+    tooltip: "重发相同问题"
+  - id: p_simpler
+    label: "📝 简化问题"
+    user_text: "列出文件"
+    tooltip: "换成简单查询"
+  - id: p_view_logs
+    label: "📋 查看错误日志"
+    user_text: "显示错误日志"
+    tooltip: "查看日志"
+
+steps:
+  - id: intro
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: streaming_error }
+      - type: text_delta
+        data: { text: "正在处理..." }
+  - id: error
+    delay_ms: 800
+    events:
+      - type: stream_status
+        data:
+          type: error
+          code: upstream_timeout

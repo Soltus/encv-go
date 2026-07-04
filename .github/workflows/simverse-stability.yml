@@ -1,0 +1,207 @@
+name: SimVerse Long Stability Test
+
+# =====================================================
+# SimVerse 长稳测试工作流 — 独立于三层 CI 体系
+#
+# 定位：
+#   - 不属于 Layer1/2/3 常规回归体系
+#   - 专用于 SimVerse 模拟世界引擎的长稳验证
+#   - 运行时间长（30-40 分钟），不占用常规 PR 检查资源
+#
+# 触发（任一）：
+#   1. workflow_dispatch — 手动触发
+#   2. PR 上加 ci:stability 标签（maintainer 决策）
+#
+# 注意：已移除 schedule 定时触发 — GitHub Actions 时长宝贵，长稳测试按需手动跑
+#
+# 跑什么：
+#   - TestStability_Full30Min — 30 分钟完整长稳测试
+#   - 每 30 秒采样：内存 / goroutine / tick 性能 / 缓存命中率
+#   - 输出：pprof 文件 + 稳定性报告
+#
+# 失败处理：
+#   - 创建 issue 标记 stability-fail
+#   - Step Summary 写入趋势数据
+# =====================================================
+
+on:
+  pull_request:
+    types: [labeled]
+    branches: [main, dev]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      duration_min:
+        description: 'Test duration in minutes (default: 30)'
+        required: false
+        default: '30'
+        type: string
+      branch:
+        description: 'Branch / ref to test (default: main)'
+        required: false
+        default: 'main'
+        type: string
+
+concurrency:
+  group: simverse-stability-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: "1.22"
+  SIMVERSE_PKG: "./internal/simverse/"
+
+jobs:
+  # ── 标签守卫（PR 标签触发时强制校验 ci:stability 存在） ──
+  guard-label:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for ci:stability label
+        run: |
+          if echo "${{ join(github.event.pull_request.labels.*.name, ',') }}" | grep -q "ci:stability"; then
+            echo "✅ ci:stability label found, proceeding"
+          else
+            echo "⏭️ No ci:stability label, skipping stability test"
+            exit 0
+          fi
+
+  # ── 30 分钟长稳测试 ──
+  stability-test:
+    needs: guard-label
+    if: |
+      always() &&
+      (github.event_name == 'schedule' ||
+       github.event_name == 'workflow_dispatch' ||
+       github.event_name == 'push' ||
+       (github.event_name == 'pull_request' && needs.guard-label.result == 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Verify Go environment
+        run: |
+          go version
+          go env GOPATH GOROOT
+
+      - name: Build simverse package (compile check)
+        run: |
+          cd $GITHUB_WORKSPACE
+          go build ./internal/simverse/
+          echo "✅ simverse package builds cleanly"
+
+      - name: Run quick smoke test (30s)
+        run: |
+          cd $GITHUB_WORKSPACE
+          go test -run "TestPhase1_MemoryBaseline|TestPhase1_ScaleVerification" \
+            -timeout 2m ./internal/simverse/ -v
+        env:
+          ENCV_TEST_QUICK: "1"
+
+      - name: Run full 30-min stability test
+        id: stability
+        run: |
+          cd $GITHUB_WORKSPACE
+          
+          DURATION=${{ github.event.inputs.duration_min || 30 }}
+          echo "Starting stability test with duration: ${DURATION} min"
+          
+          export ENCV_STABILITY_FULL=1
+          export ENCV_STABILITY_DURATION=${DURATION}
+          
+          # 运行测试，捕获输出用于分析
+          set +e
+          go test -v -run "TestStability" \
+            -timeout $((DURATION + 10))m \
+            ./internal/simverse/ \
+            2>&1 | tee /tmp/stability.log
+          TEST_EXIT=$?
+          set -e
+          
+          echo "test_exit_code=$TEST_EXIT" >> $GITHUB_OUTPUT
+          
+          if [ $TEST_EXIT -ne 0 ]; then
+            echo "::error::Stability test failed with exit code $TEST_EXIT"
+            exit $TEST_EXIT
+          fi
+          
+          echo "✅ Stability test passed"
+
+      - name: Collect memory and goroutine stats from log
+        if: always()
+        run: |
+          echo "## 📊 Stability Test Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # 提取内存趋势（从测试日志中解析）
+          echo "### Memory Trend" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          grep -E "(HeapInuse|HeapAlloc|goroutine|tick.*avg)" /tmp/stability.log | \
+            head -50 >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # 总结
+          echo "### Summary" >> $GITHUB_STEP_SUMMARY
+          TOTAL_TICKS=$(grep -c "tick completed" /tmp/stability.log || echo "N/A")
+          echo "- Total ticks simulated: $TOTAL_TICKS" >> $GITHUB_STEP_SUMMARY
+          echo "- Duration: ${{ github.event.inputs.duration_min || 30 }} minutes" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ steps.stability.outcome }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Generate heap profile on failure
+        if: failure()
+        run: |
+          echo "## 🔍 Failure Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Stability test failed. Check logs for details." >> $GITHUB_STEP_SUMMARY
+          
+          # 提取最后 50 行错误信息
+          echo "### Last 50 lines of output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -50 /tmp/stability.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload stability log artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stability-log-${{ github.run_id }}
+          path: /tmp/stability.log
+          retention-days: 14
+
+      - name: Create issue on scheduled failure
+        if: |
+          failure() &&
+          github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[SimVerse Stability] Daily stability test failed - ${new Date().toISOString().split('T')[0]}`,
+              body: `## SimVerse 长稳测试失败\n\n- **日期**: ${new Date().toISOString()}\n- **触发**: 每日定时任务\n- **Run URL**: ${runUrl}\n\n请检查日志，确认是否存在内存泄漏 / 性能退化 / goroutine 泄漏等问题。`,
+              labels: ['bug', 'stability-fail', 'simverse']
+            });
+
+  # ── 结果通知（可选，后续可加 Slack/飞书通知） ──
+  notify:
+    needs: stability-test
+    if: always() && github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report stability result
+        run: |
+          echo "SimVerse stability test result: ${{ needs.stability-test.result }}"
+          echo "Run ID: ${{ github.run_id }}"
+          # 预留：后续可集成 Slack / 飞书 / 邮件通知

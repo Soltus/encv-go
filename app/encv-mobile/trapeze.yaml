@@ -1,0 +1,85 @@
+vars:
+  BUILD_TYPE:
+    default: debug
+  ENCV_VERSION:
+
+platforms:
+  android:
+    gradle:
+      - file: app/build.gradle
+        target:
+          dependencies:
+        insert: |
+          implementation "org.jetbrains.kotlin:kotlin-stdlib:2.1.0"
+          debugImplementation 'com.github.getActivity:Logcat:13.0'
+
+      - file: app/build.gradle
+        target:
+          android:
+            defaultConfig:
+        insert: |
+          ndk {
+              abiFilters 'arm64-v8a'
+          }
+
+      - file: app/build.gradle
+        target:
+          android:
+        insert: |
+          compileOptions {
+              targetCompatibility JavaVersion.VERSION_21
+              sourceCompatibility JavaVersion.VERSION_21
+          }
+          buildFeatures {
+              buildConfig = true
+          }
+
+      - file: app/build.gradle
+        target:
+          dependencies:
+        insert: |
+          implementation 'androidx.appcompat:appcompat:1.6.1'
+
+      - file: app/build.gradle
+        target:
+          dependencies:
+        insert: |
+          implementation 'com.squareup.okhttp3:okhttp:4.9.0'
+
+      - file: app/build.gradle
+        target:
+          android:
+        insert: |
+          sourceSets {
+              main {
+                  jniLibs.srcDirs = ['src/main/jniLibs']
+              }
+          }
+
+      - file: app/build.gradle
+        target:
+          android:
+        insert: |
+          packaging {
+              jniLibs {
+                  useLegacyPackaging = true
+                  pickFirsts += ['**/*.so']
+              }
+              resources {
+                  pickFirsts += ['**/*.so']
+              }
+          }
+
+      - file: app/build.gradle
+        insert: |
+          tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+              kotlinOptions {
+                  jvmTarget = "21"
+              }
+          }
+
+      - file: app/build.gradle
+        insert: |
+          android.sourceSets {
+              main.java.srcDirs += 'src/main/java'
+          }

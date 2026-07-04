@@ -1,0 +1,10 @@
+- [x] FilePreview.vue 文本预览使用 `<iframe :src="textPreviewUrl">` 渲染（已回退 fetch+pre）
+- [x] FilePreview.vue textPreviewUrl ref 存在且正确赋值
+- [x] FilePreview.vue 无 textContent/textLoading/textError 残留
+- [x] TempFileReadCloser.Close() 仅关闭文件句柄，不执行 os.Remove()
+- [ ] registry.go 在 PostEncryptProcessor + verifyContainer 完成后才清理 encv-pre 临时文件
+- [ ] stsz box missing 验证错误根因确认（remux 后结构变化 vs SkipStructCheck 覆盖范围）
+- [ ] 加密过程中用户原始视频文件不被删除或覆盖
+- [x] GoProcessPlugin.kt 反射找到 ComboLite installPlugin(File, Boolean) 方法（parameterCount==2）
+- [ ] installMethod.invoke(pm, apkFile, true) 正确调用并返回成功
+- [ ] ExtensionsPage 安装完成后 badge 显示「已安装」
