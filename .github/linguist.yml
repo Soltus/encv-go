@@ -1,0 +1,57 @@
+# .github/linguist.yml
+# 控制 github.com 仓库页「Languages」统计的可见性。
+# 仅列在 paths-ignore 中的路径会被剔除；不在此文件中的目录保持原样。
+#
+# 背景：本项目语言统计中 JS 占比虚高，源自：
+#   1. 第三方 skill 目录（.agents/skills/、app/encv-mobile/.agents/skills/）含 5MB+ bundle
+#   2. 上游 OpenList Web 前端 dist 资产（plugin-openlist/src/main/assets/openlist/assets/）1.2MB+
+#   3. Trae AI agent 内部 docs / specs / rules（4MB+ markdown）
+# 此文件将上述「非项目交付代码」剔出语言统计。
+
+version: 1.0
+
+# 关闭自动 vendored 推断（避免 Capacitor node_modules 路径误判）
+vendored: false
+auto: false
+
+# 显式声明主要项目语言（防止 GitHub 默认推断把 Vue/TS 误归为 HTML）
+typescript: true
+vue: true
+kotlin: true
+go: true
+
+paths-ignore:
+  # === 第三方 skill 定义（纯 markdown + 偶发脚本片段） ===
+  - .agents/skills/**
+  - app/encv-mobile/.agents/skills/**
+  - .trae/skills/**
+  - agent/cmd/agent-demo/scripts/skills/**
+
+  # === 上游构建产物 / dist 输出 ===
+  - app/encv-mobile/plugin-openlist/src/main/assets/openlist/assets/**
+
+  # === Trae AI agent 内部文档与规范（不是交付代码） ===
+  - .trae/documents/**
+  - .trae/specs/**
+  - .trae/rules/**
+  - .trae/scripts/**
+
+  # === 资源 / 数据 / 锁文件（不计入语言） ===
+  - app/encv-mobile/data/**
+  - '**/*.png'
+  - '**/*.svg'
+  - '**/*.ttf'
+  - '**/*.woff2'
+  - '**/*.db'
+  - '**/*.jar'
+  - '**/*.aar'
+  - '**/*.sccgt'
+  - '**/*.tar.gz'
+  - '**/*.7z'
+  - '**/*.lock'
+  - pnpm-lock.yaml
+  - package-lock.json
+
+# 不使用 — 但显式声明避免 GitHub 默认行为
+generated:
+  - .github/workflows/**

@@ -1,0 +1,422 @@
+id: truncation_long_text
+description: "长文本流式输出（拆 35 段 × 250ms 打字机节奏）+ 截断处理 — 拟人化 ≥30s，纯通用 UI 文案"
+keywords:
+  - "truncation"
+  - "长文本"
+  - "截断"
+  - "long text"
+  - "长文"
+  - "写长文"
+exact_match: "truncation_long_text"
+rounds: 1
+
+presets:
+  - id: show_full
+    label: "📜 展开全文"
+    user_text: "展开全文"
+  - id: summarize
+    label: "📝 总结"
+    user_text: "总结全文"
+  - id: save
+    label: "💾 保存"
+    user_text: "保存到文件"
+
+steps:
+  # 阶段 1：思考链（10 段 × 700-800ms ≈ 7500ms）
+  - id: think_1
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "用户要求：阅读并流式输出长文本。" }
+  - id: think_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "这是一个长文档，需要逐段流式输出。" }
+  - id: think_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "不能用一次 text_delta 推完（用户看不到打字机效果）。" }
+  - id: think_4
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "拆成 30+ 段，每段 200-300ms 间隔。" }
+  - id: think_5
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "中途需要插入「截断提示」，模拟 token 上限警告。" }
+  - id: think_6
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "截断后给用户「展开全文」chip。" }
+  - id: think_7
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "用 mock_truncated 事件推送截断点。" }
+  - id: think_8
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "auto_run=true，长文本流式不需用户确认。" }
+  - id: think_9
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "准备好开始流式输出。" }
+  - id: think_10
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "内容来源：通用教学示例（用户提供的 Lorem 文本）。" }
+
+  # 阶段 2：流式文本（35 段 × 250ms ≈ 8750ms，构造长文）
+  - id: lt_1
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: stream_start
+        data: { scenario: truncation_long_text }
+      - type: text_delta
+        data: { text: "好的，我来流式输出这个长文档。\n\n" }
+  - id: lt_2
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "## 概述\n\n" }
+  - id: lt_3
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "本文档是一份关于软件工程实践的技术长文，\n" }
+  - id: lt_4
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "涵盖了从需求分析到部署运维的完整生命周期。\n\n" }
+  - id: lt_5
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "### 第一章：需求分析\n\n" }
+  - id: lt_6
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "在软件开发流程中，\n" }
+  - id: lt_7
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "需求分析是整个项目的基石。\n" }
+  - id: lt_8
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "没有清晰的需求，\n" }
+  - id: lt_9
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "后续的设计、编码、测试都会偏离目标。\n\n" }
+  - id: lt_10
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "需求分析的核心方法包括：\n" }
+  - id: lt_11
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "用户访谈、问卷调查、竞品分析、\n" }
+  - id: lt_12
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "用户故事地图、用例分析等。\n\n" }
+  - id: lt_13
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "### 第二章：架构设计\n\n" }
+  - id: lt_14
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "在明确需求之后，\n" }
+  - id: lt_15
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "架构设计是技术决策的关键环节。\n" }
+  - id: lt_16
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "好的架构应该具备可扩展性、可维护性、\n" }
+  - id: lt_17
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "可测试性、性能和安全性。\n\n" }
+  - id: lt_18
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "常见的架构模式包括：\n" }
+  - id: lt_19
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "单体应用、微服务、事件驱动、\n" }
+  - id: lt_20
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "分层架构、CQRS 等。\n\n" }
+  - id: lt_21
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "### 第三章：编码实现\n\n" }
+  - id: lt_22
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "编码阶段是开发周期中投入时间最多的环节。\n" }
+  - id: lt_23
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "高质量的代码应遵循 SOLID 原则，\n" }
+  - id: lt_24
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "保持简洁、可读、可测试。\n\n" }
+  - id: lt_25
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "### 第四章：测试与质量保障\n\n" }
+  - id: lt_26
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "测试是软件质量的最后一道防线。\n" }
+  - id: lt_27
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "单元测试、集成测试、端到端测试，\n" }
+  - id: lt_28
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "覆盖代码的各个层面。\n\n" }
+  - id: lt_29
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "### 第五章：部署与运维\n\n" }
+  - id: lt_30
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "现代软件的部署已经从手工脚本演进到 CI/CD。\n" }
+  - id: lt_31
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "容器化、Kubernetes、GitOps 等技术，\n" }
+  - id: lt_32
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "让部署和运维更加自动化和可靠。\n\n" }
+  - id: lt_33
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "## 总结\n\n" }
+  - id: lt_34
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "软件工程是一个持续改进的过程，\n" }
+  - id: lt_35
+    round_idx: 0
+    delay_ms: 250
+    events:
+      - type: text_delta
+        data: { text: "需要团队成员的共同努力。" }
+
+  # 阶段 3：后处理（5 段 × 600-700ms ≈ 3200ms）
+  - id: post_1
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "\n\n流式输出完成。" }
+  - id: post_2
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "正在统计总长度..." }
+  - id: post_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "总长度约 1500 token，已超过单次显示阈值。" }
+  - id: post_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "前端会自动折叠长文本，点击展开查看完整内容。" }
+  - id: post_5
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "正在准备后续操作..." }
+
+  # 阶段 4：截断提示（5 段 × 600-700ms ≈ 3200ms）
+  - id: trunc_1
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "## 提示\n\n" }
+  - id: trunc_2
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "如果需要完整内容，可以点击下方 chip 展开。\n\n" }
+  - id: trunc_3
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "或者我也可以：\n" }
+  - id: trunc_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "1. 总结全文（用 200 token 浓缩）\n" }
+  - id: trunc_5
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "2. 保存到文件（写到磁盘）\n" }
+  - id: trunc_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "3. 继续生成（追加段落）\n" }
+  - id: trunc_7
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "4. 翻译成其他语言\n" }
+  - id: trunc_8
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "5. 提取关键引用\n" }
+  - id: trunc_9
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "6. 跳过，保留现状\n" }
+  - id: trunc_10
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选择你想做的，剩下交给我。" }
+
+  # 阶段 5：chip + 收尾
+  - id: push_chips
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: mock_presets
+        data:
+          scenario: truncation_long_text
+          phase: after_truncation
+          presets:
+            - id: show_full
+              label: "📜 展开全文"
+              user_text: "展开全文"
+            - id: summarize
+              label: "📝 总结"
+              user_text: "总结全文"
+            - id: save
+              label: "💾 保存"
+              user_text: "保存到文件"
+  - id: end
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: stream_end
+        data:
+          finishReason: length
+          truncated: true
+          usage: { totalTokens: 1520 }

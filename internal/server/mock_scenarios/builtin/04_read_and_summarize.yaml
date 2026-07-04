@@ -1,0 +1,62 @@
+id: read_and_summarize
+description: "read_file tool_call — 验证只读工具 + 总结"
+keywords:
+  - "总结"
+  - "summarize"
+  - "摘要"
+  - "归纳"
+
+presets:
+  - id: p_full
+    label: "📜 看完整原文"
+    user_text: "显示完整内容"
+    tooltip: "查看完整文件"
+  - id: p_bullets
+    label: "🔹 bullet 列表版"
+    user_text: "用 bullet 列表总结"
+    tooltip: "切换为列表格式"
+  - id: p_translate
+    label: "🌐 翻译成中文"
+    user_text: "翻译成中文"
+    tooltip: "中文化输出"
+  - id: p_save
+    label: "💾 保存为摘要"
+    user_text: "保存总结"
+    tooltip: "保存到文件"
+
+steps:
+  - id: intro
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: read_and_summarize }
+      - type: text_delta
+        data: { text: "我先读取文件内容。" }
+  - id: read_file
+    delay_ms: 400
+    events:
+      - type: tool_call
+        data:
+          id: call_read_1
+          name: read_file
+          args:
+            mount_id: serving
+            rel_path: "01-plain-media/document/notes.txt"
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+  - id: summary
+    delay_ms: 200
+    events:
+      - type: text_delta
+        data: { text: "文件内容已读取。" }
+      - type: text_delta
+        data: { text: "核心要点已提取，详见上方工具结果。\n" }
+  - id: end
+    delay_ms: 100
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 156 }

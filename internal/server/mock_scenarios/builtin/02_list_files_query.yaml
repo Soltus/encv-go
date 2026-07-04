@@ -1,0 +1,129 @@
+id: list_files_query
+description: "5 步真实流程：mounts → files → files → read_file → 总结"
+keywords:
+  - "有哪些文件"
+  - "有什么文件"
+  - "视频"
+  - "目录"
+  - "列一下"
+  - "看看文件"
+  - "看下文件"
+  - "video"
+  - "movie"
+  - "files"
+  - "list files"
+  - "list"
+
+presets:
+  - id: p_video
+    label: "🎬 视频文件"
+    user_text: "查看 video 子目录"
+    tooltip: "进入 video 目录看视频文件列表"
+    icon: "🎬"
+  - id: p_doc
+    label: "📄 文档"
+    user_text: "查看 document 子目录"
+    tooltip: "进入 document 目录看文档列表"
+    icon: "📄"
+  - id: p_search
+    label: "🔍 搜索字幕"
+    user_text: "搜索带字幕的视频"
+    tooltip: "触发 multi_step_search 剧本"
+    icon: "🔍"
+  - id: p_encrypt
+    label: "🔒 加密视频"
+    user_text: "加密视频"
+    tooltip: "触发 encrypt_video 剧本"
+    icon: "🔒"
+
+steps:
+  - id: intro
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: list_files_query }
+      - type: text_delta
+        data: { text: "## 查看你的媒体库\n\n" }
+      - type: text_delta
+        data: { text: "先列出挂载点，再递归查看视频文件。\n\n" }
+  - id: list_mounts
+    delay_ms: 1200
+    events:
+      - type: tool_call
+        data:
+          id: call_mount
+          name: list_mounts
+          args: {}
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+  - id: transition_to_files
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "已找到挂载点。继续递归查看子目录...\n\n" }
+  - id: list_root_dir
+    delay_ms: 1000
+    events:
+      - type: tool_call
+        data:
+          id: call_files1
+          name: list_files
+          args:
+            mount_id: serving
+            rel_path: "/"
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+  - id: transition_to_video
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "正在进入视频子目录...\n\n" }
+  - id: list_video_dir
+    delay_ms: 1000
+    events:
+      - type: tool_call
+        data:
+          id: call_files2
+          name: list_files
+          args:
+            mount_id: serving
+            rel_path: "01-plain-media/video"
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+  - id: read_file
+    delay_ms: 1000
+    events:
+      - type: tool_call
+        data:
+          id: call_read
+          name: read_file
+          args:
+            mount_id: serving
+            rel_path: "01-plain-media/document/notes.txt"
+            max_bytes: 500
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+  - id: summary
+    delay_ms: 1500
+    events:
+      - type: text_delta
+        data: { text: "### 你的媒体库概览\n\n" }
+      - type: text_delta
+        data: { text: "已完成对媒体库的递归扫描。所有文件信息均由真实工具返回。\n\n" }
+      - type: text_delta
+        data: { text: "**下一步建议**（点击 chip 直接执行）：\n\n1. 加密视频文件\n2. 查看文档完整内容\n3. 切换到搜索剧本\n" }
+  - id: end
+    delay_ms: 500
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 618 }

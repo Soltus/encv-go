@@ -1,0 +1,303 @@
+id: search_logical_query
+description: "逻辑查询搜索（AND/OR/NOT 复合条件）— 拟人化 ≥30s，纯通用 UI 文案"
+keywords:
+  - "search_logical_query"
+  - "逻辑查询"
+  - "and 查询"
+  - "复合条件"
+exact_match: "search_logical_query"
+rounds: 1
+
+presets:
+  - id: show_largest
+    label: "📁 展示结果"
+    user_text: "展示搜索结果"
+  - id: refilter
+    label: "🔧 改条件"
+    user_text: "用更严格的条件再搜"
+  - id: encrypt_now
+    label: "🔒 加密"
+    user_text: "加密最大的视频"
+
+steps:
+  # 阶段 1：思考链（6 段 × 700-800ms ≈ 4500ms）
+  - id: think_1
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "用户要求：用逻辑表达式搜索文件。" }
+  - id: think_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "搜索工具支持 AND/OR/NOT 复合条件。" }
+  - id: think_3
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "构造表达式树：多个条件用 AND/OR 组合。" }
+  - id: think_4
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "递归扫描所有挂载点，加 result 限额防爆。" }
+  - id: think_5
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "auto_run 直接执行，不需要用户确认。" }
+  - id: think_6
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "准备好调用搜索工具。" }
+
+  # 阶段 2：过渡文本（5 段 × 500-700ms ≈ 2900ms）
+  - id: intro_1
+    round_idx: 0
+    delay_ms: 400
+    events:
+      - type: stream_start
+        data: { scenario: search_logical_query }
+      - type: text_delta
+        data: { text: "好的，我来处理。" }
+  - id: intro_2
+    round_idx: 0
+    delay_ms: 500
+    events:
+      - type: text_delta
+        data: { text: "目标：用逻辑表达式搜索文件。" }
+  - id: intro_3
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "复合条件用 AND/OR/NOT 组合表达。" }
+  - id: intro_4
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "挂载点比较多，可能要扫几秒钟。" }
+  - id: intro_5
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "开始调用工具..." }
+
+  # 阶段 3：工具调用（3000ms）
+  - id: tool_call
+    round_idx: 0
+    delay_ms: 3000
+    events:
+      - type: tool_call
+        data:
+          id: call_slq_1
+          name: search_files
+          args:
+            expression:
+              and:
+                - type: name_glob
+                  value: "*.{mp4,mkv,avi}"
+                - type: size_gt
+                  value: 209715200
+                - or:
+                    - type: name_glob
+                      value: "*4K*"
+                    - type: name_glob
+                      value: "*HDR*"
+            recursive: true
+            max_results: 30
+          auto_run: true
+          needsConfirm: false
+          kind: fileSearch
+          execute_real: true
+
+  # 阶段 4：处理结果（12 段 × 600-800ms ≈ 8400ms）
+  - id: process_1
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "搜索完成。" }
+  - id: process_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "让我解析复合条件..." }
+  - id: process_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "工具返回了若干匹配项，详情见上方工具结果。" }
+  - id: process_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在按表达式分组..." }
+  - id: process_5
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在统计符合 AND 条件的项..." }
+  - id: process_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在筛选符合 OR 子树的项..." }
+  - id: process_7
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在排除 NOT 命中的项..." }
+  - id: process_8
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "最终结果已生成，路径和大小见工具结果。" }
+  - id: process_9
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在分析复合条件下的文件特征..." }
+  - id: process_10
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在准备推荐的下一步操作..." }
+  - id: process_11
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "根据命中情况，建议如下：" }
+  - id: process_12
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选择你想做的，剩下交给我。" }
+
+  # 阶段 5：总结建议（8 段 × 500-700ms ≈ 4900ms）
+  - id: summary_1
+    round_idx: 0
+    delay_ms: 500
+    events:
+      - type: text_delta
+        data: { text: "## 逻辑搜索结果总结\n\n" }
+  - id: summary_2
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "命中若干匹配项，详细路径和大小见上方工具结果。\n\n" }
+  - id: summary_3
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "**建议**（点击 chip 直接执行）：\n\n" }
+  - id: summary_4
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "1. 展示完整结果\n" }
+  - id: summary_5
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "2. 用更严格的条件再搜\n" }
+  - id: summary_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "3. 对文件进行加密处理\n" }
+  - id: summary_7
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "4. 按其他条件继续处理\n" }
+  - id: summary_8
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选择你想做的，剩下交给我。" }
+  - id: summary_9
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "如果想查看任意一个的完整路径和大小，告诉我即可。" }
+  - id: summary_10
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "可以指定更复杂条件（如 AND+OR+NOT 嵌套）。" }
+  - id: summary_11
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "也可以跳过本次搜索，保留现状。" }
+  - id: summary_12
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选完后我立即开始执行你指定的操作。" }
+  - id: summary_13
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "如果都不想做，可以直接关闭本对话。" }
+
+  # 阶段 6：chip 推送 + 收尾
+  - id: push_chips
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: mock_presets
+        data:
+          scenario: search_logical_query
+          phase: after_search
+          presets:
+            - id: show_largest
+              label: "📁 展示结果"
+              user_text: "展示搜索结果"
+            - id: refilter
+              label: "🔧 改条件"
+              user_text: "用更严格的条件再搜"
+            - id: encrypt_now
+              label: "🔒 加密"
+              user_text: "加密最大的视频"
+  - id: end
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 1340 }

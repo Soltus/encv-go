@@ -1,0 +1,8 @@
+- [x] `libs.versions.toml` 中 `kotlin = "2.3.21"` 与 `build.gradle.kts` 一致
+- [x] GoProcessPlugin.kt 包含 `import android.content.BroadcastReceiver`
+- [x] GoProcessPlugin.kt 包含 `import android.content.Context`
+- [x] GoProcessPlugin.kt 只有一个 `companion object`（包含 TAG 和 REQUEST_CODE_PLUGIN_PICK）
+- [x] `REQUEST_CODE_PLUGIN_PICK` 可在类内所有引用处访问
+- [x] `String?` 类型使用 `isNullOrEmpty()` 而非 `isEmpty()`
+- [x] `String?` 类型使用 `!!.` 断言非空调用
+- [ ] Kotlin 编译无错误（需 CI 验证）

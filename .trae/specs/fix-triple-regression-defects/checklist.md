@@ -1,0 +1,13 @@
+- [x] text.html #textContent height 改为 100%
+- [x] GoProcessPlugin.kt installPlugin 移除错误 action + 添加 FLAG_ACTIVITY_NEW_TASK
+- [x] GoProcessPlugin.kt installFromPath 同上修复
+- [x] GoProcessPlugin.kt 两处添加 try-catch 诊断日志
+- [x] interfaces.go VerifyOptions 新增 SkipDeepCheck bool
+- [x] content_verifier.go Verify() SkipDeepCheck 时跳过 runDeepVideoIntegrityCheck
+- [x] plugin.go verifyContainer() 设置 SkipDeepCheck=true
+- [x] debugInstallFlow() @PluginMethod 实现
+- [x] web.ts + GoProcess.ts 接口定义
+- [x] ExtensionsPage.vue 调试按钮
+- [x] Go 编译通过
+- [x] 前端构建通过
+- [x] E2E 测试通过

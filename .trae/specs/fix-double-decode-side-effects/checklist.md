@@ -1,0 +1,12 @@
+- [x] server_handle.go 中 `DecodePathParam(r.URL.Query().Get("path"))` 和 `DecodePathParam(r.URL.Query().Get("file"))` 已移除，改为直接读取 query 参数
+- [x] openlist_middleware.go 中 `DecodePathParam(c.Request.URL.Query().Get("file"))` 已移除，改为直接读取 query 参数
+- [x] openlist_handlers.go 中 `DecodePathParam(c.Request.URL.Query().Get("file"))` 已移除，改为直接读取 query 参数，并添加注释说明 durl 是完整 URL 不经过 SafeURLPathToRelative
+- [x] mobile_api.go handleStreamExternalFileGin 中手动 `url.QueryUnescape` 已移除，统一走 SafeURLToAbsPath 解码
+- [x] 端到端测试覆盖：proxySafeEncode → Gin 解码 → SafeURLToAbsPath 完整链路正确还原路径
+- [x] 含 `%` 字面量文件名（如 `file%name.txt`）不被过度解码
+- [x] 含 `@` 的路径正确还原
+- [x] 含中文/emoji 的路径正确还原
+- [x] DecodePathParam 对已解码值幂等（不改变结果）
+- [x] `go build ./cmd/encv/...` 编译通过
+- [x] `go test ./internal/utils/ ./internal/server/ ./internal/config/ -count=1` 全部通过
+- [x] 项目中无三重解码残留（grep `DecodePathParam` 仅出现在 SafeURLPathToRelative 内部和测试中）

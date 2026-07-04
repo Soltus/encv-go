@@ -1,0 +1,293 @@
+openapi: 3.0.3
+info:
+  title: 云托管
+  description: >-
+    ### 功能介绍
+
+    该系列开放 API 提供了对接云托管（Cloudbase Run）服务的能力，可通过开放 API 对环境下的云托管服务进行调用，支持 `SSE(Server-Sent Event)` 和 `WebSocket` 请求。
+
+    ### 接入指引
+
+    调用以下接口需要传递 AccessToken，格式如`Authorization: Bearer <token>`。Token 获取方式参考：https://docs.cloudbase.net/http-api/basic/access-token
+
+    ### HTTP 状态码
+
+    根据返回结果的不同，可能会出现 `2xx`, `4xx`, `5xx` 状态码。
+
+    ### 错误码
+
+    以下列出了该系列 API 特定的错误码，完整列表参考：https://docs.cloudbase.net/error-code/service
+
+    <table>
+      <thead>
+      <tr>
+        <td>错误码</td>
+        <td>含义</td>
+      </tr>
+      </thead>
+      <tr>
+        <td>SERVICE_NOT_FOUND</td>
+        <td>未找到指定服务</td>
+      </tr>
+      <tr>
+        <td>SERVICE_TIMEOUT</td>
+        <td>调用云托管服务超时</td>
+      </tr>
+      <tr>
+        <td>SERVICE_FORBIDDEN</td>
+        <td>云托管服务拒绝访问，可能是由于权限配置或服务状态异常</td>
+      </tr>
+      <tr>
+        <td>SERVICE_NOT_READY</td>
+        <td>云托管服务处于未就绪状态</td>
+      </tr>
+      <tr>
+        <td>SERVICE_VERSION_NOT_FOUND</td>
+        <td>找不到匹配的云托管服务版本</td>
+      </tr>
+      <tr>
+        <td>SERVICE_ENDPOINT_NOT_FOUND</td>
+        <td>找不到云托管服务可用的地址</td>
+      </tr>
+      <tr>
+        <td>SERVICE_LB_STATUS_ABNORMAL</td>
+        <td>云托管负载均衡状态异常，可尝试新建版本</td>
+      </tr>
+      <tr>
+        <td>SERVICE_RESOURCE_NOT_FOUND</td>
+        <td>未找到服务对应的资源</td>
+      </tr>
+      <tr>
+        <td>SERVICE_CHARGE_OVERDUE</td>
+        <td>欠费停机，请及时充值</td>
+      </tr>
+    </table>
+  contact:
+    name: TCB
+    url: https://cloud.tencent.com/product/tcb
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+  - url: https://{envId}.api.tcloudbasegateway.com
+    description: TCB openapi endpoint
+    variables:
+      envId:
+        default: "your-envId"
+        description: 环境 ID
+paths:
+  /v1/cloudrun/{name}/{anyPath}:
+    get:
+      operationId: cloudrun-get
+      tags:
+        - 云托管调用
+      summary: Get 调用云托管服务
+      externalDocs:
+        description: 完整错误码列表参考：
+        url: https://docs.cloudbase.net/error-code/service
+      parameters:
+        - name: name
+          in: path
+          description: 需要调用的服务名称
+          required: !!bool true
+          schema:
+            type: string
+            pattern: "^[a-zA-Z][a-zA-Z0-9_-]{0,58}[a-zA-Z0-9]$"
+        - name: anyPath
+          required: false
+          in: path
+          description: 追加任意路径
+          schema:
+            type: string
+      description: &sharedDescription |2+
+        调用指定云托管服务。
+
+        通过开放 API 访问云托管时，针对可能存在的合规封禁风险，开放 API 会对响应头进行如下更改：
+
+        1. 对于所有的 `GET` 请求返回的响应，响应头添加 `Content-Disposition: attachment`；
+        2. 对于非文本类型（文本类型包括响应头`Content-Type`中指示`application/json`、`application/x-www-form-urlencoded`、`text/plain`类型的返回内容）的响应，响应头添加 `Content-Disposition: attachment`；
+        
+        > **_注意_**：`SSE(Server-Sent Event)` 和 `WebSocket` 请求不受到上述限制。
+      responses: &sharedResponses
+        "200":
+          $ref: "#/components/responses/CloudRunSuccessResponse"
+
+        "403":
+          $ref: "#/components/responses/CloudRunErrorResponse403"
+
+        "404":
+          $ref: "#/components/responses/CloudRunErrorResponse404"
+
+        "default":
+          $ref: "#/components/responses/CommonErrorResponse"
+
+    post:
+      operationId: cloudrun-post
+      tags:
+        - 云托管调用
+      externalDocs:
+        description: 完整错误码列表参考：
+        url: https://docs.cloudbase.net/error-code/service
+      summary: Post 调用云托管服务
+      parameters:
+        - name: name
+          in: path
+          description: 需要调用的服务名称
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-zA-Z][a-zA-Z0-9_-]{0,58}[a-zA-Z0-9]$"
+        - name: anyPath
+          required: false
+          in: path
+          description: 追加任意路径
+          schema:
+            type: string
+      description: *sharedDescription
+      requestBody:
+        description: 调用云托管服务的请求参数
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            examples:
+              Echo:
+                summary: echo
+                value: { "a": 1, "b": 2 }
+      responses: *sharedResponses
+
+components:
+  responses:
+    CommonErrorResponse:
+      description: 通用报错信息，详见 https://docs.cloudbase.net/error-code/service
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+          description: "请求ID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CommonErrorResponse"
+          examples:
+            InvalidHost:
+              summary: 请求地址异常
+              value:
+                code: "INVALID_HOST"
+                message: "xxx"
+                requestId: "xxx"
+    CloudRunErrorResponse404:
+      description: 云托管服务调用出错时返回
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+          description: "请求ID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CommonErrorResponse"
+          examples:
+            ServiceNotFound:
+              summary: 未找到云托管服务
+              value:
+                {
+                  "code": "SERVICE_NOT_FOUND",
+                  "message": "Service not found. For more information, please refer to https://docs.cloudbase.net/error-code/service",
+                  "requestId": "yyxxxxxx-yyyy-yyyy-zzzz-xxxxxxzzyyyy",
+                }
+    CloudRunErrorResponse403:
+      description: 云托管服务调用出错时返回
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+          description: "请求ID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CommonErrorResponse"
+          examples:
+            ServiceForbidden:
+              summary: 云托管服务拒绝访问
+              value:
+                {
+                  "code": "SERVICE_FORBIDDEN",
+                  "message": "Service forbidden. For more information, please refer to https://docs.cloudbase.net/error-code/service",
+                  "requestId": "yyxxxxxx-yyyy-yyyy-zzzz-xxxxxxzzyyyy",
+                }
+    CloudRunSuccessResponse:
+      description: 调用成功时返回
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+          description: "请求ID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/v1CloudRunResponseDataJSON"
+          examples:
+            Echo:
+              summary: echo
+              description: |-
+                原始 JSON 请求包的云托管服务
+              value: { "a": 1, "b": 2 }
+
+        text/plain:
+          schema:
+            $ref: "#/components/schemas/v1CloudRunResponseDataText"
+          examples:
+            Text:
+              summary: text
+              description: |-
+                返回 `Hello world` 的云托管服务
+              value: "Hello world"
+
+  requestBodies:
+    v1CloudRunRequestData:
+      required: true
+      description: 调用云托管的请求参数，无格式限制
+      content:
+        application/json:
+          schema:
+            type: object
+
+  schemas:
+    v1CloudRunResponseDataJSON:
+      type: object
+      additionalProperties: true
+    v1CloudRunResponseDataText:
+      type: string
+    CommonErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          title: 错误码
+        message:
+          type: string
+          title: 错误信息
+        requestId:
+          type: string
+          title: 请求 ID
+      description: 出错时返回的错误信息
+  securitySchemes:
+    JWTAuth:
+      type: http
+      scheme: Bearer
+      description: 环境 ID 所对应的 token，使用登录认证(v2)获取
+    APIKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: TC3-HMAC-SHA256开头的腾讯云 3.0 版签名，将 Timestamp 和 Token 拼接在签名最后
+
+security:
+  - JWTAuth: []
+  - APIKey: []
+
+tags:
+  - name: 云托管

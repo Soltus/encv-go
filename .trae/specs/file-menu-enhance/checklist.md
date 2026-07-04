@@ -1,0 +1,26 @@
+# Checklist
+
+- [x] 后端 `handleFileCopyGin` 实现：支持同目录/跨目录复制，目标已存在时返回 409
+- [x] 后端 `handleFileMoveGin` 实现：支持同设备 rename + 跨设备 copy+delete fallback
+- [x] 后端 copy/move 路由在 server.go 正确注册
+- [x] 后端 `GET /api/plugins` 返回完整插件元信息（名称、扩展名列表、MIME前缀、容器扩展名）
+- [x] 后端 tags 内存存储模型可用（线程安全 map）
+- [x] 后端 `GET /api/files/tags` 返回标签统计
+- [x] 后端 `POST /api/files/tags` 支持 add/remove 操作
+- [x] 后端 `GET /api/files?tag=xxx` 筛选逻辑正确
+- [x] 前端 encv.ts 包含全部新增 API 函数（rename/copy/move/plugins/tags）
+- [x] 前端 @capacitor/share 安装并配置完成
+- [x] 前端长按菜单展示6+个操作项（删除、加密解密、重命名、复制、移动、分享、标签）
+- [x] 前端重命名操作：弹出输入框 → 调用 API → 刷新列表
+- [x] 前端复制操作：自动生成 `{原名}_copy.{ext}` 目标名 → 调用 API → 刷新
+- [x] 前端移动操作：目录选择器 → 调用 API → 刷新
+- [x] 前端分享操作：原生环境调用 Share.share()，Web 环境降级处理
+- [x] 前端标签操作：输入框添加标签 → 调用 API → 标签显示在文件项上
+- [x] 前端侧边抽屉可打开/关闭，展示动态插件列表
+- [x] 前端插件抽屉项点击进入二级检索页，分 Tab 展示未加密/已加密文件
+- [x] 前端抽屉底部展示标签快捷筛选入口
+- [x] 后端 copy handler 单元测试通过（8 个测试用例）
+- [x] 后端 move handler 单元测试通过（8 个测试用例）
+- [x] 后端 plugins API 单元测试通过（4 个测试用例）
+- [x] 后端 tags CRUD 单元测试通过（11 个测试用例）
+- [x] 前端 vite build 通过（无编译错误，919ms）
