@@ -109,6 +109,6 @@ replace github.com/Soltus/encv-go/internal/v2/crypto => ./internal/v2/crypto
 replace github.com/Soltus/encv-go/internal/v2/plugins/interfaces => ./internal/v2/plugins/interfaces
 
 
-# github.com/libsql/libsql is the Rust libsql project (no Go module).
-# Redirect to a local stub so sqlite-antlr4-parser compiles.
+// # github.com/libsql/libsql is the Rust libsql project (no Go module).
+// # Redirect to a local stub so sqlite-antlr4-parser compiles.
 replace github.com/libsql/libsql => ./pkg/libsql-stub
