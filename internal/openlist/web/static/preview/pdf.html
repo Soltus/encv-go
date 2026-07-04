@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>ENCV PDF Viewer</title>
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--hope-ui-background, #ffffff);
+            color: var(--hope-ui-text, #1a1a1a);
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: var(--hope-ui-text, #555555);
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none;
+        }
+
+        .error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: var(--hope-ui-error, #dc3545);
+            text-align: center;
+            max-width: 80%;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="loading">Loading PDF...</div>
+    <div id="error" class="error" style="display: none;"></div>
+    <iframe id="pdfFrame" title="PDF Viewer"></iframe>
+
+    <script>
+        function getApiBaseUrl() {
+            const currentPath = window.location.pathname;
+
+            // 检查是否在 _preview 路径下
+            if (currentPath.includes('/_preview')) {
+                // 提取 _preview 之前的部分作为基础路径
+                const previewIndex = currentPath.indexOf('/_preview');
+                const basePath = currentPath.substring(0, previewIndex);
+
+                // 如果是多站点路径，返回它
+                if (basePath.includes('/openlist/sites/')) {
+                    return basePath;
+                }
+            }
+
+            // 单站点模式或默认情况
+            return '';
+        }
+
+        const baseUrl = getApiBaseUrl();
+        console.log('Detected base URL:', baseUrl);
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const file = urlParams.get('file');
+
+        if (file) {
+            const decryptUrl = baseUrl + '/decrypt?file=' + encodeURIComponent(file);
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const pdfFrame = document.getElementById('pdfFrame');
+
+            console.log('Fetching PDF from:', decryptUrl);
+
+            fetch(decryptUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    const blobUrl = URL.createObjectURL(blob);
+                    pdfFrame.src = blobUrl;
+                    loading.style.display = 'none';
+                    pdfFrame.style.display = 'block';
+                })
+                .catch(error => {
+                    console.error('Error fetching PDF:', error);
+                    loading.style.display = 'none';
+                    error.style.display = 'block';
+                    error.innerHTML = `
+                        <h3>Failed to load PDF</h3>
+                        <p>${error.message}</p>
+                        <p><small>URL: ${decryptUrl}</small></p>
+                    `;
+                });
+
+        } else {
+            document.body.innerHTML = '<div class="error"><h3>Error</h3><p>URL parameter "file" is required.</p></div>';
+        }
+    </script>
+</body>
+
+</html>

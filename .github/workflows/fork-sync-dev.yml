@@ -1,0 +1,78 @@
+name: Sync Fork & Auto PR
+
+# 确保 UPSTREAM_PR_TOKEN 是一个 Classic Token，并勾选了 public_repo 权限（因为上游和 Fork 都是公开的）。
+# Fork 仓库 → Settings → Secrets and variables → Actions → Repository secrets
+# · Name：UPSTREAM_PR_TOKEN
+# · Value：直接粘贴，确保没有前后空格或换行。
+
+on:
+  schedule:
+    - cron: '1 16 * * *'       # 北京时间 00:01
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency: fork-automation
+
+jobs:
+  auto-pr-and-sync:
+    if: github.event.repository.fork
+    runs-on: ubuntu-latest
+    env:
+      UPSTREAM_REPO: Soltus/encv-go                    # 一般不用修改
+      GH_TOKEN: ${{ secrets.UPSTREAM_PR_TOKEN }}       # PAT：需有 public_repo 权限
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.UPSTREAM_PR_TOKEN }}
+          fetch-depth: 0
+          ref: dev
+          submodules: false  # 防御
+
+      - name: Set upstream
+        run: |
+          git remote add upstream https://github.com/${{ env.UPSTREAM_REPO }}.git
+          git fetch upstream dev
+
+      - name: Check if we have unique commits
+        id: diff
+        run: |
+          if git diff --quiet upstream/dev...HEAD; then
+            echo "has_diff=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_diff=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create PR branch and push
+        if: steps.diff.outputs.has_diff == 'true'
+        run: |
+          # 创建一个唯一的分支名（基于时间戳+run id）
+          PR_BRANCH="auto-pr/dev-$(date +%Y%m%d%H%M%S)-${{ github.run_id }}"
+          git checkout -b "$PR_BRANCH"
+          git push origin "$PR_BRANCH"
+          echo "PR_BRANCH=$PR_BRANCH" >> $GITHUB_ENV
+
+      - name: Create Pull Request
+        if: steps.diff.outputs.has_diff == 'true'
+        run: |
+          # 检查是否已存在从本 Fork 的临时分支发起的 PR
+          existing=$(gh pr list --repo $UPSTREAM_REPO \
+            --head "${{ github.repository_owner }}:${{ env.PR_BRANCH }}" \
+            --base dev --state open --json number -q '.[0].number')
+          if [ -z "$existing" ]; then
+            gh pr create \
+              --repo $UPSTREAM_REPO \
+              --base dev \
+              --head "${{ github.repository_owner }}:${{ env.PR_BRANCH }}" \
+              --title "自动 PR: 来自 Fork 的更新" \
+              --body "此 PR 由自动化流程创建，包含 Fork dev 分支的独立提交。"
+          else
+            echo "PR #$existing already exists, skip."
+          fi
+
+      - name: Force sync dev to upstream
+        run: |
+          git checkout dev
+          git reset --hard upstream/dev
+          git push origin dev --force

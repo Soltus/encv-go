@@ -1,0 +1,21 @@
+- [x] artplayer 依赖已安装，package.json 中包含 artplayer
+- [x] Player.vue 使用 ArtPlayer 播放视频，原生 `<audio>` 播放音频
+- [x] Player.vue 加密视频通过 /stream?path=... 端点播放
+- [x] Player.vue 生命周期管理正确（创建/销毁/切换视频源）
+- [x] Player.vue 播放错误时显示 toast 提示
+- [x] FilePreview.vue 图片类型使用 `<img>` 展示，数据源为 /stream
+- [x] FilePreview.vue PDF 类型使用 `<iframe>` 展示，数据源为 /stream
+- [x] FilePreview.vue 文本类型使用 `<pre>` 展示，数据源为 /api/file
+- [x] FilePreview.vue 不支持预览的文件显示元信息和提示
+- [x] Files.vue handleFileClick 路由：video/audio/encrypted → Player，其他 → Preview
+- [x] HTTP 请求日志中间件记录 method/path/status/duration
+- [x] WSLogHandler 将 slog 日志桥接到 WebSocket，消息包含 type/level/message/timestamp
+- [x] WSLogHandler 仅推送 Info 及以上级别日志
+- [x] server.go 注册了 LoggingMiddleware 和 WSLogHandler
+- [x] mobile_api.go 各 handler 有 slog.Info 日志
+- [x] mobile_service.go 各方法有 slog.Info/Warn 日志
+- [x] api/encv.ts 各 API 函数有 console.info/warn/error 日志
+- [x] App.vue 权限申请有 console.info/warn 日志
+- [x] DevLogs.vue 正确解析后端日志的 level 字段
+- [x] Go 编译通过
+- [x] 前端构建通过

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head><title>Decrypt Debug</title></head>
+<body>
+<h2>Decrypt API Debug Test</h2>
+<pre id="output">Loading...</pre>
+<script>
+const output = document.getElementById('output');
+function log(msg) { output.textContent += msg + '\n'; }
+
+async function test(name, path) {
+  log('\n--- ' + name + ' ---');
+  const url = '/decrypt?file=' + encodeURIComponent(path);
+  log('URL: ' + url);
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    log('Status: ' + r.status + ' ' + r.statusText);
+    const text = await r.text();
+    log('Body (first 200): ' + text.substring(0, 200));
+    return r.status;
+  } catch(e) {
+    log('Error: ' + e.message);
+    return 'error';
+  }
+}
+
+(async () => {
+  log('Testing /decrypt endpoint via browser fetch...');
+  
+  await test('special-chars', '/04-boundary-test/special-chars-!@#$%^&*()_+.txt');
+  await test('control-chars', '/04-boundary-test/control-chars-\x01\x02\x03.txt');
+  await test('emoji', '/04-boundary-test/emoji-test-😀🎉🚀🔥.txt');
+  await test('normal notes', '/01-plain-media/document/notes.txt');
+  
+  log('\n=== DONE ===');
+})();
+</script>
+</body>
+</html>
