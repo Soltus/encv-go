@@ -1,0 +1,737 @@
+id: branch_video_or_audio
+description: "分支选择：视频 vs 音频 vs 其他 — 父剧本 30s + 3 个 onMatch 子剧本各 30s，纯通用 UI 文案"
+keywords:
+  - "branch_video_or_audio"
+  - "视频还是音频"
+  - "选视频"
+  - "选音频"
+exact_match: "branch_video_or_audio"
+rounds: 1
+
+# ════════════════════════════════════════════════════════
+# 分支：video（跑 ffprobe 抽视频流）/ audio（跑 ffprobe 抽音频流）/ other（读元数据）
+# ════════════════════════════════════════════════════════
+branches:
+  - id: video
+    label: "🎬 视频"
+    icon: "🎬"
+    description: "查看视频流元数据"
+    on_match:
+      id: video_subscenario
+      description: "视频子剧本（父选「视频」后跳转）— 拟人化 ≥30s"
+      keywords: []
+      rounds: 0
+      steps:
+        - id: v_think_1
+          delay_ms: 700
+          events:
+            - type: reasoning_delta
+              data: { text: "用户选了「视频」。" }
+        - id: v_think_2
+          delay_ms: 700
+          events:
+            - type: reasoning_delta
+              data: { text: "需要跑 ffprobe 提取视频流元数据。" }
+        - id: v_think_3
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "参数：select_streams=v:0（只取第一个视频流）。" }
+        - id: v_think_4
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "用 show_entries=stream=codec_name,width,height,duration。" }
+        - id: v_think_5
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "auto_run=false，但 ffprobe 是只读，可直接执行。" }
+        - id: v_think_6
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "准备好调用工具。" }
+        - id: v_intro_1
+          delay_ms: 400
+          events:
+            - type: stream_start
+              data: { scenario: video_subscenario }
+            - type: text_delta
+              data: { text: "好的，进入视频流分析。" }
+        - id: v_intro_2
+          delay_ms: 600
+          events:
+            - type: text_delta
+              data: { text: "目标：提取视频流元数据。" }
+        - id: v_intro_3
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "用 ffprobe + show_entries 提取关键字段。" }
+        - id: v_intro_4
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "只取第一个视频流。" }
+        - id: v_intro_5
+          delay_ms: 800
+          events:
+            - type: text_delta
+              data: { text: "开始执行..." }
+        - id: v_tool
+          delay_ms: 3000
+          events:
+            - type: tool_call
+              data:
+                id: call_vid_1
+                name: command_run
+                args:
+                  cmd: "ffprobe"
+                  args: ["-v", "quiet", "-print_format", "json", "-show_streams", "-select_streams", "v:0"]
+                  stdin_file: ""
+                  timeout_ms: 30000
+                auto_run: true
+                needsConfirm: false
+                kind: commandRun
+                execute_real: true
+        - id: v_p_1
+          delay_ms: 600
+          events:
+            - type: text_delta
+              data: { text: "ffprobe 执行完成。" }
+        - id: v_p_2
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在解析视频流..." }
+        - id: v_p_3
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "工具返回了元数据，详情见上方工具结果。" }
+        - id: v_p_4
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取分辨率..." }
+        - id: v_p_5
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取帧率..." }
+        - id: v_p_6
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取编解码..." }
+        - id: v_p_7
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取时长..." }
+        - id: v_p_8
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取码率..." }
+        - id: v_p_9
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "完整视频流元数据见工具结果。" }
+        - id: v_p_10
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在准备下一步建议..." }
+        - id: v_p_11
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "建议：抽缩略图、抽关键帧、转码、提取字幕。" }
+        - id: v_p_12
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "选择你想做的，剩下交给我。" }
+        - id: v_s_1
+          delay_ms: 500
+          events:
+            - type: text_delta
+              data: { text: "## 视频流分析完成\n\n" }
+        - id: v_s_2
+          delay_ms: 600
+          events:
+            - type: text_delta
+              data: { text: "已提取完整元数据，详情见上方工具结果。\n\n" }
+        - id: v_s_3
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "选择你想做的，剩下交给我。" }
+        - id: v_end
+          delay_ms: 200
+          events:
+            - type: stream_end
+              data: { finishReason: stop, usage: { totalTokens: 960 } }
+
+  - id: audio
+    label: "🎵 音频"
+    icon: "🎵"
+    description: "查看音频流元数据"
+    on_match:
+      id: audio_subscenario
+      description: "音频子剧本（父选「音频」后跳转）— 拟人化 ≥30s"
+      keywords: []
+      rounds: 0
+      steps:
+        - id: a_think_1
+          delay_ms: 700
+          events:
+            - type: reasoning_delta
+              data: { text: "用户选了「音频」。" }
+        - id: a_think_2
+          delay_ms: 700
+          events:
+            - type: reasoning_delta
+              data: { text: "需要跑 ffprobe 提取音频流元数据。" }
+        - id: a_think_3
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "参数：select_streams=a:0。" }
+        - id: a_think_4
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "用 show_entries 提取 codec_name,sample_rate,channels。" }
+        - id: a_think_5
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "auto_run=true，ffprobe 只读。" }
+        - id: a_think_6
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "准备好调用工具。" }
+        - id: a_intro_1
+          delay_ms: 400
+          events:
+            - type: stream_start
+              data: { scenario: audio_subscenario }
+            - type: text_delta
+              data: { text: "好的，进入音频流分析。" }
+        - id: a_intro_2
+          delay_ms: 600
+          events:
+            - type: text_delta
+              data: { text: "目标：提取音频流元数据。" }
+        - id: a_intro_3
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "用 ffprobe + show_entries 提取关键字段。" }
+        - id: a_intro_4
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "只取第一个音频流。" }
+        - id: a_intro_5
+          delay_ms: 800
+          events:
+            - type: text_delta
+              data: { text: "开始执行..." }
+        - id: a_tool
+          delay_ms: 3000
+          events:
+            - type: tool_call
+              data:
+                id: call_aud_1
+                name: command_run
+                args:
+                  cmd: "ffprobe"
+                  args: ["-v", "quiet", "-print_format", "json", "-show_streams", "-select_streams", "a:0"]
+                  stdin_file: ""
+                  timeout_ms: 30000
+                auto_run: true
+                needsConfirm: false
+                kind: commandRun
+                execute_real: true
+        - id: a_p_1
+          delay_ms: 600
+          events:
+            - type: text_delta
+              data: { text: "ffprobe 执行完成。" }
+        - id: a_p_2
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在解析音频流..." }
+        - id: a_p_3
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "工具返回了元数据，详情见上方工具结果。" }
+        - id: a_p_4
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取采样率..." }
+        - id: a_p_5
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取声道数..." }
+        - id: a_p_6
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取编解码..." }
+        - id: a_p_7
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取时长..." }
+        - id: a_p_8
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取码率..." }
+        - id: a_p_9
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "完整音频流元数据见工具结果。" }
+        - id: a_p_10
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在准备下一步建议..." }
+        - id: a_p_11
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "建议：转码、提取波形、生成字幕。" }
+        - id: a_p_12
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "选择你想做的，剩下交给我。" }
+        - id: a_s_1
+          delay_ms: 500
+          events:
+            - type: text_delta
+              data: { text: "## 音频流分析完成\n\n" }
+        - id: a_s_2
+          delay_ms: 600
+          events:
+            - type: text_delta
+              data: { text: "已提取完整元数据，详情见上方工具结果。\n\n" }
+        - id: a_s_3
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "选择你想做的，剩下交给我。" }
+        - id: a_end
+          delay_ms: 200
+          events:
+            - type: stream_end
+              data: { finishReason: stop, usage: { totalTokens: 940 } }
+
+  - id: other
+    label: "❓ 其他"
+    icon: "❓"
+    description: "查看其他元数据"
+    on_match:
+      id: other_subscenario
+      description: "其他子剧本（父选「其他」后跳转）— 拟人化 ≥30s"
+      keywords: []
+      rounds: 0
+      steps:
+        - id: o_think_1
+          delay_ms: 700
+          events:
+            - type: reasoning_delta
+              data: { text: "用户选了「其他」。" }
+        - id: o_think_2
+          delay_ms: 700
+          events:
+            - type: reasoning_delta
+              data: { text: "需要读通用文件元数据。" }
+        - id: o_think_3
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "可能用到 stat 命令或 read_metadata 工具。" }
+        - id: o_think_4
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "提取文件大小、修改时间、权限、扩展属性。" }
+        - id: o_think_5
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "auto_run=true，只读操作。" }
+        - id: o_think_6
+          delay_ms: 800
+          events:
+            - type: reasoning_delta
+              data: { text: "准备好调用工具。" }
+        - id: o_intro_1
+          delay_ms: 400
+          events:
+            - type: stream_start
+              data: { scenario: other_subscenario }
+            - type: text_delta
+              data: { text: "好的，进入通用元数据查询。" }
+        - id: o_intro_2
+          delay_ms: 600
+          events:
+            - type: text_delta
+              data: { text: "目标：读通用文件元数据。" }
+        - id: o_intro_3
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "用 stat 命令或 read_metadata 工具。" }
+        - id: o_intro_4
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "提取：大小、修改时间、权限、扩展属性。" }
+        - id: o_intro_5
+          delay_ms: 800
+          events:
+            - type: text_delta
+              data: { text: "开始执行..." }
+        - id: o_tool
+          delay_ms: 3000
+          events:
+            - type: tool_call
+              data:
+                id: call_oth_1
+                name: read_metadata
+                args:
+                  ext: "*"
+                auto_run: true
+                needsConfirm: false
+                kind: fileRead
+                execute_real: true
+        - id: o_p_1
+          delay_ms: 600
+          events:
+            - type: text_delta
+              data: { text: "元数据查询完成。" }
+        - id: o_p_2
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在解析结果..." }
+        - id: o_p_3
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "工具返回了元数据，详情见上方工具结果。" }
+        - id: o_p_4
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取文件大小..." }
+        - id: o_p_5
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取修改时间..." }
+        - id: o_p_6
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取权限信息..." }
+        - id: o_p_7
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在提取扩展属性..." }
+        - id: o_p_8
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在识别文件类型..." }
+        - id: o_p_9
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "完整元数据见工具结果。" }
+        - id: o_p_10
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "正在准备下一步建议..." }
+        - id: o_p_11
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "建议：编辑元数据、移动文件、删除文件。" }
+        - id: o_p_12
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "选择你想做的，剩下交给我。" }
+        - id: o_s_1
+          delay_ms: 500
+          events:
+            - type: text_delta
+              data: { text: "## 通用元数据查询完成\n\n" }
+        - id: o_s_2
+          delay_ms: 600
+          events:
+            - type: text_delta
+              data: { text: "已提取完整元数据，详情见上方工具结果。\n\n" }
+        - id: o_s_3
+          delay_ms: 700
+          events:
+            - type: text_delta
+              data: { text: "选择你想做的，剩下交给我。" }
+        - id: o_end
+          delay_ms: 200
+          events:
+            - type: stream_end
+              data: { finishReason: stop, usage: { totalTokens: 920 } }
+
+presets:
+  - id: do_video
+    label: "🎬 视频"
+    user_text: "视频"
+  - id: do_audio
+    label: "🎵 音频"
+    user_text: "音频"
+  - id: do_other
+    label: "❓ 其他"
+    user_text: "其他"
+
+steps:
+  # 父剧本
+  - id: parent_think_1
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "用户要求：查看文件流元数据。" }
+  - id: parent_think_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "需要先选流类型：视频 / 音频 / 其他。" }
+  - id: parent_think_3
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "不同流类型用不同 ffprobe 参数。" }
+  - id: parent_think_4
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "用分支选项让用户选。" }
+  - id: parent_think_5
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "auto_run=false，等用户选。" }
+  - id: parent_think_6
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "准备好推分支。" }
+  - id: parent_intro_1
+    round_idx: 0
+    delay_ms: 400
+    events:
+      - type: stream_start
+        data: { scenario: branch_video_or_audio }
+      - type: text_delta
+        data: { text: "好的，你想看哪种流的元数据？" }
+  - id: parent_intro_2
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "视频 / 音频 / 其他。" }
+  - id: parent_intro_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "每种流用不同参数提取。" }
+  - id: parent_intro_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "点 chip 直接选。" }
+  - id: parent_intro_5
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "下面推选项..." }
+  - id: parent_chip
+    round_idx: 0
+    delay_ms: 400
+    branch_choice: true
+    events:
+      - type: mock_presets
+        data:
+          scenario: branch_video_or_audio
+          phase: select_stream_type
+          presets:
+            - id: do_video
+              label: "🎬 视频"
+              user_text: "视频"
+            - id: do_audio
+              label: "🎵 音频"
+              user_text: "音频"
+            - id: do_other
+              label: "❓ 其他"
+              user_text: "其他"
+  - id: parent_summary_1
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "## 选择流类型\n\n" }
+  - id: parent_summary_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "点 chip 选择流类型。\n\n" }
+  - id: parent_summary_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "1. **视频** — 用 ffprobe 抽视频流\n" }
+  - id: parent_summary_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "2. **音频** — 用 ffprobe 抽音频流\n" }
+  - id: parent_summary_5
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "3. **其他** — 读通用文件元数据\n" }
+  - id: parent_summary_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选完后会自动进入对应流程。" }
+  - id: parent_summary_7
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选择你想做的，剩下交给我。" }
+  - id: parent_summary_8
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "如果都不想做，可以直接关闭本对话。" }
+  - id: parent_summary_9
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "**视频流**：用 ffprobe 抽第一个视频流，提取分辨率/帧率/编解码。" }
+  - id: parent_summary_10
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "**音频流**：用 ffprobe 抽第一个音频流，提取采样率/声道/码率。" }
+  - id: parent_summary_11
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "**其他**：读通用文件元数据（大小/时间/权限）。" }
+  - id: parent_summary_12
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选完后我会用对应方式提取元数据。" }
+  - id: parent_summary_13
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "如果文件没有对应流，会在工具结果中提示。" }
+  - id: parent_summary_14
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "如果暂时无法决定，可以稍后再选。" }
+  - id: parent_summary_15
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "选完后我会自动进入对应流程，每个流程都是独立的子剧本。" }
+  - id: parent_summary_16
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "子剧本会展示更多细节（ffprobe 参数 / 工具调用 / 进度提示）。" }
+  - id: parent_summary_17
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "如果你想看流分析流程的完整 demo，告诉我即可。" }
+  - id: parent_summary_18
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "如果都不想做，可以直接关闭本对话。" }
+  - id: parent_summary_19
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "ffprobe 的参数说明见 ffmpeg 官方文档。" }
+  - id: parent_summary_20
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "如有疑问，可以随时打断当前流程并重新提问。" }
+  - id: parent_summary_21
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "选完后我会立即开始执行你指定的操作。" }
+  - id: parent_end
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 700 }

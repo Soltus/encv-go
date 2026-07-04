@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!--
+        FOREGROUND_SERVICE_DATA_SYNC 已移除（2026-07-03 spec Phase 2.2）：
+          EncvGoService 从 dataSync 改为 specialUse 后，无任何 service 使用 dataSync 类型。
+          保留无用权限会触发 lint 警告，且 Google Play 审核会要求说明用途。
+    -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" android:minSdkVersion="33" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" android:minSdkVersion="33" />
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" android:minSdkVersion="33" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" android:minSdkVersion="33" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" android:minSdkVersion="30" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.READ_LOGS" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+
+    <application
+        android:name=".EncvApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme"
+        android:usesCleartextTraffic="true">
+        <!--
+            EncvGoService：宿主 Go 后端进程的前台 service。
+            2026-07-03 spec android-workmanager-split-start-stop Phase 2.2：
+              从 dataSync 改为 specialUse。
+            原因：Android 15+ 对 dataSync FGS 强制 6h 上限，长任务（加密 / 索引重建）
+                  会被系统强杀。Go 后端是项目核心宿主进程，需要持续运行 >6h，
+                  不符合 dataSync 的语义（短期数据同步）。
+            specialUse 不受 6h 上限约束，但需要在 <property> 描述真实用途。
+        -->
+        <service
+            android:name=".EncvGoService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-go-backend-host" />
+        </service>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="encvgo" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="com.encvgo.action.START" />
+                <action android:name="com.encvgo.action.RESTART" />
+                <action android:name="com.encvgo.action.STOP" />
+                <action android:name="com.encvgo.action.STATUS" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".PlayerActivity"
+            android:exported="true"
+            android:launchMode="standard"
+            android:documentLaunchMode="always"
+            android:maxRecents="16"
+            android:taskAffinity="com.encvgo.app.player.task"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:label="ENCV Player">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:mimeType="audio/*" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/x-encv" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".PlayerActivityCapacitor"
+            android:exported="false"
+            android:launchMode="standard"
+            android:documentLaunchMode="always"
+            android:taskAffinity="com.encvgo.app.player.task"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:label="ENCV Player"
+        />
+
+        <activity
+            android:name=".WorldActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:taskAffinity="com.encvgo.app.world.task"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="false"
+            android:label="SimVerse World"
+        />
+
+        <activity
+            android:name="com.hjq.logcat.LogcatActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:launchMode="singleInstance"
+            android:screenOrientation="portrait"
+            android:theme="@style/Theme.AppCompat.Light.NoActionBar"
+            android:windowSoftInputMode="stateHidden"
+            tools:node="replace"
+        />
+
+        <meta-data
+            android:name="LogcatWindowEntrance"
+            android:value="true" />
+        <meta-data
+            android:name="LogcatNotifyEntrance"
+            android:value="true" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
+        </provider>
+
+        <activity
+            android:name=".EncvHostActivity"
+            android:exported="false"
+            android:theme="@style/Theme.EncvHostTranslucent"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode" />
+
+        <activity
+            android:name=".InstallConfirmActivity"
+            android:exported="false"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode" />
+
+        <!-- ============================================================ -->
+        <!-- Phase 25 A2：ComboLite host 代理组件（plugin-openlist 用） -->
+        <!-- ============================================================ -->
+
+        <!--
+            Service 池：16 个空壳 Service，每个对应一个 plugin service instance。
+            2026-07-03 spec android-workmanager-split-start-stop Phase 2.1：
+              为 16 个 HostService 补 foregroundServiceType="specialUse" + <property>。
+            原因：targetSdk=36 下 ComboLite 框架调用 startForegroundService(HostServiceN)
+                  时，未声明 foregroundServiceType 会触发 MissingForegroundServiceTypeException。
+                  specialUse 是最通用的类型（plugin 服务用途多样，无法归类为 dataSync/media 等），
+                  <property> 描述真实用途满足 Google Play 政策要求。
+        -->
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService1"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService2"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService3"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService4"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService5"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService6"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService7"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService8"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService9"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService10"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService11"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService12"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService13"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService14"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService15"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+        <service
+            android:name="com.encvgo.combolite.proxy.HostService16"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="encv-plugin-host" />
+        </service>
+
+        <!-- Provider 代理：authority 必须与 EncvApplication.onFrameworkSetup 中 setHostProviderAuthority 一致 -->
+        <provider
+            android:name="com.encvgo.combolite.proxy.HostStatusProvider"
+            android:authorities="com.encvgo.app.provider"
+            android:exported="true" />
+
+        <!-- Receiver 代理：exported=true 接收系统/内部广播，转发给 plugin 静态 receiver -->
+        <receiver
+            android:name="com.encvgo.combolite.proxy.HostStaticReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.encvgo.plugin.openlist.BROADCAST_STATUS" />
+                <action android:name="com.encvgo.plugin.openlist.BROADCAST_LOG" />
+                <action android:name="com.encvgo.plugin.openlist.BROADCAST_PORT_CONFLICT" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+            GoProcessRestartReceiver：监听 Go 后端就绪广播，触发 pending Worker 立即重试。
+            2026-07-03 spec android-workmanager-split-start-stop Phase 3.3
+            exported=false，只接收应用内部广播（显式 Intent，不受 Android 8.0 静态注册限制）。
+        -->
+        <receiver
+            android:name="com.encvgo.app.workers.GoProcessRestartReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.encvgo.broadcast.BACKEND_READY" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

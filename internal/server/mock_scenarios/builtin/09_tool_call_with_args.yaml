@@ -1,0 +1,57 @@
+id: tool_call_with_args
+description: "完整 args JSON — 验证 args 字段不截断"
+keywords:
+  - "调用工具"
+  - "tool call"
+  - "test tool"
+  - "工具调用"
+
+presets:
+  - id: p_no_filter
+    label: "📂 不用 filter"
+    user_text: "列出全部文件"
+    tooltip: "去掉 filter"
+  - id: p_bigger_size
+    label: "💎 找大文件"
+    user_text: "找大文件"
+    tooltip: "min_size 调大"
+  - id: p_different_ext
+    label: "🎞️ 改格式"
+    user_text: "改成 mkv"
+    tooltip: "改 ext 过滤"
+
+steps:
+  - id: intro
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: tool_call_with_args }
+      - type: text_delta
+        data: { text: "调用一个带复杂参数的工具：" }
+  - id: tool_call
+    delay_ms: 300
+    events:
+      - type: tool_call
+        data:
+          id: call_args_1
+          name: list_files
+          args:
+            mount_id: serving
+            rel_path: "/"
+            max_entries: 50
+            filter:
+              ext:
+                - ".mp4"
+                - ".mkv"
+              min_size: 10240
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+  - id: end
+    delay_ms: 100
+    events:
+      - type: stream_end
+        data:
+          finishReason: tool_calls
+          usage: { totalTokens: 78 }

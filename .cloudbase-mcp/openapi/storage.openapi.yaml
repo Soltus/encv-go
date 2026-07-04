@@ -1,0 +1,736 @@
+openapi: 3.0.3
+info:
+  title: 云存储
+  description: >-
+    ### 功能介绍
+
+    该系列开放 API 提供了对接云存储（COS 服务）的能力，可调用开放 API 获取对象上传信息、下载链接等操作。该系列开放 API 均支持批量操作。
+
+    > **本接口适用于"传统模式"环境**。如果你使用的是 PG 模式环境，请参见 [PG 模式云存储 HTTP API](/http-api/storage-pg/pg-storage-api)，该模式提供完整的 Bucket / Object CRUD、签名 URL、对象元信息、分片上传等能力，权限由 RLS 控制。
+
+    ### 接入指引
+
+    调用以下接口需要传递 AccessToken，格式如`Authorization: Bearer <token>`。Token 获取方式参考：https://docs.cloudbase.net/http-api/basic/access-token
+
+    ### HTTP 状态码
+
+    根据返回结果的不同，可能会出现 `2xx`, `4xx`, `5xx` 状态码。
+
+    ### 错误码
+
+    以下列出了该系列 API 特定的错误码，完整列表参考：https://docs.cloudbase.net/error-code/service
+
+    <table>
+      <thead>
+      <tr>
+        <td>错误码</td>
+        <td>含义</td>
+      </tr>
+      </thead>
+      <tr>
+        <td>STORAGE_EXCEED_AUTHORITY</td>
+        <td>无权限对此对象执行对应操作</td>
+      </tr>
+      <tr>
+        <td>COS_ACTION_FAILED</td>
+        <td>对象存储操作执行失败</td>
+      </tr>
+      <tr>
+        <td>OBJECT_NOT_EXIST</td>
+        <td>请求的对象不存在，无法执行指定操作</td>
+      </tr>
+      <tr>
+        <td>OBJECT_ALREADY_EXIST</td>
+        <td>对象已经存在，无法执行指定操作</td>
+      </tr>
+      <tr>
+        <td>OBJECT_BATCH_TOO_LARGE</td>
+        <td>单次批量处理的对象数量过多，请尝试减少单批次处理对象的数量</td>
+      </tr>
+    </table>
+  contact:
+    name: TCB
+    url: https://cloud.tencent.com/product/tcb
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+  - url: https://{envId}.api.tcloudbasegateway.com
+    description: TCB openapi endpoint
+    variables:
+      envId:
+        default: "your-envId"
+        description: 环境 ID
+paths:
+  /v1/storages/get-objects-upload-info:
+    post:
+      tags:
+        - 云存储对象操作
+      externalDocs:
+        description: 完整错误码列表参考：
+        url: https://docs.cloudbase.net/error-code/service
+      operationId: get-objects-upload-info
+      summary: 获取对象上传信息
+      description: |-
+        批量获取上传对象所需信息。
+
+        **此接口受到云存储桶权限配置和身份认证鉴权的控制，请确认请求所属身份有对应资源的操作权限。**
+
+        关于云存储权限配置，请参考文档：[云存储基础权限](/storage/data-permission) 和 [云存储安全规则](/storage/security-rules)。
+        > 💡 提示：如云存储操作被基础权限或安全规则所拦截，可能会遇到的错误码：
+        >    [STORAGE_EXCEED_AUTHORITY](/error-code/STORAGE_EXCEED_AUTHORITY)
+        
+        > 💡 提示：如云存储操作被身份鉴权机制所拦截，可能会遇到的错误码：
+        >    [ACTION_FORBIDDEN](/error-code/ACTION_FORBIDDEN)
+
+
+        获取上传信息后，在客户端使用响应信息完成文件直传存储桶。示例步骤如下：
+
+        **第一步：通过 HTTP API 获取上传信息**
+
+        ```bash
+        curl -L 'https://{envId}.api.tcloudbasegateway.com/v1/storages/get-objects-upload-info' \
+          -H 'Content-Type: application/json' \
+          -H 'Authorization: Bearer <ACCESS_TOKEN>' \
+          -d '[
+            {
+              "objectId": "filename.jpg"
+            }
+          ]'
+        ```
+
+        **返回信息结构**：接口返回一个数组，成功项中包含上传所需字段，失败项包含 `code`/`message` 便于排查。
+
+        ```json
+        [
+          {
+            "objectId": "dirname/filename.jpg",
+            "uploadUrl": "https://url/filename.jpg",
+            "authorization": "q-sign-algorithm=sha1&q-ak=...",
+            "token": "xxx",
+            "cloudObjectMeta": "xxx",
+            "downloadUrl": "https://url/filename.jpg?sign=xxx&t=yyy",
+            "downloadUrlEncoded": "https://url/filename.jpg?sign=xxx&t=yyy",
+            "cloudObjectId": "cloud://your-envId.bucket/filename.jpg"
+          },
+          {
+            "code": "COS_ACTION_FAILED",
+            "message": "Execute COS action failed."
+          }
+        ]
+        ```
+
+        **第二步：从返回结果中提取上传文件所需字段，完成文件上传**
+
+        例如，使用 `jq` 等工具提取数组中第一个成功项的字段：
+
+        ```bash
+        response=$(curl ...)
+        upload_url=$(echo "$response" | jq -r '.[0].uploadUrl')
+        auth=$(echo "$response" | jq -r '.[0].authorization')
+        token=$(echo "$response" | jq -r '.[0].token')
+        meta=$(echo "$response" | jq -r '.[0].cloudObjectMeta')
+        ```
+        接着利用上述字段，使用 **PUT** 方法在对应 URL 上传文件：
+        ```bash
+        curl -X PUT "$upload_url" \
+          -H "Authorization: $auth" \
+          -H "X-Cos-Security-Token: $token" \
+          -H "X-Cos-Meta-Fileid: $meta" \
+          --data-binary @filename.jpg
+        ```
+      requestBody:
+        $ref: "#/components/requestBodies/v1GetObjectsUploadInfoRequestData"
+      responses:
+        "200":
+          description: 调用成功时返回
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: "请求ID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/v1GetObjectsUploadInfoResponseData"
+
+        "default":
+          $ref: "#/components/responses/CommonErrorResponse"
+
+  /v1/storages/get-objects-download-info:
+    post:
+      tags:
+        - 云存储对象操作
+      externalDocs:
+        description: 完整错误码列表参考：
+        url: https://docs.cloudbase.net/error-code/service
+      operationId: get-objects-download-info
+      summary: 获取对象下载信息
+      description: |-
+        批量获取对象下载 URL。
+
+        **此接口受到云存储桶权限配置和身份认证鉴权的控制，请确认请求所属身份有对应资源的操作权限。**
+
+        关于云存储权限配置，请参考文档：[云存储基础权限](/storage/data-permission) 和 [云存储安全规则](/storage/security-rules)。
+        > 💡 提示：如云存储操作被基础权限或安全规则所拦截，可能会遇到的错误码：
+        >    [STORAGE_EXCEED_AUTHORITY](/error-code/STORAGE_EXCEED_AUTHORITY)
+        
+        > 💡 提示：如云存储操作被身份鉴权机制所拦截，可能会遇到的错误码：
+        >    [ACTION_FORBIDDEN](/error-code/ACTION_FORBIDDEN)
+
+      requestBody:
+        $ref: "#/components/requestBodies/v1GetObjectDownloadInfoRequestData"
+      responses:
+        "200":
+          description: 调用成功时返回
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: "请求ID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/v1GetObjectDownloadInfoResponseData"
+
+        "default":
+          $ref: "#/components/responses/CommonErrorResponse"
+
+  /v1/storages/delete-objects:
+    post:
+      tags:
+        - 云存储对象操作
+      externalDocs:
+        description: 完整错误码列表参考：
+        url: https://docs.cloudbase.net/error-code/service
+      operationId: delete-objects
+      summary: 删除对象
+      description: |-
+        批量删除对象。
+        
+        **此接口受到云存储桶权限配置和身份认证鉴权的控制，请确认请求所属身份有对应资源的操作权限。**
+
+        关于云存储权限配置，请参考文档：[云存储基础权限](/storage/data-permission) 和 [云存储安全规则](/storage/security-rules)。
+        > 💡 提示：如云存储操作被基础权限或安全规则所拦截，可能会遇到的错误码：
+        >    [STORAGE_EXCEED_AUTHORITY](/error-code/STORAGE_EXCEED_AUTHORITY)
+        
+        > 💡 提示：如云存储操作被身份鉴权机制所拦截，可能会遇到的错误码：
+        >    [ACTION_FORBIDDEN](/error-code/ACTION_FORBIDDEN)
+        
+      requestBody:
+        $ref: "#/components/requestBodies/v1DeleteObjectsRequestData"
+      responses:
+        "200":
+          description: 调用成功时返回
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: "请求ID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/v1DeleteObjectsResponseData"
+
+        "default":
+          $ref: "#/components/responses/CommonErrorResponse"
+
+  /v1/storages/copy-objects:
+    post:
+      tags:
+        - 云存储对象操作
+      externalDocs:
+        description: 完整错误码列表参考：
+        url: https://docs.cloudbase.net/error-code/service
+      operationId: copy-objects
+      summary: 复制对象
+      description: |
+        **注意：该接口仅管理员可调用。**
+
+        批量复制指定对象至目标路径，可选参数以控制是否覆盖目标路径同名对象或在复制后删除原对象。
+
+      requestBody:
+        $ref: "#/components/requestBodies/v1CopyObjects"
+      responses:
+        "200":
+          description: 调用成功时返回
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: "请求ID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/v1CopyObjectsResponseData"
+
+        "default":
+          $ref: "#/components/responses/CommonErrorResponse"
+
+components:
+  responses:
+    InvalidRequest:
+      description: 请求失败
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+          description: "请求ID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CommonErrorResponse"
+          examples:
+            AIModelConfigMissing:
+              summary: 缺少调用模型的必要配置，如 token, clientID 等(400)
+              value:
+                code: "AI_MODEL_CONFIG_MISSING"
+                message: "xxx"
+                requestId: "xxx"
+            AIModelParamInvalid:
+              summary: 调用模型的参数异常(400)
+              value:
+                code: "AI_MODEL_PARAM_INVALID"
+                message: "xxx"
+                requestId: "xxx"
+            AIModelRequestFailed:
+              summary: 请求模型失败(400)
+              value:
+                code: "AI_MODEL_REQUEST_FAILED"
+                message: "xxx"
+                requestId: "xxx"
+    RequestFailed:
+      description: 请求失败
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+          description: "请求ID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CommonErrorResponse"
+          examples:
+            FeatureNotConfigured:
+              summary: 未启用大模型(404)
+              value:
+                code: "ENV_FEATURE_NOT_CONFIGURED"
+                message: "xxx"
+                requestId: "xxx"
+            AIModelNotFound:
+              summary: 未找到指定模型(404)
+              value:
+                code: "AI_MODEL_NOT_FOUND"
+                message: "xxx"
+                requestId: "xxx"
+    CommonErrorResponse:
+      description: 通用报错信息，详见 https://docs.cloudbase.net/error-code/service
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+          description: "请求ID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CommonErrorResponse"
+          examples:
+            InvalidHost:
+              summary: 请求地址异常
+              value:
+                code: "INVALID_HOST"
+                message: "xxx"
+                requestId: "xxx"
+
+  requestBodies:
+    v1GetObjectsUploadInfoRequestData:
+      required: true
+      description: 上传对象请求参数，数组格式
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/v1GetObjectsUploadInfoRequestData"
+    v1GetObjectDownloadInfoRequestData:
+      required: true
+      description: 下载对象请求参数，数组格式
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/v1GetObjectDownloadInfoRequestData"
+    v1DeleteObjectsRequestData:
+      required: true
+      description: 下载对象请求参数，数组格式
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/v1DeleteObjectsRequestData"
+    v1CopyObjects:
+      required: true
+      description: 批量复制对象请求参数，数组格式
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/v1CopyObjectsRequestData"
+
+  schemas:
+    v1GetObjectsUploadInfoRequestItem:
+      type: object
+      example:
+        [
+          {
+            "objectId": "file.jpg",
+            "signedHeader": { "content-md5": ["here-goes-md5"] },
+          },
+          { "object": "already-exsited-object" },
+        ]
+      properties:
+        objectId:
+          type: string
+          title: 对象 ID，例如文件名称
+          example: "file.jpg"
+        signedHeader:
+          type: object
+          title: 待签名头部字段
+          example: { "content-md5": ["here-goes-md5"] }
+          additionalProperties:
+            type: array
+            items:
+              type: string
+      required:
+        - objectId
+    v1GetObjectsUploadInfoRequestData:
+      type: array
+      items:
+        $ref: "#/components/schemas/v1GetObjectsUploadInfoRequestItem"
+      description: 上传对象请求参数，数组格式
+      example:
+        [
+          {
+            "objectId": "file.jpg",
+            "signedHeader": { "content-md5": ["here-goes-md5"] },
+          },
+          { "object": "already-exsited-object" },
+        ]
+    v1GetObjectsUploadInfoResponseItem:
+      type: object
+      oneOf:
+        - $ref: "#/components/schemas/v1GetObjectsUploadInfoResponseItemSuccess"
+        - $ref: "#/components/schemas/v1GetObjectsUploadInfoResponseItemError"
+    v1GetObjectsUploadInfoResponseItemError:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "COS_ACTION_FAILED"
+          title: 对该对象的请求出错时返回的错误码
+        message:
+          type: string
+          example: "Execute COS action failed."
+          title: 对该对象的请求出错时返回的错误信息
+      example:
+        { "code": "COS_ACTION_FAILED", "message": "Execute COS action failed." }
+    v1GetObjectsUploadInfoResponseItemSuccess:
+      type: object
+      properties:
+        uploadUrl:
+          type: string
+          format: uri
+          example: "https://url/file.jpg%3FExpires%3D123"
+          title: 对象上传地址
+        downloadUrl:
+          type: string
+          format: uri
+          example: "https://url/file.jpg?Expires=123"
+          title: 对象上传后的下载地址（未进行 URL 编码）
+        downloadUrlEncoded:
+          type: string
+          format: uri
+          example: "https://url/file.jpg%3FExpires%3D123"
+          title: 对象上传后进行 URL 编码的下载地址
+        token:
+          type: string
+          example: "token"
+          title: 上传时所需要的 token，填充 X-Cos-Security-Token 请求头
+        authorization:
+          type: string
+          example: "q-sign-algorithm=sha1&q-ak="
+          title: 上传时所需要的 authorization 认证信息，填充 Authorization 请求头
+        cloudObjectMeta:
+          type: string
+          example: "metadata"
+          title: 上传时所需要的 metadata 信息，填充 X-Cos-Meta-Fileid 请求头
+        cloudObjectId:
+          type: string
+          example: "cloud://your-envId.bucket/file.jpg?Expires=123"
+          title: 对象上传后的云端对象 ID
+        objectId:
+          type: string
+          example: "file.jpg"
+          title: 本次请求的对象 ID
+      description: 上传对象返回信息
+      example:
+        {
+          "uploadUrl": "https://url/file.jpg%3FExpires%3D123",
+          "downloadUrl": "https://url/file.jpg?Expires=123",
+          "downloadUrlEncoded": "https://url/file.jpg%3FExpires%3D123",
+          "token": "token",
+          "authorization": "q-sign-algorithm=sha1&q-ak=",
+          "cloudObjectMeta": "metadata",
+          "cloudObjectId": "cloud://your-envId.bucket/file.jpg?Expires=123",
+          "objectId": "file.jpg",
+        }
+    v1GetObjectsUploadInfoResponseData:
+      type: array
+      items:
+        $ref: "#/components/schemas/v1GetObjectsUploadInfoResponseItem"
+      description: 上传对象响应结果，数组格式
+      example:
+        [
+          {
+            "uploadUrl": "https://url/file.jpg%3FExpires%3D123",
+            "downloadUrl": "https://url/file.jpg?Expires=123",
+            "downloadUrlEncoded": "https://url/file.jpg%3FExpires%3D123",
+            "token": "token",
+            "authorization": "q-sign-algorithm=sha1&q-ak=",
+            "cloudObjectMeta": "metadata",
+            "cloudObjectId": "cloud://your-envId.bucket/file.jpg?Expires=123",
+            "objectId": "file.jpg",
+          },
+          {
+            "code": "COS_ACTION_FAILED",
+            "message": "Execute COS action failed.",
+          },
+        ]
+    v1GetObjectDownloadInfoRequestItem:
+      type: object
+      example:
+        [
+          { "objectId": "cloud://your-envId.bucket/file.jpg" },
+          { "objectId": "not-valid" },
+        ]
+      properties:
+        cloudObjectId:
+          type: string
+          title: 云端对象ID
+    v1GetObjectDownloadInfoRequestData:
+      type: array
+      items:
+        $ref: "#/components/schemas/v1GetObjectDownloadInfoRequestItem"
+      description: 下载对象请求参数，数组格式
+      example:
+        [
+          { "cloudObjectId": "cloud://your-envId.bucket/file.jpg" },
+          { "cloudObjectId": "not-valid" },
+        ]
+    v1GetObjectDownloadInfoResponseItemError:
+      type: object
+      properties:
+        code:
+          example: "INVALID_PARAM"
+          type: string
+          title: 对该对象的请求出错时返回的错误码
+        message:
+          example: "Invalid request param."
+          type: string
+          title: 对该对象的请求出错时返回的错误信息
+      example: { "code": "INVALID_PARAM", "message": "Invalid request param." }
+    v1GetObjectDownloadInfoResponseItemSuccess:
+      type: object
+      properties:
+        cloudObjectId:
+          type: string
+          title: 云端对象ID
+          example: "cloud://your-envId.bucket/file.jpg"
+        downloadUrl:
+          title: 对象上传后的下载地址（未进行 URL 编码）
+          type: string
+          example: "https://url/file.jpg"
+        downloadUrlEncoded:
+          title: 对象上传后进行 URL 编码的下载地址
+          type: string
+          example: "https://url/file.jpg"
+      example:
+        {
+          "cloudObjectId": "cloud://your-envId.bucket/file.jpg",
+          "downloadUrl": "https://url/file.jpg",
+          "downloadUrlEncoded": "https://url/file.jpg",
+        }
+    v1GetObjectDownloadInfoResponseItem:
+      type: object
+      oneOf:
+        - $ref: "#/components/schemas/v1GetObjectDownloadInfoResponseItemSuccess"
+        - $ref: "#/components/schemas/v1GetObjectDownloadInfoResponseItemError"
+    v1GetObjectDownloadInfoResponseData:
+      type: array
+      items:
+        $ref: "#/components/schemas/v1GetObjectDownloadInfoResponseItem"
+      description: 下载对象响应结果，数组格式
+      example:
+        [
+          {
+            "cloudObjectId": "cloud://your-envId.bucket/file.jpg",
+            "downloadUrl": "https://url/file.jpg",
+            "downloadUrlEncoded": "https://url/file.jpg",
+          },
+          { "code": "INVALID_PARAM", "message": "Invalid request param." },
+        ]
+    v1DeleteObjectsRequestItem:
+      type: object
+      properties:
+        cloudObjectId:
+          type: string
+          title: 云端对象ID
+    v1DeleteObjectsRequestData:
+      example:
+        [
+          { "cloudObjectId": "cloud://your-envId.bucket/not-exist" },
+          { "cloudObjectId": "cloud://your-envId.bucket/file.jpg" },
+        ]
+      type: array
+      items:
+        $ref: "#/components/schemas/v1DeleteObjectsRequestItem"
+      description: 删除对象请求参数，数组格式
+    v1DeleteObjectsResponseItemError:
+      type: object
+      example:
+        {
+          "cloudObjectId": "cloud://your-envId.bucket/not-exist",
+          "code": "OBJECT_NOT_EXIST",
+          "message": "Storage object not exists.",
+        }
+      properties:
+        code:
+          type: string
+          title: 对该对象的请求出错时返回的错误码
+        message:
+          type: string
+          title: 对该对象的请求出错时返回的错误描述
+        cloudObjectId:
+          type: string
+          title: 本次请求操作的云端对象ID
+    v1DeleteObjectsResponseItemSuccess:
+      type: object
+      example: { "cloudObjectId": "cloud://your-envId.bucket/file.jpg" }
+      properties:
+        cloudObjectId:
+          type: string
+          title: 云端对象ID
+    v1DeleteObjectsResponseItem:
+      type: object
+      oneOf:
+        - $ref: "#/components/schemas/v1DeleteObjectsResponseItemSuccess"
+        - $ref: "#/components/schemas/v1DeleteObjectsResponseItemError"
+    v1DeleteObjectsResponseData:
+      example:
+        [
+          {
+            "cloudObjectId": "cloud://your-envId.bucket/not-exist",
+            "code": "OBJECT_NOT_EXIST",
+            "message": "Storage object not exists.",
+          },
+          { "cloudObjectId": "cloud://your-envId.bucket/file.jpg" },
+        ]
+      type: array
+      items:
+        $ref: "#/components/schemas/v1DeleteObjectsResponseItem"
+      description: 删除对象响应结果，数组格式
+    v1CopyObjectsRequestItem:
+      type: object
+      properties:
+        srcPath:
+          type: string
+          title: 原对象的绝对路径，包含文件名。例如 foo/bar.jpg、foo/bar/baz.jpg 等，不能包含除[0-9 , a-z , A-Z]、/、!、-、_、.、、*和中文以外的字符
+        dstPath:
+          type: string
+          title: 目标对象的绝对路径，包含文件名。例如 foo/bar.jpg、foo/bar/baz.jpg 等，不能包含除[0-9 , a-z , A-Z]、/、!、-、_、.、、*和中文以外的字符；目标路径不可与原路径一致
+        overwrite:
+          type: boolean
+          title: 当目标对象已经存在时，是否允许覆盖已有对象，默认 true
+          default: true
+        removeOriginal:
+          type: boolean
+          title: 复制对象后，是否删除原对象，默认 false
+          default: false
+      required:
+        - srcPath
+        - dstPath
+    v1CopyObjectsRequestData:
+      example:
+        [
+          {
+            srcPath: "image.jpg",
+            dstPath: "folder/image.jpg",
+            removeOriginal: true,
+          },
+        ]
+      type: array
+      items:
+        $ref: "#/components/schemas/v1CopyObjectsRequestItem"
+      description: 批量复制对象请求参数，数组格式
+    v1CopyObjectsResponseItemError:
+      type: object
+      example:
+        { "code": "OBJECT_NOT_EXIST", "message": "Storage object not exists." }
+      properties:
+        code:
+          type: string
+          title: 对该对象的请求出错时返回的错误码
+        message:
+          type: string
+          title: 对该对象的请求出错时返回的错误描述
+    v1CopyObjectsResponseItemSuccess:
+      type: object
+      example: { "cloudObjectId": "cloud://your-envId.bucket/file.jpg" }
+      properties:
+        cloudObjectId:
+          type: string
+          title: 复制后对象的云端文件 ID
+    v1CopyObjectsResponseItem:
+      type: object
+      oneOf:
+        - $ref: "#/components/schemas/v1CopyObjectsResponseItemSuccess"
+        - $ref: "#/components/schemas/v1CopyObjectsResponseItemError"
+    v1CopyObjectsResponseData:
+      example:
+        [
+          {
+            "code": "OBJECT_NOT_EXIST",
+            "message": "Storage object not exists.",
+          },
+          { "cloudObjectId": "cloud://your-envId.bucket/file.jpg" },
+        ]
+      type: array
+      items:
+        $ref: "#/components/schemas/v1CopyObjectsResponseItem"
+
+    CommonErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          title: 错误码
+        message:
+          type: string
+          title: 错误信息
+        requestId:
+          type: string
+          title: 请求 ID
+      description: 出错时返回的错误信息
+  securitySchemes:
+    JWTAuth:
+      type: http
+      scheme: Bearer
+      description: 环境 ID 所对应的 token，使用登录认证(v2)获取
+    APIKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: TC3-HMAC-SHA256开头的腾讯云 3.0 版签名，将 Timestamp 和 Token 拼接在签名最后
+
+security:
+  - JWTAuth: []
+  - APIKey: []
+
+tags:
+  - name: 云存储对象操作

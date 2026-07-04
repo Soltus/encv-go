@@ -1,0 +1,424 @@
+id: edit_metadata_wizard
+description: "4 轮元数据编辑向导（选文件 → 选字段 → 选值 → 确认执行）— 拟人化 ≥30s，纯通用 UI 文案"
+keywords:
+  - "edit_metadata"
+  - "元数据编辑"
+  - "编辑向导"
+  - "改title"
+exact_match: "edit_metadata_wizard"
+rounds: 4
+
+# ════════════════════════════════════════════════════════
+# 4 轮 wizard：
+#   round 0: select_file    — 选目标文件（chip 选项）
+#   round 1: select_field   — 选编辑字段
+#   round 2: select_value   — 选值
+#   round 3: confirm_execute — 确认执行
+# 实际执行发生在 round 4（不在 wizard 步骤内，由 branch 触发）
+# ════════════════════════════════════════════════════════
+
+presets:
+  - id: sel_a
+    label: "选择文件 A"
+    user_text: "选 a"
+  - id: sel_b
+    label: "选择文件 B"
+    user_text: "选 b"
+  - id: f_title
+    label: "title"
+    user_text: "title"
+  - id: f_year
+    label: "year"
+    user_text: "year"
+  - id: f_genre
+    label: "genre"
+    user_text: "genre"
+  - id: v_default
+    label: "默认值"
+    user_text: "默认"
+  - id: v_custom
+    label: "自定义"
+    user_text: "自定义值"
+  - id: confirm_yes
+    label: "✅ 确认执行"
+    user_text: "确认"
+  - id: confirm_no
+    label: "❌ 取消"
+    user_text: "取消"
+
+steps:
+  # ════════════════════════════════════════════════════════
+  # ROUND 0：思考 + "请选择文件" + chip 列表（≥ 7500ms）
+  # ════════════════════════════════════════════════════════
+  - id: r0_think_1
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: reasoning_delta
+        data: { text: "用户要求：编辑某个文件的元数据。" }
+  - id: r0_think_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "这是一个 4 轮向导：选文件 → 选字段 → 选值 → 确认执行。" }
+  - id: r0_think_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "第一步：先让用户选目标文件。" }
+  - id: r0_think_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "我先准备文件 A 和文件 B 两个 chip，让用户点选。" }
+  - id: r0_think_5
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "auto_run=false，等用户输入选择。" }
+  - id: r0_intro
+    round_idx: 0
+    delay_ms: 400
+    events:
+      - type: stream_start
+        data: { scenario: edit_metadata_wizard }
+      - type: text_delta
+        data: { text: "好的，这是元数据编辑向导，4 步走完。" }
+  - id: r0_ask
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "第一步：选择目标文件。" }
+  - id: r0_ask2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "下面有两个文件选项，点 chip 直接选择。" }
+  - id: r0_chip
+    round_idx: 0
+    delay_ms: 400
+    events:
+      - type: mock_presets
+        data:
+          scenario: edit_metadata_wizard
+          phase: select_file
+          presets:
+            - id: sel_a
+              label: "选择文件 A"
+              user_text: "选 a"
+            - id: sel_b
+              label: "选择文件 B"
+              user_text: "选 b"
+      - type: mock_branch_choice
+        data:
+          branch_id: select_file
+          options:
+            - id: sel_a
+              label: "选择文件 A"
+              icon: "📁"
+            - id: sel_b
+              label: "选择文件 B"
+              icon: "📁"
+            - id: cancel
+              label: "❌ 取消"
+              icon: "❌"
+
+  # ════════════════════════════════════════════════════════
+  # ROUND 1：思考 + "请选择字段" + chip 列表（≥ 6500ms）
+  # ════════════════════════════════════════════════════════
+  - id: r1_think_1
+    round_idx: 1
+    delay_ms: 600
+    events:
+      - type: reasoning_delta
+        data: { text: "用户已选文件，进入第二步。" }
+  - id: r1_think_2
+    round_idx: 1
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "现在需要选要编辑的字段。" }
+  - id: r1_think_3
+    round_idx: 1
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "常见字段：title、year、genre。" }
+  - id: r1_think_4
+    round_idx: 1
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "推 chip 让用户选。" }
+  - id: r1_intro
+    round_idx: 1
+    delay_ms: 500
+    events:
+      - type: text_delta
+        data: { text: "好的，文件已选。" }
+  - id: r1_ask
+    round_idx: 1
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "第二步：选择要编辑的字段。" }
+  - id: r1_ask2
+    round_idx: 1
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "点 chip 选择字段名。" }
+  - id: r1_chip
+    round_idx: 1
+    delay_ms: 500
+    events:
+      - type: mock_presets
+        data:
+          scenario: edit_metadata_wizard
+          phase: select_field
+          presets:
+            - id: f_title
+              label: "title"
+              user_text: "title"
+            - id: f_year
+              label: "year"
+              user_text: "year"
+            - id: f_genre
+              label: "genre"
+              user_text: "genre"
+      - type: mock_branch_choice
+        data:
+          branch_id: select_field
+          options:
+            - id: f_title
+              label: "title"
+              icon: "📝"
+            - id: f_year
+              label: "year"
+              icon: "📅"
+            - id: f_genre
+              label: "genre"
+              icon: "🏷️"
+
+  # ════════════════════════════════════════════════════════
+  # ROUND 2：思考 + "请选择值" + chip 列表（≥ 6500ms）
+  # ════════════════════════════════════════════════════════
+  - id: r2_think_1
+    round_idx: 2
+    delay_ms: 600
+    events:
+      - type: reasoning_delta
+        data: { text: "用户已选字段，进入第三步。" }
+  - id: r2_think_2
+    round_idx: 2
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "现在需要选字段值。" }
+  - id: r2_think_3
+    round_idx: 2
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "常见值：默认值、自定义值。" }
+  - id: r2_think_4
+    round_idx: 2
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "推 chip 让用户选。" }
+  - id: r2_intro
+    round_idx: 2
+    delay_ms: 500
+    events:
+      - type: text_delta
+        data: { text: "好的，字段已选。" }
+  - id: r2_ask
+    round_idx: 2
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "第三步：选择新值。" }
+  - id: r2_ask2
+    round_idx: 2
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "默认值 vs 自定义值。" }
+  - id: r2_chip
+    round_idx: 2
+    delay_ms: 500
+    events:
+      - type: mock_presets
+        data:
+          scenario: edit_metadata_wizard
+          phase: select_value
+          presets:
+            - id: v_default
+              label: "默认值"
+              user_text: "默认"
+            - id: v_custom
+              label: "自定义"
+              user_text: "自定义值"
+      - type: mock_branch_choice
+        data:
+          branch_id: select_value
+          options:
+            - id: v_default
+              label: "默认值"
+              icon: "📋"
+            - id: v_custom
+              label: "自定义"
+              icon: "✏️"
+            - id: cancel
+              label: "❌ 取消"
+              icon: "❌"
+
+  # ════════════════════════════════════════════════════════
+  # ROUND 3：思考 + "确认执行" + chip 列表（≥ 6500ms）
+  # ════════════════════════════════════════════════════════
+  - id: r3_think_1
+    round_idx: 3
+    delay_ms: 600
+    events:
+      - type: reasoning_delta
+        data: { text: "用户已选值，进入第四步（最后一步）。" }
+  - id: r3_think_2
+    round_idx: 3
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "现在需要确认执行。" }
+  - id: r3_think_3
+    round_idx: 3
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "确认后才执行 edit_metadata 工具。" }
+  - id: r3_think_4
+    round_idx: 3
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "auto_run=false，必须用户确认才执行写操作。" }
+  - id: r3_intro
+    round_idx: 3
+    delay_ms: 500
+    events:
+      - type: text_delta
+        data: { text: "好的，所有参数都选好了。" }
+  - id: r3_ask
+    round_idx: 3
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "第四步（最后一步）：确认执行。" }
+  - id: r3_ask2
+    round_idx: 3
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "元数据编辑是写操作，确认后才生效。" }
+  - id: r3_chip
+    round_idx: 3
+    delay_ms: 500
+    events:
+      - type: mock_presets
+        data:
+          scenario: edit_metadata_wizard
+          phase: confirm_execute
+          presets:
+            - id: confirm_yes
+              label: "✅ 确认执行"
+              user_text: "确认"
+            - id: confirm_no
+              label: "❌ 取消"
+              user_text: "取消"
+      - type: mock_branch_choice
+        data:
+          branch_id: confirm_execute
+          options:
+            - id: confirm_yes
+              label: "✅ 确认执行"
+              icon: "✅"
+            - id: confirm_no
+              label: "❌ 取消"
+              icon: "❌"
+
+  # ════════════════════════════════════════════════════════
+  # 收尾：执行总结 + 等待输入（≥ 8000ms）
+  # ════════════════════════════════════════════════════════
+  - id: end_think_1
+    round_idx: 3
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "4 轮向导完成，等用户点确认或取消。" }
+  - id: end_think_2
+    round_idx: 3
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "如果确认：调用 edit_metadata 工具。" }
+  - id: end_think_3
+    round_idx: 3
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "如果取消：直接 stream_end，参数全部丢弃。" }
+  - id: end_think_4
+    round_idx: 3
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "auto_run=false，必须等用户决定才执行写操作。" }
+  - id: end_summary_1
+    round_idx: 3
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "## 元数据编辑向导\n\n" }
+  - id: end_summary_2
+    round_idx: 3
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "已选：文件 + 字段 + 新值。\n\n" }
+  - id: end_summary_3
+    round_idx: 3
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "**操作性质**：写操作（不可逆，写入真实文件元数据）。\n\n" }
+  - id: end_summary_4
+    round_idx: 3
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "确认后会自动调用 edit_metadata 工具，详情见工具返回结果。\n\n" }
+  - id: end_summary_5
+    round_idx: 3
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "取消则所有参数丢弃。\n\n" }
+  - id: end_summary_6
+    round_idx: 3
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "选择「确认」或「取消」chip 完成操作。" }
+  - id: end_stream
+    round_idx: 3
+    delay_ms: 200
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 980 }

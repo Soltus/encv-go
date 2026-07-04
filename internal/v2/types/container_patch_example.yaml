@@ -1,0 +1,22 @@
+# container_patch_example.yaml
+# 仅包含需要覆盖的数据，未列出的字段保持原样
+
+# 1. 通用 Index 覆盖 (对应 KVI.index)
+# 程序会根据原文件的 kind (如 video) 将此 map 映射到具体的结构体中
+index:
+  id: "custom_video_id_updated"
+  title: "Custom Title from YAML"
+  # ... (根据具体类型，支持任意字段覆盖)
+
+# 2. 通用 SpecialID 覆盖 (对应 EnvelopeHeaderV3.SpecialID)
+# type: "cbor" 或 "raw"
+special_id:
+  type: "cbor"
+  content:
+    custom_field: "value_123"
+    license:
+      user: "alice"
+      expires_at: "2025-01-01"
+# special_id:
+#   type: "raw"
+#   content: "my-simple-license-key-string" # 直接写字符串

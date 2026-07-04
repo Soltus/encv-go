@@ -1,0 +1,67 @@
+name: "Lint: No Node.js Crypto (API Key 加密禁止)"
+
+# 独立 workflow：仅跑 no-nodejs-crypto lint，为 PR 提供快速红线反馈。
+# 完整的 lint 也作为 layer1-quick-tests 的一个矩阵项挂在 test.yml 中，
+# 但 PR-only 走这个 workflow 速度更快（无需 pnpm / go 工具链）。
+#
+# 检测到 Node.js crypto 加密 API Key 用法 → exit 1 → CI 红灯。
+# 详见 scripts/ci-check-no-nodejs-crypto.sh 头部注释。
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+jobs:
+  no-nodejs-crypto:
+    name: scripts/ci-check-no-nodejs-crypto.sh
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false  # 防御
+
+      - name: Run lint (禁止 Node.js crypto 加密 API Key)
+        id: lint
+        run: |
+          echo "═══ No-NodeJS-Crypto Lint ═══"
+          bash scripts/ci-check-no-nodejs-crypto.sh
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+
+      - name: Annotate failure with fix guidance
+        if: steps.lint.outputs.exit_code != '0'
+        run: |
+          {
+            echo "## ❌ Node.js crypto 加密 API Key — 禁止！"
+            echo ""
+            echo "检测到主源码树中使用了 Node.js crypto 模块（scryptSync / createCipheriv / createDecipheriv / encryptApiKey / decryptApiKey 等）加密 API Key。"
+            echo ""
+            echo "### 修复指引"
+            echo ""
+            echo "**正确做法**：所有 API Key 加解密走 Go 主后端 \`internal/server/agent_api.go\`："
+            echo ""
+            echo "\`\`\`go"
+            echo "EncryptApiKey(plaintext string, deviceId ...string) string"
+            echo "DecryptApiKey(stored    string, deviceId ...string) string"
+            echo "\`\`\`"
+            echo ""
+            echo "**端点**（已挂在 encv-go :2025，被 preview-gateway /agent-api 路由）："
+            echo ""
+            echo "- \`POST /api/encrypt-key\`   \`{key, deviceId}\` → \`{encrypted}\`"
+            echo "- \`POST /api/decrypt-key\`   \`{encrypted, deviceId}\` → \`{key}\`"
+            echo ""
+            echo "### 为什么禁止"
+            echo ""
+            echo "- mobile app / WebView / Capacitor 容器内无 Node.js 运行时"
+            echo "- \`scryptSync\` 同步阻塞会卡死前端主线程"
+            echo "- 固定 salt + AES-CBC 格式与 Go 端 AES-GCM **不兼容** → 跨端解密必然失败"
+            echo ""
+            echo "### 详情"
+            echo ""
+            echo "完整命中列表见 [scripts/ci-check-no-nodejs-crypto.sh](../blob/main/scripts/ci-check-no-nodejs-crypto.sh)。"
+          } >> "$GITHUB_STEP_SUMMARY"

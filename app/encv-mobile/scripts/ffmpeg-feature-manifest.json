@@ -1,0 +1,152 @@
+{
+  "_meta": {
+    "version": "3",
+    "description": "ENCV project FFmpeg feature requirement manifest. Both desktop validation and Android build consume this as single source of truth. v3: split encoders by source: native (no external lib) vs libx264/libmp3lame (external).",
+    "last_updated": "2026-06-12"
+  },
+  "ffmpeg": {
+    "version": "8.0",
+    "license": "gpl",
+    "decoders": [
+      "h264",
+      "hevc",
+      "aac",
+      "mp3",
+      "opus",
+      "vorbis",
+      "flac",
+      "alac",
+      "pcm_s16le",
+      "pcm_s24le",
+      "pcm_s32le",
+      "aac_latm"
+    ],
+    "encoders": [
+      "aac",
+      "alac",
+      "flac",
+      "pcm_s16le",
+      "pcm_s24le",
+      "pcm_s32le",
+      "libx264",
+      "libmp3lame"
+    ],
+    "muxers": [
+      "mp4",
+      "ipod",
+      "matroska",
+      "flac",
+      "mp3",
+      "adts",
+      "null"
+    ],
+    "demuxers": [
+      "mov",
+      "matroska",
+      "aac",
+      "mp3",
+      "flac",
+      "ogg",
+      "wav"
+    ],
+    "parsers": [
+      "h264",
+      "hevc",
+      "aac",
+      "aac_latm",
+      "mpegaudio",
+      "opus",
+      "vorbis"
+    ],
+    "protocols": [
+      "file",
+      "pipe"
+    ],
+    "filters": [
+      "anull",
+      "aresample"
+    ],
+    "external_libs": [
+      "libx264",
+      "libmp3lame"
+    ],
+    "encoder_source": {
+      "aac": "native (ffmpeg built-in)",
+      "alac": "native (ffmpeg built-in)",
+      "flac": "native (ffmpeg built-in)",
+      "pcm_s16le": "native (ffmpeg built-in)",
+      "pcm_s24le": "native (ffmpeg built-in)",
+      "pcm_s32le": "native (ffmpeg built-in)",
+      "libx264": "external (videolan/x264)",
+      "libmp3lame": "external (sourceforge lame)"
+    },
+    "muxer_notes": {
+      "ipod": "iPod .m4a container (alias for mp4). Same ISO BMFF format; some M4A-specific metadata headers.",
+      "matroska": "MKV container, supports h264/aac/vorbis/opus",
+      "flac": "Native FLAC bitstream (no container wrapping)"
+    }
+  },
+  "ffprobe": {
+    "shared_with_ffmpeg": [
+      "textformat"
+    ],
+    "demuxers": [
+      "mov",
+      "matroska",
+      "aac",
+      "mp3",
+      "flac",
+      "ogg",
+      "wav"
+    ]
+  },
+  "ftools_modules": {
+    "libffmpeg.so": {
+      "core": [
+        "fftools/ffmpeg.c",
+        "fftools/ffmpeg_dec.c",
+        "fftools/ffmpeg_demux.c",
+        "fftools/ffmpeg_enc.c",
+        "fftools/ffmpeg_filter.c",
+        "fftools/ffmpeg_hw.c",
+        "fftools/ffmpeg_mux.c",
+        "fftools/ffmpeg_mux_init.c",
+        "fftools/ffmpeg_opt.c",
+        "fftools/ffmpeg_sched.c",
+        "fftools/cmdutils.c",
+        "fftools/opt_common.c",
+        "fftools/sync_queue.c",
+        "fftools/thread_queue.c"
+      ],
+      "graph": [
+        "fftools/graph/graphprint.c"
+      ],
+      "textformat": [
+        "fftools/textformat/avtextformat.c",
+        "fftools/textformat/tf_compact.c",
+        "fftools/textformat/tf_default.c",
+        "fftools/textformat/tf_flat.c",
+        "fftools/textformat/tf_ini.c",
+        "fftools/textformat/tf_json.c",
+        "fftools/textformat/tf_mermaid.c",
+        "fftools/textformat/tf_xml.c",
+        "fftools/textformat/tw_avio.c",
+        "fftools/textformat/tw_buffer.c",
+        "fftools/textformat/tw_stdout.c"
+      ],
+      "resources": [
+        "fftools/resources/resman.c",
+        "fftools/resources/graph.css.c",
+        "fftools/resources/graph.html.c"
+      ]
+    },
+    "libffprobe.so": {
+      "core": [
+        "fftools/ffprobe.c",
+        "fftools/cmdutils.c",
+        "fftools/opt_common.c"
+      ],
+      "textformat_shared": true
+    }
+  }
+}
