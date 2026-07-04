@@ -43,9 +43,11 @@ cleanup() {
 }
 trap cleanup INT TERM
 
+# Script location: <repo>/scripts/dev-openlist-web.sh
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MOBILE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-WEB_DIR="${MOBILE_DIR}/plugin-openlist/web"
+# Repo root = parent of scripts/
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+WEB_DIR="${REPO_DIR}/app/encv-mobile/plugin-openlist/web"
 
 # ---- 端口选择：默认 5174，plugin-openlist/web vite.config.ts 已设；
 # ---- 被占时回退到 5175
@@ -55,7 +57,7 @@ if lsof -i :5174 >/dev/null 2>&1; then
   VITE_PORT=5175
 fi
 
-cd "${MOBILE_DIR}"
+cd "${REPO_DIR}/app/encv-mobile"
 
 step() { echo ""; echo "==> $*"; }
 
@@ -76,14 +78,12 @@ sleep 1
 step "1/4 确保 ${WEB_DIR}/node_modules 就绪"
 if [[ ! -d "${WEB_DIR}/node_modules/vite" ]]; then
   echo "    node_modules 缺失，pnpm install ..."
-  cd "${MOBILE_DIR}"
+  cd "${REPO_DIR}/app/encv-mobile"
   pnpm install --no-frozen-lockfile --filter '@encvgo/plugin-openlist-web...'
 fi
 cd "${WEB_DIR}"
 
-# ---- Step 2: 校验 monorepo 链接（@encvgo/components 共享包）----
-step "2/4 跳过 @encvgo/components 检查（该共享包已于 pnpm+Vite 8 重构中移除）"
-
+# ---- Step 2: 跳过 @encvgo/components 检查（已移除）----
 # ---- Step 3: 启动 Vite dev server ----
 step "3/4 启动 Vite dev server (port ${VITE_PORT})"
 cd "${WEB_DIR}"

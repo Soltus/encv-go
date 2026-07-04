@@ -11,8 +11,8 @@
 #   4. CI 不能依赖 dev server → 必须预构建
 #
 # 用法：
-#   bash scripts/build-plugin-openlist-web.sh           # 默认：生产构建（混淆+压缩）
-#   bash scripts/build-plugin-openlist-web.sh --dev     # 开发构建（未压缩，含 sourcemap）
+#   bash build-plugin-openlist-web.sh              # 默认：生产构建（混淆+压缩）
+#   bash build-plugin-openlist-web.sh --dev         # 开发构建（未压缩，含 sourcemap）
 #
 # ⚠️ 重要：Vite 8 不支持 --prod 参数！
 #   - Webpack 时代遗留 `--prod` 在 Vite 里是「Unknown option」
@@ -27,10 +27,12 @@
 
 set -euo pipefail
 
+# Script location: <repo>/scripts/build-plugin-openlist-web.sh
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MOBILE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
-WEB_DIR="${MOBILE_DIR}/plugin-openlist/web"
-ASSETS_DIR="${MOBILE_DIR}/plugin-openlist/src/main/assets/openlist"
+# Repo root = parent of scripts/
+REPO_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+WEB_DIR="${REPO_DIR}/app/encv-mobile/plugin-openlist/web"
+ASSETS_DIR="${REPO_DIR}/app/encv-mobile/plugin-openlist/src/main/assets/openlist"
 
 # ---- 解析参数 ----
 # 默认生产（vite build 本身即生产）；--dev 切开发模式（--mode development）
@@ -60,9 +62,9 @@ esac
 
 step() { echo ""; echo "==> $*"; }
 
-# ---- Step 1: 确保 monorepo 安装 ----
+# ---- Step 1: pnpm install (workspace 依赖) ----
 step "1/4 pnpm install（workspace 依赖）"
-cd "${MOBILE_DIR}"
+cd "${REPO_DIR}/app/encv-mobile"
 pnpm install --no-frozen-lockfile --silent
 # ---- Step 2: 构建 plugin web ----
 step "2/4 pnpm exec vite build ${VITE_ARGS[*]:-}（Vite 构建 plugin-openlist/web，mode=${BUILD_MODE}）"
@@ -122,6 +124,6 @@ echo "  assets:    ${ASSETS_DIR}"
 echo "  apk load:  file:///android_asset/openlist/index.html"
 echo ""
 echo "  下一步："
-echo "    cd ${MOBILE_DIR}/android"
+echo "    cd ${REPO_DIR}/app/encv-mobile/android"
 echo "    ./gradlew :plugin-openlist:assembleDebug"
 echo "========================================"
