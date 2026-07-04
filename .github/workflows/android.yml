@@ -107,7 +107,7 @@ jobs:
       # 失败时: ::error:: 提示先去跑 build-ffmpeg-lib.yml。
 
       - name: Install frontend dependencies
-        run: cd ${{ env.MONOREPO_MOBILE_DIR }} && pnpm install --frozen-lockfile
+        run: cd ${{ env.MONOREPO_MOBILE_DIR }} && pnpm install
 
       - name: TypeScript check (main app)
         working-directory: ${{ env.MONOREPO_MOBILE_DIR }}
