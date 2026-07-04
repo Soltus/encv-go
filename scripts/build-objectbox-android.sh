@@ -117,6 +117,12 @@ for arch in "${ARCHS[@]}"; do
   if unzip -o -q "$AAR_FILE" "$SO_PATH_IN_AAR" -d "$WORK_DIR"; then
     # 重命名为 libobjectbox.so（CGO 期望的名字）
     cp "$WORK_DIR/$SO_PATH_IN_AAR" "$out_dir/libobjectbox.so"
+    # 🆕 2026-07-04：SONAME 兼容。
+    # ObjectBox .so 的 ELF SONAME 字段 = libobjectbox-jni.so（AAR 的原始命名）。
+    # Android linker 按 SONAME 查找依赖，Go 二进制编译时记录的 NEEDED 也是
+    # libobjectbox-jni.so。APK 内必须同时存在这个名字。
+    # 此处创建副本（不是 rename），CGO 仍用 libobjectbox.so 链接不变。
+    cp "$WORK_DIR/$SO_PATH_IN_AAR" "$out_dir/libobjectbox-jni.so"
     echo "  ✅ 提取成功"
     ls -lh "$out_dir/" | sed 's/^/     /'
     SUCCESS_ARCHS+=("$arch")

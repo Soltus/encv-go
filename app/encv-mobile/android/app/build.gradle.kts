@@ -16,6 +16,50 @@ plugins {
     alias(libs.plugins.combolite.aar2apk)
 }
 
+// 🆕 2026-07-04：从 Go 构建输出同步 ObjectBox JNI 库到 Android jniLibs
+// build-objectbox-android.sh 输出到 pkg/tasksystem/store/objectbox/libs/android_<abi>/
+// 此 task 在 merge*NativeLibs 之前执行，确保 linker 需要的 .so 存在。
+//
+// ABI 目录名映射：
+//   android_arm64 → arm64-v8a
+//   android_armv7 → armeabi-v7a
+//   android_x86   → x86
+//   android_x86_64 → x86_64
+val ABI_MAP = mapOf(
+    "android_arm64" to "arm64-v8a",
+    "android_armv7" to "armeabi-v7a",
+    "android_x86" to "x86",
+    "android_x86_64" to "x86_64",
+)
+
+tasks.register("prepareObjectboxJniLibs") {
+    description = "从 Go 构建产物复制 ObjectBox JNI 库到 jniLibs"
+    doLast {
+        val srcBase = file("${rootProject.projectDir}/../../../pkg/tasksystem/store/objectbox/libs")
+        if (!srcBase.exists()) {
+            logger.debug("prepareObjectboxJniLibs: srcBase $srcBase not found, skipping")
+            return@doLast
+        }
+        srcBase.listFiles()?.forEach { archDir ->
+            if (!archDir.isDirectory) return@forEach
+            val targetAbi = ABI_MAP[archDir.name] ?: return@forEach
+            val targetDir = file("src/main/jniLibs/$targetAbi")
+            targetDir.mkdirs()
+            archDir.listFiles { f -> f.name.endsWith(".so") }?.forEach { soFile ->
+                val target = targetDir.resolve(soFile.name)
+                if (!target.exists() || target.length() != soFile.length()) {
+                    soFile.copyTo(target, overwrite = true)
+                    logger.lifecycle("prepareObjectboxJniLibs: copied ${soFile.name} → $targetAbi/")
+                }
+            }
+        }
+    }
+}
+
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("NativeLibs") }.configureEach {
+    dependsOn("prepareObjectboxJniLibs")
+}
+
 android {
     namespace = "com.encvgo.app"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -137,29 +181,6 @@ try {
     }
 } catch (e: Exception) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
-}
-
-// 🆕 2026-07-04：ObjectBox SONAME 兼容
-// Go 二进制以 -tags objectbox 编译时，链接的是 libobjectbox.so，
-// 但该 .so 的 ELF SONAME 字段为 libobjectbox-jni.so。
-// Android linker 按 SONAME 查找依赖，因此 APK 内需要同时存在 libobjectbox-jni.so。
-// 此 script 在 mergeNativeLibs 后在每个架构目录下创建 libobjectbox-jni.so 副本。
-gradle.projectsEvaluated {
-    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("NativeLibs") }.configureEach {
-        doLast {
-            val variantDir = buildDir.resolve("intermediates/merged_native_libs/${name.removePrefix("merge").removeSuffix("NativeLibs").lowercase()}/out")
-            if (!variantDir.exists()) return@doLast
-            variantDir.walkTopDown().forEach { f ->
-                if (f.name == "libobjectbox.so" && f.parentFile != null) {
-                    val shim = File(f.parentFile, "libobjectbox-jni.so")
-                    if (!shim.exists()) {
-                        f.copyTo(shim)
-                        logger.lifecycle("libobjectbox-jni.so shim created in ${f.parentFile.name}")
-                    }
-                }
-            }
-        }
-    }
 }
 
 tasks.withType<KotlinCompile>().configureEach {
