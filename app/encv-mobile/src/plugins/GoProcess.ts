@@ -373,7 +373,7 @@ export interface KotlinLogEvent {
 export function addKotlinLogListener(
   callback: (data: KotlinLogEvent) => void
 ): Promise<PluginListenerHandle> {
-  return GoProcess.addListener('kotlin:log', callback);
+  return (GoProcess as any).addListener('kotlin:log', callback);
 }
 
 // 🆕 2026-06-17：读取 android-deps.json manifest
