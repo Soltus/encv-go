@@ -8,13 +8,14 @@ package objectbox
 #cgo android,386 LDFLAGS: -L${SRCDIR}/libs/android_x86
 #cgo android,amd64 LDFLAGS: -L${SRCDIR}/libs/android_x86_64
 #cgo LDFLAGS: -lobjectbox-jni
-// 注意：-lobjectbox-jni 而非 -lobjectbox，原因：
-//   ObjectBox AAR 内 .so 的 ELF SONAME = libobjectbox-jni.so（AAR 原始命名），
-//   ObjectBox Go SDK (v1.9.0) 自身 CGO 也写死了 -lobjectbox-jni。
-//   统一使用 libobjectbox-jni.so，避免改名引发的 SONAME/DT_NEEDED 不匹配。
-//   如果改成 -lobjectbox 会搜索 libobjectbox.so，但 SDK 仍会写 libobjectbox-jni.so，
-//   导致 linker 同时需要两个名字，且文件改名不改 SONAME 本身不可靠。
-//   build-objectbox-android.sh 输出时必须保持 libobjectbox-jni.so 不变。
+// 注意：用 -lobjectbox-jni 而非 -lobjectbox，原因：
+//   ObjectBox .so 的 ELF SONAME = libobjectbox-jni.so（AAR 原始命名），
+//   运行时 linker 按 DT_NEEDED 中的 SONAME 查找，必须是 libobjectbox-jni.so。
+//   ObjectBox Go SDK 的 CGO 用的是 -lobjectbox（找 libobjectbox.so），
+//   build-objectbox-android.sh 同时输出两个名字供不同阶段使用：
+//     libobjectbox-jni.so → 提供给 runtime linker / 本 CGO 链接
+//     libobjectbox.so     → 提供给 SDK CGO 链接
+//   两者内容一致，仅在 CGO 链接时区分。
 #include <stdlib.h>
 */
 import "C"

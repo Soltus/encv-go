@@ -460,7 +460,8 @@ jobs:
           fi
 
           # 如果是动态链接 objectbox，把 .so 复制到 jniLibs
-          # 注意：ObjectBox Go SDK CGO 写死 -lobjectbox-jni，必须保持原名
+          # 运行时 linker 按 SONAME(libobjectbox-jni.so) 查找，所以 jniLibs 里用这个名字。
+          # CGO 链接时 build-objectbox-android.sh 同时输出 libobjectbox.so（供 SDK 用）。
           # 详见 pkg/tasksystem/store/objectbox/objectbox.go 注释
           if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
             if [ -f "pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox-jni.so" ]; then

@@ -120,9 +120,13 @@ for arch in "${ARCHS[@]}"; do
 
   echo "  提取 $SO_PATH_IN_AAR ..."
   if unzip -o -q "$AAR_FILE" "$SO_PATH_IN_AAR" -d "$WORK_DIR"; then
-    # 保持原名 libobjectbox-jni.so（不改为 libobjectbox.so），
-    # 参见文件头部注释及 objectbox.go LDFLAGS 注释。
+    # 保持原名 libobjectbox-jni.so（不改名字、不改 SONAME）：
+    #   - ObjectBox Go SDK 写死了 -lobjectbox，链接时需要 libobjectbox.so
+    #   - 但 .so 的 ELF SONAME = libobjectbox-jni.so，linker 记录的 DT_NEEDED 也是它
+    #   - 运行时 linker 按 DT_NEEDED 找 libobjectbox-jni.so
+    # 因此两个名字都要有（内容相同），一个给 CGO 链接用，一个给 runtime 用。
     cp "$WORK_DIR/$SO_PATH_IN_AAR" "$out_dir/libobjectbox-jni.so"
+    cp "$WORK_DIR/$SO_PATH_IN_AAR" "$out_dir/libobjectbox.so"
     echo "  ✅ 提取成功"
     ls -lh "$out_dir/" | sed 's/^/     /'
     SUCCESS_ARCHS+=("$arch")
