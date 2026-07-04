@@ -96,10 +96,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import("@/views/DatabaseDetail.vue"),
       },
       {
-        path: "settings/chronicle",
-        component: () => import("@/views/ChronicleDetail.vue"),
-      },
-      {
         path: "settings/fulltext-index",
         component: () => import("@/views/FullTextIndexDetail.vue"),
       },

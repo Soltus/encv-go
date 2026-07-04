@@ -27,6 +27,10 @@ const routes: RouteRecordRaw[] = [
     path: "/world",
     component: () => import("@self/views/SimverseWorld.vue"),
   },
+  {
+    path: "/chronicle",
+    component: () => import("@self/views/ChronicleDetail.vue"),
+  },
 ];
 
 export default createRouter({

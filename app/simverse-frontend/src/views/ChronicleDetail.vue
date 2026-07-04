@@ -223,7 +223,7 @@ import {
   useSimverse,
   type SimverseChronicleWorldResponse,
   type SimverseChronicleEvent,
-} from '@/composables/useSimverse'
+} from '@self/composables/useSimverse'
 
 const { loadChronicleWorld, loadChronicleEvent, currentTick } = useSimverse()
 
