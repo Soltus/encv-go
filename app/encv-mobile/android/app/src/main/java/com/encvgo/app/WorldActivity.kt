@@ -12,6 +12,7 @@ import android.view.View
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.webkit.WebSettings
 import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
@@ -133,7 +134,7 @@ class WorldActivity : BridgeActivity() {
         webView.settings.domStorageEnabled = true
         webView.settings.databaseEnabled = true
         webView.settings.allowFileAccess = true
-        webView.settings.mixedContentMode = WebView.MIXED_CONTENT_ALWAYS_ALLOW
+        webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
         val originalClient = webView.webViewClient
         webView.webViewClient = object : WebViewClient() {
