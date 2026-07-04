@@ -13,10 +13,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/views/ArtPlayerView.vue"),
   },
   {
-    path: "/simverse/world",
-    component: () => import("@/views/SimverseWorld.vue"),
-  },
-  {
     path: "/tabs/",
     component: Tabs,
     children: [
