@@ -369,7 +369,7 @@ jobs:
           
           # 检查产物
           OBJECTBOX_READY=0
-          if [ -f "$OB_DIR/libobjectbox.so" ]; then
+          if [ -f "$OB_DIR/libobjectbox-jni.so" ]; then
             OBJECTBOX_READY=1
             echo "✅ ObjectBox native library found:"
             ls -lh "$OB_DIR/"
@@ -460,12 +460,14 @@ jobs:
           fi
 
           # 如果是动态链接 objectbox，把 .so 复制到 jniLibs
+          # 注意：ObjectBox Go SDK CGO 写死 -lobjectbox-jni，必须保持原名
+          # 详见 pkg/tasksystem/store/objectbox/objectbox.go 注释
           if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
-            if [ -f "pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox.so" ]; then
+            if [ -f "pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox-jni.so" ]; then
               mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
-              cp pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox.so \
+              cp pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox-jni.so \
                  ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
-              echo "✅ Copied libobjectbox.so to jniLibs/arm64-v8a/"
+              echo "✅ Copied libobjectbox-jni.so to jniLibs/arm64-v8a/"
             fi
           fi
           
@@ -747,7 +749,7 @@ jobs:
         run: |
           echo "═══ HOST APP jniLibs (Go backend + native libs) ═══"
           HOST_LIBS="${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a"
-          for lib in libencv-go.so libffmpeg.so libffprobe.so libsql_experimental.so libobjectbox.so; do
+          for lib in libencv-go.so libffmpeg.so libffprobe.so libsql_experimental.so libobjectbox-jni.so; do
             if [ -f "$HOST_LIBS/$lib" ]; then
               echo "  ✅ $lib $(ls -lh "$HOST_LIBS/$lib" | awk '{print $5}')"
             else
