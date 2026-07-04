@@ -428,10 +428,12 @@ jobs:
           else
             echo "⚠️  Building WITHOUT libsql support (fallback to SQLite only)"
           fi
-          # 移动端不使用 objectbox。
-          # Go 二进制不应对 objectbox 有编译时链接依赖，否则 linker 需要 libobjectbox-jni.so。
-          # 强制走 stub → glebarez/sqlite（纯 Go），零外部 .so 依赖。
-          # 如果后续需要 objectbox，应实现运行时 dlopen 加载，而非编译时链接。
+          if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
+            BUILD_TAGS="$BUILD_TAGS,objectbox"
+            echo "✅ Building with objectbox support"
+          else
+            echo "⚠️  Building WITHOUT objectbox support"
+          fi
           echo "ℹ️  Objectbox disabled on mobile: using gliderlabs/sqlite stub"
           BUILD_TAGS="${BUILD_TAGS# }"
           BUILD_TAGS="-tags ${BUILD_TAGS}"
@@ -458,7 +460,20 @@ jobs:
             fi
           fi
 
-           # 检查二进制是否包含 libsql
+          # 如果是动态链接 objectbox，把 .so 复制到 jniLibs
+          # build-objectbox-android.sh 同时输出 libobjectbox.so（供 SDK/自己 CGO -lobjectbox 用）
+          # 和 libobjectbox-jni.so（SONAME 匹配，运行时 linker 需要）。
+          # 这里复制 libobjectbox-jni.so 进入 APK jniLibs，供 linker 按 SONAME 查找。
+          if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
+            if [ -f "pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox-jni.so" ]; then
+              mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
+              cp pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox-jni.so \
+                 ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
+              echo "✅ Copied libobjectbox-jni.so to jniLibs/arm64-v8a/"
+            fi
+          fi
+
+          # 检查二进制是否包含 libsql
           # 注意：-ldflags="-s -w" 会 strip 符号表，nm 找不到符号。
           # 用 strings 搜索 libsql_ 前缀的函数名作为替代检测方式。
           BIN_PATH="${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64"
@@ -736,7 +751,7 @@ jobs:
         run: |
           echo "═══ HOST APP jniLibs (Go backend + native libs) ═══"
           HOST_LIBS="${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a"
-          for lib in libencv-go.so libffmpeg.so libffprobe.so libsql_experimental.so; do
+          for lib in libencv-go.so libffmpeg.so libffprobe.so libsql_experimental.so libobjectbox-jni.so; do
             if [ -f "$HOST_LIBS/$lib" ]; then
               echo "  ✅ $lib $(ls -lh "$HOST_LIBS/$lib" | awk '{print $5}')"
             else
