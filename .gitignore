@@ -1,0 +1,19 @@
+# Session credentials
+.session-env.json
+.mcporter/
+.skills/
+.capabilities/
+# Dependencies
+node_modules/
+# Auto-generated
+.workspace-info.md
+.local/share/opencode/
+
+# >>> tcb-remote-workspace internal ignore rules >>>
+.session-env.json
+.mcporter/
+.skills/
+.capabilities/
+.workspace-info.md
+.local/share/opencode/
+# <<< tcb-remote-workspace internal ignore rules <<<
