@@ -2,3 +2,5 @@ packages:
   - 'encv-mobile'
   - 'encv-mobile/plugin-openlist/web'
   - 'preview-gateway'
+  - 'packages/*'
+  - 'simverse-frontend'
