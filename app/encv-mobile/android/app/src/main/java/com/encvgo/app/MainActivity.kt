@@ -54,6 +54,9 @@ class MainActivity : BridgeActivity() {
             Log.e(TAG, "registerPlugin failed", e)
         }
         super.onCreate(savedInstanceState)
+        // 初始化 Kotlin 层 DevLog 桥接器（必须在 super.onCreate 之后，context 已可用）
+        KotlinDevLogBridge.init(this)
+        KotlinDevLogBridge.logInfo(TAG, "MainActivity created, KotlinDevLogBridge initialized")
         bridge.webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         Log.i(TAG, "WebView mixedContentMode set to MIXED_CONTENT_ALWAYS_ALLOW")
         registerBackendReceiver()

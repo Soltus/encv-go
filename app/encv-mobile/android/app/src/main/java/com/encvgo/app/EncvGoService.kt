@@ -330,18 +330,23 @@ class EncvGoService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification("后端启动中"))
         acquireWakeLock()
         resetStateForStart(source)
+        KotlinDevLogBridge.logWarn(TAG, "Go backend startup initiated by: $source")
+        KotlinDevLogBridge.flushToDisk(this)
 
         try {
             ensureConfigExists()
             ensureBuildInfoExists()
             configPort = readConfigPort()
             val binary = findExecutableBinary() ?: run {
+                KotlinDevLogBridge.logError(TAG, "Go backend start failed: no binary found", null)
+                KotlinDevLogBridge.flushToDisk(this)
                 publishFailure("no_binary", source, command)
                 return
             }
 
             val configPath = File(filesDir, "config.user.json").absolutePath
             Log.i(TAG, "Starting backend: ${binary.absolutePath} start")
+            KotlinDevLogBridge.logInfo(TAG, "Starting Go binary: ${binary.absolutePath}")
 
             // 🆕 2026-06-14：先探测 servingDir 是否可写，不可写则降级到 filesDir。
             //
