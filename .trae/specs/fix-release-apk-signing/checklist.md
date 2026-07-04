@@ -1,0 +1,10 @@
+- [x] `build.gradle.kts` 包含 `signingConfigs` 块，从 `keystore.properties` 读取凭据
+- [x] `build.gradle.kts` 的 `buildTypes.release` 引用 `signingConfig`
+- [x] `keystore.properties` 不存在时 debug 构建不报错
+- [x] `keystore.properties` 在 `.gitignore` 中
+- [x] CI 工作流在构建前生成 `keystore.properties`
+- [x] CI 工作流使用 `gradlew assembleRelease` 而非依赖 `npx cap build --keystorepath`
+- [ ] CI 构建后 `apksigner verify` 通过（需 CI 验证）
+- [x] `apksigner verify` 失败时 CI 构建 fail
+- [x] `post-cap-sync.mjs` 中 Kotlin 版本号统一为 `2.3.21`
+- [x] `post-cap-sync.mjs` 中无效的 Groovy 签名注入逻辑已移除

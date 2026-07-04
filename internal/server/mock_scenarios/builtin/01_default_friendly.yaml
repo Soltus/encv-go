@@ -1,0 +1,43 @@
+id: default_friendly
+description: "fallback 默认剧本：3 段流式文本 + 正常结束"
+keywords: []
+
+presets:
+  - id: ask_files
+    label: "📁 查看文件"
+    user_text: "有哪些视频文件"
+    tooltip: "触发 list_files_query 剧本"
+  - id: ask_summarize
+    label: "📄 总结文档"
+    user_text: "总结 docs/readme.md"
+    tooltip: "触发 read_and_summarize 剧本"
+  - id: ask_encrypt
+    label: "🔒 加密视频"
+    user_text: "加密这个视频"
+    tooltip: "触发 encrypt_video 剧本"
+
+steps:
+  - id: greeting
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: default_friendly }
+      - type: text_delta
+        data: { text: "你好！" }
+  - id: intro
+    delay_ms: 200
+    events:
+      - type: text_delta
+        data: { text: "我是 ENCV 助手。" }
+  - id: offer_help
+    delay_ms: 300
+    events:
+      - type: text_delta
+        data: { text: "有什么可以帮你的吗？" }
+  - id: end
+    delay_ms: 100
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 42 }

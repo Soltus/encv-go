@@ -1,0 +1,527 @@
+05-24 10:27:09.767  lynx      [7163386090:INFO:trace_event_utils.cc(32)] base trace init success, backend: 474692141972
+
+05-24 10:27:09.768  LynxBaseTrace  LynxBaseTrace init successfully by itself.
+
+05-24 10:27:09.769  com.encvgo.app  No implementation found for void com.lynx.devtoolwrapper.DevToolLifecycle.nativeSyncStateToNative(int) (tried Java_com_lynx_devtoolwrapper_DevToolLifecycle_nativeSyncStateToNative and Java_com_lynx_devtoolwrapper_DevToolLifecycle_nativeSyncStateToNative__I) - is the library loaded, e.g. System.loadLibrary?
+
+05-24 10:27:09.769  LynxEnv   
+  attachDevToolComponent: done.
+  LynxEnv start init
+
+05-24 10:27:09.774  LynxEnv   Loading native libraries succeeded
+
+05-24 10:27:09.775  lynx      [7163386090:INFO:vsync_monitor.cc(23)] VSyncMonitor created with is_vsync_post_task_by_emergency_ true
+
+05-24 10:27:09.776  LynxEnv   LynxEnv failed to get LynxExtensionService
+
+05-24 10:27:09.799  EncvApplication  initLynxEnv: lynx_devtool native lib not available, skipping devtool features
+
+05-24 10:27:39.586  PlayerOverlay  
+  showOverlay: overlay FrameLayout added to decorView
+  createLynxView: START
+
+05-24 10:27:39.590  LynxView  new lynxview detail com.lynx.tasm.LynxView{19fbc78 V.E...... ......I. 0,0-0,0}
+
+05-24 10:27:39.594  LynxUIRenderer  
+  lynxContext setUIBodyViewcom.lynx.tasm.LynxView{19fbc78 VFE...... ......I. 0,0-0,0}com.lynx.tasm.LynxTemplateRender$1@9b093b6
+  lynxContext setUIBodyViewcom.lynx.tasm.LynxView{19fbc78 VFE...... ......I. 0,0-0,0}com.lynx.tasm.LynxTemplateRender$1@9b093b6
+
+05-24 10:27:39.600  LynxTemplateRender  mEnableGenericResourceFetcher: false render: com.lynx.tasm.LynxTemplateRender@d343f8d
+
+05-24 10:27:39.602  lynx      
+  [7163386090:INFO:vsync_monitor.cc(23)] VSyncMonitor created with is_vsync_post_task_by_emergency_ true
+  [7163386090:INFO:task_runner_manufactor.cc(257)] TaskRunnerManufactor setThreadStrategy:0, multi_tasm:true, async_thread_cache:true
+  [7163386090:INFO:lynx_shell.cc(131)] LynxShell create, this:0xB400006F31086510
+  [7163386090:INFO:memory_monitor.h(81)] [memory_monitor.h] new MemoryMonitor, this:0xB400006F6116FE50, Enable:false, MemoryChangeThresholdMb:0
+  [7163386090:INFO:timing_handler.cc(26)] [TimingHandler.cc] new TimingHandler, this:0xB400006F6116FE90
+  [7163386090:INFO:template_assembler.h(518)] Lynx Set Enable Layout Only: true from LynxView,  this:0xB400006F01169D30
+
+05-24 10:27:39.604  LynxTemplateRender  force use quick js engine
+
+05-24 10:27:39.604  lynx      [7163386090:INFO:vsync_monitor.cc(23)] VSyncMonitor created with is_vsync_post_task_by_emergency_ true
+
+05-24 10:27:39.604  LynxTemplateRender  set JSGroupThreadName to lynx context: 
+
+05-24 10:27:39.604  lynx      
+  [6DCA3E23C0:INFO:runtime_lifecycle_observer_impl.cc(32)] [Runtime] RuntimeLifecycleObserverImpl::OnRuntimeCreate with observer:0xB40000701106B988
+  [6DCA3E23C0:INFO:bts_runtime.cc(143)] Init LynxRuntime group_id: -1 runtime_id: 0 this:0xB400006FB105B810
+  [6DCA3E23C0:INFO:runtime_lifecycle_observer_impl.cc(48)] [Runtime] RuntimeLifecycleObserverImpl::OnRuntimeInit with runtime id: 0
+  [6DCA3E23C0:INFO:runtime_manager.cc(444)] make runtime with force_use_lightweight_js_engine = true
+  [6DCA3E23C0:INFO:runtime_manager.cc(451)] make QuickJS runtime
+
+05-24 10:27:39.605  LynxLayoutProxy  LynxLayoutProxy is created
+
+05-24 10:27:39.605  lynx      
+  [6DCA3E23C0:INFO:quickjs_runtime_wrapper.cc(115)] lynx InitQuickjsRuntime success
+  [6DCA3E23C0:INFO:runtime_manager.cc(187)] create single_context:0xB400006FC10A3778
+
+05-24 10:27:39.605  LynxResourceLoader  loadJSSource with name assets://lynx_core.js
+
+05-24 10:27:39.606  lynx      
+  [6DCA3E23C0:INFO:quickjs_runtime.cc(906)] using new bytecode
+  [6DCA3E23C0:INFO:js_cache_manager.cc(222)] bytecode enabled, url: '/lynx_core.js', template_url: '', file_content size:64939
+  [7163386090:INFO:layout_context.cc(1098)] [Layout] UpdateViewport :size: 0.0, 0.0; mode: 0, 0
+  [6E85C5B3C0:INFO:js_cache_manager.cc(607)] bytecode_generate_generate_version: 3400532428
+
+05-24 10:27:39.607  LynxTemplateRender  1779589659607 create LynxView 1779589659594-27245688 
+
+05-24 10:27:39.607  lynx      [6E85C5B3C0:INFO:js_cache_manager.cc(174)] js_cache_dir created:/data/user/0/com.encvgo.app/cache/quickjs_cache
+
+05-24 10:27:39.607  lynx      [6E85C5B3C0:ERROR:js_cache_manager.cc(99)] ReadFile failed: /data/user/0/com.encvgo.app/cache/quickjs_cache/meta.json
+
+05-24 10:27:39.607  lynx      
+  [6E85C5B3C0:INFO:js_cache_manager.cc(619)] Metadata load failed, clearing cache
+  [6E85C5B3C0:INFO:js_cache_manager.cc(658)] Clearing cache dir
+  [6E85C5B3C0:INFO:js_cache_manager.cc(622)] Creating new Metadata
+
+05-24 10:27:39.607  Lynx      onAttachedToWindow:27245688
+
+05-24 10:27:39.607  LynxTemplateRender  
+  lynxview onAttachedToWindow com.lynx.tasm.LynxTemplateRender@d343f8d
+  onEnterForeground. force: false
+
+05-24 10:27:39.607  PlayerOverlay  createLynxView: LynxView added to overlay (on top of MPV surface)
+
+05-24 10:27:39.607  lynx      
+  [6E85C5B3C0:INFO:js_cache_manager.cc(597)] ClearExpiredCache time spent: 2 ms
+  [6DCA2D63C0:INFO:event_tracker_platform_impl.cc(52)] EventTracker onEvent with name: lynxsdk_code_cache
+
+05-24 10:27:39.608  PlayerOverlay  createLynxView: initData={"filePath":"\/123云盘\/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4","fileName":"e844e9ffb6650d294870a6d5ea963ec6mp4.mp4","mimeType":"video\/*","isExternal":false,"mediaType":"video"}
+
+05-24 10:27:39.608  lynx      [6DCA3E23C0:INFO:js_cache_manager.cc(287)] no cache matches this url.
+
+05-24 10:27:39.608  LynxView  renderTemplateUrl player.lynx.bundlewith jsonData incom.lynx.tasm.LynxView{19fbc78 VFE...... ......I. 0,0-0,0}
+
+05-24 10:27:39.608  lynx      
+  [6DCA3E23C0:INFO:quickjs_runtime.cc(240)] QuickjsRuntime::evaluatePreparedJavaScript start: /lynx_core.js
+  [6E85C5B3C0:INFO:quickjs_runtime_wrapper.cc(115)] lynx InitQuickjsRuntime success
+  [6DCA3E23C0:INFO:quickjs_runtime.cc(160)] QuickjsRuntime::evaluateJavaScript: /lynx_core.js
+  [6E85C5B3C0:INFO:js_cache_manager.cc(368)] RunTask start, url: '/lynx_core.js', template_url: '', file_md5: de201b688ec3f4fc5336d6ad133308b0, buffer size: 64939 bytes
+
+05-24 10:27:39.608  LynxEventReporter  eventReporter service not found or event name is null.
+
+05-24 10:27:39.608  LynxTemplateRender  
+  dispatchOnPageStart url player.lynx.bundle in com.lynx.tasm.LynxTemplateRender@d343f8d
+  1779589659608 renderTemplate LynxView 1779589659594-27245688 player.lynx.bundle
+
+05-24 10:27:39.609  lynx      [7163386090:INFO:layout_context.cc(1098)] [Layout] UpdateViewport :size: 1260.0, 2800.0; mode: 1, 1
+
+05-24 10:27:39.615  ENCV-Service  
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [MpvPlayerModule] preInit: MPV engine initialized on main thread
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [PlayerOverlay] createLynxView: START
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 468.077µs |       127.0.0.1 | POST     "/api/logs"
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 59.461µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [PlayerOverlay] showOverlay: overlay FrameLayout added to decorView
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 28.308µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [PlayerOverlay] createLynxView: initData={"filePath":"\/123云盘\/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4","fileName":"e844e9ffb6650d294870a6d5ea963ec6mp4.mp4","mimeType":"video\/*","isExternal":false,"mediaType":"video"}
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 192.077µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [PlayerOverlay] createLynxView: LynxView added to overlay (on top of MPV surface)
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 69.231µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [PlayerOverlay] showOverlay: complete
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 65.538µs |       127.0.0.1 | POST     "/api/logs"
+
+05-24 10:27:39.625  lynx      
+  [6E85C5B3C0:INFO:js_cache_manager.cc(453)] SaveCacheContentToStorage template_url=' ', url='/lynx_core.js'
+  [6E85C5B3C0:INFO:js_cache_manager.cc(408)] MakeCache success:true, cache size: 146872 bytes, time spent: 18 ms
+  [6DCA2D63C0:INFO:event_tracker_platform_impl.cc(52)] EventTracker onEvent with name: lynxsdk_code_cache
+
+05-24 10:27:39.626  LynxEventReporter  eventReporter service not found or event name is null.
+
+05-24 10:27:39.626  lynx      
+  [6DCA3E23C0:INFO:quickjs_runtime.cc(173)] QuickjsRuntime::evaluateJavaScript finished successfully.
+  [6DCA3E23C0:INFO:bts_runtime.cc(179)] js_runtime_type :0 0xB400006FB105B810
+  [6DCA3E23C0:INFO:bts_runtime.cc(195)]  lynxRuntime:0xB400006FB105B810 create APP 0xB400006F211AA630
+
+05-24 10:27:39.632  LynxTemplateRender  
+  dispatchOnPageStart url null in com.lynx.tasm.LynxTemplateRender@d343f8d
+  LoadMeta with binary, pre-painting: false ,pre-painting with draw:false enableRecycleTemplateBundle: false
+
+05-24 10:27:39.632  lynx      [7163386090:ERROR:template_assembler.cc(947)] lynx_plugin: load original lynx so
+
+05-24 10:27:39.632  lynx      [7163386090:INFO:template_assembler.cc(344)] start TemplateAssembler::LoadTemplate, url: len: 115820 this:0xB400006F01169D30
+
+05-24 10:27:39.633  lynx      
+  [6DCA2D63C0:ERROR:timing_map.cc(20)] Set duplicated timing_key, timing_key is pipelineStart
+  [6DCA2D63C0:ERROR:timing_map.cc(20)] Set duplicated timing_key, timing_key is pipeline_start
+
+05-24 10:27:39.633  lynx      
+  [7163386090:INFO:lynx_binary_base_template_reader.cc(171)] client version:0.2.0.0  ;binary_version:0.2.0.0
+  [7163386090:INFO:lynx_binary_base_template_reader.cc(122)] App Bundle's engine version: 3.2, lynx sdk version:3.7, min supported lynx version: 1.0
+  [7163386090:INFO:template_binary_reader.cc(241)] CSSLazyDecode options FE_OPTION_UNDEFINED ABSetting: 
+
+05-24 10:27:39.634  lynx      
+  [7163386090:INFO:template_assembler.cc(2479)] TemplateAssembler::OnScreenMetricsSet with width: 1260 height: 2800 device_pixel_ratio: 3.28125
+  [7163386090:INFO:element_manager.cc(531)] ElementManager::UpdateScreenMetrics width:1260,height:2800
+  [6DCA3E23C0:INFO:bts_runtime.cc(654)] lynx runtime loadApp, napi id:0
+  [6DCA3E23C0:INFO:bts_runtime.cc(672)] [LynxRuntime] circular data check flag: true
+  [6DCA3E23C0:INFO:js_app.cc(2064)]  App::loadApp start 0xB400006F211AA630
+  [6DCA3E23C0:INFO:lynx_module_android.cc(61)] NativeModule: LynxModuleAndroid Create: LynxUIMethodModule
+  [7163386090:INFO:layout_context.cc(1098)] [Layout] UpdateViewport :size: 1260.0, 2800.0; mode: 1, 1
+  [6DCA3E23C0:INFO:lynx_module_android.cc(61)] NativeModule: LynxModuleAndroid Create: LynxResourceModule
+  [6DCA3E23C0:INFO:lynx_module_android.cc(61)] NativeModule: LynxModuleAndroid Create: LynxAccessibilityModule
+  [6DCA3E23C0:INFO:lynx_module_android.cc(61)] NativeModule: LynxModuleAndroid Create: LynxSetModule
+  [6DCA3E23C0:INFO:lynx_module_android.cc(61)] NativeModule: LynxModuleAndroid Create: LynxExposureModule
+  [6DCA3E23C0:INFO:js_app.cc(2920)] loadScript:app-service.js
+  [6DCA3E23C0:INFO:quickjs_runtime.cc(240)] QuickjsRuntime::evaluatePreparedJavaScript start: /app-service.js
+  [6DCA3E23C0:INFO:quickjs_runtime.cc(160)] QuickjsRuntime::evaluateJavaScript: /app-service.js
+  [6DCA3E23C0:INFO:quickjs_runtime.cc(173)] QuickjsRuntime::evaluateJavaScript finished successfully.
+  [6DCA3E23C0:INFO:js_app.cc(2920)] loadScript:/.rspeedy/main/background.d5177a2b.js
+  [6DCA3E23C0:INFO:quickjs_runtime.cc(240)] QuickjsRuntime::evaluatePreparedJavaScript start: /.rspeedy/main/background.d5177a2b.js
+  [6DCA3E23C0:INFO:quickjs_runtime.cc(160)] QuickjsRuntime::evaluateJavaScript: /.rspeedy/main/background.d5177a2b.js
+  [7163386090:INFO:element_manager.cc(1341)] ElementManager::OnPatchFinishForFiber WithPatch!
+  [6DCA3E23C0:INFO:quickjs_runtime.cc(173)] QuickjsRuntime::evaluateJavaScript finished successfully.
+  [6DCA3E23C0:INFO:js_app.cc(361)] LYNX PageProxy get -> setCard
+  [6DCA3E23C0:INFO:js_app.cc(2196)]  App::loadApp end 0xB400006F211AA630
+  [6DCA3E23C0:INFO:bts_runtime.cc(920)] lynx runtime ready
+  [6DCA3E23C0:INFO:lynx_console.cc(246)] "PlayerApp: initData={"filePath":"/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4","fileName":"e844e9ffb6650d294870a6d5ea963ec6mp4.mp4","mimeType":"video/*","isExternal":false,"mediaType":"video"}, filePath=/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4, fileName=e844e9ffb6650d294870a6d5ea963ec6mp4.mp4, isExternal=false"
+  [6DCA2D63C0:INFO:event_tracker_platform_impl.cc(52)] EventTracker onEvent with name: lynxsdk_code_cache
+
+05-24 10:27:39.653  LynxEventReporter  eventReporter service not found or event name is null.
+
+05-24 10:27:39.653  lynx      
+  [6DCA2D63C0:INFO:event_tracker_platform_impl.cc(52)] EventTracker onEvent with name: lynxsdk_code_cache
+  [6DCA3E23C0:INFO:lynx_module_android.cc(61)] NativeModule: LynxModuleAndroid Create: LogBridge
+  [6DCA3E23C0:INFO:method_invoker.cc(481)] NativeModule: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) will fire 0xB400007081044288
+
+05-24 10:27:39.653  LynxPlayer  PlayerApp: initData={"filePath":"/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4","fileName":"e844e9ffb6650d294870a6d5ea963ec6mp4.mp4","mimeType":"video/*","isExternal":false,"mediaType":"video"}, filePath=/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4, fileName=e844e9ffb6650d294870a6d5ea963ec6mp4.mp4, isExternal=false
+
+05-24 10:27:39.653  lynx      [6DCA3E23C0:INFO:method_invoker.cc(565)] NativeModules: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) call platform implementation0xB400007081044288
+
+05-24 10:27:39.653  lynx      [6DCA3E23C0:ERROR:lynx_console.cc(252)] "GlobalEventEmitter not available"
+
+05-24 10:27:39.653  lynx      [6DCA3E23C0:INFO:method_invoker.cc(481)] NativeModule: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.error) will fire 0xB400007081044288
+
+05-24 10:27:39.653  LynxPlayer  GlobalEventEmitter not available
+
+05-24 10:27:39.653  lynx      
+  [6DCA3E23C0:INFO:method_invoker.cc(565)] NativeModules: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.error) call platform implementation0xB400007081044288
+  [6DCA3E23C0:INFO:lynx_console.cc(246)] "startPlayback: filePath=/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4 isExternal=false mediaType=video fileName=e844e9ffb6650d294870a6d5ea963ec6mp4.mp4"
+  [6DCA3E23C0:INFO:method_invoker.cc(481)] NativeModule: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) will fire 0xB400007081044288
+
+05-24 10:27:39.654  LynxPlayer  startPlayback: filePath=/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4 isExternal=false mediaType=video fileName=e844e9ffb6650d294870a6d5ea963ec6mp4.mp4
+
+05-24 10:27:39.654  lynx      [6DCA3E23C0:INFO:method_invoker.cc(565)] NativeModules: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) call platform implementation0xB400007081044288
+
+05-24 10:27:39.654  Lynx      setVisibility:27245688 0
+
+05-24 10:27:39.654  lynx      [6DCA3E23C0:INFO:lynx_console.cc(246)] "startPlayback: step1 getBackendStatus"
+
+05-24 10:27:39.654  LynxPlayer  startPlayback: step1 getBackendStatus
+
+05-24 10:27:39.655  LynxTemplateRender  onFirstScreen
+
+05-24 10:27:39.655  lynx      
+  [7163386090:INFO:touch_event_handler.cc(79)] TouchEventHandler init: support_component_js_: true; use_lepus_ng_: true
+  [7163386090:INFO:touch_event_handler.cc(367)] SendCustomEvent event name:resize tag:10
+  [7163386090:INFO:layout_context.cc(883)] [Layout] layout finish with result size: 1260, 2800 for viewport, size: 1260.0, 2800.0; mode: 1, 1 Time taken: 11374154 ns
+
+05-24 10:27:39.656  LynxTemplateRender  dispatchLoadSuccess templateSize in com.lynx.tasm.LynxTemplateRender@d343f8d
+
+05-24 10:27:39.656  lynx      [7163386090:INFO:template_assembler.cc(839)] end TemplateAssembler::LoadTemplate, url: len: 115820
+
+05-24 10:27:39.656  lynx      
+  [6DCA2D63C0:ERROR:timing_map.cc(20)] Set duplicated timing_key, timing_key is loadBundleStart
+  [6DCA2D63C0:ERROR:timing_map.cc(20)] Set duplicated timing_key, timing_key is load_template_start
+
+05-24 10:27:39.656  LynxTemplateRender  
+  1779589659656 renderTemplate LynxView 1779589659594-27245688 
+  retain TemplateData for lifecycle, url=, data=com.lynx.tasm.TemplateData@3db9495, listSize=1, bindContextEnabled=false
+
+05-24 10:27:39.656  lynx      [6DCA3E23C0:INFO:lynx_module_android.cc(61)] NativeModule: LynxModuleAndroid Create: GoBackendModule
+
+05-24 10:27:39.656  lynx      [6DCA3E23C0:INFO:method_invoker.cc(481)] NativeModule: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (GoBackendModule.getBackendStatus.) will fire 0xB40000708103A728
+
+05-24 10:27:39.657  lynx      [6DCA3E23C0:INFO:method_invoker.cc(565)] NativeModules: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (GoBackendModule.getBackendStatus.) call platform implementation0xB40000708103A728
+
+05-24 10:27:39.657  LynxTemplateRender  updateViewport is unnecessary, because the size of the cache are the same as the size to be set.
+
+05-24 10:27:39.657  lynx      
+  [6DCA3E23C0:INFO:event_target.cc(98)] EventTarget::DispatchEvent name: __OnLifecycleEvent, phase: 2, target: 0, listener options: 0
+  [6DCA3E23C0:INFO:js_event_listener.cc(38)] JSClosureEventListener::Invoke name: __OnLifecycleEvent
+  [6DCA3E23C0:INFO:js_app.cc(1248)] LYNX PageProxy get -> GeneratePipelineOptions0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1274)] LYNX PageProxy get -> OnPipelineStart0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1356)] LYNX PageProxy get -> BindPipelineIdWithTimingFlag0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1325)] LYNX PageProxy get -> MarkPipelineTiming0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1178)] LYNX PageProxy get -> callLepusMethod0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(3537)]  CallLepusMethod: rLynxChange 0xB400006F211AA630
+  [6DCA3E23C0:INFO:event_target.cc(98)] EventTarget::DispatchEvent name: __OnAppFirstScreen, phase: 2, target: 0, listener options: 0
+  [6DCA3E23C0:INFO:js_event_listener.cc(38)] JSClosureEventListener::Invoke name: __OnAppFirstScreen
+  [6DCA3E23C0:INFO:js_app.cc(2545)] call jsmodule:GlobalEventEmitter.emit.onWindowResize 0xB400006F211AA630
+  [6DCA3E23C0:INFO:event_target.cc(98)] EventTarget::DispatchEvent name: __OnNativeAppReady, phase: 2, target: 0, listener options: 0
+  [6DCA3E23C0:INFO:js_event_listener.cc(38)] JSClosureEventListener::Invoke name: __OnNativeAppReady
+  [6DCA3E23C0:INFO:js_app.cc(2545)] call jsmodule:GlobalEventEmitter.emit.onFontScaleChanged 0xB400006F211AA630
+  [6DCA3E23C0:INFO:lynx_console.cc(246)] "startPlayback: step1 result={"running":true,"port":2025}"
+  [6DCA3E23C0:INFO:method_invoker.cc(481)] NativeModule: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) will fire 0xB400007081044288
+
+05-24 10:27:39.659  LynxPlayer  startPlayback: step1 result={"running":true,"port":2025}
+
+05-24 10:27:39.659  lynx      
+  [6DCA3E23C0:INFO:method_invoker.cc(565)] NativeModules: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) call platform implementation0xB400007081044288
+  [6DCA3E23C0:INFO:lynx_console.cc(246)] "startPlayback: step3 getStreamUrl path=/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4"
+
+05-24 10:27:39.659  LynxPlayer  startPlayback: step3 getStreamUrl path=/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4
+
+05-24 10:27:39.659  lynx      [6DCA3E23C0:INFO:method_invoker.cc(481)] NativeModule: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (GoBackendModule.getStreamUrl./123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4) will fire 0xB4000070810388E8
+
+05-24 10:27:39.659  lynx      
+  [6DCA3E23C0:INFO:method_invoker.cc(565)] NativeModules: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (GoBackendModule.getStreamUrl./123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4) call platform implementation0xB4000070810388E8
+  [6DCA3E23C0:INFO:lynx_console.cc(246)] "startPlayback: step3 url=http://127.0.0.1:2025/stream?path=/123%E4%BA%91%E7%9B%98/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4"
+  [6DCA3E23C0:INFO:method_invoker.cc(481)] NativeModule: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) will fire 0xB400007081044288
+
+05-24 10:27:39.660  LynxPlayer  startPlayback: step3 url=http://127.0.0.1:2025/stream?path=/123%E4%BA%91%E7%9B%98/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4
+
+05-24 10:27:39.660  lynx      
+  [6DCA3E23C0:INFO:method_invoker.cc(565)] NativeModules: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) call platform implementation0xB400007081044288
+  [6DCA3E23C0:INFO:lynx_console.cc(246)] "startPlayback: step4 mpv.play url=http://127.0.0.1:2025/stream?path=/123%E4%BA%91%E7%9B%98/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4"
+
+05-24 10:27:39.660  LynxPlayer  startPlayback: step4 mpv.play url=http://127.0.0.1:2025/stream?path=/123%E4%BA%91%E7%9B%98/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4
+
+05-24 10:27:39.661  MpvPlayerModule  init: MpvPlayerModule created on thread: Lynx_JS
+
+05-24 10:27:39.661  lynx      
+  [6DCA3E23C0:INFO:lynx_module_android.cc(61)] NativeModule: LynxModuleAndroid Create: MpvPlayerModule
+  [6DCA3E23C0:INFO:method_invoker.cc(481)] NativeModule: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (MpvPlayerModule.play.http://127.0.0.1:2025/stream?path=/123%E4%BA%91%E7%9B%98/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4) will fire 0xB400007081023C28
+
+05-24 10:27:39.661  lynx      [6DCA2D63C0:INFO:event_tracker_platform_impl.cc(52)] EventTracker onEvent with name: lynxsdk_setup_timing
+
+05-24 10:27:39.662  LynxEventReporter  eventReporter service not found or event name is null.
+
+05-24 10:27:39.662  lynx      [7163386090:INFO:template_assembler.cc(3336)] TemplateAssembler::CallLepusMethod. this:0xB400006F01169D30 url: method name: rLynxChange
+
+05-24 10:27:39.662  lynx      [6DCA3E23C0:INFO:method_invoker.cc(565)] NativeModules: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (MpvPlayerModule.play.http://127.0.0.1:2025/stream?path=/123%E4%BA%91%E7%9B%98/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4) call platform implementation0xB400007081023C28
+
+05-24 10:27:39.662  lynx      
+  [7163386090:ERROR:layout_context.cc(549)] DestroyLayoutNodeBeforeRemoveFromParent tag:text
+  [7163386090:ERROR:layout_context.cc(549)] DestroyLayoutNodeBeforeRemoveFromParent tag:view
+  [7163386090:ERROR:layout_context.cc(549)] DestroyLayoutNodeBeforeRemoveFromParent tag:raw-text
+
+05-24 10:27:39.662  lynx      
+  [6DCA3E23C0:INFO:js_app.cc(1248)] LYNX PageProxy get -> GeneratePipelineOptions0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1274)] LYNX PageProxy get -> OnPipelineStart0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1325)] LYNX PageProxy get -> MarkPipelineTiming0xB400006FF11017A8
+
+05-24 10:27:39.663  lynx      
+  [7163386090:ERROR:layout_context.cc(549)] DestroyLayoutNodeBeforeRemoveFromParent tag:view
+  [7163386090:ERROR:layout_context.cc(549)] DestroyLayoutNodeBeforeRemoveFromParent tag:text
+  [7163386090:ERROR:layout_context.cc(549)] DestroyLayoutNodeBeforeRemoveFromParent tag:raw-text
+
+05-24 10:27:39.663  lynx      
+  [6DCA3E23C0:INFO:js_app.cc(1178)] LYNX PageProxy get -> callLepusMethod0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(3537)]  CallLepusMethod: rLynxChange 0xB400006F211AA630
+  [6DCA3E23C0:INFO:event_target.cc(98)] EventTarget::DispatchEvent name: __SendGlobalEvent, phase: 2, target: 0, listener options: 0
+  [6DCA3E23C0:INFO:closure_event_listener.cc(38)] ClosureEventListener::Invoke name: __SendGlobalEvent, type: 0
+  [6DCA3E23C0:INFO:js_app.cc(2545)] call jsmodule:GlobalEventEmitter.emit.lynx.performance.timing.onSetup 0xB400006F211AA630
+  [6DCA3E23C0:INFO:lynx_console.cc(246)] "startPlayback: step4 result=true"
+
+05-24 10:27:39.663  lynx      
+  [7163386090:INFO:element_manager.cc(1341)] ElementManager::OnPatchFinishForFiber WithPatch!
+  [6DCA3E23C0:INFO:method_invoker.cc(481)] NativeModule: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) will fire 0xB400007081044288
+
+05-24 10:27:39.663  LynxPlayer  startPlayback: step4 result=true
+
+05-24 10:27:39.663  lynx      
+  [6DCA3E23C0:INFO:method_invoker.cc(565)] NativeModules: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) call platform implementation0xB400007081044288
+  [6DCA3E23C0:INFO:lynx_console.cc(246)] "startPlayback: all steps done, playing"
+  [6DCA3E23C0:INFO:method_invoker.cc(481)] NativeModule: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) will fire 0xB400007081044288
+
+05-24 10:27:39.664  LynxPlayer  startPlayback: all steps done, playing
+
+05-24 10:27:39.664  lynx      
+  [6DCA3E23C0:INFO:method_invoker.cc(565)] NativeModules: LynxModuleAndroid MethodInvoker::InvokeMethod, method: (LogBridge.log.info) call platform implementation0xB400007081044288
+  [6DCA3E23C0:INFO:event_target.cc(98)] EventTarget::DispatchEvent name: __SendGlobalEvent, phase: 2, target: 0, listener options: 0
+  [6DCA3E23C0:INFO:closure_event_listener.cc(38)] ClosureEventListener::Invoke name: __SendGlobalEvent, type: 0
+  [6DCA3E23C0:INFO:js_app.cc(2545)] call jsmodule:GlobalEventEmitter.emit.lynx.performance.onPerformanceEvent 0xB400006F211AA630
+
+05-24 10:27:39.665  LynxTemplateRender  onPageUpdate
+
+05-24 10:27:39.665  lynx      
+  [7163386090:INFO:layout_context.cc(883)] [Layout] layout finish with result size: 1260, 2800 for viewport, size: 1260.0, 2800.0; mode: 1, 1 Time taken: 1613615 ns
+  [7163386090:INFO:template_assembler.cc(3336)] TemplateAssembler::CallLepusMethod. this:0xB400006F01169D30 url: method name: rLynxChange
+  [7163386090:INFO:element_manager.cc(1331)] ElementManager::OnPatchFinishForFiber NoPatch!
+
+05-24 10:27:39.669  ENCV-Service  
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [LynxPlayer] PlayerApp: initData={"filePath":"/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4","fileName":"e844e9ffb6650d294870a6d5ea963ec6mp4.mp4","mimeType":"video/*","isExternal":false,"mediaType":"video"}, filePath=/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4, fileName=e844e9ffb6650d294870a6d5ea963ec6mp4.mp4, isExternal=false
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 |    128µs |       127.0.0.1 | POST     "/api/logs"
+
+05-24 10:27:39.672  ENCV-Service  [go] 🦢 2026-05-24 02:27:39 [31m[ERROR][0m [90m[mobile_api.go:450][0m [LynxPlayer] GlobalEventEmitter not available
+
+05-24 10:27:39.678  ENCV-Service  
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [LynxPlayer] startPlayback: filePath=/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4 isExternal=false mediaType=video fileName=e844e9ffb6650d294870a6d5ea963ec6mp4.mp4
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 137.461µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [GoBackendModule] registerReceiver: registering backend receiver
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 149.231µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [LynxPlayer] startPlayback: step1 getBackendStatus
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [PlayerOverlay] tryAttachMpvModule: mpvModule not yet created
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 416.923µs |       127.0.0.1 | POST     "/api/logs"
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 55.692µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [PlayerOverlayClient] onLoadSuccess
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 172.923µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [GoBackendModule] registerReceiver: registered
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 |     73µs |       127.0.0.1 | POST     "/api/logs"
+
+05-24 10:27:39.680  MpvPlayerModule  init auto-attach: lynx_player_root not found
+
+05-24 10:27:39.681  LynxContext  LynxContext sendGlobalEvent mpv:state-change with this: com.lynx.tasm.LynxTemplateRender$1@9b093b6
+
+05-24 10:27:39.682  lynx      [6DCA3E23C0:INFO:js_app.cc(2545)] call jsmodule:GlobalEventEmitter.emit.mpv:state-change 0xB400006F211AA630
+
+05-24 10:27:39.682  LynxContext  LynxContext sendGlobalEvent mpv:state-change with this: com.lynx.tasm.LynxTemplateRender$1@9b093b6
+
+05-24 10:27:39.683  lynx      [6DCA3E23C0:INFO:js_app.cc(2545)] call jsmodule:GlobalEventEmitter.emit.mpv:state-change 0xB400006F211AA630
+
+05-24 10:27:39.684  LynxContext  LynxContext sendGlobalEvent mpv:state-change with this: com.lynx.tasm.LynxTemplateRender$1@9b093b6
+
+05-24 10:27:39.684  Lynx.IntersectionObserver  onRootViewDraw ObserverHandler
+
+05-24 10:27:39.684  LynxTemplateRender  updateViewport is unnecessary, because the size of the cache are the same as the size to be set.
+
+05-24 10:27:39.684  lynx      [6DCA3E23C0:INFO:js_app.cc(2545)] call jsmodule:GlobalEventEmitter.emit.mpv:state-change 0xB400006F211AA630
+
+05-24 10:27:39.686  lynx      
+  [6DCA3E23C0:INFO:event_target.cc(98)] EventTarget::DispatchEvent name: __SendGlobalEvent, phase: 2, target: 0, listener options: 0
+  [6DCA3E23C0:INFO:closure_event_listener.cc(38)] ClosureEventListener::Invoke name: __SendGlobalEvent, type: 0
+
+05-24 10:27:39.686  lynx      
+  [6DCA3E23C0:INFO:js_app.cc(2545)] call jsmodule:GlobalEventEmitter.emit.lynx.performance.timing.onUpdate 0xB400006F211AA630
+  [6DCA2D63C0:INFO:event_tracker_platform_impl.cc(52)] EventTracker onEvent with name: lynxsdk_update_timing
+
+05-24 10:27:39.687  LynxEventReporter  eventReporter service not found or event name is null.
+
+05-24 10:27:39.687  lynx      
+  [6DCA3E23C0:INFO:event_target.cc(98)] EventTarget::DispatchEvent name: __SendGlobalEvent, phase: 2, target: 0, listener options: 0
+  [6DCA3E23C0:INFO:closure_event_listener.cc(38)] ClosureEventListener::Invoke name: __SendGlobalEvent, type: 0
+  [6DCA3E23C0:INFO:js_app.cc(2545)] call jsmodule:GlobalEventEmitter.emit.lynx.performance.onPerformanceEvent 0xB400006F211AA630
+
+05-24 10:27:39.688  ENCV-Service  
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [LynxPlayer] startPlayback: step4 mpv.play url=http://127.0.0.1:2025/stream?path=/123%E4%BA%91%E7%9B%98/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 132.538µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [LynxPlayer] startPlayback: step3 url=http://127.0.0.1:2025/stream?path=/123%E4%BA%91%E7%9B%98/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 132.616µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [MpvPlayerModule] play: url=http://127.0.0.1:2025/stream?path=/123%E4%BA%91%E7%9B%98/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4, surfaceReady=false, mpvInitialized=false, preInitialized=true
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 56.077µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [MpvPlayerModule] dispatchStateChange: state=waiting_surface
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 133.154µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [LynxPlayer] startPlayback: step3 getStreamUrl path=/123云盘/e844e9ffb6650d294870a6d5ea963ec6mp4.mp4
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 101.461µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [LynxPlayer] startPlayback: step1 result={"running":true,"port":2025}
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 67.384µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [GoBackendModule] getBackendStatus: running=true, port=2025
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 |     92µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [MpvPlayerModule] init: MpvPlayerModule created on thread: Lynx_JS
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 116.692µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [MpvPlayerModule] dispatchStateChange: state=mpv_ready
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 63.077µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [MpvPlayerModule] dispatchStateChange: state=playing
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 149.231µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [PlayerOverlayClient] onRuntimeReady
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 53.615µs |       127.0.0.1 | POST     "/api/logs"
+
+05-24 10:27:39.701  ENCV-Service  
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [LynxPlayer] startPlayback: all steps done, playing
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 105.847µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [LynxPlayer] startPlayback: step4 result=true
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 36.308µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [31m[ERROR][0m [90m[mobile_api.go:450][0m [MpvPlayerModule] init auto-attach: lynx_player_root not found
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 29.538µs |       127.0.0.1 | POST     "/api/logs"
+  [go] 🦢 2026-05-24 02:27:39 [32m[INFO][0m [90m[mobile_api.go:454][0m [PlayerOverlayClient] onFirstScreen
+  [go] [GIN] 2026/05/24 - 02:27:39 | 204 | 126.461µs |       127.0.0.1 | POST     "/api/logs"
+
+05-24 10:27:41.565  Lynx      LynxView dispatchTouchEvent, this: 27245688, touch: 0 x: 910.9004 y: 1197.7998
+
+05-24 10:27:41.572  lynx      
+  [7163386090:INFO:touch_event_handler.cc(166)] HandleTouchEvent page: ;event: touchstart tag:11 ;multiFinger:false
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:10 , with pre_status: 0 , and current_status:8
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:11 , with pre_status: 0 , and current_status:8
+
+05-24 10:27:41.574  Lynx      
+  LynxView onInterceptTouchEvent, this: 27245688
+  LynxView onTouchEvent, this: 27245688
+  LynxView dispatchTouchEvent, this: 27245688, touch: 1 x: 910.9004 y: 1197.7998
+
+05-24 10:27:41.629  lynx      
+  [7163386090:INFO:touch_event_handler.cc(166)] HandleTouchEvent page: ;event: touchend tag:11 ;multiFinger:false
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:10 , with pre_status: 8 , and current_status:0
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:11 , with pre_status: 8 , and current_status:0
+  [7163386090:INFO:touch_event_handler.cc(166)] HandleTouchEvent page: ;event: tap tag:11 ;multiFinger:false
+  [7163386090:INFO:touch_event_handler.cc(1310)] SendPageEvent TouchEvent: tap with function: -2:0:
+  [6DCA3E23C0:INFO:event_target.cc(98)] EventTarget::DispatchEvent name: __SendPageEvent, phase: 2, target: 0, listener options: 0
+  [6DCA3E23C0:INFO:closure_event_listener.cc(38)] ClosureEventListener::Invoke name: __SendPageEvent, type: 0
+
+05-24 10:27:41.630  Lynx      LynxView onTouchEvent, this: 27245688
+
+05-24 10:27:41.630  lynx      
+  [6DCA3E23C0:INFO:js_app.cc(2340)] App::SendPageEvent, handler: -2:0: 0xB400006F211AA630
+  [6DCA3E23C0:INFO:js_app.cc(1248)] LYNX PageProxy get -> GeneratePipelineOptions0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1274)] LYNX PageProxy get -> OnPipelineStart0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1325)] LYNX PageProxy get -> MarkPipelineTiming0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1178)] LYNX PageProxy get -> callLepusMethod0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(3537)]  CallLepusMethod: rLynxChange 0xB400006F211AA630
+  [7163386090:INFO:template_assembler.cc(3336)] TemplateAssembler::CallLepusMethod. this:0xB400006F01169D30 url: method name: rLynxChange
+  [7163386090:INFO:element_manager.cc(1331)] ElementManager::OnPatchFinishForFiber NoPatch!
+
+05-24 10:27:43.390  Lynx      LynxView dispatchTouchEvent, this: 27245688, touch: 0 x: 754.5996 y: 1463.9004
+
+05-24 10:27:43.391  lynx      
+  [7163386090:INFO:touch_event_handler.cc(166)] HandleTouchEvent page: ;event: touchstart tag:11 ;multiFinger:false
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:10 , with pre_status: 0 , and current_status:8
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:11 , with pre_status: 0 , and current_status:8
+
+05-24 10:27:43.392  Lynx      
+  LynxView onInterceptTouchEvent, this: 27245688
+  LynxView onTouchEvent, this: 27245688
+  LynxView dispatchTouchEvent, this: 27245688, touch: 1 x: 754.5996 y: 1463.9004
+
+05-24 10:27:43.434  lynx      
+  [7163386090:INFO:touch_event_handler.cc(166)] HandleTouchEvent page: ;event: touchend tag:11 ;multiFinger:false
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:10 , with pre_status: 8 , and current_status:0
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:11 , with pre_status: 8 , and current_status:0
+  [7163386090:INFO:touch_event_handler.cc(166)] HandleTouchEvent page: ;event: tap tag:11 ;multiFinger:false
+  [7163386090:INFO:touch_event_handler.cc(1310)] SendPageEvent TouchEvent: tap with function: -2:0:
+
+05-24 10:27:43.435  Lynx      LynxView onTouchEvent, this: 27245688
+
+05-24 10:27:43.435  lynx      
+  [6DCA3E23C0:INFO:event_target.cc(98)] EventTarget::DispatchEvent name: __SendPageEvent, phase: 2, target: 0, listener options: 0
+  [6DCA3E23C0:INFO:closure_event_listener.cc(38)] ClosureEventListener::Invoke name: __SendPageEvent, type: 0
+  [6DCA3E23C0:INFO:js_app.cc(2340)] App::SendPageEvent, handler: -2:0: 0xB400006F211AA630
+  [6DCA3E23C0:INFO:js_app.cc(1248)] LYNX PageProxy get -> GeneratePipelineOptions0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1274)] LYNX PageProxy get -> OnPipelineStart0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1325)] LYNX PageProxy get -> MarkPipelineTiming0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1178)] LYNX PageProxy get -> callLepusMethod0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(3537)]  CallLepusMethod: rLynxChange 0xB400006F211AA630
+  [7163386090:INFO:template_assembler.cc(3336)] TemplateAssembler::CallLepusMethod. this:0xB400006F01169D30 url: method name: rLynxChange
+  [7163386090:INFO:element_manager.cc(1331)] ElementManager::OnPatchFinishForFiber NoPatch!
+
+05-24 10:27:45.838  Lynx      LynxView dispatchTouchEvent, this: 27245688, touch: 0 x: 915.7998 y: 1625.5
+
+05-24 10:27:45.839  lynx      
+  [7163386090:INFO:touch_event_handler.cc(166)] HandleTouchEvent page: ;event: touchstart tag:11 ;multiFinger:false
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:10 , with pre_status: 0 , and current_status:8
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:11 , with pre_status: 0 , and current_status:8
+
+05-24 10:27:45.840  Lynx      
+  LynxView onInterceptTouchEvent, this: 27245688
+  LynxView onTouchEvent, this: 27245688
+  LynxView dispatchTouchEvent, this: 27245688, touch: 1 x: 915.7998 y: 1625.5
+
+05-24 10:27:45.890  lynx      
+  [7163386090:INFO:touch_event_handler.cc(166)] HandleTouchEvent page: ;event: touchend tag:11 ;multiFinger:false
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:10 , with pre_status: 8 , and current_status:0
+  [7163386090:INFO:touch_event_handler.cc(419)] HandlePseudoStatusChanged sign:11 , with pre_status: 8 , and current_status:0
+  [7163386090:INFO:touch_event_handler.cc(166)] HandleTouchEvent page: ;event: tap tag:11 ;multiFinger:false
+  [7163386090:INFO:touch_event_handler.cc(1310)] SendPageEvent TouchEvent: tap with function: -2:0:
+  [6DCA3E23C0:INFO:event_target.cc(98)] EventTarget::DispatchEvent name: __SendPageEvent, phase: 2, target: 0, listener options: 0
+
+05-24 10:27:45.891  Lynx      LynxView onTouchEvent, this: 27245688
+
+05-24 10:27:45.891  lynx      
+  [6DCA3E23C0:INFO:closure_event_listener.cc(38)] ClosureEventListener::Invoke name: __SendPageEvent, type: 0
+  [6DCA3E23C0:INFO:js_app.cc(2340)] App::SendPageEvent, handler: -2:0: 0xB400006F211AA630
+  [6DCA3E23C0:INFO:js_app.cc(1248)] LYNX PageProxy get -> GeneratePipelineOptions0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1274)] LYNX PageProxy get -> OnPipelineStart0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1325)] LYNX PageProxy get -> MarkPipelineTiming0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(1178)] LYNX PageProxy get -> callLepusMethod0xB400006FF11017A8
+  [6DCA3E23C0:INFO:js_app.cc(3537)]  CallLepusMethod: rLynxChange 0xB400006F211AA630
+  [7163386090:INFO:template_assembler.cc(3336)] TemplateAssembler::CallLepusMethod. this:0xB400006F01169D30 url: method name: rLynxChange
+  [7163386090:INFO:element_manager.cc(1331)] ElementManager::OnPatchFinishForFiber NoPatch!
+

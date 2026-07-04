@@ -1,0 +1,288 @@
+id: context_exhausted
+description: "上下文耗尽场景（token 上限警告 + 自动压缩尝试 + 失败）— 拟人化 ≥30s，纯通用 UI 文案"
+keywords:
+  - "上下文爆了"
+  - "超长"
+  - "exhausted"
+  - "token limit"
+  - "太长"
+exact_match: "context_exhausted"
+rounds: 1
+
+presets:
+  - id: p_clear_history
+    label: "🧹 清空上下文"
+    user_text: "清空上下文"
+    tooltip: "清空历史会话重试"
+  - id: p_split
+    label: "✂️ 拆分对话"
+    user_text: "拆成新对话"
+    tooltip: "把当前任务拆分到新对话"
+  - id: p_continue
+    label: "➡️ 继续（压缩）"
+    user_text: "压缩后继续"
+    tooltip: "压缩历史后继续回答"
+
+steps:
+  # 阶段 1：思考链（8 段 × 700-800ms ≈ 6000ms）
+  - id: think_1
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "用户要求：处理一段超长对话。" }
+  - id: think_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "当前对话历史已经很长。" }
+  - id: think_3
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "token 占用已经接近模型上限。" }
+  - id: think_4
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "我需要先警告用户。" }
+  - id: think_5
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "然后尝试自动压缩历史。" }
+  - id: think_6
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "如果压缩成功，继续回答。" }
+  - id: think_7
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "如果压缩失败，触发截断。" }
+  - id: think_8
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "准备好进入处理流程。" }
+
+  # 阶段 2：警告推送（6 段 × 600-700ms ≈ 3900ms）
+  - id: warn_1
+    round_idx: 0
+    delay_ms: 400
+    events:
+      - type: stream_start
+        data: { scenario: context_exhausted }
+      - type: text_delta
+        data: { text: "⚠️ 警告：上下文接近上限\n\n" }
+  - id: warn_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "当前对话历史已经很长，" }
+  - id: warn_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "token 占用已经接近模型上限。" }
+  - id: warn_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "我需要尝试自动压缩历史。" }
+  - id: warn_5
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "如果压缩失败，会触发截断。" }
+  - id: warn_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在尝试压缩..." }
+
+  # 阶段 3：压缩尝试（8 段 × 700ms ≈ 5600ms）
+  - id: compress_1
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在分析历史消息..." }
+  - id: compress_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "识别可压缩的旧消息..." }
+  - id: compress_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在总结关键信息..." }
+  - id: compress_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在替换为摘要..." }
+  - id: compress_5
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在重新计算 token 占用..." }
+  - id: compress_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "压缩率不够理想..." }
+  - id: compress_7
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "token 占用仍然过高。" }
+  - id: compress_8
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "无法继续压缩。" }
+
+  # 阶段 4：放弃（5 段 × 800ms ≈ 4000ms）
+  - id: giveup_1
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "已达到 token 上限。" }
+  - id: giveup_2
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "本轮回复将截断（finishReason=length）。" }
+  - id: giveup_3
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "部分内容可能不完整。" }
+  - id: giveup_4
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "建议操作如下：" }
+  - id: giveup_5
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "请选择 chip 完成后续操作。" }
+
+  # 阶段 5：建议（7 段 × 700ms ≈ 4900ms）
+  - id: suggest_1
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "## 后续建议\n\n" }
+  - id: suggest_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "1. **清空上下文**：丢弃历史消息，重新开始\n" }
+  - id: suggest_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "2. **拆分对话**：把当前任务拆到新对话\n" }
+  - id: suggest_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "3. **压缩后继续**：压缩历史消息后继续\n" }
+  - id: suggest_5
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "**风险提示**：清空上下文会丢失之前的所有上下文信息。\n\n" }
+  - id: suggest_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "**建议**：如果当前任务很关键，建议拆分对话。" }
+  - id: suggest_7
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选择你想做的，剩下交给我。" }
+  - id: suggest_8
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "清空上下文会丢失所有历史消息，请谨慎操作。" }
+  - id: suggest_9
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "拆分对话是更安全的做法，新对话从当前节点继续。" }
+  - id: suggest_10
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "压缩后继续会保留部分摘要信息，但可能丢失细节。" }
+
+  # 阶段 6：chip + 收尾
+  - id: push_chips
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: mock_presets
+        data:
+          scenario: context_exhausted
+          phase: after_truncation
+          presets:
+            - id: p_clear_history
+              label: "🧹 清空上下文"
+              user_text: "清空上下文"
+            - id: p_split
+              label: "✂️ 拆分对话"
+              user_text: "拆成新对话"
+            - id: p_continue
+              label: "➡️ 继续（压缩）"
+              user_text: "压缩后继续"
+  - id: end
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: stream_end
+        data:
+          finishReason: length
+          truncated: true
+          usage: { totalTokens: 320000 }

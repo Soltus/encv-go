@@ -1,19 +1,74 @@
-# Session credentials
-.session-env.json
-.mcporter/
-.skills/
-.capabilities/
-# Dependencies
-node_modules/
-# Auto-generated
-.workspace-info.md
-.local/share/opencode/
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.log
+/encv
+/*.7z
+/encv-proxy
+/dist
+/*.token
 
-# >>> tcb-remote-workspace internal ignore rules >>>
-.session-env.json
-.mcporter/
-.skills/
-.capabilities/
-.workspace-info.md
-.local/share/opencode/
-# <<< tcb-remote-workspace internal ignore rules <<<
+# dict
+/_decrypt
+/_decrypted_v2
+/_videos
+/_audios
+/_images
+/_texts
+/_iframes
+/output
+/test_container_effect
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
+go.work
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+/tests
+
+# Mock data (generated, not committed)
+__mock_data__/
+
+# Test run artifacts (test-architecture-refactor-defense-awareness, 2026-06-15)
+.test-runs/
+
+# Local overrides for tracked env-style config files
+scripts/openlist-fork.env.local
+
+# === 编译产物（本地 build 误提交，filter-repo 已清理历史） ===
+/bin/
+/encv-go-server
+/encv-mobile
+/app/encv-mobile/server-go
+/agent/agent-demo
+/agent/cmd/agent-demo/agent-demo
+*.exe

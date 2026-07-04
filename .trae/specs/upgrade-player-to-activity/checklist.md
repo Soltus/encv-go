@@ -1,0 +1,33 @@
+- [x] PlayerActivity.kt 已创建，继承 BridgeActivity，独立注册 GoProcessPlugin
+- [x] PlayerActivity 可独立启动 EncvGoService（后端未运行时）
+- [x] PlayerActivity 注册 BroadcastReceiver 监听后端状态广播并通过 evaluateJavascript 通知前端
+- [x] PlayerActivity 可解析 content:// URI（通过 ContentResolver 获取文件名，尝试解析路径或复制到缓存）
+- [x] PlayerActivity 可解析 file:// URI
+- [x] PlayerActivity WebView 加载完成后导航到 #/standalone/player
+- [x] GoProcessPlugin 新增 isStandaloneMode() 方法，PlayerActivity 中返回 true，MainActivity 中返回 false
+- [x] GoProcessPlugin 新增 getIntentFileInfo() 方法，返回 intent 中的文件路径、文件名、MIME 类型
+- [x] GoProcess.ts 新增 isStandaloneMode() 和 getIntentFileInfo() 的 TypeScript 接口和封装
+- [x] web.ts 新增对应的 web 端空实现
+- [x] AndroidManifest.xml 注册 PlayerActivity，exported=true，launchMode=singleTop
+- [x] AndroidManifest.xml PlayerActivity 包含 ACTION_VIEW intent-filter 支持 video/* MIME 类型
+- [x] AndroidManifest.xml PlayerActivity 包含 ACTION_VIEW intent-filter 支持 audio/* MIME 类型
+- [x] AndroidManifest.xml PlayerActivity 包含 ACTION_VIEW intent-filter 支持 application/x-encv MIME 类型
+- [x] AndroidManifest.xml intent-filter 配置了 file 和 content scheme
+- [x] StandalonePlayer.vue 已创建，无 TabBar，全屏播放区域
+- [x] StandalonePlayer 独立初始化后端连接（isStandaloneMode → getIntentFileInfo → getBackendStatus）
+- [x] StandalonePlayer 显示后端等待状态（加载动画 + 提示文字）
+- [x] StandalonePlayer 使用 ArtPlayer 播放视频，使用 <audio> 播放音频
+- [x] StandalonePlayer 播放错误时显示错误信息和重试按钮
+- [x] StandalonePlayer 监听 encv:backend-ready / encv:backend-status 事件
+- [x] router/index.ts 新增 /standalone/player 顶层路由，指向 StandalonePlayer.vue
+- [x] 后端新增 GET /api/stream/external 端点，支持流式传输任意可访问路径的媒体文件
+- [x] /api/stream/external 支持 Range 请求（断点续传/拖动进度条）
+- [x] /api/stream/external 检查文件存在性、可读性、媒体类型
+- [x] api/encv.ts 新增 getExternalStreamUrl() 函数
+- [x] StandalonePlayer 中 isExternalFile 在独立模式下正确设置为 true
+- [x] StreamExternalFile 正确处理绝对路径（使用 filepath.Clean 而非 SafeURLToAbsPath）
+- [x] 从文件管理器打开视频文件可正常播放（代码逻辑验证通过）
+- [x] 后端未运行时 PlayerActivity 可独立启动后端并播放（代码逻辑验证通过）
+- [x] content:// URI 可正确解析和播放（代码逻辑验证通过）
+- [x] 加密 .encv 文件可通过 ENCV Player 打开播放（代码逻辑验证通过）
+- [x] MainActivity 内部点击视频仍正常播放（不影响现有功能，代码未修改 MainActivity）

@@ -1,0 +1,28 @@
+node_modules
+dist
+dist-ssr
+*.local
+
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ffmpeg-builder v3 编译产物（含 .so 静态库 / 源码 clone / ffmpeg 解压目录）
+# 必须在 git 排除外！否则 git clone x264 后 .git/index 会把 x264 路径加为 gitlink
+# 触发 CI 'fatal: no submodule mapping found in .gitmodules' 错误
+build/ffmpeg/
+
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+ios/
+
+# 编译期 jniLibs 由 build-ffmpeg-lib.yml release 拉取，主工作流不 commit
+android/app/src/main/jniLibs/
+
+android-overlay/app/src/main/jniLibs/

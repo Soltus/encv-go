@@ -1,0 +1,8 @@
+- [x] ComboLite 源码已克隆到 `/tmp/ComboLite`（git clone --depth 1 成功）
+- [x] PluginManager 审计完成：`object` 单例，App 中 EncvApplication/PlayerEntry 用法正确，GoProcessPlugin 反射方式错误
+- [x] InstallerManager 审计完成：`installPlugin(File, Boolean): InstallResult` 签名确认，App 从未正确调用
+- [x] ResourceManager 审计完成：App 完全未集成，插件资源加载链路缺失
+- [x] ProxyManager 审计完成：App 完全未集成，HostActivity/ServicePool 未配置，插件组件无法启动
+- [x] DependencyManager 审计完成：`internal class`，单插件场景不需要直接使用
+- [x] 完整对比矩阵已输出至 spec.md（含严重程度评级和修复建议）
+- [x] 安装确认界面 ASCII 布局对比已完成（ComboLite InstallPermissionScreen vs 当前 ExtensionsPage.vue）
