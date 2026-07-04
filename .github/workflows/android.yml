@@ -125,7 +125,6 @@ jobs:
 
       - name: Build plugin-openlist/web → assets/openlist/
         if: inputs.skip_plugin != true
-        working-directory: app/encv-mobile
         run: bash scripts/build-plugin-openlist-web.sh
 
       - name: Run frontend unit tests (vitest)
