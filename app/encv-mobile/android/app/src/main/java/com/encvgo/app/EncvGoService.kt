@@ -330,23 +330,21 @@ class EncvGoService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification("后端启动中"))
         acquireWakeLock()
         resetStateForStart(source)
-        KotlinDevLogBridge.logWarn(TAG, "Go backend startup initiated by: $source")
-        KotlinDevLogBridge.flushToDisk(this)
+        GoProcessPlugin.pushKotlinLog("warn", TAG, "Go backend startup initiated by: $source")
 
         try {
             ensureConfigExists()
             ensureBuildInfoExists()
             configPort = readConfigPort()
             val binary = findExecutableBinary() ?: run {
-                KotlinDevLogBridge.logError(TAG, "Go backend start failed: no binary found", null)
-                KotlinDevLogBridge.flushToDisk(this)
+                GoProcessPlugin.pushKotlinLog("error", TAG, "Go backend start failed: no binary found")
                 publishFailure("no_binary", source, command)
                 return
             }
 
             val configPath = File(filesDir, "config.user.json").absolutePath
             Log.i(TAG, "Starting backend: ${binary.absolutePath} start")
-            KotlinDevLogBridge.logInfo(TAG, "Starting Go binary: ${binary.absolutePath}")
+            GoProcessPlugin.pushKotlinLog("info", TAG, "Starting Go binary: ${binary.absolutePath}")
 
             // 🆕 2026-06-14：先探测 servingDir 是否可写，不可写则降级到 filesDir。
             //
@@ -400,8 +398,7 @@ class EncvGoService : Service() {
             waitForBackendReady(startupGeneration.get(), source, command)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start backend", e)
-            KotlinDevLogBridge.logError(TAG, "Start exception", e)
-            try { KotlinDevLogBridge.flushToDisk(this) } catch (_: Exception) { }
+            GoProcessPlugin.pushKotlinLog("error", TAG, "Start exception: ${e.message}")
             publishFailure("start_failed:${e.message ?: "unknown"}", source, command)
         }
     }
@@ -452,20 +449,19 @@ class EncvGoService : Service() {
                     synchronized(outputBuffer) {
                         outputBuffer.append(content).append('\n')
                     }
-                    // 🆕 2026-07-04：将 Go 进程 stderr 同时写入 KotlinDevLogBridge，
-                    // 确保 Go 启动失败时日志能通过 KotlinDevLogBridge 被前端 DevLogs 读取
+                    // 🆕 2026-07-04：将 Go 进程 stderr 通过 notifyListeners 实时推送到前端 DevLogs
                     if (content.contains("error", ignoreCase = true) ||
                         content.contains("fatal", ignoreCase = true) ||
                         content.contains("panic", ignoreCase = true) ||
                         content.contains("permission denied", ignoreCase = true)) {
                         lastError = "go_error:$content"
                         publishStatus(lastError, source, command)
-                        KotlinDevLogBridge.logError(TAG, "[go] $content")
+                        GoProcessPlugin.pushKotlinLog("error", TAG, "[go] $content")
                     } else if (content.contains("warn", ignoreCase = true) ||
                                content.contains("failed", ignoreCase = true)) {
-                        KotlinDevLogBridge.logWarn(TAG, "[go] $content")
+                        GoProcessPlugin.pushKotlinLog("warn", TAG, "[go] $content")
                     } else {
-                        KotlinDevLogBridge.logInfo(TAG, "[go] $content")
+                        GoProcessPlugin.pushKotlinLog("info", TAG, "[go] $content")
                     }
                     if (!processReady.get() && readyKeywords.any { content.contains(it, ignoreCase = true) }) {
                         maybeMarkReady(generation, source, command)
@@ -561,8 +557,7 @@ class EncvGoService : Service() {
         updateNotification("后端启动失败")
         publishStatus(error, source, command)
         sendExternalResult(false, error, source, command)
-        KotlinDevLogBridge.logError(TAG, "Backend failure: $error (source=$source)")
-        try { KotlinDevLogBridge.flushToDisk(this) } catch (_: Exception) { }
+        GoProcessPlugin.pushKotlinLog("error", TAG, "Backend failure: $error (source=$source)")
     }
 
     private fun publishStatus(error: String?, source: String = currentSource, command: String? = null) {

@@ -1,4 +1,5 @@
 import { registerPlugin } from "@capacitor/core";
+import type { PluginListenerHandle } from "@capacitor/core";
 
 /**
  * ⚠️ 架构守卫：GoProcess plugin 对象不直接导出
@@ -353,11 +354,14 @@ export async function saveDevLogs(logs: string): Promise<{ success: boolean; pat
 }
 
 /**
- * 🆕 2026-07-04：读取 Kotlin 层本地 DevLog。
- * 返回的 logs 是 JSON 数组字符串，每条包含 timestamp/level/message/source/tags。
- * 前端 DevLogs 页面在 onMounted 时调用此函数注入到 backend tab。
+ * 🆕 2026-07-04：订阅 Kotlin 层实时日志（通过 Capacitor notifyListeners 推送）。
+ *
+ * Kotlin 端的 LogBridge/EncvGoService 调用 GoProcessPlugin.pushKotlinLog()
+ * → notifyListeners('kotlin:log', data) → 推送到前端。
+ *
+ * 在 DevLogs.vue onMounted 中订阅，返回的 handle.remove() 在 onUnmounted 调用。
  */
-export interface KotlinDevLogEntry {
+export interface KotlinLogEvent {
   timestamp: string;
   level: string;
   message: string;
@@ -366,22 +370,10 @@ export interface KotlinDevLogEntry {
   stack?: string;
 }
 
-export async function getKotlinDevLogs(): Promise<{ success: boolean; logs?: KotlinDevLogEntry[] }> {
-  try {
-    const result = await GoProcess.getKotlinDevLogs();
-    if (result.success && result.logs) {
-      try {
-        const parsed = JSON.parse(result.logs) as KotlinDevLogEntry[];
-        return { success: true, logs: parsed };
-      } catch {
-        return { success: true, logs: [] };
-      }
-    }
-    return { success: false };
-  } catch (e) {
-    console.error("[ENCV] GoProcess.getKotlinDevLogs() failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
-    return { success: false };
-  }
+export function addKotlinLogListener(
+  callback: (data: KotlinLogEvent) => void
+): Promise<PluginListenerHandle> {
+  return GoProcess.addListener('kotlin:log', callback);
 }
 
 // 🆕 2026-06-17：读取 android-deps.json manifest

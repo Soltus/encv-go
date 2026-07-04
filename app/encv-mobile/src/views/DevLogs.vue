@@ -266,7 +266,7 @@ import { useI18n } from "@/composables/useI18n";
 import { useRealtimeTransport } from "@/composables/useRealtimeTransport";
 import { showToast } from "@/composables/useToast";
 import { IncrementalFilter, type Level } from "@/utils/IncrementalFilter";
-import { getKotlinDevLogs, type KotlinDevLogEntry } from "@/plugins/GoProcess";
+import { addKotlinLogListener, type KotlinLogEvent } from "@/plugins/GoProcess";
 
 const { t } = useI18n();
 const transport = useRealtimeTransport();
@@ -921,31 +921,33 @@ onMounted(async () => {
     message: `DevLogs ready, server ${serverOnline.value ? "online" : "offline"} (transport=${transport.connectionState.value})`,
   });
 
-  // 🆕 2026-07-04：读取 Kotlin 层本地日志（Go 后端启动失败时尤其重要）
-  // 这些日志通过 KotlinDevLogBridge 写入本地 JSONL 文件，不依赖网络。
-  void (async () => {
-    const result = await getKotlinDevLogs();
-    if (result.success && result.logs && result.logs.length > 0) {
-      console.info(`[DevLogs] injecting ${result.logs.length} Kotlin native log entries`);
-      for (const entry of result.logs) {
-        const level = ["debug", "info", "warn", "error"].includes(entry.level) ? entry.level as Level : "info";
-        queueBackendLog({
-          id: ++nextId,
-          timestamp: entry.timestamp || new Date().toLocaleTimeString("zh-CN", { hour12: false }),
-          level,
-          message: entry.message,
-          source: entry.source || "kotlin",
-          tags: Array.isArray(entry.tags) ? [...entry.tags] : ["kotlin"],
-        });
-      }
-    }
-  })();
+  // 🆕 2026-07-04：订阅 Kotlin 层实时日志 — Capacitor notifyListeners 实时推送
+  // LogBridge / EncvGoService 在 Kotlin 端 pushKotlinLog() → 前端实时收到
+  void addKotlinLogListener(kotlinLogHandler).then(h => { kotlinLogHandle = h; });
 });
+
+/** 实时 Kotlin 日志的 listener handle，在 onUnmounted 中 remove */
+let kotlinLogHandle: { remove: () => void } | null = null;
+
+/** 处理 Kotlin 实时日志推送 */
+function kotlinLogHandler(entry: KotlinLogEvent) {
+  const level = ["debug", "info", "warn", "error"].includes(entry.level) ? entry.level as Level : "info";
+  queueBackendLog({
+    id: ++nextId,
+    timestamp: entry.timestamp || new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+    level,
+    message: entry.message,
+    source: entry.source || "kotlin",
+    tags: Array.isArray(entry.tags) ? [...entry.tags, "kotlin"] : ["kotlin"],
+  });
+}
 
 onUnmounted(() => {
   eventBus.off("ws:message", onWsMessage);
   eventBus.off("server:status", onServerStatus);
   unsubBackendFilter();
+  // 🆕 2026-07-04：取消订阅实时 Kotlin 日志，防止内存泄漏
+  kotlinLogHandle?.remove();
 });
 
 /** 暴露给单元测试（生产环境无副作用） */
