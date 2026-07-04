@@ -13,8 +13,8 @@
 ```
 app/
 ├── pnpm-workspace.yaml
-├── encv-mobile/          # 主应用：去掉 SimVerse 专属代码，依赖 shared-components
-├── simverse-frontend/    # SimVerse 独立前端：自有构建、路由、Tab 导航，依赖 shared-components
+├── encv-mobile/          # 主应用：去掉 Simverse 专属代码，依赖 shared-components
+├── simverse-frontend/    # Simverse 独立前端：自有构建、路由、Tab 导航，依赖 shared-components
 └── packages/
     └── shared-components/ # 共享页面包：HomePage、Settings、DevLogs、Tabs + 基础工具
 ```
@@ -22,14 +22,14 @@ app/
 ### 应用行为
 
 **主应用 (`encv-mobile`)**
-- 保留 HomePage，其中 SimVerse 卡片点击 → 打开 SimVerse Activity（原生）或跳转 SimVerse 应用 URL（Web）
-- 不再包含 `SimverseWorld.vue`、独立入口 HTML、SimVerse 路由
+- 保留 HomePage，其中 SimVerse 卡片点击 -> 打开 Simverse Activity（原生）或跳转 Simverse 应用 URL（Web）
+- 不再包含 `SimverseWorld.vue`、独立入口 HTML、Simverse 路由
 - Settings、DevLogs、Tabs 等页面继续使用共享组件
 
-**SimVerse 应用 (`simverse-frontend`)**
+**Simverse 应用 (`simverse-frontend`)**
 - 独立 Vite 构建，独立 `index.html`
 - 自有 Ionic App + Vue Router，底部 Tab 导航：Home / Settings / DevLogs
-- Home Tab 复用共享 `HomePage.vue`（带有 SimVerse 卡片），点击卡片 → 进入 `/world`（横屏/全屏）
+- Home Tab 复用共享 `HomePage.vue`（带有 SimVerse 卡片），点击卡片 -> 进入 `/world`（横屏/全屏）
 - Settings Tab 复用共享 `Settings.vue`
 - DevLogs Tab 复用共享 `DevLogs.vue`
 - `/world` 路由加载 `SimverseWorld.vue`（从主应用迁移过来）
@@ -109,10 +109,10 @@ API 与数据层（被 Settings/DevLogs 依赖）：
 - `simverse-world.html`
 - `vite.config.ts` 中的 `simverse-world` 入口
 - `router/index.ts` 中的 `/simverse/world` 路由
-- `src/plugins/SimVerse.ts`（迁移到 shared）
+- `src/plugins/SimVerse.ts`（如果迁移到 shared）
 
 保留但修改：
-- `src/views/HomePage.vue` → 改为从 `@encv/shared-components` 导入，调整 SimVerse 卡片点击为打开 SimVerse 应用
+- `src/views/HomePage.vue` -> 改为从 `@encv/shared-components` 导入，调整 SimVerse 卡片点击为打开 Simverse 应用
 
 ## 关键设计决策
 
@@ -141,8 +141,8 @@ import { useI18n } from '@encv/shared-components'
     simverseAction?: 'open-app' | 'enter-world'
   }>()
   ```
-- 主应用传入 `simverseAction="open-app"` → 打开 SimVerse Activity / 跳转 SimVerse URL
-- SimVerse 应用传入 `simverseAction="enter-world"`（或默认）→ 进入世界视图
+- 主应用传入 `simverseAction="open-app"` -> 打开 Simverse Activity / 跳转 Simverse URL
+- Simverse 应用传入 `simverseAction="enter-world"`（或默认）-> 进入世界视图
 - 或通过更通用的 `onSimverseClick` 事件/slot，由父级决定行为
 
 ### 4. Vite 配置对齐
@@ -157,11 +157,11 @@ import { useI18n } from '@encv/shared-components'
 
 后端 `internal/server/simverse_api.go` 中 API 路由 `/api/simverse/*` 保持不变。
 
-新增：为 `simverse-frontend` 的构建产物提供静态文件服务，例如路由 `/simverse/` → 指向 `simverse-frontend/dist/`。
+新增：为 `simverse-frontend` 的构建产物提供静态文件服务，例如路由 `/simverse/` -> 指向 `simverse-frontend/dist/`。
 
 产物目录规划：
-- `encv-mobile/dist/` → 根路径 `/`
-- `simverse-frontend/dist/` → 子路径 `/simverse/`
+- `encv-mobile/dist/` -> 根路径 `/`
+- `simverse-frontend/dist/` -> 子路径 `/simverse/`
 
 可通过嵌入或文件系统挂载实现。
 
@@ -169,10 +169,10 @@ import { useI18n } from '@encv/shared-components'
 
 当前 `simverse-world.html` 作为 Capacitor 的独立 Activity 入口。重构后：
 - `simverse-frontend` 的 `index.html` 成为新的独立 Activity 入口
-- 原生桥接 `plugins/SimVerse.ts` 中 `openWorld` 不再直接打开世界，而是打开 SimVerse 应用（Tab 导航页）
-- 或者保留不同原生 API：`openSimverseApp()` 打开 Tab 导航，`openWorld()` 直接打开世界（在 SimVerse 应用内部或有快捷方式时使用）
+- 原生桥接 `plugins/SimVerse.ts` 中 `openWorld` 不再直接打开世界，而是打开 Simverse 应用（Tab 导航页）
+- 或者保留不同原生 API：`openSimverseApp()` 打开 Tab 导航，`openWorld()` 直接打开世界（在 Simverse 应用内部或有快捷方式时使用）
 
-为简化，本次重构：**统一改为打开 SimVerse 应用首页**（Tab 导航）。世界入口由 SimVerse 应用内的 HomePage 卡片提供。
+为简化，本次重构：**统一改为打开 Simverse 应用首页**（Tab 导航）。世界入口由 Simverse 应用内的 HomePage 卡片提供。
 
 ## 实施步骤（按依赖顺序）
 
@@ -207,14 +207,14 @@ import { useI18n } from '@encv/shared-components'
 20. 创建 `simverse-frontend/src/main.ts`
 21. 创建 `simverse-frontend/src/App.vue`（轻量 App shell，不需要 service guard）
 22. 创建 `simverse-frontend/src/router/index.ts`
-    - `/tabs/home` → HomePage（传入 `simverseAction="enter-world"`）
-    - `/tabs/settings` → Settings.vue
-    - `/tabs/devlogs` → DevLogs.vue
-    - `/world` → SimverseWorld.vue
+    - `/tabs/home` -> HomePage（传入 `simverseAction="enter-world"`）
+    - `/tabs/settings` -> Settings.vue
+    - `/tabs/devlogs` -> DevLogs.vue
+    - `/world` -> SimverseWorld.vue
 23. 从 `encv-mobile` 迁移：
-    - `SimverseWorld.vue` → `simverse-frontend/src/views/SimverseWorld.vue`
-    - `useSimverse.ts` → `simverse-frontend/src/composables/useSimverse.ts`
-    - `useWorldRenderer.ts` → `simverse-frontend/src/composables/useWorldRenderer.ts`
+    - `SimverseWorld.vue` -> `simverse-frontend/src/views/SimverseWorld.vue`
+    - `useSimverse.ts` -> `simverse-frontend/src/composables/useSimverse.ts`
+    - `useWorldRenderer.ts` -> `simverse-frontend/src/composables/useWorldRenderer.ts`
     - 更新迁移文件的内部引用路径
 
 ### Phase 4：改造主应用 encv-mobile
@@ -222,8 +222,8 @@ import { useI18n } from '@encv/shared-components'
 25. 修改 `encv-mobile/src/views/HomePage.vue`
     - 删除本地 HomePage.vue（已在 shared）
     - 在主应用对应路由中改为导入共享 HomePage，传入 `simverseAction="open-app"`
-    - 或者调整 `handleOpenSimverse` 在主应用上下文中打开 SimVerse 应用
-26. 移除 `encv-mobile` 中的 SimVerse 专属文件（SimverseWorld.vue、useSimverse.ts、useWorldRenderer.ts、simverse-world-main.ts、simverse-world.html）
+    - 或者调整 `handleOpenSimverse` 在主应用上下文中打开 Simverse 应用
+26. 移除 `encv-mobile` 中的 Simverse 专属文件（SimverseWorld.vue、useSimverse.ts、useWorldRenderer.ts、simverse-world-main.ts、simverse-world.html）
 27. 修改 `encv-mobile/vite.config.ts`
     - 从 `rollupOptions.input` 中移除 `simverse-world` 入口
     - 添加 `@shared` alias 指向 `../packages/shared-components/src`（如果消费端需要直接引用）
@@ -251,7 +251,7 @@ import { useI18n } from '@encv/shared-components'
 
 在开始执行前，请确认以下细节：
 
-1. SimVerse 应用中的 Settings 和 DevLogs 与主应用的是否需要 **完全一致**（包括所有子页面、功能），还是只需要外观一致的简化版？这决定了是否需要迁移全部依赖链。
-2. 主应用首页 SimVerse 卡片在原生端点击后，是直接打开 SimVerse 应用的 Tab 首页，还是仍希望保留一个"直接进世界"的快捷方式？
+1. Simverse 应用中的 Settings 和 DevLogs 与主应用的是否需要 **完全一致**（包括所有子页面、功能），还是只需要外观一致的简化版？这决定了是否需要迁移全部依赖链。
+2. 主应用首页 SimVerse 卡片在原生端点击后，是直接打开 Simverse 应用的 Tab 首页，还是仍希望保留一个"直接进世界"的快捷方式？
 3. `simverse-frontend` 的 Vite dev server 端口期望是多少？（建议 8200，与主应用 8100 区分）
 4. 后端对 `/simverse/` 静态文件的服务方式是否有偏好（Go embed / 文件系统 / 代理）？
