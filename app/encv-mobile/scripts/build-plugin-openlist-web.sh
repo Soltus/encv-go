@@ -61,21 +61,11 @@ esac
 step() { echo ""; echo "==> $*"; }
 
 # ---- Step 1: 确保 monorepo 安装 ----
-step "1/5 pnpm install（确保 @encvgo/components 已链接）"
+step "1/4 pnpm install（workspace 依赖）"
 cd "${MOBILE_DIR}"
 pnpm install --no-frozen-lockfile --silent
-
-# ---- Step 2: 校验 monorepo 链接 ----
-step "2/5 校验 @encvgo/components 链接"
-if [[ ! -e "${WEB_DIR}/node_modules/@encvgo/components" ]]; then
-  echo "    ❌ @encvgo/components 未链接"
-  echo "    请检查 pnpm-workspace.yaml 是否包含 packages/*"
-  exit 1
-fi
-echo "    ✅ @encvgo/components → $(readlink -f "${WEB_DIR}/node_modules/@encvgo/components" 2>/dev/null || echo "exists")"
-
-# ---- Step 3: 构建 plugin web ----
-step "3/5 pnpm exec vite build ${VITE_ARGS[*]:-}（Vite 构建 plugin-openlist/web，mode=${BUILD_MODE}）"
+# ---- Step 2: 构建 plugin web ----
+step "2/4 pnpm exec vite build ${VITE_ARGS[*]:-}（Vite 构建 plugin-openlist/web，mode=${BUILD_MODE}）"
 cd "${WEB_DIR}"
 pnpm exec vite build "${VITE_ARGS[@]}" --logLevel warn
 
@@ -84,8 +74,8 @@ if [[ ! -d "dist" ]]; then
   exit 1
 fi
 
-# ---- Step 4: 校验产物结构 ----
-step "4/5 校验构建产物"
+# ---- Step 3: 校验产物结构 ----
+step "3/4 校验构建产物"
 if [[ ! -f "dist/index.html" ]]; then
   echo "    ❌ dist/index.html 缺失"
   exit 1
@@ -110,8 +100,8 @@ find dist -type f | head -20 | sed 's/^/      /'
 SIZE=$(du -sh dist | cut -f1)
 echo "    总大小：${SIZE}"
 
-# ---- Step 5: 同步到 plugin assets ----
-step "5/5 同步到 ${ASSETS_DIR}"
+# ---- Step 4: 同步到 plugin assets ----
+step "4/4 同步到 ${ASSETS_DIR}"
 rm -rf "${ASSETS_DIR}"
 mkdir -p "${ASSETS_DIR}"
 cp -r dist/. "${ASSETS_DIR}/"

@@ -82,18 +82,7 @@ fi
 cd "${WEB_DIR}"
 
 # ---- Step 2: 校验 monorepo 链接（@encvgo/components 共享包）----
-step "2/4 校验 @encvgo/components workspace 链接"
-if [[ ! -d "${WEB_DIR}/node_modules/@encvgo/components" ]]; then
-  echo "    ⚠️ @encvgo/components 未链接，pnpm install 重试"
-  cd "${MOBILE_DIR}"
-  pnpm install --no-frozen-lockfile
-  cd "${WEB_DIR}"
-fi
-if [[ -L "${WEB_DIR}/node_modules/@encvgo/components" ]]; then
-  echo "    ✅ @encvgo/components → $(readlink -f "${WEB_DIR}/node_modules/@encvgo/components")"
-else
-  echo "    ✅ @encvgo/components 已存在"
-fi
+step "2/4 跳过 @encvgo/components 检查（该共享包已于 pnpm+Vite 8 重构中移除）"
 
 # ---- Step 3: 启动 Vite dev server ----
 step "3/4 启动 Vite dev server (port ${VITE_PORT})"
