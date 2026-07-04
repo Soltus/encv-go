@@ -1,0 +1,10 @@
+import type { FileBadge } from "@/types/file-feature";
+import { isAlistEncrypted } from "./useAlistEncrypt";
+
+export function getAlistBadge(file: any): FileBadge | null {
+  if (!isAlistEncrypted(file)) return null;
+  return {
+    text: "AE",
+    color: "danger",
+  };
+}

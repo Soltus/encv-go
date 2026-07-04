@@ -1,0 +1,28 @@
+
+# CLI tool, only in development environment.
+# https://goframe.org/docs/cli
+gfcli:
+  gen:
+    dao:
+      # sqlite需要自行编译带sqlite驱动的gf，下载库代码后修改路径文件（gf\cmd\gf\internal\cmd\cmd_gen_dao.go）的import包，取消注释即可。sqlite驱动依赖了gcc
+      - link: "sqlite::@file(internal/admin/resource/db/encv-admin.db)"
+        path: "internal/admin/model"
+    server:
+      openapiPath: "/admin/api.json"
+      swaggerPath: "/admin/swagger"
+      DumpRouterMap: true
+      # 【关键】在这里添加 OpenApi 配置
+      OpenApi:
+        # 启用 OpenApi 功能
+        Enabled: true
+        # 自定义 Swagger UI 的访问路径，可选，默认为 "/swagger/"
+        Path: "/admin/swagger"
+        # 自定义 API JSON 文档的访问路径，可选，默认为 "/api.json"
+        ApiPath:  "/admin/api.json"
+        # (可选) 是否在生产环境中禁用
+        # DisabledWhenProd: true
+
+  docker:
+    build: "-a amd64 -s linux -p temp -ew"
+    tagPrefixes:
+      - my.image.pub/my-app

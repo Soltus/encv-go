@@ -1,0 +1,10 @@
+- [x] bin2c 对 CSS 文件生成的符号名为 `ff_graph_css_data`（而非 `ff_graph_data`）
+- [x] bin2c 对 HTML 文件生成的符号名为 `ff_graph_html_data`（而非 `ff_graph_data`）
+- [x] CSS 和 HTML 生成的符号名不再冲突（无重复定义）
+- [x] `CONFIG_RESOURCE_COMPRESSION` 配置与资源数据格式一致（压缩或非压缩）
+- [x] 链接后 `libffmpeg.so` 中包含 `ff_graph_css_data` 和 `ff_graph_html_data` 符号
+- [x] 构建后符号验证步骤能检测到资源符号缺失并报错
+- [x] `--allow-multiple-definition` 的使用有明确注释说明原因
+- [ ] 清除缓存后完整构建成功，无编译/链接错误（需 CI 环境验证）
+- [ ] `nm` 验证 `libffmpeg.so` 中 `ff_graph_css_data` 和 `ff_graph_html_data` 存在（需 CI 环境验证）
+- [ ] `nm` 验证 `libffprobe.so` 不引用不存在的资源符号（ffprobe 不包含 graph 模块）（需 CI 环境验证）

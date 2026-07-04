@@ -1,0 +1,10 @@
+- [x] InstallConfirmActivity.kt 存在且继承 ComponentActivity（Compose）
+- [x] APK 图标正确提取（56dp 圆角12）或降级为默认图标
+- [x] 布局包含：TopAppBar(返回按钮) + 图标+名称+版本 + 警告横幅 + InfoRow×3 + 确认按钮 + 取消链接
+- [x] 「确认安装」按钮返回 RESULT_OK，「取消」返回 RESULT_CANCELED
+- [x] InstallConfirmActivity 已在 AndroidManifest.xml 中声明
+- [x] GoProcessPlugin.installPlugin() 先启动确认 Activity 再安装
+- [x] GoProcessPlugin.installFromPath() 同上
+- [x] 用户取消时 call.reject() 包含合理错误信息
+- [x] 无 Kotlin 编译错误（import 完整、Compose API 正确）
+- [x] 视觉风格与 ComboLite 官方 InstallPermissionScreen 一致（Material3 配色/间距/圆角）

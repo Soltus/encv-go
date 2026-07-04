@@ -1,0 +1,41 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # ──────────────────────────────────────────────────────────
+  # go run 路径（2026-06-10 用户决策 + 沙箱验证）
+  #
+  # 关键发现（沙箱）：
+  #   - air 跟踪 cmd 派生的进程组，pipe (`cmd | tee`) 让 air 误判
+  #     父进程退出 → 立即重启 → 永远启不起来
+  #   - 必须用 `bash -c '...'` 包装：air 看到单一 bash 进程
+  #     pipe 在 bash 内部运行，air 跟踪 bash 即可
+  #   - `bin` 字段不能指向不存在的文件（否则重启失败 exit 127）
+  #     → 留空让 air 复用 cmd
+  # ──────────────────────────────────────────────────────────
+  cmd = "bash -c 'export ENCV_MOBILE=${ENCV_MOBILE:-1}; export ENCV_DEV_PREVIEW=${ENCV_DEV_PREVIEW:-1}; go run ./cmd/encv start 2>&1 | tee ./tmp/encv-go-run.log'"
+  bin = ""
+  delay = 5000         # 5s 防 pipe 死锁误判
+  grace_delay = 10000  # 10s 冷编空间
+  exclude_regex = ["_test\\.go$"]
+  exclude_dir = [
+    "node_modules",
+    ".git",
+    "dist",
+    "output",
+    "tmp",
+    "app/encv-mobile/dist",
+    "app/encv-mobile/node_modules",
+    "plugin-mpv-player",
+    ".trae",
+  ]
+  include_ext = ["go", "mod", "sum"]
+
+[log]
+  time = true
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = true

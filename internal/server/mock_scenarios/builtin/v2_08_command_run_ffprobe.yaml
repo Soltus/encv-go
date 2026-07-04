@@ -1,0 +1,312 @@
+id: command_run_ffprobe
+description: "执行 ffprobe 命令（提取视频/音频元数据）— 拟人化 ≥30s，纯通用 UI 文案"
+keywords:
+  - "command_run_ffprobe"
+  - "ffprobe"
+  - "提取元数据"
+  - "视频信息"
+exact_match: "command_run_ffprobe"
+rounds: 1
+
+presets:
+  - id: show_metadata
+    label: "📊 看完整元数据"
+    user_text: "看完整元数据"
+  - id: extract_thumbnail
+    label: "🖼️ 抽缩略图"
+    user_text: "抽缩略图"
+  - id: cancel
+    label: "❌ 取消"
+    user_text: "取消"
+
+steps:
+  # 阶段 1：思考链（8 段 × 700-800ms ≈ 6000ms）
+  - id: think_1
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "用户要求：执行 ffprobe 提取元数据。" }
+  - id: think_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "ffprobe 是 ffmpeg 自带的元数据提取工具。" }
+  - id: think_3
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "需要构造 ffprobe 命令：show_streams + show_format。" }
+  - id: think_4
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "参数：input_path + output_format=json。" }
+  - id: think_5
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "这是只读操作（ffprobe），但走 command_run 必须确认。" }
+  - id: think_6
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "auto_run=false，需要用户先确认命令内容。" }
+  - id: think_7
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "确认后真正调用 command_run 执行。" }
+  - id: think_8
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "准备好调用工具。" }
+
+  # 阶段 2：过渡文本（6 段 × 500-700ms ≈ 3700ms）
+  - id: intro_1
+    round_idx: 0
+    delay_ms: 400
+    events:
+      - type: stream_start
+        data: { scenario: command_run_ffprobe }
+      - type: text_delta
+        data: { text: "好的，我来执行 ffprobe。" }
+  - id: intro_2
+    round_idx: 0
+    delay_ms: 500
+    events:
+      - type: text_delta
+        data: { text: "目标：提取视频/音频文件的详细元数据。" }
+  - id: intro_3
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "用 show_streams + show_format 模式。" }
+  - id: intro_4
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "命令：ffprobe -v quiet -print_format json -show_streams -show_format <file>。" }
+  - id: intro_5
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "走 command_run 工具，需要先确认命令内容。" }
+  - id: intro_6
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "开始调用工具..." }
+
+  # 阶段 3：工具调用（3000ms）— 模拟用户确认后执行
+  - id: tool_call
+    round_idx: 0
+    delay_ms: 3000
+    events:
+      - type: tool_call
+        data:
+          id: call_crf_1
+          name: command_run
+          args:
+            cmd: "ffprobe"
+            args:
+              - "-v"
+              - "quiet"
+              - "-print_format"
+              - "json"
+              - "-show_streams"
+              - "-show_format"
+            stdin_file: ""
+            timeout_ms: 30000
+          auto_run: true
+          needsConfirm: false
+          kind: commandRun
+          execute_real: true
+
+  # 阶段 4：处理结果（14 段 × 600-700ms ≈ 9500ms）
+  - id: process_1
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "ffprobe 执行完成。" }
+  - id: process_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在解析输出..." }
+  - id: process_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "工具返回了元数据，详情见上方工具结果。" }
+  - id: process_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在提取流信息..." }
+  - id: process_5
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在提取容器格式..." }
+  - id: process_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在解析码率..." }
+  - id: process_7
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在识别音视频轨道..." }
+  - id: process_8
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在解析编解码器..." }
+  - id: process_9
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在提取时长和分辨率..." }
+  - id: process_10
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "完整元数据见工具返回结果。" }
+  - id: process_11
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在准备下一步建议..." }
+  - id: process_12
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在分析元数据质量..." }
+  - id: process_13
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "根据元数据，建议如下：" }
+  - id: process_14
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选择你想做的，剩下交给我。" }
+
+  # 阶段 5：总结建议（10 段 × 500-700ms ≈ 6000ms）
+  - id: summary_1
+    round_idx: 0
+    delay_ms: 500
+    events:
+      - type: text_delta
+        data: { text: "## ffprobe 元数据提取\n\n" }
+  - id: summary_2
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "已提取完整元数据，详情见上方工具结果。\n\n" }
+  - id: summary_3
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "**建议**（点击 chip 直接执行）：\n\n" }
+  - id: summary_4
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "1. 查看完整元数据\n" }
+  - id: summary_5
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "2. 抽缩略图\n" }
+  - id: summary_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "3. 用元数据做更精确搜索\n" }
+  - id: summary_7
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "4. 编辑元数据\n" }
+  - id: summary_8
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "5. 跳过\n" }
+  - id: summary_9
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "6. 重新跑 ffprobe（不同参数）\n" }
+  - id: summary_10
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选择你想做的，剩下交给我。" }
+
+  # 阶段 6：chip + 收尾
+  - id: push_chips
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: mock_presets
+        data:
+          scenario: command_run_ffprobe
+          phase: after_ffprobe
+          presets:
+            - id: show_metadata
+              label: "📊 看完整元数据"
+              user_text: "看完整元数据"
+            - id: extract_thumbnail
+              label: "🖼️ 抽缩略图"
+              user_text: "抽缩略图"
+            - id: cancel
+              label: "❌ 取消"
+              user_text: "取消"
+  - id: end
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 1560 }

@@ -1,0 +1,25 @@
+// Compose source: com.encvgo.plugin.mpv.MpvAudioPlayerScreen
+// This is a placeholder — the actual Compose implementation will be generated
+// from the web prototype during the prototype-to-Compose conversion process.
+
+@Composable
+fun MpvAudioPlayerScreen(
+    viewModel: MpvAudioPlayerViewModel = viewModel(),
+    onBack: () -> Unit,
+) {
+    // TODO: Generate from web prototype
+    // Web prototype: MpvAudioOnlyPrototype.vue
+    //
+    // Features to implement:
+    // - Gradient blue-purple background
+    // - Spinning vinyl disc animation (rotating while playing)
+    // - Track title + artist info
+    // - Progress bar with time display
+    // - Play/pause button with gradient + glow
+    // - Skip forward/back
+    // - Speed chip
+    // - Volume mini bar
+    Box(modifier = Modifier.fillMaxSize()) {
+        Text("MpvAudioPlayerScreen — placeholder", color = Color.White)
+    }
+}

@@ -1,0 +1,86 @@
+id: chinese_greeting
+description: "单字符 chunk 流式 — 验证中文不丢字"
+keywords:
+  - "你好"
+  - "hello"
+  - "hi"
+  - "在吗"
+  - "哈喽"
+
+presets:
+  - id: p_greet_files
+    label: "📁 看看文件"
+    user_text: "有哪些视频文件"
+    tooltip: "跳到 list_files_query"
+  - id: p_greet_help
+    label: "❓ 你能做什么"
+    user_text: "你能做什么"
+    tooltip: "跳到 default_friendly"
+  - id: p_greet_encrypt
+    label: "🔒 加密视频"
+    user_text: "加密这个视频"
+    tooltip: "跳到 encrypt_video"
+
+steps:
+  - id: start
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: chinese_greeting }
+  - id: char_1
+    delay_ms: 50
+    events:
+      - type: text_delta
+        data: { text: "你" }
+  - id: char_2
+    delay_ms: 50
+    events:
+      - type: text_delta
+        data: { text: "好" }
+  - id: char_3
+    delay_ms: 50
+    events:
+      - type: text_delta
+        data: { text: "！" }
+  - id: char_4
+    delay_ms: 50
+    events:
+      - type: text_delta
+        data: { text: "我" }
+  - id: char_5
+    delay_ms: 50
+    events:
+      - type: text_delta
+        data: { text: "是" }
+  - id: char_6
+    delay_ms: 50
+    events:
+      - type: text_delta
+        data: { text: "EN" }
+  - id: char_7
+    delay_ms: 50
+    events:
+      - type: text_delta
+        data: { text: "CV" }
+  - id: char_8
+    delay_ms: 50
+    events:
+      - type: text_delta
+        data: { text: "助" }
+  - id: char_9
+    delay_ms: 50
+    events:
+      - type: text_delta
+        data: { text: "手" }
+  - id: char_10
+    delay_ms: 50
+    events:
+      - type: text_delta
+        data: { text: "。" }
+  - id: end
+    delay_ms: 100
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 16 }

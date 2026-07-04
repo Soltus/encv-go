@@ -1,0 +1,26 @@
+export default {
+  "zh-CN": {
+    "player.title": "播放器",
+    "player.loading": "正在加载...",
+    "player.noMedia": "未选择媒体",
+    "player.noMediaDesc": "从文件标签页选择视频或音频文件进行播放。",
+    "player.browseFiles": "浏览文件",
+    "player.playFailed": '播放 "{name}" 失败，文件可能已损坏或服务器不可用。',
+    "player.playError": "播放失败",
+    "player.playErrorDesc": "无法播放此文件，请检查文件格式或服务器状态。",
+    "player.backToFiles": "返回文件列表",
+    "player.retryPlay": "重试",
+  },
+  en: {
+    "player.title": "Player",
+    "player.loading": "Loading...",
+    "player.noMedia": "No Media Selected",
+    "player.noMediaDesc": "Select a video or audio file from the Files tab to play.",
+    "player.browseFiles": "Browse Files",
+    "player.playFailed": 'Failed to play "{name}". The file may be corrupted or the server is unavailable.',
+    "player.playError": "Playback Error",
+    "player.playErrorDesc": "Unable to play this file. Check the file format or server status.",
+    "player.backToFiles": "Back to Files",
+    "player.retryPlay": "Retry",
+  },
+};

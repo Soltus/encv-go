@@ -1,0 +1,28 @@
+{
+  "name": "preview-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sandbox preview gateway: unify 4 upstream dev servers behind a single :16000 port",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "test": "tsx --test src/__tests__/*.test.ts",
+    "test:run": "tsx --test src/__tests__/*.test.ts"
+  },
+  "dependencies": {
+    "http-proxy": "^1.18.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/http-proxy": "^1.17.16",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,66 @@
+id: reasoning_chain
+description: "reasoning_delta + text_delta 交替 — 验证 reasoning 字段排序"
+keywords:
+  - "推理"
+  - "思考"
+  - "分析"
+  - "reasoning"
+  - "step by step"
+
+presets:
+  - id: p_why
+    label: "❓ 追问"
+    user_text: "为什么"
+    tooltip: "追问决策依据"
+  - id: p_alternative
+    label: "🔄 换思路"
+    user_text: "换个思路分析"
+    tooltip: "重新推理"
+  - id: p_save_reasoning
+    label: "💾 保存推理过程"
+    user_text: "保存推理过程"
+    tooltip: "保存到文件"
+
+steps:
+  - id: start
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: reasoning_chain }
+  - id: think1
+    delay_ms: 200
+    events:
+      - type: reasoning_delta
+        data: { text: "让我先分析问题..." }
+  - id: think2
+    delay_ms: 300
+    events:
+      - type: reasoning_delta
+        data: { text: "需要考虑多个因素。" }
+  - id: think3
+    delay_ms: 300
+    events:
+      - type: reasoning_delta
+        data: { text: "综合各因素的优劣..." }
+  - id: answer1
+    delay_ms: 200
+    events:
+      - type: text_delta
+        data: { text: "根据以上分析，" }
+  - id: answer2
+    delay_ms: 200
+    events:
+      - type: text_delta
+        data: { text: "我的答案是..." }
+  - id: answer3
+    delay_ms: 200
+    events:
+      - type: text_delta
+        data: { text: "综合各因素，已给出最佳方案。" }
+  - id: end
+    delay_ms: 100
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 234 }

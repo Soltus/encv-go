@@ -1,0 +1,6 @@
+- [x] GoProcessPlugin.kt L172 包含 `override fun checkPermissions(call: PluginCall)`
+- [x] GoProcessPlugin.kt 包含 `import android.content.pm.ActivityInfo`
+- [x] GoProcessPlugin.kt L181-183 使用 `ActivityInfo.SCREEN_ORIENTATION_*` 无编译错误
+- [x] LogExporter.kt L42 使用 `.inputStream()` 方法调用（带括号）
+- [ ] Kotlin 编译无错误（需 CI 验证）
+- [x] job_logs.zip 和解压目录已清理

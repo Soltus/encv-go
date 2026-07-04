@@ -1,0 +1,210 @@
+name: Full Regression (Layer 2)
+
+# =====================================================
+# Layer 2 标签触发 — 防恶意消耗核心
+#
+# 触发（任一）：
+#   1. PR 上加 ci:full 标签（maintainer 决策，最常用）
+#   2. Actions UI 手动 Run workflow
+#   3. push to main（merge 后最终验证）
+#
+# 跑什么：
+#   - ENCV_TEST_FULL=1 bash scripts/test-all-go.sh  (Go 全包 regression)
+#   - pnpm vitest --coverage  (frontend coverage)
+#
+# 与 Layer1 关系：
+#   - Layer1 (pr-check.yml) 必跑，作为 required check
+#   - Layer2 由 maintainer 决策，**不**设 required check
+#   - 不通过 Layer2 也可以 merge（PR 作者已加 ci:full 说明愿意跑全量）
+#
+# 安全红线：
+#   - 用 pull_request 事件，不用 pull_request_target
+#     （避免 fork PR 拿到 secrets 偷跑恶意代码）
+#   - detect-and-guard job 强制校验 ci:full 标签存在
+#   - 不通过 guard → 整个 workflow 跳过（轻量 job，~1s）
+# =====================================================
+
+on:
+  pull_request:
+    types: [opened, synchronize, labeled, reopened, edited]
+    branches: [main, dev]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch / ref to test (default: main)'
+        required: false
+        default: 'main'
+        type: string
+
+concurrency:
+  group: full-regression-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  NDK_VERSION: "26.1.10909125"
+  MONOREPO_MOBILE_DIR: "app/encv-mobile"
+
+jobs:
+  # ── 标签守卫（强制 ci:full 存在才放行） ──
+  detect-and-guard:
+    name: Detect ci:full label
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    outputs:
+      should-run: ${{ steps.check.outputs.should-run }}
+      resolved-ref: ${{ steps.check.outputs.resolved-ref }}
+    steps:
+      - name: Determine if Layer 2 should run
+        id: check
+        run: |
+          set -e
+          # workflow_dispatch 永远跑
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            REF="${{ inputs.branch || 'main' }}"
+            echo "should-run=true (workflow_dispatch, ref=$REF)" >> "$GITHUB_OUTPUT"
+            echo "resolved-ref=$REF" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # push to main 永远跑
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "should-run=true (push to ${{ github.ref_name }})" >> "$GITHUB_OUTPUT"
+            echo "resolved-ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # pull_request: 必须有 ci:full 标签
+          LABELS='${{ toJSON(github.event.pull_request.labels.*.name) }}'
+          echo "PR #${{ github.event.pull_request.number }} labels: $LABELS"
+          if echo "$LABELS" | grep -q "ci:full"; then
+            REF="${{ github.event.pull_request.head.sha }}"
+            echo "should-run=true (ci:full label present, ref=$REF)" >> "$GITHUB_OUTPUT"
+            echo "resolved-ref=$REF" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "should-run=false (no ci:full label; skipped to save CI minutes)" >> "$GITHUB_OUTPUT"
+          # resolved-ref 留空，下游 jobs 会被 should-run=false 跳过
+
+  # ── Go 全包 regression ──
+  go-full-regression:
+    name: Go full regression (ENCV_TEST_FULL=1)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: detect-and-guard
+    if: needs.detect-and-guard.outputs.should-run == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.detect-and-guard.outputs.resolved-ref }}
+          fetch-depth: 1
+          submodules: false  # 防御
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ./go.mod
+          cache-dependency-path: go.sum
+
+      - name: Run Go full regression
+        run: |
+          echo "═══ Go Full Regression (Layer 2, ENCV_TEST_FULL=1) ═══"
+          # CI 模式：解除 -short + 跑全包
+          ENCV_TEST_FULL=1 bash scripts/test-all-go.sh 2>&1 | tee go-regression-output.txt
+          rc=${PIPESTATUS[0]}
+          echo ""
+          echo "exit_code=$rc"
+          echo "  0=OK / 1=FAIL / 64=GUARD_REJECTED / 124=TIMEOUT / 137=OOM"
+          exit $rc
+
+      - name: Upload Go regression output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: layer2-go-regression-output
+          path: go-regression-output.txt
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ── Frontend coverage ──
+  frontend-coverage:
+    name: Frontend vitest coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: detect-and-guard
+    if: needs.detect-and-guard.outputs.should-run == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.detect-and-guard.outputs.resolved-ref }}
+          fetch-depth: 1
+          submodules: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+          cache-dependency-path: ${{ env.MONOREPO_MOBILE_DIR }}/pnpm-lock.yaml
+
+      - name: Cache pnpm dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.MONOREPO_MOBILE_DIR }}/node_modules
+            ${{ env.MONOREPO_MOBILE_DIR }}/packages/components/node_modules
+            ${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/web/node_modules
+          key: pnpm-main-${{ hashFiles('${{ env.MONOREPO_MOBILE_DIR }}/pnpm-lock.yaml', '${{ env.MONOREPO_MOBILE_DIR }}/packages/**/package.json', '${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/web/package.json') }}
+          restore-keys: |
+            pnpm-main-
+
+      - name: Install frontend dependencies
+        run: cd ${{ env.MONOREPO_MOBILE_DIR }} && pnpm install --frozen-lockfile
+
+      - name: Run frontend tests with coverage
+        run: |
+          cd ${{ env.MONOREPO_MOBILE_DIR }}
+          echo "═══ Frontend vitest --coverage (Layer 2) ═══"
+          pnpm exec vitest run --coverage --reporter=verbose 2>&1 | tee frontend-coverage-output.txt
+
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: layer2-frontend-coverage-output
+          path: |
+            ${{ env.MONOREPO_MOBILE_DIR }}/frontend-coverage-output.txt
+            ${{ env.MONOREPO_MOBILE_DIR }}/coverage/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ── Layer 2 summary ──
+  layer2-summary:
+    name: Layer 2 Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    needs: [detect-and-guard, go-full-regression, frontend-coverage]
+    if: always()
+    steps:
+      - name: Generate summary
+        run: |
+          echo "## Layer 2 (Full Regression) Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ci:full guard | ${{ needs.detect-and-guard.outputs.should-run }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Go full regression | ${{ needs.go-full-regression.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend coverage | ${{ needs.frontend-coverage.result || 'skipped' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 触发方式" >> $GITHUB_STEP_SUMMARY
+          echo "- Event: \`${{ github.event_name }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "- PR: #${{ github.event.pull_request.number }}" >> $GITHUB_STEP_SUMMARY
+            echo "- Label: \`ci:full\`" >> $GITHUB_STEP_SUMMARY
+          fi
