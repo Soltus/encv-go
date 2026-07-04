@@ -53,7 +53,7 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
-	github.com/libsql/sqlite-antlr4-parser v0.0.0-20240327125255-dbf53b6cbf06 // indirect
+	github.com/libsql/sqlite-antlr4-parser v0.0.0-20250409195822-315575f87688 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.20 // indirect
@@ -107,3 +107,8 @@ replace github.com/Soltus/encv-go/internal/v2/plugins => ./internal/v2/plugins
 replace github.com/Soltus/encv-go/internal/v2/crypto => ./internal/v2/crypto
 
 replace github.com/Soltus/encv-go/internal/v2/plugins/interfaces => ./internal/v2/plugins/interfaces
+
+
+# github.com/libsql/libsql is the Rust libsql project (no Go module).
+# Redirect to a local stub so sqlite-antlr4-parser compiles.
+replace github.com/libsql/libsql => ./pkg/libsql-stub

@@ -413,19 +413,27 @@ jobs:
           CC: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
           CGO_LDFLAGS: "-L${GITHUB_WORKSPACE}/pkg/libsql/libs/android_arm64 -L${GITHUB_WORKSPACE}/pkg/tasksystem/store/objectbox/libs/android_arm64"
         run: |
-          # 捕获所有 go build -x 输出到文件（build 成功或失败都上传）
+          set -x
           mkdir -p /tmp/go-trace
           BUILD_TAGS="-tags objectbox libsql"
-          echo "=== go build -x trace ===" > /tmp/go-trace/trace.log
-          echo "PWD=$(pwd)" >> /tmp/go-trace/trace.log
-          go env GOMOD GO111MODULE GOPATH GOROOT GOMODCACHE >> /tmp/go-trace/trace.log 2>&1
-          echo "BUILD_TAGS=${BUILD_TAGS}" >> /tmp/go-trace/trace.log
-          echo "" >> /tmp/go-trace/trace.log
-          go build ${BUILD_TAGS} \
-            -ldflags="-s -w -X main.version=${{ inputs.version || 'dev' }}" \
-            -o /tmp/encv-go-arm64 \
-            ./cmd/encv-mobile \
-            2>&1 | tee -a /tmp/go-trace/trace.log || true
+          {
+            echo "=== go build diagnostic ==="
+            echo "PWD=$(pwd)"
+            go env GOMOD GO111MODULE GOPATH GOROOT GOMODCACHE GOPROXY GOFLAGS
+            echo "BUILD_TAGS=${BUILD_TAGS}"
+            echo ""
+            echo "=== listing pkg/libsql/ ==="
+            ls -la pkg/libsql/ || echo "no pkg/libsql"
+            echo ""
+            echo "=== go mod download (force fresh) ==="
+            go mod download -x 2>&1 | head -100 || true
+            echo ""
+            echo "=== go build -x ==="
+            go build ${BUILD_TAGS} \
+              -ldflags="-s -w -X main.version=${{ inputs.version || 'dev' }}" \
+              -o /tmp/encv-go-arm64 \
+              ./cmd/encv-mobile
+          } 2>&1 | tee /tmp/go-trace/trace.log ; true
           echo "=== end of trace ===" >> /tmp/go-trace/trace.log
 
       - name: Upload go-trace artifact
@@ -444,7 +452,9 @@ jobs:
           GOARCH: arm64
           CC: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
           CGO_LDFLAGS: "-L${GITHUB_WORKSPACE}/pkg/libsql/libs/android_arm64 -L${GITHUB_WORKSPACE}/pkg/tasksystem/store/objectbox/libs/android_arm64"
+          GOFLAGS: "-mod=mod"
         run: |
+          set -x
           # 诊断信息
           echo "=== Build diagnostics ==="
           echo "PWD=$(pwd)"
