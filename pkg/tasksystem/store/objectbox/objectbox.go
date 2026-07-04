@@ -7,15 +7,16 @@ package objectbox
 #cgo android,arm LDFLAGS: -L${SRCDIR}/libs/android_armv7
 #cgo android,386 LDFLAGS: -L${SRCDIR}/libs/android_x86
 #cgo android,amd64 LDFLAGS: -L${SRCDIR}/libs/android_x86_64
-#cgo LDFLAGS: -lobjectbox-jni
-// 注意：用 -lobjectbox-jni 而非 -lobjectbox，原因：
-//   ObjectBox .so 的 ELF SONAME = libobjectbox-jni.so（AAR 原始命名），
-//   运行时 linker 按 DT_NEEDED 中的 SONAME 查找，必须是 libobjectbox-jni.so。
-//   ObjectBox Go SDK 的 CGO 用的是 -lobjectbox（找 libobjectbox.so），
-//   build-objectbox-android.sh 同时输出两个名字供不同阶段使用：
-//     libobjectbox-jni.so → 提供给 runtime linker / 本 CGO 链接
-//     libobjectbox.so     → 提供给 SDK CGO 链接
-//   两者内容一致，仅在 CGO 链接时区分。
+#cgo LDFLAGS: -lobjectbox
+// 注意：
+//   ObjectBox .so 的 ELF SONAME = libobjectbox-jni.so（AAR 原始命名）。
+//   运行时 Android linker 按 SONAME 查找，DT_NEEDED = libobjectbox-jni.so，
+//   APK 的 jniLibs 里必须存在 libobjectbox-jni.so（CI 构建阶段从 build 产物复制）。
+//   CGO 链接时 SDK 和自己都写死了 -lobjectbox（搜索 libobjectbox.so），
+//   因此 build-objectbox-android.sh 需要同时输出两个名字，
+//   内容一致，仅在不同阶段使用：
+//     libobjectbox.so     → CGO 链接用（SDK 和自己的 -lobjectbox 都需要）
+//     libobjectbox-jni.so → 运行时 linker 用（进入 APK jniLibs）
 #include <stdlib.h>
 */
 import "C"
