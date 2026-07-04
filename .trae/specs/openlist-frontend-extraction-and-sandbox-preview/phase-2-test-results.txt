@@ -1,0 +1,18 @@
+[PASS] J1 status
+[PASS] J1 content-type
+[PASS] J1 body is OpenList HTML
+[PASS] J2 status
+[PASS] J2 content-type
+[PASS] J2 GET returns JSON
+[PASS] J3 SPA fallback
+[PASS] J4 status
+[PASS] J4 content-type is JS
+[PASS] J4 body is JS, not HTML
+[PASS] J5 encv-mobile SPA root
+[PASS] J6 /openlist/sites/* proxy
+[PASS] J7 /openlist-ui (no slash) → 200 + HTML (SPA fallback)
+J8: encv-mobile SPA /assets/ response: HTTP/1.1 200 OK Vary: Origin Content-Type: text/html Cache-Control: no-cache Etag: W/"15d-yb6ooqQfuM+EoLNma+N7lwGkq8g" Date: Tue, 02 Jun 2026 22:38:59 GMT Connection: keep-alive Keep-Alive: timeout=5 
+
+=== Summary ===
+PASS: 13
+FAIL: 0

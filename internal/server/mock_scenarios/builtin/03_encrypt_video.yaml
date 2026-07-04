@@ -1,0 +1,50 @@
+id: encrypt_video
+description: "单 tool_call (kind=fileChange) — 验证写操作确认流程"
+keywords:
+  - "加密视频"
+  - "加密"
+  - "encrypt"
+  - "video"
+
+presets:
+  - id: p_cancel
+    label: "❌ 取消"
+    user_text: "算了，不加密了"
+    tooltip: "取消加密动作"
+  - id: p_modify_path
+    label: "📁 改输出目录"
+    user_text: "改加密输出到 /Encrypted 目录"
+    tooltip: "修改输出路径"
+  - id: p_choose_other
+    label: "📂 看其他视频"
+    user_text: "有哪些视频文件"
+    tooltip: "跳到 list_files_query 选别的"
+
+steps:
+  - id: intro
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: encrypt_video }
+      - type: text_delta
+        data: { text: "好的，我来加密视频文件。" }
+  - id: encrypt_call
+    delay_ms: 400
+    events:
+      - type: tool_call
+        data:
+          id: call_enc_1
+          name: video_encrypt
+          args:
+            ext: ".mp4"
+          auto_run: false
+          needsConfirm: true
+          kind: fileChange
+          execute_real: false
+  - id: end
+    delay_ms: 100
+    events:
+      - type: stream_end
+        data:
+          finishReason: tool_calls
+          usage: { totalTokens: 89 }

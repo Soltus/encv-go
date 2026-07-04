@@ -1,0 +1,180 @@
+id: complex_workflow
+description: "超长多步工作流：6 tool_call + 10 text_delta — 验证流式渲染/折叠/滚动"
+keywords:
+  - "帮我全面分析"
+  - "详细分析"
+  - "完整报告"
+  - "comprehensive"
+  - "繁杂"
+  - "深度诊断"
+  - "全量扫描"
+
+presets:
+  - id: p_cw_encrypt_all
+    label: "🔒 全部加密"
+    user_text: "加密所有视频文件"
+    tooltip: "批量加密"
+  - id: p_cw_clean
+    label: "🧹 清理缓存"
+    user_text: "清理临时缓存"
+    tooltip: "释放空间"
+  - id: p_cw_index
+    label: "📋 生成索引"
+    user_text: "生成文件索引"
+    tooltip: "遍历目录生成索引"
+  - id: p_cw_pdf
+    label: "📄 导出报告"
+    user_text: "导出诊断报告"
+    tooltip: "导出为文档"
+
+steps:
+  - id: intro
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: complex_workflow }
+      - type: text_delta
+        data: { text: "## 系统全面诊断报告\n\n" }
+      - type: text_delta
+        data: { text: "正在对当前环境进行多维度深度扫描，请稍候...\n\n" }
+
+  - id: phase1_mounts
+    delay_ms: 1200
+    events:
+      - type: tool_call
+        data:
+          id: cw_mount
+          name: list_mounts
+          args: {}
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+
+  - id: phase2_scan
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "### 挂载点状态\n\n已检测到挂载点，开始递归扫描...\n\n" }
+
+  - id: list_root
+    delay_ms: 1000
+    events:
+      - type: tool_call
+        data:
+          id: cw_root
+          name: list_files
+          args:
+            mount_id: serving
+            rel_path: "/"
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+
+  - id: list_video
+    delay_ms: 800
+    events:
+      - type: tool_call
+        data:
+          id: cw_video
+          name: list_files
+          args:
+            mount_id: serving
+            rel_path: "01-plain-media/video"
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+
+  - id: phase3_config
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "### 文件系统详情\n\n" }
+      - type: text_delta
+        data: { text: "正在读取配置文件...\n\n" }
+
+  - id: read_config
+    delay_ms: 1000
+    events:
+      - type: tool_call
+        data:
+          id: cw_read_cfg
+          name: read_file
+          args:
+            mount_id: serving
+            rel_path: "/config.json"
+            max_bytes: 2000
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+
+  - id: phase4_system
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "### 系统资源\n\n正在检查磁盘空间和内存使用情况...\n\n" }
+
+  - id: check_disk
+    delay_ms: 1000
+    events:
+      - type: tool_call
+        data:
+          id: cw_df
+          name: command_run
+          args:
+            cmd: df
+            args:
+              - "-h"
+              - "/"
+          auto_run: true
+          needsConfirm: false
+          kind: command
+          execute_real: false
+
+  - id: phase5_suggest
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "### 建议操作\n\n基于以上扫描结果，建议执行以下优化操作：\n\n" }
+      - type: text_delta
+        data: { text: "1. **清理缓存**：释放磁盘空间\n" }
+      - type: text_delta
+        data: { text: "2. **生成索引**：为目录建立文件索引\n" }
+      - type: text_delta
+        data: { text: "3. **备份配置**：导出当前配置快照\n\n" }
+
+  - id: backup_call
+    delay_ms: 600
+    events:
+      - type: tool_call
+        data:
+          id: cw_backup
+          name: write_file
+          args:
+            mount_id: serving
+            rel_path: "/backup-config.json"
+          auto_run: false
+          needsConfirm: true
+          kind: fileChange
+          execute_real: false
+
+  - id: phase6_summary
+    delay_ms: 1500
+    events:
+      - type: text_delta
+        data: { text: "## 诊断总结\n\n" }
+      - type: text_delta
+        data: { text: "所有数据均由真实工具返回。详细信息见上方工具结果。\n\n" }
+      - type: text_delta
+        data: { text: "**下一步建议**（点击 chip 直接执行）：\n\n1. 加密所有视频文件\n2. 清理临时缓存\n3. 生成完整文件索引\n4. 导出报告\n" }
+
+  - id: end
+    delay_ms: 500
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 1247 }

@@ -1,0 +1,26 @@
+- [x] OpenListBridge.kt: all TODO placeholder stubs replaced, no local Event/LogCallback interfaces remain
+- [x] OpenListBridge.kt: imports from `openlistlib.*` resolve successfully
+- [x] OpenListBridge.kt: `init()` wires `Openlistlib.setConfigData()` and `Openlistlib.setPort()`
+- [x] OpenListBridge.kt: `start()` runs `Openlistlib.start()` on background thread
+- [x] OpenListBridge.kt: `shutdown()` has 500ms grace + force-kill fallback
+- [x] OpenListBridge.kt: `onShutdown`, `onStartError`, `onProcessExit` implement the real interface
+- [x] OpenListBridge.kt: `onLog` forwards to `LocalBroadcastManager` BROADCAST_LOG
+- [x] SAT-DBG logging: `Log.e("[SAT-DBG][OpenList] ...")` in OpenListService.kt for all lifecycle methods
+- [x] SAT-DBG logging: `Log.e("[SAT-DBG][OpenList] ...")` in OpenListBridge.kt for every bridge call
+- [x] SAT-DBG logging: `Log.e("[SAT-DBG][OpenList] ...")` in OpenListConfig.kt for load/save
+- [x] SAT-DBG logging: `Log.e("[SAT-DBG][OpenList] ...")` in OpenListPluginEntry.kt for onLoad/onUnload
+- [x] OpenListPluginEntry.kt: `pluginModule` returns Koin module with `single { OpenListBridge }`
+- [x] useEventBus.ts: `openlist:status` event typed as `{ running, port, pid, dataSizeBytes }`
+- [x] useEventBus.ts: `openlist:log` event typed as `{ level, message, timestamp }`
+- [x] useEventBus.ts: `openlist:error` event typed as `{ type, message, code? }`
+- [x] LocalOpenListStatusCard.vue: subscribes to eventBus (not HTTP polling)
+- [x] LocalOpenListStatusCard.vue: 4 distinct card variants: running, port_conflict, crash_loop, not_installed
+- [x] LocalOpenListStatusCard.vue: crash-loop detection ≥3 transitions in 10s → red card
+- [x] LocalOpenListStatusCard.vue: each card variant has an action button (go extensions / modify port / view logs / retry)
+- [x] GoProcess.ts: `getOpenListFullState()` method typed and exported
+- [x] Capacitor Android plugin: BroadcastReceiver for OpenList intents with `notifyListeners`
+- [x] i18n keys: OpenList settings fields (port, dataDir, adminPassword) in settings.ts zh-CN + en
+- [x] schema.json: OpenList configuration section under plugin_settings
+- [x] Frontend SAT-DBG: `console.error('[SAT-DBG][OpenList]'` in useOpenListBridge.ts, StatusCard, ExtensionsPage
+- [x] `./gradlew :plugin-openlist:compileDebugKotlin` passes
+- [x] `npx vue-tsc --noEmit` passes

@@ -1,0 +1,462 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/Soltus/encv-go/internal/config"
+	"github.com/Soltus/encv-go/internal/v2/types"
+	"github.com/Soltus/encv-go/pkg/encv/plugins"
+)
+
+// setupMultiTokenSearchServer 创建含中文多 token 文件名的搜索测试 server。
+//
+// 测试文件：在线播放-高清视频.mp4
+// 用户搜索场景：
+//   - "在线 高清"（空格分隔多 token）应匹配
+//   - "在线高清"（无分隔）应通过向量搜索匹配
+func setupMultiTokenSearchServer(t *testing.T) (*Server, string, func()) {
+	t.Helper()
+
+	tmpDir, err := os.MkdirTemp("", "encv-multitoken-search-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+
+	mountsFile := filepath.Join(tmpDir, "mounts.json")
+	oldMountsFile := os.Getenv("ENCV_MOUNTS_FILE")
+	os.Setenv("ENCV_MOUNTS_FILE", mountsFile)
+
+	videoDir := filepath.Join(tmpDir, "视频")
+	if err := os.MkdirAll(videoDir, 0755); err != nil {
+		os.RemoveAll(tmpDir)
+		t.Fatalf("MkdirAll 视频: %v", err)
+	}
+
+	// 关键测试文件：名字含分隔符，多 token 搜索应能匹配
+	testFile := filepath.Join(videoDir, "在线播放-高清视频.mp4")
+	if err := os.WriteFile(testFile, []byte("fake video content"), 0644); err != nil {
+		os.RemoveAll(tmpDir)
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// 另一个干扰文件，只含部分 token
+	distractorFile := filepath.Join(videoDir, "在线文档.pdf")
+	if err := os.WriteFile(distractorFile, []byte("doc"), 0644); err != nil {
+		os.RemoveAll(tmpDir)
+		t.Fatalf("WriteFile distractor: %v", err)
+	}
+
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		os.RemoveAll(tmpDir)
+		t.Fatalf("Listen: %v", err)
+	}
+	availablePort := listener.Addr().(*net.TCPAddr).Port
+	listener.Close()
+
+	cfg := &config.Config{
+		Password: "test-password",
+		Server: types.HttpServer{
+			Port: availablePort,
+			Dir:  tmpDir,
+		},
+		Webdav: types.WebdavServer{
+			Root: "/webdav/",
+			Dir:  tmpDir,
+		},
+		Log:            types.LogConfig{Level: "error"},
+		PluginSettings: map[string]json.RawMessage{},
+	}
+
+	if err := plugins.InitializeWithSettings(cfg.PluginSettings); err != nil {
+		os.RemoveAll(tmpDir)
+		t.Fatalf("plugins init: %v", err)
+	}
+
+	ctx := config.NewContext(context.Background(), cfg)
+	s := NewServer(ctx, "")
+
+	addr, err := s.Start("test")
+	if err != nil {
+		os.RemoveAll(tmpDir)
+		t.Fatalf("Start: %v", err)
+	}
+
+	host, port, splitErr := net.SplitHostPort(addr)
+	if splitErr != nil {
+		s.Stop()
+		os.RemoveAll(tmpDir)
+		t.Fatalf("SplitHostPort: %v", splitErr)
+	}
+	if host == "" || host == "::" {
+		host = "127.0.0.1"
+	}
+	baseURL := fmt.Sprintf("http://%s:%s", host, port)
+
+	teardown := func() {
+		s.Stop()
+		os.RemoveAll(tmpDir)
+		if oldMountsFile != "" {
+			os.Setenv("ENCV_MOUNTS_FILE", oldMountsFile)
+		} else {
+			os.Unsetenv("ENCV_MOUNTS_FILE")
+		}
+	}
+
+	return s, baseURL, teardown
+}
+
+// waitForIndexReady 轮询等待索引构建完成。
+func waitForIndexReady(s *Server) {
+	for i := 0; i < 50; i++ {
+		stats := s.mobileSvc.GetIndexStats()
+		if !stats.IsIndexing {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestSearch_MultiToken_KeywordSearch 验证关键词搜索支持空格分隔的多 token AND 匹配。
+//
+// Bug：搜索 "在线 高清"（空格分隔）应当匹配 "在线播放-高清视频.mp4"，
+// 但当前 SearchFiles 用 strings.Contains(name, "在线 高清") 做字面子串匹配，
+// 文件名中没有空格，所以匹配失败。
+//
+// 期望行为：空格分隔的多个 token 都必须是文件名的子串（AND 逻辑）。
+// "在线 高清" → ["在线", "高清"] → 两个都是 "在线播放-高清视频.mp4" 的子串 → 匹配
+func TestSearch_MultiToken_KeywordSearch(t *testing.T) {
+	_, baseURL, teardown := setupMultiTokenSearchServer(t)
+	defer teardown()
+
+	searchURL := fmt.Sprintf("%s/api/files/search?path=%s&keyword=%s&recursive=true",
+		baseURL,
+		url.QueryEscape("/d"),
+		url.QueryEscape("在线 高清"))
+
+	resp, err := http.Get(searchURL)
+	if err != nil {
+		t.Fatalf("GET search: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("search status = %d, want 200", resp.StatusCode)
+	}
+
+	var result struct {
+		Files []struct {
+			Name string `json:"name"`
+			Path string `json:"path"`
+		} `json:"files"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	t.Logf("multi-token keyword search result count: %d", len(result.Files))
+	for _, f := range result.Files {
+		t.Logf("  - %s (%s)", f.Name, f.Path)
+	}
+
+	found := false
+	for _, f := range result.Files {
+		if f.Name == "在线播放-高清视频.mp4" {
+			found = true
+			t.Logf("✅ found target file via multi-token keyword search: path=%s", f.Path)
+			break
+		}
+	}
+	if !found {
+		t.Errorf("❌ BUG: multi-token keyword search '在线 高清' should match '在线播放-高清视频.mp4' but did not")
+	}
+
+	// 干扰文件 "在线文档.pdf" 只含 "在线" 不含 "高清"，不应匹配
+	for _, f := range result.Files {
+		if f.Name == "在线文档.pdf" {
+			t.Errorf("❌ distractor '在线文档.pdf' should NOT match '在线 高清' (only has 在线, missing 高清)")
+		}
+	}
+}
+
+// TestSearch_MultiToken_VectorSearch_NoSpace 验证向量搜索端点 /api/search/files
+// 用无空格关键词 "在线高清" 能通过向量语义匹配到 "在线播放-高清视频.mp4"。
+//
+// Bug：handleVectorSearchFilesGin 先做关键词搜索（strings.Contains 失败 → 0 候选），
+// 然后 len(files) > 3 不成立 → 跳过向量重排序 → 返回空。
+//
+// 期望行为：当关键词搜索返回 0 结果时，若向量搜索可用，应 fallback 到纯向量搜索。
+func TestSearch_MultiToken_VectorSearch_NoSpace(t *testing.T) {
+	s, baseURL, teardown := setupMultiTokenSearchServer(t)
+	defer teardown()
+
+	// 先构建索引，让文件进入 fileIndex（SearchFiles 递归路径会用索引）
+	s.mobileSvc.RebuildIndex()
+	waitForIndexReady(s)
+
+	searchURL := fmt.Sprintf("%s/api/search/files?q=%s&path=%s&recursive=true&limit=50",
+		baseURL,
+		url.QueryEscape("在线高清"),
+		url.QueryEscape("/d"))
+
+	resp, err := http.Get(searchURL)
+	if err != nil {
+		t.Fatalf("GET vector search: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("vector search status = %d, want 200", resp.StatusCode)
+	}
+
+	var result struct {
+		Files []struct {
+			Name string `json:"name"`
+			Path string `json:"path"`
+		} `json:"files"`
+		VectorSearch bool `json:"vector_search"`
+		Total        int  `json:"total"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	t.Logf("vector search (no space) result count: %d (vector_search=%v)", len(result.Files), result.VectorSearch)
+	for _, f := range result.Files {
+		t.Logf("  - %s (%s)", f.Name, f.Path)
+	}
+
+	found := false
+	for _, f := range result.Files {
+		if f.Name == "在线播放-高清视频.mp4" {
+			found = true
+			t.Logf("✅ found target file via vector search (no space): path=%s", f.Path)
+			break
+		}
+	}
+	if !found {
+		t.Errorf("❌ BUG: vector search '在线高清' should match '在线播放-高清视频.mp4' via bigram overlap but did not")
+	}
+}
+
+// TestSearch_MultiToken_VectorSearch_WithSpace 验证向量搜索端点用空格分隔多 token 也能匹配。
+// "在线 高清" → 关键词搜索应该已能匹配（AND 逻辑），向量重排序进一步提升排序。
+func TestSearch_MultiToken_VectorSearch_WithSpace(t *testing.T) {
+	s, baseURL, teardown := setupMultiTokenSearchServer(t)
+	defer teardown()
+
+	s.mobileSvc.RebuildIndex()
+	waitForIndexReady(s)
+
+	searchURL := fmt.Sprintf("%s/api/search/files?q=%s&path=%s&recursive=true&limit=50",
+		baseURL,
+		url.QueryEscape("在线 高清"),
+		url.QueryEscape("/d"))
+
+	resp, err := http.Get(searchURL)
+	if err != nil {
+		t.Fatalf("GET vector search: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("vector search status = %d, want 200", resp.StatusCode)
+	}
+
+	var result struct {
+		Files []struct {
+			Name string `json:"name"`
+			Path string `json:"path"`
+		} `json:"files"`
+		VectorSearch bool `json:"vector_search"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	t.Logf("vector search (with space) result count: %d (vector_search=%v)", len(result.Files), result.VectorSearch)
+	for _, f := range result.Files {
+		t.Logf("  - %s (%s)", f.Name, f.Path)
+	}
+
+	found := false
+	for _, f := range result.Files {
+		if f.Name == "在线播放-高清视频.mp4" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("❌ BUG: vector search '在线 高清' should match '在线播放-高清视频.mp4'")
+	}
+}
+
+// TestSearch_VectorSearch_ReturnsScore 验证向量搜索 fallback 路径返回 score 字段，
+// 前端可据此显示相关度。
+//
+// 场景：搜索 "在线高清"（无空格）触发向量 fallback，结果应含 score > 0。
+func TestSearch_VectorSearch_ReturnsScore(t *testing.T) {
+	s, baseURL, teardown := setupMultiTokenSearchServer(t)
+	defer teardown()
+
+	s.mobileSvc.RebuildIndex()
+	waitForIndexReady(s)
+
+	searchURL := fmt.Sprintf("%s/api/search/files?q=%s&path=%s&recursive=true&limit=50",
+		baseURL,
+		url.QueryEscape("在线高清"),
+		url.QueryEscape("/d"))
+
+	resp, err := http.Get(searchURL)
+	if err != nil {
+		t.Fatalf("GET vector search: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("vector search status = %d, want 200", resp.StatusCode)
+	}
+
+	var result struct {
+		Files []struct {
+			Name  string  `json:"name"`
+			Path  string  `json:"path"`
+			Score float64 `json:"score"`
+		} `json:"files"`
+		VectorSearch bool `json:"vector_search"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	t.Logf("vector search result count: %d (vector_search=%v)", len(result.Files), result.VectorSearch)
+	for _, f := range result.Files {
+		t.Logf("  - %s score=%.4f", f.Name, f.Score)
+	}
+
+	if !result.VectorSearch {
+		t.Fatal("vector_search should be true when fallback path is used")
+	}
+
+	// 找到目标文件并验证 score > 0
+	found := false
+	for _, f := range result.Files {
+		if f.Name == "在线播放-高清视频.mp4" {
+			found = true
+			if f.Score <= 0 {
+				t.Errorf("score should be > 0 for vector search result, got %f", f.Score)
+			} else {
+				t.Logf("✅ score=%.4f for target file", f.Score)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("target file not found in vector search results")
+	}
+}
+
+// TestSearch_VectorSearch_FiltersIrrelevantResults 验证向量搜索 fallback 路径
+// 应过滤掉与查询无任何 bigram 重叠的结果。
+//
+// 场景：搜索 "在线视频"（无空格）。
+//   - "在线播放-高清视频.mp4" 应匹配（共享 bigram: 在线/视频 + 单字 在/线/视/频）
+//   - "在线文档.pdf" 在 greedy 模式下可能被返回（共享 "在线" bigram，候选 <5 时 BigramRelaxed 放宽）
+//
+// 🆕 2026-07-02 智能搜索策略（见 debug-discipline.md §3.5）：
+//   - 关键词 "在线视频" 无子串匹配 → 关键词搜索返回 0 → 进入 greedy 模式
+//   - greedy 模式候选 <5 时用 BigramRelaxed（共享 ≥1 个 bigram 即可，宁多勿少）
+//   - "在线文档.pdf" 共享 "在线" → BigramRelaxed 通过 → 允许返回（前端用 greedy 横幅标记）
+//   - 但 "在线播放-高清视频.mp4" 共享 "在线"+"视频" → score 更高 → 应排在前面
+//
+// 期望：
+//   1. search_mode == "greedy"
+//   2. 目标文件 "在线播放-高清视频.mp4" 在结果中且 score 最高
+//   3. 若 "在线文档.pdf" 被返回，其 score 应低于目标文件（排序正确）
+func TestSearch_VectorSearch_FiltersIrrelevantResults(t *testing.T) {
+	s, baseURL, teardown := setupMultiTokenSearchServer(t)
+	defer teardown()
+
+	s.mobileSvc.RebuildIndex()
+	waitForIndexReady(s)
+
+	searchURL := fmt.Sprintf("%s/api/search/files?q=%s&path=%s&recursive=true&limit=50",
+		baseURL,
+		url.QueryEscape("在线视频"),
+		url.QueryEscape("/d"))
+
+	resp, err := http.Get(searchURL)
+	if err != nil {
+		t.Fatalf("GET vector search: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("vector search status = %d, want 200", resp.StatusCode)
+	}
+
+	var result struct {
+		Files []struct {
+			Name  string  `json:"name"`
+			Path  string  `json:"path"`
+			Score float64 `json:"score"`
+		} `json:"files"`
+		VectorSearch bool   `json:"vector_search"`
+		SearchMode   string `json:"search_mode"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	t.Logf("vector search '在线视频' result count: %d (vector_search=%v, search_mode=%s)",
+		len(result.Files), result.VectorSearch, result.SearchMode)
+	for _, f := range result.Files {
+		t.Logf("  - %s score=%.4f", f.Name, f.Score)
+	}
+
+	// 1. 应为 combined 模式（关键词扩展后能召回 → 走混合评分重排）
+	//
+	// 历史：2026-07-01 之前这个测试期望走 greedy（因为 "在线视频" 整体子串匹配 "在线播放-高清视频.mp4" 失败），
+	//   目标文件只能靠向量 fallback 召回。2026-07-02 修复了"长文件名稀释"问题：
+	//   handler 注入 expandCJKQueryForSearch，把 CJK 连续查询拆为单字 AND 序列，
+	//   "在线视频" → "在 线 视 频" 让关键词搜索也能召回长文件名 → 走 combined 模式。
+	//   这是修复后的预期行为（更精准），不是回退。
+	if result.SearchMode != "combined" {
+		t.Errorf("search_mode = %q, want %q (CJK 扩展后关键词能命中，应走 combined 混合评分)", result.SearchMode, "combined")
+	}
+
+	// 2. 目标文件应在结果中
+	targetScore := -1.0
+	foundTarget := false
+	for _, f := range result.Files {
+		if f.Name == "在线播放-高清视频.mp4" {
+			foundTarget = true
+			targetScore = f.Score
+			break
+		}
+	}
+	if !foundTarget {
+		t.Errorf("❌ target '在线播放-高清视频.mp4' should match '在线视频' via shared bigrams (在线/视频)")
+	}
+
+	// 3. 若 "在线文档.pdf" 被返回（greedy 放宽允许），其 score 应低于目标文件
+	//    greedy 模式语义：结果过少时放宽，但相关性排序仍正确
+	for _, f := range result.Files {
+		if f.Name == "在线文档.pdf" {
+			if targetScore > 0 && f.Score >= targetScore {
+				t.Errorf("❌ '在线文档.pdf' score=%.4f should be lower than target '在线播放-高清视频.mp4' score=%.4f (相关性排序)",
+					f.Score, targetScore)
+			}
+			t.Logf("ℹ️ '在线文档.pdf' 在 greedy 模式下被返回（score=%.4f < target=%.4f），前端用横幅标记宽松匹配", f.Score, targetScore)
+		}
+	}
+}

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  plugin-openlist 是 **com.android.library**，不是独立 app。
+  所有 app 级资源（icon / roundIcon / theme / app_name）由 host app (encvid) 提供，
+  插件 manifest 不能引用它们（AAPT 会找不到 → verifyReleaseResources 失败）。
+
+  参考 plugin-mpv-player/src/main/AndroidManifest.xml：literal label 字符串、
+  无 @string/@mipmap/@style 引用、无 res/ 目录。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- OpenList 启动时监听 127.0.0.1:5244，需要 INTERNET 权限 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- OpenList 是本地服务（127.0.0.1:5244），但 Android 9+ 默认禁止明文 HTTP -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <application
+        android:label="OpenList"
+        android:allowBackup="true"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
+        tools:targetApi="33">
+        <!-- usesCleartextTraffic="true" 让 WebView 能访问 http://127.0.0.1:5244
+             仅本地回环，无安全风险；如需 HTTPS 访问外网，可改为 false + 加 network-security-config -->
+        <!-- 不引用 host 才有的资源: 不引 @string/app_name / @mipmap/ic_launcher* /
+             @style/AppTheme —— 这些是 host app (encvid) 提供的 -->
+
+        <meta-data
+            android:name="plugin.entryClass"
+            android:value="com.encvgo.plugin.openlist.OpenListPluginEntry" />
+        <meta-data
+            android:name="plugin.description"
+            android:value="Local OpenList server plugin (gomobile bind)" />
+
+        <provider
+            android:name="com.encvgo.plugin.openlist.OpenListStatusProvider"
+            android:authorities="com.encvgo.plugin.openlist.provider"
+            android:exported="true"
+            android:grantUriPermissions="true" />
+    </application>
+
+</manifest>

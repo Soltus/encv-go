@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:label="MPV Player">
+        <meta-data
+            android:name="plugin.entryClass"
+            android:value="com.encvgo.plugin.mpv.MpvPluginEntry" />
+        <meta-data
+            android:name="plugin.description"
+            android:value="MPV media player plugin based on libmpv" />
+        <activity
+            android:name=".MpvPlayerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize"
+            android:launchMode="singleTop" />
+    </application>
+</manifest>

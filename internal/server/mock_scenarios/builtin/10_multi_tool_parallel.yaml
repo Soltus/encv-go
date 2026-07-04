@@ -1,0 +1,74 @@
+id: multi_tool_parallel
+description: "同 step 内 3 tool_call — 验证并行工具调用渲染"
+keywords:
+  - "批量"
+  - "并行"
+  - "同时"
+  - "parallel"
+  - "batch"
+
+presets:
+  - id: p_only_movies
+    label: "🎬 只看视频"
+    user_text: "只列视频目录"
+    tooltip: "缩减范围"
+  - id: p_count_files
+    label: "🔢 统计文件数"
+    user_text: "统计文件数"
+    tooltip: "批量统计"
+  - id: p_export
+    label: "📤 导出结果"
+    user_text: "把列表导出"
+    tooltip: "导出结构化结果"
+
+steps:
+  - id: intro
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: multi_tool_parallel }
+      - type: text_delta
+        data: { text: "并行查询多个目录：" }
+  - id: parallel_calls
+    delay_ms: 400
+    events:
+      - type: tool_call
+        data:
+          id: call_par_1
+          name: list_files
+          args:
+            mount_id: serving
+            rel_path: "01-plain-media/video"
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+      - type: tool_call
+        data:
+          id: call_par_2
+          name: list_files
+          args:
+            mount_id: serving
+            rel_path: "01-plain-media/audio"
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+      - type: tool_call
+        data:
+          id: call_par_3
+          name: list_files
+          args:
+            mount_id: serving
+            rel_path: "01-plain-media/document"
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+  - id: end
+    delay_ms: 100
+    events:
+      - type: stream_end
+        data:
+          finishReason: tool_calls
+          usage: { totalTokens: 145 }

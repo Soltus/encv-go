@@ -1,0 +1,12 @@
+- [x] GoProcessPlugin.kt 所有反射代码已替换为直接 API 调用（无 Class.forName / getMethod / invoke 残留）
+- [x] installPlugin() 通过 `PluginManager.installerManager.installPlugin(apkFile, true)` 调用
+- [x] checkInstalledPlugins() 通过 `PluginManager.getAllInstallPlugins()` 调用
+- [x] installPlugin 返回值（InstallResult）被正确处理（Success → 显示成功；Failure → 显示错误原因）
+- [x] EncvHostActivity.kt 存在并继承 BaseHostActivity
+- [x] EncvHostActivity 已在 AndroidManifest.xml 中声明
+- [x] `PluginManager.proxyManager.setHostActivity(EncvHostActivity::class.java)` 在初始化时被调用
+- [x] PlayerEntry.startMpvPlayer() 的 Activity 启动方式与 HostActivity 代理兼容
+- [x] 无 Kotlin 编译错误（import 完整、类型匹配）
+- [x] FilePreview.vue 文本预览使用 iframe（前一轮修复验证）
+- [x] TempFileReadCloser.Close() 不删除文件（前一轮修复验证）
+- [ ] ~~GoProcessPlugin parameterCount==2~~ （代码库中无 `parameterCount` 残留，原问题已不存在或以其他方式解决）
