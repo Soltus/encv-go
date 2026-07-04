@@ -1,0 +1,18 @@
+- [x] `mock/handlers.ts` 不包含任何逐端点 handler 函数（无 `/api/files:`、`/api/file:`、`/stream:` 等独立 key）— 改为 6 个分组 handler + dispatchRequest 路由器
+- [x] `handlers.ts` 导出单一 `createHandlers()` 返回 `{ dispatchRequest }` 通用路由入口
+- [x] `fileSystemHandler()` 正确处理 GET /api/files（JSON）、GET /api/files/stream（SSE）、GET /api/files/plugin-stream（SSE+过滤）
+- [x] `fileContentHandler()` 正确处理 GET /api/file?path=（返回文件内容 UTF-8/base64）
+- [x] `staticFileHandler()` 正确 serve /stream 和 /preview 路径的文件二进制 + MIME type
+- [x] 未知 API 路径返回 JSON 501 而非穿透到 proxy
+- [x] `file-system.ts` 中不存在 DEFAULT_FILES / MOVIES_FILES / DOCUMENTS_FILES / MUSIC_FILES 常量
+- [x] `file-system.ts` 中 MOCK_PLUGINS、MOCK_SUFFIX 及其 getter/setter 保留
+- [x] mock 中间件不调用 next() 放行到 proxy（try-catch 包裹防止 Vite 内部错误冒泡导致崩溃）
+- [x] vite dev server 启动后 curl /api/files?path=/ 返回 __mock_data__ 的 4 个目录
+- [x] curl /api/files/stream?path=/ 返回 SSE 格式 data: 行
+- [x] curl /api/file?path=...notes.txt 返回 UTF-8 文件内容（非空，818 字符）
+- [x] curl /stream?path=...photo.jpg 返回 image/jpeg Content-Type + 二进制数据（446B）
+- [x] curl /api/config 返回合理 JSON（含 password/plugin_settings）
+- [x] curl /health 返回 { status: ok }
+- [x] 首页 `/` 不被 mock 拦截（shouldMockIntercept 路径前缀白名单）
+- [x] 前端 JS/CSS 静态资源不被拦截
+- [x] 前端完整调用链 8 步全部通过（health→config→plugins→SSE stream→txt preview→image stream→predict-plugin→task create）

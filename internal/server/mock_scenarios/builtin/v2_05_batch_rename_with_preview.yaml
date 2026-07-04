@@ -1,0 +1,301 @@
+id: batch_rename_with_preview
+description: "批量重命名（dry_run → 确认 → 执行）— 拟人化 ≥30s，纯通用 UI 文案"
+keywords:
+  - "batch_rename"
+  - "批量重命名"
+  - "rename"
+exact_match: "batch_rename_with_preview"
+rounds: 1
+
+presets:
+  - id: dry_run
+    label: "👀 预览（不执行）"
+    user_text: "预览重命名"
+  - id: apply
+    label: "✅ 确认执行"
+    user_text: "确认重命名"
+  - id: cancel
+    label: "❌ 取消"
+    user_text: "取消重命名"
+
+steps:
+  # 阶段 1：思考链（8 段 × 700-800ms ≈ 6000ms）
+  - id: think_1
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "用户要求：批量重命名文件。" }
+  - id: think_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: reasoning_delta
+        data: { text: "这是写操作，必须先 dry_run 让用户预览。" }
+  - id: think_3
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "先列出所有候选文件（按 glob 过滤）。" }
+  - id: think_4
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "应用命名规则生成新名字。" }
+  - id: think_5
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "把旧名 → 新名映射表推给用户确认。" }
+  - id: think_6
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "auto_run=false，等用户确认。" }
+  - id: think_7
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "确认后才执行真正的 rename。" }
+  - id: think_8
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: reasoning_delta
+        data: { text: "准备好调用工具。" }
+
+  # 阶段 2：过渡文本（6 段 × 500-700ms ≈ 3700ms）
+  - id: intro_1
+    round_idx: 0
+    delay_ms: 400
+    events:
+      - type: stream_start
+        data: { scenario: batch_rename_with_preview }
+      - type: text_delta
+        data: { text: "好的，我来处理批量重命名。" }
+  - id: intro_2
+    round_idx: 0
+    delay_ms: 500
+    events:
+      - type: text_delta
+        data: { text: "这是写操作，必须先 dry_run 预览。" }
+  - id: intro_3
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "先列出所有匹配文件。" }
+  - id: intro_4
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "应用命名规则生成新名字。" }
+  - id: intro_5
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "把映射表推给用户确认。" }
+  - id: intro_6
+    round_idx: 0
+    delay_ms: 800
+    events:
+      - type: text_delta
+        data: { text: "开始执行 dry_run..." }
+
+  # 阶段 3：工具调用（3000ms）— dry_run
+  - id: tool_call_dry
+    round_idx: 0
+    delay_ms: 3000
+    events:
+      - type: tool_call
+        data:
+          id: call_brp_dry
+          name: rename_files
+          args:
+            pattern: "*"
+            rename_rule: "{base}_v2{ext}"
+            dry_run: true
+          auto_run: true
+          needsConfirm: false
+          kind: fileChange
+          execute_real: true
+
+  # 阶段 4：处理 dry_run 结果（8 段 × 600-700ms ≈ 5200ms）
+  - id: process_1
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "dry_run 完成。" }
+  - id: process_2
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "让我整理映射表..." }
+  - id: process_3
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "工具返回了若干匹配项，详情见上方工具结果。" }
+  - id: process_4
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "按命名规则应用新名字..." }
+  - id: process_5
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "旧名 → 新名映射已生成。" }
+  - id: process_6
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "正在检查重名冲突..." }
+  - id: process_7
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "完整映射见工具结果。" }
+  - id: process_8
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "请确认是否执行真实重命名。" }
+
+  # 阶段 5：chip 推送（1 段 × 200ms）
+  - id: push_chips
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: mock_presets
+        data:
+          scenario: batch_rename_with_preview
+          phase: confirm_rename
+          presets:
+            - id: apply
+              label: "✅ 确认执行"
+              user_text: "确认重命名"
+            - id: dry_run
+              label: "👀 重新预览"
+              user_text: "预览重命名"
+            - id: cancel
+              label: "❌ 取消"
+              user_text: "取消重命名"
+      - type: mock_branch_choice
+        data:
+          branch_id: confirm_rename
+          options:
+            - id: apply
+              label: "✅ 确认执行"
+              icon: "✅"
+            - id: dry_run
+              label: "👀 重新预览"
+              icon: "👀"
+            - id: cancel
+              label: "❌ 取消"
+              icon: "❌"
+
+  # 阶段 6：总结（10 段 × 500-700ms ≈ 6000ms）
+  - id: summary_1
+    round_idx: 0
+    delay_ms: 500
+    events:
+      - type: text_delta
+        data: { text: "## 批量重命名预览\n\n" }
+  - id: summary_2
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "已生成映射表，详情见上方工具结果。\n\n" }
+  - id: summary_3
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "**操作性质**：写操作（不可逆，重命名真实文件）。\n\n" }
+  - id: summary_4
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "**当前状态**：dry_run 已完成，未实际改名。\n\n" }
+  - id: summary_5
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "**建议**（点击 chip 直接执行）：\n\n" }
+  - id: summary_6
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "1. 确认执行改名\n" }
+  - id: summary_7
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "2. 重新预览（不同规则）\n" }
+  - id: summary_8
+    round_idx: 0
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "3. 取消，保留原名\n" }
+  - id: summary_9
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选择你想做的，剩下交给我。" }
+  - id: summary_10
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "如果都不想做，可以直接关闭本对话。" }
+  - id: summary_11
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "改名操作是不可逆的，请确认无误后再执行。" }
+  - id: summary_12
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "如有冲突，我会在上方工具结果中标记。" }
+  - id: summary_13
+    round_idx: 0
+    delay_ms: 700
+    events:
+      - type: text_delta
+        data: { text: "选完后我立即开始执行你指定的操作。" }
+
+  # 阶段 7：收尾
+  - id: end
+    round_idx: 0
+    delay_ms: 200
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 1180 }

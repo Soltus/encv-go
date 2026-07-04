@@ -1,0 +1,16 @@
+- [x] MainActivity.loadPlugins() 不再包含任何自动扫描/安装/启动插件代码
+- [x] MainActivity.onCreate() 不因移除 loadPlugins 逻辑而 crash
+- [x] GoProcessPlugin.pickAndInstallPlugin() 前端流程可独立完成：文件选择 → 复制 → 安装 → 返回结果
+- [x] registry.go EncryptFileWithPlugin() 在 ProcessFileWithPlugin() 调用前通过 SetOutputDir 设置 outputDir
+- [x] video/plugin.go 新增 SetOutputDir(dir string) 公开方法封装 outputDir 赋值
+- [x] MP4 文件加密预处理（remuxMP4ForFastStart）不再报 "outputDir is empty" 错误
+- [x] task_manager.go.RemoveTask() 从内存 map 和 .encv-tasks.json 持久化文件中同时删除指定任务
+- [x] RemoveTask RWMutex 死锁修复：手动 Unlock 后再调用 saveTasks()
+- [x] mobile_api.go handleRemoveTaskGin handler 正确处理 DELETE /api/tasks/:id
+- [x] server.go 注册 DELETE /api/tasks/:id 路由
+- [x] encv.ts 导出 removeTask() 函数且调用正确的 HTTP DELETE 方法与路径
+- [x] Tasks.vue handleRemoveTask() 为 async 函数，调用 removeTask + loadTasks，失败有 toast 提示
+- [x] 左滑移除任务后刷新页面，被移除任务不再出现（RemoveTask + saveTasks 持久化）
+- [x] mock 测试覆盖 outputDir 时序（TestOutputDirSetBeforePreprocess 通过）
+- [x] mock 测试覆盖删除持久化（TestRemoveTask_PersistenceAfterReload 等通过）
+- [x] mock 测试覆盖 registry 层无自动安装行为（TestRegistry_NoAutoInstallBehavior 通过）

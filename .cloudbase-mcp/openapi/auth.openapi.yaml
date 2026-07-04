@@ -1,0 +1,4126 @@
+openapi: 3.0.0
+info:
+  title: 登录认证接口
+  version: 1.0.0
+  description: >-
+    ### 功能介绍
+    
+    这里给出了登录认证接口的API，以及每个API的参数参考。
+    
+    ### HTTP 状态码
+    
+    根据返回结果的不同，可能会出现 `2xx`, `4xx`, `5xx` 状态码。应当视情况处理。
+
+servers:
+  - url: https://{envId}.api.tcloudbasegateway.com
+    description: TCB openapi endpoint
+    variables:
+      envId:
+        default: "your-envId"
+        description: 环境 ID
+tags:
+  - name: 登录认证
+  - name: 第三方登录认证
+  - name: token管理
+  - name: 用户管理
+  - name: 验证码
+paths:
+  /auth/v1/provider/uri:
+    get:
+      summary: 获取三方登录的回调地址
+      deprecated: false
+      description: |-
+        ## 接口说明
+        获取第三方身份源登录的回调地址，用于OAuth授权流程
+        
+        ### 入参要求：
+        - `provider_id`: 身份源id（必填，如：github、wechat等）
+        - `redirect_uri`: 重定向地址（可选）
+        - `state`: 客户端状态参数（可选，用于防止CSRF攻击）
+        - `scope`: 授权范围（可选）
+        - `response_type`: 授权类型（可选）
+        - `client_id`: 客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（必填，请求头中传入）
+        
+        ### 出参：
+        - 返回第三方登录的回调地址URI
+        
+        ### 请求示例：
+        ```
+        GET /auth/v1/provider/uri?provider_id=github&state=random_state_string
+        x-device-id: device_123456
+        ```
+        
+        ### 响应示例：
+        ```json
+        {
+          "uri": "https://github.com/login/oauth/authorize?client_id=your_client_id&redirect_uri=https://your-app.com/callback&state=random_state_string&scope=user"
+        }
+        ```
+        
+        ### 使用流程：
+        1. 调用此接口获取第三方登录地址
+        2. 将用户重定向到返回的URI
+        3. 用户完成第三方授权后，回调到指定的redirect_uri
+        4. 在回调中获取授权码，用于后续token获取
+      operationId: Auth_GenProviderRedirectURI
+      tags:
+        - 第三方登录认证
+      parameters:
+        - name: provider_id
+          in: query
+          description: 身份源id
+          required: true
+          example: github
+          schema:
+            type: string
+        - name: redirect_uri
+          in: query
+          description: 重定向地址
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: 客户端的当前状态，可以指定任意值
+          required: false
+          schema:
+            type: string
+        - name: scope
+          in: query
+          description: 授权范围
+          required: false
+          schema:
+            type: string
+        - name: response_type
+          in: query
+          description: 授权类型
+          required: false
+          schema:
+            type: string
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id
+          required: true
+          example: ''
+          schema:
+            type: string
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/v1GenProviderRedirectURIResponse'
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: &ref_0
+                $ref: '#/components/schemas/rpcStatus'
+          headers: {}
+      security: []
+  /auth/v1/provider/token:
+    post:
+      summary: 获取三方授权信息
+      deprecated: false
+      description: |-
+        ## 接口说明
+        获取第三方服务的授权信息，通过OAuth登录获取OAuth客户端对应的授权用户信息，生成provider_token
+        
+        ### 入参要求：
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（必填，请求头中传入）
+        - 请求体参数（v1GrantProviderTokenRequest）：
+          - `provider_id`: 身份源id（必填，如：github、wechat等）
+          - `provider_code`: 第三方系统获取的登录code（必填，用于换取用户身份）
+          - `provider_redirect_uri`: 身份源回调地址（可选）
+        
+        ### 前置条件：
+        - 需要先通过第三方授权流程获取授权码（code）
+        - 第三方身份源需要在云开发平台配置
+        
+        ### 出参：
+        - 返回provider_token和provider_profile信息（v1GrantProviderTokenResponse）
+        - provider_token用于后续登录接口调用
+        - provider_profile包含第三方用户的基本信息
+        
+        ### 获取三方授权信息请求示例
+        ```
+        POST /auth/v1/provider/token
+        x-device-id: device_123456
+        Content-Type: application/json
+        
+        {
+          "provider_id": "github",
+          "provider_code": "authorization_code_from_github",
+          "provider_redirect_uri": "https://your-app.com/callback"
+        }
+        ```
+        
+        ### 获取三方授权信息响应示例
+        ```json
+        {
+          "provider_token": "your_provider_token",
+          "expires_in": 3600,
+          "provider_profile": {
+            "provider_id": "github",
+            "sub": "1234567890",
+            "name": "张三",
+            "picture": "https://avatars.githubusercontent.com/u/1234567890",
+            "email": "zhangsan@example",
+            "provider": "github"
+          }
+        }
+        ```
+        
+        ### 使用流程：
+        1. 用户完成第三方授权后，获取授权码（code）
+        2. 调用此接口使用授权码换取provider_token
+        3. 使用provider_token调用[第三方授权信息登录](/http-api/auth/auth-sign-in-with-provider)接口完成登录
+        
+        ### 关键特性：
+        - provider_token有效期为3600秒（1小时）
+        - 返回的provider_profile包含第三方用户的完整信息
+        - 支持自动注册新用户（如果用户不存在）
+        - 支持绑定到现有用户账号
+      operationId: Auth_GrantProviderToken
+      tags:
+        - 第三方登录认证
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id
+          required: true
+          example: ''
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/v1GrantProviderTokenRequest'
+            example: ''
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/v1GrantProviderTokenResponse'
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security: []
+  /auth/v1/signin/with/provider:
+    post:
+      summary: 第三方授权token登录
+      deprecated: false
+      description: |-
+        ## 接口说明
+        通过第三方授权信息生成的provider_token进行登录，支持自动注册新用户或绑定到现有用户
+        
+        ### 入参要求：
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（必填，请求头中传入）
+        - 请求体参数（v1SignInWithProviderRequest）：
+          - `provider_token`: provider_token（必填，通过[获取三方授权信息](/http-api/auth/auth-grant-provider-token)接口获取）
+          - `force_disable_sign_up`: 强制关闭自动注册（可选，默认false）
+          - `sync_profile`: 是否强制从第三方同步昵称等信息（可选，默认false）
+        
+        ### 前置条件：
+        - 需要先调用[获取三方授权信息](/http-api/auth/auth-grant-provider-token)接口获取有效的provider_token
+        - provider_token必须在有效期内（默认1小时）
+        - 第三方身份源需要在云开发平台配置并启用
+        
+        ### 出参：
+        - 返回标准的token响应（access_token、refresh_token等）
+        - 如果用户不存在且自动注册开启，会自动创建新用户
+        - 如果用户已存在，会绑定第三方身份源到现有用户
+        
+        ### 第三方授权token登录请求示例
+        ```
+        POST /auth/v1/signin/with/provider
+        x-device-id: device_123456
+        Content-Type: application/json
+        
+        {
+          "provider_token": "your_provider_token",
+          "force_disable_sign_up": false,
+          "sync_profile": true
+        }
+        ```
+        
+        ### 第三方授权token登录响应示例
+        ```json
+        {
+          "token_type": "Bearer",
+          "access_token": "your_access_token",
+          "refresh_token": "m.aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV3wX4yZ5aB6cD7eF8gH9iJ0kL1mN2oP3qR4sT5uV6wX7yZ8",
+          "expires_in": 7200,
+          "scope": "user sso",
+          "sub": "9876543210123456789"
+        }
+        ```
+        
+        ### 使用流程：
+        1. 用户完成第三方授权，获取授权码（code）
+        2. 调用[获取三方授权信息](/http-api/auth/auth-grant-provider-token)接口换取provider_token
+        3. 调用此接口使用provider_token进行登录
+        4. 返回标准的access_token和refresh_token
+        
+        ### 关键特性：
+        - 支持自动注册新用户（如果force_disable_sign_up为false）
+        - 支持绑定到现有用户账号
+        - 可以强制同步第三方用户信息到本地账号
+        - 支持多种第三方身份源（GitHub、微信、Google等）
+        
+        ### 注意事项：
+        - provider_token有效期较短，建议及时使用
+        - 如果用户已存在，会自动绑定第三方身份源
+        - 自动注册功能可以在云开发平台配置是否开启
+        - 同步用户信息功能可以更新本地用户的昵称、头像等信息
+      operationId: Auth_SignInWithProvider
+      tags:
+        - 第三方登录认证
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id
+          required: true
+          example: ''
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/v1SignInWithProviderRequest'
+            example: ''
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema: &ref_1
+                $ref: '#/components/schemas/v1Token'
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security: []
+  /auth/v1/signin/custom:
+    post:
+      summary: 自定义登录
+      deprecated: false
+      description:  |-
+        ## 适用场景
+        - 企业自有账号体系与 CloudBase 账号体系的一对一映射
+        - 需要完全自定义鉴权流程的业务场景
+        - 需要实现自有账号系统与云开发服务的无缝集成
+        
+        ## 功能说明
+        ### 1.服务端签发 Ticket
+        开发者需在服务端使用 CloudBase SDK 签发登录凭证(Ticket)，该凭证用于后续客户端认证
+        - 参考[自定义登录文档](https://docs.cloudbase.net/authentication-v2/method/custom-login)，获取ticket前的部分
+        #### 代码示例：
+        ```
+          const cloudbase = require("@cloudbase/node-sdk");
+  
+          // 1. 初始化 SDK
+          const app = cloudbase.init({
+          env: "your-env-id",
+            // 传入自定义登录私钥
+          credentials: require("/path/to/your/tcb_custom_login.json")
+          });
+            
+          // 2. 开发者自定义的用户唯一身份标识
+          const customUserId = "your-customUserId";
+          
+          // 3. 创建ticket
+          const ticket = app.auth().createTicket(customUserId);
+          
+          // 4. 将ticket返回至客户端
+          return ticket;
+        ```
+        
+        ### 2.客户端自定义登录
+        #### 接口说明
+        客户端使用服务端签发的 Ticket 获取访问凭证
+        #### 请求示例：
+        ```
+          {
+            "provider_id": "custom",
+            "ticket": "your_ticket"
+          }
+        ```
+        
+        #### 关键特性：
+          - access_token 有效期为 7200 秒（2小时）
+          - refresh_token 有效期为 2592000 秒（30天）
+          - 建议实现 token 自动刷新机制
+      operationId: Auth_SignInCustom
+      tags:
+        - 第三方登录认证
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id
+          required: false
+          example: ''
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider_id:
+                  type: string
+                  title: 身份源id，自定义登录时固定传custom
+                ticket:
+                  type: string
+                  title: 自定义登录ticket
+              required:
+                - provider_id
+                - ticket
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema: &ref_1
+                $ref: '#/components/schemas/v1Token'
+          headers: { }
+      security: [ ]
+  /auth/v1/signin:
+    post:
+      summary: 用户登录接口
+      deprecated: false
+      description: |-
+        ## 登录场景说明
+        
+        ### 1. 用户名密码登录
+        #### 入参要求：
+        - `username`: 用户名（必填，2-48位，支持英文大小写、数字、特殊字符（仅支持-_.:+ @），且只能以字母或数字开头，不支持中文）
+        - `password`: 密码（必填）
+        
+        #### 前置条件：
+        - 已注册用户使用用户名密码登录
+        
+        #### 出参：
+        - 返回标准的token响应（access_token、refresh_token等）
+        
+        #### 用户名密码登录请求示例
+        ```json
+        {
+          "username": "zhangsan",
+          "password": "DemoPass123!@#"
+        }
+        ```
+        #### 用户名密码登录响应示例
+        ```json
+        {
+          "token_type": "Bearer",
+          "access_token": "your_access_token",
+          "refresh_token": "m.aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV3wX4yZ5aB6cD7eF8gH9iJ0kL1mN2oP3qR4sT5uV6wX7yZ8",
+          "expires_in": 7200,
+          "sub": "9876543210123456789"
+        }
+        ```
+        
+        ### 2. 手机号验证码登录
+        #### 入参要求：
+        - `verification_token`: 验证码token，必填，通过[验证短信、邮箱验证码](/http-api/auth/auth-verify-verification)接口获取
+        
+        #### 前置条件：
+        - 需要先调用验证码发送接口获取验证码
+        - 验证码验证通过后获取verification_token
+        
+        #### 出参：
+        - 返回标准的token响应（access_token、refresh_token等）
+        
+        #### 手机号验证码登录请求示例
+        ```json
+        {
+          "verification_token": "your_access_token"
+        }
+        ```
+        #### 手机号验证码登录响应示例
+        ```json
+        {
+          "token_type": "Bearer",
+          "access_token": "your_access_token",
+          "refresh_token": "m.aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV3wX4yZ5aB6cD7eF8gH9iJ0kL1mN2oP3qR4sT5uV6wX7yZ8",
+          "expires_in": 7200,
+          "sub": "9876543210123456789"
+        }
+        ```
+        
+        ### 3. 邮箱验证码登录
+        #### 入参要求：
+        - `verification_token`: 验证码token，必填，通过[验证短信、邮箱验证码](/http-api/auth/auth-verify-verification)接口获取
+        
+        #### 前置条件：
+        - 需要先调用邮箱验证码发送接口获取验证码
+        - 验证码验证通过后获取verification_token
+        
+        #### 出参：
+        - 返回标准的token响应（access_token、refresh_token等）
+        
+        #### 邮箱验证码登录请求示例
+        ```json
+        {
+          "verification_token": "your_access_token"
+        }
+        ```
+        #### 邮箱验证码登录响应示例
+        ```json
+        {
+          "token_type": "Bearer",
+          "access_token": "your_access_token",
+          "refresh_token": "m.aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV3wX4yZ5aB6cD7eF8gH9iJ0kL1mN2oP3qR4sT5uV6wX7yZ8",
+          "expires_in": 7200,
+          "sub": "9876543210123456789"
+        }
+        ```
+        
+        ### 通用说明：
+        - 三种登录方式互斥，每次请求只能使用一种方式
+        - 验证码登录时，需要通过[验证短信、邮箱验证码](/http-api/auth/auth-verify-verification)接口获取verification_token
+        - 登录成功后返回标准的token响应
+
+      operationId: Auth_SignIn
+      tags:
+        - 登录认证
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/v1SignInRequest'
+            example:
+              username: zhangsan
+      password: DemoPass123!@#
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema: *ref_1
+              example:
+                token_type: Bearer
+                access_token: >-
+                  your_access_token
+                refresh_token: m.aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV3wX4yZ5aB6cD7eF8gH9iJ0kL1mN2oP3qR4sT5uV6wX7yZ8
+                expires_in: 7200
+                sub: '9876543210123456789'
+          headers: {}
+        '400':
+          description: |-
+            - invalid_username_or_password，用户名或密码有误
+            - captcha_required，登录失败重试次数过多等原因，需要验证码
+            - password_not_set，用户密码未设置，需要设置密码
+            - invalid_status，账号重试次数过多等原因导致账号被锁定，请稍后重试
+          content:
+            application/json:
+              schema: *ref_0
+              example:
+                error: invalid_username_or_password
+                error_code: 4043
+                error_description: Username or password incorrect.
+          headers:
+            X-Request-Id:
+              example: 1e55ed89-4a2b-47f8-b7de-27b4775c2adb
+              required: false
+              description: 请求id
+              schema:
+                type: string
+        '501':
+          description: >-
+            - username login is disabled by admin，用户名密码未开启，前往https://tcb.cloud.tencent.com身份认证功能开启
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                  error_code:
+                    type: integer
+                  error_description:
+                    type: string
+                required:
+                  - error
+                  - error_code
+                  - error_description
+              example:
+                error: unimplemented
+                error_code: 12
+                error_description: username login is disabled by admin
+          headers: {}
+      security: []
+  /auth/v1/signin/anonymously:
+    post:
+      summary: 匿名登录
+      deprecated: false
+      description: |-
+        ## 接口说明
+        匿名登录接口，同一个设备ID最多只能注册一个匿名用户，生成匿名用户的access_token
+        
+        ### 入参要求：
+        - `x-device-id`: 设备id（必填，请求头中传入）
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        
+        ### 前置条件：
+        - 同一个设备ID只能注册一个匿名用户
+        - 设备ID需要客户端随机生成并缓存
+        
+        ### 出参：
+        - 返回标准的token响应（access_token、refresh_token等）
+        - scope为"anonymous"，表示匿名用户
+        
+        ### 匿名登录请求示例
+        ```
+        POST /auth/v1/signin/anonymously
+        x-device-id: device_123456
+        Content-Type: application/json
+        
+        {}
+        ```
+        
+        ### 匿名登录响应示例
+        ```json
+        {
+          "token_type": "Bearer",
+          "access_token": "your_access_token",
+          "expires_in": 7200,
+          "scope": "anonymous",
+          "sub": "7ft9WRremXrz-TfgoAR9Uw"
+        }
+        ```
+        
+        ### 关键特性：
+        - 同一个设备ID只能生成一个匿名用户
+        - 匿名用户没有用户名、密码等个人信息
+        - 适合临时使用或体验功能的场景
+        - 可以通过绑定其他登录方式升级为正式用户
+      operationId: Auth_SignInAnonymously
+      tags:
+        - 登录认证
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: >-
+            匿名登录时必填。设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数在匿名登录时用于计算用户id，未缓存会导致匿名用户再次登录，用户id发生变化
+          required: true
+          example: ''
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/v1SignInAnonymouslyRequest'
+            example: {}
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema: *ref_1
+              example:
+                token_type: Bearer
+                access_token: >-
+                  your_access_token
+                expires_in: 7200
+                scope: anonymous
+                sub: 7ft9WRremXrz-TfgoAR9Uw
+          headers: {}
+        '400':
+          description: |-
+            - invalid_argument请在请求头添加设备id，x-device-id在Header中未传入
+            - unimplemented请联系管理员开启匿名登录，匿名登录未开启，前往云开发平台开启
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+          headers: {}
+        '403':
+          description: ''
+          content:
+            application/json:
+              schema:
+                title: ''
+                type: object
+                properties: {}
+              example:
+                error: permission_denied
+                error_code: 7
+                error_description: >-
+                  cors permission denied, please check if
+                  demo-app-3g4h5i6j7k8l-9876543210.example.com in
+                  your client XyZ9aB1cD2eF3gH4iJ5 domains
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security: []
+  /auth/v1/signup:
+    post:
+      summary: 注册新用户
+      deprecated: false
+      description: |-
+        注册新用户，支持以下三种注册场景：
+        
+        ### 1. 手机号+验证码注册
+        #### 入参要求：
+        - `phone_number`: 手机号（必填，格式："+86 13000000000"）
+        - `verification_token`: 验证码token，必填，通过[验证短信、邮箱验证码](/http-api/auth/auth-verify-verification)接口获取
+        - `username`: 用户名（可选，2-48位）
+        - `password`: 密码（可选）
+        
+        #### 出参：
+        - 返回标准的token响应（access_token、refresh_token等）
+       
+        #### 手机号+验证码注册请求示例
+        ```json
+        {
+          "phone_number": "+86 13000000000",
+          "verification_token": "your_access_token",
+          "username": "user123",
+          "password": "Password@123"
+        }
+        ```
+        #### 手机号+验证码注册响应示例
+        ```json
+        {
+          "token_type": "Bearer",
+          "access_token": "your_access_token",
+          "refresh_token": "m.Y7Nk75cRMmeMrwYOqmG0Sju4YjZiiPRO-lE",
+          "expires_in": 7200,
+          "sub": "9876543210123456789"
+        }
+        ```
+        
+        ### 2. 邮箱+验证码注册
+        #### 入参要求：
+        - `email`: 邮箱地址（必填）
+        - `verification_token`: 验证码token，必填，通过[验证短信、邮箱验证码](/http-api/auth/auth-verify-verification)接口获取
+        - `username`: 用户名（可选，5-24位）
+        - `password`: 密码（可选）
+        
+        #### 出参：
+        - 返回标准的token响应（access_token、refresh_token等）
+        
+        #### 邮箱+验证码注册请求示例
+        ```json
+        {
+          "email": "user@example",
+          "verification_token": "your_access_token",
+          "username": "user456",
+          "password": "DemoPass123!@#"
+        }
+        ```
+        #### 邮箱+验证码注册响应示例
+        ```json
+        {
+          "token_type": "Bearer",
+          "access_token": "your_access_token",
+          "refresh_token": "m.Y7Nk75cRMmeMrwYOqmG0Sju4YjZiiPRO-lE",
+          "expires_in": 7200,
+          "sub": "9876543210123456789"
+        }
+        ```
+        
+        ### 3. 第三方授权注册
+        #### 入参要求：
+        - `provider_token`: 第三方身份源token（必填）
+        - `username`: 用户名（可选，5-24位）
+        - `password`: 密码（可选）
+        
+        #### 出参：
+        - 返回标准的token响应（access_token、refresh_token等）
+        
+        #### 第三方授权注册请求示例
+        ```json
+        {
+          "provider_token": "your_provider_token",
+          "username": "github_user",
+          "password": "SamplePass456$%^"
+        }
+        ```
+        #### 第三方授权注册响应示例
+        ```json
+        {
+          "token_type": "Bearer",
+          "access_token": "your_access_token",
+          "refresh_token": "m.Y7Nk75cRMmeMrwYOqmG0Sju4YjZiiPRO-lE",
+          "expires_in": 7200,
+          "sub": "9876543210123456789"
+        }
+        ```
+        
+        ### 通用说明：
+        - 可在注册时同时设置用户名、密码
+        - 验证码注册时，需要通过[验证短信、邮箱验证码](/http-api/auth/auth-verify-verification)接口获取verification_token
+        - 不支持仅传入用户名、密码注册。用户名密码创建用户，请前往云后台创建
+
+      operationId: Auth_SignUp
+      tags:
+        - 登录认证
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/v1SignUpRequest'
+            example:
+              username: user03
+              password: DemoPass123!@#
+              email: demouser@123.com
+              verification_token: >-
+                your_access_token
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema: *ref_1
+              example:
+                token_type: Bearer
+                access_token: >-
+                  your_access_token
+                refresh_token: m.Y7Nk75cRMmeMrwYOqmG0Sju4YjZiiPRO-lE
+                expires_in: 7200
+                sub: '1870014161959620608'
+          headers: {}
+        '400':
+          description: |-
+            - you can not signup just by username and password，不允许仅用用户名密码注册，用户身份需经过验证
+            - phone number login is disabled by admin，手机号登录未开启，需在云开发平台开启
+            - you can not set phone number and email at same time，手机号、邮箱不可同时设置
+          content:
+            application/json:
+              schema: *ref_0
+              example:
+                error: unimplemented
+                error_code: 12
+                error_description: you can not signup just by username and password
+          headers: {}
+      security: []
+  /auth/v1/user/signout:
+    post:
+      summary: 退出登录
+      deprecated: false
+      description: |-
+        ## 接口说明
+        用户退出登录接口，用于安全地终止用户会话。
+        
+        ### 功能特性
+        - 清理后台token对应的refresh_token记录
+        - 标记access_token为已失效状态
+        - 支持客户端主动清理本地token缓存
+        - 如果是退出第三方系统授权登录态, 会根据三方身份源的配置决定是否生成三方的退出登录链接
+        
+        ## 入参要求
+        
+        ### 必需参数
+        - `Authorization`: 请求头中传入Bearer认证，格式为 `Bearer ${access_token}`
+        
+        ### 可选参数
+        - `client_id`: 应用对应的客户端id，默认为环境id，可以不传
+        - `x-device-id`: 设备id，当前登录设备的id
+        - `redirect_uri`: 登出成功后重定向地址（可选）
+        - `state`: 登出成功后重定向地址携带的参数（可选）
+        
+        ## 前置条件
+        - 用户必须处于已登录状态
+        - access_token须有效且未过期
+        - 客户端需要缓存access_token用于退出登录
+        
+        ## 出参说明
+        
+        ### 成功响应
+        - 返回200状态码表示退出登录成功
+        - 可选的`redirect_uri`用于页面重定向
+        
+        ### 退出登录请求示例
+        ```
+        POST /auth/v1/user/signout
+        Authorization: Bearer your_access_token
+        x-device-id: device_123456
+        Content-Type: application/json
+        {}
+        ```
+        
+        ## 响应示例
+        
+        ### 成功响应
+        ```json
+        {
+          "redirect_uri": "https://example/logout-callback?state=logout_state_123"
+        }
+        ```
+        
+        ### 参数错误响应
+        ```json
+        {
+          "error": "invalid_argument",
+          "error_code": 3,
+          "error_description": "device id must less than 72"
+        }
+        ```
+        
+        ## 使用流程
+        
+        ### 1. 客户端清理本地token
+        - 删除本地存储的access_token和refresh_token
+        - 清除相关的用户会话信息
+        
+        ### 2. 调用退出登录接口
+        - 使用有效的access_token调用退出登录接口
+        - 可选传入重定向地址和状态参数
+        
+        ### 3. 处理服务端响应
+        - 如果返回重定向地址，进行页面跳转
+        - 如果返回错误信息，进行相应处理
+        
+        ### 4. 验证token状态
+        - 可调用[验证token](/http-api/auth/auth-token-introspect)接口确认token已失效
+        
+        ## 注意事项
+        
+        ### 安全规范
+        - JWT token是客户端保存的，需要客户端主动清理
+        - 退出登录后，access_token将立即失效
+        - refresh_token将被标记为不可用状态
+        
+        ### 错误处理
+        - 如果access_token已过期，退出登录接口仍会返回成功
+        - 设备id长度超过限制会导致参数错误
+        - 服务器内部错误需要重试机制
+
+      operationId: Auth_SignOut
+      tags:
+        - 登录认证
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          description: 当前登录用户的access_token, 值的格式为Bearer xxx
+          required: true
+          schema:
+            type: string
+          example: Bearer your_access_token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/v1SignoutRequest'
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/v1SignoutResponse'
+          headers: {}
+        '400':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+              example:
+                error: invalid_argument
+                error_code: 3
+                error_description: device id must less than 72
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security:
+        - JWTAuth: []
+  /auth/v1/token:
+    post:
+      summary: 获取或刷新token
+      deprecated: false
+      operationId: Auth_GrantToken
+      tags:
+        - token管理
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/v1TokenRequest'
+            example:
+              client_id: your_client_id
+              grant_type: refresh_token
+              refresh_token: your_refresh_token
+
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema: *ref_1
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security: []
+      description: |-
+        ## 接口说明
+        获取或刷新token接口，支持多种OAuth 2.0标准授权模式，用于获取access_token和refresh_token。
+        
+        ## 授权模式说明
+        
+        ### 1. Refresh Token 刷新模式
+        #### 入参要求：
+        - `grant_type`: 授权类型（必填，固定值为"refresh_token"）
+        - `refresh_token`: 刷新令牌（必填，用于获取新的access_token）
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（可选，请求头中传入）
+        
+        #### 前置条件：
+        - 必须持有有效的refresh_token
+        - refresh_token未过期且未被撤销
+        
+        #### 出参：
+        - `token_type`: token类型，固定为"Bearer"
+        - `access_token`: 访问令牌，用于访问受保护的资源
+        - `refresh_token`: 新的刷新令牌，原refresh_token随即失效
+        - `expires_in`: access_token过期时间（秒）
+        - `sub`: 用户唯一标识
+        
+        #### Refresh Token刷新请求示例
+        ```json
+        {
+          "client_id": "demo-app-2f8a9c3e1b4d",
+          "grant_type": "refresh_token",
+          "refresh_token": "m.yPxK8mLnVrQwEoDzFcHbNtGsYvXpRjWq-3eSd2fA1gU5iI9kO0lP7uJ4mT6nB8yC"
+        }
+        ```
+        
+        #### Refresh Token刷新响应示例
+        ```json
+        {
+          "token_type": "Bearer",
+          "access_token": "your_access_token",
+          "refresh_token": "m.aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV3wX4yZ5aB6cD7eF8gH9iJ0kL1mN2oP3qR4sT5uV6wX7yZ8",
+          "expires_in": 7200,
+          "sub": "9876543210123456789"
+        }
+        ```
+        
+        ### 2. 密码模式认证
+        #### 入参要求：
+        - `grant_type`: 授权类型（必填，固定值为"password"）
+        - `username`: 用户名（必填）
+        - `password`: 密码（必填）
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（可选，请求头中传入）
+        
+        #### 前置条件：
+        - 用户已注册并设置密码
+        - 用户名密码登录方式已开启
+        
+        #### 出参：
+        - `token_type`: token类型，固定为"Bearer"
+        - `access_token`: 访问令牌
+        - `refresh_token`: 刷新令牌
+        - `expires_in`: access_token过期时间（秒）
+        - `sub`: 用户唯一标识
+        
+        #### 密码模式请求示例
+        ```json
+        {
+          "client_id": "demo-app-2f8a9c3e1b4d",
+          "grant_type": "password",
+          "username": "zhangsan",
+          "password": "DemoPass123!@#"
+        }
+        ```
+        
+        #### 密码模式响应示例
+        ```json
+        {
+          "token_type": "Bearer",
+          "access_token": "your_access_token",
+          "refresh_token": "m.aB3cD4eF5gH6iJ7kL8mN9oP0qR1sT2uV3wX4yZ5aB6cD7eF8gH9iJ0kL1mN2oP3qR4sT5uV6wX7yZ8",
+          "expires_in": 7200,
+          "sub": "9876543210123456789"
+        }
+        ```
+        
+        ### 3. 客户端凭证模式
+        #### 入参要求：
+        - `grant_type`: 授权类型（必填，固定值为"client_credentials"）
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `Authorization`: 认证信息（必填，请求头中传入，格式为"Basic ${base64(SecretId:SecretKey)}"）
+        
+        #### 前置条件：
+        - 必须持有有效的SecretId和SecretKey
+        - 调用方需具备服务端可信环境
+        - SecretKey需存储于安全介质
+        
+        #### 出参：
+        - `token_type`: token类型，固定为"Bearer"
+        - `access_token`: 访问令牌，具有超级管理员权限
+        - `expires_in`: access_token过期时间（秒）
+        - 注意：不返回refresh_token
+        
+        #### 客户端凭证模式请求示例
+        ```
+        POST /auth/v1/token
+        Authorization: Basic bG93Y29kZS01ZzlhYzIwdTJhMjdkYTQ2OnNlY3JldF9rZXlfZXhhbXBsZQ==
+        Content-Type: application/json
+        
+        {
+          "client_id": "demo-app-2f8a9c3e1b4d",
+          "grant_type": "client_credentials"
+        }
+        ```
+        
+        #### 客户端凭证模式响应示例
+        ```json
+        {
+          "token_type": "Bearer",
+          "access_token": "your_access_token",
+          "expires_in": 7200
+        }
+        ```
+        
+        ## 字段说明
+        
+        ### 请求参数
+        | 字段名 | 类型 | 必填 | 说明 |
+        |--------|------|------|------|
+        | grant_type | string | 是 | 授权类型，可选值：refresh_token、password、client_credentials |
+        | refresh_token | string | 否 | 刷新令牌，grant_type为refresh_token时必填 |
+        | username | string | 否 | 用户名，grant_type为password时必填 |
+        | password | string | 否 | 密码，grant_type为password时必填 |
+        | client_id | string | 否 | 客户端id，默认为环境id |
+        | x-device-id | string | 否 | 设备id，请求头中传入 |
+        | Authorization | string | 否 | 认证信息，grant_type为client_credentials时必填，请求头中传入 |
+        
+        ### 响应参数
+        | 字段名 | 类型 | 说明 |
+        |--------|------|------|
+        | token_type | string | token类型，固定为"Bearer" |
+        | access_token | string | 访问令牌，用于访问受保护的资源 |
+        | refresh_token | string | 刷新令牌，用于获取新的access_token（client_credentials模式不返回） |
+        | expires_in | integer | access_token过期时间（秒） |
+        | sub | string | 用户唯一标识（client_credentials模式为service_account） |
+        
+        ## 关键特性
+        
+        ### Refresh Token刷新机制
+        - 符合RFC 6749 Section 6标准
+        - 原refresh_token使用后立即失效
+        - 返回新的access_token和refresh_token
+        - 支持无感刷新，提升用户体验
+        
+        ### 密码模式
+        - 符合RFC 6749 Section 4.3标准
+        - 适用于可信客户端
+        - 直接使用用户名密码获取token
+        - 返回access_token和refresh_token
+        
+        ### 客户端凭证模式
+        - 符合RFC 6749 Section 4.4标准
+        - 适用于服务端调用
+        - 自动授予超级管理员权限
+        - 不返回refresh_token
+        - 需要SecretId和SecretKey认证
+        
+        ## 安全规范
+        
+        ### Refresh Token安全
+        - refresh_token应安全存储在客户端
+        - 使用后立即失效，防止重放攻击
+        - 建议定期轮换refresh_token
+        - 检测到异常时应立即撤销
+        
+        ### 密码模式安全
+        - 仅在可信客户端中使用
+        - 密码应加密传输（HTTPS）
+        - 建议实现登录失败次数限制
+        - 支持验证码防护机制
+        
+        ### 客户端凭证模式安全
+        - SecretKey必须存储于安全介质
+        - 仅在服务端可信环境中使用
+        - 定期轮换SecretKey
+        - 记录所有调用审计日志
+        - 限制调用频率和IP白名单
+        
+        ## 使用场景
+        
+        ### Refresh Token刷新
+        - access_token即将过期时自动刷新
+        - 实现无感登录体验
+        - 长期保持登录状态
+        
+        ### 密码模式
+        - 用户首次登录
+        - 可信的第一方应用
+        - 内部管理系统
+        
+        ### 客户端凭证模式
+        - 服务端API调用
+        - 后台管理操作
+        - 系统集成场景
+        - 需要管理员权限的操作
+        
+        
+        ### 错误响应示例
+        ```json
+        {
+          "error": "invalid_grant",
+          "error_code": 4001,
+          "error_description": "refresh_token无效或已过期"
+        }
+        ```
+
+  /auth/v1/token/introspect:
+    get:
+      summary: 验证token
+      deprecated: false
+      description: |-
+        ## 接口说明
+        验证token是否有效，如果token有效，会返回token对应的sub值
+        
+        ### 入参要求：
+        - `Authorization`: 当前登录用户的access_token（必填，请求头中传入，格式为Bearer xxx）
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（可选，当前登录设备的id）
+        
+        ### 前置条件：
+        - 需要有效的access_token
+        - token未过期且未被撤销
+        
+        ### 出参：
+        - 如果token有效，返回token信息（token_type、client_id、sub、scope等）
+        - 如果token无效，返回空对象
+        
+        ### 验证token请求示例
+        ```
+        GET /auth/v1/token/introspect
+        Authorization: Bearer your_access_token
+        x-device-id: device_123456
+        ```
+        
+        ### 验证token响应示例（token有效）
+        ```json
+        {
+          "token_type": "Bearer",
+          "client_id": "demo-app-2f8a9c3e1b4d",
+          "sub": "9876543210123456789",
+          "scope": "user sso"
+        }
+        ```
+        
+        ### 验证token响应示例（token无效）
+        ```json
+        {}
+        ```
+        
+        ### 使用场景：
+        - 客户端需要验证token是否仍然有效
+        - 在敏感操作前进行token有效性检查
+        - 实现token自动刷新机制时验证当前token状态
+        
+        ### 注意事项：
+        - 此接口不会刷新token，只验证当前token的有效性
+        - 如果token过期或已被撤销，会返回空对象
+        - 建议在客户端实现token自动刷新机制，避免频繁调用此接口
+      operationId: Auth_TokenIntrospect
+      tags:
+        - token管理
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          description: 用户的access_token, 值的格式为Bearer xxx
+          required: true
+          schema:
+            type: string
+          example: Bearer your_access_token
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/v1TokenIntrospectResponse'
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security:
+        - JWTAuth: []
+  /auth/v1/captcha/data:
+    post:
+      summary: 获取图片验证码
+      deprecated: false
+      description: |-
+        ## 接口说明
+        获取图片验证码接口，返回符合RFC 2397标准的内联图片数据URI，用于在登录、注册等场景中进行人机验证。
+        
+        ## 入参要求
+        
+        ### 请求参数
+        - 无需传入参数，直接调用即可
+        
+        ## 前置条件
+        - 无特殊前置条件
+        - 建议在用户登录失败次数过多时调用
+        - 可在注册、找回密码等敏感操作时使用
+        
+        ## 出参说明
+        
+        ### 成功响应
+        - `data`: 图片数据（必填，RFC 2397标准的内联图片数据URI，格式为data:image/gif;base64,xxx）
+        - `type`: 资源类型（必填，固定值为"image"）
+        - `token`: 验证码token（必填，用于后续验证接口）
+        - `expires_in`: 过期时间（必填，单位为秒，默认300秒）
+        
+        ## 请求示例
+        
+        ### 获取图片验证码请求示例
+        ```
+        POST /auth/v1/captcha/data
+        Content-Type: application/json
+        
+        {}
+        ```
+        
+        ## 响应示例
+        
+        ### 获取成功响应示例
+        ```json
+        {
+          "data": "data:image/gif;base64,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",
+          "type": "image",
+          "token": "aC_raGNycHQOSR7w0V7U0Ble-edJud_-AJofUvLFga8v59WsZVRI_RUBxC9Tk5eUoBNrdPhqA0M_ZkT0V0le909Z7YmWHVT4Yead026_",
+          "expires_in": 300
+        }
+        ```
+        
+        ## 字段说明
+        
+        ### 响应参数
+        | 字段名 | 类型 | 必填 | 说明 |
+        |--------|------|------|------|
+        | data | string | 是 | 图片数据，RFC 2397标准的内联图片数据URI，包含协议头(data:)、MIME类型(image/gif)、编码方式(base64)和实际数据 |
+        | type | string | 是 | 资源类型，固定值为"image" |
+        | token | string | 是 | 验证码token，用于后续验证接口 |
+        | expires_in | integer | 是 | 过期时间，单位为秒，默认300秒 |
+        
+        ## 使用流程
+        
+        ### 1. 获取验证码图片
+        - 前端调用该接口获取验证码数据
+        - 将返回的data字段直接作为`<img src>`的值渲染
+        - 在本地存储中保存返回的token（建议使用localStorage）
+        
+        ### 2. 用户输入验证码
+        - 用户识别图片中的验证码内容
+        - 在输入框中输入识别的验证码
+        
+        ### 3. 提交验证码验证
+        - 调用[验证图片验证码](/http-api/auth/auth-verify-captcha-data)接口
+        - 传入token和用户输入的验证码
+        - 获取captcha_token
+        
+        ### 4. 业务接口鉴权
+        - 在需要验证码保护的业务请求中附加请求头
+        - 请求头格式：`x-captcha-token: xxx`
+        
+        ## 关键特性
+        
+        ### 图片格式
+        - 符合RFC 2397标准的Data URI
+        - 使用GIF格式
+        - Base64编码
+        - 可直接在HTML中使用
+        
+        ### 安全性
+        - 验证码token有效期为300秒
+        - 每次获取生成新的验证码
+        - 验证码使用后立即失效
+        - 支持防暴力破解机制
+        
+        ## 使用场景
+        
+        ### 登录保护
+        - 用户登录失败次数过多时要求验证码
+        - 防止暴力破解密码
+        - 保护账号安全
+        
+        ### 注册保护
+        - 防止批量注册
+        - 防止恶意注册
+        - 保护系统资源
+        
+        ### 敏感操作保护
+        - 找回密码
+        - 修改密码
+        - 修改绑定信息
+        - 删除账号
+        
+        ## 注意事项
+        
+        ### 前端实现
+        - 将data字段直接赋值给img标签的src属性
+        - 妥善保存token用于后续验证
+        - 实现刷新验证码功能
+        - 验证码过期后需重新获取
+        
+        ### 安全建议
+        - 验证码应在服务端生成
+        - 验证码内容应随机且不可预测
+        - 限制同一IP的获取频率
+        - 记录验证码获取日志
+        
+        ### 常见错误
+        - 服务器错误：重试获取
+        - 网络超时：检查网络连接
+        - 频率限制：等待后重试
+        
+        ### 错误响应示例
+        ```json
+        {
+          "error": "rate_limit_exceeded",
+          "error_code": 4029,
+          "error_description": "获取验证码频率过高，请稍后重试"
+        }
+        ```
+        
+        ## 相关接口
+        - [验证图片验证码](/http-api/auth/auth-verify-captcha-data) - 验证用户输入的验证码
+        - [用户登录](/http-api/auth/auth-sign-in) - 登录接口
+        - [用户注册](/http-api/auth/auth-sign-up) - 注册接口
+        
+      operationId: Auth_GetCaptchaData
+      tags:
+        - 验证码
+      parameters: []
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    title: 图片数据
+                    description: >-
+                      RFC 2397标准的内联图片数据URI，包含以下部分：协议头：data: MIME类型：image/gif
+                      编码方式：base64 实际数据：符合RFC 4648的Base64编码二进制数据
+                  type:
+                    type: string
+                    title: 类型
+                    description: '资源类型枚举值: "image"  图片类资源。其他值保留未来扩展'
+                  token:
+                    type: string
+                    title: token
+                    description: 验证码验证接口需要传入的token
+                  expires_in:
+                    type: integer
+                    title: 过期时间
+                    description: 令牌过期时间，默认300秒
+                required:
+                  - data
+                  - type
+                  - token
+                  - expires_in
+              example:
+                data: >-
+                  data:image/gif;base64,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
+                type: image
+                token: >-
+                  aC_raGNycHQOSR7w0V7U0Ble-edJud_-AJofUvLFga8v59WsZVRI_RUBxC9Tk5eUoBNrdPhqA0M_ZkT0V0le909Z7YmWHVT4Yead026_
+                expires_in: 300
+          headers: {}
+      security: []
+  /auth/v1/captcha/data/verify:
+    post:
+      summary: 验证图片验证码
+      deprecated: false
+      description: |-
+        ## 接口说明
+        验证图片验证码接口，用于验证用户输入的验证码是否正确，验证成功后返回captcha_token，用于后续业务接口的人机验证。
+        
+        ## 入参要求
+        
+        ### 必需参数
+        - `token`: 验证码token（必填，从[获取图片验证码](/http-api/auth/auth-get-captcha-data)接口获取）
+        - `key`: 验证码内容（必填，用户识别图片后输入的验证码文本）
+        
+        ## 前置条件
+        - 必须先调用[获取图片验证码](/http-api/auth/auth-get-captcha-data)接口获取验证码
+        - token未过期（默认有效期300秒）
+        - 验证码未被使用过
+        
+        ## 出参说明
+        
+        ### 成功响应
+        - `captcha_token`: 验证码令牌（必填，用于后续业务接口的人机验证）
+        - `expires_in`: 过期时间（必填，单位为秒，默认300秒）
+        
+        ## 请求示例
+        
+        ### 验证图片验证码请求示例
+        ```json
+        {
+          "token": "aC_raGNycHQOSR7w0V7U0Ble-edJud_-AJofUvLFga8v59WsZVRI_RUBxC9Tk5eUoBNrdPhqA0M_ZkT0V0le909Z7YmWHVT4Yead026_",
+          "key": "AB12"
+        }
+        ```
+        
+        ## 响应示例
+        
+        ### 验证成功响应示例
+        ```json
+        {
+          "captcha_token": "your_access_token",
+          "expires_in": 300
+        }
+        ```
+        
+        ### 验证失败响应示例
+        ```json
+        {
+          "error": "invalid_captcha",
+          "error_code": 4001,
+          "error_description": "验证码错误"
+        }
+        ```
+        
+        ### 验证码过期响应示例
+        ```json
+        {
+          "error": "captcha_expired",
+          "error_code": 4002,
+          "error_description": "验证码已过期，请重新获取"
+        }
+        ```
+        
+        ### 验证码已使用响应示例
+        ```json
+        {
+          "error": "captcha_used",
+          "error_code": 4003,
+          "error_description": "验证码已被使用，请重新获取"
+        }
+        ```
+        
+        ## 字段说明
+        
+        ### 请求参数
+        | 字段名 | 类型 | 必填 | 说明 |
+        |--------|------|------|------|
+        | token | string | 是 | 验证码token，从/auth/v1/captcha/data接口获取 |
+        | key | string | 是 | 用户识别图片后输入的验证码文本，不区分大小写 |
+        
+        ### 响应参数
+        | 字段名 | 类型 | 必填 | 说明 |
+        |--------|------|------|------|
+        | captcha_token | string | 是 | 验证码令牌，用于后续业务接口的人机验证 |
+        | expires_in | integer | 是 | 过期时间，单位为秒，默认300秒 |
+        
+        ## 使用流程
+        
+        ### 1. 获取验证码
+        - 调用[获取图片验证码](/http-api/auth/auth-get-captcha-data)接口
+        - 获取验证码图片和token
+        
+        ### 2. 用户输入验证码
+        - 用户识别图片中的验证码
+        - 在输入框中输入验证码
+        
+        ### 3. 验证验证码
+        - 调用本接口验证用户输入
+        - 传入token和用户输入的key
+        - 获取captcha_token
+        
+        ### 4. 使用captcha_token
+        - 在需要验证码保护的业务接口中
+        - 添加请求头：`x-captcha-token: xxx`
+        - 完成人机验证
+        
+        ## 关键特性
+        
+        ### 验证规则
+        - 不区分大小写
+        - 验证码长度为4-6位
+        - 支持数字和字母
+        - 验证失败不影响token有效期
+        
+        ### 安全性
+        - 验证码使用后立即失效
+        - 限制验证失败次数
+        - 防止暴力破解
+        - 记录验证日志
+        
+        ## 使用场景
+        
+        ### 登录保护
+        - 登录失败次数过多时要求验证码
+        - 验证通过后允许登录
+        - 防止暴力破解
+        
+        ### 注册保护
+        - 注册时要求验证码
+        - 防止批量注册
+        - 保护系统资源
+        
+        ### 敏感操作保护
+        - 找回密码时验证
+        - 修改密码时验证
+        - 修改绑定信息时验证
+        - 删除账号时验证
+        
+        ## 注意事项
+        
+        ### 验证码输入
+        - 不区分大小写
+        - 去除首尾空格
+        - 验证失败可重试
+        - 过期后需重新获取
+        
+        ### 错误处理策略
+        - 验证码错误：允许重试，超过次数后重新获取
+        - 验证码过期：自动刷新验证码
+        - 验证码已使用：自动刷新验证码
+        - 网络错误：重试机制
+        
+        ## 相关接口
+        - [获取图片验证码](/http-api/auth/auth-get-captcha-data) - 获取验证码图片
+        - [用户登录](/http-api/auth/auth-sign-in) - 登录接口
+        - [用户注册](/http-api/auth/auth-sign-up) - 注册接口
+        - [修改密码](/http-api/auth/user-update-password) - 修改密码接口
+        
+      operationId: Auth_VerifyCaptchaData
+      tags:
+        - 验证码
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token:
+                  type: string
+                  title: 验证码验证token
+                  description: 从/auth/v1/captcha/data接口获取
+                key:
+                  type: string
+                  title: 验证码中识别出的文本内容
+              required:
+                - token
+                - key
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  captcha_token:
+                    type: string
+                    title: 验证码token
+                  expires_in:
+                    type: integer
+                    title: 过期时间，默认600秒
+                required:
+                  - captcha_token
+                  - expires_in
+              example:
+                captcha_token: >-
+                  v1.aC_uW2NycHQOSR7w0V7U4RtK5aYN-pTwGMhoIenRvZI0rsCSeRNG80dA3DcSnJSOsRVoZu4tDU1-N1zsFgcdoEIZttimdkGtQpbJ3Dud9Oou
+                expires_in: 600
+          headers: {}
+      security: []
+  /auth/v1/verification:
+    post:
+      summary: 发送短信、邮箱验证码
+      deprecated: false
+      description: |-
+        ## 接口说明
+        发送短信或邮箱验证码接口，用于向用户的手机号或邮箱发送验证码，支持登录、注册、找回密码等多种场景。
+        
+        本接口支持两种模式：
+        - **验证码模式（默认）**：发送6位数字验证码到用户手机或邮箱，用户需手动输入验证码完成验证。
+        - **Magic Link 模式**：当请求体中传入 `email_redirect_to` 参数时启用，仅支持邮箱（`email` 参数），不支持手机号。邮件内容为包含登录链接的按钮，用户点击即可完成登录/注册并跳转到指定页面。
+        
+        ## 入参要求
+        
+        ### 必需参数
+        - `target`: 发送验证码的目标（必填，可选值：ANY、USER）
+          - `ANY`: 不限制，无论用户是否存在都发送
+          - `USER`: 账号必须在系统中存在才发送
+        
+        ### 可选参数（二选一）
+        - `phone_number`: 手机号（可选，有效的国内手机号，需加上"+86 "前缀，如"+86 15588665555"）
+        - `email`: 邮箱（可选，有效的邮箱地址，格式如abc@example）
+        
+        ### Magic Link 专用参数
+        - `email_redirect_to`: 跳转URL（可选，string 类型）。登录成功后跳转的目标页面地址。传入此参数即触发 Magic Link 模式，邮件内容从验证码文本变为包含登录链接的按钮邮件。
+          - 必须传入完整 URL，如 `https://envId-appid.tcloudbaseapp.com/dashboard`
+          - 仅在传入 `email` 参数时生效，不支持与 `phone_number` 搭配使用
+        
+        ### 请求头参数
+        - `x-captcha-token`: 验证码token（可选，从[验证图片验证码](/http-api/auth/auth-verify-captcha-data)接口获取，接口报错captcha_required时需传入）
+        
+        ## 前置条件
+        - 需要在云开发平台开启手机号或邮箱登录功能
+        - 手机号和邮箱不能同时传入，只能选择其一
+        - 当接口返回captcha_required错误时，需要先完成图片验证码验证
+        - **Magic Link 模式额外要求**：`email_redirect_to` 中的域名需为已配置的自定义域名或 CloudBase 默认域名，否则用户点击链接后可能返回404
+        
+        ## 出参说明
+        
+        ### 验证码模式（未传 email_redirect_to）成功响应
+        - `verification_id`: 验证码id（必填，用于后续验证接口）
+        - `expires_in`: 过期时间（必填，单位为秒，默认600秒）
+        - `is_user`: 用户是否存在（可选，true表示已注册，false或空表示未注册）
+        
+        ### Magic Link 模式（传入 email_redirect_to）成功响应
+        - `expires_in`: 过期时间（必填，单位为秒，默认600秒）
+        - `is_user`: 用户是否存在（可选，true表示已注册，false或空表示未注册）
+        
+        Magic Link 模式下验证码已嵌入邮件链接中，用户无需手动验证，响应中不包含 `verification_id` 字段。
+        
+        ## 请求示例
+        
+        ### 发送邮箱验证码请求示例（验证码模式）
+        ```json
+        {
+          "email": "user@example.com",
+          "target": "ANY"
+        }
+        ```
+        
+        ### 发送手机号验证码请求示例（验证码模式）
+        ```json
+        {
+          "phone_number": "+86 13800138000",
+          "target": "ANY"
+        }
+        ```
+        
+        ### 发送验证码给已存在用户请求示例（验证码模式）
+        ```json
+        {
+          "email": "user@example.com",
+          "target": "USER"
+        }
+        ```
+        
+        ### 发送 Magic Link 邮件请求示例（Magic Link 模式）
+        ```json
+        {
+          "email": "user@example.com",
+          "target": "ANY",
+          "email_redirect_to": "https://envId-appid.tcloudbaseapp.com/dashboard"
+        }
+        ```
+        
+        ## 响应示例
+        
+        ### 验证码模式 - 发送成功响应示例
+        ```json
+        {
+          "verification_id": "your_access_token",
+          "expires_in": 600,
+          "is_user": true
+        }
+        ```
+        
+        ### Magic Link 模式 - 发送成功响应示例
+        ```json
+        {
+          "expires_in": 600,
+          "is_user": true
+        }
+        ```
+        
+        ### 需要图片验证码响应示例
+        ```json
+        {
+          "error": "captcha_required",
+          "error_code": 4028,
+          "error_description": "需要完成图片验证码验证"
+        }
+        ```
+        
+        ### 手机号格式错误响应示例
+        ```json
+        {
+          "error": "invalid_phone_number",
+          "error_code": 4001,
+          "error_description": "手机号格式错误，需加上+86前缀"
+        }
+        ```
+        
+        ### 用户不存在响应示例
+        ```json
+        {
+          "error": "user_not_found",
+          "error_code": 4004,
+          "error_description": "用户不存在"
+        }
+        ```
+        
+        ### 发送频率过高响应示例
+        ```json
+        {
+          "error": "rate_limit_exceeded",
+          "error_code": 4029,
+          "error_description": "发送验证码频率过高，请60秒后重试"
+        }
+        ```
+        
+        ## 字段说明
+        
+        ### 请求参数
+        | 字段名 | 类型 | 必填 | 说明 |
+        |--------|------|------|------|
+        | target | string | 是 | 发送目标，可选值：ANY（不限制）、USER（用户必须存在）|
+        | phone_number | string | 否 | 手机号，格式为"+86 手机号"，与email二选一 |
+        | email | string | 否 | 邮箱地址，与phone_number二选一 |
+        | email_redirect_to | string | 否 | 跳转URL。传入此参数触发 Magic Link 模式，邮件将包含登录链接而非验证码。必须传入完整URL。仅与 email 参数搭配使用 |
+        | x-captcha-token | string | 否 | 图片验证码token，请求头中传入，接口报错captcha_required时必填 |
+        
+        ### 响应参数（验证码模式 - 未传 email_redirect_to）
+        | 字段名 | 类型 | 必填 | 说明 |
+        |--------|------|------|------|
+        | verification_id | string | 是 | 验证码id，用于后续验证接口 |
+        | expires_in | integer | 是 | 过期时间，单位为秒，默认600秒 |
+        | is_user | boolean | 否 | 用户是否存在，true表示已注册 |
+        
+        ### 响应参数（Magic Link 模式 - 传入 email_redirect_to）
+        | 字段名 | 类型 | 必填 | 说明 |
+        |--------|------|------|------|
+        | expires_in | integer | 是 | 过期时间，单位为秒，默认600秒 |
+        | is_user | boolean | 否 | 用户是否存在，true表示已注册 |
+        
+        ## 使用流程
+        
+        ### 流程一：验证码模式（默认，未传 email_redirect_to）
+        
+        #### 1. 判断是否需要图片验证码
+        - 首次发送可直接调用
+        - 如果返回captcha_required错误，需要先完成图片验证码验证
+        
+        #### 2. 发送验证码
+        - 调用本接口发送验证码
+        - 根据场景选择target参数
+        - 传入手机号或邮箱
+        
+        #### 3. 用户接收验证码
+        - 用户在手机或邮箱中接收验证码
+        - 验证码有效期为600秒（10分钟）
+        
+        #### 4. 验证验证码
+        - 调用[验证短信、邮箱验证码](/http-api/auth/auth-verify-verification)接口
+        - 传入verification_id和用户输入的验证码
+        - 获取verification_token
+        
+        #### 5. 后续操作
+        - 如果is_user为true，使用verification_token调用登录接口
+        - 如果is_user为false或空，使用verification_token调用注册接口
+        
+        ### 流程二：Magic Link 模式（传入 email_redirect_to）
+        
+        #### 1. 前端调用发送接口
+        - 调用本接口，请求体中传入 `email` 和 `email_redirect_to` 参数
+        - 后端检测到 `email_redirect_to` 后自动切换为 Magic Link 模式
+        
+        #### 2. 用户收到邮件并点击链接
+        - 用户收到包含"确认邮箱并登录"按钮的邮件
+        - 点击按钮后自动完成登录/注册，并跳转到 `email_redirect_to` 指定的目标页面
+        - 用户到达目标页面时已处于登录状态，可直接使用应用
+        
+        ## 关键特性
+        
+        ### 验证码特性
+        - 验证码长度为6位数字
+        - 有效期为600秒（10分钟）
+        - 同一手机号或邮箱60秒内只能发送一次
+        - 验证码使用后立即失效
+        
+        ### 安全性
+        - 限制发送频率，防止短信轰炸
+        - 支持图片验证码防护
+        - 记录发送日志
+        
+        ## 使用场景
+        
+        ### 场景一：验证码登录（target=ANY，不传 email_redirect_to）
+        - 用户使用手机号或邮箱登录
+        - 不限制用户是否存在
+        - 适用于登录或注册流程
+        
+        ### 场景二：找回密码（target=USER，不传 email_redirect_to）
+        - 用户忘记密码
+        - 必须是已注册用户
+        - 防止泄露用户信息
+        
+        ### 场景三：注册验证（target=ANY，不传 email_redirect_to)
+        - 用户注册新账号
+        - 必须是未注册用户
+        - 防止重复注册
+        
+        ### 场景四：Magic Link 一键登录（target=ANY，传入 email_redirect_to）
+        - 用户通过邮箱进行一键登录，无需手动输入验证码
+        - 邮件中包含登录链接按钮，点击即完成登录并跳转到指定页面
+        - 如果用户未注册，点击链接后将自动完成注册并登录
+        
+        #### Magic Link 场景示例：SaaS 应用邀请登录
+        1. SaaS 应用向用户邮箱发送 Magic Link，`email_redirect_to` 设为应用的 Dashboard 页面
+        2. 用户收到邮件，点击"确认邮箱并登录"按钮
+        3. 浏览器自动完成登录，跳转到 Dashboard 页面
+        
+        ```json
+        // 请求示例
+        {
+          "email": "invitee@company.com",
+          "target": "ANY",
+          "email_redirect_to": "https://envId-appid.tcloudbaseapp.com/dashboard?from=invite"
+        }
+        ```
+        
+        ```json
+        // 响应示例
+        {
+          "expires_in": 600,
+          "is_user": false
+        }
+        ```
+        
+        #### Magic Link 场景示例：内容订阅邮件中嵌入登录
+        1. 内容平台向订阅者发送 Magic Link，`email_redirect_to` 设为某篇文章页面
+        2. 用户在邮箱中收到邮件，点击链接
+        3. 自动登录并跳转到文章页面，直接阅读
+        
+        ```json
+        // 请求示例
+        {
+          "email": "reader@example.com",
+          "target": "USER",
+          "email_redirect_to": "https://envId-appid.tcloudbaseapp.com/articles/12345"
+        }
+        ```
+        
+        ## 注意事项
+        
+        ### 手机号格式
+        - 必须加上"+86 "前缀
+        - 格式示例："+86 13800138000"
+        - 不支持其他国家手机号
+        
+        ### 邮箱格式
+        - 必须是有效的邮箱地址
+        - 格式示例："user@example.com"
+        - 支持常见邮箱服务商
+        
+        ### 发送频率限制
+        - 同一手机号或邮箱60秒内只能发送一次
+        - 同一IP每小时最多发送10次
+        - 超过限制需等待后重试
+        
+        ### 图片验证码
+        - 当检测到异常发送行为时要求图片验证码
+        - 需要先调用图片验证码接口完成验证
+        - 获取captcha_token后在请求头中传入
+        
+        ### email_redirect_to 参数规则（Magic Link 模式）
+        - `email_redirect_to` 仅在传入 `email` 参数时生效，不支持 `phone_number`
+        - 必须传入完整 URL（如 `https://envId-appid.tcloudbaseapp.com/dashboard`），不支持相对路径
+        - `email_redirect_to` 中的域名需为已配置的自定义域名或 CloudBase 默认域名，否则用户点击链接时可能返回404
+        - Magic Link 有效期与验证码一致，为600秒（10分钟），过期后链接失效
+        - 验证码一次性使用，点击链接完成登录后链接即失效，不可重复使用
+        
+        ### Magic Link 安全性
+        - 邮件中的链接强制使用 HTTPS 协议
+        - Token 不会出现在 URL 中
+        - 登录完成后 URL 中的验证参数会被自动清除
+                
+        ### 错误处理策略
+        - 友好的错误提示信息
+        - 自动处理图片验证码流程
+        - 实现发送倒计时
+        - 记录错误日志
+        
+        ## 相关接口
+        - [验证短信、邮箱验证码](/http-api/auth/auth-verify-verification) - 验证验证码
+        - [验证图片验证码](/http-api/auth/auth-verify-captcha-data) - 获取captcha_token
+        - [获取图片验证码](/http-api/auth/auth-get-captcha-data) - 获取图片验证码
+        - [用户登录](/http-api/auth/auth-sign-in) - 使用verification_token登录
+        - [用户注册](/http-api/auth/auth-sign-up) - 使用verification_token注册
+
+      operationId: Auth_SendVerification
+      tags:
+        - 验证码
+      parameters:
+        - name: x-captcha-token
+          in: header
+          description: 验证码token，从验证图片验证码接口获取，接口报错captcha_required时需传入
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                phone_number:
+                  type: string
+                  title: 手机号
+                  description: 有效的国内手机号，需加上"+86 "前缀，如"+86 15588665555"
+                email:
+                  type: string
+                  title: 邮箱
+                  description: 有效的邮箱，格式abc@xxx
+                target:
+                  type: string
+                  title: 发送验证码的目标
+                  description: 传入ANY，其余可选值USER(账号必须在系统中存在)
+                email_redirect_to:
+                  type: string
+                  title: 跳转URL
+                  description: 登录成功后跳转的目标URL。传入此参数触发Magic Link模式，邮件将包含登录链接而非验证码文本。必须传入完整URL（如https://envId-appid.tcloudbaseapp.com/dashboard），不支持相对路径。仅与email参数搭配使用，不支持phone_number
+              required:
+                - target
+            example:
+              email: demouser@example.com
+              target: ANY
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verification_id:
+                    type: string
+                    title: 验证码id
+                    description: 用于传入验证短信、邮箱验证码/auth/v1/verification/verify接口进行验证码的验证
+                  expires_in:
+                    type: integer
+                    title: 验证码过期时间，单位为秒
+                  is_user:
+                    type: boolean
+                    title: 用户是否存在
+                    description: 判断这个手机号或邮箱是否已经注册为用户，已注册返回true
+              example:
+                verification_id: >-
+                  your_access_token
+                expires_in: 600
+          headers: { }
+      security: [ ]
+  /auth/v1/verification/verify:
+    post:
+      summary: 验证短信、邮箱验证码
+      deprecated: false
+      description: |-
+        ## 接口说明
+        验证码验证接口，用于验证手机号或邮箱收到的验证码是否正确，返回verification_token用于后续登录或注册操作
+        
+        ### 功能特性
+        - 支持手机号验证码验证
+        - 支持邮箱验证码验证
+        - 返回verification_token用于后续身份验证流程
+        - 验证码有效期为600秒（10分钟）
+        
+        ## 入参要求
+        
+        ### 必需参数
+        - `verification_id`: 验证码id（必填，从发送短信、邮箱验证码接口的响应中获取）
+        - `verification_code`: 验证码（必填，手机或邮箱收到的验证码）
+        
+        ### 可选参数
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（可选，当前登录设备的id）
+        
+        ## 前置条件
+        - 需要先调用[发送短信、邮箱验证码](/http-api/auth/auth-send-verification)接口获取验证码
+        - 验证码必须在有效期内（默认600秒）
+        - verification_id必须与发送验证码时返回的id一致
+        
+        ## 出参说明
+        
+        ### 成功响应
+        - `verification_token`: 验证码token，用于后续登录或注册接口
+        - `expires_in`: 过期时间，默认600秒
+        
+        ## 请求示例
+        
+        ### 验证码验证请求示例
+        ```
+        POST /auth/v1/verification/verify
+        Content-Type: application/json
+        
+        {
+          "verification_id": "your_access_token",
+          "verification_code": "123456"
+        }
+        ```
+        
+        ## 响应示例
+        
+        ### 验证码验证成功响应
+        ```json
+        {
+          "verification_token": "your_access_token",
+          "expires_in": 600
+        }
+        ```
+        
+        ### 验证码验证失败响应
+        ```json
+        {
+          "error": "invalid_verification_code",
+          "error_code": 4001,
+          "error_description": "验证码错误，请重新输入"
+        }
+        ```
+        
+        ## 使用流程
+        
+        ### 1. 发送验证码
+        - 调用发送短信或邮箱验证码接口
+        - 获取verification_id和验证码
+        
+        ### 2. 用户输入验证码
+        - 用户从手机或邮箱获取验证码
+        - 在客户端输入验证码
+        
+        ### 3. 验证验证码
+        - 调用此接口验证验证码
+        - 获取verification_token
+        
+        ### 4. 使用验证token
+        - 使用verification_token调用登录或注册接口
+        
+        ## 关键特性
+        
+        ### 安全性
+        - 验证码有效期短，防止暴力破解
+        - verification_id与验证码绑定，防止重放攻击
+        - 支持验证码错误次数限制
+        
+        ### 兼容性
+        - 支持手机号和邮箱验证码
+        - 验证码格式为6位数字
+        - 国际化支持，支持不同国家手机号格式
+        
+        ### 错误处理
+        - 验证码错误时提供明确错误信息
+        - 验证码过期时提示重新获取
+        - 验证码id不存在时提示重新发送验证码
+        
+        ## 注意事项
+        
+        ### 安全建议
+        - 验证码不应在客户端存储
+        - 验证码发送频率应有限制
+        - 建议实现验证码错误次数限制
+        
+        ### 使用场景
+        - 登录时验证身份
+        - 注册时验证手机号或邮箱
+        - 修改敏感信息时二次验证
+        - 找回密码时身份验证
+        
+        ## 相关接口
+        - [发送短信、邮箱验证码](/http-api/auth/auth-send-verification) - 获取验证码
+        - [登录接口](/http-api/auth/auth-sign-in) - 使用verification_token登录
+        - [注册接口](/http-api/auth/auth-sign-up) - 使用verification_token注册
+      operationId: Auth_VerifyVerification
+      tags:
+        - 验证码
+      parameters: [ ]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                verification_id:
+                  type: string
+                  title: 验证码id
+                  description: 从发送短信、邮箱验证码接口的响应中获取
+                verification_code:
+                  type: string
+                  title: 验证码
+                  description: 手机或邮箱收到的验证码，过期时间默认为600秒
+              required:
+                - verification_id
+                - verification_code
+            example:
+              verification_id: >-
+                your_access_token
+              verification_code: '123456'
+      responses:
+        '200':
+          description: ''
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  verification_token:
+                    type: string
+                    title: 验证码token
+                    description: 在使用手机号+验证码或邮箱+验证码登录时，传入用户名密码登录/auth/v1/signin接口登录
+                  expires_in:
+                    type: integer
+                    title: 过期时间
+                    description: 默认600秒
+          headers: { }
+      security: [ ]
+  /auth/v1/user/reauthenticate:
+    post:
+      summary: 重新认证
+      deprecated: false
+      description: |-
+        ## 接口说明
+        向当前登录用户发送一个邮箱或者短信验证码，用于执行敏感操作如修改用户密码和删除用户。
+        
+        ### 功能特性
+        - 向当前登录用户发送邮箱或短信验证码
+        - 验证码有效期为300秒（5分钟）
+        - 增强安全性，防止误操作
+        - 用于敏感操作的二次验证
+        
+        ## 入参要求
+        
+        ### 必需参数
+        - `Authorization`: 当前登录用户的access_token（必填，Bearer格式）
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（可选，当前登录设备的id）
+        
+        ### 请求体参数
+        - `verify_opt`: 验证方式（必填，可选值：`phone_code` 发送短信验证码，`email_code` 发送邮箱验证码）
+        
+        ## 前置条件
+        - 用户必须已登录并持有有效的access_token
+        - 用户信息中必须绑定了手机号或邮箱，否则接口将调用失败
+        - 敏感操作需要二次验证以增强安全性
+        
+        ## 出参说明
+        
+        ### 成功响应
+        - 返回空对象 `{}`，表示验证码发送成功
+        
+        ## 请求示例
+        
+        ### 发送邮箱验证码请求示例
+        ```
+        POST /auth/v1/user/reauthenticate
+        Authorization: Bearer your_access_token
+        Content-Type: application/json
+        
+        {
+          "verify_opt": "email_code"
+        }
+        ```
+        
+        ### 发送短信验证码请求示例
+        ```
+        POST /auth/v1/user/reauthenticate
+        Authorization: Bearer your_access_token
+        Content-Type: application/json
+        
+        {
+          "verify_opt": "phone_code"
+        }
+        ```
+        
+        ## 响应示例
+        
+        ### 发送成功响应
+        ```json
+        {}
+        ```
+        
+        ### 验证失败响应
+        ```json
+        {
+          "error": "invalid_argument",
+          "error_code": 4001,
+          "error_description": "验证方式错误，请使用 phone_code 或 email_code"
+        }
+        ```
+        
+        ## 使用流程
+        
+        ### 1. 用户登录
+        - 用户通过正常登录流程获取access_token
+        
+        ### 2. 发起重新认证
+        - 调用此接口选择验证方式（短信或邮箱）
+        - 系统向用户发送验证码
+        
+        ### 3. 用户接收验证码
+        - 用户在手机或邮箱中查看验证码
+        - 验证码有效期为300秒（5分钟）
+        
+        ### 4. 执行敏感操作
+        - 在后续敏感操作（如修改密码、删除用户）中传入验证码完成二次验证
+        
+        ## 关键特性
+        
+        ### 安全性
+        - 二次验证确保操作安全
+        - 验证码有效期短（5分钟），防止滥用
+        - 支持短信和邮箱两种验证方式
+        
+        ### 验证方式
+        - `phone_code`: 向用户绑定的手机号发送短信验证码
+        - `email_code`: 向用户绑定的邮箱发送邮箱验证码
+        
+        ## 相关接口
+        - [修改密码](/http-api/auth/user-update-password) - 修改用户密码
+        - [删除用户](/http-api/auth/user-me) - 删除当前用户
+        - [用户信息获取](/http-api/auth/user-me) - 获取当前用户信息
+
+      operationId: User_Reauthenticate
+      tags:
+        - 用户管理
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          description: 当前登录用户的access_token, 值的格式为Bearer xxx
+          required: true
+          schema:
+            type: string
+          example: Bearer your_access_token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/v1ReauthenticateRequest'
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security:
+        - JWTAuth: []
+  /auth/v1/user/me:
+    get:
+      summary: 获取当前用户信息
+      deprecated: false
+      description: |-
+        ## 接口说明
+        获取当前登录用户的基础信息，包括用户资料、绑定身份源、角色权限等
+        
+        ### 入参要求：
+        - `Authorization`: 当前登录用户的access_token（必填，请求头中传入，格式为Bearer xxx）
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（可选，当前登录设备的id）
+        
+        ### 前置条件：
+        - 需要有效的access_token
+        - 用户必须已登录
+        
+        ### 出参：
+        - 返回完整的用户信息对象（v1Profile）
+        - 包含用户基本信息、绑定身份源、角色权限、状态等
+        
+        ### 获取用户信息请求示例
+        ```
+        GET /auth/v1/user/me
+        Authorization: Bearer your_access_token
+        x-device-id: device_123456
+        ```
+        
+        ### 获取用户信息响应示例
+        ```json
+        {
+          "sub": "9876543210123456789",
+          "name": "张三",
+          "picture": "https://example/avatar.jpg",
+          "username": "zhangsan",
+          "email": "zhangsan@example",
+          "phone_number": "+86 13000000000",
+          "providers": [
+            {
+              "id": "email",
+              "provider_user_id": "zhangsan@example",
+              "name": "邮箱登录",
+              "picture": "",
+              "url": "",
+              "meta": {}
+            }
+          ],
+          "status": "ACTIVE",
+          "gender": "MALE",
+          "groups": [
+            {
+              "id": "user"
+            }
+          ],
+          "meta": {
+            "department": "技术部",
+            "position": "开发工程师"
+          },
+          "created_at": "2023-01-01T00:00:00Z",
+          "updated_at": "2023-01-15T10:30:00Z",
+          "password_updated_at": "2023-01-01T00:00:00Z",
+          "user_id": "9876543210123456789",
+          "has_password": true,
+          "internal_user_type": "generalUser",
+          "type": "external",
+          "user_source": 1,
+          "user_desc": "普通用户",
+          "last_login": "2023-01-15T10:30:00Z"
+        }
+        ```
+        
+        ### 使用场景：
+        - 用户登录后获取个人信息
+        - 展示用户资料页面
+        - 检查用户权限和角色
+        - 获取用户绑定的登录方式
+        
+        ### 关键特性：
+        - 返回完整的用户信息，包括敏感信息（邮箱、手机号等）
+        - 包含用户绑定的所有身份源信息
+        - 显示用户状态和角色权限
+        - 提供用户扩展信息（meta字段）
+      operationId: User_Me
+      tags:
+        - 用户管理
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          description: 当前登录用户的access_token, 值的格式为Bearer xxx
+          required: true
+          schema:
+            type: string
+          example: Bearer your_access_token
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/v1Profile'
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security:
+        - JWTAuth: []
+    delete:
+      summary: 删除当前用户信息
+      deprecated: false
+      description: |-
+        ## 接口说明
+        删除当前用户信息，需要先通过[重新认证](/http-api/auth/user-reauthenticate)接口发送验证码进行二次验证才能执行。该操作会永久删除用户账号及相关数据，请谨慎使用。
+        
+        ### 功能特性
+        - 永久删除当前用户账号
+        - 需要通过重新认证接口发送验证码进行二次验证确保安全
+        - 删除后无法恢复，需谨慎操作
+        - 支持软删除和硬删除两种模式
+        
+        ## 入参要求
+        
+        ### 必需参数
+        - `Authorization`: 当前登录用户的access_token（必填，Bearer格式）
+        - `verify_code`: 验证码（必填，通过[重新认证](/http-api/auth/user-reauthenticate)接口发送到用户手机或邮箱的验证码）
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（可选，当前登录设备的id）
+        
+        ### 请求体参数
+        - 无请求体参数
+        
+        ## 前置条件
+        - 用户必须已登录并持有有效的access_token
+        - 必须通过[重新认证](/http-api/auth/user-reauthenticate)接口发送验证码
+        - 验证码有效期为300秒（5分钟）
+        - 用户确认要删除自己的账号
+        
+        ## 出参说明
+        
+        ### 成功响应
+        - 返回空对象，表示删除成功
+        
+        ## 请求示例
+        
+        ### 删除用户请求示例
+        ```
+        DELETE /auth/v1/user/me?verify_code=121688
+        Authorization: Bearer your_access_token
+        Content-Type: application/json
+        ```
+        
+        ## 响应示例
+        
+        ### 删除成功响应
+        ```json
+        {}
+        ```
+        
+        ### 验证码无效响应
+        ```json
+        {
+          "error": "permission_denied",
+          "error_code": 7,
+          "error_description": "bad verify code"
+        }
+        ```
+        
+        ### 用户不存在响应
+        ```json
+        {
+          "error": "user_not_found",
+          "error_code": 4004,
+          "error_description": "用户不存在或已被删除"
+        }
+        ```
+        
+        ## 使用流程
+        
+        ### 1. 发起重新认证
+        - 调用[重新认证接口](/http-api/auth/user-reauthenticate)发送验证码
+        - 选择短信或邮箱方式接收验证码
+        
+        ### 2. 用户收到验证码
+        - 用户在手机或邮箱中查看验证码
+        - 验证码有效期为300秒（5分钟）
+        
+        ### 3. 确认删除
+        - 前端应显示确认对话框
+        - 用户确认删除操作
+        
+        ### 4. 执行删除
+        - 调用此接口删除用户
+        - 传入verify_code（用户收到的验证码）进行二次验证
+        
+        ### 5. 清理客户端数据
+        - 删除成功后清理本地存储
+        - 跳转到登录页面
+        
+        ## 相关接口
+        - [重新认证](/http-api/auth/user-reauthenticate) - 发送验证码进行二次验证
+        - [修改密码](/http-api/auth/user-update-password) - 修改用户密码
+        - [用户信息获取](/http-api/auth/user-me) - 获取当前用户信息
+        - [退出登录](/http-api/auth/auth-sign-out) - 用户退出登录
+        
+        ## 错误处理
+        
+        ### 常见错误场景
+        - 验证码过期：提示用户重新发送验证码
+        - 验证码错误：检查验证码是否正确
+        - 网络异常：重试机制
+        - 服务器错误：显示友好错误信息
+
+      operationId: User_DeleteMe
+      tags:
+        - 用户管理
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          description: 当前登录用户的access_token, 值的格式为Bearer xxx
+          required: true
+          schema:
+            type: string
+          example: Bearer your_access_token
+        - name: verify_code
+          in: query
+          description: 验证码，通过重新认证接口发送到用户手机或邮箱的验证码
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema: {}
+          headers: {}
+        '400':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+              example:
+                error: permission_denied
+                error_code: 7
+                error_description: bad verify code
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security:
+        - JWTAuth: []
+  /auth/v1/user/password:
+    patch:
+      summary: 修改密码
+      deprecated: false
+      description: |-
+        ## 接口说明
+        修改当前用户的密码，需要先通过[重新认证](/http-api/auth/user-reauthenticate)接口发送验证码进行二次验证才能执行。该操作用于用户修改自己的登录密码，需要二次验证确保安全性。
+        
+        ### 功能特性
+        - 修改当前用户的登录密码
+        - 需要通过重新认证接口发送验证码进行二次验证
+        - 支持密码强度验证
+        - 修改后旧密码立即失效
+        - 自动退出其他设备登录
+        
+        ## 入参要求
+        
+        ### 必需参数
+        - `Authorization`: 当前登录用户的access_token（必填，Bearer格式）
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（可选，当前登录设备的id）
+        
+        ### 请求体参数
+        - `old_password`: 旧密码（可选，如果用户有密码）
+        - `new_password`: 新密码（必填，8-64位，包含大小写字母、数字、特殊字符）
+        - `confirm_password`: 确认密码（可选，用于前端验证）
+        - `verify_code`: 验证码（必填，通过[重新认证](/http-api/auth/user-reauthenticate)接口发送到用户手机或邮箱的验证码）
+        
+        ## 前置条件
+        - 用户必须已登录并持有有效的access_token
+        - 必须通过[重新认证](/http-api/auth/user-reauthenticate)接口发送验证码并完成验证
+        - 验证码有效期为300秒（5分钟）
+        - 新密码必须符合密码强度要求
+        - 如果用户已有密码，需要提供旧密码验证
+        
+        ## 出参说明
+        
+        ### 成功响应
+        - 返回空对象，表示密码修改成功
+        
+        ## 请求示例
+        
+        ### 修改密码请求示例（有旧密码）
+        ```
+        PATCH /auth/v1/user/password
+        Authorization: Bearer your_access_token
+        Content-Type: application/json
+        
+        {
+          "old_password": "your-password",
+          "new_password": "your-new-password",
+          "confirm_password": "your-new-password",
+          "verify_code": "101894"
+        }
+        ```
+        
+        ### 修改密码请求示例（无旧密码，首次设置）
+        ```
+        PATCH /auth/v1/user/password
+        Authorization: Bearer your_access_token
+        Content-Type: application/json
+        
+        {
+          "new_password": "your-password",
+          "confirm_password": "your-password",
+          "verify_code": "101894"
+        }
+        ```
+        
+        ## 响应示例
+        
+        ### 修改成功响应
+        ```json
+        {}
+        ```
+        
+        ### 旧密码错误响应
+        ```json
+        {
+          "error": "invalid_password",
+          "error_code": 4003,
+          "error_description": "旧密码错误，请重新输入"
+        }
+        ```
+        
+        ### 密码强度不足响应
+        ```json
+        {
+          "error": "weak_password",
+          "error_code": 4005,
+          "error_description": "密码强度不足，请使用包含大小写字母、数字和特殊字符的组合"
+        }
+        ```
+        
+        ## 使用流程
+        
+        ### 1. 发起重新认证
+        - 调用[重新认证接口](/http-api/auth/user-reauthenticate)发送验证码
+        - 选择短信或邮箱方式接收验证码
+        
+        ### 2. 用户收到验证码
+        - 用户在手机或邮箱中查看验证码
+        - 验证码有效期为300秒（5分钟）
+        
+        ### 3. 验证密码规则
+        - 前端验证新密码强度
+        - 确认密码一致性
+        - 检查密码历史记录
+        
+        ### 4. 执行修改
+        - 调用此接口修改密码
+        - 在请求体中传入verify_code（用户收到的验证码）进行二次验证
+        
+        ### 5. 处理结果
+        - 修改成功提示用户
+        - 错误时显示具体原因
+        - 自动退出其他设备登录
+        
+        ## 关键特性
+        
+        ### 安全性
+        - 需要验证码二次验证
+        - 密码强度自动检测
+        - 防止密码重复使用
+        - 自动退出其他设备
+        
+        ### 密码规则
+        - 至少8个字符，最多64个字符
+        - 包含大写字母、小写字母、数字、特殊字符
+        - 不包含用户名或邮箱地址
+        - 不使用连续或重复字符
+        
+        ## 注意事项
+        
+        ### 常见错误场景
+        - 验证码过期：提示用户重新发送验证码
+        - 旧密码错误：显示具体错误信息
+        - 密码强度不足：提供密码规则说明
+        - 网络异常：重试机制
+        
+        ## 相关接口
+        - [重新认证](/http-api/auth/user-reauthenticate) - 发送验证码进行二次验证
+        - [找回密码](/http-api/auth/user-update-password) - 忘记密码时重置密码
+        - [用户信息获取](/http-api/auth/user-me) - 获取当前用户信息
+        - [退出登录](/http-api/auth/auth-sign-out) - 用户退出登录
+
+      operationId: User_UpdatePassword
+      tags:
+        - 用户管理
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          description: 当前登录用户的access_token, 值的格式为Bearer xxx
+          required: true
+          schema:
+            type: string
+          example: Bearer your_access_token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/v1UpdatePasswordRequest'
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema: {}
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security:
+        - JWTAuth: []
+  /auth/v1/user/basic/edit:
+    post:
+      summary: 修改用户基础信息
+      deprecated: false
+      description: |-
+        ## 接口说明
+        修改用户基础信息，支持修改昵称、用户名、手机号、邮箱、头像、性别、描述等基本信息
+        
+        ### 入参要求：
+        - `Authorization`: 当前登录用户的access_token（必填，请求头中传入，格式为Bearer xxx）
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（可选，当前登录设备的id）
+        - 请求体参数：
+          - `user_id`: 用户id（可选，修改其他用户信息时需要管理员权限）
+          - `nickname`: 昵称（可选，2-48位）
+          - `username`: 用户名（可选，2-48位，支持英文大小写、数字、特殊字符）
+          - `phone`: 手机号（可选，格式：+86 13000000000）
+          - `description`: 描述（可选，用户个人简介）
+          - `avatar_url`: 头像URL（可选）
+          - `gender`: 性别（可选，MALE-男，FEMALE-女）
+          - `email`: 邮箱（可选，有效的邮箱格式）
+        
+        ### 前置条件：
+        - 需要有效的access_token
+        - 只能修改自己的信息，除非有管理员权限
+        - 用户名修改需要验证唯一性
+        - 手机号、邮箱修改可能需要验证码验证
+        
+        ### 出参：
+        - 返回空对象表示修改成功
+        - 错误时返回错误信息
+        
+        ### 修改用户信息请求示例
+        ```
+        POST /auth/v1/user/basic/edit
+        Authorization: Bearer your_access_token
+        x-device-id: device_123456
+        Content-Type: application/json
+        
+        {
+          "nickname": "张三",
+          "username": "zhangsan",
+          "phone": "+86 13000000000",
+          "description": "这是一位热爱技术的开发者",
+          "avatar_url": "https://example/avatar.jpg",
+          "gender": "MALE",
+          "email": "zhangsan@example"
+        }
+        ```
+        
+        ### 修改用户信息响应示例（成功）
+        ```json
+        {}
+        ```
+        
+        ### 修改用户信息响应示例（失败）
+        ```json
+        {
+          "error": "username_already_exists",
+          "error_code": 409,
+          "error_description": "用户名已存在"
+        }
+        ```
+        
+        ### 使用场景：
+        - 用户修改个人资料
+        - 管理员修改用户信息
+        - 用户绑定或更换手机号、邮箱
+        - 更新用户头像和基本信息
+        
+        ### 注意事项：
+        - 用户名修改需要验证唯一性
+        - 手机号、邮箱修改需要发送验证码
+        - 敏感信息修改可能需要二次验证
+        - 管理员可以修改其他用户信息，普通用户只能修改自己的信息
+      operationId: User_EditUserBasicInfo
+      tags:
+        - 用户管理
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          description: 当前登录用户的access_token, 值的格式为Bearer xxx
+          required: true
+          schema:
+            type: string
+          example: Bearer your_access_token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                user_id:
+                  type: string
+                  description: 用户id
+                nickname:
+                  type: string
+                  description: 昵称
+                username:
+                  type: string
+                  description: 用户名
+                phone:
+                  type: string
+                  description: 手机号
+                description:
+                  type: string
+                  description: 描述
+                avatar_url:
+                  type: string
+                  description: 头像
+                gender:
+                  type: string
+                  description: 性别, MALE-男, FEMALE-女
+                email:
+                  type: string
+                  description: 邮箱
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema: {}
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security:
+        - JWTAuth: []
+  /auth/v1/user/provider/bind:
+    post:
+      summary: 绑定第三方账户
+      deprecated: false
+      description: |-
+        ## 接口说明
+        绑定第三方账户接口，用于将第三方身份源（如GitHub、微信、QQ等）绑定到当前登录用户账号，实现多种登录方式。
+        
+        ## 入参要求
+        
+        ### 必填参数
+        - `provider_token`: 第三方身份源token（必填，通过 /auth/v1/provider/token 接口获取）
+        - `Authorization`: 当前登录用户的access_token（必填，在请求头中传递，格式为 Bearer xxx）
+        
+        ### 可选参数
+        - `with_user_center`: 是否记录到用户中心化安全日志（可选，布尔值，默认false）
+        - `client_id`: 客户端ID（可选，默认为环境ID）
+        - `x-device-id`: 设备ID（可选，在请求头中传递）
+        
+        ## 前置条件
+        - 用户必须已登录（需要有效的access_token）
+        - 用户必须在第三方平台完成授权
+        - 必须调用 [获取第三方授权信息](/http-api/auth/auth-grant-provider-token) 接口获取provider_token
+        - 该第三方账号不能已被其他用户绑定
+        
+        ## 出参说明
+        
+        ### 成功响应
+        - 返回空对象 `{}`，表示绑定成功
+        
+        ## 请求示例
+        
+        ### 绑定GitHub账号请求示例
+        ```json
+        {
+          "provider_token": "your_provider_token",
+          "with_user_center": true
+        }
+        ```
+        
+        ## 响应示例
+        
+        ### 绑定成功响应示例
+        ```json
+        {}
+        ```
+        
+        ### Provider Token无效响应示例
+        ```json
+        {
+          "error": "invalid_grant",
+          "error_code": 4001,
+          "error_description": "Provider token无效或已过期"
+        }
+        ```
+                
+        ### 未登录响应示例
+        ```json
+        {
+          "error": "unauthorized",
+          "error_code": 4003,
+          "error_description": "用户未登录或access_token无效"
+        }
+        ```
+        
+        ## 字段说明
+        
+        ### 请求参数
+        | 字段名 | 类型 | 必填 | 说明 |
+        |--------|------|------|------|
+        | provider_token | string | 是 | 第三方身份源token，通过 /auth/v1/provider/token 接口获取 |
+        | with_user_center | boolean | 否 | 是否记录到用户中心化安全日志，默认false |
+        | client_id | string | 否 | 客户端ID，默认为环境ID |
+        | x-device-id | string | 否 | 设备ID，在请求头中传递 |
+        | Authorization | string | 是 | 当前登录用户的access_token，格式为 Bearer xxx，在请求头中传递 |
+        
+        ### 响应参数
+        | 字段名 | 类型 | 必填 | 说明 |
+        |--------|------|------|------|
+        | - | object | 是 | 成功时返回空对象 {} |
+        
+        ## 使用流程
+        
+        ### 完整绑定流程
+        
+        #### 1. 用户登录
+        - 用户必须先登录系统
+        - 获取有效的access_token
+        
+        #### 2. 获取授权URL
+        - 调用 [获取第三方登录回调地址](/http-api/auth/auth-gen-provider-redirect-uri) 接口（可选，根据三方平台授权流程决定是否需要）
+        - 获取第三方授权URL
+        - 在新窗口或弹窗中打开授权页面
+        
+        #### 3. 用户授权
+        - 用户在第三方平台完成授权
+        - 第三方平台回调并返回授权码
+        
+        #### 4. 获取Provider Token
+        - 调用 [获取第三方授权信息](/http-api/auth/auth-grant-provider-token) 接口
+        - 传入授权码
+        - 获取provider_token
+        
+        #### 5. 绑定账号
+        - 调用本接口
+        - 传入provider_token和access_token
+        - 完成账号绑定
+        
+        ## 核心特性
+        
+        ### 多账号绑定
+        - 支持绑定多个第三方身份源
+        - 同一用户可绑定GitHub、微信、QQ等多个账号
+        - 绑定后可使用任意已绑定的方式登录
+        - 支持随时解绑
+        
+        ### 安全性
+        - 需要用户登录状态
+        - provider_token有效期内使用
+        - 防止重复绑定
+        - 记录绑定日志
+        
+        ### 灵活性
+        - 支持多种身份源
+        - 支持自定义身份源
+        - 支持安全日志记录
+        - 支持设备管理
+        
+        ## 使用场景
+        
+        ### 账号绑定
+        - 用户在个人设置中绑定第三方账号
+        - 方便使用多种方式登录
+        - 提升账号安全性
+        
+        ### 社交账号关联
+        - 绑定GitHub账号
+        - 绑定微信账号
+        - 绑定QQ账号
+        - 绑定微博账号
+        
+        ### 企业账号关联
+        - 绑定企业微信账号
+        - 绑定钉钉账号
+        - 绑定飞书账号
+        
+        ## 注意事项
+        
+        ### 账号绑定限制
+        - 同一第三方账号只能绑定一个用户
+        - 同一用户可以绑定多个不同的第三方账号
+        - 不能绑定已被其他用户绑定的第三方账号
+        - 绑定前会检查是否已存在绑定关系
+        
+        ### Access Token
+        - 必须是有效的access_token
+        - 必须在请求头中传递
+        - 格式必须为 Bearer xxx
+        - Token过期需要重新登录
+        
+        ### 解绑操作
+        - 绑定后可以随时解绑
+        - 调用 [解绑第三方账户](/http-api/auth/user-un-bind-provider) 接口
+        - 解绑后可以重新绑定
+        
+        ## 错误处理
+        
+        ### 常见错误
+        - `invalid_grant`: Provider token无效或已过期
+        - `unauthorized`: 用户未登录或access_token无效
+        
+        ### 错误处理策略
+        - provider_token无效：重新获取授权
+        - 账号已被绑定：提示用户该账号已被使用
+        - 未登录：跳转到登录页面
+        - 身份源未配置：联系管理员
+        - 达到绑定上限：解绑不常用的账号
+        
+        ## 相关接口
+        - [获取第三方登录回调地址](/http-api/auth/auth-gen-provider-redirect-uri) - 获取授权URL
+        - [获取第三方授权信息](/http-api/auth/auth-grant-provider-token) - 获取provider_token
+        - [解绑第三方账户](/http-api/auth/user-un-bind-provider) - 解绑已绑定的账号
+        - [获取账号绑定的三方身份源列表](/http-api/auth/user-providers) - 查看已绑定的账号列表
+
+      operationId: User_BindWithProvider
+      tags:
+        - 用户管理
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          description: 当前登录用户的access_token, 值的格式为Bearer xxx
+          required: true
+          schema:
+            type: string
+          example: Bearer your_access_token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider_token:
+                  type: string
+                  description: 第三方身份源获取的provider_token, 通过 /auth/v1/provider/token 获取
+                with_user_center:
+                  type: boolean
+                  description: 是否记录用户中心化安全日志中
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema: {}
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security:
+      - JWTAuth: []
+  /auth/v1/user/provider/{provider_id}:
+    delete:
+      summary: 解绑第三方账户
+      deprecated: false
+      description: |-
+        ## 接口说明
+        解绑第三方账户接口，用于解除当前登录用户与指定第三方身份源（如GitHub、微信、QQ等）的绑定关系。
+        
+        ## 入参要求
+        
+        ### 必填参数
+        - `provider_id`: 身份源ID（必填，路径参数，如 wx_open、github、wechat 等）
+        - `Authorization`: 当前登录用户的access_token（必填，在请求头中传递，格式为 Bearer xxx）
+        
+        ### 可选参数
+        - `with_user_center`: 是否记录到用户中心化安全日志（可选，布尔值，默认false）
+        - `client_id`: 客户端ID（可选，默认为环境ID）
+        - `x-device-id`: 设备ID（可选，在请求头中传递）
+        
+        ## 前置条件
+        - 用户必须已登录（需要有效的access_token）
+        - 该身份源必须已经绑定到当前用户
+        - 可以先调用 [获取账号绑定的三方身份源列表](/http-api/auth/user-providers) 接口查看已绑定的身份源
+        
+        ## 出参说明
+        
+        ### 成功响应
+        - 返回空对象 `{}`，表示解绑成功
+        
+        ## 请求示例
+        
+        ### 解绑GitHub账号请求示例
+        ```bash
+        DELETE /auth/v1/user/provider/github?with_user_center=true
+        Headers:
+          Authorization: Bearer your_access_token
+          x-device-id: device_abc123
+        ```
+        
+        ### 解绑成功响应示例
+        ```json
+        {}
+        ```
+    
+        ### 未登录响应示例
+        ```json
+        {
+          "error": "unauthorized",
+          "error_code": 4003,
+          "error_description": "用户未登录或access_token无效"
+        }
+        ```
+        
+        ### 身份源不存在响应示例
+        ```json
+        {
+          "error": "provider_not_found",
+          "error_code": 4004,
+          "error_description": "指定的身份源不存在"
+        }
+        ```
+        
+        ## 字段说明
+        
+        ### 请求参数
+        | 字段名 | 类型 | 必填 | 位置 | 说明 |
+        |--------|------|------|------|------|
+        | provider_id | string | 是 | path | 身份源ID，如 wx_open、github、wechat、qq 等 |
+        | Authorization | string | 是 | header | 当前登录用户的access_token，格式为 Bearer xxx |
+        | with_user_center | boolean | 否 | query | 是否记录到用户中心化安全日志，默认false |
+        | client_id | string | 否 | query | 客户端ID，默认为环境ID |
+        | x-device-id | string | 否 | header | 设备ID |
+        
+        ### 响应参数
+        | 字段名 | 类型 | 必填 | 说明 |
+        |--------|------|------|------|
+        | - | object | 是 | 成功时返回空对象 {} |
+        
+        ## 使用流程
+        
+        ### 完整解绑流程
+        
+        #### 1. 查看已绑定的身份源
+        - 调用 [获取账号绑定的三方身份源列表](/http-api/auth/user-providers) 接口
+        - 获取当前用户已绑定的身份源列表
+        - 确认要解绑的身份源ID
+        
+        #### 2. 确认解绑操作
+        - 提示用户确认解绑操作
+        - 说明解绑后的影响
+        - 确保至少保留一种登录方式
+        
+        #### 3. 执行解绑
+        - 调用本接口
+        - 传入要解绑的provider_id
+        - 传入有效的access_token
+        
+        #### 4. 处理结果
+        - 解绑成功：更新UI，移除该身份源
+        - 解绑失败：显示错误信息，提示用户
+                
+        ## 注意事项
+        
+        ### AccessToken
+        - 必须是有效的access_token
+        - 必须在请求头中传递
+        - 格式必须为 Bearer xxx
+        - Token过期需要重新登录
+        
+        ### Provider ID
+        - 必须是已绑定的身份源ID
+        - 必须是有效的身份源
+        - 可以通过列表接口查询
+        
+        ### 解绑后影响
+        - 无法再使用该身份源登录
+        - 需要使用其他已绑定的方式登录
+        - 可以随时重新绑定
+        - 不影响用户其他数据
+        
+        ## 错误处理
+        
+        ### 常见错误
+        - `unauthorized`: 用户未登录或access_token无效
+        - `provider_not_found`: 指定的身份源不存在
+        - `internal_error`: 服务器内部错误
+        
+        ### 错误处理策略
+        - 身份源未绑定：提示用户该身份源未绑定
+        - 不能解绑最后一个：提示用户至少保留一种登录方式
+        - 未登录：跳转到登录页面
+        - 身份源不存在：提示用户选择有效的身份源
+        - 服务器错误：稍后重试或联系客服
+        
+        ## 相关接口
+        - [获取账号绑定的三方身份源列表](/http-api/auth/user-providers) - 查看已绑定的身份源
+        - [绑定第三方账户](/http-api/auth/user-bind-with-provider) - 绑定新的第三方账号
+        - [获取第三方登录回调地址](/http-api/auth/auth-gen-provider-redirect-uri) - 获取授权URL
+        - [获取第三方授权信息](/http-api/auth/auth-grant-provider-token) - 获取provider_token
+
+      operationId: User_UnBindProvider
+      tags:
+        - 用户管理
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          description: 当前登录用户的access_token, 值的格式为Bearer xxx
+          required: true
+          schema:
+            type: string
+          example: Bearer your_access_token
+        - name: provider_id
+          in: path
+          description: 身份源id, 如wx_open,或小程序appid
+          required: true
+          schema:
+            type: string
+        - name: with_user_center
+          in: query
+          description: 是否记录用户中心化安全日志中
+          schema:
+            type: boolean
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema: {}
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security:
+        - JWTAuth: []
+  /auth/v1/user/provider:
+    get:
+      summary: 获取账号绑定的三方身份源
+      deprecated: false
+      description: |-
+        ## 接口说明
+        获取当前用户绑定的第三方身份源列表，包括已绑定的和可绑定的身份源信息
+        
+        ### 入参要求：
+        - `Authorization`: 当前登录用户的access_token（必填，请求头中传入，格式为Bearer xxx）
+        - `client_id`: 应用对应的客户端id（可选，默认为环境id）
+        - `x-device-id`: 设备id（可选，当前登录设备的id）
+        
+        ### 前置条件：
+        - 需要有效的access_token
+        - 用户必须已登录
+        
+        ### 出参：
+        - 返回用户绑定的身份源列表（v1ProvidersResponse）
+        - 包含身份源标识、名称、主页、头像、绑定状态等信息
+        
+        ### 获取绑定身份源请求示例
+        ```
+        GET /auth/v1/user/provider
+        Authorization: Bearer your_access_token
+        x-device-id: device_123456
+        ```
+        
+        ### 获取绑定身份源响应示例
+        ```json
+        {
+          "total": 2,
+          "data": [
+            {
+              "id": "github",
+              "name": "GitHub",
+              "homepage": "https://github.com",
+              "picture": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+              "provider_user_name": "zhangsan",
+              "provider_type": "oauth",
+              "bind": true
+            },
+            {
+              "id": "wechat",
+              "name": "微信",
+              "homepage": "https://open.weixin.qq.com",
+              "picture": "https://res.wx.qq.com/a/wx_fed/assets/res/NTI4MWU5.ico",
+              "provider_user_name": "",
+              "provider_type": "oauth",
+              "bind": false
+            },
+            {
+              "id": "google",
+              "name": "Google",
+              "homepage": "https://accounts.google.com",
+              "picture": "https://www.google.com/favicon.ico",
+              "provider_user_name": "",
+              "provider_type": "oauth",
+              "bind": false
+            }
+          ]
+        }
+        ```
+        
+        ### 使用场景：
+        - 用户查看已绑定的第三方登录方式
+        - 用户选择可绑定的新身份源
+        - 管理用户的多重身份验证方式
+        - 展示用户登录方式的安全性状态
+        
+        ### 关键特性：
+        - 返回所有可用的身份源列表
+        - 显示每个身份源的绑定状态
+        - 包含身份源的基本信息和图标
+        - 支持多种身份源类型（OAuth、OIDC、SAML等）
+        
+        ### 后续操作：
+        - 对于未绑定的身份源，可以调用绑定接口进行绑定
+        - 对于已绑定的身份源，可以调用解绑接口进行解绑
+        - 可以通过身份源信息进行登录方式切换
+      operationId: User_Providers
+      tags:
+        - 用户管理
+      parameters:
+        - name: client_id
+          in: query
+          description: 应用对应的客户端id，可从云开发平台-->身份认证-->开发设置获取。默认为环境id，可以不传
+          required: false
+          schema:
+            type: string
+        - name: x-device-id
+          in: header
+          description: 设备id，当前登录设备的id。客户端应随机生成，并缓存到客户端。此参数与登录账号数有关
+          required: false
+          example: ''
+          schema:
+            type: string
+        - name: Authorization
+          in: header
+          description: 当前登录用户的access_token, 值的格式为Bearer xxx
+          required: true
+          schema:
+            type: string
+          example: Bearer your_access_token
+      requestBody:
+        content:
+          application/json:
+            schema: {}
+      responses:
+        '200':
+          description: A successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/v1ProvidersResponse'
+          headers: {}
+        '500':
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema: *ref_0
+          headers: {}
+      security:
+        - JWTAuth: []
+components:
+  schemas:
+    rpcStatus:
+      type: object
+      properties:
+        error:
+          type: string
+          title: 错误信息
+        error_code:
+          type: integer
+          format: int32
+          title: 错误码
+        error_description:
+          type: string
+          title: 错误描述
+    v1GenProviderRedirectURIResponse:
+      type: object
+      properties:
+        uri:
+          type: string
+          title: 回调url
+      title: GenProviderRedirectUriResponse 回调地址
+    v1GrantProviderTokenRequest:
+      type: object
+      properties:
+        provider_id:
+          type: string
+          title: 身份源id, 如wx_open,或小程序appid
+        provider_redirect_uri:
+          type: string
+          title: 身份源回调地址
+        provider_code:
+          type: string
+          title: 第三方系统获取的登录code, 用来换取用户身份
+      title: GrantProviderToken 获取第三方Token请求
+      required:
+        - provider_id
+    v1GrantProviderTokenResponse:
+      type: object
+      properties:
+        provider_token:
+          type: string
+          title: 如果不启用自动注册， 则返回 provider_token， 用于进一步处理，例如：通过手机号等。
+        expires_in:
+          type: integer
+          format: int32
+          title: 过期时间
+        provider_profile:
+          $ref: '#/components/schemas/v1ProviderProfile'
+      title: GrantProviderTokenResponse 获取第三方Token响应
+    v1ProviderProfile:
+      type: object
+      properties:
+        provider_id:
+          type: string
+          title: 身份源id
+        sub:
+          type: string
+          title: 主ID, 标识用户唯一标识
+        name:
+          type: string
+          title: 姓名
+        picture:
+          type: string
+          title: 头像
+        email:
+          type: string
+          title: 邮箱
+        phone_number:
+          type: string
+          title: 手机号
+        gender:
+          type: string
+          title: 性别
+        locale:
+          type: string
+          title: 地区
+        url:
+          type: string
+          title: 邮箱
+        groups:
+          type: array
+          items:
+            type: string
+          title: 关联角色
+        sub_id:
+          type: string
+          title: >-
+            sub_id 如果客户选需要SLO，可能需要返回sub_id,
+            可以参考：urn:oasis:names:tc:SAML:attribute:subject-id
+        token:
+          type: string
+          title: provider 返回的 token，比如：oauth 模式下，该token为 refresh_token
+        at_hash:
+          type: string
+          title: at hash of provider profile
+        meta:
+          type: object
+          additionalProperties:
+            type: string
+          title: token的补充信息
+          properties: {}
+        raw:
+          type: string
+          title: 三方信息原文
+        provider:
+          type: string
+          title: 身份源类型
+      title: |-
+        如果返回信息中，包含手机号，则查询手机号是否在系统中存在
+        如果是： 确认密码登录，如果否： 提示注册
+    v1SignInAnonymouslyRequest:
+      type: object
+      properties: {}
+      title: SignInAnonymouslyRequest 匿名注册请求
+    v1SignInRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          title: 用户名
+          description: 用户名密码登录时必传。2-48位，支持英文大小写、数字、特殊字符（仅支持-_.:+ @），且只能以字母或数字开头，不支持中文
+        password:
+          type: string
+          title: 密码
+          description: 用户名密码登录时必传
+        verification_token:
+          type: string
+          title: 验证码token
+          description: 验证码登录时必传。手机验证码登录时，通过验证码验证后，返回的验证码token。通过[验证短信、邮箱验证码](/http-api/auth/auth-verify-verification)接口获取
+      title: SignInRequest 登录请求
+    v1SignInWithProviderRequest:
+      type: object
+      properties:
+        provider_id:
+          type: string
+          title: 身份源id
+        provider_token:
+          type: string
+          title: 通过/auth/v1/provider/token获取的三方的providerToken
+        force_disable_sign_up:
+          type: boolean
+          title: 强制关闭自动注册。默认情况下，这里以服务器配置为准，如果客户端为了平滑升级可以配置为true。
+        sync_profile:
+          type: boolean
+          title: 是否强制从第三方同步昵称等信息
+      title: SignInWithProviderRequest 通过第三方回调方式登录
+      required:
+        - provider_id
+        - provider_token
+    v1SignUpRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          title: 邮箱
+          description: 邮箱+verification_token注册时必传
+        phone_number:
+          type: string
+          title: 手机号
+          description: 手机+verification_token注册时必传，+86不可省略。例如："+86 13000000000"
+        username:
+          type: string
+          title: 用户名
+          description: 长度2-48位，支持英文大小写、数字、特殊字符（仅支持-_.:+ @），且只能以字母或数字开头，不支持中文
+        verification_token:
+          type: string
+          title: 接收到的验证码Token
+          description: 手机+verification_token或邮箱+verification_token注册时必传
+        password:
+          type: string
+          title: optional  password 密码
+        name:
+          type: string
+          title: optional 昵称, 可选
+        gender:
+          type: string
+          title: optional 头像, 符合css编码格式
+        picture:
+          type: string
+          title: optional 头像, 符合css编码格式
+        locale:
+          type: string
+          title: |-
+            optional 地区, 可选 (如果地区为空, 则h后端会根据手机号码,ip地址等多种因素, 选择初始化地区)
+            格式: zh
+        provider_token:
+          type: string
+          title: 如果之前获取过三方信息， 则可以将三方信息绑定到该账号
+          description: /auth/v1/provider/token等接口返回的provider_token
+      title: SignUpRequestRequest 注册请求
+    v1Token:
+      type: object
+      properties:
+        token_type:
+          type: string
+          description: 统一返回 Bearer
+          title: 访问令牌类型
+        access_token:
+          type: string
+          title: 用户的访问令牌
+          description: 用于访问云开发HTTP API的令牌，长度4096位以内
+        refresh_token:
+          type: string
+          title: 用户的刷新令牌
+          description: access_token过期可通过refresh_token刷新获取新的access_token，过期时间默认为31天。长度128位以内
+        expires_in:
+          type: integer
+          format: int32
+          description: access_token的过期时间，单位为秒
+          title: 访问令牌过期时间
+        scope:
+          type: string
+          title: 授权范围
+        sub:
+          type: string
+          title: 用户的唯一id
+        groups:
+          type: array
+          items:
+            type: string
+          title: 用户角色列表
+      title: Token 返回的token 信息
+    v1TokenRequest:
+      type: object
+      properties:
+        grant_type:
+          type: string
+          title: 获取token的授权方式
+          nullable: true
+        code:
+          type: string
+          title: grant_type 为 authorization_code 时使用
+        refresh_token:
+          type: string
+          title: refresh_token 刷新token时, 使用
+        username:
+          type: string
+          title: grant_type 为 password时使用
+        password:
+          type: string
+          title: grant_type 为 password时使用
+        scope:
+          type: string
+          title: scope，可选
+        nonce:
+          type: string
+          title: 随机字符串, 可选
+        code_verifier:
+          type: string
+          title: 'PKCE: code_verifier'
+        device_code:
+          type: string
+          title: Device Code Flow https://tools.ietf.org/html/rfc8628
+      title: TokenRequest 换取token请求
+    v1CheckIfUserExistResponse:
+      type: object
+      properties:
+        exist:
+          type: boolean
+          description: 用户是否存在标识，true表示用户已存在，false表示用户不存在
+      description: 用户存在性检查响应，用于注册前检查用户名、邮箱或手机号是否已被注册
+    v1SignoutRequest:
+      type: object
+      description: 退出登录请求
+      properties:
+        redirect_uri:
+          type: string
+          description: 登出成功后重定向地址, 可选
+        state:
+          type: string
+          description: 登出成功后重定向地址携带的参数, 可选
+    v1SignoutResponse:
+      type: object
+      description: 退出登录响应
+      properties:
+        redirect_uri:
+          type: string
+          description: 登出成功后重定向地址, 可选
+    v1TokenIntrospectResponse:
+      type: object
+      description: 验证token响应, 如果token有效, 则返回token信息, 如果token无效, 则返回空对象
+      properties:
+        token_type:
+          type: string
+          description: 令牌类型
+        client_id:
+          type: string
+          description: 令牌所属应用的客户端ID
+        sub:
+          type: string
+          description: 令牌所属用户的ID
+        scope:
+          type: string
+          description: 令牌所允许的范围
+    v1Profile:
+      type: object
+      description: 用户信息
+      properties:
+        sub:
+          type: string
+          description: 用户sub
+        name:
+          type: string
+          description: 用户昵称
+        picture:
+          type: string
+          description: 头像
+        username:
+          type: string
+          description: 用户名
+        email:
+          type: string
+          description: 邮箱
+        phone_number:
+          type: string
+          description: 手机号
+        providers:
+          type: array
+          description: 用户绑定的登录方式
+          items:
+            $ref: '#/components/schemas/v1ProfileProvider'
+        status:
+          description: 用户状态
+          $ref: '#/components/schemas/ProfileProfileStatus'
+        gender:
+          type: string
+          description: 性别
+        groups:
+          type: array
+          description: 用户组, 用户绑定的角色标识列表
+          items:
+            $ref: '#/components/schemas/v1ProfileGroup'
+        meta:
+          type: object
+          additionalProperties:
+            type: string
+          description: 用户扩展信息
+        created_at:
+          type: string
+          format: date-time
+          description: 创建时间
+        updated_at:
+          type: string
+          format: date-time
+          description: 更新时间
+        password_updated_at:
+          type: string
+          format: date-time
+          description: 密码更新时间
+        user_id:
+          type: string
+          description: 微搭用户ID
+        has_password:
+          type: boolean
+          description: 是否有密码
+        internal_user_type:
+          type: string
+          description: 内部用户类型, 内置超管-administrator、普通用户-generalUser
+        type:
+          type: string
+          description: 用户类型, 内部用户-internal、外部用户-external
+        user_source:
+          type: integer
+          format: int32
+          description: 用户来源, 1-自建, 2-企业微信, 3-外部注册
+        user_desc:
+          type: string
+          description: 用户描述
+        open_id:
+          type: string
+          description: 微信或企微的openID
+        corp_id:
+          type: string
+          description: 企业ID
+        parent_user_id:
+          type: string
+          description: 直属上级ID
+        main_dep:
+          type: string
+          description: 主岗部门ID
+        sort:
+          type: integer
+          format: int32
+          description: 排序值, sort越小, 排序越靠前
+        last_login:
+          type: string
+          format: date-time
+          description: 最近登录时间
+    v1ProfileProvider:
+      type: object
+      description: 用户绑定身份源信息
+      properties:
+        id:
+          type: string
+          description: 身份源ID
+        provider_user_id:
+          type: string
+          description: 身份源用户ID
+        name:
+          type: string
+          description: 身份源名称
+        picture:
+          type: string
+          description: 身份源头像
+        url:
+          type: string
+          description: 身份源URL
+        meta:
+          type: object
+          additionalProperties:
+            type: string
+          description: 身份源扩展信息
+    v1ProfileGroup:
+      type: object
+      description: 用户所属组信息
+      properties:
+        id:
+          type: string
+          description: 角色标识
+    ProfileProfileStatus:
+      type: string
+      enum: [ DEFAULT, ACTIVE, PENDING, BLOCKED ]
+      description: 用户状态, 默认-DEFAULT, 已激活-ACTIVE, 待激活-PENDING, 已禁用-BLOCKED
+    v1UpdatePasswordRequest:
+      type: object
+      description: 修改密码请求
+      properties:
+        verify_code:
+          type: string
+          description: 验证码, 通过重新认证接口发送到用户手机或邮箱的验证码。如果原账户没有设置密码, 并且手机号和邮箱都是空, 则不需要验证码, 直接修改
+        new_password:
+          type: string
+          description: 新密码
+          required: true
+    v1ReauthenticateRequest:
+      type: object
+      description: 重新认证请求，向当前登录用户发送验证码
+      properties:
+        verify_opt:
+          type: string
+          description: 验证方式，可选值：phone_code（发送短信验证码）、email_code（发送邮箱验证码）
+          enum:
+            - phone_code
+            - email_code
+      required:
+        - verify_opt
+    v1ProvidersResponse:
+      type: object
+      description: 获取用户绑定身份源列表响应
+      properties:
+        total:
+          type: integer
+          format: int32
+          description: 总数
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/v1UserProvider'
+          description: 绑定身份源数据
+    v1UserProvider:
+      type: object
+      description: 用户绑定身份源信息
+      properties:
+        id:
+          type: string
+          description: 身份源标识
+        name:
+          type: string
+          description: 身份源名称
+        homepage:
+          type: string
+          description: 身份源主页
+        picture:
+          type: string
+          description: 身份源头像
+        provider_user_name:
+          type: string
+          description: 身份源用户名
+        provider_type:
+          type: string
+          description: 身份源类型
+        bind:
+          type: boolean
+          description: 是否绑定
+  securitySchemes: {}
