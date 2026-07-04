@@ -1,0 +1,1669 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build (defaults to current branch)'
+        required: false
+        default: ''
+        type: string
+      version:
+        description: 'Version number (e.g. 1.0.0). When set, builds release APK.'
+        required: false
+        default: ''
+        type: string
+      skip_plugin:
+        description: 'Skip all plugin builds (MPV + OpenList). Only build host app.'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  NDK_VERSION: "26.1.10909125"
+  # 唯一 monorepo 子工程硬编码（仓内结构，集中配置 1 处）
+  # 与 build-ffmpeg-lib.yml 同步；重构 monorepo 改两处同名 env 即可
+  MONOREPO_MOBILE_DIR: "app/encv-mobile"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref_name }}
+          submodules: false  # 防御：仓库无真实 submodule
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          # 统一 Go 1.25.1（encv-go 根 go.mod + Hi-Sillot/OpenList fork 均声明 1.25.1）
+          # host 编译（encv-go for 端口 2025）与 fork 编译（libopenlist.so for 5244）
+          # 共用同一个 Go toolchain。
+          go-version-file: ./go.mod
+          cache-dependency-path: go.sum
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Cache Android NDK
+        id: cache-ndk
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}
+          key: ndk-${{ env.NDK_VERSION }}
+
+      - name: Install Android NDK
+        if: steps.cache-ndk.outputs.cache-hit != 'true'
+        run: yes | sdkmanager --install "ndk;${{ env.NDK_VERSION }}" > /dev/null 2>&1 && echo "✅ NDK installed"
+
+      - name: Install Android platform & build tools
+        run: yes | sdkmanager --install "platforms;android-35" "build-tools;35.0.0" > /dev/null 2>&1 && echo "✅ Platform & build tools installed"
+
+      - name: Cache pnpm dependencies (main)
+        id: cache-pnpm
+        uses: actions/cache@v4
+        with:
+          path: |
+            app/node_modules
+            app/encv-mobile/node_modules
+            app/encv-mobile/plugin-openlist/web/node_modules
+            app/preview-gateway/node_modules
+          key: pnpm-main-${{ hashFiles('app/pnpm-lock.yaml', 'app/encv-mobile/package.json', 'app/preview-gateway/package.json') }}
+          restore-keys: |
+            pnpm-main-
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('${{ env.MONOREPO_MOBILE_DIR }}/android/*.gradle', '${{ env.MONOREPO_MOBILE_DIR }}/android/app/*.gradle', '${{ env.MONOREPO_MOBILE_DIR }}/android/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-
+
+      # ffmpeg 编译已拆分到独立工作流 build-ffmpeg-lib.yml:
+      #   - 产物: release "ffmpeg-native-libs" 下的 ffmpeg-jniLibs-arm64-v8a-v$VERSION.zip
+      #   - 触发: workflow_dispatch on build-ffmpeg-lib.yml
+      # 此处不重复编译,直接下载预编产物到 jniLibs/arm64-v8a/。
+      # 失败时: ::error:: 提示先去跑 build-ffmpeg-lib.yml。
+
+      - name: Install frontend dependencies
+        run: cd app && pnpm install
+
+      - name: TypeScript check (main app)
+        working-directory: app/encv-mobile
+        run: pnpm exec vue-tsc --noEmit
+
+      - name: TypeScript check (plugin-openlist/web)
+        if: inputs.skip_plugin != true
+        working-directory: app/encv-mobile/plugin-openlist/web
+        run: pnpm exec vue-tsc --noEmit
+
+      - name: Build main app web
+        working-directory: app/encv-mobile
+        run: pnpm run build
+
+      - name: Build plugin-openlist/web → assets/openlist/
+        if: inputs.skip_plugin != true
+        run: bash scripts/build-plugin-openlist-web.sh
+
+      - name: Run frontend unit tests (vitest)
+        run: |
+          cd app/encv-mobile
+          echo "═══ Frontend Unit Tests ═══"
+          pnpm exec vitest run --reporter=verbose 2>&1 | tail -30
+          echo ""
+          echo "═══ Frontend Test Summary ═══"
+
+      # 派生 monorepo 绝对路径供后续步骤引用。
+      # 原则: workflow 内只硬编码 MONOREPO_MOBILE_DIR (仓内结构名),
+      #       绝对路径全部由 $GITHUB_WORKSPACE 派生,跨 runner 一致。
+      - name: Compute monorepo paths
+        id: paths
+        run: |
+          MOBILE_DIR="${GITHUB_WORKSPACE}/${MONOREPO_MOBILE_DIR}"
+          ANDROID_DIR="${MOBILE_DIR}/android"
+          JNI_BASE="${ANDROID_DIR}/app/src/main/jniLibs/arm64-v8a"
+          PLUGIN_MPV_JNI="${MOBILE_DIR}/plugin-mpv-player/src/main/jniLibs/arm64-v8a"
+          PLUGIN_OPENLIST_JNI="${MOBILE_DIR}/plugin-openlist/src/main/jniLibs/arm64-v8a"
+
+          for v in MOBILE_DIR ANDROID_DIR JNI_BASE PLUGIN_MPV_JNI PLUGIN_OPENLIST_JNI; do
+            eval "val=\$$v"
+            [ -n "$val" ] || { echo "::error::$v is empty"; exit 1; }
+          done
+          [ -d "$MOBILE_DIR" ]      || { echo "::error::MOBILE_DIR missing: $MOBILE_DIR"; exit 1; }
+          [ -d "$ANDROID_DIR" ]     || { echo "::error::ANDROID_DIR missing: $ANDROID_DIR"; exit 1; }
+
+          echo "MOBILE_DIR=$MOBILE_DIR"               >> "$GITHUB_OUTPUT"
+          echo "ANDROID_DIR=$ANDROID_DIR"             >> "$GITHUB_OUTPUT"
+          echo "JNI_BASE=$JNI_BASE"                   >> "$GITHUB_OUTPUT"
+          echo "PLUGIN_MPV_JNI=$PLUGIN_MPV_JNI"       >> "$GITHUB_OUTPUT"
+          echo "PLUGIN_OPENLIST_JNI=$PLUGIN_OPENLIST_JNI" >> "$GITHUB_OUTPUT"
+
+          echo "✅ Monorepo paths:"
+          for v in MOBILE_DIR ANDROID_DIR JNI_BASE PLUGIN_MPV_JNI PLUGIN_OPENLIST_JNI; do
+            eval "val=\$$v"
+            echo "  $v = $val"
+          done
+
+      - name: Download MPV native libraries from Release
+        if: inputs.skip_plugin != true
+        env:
+          PLUGIN_MPV_JNI: ${{ steps.paths.outputs.PLUGIN_MPV_JNI }}
+        run: |
+          [ -n "$PLUGIN_MPV_JNI" ] || { echo "::error::PLUGIN_MPV_JNI not set (paths step missing?)"; exit 1; }
+          mkdir -p "$PLUGIN_MPV_JNI"
+          cd "$PLUGIN_MPV_JNI/.."
+          ASSET_URL=$(curl -sf \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/mpv-native-libs" \
+            | jq -r '.assets[] | select(.name | startswith("mpv-jniLibs-arm64")) | .browser_download_url')
+          if [ -z "$ASSET_URL" ]; then
+            echo "::error::No MPV lib asset found in release 'mpv-native-libs'. Run 'Build MPV Native Libraries' workflow first."
+            exit 1
+          fi
+          echo "Downloading: $ASSET_URL"
+          curl -fSL -o /tmp/mpv-jniLibs.zip "$ASSET_URL"
+          unzip -o /tmp/mpv-jniLibs.zip -d jniLibs/
+          echo "✅ MPV libs extracted:"
+          ls -lhR jniLibs/
+
+      - name: Download FFmpeg native libraries from Release
+        env:
+          JNI_BASE: ${{ steps.paths.outputs.JNI_BASE }}
+        run: |
+          # 模式与 MPV 一致：从 release "ffmpeg-native-libs" 下载预编产物
+          # 产物名约定: ffmpeg-jniLibs-arm64-v8a-v$FFMPEG_LIB_VERSION.zip
+          # zip 内是 arm64-v8a/{libffmpeg.so, libffprobe.so, libffmpeg-worker.so, build-info.json}
+          set -e
+          [ -n "$JNI_BASE" ] || { echo "::error::JNI_BASE not set (paths step missing?)"; exit 1; }
+          mkdir -p "$JNI_BASE"
+
+          ASSET_URL=$(curl -sf \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/ffmpeg-native-libs" \
+            | jq -r '.assets[] | select(.name | startswith("ffmpeg-jniLibs-arm64")) | .browser_download_url')
+
+          if [ -z "$ASSET_URL" ]; then
+            echo "::error::No FFmpeg lib asset found in release 'ffmpeg-native-libs'."
+            echo "::error::Run the 'Build FFmpeg Native Libraries' workflow first, then re-run this build."
+            echo ""
+            echo "Available releases:"
+            curl -sf "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases" \
+              | jq -r '.[] | "  - " + .tag_name' || echo "  (could not list releases)"
+            exit 1
+          fi
+
+          echo "Downloading: $ASSET_URL"
+          curl -fSL -o /tmp/ffmpeg-jniLibs.zip "$ASSET_URL"
+
+          # 解压到临时目录,验证产物后拷到 jniLibs/
+          rm -rf /tmp/ffmpeg-extract && mkdir -p /tmp/ffmpeg-extract
+          unzip -o /tmp/ffmpeg-jniLibs.zip -d /tmp/ffmpeg-extract/
+
+          # zip 结构: <zip-root>/arm64-v8a/*.so
+          SRC_ARM64=$(find /tmp/ffmpeg-extract -mindepth 1 -maxdepth 1 -type d -name "arm64-v8a" | head -1)
+          if [ -z "$SRC_ARM64" ]; then
+            echo "::error::ffmpeg-jniLibs.zip missing 'arm64-v8a/' directory"
+            unzip -l /tmp/ffmpeg-jniLibs.zip
+            exit 1
+          fi
+
+          cp -r "$SRC_ARM64"/* "$JNI_BASE/"
+
+          echo "✅ FFmpeg libs installed:"
+          ls -lh "$JNI_BASE/"
+
+          # 验证关键符号
+          NM="${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          for required in "libffmpeg.so:ffmpeg_run" "libffmpeg.so:ffmpeg_reset" "libffprobe.so:ffprobe_run" "libffprobe.so:ffprobe_reset"; do
+            lib="${required%:*}"
+            sym="${required#*:}"
+            if ! $NM -D "$JNI_BASE/$lib" | grep -q " ${sym}$"; then
+              echo "::error::$lib missing symbol: $sym (build-ffmpeg-lib.yml may have failed silently)"
+              exit 1
+            fi
+            echo "  ✅ $lib: $sym"
+          done
+
+          # 验证 build-info.json
+          if ! jq -e '.ffmpeg_version and .abi and .external_libs' "$JNI_BASE/build-info.json" > /dev/null; then
+            echo "::error::build-info.json invalid (expected fields: ffmpeg_version, abi, external_libs)"
+            cat "$JNI_BASE/build-info.json"
+            exit 1
+          fi
+          echo ""
+          echo "=== build-info.json ==="
+          jq '{ffmpeg_version, abi, api_level, external_libs, encoders: .enabled_encoders | length, decoders: .enabled_decoders | length}' "$JNI_BASE/build-info.json"
+          # Android APK 打包时只会把 jniLibs 里的 .so 文件打进 APK，.json 会被忽略
+          # 必须复制到 assets/ 目录才能被打进 APK（跟重构前 legacy 脚本逻辑一致）
+          ASSETS_DIR="$(dirname $(dirname $JNI_BASE))/assets"
+          mkdir -p "$ASSETS_DIR"
+          cp "$JNI_BASE/build-info.json" "$ASSETS_DIR/"
+          echo "✅ Copied build-info.json to Android assets: $ASSETS_DIR"
+
+      - name: Run Go unit tests
+        run: |
+          # Phase 18 Guard D: gofmt -l on touched Go files（警告级别，不阻断 CI）
+          UNFORMATTED=$(gofmt -l ./internal ./cmd 2>/dev/null || true)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::warning::⚠️ gofmt check: files need formatting. Run \`gofmt -w <files>\` on:"
+            echo "$UNFORMATTED" | while read f; do echo "  - $f"; done
+          fi
+          echo "✅ gofmt check done"
+
+          echo "═══ Go Unit Tests (service layer) ═══"
+          go test ./internal/service/ -count=1 -timeout 120s -v 2>&1 | tail -30
+          echo ""
+          echo "═══ Go Unit Tests (video plugin) ═══"
+          go test ./internal/v2/plugins/video/ -count=1 -timeout 120s -v 2>&1 | tail -30
+          echo ""
+          echo "═══ ComboLite Static Check ═══"
+          go test ./internal/service/ -count=1 -timeout 60s -run TestComboLite -v 2>&1 | tail -20
+          echo ""
+          echo "═══ Go Test Summary ═══"
+          go test ./internal/service/ ./internal/v2/plugins/video/ -count=1 -timeout 120s 2>&1 | tail -5
+
+      - name: Prepare libsql native library for Android
+        run: |
+          echo "═══ Preparing LibSQL for Android arm64-v8a ═══"
+          
+          LIBSQL_DIR="pkg/libsql/libs/android_arm64"
+          mkdir -p "$LIBSQL_DIR"
+          
+          # 安装 Rust（如果没有的话）
+          if ! command -v rustup &> /dev/null; then
+            echo "Installing Rust..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>&1 | tail -5
+            source "$HOME/.cargo/env"
+          fi
+          source "$HOME/.cargo/env" 2>/dev/null || true
+          
+          echo "Rust version: $(rustc --version 2>/dev/null || echo unknown)"
+          echo ""
+          
+          # 调用统一脚本（单一真相来源，避免双重维护）
+          set +e
+          bash scripts/build-libsql-android.sh \
+            --arch arm64-v8a \
+            --api 24 \
+            --ndk "${ANDROID_HOME}/ndk/${NDK_VERSION}" \
+            2>&1
+          BUILD_EXIT=$?
+          set -e
+          
+          echo ""
+          echo "═══ libsql build result: exit=$BUILD_EXIT ═══"
+          
+          # 检查产物
+          LIBSQL_READY=0
+          if [ -f "$LIBSQL_DIR/libsql_experimental.a" ] || [ -f "$LIBSQL_DIR/libsql_experimental.so" ]; then
+            LIBSQL_READY=1
+            echo "✅ libsql native library found:"
+            ls -lh "$LIBSQL_DIR/"
+          else
+            echo "⚠️  libsql native library NOT found (will use SQLite-only)"
+          fi
+          
+          # 设置结果供后续步骤使用
+          echo "LIBSQL_READY=$LIBSQL_READY" >> "$GITHUB_ENV"
+          
+          # 写入 Step Summary（显式可观测，禁止静默降级）
+          if [ $LIBSQL_READY -eq 1 ]; then
+            echo "## ✅ libsql 构建成功" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "libsql 原生库已就绪，将在 Go 二进制中启用向量搜索支持。" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            ls -lh "$LIBSQL_DIR/" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::warning::libsql 构建失败，将降级为 SQLite-only（无向量搜索）"
+            
+            echo "## ⚠️ libsql 构建失败（降级为 SQLite-only）" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**libsql 原生库未包含在此构建中**，将使用纯 SQLite（无向量搜索功能）。" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 影响" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ 加密/解密、文件管理、任务系统等核心功能正常" >> $GITHUB_STEP_SUMMARY
+            echo "- ❌ 向量搜索功能不可用" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔄 运行时自动使用 glebarez/sqlite（纯 Go）" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Prepare ObjectBox native library for Android
+        run: |
+          echo "═══ Preparing ObjectBox for Android arm64-v8a ═══"
+          
+          OB_DIR="pkg/tasksystem/store/objectbox/libs/android_arm64"
+          mkdir -p "$OB_DIR"
+          
+          # 调用统一脚本（从 Maven Central 的 objectbox-android-db AAR 提取）
+          set +e
+          bash scripts/build-objectbox-android.sh \
+            --arch arm64-v8a \
+            2>&1
+          BUILD_EXIT=$?
+          set -e
+          
+          echo ""
+          echo "═══ ObjectBox build result: exit=$BUILD_EXIT ═══"
+          
+          # 检查产物
+          OBJECTBOX_READY=0
+          if [ -f "$OB_DIR/libobjectbox-jni.so" ]; then
+            OBJECTBOX_READY=1
+            echo "✅ ObjectBox native library found:"
+            ls -lh "$OB_DIR/"
+          else
+            echo "⚠️  ObjectBox native library NOT found (will use SQLite-only)"
+          fi
+          
+          # 设置结果供后续步骤使用
+          echo "OBJECTBOX_READY=$OBJECTBOX_READY" >> "$GITHUB_ENV"
+          
+          # 写入 Step Summary（显式可观测，禁止静默降级）
+          if [ $OBJECTBOX_READY -eq 1 ]; then
+            echo "## ✅ ObjectBox 构建成功" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "ObjectBox 原生库已就绪，将在 Go 二进制中启用高性能对象存储引擎。" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            ls -lh "$OB_DIR/" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::ObjectBox 构建失败，将不包含 ObjectBox 引擎"
+            
+            echo "## ⚠️ ObjectBox 构建失败（不包含该引擎）" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**ObjectBox 原生库未包含在此构建中**，将使用默认 SQLite 引擎。" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### 影响" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- ✅ 加密/解密、文件管理、任务系统等核心功能正常" >> "$GITHUB_STEP_SUMMARY"
+            echo "- ❌ ObjectBox 高性能对象存储引擎不可用" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 🔄 运行时自动使用 glebarez/sqlite（纯 Go）" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen + libsql + objectbox)
+        working-directory: ${{ github.workspace }}
+        env:
+          CGO_ENABLED: "1"
+          GOOS: android
+          GOARCH: arm64
+          CC: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+          CGO_LDFLAGS: "-L${GITHUB_WORKSPACE}/pkg/libsql/libs/android_arm64 -L${GITHUB_WORKSPACE}/pkg/tasksystem/store/objectbox/libs/android_arm64"
+          GOFLAGS: "-mod=mod"
+        run: |
+          set -x
+          # 诊断信息
+          echo "=== Build diagnostics ==="
+          echo "PWD=$(pwd)"
+          echo "go.mod exists=$(test -f go.mod && echo yes || echo no)"
+          go env GOMOD GO111MODULE GOPATH GOROOT GOTOOLCHAIN GOFLAGS GOWORK
+          echo "BUILD_TAGS expanded: LIBSQL=${LIBSQL_READY:-0}, OBJECTBOX=${OBJECTBOX_READY:-0}"
+          # 构建参数
+          BUILD_TAGS=""
+          if [ "${LIBSQL_READY:-0}" = "1" ]; then
+            BUILD_TAGS="libsql"
+            echo "✅ Building with libsql support"
+          else
+            echo "⚠️  Building WITHOUT libsql support (fallback to SQLite only)"
+          fi
+          if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
+            BUILD_TAGS="$BUILD_TAGS,objectbox"
+            echo "✅ Building with objectbox support"
+          else
+            echo "⚠️  Building WITHOUT objectbox support"
+          fi
+          BUILD_TAGS="${BUILD_TAGS# }"
+          BUILD_TAGS="-tags ${BUILD_TAGS}"
+          echo "Final BUILD_TAGS='${BUILD_TAGS}'"
+
+          # working-directory: ${{ github.workspace }} 已在上方 step 级设定，当前目录即 go.mod 所在
+          echo "=== Final go build command ==="
+          echo "go build ${BUILD_TAGS} -ldflags=\"-s -w -X main.version=${{ inputs.version || 'dev' }}\" -o ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64 ./cmd/encv-mobile"
+          go build \
+            ${BUILD_TAGS} \
+            -ldflags="-s -w -X main.version=${{ inputs.version || 'dev' }}" \
+            -o ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64 \
+            ./cmd/encv-mobile
+          echo "Go binary size:"
+          ls -lh ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64
+          
+          # 如果是动态链接 libsql，把 .so 复制到 jniLibs
+          if [ "${LIBSQL_READY:-0}" = "1" ]; then
+            if [ -f "pkg/libsql/libs/android_arm64/libsql_experimental.so" ]; then
+              mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
+              cp pkg/libsql/libs/android_arm64/libsql_experimental.so \
+                 ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
+              echo "✅ Copied libsql_experimental.so to jniLibs/arm64-v8a/"
+            fi
+          fi
+
+          # 如果是动态链接 objectbox，把 .so 复制到 jniLibs
+          # 注意：ObjectBox Go SDK CGO 写死 -lobjectbox-jni，必须保持原名
+          # 详见 pkg/tasksystem/store/objectbox/objectbox.go 注释
+          if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
+            if [ -f "pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox-jni.so" ]; then
+              mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
+              cp pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox-jni.so \
+                 ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
+              echo "✅ Copied libobjectbox-jni.so to jniLibs/arm64-v8a/"
+            fi
+          fi
+          
+          # 检查二进制是否包含 libsql
+          # 注意：-ldflags="-s -w" 会 strip 符号表，nm 找不到符号。
+          # 用 strings 搜索 libsql_ 前缀的函数名作为替代检测方式。
+          BIN_PATH="${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64"
+          if [ -f "$BIN_PATH" ]; then
+            if strings "$BIN_PATH" 2>/dev/null | grep -q "libsql_open_file\|libsql_sync2\|libsql_column_count"; then
+              echo "✅ Go binary contains libsql symbols (statically linked)"
+            elif strings "$BIN_PATH" 2>/dev/null | grep -q "sql_experimental\|libsql\.so"; then
+              echo "✅ Go binary references libsql (dynamically linked)"
+            else
+              echo "ℹ️  Go binary does not contain libsql strings (SQLite-only build)"
+            fi
+          fi
+
+      # Keystore stored outside android/app to avoid accidental commit
+      - name: Restore release keystore from cache
+        uses: actions/cache@v4
+        id: keystore-cache
+        with:
+          path: ${{ env.MONOREPO_MOBILE_DIR }}/keystore
+          key: encv-release-keystore
+
+      - name: Ensure release keystore exists
+        run: |
+          KEYSTORE="${{ env.MONOREPO_MOBILE_DIR }}/keystore/release.jks"
+          if [ -f "$KEYSTORE" ]; then
+            echo "Keystore ready:"
+            ls -lh "$KEYSTORE"
+          else
+            echo "Creating new release keystore..."
+            mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/keystore
+            keytool -genkeypair -v -keystore "$KEYSTORE" \
+              -storepass encv2025 -alias encvrelease \
+              -keypass encv2025 \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=ENCV-go, OU=Personal, O=ENCV, L=Unknown, ST=Unknown, C=CN"
+            echo "Keystore created:"
+            ls -lh "$KEYSTORE"
+          fi
+
+      # android/ is in git — cap sync copies web assets (dist/ → assets/public/) AND regenerates capacitor.plugins.json
+      # 🆕 2026-06-22 修复：必须用 cap sync 而非 cap copy
+      #   - cap copy: 只复制 web assets，**不会**重新发现新装的 @capacitor/* npm 包
+      #     → 新装 @capacitor/filesystem 后 plugins.json 不更新 → native Android 工程不注册
+      #     → 真机调 Filesystem.writeFile 报 "plugin is not implemented on android"
+      #   - cap sync: copy + 重新扫描 node_modules/@capacitor/* 写 capacitor.plugins.json
+      #     + 更新 Android Gradle dependency + (iOS) pod install
+      #   症状：Filesystem.writeFile / Share.files 在 CI 出的 APK 上都报 "plugin is not implemented on android"
+      - name: Sync web assets + Capacitor plugins to Android project
+        run: |
+          cd ${{ env.MONOREPO_MOBILE_DIR }}
+          npx cap sync android
+          echo "=== After cap sync: capacitor.plugins.json ==="
+          cat android/app/src/main/assets/capacitor.plugins.json
+          echo ""
+          echo "=== Android project ready: ==="
+          ls -la android/*.gradle android/app/*.gradle
+
+      # === Non-Gradle customizations ===
+      # Phase 18 Guard A (from .trae/rules/verification-discipline.md §7.7):
+      # Validate every libs.X.Y reference in build.gradle.kts has a corresponding
+      # alias in libs.versions.toml. Catches Phase 16 bug class
+      # (Unresolved reference 'foundation' polluting the entire multi-project).
+      # Runs BEFORE R8 guard because toml mismatch blocks the whole config phase.
+      - name: "Pre-build: Gradle version catalog alias guard"
+        run: |
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║   Gradle Version Catalog Alias Guard (v1)       ║"
+          echo "║   Catches: libs.X.Y w/o toml alias (Phase 16)   ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          echo ""
+
+          cd ${{ env.MONOREPO_MOBILE_DIR }}
+          TOML="android/gradle/libs.versions.toml"
+          if [ ! -f "$TOML" ]; then
+            echo "::error::libs.versions.toml not found at $TOML"
+            exit 1
+          fi
+
+          # Extract toml aliases (strip hyphen, Gradle maps '-' to '.' in accessor)
+          TOML_LIBS=$(awk '/\[libraries\]/{flag=1; next} /^\[/{flag=0} flag && /^[a-zA-Z]/' "$TOML" \
+                      | sed -E 's/^([a-zA-Z0-9._-]+).*/\1/' | sort -u)
+          TOML_PLUGINS=$(awk '/\[plugins\]/{flag=1; next} /^\[/{flag=0} flag && /^[a-zA-Z]/' "$TOML" \
+                         | sed -E 's/^([a-zA-Z0-9._-]+).*/\1/' | sort -u)
+
+          FAIL=0
+          TOTAL=0
+          # Search ALL build.gradle.kts under ${{ env.MONOREPO_MOBILE_DIR }}/ (incl. plugin-*/ siblings of android/)
+          for f in $(find . -name "build.gradle.kts" -not -path "*/build/*" -type f | sort); do
+            REFS=$(grep -oE 'libs\.(plugins|[a-zA-Z0-9._-]+)\.[a-zA-Z0-9._-]+' "$f" 2>/dev/null | sort -u)
+            for ref in $REFS; do
+              [[ "$ref" == libs.versions.* ]] && continue
+              TOTAL=$((TOTAL + 1))
+              if [[ "$ref" == libs.plugins.* ]]; then
+                alias="${ref#libs.plugins.}"; alias="${alias//./-}"
+                if ! echo "$TOML_PLUGINS" | grep -qx "$alias"; then
+                  echo "  ✗ $f: $ref ❌ PLUGIN '$alias' not in toml"
+                  FAIL=$((FAIL + 1))
+                fi
+              else
+                alias="${ref#libs.}"; alias="${alias//./-}"
+                if ! echo "$TOML_LIBS" | grep -qx "$alias"; then
+                  echo "  ✗ $f: $ref ❌ LIB '$alias' not in toml"
+                  FAIL=$((FAIL + 1))
+                fi
+              fi
+            done
+          done
+
+          echo ""
+          echo "────────────────────────────────────"
+          echo "Total libs.* references checked: $TOTAL"
+          echo "Failures: $FAIL"
+          echo "────────────────────────────────────"
+          if [ "$FAIL" -gt 0 ]; then
+            echo "::error::❌ TOML alias guard FAILED: $FAIL unresolved libs.* references"
+            echo "::error::Each libs.X.Y accessor must have an alias 'x-y' (dash) in [libraries] or [plugins] of libs.versions.toml"
+            exit 1
+          fi
+          echo "✅ TOML alias guard PASSED: all $TOTAL libs.* references resolvable"
+
+      - name: Check R8/ProGuard is disabled for ALL build variants
+        run: |
+          set +e  # Don't let sub-command failures kill the script before we print diagnostics
+          exec 2>&1  # Merge stderr into stdout so everything shows in one stream
+
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║     R8 / ProGuard Obfuscation Guard (v2)        ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          echo ""
+
+          VIOLATIONS=0
+          WARNINGS=0
+          FILES_CHECKED=0
+          FILES_SKIPPED=0
+
+          # Phase 1: List ALL .gradle.kts files found
+          echo "📋 Phase 1: Scanning for *.gradle.kts files..."
+          echo "   Search path: ${{ env.MONOREPO_MOBILE_DIR }}/android"
+          echo "   Exclude pattern: */build/*"
+          echo ""
+          ALL_FILES=$(find ${{ env.MONOREPO_MOBILE_DIR }}/android -name "*.gradle.kts" -not -path "*/build/*" -type f | sort)
+          FILE_COUNT=$(echo "$ALL_FILES" | grep -c .)
+
+          if [ "$FILE_COUNT" -eq 0 ]; then
+            echo "::error::No .gradle.kts files found! Search path may be wrong."
+            echo "   This means the guard cannot check anything."
+            exit 1
+          fi
+
+          echo "   Found $FILE_COUNT file(s):"
+          while IFS= read -r line || [ -n "$line" ]; do
+            echo "     ✦ $line"
+          done < <(echo "$ALL_FILES")
+          echo ""
+
+          # Phase 2: Check each file (use process substitution to avoid subshell variable loss)
+          echo "🔍 Phase 2: Checking each file..."
+          echo ""
+
+          while IFS= read -r f || [ -n "$f" ]; do
+            FILES_CHECKED=$((FILES_CHECKED + 1))
+            BASENAME=$(basename "$f")
+            RELPATH=${f#${{ env.MONOREPO_MOBILE_DIR }}/android/}
+            echo "--- [$FILES_CHECKED/$FILE_COUNT] $RELPATH ---"
+
+            # Check 1: isMinifyEnabled = true → FATAL
+            MINIFY_MATCH=$(grep -n 'isMinifyEnabled\s*=\s*true' "$f" 2>/dev/null)
+            if [ -n "$MINIFY_MATCH" ]; then
+              echo "   ❌ FATAL: isMinifyEnabled = true found:"
+              echo "$MINIFY_MATCH" | while read line; do echo "      $line"; done
+              echo "::error file=$f,line=$(echo "$MINIFY_MATCH" | head -1 | cut -d: -f1)::R8 minification ENABLED (isMinifyEnabled=true) — ComboLite incompatible!"
+              VIOLATIONS=$((VIOLATIONS + 1))
+            else
+              echo "   ✅ isMinifyEnabled ≠ true (OK)"
+            fi
+
+            # Check 2: isShrinkResources = true → FATAL (AGP hard-coupling with minifyEnabled)
+            SHRINK_MATCH=$(grep -n 'isShrinkResources\s*=\s*true' "$f" 2>/dev/null)
+            if [ -n "$SHRINK_MATCH" ]; then
+              echo "   ❌ FATAL: isShrinkResources = true found:"
+              echo "$SHRINK_MATCH" | while read line; do echo "      $line"; done
+              echo "::error file=$f,line=$(echo "$SHRINK_MATCH" | head -1 | cut -d: -f1)::Resource shrinking ENABLED — AGP requires isMinifyEnabled=true (ComboLite incompatible)!"
+              VIOLATIONS=$((VIOLATIONS + 1))
+            else
+              echo "   isShrinkResources ≠ true (not set)"
+            fi
+
+            # Check 3: legacy minifyEnabled = true → FATAL
+            LEGACY_MATCH=$(grep -n 'minifyEnabled\s*=\s*true' "$f" 2>/dev/null)
+            if [ -n "$LEGACY_MATCH" ]; then
+              echo "   ❌ FATAL: Legacy minifyEnabled=true found:"
+              echo "$LEGACY_MATCH" | while read line; do echo "      $line"; done
+              echo "::error file=$f,line=$(echo "$LEGACY_MATCH" | head -1 | cut -d: -f1)::Legacy R8 minification enabled (minifyEnabled=true)"
+              VIOLATIONS=$((VIOLATIONS + 1))
+            else
+              echo "   Legacy minifyEnabled ≠ true (OK)"
+            fi
+
+            # Bonus: Show actual values if buildTypes block exists
+            ACTUAL_MINIFY=$(grep 'isMinifyEnabled' "$f" 2>/dev/null | head -1)
+            ACTUAL_SHRINK=$(grep 'isShrinkResources' "$f" 2>/dev/null | head -1)
+            if [ -n "$ACTUAL_MINIFY" ] || [ -n "$ACTUAL_SHRINK" ]; then
+              echo "   📝 Actual config:"
+              [ -n "$ACTUAL_MINIFY" ] && echo "      $ACTUAL_MINIFY"
+              [ -n "$ACTUAL_SHRINK" ] && echo "      $ACTUAL_SHRINK"
+            fi
+            echo ""
+          done < <(echo "$ALL_FILES")
+
+          # Phase 3: Verdict
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║           GUARD VERDICT                        ║"
+          echo "╠══════════════════════════════════════════════════╣"
+          echo "║ Files scanned : $FILE_COUNT                        ║"
+          echo "║ Violations    : $VIOLATIONS (FATAL → blocks build)    ║"
+          echo "║ Warnings      : $WARNINGS (info only)                ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          echo ""
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "::error::❌ GUARD FAILED: $VIOLATIONS R8/ProGuard violation(s) detected."
+            echo ""
+            echo "WHAT THIS MEANS:"
+            echo "  ComboLite framework uses kotlin-reflect (::function.javaMethod)"
+            echo "  for @RequiresPermission permission checks. R8 obfuscation breaks"
+            echo "  @Metadata ↔ bytecode consistency, causing runtime crashes."
+            echo ""
+            echo "HOW TO FIX:"
+            echo "  Set isMinifyEnabled=false AND isShrinkResources=false in ALL buildTypes."
+            echo "  AGP hard-couples these two: shrinkResources requires minifyEnabled=true."
+            echo "  See: .trae/rules/combolite.md §1.3 + .trae/rules/android.md §3.1"
+            echo ""
+
+            # Write detailed report to summary
+            echo "## ❌ R8/ProGuard Guard FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Files scanned | $FILE_COUNT |" >> $GITHUB_STEP_SUMMARY
+            echo "| Fatal violations | \`$VIOLATIONS\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| Warnings | \`$WARNINGS\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| Root cause | R8 breaks kotlin-reflect @Metadata consistency |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Fix:** Set \`isMinifyEnabled=false\`. See [.trae/rules/combolite.md](.trae/rules/combolite.md#13)" >> $GITHUB_STEP_SUMMARY
+
+            exit 1
+          else
+            echo "✅ GUARD PASSED: No R8/ProGuard obfuscation found."
+            if [ "$WARNINGS" -gt 0 ]; then
+              echo "⚠️  $WARNINGS resource shrink warning(s) above (safe with ComboLite)."
+            fi
+            echo ""
+
+            echo "## ✅ R8/ProGuard Guard PASSED" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Files scanned | $FILE_COUNT |" >> $GITHUB_STEP_SUMMARY
+            echo "| Violations | 0 |" >> $GITHUB_STEP_SUMMARY
+            if [ "$WARNINGS" -gt 0 ]; then
+              echo "| Warnings | $WARNINGS (resource shrink, safe) |" >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+      - name: Copy Go binary to jniLibs
+        run: |
+          mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
+          cp ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64 ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/libencv-go.so
+          echo "=== Host jniLibs BEFORE build ==="
+          ls -lhR ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/
+
+
+
+      - name: Verify native libraries
+        run: |
+          echo "═══ HOST APP jniLibs (Go backend + native libs) ═══"
+          HOST_LIBS="${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a"
+          for lib in libencv-go.so libffmpeg.so libffprobe.so libsql_experimental.so libobjectbox-jni.so; do
+            if [ -f "$HOST_LIBS/$lib" ]; then
+              echo "  ✅ $lib $(ls -lh "$HOST_LIBS/$lib" | awk '{print $5}')"
+            else
+              echo "  ⚠️ $lib absent"
+            fi
+          done
+
+          echo ""
+          echo "═══ MPV PLAYER PLUGIN jniLibs ═══"
+          PLUGIN_LIBS="${{ env.MONOREPO_MOBILE_DIR }}/plugin-mpv-player/src/main/jniLibs/arm64-v8a"
+          if [ -d "$PLUGIN_LIBS" ]; then
+            ls -lh "$PLUGIN_LIBS/"*.so 2>/dev/null | awk '{print "  ✅ "$NF" ("$5")"}'
+            for lib in libmpv.so libplayer.so libavcodec.so libavformat.so libavutil.so; do
+              [ -f "$PLUGIN_LIBS/$lib" ] && echo "  ✅ $lib present" || echo "  ❌ $lib MISSING!"
+            done
+          else
+            echo "  ⚠️ Plugin jniLibs dir not found"
+          fi
+
+          echo ""
+          echo "═══ EXPECTED SEPARATION ═══"
+          echo "  Host APK: Go backend only (no MPV .so)"
+          echo "  Plugin APK: All MPV/FFmpeg .so files"
+
+
+      # === Build Plugins (structurally isolated from main app) ===
+      # Plugin subprojects are conditionally included via -PincludePlugins=true
+      # (see android/settings.gradle.kts).  Without the flag, Gradle's task
+      # graph does NOT resolve :plugin-openlist:compile* or :plugin-mpv-player:*,
+      # so a plugin Kotlin compile error can NEVER block the main app APK.
+      #
+      # Each plugin step runs its own gradlew invocation with -PincludePlugins=true.
+      # Two layers of isolation:
+      #   1. settings.gradle.kts conditional include — Gradle task graph never
+      #      pulls :plugin-openlist:* into the main app's assemble* task.
+      #   2. continue-on-error on each step — if a plugin build fails for its
+      #      own reasons (Kotlin compile error, missing AAR, etc.), the step
+      #      still shows FAILED (red, real error) but does NOT kill the job
+      #      before the main app APK is built and uploaded.
+
+      - name: Build MPV player plugin (JNI + Kotlin)
+        if: inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          cd ${{ env.MONOREPO_MOBILE_DIR }}/android
+
+          # Ensure libplayer.so is built
+          if [ ! -f "plugin-mpv-player/src/main/jniLibs/arm64-v8a/libplayer.so" ]; then
+            echo "Building libplayer.so via ndk-build..."
+            bash ../scripts/build-player-so.sh || echo "⚠️ libplayer.so build failed"
+          fi
+
+          # Compile plugin Kotlin code (debug or release)
+          BUILD_TYPE="${{ inputs.version && 'Release' || 'Debug' }}"
+          ./gradlew -PincludePlugins=true ":plugin-mpv-player:compile${BUILD_TYPE}Kotlin" --stacktrace 2>&1 || true
+          echo "=== Plugin compile done (${BUILD_TYPE}) ==="
+
+      - name: Package MPV plugin as APK
+        if: inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          cd ${{ env.MONOREPO_MOBILE_DIR }}/android
+          BUILD_TYPE="${{ inputs.version && 'release' || 'debug' }}"
+
+          ./gradlew -PincludePlugins=true "convert_plugin-mpv-player_${BUILD_TYPE}" --stacktrace
+
+          PLUGIN_APK=$(find build -name "plugin-mpv-player-${BUILD_TYPE}.apk" -type f 2>/dev/null | head -1)
+          if [ -n "$PLUGIN_APK" ] && [ -f "$PLUGIN_APK" ]; then
+            echo "✅ Plugin APK generated:"
+            ls -lh "$PLUGIN_APK"
+            echo "📁 Plugin will be loaded from disk at runtime (filesDir/plugins/)"
+          else
+            echo "::error::Plugin APK not found after successful build"
+            find build/outputs -name "*.apk" 2>/dev/null | head -5 || echo "No APKs found"
+            exit 1
+          fi
+
+      - name: Verify plugin APK contents
+        if: always() && inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          BUILD_TYPE="${{ inputs.version && 'release' || 'debug' }}"
+          PLUGIN_APK=$(find ${{ env.MONOREPO_MOBILE_DIR }}/android/build -name "plugin-mpv-player-${BUILD_TYPE}.apk" -type f 2>/dev/null | head -1)
+          if [ -f "$PLUGIN_APK" ]; then
+            echo "=== Plugin APK size ==="
+            ls -lh "$PLUGIN_APK"
+            echo "=== .so files in plugin APK ==="
+            unzip -l "$PLUGIN_APK" | grep "\.so" | head -20 || echo "(no .so)"
+            echo "=== Total .so count ==="
+            unzip -l "$PLUGIN_APK" | grep -c "\.so" || echo "0"
+          else
+            echo "⏭️ Plugin APK not available"
+          fi
+
+      # === Build OpenList Plugin (Phase 27: Hi-Sillot/OpenList fork 交叉编译为 libopenlist.so) ===
+      # 架构:Go 1.25.1 交叉编译 fork dev 分支为 arm64-v8a native binary,
+      # 拷到 plugin-openlist jniLibs/,走 AGP 标准 jniLibs 流程 → aar2apk 任务 addNativeLibs →
+      # plugin-openlist APK 含 lib/arm64-v8a/libopenlist.so。
+      # 详见 .trae/specs/build-openlist-fork-as-android-native/spec.md。
+      #
+      # 关键:fork clone 不在主仓库(.gitignore 排除),必须 CI step 浅拉到
+      # app/openlist/Hi-Sillot-OpenList/。fork 是 public 仓库无需 token。
+      - name: Checkout Hi-Sillot/OpenList fork (Phase 27)
+        if: inputs.skip_plugin != true
+        uses: actions/checkout@v4
+        with:
+          repository: Hi-Sillot/OpenList
+          ref: dev
+          path: app/openlist/Hi-Sillot-OpenList
+          fetch-depth: 1
+      - name: Build OpenList native libs (Go cross-compile, arm64-v8a, CGO+NDK)
+        if: inputs.skip_plugin != true
+        env:
+          CGO_ENABLED: "1"
+          GOOS: android
+          GOARCH: arm64
+          # NDK clang toolchain (同 §encv-go-arm64 build 步骤,见 L190-195)
+          # Phase 27 关键:ffmpeg package 的 ffmpeg_dlopen.go 是 cgo-only
+          # (//go:build android + import "C" + dlopen),纯 Go 编译会缺符号。
+          # 详见 .trae/rules/android.md §5.5 兜底方案
+          CC: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+        run: |
+          set -e
+          echo "═══ Phase 27: Hi-Sillot/OpenList fork 交叉编译为 libopenlist.so (arm64-v8a) ═══"
+          echo ""
+          echo "=== Go toolchain info ==="
+          go version
+          echo "CC=$CC"
+          echo "CGO_ENABLED=$CGO_ENABLED GOOS=$GOOS GOARCH=$GOARCH"
+          echo ""
+          cd app/openlist/Hi-Sillot-OpenList
+          go mod download
+          # buildmode=default (exe),产物为可执行 ELF,文件名取 libopenlist.so
+          # 是为了过 AGP jniLibs 打包(只打 *.so),运行时由 Kotlin setExecutable(true) 启用执行位
+          CGO_ENABLED=1 GOOS=android GOARCH=arm64 \
+            go build -o /tmp/libopenlist-arm64.so ./
+          echo ""
+          echo "=== libopenlist.so 构建产物 ==="
+          ls -lh /tmp/libopenlist-arm64.so
+          file /tmp/libopenlist-arm64.so
+          # 验证 ELF 头:必须是 ARM aarch64 + ELF executable (not .so)
+          if ! file /tmp/libopenlist-arm64.so | grep -q "ARM aarch64"; then
+            echo "::error::libopenlist.so 不是 ARM aarch64 架构"
+            exit 1
+          fi
+          if ! file /tmp/libopenlist-arm64.so | grep -q "executable"; then
+            echo "::error::libopenlist.so 不是 executable ELF (是 shared object 或其它)"
+            exit 1
+          fi
+          echo "✅ libopenlist-arm64.so 构建成功 (ARM aarch64 executable)"
+      - name: Copy libopenlist.so to plugin-openlist jniLibs
+        if: inputs.skip_plugin != true
+        run: |
+          set -e
+          JNI_DIR="${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/src/main/jniLibs/arm64-v8a"
+          mkdir -p "$JNI_DIR"
+          cp /tmp/libopenlist-arm64.so "$JNI_DIR/libopenlist.so"
+          echo "=== jniLibs 拷贝结果 ==="
+          ls -lh "$JNI_DIR/"
+          file "$JNI_DIR/libopenlist.so"
+
+      - name: Build OpenList plugin APK (aar2apk)
+        if: inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          # Phase 18 Guard C (cheapest, fail-fast): grep for known-bad Map<String, Any?>
+          # property accesses. snapshot() returns a Map, so snapshot.running etc. is
+          # always wrong (Phase 17 bug class). Grep is sub-second; catches the bug
+          # BEFORE we even invoke gradle (which would take ~3 min to fail).
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║  Map<String,Any?> property-guard (Phase 17)     ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          GUARD_C_FAIL=0
+          while IFS= read -r f; do
+            for prop in running port pid dataSizeBytes lastError lastUpdateTs; do
+              # Match snapshot.<prop>, exclude lines inside comments
+              match=$(grep -nE "(^|[^A-Za-z_])\bsnapshot\.${prop}\b" "$f" 2>/dev/null \
+                      | grep -vE ":\s*(//|\*)" || true)
+              if [ -n "$match" ]; then
+                echo "  ✗ $f: snapshot.${prop} is a Map<String,Any?> — use snapshot[\"${prop}\"]"
+                echo "$match" | sed 's/^/      /'
+                GUARD_C_FAIL=$((GUARD_C_FAIL + 1))
+              fi
+            done
+          done < <(find ${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/src -name "*.kt" 2>/dev/null)
+          if [ "$GUARD_C_FAIL" -gt 0 ]; then
+            echo "::error::❌ Map property guard FAILED: $GUARD_C_FAIL bad access(es)"
+            echo "::error::snapshot() returns Map<String,Any?>. Use snapshot[\"key\"] instead of snapshot.key"
+            exit 1
+          fi
+          echo "✅ Map property guard PASSED"
+
+          # Phase 18 Guard B (kotlinc pre-flight): compile plugin Kotlin against
+          # openlist-classes.jar (real gomobile stubs) to catch Unresolved
+          # reference errors (Phase 17 bug class) BEFORE gradle's compileKotlin.
+          # The gradle compileKotlin task itself takes ~3 min; this guard fails
+          # in ~10s by going straight through kotlinc with classpath.
+          echo ""
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║  kotlinc pre-flight (Phase 17 Unresolved guard) ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          CLASSES_JAR="${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/libs/openlist-classes.jar"
+          if [ ! -f "$CLASSES_JAR" ]; then
+            echo "⏭️  openlist-classes.jar not present — kotlinc pre-flight SKIPPED"
+            echo "    (jar is produced by 'Build OpenList AAR' + 'Extract OpenList AAR' steps)"
+            echo "    (guard will fall through to gradle build, which catches unresolved references too — just slower)"
+            echo "    Expected path: $CLASSES_JAR"
+            ls -la "$CLASSES_JAR" 2>&1 || true
+            echo ""
+          else
+            # Download kotlin-compiler-embeddable + stdlib + reflect + coroutines
+            # via setup-kotlinc.sh (Maven Central, ~66MB, cached separately).
+            # `|| true` shields from `set -e` killing the step on setup failure.
+            bash .trae/scripts/setup-kotlinc.sh > /tmp/setup-kotlinc.log 2>&1 || true
+            SETUP_EXIT=$?
+            if [ $SETUP_EXIT -ne 0 ]; then
+              echo "::warning::setup-kotlinc.sh failed (exit=$SETUP_EXIT). Last 30 lines of setup log:"
+              tail -30 /tmp/setup-kotlinc.log
+              echo "⚠️  Skipping kotlinc pre-flight (will rely on gradle build to catch errors)."
+              echo ""
+            else
+              KOTLINC=$(which kotlinc-2.3.21 2>/dev/null || echo "/usr/local/bin/kotlinc-2.3.21")
+              # Build classpath: openlist classes + android.jar + combolite-core
+              ANDROID_JAR=$(find "$ANDROID_HOME/platforms" -name "android.jar" 2>/dev/null | head -1)
+              COMBOLITE_JAR=$(find ~/.gradle/caches -name "combolite-core-2.0.2*.jar" 2>/dev/null | grep -v sources | head -1)
+              CP="${CLASSES_JAR}"
+              [ -n "$ANDROID_JAR" ] && CP="${CP}:${ANDROID_JAR}"
+              [ -n "$COMBOLITE_JAR" ] && CP="${CP}:${COMBOLITE_JAR}"
+              echo "  kotlinc: $KOTLINC"
+              echo "  classpath: ${CP//:/, }"
+
+              cd ${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist
+              # NOTE: `|| true` is REQUIRED because the step's shell is
+              # `bash -e` (set -e from `shell: /usr/bin/bash -e {0}` header).
+              # Without it, kotlinc's non-zero exit would terminate the entire
+              # step BEFORE PREFLIGHT_EXIT=$? runs, hiding the actual error
+              # (Phase 19 finding: CI log showed "Process completed with exit
+              # code 1" with NO "❌ kotlinc pre-flight FAILED" message).
+              "$KOTLINC" -cp "$CP" -no-stdlib -no-reflect -Xsuppress-version-warnings \
+                src/main/java/com/encvgo/plugin/openlist/*.kt \
+                -d /tmp/encv-preflight-out 2>/tmp/encv-preflight.log || true
+              PREFLIGHT_EXIT=$?
+              cd -
+
+              echo "  kotlinc exit: $PREFLIGHT_EXIT"
+              # Filtered list = "known Phase 17 bug class" (gomobile methods + Map<String,Any?> keys)
+              REAL_ERRORS=$(grep -E "Unresolved reference '(forceDbSync|forceDBSync|setConfigData|setConfigLog|setConfigDebug|setConfigNoPrefix|setAdminPassword|init|start|shutdown|isRunning|getOutbound|running|port|pid|dataSizeBytes|lastError|lastUpdateTs)'" /tmp/encv-preflight.log || true)
+              # ALL unresolved = everything not in expected-3rd-party whitelist
+              ALL_UNRESOLVED=$(grep -E "Unresolved reference" /tmp/encv-preflight.log || true)
+              # Whitelisted 3rd-party noise (expected: android.*, compose.*, koin.*, openlistlib.* stub not on classpath, etc.)
+              # Note: each pattern needs `\..*` to match the full reference like 'android.widget.Toast', not just 'android' literal.
+              NOISE=$(echo "$ALL_UNRESOLVED" | grep -E "Unresolved reference '(android\.|androidx\.|com\.combo\.|org\.jetbrains\.|com\.tencent\.|mm\.composer\.|kotlin\.|kotlinx\.|kotlinx\.coroutines\.|org\.koin\.|openlistlib\.|com\.encvgo\.)" || true)
+              TRULY_NEW=$(comm -23 <(echo "$ALL_UNRESOLVED" | sort -u) <(echo "$NOISE" | sort -u))
+
+              if [ "$PREFLIGHT_EXIT" -ne 0 ] || [ -n "$REAL_ERRORS" ] || [ -n "$TRULY_NEW" ]; then
+                echo "❌ kotlinc pre-flight FAILED"
+                if [ -n "$REAL_ERRORS" ]; then
+                  echo "  --- Phase 17 bug class (gomobile/Map<String,Any?>) ---"
+                  echo "$REAL_ERRORS" | head -20 | sed 's/^/    /'
+                fi
+                if [ -n "$TRULY_NEW" ]; then
+                  echo "  --- Other unresolved (NOT in expected 3rd-party whitelist) ---"
+                  echo "$TRULY_NEW" | head -20 | sed 's/^/    /'
+                fi
+                if [ -z "$REAL_ERRORS" ] && [ -z "$TRULY_NEW" ]; then
+                  echo "  (no unresolved references, but kotlinc exit=$PREFLIGHT_EXIT)"
+                  echo "  --- last 20 lines of kotlinc output ---"
+                  tail -20 /tmp/encv-preflight.log | sed 's/^/    /'
+                fi
+                echo "::error::❌ kotlinc pre-flight failed. Full log: /tmp/encv-preflight.log (already shown above)"
+                exit 1
+              fi
+              echo "✅ kotlinc pre-flight PASSED (0 unresolved after filter)"
+            fi
+          fi
+
+          echo ""
+          echo "╔══════════════════════════════════════════════════╗"
+          echo "║  Gradle: compile + convert (real build)         ║"
+          echo "╚══════════════════════════════════════════════════╝"
+          cd ${{ env.MONOREPO_MOBILE_DIR }}/android
+          BUILD_TYPE="${{ inputs.version && 'Release' || 'Debug' }}"
+          APK_BUILD_TYPE="${{ inputs.version && 'release' || 'debug' }}"
+          echo "=== Compiling OpenList plugin (${BUILD_TYPE}) ==="
+          ./gradlew -PincludePlugins=true ":plugin-openlist:compile${BUILD_TYPE}Kotlin" --stacktrace 2>&1
+          echo "=== Converting to plugin APK ==="
+          # ⚠️ 任务名是连字符不是下划线 (Aar2ApkPlugin.kt:82-86 baseTaskName
+          # 从 modulePath ':plugin-openlist' 推导保留 '-',所以是
+          # 'convert_plugin-openlist_release',**不是** 'convert_plugin_openlist_release')
+          ./gradlew -PincludePlugins=true "convert_plugin-openlist_${APK_BUILD_TYPE}" --stacktrace 2>&1
+          echo "=== Locating output ==="
+          OPENLIST_APK="build/outputs/plugin-apks/${APK_BUILD_TYPE}/plugin-openlist-${APK_BUILD_TYPE}.apk"
+          if [ -f "$OPENLIST_APK" ]; then
+            echo "✅ OpenList Plugin APK:"
+            ls -lh "$OPENLIST_APK"
+          else
+            echo "::error::OpenList Plugin APK not found after build"
+            find build/outputs -name "*.apk" 2>/dev/null | head -5 || echo "No APKs found"
+            exit 1
+          fi
+
+      - name: Verify injectOpenlistClassesToAar task ran (A3.3 v2 diagnostic)
+        if: always() && inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          # A3.3 v2 关键诊断: build.gradle.kts 用错任务名 (下划线 vs 连字符)
+          # 会导致 inject 任务永远不被 convert 触发,aar 不被修改,d8 漏 openlistlib
+          # 这次修成连字符模式,本步验证 inject 任务真跑了 + aar 字节被修改
+          #
+          # ⚠️ 关键架构事实 (踩坑):
+          #   1. :plugin-openlist 只在 -PincludePlugins=true 时被 settings.gradle.kts
+          #      include,否则 ./gradlew 报 "project 'plugin-openlist' not found"
+          #   2. :plugin-openlist 的 projectDir = ../plugin-openlist (相对 android/),
+          #      所以 aar 输出在 ${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/build/outputs/aar/,
+          #      **不是** ${{ env.MONOREPO_MOBILE_DIR }}/android/plugin-openlist/build/outputs/aar/
+          mkdir -p /tmp/diagnostic-step385
+          echo "step38.5 start ts=$(date +%s)" > /tmp/diagnostic-step385/META.txt
+
+          cd "$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/android"
+          echo "=== 检查 inject 任务配置 (--dry-run, 必须带 -PincludePlugins=true) ===" | tee /tmp/diagnostic-step385/inject-dryrun.txt
+          ./gradlew -PincludePlugins=true :plugin-openlist:injectOpenlistClassesToAar --dry-run 2>&1 | tail -10 >> /tmp/diagnostic-step385/inject-dryrun.txt
+          echo
+          echo "=== aar/classes.jar 现状 (inject 任务应当真把 openlistlib 类合并进去) ==="
+          # ⚠️ 真实路径: plugin-openlist 是兄弟目录,projectDir = ../plugin-openlist
+          AAR="$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/build/outputs/aar/plugin-openlist-release.aar"
+          AAR_DEBUG="$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/build/outputs/aar/plugin-openlist-debug.aar"
+          AAR_FOUND=0
+          for A in "$AAR" "$AAR_DEBUG"; do
+            if [ -f "$A" ]; then
+              AAR_FOUND=1
+              echo "--- $A ---" | tee -a /tmp/diagnostic-step385/aar-inspection.txt
+              ls -lh "$A" >> /tmp/diagnostic-step385/aar-inspection.txt
+              rm -rf /tmp/aar-tmp-inspect
+              mkdir -p /tmp/aar-tmp-inspect
+              unzip -o "$A" -d /tmp/aar-tmp-inspect/ >/dev/null
+              if [ -f /tmp/aar-tmp-inspect/classes.jar ]; then
+                OPENLISTLIB_COUNT=$(unzip -l /tmp/aar-tmp-inspect/classes.jar 2>/dev/null | grep -c "openlistlib/" || echo 0)
+                if [ "$OPENLISTLIB_COUNT" -gt 0 ]; then
+                  echo "  ✅ $OPENLISTLIB_COUNT openlistlib 类在 classes.jar (inject 任务生效)" >> /tmp/diagnostic-step385/aar-inspection.txt
+                  unzip -l /tmp/aar-tmp-inspect/classes.jar | grep "openlistlib/" | head -10 >> /tmp/diagnostic-step385/aar-inspection.txt
+                else
+                  echo "  ❌ openlistlib/ 不在 classes.jar ← inject 任务未跑/失败" >> /tmp/diagnostic-step385/aar-inspection.txt
+                  echo "  classes.jar 内容:" >> /tmp/diagnostic-step385/aar-inspection.txt
+                  unzip -l /tmp/aar-tmp-inspect/classes.jar | head -10 >> /tmp/diagnostic-step385/aar-inspection.txt
+                fi
+              else
+                echo "  ❌ classes.jar 不在 aar 里" >> /tmp/diagnostic-step385/aar-inspection.txt
+              fi
+            fi
+          done
+          if [ "$AAR_FOUND" -eq 0 ]; then
+            echo "❌ 找不到 plugin-openlist aar ← 编译失败 / convert 任务失败" | tee /tmp/diagnostic-step385/REASON.txt
+            echo "可能根因: inject 任务 throw GradleException / bundleReleaseAar 没跑" >> /tmp/diagnostic-step385/REASON.txt
+          fi
+          # 把 aar 本身复制到 /tmp/diagnostic-aar/ 让用户能直接下载验证
+          mkdir -p /tmp/diagnostic-aar
+          for A in "$AAR" "$AAR_DEBUG"; do
+            [ -f "$A" ] && cp "$A" /tmp/diagnostic-aar/
+          done
+          ls -lh /tmp/diagnostic-aar/ 2>/dev/null
+
+      - name: Verify OpenList plugin APK has openlistlib classes (dex string scan)
+        if: inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          # A3.4 强化验证：用 dexdump 字符串扫描 classes.dex 看 Lopenlistlib/* 类是否真在 dex
+          #
+          # ⚠️ 即使本步失败,也要把"诊断信息"写到 /tmp/diagnostic/,避免空 bundle
+          mkdir -p /tmp/diagnostic-step39
+          echo "step39 start ts=$(date +%s)" > /tmp/diagnostic-step39/META.txt
+
+          # 路径策略：不 cd，直接用 $GITHUB_WORKSPACE 作为根
+          # aar2apk 输出在 root project (android/) 的 build/outputs/plugin-apks/<type>/
+          APK_PATH=""
+          for variant in release debug; do
+            P="$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/android/build/outputs/plugin-apks/${variant}/plugin-openlist-${variant}.apk"
+            [ -f "$P" ] && APK_PATH="$P" && break
+          done
+          if [ -z "$APK_PATH" ]; then
+            # 兜底 find (兼容未来路径变动)
+            APK_PATH=$(find "$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}" -name "plugin-openlist-*.apk" -type f 2>/dev/null | head -1)
+          fi
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            echo "❌ No plugin APK found at expected path" | tee /tmp/diagnostic-step39/REASON.txt
+            echo "查找过: $GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/android/build/outputs/plugin-apks/{release,debug}/" >> /tmp/diagnostic-step39/REASON.txt
+            echo "        $GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }} (兜底 find)" >> /tmp/diagnostic-step39/REASON.txt
+            echo "可能根因: step 38 失败 / convert 任务没跑 / aar2apk 输出路径变了" >> /tmp/diagnostic-step39/REASON.txt
+            echo "请看 step 38.5 (Verify inject task ran) 的实际输出" >> /tmp/diagnostic-step39/REASON.txt
+            exit 0
+          fi
+          echo "=== APK: $APK_PATH ===" | tee /tmp/diagnostic-step39/APK_PATH.txt
+          ls -lh "$APK_PATH" >> /tmp/diagnostic-step39/APK_PATH.txt
+
+          # ⚠️ 关键: 把 plugin-openlist-release.apk 本身复制到 /tmp/diagnostic-apk/
+          # 用户反馈"两个扩展也没有打包上传"——之前 step 43 没复制 APK/AAR 到 bundle
+          mkdir -p /tmp/diagnostic-apk
+          cp "$APK_PATH" /tmp/diagnostic-apk/
+          ls -lh /tmp/diagnostic-apk/
+
+          mkdir -p /tmp/apk-inspect
+          rm -f /tmp/apk-inspect/classes*.dex
+          unzip -o "$APK_PATH" 'classes*.dex' -d /tmp/apk-inspect/ >/dev/null 2>&1 || true
+          ls -la /tmp/apk-inspect/classes*.dex 2>/dev/null
+
+          echo
+          echo "=== dexdump availability ==="
+          DEXDUMP=""
+          for p in /opt/android-sdk/build-tools/*/dexdump /usr/lib/android-sdk/build-tools/*/dexdump "$ANDROID_HOME"/build-tools/*/dexdump; do
+            [ -x "$p" ] && [ -f "$p" ] && DEXDUMP="$p" && break
+          done
+          if [ -z "$DEXDUMP" ]; then
+            DEXDUMP=$(find / -name dexdump -executable -type f 2>/dev/null | head -1)
+          fi
+          echo "dexdump=$DEXDUMP" | tee /tmp/diagnostic-step39/dexdump-path.txt
+
+          echo
+          echo "=== openlistlib classes in dex (via strings) ==="
+          TOTAL_OPENLISTLIB=0
+          for dex in /tmp/apk-inspect/classes*.dex; do
+            [ -f "$dex" ] || continue
+            echo "--- $(basename $dex) ---"
+            echo "  bytes: $(stat -c%s "$dex")"
+            COUNT=$(strings "$dex" | grep -c "Lopenlistlib/" 2>/dev/null || echo 0)
+            TOTAL_OPENLISTLIB=$((TOTAL_OPENLISTLIB + COUNT))
+            echo "  Lopenlistlib/ 字符串数量: $COUNT"
+            if [ "$COUNT" -gt 0 ]; then
+              strings "$dex" | grep "Lopenlistlib/" | sort -u | head -20
+            fi
+          done
+          echo "TOTAL: $TOTAL_OPENLISTLIB openlistlib references in dex"
+          if [ "$TOTAL_OPENLISTLIB" -eq 0 ]; then
+            echo "❌ plugin APK dex 不含任何 openlistlib 类 ← A3.3 v2 inject 任务未生效" | tee /tmp/diagnostic-step39/REASON.txt
+            echo "可能根因: build.gradle.kts 任务名不匹配 / inject 任务失败 / aar 没被修改" >> /tmp/diagnostic-step39/REASON.txt
+          else
+            echo "✅ plugin APK dex 含 $TOTAL_OPENLISTLIB openlistlib 引用"
+          fi
+
+          echo
+          echo "=== openlistlib classes in dex (via dexdump classes) ==="
+          if [ -n "$DEXDUMP" ] && [ -f "$DEXDUMP" ] && [ -x "$DEXDUMP" ]; then
+            for dex in /tmp/apk-inspect/classes*.dex; do
+              [ -f "$dex" ] || continue
+              echo "--- $(basename $dex) ---"
+              "$DEXDUMP" "$dex" 2>/dev/null | grep -i "openlistlib" | head -20 || true
+            done
+          else
+            echo "⚠️ dexdump 不可用，仅 strings 扫描"
+          fi
+
+          echo
+          echo "=== com.encvgo.plugin.openlist classes in dex (sanity check) ==="
+          for dex in /tmp/apk-inspect/classes*.dex; do
+            [ -f "$dex" ] || continue
+            echo "--- $(basename $dex) ---"
+            strings "$dex" | grep -E "Lcom/encvgo/plugin/openlist/" | sort -u | head -30
+          done
+
+          echo
+          echo "=== libgojni.so check (native lib) ==="
+          unzip -l "$APK_PATH" | grep -E "lib/.*\.so" | head -10
+          unzip -p "$APK_PATH" 'lib/arm64-v8a/libgojni.so' 2>/dev/null | wc -c | xargs -I {} echo "lib/arm64-v8a/libgojni.so bytes: {}"
+
+      - name: Inspect plugin-openlist AAR classes.jar (intermediate artifact)
+        if: inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          # A3.4 v2: 看 aar 阶段 classes.jar 里有什么类
+          # 关键证据: injectOpenlistClassesToAar 任务是否真把 openlistlib 类合并到 aar
+          mkdir -p /tmp/diagnostic-step40
+          echo "step40 start ts=$(date +%s)" > /tmp/diagnostic-step40/META.txt
+
+          # ⚠️ 真实路径: plugin-openlist 是 android/ 的兄弟目录
+          #   settings.gradle.kts:62-63  set projectDir = ../plugin-openlist
+          #   所以 aar 输出在 ${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/build/outputs/aar/
+          AAR_PATH=""
+          for variant in release debug; do
+            P="$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/build/outputs/aar/plugin-openlist-${variant}.aar"
+            [ -f "$P" ] && AAR_PATH="$P" && break
+          done
+          if [ -z "$AAR_PATH" ]; then
+            # 兜底 find
+            AAR_PATH=$(find "$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/build" -name "*.aar" -type f 2>/dev/null | head -1)
+          fi
+          if [ -z "$AAR_PATH" ] || [ ! -f "$AAR_PATH" ]; then
+            echo "❌ No plugin-openlist AAR found (可能 plugin-openlist 编译失败)" | tee /tmp/diagnostic-step40/REASON.txt
+            echo "查找过: $GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/build/outputs/aar/" >> /tmp/diagnostic-step40/REASON.txt
+            echo "可能的根因:libs/openlist-classes.jar 不存在,compileKotlin 缺 openlistlib 引用" >> /tmp/diagnostic-step40/REASON.txt
+            echo "修复:CI 步骤 'Extract OpenList AAR for plugin packaging' 必须成功" >> /tmp/diagnostic-step40/REASON.txt
+            exit 0
+          fi
+          echo "=== AAR: $AAR_PATH ===" | tee -a /tmp/diagnostic-step40/aar-info.txt
+          ls -lh "$AAR_PATH" >> /tmp/diagnostic-step40/aar-info.txt
+          # ⚠️ 把 aar 复制到 bundle 让用户能直接下载
+          mkdir -p /tmp/diagnostic-aar
+          cp "$AAR_PATH" /tmp/diagnostic-aar/
+          ls -lh /tmp/diagnostic-aar/
+          mkdir -p /tmp/aar-inspect
+          rm -rf /tmp/aar-inspect/*
+          unzip -o "$AAR_PATH" -d /tmp/aar-inspect/ >/dev/null
+          echo
+          echo "=== AAR contents ===" | tee -a /tmp/diagnostic-step40/aar-info.txt
+          unzip -l "$AAR_PATH" | tail -20 >> /tmp/diagnostic-step40/aar-info.txt
+          echo
+          echo "=== classes.jar classes (按包分组) ===" | tee -a /tmp/diagnostic-step40/aar-info.txt
+          if [ -f /tmp/aar-inspect/classes.jar ]; then
+            unzip -l /tmp/aar-inspect/classes.jar | awk '{print $NF}' | grep -E "\.class$" | awk -F'/' '{print $1"/"$2"/"$3"/"$4}' | sort -u | head -30 >> /tmp/diagnostic-step40/aar-info.txt
+            echo >> /tmp/diagnostic-step40/aar-info.txt
+            echo "--- openlistlib 包是否存在 ---" >> /tmp/diagnostic-step40/aar-info.txt
+            unzip -l /tmp/aar-inspect/classes.jar | grep -E "openlistlib/" | head -20 >> /tmp/diagnostic-step40/aar-info.txt
+            if unzip -l /tmp/aar-inspect/classes.jar | grep -q "openlistlib/Event.class"; then
+              echo "✅ openlistlib/Event.class 在 classes.jar 里 (inject 任务生效)" | tee -a /tmp/diagnostic-step40/aar-info.txt
+            else
+              echo "❌ openlistlib/Event.class 不在 classes.jar 里 ← injectOpenlistClassesToAar 任务未跑/失败" | tee /tmp/diagnostic-step40/REASON.txt
+            fi
+          else
+            echo "❌ classes.jar 不在 aar 里（异常情况）" | tee -a /tmp/diagnostic-step40/aar-info.txt
+          fi
+
+      - name: Inspect injectOpenlistClassesToAar task (A3.3 v2 injection)
+        if: inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          # A3.4 v2: 验证 A3.3 重写版 injectOpenlistClassesToAar 任务配置
+          # 旧版 "sourceSet 注入" 已废弃,因为 AGP 不编译 .class 文件
+          mkdir -p /tmp/diagnostic-step41
+          echo "step41 start ts=$(date +%s)" > /tmp/diagnostic-step41/META.txt
+
+          BUILD_GRADLE="$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/build.gradle.kts"
+          if [ ! -f "$BUILD_GRADLE" ]; then
+            echo "❌ plugin-openlist/build.gradle.kts 不存在" | tee /tmp/diagnostic-step41/REASON.txt
+            exit 0
+          fi
+          echo "=== build.gradle.kts inject 任务检查 ===" | tee /tmp/diagnostic-step41/gradle-check.txt
+          grep -n "injectOpenlistClassesToAar\|unpackOpenlistClasses" "$BUILD_GRADLE" | head -10 >> /tmp/diagnostic-step41/gradle-check.txt
+          echo >> /tmp/diagnostic-step41/gradle-check.txt
+          if grep -q "injectOpenlistClassesToAar" "$BUILD_GRADLE"; then
+            echo "✅ injectOpenlistClassesToAar 任务已定义" >> /tmp/diagnostic-step41/gradle-check.txt
+          else
+            echo "❌ injectOpenlistClassesToAar 任务未定义 ← A3.3 v2 未生效" | tee /tmp/diagnostic-step41/REASON.txt
+          fi
+          if grep -q "convert_plugin-openlist_" "$BUILD_GRADLE"; then
+            echo "✅ convert 任务 hook 用了连字符模式 (匹配 Aar2ApkPlugin 任务名)" >> /tmp/diagnostic-step41/gradle-check.txt
+          else
+            echo "❌ convert 任务 hook 不存在 / 任务名错" | tee -a /tmp/diagnostic-step41/REASON.txt
+          fi
+          if grep -q "sourceSets.*java.srcDir.*openlistlib" "$BUILD_GRADLE"; then
+            echo "⚠️ 旧版 sourceSet 注入仍存在,应删除 (AGP 不编译 .class)" >> /tmp/diagnostic-step41/gradle-check.txt
+          fi
+
+          echo
+          echo "=== run injectOpenlistClassesToAar task (--dry-run) ===" | tee /tmp/diagnostic-step41/inject-dryrun.txt
+          cd "$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/android"
+          # ⚠️ 必须 -PincludePlugins=true 否则 plugin-openlist 项目没注册
+          ./gradlew -PincludePlugins=true :plugin-openlist:injectOpenlistClassesToAar --dry-run 2>&1 | tail -20 >> /tmp/diagnostic-step41/inject-dryrun.txt || true
+
+          echo
+          echo "=== libs/openlist-classes.jar 现状 ===" | tee /tmp/diagnostic-step41/classes-jar-check.txt
+          JAR="$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/libs/openlist-classes.jar"
+          if [ -f "$JAR" ]; then
+            ls -lh "$JAR" >> /tmp/diagnostic-step41/classes-jar-check.txt
+            echo "classes.jar 含 openlistlib 类:" >> /tmp/diagnostic-step41/classes-jar-check.txt
+            unzip -l "$JAR" | grep "openlistlib/" | head -10 >> /tmp/diagnostic-step41/classes-jar-check.txt
+          else
+            echo "❌ libs/openlist-classes.jar 不存在 ← CI Extract OpenList AAR 步骤未跑/失败" | tee -a /tmp/diagnostic-step41/REASON.txt
+          fi
+
+          echo
+          echo "=== build/generated/openlistlib/ 现状 ===" | tee /tmp/diagnostic-step41/generated-check.txt
+          DIR="$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/build/generated/openlistlib"
+          if [ -d "$DIR" ]; then
+            find "$DIR" -name "*.class" | head -10 >> /tmp/diagnostic-step41/generated-check.txt
+            echo "class 数量: $(find "$DIR" -name "*.class" 2>/dev/null | wc -l)" >> /tmp/diagnostic-step41/generated-check.txt
+          else
+            echo "❌ build/generated/openlistlib/ 不存在 ← unpackOpenlistClasses 任务未跑过" | tee -a /tmp/diagnostic-step41/REASON.txt
+          fi
+
+      - name: Run kotlinc verify on OpenListBridge (sandbox sim)
+        if: inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          # A3.4: 用 kotlinc 直接编译 OpenListBridge.kt + libs/openlist-classes.jar
+          # 如果 unresolved 'openlistlib' 出现 → classes.jar 不含 openlistlib 类
+          # 如果 unresolved 'openlistlib' 消失 → classes.jar 含 openlistlib 类（CI 提取成功）
+          #
+          # ⚠️ 即使本步失败,也要把"诊断信息"写到 /tmp/diagnostic/,这样
+          # diagnostic bundle 不至于空(用户反馈 1KB bundle 看不到任何东西)
+          mkdir -p /tmp/diagnostic-step42
+          echo "step42 start ts=$(date +%s)" > /tmp/diagnostic-step42/META.txt
+
+          cd "$GITHUB_WORKSPACE/${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist"
+
+          if [ ! -f libs/openlist-classes.jar ]; then
+            echo "❌ libs/openlist-classes.jar 不存在,跳过 kotlinc verify" | tee /tmp/diagnostic-step42/REASON.txt
+            echo "CI Extract OpenList AAR 步骤未成功,无法验证" >> /tmp/diagnostic-step42/REASON.txt
+            exit 0
+          fi
+          echo "=== libs/openlist-classes.jar 内容 ===" | tee /tmp/diagnostic-step42/classes-jar-listing.txt
+          unzip -l libs/openlist-classes.jar | head -20 >> /tmp/diagnostic-step42/classes-jar-listing.txt
+          echo
+          echo "=== openlistlib classes in classes.jar ===" | tee -a /tmp/diagnostic-step42/classes-jar-listing.txt
+          unzip -l libs/openlist-classes.jar | grep -E "openlistlib/" | head -10 >> /tmp/diagnostic-step42/classes-jar-listing.txt
+          if ! unzip -l libs/openlist-classes.jar | grep -q "openlistlib/Event.class"; then
+            echo "❌ openlistlib/Event.class 不在 classes.jar 里 ← gomobile bind 产物异常" | tee /tmp/diagnostic-step42/REASON.txt
+            exit 0
+          fi
+          echo "✅ openlistlib/Event.class 在 classes.jar 里"
+
+          # find kotlinc —— 必须 -type f (否则会匹配 /usr/share/kotlinc 这种目录,
+          # 执行时 bash 会报 "/usr/share/kotlinc: Is a directory")
+          KOTLINC=""
+          for p in /usr/local/bin/kotlinc /opt/kotlinc/bin/kotlinc /usr/share/kotlinc/bin/kotlinc; do
+            [ -x "$p" ] && [ -f "$p" ] && KOTLINC="$p" && break
+          done
+          if [ -z "$KOTLINC" ]; then
+            KOTLINC=$(find / -name 'kotlinc' -executable -type f 2>/dev/null | head -1)
+          fi
+          # 二次校验:必须是 file 不是 directory
+          if [ -n "$KOTLINC" ] && [ ! -f "$KOTLINC" ]; then
+            echo "⚠️ KOTLINC=$KOTLINC 不是普通文件,清空"
+            KOTLINC=""
+          fi
+          echo "kotlinc=$KOTLINC" | tee /tmp/diagnostic-step42/kotlinc-path.txt
+          if [ -z "$KOTLINC" ]; then
+            echo "⚠️ kotlinc 不可用,跳过编译验证" | tee /tmp/diagnostic-step42/REASON.txt
+            echo "find 路径:'/usr/local/bin/kotlinc' '/opt/kotlinc/bin/kotlinc' '/usr/share/kotlinc/bin/kotlinc' 都缺失" >> /tmp/diagnostic-step42/REASON.txt
+            echo "find / -name 'kotlinc' -executable -type f 也没找到" >> /tmp/diagnostic-step42/REASON.txt
+            exit 0
+          fi
+          echo
+          echo "=== kotlinc compile OpenListBridge.kt (with classes.jar classpath, FULL stdlib) ==="
+          # ⚠️ 不用 -no-stdlib —— OpenListBridge 用了 List/Map 等 stdlib 类
+          # 上次失败根因:-no-stdlib 让 stdlib 类 unresolved 报 unrelated 错误
+          rm -rf /tmp/openlist-verify
+          mkdir -p /tmp/openlist-verify
+          "$KOTLINC" -Xsuppress-version-warnings \
+            -classpath "libs/openlist-classes.jar" \
+            src/main/java/com/encvgo/plugin/openlist/OpenListBridge.kt \
+            -d /tmp/openlist-verify 2>/tmp/openlist-verify.log || true
+          echo "--- 完整 log:openlist-verify.log ---"
+          cp /tmp/openlist-verify.log /tmp/diagnostic-step42/ 2>/dev/null || true
+          echo "--- 过滤错误:openlistlib/unresolved ---"
+          grep -E "openlistlib|unresolved reference" /tmp/openlist-verify.log 2>/dev/null | head -20 || true
+          echo
+          echo "=== verify result ==="
+          if [ -f /tmp/openlist-verify/com/encvgo/plugin/openlist/OpenListBridge.class ]; then
+            echo "✅ OpenListBridge.class 生成成功 — openlistlib 类在 classpath 中"
+          else
+            echo "❌ OpenListBridge.class 未生成 — 完整 log 见 openlist-verify.log"
+            tail -30 /tmp/openlist-verify.log 2>/dev/null | tee /tmp/diagnostic-step42/REASON.txt
+          fi
+
+      - name: Upload diagnostic bundle
+        if: always() && inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          # A3.4 v3: 打包**所有**诊断产物到 artifact
+          # 上次用户反馈"1KB 空 bundle + 两个扩展没打包"——根因是本步只 cp 了 3 个
+          # inspect 目录,缺 step38.5/39/40/41/42 的诊断 + APK/AAR 本身
+          mkdir -p /tmp/diagnostic
+          rm -rf /tmp/diagnostic/*
+          # ---------- 核心扩展产物 (用户最关心) ----------
+          cp -r /tmp/diagnostic-apk /tmp/diagnostic/ 2>/dev/null || true
+          cp -r /tmp/diagnostic-aar /tmp/diagnostic/ 2>/dev/null || true
+          # ---------- dex / aar 解包内容 ----------
+          cp -r /tmp/apk-inspect /tmp/diagnostic/ 2>/dev/null || true
+          cp -r /tmp/aar-inspect /tmp/diagnostic/ 2>/dev/null || true
+          # ---------- 各 step 诊断目录 ----------
+          cp -r /tmp/diagnostic-step385 /tmp/diagnostic/ 2>/dev/null || true
+          cp -r /tmp/diagnostic-step39  /tmp/diagnostic/ 2>/dev/null || true
+          cp -r /tmp/diagnostic-step40  /tmp/diagnostic/ 2>/dev/null || true
+          cp -r /tmp/diagnostic-step41  /tmp/diagnostic/ 2>/dev/null || true
+          cp -r /tmp/diagnostic-step42  /tmp/diagnostic/ 2>/dev/null || true
+          # ---------- kotlinc verify 输出 ----------
+          cp -r /tmp/openlist-verify /tmp/diagnostic/ 2>/dev/null || true
+          cp /tmp/openlist-verify.log /tmp/diagnostic/ 2>/dev/null || true
+
+          # ---------- 总览:打印所有 step 的 REASON + 关键产物 ----------
+          echo "============================================="
+          echo "  Diagnostic bundle inventory"
+          echo "============================================="
+          echo
+          echo "=== APK/AAR 扩展本身 ==="
+          ls -lh /tmp/diagnostic/diagnostic-apk/ 2>/dev/null | sed 's/^/  /' || echo "  ❌ /tmp/diagnostic-apk/ 缺失 ← step 39 没 cp 成功"
+          ls -lh /tmp/diagnostic/diagnostic-aar/ 2>/dev/null | sed 's/^/  /' || echo "  ❌ /tmp/diagnostic-aar/ 缺失 ← step 38.5/40 没 cp 成功"
+          echo
+          echo "=== 各 step REASON.txt ==="
+          for s in step385 step39 step40 step41 step42; do
+            F="/tmp/diagnostic/diagnostic-$s/REASON.txt"
+            if [ -f "$F" ]; then
+              echo "  --- $s REASON ---"
+              sed 's/^/    /' "$F"
+            else
+              echo "  --- $s: (no REASON.txt, 步 正常通过) ---"
+            fi
+          done
+          echo
+          echo "=== Bundle 内容总览 ==="
+          find /tmp/diagnostic -maxdepth 3 -type f | sort | head -50
+          TOTAL_FILES=$(find /tmp/diagnostic -type f | wc -l)
+          echo "  总文件数: $TOTAL_FILES"
+          echo
+          tar czf /tmp/diagnostic.tar.gz -C /tmp diagnostic
+          ls -lh /tmp/diagnostic.tar.gz
+          # 验证 tar 内容
+          echo
+          echo "=== tar.gz 内容校验 ==="
+          tar tzf /tmp/diagnostic.tar.gz | head -30
+          echo "  ..."
+          echo "  tar 实际条目数: $(tar tzf /tmp/diagnostic.tar.gz | wc -l)"
+
+          # 准备独立路径供后续 upload-artifact 步骤读取
+          mkdir -p /tmp/diagnostic-artifact
+          cp /tmp/diagnostic.tar.gz /tmp/diagnostic-artifact/openlist-diagnostic.tar.gz
+          ls -lh /tmp/diagnostic-artifact/
+          echo "Diagnostic ready at /tmp/diagnostic-artifact/openlist-diagnostic.tar.gz" >> $GITHUB_STEP_SUMMARY
+
+      # === Build ===
+      - name: Build ${{ inputs.version && 'Release' || 'Debug' }} APK
+        env:
+          BUGLY_APP_ID: ${{ secrets.BUGLY_APP_ID }}
+        run: |
+          cd ${{ env.MONOREPO_MOBILE_DIR }}
+
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "=== Building RELEASE APK v${{ inputs.version }} ==="
+
+            echo "=== Generating keystore.properties for signing ==="
+            {
+              echo "storeFile=${{ github.workspace }}/${{ env.MONOREPO_MOBILE_DIR }}/keystore/release.jks"
+              echo "storePassword=encv2025"
+              echo "keyAlias=encvrelease"
+              echo "keyPassword=encv2025"
+            } > android/keystore.properties
+            echo "keystore.properties created"
+
+            cd android
+            chmod +x gradlew
+            ./gradlew assembleRelease --stacktrace
+
+            echo "=== Locating signed APK ==="
+            ls -la app/build/outputs/apk/release/
+            APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" ! -name "*-unsigned*" -type f | head -1)
+            [ -z "$APK_PATH" ] && { echo "::error::No APK found"; exit 1; }
+            echo "Selected APK: $APK_PATH"
+
+            echo "Verifying signature..."
+            APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name "apksigner" -type f | head -1)
+            [ -z "$APKSIGNER" ] && { echo "::error::apksigner not found in $ANDROID_HOME/build-tools"; exit 1; }
+            if "$APKSIGNER" verify --print-certs "$APK_PATH"; then
+              echo "✅ Signed OK: $(ls -lh "$APK_PATH" | awk '{print $5}')"
+            else
+              echo "::error::APK signature verification FAILED — signingConfig may not be applied in build.gradle.kts"
+              exit 1
+            fi
+          else
+            echo "=== Building DEBUG APK ==="
+            cd android
+            chmod +x gradlew
+            ./gradlew assembleDebug --stacktrace
+          fi
+
+      - name: Verify APK contents
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            APK_PATH=$(find ${{ env.MONOREPO_MOBILE_DIR }}/android/app/build/outputs/apk/release -name "*.apk" ! -name "*-unsigned*" -type f | head -1)
+          else
+            APK_PATH=$(find ${{ env.MONOREPO_MOBILE_DIR }}/android/app/build/outputs/apk/debug -name "*.apk" -type f | head -1)
+          fi
+          if [ -n "$APK_PATH" ]; then
+            echo "=== APK size ==="
+            ls -lh "$APK_PATH"
+            echo "=== Assets ==="
+            unzip -l "$APK_PATH" | grep -E "encv-go|config.mobile" || true
+
+            echo "=== Web assets (public/index.html) ==="
+            if unzip -l "$APK_PATH" | grep -q "public/index.html"; then
+              echo "✅ PASS: Web assets found in APK"
+              unzip -l "$APK_PATH" | grep "public/index.html"
+            else
+              echo "::error::Web assets (public/index.html) MISSING from APK! Did npx cap copy android run?"
+              exit 1
+            fi
+
+            echo "=== Config file (config.user.json) ==="
+            if unzip -l "$APK_PATH" | grep -q "config.user.json"; then
+              echo "✅ PASS: config.user.json found in APK"
+            else
+              echo "::warning::config.user.json not in APK assets (will use fallback config on first launch)"
+            fi
+
+            echo "=== DEX strings check (real class presence) ==="
+            TMPDIR=$(mktemp -d)
+            unzip -q "$APK_PATH" -d "$TMPDIR"
+            if [ -f "$TMPDIR/classes.dex" ]; then
+              strings "$TMPDIR/classes.dex" | grep -i "encvgo\|GoProcess" && \
+                echo "✅ GoProcess found in DEX (compiled+packaged)" || \
+                echo "❌ Not found in DEX strings"
+            else
+              echo "❌ classes.dex missing!"
+              ls "$TMPDIR/"*.dex 2>/dev/null || echo "No dex files"
+            fi
+            rm -rf "$TMPDIR"
+            echo "=== Go binary in APK (jniLibs) ==="
+            unzip -l "$APK_PATH" | grep -E "libencv-go|lib/arm64" || echo "❌ libencv-go.so NOT in APK!"
+            echo "=== Host APK must NOT contain MPV .so ==="
+            if unzip -l "$APK_PATH" | grep -q "libmpv\.so\|libplayer\.so"; then
+              echo "❌ FAIL: Host APK contains MPV .so!"
+              exit 1
+            else
+              echo "✅ PASS: Host APK excludes MPV .so"
+            fi
+            echo "=== Plugin loading strategy ==="
+            if [ "${{ inputs.skip_plugin }}" = "true" ]; then
+              echo "⏭️ Skipped (skip_plugin=true)"
+            elif unzip -l "$APK_PATH" | grep -q "mpv-player.apk"; then
+              echo "❌ FAIL: Plugin APK should NOT be bundled in host assets (disk-based loading)"
+              exit 1
+            else
+              echo "✅ PASS: Plugin not bundled (loaded from filesDir/plugins/ at runtime)"
+            fi
+          else
+            echo "No APK found to verify"
+          fi
+
+      - name: Verify upload files exist + log sizes
+        if: always() && inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          # 用户多次反馈 28.5MB encv-go-android-v1.0.1 只有 host APK ——
+          # 实际上传前**必须** ls 验证 plugin-openlist-*.apk 存在 + 大小
+          # (期望 >50MB 含 libgojni.so,~2MB 仅 dex)
+          echo "=== Host APK ===" | tee /tmp/diagnostic-apk-sizes.txt
+          for f in $(find ${{ env.MONOREPO_MOBILE_DIR }}/android/app/build/outputs/apk -name "*.apk" -type f 2>/dev/null); do
+            ls -lh "$f" | tee -a /tmp/diagnostic-apk-sizes.txt
+          done
+          echo | tee -a /tmp/diagnostic-apk-sizes.txt
+          echo "=== Plugin APKs ===" | tee -a /tmp/diagnostic-apk-sizes.txt
+          PLUGIN_FOUND=0
+          for f in $(find ${{ env.MONOREPO_MOBILE_DIR }}/android/build/outputs/plugin-apks -name "*.apk" -type f 2>/dev/null); do
+            ls -lh "$f" | tee -a /tmp/diagnostic-apk-sizes.txt
+            PLUGIN_FOUND=1
+          done
+          if [ "$PLUGIN_FOUND" -eq 0 ]; then
+            echo "❌ 找不到 plugin APK" | tee -a /tmp/diagnostic-apk-sizes.txt
+            echo "可能根因: step 38 (Build OpenList plugin APK) 失败" | tee -a /tmp/diagnostic-apk-sizes.txt
+            echo "          或 convert_plugin-openlist_release 任务被跳过" | tee -a /tmp/diagnostic-apk-sizes.txt
+            # 兜底查找 (兼容 aar2apk 路径变动)
+            echo "兜底 find (整个 encv-mobile):" | tee -a /tmp/diagnostic-apk-sizes.txt
+            find ${{ env.MONOREPO_MOBILE_DIR }} -name "plugin-openlist-*.apk" -type f 2>/dev/null | head -5 | tee -a /tmp/diagnostic-apk-sizes.txt
+          else
+            echo "✅ plugin APK 找到" | tee -a /tmp/diagnostic-apk-sizes.txt
+            echo "检查是否含 libgojni.so (期望 >50MB):" | tee -a /tmp/diagnostic-apk-sizes.txt
+            APK=$(find ${{ env.MONOREPO_MOBILE_DIR }}/android/build/outputs/plugin-apks -name "*.apk" -type f | head -1)
+            unzip -l "$APK" 2>/dev/null | grep -E "libgojni|lib/" | head -10 | tee -a /tmp/diagnostic-apk-sizes.txt
+            SIZE=$(stat -c%s "$APK" 2>/dev/null || stat -f%z "$APK" 2>/dev/null)
+            echo "plugin APK 字节数: $SIZE (期望 >50000000)" | tee -a /tmp/diagnostic-apk-sizes.txt
+          fi
+          # 把诊断日志也存到 /tmp/diagnostic-artifact 让 step 47 一并打包
+          mkdir -p /tmp/diagnostic-artifact
+          cp /tmp/diagnostic-apk-sizes.txt /tmp/diagnostic-artifact/ 2>/dev/null || true
+          # 也复制到 /tmp/diagnostic 供 step 43 打包
+          mkdir -p /tmp/diagnostic/diagnostic-apk-sizes
+          cp /tmp/diagnostic-apk-sizes.txt /tmp/diagnostic/diagnostic-apk-sizes/ 2>/dev/null || true
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: encv-go-android${{ inputs.version && format('-v{0}', inputs.version) || '-debug' }}
+          path: |
+            ${{ env.MONOREPO_MOBILE_DIR }}/android/app/build/outputs/apk/**/*.apk
+            ${{ env.MONOREPO_MOBILE_DIR }}/android/build/outputs/plugin-apks/**/*.apk
+            ${{ env.MONOREPO_MOBILE_DIR }}/android/build/**/plugin-openlist*.apk
+          retention-days: 3
+          if-no-files-found: error
+
+      - name: Upload OpenList diagnostic bundle
+        if: always() && inputs.skip_plugin != true
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: openlist-diagnostic${{ inputs.version && format('-v{0}', inputs.version) || '-debug' }}
+          path: /tmp/diagnostic-artifact/openlist-diagnostic.tar.gz
+          retention-days: 7
+          # ⚠️ 用 error 而不是 warn —— 如果 file 缺失说明 step 43 (Upload diagnostic
+          # bundle) 失败,必须显式报错让用户看到(之前 warn 静默吞掉,用户反复反馈
+          # "openlist-diagnostic-{version}.tar.gz 根本没有上传成功")
+          # continue-on-error: true 防止 step 47 fail 阻塞整个 job 的 success 状态
+          # (主 APK artifact 已经在 step 46 上传)
+          if-no-files-found: error
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo "## Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`${{ inputs.version || 'debug (development)' }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Go Binary | $(ls -lh ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64 2>/dev/null | awk '{print $5}' || echo N/A) |" >> $GITHUB_STEP_SUMMARY
+          echo "| OpenList AAR | $(ls -lh ${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/libs/openlist.aar 2>/dev/null | awk '{print $5}' || echo N/A) |" >> $GITHUB_STEP_SUMMARY
+          find ${{ env.MONOREPO_MOBILE_DIR }}/android/app/build/outputs/apk -name "*.apk" -type f 2>/dev/null | while read apk; do
+            echo "| APK | $(basename "$apk") ($(\ls -lh "$apk" | awk '{print $5}')) |" >> $GITHUB_STEP_SUMMARY
+          done
+          find ${{ env.MONOREPO_MOBILE_DIR }}/android/build -name "plugin-openlist-*.apk" -type f 2>/dev/null | while read apk; do
+            echo "| OpenList Plugin APK | $(basename "$apk") ($(\ls -lh "$apk" | awk '{print $5}')) |" >> $GITHUB_STEP_SUMMARY
+          done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### A3.4 诊断产物" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "完整诊断包已上传为独立 artifact：**openlist-diagnostic-{version}.tar.gz**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "包含:" >> $GITHUB_STEP_SUMMARY
+          echo "- \`apk-inspect/classes*.dex\` — plugin APK 的 classes.dex 提取（含 openlistlib 类字符串扫描结果）" >> $GITHUB_STEP_SUMMARY
+          echo "- \`aar-inspect/classes.jar\` — plugin-openlist.aar 的中间 classes.jar 列表（含 openlistlib 类是否合并）" >> $GITHUB_STEP_SUMMARY
+          echo "- \`openlist-verify/com/encvgo/plugin/openlist/OpenListBridge.class\` — kotlinc 验证编译产物" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "请在 GitHub Actions 页面下载该 artifact 并解包查看，定位 A3 修复是否真生效。" >> $GITHUB_STEP_SUMMARY

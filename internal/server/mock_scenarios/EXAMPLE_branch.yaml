@@ -1,0 +1,118 @@
+# EXAMPLE_branch — 预设选项 chip + 多 step 跳转示例
+#
+# 演示：
+#   1. mock_branch_choice 推 3 个 chip 给用户
+#   2. 用户点 chip → 后端收 option_id → 跳到对应 step
+#   3. 不同 option 走不同 step 路径
+#   4. 每个 step 可独立调真实工具
+#
+# 跳转机制（v1 flat 模式）：
+#   - option.id 必须等于某个 step.id
+#   - 用户点击 "relax" → 后端跳到 step.id = "relax"
+#   - 用户点击 "change_ext" → 后端跳到 step.id = "change_ext"
+#
+# 触发：用户输入 "分支测试" / "branch test"
+id: example_branch
+description: 预设选项 + 多 step 跳转示例
+
+keywords:
+  - 分支测试
+  - branch test
+  - example branch
+
+steps:
+  # ── 步骤 1：流开始 + 文本 ──
+  - id: intro
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: example_branch }
+      - type: text_delta
+        data: { text: "欢迎使用分支测试剧本。\n" }
+
+  # ── 步骤 2：先做一次搜索 ──
+  - id: initial_search
+    delay_ms: 400
+    events:
+      - type: text_delta
+        data: { text: "先用默认条件搜索...\n" }
+      - type: tool_call
+        data:
+          id: call_branch_1
+          name: search_files
+          args: { ext: ".mp4", min_size: 10240 }   # 10KB+
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+
+  # ── 步骤 3：分支选择点 ──
+  - id: post_search
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "请选择下一步操作：\n" }
+      - type: mock_branch_choice
+        data:
+          branch_id: post_search
+          options:
+            # ✅ id = step.id — 用户点 "relax" → 跳到 step "relax"
+            - id: relax
+              label: "🎚️ 放宽条件（不限大小）"
+              icon: "🎚️"
+            - id: change_ext
+              label: "📁 改其他格式（.mkv）"
+              icon: "📁"
+            - id: cancel
+              label: "❌ 取消"
+              icon: "❌"
+      # 注意：用户点 chip 后，stream 暂停（mid-scenario pause）
+
+  # ── 分支路径 1：放宽条件 → 不限大小再搜一次 ──
+  - id: relax
+    delay_ms: 100
+    events:
+      - type: text_delta
+        data: { text: "好的，已放宽到不限大小，重新搜索中...\n" }
+      - type: tool_call
+        data:
+          id: call_branch_relax
+          name: search_files
+          args: { ext: ".mp4" }   # 不限大小
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+      - type: text_delta
+        data: { text: "搜索完成。\n" }
+      - type: stream_end
+        data: { finishReason: stop }
+
+  # ── 分支路径 2：改格式 → 搜 .mkv ──
+  - id: change_ext
+    delay_ms: 100
+    events:
+      - type: text_delta
+        data: { text: "好的，改为搜索 .mkv 格式...\n" }
+      - type: tool_call
+        data:
+          id: call_branch_change
+          name: search_files
+          args: { ext: ".mkv" }
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+      - type: text_delta
+        data: { text: "搜索完成。\n" }
+      - type: stream_end
+        data: { finishReason: stop }
+
+  # ── 分支路径 3：取消 → 直接收尾 ──
+  - id: cancel
+    delay_ms: 100
+    events:
+      - type: text_delta
+        data: { text: "好的，已取消。\n" }
+      - type: stream_end
+        data: { finishReason: stop, usage: { totalTokens: 80 } }

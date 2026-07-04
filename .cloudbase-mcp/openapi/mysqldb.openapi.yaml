@@ -1,0 +1,847 @@
+openapi: 3.0.0
+
+info:
+  title: MySQL RESTful API
+  version: 1.0.0
+  description: >-
+    ### 功能介绍
+
+    这里给出了调用 mysql 所有操作的API，以及每个API的参数参考。
+
+
+    ### 请求域名
+
+    支持以下三种域名访问方式：
+
+    1. `https://{envId}.api.tcloudbasegateway.com/v1/rdb/rest/{table}`
+
+    2. `https://{envId}.api.tcloudbasegateway.com/v1/rdb/rest/{schema}/{table}`
+
+    3. `https://{envId}.api.tcloudbasegateway.com/v1/rdb/rest/{instance}/{schema}/{table}`
+
+
+    - envId 是环境id
+
+    - instance 是数据库实例标识
+
+    - schema 是数据库名
+
+    - table 是表名
+
+
+    如果使用系统数据库，推荐方式 1
+
+
+    ### 接入指引
+
+    调用以下接口需要传递 AccessToken，格式如`Authorization: Bearer <token>`。Token 获取方式参考：https://docs.cloudbase.net/http-api/basic/access-token
+
+    ### 请求编码
+
+    当发起请求前请进行 url 编码，如：
+
+    > 原始请求
+
+    ```shell
+
+    curl -i -X GET 'https://{{host}}/v1/rdb/rest/course?select=name,position&name=like.%张三%&title=eq.文章标题'
+
+    ```
+
+    > 编码后请求
+
+    ```shell
+
+    curl -i -X GET 'https://{{host}}/v1/rdb/rest/course?select=name,position&name=like.%%E5%BC%A0%E4%B8%89%&title=eq.%E6%96%87%E7%AB%A0%E6%A0%87%E9%A2%98'
+
+    ```
+
+
+    ### 请求头和返回头
+
+    <table>
+      <thead>
+        <tr>
+          <td>请求头</td>
+          <td>参数</td>
+          <td>说明</td>
+          <td>示例</td>
+        </tr>
+      </thead>
+      <tr>
+        <td>Accept</td>
+        <td>支持 `application/json`、`application/vnd.pgrst.object+json`</td>
+        <td>控制数据返回格式</td>
+        <td>Accept: application/json</td>
+      </tr>
+      <tr>
+        <td>Content-Type</td>
+        <td>支持 `application/json`、`application/vnd.pgrst.object+json`</td>
+        <td>返回</td>
+        <td>Content-Type: application/json</td>
+      </tr>
+      <tr>
+        <td>Prefer</td>
+        <td>操作依赖的特征值</td>
+        <td>
+          - `return=representation` 写操作，返回数据体和数据头
+          - `return=minimal` 写操作，不返回数据体只返回头，写操作默认类型
+          - `count=exact` 读操作，指定 count 计数
+          - `resolution=merge-duplicates` upsert操作，合并冲突项
+          - `resolution=ignore-duplicates` upsert操作，忽略冲突项
+        </td>
+        <td>Prefer: return=representation</td>
+      </tr>
+      <tr>
+        <td>Preference-Applied</td>
+        <td>使用请求时Prefer的类型</td>
+        <td>返回信息使用请求时的Prefer，会将对应的特征信息以此返回，某些情况下会有默认值</td>
+        <td>Preference-Applied: return=representation</td>
+      </tr>
+      <tr>
+        <td>Content-Range</td>
+        <td>分页信息</td>
+        <td>
+          - 当查询时指定 Prefer: count=exact 时会返回分页信息入 0-1/2，其中0表示起始位，1表示偏移量，2表示总数
+          （注意，此处的起始位、偏移量并非 mysql 中的 offset、limit关键字含义，而是指查询后的数据位置，通常配合 limit 使用）
+          - 当写操作时指定 return=representation 或 return=minimal (默认) 时，会返回分页信息，如 *-*/2，其中2表示受影响行数
+        </td>
+        <td>Content-Range: 0-1/2</td>
+      </tr>
+    </table>
+
+
+    ### 错误码与 HTTP 状态码
+
+    <table>
+      <thead>
+          <tr>
+              <td>错误码</td>
+              <td>HTTP状态码</td>
+              <td>说明</td>
+          </tr>
+      </thead>
+      <tbody>
+          <tr>
+              <td>INVALID_PARAM</td>
+              <td>400</td>
+              <td>请求参数无效</td>
+          </tr>
+          <tr>
+              <td>INVALID_REQUEST</td>
+              <td>400</td>
+              <td>请求内容无效：缺少权限字段、执行SQL异常等</td>
+          </tr>
+          <tr>
+              <td>INVALID_REQUEST</td>
+              <td>406</td>
+              <td>不符合单条记录返回约束</td>
+          </tr>
+          <tr>
+              <td>PERMISSION_DENIED</td>
+              <td>401、403</td>
+              <td>鉴权失败：如果身份认证失败返回 401，如果鉴权失败返回403</td>
+          </tr>
+          <tr>
+              <td>RESOURCE_NOT_FOUND</td>
+              <td>404</td>
+              <td>未找到数据库实例或表信息</td>
+          </tr>
+          <tr>
+              <td>SYS_ERR</td>
+              <td>500</td>
+              <td>系统内部错误</td>
+          </tr>
+          <tr>
+              <td>OPERATION_FAILED</td>
+              <td>503</td>
+              <td>建立数据库连接失败</td>
+          </tr>
+          <tr>
+              <td>RESOURCE_UNAVAILABLE</td>
+              <td>503</td>
+              <td>数据库由于某些原因导致不可用</td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    ### 数据返回
+
+    1. 所有 POST、PATCH、DELETE 一样，请求头带 `Prefer: return=representation` 表示有返回体，不带表示无回包只有返回头
+
+    2. POST、PATCH、DELETE 的返回体通常是json array类型 `[]` ，如果请求头指定了 `Accept: application/vnd.pgrst.object+json`，那么会返回json object类型 `{}` 
+
+    3. 如果指定 `Accept: application/vnd.pgrst.object+json`，但是数据是大于 1 的量，则会报错
+
+tags:
+  - name: 数据操作
+    description: 数据的增删改查操作
+
+servers:
+  - url: https://{envId}.api.tcloudbasegateway.com
+    description: TCB openapi endpoint
+    variables:
+      envId:
+        default: "your-envId"
+        description: 环境 ID
+
+paths:
+  /v1/rdb/rest/{table}:
+    get:
+      tags:
+        - 数据操作
+      operationId: queryRecords
+      summary: 查询数据
+      description: 查询表中的数据，支持复杂查询、关联查询、分页、排序等
+      parameters:
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+        - name: select
+          in: query
+          description: 选择字段，支持 * 或指定字段列表，支持关联查询如 class_id(grade,class_number)
+          required: false
+          schema:
+            type: string
+            example: "*"
+        - name: limit
+          in: query
+          description: 限制返回数量
+          required: false
+          schema:
+            type: integer
+            example: 10
+        - name: offset
+          in: query
+          description: 偏移量，用于分页
+          required: false
+          schema:
+            type: integer
+            example: 0
+        - name: order
+          in: query
+          description: 排序字段，格式为 field.asc 或 field.desc
+          required: false
+          schema:
+            type: string
+            example: "id.asc"
+        - name: Prefer
+          in: header
+          description: 偏好设置，如 count=exact
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 查询成功
+          headers:
+            Content-Range:
+              description: 数据范围
+              schema:
+                type: string
+                example: "0-9/100"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "400":
+          description: 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: 鉴权失败
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: 表不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    head:
+      tags:
+        - 数据操作
+      operationId: countRecords
+      summary: 统计数据数量
+      description: 统计表中符合条件的数据数量
+      parameters:
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+        - name: select
+          in: query
+          description: 选择字段
+          required: false
+          schema:
+            type: string
+        - name: Prefer
+          in: header
+          description: 必须设置为 count=exact
+          required: true
+          schema:
+            type: string
+            example: "count=exact"
+      responses:
+        "200":
+          description: 统计成功
+          headers:
+            Content-Range:
+              description: 数据范围和总数
+              schema:
+                type: string
+                example: "0-9/100"
+
+    post:
+      tags:
+        - 数据操作
+      operationId: insertRecords
+      summary: 插入数据或Upsert
+      description: 插入单条或多条数据，支持upsert操作
+      parameters:
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+        - name: select
+          in: query
+          description: 返回字段，支持 * 或指定字段列表
+          required: false
+          schema:
+            type: string
+        - name: Prefer
+          in: header
+          description: 偏好设置。`return=representation` 返回插入后的数据；`resolution=merge-duplicates` 开启 upsert 并在主键或唯一约束冲突时合并（更新）已有数据（等同于 `ON CONFLICT ... DO UPDATE`）；`resolution=ignore-duplicates` 开启 upsert 并在冲突时跳过，不修改已有数据（等同于 `ON CONFLICT ... DO NOTHING`）
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  description: 单条数据
+                - type: array
+                  items:
+                    type: object
+                  description: 多条数据
+            examples:
+              single:
+                summary: 插入单条数据
+                value:
+                  name: "Rust"
+                  credits: 5
+                  created_by: "e65c2ef5-d0bd-485d-a7b4-830789f00638"
+              batch:
+                summary: 批量插入
+                value:
+                  - name: "A"
+                    created_by: "e65c2ef5-d0bd-485d-a7b4-830789f00638"
+                  - name: "B"
+                    credits: 5
+                    created_by: "e65c2ef5-d0bd-485d-a7b4-830789f00638"
+              upsert:
+                summary: Upsert操作
+                value:
+                  id: 113
+                  name: "c"
+      responses:
+        "201":
+          description: 插入成功
+          headers:
+            Content-Range:
+              description: 受影响的行数
+              schema:
+                type: string
+                example: "*/1"
+            Preference-Applied:
+              description: 应用的偏好设置
+              schema:
+                type: string
+                example: "return=minimal"
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: array
+                    items:
+                      type: object
+                  - type: object
+        "400":
+          description: 请求错误
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      tags:
+        - 数据操作
+      operationId: updateRecords
+      summary: 更新数据
+      description: 根据条件更新数据，必须提供WHERE条件
+      parameters:
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+        - name: select
+          in: query
+          description: 返回字段，支持 * 或指定字段列表
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: 限制更新数量
+          required: false
+          schema:
+            type: integer
+        - name: order
+          in: query
+          description: 排序字段
+          required: false
+          schema:
+            type: string
+        - name: Prefer
+          in: header
+          description: 偏好设置，如 return=representation 返回更新后的数据
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+            example:
+              name: "Java"
+              credits: 1
+      responses:
+        "200":
+          description: 更新成功（带返回体）
+          headers:
+            Content-Range:
+              description: 受影响的行数
+              schema:
+                type: string
+                example: "*/1"
+            Preference-Applied:
+              description: 应用的偏好设置
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "204":
+          description: 更新成功（无返回体）
+          headers:
+            Content-Range:
+              description: 受影响的行数
+              schema:
+                type: string
+                example: "*/1"
+            Preference-Applied:
+              description: 应用的偏好设置
+              schema:
+                type: string
+        "400":
+          description: 请求错误，如缺少WHERE条件
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags:
+        - 数据操作
+      operationId: deleteRecords
+      summary: 删除数据
+      description: 根据条件删除数据，必须提供WHERE条件
+      parameters:
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+        - name: select
+          in: query
+          description: 返回字段，支持 * 或指定字段列表
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: 限制删除数量
+          required: false
+          schema:
+            type: integer
+        - name: order
+          in: query
+          description: 排序字段
+          required: false
+          schema:
+            type: string
+        - name: Prefer
+          in: header
+          description: 偏好设置，如 return=representation 返回删除的数据
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 删除成功（带返回体）
+          headers:
+            Content-Range:
+              description: 受影响的行数
+              schema:
+                type: string
+                example: "*/1"
+            Preference-Applied:
+              description: 应用的偏好设置
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "204":
+          description: 删除成功（无返回体）
+          headers:
+            Content-Range:
+              description: 受影响的行数
+              schema:
+                type: string
+                example: "*/1"
+            Preference-Applied:
+              description: 应用的偏好设置
+              schema:
+                type: string
+        "400":
+          description: 请求错误，如缺少WHERE条件
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /v1/rdb/rest/{schema}/{table}:
+    get:
+      tags:
+        - 数据操作
+      operationId: queryRecordsWithSchema
+      summary: 查询数据（指定数据库）
+      description: 查询指定数据库中表的数据
+      parameters:
+        - name: schema
+          in: path
+          description: 数据库名
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+        - name: select
+          in: query
+          description: 选择字段
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+    post:
+      tags:
+        - 数据操作
+      operationId: insertRecordsWithSchema
+      summary: 插入数据（指定数据库）
+      description: 向指定数据库的表中插入数据
+      parameters:
+        - name: schema
+          in: path
+          description: 数据库名
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                - type: array
+                  items:
+                    type: object
+      responses:
+        "201":
+          description: 插入成功
+          headers:
+            Content-Range:
+              schema:
+                type: string
+
+    patch:
+      tags:
+        - 数据操作
+      operationId: updateRecordsWithSchema
+      summary: 更新数据（指定数据库）
+      description: 更新指定数据库中表的数据
+      parameters:
+        - name: schema
+          in: path
+          description: 数据库名
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+        "204":
+          description: 更新成功（无返回体）
+
+    delete:
+      tags:
+        - 数据操作
+      operationId: deleteRecordsWithSchema
+      summary: 删除数据（指定数据库）
+      description: 删除指定数据库中表的数据
+      parameters:
+        - name: schema
+          in: path
+          description: 数据库名
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 删除成功
+        "204":
+          description: 删除成功（无返回体）
+
+  /v1/rdb/rest/{instance}/{schema}/{table}:
+    get:
+      tags:
+        - 数据操作
+      operationId: queryRecordsWithInstance
+      summary: 查询数据（指定实例和数据库）
+      description: 查询指定实例和数据库中表的数据
+      parameters:
+        - name: instance
+          in: path
+          description: 数据库实例标识
+          required: true
+          schema:
+            type: string
+        - name: schema
+          in: path
+          description: 数据库名
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+        - name: select
+          in: query
+          description: 选择字段
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 查询成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+
+    post:
+      tags:
+        - 数据操作
+      operationId: insertRecordsWithInstance
+      summary: 插入数据（指定实例和数据库）
+      description: 向指定实例和数据库的表中插入数据
+      parameters:
+        - name: instance
+          in: path
+          description: 数据库实例标识
+          required: true
+          schema:
+            type: string
+        - name: schema
+          in: path
+          description: 数据库名
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                - type: array
+                  items:
+                    type: object
+      responses:
+        "201":
+          description: 插入成功
+
+    patch:
+      tags:
+        - 数据操作
+      operationId: updateRecordsWithInstance
+      summary: 更新数据（指定实例和数据库）
+      description: 更新指定实例和数据库中表的数据
+      parameters:
+        - name: instance
+          in: path
+          description: 数据库实例标识
+          required: true
+          schema:
+            type: string
+        - name: schema
+          in: path
+          description: 数据库名
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 更新成功
+        "204":
+          description: 更新成功（无返回体）
+
+    delete:
+      tags:
+        - 数据操作
+      operationId: deleteRecordsWithInstance
+      summary: 删除数据（指定实例和数据库）
+      description: 删除指定实例和数据库中表的数据
+      parameters:
+        - name: instance
+          in: path
+          description: 数据库实例标识
+          required: true
+          schema:
+            type: string
+        - name: schema
+          in: path
+          description: 数据库名
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          description: 表名
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 删除成功
+        "204":
+          description: 删除成功（无返回体）
+
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          description: 错误码
+          example: "BadApiRequest"
+        message:
+          type: string
+          description: 错误信息
+          example: "UPDATE requires a WHERE clause"
+        requestId:
+          type: string
+          description: 请求唯一ID
+          example: "req-123456"

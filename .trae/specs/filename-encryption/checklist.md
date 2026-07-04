@@ -1,0 +1,36 @@
+- [ ] alist-encrypt 插件 EncryptedName 与 alist-encrypt-go 二进制兼容
+- [ ] filename.go EncryptName/DecryptName 往返一致性通过
+- [ ] CRC6 校验逻辑与参考实现一致
+- [ ] 前端 decodeAlistFilename 正确解析 EncryptedName 并还原 UTF-8 明文
+
+- [ ] charset.go：5 个字符池定义完整（alnum 62[必选] / symbols_basic 4 / symbols_ext 26 / hanzi_rare ~1000+ / emoji ~100）
+- [ ] alnum 始终作为必选基础池自动包含，Charsets 数组仅控制扩展池
+- [ ] BuildCharsetTable 多选并集正确：扩展池[hanzi_rare, emoji] + alnum 必选 → 正确并集大小
+- [ ] 去混淆开关正确：Deconfuse=true 时从并集中移除 `0Oo1lI`（仅当 alnum 在字符表中时）；Deconfuse=false 保留全部
+- [ ] 空扩展池（仅 alnum）时去混淆正常工作：62 → 56 字符
+- [ ] EncodeToCharset / DecodeFromCharset 正确映射字节序列到目标字符表并集
+- [ ] kdf.go：HKDF-SHA256 派生正确，password → 主密钥 → S-box 种子 + N 轮密钥
+- [ ] sbox.go：种子确定性生成 S-box + 逆 S-box，Fisher-Yates 可复现
+- [ ] feistel.go：Feistel 正向/逆向变换正确，4-12 轮可配置
+- [ ] encfn.go：Encode/Decode 完整流程正确，compact + structured 双模式
+- [ ] ENC-FN 确定性：同输入+同密码+同配置→相同输出
+- [ ] ENC-FN 密码敏感性：不同密码→完全不同输出
+- [ ] ENC-FN 雪崩效应：1 bit 明文变化 → ~50% 输出位变化
+- [ ] ENC-FN 篡改检测返回明确错误（不返回部分乱码）
+
+- [ ] Manifest_v4 新增 OriginalName + FilenameAlgorithm，JSON 序列化正确
+- [ ] FlagFilenameEncrypted (0x0010) 已定义，Header 读写正确处理
+- [ ] ResolveDisplayName 优先级正确：Manifest 解码 > 物理文件名
+- [ ] Files.vue 使用 display_name 渲染
+- [ ] v4 创建时 ENC-FN.Encode 写入 Manifest.original_name
+- [ ] v4 打开时 ENC-FN.Decode 还原 original_name
+- [ ] 解码失败 fallback 明确（物理文件名或占位符）
+- [ ] PATCH /api/v1/file/rename 可修改 Manifest original_name
+- [ ] rename 后列表立即反映新文件名
+- [ ] 超长文件名：Manifest 完整存储，物理文件名自动缩短
+- [ ] 空/空白文件名：ENC-FN 接受空，展示层回退
+- [ ] Unicode 全量支持（emoji/CJK/生僻汉字/RTL/control char）
+- [ ] 基于 UTF-8 字节操作
+- [ ] vue-tsc 零错误
+- [ ] vitest 全部通过
+- [ ] vite build 成功

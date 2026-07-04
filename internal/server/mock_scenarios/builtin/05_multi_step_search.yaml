@@ -1,0 +1,105 @@
+id: multi_step_search
+description: "3 轮 tool_call — list_files → list_files → stat_file"
+keywords:
+  - "搜索"
+  - "查找"
+  - "search"
+  - "找一下"
+  - "找视频"
+
+presets:
+  - id: p_init_listing
+    label: "📂 先列目录"
+    user_text: "列出目录"
+    tooltip: "从入口开始"
+  - id: p_init_all_video
+    label: "🎬 找所有视频"
+    user_text: "找所有视频"
+    tooltip: "触发完整搜索"
+  - id: p_init_cancel
+    label: "❌ 取消"
+    user_text: "算了不找了"
+    tooltip: "退出搜索"
+
+steps:
+  - id: intro
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: multi_step_search }
+      - type: text_delta
+        data: { text: "我来搜索视频文件。" }
+  - id: round1_list
+    delay_ms: 400
+    events:
+      - type: tool_call
+        data:
+          id: call_search_1
+          name: list_files
+          args:
+            mount_id: serving
+            rel_path: "/"
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+  - id: round2_list_sub
+    delay_ms: 300
+    events:
+      - type: tool_call
+        data:
+          id: call_search_2
+          name: list_files
+          args:
+            mount_id: serving
+            rel_path: "01-plain-media/video"
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+  - id: mid_presets
+    delay_ms: 100
+    events:
+      - type: mock_presets
+        data:
+          scenario: multi_step_search
+          phase: after_round_2
+          presets:
+            - id: p_stat
+              label: "📊 看文件大小"
+              user_text: "查看文件详情"
+              tooltip: "触发 stat_file"
+            - id: p_encrypt_found
+              label: "🔒 加密文件"
+              user_text: "加密视频"
+              tooltip: "跳到 encrypt_video"
+            - id: p_done
+              label: "✅ 结束搜索"
+              user_text: "好的，不用再找了"
+              tooltip: "结束搜索"
+  - id: round3_stat
+    delay_ms: 300
+    events:
+      - type: tool_call
+        data:
+          id: call_search_3
+          name: stat_file
+          args:
+            mount_id: serving
+            rel_path: "01-plain-media/video"
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          execute_real: true
+  - id: result_text
+    delay_ms: 200
+    events:
+      - type: text_delta
+        data: { text: "搜索完成。所有文件信息均由真实工具返回。\n" }
+  - id: end
+    delay_ms: 100
+    events:
+      - type: stream_end
+        data:
+          finishReason: stop
+          usage: { totalTokens: 423 }

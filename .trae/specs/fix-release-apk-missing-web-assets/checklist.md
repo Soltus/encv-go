@@ -1,0 +1,7 @@
+- [x] CI workflow "Copy web assets" 步骤对 release 构建也生效（无 if: inputs.version == '' 限制）
+- [x] android-overlay/ 目录已删除
+- [x] post-cap-sync.mjs 已删除
+- [x] `grep -r "config.mobile" app/encv-mobile/` 无结果（幽灵引用彻底清除）
+- [x] sync-native.mjs 执行后 android/app/src/main/assets/config.user.json 存在
+- [x] CI "Verify APK contents" 检查 public/index.html 存在性，缺失时构建失败
+- [x] CI "Verify APK contents" 检查 config.user.json 在 assets 中存在

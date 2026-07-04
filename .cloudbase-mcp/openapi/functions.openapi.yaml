@@ -1,0 +1,260 @@
+openapi: 3.0.3
+info:
+  title: 云函数
+  description: >-
+    ### 功能介绍
+
+    该系列开放 API 提供了对接云函数（[云开发-云函数](https://docs.cloudbase.net/cloud-function/introduce)）的能力，可调用开放 API 对环境下的云函数进行调用。
+
+    ### 接入指引
+
+    调用以下接口需要传递 AccessToken，格式如`Authorization: Bearer <token>`。Token 获取方式参考：https://docs.cloudbase.net/http-api/basic/access-token
+
+    ### HTTP 状态码
+
+    根据返回结果的不同，可能会出现 `2xx`, `4xx`, `5xx` 状态码。
+
+    ### 错误码
+
+    以下列出了该系列 API 特定的错误码，完整列表参考：https://docs.cloudbase.net/error-code/service
+
+    <table>
+      <thead>
+      <tr>
+        <td>错误码</td>
+        <td>含义</td>
+      </tr>
+      </thead>
+      <tr>
+        <td>FUNCTION_NOT_FOUND</td>
+        <td>未找到指定函数</td>
+      </tr>
+      <tr>
+        <td>FUNCTION_QUALIFIER_NOT_FOUND</td>
+        <td>未找到函数的指定版本</td>
+      </tr>
+      <tr>
+        <td>FUNCTION_INVOCATION_FAILED</td>
+        <td>函数执行失败，需检查函数代码</td>
+      </tr>
+      <tr>
+        <td>FUNCTION_PARAM_INVALID</td>
+        <td>调用函数的参数异常</td>
+      </tr>
+      <tr>
+        <td>FUNCTION_EXCEED_RESOURCE_LIMIT</td>
+        <td>请求资源超过预置并发</td>
+      </tr>
+      <tr>
+        <td>FUNCTION_STATUS_ABNORMAL</td>
+        <td>函数状态异常</td>
+      </tr>
+      <tr>
+        <td>FUNCTION_TIME_LIMIT_EXCEEDED</td>
+        <td>函数执行超时</td>
+      </tr>
+      <tr>
+        <td>FUNCTION_MEMORY_LIMIT_EXCEEDED</td>
+        <td>函数执行内存超出限制</td>
+      </tr>
+    </table>
+  contact:
+    name: TCB
+    url: https://cloud.tencent.com/product/tcb
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+  - url: https://{envId}.api.tcloudbasegateway.com
+    description: TCB openapi endpoint
+    variables:
+      envId:
+        default: "your-envId"
+        description: 环境 ID
+paths:
+  /v1/functions/{name}:
+    post:
+      tags:
+        - 云函数调用
+      externalDocs:
+        description: 完整错误码列表参考：
+        url: https://docs.cloudbase.net/error-code/service
+      operationId: functions-post
+      summary: 调用云函数
+      parameters:
+        - name: name
+          in: path
+          description: 需要调用的函数名称
+          required: true
+          schema:
+            type: string
+            pattern: "^[a-zA-Z][a-zA-Z0-9_-]{0,58}[a-zA-Z0-9]$"
+        - in: header
+          name: X-Qualifier
+          description: 指定调用函数的版本，不填则按灰度规则调用
+          schema:
+            type: string
+        - in: header
+          name: X-Tcb-Webfn
+          description: 当调用的函数为 web 函数时需要指定为 true，与 query 参数 `webfn=true` 二选一
+          schema:
+            type: string
+            enum: ["true"]
+        - in: query
+          name: webfn
+          description: 当调用的函数为 web 函数时需要指定为 true，与 header 参数 `X-Tcb-Webfn=true` 二选一
+          schema:
+            type: string
+            enum: ["true"]
+      description: |-
+        调用指定云函数。
+
+        调用函数权限受到云函数安全规则和身份认证鉴权的控制，请确认请求所属身份有对应云函数的调用权限。
+
+        关于云函数安全规则，请参考文档：[云函数安全规则](/cloud-function/security-rules) 。
+        > 💡 提示：如函数调用被安全规则所拦截，可能会遇到的错误码：
+        >    [EXCEED_AUTHORITY](/error-code/EXCEED_AUTHORITY)
+        
+        > 💡 提示：如函数调用被身份鉴权机制所拦截，可能会遇到的错误码：
+        >    [ACTION_FORBIDDEN](/error-code/ACTION_FORBIDDEN)
+      requestBody:
+        description: 调用函数的请求参数，请求参数需为 JSON 对象
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+            examples:
+              Echo:
+                summary: echo
+                value: { "a": 1, "b": 2 }
+      responses:
+        "200":
+          description: 调用成功时返回
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: "请求ID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/v1FunctionsResponseDataJSON"
+              examples:
+                Echo:
+                  summary: echo
+                  description: |-
+                    输出原始 JSON 请求包，函数代码：
+                    ```javascript
+                    exports.main = function (event, context) {
+                      return event
+                    }
+                    ```
+                  value: { "a": 1, "b": 2 }
+
+            text/plain:
+              schema:
+                $ref: "#/components/schemas/v1FunctionsResponseDataText"
+              examples:
+                Text:
+                  summary: text
+                  description: |-
+                    返回文本数据，函数代码：
+                    ```javascript
+                    exports.main = function (event, context) {
+                      return "Hello fn"
+                    }
+                    ```
+                  value: "Hello fn"
+
+        "400":
+          description: 函数调用出错时返回
+          headers:
+            X-Request-Id:
+              schema:
+                type: string
+              description: "请求ID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommonErrorResponse"
+              examples:
+                ExecuteFail:
+                  summary: 函数执行失败
+                  value:
+                    {
+                      "code": "FUNCTION_PARAM_INVALID",
+                      "message": "bad http request body (e1xxxxxx-xxxx-xxxx-xxxx-xxxxxxf7yyyy). For more information, please refer to https://docs.cloudbase.net/error-code/service",
+                      "requestId": "yyxxxxxx-yyyy-yyyy-zzzz-xxxxxxzzyyyy",
+                    }
+
+        "default":
+          $ref: "#/components/responses/CommonErrorResponse"
+
+components:
+  responses:
+    CommonErrorResponse:
+      description: 通用报错信息，详见 https://docs.cloudbase.net/error-code/service
+      headers:
+        X-Request-Id:
+          schema:
+            type: string
+          description: "请求ID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CommonErrorResponse"
+          examples:
+            InvalidHost:
+              summary: 请求地址异常
+              value:
+                code: "INVALID_HOST"
+                message: "xxx"
+                requestId: "xxx"
+
+  requestBodies:
+    v1FunctionsRequestData:
+      required: true
+      description: 调用函数的请求参数
+      content:
+        application/json:
+          schema:
+            type: object
+
+  schemas:
+    v1FunctionsResponseDataJSON:
+      type: object
+      additionalProperties: true
+    v1FunctionsResponseDataText:
+      type: string
+    CommonErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          title: 错误码
+        message:
+          type: string
+          title: 错误信息
+        requestId:
+          type: string
+          title: 请求 ID
+      description: 出错时返回的错误信息
+  securitySchemes:
+    JWTAuth:
+      type: http
+      scheme: Bearer
+      description: 环境 ID 所对应的 token，使用登录认证(v2)获取
+    APIKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: TC3-HMAC-SHA256开头的腾讯云 3.0 版签名，将 Timestamp 和 Token 拼接在签名最后
+
+security:
+  - JWTAuth: []
+  - APIKey: []
+
+tags:
+  - name: 云函数调用

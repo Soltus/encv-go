@@ -1,0 +1,97 @@
+# EXAMPLE_basic — 5 步最小剧本示例
+#
+# 这是演示团队加新剧本时**第一个**该看的文件。
+# 复制本文件 → 改 id/keywords/events → 重启 / 热重载。
+#
+# 关键认知：
+#   1. YAML 里**没有** tool_result 事件 — 由 MockEngine 自动调真实工具后产生
+#   2. text_delta 全部是通用 UI 文案 — 不含具体文件名/计数/错误
+#   3. tool_call.args 是"过滤条件" — 数据由工具真实产生
+#   4. stream_start / stream_end 标记流的开头和结尾
+#
+# 触发：用户输入 "测试剧本" / "test scenario"
+# 工具：search_files（读工具，必须已注册到 tools.GlobalRegistry）
+id: example_basic
+description: 5 步最小剧本示例 — 演示团队入门用
+
+# 触发关键词（任一命中即触发）
+keywords:
+  - 测试剧本
+  - test scenario
+  - example basic
+
+# 初始 chip（用户进入剧本后立即看到）
+presets:
+  - id: p_continue
+    label: "▶️ 继续"
+    user_text: "继续"
+    icon: "▶️"
+    tooltip: "跳到下一步"
+  - id: p_cancel
+    label: "❌ 取消"
+    user_text: "算了"
+    icon: "❌"
+    tooltip: "结束对话"
+
+steps:
+  # ── 步骤 1：流开始 + 通用打招呼 ──
+  - id: s1_greet
+    delay_ms: 0
+    events:
+      - type: stream_start
+        data: { scenario: example_basic }
+      - type: text_delta
+        # ✅ 通用 UI 文案
+        data: { text: "你好，这是一个最小剧本示例。\n" }
+
+  # ── 步骤 2：调 search_files 工具 ──
+  # 注意：YAML 里**没有** tool_result！engine 在 tool_call 后自动调真实工具
+  - id: s2_search
+    delay_ms: 400
+    events:
+      - type: text_delta
+        data: { text: "正在搜索示例文件...\n" }
+      - type: tool_call
+        data:
+          id: call_example_1
+          name: search_files
+          # ✅ args 是用户输入的过滤条件（不是数据）
+          args: { ext: ".mp4", min_size: 10240 }
+          auto_run: true
+          needsConfirm: false
+          kind: readOnly
+          # execute_real 默认 true — MockEngine 调真实工具
+          execute_real: true
+
+  # ── 步骤 3：通用总结（具体结果在 tool_result 渲染） ──
+  - id: s3_summarize
+    delay_ms: 600
+    events:
+      - type: text_delta
+        data: { text: "## 搜索完成\n\n" }
+      - type: text_delta
+        # ✅ 不写"找到 0 个文件" — 那是真实结果
+        data: { text: "已按您的过滤条件搜索完毕，详见上方工具结果。\n" }
+
+  # ── 步骤 4：分支选择点 ──
+  - id: s4_branch
+    delay_ms: 400
+    events:
+      - type: mock_branch_choice
+        data:
+          branch_id: post_search
+          options:
+            - id: relax
+              label: "🎚️ 放宽条件"
+              icon: "🎚️"
+            - id: cancel
+              label: "❌ 取消"
+              icon: "❌"
+      # 注意：用户选了某个 option 后，会从对应的 step_id 继续（见 EXAMPLE_branch.yaml）
+
+  # ── 步骤 5：流结束 ──
+  - id: s5_end
+    delay_ms: 100
+    events:
+      - type: stream_end
+        data: { finishReason: stop, usage: { totalTokens: 50 } }

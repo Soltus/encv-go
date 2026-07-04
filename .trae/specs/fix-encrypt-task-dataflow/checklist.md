@@ -1,0 +1,12 @@
+- [x] TaskStateResetter 接口已定义在 interfaces.go 中
+- [x] AlistEncryptPlugin 实现了 ResetTaskState()，重置 taskExtraFields/outputDir/inputPath
+- [x] processEncrypt 在任务结束后（成功或失败）调用 ResetTaskState()
+- [x] processDecrypt 在任务结束后（成功或失败）调用 ResetTaskState()
+- [x] 连续两个加密任务之间状态隔离：任务 A 的 taskExtraFields 不会泄漏到任务 B
+- [x] NewTaskModal.vue 中 ExtraField label 通过 t() 翻译，用户看到翻译后的文字而非 i18n key
+- [x] NewTaskModal.vue 中 ExtraField placeholder 通过 t() 翻译
+- [x] alistencrypt/plugin.go 的 Encrypt 调试日志已降级为 slog.Debug
+- [x] registry.go 的 EncryptFileWithPlugin 调试日志已降级为 slog.Debug
+- [x] go build ./cmd/encv-mobile/ 构建通过
+- [x] go test ./internal/v2/plugins/alistencrypt/... 测试通过
+- [x] go test ./internal/server/... -run "AlistEncrypt" 测试通过
