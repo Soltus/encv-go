@@ -404,6 +404,7 @@ jobs:
           fi
 
       - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen + libsql + objectbox)
+        working-directory: ${{ github.workspace }}
         env:
           CGO_ENABLED: "1"
           GOOS: android
@@ -429,8 +430,7 @@ jobs:
           # ⚠️ 关键：始终带上 -tags，即使为空；否则 -ldflags 会变成位置参数（Go 解析为 import path）
           BUILD_TAGS="-tags ${BUILD_TAGS}"
 
-          # ⚠️ 必须切换到带 go.mod 的模块根目录，否则 Go 降级为 GOPATH 模式
-          cd $GITHUB_WORKSPACE
+          # working-directory: ${{ github.workspace }} 已在上方 step 级设定，当前目录即 go.mod 所在
           go build \
             $BUILD_TAGS \
             -ldflags="-s -w -X main.version=${{ inputs.version || 'dev' }}" \
