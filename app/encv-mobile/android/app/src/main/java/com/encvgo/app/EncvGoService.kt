@@ -390,6 +390,13 @@ class EncvGoService : Service() {
                 //   改用 subprocess worker 调 ffmpeg 后，父进程 ctx cancel 时可以 SIGKILL worker
                 //   解锁（之前 in-process cgo 阻塞 OS thread 没法 cancel，hang spinner forever）
                 environment()["ENCV_LIB_DIR"] = applicationInfo.nativeLibraryDir
+                // 🆕 2026-07-04：LD_LIBRARY_PATH 让 Android linker 能找到子进程的 .so。
+                // Go 二进制 (libencv-go.so) 通过 ProcessBuilder 直接 exec 执行，
+                // 不是用 System.loadLibrary 加载。linker64 解析 DT_NEEDED 时默认
+                // 不搜应用私有 native lib 目录，必须显式设置 LD_LIBRARY_PATH。
+                // 否则 libobjectbox-jni.so、libsql_experimental.so 等会“not found”。
+                val oldLd = environment()["LD_LIBRARY_PATH"]?.takeIf { it.isNotBlank() }
+                environment()["LD_LIBRARY_PATH"] = listOfNotNull(oldLd, applicationInfo.nativeLibraryDir).joinToString(":")
                 environment()["ENCV_FFMPEG_WORKER"] =
                     File(applicationInfo.nativeLibraryDir, "libffmpeg-worker.so").absolutePath
                 // 🆕 2026-06-14：删除 ENCV_SERVING_DIR / ENCV_HEARTBEAT_PATH
