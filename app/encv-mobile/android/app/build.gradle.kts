@@ -139,6 +139,32 @@ packagePlugins {
     pluginsDir.set("debug_plugins")
 }
 
+// 🆕 2026-07-04：从 Go 构建产物同步 ObjectBox JNI 库到 jniLibs。
+// build-objectbox-android.sh 输出 libobjectbox-jni.so 到 pkg/.../libs/<arch>/，
+// CGO 和 ObjectBox Go SDK 都写死 -lobjectbox-jni，APK 必须包含同名文件。
+// 仅在有 output 时运行，无 output 时静默跳过（未使用 objectbox 的构建）。
+val objectboxLibSrc = rootProject.projectDir.parentFile.parentFile.parentFile.resolve("pkg/tasksystem/store/objectbox/libs")
+if (objectboxLibSrc.exists()) {
+    val abiToAndroid = mapOf("android_arm64" to "arm64-v8a", "android_armv7" to "armeabi-v7a", "android_x86" to "x86", "android_x86_64" to "x86_64")
+    tasks.register("syncObjectboxJniLibs") {
+        description = "从 Go 构建产物复制 ObjectBox JNI 库到 jniLibs"
+        doLast {
+            objectboxLibSrc.listFiles()?.forEach { dir ->
+                val abi = abiToAndroid[dir.name] ?: return@forEach
+                dir.listFiles { f -> f.name == "libobjectbox-jni.so" }?.forEach { so ->
+                    val target = file("src/main/jniLibs/$abi/libobjectbox-jni.so")
+                    target.parentFile.mkdirs()
+                    if (!target.exists() || target.length() != so.length())
+                        so.copyTo(target, overwrite = true)
+                }
+            }
+        }
+    }
+    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("NativeLibs") }.configureEach {
+        dependsOn("syncObjectboxJniLibs")
+    }
+}
+
 dependencies {
     implementation(fileTree(mapOf("include" to listOf("*.jar"), "dir" to "libs")))
     implementation(libs.androidx.appcompat)
