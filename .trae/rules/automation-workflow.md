@@ -195,5 +195,8 @@ for (const t of tasks) {
 - [task-group-collapse.md](task-group-collapse.md) — 任务组折叠
 - [mock-data-architecture.md](mock-data-architecture.md) — mock 架构
 - [saturation-debugging.md](saturation-debugging.md) — 饱和调试
+- [test-master-plan.md](test-master-plan.md) — **测试体系总纲**：Cypress 性能测试方法论、层级定位
+- [test-orchestration.md](test-orchestration.md) — 测试编排守卫、合法入口
 
 > 拆分：2026-06-11
+> 更新：2026-07-01（新增 test-master-plan / test-orchestration 引用）

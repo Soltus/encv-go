@@ -186,7 +186,66 @@ function applyColor(color: string) {
 
 > 完整 10.x 章节（架构概览 + Settings.vue UI + 注意事项）→ 详见 [详情文档 §十/§十一](../rule-library/capacitor.md#十一主题色系统)
 
-## 八、调试检查清单
+## 八、三级页面 classList 错误（实战踩坑！2026-07-03）
+
+> **Vue SFC 未显式 import Ionic 组件 → `<ion-page>` 渲染成原生 `<ION-PAGE>` 自闭合元素，缺失 `.ion-page` class 和 z-index，页面被前一个页面覆盖。**
+>
+> **症状**：URL 变了，但页面内容"冻结"在离开前的视图（被前页 z-index:101 覆盖），无白屏无报错。Cypress e2e DOM log 可见 `lastChild.tagName === 'ION-PAGE'`（大写 = 未编译）。
+
+### 8.1 根因链路
+
+```
+FullTextIndexDetail.vue <script setup> 没 import Ionic 组件
+  → Vue 编译器不识别 <ion-page> 为 Ionic Vue 组件
+  → 渲染成原生自定义元素 <ION-PAGE>（大写，自闭合）
+  → 缺失 .ion-page class（Ionic RouterOutlet 依赖此 class 加 z-index）
+  → 缺失 z-index style → 被前一个 CacheDetail（z-index:101）覆盖
+  → 用户看到"页面进不去/被前页覆盖"
+```
+
+**对比验证**：`ServerDetail.vue` / `DatabaseDetail.vue` / `CacheDetail.vue` 都显式 import Ionic 组件，正常渲染。只有 `FullTextIndexDetail.vue` 漏了 import。
+
+### 8.2 修复模式（必须显式 import）
+
+```typescript
+// ❌ 错误（修复前）：完全没 import Ionic 组件
+import { ref, onMounted } from 'vue'
+// <template> 里用 <ion-page> 等标签，但 Vue 编译器不识别
+
+// ✅ 正确（修复后）：显式 import 所有用到的 Ionic 组件
+import {
+  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
+  IonButton, IonIcon, IonContent, IonList, IonListHeader, IonItem,
+  IonLabel, IonNote, IonBadge, IonSpinner,
+} from '@ionic/vue'
+```
+
+### 8.3 Cypress e2e 验证模式
+
+```typescript
+cy.get('ion-router-outlet').then(($outlet) => {
+  const children = $outlet.children()
+  const lastChild = children[children.length - 1]
+  // 修复前是 ION-PAGE（大写 = 未编译的自定义元素）
+  expect(lastChild.tagName).to.not.eq('ION-PAGE')
+  // 修复后应该有 ion-page class
+  expect(lastChild.className).to.include('ion-page')
+  // 应该有 z-index style（被前页覆盖的根因就是没 z-index）
+  const style = lastChild.getAttribute('style') || ''
+  expect(style).to.include('z-index')
+})
+```
+
+### 8.4 铁律
+
+1. **SHALL** 所有三级页面（`/tabs/settings/xxx`）的 `<script setup>` 必须显式 import 所有用到的 Ionic 组件，即使 `<template>` 里只用了 `<ion-page>` 一个标签
+2. **SHALL** 新建三级页面前，对照 `ServerDetail.vue` 等"金标准"文件检查 import 完整性
+3. **SHALL NOT** 依赖 Vue 编译器自动识别 `<ion-xxx>` 标签（未 import 时会渲染成原生自定义元素，无样式无行为）
+4. **SHALL** 三级页面 PR 必须附 Cypress e2e 验证 `tagName !== 'ION-PAGE'` + `className includes 'ion-page'` + `style includes 'z-index'`
+
+> 完整修复链路 + Cypress e2e 测试 → [search-diagnostics-and-classlist-fix.cy.ts](file:///workspace/app/encv-mobile/cypress/e2e/search-diagnostics-and-classlist-fix.cy.ts)
+
+## 九、调试检查清单
 
 1. modal 用 `modalController.create()`？inline → 改 create
 2. present() 前有 await？改 present 后异步
@@ -194,5 +253,7 @@ function applyColor(color: string) {
 4. 有无谓 router.push？去掉
 5. eventBus 跨 tab？改 composable 直接调用
 6. SSE 端点 fetch headers 是否带 `Accept: text/event-stream`？
+7. **🆕 三级页面进不去/被前页覆盖？检查 `<script setup>` 是否显式 import Ionic 组件（`tagName === 'ION-PAGE'` = 未编译）**
 
 > 拆分：2026-06-11
+> 更新：2026-07-03（新增 §八 三级页面 classList 错误）

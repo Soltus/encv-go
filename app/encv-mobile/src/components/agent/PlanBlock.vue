@@ -1,32 +1,27 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import {
-  checkmarkCircle,
-  sync,
-  ellipsisHorizontalCircle,
-  checkboxOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import BlockHeader from './BlockHeader.vue'
+import { IonIcon } from "@ionic/vue";
+import { checkboxOutline, checkmarkCircle, ellipsisHorizontalCircle, sync } from "ionicons/icons";
+import { computed } from "vue";
+import { useI18n } from "@/composables/useI18n";
+import BlockHeader from "./BlockHeader.vue";
 
 export interface PlanTodo {
-  id: string
-  status: 'pending' | 'in_progress' | 'completed' | string
-  content: string
+  id: string;
+  status: "pending" | "in_progress" | "completed" | string;
+  content: string;
 }
 
 const props = withDefaults(
   defineProps<{
-    todos: PlanTodo[]
-    streaming?: boolean
+    todos: PlanTodo[];
+    streaming?: boolean;
   }>(),
   {
     streaming: false,
-  },
-)
+  }
+);
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 // Split todos by status so completed items sit at the bottom
 // of the list (they read as a log of what's been done) and
@@ -35,41 +30,32 @@ const { t } = useI18n()
 // only — the underlying id+status+content is preserved so
 // the LLM's notion of ordering can be reconstructed by id.
 const orderedTodos = computed(() => {
-  const inProgress = props.todos.filter((x) => x.status === 'in_progress')
-  const pending = props.todos.filter((x) => x.status === 'pending')
-  const completed = props.todos.filter((x) => x.status === 'completed')
-  const unknown = props.todos.filter(
-    (x) =>
-      x.status !== 'in_progress' &&
-      x.status !== 'pending' &&
-      x.status !== 'completed',
-  )
-  return [...inProgress, ...pending, ...unknown, ...completed]
-})
+  const inProgress = props.todos.filter(x => x.status === "in_progress");
+  const pending = props.todos.filter(x => x.status === "pending");
+  const completed = props.todos.filter(x => x.status === "completed");
+  const unknown = props.todos.filter(x => x.status !== "in_progress" && x.status !== "pending" && x.status !== "completed");
+  return [...inProgress, ...pending, ...unknown, ...completed];
+});
 
-const completedCount = computed(
-  () => props.todos.filter((x) => x.status === 'completed').length,
-)
-const inProgressCount = computed(
-  () => props.todos.filter((x) => x.status === 'in_progress').length,
-)
+const completedCount = computed(() => props.todos.filter(x => x.status === "completed").length);
+const inProgressCount = computed(() => props.todos.filter(x => x.status === "in_progress").length);
 const progressPct = computed(() => {
-  const total = props.todos.length
-  if (total === 0) return 0
-  return Math.round((completedCount.value / total) * 100)
-})
+  const total = props.todos.length;
+  if (total === 0) return 0;
+  return Math.round((completedCount.value / total) * 100);
+});
 
 function statusLabel(status: string): string {
-  if (status === 'in_progress') return t('agent.planStatusInProgress')
-  if (status === 'completed') return t('agent.planStatusCompleted')
-  if (status === 'pending') return t('agent.planStatusPending')
-  return status
+  if (status === "in_progress") return t("agent.planStatusInProgress");
+  if (status === "completed") return t("agent.planStatusCompleted");
+  if (status === "pending") return t("agent.planStatusPending");
+  return status;
 }
 
 function statusIcon(status: string) {
-  if (status === 'completed') return checkmarkCircle
-  if (status === 'in_progress') return sync
-  return ellipsisHorizontalCircle
+  if (status === "completed") return checkmarkCircle;
+  if (status === "in_progress") return sync;
+  return ellipsisHorizontalCircle;
 }
 </script>
 

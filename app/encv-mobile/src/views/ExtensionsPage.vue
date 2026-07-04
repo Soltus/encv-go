@@ -111,260 +111,284 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { Capacitor } from "@capacitor/core";
 import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonButtons,
+  alertController,
   IonBackButton,
-  IonTitle,
-  IonContent,
+  IonBadge,
+  IonButton,
+  IonButtons,
   IonCard,
   IonCardHeader,
   IonCardTitle,
-  IonButton,
-  IonBadge,
+  IonContent,
+  IonHeader,
   IonIcon,
+  IonPage,
   IonSpinner,
-  alertController,
-} from '@ionic/vue'
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
 import {
-  filmOutline,
-  serverOutline,
   addOutline,
-  informationCircle,
   checkmarkCircle,
   closeCircle,
   cloudUploadOutline,
+  filmOutline,
+  informationCircle,
   layersOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { Capacitor } from '@capacitor/core'
-import { isNative, pickAndInstallPlugin, checkInstalledPlugins, debugInstallFlow, debugKotlinReflect, debugApkValidation, debugValidationStrategy, togglePluginEnabled, uninstallPlugin, debugLifecycleFlow } from '@/plugins/GoProcess'
-import { showToast } from '@/composables/useToast'
-import { copyToClipboard } from '@/composables/useClipboard'
+  serverOutline,
+} from "ionicons/icons";
+import { onMounted, ref } from "vue";
+import { copyToClipboard } from "@/composables/useClipboard";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
+import {
+  checkInstalledPlugins,
+  debugApkValidation,
+  debugInstallFlow,
+  debugKotlinReflect,
+  debugLifecycleFlow,
+  debugValidationStrategy,
+  isNative,
+  pickAndInstallPlugin,
+  togglePluginEnabled,
+  uninstallPlugin,
+} from "@/plugins/GoProcess";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 interface ExtensionInfo {
-  id: string
-  name: string
-  description: string
-  installed: boolean
-  enabled: boolean
-  sizeDisplay: string
+  id: string;
+  name: string;
+  description: string;
+  installed: boolean;
+  enabled: boolean;
+  sizeDisplay: string;
 }
 
-const extensions = ref<ExtensionInfo[]>([])
-const isLoading = ref(true)
-const installError = ref('')
-const isInstalling = ref(false)
+const extensions = ref<ExtensionInfo[]>([]);
+const isLoading = ref(true);
+const installError = ref("");
+const isInstalling = ref(false);
 
 function isNativePlatform(): boolean {
-  return isNative()
+  return isNative();
 }
 
 onMounted(async () => {
-  await loadExtensions()
-})
+  await loadExtensions();
+});
 
 async function loadExtensions() {
-  isLoading.value = true
+  isLoading.value = true;
   try {
     const COMBOLITE_PLUGIN_ID_MAP: Record<string, string> = {
-      'mpv-player': 'com.encvgo.plugin.mpv',
-      'openlist': 'com.encvgo.plugin.openlist',
+      "mpv-player": "com.encvgo.plugin.mpv",
+      openlist: "com.encvgo.plugin.openlist",
+    };
+
+    interface PluginStatus {
+      installed: boolean;
+      enabled: boolean;
+      versionName: string;
     }
+    console.error("[SAT-DBG][Extensions] loadExtensions() start | isNative=", Capacitor.isNativePlatform());
+    const installedMap: Record<string, PluginStatus> = Capacitor.isNativePlatform() ? await checkInstalledPlugins() : {};
+    console.error(
+      "[SAT-DBG][Extensions] installedMap keys=",
+      Object.keys(installedMap),
+      "| mpv=",
+      !!installedMap["com.encvgo.plugin.mpv"],
+      "| openlist=",
+      !!installedMap["com.encvgo.plugin.openlist"]
+    );
 
-    interface PluginStatus { installed: boolean; enabled: boolean; versionName: string }
-    console.error('[SAT-DBG][Extensions] loadExtensions() start | isNative=', Capacitor.isNativePlatform())
-    const installedMap: Record<string, PluginStatus> = Capacitor.isNativePlatform() ? await checkInstalledPlugins() : {}
-    console.error('[SAT-DBG][Extensions] installedMap keys=', Object.keys(installedMap), '| mpv=', !!installedMap['com.encvgo.plugin.mpv'], '| openlist=', !!installedMap['com.encvgo.plugin.openlist'])
-
-    const mpvInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP['mpv-player']]
-    const openlistInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP['openlist']]
-    console.error('[SAT-DBG][Extensions] mpvInfo=', JSON.stringify(mpvInfo), '| openlistInfo=', JSON.stringify(openlistInfo))
+    const mpvInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP["mpv-player"]];
+    const openlistInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP["openlist"]];
+    console.error("[SAT-DBG][Extensions] mpvInfo=", JSON.stringify(mpvInfo), "| openlistInfo=", JSON.stringify(openlistInfo));
 
     extensions.value = [
       {
-        id: 'mpv-player',
-        name: t('extensions.mpvPlayer'),
-        description: t('extensions.mpvPlayerDesc'),
+        id: "mpv-player",
+        name: t("extensions.mpvPlayer"),
+        description: t("extensions.mpvPlayerDesc"),
         installed: !!mpvInfo?.installed,
         enabled: mpvInfo?.enabled ?? false,
-        sizeDisplay: '~35 MB',
+        sizeDisplay: "~35 MB",
       },
       {
-        id: 'openlist',
-        name: t('extensions.openlist'),
-        description: t('extensions.openlistDesc'),
+        id: "openlist",
+        name: t("extensions.openlist"),
+        description: t("extensions.openlistDesc"),
         installed: !!openlistInfo?.installed,
         enabled: openlistInfo?.enabled ?? false,
-        sizeDisplay: '~40 MB',
+        sizeDisplay: "~40 MB",
       },
-    ]
-    console.error('[SAT-DBG][Extensions] extensions.value.length=', extensions.value.length)
+    ];
+    console.error("[SAT-DBG][Extensions] extensions.value.length=", extensions.value.length);
   } catch (e) {
-    console.error('[SAT-DBG][Extensions] loadExtensions ERROR:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
+    console.error("[SAT-DBG][Extensions] loadExtensions ERROR:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
   } finally {
-    isLoading.value = false
+    isLoading.value = false;
   }
 }
 
 async function handleInstallFromFile() {
-  if (!isNativePlatform()) return
+  if (!isNativePlatform()) return;
 
-  isInstalling.value = true
-  installError.value = ''
+  isInstalling.value = true;
+  installError.value = "";
 
   try {
     const result = await Promise.race([
       pickAndInstallPlugin(),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Installation timeout')), 120000)),
-    ])
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Installation timeout")), 120000)),
+    ]);
     if (result.success) {
-      showToast({ message: t('extensions.installSuccess'), duration: 2000, color: 'success' })
-      window.dispatchEvent(new CustomEvent('plugin-state-changed'))
-      await loadExtensions()
+      showToast({ message: t("extensions.installSuccess"), duration: 2000, color: "success" });
+      window.dispatchEvent(new CustomEvent("plugin-state-changed"));
+      await loadExtensions();
     } else {
-      installError.value = result.error || t('extensions.installFailed')
+      installError.value = result.error || t("extensions.installFailed");
     }
   } catch (e: any) {
-    installError.value = e.message || t('extensions.installFailed')
+    installError.value = e.message || t("extensions.installFailed");
   } finally {
-    isInstalling.value = false
+    isInstalling.value = false;
   }
 }
 
 async function handleInstall(_id: string) {
-  await handleInstallFromFile()
+  await handleInstallFromFile();
 }
 
 async function handleToggleEnabled(id: string, currentEnabled: boolean) {
-  if (!isNativePlatform()) return
+  if (!isNativePlatform()) return;
   const COMBO_LITE_ID: Record<string, string> = {
-    'mpv-player': 'com.encvgo.plugin.mpv',
-    'openlist': 'com.encvgo.plugin.openlist',
-  }
-  const pluginId = COMBO_LITE_ID[id] || id
-  const newEnabled = !currentEnabled
-  console.log('Toggle extension:', id, '→', newEnabled ? 'ENABLED' : 'DISABLED')
+    "mpv-player": "com.encvgo.plugin.mpv",
+    openlist: "com.encvgo.plugin.openlist",
+  };
+  const pluginId = COMBO_LITE_ID[id] || id;
+  const newEnabled = !currentEnabled;
+  console.log("Toggle extension:", id, "→", newEnabled ? "ENABLED" : "DISABLED");
   try {
-    const result = await togglePluginEnabled(pluginId, newEnabled)
+    const result = await togglePluginEnabled(pluginId, newEnabled);
     if (result.success) {
-      showToast({ message: newEnabled ? t('extensions.enabled') : t('extensions.disabled'), duration: 1500, color: 'success' })
-      window.dispatchEvent(new CustomEvent('plugin-state-changed'))
+      showToast({ message: newEnabled ? t("extensions.enabled") : t("extensions.disabled"), duration: 1500, color: "success" });
+      window.dispatchEvent(new CustomEvent("plugin-state-changed"));
     } else {
-      showToast({ message: t('extensions.toggleFailed'), duration: 2000, color: 'danger' })
+      showToast({ message: t("extensions.toggleFailed"), duration: 2000, color: "danger" });
     }
   } catch (e: any) {
-    console.error('togglePluginEnabled failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-    showToast({ message: e?.message || t('extensions.toggleFailed'), duration: 2000, color: 'danger' })
+    console.error("togglePluginEnabled failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    showToast({ message: e?.message || t("extensions.toggleFailed"), duration: 2000, color: "danger" });
   }
-  await loadExtensions()
+  await loadExtensions();
 }
 
 async function handleUninstall(id: string) {
   const COMBO_LITE_ID: Record<string, string> = {
-    'mpv-player': 'com.encvgo.plugin.mpv',
-    'openlist': 'com.encvgo.plugin.openlist',
-  }
-  const pluginId = COMBO_LITE_ID[id] || id
+    "mpv-player": "com.encvgo.plugin.mpv",
+    openlist: "com.encvgo.plugin.openlist",
+  };
+  const pluginId = COMBO_LITE_ID[id] || id;
   const alert = await alertController.create({
-    header: t('extensions.uninstallConfirm'),
+    header: t("extensions.uninstallConfirm"),
     buttons: [
-      { text: t('common.cancel'), role: 'cancel' },
+      { text: t("common.cancel"), role: "cancel" },
       {
-        text: t('common.confirm'),
-        role: 'confirm',
+        text: t("common.confirm"),
+        role: "confirm",
         handler: async () => {
-          if (!isNativePlatform()) return
-          console.log('Uninstall extension:', pluginId)
+          if (!isNativePlatform()) return;
+          console.log("Uninstall extension:", pluginId);
           try {
-            const result = await uninstallPlugin(pluginId)
+            const result = await uninstallPlugin(pluginId);
             if (result.success) {
-              showToast({ message: t('extensions.uninstalled'), duration: 1500, color: 'success' })
-              window.dispatchEvent(new CustomEvent('plugin-state-changed'))
+              showToast({ message: t("extensions.uninstalled"), duration: 1500, color: "success" });
+              window.dispatchEvent(new CustomEvent("plugin-state-changed"));
             } else {
-              showToast({ message: t('extensions.uninstallFailed'), duration: 2000, color: 'danger' })
+              showToast({ message: t("extensions.uninstallFailed"), duration: 2000, color: "danger" });
             }
           } catch (e: any) {
-            console.error('uninstallPlugin failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-            showToast({ message: e?.message || t('extensions.uninstallFailed'), duration: 2000, color: 'danger' })
+            console.error("uninstallPlugin failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+            showToast({ message: e?.message || t("extensions.uninstallFailed"), duration: 2000, color: "danger" });
           }
-          await loadExtensions()
+          await loadExtensions();
         },
       },
     ],
-  })
-  await alert.present()
+  });
+  await alert.present();
 }
 
 async function showDebugResult(header: string, result: Record<string, any>) {
-  const debugText = result.debugLog || Object.entries(result)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join('\n')
+  const debugText =
+    result.debugLog ||
+    Object.entries(result)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("\n");
   const alert = await alertController.create({
     header,
     message: `<pre style="font-size:12px;white-space:pre-wrap;max-height:60vh;overflow:auto;">${debugText}</pre>`,
     buttons: [
       {
-        text: '复制',
+        text: "复制",
         handler: async () => {
-          const ok = await copyToClipboard(debugText)
-          showToast({ message: ok ? '已复制诊断信息' : '复制失败', duration: 1500, color: ok ? 'success' : 'danger' })
-          return false
+          const ok = await copyToClipboard(debugText);
+          showToast({ message: ok ? "已复制诊断信息" : "复制失败", duration: 1500, color: ok ? "success" : "danger" });
+          return false;
         },
       },
-      'OK',
+      "OK",
     ],
-  })
-  await alert.present()
+  });
+  await alert.present();
 }
 
 async function handleDebugInstall() {
   try {
-    const result = await debugInstallFlow()
-    await showDebugResult('🔧 installPlugin诊断', result)
+    const result = await debugInstallFlow();
+    await showDebugResult("🔧 installPlugin诊断", result);
   } catch (e: any) {
-    await showDebugResult('🔧 诊断失败', { debugLog: e?.message || String(e) })
+    await showDebugResult("🔧 诊断失败", { debugLog: e?.message || String(e) });
   }
 }
 
 async function handleDebugKotlinReflect() {
   try {
-    const result = await debugKotlinReflect()
-    await showDebugResult('🔧 kotlin-reflect诊断', result)
+    const result = await debugKotlinReflect();
+    await showDebugResult("🔧 kotlin-reflect诊断", result);
   } catch (e: any) {
-    await showDebugResult('🔧 诊断失败', { debugLog: e?.message || String(e) })
+    await showDebugResult("🔧 诊断失败", { debugLog: e?.message || String(e) });
   }
 }
 
 async function handleDebugApkValidation() {
   try {
-    const result = await debugApkValidation()
-    await showDebugResult('🔧 APK校验诊断', result)
+    const result = await debugApkValidation();
+    await showDebugResult("🔧 APK校验诊断", result);
   } catch (e: any) {
-    await showDebugResult('🔧 诊断失败', { debugLog: e?.message || String(e) })
+    await showDebugResult("🔧 诊断失败", { debugLog: e?.message || String(e) });
   }
 }
 
 async function handleDebugValidationStrategy() {
   try {
-    const result = await debugValidationStrategy()
-    await showDebugResult('🔧 ValidationStrategy诊断', result)
+    const result = await debugValidationStrategy();
+    await showDebugResult("🔧 ValidationStrategy诊断", result);
   } catch (e: any) {
-    await showDebugResult('🔧 诊断失败', { debugLog: e?.message || String(e) })
+    await showDebugResult("🔧 诊断失败", { debugLog: e?.message || String(e) });
   }
 }
 
 async function handleDebugLifecycle() {
   try {
-    const result = await debugLifecycleFlow('com.encvgo.plugin.mpv')
-    await showDebugResult('🔧 插件生命周期诊断', result)
+    const result = await debugLifecycleFlow("com.encvgo.plugin.mpv");
+    await showDebugResult("🔧 插件生命周期诊断", result);
   } catch (e: any) {
-    await showDebugResult('🔧 诊断失败', { debugLog: e?.message || String(e) })
+    await showDebugResult("🔧 诊断失败", { debugLog: e?.message || String(e) });
   }
 }
 </script>

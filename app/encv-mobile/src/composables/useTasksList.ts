@@ -1,507 +1,588 @@
-import { ref, computed } from 'vue'
+/**
+ * useTasksList — 任务视图薄壳（v7 2026-06-22 重构）
+ *
+ * v6 之前：1038 行 monolith，自己管 tasks ref + filter + view state
+ * v6：拆成 useTaskStore + useTaskFilter + useTasksList 三层
+ * v7（当前）：taskStore 是唯一 owner；本文件只保留 helper 函数 + UI 局部 state
+ *
+ * 视图组件 import 路径不变（继续用 useTasksList），内部委托给 useTaskStore
+ */
+
+import { storeToRefs } from "pinia";
+import { computed, ref } from "vue";
+import type { RunSummary } from "@/api/encv";
 import {
-  timer,
-  sync,
-  checkmarkCircle,
-  closeCircle,
-} from 'ionicons/icons'
-import {
-  getTasks,
+  getTasks as apiGetTasks,
   cancelTask,
-  retryTask,
-  removeTask,
+  type EncvTask,
   isWrongPasswordError,
-} from '@/api/encv'
-import type { EncvTask, TaskType, TaskStatus } from '@/api/encv'
-import { useI18n } from '@/composables/useI18n'
-import { formatDuration } from '@/composables/useDateFormat'
-import { showToast } from '@/composables/useToast'
-import { getTaskMetadata } from './useTaskTrigger'
+  removeTask as removeTaskApi,
+  retryTask as retryTaskApi,
+  type TaskStatus,
+} from "@/api/encv";
+import { formatDateTime as dateFormat } from "@/composables/useDateFormat";
+import { useI18n } from "@/composables/useI18n";
+import { useRunSummariesSingleton } from "@/composables/useRunSummaries";
+import { useTaskEventBridge } from "@/composables/useTaskEventBridge";
+import { useTaskViewCompute } from "@/composables/useTaskViewCompute";
+import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
+import { getTaskTypeLabel } from "@/lib/taskTypeLabel";
+import { useTaskStore } from "@/stores/taskStore";
 
-export type SortBy = 'activity' | 'created'
+// ============ helper：单例 ref state（UI 局部） ============
+// 这些状态属于"视图临时态"（popover / expanded warning / search 框显示）
+// 不进 store，但跨组件共享 → 模块级 singleton
+let _viewInstance: ReturnType<typeof createView> | null = null;
+let _tasksListInstance: ReturnType<typeof createUseTasksList> | null = null;
+function createView() {
+  return {
+    showSearch: ref(false),
+    showFilters: ref(false),
+    expandedWarningDetail: ref<Set<string>>(new Set()),
+    pluginPopoverOpen: ref(false),
+    typePopoverOpen: ref(false),
+    statusPopoverOpen: ref(false),
+    datePopoverOpen: ref(false),
+    pluginPopoverEvent: ref<any>(null),
+    typePopoverEvent: ref<any>(null),
+    statusPopoverEvent: ref<any>(null),
+    datePopoverEvent: ref<any>(null),
+  };
+}
 
-export function useTasksList() {
-  const { t } = useI18n()
+// ============ helper：任务显示 ============
+function getTaskDisplayName(task: EncvTask): string {
+  if (task.targetPath) return task.targetPath.split("/").pop() || task.targetPath;
+  if (task.sourcePath) return task.sourcePath.split("/").pop() || task.sourcePath;
+  return task.id.slice(0, 8);
+}
 
-  const tasks = ref<EncvTask[]>([])
-  const loading = ref(false)
-  const expandedWarningDetail = ref<string | null>(null)
-  const sortBy = ref<SortBy>('activity')
+function formatTaskDuration(task: EncvTask): string {
+  if (!task.completedAt) return "";
+  const ms = new Date(task.completedAt).getTime() - new Date(task.createdAt).getTime();
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+}
 
-  const showSearch = ref(false)
-  const searchQuery = ref('')
-  const showFilters = ref(false)
-  const filterPlugins = ref<string[]>([])
-  const filterTypes = ref<TaskType[]>([])
-  const filterStatuses = ref<TaskStatus[]>([])
+function getStatusColorInner(status: TaskStatus): string {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "failed":
+      return "danger";
+    case "running":
+    case "cancelling":
+      return "warning";
+    case "cancelled":
+      return "medium";
+    case "queued":
+      return "primary";
+    default:
+      return "medium";
+  }
+}
 
-  const statusOptions: TaskStatus[] = ['queued', 'running', 'completed', 'failed', 'cancelled']
+function isPasswordError(task: EncvTask): boolean {
+  if (!task.error) return false;
+  return isWrongPasswordError(task.error);
+}
 
-  const pluginPopoverOpen = ref(false)
-  const typePopoverOpen = ref(false)
-  const statusPopoverOpen = ref(false)
-  const pluginPopoverEvent = ref<Event | null>(null)
-  const typePopoverEvent = ref<Event | null>(null)
-  const statusPopoverEvent = ref<Event | null>(null)
+// ============ helper：group 派生（兜底，store 已有但保持兼容） ============
+function computeGroupCounters(tasks: EncvTask[], filter: any): any {
+  const plugins: Record<string, { hit: number; total: number }> = {};
+  const types: Record<string, { hit: number; total: number }> = {};
+  const statuses: Record<string, { hit: number; total: number }> = {};
+  const date = { hit: 0, total: tasks.length };
+  const search = { hit: 0, total: tasks.length };
 
-  const availablePlugins = computed(() => {
-    const plugins = new Set<string>()
-    for (const task of tasks.value) {
-      if (task.pluginName) plugins.add(task.pluginName)
+  const q = (filter.searchQuery.value ?? "").trim().toLowerCase();
+  const fromTs = filter.filterDateRange.value?.from;
+  const toTs = filter.filterDateRange.value?.to;
+  const hasSearch = q.length > 0;
+  const hasDate = !!fromTs || !!toTs;
+
+  for (const tk of tasks) {
+    const pName = tk.pluginName || "__unknown__";
+    if (!plugins[pName]) plugins[pName] = { hit: 0, total: 0 };
+    plugins[pName].total++;
+    if (filter.filterPlugins.value.length === 0 || filter.filterPlugins.value.includes(pName)) {
+      plugins[pName].hit++;
     }
-    return Array.from(plugins).sort()
-  })
-
-  const hasActiveFilters = computed(() =>
-    filterPlugins.value.length > 0 || filterTypes.value.length > 0 || filterStatuses.value.length > 0
-  )
-
-  const hasCompletedTasks = computed(() =>
-    tasks.value.some(
-      (task) => task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled'
-    )
-  )
-
-  const sortedTasks = computed(() => {
-    const arr = [...tasks.value]
-    if (sortBy.value === 'activity') {
-      arr.sort((a, b) => {
-        const timeA = a.completedAt
-          ? new Date(a.completedAt).getTime()
-          : new Date(a.createdAt).getTime()
-        const timeB = b.completedAt
-          ? new Date(b.completedAt).getTime()
-          : new Date(b.createdAt).getTime()
-        if (timeB !== timeA) return timeB - timeA
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      })
+    if (!types[tk.type]) types[tk.type] = { hit: 0, total: 0 };
+    types[tk.type].total++;
+    if (filter.filterTypes.value.length === 0 || filter.filterTypes.value.includes(tk.type)) {
+      types[tk.type].hit++;
+    }
+    if (!statuses[tk.status]) statuses[tk.status] = { hit: 0, total: 0 };
+    statuses[tk.status].total++;
+    if (filter.filterStatuses.value.length === 0 || filter.filterStatuses.value.includes(tk.status)) {
+      statuses[tk.status].hit++;
+    }
+    if (!hasDate || ((!fromTs || tk.createdAt >= fromTs) && (!toTs || tk.createdAt < toTs))) {
+      date.hit++;
+    }
+    if (!hasSearch) {
+      search.hit++;
     } else {
-      arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    }
-    return arr
-  })
-
-  const filteredTasks = computed(() => {
-    let result = sortedTasks.value
-
-    if (searchQuery.value.trim()) {
-      const q = searchQuery.value.trim().toLowerCase()
-      result = result.filter((task) => {
-        const name = getTaskName(task).toLowerCase()
-        const plugin = (task.pluginName || '').toLowerCase()
-        const error = (task.error || '').toLowerCase()
-        const id = task.id.toLowerCase()
-        return name.includes(q) || plugin.includes(q) || error.includes(q) || id.includes(q)
-      })
-    }
-
-    if (filterPlugins.value.length > 0) {
-      result = result.filter((task) => task.pluginName && filterPlugins.value.includes(task.pluginName))
-    }
-
-    if (filterTypes.value.length > 0) {
-      result = result.filter((task) => filterTypes.value.includes(task.type))
-    }
-
-    if (filterStatuses.value.length > 0) {
-      result = result.filter((task) => filterStatuses.value.includes(task.status))
-    }
-
-    return result
-  })
-
-  function openPluginPopover(event: Event) {
-    pluginPopoverEvent.value = event
-    pluginPopoverOpen.value = true
-  }
-
-  function openTypePopover(event: Event) {
-    typePopoverEvent.value = event
-    typePopoverOpen.value = true
-  }
-
-  function openStatusPopover(event: Event) {
-    statusPopoverEvent.value = event
-    statusPopoverOpen.value = true
-  }
-
-  function togglePluginFilter(plugin: string) {
-    const idx = filterPlugins.value.indexOf(plugin)
-    if (idx === -1) filterPlugins.value.push(plugin)
-    else filterPlugins.value.splice(idx, 1)
-  }
-
-  function toggleTypeFilter(type: TaskType) {
-    const idx = filterTypes.value.indexOf(type)
-    if (idx === -1) filterTypes.value.push(type)
-    else filterTypes.value.splice(idx, 1)
-  }
-
-  function toggleStatusFilter(status: TaskStatus) {
-    const idx = filterStatuses.value.indexOf(status)
-    if (idx === -1) filterStatuses.value.push(status)
-    else filterStatuses.value.splice(idx, 1)
-  }
-
-  function clearFilters() {
-    filterPlugins.value = []
-    filterTypes.value = []
-    filterStatuses.value = []
-    searchQuery.value = ''
-  }
-
-  function onSearchInput(event: CustomEvent) {
-    searchQuery.value = event.detail.value ?? ''
-  }
-
-  function toggleSort() {
-    sortBy.value = sortBy.value === 'activity' ? 'created' : 'activity'
-  }
-
-  function applyFilter(opts: { plugins?: string[]; types?: TaskType[]; statuses?: TaskStatus[]; query?: string }) {
-    if (opts.plugins !== undefined) filterPlugins.value = opts.plugins
-    if (opts.types !== undefined) filterTypes.value = opts.types
-    if (opts.statuses !== undefined) filterStatuses.value = opts.statuses
-    if (opts.query !== undefined) searchQuery.value = opts.query
-  }
-
-  function applySort(sort: SortBy) {
-    sortBy.value = sort
-  }
-
-  // 🆕 2026-06-10 修复 v4：fetchTasks 后批量补回元数据
-  // 历史：fetchTasks 用后端数据替换 tasks.value，丢失所有 triggeredBy/runId（后端不存）
-  //   → 重新跑也没用，因为新数据一覆盖就没了
-  // 修复：替换后遍历新数组，对每个 taskId 查 taskMetadata，merge 回去
-  async function fetchTasks() {
-    loading.value = true
-    try {
-      const data = await getTasks()
-      const enriched = data.map((t) => {
-        const meta = getTaskMetadata(t.id)
-        if (!meta) return t
-        return { ...t, triggeredBy: meta.triggeredBy, runId: meta.runId }
-      })
-      tasks.value = enriched
-    } catch {
-      tasks.value = []
-    }
-    loading.value = false
-  }
-
-  async function refresh() {
-    try {
-      // 🆕 v4：refresh 也补回元数据
-      const data = await getTasks()
-      const enriched = data.map((t) => {
-        const meta = getTaskMetadata(t.id)
-        if (!meta) return t
-        return { ...t, triggeredBy: meta.triggeredBy, runId: meta.runId }
-      })
-      tasks.value = enriched
-    } catch {
-      // silent
-    }
-  }
-
-  // 🆕 2026-06-10 修复：所有 apply* 函数都 spread 完整 payload
-  // 历史 bug：applyTaskCreated 只构造 {id, type, sourcePath, status, progress, createdAt}（6 字段）
-  //   → 丢失 pluginName/version/targetPath/extraFields
-  //   → Tasks.vue 任务组按 pluginName 分桶 → 全部落到 '(unknown plugin)' → 「插件没正确识别，任务依旧全部平铺」
-  // 修复：spread data 整个对象，WS 后端会发完整 *MobileTask（含 pluginName）
-
-  function applyTaskUpdate(data: { id: string; type: string; status: string; progress: number }) {
-    const idx = tasks.value.findIndex((t) => t.id === data.id)
-    if (idx !== -1) {
-      tasks.value[idx] = {
-        ...tasks.value[idx],
-        ...data,  // 🆕 spread 整个 data（防 pluginName 丢失）
-        type: data.type as TaskType,
-        status: data.status as TaskStatus,
-        progress: data.progress,
+      const name = getTaskDisplayName(tk).toLowerCase();
+      const plugin = (tk.pluginName || "").toLowerCase();
+      const error = (tk.error || "").toLowerCase();
+      const id = tk.id.toLowerCase();
+      if (name.includes(q) || plugin.includes(q) || error.includes(q) || id.includes(q)) {
+        search.hit++;
       }
     }
   }
+  const hitAny =
+    Object.values(plugins).some(p => p.hit > 0) &&
+    Object.values(types).some(ty => ty.hit > 0) &&
+    Object.values(statuses).some(s => s.hit > 0) &&
+    date.hit > 0;
+  return { plugins, types, statuses, date, search, hitAny };
+}
 
-  function applyTaskProgress(data: {
-    id: string
-    progress: number
-    phase: string
-    speed: string
-    eta: string
-  }) {
-    const idx = tasks.value.findIndex((t) => t.id === data.id)
-    if (idx !== -1) {
-      tasks.value[idx] = {
-        ...tasks.value[idx],
-        progress: data.progress,
-        phase: data.phase,
-        speed: data.speed,
-        eta: data.eta,
+function createUseTasksList() {
+  const store = useTaskStore();
+  const storeRefs = storeToRefs(store);
+  const { t } = useI18n();
+  const workflowService = useWorkflowTaskService();
+  const view = _viewInstance ?? (_viewInstance = createView());
+
+  // ============ WS 4 件套桥接（按视图上下文过滤） ============
+  // 🆕 2026-06-23 Task 9：WS 事件按视图上下文过滤（spec §2.3）
+  //   - Tasks 列表页是"视图分页"：store 只持有当前页的 task（~100 个）
+  //   - WS task:created 不进 store（task 可能不属于当前页；手动创建走 task:refresh）
+  //     → 只触发 runSummaries 刷新（group card 计数从后端 SQL 拿）
+  //   - WS task:update / task:progress / task:completed：只 patch 已加载的 task
+  //     → patchTaskById 不在 store 则 return false（天然过滤）
+  //   - WS task:completed：额外刷新对应 runId 的 summary（计数变化）
+  //   - 离开 Tasks 页时 useTaskEventBridge 的 onUnmounted 自动 stopListening
+  const runSummaries = useRunSummariesSingleton();
+  useTaskEventBridge({
+    onUpdate: payload => store.applyEvent("update", payload),
+    onProgress: payload => store.applyEvent("progress", payload),
+    // 🆕 Task 9：task:created 不进 store，只刷新 summary
+    //   - 手动创建任务走 eventBus.emit('task:refresh') → fetchTasks 从后端加载
+    //   - 自动化/workflow 创建的 task 属于 run，用户通过 group card → GroupDetail 查看
+    //   - 这里只刷新 summary，让 group card 计数实时更新
+    onCreate: payload => {
+      const runId = (payload as any)?.runId;
+      if (runId) {
+        void runSummaries.refreshOnTaskCompleted(runId);
+      } else {
+        // 没有 runId（旧任务）→ fetchAll 刷新所有 run summary
+        void runSummaries.fetchAll();
+      }
+    },
+    onComplete: payload => {
+      store.applyEvent("completed", payload);
+      // 🆕 Task 9：task 完成后刷新对应 runId 的 summary（计数变化）
+      //   - patchTaskById 只 patch 已加载的 task，不在 store 则 return false
+      //   - 但 summary 必须刷新（group card 显示的 passed/failed 计数）
+      //   - 从 store 查找 task 拿 runId（payload 可能不带 runId）
+      const taskId = payload?.id;
+      const task = taskId ? store.getTaskById(taskId) : undefined;
+      const runId = task?.runId;
+      if (runId) {
+        void runSummaries.refreshOnTaskCompleted(runId);
+      }
+    },
+  });
+
+  // ============ displayedItems（视图层包装：注入 kind/counters/displayData） ============
+  // ⚠️ 模板 TaskVirtualList 期望 item.kind === 'date' | 'group' | 'task' 三种
+  //   - date: { kind:'date', key, label }
+  //   - group: { kind:'group', key, runId, startedAt, tasks, counters, displayData }
+  //   - task: { kind:'task', key, task }
+  // 🆕 2026-06-23 Task 10：dateSectionKey / buildGroupDisplayData 已迁移到
+  //   useTaskViewCompute（worker + computeSync 内联），此处不再保留
+
+  // ============ displayedItems（Web Worker 委托计算） ============
+  // 🆕 2026-06-23 Task 10：把 O(N) 视图计算委托给 Web Worker，避免阻塞 UI 主线程
+  //   - 1000+ task 时 displayedItems computed 遍历会卡顿
+  //   - Worker 接收 tasks 快照 + filter/sort/view 状态，返回 displayedItems 数组
+  //   - debounce 16ms（1 帧）→ postMessage → 接收结果 → 更新 ref
+  //   - 降级：Worker 不可用 → 主线程同步计算（computeSync）
+  //   - date section label：worker 返回 dateKey，主线程映射为 i18n label
+  //   - 旧的 dateSectionKey / buildGroupDisplayData / computeGroupCounters 函数保留
+  //     作为 fallback（computeSync 内联了相同逻辑，但保留这些函数供测试 _computeGroupCounters 用）
+  const { displayedItems: workerDisplayedItems } = useTaskViewCompute({
+    tasks: storeRefs.tasks,
+    viewMode: storeRefs.viewMode,
+    sortBy: storeRefs.sortBy,
+    searchQuery: storeRefs.searchQuery,
+    filterPlugins: storeRefs.filterPlugins,
+    filterTypes: storeRefs.filterTypes,
+    filterStatuses: storeRefs.filterStatuses,
+    filterTriggeredBy: storeRefs.filterTriggeredBy,
+    filterDateRange: storeRefs.filterDateRange,
+    pinnedRunIds: storeRefs.pinnedRunIds,
+  });
+
+  // 🆕 2026-06-24 修复：group card 计数使用 runSummaries（后端 SQL 权威）而非 store.tasks.length
+  //   - 旧问题：Tasks 页视图分页只加载 100 条任务，group card 显示 "100 个任务"
+  //   - 新逻辑：如果 runSummaries 中有该 runId 的 summary，用 summary.total 覆盖显示总数
+  //   - 保持 item.tasks 数组不变（用于过滤命中计算 / 点击进入详情等）
+  const displayedItems = computed(() => {
+    const items = workerDisplayedItems.value;
+    if (!items || items.length === 0) return items;
+    const summaries = runSummaries.summaries.value;
+    let hasGroupWithSummary = false;
+    for (const item of items) {
+      if (item.kind === "group" && item.runId && !item.runId.startsWith("__manual__")) {
+        const summary = summaries.get(item.runId);
+        if (summary) {
+          hasGroupWithSummary = true;
+          break;
+        }
       }
     }
-  }
-
-  function applyTaskCreated(data: {
-    id: string
-    type: string
-    sourcePath: string
-    pluginName?: string
-    version?: number
-    targetPath?: string
-    createdAt?: string
-    [k: string]: any  // 允许后端多发字段（status/progress/phase/extraFields 等）
-  }) {
-    const exists = tasks.value.some((t) => t.id === data.id)
-    if (!exists) {
-      // 🆕 2026-06-10 修复 v4：从 useTaskTrigger.taskMetadata 合并 triggeredBy + runId
-      // 历史 bug：WS task:created payload 没有这 2 字段（后端不知道），tasks.value 里的 task 也跟着没有
-      //   → displayedItems 必须靠 getTriggeredBy / getRunIdForTask 查 localStorage
-      //   → 跨 session / localStorage 清空 → 分组完全失效 → 「任务组只在一开始正确，插件没正确识别」
-      // 修复：useWorkflowEngine 在 submitAction 后立即 setTaskMetadata(task.id, ...)，
-      //   applyTaskCreated 收到 WS 事件时通过 taskId 取回 → spread 进 task 对象
-      const meta = getTaskMetadata(data.id)
-      tasks.value.unshift({
-        ...data,  // spread 完整 payload（pluginName/version/targetPath/createdAt 等保留）
-        id: data.id,
-        type: data.type as TaskType,
-        sourcePath: data.sourcePath,
-        pluginName: data.pluginName,  // 🆕 关键字段：保持插件识别
-        // 🆕 v4：data.version 是后端 container version 字段，前端 EncvTask 命名是 containerVersion
-        containerVersion: data.version,
-        targetPath: data.targetPath,
-        status: data.status ?? 'queued',
-        progress: data.progress ?? 0,
-        phase: data.phase,
-        createdAt: data.createdAt ?? new Date().toISOString(),
-        // 🆕 v4：把元数据写进 task 对象本身（displayedItems 直接读，不再依赖 localStorage）
-        triggeredBy: meta?.triggeredBy,
-        runId: meta?.runId,
-      })
-    }
-  }
-
-  function applyTaskCompleted(data: { id: string; error?: string }) {
-    const idx = tasks.value.findIndex((t) => t.id === data.id)
-    if (idx !== -1) {
-      const prev = tasks.value[idx]
-      tasks.value[idx] = {
-        ...prev,  // 🆕 prev 已经有 pluginName（从 spread 来），不再被覆盖
-        status: data.error ? 'failed' : 'completed',
-        progress: data.error ? prev.progress : 100,
-        phase: data.error ? prev.phase : 'completed',
-        speed: '',
-        eta: '',
-        error: data.error,
-        completedAt: new Date().toISOString(),
+    if (!hasGroupWithSummary) return items;
+    return items.map((item: any) => {
+      if (item.kind !== "group" || !item.runId || item.runId.startsWith("__manual__")) {
+        return item;
       }
-    }
+      const summary = summaries.get(item.runId);
+      if (!summary) return item;
+      return mergeGroupWithSummary(item, summary);
+    });
+  });
+
+  function mergeGroupWithSummary(item: any, summary: RunSummary): any {
+    const total = summary.total;
+    const passed = summary.passed;
+    const failed = summary.failed;
+    const running = summary.running;
+    const pending = summary.pending;
+    const finished = passed + failed;
+    const percent = summary.percent ?? (total > 0 ? Math.round((finished / total) * 100) : 0);
+    let dominantStatus = "running";
+    if (failed > 0) dominantStatus = "failed";
+    else if (running > 0) dominantStatus = "running";
+    else if (pending > 0) dominantStatus = "queued";
+    else if (passed > 0) dominantStatus = "completed";
+
+    const moodClass =
+      failed > 0
+        ? "tl-mood--fail"
+        : running > 0
+          ? "tl-mood--running"
+          : passed === total && total > 0
+            ? "tl-mood--success"
+            : (item.displayData?.moodClass ?? "");
+
+    return {
+      ...item,
+      displayData: {
+        ...item.displayData,
+        summary: { total, passed, failed, running, pending, percent },
+        dominantStatus,
+        moodClass,
+      },
+      _summaryTotal: total,
+    };
   }
 
-  async function cancelTaskById(id: string) {
-    try {
-      await cancelTask(id)
-      await fetchTasks()
-    } catch {
-      showToast({ message: t('tasks.taskCancelFailed'), duration: 2000, color: 'danger' })
-    }
+  // ============ Helper：状态显示 ============
+  function getTaskName(task: EncvTask): string {
+    return getTaskDisplayName(task);
   }
-
-  async function retryTaskById(id: string) {
-    try {
-      await retryTask(id)
-      await fetchTasks()
-    } catch {
-      showToast({ message: t('tasks.taskRetryFailed'), duration: 2000, color: 'danger' })
-    }
+  function getTaskIcon(task: EncvTask): string {
+    return task.type === "encrypt" ? "lock-closed" : "lock-open";
   }
-
-  async function removeTaskById(id: string) {
-    try {
-      await removeTask(id)
-      await fetchTasks()
-    } catch {
-      showToast({ message: t('tasks.taskRemoveFailed'), duration: 2000, color: 'danger' })
-    }
+  function getTaskColor(task: EncvTask): string {
+    return getStatusColorInner(task.status);
   }
-
-  async function clearCompletedWithConfirm() {
-    const completedCount = tasks.value.filter(
-      (task) =>
-        task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled'
-    ).length
-    if (completedCount === 0) return
-    return completedCount
+  function getStatusLabel(status: TaskStatus): string {
+    return t(`tasks.${status}`);
   }
-
-  function getTaskName(task: EncvTask) {
-    const parts = task.sourcePath.replace(/\\/g, '/').split('/')
-    const basename = parts[parts.length - 1] || task.sourcePath
-    return task.pluginName ? `${basename} [${task.pluginName}]` : basename
+  function getStatusColor(status: TaskStatus): string {
+    return getStatusColorInner(status);
   }
-
+  function getPhaseLabel(phase?: string): string {
+    if (!phase) return "";
+    return t(`tasks.phase.${phase}`, { defaultValue: phase });
+  }
   function getTaskDuration(task: EncvTask): string {
-    if (!task.createdAt) return ''
-    const created = new Date(task.createdAt).getTime()
-    if (isNaN(created)) return ''
-    if (task.completedAt) {
-      const completed = new Date(task.completedAt).getTime()
-      if (isNaN(completed)) return ''
-      return formatDuration(completed - created)
-    }
-    if (task.status === 'running' || task.status === 'cancelling') {
-      return formatDuration(Date.now() - created)
-    }
-    return ''
+    return formatTaskDuration(task);
+  }
+  function getPluginChipLabel(name?: string): string {
+    if (name === "__unknown__") return t("tasks.unknownPlugin");
+    if (name) return name;
+    if (store.filterPlugins.length === 0) return t("tasks.allPlugins");
+    if (store.filterPlugins.length === 1) return store.filterPlugins[0];
+    return `${store.filterPlugins.length}`;
+  }
+  function getTypeChipLabel(type?: string): string {
+    if (type) return getTaskTypeLabel(type, t);
+    if (store.filterTypes.length === 0) return t("tasks.allTypes");
+    if (store.filterTypes.length === 1) return getTaskTypeLabel(store.filterTypes[0], t);
+    return `${store.filterTypes.length}`;
+  }
+  function getStatusChipLabel(status?: string): string {
+    if (status) return t(`tasks.status.${status}`);
+    if (store.filterStatuses.length === 0) return t("tasks.allStatuses");
+    if (store.filterStatuses.length === 1) return t(`tasks.status.${store.filterStatuses[0]}`);
+    return `${store.filterStatuses.length}`;
   }
 
-  function getPluginChipLabel(): string {
-    if (filterPlugins.value.length === 0) return t('tasks.allPlugins')
-    if (filterPlugins.value.length === 1) return filterPlugins.value[0]
-    return `${t('tasks.allPlugins')} (${filterPlugins.value.length})`
+  function toggleWarningDetail(id: string): void {
+    const next = new Set(view.expandedWarningDetail.value);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    view.expandedWarningDetail.value = next;
   }
-
-  function getTypeChipLabel(): string {
-    if (filterTypes.value.length === 0) return t('tasks.allTypes')
-    return filterTypes.value
-      .map((ty) => (ty === 'encrypt' ? t('tasks.encrypt') : t('tasks.decrypt')))
-      .join(', ')
-  }
-
-  function getStatusChipLabel(): string {
-    if (filterStatuses.value.length === 0) return t('tasks.allStatuses')
-    return filterStatuses.value.map((s) => getStatusLabel(s)).join(', ')
-  }
-
-  function getStatusLabel(status: TaskStatus) {
-    switch (status) {
-      case 'queued': return t('tasks.queued')
-      case 'running': return t('tasks.running')
-      case 'completed': return t('tasks.completed')
-      case 'failed': return t('tasks.failed')
-      case 'cancelled': return t('tasks.cancelled')
-      case 'cancelling': return t('tasks.cancelling')
-      default: return status
-    }
-  }
-
-  function isPasswordError(task: EncvTask): boolean {
-    if (!task.error) return false
-    return isWrongPasswordError(task.error)
-  }
-
-  function toggleWarningDetail(task: EncvTask) {
-    expandedWarningDetail.value = expandedWarningDetail.value === task.id ? null : task.id
-  }
-
   function formatWarningDetail(detail: string): string {
+    return detail;
+  }
+
+  // ============ fetch / refresh / loadMore（视图分页加载） ============
+  // 🆕 2026-06-23 重新设计（后端 SQL 权威 + 前端视图分页）：
+  //   - 后端是唯一权威：GET /api/tasks?runId=&offset=&limit= + X-Total-Count
+  //   - 前端 store 只持有"当前视图需要的"task（不是所有 task）
+  //   - 聚合计数独立：后端 SQL COUNT，前端不靠 store.tasks.length 算总数
+  //   - WS task:created 守卫：store 满后不 push（避免视图分页被破坏）
+  //     跳过的 task 在 loadMore / refresh 时从后端获取最新状态
+  const PAGE_SIZE = 100;
+  const _paginationOffset = ref(0);
+  const hasMore = ref(false);
+  const isLoadingMore = ref(false);
+
+  async function fetchTasks(_opts?: { silent?: boolean }): Promise<void> {
+    store.isRefreshing = true;
     try {
-      return JSON.stringify(JSON.parse(detail), null, 2)
-    } catch {
-      return detail
+      const [list] = await Promise.all([apiGetTasks({ offset: 0, limit: PAGE_SIZE }), runSummaries.fetchAll().catch(() => {})]);
+      store.rebuildFromBackend(list);
+      _paginationOffset.value = 0;
+      hasMore.value = list.length >= PAGE_SIZE;
+    } catch (err) {
+      console.warn("[useTasksList.fetchTasks] failed:", err);
+    } finally {
+      store.isRefreshing = false;
+    }
+  }
+  function refresh(): Promise<void> {
+    return fetchTasks({ silent: true });
+  }
+
+  async function loadMore(): Promise<void> {
+    if (isLoadingMore.value || !hasMore.value) return;
+    isLoadingMore.value = true;
+    try {
+      const nextOffset = _paginationOffset.value + PAGE_SIZE;
+      const list = await apiGetTasks({ offset: nextOffset, limit: PAGE_SIZE });
+      store.appendTasksPage(list);
+      _paginationOffset.value = nextOffset;
+      hasMore.value = list.length >= PAGE_SIZE;
+    } catch (err) {
+      console.warn("[useTasksList.loadMore] failed:", err);
+    } finally {
+      isLoadingMore.value = false;
     }
   }
 
-  function getTaskIcon(task: EncvTask) {
-    switch (task.status) {
-      case 'queued': return timer
-      case 'running': return sync
-      case 'completed': return checkmarkCircle
-      case 'failed': return closeCircle
-      default: return timer
+  // ============ 任务操作 ============
+  async function cancelTaskById(id: string): Promise<void> {
+    const task = store.getTaskById(id) ?? store.tasks.find(t => t.id === id);
+    if (!task) return;
+    const prevStatus = task.status;
+    store.patchTaskById(id, { status: "cancelling" });
+    try {
+      await cancelTask(id);
+    } catch (err) {
+      store.patchTaskById(id, { status: prevStatus });
+      throw err;
     }
+  }
+  async function cancelRun(runId: string): Promise<void> {
+    const previous = store.cancelRunTasks(runId);
+    const errors: unknown[] = [];
+    for (const t of previous) {
+      try {
+        await cancelTask(t.id);
+      } catch (err) {
+        errors.push(err);
+      }
+    }
+    if (errors.length > 0) {
+      for (const t of previous) {
+        store.patchTaskById(t.id, { status: t.status });
+      }
+      throw errors[0];
+    }
+  }
+  async function retryTaskById(id: string): Promise<void> {
+    try {
+      await retryTaskApi(id);
+      void fetchTasks({ silent: true });
+    } catch (err) {
+      console.warn("[useTasksList.retryTaskById] failed:", err);
+    }
+  }
+  async function removeTaskById(id: string): Promise<void> {
+    try {
+      await removeTaskApi(id);
+      store.removeTask(id);
+    } catch (err) {
+      console.warn("[useTasksList.removeTaskById] failed:", err);
+    }
+  }
+  async function removeRunTasks(runId: string): Promise<{ removed: number; failed: number }> {
+    const targets = store.removeRunTasks(runId);
+    if (targets.length === 0) return { removed: 0, failed: 0 };
+    let removed = 0,
+      failed = 0;
+    for (const t of targets) {
+      try {
+        await removeTaskApi(t.id);
+        removed++;
+      } catch (err) {
+        failed++;
+      }
+    }
+    if (failed > 0) void fetchTasks({ silent: true });
+    return { removed, failed };
+  }
+  async function clearCompletedWithConfirm(): Promise<number> {
+    const completed = store.tasks.filter(tk => tk.status === "completed" || tk.status === "cancelled" || tk.status === "failed");
+    if (completed.length === 0) return 0;
+    let deletedCount = 0;
+    for (const tk of completed) {
+      try {
+        await removeTaskApi(tk.id);
+        store.removeTask(tk.id);
+        deletedCount++;
+      } catch (err) {
+        console.warn("[useTasksList.clearCompleted] remove failed:", err);
+      }
+    }
+    return deletedCount;
   }
 
-  function getTaskColor(task: EncvTask) {
-    switch (task.status) {
-      case 'queued': return 'medium'
-      case 'running': return 'primary'
-      case 'completed': return 'success'
-      case 'failed': return 'danger'
-      default: return 'medium'
-    }
+  // ============ search / sort / view 操作（透传到 store） ============
+  function onSearchInput(event: any): void {
+    const value = event?.target?.value ?? event?.detail?.value ?? event;
+    store.setSearchQuery(String(value ?? ""));
+  }
+  function toggleSort(): void {
+    store.toggleSort();
+  }
+  function toggleViewMode(): void {
+    store.toggleViewMode();
+  }
+  async function openPluginPopover(ev: any): Promise<void> {
+    view.pluginPopoverEvent.value = ev;
+    view.pluginPopoverOpen.value = true;
+  }
+  async function openTypePopover(ev: any): Promise<void> {
+    view.typePopoverEvent.value = ev;
+    view.typePopoverOpen.value = true;
+  }
+  async function openStatusPopover(ev: any): Promise<void> {
+    view.statusPopoverEvent.value = ev;
+    view.statusPopoverOpen.value = true;
+  }
+  async function openDatePopover(ev: any): Promise<void> {
+    view.datePopoverEvent.value = ev;
+    view.datePopoverOpen.value = true;
   }
 
-  function getStatusColor(status: TaskStatus) {
-    switch (status) {
-      case 'queued': return 'medium'
-      case 'running': return 'primary'
-      case 'completed': return 'success'
-      case 'failed': return 'danger'
-      default: return 'medium'
-    }
+  // ============ 兼容旧 API：applyTaskUpdate 等 ============
+  function applyTaskUpdate(data: any) {
+    store.applyEvent("update", data);
+  }
+  function applyTaskProgress(data: any) {
+    store.applyEvent("progress", data);
+  }
+  function applyTaskCreated(data: any) {
+    store.applyEvent("created", data);
+  }
+  function applyTaskCompleted(data: any) {
+    store.applyEvent("completed", data);
   }
 
-  function getPhaseLabel(phase: string) {
-    switch (phase) {
-      case 'analyzing': return t('tasks.phaseAnalyzing')
-      case 'initializing': return t('tasks.phaseInitializing')
-      case 'preprocessing': return t('tasks.phasePreprocessing')
-      case 'encrypting': return t('tasks.phaseEncrypting')
-      case 'decrypting': return t('tasks.phaseDecrypting')
-      case 'packing': return t('tasks.phasePacking')
-      case 'verifying': return t('tasks.phaseVerifying')
-      case 'completed': return t('tasks.phaseCompleted')
-      default: return phase
-    }
-  }
+  // ============ loading / isInitialLoad 兼容（Tasks.vue 还在用） ============
+  const loading = computed(() => false);
+  const isInitialLoad = computed(() => !store.hydrated);
 
   return {
-    tasks,
+    // store state（通过 storeToRefs 保留 ref 包装，避免 Pinia 自动 unwrap 丢失响应性）
+    ...storeRefs,
+    // 兼容旧 computed
     loading,
-    expandedWarningDetail,
-    sortBy,
-    showSearch,
-    searchQuery,
-    showFilters,
-    filterPlugins,
-    filterTypes,
-    filterStatuses,
-    statusOptions,
-    pluginPopoverOpen,
-    typePopoverOpen,
-    statusPopoverOpen,
-    pluginPopoverEvent,
-    typePopoverEvent,
-    statusPopoverEvent,
-    availablePlugins,
-    hasActiveFilters,
-    hasCompletedTasks,
-    sortedTasks,
-    filteredTasks,
-    fetchTasks,
-    refresh,
-    applyFilter,
-    applySort,
-    openPluginPopover,
-    openTypePopover,
-    openStatusPopover,
-    togglePluginFilter,
-    toggleTypeFilter,
-    toggleStatusFilter,
-    clearFilters,
-    onSearchInput,
-    toggleSort,
-    applyTaskUpdate,
-    applyTaskProgress,
-    applyTaskCreated,
-    applyTaskCompleted,
-    cancelTaskById,
-    retryTaskById,
-    removeTaskById,
-    clearCompletedWithConfirm,
+    isInitialLoad,
+    // 🆕 v7：视图层包装的 displayedItems（带 kind/counters/displayData）
+    displayedItems,
+    // UI state
+    ...view,
+    // helper
     getTaskName,
+    getTaskIcon,
+    getTaskColor,
+    getStatusLabel,
+    getStatusColor,
+    getPhaseLabel,
     getTaskDuration,
     getPluginChipLabel,
     getTypeChipLabel,
     getStatusChipLabel,
-    getStatusLabel,
     isPasswordError,
     toggleWarningDetail,
     formatWarningDetail,
-    getTaskIcon,
-    getTaskColor,
-    getStatusColor,
-    getPhaseLabel,
-  }
+    formatDateTime: dateFormat,
+    // 🆕 2026-07-02：向量搜索相关度（前端 RelevanceBadge 用）
+    getTaskSearchScore: store.getTaskSearchScore,
+    // 🆕 2026-07-02：搜索模式（strict/combined/greedy/none，前端横幅用）
+    searchMode: store.searchMode,
+    // 操作
+    fetchTasks,
+    refresh,
+    loadMore,
+    hasMore,
+    isLoadingMore,
+    cancelRun,
+    cancelTaskById,
+    retryTaskById,
+    removeTaskById,
+    removeRunTasks,
+    clearCompletedWithConfirm,
+    onSearchInput,
+    toggleSort,
+    toggleViewMode,
+    openPluginPopover,
+    openTypePopover,
+    openStatusPopover,
+    openDatePopover,
+    applyTaskUpdate,
+    applyTaskProgress,
+    applyTaskCreated,
+    applyTaskCompleted,
+    // 🆕 v7：透传 filter / pin / run 操作
+    clearFilters: store.clearFilters,
+    togglePluginFilter: store.togglePluginFilter,
+    toggleTypeFilter: store.toggleTypeFilter,
+    toggleStatusFilter: store.toggleStatusFilter,
+    toggleTriggeredByFilter: store.toggleTriggeredByFilter,
+    applyDatePreset: store.applyDatePreset,
+    setCustomDateRange: store.setCustomDateRange,
+    togglePinRun: store.togglePinRun,
+    isRunPinned: store.isRunPinned,
+    hydrate: store.hydrate,
+    // 内部：给 group-detail 使用
+    _computeGroupCounters: (tasks: EncvTask[]) => computeGroupCounters(tasks, storeRefs),
+    workflowService,
+  };
+}
+
+export function useTasksList() {
+  if (_tasksListInstance) return _tasksListInstance;
+  _tasksListInstance = createUseTasksList();
+  return _tasksListInstance;
+}
+
+/** 🆕 测试用：重置 module-level singleton（让下一次 useTasksList() 重新创建 instance） */
+export function _resetTasksListSingletonForTests(): void {
+  _tasksListInstance = null;
+  _viewInstance = null;
 }

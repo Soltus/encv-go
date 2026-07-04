@@ -50,25 +50,25 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from '@ionic/vue'
-import { closeOutline, documentTextOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import type { Attachment } from '@/composables/useAttachments'
+import { IonIcon } from "@ionic/vue";
+import { closeOutline, documentTextOutline } from "ionicons/icons";
+import type { Attachment } from "@/composables/useAttachments";
+import { useI18n } from "@/composables/useI18n";
 
 defineProps<{
-  attachments: Attachment[]
-  onRemove: (id: string) => void
-}>()
+  attachments: Attachment[];
+  onRemove: (id: string) => void;
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const closeIcon = closeOutline
-const documentIcon = documentTextOutline
+const closeIcon = closeOutline;
+const documentIcon = documentTextOutline;
 
 function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 </script>
 

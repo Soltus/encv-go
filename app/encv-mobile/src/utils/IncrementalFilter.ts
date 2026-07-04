@@ -22,90 +22,105 @@
  * 2026-06-15 创建
  */
 
-import type { LogEntry } from '@/composables/useFrontendLogs'
-import { RingBuffer } from './RingBuffer'
+import type { LogEntry } from "@/composables/useFrontendLogs";
+import { RingBuffer } from "./RingBuffer";
 
 /** 重导出方便消费者（如 RingBuffer.bench.test.ts）单点引入 */
-export type { LogEntry }
+export type { LogEntry };
 
-export type Level = 'debug' | 'info' | 'warn' | 'error' | 'all'
-export type FilterPredicate = (entry: LogEntry) => boolean
+export type Level = "debug" | "info" | "warn" | "error" | "all";
+export type FilterPredicate = (entry: LogEntry) => boolean;
 
 export interface FilterState {
   /** 等级集合（'all' 表示全过） */
-  levels: ReadonlySet<Level>
+  levels: ReadonlySet<Level>;
   /** 搜索文本（小写，空字符串表示不过滤） */
-  searchLower: string
+  searchLower: string;
+  /** 🆕 2026-07-03：标签筛选集合（OR 匹配：任一标签命中即通过）
+   * 空 set 表示不过滤（所有标签都通过） */
+  tags: ReadonlySet<string>;
 }
 
 export function buildPredicate(state: FilterState): FilterPredicate {
-  const { levels, searchLower } = state
-  // 🆕 修复 A2: 移除 `|| levels.size === 0` 短路
-  // 空 set 必须 0 通过（用户已取消全选，预期看不到任何日志）
-  // 'all' 必须显式在 set 中（由 toggleLevel 在 select-all 时 push 进 set）
-  const allLevels = levels.has('all')
+  const { levels, searchLower, tags } = state;
+  const allLevels = levels.has("all");
+  const hasTagFilter = tags.size > 0;
   return (entry: LogEntry): boolean => {
-    if (!allLevels && !levels.has(entry.level as Level)) return false
-    if (searchLower && !entry.message.toLowerCase().includes(searchLower)) return false
-    return true
-  }
+    if (!allLevels && !levels.has(entry.level as Level)) return false;
+    if (searchLower && !entry.message.toLowerCase().includes(searchLower)) return false;
+    if (hasTagFilter) {
+      const entryTags = entry.tags;
+      if (!Array.isArray(entryTags) || entryTags.length === 0) return false;
+      let hit = false;
+      for (const t of entryTags) {
+        if (tags.has(t)) {
+          hit = true;
+          break;
+        }
+      }
+      if (!hit) return false;
+    }
+    return true;
+  };
 }
 
 export class IncrementalFilter {
   /** 源数据（ring buffer） */
-  readonly source: RingBuffer<LogEntry>
+  readonly source: RingBuffer<LogEntry>;
   /** 当前 filter 状态（用于判断是否需要 rebuild） */
-  private state: FilterState = { levels: new Set<Level>(['all']), searchLower: '' }
+  private state: FilterState = { levels: new Set<Level>(["all"]), searchLower: "", tags: new Set<string>() };
   /** 当前 predicate */
-  private predicate: FilterPredicate = buildPredicate(this.state)
+  private predicate: FilterPredicate = buildPredicate(this.state);
   /** 缓存的过滤结果（数组，仅追加） */
-  private result: LogEntry[] = []
+  private result: LogEntry[] = [];
   /** 已处理到的 push 序号（下次 processPending 从这里开始） */
-  private processed: number = 0
+  private processed: number = 0;
   /** 自上次 rebuild 以来跳过的 item 数（debug 用） */
-  public droppedSinceRebuild: number = 0
+  public droppedSinceRebuild: number = 0;
   /** 上一帧过滤 push 调用耗时（ms，debug 用） */
-  public lastProcessMs: number = 0
+  public lastProcessMs: number = 0;
   /**
    * 变更通知订阅列表。
    * - 推/批推/rebuild/clear 时同步 notify()
    * - DevLogs.vue 用它驱动 backendUpdateTick ref → 触发 computed 重算
    * - 替代 `watch(() => filter.version, ...)` 模式（markRaw 对象上 watch 永远不 invoke）
    */
-  private listeners: Set<() => void> = new Set()
+  private listeners: Set<() => void> = new Set();
   /**
    * 单调递增的版本号（push/pushMany/rebuild/clear 自增）。保留作为 debug 探针。
    * ⚠️ 不可单独用作 Vue watch source — markRaw 对象的属性读写不会被 vue track。
    * 必须配合 subscribe() 通知机制使用。
    */
-  public version: number = 0
+  public version: number = 0;
 
   /**
    * 订阅变更通知。返回取消订阅函数。
    * 用于 vue 层把 IncrementalFilter 状态同步到 reactive ref。
    */
   subscribe(cb: () => void): () => void {
-    this.listeners.add(cb)
-    return () => { this.listeners.delete(cb) }
+    this.listeners.add(cb);
+    return () => {
+      this.listeners.delete(cb);
+    };
   }
 
   /** 同步通知所有订阅者 */
   private notify(): void {
-    for (const cb of this.listeners) cb()
+    for (const cb of this.listeners) cb();
   }
 
   constructor(capacity: number) {
-    this.source = new RingBuffer<LogEntry>(capacity)
+    this.source = new RingBuffer<LogEntry>(capacity);
   }
 
   /**
    * 推入新 item。O(1)（满则 O(1) ring buffer push + O(1) predicate check）。
    */
   push(item: LogEntry): void {
-    this.source.push(item)
-    this.processPending()
-    this.version++
-    this.notify()
+    this.source.push(item);
+    this.processPending();
+    this.version++;
+    this.notify();
   }
 
   /**
@@ -119,10 +134,10 @@ export class IncrementalFilter {
    *   3. 看着像级别筛选/搜索也失效（其实 setFilter 路径正常，但 pushMany 不通知 → UI 卡死）
    */
   pushMany(items: LogEntry[]): void {
-    for (let i = 0; i < items.length; i++) this.source.push(items[i])
-    this.processPending()
-    this.version++
-    this.notify()
+    for (let i = 0; i < items.length; i++) this.source.push(items[i]);
+    this.processPending();
+    this.version++;
+    this.notify();
   }
 
   /**
@@ -130,27 +145,27 @@ export class IncrementalFilter {
    * 时间复杂度：O(newItems) — 远比 O(N) 优
    */
   private processPending(): void {
-    if (this.source.totalPushed === this.processed) return
-    const t0 = performance.now()
-    const earliestValid = this.source.earliestValidPushed
-    const start = Math.max(this.processed, earliestValid)
-    const end = this.source.totalPushed
+    if (this.source.totalPushed === this.processed) return;
+    const t0 = performance.now();
+    const earliestValid = this.source.earliestValidPushed;
+    const start = Math.max(this.processed, earliestValid);
+    const end = this.source.totalPushed;
     if (start >= end) {
       // 落后超过 capacity → 必须 rebuild
-      this.rebuild()
-      this.lastProcessMs = performance.now() - t0
-      return
+      this.rebuild();
+      this.lastProcessMs = performance.now() - t0;
+      return;
     }
     for (let t = start; t < end; t++) {
-      const item = this.source.atPushed(t)
+      const item = this.source.atPushed(t);
       if (item && this.predicate(item)) {
-        this.result.push(item)
+        this.result.push(item);
       } else {
-        this.droppedSinceRebuild++
+        this.droppedSinceRebuild++;
       }
     }
-    this.processed = end
-    this.lastProcessMs = performance.now() - t0
+    this.processed = end;
+    this.lastProcessMs = performance.now() - t0;
   }
 
   /**
@@ -158,21 +173,25 @@ export class IncrementalFilter {
    * 时间复杂度：O(N)
    */
   setFilter(state: FilterState): void {
-    if (this.isSameState(state)) return
-    this.state = state
-    this.predicate = buildPredicate(state)
-    this.rebuild()
-    this.version++
-    this.notify()
+    if (this.isSameState(state)) return;
+    this.state = state;
+    this.predicate = buildPredicate(state);
+    this.rebuild();
+    this.version++;
+    this.notify();
   }
 
   private isSameState(s: FilterState): boolean {
-    if (s.searchLower !== this.state.searchLower) return false
-    if (s.levels.size !== this.state.levels.size) return false
+    if (s.searchLower !== this.state.searchLower) return false;
+    if (s.levels.size !== this.state.levels.size) return false;
+    if (s.tags.size !== this.state.tags.size) return false;
     for (const lvl of s.levels) {
-      if (!this.state.levels.has(lvl)) return false
+      if (!this.state.levels.has(lvl)) return false;
     }
-    return true
+    for (const tag of s.tags) {
+      if (!this.state.tags.has(tag)) return false;
+    }
+    return true;
   }
 
   /**
@@ -180,22 +199,22 @@ export class IncrementalFilter {
    * 时间复杂度：O(N)
    */
   private rebuild(): void {
-    const t0 = performance.now()
-    this.result = []
-    this.droppedSinceRebuild = 0
-    this.source.forEach((item) => {
-      if (this.predicate(item)) this.result.push(item)
-      else this.droppedSinceRebuild++
-    })
-    this.processed = this.source.totalPushed
-    this.lastProcessMs = performance.now() - t0
+    const t0 = performance.now();
+    this.result = [];
+    this.droppedSinceRebuild = 0;
+    this.source.forEach(item => {
+      if (this.predicate(item)) this.result.push(item);
+      else this.droppedSinceRebuild++;
+    });
+    this.processed = this.source.totalPushed;
+    this.lastProcessMs = performance.now() - t0;
   }
 
   /**
    * 强制 rebuild（公开 API，用于"切 filter 时想同步等结果"场景）。
    */
   forceRebuild(): void {
-    this.rebuild()
+    this.rebuild();
   }
 
   /**
@@ -203,39 +222,39 @@ export class IncrementalFilter {
    * 注意：返回的是内部引用，不要直接 mutate。
    */
   getResult(): readonly LogEntry[] {
-    return this.result
+    return this.result;
   }
 
   /**
    * 拿过滤后的总数。
    */
   get length(): number {
-    return this.result.length
+    return this.result.length;
   }
 
   /**
    * 拿源 buffer 的总数（不过滤）。
    */
   get totalLength(): number {
-    return this.source.size
+    return this.source.size;
   }
 
   /**
    * 清空（保留 filter state）。
    */
   clear(): void {
-    this.source.clear()
-    this.result = []
-    this.processed = 0
-    this.droppedSinceRebuild = 0
-    this.version++
-    this.notify()
+    this.source.clear();
+    this.result = [];
+    this.processed = 0;
+    this.droppedSinceRebuild = 0;
+    this.version++;
+    this.notify();
   }
 
   /**
    * 当前 filter 状态（只读）。
    */
   getState(): Readonly<FilterState> {
-    return this.state
+    return this.state;
   }
 }

@@ -26,20 +26,49 @@
         </div>
       </ion-toolbar>
       <ion-toolbar>
-        <ion-searchbar
-          v-model="searchQuery"
-          :placeholder="t('files.searchPlaceholder')"
-          @ionInput="handleSearchInput"
-          @ionClear="handleSearchClear"
-        ></ion-searchbar>
+        <!-- 🆕 2026-07-02 v2 重写：contenteditable div + span units（替换 ion-searchbar） -->
+        <!-- 用户强反馈：之前 ion-searchbar + 外部 overlay div 是"在输入框外高亮"，不符合预期 -->
+        <!-- 现在高亮在 input 内部（每个 token 都是 <span>），插入按钮插入 symbol span（&/｜/￢） -->
+        <div class="search-input-wrapper">
+          <div
+            ref="queryInputRef"
+            class="query-input"
+            contenteditable="true"
+            data-testid="search-input"
+            :data-empty="!searchQuery"
+            :placeholder="t('files.searchPlaceholder')"
+            @input="onQueryInput($event)"
+            @keydown="onQueryKeydown($event)"
+            @focus="onQueryFocus"
+            @blur="onQueryBlur"
+            role="searchbox"
+            aria-label="Search"
+          ></div>
+          <button
+            v-if="searchQuery"
+            class="query-clear-btn"
+            type="button"
+            :title="t('files.clear') || '清空'"
+            @click="handleSearchClear"
+          >×</button>
+        </div>
+        <!-- 🆕 2026-07-02 v2 插入操作符按钮行：点击即在光标位置插入 symbol span（不是字符串） -->
+        <div v-if="searchQuery" class="search-insert-bar">
+          <span class="insert-label">{{ t('files.insertOp') || '插入:' }}</span>
+          <button class="insert-btn op-and" data-testid="btn-and" @click="insertOperator('AND')" type="button" :title="t('files.insertAndTitle')">＆</button>
+          <button class="insert-btn op-or" data-testid="btn-or" @click="insertOperator('OR')" type="button" :title="t('files.insertOrTitle')">｜</button>
+          <button class="insert-btn op-not" data-testid="btn-not" @click="insertOperator('NOT')" type="button" :title="t('files.insertNotTitle')">￢</button>
+          <button class="insert-btn op-phrase" data-testid="btn-phrase" @click="insertOperator('__phrase_open__')" type="button" :title="t('files.insertPhraseTitle')">「」</button>
+          <button class="insert-btn op-regex" data-testid="btn-regex" @click="insertOperator('__regex_prefix__')" type="button" :title="t('files.insertRegexTitle')">/ /</button>
+        </div>
         <ion-toggle
           v-if="searchQuery"
           slot="end"
-          v-model="searchRecursive"
+          v-model="searchFullText"
           @ionChange="handleSearchToggle"
           class="recursive-toggle"
         >
-          {{ t('files.recursive') }}
+          {{ t('files.fullText') || '全文' }}
         </ion-toggle>
       </ion-toolbar>
     </ion-header>
@@ -79,10 +108,16 @@
       </ion-content>
     </ion-menu>
 
-    <ion-content id="main-content">
+    <ion-content id="main-content" ref="mainContentRef">
       <ion-refresher slot="fixed" @ionRefresh="handleRefresh" v-if="!searchQuery">
         <ion-refresher-content></ion-refresher-content>
       </ion-refresher>
+
+      <!-- 🆕 v4 Bug1 修复：自动更新顶栏细 indicator（不阻塞老数据渲染，不清空列表） -->
+      <div v-if="refreshing" class="files-refresh-bar" aria-live="polite">
+        <ion-spinner name="dots" class="files-refresh-bar__spinner"></ion-spinner>
+        <span class="files-refresh-bar__label">{{ t('files.autoRefreshing') }}</span>
+      </div>
 
       <!-- 播放错误展示区域 -->
       <div v-if="playError" class="play-error-banner">
@@ -103,7 +138,16 @@
 
       <template v-if="(loading || isSearching || noPermission || !serverOnline || displayFiles.length === 0) && !selectedPlugin">
         <div v-if="loading || isSearching" class="loading-container">
-          <ion-spinner name="crescent"></ion-spinner>
+          <!--
+            搜索中 loading 三态区分（debug-discipline.md §1.6）：
+              - 'available'   → spinner（旋转，索引完全可用）
+              - 'degraded'    → dots（安静等待，部分降级）
+              - 'unavailable' / 'unknown' → pulse（脉冲闪动，索引不可用，仅关键词）
+          -->
+          <ion-spinner v-if="isSearching && vectorSearchStatus === 'available'" name="crescent"></ion-spinner>
+          <ion-spinner v-else-if="isSearching && vectorSearchStatus === 'degraded'" name="dots"></ion-spinner>
+          <ion-spinner v-else-if="isSearching" name="lines" class="search-spinner-pulse"></ion-spinner>
+          <ion-spinner v-else name="crescent"></ion-spinner>
           <p>{{ isSearching ? t('files.searching') : (connecting ? t('files.connecting') : t('files.loading')) }}</p>
         </div>
         <div v-else-if="noPermission" class="empty-state">
@@ -128,6 +172,99 @@
           <ion-icon :icon="searchQuery ? search : folderOpen" class="empty-icon"></ion-icon>
           <h3>{{ searchQuery ? t('files.noSearchResults') : t('files.emptyDir') }}</h3>
           <p>{{ searchQuery ? t('files.noSearchResultsDesc') : t('files.emptyDirDesc') }}</p>
+
+          <!-- 🆕 2026-07-03 搜索诊断卡片（仅搜索结果为空时显示）
+                背景：安卓真机 FTS5 可能异常，但用户进不去 /settings/fulltext-index（classList bug）
+                无法在那查看 FTS 状态。所以搜索界面直接显示诊断信息辅助排查。
+                数据源：refreshSearchDiagnostics() 在 performSearch 空结果时自动调用 -->
+          <div v-if="searchQuery && searchDiagnostics" class="search-diagnostics-card" data-testid="search-diagnostics-card">
+            <div class="diag-card-header">
+              <ion-icon :icon="alertCircle" class="diag-card-icon"></ion-icon>
+              <span>搜索诊断</span>
+              <span class="diag-card-time">{{ searchDiagnostics.searchedAt }}</span>
+            </div>
+
+            <div class="diag-grid">
+              <div class="diag-item">
+                <span class="diag-label">FTS5</span>
+                <ion-badge
+                  :color="searchDiagnostics.ftsAvailable ? 'success' : 'danger'"
+                  data-testid="diag-fts-badge"
+                >
+                  {{ searchDiagnostics.ftsAvailable ? '可用' : '不可用' }}
+                </ion-badge>
+              </div>
+
+              <div class="diag-item">
+                <span class="diag-label">向量搜索</span>
+                <ion-badge
+                  :color="searchDiagnostics.vectorSearch === 'available' ? 'success' : (searchDiagnostics.vectorSearch === 'degraded' ? 'warning' : 'danger')"
+                >
+                  {{ searchDiagnostics.vectorSearch }}
+                </ion-badge>
+              </div>
+
+              <div class="diag-item">
+                <span class="diag-label">FTS 索引</span>
+                <span class="diag-value" data-testid="diag-fts-index-size">{{ searchDiagnostics.ftsIndexSize ?? '-' }} 文件</span>
+              </div>
+
+              <div class="diag-item">
+                <span class="diag-label">普通索引</span>
+                <span class="diag-value">{{ searchDiagnostics.totalFiles ?? '-' }} 文件</span>
+              </div>
+
+              <div class="diag-item" v-if="searchDiagnostics.isIndexing">
+                <span class="diag-label">状态</span>
+                <ion-badge color="warning">
+                  <ion-spinner name="dots" class="diag-spinner"></ion-spinner>
+                  索引中
+                </ion-badge>
+              </div>
+
+              <div class="diag-item" v-if="searchDiagnostics.ftsTokenizer">
+                <span class="diag-label">分词器</span>
+                <span class="diag-value mono">{{ searchDiagnostics.ftsTokenizer }}</span>
+              </div>
+            </div>
+
+            <!-- FTS 不可用原因 / 错误信息 -->
+            <div v-if="searchDiagnostics.ftsError || !searchDiagnostics.ftsAvailable" class="diag-error-row">
+              <ion-icon :icon="warningOutline" class="diag-error-icon"></ion-icon>
+              <span class="diag-error-text">
+                {{ searchDiagnostics.ftsError || 'FTS5 未启用' }}
+              </span>
+            </div>
+
+            <!-- 上次搜索元信息 -->
+            <div v-if="searchDiagnostics.lastQuery" class="diag-meta-row">
+              <span class="diag-meta-item">
+                查询: <code>{{ searchDiagnostics.lastQuery }}</code>
+              </span>
+              <span class="diag-meta-item" v-if="searchDiagnostics.lastNormalCount !== undefined">
+                普通匹配: {{ searchDiagnostics.lastNormalCount }}
+              </span>
+              <span class="diag-meta-item" v-if="searchDiagnostics.lastFtsCount !== undefined">
+                FTS 匹配: {{ searchDiagnostics.lastFtsCount }}
+              </span>
+            </div>
+
+            <!-- 操作按钮 -->
+            <div class="diag-actions">
+              <ion-button size="small" fill="outline" @click="retrySearch" data-testid="diag-retry-btn">
+                <ion-icon :icon="refresh" slot="start"></ion-icon>
+                重试
+              </ion-button>
+              <ion-button size="small" fill="outline" @click="refreshSearchDiagnostics()" data-testid="diag-refresh-btn">
+                <ion-icon :icon="alertCircle" slot="start"></ion-icon>
+                刷新状态
+              </ion-button>
+              <ion-button size="small" fill="outline" color="tertiary" @click="goFullTextIndexFromSearch" data-testid="diag-goto-index-btn">
+                <ion-icon :icon="search" slot="start"></ion-icon>
+                全文索引页
+              </ion-button>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -259,28 +396,69 @@
           </template>
         </div>
 
-        <div v-if="!selectedPlugin && !searchQuery" class="main-sort-bar">
+        <!--
+          排序控件显示条件：
+          - 非插件模式：始终显示
+          - 搜索时：仅在有搜索结果时显示（避免空结果时显示无意义控件）
+        -->
+        <div v-if="!selectedPlugin && (!searchQuery || (searchQuery && displayFiles.length > 0))" class="main-sort-bar">
           <ion-item button detail @click="showMainSort = !showMainSort">
             <ion-icon :icon="swapVerticalOutline" slot="start"></ion-icon>
-            <ion-label>排序</ion-label>
+            <ion-label>{{ t('files.sortBy') || '排序' }}</ion-label>
             <ion-badge slot="end" color="medium">{{ mainSortLabel }}</ion-badge>
           </ion-item>
           <ion-list v-if="showMainSort" :inset="true">
             <ion-item>
-              <ion-label position="stacked">排序方式</ion-label>
+              <ion-label position="stacked">{{ t('files.sortMethod') || '排序方式' }}</ion-label>
               <div class="filter-chips">
-                <ion-chip v-for="s in ['name', 'size', 'time'] as const" :key="s"
+                <!--
+                  排序选项：
+                  - 搜索时：额外提供「相关度」选项（用后端返回的 hybrid score）
+                    默认选中，且是降序（高相关度在前）
+                  - 非搜索：name / size / time 三选一
+                -->
+                <ion-chip v-if="searchQuery && searchResults && searchResults.length > 0"
+                  :button="true" :outline="sortBy !== 'relevance'" :color="sortBy === 'relevance' ? 'primary' : undefined"
+                  @click.stop="setSortBy('relevance')">
+                  {{ t('files.sortByRelevance') || '相关度' }}
+                </ion-chip>
+                <ion-chip v-for="s in (['name', 'size', 'time'] as const)" :key="s"
                   :button="true" :outline="sortBy !== s" :color="sortBy === s ? 'primary' : undefined"
-                  @click.stop="sortBy = s">
-                  {{ s === 'name' ? '名称' : s === 'size' ? '大小' : '时间' }}
+                  @click.stop="setSortBy(s)">
+                  {{ s === 'name' ? t('files.sortByName') || '名称' : s === 'size' ? t('files.sortBySize') || '大小' : t('files.sortByTime') || '时间' }}
                 </ion-chip>
               </div>
-              <div class="filter-chips" style="margin-top:4px">
-                <ion-chip :button="true" :outline="!!sortDesc" :color="!sortDesc ? 'primary' : undefined" @click.stop="sortDesc = false">升序 ↑</ion-chip>
-                <ion-chip :button="true" :outline="!sortDesc" :color="!!sortDesc ? 'primary' : undefined" @click.stop="sortDesc = true">降序 ↓</ion-chip>
+              <!--
+                相关度排序强制为降序（高相关度在前），不显示升降选择器。
+                非相关度排序才显示升/降切换。
+              -->
+              <div v-if="sortBy !== 'relevance'" class="filter-chips" style="margin-top:4px">
+                <ion-chip :button="true" :outline="!!sortDesc" :color="!sortDesc ? 'primary' : undefined" @click.stop="sortDesc = false">{{ t('files.sortAsc') || '升序 ↑' }}</ion-chip>
+                <ion-chip :button="true" :outline="!sortDesc" :color="!!sortDesc ? 'primary' : undefined" @click.stop="sortDesc = true">{{ t('files.sortDesc') || '降序 ↓' }}</ion-chip>
+              </div>
+              <div v-else class="filter-chips" style="margin-top:4px">
+                <ion-chip :button="false" :outline="false" color="primary">{{ t('files.sortDesc') || '降序 ↓' }}（{{ t('files.sortByRelevance') || '相关度' }}）</ion-chip>
               </div>
             </ion-item>
           </ion-list>
+        </div>
+
+        <!-- 🆕 2026-07-02 搜索模式提示（见 debug-discipline.md §3.5）：
+             greedy 模式时显示徽章，告知用户结果是宽松匹配（可能不完全相关） -->
+        <div v-if="searchQuery && searchResults && searchResults.length > 0 && searchMode === 'greedy'" class="search-mode-banner search-mode-greedy">
+          <ion-icon :icon="pricetagOutline" class="search-mode-icon"></ion-icon>
+          <span>{{ t('files.searchModeGreedy', { defaultValue: '贪婪匹配：结果为语义近似，可能不完全相关' }) }}</span>
+        </div>
+        <div v-else-if="searchQuery && searchResults && searchResults.length > 0 && searchMode === 'combined'" class="search-mode-banner search-mode-combined">
+          <ion-icon :icon="pricetagOutline" class="search-mode-icon"></ion-icon>
+          <span>{{ t('files.searchModeCombined', { defaultValue: '综合匹配：关键词 + 语义重排序' }) }}</span>
+        </div>
+
+        <!-- 🆕 2026-07-02 A6：FTS 失败降级 banner（不破坏现有结果） -->
+        <div v-if="fulltextBanner" :class="['fulltext-banner', `fulltext-banner-${fulltextBanner.type}`]">
+          <ion-icon :icon="warningOutline" class="fulltext-banner-icon"></ion-icon>
+          <span class="fulltext-banner-msg">{{ fulltextBanner.message }}</span>
+          <button class="fulltext-banner-dismiss" type="button" @click="dismissFulltextBanner">×</button>
         </div>
 
         <ion-list>
@@ -289,6 +467,8 @@
             :key="file.path"
             @click="handleFileClick(file)"
             v-longpress="() => handleLongPress(file)"
+            :data-highlight-path="file.path"
+            :class="{ 'file-highlight': highlightedPath === file.path, 'greedy-match': searchMode === 'greedy' }"
           >
             <div slot="start" class="file-thumbnail-slot lazy-thumb-target" :data-file-path="file.path">
                 <img
@@ -309,6 +489,21 @@
               <h2>{{ file.display_name || file.name }}</h2>
               <p v-if="searchQuery && !file.isDirectory" class="search-path">{{ file.path }}</p>
               <p v-if="!file.isDirectory && file.size">{{ formatFileSize(file.size) }}<span v-if="file.modified && !searchQuery"> · {{ formatDateTime(file.modified) }}</span></p>
+              <!-- 🆕 2026-07-02 全文搜索命中预览框：snippet 高亮 + hitCount 计数 + 导航按钮 -->
+              <div v-if="searchFullText && file.snippet" class="fulltext-preview">
+                <div class="fulltext-preview-header">
+                  <ion-badge color="primary" class="hit-count-badge">
+                    {{ file.hitCount || 0 }} 命中
+                  </ion-badge>
+                  <span class="fulltext-preview-source">在内容中</span>
+                </div>
+                <div class="fulltext-snippet">
+                  <template v-for="(part, idx) in renderSnippet(file.snippet)" :key="idx">
+                    <mark v-if="part.highlight" class="snippet-highlight">{{ part.text }}</mark>
+                    <span v-else>{{ part.text }}</span>
+                  </template>
+                </div>
+              </div>
               <!-- 🆕 2026-06-15 multi-mount 适配：mount 伪 item 在根目录展示
                    driver badge + 真实 mount_path + resolved root_path
                    让用户能看到 "这是个 mount，不是普通目录" -->
@@ -323,8 +518,13 @@
                 <ion-chip v-for="tag in file._tags" :key="tag" size="small" color="tertiary" outline>{{ tag }}</ion-chip>
               </div>
             </ion-label>
+            <RelevanceBadge v-if="searchQuery && file.score" :score="file.score" slot="end" />
             <ion-badge v-if="file.isEncrypted" color="warning" slot="end">
               ENCV
+            </ion-badge>
+            <!-- 🆕 2026-07-02 A4：FTS 增强模式：FTS-only 命中（非普通搜索结果）的项打"全文"角标 -->
+            <ion-badge v-if="file._fulltextHit" color="tertiary" slot="end" class="fulltext-hit-badge">
+              全文
             </ion-badge>
             <ion-badge v-for="badge in fileBadges[file.path]" :key="'badge-' + badge.text" :color="badge.color" slot="end">
               {{ badge.text }}
@@ -403,1212 +603,482 @@
 
   </ion-page>
 </template>
-
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { onIonViewWillEnter } from '@ionic/vue'
+// Files.vue 重构后只剩 thin script：调用 useFilesView() composable + 必要 imports。
+// 原 1565 行 script 逻辑已全部抽到 ./useFilesView.ts。
+//
+// template 内直接使用的 state/handler 都在此解构到局部变量，
+// Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
+
 import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonButton,
-  IonContent,
-  IonRefresher,
-  IonRefresherContent,
-  IonList,
-  IonItem,
-  IonIcon,
-  IonLabel,
-  IonBadge,
-  IonSpinner,
-  IonSearchbar,
-  IonToggle,
-  actionSheetController,
-  alertController,
-  menuController,
   IonAlert,
-  IonMenu,
-  IonSegment,
-  IonSegmentButton,
-  IonListHeader,
+  IonBadge,
+  IonButton,
+  IonButtons,
   IonChip,
-  IonModal,
-  IonInput,
+  IonContent,
   IonFab,
   IonFabButton,
-} from '@ionic/vue'
+  IonHeader,
+  IonIcon,
+  IonInput,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonMenu,
+  IonModal,
+  IonPage,
+  IonRefresher,
+  IonRefresherContent,
+  IonSegment,
+  IonSegmentButton,
+  IonSpinner,
+  IonTitle,
+  IonToggle,
+  IonToolbar,
+} from "@ionic/vue";
 import {
+  alertCircle,
   arrowBack,
   chevronForward,
-  folder,
-  folderOpen,
-  eyeOutline,
-  playCircle,
-  lockClosed,
-  cloudOffline,
-  refresh,
-  trash,
-  search,
-  informationCircle,
-  menuOutline,
-  pricetagOutline,
-  createOutline,
-  copyOutline,
-  arrowForwardOutline,
-  shareOutline,
+  close,
   closeCircle,
   closeCircleOutline,
+  cloudOffline,
   filterOutline,
+  folder,
+  folderOpen,
+  lockClosed,
+  menuOutline,
+  pricetagOutline,
+  refresh,
+  search,
   swapVerticalOutline,
-  alertCircle,
-  close,
-  filmOutline,
+  warningOutline,
+} from "ionicons/icons";
+import { formatFileSize } from "@/api/encv";
+import InputWithHistory from "@/components/InputWithHistory.vue";
+import RelevanceBadge from "@/components/shared/RelevanceBadge.vue";
+import { formatDateTime } from "@/composables/useDateFormat";
+import { getFileIcon, getFileIconColor, isImageFile } from "@/composables/useFileList";
+import { useFilesView } from "./useFilesView";
+
+const {
+  // i18n + composable re-exposed values
+  t,
+  vectorSearchStatus,
+  thumbnailUrls,
+  onThumbError,
+  sortBy,
+  sortDesc,
+  mainSortLabel,
+  setSortBy,
+  showMainSort,
+  // connection / loading state
+  serverOnline,
+  noPermission,
+  loading,
+  refreshing,
+  connecting,
+  // file list + sort state
+  fileBadges,
+  fileSubtitles,
+  displayFiles,
+  // path / navigation
+  currentPath,
+  pathSegments,
+  navigateTo,
+  goUp,
+  highlightedPath,
+  mainContentRef,
+  openContainingFolder,
+  // search state
+  searchQuery,
+  searchFullText,
+  searchResults,
+  isSearching,
+  searchMode,
+  // 🆕 A3 contenteditable ref + handlers
+  queryInputRef,
+  onQueryInput,
+  onQueryKeydown,
+  // 🆕 A6 FTS 降级 banner
+  fulltextBanner,
+  dismissFulltextBanner,
+  // 🆕 2026-07-03 搜索空结果诊断
+  searchDiagnostics,
+  refreshSearchDiagnostics,
+  retrySearch,
+  goFullTextIndexFromSearch,
+  // 🆕 旧 handleSearchInput 不再需要（onQueryInput 自动触发）
+  handleSearchClear,
+  handleSearchToggle,
+  insertOperator,
+  renderSnippet,
+  // play error state
+  playError,
+  playErrorDetail,
+  playErrorFile,
+  clearPlayError,
+  togglePlayErrorDetail,
+  // plugin view state
+  selectedPlugin,
+  pluginTab,
+  pluginFiles,
+  pluginLoaded,
+  showPluginFilters,
+  sizeFilterMin,
+  sizeFilterMax,
+  timeFilterFrom,
+  timeFilterTo,
+  pluginSortBy,
+  pluginSortDesc,
+  pluginSortLabel,
+  activeFilterCount,
+  filteredPluginFiles,
+  applySizePreset,
+  applyTimePreset,
+  clearAllPluginFilters,
+  SIZE_PRESETS,
+  TIME_PRESETS,
+  // dialogs + selected
+  showRenameDialog,
+  showTagDialog,
+  showMoveDialog,
+  selectedFile,
+  moveTargetPath,
+  editingFileTags,
+  newTagInput,
+  renameAlertInputs,
+  // menu / drawer
+  plugins,
+  tags,
+  openSideDrawer,
+  exitPluginMode,
+  openPluginView,
+  getPluginIcon,
+  handleTagFilter,
+  // file actions
+  handleRefresh,
+  retryConnection,
+  handleRequestStorage,
+  handleFileClick,
+  handleLongPress,
+  onRenameConfirm,
+  handleMove,
+  handleAddNewTag,
+  handleRemoveTag,
+  handleUpload,
+  handleFileSelected,
+  fileInputRef,
+  // multi-mount 字段访问器
+  mountDriverOf,
+  mountPathOf,
+  mountRootOf,
+  // icons (template 用)
   add,
-  musicalNotesOutline,
-  imageOutline,
-  documentTextOutline,
-  documentOutline,
-} from 'ionicons/icons'
-import {
-  listFiles,
-  listFilesStream,
-  listPluginFilesStream,
-  searchFiles,
-  formatFileSize,
-  getFileCategory,
-  PermissionDeniedError,
-  NotFoundError,
-  deleteFile,
-  renameFile,
-  renameOriginalName,
-  copyFile,
-  moveFile,
-  uploadFile,
-  fetchPlugins,
-  fetchTags,
-  addTag,
-  removeTag,
-  listFilesByTag,
-} from '@/api/encv'
-import type { FileItem, PluginMeta, TagInfo } from '@/api/encv'
-import { eventBus } from '@/composables/useEventBus'
-import { useI18n } from '@/composables/useI18n'
-import { formatDateTime } from '@/composables/useDateFormat'
-import { useThumbnailCache } from '@/composables/useThumbnailCache'
-import { useFileFeatures, findClickHandler, isAnyContainerFile, getFeatureIcon } from '@/composables/useFileFeatures'
-import { preloadSubtitles } from '@/features/alist-encrypt'
-import { isAlistEncrypted, getSessionPassword, setSessionPassword, loadDecodedName, getDecodedName } from '@/features/alist-encrypt/useAlistEncrypt'
-import { promptPassword } from '@/features/alist-encrypt/password-dialog'
-import {
-  isImageFile,
-  getFileIcon,
-  getFileIconColor,
-  useFileListSort,
-  sortFiles,
-} from '@/composables/useFileList'
-import { vLongpress } from '@/directives/longpress'
-import { isNative, requestStoragePermission, openPlayer, openExternal, getLocalFilePath } from '@/plugins/GoProcess'
-import { getExternalStreamUrl } from '@/api/encv'
-import { copyToClipboard } from '@/composables/useClipboard'
-import { showToast } from '@/composables/useToast'
-import { Share } from '@capacitor/share'
-import { PLAY_MODE, type PlayMode, VIDEO_DEFAULT, AUDIO_DEFAULT } from '@/constants/player'
-import InputWithHistory from '@/components/InputWithHistory.vue'
+} = useFilesView();
 
-const ALL_VALID_MODES: PlayMode[] = [
-  PLAY_MODE.ARTPLAYER,
-  PLAY_MODE.MPV_PLUGIN,
-  PLAY_MODE.MPV_ACTIVITY,
-  PLAY_MODE.MPV_FRAGMENT,
-  PLAY_MODE.MPV_COMPOSE,
-  PLAY_MODE.EXTERNAL,
-]
-
-function isValidPlayMode(value: string): value is PlayMode {
-  return (ALL_VALID_MODES as readonly string[]).includes(value)
+// 🆕 2026-07-02 v2 简化：不需要 phraseInsertion 常量（直接调 insertSymbol('__phrase_open__')）
+// 占位：保留空的占位 hooks（focus/blur 事件，可后续加视觉反馈）
+function onQueryFocus() {
+  // 占位：input 聚焦时可以让插入按钮行高亮
 }
-
-function getPlayMode(mediaType: 'video' | 'audio'): PlayMode {
-  const key = mediaType === 'video' ? 'encv_player_video' : 'encv_player_audio'
-  const stored = localStorage.getItem(key)
-  if (stored && isValidPlayMode(stored)) return stored
-  return mediaType === 'video' ? VIDEO_DEFAULT : AUDIO_DEFAULT
-}
-
-const playError = ref<string>('')
-const playErrorDetail = ref<string>('')
-const playErrorFile = ref<string>('')
-
-async function playMedia(file: FileItem, category: string) {
-  const isVideo = category === 'video'
-  const mediaType = isVideo ? 'video' : 'audio'
-  const mimeType = isVideo ? 'video/*' : 'audio/*'
-  const mode = getPlayMode(mediaType)
-
-  console.info('[Files] playMedia: file=', file.path, 'mode=', mode, 'category=', category)
-  playError.value = ''
-  playErrorDetail.value = ''
-  playErrorFile.value = ''
-
-  switch (mode) {
-    case PLAY_MODE.ARTPLAYER:
-      router.push({ path: '/player', query: { path: file.path, name: file.name } })
-      break
-    case PLAY_MODE.MPV_PLUGIN:
-    case PLAY_MODE.MPV_ACTIVITY:
-    case PLAY_MODE.MPV_FRAGMENT:
-    case PLAY_MODE.MPV_COMPOSE:
-      if (isNative()) {
-        const result = await openPlayer(file.path, file.name, mimeType, mode)
-        if (!result.success) {
-          console.error('[Files] playMedia failed:', result.error, result.errorDetail)
-          playError.value = result.error || '播放失败'
-          playErrorDetail.value = result.errorDetail || ''
-          playErrorFile.value = file.name
-        }
-      } else {
-        router.push({ path: '/player', query: { path: file.path, name: file.name } })
-      }
-      break
-    case PLAY_MODE.EXTERNAL:
-      if (isNative()) {
-        const url = getExternalStreamUrl(file.path)
-        openExternal(url, mimeType)
-      } else {
-        router.push({ path: '/player', query: { path: file.path, name: file.name } })
-      }
-      break
-    default:
-      console.debug('[Files] Unknown play mode:', mode, '— falling back to artplayer')
-      router.push({ path: '/player', query: { path: file.path, name: file.name } })
-      break
-  }
-}
-
-function clearPlayError() {
-  playError.value = ''
-  playErrorDetail.value = ''
-  playErrorFile.value = ''
-}
-
-function togglePlayErrorDetail() {
-  if (playErrorDetail.value) {
-    const expanded = playErrorDetail.value
-    playErrorDetail.value = ''
-    playError.value = playError.value + '\n' + expanded
-  }
-}
-
-const { t } = useI18n()
-const { thumbnailUrls, setupLazyThumbnails, onThumbError } = useThumbnailCache()
-const { sortBy, sortDesc } = useFileListSort()
-const showMainSort = ref(false)
-
-const mainSortLabel = computed(() => {
-  const map: Record<string, string> = { name: '名称', size: '大小', time: '时间' }
-  return (map[sortBy.value] || '名称') + (sortDesc.value ? '↓' : '↑')
-})
-const router = useRouter()
-const serverOnline = ref(false)
-const noPermission = ref(false)
-const files = ref<FileItem[]>([])
-const plugins = ref<PluginMeta[]>([])
-const tags = ref<TagInfo[]>([])
-const showRenameDialog = ref(false)
-const showTagDialog = ref(false)
-const showMoveDialog = ref(false)
-const selectedPlugin = ref<PluginMeta | null>(null)
-const selectedFile = ref<FileItem | null>(null)
-const renameValue = ref('')
-const renamePassword = ref('')
-const moveTargetPath = ref('')
-const editingFileTags = ref<string[]>([])
-const newTagInput = ref('')
-const fileTagMap = ref<Record<string, string[]>>({})
-const fileBadges = ref<Record<string, any[]>>({})
-const fileSubtitles = ref<Record<string, any[]>>({})
-
-const { getBadges, getSubtitles, getAllActions } = useFileFeatures()
-
-const renameAlertInputs = computed(() => {
-  const inputs: any[] = [{ name: 'name', type: 'text', placeholder: '新文件名', value: renameValue.value }]
-  if (selectedFile.value?.isEncrypted) {
-    inputs.push({ name: 'password', type: 'text', placeholder: '文件名加密密码（如需要）' })
-  }
-  return inputs
-})
-
-// 🆕 2026-06-15 multi-mount 适配：currentPath 起始改为 '/d'（mount 虚拟根）
-//   旧版：'/' 直接是 serving dir（一个根目录）
-//   新版：'/' 不再合法；根是 '/d'，下面是 mount 列表（primary / automation / sandbox）
-//   后端 /api/files?path=/d → mount registry 解析为 mount 列表
-//   后续 /api/files?path=/d/<name>/... → 走对应 mount driver
-const MOUNT_ROOT = '/d'
-const currentPath = ref(MOUNT_ROOT)
-const loading = ref(false)
-const connecting = ref(false)
-
-// 🆕 2026-06-15 multi-mount 适配：mount 根 /d 由后端 handleListFilesGin 返 mount 列表
-//   - 后端响应里 mount 伪 item 含 mount_driver / mount_path / mount_root 字段
-//   - frontend Files.vue 通过 mountDriverOf(file) / mountPathOf(file) / mountRootOf(file) 访问
-//   - 这里不再维护本地 mounts ref（避免与文件列表数据源不一致）
-const isMountRoot = computed(() => currentPath.value === MOUNT_ROOT)
-
-const searchQuery = ref('')
-const searchRecursive = ref(false)
-const searchResults = ref<FileItem[] | null>(null)
-const isSearching = ref(false)
-let searchTimer: ReturnType<typeof setTimeout> | null = null
-let searchGeneration = 0
-
-const searchCache = new Map<string, { timestamp: number; results: FileItem[] }>()
-const CACHE_TTL = 30000
-
-const MAX_RETRIES = isNative() ? 15 : 3
-const RETRY_DELAY = 1000
-
-const pathSegments = computed(() => {
-  if (currentPath.value === '/d') return [] // mount 根：面包屑在 ion-toolbar v-if 控制不显示
-  // 🆕 2026-06-15 multi-mount 适配：面包屑第一段固定是 'd'（mount 根名）
-  //   旧版：path='/' → 空 parts → []
-  //   新版：path='/d/<name>/<sub>' → 显示 [d, <name>, <sub>]
-  //   第一段点 → 跳到 /d（mount 根）
-  if (currentPath.value === MOUNT_ROOT) return []
-  const parts = currentPath.value.split('/').filter(Boolean)
-  return parts.map((name, index) => {
-    let displayName = name
-    if (index === 0 && name === 'd') {
-      displayName = t('files.mountRoot') || '挂载点' // 第一段显示成"挂载点"
-    } else if (index === 1) {
-      // mount name 段：从 files.value 里找 mount 伪 item（mount_driver 字段存在），
-      // 找不到就原样用路径段（容错）
-      const m = files.value.find(
-        (f) =>
-          f.isDirectory &&
-          mountDriverOf(f) != null &&
-          f.name === name,
-      )
-      if (m) displayName = m.name
-    }
-    return {
-      name: displayName,
-      path: '/' + parts.slice(0, index + 1).join('/'),
-    }
-  })
-})
-
-const displayFiles = computed(() => {
-  const raw = searchResults.value !== null ? searchResults.value : sortedFiles.value
-  const tagMap = fileTagMap.value
-  return raw.map(f => ({ ...f, _tags: tagMap[f.path] || [] }))
-})
-
-const sortedFiles = computed(() => {
-  return sortFiles(files.value, sortBy.value, sortDesc.value)
-})
-
-let loadGeneration = 0
-
-// 🆕 2026-06-15 multi-mount 适配：根目录 /d 由后端 handleListFilesGin 返 mount 列表
-//   旧前端逻辑：currentPath='/' → 后端列 serving dir 子目录
-//   新前端逻辑：currentPath='/d' → 后端 mountListAsFiles 返 mount 列表 → Files.vue 当目录展示
-//   mount 伪 item 包含 mount_driver / mount_path / mount_root 字段
-//   进 mount 后 currentPath='/d/<name>' → listFiles 走 mount.Resolve → 列 mount root 下的文件
-async function loadFiles() {
-  // mount 根走 listFiles 走 stream 同样路径 /api/files/stream?path=/d → 后端 mountListAsFiles
-  //   让前端只需维护一个 loadFiles 路径
-  console.info('[Files] Loading files (stream), path:', currentPath.value)
-  const gen = ++loadGeneration
-  loading.value = true
-  connecting.value = false
-  noPermission.value = false
-  files.value = []
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    if (gen !== loadGeneration) return
-
-    try {
-      const result = await listFilesStream(currentPath.value, (file) => {
-        if (gen !== loadGeneration) return
-        files.value.push(file)
-        if (files.value.length === 1 && loading.value) {
-          loading.value = false
-          console.info('[Files] First item arrived, UI unlocked')
-        }
-      })
-
-      serverOnline.value = true
-      noPermission.value = false
-      loading.value = false
-      connecting.value = false
-      console.info('[Files] Stream complete, total:', result.files.length, 'files')
-
-      loadFileTagsForCurrentDir()
-      return
-    } catch (error) {
-      if (error instanceof PermissionDeniedError) {
-        serverOnline.value = true
-        noPermission.value = true
-        loading.value = false
-        connecting.value = false
-        return
-      }
-      if (error instanceof NotFoundError) {
-        serverOnline.value = true
-        loading.value = false
-        connecting.value = false
-        if (currentPath.value !== '/d') {
-          showToast({ message: t('files.pathNotFound'), duration: 2000, color: 'warning' })
-          goUp()
-        }
-        return
-      }
-      if (attempt < MAX_RETRIES) {
-        connecting.value = true
-        await new Promise(r => setTimeout(r, RETRY_DELAY))
-      }
-    }
-  }
-
-  if (gen !== loadGeneration) return
-  serverOnline.value = false
-  loading.value = false
-  connecting.value = false
-}
-
-async function handleRefresh(event: CustomEvent) {
-  if (selectedPlugin.value) {
-    pluginFiles.value = []
-    pluginLoaded.value = false
-    try {
-      const results = await searchPluginFiles(selectedPlugin.value)
-      pluginFiles.value = results
-    } catch (e) {
-      console.debug('[Files] Plugin refresh failed:', e)
-    } finally {
-      pluginLoaded.value = true
-    }
-  } else {
-    try {
-      files.value = await listFiles(currentPath.value)
-      serverOnline.value = true
-      noPermission.value = false
-      loadFileTagsForCurrentDir()
-    } catch (error) {
-      if (error instanceof PermissionDeniedError) {
-        serverOnline.value = true
-        noPermission.value = true
-      }
-      if (error instanceof NotFoundError) {
-        serverOnline.value = true
-        if (currentPath.value !== '/d') {
-          goUp()
-        }
-      }
-    }
-  }
-  ;(event.target as any)?.complete?.()
-}
-
-async function retryConnection() {
-  await loadFiles()
-}
-
-async function handleRequestStorage() {
-  console.info('[Files] Requesting storage permission')
-  await requestStoragePermission()
-  setTimeout(() => loadFiles(), 1500)
-}
-
-function navigateTo(path: string) {
-  currentPath.value = path
-  searchQuery.value = ''
-  searchResults.value = null
-  loadFiles()
-}
-
-function openContainingFolder(file: FileItem) {
-  // 🆕 2026-06-15 multi-mount 适配：父目录 = /d/<mount_name>
-  //   旧版：file.path='/foo/bar.txt' → parent='/foo'
-  //   新版：file.path='/d/primary/foo/bar.txt' → parent='/d/primary'（不能进 /d/foo）
-  const parts = file.path.split('/').filter(Boolean)
-  let parentDir: string
-  if (parts.length >= 2 && parts[0] === 'd') {
-    // /d/<name>/... → 父 = /d/<name>
-    parentDir = '/' + parts.slice(0, 2).join('/')
-  } else {
-    parentDir = file.path.substring(0, file.path.lastIndexOf('/')) || MOUNT_ROOT
-  }
-  searchQuery.value = ''
-  searchResults.value = null
-  navigateTo(parentDir)
-}
-
-function goUp() {
-  // 🆕 2026-06-15 multi-mount 适配：
-  //   旧版：'/' 不能再上；其他路径弹掉最后一段
-  //   新版：'/d' 不能再上；'/d/<name>' 上到 '/d'；'/<more>' 弹最后一段
-  if (isMountRoot.value) return
-  const parts = currentPath.value.split('/').filter(Boolean)
-  if (parts.length === 2 && parts[0] === 'd') {
-    // 当前在 /d/<name> 顶层 → 退到 /d
-    currentPath.value = MOUNT_ROOT
-  } else {
-    parts.pop()
-    currentPath.value = parts.length === 0 ? MOUNT_ROOT : '/' + parts.join('/')
-  }
-  searchQuery.value = ''
-  searchResults.value = null
-  loadFiles()
-}
-
-async function handleFileClick(file: FileItem) {
-  const clickResult = await findClickHandler(file)
-  if (clickResult?.handled) {
-    const cached = getSessionPassword(file.path)
-    let password: string | undefined | null = cached
-    if (!password) {
-      password = await promptPassword(file.name)
-      if (!password) return
-    }
-    setSessionPassword(file.path, password)
-    if (isAlistEncrypted(file)) {
-      await loadDecodedName(file, password)
-    }
-    const displayName = isAlistEncrypted(file)
-      ? (getDecodedName(file.path) || file.name)
-      : file.name
-    router.push({ path: '/player', query: { path: file.path, name: displayName, alistPath: file.path, alistPassword: password } })
-    return
-  }
-
-  if (file.isDirectory) {
-    // 🆕 2026-06-15 multi-mount 适配：根目录已是 /d
-    //   旧版：'/' + name = '/<name>'
-    //   新版：'/d' + name = '/d/<name>'
-    const base = currentPath.value === '/d' ? '/d' : currentPath.value
-    const newPath = base + '/' + file.name
-    navigateTo(newPath)
-    return
-  }
-
-  if (isAlistEncrypted(file)) {
-    const password = await promptPassword(file.name)
-    if (!password) return
-    router.push({ path: '/player', query: { path: file.path, name: file.name, alistPath: file.path, alistPassword: password } })
-    return
-  }
-
-  if (file.isEncrypted) {
-    router.push({
-      path: '/tabs/preview',
-      query: { path: file.path, name: file.name, isEncrypted: 'true' },
-    })
-    return
-  }
-
-  const category = getFileCategory(file.name)
-  console.info('[Files] Click:', file.name, 'category:', category)
-  if (category === 'video' || category === 'audio') {
-    playMedia(file, category)
-  } else {
-    router.push({
-      path: '/tabs/preview',
-      query: { path: file.path, name: file.name, isEncrypted: 'false' },
-    })
-  }
-}
-
-function handleSearchInput() {
-  const query = searchQuery.value.trim()
-  if (!query) {
-    searchGeneration++
-    searchResults.value = null
-    isSearching.value = false
-    return
-  }
-  searchTimer = setTimeout(() => performSearch(), searchRecursive.value ? 600 : 300)
-}
-
-function handleSearchClear() {
-  searchGeneration++
-  searchQuery.value = ''
-  searchResults.value = null
-  isSearching.value = false
-}
-
-function handleSearchToggle() {
-  if (searchQuery.value.trim()) {
-    performSearch()
-  }
-}
-
-async function performSearch() {
-  const query = searchQuery.value.trim()
-  if (!query) return
-  if (selectedPlugin.value) return
-
-  if (isSearching.value) {
-    searchGeneration++
-  }
-  const gen = ++searchGeneration
-
-  const cacheKey = `${currentPath.value}:${query}:${searchRecursive.value}`
-  const cached = searchCache.get(cacheKey)
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    searchResults.value = cached.results
-    return
-  }
-
-  isSearching.value = true
-  try {
-    const results = await searchFiles(currentPath.value, query, searchRecursive.value)
-    if (gen !== searchGeneration) return
-    searchResults.value = results
-    searchCache.set(cacheKey, { timestamp: Date.now(), results })
-  } catch {
-    if (gen !== searchGeneration) return
-    searchResults.value = []
-  }
-  isSearching.value = false
-}
-
-async function handleLongPress(file: FileItem) {
-  const category = file.isDirectory ? 'directory' : getFileCategory(file.name)
-
-  const buttons: any[] = []
-
-  // ===== Section 1: 查看 / 打开 =====
-  buttons.push({
-    text: t('files.info'),
-    icon: informationCircle,
-    cssClass: 'action-section-view',
-    handler: () => {
-      router.push({ path: '/tabs/file-info', query: { path: file.path, name: file.name } })
-    },
-  })
-
-  if (file.isDirectory) {
-    buttons.push({
-      text: t('files.open'),
-      icon: folderOpen,
-      cssClass: 'action-section-view',
-      handler: () => {
-        // 🆕 2026-06-15 multi-mount 适配：根目录 /d + name
-        const base = currentPath.value === '/d' ? '/d' : currentPath.value
-        const newPath = base + '/' + file.name
-        navigateTo(newPath)
-      },
-    })
-  } else if (file.isEncrypted) {
-    buttons.push({
-      text: t('files.preview'),
-      icon: eyeOutline,
-      cssClass: 'action-section-view',
-      handler: () => {
-        router.push({
-          path: '/tabs/preview',
-          query: { path: file.path, name: file.name, isEncrypted: 'true' },
-        })
-      },
-    })
-  } else {
-    const isMedia = category === 'video' || category === 'audio'
-
-    const featureActions = await getAllActions(file)
-    for (const fa of featureActions) {
-      buttons.push({
-        text: fa.text(),
-        icon: fa.icon,
-        cssClass: 'action-section-view',
-        ...(fa.color ? { role: undefined, cssClass: `action-section-view action-color-${fa.color}` } : {}),
-        handler: () => {
-          fa.handler(file)
-        },
-      })
-    }
-
-    buttons.push({
-      text: isMedia ? t('files.play') : t('files.preview'),
-      icon: isMedia ? playCircle : eyeOutline,
-      cssClass: 'action-section-view',
-      handler: () => {
-        if (isMedia) {
-          playMedia(file, category)
-        } else {
-          router.push({
-            path: '/tabs/preview',
-            query: { path: file.path, name: file.name, isEncrypted: 'false' },
-          })
-        }
-      },
-    })
-  }
-
-  // ===== Section 3: 文件管理 =====
-  buttons.push({
-    text: '重命名',
-    icon: createOutline,
-    cssClass: 'action-section-manage',
-    handler: () => {
-      selectedFile.value = file
-      renameValue.value = file.name
-      renamePassword.value = ''
-      showRenameDialog.value = true
-    },
-  })
-  buttons.push({
-    text: '复制',
-    icon: copyOutline,
-    cssClass: 'action-section-manage',
-    handler: () => {
-      handleCopy(file)
-    },
-  })
-  buttons.push({
-    text: '移动',
-    icon: arrowForwardOutline,
-    cssClass: 'action-section-manage',
-    handler: () => {
-      selectedFile.value = file
-      moveTargetPath.value = currentPath.value
-      showMoveDialog.value = true
-    },
-  })
-  buttons.push({
-    text: '分享',
-    icon: shareOutline,
-    cssClass: 'action-section-manage',
-    handler: () => {
-      handleShare(file)
-    },
-  })
-  buttons.push({
-    text: '标签管理',
-    icon: pricetagOutline,
-    cssClass: 'action-section-manage',
-    handler: async () => {
-      selectedFile.value = file
-      newTagInput.value = ''
-      editingFileTags.value = []
-      showTagDialog.value = true
-      try {
-        const allTags = await fetchTags()
-        editingFileTags.value = allTags
-          .filter(t => t.count > 0)
-          .map(t => t.name)
-          .slice(0, 10)
-      } catch {}
-    },
-  })
-
-  // ===== Section 4: 危险操作 =====
-  // 🆕 2026-06-10 修复：文件夹长按菜单缺少删除操作
-  // 历史 bug：line 1041 `if (!file.isDirectory)` 阻止文件夹删除
-  // 修复：去掉 !file.isDirectory 条件 — 文件 / 文件夹都能删除
-  buttons.push({
-    text: t('files.delete'),
-    icon: trash,
-    role: 'destructive',
-    cssClass: 'action-section-danger',
-    handler: () => {
-      handleDeleteFile(file)
-    },
-  })
-
-  buttons.push({
-    text: t('files.cancelSelect'),
-    role: 'cancel',
-  })
-
-  const actionSheet = await actionSheetController.create({
-    header: file.name,
-    buttons,
-    cssClass: 'file-action-sheet',
-  })
-  await actionSheet.present()
-}
-
-async function handleCopy(file: FileItem) {
-  const ext = file.name.includes('.') ? '.' + file.name.split('.').pop() : ''
-  const baseName = ext ? file.name.slice(0, -ext.length) : file.name
-  const destName = `${baseName}_copy${ext}`
-  // 🆕 2026-06-15 multi-mount 适配：根目录 /d 而不是 /
-  const destPath = currentPath.value === '/d' ? `/d/${destName}` : `${currentPath.value}/${destName}`
-  try {
-    await copyFile(file.path, destPath)
-    await loadFiles()
-  } catch (e) { showToast({ message: `复制失败: ${e}` }) }
-}
-
-function onRenameConfirm(d: any) {
-  renameValue.value = d.name ?? renameValue.value
-  renamePassword.value = d.password ?? ''
-  if (selectedFile.value) handleRename(selectedFile.value)
-}
-
-async function handleRename(file: FileItem) {
-  if (!renameValue.value.trim() || renameValue.value === file.name) return
-  try {
-    if (file.isEncrypted) {
-      const result = await renameOriginalName(file.path, renameValue.value.trim(), renamePassword.value.trim() || undefined)
-      if (result.success) {
-        showToast({ message: '原始文件名已更新' })
-      }
-    } else {
-      await renameFile(file.path, renameValue.value.trim())
-    }
-    showRenameDialog.value = false
-    renamePassword.value = ''
-    await loadFiles()
-  } catch (e) { showToast({ message: `重命名失败: ${e}` }) }
-}
-
-async function handleMove(file: FileItem) {
-  if (!moveTargetPath.value || moveTargetPath.value === file.path) return
-  try {
-    const destPath = moveTargetPath.value.endsWith('/') ? `${moveTargetPath.value}${file.name}` : `${moveTargetPath.value}/${file.name}`
-    await moveFile(file.path, destPath)
-    showMoveDialog.value = false
-    await loadFiles()
-  } catch (e) { showToast({ message: `移动失败: ${e}` }) }
-}
-
-async function handleShare(file: FileItem) {
-  if (isNative()) {
-    try {
-      const localPath = await getLocalFilePath(file.path)
-      if (localPath) {
-        await Share.share({ title: file.name, url: 'file://' + localPath })
-      } else {
-        showToast({ message: '仅支持本地文件分享', duration: 2500, color: 'warning' })
-      }
-    } catch (e) { showToast({ message: '分享失败或已取消' }) }
-  } else {
-    copyToClipboard(getExternalStreamUrl(file.path)).then(ok => showToast({ message: ok ? '链接已复制到剪贴板' : '复制失败', color: ok ? 'success' : 'danger' }))
-  }
-}
-
-const fileInputRef = ref<HTMLInputElement>()
-
-function handleUpload() {
-  fileInputRef.value?.click()
-}
-
-async function handleFileSelected(event: Event) {
-  const input = event.target as HTMLInputElement
-  if (!input.files?.length) return
-
-  const files = Array.from(input.files)
-  let successCount = 0
-  let failCount = 0
-
-  for (const file of files) {
-    try {
-      showToast({ message: `正在上传: ${file.name}...`, color: 'primary', duration: 2000 })
-      await uploadFile(currentPath.value, file)
-      successCount++
-    } catch (e) {
-      console.error('[Files] upload failed:', file.name, e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-      failCount++
-    }
-  }
-
-  if (successCount > 0) {
-    showToast({
-      message: `成功上传 ${successCount} 个文件${failCount > 0 ? `，${failCount} 个失败` : ''}`,
-      color: failCount > 0 ? 'warning' : 'success',
-      duration: 3000,
-    })
-    await loadFiles()
-  }
-
-  input.value = ''
-}
-
-async function handleAddNewTag() {
-  if (!selectedFile.value || !newTagInput.value.trim()) return
-  const tag = newTagInput.value.trim()
-  if (editingFileTags.value.includes(tag)) {
-    newTagInput.value = ''
-    return
-  }
-  try {
-    await addTag(selectedFile.value.path, tag)
-    editingFileTags.value.push(tag)
-    newTagInput.value = ''
-  } catch (e) { showToast({ message: '添加标签失败' }) }
-}
-
-async function handleRemoveTag(tag: string) {
-  if (!selectedFile.value) return
-  try {
-    await removeTag(selectedFile.value.path, tag)
-    editingFileTags.value = editingFileTags.value.filter(t => t !== tag)
-  } catch (e) { showToast({ message: '移除标签失败' }) }
-}
-
-async function loadFileTagsForCurrentDir() {
-  try {
-    const allTags = await fetchTags()
-    const map: Record<string, string[]> = {}
-    for (const tag of allTags) {
-      if (tag.count > 0) {
-        for (const f of files.value) {
-          if (!map[f.path]) map[f.path] = []
-          map[f.path].push(tag.name)
-        }
-      }
-    }
-    fileTagMap.value = map
-  } catch {}
-
-  const badgesMap: Record<string, any[]> = {}
-  const subtitlesMap: Record<string, any[]> = {}
-  for (const f of files.value) {
-    const badges = await getBadges(f)
-    if (badges.length > 0) badgesMap[f.path] = badges
-    const subs = await getSubtitles(f)
-    if (subs.length > 0) subtitlesMap[f.path] = subs
-  }
-  fileBadges.value = badgesMap
-  fileSubtitles.value = subtitlesMap
-
-  preloadSubtitles(files.value)
-  setupLazyThumbnails()
-}
-
-async function handleDeleteFile(file: FileItem) {
-  // 🆕 2026-06-10 修复 #1：删除安全防御
-  //   1) 根目录客户端拦截
-  //   2) 文件夹二次确认（防误删整目录）
-  //   3) 文件夹删除前先 list 一次，让用户看到"包含 N 个文件 + M 个子目录"
-  //   4) 详细错误 toast（把后端 error 透传给用户）
-  if (file.path === '/' || file.path === '') {
-    showToast({ message: '不能删除根目录', duration: 2000, color: 'danger' })
-    return
-  }
-
-  if (file.isDirectory) {
-    // 🆕 删除文件夹前先 list 一次，让用户在确认前看到包含多少内容
-    let detail = '此操作不可撤销'
-    try {
-      const list = await listFiles(file.path)
-      const filesInDir = list.filter((f: FileItem) => !f.isDirectory).length
-      const subDirs = list.filter((f: FileItem) => f.isDirectory).length
-      detail = `包含 ${filesInDir} 个文件 + ${subDirs} 个子目录，此操作不可撤销。`
-    } catch (e) {
-      // list 失败：仍允许删除（用户可能想强制删一个无法 list 的目录）
-      console.warn('[Files] list directory failed before delete:', file.path, e)
-    }
-    const dirAlert = await alertController.create({
-      header: t('files.delete'),
-      subHeader: `📁 ${file.name}`,
-      message: `确认删除文件夹 "${file.name}" 及其所有内容？\n\n${detail}`,
-      buttons: [
-        { text: t('files.cancelSelect'), role: 'cancel' },
-        { text: t('files.delete'), role: 'destructive', handler: () => doDelete(file) },
-      ],
-    })
-    await dirAlert.present()
-  } else {
-    // 文件删除用普通 alert
-    const alert = await alertController.create({
-      header: t('files.delete'),
-      message: t('files.deleteConfirm', { name: file.name }),
-      buttons: [
-        { text: t('files.cancelSelect'), role: 'cancel' },
-        { text: t('files.delete'), role: 'destructive', handler: () => doDelete(file) },
-      ],
-    })
-    await alert.present()
-  }
-}
-
-async function doDelete(file: FileItem) {
-  try {
-    await deleteFile(file.path)
-    await loadFiles()
-    showToast({ message: `已删除 ${file.name}`, duration: 1500, color: 'success' })
-  } catch (e) {
-    // 🆕 把后端 error message 完整透传给用户（不只说"删除失败"）
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error('[Files] deleteFile failed:', file.path, msg)
-    showToast({ message: `${t('files.deleteFailed')}: ${msg}`, duration: 3500, color: 'danger' })
-  }
-}
-
-function onFileChange() {
-  searchCache.clear()
-  loadFiles()
-}
-
-async function loadPlugins() {
-  try { plugins.value = await fetchPlugins() } catch {}
-}
-async function loadTags() {
-  try { tags.value = await fetchTags() } catch {}
-}
-
-function openPluginView(plugin: PluginMeta) {
-  files.value = []
-  loading.value = true
-  pluginLoaded.value = false
-  selectedPlugin.value = plugin
-  menuController.close()
-}
-
-async function exitPluginMode() {
-  selectedPlugin.value = null
-  await menuController.close()
-  files.value = []
-  loading.value = true
-  await loadFiles()
-}
-
-async function openSideDrawer() {
-  await menuController.open('plugin-menu')
-}
-
-function getPluginIcon(plugin: PluginMeta): any {
-  const featureIcon = getFeatureIcon(plugin.name)
-  if (featureIcon) return featureIcon
-  const icons: Record<string, string> = { video: filmOutline, audio: musicalNotesOutline, image: imageOutline, pdf: documentTextOutline, text: documentOutline, wps: documentOutline }
-  return icons[plugin.name] || lockClosed
-}
-
-// 🆕 2026-06-15 multi-mount 适配：mount 伪 item 字段访问器
-//   强类型访问 (file as any) 在 template 里太丑，集中到 helper 里
-function mountDriverOf(file: FileItem): string | null {
-  const f = file as FileItem & { mount_driver?: string }
-  return f.mount_driver ?? null
-}
-function mountPathOf(file: FileItem): string {
-  const f = file as FileItem & { mount_path?: string }
-  return f.mount_path ?? ''
-}
-function mountRootOf(file: FileItem): string {
-  const f = file as FileItem & { mount_root?: string }
-  return f.mount_root ?? ''
-}
-
-async function searchPluginFiles(
-  plugin: PluginMeta,
-  onItem?: (file: FileItem) => void
-): Promise<FileItem[]> {
-  if (!plugin.supportedExtensions || plugin.supportedExtensions.length === 0) return []
-  const result = await listPluginFilesStream(
-    currentPath.value,
-    plugin.supportedExtensions,
-    (file) => { onItem?.(file) }
-  )
-  return result.files
-}
-
-async function handleTagFilter(tagName: string) {
-  menuController.close()
-  files.value = []
-  loading.value = true
-  selectedPlugin.value = null
-  try {
-    files.value = await listFilesByTag(tagName, currentPath.value)
-    loadFileTagsForCurrentDir()
-  } catch (e) { showToast({ message: `筛选失败: ${e}` }) }
-  finally { loading.value = false }
-}
-
-const pluginTab = ref<'source' | 'container'>('source')
-const pluginFiles = ref<FileItem[]>([])
-const pluginLoaded = ref(false)
-let pluginLoadGeneration = 0
-
-const sizeFilterMin = ref<number | null>(null)
-const sizeFilterMax = ref<number | null>(null)
-const timeFilterFrom = ref<string | null>(null)
-const timeFilterTo = ref<string | null>(null)
-const showPluginFilters = ref(false)
-
-const pluginSortBy = ref<'name' | 'size' | 'time'>('name')
-const pluginSortDesc = ref(false)
-
-const pluginSortLabel = computed(() => {
-  const map: Record<string, string> = { name: '名称', size: '大小', time: '时间' }
-  return (map[pluginSortBy.value] || '名称') + (pluginSortDesc.value ? '↓' : '↑')
-})
-
-const SIZE_PRESETS = [
-  { label: '< 1MB', max: 1024 * 1024 },
-  { label: '1MB - 10MB', min: 1024 * 1024, max: 10 * 1024 * 1024 },
-  { label: '10MB - 100MB', min: 10 * 1024 * 1024, max: 100 * 1024 * 1024 },
-  { label: '> 100MB', min: 100 * 1024 * 1024 },
-] as const
-const TIME_PRESETS = [
-  { label: '今天', days: 0 },
-  { label: '近 3 天', days: 3 },
-  { label: '近 7 天', days: 7 },
-  { label: '近 30 天', days: 30 },
-] as const
-
-const activeFilterCount = computed(() => {
-  let c = 0
-  if (sizeFilterMin.value !== null) c++
-  if (sizeFilterMax.value !== null) c++
-  if (timeFilterFrom.value !== null) c++
-  if (timeFilterTo.value !== null) c++
-  return c
-})
-
-function applySizePreset(preset: typeof SIZE_PRESETS[number]) {
-  sizeFilterMin.value = 'min' in preset ? (preset as { min?: number }).min ?? null : null
-  sizeFilterMax.value = 'max' in preset ? (preset as { max?: number }).max ?? null : null
-}
-function applyTimePreset(preset: typeof TIME_PRESETS[number]) {
-  const now = new Date()
-  const from = new Date(now)
-  from.setDate(from.getDate() - preset.days)
-  from.setHours(0, 0, 0, 0)
-  timeFilterFrom.value = formatDateInput(from)
-  if (preset.days === 0) {
-    timeFilterTo.value = formatDateInput(now)
-  } else {
-    timeFilterTo.value = null
-  }
-}
-
-function formatDateInput(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
-function clearAllPluginFilters() {
-  sizeFilterMin.value = null
-  sizeFilterMax.value = null
-  timeFilterFrom.value = null
-  timeFilterTo.value = null
-  pluginSortBy.value = 'name'
-  pluginSortDesc.value = false
-}
-const filteredPluginFiles = computed(() => {
-  if (!selectedPlugin.value) return []
-  let list: FileItem[]
-  if (pluginTab.value === 'container') {
-    list = pluginFiles.value.filter(f => isAnyContainerFile(f))
-  } else {
-    list = pluginFiles.value.filter(f => !isAnyContainerFile(f))
-  }
-  const query = searchQuery.value.trim().toLowerCase()
-  if (query) {
-    list = list.filter(f => f.name.toLowerCase().includes(query))
-  }
-  if (sizeFilterMin.value !== null) {
-    list = list.filter(f => (f.size || 0) >= sizeFilterMin.value!)
-  }
-  if (sizeFilterMax.value !== null) {
-    list = list.filter(f => (f.size || 0) <= sizeFilterMax.value!)
-  }
-  if (timeFilterFrom.value !== null) {
-    const from = new Date(timeFilterFrom.value).getTime()
-    list = list.filter(f => (f.modified ? new Date(f.modified).getTime() : 0) >= from)
-  }
-  if (timeFilterTo.value !== null) {
-    const to = new Date(timeFilterTo.value).getTime()
-    list = list.filter(f => (f.modified ? new Date(f.modified).getTime() : 0) <= to)
-  }
-  list.sort((a, b) => {
-    if (a.isDirectory && !b.isDirectory) return -1
-    if (!a.isDirectory && b.isDirectory) return 1
-    let cmp = 0
-    switch (pluginSortBy.value) {
-      case 'name': cmp = a.name.localeCompare(b.name); break
-      case 'size': cmp = (a.size || 0) - (b.size || 0); break
-      case 'time': cmp = (Number(a.modified) || 0) - (Number(b.modified) || 0); break
-    }
-    return pluginSortDesc.value ? -cmp : cmp
-  })
-  const tagMap = fileTagMap.value
-  return list.map(f => ({ ...f, _tags: tagMap[f.path] || [] }))
-})
-
-watch(selectedPlugin, async (plugin) => {
-  if (plugin) {
-    const gen = ++pluginLoadGeneration
-    pluginTab.value = 'source'
-    pluginLoaded.value = false
-    pluginFiles.value = []
-    console.info('[Files] Loading plugin files (stream):', plugin.name)
-    try {
-      const results = await searchPluginFiles(plugin, (file) => {
-        if (gen !== pluginLoadGeneration) return
-        pluginFiles.value.push(file)
-        if (pluginFiles.value.length === 1 && !pluginLoaded.value) {
-          console.info('[Files] First plugin item arrived, UI unlocked')
-        }
-      })
-      if (gen !== pluginLoadGeneration) return
-      pluginFiles.value = results
-    } catch (e) {
-      console.debug('[Files] Plugin stream load failed:', e)
-    }
-    if (gen === pluginLoadGeneration) {
-      pluginLoaded.value = true
-      setupLazyThumbnails()
-    }
-  }
-})
-
-function onBackendReady(data: { port?: number; running?: boolean }) {
-  if (data.running || data.port) {
-    loadFiles()
-  }
-}
-
-onMounted(() => {
-  loadFiles()
-  loadPlugins()
-  loadTags()
-  eventBus.on('file:change', onFileChange)
-  window.addEventListener('encv:backend-ready', onBackendReadyWindow as EventListener)
-  if (import.meta.env.DEV) {
-    import('@/composables/useTestBackdoor').then(({ useTestBackdoor }) => {
-      import('@/composables/useNewTaskModal').then(({ useNewTaskModal: createNewTaskModal }) => {
-        const { openNewTask } = createNewTaskModal()
-        useTestBackdoor(files, {
-          onLongPress: handleLongPress,
-          onClick: handleFileClick,
-          navigateTo: navigateTo,
-          openNewTask: (sourcePath?: string, taskType?: 'encrypt' | 'decrypt') => {
-            return openNewTask(sourcePath, taskType)
-          },
-        })
-      })
-    })
-  }
-})
-
-onIonViewWillEnter(() => {
-  if (files.value.length === 0 && !loading.value && !connecting.value) {
-    loadFiles()
-  }
-})
-
-onUnmounted(() => {
-  eventBus.off('file:change', onFileChange)
-  window.removeEventListener('encv:backend-ready', onBackendReadyWindow as EventListener)
-  if (searchTimer) clearTimeout(searchTimer)
-})
-
-function onBackendReadyWindow(event: Event) {
-  const detail = (event as CustomEvent).detail || {}
-  onBackendReady(detail)
+function onQueryBlur() {
+  // 占位：input 失焦时不立即清空（用户可能想看高亮结果）
 }
 </script>
 
 <style scoped>
-/* 播放错误展示区域 */
+/* 🆕 2026-07-02 全文搜索命中预览框 */
+.fulltext-preview {
+  margin-top: 4px;
+  padding: 6px 8px;
+  background: var(--ion-color-light-shade, #f4f4f4);
+  border-left: 3px solid var(--ion-color-primary, #4f8cff);
+  border-radius: 4px;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+/* 🆕 2026-07-02 搜索语法高亮：符号 overlay（在搜索框下方展示输入） */
+.search-syntax-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  background: var(--ion-color-light-tint, #fafafa);
+  min-height: 32px;
+  align-items: center;
+  font-size: 0.85em;
+  line-height: 1.4;
+  color: var(--ion-text-color, #333);
+}
+
+.syntax-token-text {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  color: var(--ion-text-color, #333);
+}
+
+.syntax-token-text.syntax-word {
+  color: var(--ion-text-color, #333);
+}
+
+.syntax-token-text.syntax-op {
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ion-color-warning-tint, #fff4d6);
+  color: var(--ion-color-warning-shade, #b07a00);
+}
+
+.syntax-token-text.syntax-or {
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ion-color-primary-tint, #d6e6ff);
+  color: var(--ion-color-primary-shade, #2962cc);
+}
+
+.syntax-token-text.syntax-not {
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ion-color-danger-tint, #ffd6d6);
+  color: var(--ion-color-danger-shade, #b00020);
+}
+
+.syntax-token-text.syntax-phrase {
+  font-style: italic;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ion-color-success-tint, #d6f5d6);
+  color: var(--ion-color-success-shade, #1b6b1b);
+}
+
+.syntax-token-text.syntax-regex {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--ion-color-tertiary-tint, #e6d6f5);
+  color: var(--ion-color-tertiary-shade, #6b3aa0);
+}
+
+/* 🆕 2026-07-02 插入操作符按钮行（搜索框内操作） */
+.search-insert-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 12px;
+  border-top: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  background: var(--ion-color-light, #ffffff);
+  align-items: center;
+  min-height: 36px;
+}
+
+.search-insert-bar .insert-label {
+  font-size: 0.75em;
+  color: var(--ion-color-medium, #666);
+  margin-right: 4px;
+}
+
+.search-insert-bar .insert-btn {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.85em;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  background: var(--ion-color-light-tint, #fafafa);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.search-insert-bar .insert-btn:hover {
+  background: var(--ion-color-light-shade, #f0f0f0);
+}
+
+.search-insert-bar .insert-btn.op-and { color: var(--ion-color-warning-shade, #b07a00); }
+.search-insert-bar .insert-btn.op-or { color: var(--ion-color-primary-shade, #2962cc); }
+.search-insert-bar .insert-btn.op-not { color: var(--ion-color-danger-shade, #b00020); }
+.search-insert-bar .insert-btn.op-phrase { color: var(--ion-color-success-shade, #1b6b1b); }
+.search-insert-bar .insert-btn.op-regex { color: var(--ion-color-tertiary-shade, #6b3aa0); }
+
+/* 🆕 2026-07-02 A3：contenteditable 搜索输入框 + span units（替换 ion-searchbar） */
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ion-color-light-shade, #e0e0e0);
+}
+
+.query-input {
+  flex: 1;
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 0.95em;
+  line-height: 1.4;
+  border: 1px solid var(--ion-color-light-shade, #d0d0d0);
+  border-radius: 4px;
+  background: var(--ion-color-light, #ffffff);
+  outline: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: text;
+  user-select: text;
+}
+
+.query-input:focus {
+  border-color: var(--ion-color-primary, #4f8cff);
+  box-shadow: 0 0 0 2px var(--ion-color-primary-tint, #d6e4ff);
+}
+
+/* 空内容时显示 placeholder（用 :empty + ::before） */
+.query-input:empty::before,
+.query-input[data-empty="true"]::before {
+  content: attr(placeholder);
+  color: var(--ion-color-medium, #999);
+  pointer-events: none;
+}
+
+/* 输入框内的 span unit 样式 */
+.query-input :deep(.syntax-text-span) {
+  color: var(--ion-text-color, #333);
+}
+
+.query-input :deep(.syntax-op-span) {
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  cursor: default;
+  user-select: none;
+}
+
+.query-input :deep(.syntax-op-span.syntax-op) {
+  background: var(--ion-color-warning-tint, #fff4d6);
+  color: var(--ion-color-warning-shade, #b07a00);
+}
+
+.query-input :deep(.syntax-op-span.syntax-or) {
+  background: var(--ion-color-primary-tint, #d6e4ff);
+  color: var(--ion-color-primary-shade, #2962cc);
+}
+
+.query-input :deep(.syntax-op-span.syntax-not) {
+  background: var(--ion-color-danger-tint, #fbd6d6);
+  color: var(--ion-color-danger-shade, #b00020);
+}
+
+.query-input :deep(.syntax-op-span.syntax-phrase) {
+  background: var(--ion-color-success-tint, #d6f5d6);
+  color: var(--ion-color-success-shade, #1b6b1b);
+  font-style: italic;
+}
+
+.query-input :deep(.syntax-op-span.syntax-regex) {
+  background: var(--ion-color-tertiary-tint, #e6d6f5);
+  color: var(--ion-color-tertiary-shade, #6b3aa0);
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.query-clear-btn {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: var(--ion-color-medium, #999);
+  color: white;
+  border-radius: 50%;
+  font-size: 1.1em;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.query-clear-btn:hover {
+  background: var(--ion-color-medium-shade, #666);
+}
+
+/* 🆕 2026-07-02 A6：FTS 失败降级 banner（不破坏现有结果） */
+.fulltext-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 8px 12px;
+  border-radius: 6px;
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.fulltext-banner-unavailable {
+  background: var(--ion-color-warning-tint, #fff4d6);
+  border-left: 4px solid var(--ion-color-warning, #ffc409);
+  color: var(--ion-color-warning-shade, #b07a00);
+}
+
+.fulltext-banner-error {
+  background: var(--ion-color-danger-tint, #fbd6d6);
+  border-left: 4px solid var(--ion-color-danger, #eb445a);
+  color: var(--ion-color-danger-shade, #b00020);
+}
+
+.fulltext-banner-icon {
+  font-size: 1.2em;
+  flex-shrink: 0;
+}
+
+.fulltext-banner-msg {
+  flex: 1;
+}
+
+.fulltext-banner-dismiss {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 1.2em;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.fulltext-banner-dismiss:hover {
+  opacity: 0.7;
+}
+
+/* 🆕 2026-07-02 A4：FTS 命中角标（merge 后非普通结果的项） */
+.fulltext-hit-badge {
+  font-size: 0.7em;
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+/* 🆕 2026-07-03 从 git history (commit 08c5b63) 恢复 Files.vue 拆分时丢失的样式
+ *   背景：Files.vue script 拆到 useFilesView.ts 时 <style> 块丢失了 40+ 个 class。
+ *   之前只在 2026-07-02 补了 loading-container / empty-state，其余仍丢失。
+ *   本次完整恢复（面包屑 / 长按菜单 action sheet / 文件缩略图 / 标签 / plugin 视图等）。
+ */
+
+/* === v3 2026-06-18 Task 8：route.query.highlight 驱动的文件高亮 === */
+.file-highlight {
+  --background: rgba(var(--ion-color-primary-rgb), 0.12);
+  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  box-shadow: inset 3px 0 0 var(--ion-color-primary);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* === 播放错误展示区域 === */
 .play-error-banner {
   background: rgba(var(--ion-color-danger-rgb), 0.08);
   border-left: 3px solid var(--ion-color-danger);
@@ -1616,93 +1086,90 @@ function onBackendReadyWindow(event: Event) {
   margin: 8px 12px;
   padding: 10px 12px;
 }
-
 .play-error-header {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-
 .play-error-file {
   font-weight: 500;
   color: var(--ion-color-danger);
   font-size: 14px;
 }
-
 .play-error-message {
   color: var(--ion-color-danger);
   font-size: 12px;
   margin-top: 4px;
   margin-bottom: 0;
 }
-
 .play-error-detail-row {
   margin-top: 6px;
 }
 
-.loading-container {
+/* === v4 Bug1 修复：自动更新顶栏细 indicator === */
+.files-refresh-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  height: 50%;
-  color: var(--encv-text-secondary);
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--ion-color-primary-tint);
+  color: var(--ion-color-primary-contrast);
+  font-size: 11px;
+  font-weight: 500;
+  border-bottom: 1px solid var(--ion-color-primary-shade);
+  animation: files-refresh-bar-enter 0.15s ease-out;
+}
+.files-refresh-bar__spinner {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+.files-refresh-bar__label {
+  white-space: nowrap;
+}
+@keyframes files-refresh-bar-enter {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 50%;
-  padding: 24px;
-  text-align: center;
-  color: var(--encv-text-secondary);
-}
-
-.empty-icon {
-  font-size: 64px;
-  margin-bottom: 16px;
-  opacity: 0.5;
-}
-
+/* === 面包屑 === */
 .breadcrumb-scroll {
   --background: transparent;
 }
-
 .breadcrumb {
   display: flex;
   align-items: center;
   padding: 0 16px;
   white-space: nowrap;
 }
-
 .breadcrumb-item {
   cursor: pointer;
   color: var(--ion-color-primary);
   font-size: 14px;
 }
-
 .breadcrumb-item:hover {
   text-decoration: underline;
 }
-
 .breadcrumb-sep {
   font-size: 14px;
   margin: 0 4px;
   color: var(--encv-text-secondary);
 }
-
 .breadcrumb-segment {
   display: flex;
   align-items: center;
 }
 
+/* === 搜索框旁的全文搜索开关 === */
 .recursive-toggle {
   margin-right: 8px;
   font-size: 12px;
 }
 
+/* === 搜索路径提示 === */
 .search-path {
   font-size: 11px;
   color: var(--encv-text-secondary);
@@ -1711,6 +1178,46 @@ function onBackendReadyWindow(event: Event) {
   text-overflow: ellipsis;
 }
 
+/* === 2026-07-02 搜索模式提示横幅 === */
+.search-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px 4px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.search-mode-banner .search-mode-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.search-mode-greedy {
+  background: rgba(var(--ion-color-warning-rgb), 0.12);
+  border: 1px dashed var(--ion-color-warning);
+  color: var(--ion-color-warning-shade);
+}
+.search-mode-combined {
+  background: rgba(var(--ion-color-tertiary-rgb), 0.10);
+  border: 1px solid var(--ion-color-tertiary);
+  color: var(--ion-color-tertiary-shade);
+}
+/* greedy 模式下，结果项加左侧橙色虚线条 */
+.greedy-match {
+  --background: rgba(var(--ion-color-warning-rgb), 0.06);
+  box-shadow: inset 3px 0 0 var(--ion-color-warning);
+}
+@media (prefers-color-scheme: dark) {
+  .search-mode-greedy {
+    color: var(--ion-color-warning-tint);
+  }
+  .search-mode-combined {
+    color: var(--ion-color-tertiary-tint);
+  }
+}
+
+/* === 打开文件夹按钮 === */
 .open-folder-btn {
   --padding-start: 8px;
   --padding-end: 8px;
@@ -1718,12 +1225,12 @@ function onBackendReadyWindow(event: Event) {
   min-height: 44px;
   margin: 0;
 }
-
 .open-folder-icon {
   font-size: 20px;
   color: var(--ion-color-primary);
 }
 
+/* === Tag 编辑器 === */
 .tag-editor-content {
   padding: 16px;
 }
@@ -1754,7 +1261,10 @@ function onBackendReadyWindow(event: Event) {
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 4px;
+  contain: content;
 }
+
+/* === 文件缩略图 === */
 .file-thumbnail-slot {
   width: 48px;
   height: 48px;
@@ -1777,9 +1287,8 @@ function onBackendReadyWindow(event: Event) {
 ion-item {
   contain: layout style;
 }
-.file-tag-chips {
-  contain: content;
-}
+
+/* === 筛选 chips === */
 .filter-chips {
   display: flex;
   flex-wrap: wrap;
@@ -1792,6 +1301,8 @@ ion-item {
   --padding-end: 8px;
   cursor: pointer;
 }
+
+/* === Plugin 视图 === */
 .plugin-header {
   padding: 0 4px;
 }
@@ -1841,6 +1352,7 @@ ion-item {
   padding: 0 4px;
 }
 
+/* === 真实文件名（alist 加密解码后）=== */
 .real-name {
   color: var(--ion-color-danger);
   font-size: 12px;
@@ -1849,7 +1361,7 @@ ion-item {
   text-overflow: ellipsis;
 }
 
-/* 🆕 2026-06-15 multi-mount 适配：mount 伪 item 样式（driver badge + mount_path + root_path） */
+/* === 2026-06-15 multi-mount 适配：mount 伪 item 样式 === */
 .mount-driver-badge {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10px;
@@ -1877,31 +1389,277 @@ ion-item {
   padding: 12px 16px;
   font-size: 15px;
 }
-
+:global(.file-action-sheet .action-section_view),
 :global(.file-action-sheet .action-section-view) {
   --color: var(--ion-color-primary);
 }
+:global(.file-action-sheet .action-section_view .action-button-icon),
 :global(.file-action-sheet .action-section-view .action-button-icon) {
   color: var(--ion-color-primary) !important;
 }
-
 :global(.file-action-sheet .action-section-crypto) {
   --color: var(--ion-color-warning);
 }
 :global(.file-action-sheet .action-section-crypto .action-button-icon) {
   color: #e6a000 !important;
 }
-
 :global(.file-action-sheet .action-section-manage) {
   --color: var(--ion-color-medium);
 }
 :global(.file-action-sheet .action-section-manage .action-button-icon) {
   color: var(--ion-color-medium-shade) !important;
 }
-
 :global(.file-action-sheet .action-section-danger) {
   --color: var(--ion-color-danger);
 }
 :global(.file-action-sheet .action-section-danger .action-button-icon) {
   color: var(--ion-color-danger) !important;
-}</style>
+}
+
+/* 🆕 2026-07-02 修复 loading 样式丢失 */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  min-height: 200px;
+  color: var(--ion-text-color, #333);
+}
+
+.loading-container ion-spinner {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 12px;
+  color: var(--ion-color-primary, #4f8cff);
+}
+
+.loading-container p {
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--ion-color-medium, #666);
+}
+
+.search-spinner-pulse {
+  animation: search-spinner-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes search-spinner-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* 🆕 2026-07-02 修复 empty-state 样式丢失 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+  min-height: 200px;
+  color: var(--ion-text-color, #333);
+}
+
+.empty-state h3 {
+  margin: 12px 0 6px;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--ion-text-color, #333);
+}
+
+.empty-state p {
+  margin: 0 0 16px;
+  font-size: 0.9em;
+  color: var(--ion-color-medium, #666);
+  max-width: 320px;
+}
+
+.empty-state .empty-icon {
+  font-size: 64px;
+  color: var(--ion-color-medium, #999);
+  margin-bottom: 8px;
+}
+
+/* 🆕 2026-07-03 搜索诊断卡片样式（搜索结果为空时显示 FTS/索引状态辅助排查） */
+.search-diagnostics-card {
+  width: 100%;
+  max-width: 560px;
+  margin: 16px auto 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.06);
+  border: 1px solid rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.18);
+  text-align: left;
+  font-size: 13px;
+}
+body.dark .search-diagnostics-card {
+  background: rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.12);
+  border-color: rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.3);
+}
+
+.diag-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 13.5px;
+  margin-bottom: 10px;
+  color: var(--ion-color-warning, #ff9800);
+}
+.diag-card-icon { font-size: 16px; }
+.diag-card-time {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--ion-color-medium, #999);
+  font-family: 'SFMono-Regular', Consolas, monospace;
+}
+
+.diag-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+.diag-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.5);
+  border: 1px solid rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.1);
+}
+body.dark .diag-item {
+  background: rgba(var(--ion-background-color-rgb, 30, 30, 30), 0.5);
+}
+.diag-label {
+  font-size: 11px;
+  color: var(--ion-color-medium, #666);
+  font-weight: 500;
+}
+.diag-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ion-text-color, #333);
+}
+.diag-value.mono {
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  font-size: 11.5px;
+  word-break: break-all;
+}
+.diag-spinner {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.diag-error-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background: rgba(var(--ion-color-danger-rgb, 240, 60, 60), 0.08);
+  border-left: 3px solid var(--ion-color-danger, #f53d3d);
+}
+.diag-error-icon {
+  font-size: 14px;
+  color: var(--ion-color-danger, #f53d3d);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.diag-error-text {
+  font-size: 12px;
+  color: var(--ion-color-danger, #f53d3d);
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.diag-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 6px 0;
+  margin-bottom: 8px;
+  border-top: 1px dashed rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.15);
+  font-size: 11.5px;
+  color: var(--ion-color-medium, #666);
+}
+.diag-meta-item code {
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  background: rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.1);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.diag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+.diag-actions ion-button {
+  --padding-start: 8px;
+  --padding-end: 12px;
+  font-size: 12px;
+  height: 32px;
+}
+.diag-actions ion-button ion-icon {
+  font-size: 14px;
+  margin-right: 2px;
+}
+
+
+.fulltext-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.hit-count-badge {
+  font-size: 0.75em;
+  padding: 2px 6px;
+}
+
+.fulltext-preview-source {
+  color: var(--ion-color-medium, #666);
+  font-size: 0.8em;
+}
+
+.fulltext-snippet {
+  word-break: break-word;
+  white-space: pre-wrap;
+  color: var(--ion-text-color, #333);
+}
+
+.fulltext-snippet .snippet-highlight {
+  background: var(--ion-color-primary-tint, #cce0ff);
+  color: var(--ion-color-primary-shade, #2962cc);
+  font-weight: 600;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* 暗黑模式适配 */
+@media (prefers-color-scheme: dark) {
+  .fulltext-preview {
+    background: rgba(255, 255, 255, 0.05);
+  }
+  .fulltext-snippet {
+    color: var(--ion-text-color, #ddd);
+  }
+  .fulltext-snippet .snippet-highlight {
+    background: rgba(79, 140, 255, 0.3);
+    color: #cce0ff;
+  }
+}
+</style>
+

@@ -86,52 +86,43 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import {
-  IonButton, IonIcon, IonBadge,
-} from '@ionic/vue'
+import { IonBadge, IonButton, IonIcon } from "@ionic/vue";
 import {
   alertCircleOutline,
-  cloudOfflineOutline,
-  documentOutline,
-  helpCircleOutline,
-  refresh,
-  copyOutline,
-  chevronDown,
-  chevronForward,
   bulbOutline,
   checkmarkCircle,
+  chevronDown,
+  chevronForward,
+  cloudOfflineOutline,
+  copyOutline,
+  documentOutline,
+  helpCircleOutline,
   lockClosedOutline,
-} from 'ionicons/icons'
+  refresh,
+} from "ionicons/icons";
+import { computed, ref } from "vue";
 
-export type ErrorType =
-  | 'network_error'
-  | 'gateway_error'
-  | 'format_error'
-  | 'init_failed'
-  | 'playback_failed'
-  | 'auth_error'
-  | 'unknown'
+export type ErrorType = "network_error" | "gateway_error" | "format_error" | "init_failed" | "playback_failed" | "auth_error" | "unknown";
 
 export interface ErrorDetailItem {
-  label: string
-  value: string
-  copyable?: boolean
+  label: string;
+  value: string;
+  copyable?: boolean;
 }
 
 interface Props {
-  errorType: ErrorType
-  title: string
-  subtitle?: string
-  details?: ErrorDetailItem[]
+  errorType: ErrorType;
+  title: string;
+  subtitle?: string;
+  details?: ErrorDetailItem[];
   /** 显示重试按钮 */
-  canRetry?: boolean
+  canRetry?: boolean;
   /** 显示"复制调试信息"按钮 */
-  canCopyDebug?: boolean
+  canCopyDebug?: boolean;
   /** 重试按钮文案 */
-  retryText?: string
+  retryText?: string;
   /** 复制按钮文案 */
-  copyText?: string
+  copyText?: string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -139,61 +130,60 @@ const props = withDefaults(defineProps<Props>(), {
   details: () => [],
   canRetry: true,
   canCopyDebug: true,
-  retryText: '重试',
-  copyText: '复制调试信息',
-})
+  retryText: "重试",
+  copyText: "复制调试信息",
+});
 
-defineEmits<{
-  (e: 'retry'): void
-}>()
+defineEmits<(e: "retry") => void>();
 
-const detailsExpanded = ref(false)
-const toastVisible = ref(false)
-const toastText = ref('')
+const detailsExpanded = ref(false);
+const toastVisible = ref(false);
+const toastText = ref("");
 
 /** 按错误类型映射 ICON + 主题色 + 建议文案 */
 const config = computed(() => {
   switch (props.errorType) {
-    case 'network_error':
+    case "network_error":
       return {
         icon: cloudOfflineOutline,
-        suggestion: '网络无法到达服务器。请检查：\n• 手机/浏览器与 ENCV 后端的网络连通性\n• 切换 WiFi / 移动数据\n• 若使用 Trae 沙箱预览，可能受限于 401 鉴权',
-      }
-    case 'gateway_error':
+        suggestion:
+          "网络无法到达服务器。请检查：\n• 手机/浏览器与 ENCV 后端的网络连通性\n• 切换 WiFi / 移动数据\n• 若使用 Trae 沙箱预览，可能受限于 401 鉴权",
+      };
+    case "gateway_error":
       return {
         icon: lockClosedOutline,
-        suggestion: '网关层拦截（常见 Trae 沙箱 401）。预览模式可能在当前网络不可用。',
-      }
-    case 'format_error':
+        suggestion: "网关层拦截（常见 Trae 沙箱 401）。预览模式可能在当前网络不可用。",
+      };
+    case "format_error":
       return {
         icon: documentOutline,
-        suggestion: '媒体格式不受支持。推荐使用 MP4 / WebM 容器 + H.264 视频 + AAC 音频。',
-      }
-    case 'init_failed':
+        suggestion: "媒体格式不受支持。推荐使用 MP4 / WebM 容器 + H.264 视频 + AAC 音频。",
+      };
+    case "init_failed":
       return {
         icon: alertCircleOutline,
-        suggestion: '播放器初始化失败。可尝试重试，或刷新页面重新进入。',
-      }
-    case 'auth_error':
+        suggestion: "播放器初始化失败。可尝试重试，或刷新页面重新进入。",
+      };
+    case "auth_error":
       return {
         icon: lockClosedOutline,
-        suggestion: '鉴权失败。请检查文件是否加密、密码是否正确。',
-      }
-    case 'playback_failed':
+        suggestion: "鉴权失败。请检查文件是否加密、密码是否正确。",
+      };
+    case "playback_failed":
       return {
         icon: alertCircleOutline,
-        suggestion: '播放过程中出错。可尝试：\n• 重新进入页面\n• 检查容器是否损坏\n• 查看 DevLogs 中 [ArtPlayer] 详细日志',
-      }
+        suggestion: "播放过程中出错。可尝试：\n• 重新进入页面\n• 检查容器是否损坏\n• 查看 DevLogs 中 [ArtPlayer] 详细日志",
+      };
     default:
       return {
         icon: helpCircleOutline,
         suggestion: '发生未知错误。点击"查看调试信息"获取详情，或粘贴给开发者。',
-      }
+      };
   }
-})
+});
 
-const iconForType = computed(() => config.value.icon)
-const suggestion = computed(() => config.value.suggestion)
+const iconForType = computed(() => config.value.icon);
+const suggestion = computed(() => config.value.suggestion);
 
 /** 拼接所有 details 为单行 JSON，用于一键复制调试信息 */
 function buildDebugInfo(): string {
@@ -204,56 +194,56 @@ function buildDebugInfo(): string {
       subtitle: props.subtitle,
       details: props.details,
       timestamp: new Date().toISOString(),
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '(no navigator)',
+      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "(no navigator)",
     },
     null,
-    2,
-  )
+    2
+  );
 }
 
 async function copyDebugInfo() {
-  const text = buildDebugInfo()
-  const ok = await copyToClipboard(text)
-  showToast(ok ? '✓ 调试信息已复制' : '⚠ 复制失败，请手动选择')
+  const text = buildDebugInfo();
+  const ok = await copyToClipboard(text);
+  showToast(ok ? "✓ 调试信息已复制" : "⚠ 复制失败，请手动选择");
 }
 
 async function copyValue(value: string) {
-  const ok = await copyToClipboard(value)
-  showToast(ok ? '✓ 已复制' : '⚠ 复制失败')
+  const ok = await copyToClipboard(value);
+  showToast(ok ? "✓ 已复制" : "⚠ 复制失败");
 }
 
 async function copyToClipboard(text: string): Promise<boolean> {
   try {
     if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
-      return true
+      await navigator.clipboard.writeText(text);
+      return true;
     }
   } catch {
     // 降级到 textarea + execCommand
   }
   try {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    ta.style.position = 'fixed'
-    ta.style.left = '-9999px'
-    document.body.appendChild(ta)
-    ta.select()
-    const ok = document.execCommand('copy')
-    document.body.removeChild(ta)
-    return ok
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
   } catch {
-    return false
+    return false;
   }
 }
 
-let toastTimer: ReturnType<typeof setTimeout> | null = null
+let toastTimer: ReturnType<typeof setTimeout> | null = null;
 function showToast(text: string) {
-  toastText.value = text
-  toastVisible.value = true
-  if (toastTimer) clearTimeout(toastTimer)
+  toastText.value = text;
+  toastVisible.value = true;
+  if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
-    toastVisible.value = false
-  }, 1800)
+    toastVisible.value = false;
+  }, 1800);
 }
 </script>
 

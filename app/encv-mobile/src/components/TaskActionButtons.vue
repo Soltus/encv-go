@@ -32,18 +32,18 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon } from '@ionic/vue'
-import { closeCircle, refresh, trash } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import type { EncvTask } from '@/api/encv'
+import { IonButton, IonIcon } from "@ionic/vue";
+import { closeCircle, refresh, trash } from "ionicons/icons";
+import type { EncvTask } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
 
-defineProps<{ task: EncvTask }>()
+defineProps<{ task: EncvTask }>();
 const emit = defineEmits<{
-  (e: 'cancel'): void
-  (e: 'retry'): void
-  (e: 'remove'): void
-}>()
-const { t } = useI18n()
+  (e: "cancel"): void;
+  (e: "retry"): void;
+  (e: "remove"): void;
+}>();
+const { t } = useI18n();
 </script>
 
 <style scoped>

@@ -10,35 +10,35 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref } from "vue";
 
 defineProps<{
-  progress: number
-  currentPosition: number
-  duration: number
-}>()
+  progress: number;
+  currentPosition: number;
+  duration: number;
+}>();
 
 const emit = defineEmits<{
-  seek: [ratio: number]
-}>()
+  seek: [ratio: number];
+}>();
 
-const trackRef = ref<HTMLElement>()
+const trackRef = ref<HTMLElement>();
 
 function formatTime(ms: number): string {
-  if (ms < 0) return '0:00'
-  const totalSec = Math.floor(ms / 1000)
-  const h = Math.floor(totalSec / 3600)
-  const m = Math.floor((totalSec % 3600) / 60)
-  const s = totalSec % 60
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-  return `${m}:${String(s).padStart(2, '0')}`
+  if (ms < 0) return "0:00";
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 function handleTrackClick(e: MouseEvent) {
-  if (!trackRef.value) return
-  const rect = trackRef.value.getBoundingClientRect()
-  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width))
-  emit('seek', ratio)
+  if (!trackRef.value) return;
+  const rect = trackRef.value.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  emit("seek", ratio);
 }
 </script>
 

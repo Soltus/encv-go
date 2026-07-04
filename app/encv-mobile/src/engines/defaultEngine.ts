@@ -8,10 +8,10 @@
  * 协议：AG-UI（与 TDesign 引擎共享同一份数据）
  */
 
-import { h, type VNode } from 'vue'
-import type { ChatEngine, EngineRenderProps } from '@/composables/chatEngine'
-import { registerEngine } from '@/composables/chatEngine'
-import DefaultMessagesView from '@/components/agent/DefaultMessagesView.vue'
+import { h, type VNode } from "vue";
+import DefaultMessagesView from "@/components/agent/DefaultMessagesView.vue";
+import type { ChatEngine, EngineRenderProps } from "@/composables/chatEngine";
+import { registerEngine } from "@/composables/chatEngine";
 
 /**
  * 创建默认引擎实例
@@ -27,21 +27,21 @@ import DefaultMessagesView from '@/components/agent/DefaultMessagesView.vue'
  */
 export function createDefaultEngine(): ChatEngine {
   return {
-    id: 'default',
-    name: 'Ionic 默认',
-    description: '当前默认的 Ionic 组件实现',
+    id: "default",
+    name: "Ionic 默认",
+    description: "当前默认的 Ionic 组件实现",
     supportsA2UI: false,
 
     renderMessages(props: EngineRenderProps): VNode {
-      return h(DefaultMessagesView, { ...props })
+      return h(DefaultMessagesView, { ...props });
     },
 
     destroy(): void {
       // 无需清理：无副作用（无定时器、事件监听器或订阅）
     },
-  }
+  };
 }
 
 // ── 自动注册到 EngineRegistry ──────────────────────────────
 // 模块被 import 时自动注册，确保 useChatEngine() 能通过 'default' id 找到此引擎。
-registerEngine('default', createDefaultEngine)
+registerEngine("default", createDefaultEngine);

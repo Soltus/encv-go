@@ -6,30 +6,42 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { StepStatus } from '@/lib/workflow/types'
+import { computed } from "vue";
+import type { StepStatus } from "@/lib/workflow/types";
 
-const props = withDefaults(defineProps<{
-  status: StepStatus
-  name?: string
-  showName?: boolean
-}>(), {
-  showName: true,
-})
+const props = withDefaults(
+  defineProps<{
+    status: StepStatus;
+    name?: string;
+    showName?: boolean;
+  }>(),
+  {
+    showName: true,
+  }
+);
 
 const icon = computed(() => {
   switch (props.status) {
-    case 'success': return '✓'
-    case 'failure': return '✕'
-    case 'cancelled': return '⊘'
-    case 'skipped': return '⊘'
-    case 'timed_out': return '⏱'
-    case 'running': return '◉'
-    case 'queued': return '◌'
-    case 'submitted': return '◐'
-    default: return '○'
+    case "success":
+      return "✓";
+    case "failure":
+      return "✕";
+    case "cancelled":
+      return "⊘";
+    case "skipped":
+      return "⊘";
+    case "timed_out":
+      return "⏱";
+    case "running":
+      return "◉";
+    case "queued":
+      return "◌";
+    case "submitted":
+      return "◐";
+    default:
+      return "○";
   }
-})
+});
 </script>
 
 <style scoped>

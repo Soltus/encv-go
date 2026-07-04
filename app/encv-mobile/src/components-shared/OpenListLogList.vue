@@ -12,39 +12,39 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
-import { IonList, IonItem } from '@ionic/vue'
-import type { OpenListLog } from './index'
+import { IonItem, type IonList } from "@ionic/vue";
+import { nextTick, ref, watch } from "vue";
+import type { OpenListLog } from "./index";
 
 const props = defineProps<{
-  logs: OpenListLog[]
-  maxLength?: number
-  autoScroll?: boolean
-}>()
+  logs: OpenListLog[];
+  maxLength?: number;
+  autoScroll?: boolean;
+}>();
 
-const listRef = ref<InstanceType<typeof IonList> | null>(null)
-const maxLen = props.maxLength ?? 500
-const autoScroll = props.autoScroll ?? true
+const listRef = ref<InstanceType<typeof IonList> | null>(null);
+const maxLen = props.maxLength ?? 500;
+const autoScroll = props.autoScroll ?? true;
 
 watch(
   () => props.logs.length,
   async () => {
     if (autoScroll) {
-      await nextTick()
-      const el = listRef.value?.$el as HTMLElement | undefined
-      el?.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+      await nextTick();
+      const el = listRef.value?.$el as HTMLElement | undefined;
+      el?.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     }
-  },
-)
+  }
+);
 
 function formatTime(ts: number): string {
-  const d = new Date(ts)
-  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`
+  const d = new Date(ts);
+  return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
 }
 
 // 修剪超出 maxLength 的日志
 if (props.logs.length > maxLen) {
-  props.logs.splice(0, props.logs.length - maxLen)
+  props.logs.splice(0, props.logs.length - maxLen);
 }
 </script>
 

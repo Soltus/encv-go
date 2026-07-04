@@ -36,27 +36,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { RecycleScroller, type RecycleScrollerExposed } from 'vue-virtual-scroller'
-import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
-import type { RenderedItem } from '@/composables/renderTurnItems'
+import { ref } from "vue";
+import { RecycleScroller, type RecycleScrollerExposed } from "vue-virtual-scroller";
+import "vue-virtual-scroller/dist/vue-virtual-scroller.css";
+import type { RenderedItem } from "@/composables/renderTurnItems";
 
 const props = withDefaults(
   defineProps<{
-    items: RenderedItem[]
+    items: RenderedItem[];
     /** 最小行高（默认 80px） */
-    minItemSize?: number
+    minItemSize?: number;
     /** 预渲染缓冲区（像素），默认 400 */
-    buffer?: number
+    buffer?: number;
   }>(),
   {
     minItemSize: 80,
     buffer: 400,
-  },
-)
+  }
+);
 
-const scrollerRef = ref<RecycleScrollerExposed | null>(null)
-const containerRef = ref<HTMLDivElement | null>(null)
+const scrollerRef = ref<RecycleScrollerExposed | null>(null);
+const containerRef = ref<HTMLDivElement | null>(null);
 
 /**
  * 按 item type 估算高度
@@ -69,22 +69,22 @@ const containerRef = ref<HTMLDivElement | null>(null)
  */
 function getItemSize(item: RenderedItem): number {
   switch (item.type) {
-    case 'user':
-      return 80
-    case 'assistantText':
-      return 120
-    case 'reasoning':
-      return 100
-    case 'error':
-      return 80
-    case 'approval':
-      return 160
-    case 'operationGroup':
-      return 200
-    case 'webSearchGroup':
-      return 140
+    case "user":
+      return 80;
+    case "assistantText":
+      return 120;
+    case "reasoning":
+      return 100;
+    case "error":
+      return 80;
+    case "approval":
+      return 160;
+    case "operationGroup":
+      return 200;
+    case "webSearchGroup":
+      return 140;
     default:
-      return 120
+      return 120;
   }
 }
 
@@ -92,16 +92,19 @@ function getItemSize(item: RenderedItem): number {
  * 滚到列表底部
  * @param behavior 'auto' | 'smooth'
  */
-function scrollToBottom(behavior: 'auto' | 'smooth' = 'smooth') {
-  if (scrollerRef.value && typeof (scrollerRef.value as unknown as { scrollToItem?: (n: number, b?: ScrollBehavior) => void }).scrollToItem === 'function') {
-    ;(scrollerRef.value as unknown as { scrollToItem: (n: number, b?: ScrollBehavior) => void }).scrollToItem(
+function scrollToBottom(behavior: "auto" | "smooth" = "smooth") {
+  if (
+    scrollerRef.value &&
+    typeof (scrollerRef.value as unknown as { scrollToItem?: (n: number, b?: ScrollBehavior) => void }).scrollToItem === "function"
+  ) {
+    (scrollerRef.value as unknown as { scrollToItem: (n: number, b?: ScrollBehavior) => void }).scrollToItem(
       props.items.length - 1,
-      behavior,
-    )
+      behavior
+    );
   } else if (containerRef.value) {
     // 降级：直接滚到 container 底部
-    const el = containerRef.value
-    el.scrollTo({ top: el.scrollHeight, behavior })
+    const el = containerRef.value;
+    el.scrollTo({ top: el.scrollHeight, behavior });
   }
 }
 
@@ -109,7 +112,7 @@ function onScroll(_e: Event) {
   // 子组件可监听 scroll 事件以实现"是否接近底部"判断
 }
 
-defineExpose({ scrollToBottom })
+defineExpose({ scrollToBottom });
 </script>
 
 <style scoped>

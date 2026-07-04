@@ -19,17 +19,17 @@
  * SPEC: /workspace/.trae/specs/agui-real-llm-path-completion/ Phase 4
  */
 
-import { h } from 'vue'
-import type { VNode } from 'vue'
-import type { ChatEngine, EngineRenderProps } from '@/composables/chatEngine'
-import { registerEngine } from '@/composables/chatEngine'
-import TDesignChatView from './TDesignChatView.vue'
+import type { VNode } from "vue";
+import { h } from "vue";
+import type { ChatEngine, EngineRenderProps } from "@/composables/chatEngine";
+import { registerEngine } from "@/composables/chatEngine";
+import TDesignChatView from "./TDesignChatView.vue";
 
 export function createTDesignEngine(): ChatEngine {
   return {
-    id: 'tdesign',
-    name: 'TDesign 风格',
-    description: '腾讯 TDesign 视觉风格的聊天渲染',
+    id: "tdesign",
+    name: "TDesign 风格",
+    description: "腾讯 TDesign 视觉风格的聊天渲染",
     supportsA2UI: false,
 
     /**
@@ -38,13 +38,13 @@ export function createTDesignEngine(): ChatEngine {
      * （消息 / 状态 / 回调等所有上下文都从宿主来）
      */
     renderMessages(props: EngineRenderProps): VNode {
-      return h(TDesignChatView, { ...props })
+      return h(TDesignChatView, { ...props });
     },
 
     destroy(): void {
       // 无需清理：TDesignChatView 是无状态纯组件
     },
-  }
+  };
 }
 
-registerEngine('tdesign', createTDesignEngine)
+registerEngine("tdesign", createTDesignEngine);

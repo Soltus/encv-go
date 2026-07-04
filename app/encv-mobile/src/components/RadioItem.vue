@@ -27,8 +27,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonItem, IonLabel, IonRadio } from '@ionic/vue'
+import { IonItem, IonLabel, IonRadio } from "@ionic/vue";
+import { computed } from "vue";
 
 /**
  * RadioItem —— 优雅的单选项组件（统一所有"整行点击即可切换"的 radio item）
@@ -56,21 +56,19 @@ import { IonItem, IonLabel, IonRadio } from '@ionic/vue'
  */
 
 interface Props {
-  value: string | number
-  selected?: string | number
-  disabled?: boolean
+  value: string | number;
+  selected?: string | number;
+  disabled?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   selected: undefined,
   disabled: false,
-})
+});
 
-const emit = defineEmits<{
-  (e: 'select', value: string | number): void
-}>()
+const emit = defineEmits<(e: "select", value: string | number) => void>();
 
-const isSelected = computed(() => props.value === props.selected)
+const isSelected = computed(() => props.value === props.selected);
 
 /**
  * 整行点击：阻止默认后 emit 'select'，由父 group 接管更新。
@@ -79,18 +77,18 @@ const isSelected = computed(() => props.value === props.selected)
  */
 function handleClick(event: MouseEvent) {
   if (props.disabled) {
-    event.preventDefault()
-    event.stopPropagation()
-    return
+    event.preventDefault();
+    event.stopPropagation();
+    return;
   }
   // 避免点击 radio 圆点本身时重复触发（虽然逻辑上不会有问题，但可以减少一次 emit）
-  const target = event.target as HTMLElement
-  if (target.closest('ion-radio') && !target.closest('ion-radio')?.matches(':host(:not([disabled]))')) {
+  const target = event.target as HTMLElement;
+  if (target.closest("ion-radio") && !target.closest("ion-radio")?.matches(":host(:not([disabled]))")) {
     // radio 内部点击仍然走 ionChange 路径，handler 在父级统一处理
-    return
+    return;
   }
   if (!isSelected.value) {
-    emit('select', props.value)
+    emit("select", props.value);
   }
 }
 

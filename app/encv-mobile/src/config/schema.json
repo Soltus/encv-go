@@ -12,9 +12,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "password"
-      ],
+      "required": ["password"],
       "description": "--- 管理后台服务器 设置 ---"
     },
     "AudioPluginConfig": {
@@ -25,9 +23,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "ext"
-      ]
+      "required": ["ext"]
     },
     "Config": {
       "properties": {
@@ -131,6 +127,10 @@
           "$ref": "#/$defs/LogConfig",
           "description": "--- 日志设置 ---\nLog 配置结构化日志的输出级别和文件路径。"
         },
+        "database": {
+          "$ref": "#/$defs/DatabaseConfig",
+          "description": "--- 数据库设置 ---\nDatabase 数据库存储引擎配置，支持 SQLite / Turso / LibSQL。"
+        },
         "agent_settings": {
           "properties": {
             "openai_api_key": {
@@ -202,17 +202,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "password",
-        "recover",
-        "output_path",
-        "plugin_settings",
-        "server",
-        "admin",
-        "webdav",
-        "proxy",
-        "log"
-      ],
+      "required": ["password", "recover", "output_path", "plugin_settings", "server", "admin", "webdav", "proxy", "log", "database"],
       "description": "Config 是应用程序的顶层配置结构，包含所有子模块的配置。"
     },
     "HttpServer": {
@@ -228,10 +218,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "port",
-        "dir"
-      ],
+      "required": ["port", "dir"],
       "description": "--- 内置HTTP服务器 设置 ---"
     },
     "ImagePluginConfig": {
@@ -242,9 +229,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "ext"
-      ]
+      "required": ["ext"]
     },
     "LogConfig": {
       "properties": {
@@ -273,11 +258,46 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "level",
-        "file"
-      ],
+      "required": ["level", "file"],
       "description": "--- 日志配置 ---"
+    },
+    "DatabaseConfig": {
+      "properties": {
+        "engine": {
+          "type": "string",
+          "enum": ["sqlite", "turso", "libsql", "objectbox"],
+          "x-enum-labels": {
+            "sqlite": "SQLite（默认底座，稳定可靠）",
+            "turso": "Turso / LibSQL（高性能，支持 MVCC 并发）",
+            "libsql": "LibSQL（同 Turso 引擎）",
+            "objectbox": "ObjectBox（对象数据库，高性能写入）"
+          },
+          "default": "sqlite",
+          "description": "主存储引擎（底座）：\n- sqlite: SQLite，稳定可靠，全平台兼容\n- turso: Turso / LibSQL，高性能，支持 MVCC 并发写入\n- libsql: LibSQL（同 Turso 引擎）\n- objectbox: ObjectBox 对象数据库\n切换引擎后需要重启应用生效。"
+        },
+        "enable_engines": {
+          "type": "object",
+          "additionalProperties": { "type": "boolean" },
+          "description": "可选引擎启用开关（除 sqlite 外的引擎）\nkey = 引擎名，value = 是否启用"
+        },
+        "path": {
+          "type": "string",
+          "description": "数据库文件路径（仅 sqlite/turso 本地模式）\n留空则使用默认路径。"
+        },
+        "turso_sync_url": {
+          "type": "string",
+          "description": "Turso 同步 URL（仅 turso 远程模式）\n例如：libsql://your-db.turso.io"
+        },
+        "turso_auth_token": {
+          "type": "string",
+          "secret": true,
+          "description": "Turso 认证令牌（仅 turso 远程模式）"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object",
+      "required": ["engine"],
+      "description": "--- 数据库配置 ---"
     },
     "OpenlistProxyServer": {
       "properties": {
@@ -294,10 +314,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "sites",
-        "disable_signature_verification"
-      ],
+      "required": ["sites", "disable_signature_verification"],
       "description": "--- Openlist 代理服务器设置 ---"
     },
     "PDFPluginConfig": {
@@ -308,9 +325,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "ext"
-      ]
+      "required": ["ext"]
     },
     "ProxySiteConfig": {
       "properties": {
@@ -325,9 +340,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "host"
-      ]
+      "required": ["host"]
     },
     "TextPluginConfig": {
       "properties": {
@@ -342,9 +355,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "ext"
-      ]
+      "required": ["ext"]
     },
     "VideoPluginConfig": {
       "properties": {
@@ -425,9 +436,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "ext"
-      ]
+      "required": ["ext"]
     },
     "WebdavServer": {
       "properties": {
@@ -450,12 +459,7 @@
       },
       "additionalProperties": false,
       "type": "object",
-      "required": [
-        "root",
-        "dir",
-        "username",
-        "password"
-      ],
+      "required": ["root", "dir", "username", "password"],
       "description": "--- WebDAV 服务器设置 ---"
     }
   }

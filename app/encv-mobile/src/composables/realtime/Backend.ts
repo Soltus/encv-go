@@ -19,7 +19,7 @@
  */
 
 /** emit(type, data) — backend 把解析后的事件通过此 callback 通知 transport */
-export type EventEmitter = (type: string, data: any) => void
+export type EventEmitter = (type: string, data: any) => void;
 
 /**
  * 所有 transport backend 必须实现 start / stop
@@ -28,10 +28,10 @@ export type EventEmitter = (type: string, data: any) => void
  * - reset（可选）: 完全清空 backend 内部状态
  */
 export interface Backend {
-  start(): void
-  stop(): void
-  reset?(): void
+  start(): void;
+  stop(): void;
+  reset?(): void;
 }
 
 /** 状态机（被 useRealtimeTransport 持有） */
-export type ConnectionState = 'connecting' | 'connected' | 'disconnected'
+export type ConnectionState = "connecting" | "connected" | "disconnected";

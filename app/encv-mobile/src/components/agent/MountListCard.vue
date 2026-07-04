@@ -41,65 +41,65 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { folderOpenOutline, serverOutline, hourglassOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
+import { IonIcon } from "@ionic/vue";
+import { folderOpenOutline, hourglassOutline, serverOutline } from "ionicons/icons";
+import { computed } from "vue";
+import { useI18n } from "@/composables/useI18n";
 
 const props = defineProps<{
   /** 后端 tool_result.result 的 JSON 字符串（list_mounts 返回值） */
-  resultJson: string
+  resultJson: string;
   /** 工具执行状态 */
-  status?: 'pending' | 'running' | 'success' | 'failed'
-}>()
+  status?: "pending" | "running" | "success" | "failed";
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const folderOpenIcon = folderOpenOutline
-const serverIcon = serverOutline
-const hourglassIcon = hourglassOutline
+const folderOpenIcon = folderOpenOutline;
+const serverIcon = serverOutline;
+const hourglassIcon = hourglassOutline;
 
 interface Mount {
-  id?: string
-  name?: string
-  path?: string
+  id?: string;
+  name?: string;
+  path?: string;
 }
 
 const parsed = computed<{ mounts: Mount[]; error: string }>(() => {
   if (!props.resultJson) {
-    return { mounts: [], error: 'empty result' }
+    return { mounts: [], error: "empty result" };
   }
   try {
     const obj = JSON.parse(props.resultJson) as {
-      count?: number
-      items?: Mount[]
-      mounts?: Mount[]
-    }
-    const arr = Array.isArray(obj.items) ? obj.items : Array.isArray(obj.mounts) ? obj.mounts : []
-    return { mounts: arr, error: '' }
+      count?: number;
+      items?: Mount[];
+      mounts?: Mount[];
+    };
+    const arr = Array.isArray(obj.items) ? obj.items : Array.isArray(obj.mounts) ? obj.mounts : [];
+    return { mounts: arr, error: "" };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.debug('[MountListCard] parse failed:', msg, props.resultJson)
-    return { mounts: [], error: msg }
+    const msg = e instanceof Error ? e.message : String(e);
+    console.debug("[MountListCard] parse failed:", msg, props.resultJson);
+    return { mounts: [], error: msg };
   }
-})
+});
 
-const mounts = computed(() => parsed.value.mounts)
-const rawResult = computed(() => (parsed.value.error ? props.resultJson : ''))
+const mounts = computed(() => parsed.value.mounts);
+const rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
 
 const titleText = computed(() => {
-  if (props.status === 'pending' || props.status === 'running') return t('agent.toolCards.mountsTitle') || '挂载点（查询中）'
-  if (parsed.value.error) return t('agent.toolCards.parseFailed') || '挂载点（数据异常）'
-  return t('agent.toolCards.mountsTitle') || '挂载点'
-})
+  if (props.status === "pending" || props.status === "running") return t("agent.toolCards.mountsTitle") || "挂载点（查询中）";
+  if (parsed.value.error) return t("agent.toolCards.parseFailed") || "挂载点（数据异常）";
+  return t("agent.toolCards.mountsTitle") || "挂载点";
+});
 
 const dataSourceTag = computed(() => {
-  if (!props.resultJson) return ''
-  const s = props.resultJson
-  if (s.includes('"FAKE":true') || s.includes('"FAKE": true')) return 'mock 数据'
-  if (s.includes('studio_video_')) return '历史 mock'
-  return ''
-})
+  if (!props.resultJson) return "";
+  const s = props.resultJson;
+  if (s.includes('"FAKE":true') || s.includes('"FAKE": true')) return "mock 数据";
+  if (s.includes("studio_video_")) return "历史 mock";
+  return "";
+});
 </script>
 
 <style scoped>

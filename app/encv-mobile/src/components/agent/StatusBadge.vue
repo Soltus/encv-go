@@ -14,10 +14,10 @@
 
 <script setup lang="ts">
 defineProps<{
-  label: string
-  tone: 'ready' | 'warn' | 'idle' | 'danger'
-  pulse?: boolean
-}>()
+  label: string;
+  tone: "ready" | "warn" | "idle" | "danger";
+  pulse?: boolean;
+}>();
 </script>
 
 <style scoped>

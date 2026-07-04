@@ -131,40 +131,46 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import ErrorChainNode from './ErrorChainNode.vue'
-import { CATEGORY_META } from '@/composables/useErrorAnalyzer'
-import type { TestCaseResult } from '@/composables/useAutomationTests'
+import { computed, ref } from "vue";
+import { CATEGORY_META } from "@/composables/useErrorAnalyzer";
+import type { TestCaseResult } from "@/lib/workflow/types";
+import ErrorChainNode from "./ErrorChainNode.vue";
 
 const props = defineProps<{
-  result: TestCaseResult
-  index: number
-}>()
+  result: TestCaseResult;
+  index: number;
+}>();
 
-const expanded = ref(props.result.status === 'failed' || props.result.status === 'passed')
+const expanded = ref(props.result.status === "failed" || props.result.status === "passed");
 
-const paddedIdx = computed(() => String(props.index + 1).padStart(3, '0'))
+const paddedIdx = computed(() => String(props.index + 1).padStart(3, "0"));
 
 const statusText = computed(() => {
   switch (props.result.status) {
-    case 'passed': return 'VERIFIED'
-    case 'failed': return 'REJECTED'
-    case 'skipped': return 'OMITTED'
-    case 'running': return 'IN PROGRESS'
-    case 'pending': return 'QUEUED'
-    default: return '—'
+    case "passed":
+      return "VERIFIED";
+    case "failed":
+      return "REJECTED";
+    case "skipped":
+      return "OMITTED";
+    case "running":
+      return "IN PROGRESS";
+    case "pending":
+      return "QUEUED";
+    default:
+      return "—";
   }
-})
+});
 
-const isExpandable = computed(() => true)
+const isExpandable = computed(() => true);
 
 const catMeta = computed(() => {
-  const cat = props.result.errorAnalysis?.category ?? 'unknown'
-  return CATEGORY_META[cat]
-})
+  const cat = props.result.errorAnalysis?.category ?? "unknown";
+  return CATEGORY_META[cat];
+});
 
 function toggle() {
-  expanded.value = !expanded.value
+  expanded.value = !expanded.value;
 }
 </script>
 

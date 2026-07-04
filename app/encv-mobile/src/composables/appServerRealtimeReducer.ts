@@ -31,16 +31,16 @@
  * 集成到 useAgent 时，后端推送的 AgentEvent 会被映射为 MinimalRealtimeEvent。
  */
 export interface MinimalRealtimeEvent {
-  type?: string
-  sequence?: number
-  payload?: unknown
-  params?: unknown
-  approval?: unknown
-  threadId?: string
-  conversationId?: string
-  cacheVersion?: number
-  atIso?: string
-  serverInstanceId?: string
+  type?: string;
+  sequence?: number;
+  payload?: unknown;
+  params?: unknown;
+  approval?: unknown;
+  threadId?: string;
+  conversationId?: string;
+  cacheVersion?: number;
+  atIso?: string;
+  serverInstanceId?: string;
 }
 
 // =============================================================================
@@ -53,10 +53,10 @@ export interface MinimalRealtimeEvent {
  * - 其他（数组、原始类型、null、undefined） → 返回 null
  */
 export function asRecord(value: unknown): Record<string, unknown> | null {
-  if (value == null) return null
-  if (typeof value !== 'object') return null
-  if (Array.isArray(value)) return null
-  return value as Record<string, unknown>
+  if (value == null) return null;
+  if (typeof value !== "object") return null;
+  if (Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
 }
 
 /**
@@ -65,8 +65,8 @@ export function asRecord(value: unknown): Record<string, unknown> | null {
  * - 输入是 string → 原样返回
  */
 export function readString(value: unknown): string {
-  if (typeof value === 'string') return value
-  return ''
+  if (typeof value === "string") return value;
+  return "";
 }
 
 /**
@@ -79,20 +79,20 @@ export function readString(value: unknown): string {
  *   5) event.approval.threadId
  */
 export function readRealtimeThreadId(event: MinimalRealtimeEvent): string {
-  if (typeof event.threadId === 'string' && event.threadId.length > 0) {
-    return event.threadId
+  if (typeof event.threadId === "string" && event.threadId.length > 0) {
+    return event.threadId;
   }
-  if (typeof event.conversationId === 'string' && event.conversationId.length > 0) {
-    return event.conversationId
+  if (typeof event.conversationId === "string" && event.conversationId.length > 0) {
+    return event.conversationId;
   }
   for (const container of [event.payload, event.params, event.approval]) {
-    const rec = asRecord(container)
+    const rec = asRecord(container);
     if (rec) {
-      const id = rec.threadId
-      if (typeof id === 'string' && id.length > 0) return id
+      const id = rec.threadId;
+      if (typeof id === "string" && id.length > 0) return id;
     }
   }
-  return ''
+  return "";
 }
 
 /**
@@ -102,32 +102,28 @@ export function readRealtimeThreadId(event: MinimalRealtimeEvent): string {
  * 任何非有限数（NaN、Infinity、string-number）都被规范化为 null。
  */
 export function readRealtimeCacheVersion(event: MinimalRealtimeEvent): number | null {
-  const candidates: unknown[] = [
-    event.payload,
-    event.params,
-    event.approval,
-  ]
+  const candidates: unknown[] = [event.payload, event.params, event.approval];
   // 先扫描 payload-like 容器
   for (const container of candidates) {
-    const rec = asRecord(container)
+    const rec = asRecord(container);
     if (rec) {
-      const v = rec.cacheVersion
-      if (typeof v === 'number' && Number.isFinite(v)) return v
-      if (typeof v === 'string') {
-        const n = Number(v)
-        if (Number.isFinite(n)) return n
+      const v = rec.cacheVersion;
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+      if (typeof v === "string") {
+        const n = Number(v);
+        if (Number.isFinite(n)) return n;
       }
     }
   }
   // 最后看顶层
-  if (typeof event.cacheVersion === 'number' && Number.isFinite(event.cacheVersion)) {
-    return event.cacheVersion
+  if (typeof event.cacheVersion === "number" && Number.isFinite(event.cacheVersion)) {
+    return event.cacheVersion;
   }
-  if (typeof event.cacheVersion === 'string') {
-    const n = Number(event.cacheVersion)
-    if (Number.isFinite(n)) return n
+  if (typeof event.cacheVersion === "string") {
+    const n = Number(event.cacheVersion);
+    if (Number.isFinite(n)) return n;
   }
-  return null
+  return null;
 }
 
 /**
@@ -135,9 +131,9 @@ export function readRealtimeCacheVersion(event: MinimalRealtimeEvent): number | 
  * 其它类型一律返回空串（避免误把常规事件里的字段当成 instance）。
  */
 export function readRealtimeServerInstance(event: MinimalRealtimeEvent): string {
-  if (event.type !== 'connected') return ''
-  if (typeof event.serverInstanceId === 'string') return event.serverInstanceId
-  return ''
+  if (event.type !== "connected") return "";
+  if (typeof event.serverInstanceId === "string") return event.serverInstanceId;
+  return "";
 }
 
 // =============================================================================
@@ -158,18 +154,18 @@ export function readRealtimeServerInstance(event: MinimalRealtimeEvent): string 
 export function updateRealtimeServerInstance(
   versionsByThreadId: Map<string, number>,
   currentServerInstance: string,
-  event: MinimalRealtimeEvent,
+  event: MinimalRealtimeEvent
 ): string {
-  const candidate = readRealtimeServerInstance(event)
-  if (candidate === '') {
-    return currentServerInstance
+  const candidate = readRealtimeServerInstance(event);
+  if (candidate === "") {
+    return currentServerInstance;
   }
   if (candidate === currentServerInstance) {
-    return currentServerInstance
+    return currentServerInstance;
   }
   // instance 切换：清空去重状态
-  versionsByThreadId.clear()
-  return candidate
+  versionsByThreadId.clear();
+  return candidate;
 }
 
 // =============================================================================
@@ -181,11 +177,11 @@ export function updateRealtimeServerInstance(
  */
 export interface RealtimeThreadEventDecision {
   /** 是否接受并继续处理 */
-  accepted: boolean
+  accepted: boolean;
   /** 事件所属 thread id（可能为空串） */
-  threadId: string
+  threadId: string;
   /** 事件携带的 cache version（可能为 null） */
-  cacheVersion: number | null
+  cacheVersion: number | null;
 }
 
 /**
@@ -195,26 +191,24 @@ export interface RealtimeThreadEventDecision {
  * - seenSequences:   已见过的 event sequence 集合（容量上限 MAX_TRACKED_REALTIME_SEQUENCES）
  */
 export interface RealtimeSequenceTrackerState {
-  serverInstance: string
-  seenSequences: Set<number>
+  serverInstance: string;
+  seenSequences: Set<number>;
 }
 
 /**
  * 超过此容量时，按 sequence 自然顺序（升序）淘汰最早加入的 1/4。
  * 2_000 来自 codex-web `realtimeState.ts:27` 的同名字常量。
  */
-export const MAX_TRACKED_REALTIME_SEQUENCES = 2_000
+export const MAX_TRACKED_REALTIME_SEQUENCES = 2_000;
 
 /**
  * 创建一个新的 sequence tracker state（默认无 server instance、零去重）。
  */
-export function createRealtimeSequenceTrackerState(
-  serverInstance: string = '',
-): RealtimeSequenceTrackerState {
+export function createRealtimeSequenceTrackerState(serverInstance: string = ""): RealtimeSequenceTrackerState {
   return {
     serverInstance,
     seenSequences: new Set<number>(),
-  }
+  };
 }
 
 /**
@@ -226,22 +220,19 @@ export function createRealtimeSequenceTrackerState(
  *   - 高 sequence 永不被淘汰（避免正在活跃的事件被错杀）
  *   - 老 sequence 自然下沉并被回收
  */
-function recordSequence(
-  seen: Set<number>,
-  sequence: number,
-): void {
+function recordSequence(seen: Set<number>, sequence: number): void {
   if (seen.size < MAX_TRACKED_REALTIME_SEQUENCES) {
-    seen.add(sequence)
-    return
+    seen.add(sequence);
+    return;
   }
   // 已满：取出所有小于当前 sequence 的元素，按升序删除前 1/4
-  const overflowCount = Math.floor(MAX_TRACKED_REALTIME_SEQUENCES / 4) || 1
+  const overflowCount = Math.floor(MAX_TRACKED_REALTIME_SEQUENCES / 4) || 1;
   const older = Array.from(seen)
-    .filter((n) => n < sequence)
-    .sort((a, b) => a - b)
-  const toRemove = older.slice(0, overflowCount)
-  for (const n of toRemove) seen.delete(n)
-  seen.add(sequence)
+    .filter(n => n < sequence)
+    .sort((a, b) => a - b);
+  const toRemove = older.slice(0, overflowCount);
+  for (const n of toRemove) seen.delete(n);
+  seen.add(sequence);
 }
 
 // =============================================================================
@@ -268,28 +259,25 @@ function recordSequence(
  */
 export function processRealtimeEvent(
   state: RealtimeSequenceTrackerState,
-  event: MinimalRealtimeEvent,
+  event: MinimalRealtimeEvent
 ): { accept: boolean; decision: RealtimeThreadEventDecision } {
   // ① server instance 变化检测
-  const candidate = readRealtimeServerInstance(event)
-  if (candidate !== '' && candidate !== state.serverInstance) {
-    state.serverInstance = candidate
-    state.seenSequences.clear()
+  const candidate = readRealtimeServerInstance(event);
+  if (candidate !== "" && candidate !== state.serverInstance) {
+    state.serverInstance = candidate;
+    state.seenSequences.clear();
   }
 
   // ② 抽取 threadId / cacheVersion
-  const threadId = readRealtimeThreadId(event)
-  const cacheVersion = readRealtimeCacheVersion(event)
+  const threadId = readRealtimeThreadId(event);
+  const cacheVersion = readRealtimeCacheVersion(event);
 
   // ③ 无 sequence → 非去重事件
-  if (
-    typeof event.sequence !== 'number' ||
-    !Number.isFinite(event.sequence)
-  ) {
+  if (typeof event.sequence !== "number" || !Number.isFinite(event.sequence)) {
     return {
       accept: true,
       decision: { accepted: true, threadId, cacheVersion },
-    }
+    };
   }
 
   // ④ 已见过 → 重复
@@ -297,13 +285,13 @@ export function processRealtimeEvent(
     return {
       accept: false,
       decision: { accepted: false, threadId, cacheVersion },
-    }
+    };
   }
 
   // ⑤ 接受 + 记录
-  recordSequence(state.seenSequences, event.sequence)
+  recordSequence(state.seenSequences, event.sequence);
   return {
     accept: true,
     decision: { accepted: true, threadId, cacheVersion },
-  }
+  };
 }

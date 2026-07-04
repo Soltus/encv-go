@@ -26,6 +26,7 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/plugins/video"
 	"github.com/Soltus/encv-go/internal/v2/plugins/wps"
 	"github.com/Soltus/encv-go/internal/v2/types"
+	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
 )
 
 // Plugins 是所有已注册插件的列表，顺序代表优先级
@@ -297,6 +298,25 @@ func GetAllRegisteredChunkNamers() []namer.ChunkNamer {
 	return allChunkNamers
 }
 
+// GetAllRegisteredSearchableExtractors 返回所有实现了 SearchableContentsExtractor 的插件。
+// 2026-07-02 用户反馈：插件自主声明容器内可被全文搜索的内容。
+// FTS5 索引构建会调本函数拿到所有可提取器，对每个容器调 ExtractSearchableContents()。
+// 未实现 SearchableContentsExtractor 的插件被自动跳过（容器不参与全文搜索）。
+func GetAllRegisteredSearchableExtractors() []pluginInterfaces.SearchableContentsExtractor {
+	var out []pluginInterfaces.SearchableContentsExtractor
+	for _, p := range Plugins {
+		ext, ok := p.(pluginInterfaces.SearchableContentsExtractor)
+		if !ok {
+			continue
+		}
+		if !ext.GetSearchableContentsManifest().Enabled {
+			continue
+		}
+		out = append(out, ext)
+	}
+	return out
+}
+
 // BuildFullPluginSettings 构建一个完整的插件配置映射
 // userSettings: 从用户配置文件中读取的原始 map
 // 返回一个包含所有插件配置（用户+默认）的完整 map
@@ -554,7 +574,7 @@ func ProcessFileWithPlugin(p Plugin, inputPath string) (types.Index, io.ReadClos
 	return index, file, nil
 }
 
-func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputRootDir, outputDir string) (string, error) {
+func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputRootDir, outputDir string, collector *performance.Collector) (string, error) {
 	var outputPath string
 	if vp, ok := plugin.(*video.VideoPlugin); ok {
 		vp.SetOutputDir(outputDir)
@@ -567,6 +587,9 @@ func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputR
 		}
 	}()
 
+	if collector != nil {
+		collector.StartPhase("analyzing")
+	}
 	needsPreprocessing := plugin.GetMetadataExtractor() != nil || plugin.GetContentPreprocessor() != nil
 	slog.Debug("EncryptFileWithPlugin", "plugin", plugin.Name(), "needsPreprocessing", needsPreprocessing, "path", inputPath)
 
@@ -582,10 +605,18 @@ func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputR
 		defer dataReader.Close()
 	}
 
+	if collector != nil {
+		collector.EndPhase("analyzing", 0)
+		collector.StartPhase("preprocessing")
+	}
 	if err := plugin.PreEncryptProcessor(index, inputPath, inputRootDir, outputDir); err != nil {
 		return "", fmt.Errorf("pre-encryption failed for '%s': %w", inputPath, err)
 	}
 	slog.Debug("PreEncryptProcessor completed", "path", inputPath)
+	if collector != nil {
+		collector.EndPhase("preprocessing", 0)
+		collector.StartPhase("encrypting")
+	}
 
 	var result *crypto.EncryptionResult
 	var err error
@@ -603,6 +634,10 @@ func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputR
 		return "", fmt.Errorf("encryption failed for '%s': %w", inputPath, err)
 	}
 	slog.Debug("Encrypt completed", "path", inputPath)
+	if collector != nil {
+		collector.EndPhase("encrypting", 0)
+		collector.StartPhase("packing")
+	}
 
 	if vp, ok := plugin.(*video.VideoPlugin); ok {
 		vp.SetPostEncryptVerify(true)
@@ -612,6 +647,9 @@ func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputR
 		return "", fmt.Errorf("post-encryption failed for '%s': %w", inputPath, err)
 	}
 	slog.Debug("PostEncryptProcessor completed", "path", inputPath, "outputPath", outputPath)
+	if collector != nil {
+		collector.EndPhase("packing", 0)
+	}
 
 	if vp, ok := plugin.(*video.VideoPlugin); ok {
 		sourcePath := vp.EncryptedSourcePath()
@@ -630,22 +668,36 @@ func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputR
 }
 
 // DecryptContainerWithPlugin 是一个新的辅助函数，封装了完整的解密流程
-func DecryptContainerWithPlugin(ctx context.Context, plugin Plugin, containerPath, outputDir string) (string, error) {
+func DecryptContainerWithPlugin(ctx context.Context, plugin Plugin, containerPath, outputDir string, collector *performance.Collector) (string, error) {
+	if collector != nil {
+		collector.StartPhase("analyzing")
+	}
 	if err := plugin.PreDecryptProcessor(containerPath, outputDir); err != nil {
 		return "", fmt.Errorf("pre-decryption failed for '%s': %w", containerPath, err)
 	}
 	slog.Debug("PreDecryptProcessor completed", "path", containerPath)
+	if collector != nil {
+		collector.EndPhase("analyzing", 0)
+		collector.StartPhase("decrypting")
+	}
 
 	outputPath, err := plugin.Decrypt(containerPath, outputDir)
 	if err != nil {
 		return "", fmt.Errorf("decryption failed for '%s': %w", containerPath, err)
 	}
 	slog.Debug("Decrypt completed", "path", containerPath, "outputPath", outputPath)
+	if collector != nil {
+		collector.EndPhase("decrypting", 0)
+		collector.StartPhase("verifying")
+	}
 
 	if err := plugin.PostDecryptProcessor(containerPath); err != nil {
 		return "", fmt.Errorf("post-decryption failed for '%s': %w", containerPath, err)
 	}
 	slog.Debug("PostDecryptProcessor completed", "path", containerPath)
+	if collector != nil {
+		collector.EndPhase("verifying", 0)
+	}
 
 	return outputPath, nil
 }
@@ -684,7 +736,7 @@ func WalkAndEncrypt(ctx context.Context, walkPath string, inputRootDir, outputDi
 		// 4. 对处理后的文件列表进行逐个加密
 		for _, path := range processedPaths {
 			slog.Debug("Processing file with plugin", "path", path, "plugin", fmt.Sprintf("%T", plugin))
-			if _, err := EncryptFileWithPlugin(ctx, plugin, path, inputRootDir, outputDir); err != nil {
+			if _, err := EncryptFileWithPlugin(ctx, plugin, path, inputRootDir, outputDir, nil); err != nil {
 				slog.Warn("Failed to encrypt file, continuing", "path", path, "plugin", fmt.Sprintf("%T", plugin), "error", err)
 			}
 		}

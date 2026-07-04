@@ -296,10 +296,97 @@ ENCV_TEST_BYPASS_GUARD=1 /tmp/foo.test  # PASS
 | [development.md §5](file:///workspace/.trae/rules/development.md) | 后端启动规范；test-go.sh 与之同级（都是"统一入口 + 守卫"模式） |
 | [combolite.md](file:///workspace/.trae/rules/combolite.md) | 无关（combolite 集成） |
 | [automation-workflow.md](file:///workspace/.trae/rules/automation-workflow.md) | 弱相关（vitest 模块化测试可参考本规则 §二点五） |
+| [test-master-plan.md](./test-master-plan.md) | **强相关** — 测试体系总纲，Cypress 为主 Go bench 为辅 |
 
 ---
 
-## 六、相关引用
+## 🆕 六、Cypress 测试编排（2026-07-01 新增）
+
+### 6.1 Cypress 测试分类
+
+| 类型 | 目录 | 用途 | 沙箱可跑 | 依赖后端 |
+|------|------|------|---------|---------|
+| **Component Testing** | `cypress/component/` | 单组件 UI / 交互 / 状态 | ✅ 是 | ❌ 否 |
+| **E2E Testing** | `cypress/e2e/` | 整页交互 / 真实 API / 性能对比 | ⚠️ 需后端 | ✅ 是 |
+
+### 6.2 Cypress 合法入口
+
+```bash
+# ✅ Component 测试（沙箱可跑，轻量）
+cd app/encv-mobile
+pnpm exec cypress run --component
+
+# ✅ E2E 测试（需后端 + Vite 同时运行）
+CYPRESS_BASE_URL=http://localhost:5173 \
+CYPRESS_API_BASE=http://localhost:2025 \
+pnpm exec cypress run --e2e
+
+# ✅ 跑单个 spec 文件
+pnpm exec cypress run --e2e --spec "cypress/e2e/db-engine-perf.cy.ts"
+
+# ❌ 禁止：用临时脚本调 API 测性能
+# ❌ 禁止：手动 curl 循环当测试
+```
+
+### 6.3 Cypress 性能测试铁律
+
+> **性能结论必须出自 Cypress E2E 真实测试，Go benchmark 仅作补充参考。**
+> 详见 [test-master-plan.md §一.3](./test-master-plan.md#13-铁律性能结论必须出自-cypress-e2e)
+
+性能测试三要素（缺一不可）：
+1. **相同硬件环境** — 同机同时段同负载
+2. **相同测试负载** — 同任务数同流程同数据
+3. **多次测量取中位** — 至少 3 次，取中位数
+
+### 6.4 性能测试 spec 规范
+
+每个性能测试 spec 必须：
+- 有明确的 `describe` 描述测试场景和对比维度
+- 用 `performance.now()` 计时（不是 `Date.now()`）
+- 至少跑 3 次取中位数
+- 输出结构化的性能指标（耗时 / 吞吐 / 峰值并发）
+- 测试后清理状态（不污染下一次测试）
+
+---
+
+## 🆕 七、Go 基准测试（补充参考）
+
+### 7.1 定位
+
+Go benchmark 是**函数级性能参考**，用于：
+- 快速对比两个算法实现的差异
+- 验证单次优化的有效性（前后对比）
+- 检测内存分配热点（`-benchmem`）
+
+**Go benchmark 的数据不作为最终性能结论依据**，最终结论以 Cypress E2E 为准。
+
+### 7.2 合法入口
+
+```bash
+# ✅ 单包 benchmark
+bash scripts/test-go.sh -bench ./internal/service
+
+# ✅ 指定 benchmark 函数
+bash scripts/test-go.sh -bench=BenchmarkCreateBatch -benchmem ./internal/service
+
+# ✅ 跑完整 benchmark（CI 用）
+ENCV_TEST_FULL=1 bash scripts/test-go.sh -bench ./...
+```
+
+### 7.3 Benchmark 命名规范
+
+```
+Benchmark<场景描述>_<引擎/条件>_<规模>
+```
+
+示例：
+- `BenchmarkCreateBatch_SQLite_100` — SQLite 引擎批量创建 100 任务
+- `BenchmarkCreateBatch_Turso_1000` — Turso 引擎批量创建 1000 任务
+- `BenchmarkUpdateProgress_DirtyThrottle_500` — 脏任务节流 500 任务
+
+---
+
+## 八、相关引用
 
 - [scripts/test-go.sh](file:///workspace/scripts/test-go.sh) — Go 测试唯一入口 + 守卫
 - [scripts/test-all-go.sh](file:///workspace/scripts/test-all-go.sh) — 模块化编排入口

@@ -10,13 +10,13 @@
  *   context: 上一步骤的 status + 当前 matrix 变量
  */
 
-import type { ConditionExpr, StepStatus } from './types'
+import type { ConditionExpr, StepStatus } from "./types";
 
 export interface EvalContext {
   /** 上一步骤的状态（用于 success/failure 判断） */
-  previousStepStatus?: StepStatus
+  previousStepStatus?: StepStatus;
   /** matrix 展开的变量绑定 */
-  vars?: Record<string, string>
+  vars?: Record<string, string>;
 }
 
 /**
@@ -24,40 +24,40 @@ export interface EvalContext {
  */
 export function evaluateCondition(expr: ConditionExpr, ctx: EvalContext): boolean {
   switch (expr.op) {
-    case 'always':
-      return true
+    case "always":
+      return true;
 
-    case 'success':
-      return ctx.previousStepStatus === 'success'
+    case "success":
+      return ctx.previousStepStatus === "success";
 
-    case 'failure':
-      return ctx.previousStepStatus !== undefined && ctx.previousStepStatus !== 'success'
+    case "failure":
+      return ctx.previousStepStatus !== undefined && ctx.previousStepStatus !== "success";
 
-    case 'eq': {
-      const left = resolveTemplate(expr.left, ctx)
-      const right = resolveTemplate(expr.right, ctx)
-      return left === right
+    case "eq": {
+      const left = resolveTemplate(expr.left, ctx);
+      const right = resolveTemplate(expr.right, ctx);
+      return left === right;
     }
 
-    case 'neq': {
-      const left = resolveTemplate(expr.left, ctx)
-      const right = resolveTemplate(expr.right, ctx)
-      return left !== right
+    case "neq": {
+      const left = resolveTemplate(expr.left, ctx);
+      const right = resolveTemplate(expr.right, ctx);
+      return left !== right;
     }
 
-    case 'and':
-      return expr.children.every((child) => evaluateCondition(child, ctx))
+    case "and":
+      return expr.children.every(child => evaluateCondition(child, ctx));
 
-    case 'or':
-      return expr.children.some((child) => evaluateCondition(child, ctx))
+    case "or":
+      return expr.children.some(child => evaluateCondition(child, ctx));
 
-    case 'not':
-      return !evaluateCondition(expr.child, ctx)
+    case "not":
+      return !evaluateCondition(expr.child, ctx);
 
     default:
       // 未知操作符，默认执行（安全侧）
-      console.warn(`[ConditionEval] Unknown op: ${(expr as any).op}, defaulting to true`)
-      return true
+      console.warn(`[ConditionEval] Unknown op: ${(expr as any).op}, defaulting to true`);
+      return true;
   }
 }
 
@@ -66,8 +66,8 @@ export function evaluateCondition(expr: ConditionExpr, ctx: EvalContext): boolea
  * 支持 ${{ varName }} 语法。
  */
 function resolveTemplate(template: string, ctx: EvalContext): string {
-  if (!template.includes('${{')) return template
+  if (!template.includes("${{")) return template;
   return template.replace(/\$\{\{\s*(\w+)\s*\}\}/g, (_match, varName) => {
-    return ctx.vars?.[varName] ?? template
-  })
+    return ctx.vars?.[varName] ?? template;
+  });
 }

@@ -11,27 +11,27 @@
  *   - 留位置给未来 SSE / 设备本地 socket 实现
  */
 
-import type { Backend, EventEmitter } from './Backend'
+import type { Backend, EventEmitter } from "./Backend";
 
 export function createNativeBridgeBackend(_emit: EventEmitter): Backend {
   // TODO: 实现 APK native bridge transport
   // - 注册 @capacitor/core bridge listener
   // - 解析 native module 推送的消息 → emit(event, data)
   // - 必要时回写到 native side（player control 等）
-  console.warn('[NativeBridgeBackend] not yet implemented; falling back to noop')
+  console.warn("[NativeBridgeBackend] not yet implemented; falling back to noop");
 
-  let running = false
+  let running = false;
 
   return {
     start() {
-      if (running) return
-      running = true
+      if (running) return;
+      running = true;
       // 占位：先 emit online:true 让 UI 不卡
-      _emit('server:status', { online: true })
-      console.warn('[NativeBridgeBackend] start() called but backend not implemented')
+      _emit("server:status", { online: true });
+      console.warn("[NativeBridgeBackend] start() called but backend not implemented");
     },
     stop() {
-      running = false
+      running = false;
     },
-  }
+  };
 }

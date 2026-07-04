@@ -21,18 +21,15 @@ import (
 
 	"github.com/Soltus/encv-go/internal/auth"
 	"github.com/Soltus/encv-go/internal/config"
-	"github.com/Soltus/encv-go/internal/middleware"
+	"github.com/Soltus/encv-go/internal/kernel"
 	"github.com/Soltus/encv-go/internal/mount"
 	"github.com/Soltus/encv-go/internal/mount/drivers"
 	"github.com/Soltus/encv-go/internal/openlist"
-	"github.com/Soltus/encv-go/internal/openlist/web"
 	"github.com/Soltus/encv-go/internal/register"
-	"github.com/Soltus/encv-go/internal/routes"
 	mobileservice "github.com/Soltus/encv-go/internal/service"
+	"github.com/Soltus/encv-go/internal/search"
 	"github.com/Soltus/encv-go/internal/tools"
 	"github.com/Soltus/encv-go/internal/utils"
-	// 🆕 2026-06-14 移除 internal/utils/ffmpeg import：心跳改内存版，不再调 ffmpeg.StartHeartbeatLoop
-	// (留注释提醒后人：不要重新加回)
 	"github.com/Soltus/encv-go/internal/v2/container/detector"
 	"github.com/Soltus/encv-go/internal/v2/handler"
 	"github.com/Soltus/encv-go/internal/v2/namer"
@@ -41,18 +38,7 @@ import (
 	"github.com/Soltus/encv-go/internal/webdav"
 	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
-	goWebdav "golang.org/x/net/webdav"
 )
-
-// 🆕 2026-06-17：webdavFSEntry 是多挂载点 webdav 适配用的封装。
-// 每个 mount 一个 webdavFS 实例（独立 dir / indexCache / fsnotify watcher），
-// 同时持有 goWebdav.FileSystem（给 Handler 用）和 webdav.IndexProvider（给 SearchInIndex / GetIndexStats 用）。
-type webdavFSEntry struct {
-	fs         webdav.IndexProvider
-	fileSystem goWebdav.FileSystem
-	mount      *mount.Mount
-	webdavPath string // URL 前缀，如 "/d/automation" 或 "/webdav"
-}
 
 type Server struct {
 	server         *http.Server
@@ -106,6 +92,41 @@ type Server struct {
 	// atomic.LoadInt64 无锁读，atomic.StoreInt64 写。
 	// HeartbeatStaleThreshold = 30s，见 runtime_api.go
 	lastHeartbeatMs int64
+	// 🆕 2026-07-03：向量搜索服务（Turso 原生向量检索 + 中文 bigram 分词）
+	searchSvc *vectorsearch.SearchService
+	// 🆕 2026-07-03：特色微服务内核 Lifecycle（启停编排 + 内存守卫）
+	//   - Start/Stop 受控：满足"启动 ≤500ms / 停止 ≤200ms"硬指标
+	//   - 不消耗 TCP 端口（纯进程内）
+	//   - 内存守卫：接近阈值时触发 Stop
+	//   - 受管的 Pool 在 Stop 时把 in-flight job 委托给 Ledger
+	//   - 可选：nil = 未启用（dev/test 场景）
+	kernelLifecycle *kernel.Lifecycle
+	kernelPool      *kernel.Pool
+	// 🆕 2026-07-03：微内核运行时（服务级生命周期 + 多租户 + 工具调度）
+	//   - 服务按需激活/停用（不是整进程启停）
+	//   - 多租户隔离（并发配额 + 速率限制）
+	//   - AI Agent 工具调用：按需激活依赖的服务
+	//   - 可选：nil = 使用全局 registry（向后兼容）
+	microKernel *kernel.MicroKernel
+	toolKernel  *kernel.ToolKernel
+	// 🆕 2026-07-02：搜索结果内存 LRU 缓存（解决连续搜索重新加载慢的问题）
+	//   连续搜"在线" → "在线 视频" → "在线视频" 时，第二、三次直接命中缓存
+	//   避免每次都走 DB + 向量搜索 + 混合评分（综合 ~500ms+）
+	searchCache *searchResultCache
+	// 🆕 2026-07-02：数据库引擎降级真实原因（修复 handleDatabaseInfo 硬编码"当前平台不支持"的问题）
+	//
+	// 历史：InitDatabase 通过 slog.Error 记录错误，但没保存到 Server，
+	//       handleDatabaseInfo 只能硬编码"当前平台不支持 Turso/LibSQL 引擎"，
+	//       误导用户和调试 — 真实原因可能是 C 库加载失败、PRAGMA 失败、schema 失败、panic 等。
+	//
+	// 修复：InitDatabase 在降级时把真实失败原因写入此字段，handleDatabaseInfo 优先使用它。
+	// 参见 .trae/rules/graceful-degradation.md L2 降级规范："降级原因明确"。
+	dbFallbackReason string
+
+	// 🆕 2026-07-03：SimVerse 模拟世界引擎管理器（Phase 2 前后端联通）
+	//  持有 FractalWorld 实例 + tick 循环 + 性能调度
+	//  可选：nil = 未启用（dev/test 场景可手动创建）
+	simverseMgr *SimverseManager
 }
 
 // mountRegistryDataPath 返回 mounts.json 的持久化路径。
@@ -214,6 +235,57 @@ func desktopAppDirName(isDev bool) string {
 	return "encv"
 }
 
+// kernelDataPath 返回 kernel Ledger + CheckpointStore 的持久化目录。
+//
+// 平台/env 矩阵与 mountRegistryDataPath 对齐：
+//
+//	平台    环境              路径
+//	─────  ───────────       ──────────────────────────────────────────
+//	Android 任意              <ENCV_APP_FILES_DIR>/.encv/kernel
+//	Linux   dev               $XDG_DATA_HOME/encv-dev/kernel
+//	Linux   production        $XDG_DATA_HOME/encv/kernel
+//	macOS   dev               $HOME/Library/Application Support/encv-dev/kernel
+//	macOS   production        $HOME/Library/Application Support/encv/kernel
+//	Windows dev               %LOCALAPPDATA%\encv-dev\kernel
+//	Windows production        %LOCALAPPDATA%\encv\kernel
+//
+// 优先级：ENCV_KERNEL_DIR（明确指定） > 派生默认值。
+//
+// 用途：FileJobLedger + FileCheckpointStore 跨进程持久化（WorkManager 风格断点续跑）。
+func kernelDataPath() string {
+	if v := os.Getenv("ENCV_KERNEL_DIR"); v != "" {
+		return v
+	}
+	// 复用 mountRegistryDataPath 的目录派生逻辑，取同级 .encv/kernel 子目录
+	mountsFile := mountRegistryDataPath(nil) // cfg 不影响 env-driven 路径
+	parent := filepath.Dir(mountsFile)        // .../.encv  或 .../encv(-dev)
+	return filepath.Join(parent, "kernel")
+}
+
+// simverseDataPath 返回 SimVerse 世界数据的持久化目录。
+//
+// 平台/env 矩阵与 mountRegistryDataPath 对齐：
+//
+//	平台    环境              路径
+//	─────  ───────────       ──────────────────────────────────────────
+//	Android 任意              <ENCV_APP_FILES_DIR>/.encv/simverse
+//	Linux   dev               $XDG_DATA_HOME/encv-dev/simverse
+//	Linux   production        $XDG_DATA_HOME/encv/simverse
+//	macOS   dev               $HOME/Library/Application Support/encv-dev/simverse
+//	macOS   production        $HOME/Library/Application Support/encv/simverse
+//	Windows dev               %LOCALAPPDATA%\encv-dev\simverse
+//	Windows production        %LOCALAPPDATA%\encv\simverse
+//
+// 优先级：ENCV_SIMVERSE_DIR（明确指定） > 派生默认值。
+func simverseDataPath() string {
+	if v := os.Getenv("ENCV_SIMVERSE_DIR"); v != "" {
+		return v
+	}
+	mountsFile := mountRegistryDataPath(nil)
+	parent := filepath.Dir(mountsFile)
+	return filepath.Join(parent, "simverse")
+}
+
 // resolveUserPath 解析用户路径为绝对路径（multi-mount-aware）。
 //
 // 优先级：
@@ -313,10 +385,137 @@ func NewServer(ctx context.Context, configPath string) *Server {
 		&taskMountResolver{reg: s.mountRegistry},
 	)
 
+	// 🆕 2026-07-01：数据库存储引擎初始化
+	actualEngine, dbPath := s.InitDatabase(s.servingDir)
+
+	// 🆕 2026-07-03：向量搜索服务初始化
+	s.InitVectorSearch(dbPath, actualEngine)
+
+	// 🆕 2026-07-02：FTS5 全文索引初始化（异步后台 build，不阻塞启动）
+	//   修复：InitFullTextIndex 之前定义但从未调用，导致全文搜索 0 结果。
+	//   现在启动时 init + 后台 scan servingDir 写入索引。
+	//   失败不阻断（log warn + 标 available=false，调用方走降级路径）
+	// 2026-07-02 v2：注册可搜索内容提取器（插件自主声明字幕/歌词等可被搜的内容）
+	extractors := plugins.GetAllRegisteredSearchableExtractors()
+	RegisterSearchableExtractors(extractors)
+	slog.Info("FTS5 registered searchable extractors", "count", len(extractors))
+
+	if err := s.InitFullTextIndexWithBuild(s.servingDir); err != nil {
+		slog.Warn("FTS5 full-text index init failed, full-text search will be unavailable", "err", err)
+	}
+
+	// 🆕 2026-07-03：FTS 索引重建器注入（spec fts-rebuild-task）
+	//   - 把 server 层的 FTSRebuilder 实现注入到 taskManager
+	//   - 让 POST /api/files/search-fulltext/rebuild 能创建 rebuild_fts_index 任务
+	//   - 任务走 worker pool，自带进度推送（task:progress WS）+ 持久化 + 取消能力
+	//   - 同一实例也注入 kernel（让 AI agent / kernel Bus 可触发重建，不重复构造）
+	ftsRebuilderImpl := NewFTSRebuilder(s.servingDir)
+	s.mobileSvc.GetTaskManager().SetFTSRebuilder(ftsRebuilderImpl)
+	slog.Info("FTS rebuilder injected into task manager")
+
+	// 🆕 2026-07-03：特色微服务内核接入（spec kernel-integration）
+	//   - 把 SearchService / WSHub / FTSRebuilder 注册为 kernel.Service
+	//   - 暴露 /api/kernel/services / /api/kernel/health / /api/kernel/call（dev only）
+	//   - 不破坏现有直接 method call 路径（新旧两条路径并存，渐进式迁移）
+	//   - kernel 包从孤儿状态盘活：868 行测试 + 完整设计此前零生产引用
+	if initErrs := RegisterKernelAdapters(
+		s.searchSvc,
+		s.mobileSvc.GetWSHub(),
+		ftsRebuilderImpl,
+	); len(initErrs) > 0 {
+		// 不阻断启动 — kernel service init 失败属 L2 降级
+		// （Health 端点会暴露，前端可看到具体哪个 service 不可用）
+		slog.Warn("kernel: some services failed to init (continuing in degraded mode)",
+			"failed", initErrs)
+	} else {
+		slog.Info("kernel: all adapters registered and initialized",
+			"services", kernelListNames())
+	}
+
+	// 🆕 2026-07-03：特色微服务内核 Lifecycle 接入（spec android-workmanager-split-start-stop Phase 1.3）
+	//
+	// 用户硬约束：
+	//   - 启动 ≤ 500ms / 停止 ≤ 200ms
+	//   - 内存守卫（避免沙箱 OOM）
+	//   - 不消耗 TCP 端口（纯进程内）
+	//   - Stop 时 in-flight job 委托给 Ledger（下次 Start 时 Restore 续跑）
+	//
+	// feature flag：ENCV_USE_KERNEL_POOL=1 启用（默认关闭，渐进式迁移）
+	// 未启用时 s.kernelLifecycle = nil，HTTP 端点返回 503 Service Unavailable。
+	//
+	// 构造但不启动 —— Start() 在路由注册后调 kernelLifecycle.Start(ctx)，
+	// 让 Restore 跑在端口监听前（避免 Restore 未完成时业务请求打进来）。
+	if os.Getenv("ENCV_USE_KERNEL_POOL") == "1" {
+		kdir := kernelDataPath()
+		ledger, err := kernel.NewFileJobLedger(filepath.Join(kdir, "ledger"))
+		if err != nil {
+			slog.Warn("kernel: FileJobLedger init failed, lifecycle disabled",
+				"dir", kdir, "err", err)
+		} else {
+			store, err := kernel.NewFileCheckpointStore(filepath.Join(kdir, "checkpoints"))
+			if err != nil {
+				slog.Warn("kernel: FileCheckpointStore init failed, lifecycle disabled",
+					"dir", kdir, "err", err)
+			} else {
+				// 单 pool 承载 task-manager 类 job（FTS 重建 / 批量加密 / 向量索引）
+				// worker 数 4：长任务并发上限，避免沙箱 OOM
+				// QueueSize 64：突发请求缓冲
+				// MemGuardMB 256：接近 256MB 时 MemoryGuard 标记 triggered（由 Lifecycle.Stop 决定是否停）
+				s.kernelPool = kernel.NewPool("task-manager", 4, kernel.PoolConfig{
+					QueueSize: 64,
+					Ledger:    ledger,
+				})
+				s.kernelLifecycle = kernel.NewLifecycle(kernel.LifecycleConfig{
+					Name:       "main",
+					Pools:      []*kernel.Pool{s.kernelPool},
+					Ledger:     ledger,
+					Store:      store,
+					MemGuardMB: 256,
+					Graceful:   100 * time.Millisecond,
+				})
+				slog.Info("kernel: lifecycle constructed (not started yet)",
+					"dir", kdir, "pools", 1, "memGuardMB", 256)
+			}
+		}
+	}
+
+	// 🆕 2026-07-03：微内核运行时 + 工具内核（spec microkernel-split-start-stop Phase 4.2/4.4）
+	//
+	// 核心价值：
+	//   - 服务按需激活/停用（不是整进程启停）
+	//   - 多租户隔离（并发配额 + 速率限制）
+	//   - AI Agent 工具调用：只激活需要的服务，用完自动释放
+	//
+	// feature flag：ENCV_USE_MICRO_KERNEL=1 启用（默认关闭，渐进式迁移）
+	// 与 ENCV_USE_KERNEL_POOL 独立：可以只开 lifecycle，也可以两者都开
+	if os.Getenv("ENCV_USE_MICRO_KERNEL") == "1" {
+		s.microKernel = kernel.NewMicroKernel(kernel.MicroKernelConfig{
+			Name:               "main",
+			MemGuardMB:         256,
+			DefaultIdleTimeout: 5 * time.Minute, // 5 分钟空闲自动停用
+			DefaultGraceful:    100 * time.Millisecond,
+		})
+		s.toolKernel = kernel.NewToolKernel(s.microKernel)
+
+		// 注册服务工厂（与 kernel.Register 的 adapter 对应，但用工厂延迟构造）
+		slog.Info("kernel: micro kernel constructed (services registered lazily)")
+	}
+
 	// 剧本外置 spec：若 agent_settings.mock_scenarios_dir 非空，
 	// 用 ScenarioLoader 加载 YAML/JSON 剧本，注入到 MockEngine。
 	// 详见 internal/server/mock_scenarios/SCHEMA.md。
 	s.loadScenariosFromAgentConfig()
+
+	// 🆕 2026-07-03：SimVerse 模拟世界引擎持久化初始化
+	//   - 持久化目录：与 mountRegistry / kernel 同级 (.encv/simverse)
+	//   - 自动从 checkpoint 恢复（若存在）
+	//   - 运行时每 500 tick 自动 checkpoint
+	//   - 退出时最终 checkpoint
+	simDir := simverseDataPath()
+	s.simverseMgr = NewSimverseManager(simDir)
+	slog.Info("simverse manager initialized", "data_dir", simDir,
+		"has_checkpoint", s.simverseMgr.HasCheckpoint())
+
 	return s
 }
 
@@ -534,278 +733,28 @@ func (s *Server) Start(version string) (string, error) {
 	// 3. 创建 Gin 引擎并注册路由
 	r := NewGinApp(s.cfg)
 
-	r.GET("/ping", s.handlePingGin)
-	r.GET("/health", s.handleHealthGin)
-	// 🆕 2026-06-14：Runtime 自描述端点（child 主动声明状态，parent 只读）
-	// 见 internal/server/runtime_api.go
-	r.GET("/api/runtime", s.handleRuntimeAPI)
-	// 🆕 2026-06-15：统一诊断端点 — 聚合 ping/health/runtime/build-info/ffmpeg-status/service-guard
-	// AI / 前端探针调一次拿全貌，替代在 6+ 路由里挑 + 编错路径的历史痛点。
-	r.GET("/api/diagnose", s.handleDiagnoseGin)
-	r.GET("/stream", gin.WrapF(s.handleStreamRequest))
-	r.GET("/decrypt", gin.WrapF(s.handleStreamRequest))
-	r.GET("/preview/*filepath", gin.WrapH(http.StripPrefix("/preview", web.PreviewHandler())))
-	r.GET("/api/config", s.handleGetConfigGin)
-	r.PUT("/api/config", s.handlePutConfigGin)
-	r.GET("/api/config/schema", s.handleConfigSchemaGin)
-	r.GET("/api/files", s.handleListFilesGin)
-	r.GET("/api/files/stream", s.handleListFilesStreamGin)
-	r.GET("/api/files/plugin-stream", s.handlePluginFilesStreamGin)
-	r.DELETE("/api/files", s.handleDeleteFileGin)
-	r.POST("/api/files/mkdir", s.handleCreateDirectoryGin)
-	r.POST("/api/files/upload", s.handleUploadFileGin)
-	r.GET("/api/service-guard", s.handleServiceGuardGin)
-	r.GET("/api/file", s.handleReadFileContentGin)
-	r.GET("/api/file/text-preview-exts", s.handleTextPreviewExtsGin)
-	r.GET("/api/file/info", s.handleFileInfoGin)
-	r.POST("/api/file/rename", s.handleFileRenameGin)
-	r.POST("/api/file/copy", s.handleFileCopyGin)
-	r.POST("/api/file/move", s.handleFileMoveGin)
-	r.PATCH("/api/file/rename", s.handleRenameFileGin)
-	r.GET("/api/tasks", s.handleGetTasksGin)
-	r.POST("/api/tasks", s.handleCreateTaskGin)
-	r.POST("/api/tasks/predict-plugin", s.handlePredictPluginGin)
-	r.POST("/api/tasks/:id/cancel", s.handleCancelTaskGin)
-	r.POST("/api/tasks/:id/retry", s.handleRetryTaskGin)
-	r.DELETE("/api/tasks/:id", s.handleRemoveTaskGin)
-	r.DELETE("/api/tasks", s.handleClearCompletedTasksGin)
-	r.POST("/api/webdav/test", s.handleTestWebDAVGin)
-	r.GET("/api/webdav/test-local", s.handleTestLocalWebDAVGin)
-	r.GET("/api/webdav/local-info", s.handleWebDavLocalInfoGin)
-	// 🆕 2026-06-17：多挂载点 webdav manifest API（multi-mount-storage-refactor spec 续）
-	// 前端 WebDavAutomationTestsDetail.vue 用此 API 动态生成测试用例
-	r.GET("/api/webdav/manifest", s.handleWebDavManifestGin)
-	r.GET("/api/remote/info", s.handleRemoteInfoGin)
-	r.GET("/api/remote/openlist", s.handleListOpenlistSitesGin)
-	r.POST("/api/remote/openlist", s.handleAddOpenlistSiteGin)
-	r.PUT("/api/remote/openlist/:id", s.handleUpdateOpenlistSiteGin)
-	r.DELETE("/api/remote/openlist/:id", s.handleDeleteOpenlistSiteGin)
-	r.GET("/api/permissions", s.handlePermissionsGin)
-	r.POST("/api/server/shutdown", s.handleServerShutdownGin)
-	r.GET("/api/files/exists", s.handleFileExistsGin)
-	r.GET("/api/files/encrypt-output-exists", s.handleEncryptOutputExistsGin)
-	r.GET("/api/files/search", s.handleSearchFilesGin)
-	r.GET("/api/files/tags", s.handleTagsListGin)
-	r.POST("/api/files/tags", s.handleTagsMutateGin)
-	r.GET("/api/index/stats", s.handleIndexStatsGin)
-	r.POST("/api/index/rebuild", s.handleIndexRebuildGin)
-	r.POST("/api/index/clear", s.handleIndexClearGin)
-	r.GET("/api/stream/external", s.handleStreamExternalFileGin)
-	r.GET("/api/build-info", s.handleBuildInfoGin)
-	r.GET("/api/libraries", s.handleLibrariesGin)  // 🆕 2026-06-17：About 页库展示数据源
-	r.GET("/api/ffmpeg-status", s.handleFFmpegStatusGin)
-	r.POST("/api/dev/automation-report", s.handleAutomationReportGin)
-	r.POST("/api/dev/sparse-container", s.handleSparseContainerWriteGin)
-	r.GET("/api/dev/sparse-container/probe", s.handleSparseContainerProbeGin)
-	r.DELETE("/api/dev/sparse-container", s.handleSparseContainerCleanupGin)
-	r.GET("/api/container/versions", s.handleGetContainerVersionsGin)
-	r.GET("/api/plugins", s.handlePluginsGin)
-	r.GET("/api/plugins/container-extensions", s.handleContainerExtensionsGin)
-	r.GET("/api/alist-encrypt/stream", s.handleAlistEncryptStreamGin)
-	r.GET("/api/alist-encrypt/decode-filename", s.handleAlistDecodeFilenameGin)
-	r.POST("/api/logs", s.handleAPILogsGin)
-	// 🆕 2026-06-16: GET /api/logs/recent — http-poll 降级模式 + WS 模式冷启动时拉历史日志
-	r.GET("/api/logs/recent", s.handleAPILogsRecentGin)
-	// 🆕 2026-06-15：多挂载点管理 API（multi-mount-storage-refactor spec §6.1）
-	r.GET("/api/mounts", s.handleListMountsGin)
-	// 2026-06-16 移除：/api/mounts/refresh — 自动迁移启动期补齐已经够用（migrate.go MigrateFromServingDir），
-	//   不需要用户主动触发；mount 失败信息通过 /api/mounts 响应的 bootstrap_errors 字段暴露给 MountsDetail.vue 内联 banner
-	r.GET("/api/mounts/:id", s.handleGetMountGin)
-	r.POST("/api/mounts", s.handleCreateMountGin)
-	r.PUT("/api/mounts/:id", s.handleUpdateMountGin)
-	r.DELETE("/api/mounts/:id", s.handleDeleteMountGin)
-	r.POST("/api/mounts/:id/resolve", s.handleResolveMountPathGin)
-	r.GET("/api/mounts/:id/usage", s.handleMountUsageGin)
-	// 自动化测试 mock 数据生成/重置（root 白名单校验后写入）
-	r.POST("/api/mock/generate", s.handleMockGenerateGin)
-	r.POST("/api/mock/reset", s.handleMockResetGin)
-	r.GET("/ws", gin.WrapF(s.handleWebSocket))
+	RegisterRoutes(s, r)
 
-	// Agent AI 端点（集成到 encv-go 主后端）
-	s.registerAgentRoutes(r)
-
-	// plugin-openlist 独立 vite dev server (:5174) 反向代理
-	// 路径：/api/preview/plugin-openlist/* → http://127.0.0.1:5174/*
-	// 独立后端协调（不走 vite），前端点击跳相对路径即可
-	r.Any("/api/preview/plugin-openlist/*filepath", s.handlePluginOpenlistProxyGin)
-	r.Any("/api/preview/plugin-openlist", s.handlePluginOpenlistProxyGin)
-
-	// Admin 路由
-	r.GET(routes.Admin, func(c *gin.Context) {
-		c.Redirect(http.StatusFound, routes.FSProxy+"/")
-	})
-	loginRequired := s.cfg.Admin.Password != ""
-	if loginRequired {
-		s.jwtManager = auth.NewJWTManager(s.cfg.Admin.Password, 7*24*time.Hour)
-		slog.Info("Admin service requires login")
-	} else {
-		slog.Info("Admin service running without authentication (password is empty)")
-	}
-
-	r.GET(routes.Login, s.handleLoginGin)
-	r.POST(routes.Login, s.handleLoginGin)
-	r.Any(routes.Logout, s.handleLogoutGin)
-
-	adminGroup := r.Group(routes.Admin)
-	if loginRequired {
-		adminGroup.Use(JWTAuthMiddleware(s.jwtManager))
-	}
-	adminGroup.POST("/file/analyze", s.handleFileAnalyzeGin)
-	adminGroup.POST("/file/rename", s.handleFileRenameGin)
-	adminGroup.POST("/file/copy", s.handleFileCopyGin)
-	adminGroup.POST("/file/move", s.handleFileMoveGin)
-
-	fsProxyGroup := r.Group(routes.FSProxy)
-	if loginRequired {
-		fsProxyGroup.Use(JWTAuthMiddleware(s.jwtManager))
-	}
-	fsProxyGroup.Any("/*path", s.handleFSProxyGin)
-
-	r.Any(routes.FSProxyAPI+"/*path", func(c *gin.Context) {
-		path := c.Param("path")
-		c.Redirect(http.StatusTemporaryRedirect, "/api"+path)
-	})
-
-	// OpenList 路由
-	r.GET(routes.OpenListProxy+"/local/status", LocalOpenListStatusHandler())
-
-	if len(s.cfg.Proxy.Sites) > 0 {
-		multiSiteServer := openlist.NewMultiSiteServer(config.NewContext(context.Background(), s.cfg))
-		proxyGin := NewProxyGin(s.cfg)
-
-		r.GET(routes.OpenListProxy+"/sites", handleOpenlistSitesGin(multiSiteServer))
-		r.POST(routes.OpenListProxy+"/set-token", handleSetSiteTokenGin(multiSiteServer))
-		r.POST(routes.OpenListProxy+"/delete-token", handleDeleteTokenGin(multiSiteServer))
-		r.POST(routes.OpenListProxy+"/set-expiry", handleSetExpiryGin(multiSiteServer))
-
-		openlistGroup := r.Group(routes.OpenListProxy + "/sites")
-		openlistGroup.Use(OpenlistSiteMiddleware(multiSiteServer))
-		if loginRequired {
-			openlistGroup.Use(JWTAuthMiddleware(s.jwtManager))
-		}
-		openlistGroup.GET("/:siteId/*path", handleOpenlistProxyGin(proxyGin))
-		openlistGroup.HEAD("/:siteId/*path", handleOpenlistProxyGin(proxyGin))
-		openlistGroup.POST("/:siteId/*path", handleOpenlistProxyGin(proxyGin))
-		openlistGroup.PUT("/:siteId/*path", handleOpenlistProxyGin(proxyGin))
-		openlistGroup.DELETE("/:siteId/*path", handleOpenlistProxyGin(proxyGin))
-		openlistGroup.PATCH("/:siteId/*path", handleOpenlistProxyGin(proxyGin))
-		openlistGroup.OPTIONS("/:siteId/*path", handleOpenlistProxyGin(proxyGin))
-	}
-
-	// 🆕 2026-06-17：多挂载点 webdav 适配
+	// 🆕 2026-07-03：启动 kernel Lifecycle（含 Restore 未完成 job）
 	//
-	// 之前的实现：单根 webdavFS，URL 仅 /webdav/*path。问题：
-	//   1. mobile_api.go 大量代码用 s.webdavFS.SearchInIndex / GetIndexStats
-	//      → 单根架构下 SearchInIndex 只覆盖 primary（servingDir）范围
-	//   2. WebDAV 协议直接暴露 servingDir 物理根，不感知 mount 概念
-	//      → 多 mount 引入后，physical dir（primary）vs test dir（automation）必须隔离
-	//   3. 路径穿越 / 跨 mount 逃逸无法用单 FS 隔离（必须每个 mount 独立 FS）
+	// 放在 RegisterRoutes 之后、端口监听之前：
+	//   - 路由已就绪：Restore 失败时 /api/kernel/lifecycle/stats 可查诊断
+	//   - 端口未监听：外部请求还打不进来，Restore 期间不会有业务竞争
 	//
-	// 新实现（multi-mount-storage-refactor spec 续）：
-	//   - s.webdavFS           保留，指向 primary mount（向后兼容 mobile_api.go + /webdav/ 入口）
-	//   - s.webdavFSByMount    新增，key = mount.Name；每个 mount 一个独立 webdavFS 实例
-	//   - URL 双兼容：
-	//       /webdav/*path              →  primary（向后兼容所有旧客户端 / Windows Explorer 单 webdav）
-	//       /d/<mount_path>/*path      →  对应 mount（多 webdav 客户端用）
-	//   - 路径逃逸防护：webdavFS 实例的 dir = mount.RootPath（绝对路径）；
-	//     webdav library 的 Resolve 自动用 dir 限制（拼 filepath.Clean + IsAbs 校验）
-	//     → 跨 mount 逃逸测试会在 attack module 跑
-	//
-	// 性能：每个 mount 一个独立 indexCache + fsnotify watcher + runIndexer goroutine。
-	// 启动期独立失败 → 记录到 s.mountBootstrapErrors，前端 /api/mounts 可见。
-	s.webdavFSByMount = make(map[string]*webdavFSEntry)
-
-	// 1. 收集所有 enabled mounts（primary / automation / sandbox 等）
-	webdavEnabledMounts := []*mount.Mount{}
-	if s.mountRegistry != nil {
-		for _, m := range s.mountRegistry.List() {
-			if !m.Enabled {
-				continue
-			}
-			// 过滤：只对 webdavProtocol=true 的 mount 注册（防御性：未来可加开关）
-			webdavEnabledMounts = append(webdavEnabledMounts, m)
-		}
-	}
-
-	// 2. 确保 primary mount 也在列表里（即使 mountRegistry 里没 primary，也用 s.webdavDir 兜底）
-	hasPrimary := false
-	for _, m := range webdavEnabledMounts {
-		if m.Name == mount.NamePrimary {
-			hasPrimary = true
-			break
-		}
-	}
-	if !hasPrimary && s.webdavDir != "" {
-		// 兜底：用 s.webdavDir 作为 primary（cfg.Webdav.Dir 兼容路径）
-		// 此时 webdavFS 的 dir = s.webdavDir，mount.Mount 字段是 nil（仅供 /webdav/ 入口用）
-		webdavEnabledMounts = append(webdavEnabledMounts, &mount.Mount{
-			Name:      mount.NamePrimary,
-			MountPath: "/",
-			RootPath:  s.webdavDir,
-			Enabled:   true,
-		})
-	}
-
-	// 3. 为每个 mount 创建 webdavFS 实例 + 注册 handler
-	for _, m := range webdavEnabledMounts {
-		// 3.1 计算该 mount 的主 URL 前缀
-		// 例：mount_path = "/d/automation" → urlPrefix = "/d/automation/"
-		// 例：mount_path = "/"           → urlPrefix = s.webdavPath (cfg.Webdav.Root 兜底)
-		var urlPrefix string
-		if m.MountPath == "/" || m.MountPath == "" {
-			urlPrefix = s.webdavPath // 用 cfg.Webdav.Root 兜底
+	// Start 耗时目标 ≤ 500ms（实测通常 < 50ms，Restore 取决于 pending job 数）。
+	// 失败不阻断 HTTP 启动 —— kernel 降级为 not-ready，业务调 kernel.Call 返回 ErrKernelNotReady。
+	if s.kernelLifecycle != nil {
+		startCtx := context.Background()
+		if err := s.kernelLifecycle.Start(startCtx); err != nil {
+			slog.Warn("kernel: lifecycle Start failed (continuing in degraded mode)",
+				"err", err)
 		} else {
-			mp := strings.TrimSuffix(m.MountPath, "/")
-			if !strings.HasPrefix(mp, "/") {
-				mp = "/" + mp
-			}
-			urlPrefix = mp + "/"
-		}
-
-		// 🆕 2026-06-17：primary mount 额外注册 cfg.Webdav.Root 作为向后兼容入口
-		// 关键修复：primary mount 走【双 URL + 双 webdavFS】模式
-		// - /d/primary/* → webdavFS_a（webdavPrefix = "/d/primary"）
-		// - /webdav/*    → webdavFS_b（webdavPrefix = "/webdav"）
-		// 两个 webdavFS 指向同一 RootPath 但 webdavPrefix 不同 → h.Prefix 必须各自设对
-		// 修复前：共用 webdavHandler，h.Prefix 永远是最后注册那一个（/webdav 或 /d/primary），
-		//         另一个 URL 走 webdavFS.webdavPathToIndexKey 时 prefix 不匹配 → 405
-		primaryLegacyPrefix := ""
-		if m.Name == mount.NamePrimary && s.webdavPath != "" && s.webdavPath != urlPrefix {
-			primaryLegacyPrefix = s.webdavPath
-		}
-
-		// 3.2 为主 URL 注册 webdavFS + handler
-		entry, fsErr := s.registerWebdavHandlerForURL(r, m, urlPrefix)
-		if fsErr != nil {
-			errMsg := fmt.Sprintf("WebDAV init failed for mount %s (root=%s, url=%s): %v", m.Name, m.RootPath, urlPrefix, fsErr)
-			slog.Warn(errMsg)
-			s.mountBootstrapErrors = append(s.mountBootstrapErrors, errMsg)
-			continue
-		}
-		s.webdavFSByMount[m.Name] = entry
-
-		// 3.3 兼容：primary 的 webdavFS 同时存到 s.webdavFS（旧调用方用）
-		if m.Name == mount.NamePrimary && s.webdavFS == nil {
-			s.webdavFS = entry.fs
-		}
-
-		// 3.4 primary mount 额外注册 legacy URL（独立的 webdavFS + handler）
-		//
-		// 🆕 2026-06-17：独立 webdavFS（不复用主 URL 的）→ 修 405
-		// 原因：h.Prefix 是 webdavHandler 的字段（单一值），不能一 handler 多 URL。
-		// 共享 FS 也不行：webdavFS.webdavPrefix 也得跟 h.Prefix 一致，否则 webdavPathToIndexKey 拒。
-		if primaryLegacyPrefix != "" {
-			_, legacyErr := s.registerWebdavHandlerForURL(r, m, primaryLegacyPrefix)
-			if legacyErr != nil {
-				errMsg := fmt.Sprintf("WebDAV legacy URL init failed for mount %s (url=%s): %v", m.Name, primaryLegacyPrefix, legacyErr)
-				slog.Warn(errMsg)
-				s.mountBootstrapErrors = append(s.mountBootstrapErrors, errMsg)
-			} else {
-				slog.Info("WebDAV legacy /webdav/ alias also registered (backward compat for old clients + Windows Explorer single-webdav)",
-					"url_prefix", primaryLegacyPrefix)
-			}
+			slog.Info("kernel: lifecycle started",
+				"pools", len(s.kernelLifecycle.Stats().Pools))
 		}
 	}
+
+	s.InitWebDAV(r)
 
 	r.NoRoute(gin.WrapF(s.handleRequest))
 
@@ -825,182 +774,6 @@ func (s *Server) Start(version string) (string, error) {
 		}
 	}
 	return addr, nil
-}
-
-func (s *Server) webdavLoggingMiddleware() func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			start := time.Now()
-			method := r.Method
-			path := r.URL.Path
-			clientIP := clientIPFromRequest(r)
-			ua := r.Header.Get("User-Agent")
-
-			// 🆕 2026-06-17：增强的 loggingResponseWriter — 记录 body bytes + category
-			lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-			next.ServeHTTP(lrw, r)
-
-			elapsed := time.Since(start)
-			latencyCategory := latencyCategoryFromMs(elapsed.Milliseconds())
-
-			attrs := []any{
-				"method", method,
-				"path", path,
-				"status", lrw.statusCode,
-				"bytes", lrw.bytesWritten,
-				"elapsed_ms", elapsed.Milliseconds(),
-				"latency", latencyCategory,
-				"client_ip", clientIP,
-			}
-			if ua != "" {
-				attrs = append(attrs, "ua", ua)
-			}
-
-			// 按 status 选择 log level：5xx → error，4xx → warn，其他 → info
-			switch {
-			case lrw.statusCode >= 500:
-				slog.Error("WebDAV", attrs...)
-			case lrw.statusCode >= 400:
-				slog.Warn("WebDAV", attrs...)
-			default:
-				slog.Info("WebDAV", attrs...)
-			}
-		})
-	}
-}
-
-// clientIPFromRequest 解析请求的 client IP（trust X-Forwarded-For 第一个）
-func clientIPFromRequest(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if idx := strings.IndexByte(xff, ','); idx > 0 {
-			return strings.TrimSpace(xff[:idx])
-		}
-		return strings.TrimSpace(xff)
-	}
-	if xrip := r.Header.Get("X-Real-IP"); xrip != "" {
-		return strings.TrimSpace(xrip)
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
-}
-
-// latencyCategoryFromMs 把延迟按量级分桶（fast/normal/slow/very-slow）
-func latencyCategoryFromMs(ms int64) string {
-	switch {
-	case ms < 50:
-		return "fast"
-	case ms < 200:
-		return "normal"
-	case ms < 1000:
-		return "slow"
-	default:
-		return "very-slow"
-	}
-}
-
-// registerWebdavHandlerForURL 为 (mount, urlPrefix) 组合注册一个独立的 webdavFS + handler。
-//
-// 🆕 2026-06-17：从 StartWebDavServer 提取的 helper（multi-mount-storage-refactor spec 续）
-// 关键修复：每个 URL 前缀绑定一个独立 webdavFS 实例，避免 h.Prefix / webdavPrefix 串号。
-// primary mount 在双 URL 场景下会被调用 2 次（/d/primary/ 和 /webdav/），每次都创建独立 FS。
-func (s *Server) registerWebdavHandlerForURL(r *gin.Engine, m *mount.Mount, urlPrefix string) (*webdavFSEntry, error) {
-	// 1. 为该 URL 前缀创建独立 webdavFS
-	webdavFSRaw, indexProvider, fsErr := webdav.NewENCVFSForRoot(
-		config.NewContext(context.Background(), s.cfg),
-		m.RootPath,
-		urlPrefix, // 🆕 传入 urlPrefix，让 fs.webdavPrefix 跟 URL 一致
-		s.readerService,
-		s.chunkNamers,
-	)
-	if fsErr != nil {
-		return nil, fsErr
-	}
-
-	fsConcrete, ok := webdavFSRaw.(goWebdav.FileSystem)
-	if !ok {
-		return nil, fmt.Errorf("WebDAV FS for mount %s (url=%s) does not implement goWebdav.FileSystem", m.Name, urlPrefix)
-	}
-
-	// 2. 创建 webdavHandler，**关键**：h.Prefix = urlPrefix
-	// → go-webdav 库 stripPrefix 正确剥离 URL → Stat 收到的是相对路径
-	// → webdavPathToIndexKey 校验通过（fs.webdavPrefix == urlPrefix）
-	// 🆕 2026-06-17：h.Prefix 字段必须设（修复 405 的根因）
-	webdavHandler := &goWebdav.Handler{
-		Prefix:     urlPrefix,
-		FileSystem: fsConcrete,
-		LockSystem: goWebdav.NewMemLS(),
-	}
-
-	authMiddleware := middleware.BasicAuthDynamic(s)
-	loggingMiddleware := s.webdavLoggingMiddleware()
-	protectedWebdavHandler := authMiddleware(loggingMiddleware(webdavHandler))
-
-	webdavMethods := []string{
-		"GET", "POST", "PUT", "PATCH", "HEAD", "OPTIONS", "DELETE", "CONNECT", "TRACE",
-		"PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK",
-	}
-
-	// 3. 注册到 <urlPrefix>*path
-	for _, method := range webdavMethods {
-		r.Handle(method, urlPrefix+"*path", gin.WrapH(protectedWebdavHandler))
-	}
-	// 4. 精确匹配根 URL（无 path 部分）
-	rootURL := strings.TrimSuffix(urlPrefix, "/")
-	if rootURL != "" {
-		for _, method := range webdavMethods {
-			r.Handle(method, rootURL, func(c *gin.Context) {
-				c.Request.URL.Path = urlPrefix
-				protectedWebdavHandler.ServeHTTP(c.Writer, c.Request)
-			})
-		}
-	}
-
-	entry := &webdavFSEntry{
-		fs:         indexProvider,
-		fileSystem: fsConcrete,
-		mount:      m,
-		webdavPath: urlPrefix,
-	}
-
-	slog.Info("WebDAV handler registered",
-		"mount", m.Name,
-		"mount_path", m.MountPath,
-		"root_path", m.RootPath,
-		"url_prefix", urlPrefix,
-		"fs_webdav_prefix", indexProvider.WebdavPrefix(),
-	)
-
-	return entry, nil
-}
-
-type loggingResponseWriter struct {
-	http.ResponseWriter
-	statusCode   int
-	bytesWritten int64
-}
-
-func (lrw *loggingResponseWriter) WriteHeader(code int) {
-	lrw.statusCode = code
-	lrw.ResponseWriter.WriteHeader(code)
-}
-
-// Write 包装 http.ResponseWriter.Write，记录响应 body bytes
-func (lrw *loggingResponseWriter) Write(p []byte) (int, error) {
-	if lrw.statusCode == 0 {
-		lrw.statusCode = http.StatusOK
-	}
-	n, err := lrw.ResponseWriter.Write(p)
-	lrw.bytesWritten += int64(n)
-	return n, err
-}
-
-func (lrw *loggingResponseWriter) Flush() {
-	if f, ok := lrw.ResponseWriter.(http.Flusher); ok {
-		f.Flush()
-	}
 }
 
 func (s *Server) Stop() error {

@@ -83,82 +83,83 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, provide } from 'vue'
-import { useRoute } from 'vue-router'
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonIcon, IonSpinner,
-} from '@ionic/vue'
-import { eyeOutline, logoVue, codeSlashOutline, copyOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import { copyToClipboard } from '@/composables/useClipboard'
-import { getPrototype } from './prototypes/registry'
+import { IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
+import { codeSlashOutline, copyOutline, eyeOutline, logoVue } from "ionicons/icons";
+import { computed, provide, ref, watch } from "vue";
+import { useRoute } from "vue-router";
+import { copyToClipboard } from "@/composables/useClipboard";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
+import { getPrototype } from "./prototypes/registry";
 
-const { t } = useI18n()
-const route = useRoute()
+const { t } = useI18n();
+const route = useRoute();
 
-const protoId = computed(() => route.params.id as string || '')
-const proto = computed(() => getPrototype(protoId.value))
+const protoId = computed(() => (route.params.id as string) || "");
+const proto = computed(() => getPrototype(protoId.value));
 
-const activeTab = ref<'preview' | 'web' | 'compose'>('preview')
-const loadedComponent = ref<any>(null)
-const webSource = ref('')
-const composeSource = ref('')
+const activeTab = ref<"preview" | "web" | "compose">("preview");
+const loadedComponent = ref<any>(null);
+const webSource = ref("");
+const composeSource = ref("");
 
-const isLandscape = ref(false)
-const frameRef = ref<HTMLElement>()
+const isLandscape = ref(false);
+const frameRef = ref<HTMLElement>();
 
 const tabs = [
-  { id: 'preview' as const, label: 'Preview', icon: eyeOutline },
-  { id: 'web' as const, label: 'Web', icon: logoVue },
-  { id: 'compose' as const, label: 'Compose', icon: codeSlashOutline },
-]
+  { id: "preview" as const, label: "Preview", icon: eyeOutline },
+  { id: "web" as const, label: "Web", icon: logoVue },
+  { id: "compose" as const, label: "Compose", icon: codeSlashOutline },
+];
 
 function toggleLandscape() {
-  isLandscape.value = !isLandscape.value
+  isLandscape.value = !isLandscape.value;
 }
 
-provide('sandboxLandscape', {
+provide("sandboxLandscape", {
   isLandscape,
   toggleLandscape,
-})
+});
 
-watch(proto, async (p) => {
-  if (!p) return
-  loadedComponent.value = null
-  webSource.value = ''
-  composeSource.value = ''
-  isLandscape.value = false
-  try {
-    const mod = await p.component()
-    loadedComponent.value = mod.default
-  } catch (e) {
-    console.error('Failed to load prototype component:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-  }
-}, { immediate: true })
-
-watch(activeTab, async (tab) => {
-  if (!proto.value) return
-  if (tab === 'web' && !webSource.value) {
+watch(
+  proto,
+  async p => {
+    if (!p) return;
+    loadedComponent.value = null;
+    webSource.value = "";
+    composeSource.value = "";
+    isLandscape.value = false;
     try {
-      webSource.value = await proto.value.webSource()
+      const mod = await p.component();
+      loadedComponent.value = mod.default;
     } catch (e) {
-      webSource.value = '// Source not available'
+      console.error("Failed to load prototype component:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    }
+  },
+  { immediate: true }
+);
+
+watch(activeTab, async tab => {
+  if (!proto.value) return;
+  if (tab === "web" && !webSource.value) {
+    try {
+      webSource.value = await proto.value.webSource();
+    } catch (e) {
+      webSource.value = "// Source not available";
     }
   }
-  if (tab === 'compose' && !composeSource.value) {
+  if (tab === "compose" && !composeSource.value) {
     try {
-      composeSource.value = await proto.value.composeSource()
+      composeSource.value = await proto.value.composeSource();
     } catch (e) {
-      composeSource.value = '// Source not available'
+      composeSource.value = "// Source not available";
     }
   }
-})
+});
 
 async function copySource(text: string) {
-  const ok = await copyToClipboard(text)
-  showToast({ message: ok ? t('devtools.copiedCode') : t('devtools.copyFailed'), duration: 1500, color: ok ? 'success' : 'danger' })
+  const ok = await copyToClipboard(text);
+  showToast({ message: ok ? t("devtools.copiedCode") : t("devtools.copyFailed"), duration: 1500, color: ok ? "success" : "danger" });
 }
 </script>
 

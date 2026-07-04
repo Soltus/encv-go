@@ -43,28 +43,26 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from '@/composables/useI18n'
-import type { MockPreset } from '@/composables/useAgent'
+import type { MockPreset } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 defineProps<{
   /** 当前阶段预设列表（mock_presets 事件覆盖更新） */
-  presets: MockPreset[]
+  presets: MockPreset[];
   /** 当前 scenario ID（调试可见） */
-  scenario?: string
+  scenario?: string;
   /** 当前阶段标识（initial / after_round_2 / ...） */
-  phase?: string
+  phase?: string;
   /** 流式进行中时禁用 chip（防止重复触发） */
-  disabled?: boolean
-}>()
+  disabled?: boolean;
+}>();
 
-const emit = defineEmits<{
-  (e: 'pick', preset: MockPreset): void
-}>()
+const emit = defineEmits<(e: "pick", preset: MockPreset) => void>();
 
 function onPick(preset: MockPreset): void {
-  emit('pick', preset)
+  emit("pick", preset);
 }
 </script>
 

@@ -57,6 +57,12 @@ type RuntimeInfo struct {
 	HeartbeatOK bool `json:"heartbeat_ok"`
 	// HeartbeatAgeMs 心跳距离现在多久（毫秒）
 	HeartbeatAgeMs int64 `json:"heartbeat_age_ms"`
+	// VectorSearchAvailable 向量搜索是否可用（searchSvc != nil）
+	VectorSearchAvailable bool `json:"vector_search_available"`
+	// VectorSearchDegraded 向量搜索是否降级到 Go 层计算（L2 降级，见 graceful-degradation.md）
+	//   - false：用原生 vector_distance_cos（turso/libsql）
+	//   - true：运行时检测到原生向量函数不可用，降级到 SQLiteStore
+	VectorSearchDegraded bool `json:"vector_search_degraded"`
 }
 
 // HeartbeatStaleThreshold 心跳陈旧阈值。超过这个时间没更新认为进程 hang。
@@ -97,6 +103,12 @@ func (s *Server) snapshotRuntimeInfo() RuntimeInfo {
 		snapshot.HeartbeatOK = hbAge < HeartbeatStaleThreshold.Milliseconds()
 	}
 	snapshot.UptimeMs = nowMs - snapshot.StartedAt
+
+	// 向量搜索状态（L2 降级可见性）
+	if s.searchSvc != nil {
+		snapshot.VectorSearchAvailable = true
+		snapshot.VectorSearchDegraded = s.searchSvc.IsDegraded()
+	}
 	return snapshot
 }
 

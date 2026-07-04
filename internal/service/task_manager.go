@@ -1,9 +1,10 @@
 package service
 
+// task_manager.go — 拆分后保留
+
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -14,13 +15,12 @@ import (
 	"time"
 
 	"github.com/Soltus/encv-go/internal/config"
-	"github.com/Soltus/encv-go/internal/utils"
-	"github.com/Soltus/encv-go/internal/v2/plugins"
-	pluginInterfaces "github.com/Soltus/encv-go/internal/v2/plugins/interfaces"
-	"github.com/Soltus/encv-go/internal/v2/plugins/video"
 	"github.com/Soltus/encv-go/internal/v2/types"
-	"github.com/google/uuid"
+	"github.com/Soltus/encv-go/pkg/tasksystem"
+	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
 )
+
+type RunSummary = tasksystem.RunSummary
 
 type TaskStep struct {
 	Phase       string     `json:"phase"`
@@ -51,19 +51,46 @@ type MobileTask struct {
 	OutputPath        string            `json:"outputPath,omitempty"`
 	Steps             []TaskStep        `json:"steps,omitempty"`
 
+	// 🆕 2026-06-18 Task 16：加解密参数持久化
+	//   前端 createTask 传 cipherMode (0=AES-128-GCM, 1=AES-256-GCM) + compressionMode ('none'|'zstd')
+	//   后端持久化让任务列表刷新后仍能回显参数（Task 18 展示用）
+	//   omitempty：旧任务（无这两个字段）反序列化时自动空值，向后兼容
+	CipherMode      int    `json:"cipherMode,omitempty"`
+	CompressionMode string `json:"compressionMode,omitempty"`
+
+	// 🆕 v6 2026-06-18：runId + triggeredBy 作为 task 一等字段（单一数据源）
+	//   - runId：自动化测试/AI agent 产生的 task 共享同一个 runId，前端按 runId 聚合
+	//   - triggeredBy：'user' | 'automation' | 'ai_agent'
+	//   - omitempty：旧任务（无这两个字段）反序列化时自动空值，向后兼容
+	//   - 前端不再需要 useTaskTrigger localStorage 维护关联
+	RunId       string `json:"runId,omitempty"`
+	TriggeredBy string `json:"triggeredBy,omitempty"`
+
+	// 🆕 回滚相关字段
+	//   - RollbackOf：回滚任务指向原任务 ID（仅 rollback_* 任务有值）
+	//   - OriginalPath：原始路径（回滚时恢复用，仅 rollback_* 任务有值）
+	RollbackOf   string `json:"rollbackOf,omitempty"`
+	OriginalPath string `json:"originalPath,omitempty"`
+
 	// 🆕 2026-06-15 multi-mount（spec Phase C1）
 	//   - SourcePath 是 /d/<mount>/... 形式时，记录解析后的 mount_id + sub_path
 	//   - SourcePath 是旧绝对路径且能匹配到 mount 时同样记录
 	//   - 都无法匹配时 MountID == ""，回退到 s.servingDir 解析（向后兼容）
 	//   - JSON 字段加 omitempty：旧 fixture（无 mountId）反序列化时自动空值
-	MountID          string `json:"mountId,omitempty"`
-	MountSubPath     string `json:"mountSubPath,omitempty"`
-	TargetMountID    string `json:"targetMountId,omitempty"`
+	MountID            string `json:"mountId,omitempty"`
+	MountSubPath       string `json:"mountSubPath,omitempty"`
+	TargetMountID      string `json:"targetMountId,omitempty"`
 	TargetMountSubPath string `json:"targetMountSubPath,omitempty"`
 
 	CreatedAt   time.Time  `json:"createdAt"`
 	CompletedAt *time.Time `json:"completedAt,omitempty"`
-	cancelFn    context.CancelFunc
+
+	// 🆕 2026-07-02：向量搜索相关度分数（0-1，越大越相似）。
+	// 仅在向量搜索（/api/search/tasks）返回时填充，普通列表查询不填。
+	// 前端可据此显示相关度徽章（与文件搜索复用 RelevanceBadge 组件）。
+	SearchScore float64 `json:"searchScore,omitempty"`
+
+	cancelFn context.CancelFunc
 }
 
 type TaskManager struct {
@@ -76,6 +103,34 @@ type TaskManager struct {
 	broadcaster Broadcaster
 	persistPath string
 
+	// 🆕 SQLite 权威持久化层（双写策略）
+	//   - nil → 走旧 JSON 持久化（向后兼容旧测试）
+	//   - 非 nil → saveTasks/loadTasks 走 store，内存 map 作为性能缓存
+	store tasksystem.Store
+
+	// 🆕 进度节流持久化
+	//   - dirtyTasks: 进度有变化需要持久化的任务 ID 集合
+	//   - persistTicker: 定期批量持久化进度的 ticker
+	dirtyTasks  map[string]struct{}
+	dirtyMu     sync.Mutex
+	persistDone chan struct{}
+
+	// 🆕 v6 2026-06-22：文件操作任务处理器（move/copy/rename/delete）
+	//   - nil → 文件操作任务会 failTask（未配置 FileTaskHandler）
+	//   - 非 nil → processTask switch 的 move/copy/rename/delete case 调用对应方法
+	fileTaskHandler *FileTaskHandler
+
+	// 🆕 2026-06-22 回滚管理器
+	//   - nil → rollback_* 任务会 failTask（未配置 RollbackManager）
+	//   - 非 nil → processTask switch 的 rollback_* case 调用 ProcessRollbackTask
+	rollbackManager *RollbackManagerImpl
+
+	// 🆕 2026-07-03 FTS 索引重建器（spec fts-rebuild-task）
+	//   - nil → rebuild_fts_index 任务会 failTask（未配置 FTSRebuilder）
+	//   - 非 nil → processTask switch 的 rebuild_fts_index case 调用 RebuildWithProgress
+	//   - 用 interface 而不是 *server.FTSRebuilderImpl：避免 service → server 反向依赖
+	ftsRebuilder FTSRebuilder
+
 	// 🆕 2026-06-15 multi-mount（spec Phase C1）
 	//   - nil → 旧行为，所有 sourcePath 走 SafeResolveToAbsPath(servingDir, ...)
 	//   - 非 nil → sourcePath 是 /d/<mount>/... 时走 mount 解析
@@ -83,40 +138,118 @@ type TaskManager struct {
 	mountResolver MountResolver
 }
 
-// MountResolver 是 mount.MountRegistry 的子集接口（service 包不依赖 mount 包）
-//
-// 行为：
-//   - input "/d/<mount>/<sub>" → Resolver 用最长前缀匹配找到 mount
-//   - output MountResolveResult：MountID + AbsPath + SubPath
-//   - 找不到 / mount 禁用 / mount 只读：返回错误
-type MountResolver interface {
-	Resolve(virtualPath string) (*MountResolveResult, error)
+// GetStore 返回底层 tasksystem.Store（引擎无关）。
+func (tm *TaskManager) GetStore() tasksystem.Store {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+	return tm.store
 }
 
-// MountResolveResult 是 mount.ResolveResult 的 service 包本地副本
-// （避免 import mount 包；同时让 service 不知道 mount 内部结构）
+func (tm *TaskManager) GetStoreEngine() string {
+	if tm.store == nil {
+		return "unknown"
+	}
+	return tm.store.EngineName()
+}
+
+func (tm *TaskManager) GetStoreConcurrency() int {
+	if tm.store == nil {
+		return 1
+	}
+	return tm.store.ConcurrencyHint()
+}
+
+func (tm *TaskManager) ReplaceStore(store tasksystem.Store) error {
+	if store != nil && len(tm.tasks) > 0 {
+		for _, task := range tm.tasks {
+			td := mobileTaskToData(task)
+			_ = store.CreateTask(td)
+		}
+	}
+	tm.store = store
+	return nil
+}
+
+func (tm *TaskManager) ExportDatabase() (*tasksystem.DatabaseDump, error) {
+	if tm.store == nil {
+		return nil, fmt.Errorf("store not configured (memory mode)")
+	}
+	return tm.store.ExportAll()
+}
+
+func (tm *TaskManager) ImportDatabase(dump *tasksystem.DatabaseDump) error {
+	if tm.store == nil {
+		return fmt.Errorf("store not configured (memory mode)")
+	}
+	if dump == nil {
+		return fmt.Errorf("dump is nil")
+	}
+
+	// 1. 导入到 store（事务内原子执行）
+	if err := tm.store.ImportAll(dump); err != nil {
+		return fmt.Errorf("import to store: %w", err)
+	}
+
+	// 2. 重新加载内存缓存（tm.tasks）
+	//    导入后内存 map 需要与 DB 保持一致
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+
+	// 清空内存 map
+	tm.tasks = make(map[string]*MobileTask)
+
+	// 从 store 重新加载所有任务
+	allTasks, err := tm.store.ListTasks(tasksystem.TaskFilter{})
+	if err != nil {
+		return fmt.Errorf("reload tasks from store: %w", err)
+	}
+	for _, td := range allTasks {
+		tm.tasks[td.ID] = dataToMobileTask(td)
+	}
+
+	return nil
+}
+
+func (tm *TaskManager) EnsureCalibration() {
+	if tm.store == nil {
+		return
+	}
+	// 检查是否已校准
+	existing, err := tm.store.GetCalibration()
+	if err != nil {
+		slog.Warn("EnsureCalibration: GetCalibration failed", "error", err)
+		return
+	}
+	if existing != nil {
+		slog.Info("EnsureCalibration: already calibrated", "cpuScore", existing.CPUScore, "label", existing.CPULabel)
+		return
+	}
+	// 运行校准
+	slog.Info("EnsureCalibration: running calibration...")
+	cal := performance.RunCalibration()
+	if err := tm.store.SaveCalibration(cal); err != nil {
+		slog.Warn("EnsureCalibration: SaveCalibration failed", "error", err)
+		return
+	}
+	slog.Info("EnsureCalibration: done", "cpuScore", cal.CPUScore, "label", cal.CPULabel, "aesThroughput", cal.AESThroughput)
+}
+
+type MountResolver interface {
+	Resolve(virtualPath string) (*MountResolveResult, error)
+	// 🆕 Task 8：absPath → virtualPath（找不到匹配 mount 返回 error）
+	AbsToVirtual(absPath string) (string, error)
+}
+
 type MountResolveResult struct {
 	MountID string // mount 唯一 ID（持久化用）
 	AbsPath string // 解析后的绝对路径（运行时用）
 	SubPath string // mount 内部相对路径（持久化用）
 }
 
-// SetMountResolver 注入 mount resolver
-//
-// 调用方：server.NewServer 在 mount registry 创建后调用
-// nil 是合法值（向后兼容：未启用 multi-mount 时）
 func (tm *TaskManager) SetMountResolver(r MountResolver) {
 	tm.mountResolver = r
 }
 
-// tryAttachMount 尝试把 sourcePath 解析为 (mountID, subPath) 并写到 task。
-//   - isTarget=false → 写到 MountID/MountSubPath（source）
-//   - isTarget=true  → 写到 TargetMountID/TargetMountSubPath（target）
-//
-// 调用规约：
-//   - 调用方必须确认 tm.mountResolver != nil
-//   - 解析失败不报错（err swallowed）—— 任务回退到旧 SafeResolveToAbsPath 解析
-//   - 非 / 开头路径直接跳过（不尝试 mount 解析）
 func (tm *TaskManager) tryAttachMount(task *MobileTask, sourcePath string, isTarget bool) {
 	if !strings.HasPrefix(sourcePath, "/") {
 		return // relative path 不走 mount
@@ -146,12 +279,57 @@ func NewTaskManager(servingDir string, cfg *config.Config, broadcaster Broadcast
 		stopCh:      make(chan struct{}),
 		broadcaster: broadcaster,
 		persistPath: persistPath,
+		dirtyTasks:  make(map[string]struct{}),
 	}
 
 	tm.loadTasks()
 
-	tm.wg.Add(1)
-	go tm.worker()
+	workerCount := 1
+	tm.wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go tm.worker()
+	}
+	return tm
+}
+
+func NewTaskManagerWithStore(servingDir string, cfg *config.Config, broadcaster Broadcaster, store tasksystem.Store) *TaskManager {
+	persistPath := filepath.Join(servingDir, ".encv-tasks.json")
+
+	tm := &TaskManager{
+		tasks:       make(map[string]*MobileTask),
+		servingDir:  servingDir,
+		cfg:         cfg,
+		stopCh:      make(chan struct{}),
+		broadcaster: broadcaster,
+		persistPath: persistPath,
+		store:       store,
+		dirtyTasks:  make(map[string]struct{}),
+		persistDone: make(chan struct{}),
+	}
+
+	tm.loadTasks()
+
+	workerCount := 1
+	if store != nil {
+		workerCount = store.ConcurrencyHint()
+	}
+	if workerCount < 1 {
+		workerCount = 1
+	}
+	tm.wg.Add(workerCount)
+	for i := 0; i < workerCount; i++ {
+		go tm.worker()
+	}
+	slog.Info("TaskManager workers started", "count", workerCount)
+
+	if store != nil {
+		tm.wg.Add(1)
+		go tm.progressPersister()
+		slog.Info("Progress persister started")
+	}
+
+	go tm.EnsureCalibration()
+
 	return tm
 }
 
@@ -162,6 +340,23 @@ func (tm *TaskManager) saveTasks() {
 		taskList = append(taskList, t)
 	}
 	tm.mu.RUnlock()
+
+	// 🆕 SQLite 权威持久化层（双写策略）
+	//   - store != nil → 逐条 UPSERT 到 store，内存 map 作为性能缓存
+	//   - store == nil → 走旧 JSON 持久化（向后兼容）
+	if tm.store != nil {
+		for _, t := range taskList {
+			data := mobileTaskToData(t)
+			// UPSERT 语义：先尝试 Create，失败（行已存在）则 Update
+			if err := tm.store.CreateTask(data); err != nil {
+				if err := tm.store.UpdateTask(data); err != nil {
+					slog.Warn("Failed to upsert task in store",
+						"id", t.ID, "error", err)
+				}
+			}
+		}
+		return
+	}
 
 	data, err := json.MarshalIndent(taskList, "", "  ")
 	if err != nil {
@@ -174,14 +369,56 @@ func (tm *TaskManager) saveTasks() {
 		slog.Warn("Failed to write tasks temp file", "error", err)
 		return
 	}
-
 	if err := os.Rename(tmpPath, tm.persistPath); err != nil {
 		slog.Warn("Failed to rename tasks file", "error", err)
 		return
 	}
 }
 
+func (tm *TaskManager) saveTaskSingle(task *MobileTask) {
+	if task == nil {
+		return
+	}
+	if tm.store != nil {
+		tm.persistTaskWithRetry(task)
+		return
+	}
+	// 无 store：降级为全表写（保持向后兼容）
+	tm.saveTasks()
+}
+
 func (tm *TaskManager) loadTasks() {
+	// 🆕 SQLite 权威持久化层
+	//   - store != nil → 从 store.ListTasks 加载
+	//   - store == nil → 走旧 JSON 持久化（向后兼容）
+	if tm.store != nil {
+		tasks, err := tm.store.ListTasks(tasksystem.TaskFilter{})
+		if err != nil {
+			slog.Warn("Failed to list tasks from store", "error", err)
+			return
+		}
+
+		for _, d := range tasks {
+			t := dataToMobileTask(d)
+			switch t.Status {
+			case "running", "cancelling":
+				t.Status = "failed"
+				t.Error = "interrupted by restart"
+				now := time.Now()
+				t.CompletedAt = &now
+			case "queued":
+				t.Status = "paused"
+			}
+			t.cancelFn = nil
+			t.Speed = ""
+			t.Eta = ""
+			tm.tasks[t.ID] = t
+		}
+
+		slog.Info("Loaded persisted tasks from store", "count", len(tasks))
+		return
+	}
+
 	data, err := os.ReadFile(tm.persistPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -198,17 +435,13 @@ func (tm *TaskManager) loadTasks() {
 
 	for _, t := range taskList {
 		switch t.Status {
-		case "running", "queued":
+		case "running", "cancelling":
 			t.Status = "failed"
 			t.Error = "interrupted by restart"
 			now := time.Now()
 			t.CompletedAt = &now
-		case "cancelling":
-			t.Status = "cancelled"
-			if t.CompletedAt == nil {
-				now := time.Now()
-				t.CompletedAt = &now
-			}
+		case "queued":
+			t.Status = "paused"
 		}
 		t.cancelFn = nil
 		t.Speed = ""
@@ -219,144 +452,128 @@ func (tm *TaskManager) loadTasks() {
 	slog.Info("Loaded persisted tasks", "count", len(taskList))
 }
 
+func mobileTaskToData(t *MobileTask) tasksystem.TaskData {
+	var extraFieldsJSON string
+	if len(t.ExtraFields) > 0 {
+		if b, err := json.Marshal(t.ExtraFields); err == nil {
+			extraFieldsJSON = string(b)
+		}
+	}
+
+	var stepsJSON string
+	if len(t.Steps) > 0 {
+		if b, err := json.Marshal(t.Steps); err == nil {
+			stepsJSON = string(b)
+		}
+	}
+
+	return tasksystem.TaskData{
+		ID:                 t.ID,
+		Type:               tasksystem.TaskType(t.Type),
+		Status:             tasksystem.TaskStatus(t.Status),
+		SourcePath:         t.SourcePath,
+		TargetPath:         t.TargetPath,
+		OutputPath:         t.OutputPath,
+		PluginName:         t.PluginName,
+		TriggeredBy:        t.TriggeredBy,
+		RunID:              t.RunId,
+		Progress:           t.Progress,
+		Phase:              t.Phase,
+		Error:              t.Error,
+		ErrorDetail:        t.ErrorDetail,
+		Warning:            t.Warning,
+		WarningDetail:      t.WarningDetail,
+		ContainerVersion:   t.ContainerVersion,
+		CipherMode:         t.CipherMode,
+		CompressionMode:    t.CompressionMode,
+		ExtraFields:        extraFieldsJSON,
+		Steps:              stepsJSON,
+		MountID:            t.MountID,
+		MountSubPath:       t.MountSubPath,
+		TargetMountID:      t.TargetMountID,
+		TargetMountSubPath: t.TargetMountSubPath,
+		Password:           t.Password,
+		SecondaryPassword:  t.SecondaryPassword,
+		CreatedAt:          t.CreatedAt,
+		CompletedAt:        t.CompletedAt,
+		RollbackOf:         t.RollbackOf,
+		OriginalPath:       t.OriginalPath,
+	}
+}
+
+func dataToMobileTask(d tasksystem.TaskData) *MobileTask {
+	t := &MobileTask{
+		ID:                 d.ID,
+		Type:               string(d.Type),
+		Status:             string(d.Status),
+		SourcePath:         d.SourcePath,
+		TargetPath:         d.TargetPath,
+		OutputPath:         d.OutputPath,
+		PluginName:         d.PluginName,
+		Progress:           d.Progress,
+		Phase:              d.Phase,
+		Error:              d.Error,
+		ErrorDetail:        d.ErrorDetail,
+		Warning:            d.Warning,
+		WarningDetail:      d.WarningDetail,
+		ContainerVersion:   d.ContainerVersion,
+		CipherMode:         d.CipherMode,
+		CompressionMode:    d.CompressionMode,
+		MountID:            d.MountID,
+		MountSubPath:       d.MountSubPath,
+		TargetMountID:      d.TargetMountID,
+		TargetMountSubPath: d.TargetMountSubPath,
+		Password:           d.Password,
+		SecondaryPassword:  d.SecondaryPassword,
+		CreatedAt:          d.CreatedAt,
+		CompletedAt:        d.CompletedAt,
+		RunId:              d.RunID,
+		TriggeredBy:        d.TriggeredBy,
+		RollbackOf:         d.RollbackOf,
+		OriginalPath:       d.OriginalPath,
+	}
+
+	if d.ExtraFields != "" {
+		_ = json.Unmarshal([]byte(d.ExtraFields), &t.ExtraFields)
+	}
+	if d.Steps != "" {
+		_ = json.Unmarshal([]byte(d.Steps), &t.Steps)
+	}
+
+	return t
+}
+
 func (tm *TaskManager) Stop() {
 	close(tm.stopCh)
 	tm.wg.Wait()
 }
 
-func (tm *TaskManager) Create(taskType, sourcePath, targetPath, password string, version int, pluginName string) *MobileTask {
-	task := &MobileTask{
-		ID:               uuid.New().String(),
-		Type:             taskType,
-		SourcePath:       sourcePath,
-		TargetPath:       targetPath,
-		Password:         password,
-		Status:           "queued",
-		Progress:         0,
-		ContainerVersion: version,
-		PluginName:       pluginName,
-		CreatedAt:        time.Now(),
+func isTerminalStatus(status string) bool {
+	switch status {
+	case "success", "failure", "cancelled", "timed_out", "completed", "failed":
+		return true
 	}
-
-	// 🆕 2026-06-15 multi-mount（spec Phase C1+C2）
-	//   两种 sourcePath 形式都尝试 mount 解析：
-	//   1. /d/<mount>/... 形式（new format，front-end 切到 B4 后默认用这个）
-	//      → 显式 mount 解析（longest prefix match）
-	//   2. 旧绝对路径（/storage/emulated/0/foo, /foo 等）
-	//      → mount.Resolve fallback 到 primary mount（自动映射）
-	//   3. 非 / 开头（relative path） → 跳过 mount 解析（旧 SafeResolveToAbsPath 处理）
-	//
-	//   targetPath 也同样处理（如果非空）。
-	if tm.mountResolver != nil {
-		tm.tryAttachMount(task, sourcePath, false /* isTarget */)
-		if targetPath != "" {
-			tm.tryAttachMount(task, targetPath, true /* isTarget */)
-		}
-	}
-
-	tm.mu.Lock()
-	tm.tasks[task.ID] = task
-	tm.mu.Unlock()
-
-	tm.saveTasks()
-
-	slog.Info("Task created", "id", task.ID, "type", taskType, "source", sourcePath,
-		"target", targetPath, "version", version,
-		"mountId", task.MountID, "mountSubPath", task.MountSubPath,
-		"targetMountId", task.TargetMountID)
-	if tm.broadcaster != nil {
-		tm.broadcaster.Broadcast("task:created", task)
-	}
-	return task
+	return false
 }
 
-func (tm *TaskManager) CreateWithExtras(taskType, sourcePath, targetPath, password, secondaryPassword string, version int, pluginName string, extras map[string]string) *MobileTask {
-	task := tm.Create(taskType, sourcePath, targetPath, password, version, pluginName)
-	task.SecondaryPassword = secondaryPassword
-	task.ExtraFields = extras
-	return task
-}
-
-func (tm *TaskManager) List() []*MobileTask {
-	tm.mu.RLock()
-	defer tm.mu.RUnlock()
-
-	result := make([]*MobileTask, 0, len(tm.tasks))
-	for _, t := range tm.tasks {
-		result = append(result, t)
-	}
-	return result
-}
-
-func (tm *TaskManager) Get(id string) (*MobileTask, error) {
-	tm.mu.RLock()
-	defer tm.mu.RUnlock()
-
-	task, ok := tm.tasks[id]
-	if !ok {
-		return nil, errors.New("task not found")
-	}
-	return task, nil
-}
-
-func (tm *TaskManager) Cancel(id string) (*MobileTask, error) {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-
-	task, ok := tm.tasks[id]
-	if !ok {
-		return nil, errors.New("task not found")
-	}
-
-	if task.Status == "running" {
-		task.Status = "cancelling"
-		if task.cancelFn != nil {
-			task.cancelFn()
-		}
-	} else {
-		task.Status = "cancelled"
-		now := time.Now()
-		task.CompletedAt = &now
-	}
-	if tm.broadcaster != nil {
-		tm.broadcaster.Broadcast("task:update", map[string]interface{}{
-			"id":     id,
-			"status": task.Status,
-		})
-	}
-	return task, nil
-}
-
-func (tm *TaskManager) updateProgress(id string, progress int, phase, speed, eta string) {
-	tm.mu.Lock()
-	if task, ok := tm.tasks[id]; ok {
-		if task.Phase != phase {
-			now := time.Now()
-			for i := len(task.Steps) - 1; i >= 0; i-- {
-				if task.Steps[i].CompletedAt == nil {
-					task.Steps[i].CompletedAt = &now
-					break
-				}
-			}
-			task.Steps = append(task.Steps, TaskStep{
-				Phase:     phase,
-				StartedAt: now,
-			})
-		}
-		task.Progress = progress
-		task.Phase = phase
-		task.Speed = speed
-		task.Eta = eta
-	}
-	tm.mu.Unlock()
-	if tm.broadcaster != nil {
-		tm.broadcaster.Broadcast("task:progress", map[string]interface{}{
-			"id":       id,
-			"progress": progress,
-			"phase":    phase,
-			"speed":    speed,
-			"eta":      eta,
-		})
+func phaseDetailDescription(phase string) string {
+	switch phase {
+	case "analyzing":
+		return "分析源文件格式与流信息"
+	case "initializing":
+		return "初始化加密引擎"
+	case "preprocessing":
+		return "预处理源数据"
+	case "encrypting":
+		return "加密数据流"
+	case "decrypting":
+		return "解密数据流"
+	case "packing":
+		return "打包加密产物"
+	case "verifying":
+		return "校验产物完整性"
+	default:
+		return ""
 	}
 }
 
@@ -385,577 +602,6 @@ func formatDuration(seconds float64) string {
 		return fmt.Sprintf("%dm%ds", int(d.Minutes()), int(d.Seconds())%60)
 	}
 	return fmt.Sprintf("%dh%dm", int(d.Hours()), int(d.Minutes())%60)
-}
-
-func (tm *TaskManager) RemoveTask(id string) error {
-	tm.mu.Lock()
-	if _, ok := tm.tasks[id]; !ok {
-		tm.mu.Unlock()
-		return errors.New("task not found")
-	}
-
-	delete(tm.tasks, id)
-	tm.mu.Unlock()
-
-	tm.saveTasks()
-
-	slog.Info("Task removed", "id", id)
-	if tm.broadcaster != nil {
-		tm.broadcaster.Broadcast("task:removed", map[string]interface{}{
-			"id": id,
-		})
-	}
-	return nil
-}
-
-func (tm *TaskManager) ClearCompleted() int {
-	tm.mu.Lock()
-	removed := 0
-	for id, task := range tm.tasks {
-		if task.Status == "completed" || task.Status == "failed" || task.Status == "cancelled" {
-			delete(tm.tasks, id)
-			removed++
-		}
-	}
-	tm.mu.Unlock()
-
-	if removed > 0 {
-		tm.saveTasks()
-		slog.Info("Cleared completed tasks", "count", removed)
-		if tm.broadcaster != nil {
-			tm.broadcaster.Broadcast("task:cleared", map[string]interface{}{
-				"count": removed,
-			})
-		}
-	}
-	return removed
-}
-
-func (tm *TaskManager) Retry(id string) (*MobileTask, error) {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-
-	task, ok := tm.tasks[id]
-	if !ok {
-		return nil, errors.New("task not found")
-	}
-
-	task.Status = "queued"
-	task.Error = ""
-	task.Progress = 0
-	if tm.broadcaster != nil {
-		tm.broadcaster.Broadcast("task:update", map[string]interface{}{
-			"id":       id,
-			"status":   "queued",
-			"progress": 0,
-		})
-	}
-	return task, nil
-}
-
-func (tm *TaskManager) worker() {
-	defer tm.wg.Done()
-
-	for {
-		select {
-		case <-tm.stopCh:
-			return
-		default:
-		}
-
-		task := tm.dequeue()
-		if task == nil {
-			time.Sleep(1 * time.Second)
-			continue
-		}
-
-		tm.processTask(task)
-	}
-}
-
-func (tm *TaskManager) dequeue() *MobileTask {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-
-	for _, task := range tm.tasks {
-		if task.Status == "queued" {
-			task.Status = "running"
-			return task
-		}
-	}
-	return nil
-}
-
-func (tm *TaskManager) resolveAbsPath(sourcePath string) string {
-	// 🆕 2026-06-15 multi-mount（spec Phase C3）
-	//   - sourcePath 是 /d/<mount>/... 形式 + mountResolver 注入 → 走 mount 解析
-	//     → 真机：/d/automation/... → /data/user/<uid>/com.encvgo.app/files/encv-automation/...
-	//     → 任务运行时不再依赖 servingDir（servingDir 改了不影响任务）
-	//   - mountResolver 为 nil 或解析失败 → 留空 → processTask failTask("invalid source path")
-	//   - 其他形式（/storage/emulated/0/...、/test.mp4 等） → 走旧 SafeResolveToAbsPath
-	if strings.HasPrefix(sourcePath, "/d/") && tm.mountResolver != nil {
-		res, err := tm.mountResolver.Resolve(sourcePath)
-		if err != nil {
-			slog.Warn("mount resolve failed in resolveAbsPath", "path", sourcePath, "error", err)
-			return ""
-		}
-		return res.AbsPath
-	}
-
-	// 旧行为：SafeResolveToAbsPath 走 servingDir
-	abs, err := utils.SafeResolveToAbsPath(tm.servingDir, sourcePath)
-	if err != nil {
-		// Security: path traversal detected (e.g., "../../../etc/passwd").
-		// Return empty string so the caller (processTask/processDecrypt) calls
-		// failTask instead of using the traversal path. Previously this fell
-		// through to filepath.Clean(sourcePath) which returned the original
-		// traversal path — pre-existing security bug.
-		return ""
-	}
-	return abs
-}
-
-func (tm *TaskManager) processTask(task *MobileTask) {
-	slog.Info("Processing task", "id", task.ID, "type", task.Type, "source", task.SourcePath)
-
-	tm.updateProgress(task.ID, 0, "queued", "", "")
-
-	absPath := tm.resolveAbsPath(task.SourcePath)
-	if absPath == "" {
-		tm.failTask(task.ID, "invalid source path")
-		return
-	}
-
-	slog.Info("Resolved path", "source", task.SourcePath, "absPath", absPath)
-
-	switch task.Type {
-	case "encrypt":
-		tm.processEncrypt(task, absPath)
-	case "decrypt":
-		tm.processDecrypt(task, absPath)
-	default:
-		tm.failTask(task.ID, fmt.Sprintf("unknown task type: %s", task.Type))
-	}
-}
-
-func (tm *TaskManager) getPasswordContext(ctx context.Context, primaryPassword string) context.Context {
-	if primaryPassword != "" {
-		cfgCopy := *tm.cfg
-		cfgCopy.Password = primaryPassword
-		return config.NewContext(ctx, &cfgCopy)
-	}
-	return config.NewContext(ctx, tm.cfg)
-}
-
-func (tm *TaskManager) processEncrypt(task *MobileTask, absPath string) {
-	taskID := task.ID
-
-	ctx, cancel := context.WithCancel(context.Background())
-	task.cancelFn = cancel
-	defer cancel()
-
-	tm.updateProgress(taskID, 5, "analyzing", "", "")
-
-	info, err := os.Stat(absPath)
-	if err != nil {
-		tm.failTask(taskID, fmt.Sprintf("source file not found: %v", err))
-		return
-	}
-
-	if info.IsDir() {
-		tm.failTask(taskID, "directory encryption is not supported yet")
-		return
-	}
-
-	effectiveVersion := task.ContainerVersion
-	if effectiveVersion == 0 {
-		effectiveVersion = tm.cfg.GetEffectiveDefaultVersion()
-	}
-	if !types.IsValidVersion(effectiveVersion) {
-		tm.failTask(taskID, fmt.Sprintf("invalid container version: %d", effectiveVersion))
-		return
-	}
-	if types.IsDeprecatedVersion(effectiveVersion) && tm.cfg.IsStrictMode() {
-		tm.failTask(taskID, fmt.Sprintf("container version %d is deprecated and strict mode is enabled", effectiveVersion))
-		return
-	}
-
-	outputDir := filepath.Dir(absPath)
-	if task.TargetPath != "" {
-		targetAbs := tm.resolveAbsPath(task.TargetPath)
-		if targetAbs != "" {
-			outputDir = targetAbs
-			if mkdirErr := os.MkdirAll(outputDir, 0755); mkdirErr != nil {
-				tm.failTask(taskID, fmt.Sprintf("failed to create target directory: %v", mkdirErr))
-				return
-			}
-		}
-	}
-
-	requiredSpace := info.Size() * 3 / 2
-	if freeSpace, diskErr := getAvailableDiskSpace(outputDir); diskErr == nil && freeSpace < requiredSpace {
-		tm.failTask(taskID, fmt.Sprintf("insufficient disk space: need %s, available %s", formatSpeed(float64(requiredSpace)), formatSpeed(float64(freeSpace))))
-		return
-	}
-
-	tm.updateProgress(taskID, 10, "initializing", "", "")
-
-	var plugin plugins.Plugin
-	if task.PluginName != "" {
-		plugin, err = plugins.FindPluginByName(task.PluginName)
-		if err != nil {
-			tm.failTask(taskID, fmt.Sprintf("specified plugin not found: %v", err))
-			return
-		}
-	} else {
-		plugin, err = plugins.FindEncryptingPlugin(absPath)
-		if err != nil {
-			tm.failTask(taskID, fmt.Sprintf("no encrypting plugin found: %v", err))
-			return
-		}
-		task.PluginName = plugin.Name()
-	}
-
-	if resetter, ok := plugin.(pluginInterfaces.TaskStateResetter); ok {
-		defer resetter.ResetTaskState()
-	}
-
-	var primaryPassword string
-	isPasswordIndependent := false
-	if resolver, ok := plugin.(pluginInterfaces.TaskPasswordResolver); ok {
-		primaryPassword = resolver.ResolveTaskPassword(task.Password, task.ExtraFields)
-		opts := plugin.GetTaskOptions()
-		isPasswordIndependent = opts.PasswordStrategy == pluginInterfaces.PasswordIndependent
-	} else {
-		primaryPassword = task.Password
-		if primaryPassword == "" {
-			primaryPassword = tm.cfg.Password
-		}
-	}
-	if primaryPassword == "" && !isPasswordIndependent {
-		tm.failTask(taskID, "encryption requires a password")
-		return
-	}
-
-	passwordCtx := tm.getPasswordContext(ctx, primaryPassword)
-
-	if setter, ok := plugin.(pluginInterfaces.TaskExtraFieldsSetter); ok {
-		setter.SetTaskExtraFields(task.ExtraFields)
-	}
-
-	if task.SecondaryPassword != "" {
-		slog.Debug("task has secondary password (L2) — reserved for future dual-password crypto support",
-			"taskId", taskID)
-	}
-
-	tm.updateProgress(taskID, 15, "preprocessing", "", "")
-
-	fileSize := info.Size()
-	stopMonitor := make(chan struct{})
-	go tm.monitorFileProgress(taskID, outputDir, fileSize, stopMonitor)
-
-	outputPath, err := plugins.EncryptFileWithPlugin(passwordCtx, plugin, absPath, tm.servingDir, outputDir)
-	close(stopMonitor)
-
-	if err != nil {
-		tm.cleanupTempFiles(outputDir)
-		if ctx.Err() != nil || task.Status == "cancelling" {
-			tm.failTask(taskID, "task cancelled")
-		} else {
-			tm.failTask(taskID, fmt.Sprintf("encryption failed: %v", err))
-		}
-		return
-	}
-
-	tm.mu.Lock()
-	if task.Status != "cancelling" {
-		task.Status = "completed"
-		task.Progress = 100
-		task.Phase = "completed"
-		task.Speed = ""
-		task.Eta = ""
-		now := time.Now()
-		task.CompletedAt = &now
-
-		for i := len(task.Steps) - 1; i >= 0; i-- {
-			if task.Steps[i].CompletedAt == nil {
-				task.Steps[i].CompletedAt = &now
-				if outputPath != "" {
-					task.Steps[i].Detail = outputPath
-				}
-				break
-			}
-		}
-
-		if outputPath != "" {
-			task.ContainerVersion = detectContainerVersion(outputPath)
-			task.OutputPath = outputPath
-		}
-
-		if warnings := video.LastVerifyWarnings(); len(warnings) > 0 {
-			task.Warning = fmt.Sprintf("%d verification warning(s)", len(warnings))
-			detailBytes, _ := json.Marshal(warnings)
-			task.WarningDetail = string(detailBytes)
-		}
-	}
-	tm.mu.Unlock()
-
-	tm.saveTasks()
-
-	slog.Info("Task completed", "id", task.ID, "type", task.Type)
-	if tm.broadcaster != nil {
-		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
-			"id":     task.ID,
-			"status": "completed",
-		})
-		tm.broadcaster.Broadcast("file:change", map[string]interface{}{
-			"path": task.SourcePath,
-		})
-	}
-}
-
-func (tm *TaskManager) monitorFileProgress(taskID, outputDir string, totalSize int64, stopCh chan struct{}) {
-	ticker := time.NewTicker(3 * time.Second)
-	defer ticker.Stop()
-	startTime := time.Now()
-	var lastSize int64
-	var lastTime time.Time
-	estimatedTotal := totalSize * 2
-
-	for {
-		select {
-		case <-ticker.C:
-			var currentSize int64
-			filepath.WalkDir(outputDir, func(path string, d os.DirEntry, err error) error {
-				if err != nil || d.IsDir() {
-					return nil
-				}
-				if info, err := d.Info(); err == nil {
-					name := info.Name()
-					if strings.HasPrefix(name, "encv-pre-") || strings.HasSuffix(name, ".tmp") {
-						return nil
-					}
-					currentSize += info.Size()
-				}
-				return nil
-			})
-
-			now := time.Now()
-			elapsed := now.Sub(startTime).Seconds()
-			if elapsed <= 0 || currentSize <= 0 {
-				continue
-			}
-
-			avgSpeed := float64(currentSize) / elapsed
-			var instantSpeed float64
-			if !lastTime.IsZero() && currentSize > lastSize {
-				dt := now.Sub(lastTime).Seconds()
-				if dt > 0 {
-					instantSpeed = float64(currentSize-lastSize) / dt
-				}
-			}
-			lastSize = currentSize
-			lastTime = now
-
-			speed := instantSpeed
-			if speed <= 0 {
-				speed = avgSpeed
-			}
-
-			if currentSize > estimatedTotal/2 && estimatedTotal < currentSize*3 {
-				estimatedTotal = currentSize * 2
-			}
-
-			rawProgress := float64(currentSize) / float64(estimatedTotal)
-			if rawProgress > 0.95 {
-				rawProgress = 0.95
-			}
-			progress := int(rawProgress*80) + 15
-			if progress > 95 {
-				progress = 95
-			}
-
-			speedStr := formatSpeed(speed)
-			remaining := float64(estimatedTotal-currentSize) / speed
-			if remaining < 0 {
-				remaining = 0
-			}
-			etaStr := formatDuration(remaining)
-
-			tm.mu.RLock()
-			task, ok := tm.tasks[taskID]
-			currentPhase := ""
-			if ok {
-				currentPhase = task.Phase
-			}
-			tm.mu.RUnlock()
-
-			phase := "encrypting"
-			if currentPhase == "preprocessing" {
-				phase = "preprocessing"
-			}
-
-			tm.updateProgress(taskID, progress, phase, speedStr, etaStr)
-
-		case <-stopCh:
-			return
-		}
-	}
-}
-
-func (tm *TaskManager) processDecrypt(task *MobileTask, absPath string) {
-	taskID := task.ID
-
-	ctx, cancel := context.WithCancel(context.Background())
-	task.cancelFn = cancel
-	defer cancel()
-
-	tm.updateProgress(taskID, 5, "analyzing", "", "")
-
-	task.ContainerVersion = detectContainerVersion(absPath)
-
-	info, err := os.Stat(absPath)
-	if err != nil {
-		tm.failTask(taskID, fmt.Sprintf("source file not found: %v", err))
-		return
-	}
-
-	if info.IsDir() {
-		tm.failTask(taskID, "directory decryption is not supported yet")
-		return
-	}
-
-	outputDir := filepath.Dir(absPath)
-	if task.TargetPath != "" {
-		targetAbs := tm.resolveAbsPath(task.TargetPath)
-		if targetAbs != "" {
-			outputDir = targetAbs
-			if mkdirErr := os.MkdirAll(outputDir, 0755); mkdirErr != nil {
-				tm.failTask(taskID, fmt.Sprintf("failed to create target directory: %v", mkdirErr))
-				return
-			}
-		}
-	}
-
-	tm.updateProgress(taskID, 10, "initializing", "", "")
-
-	plugin, err := plugins.FindDecryptingPlugin(absPath)
-	if err != nil {
-		tm.failTask(taskID, fmt.Sprintf("no decrypting plugin found: %v", err))
-		return
-	}
-	task.PluginName = plugin.Name()
-
-	if resetter, ok := plugin.(pluginInterfaces.TaskStateResetter); ok {
-		defer resetter.ResetTaskState()
-	}
-
-	var primaryPassword string
-	if resolver, ok := plugin.(pluginInterfaces.TaskPasswordResolver); ok {
-		primaryPassword = resolver.ResolveTaskPassword(task.Password, task.ExtraFields)
-	} else {
-		primaryPassword = task.Password
-		if primaryPassword == "" {
-			primaryPassword = tm.cfg.Password
-		}
-	}
-
-	passwordCtx := tm.getPasswordContext(ctx, primaryPassword)
-
-	if setter, ok := plugin.(pluginInterfaces.TaskExtraFieldsSetter); ok {
-		setter.SetTaskExtraFields(task.ExtraFields)
-	}
-
-	if task.SecondaryPassword != "" {
-		slog.Debug("task has secondary password (L2) — reserved for future dual-password crypto support",
-			"taskId", taskID, "context", "decrypt")
-	}
-
-	tm.updateProgress(taskID, 15, "preprocessing", "", "")
-
-	fileSize := info.Size()
-	stopMonitor := make(chan struct{})
-	go tm.monitorFileProgress(taskID, outputDir, fileSize, stopMonitor)
-
-	outputPath, err := plugins.DecryptContainerWithPlugin(passwordCtx, plugin, absPath, outputDir)
-	close(stopMonitor)
-
-	if err != nil {
-		tm.cleanupTempFiles(outputDir)
-		if ctx.Err() != nil || task.Status == "cancelling" {
-			tm.failTask(taskID, "task cancelled")
-		} else {
-			tm.failTask(taskID, fmt.Sprintf("decryption failed: %v", err))
-		}
-		return
-	}
-
-	tm.mu.Lock()
-	if task.Status != "cancelling" {
-		task.Status = "completed"
-		task.Progress = 100
-		task.Phase = "completed"
-		task.Speed = ""
-		task.Eta = ""
-		now := time.Now()
-		task.CompletedAt = &now
-
-		for i := len(task.Steps) - 1; i >= 0; i-- {
-			if task.Steps[i].CompletedAt == nil {
-				task.Steps[i].CompletedAt = &now
-				if outputPath != "" {
-					task.Steps[i].Detail = outputPath
-				}
-				break
-			}
-		}
-
-		if outputPath != "" {
-			task.OutputPath = outputPath
-		}
-	}
-	tm.mu.Unlock()
-
-	tm.saveTasks()
-
-	slog.Info("Task completed", "id", task.ID, "type", task.Type, "output", task.OutputPath)
-	if tm.broadcaster != nil {
-		tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
-			"id":     task.ID,
-			"status": "completed",
-		})
-		tm.broadcaster.Broadcast("file:change", map[string]interface{}{
-			"path": task.SourcePath,
-		})
-	}
-}
-
-func (tm *TaskManager) failTask(id, errMsg string) {
-	tm.mu.Lock()
-	defer tm.mu.Unlock()
-
-	friendlyMsg := simplifyErrorMessage(errMsg)
-
-	if task, ok := tm.tasks[id]; ok {
-		task.Status = "failed"
-		task.Error = friendlyMsg
-		task.ErrorDetail = errMsg
-		now := time.Now()
-		task.CompletedAt = &now
-		slog.Error("Task failed", "id", id, "error", errMsg)
-		if tm.broadcaster != nil {
-			tm.broadcaster.Broadcast("task:completed", map[string]interface{}{
-				"id":          id,
-				"status":      "failed",
-				"error":       friendlyMsg,
-				"errorDetail": errMsg,
-			})
-			tm.broadcaster.Broadcast("log", map[string]interface{}{
-				"level":   "error",
-				"message": fmt.Sprintf("[Task %s] %s", id, errMsg),
-			})
-		}
-	}
 }
 
 func simplifyErrorMessage(errMsg string) string {
@@ -989,25 +635,63 @@ func simplifyErrorMessage(errMsg string) string {
 	return errMsg
 }
 
+func classifyError(errMsg string) string {
+	reason := "unknown"
+	phase := "backend"
+
+	switch {
+	case strings.Contains(errMsg, "ENGINE_LOAD_FAILED"), strings.Contains(errMsg, "ENGINE_SYMBOL_MISSING"), strings.Contains(errMsg, "video engine unavailable"):
+		reason = "engine_unavailable"
+		phase = "plugin"
+	case strings.Contains(errMsg, "cannot access file"):
+		reason = "source_missing"
+		phase = "submission"
+	case strings.Contains(errMsg, "No such file"), strings.Contains(errMsg, "source file not found"):
+		reason = "source_missing"
+		phase = "submission"
+	case strings.Contains(errMsg, "Permission denied"):
+		reason = "permission_denied"
+		phase = "submission"
+	case strings.Contains(errMsg, "ffprobe failed"):
+		reason = "ffprobe_failed"
+		phase = "plugin"
+	case strings.Contains(errMsg, "ffmpeg failed"):
+		reason = "ffmpeg_failed"
+		phase = "plugin"
+	case strings.Contains(errMsg, "encryption failed"), strings.Contains(errMsg, "plugin failed"), strings.Contains(errMsg, "panic"):
+		reason = "plugin_panic"
+		phase = "plugin"
+	case strings.Contains(errMsg, "wrong password"), strings.Contains(errMsg, "auth"):
+		reason = "auth_failed"
+		phase = "plugin"
+	case strings.Contains(errMsg, "container"), strings.Contains(errMsg, "header"):
+		reason = "container_corrupted"
+		phase = "plugin"
+	case strings.Contains(errMsg, "no space left"):
+		reason = "disk_full"
+		phase = "backend"
+	}
+
+	payload := map[string]interface{}{
+		"phase":  phase,
+		"reason": reason,
+		"raw":    errMsg,
+		"at":     time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		// fallback：序列化失败时退化为原始字符串
+		return errMsg
+	}
+	return string(b)
+}
+
 func getAvailableDiskSpace(path string) (int64, error) {
 	var stat syscall.Statfs_t
 	if err := syscall.Statfs(path, &stat); err != nil {
 		return 0, err
 	}
 	return int64(stat.Bavail) * int64(stat.Bsize), nil
-}
-
-func (tm *TaskManager) cleanupTempFiles(dir string) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if strings.HasPrefix(name, "encv-pre-") {
-			os.Remove(filepath.Join(dir, name))
-		}
-	}
 }
 
 func detectContainerVersion(filePath string) int {

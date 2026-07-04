@@ -13,68 +13,55 @@
  *  - 走普通 fetch 即可（不走 SSE / proxy）
  */
 
-import { ref, computed, type ComputedRef } from 'vue'
-import { fetchWebDavManifest, fetchWebDavLocalInfo } from '@/api/encv'
-import type {
-  WebDavManifestResponse,
-  WebDavMountManifest,
-  WebDavAuth,
-} from '@/types/webdav-test'
+import { type ComputedRef, computed, ref } from "vue";
+import { fetchWebDavLocalInfo, fetchWebDavManifest } from "@/api/encv";
+import type { WebDavAuth, WebDavManifestResponse, WebDavMountManifest } from "@/types/webdav-test";
 
-const DEFAULT_MOUNT = 'automation'
+const DEFAULT_MOUNT = "automation";
 
 export function useWebDavManifest() {
-  const manifest = ref<WebDavManifestResponse | null>(null)
-  const loading = ref(false)
-  const error = ref<Error | null>(null)
-  const auth = ref<WebDavAuth>({})
-  const webdavPath = ref('')
-  const serverBaseUrl = ref('')
-  const activeMountName = ref(DEFAULT_MOUNT)
+  const manifest = ref<WebDavManifestResponse | null>(null);
+  const loading = ref(false);
+  const error = ref<Error | null>(null);
+  const auth = ref<WebDavAuth>({});
+  const webdavPath = ref("");
+  const serverBaseUrl = ref("");
+  const activeMountName = ref(DEFAULT_MOUNT);
 
-  const availableMounts: ComputedRef<WebDavMountManifest[]> = computed(
-    () => manifest.value?.mounts ?? []
-  )
+  const availableMounts: ComputedRef<WebDavMountManifest[]> = computed(() => manifest.value?.mounts ?? []);
 
   const activeMount: ComputedRef<WebDavMountManifest | null> = computed(() => {
-    const list = availableMounts.value
-    return (
-      list.find((m) => m.name === activeMountName.value)
-      ?? list.find((m) => m.is_default)
-      ?? list[0]
-      ?? null
-    )
-  })
+    const list = availableMounts.value;
+    return list.find(m => m.name === activeMountName.value) ?? list.find(m => m.is_default) ?? list[0] ?? null;
+  });
 
-  const isReady: ComputedRef<boolean> = computed(
-    () => manifest.value !== null && activeMount.value !== null
-  )
+  const isReady: ComputedRef<boolean> = computed(() => manifest.value !== null && activeMount.value !== null);
 
   async function refresh() {
-    if (loading.value) return
-    loading.value = true
-    error.value = null
+    if (loading.value) return;
+    loading.value = true;
+    error.value = null;
     try {
       const [manifestData, localInfo] = await Promise.all([
         fetchWebDavManifest(),
         // local-info 失败不阻塞（dev 环境可能没配置 webdav）
         fetchWebDavLocalInfo().catch(() => null),
-      ])
-      manifest.value = manifestData
-      serverBaseUrl.value = manifestData.server_base
+      ]);
+      manifest.value = manifestData;
+      serverBaseUrl.value = manifestData.server_base;
       if (localInfo) {
-        auth.value = { username: localInfo.username, password: localInfo.password }
-        webdavPath.value = localInfo.webdavPath
+        auth.value = { username: localInfo.username, password: localInfo.password };
+        webdavPath.value = localInfo.webdavPath;
       }
     } catch (e) {
-      error.value = e instanceof Error ? e : new Error(String(e))
+      error.value = e instanceof Error ? e : new Error(String(e));
     } finally {
-      loading.value = false
+      loading.value = false;
     }
   }
 
   function setActiveMount(mountName: string) {
-    activeMountName.value = mountName
+    activeMountName.value = mountName;
   }
 
   return {
@@ -90,5 +77,5 @@ export function useWebDavManifest() {
     isReady,
     refresh,
     setActiveMount,
-  }
+  };
 }

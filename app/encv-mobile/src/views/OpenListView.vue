@@ -85,65 +85,65 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
 import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
   IonBackButton,
+  IonButton,
   IonButtons,
   IonContent,
-  IonButton,
+  IonHeader,
   IonIcon,
+  IonPage,
   IonSpinner,
-} from '@ionic/vue'
-import { refreshOutline, powerOutline, playOutline, openOutline, globeOutline } from 'ionicons/icons'
-import { OpenListStatusCard, type OpenListRuntime } from '@/components-shared'
-import { OpenListNative } from '@/plugins/openlist-native'
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { globeOutline, openOutline, playOutline, powerOutline, refreshOutline } from "ionicons/icons";
+import { onMounted, onUnmounted, ref } from "vue";
+import { type OpenListRuntime, OpenListStatusCard } from "@/components-shared";
+import { OpenListNative } from "@/plugins/openlist-native";
 
 const runtime = ref<OpenListRuntime>({
   running: false,
   port: 0,
   pid: 0,
   dataSizeBytes: 0,
-  lastError: '',
+  lastError: "",
   lastUpdateTs: 0,
-  dataDir: '',
+  dataDir: "",
   isInstalled: true,
-})
+});
 
-const isControlling = ref(false)
-let refreshTimer: ReturnType<typeof setInterval> | null = null
+const isControlling = ref(false);
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(() => {
-  reloadStatus()
-  refreshTimer = setInterval(reloadStatus, 3000)
-})
+  reloadStatus();
+  refreshTimer = setInterval(reloadStatus, 3000);
+});
 
 onUnmounted(() => {
   if (refreshTimer) {
-    clearInterval(refreshTimer)
-    refreshTimer = null
+    clearInterval(refreshTimer);
+    refreshTimer = null;
   }
-})
+});
 
 function reloadStatus() {
-  runtime.value = OpenListNative.getStatus()
+  runtime.value = OpenListNative.getStatus();
 }
 
 async function toggleService() {
-  if (isControlling.value) return
-  isControlling.value = true
+  if (isControlling.value) return;
+  isControlling.value = true;
   try {
     if (runtime.value.running) {
-      OpenListNative.stopOpenList()
+      OpenListNative.stopOpenList();
     } else {
-      OpenListNative.startOpenList()
+      OpenListNative.startOpenList();
     }
-    setTimeout(reloadStatus, 1000)
+    setTimeout(reloadStatus, 1000);
   } finally {
-    isControlling.value = false
+    isControlling.value = false;
   }
 }
 </script>

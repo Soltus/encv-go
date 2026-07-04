@@ -12,4 +12,4 @@
  * - 总数 <= INITIAL_COUNT：直接展开（不显示"显示更多"按钮）
  * - 总数 >  INITIAL_COUNT：默认只显示前 INITIAL_COUNT 条，附"显示更多 (N)"按钮
  */
-export const OPERATION_COLLAPSE_INITIAL_COUNT = 3
+export const OPERATION_COLLAPSE_INITIAL_COUNT = 3;

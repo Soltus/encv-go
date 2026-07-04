@@ -229,210 +229,216 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, inject, type Ref } from 'vue'
-import MpvProgressBar from './MpvProgressBarWeb.vue'
+import { computed, inject, type Ref, ref, watch } from "vue";
+import MpvProgressBar from "./MpvProgressBarWeb.vue";
 
-const sandbox = inject<{ isLandscape: Ref<boolean>; toggleLandscape: () => void }>('sandboxLandscape', {
+const sandbox = inject<{ isLandscape: Ref<boolean>; toggleLandscape: () => void }>("sandboxLandscape", {
   isLandscape: ref(false),
   toggleLandscape: () => {},
-})
+});
 
-const SPEED_MIN = 0.5
-const SPEED_MAX = 3.0
-const SPEED_ANCHORS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0]
-const SNAP_THRESHOLD = 0.08
+const SPEED_MIN = 0.5;
+const SPEED_MAX = 3.0;
+const SPEED_ANCHORS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
+const SNAP_THRESHOLD = 0.08;
 
-const playerState = ref<'idle' | 'loading' | 'playing' | 'paused' | 'audioOnly' | 'error'>('paused')
-const fileName = ref('Big.Buck.Bunny.1080p.mkv')
-const durationInput = ref(596000)
-const currentPosition = ref(142000)
-const isPlaying = computed(() => playerState.value === 'playing' || playerState.value === 'audioOnly')
-const duration = computed(() => durationInput.value)
-const progress = computed(() => duration.value > 0 ? currentPosition.value / duration.value : 0)
-const showControls = ref(true)
-const isLocked = ref(false)
-const playbackSpeed = ref(1.0)
-const volume = ref(0.8)
-const showVolumeSlider = ref(false)
-const isDragging = ref(false)
-const volumeTrackRef = ref<HTMLElement>()
-const isSpeedDragging = ref(false)
-const speedSliderRef = ref<HTMLElement>()
-const activePanel = ref<'' | 'settings' | 'subtitles' | 'audio'>('')
-const selectedSubtitle = ref('none')
-const selectedAudio = ref('1')
-const subtitleDelay = ref(0)
-const audioDelay = ref(0)
-const bgPlayback = ref(false)
-const isPipMode = ref(false)
-const externalSubtitleName = ref('')
+const playerState = ref<"idle" | "loading" | "playing" | "paused" | "audioOnly" | "error">("paused");
+const fileName = ref("Big.Buck.Bunny.1080p.mkv");
+const durationInput = ref(596000);
+const currentPosition = ref(142000);
+const isPlaying = computed(() => playerState.value === "playing" || playerState.value === "audioOnly");
+const duration = computed(() => durationInput.value);
+const progress = computed(() => (duration.value > 0 ? currentPosition.value / duration.value : 0));
+const showControls = ref(true);
+const isLocked = ref(false);
+const playbackSpeed = ref(1.0);
+const volume = ref(0.8);
+const showVolumeSlider = ref(false);
+const isDragging = ref(false);
+const volumeTrackRef = ref<HTMLElement>();
+const isSpeedDragging = ref(false);
+const speedSliderRef = ref<HTMLElement>();
+const activePanel = ref<"" | "settings" | "subtitles" | "audio">("");
+const selectedSubtitle = ref("none");
+const selectedAudio = ref("1");
+const subtitleDelay = ref(0);
+const audioDelay = ref(0);
+const bgPlayback = ref(false);
+const isPipMode = ref(false);
+const externalSubtitleName = ref("");
 
 const speedSliderPercent = computed(() => {
-  return ((playbackSpeed.value - SPEED_MIN) / (SPEED_MAX - SPEED_MIN)) * 100
-})
+  return ((playbackSpeed.value - SPEED_MIN) / (SPEED_MAX - SPEED_MIN)) * 100;
+});
 
 const subtitleTracks = [
-  { id: 'none', label: 'None' },
-  { id: '1', label: 'English' },
-  { id: '2', label: 'Chinese (Simplified)' },
-  { id: '3', label: 'Chinese (Traditional)' },
-  { id: '4', label: 'Japanese' },
-]
+  { id: "none", label: "None" },
+  { id: "1", label: "English" },
+  { id: "2", label: "Chinese (Simplified)" },
+  { id: "3", label: "Chinese (Traditional)" },
+  { id: "4", label: "Japanese" },
+];
 
 const audioTracks = [
-  { id: '1', label: 'Japanese (5.1)' },
-  { id: '2', label: 'English (Stereo)' },
-  { id: '3', label: 'Chinese (Stereo)' },
-]
+  { id: "1", label: "Japanese (5.1)" },
+  { id: "2", label: "English (Stereo)" },
+  { id: "3", label: "Chinese (Stereo)" },
+];
 
 function snapSpeed(val: number): number {
   for (const anchor of SPEED_ANCHORS) {
-    if (Math.abs(val - anchor) < SNAP_THRESHOLD) return anchor
+    if (Math.abs(val - anchor) < SNAP_THRESHOLD) return anchor;
   }
-  return val
+  return val;
 }
 
 function speedFromX(clientX: number) {
-  if (!speedSliderRef.value) return
-  const rect = speedSliderRef.value.getBoundingClientRect()
-  const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width))
-  let raw = SPEED_MIN + ratio * (SPEED_MAX - SPEED_MIN)
-  raw = Math.round(raw * 10) / 10
-  playbackSpeed.value = snapSpeed(raw)
+  if (!speedSliderRef.value) return;
+  const rect = speedSliderRef.value.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  let raw = SPEED_MIN + ratio * (SPEED_MAX - SPEED_MIN);
+  raw = Math.round(raw * 10) / 10;
+  playbackSpeed.value = snapSpeed(raw);
 }
 
 function onSpeedSliderClick(e: MouseEvent) {
-  if (isSpeedDragging.value) return
-  speedFromX(e.clientX)
+  if (isSpeedDragging.value) return;
+  speedFromX(e.clientX);
 }
 
 function onSpeedSliderDown(e: MouseEvent) {
-  isSpeedDragging.value = true
-  speedFromX(e.clientX)
-  const onMove = (ev: MouseEvent) => speedFromX(ev.clientX)
+  isSpeedDragging.value = true;
+  speedFromX(e.clientX);
+  const onMove = (ev: MouseEvent) => speedFromX(ev.clientX);
   const onUp = () => {
-    isSpeedDragging.value = false
-    window.removeEventListener('mousemove', onMove)
-    window.removeEventListener('mouseup', onUp)
-  }
-  window.addEventListener('mousemove', onMove)
-  window.addEventListener('mouseup', onUp)
+    isSpeedDragging.value = false;
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
 }
 
 function togglePanel(panel: typeof activePanel.value) {
   if (activePanel.value === panel) {
-    activePanel.value = ''
+    activePanel.value = "";
   } else {
-    activePanel.value = panel
-    showVolumeSlider.value = false
+    activePanel.value = panel;
+    showVolumeSlider.value = false;
   }
 }
 
 function handleTap() {
   if (isLocked.value) {
-    isLocked.value = false
+    isLocked.value = false;
   } else {
-    showControls.value = !showControls.value
-    activePanel.value = ''
-    showVolumeSlider.value = false
+    showControls.value = !showControls.value;
+    activePanel.value = "";
+    showVolumeSlider.value = false;
   }
 }
 
 function togglePlay() {
-  if (playerState.value === 'playing') playerState.value = 'paused'
-  else if (playerState.value === 'paused') playerState.value = 'playing'
-  else playerState.value = 'playing'
-  showControls.value = true
+  if (playerState.value === "playing") playerState.value = "paused";
+  else if (playerState.value === "paused") playerState.value = "playing";
+  else playerState.value = "playing";
+  showControls.value = true;
 }
 
 function handleSeek(ratio: number) {
-  currentPosition.value = Math.round(ratio * duration.value)
+  currentPosition.value = Math.round(ratio * duration.value);
 }
 
 function seekDelta(ms: number) {
-  currentPosition.value = Math.max(0, Math.min(duration.value, currentPosition.value + ms))
-  showControls.value = true
+  currentPosition.value = Math.max(0, Math.min(duration.value, currentPosition.value + ms));
+  showControls.value = true;
 }
 
 function cycleSpeed() {
-  const current = playbackSpeed.value
-  let best = SPEED_ANCHORS[0]
+  const current = playbackSpeed.value;
+  let best = SPEED_ANCHORS[0];
   for (const a of SPEED_ANCHORS) {
-    if (a > current + 0.01) { best = a; break }
-    best = a
+    if (a > current + 0.01) {
+      best = a;
+      break;
+    }
+    best = a;
   }
-  playbackSpeed.value = best
+  playbackSpeed.value = best;
 }
 
 function toggleVolumeSlider() {
-  showVolumeSlider.value = !showVolumeSlider.value
-  if (showVolumeSlider.value) activePanel.value = ''
+  showVolumeSlider.value = !showVolumeSlider.value;
+  if (showVolumeSlider.value) activePanel.value = "";
 }
 
 function onVolumeTrackClick(e: MouseEvent) {
-  if (!volumeTrackRef.value) return
-  const rect = volumeTrackRef.value.getBoundingClientRect()
-  const ratio = 1 - Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
-  volume.value = Math.round(ratio * 100) / 100
+  if (!volumeTrackRef.value) return;
+  const rect = volumeTrackRef.value.getBoundingClientRect();
+  const ratio = 1 - Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+  volume.value = Math.round(ratio * 100) / 100;
 }
 
 function onVolumeDrag(e: MouseEvent) {
-  if (!isDragging.value) return
-  onVolumeTrackClick(e)
+  if (!isDragging.value) return;
+  onVolumeTrackClick(e);
 }
 
 function startDrag(e: MouseEvent) {
-  isDragging.value = true
-  onVolumeTrackClick(e)
+  isDragging.value = true;
+  onVolumeTrackClick(e);
 }
 
 function stopDrag() {
-  isDragging.value = false
+  isDragging.value = false;
 }
 
 function pickSubtitleFile() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = '.srt,.ass,.ssa,.vtt,.lrc,.sub'
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".srt,.ass,.ssa,.vtt,.lrc,.sub";
   input.onchange = () => {
-    const file = input.files?.[0]
+    const file = input.files?.[0];
     if (file) {
-      externalSubtitleName.value = file.name
-      selectedSubtitle.value = 'external'
-      activePanel.value = ''
+      externalSubtitleName.value = file.name;
+      selectedSubtitle.value = "external";
+      activePanel.value = "";
     }
-  }
-  input.click()
+  };
+  input.click();
 }
 
 function enterPip() {
-  isPipMode.value = true
-  activePanel.value = ''
-  showControls.value = false
+  isPipMode.value = true;
+  activePanel.value = "";
+  showControls.value = false;
 }
 
 function exitPip() {
-  isPipMode.value = false
-  showControls.value = true
+  isPipMode.value = false;
+  showControls.value = true;
 }
 
 function onBack() {
-  showControls.value = true
+  showControls.value = true;
 }
 
-watch(isPlaying, (val) => {
+watch(isPlaying, val => {
   if (val) {
     const interval = setInterval(() => {
-      if (!isPlaying.value) { clearInterval(interval); return }
-      if (currentPosition.value < duration.value) {
-        currentPosition.value += 1000
-      } else {
-        playerState.value = 'paused'
-        clearInterval(interval)
+      if (!isPlaying.value) {
+        clearInterval(interval);
+        return;
       }
-    }, 1000)
+      if (currentPosition.value < duration.value) {
+        currentPosition.value += 1000;
+      } else {
+        playerState.value = "paused";
+        clearInterval(interval);
+      }
+    }, 1000);
   }
-})
+});
 </script>
 
 <style scoped>

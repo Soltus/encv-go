@@ -76,180 +76,178 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { IonIcon, IonButton } from '@ionic/vue'
-import {
-  server as serverIcon,
-  settings as settingsIcon,
-  open as openIcon,
-  extensionPuzzleOutline,
-  bugOutline,
-} from 'ionicons/icons'
-import { eventBus } from '@/composables/useEventBus'
-import { useOpenListBridge } from '@/composables/useOpenListBridge'
-import { formatFileSize } from '@/api/encv'
-import { useI18n } from '@/composables/useI18n'
+import { IonButton, IonIcon } from "@ionic/vue";
+import { bugOutline, extensionPuzzleOutline, open as openIcon, server as serverIcon, settings as settingsIcon } from "ionicons/icons";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import { formatFileSize } from "@/api/encv";
+import { eventBus } from "@/composables/useEventBus";
+import { useI18n } from "@/composables/useI18n";
+import { useOpenListBridge } from "@/composables/useOpenListBridge";
 
-const HEARTBEAT_FRESH_MS = 5000
-const CRASH_LOOP_WINDOW_MS = 10_000
-const CRASH_LOOP_THRESHOLD = 3
+const HEARTBEAT_FRESH_MS = 5000;
+const CRASH_LOOP_WINDOW_MS = 10_000;
+const CRASH_LOOP_THRESHOLD = 3;
 
-const { t } = useI18n()
-const router = useRouter()
+const { t } = useI18n();
+const router = useRouter();
 
-useOpenListBridge()
+useOpenListBridge();
 
-const state = ref<string>('not_installed')
-const pid = ref(0)
-const port = ref(5244)
-const dataDirSize = ref(0)
-const lastHeartbeat = ref(0)
-const error = ref('')
-const crashCount = ref(0)
+const state = ref<string>("not_installed");
+const pid = ref(0);
+const port = ref(5244);
+const dataDirSize = ref(0);
+const lastHeartbeat = ref(0);
+const error = ref("");
+const crashCount = ref(0);
 
-let nowTickTimer: ReturnType<typeof setInterval> | null = null
-const nowMs = ref(Date.now())
+let nowTickTimer: ReturnType<typeof setInterval> | null = null;
+const nowMs = ref(Date.now());
 
 // ------ crash-loop detection ------
 interface TransitionEntry {
-  timestamp: number
-  running: boolean
+  timestamp: number;
+  running: boolean;
 }
-const transitionHistory: TransitionEntry[] = []
+const transitionHistory: TransitionEntry[] = [];
 
 function recordTransition(running: boolean) {
-  const now = Date.now()
-  transitionHistory.push({ timestamp: now, running })
+  const now = Date.now();
+  transitionHistory.push({ timestamp: now, running });
 
   // prune entries older than CRASH_LOOP_WINDOW_MS
-  const cutoff = now - CRASH_LOOP_WINDOW_MS
+  const cutoff = now - CRASH_LOOP_WINDOW_MS;
   while (transitionHistory.length > 0 && transitionHistory[0].timestamp < cutoff) {
-    transitionHistory.shift()
+    transitionHistory.shift();
   }
 
   // count stopped (running=false) transitions in the window
-  const stoppedCount = transitionHistory.filter((e) => !e.running).length
+  const stoppedCount = transitionHistory.filter(e => !e.running).length;
 
   if (stoppedCount >= CRASH_LOOP_THRESHOLD) {
-    state.value = 'crash_loop'
-    crashCount.value = stoppedCount
-    console.error(
-      '[SAT-DBG][OpenList][StatusCard] crash_loop detected:',
-      stoppedCount,
-      'stopped transitions in last 10s',
-    )
+    state.value = "crash_loop";
+    crashCount.value = stoppedCount;
+    console.error("[SAT-DBG][OpenList][StatusCard] crash_loop detected:", stoppedCount, "stopped transitions in last 10s");
   }
 }
 
 // ------ eventBus handlers ------
-function onOpenListStatus(data: { running: boolean; port: number; pid: number; dataSizeBytes: number; isInstalled: boolean; lastError: string; lastUpdateTs: number }) {
-  console.error('[SAT-DBG][OpenList][StatusCard] openlist:status event:', data)
-  lastHeartbeat.value = Date.now()
+function onOpenListStatus(data: {
+  running: boolean;
+  port: number;
+  pid: number;
+  dataSizeBytes: number;
+  isInstalled: boolean;
+  lastError: string;
+  lastUpdateTs: number;
+}) {
+  console.error("[SAT-DBG][OpenList][StatusCard] openlist:status event:", data);
+  lastHeartbeat.value = Date.now();
   if (!data.isInstalled) {
-    state.value = 'not_installed'
-    return
+    state.value = "not_installed";
+    return;
   }
-  if (data.lastError && data.lastError.toLowerCase().includes('port')) {
-    state.value = 'port_conflict'
-    return
+  if (data.lastError && data.lastError.toLowerCase().includes("port")) {
+    state.value = "port_conflict";
+    return;
   }
   if (data.running) {
-    state.value = 'running'
-    port.value = data.port
-    pid.value = data.pid
-    dataDirSize.value = data.dataSizeBytes
-    recordTransition(true)
+    state.value = "running";
+    port.value = data.port;
+    pid.value = data.pid;
+    dataDirSize.value = data.dataSizeBytes;
+    recordTransition(true);
   } else {
-    if (state.value !== 'crash_loop') {
-      state.value = 'stopped'
+    if (state.value !== "crash_loop") {
+      state.value = "stopped";
     }
-    recordTransition(false)
+    recordTransition(false);
   }
 }
 
 function onOpenListError(data: { type: string; message: string; code?: number }) {
-  console.error('[SAT-DBG][OpenList][StatusCard] openlist:error event:', data)
+  console.error("[SAT-DBG][OpenList][StatusCard] openlist:error event:", data);
 
-  if (data.type === 'port_conflict') {
-    state.value = 'port_conflict'
-    error.value = ''
+  if (data.type === "port_conflict") {
+    state.value = "port_conflict";
+    error.value = "";
   } else {
-    error.value = data.message
+    error.value = data.message;
   }
 }
 
 // ------ navigation ------
 function goToExtensions() {
-  router.push('/tabs/extensions')
+  router.push("/tabs/extensions");
 }
 
 function goToSettings() {
-  router.push('/tabs/settings')
+  router.push("/tabs/settings");
 }
 
 function goToDevLogs() {
-  router.push('/tabs/devlogs')
+  router.push("/tabs/devlogs");
 }
 
 function openWebUi() {
-  window.open(`http://127.0.0.1:${port.value || 5244}/#/login`, '_system')
+  window.open(`http://127.0.0.1:${port.value || 5244}/#/login`, "_system");
 }
 
 // ------ computed ------
 const cardClass = computed(() => {
-  if (state.value === 'running') return 'state-running'
-  if (state.value === 'port_conflict') return 'state-conflict'
-  if (state.value === 'crash_loop') return 'state-crash-loop'
-  return 'state-idle'
-})
+  if (state.value === "running") return "state-running";
+  if (state.value === "port_conflict") return "state-conflict";
+  if (state.value === "crash_loop") return "state-crash-loop";
+  return "state-idle";
+});
 
 const badgeColor = computed(() => {
-  if (state.value === 'running') return 'success'
-  if (state.value === 'port_conflict') return 'danger'
-  if (state.value === 'crash_loop') return 'danger'
-  return 'medium'
-})
+  if (state.value === "running") return "success";
+  if (state.value === "port_conflict") return "danger";
+  if (state.value === "crash_loop") return "danger";
+  return "medium";
+});
 
 const statusLabel = computed(() => {
-  if (state.value === 'running') return t('remote.localOpenListRunning')
-  if (state.value === 'port_conflict') return t('remote.localOpenListPortConflict', { port: String(port.value || 5244) })
-  if (state.value === 'crash_loop') return '反复崩溃'
-  if (state.value === 'not_installed') return t('remote.localOpenListNotInstalled')
-  return t('remote.localOpenListStopped')
-})
+  if (state.value === "running") return t("remote.localOpenListRunning");
+  if (state.value === "port_conflict") return t("remote.localOpenListPortConflict", { port: String(port.value || 5244) });
+  if (state.value === "crash_loop") return "反复崩溃";
+  if (state.value === "not_installed") return t("remote.localOpenListNotInstalled");
+  return t("remote.localOpenListStopped");
+});
 
-const formattedDataSize = computed(() => formatFileSize(dataDirSize.value))
+const formattedDataSize = computed(() => formatFileSize(dataDirSize.value));
 
 const isHeartbeatFresh = computed(() => {
-  if (!lastHeartbeat.value) return false
-  return nowMs.value - lastHeartbeat.value <= HEARTBEAT_FRESH_MS
-})
+  if (!lastHeartbeat.value) return false;
+  return nowMs.value - lastHeartbeat.value <= HEARTBEAT_FRESH_MS;
+});
 
 const heartbeatLabel = computed(() => {
-  if (!lastHeartbeat.value) return '-'
-  const deltaSec = Math.max(0, Math.floor((nowMs.value - lastHeartbeat.value) / 1000))
-  if (deltaSec <= 5) return t('remote.localOpenListHeartbeatFresh')
-  return t('remote.localOpenListHeartbeatStale', { seconds: String(deltaSec) })
-})
+  if (!lastHeartbeat.value) return "-";
+  const deltaSec = Math.max(0, Math.floor((nowMs.value - lastHeartbeat.value) / 1000));
+  if (deltaSec <= 5) return t("remote.localOpenListHeartbeatFresh");
+  return t("remote.localOpenListHeartbeatStale", { seconds: String(deltaSec) });
+});
 
 // ------ lifecycle ------
 onMounted(() => {
-  eventBus.on('openlist:status', onOpenListStatus)
-  eventBus.on('openlist:error', onOpenListError)
+  eventBus.on("openlist:status", onOpenListStatus);
+  eventBus.on("openlist:error", onOpenListError);
   nowTickTimer = setInterval(() => {
-    nowMs.value = Date.now()
-  }, 1000)
-})
+    nowMs.value = Date.now();
+  }, 1000);
+});
 
 onUnmounted(() => {
-  eventBus.off('openlist:status', onOpenListStatus)
-  eventBus.off('openlist:error', onOpenListError)
+  eventBus.off("openlist:status", onOpenListStatus);
+  eventBus.off("openlist:error", onOpenListError);
   if (nowTickTimer) {
-    clearInterval(nowTickTimer)
-    nowTickTimer = null
+    clearInterval(nowTickTimer);
+    nowTickTimer = null;
   }
-})
+});
 </script>
 
 <style scoped>

@@ -3,45 +3,33 @@
   "admin": {
     "password": "123456"
   },
+  "agent_settings": {
+    "mock_mode": "builtin",
+    "openai_api_key": "enc:2EbMrA05RCjsaOCJ3nDooY7HXKFxXeQiD40trzM9dzLbluXgRgZi95K0YunUlQRPCJd4jQbsUtdy9mlmEXD94fyxH71PAqfHXrK3nsen8B8=",
+    "openai_base_url": "https://api.gptgod.online/v1",
+    "openai_model": "gpt-4o"
+  },
   "default_container_version": 0,
   "log": {
     "file": "encv.log",
-    "level": "debug"
+    "level": "info"
   },
   "mobile": {
-    "server": { "dir": "/storage/emulated/0" },
-    "output": { "path": "/storage/emulated/0/encv-output" },
-    "webdav": { "dir": "" }
+    "output": {
+      "path": "/storage/emulated/0/encv-output"
+    },
+    "server": {
+      "dir": "/storage/emulated/0"
+    },
+    "webdav": {
+      "dir": ""
+    }
   },
   "output_path": "./output",
-  "password": "my-encv_key，可以使用中文和标点符号✔",
+  "password": "my-encv_key",
   "plugin_settings": {
-    "alist_encrypt": {
-      "enabled": true,
-      "suffix": ".bin"
-    },
-    "audio": {
-      "ext": ".sccga"
-    },
-    "image": {
-      "ext": ".sccgi"
-    },
-    "pdf": {
-      "ext": ".sccgpdf"
-    },
-    "text": {
-      "ext": ".sccgt"
-    },
     "video": {
-      "chunk_size_mb": 0,
-      "ext": ".sccgv",
-      "light_main_chunk_enabled": true,
-      "skip_merge_for_split_mkv": false,
-      "track_extensions": ".ass,.srt,.dm.ass,.vtt",
-      "verify_after_pack": true
-    },
-    "wps": {
-      "ext": ".sccgwps"
+      "allow_no_reencode": true
     }
   },
   "proxy": {
@@ -67,6 +55,10 @@
     "port": 2025
   },
   "strict_deprecated_version": false,
+  "v4_cipher_mode": 0,
+  "v4_compression_mode": "",
+  "v4_enable_hmac": false,
+  "v4_zstd_block_size": 0,
   "webdav": {
     "dir": "./output",
     "password": "123456",

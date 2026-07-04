@@ -13,708 +13,63 @@
  *   - POST /agent-api/api/resume  断点续传（SSE）
  *   - POST /agent-api/api/confirm 4-决策确认（SSE）
  *
- * SPEC: /workspace/.trae/specs/go-in-process-agent/spec.md
- *   - Requirement: Vue 复合式（useAgent）
- *   - Requirement: Event 类型契约（6 种 event type）
- *   - Requirement: 4-决策 ConfirmRequest
+ * 文件拆分（2026-07-02）：
+ *   - useAgent.ts（本文件）：composable 主体（useAgent 函数）
+ *   - useAgent_helpers.ts：类型 / 常量 / 解析器 / 辅助函数
+ *   下面 re-export 所有 helper 以保持向后兼容（`import { ... } from '@/composables/useAgent'`）
  */
-import { ref, computed } from 'vue'
-import { showToast } from '@/composables/useToast'
-import { getDeviceIdSync } from './useDeviceId'
-import { getAgentApiBase, getAgentApiBaseContext, shouldSendAGUIHeader } from './useAgentApiBase'
+
+// 完整 import helpers（主体使用）+ re-export（保持向后兼容）
 import {
-  serializeAttachments,
-  type Attachment,
-  type MessageContentPart,
-} from './useAttachments'
-import { useContextUsage } from './useContextUsage'
-import { processAGUISSE as processAGUISSEImpl } from './useAGUIParser'
+  type AgentEvent,
+  // 类型（按需）
+  type AgentStatus,
+  appendSequencedChunk,
+  buildHttpError,
+  CONTEXT_COMPACTION_MARKER,
+  type Decision,
+  extractUserTitle,
+  generateSessionId,
+  getAgentBase,
+  MAX_TRACKED_REALTIME_SEQUENCES,
+  type Message,
+  type MockBranch,
+  type MockPreset,
+  type MockRoundState,
+  parseCompactionData,
+  // 工具函数
+  parseContentDelta,
+  parseStreamStatusData,
+  parseToolCallData,
+  parseToolResultData,
+  parseToolStatus,
+  type SessionMeta,
+  STORAGE_PREFIX,
+  type ToolCall,
+} from "./useAgent_helpers";
 
-// =============================================================================
-// 类型定义（与 agent Go 服务契约对齐）
-// =============================================================================
+// 重新导出所有 helpers 以保持向后兼容（`import { ... } from '@/composables/useAgent'`）
+export * from "./useAgent_helpers";
 
-export type AgentStatus = 'idle' | 'streaming' | 'confirming' | 'error'
-
-export interface SessionMeta {
-  id: string
-  title: string
-  createdAt: number
-  updatedAt: number
-  messageCount: number
-  rounds: number
-}
-
-export type Decision = 'accept' | 'accept_for_session' | 'decline' | 'cancel'
-
-export type AgentEventType =
-  | 'text_delta'
-  | 'reasoning_delta'
-  | 'tool_call'
-  | 'tool_status'
-  | 'tool_result'
-  | 'stream_status'  // 后端流式状态（断点续传时推 synced / more_pending）
-  | 'stream_start'   // Mock 模式信号：data = { mock: true, scenario: "..." }
-  | 'stream_end'
-  | 'stream_error'   // 后端在 SSE 流过程中遇到不可恢复错误时推送
-  // 上下文自动压缩事件。Task 7 引入：后端在 messages token 数
-  // 越过窗口 80% 时调用 LLM summary 压缩老消息，并推送本事件。
-  // 前端收到时插入一条 role='system', content='上下文已自动压缩'
-  // 的合成消息（renderTurnItems 把它转成 ContextCompactionDivider）。
-  // 这是 7 种 event type 中的第 7 种，原有 6 种契约不变。
-  | 'compaction'
-  // Mock 模式剧本预设：后端 MockEngine 在 stream_start 之后（或 mid-scenario
-  // 任意 step 内）推送，data 形状是 { scenario, phase, presets: MockPreset[] }。
-  // 前端收到后由 MockPresetBar 渲染为输入框上方的 chip 按钮列表。
-  | 'mock_presets'
-  // Mock 模式预设清空信号：后端在 stream_end 时推，前端 MockPresetBar 收到
-  // 后清空 chip。reason 字段仅做调试。
-  | 'mock_presets_clear'
-  // ── AG-UI 协议新增内部类型（useAGUIParser 归一化输出） ──
-  // tool_call_args：AG-UI TOOL_CALL_ARGS 事件归一化结果，携带 args 增量
-  // （arg 是 String，handleAgentEvent 把它追加到对应 tool_call.args 字段）
-  | 'tool_call_args'
-  // state_snapshot：AG-UI STATE_SNAPSHOT 事件归一化结果
-  // （会话级共享状态，前端暂不消费，仅做调试记录 + 持久化兜底）
-  | 'state_snapshot'
-  // messages_snapshot：AG-UI MESSAGES_SNAPSHOT 事件归一化结果
-  // （完整消息快照，用于断点续传对齐）
-  | 'messages_snapshot'
-  // ── v2 多轮/分支剧本（参考 .trae/specs/agent-tools-scenarios-v2/spec.md）───
-  // mock_branch_choice：剧本在 step.branch_choice=true 时推，由前端
-  // MockBranchChoiceBar 渲染为 chip 列表；用户点击 chip / 直接键入
-  // 文本都走 pickMockBranch / sendMockRoundResponse 把 userText
-  // 送回后端 Resume。
-  | 'mock_branch_choice'
-  // mock_round_state：剧本报告当前 round 进度（round_idx / total_rounds /
-  // phase / context）。前端由 mockRoundState 暴露；AgentChat 可选择
-  // 渲染 "Round 2/4 · awaiting_user_input" header。
-  | 'mock_round_state'
-
-/** 单个 mock 预设按钮契约（与后端 internal/server.MockPreset JSON 对应） */
-export interface MockPreset {
-  id: string
-  label: string
-  userText: string
-  icon?: string
-  tooltip?: string
-}
-
-/**
- * 单个 mock 分支选项契约（与后端 internal/server.MockBranch JSON 对应）。
- * 用于剧本中 step.branch_choice=true 时的选项列表。
- * - id：精确匹配 / 关键词匹配 / 正则匹配时使用
- * - label：chip 上显示
- * - icon / description：可选 UI 增强
- */
-export interface MockBranch {
-  id: string
-  label: string
-  icon?: string
-  description?: string
-}
-
-/** mock_round_state 事件 payload 形状（后端 MockRoundState JSON 归一化结果） */
-export interface MockRoundState {
-  /** 当前 round 下标（0-based） */
-  roundIdx: number
-  /** 剧本总轮数（v2 8 个剧本里 edit_metadata_wizard=4 / batch_rename=2 / 其他=1） */
-  totalRounds: number
-  /** 当前阶段：`running` / `awaiting_user_input` / `awaiting_branch_choice` */
-  phase: string
-  /** 跨轮变量：set_context / use_context 写入/读取的任意结构 */
-  context: Record<string, unknown>
-  /** 归属 scenario ID（调试用） */
-  scenario?: string
-}
-
-/** Agent 推送到 SSE channel 的事件 */
-export interface AgentEvent {
-  type: AgentEventType
-  /** JSON string —— 前端按 type 自行反序列化 */
-  data: string
-}
-
-export type ToolKind = 'command' | 'fileChange' | 'readOnly' | 'webSearch' | 'plan' | 'unknown'
-export type ToolStatus = 'pending' | 'running' | 'success' | 'failed' | 'cancelled'
-
-export interface ToolCall {
-  id: string
-  name: string
-  args: string
-  auto_run: boolean
-  kind: ToolKind
-  /** !auto_run —— 需要用户 4-决策确认 */
-  needsConfirm: boolean
-  status: ToolStatus
-  /**
-   * 失败时的错误码（与后端 ToolError.Code 对齐，如 'ENOENT' / 'TIMEOUT' / 'EXEC_FAILED'）。
-   * 仅在 status === 'failed' 时有值。
-   */
-  errorCode?: string
-  /** 失败时的错误消息（来自后端，已本地化；前端原样透传，不硬编码翻译） */
-  errorMessage?: string
-  /** 成功时的输出（来自后端 ToolResult.Output，结构因工具而异） */
-  output?: any
-  /** 运行开始时间戳（毫秒）。在 tool_status 收到 'running' 时填入 */
-  startedAt?: number
-  /** 运行结束时间戳（毫秒）。在 tool_result 到达 / 状态转为终态时填入 */
-  finishedAt?: number
-}
-
-export interface ToolResult {
-  id: string
-  name: string
-  result: string
-  is_error: boolean
-  status: string
-  duration_ms: number
-}
-
-export interface Message {
-  /**
-   * Task 27：事件到达顺序日志（agent 流式时间轴渲染核心）。
-   *
-   * 后端 SSE 事件流按时间顺序到达：text_delta → tool_call → tool_result → text_delta → ...
-   * 但 Message 结构体把所有 text 合并到 content、所有 tool_calls/tool_results 分开存。
-   * eventLog 记录原始到达顺序，让 renderTurnItems 能按时间轴交错渲染：
-   *   [text, tool_call(id=call_mount), tool_result(id=call_mount), text, tool_call(id=call_files1), ...]
-   *
-   * 每条 entry 的 type 取值：'text' | 'tool_call' | 'tool_result' | 'stream_start' | 'stream_end'
-   * tool_call / tool_result 条目额外带 id 字段用于配对。
-   */
-  eventLog?: Array<{ type: string; id?: string }>
-  /**
-   * Task 22：agent 派发 subagent 拆解任务时插入的"agent task"消息。
-   * 与 user/assistant/system 并列，是前端渲染层的合法角色之一。
-   * 后端在 SubagentDispatch 事件中构造（content 是 JSON 字符串，
-   * 形如 {"subTasks":[{id,status,description}], "reasoning":"..."}）。
-   * renderTurnItems 检测到该角色时产出 type='agentTask' 的
-   * RenderedItem，由 AgentTaskMessage.vue 渲染子任务列表。
-   * 后端持久化 / 上下文回送时该 role 一并保留——见 send() 里的
-   * apiMessages 构造循环。
-   */
-  role: 'user' | 'assistant' | 'system' | 'agent_task'
-  /**
-   * Task 12：附件场景下 content 可能是 OpenAI multimodal 数组
-   * （text / image_url / file 元素）。老消息（无附件）保持 string。
-   * 持久化层 JSON.parse 后这个 union 仍能正确还原。
-   */
-  content: string | MessageContentPart[]
-  reasoning?: string
-  tool_calls: ToolCall[]
-  tool_results: ToolResult[]
-  isStreaming?: boolean
-  /**
-   * 发送失败时的错误信息（每条消息独立）
-   */
-  error?: string
-  /**
-   * Task 11 (Steer / Queue)：当用户点击「排队下一条」时，
-   * 该 user 消息进入 pendingMessages 队列，等待当前 turn
-   * 完全结束后由服务端 drain hook 触发新一轮 Chat。pending=true
-   * 时 UI 应展示「已排队」标签。首个 text_delta 事件到达时
-   * 自动清除（说明服务端已开始处理该消息）。
-   */
-  pending?: boolean
-  /**
-   * 内部 buffer：SSE {seq, text} 排序重建用（不持久化，不回送给后端）
-   */
-  _contentSeqBuf?: Map<number, string>
-  _reasoningSeqBuf?: Map<number, string>
-}
-
-/**
- * Task 7 引入的「上下文已自动压缩」标记文本。后端在
- * EventCompaction 事件里推送一份 LLM 生成的 summary，前端把它
- * 包裹成一条 role='system' 的合成消息插入 messages 列表。renderTurnItems
- * 检测到 message.role === 'system' && content === CONTEXT_COMPACTION_MARKER
- * 时产出 compaction 类型的 RenderedItem，由 AgentChat.vue
- * 渲染为不可展开的 ContextCompactionDivider 分隔线。
- *
- * 该 marker 是 *单向契约*：前端在 useAgent.ts 收到 compaction 事件
- * 时构造，后端不会直接发这个字符串。如果后端在 messages 数组里看到
- * 这条「system:上下文已自动压缩」消息，会被忽略（不会再次触发压缩）。
- */
-export const CONTEXT_COMPACTION_MARKER = '上下文已自动压缩'
-
-// =============================================================================
-// 常量
-// =============================================================================
-
-/** 持久化到 localStorage 的 key 前缀 */
-const STORAGE_PREFIX = 'agent:session:'
-
-/**
- * Agent 服务 API 基础 URL（动态解析，**不在模块加载时缓存**）。
- *
- * 为什么是函数而不是常量：
- *   - 旧实现 `const AGENT_API_BASE = getAgentApiBase()` 在模块首次 import 时
- *     求值一次 → 之后即使用户改了 baseUrl（probe 命中 LAN / 手动设置 / 切前后台），
- *     永远用旧值 → 真实路由失败但 JS 还打旧 URL
- *   - 新实现 getAgentBase() 每次调用都实时读 getApiBaseBase() →
- *     baseUrl 变化立刻生效（与 WS 层 useWebSocket 行为一致）
- *
- * 性能：每次调用 ≈ 1 次 localStorage 读 + 1 个三元判断，可忽略
- * （chat send 不是热路径，且 baseUrl 变化场景只在 probe/手动切换瞬间）
- */
-function getAgentBase(): string {
-  return getAgentApiBase()
-}
-
-/**
- * 单实例最多追踪的 SSE sequence 编号数。超过此上限时按插入顺序
- * 淘汰最老的 sequence 编号（FIFO 近似 LRU）。参考 codex-web
- * `appServerRealtimeReducer.ts` 的 `MAX_TRACKED_REALTIME_SEQUENCES` 常量。
- */
-const MAX_TRACKED_REALTIME_SEQUENCES = 2_000
-
-/** ToolCall 状态在 tool_status 事件中可能的取值 */
-const TOOL_STATUS_VALUES: ReadonlySet<ToolStatus> = new Set<ToolStatus>([
-  'pending',
-  'running',
-  'success',
-  'failed',
-  'cancelled',
-])
-
-// =============================================================================
-// 工具函数
-// =============================================================================
-
-/**
- * 解析 `text_delta` / `reasoning_delta` 的 data 字段
- * 后端格式：json.Marshal(plainString) → 经外层 JSON 解码后 data 就是纯文本
- * 兼容旧格式：{"content": "..."} 包装
- */
-/**
- * 解析 text_delta / reasoning_delta 的 data 字段。
- *
- * 后端架构升级后事件格式从裸字符串变为 {seq: number, text: string}，
- * 此函数兼容两种格式：
- *   - 旧格式：data 是 string → { text, seq: undefined }
- *   - 新格式：data 是 {seq, text} 对象 → { text, seq }
- */
-interface ParsedContentDelta {
-  text: string
-  seq?: number
-}
-export function parseContentDelta(data: unknown): ParsedContentDelta {
-  if (!data) return { text: '' }
-  if (typeof data === 'string') {
-    try {
-      const parsed = JSON.parse(data)
-      if (typeof parsed === 'string') return { text: parsed }
-      if (parsed && typeof parsed === 'object') {
-        // 新格式 {seq, text}
-        if ('text' in parsed && 'seq' in parsed) {
-          return { text: String(parsed.text ?? ''), seq: Number(parsed.seq) }
-        }
-        // AG-UI 归一化格式：{text, messageId}（useAGUIParser 输出，**无 seq**）
-        // 修乱码 bug：之前这种情况会落到末尾 return {text: data}，把整段 JSON 字符串当文本渲染
-        if ('text' in parsed) {
-          return { text: String((parsed as { text: unknown }).text ?? '') }
-        }
-        // 旧格式兼容 {"content":"..."}
-        if ('content' in parsed) {
-          return { text: String((parsed as { content: unknown }).content ?? '') }
-        }
-      }
-    } catch {
-      // 不是有效 JSON → 纯文本，直接使用
-    }
-    return { text: data }
-  }
-  // data 已经是对象（新格式，SSE 层已 JSON.parse）
-  if (data && typeof data === 'object') {
-    if ('text' in data && 'seq' in data) {
-      return { text: String((data as { text: unknown }).text ?? ''), seq: Number((data as { seq: unknown }).seq) }
-    }
-    // AG-UI 归一化格式：{text, messageId}
-    if ('text' in data) {
-      return { text: String((data as { text: unknown }).text ?? '') }
-    }
-  }
-  return { text: String(data ?? '') }
-}
-
-/**
- * 按 seq 序列号追加文本块到消息字段，保证乱序到达时也能正确排序显示。
- *
- * 内部维护 msg._contentSeqBuf / msg._reasoningSeqBuf（Map<number, string>），
- * 每次写入后按 key 排序重建 msg.content / msg.reasoning。
- */
-function appendSequencedChunk(
-  msg: Message,
-  field: 'content' | 'reasoning',
-  seq: number | undefined,
-  text: string,
-) {
-  const bufKey = field === 'content' ? '_contentSeqBuf' : '_reasoningSeqBuf'
-  let buf = msg[bufKey] as Map<number, string> | undefined
-  if (!buf) {
-    buf = new Map<number, string>()
-    msg[bufKey] = buf
-  }
-
-  if (seq !== undefined) {
-    // 有序号模式：存入 buffer，按 seq 排序后重建
-    buf.set(seq, text)
-    let rebuilt = ''
-    const sortedKeys = Array.from(buf.keys()).sort((a, b) => a - b)
-    for (const k of sortedKeys) rebuilt += buf.get(k)
-    msg[field] = rebuilt
-
-    // 检测乱序/丢包（seq 不连续）
-    if (buf.size > 1 && sortedKeys.length > 1) {
-      for (let i = 1; i < sortedKeys.length; i++) {
-        if (sortedKeys[i] - sortedKeys[i - 1] > 1) {
-          console.warn(
-            `[useAgent] seq gap detected in ${field}:`,
-            `missing ${sortedKeys[i - 1] + 1}..${sortedKeys[i] - 1}`,
-            `(got ${sortedKeys[i - 1]} → ${sortedKeys[i]}, total=${buf.size})`,
-          )
-          break // 只报一次
-        }
-      }
-    }
-  } else {
-    // 无序号（旧格式 fallback）：直接追加
-    ;(msg[field] as string) = ((msg[field] as string) || '') + text
-  }
-}
-
-/**
- * 解析 `tool_call` 的 data 字段 —— ToolCallData
- */
-function parseToolCallData(data: unknown): ToolCall | null {
-  try {
-    // event.data 可能是已解析的对象（processSSE 中 JSON.parse 后）或字符串（旧代码路径）
-    const parsed: Partial<ToolCall> = typeof data === 'string' ? JSON.parse(data) : (data as Partial<ToolCall>)
-    if (!parsed.id || !parsed.name) return null
-    const autoRun = parsed.auto_run !== false
-    return {
-      id: String(parsed.id),
-      name: String(parsed.name),
-      args: typeof parsed.args === 'string' ? parsed.args : JSON.stringify(parsed.args ?? {}),
-      auto_run: autoRun,
-      kind: (parsed.kind as ToolKind) ?? 'unknown',
-      needsConfirm: !autoRun,
-      status: 'pending',
-    }
-  } catch {
-    return null
-  }
-}
-
-/**
- * 解析 `tool_status` 的 data 字段 —— 包含 id 和 status
- */
-function parseToolStatus(data: unknown): { id: string; status: ToolStatus } | null {
-  try {
-    const parsed = typeof data === 'string' ? JSON.parse(data) : data
-    if (!parsed || typeof parsed !== 'object') return null
-    const { id, status: rawStatus } = parsed as { id?: string; status?: string }
-    if (!id || !rawStatus) return null
-    const status = rawStatus as ToolStatus
-    if (!TOOL_STATUS_VALUES.has(status)) return null
-    return { id, status }
-  } catch {
-    return null
-  }
-}
-
-/**
- * 解析 `tool_result` 的 data 字段 —— ToolResultData
- *
- * 适配 AG-UI 协议：AG-UI `TOOL_CALL_RESULT` 事件归一化后只有
- *   `{ id, result }`（**无 name** 字段——name 来自前面的 `TOOL_CALL_START`）
- * legacy 格式有 `name` 字段（来自后端 sendAndCache 的 tool_result 事件）
- * 本函数**不强制**要求 name，由调用方在拿到 result 后从已存在的
- * tool_calls 里按 id 查找补齐 name。
- */
-export function parseToolResultData(data: unknown): ToolResult | null {
-  try {
-    const parsed = typeof data === 'string' ? JSON.parse(data) : data
-    if (!parsed || typeof parsed !== 'object') return null
-    const p = parsed as Partial<ToolResult>
-    if (!p.id) return null
-    return {
-      id: String(p.id),
-      // name 可能为空（AG-UI 归一化格式）——调用方负责补齐
-      name: typeof p.name === 'string' ? p.name : '',
-      result: typeof p.result === 'string' ? p.result : JSON.stringify(p.result ?? ''),
-      is_error: p.is_error === true,
-      status: String(p.status ?? 'success'),
-      duration_ms: typeof p.duration_ms === 'number' ? p.duration_ms : 0,
-    }
-  } catch {
-    return null
-  }
-}
-
-/**
- * 解析 `stream_status` 的 data 字段 —— StreamStatusData
- * 后端格式（internal/server/agent_api.go::sendAndCache stream_status 分支）：
- *   { "status": "synced" | "more_pending", "inProgress": bool, "maxEventId"?: number }
- *
- * 此类型在 D.2 引入：断点续传链路的前端信号
- */
-export interface StreamStatusData {
-  status: 'synced' | 'more_pending' | string
-  inProgress?: boolean
-  maxEventId?: number
-}
-
-function parseStreamStatusData(data: string): StreamStatusData | null {
-  try {
-    const parsed = JSON.parse(data) as Partial<StreamStatusData>
-    if (!parsed || typeof parsed.status !== 'string') return null
-    return {
-      status: parsed.status,
-      inProgress: parsed.inProgress,
-      maxEventId: typeof parsed.maxEventId === 'number' ? parsed.maxEventId : undefined,
-    }
-  } catch {
-    return null
-  }
-}
-
-/**
- * CompactionData 是后端 EventCompaction 事件的 payload 形状（Task 7）：
- *   {
- *     summary_text: string,            // LLM 生成的 summary
- *     replaced_message_count: number,  // 被替换的旧消息数
- *     triggered_at_ms: number,          // unix 毫秒时间戳
- *   }
- *
- * parseCompactionData 容忍后端包装格式（data 字段是 JSON 字符串）：
- *   - 直接 JSON.parse(data) 拿到 CompactionData
- *   - 旧后端可能把整个 CompactionData 直接 stringify 在 data 里
- *   - 极端场景：data 损坏 → 返回 null，让上层用 fallback 行为
- */
-export interface CompactionData {
-  summary_text?: string
-  replaced_message_count?: number
-  triggered_at_ms?: number
-}
-
-function parseCompactionData(data: string): CompactionData | null {
-  if (!data) return null
-  try {
-    const parsed = JSON.parse(data) as Partial<CompactionData>
-    if (!parsed || typeof parsed !== 'object') return null
-    return {
-      summary_text: typeof parsed.summary_text === 'string' ? parsed.summary_text : undefined,
-      replaced_message_count:
-        typeof parsed.replaced_message_count === 'number' ? parsed.replaced_message_count : undefined,
-      triggered_at_ms: typeof parsed.triggered_at_ms === 'number' ? parsed.triggered_at_ms : undefined,
-    }
-  } catch {
-    return null
-  }
-}
-
-function generateSessionId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  // 极端 fallback（老浏览器 / 测试环境无 crypto）
-  return `sess-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
-}
-
-/**
- * 把 fetch 失败响应构造成带 .code 标记的 Error。
- *
- * 背景：后端在缺 API Key / 解密失败 / 上游错误等场景下，body 是
- *   { "error": "no_api_key", "message": "未配置 API Key，请在 AI 设置中填写" }
- *  之前前端只读 statusText = "Service Unavailable"，把"未配置 API Key"
- *  这层用户语义吞了——用户只看到 "HTTP 503: Service Unavailable"，完全
- *  不知道为什么。
- *
- * 此函数：
- *   1. 尝试 JSON.parse(body) → 取 message / error 字段
- *   2. 拼成 "后端文案（HTTP 503）" 给用户看
- *   3. 在 Error 上挂 .code 字段（'no_api_key' / 'upstream_error' / 'unknown'），
- *      供上游 UI 做分支判断（如 chat 显示"去设置"按钮）
- */
-async function buildHttpError(response: Response, endpoint: string): Promise<Error & { code?: string; status?: number }> {
-  let bodyText = ''
-  let parsed: any = null
-  try {
-    bodyText = await response.text()
-    if (bodyText) {
-      try { parsed = JSON.parse(bodyText) } catch { /* not JSON */ }
-    }
-  } catch {
-    // 读 body 失败也无所谓，落到 fallback
-  }
-  const userMessage = (parsed && typeof parsed.message === 'string' && parsed.message.trim())
-    ? parsed.message
-    : (parsed && typeof parsed.error === 'string' && parsed.error !== 'unknown' && parsed.error.trim())
-      ? parsed.error
-      : (response.statusText || '请求失败')
-  const code = (parsed && typeof parsed.error === 'string') ? parsed.error : 'unknown'
-  const detail = `${userMessage}（HTTP ${response.status}）`
-  console.error('[useAgent]', endpoint, 'failed:', detail)
-  const err = new Error(detail) as Error & { code?: string; status?: number }
-  err.code = code
-  err.status = response.status
-  return err
-}
-
-// =============================================================================
-// Task 26 (LAN Access) —— 与后端 /api/network/lan-access 对齐的类型
-// =============================================================================
-//
-// 后端 agent/lan_access.go::LanAddress 的 JSON 形状。字段重命名是
-// breaking change —— 任何修改都必须同步更新 AgentChat.vue 的渲染层。
-// 保持后端字段 tag 与前端 interface 字段名一致：interface / ip / url。
-export interface LanAddress {
-  interface: string
-  ip: string
-  url: string
-}
-
-/**
- * Task 26：拉取当前后端可访问的 LAN URL 列表。
- *
- * 调用后端 GET /api/network/lan-access?port=... ，失败时返回空数组并
- * 留痕一条 console.debug（不抛错、不显示 toast —— 该功能是辅助性的，
- * UI 应当自己处理空列表状态：折叠面板显示 "未发现可用网络接口"）。
- *
- * @param port 监听端口，传 0 让后端用默认 5245
- */
-export async function getLanAccess(port: number = 0): Promise<LanAddress[]> {
-  try {
-    const qs = port > 0 ? `?port=${port}` : ''
-    const response = await fetch(`${getAgentBase()}/api/network/lan-access${qs}`, {
-      method: 'GET',
-    })
-    if (!response.ok) {
-      console.debug('[getLanAccess] HTTP', response.status, '— returning empty list')
-      return []
-    }
-    const data = (await response.json()) as { addresses?: LanAddress[] }
-    if (!data || !Array.isArray(data.addresses)) {
-      console.debug('[getLanAccess] malformed response:', data)
-      return []
-    }
-    return data.addresses
-  } catch (e) {
-    console.debug('[getLanAccess] fetch failed:', e)
-    return []
-  }
-}
-
-/**
- * Task 12：从 Message.content 抽取会话标题用的纯文本。
- *  - string  → 第一行前 40 字符
- *  - array   → 取首个 text 元素
- *  - empty   → 空串
- */
-function extractUserTitle(content: string | MessageContentPart[] | undefined): string {
-  if (!content) return ''
-  if (typeof content === 'string') {
-    return content.split('\n')[0]?.slice(0, 40) || ''
-  }
-  // multimodal 数组：找第一个 text 元素
-  for (const part of content) {
-    if (part.type === 'text' && part.text) {
-      return part.text.split('\n')[0]?.slice(0, 40) || ''
-    }
-  }
-  // 全是附件没文本：返回一个占位提示
-  return '[附件]'
-}
-
-// =============================================================================
-// Task 25 (Sync Doctor) —— 与后端 /api/sync/doctor 对齐的类型
-// =============================================================================
-//
-// DoctorReport 的 JSON 形状由 agent/sync_doctor.go::DoctorReport 定义。
-// 前端不依赖任何后端内部结构 —— 只消费这个 doctor 报告的 wire 字段。
-// 后端已经在生成报告前对所有错误信息和配置做 Redact 处理，所以
-// 前端把它原样塞进 <pre> 块 / 剪贴板 / 截图分享都是安全的。
-export interface DoctorReport {
-  generated_at_ms: number
-  version: string
-  agent: {
-    version: string
-    server_instance_id: string
-    go_version: string
-    gomaxprocs: number
-    num_goroutine: number
-    openai_api_key_configured: boolean
-  }
-  sessions: {
-    total_cached: number
-    total_persisted: number
-    largest_session_size_bytes: number
-  }
-  tools: {
-    registered_count: number
-    names: string[]
-  }
-  openlist: {
-    base_url_configured: boolean
-    token_configured: boolean
-    last_ping_ms: number
-    last_error?: string
-  }
-  skills: {
-    loaded_count: number
-    names: string[]
-  }
-  issues: string[]
-}
-
-/**
- * Task 25：调用后端 /api/sync/doctor 拉取一次脱敏诊断报告。
- *
- * 用途：AgentSettingsDetail.vue 面板的「运行 sync 诊断」按钮，
- * 拿到 JSON 后展示给用户（<pre> 块 + 复制按钮）。
- *
- * 行为：
- *  - 成功：返回解析后的 DoctorReport，调用方自行 JSON.stringify 展示。
- *  - 失败：抛 Error，调用方负责 toast / 弹窗。
- *
- * 副作用：无（HTTP 只读）。AbortSignal 透传给 fetch 以便 UI 能取消
- * 一个长尾的 doctor 请求（实际后端超时是 2 秒，不会真等很久）。
- */
-export async function runSyncDoctor(signal?: AbortSignal): Promise<DoctorReport> {
-  const response = await fetch(`${getAgentBase()}/api/sync/doctor`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    // 没有 body 也合法：handler 接受 GET/POST 两种 method。
-    body: JSON.stringify({}),
-    ...(signal ? { signal } : {}),
-  })
-  if (!response.ok) {
-    throw await buildHttpError(response, '/api/sync/doctor')
-  }
-  const report = (await response.json()) as DoctorReport
-  if (!report || typeof report !== 'object' || !Array.isArray(report.issues)) {
-    throw new Error('malformed doctor report')
-  }
-  return report
-}
-
-// =============================================================================
-// 复合式主体
-// =============================================================================
+import { computed, ref } from "vue";
+import { showToast } from "@/composables/useToast";
+import { processAGUISSE as processAGUISSEImpl } from "./useAGUIParser";
+import { getAgentApiBaseContext, shouldSendAGUIHeader } from "./useAgentApiBase";
+import { type Attachment, type MessageContentPart, serializeAttachments } from "./useAttachments";
+import { useContextUsage } from "./useContextUsage";
+import { getDeviceIdSync } from "./useDeviceId";
 
 export function useAgent() {
-  const messages = ref<Message[]>([])
-  const status = ref<AgentStatus>('idle')
-  const lastError = ref<string>('')
+  const messages = ref<Message[]>([]);
+  const status = ref<AgentStatus>("idle");
+  const lastError = ref<string>("");
   // 错误语义码：后端 buildHttpError 在 Error 上挂 .code 字段（'no_api_key' / 'upstream_error' / 'unknown'），
   // 前端 chat UI 据此做分支判断（如展示"去 AI 设置"按钮）。
   // 与 lastError 的区别：lastError 是给人看的字符串，lastErrorCode 是给程序判断的结构化字段。
-  const lastErrorCode = ref<'' | 'no_api_key' | 'upstream_error' | 'invalid_json' | 'unknown'>('')
-  const lastUserInput = ref<string>('')
-  const sessions = ref<SessionMeta[]>([])
-  const currentSessionId = ref<string>('')
+  const lastErrorCode = ref<"" | "no_api_key" | "upstream_error" | "invalid_json" | "unknown">("");
+  const lastUserInput = ref<string>("");
+  const sessions = ref<SessionMeta[]>([]);
+  const currentSessionId = ref<string>("");
   /**
    * Task 11 (Steer / Queue)：跟踪已通过「排队下一条」按钮提交、
    * 但服务端尚未开始处理的 user 消息。pendingMessages 数组的元素
@@ -723,9 +78,9 @@ export function useAgent() {
    * 提示，并在服务端开始处理时（首个 text_delta 到达）实时清除
    * 对应条目的 pending 标记。
    */
-  const pendingMessages = ref<Message[]>([])
+  const pendingMessages = ref<Message[]>([]);
   /** 本地已处理事件计数（与 lastEventId 解耦：eventOffset 永远递增，lastEventId 由 SSE id 行决定） */
-  let eventOffset = 0
+  let eventOffset = 0;
   /**
    * Context 图标：从 /api/agent/context-usage 周期拉取的实时数据
    * （tokens/window/percent、todos、referencedFiles、compactions）
@@ -737,14 +92,14 @@ export function useAgent() {
   const contextUsage = useContextUsage({
     sessionId: currentSessionId,
     status,
-  })
+  });
   /**
    * SSE 标准 Last-Event-ID：服务端为每个事件分配的全局递增 ID。
    * 用于断点续传——前端解析 `id: N` 行维护此字段，resume() 时回传给后端。
    * 0 = 尚未收到任何事件 id。
    */
-  let lastEventId = 0
-  let abortController: AbortController | null = null
+  let lastEventId = 0;
+  let abortController: AbortController | null = null;
 
   // ─── Task 3: tool_call 状态机 — 30s 无响应超时保护 ────────────────
   // 当 tool_call 创建后 30s 内未收到 tool_result（且未进入 failed/cancelled
@@ -752,40 +107,38 @@ export function useAgent() {
   // 卡住没有任何反馈"的根因——之前前端没有超时机制，spinner 转 60s+ 仍然
   // 停在 running。timer 必须在 tool_result 到达或 tool_call 进入终态时清除
   // （clearToolCallTimeout），否则会泄漏。
-  const TOOL_CALL_TIMEOUT_MS = 30_000
-  const toolCallTimeoutMap = new Map<string, ReturnType<typeof setTimeout>>()
+  const TOOL_CALL_TIMEOUT_MS = 30_000;
+  const toolCallTimeoutMap = new Map<string, ReturnType<typeof setTimeout>>();
 
   function clearToolCallTimeout(toolCallId: string): void {
-    const t = toolCallTimeoutMap.get(toolCallId)
+    const t = toolCallTimeoutMap.get(toolCallId);
     if (t !== undefined) {
-      clearTimeout(t)
-      toolCallTimeoutMap.delete(toolCallId)
+      clearTimeout(t);
+      toolCallTimeoutMap.delete(toolCallId);
     }
   }
 
   function armToolCallTimeout(toolCallId: string): void {
-    clearToolCallTimeout(toolCallId) // 防重入
+    clearToolCallTimeout(toolCallId); // 防重入
     const t = setTimeout(() => {
-      toolCallTimeoutMap.delete(toolCallId)
+      toolCallTimeoutMap.delete(toolCallId);
       // 找到对应 tool_call，标 failed
       for (const msg of messages.value) {
-        const tc = msg.tool_calls.find((c) => c.id === toolCallId)
-        if (!tc) continue
+        const tc = msg.tool_calls.find(c => c.id === toolCallId);
+        if (!tc) continue;
         // 单向：终态（failed/cancelled/success）不再覆盖
-        if (tc.status === 'failed' || tc.status === 'cancelled' || tc.status === 'success') {
-          break
+        if (tc.status === "failed" || tc.status === "cancelled" || tc.status === "success") {
+          break;
         }
-        tc.status = 'failed'
-        tc.errorCode = 'TIMEOUT'
-        tc.errorMessage = '工具执行超过 30s 无响应'
-        tc.finishedAt = Date.now()
-        console.warn(
-          `[useAgent] tool_call ${toolCallId} (${tc.name}) timed out after ${TOOL_CALL_TIMEOUT_MS}ms`,
-        )
-        break
+        tc.status = "failed";
+        tc.errorCode = "TIMEOUT";
+        tc.errorMessage = "工具执行超过 30s 无响应";
+        tc.finishedAt = Date.now();
+        console.warn(`[useAgent] tool_call ${toolCallId} (${tc.name}) timed out after ${TOOL_CALL_TIMEOUT_MS}ms`);
+        break;
       }
-    }, TOOL_CALL_TIMEOUT_MS)
-    toolCallTimeoutMap.set(toolCallId, t)
+    }, TOOL_CALL_TIMEOUT_MS);
+    toolCallTimeoutMap.set(toolCallId, t);
   }
 
   // ─── Server Instance + Sequence 去重（Task 4） ────────────────────────
@@ -795,29 +148,32 @@ export function useAgent() {
   // 的 SSE sequence 编号可能与旧进程"撞号"，不复用旧的去重集合会造成
   // 真实事件被错误丢弃。
   /** 当前进程已知的 serverInstanceId；空串 = 尚未拉取过 /api/health */
-  let currentServerInstance = ''
+  let currentServerInstance = "";
   /** 已见 SSE sequence 编号集合；超过 MAX_TRACKED_REALTIME_SEQUENCES 时按 FIFO 驱逐 */
-  const seenSequences = new Set<number>()
+  const seenSequences = new Set<number>();
   /** 配合 Set 实现的 FIFO 驱逐顺序表 */
-  const seenSequencesOrder: number[] = []
+  const seenSequencesOrder: number[] = [];
 
   // 模型/温度从 localStorage 读取（AgentChat 顶部 UI 选择会同步写入这里）
-  const MODEL_STORAGE_KEY = 'encv-agent-selected-model'
-  const TEMP_STORAGE_KEY = 'encv-agent-temperature'
+  const MODEL_STORAGE_KEY = "encv-agent-selected-model";
+  const TEMP_STORAGE_KEY = "encv-agent-temperature";
   const activeModel = ref<string>(
     (() => {
-      try { return localStorage.getItem(MODEL_STORAGE_KEY) || 'gpt-4o-mini' }
-      catch { return 'gpt-4o-mini' }
-    })(),
-  )
+      try {
+        return localStorage.getItem(MODEL_STORAGE_KEY) || "gpt-4o-mini";
+      } catch {
+        return "gpt-4o-mini";
+      }
+    })()
+  );
   /**
    * API 返回的默认模型（来自 /api/models 的 defaultModel 字段）。
    * AgentChat 在 fetchModels 成功后通过 setApiDefaultModel() 写入，
    * newSession 时用于重置 activeModel。
    */
-  const apiDefaultModel = ref<string>('')
+  const apiDefaultModel = ref<string>("");
   /** 当前会话的创建时间戳（毫秒），用于持久化和历史列表排序 */
-  const sessionCreatedAt = ref<number>(Date.now())
+  const sessionCreatedAt = ref<number>(Date.now());
   // 之前怀疑 gpt-4o-mini 在 gptgod 代理下不发 tools，临时加了 safeModel
   // 白名单做硬编码降级。实测 gpt-4o-mini 完全能用工具（3 轮 list_mounts →
   // list_files → 输出 4 个目录），根因不在模型上。回退这段逻辑，
@@ -825,12 +181,14 @@ export function useAgent() {
   const activeTemperature = ref<number>(
     (() => {
       try {
-        const v = localStorage.getItem(TEMP_STORAGE_KEY)
-        const n = v == null ? 0.7 : Number(v)
-        return Number.isFinite(n) ? n : 0.7
-      } catch { return 0.7 }
-    })(),
-  )
+        const v = localStorage.getItem(TEMP_STORAGE_KEY);
+        const n = v == null ? 0.7 : Number(v);
+        return Number.isFinite(n) ? n : 0.7;
+      } catch {
+        return 0.7;
+      }
+    })()
+  );
 
   // ─── Mock 模式检测 ────────────────────────────────────────
   // 后端在 cfg.Agent.MockMode != "off" 时启用 mock 模式：
@@ -838,24 +196,24 @@ export function useAgent() {
   //   - HTTP response header: X-Mock-Scenario: <scenario_id>
   //   - SSE 首个 stream_start 事件 data: { mock: true, scenario: "..." }
   // 前端拿到任一信号就置 isMockMode=true，让 AgentChat 顶部展示"🧪 模拟"badge。
-  const isMockMode = ref(false)
-  const mockScenario = ref<string>('')
+  const isMockMode = ref(false);
+  const mockScenario = ref<string>("");
 
   // 调试开关：URL 带 ?debug=agent 时为 true，强制显示 AgentDebugPanel。
   // 浏览器端用 window.location，SSR 时降级为 false。
   const isDebugAgent = computed(() => {
-    if (typeof window === 'undefined') return false
+    if (typeof window === "undefined") return false;
     try {
-      return new URLSearchParams(window.location.search).get('debug') === 'agent'
+      return new URLSearchParams(window.location.search).get("debug") === "agent";
     } catch {
-      return false
+      return false;
     }
-  })
+  });
 
   // ─── 原始 SSE 事件日志（调试用：AgentDebugPanel ⑦ 区展示） ──
   // 每个进 processSSE 的 event 都追加一条（含 type + data 摘要 + 时间戳）。
   // 不自动清理——用户手动"清空"或新建会话时重置。
-  const rawSSEEvents = ref<{ ts: string; type: string; dataSummary: string; seq?: number | null }[]>([])
+  const rawSSEEvents = ref<{ ts: string; type: string; dataSummary: string; seq?: number | null }[]>([]);
 
   /** 追加一条原始事件到日志（最多保留 200 条防内存爆炸） */
   function pushRawEvent(type: string, dataSummary: string, seq?: number | null) {
@@ -864,9 +222,9 @@ export function useAgent() {
       type,
       dataSummary,
       seq: seq ?? null,
-    })
+    });
     if (rawSSEEvents.value.length > 200) {
-      rawSSEEvents.value = rawSSEEvents.value.slice(-150)
+      rawSSEEvents.value = rawSSEEvents.value.slice(-150);
     }
   }
 
@@ -878,9 +236,9 @@ export function useAgent() {
   // 后端会在 stream_start 之后立刻推一次 mock_presets 事件初始化，
   // 并在 stream_end 时推 mock_presets_clear 清空。
   // 中级/高级剧本可在 mid-scenario step 内再次推 mock_presets 实现"随进度更新"。
-  const mockPresets = ref<MockPreset[]>([])
-  const mockPresetsPhase = ref<string>('')
-  const mockPresetsScenario = ref<string>('')
+  const mockPresets = ref<MockPreset[]>([]);
+  const mockPresetsPhase = ref<string>("");
+  const mockPresetsScenario = ref<string>("");
 
   // ─── v2 多轮/分支剧本（参考 .trae/specs/agent-tools-scenarios-v2/spec.md） ───
   // 与上面 mockPresets 的区别：
@@ -896,15 +254,15 @@ export function useAgent() {
   //     sendMockRoundResponse 必须带上，供后端 MockEngineV2 知道是哪个剧本）
   // 后端 stream_end 时（或者推 mock_branch_choice_clear / mock_round_state_clear
   // 显式清空时）本 composable 把所有 ref 复位。
-  const mockBranchChoices = ref<MockBranch[]>([])
-  const mockBranchPrompt = ref<string>('')
-  const mockRoundState = ref<MockRoundState | null>(null)
-  const currentMockScenario = ref<string>('')
+  const mockBranchChoices = ref<MockBranch[]>([]);
+  const mockBranchPrompt = ref<string>("");
+  const mockRoundState = ref<MockRoundState | null>(null);
+  const currentMockScenario = ref<string>("");
 
   const mockScenarioPaused = computed(() => {
-    const phase = mockRoundState.value?.phase
-    return phase === 'awaiting_user_input' || phase === 'awaiting_branch_choice'
-  })
+    const phase = mockRoundState.value?.phase;
+    return phase === "awaiting_user_input" || phase === "awaiting_branch_choice";
+  });
 
   // ─── Task 3: tool_call 状态机派生 computed ────────────────────────
   /**
@@ -915,33 +273,33 @@ export function useAgent() {
    * 「🔄 工具执行中…」指示 + OperationCard 渲染脉冲动画。
    */
   const runningTools = computed(() => {
-    const list: ToolCall[] = []
+    const list: ToolCall[] = [];
     for (const m of messages.value) {
       for (const tc of m.tool_calls) {
-        if (tc.status === 'running' || tc.status === 'pending') {
-          list.push(tc)
+        if (tc.status === "running" || tc.status === "pending") {
+          list.push(tc);
         }
       }
     }
-    return list
-  })
+    return list;
+  });
 
   /** 是否有任意 tool_call 仍在运行 / 等待中（UI 状态指示用） */
-  const hasRunningTool = computed(() => runningTools.value.length > 0)
+  const hasRunningTool = computed(() => runningTools.value.length > 0);
 
   /**
    * 当前会话中所有 tool_call 的扁平引用（按到达顺序）。
    * 供 UI 一次性遍历渲染——避免在模板里再嵌套 .tool_calls。
    */
   const allToolCalls = computed(() => {
-    const list: ToolCall[] = []
+    const list: ToolCall[] = [];
     for (const m of messages.value) {
       for (const tc of m.tool_calls) {
-        list.push(tc)
+        list.push(tc);
       }
     }
-    return list
-  })
+    return list;
+  });
 
   /**
    * 多轮剧本中点 chip 继续：把 chip id 当作 userText 送回后端 Resume。
@@ -949,25 +307,20 @@ export function useAgent() {
    * 和"在暂停点恢复"，并用 currentMockScenario 找到正确的剧本状态机。
    */
   function pickMockBranch(branchId: string): void {
-    if (typeof branchId !== 'string' || branchId.length === 0) {
-      console.debug('[useAgent] pickMockBranch: invalid branchId', branchId)
-      return
+    if (typeof branchId !== "string" || branchId.length === 0) {
+      console.debug("[useAgent] pickMockBranch: invalid branchId", branchId);
+      return;
     }
     if (!currentMockScenario.value) {
-      console.debug('[useAgent] pickMockBranch: no currentMockScenario — dropped')
-      return
+      console.debug("[useAgent] pickMockBranch: no currentMockScenario — dropped");
+      return;
     }
-    if (status.value === 'streaming' || status.value === 'confirming') {
-      console.debug('[useAgent] pickMockBranch: ignored (busy)')
-      return
+    if (status.value === "streaming" || status.value === "confirming") {
+      console.debug("[useAgent] pickMockBranch: ignored (busy)");
+      return;
     }
-    console.debug(
-      '[useAgent] pickMockBranch →',
-      branchId,
-      '| scenario =',
-      currentMockScenario.value,
-    )
-    void send(branchId, { mode: 'mock_resume', scenario: currentMockScenario.value })
+    console.debug("[useAgent] pickMockBranch →", branchId, "| scenario =", currentMockScenario.value);
+    void send(branchId, { mode: "mock_resume", scenario: currentMockScenario.value });
   }
 
   /**
@@ -975,25 +328,20 @@ export function useAgent() {
    * 用于：chip 列表里没覆盖到的细粒度控制（比如用正则编辑 metadata 字段）。
    */
   function sendMockRoundResponse(userText: string): void {
-    if (typeof userText !== 'string' || userText.trim().length === 0) {
-      console.debug('[useAgent] sendMockRoundResponse: empty text — dropped')
-      return
+    if (typeof userText !== "string" || userText.trim().length === 0) {
+      console.debug("[useAgent] sendMockRoundResponse: empty text — dropped");
+      return;
     }
     if (!currentMockScenario.value) {
-      console.debug('[useAgent] sendMockRoundResponse: no currentMockScenario — dropped')
-      return
+      console.debug("[useAgent] sendMockRoundResponse: no currentMockScenario — dropped");
+      return;
     }
-    if (status.value === 'streaming' || status.value === 'confirming') {
-      console.debug('[useAgent] sendMockRoundResponse: ignored (busy)')
-      return
+    if (status.value === "streaming" || status.value === "confirming") {
+      console.debug("[useAgent] sendMockRoundResponse: ignored (busy)");
+      return;
     }
-    console.debug(
-      '[useAgent] sendMockRoundResponse →',
-      userText.slice(0, 40),
-      '| scenario =',
-      currentMockScenario.value,
-    )
-    void send(userText.trim(), { mode: 'mock_resume', scenario: currentMockScenario.value })
+    console.debug("[useAgent] sendMockRoundResponse →", userText.slice(0, 40), "| scenario =", currentMockScenario.value);
+    void send(userText.trim(), { mode: "mock_resume", scenario: currentMockScenario.value });
   }
 
   // ─── Mock 模式控制（用户从 AgentChat 顶栏的"🧪 模拟"badge 切换） ─────
@@ -1004,8 +352,8 @@ export function useAgent() {
   //
   // 修改后会立刻调 PUT /api/config 持久化到后端 config.user.json，
   // 下次会话起立即生效（无需重启后端）。
-  type MockMode = 'off' | 'builtin' | 'custom'
-  const currentMockMode = ref<MockMode>('off')
+  type MockMode = "off" | "builtin" | "custom";
+  const currentMockMode = ref<MockMode>("off");
 
   /**
    * 模拟模式预设 chip 点击：直接把 preset.userText 喂给 send()。
@@ -1015,17 +363,17 @@ export function useAgent() {
    * 用 mode='start'（而非 'steer' / 'queue'）：mock 模式是单次请求流。
    */
   async function pickMockPreset(preset: MockPreset): Promise<void> {
-    if (!preset || typeof preset.userText !== 'string' || preset.userText.length === 0) {
-      console.debug('[useAgent] pickMockPreset: invalid preset', preset)
-      return
+    if (!preset || typeof preset.userText !== "string" || preset.userText.length === 0) {
+      console.debug("[useAgent] pickMockPreset: invalid preset", preset);
+      return;
     }
     // 状态检查：跟 send 保持一致 —— 正在 streaming/confirming 时丢弃
-    if (status.value === 'streaming' || status.value === 'confirming') {
-      console.debug('[useAgent] pickMockPreset: ignored (busy)')
-      return
+    if (status.value === "streaming" || status.value === "confirming") {
+      console.debug("[useAgent] pickMockPreset: ignored (busy)");
+      return;
     }
-    console.debug('[useAgent] pickMockPreset →', preset.id, '| userText =', preset.userText)
-    await send(preset.userText, { mode: 'start' })
+    console.debug("[useAgent] pickMockPreset →", preset.id, "| userText =", preset.userText);
+    await send(preset.userText, { mode: "start" });
   }
 
   /**
@@ -1036,99 +384,89 @@ export function useAgent() {
    */
   async function loadMockPresets(): Promise<void> {
     try {
-      const resp = await fetch(`${getAgentBase()}/api/agent/mock/presets`)
+      const resp = await fetch(`${getAgentBase()}/api/agent/mock/presets`);
       if (!resp.ok) {
-        console.debug('[useAgent] loadMockPresets: HTTP', resp.status)
-        return
+        console.debug("[useAgent] loadMockPresets: HTTP", resp.status);
+        return;
       }
       const data = (await resp.json()) as {
-        scenario?: string
-        phase?: string
-        presets?: MockPreset[]
-        mockMode?: string
-      }
-      const list = Array.isArray(data.presets) ? data.presets : []
+        scenario?: string;
+        phase?: string;
+        presets?: MockPreset[];
+        mockMode?: string;
+      };
+      const list = Array.isArray(data.presets) ? data.presets : [];
       // 标准化：scenario_picker 后端 ID 是 "pick_xxx" 风格，但前端 type
       // 要求必须有 id+label+userText。后端已经保证。
       mockPresets.value = list.filter(
         (p): p is MockPreset =>
-          !!p &&
-          typeof p === 'object' &&
-          typeof p.id === 'string' &&
-          typeof p.label === 'string' &&
-          typeof p.userText === 'string',
-      )
-      mockPresetsPhase.value = String(data.phase ?? 'picker')
-      mockPresetsScenario.value = String(data.scenario ?? 'scenario_picker')
+          !!p && typeof p === "object" && typeof p.id === "string" && typeof p.label === "string" && typeof p.userText === "string"
+      );
+      mockPresetsPhase.value = String(data.phase ?? "picker");
+      mockPresetsScenario.value = String(data.scenario ?? "scenario_picker");
       console.debug(
-        '[useAgent] loadMockPresets →',
+        "[useAgent] loadMockPresets →",
         mockPresets.value.length,
-        'presets | mode =',
+        "presets | mode =",
         data.mockMode,
-        '| phase =',
-        mockPresetsPhase.value,
-      )
+        "| phase =",
+        mockPresetsPhase.value
+      );
     } catch (e) {
-      console.debug('[useAgent] loadMockPresets failed:', e)
+      console.debug("[useAgent] loadMockPresets failed:", e);
     }
   }
 
   async function loadMockMode() {
     try {
-      const resp = await fetch(`${getAgentBase()}/api/config`)
+      const resp = await fetch(`${getAgentBase()}/api/config`);
       if (!resp.ok) {
-        console.debug('[MockMode] fetch /api/config failed: HTTP', resp.status)
-        return
+        console.debug("[MockMode] fetch /api/config failed: HTTP", resp.status);
+        return;
       }
       const cfg = (await resp.json()) as {
-        agent_settings?: { mock_mode?: string }
-      }
-      const m = String(cfg?.agent_settings?.mock_mode ?? 'off').toLowerCase()
-      currentMockMode.value =
-        m === 'builtin' || m === 'custom' ? (m as MockMode) : 'off'
+        agent_settings?: { mock_mode?: string };
+      };
+      const m = String(cfg?.agent_settings?.mock_mode ?? "off").toLowerCase();
+      currentMockMode.value = m === "builtin" || m === "custom" ? (m as MockMode) : "off";
       // 覆盖式 UI：mock 模式配置开启时，isMockMode 必须**预先**置 true，
       // 否则用户首次进 AgentChat（还没发过消息）chip 不会显示。
       // 后续发消息触发流时，stream_start 事件会再次确认 isMockMode=true。
-      isMockMode.value = currentMockMode.value !== 'off'
-      console.debug(
-        '[MockMode] load → mode =',
-        currentMockMode.value,
-        '| isMockMode =',
-        isMockMode.value,
-      )
+      isMockMode.value = currentMockMode.value !== "off";
+      console.debug("[MockMode] load → mode =", currentMockMode.value, "| isMockMode =", isMockMode.value);
     } catch (e) {
-      console.debug('[MockMode] load failed:', e)
+      console.debug("[MockMode] load failed:", e);
     }
   }
 
   async function setMockMode(mode: MockMode) {
-    if (mode === currentMockMode.value) return
+    if (mode === currentMockMode.value) return;
     try {
       // 必须整张 config 一并 PUT（后端会保留非 agent_settings 字段）。
-      const getResp = await fetch(`${getAgentBase()}/api/config`)
-      if (!getResp.ok) throw new Error(`fetch /api/config → HTTP ${getResp.status}`)
-      const cfg = (await getResp.json()) as Record<string, unknown>
-      const agentSettings = (cfg.agent_settings as Record<string, unknown> | undefined) ?? {}
-      agentSettings.mock_mode = mode
-      cfg.agent_settings = agentSettings
+      const getResp = await fetch(`${getAgentBase()}/api/config`);
+      if (!getResp.ok) throw new Error(`fetch /api/config → HTTP ${getResp.status}`);
+      const cfg = (await getResp.json()) as Record<string, unknown>;
+      const agentSettings = (cfg.agent_settings as Record<string, unknown> | undefined) ?? {};
+      agentSettings.mock_mode = mode;
+      cfg.agent_settings = agentSettings;
       const putResp = await fetch(`${getAgentBase()}/api/config`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cfg),
-      })
+      });
       if (!putResp.ok) {
-        const errText = await putResp.text()
-        throw new Error(`PUT /api/config → HTTP ${putResp.status}: ${errText}`)
+        const errText = await putResp.text();
+        throw new Error(`PUT /api/config → HTTP ${putResp.status}: ${errText}`);
       }
-      currentMockMode.value = mode
+      currentMockMode.value = mode;
       // 立即重置 isMockMode：下次 send 时再由 SSE stream_start 事件重新置位
-      isMockMode.value = false
-      mockScenario.value = ''
-      console.info('[MockMode] set to', mode)
+      isMockMode.value = false;
+      mockScenario.value = "";
+      console.info("[MockMode] set to", mode);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      console.error('[MockMode] setMockMode failed:', msg)
-      throw e
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[MockMode] setMockMode failed:", msg);
+      throw e;
     }
   }
 
@@ -1140,9 +478,9 @@ export function useAgent() {
    */
   function finalizeLastAssistant(): void {
     for (let i = messages.value.length - 1; i >= 0; i--) {
-      if (messages.value[i].role === 'assistant' && messages.value[i].isStreaming) {
-        messages.value[i].isStreaming = false
-        break
+      if (messages.value[i].role === "assistant" && messages.value[i].isStreaming) {
+        messages.value[i].isStreaming = false;
+        break;
       }
     }
   }
@@ -1160,28 +498,31 @@ export function useAgent() {
    */
   async function refreshServerInstance(): Promise<void> {
     try {
-      const response = await fetch(`${getAgentBase()}/api/health`, { method: 'GET' })
+      const response = await fetch(`${getAgentBase()}/api/health`, { method: "GET" });
       if (!response.ok) {
-        console.warn('[useAgent] refreshServerInstance: /api/health returned', response.status)
-        return
+        console.warn("[useAgent] refreshServerInstance: /api/health returned", response.status);
+        return;
       }
-      const data = await response.json()
-      const newId = typeof data?.serverInstanceId === 'string' ? data.serverInstanceId : ''
+      const data = await response.json();
+      const newId = typeof data?.serverInstanceId === "string" ? data.serverInstanceId : "";
       if (!newId) {
-        console.warn('[useAgent] refreshServerInstance: response missing serverInstanceId')
-        return
+        console.warn("[useAgent] refreshServerInstance: response missing serverInstanceId");
+        return;
       }
       if (newId !== currentServerInstance) {
-        console.debug('[useAgent] server instance changed:', currentServerInstance || '(none)', '->', newId)
-        currentServerInstance = newId
+        console.debug("[useAgent] server instance changed:", currentServerInstance || "(none)", "->", newId);
+        currentServerInstance = newId;
         // 清空去重状态：旧 instance 的 sequence 编号集合在物理上属于旧进程，
         // 复用它们会导致新进程的真实事件被错误判为重复。
-        seenSequences.clear()
-        seenSequencesOrder.length = 0
+        seenSequences.clear();
+        seenSequencesOrder.length = 0;
       }
     } catch (e) {
       // 网络/CORS 等错误：保留旧值不丢业务，但提示一次
-      console.warn('[useAgent] refreshServerInstance: fetch /api/health failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
+      console.warn(
+        "[useAgent] refreshServerInstance: fetch /api/health failed:",
+        e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+      );
     }
   }
 
@@ -1192,21 +533,21 @@ export function useAgent() {
    */
   function rememberSequence(seq: number): boolean {
     if (seenSequences.has(seq)) {
-      return false
+      return false;
     }
-    seenSequences.add(seq)
-    seenSequencesOrder.push(seq)
+    seenSequences.add(seq);
+    seenSequencesOrder.push(seq);
     if (seenSequencesOrder.length > MAX_TRACKED_REALTIME_SEQUENCES) {
-      const evict = seenSequencesOrder.shift()
-      if (evict !== undefined) seenSequences.delete(evict)
+      const evict = seenSequencesOrder.shift();
+      if (evict !== undefined) seenSequences.delete(evict);
     }
-    return true
+    return true;
   }
 
   // ─── 持久化 ─────────────────────────────────────────────────────────────
 
   function saveState() {
-    if (!currentSessionId.value) return
+    if (!currentSessionId.value) return;
     try {
       const payload = {
         sessionId: currentSessionId.value,
@@ -1216,63 +557,63 @@ export function useAgent() {
         status: status.value,
         createdAt: sessionCreatedAt.value,
         updatedAt: Date.now(),
-      }
-      localStorage.setItem(STORAGE_PREFIX + currentSessionId.value, JSON.stringify(payload))
+      };
+      localStorage.setItem(STORAGE_PREFIX + currentSessionId.value, JSON.stringify(payload));
     } catch (e) {
-      console.debug('[useAgent] saveState failed:', e)
+      console.debug("[useAgent] saveState failed:", e);
     }
   }
 
   function loadState(sessionId: string): {
-    sessionId: string
-    eventOffset: number
+    sessionId: string;
+    eventOffset: number;
     /** 兼容老存档：无 lastEventId 字段时默认为 0 */
-    lastEventId?: number
-    messages: Message[]
-    status: AgentStatus
-    createdAt?: number
-    updatedAt?: number
+    lastEventId?: number;
+    messages: Message[];
+    status: AgentStatus;
+    createdAt?: number;
+    updatedAt?: number;
   } | null {
     try {
-      const raw = localStorage.getItem(STORAGE_PREFIX + sessionId)
-      if (!raw) return null
-      const parsed = JSON.parse(raw)
+      const raw = localStorage.getItem(STORAGE_PREFIX + sessionId);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
       // 恢复会话创建时间（兼容老存档无此字段）
-      if (typeof parsed?.createdAt === 'number') {
-        sessionCreatedAt.value = parsed.createdAt
+      if (typeof parsed?.createdAt === "number") {
+        sessionCreatedAt.value = parsed.createdAt;
       }
-      return parsed
+      return parsed;
     } catch (e) {
-      console.debug('[useAgent] loadState failed:', e)
-      return null
+      console.debug("[useAgent] loadState failed:", e);
+      return null;
     }
   }
 
   function findLatestPersistedSession(): string | null {
     try {
-      let latest: { id: string; ts: number } | null = null
+      let latest: { id: string; ts: number } | null = null;
       for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i)
-        if (!key || !key.startsWith(STORAGE_PREFIX)) continue
-        const raw = localStorage.getItem(key)
-        if (!raw) continue
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith(STORAGE_PREFIX)) continue;
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
         try {
-          const parsed = JSON.parse(raw) as { sessionId?: string; messages?: Message[] }
+          const parsed = JSON.parse(raw) as { sessionId?: string; messages?: Message[] };
           // 启发式：取有消息的最后一次会话
           if (parsed?.messages && parsed.messages.length > 0 && parsed.sessionId) {
-            const ts = parsed.messages[parsed.messages.length - 1]?.content?.length ?? 0
+            const ts = parsed.messages[parsed.messages.length - 1]?.content?.length ?? 0;
             if (!latest || ts > latest.ts) {
-              latest = { id: parsed.sessionId, ts }
+              latest = { id: parsed.sessionId, ts };
             }
           }
         } catch {
           // skip malformed
         }
       }
-      return latest?.id ?? null
+      return latest?.id ?? null;
     } catch (e) {
-      console.debug('[useAgent] findLatestPersistedSession failed:', e)
-      return null
+      console.debug("[useAgent] findLatestPersistedSession failed:", e);
+      return null;
     }
   }
 
@@ -1281,31 +622,31 @@ export function useAgent() {
    * 用于 UI 渲染"会话历史"
    */
   function refreshSessions(): void {
-    const list: SessionMeta[] = []
+    const list: SessionMeta[] = [];
     try {
       for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i)
-        if (!key || !key.startsWith(STORAGE_PREFIX)) continue
-        const raw = localStorage.getItem(key)
-        if (!raw) continue
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith(STORAGE_PREFIX)) continue;
+        const raw = localStorage.getItem(key);
+        if (!raw) continue;
         try {
           const parsed = JSON.parse(raw) as {
-            sessionId?: string
-            messages?: Message[]
-            createdAt?: number
-            updatedAt?: number
-          }
-          if (!parsed?.sessionId) continue
-          const msgs = parsed.messages || []
-          const firstUser = msgs.find((m) => m.role === 'user')
+            sessionId?: string;
+            messages?: Message[];
+            createdAt?: number;
+            updatedAt?: number;
+          };
+          if (!parsed?.sessionId) continue;
+          const msgs = parsed.messages || [];
+          const firstUser = msgs.find(m => m.role === "user");
           // Task 12：content 可能是 multimodal 数组（带附件的 user 消息），
           //          从中抽出首段 text 元素作为会话标题。
-          const title = extractUserTitle(firstUser?.content) || '(空会话)'
+          const title = extractUserTitle(firstUser?.content) || "(空会话)";
           // 优先使用持久化的真实时间戳，兼容老存档无此字段
-          const createdAt = parsed.createdAt || Date.now()
-          const updatedAt = parsed.updatedAt || createdAt
+          const createdAt = parsed.createdAt || Date.now();
+          const updatedAt = parsed.updatedAt || createdAt;
           // 轮次 = 用户消息数量（每条 user 消息代表一轮对话）
-          const rounds = msgs.filter((m) => m.role === 'user').length
+          const rounds = msgs.filter(m => m.role === "user").length;
           list.push({
             id: parsed.sessionId,
             title,
@@ -1313,39 +654,39 @@ export function useAgent() {
             updatedAt,
             messageCount: msgs.length,
             rounds,
-          })
+          });
         } catch {
           // skip
         }
       }
     } catch (e) {
-      console.debug('[useAgent] refreshSessions failed:', e)
+      console.debug("[useAgent] refreshSessions failed:", e);
     }
-    list.sort((a, b) => b.updatedAt - a.updatedAt)
-    sessions.value = list
+    list.sort((a, b) => b.updatedAt - a.updatedAt);
+    sessions.value = list;
   }
 
   /**
    * 切换到指定 session：先 stop 当前流，再加载目标 session 消息
    */
   function switchSession(sessionId: string): void {
-    if (sessionId === currentSessionId.value) return
+    if (sessionId === currentSessionId.value) return;
     if (abortController) {
-      abortController.abort()
-      abortController = null
+      abortController.abort();
+      abortController = null;
     }
-    const saved = loadState(sessionId)
+    const saved = loadState(sessionId);
     if (!saved) {
-      console.debug('[useAgent] switchSession: no saved state for', sessionId)
-      return
+      console.debug("[useAgent] switchSession: no saved state for", sessionId);
+      return;
     }
-    currentSessionId.value = saved.sessionId
-    eventOffset = saved.eventOffset
-    messages.value = saved.messages.map((m) => ({ ...m }))
-    status.value = 'idle'
-    lastError.value = ''
-    lastErrorCode.value = ''
-    saveState()
+    currentSessionId.value = saved.sessionId;
+    eventOffset = saved.eventOffset;
+    messages.value = saved.messages.map(m => ({ ...m }));
+    status.value = "idle";
+    lastError.value = "";
+    lastErrorCode.value = "";
+    saveState();
   }
 
   /**
@@ -1353,27 +694,27 @@ export function useAgent() {
    */
   function newSession(): void {
     if (abortController) {
-      abortController.abort()
-      abortController = null
+      abortController.abort();
+      abortController = null;
     }
     if (currentSessionId.value && messages.value.length > 0) {
       // 当前会话已存在消息 → 持久化保留作为历史
-      saveState()
+      saveState();
     }
-    currentSessionId.value = generateSessionId()
-    eventOffset = 0
-    lastEventId = 0
-    messages.value = []
-    status.value = 'idle'
-    lastError.value = ''
-    lastUserInput.value = ''
-    sessionCreatedAt.value = Date.now()
+    currentSessionId.value = generateSessionId();
+    eventOffset = 0;
+    lastEventId = 0;
+    messages.value = [];
+    status.value = "idle";
+    lastError.value = "";
+    lastUserInput.value = "";
+    sessionCreatedAt.value = Date.now();
     // 如果 API 返回了默认模型，新会话时重置为该默认模型
     if (apiDefaultModel.value) {
-      activeModel.value = apiDefaultModel.value
+      activeModel.value = apiDefaultModel.value;
     }
-    saveState()
-    refreshSessions()
+    saveState();
+    refreshSessions();
   }
 
   /**
@@ -1381,17 +722,17 @@ export function useAgent() {
    */
   function deleteSession(sessionId: string): void {
     try {
-      localStorage.removeItem(STORAGE_PREFIX + sessionId)
+      localStorage.removeItem(STORAGE_PREFIX + sessionId);
     } catch {
       // ignore
     }
     if (sessionId === currentSessionId.value) {
-      currentSessionId.value = ''
-      messages.value = []
-      eventOffset = 0
-      lastEventId = 0
+      currentSessionId.value = "";
+      messages.value = [];
+      eventOffset = 0;
+      lastEventId = 0;
     }
-    refreshSessions()
+    refreshSessions();
   }
 
   // ─── SSE 解析器 ─────────────────────────────────────────────────────────
@@ -1436,16 +777,16 @@ export function useAgent() {
    */
   async function processSSE(
     stream: ReadableStream<Uint8Array> | null,
-    protocol: 'agui' | 'legacy' = 'legacy',
+    protocol: "agui" | "legacy" = "legacy"
   ): Promise<{
-    received: boolean
-    streamEnded: boolean
-    morePending: boolean
+    received: boolean;
+    streamEnded: boolean;
+    morePending: boolean;
   }> {
-    if (protocol === 'agui') {
-      return processAGUISSEWithHandlers(stream)
+    if (protocol === "agui") {
+      return processAGUISSEWithHandlers(stream);
     }
-    return processLegacySSE(stream)
+    return processLegacySSE(stream);
   }
 
   /**
@@ -1460,119 +801,115 @@ export function useAgent() {
    *   - 流关闭后 finalize + 修正 status
    */
   async function processLegacySSE(stream: ReadableStream<Uint8Array> | null): Promise<{
-    received: boolean
-    streamEnded: boolean
-    morePending: boolean
+    received: boolean;
+    streamEnded: boolean;
+    morePending: boolean;
   }> {
-    if (!stream) return { received: false, streamEnded: false, morePending: false }
+    if (!stream) return { received: false, streamEnded: false, morePending: false };
 
-    const reader = stream.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    let received = false
-    let streamEnded = false
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let received = false;
+    let streamEnded = false;
     /** 最后一个 stream_status 事件：synced 还是 more_pending（用于 chain 决策） */
-    let lastStreamStatus: 'synced' | 'more_pending' | null = null
+    let lastStreamStatus: "synced" | "more_pending" | null = null;
 
     /**
      * 处理一个完整 SSE 事件（已被 \n\n 分隔）
      * 维护 currentEventId 用于关联同一事件内的 data 行
      */
     function consumeEvent(rawEvent: string): void {
-      if (!rawEvent.trim()) return
-      let currentEventId: number | null = null
-      const lines = rawEvent.split('\n')
+      if (!rawEvent.trim()) return;
+      let currentEventId: number | null = null;
+      const lines = rawEvent.split("\n");
       for (const line of lines) {
         // SSE 标准：id: N —— 用于断点续传
-        if (line.startsWith('id:')) {
-          const n = parseInt(line.slice(3).trim(), 10)
-          if (Number.isFinite(n) && n >= 0) currentEventId = n
-          continue
+        if (line.startsWith("id:")) {
+          const n = parseInt(line.slice(3).trim(), 10);
+          if (Number.isFinite(n) && n >= 0) currentEventId = n;
+          continue;
         }
-        if (!line.startsWith('data: ')) continue
-        const payload = line.slice(6).trim()
-        if (!payload) continue
-        received = true
+        if (!line.startsWith("data: ")) continue;
+        const payload = line.slice(6).trim();
+        if (!payload) continue;
+        received = true;
         try {
-          const event = JSON.parse(payload) as AgentEvent
+          const event = JSON.parse(payload) as AgentEvent;
           // ─── Task 27 调试：每个 SSE 事件立即 console.error 打印 ───
           // 看后端到底推了哪些 event.type + data 摘要（特别关注 tool_call / tool_result）
           const dataSummary =
             event.data == null
-              ? 'null'
-              : typeof event.data === 'string'
+              ? "null"
+              : typeof event.data === "string"
                 ? event.data.slice(0, 120)
-                : JSON.stringify(event.data).slice(0, 200)
-          console.error(
-            `[useAgent][SSE] type=${event.type} id=${currentEventId ?? '-'} data=${dataSummary}`,
-          )
+                : JSON.stringify(event.data).slice(0, 200);
+          console.error(`[useAgent][SSE] type=${event.type} id=${currentEventId ?? "-"} data=${dataSummary}`);
           // ⑦ 区：追加到原始事件日志（AgentDebugPanel 可视化展示）
-          pushRawEvent(event.type, dataSummary, currentEventId)
+          pushRawEvent(event.type, dataSummary, currentEventId);
           // Task 4.3：sequence 去重。若事件声明了 SSE id (currentEventId)，
           // 且该 id 已在当前 serverInstance 见过 → 整条事件丢弃，不再 dispatch。
           // 注意：未声明 id 的事件（如后端断点续传 stream_status 边界事件）跳过
           // 去重逻辑，避免误丢无 id 的合法事件。
           if (currentEventId !== null) {
             if (!rememberSequence(currentEventId)) {
-              console.debug('[useAgent] drop duplicate seq', currentEventId)
+              console.debug("[useAgent] drop duplicate seq", currentEventId);
               // 重置 currentEventId 避免下一行误用
-              currentEventId = null
-              continue
+              currentEventId = null;
+              continue;
             }
             // 关联 SSE id：若同一事件声明了 id，则覆盖到 lastEventId
             // （一个事件只能有一个 data，多个 id 行以最后一个为准）
-            lastEventId = currentEventId
+            lastEventId = currentEventId;
             // 重置 currentEventId 避免下一行误用
-            currentEventId = null
+            currentEventId = null;
           }
-          if (event.type === 'stream_end') streamEnded = true
-          if (event.type === 'stream_status') {
-            const payload = parseStreamStatusData(event.data)
-            if (payload?.status === 'synced' || payload?.status === 'more_pending') {
-              lastStreamStatus = payload.status
+          if (event.type === "stream_end") streamEnded = true;
+          if (event.type === "stream_status") {
+            const payload = parseStreamStatusData(event.data);
+            if (payload?.status === "synced" || payload?.status === "more_pending") {
+              lastStreamStatus = payload.status;
             }
           }
-          handleAgentEvent(event)
+          handleAgentEvent(event);
         } catch (e) {
-          console.debug('[useAgent] malformed SSE payload:', payload, e)
+          console.debug("[useAgent] malformed SSE payload:", payload, e);
         }
       }
     }
 
     try {
       while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+        const { done, value } = await reader.read();
+        if (done) break;
 
-        buffer += decoder.decode(value, { stream: true })
+        buffer += decoder.decode(value, { stream: true });
         // SSE 事件以 \n\n 分隔
-        const events = buffer.split('\n\n')
-        buffer = events.pop() || ''
+        const events = buffer.split("\n\n");
+        buffer = events.pop() || "";
 
         for (const rawEvent of events) {
-          consumeEvent(rawEvent)
+          consumeEvent(rawEvent);
         }
       }
       // 处理 trailing buffer（不带 \n\n 结尾的最后一段）
       if (buffer.trim()) {
-        consumeEvent(buffer)
-        buffer = ''
+        consumeEvent(buffer);
+        buffer = "";
       }
 
       // 流结束：清理未结束的 assistant 消息 + 恢复 idle 状态
       // （防止 server 端未发 stream_end 但连接关闭的边角场景）
-      finalizeLastAssistant()
-      if (status.value === 'streaming') {
+      finalizeLastAssistant();
+      if (status.value === "streaming") {
         // 决定 status：是否有 pending 确认？
-        const hasPendingConfirm = messages.value.some((m) =>
-          m.tool_calls.some((tc) => tc.needsConfirm && tc.status === 'pending'),
-        )
-        status.value = hasPendingConfirm ? 'confirming' : 'idle'
-        saveState()
+        const hasPendingConfirm = messages.value.some(m => m.tool_calls.some(tc => tc.needsConfirm && tc.status === "pending"));
+        status.value = hasPendingConfirm ? "confirming" : "idle";
+        saveState();
       }
     } finally {
       try {
-        reader.releaseLock()
+        reader.releaseLock();
       } catch {
         // already released
       }
@@ -1581,8 +918,8 @@ export function useAgent() {
     return {
       received,
       streamEnded,
-      morePending: lastStreamStatus === 'more_pending',
-    }
+      morePending: lastStreamStatus === "more_pending",
+    };
   }
 
   /**
@@ -1596,45 +933,41 @@ export function useAgent() {
    *   - onStreamEnd  → 复用 legacy 的 finalizeLastAssistant + status 修正
    */
   async function processAGUISSEWithHandlers(
-    stream: ReadableStream<Uint8Array> | null,
+    stream: ReadableStream<Uint8Array> | null
   ): Promise<{ received: boolean; streamEnded: boolean; morePending: boolean }> {
     return processAGUISSEImpl(stream, {
-      onEvent: (event) => {
+      onEvent: event => {
         // 与 processLegacySSE 一致：Task 27 调试 console.error
         const dataSummary =
           event.data == null
-            ? 'null'
-            : typeof event.data === 'string'
+            ? "null"
+            : typeof event.data === "string"
               ? event.data.slice(0, 120)
-              : JSON.stringify(event.data).slice(0, 200)
-        console.error(
-          `[useAgent][AGUI] type=${event.type} data=${dataSummary}`,
-        )
-        handleAgentEvent(event)
+              : JSON.stringify(event.data).slice(0, 200);
+        console.error(`[useAgent][AGUI] type=${event.type} data=${dataSummary}`);
+        handleAgentEvent(event);
       },
       rememberSequence: (id: number) => {
         // 与 legacy 共用 rememberSequence 闭包（serverInstance 切换时会被清空）
-        return rememberSequence(id)
+        return rememberSequence(id);
       },
       onRawEvent: (type: string, dataSummary: string, seq?: number | null) => {
-        pushRawEvent(type, dataSummary, seq ?? null)
+        pushRawEvent(type, dataSummary, seq ?? null);
         // 同步 lastEventId（与 legacy 同形）
         if (seq !== null && seq !== undefined && seq > lastEventId) {
-          lastEventId = seq
+          lastEventId = seq;
         }
       },
       onStreamEnd: () => {
         // 与 legacy onFinalize 行为一致
-        finalizeLastAssistant()
-        if (status.value === 'streaming') {
-          const hasPendingConfirm = messages.value.some((m) =>
-            m.tool_calls.some((tc) => tc.needsConfirm && tc.status === 'pending'),
-          )
-          status.value = hasPendingConfirm ? 'confirming' : 'idle'
-          saveState()
+        finalizeLastAssistant();
+        if (status.value === "streaming") {
+          const hasPendingConfirm = messages.value.some(m => m.tool_calls.some(tc => tc.needsConfirm && tc.status === "pending"));
+          status.value = hasPendingConfirm ? "confirming" : "idle";
+          saveState();
         }
       },
-    })
+    });
   }
 
   /**
@@ -1660,119 +993,119 @@ export function useAgent() {
     // 因此原"追加到最后一条 assistant"行为保留。
     const lastAssistant = (): Message => {
       // Turn 边界检测：尾部是 system 消息 → 必须新开 assistant
-      const tail = messages.value[messages.value.length - 1]
-      const isTurnBoundary = tail && tail.role === 'system'
+      const tail = messages.value[messages.value.length - 1];
+      const isTurnBoundary = tail && tail.role === "system";
       if (!isTurnBoundary) {
         // 非 turn 边界：优先 streaming → fallback 到任何 assistant
         for (let i = messages.value.length - 1; i >= 0; i--) {
-          const m = messages.value[i]
-          if (m.role === 'assistant' && m.isStreaming) return m
+          const m = messages.value[i];
+          if (m.role === "assistant" && m.isStreaming) return m;
         }
         for (let i = messages.value.length - 1; i >= 0; i--) {
-          if (messages.value[i].role === 'assistant') return messages.value[i]
+          if (messages.value[i].role === "assistant") return messages.value[i];
         }
       }
       // turn 边界 or 没有 assistant → 创建新 assistant
       const newMsg: Message = {
-        role: 'assistant',
-        content: '',
+        role: "assistant",
+        content: "",
         tool_calls: [],
         tool_results: [],
         isStreaming: true,
         eventLog: [], // Task 27：初始化事件顺序日志
-      }
-      messages.value.push(newMsg)
-      return messages.value[messages.value.length - 1]
-    }
+      };
+      messages.value.push(newMsg);
+      return messages.value[messages.value.length - 1];
+    };
 
     switch (event.type) {
-      case 'text_delta': {
-        const m = lastAssistant()
-        const parsed = parseContentDelta(event.data)
-        appendSequencedChunk(m, 'content', parsed.seq, parsed.text)
+      case "text_delta": {
+        const m = lastAssistant();
+        const parsed = parseContentDelta(event.data);
+        appendSequencedChunk(m, "content", parsed.seq, parsed.text);
         // Task 27：记录文本事件到达顺序
-        if (!m.eventLog) m.eventLog = []
-        m.eventLog.push({ type: 'text' })
-        break
+        if (!m.eventLog) m.eventLog = [];
+        m.eventLog.push({ type: "text" });
+        break;
       }
-      case 'reasoning_delta': {
-        const m = lastAssistant()
-        const parsed = parseContentDelta(event.data)
-        appendSequencedChunk(m, 'reasoning', parsed.seq, parsed.text)
-        break
+      case "reasoning_delta": {
+        const m = lastAssistant();
+        const parsed = parseContentDelta(event.data);
+        appendSequencedChunk(m, "reasoning", parsed.seq, parsed.text);
+        break;
       }
-      case 'tool_call': {
-        const tool = parseToolCallData(event.data)
+      case "tool_call": {
+        const tool = parseToolCallData(event.data);
         if (tool) {
-          const m = lastAssistant()
-          m.tool_calls.push(tool)
+          const m = lastAssistant();
+          m.tool_calls.push(tool);
           // Task 27：记录工具调用事件到达顺序
-          if (!m.eventLog) m.eventLog = []
-          m.eventLog.push({ type: 'tool_call', id: tool.id })
+          if (!m.eventLog) m.eventLog = [];
+          m.eventLog.push({ type: "tool_call", id: tool.id });
           // Task 3：启动 30s 超时 watchdog。若 30s 内未收到 tool_result，
           // 自动标记 failed + errorCode='TIMEOUT'。timer 会在 tool_result
           // 到达时由 clearToolCallTimeout 清除。
-          armToolCallTimeout(tool.id)
+          armToolCallTimeout(tool.id);
         }
-        break
+        break;
       }
-      case 'tool_status': {
-        const ts = parseToolStatus(event.data)
+      case "tool_status": {
+        const ts = parseToolStatus(event.data);
         if (ts) {
           // 找到对应的 tool_call 并更新 status
           for (const msg of messages.value) {
-            const tc = msg.tool_calls.find((t) => t.id === ts.id)
+            const tc = msg.tool_calls.find(t => t.id === ts.id);
             if (tc) {
               // 状态机严格单向：failed/cancelled 是终态，后续 tool_status 不可降级
               // （典型场景：失败后服务端还推了个 success 给陈旧连接）
-              if (tc.status === 'failed' || tc.status === 'cancelled' || tc.status === 'success') {
-                break
+              if (tc.status === "failed" || tc.status === "cancelled" || tc.status === "success") {
+                break;
               }
-              tc.status = ts.status
+              tc.status = ts.status;
               // 进入 running 状态时记录 startedAt
-              if (ts.status === 'running' && tc.startedAt === undefined) {
-                tc.startedAt = Date.now()
+              if (ts.status === "running" && tc.startedAt === undefined) {
+                tc.startedAt = Date.now();
               }
-              break
+              break;
             }
           }
         }
-        break
+        break;
       }
-      case 'tool_result': {
-        const result = parseToolResultData(event.data)
+      case "tool_result": {
+        const result = parseToolResultData(event.data);
         if (result) {
           // AG-UI 协议适配：TOOL_CALL_RESULT 归一化结果只有 {id, result}（无 name），
           // 从前面累积的 tool_calls 按 id 反查补齐 name
-          let matchedTc: ToolCall | null = null
+          let matchedTc: ToolCall | null = null;
           if (!result.name) {
             for (let i = messages.value.length - 1; i >= 0; i--) {
-              const m = messages.value[i]
-              if (m.role !== 'assistant') continue
-              const tc = m.tool_calls.find((t) => t.id === result.id)
+              const m = messages.value[i];
+              if (m.role !== "assistant") continue;
+              const tc = m.tool_calls.find(t => t.id === result.id);
               if (tc?.name) {
-                result.name = tc.name
-                matchedTc = tc
-                break
+                result.name = tc.name;
+                matchedTc = tc;
+                break;
               }
             }
           } else {
             // 已有 name：同样按 id 反查 tool_call，准备联动 status
             for (let i = messages.value.length - 1; i >= 0; i--) {
-              const m = messages.value[i]
-              if (m.role !== 'assistant') continue
-              const tc = m.tool_calls.find((t) => t.id === result.id)
+              const m = messages.value[i];
+              if (m.role !== "assistant") continue;
+              const tc = m.tool_calls.find(t => t.id === result.id);
               if (tc) {
-                matchedTc = tc
-                break
+                matchedTc = tc;
+                break;
               }
             }
           }
-          const m = lastAssistant()
-          m.tool_results.push(result)
+          const m = lastAssistant();
+          m.tool_results.push(result);
           // Task 27：记录工具结果事件到达顺序
-          if (!m.eventLog) m.eventLog = []
-          m.eventLog.push({ type: 'tool_result', id: result.id })
+          if (!m.eventLog) m.eventLog = [];
+          m.eventLog.push({ type: "tool_result", id: result.id });
 
           // ── 状态机联动：tool_result → tool_call.status ──
           // 关键修复：之前 tool_call.status 只看 tool_status 事件，failed 时
@@ -1780,59 +1113,64 @@ export function useAgent() {
           // is_error + status 字段联动外层 tool_call.status。
           // 状态机严格单向：failed/cancelled 是终态（已被 tool_status 设过），
           // 不再被 tool_result 覆盖（防止陈旧重放把 failed 改回 success）。
-          if (matchedTc && matchedTc.status !== 'failed' && matchedTc.status !== 'cancelled') {
-            const finishedAt = Date.now()
-            matchedTc.finishedAt = finishedAt
+          if (matchedTc && matchedTc.status !== "failed" && matchedTc.status !== "cancelled") {
+            const finishedAt = Date.now();
+            matchedTc.finishedAt = finishedAt;
 
             // ── errorCode / errorMessage 提取 ──
             // ToolResult 类型契约不包含这两个字段（避免与后端 wire format 紧耦合），
             // 但后端实际可能通过原始 event.data 传 errorCode / errorMessage /
             // message 字段。这里就地再 JSON.parse 一次 raw data 拿这些可选字段。
             // 容错：解析失败 / 字段缺失时退到 fallback。
-            let rawErrorCode: string | undefined
-            let rawErrorMessage: string | undefined
-            let rawOutput: any
+            let rawErrorCode: string | undefined;
+            let rawErrorMessage: string | undefined;
+            let rawOutput: any;
             try {
-              const raw = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-              if (raw && typeof raw === 'object') {
-                const r = raw as Record<string, unknown>
-                if (typeof r.errorCode === 'string') rawErrorCode = r.errorCode
-                else if (typeof (r as any).code === 'string') rawErrorCode = (r as any).code
-                if (typeof r.errorMessage === 'string') rawErrorMessage = r.errorMessage
-                else if (typeof (r as any).message === 'string') rawErrorMessage = (r as any).message
-                if ('output' in r) rawOutput = (r as any).output
+              const raw = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+              if (raw && typeof raw === "object") {
+                const r = raw as Record<string, unknown>;
+                if (typeof r.errorCode === "string") rawErrorCode = r.errorCode;
+                else if (typeof (r as any).code === "string") rawErrorCode = (r as any).code;
+                if (typeof r.errorMessage === "string") rawErrorMessage = r.errorMessage;
+                else if (typeof (r as any).message === "string") rawErrorMessage = (r as any).message;
+                if ("output" in r) rawOutput = (r as any).output;
               }
             } catch {
               // raw data 解析失败 → 用 fallback（不阻塞主流程）
             }
 
             // 后端契约：is_error=true 表示执行失败；status='cancelled' 表示用户取消
-            if (result.status === 'cancelled') {
-              matchedTc.status = 'cancelled'
+            if (result.status === "cancelled") {
+              matchedTc.status = "cancelled";
             } else if (result.is_error === true) {
-              matchedTc.status = 'failed'
-              matchedTc.errorCode = rawErrorCode || 'EXEC_FAILED'
+              matchedTc.status = "failed";
+              matchedTc.errorCode = rawErrorCode || "EXEC_FAILED";
               // 错误消息原样透传（后端已本地化），不要在前端硬编码翻译
-              matchedTc.errorMessage = rawErrorMessage
-                || (typeof result.result === 'string' ? result.result : '')
-                || '工具执行失败'
+              matchedTc.errorMessage = rawErrorMessage || (typeof result.result === "string" ? result.result : "") || "工具执行失败";
             } else {
-              matchedTc.status = 'success'
+              matchedTc.status = "success";
               // output 字段：后端 AG-UI 格式可能挂在 raw.output 或 result.result
-              const output = rawOutput !== undefined
-                ? rawOutput
-                : (typeof result.result === 'string'
-                    ? (() => { try { return JSON.parse(result.result) } catch { return result.result } })()
-                    : result.result)
-              matchedTc.output = output
+              const output =
+                rawOutput !== undefined
+                  ? rawOutput
+                  : typeof result.result === "string"
+                    ? (() => {
+                        try {
+                          return JSON.parse(result.result);
+                        } catch {
+                          return result.result;
+                        }
+                      })()
+                    : result.result;
+              matchedTc.output = output;
             }
             // 收到 result 时清除 30s 超时 timer（避免泄漏 + 误标记 failed）
-            clearToolCallTimeout(result.id)
+            clearToolCallTimeout(result.id);
           }
         }
-        break
+        break;
       }
-      case 'stream_status': {
+      case "stream_status": {
         // 后端断点续传信号：
         //   { status: 'synced',       inProgress: bool, maxEventId?: number }
         //   { status: 'more_pending', inProgress: bool, maxEventId?: number }
@@ -1840,56 +1178,54 @@ export function useAgent() {
         // 不修改 status（status 由 stream_end / confirm 决策驱动），但要：
         //   1. 同步服务端声明的 maxEventId 到 lastEventId（覆盖，避免漂移）
         //   2. 通过 console.debug 留痕便于排查
-        const payload = parseStreamStatusData(event.data)
+        const payload = parseStreamStatusData(event.data);
         if (payload?.maxEventId !== undefined) {
           if (payload.maxEventId > lastEventId) {
-            lastEventId = payload.maxEventId
+            lastEventId = payload.maxEventId;
           }
         }
-        if (payload?.status === 'synced') {
-          console.debug('[useAgent] stream_status: synced, awaiting new events')
-        } else if (payload?.status === 'more_pending') {
-          console.debug('[useAgent] stream_status: more_pending, will re-resume')
+        if (payload?.status === "synced") {
+          console.debug("[useAgent] stream_status: synced, awaiting new events");
+        } else if (payload?.status === "more_pending") {
+          console.debug("[useAgent] stream_status: more_pending, will re-resume");
         } else {
-          console.debug('[useAgent] stream_status:', payload)
+          console.debug("[useAgent] stream_status:", payload);
         }
-        break
+        break;
       }
-      case 'stream_end': {
+      case "stream_end": {
         // 标记最后 assistant 消息流式结束
         for (let i = messages.value.length - 1; i >= 0; i--) {
-          if (messages.value[i].role === 'assistant' && messages.value[i].isStreaming) {
-            messages.value[i].isStreaming = false
-            break
+          if (messages.value[i].role === "assistant" && messages.value[i].isStreaming) {
+            messages.value[i].isStreaming = false;
+            break;
           }
         }
         // 决定下一个 status：
         //   - 如果有 pending tool_call（needsConfirm=true 且 status=pending）→ confirming
         //   - 否则 → idle
-        const hasPendingConfirm = messages.value.some((m) =>
-          m.tool_calls.some((tc) => tc.needsConfirm && tc.status === 'pending'),
-        )
-        status.value = hasPendingConfirm ? 'confirming' : 'idle'
+        const hasPendingConfirm = messages.value.some(m => m.tool_calls.some(tc => tc.needsConfirm && tc.status === "pending"));
+        status.value = hasPendingConfirm ? "confirming" : "idle";
         // Task 11：每个 stream_end 清掉队首 pending 消息。
         // 时序说明：当 in-flight turn 结束时，stream_end 触发
         // 队首清空（即使这个 turn 实际处理的是该消息，UI 端
         // 「已排队」标签与实际处理节拍同步）；后续 queued turn
         // 各自的 stream_end 同样按 FIFO 清队。
         if (pendingMessages.value.length > 0) {
-          const first = pendingMessages.value.shift()!
-          first.pending = false
+          const first = pendingMessages.value.shift()!;
+          first.pending = false;
         }
         // v2 多轮/分支剧本清理：stream_end 到达意味着整个 session 结束
         // （不管是正常结束、超时、还是用户中断）。把 v2 state 复位，
         // 否则用户开新会话时 MockBranchChoiceBar 会"残留显示"。
         // mockPresets 不在此处清空（它走"chip 永远覆盖显示"语义）。
-        mockBranchChoices.value = []
-        mockBranchPrompt.value = ''
-        mockRoundState.value = null
-        currentMockScenario.value = ''
-        break
+        mockBranchChoices.value = [];
+        mockBranchPrompt.value = "";
+        mockRoundState.value = null;
+        currentMockScenario.value = "";
+        break;
       }
-      case 'stream_error': {
+      case "stream_error": {
         // 后端在 SSE 流过程中遇到不可恢复错误时推送此事件。
         // data 字段包含错误信息（JSON 字符串或纯文本）。
         // 前端收到后应：
@@ -1897,37 +1233,37 @@ export function useAgent() {
         //   2. 记录错误信息到 lastError / lastErrorCode
         //   3. 切换 status 为 'error'
         //   4. 不再继续处理后续事件（连接即将关闭）
-        finalizeLastAssistant()
-        const errorMsg = parseContentDelta(event.data).text || '服务端流式传输发生未知错误'
-        lastError.value = errorMsg
-        lastErrorCode.value = 'upstream_error'
-        status.value = 'error'
+        finalizeLastAssistant();
+        const errorMsg = parseContentDelta(event.data).text || "服务端流式传输发生未知错误";
+        lastError.value = errorMsg;
+        lastErrorCode.value = "upstream_error";
+        status.value = "error";
         // v2 多轮/分支剧本清理：异常路径下也要清掉 chip 状态，
         // 否则用户关闭错误弹窗后 MockBranchChoiceBar 还会显示。
-        mockBranchChoices.value = []
-        mockBranchPrompt.value = ''
-        mockRoundState.value = null
-        currentMockScenario.value = ''
-        console.error('[useAgent] stream_error:', errorMsg)
-        break
+        mockBranchChoices.value = [];
+        mockBranchPrompt.value = "";
+        mockRoundState.value = null;
+        currentMockScenario.value = "";
+        console.error("[useAgent] stream_error:", errorMsg);
+        break;
       }
-      case 'stream_start': {
+      case "stream_start": {
         // Mock 模式信号：后端在 cfg.Agent.MockMode != "off" 时，SSE 流首
         // 个事件就是 stream_start，data 形状是 { mock: true, scenario: "..." }。
         // 拿到就置 isMockMode = true，AgentChat 顶部展示"🧪 模拟"badge。
         // 容忍旧后端/不 mock 模式：data 可能为空 / 不含 mock 字段 → 不动状态。
         try {
-          const raw = JSON.parse(event.data) as { mock?: unknown; scenario?: unknown } | null
+          const raw = JSON.parse(event.data) as { mock?: unknown; scenario?: unknown } | null;
           if (raw && raw.mock === true) {
-            isMockMode.value = true
-            mockScenario.value = String(raw.scenario ?? '')
+            isMockMode.value = true;
+            mockScenario.value = String(raw.scenario ?? "");
           }
         } catch {
           // data 不是 JSON → 非 mock 信号，忽略
         }
-        break
+        break;
       }
-      case 'mock_presets': {
+      case "mock_presets": {
         // Mock 模式剧本预设推送：
         //   - 后端在 stream_start 之后立即推一次（phase=initial）
         //   - 高级剧本可在 mid-scenario 任意 step 再推（phase=after_round_2 等）
@@ -1936,49 +1272,47 @@ export function useAgent() {
         // 前端覆盖行为：每次 mock_presets 事件都**完整替换**当前 mockPresets。
         // 这样 mid-scenario 更新（高级剧本的"随进度更新"）天然就是覆盖语义。
         try {
-          const raw = JSON.parse(event.data) as
-            | { scenario?: unknown; phase?: unknown; presets?: unknown }
-            | null
-          if (!raw) break
-          const list = Array.isArray(raw.presets) ? (raw.presets as MockPreset[]) : []
+          const raw = JSON.parse(event.data) as { scenario?: unknown; phase?: unknown; presets?: unknown } | null;
+          if (!raw) break;
+          const list = Array.isArray(raw.presets) ? (raw.presets as MockPreset[]) : [];
           // 兼容后端发送 MockPreset 时字段大小写：id/label/userText/tooltip
           // 一律 lowercase 归一化（后端 json tag 是 lowercase，前端契约保持一致）。
           mockPresets.value = list
-            .filter((p): p is MockPreset => !!p && typeof p === 'object' && typeof p.id === 'string' && typeof p.userText === 'string')
-            .map((p) => ({
+            .filter((p): p is MockPreset => !!p && typeof p === "object" && typeof p.id === "string" && typeof p.userText === "string")
+            .map(p => ({
               id: p.id,
               label: String(p.label ?? p.id),
               userText: p.userText,
-              icon: typeof p.icon === 'string' ? p.icon : undefined,
-              tooltip: typeof p.tooltip === 'string' ? p.tooltip : undefined,
-            }))
-          mockPresetsPhase.value = String(raw.phase ?? '')
-          mockPresetsScenario.value = String(raw.scenario ?? '')
+              icon: typeof p.icon === "string" ? p.icon : undefined,
+              tooltip: typeof p.tooltip === "string" ? p.tooltip : undefined,
+            }));
+          mockPresetsPhase.value = String(raw.phase ?? "");
+          mockPresetsScenario.value = String(raw.scenario ?? "");
           console.debug(
-            '[useAgent] mock_presets:',
+            "[useAgent] mock_presets:",
             mockPresets.value.length,
-            'presets, phase=',
+            "presets, phase=",
             mockPresetsPhase.value,
-            ', scenario=',
-            mockPresetsScenario.value,
-          )
+            ", scenario=",
+            mockPresetsScenario.value
+          );
         } catch (e) {
-          console.debug('[useAgent] mock_presets parse failed:', e)
+          console.debug("[useAgent] mock_presets parse failed:", e);
         }
-        break
+        break;
       }
 
-      case 'mock_presets_clear': {
+      case "mock_presets_clear": {
         // 故意 noop：chip 在 mock 模式开启期间**永远覆盖显示**（覆盖式 UI）。
         // 收到 clear 事件**不**清空 mockPresets —— 仅当用户**主动**退出 mock 模式
         // （setMockMode("off") 触发 X-Mock-Mode header 变化）时，isMockMode 变 false，
         // AgentChat 的 v-if 自然不再渲染 MockPresetBar。
         // 后端未来若需要主动清 chip（极少见），可以走一个新的 `mock_presets_reset` 事件。
-        console.debug('[useAgent] mock_presets_clear (ignored, chip 永远覆盖显示)')
-        break
+        console.debug("[useAgent] mock_presets_clear (ignored, chip 永远覆盖显示)");
+        break;
       }
 
-      case 'mock_branch_choice': {
+      case "mock_branch_choice": {
         // v2 多轮/分支剧本：剧本在 step.branch_choice=true 时推。
         // data 形状：{ scenario, prompt, choices: MockBranch[], phase }
         // 关键不变量：
@@ -1988,105 +1322,93 @@ export function useAgent() {
         //   3. phase 写入 mockRoundState，使 mockScenarioPaused = true
         // 不会在此处清理 mockRoundState —— 它的"运行中"状态可能仍有用。
         try {
-          const raw = JSON.parse(event.data) as
-            | {
-                scenario?: unknown
-                prompt?: unknown
-                choices?: unknown
-                phase?: unknown
-              }
-            | null
-          if (!raw) break
-          const list = Array.isArray(raw.choices) ? (raw.choices as MockBranch[]) : []
+          const raw = JSON.parse(event.data) as {
+            scenario?: unknown;
+            prompt?: unknown;
+            choices?: unknown;
+            phase?: unknown;
+          } | null;
+          if (!raw) break;
+          const list = Array.isArray(raw.choices) ? (raw.choices as MockBranch[]) : [];
           mockBranchChoices.value = list
-            .filter((b): b is MockBranch =>
-              !!b && typeof b === 'object' && typeof (b as MockBranch).id === 'string',
-            )
-            .map((b) => ({
+            .filter((b): b is MockBranch => !!b && typeof b === "object" && typeof (b as MockBranch).id === "string")
+            .map(b => ({
               id: b.id,
               label: String(b.label ?? b.id),
-              icon: typeof b.icon === 'string' ? b.icon : undefined,
-              description: typeof b.description === 'string' ? b.description : undefined,
-            }))
-          mockBranchPrompt.value = String(raw.prompt ?? '')
-          if (typeof raw.scenario === 'string' && raw.scenario.length > 0) {
-            currentMockScenario.value = raw.scenario
+              icon: typeof b.icon === "string" ? b.icon : undefined,
+              description: typeof b.description === "string" ? b.description : undefined,
+            }));
+          mockBranchPrompt.value = String(raw.prompt ?? "");
+          if (typeof raw.scenario === "string" && raw.scenario.length > 0) {
+            currentMockScenario.value = raw.scenario;
           }
           // 强制 paused：即使后端没推 mock_round_state 事件，单凭 mock_branch_choice
           // 到达也意味着剧本在等用户选 branch。
           mockRoundState.value = {
             roundIdx: mockRoundState.value?.roundIdx ?? 0,
             totalRounds: mockRoundState.value?.totalRounds ?? 1,
-            phase: 'awaiting_branch_choice',
+            phase: "awaiting_branch_choice",
             context: mockRoundState.value?.context ?? {},
             scenario: currentMockScenario.value,
-          }
+          };
           console.debug(
-            '[useAgent] mock_branch_choice:',
+            "[useAgent] mock_branch_choice:",
             mockBranchChoices.value.length,
             'branches, prompt="',
             mockBranchPrompt.value.slice(0, 40),
-            '..., scenario=',
-            currentMockScenario.value,
-          )
+            "..., scenario=",
+            currentMockScenario.value
+          );
         } catch (e) {
-          console.debug('[useAgent] mock_branch_choice parse failed:', e)
+          console.debug("[useAgent] mock_branch_choice parse failed:", e);
         }
-        break
+        break;
       }
 
-      case 'mock_round_state': {
+      case "mock_round_state": {
         // v2 多轮/分支剧本：剧本报告当前 round 进度。
         // data 形状：{ roundIdx, totalRounds, phase, context, scenario }
         // 与 mock_branch_choice 配合使用：round_state 永远先到（宣告"我现在到
         // round N 了"），branch_choice 后到（"我在这一步等你"）。
         // 也可在 phase='running' 时单独到达，告知前端 round 推进但不需要用户操作。
         try {
-          const raw = JSON.parse(event.data) as
-            | {
-                roundIdx?: unknown
-                totalRounds?: unknown
-                phase?: unknown
-                context?: unknown
-                scenario?: unknown
-              }
-            | null
-          if (!raw) break
+          const raw = JSON.parse(event.data) as {
+            roundIdx?: unknown;
+            totalRounds?: unknown;
+            phase?: unknown;
+            context?: unknown;
+            scenario?: unknown;
+          } | null;
+          if (!raw) break;
           const next: MockRoundState = {
-            roundIdx: typeof raw.roundIdx === 'number' ? raw.roundIdx : 0,
-            totalRounds: typeof raw.totalRounds === 'number' ? raw.totalRounds : 1,
-            phase: typeof raw.phase === 'string' ? raw.phase : 'running',
-            context:
-              raw.context && typeof raw.context === 'object'
-                ? (raw.context as Record<string, unknown>)
-                : {},
-            scenario:
-              typeof raw.scenario === 'string' && raw.scenario.length > 0
-                ? raw.scenario
-                : mockRoundState.value?.scenario,
-          }
-          mockRoundState.value = next
+            roundIdx: typeof raw.roundIdx === "number" ? raw.roundIdx : 0,
+            totalRounds: typeof raw.totalRounds === "number" ? raw.totalRounds : 1,
+            phase: typeof raw.phase === "string" ? raw.phase : "running",
+            context: raw.context && typeof raw.context === "object" ? (raw.context as Record<string, unknown>) : {},
+            scenario: typeof raw.scenario === "string" && raw.scenario.length > 0 ? raw.scenario : mockRoundState.value?.scenario,
+          };
+          mockRoundState.value = next;
           // scenario 也要单独缓存（mock_branch_choice 也写一次）
-          if (typeof raw.scenario === 'string' && raw.scenario.length > 0) {
-            currentMockScenario.value = raw.scenario
+          if (typeof raw.scenario === "string" && raw.scenario.length > 0) {
+            currentMockScenario.value = raw.scenario;
           }
           console.debug(
-            '[useAgent] mock_round_state: round',
+            "[useAgent] mock_round_state: round",
             next.roundIdx,
-            '/',
+            "/",
             next.totalRounds,
-            'phase=',
+            "phase=",
             next.phase,
-            'scenario=',
-            currentMockScenario.value,
-          )
+            "scenario=",
+            currentMockScenario.value
+          );
         } catch (e) {
-          console.debug('[useAgent] mock_round_state parse failed:', e)
+          console.debug("[useAgent] mock_round_state parse failed:", e);
         }
-        break
+        break;
       }
 
-      case 'compaction': {
+      case "compaction": {
         // Task 7：上下文自动压缩事件。
         //
         // 后端在 messages token 数越过 80% 窗口阈值时，调用 LLM
@@ -2116,92 +1438,91 @@ export function useAgent() {
         // 容错：compaction 事件不应让 status 切换；不影响
         // streaming 状态。重复到达时直接再 push 一条 marker
         // （后端保证只发一次）。
-        finalizeLastAssistant()
-        const data = parseCompactionData(event.data)
+        finalizeLastAssistant();
+        const data = parseCompactionData(event.data);
         // 不论 data 是否解析成功都插入 marker（即使解析失败也
         // 给用户一个 divider 提示此处发生了压缩）。
         messages.value.push({
-          role: 'system',
+          role: "system",
           content: CONTEXT_COMPACTION_MARKER,
           tool_calls: [],
           tool_results: [],
-        })
+        });
         if (data) {
           console.debug(
-            '[useAgent] compaction: replaced',
+            "[useAgent] compaction: replaced",
             data.replaced_message_count,
-            'messages @',
-            data.triggered_at_ms
-              ? new Date(data.triggered_at_ms).toISOString()
-              : '(no timestamp)',
-          )
+            "messages @",
+            data.triggered_at_ms ? new Date(data.triggered_at_ms).toISOString() : "(no timestamp)"
+          );
         }
-        break
+        break;
       }
 
       // ====== AG-UI 协议新增事件类型（useAGUIParser 归一化输出） ======
 
-      case 'tool_call_args': {
+      case "tool_call_args": {
         // AG-UI TOOL_CALL_ARGS：把 args 增量追加到已存在的 tool_call.args 字段
         // 找最后一条 assistant 消息里 id 匹配的 tool_call
         try {
-          const payload = typeof event.data === 'string' ? JSON.parse(event.data) : (event.data as any)
-          if (!payload || typeof payload !== 'object' || !payload.id || typeof payload.argsDelta !== 'string') break
+          const payload = typeof event.data === "string" ? JSON.parse(event.data) : (event.data as any);
+          if (!payload || typeof payload !== "object" || !payload.id || typeof payload.argsDelta !== "string") break;
           // 遍历所有 assistant 消息找到匹配的 tool_call（FIFO 顺序匹配，
           // 保留 processSSE 阶段的 lastAssistant 选择语义）
           for (let i = messages.value.length - 1; i >= 0; i--) {
-            const m = messages.value[i]
-            if (m.role !== 'assistant') continue
-            const tc = m.tool_calls.find((t) => t.id === payload.id)
+            const m = messages.value[i];
+            if (m.role !== "assistant") continue;
+            const tc = m.tool_calls.find(t => t.id === payload.id);
             if (tc) {
-              tc.args = (tc.args || '') + payload.argsDelta
-              break
+              tc.args = (tc.args || "") + payload.argsDelta;
+              break;
             }
           }
         } catch {
           // 解析失败：忽略此增量 args（不破坏已存在的 tc.args）
         }
-        break
+        break;
       }
 
-      case 'state_snapshot': {
+      case "state_snapshot": {
         // AG-UI STATE_SNAPSHOT：会话级共享状态，目前仅做调试记录 + 持久化兜底
         try {
-          const payload = typeof event.data === 'string' ? JSON.parse(event.data) : (event.data as any)
-          if (typeof console.debug === 'function') {
-            const keys = payload && typeof payload === 'object' && payload.state && typeof payload.state === 'object'
-              ? Object.keys(payload.state)
-              : []
-            console.debug('[useAgent] agui state_snapshot keys:', keys)
+          const payload = typeof event.data === "string" ? JSON.parse(event.data) : (event.data as any);
+          if (typeof console.debug === "function") {
+            const keys =
+              payload && typeof payload === "object" && payload.state && typeof payload.state === "object"
+                ? Object.keys(payload.state)
+                : [];
+            console.debug("[useAgent] agui state_snapshot keys:", keys);
           }
         } catch {
           // 静默
         }
-        break
+        break;
       }
 
-      case 'messages_snapshot': {
+      case "messages_snapshot": {
         // AG-UI MESSAGES_SNAPSHOT：完整消息快照（断点续传对齐用）
         // 当前实现：仅记录关键信息，不直接覆盖前端 messages（避免与本地编辑冲突）。
         try {
-          const payload = typeof event.data === 'string' ? JSON.parse(event.data) : (event.data as any)
-          if (typeof console.debug === 'function') {
-            const count = payload && Array.isArray(payload.messages) ? payload.messages.length : 0
-            console.debug('[useAgent] agui messages_snapshot count:', count)
+          const payload = typeof event.data === "string" ? JSON.parse(event.data) : (event.data as any);
+          if (typeof console.debug === "function") {
+            const count = payload && Array.isArray(payload.messages) ? payload.messages.length : 0;
+            console.debug("[useAgent] agui messages_snapshot count:", count);
           }
         } catch {
           // 静默
         }
-        break
+        break;
       }
 
       default:
         // 未知 type 静默忽略
-        break
+        break;
     }
 
-    eventOffset++
-    saveState()
+    eventOffset++;
+    saveState();
   }
 
   // ─── 公共 API ───────────────────────────────────────────────────────────
@@ -2225,110 +1546,107 @@ export function useAgent() {
    */
   async function send(
     text: string,
-    options?: { mode?: 'start' | 'steer' | 'queue' | 'mock_resume'; scenario?: string; attachments?: Attachment[] },
+    options?: { mode?: "start" | "steer" | "queue" | "mock_resume"; scenario?: string; attachments?: Attachment[] }
   ): Promise<void> {
-    const mode = options?.mode ?? 'start'
-    if (mode === 'queue') {
-      await sendQueued(text, options?.attachments ?? [])
-      return
+    const mode = options?.mode ?? "start";
+    if (mode === "queue") {
+      await sendQueued(text, options?.attachments ?? []);
+      return;
     }
 
-    if (status.value === 'streaming' || status.value === 'confirming') {
-      console.debug('[useAgent] send: ignored (busy)')
-      return
+    if (status.value === "streaming" || status.value === "confirming") {
+      console.debug("[useAgent] send: ignored (busy)");
+      return;
     }
 
     // 关闭上一轮的错误条
-    lastError.value = ''
-    lastErrorCode.value = ''
-    lastUserInput.value = text
+    lastError.value = "";
+    lastErrorCode.value = "";
+    lastUserInput.value = text;
 
     // Task 4：先拉取 /api/health 取 serverInstanceId。每次 send 都刷一次——
     // 开销可忽略（一次 GET，且 health 不带 SSE body），但能在"中途服务器
     // 重启"时立刻把 seenSequences 清空，避免后续事件被错误判为重复。
-    await refreshServerInstance()
+    await refreshServerInstance();
 
     // 第一次发送：分配新 session
     if (!currentSessionId.value) {
-      currentSessionId.value = generateSessionId()
+      currentSessionId.value = generateSessionId();
     }
-    eventOffset = 0
-    lastEventId = 0
+    eventOffset = 0;
+    lastEventId = 0;
 
     // 推 user 消息 + 空 assistant 占位
     // Task 12：如果有 attachments，content 编为 multimodal 数组；
     //          否则保持原样（纯字符串）以保持向后兼容。
-    const attachments = options?.attachments ?? []
-    const userContent: string | MessageContentPart[] =
-      attachments.length > 0
-        ? serializeAttachments(text, attachments)
-        : text
+    const attachments = options?.attachments ?? [];
+    const userContent: string | MessageContentPart[] = attachments.length > 0 ? serializeAttachments(text, attachments) : text;
 
     messages.value.push({
-      role: 'user',
+      role: "user",
       content: userContent,
       tool_calls: [],
       tool_results: [],
-    })
+    });
     messages.value.push({
-      role: 'assistant',
-      content: '',
+      role: "assistant",
+      content: "",
       tool_calls: [],
       tool_results: [],
       isStreaming: true,
-    })
+    });
 
-    status.value = 'streaming'
+    status.value = "streaming";
 
     // T15 unblock：mock_resume 模式在 fetch 前清空 chip + 把 round state
     // 切到 "running" —— UI 立即从 paused 切到 spinner，避免视觉残留
     // （stale "awaiting_user_input" 与新事件流冲突）。
     // 后续 mock_round_state{phase:resumed/in_progress} 事件会覆盖此处写入。
-    if (mode === 'mock_resume') {
-      mockBranchChoices.value = []
-      mockBranchPrompt.value = ''
-      const curRound = mockRoundState.value?.roundIdx ?? 0
-      const totalRounds = mockRoundState.value?.totalRounds ?? 0
+    if (mode === "mock_resume") {
+      mockBranchChoices.value = [];
+      mockBranchPrompt.value = "";
+      const curRound = mockRoundState.value?.roundIdx ?? 0;
+      const totalRounds = mockRoundState.value?.totalRounds ?? 0;
       mockRoundState.value = {
         scenario: currentMockScenario.value,
         roundIdx: curRound,
         totalRounds,
-        phase: 'running',
+        phase: "running",
         context: { ...(mockRoundState.value?.context ?? {}) },
-      }
+      };
     }
 
-    saveState()
-    refreshSessions()
+    saveState();
+    refreshSessions();
 
-    abortController = new AbortController()
+    abortController = new AbortController();
     // 30s 超时保护：如果后端长时间无响应，自动中断
-    let timedOut = false
+    let timedOut = false;
     const timeoutId = setTimeout(() => {
-      timedOut = true
-      if (abortController) abortController.abort()
-    }, 30_000)
+      timedOut = true;
+      if (abortController) abortController.abort();
+    }, 30_000);
 
     // ── 构建消息列表：历史对话（system prompt 由后端从 config 注入） ──
     // Task 12：content 可能是 string 或 multimodal 数组，原样透传。
-    const apiMessages: Array<{ role: string; content: string | MessageContentPart[] }> = []
+    const apiMessages: Array<{ role: string; content: string | MessageContentPart[] }> = [];
 
     // 追加历史消息（不含空的 assistant 占位消息）。
     // Task 7：跳过 role='system' + content=CONTEXT_COMPACTION_MARKER
     // 的合成消息——后端在触发压缩时已经把这段 summary 写进了
     // 自己的 session 持久化层，前端再回送一份就是重复。
     for (const m of messages.value) {
-      if (m.role === 'assistant' && !m.content && !m.reasoning && m.tool_calls.length === 0) continue
+      if (m.role === "assistant" && !m.content && !m.reasoning && m.tool_calls.length === 0) continue;
       // Task 7：跳过 system + CONTEXT_COMPACTION_MARKER 的合成消息。
       // Task 12：content 可能是 multimodal 数组，这种情况下不可能 ==
       // CONTEXT_COMPACTION_MARKER（string），TS 也允许此比较但用 typeof
       // 守卫更安全。
-      if (m.role === 'system' && typeof m.content === 'string' && m.content === CONTEXT_COMPACTION_MARKER) continue
-      apiMessages.push({ role: m.role, content: m.content })
+      if (m.role === "system" && typeof m.content === "string" && m.content === CONTEXT_COMPACTION_MARKER) continue;
+      apiMessages.push({ role: m.role, content: m.content });
     }
 
     try {
-      console.debug('[useAgent] send() starting fetch to', `${getAgentBase()}/api/chat`, 'mode=', mode)
+      console.debug("[useAgent] send() starting fetch to", `${getAgentBase()}/api/chat`, "mode=", mode);
       // AG-UI 协议协商：根据 useAgentApiBase.shouldSendAGUIHeader() 决定
       // 是否带 X-Agent-Protocol: agui header（默认 'auto' → 带）。
       // 后端看到 header 后用 AG-UI parser 解析 LLM 响应；不带则按
@@ -2341,23 +1659,20 @@ export function useAgent() {
       //   reader.read() 同步读完所有 chunk，**没有逐字流式效果**。
       // dev 模式 useProxiedFetch 不安装，原生 fetch 走 WebView 自带 SSE 拆分，
       // 加此 header 无副作用（CORS 不拦 Accept）。
-      const sendAGUIHeader = shouldSendAGUIHeader()
+      const sendAGUIHeader = shouldSendAGUIHeader();
       const fetchHeaders: Record<string, string> = {
-        'Content-Type': 'application/json',
-        'Accept': 'text/event-stream',
-        ...(sendAGUIHeader ? { 'X-Agent-Protocol': 'agui' } : {}),
-      }
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+        ...(sendAGUIHeader ? { "X-Agent-Protocol": "agui" } : {}),
+      };
       // T15 unblock：mode === 'mock_resume' 时把 scenario 透传给后端，
       // 否则 MockEngineV2 找不到对应的 stateful 实例 → 400 错误。
       // 后端 handleMockResume 据此：(1) 在 mockScenariosV2 中查找剧本；
       // (2) 调 mockV2SessionEngines 取出 / 创建 stateful 引擎；
       // (3) 调 engine.Resume(userText) 推下一轮事件。
-      const scenarioForBody =
-        mode === 'mock_resume'
-          ? options?.scenario ?? currentMockScenario.value ?? undefined
-          : undefined
+      const scenarioForBody = mode === "mock_resume" ? (options?.scenario ?? currentMockScenario.value ?? undefined) : undefined;
       const response = await fetch(`${getAgentBase()}/api/chat`, {
-        method: 'POST',
+        method: "POST",
         headers: fetchHeaders,
         body: JSON.stringify({
           sessionId: currentSessionId.value,
@@ -2374,96 +1689,96 @@ export function useAgent() {
           ...(scenarioForBody ? { scenario: scenarioForBody } : {}),
         }),
         signal: abortController.signal,
-      })
+      });
 
       if (!response.ok) {
         // 关键：解析后端 JSON body 拿到真正的 message 字段，而不是只显示
         // "HTTP 503: Service Unavailable"。后端 handleAgentChat 在缺 API Key
         // 等场景下会返回 {error, message, ...}，前端要把 message 透给用户。
-        throw await buildHttpError(response, '/api/chat')
+        throw await buildHttpError(response, "/api/chat");
       }
 
       if (!response.body) {
-        throw new Error('响应体为空（可能被代理或网络中间层截断）')
+        throw new Error("响应体为空（可能被代理或网络中间层截断）");
       }
 
       // Mock 模式 header 检测（备份信号）：SSE stream_start 事件是主信号，
       // 但如果首条事件到达前 header 已被读取，这里先把状态置好，避免 UI
       // 看到一段无 badge 的"普通"回复再被刷成 mock。
       // response.headers 可能为 undefined（部分代理 / 测试 mock），用 ?. 兼容。
-      const mockHeader = response.headers?.get('X-Mock-Mode')
+      const mockHeader = response.headers?.get("X-Mock-Mode");
       if (mockHeader) {
-        isMockMode.value = true
-        mockScenario.value = response.headers?.get('X-Mock-Scenario') ?? ''
+        isMockMode.value = true;
+        mockScenario.value = response.headers?.get("X-Mock-Scenario") ?? "";
       }
 
       // 协议分发：根据后端响应 X-Agent-Protocol 决定走 AG-UI parser 还是 legacy
       // response.headers 可能为 undefined（部分代理 / 测试 mock），用 ?. 兼容。
-      const responseProtocol = response.headers?.get('X-Agent-Protocol') === 'agui' ? 'agui' : 'legacy'
-      const result = await processSSE(response.body, responseProtocol)
+      const responseProtocol = response.headers?.get("X-Agent-Protocol") === "agui" ? "agui" : "legacy";
+      const result = await processSSE(response.body, responseProtocol);
 
       // 流结束但未收到任何事件 → 后端无响应
       if (!result.received) {
-        throw new Error('服务端无响应：连接已关闭但未返回任何数据')
+        throw new Error("服务端无响应：连接已关闭但未返回任何数据");
       }
 
       // 收到了事件但 assistant 内容仍为空且无工具调用 → 异常空回复
-      const lastAssistant = [...messages.value].reverse().find((m) => m.role === 'assistant')
+      const lastAssistant = [...messages.value].reverse().find(m => m.role === "assistant");
       if (lastAssistant && !lastAssistant.content && lastAssistant.tool_calls.length === 0) {
-        console.error('[useAgent] WARNING: stream ended with empty assistant reply — marking user msg as errored')
-        const lastUserMsg = [...messages.value].reverse().find((m) => m.role === 'user')
-        if (lastUserMsg) lastUserMsg.error = '服务端返回空回复，请重试'
-        status.value = 'idle'
+        console.error("[useAgent] WARNING: stream ended with empty assistant reply — marking user msg as errored");
+        const lastUserMsg = [...messages.value].reverse().find(m => m.role === "user");
+        if (lastUserMsg) lastUserMsg.error = "服务端返回空回复，请重试";
+        status.value = "idle";
       }
     } catch (e: any) {
       // 找到本次发送的 user 消息，标记错误（每条消息独立错误状态）
-      const lastUserMsg = [...messages.value].reverse().find((m) => m.role === 'user')
-      if (e?.name === 'AbortError') {
+      const lastUserMsg = [...messages.value].reverse().find(m => m.role === "user");
+      if (e?.name === "AbortError") {
         if (timedOut) {
-          console.error('[useAgent] send timed out (30s)')
-          if (lastUserMsg) lastUserMsg.error = '请求超时（30秒内服务端无响应），请检查网络或稍后重试'
-          status.value = 'idle'
+          console.error("[useAgent] send timed out (30s)");
+          if (lastUserMsg) lastUserMsg.error = "请求超时（30秒内服务端无响应），请检查网络或稍后重试";
+          status.value = "idle";
         } else {
-          console.debug('[useAgent] send aborted by user')
+          console.debug("[useAgent] send aborted by user");
           // 用户主动停止：不标记错误
         }
-        finalizeLastAssistant()
-        if (status.value !== 'idle') status.value = 'idle'
+        finalizeLastAssistant();
+        if (status.value !== "idle") status.value = "idle";
       } else {
-        let detail = e?.message || String(e)
+        let detail = e?.message || String(e);
         // 区分 CORS 预检失败 / 网络断开 / 服务器返回：
         //   TypeError: Failed to fetch（或 iOS Safari 的"Load failed"）通常是
         //     CORS 预检失败 / mixed content blocked / 端口不通 — 浏览器拒绝跨域 POST
         //   这里把诊断信息 dump 到 console.error，下次出问题时 DevLogs 一眼能定位
-        if (e?.name === 'TypeError' && /Failed to fetch|Load failed/i.test(detail)) {
-          const ctx = getAgentApiBaseContext()
-          console.error('[useAgent] send failed (likely CORS preflight / network / mixed content):', {
+        if (e?.name === "TypeError" && /Failed to fetch|Load failed/i.test(detail)) {
+          const ctx = getAgentApiBaseContext();
+          console.error("[useAgent] send failed (likely CORS preflight / network / mixed content):", {
             base: ctx.base,
             source: ctx.source,
             isNative: ctx.isNative,
             env: ctx.env,
             sampleUrl: ctx.sampleUrl,
-            pageOrigin: typeof location !== 'undefined' ? location.origin : '(no location)',
+            pageOrigin: typeof location !== "undefined" ? location.origin : "(no location)",
             requestUrl: `${ctx.base}/api/chat`,
             aguiHeaderSent: shouldSendAGUIHeader(),
-          })
-          detail = `无法连接 Agent API (${ctx.base}) — 检查 CORS 预检 / 网络 / 服务器可达性`
+          });
+          detail = `无法连接 Agent API (${ctx.base}) — 检查 CORS 预检 / 网络 / 服务器可达性`;
         }
-        console.error('[useAgent] send failed:', detail)
-        if (lastUserMsg) lastUserMsg.error = detail
+        console.error("[useAgent] send failed:", detail);
+        if (lastUserMsg) lastUserMsg.error = detail;
         // 把后端 buildHttpError 挂的 .code 提取出来（'no_api_key' / 'upstream_error' / 等）。
         // chat UI 据此可以展示"去 AI 设置"快捷按钮，让用户从对话流直达修复点，
         // 避免"我保存了 key 但 chat 还是 503"的卡死循环（用户的 6 条日志就是这个场景）。
-        const errCode = e?.code as 'no_api_key' | 'upstream_error' | 'invalid_json' | 'unknown' | undefined
-        lastErrorCode.value = errCode ?? 'unknown'
-        showToast({ message: detail, duration: 3000, color: 'danger' })
-        status.value = 'idle'
-        finalizeLastAssistant()
+        const errCode = e?.code as "no_api_key" | "upstream_error" | "invalid_json" | "unknown" | undefined;
+        lastErrorCode.value = errCode ?? "unknown";
+        showToast({ message: detail, duration: 3000, color: "danger" });
+        status.value = "idle";
+        finalizeLastAssistant();
       }
     } finally {
-      clearTimeout(timeoutId)
-      abortController = null
-      saveState()
+      clearTimeout(timeoutId);
+      abortController = null;
+      saveState();
     }
   }
 
@@ -2483,78 +1798,75 @@ export function useAgent() {
    * 在首个 text_delta 时按需创建。
    */
   async function sendQueued(text: string, attachments: Attachment[]): Promise<void> {
-    if (status.value !== 'streaming' && status.value !== 'confirming') {
-      console.debug('[useAgent] sendQueued: ignored (no active turn to queue after)')
-      return
+    if (status.value !== "streaming" && status.value !== "confirming") {
+      console.debug("[useAgent] sendQueued: ignored (no active turn to queue after)");
+      return;
     }
     if (!currentSessionId.value) {
-      console.debug('[useAgent] sendQueued: ignored (no active session)')
-      return
+      console.debug("[useAgent] sendQueued: ignored (no active session)");
+      return;
     }
 
-    lastError.value = ''
+    lastError.value = "";
 
     // Task 12：multimodal content 数组 vs 纯字符串
-    const userContent: string | MessageContentPart[] =
-      attachments.length > 0
-        ? serializeAttachments(text, attachments)
-        : text
+    const userContent: string | MessageContentPart[] = attachments.length > 0 ? serializeAttachments(text, attachments) : text;
 
     // Push user 消息（带 pending=true），并把它登记到 pendingMessages。
     // 两个数组共享同一对象引用：messages.value 渲染聊天气泡，
     // pendingMessages 暴露给 UI 渲染「已排队：xxx」提示。
     const userMsg: Message = {
-      role: 'user',
+      role: "user",
       content: userContent,
       tool_calls: [],
       tool_results: [],
       pending: true,
-    }
-    messages.value.push(userMsg)
-    pendingMessages.value.push(userMsg)
-    saveState()
-    refreshSessions()
+    };
+    messages.value.push(userMsg);
+    pendingMessages.value.push(userMsg);
+    saveState();
+    refreshSessions();
 
     // 复用 send() 的 apiMessages 构建逻辑（不能调 send() 本身——
     // 那会重置 eventOffset 并破坏当前 SSE 流的状态机）。
-    const apiMessages: Array<{ role: string; content: string | MessageContentPart[] }> = []
+    const apiMessages: Array<{ role: string; content: string | MessageContentPart[] }> = [];
     for (const m of messages.value) {
-      if (m.role === 'assistant' && !m.content && !m.reasoning && m.tool_calls.length === 0) continue
-      if (m.role === 'system' && typeof m.content === 'string' && m.content === CONTEXT_COMPACTION_MARKER) continue
-      apiMessages.push({ role: m.role, content: m.content })
+      if (m.role === "assistant" && !m.content && !m.reasoning && m.tool_calls.length === 0) continue;
+      if (m.role === "system" && typeof m.content === "string" && m.content === CONTEXT_COMPACTION_MARKER) continue;
+      apiMessages.push({ role: m.role, content: m.content });
     }
 
     try {
-      console.debug('[useAgent] sendQueued() POST /api/chat mode=queue')
+      console.debug("[useAgent] sendQueued() POST /api/chat mode=queue");
       const response = await fetch(`${getAgentBase()}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sessionId: currentSessionId.value,
           model: activeModel.value,
           temperature: activeTemperature.value,
           messages: apiMessages,
           deviceId: getDeviceIdSync(),
-          mode: 'queue',
+          mode: "queue",
         }),
-      })
+      });
       // queue 模式服务端约定返回 202 Accepted（chat.go 中由
       // HandleChat 在 mode=='queue' 时显式 WriteHeader 202）。
       if (response.status !== 202) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText || '排队失败'}`)
+        throw new Error(`HTTP ${response.status}: ${response.statusText || "排队失败"}`);
       }
-      console.debug('[useAgent] sendQueued: 202 Accepted, message parked on server')
+      console.debug("[useAgent] sendQueued: 202 Accepted, message parked on server");
     } catch (e: any) {
-      const detail = e?.message || String(e)
-      console.error('[useAgent] sendQueued failed:', detail)
+      const detail = e?.message || String(e);
+      console.error("[useAgent] sendQueued failed:", detail);
       // 出错：把 user 消息从 pendingMessages 摘除并标记 error（保留在
       // messages.value 以便用户看到失败提示）。
-      const idx = pendingMessages.value.indexOf(userMsg)
-      if (idx !== -1) pendingMessages.value.splice(idx, 1)
-      userMsg.error = '排队失败：' + detail
-      userMsg.pending = false
-      showToast({ message: '排队失败', duration: 3000, color: 'danger' })
-      saveState()
+      const idx = pendingMessages.value.indexOf(userMsg);
+      if (idx !== -1) pendingMessages.value.splice(idx, 1);
+      userMsg.error = "排队失败：" + detail;
+      userMsg.pending = false;
+      showToast({ message: "排队失败", duration: 3000, color: "danger" });
+      saveState();
     }
   }
 
@@ -2563,45 +1875,45 @@ export function useAgent() {
    */
   async function confirmTool(toolCallId: string, decision: Decision): Promise<void> {
     if (!currentSessionId.value) {
-      console.debug('[useAgent] confirmTool: no active session')
-      return
+      console.debug("[useAgent] confirmTool: no active session");
+      return;
     }
 
     if (abortController) {
-      abortController.abort()
-      abortController = null
+      abortController.abort();
+      abortController = null;
     }
 
     // 找到对应的 tool_call，把它的 status 标记为 'running' 表示处理中
-    let targetTool: ToolCall | null = null
+    let targetTool: ToolCall | null = null;
     for (const msg of messages.value) {
-      const tc = msg.tool_calls.find((t) => t.id === toolCallId)
+      const tc = msg.tool_calls.find(t => t.id === toolCallId);
       if (tc) {
-        targetTool = tc
-        break
+        targetTool = tc;
+        break;
       }
     }
     if (targetTool) {
       // 用户做决策期间：保持 needsConfirm 但 status 标记 'running' 表示处理中
-      targetTool.status = 'running'
+      targetTool.status = "running";
     }
 
-    status.value = 'streaming'
-    saveState()
+    status.value = "streaming";
+    saveState();
 
-    abortController = new AbortController()
+    abortController = new AbortController();
     try {
       // AG-UI 协议协商（与 send() 一致）
       // Accept: text/event-stream —— 必传，触发 useProxiedFetch 走 streamStart，
       // 否则 native 端走 fetchOnce 一次性读完所有 chunk，无流式效果。
       // 详见 useAgent.send() 注释。
-      const sendAGUIHeader = shouldSendAGUIHeader()
+      const sendAGUIHeader = shouldSendAGUIHeader();
       const response = await fetch(`${getAgentBase()}/api/confirm`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream',
-          ...(sendAGUIHeader ? { 'X-Agent-Protocol': 'agui' } : {}),
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+          ...(sendAGUIHeader ? { "X-Agent-Protocol": "agui" } : {}),
         },
         body: JSON.stringify({
           sessionId: currentSessionId.value,
@@ -2615,29 +1927,29 @@ export function useAgent() {
           deviceId: getDeviceIdSync(),
         }),
         signal: abortController.signal,
-      })
+      });
 
       if (!response.ok) {
-        throw await buildHttpError(response, '/api/confirm')
+        throw await buildHttpError(response, "/api/confirm");
       }
 
       // 协议分发
-      const responseProtocol = response.headers?.get('X-Agent-Protocol') === 'agui' ? 'agui' : 'legacy'
-      await processSSE(response.body, responseProtocol)
+      const responseProtocol = response.headers?.get("X-Agent-Protocol") === "agui" ? "agui" : "legacy";
+      await processSSE(response.body, responseProtocol);
     } catch (e: any) {
-      if (e?.name === 'AbortError') {
-        console.debug('[useAgent] confirmTool aborted')
-        if (targetTool) targetTool.status = 'pending'
-        status.value = 'confirming'
+      if (e?.name === "AbortError") {
+        console.debug("[useAgent] confirmTool aborted");
+        if (targetTool) targetTool.status = "pending";
+        status.value = "confirming";
       } else {
-        console.error('[useAgent] confirmTool failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-        if (targetTool) targetTool.status = 'pending'
-        showToast({ message: 'Confirm request failed', duration: 2000, color: 'danger' })
-        status.value = 'confirming'
+        console.error("[useAgent] confirmTool failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+        if (targetTool) targetTool.status = "pending";
+        showToast({ message: "Confirm request failed", duration: 2000, color: "danger" });
+        status.value = "confirming";
       }
     } finally {
-      abortController = null
-      saveState()
+      abortController = null;
+      saveState();
     }
   }
 
@@ -2653,22 +1965,22 @@ export function useAgent() {
    *   ④ 收尾：服务端流自然结束（stream_end）→ 状态切回 idle
    */
   async function resume(): Promise<void> {
-    const sessionId = findLatestPersistedSession()
-    if (!sessionId) return
+    const sessionId = findLatestPersistedSession();
+    if (!sessionId) return;
 
-    const saved = loadState(sessionId)
-    if (!saved) return
+    const saved = loadState(sessionId);
+    if (!saved) return;
 
-    currentSessionId.value = saved.sessionId
-    eventOffset = saved.eventOffset || 0
-    lastEventId = saved.lastEventId || 0
+    currentSessionId.value = saved.sessionId;
+    eventOffset = saved.eventOffset || 0;
+    lastEventId = saved.lastEventId || 0;
     // 恢复 messages
-    messages.value.splice(0, messages.value.length, ...(saved.messages || []))
-    status.value = saved.status || 'idle'
+    messages.value.splice(0, messages.value.length, ...(saved.messages || []));
+    status.value = saved.status || "idle";
 
     // 如果上次是 streaming 状态，主动 resume 追平进度
-    if (status.value === 'streaming') {
-      await runResumeChain()
+    if (status.value === "streaming") {
+      await runResumeChain();
     }
   }
 
@@ -2678,12 +1990,12 @@ export function useAgent() {
    */
   async function runResumeChain(maxHops = 32): Promise<void> {
     if (abortController) {
-      abortController.abort()
-      abortController = null
+      abortController.abort();
+      abortController = null;
     }
-    abortController = new AbortController()
-    const controller = abortController
-    let hopsLeft = maxHops
+    abortController = new AbortController();
+    const controller = abortController;
+    let hopsLeft = maxHops;
     try {
       // 链式 resume：每轮处理 processSSE 的信号决定下一步
       //   - streamEnded=true       → 退出循环（服务端显式 stream_end）
@@ -2692,20 +2004,20 @@ export function useAgent() {
       //   - 收到 synced            → 退出（保持 streaming 状态由后续触发）
       //   - status 切到非 streaming → 退出
       while (hopsLeft-- > 0) {
-        const headerLastEventId = lastEventId > 0 ? String(lastEventId) : undefined
+        const headerLastEventId = lastEventId > 0 ? String(lastEventId) : undefined;
         // AG-UI 协议协商（与 send() / confirmTool() 一致）
         // Accept: text/event-stream —— 必传，触发 useProxiedFetch 走 streamStart，
         // 否则 native 端走 fetchOnce 一次性读完所有 chunk，无流式效果。
         // 详见 useAgent.send() 注释。
-        const sendAGUIHeader = shouldSendAGUIHeader()
+        const sendAGUIHeader = shouldSendAGUIHeader();
         const response = await fetch(`${getAgentBase()}/api/resume`, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'text/event-stream',
+            "Content-Type": "application/json",
+            Accept: "text/event-stream",
             // SSE 标准 Last-Event-ID：与 EventSource 协议一致
-            ...(headerLastEventId ? { 'Last-Event-ID': headerLastEventId } : {}),
-            ...(sendAGUIHeader ? { 'X-Agent-Protocol': 'agui' } : {}),
+            ...(headerLastEventId ? { "Last-Event-ID": headerLastEventId } : {}),
+            ...(sendAGUIHeader ? { "X-Agent-Protocol": "agui" } : {}),
           },
           body: JSON.stringify({
             sessionId: currentSessionId.value,
@@ -2714,38 +2026,38 @@ export function useAgent() {
             lastEventId: lastEventId,
           }),
           signal: controller.signal,
-        })
+        });
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
+          throw new Error(`HTTP ${response.status}`);
         }
 
         // 协议分发：response.headers 可能为 undefined（部分代理 / 测试 mock），
         // 用 ?. 兼容。后端正常响应总会带 X-Agent-Protocol header。
-        const responseProtocol = response.headers?.get('X-Agent-Protocol') === 'agui' ? 'agui' : 'legacy'
-        const { received, streamEnded, morePending } = await processSSE(response.body, responseProtocol)
+        const responseProtocol = response.headers?.get("X-Agent-Protocol") === "agui" ? "agui" : "legacy";
+        const { received, streamEnded, morePending } = await processSSE(response.body, responseProtocol);
 
         // 收尾判定
-        if (streamEnded) break                  // 服务端显式收尾 → 退出
-        if (morePending) continue               // 服务端还有事件未推完 → 立刻下一轮
-        if (!received) break                    // 流自然关闭且无事件 → 退出
-        if (status.value !== 'streaming') break // 已被 confirm/cancel 切走 → 退出
+        if (streamEnded) break; // 服务端显式收尾 → 退出
+        if (morePending) continue; // 服务端还有事件未推完 → 立刻下一轮
+        if (!received) break; // 流自然关闭且无事件 → 退出
+        if (status.value !== "streaming") break; // 已被 confirm/cancel 切走 → 退出
         // 收到事件但 neither morePending nor streamEnded：保守退出，
         // 避免无限循环（实际上 server 应该会推 stream_status 或 stream_end）
-        break
+        break;
       }
     } catch (e: any) {
-      if (e?.name !== 'AbortError') {
-        console.error('[useAgent] resume failed:', e instanceof Error ? `${e.name}: ${e.message}` : String(e))
-        finalizeLastAssistant()
-        status.value = 'idle'
+      if (e?.name !== "AbortError") {
+        console.error("[useAgent] resume failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+        finalizeLastAssistant();
+        status.value = "idle";
       }
     } finally {
       // 仅当 controller 没被换掉时才清空（避免覆盖新一轮 runResumeChain 的 controller）
       if (abortController === controller) {
-        abortController = null
+        abortController = null;
       }
-      saveState()
+      saveState();
     }
   }
 
@@ -2754,12 +2066,12 @@ export function useAgent() {
    */
   function stop(): void {
     if (abortController) {
-      abortController.abort()
-      abortController = null
+      abortController.abort();
+      abortController = null;
     }
-    finalizeLastAssistant()
-    status.value = 'idle'
-    saveState()
+    finalizeLastAssistant();
+    status.value = "idle";
+    saveState();
   }
 
   /**
@@ -2768,44 +2080,44 @@ export function useAgent() {
    *    reset 仅用于内部紧急回退（UI 入口已切换为 newSession）
    */
   function reset(): void {
-    stop()
+    stop();
     // 清除所有 tool_call 超时 timer（避免泄漏 + reset 后误标记）
-    for (const t of toolCallTimeoutMap.values()) clearTimeout(t)
-    toolCallTimeoutMap.clear()
+    for (const t of toolCallTimeoutMap.values()) clearTimeout(t);
+    toolCallTimeoutMap.clear();
     if (currentSessionId.value) {
       try {
-        localStorage.removeItem(STORAGE_PREFIX + currentSessionId.value)
+        localStorage.removeItem(STORAGE_PREFIX + currentSessionId.value);
       } catch {
         // ignore
       }
     }
-    currentSessionId.value = ''
-    eventOffset = 0
-    messages.value.splice(0, messages.value.length)
-    status.value = 'idle'
-    lastError.value = ''
-    lastUserInput.value = ''
-    refreshSessions()
+    currentSessionId.value = "";
+    eventOffset = 0;
+    messages.value.splice(0, messages.value.length);
+    status.value = "idle";
+    lastError.value = "";
+    lastUserInput.value = "";
+    refreshSessions();
   }
 
   /**
    * 关闭错误条
    */
   function dismissError(): void {
-    lastError.value = ''
-    lastErrorCode.value = ''
-    if (status.value === 'error') status.value = 'idle'
+    lastError.value = "";
+    lastErrorCode.value = "";
+    if (status.value === "error") status.value = "idle";
   }
 
   /**
    * 重发上一次失败的用户消息
    */
   function retryLast(): void {
-    const text = lastUserInput.value
-    if (!text) return
-    lastError.value = ''
-    status.value = 'idle'
-    void send(text)
+    const text = lastUserInput.value;
+    if (!text) return;
+    lastError.value = "";
+    status.value = "idle";
+    void send(text);
   }
 
   /**
@@ -2813,11 +2125,11 @@ export function useAgent() {
    * 写入后 newSession() 会自动使用此值重置 activeModel。
    */
   function setApiDefaultModel(m: string): void {
-    apiDefaultModel.value = m
+    apiDefaultModel.value = m;
   }
 
   // 构造时同步一次 session 列表（供 UI 立即显示）
-  refreshSessions()
+  refreshSessions();
 
   return {
     messages,
@@ -2901,8 +2213,8 @@ export function useAgent() {
     __refreshServerInstanceForTest: refreshServerInstance,
     __getServerInstanceForTest: () => currentServerInstance,
     __setServerInstanceForTest: (id: string) => {
-      currentServerInstance = id
+      currentServerInstance = id;
     },
     __getSeenSequencesForTest: () => seenSequencesOrder.slice(),
-  }
+  };
 }

@@ -1,8 +1,16 @@
-import { createApp } from 'vue'
-import App from './App.vue'
-import router from './router'
-import { IonicVue } from '@ionic/vue'
-import { installProxiedFetch } from './composables/useProxiedFetch'
+import { IonicVue } from "@ionic/vue";
+import { createPinia } from "pinia";
+import { createApp, watch } from "vue";
+import App from "./App.vue";
+// 🆕 2026-07-02 A5：三管齐下错误捕获
+//   用户强反馈："ion-page 警告 = 更底层错误没有捕获，比如不支持安卓端的调用"
+//   三管齐下：Vue errorHandler + window.onerror/unhandledrejection + console.error 重定向
+import { bindVueErrorHandler, errorStore, installErrorCapture } from "./composables/useErrorCapture";
+// 🆕 2026-07-02：DevLogs 前端日志（错误捕获系统的错误同步写入这里）
+import { addFrontendLog } from "./composables/useFrontendLogs";
+import { installProxiedFetch } from "./composables/useProxiedFetch";
+import { clearLegacyLocalStorage } from "./lib/taskPersistence";
+import router from "./router";
 
 // TDesign Chat 组件库不再做全局注册：
 //   早期版本用 <Chatbot> + ChatService 自行消费 SSE 流，与 useAgent
@@ -12,21 +20,52 @@ import { installProxiedFetch } from './composables/useProxiedFetch'
 //   <Chatbot> 全局注册已删除，仅保留 TDesign 通用组件的 CSS（项目其它
 //   地方仍可能用 tdesign-vue-next 的 List/Tag 等基础组件）。
 
-import '@ionic/vue/css/core.css'
-import '@ionic/vue/css/normalize.css'
-import '@ionic/vue/css/structure.css'
-import '@ionic/vue/css/typography.css'
-import '@ionic/vue/css/padding.css'
-import '@ionic/vue/css/flex-utils.css'
-import '@ionic/vue/css/display.css'
-import './theme/variables.css'
+import "@ionic/vue/css/core.css";
+import "@ionic/vue/css/normalize.css";
+import "@ionic/vue/css/structure.css";
+import "@ionic/vue/css/typography.css";
+import "@ionic/vue/css/padding.css";
+import "@ionic/vue/css/flex-utils.css";
+import "@ionic/vue/css/display.css";
+import "./theme/variables.css";
+import "./styles/timeline-tokens.css";
+import "./styles/timeline-utilities.css";
 
-const app = createApp(App).use(IonicVue).use(router)
+// 🆕 v6 2026-06-18：注册 Pinia（任务系统 store）
+const pinia = createPinia();
+const app = createApp(App).use(IonicVue).use(router).use(pinia);
+
+// 🆕 2026-07-02 A5：在 Vue app 创建后挂 errorHandler
+// 类型签名差异：Vue 的 errorHandler 第 2 参数是 ComponentPublicInstance 类型，
+// 我们只需要 err/info → 用 any cast 简化（实际语义不影响）
+bindVueErrorHandler(app as unknown as { config: { errorHandler?: (err: unknown, instance: unknown, info: string) => void } });
 
 // Phase X1: 在 native 模式下把 window.fetch 路由到 ApiProxy 插件，
 // 绕开 WebView CORS preflight。dev / web 平台 no-op。
-installProxiedFetch()
+installProxiedFetch();
+
+// 🆕 2026-07-02 A5：安装 window.onerror / unhandledrejection / console.error 三件套
+//   必须在 app 创建后调，确保覆盖完整
+installErrorCapture();
+
+// 🆕 2026-07-02：错误捕获系统 ↔ DevLogs 前端日志 桥接
+//   - 错误捕获系统抓到的异常 → 写入 DevLogs 前端日志（带原始堆栈）
+//   - 用户要求："devlogs 支持原始堆栈，应当补充发送"
+watch(
+  () => errorStore.latestError.value,
+  err => {
+    if (err) {
+      addFrontendLog("error", `[${err.source.toUpperCase()}] ${err.message}`, {
+        source: `error_capture:${err.source}`,
+        stack: err.stack,
+      });
+    }
+  }
+);
+
+// 🆕 v6 2026-06-18：清理旧 localStorage key（v6 决定：清空迁移，从零开始）
+clearLegacyLocalStorage();
 
 router.isReady().then(() => {
-  app.mount('#app')
-})
+  app.mount("#app");
+});

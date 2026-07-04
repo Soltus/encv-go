@@ -101,61 +101,61 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonIcon, IonItem, IonToggle, IonButton, IonNote, IonLabel, IonSelect, IonSelectOption } from '@ionic/vue'
-import { cloudOutline, refreshOutline } from 'ionicons/icons'
-import type { FieldDef } from '@/config/schemaParser'
-import { getDefaultValue } from '@/config/schemaParser'
-import { useI18n } from '@/composables/useI18n'
-import InputWithHistory from '@/components/InputWithHistory.vue'
+import { IonButton, IonIcon, IonItem, IonLabel, IonNote, IonSelect, IonSelectOption, IonToggle } from "@ionic/vue";
+import { cloudOutline, refreshOutline } from "ionicons/icons";
+import { computed } from "vue";
+import InputWithHistory from "@/components/InputWithHistory.vue";
+import { useI18n } from "@/composables/useI18n";
+import type { FieldDef } from "@/config/schemaParser";
+import { getDefaultValue } from "@/config/schemaParser";
 
-const TASK_OVERRIDABLE = new Set(['password', 'output_path', 'recover'])
+const TASK_OVERRIDABLE = new Set(["password", "output_path", "recover"]);
 
 const props = defineProps<{
-  field: FieldDef
-  modelValue: unknown
-  label: string
-  placeholder?: string
-  icon?: string | { name: string; ios: string; md: string }
-}>()
+  field: FieldDef;
+  modelValue: unknown;
+  label: string;
+  placeholder?: string;
+  icon?: string | { name: string; ios: string; md: string };
+}>();
 
 defineEmits<{
-  'update:modelValue': [value: unknown]
-  input: [event: CustomEvent]
-  browse: []
-  reset: []
-}>()
+  "update:modelValue": [value: unknown];
+  input: [event: CustomEvent];
+  browse: [];
+  reset: [];
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const defaultVal = computed(() => getDefaultValue(props.field))
+const defaultVal = computed(() => getDefaultValue(props.field));
 
-const isTaskOverridable = computed(() => TASK_OVERRIDABLE.has(props.field.key))
+const isTaskOverridable = computed(() => TASK_OVERRIDABLE.has(props.field.key));
 
-const hasDefault = computed(() => props.field.default !== undefined)
+const hasDefault = computed(() => props.field.default !== undefined);
 
 const isCustomized = computed(() => {
-  const current = props.modelValue
-  const def = defaultVal.value
-  if (current === def) return false
-  if (current == null && (def === '' || def === 0 || def === false)) return false
-  return String(current) !== String(def)
-})
+  const current = props.modelValue;
+  const def = defaultVal.value;
+  if (current === def) return false;
+  if (current == null && (def === "" || def === 0 || def === false)) return false;
+  return String(current) !== String(def);
+});
 
 const labelWithRequired = computed(() => {
-  return props.label + (props.field.required ? ' *' : '')
-})
+  return props.label + (props.field.required ? " *" : "");
+});
 
 const defaultOptionLabel = computed(() => {
-  if (!props.field.selectOptions || !props.field.default) return formatDefault(defaultVal.value)
-  const opt = props.field.selectOptions.find(o => o.value === String(props.field.default))
-  return opt ? opt.label : formatDefault(defaultVal.value)
-})
+  if (!props.field.selectOptions || !props.field.default) return formatDefault(defaultVal.value);
+  const opt = props.field.selectOptions.find(o => o.value === String(props.field.default));
+  return opt ? opt.label : formatDefault(defaultVal.value);
+});
 
 function formatDefault(val: unknown): string {
-  if (val === undefined || val === null) return '-'
-  if (typeof val === 'boolean') return val ? 'true' : 'false'
-  return String(val)
+  if (val === undefined || val === null) return "-";
+  if (typeof val === "boolean") return val ? "true" : "false";
+  return String(val);
 }
 </script>
 

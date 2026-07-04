@@ -112,6 +112,7 @@ dependencies {
     implementation(libs.kotlin.reflect)
     debugImplementation(libs.logcat)
     implementation(libs.okhttp)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.bugly.crashreport)
 
     implementation(libs.combolite.core)

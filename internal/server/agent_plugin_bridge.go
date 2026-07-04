@@ -248,10 +248,10 @@ func (s *Server) ListAgentTools() []map[string]interface{} {
 // executeAgentTool 统一派发所有 agent 工具调用。
 //
 // 派发顺序（v2 spec）：
-//   1. 工具注册表（tools.GlobalRegistry）—— 新工具（search_files / get_metadata /
-//      read_file_v2 / command_run / edit_metadata / batch_rename）
-//   2. 旧插件工具表（pluginOpsByName）—— 兼容 encrypt_video 等插件
-//   3. fs 工具（list_mounts / list_files / read_file 等）—— 兼容 v1
+//  1. 工具注册表（tools.GlobalRegistry）—— 新工具（search_files / get_metadata /
+//     read_file_v2 / command_run / edit_metadata / batch_rename）
+//  2. 旧插件工具表（pluginOpsByName）—— 兼容 encrypt_video 等插件
+//  3. fs 工具（list_mounts / list_files / read_file 等）—— 兼容 v1
 //
 // 不存在的工具名 → 报错。
 //
@@ -334,18 +334,18 @@ func runPluginEncrypt(ctx context.Context, def pluginToolDef, argsJSON string) (
 	injectExtraFields(p, args.ExtraFields)
 
 	inputRootDir := filepath.Dir(inputPath)
-	outputPath, err := plugins.EncryptFileWithPlugin(ctx, p, inputPath, inputRootDir, args.OutputPath)
+	outputPath, err := plugins.EncryptFileWithPlugin(ctx, p, inputPath, inputRootDir, args.OutputPath, nil)
 	if err != nil {
 		slog.Warn("agent: plugin encrypt failed", "plugin", p.Name(), "input", inputPath, "error", err)
 		return errJSON("encrypt_failed", err.Error()), nil
 	}
 
 	return okJSON(map[string]interface{}{
-		"plugin":   p.Name(),
-		"op":       "encrypt",
-		"input":    inputPath,
-		"output":   outputPath,
-		"version":  args.Version,
+		"plugin":  p.Name(),
+		"op":      "encrypt",
+		"input":   inputPath,
+		"output":  outputPath,
+		"version": args.Version,
 	}), nil
 }
 
@@ -384,18 +384,18 @@ func runPluginDecrypt(ctx context.Context, def pluginToolDef, argsJSON string) (
 	// 注入 extra_fields
 	injectExtraFields(p, args.ExtraFields)
 
-	outputPath, err := plugins.DecryptContainerWithPlugin(ctx, p, args.ContainerPath, args.OutputDir)
+	outputPath, err := plugins.DecryptContainerWithPlugin(ctx, p, args.ContainerPath, args.OutputDir, nil)
 	if err != nil {
 		slog.Warn("agent: plugin decrypt failed", "plugin", p.Name(), "input", args.ContainerPath, "error", err)
 		return errJSON("decrypt_failed", err.Error()), nil
 	}
 
 	return okJSON(map[string]interface{}{
-		"plugin":   p.Name(),
-		"op":       "decrypt",
-		"input":    args.ContainerPath,
-		"output":   outputPath,
-		"version":  args.Version,
+		"plugin":  p.Name(),
+		"op":      "decrypt",
+		"input":   args.ContainerPath,
+		"output":  outputPath,
+		"version": args.Version,
 	}), nil
 }
 

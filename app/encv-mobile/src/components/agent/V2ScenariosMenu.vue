@@ -71,92 +71,132 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { IonButton, IonIcon, IonModal, IonHeader, IonToolbar, IonTitle, IonButtons, IonContent } from '@ionic/vue'
+import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from "@ionic/vue";
 import {
-  filmOutline,
   closeOutline as closeIcon,
-  searchOutline,
   documentTextOutline,
-  pricetagOutline,
+  filmOutline,
   gitBranchOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
+  pricetagOutline,
+  searchOutline,
+} from "ionicons/icons";
+import { ref } from "vue";
+import { useI18n } from "@/composables/useI18n";
 
 export interface V2ScenarioEntry {
-  id: string
-  desc: string
-  triggerKeyword: string
-  groupId: 'search' | 'read' | 'write' | 'branch'
+  id: string;
+  desc: string;
+  triggerKeyword: string;
+  groupId: "search" | "read" | "write" | "branch";
 }
 
 defineProps<{
   /** disabled 状态（streaming / confirming 时不可触发） */
-  disabled?: boolean
-}>()
+  disabled?: boolean;
+}>();
 
 const emit = defineEmits<{
-  pick: [scenario: V2ScenarioEntry]
-}>()
+  pick: [scenario: V2ScenarioEntry];
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const isOpen = ref(false)
+const isOpen = ref(false);
 
 function openModal(): void {
-  isOpen.value = true
+  isOpen.value = true;
 }
 
 function closeModal(): void {
-  isOpen.value = false
+  isOpen.value = false;
 }
 
 function emitPick(s: V2ScenarioEntry): void {
-  closeModal()
-  emit('pick', s)
+  closeModal();
+  emit("pick", s);
 }
 
 // ─── 8 个 v2 剧本分组 ──────────────────────────────────────
 const groups = [
   {
-    id: 'search',
-    title: t('agent.v2Scenarios.groupSearch'),
+    id: "search",
+    title: t("agent.v2Scenarios.groupSearch"),
     icon: searchOutline,
     scenarios: [
-      { id: 'search_recursive_mp4', desc: t('agent.v2Scenarios.s.recursiveMp4'), triggerKeyword: 'search_recursive_mp4', groupId: 'search' as const },
-      { id: 'search_logical_query', desc: t('agent.v2Scenarios.s.logicalQuery'), triggerKeyword: 'search_logical_query', groupId: 'search' as const },
-      { id: 'search_content_regex', desc: t('agent.v2Scenarios.s.contentRegex'), triggerKeyword: 'search_content_regex', groupId: 'search' as const },
+      {
+        id: "search_recursive_mp4",
+        desc: t("agent.v2Scenarios.s.recursiveMp4"),
+        triggerKeyword: "search_recursive_mp4",
+        groupId: "search" as const,
+      },
+      {
+        id: "search_logical_query",
+        desc: t("agent.v2Scenarios.s.logicalQuery"),
+        triggerKeyword: "search_logical_query",
+        groupId: "search" as const,
+      },
+      {
+        id: "search_content_regex",
+        desc: t("agent.v2Scenarios.s.contentRegex"),
+        triggerKeyword: "search_content_regex",
+        groupId: "search" as const,
+      },
     ],
   },
   {
-    id: 'read',
-    title: t('agent.v2Scenarios.groupRead'),
+    id: "read",
+    title: t("agent.v2Scenarios.groupRead"),
     icon: documentTextOutline,
     scenarios: [
-      { id: 'read_file_v2', desc: t('agent.v2Scenarios.s.readFileV2'), triggerKeyword: 'read_file_v2', groupId: 'read' as const },
-      { id: 'get_metadata', desc: t('agent.v2Scenarios.s.getMetadata'), triggerKeyword: 'get_metadata', groupId: 'read' as const },
-      { id: 'command_run_ffprobe', desc: t('agent.v2Scenarios.s.commandRun'), triggerKeyword: 'command_run_ffprobe', groupId: 'read' as const },
+      { id: "read_file_v2", desc: t("agent.v2Scenarios.s.readFileV2"), triggerKeyword: "read_file_v2", groupId: "read" as const },
+      { id: "get_metadata", desc: t("agent.v2Scenarios.s.getMetadata"), triggerKeyword: "get_metadata", groupId: "read" as const },
+      {
+        id: "command_run_ffprobe",
+        desc: t("agent.v2Scenarios.s.commandRun"),
+        triggerKeyword: "command_run_ffprobe",
+        groupId: "read" as const,
+      },
     ],
   },
   {
-    id: 'write',
-    title: t('agent.v2Scenarios.groupWrite'),
+    id: "write",
+    title: t("agent.v2Scenarios.groupWrite"),
     icon: pricetagOutline,
     scenarios: [
-      { id: 'edit_metadata_wizard', desc: t('agent.v2Scenarios.s.editMetadata'), triggerKeyword: 'edit_metadata_wizard', groupId: 'write' as const },
-      { id: 'batch_rename_with_preview', desc: t('agent.v2Scenarios.s.batchRename'), triggerKeyword: 'batch_rename_with_preview', groupId: 'write' as const },
+      {
+        id: "edit_metadata_wizard",
+        desc: t("agent.v2Scenarios.s.editMetadata"),
+        triggerKeyword: "edit_metadata_wizard",
+        groupId: "write" as const,
+      },
+      {
+        id: "batch_rename_with_preview",
+        desc: t("agent.v2Scenarios.s.batchRename"),
+        triggerKeyword: "batch_rename_with_preview",
+        groupId: "write" as const,
+      },
     ],
   },
   {
-    id: 'branch',
-    title: t('agent.v2Scenarios.groupBranch'),
+    id: "branch",
+    title: t("agent.v2Scenarios.groupBranch"),
     icon: gitBranchOutline,
     scenarios: [
-      { id: 'branch_encrypt_or_decrypt', desc: t('agent.v2Scenarios.s.branchEncrypt'), triggerKeyword: 'branch_encrypt_or_decrypt', groupId: 'branch' as const },
-      { id: 'branch_video_or_audio', desc: t('agent.v2Scenarios.s.branchVideo'), triggerKeyword: 'branch_video_or_audio', groupId: 'branch' as const },
+      {
+        id: "branch_encrypt_or_decrypt",
+        desc: t("agent.v2Scenarios.s.branchEncrypt"),
+        triggerKeyword: "branch_encrypt_or_decrypt",
+        groupId: "branch" as const,
+      },
+      {
+        id: "branch_video_or_audio",
+        desc: t("agent.v2Scenarios.s.branchVideo"),
+        triggerKeyword: "branch_video_or_audio",
+        groupId: "branch" as const,
+      },
     ],
   },
-]
+];
 </script>
 
 <style scoped>

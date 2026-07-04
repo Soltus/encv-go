@@ -71,6 +71,10 @@ type FileInfo struct {
 	MountDriver string `json:"mount_driver,omitempty"`
 	MountPath   string `json:"mount_path,omitempty"`
 	MountRoot   string `json:"mount_root,omitempty"`
+	// 🆕 2026-07-02：向量搜索相关度分数（0-1，越大越相似）。
+	// 仅在向量搜索（/api/search/files）返回时填充，普通关键词搜索不填。
+	// 前端可据此显示相关度徽章或进度条。
+	Score float64 `json:"score,omitempty"`
 }
 
 type FileContentResult struct {
@@ -99,6 +103,12 @@ type MobileService struct {
 	//   - nil 时 resolveUserPath 回退到 SafeResolveToAbsPath(s.servingDir, ...)
 	//   - 由 SetMountRegistry 第二个参数注入（同一来源 = taskManager 的 resolver）
 	mountResolver MountResolver
+
+	// 🆕 2026-06-22 回收站 / 回滚管理器
+	//   - 由 server 层注入（需要 tasksystem.Store 依赖，MobileService 构造时不持有 store）
+	//   - nil 时 trash / rollback API 返回 503 Service Unavailable
+	trashManager    *TrashManagerImpl
+	rollbackManager *RollbackManagerImpl
 
 	// --- 可选依赖注入（用于测试） ---
 	dirReader         DirReader         // nil = 使用 os.ReadDir
@@ -146,10 +156,6 @@ func (s *MobileService) primaryRootPath() string {
 //  2. 否则 → 走旧 SafeResolveToAbsPath(servingDir, ...) 兜底（向后兼容）
 //
 // 返回 raw err；调用方负责 wrap 成 ForbiddenError / BadRequestError。
-//
-// 2026-06-15 Phase D：替换 mobile_service.go 中 13 处 SafeResolveToAbsPath 调用，
-// 让 /d/automation/... /d/primary/... 等虚拟路径走 mount 解析，/foo/bar.bin
-// 等传统相对路径保持旧行为。
 func (s *MobileService) resolveUserPath(userPath string) (string, error) {
 	if s.mountResolver != nil && strings.HasPrefix(userPath, "/d/") {
 		res, err := s.mountResolver.Resolve(userPath)
@@ -161,13 +167,63 @@ func (s *MobileService) resolveUserPath(userPath string) (string, error) {
 	return utils.SafeResolveToAbsPath(s.servingDir, userPath)
 }
 
+// relIndexPathForVirtual 把虚拟路径转成 fileIndex 的路径前缀（相对于 servingDir，带前导斜杠）。
+// 仅对 primary mount（RootPath = servingDir）有效；其他挂载点的文件不在 fileIndex 里。
+func (s *MobileService) relIndexPathForVirtual(virtualPath string) (string, error) {
+	absPath, err := s.resolveUserPath(virtualPath)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(s.servingDir, absPath)
+	if err != nil {
+		return "", fmt.Errorf("rel to servingDir: %w", err)
+	}
+	if strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("path outside servingDir: %s", virtualPath)
+	}
+	result := "/" + filepath.ToSlash(rel)
+	if result == "/." {
+		result = "/"
+	}
+	return result, nil
+}
+
+// virtualPathForIndex 把 fileIndex 中的相对路径（带前导斜杠）转成虚拟路径。
+func (s *MobileService) virtualPathForIndex(indexPath string, queryPath string) string {
+	if s.mountResolver == nil {
+		return indexPath
+	}
+	absPath := filepath.Join(s.servingDir, indexPath)
+	virtual, err := s.mountResolver.AbsToVirtual(absPath)
+	if err != nil {
+		return indexPath
+	}
+	return virtual
+}
+
 func NewMobileService(servingDir string, cfg *config.Config) *MobileService {
 	wsHub := NewWSHub()
+	taskManager := NewTaskManager(servingDir, cfg, wsHub)
+
+	// 🆕 2026-06-22 修复：file/rollback handler 必须在 NewMobileService 内部注入。
+	//   历史 bug：SetFileTaskHandler/SetRollbackManager 暴露但无任何调用方，
+	//   导致 move/copy/rename/delete 任务永远 failTask("file task handler not configured")。
+	//   修法：NewMobileService 内部构造 trash + fileTaskHandler + rollbackManager 并注入到 taskManager。
+	//   store 在 server 启动后通过 NewMobileServiceWithStore 注入（不影响本构造函数）。
+	trash := NewTrashManager(servingDir, nil, wsHub)
+	fileTaskHandler := NewFileTaskHandler(trash, wsHub)
+	taskManager.SetFileTaskHandler(fileTaskHandler)
+
+	rollbackMgr := NewRollbackManager(nil, taskManager, trash)
+	taskManager.SetRollbackManager(rollbackMgr)
+
 	return &MobileService{
-		servingDir:  servingDir,
-		taskManager: NewTaskManager(servingDir, cfg, wsHub),
-		wsHub:       wsHub,
-		cfg:         cfg,
+		servingDir:    servingDir,
+		taskManager:   taskManager,
+		wsHub:         wsHub,
+		cfg:           cfg,
+		trashManager:  trash,
+		rollbackManager: rollbackMgr,
 	}
 }
 
@@ -964,6 +1020,30 @@ func (s *MobileService) GetTaskManager() *TaskManager {
 	return s.taskManager
 }
 
+// GetTrashManager 返回回收站管理器。
+// 未注入时返回 nil，调用方需 nil 检查（trash API 返回 503）。
+func (s *MobileService) GetTrashManager() *TrashManagerImpl {
+	return s.trashManager
+}
+
+// SetTrashManager 注入回收站管理器。
+// 由 server 层在构造完 tasksystem.Store 后调用。
+func (s *MobileService) SetTrashManager(tm *TrashManagerImpl) {
+	s.trashManager = tm
+}
+
+// GetRollbackManager 返回回滚管理器。
+// 未注入时返回 nil，调用方需 nil 检查（rollback API 返回 503）。
+func (s *MobileService) GetRollbackManager() *RollbackManagerImpl {
+	return s.rollbackManager
+}
+
+// SetRollbackManager 注入回滚管理器。
+// 由 server 层在构造完 tasksystem.Store 后调用。
+func (s *MobileService) SetRollbackManager(rm *RollbackManagerImpl) {
+	s.rollbackManager = rm
+}
+
 func (s *MobileService) GetWSHub() *WSHub {
 	return s.wsHub
 }
@@ -1120,6 +1200,30 @@ type fileIndex struct {
 	building bool
 }
 
+// matchKeyword 检查文件名是否匹配搜索关键词。
+//
+// 关键词按空白符分隔为多个 token，所有 token 都必须是文件名的子串（AND 逻辑）。
+// 单 token 关键词行为与 strings.Contains 一致。
+//
+// 例：matchKeyword("在线播放-高清视频.mp4", "在线 高清") → true
+//     ["在线", "高清"] 都是 "在线播放-高清视频.mp4" 的子串 → 匹配
+//
+// 注意：不要用 strings.Contains(name, keyword) 做字面匹配——
+// 文件名中没有空格，所以 "在线 高清" 这样的多 token 搜索会失败。
+func matchKeyword(name, keyword string) bool {
+	lowerName := strings.ToLower(name)
+	tokens := strings.Fields(keyword)
+	if len(tokens) == 0 {
+		return true
+	}
+	for _, tok := range tokens {
+		if !strings.Contains(lowerName, strings.ToLower(tok)) {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *MobileService) SearchFiles(queryPath string, keyword string, recursive bool) ([]FileInfo, error) {
 	if queryPath == "" {
 		queryPath = "/"
@@ -1143,31 +1247,49 @@ func (s *MobileService) SearchFiles(queryPath string, keyword string, recursive 
 		s.fileIndex.mu.RUnlock()
 
 		if hasIndex {
-			s.fileIndex.mu.RLock()
-			for _, entry := range s.fileIndex.entries {
+			indexPrefix := queryPath
+			isVirtualPath := strings.HasPrefix(queryPath, "/d/")
+			if isVirtualPath {
+				rel, err := s.relIndexPathForVirtual(queryPath)
+				if err != nil {
+					slog.Warn("SearchFiles: cannot resolve virtual path to index prefix", "path", queryPath, "error", err)
+					hasIndex = false
+				} else {
+					indexPrefix = rel
+				}
+			}
+
+			if hasIndex {
+				s.fileIndex.mu.RLock()
+				for _, entry := range s.fileIndex.entries {
 				if len(results) >= maxResults {
 					break
 				}
-				if !strings.Contains(strings.ToLower(entry.Name), keyword) {
+				if !matchKeyword(entry.Name, keyword) {
 					continue
 				}
-				if !strings.HasPrefix(entry.Path, queryPath) && queryPath != "/" {
-					continue
+					if indexPrefix != "" && indexPrefix != "/" && !strings.HasPrefix(entry.Path, indexPrefix) {
+						continue
+					}
+					if indexPrefix == "/" && !strings.HasPrefix(entry.Path, "/") {
+						continue
+					}
+					resultPath := entry.Path
+					if isVirtualPath {
+						resultPath = s.virtualPathForIndex(entry.Path, queryPath)
+					}
+					results = append(results, FileInfo{
+						Name:        entry.Name,
+						Path:        resultPath,
+						IsDirectory: entry.IsDirectory,
+						Size:        entry.Size,
+						Modified:    entry.Modified,
+					})
 				}
-				if queryPath == "/" && !strings.HasPrefix(entry.Path, "/") {
-					continue
-				}
-				results = append(results, FileInfo{
-					Name:        entry.Name,
-					Path:        entry.Path,
-					IsDirectory: entry.IsDirectory,
-					Size:        entry.Size,
-					Modified:    entry.Modified,
-				})
+				s.fileIndex.mu.RUnlock()
+				slog.Info("SearchFiles using index", "path", queryPath, "keyword", keyword, "count", len(results))
+				return results, nil
 			}
-			s.fileIndex.mu.RUnlock()
-			slog.Info("SearchFiles using index", "path", queryPath, "keyword", keyword, "count", len(results))
-			return results, nil
 		}
 	}
 
@@ -1185,7 +1307,7 @@ func (s *MobileService) SearchFiles(queryPath string, keyword string, recursive 
 				}
 				return nil
 			}
-			if strings.Contains(strings.ToLower(d.Name()), keyword) {
+			if matchKeyword(d.Name(), keyword) {
 				relPath, relErr := filepath.Rel(absPath, path)
 				if relErr != nil {
 					relPath = d.Name()
@@ -1230,7 +1352,7 @@ func (s *MobileService) SearchFiles(queryPath string, keyword string, recursive 
 			if strings.HasPrefix(entry.Name(), ".") {
 				continue
 			}
-			if strings.Contains(strings.ToLower(entry.Name()), keyword) {
+			if matchKeyword(entry.Name(), keyword) {
 				filePath := queryPath + "/" + entry.Name()
 				if queryPath == "/" {
 					filePath = "/" + entry.Name()
@@ -1355,6 +1477,155 @@ func (s *MobileService) ClearIndex() {
 	s.fileIndex.entries = nil
 	s.fileIndex.stats = IndexStats{}
 	slog.Info("ClearIndex completed")
+}
+
+// ListAllFilesForVectorIndex 列出搜索路径下的所有文件（不过滤关键词），
+// 用于向量搜索 fallback 场景：当关键词搜索返回 0 结果时，需要把路径下所有文件
+// 索引到向量库，再用向量相似度匹配。
+//
+// 与 SearchFiles 的区别：不做关键词过滤，返回所有文件。
+// 与 ListFiles 的区别：支持递归遍历（ListFiles 只列当前目录）。
+//
+// limit 控制最大返回数，避免索引过多文件。
+func (s *MobileService) ListAllFilesForVectorIndex(queryPath string, recursive bool, limit int) []FileInfo {
+	if queryPath == "" {
+		queryPath = "/"
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+
+	absPath, err := s.resolveUserPath(queryPath)
+	if err != nil {
+		return nil
+	}
+
+	var results []FileInfo
+
+	// 优先使用文件索引（如果已构建且递归）
+	if recursive && s.fileIndex != nil {
+		s.fileIndex.mu.RLock()
+		hasIndex := len(s.fileIndex.entries) > 0
+		s.fileIndex.mu.RUnlock()
+
+		if hasIndex {
+			indexPrefix := queryPath
+			isVirtualPath := strings.HasPrefix(queryPath, "/d/")
+			if isVirtualPath {
+				rel, err := s.relIndexPathForVirtual(queryPath)
+				if err == nil {
+					indexPrefix = rel
+				}
+			}
+
+			s.fileIndex.mu.RLock()
+			for _, entry := range s.fileIndex.entries {
+				if len(results) >= limit {
+					break
+				}
+				if entry.IsDirectory {
+					continue
+				}
+				if indexPrefix != "" && indexPrefix != "/" && !strings.HasPrefix(entry.Path, indexPrefix) {
+					continue
+				}
+				if indexPrefix == "/" && !strings.HasPrefix(entry.Path, "/") {
+					continue
+				}
+				resultPath := entry.Path
+				if isVirtualPath {
+					resultPath = s.virtualPathForIndex(entry.Path, queryPath)
+				}
+				results = append(results, FileInfo{
+					Name:     entry.Name,
+					Path:     resultPath,
+					Size:     entry.Size,
+					Modified: entry.Modified,
+				})
+			}
+			s.fileIndex.mu.RUnlock()
+			return results
+		}
+	}
+
+	// 无索引时用 WalkDir 递归列出
+	if recursive {
+		filepath.WalkDir(absPath, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			if len(results) >= limit {
+				return fs.SkipAll
+			}
+			if strings.HasPrefix(d.Name(), ".") {
+				if d.IsDir() {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			if d.IsDir() {
+				return nil
+			}
+			relPath, relErr := filepath.Rel(absPath, path)
+			if relErr != nil {
+				relPath = d.Name()
+			}
+			urlPath := queryPath
+			if queryPath == "/" {
+				urlPath = ""
+			}
+			urlPath += "/" + filepath.ToSlash(relPath)
+
+			info, infoErr := d.Info()
+			size := int64(0)
+			modified := ""
+			if infoErr == nil {
+				size = info.Size()
+				modified = info.ModTime().Format(time.RFC3339)
+			}
+			results = append(results, FileInfo{
+				Name:     d.Name(),
+				Path:     urlPath,
+				Size:     size,
+				Modified: modified,
+			})
+			return nil
+		})
+	} else {
+		entries, err := os.ReadDir(absPath)
+		if err != nil {
+			return nil
+		}
+		for _, entry := range entries {
+			if len(results) >= limit {
+				break
+			}
+			if strings.HasPrefix(entry.Name(), ".") {
+				continue
+			}
+			if entry.IsDir() {
+				continue
+			}
+			filePath := queryPath + "/" + entry.Name()
+			if queryPath == "/" {
+				filePath = "/" + entry.Name()
+			}
+			info, infoErr := entry.Info()
+			size := int64(0)
+			modified := ""
+			if infoErr == nil {
+				size = info.Size()
+				modified = info.ModTime().Format(time.RFC3339)
+			}
+			results = append(results, FileInfo{
+				Name:     entry.Name(),
+				Path:     filePath,
+				Size:     size,
+				Modified: modified,
+			})
+		}
+	}
+	return results
 }
 
 var mediaExtensions = map[string]bool{

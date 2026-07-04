@@ -123,59 +123,63 @@
 </template>
 
 <script setup lang="ts">
+import { IonButton, IonIcon, IonSpinner } from "@ionic/vue";
 import {
-  IonButton, IonIcon, IonSpinner,
-} from '@ionic/vue'
-import {
-  layers as layersIcon,
-  close as closeIcon,
   checkbox as checkboxIcon,
+  close as closeIcon,
+  checkmarkCircle as completedIcon,
+  archiveOutline as compressIcon,
   document as documentIcon,
   documentText as documentTextIcon,
   informationCircle as informationCircleIcon,
-  ellipsisHorizontal as pendingIcon,
   sync as inProgressIcon,
-  checkmarkCircle as completedIcon,
-  archiveOutline as compressIcon,
-} from 'ionicons/icons'
-import type { ContextUsageResponse } from '@/composables/useContextUsage'
+  layers as layersIcon,
+  ellipsisHorizontal as pendingIcon,
+} from "ionicons/icons";
+import type { ContextUsageResponse } from "@/composables/useContextUsage";
 
 defineProps<{
-  data: ContextUsageResponse | null
-  loading: boolean
-}>()
+  data: ContextUsageResponse | null;
+  loading: boolean;
+}>();
 
-defineEmits<{ close: [] }>()
+defineEmits<{ close: [] }>();
 
 // ─── 计算属性 ──────────────────────────────────────────────
 
 function getToneClass(percent: number): string {
-  if (percent >= 90) return 'ctx-tone-danger'
-  if (percent >= 70) return 'ctx-tone-warn'
-  return 'ctx-tone-ok'
+  if (percent >= 90) return "ctx-tone-danger";
+  if (percent >= 70) return "ctx-tone-warn";
+  return "ctx-tone-ok";
 }
 
 // ─── 工具函数 ──────────────────────────────────────────────
 
 function formatTokens(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K'
-  return String(n)
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return String(n);
 }
 
 function todoIcon(status: string) {
   switch (status) {
-    case 'completed': return completedIcon
-    case 'in_progress': return inProgressIcon
-    default: return pendingIcon
+    case "completed":
+      return completedIcon;
+    case "in_progress":
+      return inProgressIcon;
+    default:
+      return pendingIcon;
   }
 }
 
 function todoStatusLabel(status: string): string {
   switch (status) {
-    case 'completed': return '已完成'
-    case 'in_progress': return '进行中'
-    default: return '待办'
+    case "completed":
+      return "已完成";
+    case "in_progress":
+      return "进行中";
+    default:
+      return "待办";
   }
 }
 </script>

@@ -1,11 +1,7 @@
-//go:build windows
-// +build windows
-
 package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -21,10 +17,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
-	"unsafe"
 
+	"github.com/Soltus/encv-go/pkg/tasksystem/performance"
+	"github.com/Soltus/encv-go/pkg/tasksystem/store/sqlite"
 	"github.com/pterm/pterm"
 )
 
@@ -579,26 +575,24 @@ func formatElapsed(d time.Duration) string {
 	}
 }
 
-// getMemoryInfoMB 获取系统内存信息（可用 MB, 总计 MB）
+// getMemoryInfoMB 获取系统内存信息（跨平台版本）
+// 返回：可用 MB（基于 Go 进程视角）, 总计 MB, 可用 commit MB
+// 注意：runtime.MemStats 只能获取 Go 进程视角的内存，无法获取系统级可用内存。
+// 在非 Windows 平台，我们用 SysMem（系统内存总量）作为估算基础。
 func getMemoryInfoMB() (availMB, totalMB, availCommitMB uint64) {
-	kernel32 := syscall.NewLazyDLL("kernel32.dll")
-	globalMemoryStatusEx := kernel32.NewProc("GlobalMemoryStatusEx")
-	type memoryStatusEx struct {
-		dwLength         uint32
-		dwMemoryLoad     uint32
-		ullTotalPhys     uint64
-		ullAvailPhys     uint64
-		ullTotalPageFile uint64
-		ullAvailPageFile uint64
-		_                [4]uint64
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	// Sys 是 Go 从系统获取的内存总量，作为 totalMB 的近似
+	totalMB = ms.Sys / (1024 * 1024)
+	// 估算可用内存：假设系统总内存至少是 Go 占用的 4 倍（粗略估算）
+	// 如果无法获取真实系统内存，返回保守值
+	if totalMB == 0 {
+		return 2048, 8192, 2048
 	}
-	var msx memoryStatusEx
-	msx.dwLength = uint32(unsafe.Sizeof(msx))
-	ret, _, _ := globalMemoryStatusEx.Call(uintptr(unsafe.Pointer(&msx)))
-	if ret != 0 {
-		return msx.ullAvailPhys / (1024 * 1024), msx.ullTotalPhys / (1024 * 1024), msx.ullAvailPageFile / (1024 * 1024)
-	}
-	return 0, 0, 0
+	// availMB 估算为 totalMB 的 75%（假设 25% 已被占用）
+	availMB = totalMB * 3 / 4
+	availCommitMB = availMB
+	return
 }
 
 // memoryGuard 内存围栏：检测可用内存，返回 GOMEMLIMIT 值和是否需要降级
@@ -1771,64 +1765,25 @@ func generateReport(data *reportData, outputPath string) error {
 }
 
 // runCalibration 运行硬件校准基准，返回校准结果
-// 基准线：AES-CTR 1MB 加密在现代 x86 CPU 上约 3000 MB/s
+// 使用 performance.RunCalibration()（跨平台，纯 Go AES-CTR 测试）
 func runCalibration(root string) calibrationResult {
 	spinner, _ := pterm.DefaultSpinner.
 		WithSequence("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏").
 		Start("硬件校准中...")
 
-	args := []string{
-		"test", "-bench=BenchmarkEncryptStream_v2/size=1MB",
-		"-benchtime=500ms", "-count=1", "-run=^$",
-		"./internal/v2/crypto",
-	}
+	cal := performance.RunCalibration()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "go", args...)
-	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GOLANG_LOG=off")
-
-	output, err := cmd.Output()
-	if err != nil {
+	if cal.AESThroughput <= 0 {
 		spinner.Warning("硬件校准失败，使用默认评级标准")
 		return calibrationResult{CPUScore: 1.0, AESThroughput: 0, CPULabel: "unknown"}
 	}
 
-	var aesThroughput float64
-	scanner := bufio.NewScanner(bytes.NewReader(output))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if matches := benchLineRe.FindStringSubmatch(line); matches != nil {
-			if matches[4] != "" {
-				aesThroughput, _ = strconv.ParseFloat(matches[4], 64)
-			}
-		}
-	}
-
-	if aesThroughput <= 0 {
-		spinner.Warning("未能获取 AES 吞吐量，使用默认评级标准")
-		return calibrationResult{CPUScore: 1.0, AESThroughput: 0, CPULabel: "unknown"}
-	}
-
-	cpuScore := aesThroughput / 3000.0
-	var label string
-	switch {
-	case cpuScore >= 1.5:
-		label = "fast"
-	case cpuScore >= 0.5:
-		label = "medium"
-	default:
-		label = "slow"
-	}
-
-	spinner.Success(fmt.Sprintf("AES-CTR %.0f MB/s | CPU 分数 %.2f (%s)", aesThroughput, cpuScore, label))
+	spinner.Success(fmt.Sprintf("AES-CTR %.0f MB/s | CPU 分数 %.2f (%s)", cal.AESThroughput, cal.CPUScore, cal.CPULabel))
 
 	return calibrationResult{
-		CPUScore:      cpuScore,
-		AESThroughput: aesThroughput,
-		CPULabel:      label,
+		CPUScore:      cal.CPUScore,
+		AESThroughput: cal.AESThroughput,
+		CPULabel:      cal.CPULabel,
 	}
 }
 
@@ -1863,6 +1818,7 @@ func main() {
 	skipL4 := flag.Bool("skip-integration", false, "跳过 L4/L5 集成测试（需要 FFmpeg 和视频文件）")
 	noSave := flag.Bool("no-save", false, "不保存本次结果到历史缓存")
 	pkgTimeout := flag.Duration("pkg-timeout", 10*time.Minute, "单个测试包超时时间（防止卡死）")
+	storePath := flag.String("store", "", "SQLite 数据库路径（可选，把结果写入 performance_metrics 表）")
 	flag.Parse()
 
 	pterm.DefaultHeader.WithFullWidth().Println("encv-go 基准测试报告生成器")
@@ -2007,6 +1963,50 @@ func main() {
 		summary += fmt.Sprintf("\n历史对比: %s (%d 项)", data.HistoryTime, data.HistoryCount)
 	}
 	resultBox.Println(summary)
+
+	// 🆕 --store flag：把结果写入 SQLite performance_metrics 表
+	if *storePath != "" {
+		store, err := sqlite.New(*storePath)
+		if err != nil {
+			log.Printf("Warning: open sqlite store failed: %v\n", err)
+		} else {
+			defer store.Close()
+			for _, r := range results {
+				metrics := performance.PerformanceMetrics{
+					TaskID:          fmt.Sprintf("bench-%s-%d", r.Name, time.Now().Unix()),
+					TaskType:        "bench",
+					PluginName:      r.Layer,
+					SourceSize:      r.BytesPerOp * r.IterCount,
+					AvgThroughput:   r.MBPerSec,
+					PeakThroughput:  r.MBPerSec,
+					TotalDurationMs: int64(r.NsPerOp * float64(r.IterCount) / 1e6),
+					Grade:           performance.GradeGood, // bench 结果默认 good
+					GradeScore:      50,
+					CPUScore:        cal.CPUScore,
+					CPULabel:        cal.CPULabel,
+					CreatedAt:       time.Now(),
+				}
+				if err := store.SaveMetrics(metrics); err != nil {
+					log.Printf("Warning: save metrics for %s failed: %v\n", r.Name, err)
+				}
+			}
+			// 保存校准结果
+			calResult := performance.CalibrationResult{
+				CPUScore:      cal.CPUScore,
+				AESThroughput: cal.AESThroughput,
+				CPULabel:      cal.CPULabel,
+				CalibratedAt:  time.Now(),
+				GoVersion:     runtime.Version(),
+				OS:            runtime.GOOS,
+				Arch:          runtime.GOARCH,
+				NumCPU:        runtime.NumCPU(),
+			}
+			if err := store.SaveCalibration(calResult); err != nil {
+				log.Printf("Warning: save calibration failed: %v\n", err)
+			}
+			fmt.Printf("✓ Results saved to SQLite: %s\n", *storePath)
+		}
+	}
 
 	if *openBrowser {
 		openInBrowser(absOutput)

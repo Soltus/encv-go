@@ -187,5 +187,7 @@ Step 6: 清理状态（关闭 modal/sheet）
 
 - [mock-data-architecture.md](./mock-data-architecture.md) — Mock 字节必须同源
 - [development.md](./development.md) — dev mode 激活条件
+- [test-master-plan.md](./test-master-plan.md) — **测试体系总纲**：Cypress 为主、Go bench 为辅、性能测试方法论
 
 > 拆分：2026-06-11
+> 更新：2026-07-01（新增 test-master-plan 引用）

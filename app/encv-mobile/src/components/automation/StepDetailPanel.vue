@@ -95,71 +95,69 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import StepMiniBadge from './StepMiniBadge.vue'
-import ErrorChainNode from './ErrorChainNode.vue'
-import type { StepRun, JobRun } from '@/lib/workflow/types'
+import { computed } from "vue";
+import type { JobRun, StepRun } from "@/lib/workflow/types";
+import ErrorChainNode from "./ErrorChainNode.vue";
+import StepMiniBadge from "./StepMiniBadge.vue";
 
 const props = defineProps<{
-  stepRun: StepRun
-  jobRun: JobRun
-}>()
+  stepRun: StepRun;
+  jobRun: JobRun;
+}>();
 
-const stepName = computed(() => props.stepRun.stepDefId)
+const stepName = computed(() => props.stepRun.stepDefId);
 
 /** 从 matrixVars 或 stepDefId 推断加密选型参数 */
 const encryptionParams = computed(() => {
-  const vars = props.stepRun.matrixVars
-  const id = props.stepRun.stepDefId
+  const vars = props.stepRun.matrixVars;
+  const id = props.stepRun.stepDefId;
 
   // 优先从 matrixVars 获取
   if (vars) {
     return {
-      cipher: vars.cipher ? (vars.cipher === '0' ? 'AES-128-GCM' : vars.cipher === '1' ? 'AES-256-GCM' : `c${vars.cipher}`) : undefined,
+      cipher: vars.cipher ? (vars.cipher === "0" ? "AES-128-GCM" : vars.cipher === "1" ? "AES-256-GCM" : `c${vars.cipher}`) : undefined,
       compress: vars.compress ? String(vars.compress).toUpperCase() : undefined,
       version: undefined, // version 通常不在 matrix 中
       plugin: vars.plugin ?? undefined,
-    }
+    };
   }
 
   // 从 stepDefId 解析：格式 "plugin-taskType-vN-cN-compress"
-  const parts = id.split('-')
-  const result: Record<string, string | number | undefined> = {}
+  const parts = id.split("-");
+  const result: Record<string, string | number | undefined> = {};
   for (let i = 0; i < parts.length; i++) {
-    if (parts[i].startsWith('v') && /^\d+$/.test(parts[i].slice(1))) {
-      result.version = Number(parts[i].slice(1))
-    } else if (parts[i] === '0' || parts[i] === '1') {
+    if (parts[i].startsWith("v") && /^\d+$/.test(parts[i].slice(1))) {
+      result.version = Number(parts[i].slice(1));
+    } else if (parts[i] === "0" || parts[i] === "1") {
       // cipher mode
-      result.cipher = parts[i] === '0' ? 'AES-128-GCM' : 'AES-256-GCM'
-    } else if (['none', 'zstd'].includes(parts[i])) {
-      result.compress = parts[i].toUpperCase()
+      result.cipher = parts[i] === "0" ? "AES-128-GCM" : "AES-256-GCM";
+    } else if (["none", "zstd"].includes(parts[i])) {
+      result.compress = parts[i].toUpperCase();
     }
   }
 
   // plugin name 是第一段
   if (parts.length > 0 && !/^(encrypt|decrypt|v\d|c\d|none|zstd)$/.test(parts[0])) {
-    result.plugin = parts[0]
+    result.plugin = parts[0];
   }
 
-  return result
-})
+  return result;
+});
 
 const hasEncryptionParams = computed(() => {
-  const p = encryptionParams.value
-  return !!(p.cipher || p.compress || p.version || p.plugin)
-})
+  const p = encryptionParams.value;
+  return !!(p.cipher || p.compress || p.version || p.plugin);
+});
 
-const completedInJob = computed(() =>
-  props.jobRun.steps.filter((s) =>
-    ['success', 'failure', 'cancelled', 'skipped', 'timed_out'].includes(s.status),
-  ).length,
-)
+const completedInJob = computed(
+  () => props.jobRun.steps.filter(s => ["success", "failure", "cancelled", "skipped", "timed_out"].includes(s.status)).length
+);
 
 function formatDur(ms?: number): string {
-  if (!ms) return '—'
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`
+  if (!ms) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;
 }
 </script>
 

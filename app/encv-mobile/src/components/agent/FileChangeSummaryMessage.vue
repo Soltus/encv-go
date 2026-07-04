@@ -60,105 +60,101 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { documentTextOutline, chevronForward as chevronIcon } from 'ionicons/icons'
-import StatusBadge from './StatusBadge.vue'
-import { OPERATION_COLLAPSE_INITIAL_COUNT } from './twoLevelGrouping'
-import { useI18n } from '@/composables/useI18n'
-import type { ToolCall, ToolStatus } from '@/composables/useAgent'
+import { IonIcon } from "@ionic/vue";
+import { chevronForward as chevronIcon, documentTextOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
+import type { ToolCall, ToolStatus } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
+import StatusBadge from "./StatusBadge.vue";
+import { OPERATION_COLLAPSE_INITIAL_COUNT } from "./twoLevelGrouping";
 
 const props = defineProps<{
-  items: ToolCall[]
-  forceComplete?: boolean
-}>()
+  items: ToolCall[];
+  forceComplete?: boolean;
+}>();
 
-const { t } = useI18n()
-const listExpanded = ref(false)
-const headerExpanded = ref(false)
+const { t } = useI18n();
+const listExpanded = ref(false);
+const headerExpanded = ref(false);
 
 function toggleHeader() {
-  headerExpanded.value = !headerExpanded.value
+  headerExpanded.value = !headerExpanded.value;
 }
 
-const icon = documentTextOutline
-const documentOutline = documentTextOutline
+const icon = documentTextOutline;
+const documentOutline = documentTextOutline;
 
 const paths = computed<string[]>(() => {
-  const out: string[] = []
+  const out: string[] = [];
   for (const it of props.items) {
     try {
-      const args = JSON.parse(it.args) as Record<string, unknown>
+      const args = JSON.parse(it.args) as Record<string, unknown>;
       if (Array.isArray(args.changedFiles)) {
         for (const f of args.changedFiles) {
-          if (typeof f === 'string') out.push(f)
-          else if (f && typeof f === 'object' && typeof (f as Record<string, unknown>).path === 'string') {
-            out.push((f as Record<string, string>).path)
+          if (typeof f === "string") out.push(f);
+          else if (f && typeof f === "object" && typeof (f as Record<string, unknown>).path === "string") {
+            out.push((f as Record<string, string>).path);
           }
         }
-      } else if (typeof args.path === 'string') {
-        out.push(args.path)
+      } else if (typeof args.path === "string") {
+        out.push(args.path);
       }
     } catch {
       // ignore
     }
   }
-  return out
-})
+  return out;
+});
 
-const lastItem = computed<ToolCall | null>(() => props.items[props.items.length - 1] ?? null)
+const lastItem = computed<ToolCall | null>(() => props.items[props.items.length - 1] ?? null);
 
-const summary = computed(() => t('agent.ops.files', { n: String(paths.value.length) }))
+const summary = computed(() => t("agent.ops.files", { n: String(paths.value.length) }));
 
 const status = computed(() => {
-  const s = lastItem.value?.status
-  if (!s) return ''
-  if (s === 'success') return t('agent.completed')
-  if (s === 'failed') return t('agent.failed')
-  if (s === 'cancelled') return t('agent.cancelled')
-  if (s === 'running') return t('agent.running')
-  return ''
-})
+  const s = lastItem.value?.status;
+  if (!s) return "";
+  if (s === "success") return t("agent.completed");
+  if (s === "failed") return t("agent.failed");
+  if (s === "cancelled") return t("agent.cancelled");
+  if (s === "running") return t("agent.running");
+  return "";
+});
 
-const statusTone = computed<'ready' | 'warn' | 'idle'>(() => {
-  const s: ToolStatus | undefined = lastItem.value?.status
-  if (s === 'success') return 'ready'
-  if (s === 'failed' || s === 'cancelled') return 'warn'
-  if (s === 'running' || s === 'pending') return 'idle'
-  return 'idle'
-})
+const statusTone = computed<"ready" | "warn" | "idle">(() => {
+  const s: ToolStatus | undefined = lastItem.value?.status;
+  if (s === "success") return "ready";
+  if (s === "failed" || s === "cancelled") return "warn";
+  if (s === "running" || s === "pending") return "idle";
+  return "idle";
+});
 
-const isActive = computed(() => lastItem.value?.status === 'running' || lastItem.value?.status === 'pending')
+const isActive = computed(() => lastItem.value?.status === "running" || lastItem.value?.status === "pending");
 
 // 两级折叠：hasDetail / visiblePaths / canExpand / canCollapse
-const hasDetail = computed(() => paths.value.length > 0)
+const hasDetail = computed(() => paths.value.length > 0);
 const visiblePaths = computed(() => {
-  if (listExpanded.value) return paths.value
-  return paths.value.slice(0, OPERATION_COLLAPSE_INITIAL_COUNT)
-})
-const canExpand = computed(
-  () => !listExpanded.value && paths.value.length > OPERATION_COLLAPSE_INITIAL_COUNT,
-)
-const canCollapse = computed(
-  () => listExpanded.value && paths.value.length > OPERATION_COLLAPSE_INITIAL_COUNT,
-)
+  if (listExpanded.value) return paths.value;
+  return paths.value.slice(0, OPERATION_COLLAPSE_INITIAL_COUNT);
+});
+const canExpand = computed(() => !listExpanded.value && paths.value.length > OPERATION_COLLAPSE_INITIAL_COUNT);
+const canCollapse = computed(() => listExpanded.value && paths.value.length > OPERATION_COLLAPSE_INITIAL_COUNT);
 const showMoreLabel = computed(() =>
-  t('agent.ops.showMore', {
+  t("agent.ops.showMore", {
     n: String(paths.value.length - OPERATION_COLLAPSE_INITIAL_COUNT),
-  }),
-)
+  })
+);
 
 function expandList() {
-  listExpanded.value = true
+  listExpanded.value = true;
 }
 
 function collapseList() {
-  listExpanded.value = false
+  listExpanded.value = false;
 }
 
 function truncate(p: string): string {
-  if (p.length <= 60) return p
-  return '…' + p.slice(p.length - 59)
+  if (p.length <= 60) return p;
+  return "…" + p.slice(p.length - 59);
 }
 </script>
 

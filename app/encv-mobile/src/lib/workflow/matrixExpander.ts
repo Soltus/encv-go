@@ -11,43 +11,40 @@
  *   ]
  */
 
-import type { MatrixStrategy, JobStrategy } from './types'
+import type { JobStrategy, MatrixStrategy } from "./types";
 
 export interface MatrixBinding {
-  [key: string]: string
+  [key: string]: string;
 }
 
 /**
  * 将 matrix 策略展开为所有变量组合。
  */
 export function expandMatrix(strategy: MatrixStrategy): MatrixBinding[] {
-  const entries = Object.entries(strategy.axes)
-  if (entries.length === 0) return [{}]
+  const entries = Object.entries(strategy.axes);
+  if (entries.length === 0) return [{}];
 
   // 递归笛卡尔积
-  function cartesian(
-    remaining: [string, string[]][],
-    current: MatrixBinding,
-  ): MatrixBinding[] {
-    if (remaining.length === 0) return [current]
+  function cartesian(remaining: [string, string[]][], current: MatrixBinding): MatrixBinding[] {
+    if (remaining.length === 0) return [current];
 
-    const [[key, values], ...rest] = remaining
-    const results: MatrixBinding[] = []
+    const [[key, values], ...rest] = remaining;
+    const results: MatrixBinding[] = [];
 
     for (const val of values) {
-      const childResults = cartesian(rest, { ...current, [key]: val })
-      results.push(...childResults)
+      const childResults = cartesian(rest, { ...current, [key]: val });
+      results.push(...childResults);
     }
 
-    return results
+    return results;
   }
 
-  return cartesian(entries, {})
+  return cartesian(entries, {});
 }
 
 /**
  * 判断 Job 是否使用 matrix 策略。
  */
 export function isMatrixStrategy(strategy?: JobStrategy): strategy is MatrixStrategy {
-  return strategy?.type === 'matrix'
+  return strategy?.type === "matrix";
 }

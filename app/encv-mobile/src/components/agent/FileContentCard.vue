@@ -48,119 +48,119 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { documentTextOutline, hourglassOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
+import { IonIcon } from "@ionic/vue";
+import { documentTextOutline, hourglassOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
+import { useI18n } from "@/composables/useI18n";
 
 const props = defineProps<{
   /** 后端 tool_result.result 的 JSON 字符串 */
-  resultJson: string
+  resultJson: string;
   /** 工具执行状态 */
-  status?: 'pending' | 'running' | 'success' | 'failed'
-}>()
+  status?: "pending" | "running" | "success" | "failed";
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const documentTextIcon = documentTextOutline
-const hourglassIcon = hourglassOutline
-const expanded = ref(false)
+const documentTextIcon = documentTextOutline;
+const hourglassIcon = hourglassOutline;
+const expanded = ref(false);
 
-const COLLAPSE_THRESHOLD = 4000
+const COLLAPSE_THRESHOLD = 4000;
 
 interface ParsedFile {
-  content: string
-  mimeType?: string
-  size?: number
-  note?: string
+  content: string;
+  mimeType?: string;
+  size?: number;
+  note?: string;
 }
 
 const parsed = computed<{ data: ParsedFile | null; error: string; isErrorResponse: boolean }>(() => {
   if (!props.resultJson) {
-    return { data: null, error: 'empty result', isErrorResponse: false }
+    return { data: null, error: "empty result", isErrorResponse: false };
   }
   try {
-    const obj = JSON.parse(props.resultJson) as Partial<ParsedFile & { error?: string; message?: string }>
+    const obj = JSON.parse(props.resultJson) as Partial<ParsedFile & { error?: string; message?: string }>;
     // 错误响应格式：{"error": "too_large", "message": "文件 xxx 字节 > max_bytes"}
-    if (typeof obj.error === 'string' && obj.error.length > 0 && !obj.content) {
-      return { data: null, error: obj.message || obj.error, isErrorResponse: true }
+    if (typeof obj.error === "string" && obj.error.length > 0 && !obj.content) {
+      return { data: null, error: obj.message || obj.error, isErrorResponse: true };
     }
-    if (typeof obj.content !== 'string') {
-      return { data: null, error: 'missing content field', isErrorResponse: false }
+    if (typeof obj.content !== "string") {
+      return { data: null, error: "missing content field", isErrorResponse: false };
     }
     return {
       data: {
         content: obj.content,
-        mimeType: typeof obj.mimeType === 'string' ? obj.mimeType : undefined,
-        size: typeof obj.size === 'number' ? obj.size : undefined,
-        note: typeof obj.note === 'string' ? obj.note : undefined,
+        mimeType: typeof obj.mimeType === "string" ? obj.mimeType : undefined,
+        size: typeof obj.size === "number" ? obj.size : undefined,
+        note: typeof obj.note === "string" ? obj.note : undefined,
       },
-      error: '',
+      error: "",
       isErrorResponse: false,
-    }
+    };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.debug('[FileContentCard] parse failed:', msg, props.resultJson)
-    return { data: null, error: msg, isErrorResponse: false }
+    const msg = e instanceof Error ? e.message : String(e);
+    console.debug("[FileContentCard] parse failed:", msg, props.resultJson);
+    return { data: null, error: msg, isErrorResponse: false };
   }
-})
+});
 
-const content = computed(() => parsed.value.data?.content ?? '')
+const content = computed(() => parsed.value.data?.content ?? "");
 const meta = computed(() => ({
   mimeType: parsed.value.data?.mimeType,
   size: parsed.value.data?.size,
-}))
-const rawResult = computed(() => (parsed.value.error ? props.resultJson : ''))
+}));
+const rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
 
-const showToggle = computed(() => content.value.length > COLLAPSE_THRESHOLD)
+const showToggle = computed(() => content.value.length > COLLAPSE_THRESHOLD);
 const truncatedContent = computed(() => {
-  if (content.value.length <= COLLAPSE_THRESHOLD) return content.value
-  return content.value.slice(0, COLLAPSE_THRESHOLD) + '\n…'
-})
+  if (content.value.length <= COLLAPSE_THRESHOLD) return content.value;
+  return content.value.slice(0, COLLAPSE_THRESHOLD) + "\n…";
+});
 
 const titleText = computed(() => {
-  if (props.status === 'pending' || props.status === 'running') return t('agent.toolCards.fileContentTitle') || '文件内容（查询中）'
-  if (parsed.value.isErrorResponse) return parsed.value.error.includes('too_large') ? '文件过大' : '读取失败'
-  if (parsed.value.error) return t('agent.toolCards.parseFailed') || '文件内容（数据异常）'
-  return t('agent.toolCards.fileContentTitle') || '文件内容'
-})
+  if (props.status === "pending" || props.status === "running") return t("agent.toolCards.fileContentTitle") || "文件内容（查询中）";
+  if (parsed.value.isErrorResponse) return parsed.value.error.includes("too_large") ? "文件过大" : "读取失败";
+  if (parsed.value.error) return t("agent.toolCards.parseFailed") || "文件内容（数据异常）";
+  return t("agent.toolCards.fileContentTitle") || "文件内容";
+});
 
 const errorBadgeLabel = computed(() => {
-  const err = parsed.value.error
-  if (err?.includes('too_large')) return '过大'
-  return '错误'
-})
+  const err = parsed.value.error;
+  if (err?.includes("too_large")) return "过大";
+  return "错误";
+});
 
 const dataSourceTag = computed(() => {
-  if (!props.resultJson) return ''
-  const s = props.resultJson
-  if (s.includes('"FAKE":true') || s.includes('"FAKE": true')) return 'mock 数据'
-  if (s.includes('studio_video_')) return '历史 mock'
-  return ''
-})
+  if (!props.resultJson) return "";
+  const s = props.resultJson;
+  if (s.includes('"FAKE":true') || s.includes('"FAKE": true')) return "mock 数据";
+  if (s.includes("studio_video_")) return "历史 mock";
+  return "";
+});
 
 const contentLineCount = computed(() => {
-  return content.value ? content.value.split('\n').length : 0
-})
+  return content.value ? content.value.split("\n").length : 0;
+});
 
 const looksBinary = computed(() => {
-  if (content.value.length < 50) return false
-  const nonPrintable = (content.value.match(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g) || []).length
-  return nonPrintable > content.value.length * 0.05
-})
+  if (content.value.length < 50) return false;
+  const nonPrintable = (content.value.match(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g) || []).length;
+  return nonPrintable > content.value.length * 0.05;
+});
 
 function toggle() {
-  expanded.value = !expanded.value
+  expanded.value = !expanded.value;
 }
 
 function formatSize(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes < 0) return '—'
-  if (bytes < 1024) return `${bytes} B`
-  const kb = bytes / 1024
-  if (kb < 1024) return `${kb.toFixed(1)} KB`
-  const mb = kb / 1024
-  if (mb < 1024) return `${mb.toFixed(1)} MB`
-  return `${(mb / 1024).toFixed(2)} GB`
+  if (!Number.isFinite(bytes) || bytes < 0) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  return `${(mb / 1024).toFixed(2)} GB`;
 }
 </script>
 

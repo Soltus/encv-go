@@ -9,11 +9,11 @@
   <script setup> + options render() 混用会导致追踪断裂。
 -->
 <script lang="ts">
-import { defineComponent, type PropType } from 'vue'
-import type { ChatEngine, EngineRenderProps } from '@/composables/chatEngine'
+import { defineComponent, type PropType } from "vue";
+import type { ChatEngine, EngineRenderProps } from "@/composables/chatEngine";
 
 export default defineComponent({
-  name: 'EngineRenderer',
+  name: "EngineRenderer",
   props: {
     engine: {
       type: Object as PropType<ChatEngine>,
@@ -26,10 +26,10 @@ export default defineComponent({
   },
   render() {
     // 通过 this 访问 props，确保 Vue 响应式追踪正常工作
-    const engine = this.engine
-    const renderProps = this.renderProps
-    if (!engine || !renderProps) return null
-    return engine.renderMessages(renderProps)
+    const engine = this.engine;
+    const renderProps = this.renderProps;
+    if (!engine || !renderProps) return null;
+    return engine.renderMessages(renderProps);
   },
-})
+});
 </script>

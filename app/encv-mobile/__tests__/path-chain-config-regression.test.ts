@@ -50,17 +50,36 @@ const REPO_ROOT = resolve(__dirname, '..', '..', '..')
 const EXPECTED_AUTOMATION_NS = '/d/automation'
 
 describe('path-chain — 配置文件防回归（跨链路一致）', () => {
-  it('【防回归】useAutomationTests.DEFAULT_AUTOMATION_SOURCE 父目录必须 = /d/automation（multi-mount）', () => {
+  // 2026-06-18 spec unify-workflow-task-service：useAutomationTests.ts 已删除，
+  // 自动化测试 sourcePath 命名空间真相源迁移到 mockConstants.ts 的 MOCK_GENERATE_ROOT。
+  // useTestCaseGeneration.ts 通过 mockRoot 参数接收 MOCK_GENERATE_ROOT 并派生 sourcePath。
+  it('【防回归】mockConstants.MOCK_GENERATE_ROOT 必须以 /d/automation/ 为前缀（multi-mount）', () => {
     const src = readFileSync(
-      resolve(REPO_ROOT, 'app/encv-mobile/src/composables/useAutomationTests.ts'),
+      resolve(REPO_ROOT, 'app/encv-mobile/src/lib/mockConstants.ts'),
       'utf-8',
     )
-    // 提取 DEFAULT_AUTOMATION_SOURCE = '...' 字符串
-    const m = src.match(/DEFAULT_AUTOMATION_SOURCE\s*=\s*['"]([^'"]+)['"]/)
-    expect(m, 'DEFAULT_AUTOMATION_SOURCE must be present in useAutomationTests.ts').toBeTruthy()
-    const sourcePath = m![1]
-    // 父目录（去掉 01-plain-media/...）必须是 /d/automation mount 命名空间
-    expect(sourcePath.startsWith(`${EXPECTED_AUTOMATION_NS}/`)).toBe(true)
+    // 提取 MOCK_GENERATE_ROOT 派生链：必须由 AUTOMATION_MOUNT_PATH + '/' 构造
+    expect(
+      src.includes('MOCK_GENERATE_ROOT = AUTOMATION_MOUNT_PATH +'),
+      'MOCK_GENERATE_ROOT must be derived from AUTOMATION_MOUNT_PATH in mockConstants.ts',
+    ).toBe(true)
+    // AUTOMATION_MOUNT_PATH 必须由 mountPath(AUTOMATION_MOUNT_NAME) 构造
+    expect(
+      src.includes('AUTOMATION_MOUNT_PATH = mountPath(AUTOMATION_MOUNT_NAME)'),
+      'AUTOMATION_MOUNT_PATH must be derived from mountPath(AUTOMATION_MOUNT_NAME)',
+    ).toBe(true)
+  })
+
+  it('【防回归】useTestCaseGeneration.selectSourcePath 必须以 ${mockRoot.value}01-plain-media/ 派生（命名空间硬约束）', () => {
+    const src = readFileSync(
+      resolve(REPO_ROOT, 'app/encv-mobile/src/composables/useTestCaseGeneration.ts'),
+      'utf-8',
+    )
+    // selectSourcePath 必须用 mockRoot.value 拼接 01-plain-media 子目录
+    expect(
+      src.includes('${mockRoot.value}01-plain-media/'),
+      'useTestCaseGeneration.selectSourcePath must derive from mockRoot.value + 01-plain-media/',
+    ).toBe(true)
   })
 
   it('【防回归】ecosystem.config.cjs 不再注入 ENCV_MOCK_ROOT（2026-06-10 废弃）', () => {
@@ -80,9 +99,14 @@ describe('path-chain — 配置文件防回归（跨链路一致）', () => {
   // 🆕 2026-06-15 multi-mount：mockRoot 必须是声明式常量 MOCK_GENERATE_ROOT
   //   禁用 .split('/').slice(N) 的隐式推导（fragile：源路径改前缀就静默错）
   //   正确做法：见 src/lib/mockConstants.ts 的 MOCK_GENERATE_ROOT
+  // 2026-06-18 spec unify-workflow-task-service：AutomationTestsDetail.vue 已删除，
+  //   自动化测试视图拆分为 AutomationTestsHub.vue（hub 页，无需 mockRoot）+
+  //   PluginTestsDetail.vue（实际测试页，import MOCK_GENERATE_ROOT）。
+  // 2026-06-18 v5-bug3fix：PluginTestsDetail.vue 已恢复（误删修复），
+  //   测试报告数据并入任务系统 group card 的 exportGroupReport（zip 导出）。
   it.each([
     'WorkflowDashboard.vue',
-    'AutomationTestsDetail.vue',
+    'PluginTestsDetail.vue',
   ])('【防回归】%s 必须 import MOCK_GENERATE_ROOT 声明式常量（禁 split/slice 推导）', (viewFile) => {
     const src = readFileSync(
       resolve(REPO_ROOT, `app/encv-mobile/src/views/${viewFile}`),

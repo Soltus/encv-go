@@ -174,6 +174,15 @@ func (t *taskMountResolver) Resolve(virtualPath string) (*mobileservice.MountRes
 	}, nil
 }
 
+// 🆕 v3 2026-06-18 Task 8：absPath → virtualPath 反向解析
+//   - 供 task_manager 把 task.OutputPath / step.Detail 转为虚拟路径
+func (t *taskMountResolver) AbsToVirtual(absPath string) (string, error) {
+	if t == nil || t.reg == nil {
+		return "", fmt.Errorf("taskMountResolver: nil registry")
+	}
+	return t.reg.AbsToVirtual(absPath)
+}
+
 // 编译期断言
 var _ mobileservice.MountResolver = (*taskMountResolver)(nil)
 

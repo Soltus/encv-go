@@ -50,93 +50,91 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { IonIcon, IonItem, IonInput, IonButton } from '@ionic/vue'
-import { eyeOutline, eyeOffOutline, folderOpen, refreshOutline, chevronDownOutline, chevronUpOutline, timeOutline } from 'ionicons/icons'
-import { recordHistory, getHistory, clearHistory } from '@/composables/useInputHistory'
-import { useI18n } from '@/composables/useI18n'
+import { IonButton, IonIcon, IonInput, IonItem } from "@ionic/vue";
+import { chevronDownOutline, chevronUpOutline, eyeOffOutline, eyeOutline, folderOpen, refreshOutline, timeOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
+import { useI18n } from "@/composables/useI18n";
+import { clearHistory, getHistory, recordHistory } from "@/composables/useInputHistory";
 
 const props = defineProps<{
-  modelValue: string
-  label: string
-  placeholder?: string
-  icon?: string | { name: string; ios: string; md: string }
-  inputType?: 'text' | 'password' | 'email' | 'number'
-  historyKey?: string
-  browsable?: boolean
-  clearInput?: boolean
-  isCustomized?: boolean
-  errorText?: string
-  disabled?: boolean
-}>()
+  modelValue: string;
+  label: string;
+  placeholder?: string;
+  icon?: string | { name: string; ios: string; md: string };
+  inputType?: "text" | "password" | "email" | "number";
+  historyKey?: string;
+  browsable?: boolean;
+  clearInput?: boolean;
+  isCustomized?: boolean;
+  errorText?: string;
+  disabled?: boolean;
+}>();
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string]
-  browse: []
-  reset: []
-  'commit-history': [value: string]
-  'keyup-enter': []
-  blur: []
-}>()
+  "update:modelValue": [value: string];
+  browse: [];
+  reset: [];
+  "commit-history": [value: string];
+  "keyup-enter": [];
+  blur: [];
+}>();
 
-const { t } = useI18n()
-const showPassword = ref(false)
-const showHistory = ref(false)
+const { t } = useI18n();
+const showPassword = ref(false);
+const showHistory = ref(false);
 
-const entries = computed(() => (props.historyKey ? getHistory(props.historyKey) : []))
+const entries = computed(() => (props.historyKey ? getHistory(props.historyKey) : []));
 
 const resolvedType = computed(() => {
-  if (props.inputType !== 'password') return props.inputType || 'text'
-  return showPassword.value ? 'text' : 'password'
-})
+  if (props.inputType !== "password") return props.inputType || "text";
+  return showPassword.value ? "text" : "password";
+});
 
 function handleInput(e: CustomEvent) {
   // 防御：ionInput 事件必须是 CustomEvent 携带 detail.value
   // 但代码路径中可能存在非 CustomEvent 派发（如测试代码 dispatchEvent(new Event('ionInput'))），
   // 这种情况下 e.detail 是 undefined，原代码会抛 "Cannot read properties of undefined"
-  const detail: any = (e as any)?.detail
-  const raw = typeof detail?.value === 'string' || typeof detail?.value === 'number'
-    ? detail.value
-    : ''
-  emit('update:modelValue', raw)
+  const detail: any = (e as any)?.detail;
+  const raw = typeof detail?.value === "string" || typeof detail?.value === "number" ? detail.value : "";
+  emit("update:modelValue", raw);
 }
 
 function handleFocus() {
   if (props.historyKey && entries.value.length > 0) {
-    showHistory.value = true
+    showHistory.value = true;
   }
 }
 
 function handleBlur() {
   if (props.historyKey) {
-    recordHistory(props.historyKey, props.modelValue)
+    recordHistory(props.historyKey, props.modelValue);
   }
   setTimeout(() => {
-    showHistory.value = false
-  }, 150)
+    showHistory.value = false;
+  }, 150);
   // 关键：暴露 blur 事件给父组件——父组件可借此自动保存
   // 场景：用户修改 API Key 后不按 Enter 就离开 input → blur 时自动加密保存
-  emit('blur')
+  emit("blur");
 }
 
 function handleSelect(value: string) {
-  emit('update:modelValue', value)
-  emit('commit-history', value)
-  recordHistory(props.historyKey!, value)
-  showHistory.value = false
+  emit("update:modelValue", value);
+  emit("commit-history", value);
+  recordHistory(props.historyKey!, value);
+  showHistory.value = false;
 }
 
 function handleClear() {
-  if (props.historyKey) clearHistory(props.historyKey)
-  showHistory.value = false
+  if (props.historyKey) clearHistory(props.historyKey);
+  showHistory.value = false;
 }
 
 function togglePassword() {
-  showPassword.value = !showPassword.value
+  showPassword.value = !showPassword.value;
 }
 
 function handleEnter() {
-  emit('keyup-enter')
+  emit("keyup-enter");
 }
 </script>
 

@@ -127,20 +127,80 @@ dependencyResolutionManagement {
 
 ---
 
-## 五、gomobile + sqlite 选型铁律
+## 五、SQLite 选型铁律（glebarez 是权威，libsql 是增强）
 
-> ⚠️ **plugin-openlist 必读**：gomobile bind 产物（AAR 内的 libgojni.so）若引入 sqlite，**必须用 `github.com/glebarez/sqlite`（pure-Go）**，禁止 `gorm.io/driver/sqlite` / `mattn/go-sqlite3`（CGO）。
+> **2026-07-01 更新：本项目已不再使用 gomobile。**
+> 
+> **核心定位：glebarez/sqlite 是权威（Source of Truth），libsql/turso 是增强。**
+> 数据库文件就是数据库本身，不是传统后端的"数据库服务"。
+> 默认用 glebarez/sqlite（零依赖、全平台），有原生库时启用 libsql 获得向量搜索。
+>
+> 降级设计通用原则见 [graceful-degradation.md](./graceful-degradation.md)。
 
-**核心铁律**：
-1. **SHALL** 导入 `github.com/glebarez/sqlite`
-2. **SHALL NOT** 导入 `gorm.io/driver/sqlite`（其内部链入 mattn）
-3. **SHALL NOT** 直接导入 `github.com/mattn/go-sqlite3`
+### 5.1 引擎对比
 
-**为什么 mattn 是雷**：`mattn/go-sqlite3` 是 CGO 绑定驱动——通过 `#cgo` 指令桥接 C 语言版的 `sqlite3.c`，编译要求 `CGO_ENABLED=1` + 主机 gcc/clang，gomobile bind 表现必须配 NDK clang（常见 `-fPIC` / `setresuid` / musl 报错），AAR 体积 ~42 MB。
+| 引擎 | 实现方式 | Android 支持 | 向量搜索 | 定位 |
+|------|---------|------------|---------|------|
+| **glebarez/sqlite** | 纯 Go transpile | ✅ 原生支持 | ❌ 不支持 | ✅ **权威数据库**（默认） |
+| **libsql** | CGO + 原生 .so | ✅ 需 NDK 编译 | ✅ 支持 | ⚡ **性能增强 + 向量搜索** |
+| **turso** | purego | ❌ 移动端不支持 | ✅ 支持 | 🖥️ **桌面端专用** |
 
-**glebarez 优势**：纯 Go 字节码，`CGO_ENABLED=0` 也可，零系统依赖，arm64-v8a ELF 跨设备一致，AAR ~30 MB，写性能 70-80%（元数据场景不可感知）。
+### 5.2 铁律
 
-**完整对比 + 验证命令 + 历史踩坑** → 详见 [详情文档 §五](../rule-library/android.md#五gomobile--sqlite-选型铁律plugin-openlist-必读)
+1. **SHALL** 默认使用 `glebarez/sqlite`（纯 Go，零依赖，全平台可用）
+2. **SHALL** 如需向量搜索，桌面端用 `turso`（purego），移动端用 `libsql`（CGO）
+3. **SHALL NOT** 移动端使用 turso（purego 方案不兼容 Android）
+4. **SHALL NOT** 使用 `mattn/go-sqlite3` / `gorm.io/driver/sqlite`（CGO 版本）
+5. **SHALL NOT** 把 libsql 当作"替代 SQLite 的更好数据库" — 它是增强，不是替代
+
+### 5.3 LibSQL Android 集成
+
+LibSQL 通过 CGO 动态链接原生库，产物放在 `jniLibs/arm64-v8a/libsql_experimental.so`：
+- 编译脚本：`scripts/build-libsql-android.sh`
+- 驱动代码：`pkg/libsql/driver.go`
+- 预编译库目录：`pkg/libsql/libs/android_arm64/`
+
+### 5.4 数据库降级规范（L2 级）
+
+libsql 初始化失败属于 **L2 降级体验**，不是静默 fallback。
+
+**必须满足的条件**：
+
+| 要求 | 说明 |
+|------|------|
+| **状态可查** | `/api/runtime` 或 `/health` 接口必须返回当前使用的引擎（`sqlite` / `libsql`） |
+| **降级原因明确** | 日志 WARN 级别记录"为什么降级"，不能静默 |
+| **功能差异明确** | 向量搜索等增强功能在降级时必须返回明确错误，不能假装可用 |
+| **CI 可见** | CI 构建中 libsql 编译失败必须高亮，写入 Step Summary |
+
+**运行时检测方法**：
+- 调用 `/api/runtime` 接口，查看 `dbEngine` 字段
+- `sqlite` = glebarez/sqlite（纯 Go，无向量搜索）
+- `libsql` = libsql（有向量搜索）
+
+**反模式（禁止）**：
+```go
+// ❌ 错误：向量搜索不可用时返回空列表，用户以为"没搜到"
+func Search(query string) []Result {
+    if searchSvc == nil {
+        return []Result{}  // 静默降级！
+    }
+    return searchSvc.Search(query)
+}
+```
+
+**正确模式**：
+```go
+// ✅ 正确：明确告知功能不可用
+func Search(query string) ([]Result, error) {
+    if searchSvc == nil {
+        return nil, errors.New("向量搜索不可用：当前使用 SQLite 引擎，不支持向量搜索")
+    }
+    return searchSvc.Search(query), nil
+}
+```
+
+> **历史背景（已废弃）**：gomobile bind 方案详见 [详情文档 §五](../rule-library/android.md#五gomobile--sqlite-选型铁律plugin-openlist-必读-历史)
 
 ---
 

@@ -76,62 +76,71 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
-  IonButton, IonBadge, alertController,
-} from '@ionic/vue'
-import {
-  downloadOutline, trashOutline, terminal,
-  cloudOutline, refreshOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { useConfig } from '@/composables/useConfig'
-import { getDefaultValue } from '@/config/schemaParser'
-import { showToast } from '@/composables/useToast'
-import { isNative, exportLogs, clearLogs, saveDevLogs } from '@/plugins/GoProcess'
-import { useFrontendLogs, type LogEntry } from '@/composables/useFrontendLogs'
+  alertController,
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { cloudOutline, downloadOutline, refreshOutline, terminal, trashOutline } from "ionicons/icons";
+import { computed } from "vue";
+import { useConfig } from "@/composables/useConfig";
+import { type LogEntry, useFrontendLogs } from "@/composables/useFrontendLogs";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
+import { getDefaultValue } from "@/config/schemaParser";
+import { clearLogs, exportLogs, isNative, saveDevLogs } from "@/plugins/GoProcess";
 
-const { t, tField } = useI18n()
-const { schemaFields, getFieldValue, setFieldValue, saveConfig, resetFieldToDefault } = useConfig()
-const { logs: frontendLogs } = useFrontendLogs()
+const { t, tField } = useI18n();
+const { schemaFields, getFieldValue, setFieldValue, saveConfig, resetFieldToDefault } = useConfig();
+const { logs: frontendLogs } = useFrontendLogs();
 
-const configLoaded = computed(() => schemaFields.value.length > 0)
+const configLoaded = computed(() => schemaFields.value.length > 0);
 
-const logLevel = computed(() => String(getFieldValue(['log', 'level']) ?? 'info'))
+const logLevel = computed(() => String(getFieldValue(["log", "level"]) ?? "info"));
 
 const logLevelField = computed(() => {
-  const logSection = schemaFields.value.find((s) => s.key === 'log')
-  if (!logSection || !logSection.properties) return null
-  return logSection.properties.find((p) => p.key === 'level') || null
-})
+  const logSection = schemaFields.value.find(s => s.key === "log");
+  if (!logSection || !logSection.properties) return null;
+  return logSection.properties.find(p => p.key === "level") || null;
+});
 
 const logDefault = computed(() => {
-  if (!logLevelField.value) return 'info'
-  return String(getDefaultValue(logLevelField.value))
-})
+  if (!logLevelField.value) return "info";
+  return String(getDefaultValue(logLevelField.value));
+});
 
-const isLogLevelCustomized = computed(() => logLevel.value !== logDefault.value)
+const isLogLevelCustomized = computed(() => logLevel.value !== logDefault.value);
 
 function resetLogLevelToDefault() {
-  if (!logLevelField.value) return
-  resetFieldToDefault(['log', 'level'], logLevelField.value)
-  saveLogConfig()
+  if (!logLevelField.value) return;
+  resetFieldToDefault(["log", "level"], logLevelField.value);
+  saveLogConfig();
 }
 
 async function handleLogLevelChange(value: string) {
-  setFieldValue(['log', 'level'], value)
-  await saveLogConfig()
+  setFieldValue(["log", "level"], value);
+  await saveLogConfig();
 }
 
 async function saveLogConfig() {
   try {
-    await saveConfig()
-    showToast({ message: t('settings.configSaved'), duration: 1500, color: 'success' })
+    await saveConfig();
+    showToast({ message: t("settings.configSaved"), duration: 1500, color: "success" });
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e)
-    showToast({ message: t('settings.configSaveFailed') + ': ' + detail, duration: 3000, color: 'danger' })
+    const detail = e instanceof Error ? e.message : String(e);
+    showToast({ message: t("settings.configSaveFailed") + ": " + detail, duration: 3000, color: "danger" });
   }
 }
 
@@ -154,53 +163,51 @@ async function saveLogConfig() {
  *   - 非持久化、不影响 export
  *   - 用户明确要求"而不是 devlogs 页面的日志级别筛选"
  */
-const LEVEL_RANK: Record<string, number> = { debug: 0, info: 1, warn: 2, error: 3 }
+const LEVEL_RANK: Record<string, number> = { debug: 0, info: 1, warn: 2, error: 3 };
 
 function rankOf(level: string): number {
-  return LEVEL_RANK[level] ?? 1
+  return LEVEL_RANK[level] ?? 1;
 }
 
 async function handleExportLogs() {
-  if (!isNative()) return
+  if (!isNative()) return;
   try {
-    const configuredLevel = String(getFieldValue(['log', 'level']) ?? 'info')
-    const threshold = rankOf(configuredLevel)
-    const filteredFrontendLogs: LogEntry[] = frontendLogs.value.filter(
-      (l) => rankOf(l.level) >= threshold,
-    )
-    await saveDevLogs(JSON.stringify(filteredFrontendLogs, null, 2))
-    const result = await exportLogs()
+    const configuredLevel = String(getFieldValue(["log", "level"]) ?? "info");
+    const threshold = rankOf(configuredLevel);
+    const filteredFrontendLogs: LogEntry[] = frontendLogs.value.filter(l => rankOf(l.level) >= threshold);
+    await saveDevLogs(JSON.stringify(filteredFrontendLogs, null, 2));
+    const result = await exportLogs();
     if (result.success) {
-      showToast({ message: t('devtools.exportSuccess'), duration: 1500, color: 'success' })
+      showToast({ message: t("devtools.exportSuccess"), duration: 1500, color: "success" });
     } else {
-      showToast({ message: t('devtools.exportFailed'), duration: 2000, color: 'danger' })
+      showToast({ message: t("devtools.exportFailed"), duration: 2000, color: "danger" });
     }
   } catch {
-    showToast({ message: t('devtools.exportFailed'), duration: 2000, color: 'danger' })
+    showToast({ message: t("devtools.exportFailed"), duration: 2000, color: "danger" });
   }
 }
 
 async function handleClearLogs() {
-  if (!isNative()) return
+  if (!isNative()) return;
   const alert = await alertController.create({
-    header: t('devtools.clearLogsConfirm'),
+    header: t("devtools.clearLogsConfirm"),
     buttons: [
-      { text: t('common.cancel'), role: 'cancel' },
+      { text: t("common.cancel"), role: "cancel" },
       {
-        text: t('common.confirm'),
-        role: 'confirm',
+        text: t("common.confirm"),
+        role: "confirm",
         handler: async () => {
-          const result = await clearLogs()
+          const result = await clearLogs();
           if (result.success) {
-            showToast({ message: t('devtools.clearSuccess'), duration: 1500, color: 'success' })
+            showToast({ message: t("devtools.clearSuccess"), duration: 1500, color: "success" });
           } else {
-            showToast({ message: t('devtools.clearFailed'), duration: 2000, color: 'danger' })
+            showToast({ message: t("devtools.clearFailed"), duration: 2000, color: "danger" });
           }
         },
       },
     ],
-  })
-  await alert.present()
+  });
+  await alert.present();
 }
 </script>
 

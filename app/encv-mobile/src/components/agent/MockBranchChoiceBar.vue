@@ -35,41 +35,41 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from '@/composables/useI18n'
+import { useI18n } from "@/composables/useI18n";
 
 defineProps<{
   /** 父组件用 mockScenarioPaused 控制显隐；这里再做一次防御（v-if 双向） */
-  paused: boolean
+  paused: boolean;
   /** 当前激活的 scenario ID（来自 useAgent.currentMockScenario） */
-  scenario?: string
+  scenario?: string;
   /** 当前 round 下标（0-based），来自 mockRoundState.roundIdx */
-  round?: number
+  round?: number;
   /** 剧本总轮数，来自 mockRoundState.totalRounds */
-  total?: number
+  total?: number;
   /** 当前 step 的 prompt 文案（来自 useAgent.mockBranchPrompt） */
-  prompt?: string
+  prompt?: string;
   /** 分支选项列表（来自 useAgent.mockBranchChoices） */
   branches?: Array<{
-    id: string
-    label: string
-    icon?: string
-    description?: string
-  }>
+    id: string;
+    label: string;
+    icon?: string;
+    description?: string;
+  }>;
   /** 当前 phase 字符串，调试用（'awaiting_branch_choice' / 'awaiting_user_input'） */
-  phase?: string
-}>()
+  phase?: string;
+}>();
 
 const emit = defineEmits<{
   /** 点 chip：把整个 branch 对象回传，父组件用 branch.id 调 pickMockBranch */
-  (e: 'pick', branch: { id: string; label: string; icon?: string; description?: string }): void
+  (e: "pick", branch: { id: string; label: string; icon?: string; description?: string }): void;
   /** 用户在输入框键入文本时由父组件转发到 useAgent.sendMockRoundResponse */
-  (e: 'type', text: string): void
-}>()
+  (e: "type", text: string): void;
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 function onPick(branch: { id: string; label: string; icon?: string; description?: string }): void {
-  emit('pick', branch)
+  emit("pick", branch);
 }
 </script>
 

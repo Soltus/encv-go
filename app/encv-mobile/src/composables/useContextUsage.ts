@@ -10,110 +10,108 @@
  * SPEC: /workspace/.trae/specs/go-in-process-agent/spec.md
  *   - §Requirement: Context 图标
  */
-import { ref, onUnmounted, watch, type Ref } from 'vue'
-import { getAgentApiBase } from './useAgentApiBase'
+import { onUnmounted, type Ref, ref, watch } from "vue";
+import { getAgentApiBase } from "./useAgentApiBase";
 
-const AGENT_API_BASE = getAgentApiBase()
+const AGENT_API_BASE = getAgentApiBase();
 
 // ─── 类型契约 ───────────────────────────────────────────────
 
 export interface ContextUsage {
-  tokens: number
-  window: number
-  percent: number
+  tokens: number;
+  window: number;
+  percent: number;
 }
 
 export interface ContextTodo {
-  content: string
-  status: 'pending' | 'in_progress' | 'completed'
+  content: string;
+  status: "pending" | "in_progress" | "completed";
 }
 
 export interface ContextReferencedFile {
-  path: string
-  mountId: string
-  viaTool: string
-  lastRefAt: number
+  path: string;
+  mountId: string;
+  viaTool: string;
+  lastRefAt: number;
 }
 
 export interface ContextUsageResponse {
-  sessionId: string
-  model: string
-  usage: ContextUsage
-  todos: ContextTodo[]
-  referencedFiles: ContextReferencedFile[]
-  compactions: number
-  updatedAt: number
+  sessionId: string;
+  model: string;
+  usage: ContextUsage;
+  todos: ContextTodo[];
+  referencedFiles: ContextReferencedFile[];
+  compactions: number;
+  updatedAt: number;
 }
 
-export type AgentStatusLite = 'idle' | 'streaming' | 'confirming' | 'error'
+export type AgentStatusLite = "idle" | "streaming" | "confirming" | "error";
 
 // ─── Composable ─────────────────────────────────────────────
 
 export interface UseContextUsageOptions {
   /** 当前 session id（默认 'default'） */
-  sessionId: Ref<string>
+  sessionId: Ref<string>;
   /** useAgent 的 status ref（决定轮询频率） */
-  status: Ref<AgentStatusLite>
+  status: Ref<AgentStatusLite>;
 }
 
 /**
  * 创建一个 context-usage 拉取器，返回 reactive 状态 + 控制函数
  */
 export function useContextUsage(opts: UseContextUsageOptions) {
-  const data = ref<ContextUsageResponse | null>(null)
-  const loading = ref(false)
-  const lastFetchedAt = ref(0)
-  let timer: ReturnType<typeof setTimeout> | null = null
+  const data = ref<ContextUsageResponse | null>(null);
+  const loading = ref(false);
+  const lastFetchedAt = ref(0);
+  let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const STREAMING_INTERVAL = 5_000
-  const IDLE_INTERVAL = 30_000
+  const STREAMING_INTERVAL = 5_000;
+  const IDLE_INTERVAL = 30_000;
 
   function getInterval(): number {
-    return opts.status.value === 'streaming' || opts.status.value === 'confirming'
-      ? STREAMING_INTERVAL
-      : IDLE_INTERVAL
+    return opts.status.value === "streaming" || opts.status.value === "confirming" ? STREAMING_INTERVAL : IDLE_INTERVAL;
   }
 
   async function fetchOnce() {
-    const sessionId = opts.sessionId.value || 'default'
-    loading.value = true
+    const sessionId = opts.sessionId.value || "default";
+    loading.value = true;
     try {
-      const url = `${AGENT_API_BASE}/api/agent/context-usage?sessionId=${encodeURIComponent(sessionId)}`
-      const resp = await fetch(url, { method: 'GET' })
+      const url = `${AGENT_API_BASE}/api/agent/context-usage?sessionId=${encodeURIComponent(sessionId)}`;
+      const resp = await fetch(url, { method: "GET" });
       if (!resp.ok) {
-        console.debug('[useContextUsage] fetch failed:', resp.status)
-        return
+        console.debug("[useContextUsage] fetch failed:", resp.status);
+        return;
       }
-      const body = (await resp.json()) as ContextUsageResponse
-      data.value = body
-      lastFetchedAt.value = Date.now()
+      const body = (await resp.json()) as ContextUsageResponse;
+      data.value = body;
+      lastFetchedAt.value = Date.now();
     } catch (e) {
-      console.debug('[useContextUsage] fetch error:', e)
+      console.debug("[useContextUsage] fetch error:", e);
     } finally {
-      loading.value = false
+      loading.value = false;
     }
   }
 
   function schedule() {
-    if (timer) clearTimeout(timer)
-    const ms = getInterval()
+    if (timer) clearTimeout(timer);
+    const ms = getInterval();
     timer = setTimeout(async () => {
-      await fetchOnce()
-      schedule()
-    }, ms)
+      await fetchOnce();
+      schedule();
+    }, ms);
   }
 
   function start() {
-    if (timer) return
+    if (timer) return;
     // 立即拉一次
-    void fetchOnce()
-    schedule()
+    void fetchOnce();
+    schedule();
   }
 
   function stop() {
     if (timer) {
-      clearTimeout(timer)
-      timer = null
+      clearTimeout(timer);
+      timer = null;
     }
   }
 
@@ -122,11 +120,11 @@ export function useContextUsage(opts: UseContextUsageOptions) {
     () => opts.status.value,
     () => {
       if (timer) {
-        clearTimeout(timer)
-        schedule()
+        clearTimeout(timer);
+        schedule();
       }
-    },
-  )
+    }
+  );
 
   // sessionId 变化时立即拉一次（仅在轮询已启动后）
   // - useAgent() 内部 ref 初始化时也会触发 watch，但不应当偷偷发请求
@@ -135,16 +133,16 @@ export function useContextUsage(opts: UseContextUsageOptions) {
     () => opts.sessionId.value,
     () => {
       if (timer) {
-        void fetchOnce()
+        void fetchOnce();
       }
-    },
-  )
+    }
+  );
 
   onUnmounted(() => {
-    stop()
-    stopWatch()
-    watchSession()
-  })
+    stop();
+    stopWatch();
+    watchSession();
+  });
 
   return {
     data,
@@ -153,5 +151,5 @@ export function useContextUsage(opts: UseContextUsageOptions) {
     start,
     stop,
     refresh: fetchOnce,
-  }
+  };
 }

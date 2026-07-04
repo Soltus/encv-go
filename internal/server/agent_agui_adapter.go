@@ -18,7 +18,8 @@
 //   - Query:  ?protocol=agui
 //
 // SPEC: /workspace/.trae/specs/multi-engine-chat-architecture/ Phase 4
-//       /workspace/.trae/specs/agui-real-llm-path-completion/ Phase 1
+//
+//	/workspace/.trae/specs/agui-real-llm-path-completion/ Phase 1
 package server
 
 import (
@@ -429,7 +430,7 @@ func (m *AGUIEventMapper) EmitStateSnapshot(state map[string]interface{}) {
 // EmitMessagesSnapshot 推 MESSAGES_SNAPSHOT 事件。
 //
 // 用于断点续传时的完整消息历史对齐。messages 是任意 JSON-serializable 数组
-//（通常是 useAgent Message[] 的归一化形式）。
+// （通常是 useAgent Message[] 的归一化形式）。
 //
 // JSON data：{ messages, timestamp, threadId, runId, type }
 func (m *AGUIEventMapper) EmitMessagesSnapshot(messages interface{}) {

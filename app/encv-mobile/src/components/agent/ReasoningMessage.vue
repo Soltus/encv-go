@@ -34,26 +34,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { bulbOutline, chevronUpOutline, chevronDownOutline } from 'ionicons/icons'
-import MessageAuthor from './MessageAuthor.vue'
-import MarkdownStream from './MarkdownStream.vue'
-import StatusBadge from './StatusBadge.vue'
-import { useI18n } from '@/composables/useI18n'
+import { bulbOutline, chevronDownOutline, chevronUpOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
+import { useI18n } from "@/composables/useI18n";
+import MarkdownStream from "./MarkdownStream.vue";
+import MessageAuthor from "./MessageAuthor.vue";
+import StatusBadge from "./StatusBadge.vue";
 
 const props = defineProps<{
-  text: string
-  streaming: boolean
-}>()
+  text: string;
+  streaming: boolean;
+}>();
 
-const { t } = useI18n()
-const expanded = ref(props.streaming)
-const icon = bulbOutline
-const chevronUp = chevronUpOutline
-const chevronDown = chevronDownOutline
+const { t } = useI18n();
+const expanded = ref(props.streaming);
+const icon = bulbOutline;
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
 
-const label = computed(() => t('agent.reasoning'))
-const metaText = computed(() => (props.streaming ? t('agent.thinkingMeta') : ''))
+const label = computed(() => t("agent.reasoning"));
+const metaText = computed(() => (props.streaming ? t("agent.thinkingMeta") : ""));
 </script>
 
 <style scoped>

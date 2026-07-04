@@ -7,23 +7,23 @@
 
 /** AppErrorType 8 个枚举值（与 Go tools.AppErrorType 一一对应）。 */
 export type AppErrorType =
-  | 'NetworkUnavailable'
-  | 'NetworkTimeout'
-  | 'ApiKeyInvalid'
-  | 'InsufficientBalance'
-  | 'RateLimited'
-  | 'ServerError'
-  | 'UserCancelled'
-  | 'Unknown'
+  | "NetworkUnavailable"
+  | "NetworkTimeout"
+  | "ApiKeyInvalid"
+  | "InsufficientBalance"
+  | "RateLimited"
+  | "ServerError"
+  | "UserCancelled"
+  | "Unknown";
 
 /** AppError 结构（与 Go tools.AppError 对齐）。 */
 export interface AppError {
   /** 错误分类 */
-  type: AppErrorType
+  type: AppErrorType;
   /** 技术性错误消息（开发调试用） */
-  message: string
+  message: string;
   /** 面向用户的友好文案（emoji + 中英文） */
-  humanMessage: string
+  humanMessage: string;
   /** 是否可以重试 */
-  isRetryable: boolean
+  isRetryable: boolean;
 }

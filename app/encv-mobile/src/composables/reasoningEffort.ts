@@ -18,7 +18,7 @@
  *   - 去除空格 / 下划线 / 连字符 / 中划线
  */
 
-export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'default' | string
+export type ReasoningEffort = "low" | "medium" | "high" | "xhigh" | "default" | string;
 
 /**
  * 把任意输入归一化为 5 个 effort bucket 之一 + 'default' 兜底。
@@ -28,13 +28,13 @@ export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'default' | 
  * - 去除 [\s_-]+：把 "extra max" / "Extra-Max" / "extra_max" 都归一为 "extramax"
  */
 export function normalizeReasoningEffort(value: unknown): ReasoningEffort {
-  if (typeof value !== 'string') return 'default'
-  const s = value.toLowerCase().replace(/[\s_-]+/g, '')
-  if (['low', 'minimal', 'small'].includes(s)) return 'low'
-  if (['medium', 'med', 'normal'].includes(s)) return 'medium'
-  if (['high', 'large'].includes(s)) return 'high'
-  if (['xhigh', 'extra', 'extramax', 'max'].includes(s)) return 'xhigh'
-  return 'default'
+  if (typeof value !== "string") return "default";
+  const s = value.toLowerCase().replace(/[\s_-]+/g, "");
+  if (["low", "minimal", "small"].includes(s)) return "low";
+  if (["medium", "med", "normal"].includes(s)) return "medium";
+  if (["high", "large"].includes(s)) return "high";
+  if (["xhigh", "extra", "extramax", "max"].includes(s)) return "xhigh";
+  return "default";
 }
 
 /**
@@ -42,5 +42,5 @@ export function normalizeReasoningEffort(value: unknown): ReasoningEffort {
  * ReasoningMessage 拿到这个键后交给 useI18n().t() 渲染。
  */
 export function i18nKeyFor(effort: ReasoningEffort): string {
-  return `agent.reasoningEffort.${effort}` as const
+  return `agent.reasoningEffort.${effort}` as const;
 }

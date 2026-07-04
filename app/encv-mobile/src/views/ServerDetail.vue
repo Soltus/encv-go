@@ -105,149 +105,171 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
-  IonButton, alertController,
-} from '@ionic/vue'
+  alertController,
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
 import {
-  server as serverIcon,
-  notifications as notificationsIcon, folderOpen,
-  copy as copyIcon, shieldCheckmark, cloudOutline, globeOutline,
   batteryCharging as batteryOptimizationIcon,
-} from 'ionicons/icons'
-import { useServerStatus } from '@/composables/useServerStatus'
-import { useI18n } from '@/composables/useI18n'
-import ServerStatusCard from '@/components/ServerStatusCard.vue'
-import { showToast } from '@/composables/useToast'
-import { copyToClipboard as clipboardWrite } from '@/composables/useClipboard'
-import { getServerUrl, fetchConfig } from '@/api/encv'
-import { isNative, requestNotificationPermission, requestStoragePermission, requestBatteryOptimization, checkPermissions } from '@/plugins/GoProcess'
+  cloudOutline,
+  copy as copyIcon,
+  folderOpen,
+  globeOutline,
+  notifications as notificationsIcon,
+  server as serverIcon,
+  shieldCheckmark,
+} from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import { fetchConfig, getServerUrl } from "@/api/encv";
+import ServerStatusCard from "@/components/ServerStatusCard.vue";
+import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
+import { useI18n } from "@/composables/useI18n";
+import { useServerStatus } from "@/composables/useServerStatus";
+import { showToast } from "@/composables/useToast";
+import {
+  checkPermissions,
+  isNative,
+  requestBatteryOptimization,
+  requestNotificationPermission,
+  requestStoragePermission,
+} from "@/plugins/GoProcess";
 
-const configData = ref<Record<string, unknown> | null>(null)
-const {
-  isOnline: serverOnline,
-  checkStatus,
-  restartBackend,
-  stopBackend,
-} = useServerStatus()
-const { t } = useI18n()
+const configData = ref<Record<string, unknown> | null>(null);
+const { isOnline: serverOnline, checkStatus, restartBackend, stopBackend } = useServerStatus();
+const { t } = useI18n();
 
-const serverUrl = ref(getServerUrl())
-const isNativePlatform = ref(isNative())
-const permNotifications = ref(false)
-const permStorage = ref(false)
-const permBatteryOpt = ref(false)
-let permissionCheckTimer: number | null = null
+const serverUrl = ref(getServerUrl());
+const isNativePlatform = ref(isNative());
+const permNotifications = ref(false);
+const permStorage = ref(false);
+const permBatteryOpt = ref(false);
+let permissionCheckTimer: number | null = null;
 
-const router = useRouter()
+const router = useRouter();
 
-const httpPort = computed(() => (configData.value?.server as Record<string, unknown>)?.port ?? '-')
-const rootDir = computed(() => (configData.value?.server as Record<string, unknown>)?.dir ?? '/')
-const adminConfigured = computed(() => !!(configData.value?.admin as Record<string, unknown>)?.password)
+const httpPort = computed(() => (configData.value?.server as Record<string, unknown>)?.port ?? "-");
+const rootDir = computed(() => (configData.value?.server as Record<string, unknown>)?.dir ?? "/");
+const adminConfigured = computed(() => !!(configData.value?.admin as Record<string, unknown>)?.password);
 const webdavRoot = computed(() => {
-  const val = (configData.value?.webdav as Record<string, unknown>)?.root
-  return typeof val === 'string' ? val : '/'
-})
-const webdavUsername = computed(() => (configData.value?.webdav as Record<string, unknown>)?.username ?? '')
+  const val = (configData.value?.webdav as Record<string, unknown>)?.root;
+  return typeof val === "string" ? val : "/";
+});
+const webdavUsername = computed(() => (configData.value?.webdav as Record<string, unknown>)?.username ?? "");
 
-function goHttpServer() { router.push('/tabs/settings/server/http') }
-function goAdminServer() { router.push('/tabs/settings/server/admin') }
-function goWebdavServer() { router.push('/tabs/settings/server/webdav') }
+function goHttpServer() {
+  router.push("/tabs/settings/server/http");
+}
+function goAdminServer() {
+  router.push("/tabs/settings/server/admin");
+}
+function goWebdavServer() {
+  router.push("/tabs/settings/server/webdav");
+}
 
 async function copyToClipboard(text: string) {
-  const ok = await clipboardWrite(text)
-  showToast({ message: ok ? t('remote.copied') : t('devlogs.copyFailed'), duration: 1000, color: ok ? 'success' : 'danger' })
+  const ok = await clipboardWrite(text);
+  showToast({ message: ok ? t("remote.copied") : t("devlogs.copyFailed"), duration: 1000, color: ok ? "success" : "danger" });
 }
 
 async function refreshPermissions() {
-  const perms = await checkPermissions()
-  permNotifications.value = perms.notifications
-  permStorage.value = perms.storage
-  permBatteryOpt.value = perms.batteryOptimization
+  const perms = await checkPermissions();
+  permNotifications.value = perms.notifications;
+  permStorage.value = perms.storage;
+  permBatteryOpt.value = perms.batteryOptimization;
 }
 
 async function handleRequestNotification() {
-  await requestNotificationPermission()
-  if (permissionCheckTimer) clearTimeout(permissionCheckTimer)
-  permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000)
-  setTimeout(() => refreshPermissions(), 3000)
-  setTimeout(() => refreshPermissions(), 5000)
+  await requestNotificationPermission();
+  if (permissionCheckTimer) clearTimeout(permissionCheckTimer);
+  permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000);
+  setTimeout(() => refreshPermissions(), 3000);
+  setTimeout(() => refreshPermissions(), 5000);
 }
 
 async function handleRequestStorage() {
-  await requestStoragePermission()
-  if (permissionCheckTimer) clearTimeout(permissionCheckTimer)
-  permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000)
-  setTimeout(() => refreshPermissions(), 3000)
-  setTimeout(() => refreshPermissions(), 5000)
+  await requestStoragePermission();
+  if (permissionCheckTimer) clearTimeout(permissionCheckTimer);
+  permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000);
+  setTimeout(() => refreshPermissions(), 3000);
+  setTimeout(() => refreshPermissions(), 5000);
 }
 
 async function handleRequestBatteryOpt() {
-  await requestBatteryOptimization()
-  if (permissionCheckTimer) clearTimeout(permissionCheckTimer)
-  permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000)
-  setTimeout(() => refreshPermissions(), 3000)
-  setTimeout(() => refreshPermissions(), 5000)
+  await requestBatteryOptimization();
+  if (permissionCheckTimer) clearTimeout(permissionCheckTimer);
+  permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000);
+  setTimeout(() => refreshPermissions(), 3000);
+  setTimeout(() => refreshPermissions(), 5000);
 }
 
 async function checkServerInner() {
   // 刷新按钮：只 ping 一次后端 + 弹 toast
-  await checkStatus()
+  await checkStatus();
   showToast({
-    message: serverOnline.value ? t('settings.serverOnline') : t('settings.serverOffline'),
+    message: serverOnline.value ? t("settings.serverOnline") : t("settings.serverOffline"),
     duration: 1500,
-    color: serverOnline.value ? 'success' : 'danger',
-  })
+    color: serverOnline.value ? "success" : "danger",
+  });
 }
 
 async function handleRestart() {
   showToast({
-    message: t('settings.restarting'),
+    message: t("settings.restarting"),
     duration: 30000,
-  })
-  const success = await restartBackend()
+  });
+  const success = await restartBackend();
   showToast({
-    message: success ? t('settings.restartSuccess') : t('settings.restartFailed'),
+    message: success ? t("settings.restartSuccess") : t("settings.restartFailed"),
     duration: 2000,
-    color: success ? 'success' : 'danger',
-  })
+    color: success ? "success" : "danger",
+  });
 }
 
 async function handleStop() {
   const alert = await alertController.create({
-    header: t('settings.stopConfirm'),
+    header: t("settings.stopConfirm"),
     buttons: [
-      { text: t('settings.cancel'), role: 'cancel' },
+      { text: t("settings.cancel"), role: "cancel" },
       {
-        text: t('settings.stop'),
-        role: 'destructive',
+        text: t("settings.stop"),
+        role: "destructive",
         handler: async () => {
-          const success = await stopBackend()
+          const success = await stopBackend();
           showToast({
-            message: success ? t('settings.stopped') : t('settings.stopFailed'),
+            message: success ? t("settings.stopped") : t("settings.stopFailed"),
             duration: 2000,
-            color: success ? 'success' : 'danger',
-          })
+            color: success ? "success" : "danger",
+          });
         },
       },
     ],
-  })
-  await alert.present()
+  });
+  await alert.present();
 }
 
 onMounted(async () => {
   if (isNativePlatform.value) {
-    await refreshPermissions()
+    await refreshPermissions();
   }
   if (serverOnline.value) {
     try {
-      configData.value = await fetchConfig()
+      configData.value = await fetchConfig();
     } catch {}
   }
-})
+});
 </script>
 
 <style scoped>

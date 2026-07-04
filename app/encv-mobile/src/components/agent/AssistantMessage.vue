@@ -36,73 +36,73 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { sparklesOutline, copyOutline } from 'ionicons/icons'
-import MessageAuthor from './MessageAuthor.vue'
-import MarkdownStream from './MarkdownStream.vue'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import type { AgentStatus } from '@/composables/useAgent'
+import { IonIcon } from "@ionic/vue";
+import { copyOutline, sparklesOutline } from "ionicons/icons";
+import { computed } from "vue";
+import type { AgentStatus } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
+import MarkdownStream from "./MarkdownStream.vue";
+import MessageAuthor from "./MessageAuthor.vue";
 
 const props = defineProps<{
-  text: string
-  streaming: boolean
-  status?: AgentStatus
+  text: string;
+  streaming: boolean;
+  status?: AgentStatus;
   /** 时间戳（Unix ms），不传则用当前时间 */
-  timestamp?: number
+  timestamp?: number;
   /**
    * 紧凑模式：隐藏头像/名字。
    * 用于 agent 时间轴模式——同轮消息只有第一个 text 段显示完整 header，
    * 后续 text 段用 compact=true 只渲染 markdown body。
    */
-  compact?: boolean
+  compact?: boolean;
   /**
    * 强制显示 footer（时间戳+复制按钮）。
    * 用于 agent 时间轴模式——只有最后一个 text 段显示 footer，
    * 即使在 compact 模式下也展示。
    */
-  showFooter?: boolean
-}>()
+  showFooter?: boolean;
+}>();
 
-const { t } = useI18n()
-const icon = sparklesOutline
-const copyIconVar = copyOutline
+const { t } = useI18n();
+const icon = sparklesOutline;
+const copyIconVar = copyOutline;
 
-const label = computed(() => 'AI 助手')
+const label = computed(() => "AI 助手");
 const meta = computed(() => {
-  if (props.streaming) return t('agent.thinking')
-  return ''
-})
+  if (props.streaming) return t("agent.thinking");
+  return "";
+});
 
 /** 格式化时间戳为 HH:mm */
 const displayTime = computed(() => {
-  const ts = props.timestamp ?? Date.now()
-  const d = new Date(ts)
-  const hh = String(d.getHours()).padStart(2, '0')
-  const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
-})
+  const ts = props.timestamp ?? Date.now();
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+});
 
 /** 复制全文到剪贴板 */
 async function handleCopy() {
   try {
-    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-      await navigator.clipboard.writeText(props.text)
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      await navigator.clipboard.writeText(props.text);
     } else {
       // Fallback：临时 textarea + execCommand
-      const ta = document.createElement('textarea')
-      ta.value = props.text
-      ta.style.position = 'fixed'
-      ta.style.left = '-9999px'
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
+      const ta = document.createElement("textarea");
+      ta.value = props.text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
     }
-    showToast({ message: '已复制', duration: 1200, color: 'success' })
+    showToast({ message: "已复制", duration: 1200, color: "success" });
   } catch {
-    showToast({ message: '复制失败', duration: 1600, color: 'danger' })
+    showToast({ message: "复制失败", duration: 1600, color: "danger" });
   }
 }
 </script>

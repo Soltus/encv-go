@@ -40,6 +40,22 @@
             <p>{{ t('devtools.sparseContainer.entryHint') }}</p>
           </ion-label>
         </ion-item>
+
+        <ion-item button detail @click="goFsTests">
+          <ion-icon :icon="folderOpenOutline" slot="start" color="success"></ion-icon>
+          <ion-label>
+            <h3>{{ t('devtools.automationHub.fsTests') }}</h3>
+            <p>{{ t('devtools.automationHub.fsTestsDesc') }}</p>
+          </ion-label>
+        </ion-item>
+
+        <ion-item button detail @click="goDatabaseTests">
+          <ion-icon :icon="serverOutline" slot="start" color="tertiary"></ion-icon>
+          <ion-label>
+            <h3>数据库自动化测试</h3>
+            <p>CRUD / 批量写入 / 查询过滤 / 并发压测 / 导出导入一致性</p>
+          </ion-label>
+        </ion-item>
       </ion-list>
     </ion-content>
   </ion-page>
@@ -47,27 +63,47 @@
 
 <script setup lang="ts">
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel,
-} from '@ionic/vue'
-import { flaskOutline, cloudUploadOutline, serverOutline } from 'ionicons/icons'
-import { useRouter } from 'vue-router'
-import { useI18n } from '@/composables/useI18n'
+  IonBackButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { cloudUploadOutline, flaskOutline, folderOpenOutline, serverOutline } from "ionicons/icons";
+import { useRouter } from "vue-router";
+import { useI18n } from "@/composables/useI18n";
 
-const { t } = useI18n()
-const router = useRouter()
+const { t } = useI18n();
+const router = useRouter();
 
 // 2026-06-17：插件加密/解密自动化测试（重命名自 AutomationTestsDetail）
 function goPluginTests() {
-  router.push('/tabs/settings/devtools/plugin-tests')
+  router.push("/tabs/settings/devtools/plugin-tests");
 }
 
 function goWebDavTests() {
-  router.push('/tabs/settings/devtools/webdav-tests')
+  router.push("/tabs/settings/devtools/webdav-tests");
 }
 
 function goSparseContainerTest() {
-  router.push('/tabs/settings/devtools/sparse-container-test')
+  router.push("/tabs/settings/devtools/sparse-container-test");
+}
+
+// 🆕 2026-06-22：文件系统任务测试（move/copy/rename/delete + rollback + trash 边界）
+function goFsTests() {
+  router.push("/tabs/settings/devtools/fs-tests");
+}
+
+// 🆕 2026-07-03：数据库自动化测试
+function goDatabaseTests() {
+  router.push("/tabs/settings/devtools/database-tests");
 }
 </script>
 

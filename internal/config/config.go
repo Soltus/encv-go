@@ -53,6 +53,9 @@ type Config struct {
 	// --- 日志设置 ---
 	// Log 配置结构化日志的输出级别和文件路径。
 	Log types.LogConfig `json:"log"`
+	// --- 数据库设置 ---
+	// Database 数据库存储引擎配置。
+	Database DatabaseConfig `json:"database"`
 	// --- 预览设置 ---
 	Preview *PreviewConfig      `json:"preview,omitempty"`
 	Mobile  *types.MobileConfig `json:"mobile,omitempty"`
@@ -127,6 +130,31 @@ type Agent struct {
 	// true → 检测到目录内 *.yaml / *.json 变更时自动 reload（500ms 防抖）。
 	// 仅在 MockScenariosDir 非空时生效。
 	MockScenariosHotReload bool `json:"mock_scenarios_hot_reload,omitempty"`
+}
+
+// DatabaseConfig 数据库存储引擎配置。
+//
+// 架构（2026-07-03 改造）：
+//   - SQLite 是默认底座（base engine），始终启用，不可关闭
+//   - 其他引擎（libsql / turso / objectbox）作为可选服务，独立启用/禁用
+//   - Engine 字段保留向后兼容（旧配置的主存储引擎选择）
+//   - 各可选引擎的启用开关在 EnableEngines map 中
+type DatabaseConfig struct {
+	// Engine 主存储引擎类型："sqlite" | "turso" | "libsql" | "objectbox"
+	// 默认 "sqlite"（向后兼容）
+	Engine string `json:"engine"`
+	// Path 数据库文件路径（仅 sqlite/turso 本地模式使用）
+	// 留空则使用默认路径：{data_dir}/encv.db
+	Path string `json:"path,omitempty"`
+	// TursoSyncURL Turso 同步 URL（仅 turso 模式使用）
+	// 例如 "libsql://your-db.turso.io"
+	TursoSyncURL string `json:"turso_sync_url,omitempty"`
+	// TursoAuthToken Turso 认证令牌（仅 turso 模式使用）
+	TursoAuthToken string `json:"turso_auth_token,omitempty"`
+	// EnableEngines 可选引擎的启用开关（除 sqlite 外的引擎）
+	// key = 引擎名（"libsql" | "turso" | "objectbox"）
+	// value = 是否启用
+	EnableEngines map[string]bool `json:"enable_engines,omitempty"`
 }
 
 // MockScenario — 自定义 mock 剧本配置项（与 internal/server/agent_mock.go 中的同名类型语义一致）
@@ -243,6 +271,9 @@ func DefaultConfig() *Config {
 		Log: types.LogConfig{
 			Level: "info",
 			File:  "",
+		},
+		Database: DatabaseConfig{
+			Engine: "sqlite", // 默认 SQLite，持久化可靠
 		},
 	}
 }

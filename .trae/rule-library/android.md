@@ -178,9 +178,67 @@ if (!buildType.isMinifyEnabled && androidResources.shrink) {
 
 ---
 
-## 五、gomobile + sqlite 选型铁律（plugin-openlist 必读）
+## 五、SQLite / LibSQL 选型铁律
 
-> **核心原则：gomobile bind 产物（AAR 内的 libgojni.so）若引入 sqlite，必须用 `github.com/glebarez/sqlite`（pure-Go），禁止 `gorm.io/driver/sqlite` / `mattn/go-sqlite3`（CGO）。**
+> **2026-07-01 更新：本项目已不再使用 gomobile。**
+> 
+> 当前架构：Go 后端以独立可执行文件（`libencv-go.so`）运行，通过 ProcessBuilder 启动，
+> 不走 gomobile bind / JNI 桥接路径。
+> 
+> gomobile 历史文档见 [§六](#六gomobile--sqlite-选型铁律历史)。
+
+### 5.1 引擎对比
+
+| 引擎 | 实现方式 | Android 支持 | 向量搜索 | 说明 |
+|------|---------|------------|---------|------|
+| **glebarez/sqlite** | 纯 Go transpile | ✅ 原生支持 | ❌ 不支持 | 轻量、零依赖 |
+| **libsql** | CGO + 原生 .so | ✅ 需 NDK 编译 | ✅ 支持 | Turso 官方 SQLite fork，高性能 |
+| **turso** | purego | ❌ 移动端不支持 | ✅ 支持 | 桌面端可用 |
+
+### 5.2 铁律
+
+1. **SHALL** 默认使用 `glebarez/sqlite`（纯 Go，零依赖）
+2. **SHALL** 如需向量搜索：桌面端用 `turso`（purego），移动端用 `libsql`（CGO）
+3. **SHALL NOT** 移动端使用 turso（purego 方案不兼容 Android）
+4. **SHALL NOT** 使用 `mattn/go-sqlite3` / `gorm.io/driver/sqlite`（CGO 版本）
+
+### 5.3 LibSQL Android 集成
+
+LibSQL 通过 CGO 动态链接原生库，产物放在 `jniLibs/arm64-v8a/libsql_experimental.so`。
+
+**架构说明**：
+- Go 后端是独立可执行 ELF（不是共享库），通过 ProcessBuilder 启动
+- CGO 在 Go 二进制内动态链接 libsql_experimental.so
+- .so 文件随 APK 打包在 jniLibs/ 目录，运行时从 nativeLibraryDir 加载
+
+**关键文件**：
+- 编译脚本：`scripts/build-libsql-android.sh`
+- 驱动代码：`pkg/libsql/driver.go`
+- 预编译库目录：`pkg/libsql/libs/android_arm64/`
+- 存储实现：`pkg/tasksystem/store/libsql/libsql.go`
+
+**CI 构建流程**：
+1. 下载预编译的 libsql 原生库（或从源码编译）
+2. 复制到 `jniLibs/arm64-v8a/`
+3. Go 编译时设置 `CGO_ENABLED=1` + NDK clang
+4. APK 打包时自动包含 jniLibs 里的 .so
+
+### 5.4 Turso vs LibSQL 关系
+
+> **重要：Turso 已脱离 libsql 成为独立的 SQLite fork 路线。**
+
+| 维度 | LibSQL | Turso |
+|------|--------|-------|
+| 定位 | SQLite fork，开源免费 | 独立 SQLite fork，云服务 + 本地 |
+| Android 支持 | ✅ 官方 libsql-android | ❌ 无官方移动端 SDK |
+| Go 驱动 | CGO（自研） | purego（tursogo） |
+| 向量搜索 | ✅ | ✅ |
+
+---
+
+## 六、gomobile + sqlite 选型铁律（历史）
+
+> **⚠️ 已废弃：本项目不再使用 gomobile。保留此节供历史参考。**
 
 ### 5.1 为什么 mattn/go-sqlite3 在 gomobile 路径下是雷
 

@@ -15,14 +15,31 @@
         </ion-segment>
       </ion-toolbar>
       <div class="toolbar-row">
-        <div class="level-filters">
-          <button
-            v-for="lvl in levelOptions"
-            :key="lvl.value"
-            class="level-btn"
-            :class="{ active: selectedLevels.has(lvl.value), [lvl.value]: true }"
-            @click="toggleLevel(lvl.value)"
-          >{{ lvl.label }}</button>
+        <div class="filter-dropdowns">
+          <FilterDropdown
+            :options="levelDropdownOptions"
+            v-model="selectedLevelsArray"
+            :label="t('devlogs.level')"
+            :multi-select="true"
+            :show-actions="true"
+            :select-all-text="t('devlogs.selectAll')"
+            :clear-all-text="t('devlogs.clearAll')"
+            @change="onLevelsChange"
+          />
+          <FilterDropdown
+            :options="tagDropdownOptions"
+            v-model="selectedTags"
+            :label="t('devlogs.source')"
+            :multi-select="true"
+            :searchable="true"
+            :search-placeholder="t('devlogs.searchTag')"
+            :empty-text="t('devlogs.noTags')"
+            :show-actions="true"
+            :select-all-text="t('devlogs.selectAll')"
+            :clear-all-text="t('devlogs.clearAll')"
+            :empty-means-all="true"
+            @change="onTagsChange"
+          />
         </div>
         <div class="toolbar-actions">
           <!-- v6 纯手动挡：▶ 跟随 / ⏸ 暂停 开关按钮 -->
@@ -73,6 +90,9 @@
         </div>
         <VirtualLogList :key="'frontend'" v-if="filteredFrontend.length > 0" :items="filteredFrontend" :scroll-el="scrollEl" @select="onLogSelect">
           <template #default="{ item }">
+            <span class="log-source-icon" :title="getSourceIconTitle(item)">
+              {{ getSourceIcon(item) }}
+            </span>
             <span class="log-time">[{{ item.timestamp }}]</span>
             <ion-badge :color="getBadgeColor(item.level)" class="level-badge">{{ item.level.toUpperCase() }}</ion-badge>
             <span class="log-msg" v-html="highlightMatch(item.message, searchText)"></span>
@@ -92,6 +112,9 @@
         </div>
         <VirtualLogList :key="'backend'" v-if="backendFilteredItems.length > 0" :items="backendFilteredItems" :scroll-el="scrollEl" @select="onLogSelect">
           <template #default="{ item }">
+            <span class="log-source-icon" :title="getSourceIconTitle(item)">
+              {{ getSourceIcon(item) }}
+            </span>
             <span class="log-time">[{{ item.timestamp }}]</span>
             <ion-badge :color="getBadgeColor(item.level)" class="level-badge">{{ item.level.toUpperCase() }}</ion-badge>
             <span class="log-msg" v-html="highlightMatch(item.message, searchText)"></span>
@@ -178,6 +201,17 @@
             <span class="log-detail-label">{{ t('devlogs.logDetailSource') }}</span>
             <span class="log-detail-value log-source-detail">{{ selectedLog.source }}</span>
           </div>
+          <div v-if="selectedLog.tags && selectedLog.tags.length > 0" class="log-detail-row">
+            <span class="log-detail-label">{{ t('devlogs.logDetailTags') }}</span>
+            <div class="log-detail-tags">
+              <span
+                v-for="tag in selectedLog.tags"
+                :key="tag"
+                class="log-tag-chip"
+                @click="onTagClick(tag)"
+              >{{ tag }}</span>
+            </div>
+          </div>
           <div class="log-detail-row log-detail-message-row">
             <span class="log-detail-label">{{ t('devlogs.logDetailMessage') }}</span>
             <pre class="log-detail-message">{{ selectedLog.message }}</pre>
@@ -204,28 +238,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, onBeforeUnmount, nextTick, markRaw, shallowRef, triggerRef } from 'vue'
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonContent,
-  IonSegment, IonSegmentButton, IonSearchbar, IonButton,
-  IonIcon, IonBadge, IonFooter, alertController,
-} from '@ionic/vue'
-import { trashOutline, copyOutline, arrowDownOutline, arrowUpOutline, playOutline, pauseOutline, closeOutline } from 'ionicons/icons'
-import VirtualLogList from '@/components/VirtualLogList.vue'
-import { eventBus } from '@/composables/useEventBus'
-import { useI18n } from '@/composables/useI18n'
-import { useRealtimeTransport } from '@/composables/useRealtimeTransport'
-import { useFrontendLogs, type LogEntry } from '@/composables/useFrontendLogs'
-import { showToast } from '@/composables/useToast'
-import { copyToClipboard } from '@/composables/useClipboard'
-import { checkServerStatus, getRecentBackendLogs } from '@/api/encv'
-import { IncrementalFilter, type Level } from '@/utils/IncrementalFilter'
+  alertController,
+  IonBadge,
+  IonButton,
+  type IonContent,
+  IonFooter,
+  IonHeader,
+  IonIcon,
+  IonPage,
+  IonSearchbar,
+  IonSegment,
+  IonSegmentButton,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { arrowDownOutline, arrowUpOutline, closeOutline, copyOutline, pauseOutline, playOutline, trashOutline } from "ionicons/icons";
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, triggerRef, watch } from "vue";
+import { type BackendLogEntry, checkServerStatus, getRecentBackendLogs } from "@/api/encv";
+import type { DropdownOption } from "@/components/shared/FilterDropdown.vue";
+import FilterDropdown from "@/components/shared/FilterDropdown.vue";
+import VirtualLogList from "@/components/VirtualLogList.vue";
+import { copyToClipboard } from "@/composables/useClipboard";
+import { eventBus } from "@/composables/useEventBus";
+import { type LogEntry, useFrontendLogs } from "@/composables/useFrontendLogs";
+import { useI18n } from "@/composables/useI18n";
+import { useRealtimeTransport } from "@/composables/useRealtimeTransport";
+import { showToast } from "@/composables/useToast";
+import { IncrementalFilter, type Level } from "@/utils/IncrementalFilter";
 
-const { t } = useI18n()
-const transport = useRealtimeTransport()
+const { t } = useI18n();
+const transport = useRealtimeTransport();
 
-const activeTab = ref<'frontend' | 'backend'>('frontend')
-const searchText = ref('')
+const activeTab = ref<"frontend" | "backend">("frontend");
+const searchText = ref("");
 /**
  * 自动滚动：true 跟随 / false 暂停
  * 唯一交互入口：toolbar 开关按钮（toggleAutoScroll）和浮动 ↓ 按钮（onJumpToBottom）
@@ -233,18 +279,18 @@ const searchText = ref('')
  * 理由：浏览器预览=手机浏览器无 wheel；项目用 Capacitor 高刷 WebView 90/120Hz，
  * @ionScroll/@ionScrollStart 在移动端 + 高刷下完全不可靠
  */
-const autoScrollEnabled = ref(true)
-const contentRef = ref<InstanceType<typeof IonContent> | null>(null)
+const autoScrollEnabled = ref(true);
+const contentRef = ref<InstanceType<typeof IonContent> | null>(null);
 /** ion-content 的 .inner-scroll 元素（虚拟列表的 scroll 容器） */
-const scrollEl = ref<HTMLElement | null>(null)
+const scrollEl = ref<HTMLElement | null>(null);
 
 /** VirtualLogList refs（用于主动调 forceMeasure 触发首次渲染） */
-const frontendListRef = ref<{ forceMeasure: () => void } | null>(null)
-const backendListRef = ref<{ forceMeasure: () => void } | null>(null)
+const frontendListRef = ref<{ forceMeasure: () => void } | null>(null);
+const backendListRef = ref<{ forceMeasure: () => void } | null>(null);
 function virtualizerForceMeasure(): void {
   // 当前 active tab 的 virtual list 才需要 measure
-  if (activeTab.value === 'frontend') frontendListRef.value?.forceMeasure()
-  else backendListRef.value?.forceMeasure()
+  if (activeTab.value === "frontend") frontendListRef.value?.forceMeasure();
+  else backendListRef.value?.forceMeasure();
 }
 /**
  * 🆕 2026-06-15 1M+ 容量优化：用 IncrementalFilter 替代 shallowRef<LogEntry[]>
@@ -254,8 +300,8 @@ function virtualizerForceMeasure(): void {
  *   - markRaw：避免 Vue 把 filter 实例包成 reactive proxy（性能杀手）
  *   - MAX=1_000_000 满足"至少 100 万条"硬需求
  */
-const MAX_BACKEND_LOGS = 1_000_000
-const backendFilter = markRaw(new IncrementalFilter(MAX_BACKEND_LOGS))
+const MAX_BACKEND_LOGS = 1_000_000;
+const backendFilter = markRaw(new IncrementalFilter(MAX_BACKEND_LOGS));
 /**
  * 同步 trigger：IncrementalFilter 是 markRaw 对象，watch 纯函数 getter 永远不 invoke
  * （vue 内部对 markRaw 属性不 track）。改用 IncrementalFilter.subscribe() 显式通知：
@@ -281,76 +327,197 @@ const backendFilter = markRaw(new IncrementalFilter(MAX_BACKEND_LOGS))
  *   - 级别筛选/搜索 UI 不响应（pushMany 之前漏 notify，filter.setFilter 路径 OK 但 pushMany 看着像卡死）
  *   - VirtualLogList 显示不全（virtualizer count 不更新）
  */
-const backendUpdateTick = ref(0)
-const backendLogsView = shallowRef<readonly LogEntry[]>(backendFilter.getResult())
+const backendUpdateTick = ref(0);
+const backendLogsView = shallowRef<readonly LogEntry[]>(backendFilter.getResult());
 const unsubBackendFilter = backendFilter.subscribe(() => {
-  backendUpdateTick.value++
+  backendUpdateTick.value++;
   // 🆕 修复 A1: spread 创建新数组引用，让 Vue 3 computed 缓存失效链路完整传递
-  backendLogsView.value = [...backendFilter.getResult()]
-  triggerRef(backendLogsView)
-})
+  backendLogsView.value = [...backendFilter.getResult()];
+  triggerRef(backendLogsView);
+});
 
 // 🆕 2026-06-15 rAF coalesce 后端日志：把单帧内多条 WS 消息合并为 1 次 filter.pushMany
-let pendingBackendLogs: LogEntry[] = []
-let flushScheduled = false
+let pendingBackendLogs: LogEntry[] = [];
+let flushScheduled = false;
 function queueBackendLog(entry: LogEntry) {
-  pendingBackendLogs.push(entry)
-  if (flushScheduled) return
-  flushScheduled = true
-  requestAnimationFrame(flushPendingBackendLogs)
+  pendingBackendLogs.push(entry);
+  if (flushScheduled) return;
+  flushScheduled = true;
+  requestAnimationFrame(flushPendingBackendLogs);
 }
 function flushPendingBackendLogs() {
-  flushScheduled = false
-  if (pendingBackendLogs.length === 0) return
-  const toAdd = pendingBackendLogs
-  pendingBackendLogs = []
-  // 🆕 1M 容量：直接 pushMany，O(toAdd) 而非 O(MAX)
-  backendFilter.pushMany(toAdd)
+  flushScheduled = false;
+  if (pendingBackendLogs.length === 0) return;
+  const toAdd = pendingBackendLogs;
+  pendingBackendLogs = [];
+  for (const entry of toAdd) {
+    updateTagCounts(entry, backendTagCounts);
+  }
+  backendFilter.pushMany(toAdd);
 }
 
-const selectedLevels = ref<Set<string>>(new Set(['debug', 'info', 'warn', 'error']))
-const levelOptions = [
-  { value: 'all', label: t('devlogs.all') },
-  { value: 'debug', label: 'DEBUG' },
-  { value: 'info', label: 'INFO' },
-  { value: 'warn', label: 'WARN' },
-  { value: 'error', label: 'ERROR' },
-]
+/**
+ * 🆕 2026-06-18 v4 Bug2 修复：冷启动拉历史日志分块（避免大 list 一次性 pushMany 卡 UI）
+ *   - 旧逻辑：for (const e of resp.logs) queueBackendLog(e) → 单帧内触发 1 次 rAF → pushMany(arr) O(N)
+ *   - 10K+ 历史日志时单帧推完仍可能超 16ms（1 帧预算），导致 tab 切换卡顿
+ *   - 修法：每帧最多 200 条，分多帧推完（实测 5K log/帧 = 1 帧内 200 条 O(200) ≈ 0.5ms）
+ *   - 配合 requestIdleCallback（推迟到 main thread idle），首次切到 DevLogs tab 渲染后再拉
+ */
+const PUSH_CHUNK_SIZE = 200;
+async function pushLogsInChunks(logs: BackendLogEntry[]): Promise<void> {
+  if (logs.length === 0) return;
+  let i = 0;
+  const pushNextChunk = (): Promise<void> => {
+    return new Promise(resolve => {
+      requestAnimationFrame(() => {
+        const chunk = logs.slice(i, i + PUSH_CHUNK_SIZE);
+        i += chunk.length;
+        if (chunk.length > 0) {
+          for (const e of chunk) {
+            const lvl: Level = ["debug", "info", "warn", "error"].includes(e.level) ? (e.level as Level) : "info";
+            const entry: LogEntry = {
+              id: ++nextId,
+              timestamp: e.timestamp || new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+              level: lvl,
+              message: e.message,
+              tags: normalizeTags((e as any).tags),
+            };
+            updateTagCounts(entry, backendTagCounts);
+            backendFilter.push(entry);
+          }
+        }
+        if (i < logs.length) {
+          // 继续下一帧
+          void pushNextChunk().then(resolve);
+        } else {
+          resolve();
+        }
+      });
+    });
+  };
+  await pushNextChunk();
+}
+
+/** 冷启动拉历史日志入口（推迟到 idle + 分块推） */
+async function coldStartLoadRecentLogs(): Promise<void> {
+  if (!serverOnline.value) return;
+  try {
+    const resp = await getRecentBackendLogs();
+    await pushLogsInChunks(resp.logs || []);
+  } catch (err) {
+    console.warn("[DevLogs] cold-start fetch recent logs failed:", err instanceof Error ? err.message : String(err));
+  }
+}
+
+const selectedLevelsArray = ref<string[]>(["debug", "info", "warn", "error"]);
+const levelDropdownOptions: DropdownOption[] = [
+  { value: "debug", label: "DEBUG" },
+  { value: "info", label: "INFO" },
+  { value: "warn", label: "WARN" },
+  { value: "error", label: "ERROR" },
+];
+
+const selectedTags = ref<string[]>([]);
+
+const backendTagCounts = new Map<string, number>();
+
+function normalizeTags(raw: any): string[] | undefined {
+  if (Array.isArray(raw)) {
+    const arr = raw.filter((t: any) => typeof t === "string" && t.length > 0 && t.length < 64);
+    return arr.length > 0 ? arr : undefined;
+  }
+  if (typeof raw === "string" && raw.length > 0) {
+    const arr = raw.split(",").filter(t => t.length > 0 && t.length < 64);
+    return arr.length > 0 ? arr : undefined;
+  }
+  return undefined;
+}
+
+function updateTagCounts(entry: LogEntry, counts: Map<string, number>) {
+  if (entry.tags && entry.tags.length > 0) {
+    for (const tag of entry.tags) {
+      counts.set(tag, (counts.get(tag) || 0) + 1);
+    }
+  }
+}
+
+const tagDropdownOptions = computed<DropdownOption[]>(() => {
+  if (activeTab.value === "frontend") {
+    const counts = new Map<string, number>();
+    for (const entry of frontendLogs.value) {
+      updateTagCounts(entry, counts);
+    }
+    return Array.from(counts.entries())
+      .map(([value, count]) => ({ value, label: value, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+  return Array.from(backendTagCounts.entries())
+    .map(([value, count]) => ({ value, label: value, count }))
+    .sort((a, b) => b.count - a.count);
+});
 
 /**
  * 🆕 2026-06-15 搜索高亮：转义 HTML 特殊字符 + 把 query 用 <mark> 包起来
  * 性能：30 item 虚拟列表下完全可承受
  */
 function highlightMatch(text: string, query: string): string {
-  const escapeHtml = (s: string) => s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-  if (!query.trim()) return escapeHtml(text)
+  const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  if (!query.trim()) return escapeHtml(text);
   try {
-    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const re = new RegExp(`(${escaped})`, 'gi')
-    return escapeHtml(text).replace(re, '<mark>$1</mark>')
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(${escaped})`, "gi");
+    return escapeHtml(text).replace(re, "<mark>$1</mark>");
   } catch {
-    return escapeHtml(text)
+    return escapeHtml(text);
   }
 }
 
-function toggleLevel(level: string) {
-  const s = new Set(selectedLevels.value)
-  if (level === 'all') {
-    if (s.has('all')) { s.clear() }
-    else { s.add('all'); for (const o of levelOptions) if (o.value !== 'all') s.add(o.value) }
-  } else {
-    if (s.has(level)) { s.delete(level); s.delete('all') }
-    else { s.add(level); if (s.size === levelOptions.length - 1) s.add('all') }
-    if (s.size === levelOptions.length - 1) s.add('all')
-  }
-  selectedLevels.value = s
+function onLevelsChange(_values: string[]) {
+  // levels 变化时，watch 会自动触发 filter 更新
 }
 
-let nextId = 0
-const { logs: frontendLogs, clearLogs: clearFrontendLogs } = useFrontendLogs()
+function onTagsChange(_values: string[]) {
+  // tags 变化时，watch 会自动触发 filter 更新
+}
+
+function onTagClick(tag: string) {
+  if (!selectedTags.value.includes(tag)) {
+    selectedTags.value = [...selectedTags.value, tag];
+  }
+  closeLogDetail();
+}
+
+function getSourceIcon(entry: LogEntry): string {
+  const tags = Array.isArray(entry.tags) ? entry.tags : [];
+  if (tags.includes("frontend")) {
+    if (tags.includes("worker")) return "⚙";
+    if (tags.includes("error-capture")) return "⚠";
+    if (tags.includes("hmr")) return "🔥";
+    if (tags.includes("console")) return "◉";
+    return "◉";
+  }
+  if (tags.includes("backend")) {
+    if (tags.includes("api")) return "🌐";
+    if (tags.includes("websocket")) return "⚡";
+    if (tags.includes("task")) return "📋";
+    if (tags.includes("db")) return "🗄";
+    if (tags.includes("mount")) return "📁";
+    if (tags.includes("kernel") || tags.includes("plugin")) return "🔌";
+    if (tags.includes("agent")) return "🤖";
+    if (tags.includes("service")) return "⚙";
+    return "●";
+  }
+  return "●";
+}
+
+function getSourceIconTitle(entry: LogEntry): string {
+  const tags = Array.isArray(entry.tags) ? entry.tags : [];
+  if (tags.length === 0) return entry.source || "unknown";
+  return tags.join(" · ");
+}
+
+let nextId = 0;
+const { logs: frontendLogs, clearLogs: clearFrontendLogs } = useFrontendLogs();
 /**
  * 🆕 2026-06-15 1M+ 容量：所有 backend 状态都从 IncrementalFilter 读
  *   - filteredBackendItems：O(1) 拿当前过滤结果（incremental cache）
@@ -363,25 +530,30 @@ const { logs: frontendLogs, clearLogs: clearFrontendLogs } = useFrontendLogs()
  */
 const backendFilteredItems = computed<readonly LogEntry[]>(() => {
   // 访问 backendLogsView 触发 computed dep；filter.getResult() 返回同一引用但 triggerRef → 强制下游
-  void backendLogsView.value
+  void backendLogsView.value;
   // 显式 dep 标识：subscribe 回调里 ++tick，computed 也会重新求值
-  void backendUpdateTick.value
+  void backendUpdateTick.value;
   // 🆕 修复 A1: spread 确保返回新引用（双保险 — 即便 subscription 回调漏 spread，下游也能失效）
-  return [...backendFilter.getResult()]
-})
+  return [...backendFilter.getResult()];
+});
 const totalBackendCount = computed(() => {
-  void backendUpdateTick.value
-  return backendFilter.totalLength
-})
-const serverOnline = ref(false)
+  void backendUpdateTick.value;
+  return backendFilter.totalLength;
+});
+const serverOnline = ref(false);
 
 function getBadgeColor(level: string): string {
   switch (level) {
-    case 'debug': return 'medium'
-    case 'info': return 'success'
-    case 'warn': return 'warning'
-    case 'error': return 'danger'
-    default: return 'medium'
+    case "debug":
+      return "medium";
+    case "info":
+      return "success";
+    case "warn":
+      return "warning";
+    case "error":
+      return "danger";
+    default:
+      return "medium";
   }
 }
 
@@ -391,39 +563,48 @@ function getBadgeColor(level: string): string {
  * 1M rebuild 实测 27ms（< 60FPS 单帧预算 16.67ms × 2，仍在用户可感知阈值外）
  */
 watch(
-  [searchText, selectedLevels],
+  [searchText, selectedLevelsArray, selectedTags],
   () => {
     backendFilter.setFilter({
-      levels: new Set<Level>([...selectedLevels.value] as Level[]),
+      levels: new Set<Level>([...selectedLevelsArray.value] as Level[]),
       searchLower: searchText.value.toLowerCase(),
-    })
+      tags: new Set<string>(selectedTags.value),
+    });
   },
-  { flush: 'post' },
-)
+  { flush: "post" }
+);
 
 const filteredFrontend = computed(() => {
-  // 前端用 useFrontendLogs 自己的 2000 cap；保持原 Array.filter 实现（2000 项下完全 OK）
-  let logs = frontendLogs.value
-  if (!selectedLevels.value.has('all')) {
-    const lvls = Array.from(selectedLevels.value)
-    logs = logs.filter((l) => lvls.includes(l.level))
+  let logs = frontendLogs.value;
+  const lvls = selectedLevelsArray.value;
+  if (lvls.length > 0) {
+    logs = logs.filter(l => lvls.includes(l.level));
   }
-  if (searchText.value) logs = logs.filter((l) => l.message.toLowerCase().includes(searchText.value.toLowerCase()))
-  return logs
-})
+  if (selectedTags.value.length > 0) {
+    const tagSet = new Set(selectedTags.value);
+    logs = logs.filter(l => {
+      if (!l.tags || l.tags.length === 0) return false;
+      return l.tags.some(t => tagSet.has(t));
+    });
+  }
+  if (searchText.value) logs = logs.filter(l => l.message.toLowerCase().includes(searchText.value.toLowerCase()));
+  return logs;
+});
 
-const totalCurrent = computed(() => activeTab.value === 'frontend' ? frontendLogs.value.length : totalBackendCount.value)
-const filteredCurrent = computed(() => activeTab.value === 'frontend' ? filteredFrontend.value.length : backendFilteredItems.value.length)
+const totalCurrent = computed(() => (activeTab.value === "frontend" ? frontendLogs.value.length : totalBackendCount.value));
+const filteredCurrent = computed(() =>
+  activeTab.value === "frontend" ? filteredFrontend.value.length : backendFilteredItems.value.length
+);
 
 /** 重复点击当前 tab 按钮时滚到顶部（VS Code / Chrome DevTools 行为） */
-function onTabClick(tab: 'frontend' | 'backend') {
+function onTabClick(tab: "frontend" | "backend") {
   if (activeTab.value === tab) {
-    scrollToTop()
+    scrollToTop();
   }
 }
 
 function onTabChange(event: CustomEvent) {
-  activeTab.value = (event.detail.value || 'frontend') as 'frontend' | 'backend'
+  activeTab.value = (event.detail.value || "frontend") as "frontend" | "backend";
 }
 
 /**
@@ -436,30 +617,30 @@ function onTabChange(event: CustomEvent) {
  * 修法：找到 .inner-scroll 后手动 addEventListener('scroll', onLogScroll, { passive: true })。
  * 用 boundScrollEl 跟踪已绑定的元素，避免重复绑定。
  */
-let boundScrollEl: HTMLElement | null = null
+let boundScrollEl: HTMLElement | null = null;
 function ensureScrollEl(): HTMLElement | null {
   if (!contentRef.value) {
-    if (typeof window !== 'undefined' && (window as any).__DEVLOGS_DEBUG__) {
-      throw new Error(`DEBUG ensureScrollEl: contentRef.value is null`)
+    if (typeof window !== "undefined" && (window as any).__DEVLOGS_DEBUG__) {
+      throw new Error(`DEBUG ensureScrollEl: contentRef.value is null`);
     }
-    return null
+    return null;
   }
-  const hostEl = ((contentRef.value as any).$el || (contentRef.value as any)) as HTMLElement | undefined
+  const hostEl = ((contentRef.value as any).$el || (contentRef.value as any)) as HTMLElement | undefined;
   if (!hostEl || !hostEl.shadowRoot) {
-    if (typeof window !== 'undefined' && (window as any).__DEVLOGS_DEBUG__) {
-      throw new Error(`DEBUG ensureScrollEl: hostEl=${!!hostEl} shadowRoot=${!!hostEl?.shadowRoot}`)
+    if (typeof window !== "undefined" && (window as any).__DEVLOGS_DEBUG__) {
+      throw new Error(`DEBUG ensureScrollEl: hostEl=${!!hostEl} shadowRoot=${!!hostEl?.shadowRoot}`);
     }
-    return null
+    return null;
   }
-  const el = hostEl.shadowRoot.querySelector('.inner-scroll') as HTMLElement | null
-  if (el && el !== scrollEl.value) scrollEl.value = el
+  const el = hostEl.shadowRoot.querySelector(".inner-scroll") as HTMLElement | null;
+  if (el && el !== scrollEl.value) scrollEl.value = el;
   // 🆕 手动绑定 scroll listener（Web Component shadow DOM 不冒泡）
   if (el && el !== boundScrollEl) {
-    if (boundScrollEl) boundScrollEl.removeEventListener('scroll', onLogScroll)
-    el.addEventListener('scroll', onLogScroll, { passive: true })
-    boundScrollEl = el
+    if (boundScrollEl) boundScrollEl.removeEventListener("scroll", onLogScroll);
+    el.addEventListener("scroll", onLogScroll, { passive: true });
+    boundScrollEl = el;
   }
-  return el
+  return el;
 }
 
 /**
@@ -467,14 +648,14 @@ function ensureScrollEl(): HTMLElement | null {
  */
 onBeforeUnmount(() => {
   if (boundScrollEl) {
-    boundScrollEl.removeEventListener('scroll', onLogScroll)
-    boundScrollEl = null
+    boundScrollEl.removeEventListener("scroll", onLogScroll);
+    boundScrollEl = null;
   }
-})
+});
 
 function scrollToTop() {
-  const el = ensureScrollEl()
-  if (el) el.scrollTop = 0
+  const el = ensureScrollEl();
+  if (el) el.scrollTop = 0;
 }
 
 /**
@@ -484,85 +665,88 @@ function scrollToTop() {
  * smooth=true 时用 scrollTo 触发平滑滚动；smooth=false 时直接赋值即生效
  */
 async function scrollToBottom(smooth = false) {
-  if (!autoScrollEnabled.value) return
-  await nextTick()
-  await new Promise<void>((r) => requestAnimationFrame(() => r()))
-  let el = ensureScrollEl()
+  if (!autoScrollEnabled.value) return;
+  await nextTick();
+  await new Promise<void>(r => requestAnimationFrame(() => r()));
+  let el = ensureScrollEl();
   if (!el) {
-    await new Promise<void>((r) => requestAnimationFrame(() => r()))
-    el = ensureScrollEl()
+    await new Promise<void>(r => requestAnimationFrame(() => r()));
+    el = ensureScrollEl();
   }
-  if (!el) return
-  if (smooth) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  else el.scrollTop = el.scrollHeight
+  if (!el) return;
+  if (smooth) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  else el.scrollTop = el.scrollHeight;
 }
 
 /** 切换自动滚动状态（toolbar ▶/⏸ 开关） */
 function toggleAutoScroll() {
-  autoScrollEnabled.value = !autoScrollEnabled.value
+  autoScrollEnabled.value = !autoScrollEnabled.value;
 }
 
 /** 浮动「↓」按钮：开启跟随 + 平滑滚到底 */
 async function onJumpToBottom() {
-  autoScrollEnabled.value = true
-  await scrollToBottom(true)
+  autoScrollEnabled.value = true;
+  await scrollToBottom(true);
 }
 
 /** 浮动「↑」按钮：滚到顶部（不影响 autoScrollEnabled 状态） */
 function onJumpToTop() {
-  const el = ensureScrollEl()
-  if (el) el.scrollTop = 0
+  const el = ensureScrollEl();
+  if (el) el.scrollTop = 0;
 }
 
 /** 浮动「↑」按钮显示条件：滚离顶部 200px 以上时显示，避免无意义闪烁 */
-const showScrollToTop = ref(false)
+const showScrollToTop = ref(false);
 /** 跟踪 ion-content 滚动以控制 ↑ 按钮显示 */
 function onLogScroll() {
-  const el = ensureScrollEl()
-  if (!el) { showScrollToTop.value = false; return }
-  showScrollToTop.value = el.scrollTop > 200
+  const el = ensureScrollEl();
+  if (!el) {
+    showScrollToTop.value = false;
+    return;
+  }
+  showScrollToTop.value = el.scrollTop > 200;
 }
 
 // 🆕 2026-06-15 修 #2：点击日志行展开详情
-const selectedLog = ref<LogEntry | null>(null)
+const selectedLog = ref<LogEntry | null>(null);
 function onLogSelect(item: LogEntry) {
-  selectedLog.value = item
+  selectedLog.value = item;
 }
 function closeLogDetail() {
-  selectedLog.value = null
+  selectedLog.value = null;
 }
 async function copyLogDetail() {
-  if (!selectedLog.value) return
-  const text = `[${selectedLog.value.timestamp}] ${selectedLog.value.level.toUpperCase()} ${selectedLog.value.message}`
-  const ok = await copyToClipboard(text)
-  if (ok) await showToast({ message: t('devlogs.logDetailCopied') })
-  else await showToast({ message: t('devlogs.copyFailed') })
+  if (!selectedLog.value) return;
+  const text = `[${selectedLog.value.timestamp}] ${selectedLog.value.level.toUpperCase()} ${selectedLog.value.message}`;
+  const ok = await copyToClipboard(text);
+  if (ok) await showToast({ message: t("devlogs.logDetailCopied") });
+  else await showToast({ message: t("devlogs.copyFailed") });
 }
 
 /** ESC 关闭详情模态 + body 滚动锁 */
 function onKeyDown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && selectedLog.value) {
-    closeLogDetail()
-    e.preventDefault()
+  if (e.key === "Escape" && selectedLog.value) {
+    closeLogDetail();
+    e.preventDefault();
   }
 }
-watch(selectedLog, (open) => {
-  if (typeof document === 'undefined') return
+watch(selectedLog, open => {
+  if (typeof document === "undefined") return;
   // 🆕 详情模态打开时锁 body 滚动，避免背景跟着滚
-  document.body.style.overflow = open ? 'hidden' : ''
-})
+  document.body.style.overflow = open ? "hidden" : "";
+});
 onMounted(() => {
-  if (typeof window !== 'undefined') window.addEventListener('keydown', onKeyDown)
-})
+  if (typeof window !== "undefined") window.addEventListener("keydown", onKeyDown);
+});
 onUnmounted(() => {
-  if (typeof window !== 'undefined') window.removeEventListener('keydown', onKeyDown)
-  if (typeof document !== 'undefined') document.body.style.overflow = ''
-})
+  if (typeof window !== "undefined") window.removeEventListener("keydown", onKeyDown);
+  if (typeof document !== "undefined") document.body.style.overflow = "";
+});
 
 /** 新日志到达的统一处理（被 frontend/backend 两个 watcher 调用） */
 function handleNewLog() {
-  if (!autoScrollEnabled.value) return
-  void scrollToBottom(false)
+  if (!autoScrollEnabled.value) return;
+  void scrollToBottom(false);
 }
 
 /**
@@ -576,124 +760,135 @@ function handleNewLog() {
 watch(
   () => frontendLogs.value.length,
   () => {
-    if (activeTab.value === 'frontend') handleNewLog()
+    if (activeTab.value === "frontend") handleNewLog();
   },
-  { flush: 'post' },
-)
+  { flush: "post" }
+);
 watch(
   backendUpdateTick,
   () => {
-    if (activeTab.value === 'backend') handleNewLog()
+    if (activeTab.value === "backend") handleNewLog();
   },
-  { flush: 'post' },
-)
+  { flush: "post" }
+);
 
 async function handleCopy() {
-  const logs = activeTab.value === 'frontend' ? filteredFrontend.value : backendFilteredItems.value
-  const text = logs.map((l) => `[${l.timestamp}] ${l.level.toUpperCase()} ${l.message}`).join('\n')
-  const ok = await copyToClipboard(text)
+  const logs = activeTab.value === "frontend" ? filteredFrontend.value : backendFilteredItems.value;
+  const text = logs.map(l => `[${l.timestamp}] ${l.level.toUpperCase()} ${l.message}`).join("\n");
+  const ok = await copyToClipboard(text);
   if (ok) {
     showToast({
-      message: t('devlogs.copied', { count: String(logs.length) }),
+      message: t("devlogs.copied", { count: String(logs.length) }),
       duration: 1500,
-      color: 'success',
-    })
+      color: "success",
+    });
   } else {
-    showToast({ message: t('devlogs.copyFailed'), duration: 1500, color: 'danger' })
+    showToast({ message: t("devlogs.copyFailed"), duration: 1500, color: "danger" });
   }
 }
 
 async function handleClear() {
   const alert = await alertController.create({
-    header: t('devlogs.clearConfirm'),
+    header: t("devlogs.clearConfirm"),
     buttons: [
-      { text: t('common.cancel'), role: 'cancel' },
+      { text: t("common.cancel"), role: "cancel" },
       {
-        text: t('common.confirm'), role: 'destructive',
+        text: t("common.confirm"),
+        role: "destructive",
         handler: () => {
-          if (activeTab.value === 'frontend') clearFrontendLogs()
-          else backendFilter.clear()  // 🆕 1M+ 容量：filter.clear() O(1)
+          if (activeTab.value === "frontend") {
+            clearFrontendLogs();
+          } else {
+            backendFilter.clear();
+            backendTagCounts.clear();
+          }
         },
       },
     ],
-  })
-  await alert.present()
+  });
+  await alert.present();
 }
 
 function onWsMessage(data: any) {
-  if (data && data.type === 'log' && data.data) {
-    const logData = data.data
-    const level = ['debug', 'info', 'warn', 'error'].includes(logData.level) ? logData.level : 'info'
-    const message = String(logData.message || logData.msg || '')
-    if (!message && !logData.message) return
+  if (data && data.type === "log" && data.data) {
+    const logData = data.data;
+    const level = ["debug", "info", "warn", "error"].includes(logData.level) ? logData.level : "info";
+    const message = String(logData.message || logData.msg || "");
+    if (!message && !logData.message) return;
+    const tags = normalizeTags(logData.tags);
     queueBackendLog({
       id: ++nextId,
-      timestamp: logData.timestamp || new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      timestamp: logData.timestamp || new Date().toLocaleTimeString("zh-CN", { hour12: false }),
       level,
       message,
-      // 🆕 2026-06-16：来源 + 堆栈透传
-      //  WS 推来的 → 'ws_log_handler'（真机主路径）
-      //  透传 stack（如果后端 slog 后续扩展推 stack，这里自动显示）
-      source: typeof logData.source === 'string' ? logData.source : 'ws_log_handler',
-      stack: typeof logData.stack === 'string' ? logData.stack : undefined,
-    })
-    return
+      source: typeof logData.source === "string" ? logData.source : "ws_log_handler",
+      stack: typeof logData.stack === "string" ? logData.stack : undefined,
+      tags,
+    });
+    return;
   }
-  if (data && data.type && data.type !== 'log' && data.type !== 'pong' && data.type !== 'server:status') {
-    const msg = typeof data === 'string' ? data : JSON.stringify(data)
-    queueBackendLog({ id: ++nextId, timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }), level: 'debug', message: msg, source: 'ws_log_handler' })
+  if (data && data.type && data.type !== "log" && data.type !== "pong" && data.type !== "server:status") {
+    const msg = typeof data === "string" ? data : JSON.stringify(data);
+    queueBackendLog({
+      id: ++nextId,
+      timestamp: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+      level: "debug",
+      message: msg,
+      source: "ws_log_handler",
+      tags: ["backend", "websocket", "debug"],
+    });
   }
 }
 
 function onServerStatus(data: any) {
-  serverOnline.value = data?.online ?? false
+  serverOnline.value = data?.online ?? false;
 }
 
 onMounted(async () => {
-  await nextTick()
+  await nextTick();
 
   // transport 已在 App.vue 启动为 useWebSocket 单例，DevLogs 只读 connectionState 不再 connect
-  eventBus.on('ws:message', onWsMessage)
-  eventBus.on('server:status', onServerStatus)
+  eventBus.on("ws:message", onWsMessage);
+  eventBus.on("server:status", onServerStatus);
 
-  serverOnline.value = transport.connectionState.value === 'connected'
+  serverOnline.value = transport.connectionState.value === "connected";
   if (!serverOnline.value) {
-    const result = await checkServerStatus()
-    serverOnline.value = result.online
+    const result = await checkServerStatus();
+    serverOnline.value = result.online;
   }
 
   // 🆕 2026-06-16 修复：ion-content 异步渲染时 .inner-scroll 还没 ready
   // 旧逻辑：onMounted 调一次 ensureScrollEl → 可能仍 null → virtualizer 一直空 → 列表全白
   // 修法：多次重试（rAF + 0ms/50ms/150ms/300ms）+ ResizeObserver 兜底监听
-  let retryCount = 0
-  const maxRetries = 8
+  let retryCount = 0;
+  const maxRetries = 8;
   const tryInitScrollEl = (): void => {
-    const el = ensureScrollEl()
+    const el = ensureScrollEl();
     if (el) {
       // 拿到 .inner-scroll 后，强制 virtualizer 重算（首次 watch 已触发 measure()，
       // 这里再 measure 一次确保虚拟列表渲染首屏 items）
-      virtualizerForceMeasure()
-      return
+      virtualizerForceMeasure();
+      return;
     }
-    retryCount++
+    retryCount++;
     if (retryCount < maxRetries) {
       // 指数退避：0ms → 50ms → 100ms → 150ms → 200ms → 250ms → 300ms
-      const delay = Math.min(50 * retryCount, 300)
-      setTimeout(tryInitScrollEl, delay)
+      const delay = Math.min(50 * retryCount, 300);
+      setTimeout(tryInitScrollEl, delay);
     }
-  }
-  tryInitScrollEl()
+  };
+  tryInitScrollEl();
 
   // 兜底：ResizeObserver 监听 contentRef 尺寸变化（ion-content 完成渲染时会触发）
-  if (typeof ResizeObserver !== 'undefined' && contentRef.value) {
-    const hostEl = ((contentRef.value as any).$el || contentRef.value) as HTMLElement | undefined
+  if (typeof ResizeObserver !== "undefined" && contentRef.value) {
+    const hostEl = ((contentRef.value as any).$el || contentRef.value) as HTMLElement | undefined;
     if (hostEl) {
       const ro = new ResizeObserver(() => {
-        if (!scrollEl.value) tryInitScrollEl()
-      })
-      ro.observe(hostEl)
+        if (!scrollEl.value) tryInitScrollEl();
+      });
+      ro.observe(hostEl);
       // 组件卸载时断开（onBeforeUnmount 已存在清理 hook，这里先缓存到 ro 变量）
-      ;(contentRef.value as any).__devlogsRO__ = ro
+      (contentRef.value as any).__devlogsRO__ = ro;
     }
   }
 
@@ -701,37 +896,36 @@ onMounted(async () => {
   // 不依赖 WS / http-poll 模式：HTTP 拉一次 GET /api/logs/recent
   // 真机 WS 模式：历史日志（启动前）补齐；WS 推的实时日志仍通过 onWsMessage 收
   // OpenPreview 沙箱：http-poll 模式也调用 getRecentBackendLogs，但这是冷启动多拉一次（幂等）
+  // 🆕 2026-06-18 v4 Bug2 修复：推迟到 requestIdleCallback + pushLogsInChunks 分块推
+  //   - 旧行为：onMounted 同步 for 循环 queueBackendLog + rAF 一次性 pushMany(arr) → 大 list 卡 UI
+  //   - 新行为：requestIdleCallback 推迟到 main thread idle（首次切 tab 渲染后）→ 分块 200 条/帧推
   if (serverOnline.value) {
-    try {
-      const resp = await getRecentBackendLogs()
-      for (const e of resp.logs || []) {
-        const lvl: Level = ['debug', 'info', 'warn', 'error'].includes(e.level) ? (e.level as Level) : 'info'
-        queueBackendLog({
-          id: ++nextId,
-          timestamp: e.timestamp || new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-          level: lvl,
-          message: e.message,
-        })
+    const scheduleIdle = (cb: () => void) => {
+      if (typeof window !== "undefined" && typeof (window as any).requestIdleCallback === "function") {
+        (window as any).requestIdleCallback(cb, { timeout: 1500 });
+      } else {
+        setTimeout(cb, 200);
       }
-    } catch (err) {
-      console.warn('[DevLogs] cold-start fetch recent logs failed:', err instanceof Error ? err.message : String(err))
-    }
+    };
+    scheduleIdle(() => {
+      void coldStartLoadRecentLogs();
+    });
   }
 
   // 写入一条启动日志（INFO/WARN 取决于 server 状态）——首条直接 push 即可
   backendFilter.push({
     id: ++nextId,
-    timestamp: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
-    level: serverOnline.value ? 'info' : 'warn',
-    message: `DevLogs ready, server ${serverOnline.value ? 'online' : 'offline'} (transport=${transport.connectionState.value})`,
-  })
-})
+    timestamp: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+    level: serverOnline.value ? "info" : "warn",
+    message: `DevLogs ready, server ${serverOnline.value ? "online" : "offline"} (transport=${transport.connectionState.value})`,
+  });
+});
 
 onUnmounted(() => {
-  eventBus.off('ws:message', onWsMessage)
-  eventBus.off('server:status', onServerStatus)
-  unsubBackendFilter()
-})
+  eventBus.off("ws:message", onWsMessage);
+  eventBus.off("server:status", onServerStatus);
+  unsubBackendFilter();
+});
 
 /** 暴露给单元测试（生产环境无副作用） */
 defineExpose({
@@ -741,20 +935,24 @@ defineExpose({
   toggleAutoScroll,
   onJumpToBottom,
   scrollToBottom,
-  setActiveTab(tab: 'frontend' | 'backend') { activeTab.value = tab },
+  setActiveTab(tab: "frontend" | "backend") {
+    activeTab.value = tab;
+  },
   /**
    * 测试专用：替换后端日志数组。
    * 走 setBackendLogs 显式赋值（Vue 自动 unwrap ref 导致 vm.backendLogs.value 无法访问）。
    * 重构后通过 IncrementalFilter.clear() + pushMany 模拟。
    */
   setBackendLogs(arr: LogEntry[]) {
-    backendFilter.clear()
-    if (arr.length > 0) backendFilter.pushMany(arr)
+    backendFilter.clear();
+    if (arr.length > 0) backendFilter.pushMany(arr);
   },
-  getBackendLogs(): readonly LogEntry[] { return backendFilter.getResult() },
+  getBackendLogs(): readonly LogEntry[] {
+    return backendFilter.getResult();
+  },
   /** 测试专用：暴露 filter 实例用于高级断言 */
   backendFilter,
-})
+});
 </script>
 
 <style scoped>
@@ -1127,5 +1325,60 @@ defineExpose({
   gap: 8px;
   padding: 10px 16px;
   border-top: 1px solid var(--ion-border-color, rgba(0, 0, 0, 0.08));
+}
+
+.filter-dropdowns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.log-source-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 12px;
+  flex-shrink: 0;
+  line-height: 1;
+  user-select: none;
+}
+
+.log-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.log-tag-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 12px;
+  background: var(--ion-color-light-shade, #eee);
+  color: var(--ion-color-dark, #333);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: var(--ion-font-family, sans-serif);
+}
+
+.log-tag-chip:hover {
+  background: var(--ion-color-primary-tint, #e8f0fe);
+  color: var(--ion-color-primary, #3880ff);
+}
+
+@media (prefers-color-scheme: dark) {
+  .log-tag-chip {
+    background: var(--ion-color-dark-shade, #2a2a2a);
+    color: var(--ion-color-light, #ddd);
+  }
+
+  .log-tag-chip:hover {
+    background: rgba(56, 128, 255, 0.2);
+    color: var(--ion-color-primary, #6ba3ff);
+  }
 }
 </style>

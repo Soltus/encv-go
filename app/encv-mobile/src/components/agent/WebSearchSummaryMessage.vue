@@ -29,38 +29,38 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { searchOutline, chevronUpOutline, chevronDownOutline } from 'ionicons/icons'
-import MessageAuthor from './MessageAuthor.vue'
-import StatusBadge from './StatusBadge.vue'
-import { useI18n } from '@/composables/useI18n'
-import type { ToolCall } from '@/composables/useAgent'
+import { chevronDownOutline, chevronUpOutline, searchOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
+import type { ToolCall } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
+import MessageAuthor from "./MessageAuthor.vue";
+import StatusBadge from "./StatusBadge.vue";
 
 const props = defineProps<{
-  queries: string[]
-  toolCalls: ToolCall[]
+  queries: string[];
+  toolCalls: ToolCall[];
   /** 每个查询的命中数（与 queries 一一对应，可选） */
-  results?: number[]
-}>()
+  results?: number[];
+}>();
 
-const { t } = useI18n()
-const expanded = ref(false)
-const icon = searchOutline
-const chevronUp = chevronUpOutline
-const chevronDown = chevronDownOutline
-const label = computed(() => t('agent.webSearch'))
+const { t } = useI18n();
+const expanded = ref(false);
+const icon = searchOutline;
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
+const label = computed(() => t("agent.webSearch"));
 
 const metaText = computed(() => {
-  const n = props.queries.length
-  return n > 1 ? `${n} ${t('agent.queries')}` : `${n} ${t('agent.query')}`
-})
+  const n = props.queries.length;
+  return n > 1 ? `${n} ${t("agent.queries")}` : `${n} ${t("agent.query")}`;
+});
 
 const totalHits = computed(() => {
-  if (!props.results) return null
-  let s = 0
-  for (const r of props.results) s += r
-  return s > 0 ? s : null
-})
+  if (!props.results) return null;
+  let s = 0;
+  for (const r of props.results) s += r;
+  return s > 0 ? s : null;
+});
 </script>
 
 <style scoped>

@@ -96,38 +96,38 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
-import { IonIcon } from '@ionic/vue'
+import { IonIcon } from "@ionic/vue";
 import {
-  terminalOutline,
-  codeSlashOutline,
-  shieldCheckmarkOutline,
-  helpCircleOutline,
-  searchOutline,
-  listOutline,
-  chevronUpOutline,
   chevronDownOutline,
-} from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import type { ToolCall, Decision, ToolKind } from '@/composables/useAgent'
+  chevronUpOutline,
+  codeSlashOutline,
+  helpCircleOutline,
+  listOutline,
+  searchOutline,
+  shieldCheckmarkOutline,
+  terminalOutline,
+} from "ionicons/icons";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import type { Decision, ToolCall, ToolKind } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
 
 // 模板用 chevronUp/chevronDown 引用，必须从 import 别名重绑定，否则
 // 模板引用未定义变量（vue-tsc 报 chevronUp/Down 不在 template scope）。
-const chevronUp = chevronUpOutline
-const chevronDown = chevronDownOutline
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
 
 const props = defineProps<{
-  toolCall: ToolCall
-  onDecide: (toolCallId: string, decision: Decision) => void
-  isProcessing: boolean
-}>()
+  toolCall: ToolCall;
+  onDecide: (toolCallId: string, decision: Decision) => void;
+  isProcessing: boolean;
+}>();
 
-const { t } = useI18n()
-const processingDecision = ref<Decision | null>(null)
-const diffExpanded = ref(false)
-let safetyTimer: number | null = null
+const { t } = useI18n();
+const processingDecision = ref<Decision | null>(null);
+const diffExpanded = ref(false);
+let safetyTimer: number | null = null;
 
-const MAX_FILE_CHIPS = 6
+const MAX_FILE_CHIPS = 6;
 
 const kindIcon = computed(() => {
   const map: Record<ToolKind, typeof terminalOutline> = {
@@ -137,120 +137,123 @@ const kindIcon = computed(() => {
     webSearch: searchOutline,
     plan: listOutline,
     unknown: helpCircleOutline,
-  }
-  return map[props.toolCall.kind] || helpCircleOutline
-})
+  };
+  return map[props.toolCall.kind] || helpCircleOutline;
+});
 
 const titleText = computed(() => {
   const kindMap: Record<ToolKind, string> = {
-    command: t('agent.tool.command'),
-    fileChange: t('agent.tool.fileChange'),
-    readOnly: t('agent.tool.readOnly'),
-    webSearch: t('agent.tool.webSearch'),
-    plan: t('agent.plan'),
-    unknown: t('agent.tool.unknown'),
-  }
-  const kindLabel = kindMap[props.toolCall.kind] || props.toolCall.kind
-  return `${kindLabel}：${props.toolCall.name}`
-})
+    command: t("agent.tool.command"),
+    fileChange: t("agent.tool.fileChange"),
+    readOnly: t("agent.tool.readOnly"),
+    webSearch: t("agent.tool.webSearch"),
+    plan: t("agent.plan"),
+    unknown: t("agent.tool.unknown"),
+  };
+  const kindLabel = kindMap[props.toolCall.kind] || props.toolCall.kind;
+  return `${kindLabel}：${props.toolCall.name}`;
+});
 
 const reasonText = computed(() => {
   // 解析 args 拿第一个 string 字段作为 "reason" 提示
   try {
-    const parsed = JSON.parse(props.toolCall.args)
-    if (parsed && typeof parsed === 'object') {
-      const reasonField = (parsed as Record<string, unknown>).reason
-      if (typeof reasonField === 'string' && reasonField.trim()) return reasonField
+    const parsed = JSON.parse(props.toolCall.args);
+    if (parsed && typeof parsed === "object") {
+      const reasonField = (parsed as Record<string, unknown>).reason;
+      if (typeof reasonField === "string" && reasonField.trim()) return reasonField;
     }
   } catch {
     // ignore
   }
-  return ''
-})
+  return "";
+});
 
-interface SummaryRow { label: string; value: string }
+interface SummaryRow {
+  label: string;
+  value: string;
+}
 
 const bodySummary = computed<SummaryRow[]>(() => {
-  const rows: SummaryRow[] = []
-  let args: Record<string, unknown> = {}
+  const rows: SummaryRow[] = [];
+  let args: Record<string, unknown> = {};
   try {
-    const parsed = JSON.parse(props.toolCall.args)
-    if (parsed && typeof parsed === 'object') args = parsed as Record<string, unknown>
+    const parsed = JSON.parse(props.toolCall.args);
+    if (parsed && typeof parsed === "object") args = parsed as Record<string, unknown>;
   } catch {
     // ignore
   }
 
-  if (typeof args.command === 'string' && args.command.trim()) {
-    rows.push({ label: 'Command', value: args.command })
+  if (typeof args.command === "string" && args.command.trim()) {
+    rows.push({ label: "Command", value: args.command });
   }
-  if (typeof args.cwd === 'string' && args.cwd.trim()) {
-    rows.push({ label: 'CWD', value: args.cwd })
+  if (typeof args.cwd === "string" && args.cwd.trim()) {
+    rows.push({ label: "CWD", value: args.cwd });
   }
   if (Array.isArray(args.permissions) && args.permissions.length > 0) {
-    rows.push({ label: 'Permissions', value: (args.permissions as unknown[]).map(String).join(', ') })
+    rows.push({ label: "Permissions", value: (args.permissions as unknown[]).map(String).join(", ") });
   }
-  return rows
-})
+  return rows;
+});
 
 const filesChips = computed<string[]>(() => {
-  let args: Record<string, unknown> = {}
+  let args: Record<string, unknown> = {};
   try {
-    const parsed = JSON.parse(props.toolCall.args)
-    if (parsed && typeof parsed === 'object') args = parsed as Record<string, unknown>
+    const parsed = JSON.parse(props.toolCall.args);
+    if (parsed && typeof parsed === "object") args = parsed as Record<string, unknown>;
   } catch {
-    return []
+    return [];
   }
-  const candidates: string[] = []
+  const candidates: string[] = [];
   if (Array.isArray(args.changedFiles)) {
     for (const f of args.changedFiles) {
-      if (typeof f === 'string') candidates.push(f)
-      else if (f && typeof f === 'object' && typeof (f as Record<string, unknown>).path === 'string') {
-        candidates.push((f as Record<string, string>).path)
+      if (typeof f === "string") candidates.push(f);
+      else if (f && typeof f === "object" && typeof (f as Record<string, unknown>).path === "string") {
+        candidates.push((f as Record<string, string>).path);
       }
     }
   } else if (Array.isArray(args.input_paths)) {
     for (const p of args.input_paths) {
-      if (typeof p === 'string') candidates.push(p)
+      if (typeof p === "string") candidates.push(p);
     }
-  } else if (typeof args.path === 'string') {
-    candidates.push(args.path)
+  } else if (typeof args.path === "string") {
+    candidates.push(args.path);
   }
-  return candidates.slice(0, MAX_FILE_CHIPS)
-})
+  return candidates.slice(0, MAX_FILE_CHIPS);
+});
 
 const extraFilesCount = computed(() => {
-  let args: Record<string, unknown> = {}
+  let args: Record<string, unknown> = {};
   try {
-    const parsed = JSON.parse(props.toolCall.args)
-    if (parsed && typeof parsed === 'object') args = parsed as Record<string, unknown>
+    const parsed = JSON.parse(props.toolCall.args);
+    if (parsed && typeof parsed === "object") args = parsed as Record<string, unknown>;
   } catch {
-    return 0
+    return 0;
   }
-  let total = 0
-  if (Array.isArray(args.changedFiles)) total = args.changedFiles.length
-  else if (Array.isArray(args.input_paths)) total = args.input_paths.length
-  else if (typeof args.path === 'string') total = 1
-  return Math.max(0, total - MAX_FILE_CHIPS)
-})
+  let total = 0;
+  if (Array.isArray(args.changedFiles)) total = args.changedFiles.length;
+  else if (Array.isArray(args.input_paths)) total = args.input_paths.length;
+  else if (typeof args.path === "string") total = 1;
+  return Math.max(0, total - MAX_FILE_CHIPS);
+});
 
 const diffText = computed(() => {
-  let args: Record<string, unknown> = {}
+  let args: Record<string, unknown> = {};
   try {
-    const parsed = JSON.parse(props.toolCall.args)
-    if (parsed && typeof parsed === 'object') args = parsed as Record<string, unknown>
+    const parsed = JSON.parse(props.toolCall.args);
+    if (parsed && typeof parsed === "object") args = parsed as Record<string, unknown>;
   } catch {
-    return ''
+    return "";
   }
-  if (typeof args.diff === 'string') return args.diff
-  if (typeof args.content === 'string' && props.toolCall.kind === 'fileChange') {
-    return args.content
+  if (typeof args.diff === "string") return args.diff;
+  if (typeof args.content === "string" && props.toolCall.kind === "fileChange") {
+    return args.content;
   }
-  return ''
-})
+  return "";
+});
 
-const canShowSessionGrant = computed(() => props.toolCall.kind !== 'readOnly')
+const canShowSessionGrant = computed(() => props.toolCall.kind !== "readOnly");
 
-const disabled = computed(() => props.isProcessing || processingDecision.value !== null)
+const disabled = computed(() => props.isProcessing || processingDecision.value !== null);
 
 /**
  * 当父组件通知流结束（isProcessing 变 false）时，
@@ -263,40 +266,40 @@ watch(
   () => props.isProcessing,
   (curr, prev) => {
     if (prev === true && curr === false) {
-      processingDecision.value = null
+      processingDecision.value = null;
       if (safetyTimer !== null) {
-        window.clearTimeout(safetyTimer)
-        safetyTimer = null
+        window.clearTimeout(safetyTimer);
+        safetyTimer = null;
       }
     }
-  },
-)
+  }
+);
 
 onBeforeUnmount(() => {
   if (safetyTimer !== null) {
-    window.clearTimeout(safetyTimer)
-    safetyTimer = null
+    window.clearTimeout(safetyTimer);
+    safetyTimer = null;
   }
-})
+});
 
 function handleDecide(decision: Decision) {
-  if (disabled.value) return
-  processingDecision.value = decision
+  if (disabled.value) return;
+  processingDecision.value = decision;
   try {
-    props.onDecide(props.toolCall.id, decision)
+    props.onDecide(props.toolCall.id, decision);
   } finally {
     // safetyTimer：网络挂起兜底 5s 强制清空，防止按钮永久 disabled
-    if (safetyTimer !== null) window.clearTimeout(safetyTimer)
+    if (safetyTimer !== null) window.clearTimeout(safetyTimer);
     safetyTimer = window.setTimeout(() => {
-      if (processingDecision.value === decision) processingDecision.value = null
-      safetyTimer = null
-    }, 5000)
+      if (processingDecision.value === decision) processingDecision.value = null;
+      safetyTimer = null;
+    }, 5000);
   }
 }
 
 function truncatePath(p: string): string {
-  if (p.length <= 28) return p
-  return '…' + p.slice(p.length - 27)
+  if (p.length <= 28) return p;
+  return "…" + p.slice(p.length - 27);
 }
 </script>
 

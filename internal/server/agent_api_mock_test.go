@@ -32,7 +32,7 @@ func buildMockModeConfig(t *testing.T, agentCfg config.Agent) string {
 
 	// 只放 string 字段以兼容 readAgentConfig 的 map[string]string
 	agentSettings := map[string]interface{}{
-		"openai_api_key": "sk-mock-test-placeholder",
+		"openai_api_key":  "sk-mock-test-placeholder",
 		"openai_base_url": "https://api.openai.com",
 		"openai_model":    "gpt-4o",
 		"mock_mode":       agentCfg.MockMode,

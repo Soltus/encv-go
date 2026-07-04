@@ -34,19 +34,19 @@
 </template>
 
 <script setup lang="ts">
-import type { ErrorChainStep } from '@/composables/useErrorAnalyzer'
+import type { ErrorChainStep } from "@/composables/useErrorAnalyzer";
 
 defineProps<{
-  chain: ErrorChainStep[]
-}>()
+  chain: ErrorChainStep[];
+}>();
 
 function getGlyph(step: ErrorChainStep, _idx: number): string {
-  if (step.severity === 'error') return '✕'
-  if (step.severity === 'warning') return '!'
+  if (step.severity === "error") return "✕";
+  if (step.severity === "warning") return "!";
   // info: 前置阶段用 '✓'，未到达阶段用 '○'
   // 通过"detail 是否包含"未到达""判断
-  if (step.detail.includes('未到达')) return '○'
-  return '✓'
+  if (step.detail.includes("未到达")) return "○";
+  return "✓";
 }
 </script>
 

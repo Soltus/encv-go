@@ -18,47 +18,52 @@
  *   - 80-95% 黄色
  *   - > 95%  红色
  */
-import { computed } from 'vue'
-import type { TokenSnapshot } from '../../types/tokenSnapshot'
+import { computed } from "vue";
+import type { TokenSnapshot } from "../../types/tokenSnapshot";
 
 const props = withDefaults(
   defineProps<{
-    snapshot: TokenSnapshot
+    snapshot: TokenSnapshot;
     /** DeepSeek context window size (default 1M) */
-    contextWindow?: number
+    contextWindow?: number;
   }>(),
-  { contextWindow: 1_000_000 },
-)
+  { contextWindow: 1_000_000 }
+);
 
-const usagePercent = computed(() => props.snapshot.contextUsagePercent)
-const warningLevel = computed<'ok' | 'green' | 'yellow' | 'red' | 'force'>(() => {
-  const pct = usagePercent.value
-  if (pct >= 0.98) return 'force'
-  if (pct >= 0.95) return 'red'
-  if (pct >= 0.8) return 'yellow'
-  if (pct >= 0.3) return 'green'
-  return 'ok'
-})
+const usagePercent = computed(() => props.snapshot.contextUsagePercent);
+const warningLevel = computed<"ok" | "green" | "yellow" | "red" | "force">(() => {
+  const pct = usagePercent.value;
+  if (pct >= 0.98) return "force";
+  if (pct >= 0.95) return "red";
+  if (pct >= 0.8) return "yellow";
+  if (pct >= 0.3) return "green";
+  return "ok";
+});
 
 const levelColor = computed(() => {
   switch (warningLevel.value) {
-    case 'ok': return '#4caf50'
-    case 'green': return '#4caf50'
-    case 'yellow': return '#ffc107'
-    case 'red': return '#ff5252'
-    case 'force': return '#b71c1c'
+    case "ok":
+      return "#4caf50";
+    case "green":
+      return "#4caf50";
+    case "yellow":
+      return "#ffc107";
+    case "red":
+      return "#ff5252";
+    case "force":
+      return "#b71c1c";
   }
-})
+});
 
 const formatTokens = (n: number): string => {
-  if (n < 1000) return `${n}`
-  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`
-  return `${(n / 1_000_000).toFixed(2)}M`
-}
+  if (n < 1000) return `${n}`;
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
+  return `${(n / 1_000_000).toFixed(2)}M`;
+};
 
-const formatPercent = (n: number): string => `${(n * 100).toFixed(1)}%`
-const formatSpeed = (n: number): string => `${n.toFixed(1)} t/s`
-const formatLatency = (ms: number): string => ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`
+const formatPercent = (n: number): string => `${(n * 100).toFixed(1)}%`;
+const formatSpeed = (n: number): string => `${n.toFixed(1)} t/s`;
+const formatLatency = (ms: number): string => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`);
 </script>
 
 <template>

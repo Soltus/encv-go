@@ -30,7 +30,7 @@ func EncryptPathV2(ctx context.Context, inputPath, outputDir string) error {
 		if err != nil {
 			return err
 		}
-		_, err = plugins.EncryptFileWithPlugin(ctx, p, inputPath, filepath.Dir(inputPath), outputDir)
+		_, err = plugins.EncryptFileWithPlugin(ctx, p, inputPath, filepath.Dir(inputPath), outputDir, nil)
 		return err
 	}
 }

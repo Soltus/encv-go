@@ -17,28 +17,18 @@
  *  - 'unknown'：default
  */
 
-import type {
-  TestDescriptor,
-  WebDavTestContext,
-  TestCaseResult,
-  TestCaseStatus,
-  AssertionFailure,
-} from '@/types/webdav-test'
+import type { AssertionFailure, TestCaseResult, TestCaseStatus, TestDescriptor, WebDavTestContext } from "@/types/webdav-test";
 
-const DEFAULT_TIMEOUT_MS = 15_000
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 export interface RunCaseOptions {
   /** 用户手动 abort signal（取消测试） */
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal;
   /** 翻译函数（前端注入，runner 不耦合 i18n） */
-  translateName: (id: string) => string
+  translateName: (id: string) => string;
 }
 
-export type RunCaseFn = (
-  desc: TestDescriptor,
-  ctx: WebDavTestContext,
-  options?: RunCaseOptions
-) => Promise<TestCaseResult>
+export type RunCaseFn = (desc: TestDescriptor, ctx: WebDavTestContext, options?: RunCaseOptions) => Promise<TestCaseResult>;
 
 export function useWebDavTestRunner() {
   /**
@@ -47,152 +37,146 @@ export function useWebDavTestRunner() {
   async function runCase(
     desc: TestDescriptor,
     ctx: WebDavTestContext,
-    options: RunCaseOptions = { translateName: (id) => id }
+    options: RunCaseOptions = { translateName: id => id }
   ): Promise<TestCaseResult> {
-    const start = Date.now()
+    const start = Date.now();
 
     // 1. skip 判断
-    if (typeof desc.skip === 'function' ? desc.skip(ctx) : desc.skip === true) {
+    if (typeof desc.skip === "function" ? desc.skip(ctx) : desc.skip === true) {
       return {
         id: desc.id,
         name: options.translateName(desc.id),
         module: desc.module,
-        status: 'skipped',
+        status: "skipped",
         durationMs: 0,
-      }
+      };
     }
 
     // 2. 构造请求参数
-    const method = desc.method
-    const url = typeof desc.url === 'function' ? desc.url(ctx) : desc.url
-    const headers = typeof desc.headers === 'function'
-      ? desc.headers(ctx)
-      : (desc.headers ?? {})
-    const body = (typeof desc.body === 'function' ? desc.body(ctx) : desc.body) ?? null
+    const method = desc.method;
+    const url = typeof desc.url === "function" ? desc.url(ctx) : desc.url;
+    const headers = typeof desc.headers === "function" ? desc.headers(ctx) : (desc.headers ?? {});
+    const body = (typeof desc.body === "function" ? desc.body(ctx) : desc.body) ?? null;
 
     // 注入 Basic Auth（如果 ctx.auth 有 username）
-    const finalHeaders: Record<string, string> = { ...headers }
-    if (ctx.auth.username && finalHeaders['Authorization'] === undefined) {
-      finalHeaders['Authorization'] = basicAuthHeader(ctx.auth)
+    const finalHeaders: Record<string, string> = { ...headers };
+    if (ctx.auth.username && finalHeaders["Authorization"] === undefined) {
+      finalHeaders["Authorization"] = basicAuthHeader(ctx.auth);
     }
 
-    const timeoutMs = desc.timeoutMs ?? DEFAULT_TIMEOUT_MS
-    const controller = new AbortController()
-    const linkedSignal = linkAbortSignals(controller, options.abortSignal, ctx.abortSignal)
+    const timeoutMs = desc.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const controller = new AbortController();
+    const linkedSignal = linkAbortSignals(controller, options.abortSignal, ctx.abortSignal);
 
-    let timer: ReturnType<typeof setTimeout> | null = null
+    let timer: ReturnType<typeof setTimeout> | null = null;
     if (timeoutMs > 0) {
-      timer = setTimeout(() => controller.abort(), timeoutMs)
+      timer = setTimeout(() => controller.abort(), timeoutMs);
     }
 
     try {
       // 3. beforeRun 钩子
-      if (desc.beforeRun) await desc.beforeRun(ctx)
+      if (desc.beforeRun) await desc.beforeRun(ctx);
 
       // 4. 执行 HTTP 请求（支持并发 / 重复）
-      const iterations = desc.iterations ?? 1
-      const concurrency = desc.concurrency ?? 1
-      const iterResults: { status: number; durationMs: number; passed: boolean }[] = []
+      const iterations = desc.iterations ?? 1;
+      const concurrency = desc.concurrency ?? 1;
+      const iterResults: { status: number; durationMs: number; passed: boolean }[] = [];
 
-      let primaryResponse: Response | null = null
-      let primaryBody = ''
-      let primaryError: Error | null = null
+      let primaryResponse: Response | null = null;
+      let primaryBody = "";
+      let primaryError: Error | null = null;
 
       for (let i = 0; i < iterations; i++) {
         const responses = await Promise.all(
-          Array.from({ length: concurrency }, () =>
-            runSingleFetch(url, method, finalHeaders, body, linkedSignal.signal)
-          )
-        )
+          Array.from({ length: concurrency }, () => runSingleFetch(url, method, finalHeaders, body, linkedSignal.signal))
+        );
 
         // 验证所有并发响应 status 一致
         for (const r of responses) {
           if (r.error) {
-            iterResults.push({ status: 0, durationMs: 0, passed: false })
-            if (!primaryError) primaryError = r.error
+            iterResults.push({ status: 0, durationMs: 0, passed: false });
+            if (!primaryError) primaryError = r.error;
           } else if (r.response) {
-            iterResults.push({ status: r.response.status, durationMs: r.durationMs, passed: true })
+            iterResults.push({ status: r.response.status, durationMs: r.durationMs, passed: true });
             if (!primaryResponse) {
-              primaryResponse = r.response
-              primaryBody = r.body
+              primaryResponse = r.response;
+              primaryBody = r.body;
             }
           }
         }
       }
 
-      if (timer) clearTimeout(timer)
+      if (timer) clearTimeout(timer);
 
       // 5. 验证
-      let passed = true
-      let assertionFailure: AssertionFailure | null = null
-      let errorKind: TestCaseResult['errorKind']
-      let error: string | undefined
+      let passed = true;
+      let assertionFailure: AssertionFailure | null = null;
+      let errorKind: TestCaseResult["errorKind"];
+      let error: string | undefined;
 
       if (primaryError) {
-        if (primaryError.name === 'AbortError') {
-          passed = false
-          errorKind = 'timeout'
-          error = `timeout after ${timeoutMs}ms`
+        if (primaryError.name === "AbortError") {
+          passed = false;
+          errorKind = "timeout";
+          error = `timeout after ${timeoutMs}ms`;
         } else {
-          passed = false
-          errorKind = 'network'
-          error = primaryError.message
+          passed = false;
+          errorKind = "network";
+          error = primaryError.message;
         }
       } else if (primaryResponse) {
-        const status = primaryResponse.status
-        const expected = desc.expect.status
-        const statusNotIn = desc.expect.statusNotIn ?? []
-        const expectedList = expected !== undefined
-          ? (Array.isArray(expected) ? expected : [expected])
-          : null
+        const status = primaryResponse.status;
+        const expected = desc.expect.status;
+        const statusNotIn = desc.expect.statusNotIn ?? [];
+        const expectedList = expected !== undefined ? (Array.isArray(expected) ? expected : [expected]) : null;
 
         if (expectedList && !expectedList.includes(status)) {
-          passed = false
-          errorKind = status >= 500 ? 'http_5xx' : 'http_4xx'
-          error = `expected status ${expectedList.join('|')}, got ${status}`
+          passed = false;
+          errorKind = status >= 500 ? "http_5xx" : "http_4xx";
+          error = `expected status ${expectedList.join("|")}, got ${status}`;
         } else if (statusNotIn.length > 0 && statusNotIn.includes(status)) {
-          passed = false
-          errorKind = status >= 500 ? 'http_5xx' : 'http_4xx'
-          error = `status ${status} is in excluded list [${statusNotIn.join(',')}]`
+          passed = false;
+          errorKind = status >= 500 ? "http_5xx" : "http_4xx";
+          error = `status ${status} is in excluded list [${statusNotIn.join(",")}]`;
         } else {
           // body 验证（bodyMatches / bodyNotMatches 支持函数式动态构造）
-          const bodyFail = validateBody(primaryBody, desc.expect.bodyMatches, desc.expect.bodyNotMatches, ctx)
+          const bodyFail = validateBody(primaryBody, desc.expect.bodyMatches, desc.expect.bodyNotMatches, ctx);
           if (bodyFail) {
-            passed = false
-            errorKind = 'assertion'
-            error = bodyFail.message
-            assertionFailure = bodyFail
+            passed = false;
+            errorKind = "assertion";
+            error = bodyFail.message;
+            assertionFailure = bodyFail;
           }
 
           // header 验证
           if (passed && desc.expect.headerContains) {
-            const headerFail = validateHeaders(primaryResponse, desc.expect.headerContains)
+            const headerFail = validateHeaders(primaryResponse, desc.expect.headerContains);
             if (headerFail) {
-              passed = false
-              errorKind = 'assertion'
-              error = headerFail.message
-              assertionFailure = headerFail
+              passed = false;
+              errorKind = "assertion";
+              error = headerFail.message;
+              assertionFailure = headerFail;
             }
           }
 
           // 响应时间验证
           if (passed && desc.expect.responseTimeMs) {
-            const durationMs = Date.now() - start
+            const durationMs = Date.now() - start;
             if (durationMs > desc.expect.responseTimeMs.max) {
-              passed = false
-              errorKind = 'assertion'
-              error = `response time ${durationMs}ms exceeds max ${desc.expect.responseTimeMs.max}ms`
+              passed = false;
+              errorKind = "assertion";
+              error = `response time ${durationMs}ms exceeds max ${desc.expect.responseTimeMs.max}ms`;
             }
           }
 
           // 自定义断言
           if (passed && desc.customAssert && primaryResponse) {
-            const customFail = desc.customAssert(primaryResponse, primaryBody, ctx)
+            const customFail = desc.customAssert(primaryResponse, primaryBody, ctx);
             if (customFail) {
-              passed = false
-              errorKind = 'assertion'
-              error = customFail.message
-              assertionFailure = customFail
+              passed = false;
+              errorKind = "assertion";
+              error = customFail.message;
+              assertionFailure = customFail;
             }
           }
         }
@@ -200,10 +184,14 @@ export function useWebDavTestRunner() {
 
       // 6. afterRun 钩子（不阻塞失败状态）
       if (desc.afterRun) {
-        try { await desc.afterRun(ctx) } catch { /* ignore */ }
+        try {
+          await desc.afterRun(ctx);
+        } catch {
+          /* ignore */
+        }
       }
 
-      const status: TestCaseStatus = passed ? 'success' : 'failure'
+      const status: TestCaseStatus = passed ? "success" : "failure";
 
       return {
         id: desc.id,
@@ -214,53 +202,46 @@ export function useWebDavTestRunner() {
         httpStatus: primaryResponse?.status,
         error,
         errorKind: passed ? undefined : errorKind,
-        details: assertionFailure
-          ? JSON.stringify(assertionFailure, null, 2)
-          : undefined,
+        details: assertionFailure ? JSON.stringify(assertionFailure, null, 2) : undefined,
         iterations: iterResults.length > 1 ? iterResults : undefined,
-      }
+      };
     } catch (e) {
-      if (timer) clearTimeout(timer)
-      const err = e instanceof Error ? e : new Error(String(e))
+      if (timer) clearTimeout(timer);
+      const err = e instanceof Error ? e : new Error(String(e));
       return {
         id: desc.id,
         name: options.translateName(desc.id),
         module: desc.module,
-        status: 'failure',
+        status: "failure",
         durationMs: Date.now() - start,
-        error: err.name === 'AbortError' ? `timeout after ${timeoutMs}ms` : err.message,
-        errorKind: err.name === 'AbortError' ? 'timeout' : 'unknown',
-      }
+        error: err.name === "AbortError" ? `timeout after ${timeoutMs}ms` : err.message,
+        errorKind: err.name === "AbortError" ? "timeout" : "unknown",
+      };
     }
   }
 
-  return { runCase }
+  return { runCase };
 }
 
 // ============ 辅助函数 ============
 
 function basicAuthHeader(auth: { username?: string; password?: string }): string {
-  const creds = `${auth.username ?? ''}:${auth.password ?? ''}`
+  const creds = `${auth.username ?? ""}:${auth.password ?? ""}`;
   // btoa 在 Capacitor / 现代浏览器可用
-  const encoded = typeof btoa !== 'undefined'
-    ? btoa(creds)
-    : (typeof Buffer !== 'undefined' ? Buffer.from(creds).toString('base64') : '')
-  return `Basic ${encoded}`
+  const encoded = typeof btoa !== "undefined" ? btoa(creds) : typeof Buffer !== "undefined" ? Buffer.from(creds).toString("base64") : "";
+  return `Basic ${encoded}`;
 }
 
-function linkAbortSignals(
-  controller: AbortController,
-  ...signals: (AbortSignal | undefined)[]
-): AbortController {
+function linkAbortSignals(controller: AbortController, ...signals: (AbortSignal | undefined)[]): AbortController {
   for (const sig of signals) {
-    if (!sig) continue
+    if (!sig) continue;
     if (sig.aborted) {
-      controller.abort()
-      break
+      controller.abort();
+      break;
     }
-    sig.addEventListener('abort', () => controller.abort(), { once: true })
+    sig.addEventListener("abort", () => controller.abort(), { once: true });
   }
-  return controller
+  return controller;
 }
 
 async function runSingleFetch(
@@ -270,18 +251,18 @@ async function runSingleFetch(
   body: string | null,
   signal: AbortSignal
 ): Promise<{ response?: Response; body: string; durationMs: number; error?: Error }> {
-  const start = Date.now()
+  const start = Date.now();
   try {
     const response = await fetch(url, {
       method,
       headers,
       body: body ?? undefined,
       signal,
-    })
-    const text = await response.text()
-    return { response, body: text, durationMs: Date.now() - start }
+    });
+    const text = await response.text();
+    return { response, body: text, durationMs: Date.now() - start };
   } catch (e) {
-    return { body: '', durationMs: Date.now() - start, error: e instanceof Error ? e : new Error(String(e)) }
+    return { body: "", durationMs: Date.now() - start, error: e instanceof Error ? e : new Error(String(e)) };
   }
 }
 
@@ -292,32 +273,29 @@ function validateBody(
   ctx: WebDavTestContext
 ): AssertionFailure | null {
   // 解析函数式 bodyMatches / bodyNotMatches（动态构造 regex，避免硬编码）
-  const resolvedMatches = typeof matches === 'function' ? matches(ctx) : matches
-  const resolvedNotMatches = typeof notMatches === 'function' ? notMatches(ctx) : notMatches
+  const resolvedMatches = typeof matches === "function" ? matches(ctx) : matches;
+  const resolvedNotMatches = typeof notMatches === "function" ? notMatches(ctx) : notMatches;
   if (resolvedMatches !== undefined && resolvedMatches !== null) {
-    const m = resolvedMatches instanceof RegExp ? resolvedMatches : new RegExp(resolvedMatches)
+    const m = resolvedMatches instanceof RegExp ? resolvedMatches : new RegExp(resolvedMatches);
     if (!m.test(body)) {
-      return { message: `body missing pattern ${m}`, actual: body.slice(0, 200) }
+      return { message: `body missing pattern ${m}`, actual: body.slice(0, 200) };
     }
   }
   if (resolvedNotMatches !== undefined && resolvedNotMatches !== null) {
-    const m = resolvedNotMatches instanceof RegExp ? resolvedNotMatches : new RegExp(resolvedNotMatches)
+    const m = resolvedNotMatches instanceof RegExp ? resolvedNotMatches : new RegExp(resolvedNotMatches);
     if (m.test(body)) {
-      return { message: `body unexpectedly matched pattern ${m}`, actual: body.slice(0, 200) }
+      return { message: `body unexpectedly matched pattern ${m}`, actual: body.slice(0, 200) };
     }
   }
-  return null
+  return null;
 }
 
-function validateHeaders(
-  response: Response,
-  expected: Record<string, string>
-): AssertionFailure | null {
+function validateHeaders(response: Response, expected: Record<string, string>): AssertionFailure | null {
   for (const [key, value] of Object.entries(expected)) {
-    const actual = response.headers.get(key) ?? ''
+    const actual = response.headers.get(key) ?? "";
     if (!actual.toLowerCase().includes(value.toLowerCase())) {
-      return { message: `header ${key} missing "${value}", got "${actual}"` }
+      return { message: `header ${key} missing "${value}", got "${actual}"` };
     }
   }
-  return null
+  return null;
 }

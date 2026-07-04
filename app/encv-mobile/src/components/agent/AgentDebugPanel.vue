@@ -180,326 +180,318 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch, onMounted, ref } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { bugOutline, copyOutline, refreshOutline } from 'ionicons/icons'
-import type { Message, ToolCall } from '@/composables/useAgent'
+import { IonIcon } from "@ionic/vue";
+import { bugOutline, copyOutline, refreshOutline } from "ionicons/icons";
+import { computed, onMounted, ref, watch } from "vue";
+import type { Message, ToolCall } from "@/composables/useAgent";
 
-type RenderedItemLike = { type: string; [k: string]: unknown }
+type RenderedItemLike = { type: string; [k: string]: unknown };
 
 const props = defineProps<{
-  messages: Message[]
+  messages: Message[];
   /** 由 AgentChat 传入的 renderedItems（任意结构，只读 type 字段） */
-  renderedItems: RenderedItemLike[]
+  renderedItems: RenderedItemLike[];
   /** 默认是否展开（mock 模式自动展开便于诊断） */
-  defaultOpen?: boolean
+  defaultOpen?: boolean;
   /** 当前 agent status（idle / streaming / confirming / error） */
-  agentStatus?: string
+  agentStatus?: string;
   /**
    * 原始 SSE 事件日志（useAgent.pushRawEvent 追加的数组）。
    * 每条含 { ts, type, dataSummary, seq }。
    * AgentDebugPanel ⑦ 区直接渲染——用户不需要复制 console 了。
    */
-  rawSSEEvents?: { ts: string; type: string; dataSummary: string; seq?: number | null }[]
-}>()
+  rawSSEEvents?: { ts: string; type: string; dataSummary: string; seq?: number | null }[];
+}>();
 
-const bugIcon = bugOutline
+const bugIcon = bugOutline;
 
 const roleCounts = computed<Record<string, number>>(() => {
-  const counts: Record<string, number> = {}
+  const counts: Record<string, number> = {};
   for (const m of props.messages) {
-    counts[m.role] = (counts[m.role] ?? 0) + 1
+    counts[m.role] = (counts[m.role] ?? 0) + 1;
   }
-  return counts
-})
+  return counts;
+});
 
-const totalToolCalls = computed(() =>
-  props.messages.reduce((sum, m) => sum + m.tool_calls.length, 0),
-)
-const totalToolResults = computed(() =>
-  props.messages.reduce((sum, m) => sum + m.tool_results.length, 0),
-)
+const totalToolCalls = computed(() => props.messages.reduce((sum, m) => sum + m.tool_calls.length, 0));
+const totalToolResults = computed(() => props.messages.reduce((sum, m) => sum + m.tool_results.length, 0));
 
 /** 配对率：tool_results 中能找到对应 tool_call id 的比例 */
 const pairRateText = computed(() => {
-  const calls = new Set<string>()
-  for (const m of props.messages) for (const tc of m.tool_calls) calls.add(tc.id)
-  if (calls.size === 0) return 'n/a'
-  const results = new Set<string>()
-  for (const m of props.messages) for (const r of m.tool_results) results.add(r.id)
-  let paired = 0
-  for (const id of calls) if (results.has(id)) paired++
-  return `${paired}/${calls.size}`
-})
+  const calls = new Set<string>();
+  for (const m of props.messages) for (const tc of m.tool_calls) calls.add(tc.id);
+  if (calls.size === 0) return "n/a";
+  const results = new Set<string>();
+  for (const m of props.messages) for (const r of m.tool_results) results.add(r.id);
+  let paired = 0;
+  for (const id of calls) if (results.has(id)) paired++;
+  return `${paired}/${calls.size}`;
+});
 
 const renderedTypeCounts = computed<Record<string, number>>(() => {
-  const counts: Record<string, number> = {}
+  const counts: Record<string, number> = {};
   for (const r of props.renderedItems) {
-    counts[r.type] = (counts[r.type] ?? 0) + 1
+    counts[r.type] = (counts[r.type] ?? 0) + 1;
   }
-  return counts
-})
+  return counts;
+});
 
 const recentMessages = computed(() => {
   // 只看含 tool_calls 的最近 3 条 message（核心问题区）
-  return props.messages.filter((m) => m.tool_calls.length > 0).slice(-3)
-})
+  return props.messages.filter(m => m.tool_calls.length > 0).slice(-3);
+});
 
 const operationGroups = computed(() => {
   // narrow：把 type=operationGroup 的元素断言为带 toolCallIds 字段
   return props.renderedItems
-    .filter((r) => r.type === 'operationGroup')
-    .map((r) => r as unknown as { type: 'operationGroup'; toolCallIds: string[] })
-})
+    .filter(r => r.type === "operationGroup")
+    .map(r => r as unknown as { type: "operationGroup"; toolCallIds: string[] });
+});
 
 function findResult(msg: Message, toolCallId: string): string | null {
-  const r = msg.tool_results.find((x) => x.id === toolCallId)
-  return r ? r.result : null
+  const r = msg.tool_results.find(x => x.id === toolCallId);
+  return r ? r.result : null;
 }
 
 function truncate(s: string | null, max: number): string {
-  if (!s) return ''
-  if (s.length <= max) return s
-  return s.slice(0, max) + `… (+${s.length - max} chars)`
+  if (!s) return "";
+  if (s.length <= max) return s;
+  return s.slice(0, max) + `… (+${s.length - max} chars)`;
 }
 
-function resultStatusHint(status: ToolCall['status']): string {
-  if (status === 'pending' || status === 'running') return '工具还在执行，正常'
-  if (status === 'success') return '⚠️ 工具声明 success 但 tool_result 事件没到——后端数据丢失'
-  if (status === 'failed') return '工具失败，等错误回传'
-  if (status === 'cancelled') return '已取消'
-  return '未知状态'
+function resultStatusHint(status: ToolCall["status"]): string {
+  if (status === "pending" || status === "running") return "工具还在执行，正常";
+  if (status === "success") return "⚠️ 工具声明 success 但 tool_result 事件没到——后端数据丢失";
+  if (status === "failed") return "工具失败，等错误回传";
+  if (status === "cancelled") return "已取消";
+  return "未知状态";
 }
 
 // ─── 自我诊断 ────────────────────────────────────────
-const diagnostics = computed<{ level: 'ok' | 'warn' | 'error'; text: string }[]>(() => {
-  const out: { level: 'ok' | 'warn' | 'error'; text: string }[] = []
+const diagnostics = computed<{ level: "ok" | "warn" | "error"; text: string }[]>(() => {
+  const out: { level: "ok" | "warn" | "error"; text: string }[] = [];
   if (totalToolCalls.value > 0 && totalToolResults.value === 0) {
     out.push({
-      level: 'error',
+      level: "error",
       text: `有 ${totalToolCalls.value} 个 tool_call 但 0 个 tool_result——剧本可能没推 tool_result 事件，或前端没收到`,
-    })
+    });
   }
   if (totalToolResults.value > 0) {
-    const fakeCheck = checkForFakeData()
+    const fakeCheck = checkForFakeData();
     if (fakeCheck.length > 0) {
       out.push({
-        level: 'warn',
-        text: `检测到疑似硬编码假数据：${fakeCheck.join('; ')}`,
-      })
+        level: "warn",
+        text: `检测到疑似硬编码假数据：${fakeCheck.join("; ")}`,
+      });
     } else {
-      out.push({ level: 'ok', text: 'tool_result 数据看起来是真实数据（非 {FAKE:true} / 已知硬编码文件名）' })
+      out.push({ level: "ok", text: "tool_result 数据看起来是真实数据（非 {FAKE:true} / 已知硬编码文件名）" });
     }
   }
   if (operationGroups.value.length === 0 && totalToolCalls.value > 0) {
     out.push({
-      level: 'error',
-      text: '有 tool_call 但 renderedItems 里 0 个 operationGroup——renderTurnItems 没把它们聚成 group，看下面的纯 markdown 渲染就是它导致的',
-    })
+      level: "error",
+      text: "有 tool_call 但 renderedItems 里 0 个 operationGroup——renderTurnItems 没把它们聚成 group，看下面的纯 markdown 渲染就是它导致的",
+    });
   }
   if (operationGroups.value.length > 0) {
-    out.push({ level: 'ok', text: `renderedItems 含 ${operationGroups.value.length} 个 operationGroup` })
+    out.push({ level: "ok", text: `renderedItems 含 ${operationGroups.value.length} 个 operationGroup` });
   }
-  if (pairRateText.value !== 'n/a' && pairRateText.value !== '0/0') {
-    const [p, t] = pairRateText.value.split('/').map(Number)
+  if (pairRateText.value !== "n/a" && pairRateText.value !== "0/0") {
+    const [p, t] = pairRateText.value.split("/").map(Number);
     if (p < t) {
       out.push({
-        level: 'warn',
+        level: "warn",
         text: `配对率 ${p}/${t}——部分 tool_call 没收到 result（可能是分组时漏了）`,
-      })
+      });
     } else if (p === t && t > 0) {
-      out.push({ level: 'ok', text: `所有 ${t} 个 tool_call 都配对到 tool_result` })
+      out.push({ level: "ok", text: `所有 ${t} 个 tool_call 都配对到 tool_result` });
     }
   }
-  return out
-})
+  return out;
+});
 
 function checkForFakeData(): string[] {
-  const suspicious: string[] = []
+  const suspicious: string[] = [];
   for (const m of props.messages) {
     for (const r of m.tool_results) {
       if (r.result.includes('"FAKE":true') || r.result.includes('"FAKE": true')) {
-        suspicious.push(`${r.id}: 含 FAKE:true 标记`)
+        suspicious.push(`${r.id}: 含 FAKE:true 标记`);
       }
-      if (r.result.includes('studio_video_')) {
-        suspicious.push(`${r.id}: 含老剧本硬编码 studio_video_* 假文件名`)
+      if (r.result.includes("studio_video_")) {
+        suspicious.push(`${r.id}: 含老剧本硬编码 studio_video_* 假文件名`);
       }
     }
   }
-  return suspicious
+  return suspicious;
 }
 
 // ─── 实时状态 dump（可复制） ──────────────────────────────
 function getMsgText(m: Message): string {
   // content 可能是 string | MessageContentPart[]，dump 时统一转字符串
-  if (typeof m.content === 'string') return m.content
+  if (typeof m.content === "string") return m.content;
   if (Array.isArray(m.content)) {
-    return m.content
-      .map((p) => (typeof p === 'string' ? p : (p as { text?: string })?.text ?? ''))
-      .join('')
+    return m.content.map(p => (typeof p === "string" ? p : ((p as { text?: string })?.text ?? ""))).join("");
   }
-  return ''
+  return "";
 }
 
 const dumpText = computed(() => {
-  const lines: string[] = []
-  const ts = new Date().toISOString()
-  lines.push(`# AgentDebugPanel dump @ ${ts}`)
-  lines.push(`agentStatus: ${props.agentStatus ?? '(unset)'}`)
-  lines.push(`messages.length: ${props.messages.length}`)
-  lines.push(`renderedItems.length: ${props.renderedItems.length}`)
-  lines.push('')
-  lines.push('--- messages ---')
+  const lines: string[] = [];
+  const ts = new Date().toISOString();
+  lines.push(`# AgentDebugPanel dump @ ${ts}`);
+  lines.push(`agentStatus: ${props.agentStatus ?? "(unset)"}`);
+  lines.push(`messages.length: ${props.messages.length}`);
+  lines.push(`renderedItems.length: ${props.renderedItems.length}`);
+  lines.push("");
+  lines.push("--- messages ---");
   props.messages.forEach((m, i) => {
-    const text = getMsgText(m).slice(0, 80).replace(/\n/g, '⏎')
-    lines.push(
-      `[${i}] role=${m.role} content="${text}" tool_calls=${m.tool_calls.length} tool_results=${m.tool_results.length}`,
-    )
-    m.tool_calls.forEach((tc) => {
-      lines.push(`  call  id=${tc.id} name=${tc.name} kind=${tc.kind} status=${tc.status} args=${(tc.args || '').slice(0, 60)}`)
-    })
-    m.tool_results.forEach((tr) => {
-      lines.push(`  result id=${tr.id} name=${tr.name} status=${tr.status} result="${(tr.result || '').slice(0, 200).replace(/\n/g, '⏎')}"`)
-    })
-  })
-  lines.push('')
-  lines.push('--- renderedItems (type 分布 + 关键字段) ---')
-  const typeCounts: Record<string, number> = {}
-  for (const r of props.renderedItems) typeCounts[r.type] = (typeCounts[r.type] ?? 0) + 1
-  lines.push(`typeCounts: ${JSON.stringify(typeCounts)}`)
+    const text = getMsgText(m).slice(0, 80).replace(/\n/g, "⏎");
+    lines.push(`[${i}] role=${m.role} content="${text}" tool_calls=${m.tool_calls.length} tool_results=${m.tool_results.length}`);
+    m.tool_calls.forEach(tc => {
+      lines.push(`  call  id=${tc.id} name=${tc.name} kind=${tc.kind} status=${tc.status} args=${(tc.args || "").slice(0, 60)}`);
+    });
+    m.tool_results.forEach(tr => {
+      lines.push(
+        `  result id=${tr.id} name=${tr.name} status=${tr.status} result="${(tr.result || "").slice(0, 200).replace(/\n/g, "⏎")}"`
+      );
+    });
+  });
+  lines.push("");
+  lines.push("--- renderedItems (type 分布 + 关键字段) ---");
+  const typeCounts: Record<string, number> = {};
+  for (const r of props.renderedItems) typeCounts[r.type] = (typeCounts[r.type] ?? 0) + 1;
+  lines.push(`typeCounts: ${JSON.stringify(typeCounts)}`);
   props.renderedItems.forEach((r, i) => {
-    const keys = Object.keys(r).filter((k) => k !== 'type')
-    const summary = keys.map((k) => {
-      const v = r[k]
-      if (Array.isArray(v)) return `${k}=[${v.length}]`
-      if (typeof v === 'string') return `${k}="${v.slice(0, 40).replace(/\n/g, '⏎')}"`
-      return `${k}=${JSON.stringify(v)?.slice(0, 40)}`
-    }).join(' ')
-    lines.push(`[${i}] ${r.type} ${summary}`)
-  })
-  return lines.join('\n')
-})
+    const keys = Object.keys(r).filter(k => k !== "type");
+    const summary = keys
+      .map(k => {
+        const v = r[k];
+        if (Array.isArray(v)) return `${k}=[${v.length}]`;
+        if (typeof v === "string") return `${k}="${v.slice(0, 40).replace(/\n/g, "⏎")}"`;
+        return `${k}=${JSON.stringify(v)?.slice(0, 40)}`;
+      })
+      .join(" ");
+    lines.push(`[${i}] ${r.type} ${summary}`);
+  });
+  return lines.join("\n");
+});
 
-const copyStatus = ref<'idle' | 'copied' | 'failed'>('idle')
+const copyStatus = ref<"idle" | "copied" | "failed">("idle");
 
 async function copyDump() {
   try {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(dumpText.value)
+      await navigator.clipboard.writeText(dumpText.value);
     } else {
       // fallback：选中文本让用户手动复制
-      const ta = document.getElementById('agentDebugDumpTextarea') as HTMLTextAreaElement | null
+      const ta = document.getElementById("agentDebugDumpTextarea") as HTMLTextAreaElement | null;
       if (ta) {
-        ta.select()
-        document.execCommand('copy')
-        ta.blur()
+        ta.select();
+        document.execCommand("copy");
+        ta.blur();
       }
     }
-    copyStatus.value = 'copied'
-    console.error('[AgentDebugPanel] dump copied:\n' + dumpText.value)
-    setTimeout(() => (copyStatus.value = 'idle'), 1500)
+    copyStatus.value = "copied";
+    console.error("[AgentDebugPanel] dump copied:\n" + dumpText.value);
+    setTimeout(() => (copyStatus.value = "idle"), 1500);
   } catch (e) {
-    copyStatus.value = 'failed'
-    console.error('[AgentDebugPanel] copy failed:', e)
+    copyStatus.value = "failed";
+    console.error("[AgentDebugPanel] copy failed:", e);
   }
 }
 
-const dumpTextarea = ref<HTMLTextAreaElement | null>(null)
+const dumpTextarea = ref<HTMLTextAreaElement | null>(null);
 function selectAllDump() {
-  dumpTextarea.value?.select()
+  dumpTextarea.value?.select();
 }
 
 // ─── ⑦ 区：SSE 事件流 ─────────────────────────────────────
-const sseTextarea = ref<HTMLTextAreaElement | null>(null)
-const sseCopyStatus = ref<'idle' | 'copied' | 'failed'>('idle')
+const sseTextarea = ref<HTMLTextAreaElement | null>(null);
+const sseCopyStatus = ref<"idle" | "copied" | "failed">("idle");
 
 const sseTypeCounts = computed<Record<string, number>>(() => {
-  const counts: Record<string, number> = {}
-  if (!props.rawSSEEvents) return counts
-  for (const ev of props.rawSSEEvents) counts[ev.type] = (counts[ev.type] ?? 0) + 1
-  return counts
-})
+  const counts: Record<string, number> = {};
+  if (!props.rawSSEEvents) return counts;
+  for (const ev of props.rawSSEEvents) counts[ev.type] = (counts[ev.type] ?? 0) + 1;
+  return counts;
+});
 
 const sseEventText = computed(() => {
-  if (!props.rawSSEEvents || props.rawSSEEvents.length === 0) return '(无 SSE 事件)'
+  if (!props.rawSSEEvents || props.rawSSEEvents.length === 0) return "(无 SSE 事件)";
   return props.rawSSEEvents
-    .map((ev) => {
-      const seqTag = ev.seq != null ? ` [seq=${ev.seq}]` : ''
-      return `[${ev.ts}] type=${ev.type}${seqTag} data=${ev.dataSummary}`
+    .map(ev => {
+      const seqTag = ev.seq != null ? ` [seq=${ev.seq}]` : "";
+      return `[${ev.ts}] type=${ev.type}${seqTag} data=${ev.dataSummary}`;
     })
-    .join('\n')
-})
+    .join("\n");
+});
 
 function selectAllSse() {
-  sseTextarea.value?.select()
+  sseTextarea.value?.select();
 }
 
 async function copySse() {
   try {
-    await navigator.clipboard?.writeText(sseEventText.value)
-    sseCopyStatus.value = 'copied'
-    console.error('[AgentDebugPanel] SSE events copied:\n' + sseEventText.value)
-    setTimeout(() => (sseCopyStatus.value = 'idle'), 1500)
+    await navigator.clipboard?.writeText(sseEventText.value);
+    sseCopyStatus.value = "copied";
+    console.error("[AgentDebugPanel] SSE events copied:\n" + sseEventText.value);
+    setTimeout(() => (sseCopyStatus.value = "idle"), 1500);
   } catch (e) {
-    sseCopyStatus.value = 'failed'
-    console.error('[AgentDebugPanel] copy SSE failed:', e)
+    sseCopyStatus.value = "failed";
+    console.error("[AgentDebugPanel] copy SSE failed:", e);
   }
 }
 
 // ─── 实时监控：变化时立即 console.error 打印 ──────────────
 onMounted(() => {
   console.error(
-    '[AgentDebugPanel] mounted — messages=',
+    "[AgentDebugPanel] mounted — messages=",
     props.messages.length,
-    'renderedItems=',
+    "renderedItems=",
     props.renderedItems.length,
-    'agentStatus=',
-    props.agentStatus,
-  )
-  console.error('[AgentDebugPanel] initial dump:\n' + dumpText.value)
-})
+    "agentStatus=",
+    props.agentStatus
+  );
+  console.error("[AgentDebugPanel] initial dump:\n" + dumpText.value);
+});
 
 watch(
   () => props.messages.length,
   (newLen, oldLen) => {
-    console.error(
-      `[AgentDebugPanel] messages.length: ${oldLen} → ${newLen} (Δ=${newLen - (oldLen ?? 0)})`,
-    )
+    console.error(`[AgentDebugPanel] messages.length: ${oldLen} → ${newLen} (Δ=${newLen - (oldLen ?? 0)})`);
     if (newLen > 0) {
-      const last = props.messages[props.messages.length - 1]
+      const last = props.messages[props.messages.length - 1];
       console.error(
-        `[AgentDebugPanel] last message: role=${last.role} content="${getMsgText(last).slice(0, 120).replace(/\n/g, '⏎')}" tool_calls=${last.tool_calls.length} tool_results=${last.tool_results.length}`,
-      )
+        `[AgentDebugPanel] last message: role=${last.role} content="${getMsgText(last).slice(0, 120).replace(/\n/g, "⏎")}" tool_calls=${last.tool_calls.length} tool_results=${last.tool_results.length}`
+      );
     }
-    console.error('[AgentDebugPanel] dump @ messages change:\n' + dumpText.value)
-  },
-)
+    console.error("[AgentDebugPanel] dump @ messages change:\n" + dumpText.value);
+  }
+);
 
 watch(
   () => props.renderedItems.length,
   (newLen, oldLen) => {
-    console.error(
-      `[AgentDebugPanel] renderedItems.length: ${oldLen} → ${newLen} (Δ=${newLen - (oldLen ?? 0)})`,
-    )
-    const types = props.renderedItems.map((r) => r.type)
-    console.error(`[AgentDebugPanel] renderedItem types: [${types.join(', ')}]`)
-  },
-)
+    console.error(`[AgentDebugPanel] renderedItems.length: ${oldLen} → ${newLen} (Δ=${newLen - (oldLen ?? 0)})`);
+    const types = props.renderedItems.map(r => r.type);
+    console.error(`[AgentDebugPanel] renderedItem types: [${types.join(", ")}]`);
+  }
+);
 
 watch(
-  () => props.renderedItems.map((r) => r.type).join('|'),
+  () => props.renderedItems.map(r => r.type).join("|"),
   (newTypes, oldTypes) => {
-    if (newTypes === oldTypes) return
-    console.error(`[AgentDebugPanel] renderedItem type set changed: "${oldTypes}" → "${newTypes}"`)
-  },
-)
+    if (newTypes === oldTypes) return;
+    console.error(`[AgentDebugPanel] renderedItem type set changed: "${oldTypes}" → "${newTypes}"`);
+  }
+);
 
 watch(
   () => props.agentStatus,
   (newStatus, oldStatus) => {
-    console.error(`[AgentDebugPanel] agentStatus: ${oldStatus ?? '?'} → ${newStatus ?? '?'}`)
-  },
-)
+    console.error(`[AgentDebugPanel] agentStatus: ${oldStatus ?? "?"} → ${newStatus ?? "?"}`);
+  }
+);
 </script>
 
 <style scoped>

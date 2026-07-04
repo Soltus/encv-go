@@ -37,16 +37,14 @@ jobs:
           submodules: false  # 防御：仓库无真实 submodule
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '24'
-          cache: 'pnpm'
-          cache-dependency-path: ${{ env.MONOREPO_MOBILE_DIR }}/pnpm-lock.yaml
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -85,10 +83,11 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ${{ env.MONOREPO_MOBILE_DIR }}/node_modules
-            ${{ env.MONOREPO_MOBILE_DIR }}/packages/components/node_modules
-            ${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/web/node_modules
-          key: pnpm-main-${{ hashFiles('${{ env.MONOREPO_MOBILE_DIR }}/pnpm-lock.yaml', '${{ env.MONOREPO_MOBILE_DIR }}/packages/**/package.json', '${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/web/package.json') }}
+            app/node_modules
+            app/encv-mobile/node_modules
+            app/encv-mobile/plugin-openlist/web/node_modules
+            app/preview-gateway/node_modules
+          key: pnpm-main-${{ hashFiles('app/pnpm-lock.yaml', 'app/encv-mobile/package.json', 'app/preview-gateway/package.json') }}
           restore-keys: |
             pnpm-main-
 
@@ -109,29 +108,28 @@ jobs:
       # 失败时: ::error:: 提示先去跑 build-ffmpeg-lib.yml。
 
       - name: Install frontend dependencies
-        run: cd ${{ env.MONOREPO_MOBILE_DIR }} && pnpm install --frozen-lockfile
+        run: cd app && pnpm install
 
       - name: TypeScript check (main app)
-        working-directory: ${{ env.MONOREPO_MOBILE_DIR }}
+        working-directory: app/encv-mobile
         run: pnpm exec vue-tsc --noEmit
 
       - name: TypeScript check (plugin-openlist/web)
         if: inputs.skip_plugin != true
-        working-directory: ${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/web
+        working-directory: app/encv-mobile/plugin-openlist/web
         run: pnpm exec vue-tsc --noEmit
 
       - name: Build main app web
-        working-directory: ${{ env.MONOREPO_MOBILE_DIR }}
+        working-directory: app/encv-mobile
         run: pnpm run build
 
       - name: Build plugin-openlist/web → assets/openlist/
         if: inputs.skip_plugin != true
-        working-directory: ${{ env.MONOREPO_MOBILE_DIR }}
         run: bash scripts/build-plugin-openlist-web.sh
 
       - name: Run frontend unit tests (vitest)
         run: |
-          cd ${{ env.MONOREPO_MOBILE_DIR }}
+          cd app/encv-mobile
           echo "═══ Frontend Unit Tests ═══"
           pnpm exec vitest run --reporter=verbose 2>&1 | tail -30
           echo ""
@@ -284,19 +282,206 @@ jobs:
           echo "═══ Go Test Summary ═══"
           go test ./internal/service/ ./internal/v2/plugins/video/ -count=1 -timeout 120s 2>&1 | tail -5
 
-      - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen)
+      - name: Prepare libsql native library for Android
+        run: |
+          echo "═══ Preparing LibSQL for Android arm64-v8a ═══"
+          
+          LIBSQL_DIR="pkg/libsql/libs/android_arm64"
+          mkdir -p "$LIBSQL_DIR"
+          
+          # 安装 Rust（如果没有的话）
+          if ! command -v rustup &> /dev/null; then
+            echo "Installing Rust..."
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y 2>&1 | tail -5
+            source "$HOME/.cargo/env"
+          fi
+          source "$HOME/.cargo/env" 2>/dev/null || true
+          
+          echo "Rust version: $(rustc --version 2>/dev/null || echo unknown)"
+          echo ""
+          
+          # 调用统一脚本（单一真相来源，避免双重维护）
+          set +e
+          bash scripts/build-libsql-android.sh \
+            --arch arm64-v8a \
+            --api 24 \
+            --ndk "${ANDROID_HOME}/ndk/${NDK_VERSION}" \
+            2>&1
+          BUILD_EXIT=$?
+          set -e
+          
+          echo ""
+          echo "═══ libsql build result: exit=$BUILD_EXIT ═══"
+          
+          # 检查产物
+          LIBSQL_READY=0
+          if [ -f "$LIBSQL_DIR/libsql_experimental.a" ] || [ -f "$LIBSQL_DIR/libsql_experimental.so" ]; then
+            LIBSQL_READY=1
+            echo "✅ libsql native library found:"
+            ls -lh "$LIBSQL_DIR/"
+          else
+            echo "⚠️  libsql native library NOT found (will use SQLite-only)"
+          fi
+          
+          # 设置结果供后续步骤使用
+          echo "LIBSQL_READY=$LIBSQL_READY" >> "$GITHUB_ENV"
+          
+          # 写入 Step Summary（显式可观测，禁止静默降级）
+          if [ $LIBSQL_READY -eq 1 ]; then
+            echo "## ✅ libsql 构建成功" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "libsql 原生库已就绪，将在 Go 二进制中启用向量搜索支持。" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            ls -lh "$LIBSQL_DIR/" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "::warning::libsql 构建失败，将降级为 SQLite-only（无向量搜索）"
+            
+            echo "## ⚠️ libsql 构建失败（降级为 SQLite-only）" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**libsql 原生库未包含在此构建中**，将使用纯 SQLite（无向量搜索功能）。" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 影响" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ 加密/解密、文件管理、任务系统等核心功能正常" >> $GITHUB_STEP_SUMMARY
+            echo "- ❌ 向量搜索功能不可用" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔄 运行时自动使用 glebarez/sqlite（纯 Go）" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Prepare ObjectBox native library for Android
+        run: |
+          echo "═══ Preparing ObjectBox for Android arm64-v8a ═══"
+          
+          OB_DIR="pkg/tasksystem/store/objectbox/libs/android_arm64"
+          mkdir -p "$OB_DIR"
+          
+          # 调用统一脚本（从 Maven Central 的 objectbox-android-db AAR 提取）
+          set +e
+          bash scripts/build-objectbox-android.sh \
+            --arch arm64-v8a \
+            2>&1
+          BUILD_EXIT=$?
+          set -e
+          
+          echo ""
+          echo "═══ ObjectBox build result: exit=$BUILD_EXIT ═══"
+          
+          # 检查产物
+          OBJECTBOX_READY=0
+          if [ -f "$OB_DIR/libobjectbox.so" ]; then
+            OBJECTBOX_READY=1
+            echo "✅ ObjectBox native library found:"
+            ls -lh "$OB_DIR/"
+          else
+            echo "⚠️  ObjectBox native library NOT found (will use SQLite-only)"
+          fi
+          
+          # 设置结果供后续步骤使用
+          echo "OBJECTBOX_READY=$OBJECTBOX_READY" >> "$GITHUB_ENV"
+          
+          # 写入 Step Summary（显式可观测，禁止静默降级）
+          if [ $OBJECTBOX_READY -eq 1 ]; then
+            echo "## ✅ ObjectBox 构建成功" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "ObjectBox 原生库已就绪，将在 Go 二进制中启用高性能对象存储引擎。" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            ls -lh "$OB_DIR/" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::ObjectBox 构建失败，将不包含 ObjectBox 引擎"
+            
+            echo "## ⚠️ ObjectBox 构建失败（不包含该引擎）" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**ObjectBox 原生库未包含在此构建中**，将使用默认 SQLite 引擎。" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### 影响" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- ✅ 加密/解密、文件管理、任务系统等核心功能正常" >> "$GITHUB_STEP_SUMMARY"
+            echo "- ❌ ObjectBox 高性能对象存储引擎不可用" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 🔄 运行时自动使用 glebarez/sqlite（纯 Go）" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen + libsql + objectbox)
+        working-directory: ${{ github.workspace }}
         env:
           CGO_ENABLED: "1"
           GOOS: android
           GOARCH: arm64
           CC: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+          CGO_LDFLAGS: "-L${GITHUB_WORKSPACE}/pkg/libsql/libs/android_arm64 -L${GITHUB_WORKSPACE}/pkg/tasksystem/store/objectbox/libs/android_arm64"
+          GOFLAGS: "-mod=mod"
         run: |
+          set -x
+          # 诊断信息
+          echo "=== Build diagnostics ==="
+          echo "PWD=$(pwd)"
+          echo "go.mod exists=$(test -f go.mod && echo yes || echo no)"
+          go env GOMOD GO111MODULE GOPATH GOROOT GOTOOLCHAIN GOFLAGS GOWORK
+          echo "BUILD_TAGS expanded: LIBSQL=${LIBSQL_READY:-0}, OBJECTBOX=${OBJECTBOX_READY:-0}"
+          # 构建参数
+          BUILD_TAGS=""
+          if [ "${LIBSQL_READY:-0}" = "1" ]; then
+            BUILD_TAGS="libsql"
+            echo "✅ Building with libsql support"
+          else
+            echo "⚠️  Building WITHOUT libsql support (fallback to SQLite only)"
+          fi
+          if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
+            BUILD_TAGS="$BUILD_TAGS,objectbox"
+            echo "✅ Building with objectbox support"
+          else
+            echo "⚠️  Building WITHOUT objectbox support"
+          fi
+          BUILD_TAGS="${BUILD_TAGS# }"
+          BUILD_TAGS="-tags ${BUILD_TAGS}"
+          echo "Final BUILD_TAGS='${BUILD_TAGS}'"
+
+          # working-directory: ${{ github.workspace }} 已在上方 step 级设定，当前目录即 go.mod 所在
+          echo "=== Final go build command ==="
+          echo "go build ${BUILD_TAGS} -ldflags=\"-s -w -X main.version=${{ inputs.version || 'dev' }}\" -o ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64 ./cmd/encv-mobile"
           go build \
+            ${BUILD_TAGS} \
             -ldflags="-s -w -X main.version=${{ inputs.version || 'dev' }}" \
             -o ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64 \
             ./cmd/encv-mobile
           echo "Go binary size:"
           ls -lh ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64
+          
+          # 如果是动态链接 libsql，把 .so 复制到 jniLibs
+          if [ "${LIBSQL_READY:-0}" = "1" ]; then
+            if [ -f "pkg/libsql/libs/android_arm64/libsql_experimental.so" ]; then
+              mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
+              cp pkg/libsql/libs/android_arm64/libsql_experimental.so \
+                 ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
+              echo "✅ Copied libsql_experimental.so to jniLibs/arm64-v8a/"
+            fi
+          fi
+
+          # 如果是动态链接 objectbox，把 .so 复制到 jniLibs
+          if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
+            if [ -f "pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox.so" ]; then
+              mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
+              cp pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox.so \
+                 ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
+              echo "✅ Copied libobjectbox.so to jniLibs/arm64-v8a/"
+            fi
+          fi
+          
+          # 检查二进制是否包含 libsql
+          # 注意：-ldflags="-s -w" 会 strip 符号表，nm 找不到符号。
+          # 用 strings 搜索 libsql_ 前缀的函数名作为替代检测方式。
+          BIN_PATH="${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64"
+          if [ -f "$BIN_PATH" ]; then
+            if strings "$BIN_PATH" 2>/dev/null | grep -q "libsql_open_file\|libsql_sync2\|libsql_column_count"; then
+              echo "✅ Go binary contains libsql symbols (statically linked)"
+            elif strings "$BIN_PATH" 2>/dev/null | grep -q "sql_experimental\|libsql\.so"; then
+              echo "✅ Go binary references libsql (dynamically linked)"
+            else
+              echo "ℹ️  Go binary does not contain libsql strings (SQLite-only build)"
+            fi
+          fi
 
       # Keystore stored outside android/app to avoid accidental commit
       - name: Restore release keystore from cache
@@ -324,12 +509,22 @@ jobs:
             ls -lh "$KEYSTORE"
           fi
 
-      # android/ is in git — cap copy copies web assets (dist/ → assets/public/). Required for BOTH debug and release because we use gradlew directly instead of npx cap build
-      - name: Copy web assets to Android project
+      # android/ is in git — cap sync copies web assets (dist/ → assets/public/) AND regenerates capacitor.plugins.json
+      # 🆕 2026-06-22 修复：必须用 cap sync 而非 cap copy
+      #   - cap copy: 只复制 web assets，**不会**重新发现新装的 @capacitor/* npm 包
+      #     → 新装 @capacitor/filesystem 后 plugins.json 不更新 → native Android 工程不注册
+      #     → 真机调 Filesystem.writeFile 报 "plugin is not implemented on android"
+      #   - cap sync: copy + 重新扫描 node_modules/@capacitor/* 写 capacitor.plugins.json
+      #     + 更新 Android Gradle dependency + (iOS) pod install
+      #   症状：Filesystem.writeFile / Share.files 在 CI 出的 APK 上都报 "plugin is not implemented on android"
+      - name: Sync web assets + Capacitor plugins to Android project
         run: |
           cd ${{ env.MONOREPO_MOBILE_DIR }}
-          npx cap copy android
-          echo "Android project ready:"
+          npx cap sync android
+          echo "=== After cap sync: capacitor.plugins.json ==="
+          cat android/app/src/main/assets/capacitor.plugins.json
+          echo ""
+          echo "=== Android project ready: ==="
           ls -la android/*.gradle android/app/*.gradle
 
       # === Non-Gradle customizations ===
@@ -550,9 +745,9 @@ jobs:
 
       - name: Verify native libraries
         run: |
-          echo "═══ HOST APP jniLibs (Go backend only) ═══"
+          echo "═══ HOST APP jniLibs (Go backend + native libs) ═══"
           HOST_LIBS="${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a"
-          for lib in libencv-go.so libffmpeg.so libffprobe.so; do
+          for lib in libencv-go.so libffmpeg.so libffprobe.so libsql_experimental.so libobjectbox.so; do
             if [ -f "$HOST_LIBS/$lib" ]; then
               echo "  ✅ $lib $(ls -lh "$HOST_LIBS/$lib" | awk '{print $5}')"
             else

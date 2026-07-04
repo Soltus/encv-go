@@ -90,194 +90,198 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
 import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonButton,
-  IonContent,
-  IonList,
-  IonItem,
-  IonIcon,
-  IonLabel,
-  IonSpinner,
-  IonInput,
-  modalController,
   alertController,
-} from '@ionic/vue'
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonInput,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+  modalController,
+} from "@ionic/vue";
 import {
+  add,
   arrowBack,
   chevronForward,
-  add,
-  folder,
-  folderOpen,
-  videocam,
-  musicalNotes,
-  image,
   document,
   documentText,
+  folder,
+  folderOpen,
+  image,
   lockClosed,
-} from 'ionicons/icons'
-import {
-  listFiles,
-  formatFileSize,
-  getFileCategory,
-  createDirectory,
-  PermissionDeniedError,
-} from '@/api/encv'
-import type { FileItem } from '@/api/encv'
-import { useI18n } from '@/composables/useI18n'
+  musicalNotes,
+  videocam,
+} from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
+import type { FileItem } from "@/api/encv";
+import { createDirectory, formatFileSize, getFileCategory, listFiles, PermissionDeniedError } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
 
-const props = withDefaults(defineProps<{
-  mode?: 'file' | 'folder'
-  initialPath?: string
-}>(), {
-  mode: 'file',
-  initialPath: '/',
-})
+const props = withDefaults(
+  defineProps<{
+    mode?: "file" | "folder";
+    initialPath?: string;
+  }>(),
+  {
+    mode: "file",
+    initialPath: "/",
+  }
+);
 
-const { t } = useI18n()
-const files = ref<FileItem[]>([])
-const currentPath = ref(props.initialPath || '/')
-const loading = ref(false)
-const noPermission = ref(false)
-const showNewFolder = ref(false)
-const newFolderName = ref('')
+const { t } = useI18n();
+const files = ref<FileItem[]>([]);
+const currentPath = ref(props.initialPath || "/");
+const loading = ref(false);
+const noPermission = ref(false);
+const showNewFolder = ref(false);
+const newFolderName = ref("");
 
 const pathSegments = computed(() => {
-  if (currentPath.value === '/') return []
-  const parts = currentPath.value.split('/').filter(Boolean)
+  if (currentPath.value === "/") return [];
+  const parts = currentPath.value.split("/").filter(Boolean);
   return parts.map((name, index) => ({
     name,
-    path: '/' + parts.slice(0, index + 1).join('/'),
-  }))
-})
+    path: "/" + parts.slice(0, index + 1).join("/"),
+  }));
+});
 
 const sortedFiles = computed(() => {
   return [...files.value].sort((a, b) => {
-    if (a.isDirectory && !b.isDirectory) return -1
-    if (!a.isDirectory && b.isDirectory) return 1
-    return a.name.localeCompare(b.name)
-  })
-})
+    if (a.isDirectory && !b.isDirectory) return -1;
+    if (!a.isDirectory && b.isDirectory) return 1;
+    return a.name.localeCompare(b.name);
+  });
+});
 
 const displayFiles = computed(() => {
-  if (props.mode === 'folder') {
-    return sortedFiles.value.filter(f => f.isDirectory)
+  if (props.mode === "folder") {
+    return sortedFiles.value.filter(f => f.isDirectory);
   }
-  return sortedFiles.value
-})
+  return sortedFiles.value;
+});
 
 function getFileIcon(file: FileItem) {
-  if (file.isDirectory) return folder
-  if (file.isEncrypted) return lockClosed
-  const category = getFileCategory(file.name)
+  if (file.isDirectory) return folder;
+  if (file.isEncrypted) return lockClosed;
+  const category = getFileCategory(file.name);
   switch (category) {
-    case 'video': return videocam
-    case 'audio': return musicalNotes
-    case 'image': return image
-    case 'document': return document
-    default: return documentText
+    case "video":
+      return videocam;
+    case "audio":
+      return musicalNotes;
+    case "image":
+      return image;
+    case "document":
+      return document;
+    default:
+      return documentText;
   }
 }
 
 function getFileIconColor(file: FileItem) {
-  if (file.isDirectory) return 'primary'
-  if (file.isEncrypted) return 'warning'
-  const category = getFileCategory(file.name)
+  if (file.isDirectory) return "primary";
+  if (file.isEncrypted) return "warning";
+  const category = getFileCategory(file.name);
   switch (category) {
-    case 'video': return 'danger'
-    case 'audio': return 'tertiary'
-    case 'image': return 'success'
-    default: return 'medium'
+    case "video":
+      return "danger";
+    case "audio":
+      return "tertiary";
+    case "image":
+      return "success";
+    default:
+      return "medium";
   }
 }
 
 async function loadFiles() {
-  loading.value = true
-  noPermission.value = false
+  loading.value = true;
+  noPermission.value = false;
   try {
-    files.value = await listFiles(currentPath.value)
-    noPermission.value = false
+    files.value = await listFiles(currentPath.value);
+    noPermission.value = false;
   } catch (error) {
     if (error instanceof PermissionDeniedError) {
-      noPermission.value = true
+      noPermission.value = true;
     }
-    files.value = []
+    files.value = [];
   }
-  loading.value = false
+  loading.value = false;
 }
 
 function navigateTo(path: string) {
-  currentPath.value = path
-  loadFiles()
+  currentPath.value = path;
+  loadFiles();
 }
 
 function goUp() {
-  if (currentPath.value === '/') return
-  const parts = currentPath.value.split('/').filter(Boolean)
-  parts.pop()
-  currentPath.value = parts.length === 0 ? '/' : '/' + parts.join('/')
-  loadFiles()
+  if (currentPath.value === "/") return;
+  const parts = currentPath.value.split("/").filter(Boolean);
+  parts.pop();
+  currentPath.value = parts.length === 0 ? "/" : "/" + parts.join("/");
+  loadFiles();
 }
 
 function handleFileClick(file: FileItem) {
   if (file.isDirectory) {
-    const newPath = currentPath.value === '/'
-      ? '/' + file.name
-      : currentPath.value + '/' + file.name
-    navigateTo(newPath)
-    return
+    const newPath = currentPath.value === "/" ? "/" + file.name : currentPath.value + "/" + file.name;
+    navigateTo(newPath);
+    return;
   }
-  if (props.mode === 'file') {
-    modalController.dismiss({ path: file.path, name: file.name }, 'select')
+  if (props.mode === "file") {
+    modalController.dismiss({ path: file.path, name: file.name }, "select");
   }
 }
 
 function selectCurrentFolder() {
-  modalController.dismiss({ path: currentPath.value, name: currentPath.value.split('/').filter(Boolean).pop() || '/' }, 'select')
+  modalController.dismiss({ path: currentPath.value, name: currentPath.value.split("/").filter(Boolean).pop() || "/" }, "select");
 }
 
 function cancel() {
-  modalController.dismiss(null, 'cancel')
+  modalController.dismiss(null, "cancel");
 }
 
 function showNewFolderInput() {
-  showNewFolder.value = true
-  newFolderName.value = ''
+  showNewFolder.value = true;
+  newFolderName.value = "";
 }
 
 async function confirmNewFolder() {
-  const name = newFolderName.value.trim()
-  if (!name) return
+  const name = newFolderName.value.trim();
+  if (!name) return;
   try {
-    await createDirectory(currentPath.value, name)
-    const newPath = currentPath.value === '/' ? `/${name}` : `${currentPath.value}/${name}`
-    showNewFolder.value = false
-    newFolderName.value = ''
-    navigateTo(newPath)
+    await createDirectory(currentPath.value, name);
+    const newPath = currentPath.value === "/" ? `/${name}` : `${currentPath.value}/${name}`;
+    showNewFolder.value = false;
+    newFolderName.value = "";
+    navigateTo(newPath);
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error)
+    const msg = error instanceof Error ? error.message : String(error);
     const alert = await alertController.create({
-      header: t('files.createFolderFailed'),
+      header: t("files.createFolderFailed"),
       message: msg,
-      buttons: [t('common.confirm')],
-    })
-    await alert.present()
+      buttons: [t("common.confirm")],
+    });
+    await alert.present();
   }
 }
 
 function cancelNewFolder() {
-  showNewFolder.value = false
-  newFolderName.value = ''
+  showNewFolder.value = false;
+  newFolderName.value = "";
 }
 
 onMounted(() => {
-  loadFiles()
-})
+  loadFiles();
+});
 </script>
 
 <style scoped>

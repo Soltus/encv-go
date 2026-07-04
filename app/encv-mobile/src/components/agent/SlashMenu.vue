@@ -77,10 +77,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { IonIcon } from '@ionic/vue'
-import { useI18n } from '@/composables/useI18n'
-import type { SlashMenuItem } from '@/composables/useSlashMenu'
+import { IonIcon } from "@ionic/vue";
+import { computed } from "vue";
+import { useI18n } from "@/composables/useI18n";
+import type { SlashMenuItem } from "@/composables/useSlashMenu";
 
 /**
  * 必填 props：items / query / onApply / onClose（与 spec 一致）
@@ -89,47 +89,47 @@ import type { SlashMenuItem } from '@/composables/useSlashMenu'
  *   "受控组件"——键盘事件在 textarea 上发生，状态在 composable 中更新。
  */
 const props = defineProps<{
-  items: SlashMenuItem[]
-  query: string
-  onApply: (id: string) => void
-  onClose: () => void
-  selectedIndex?: number
-  onSelectedIndexChange?: (n: number) => void
-}>()
+  items: SlashMenuItem[];
+  query: string;
+  onApply: (id: string) => void;
+  onClose: () => void;
+  selectedIndex?: number;
+  onSelectedIndexChange?: (n: number) => void;
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
 /** 按 group 拆分后渲染（功能在前，技能在后） */
 const groupedItems = computed(() => {
-  const features: SlashMenuItem[] = []
-  const skills: SlashMenuItem[] = []
+  const features: SlashMenuItem[] = [];
+  const skills: SlashMenuItem[] = [];
   for (const it of props.items) {
-    if (it.group === '功能') features.push(it)
-    else skills.push(it)
+    if (it.group === "功能") features.push(it);
+    else skills.push(it);
   }
-  return { features, skills }
-})
+  return { features, skills };
+});
 
 /** 是否当前有 query——空 query 也要显示完整列表 */
-const hasQuery = computed(() => props.query.length > 0)
+const hasQuery = computed(() => props.query.length > 0);
 
 /**
  * 通过 id 找当前项在 props.items（扁平数组）中的索引。
  * 用于判断某条 item 是否是当前 selectedIndex。
  */
 function flatIndexOf(id: string): number {
-  return props.items.findIndex((x) => x.id === id)
+  return props.items.findIndex(x => x.id === id);
 }
 
 function onClickItem(id: string) {
-  props.onApply(id)
+  props.onApply(id);
 }
 
 function onMouseEnterItem(id: string) {
   // 鼠标悬停时同步更新 selectedIndex，让"键盘高亮 == 鼠标悬停高亮"
-  const idx = flatIndexOf(id)
+  const idx = flatIndexOf(id);
   if (idx >= 0 && idx !== (props.selectedIndex ?? 0)) {
-    props.onSelectedIndexChange?.(idx)
+    props.onSelectedIndexChange?.(idx);
   }
 }
 

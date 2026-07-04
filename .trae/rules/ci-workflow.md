@@ -104,9 +104,64 @@ gh pr edit <PR-number> --add-label ci:full,ci:e2e
 
 ---
 
-## 四、应急（恶意消耗 attack 应对）
+## 四、CI 中的降级规范
 
-### 4.1 一键关停 workflow
+> **通用原则见 [graceful-degradation.md](./graceful-degradation.md) — 本节是 CI 场景下的子集。**
+
+### 4.1 CI 降级的特殊要求
+
+CI 是「功能是否真的可用」的第一道防线，所以降级可见性要求比运行时更严格：
+
+| 要求 | 说明 |
+|------|------|
+| **Step Summary 必须有** | 不能只在日志里打一行，必须写 `$GITHUB_STEP_SUMMARY` |
+| **必须用 ::warning:: / ::error::** | GitHub Actions 会高亮，翻页也能看到 |
+| **步骤状态不能是绿色** | 降级了就应该是黄色（warning），不能假装成功 |
+| **失败原因必须明确** | 不能只说"失败了"，要说清楚哪一步、为什么 |
+
+### 4.2 三级降级在 CI 中的表现
+
+| 级别 | CI 表现 |
+|------|---------|
+| **L1 功能禁用** | CI 直接红（fail），核心功能不能用就不能出包 |
+| **L2 降级体验** | Step 黄（warning）+ Step Summary 明确说明缺了什么 |
+| **L3 透明降级** | 可以绿，但日志里要有 debug 级别的记录 |
+
+### 4.3 脚本编写规范
+
+**错误（静默失败）**：
+```bash
+set +e
+build-something || true
+echo "done"
+```
+
+**正确（L2 降级，显式可观测）**：
+```bash
+set -e
+
+BUILD_SUCCESS=0
+build-something 2>&1 | tee /tmp/build.log && BUILD_SUCCESS=1 || BUILD_SUCCESS=0
+
+if [ $BUILD_SUCCESS -eq 0 ]; then
+  echo "::warning::可选功能 X 构建失败，降级方案已启用"
+  echo "::warning::失败原因: $(tail -3 /tmp/build.log)"
+  echo "## ⚠️ 可选功能 X 构建失败" >> $GITHUB_STEP_SUMMARY
+  echo "" >> $GITHUB_STEP_SUMMARY
+  echo "**降级影响**：哪些功能不可用、哪些还能用" >> $GITHUB_STEP_SUMMARY
+  echo "" >> $GITHUB_STEP_SUMMARY
+  echo "**失败原因**：" >> $GITHUB_STEP_SUMMARY
+  echo '```' >> $GITHUB_STEP_SUMMARY
+  tail -20 /tmp/build.log >> $GITHUB_STEP_SUMMARY
+  echo '```' >> $GITHUB_STEP_SUMMARY
+fi
+```
+
+---
+
+## 五、应急（恶意消耗 attack 应对）
+
+### 5.1 一键关停 workflow
 
 ```bash
 gh workflow disable pr-check.yml
@@ -119,7 +174,7 @@ gh workflow enable full-regression.yml
 gh workflow enable e2e-integration.yml
 ```
 
-### 4.2 cancel 正在跑的恶意 run
+### 5.2 cancel 正在跑的恶意 run
 
 ```bash
 # 列出所有 running runs
@@ -129,25 +184,26 @@ gh run list --status in_progress
 gh run cancel <run-id>
 ```
 
-### 4.3 应急 commit 直接走 Layer1
+### 5.3 应急 commit 直接走 Layer1
 
 恶意 PR 触发 Layer1 → 红灯 → 无法 merge → 自然终止（无需手动干预）。
 
 ---
 
-## 五、与其他规则交叉
+## 六、与其他规则交叉
 
 | 规则 | 关系 |
 |------|------|
+| [graceful-degradation.md](file:///workspace/.trae/rules/graceful-degradation.md) | **强相关** — 降级设计通用原则，本节是其子集 |
 | [test-orchestration.md](file:///workspace/.trae/rules/test-orchestration.md) | **强相关** — CI 必须走 scripts/test-go.sh / test-all-go.sh |
 | [development.md](file:///workspace/.trae/rules/development.md) | 弱相关（沙箱开发环境规范，与 CI 分离） |
+| [android.md](file:///workspace/.trae/rules/android.md) | **强相关** — libsql 降级规则、Android 构建规范 |
 | [combolite.md](file:///workspace/.trae/rules/combolite.md) | 无关 |
 | [capacitor.md](file:///workspace/.trae/rules/capacitor.md) | 无关 |
-| [android.md](file:///workspace/.trae/rules/android.md) | 无关 |
 
 ---
 
-## 六、引用
+## 七、引用
 
 - [scripts/test-go.sh](file:///workspace/scripts/test-go.sh) — Go 测试唯一入口
 - [scripts/test-all-go.sh](file:///workspace/scripts/test-all-go.sh) — 模块化测试编排

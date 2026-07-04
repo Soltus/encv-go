@@ -76,38 +76,64 @@
           </ion-label>
         </ion-item>
       </ion-list>
+
+      <ion-list>
+        <ion-list-header>
+          <ion-label>模拟世界</ion-label>
+        </ion-list-header>
+        <ion-item button detail @click="goChronicle">
+          <ion-icon :icon="bookOutline" slot="start" color="tertiary"></ion-icon>
+          <ion-label>
+            <h3>编年史</h3>
+            <p>世界历史事件时间线</p>
+          </ion-label>
+        </ion-item>
+      </ion-list>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonIcon, IonLabel, IonToggle,
-} from '@ionic/vue'
-import {
-  bugOutline, terminal, eyeOutline, extensionPuzzleOutline, flaskOutline,
-} from 'ionicons/icons'
-import { useRouter } from 'vue-router'
-import { useI18n } from '@/composables/useI18n'
-import { useDevTools } from '@/composables/useDevTools'
+  IonBackButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonTitle,
+  IonToggle,
+  IonToolbar,
+} from "@ionic/vue";
+import { bugOutline, extensionPuzzleOutline, eyeOutline, flaskOutline, terminal, bookOutline } from "ionicons/icons";
+import { useRouter } from "vue-router";
+import { useDevTools } from "@/composables/useDevTools";
+import { useI18n } from "@/composables/useI18n";
 
-const { t } = useI18n()
-const router = useRouter()
-const { vconsoleEnabled, toggleVConsole } = useDevTools()
+const { t } = useI18n();
+const router = useRouter();
+const { vconsoleEnabled, toggleVConsole } = useDevTools();
 
 function goLogSettings() {
-  router.push('/tabs/settings/devtools/log-settings')
+  router.push("/tabs/settings/devtools/log-settings");
 }
 
 // 🆕 2026-06-17：自动化测试总览入口（原 section 内 3 个 ion-item 已整体搬到 AutomationTestsHub）
 function goAutomationHub() {
-  router.push('/tabs/settings/devtools/automation-hub')
+  router.push("/tabs/settings/devtools/automation-hub");
 }
 
 // 🆕 2026-06-17：Compose UI 原型总览入口（原 prototype 卡片循环已整体搬到 ComposePrototypesHub）
 function goComposePrototypesHub() {
-  router.push('/tabs/settings/devtools/compose-prototypes-hub')
+  router.push("/tabs/settings/devtools/compose-prototypes-hub");
+}
+
+function goChronicle() {
+  router.push("/tabs/settings/chronicle");
 }
 
 // 沙箱预览：强制整页跳转，绕过 Vue Router 拦截
@@ -116,9 +142,9 @@ function goComposePrototypesHub() {
 //   导致 router 试图导航到 /openlist-ui/ 失败、渲空 <ion-router-outlet>
 // 为什么不用 window.open(_, '_blank')：会破坏 OpenPreview 会话（用户需手动切回 tab）
 // 为什么用 window.location.assign：触发完整页面加载，浏览器原生处理同源跳转
-const isDev = import.meta.env.DEV
+const isDev = import.meta.env.DEV;
 function openPreviewOpenList() {
-  window.location.assign('/openlist-ui/')
+  window.location.assign("/openlist-ui/");
 }
 
 // 跳 :5174 plugin-openlist 管理 UI（OpenListHome/Settings/ConfigEditor）
@@ -135,11 +161,11 @@ function openPreviewOpenList() {
 //   走 encv-go 后端相对路径，由后端内部处理上游转发
 // - 跟 openPreviewOpenList（/openlist-ui/）保持同一种风格：相对路径 + 整页跳转
 function openPreviewOpenListPlugin() {
-  window.location.assign('/api/preview/plugin-openlist/')
+  window.location.assign("/api/preview/plugin-openlist/");
 }
 
 function handleVConsoleToggle(event: CustomEvent) {
-  toggleVConsole(event.detail.checked)
+  toggleVConsole(event.detail.checked);
 }
 </script>
 

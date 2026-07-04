@@ -85,74 +85,58 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButton,
-  IonIcon,
-} from '@ionic/vue'
-import {
-  alertCircleOutline,
-  helpCircleOutline,
-  homeOutline,
-  appsOutline,
-  refreshOutline,
-} from 'ionicons/icons'
+import { IonButton, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from "@ionic/vue";
+import { alertCircleOutline, appsOutline, helpCircleOutline, homeOutline, refreshOutline } from "ionicons/icons";
+import { computed } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
-const route = useRoute()
-const router = useRouter()
+const route = useRoute();
+const router = useRouter();
 
-const attemptedPath = computed(() => route.fullPath || '/')
-const currentRoute = computed(() => route.path)
-const routeName = computed(() => (route.name ? String(route.name) : ''))
-const pathname = computed(() =>
-  typeof window !== 'undefined' ? window.location.pathname : '(n/a)',
-)
+const attemptedPath = computed(() => route.fullPath || "/");
+const currentRoute = computed(() => route.path);
+const routeName = computed(() => (route.name ? String(route.name) : ""));
+const pathname = computed(() => (typeof window !== "undefined" ? window.location.pathname : "(n/a)"));
 
 // 防御性：列出真实路由（与 src/router/index.ts 保持同步），开发者立刻知道有哪些路径可用
 const availableRoutes = [
-  { path: '/tabs/home',                       desc: '首页' },
-  { path: '/tabs/files',                      desc: '文件管理' },
-  { path: '/tabs/tasks',                      desc: '任务' },
-  { path: '/tabs/remote',                     desc: '远端连接' },
-  { path: '/tabs/settings',                   desc: '设置' },
-  { path: '/tabs/extensions',                 desc: '扩展管理' },
-  { path: '/tabs/openlist',                   desc: 'OpenList 管理（主 app 桥接）' },
-  { path: '/tabs/settings/server',            desc: '服务器设置' },
-  { path: '/tabs/settings/server/http',       desc: 'HTTP 服务器' },
-  { path: '/tabs/settings/server/admin',      desc: 'Admin 服务器' },
-  { path: '/tabs/settings/server/webdav',     desc: 'WebDAV 服务器' },
-  { path: '/tabs/settings/engine',            desc: '【已废弃】加密引擎（迁移到 /tabs/settings/about/engine）' },
-  { path: '/tabs/settings/about',             desc: '关于' },
-  { path: '/tabs/settings/about/engine',      desc: 'FFmpeg 引擎详情（三级）' },
-  { path: '/tabs/settings/cache',             desc: '缓存' },
-  { path: '/tabs/settings/plugins',           desc: '插件设置' },
-  { path: '/tabs/settings/devtools',          desc: '开发者工具' },
-  { path: '/tabs/settings/appearance',        desc: '外观' },
-  { path: '/tabs/devlogs',                    desc: '开发日志' },
-  { path: '/tabs/preview',                    desc: '文件预览' },
-  { path: '/tabs/file-info',                  desc: '文件信息' },
-]
+  { path: "/tabs/home", desc: "首页" },
+  { path: "/tabs/files", desc: "文件管理" },
+  { path: "/tabs/tasks", desc: "任务" },
+  { path: "/tabs/remote", desc: "远端连接" },
+  { path: "/tabs/settings", desc: "设置" },
+  { path: "/tabs/extensions", desc: "扩展管理" },
+  { path: "/tabs/openlist", desc: "OpenList 管理（主 app 桥接）" },
+  { path: "/tabs/settings/server", desc: "服务器设置" },
+  { path: "/tabs/settings/server/http", desc: "HTTP 服务器" },
+  { path: "/tabs/settings/server/admin", desc: "Admin 服务器" },
+  { path: "/tabs/settings/server/webdav", desc: "WebDAV 服务器" },
+  { path: "/tabs/settings/engine", desc: "【已废弃】加密引擎（迁移到 /tabs/settings/about/engine）" },
+  { path: "/tabs/settings/about", desc: "关于" },
+  { path: "/tabs/settings/about/engine", desc: "FFmpeg 引擎详情（三级）" },
+  { path: "/tabs/settings/cache", desc: "缓存" },
+  { path: "/tabs/settings/plugins", desc: "插件设置" },
+  { path: "/tabs/settings/devtools", desc: "开发者工具" },
+  { path: "/tabs/settings/appearance", desc: "外观" },
+  { path: "/tabs/devlogs", desc: "开发日志" },
+  { path: "/tabs/preview", desc: "文件预览" },
+  { path: "/tabs/file-info", desc: "文件信息" },
+];
 const topLevelRoutes = [
-  { path: '/',         desc: '重定向到 /tabs/home' },
-  { path: '/player',   desc: '播放器（ArtPlayer）' },
-  { path: '/tabs/*',   desc: 'Tabs 内嵌路由' },
-]
+  { path: "/", desc: "重定向到 /tabs/home" },
+  { path: "/player", desc: "播放器（ArtPlayer）" },
+  { path: "/tabs/*", desc: "Tabs 内嵌路由" },
+];
 
 function goHome() {
-  router.replace('/tabs/home')
+  router.replace("/tabs/home");
 }
 function goExtensions() {
-  router.replace('/tabs/extensions')
+  router.replace("/tabs/extensions");
 }
 function reload() {
-  if (typeof window !== 'undefined') {
-    window.location.reload()
+  if (typeof window !== "undefined") {
+    window.location.reload();
   }
 }
 </script>

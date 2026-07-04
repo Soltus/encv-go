@@ -35,37 +35,37 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from '@ionic/vue'
-import { copyOutline, chevronUpOutline, chevronDownOutline } from 'ionicons/icons'
-import type { Component } from 'vue'
-import StatusBadge from './StatusBadge.vue'
-import { useI18n } from '@/composables/useI18n'
-import { showToast } from '@/composables/useToast'
-import { copyToClipboard } from '@/composables/useClipboard'
+import { IonIcon } from "@ionic/vue";
+import { chevronDownOutline, chevronUpOutline, copyOutline } from "ionicons/icons";
+import type { Component } from "vue";
+import { copyToClipboard } from "@/composables/useClipboard";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
+import StatusBadge from "./StatusBadge.vue";
 
 const props = defineProps<{
-  icon: Component | string
-  title: string
-  status?: string
-  statusTone?: 'ready' | 'warn' | 'idle'
-  copyText?: string
-  expanded: boolean
-  onToggleExpanded?: () => void
-}>()
+  icon: Component | string;
+  title: string;
+  status?: string;
+  statusTone?: "ready" | "warn" | "idle";
+  copyText?: string;
+  expanded: boolean;
+  onToggleExpanded?: () => void;
+}>();
 
-const { t } = useI18n()
+const { t } = useI18n();
 
-const copyIcon = copyOutline
-const chevronUp = chevronUpOutline
-const chevronDown = chevronDownOutline
+const copyIcon = copyOutline;
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
 
 async function handleCopy() {
-  if (!props.copyText) return
-  const ok = await copyToClipboard(props.copyText)
+  if (!props.copyText) return;
+  const ok = await copyToClipboard(props.copyText);
   if (ok) {
-    showToast({ message: t('agent.copied'), duration: 1200, color: 'success' })
+    showToast({ message: t("agent.copied"), duration: 1200, color: "success" });
   } else {
-    showToast({ message: t('agent.copyFailed'), duration: 1500, color: 'danger' })
+    showToast({ message: t("agent.copyFailed"), duration: 1500, color: "danger" });
   }
 }
 </script>

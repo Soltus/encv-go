@@ -21,25 +21,25 @@
  *   硬编码，统一从本模块派生
  */
 
-export const ECV2 = 2 as const
-export const ECV3 = 3 as const
-export const ECV4 = 4 as const
+export const ECV2 = 2 as const;
+export const ECV3 = 3 as const;
+export const ECV4 = 4 as const;
 
-export type ContainerVersion = 2 | 3 | 4
+export type ContainerVersion = 2 | 3 | 4;
 
 export interface ContainerVersionInfo {
-  version: ContainerVersion
-  status: 'deprecated' | 'recommended'
-  label: string
+  version: ContainerVersion;
+  status: "deprecated" | "recommended";
+  label: string;
 }
 
 /** 当前支持创建新容器的版本（v3 deprecated + v4 recommended） */
 export const CONTAINER_VERSIONS: readonly ContainerVersionInfo[] = [
-  { version: ECV3, status: 'deprecated', label: 'ECv3' },
-  { version: ECV4, status: 'recommended', label: 'ECv4' },
-] as const
+  { version: ECV3, status: "deprecated", label: "ECv3" },
+  { version: ECV4, status: "recommended", label: "ECv4" },
+] as const;
 
-export const DEFAULT_CONTAINER_VERSION: ContainerVersion = ECV4
+export const DEFAULT_CONTAINER_VERSION: ContainerVersion = ECV4;
 
 /**
  * 判断容器版本是否已弃用（v2/v3 都算 deprecated）
@@ -47,14 +47,14 @@ export const DEFAULT_CONTAINER_VERSION: ContainerVersion = ECV4
  * 注意：v2 已从 SupportedVersions 移除，但语义上仍算 deprecated
  */
 export function isDeprecatedVersion(v: number): boolean {
-  return v === ECV2 || v === ECV3
+  return v === ECV2 || v === ECV3;
 }
 
 /**
  * 判断容器版本是否是当前推荐版本（仅 ECv4）
  */
 export function isRecommendedVersion(v: number): boolean {
-  return v === ECV4
+  return v === ECV4;
 }
 
 /**
@@ -65,8 +65,8 @@ export function isRecommendedVersion(v: number): boolean {
  *   其它数字 → "ECv{数字}"（不报错）
  */
 export function formatContainerVersion(v: number | undefined | null): string {
-  if (v === undefined || v === null) return ''
-  return `ECv${v}`
+  if (v === undefined || v === null) return "";
+  return `ECv${v}`;
 }
 
 /**
@@ -74,16 +74,16 @@ export function formatContainerVersion(v: number | undefined | null): string {
  * 失败返回 null
  */
 export function parseContainerVersion(label: string): ContainerVersion | null {
-  const m = /^ECv([2-4])$/.exec(label)
-  if (!m || !m[1]) return null
-  const n = Number(m[1])
-  if (n !== ECV2 && n !== ECV3 && n !== ECV4) return null
-  return n as ContainerVersion
+  const m = /^ECv([2-4])$/.exec(label);
+  if (!m || !m[1]) return null;
+  const n = Number(m[1]);
+  if (n !== ECV2 && n !== ECV3 && n !== ECV4) return null;
+  return n as ContainerVersion;
 }
 
 /**
  * 给定 plugin 的 supportedVersions 列表，过滤掉已弃用版本（当 includeDeprecated=false）
  */
 export function filterRecommendedVersions(versions: readonly number[]): number[] {
-  return versions.filter((v) => !isDeprecatedVersion(v))
+  return versions.filter(v => !isDeprecatedVersion(v));
 }

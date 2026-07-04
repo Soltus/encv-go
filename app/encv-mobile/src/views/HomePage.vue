@@ -51,6 +51,14 @@
             <p>{{ t('home.extensionsDesc') }}</p>
           </div>
         </div>
+
+        <div class="home-card simverse-card" @click="handleOpenSimverse">
+          <ion-icon :icon="planet" class="card-icon simverse-icon"></ion-icon>
+          <div class="card-info">
+            <h3>SimVerse 世界</h3>
+            <p>进入横屏模拟世界</p>
+          </div>
+        </div>
       </div>
 
       <!-- 浮动 AI 入口（Phase 7.6） -->
@@ -60,44 +68,46 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonIcon,
-} from '@ionic/vue'
-import { playCircle, folder, lockClosed, globe, layersOutline } from 'ionicons/icons'
-import { useI18n } from '@/composables/useI18n'
-import { useRouter } from 'vue-router'
-import { onIonViewWillEnter } from '@ionic/vue'
-import AgentEntry from '@/components/agent/AgentEntry.vue'
+import { IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar, onIonViewWillEnter } from "@ionic/vue";
+import { folder, globe, layersOutline, lockClosed, playCircle, planet } from "ionicons/icons";
+import { useRouter } from "vue-router";
+import AgentEntry from "@/components/agent/AgentEntry.vue";
+import { useI18n } from "@/composables/useI18n";
+import { openWorld } from "@/plugins/SimVerse";
+import { isNative } from "@/plugins/GoProcess";
 
-const { t } = useI18n()
-const router = useRouter()
+const { t } = useI18n();
+const router = useRouter();
 
 function handleOpenPlayer() {
-  router.push('/player')
+  router.push("/player");
 }
 
 function handleOpenFiles() {
-  router.push('/tabs/files')
+  router.push("/tabs/files");
 }
 
 function handleOpenTasks() {
-  router.push('/tabs/tasks')
+  router.push("/tabs/tasks");
 }
 
 function handleOpenRemote() {
-  router.push('/tabs/remote')
+  router.push("/tabs/remote");
 }
 
 function handleOpenExtensions() {
-  router.push('/tabs/extensions')
+  router.push("/tabs/extensions");
 }
 
-onIonViewWillEnter(() => {})
+function handleOpenSimverse() {
+  if (isNative()) {
+    openWorld("default", "SimVerse");
+  } else {
+    router.push("/simverse/world");
+  }
+}
+
+onIonViewWillEnter(() => {});
 </script>
 
 <style scoped>
@@ -186,6 +196,15 @@ onIonViewWillEnter(() => {})
 
 .extensions-icon {
   color: #8b5cf6;
+}
+
+.simverse-card {
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.12), rgba(139, 92, 246, 0.08));
+  border: 1px solid rgba(20, 184, 166, 0.2);
+}
+
+.simverse-icon {
+  color: #14b8a6;
 }
 
 .card-info {

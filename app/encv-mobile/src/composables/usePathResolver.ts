@@ -1,11 +1,6 @@
-import type { FileItem } from '@/api/encv'
+import type { FileItem } from "@/api/encv";
 
-const MOCK_PATHS = [
-  '/mock/video.mp4',
-  '/mock/doc.txt',
-  '/mock/report.pdf',
-  '/mock/data.csv',
-] as const
+const MOCK_PATHS = ["/mock/video.mp4", "/mock/doc.txt", "/mock/report.pdf", "/mock/data.csv"] as const;
 
 /**
  * 真机安全边界常量
@@ -28,35 +23,35 @@ const MOCK_PATHS = [
  * 适用于自动化测试入口（即使开发者在 dev 设置了 /tmp/real.txt 也改写）。
  */
 export interface WithSafetyBoundaryOptions {
-  forceAutomation?: boolean
+  forceAutomation?: boolean;
 }
 
 export function usePathResolver() {
   function normalize(rawPath: string): string {
-    const trimmed = rawPath.trim()
-    if (!trimmed) return ''
-    const slashesReplaced = trimmed.replace(/\\/g, '/')
-    const deduped = slashesReplaced.replace(/\/+/g, '/')
-    if (!deduped.startsWith('/')) {
-      return '/' + deduped
+    const trimmed = rawPath.trim();
+    if (!trimmed) return "";
+    const slashesReplaced = trimmed.replace(/\\/g, "/");
+    const deduped = slashesReplaced.replace(/\/+/g, "/");
+    if (!deduped.startsWith("/")) {
+      return "/" + deduped;
     }
-    return deduped
+    return deduped;
   }
 
   function resolveFileItem(file: FileItem): string {
-    if (!file?.path) return ''
-    return normalize(file.path)
+    if (!file?.path) return "";
+    return normalize(file.path);
   }
 
   function isAbsolutePath(path: string): boolean {
-    return path.startsWith('/')
+    return path.startsWith("/");
   }
 
   function getMockPaths(): string[] | null {
     if (import.meta.env.DEV) {
-      return [...MOCK_PATHS]
+      return [...MOCK_PATHS];
     }
-    return null
+    return null;
   }
 
   /**
@@ -75,7 +70,7 @@ export function usePathResolver() {
    * @deprecated since 2026-06-15 — use mount path /d/<mount>/... directly
    */
   function withSafetyBoundary(rawPath: string, _opts?: WithSafetyBoundaryOptions): string {
-    return normalize(rawPath)
+    return normalize(rawPath);
   }
 
   return {
@@ -84,5 +79,5 @@ export function usePathResolver() {
     isAbsolutePath,
     getMockPaths,
     withSafetyBoundary,
-  }
+  };
 }
