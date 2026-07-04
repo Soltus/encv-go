@@ -15,14 +15,15 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
+        google()
         mavenCentral()
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        // CI 环境在腾讯云，优先用腾讯镜像；阿里云镜像偶发 502 放在最后做兜底
         if (System.getenv("CI") == null) {
             maven { url = uri("https://mirrors.tencent.com/nexus/repository/maven-public/") }
         }
         maven { url = uri("https://mirrors.tencent.com/repository/maven-tencent/") }
         maven { url = uri("https://maven.aliyun.com/repository/public") }
-        google()
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
         maven { url = uri("https://jitpack.io") }
         flatDir {
             dirs("${rootProject.projectDir}/capacitor-cordova-android-plugins/src/main/libs", "${rootProject.projectDir}/app/libs")
