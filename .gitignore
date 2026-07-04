@@ -72,3 +72,12 @@ scripts/openlist-fork.env.local
 /agent/agent-demo
 /agent/cmd/agent-demo/agent-demo
 *.exe
+
+# >>> tcb-remote-workspace internal ignore rules >>>
+.session-env.json
+.mcporter/
+.skills/
+.capabilities/
+.workspace-info.md
+.local/share/opencode/
+# <<< tcb-remote-workspace internal ignore rules <<<
