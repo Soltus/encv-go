@@ -139,6 +139,29 @@ try {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
 
+// 🆕 2026-07-04：ObjectBox SONAME 兼容
+// Go 二进制以 -tags objectbox 编译时，链接的是 libobjectbox.so，
+// 但该 .so 的 ELF SONAME 字段为 libobjectbox-jni.so。
+// Android linker 按 SONAME 查找依赖，因此 APK 内需要同时存在 libobjectbox-jni.so。
+// 此 script 在 mergeNativeLibs 后在每个架构目录下创建 libobjectbox-jni.so 副本。
+gradle.projectsEvaluated {
+    tasks.matching { it.name.startsWith("merge") && it.name.endsWith("NativeLibs") }.configureEach {
+        doLast {
+            val variantDir = buildDir.resolve("intermediates/merged_native_libs/${name.removePrefix("merge").removeSuffix("NativeLibs").lowercase()}/out")
+            if (!variantDir.exists()) return@doLast
+            variantDir.walkTopDown().forEach { f ->
+                if (f.name == "libobjectbox.so" && f.parentFile != null) {
+                    val shim = File(f.parentFile, "libobjectbox-jni.so")
+                    if (!shim.exists()) {
+                        f.copyTo(shim)
+                        logger.lifecycle("libobjectbox-jni.so shim created in ${f.parentFile.name}")
+                    }
+                }
+            }
+        }
+    }
+}
+
 tasks.withType<KotlinCompile>().configureEach {
     compilerOptions {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
