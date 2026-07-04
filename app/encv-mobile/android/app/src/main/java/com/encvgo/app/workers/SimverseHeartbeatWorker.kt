@@ -73,33 +73,35 @@ class SimverseHeartbeatWorker(
 
         Log.i(TAG, "heartbeat tick: expectedRunning=$expectedRunning")
 
-        val port = EncvGoService.getPort(context)
+        val port = EncvGoService.lastKnownPort
         if (port <= 0) {
             Log.w(TAG, "heartbeat: backend not running (port=0)")
             recordHeartbeat(context, now, false, 0)
-            return Result.retry()
+            return@withContext Result.retry()
         }
 
-        return try {
-            val state = fetchWorldState(port)
-            val running = state?.optBoolean("running") == true
-            val tick = state?.optInt("tick") ?: 0
+        try {
+          val state = fetchWorldState(port)
+          val running = state?.optBoolean("running") == true
+          val tick = state?.optInt("tick") ?: 0
 
-            recordHeartbeat(context, now, running, tick.toLong())
+          recordHeartbeat(context, now, running, tick.toLong())
 
-            if (expectedRunning && !running) {
-                Log.w(TAG, "heartbeat: world paused but expected running, resuming...")
-                resumeWorld(port)
-            }
+          if (expectedRunning && !running) {
+            Log.w(TAG, "heartbeat: world paused but expected running, resuming...")
+            resumeWorld(port)
+          }
 
-            if (tick > 0) {
-                saveWorldCheckpoint(port)
-            }
+          if (tick > 0) {
+            saveWorldCheckpoint(port)
+          }
 
-            Result.success()
+          // 这里直接返回 Result.success()，作为 try 块的最后一个表达式
+          Result.success()
         } catch (e: Exception) {
-            Log.e(TAG, "heartbeat failed", e)
-            Result.retry()
+          Log.e(TAG, "heartbeat failed", e)
+          // 这里也是直接返回 Result.retry()
+          Result.retry()
         }
     }
 
