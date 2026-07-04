@@ -266,6 +266,7 @@ import { useI18n } from "@/composables/useI18n";
 import { useRealtimeTransport } from "@/composables/useRealtimeTransport";
 import { showToast } from "@/composables/useToast";
 import { IncrementalFilter, type Level } from "@/utils/IncrementalFilter";
+import { getKotlinDevLogs, type KotlinDevLogEntry } from "@/plugins/GoProcess";
 
 const { t } = useI18n();
 const transport = useRealtimeTransport();
@@ -919,6 +920,26 @@ onMounted(async () => {
     level: serverOnline.value ? "info" : "warn",
     message: `DevLogs ready, server ${serverOnline.value ? "online" : "offline"} (transport=${transport.connectionState.value})`,
   });
+
+  // 🆕 2026-07-04：读取 Kotlin 层本地日志（Go 后端启动失败时尤其重要）
+  // 这些日志通过 KotlinDevLogBridge 写入本地 JSONL 文件，不依赖网络。
+  void (async () => {
+    const result = await getKotlinDevLogs();
+    if (result.success && result.logs && result.logs.length > 0) {
+      console.info(`[DevLogs] injecting ${result.logs.length} Kotlin native log entries`);
+      for (const entry of result.logs) {
+        const level = ["debug", "info", "warn", "error"].includes(entry.level) ? entry.level as Level : "info";
+        queueBackendLog({
+          id: ++nextId,
+          timestamp: entry.timestamp || new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+          level,
+          message: entry.message,
+          source: entry.source || "kotlin",
+          tags: Array.isArray(entry.tags) ? [...entry.tags] : ["kotlin"],
+        });
+      }
+    }
+  })();
 });
 
 onUnmounted(() => {

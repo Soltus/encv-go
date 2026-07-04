@@ -352,6 +352,38 @@ export async function saveDevLogs(logs: string): Promise<{ success: boolean; pat
   }
 }
 
+/**
+ * 🆕 2026-07-04：读取 Kotlin 层本地 DevLog。
+ * 返回的 logs 是 JSON 数组字符串，每条包含 timestamp/level/message/source/tags。
+ * 前端 DevLogs 页面在 onMounted 时调用此函数注入到 backend tab。
+ */
+export interface KotlinDevLogEntry {
+  timestamp: string;
+  level: string;
+  message: string;
+  source: string;
+  tags: string[];
+  stack?: string;
+}
+
+export async function getKotlinDevLogs(): Promise<{ success: boolean; logs?: KotlinDevLogEntry[] }> {
+  try {
+    const result = await GoProcess.getKotlinDevLogs();
+    if (result.success && result.logs) {
+      try {
+        const parsed = JSON.parse(result.logs) as KotlinDevLogEntry[];
+        return { success: true, logs: parsed };
+      } catch {
+        return { success: true, logs: [] };
+      }
+    }
+    return { success: false };
+  } catch (e) {
+    console.error("[ENCV] GoProcess.getKotlinDevLogs() failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+    return { success: false };
+  }
+}
+
 // 🆕 2026-06-17：读取 android-deps.json manifest
 // native 端返回完整 manifest，web 端返回 null（前端 fallback 不显示 Android 段）
 export interface AndroidDepsManifest {

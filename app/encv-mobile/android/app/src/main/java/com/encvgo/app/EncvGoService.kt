@@ -400,6 +400,8 @@ class EncvGoService : Service() {
             waitForBackendReady(startupGeneration.get(), source, command)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start backend", e)
+            KotlinDevLogBridge.logError(TAG, "Start exception", e)
+            try { KotlinDevLogBridge.flushToDisk(this) } catch (_: Exception) { }
             publishFailure("start_failed:${e.message ?: "unknown"}", source, command)
         }
     }
@@ -450,15 +452,23 @@ class EncvGoService : Service() {
                     synchronized(outputBuffer) {
                         outputBuffer.append(content).append('\n')
                     }
-                    if (!processReady.get() && readyKeywords.any { content.contains(it, ignoreCase = true) }) {
-                        maybeMarkReady(generation, source, command)
-                    }
+                    // 🆕 2026-07-04：将 Go 进程 stderr 同时写入 KotlinDevLogBridge，
+                    // 确保 Go 启动失败时日志能通过 KotlinDevLogBridge 被前端 DevLogs 读取
                     if (content.contains("error", ignoreCase = true) ||
                         content.contains("fatal", ignoreCase = true) ||
                         content.contains("panic", ignoreCase = true) ||
                         content.contains("permission denied", ignoreCase = true)) {
                         lastError = "go_error:$content"
                         publishStatus(lastError, source, command)
+                        KotlinDevLogBridge.logError(TAG, "[go] $content")
+                    } else if (content.contains("warn", ignoreCase = true) ||
+                               content.contains("failed", ignoreCase = true)) {
+                        KotlinDevLogBridge.logWarn(TAG, "[go] $content")
+                    } else {
+                        KotlinDevLogBridge.logInfo(TAG, "[go] $content")
+                    }
+                    if (!processReady.get() && readyKeywords.any { content.contains(it, ignoreCase = true) }) {
+                        maybeMarkReady(generation, source, command)
                     }
                 }
 
@@ -551,6 +561,8 @@ class EncvGoService : Service() {
         updateNotification("后端启动失败")
         publishStatus(error, source, command)
         sendExternalResult(false, error, source, command)
+        KotlinDevLogBridge.logError(TAG, "Backend failure: $error (source=$source)")
+        try { KotlinDevLogBridge.flushToDisk(this) } catch (_: Exception) { }
     }
 
     private fun publishStatus(error: String?, source: String = currentSource, command: String? = null) {

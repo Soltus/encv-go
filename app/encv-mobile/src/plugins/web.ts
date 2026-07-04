@@ -72,6 +72,13 @@ export interface GoProcessPlugin {
   clearLogs(): Promise<{ success: boolean }>;
   openLogViewer(): Promise<{ success: boolean }>;
   saveDevLogs(options: { logs: string }): Promise<{ success: boolean; path?: string }>;
+
+  /**
+   * 🆕 2026-07-04：读取 Kotlin 层本地 DevLog，用于 Go 后端未启动时的日志注入。
+   * 返回格式：{ success: boolean, logs?: string (JSON 数组字符串) }
+   */
+  getKotlinDevLogs(): Promise<{ success: boolean; logs?: string }>;
+
   // 🆕 2026-06-17：读取 android-deps.json manifest (build 时由 Gradle task 生成)
   // web 端 mock 返回 null（无 Android assets）
   getAndroidDeps(): Promise<{ items: any[] } | null>;
@@ -213,6 +220,10 @@ export class GoProcessWeb extends WebPlugin implements GoProcessPlugin {
   }
 
   async saveDevLogs(_options: { logs: string }): Promise<{ success: boolean; path?: string }> {
+    return { success: false };
+  }
+
+  async getKotlinDevLogs(): Promise<{ success: boolean; logs?: string }> {
     return { success: false };
   }
 

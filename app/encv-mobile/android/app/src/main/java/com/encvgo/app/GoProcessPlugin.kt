@@ -637,6 +637,46 @@ class GoProcessPlugin : Plugin() {
         if (p != null) call.resolve(JSObject().apply { put("success", true); put("path", p) }) else call.reject("Failed to save dev logs")
     }
 
+    /**
+     * 🆕 2026-07-04：读取 Kotlin 层本地日志，用于 Go 后端未启动时的 DevLogs 注入。
+     *
+     * 返回格式：
+     * ```json
+     * {
+     *   "success": true,
+     *   "logs": [
+     *     { "timestamp": "2026-07-04 10:30:00.123", "level": "error",
+     *       "message": "Go backend start failed: no binary found",
+     *       "source": "EncvGoService", "tags": ["kotlin", "android"] }
+     *   ]
+     * }
+     * ```
+     *
+     * 触发时机：前端 DevLogs 组件 onMounted 时调用。
+     * 读取完成后自动清空本地文件（已读取 = 已消费）。
+     */
+    @PluginMethod
+    fun getKotlinDevLogs(call: PluginCall) {
+        try {
+            val entries = KotlinDevLogBridge.readAll(context)
+            val arr = org.json.JSONArray()
+            for (entry in entries) {
+                val obj = org.json.JSONObject(entry as Map<String, Any?>)
+                arr.put(obj)
+            }
+            // 读取完成后清空，避免重复注入
+            KotlinDevLogBridge.clear(context)
+            val result = JSObject().apply {
+                put("success", true)
+                put("logs", arr.toString())
+            }
+            call.resolve(result)
+        } catch (e: Exception) {
+            Log.e(TAG, "getKotlinDevLogs failed", e)
+            call.reject("getKotlinDevLogs failed", e)
+        }
+    }
+
     // 🆕 2026-06-17：读取 android-deps.json manifest（由 Gradle task generateAndroidDepsManifest 在
     //   :app:preBuild 阶段生成到 app/src/main/assets/android-deps.json）
     //   用途：About 页"Android 库"section 数据源
