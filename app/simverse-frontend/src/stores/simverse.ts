@@ -1,4 +1,4 @@
-import type { Chronicle, NPC, WorldState } from "@shared/types/simverse";
+import type { Chronicle, NPC, WorldState } from "../../packages/shared-components/src/types/simverse";
 import { defineStore } from "pinia";
 
 export const useSimverseStore = defineStore("simverse", {

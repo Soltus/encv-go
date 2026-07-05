@@ -12,6 +12,7 @@
     "@capacitor/core": "^8.3.4",
     "@capacitor/screen-orientation": "^8.0.1",
     "@encv/shared-components": "workspace:*",
+    "@ionic/core": "8.8.7",
     "@ionic/vue": "^8.8.7",
     "@ionic/vue-router": "^8.8.7",
     "ionicons": "^8.0.13",

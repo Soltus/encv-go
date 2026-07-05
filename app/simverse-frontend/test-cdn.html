@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SimVerse CDN</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; margin: 0; padding: 0; background: #fff; }
+    #app { padding: 20px; }
+    .loading { text-align: center; padding: 40px; color: #666; }
+    .error { background: #ffe6e6; color: #d00; padding: 20px; margin: 20px; border-radius: 8px; }
+    .success { background: #e6ffe6; color: #060; padding: 20px; margin: 20px; border-radius: 8px; }
+    button { padding: 8px 16px; margin: 5px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="loading">正在加载 Vue CDN...</div>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script>
+    const app = Vue.createApp({
+      template: `
+        <div>
+          <h1>🏠 SimVerse</h1>
+          <p>Vue CDN 测试页面</p>
+          <button @click="tick++">+ Tick: {{ tick }}</button>
+          <button @click="npc++">+ NPC: {{ npc }}</button>
+          <button @click="toggle = !toggle">Toggle: {{ toggle }}</button>
+        </div>
+      `,
+      data() {
+        return {
+          tick: 0,
+          npc: 0,
+          toggle: false
+        };
+      },
+      mounted() {
+        document.getElementById('app').innerHTML = '<div class="success">✅ Vue CDN 加载成功! (版本: ' + Vue.version + ')</div><div id="real-app"></div>';
+        this.$mount('#real-app');
+      },
+      errorCaptured(err, vm, info) {
+        document.getElementById('app').innerHTML = '<div class="error">❌ 错误: ' + err.message + '</div>';
+        console.error('Vue Error:', err, info);
+        return false;
+      }
+    });
+    
+    app.config.errorHandler = (err, vm, info) => {
+      document.getElementById('app').innerHTML = '<div class="error">❌ Global Error: ' + err.message + '</div>';
+      console.error('Global Error:', err, info);
+    };
+    
+    app.mount('#app').catch(err => {
+      document.getElementById('app').innerHTML = '<div class="error">❌ Mount Error: ' + err.message + '</div>';
+    });
+    
+    window.onerror = function(msg, src, line, col, err) {
+      document.getElementById('app').innerHTML = '<div class="error">❌ Window Error: ' + (err?.stack || msg) + '</div>';
+      return true;
+    };
+  </script>
+  <div id="real-app"></div>
+</body>
+</html>

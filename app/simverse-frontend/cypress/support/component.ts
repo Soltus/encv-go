@@ -1,6 +1,4 @@
 // Cypress 组件测试支持文件
-// 设计参考：app/encv-mobile/cypress/support/component.ts
-
 import { mount } from 'cypress/vue'
 import { IonicVue } from '@ionic/vue'
 import { createPinia } from 'pinia'
@@ -29,20 +27,32 @@ const sharedTestRouter = createRouter({
 
 // 每个测试前重置 pinia + router
 beforeEach(() => {
-  // 重置 router 到 /
   void sharedTestRouter.push('/').catch(() => {})
 })
 
-// 暴露 mount 给所有测试（自动装 IonicVue + vue-router + pinia）
+// 暴露 mount 给所有测试
 Cypress.Commands.add('mount', (component, options: any = {}) => {
   const pinia = createPinia()
   const { global = {}, ...rest } = options
+  
+  // 添加全局样式来修复 ion-content 高度问题
+  const styleTag = document.createElement('style')
+  styleTag.id = 'cypress-global-styles'
+  styleTag.textContent = `
+    html, body { margin: 0; padding: 0; height: 100%; }
+    ion-app { height: 100% !important; min-height: 100vh !important; }
+    ion-page { display: flex !important; flex-direction: column !important; height: 100% !important; }
+    ion-header { flex-shrink: 0; }
+    ion-content { flex: 1 1 auto !important; display: flex !important; flex-direction: column !important; }
+  `
+  document.head.appendChild(styleTag)
+  
   return mount(component, {
     global: {
       plugins: [
         sharedTestRouter,
         pinia,
-        IonicVue,
+        [IonicVue, { mode: 'ios', rippleEffect: false }],
         ...(global.plugins || []),
       ],
       ...global,
@@ -51,5 +61,4 @@ Cypress.Commands.add('mount', (component, options: any = {}) => {
   })
 })
 
-// ⚠️ 暴露带 template compiler 的 Vue
 export * as Vue from 'vue'

@@ -38,6 +38,8 @@
 **/yarn.lock
 **/.pnpm-store/
 
+**/screenshots/
+
 # Go workspace file
 go.work
 

@@ -236,14 +236,14 @@
 <script setup lang="ts">
 import { Capacitor } from "@capacitor/core";
 import { ScreenOrientation } from "@capacitor/screen-orientation";
-import { useWorldRenderer, type WorldEntity } from "@self/composables/useWorldRenderer";
-import { addWorldShortcut, closeWorld, isWorldShortcutSupported } from "@self/plugins/SimVerse";
+import { useWorldRenderer, type WorldEntity } from "../composables/useWorldRenderer";
+import { addWorldShortcut, closeWorld, isWorldShortcutSupported } from "../plugins/SimVerse";
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 
-const _router = useRouter();
+const router = useRouter();
 
-const _worldName = ref("SimVerse");
+const worldName = ref("SimVerse");
 const worldState = ref<any>(null);
 const storageStatus = ref<any>(null);
 const npcs = ref<any[]>([]);
@@ -509,11 +509,11 @@ function _selectNPC(npc: any) {
   selectedNPC.value = npc;
 }
 
-function _toggleMenu() {
+function toggleMenu() {
   menuOpen.value = !menuOpen.value;
 }
 
-function _exitWorld() {
+function exitWorld() {
   closeWorld();
   if (window.history.length > 1) {
     window.history.back();
