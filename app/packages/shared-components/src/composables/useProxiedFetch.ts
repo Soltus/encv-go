@@ -168,8 +168,8 @@ async function proxiedFetch(url: string, init: InternalRequestInit = {}): Promis
   // 流式：要求 Accept: text/event-stream 或 init.isStream
   const isStream =
     init.isStream === true ||
-    (headers["Accept"]?.includes("text/event-stream") ?? false) ||
-    (headers["accept"]?.includes("text/event-stream") ?? false);
+    (headers.Accept?.includes("text/event-stream") ?? false) ||
+    (headers.accept?.includes("text/event-stream") ?? false);
 
   if (isStream) {
     const result = await ApiProxy.streamStart({ url, method, headers, body });

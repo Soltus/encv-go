@@ -208,38 +208,10 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSelect,
-  IonSelectOption,
-  IonTitle,
-  IonToggle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  closeCircleOutline,
-  colorPaletteOutline,
-  eyeOutline,
-  globeOutline,
-  layersOutline,
-  sparklesOutline,
-  trendingUpOutline,
-} from "ionicons/icons";
-import { computed, ref } from "vue";
 import type { Locale } from "@encv/shared-components/composables/useI18n";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useTheme } from "@encv/shared-components/composables/useTheme";
+import { computed, ref } from "vue";
 
 const {
   isDark,
@@ -264,7 +236,7 @@ const { t, locale, setLocale } = useI18n();
 
 const currentGradient = ref<string | null>(null);
 
-const bgCategories = computed(() => [
+const _bgCategories = computed(() => [
   {
     key: "light",
     label: "settings.bgLight",
@@ -287,29 +259,29 @@ const bgCategories = computed(() => [
   },
 ]);
 
-const p3Modes = [
+const _p3Modes = [
   { value: "auto", label: "settings.p3Auto", description: "" },
   { value: "on", label: "settings.p3On", description: "" },
   { value: "off", label: "settings.p3Off", description: "" },
 ];
 
-function handleLocaleChange(event: CustomEvent) {
+function _handleLocaleChange(event: CustomEvent) {
   setLocale(event.detail.value as Locale);
 }
 
-function handleBgColorChange(value: string) {
+function _handleBgColorChange(value: string) {
   setBgColor(value);
   currentGradient.value = null;
 }
 
-function handleGradientSelect(preset: (typeof BG_PRESETS)[number]) {
+function _handleGradientSelect(preset: (typeof BG_PRESETS)[number]) {
   if (preset.gradientColors) {
     setBgGradient(preset.gradientColors);
     currentGradient.value = preset.name;
   }
 }
 
-function getPresetStyle(preset: (typeof BG_PRESETS)[number]) {
+function _getPresetStyle(preset: (typeof BG_PRESETS)[number]) {
   if (preset.gradientColors) {
     return {
       background: `linear-gradient(135deg, ${preset.gradientColors.join(", ")})`,
@@ -323,20 +295,20 @@ function getPresetStyle(preset: (typeof BG_PRESETS)[number]) {
   };
 }
 
-function handleBgBlurChange(event: Event) {
+function _handleBgBlurChange(event: Event) {
   const target = event.target as HTMLInputElement;
   setBgBlur(parseInt(target.value, 10));
 }
 
-function handleP3ModeChange(value: string) {
+function _handleP3ModeChange(value: string) {
   setP3Mode(value as "off" | "on" | "auto");
 }
 
-function handleVividToggle(event: CustomEvent) {
+function _handleVividToggle(event: CustomEvent) {
   setVividMode(event.detail.checked ? "on" : "off");
 }
 
-function handleVividIntensityChange(event: Event) {
+function _handleVividIntensityChange(event: Event) {
   const target = event.target as HTMLInputElement;
   setVividIntensity(parseInt(target.value, 10));
 }

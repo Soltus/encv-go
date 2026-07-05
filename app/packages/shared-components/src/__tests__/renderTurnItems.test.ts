@@ -12,9 +12,10 @@
  * - 流式状态保留未完结 group
  * - 非流式状态强制 flush
  */
-import { describe, expect, it } from "vitest";
+
 import { renderTurnItems } from "@encv/shared-components/composables/renderTurnItems";
 import type { Message } from "@encv/shared-components/composables/useAgent";
+import { describe, expect, it } from "vitest";
 
 const u = (_i: number, content: string): Message => ({
   role: "user",

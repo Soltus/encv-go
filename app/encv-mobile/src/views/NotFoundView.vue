@@ -85,21 +85,19 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from "@ionic/vue";
-import { alertCircleOutline, appsOutline, helpCircleOutline, homeOutline, refreshOutline } from "ionicons/icons";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 const route = useRoute();
 const router = useRouter();
 
-const attemptedPath = computed(() => route.fullPath || "/");
-const currentRoute = computed(() => route.path);
-const routeName = computed(() => (route.name ? String(route.name) : ""));
-const pathname = computed(() => (typeof window !== "undefined" ? window.location.pathname : "(n/a)"));
+const _attemptedPath = computed(() => route.fullPath || "/");
+const _currentRoute = computed(() => route.path);
+const _routeName = computed(() => (route.name ? String(route.name) : ""));
+const _pathname = computed(() => (typeof window !== "undefined" ? window.location.pathname : "(n/a)"));
 
 // 防御性：列出真实路由（与 src/router/index.ts 保持同步），开发者立刻知道有哪些路径可用
-const availableRoutes = [
+const _availableRoutes = [
   { path: "/tabs/home", desc: "首页" },
   { path: "/tabs/files", desc: "文件管理" },
   { path: "/tabs/tasks", desc: "任务" },
@@ -122,19 +120,19 @@ const availableRoutes = [
   { path: "/tabs/preview", desc: "文件预览" },
   { path: "/tabs/file-info", desc: "文件信息" },
 ];
-const topLevelRoutes = [
+const _topLevelRoutes = [
   { path: "/", desc: "重定向到 /tabs/home" },
   { path: "/player", desc: "播放器（ArtPlayer）" },
   { path: "/tabs/*", desc: "Tabs 内嵌路由" },
 ];
 
-function goHome() {
+function _goHome() {
   router.replace("/tabs/home");
 }
-function goExtensions() {
+function _goExtensions() {
   router.replace("/tabs/extensions");
 }
-function reload() {
+function _reload() {
   if (typeof window !== "undefined") {
     window.location.reload();
   }

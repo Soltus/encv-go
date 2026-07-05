@@ -39,9 +39,9 @@
 </template>
 
 <script setup lang="ts" generic="T extends { id: number; level: string }">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useVirtualizer } from "@tanstack/vue-virtual";
 import { computed, watch } from "vue";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 interface Props {
   /** 🆕 2026-06-15 1M+ 优化：接受 readonly 数组，IncrementalFilter.getResult() 内部结果
@@ -76,7 +76,7 @@ const props = withDefaults(defineProps<Props>(), {
 // 修法：行点击/键盘 enter/space 触发 select 事件，父级弹模态显示完整内容 + 复制。
 const emit = defineEmits<(e: "select", item: T) => void>();
 
-function handleClick(item: T) {
+function _handleClick(item: T) {
   emit("select", item);
 }
 
@@ -91,8 +91,8 @@ const virtualizerOptions = computed(() => ({
 
 const virtualizer = useVirtualizer(virtualizerOptions);
 
-const virtualItems = computed(() => virtualizer.value.getVirtualItems());
-const totalSize = computed(() => virtualizer.value.getTotalSize());
+const _virtualItems = computed(() => virtualizer.value.getVirtualItems());
+const _totalSize = computed(() => virtualizer.value.getTotalSize());
 
 // 🆕 修复：scrollEl 首次为 null 时 virtualizer 返回空 items → 列表全空白
 //   根因：Ionic ion-content 的 .inner-scroll 在 shadow DOM 内，onMounted 时可能还没 ready
@@ -133,7 +133,7 @@ defineExpose({ forceMeasure });
  *   const hl = new Highlight(range)
  *   CSS.highlights.set('log-search', hl)
  */
-function highlightRange(_text: string, _query: string): { start: number; end: number }[] | null {
+function _highlightRange(_text: string, _query: string): { start: number; end: number }[] | null {
   return null;
 }
 </script>

@@ -338,7 +338,7 @@ export function useTaskViewCompute(options: UseTaskViewComputeOptions): UseTaskV
   if (worker) {
     worker.onmessage = (e: MessageEvent<ComputeOutput>) => {
       const output = e.data;
-      if (!output || output.type !== "result") return;
+      if (output?.type !== "result") return;
       isComputing.value = false;
       workerHasResult.value = true;
       // date section: dateKey → i18n label

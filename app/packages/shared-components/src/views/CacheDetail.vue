@@ -129,44 +129,14 @@
 </template>
 
 <script setup lang="ts">
-import {
-  alertController,
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  cloudOutline,
-  documentTextOutline,
-  folderOpenOutline,
-  imageOutline,
-  lockClosed,
-  refreshCircleOutline,
-  searchOutline,
-  serverOutline,
-  statsChartOutline,
-  timeOutline,
-  timerOutline,
-  trashOutline,
-} from "ionicons/icons";
+import type { IndexStats } from "@encv/shared-components/api/encv";
+import { clearIndex, getIndexStats, rebuildIndex } from "@encv/shared-components/api/encv";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { clearThumbCache, getThumbCacheSize } from "@encv/shared-components/composables/useThumbnailCache";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import { alertController } from "@ionic/vue";
 import { onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import type { IndexStats } from "@encv/shared-components/api/encv";
-import { clearIndex, formatFileSize, getIndexStats, rebuildIndex } from "@encv/shared-components/api/encv";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { clearThumbCache, getThumbCacheSize, THUMB_CACHE_MAX } from "@encv/shared-components/composables/useThumbnailCache";
-import { showToast } from "@encv/shared-components/composables/useToast";
 
 const router = useRouter();
 const { t } = useI18n();
@@ -184,7 +154,7 @@ async function loadStats() {
 }
 
 // 🆕 2026-07-02 跳转全文索引二级页（FTS5 详情）
-function goFullTextIndex() {
+function _goFullTextIndex() {
   router.push("/tabs/settings/fulltext-index");
 }
 
@@ -201,7 +171,7 @@ function updateSearchCacheSize() {
   }
 }
 
-async function handleRebuild() {
+async function _handleRebuild() {
   try {
     await rebuildIndex();
     await loadStats();
@@ -211,7 +181,7 @@ async function handleRebuild() {
   }
 }
 
-async function handleClearIndex() {
+async function _handleClearIndex() {
   const alert = await alertController.create({
     header: t("settings.clearIndex"),
     message: t("settings.clearIndexConfirm"),
@@ -234,7 +204,7 @@ async function handleClearIndex() {
   await alert.present();
 }
 
-function handleClearSearchCache() {
+function _handleClearSearchCache() {
   const keysToRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -249,7 +219,7 @@ function updateThumbCacheSize() {
   thumbCacheSize.value = getThumbCacheSize();
 }
 
-async function handleClearThumbCache() {
+async function _handleClearThumbCache() {
   const alert = await alertController.create({
     header: t("settings.clearThumbCache"),
     message: t("settings.clearIndexConfirm"),

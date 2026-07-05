@@ -35,23 +35,9 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
+import { modalController } from "@ionic/vue";
 import { cloudOutline, folderOpen, settingsOutline, speedometerOutline } from "ionicons/icons";
 import { computed } from "vue";
-import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import FilePickerModal from "@/components/FilePickerModal.vue";
 import { useConfig } from "@/composables/useConfig";
 import { useI18n } from "@/composables/useI18n";
@@ -65,13 +51,13 @@ const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig()
 const SECTION_KEY = "server";
 
 const sectionDef = computed(() => parseSchema().find(s => s.key === SECTION_KEY));
-const childFields = computed(() => sectionDef.value?.properties ?? []);
+const _childFields = computed(() => sectionDef.value?.properties ?? []);
 
 function tField(key: string): string {
   return t(`settings.${key}`);
 }
 
-function fieldLabel(key: string, required?: boolean): string {
+function _fieldLabel(key: string, required?: boolean): string {
   return tField(key) + (required ? " *" : "");
 }
 
@@ -80,7 +66,7 @@ const fieldIconMap: Record<string, string> = {
   dir: folderOpen,
 };
 
-function getFieldIcon(fieldKey: string, fieldType: string): string {
+function _getFieldIcon(fieldKey: string, fieldType: string): string {
   if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey];
   if (fieldType === "boolean") return settingsOutline;
   if (fieldType === "integer") return speedometerOutline;
@@ -88,11 +74,11 @@ function getFieldIcon(fieldKey: string, fieldType: string): string {
   return settingsOutline;
 }
 
-function setValue(path: string[], value: unknown) {
+function _setValue(path: string[], value: unknown) {
   setFieldValue(path, value);
 }
 
-function handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
+function _handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
   const val = (event.target as HTMLInputElement).value;
   if (_field.type === "integer") {
     setFieldValue(path, val ? Number(val) : 0);
@@ -101,7 +87,7 @@ function handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
   }
 }
 
-async function handleBrowsePath(path: string[], field: FieldDef) {
+async function _handleBrowsePath(path: string[], field: FieldDef) {
   const isFolder = field.key !== "file";
   const currentVal = String(getFieldValue(path) || "/");
   const modal = await modalController.create({
@@ -119,7 +105,7 @@ async function handleBrowsePath(path: string[], field: FieldDef) {
   }
 }
 
-async function handleSave() {
+async function _handleSave() {
   try {
     await saveConfig();
     showToast({ message: t("settings.configSaved"), duration: 1500, color: "success" });

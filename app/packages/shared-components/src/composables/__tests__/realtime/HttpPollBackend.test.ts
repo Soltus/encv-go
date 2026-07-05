@@ -17,9 +17,9 @@
  *   - stop() / 错误路径用更短等待以减少测试时间
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EncvTask } from "@encv/shared-components/api/encv";
 import { createHttpPollBackend } from "@encv/shared-components/composables/realtime/HttpPollBackend";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 function makeTask(id: string, status: string = "running", progress: number = 0): EncvTask {
   return {

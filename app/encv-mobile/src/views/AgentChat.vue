@@ -542,18 +542,6 @@
 // template 内直接使用的 state/handler 都在此解构到局部变量，
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
-import { IonIcon } from "@ionic/vue";
-import AgentDebugPanel from "@/components/agent/AgentDebugPanel.vue";
-// 以下组件现在由 DefaultMessagesView.vue 内部导入（引擎渲染路径）
-import AttachmentTray from "@/components/agent/AttachmentTray.vue";
-import ContextIcon from "@/components/agent/ContextIcon.vue";
-// 多渲染引擎架构：引擎渲染包装组件
-import EngineRenderer from "@/components/agent/EngineRenderer.vue";
-import MockBranchChoiceBar from "@/components/agent/MockBranchChoiceBar.vue";
-import MockPresetBar from "@/components/agent/MockPresetBar.vue";
-import SlashMenu from "@/components/agent/SlashMenu.vue";
-import V2QuickActions from "@/components/agent/V2QuickActions.vue";
-import V2ScenariosMenu from "@/components/agent/V2ScenariosMenu.vue";
 import { useAgentChatView } from "./useAgentChatView";
 
 const {

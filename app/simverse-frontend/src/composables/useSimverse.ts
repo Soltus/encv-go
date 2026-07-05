@@ -1,4 +1,4 @@
-import { ref, computed } from "vue";
+import { computed, ref } from "vue";
 
 export interface SimverseWorldState {
   tick: number;
@@ -230,9 +230,7 @@ export function useSimverse() {
   }
 
   async function loadNPCList(page = 1, pageSize = 50) {
-    const data = await fetchJSON(
-      `/api/simverse/npc/list?page=${page}&page_size=${pageSize}`,
-    );
+    const data = await fetchJSON(`/api/simverse/npc/list?page=${page}&page_size=${pageSize}`);
     return data as {
       page: number;
       page_size: number;
@@ -279,9 +277,7 @@ export function useSimverse() {
 
   async function loadChronicleWorld(minImportance = 2, limit = 50) {
     try {
-      const data = await fetchJSON(
-        `/api/simverse/chronicle/world?min_importance=${minImportance}&limit=${limit}`,
-      );
+      const data = await fetchJSON(`/api/simverse/chronicle/world?min_importance=${minImportance}&limit=${limit}`);
       return data as SimverseChronicleWorldResponse;
     } catch (e) {
       console.warn("Failed to load world chronicle:", e);
@@ -291,9 +287,7 @@ export function useSimverse() {
 
   async function loadChronicleNPC(npcID: number, limit = 50) {
     try {
-      const data = await fetchJSON(
-        `/api/simverse/chronicle/npc/${npcID}?limit=${limit}`,
-      );
+      const data = await fetchJSON(`/api/simverse/chronicle/npc/${npcID}?limit=${limit}`);
       return data as SimverseChronicleNPCResponse;
     } catch (e) {
       console.warn(`Failed to load NPC ${npcID} chronicle:`, e);
@@ -324,7 +318,7 @@ export function useSimverse() {
         console.log("[simverse] WS connected");
       };
 
-      ws.onmessage = (event) => {
+      ws.onmessage = event => {
         try {
           const msg = JSON.parse(event.data);
           handleWSMessage(msg);
@@ -339,7 +333,7 @@ export function useSimverse() {
         scheduleReconnect();
       };
 
-      ws.onerror = (e) => {
+      ws.onerror = e => {
         console.error("[simverse] WS error:", e);
       };
     } catch (e) {

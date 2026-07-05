@@ -1,5 +1,5 @@
-import { alertController } from "@ionic/vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { alertController } from "@ionic/vue";
 
 const { t } = useI18n();
 

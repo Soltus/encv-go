@@ -96,7 +96,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
 import {
   chevronDownOutline,
   chevronUpOutline,
@@ -113,8 +112,8 @@ import { useI18n } from "@/composables/useI18n";
 
 // 模板用 chevronUp/chevronDown 引用，必须从 import 别名重绑定，否则
 // 模板引用未定义变量（vue-tsc 报 chevronUp/Down 不在 template scope）。
-const chevronUp = chevronUpOutline;
-const chevronDown = chevronDownOutline;
+const _chevronUp = chevronUpOutline;
+const _chevronDown = chevronDownOutline;
 
 const props = defineProps<{
   toolCall: ToolCall;
@@ -124,12 +123,12 @@ const props = defineProps<{
 
 const { t } = useI18n();
 const processingDecision = ref<Decision | null>(null);
-const diffExpanded = ref(false);
+const _diffExpanded = ref(false);
 let safetyTimer: number | null = null;
 
 const MAX_FILE_CHIPS = 6;
 
-const kindIcon = computed(() => {
+const _kindIcon = computed(() => {
   const map: Record<ToolKind, typeof terminalOutline> = {
     command: terminalOutline,
     fileChange: codeSlashOutline,
@@ -141,7 +140,7 @@ const kindIcon = computed(() => {
   return map[props.toolCall.kind] || helpCircleOutline;
 });
 
-const titleText = computed(() => {
+const _titleText = computed(() => {
   const kindMap: Record<ToolKind, string> = {
     command: t("agent.tool.command"),
     fileChange: t("agent.tool.fileChange"),
@@ -154,7 +153,7 @@ const titleText = computed(() => {
   return `${kindLabel}：${props.toolCall.name}`;
 });
 
-const reasonText = computed(() => {
+const _reasonText = computed(() => {
   // 解析 args 拿第一个 string 字段作为 "reason" 提示
   try {
     const parsed = JSON.parse(props.toolCall.args);
@@ -173,7 +172,7 @@ interface SummaryRow {
   value: string;
 }
 
-const bodySummary = computed<SummaryRow[]>(() => {
+const _bodySummary = computed<SummaryRow[]>(() => {
   const rows: SummaryRow[] = [];
   let args: Record<string, unknown> = {};
   try {
@@ -195,7 +194,7 @@ const bodySummary = computed<SummaryRow[]>(() => {
   return rows;
 });
 
-const filesChips = computed<string[]>(() => {
+const _filesChips = computed<string[]>(() => {
   let args: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(props.toolCall.args);
@@ -221,7 +220,7 @@ const filesChips = computed<string[]>(() => {
   return candidates.slice(0, MAX_FILE_CHIPS);
 });
 
-const extraFilesCount = computed(() => {
+const _extraFilesCount = computed(() => {
   let args: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(props.toolCall.args);
@@ -236,7 +235,7 @@ const extraFilesCount = computed(() => {
   return Math.max(0, total - MAX_FILE_CHIPS);
 });
 
-const diffText = computed(() => {
+const _diffText = computed(() => {
   let args: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(props.toolCall.args);
@@ -251,7 +250,7 @@ const diffText = computed(() => {
   return "";
 });
 
-const canShowSessionGrant = computed(() => props.toolCall.kind !== "readOnly");
+const _canShowSessionGrant = computed(() => props.toolCall.kind !== "readOnly");
 
 const disabled = computed(() => props.isProcessing || processingDecision.value !== null);
 
@@ -282,7 +281,7 @@ onBeforeUnmount(() => {
   }
 });
 
-function handleDecide(decision: Decision) {
+function _handleDecide(decision: Decision) {
   if (disabled.value) return;
   processingDecision.value = decision;
   try {
@@ -297,7 +296,7 @@ function handleDecide(decision: Decision) {
   }
 }
 
-function truncatePath(p: string): string {
+function _truncatePath(p: string): string {
   if (p.length <= 28) return p;
   return "…" + p.slice(p.length - 27);
 }

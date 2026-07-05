@@ -7,8 +7,7 @@
  * 3. categoryLabel category → 中文 label 映射
  * 4. useSectionDerivation composable（静态维度 + 响应式维度）
  */
-import { describe, expect, it } from "vitest";
-import { computed, nextTick, ref } from "vue";
+
 import type { EncvTask } from "@encv/shared-components/api/encv";
 import {
   categoryForExt,
@@ -17,6 +16,8 @@ import {
   type SectionDimension,
   useSectionDerivation,
 } from "@encv/shared-components/composables/useSectionDerivation";
+import { describe, expect, it } from "vitest";
+import { computed, nextTick, ref } from "vue";
 
 // 构造测试用 EncvTask（只填派生关心的字段，其他用合理默认值）
 function makeTask(overrides: Partial<EncvTask> = {}): EncvTask {

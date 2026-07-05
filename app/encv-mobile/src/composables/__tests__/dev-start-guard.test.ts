@@ -35,7 +35,7 @@ interface MinimalEnv {
 
 // Vite 8 Plugin['config'] 是 ObjectHook（{ handler, order? }），不是直接函数
 // 需要 plugin.config.handler(config, env) 调用
-type ConfigHandler = (this: unknown, config: Record<string, unknown>, env: MinimalEnv) => void | Record<string, unknown> | null;
+type ConfigHandler = (this: unknown, config: Record<string, unknown>, env: MinimalEnv) => undefined | Record<string, unknown> | null;
 
 function callGuard(plugin: ReturnType<typeof devStartGuard>, env: MinimalEnv): void {
   const hook = plugin.config as unknown as { handler: ConfigHandler } | ConfigHandler;

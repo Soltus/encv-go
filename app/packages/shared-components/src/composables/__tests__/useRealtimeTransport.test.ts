@@ -9,8 +9,8 @@
  *  5. http-poll 模式实际启动 HttpPollBackend
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EncvTask } from "@encv/shared-components/api/encv";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // mock api/encv 模块的 isOpenPreviewBrowser / getApiBaseUrl
 const _isOpenPreviewBrowser = vi.fn().mockReturnValue(false);
@@ -36,7 +36,11 @@ vi.mock("@/composables/useEventBus", () => ({
   },
 }));
 
-import { getActiveTransportMode, getTransportDebugInfo, useRealtimeTransport } from "@encv/shared-components/composables/useRealtimeTransport";
+import {
+  getActiveTransportMode,
+  getTransportDebugInfo,
+  useRealtimeTransport,
+} from "@encv/shared-components/composables/useRealtimeTransport";
 
 describe("useRealtimeTransport", () => {
   beforeEach(() => {

@@ -11,9 +11,9 @@
  * 与 PhaseBadge.test.ts 范式一致（同属 shared 组件）
  */
 
+import RelevanceBadge from "@encv/shared-components/components/shared/RelevanceBadge.vue";
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import RelevanceBadge from "@encv/shared-components/components/shared/RelevanceBadge.vue";
 
 // ion-icon stub：RelevanceBadge 内部使用 ion-icon，需 stub 避免 @ionic/vue 全局注册依赖
 const IonIconStub = {

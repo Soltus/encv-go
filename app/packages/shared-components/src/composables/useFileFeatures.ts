@@ -1,6 +1,6 @@
-import { computed, shallowRef } from "vue";
 import type { FileItem } from "@encv/shared-components/api/encv";
 import type { ClickResult, FileAction, FileBadge, FileFeature, FileSubtitle } from "@encv/shared-components/types/file-feature";
+import { computed, shallowRef } from "vue";
 
 const registry = new Map<string, FileFeature>();
 const version = shallowRef(0);

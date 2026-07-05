@@ -34,27 +34,13 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { lockClosed, settingsOutline, shieldCheckmark } from "ionicons/icons";
-import { computed } from "vue";
-import ConfigFieldItem from "@encv/shared-components/components/ConfigFieldItem.vue";
 import { useConfig } from "@encv/shared-components/composables/useConfig";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
 import type { FieldDef } from "@encv/shared-components/config/schemaParser";
 import { parseSchema } from "@encv/shared-components/config/schemaParser";
+import { lockClosed, settingsOutline, shieldCheckmark } from "ionicons/icons";
+import { computed } from "vue";
 
 const { t } = useI18n();
 const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig();
@@ -62,33 +48,33 @@ const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig()
 const SECTION_KEY = "admin";
 
 const sectionDef = computed(() => parseSchema().find(s => s.key === SECTION_KEY));
-const childFields = computed(() => sectionDef.value?.properties ?? []);
+const _childFields = computed(() => sectionDef.value?.properties ?? []);
 
 function tField(key: string): string {
   return t(`settings.${key}`);
 }
 
-function fieldLabel(key: string, required?: boolean): string {
+function _fieldLabel(key: string, required?: boolean): string {
   return tField(key) + (required ? " *" : "");
 }
 
-function getFieldIcon(fieldKey: string, fieldType: string): string {
+function _getFieldIcon(fieldKey: string, fieldType: string): string {
   if (fieldKey.includes("password")) return lockClosed;
   if (fieldType === "boolean") return settingsOutline;
   if (fieldType === "integer") return shieldCheckmark;
   return shieldCheckmark;
 }
 
-function setValue(path: string[], value: unknown) {
+function _setValue(path: string[], value: unknown) {
   setFieldValue(path, value);
 }
 
-function handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
+function _handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
   const val = (event.target as HTMLInputElement).value;
   setFieldValue(path, val);
 }
 
-async function handleSave() {
+async function _handleSave() {
   try {
     await saveConfig();
     showToast({ message: t("settings.configSaved"), duration: 1500, color: "success" });

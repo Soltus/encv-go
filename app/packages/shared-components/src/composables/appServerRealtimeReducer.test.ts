@@ -11,7 +11,7 @@
  *  7) processRealtimeEvent —— sequence 去重 / accept 决策
  *  8) MAX_TRACKED_REALTIME_SEQUENCES —— 超过上限时淘汰最早 sequence
  */
-import { describe, expect, it } from "vitest";
+
 import {
   asRecord,
   createRealtimeSequenceTrackerState,
@@ -25,6 +25,7 @@ import {
   readString,
   updateRealtimeServerInstance,
 } from "@encv/shared-components/composables/appServerRealtimeReducer";
+import { describe, expect, it } from "vitest";
 
 // =============================================================================
 // asRecord

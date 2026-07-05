@@ -1,5 +1,5 @@
-import { lockClosed } from "ionicons/icons";
 import type { FileFeature } from "@encv/shared-components/types/file-feature";
+import { lockClosed } from "ionicons/icons";
 import { getAlistActions } from "./actions";
 import { getAlistBadge } from "./badge";
 import { getAlistSubtitle, preloadSubtitles } from "./subtitle";

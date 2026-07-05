@@ -81,7 +81,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonButton } from "@ionic/vue";
 import { computed, ref } from "vue";
 import { type EncvTask, getTaskPerformance, type PerformanceMetrics, type PerformanceSummary, type PhaseTiming } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
@@ -108,7 +107,7 @@ const loading = ref(false);
 const summary = computed<PerformanceSummary | undefined>(() => props.task.performanceSummary);
 
 // 显示用的指标：优先用完整 metrics，否则用 summary
-const displayMetrics = computed<DisplayMetrics | null>(() => {
+const _displayMetrics = computed<DisplayMetrics | null>(() => {
   if (metrics.value) {
     const m = metrics.value;
     return {
@@ -148,13 +147,13 @@ const displayGrade = computed(() => {
   return "";
 });
 
-const displayGradeScore = computed(() => {
+const _displayGradeScore = computed(() => {
   if (metrics.value) return metrics.value.gradeScore.toFixed(0);
   if (summary.value) return summary.value.gradeScore.toFixed(0);
   return "";
 });
 
-const gradeColor = computed(() => {
+const _gradeColor = computed(() => {
   switch (displayGrade.value) {
     case "excellent":
       return "success";
@@ -176,11 +175,11 @@ const maxPhaseDuration = computed(() => {
   return Math.max(...phaseTimings.value.map(p => p.durationMs), 1);
 });
 
-function phaseBarWidth(durationMs: number): number {
+function _phaseBarWidth(durationMs: number): number {
   return (durationMs / maxPhaseDuration.value) * 100;
 }
 
-function formatBytes(bytes: number): string {
+function _formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
@@ -188,7 +187,7 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / k ** i).toFixed(2)) + " " + sizes[i];
 }
 
-async function loadFullMetrics() {
+async function _loadFullMetrics() {
   loading.value = true;
   try {
     metrics.value = await getTaskPerformance(props.task.id);

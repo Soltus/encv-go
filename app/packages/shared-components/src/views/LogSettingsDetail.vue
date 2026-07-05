@@ -76,43 +76,26 @@
 </template>
 
 <script setup lang="ts">
-import {
-  alertController,
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { cloudOutline, downloadOutline, refreshOutline, terminal, trashOutline } from "ionicons/icons";
-import { computed } from "vue";
 import { useConfig } from "@encv/shared-components/composables/useConfig";
 import { type LogEntry, useFrontendLogs } from "@encv/shared-components/composables/useFrontendLogs";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
 import { getDefaultValue } from "@encv/shared-components/config/schemaParser";
 import { clearLogs, exportLogs, isNative, saveDevLogs } from "@encv/shared-components/plugins/GoProcess";
+import { alertController } from "@ionic/vue";
+import { computed } from "vue";
 
 const { t, tField } = useI18n();
 const { schemaFields, getFieldValue, setFieldValue, saveConfig, resetFieldToDefault } = useConfig();
 const { logs: frontendLogs } = useFrontendLogs();
 
-const configLoaded = computed(() => schemaFields.value.length > 0);
+const _configLoaded = computed(() => schemaFields.value.length > 0);
 
 const logLevel = computed(() => String(getFieldValue(["log", "level"]) ?? "info"));
 
 const logLevelField = computed(() => {
   const logSection = schemaFields.value.find(s => s.key === "log");
-  if (!logSection || !logSection.properties) return null;
+  if (!logSection?.properties) return null;
   return logSection.properties.find(p => p.key === "level") || null;
 });
 
@@ -121,15 +104,15 @@ const logDefault = computed(() => {
   return String(getDefaultValue(logLevelField.value));
 });
 
-const isLogLevelCustomized = computed(() => logLevel.value !== logDefault.value);
+const _isLogLevelCustomized = computed(() => logLevel.value !== logDefault.value);
 
-function resetLogLevelToDefault() {
+function _resetLogLevelToDefault() {
   if (!logLevelField.value) return;
   resetFieldToDefault(["log", "level"], logLevelField.value);
   saveLogConfig();
 }
 
-async function handleLogLevelChange(value: string) {
+async function _handleLogLevelChange(value: string) {
   setFieldValue(["log", "level"], value);
   await saveLogConfig();
 }
@@ -169,7 +152,7 @@ function rankOf(level: string): number {
   return LEVEL_RANK[level] ?? 1;
 }
 
-async function handleExportLogs() {
+async function _handleExportLogs() {
   if (!isNative()) return;
   try {
     const configuredLevel = String(getFieldValue(["log", "level"]) ?? "info");
@@ -187,7 +170,7 @@ async function handleExportLogs() {
   }
 }
 
-async function handleClearLogs() {
+async function _handleClearLogs() {
   if (!isNative()) return;
   const alert = await alertController.create({
     header: t("devtools.clearLogsConfirm"),

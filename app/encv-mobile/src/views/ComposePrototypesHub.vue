@@ -41,8 +41,7 @@
 </template>
 
 <script setup lang="ts">
-import { IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from "@ionic/vue";
-import { chevronForward, colorPaletteOutline, musicalNotesOutline, playCircleOutline, settingsOutline } from "ionicons/icons";
+import { colorPaletteOutline, musicalNotesOutline, playCircleOutline, settingsOutline } from "ionicons/icons";
 import { useRouter } from "vue-router";
 import { useI18n } from "@/composables/useI18n";
 import { getAllPrototypes } from "./prototypes/registry";
@@ -53,14 +52,14 @@ const router = useRouter();
 
 const prototypes = getAllPrototypes();
 
-const iconMap: Record<string, string> = {
+const _iconMap: Record<string, string> = {
   "play-circle": playCircleOutline,
   settings: settingsOutline,
   "musical-notes": musicalNotesOutline,
   "color-palette": colorPaletteOutline,
 };
 
-function handlePrototypeClick(proto: (typeof prototypes)[0]) {
+function _handlePrototypeClick(proto: (typeof prototypes)[0]) {
   router.push(`/tabs/settings/devtools/prototype/${proto.id}`);
 }
 </script>

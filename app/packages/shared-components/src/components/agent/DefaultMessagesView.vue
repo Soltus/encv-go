@@ -224,36 +224,20 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { chatbubblesOutline, copyOutline } from "ionicons/icons";
-import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
-import AgentTaskMessage from "@encv/shared-components/components/agent/AgentTaskMessage.vue";
-import ApprovalCard from "@encv/shared-components/components/agent/ApprovalCard.vue";
-import AssistantMessage from "@encv/shared-components/components/agent/AssistantMessage.vue";
-import ContextCompactionDivider from "@encv/shared-components/components/agent/ContextCompactionDivider.vue";
-import ErrorMessage from "@encv/shared-components/components/agent/ErrorMessage.vue";
-import FileContentCard from "@encv/shared-components/components/agent/FileContentCard.vue";
-import FileListCard from "@encv/shared-components/components/agent/FileListCard.vue";
-import GroupedOperationMessage from "@encv/shared-components/components/agent/GroupedOperationMessage.vue";
-import MessageVirtualList from "@encv/shared-components/components/agent/MessageVirtualList.vue";
-import MountListCard from "@encv/shared-components/components/agent/MountListCard.vue";
-import OperationCard from "@encv/shared-components/components/agent/OperationCard.vue";
-import PlanBlock from "@encv/shared-components/components/agent/PlanBlock.vue";
-import ReasoningMessage from "@encv/shared-components/components/agent/ReasoningMessage.vue";
-import UserMessageBubble from "@encv/shared-components/components/agent/UserMessageBubble.vue";
-import WebSearchSummaryMessage from "@encv/shared-components/components/agent/WebSearchSummaryMessage.vue";
 import type { EngineRenderProps } from "@encv/shared-components/composables/chatEngine";
 import { useRenderTurnItems } from "@encv/shared-components/composables/renderTurnItems";
 import type { Decision, Message, ToolCall, ToolResult } from "@encv/shared-components/composables/useAgent";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
+import { chatbubblesOutline, copyOutline } from "ionicons/icons";
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 
 const props = defineProps<EngineRenderProps>();
 const { t } = useI18n();
 
 // ── 图标常量 ──────────────────────────────────────────────
-const chatbubblesIcon = chatbubblesOutline;
-const copyIconVar = copyOutline;
+const _chatbubblesIcon = chatbubblesOutline;
+const _copyIconVar = copyOutline;
 
 // ── 内部状态 ──────────────────────────────────────────────
 /** 把 readonly Message[] 包装为 shallowRef，供 useRenderTurnItems 和辅助方法使用 */
@@ -299,15 +283,15 @@ function findToolResult(id: string): ToolResult | null {
   return null;
 }
 
-function findToolCallById(id: string): ToolCall | null {
+function _findToolCallById(id: string): ToolCall | null {
   return findToolCall(id);
 }
-function findToolResultById(id: string): ToolResult | null {
+function _findToolResultById(id: string): ToolResult | null {
   return findToolResult(id);
 }
 
 /** 格式化 Footer 固定时间戳为 HH:mm */
-function formatFooterTime(timestamp: number): string {
+function _formatFooterTime(timestamp: number): string {
   const d = new Date(timestamp);
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
@@ -315,7 +299,7 @@ function formatFooterTime(timestamp: number): string {
 }
 
 /** 复制 messageFooter 对应消息的全文内容 */
-async function copyMessageContent(messageId: string): Promise<void> {
+async function _copyMessageContent(messageId: string): Promise<void> {
   const idx = parseInt(messageId.replace(/^[au]-/, ""), 10);
   const msg = messagesRef.value[idx];
   if (!msg?.content) return;
@@ -339,7 +323,7 @@ async function copyMessageContent(messageId: string): Promise<void> {
   }
 }
 
-function resolveToolCalls(ids: string[]): ToolCall[] {
+function _resolveToolCalls(ids: string[]): ToolCall[] {
   const out: ToolCall[] = [];
   for (const id of ids) {
     const tc = findToolCall(id);
@@ -349,7 +333,7 @@ function resolveToolCalls(ids: string[]): ToolCall[] {
 }
 
 /** 按 id 查 tool result，构造成 name→Result 的 record 给结构化卡片用 */
-function resolveToolResultsByCallId(ids: string[]): Record<string, ToolResult> {
+function _resolveToolResultsByCallId(ids: string[]): Record<string, ToolResult> {
   const out: Record<string, ToolResult> = {};
   for (const id of ids) {
     const tr = findToolResult(id);
@@ -359,19 +343,19 @@ function resolveToolResultsByCallId(ids: string[]): Record<string, ToolResult> {
 }
 
 // ── 事件处理 ──────────────────────────────────────────────
-function handleDecide(toolCallId: string, decision: Decision) {
+function _handleDecide(toolCallId: string, decision: Decision) {
   props.onConfirmTool(toolCallId, decision);
 }
 
 /**
  * 重试一条出错的消息：清除 error 标记 + 删除关联的 assistant 消息 + 重新发送
  */
-function handleRetryError(item: { type: "error"; messageIndex: number }) {
+function _handleRetryError(item: { type: "error"; messageIndex: number }) {
   const idx = item.messageIndex;
   if (idx < 0 || idx >= messagesRef.value.length) return;
 
   const targetMsg = messagesRef.value[idx];
-  if (!targetMsg || targetMsg.role !== "user") return;
+  if (targetMsg?.role !== "user") return;
 
   let text = "";
   if (typeof targetMsg.content === "string") {
@@ -404,7 +388,7 @@ function scrollToBottom(behavior: "auto" | "smooth" = "smooth") {
   });
 }
 
-function onMainScroll() {
+function _onMainScroll() {
   const el = mainRef.value;
   if (!el) return;
   const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;

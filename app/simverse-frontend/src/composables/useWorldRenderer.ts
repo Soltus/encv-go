@@ -1,10 +1,10 @@
-import { ref, onUnmounted } from 'vue';
-import { Leafer, Rect, Ellipse, Text, PointerEvent } from 'leafer-ui';
-import Matter from 'matter-js';
+import { Ellipse, Leafer, PointerEvent, Rect, Text } from "leafer-ui";
+import Matter from "matter-js";
+import { onUnmounted, ref } from "vue";
 
 export interface WorldEntity {
   id: string;
-  type: 'npc' | 'building' | 'tree' | 'rock' | 'ground' | 'water';
+  type: "npc" | "building" | "tree" | "rock" | "ground" | "water";
   x: number;
   y: number;
   width: number;
@@ -47,10 +47,10 @@ export function useWorldRenderer(options: WorldRendererOptions) {
 
     const worldSize = { width: worldWidth, height: worldHeight };
     Matter.Composite.add(engine.world, [
-      Matter.Bodies.rectangle(worldSize.width / 2, -50, worldSize.width, 100, { isStatic: true, label: 'wall-top' }),
-      Matter.Bodies.rectangle(worldSize.width / 2, worldSize.height + 50, worldSize.width, 100, { isStatic: true, label: 'wall-bottom' }),
-      Matter.Bodies.rectangle(-50, worldSize.height / 2, 100, worldSize.height, { isStatic: true, label: 'wall-left' }),
-      Matter.Bodies.rectangle(worldSize.width + 50, worldSize.height / 2, 100, worldSize.height, { isStatic: true, label: 'wall-right' }),
+      Matter.Bodies.rectangle(worldSize.width / 2, -50, worldSize.width, 100, { isStatic: true, label: "wall-top" }),
+      Matter.Bodies.rectangle(worldSize.width / 2, worldSize.height + 50, worldSize.width, 100, { isStatic: true, label: "wall-bottom" }),
+      Matter.Bodies.rectangle(-50, worldSize.height / 2, 100, worldSize.height, { isStatic: true, label: "wall-left" }),
+      Matter.Bodies.rectangle(worldSize.width + 50, worldSize.height / 2, 100, worldSize.height, { isStatic: true, label: "wall-right" }),
     ]);
 
     runner = Matter.Runner.create();
@@ -85,32 +85,38 @@ export function useWorldRenderer(options: WorldRendererOptions) {
   function addEntity(entity: WorldEntity) {
     if (!leafer || !engine) return;
 
-    const isStatic = entity.static ?? (entity.type === 'building' || entity.type === 'tree' || entity.type === 'ground' || entity.type === 'rock' || entity.type === 'water');
+    const isStatic =
+      entity.static ??
+      (entity.type === "building" ||
+        entity.type === "tree" ||
+        entity.type === "ground" ||
+        entity.type === "rock" ||
+        entity.type === "water");
 
     let leaf: any;
-    if (entity.type === 'npc') {
+    if (entity.type === "npc") {
       leaf = new Ellipse({
         x: entity.x,
         y: entity.y,
         width: entity.width,
         height: entity.height,
         fill: entity.color,
-        stroke: '#ffffff',
+        stroke: "#ffffff",
         strokeWidth: 2,
-        cursor: 'pointer',
+        cursor: "pointer",
       });
-    } else if (entity.type === 'tree' || entity.type === 'rock' || entity.type === 'building') {
+    } else if (entity.type === "tree" || entity.type === "rock" || entity.type === "building") {
       leaf = new Rect({
         x: entity.x,
         y: entity.y,
         width: entity.width,
         height: entity.height,
         fill: entity.color,
-        stroke: '#333',
+        stroke: "#333",
         strokeWidth: 1,
         cornerRadius: 4,
       });
-    } else if (entity.type === 'water' || entity.type === 'ground') {
+    } else if (entity.type === "water" || entity.type === "ground") {
       leaf = new Rect({
         x: entity.x,
         y: entity.y,
@@ -134,9 +140,9 @@ export function useWorldRenderer(options: WorldRendererOptions) {
         y: entity.y - 18,
         text: entity.label,
         fontSize: 12,
-        fill: '#fff',
-        textAlign: 'center',
-        verticalAlign: 'middle',
+        fill: "#fff",
+        textAlign: "center",
+        verticalAlign: "middle",
         textWrap: false,
       });
       leafer.add(labelText);
@@ -145,18 +151,17 @@ export function useWorldRenderer(options: WorldRendererOptions) {
     leafer.add(leaf);
     entityToLeafer.set(entity.id, leaf);
 
-    const body = Matter.Bodies.rectangle(
-      entity.x + entity.width / 2,
-      entity.y + entity.height / 2,
-      entity.width,
-      entity.height,
-      { isStatic, label: entity.id, friction: 0.1, restitution: 0.3 }
-    );
+    const body = Matter.Bodies.rectangle(entity.x + entity.width / 2, entity.y + entity.height / 2, entity.width, entity.height, {
+      isStatic,
+      label: entity.id,
+      friction: 0.1,
+      restitution: 0.3,
+    });
     Matter.Composite.add(engine.world, body);
     bodyToEntity.set(body.id, entity);
     entityToBody.set(entity.id, body);
 
-    if (entity.onClick && entity.type === 'npc') {
+    if (entity.onClick && entity.type === "npc") {
       leaf.on(PointerEvent.DOWN, () => {
         entity.onClick?.(entity);
       });

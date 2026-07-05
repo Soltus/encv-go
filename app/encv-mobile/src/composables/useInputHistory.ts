@@ -42,7 +42,7 @@ function saveToStorage() {
 }
 
 export function recordHistory(inputKey: string, value: string) {
-  if (!inputKey || !value || !value.trim()) return;
+  if (!inputKey || !value?.trim()) return;
   const trimmed = value.trim();
   const existing = historyMap.value[inputKey] || [];
   const filtered = existing.filter(e => e.value !== trimmed);

@@ -18,8 +18,9 @@
  *   - API 失败时保留旧数据 + warn 日志（不阻塞 UI）
  *   - 首次加载失败时返回空 Map（group card 显示 loading 或 0）
  */
-import { type ComputedRef, computed, type Ref, ref } from "vue";
+
 import { getRunSummary, listRuns, type RunInfo, type RunSummary } from "@encv/shared-components/api/encv";
+import { type ComputedRef, computed, type Ref, ref } from "vue";
 
 export interface UseRunSummaries {
   /** 所有 run 的 summary 缓存（按 runId 索引） */

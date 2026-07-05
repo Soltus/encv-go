@@ -42,13 +42,11 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon } from "@ionic/vue";
-import { checkmarkCircle, documentTextOutline, folderOpenOutline, playCircleOutline } from "ionicons/icons";
-import { computed } from "vue";
 import type { EncvTask } from "@encv/shared-components/api/encv";
 import { formatDuration } from "@encv/shared-components/composables/useDateFormat";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
+import { computed } from "vue";
 
 const props = defineProps<{ task: EncvTask }>();
 const emit = defineEmits<{
@@ -59,13 +57,13 @@ const { t } = useI18n();
 
 const PREVIEWABLE_VIDEO = new Set(["mp4", "webm", "mov", "m4v", "mkv"]);
 
-const durationStr = computed(() => {
+const _durationStr = computed(() => {
   if (!props.task.createdAt) return "";
   const created = new Date(props.task.createdAt).getTime();
-  if (isNaN(created)) return "";
+  if (Number.isNaN(created)) return "";
   if (props.task.completedAt) {
     const completed = new Date(props.task.completedAt).getTime();
-    if (isNaN(completed)) return "";
+    if (Number.isNaN(completed)) return "";
     return formatDuration(completed - created);
   }
   return "";
@@ -83,7 +81,7 @@ const outputInfo = computed(() => {
   };
 });
 
-const canPreviewOutput = computed(() => {
+const _canPreviewOutput = computed(() => {
   if (!outputInfo.value) return false;
   const ext = outputInfo.value.name.split(".").pop()?.toLowerCase() || "";
   return PREVIEWABLE_VIDEO.has(ext);
@@ -95,7 +93,7 @@ function dirOf(p: string): string {
   return p.slice(0, idx) || "/";
 }
 
-function handleOpenOutput() {
+function _handleOpenOutput() {
   if (!outputInfo.value) return;
   const ext = outputInfo.value.name.split(".").pop()?.toLowerCase() || "";
   if (PREVIEWABLE_VIDEO.has(ext)) {
@@ -105,7 +103,7 @@ function handleOpenOutput() {
   }
 }
 
-function handleLocateOutput() {
+function _handleLocateOutput() {
   if (!outputInfo.value) return;
   emit("locate", outputInfo.value.fullPath);
 }

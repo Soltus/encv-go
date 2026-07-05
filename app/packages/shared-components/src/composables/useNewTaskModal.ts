@@ -1,5 +1,3 @@
-import { modalController } from "@ionic/vue";
-import { reactive, ref } from "vue";
 import type { ContainerVersionInfo, PluginCandidate, TaskField, TaskOptions, TaskType } from "@encv/shared-components/api/encv";
 import { createTask } from "@encv/shared-components/api/encv";
 import NewTaskModal from "@encv/shared-components/components/NewTaskModal.vue";
@@ -10,6 +8,8 @@ import { useTaskForm } from "@encv/shared-components/composables/useTaskForm";
 import { recordTriggeredBy } from "@encv/shared-components/composables/useTaskTrigger";
 import { showToast } from "@encv/shared-components/composables/useToast";
 import { isRecommendedVersion } from "@encv/shared-components/constants/containerVersion";
+import { modalController } from "@ionic/vue";
+import { reactive, ref } from "vue";
 
 const { normalize } = usePathResolver();
 

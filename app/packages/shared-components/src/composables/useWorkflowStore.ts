@@ -13,9 +13,9 @@
  * MVP 阶段纯前端存储，预留后端 API 接口签名。
  */
 
-import { ref } from "vue";
 import type { WorkflowDefinition } from "@encv/shared-components/lib/workflow/types";
 import { WORKFLOW_STORE_KEY } from "@encv/shared-components/lib/workflow/types";
+import { ref } from "vue";
 
 /** 生成简易 UUID（不需要 crypto 库） */
 function generateId(): string {

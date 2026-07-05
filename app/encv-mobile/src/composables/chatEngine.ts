@@ -91,7 +91,7 @@ export interface ChatEngine {
    * 用户发送文本时的额外钩子（引擎可拦截或增强发送行为）
    * 如果返回 false，阻止默认发送流程
    */
-  onSend?(text: string): Promise<boolean> | void;
+  onSend?(text: string): Promise<boolean> | undefined;
 
   /**
    * 停止生成时的额外钩子

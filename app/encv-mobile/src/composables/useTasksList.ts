@@ -437,7 +437,7 @@ function createUseTasksList() {
       try {
         await removeTaskApi(t.id);
         removed++;
-      } catch (err) {
+      } catch (_err) {
         failed++;
       }
     }

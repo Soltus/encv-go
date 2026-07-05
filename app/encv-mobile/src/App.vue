@@ -121,13 +121,9 @@
 </template>
 
 <script setup lang="ts">
-import { IonApp, IonButton, IonIcon, IonRouterOutlet } from "@ionic/vue";
-import { alertCircleOutline, bugOutline, codeSlashOutline, copyOutline, refreshOutline, warningOutline } from "ionicons/icons";
 import { onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
 import type { ServiceGuardResult } from "@/api/encv";
 import { checkServiceGuard } from "@/api/encv";
-// 🆕 2026-07-02 A5：错误捕获浮窗（三管齐下的第 3 件：console 重定向 + 浮窗）
-import ErrorCaptureOverlay from "@/components/shared/ErrorCaptureOverlay.vue";
 import { autoInitVConsole } from "@/composables/useDevTools";
 import { registerFileFeature } from "@/composables/useFileFeatures";
 import { hijackConsole } from "@/composables/useFrontendLogs";
@@ -267,7 +263,7 @@ async function copyToClipboard(text: string): Promise<void> {
   }
 }
 
-function copyErrorSummary() {
+function _copyErrorSummary() {
   const ctx = rootErrorContext.value;
   const lines = [
     `类型: ${rootErrorSummary.value}`,
@@ -279,12 +275,12 @@ function copyErrorSummary() {
   copyToClipboard(lines.join("\n"));
 }
 
-function copyErrorStack() {
+function _copyErrorStack() {
   const lines = [`STACK (${rootErrorSummary.value} @ ${rootErrorTime.value}):`, rootErrorStack.value];
   copyToClipboard(lines.join("\n"));
 }
 
-function reloadPage() {
+function _reloadPage() {
   if (typeof window !== "undefined") {
     window.location.reload();
   }
@@ -319,7 +315,7 @@ async function runServiceGuard(): Promise<void> {
   }
 }
 
-async function retryServiceGuard() {
+async function _retryServiceGuard() {
   try {
     await runServiceGuard();
     serviceGuardBlocked.value = false;

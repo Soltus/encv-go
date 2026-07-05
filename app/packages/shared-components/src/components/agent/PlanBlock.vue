@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { checkboxOutline, checkmarkCircle, ellipsisHorizontalCircle, sync } from "ionicons/icons";
-import { computed } from "vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import BlockHeader from "./BlockHeader.vue";
+import { checkmarkCircle, ellipsisHorizontalCircle, sync } from "ionicons/icons";
+import { computed } from "vue";
 
 export interface PlanTodo {
   id: string;
@@ -29,7 +27,7 @@ const { t } = useI18n();
 // user's eye lands first. This is a presentational choice
 // only — the underlying id+status+content is preserved so
 // the LLM's notion of ordering can be reconstructed by id.
-const orderedTodos = computed(() => {
+const _orderedTodos = computed(() => {
   const inProgress = props.todos.filter(x => x.status === "in_progress");
   const pending = props.todos.filter(x => x.status === "pending");
   const completed = props.todos.filter(x => x.status === "completed");
@@ -38,21 +36,21 @@ const orderedTodos = computed(() => {
 });
 
 const completedCount = computed(() => props.todos.filter(x => x.status === "completed").length);
-const inProgressCount = computed(() => props.todos.filter(x => x.status === "in_progress").length);
-const progressPct = computed(() => {
+const _inProgressCount = computed(() => props.todos.filter(x => x.status === "in_progress").length);
+const _progressPct = computed(() => {
   const total = props.todos.length;
   if (total === 0) return 0;
   return Math.round((completedCount.value / total) * 100);
 });
 
-function statusLabel(status: string): string {
+function _statusLabel(status: string): string {
   if (status === "in_progress") return t("agent.planStatusInProgress");
   if (status === "completed") return t("agent.planStatusCompleted");
   if (status === "pending") return t("agent.planStatusPending");
   return status;
 }
 
-function statusIcon(status: string) {
+function _statusIcon(status: string) {
   if (status === "completed") return checkmarkCircle;
   if (status === "in_progress") return sync;
   return ellipsisHorizontalCircle;

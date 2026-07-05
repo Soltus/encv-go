@@ -297,36 +297,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-  alertController,
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonInput,
-  IonItem,
-  IonList,
-  IonModal,
-  IonPage,
-  IonSelect,
-  IonSelectOption,
-  IonSpinner,
-  IonTitle,
-  IonToggle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  addOutline,
-  alertCircleOutline,
-  createOutline,
-  folderOpenOutline,
-  searchOutline,
-  serverOutline,
-  trashOutline,
-} from "ionicons/icons";
+import { alertController } from "@ionic/vue";
 import { computed, onMounted, ref } from "vue";
 import {
   createMount,
@@ -417,25 +388,25 @@ onMounted(() => {
 });
 
 // ================== 工具函数 ==================
-function driverColor(d: string): string {
+function _driverColor(d: string): string {
   if (d === "local") return "primary";
   if (d === "appdata") return "success";
   if (d === "sandbox") return "warning";
   return "medium";
 }
 
-function tDriver(d: string): string {
+function _tDriver(d: string): string {
   return t(`settings.mountDriver_${d}` as any, { default: d });
 }
 
-function formatDriverConfig(cfg: Record<string, unknown>): string {
+function _formatDriverConfig(cfg: Record<string, unknown>): string {
   return Object.entries(cfg)
     .map(([k, v]) => `${k} = ${typeof v === "string" ? v : JSON.stringify(v)}`)
     .join("\n");
 }
 
 // ================== Enabled 切换 ==================
-async function handleToggleEnabled(m: Mount, enabled: boolean) {
+async function _handleToggleEnabled(m: Mount, enabled: boolean) {
   if (togglingId.value) return;
   togglingId.value = m.id;
   // 乐观更新
@@ -469,7 +440,7 @@ async function handleToggleEnabled(m: Mount, enabled: boolean) {
 }
 
 // ================== Editor ==================
-function openEditor(target: Mount | null) {
+function _openEditor(target: Mount | null) {
   editing.value = target;
   if (target) {
     form.value = {
@@ -498,7 +469,7 @@ function closeEditor() {
   editing.value = null;
 }
 
-async function handleSave() {
+async function _handleSave() {
   if (!canSave.value) return;
   saveError.value = "";
   const input: MountInput = { ...form.value };
@@ -532,7 +503,7 @@ async function handleSave() {
 }
 
 // ================== Delete ==================
-async function confirmDelete(m: Mount) {
+async function _confirmDelete(m: Mount) {
   if (m.name === "primary") return;
   const alert = await alertController.create({
     header: t("settings.mountDeleteTitle"),
@@ -566,7 +537,7 @@ async function confirmDelete(m: Mount) {
 }
 
 // ================== Resolve (debug) ==================
-function openResolve(m: Mount) {
+function _openResolve(m: Mount) {
   resolving.value = m;
   resolveSubPath.value = "";
   resolveResult.value = null;
@@ -574,7 +545,7 @@ function openResolve(m: Mount) {
   resolveOpen.value = true;
 }
 
-function closeResolve() {
+function _closeResolve() {
   resolveOpen.value = false;
   resolving.value = null;
   resolveResult.value = null;
@@ -582,7 +553,7 @@ function closeResolve() {
   resolveSubPath.value = "";
 }
 
-async function runResolve() {
+async function _runResolve() {
   if (!resolving.value || !resolveSubPath.value) return;
   resolveError.value = "";
   resolveResult.value = null;

@@ -4,7 +4,7 @@ export function formatDateTime(isoStr: string | undefined | null): string {
   if (!isoStr) return "";
   try {
     const d = new Date(isoStr);
-    if (isNaN(d.getTime())) return "";
+    if (Number.isNaN(d.getTime())) return "";
     const { getLocale } = useI18n();
     const locale = getLocale();
     return new Intl.DateTimeFormat(locale, {

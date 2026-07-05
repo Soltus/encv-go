@@ -123,20 +123,8 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon, IonSpinner } from "@ionic/vue";
-import {
-  checkbox as checkboxIcon,
-  close as closeIcon,
-  checkmarkCircle as completedIcon,
-  archiveOutline as compressIcon,
-  document as documentIcon,
-  documentText as documentTextIcon,
-  informationCircle as informationCircleIcon,
-  sync as inProgressIcon,
-  layers as layersIcon,
-  ellipsisHorizontal as pendingIcon,
-} from "ionicons/icons";
 import type { ContextUsageResponse } from "@encv/shared-components/composables/useContextUsage";
+import { checkmarkCircle as completedIcon, sync as inProgressIcon, ellipsisHorizontal as pendingIcon } from "ionicons/icons";
 
 defineProps<{
   data: ContextUsageResponse | null;
@@ -147,7 +135,7 @@ defineEmits<{ close: [] }>();
 
 // ─── 计算属性 ──────────────────────────────────────────────
 
-function getToneClass(percent: number): string {
+function _getToneClass(percent: number): string {
   if (percent >= 90) return "ctx-tone-danger";
   if (percent >= 70) return "ctx-tone-warn";
   return "ctx-tone-ok";
@@ -155,13 +143,13 @@ function getToneClass(percent: number): string {
 
 // ─── 工具函数 ──────────────────────────────────────────────
 
-function formatTokens(n: number): string {
+function _formatTokens(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
   if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
   return String(n);
 }
 
-function todoIcon(status: string) {
+function _todoIcon(status: string) {
   switch (status) {
     case "completed":
       return completedIcon;
@@ -172,7 +160,7 @@ function todoIcon(status: string) {
   }
 }
 
-function todoStatusLabel(status: string): string {
+function _todoStatusLabel(status: string): string {
   switch (status) {
     case "completed":
       return "已完成";

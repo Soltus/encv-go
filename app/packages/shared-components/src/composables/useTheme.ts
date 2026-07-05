@@ -324,7 +324,7 @@ function initTheme() {
   const storedBlur = localStorage.getItem(BG_BLUR_KEY);
   if (storedBlur !== null) {
     const v = parseInt(storedBlur, 10);
-    if (!isNaN(v)) applyBgBlur(v);
+    if (!Number.isNaN(v)) applyBgBlur(v);
   }
 
   const storedP3 = localStorage.getItem(P3_KEY) as "off" | "on" | "auto" | null;
@@ -339,7 +339,7 @@ function initTheme() {
   const storedIntensity = localStorage.getItem(`${VIVID_KEY}-intensity`);
   if (storedIntensity !== null) {
     const v = parseInt(storedIntensity, 10);
-    if (!isNaN(v)) vividIntensity.value = v;
+    if (!Number.isNaN(v)) vividIntensity.value = v;
   }
   syncVividFilter();
 }

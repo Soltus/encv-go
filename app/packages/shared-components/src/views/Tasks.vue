@@ -582,64 +582,6 @@
 // template 内直接使用的 state/handler 都在此解构到局部变量，
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
-import {
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonCheckbox,
-  IonChip,
-  IonContent,
-  IonFab,
-  IonFabButton,
-  IonHeader,
-  IonIcon,
-  IonInfiniteScroll,
-  IonInfiniteScrollContent,
-  IonItem,
-  IonItemOption,
-  IonItemOptions,
-  IonItemSliding,
-  IonLabel,
-  IonPage,
-  IonPopover,
-  IonProgressBar,
-  IonRefresher,
-  IonRefresherContent,
-  IonSearchbar,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  add,
-  albumsOutline,
-  calendarOutline,
-  checkmarkCircle,
-  chevronDown,
-  chevronForward,
-  closeCircle,
-  extensionPuzzle,
-  funnel,
-  listOutline,
-  lockClosed,
-  lockClosedOutline,
-  pin,
-  pricetagOutline,
-  search,
-  swapVertical,
-  sync,
-  timer,
-  trashBin,
-  warningOutline,
-} from "ionicons/icons";
-// 🆕 2026-07-02：向量搜索相关度徽章（与 Files.vue 复用同一组件）
-import RelevanceBadge from "@encv/shared-components/components/shared/RelevanceBadge.vue";
-// 🆕 2026-06-22 任务诊断面板（真机可见版）：?debug=tasks 启用
-import TaskDebugPanel from "@encv/shared-components/components/tasks/TaskDebugPanel.vue";
-// 🆕 Task 15：虚拟滚动组件
-import TaskVirtualList from "@encv/shared-components/components/tasks/TaskVirtualList.vue";
-import { formatDateTime } from "@encv/shared-components/composables/useDateFormat";
-import { formatContainerVersion } from "@encv/shared-components/constants/containerVersion";
 import { useTasksView } from "./useTasksView";
 
 const {

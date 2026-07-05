@@ -236,10 +236,7 @@ export interface DBTestRequest {
  * @param onProgress 进度回调
  * @returns Promise，测试完成时 resolve
  */
-export function runDatabaseTests(
-  scenarios?: string[],
-  onProgress?: (p: DBTestProgress) => void,
-): Promise<DBTestProgress> {
+export function runDatabaseTests(scenarios?: string[], onProgress?: (p: DBTestProgress) => void): Promise<DBTestProgress> {
   return new Promise((resolve, reject) => {
     const baseUrl = getApiBaseUrl();
     const url = `${baseUrl}/api/database/test/run`;

@@ -17,9 +17,9 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonContent, IonHeader, IonTitle, IonToolbar, modalController } from '@ionic/vue'
+import { modalController } from "@ionic/vue";
 
-function dismiss(result: 'saveOnly' | 'saveAndRestart' | 'cancel') {
-  modalController.dismiss(result)
+function _dismiss(result: "saveOnly" | "saveAndRestart" | "cancel") {
+  modalController.dismiss(result);
 }
 </script>

@@ -104,12 +104,10 @@
 </template>
 
 <script setup lang="ts">
-import { IonItem, IonLabel, IonNote, IonSelect, IonSelectOption, IonToggle, modalController } from "@ionic/vue";
-import { documentText, folderOpen, lockClosed } from "ionicons/icons";
+import { modalController } from "@ionic/vue";
 import { computed } from "vue";
 import type { TaskField } from "@/api/encv";
 import FilePickerModal from "@/components/FilePickerModal.vue";
-import InputWithHistory from "@/components/InputWithHistory.vue";
 import type { NewTaskState } from "@/components/NewTaskState";
 import { useI18n } from "@/composables/useI18n";
 
@@ -133,18 +131,18 @@ const props = withDefaults(
 
 const { t } = useI18n();
 
-const decryptExtraFields = computed<TaskField[]>(() => {
+const _decryptExtraFields = computed<TaskField[]>(() => {
   const arr = Array.isArray(props.state.filteredExtraFields) ? props.state.filteredExtraFields : [];
   return arr.filter(f => !f.condition || f.condition === "decrypt");
 });
 
-function getExtra(key: string): string {
+function _getExtra(key: string): string {
   const ev = props.state?.extraValues;
   if (!ev || typeof ev !== "object") return "";
   return ev[key] || "";
 }
 
-async function handleBrowseSource() {
+async function _handleBrowseSource() {
   const modal = await modalController.create({
     component: FilePickerModal,
     componentProps: { mode: "file" as const },
@@ -156,7 +154,7 @@ async function handleBrowseSource() {
   }
 }
 
-async function handleBrowseTarget() {
+async function _handleBrowseTarget() {
   const modal = await modalController.create({
     component: FilePickerModal,
     componentProps: { mode: "folder" as const },

@@ -11,10 +11,10 @@
  * - formatExtraFieldValue: bool 字符串 → ✓/✗，长字符串截断
  */
 
-import { mount } from "@vue/test-utils";
-import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EncvTask } from "@encv/shared-components/api/encv";
 import TaskBasicInfo from "@encv/shared-components/components/TaskBasicInfo.vue";
+import { mount } from "@vue/test-utils";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ion-icon stub：避免 @ionic/vue 全局注册依赖
 const IonIconStub = {

@@ -143,34 +143,25 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonIcon } from "@ionic/vue";
-import {
-  chevronForward,
-  cogOutline,
-  copyOutline,
-  documentTextOutline,
-  ellipsisHorizontalCircleOutline,
-  extensionPuzzle,
-  folderOutline,
-  gitBranchOutline,
-  hardwareChipOutline,
-  informationCircleOutline,
-  listOutline,
-  lockClosedOutline,
-  person,
-  swapVertical,
-} from "ionicons/icons";
-import { computed } from "vue";
 import type { EncvTask } from "@encv/shared-components/api/encv";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { type SectionDimension, useSectionDerivation } from "@encv/shared-components/composables/useSectionDerivation";
 import { showToast } from "@encv/shared-components/composables/useToast";
-import { formatContainerVersion } from "@encv/shared-components/constants/containerVersion";
+import {
+  cogOutline,
+  ellipsisHorizontalCircleOutline,
+  extensionPuzzle,
+  folderOutline,
+  hardwareChipOutline,
+  person,
+  swapVertical,
+} from "ionicons/icons";
+import { computed } from "vue";
 
 const props = defineProps<{ task: EncvTask }>();
 const { t } = useI18n();
 
-async function copyTaskId() {
+async function _copyTaskId() {
   try {
     await navigator.clipboard.writeText(props.task.id);
     showToast({ message: t("tasks.idCopied"), duration: 1500, color: "success" });
@@ -179,7 +170,7 @@ async function copyTaskId() {
   }
 }
 
-async function copyRunId() {
+async function _copyRunId() {
   if (!runId.value) return;
   try {
     await navigator.clipboard.writeText(runId.value);
@@ -189,14 +180,14 @@ async function copyRunId() {
   }
 }
 
-const fileName = computed(() => {
+const _fileName = computed(() => {
   const parts = props.task.sourcePath.split("/");
   return parts[parts.length - 1] || props.task.sourcePath;
 });
 
 // 🆕 2026-06-18 Task 18：crypto params 区块显示判定 + extraFields 格式化
 // 旧任务（Task 16 之前）没有这 3 个字段 → 不显示空区块
-const hasCryptoParams = computed(() => {
+const _hasCryptoParams = computed(() => {
   const task = props.task;
   return (
     (task.cipherMode !== undefined && task.cipherMode !== null) ||
@@ -219,7 +210,7 @@ const EXTRA_FIELD_LABEL_I18N: Record<string, string> = {
   encType: "tasks.encType",
 };
 
-function formatExtraFieldLabel(key: string): string {
+function _formatExtraFieldLabel(key: string): string {
   // 1) 直接命中 i18n 表
   const directKey = EXTRA_FIELD_LABEL_I18N[key];
   if (directKey) return t(directKey);
@@ -232,7 +223,7 @@ function formatExtraFieldLabel(key: string): string {
 }
 
 // extraField value → 显示值：bool 字符串 → ✓/✗；密码类 key → 脱敏（•••••）
-function formatExtraFieldValue(value: string): string {
+function _formatExtraFieldValue(value: string): string {
   if (value === undefined || value === null) return "";
   const v = String(value);
   // bool 字符串
@@ -246,7 +237,7 @@ function formatExtraFieldValue(value: string): string {
 
 const triggeredBy = computed(() => props.task.triggeredBy ?? "user");
 const runId = computed(() => props.task.runId);
-const triggeredByIcon = computed(() => {
+const _triggeredByIcon = computed(() => {
   const v = triggeredBy.value;
   return v === "automation" ? cogOutline : v === "ai_agent" ? hardwareChipOutline : person;
 });
@@ -265,7 +256,7 @@ const sectionMeta = computed(() => {
   }
   return meta;
 });
-const sectionIcon = computed(() => {
+const _sectionIcon = computed(() => {
   // 当前 sectionMeta 仅返回 'plugin' | 'none' 两个维度（type / category 留给 Tasks.vue 派生）
   // 为兼容历史 case 分支不报错，这里也覆盖 'type' | 'category'
   const dim = sectionMeta.value.dimension as "plugin" | "type" | "category" | "none";
@@ -280,7 +271,7 @@ const sectionIcon = computed(() => {
       return ellipsisHorizontalCircleOutline;
   }
 });
-const sectionDimensionLabel = computed(() => {
+const _sectionDimensionLabel = computed(() => {
   const dim = sectionMeta.value.dimension as "plugin" | "type" | "category" | "none";
   switch (dim) {
     case "plugin":

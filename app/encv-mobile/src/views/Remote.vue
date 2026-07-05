@@ -311,44 +311,6 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonChip,
-  IonContent,
-  IonFab,
-  IonFabButton,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonItemOption,
-  IonItemOptions,
-  IonItemSliding,
-  IonLabel,
-  IonList,
-  IonModal,
-  IonNote,
-  IonPage,
-  IonSegment,
-  IonSegmentButton,
-  IonTitle,
-  IonToggle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  add,
-  cloud,
-  documentText,
-  fingerPrint,
-  flash,
-  folderOpen,
-  globe,
-  home,
-  lockClosed,
-  person,
-  save as saveIcon,
-} from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import type { OpenlistSiteInfo, RemoteWebDAVInfo, WebDAVConfig, WebDAVTestResult } from "@/api/encv";
 import {
@@ -360,8 +322,6 @@ import {
   testWebDAVConnection,
   updateOpenlistSite,
 } from "@/api/encv";
-import InputWithHistory from "@/components/InputWithHistory.vue";
-import LocalOpenListStatusCard from "@/components/LocalOpenListStatusCard.vue";
 import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
@@ -373,7 +333,7 @@ const webdavConfigs = ref<WebDAVConfig[]>([]);
 const builtInWebdav = ref<RemoteWebDAVInfo | null>(null);
 const openlistSites = ref<Record<string, OpenlistSiteInfo>>({});
 const disabledSites = ref<Set<string>>(new Set());
-const openlistSiteKeys = computed(() => {
+const _openlistSiteKeys = computed(() => {
   const all = Object.keys(openlistSites.value);
   return [...all.filter(k => k === "local-loopback"), ...all.filter(k => k !== "local-loopback")];
 });
@@ -382,15 +342,15 @@ function isLocalLoopback(key: string): boolean {
   return key === "local-loopback";
 }
 
-function isSiteBuiltIn(key: string): boolean {
+function _isSiteBuiltIn(key: string): boolean {
   return !!openlistSites.value[key]?.isBuiltIn || isLocalLoopback(key);
 }
 
-function isSiteDisabled(key: string): boolean {
+function _isSiteDisabled(key: string): boolean {
   return disabledSites.value.has(key);
 }
 
-function onSiteToggleChange(key: string, event: CustomEvent) {
+function _onSiteToggleChange(key: string, event: CustomEvent) {
   const checked = !!event.detail.checked;
   const next = new Set(disabledSites.value);
   if (checked) {
@@ -421,7 +381,7 @@ const formDescription = ref("");
 const formSiteIdError = ref("");
 const formHostError = ref("");
 
-function onTabChange() {
+function _onTabChange() {
   if (activeTab.value === "openlist") {
     loadRemoteInfo();
   }
@@ -430,7 +390,7 @@ function onTabChange() {
 async function loadRemoteInfo() {
   try {
     const info = await fetchRemoteInfo();
-    if (info.webdav && info.webdav.enabled) {
+    if (info.webdav?.enabled) {
       builtInWebdav.value = info.webdav;
     } else {
       builtInWebdav.value = null;
@@ -445,7 +405,7 @@ function loadConfigs() {
   webdavConfigs.value = getWebDAVConfigs();
 }
 
-function openNewConfig() {
+function _openNewConfig() {
   editingId.value = "";
   formName.value = "";
   formUrl.value = "";
@@ -456,7 +416,7 @@ function openNewConfig() {
   showWebdavModal.value = true;
 }
 
-function editConfig(config: WebDAVConfig) {
+function _editConfig(config: WebDAVConfig) {
   editingId.value = config.id;
   formName.value = config.name;
   formUrl.value = config.url;
@@ -467,7 +427,7 @@ function editConfig(config: WebDAVConfig) {
   showWebdavModal.value = true;
 }
 
-function saveConfig() {
+function _saveConfig() {
   if (!formName.value || !formUrl.value) return;
   let updated: WebDAVConfig[];
   if (editingId.value) {
@@ -500,7 +460,7 @@ function saveConfig() {
   showToast({ message: t("webdav.configSaved"), duration: 1500, color: "success" });
 }
 
-async function testConfig(config: WebDAVConfig) {
+async function _testConfig(config: WebDAVConfig) {
   testingId.value = config.id;
   listTestResults.value[config.id] = {
     success: false,
@@ -534,7 +494,7 @@ async function testConfig(config: WebDAVConfig) {
   }
 }
 
-async function testConnection() {
+async function _testConnection() {
   if (!formUrl.value) return;
   testing.value = true;
   testResult.value = null;
@@ -562,13 +522,13 @@ async function testConnection() {
   }
 }
 
-function deleteConfig(id: string) {
+function _deleteConfig(id: string) {
   const updated = webdavConfigs.value.filter(c => c.id !== id);
   saveWebDAVConfigs(updated);
   webdavConfigs.value = updated;
 }
 
-function validateSiteId() {
+function _validateSiteId() {
   const val = formSiteId.value.trim();
   if (!val) {
     formSiteIdError.value = t("tasks.pathRequired");
@@ -579,7 +539,7 @@ function validateSiteId() {
   }
 }
 
-function validateHost() {
+function _validateHost() {
   const val = formHost.value.trim();
   if (!val) {
     formHostError.value = t("tasks.pathRequired");
@@ -588,7 +548,7 @@ function validateHost() {
   }
 }
 
-function openNewSite() {
+function _openNewSite() {
   editingSiteId.value = "";
   formSiteId.value = "";
   formHost.value = "";
@@ -598,7 +558,7 @@ function openNewSite() {
   showSiteModal.value = true;
 }
 
-function editSite(key: string) {
+function _editSite(key: string) {
   editingSiteId.value = key;
   formSiteId.value = key;
   formHost.value = openlistSites.value[key]?.host || "";
@@ -608,7 +568,7 @@ function editSite(key: string) {
   showSiteModal.value = true;
 }
 
-async function saveSite() {
+async function _saveSite() {
   if (!formSiteId.value || !formHost.value) return;
   try {
     if (editingSiteId.value) {
@@ -625,7 +585,7 @@ async function saveSite() {
   }
 }
 
-async function handleDeleteSite(key: string) {
+async function _handleDeleteSite(key: string) {
   try {
     await deleteOpenlistSite(key);
     showToast({ message: t("webdav.configSaved"), duration: 1500, color: "success" });
@@ -636,7 +596,7 @@ async function handleDeleteSite(key: string) {
   }
 }
 
-async function copyProxyUrl(url: string) {
+async function _copyProxyUrl(url: string) {
   const ok = await clipboardWrite(url);
   if (ok) {
     showToast({ message: t("remote.copied"), duration: 1500, color: "success" });

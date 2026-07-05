@@ -1,5 +1,5 @@
-import { nextTick, onUnmounted, ref } from "vue";
 import { getExternalStreamUrl } from "@encv/shared-components/api/encv";
+import { nextTick, onUnmounted, ref } from "vue";
 
 export const THUMB_CACHE_MAX = 500;
 

@@ -61,7 +61,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
 import { documentOutline, folderOutline, hourglassOutline, listOutline } from "ionicons/icons";
 import { computed } from "vue";
 import { useI18n } from "@/composables/useI18n";
@@ -75,10 +74,10 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-const folderIcon = folderOutline;
-const fileIcon = documentOutline;
-const listIcon = listOutline;
-const hourglassIcon = hourglassOutline;
+const _folderIcon = folderOutline;
+const _fileIcon = documentOutline;
+const _listIcon = listOutline;
+const _hourglassIcon = hourglassOutline;
 
 interface FileRow {
   name: string;
@@ -135,17 +134,17 @@ const parsed = computed<{ rows: FileRow[]; error: string; isStat: boolean }>(() 
 });
 
 const rows = computed(() => parsed.value.rows);
-const visibleRows = computed(() => rows.value.slice(0, 20));
-const rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
+const _visibleRows = computed(() => rows.value.slice(0, 20));
+const _rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
 
-const titleText = computed(() => {
+const _titleText = computed(() => {
   if (props.status === "pending" || props.status === "running") return t("agent.toolCards.fileListTitle") || "文件列表（查询中）";
   if (parsed.value.error) return t("agent.toolCards.parseFailed") || "文件列表（数据异常）";
   if (parsed.value.isStat) return t("agent.toolCards.fileStatTitle") || "文件信息";
   return t("agent.toolCards.fileListTitle") || "文件列表";
 });
 
-const dataSourceTag = computed(() => {
+const _dataSourceTag = computed(() => {
   if (!props.resultJson) return "";
   const s = props.resultJson;
   if (s.includes('"FAKE":true') || s.includes('"FAKE": true')) return "mock 数据";
@@ -153,7 +152,7 @@ const dataSourceTag = computed(() => {
   return "";
 });
 
-function formatSize(bytes?: number): string {
+function _formatSize(bytes?: number): string {
   if (typeof bytes !== "number" || !Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes < 1024) return `${bytes} B`;
   const kb = bytes / 1024;

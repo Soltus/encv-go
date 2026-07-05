@@ -1,4 +1,3 @@
-import { ref } from "vue";
 import agent from "@encv/shared-components/i18n/agent";
 import common from "@encv/shared-components/i18n/common";
 import devlogs from "@encv/shared-components/i18n/devlogs";
@@ -9,6 +8,7 @@ import modals from "@encv/shared-components/i18n/modals";
 import player from "@encv/shared-components/i18n/player";
 import settings from "@encv/shared-components/i18n/settings";
 import tasks from "@encv/shared-components/i18n/tasks";
+import { ref } from "vue";
 
 // ===== 公开类型 =====
 

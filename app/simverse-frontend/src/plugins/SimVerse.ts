@@ -38,10 +38,7 @@ const SimVerse = registerPlugin<SimVersePlugin>("SimVerse", {
   web: () => new SimVerseWeb(),
 });
 
-export async function openWorld(
-  worldId: string = "default",
-  worldName: string = "Default",
-): Promise<{ success: boolean; error?: string }> {
+export async function openWorld(worldId: string = "default", worldName: string = "Default"): Promise<{ success: boolean; error?: string }> {
   try {
     await SimVerse.openWorld({ worldId, worldName });
     return { success: true };

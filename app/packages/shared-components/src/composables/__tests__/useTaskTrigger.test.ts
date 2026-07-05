@@ -8,8 +8,14 @@
  * 4. clearTriggeredBy 清空
  * 5. 异常 localStorage 降级
  */
+
+import {
+  _reloadTriggeredByCache,
+  clearTriggeredBy,
+  getTriggeredBy,
+  recordTriggeredBy,
+} from "@encv/shared-components/composables/useTaskTrigger";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { _reloadTriggeredByCache, clearTriggeredBy, getTriggeredBy, recordTriggeredBy } from "@encv/shared-components/composables/useTaskTrigger";
 
 // 🆕 2026-06-10 修复：每个 test 都要 reset cacheMap（useTaskTrigger 模块级单例）
 // 历史 bug：cacheMap 在 test 之间持续存在 → 后 test 拿前 test 的 cache，

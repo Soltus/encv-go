@@ -5,8 +5,6 @@
  * 继承自 1d8b95e 干净版本（v3 完全重写前的设计）
  */
 import { computed } from "vue";
-import JobPipelineCard from "@/components/automation/JobPipelineCard.vue";
-import TestReportHeader from "@/components/automation/TestReportHeader.vue";
 import { useI18n } from "@/composables/useI18n";
 import type { JobRun, WorkflowRun } from "@/lib/workflow/types";
 
@@ -21,11 +19,11 @@ interface Props {
   platform?: string;
 }
 const props = defineProps<Props>();
-const emit = defineEmits<(e: "select-job", job: JobRun) => void>();
+const _emit = defineEmits<(e: "select-job", job: JobRun) => void>();
 
 const { t } = useI18n();
 
-const sortedJobs = computed<JobRun[]>(() => {
+const _sortedJobs = computed<JobRun[]>(() => {
   return [...props.jobs].sort((a, b) => {
     // 失败/进行中 优先 → 已完成 最后
     const sa = a.status;
@@ -35,7 +33,7 @@ const sortedJobs = computed<JobRun[]>(() => {
   });
 });
 
-const durationMs = computed<number>(() => {
+const _durationMs = computed<number>(() => {
   if (!props.run?.durationMs) return 0;
   return props.run.durationMs;
 });

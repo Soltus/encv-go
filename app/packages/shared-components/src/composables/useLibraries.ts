@@ -20,9 +20,10 @@
  *   - 全部失败 → "无描述" 占位符
  *   - 结果缓存到 localStorage["encv_lib_desc_cache_v1"]，TTL 7 天
  */
-import { computed, ref } from "vue";
+
 import frontendDeps from "@encv/shared-components/generated/frontend-deps.json";
 import { getAndroidDeps, isNative } from "@encv/shared-components/plugins/GoProcess";
+import { computed, ref } from "vue";
 
 export type LibSource = "package.json" | "libs.versions.toml" | "build.gradle.kts" | "go.mod" | "runtime.Version()" | "unknown";
 
@@ -137,7 +138,7 @@ async function fetchFallbackDescription(name: string, version: string): Promise<
         );
         if (r.ok) {
           const data = await r.json();
-          if (data.response && data.response.docs && data.response.docs[0]) {
+          if (data.response?.docs?.[0]) {
             const desc = data.response.docs[0].descr || data.response.docs[0].description;
             if (desc) return String(desc);
           }

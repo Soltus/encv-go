@@ -95,17 +95,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
 import type { JobRun, StepRun } from "@encv/shared-components/lib/workflow/types";
-import ErrorChainNode from "./ErrorChainNode.vue";
-import StepMiniBadge from "./StepMiniBadge.vue";
+import { computed } from "vue";
 
 const props = defineProps<{
   stepRun: StepRun;
   jobRun: JobRun;
 }>();
 
-const stepName = computed(() => props.stepRun.stepDefId);
+const _stepName = computed(() => props.stepRun.stepDefId);
 
 /** 从 matrixVars 或 stepDefId 推断加密选型参数 */
 const encryptionParams = computed(() => {
@@ -144,16 +142,16 @@ const encryptionParams = computed(() => {
   return result;
 });
 
-const hasEncryptionParams = computed(() => {
+const _hasEncryptionParams = computed(() => {
   const p = encryptionParams.value;
   return !!(p.cipher || p.compress || p.version || p.plugin);
 });
 
-const completedInJob = computed(
+const _completedInJob = computed(
   () => props.jobRun.steps.filter(s => ["success", "failure", "cancelled", "skipped", "timed_out"].includes(s.status)).length
 );
 
-function formatDur(ms?: number): string {
+function _formatDur(ms?: number): string {
   if (!ms) return "—";
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;

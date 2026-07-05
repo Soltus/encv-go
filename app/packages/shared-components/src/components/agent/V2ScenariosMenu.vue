@@ -71,17 +71,9 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from "@ionic/vue";
-import {
-  closeOutline as closeIcon,
-  documentTextOutline,
-  filmOutline,
-  gitBranchOutline,
-  pricetagOutline,
-  searchOutline,
-} from "ionicons/icons";
-import { ref } from "vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { documentTextOutline, gitBranchOutline, pricetagOutline, searchOutline } from "ionicons/icons";
+import { ref } from "vue";
 
 export interface V2ScenarioEntry {
   id: string;
@@ -103,7 +95,7 @@ const { t } = useI18n();
 
 const isOpen = ref(false);
 
-function openModal(): void {
+function _openModal(): void {
   isOpen.value = true;
 }
 
@@ -111,13 +103,13 @@ function closeModal(): void {
   isOpen.value = false;
 }
 
-function emitPick(s: V2ScenarioEntry): void {
+function _emitPick(s: V2ScenarioEntry): void {
   closeModal();
   emit("pick", s);
 }
 
 // ─── 8 个 v2 剧本分组 ──────────────────────────────────────
-const groups = [
+const _groups = [
   {
     id: "search",
     title: t("agent.v2Scenarios.groupSearch"),

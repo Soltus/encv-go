@@ -137,7 +137,7 @@ async function fetchFallbackDescription(name: string, version: string): Promise<
         );
         if (r.ok) {
           const data = await r.json();
-          if (data.response && data.response.docs && data.response.docs[0]) {
+          if (data.response?.docs?.[0]) {
             const desc = data.response.docs[0].descr || data.response.docs[0].description;
             if (desc) return String(desc);
           }

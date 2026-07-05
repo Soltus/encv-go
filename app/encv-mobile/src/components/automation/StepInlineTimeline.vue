@@ -19,7 +19,6 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import UnifiedTimelineCard from "@/components/shared/UnifiedTimelineCard.vue";
 import { formatDateTime, formatDuration } from "@/composables/useDateFormat";
 import { useI18n } from "@/composables/useI18n";
 import { Phase, type StepRun, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
@@ -80,7 +79,7 @@ function calcDurationMs(startedAt?: string, completedAt?: string): number {
   if (!startedAt || !completedAt) return 0;
   const start = new Date(startedAt).getTime();
   const end = new Date(completedAt).getTime();
-  if (isNaN(start) || isNaN(end) || end < start) return 0;
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 0;
   return end - start;
 }
 
@@ -120,7 +119,7 @@ interface InternalTimelineEntry extends UnifiedTimelineEntry {
  *   - step 有 startedAt + phase（运行中）→ 2 个条目（Started + Current phase）
  *   - step 有 startedAt + completedAt（已完成）→ 2-3 个条目（Started + Completed，可能含中间 phase）
  */
-const entries = computed<UnifiedTimelineEntry[]>(() => {
+const _entries = computed<UnifiedTimelineEntry[]>(() => {
   const step = props.step;
   const result: InternalTimelineEntry[] = [];
 

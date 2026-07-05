@@ -91,7 +91,9 @@ export async function fetchWebDavLocalInfo(): Promise<WebDavLocalInfo> {
 // 🆕 2026-06-17：拉取 webdav manifest（多挂载点 + 虚拟文件树 + 容器映射）
 // 强类型，import from types/webdav-test
 
-export async function fetchWebDavManifest(mountName?: string): Promise<import("@encv/shared-components/types/webdav-test").WebDavManifestResponse> {
+export async function fetchWebDavManifest(
+  mountName?: string
+): Promise<import("@encv/shared-components/types/webdav-test").WebDavManifestResponse> {
   const baseUrl = getApiBaseUrl();
   const qs = mountName ? `?mount=${encodeURIComponent(mountName)}` : "";
   const response = await fetch(`${baseUrl}/api/webdav/manifest${qs}`);

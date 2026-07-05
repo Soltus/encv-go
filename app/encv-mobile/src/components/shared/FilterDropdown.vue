@@ -92,11 +92,9 @@ const isOpen = ref(false);
 const searchQuery = ref("");
 const dropdownRef = ref<HTMLElement | null>(null);
 const searchInputRef = ref<HTMLInputElement | null>(null);
-const listRef = ref<HTMLElement | null>(null);
+const _listRef = ref<HTMLElement | null>(null);
 
-const isEmptyAll = computed(() =>
-  props.emptyMeansAll && props.modelValue.length === 0
-);
+const isEmptyAll = computed(() => props.emptyMeansAll && props.modelValue.length === 0);
 
 const selectedSet = computed(() => {
   if (isEmptyAll.value) {
@@ -105,12 +103,12 @@ const selectedSet = computed(() => {
   return new Set(props.modelValue);
 });
 
-const selectedCount = computed(() => {
+const _selectedCount = computed(() => {
   if (isEmptyAll.value) return props.options.length;
   return props.modelValue.length;
 });
 
-const triggerLabel = computed(() => {
+const _triggerLabel = computed(() => {
   if (isEmptyAll.value) {
     if (props.options.length <= 1) return props.label;
     return `${props.label} (${props.options.length})`;
@@ -129,11 +127,11 @@ const filteredOptions = computed(() => {
   return props.options.filter(o => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q));
 });
 
-function isSelected(value: string): boolean {
+function _isSelected(value: string): boolean {
   return selectedSet.value.has(value);
 }
 
-function toggleOption(value: string) {
+function _toggleOption(value: string) {
   if (props.multiSelect) {
     const next = new Set(props.modelValue);
     if (next.has(value)) next.delete(value);
@@ -148,18 +146,18 @@ function toggleOption(value: string) {
   }
 }
 
-function selectAll() {
+function _selectAll() {
   const all = filteredOptions.value.map(o => o.value);
   emit("update:modelValue", all);
   emit("change", all);
 }
 
-function clearAll() {
+function _clearAll() {
   emit("update:modelValue", []);
   emit("change", []);
 }
 
-function toggleOpen() {
+function _toggleOpen() {
   isOpen.value = !isOpen.value;
   if (isOpen.value) {
     nextTick(() => {
@@ -170,7 +168,7 @@ function toggleOpen() {
   }
 }
 
-function onSearchInput() {
+function _onSearchInput() {
   // 搜索时不需要特殊处理，computed 自动更新
 }
 

@@ -77,7 +77,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
 import { computed } from "vue";
 import { useI18n } from "@/composables/useI18n";
 import type { SlashMenuItem } from "@/composables/useSlashMenu";
@@ -100,7 +99,7 @@ const props = defineProps<{
 const { t } = useI18n();
 
 /** 按 group 拆分后渲染（功能在前，技能在后） */
-const groupedItems = computed(() => {
+const _groupedItems = computed(() => {
   const features: SlashMenuItem[] = [];
   const skills: SlashMenuItem[] = [];
   for (const it of props.items) {
@@ -111,7 +110,7 @@ const groupedItems = computed(() => {
 });
 
 /** 是否当前有 query——空 query 也要显示完整列表 */
-const hasQuery = computed(() => props.query.length > 0);
+const _hasQuery = computed(() => props.query.length > 0);
 
 /**
  * 通过 id 找当前项在 props.items（扁平数组）中的索引。
@@ -121,11 +120,11 @@ function flatIndexOf(id: string): number {
   return props.items.findIndex(x => x.id === id);
 }
 
-function onClickItem(id: string) {
+function _onClickItem(id: string) {
   props.onApply(id);
 }
 
-function onMouseEnterItem(id: string) {
+function _onMouseEnterItem(id: string) {
   // 鼠标悬停时同步更新 selectedIndex，让"键盘高亮 == 鼠标悬停高亮"
   const idx = flatIndexOf(id);
   if (idx >= 0 && idx !== (props.selectedIndex ?? 0)) {
@@ -133,7 +132,7 @@ function onMouseEnterItem(id: string) {
   }
 }
 
-function onMouseLeaveList() {
+function _onMouseLeaveList() {
   // 鼠标离开整个列表时不主动改 selectedIndex——下一次键盘导航从原位继续
   // 如果想要"鼠标离开后回到原 selectedIndex"，可在这里发 onSelectedIndexChange
   // 当前不发送以避免键盘/鼠标竞态

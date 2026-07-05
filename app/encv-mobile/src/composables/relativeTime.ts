@@ -36,8 +36,8 @@ const WEEK_MS = 604_800_000;
  */
 export function formatRelativeTime(ts: number, now: number = Date.now()): string {
   // 防御：0 / undefined / null / NaN
-  if (!ts || typeof ts !== "number" || isNaN(ts)) return "";
-  if (!now || typeof now !== "number" || isNaN(now)) return "";
+  if (!ts || typeof ts !== "number" || Number.isNaN(ts)) return "";
+  if (!now || typeof now !== "number" || Number.isNaN(now)) return "";
 
   const diff = now - ts;
   const abs = Math.abs(diff);

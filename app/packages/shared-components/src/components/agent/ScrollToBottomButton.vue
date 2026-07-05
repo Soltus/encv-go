@@ -20,9 +20,8 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { arrowDownOutline } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { arrowDownOutline } from "ionicons/icons";
 
 withDefaults(
   defineProps<{
@@ -36,7 +35,7 @@ withDefaults(
 );
 
 const { t } = useI18n();
-const arrowDownIcon = arrowDownOutline;
+const _arrowDownIcon = arrowDownOutline;
 </script>
 
 <style scoped>

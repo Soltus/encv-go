@@ -9,12 +9,12 @@
  * - 包含 PhaseIcon 子组件
  */
 
-import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
 import PhaseBadge from "@encv/shared-components/components/shared/PhaseBadge.vue";
 import type { PhaseIconValue } from "@encv/shared-components/components/shared/PhaseIcon.vue";
 import PhaseIcon from "@encv/shared-components/components/shared/PhaseIcon.vue";
 import { ALL_PHASES, Phase } from "@encv/shared-components/lib/workflow/types";
+import { mount } from "@vue/test-utils";
+import { describe, expect, it } from "vitest";
 
 // ion-icon stub：PhaseIcon 内部使用 ion-icon，需 stub 避免 @ionic/vue 全局注册依赖
 const IonIconStub = {

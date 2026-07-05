@@ -20,7 +20,6 @@
  *  - clearHistory 只清 WebDAV 记录（按 workflowDefId 过滤），不影响插件测试记录
  */
 
-import { type ComputedRef, computed, type Ref, ref, watch } from "vue";
 import { generateMockFilesViaBackend } from "@encv/shared-components/api/mockGenerator";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useWebDavManifest } from "@encv/shared-components/composables/useWebDavManifest";
@@ -28,8 +27,15 @@ import { getModuleById, WEBDAV_TEST_MODULES } from "@encv/shared-components/comp
 import { useWebDavTestRunner } from "@encv/shared-components/composables/useWebDavTestRunner";
 import { useWorkflowTaskService } from "@encv/shared-components/composables/useWorkflowTaskService";
 import { MOCK_GENERATE_ROOT } from "@encv/shared-components/lib/mockConstants";
-import type { StepStatus, UnifiedRunRecord, WorkflowDefinition, WorkflowRun, WorkflowStatus } from "@encv/shared-components/lib/workflow/types";
+import type {
+  StepStatus,
+  UnifiedRunRecord,
+  WorkflowDefinition,
+  WorkflowRun,
+  WorkflowStatus,
+} from "@encv/shared-components/lib/workflow/types";
 import type { TestCaseResult, TestCaseStatus, TestRun, WebDavTestContext } from "@encv/shared-components/types/webdav-test";
+import { type ComputedRef, computed, type Ref, ref, watch } from "vue";
 
 // ============= 类型定义（与原 useWebDavAutomationTests 保持一致）=============
 

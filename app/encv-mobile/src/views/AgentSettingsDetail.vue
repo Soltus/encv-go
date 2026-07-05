@@ -338,32 +338,10 @@
 
 <script setup lang="ts">
 import {
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonChip,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonInput,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonModal,
-  IonNote,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
   alertCircleOutline,
   bugOutline,
   checkmarkCircle,
   closeCircleOutline,
-  cloudOutline,
   copyOutline,
   documentText,
   flashOutline,
@@ -375,7 +353,6 @@ import {
   medkitOutline,
   optionsOutline,
   refreshOutline,
-  save as saveIcon,
   settingsOutline,
   sparklesOutline,
   speedometerOutline,
@@ -383,9 +360,6 @@ import {
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { fetchConfig, getApiBaseUrl, updateConfig } from "@/api/encv";
-import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
-import InputWithHistory from "@/components/InputWithHistory.vue";
-import ServerStatusCard from "@/components/ServerStatusCard.vue";
 import { devlogApiError, devlogApiInfo } from "@/composables/devlogApiError";
 import { type DoctorReport, runSyncDoctor } from "@/composables/useAgent";
 import { getAgentApiBase, getAgentApiBaseContext } from "@/composables/useAgentApiBase";
@@ -435,17 +409,17 @@ const testing = ref(false);
 const testResult = ref("");
 const testResultSuccess = ref(false);
 
-const listIcon = listOutline;
-const flashIcon = flashOutline;
-const closeIcon = closeCircleOutline;
+const _listIcon = listOutline;
+const _flashIcon = flashOutline;
+const _closeIcon = closeCircleOutline;
 const lockOpenIcon = lockOpenOutline;
 const lockIcon = lockClosed;
 const checkmarkIcon = checkmarkCircle;
 const alertIcon = alertCircleOutline;
 const refreshIcon = refreshOutline;
-const bugIcon = bugOutline;
-const medkitIcon = medkitOutline;
-const copyIcon = copyOutline;
+const _bugIcon = bugOutline;
+const _medkitIcon = medkitOutline;
+const _copyIcon = copyOutline;
 
 // ─── API Key 状态机（spec F.3 状态反馈 UI）────────────────────
 type ApiKeyStatus =
@@ -483,7 +457,7 @@ const apiKeyPlainValue = ref(""); // 用户正在编辑的明文（内存中，p
 
 // 输入框 placeholder 根据 API Key 状态切换
 // 当 decrypt-failed 时明确告诉用户"这里有损坏的密文"，避免被误认为输入框是空的
-const apiKeyInputPlaceholder = computed(() => {
+const _apiKeyInputPlaceholder = computed(() => {
   if (apiKeyStatus.value === "decrypt-failed") {
     return t("agent.apiKeyPlaceholderBroken") || "已存储加密值但无法解密，请重新输入";
   }
@@ -496,7 +470,7 @@ const apiKeyInputPlaceholder = computed(() => {
 // model-error 是否由 API Key 状态问题引起——决定是否显示"一键跳转"按钮
 // 关键：让依赖关系可被发现。模型列表不能孤立地报告"未配置 API Key"，
 // 必须在 UI 上提供回到根因的入口
-const isModelErrorCausedByApiKey = computed(() => {
+const _isModelErrorCausedByApiKey = computed(() => {
   return (
     apiKeyStatus.value === "empty" ||
     apiKeyStatus.value === "decrypt-failed" ||
@@ -574,13 +548,13 @@ function scrollToApiKey() {
 // 注意：不能用 apiKeyPlainValue 作为判断源——页面加载时 decryptAndLoadApiKey 会把解密后的
 // 明文回填到 apiKeyPlainValue，导致"已保存的密文"被误判为"用户修改中"。
 // 正确语义：当前显示内容是否与"默认空值"不同 → 存储值非空即视为已自定义。
-const isApiKeyCustomized = computed(() => {
+const _isApiKeyCustomized = computed(() => {
   const stored = getFieldValue(["agent_settings", "openai_api_key"]);
   return typeof stored === "string" && stored.length > 0;
 });
 
 // 状态徽标展示
-const apiKeyStatusBadge = computed(() => {
+const _apiKeyStatusBadge = computed(() => {
   switch (apiKeyStatus.value) {
     case "empty":
       return { color: "medium" as const, icon: lockOpenIcon, label: t("agent.apiKeyStatusEmpty") };
@@ -609,7 +583,7 @@ const apiKeyStatusBadge = computed(() => {
 
 // Agent API base 当前解析（用于 UI 展示"实际打到哪里"）
 const agentApiBaseCtx = computed(() => getAgentApiBaseContext());
-const agentApiBaseLabel = computed(() => {
+const _agentApiBaseLabel = computed(() => {
   switch (agentApiBaseCtx.value.source) {
     case "dev-gateway":
       return t("agent.apiKeyBackendDev");
@@ -728,7 +702,7 @@ async function decryptAndLoadApiKey() {
   }
 }
 
-function handleApiKeyInput(val: string) {
+function _handleApiKeyInput(val: string) {
   apiKeyPlainValue.value = val;
   setFieldValue(["agent_settings", "openai_api_key"], val);
   // 用户开始编辑：状态机切到 'plaintext'（避免仍显示"已加密"绿徽标误导用户）
@@ -748,7 +722,7 @@ function handleApiKeyInput(val: string) {
 // 重置 API Key 到默认值（空）
 // 之前 InputWithHistory 的 ↺ 按钮 click 后无任何反应——@reset 事件未挂载。
 // 这里把存储值清空、明文缓存清空、状态机归位到 empty。
-function handleApiKeyReset() {
+function _handleApiKeyReset() {
   apiKeyPlainValue.value = "";
   setFieldValue(["agent_settings", "openai_api_key"], "");
   apiKeyStatus.value = "empty";
@@ -762,7 +736,7 @@ function handleApiKeyReset() {
  * 关键 UX：autoResetBrokenApiKey 后用户**只需输入一次 + 按 Enter** 即可完成全流程，
  * 不必再点顶部的"保存"按钮。这是从"用户愤怒不愿操作"到"零操作可用"的关键。
  */
-async function handleApiKeyEnter() {
+async function _handleApiKeyEnter() {
   // 1. 基本校验：必须有内容
   const raw = apiKeyPlainValue.value.trim();
   if (!raw) {
@@ -791,7 +765,7 @@ async function handleApiKeyEnter() {
  *   - 这时候 Enter 没被按过，但真 key 已经输入好了——blur 时自动保存。
  *   - 只有"用户改动了内容"才保存，避免空 blur 时也触发 save。
  */
-async function handleApiKeyBlur() {
+async function _handleApiKeyBlur() {
   const raw = apiKeyPlainValue.value.trim();
   if (!raw) return; // 空白不保存
   if (raw.startsWith("enc:")) return; // 已经是密文格式（用户没改）
@@ -930,7 +904,7 @@ watch(apiKeyStatus, (newStatus, oldStatus) => {
   }
 });
 
-function handleModelManualInput(event: Event) {
+function _handleModelManualInput(event: Event) {
   const val = (event.target as HTMLInputElement).value;
   setValue(["agent_settings", "openai_model"], val);
 }
@@ -941,7 +915,7 @@ const jsonError = ref("");
 
 // 诊断信息：错误态 UI 展示的完整状态快照
 // 目的：让用户（和开发者）一眼看到"到底哪一步失败了"，而不是只看到"后端服务未连接"
-const diagInfo = computed(() => {
+const _diagInfo = computed(() => {
   const lines: string[] = [];
   lines.push(`serverOnline   = ${serverOnline.value}`);
   lines.push(`configLoaded    = ${configLoaded.value}`);
@@ -965,7 +939,7 @@ const diagInfo = computed(() => {
   return lines.join("\n");
 });
 
-const agentSection = computed<FieldDef | undefined>(() => {
+const _agentSection = computed<FieldDef | undefined>(() => {
   return schemaFields.value.find(s => s.key === "agent_settings");
 });
 
@@ -983,11 +957,11 @@ const toolsChips = computed<string[]>(() => {
   return [];
 });
 
-const toolsText = computed(() => toolsChips.value.join(", "));
+const _toolsText = computed(() => toolsChips.value.join(", "));
 
-const testResultClass = computed(() => (testResultSuccess.value ? "test-result-success" : "test-result-failed"));
+const _testResultClass = computed(() => (testResultSuccess.value ? "test-result-success" : "test-result-failed"));
 
-function getValue(path: string[]): unknown {
+function _getValue(path: string[]): unknown {
   return getFieldValue(path);
 }
 
@@ -995,7 +969,7 @@ function setValue(path: string[], value: unknown) {
   setFieldValue(path, value);
 }
 
-function handleInput(path: string[], field: FieldDef, event: CustomEvent) {
+function _handleInput(path: string[], field: FieldDef, event: CustomEvent) {
   // ion-input 的 ionInput 事件是 CustomEvent，值在 event.detail.value
   // 不能用 event.target.value：event.target 是 ion-input 元素（不是原生 input）
   // 直接读 .detail.value 才是稳定可靠的（兼容 number / string / 未知类型）
@@ -1008,7 +982,7 @@ function handleInput(path: string[], field: FieldDef, event: CustomEvent) {
   }
 }
 
-function handleToolsInput(event: CustomEvent) {
+function _handleToolsInput(event: CustomEvent) {
   const raw = (event.target as HTMLInputElement).value || "";
   const list = raw
     .split(",")
@@ -1017,12 +991,12 @@ function handleToolsInput(event: CustomEvent) {
   setFieldValue(["agent_settings", "enabled_tools"], list);
 }
 
-function removeTool(name: string) {
+function _removeTool(name: string) {
   const next = toolsChips.value.filter(t => t !== name);
   setFieldValue(["agent_settings", "enabled_tools"], next);
 }
 
-function fieldLabel(key: string, _required?: boolean): string {
+function _fieldLabel(key: string, _required?: boolean): string {
   return tField(key);
 }
 
@@ -1038,7 +1012,7 @@ const fieldIconMap: Record<string, string> = {
   max_tool_calls_per_turn: speedometerOutline,
 };
 
-function getFieldIcon(fieldKey: string, fieldType: string): string {
+function _getFieldIcon(fieldKey: string, fieldType: string): string {
   if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey];
   if (fieldType === "boolean") return settingsOutline;
   if (fieldType === "integer") return speedometerOutline;
@@ -1130,7 +1104,7 @@ async function handleSaveConfig() {
  * 用于诊断"加密看似成功但解密时数据丢失 / 哈希被改" 等问题。
  * 与 handleSaveConfig 完全独立：不修改任何持久化数据。
  */
-async function handleRoundtripTest() {
+async function _handleRoundtripTest() {
   const rawKey = apiKeyPlainValue.value || String(getFieldValue(["agent_settings", "openai_api_key"]) ?? "").replace(/^enc:/, "");
   if (!rawKey) {
     showToast({ message: t("agent.apiKeyStatusEmpty"), duration: 1500, color: "warning" });
@@ -1224,15 +1198,15 @@ async function handleRoundtripTest() {
   }
 }
 
-function goToDevLogs() {
+function _goToDevLogs() {
   router.push("/tabs/devlogs");
 }
 
-function handleResetConfig() {
+function _handleResetConfig() {
   resetConfig();
 }
 
-async function handleTestConnection() {
+async function _handleTestConnection() {
   testing.value = true;
   testResult.value = "";
   testResultSuccess.value = false;
@@ -1279,14 +1253,14 @@ async function handleTestConnection() {
   }
 }
 
-function openJsonEditor() {
+function _openJsonEditor() {
   const agentVal = getFieldValue(["agent_settings"]);
   jsonText.value = JSON.stringify(agentVal ?? {}, null, 2);
   jsonError.value = "";
   showJsonEditor.value = true;
 }
 
-function validateJson() {
+function _validateJson() {
   try {
     JSON.parse(jsonText.value);
     jsonError.value = "";
@@ -1295,7 +1269,7 @@ function validateJson() {
   }
 }
 
-async function handleSaveJson() {
+async function _handleSaveJson() {
   try {
     const parsed = JSON.parse(jsonText.value);
     const cfg = await fetchConfig();
@@ -1317,7 +1291,7 @@ const doctorRunning = ref(false);
 const doctorReportJson = ref("");
 const doctorIssuesCount = ref(0);
 
-async function handleRunSyncDoctor() {
+async function _handleRunSyncDoctor() {
   if (doctorRunning.value) return;
   doctorRunning.value = true;
   try {
@@ -1339,7 +1313,7 @@ async function handleRunSyncDoctor() {
   }
 }
 
-async function handleCopyDoctorJson() {
+async function _handleCopyDoctorJson() {
   if (!doctorReportJson.value) return;
   try {
     if (navigator?.clipboard?.writeText) {
@@ -1475,7 +1449,7 @@ async function loadConfigSafely() {
  * 修复：先主动触发 useServerStatus.checkStatus() 重新探测（不走缓存），
  * 再根据探测结果决定 loadConfig 或更新错误文案。
  */
-async function retryLoadConfig() {
+async function _retryLoadConfig() {
   // 重试前先主动探测一次后端（避免 serverOnline 缓存还是 false）
   let onlineNow = serverOnline.value;
   try {
@@ -1493,7 +1467,7 @@ async function retryLoadConfig() {
   }
 }
 
-function handleGoToDevLogs() {
+function _handleGoToDevLogs() {
   // 跳到 DevLogs tab 方便用户贴日志给客服
   router.push("/tabs/devlogs");
 }

@@ -9,9 +9,10 @@
  *
  * 修复：createDefinition 改用 partial.id ?? generateId()，尊重调用方指定的 id。
  */
-import { beforeEach, describe, expect, it } from "vitest";
+
 import { useWorkflowStore } from "@encv/shared-components/composables/useWorkflowStore";
 import type { WorkflowDefinition } from "@encv/shared-components/lib/workflow/types";
+import { beforeEach, describe, expect, it } from "vitest";
 
 // mock localStorage
 const storage = new Map<string, string>();

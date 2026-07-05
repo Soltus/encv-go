@@ -7,7 +7,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
 import {
   banOutline,
   checkmarkCircleOutline,
@@ -60,7 +59,7 @@ const PHASE_ICON_MAP: Record<PhaseIconValue, string> = {
   cancelled: banOutline,
 };
 
-const icon = computed(() => PHASE_ICON_MAP[props.phase] ?? helpCircleOutline);
+const _icon = computed(() => PHASE_ICON_MAP[props.phase] ?? helpCircleOutline);
 </script>
 
 <style scoped>

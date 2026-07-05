@@ -76,8 +76,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonCard, IonCardContent, IonCardHeader, IonCardTitle, IonIcon, IonSpinner } from "@ionic/vue";
-import { analyticsOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { type CalibrationResult, type EncvTask, getCalibration, getPerformanceHistory, type PerformanceMetrics } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
@@ -97,7 +95,7 @@ interface PluginAggregation {
   trendPctChange: number;
 }
 
-const pluginAggregation = computed<PluginAggregation[]>(() => {
+const _pluginAggregation = computed<PluginAggregation[]>(() => {
   const map = new Map<string, EncvTask[]>();
   for (const task of props.runTasks) {
     if (!task.performanceSummary) continue;
@@ -139,7 +137,7 @@ const pluginAggregation = computed<PluginAggregation[]>(() => {
   return result.sort((a, b) => b.caseCount - a.caseCount);
 });
 
-function gradeColor(grade: string): string {
+function _gradeColor(grade: string): string {
   switch (grade) {
     case "excellent":
       return "success";
@@ -152,15 +150,15 @@ function gradeColor(grade: string): string {
   }
 }
 
-function trendArrow(pct: number): string {
+function _trendArrow(pct: number): string {
   return pct > 0 ? "↗" : "↘";
 }
 
-function trendClass(pct: number): string {
+function _trendClass(pct: number): string {
   return pct > 0 ? "trend-up" : "trend-down";
 }
 
-function formatTime(iso: string): string {
+function _formatTime(iso: string): string {
   try {
     return new Date(iso).toLocaleString();
   } catch {

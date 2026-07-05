@@ -81,7 +81,9 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
+import type { SubTask } from "@encv/shared-components/composables/renderTurnItems";
+import { AGENT_TASK_COLLAPSE_CHAR_COUNT, AGENT_TASK_COLLAPSE_LINE_COUNT } from "@encv/shared-components/composables/renderTurnItems";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   checkmarkCircle,
   chevronDownOutline,
@@ -92,10 +94,6 @@ import {
   sync,
 } from "ionicons/icons";
 import { computed, ref } from "vue";
-import type { SubTask } from "@encv/shared-components/composables/renderTurnItems";
-import { AGENT_TASK_COLLAPSE_CHAR_COUNT, AGENT_TASK_COLLAPSE_LINE_COUNT } from "@encv/shared-components/composables/renderTurnItems";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import StatusBadge from "./StatusBadge.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -113,9 +111,9 @@ const props = withDefaults(
 
 const { t } = useI18n();
 
-const icon = gitBranchOutline;
-const chevronUp = chevronUpOutline;
-const chevronDown = chevronDownOutline;
+const _icon = gitBranchOutline;
+const _chevronUp = chevronUpOutline;
+const _chevronDown = chevronDownOutline;
 
 const shouldCollapse = computed(() => {
   if (props.subTasks.length > AGENT_TASK_COLLAPSE_LINE_COUNT) return true;
@@ -127,25 +125,25 @@ const shouldCollapse = computed(() => {
 // 非 streaming 态按 shouldCollapse 决定初值。
 const expanded = ref<boolean>(props.streaming || !shouldCollapse.value);
 
-function toggleExpanded() {
+function _toggleExpanded() {
   expanded.value = !expanded.value;
 }
 
 const completedCount = computed(() => props.subTasks.filter(s => s.status === "completed").length);
-const inProgressCount = computed(() => props.subTasks.filter(s => s.status === "in_progress").length);
-const failedCount = computed(() => props.subTasks.filter(s => s.status === "failed").length);
-const progressPct = computed(() => {
+const _inProgressCount = computed(() => props.subTasks.filter(s => s.status === "in_progress").length);
+const _failedCount = computed(() => props.subTasks.filter(s => s.status === "failed").length);
+const _progressPct = computed(() => {
   const total = props.subTasks.length;
   if (total === 0) return 0;
   return Math.round((completedCount.value / total) * 100);
 });
 
-const reasoningText = computed(() => {
+const _reasoningText = computed(() => {
   const r = props.reasoning;
   return typeof r === "string" && r.trim().length > 0 ? r.trim() : "";
 });
 
-function statusIcon(status: SubTask["status"]) {
+function _statusIcon(status: SubTask["status"]) {
   switch (status) {
     case "completed":
       return checkmarkCircle;
@@ -153,13 +151,12 @@ function statusIcon(status: SubTask["status"]) {
       return sync;
     case "failed":
       return closeCircle;
-    case "pending":
     default:
       return ellipsisHorizontalCircle;
   }
 }
 
-function statusLabel(status: SubTask["status"]): string {
+function _statusLabel(status: SubTask["status"]): string {
   if (status === "in_progress") return t("agent.planStatusInProgress");
   if (status === "completed") return t("agent.planStatusCompleted");
   if (status === "failed") return t("agent.failed");

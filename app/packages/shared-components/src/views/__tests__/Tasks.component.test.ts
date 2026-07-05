@@ -206,8 +206,8 @@ vi.mock("@/lib/taskPersistence", () => ({
 
 // ============ 测试 fixture ============
 
-import { createPinia, setActivePinia } from "pinia";
 import type { EncvTask } from "@encv/shared-components/api/encv";
+import { createPinia, setActivePinia } from "pinia";
 
 async function freshModules() {
   vi.resetModules();

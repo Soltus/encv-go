@@ -15,13 +15,13 @@
  * - getPhaseLabel 基于 Phase 枚举映射（i18n key）
  */
 
-import { mount } from "@vue/test-utils";
-import { beforeEach, describe, expect, it } from "vitest";
 import type { EncvTask, TaskStep } from "@encv/shared-components/api/encv";
 import PhaseIcon from "@encv/shared-components/components/shared/PhaseIcon.vue";
 import UnifiedTimelineCard from "@encv/shared-components/components/shared/UnifiedTimelineCard.vue";
 import TaskTimeline from "@encv/shared-components/components/TaskTimeline.vue";
 import { Phase } from "@encv/shared-components/lib/workflow/types";
+import { mount } from "@vue/test-utils";
+import { beforeEach, describe, expect, it } from "vitest";
 
 // ion-icon stub：避免 @ionic/vue 全局注册依赖
 const IonIconStub = {

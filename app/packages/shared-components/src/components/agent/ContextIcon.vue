@@ -39,10 +39,9 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonButton, IonIcon, modalController } from "@ionic/vue";
-import { layers as layersIcon } from "ionicons/icons";
-import { computed, reactive } from "vue";
 import type { ContextUsageResponse } from "@encv/shared-components/composables/useContextUsage";
+import { modalController } from "@ionic/vue";
+import { computed, reactive } from "vue";
 import type { ContextPopoverState } from "./ContextPopoverModal.vue";
 import ContextPopoverModal from "./ContextPopoverModal.vue";
 
@@ -54,19 +53,19 @@ const props = defineProps<{
   compact?: boolean;
 }>();
 
-const ariaLabel = computed(() => {
+const _ariaLabel = computed(() => {
   if (!props.data) return "上下文使用（加载中）";
   return `上下文使用 ${props.data.usage.percent.toFixed(1)}%`;
 });
 
-const percentText = computed(() => {
+const _percentText = computed(() => {
   if (!props.data) return "—";
   return props.data.usage.percent.toFixed(1) + "%";
 });
 
-const compactions = computed(() => props.data?.compactions ?? 0);
+const _compactions = computed(() => props.data?.compactions ?? 0);
 
-const toneClass = computed(() => {
+const _toneClass = computed(() => {
   if (!props.data) return "tone-idle";
   const p = props.data.usage.percent;
   if (p >= 90) return "tone-danger";
@@ -78,7 +77,7 @@ const toneClass = computed(() => {
  * 打开底部弹出面板（modalController.create 模式）
  * per workspace rules §1.1 + §1.2: 使用 reactive state object 传递数据
  */
-async function openPopover() {
+async function _openPopover() {
   const state: ContextPopoverState = reactive({
     data: props.data,
     loading: props.loading ?? false,

@@ -50,8 +50,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon, IonInput, IonItem } from "@ionic/vue";
-import { chevronDownOutline, chevronUpOutline, eyeOffOutline, eyeOutline, folderOpen, refreshOutline, timeOutline } from "ionicons/icons";
 import { computed, ref } from "vue";
 import { useI18n } from "@/composables/useI18n";
 import { clearHistory, getHistory, recordHistory } from "@/composables/useInputHistory";
@@ -85,12 +83,12 @@ const showHistory = ref(false);
 
 const entries = computed(() => (props.historyKey ? getHistory(props.historyKey) : []));
 
-const resolvedType = computed(() => {
+const _resolvedType = computed(() => {
   if (props.inputType !== "password") return props.inputType || "text";
   return showPassword.value ? "text" : "password";
 });
 
-function handleInput(e: CustomEvent) {
+function _handleInput(e: CustomEvent) {
   // 防御：ionInput 事件必须是 CustomEvent 携带 detail.value
   // 但代码路径中可能存在非 CustomEvent 派发（如测试代码 dispatchEvent(new Event('ionInput'))），
   // 这种情况下 e.detail 是 undefined，原代码会抛 "Cannot read properties of undefined"
@@ -99,13 +97,13 @@ function handleInput(e: CustomEvent) {
   emit("update:modelValue", raw);
 }
 
-function handleFocus() {
+function _handleFocus() {
   if (props.historyKey && entries.value.length > 0) {
     showHistory.value = true;
   }
 }
 
-function handleBlur() {
+function _handleBlur() {
   if (props.historyKey) {
     recordHistory(props.historyKey, props.modelValue);
   }
@@ -117,23 +115,23 @@ function handleBlur() {
   emit("blur");
 }
 
-function handleSelect(value: string) {
+function _handleSelect(value: string) {
   emit("update:modelValue", value);
   emit("commit-history", value);
   recordHistory(props.historyKey!, value);
   showHistory.value = false;
 }
 
-function handleClear() {
+function _handleClear() {
   if (props.historyKey) clearHistory(props.historyKey);
   showHistory.value = false;
 }
 
-function togglePassword() {
+function _togglePassword() {
   showPassword.value = !showPassword.value;
 }
 
-function handleEnter() {
+function _handleEnter() {
   emit("keyup-enter");
 }
 </script>

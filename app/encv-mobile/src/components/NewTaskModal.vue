@@ -104,25 +104,9 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonPage,
-  IonSelect,
-  IonSelectOption,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
-import { checkmarkCircle, lockClosed } from "ionicons/icons";
+import { modalController } from "@ionic/vue";
 import { computed, reactive } from "vue";
 import type { ContainerVersionInfo, PluginCandidate, TaskField, TaskOptions } from "@/api/encv";
-import DecryptBody from "@/components/DecryptBody.vue";
-import EncryptBody from "@/components/EncryptBody.vue";
 import type { NewTaskState } from "@/components/NewTaskState";
 import { useI18n } from "@/composables/useI18n";
 
@@ -198,26 +182,26 @@ const effectiveState = computed<NewTaskState>(() => {
 });
 
 const src = computed(() => effectiveState.value.sourcePath ?? props.sourcePath ?? "");
-const taskType = computed(() => effectiveState.value.taskType ?? props.taskType ?? "encrypt");
+const _taskType = computed(() => effectiveState.value.taskType ?? props.taskType ?? "encrypt");
 const cands = computed<PluginCandidate[]>(() => {
   const arr = effectiveState.value.candidates ?? props.candidates;
   return Array.isArray(arr) ? arr : [];
 });
 const pluginName = computed(() => effectiveState.value.predictedPlugin ?? props.predictedPlugin ?? "");
-const selectedIdx = computed(() =>
+const _selectedIdx = computed(() =>
   typeof effectiveState.value.selectedPluginIndex === "number"
     ? effectiveState.value.selectedPluginIndex
     : typeof props.selectedPluginIndex === "number"
       ? props.selectedPluginIndex
       : 0
 );
-const taskOpts = computed(() => effectiveState.value.taskOptions ?? props.taskOptions ?? null);
+const _taskOpts = computed(() => effectiveState.value.taskOptions ?? props.taskOptions ?? null);
 
-const isPredicting = computed(() => {
+const _isPredicting = computed(() => {
   return src.value.length > 0 && cands.value.length === 0 && !pluginName.value;
 });
 
-function getMatchTypeLabel(matchType: string): string {
+function _getMatchTypeLabel(matchType: string): string {
   switch (matchType) {
     case "mime":
       return "MIME";
@@ -232,7 +216,7 @@ function getMatchTypeLabel(matchType: string): string {
   }
 }
 
-async function handleClose() {
+async function _handleClose() {
   await modalController.dismiss();
 }
 </script>

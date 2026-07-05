@@ -131,10 +131,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
 import { CATEGORY_META } from "@encv/shared-components/composables/useErrorAnalyzer";
 import type { TestCaseResult } from "@encv/shared-components/lib/workflow/types";
-import ErrorChainNode from "./ErrorChainNode.vue";
+import { computed, ref } from "vue";
 
 const props = defineProps<{
   result: TestCaseResult;
@@ -143,9 +142,9 @@ const props = defineProps<{
 
 const expanded = ref(props.result.status === "failed" || props.result.status === "passed");
 
-const paddedIdx = computed(() => String(props.index + 1).padStart(3, "0"));
+const _paddedIdx = computed(() => String(props.index + 1).padStart(3, "0"));
 
-const statusText = computed(() => {
+const _statusText = computed(() => {
   switch (props.result.status) {
     case "passed":
       return "VERIFIED";
@@ -162,14 +161,14 @@ const statusText = computed(() => {
   }
 });
 
-const isExpandable = computed(() => true);
+const _isExpandable = computed(() => true);
 
-const catMeta = computed(() => {
+const _catMeta = computed(() => {
   const cat = props.result.errorAnalysis?.category ?? "unknown";
   return CATEGORY_META[cat];
 });
 
-function toggle() {
+function _toggle() {
   expanded.value = !expanded.value;
 }
 </script>

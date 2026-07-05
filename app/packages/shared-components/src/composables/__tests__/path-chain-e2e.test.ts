@@ -15,8 +15,9 @@
  *
  * 如果不一致 → "source file not found" 错误（用户报告的问题）
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import { collectSpecs } from "@encv/shared-components/lib/mockDataGenerator";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // 注：「跨链路配置文件防回归」测试已移出到 __tests__/path-chain-config-regression.test.ts
 //  （那里用 node:fs/path/url 协议读真实文件验证 ENCV_MOCK_ROOT 一致性）。

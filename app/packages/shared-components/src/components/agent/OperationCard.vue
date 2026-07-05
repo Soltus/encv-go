@@ -99,23 +99,11 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon } from "@ionic/vue";
-import {
-  alertCircleOutline,
-  chevronDownOutline,
-  chevronUpOutline,
-  copyOutline,
-  documentTextOutline,
-  ellipsisHorizontalCircleOutline,
-  eyeOutline,
-  searchOutline,
-  terminalOutline,
-} from "ionicons/icons";
-import { computed, ref } from "vue";
 import type { ToolCall } from "@encv/shared-components/composables/useAgent";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
-import StatusBadge from "./StatusBadge.vue";
+import { documentTextOutline, ellipsisHorizontalCircleOutline, eyeOutline, searchOutline, terminalOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
 
 const props = defineProps<{
   toolCall: ToolCall;
@@ -130,13 +118,13 @@ const isCollapsed = ref(true);
 // 错误详情展开态：默认折叠
 const showErrorDetails = ref(false);
 
-function toggleCollapse() {
+function _toggleCollapse() {
   if (!props.streaming) {
     isCollapsed.value = !isCollapsed.value;
   }
 }
 
-function toggleErrorDetails() {
+function _toggleErrorDetails() {
   showErrorDetails.value = !showErrorDetails.value;
 }
 
@@ -144,7 +132,7 @@ function toggleErrorDetails() {
  * 复制错误：拼接 errorCode + errorMessage，方便用户贴到 issue / 群聊。
  * 失败时弹 toast（不静默吞错）。
  */
-async function copyError() {
+async function _copyError() {
   if (!props.toolCall.errorMessage) return;
   const text = props.toolCall.errorCode ? `[${props.toolCall.errorCode}] ${props.toolCall.errorMessage}` : props.toolCall.errorMessage;
   try {
@@ -170,7 +158,7 @@ async function copyError() {
 }
 
 /** 按 kind 选图标 */
-const toolIcon = computed(() => {
+const _toolIcon = computed(() => {
   switch (props.toolCall.kind) {
     case "command":
       return terminalOutline;
@@ -186,7 +174,7 @@ const toolIcon = computed(() => {
 });
 
 /** ToolStatus → StatusBadge tone 映射 */
-const statusTone = computed<"ready" | "warn" | "idle">(() => {
+const _statusTone = computed<"ready" | "warn" | "idle">(() => {
   switch (props.toolCall.status) {
     case "success":
       return "ready";
@@ -200,7 +188,7 @@ const statusTone = computed<"ready" | "warn" | "idle">(() => {
 });
 
 /** ToolStatus → 状态文案（覆盖 raw 英文 tag，状态语义化） */
-const statusLabel = computed(() => {
+const _statusLabel = computed(() => {
   switch (props.toolCall.status) {
     case "pending":
       return t("agent.toolStatusPending");
@@ -224,7 +212,7 @@ const statusLabel = computed(() => {
  *  3. finishedAt - Date.now() 的一个保守 fallback（不推荐，仅作为视觉占位）
  * 返回 null 表示「非终态 / 不可计算」，不显示耗时行。
  */
-const durationMs = computed<number | null>(() => {
+const _durationMs = computed<number | null>(() => {
   const tc = props.toolCall;
   // 优先：用最近一条 tool_result 的 duration_ms（来自 useAgent.m.tool_results）
   // 这里用 props 没传 result，所以只能从 tc 自身找。
@@ -239,10 +227,10 @@ const durationMs = computed<number | null>(() => {
 });
 
 /** 超过该阈值时显示"耗时较长"红色提示（spec: 5s） */
-const LONG_DURATION_MS = 5_000;
+const _LONG_DURATION_MS = 5_000;
 
 /** 毫秒 → "1.2s" / "850ms" 友好格式 */
-function formatDuration(ms: number): string {
+function _formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   const s = ms / 1000;
   if (s < 10) return `${s.toFixed(2)}s`;
@@ -253,7 +241,7 @@ function formatDuration(ms: number): string {
 }
 
 /** 错误 output 可能为对象/字符串，统一格式化 */
-function formatErrorOutput(output: unknown): string {
+function _formatErrorOutput(output: unknown): string {
   if (output === null || output === undefined) return "(empty)";
   if (typeof output === "string") return output;
   try {
@@ -263,7 +251,7 @@ function formatErrorOutput(output: unknown): string {
   }
 }
 
-function truncateArgs(args: string): string {
+function _truncateArgs(args: string): string {
   if (!args || args.length <= 120) return args || "";
   return args.slice(0, 120) + "…";
 }
@@ -280,7 +268,7 @@ const V2_TOOL_NAMES = new Set<string>([
 ]);
 
 /** 当前 toolCall 是否是 v2 工具（用于显示 v2 badge） */
-const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
+const _isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
 </script>
 
 <style scoped>

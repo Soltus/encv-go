@@ -9,8 +9,9 @@
  * 5. chain 总是非空
  * 6. fixes 总是非空（unknown 也有 3 条）
  */
-import { describe, expect, it } from "vitest";
+
 import { analyzeError, CATEGORY_META } from "@encv/shared-components/composables/useErrorAnalyzer";
+import { describe, expect, it } from "vitest";
 
 describe("analyzeError — 关键字匹配", () => {
   const cases: Array<[string, string, string]> = [

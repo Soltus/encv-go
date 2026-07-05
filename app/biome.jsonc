@@ -8,8 +8,20 @@
   "files": {
     "maxSize": 5888888,
     "ignoreUnknown": true,
-    "includes": ["**/src/**/*.{ts,js,vue,json}"],
-    "ignore": ["**/node_modules/**", "**/dist/**", "**/android/**", "**/ios/**", "**/cypress/**", "**/public/**"]
+    "includes": [
+      "**/src/**/*.{ts,js,vue,json}",
+      "**/__tests__/**/*.{ts,js,vue,json}",
+      "**/*.test.ts",
+      "**/*.spec.ts",
+      "!!**/node_modules",
+      "!!**/dist",
+      "!!**/android",
+      "!!**/ios",
+      "!!**/cypress",
+      "!!**/public",
+      "!!**/*.assets",
+      "!!**/plugin-*/src/main/assets"
+    ]
   },
   "formatter": {
     "enabled": true,

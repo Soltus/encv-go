@@ -126,43 +126,11 @@
 <script setup lang="ts">
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
-import {
-  alertController,
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonFooter,
-  IonHeader,
-  IonIcon,
-  IonLabel,
-  IonPage,
-  IonSegment,
-  IonSegmentButton,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-  modalController,
-  toastController,
-} from "@ionic/vue";
-import {
-  alertCircleOutline,
-  checkboxOutline,
-  chevronDown,
-  chevronForward,
-  closeOutline,
-  downloadOutline,
-  refreshOutline,
-  stopCircleOutline,
-  trashOutline,
-} from "ionicons/icons";
+import { alertController, modalController, toastController } from "@ionic/vue";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { EncvTask } from "@/api/encv";
 import { getCalibration } from "@/api/encv";
-import PerformanceTab from "@/components/group-detail/PerformanceTab.vue";
-import PipelineTab from "@/components/group-detail/PipelineTab.vue";
-import TasksTab from "@/components/group-detail/TasksTab.vue";
 import { useBatchOperations } from "@/composables/useBatchOperations";
 import { useI18n } from "@/composables/useI18n";
 import { useRunSummariesSingleton } from "@/composables/useRunSummaries";
@@ -182,8 +150,8 @@ const batchOps = useBatchOperations();
 
 // ============ UI 局部状态（selection 是 per-view，不进 store） ============
 const selectedIds = ref<Set<string>>(new Set());
-const multiSelectMode = ref(false);
-function toggleSelect(id: string) {
+const _multiSelectMode = ref(false);
+function _toggleSelect(id: string) {
   if (selectedIds.value.has(id)) selectedIds.value.delete(id);
   else selectedIds.value.add(id);
   selectedIds.value = new Set(selectedIds.value);
@@ -213,7 +181,7 @@ watch(activeTab, v => {
   }
 });
 
-const performanceSectionOpen = ref(false);
+const _performanceSectionOpen = ref(false);
 
 // 衍生数据
 const run = computed(() => workflowService.getRun(runId.value));
@@ -252,7 +220,7 @@ const totals = computed(() => {
 });
 
 // ============ 操作 ============
-async function openTaskDetail(task: EncvTask) {
+async function _openTaskDetail(task: EncvTask) {
   const { default: TaskDetailModal } = await import("@/components/TaskDetailModal.vue");
   const modal = await modalController.create({
     component: TaskDetailModal,
@@ -262,27 +230,27 @@ async function openTaskDetail(task: EncvTask) {
   await modal.present();
 }
 
-function onJobClick(_job: JobRun) {
+function _onJobClick(_job: JobRun) {
   activeTab.value = "tasks";
   // 默认打开后筛选到 failed + 选中当前 job 的 task
 }
 
-function goBack() {
+function _goBack() {
   router.replace("/tabs/tasks");
 }
 
 // ============ 多选 / 批量操作（local state + batchOps） ============
-async function batchRetrySelected() {
+async function _batchRetrySelected() {
   const ids = Array.from(selectedIds.value) as string[];
   await batchOps.batchRetry(ids);
   clearSelection();
 }
-async function batchCancelSelected() {
+async function _batchCancelSelected() {
   const ids = Array.from(selectedIds.value) as string[];
   await batchOps.batchCancel(ids);
   clearSelection();
 }
-async function batchDeleteSelected() {
+async function _batchDeleteSelected() {
   const ids = Array.from(selectedIds.value) as string[];
   const confirm = await alertController.create({
     header: t("tasks.batchDeleteConfirmHeader"),
@@ -353,7 +321,7 @@ async function shareOrDownloadFallback(blob: Blob, filename: string): Promise<vo
   URL.revokeObjectURL(url);
 }
 
-async function exportGroupReport() {
+async function _exportGroupReport() {
   if (!run.value) return;
   try {
     exporting.value = true;

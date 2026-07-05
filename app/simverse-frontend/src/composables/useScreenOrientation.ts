@@ -1,15 +1,15 @@
-import { onMounted, onUnmounted } from 'vue';
-import { ScreenOrientation } from '@capacitor/screen-orientation';
+import { ScreenOrientation } from "@capacitor/screen-orientation";
+import { onMounted, onUnmounted } from "vue";
 
-export function useScreenOrientation(type: 'landscape-primary' | 'portrait-primary' = 'portrait-primary') {
+export function useScreenOrientation(type: "landscape-primary" | "portrait-primary" = "portrait-primary") {
   onMounted(() => {
     ScreenOrientation.lock({
       orientation: type,
     }).catch((error: unknown) => {
-      console.warn('Failed to lock screen orientation:', error);
+      console.warn("Failed to lock screen orientation:", error);
     });
   });
-  
+
   onUnmounted(() => {
     // 组件卸载时不解锁，由父组件管理
   });

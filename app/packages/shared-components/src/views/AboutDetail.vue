@@ -123,29 +123,11 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBackButton,
-  IonBadge,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { codeSlash, informationCircle, logoGithub, openOutline, videocamOutline, warningOutline } from "ionicons/icons";
-import { onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
 import { type BuildInfo, fetchBuildInfo } from "@encv/shared-components/api/encv";
-import LibraryRow from "@encv/shared-components/components/LibraryRow.vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { type LibraryItem, useLibraries } from "@encv/shared-components/composables/useLibraries";
+import { onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -205,11 +187,11 @@ watch([androidItems, frontendItems, backendItems], () => {
   }
 });
 
-function openGitHub() {
+function _openGitHub() {
   window.open("https://github.com/Soltus/encv-go", "_blank");
 }
 
-function goFfmpegEngine() {
+function _goFfmpegEngine() {
   // 三级页：FFmpeg 引擎详情（runtime status + build info + 7 类 components）
   router.push("/tabs/settings/about/engine");
 }

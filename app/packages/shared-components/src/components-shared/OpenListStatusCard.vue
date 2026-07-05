@@ -52,8 +52,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { serverOutline } from "ionicons/icons";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { OpenListRuntime } from "./index";
 
@@ -84,7 +82,7 @@ const state = computed(() => {
   return props.runtime.running ? "running" : "stopped";
 });
 
-const formattedDataSize = computed(() => {
+const _formattedDataSize = computed(() => {
   const b = props.runtime.dataSizeBytes || 0;
   if (b < 1024) return `${b} B`;
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
@@ -92,22 +90,22 @@ const formattedDataSize = computed(() => {
   return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
 });
 
-const heartbeatLabel = computed(() => {
+const _heartbeatLabel = computed(() => {
   if (!props.runtime.lastUpdateTs) return "-";
   const deltaSec = Math.max(0, Math.floor((nowMs.value - props.runtime.lastUpdateTs) / 1000));
   if (deltaSec <= 5) return "正常";
   return `${deltaSec}s 前`;
 });
 
-const cardClass = computed(() => `state-${state.value}`);
+const _cardClass = computed(() => `state-${state.value}`);
 
-const badgeColor = computed(() => {
+const _badgeColor = computed(() => {
   if (state.value === "running") return "success";
   if (state.value === "port_conflict") return "danger";
   return "medium";
 });
 
-const statusLabel = computed(() => {
+const _statusLabel = computed(() => {
   if (state.value === "running") return "运行中";
   if (state.value === "port_conflict") return "端口冲突";
   if (state.value === "not_installed") return "未安装";

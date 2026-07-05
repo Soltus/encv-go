@@ -132,30 +132,8 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToast,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  checkmarkOutline as checkmarkIcon,
-  createOutline as createIcon,
-  globeOutline as globeIcon,
-  homeOutline as homeIcon,
-  refresh as refreshIcon,
-  searchOutline as searchIcon,
-} from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { DEFAULT_API_BASE_URL, getApiBaseUrl } from "@/api/encv";
-import ServerStatusCard from "@/components/ServerStatusCard.vue";
 import { type ProbeResult, useApiBaseProbe } from "@/composables/useApiBaseProbe";
 import { useI18n } from "@/composables/useI18n";
 import { useServerStatus } from "@/composables/useServerStatus";
@@ -177,7 +155,7 @@ const currentBaseUrl = computed(() => {
 
 // LAN 候选：来自 probe.lastResult.lanAccess.addresses
 // + 在地址前补 port（如果后端没返 port）
-const lanCandidates = computed<string[]>(() => {
+const _lanCandidates = computed<string[]>(() => {
   const la = probe.lastResult.value?.lanAccess;
   if (!la || la.addresses.length === 0) return [];
   const port = extractPort(currentBaseUrl.value) || 2025;
@@ -203,7 +181,7 @@ const isManualValid = computed(() => {
   return /^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(v);
 });
 
-function sourceLabel(s: ProbeResult["source"]): string {
+function _sourceLabel(s: ProbeResult["source"]): string {
   // 覆盖 ProbeResult['source'] 的全部 4 个 union 值 + default 兜底（TS2366）
   switch (s) {
     case "cached":
@@ -225,7 +203,7 @@ function showToast(msg: string, color: "success" | "danger" | "warning" = "succe
   toastOpen.value = true;
 }
 
-async function handleProbeNow(): Promise<void> {
+async function _handleProbeNow(): Promise<void> {
   try {
     const result = await probe.probe({ force: true });
     if (result.baseUrl) {
@@ -242,7 +220,7 @@ async function handleProbeNow(): Promise<void> {
   }
 }
 
-async function handleReset(): Promise<void> {
+async function _handleReset(): Promise<void> {
   try {
     const result = await probe.resetToDefault();
     await server.manualReconnect();
@@ -252,7 +230,7 @@ async function handleReset(): Promise<void> {
   }
 }
 
-async function handleUseLanAddress(addr: string): Promise<void> {
+async function _handleUseLanAddress(addr: string): Promise<void> {
   try {
     manualUrl.value = addr;
     manualError.value = "";
@@ -265,7 +243,7 @@ async function handleUseLanAddress(addr: string): Promise<void> {
   }
 }
 
-async function handleUseManual(): Promise<void> {
+async function _handleUseManual(): Promise<void> {
   if (!isManualValid.value) {
     manualError.value = t("settings.server.manualUrlInvalid") || "URL 格式无效";
     return;

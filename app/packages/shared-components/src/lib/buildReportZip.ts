@@ -29,9 +29,9 @@
  *   - 前端 JSZip 3.10.1 是最简可行方案
  */
 
-import JSZip from "jszip";
 import type { CalibrationResult, EncvTask, PerformanceSummary } from "@encv/shared-components/api/encv";
 import type { TFunction } from "@encv/shared-components/composables/useI18n";
+import JSZip from "jszip";
 import type { JobRun, StepRun, UnifiedRunRecord } from "./workflow/types";
 
 // ==================== Public API ====================

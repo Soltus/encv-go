@@ -89,24 +89,11 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBadge,
-  IonCheckbox,
-  IonIcon,
-  IonItem,
-  IonItemOption,
-  IonItemOptions,
-  IonItemSliding,
-  IonLabel,
-  IonList,
-  toastController,
-} from "@ionic/vue";
-import { alertCircle, listOutline, lockClosed, refreshOutline, stopCircleOutline, trashOutline } from "ionicons/icons";
+import { toastController } from "@ionic/vue";
 import type { EncvTask } from "@/api/encv";
 import { cancelTask, deleteTask, retryTask } from "@/api/encv";
-import { formatDateTime } from "@/composables/useDateFormat";
 import { useI18n } from "@/composables/useI18n";
-import { getTaskTypeIcon, getTaskTypeLabel } from "@/lib/taskTypeLabel";
+import { getTaskTypeIcon } from "@/lib/taskTypeLabel";
 
 const { t } = useI18n();
 
@@ -131,7 +118,7 @@ const emit = defineEmits<{
   (e: "open-performance"): void;
 }>();
 
-function onItemClick(tk: EncvTask) {
+function _onItemClick(tk: EncvTask) {
   if (props.multiSelectMode) {
     emit("toggle-select", tk.id);
   } else {
@@ -139,25 +126,25 @@ function onItemClick(tk: EncvTask) {
   }
 }
 
-function getTaskName(task: EncvTask): string {
+function _getTaskName(task: EncvTask): string {
   if (task.targetPath) return task.targetPath.split("/").pop() || task.targetPath;
   if (task.sourcePath) return task.sourcePath.split("/").pop() || task.sourcePath;
   return task.id.slice(0, 8);
 }
 
-function getTaskIcon(task: EncvTask): string {
+function _getTaskIcon(task: EncvTask): string {
   return getTaskTypeIcon(task.type);
 }
 
-function isEncrypted(task: EncvTask): boolean {
+function _isEncrypted(task: EncvTask): boolean {
   return task.type === "encrypt" || (task.targetPath?.endsWith(".encv") ?? false);
 }
 
-function getStatusLabel(status: EncvTask["status"]): string {
+function _getStatusLabel(status: EncvTask["status"]): string {
   return t(`tasks.status.${status}`);
 }
 
-function getStatusColor(status: EncvTask["status"]): string {
+function _getStatusColor(status: EncvTask["status"]): string {
   switch (status) {
     case "completed":
       return "success";
@@ -175,7 +162,7 @@ function getStatusColor(status: EncvTask["status"]): string {
   }
 }
 
-function getTaskDuration(task: EncvTask): string {
+function _getTaskDuration(task: EncvTask): string {
   if (!task.completedAt) return "";
   const ms = new Date(task.completedAt).getTime() - new Date(task.createdAt).getTime();
   if (ms < 1000) return `${ms}ms`;
@@ -183,14 +170,14 @@ function getTaskDuration(task: EncvTask): string {
   return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
 }
 
-function canCancel(tk: EncvTask): boolean {
+function _canCancel(tk: EncvTask): boolean {
   return tk.status === "running" || tk.status === "queued";
 }
-function canRetry(tk: EncvTask): boolean {
+function _canRetry(tk: EncvTask): boolean {
   return tk.status === "failed" || tk.status === "cancelled";
 }
 
-async function onCancel(tk: EncvTask) {
+async function _onCancel(tk: EncvTask) {
   try {
     await cancelTask(tk.id);
     const toast = await toastController.create({ message: t("tasks.cancelSuccess"), duration: 1500, color: "success" });
@@ -201,7 +188,7 @@ async function onCancel(tk: EncvTask) {
   }
 }
 
-async function onRetry(tk: EncvTask) {
+async function _onRetry(tk: EncvTask) {
   try {
     await retryTask(tk.id);
     const toast = await toastController.create({ message: t("tasks.retrySuccess"), duration: 1500, color: "success" });
@@ -212,7 +199,7 @@ async function onRetry(tk: EncvTask) {
   }
 }
 
-async function onDelete(tk: EncvTask) {
+async function _onDelete(tk: EncvTask) {
   try {
     await deleteTask(tk.id);
     const toast = await toastController.create({ message: t("tasks.deleteSuccess"), duration: 1500, color: "success" });

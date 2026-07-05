@@ -610,58 +610,6 @@
 // template 内直接使用的 state/handler 都在此解构到局部变量，
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
-import {
-  IonAlert,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonChip,
-  IonContent,
-  IonFab,
-  IonFabButton,
-  IonHeader,
-  IonIcon,
-  IonInput,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonMenu,
-  IonModal,
-  IonPage,
-  IonRefresher,
-  IonRefresherContent,
-  IonSegment,
-  IonSegmentButton,
-  IonSpinner,
-  IonTitle,
-  IonToggle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  alertCircle,
-  arrowBack,
-  chevronForward,
-  close,
-  closeCircle,
-  closeCircleOutline,
-  cloudOffline,
-  filterOutline,
-  folder,
-  folderOpen,
-  lockClosed,
-  menuOutline,
-  pricetagOutline,
-  refresh,
-  search,
-  swapVerticalOutline,
-  warningOutline,
-} from "ionicons/icons";
-import { formatFileSize } from "@encv/shared-components/api/encv";
-import InputWithHistory from "@encv/shared-components/components/InputWithHistory.vue";
-import RelevanceBadge from "@encv/shared-components/components/shared/RelevanceBadge.vue";
-import { formatDateTime } from "@encv/shared-components/composables/useDateFormat";
-import { getFileIcon, getFileIconColor, isImageFile } from "@encv/shared-components/composables/useFileList";
 import { useFilesView } from "./useFilesView";
 
 const {
@@ -782,10 +730,10 @@ const {
 
 // 🆕 2026-07-02 v2 简化：不需要 phraseInsertion 常量（直接调 insertSymbol('__phrase_open__')）
 // 占位：保留空的占位 hooks（focus/blur 事件，可后续加视觉反馈）
-function onQueryFocus() {
+function _onQueryFocus() {
   // 占位：input 聚焦时可以让插入按钮行高亮
 }
-function onQueryBlur() {
+function _onQueryBlur() {
   // 占位：input 失焦时不立即清空（用户可能想看高亮结果）
 }
 </script>

@@ -74,54 +74,35 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonContent,
-  IonButton,
-  IonIcon,
-} from '@ionic/vue'
-import {
-  alertCircleOutline,
-  helpCircleOutline,
-  homeOutline,
-  refreshOutline,
-} from 'ionicons/icons'
+import { computed } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
-const route = useRoute()
-const router = useRouter()
+const route = useRoute();
+const router = useRouter();
 
-const attemptedPath = computed(() => route.fullPath || '/')
-const currentRoute = computed(() => route.path)
-const pathname = computed(() =>
-  typeof window !== 'undefined' ? window.location.pathname : '(n/a)',
-)
-const hash = computed(() =>
-  typeof window !== 'undefined' ? window.location.hash : '',
-)
-const routerBase = computed(() => (router.options.history as any).state?.base || (router.options.history as any).base || '(unknown)')
+const _attemptedPath = computed(() => route.fullPath || "/");
+const _currentRoute = computed(() => route.path);
+const _pathname = computed(() => (typeof window !== "undefined" ? window.location.pathname : "(n/a)"));
+const _hash = computed(() => (typeof window !== "undefined" ? window.location.hash : ""));
+const _routerBase = computed(() => (router.options.history as any).state?.base || (router.options.history as any).base || "(unknown)");
 
 // 防御性：列出真实路由（与 router/index.ts 保持同步），开发者立刻知道有哪些路径可用
-const availableRoutes = [
-  { path: '/',             desc: '重定向到 /home' },
-  { path: '/home',         desc: '主面板（StatusCard + FAB）' },
-  { path: '/config',       desc: 'Config 编辑器' },
-  { path: '/settings',     desc: '设置' },
-  { path: '/webview',      desc: 'OpenList WebView (iframe :5244)' },
-  { path: '/back-to-main', desc: '返回 ENCV 主 app (iframe :8100)' },
-]
+const _availableRoutes = [
+  { path: "/", desc: "重定向到 /home" },
+  { path: "/home", desc: "主面板（StatusCard + FAB）" },
+  { path: "/config", desc: "Config 编辑器" },
+  { path: "/settings", desc: "设置" },
+  { path: "/webview", desc: "OpenList WebView (iframe :5244)" },
+  { path: "/back-to-main", desc: "返回 ENCV 主 app (iframe :8100)" },
+];
 
-function goHome() {
-  router.replace('/home')
+function _goHome() {
+  router.replace("/home");
 }
 
-function reload() {
-  if (typeof window !== 'undefined') {
-    window.location.reload()
+function _reload() {
+  if (typeof window !== "undefined") {
+    window.location.reload();
   }
 }
 </script>

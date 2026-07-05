@@ -36,14 +36,11 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { copyOutline, sparklesOutline } from "ionicons/icons";
-import { computed } from "vue";
 import type { AgentStatus } from "@encv/shared-components/composables/useAgent";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
-import MarkdownStream from "./MarkdownStream.vue";
-import MessageAuthor from "./MessageAuthor.vue";
+import { copyOutline, sparklesOutline } from "ionicons/icons";
+import { computed } from "vue";
 
 const props = defineProps<{
   text: string;
@@ -66,17 +63,17 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const icon = sparklesOutline;
-const copyIconVar = copyOutline;
+const _icon = sparklesOutline;
+const _copyIconVar = copyOutline;
 
-const label = computed(() => "AI 助手");
-const meta = computed(() => {
+const _label = computed(() => "AI 助手");
+const _meta = computed(() => {
   if (props.streaming) return t("agent.thinking");
   return "";
 });
 
 /** 格式化时间戳为 HH:mm */
-const displayTime = computed(() => {
+const _displayTime = computed(() => {
   const ts = props.timestamp ?? Date.now();
   const d = new Date(ts);
   const hh = String(d.getHours()).padStart(2, "0");
@@ -85,7 +82,7 @@ const displayTime = computed(() => {
 });
 
 /** 复制全文到剪贴板 */
-async function handleCopy() {
+async function _handleCopy() {
   try {
     if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
       await navigator.clipboard.writeText(props.text);

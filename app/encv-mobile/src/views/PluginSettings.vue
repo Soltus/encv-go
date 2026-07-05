@@ -184,28 +184,8 @@
 </template>
 
 <script setup lang="ts">
+import { modalController } from "@ionic/vue";
 import {
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonInput,
-  IonItem,
-  IonItemDivider,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonModal,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
-import {
-  cloudOutline,
   colorPaletteOutline,
   documentText,
   eyeOutline,
@@ -217,17 +197,14 @@ import {
   musicalNotesOutline,
   newspaperOutline,
   readerOutline,
-  save as saveIcon,
   settingsOutline,
   shieldCheckmark,
   speedometerOutline,
   textOutline,
   toggleOutline,
-  warningOutline,
 } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
 import { fetchConfig, fetchTextPreviewExts, invalidateTextExtsCache, updateConfig } from "@/api/encv";
-import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import FilePickerModal from "@/components/FilePickerModal.vue";
 import { useConfig } from "@/composables/useConfig";
 import { useI18n } from "@/composables/useI18n";
@@ -286,7 +263,7 @@ function extractAnnotations(schema: any, prefix: string = ""): { path: string; d
   return result;
 }
 
-async function openJsonEditor() {
+async function _openJsonEditor() {
   try {
     const cfg = await fetchConfig();
     jsonText.value = JSON.stringify(cfg, null, 2);
@@ -304,7 +281,7 @@ async function openJsonEditor() {
   }
 }
 
-function validateJson() {
+function _validateJson() {
   try {
     JSON.parse(jsonText.value);
     jsonError.value = "";
@@ -313,7 +290,7 @@ function validateJson() {
   }
 }
 
-async function handleSaveJson() {
+async function _handleSaveJson() {
   try {
     const parsed = JSON.parse(jsonText.value);
     await updateConfig(parsed);
@@ -326,7 +303,7 @@ async function handleSaveJson() {
   }
 }
 
-const pluginSection = computed<FieldDef | undefined>(() => {
+const _pluginSection = computed<FieldDef | undefined>(() => {
   return schemaFields.value.find(s => s.key === "plugin_settings");
 });
 
@@ -338,13 +315,13 @@ function setValue(path: string[], value: unknown) {
   setFieldValue(path, value);
 }
 
-function getMapEntries(path: string[]): [string, Record<string, unknown>][] {
+function _getMapEntries(path: string[]): [string, Record<string, unknown>][] {
   const val = getFieldValue(path);
   if (!val || typeof val !== "object") return [];
   return Object.entries(val as Record<string, unknown>) as [string, Record<string, unknown>][];
 }
 
-function handleInput(path: string[], field: FieldDef, event: CustomEvent) {
+function _handleInput(path: string[], field: FieldDef, event: CustomEvent) {
   const val = (event.target as HTMLInputElement).value;
   if (field.type === "integer") {
     setFieldValue(path, val ? Number(val) : 0);
@@ -395,7 +372,7 @@ function checkTextExtsConflicts(extensions: string[]): string[] {
   return conflicts;
 }
 
-async function handleCustomTextExtsInput(event: CustomEvent) {
+async function _handleCustomTextExtsInput(event: CustomEvent) {
   const raw = (event.target as HTMLInputElement).value || "";
   setValue(["plugin_settings", "text", "custom_text_extensions"], raw);
 
@@ -409,7 +386,7 @@ async function handleCustomTextExtsInput(event: CustomEvent) {
   }
 }
 
-async function handleBrowsePath(path: string[], field: FieldDef) {
+async function _handleBrowsePath(path: string[], field: FieldDef) {
   const isFolder = field.key !== "file";
   const currentVal = String(getFieldValue(path) || "/");
   const modal = await modalController.create({
@@ -426,7 +403,7 @@ async function handleBrowsePath(path: string[], field: FieldDef) {
   }
 }
 
-function fieldLabel(key: string, _required?: boolean): string {
+function _fieldLabel(key: string, _required?: boolean): string {
   return tField(key);
 }
 
@@ -450,7 +427,7 @@ const fieldIconMap: Record<string, string> = {
   disable_signature_verification: shieldCheckmark,
 };
 
-function getFieldIcon(fieldKey: string, fieldType: string): string {
+function _getFieldIcon(fieldKey: string, fieldType: string): string {
   if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey];
   if (fieldType === "boolean") return toggleOutline;
   if (fieldType === "integer") return speedometerOutline;
@@ -458,14 +435,14 @@ function getFieldIcon(fieldKey: string, fieldType: string): string {
   return settingsOutline;
 }
 
-function isFieldVisible(field: FieldDef): boolean {
+function _isFieldVisible(field: FieldDef): boolean {
   if (!field.platform || field.platform === "both") return true;
   if (field.platform === "mobile") return isNative();
   if (field.platform === "desktop") return !isNative();
   return true;
 }
 
-async function handleSaveConfig() {
+async function _handleSaveConfig() {
   try {
     const textExtsVal = String(getValue(["plugin_settings", "text", "custom_text_extensions"]) ?? "");
     if (textExtsVal) {
@@ -485,7 +462,7 @@ async function handleSaveConfig() {
   }
 }
 
-function handleResetConfig() {
+function _handleResetConfig() {
   resetConfig();
 }
 

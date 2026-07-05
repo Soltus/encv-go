@@ -234,41 +234,41 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { Capacitor } from '@capacitor/core'
-import { ScreenOrientation } from '@capacitor/screen-orientation'
-import { closeWorld, addWorldShortcut, isWorldShortcutSupported } from '@self/plugins/SimVerse'
-import { useWorldRenderer, type WorldEntity } from '@self/composables/useWorldRenderer'
+import { Capacitor } from "@capacitor/core";
+import { ScreenOrientation } from "@capacitor/screen-orientation";
+import { useWorldRenderer, type WorldEntity } from "@self/composables/useWorldRenderer";
+import { addWorldShortcut, closeWorld, isWorldShortcutSupported } from "@self/plugins/SimVerse";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 
-const router = useRouter()
+const _router = useRouter();
 
-const worldName = ref('SimVerse')
-const worldState = ref<any>(null)
-const storageStatus = ref<any>(null)
-const npcs = ref<any[]>([])
-const chronicleEvents = ref<any[]>([])
-const recentEvents = ref<any[]>([])
-const selectedNPC = ref<any>(null)
-const activeTab = ref('world')
-const menuOpen = ref(false)
-const shortcutSupported = ref(false)
-const worldCanvasRef = ref<HTMLElement | null>(null)
+const _worldName = ref("SimVerse");
+const worldState = ref<any>(null);
+const storageStatus = ref<any>(null);
+const npcs = ref<any[]>([]);
+const chronicleEvents = ref<any[]>([]);
+const recentEvents = ref<any[]>([]);
+const selectedNPC = ref<any>(null);
+const activeTab = ref("world");
+const menuOpen = ref(false);
+const shortcutSupported = ref(false);
+const worldCanvasRef = ref<HTMLElement | null>(null);
 
-let renderer: ReturnType<typeof useWorldRenderer> | null = null
-let initialized = false
+let renderer: ReturnType<typeof useWorldRenderer> | null = null;
+let initialized = false;
 
-const WORLD_WIDTH = 2000
-const WORLD_HEIGHT = 2000
-const NPC_COLORS = ['#4f8cff', '#8b5cf6', '#22c55e', '#f97316', '#ef4444', '#ec4899', '#14b8a6']
+const WORLD_WIDTH = 2000;
+const WORLD_HEIGHT = 2000;
+const NPC_COLORS = ["#4f8cff", "#8b5cf6", "#22c55e", "#f97316", "#ef4444", "#ec4899", "#14b8a6"];
 
 function npcToEntity(npc: any): WorldEntity {
-  const color = NPC_COLORS[Math.abs(hashCode(npc.id)) % NPC_COLORS.length]
-  const x = 100 + Math.abs(hashCode(npc.id + 'x')) % (WORLD_WIDTH - 200)
-  const y = 100 + Math.abs(hashCode(npc.id + 'y')) % (WORLD_HEIGHT - 200)
+  const color = NPC_COLORS[Math.abs(hashCode(npc.id)) % NPC_COLORS.length];
+  const x = 100 + (Math.abs(hashCode(npc.id + "x")) % (WORLD_WIDTH - 200));
+  const y = 100 + (Math.abs(hashCode(npc.id + "y")) % (WORLD_HEIGHT - 200));
   return {
     id: npc.id,
-    type: 'npc',
+    type: "npc",
     x,
     y,
     width: 24,
@@ -277,287 +277,291 @@ function npcToEntity(npc: any): WorldEntity {
     label: npc.name,
     static: false,
     onClick: () => {
-      selectedNPC.value = npc
+      selectedNPC.value = npc;
     },
-  }
+  };
 }
 
 function hashCode(str: string): number {
-  let hash = 0
+  let hash = 0;
   for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
   }
-  return hash
+  return hash;
 }
 
 function generateStaticEntities(): WorldEntity[] {
-  const entities: WorldEntity[] = []
+  const entities: WorldEntity[] = [];
   for (let i = 0; i < 15; i++) {
     entities.push({
       id: `tree-${i}`,
-      type: 'tree',
-      x: 200 + (i * 137) % (WORLD_WIDTH - 400),
-      y: 200 + (i * 211) % (WORLD_HEIGHT - 400),
+      type: "tree",
+      x: 200 + ((i * 137) % (WORLD_WIDTH - 400)),
+      y: 200 + ((i * 211) % (WORLD_HEIGHT - 400)),
       width: 32,
       height: 48,
-      color: '#166534',
+      color: "#166534",
       static: true,
-    })
+    });
   }
   for (let i = 0; i < 8; i++) {
     entities.push({
       id: `rock-${i}`,
-      type: 'rock',
-      x: 300 + (i * 193) % (WORLD_WIDTH - 600),
-      y: 300 + (i * 277) % (WORLD_HEIGHT - 600),
+      type: "rock",
+      x: 300 + ((i * 193) % (WORLD_WIDTH - 600)),
+      y: 300 + ((i * 277) % (WORLD_HEIGHT - 600)),
       width: 40,
       height: 30,
-      color: '#6b7280',
+      color: "#6b7280",
       static: true,
-    })
+    });
   }
   for (let i = 0; i < 5; i++) {
     entities.push({
       id: `building-${i}`,
-      type: 'building',
-      x: 500 + (i * 300) % (WORLD_WIDTH - 700),
-      y: 500 + (i * 400) % (WORLD_HEIGHT - 700),
+      type: "building",
+      x: 500 + ((i * 300) % (WORLD_WIDTH - 700)),
+      y: 500 + ((i * 400) % (WORLD_HEIGHT - 700)),
       width: 80,
       height: 60,
-      color: '#7c3aed',
+      color: "#7c3aed",
       static: true,
-    })
+    });
   }
   entities.push({
-    id: 'ground',
-    type: 'ground',
+    id: "ground",
+    type: "ground",
     x: 0,
     y: WORLD_HEIGHT - 40,
     width: WORLD_WIDTH,
     height: 40,
-    color: '#1e3a5f',
+    color: "#1e3a5f",
     static: true,
-  })
+  });
   entities.push({
-    id: 'water',
-    type: 'water',
+    id: "water",
+    type: "water",
     x: WORLD_WIDTH / 2 - 150,
     y: WORLD_HEIGHT / 2 - 80,
     width: 300,
     height: 160,
-    color: '#0369a1',
+    color: "#0369a1",
     static: true,
-  })
-  return entities
+  });
+  return entities;
 }
 
 async function initRenderer() {
-  if (initialized || !worldCanvasRef.value) return
-  initialized = true
+  if (initialized || !worldCanvasRef.value) return;
+  initialized = true;
 
   renderer = useWorldRenderer({
     container: worldCanvasRef.value,
     worldWidth: WORLD_WIDTH,
     worldHeight: WORLD_HEIGHT,
     gravity: 0,
-  })
+  });
 
-  renderer.init()
+  renderer.init();
 
   for (const ent of generateStaticEntities()) {
-    renderer.addEntity(ent)
+    renderer.addEntity(ent);
   }
 
   for (const npc of npcs.value) {
-    renderer.addEntity(npcToEntity(npc))
+    renderer.addEntity(npcToEntity(npc));
     if (Math.random() > 0.3) {
       setTimeout(() => {
-        renderer?.setVelocity(npc.id, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2)
-      }, Math.random() * 2000)
+        renderer?.setVelocity(npc.id, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2);
+      }, Math.random() * 2000);
     }
   }
 
   setInterval(() => {
-    if (!renderer) return
+    if (!renderer) return;
     for (const npc of npcs.value) {
       if (Math.random() > 0.92) {
-        renderer.setVelocity(npc.id, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3)
+        renderer.setVelocity(npc.id, (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3);
       }
     }
-  }, 3000)
+  }, 3000);
 }
 
-watch(npcs, (newNpcs, oldNpcs) => {
-  if (!renderer) return
-  const oldIds = new Set(oldNpcs.map(n => n.id))
-  for (const npc of newNpcs) {
-    if (!oldIds.has(npc.id)) {
-      renderer.addEntity(npcToEntity(npc))
+watch(
+  npcs,
+  (newNpcs, oldNpcs) => {
+    if (!renderer) return;
+    const oldIds = new Set(oldNpcs.map(n => n.id));
+    for (const npc of newNpcs) {
+      if (!oldIds.has(npc.id)) {
+        renderer.addEntity(npcToEntity(npc));
+      }
     }
-  }
-  const newIds = new Set(newNpcs.map(n => n.id))
-  for (const npc of oldNpcs) {
-    if (!newIds.has(npc.id)) {
-      renderer.removeEntity(npc.id)
+    const newIds = new Set(newNpcs.map(n => n.id));
+    for (const npc of oldNpcs) {
+      if (!newIds.has(npc.id)) {
+        renderer.removeEntity(npc.id);
+      }
     }
-  }
-}, { deep: true })
+  },
+  { deep: true }
+);
 
-watch(activeTab, async (tab) => {
-  if (tab === 'world') {
-    await nextTick()
-    initRenderer()
+watch(activeTab, async tab => {
+  if (tab === "world") {
+    await nextTick();
+    initRenderer();
   }
-})
+});
 
-let pollTimer: number | null = null
+let pollTimer: number | null = null;
 
 async function fetchWorldState() {
   try {
-    const r = await fetch('/api/simverse/world/state')
+    const r = await fetch("/api/simverse/world/state");
     if (r.ok) {
-      worldState.value = await r.json()
+      worldState.value = await r.json();
     }
   } catch (e) {
-    console.warn('fetchWorldState failed', e)
+    console.warn("fetchWorldState failed", e);
   }
 }
 
 async function fetchStorageStatus() {
   try {
-    const r = await fetch('/api/simverse/world/storage')
+    const r = await fetch("/api/simverse/world/storage");
     if (r.ok) {
-      storageStatus.value = await r.json()
+      storageStatus.value = await r.json();
     }
   } catch (e) {
-    console.warn('fetchStorageStatus failed', e)
+    console.warn("fetchStorageStatus failed", e);
   }
 }
 
 async function fetchNPCs() {
   try {
-    const r = await fetch('/api/simverse/npcs?limit=20')
+    const r = await fetch("/api/simverse/npcs?limit=20");
     if (r.ok) {
-      const data = await r.json()
-      npcs.value = data.npcs || data.items || []
+      const data = await r.json();
+      npcs.value = data.npcs || data.items || [];
     }
   } catch (e) {
-    console.warn('fetchNPCs failed', e)
+    console.warn("fetchNPCs failed", e);
   }
 }
 
 async function fetchChronicle() {
   try {
-    const r = await fetch('/api/simverse/chronicle/world?limit=30')
+    const r = await fetch("/api/simverse/chronicle/world?limit=30");
     if (r.ok) {
-      const data = await r.json()
-      chronicleEvents.value = data.events || data.items || []
-      recentEvents.value = data.events?.slice(0, 8) || []
+      const data = await r.json();
+      chronicleEvents.value = data.events || data.items || [];
+      recentEvents.value = data.events?.slice(0, 8) || [];
     }
   } catch (e) {
-    console.warn('fetchChronicle failed', e)
+    console.warn("fetchChronicle failed", e);
   }
 }
 
-async function togglePause() {
+async function _togglePause() {
   try {
-    const action = worldState.value?.running ? 'pause' : 'resume'
-    await fetch(`/api/simverse/world/${action}`, { method: 'POST' })
-    setTimeout(fetchWorldState, 200)
+    const action = worldState.value?.running ? "pause" : "resume";
+    await fetch(`/api/simverse/world/${action}`, { method: "POST" });
+    setTimeout(fetchWorldState, 200);
   } catch (e) {
-    console.warn('togglePause failed', e)
+    console.warn("togglePause failed", e);
   }
 }
 
-async function stepTick() {
+async function _stepTick() {
   try {
-    await fetch('/api/simverse/world/step', { method: 'POST' })
-    setTimeout(fetchWorldState, 200)
+    await fetch("/api/simverse/world/step", { method: "POST" });
+    setTimeout(fetchWorldState, 200);
   } catch (e) {
-    console.warn('stepTick failed', e)
+    console.warn("stepTick failed", e);
   }
 }
 
-async function saveCheckpoint() {
+async function _saveCheckpoint() {
   try {
-    await fetch('/api/simverse/world/save', { method: 'POST' })
+    await fetch("/api/simverse/world/save", { method: "POST" });
   } catch (e) {
-    console.warn('saveCheckpoint failed', e)
+    console.warn("saveCheckpoint failed", e);
   }
 }
 
-async function loadCheckpoint() {
+async function _loadCheckpoint() {
   try {
-    await fetch('/api/simverse/world/load', { method: 'POST' })
+    await fetch("/api/simverse/world/load", { method: "POST" });
     setTimeout(() => {
-      fetchWorldState()
-      fetchNPCs()
-      fetchChronicle()
-    }, 200)
+      fetchWorldState();
+      fetchNPCs();
+      fetchChronicle();
+    }, 200);
   } catch (e) {
-    console.warn('loadCheckpoint failed', e)
+    console.warn("loadCheckpoint failed", e);
   }
 }
 
-function selectNPC(npc: any) {
-  selectedNPC.value = npc
+function _selectNPC(npc: any) {
+  selectedNPC.value = npc;
 }
 
-function toggleMenu() {
-  menuOpen.value = !menuOpen.value
+function _toggleMenu() {
+  menuOpen.value = !menuOpen.value;
 }
 
-function exitWorld() {
-  closeWorld()
+function _exitWorld() {
+  closeWorld();
   if (window.history.length > 1) {
-    window.history.back()
+    window.history.back();
   }
 }
 
-function openSettings() {
-  menuOpen.value = false
+function _openSettings() {
+  menuOpen.value = false;
 }
 
-function openDevLogs() {
-  menuOpen.value = false
+function _openDevLogs() {
+  menuOpen.value = false;
 }
 
-function toggleFullscreen() {
-  menuOpen.value = false
+function _toggleFullscreen() {
+  menuOpen.value = false;
   if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen()
+    document.documentElement.requestFullscreen();
   } else {
-    document.exitFullscreen()
+    document.exitFullscreen();
   }
 }
 
-async function handleAddShortcut() {
-  await addWorldShortcut()
+async function _handleAddShortcut() {
+  await addWorldShortcut();
 }
 
-function formatBytes(bytes: number): string {
-  if (!bytes) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+function _formatBytes(bytes: number): string {
+  if (!bytes) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / k ** i).toFixed(1)) + " " + sizes[i];
 }
 
 function startPolling() {
   pollTimer = window.setInterval(() => {
-    fetchWorldState()
-    if (activeTab.value === 'npcs') fetchNPCs()
-    if (activeTab.value === 'chronicle') fetchChronicle()
-    if (Math.random() > 0.8) fetchStorageStatus()
-  }, 2000)
+    fetchWorldState();
+    if (activeTab.value === "npcs") fetchNPCs();
+    if (activeTab.value === "chronicle") fetchChronicle();
+    if (Math.random() > 0.8) fetchStorageStatus();
+  }, 2000);
 }
 
 function stopPolling() {
   if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
+    clearInterval(pollTimer);
+    pollTimer = null;
   }
 }
 
@@ -565,10 +569,10 @@ async function lockLandscape() {
   if (Capacitor.isNativePlatform()) {
     try {
       await ScreenOrientation.lock({
-        orientation: 'landscape-primary',
-      })
+        orientation: "landscape-primary",
+      });
     } catch (e) {
-      console.warn('Failed to lock landscape orientation', e)
+      console.warn("Failed to lock landscape orientation", e);
     }
   }
 }
@@ -576,52 +580,52 @@ async function lockLandscape() {
 async function unlockOrientation() {
   if (Capacitor.isNativePlatform()) {
     try {
-      await ScreenOrientation.unlock()
+      await ScreenOrientation.unlock();
     } catch (e) {
-      console.warn('Failed to unlock orientation', e)
+      console.warn("Failed to unlock orientation", e);
     }
   }
 }
 
-let resizeObserver: ResizeObserver | null = null
+let resizeObserver: ResizeObserver | null = null;
 
 onMounted(async () => {
   // 锁定横屏
-  await lockLandscape()
-  
-  await fetchWorldState()
-  await fetchStorageStatus()
-  await fetchNPCs()
-  await fetchChronicle()
-  startPolling()
-  shortcutSupported.value = await isWorldShortcutSupported()
+  await lockLandscape();
 
-  await nextTick()
-  initRenderer()
+  await fetchWorldState();
+  await fetchStorageStatus();
+  await fetchNPCs();
+  await fetchChronicle();
+  startPolling();
+  shortcutSupported.value = await isWorldShortcutSupported();
+
+  await nextTick();
+  initRenderer();
 
   resizeObserver = new ResizeObserver(() => {
-    renderer?.resize()
-  })
+    renderer?.resize();
+  });
   if (worldCanvasRef.value) {
-    resizeObserver.observe(worldCanvasRef.value)
+    resizeObserver.observe(worldCanvasRef.value);
   }
-})
+});
 
 onUnmounted(() => {
   // 恢复竖屏
-  unlockOrientation()
-  
-  stopPolling()
+  unlockOrientation();
+
+  stopPolling();
   if (resizeObserver) {
-    resizeObserver.disconnect()
-    resizeObserver = null
+    resizeObserver.disconnect();
+    resizeObserver = null;
   }
   if (renderer) {
-    renderer.destroy()
-    renderer = null
-    initialized = false
+    renderer.destroy();
+    renderer = null;
+    initialized = false;
   }
-})
+});
 </script>
 
 <style scoped>

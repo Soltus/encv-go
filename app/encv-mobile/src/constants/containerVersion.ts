@@ -75,7 +75,7 @@ export function formatContainerVersion(v: number | undefined | null): string {
  */
 export function parseContainerVersion(label: string): ContainerVersion | null {
   const m = /^ECv([2-4])$/.exec(label);
-  if (!m || !m[1]) return null;
+  if (!m?.[1]) return null;
   const n = Number(m[1]);
   if (n !== ECV2 && n !== ECV3 && n !== ECV4) return null;
   return n as ContainerVersion;

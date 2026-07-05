@@ -10,14 +10,14 @@
  *   - 当前职责：mkdir -p /storage/emulated/0（空目录，service-guard 不查内容）
  */
 
-const LOG_PREFIX = '[preflight]'
+const LOG_PREFIX = "[preflight]";
 
 function log(...args: unknown[]): void {
-  console.log(LOG_PREFIX, ...args)
+  console.log(LOG_PREFIX, ...args);
 }
 
-import { mkdir } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { existsSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 
 /**
  * 2026-06-14 修复版：建空 /storage/emulated/0（service-guard 要求 servingDir 是这个路径）。
@@ -26,13 +26,13 @@ import { existsSync } from 'node:fs'
  */
 export async function ensureMockData(mobileDir: string): Promise<void> {
   if (existsSync(mobileDir)) {
-    log(`(skip) ${mobileDir} already exists`)
-    return
+    log(`(skip) ${mobileDir} already exists`);
+    return;
   }
   try {
-    await mkdir(mobileDir, { recursive: true })
-    log(`(created) ${mobileDir}`)
+    await mkdir(mobileDir, { recursive: true });
+    log(`(created) ${mobileDir}`);
   } catch (err) {
-    log(`(warn) failed to create ${mobileDir}:`, err)
+    log(`(warn) failed to create ${mobileDir}:`, err);
   }
 }

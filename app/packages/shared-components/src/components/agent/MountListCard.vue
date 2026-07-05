@@ -41,10 +41,9 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { folderOpenOutline, hourglassOutline, serverOutline } from "ionicons/icons";
 import { computed } from "vue";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 const props = defineProps<{
   /** 后端 tool_result.result 的 JSON 字符串（list_mounts 返回值） */
@@ -55,9 +54,9 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-const folderOpenIcon = folderOpenOutline;
-const serverIcon = serverOutline;
-const hourglassIcon = hourglassOutline;
+const _folderOpenIcon = folderOpenOutline;
+const _serverIcon = serverOutline;
+const _hourglassIcon = hourglassOutline;
 
 interface Mount {
   id?: string;
@@ -84,16 +83,16 @@ const parsed = computed<{ mounts: Mount[]; error: string }>(() => {
   }
 });
 
-const mounts = computed(() => parsed.value.mounts);
-const rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
+const _mounts = computed(() => parsed.value.mounts);
+const _rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
 
-const titleText = computed(() => {
+const _titleText = computed(() => {
   if (props.status === "pending" || props.status === "running") return t("agent.toolCards.mountsTitle") || "挂载点（查询中）";
   if (parsed.value.error) return t("agent.toolCards.parseFailed") || "挂载点（数据异常）";
   return t("agent.toolCards.mountsTitle") || "挂载点";
 });
 
-const dataSourceTag = computed(() => {
+const _dataSourceTag = computed(() => {
   if (!props.resultJson) return "";
   const s = props.resultJson;
   if (s.includes('"FAKE":true') || s.includes('"FAKE": true')) return "mock 数据";

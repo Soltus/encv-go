@@ -121,7 +121,7 @@ export function useRunTasksStore(): UseRunTasksStore {
 
   /** WS 事件处理（只处理 currentRunId 的 task） */
   function applyEvent(type: "created" | "update" | "progress" | "completed", data: any): void {
-    if (!data || !data.id) return;
+    if (!data?.id) return;
     // 只处理当前 runId 的 task
     //   - created: 如果 data.runId === currentRunId，push 到 tasks
     //   - update/progress/completed: patch 已加载的 task

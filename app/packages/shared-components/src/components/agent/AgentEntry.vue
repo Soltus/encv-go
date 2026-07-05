@@ -17,14 +17,14 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon, modalController } from "@ionic/vue";
-import { sparklesOutline } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { modalController } from "@ionic/vue";
+import { sparklesOutline } from "ionicons/icons";
 
 const { t } = useI18n();
-const sparkleIcon = sparklesOutline;
+const _sparkleIcon = sparklesOutline;
 
-async function handleOpen() {
+async function _handleOpen() {
   const { default: AgentChat } = await import("@encv/shared-components/views/AgentChat.vue");
   const modal = await modalController.create({
     component: AgentChat,

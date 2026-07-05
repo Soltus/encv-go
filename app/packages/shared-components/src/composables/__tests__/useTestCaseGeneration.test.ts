@@ -8,10 +8,11 @@
  * 4. deriveExtraFieldCombinations：笛卡尔积展开（select 字段 / bool 忽略 / 单选项忽略）
  * 5. generateCases：用例数量 / id 唯一性 / extraFields 填充
  */
-import { describe, expect, it } from "vitest";
-import { ref } from "vue";
+
 import type { PluginMeta, TaskField, TaskOptions } from "@encv/shared-components/api/encv";
 import { useTestCaseGeneration } from "@encv/shared-components/composables/useTestCaseGeneration";
+import { describe, expect, it } from "vitest";
+import { ref } from "vue";
 
 // ==================== 测试夹具 ====================
 

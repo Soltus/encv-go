@@ -14,12 +14,12 @@
  * - expandDetail 包含 startedAt / completedAt / duration / error
  */
 
-import { mount } from "@vue/test-utils";
-import { beforeEach, describe, expect, it } from "vitest";
 import StepInlineTimeline from "@encv/shared-components/components/automation/StepInlineTimeline.vue";
 import UnifiedTimelineCard from "@encv/shared-components/components/shared/UnifiedTimelineCard.vue";
 import type { StepRun } from "@encv/shared-components/lib/workflow/types";
 import { Phase } from "@encv/shared-components/lib/workflow/types";
+import { mount } from "@vue/test-utils";
+import { beforeEach, describe, expect, it } from "vitest";
 
 // ion-icon stub：避免 @ionic/vue 全局注册依赖
 const IonIconStub = {

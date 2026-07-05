@@ -430,50 +430,14 @@
 </template>
 
 <script setup lang="ts">
+import { alertController } from "@ionic/vue";
 import {
-  alertController,
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonInput,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonModal,
-  IonPage,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  archiveOutline,
-  checkmarkCircle,
-  chevronDown,
-  chevronUp,
-  closeCircle,
-  cloudDoneOutline,
-  cloudDownloadOutline,
   cubeOutline,
-  ellipseOutline,
   flashOutline,
-  folderOutline,
   gitNetworkOutline,
-  keyOutline,
   listOutline,
   lockClosedOutline,
-  playCircle,
-  removeCircle,
-  serverOutline,
   shieldCheckmarkOutline,
-  starOutline,
-  stopCircle,
-  sync,
-  timeOutline,
-  trashOutline,
   warningOutline,
 } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
@@ -494,7 +458,7 @@ const manifest = useWebDavManifest();
 const totalCases = computed(() => modules.reduce((sum, m) => sum + m.cases.length, 0));
 
 // ============= manifest tone =============
-const manifestTone = computed(() => {
+const _manifestTone = computed(() => {
   if (manifest.error.value) return "tone-error";
   if (manifest.loading.value) return "tone-loading";
   if (availableMounts.value.length === 0) return "tone-empty";
@@ -503,29 +467,29 @@ const manifestTone = computed(() => {
 
 const availableMounts = computed(() => manifest.availableMounts.value);
 const baseUrl = computed(() => manifest.serverBaseUrl.value || (typeof window !== "undefined" ? window.location.origin : ""));
-const webdavPath = computed(() => manifest.webdavPath.value);
+const _webdavPath = computed(() => manifest.webdavPath.value);
 
-const attackCountTotal = computed(() => modules.reduce((sum, m) => sum + m.cases.filter(c => !!c.attackType).length, 0));
+const _attackCountTotal = computed(() => modules.reduce((sum, m) => sum + m.cases.filter(c => !!c.attackType).length, 0));
 
-function getAttackCount(moduleId: string): number {
+function _getAttackCount(moduleId: string): number {
   const m = modules.find(mm => mm.id === moduleId);
   if (!m) return 0;
   return m.cases.filter(c => !!c.attackType).length;
 }
 
 // ============= module helpers =============
-function isModuleRunning(moduleId: string): boolean {
+function _isModuleRunning(moduleId: string): boolean {
   const s = moduleStates[moduleId]?.value;
   return s?.status === "running" || s?.status === "cancelling";
 }
-function isModuleDone(moduleId: string): boolean {
+function _isModuleDone(moduleId: string): boolean {
   const s = moduleStates[moduleId]?.value;
   return s?.status === "done" || s?.status === "cancelled" || s?.status === "error";
 }
 function getModuleState(moduleId: string) {
   return moduleStates[moduleId]?.value ?? { status: "idle" as const, results: [] };
 }
-function getModulePassed(moduleId: string): number {
+function _getModulePassed(moduleId: string): number {
   return getModuleState(moduleId).results.filter(r => r.status === "success").length;
 }
 
@@ -535,7 +499,7 @@ function getCaseResult(moduleId: string, caseId: string) {
 function getCaseStatus(moduleId: string, caseId: string): TestCaseStatus {
   return getCaseResult(moduleId, caseId)?.status ?? "pending";
 }
-function getCaseStatusColor(moduleId: string, caseId: string): string {
+function _getCaseStatusColor(moduleId: string, caseId: string): string {
   const st = getCaseStatus(moduleId, caseId);
   if (st === "success") return "success";
   if (st === "failure" || st === "timed_out") return "danger";
@@ -543,7 +507,7 @@ function getCaseStatusColor(moduleId: string, caseId: string): string {
 }
 
 const expandedModules = ref<Set<string>>(new Set());
-function toggleModule(id: string) {
+function _toggleModule(id: string) {
   if (expandedModules.value.has(id)) expandedModules.value.delete(id);
   else expandedModules.value.add(id);
   // 触发响应式更新
@@ -560,7 +524,7 @@ const ICON_MAP: Record<string, string> = {
   "warning-outline": warningOutline,
   "shield-checkmark-outline": shieldCheckmarkOutline,
 };
-function resolveIcon(iconName: string): string {
+function _resolveIcon(iconName: string): string {
   return ICON_MAP[iconName] ?? warningOutline;
 }
 
@@ -578,7 +542,7 @@ async function checkWebDavHealth() {
 }
 
 // ============= 账号配置 =============
-const showAuthPanel = ref(false);
+const _showAuthPanel = ref(false);
 const credsUsername = ref("");
 const credsPassword = ref("");
 const backendUsername = ref("");
@@ -611,18 +575,18 @@ async function loadWebDavLocalInfo() {
   }
 }
 
-const maskedUsername = computed(() => {
+const _maskedUsername = computed(() => {
   if (credsUsername.value) return credsUsername.value;
   if (backendUsername.value) return `${backendUsername.value} (${t("devtools.webdavAuth.fromBackend")})`;
   return t("devtools.webdavAuth.notSet");
 });
 
-function saveCreds() {
+function _saveCreds() {
   localStorage.setItem(CRED_STORAGE_KEY, JSON.stringify({ username: credsUsername.value, password: credsPassword.value }));
   showToast({ message: t("devtools.webdavAuth.saved"), color: "success" });
 }
 
-function resetToBackend() {
+function _resetToBackend() {
   if (!localInfo.value) return;
   credsUsername.value = localInfo.value.username;
   credsPassword.value = localInfo.value.password;
@@ -630,7 +594,7 @@ function resetToBackend() {
 }
 
 // ============= 批量运行 =============
-async function handleRunAllModules() {
+async function _handleRunAllModules() {
   if (isAnyRunning.value) return;
   try {
     await runAll();
@@ -648,14 +612,14 @@ async function handleRunAllModules() {
   }
 }
 
-function handleCancelAll() {
+function _handleCancelAll() {
   for (const m of modules) {
     cancelModule(m.id);
   }
   showToast({ message: "已请求取消所有 module", duration: 1500, color: "medium" });
 }
 
-async function runSingleModule(moduleId: string) {
+async function _runSingleModule(moduleId: string) {
   if (isAnyRunning.value) return;
   try {
     await runModule(moduleId);
@@ -667,12 +631,12 @@ async function runSingleModule(moduleId: string) {
   }
 }
 
-function cancelSingleModule(moduleId: string) {
+function _cancelSingleModule(moduleId: string) {
   cancelModule(moduleId);
 }
 
 // ============= manifest refresh =============
-async function refreshManifest() {
+async function _refreshManifest() {
   await manifest.refresh();
   if (availableMounts.value.length === 0) {
     showToast({ message: t("devtools.webdav.manifestEmpty"), color: "warning", duration: 2000 });
@@ -680,15 +644,15 @@ async function refreshManifest() {
 }
 
 // ============= 历史 =============
-const showHistory = ref(false);
+const _showHistory = ref(false);
 const detailRun = ref<TestRun | null>(null);
 
-function refreshHistory() {
+function _refreshHistory() {
   // 触发响应式更新：useWebDavWorkflowAdapter 内部 historyRuns 是 ref
   automation.historyRuns.value = [...automation.historyRuns.value];
 }
 
-async function handleClearHistory() {
+async function _handleClearHistory() {
   const alert = await alertController.create({
     header: t("devtools.confirmClearHistory"),
     message: t("devtools.confirmClearHistoryMsg"),
@@ -707,16 +671,16 @@ async function handleClearHistory() {
   await alert.present();
 }
 
-function openRunDetail(run: TestRun) {
+function _openRunDetail(run: TestRun) {
   detailRun.value = run;
 }
 
-function formatTime(iso: string): string {
+function _formatTime(iso: string): string {
   if (!iso) return "-";
   const d = new Date(iso);
   return d.toLocaleString("zh-CN", { hour12: false });
 }
-function formatDuration(start?: string, end?: string): string {
+function _formatDuration(start?: string, end?: string): string {
   if (!start || !end) return "-";
   const ms = new Date(end).getTime() - new Date(start).getTime();
   if (ms < 1000) return `${ms}ms`;

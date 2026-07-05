@@ -12,9 +12,9 @@
  * 8. submitRun 拒绝重复运行
  */
 
+import type { UnifiedRunRecord, WorkflowDefinition } from "@encv/shared-components/lib/workflow/types";
 import { createPinia, setActivePinia } from "pinia";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { UnifiedRunRecord, WorkflowDefinition } from "@encv/shared-components/lib/workflow/types";
 
 // ==================== Mock 设置 ====================
 

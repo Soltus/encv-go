@@ -2,12 +2,12 @@
  * 状态机 + 调度器 + matrix 展开器 + 条件求值器 单元测试
  */
 
-import { describe, expect, it } from "vitest";
 import { evaluateCondition } from "@encv/shared-components/lib/workflow/conditionEvaluator";
 import { expandMatrix } from "@encv/shared-components/lib/workflow/matrixExpander";
 import { getNextReadyJobs, resolveExecutionOrder } from "@encv/shared-components/lib/workflow/scheduler";
 import { canTransition, computeJobConclusion, inferWorkflowStatus, transition } from "@encv/shared-components/lib/workflow/stateMachine";
 import type { JobRun, StepRun, StepStatus } from "@encv/shared-components/lib/workflow/types";
+import { describe, expect, it } from "vitest";
 
 // ==================== State Machine ====================
 

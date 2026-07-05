@@ -10,8 +10,9 @@
  *   1. withSafetyBoundary 永远原样返回（除 normalize）
  *   2. 基础 API：normalize / isAbsolutePath / getMockPaths 不变
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import { usePathResolver } from "@encv/shared-components/composables/usePathResolver";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("usePathResolver.withSafetyBoundary (no-op mode)", () => {
   beforeEach(() => {

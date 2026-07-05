@@ -484,7 +484,7 @@ function createService(options: WorkflowTaskServiceOptions): WorkflowTaskService
 
         if (persist) persistCurrentRun();
         notifySubscribers();
-      } catch (e) {
+      } catch (_e) {
         run.status = "failure";
         run.completedAt = new Date().toISOString();
         if (persist) persistCurrentRun();
@@ -676,7 +676,7 @@ function createService(options: WorkflowTaskServiceOptions): WorkflowTaskService
 
   /** 当一个 Job 完成后，检查并启动依赖它的下游 Jobs */
   function scheduleDependentJobs(_completedJobDefId: string): void {
-    if (!currentRun.value || currentRun.value.status !== "running") return;
+    if (currentRun.value?.status !== "running") return;
     if (!currentDef.value) return;
 
     const completedJobIds = new Set(currentRun.value.jobs.filter(j => isTerminalStep(j.status)).map(j => j.jobDefId));

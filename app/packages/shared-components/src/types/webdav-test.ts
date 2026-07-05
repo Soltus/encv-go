@@ -163,7 +163,7 @@ export interface TestDescriptor {
   /** 动态 skip（manifest 缺失某个资源时跳过） */
   skip?: boolean | ((ctx: WebDavTestContext) => boolean);
   /** 运行前钩子（用于挂定时器 / 准备外部状态）；返回 cleanup 函数 */
-  beforeRun?: (ctx: WebDavTestContext) => Promise<(() => void) | void> | (() => void) | void;
+  beforeRun?: (ctx: WebDavTestContext) => Promise<(() => void) | undefined> | (() => void) | void;
   /** 运行后钩子（不影响 result status） */
   afterRun?: (ctx: WebDavTestContext) => Promise<void> | void;
   /** 顺序号（用于排序） */

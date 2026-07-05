@@ -80,48 +80,47 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import MpvProgressBar from "./MpvProgressBarWeb.vue";
 
 const playerState = ref<"playing" | "paused">("paused");
-const fileName = ref("Bohemian Rhapsody.flac");
+const _fileName = ref("Bohemian Rhapsody.flac");
 const durationInput = ref(354000);
 const currentPosition = ref(86000);
 const isPlaying = computed(() => playerState.value === "playing");
 const duration = computed(() => durationInput.value);
-const progress = computed(() => (duration.value > 0 ? currentPosition.value / duration.value : 0));
+const _progress = computed(() => (duration.value > 0 ? currentPosition.value / duration.value : 0));
 const playbackSpeed = ref(1.0);
 const volume = ref(0.8);
 const volumeTrackRef = ref<HTMLElement>();
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
-function togglePlay() {
+function _togglePlay() {
   playerState.value = playerState.value === "playing" ? "paused" : "playing";
 }
 
-function handleSeek(ratio: number) {
+function _handleSeek(ratio: number) {
   currentPosition.value = Math.round(ratio * duration.value);
 }
 
-function seekDelta(ms: number) {
+function _seekDelta(ms: number) {
   currentPosition.value = Math.max(0, Math.min(duration.value, currentPosition.value + ms));
 }
 
-function cycleSpeed() {
+function _cycleSpeed() {
   const idx = SPEED_OPTIONS.indexOf(playbackSpeed.value);
   playbackSpeed.value = SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length];
 }
 
-function toggleMute() {
+function _toggleMute() {
   volume.value = volume.value > 0 ? 0 : 0.8;
 }
 
-function onVolumeTrackClick(e: MouseEvent) {
+function _onVolumeTrackClick(e: MouseEvent) {
   if (!volumeTrackRef.value) return;
   const rect = volumeTrackRef.value.getBoundingClientRect();
   volume.value = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
 }
 
-function onBack() {}
+function _onBack() {}
 
 watch(isPlaying, val => {
   if (val) {

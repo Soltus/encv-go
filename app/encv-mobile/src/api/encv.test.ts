@@ -160,6 +160,6 @@ describe("checkServerStatus — instance_id hijack detection", () => {
     await checkServerStatus();
     const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(init.cache).toBe("no-store");
-    expect((init.headers as Record<string, string>)?.["Accept"]).toBe("application/json");
+    expect((init.headers as Record<string, string>)?.Accept).toBe("application/json");
   });
 });

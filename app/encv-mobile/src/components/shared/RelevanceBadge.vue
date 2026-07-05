@@ -6,7 +6,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
 import { checkmarkCircle, ellipsisHorizontalCircle, sparkles } from "ionicons/icons";
 import { computed } from "vue";
 
@@ -26,7 +25,7 @@ const tier = computed<"high" | "mid" | "low">(() => {
   return "low";
 });
 
-const tierIcon = computed(() => {
+const _tierIcon = computed(() => {
   switch (tier.value) {
     case "high":
       return sparkles;
@@ -38,7 +37,7 @@ const tierIcon = computed(() => {
 });
 
 // 显示百分比，保留整数
-const label = computed(() => `${Math.round(scoreValue.value * 100)}%`);
+const _label = computed(() => `${Math.round(scoreValue.value * 100)}%`);
 </script>
 
 <style scoped>

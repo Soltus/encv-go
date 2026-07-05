@@ -123,7 +123,6 @@ export function deriveSubSection(task: EncvTask, dimension: SectionDimension): S
         label: categoryLabel(category),
       };
     }
-    case "none":
     default:
       return {
         dimension: "none",

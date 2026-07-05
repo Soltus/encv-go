@@ -150,191 +150,183 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonBackButton,
-  IonButtons,
-  IonButton,
-  IonContent,
-  IonIcon,
-  IonSpinner,
-  IonFab,
-  IonFabButton,
-  toastController,
-} from '@ionic/vue'
-import {
-  refreshOutline,
-  openOutline,
-  cloudOfflineOutline,
-  alertCircleOutline,
-  timerOutline,
-  checkmarkCircleOutline,
-  copyOutline,
-  bugOutline,
-} from 'ionicons/icons'
-import { OpenListNative, logBuffer } from '@/plugins/openlist-native'
+import { toastController } from "@ionic/vue";
+import { checkmarkCircleOutline, cloudOfflineOutline, refreshOutline, timerOutline } from "ionicons/icons";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
 
-type IframeState = 'probing' | 'loading' | 'connected' | 'error' | 'timeout'
+type IframeState = "probing" | "loading" | "connected" | "error" | "timeout";
 
 interface DebugEntry {
-  ts: string
-  level: 'info' | 'warn' | 'error' | 'probe'
-  msg: string
-  data?: string
+  ts: string;
+  level: "info" | "warn" | "error" | "probe";
+  msg: string;
+  data?: string;
 }
 
-const router = useRouter()
+const _router = useRouter();
 
-const port = ref(0)
-const state = ref<IframeState>('probing')
-const lastError = ref('')
-const retryCount = ref(0)
-const frameRef = ref<HTMLIFrameElement | null>(null)
-const debugOpen = ref(false)
-const debugEntries = ref<DebugEntry[]>([])
+const port = ref(0);
+const state = ref<IframeState>("probing");
+const lastError = ref("");
+const retryCount = ref(0);
+const frameRef = ref<HTMLIFrameElement | null>(null);
+const _debugOpen = ref(false);
+const debugEntries = ref<DebugEntry[]>([]);
 
-const PROBE_TIMEOUT_MS = 5000
-const HEALTH_POLL_INTERVAL_MS = 10000
+const PROBE_TIMEOUT_MS = 5000;
+const HEALTH_POLL_INTERVAL_MS = 10000;
 
-let pollTimer: ReturnType<typeof setInterval> | null = null
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 /**
  * 沙箱 dev / 真机 prod 区分
  *  - dev:   直访 127.0.0.1:5244（同源策略对 127.0.0.1 不严格，CORS=*）
  *  - prod:  直连 127.0.0.1:5244（同设备，OpenList 与 Capacitor 同进程域）
  */
-const isSandbox = computed(() => import.meta.env.DEV)
+const isSandbox = computed(() => import.meta.env.DEV);
 
-const iframeUrl = computed(() => {
-  const hash = '#/login'
+const _iframeUrl = computed(() => {
+  const hash = "#/login";
   // 走 preview-gateway 统一收口 :16666/openlist/ → :5244 OpenList upstream
   //   不再硬编码 :5244 — 沙箱 dev 唯一对外端口是 :16666（agent-tool-host :16000 代理过来）
-  return `http://localhost:16666/openlist/${hash}`
-})
+  return `http://localhost:16666/openlist/${hash}`;
+});
 
-const stateText = computed(() => {
+const _stateText = computed(() => {
   switch (state.value) {
-    case 'probing': return '连接中…'
-    case 'error': return '连接失败'
-    case 'timeout': return '连接超时'
-    default: return ''
+    case "probing":
+      return "连接中…";
+    case "error":
+      return "连接失败";
+    case "timeout":
+      return "连接超时";
+    default:
+      return "";
   }
-})
+});
 
-const stateColor = computed(() => {
+const _stateColor = computed(() => {
   switch (state.value) {
-    case 'connected': return 'success'
-    case 'error': return 'danger'
-    case 'timeout': return 'warning'
-    case 'probing': return 'medium'
-    default: return 'primary'
+    case "connected":
+      return "success";
+    case "error":
+      return "danger";
+    case "timeout":
+      return "warning";
+    case "probing":
+      return "medium";
+    default:
+      return "primary";
   }
-})
+});
 
-const stateIcon = computed(() => {
+const _stateIcon = computed(() => {
   switch (state.value) {
-    case 'connected': return checkmarkCircleOutline
-    case 'error': return cloudOfflineOutline
-    case 'timeout': return timerOutline
-    case 'probing': return refreshOutline
-    case 'loading': return refreshOutline
-    default: return refreshOutline
+    case "connected":
+      return checkmarkCircleOutline;
+    case "error":
+      return cloudOfflineOutline;
+    case "timeout":
+      return timerOutline;
+    case "probing":
+      return refreshOutline;
+    case "loading":
+      return refreshOutline;
+    default:
+      return refreshOutline;
   }
-})
+});
 
 // ============== 调试日志 ==============
 
-function debug(level: DebugEntry['level'], msg: string, data?: any) {
-  const ts = new Date().toISOString().split('T')[1].slice(0, 12)
-  let dataStr = ''
+function debug(level: DebugEntry["level"], msg: string, data?: any) {
+  const ts = new Date().toISOString().split("T")[1].slice(0, 12);
+  let dataStr = "";
   if (data !== undefined) {
     try {
-      dataStr = typeof data === 'string' ? data : JSON.stringify(data)
-      if (dataStr.length > 200) dataStr = dataStr.slice(0, 200) + '…'
+      dataStr = typeof data === "string" ? data : JSON.stringify(data);
+      if (dataStr.length > 200) dataStr = dataStr.slice(0, 200) + "…";
     } catch {
-      dataStr = String(data)
+      dataStr = String(data);
     }
   }
-  debugEntries.value.unshift({ ts, level, msg, data: dataStr })
-  if (debugEntries.value.length > 50) debugEntries.value.length = 50
+  debugEntries.value.unshift({ ts, level, msg, data: dataStr });
+  if (debugEntries.value.length > 50) debugEntries.value.length = 50;
 }
 
 // ============== 生命周期 ==============
 
 onMounted(async () => {
-  port.value = OpenListNative.getPort()
-  debug('info', 'onMounted', { isSandbox: isSandbox.value, port: port.value })
+  port.value = OpenListNative.getPort();
+  debug("info", "onMounted", { isSandbox: isSandbox.value, port: port.value });
   if (isSandbox.value) {
-    await probeBackend('initial')
+    await probeBackend("initial");
   } else {
     // 真机模式：OpenList 与 Capacitor 同设备，假设后端可达
-    state.value = 'loading'
+    state.value = "loading";
   }
-  startHealthPolling()
-})
+  startHealthPolling();
+});
 
 onUnmounted(() => {
-  stopHealthPolling()
-})
+  stopHealthPolling();
+});
 
 // ============== 健康轮询 ==============
 
 function startHealthPolling() {
-  stopHealthPolling()
+  stopHealthPolling();
   pollTimer = setInterval(() => {
-    pollHealth()
-  }, HEALTH_POLL_INTERVAL_MS)
+    pollHealth();
+  }, HEALTH_POLL_INTERVAL_MS);
 }
 
 function stopHealthPolling() {
   if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
+    clearInterval(pollTimer);
+    pollTimer = null;
   }
 }
 
 async function pollHealth() {
   // 仅在 connected 状态做后置校验：若后端突然挂掉，自动跳回 error
-  if (state.value !== 'connected') return
-  debug('probe', 'pollHealth (background)')
-  const result = await checkHealth()
+  if (state.value !== "connected") return;
+  debug("probe", "pollHealth (background)");
+  const result = await checkHealth();
   if (!result.alive) {
-    debug('error', 'pollHealth: backend gone', result)
-    state.value = 'error'
-    lastError.value = `后端已离线：${result.error || 'unknown'}`
+    debug("error", "pollHealth: backend gone", result);
+    state.value = "error";
+    lastError.value = `后端已离线：${result.error || "unknown"}`;
   }
 }
 
 // ============== 探测 / 健康检查 ==============
 
 interface HealthResult {
-  alive: boolean
-  error?: string
-  code?: string
-  upstreamStatus?: number
-  latency?: number
-  ts: number
+  alive: boolean;
+  error?: string;
+  code?: string;
+  upstreamStatus?: number;
+  latency?: number;
+  ts: number;
 }
 
 async function checkHealth(): Promise<HealthResult> {
   try {
-    const res = await fetch('/__openlist-health', {
-      cache: 'no-store',
-    })
-    const data = await res.json() as HealthResult
-    return data
+    const res = await fetch("/__openlist-health", {
+      cache: "no-store",
+    });
+    const data = (await res.json()) as HealthResult;
+    return data;
   } catch (e: any) {
     return {
       alive: false,
       error: e?.message || String(e),
-      code: 'FETCH_FAILED',
+      code: "FETCH_FAILED",
       ts: Date.now(),
-    }
+    };
   }
 }
 
@@ -344,132 +336,132 @@ async function checkHealth(): Promise<HealthResult> {
  * - alive=false 且 error=timeout → state=timeout
  * - alive=false 其它 → state=error
  */
-async function probeBackend(reason: string = 'manual') {
-  state.value = 'probing'
-  lastError.value = ''
-  debug('probe', `probeBackend (${reason})`)
+async function probeBackend(reason: string = "manual") {
+  state.value = "probing";
+  lastError.value = "";
+  debug("probe", `probeBackend (${reason})`);
 
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS)
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
 
-  let result: HealthResult
+  let result: HealthResult;
   try {
     // 带超时的健康检查（middleware 自带 3s 超时，但前端再加一层保险）
     const r = await Promise.race([
-      fetch('/__openlist-health', { cache: 'no-store', signal: controller.signal }),
+      fetch("/__openlist-health", { cache: "no-store", signal: controller.signal }),
       new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new DOMException('probe timeout', 'AbortError')), PROBE_TIMEOUT_MS)
+        setTimeout(() => reject(new DOMException("probe timeout", "AbortError")), PROBE_TIMEOUT_MS);
       }),
-    ])
-    result = await (r as Response).json() as HealthResult
-    clearTimeout(timer)
+    ]);
+    result = (await (r as Response).json()) as HealthResult;
+    clearTimeout(timer);
   } catch (e: any) {
-    clearTimeout(timer)
-    if (e?.name === 'AbortError' || e?.message?.includes('timeout')) {
-      state.value = 'timeout'
-      lastError.value = `超过 ${PROBE_TIMEOUT_MS}ms 未响应`
-      debug('warn', 'probeBackend timeout')
-      return
+    clearTimeout(timer);
+    if (e?.name === "AbortError" || e?.message?.includes("timeout")) {
+      state.value = "timeout";
+      lastError.value = `超过 ${PROBE_TIMEOUT_MS}ms 未响应`;
+      debug("warn", "probeBackend timeout");
+      return;
     }
-    state.value = 'error'
-    lastError.value = String(e?.message || e)
-    debug('error', 'probeBackend fetch failed', e?.message)
-    return
+    state.value = "error";
+    lastError.value = String(e?.message || e);
+    debug("error", "probeBackend fetch failed", e?.message);
+    return;
   }
 
-  debug('probe', 'health result', result)
+  debug("probe", "health result", result);
 
   if (result.alive) {
-    state.value = 'loading'
-    logBuffer.info(`OpenList 后端已连接 (${result.latency}ms, status=${result.upstreamStatus})`)
-  } else if (result.error === 'timeout') {
-    state.value = 'timeout'
-    lastError.value = `超过 ${PROBE_TIMEOUT_MS}ms 未响应`
+    state.value = "loading";
+    logBuffer.info(`OpenList 后端已连接 (${result.latency}ms, status=${result.upstreamStatus})`);
+  } else if (result.error === "timeout") {
+    state.value = "timeout";
+    lastError.value = `超过 ${PROBE_TIMEOUT_MS}ms 未响应`;
   } else {
-    state.value = 'error'
-    lastError.value = `${result.error || 'unknown'}${result.code ? ' (' + result.code + ')' : ''}`
+    state.value = "error";
+    lastError.value = `${result.error || "unknown"}${result.code ? " (" + result.code + ")" : ""}`;
   }
 }
 
 // ============== iframe 事件 ==============
 
-function onIframeLoad() {
-  debug('info', 'iframe @load fired', {
+function _onIframeLoad() {
+  debug("info", "iframe @load fired", {
     currentState: state.value,
     src: frameRef.value?.src?.slice(0, 80),
-  })
+  });
 
   // 关键修复：iframe @load 不直接置 connected
   // 原因：iframe 可能加载 502 错误页面（来自 Vite proxy）也会触发 @load
   // 必须重新 health 校验才能确认是真 SPA 加载完成
-  if (state.value === 'connected') {
+  if (state.value === "connected") {
     // 已经是 connected（用户在 SPA 内导航/刷新），不重复验证
-    return
+    return;
   }
 
   // 立即做一次 health check 验证
-  verifyAfterIframeLoad()
+  verifyAfterIframeLoad();
 }
 
 async function verifyAfterIframeLoad() {
-  debug('probe', 'verifyAfterIframeLoad (post @load)')
-  const result = await checkHealth()
+  debug("probe", "verifyAfterIframeLoad (post @load)");
+  const result = await checkHealth();
   if (result.alive) {
-    state.value = 'connected'
-    debug('info', 'iframe verified, state=connected', result)
+    state.value = "connected";
+    debug("info", "iframe verified, state=connected", result);
   } else {
     // iframe @load 触发了，但 health 不通过 → iframe 是 502 错误页
-    state.value = 'error'
-    lastError.value = `iframe 加载但后端不健康：${result.error}`
-    debug('error', 'iframe loaded 502 page', result)
+    state.value = "error";
+    lastError.value = `iframe 加载但后端不健康：${result.error}`;
+    debug("error", "iframe loaded 502 page", result);
   }
 }
 
-function onError() {
-  debug('error', 'iframe @error fired')
-  logBuffer.error('iframe 加载失败')
+function _onError() {
+  debug("error", "iframe @error fired");
+  logBuffer.error("iframe 加载失败");
   if (isSandbox.value) {
-    state.value = 'error'
-    lastError.value = 'iframe 加载失败'
+    state.value = "error";
+    lastError.value = "iframe 加载失败";
   }
 }
 
 // ============== 用户操作 ==============
 
-function reload() {
-  retryCount.value++
+function _reload() {
+  retryCount.value++;
   if (isSandbox.value) {
-    probeBackend('manual')
+    probeBackend("manual");
   } else {
-    const frame = frameRef.value
+    const frame = frameRef.value;
     if (frame) {
-      state.value = 'loading'
-      const oldSrc = frame.src
-      frame.src = 'about:blank'
+      state.value = "loading";
+      const oldSrc = frame.src;
+      frame.src = "about:blank";
       nextTick(() => {
-        frame.src = oldSrc
-      })
+        frame.src = oldSrc;
+      });
     }
   }
 }
 
-function openExternal() {
-  const url = `http://127.0.0.1:${port.value || 5244}/`
-  window.open(url, '_blank')
+function _openExternal() {
+  const url = `http://127.0.0.1:${port.value || 5244}/`;
+  window.open(url, "_blank");
 }
 
-async function copyCommand() {
-  const cmd = 'bash scripts/dev-openlist.sh'
+async function _copyCommand() {
+  const cmd = "bash scripts/dev-openlist.sh";
   try {
-    await navigator.clipboard.writeText(cmd)
+    await navigator.clipboard.writeText(cmd);
     const toast = await toastController.create({
-      message: '启动命令已复制到剪贴板',
+      message: "启动命令已复制到剪贴板",
       duration: 1800,
-      position: 'bottom',
-    })
-    await toast.present()
+      position: "bottom",
+    });
+    await toast.present();
   } catch {
-    logBuffer.warn('剪贴板复制失败')
+    logBuffer.warn("剪贴板复制失败");
   }
 }
 </script>

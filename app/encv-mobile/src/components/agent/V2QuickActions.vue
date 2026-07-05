@@ -31,7 +31,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
 import {
   documentTextOutline,
   informationCircleOutline,
@@ -63,7 +62,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 /** 6 个 v2 工具快捷入口（按用户使用频率排序：搜索 > 读 > 元数据 > 写 > 跑命令） */
-const actions: V2QuickAction[] = [
+const _actions: V2QuickAction[] = [
   {
     id: "search",
     label: t("agent.v2Chip.search"),
@@ -108,7 +107,7 @@ const actions: V2QuickAction[] = [
   },
 ];
 
-function emitPick(a: V2QuickAction): void {
+function _emitPick(a: V2QuickAction): void {
   emit("pick", a);
 }
 </script>

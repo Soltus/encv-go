@@ -185,17 +185,13 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonItem, IonLabel, IonNote, IonRadioGroup, IonSelect, IonSelectOption, IonToggle, modalController } from "@ionic/vue";
-import { documentText, folderOpen, lockClosed } from "ionicons/icons";
-import { computed } from "vue";
 import type { ContainerVersionInfo, TaskField } from "@encv/shared-components/api/encv";
-import ContainerVersionSelector from "@encv/shared-components/components/ContainerVersionSelector.vue";
 import FilePickerModal from "@encv/shared-components/components/FilePickerModal.vue";
-import InputWithHistory from "@encv/shared-components/components/InputWithHistory.vue";
 import type { NewTaskState } from "@encv/shared-components/components/NewTaskState";
-import RadioItem from "@encv/shared-components/components/RadioItem.vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { isRecommendedVersion } from "@encv/shared-components/constants/containerVersion";
+import { modalController } from "@ionic/vue";
+import { computed } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -223,24 +219,24 @@ const props = withDefaults(
 
 const { t } = useI18n();
 
-const versionOpts = computed<ContainerVersionInfo[]>(() => (Array.isArray(props.state.versionOptions) ? props.state.versionOptions : []));
+const _versionOpts = computed<ContainerVersionInfo[]>(() => (Array.isArray(props.state.versionOptions) ? props.state.versionOptions : []));
 
 // v4 容器：Header 含 CipherMode 字段（offset 2040-2042），且支持 zstd seekable 压缩
 // v2/v3 容器：不显示 cipher mode / compression 控件（这两个特性 v4 独有）
-const isV4Container = computed(() => isRecommendedVersion(Number(props.state.version)));
+const _isV4Container = computed(() => isRecommendedVersion(Number(props.state.version)));
 
-const encryptExtraFields = computed<TaskField[]>(() => {
+const _encryptExtraFields = computed<TaskField[]>(() => {
   const arr = Array.isArray(props.state.filteredExtraFields) ? props.state.filteredExtraFields : [];
   return arr.filter(f => !f.condition || f.condition === "encrypt");
 });
 
-function getExtra(key: string): string {
+function _getExtra(key: string): string {
   const ev = props.state?.extraValues;
   if (!ev || typeof ev !== "object") return "";
   return ev[key] || "";
 }
 
-async function handleBrowseSource() {
+async function _handleBrowseSource() {
   const modal = await modalController.create({
     component: FilePickerModal,
     componentProps: { mode: "file" as const },
@@ -252,7 +248,7 @@ async function handleBrowseSource() {
   }
 }
 
-async function handleBrowseTarget() {
+async function _handleBrowseTarget() {
   const modal = await modalController.create({
     component: FilePickerModal,
     componentProps: { mode: "folder" as const },

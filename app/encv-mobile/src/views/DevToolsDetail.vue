@@ -94,22 +94,6 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBackButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonTitle,
-  IonToggle,
-  IonToolbar,
-} from "@ionic/vue";
-import { bugOutline, extensionPuzzleOutline, eyeOutline, flaskOutline, terminal, bookOutline } from "ionicons/icons";
 import { useRouter } from "vue-router";
 import { useDevTools } from "@/composables/useDevTools";
 import { useI18n } from "@/composables/useI18n";
@@ -118,21 +102,21 @@ const { t } = useI18n();
 const router = useRouter();
 const { vconsoleEnabled, toggleVConsole } = useDevTools();
 
-function goLogSettings() {
+function _goLogSettings() {
   router.push("/tabs/settings/devtools/log-settings");
 }
 
 // 🆕 2026-06-17：自动化测试总览入口（原 section 内 3 个 ion-item 已整体搬到 AutomationTestsHub）
-function goAutomationHub() {
+function _goAutomationHub() {
   router.push("/tabs/settings/devtools/automation-hub");
 }
 
 // 🆕 2026-06-17：Compose UI 原型总览入口（原 prototype 卡片循环已整体搬到 ComposePrototypesHub）
-function goComposePrototypesHub() {
+function _goComposePrototypesHub() {
   router.push("/tabs/settings/devtools/compose-prototypes-hub");
 }
 
-function goChronicle() {
+function _goChronicle() {
   router.push("/tabs/settings/chronicle");
 }
 
@@ -142,8 +126,8 @@ function goChronicle() {
 //   导致 router 试图导航到 /openlist-ui/ 失败、渲空 <ion-router-outlet>
 // 为什么不用 window.open(_, '_blank')：会破坏 OpenPreview 会话（用户需手动切回 tab）
 // 为什么用 window.location.assign：触发完整页面加载，浏览器原生处理同源跳转
-const isDev = import.meta.env.DEV;
-function openPreviewOpenList() {
+const _isDev = import.meta.env.DEV;
+function _openPreviewOpenList() {
   window.location.assign("/openlist-ui/");
 }
 
@@ -160,11 +144,11 @@ function openPreviewOpenList() {
 // - Capacitor native 端 127.0.0.1 指向设备本身，跳绝对 URL 不可达
 //   走 encv-go 后端相对路径，由后端内部处理上游转发
 // - 跟 openPreviewOpenList（/openlist-ui/）保持同一种风格：相对路径 + 整页跳转
-function openPreviewOpenListPlugin() {
+function _openPreviewOpenListPlugin() {
   window.location.assign("/api/preview/plugin-openlist/");
 }
 
-function handleVConsoleToggle(event: CustomEvent) {
+function _handleVConsoleToggle(event: CustomEvent) {
   toggleVConsole(event.detail.checked);
 }
 </script>

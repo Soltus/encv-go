@@ -45,36 +45,34 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { IonPage, IonHeader, IonToolbar, IonTitle, IonButton, IonContent, IonIcon, IonButtons } from '@ionic/vue';
-import { settingsOutline, planetOutline, documentTextOutline, listOutline } from 'ionicons/icons';
-import { useSimverseStore } from '@self/stores/simverse';
+import { useSimverseStore } from "@self/stores/simverse";
+import { computed, onMounted } from "vue";
+import { useRouter } from "vue-router";
 
 const router = useRouter();
 const store = useSimverseStore();
 
-const worldState = computed(() => store.worldState);
-const eraName = computed(() => `时代 ${Math.floor((store.worldState?.tick || 0) / 1000)}`);
+const _worldState = computed(() => store.worldState);
+const _eraName = computed(() => `时代 ${Math.floor((store.worldState?.tick || 0) / 1000)}`);
 
 onMounted(async () => {
   await store.fetchWorldState();
 });
 
-const enterWorld = () => {
-  router.push('/world');
+const _enterWorld = () => {
+  router.push("/world");
 };
 
-const goToChronicles = () => {
-  router.push('/chronicle');
+const _goToChronicles = () => {
+  router.push("/chronicle");
 };
 
-const goToSettings = () => {
-  router.push('/tabs/settings');
+const _goToSettings = () => {
+  router.push("/tabs/settings");
 };
 
-const goToDevLogs = () => {
-  router.push('/tabs/devlogs');
+const _goToDevLogs = () => {
+  router.push("/tabs/devlogs");
 };
 </script>
 

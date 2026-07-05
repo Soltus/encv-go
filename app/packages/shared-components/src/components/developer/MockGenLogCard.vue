@@ -103,22 +103,12 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import {
-  checkmarkCircleOutline,
-  copyOutline,
-  documentTextOutline,
-  flashOutline,
-  settingsOutline,
-  terminalOutline,
-  warningOutline,
-} from "ionicons/icons";
-import { computed } from "vue";
-import UnifiedTimelineCard from "@encv/shared-components/components/shared/UnifiedTimelineCard.vue";
 // v3 2026-06-18：FFMPEG 日志时间格式化（避免 ISO 字符串撑满宽度导致溢出）
 import { formatDateTime } from "@encv/shared-components/composables/useDateFormat";
 import type { MockGenLogEntry, MockGenLogSummary } from "@encv/shared-components/composables/useMockGenLog";
 import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@encv/shared-components/lib/workflow/types";
+import { documentTextOutline, flashOutline, settingsOutline } from "ionicons/icons";
+import { computed } from "vue";
 
 /**
  * MockGenLogCard — FFMPEG 流程日志卡（Task 13 SubTask 13.2/13.3）
@@ -150,7 +140,7 @@ const emit = defineEmits<{
 }>();
 
 /** runner 标识 → ion-icon */
-function runnerIcon(runner: string) {
+function _runnerIcon(runner: string) {
   if (runner === "mediacodec") return flashOutline;
   if (runner === "static") return documentTextOutline;
   return settingsOutline; // ffmpeg / default
@@ -170,7 +160,7 @@ const STATUS_MAP: Record<MockGenLogEntry["status"], StepStatus> = {
  * （UnifiedTimelineCard 的 PhaseIcon 会渲染 checkmarkCircleOutline，
  *   但本组件用 #icon slot 覆盖为 runner ion-icon，phase 仅影响状态色边框）
  */
-function toUnifiedTimelineEntry(entry: MockGenLogEntry): UnifiedTimelineEntry {
+function _toUnifiedTimelineEntry(entry: MockGenLogEntry): UnifiedTimelineEntry {
   return {
     id: entry.key,
     phase: Phase.Completed,
@@ -187,7 +177,7 @@ function toUnifiedTimelineEntry(entry: MockGenLogEntry): UnifiedTimelineEntry {
 }
 
 /** 汇总文本（保持与原 PluginTestsDetail.vue 一致的格式） */
-const summaryText = computed(() => {
+const _summaryText = computed(() => {
   if (!props.summary) return "";
   const { ok, failed, skipped } = props.summary;
   let text = `${ok} ✓ / ${failed} ✗ / ${skipped} ◌`;
@@ -198,7 +188,7 @@ const summaryText = computed(() => {
 });
 
 /** UnifiedTimelineCard 的 toggle 事件转发为 toggle(key) */
-function onToggle(key: string, _value: boolean): void {
+function _onToggle(key: string, _value: boolean): void {
   emit("toggle", key);
 }
 </script>

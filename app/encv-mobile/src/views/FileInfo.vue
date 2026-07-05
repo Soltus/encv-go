@@ -181,26 +181,11 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
-import {
-  alertCircle,
-  arrowBack,
-  chevronDown,
-  chevronForward,
-  documentTextOutline,
-  filmOutline,
-  helpCircleOutline,
-  imageOutline,
-  listOutline,
-  lockClosed,
-  settingsOutline,
-} from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import type { FileItem, PredictPluginResponse } from "@/api/encv";
-import { formatFileSize, getApiBaseUrl, getExternalStreamUrl, predictPlugin, proxySafeEncode } from "@/api/encv";
+import { getApiBaseUrl, getExternalStreamUrl, predictPlugin, proxySafeEncode } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
-import { formatContainerVersion } from "@/constants/containerVersion";
 import { getDecodedName, isAlistEncrypted, loadDecodedName } from "@/features/alist-encrypt/useAlistEncrypt";
 
 const { t } = useI18n();
@@ -244,7 +229,7 @@ const isAlistEnc = ref(false);
 const thumbnailError = ref(false);
 const pluginPrediction = ref<PredictPluginResponse | null>(null);
 
-const thumbnailUrl = computed(() => {
+const _thumbnailUrl = computed(() => {
   if (!info.value || thumbnailError.value) return "";
   const path = info.value.path;
   if (!path) return "";
@@ -261,15 +246,15 @@ const isVideoFile = computed(() => {
   return mime.startsWith("video/");
 });
 
-const isImageOrVideo = computed(() => isImageFile.value || isVideoFile.value);
+const _isImageOrVideo = computed(() => isImageFile.value || isVideoFile.value);
 
-function formatDuration(seconds: number): string {
+function _formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-function formatTime(isoStr: string): string {
+function _formatTime(isoStr: string): string {
   try {
     return new Date(isoStr).toLocaleString();
   } catch {
@@ -277,7 +262,7 @@ function formatTime(isoStr: string): string {
   }
 }
 
-function matchTypeLabel(type?: string): string {
+function _matchTypeLabel(type?: string): string {
   const map: Record<string, string> = {
     mime: "MIME",
     extension: "扩展名",
@@ -287,7 +272,7 @@ function matchTypeLabel(type?: string): string {
   return type ? map[type] || type : "-";
 }
 
-const pluginMatchDesc = computed(() => {
+const _pluginMatchDesc = computed(() => {
   const p = pluginPrediction.value;
   if (!p?.pluginName) return "";
   const candidates = p.candidates || [];
@@ -295,7 +280,7 @@ const pluginMatchDesc = computed(() => {
   return `${t("fileInfo.pluginCandidateCount") || "候选"} ${candidates.length}`;
 });
 
-function handlePreviewClick() {
+function _handlePreviewClick() {
   router.push({ path: "/tabs/files", query: { action: "preview", path: info.value?.path } });
 }
 

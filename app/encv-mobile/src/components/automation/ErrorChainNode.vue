@@ -40,7 +40,7 @@ defineProps<{
   chain: ErrorChainStep[];
 }>();
 
-function getGlyph(step: ErrorChainStep, _idx: number): string {
+function _getGlyph(step: ErrorChainStep, _idx: number): string {
   if (step.severity === "error") return "✕";
   if (step.severity === "warning") return "!";
   // info: 前置阶段用 '✓'，未到达阶段用 '○'

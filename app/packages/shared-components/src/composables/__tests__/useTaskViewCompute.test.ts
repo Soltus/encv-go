@@ -41,9 +41,9 @@ const mockLocalStorage: Storage = {
 } as unknown as Storage;
 vi.stubGlobal("localStorage", mockLocalStorage);
 
+import type { EncvTask } from "@encv/shared-components/api/encv";
 import { createPinia, setActivePinia } from "pinia";
 import { nextTick } from "vue";
-import type { EncvTask } from "@encv/shared-components/api/encv";
 
 vi.mock("@/composables/useTaskEventBridge", () => ({
   useTaskEventBridge: () => {},

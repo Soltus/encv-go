@@ -165,9 +165,9 @@ const resolvedDescription = ref<string>(props.item.descriptionFallback || "");
 const iconName = computed<string>(() => props.item.icon || "cube");
 
 // ion-icon 通过 :icon prop 接受 string（自动查 addIcons 注册的 svg 路径）
-const resolvedIcon = computed<string>(() => iconName.value);
+const _resolvedIcon = computed<string>(() => iconName.value);
 
-const sourceLabel = computed(() => {
+const _sourceLabel = computed(() => {
   const s = props.item.source;
   if (s === "package.json") return t("about.libSource.packageJson");
   if (s === "libs.versions.toml") return t("about.libSource.libsVersionsToml");
@@ -177,14 +177,14 @@ const sourceLabel = computed(() => {
   return t("about.libSource.unknown");
 });
 
-const statusLabel = computed(() => {
+const _statusLabel = computed(() => {
   const s = props.item.status;
   if (s === "active") return t("about.libStatus.active");
   if (s === "broken") return t("about.libStatus.broken");
   return t("about.libStatus.historical");
 });
 
-const importanceLabel = computed(() => {
+const _importanceLabel = computed(() => {
   const i = props.item.importance;
   if (i === "core") return t("about.libImportance.core");
   if (i === "light") return t("about.libImportance.light");

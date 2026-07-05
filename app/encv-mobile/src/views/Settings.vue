@@ -380,66 +380,37 @@
 </template>
 
 <script setup lang="ts">
+import { alertController, modalController } from "@ionic/vue";
 import {
-  alertController,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonItemDivider,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSelect,
-  IonSelectOption,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
-import {
-  bugOutline,
   cloudOutline,
   colorPaletteOutline,
-  fileTrayFull as databaseIcon,
   documentText,
   eyeOutline,
   filmOutline,
   folderOpen,
   gitNetworkOutline,
   globeOutline,
-  hardwareChipOutline,
   imagesOutline,
-  informationCircle,
   key,
   layersOutline,
   lockClosed,
   musicalNotesOutline,
   newspaperOutline,
   personOutline,
-  phonePortraitOutline,
   readerOutline,
   refreshCircle,
-  save as saveIcon,
   server as serverIcon,
   settingsOutline,
   shieldCheckmark,
-  sparklesOutline,
   speedometerOutline,
   terminal,
   textOutline,
   toggleOutline,
-  trash,
 } from "ionicons/icons";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import type { DatabaseInfo, IndexStats } from "@/api/encv";
 import { fetchConfig, getDatabaseInfo, getIndexStats, updateConfig } from "@/api/encv";
-import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import FilePickerModal from "@/components/FilePickerModal.vue";
 import { useConfig } from "@/composables/useConfig";
 import { registerFileFeature, unregisterFileFeature } from "@/composables/useFileFeatures";
@@ -484,7 +455,7 @@ const screenOrientation = ref(localStorage.getItem("encv_screen_orientation") ||
 const mpvPluginStatus = ref<string>("unknown");
 const mpvPluginError = ref("");
 
-const mpvStatusI18nKey = computed(() => {
+const _mpvStatusI18nKey = computed(() => {
   const keyMap: Record<string, string> = {
     not_installed: "settings.pluginNotInstalled",
     disabled: "settings.pluginDisabled",
@@ -500,21 +471,21 @@ function isMpvMode(mode: string): boolean {
   return isMpvSubMode(mode) || mode === "mpv-plugin" || mode === "mpv";
 }
 
-async function handleVideoPlayerChange(event: CustomEvent) {
+async function _handleVideoPlayerChange(event: CustomEvent) {
   const value = event.detail.value;
   videoPlayerMode.value = value;
   localStorage.setItem("encv_player_video", value);
   if (isMpvMode(value)) await refreshMpvPluginStatus();
 }
 
-async function handleAudioPlayerChange(event: CustomEvent) {
+async function _handleAudioPlayerChange(event: CustomEvent) {
   const value = event.detail.value;
   audioPlayerMode.value = value;
   localStorage.setItem("encv_player_audio", value);
   if (isMpvMode(value)) await refreshMpvPluginStatus();
 }
 
-function handleScreenOrientationChange(event: CustomEvent) {
+function _handleScreenOrientationChange(event: CustomEvent) {
   const value = event.detail.value;
   screenOrientation.value = value;
   localStorage.setItem("encv_screen_orientation", value);
@@ -537,11 +508,11 @@ async function applyScreenOrientation(orientation: string) {
   }
 }
 
-function goAppearance() {
+function _goAppearance() {
   router.push("/tabs/settings/appearance");
 }
 
-function goDevTools() {
+function _goDevTools() {
   router.push("/tabs/settings/devtools");
 }
 
@@ -573,7 +544,7 @@ function extractAnnotations(schema: any, prefix: string = ""): { path: string; d
   return result;
 }
 
-async function openJsonEditor() {
+async function _openJsonEditor() {
   try {
     const cfg = await fetchConfig();
     jsonText.value = JSON.stringify(cfg, null, 2);
@@ -591,7 +562,7 @@ async function openJsonEditor() {
   }
 }
 
-function validateJson() {
+function _validateJson() {
   try {
     JSON.parse(jsonText.value);
     jsonError.value = "";
@@ -600,7 +571,7 @@ function validateJson() {
   }
 }
 
-async function handleSaveJson() {
+async function _handleSaveJson() {
   try {
     const parsed = JSON.parse(jsonText.value);
     await updateConfig(parsed);
@@ -613,49 +584,49 @@ async function handleSaveJson() {
   }
 }
 
-function goServer() {
+function _goServer() {
   router.push("/tabs/settings/server");
 }
 
-function goAbout() {
+function _goAbout() {
   router.push("/tabs/settings/about");
 }
 
-function goCache() {
+function _goCache() {
   router.push("/tabs/settings/cache");
 }
 
-function goDatabase() {
+function _goDatabase() {
   router.push("/tabs/settings/database");
 }
 
-function goMounts() {
+function _goMounts() {
   router.push("/tabs/settings/mounts");
 }
 
-function goPlugins() {
+function _goPlugins() {
   router.push("/tabs/settings/plugins");
 }
 
-function goAgent() {
+function _goAgent() {
   router.push("/tabs/settings/agent");
 }
 
-function getValue(path: string[]): unknown {
+function _getValue(path: string[]): unknown {
   return getFieldValue(path);
 }
 
-function setValue(path: string[], value: unknown) {
+function _setValue(path: string[], value: unknown) {
   setFieldValue(path, value);
 }
 
-function getMapEntries(path: string[]): [string, Record<string, unknown>][] {
+function _getMapEntries(path: string[]): [string, Record<string, unknown>][] {
   const val = getFieldValue(path);
   if (!val || typeof val !== "object") return [];
   return Object.entries(val as Record<string, unknown>) as [string, Record<string, unknown>][];
 }
 
-function handleInput(path: string[], field: FieldDef, event: CustomEvent) {
+function _handleInput(path: string[], field: FieldDef, event: CustomEvent) {
   const val = (event.target as HTMLInputElement).value;
   if (path.length >= 2 && path[0] === "webdav" && path[1] === "root" && val) {
     const err = validateWebdavRoute(val);
@@ -679,7 +650,7 @@ function validateWebdavRoute(val: string): string | null {
   return null;
 }
 
-async function handleBrowsePath(path: string[], field: FieldDef) {
+async function _handleBrowsePath(path: string[], field: FieldDef) {
   if (isNative()) {
     const result = await pickFolder();
     if (result.path) {
@@ -703,7 +674,7 @@ async function handleBrowsePath(path: string[], field: FieldDef) {
   }
 }
 
-function fieldLabel(key: string, _required?: boolean): string {
+function _fieldLabel(key: string, _required?: boolean): string {
   return tField(key);
 }
 
@@ -746,7 +717,7 @@ const fieldIconMap: Record<string, string> = {
   text: textOutline,
 };
 
-function getFieldIcon(fieldKey: string, fieldType: string): string {
+function _getFieldIcon(fieldKey: string, fieldType: string): string {
   if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey];
   if (fieldType === "boolean") return toggleOutline;
   if (fieldType === "integer") return speedometerOutline;
@@ -754,7 +725,7 @@ function getFieldIcon(fieldKey: string, fieldType: string): string {
   return settingsOutline;
 }
 
-function isFieldVisible(field: FieldDef): boolean {
+function _isFieldVisible(field: FieldDef): boolean {
   if (field.key === "console") return false;
   if (!field.platform || field.platform === "both") return true;
   if (field.platform === "mobile") return isNative();
@@ -762,7 +733,7 @@ function isFieldVisible(field: FieldDef): boolean {
   return true;
 }
 
-async function handleClearCache() {
+async function _handleClearCache() {
   const alert = await alertController.create({
     header: t("settings.clearCache"),
     message: t("settings.clearCacheConfirm"),
@@ -793,7 +764,7 @@ async function handleClearCache() {
   await alert.present();
 }
 
-async function handleResetSettings() {
+async function _handleResetSettings() {
   const alert = await alertController.create({
     header: t("settings.resetSettings"),
     message: t("settings.resetConfirm"),
@@ -816,7 +787,7 @@ async function handleResetSettings() {
   await alert.present();
 }
 
-async function handleSaveConfig() {
+async function _handleSaveConfig() {
   try {
     await saveConfig();
     if (restartNeeded.value) {
@@ -842,7 +813,7 @@ async function handleSaveConfig() {
   }
 }
 
-function handleResetConfig() {
+function _handleResetConfig() {
   resetConfig();
 }
 

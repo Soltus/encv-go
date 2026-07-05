@@ -238,27 +238,8 @@
 </template>
 
 <script setup lang="ts">
-import {
-  alertController,
-  IonBadge,
-  IonButton,
-  type IonContent,
-  IonFooter,
-  IonHeader,
-  IonIcon,
-  IonPage,
-  IonSearchbar,
-  IonSegment,
-  IonSegmentButton,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { arrowDownOutline, arrowUpOutline, closeOutline, copyOutline, pauseOutline, playOutline, trashOutline } from "ionicons/icons";
-import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, triggerRef, watch } from "vue";
 import { type BackendLogEntry, checkServerStatus, getRecentBackendLogs } from "@encv/shared-components/api/encv";
 import type { DropdownOption } from "@encv/shared-components/components/shared/FilterDropdown.vue";
-import FilterDropdown from "@encv/shared-components/components/shared/FilterDropdown.vue";
-import VirtualLogList from "@encv/shared-components/components/VirtualLogList.vue";
 import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
 import { eventBus } from "@encv/shared-components/composables/useEventBus";
 import { type LogEntry, useFrontendLogs } from "@encv/shared-components/composables/useFrontendLogs";
@@ -266,6 +247,8 @@ import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useRealtimeTransport } from "@encv/shared-components/composables/useRealtimeTransport";
 import { showToast } from "@encv/shared-components/composables/useToast";
 import { IncrementalFilter, type Level } from "@encv/shared-components/utils/IncrementalFilter";
+import { alertController, type IonContent } from "@ionic/vue";
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, triggerRef, watch } from "vue";
 
 const { t } = useI18n();
 const transport = useRealtimeTransport();
@@ -410,7 +393,7 @@ async function coldStartLoadRecentLogs(): Promise<void> {
 }
 
 const selectedLevelsArray = ref<string[]>(["debug", "info", "warn", "error"]);
-const levelDropdownOptions: DropdownOption[] = [
+const _levelDropdownOptions: DropdownOption[] = [
   { value: "debug", label: "DEBUG" },
   { value: "info", label: "INFO" },
   { value: "warn", label: "WARN" },
@@ -441,7 +424,7 @@ function updateTagCounts(entry: LogEntry, counts: Map<string, number>) {
   }
 }
 
-const tagDropdownOptions = computed<DropdownOption[]>(() => {
+const _tagDropdownOptions = computed<DropdownOption[]>(() => {
   if (activeTab.value === "frontend") {
     const counts = new Map<string, number>();
     for (const entry of frontendLogs.value) {
@@ -460,7 +443,7 @@ const tagDropdownOptions = computed<DropdownOption[]>(() => {
  * 🆕 2026-06-15 搜索高亮：转义 HTML 特殊字符 + 把 query 用 <mark> 包起来
  * 性能：30 item 虚拟列表下完全可承受
  */
-function highlightMatch(text: string, query: string): string {
+function _highlightMatch(text: string, query: string): string {
   const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   if (!query.trim()) return escapeHtml(text);
   try {
@@ -472,22 +455,22 @@ function highlightMatch(text: string, query: string): string {
   }
 }
 
-function onLevelsChange(_values: string[]) {
+function _onLevelsChange(_values: string[]) {
   // levels 变化时，watch 会自动触发 filter 更新
 }
 
-function onTagsChange(_values: string[]) {
+function _onTagsChange(_values: string[]) {
   // tags 变化时，watch 会自动触发 filter 更新
 }
 
-function onTagClick(tag: string) {
+function _onTagClick(tag: string) {
   if (!selectedTags.value.includes(tag)) {
     selectedTags.value = [...selectedTags.value, tag];
   }
   closeLogDetail();
 }
 
-function getSourceIcon(entry: LogEntry): string {
+function _getSourceIcon(entry: LogEntry): string {
   const tags = Array.isArray(entry.tags) ? entry.tags : [];
   if (tags.includes("frontend")) {
     if (tags.includes("worker")) return "⚙";
@@ -510,7 +493,7 @@ function getSourceIcon(entry: LogEntry): string {
   return "●";
 }
 
-function getSourceIconTitle(entry: LogEntry): string {
+function _getSourceIconTitle(entry: LogEntry): string {
   const tags = Array.isArray(entry.tags) ? entry.tags : [];
   if (tags.length === 0) return entry.source || "unknown";
   return tags.join(" · ");
@@ -542,7 +525,7 @@ const totalBackendCount = computed(() => {
 });
 const serverOnline = ref(false);
 
-function getBadgeColor(level: string): string {
+function _getBadgeColor(level: string): string {
   switch (level) {
     case "debug":
       return "medium";
@@ -591,19 +574,19 @@ const filteredFrontend = computed(() => {
   return logs;
 });
 
-const totalCurrent = computed(() => (activeTab.value === "frontend" ? frontendLogs.value.length : totalBackendCount.value));
-const filteredCurrent = computed(() =>
+const _totalCurrent = computed(() => (activeTab.value === "frontend" ? frontendLogs.value.length : totalBackendCount.value));
+const _filteredCurrent = computed(() =>
   activeTab.value === "frontend" ? filteredFrontend.value.length : backendFilteredItems.value.length
 );
 
 /** 重复点击当前 tab 按钮时滚到顶部（VS Code / Chrome DevTools 行为） */
-function onTabClick(tab: "frontend" | "backend") {
+function _onTabClick(tab: "frontend" | "backend") {
   if (activeTab.value === tab) {
     scrollToTop();
   }
 }
 
-function onTabChange(event: CustomEvent) {
+function _onTabChange(event: CustomEvent) {
   activeTab.value = (event.detail.value || "frontend") as "frontend" | "backend";
 }
 
@@ -626,7 +609,7 @@ function ensureScrollEl(): HTMLElement | null {
     return null;
   }
   const hostEl = ((contentRef.value as any).$el || (contentRef.value as any)) as HTMLElement | undefined;
-  if (!hostEl || !hostEl.shadowRoot) {
+  if (!hostEl?.shadowRoot) {
     if (typeof window !== "undefined" && (window as any).__DEVLOGS_DEBUG__) {
       throw new Error(`DEBUG ensureScrollEl: hostEl=${!!hostEl} shadowRoot=${!!hostEl?.shadowRoot}`);
     }
@@ -690,7 +673,7 @@ async function onJumpToBottom() {
 }
 
 /** 浮动「↑」按钮：滚到顶部（不影响 autoScrollEnabled 状态） */
-function onJumpToTop() {
+function _onJumpToTop() {
   const el = ensureScrollEl();
   if (el) el.scrollTop = 0;
 }
@@ -709,13 +692,13 @@ function onLogScroll() {
 
 // 🆕 2026-06-15 修 #2：点击日志行展开详情
 const selectedLog = ref<LogEntry | null>(null);
-function onLogSelect(item: LogEntry) {
+function _onLogSelect(item: LogEntry) {
   selectedLog.value = item;
 }
 function closeLogDetail() {
   selectedLog.value = null;
 }
-async function copyLogDetail() {
+async function _copyLogDetail() {
   if (!selectedLog.value) return;
   const text = `[${selectedLog.value.timestamp}] ${selectedLog.value.level.toUpperCase()} ${selectedLog.value.message}`;
   const ok = await copyToClipboard(text);
@@ -772,7 +755,7 @@ watch(
   { flush: "post" }
 );
 
-async function handleCopy() {
+async function _handleCopy() {
   const logs = activeTab.value === "frontend" ? filteredFrontend.value : backendFilteredItems.value;
   const text = logs.map(l => `[${l.timestamp}] ${l.level.toUpperCase()} ${l.message}`).join("\n");
   const ok = await copyToClipboard(text);
@@ -787,7 +770,7 @@ async function handleCopy() {
   }
 }
 
-async function handleClear() {
+async function _handleClear() {
   const alert = await alertController.create({
     header: t("devlogs.clearConfirm"),
     buttons: [
@@ -827,7 +810,7 @@ function onWsMessage(data: any) {
     });
     return;
   }
-  if (data && data.type && data.type !== "log" && data.type !== "pong" && data.type !== "server:status") {
+  if (data?.type && data.type !== "log" && data.type !== "pong" && data.type !== "server:status") {
     const msg = typeof data === "string" ? data : JSON.stringify(data);
     queueBackendLog({
       id: ++nextId,

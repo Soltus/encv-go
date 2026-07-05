@@ -29,12 +29,10 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonRadioGroup } from "@ionic/vue";
-import { computed } from "vue";
 import type { ContainerVersionInfo } from "@encv/shared-components/api/encv";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { CONTAINER_VERSIONS, DEFAULT_CONTAINER_VERSION } from "@encv/shared-components/constants/containerVersion";
-import RadioItem from "./RadioItem.vue";
+import { computed } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -53,9 +51,9 @@ const { t } = useI18n();
 // 🆕 2026-06-11 v2 cleanup：版本列表从 constants/containerVersion.ts 统一派生
 // 命名规则：ECv = ENCV Container，大写 EC，小写 v，避免与项目内 v2 架构命名混淆。
 // 注：ECV2 已在 SupportedVersions 中移除，不再可选。
-const versions = computed<ContainerVersionInfo[]>(() => props.versions ?? [...CONTAINER_VERSIONS]);
+const _versions = computed<ContainerVersionInfo[]>(() => props.versions ?? [...CONTAINER_VERSIONS]);
 
-function handleChange(event: CustomEvent) {
+function _handleChange(event: CustomEvent) {
   emit("update:modelValue", event.detail.value as number);
 }
 </script>

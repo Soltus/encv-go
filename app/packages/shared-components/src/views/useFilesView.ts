@@ -7,12 +7,12 @@
 //   /selectedFile/renameValue 等），如果分多个 composable 要 props 双向同步，反而更乱。
 //   所以采用「单 composable + 内部注释分块」的方式：拆出大文件，但保持 state 共享。
 
-import { actionSheetController, alertController, menuController, onIonViewWillEnter } from "@ionic/vue";
-import { computed, nextTick, onMounted, onUnmounted, type Ref, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
 // 🆕 2026-07-02: contenteditable 搜索框 + span units（替换原 ion-searchbar + 外部 overlay）
 import { useSearchInput } from "@encv/shared-components/composables/useSearchInput";
 import { type QueryToken, renderSnippet, tokenizeQuery } from "@encv/shared-components/views/useFilesView.searchTokens";
+import { actionSheetController, alertController, menuController, onIonViewWillEnter } from "@ionic/vue";
+import { computed, nextTick, onMounted, onUnmounted, type Ref, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 // 🆕 2026-07-02: 显式 return type（用 Record<string, any> 兼容所有字段）— 避免 vue-tsc 推断丢字段
 // (历史踩坑：isSelectedModelAvailable / switchSession / lanAccessLoaded / fetchModels / temperature 都从推断 type 中消失过)
@@ -31,25 +31,6 @@ export type UseFilesViewReturn = {
 };
 
 import { Share } from "@capacitor/share";
-import {
-  add,
-  arrowForwardOutline,
-  copyOutline,
-  createOutline,
-  documentOutline,
-  documentTextOutline,
-  eyeOutline,
-  filmOutline,
-  folderOpen,
-  imageOutline,
-  informationCircle,
-  lockClosed,
-  musicalNotesOutline,
-  playCircle,
-  pricetagOutline,
-  shareOutline,
-  trash,
-} from "ionicons/icons";
 import type { FileItem, IndexStats, PluginMeta, SearchMode, TagInfo } from "@encv/shared-components/api/encv";
 import {
   addTag,
@@ -99,6 +80,25 @@ import {
   setSessionPassword,
 } from "@encv/shared-components/features/alist-encrypt/useAlistEncrypt";
 import { getLocalFilePath, isNative, openExternal, openPlayer, requestStoragePermission } from "@encv/shared-components/plugins/GoProcess";
+import {
+  add,
+  arrowForwardOutline,
+  copyOutline,
+  createOutline,
+  documentOutline,
+  documentTextOutline,
+  eyeOutline,
+  filmOutline,
+  folderOpen,
+  imageOutline,
+  informationCircle,
+  lockClosed,
+  musicalNotesOutline,
+  playCircle,
+  pricetagOutline,
+  shareOutline,
+  trash,
+} from "ionicons/icons";
 import { formatDateInput, getPlayMode, mountDriverOf, mountPathOf, mountRootOf, SIZE_PRESETS, TIME_PRESETS } from "./useFilesHelpers";
 
 /**
@@ -378,7 +378,7 @@ export function useFilesView(): UseFilesViewReturn {
   async function restoreScrollTop() {
     await nextTick();
     requestAnimationFrame(() => {
-      if (mainContentRef.value && mainContentRef.value.$el && lastScrollTop.value > 0) {
+      if (mainContentRef.value?.$el && lastScrollTop.value > 0) {
         const scrollEl = mainContentRef.value.$el;
         if (scrollEl && scrollEl.scrollTop !== undefined) {
           scrollEl.scrollTop = lastScrollTop.value;
@@ -596,7 +596,7 @@ export function useFilesView(): UseFilesViewReturn {
   }
 
   function openContainingFolder(file: FileItem) {
-    if (!file || !file.path) {
+    if (!file?.path) {
       // 搜索结果可能没有完整 path，防御性处理
       searchQuery.value = "";
       searchResults.value = null;
@@ -823,7 +823,7 @@ export function useFilesView(): UseFilesViewReturn {
     if (!query) return;
     if (selectedPlugin.value) return;
 
-    if (mainContentRef.value && mainContentRef.value.$el) {
+    if (mainContentRef.value?.$el) {
       const scrollEl = mainContentRef.value.$el;
       if (scrollEl && scrollEl.scrollTop !== undefined) {
         lastScrollTop.value = scrollEl.scrollTop;
@@ -1267,7 +1267,7 @@ export function useFilesView(): UseFilesViewReturn {
         } else {
           showToast({ message: "仅支持本地文件分享", duration: 2500, color: "warning" });
         }
-      } catch (e) {
+      } catch (_e) {
         showToast({ message: "分享失败或已取消" });
       }
     } else {
@@ -1325,7 +1325,7 @@ export function useFilesView(): UseFilesViewReturn {
       await addTag(selectedFile.value.path, tag);
       editingFileTags.value.push(tag);
       newTagInput.value = "";
-    } catch (e) {
+    } catch (_e) {
       showToast({ message: "添加标签失败" });
     }
   }
@@ -1335,7 +1335,7 @@ export function useFilesView(): UseFilesViewReturn {
     try {
       await removeTag(selectedFile.value.path, tag);
       editingFileTags.value = editingFileTags.value.filter(t => t !== tag);
-    } catch (e) {
+    } catch (_e) {
       showToast({ message: "移除标签失败" });
     }
   }

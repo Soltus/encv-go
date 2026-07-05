@@ -51,8 +51,8 @@ import {
 // 重新导出所有 helpers 以保持向后兼容（`import { ... } from '@encv/shared-components/composables/useAgent'`）
 export * from "./useAgent_helpers";
 
-import { computed, ref } from "vue";
 import { showToast } from "@encv/shared-components/composables/useToast";
+import { computed, ref } from "vue";
 import { processAGUISSE as processAGUISSEImpl } from "./useAGUIParser";
 import { getAgentApiBaseContext, shouldSendAGUIHeader } from "./useAgentApiBase";
 import { type Attachment, type MessageContentPart, serializeAttachments } from "./useAttachments";
@@ -594,7 +594,7 @@ export function useAgent() {
       let latest: { id: string; ts: number } | null = null;
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (!key || !key.startsWith(STORAGE_PREFIX)) continue;
+        if (!key?.startsWith(STORAGE_PREFIX)) continue;
         const raw = localStorage.getItem(key);
         if (!raw) continue;
         try {
@@ -626,7 +626,7 @@ export function useAgent() {
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (!key || !key.startsWith(STORAGE_PREFIX)) continue;
+        if (!key?.startsWith(STORAGE_PREFIX)) continue;
         const raw = localStorage.getItem(key);
         if (!raw) continue;
         try {

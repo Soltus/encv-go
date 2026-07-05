@@ -1,5 +1,5 @@
-import { registerPlugin } from "@capacitor/core";
 import type { PluginListenerHandle } from "@capacitor/core";
+import { registerPlugin } from "@capacitor/core";
 
 /**
  * ⚠️ 架构守卫：GoProcess plugin 对象不直接导出
@@ -370,10 +370,8 @@ export interface KotlinLogEvent {
   stack?: string;
 }
 
-export function addKotlinLogListener(
-  callback: (data: KotlinLogEvent) => void
-): Promise<PluginListenerHandle> {
-  return (GoProcess as any).addListener('kotlin:log', callback);
+export function addKotlinLogListener(callback: (data: KotlinLogEvent) => void): Promise<PluginListenerHandle> {
+  return (GoProcess as any).addListener("kotlin:log", callback);
 }
 
 // 🆕 2026-06-17：读取 android-deps.json manifest

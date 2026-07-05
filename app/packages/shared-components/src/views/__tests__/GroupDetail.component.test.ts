@@ -184,8 +184,8 @@ vi.mock("vue-router", () => ({
 
 // ============ 测试 fixture ============
 
-import { createPinia, setActivePinia } from "pinia";
 import type { EncvTask, RunSummary } from "@encv/shared-components/api/encv";
+import { createPinia, setActivePinia } from "pinia";
 
 async function freshModules() {
   vi.resetModules();

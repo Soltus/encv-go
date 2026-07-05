@@ -57,32 +57,12 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonAlert,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonPage,
-  IonProgressBar,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
-import { arrowUndoOutline } from "ionicons/icons";
+import { modalController } from "@ionic/vue";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { type EncvTask, rollbackTask } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
-import TaskActionButtons from "./TaskActionButtons.vue";
-import TaskBasicInfo from "./TaskBasicInfo.vue";
-import TaskErrorSection from "./TaskErrorSection.vue";
-import TaskOutputInfo from "./TaskOutputInfo.vue";
-import TaskPerformanceSection from "./TaskPerformanceSection.vue";
-import TaskTimeline from "./TaskTimeline.vue";
-import TaskWarningSection from "./TaskWarningSection.vue";
 
 const props = defineProps<{ task: EncvTask }>();
 const emit = defineEmits<(e: "rollback", taskId: string) => void>();
@@ -91,7 +71,7 @@ const router = useRouter();
 
 const showRollbackConfirm = ref(false);
 
-const canRollback = computed(() => {
+const _canRollback = computed(() => {
   const task = props.task;
   if (!task) return false;
   // 必须是 completed 状态
@@ -107,7 +87,7 @@ const canRollback = computed(() => {
   return true;
 });
 
-async function doRollback() {
+async function _doRollback() {
   if (!props.task) return;
   try {
     const result = await rollbackTask(props.task.id);
@@ -121,11 +101,11 @@ async function doRollback() {
   }
 }
 
-function dismiss(action: "cancel" | "retry" | "remove") {
+function _dismiss(action: "cancel" | "retry" | "remove") {
   return modalController.dismiss({ action, id: props.task.id });
 }
 
-function openOutput(outputPath: string) {
+function _openOutput(outputPath: string) {
   const name = outputPath.split("/").pop() || outputPath;
   router.push({ path: "/player", query: { path: outputPath, name } });
   modalController.dismiss({ action: "opened", id: props.task.id, outputPath });
@@ -135,7 +115,7 @@ function openOutput(outputPath: string) {
 //   - 后端 task.outputPath 已统一为虚拟路径 /d/<mount>/<sub>（task_manager.absToVirtualPath）
 //   - 前端直接拆 dir + name 塞 route.query，Files.vue onIonViewWillEnter 消费
 //   - 旧版逻辑（物理绝对路径 → 前端无法解析）已废弃
-function locateOutput(outputPath: string) {
+function _locateOutput(outputPath: string) {
   const trimmed = outputPath.replace(/\/+$/, "");
   const lastSlash = trimmed.lastIndexOf("/");
   const name = lastSlash >= 0 ? trimmed.substring(lastSlash + 1) : trimmed;

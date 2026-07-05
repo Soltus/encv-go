@@ -12,8 +12,6 @@
  * - 不需要 useTaskFilter / useTaskFiltering 等独立 composable
  */
 
-import { defineStore } from "pinia";
-import { computed, ref, shallowRef, triggerRef, watch } from "vue";
 import type { EncvTask, SearchMode, TaskStatus, TaskType } from "@encv/shared-components/api/encv";
 import { searchTasksVector } from "@encv/shared-components/api/encv";
 import {
@@ -24,6 +22,8 @@ import {
   deleteTask as persistDelete,
   putTask as persistPut,
 } from "@encv/shared-components/lib/taskPersistence";
+import { defineStore } from "pinia";
+import { computed, ref, shallowRef, triggerRef, watch } from "vue";
 
 export type ViewMode = "group" | "flat";
 export type DatePreset = "today" | "7d" | "30d" | "all" | "custom";
@@ -154,7 +154,7 @@ export const useTaskStore = defineStore("task", () => {
       rebuildIndex();
       hydrated.value = true;
       void ensureLRUCache();
-    } catch (err) {
+    } catch (_err) {
       hydrated.value = true;
     }
   }
@@ -367,7 +367,7 @@ export const useTaskStore = defineStore("task", () => {
    *   - update/progress/completed 天然只 patch 已加载的 task（patchTaskById 不在 store 则 return false）
    */
   function applyEvent(type: "created" | "update" | "progress" | "completed", data: any): void {
-    if (!data || !data.id) return;
+    if (!data?.id) return;
     const id = data.id;
     if (type === "created") {
       // 🆕 视图分页保护：store 已满 + task 不在 store → 跳过（等 loadMore/refresh 从后端获取）

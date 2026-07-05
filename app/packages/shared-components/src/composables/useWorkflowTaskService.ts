@@ -22,7 +22,7 @@
  * - startListening / stopListening → useTaskEventBridge
  * - cancelCurrentRun → cancelRun
  */
-import { type ComputedRef, computed, type Ref, ref } from "vue";
+
 import { type BatchTaskSpec, batchCreateTasks, cancelRun as cancelRunApi, type EncvTask } from "@encv/shared-components/api/encv";
 import { analyzeError } from "@encv/shared-components/composables/useErrorAnalyzer";
 import { useTaskEventBridge } from "@encv/shared-components/composables/useTaskEventBridge";
@@ -47,6 +47,7 @@ import {
   type WorkflowRun,
 } from "@encv/shared-components/lib/workflow/types";
 import { useTaskStore } from "@encv/shared-components/stores/taskStore";
+import { type ComputedRef, computed, type Ref, ref } from "vue";
 
 // ==================== 接口定义 ====================
 
@@ -484,7 +485,7 @@ function createService(options: WorkflowTaskServiceOptions): WorkflowTaskService
 
         if (persist) persistCurrentRun();
         notifySubscribers();
-      } catch (e) {
+      } catch (_e) {
         run.status = "failure";
         run.completedAt = new Date().toISOString();
         if (persist) persistCurrentRun();
@@ -676,7 +677,7 @@ function createService(options: WorkflowTaskServiceOptions): WorkflowTaskService
 
   /** 当一个 Job 完成后，检查并启动依赖它的下游 Jobs */
   function scheduleDependentJobs(_completedJobDefId: string): void {
-    if (!currentRun.value || currentRun.value.status !== "running") return;
+    if (currentRun.value?.status !== "running") return;
     if (!currentDef.value) return;
 
     const completedJobIds = new Set(currentRun.value.jobs.filter(j => isTerminalStep(j.status)).map(j => j.jobDefId));

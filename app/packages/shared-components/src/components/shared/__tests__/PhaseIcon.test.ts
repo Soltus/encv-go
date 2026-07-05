@@ -9,6 +9,8 @@
  * - size props 控制图标尺寸
  */
 
+import PhaseIcon from "@encv/shared-components/components/shared/PhaseIcon.vue";
+import { ALL_PHASES, Phase } from "@encv/shared-components/lib/workflow/types";
 import { mount } from "@vue/test-utils";
 import {
   banOutline,
@@ -25,8 +27,6 @@ import {
   shieldCheckmarkOutline,
 } from "ionicons/icons";
 import { describe, expect, it } from "vitest";
-import PhaseIcon from "@encv/shared-components/components/shared/PhaseIcon.vue";
-import { ALL_PHASES, Phase } from "@encv/shared-components/lib/workflow/types";
 
 // ion-icon stub：捕获 icon prop 供断言
 const IonIconStub = {

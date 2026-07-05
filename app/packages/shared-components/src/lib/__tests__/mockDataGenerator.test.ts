@@ -9,8 +9,15 @@
  * 5. listAllRelativePaths 返回所有路径
  * 6. 端到端：mockRoot + relativePath = 完整路径
  */
+
+import {
+  collectSpecs,
+  createMP4,
+  generateMockFiles,
+  listAllRelativePaths,
+  type MockFileSpec,
+} from "@encv/shared-components/lib/mockDataGenerator";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { collectSpecs, createMP4, generateMockFiles, listAllRelativePaths, type MockFileSpec } from "@encv/shared-components/lib/mockDataGenerator";
 
 // mock crypto.getRandomValues 以避免 1MB large-1mb.dat 在 jsdom 中超出配额
 beforeEach(() => {

@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import { IonItem, type IonList } from "@ionic/vue";
+import type { IonList } from "@ionic/vue";
 import { nextTick, ref, watch } from "vue";
 import type { OpenListLog } from "./index";
 
@@ -37,7 +37,7 @@ watch(
   }
 );
 
-function formatTime(ts: number): string {
+function _formatTime(ts: number): string {
   const d = new Date(ts);
   return `${d.getHours().toString().padStart(2, "0")}:${d.getMinutes().toString().padStart(2, "0")}:${d.getSeconds().toString().padStart(2, "0")}`;
 }

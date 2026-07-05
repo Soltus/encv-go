@@ -33,8 +33,8 @@
  *   - native-bridge 模式：APK 真机（暂未实现）
  */
 
-import { type Ref, ref } from "vue";
 import { getApiBaseUrl, isOpenPreviewBrowser } from "@encv/shared-components/api/encv";
+import { type Ref, ref } from "vue";
 import type { Backend, ConnectionState } from "./realtime/Backend";
 import { createHttpPollBackend } from "./realtime/HttpPollBackend";
 import { createNativeBridgeBackend } from "./realtime/NativeBridgeBackend";

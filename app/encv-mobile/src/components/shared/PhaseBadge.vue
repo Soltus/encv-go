@@ -8,7 +8,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { Phase } from "@/lib/workflow/types";
-import PhaseIcon, { type PhaseIconValue } from "./PhaseIcon.vue";
+import type { PhaseIconValue } from "./PhaseIcon.vue";
 
 const props = defineProps<{
   phase: PhaseIconValue;
@@ -31,7 +31,7 @@ const PHASE_LABEL_MAP: Record<string, string> = {
   cancelled: "已取消",
 };
 
-const label = computed(() => props.label ?? PHASE_LABEL_MAP[props.phase] ?? props.phase);
+const _label = computed(() => props.label ?? PHASE_LABEL_MAP[props.phase] ?? props.phase);
 </script>
 
 <style scoped>

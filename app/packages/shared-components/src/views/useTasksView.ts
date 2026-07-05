@@ -2,16 +2,16 @@
 // 拆分自 Tasks.vue。所有 reactive state / handler / lifecycle 集中在此。
 // Tasks.vue 只剩 template + 调 useTasksView() 拿到返回值后解构使用。
 
-import { actionSheetController, alertController, modalController, onIonViewWillEnter } from "@ionic/vue";
-import { cogOutline, hardwareChipOutline, person } from "ionicons/icons";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
 import type { EncvTask } from "@encv/shared-components/api/encv";
 import { clearCompletedTasks } from "@encv/shared-components/api/encv";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useNewTaskModal } from "@encv/shared-components/composables/useNewTaskModal";
 import { useTasksList } from "@encv/shared-components/composables/useTasksList";
 import { showToast } from "@encv/shared-components/composables/useToast";
+import { actionSheetController, alertController, modalController, onIonViewWillEnter } from "@ionic/vue";
+import { cogOutline, hardwareChipOutline, person } from "ionicons/icons";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 /**
  * useTasksView - Tasks.vue 的核心 composable
@@ -54,7 +54,7 @@ export function useTasksView() {
   function ensureScrollEl(): HTMLElement | null {
     if (!contentRef.value) return null;
     const hostEl = (contentRef.value.$el || contentRef.value) as HTMLElement | undefined;
-    if (!hostEl || !hostEl.shadowRoot) return null;
+    if (!hostEl?.shadowRoot) return null;
     const el = hostEl.shadowRoot.querySelector(".inner-scroll") as HTMLElement | null;
     if (el && el !== scrollEl.value) scrollEl.value = el;
     return scrollEl.value;

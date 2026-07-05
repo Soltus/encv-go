@@ -47,8 +47,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon, IonPopover } from "@ionic/vue";
-import { copyOutline, documentTextOutline, folderOpenOutline, gitBranchOutline } from "ionicons/icons";
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { copyToClipboard } from "@/composables/useClipboard";
@@ -66,10 +64,10 @@ const router = useRouter();
 
 const popoverOpen = ref(false);
 const popoverEvent = ref<Event | undefined>(undefined);
-const wrapRef = ref<HTMLElement | null>(null);
+const _wrapRef = ref<HTMLElement | null>(null);
 
 // 显示文本：取最后一段（basename）；若与 path 相同则直接显示
-const displayLabel = computed(() => {
+const _displayLabel = computed(() => {
   const segs = props.path.split(/[\\/]/).filter(Boolean);
   return segs[segs.length - 1] || props.path;
 });
@@ -86,12 +84,12 @@ const relativePath = computed(() => {
   return props.path.replace(/^\.{1,2}[\\/]/, "");
 });
 
-function togglePopover(event: MouseEvent) {
+function _togglePopover(event: MouseEvent) {
   popoverEvent.value = event;
   popoverOpen.value = !popoverOpen.value;
 }
 
-async function onCopyPath() {
+async function _onCopyPath() {
   const ok = await copyToClipboard(fullPath.value);
   showToast({
     message: ok ? t("agent.copied") : t("agent.copyFailed"),
@@ -101,7 +99,7 @@ async function onCopyPath() {
   popoverOpen.value = false;
 }
 
-async function onCopyRelativePath() {
+async function _onCopyRelativePath() {
   const text =
     props.line !== undefined ? `${relativePath.value}:${props.line}${props.col !== undefined ? `:${props.col}` : ""}` : relativePath.value;
   const ok = await copyToClipboard(text);
@@ -113,7 +111,7 @@ async function onCopyRelativePath() {
   popoverOpen.value = false;
 }
 
-function onOpenInFiles() {
+function _onOpenInFiles() {
   popoverOpen.value = false;
   // 跳转到 Files tab，path 作为 query param
   router.push({

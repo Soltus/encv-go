@@ -16,11 +16,11 @@
  * - 自定义 icon / meta slot
  */
 
-import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
 import PhaseIcon from "@encv/shared-components/components/shared/PhaseIcon.vue";
 import UnifiedTimelineCard from "@encv/shared-components/components/shared/UnifiedTimelineCard.vue";
 import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@encv/shared-components/lib/workflow/types";
+import { mount } from "@vue/test-utils";
+import { describe, expect, it } from "vitest";
 
 // ion-icon stub：避免 @ionic/vue 全局注册依赖
 const IonIconStub = {

@@ -68,38 +68,36 @@
 </template>
 
 <script setup lang="ts">
-import { IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar, onIonViewWillEnter } from "@ionic/vue";
-import { folder, globe, layersOutline, lockClosed, playCircle, planet } from "ionicons/icons";
-import { useRouter } from "vue-router";
-import AgentEntry from "@encv/shared-components/components/agent/AgentEntry.vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { openWorld } from "@encv/shared-components/plugins/SimVerse";
 import { isNative } from "@encv/shared-components/plugins/GoProcess";
+import { openWorld } from "@encv/shared-components/plugins/SimVerse";
+import { onIonViewWillEnter } from "@ionic/vue";
+import { useRouter } from "vue-router";
 
 const { t } = useI18n();
 const router = useRouter();
 
-function handleOpenPlayer() {
+function _handleOpenPlayer() {
   router.push("/player");
 }
 
-function handleOpenFiles() {
+function _handleOpenFiles() {
   router.push("/tabs/files");
 }
 
-function handleOpenTasks() {
+function _handleOpenTasks() {
   router.push("/tabs/tasks");
 }
 
-function handleOpenRemote() {
+function _handleOpenRemote() {
   router.push("/tabs/remote");
 }
 
-function handleOpenExtensions() {
+function _handleOpenExtensions() {
   router.push("/tabs/extensions");
 }
 
-function handleOpenSimverse() {
+function _handleOpenSimverse() {
   if (isNative()) {
     openWorld("default", "SimVerse");
   } else {

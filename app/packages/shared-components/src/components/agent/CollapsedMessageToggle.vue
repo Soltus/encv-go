@@ -23,7 +23,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
 import { chevronDownOutline, chevronUpOutline } from "ionicons/icons";
 import type { Component } from "vue";
 
@@ -36,8 +35,8 @@ defineProps<{
   onToggle: () => void;
 }>();
 
-const chevronUp = chevronUpOutline;
-const chevronDown = chevronDownOutline;
+const _chevronUp = chevronUpOutline;
+const _chevronDown = chevronDownOutline;
 </script>
 
 <style scoped>

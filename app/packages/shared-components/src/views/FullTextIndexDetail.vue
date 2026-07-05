@@ -248,33 +248,13 @@
 //   识别为 Ionic Vue 组件，渲染成原生 <ION-PAGE> 自闭合元素，缺失 .ion-page class
 //   和 z-index 样式，导致页面被前一个 CacheDetail（z-index:101）覆盖。
 //   对比 ServerDetail.vue / DatabaseDetail.vue / CacheDetail.vue 都显式 import。
-import {
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
-  IonPage,
-  IonProgressBar,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { bugOutline, refreshOutline, warningOutline } from "ionicons/icons";
-import { computed, onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
+
 import { getApiBaseUrl } from "@encv/shared-components/api/encv_core";
 import { type FullTextIndexStats, getFullTextIndexStats, rebuildFullTextIndex } from "@encv/shared-components/api/encv_search";
-import { formatDateTime } from "@encv/shared-components/composables/useDateFormat";
 import { errorStore } from "@encv/shared-components/composables/useErrorCapture";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useTaskEventBridge } from "@encv/shared-components/composables/useTaskEventBridge";
+import { computed, onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
 
 const { t } = useI18n();
 
@@ -296,7 +276,7 @@ interface RebuildTaskState {
 const rebuildTask = ref<RebuildTaskState | null>(null);
 const rebuildSubmitting = ref(false);
 
-const rebuildStatusLabel = computed(() => {
+const _rebuildStatusLabel = computed(() => {
   if (!rebuildTask.value) return "";
   const s = rebuildTask.value.status;
   if (s === "queued") return t("settings.rebuildQueued") || "重建任务排队中";
@@ -368,7 +348,7 @@ useTaskEventBridge({
   },
 });
 
-function reloadPage() {
+function _reloadPage() {
   if (typeof window !== "undefined") {
     window.location.reload();
   }
@@ -405,7 +385,7 @@ async function loadStats() {
 }
 
 // 🆕 2026-07-03：触发 FTS 索引重建
-async function triggerRebuild() {
+async function _triggerRebuild() {
   if (rebuildSubmitting.value) return;
   rebuildSubmitting.value = true;
   try {
@@ -439,7 +419,7 @@ async function triggerRebuild() {
 }
 
 // 🆕 2026-07-03：取消重建任务
-async function cancelRebuild() {
+async function _cancelRebuild() {
   if (!rebuildTask.value) return;
   try {
     const baseUrl = getApiBaseUrl();
@@ -449,21 +429,21 @@ async function cancelRebuild() {
       ...rebuildTask.value,
       status: "cancelling",
     };
-  } catch (e) {
+  } catch (_e) {
     // 取消失败不阻断，用户可重试
   }
 }
 
 // 🆕 2026-07-03：关闭重建卡片（终态后）
-function dismissRebuildCard() {
+function _dismissRebuildCard() {
   rebuildTask.value = null;
 }
 
-function formatNumber(n: number): string {
+function _formatNumber(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-function formatBytes(b: number): string {
+function _formatBytes(b: number): string {
   if (b < 1024) return `${b} B`;
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
   if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;

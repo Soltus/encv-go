@@ -23,29 +23,27 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onErrorCaptured } from 'vue'
-import { IonApp, IonRouterOutlet, IonIcon, IonButton } from '@ionic/vue'
-import { bugOutline, refreshOutline } from 'ionicons/icons'
+import { onErrorCaptured, ref } from "vue";
 
 // ============ Vue 错误边界 ============
-const rootError = ref(false)
-const rootErrorMessage = ref('')
-const rootErrorStack = ref('')
+const rootError = ref(false);
+const rootErrorMessage = ref("");
+const rootErrorStack = ref("");
 
 onErrorCaptured((err: any, _instance, info) => {
   // 防止无限递归：如果已经是 error 状态，不再捕获
-  if (rootError.value) return false
-  console.error('[plugin-openlist/web] Vue error captured:', err, '| info:', info)
-  rootError.value = true
-  rootErrorMessage.value = err?.message || String(err) || 'Unknown render error'
-  rootErrorStack.value = err?.stack || ''
+  if (rootError.value) return false;
+  console.error("[plugin-openlist/web] Vue error captured:", err, "| info:", info);
+  rootError.value = true;
+  rootErrorMessage.value = err?.message || String(err) || "Unknown render error";
+  rootErrorStack.value = err?.stack || "";
   // 不阻止冒泡：让 Vue 仍然 console.error，方便 DevTools 调试
-  return false
-})
+  return false;
+});
 
-function reloadPage() {
-  if (typeof window !== 'undefined') {
-    window.location.reload()
+function _reloadPage() {
+  if (typeof window !== "undefined") {
+    window.location.reload();
   }
 }
 // ======================================

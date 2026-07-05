@@ -147,24 +147,8 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
-import {
-  alertCircle,
-  arrowBack,
-  chevronDown,
-  chevronForward,
-  documentTextOutline,
-  helpCircleOutline,
-  informationCircle,
-  lockClosed,
-  returnDownBackOutline,
-  returnDownForwardOutline,
-} from "ionicons/icons";
-import { computed, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
 import {
   fetchTextPreviewExts,
-  formatFileSize,
   getApiBaseUrl,
   getFileCategory,
   getFileExtension,
@@ -173,8 +157,9 @@ import {
   proxySafeEncode,
 } from "@encv/shared-components/api/encv";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { formatContainerVersion } from "@encv/shared-components/constants/containerVersion";
 import { isNative, openPlayer } from "@encv/shared-components/plugins/GoProcess";
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 type PreviewType = "image" | "pdf" | "text" | "container" | "unsupported";
 
@@ -212,16 +197,16 @@ const textContent = ref("");
 const textLoading = ref(false);
 const textError = ref("");
 const textErrorDetail = ref<string>("");
-const showTextErrorDetail = ref(false);
+const _showTextErrorDetail = ref(false);
 const textWrap = ref(true);
 
-const isEncryptedPreview = computed(() => route.query.isEncrypted === "true");
+const _isEncryptedPreview = computed(() => route.query.isEncrypted === "true");
 
-function toggleWrap() {
+function _toggleWrap() {
   textWrap.value = !textWrap.value;
 }
 
-function formatDuration(seconds: number): string {
+function _formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;

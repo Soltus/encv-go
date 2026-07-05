@@ -13,8 +13,9 @@
  * 行为一致性：5 个 SSE 回调（onSpecDiag / onSpecPlan / onProgress / onSpecFailed / onSkipped）
  * 完整迁移自 PluginTestsDetail.vue 608-707 行，保持状态转移 / 自动展开 / _marked 标记等逻辑不变。
  */
-import { computed, ref } from "vue";
+
 import type { MockProgress, MockSpecDiag, MockSpecFailed } from "@encv/shared-components/api/mockGenerator";
+import { computed, ref } from "vue";
 
 /**
  * 单条 FFMPEG 流程日志条目

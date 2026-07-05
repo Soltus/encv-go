@@ -113,12 +113,8 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { chevronDown, chevronForward, closeCircleOutline, flashOutline } from "ionicons/icons";
-import { computed, ref, watch } from "vue";
-import PhaseIcon from "@encv/shared-components/components/shared/PhaseIcon.vue";
 import { isPhase, type StepStatus, type UnifiedTreeNode, type WorkflowRun } from "@encv/shared-components/lib/workflow/types";
-import StepMiniBadge from "./StepMiniBadge.vue";
+import { computed, ref, watch } from "vue";
 
 /**
  * 通用树形视图组件（UnifiedTreeView）
@@ -244,7 +240,7 @@ watch(
 
 // ==================== 搜索过滤 ====================
 
-const filteredNodes = computed(() => {
+const _filteredNodes = computed(() => {
   if (!searchQuery.value) return resolvedNodes.value;
   const q = searchQuery.value.toLowerCase();
   return resolvedNodes.value.filter(node => {
@@ -259,7 +255,7 @@ const filteredNodes = computed(() => {
 // ==================== 交互 ====================
 
 /** 切换父节点展开状态 */
-function toggleNode(node: UnifiedTreeNode) {
+function _toggleNode(node: UnifiedTreeNode) {
   const next = new Set(expandedSet.value);
   const wasExpanded = next.has(node.id);
   if (wasExpanded) next.delete(node.id);
@@ -269,7 +265,7 @@ function toggleNode(node: UnifiedTreeNode) {
 }
 
 /** 子节点点击：emit select-node + 切换详情展开 */
-function selectNode(node: UnifiedTreeNode) {
+function _selectNode(node: UnifiedTreeNode) {
   const next = new Set(expandedDetailSet.value);
   if (next.has(node.id)) next.delete(node.id);
   else next.add(node.id);

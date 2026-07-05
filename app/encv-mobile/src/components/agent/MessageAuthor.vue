@@ -17,7 +17,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
 import type { Component } from "vue";
 import { computed } from "vue";
 
@@ -29,7 +28,7 @@ const props = defineProps<{
   variant?: "default" | "streaming" | "error" | "tool";
 }>();
 
-const variant = computed(() => props.variant || "default");
+const _variant = computed(() => props.variant || "default");
 </script>
 
 <style scoped>

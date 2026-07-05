@@ -16,8 +16,9 @@
  * - TouchEvent 在 jsdom 中未完整实现 → 自定义 class 模拟 touches/length/cancelable
  * - 使用 __onTouchStart / __onTouchMove 内部 hook 注入 TouchEvent（避免依赖 addEventListener 触发）
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import { mockTouchList, usePinchZoom } from "@encv/shared-components/composables/usePinchZoom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * 构造 mock TouchEvent

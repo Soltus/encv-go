@@ -40,7 +40,7 @@ const warningLevel = computed<"ok" | "green" | "yellow" | "red" | "force">(() =>
   return "ok";
 });
 
-const levelColor = computed(() => {
+const _levelColor = computed(() => {
   switch (warningLevel.value) {
     case "ok":
       return "#4caf50";
@@ -55,15 +55,15 @@ const levelColor = computed(() => {
   }
 });
 
-const formatTokens = (n: number): string => {
+const _formatTokens = (n: number): string => {
   if (n < 1000) return `${n}`;
   if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
   return `${(n / 1_000_000).toFixed(2)}M`;
 };
 
-const formatPercent = (n: number): string => `${(n * 100).toFixed(1)}%`;
-const formatSpeed = (n: number): string => `${n.toFixed(1)} t/s`;
-const formatLatency = (ms: number): string => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`);
+const _formatPercent = (n: number): string => `${(n * 100).toFixed(1)}%`;
+const _formatSpeed = (n: number): string => `${n.toFixed(1)} t/s`;
+const _formatLatency = (ms: number): string => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(2)}s`);
 </script>
 
 <template>

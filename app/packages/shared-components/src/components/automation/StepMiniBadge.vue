@@ -6,8 +6,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
 import type { StepStatus } from "@encv/shared-components/lib/workflow/types";
+import { computed } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -20,7 +20,7 @@ const props = withDefaults(
   }
 );
 
-const icon = computed(() => {
+const _icon = computed(() => {
   switch (props.status) {
     case "success":
       return "✓";

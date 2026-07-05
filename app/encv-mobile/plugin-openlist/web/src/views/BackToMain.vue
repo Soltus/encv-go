@@ -70,61 +70,49 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonBackButton,
-  IonButton,
-  IonIcon,
-  IonContent,
-} from '@ionic/vue'
-import { refreshOutline } from 'ionicons/icons'
+import { onMounted, onUnmounted, ref } from "vue";
 
 // 目标 encv-mobile vite dev server 直连地址。
 // 用 127.0.0.1 而非 localhost：避免某些环境 DNS 解析 localhost 到 ::1 失败。
 // 用 5173 是 start-preview.sh 起的端口（被占时回退 5174，但 5174 是 plugin-openlist 自身占着）
 // 走 preview-gateway 统一收口 :16666（沙箱 dev 唯一对外端口）
 //   /tabs/remote  → 主 app Remote tab（不再硬编码 :5173，因为主 app vite 已迁到 :8100）
-const ENCV_MAIN_URL = 'http://localhost:16666/tabs/remote'
+const ENCV_MAIN_URL = "http://localhost:16666/tabs/remote";
 
-const iframeRef = ref<HTMLIFrameElement | null>(null)
-const iframeSrc = ref(ENCV_MAIN_URL)
-const loadError = ref('')
-let probeTimer: ReturnType<typeof setInterval> | null = null
+const _iframeRef = ref<HTMLIFrameElement | null>(null);
+const iframeSrc = ref(ENCV_MAIN_URL);
+const loadError = ref("");
+let probeTimer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(() => {
   // 健康探测：每秒检查 iframe 是否能成功加载（避免空白卡死没反馈）
-  probeTimer = setInterval(probeHealth, 2000)
-})
+  probeTimer = setInterval(probeHealth, 2000);
+});
 
 onUnmounted(() => {
   if (probeTimer) {
-    clearInterval(probeTimer)
-    probeTimer = null
+    clearInterval(probeTimer);
+    probeTimer = null;
   }
-})
+});
 
-function reload() {
-  loadError.value = ''
+function _reload() {
+  loadError.value = "";
   // 给 iframe 加 cache buster 参数强制重载
-  const sep = ENCV_MAIN_URL.includes('?') ? '&' : '?'
-  iframeSrc.value = `${ENCV_MAIN_URL}${sep}_t=${Date.now()}`
+  const sep = ENCV_MAIN_URL.includes("?") ? "&" : "?";
+  iframeSrc.value = `${ENCV_MAIN_URL}${sep}_t=${Date.now()}`;
 }
 
-function onIframeError() {
+function _onIframeError() {
   // iframe @error 不一定靠谱（sandboxed 跨源时静默），但保险起见监听
-  loadError.value = 'iframe 触发 error 事件（可能是 :5173 离线或 sandbox 拒访问）'
+  loadError.value = "iframe 触发 error 事件（可能是 :5173 离线或 sandbox 拒访问）";
 }
 
-function onIframeLoad() {
+function _onIframeLoad() {
   // iframe @load 触发：能加载就清掉错误（即使加载的是错误页也算 load）
   // 进一步状态由 probeHealth 检查
   if (loadError.value) {
-    loadError.value = ''
+    loadError.value = "";
   }
 }
 
@@ -134,19 +122,19 @@ function onIframeLoad() {
  */
 async function probeHealth() {
   try {
-    const res = await fetch('http://localhost:16666/', {
-      method: 'HEAD',
-      cache: 'no-store',
+    const res = await fetch("http://localhost:16666/", {
+      method: "HEAD",
+      cache: "no-store",
       signal: AbortSignal.timeout(1500),
-    })
+    });
     if (!res.ok) {
-      loadError.value = `HTTP ${res.status}（:5173 异常）`
+      loadError.value = `HTTP ${res.status}（:5173 异常）`;
     } else if (loadError.value) {
       // 恢复了
-      loadError.value = ''
+      loadError.value = "";
     }
   } catch (e: any) {
-    loadError.value = `:5173 不可达：${e?.message || e}`
+    loadError.value = `:5173 不可达：${e?.message || e}`;
   }
 }
 </script>

@@ -12,7 +12,7 @@
  * 6. agent_task 之前的 operationGroup 在到达时被正确 flush
  *    （agent task 不应与 operationGroup 合并）
  */
-import { describe, expect, it } from "vitest";
+
 import {
   AGENT_TASK_COLLAPSE_CHAR_COUNT,
   AGENT_TASK_COLLAPSE_LINE_COUNT,
@@ -21,6 +21,7 @@ import {
   renderTurnItems,
 } from "@encv/shared-components/composables/renderTurnItems";
 import type { Message } from "@encv/shared-components/composables/useAgent";
+import { describe, expect, it } from "vitest";
 
 function msg(partial: Partial<Message>): Message {
   return {

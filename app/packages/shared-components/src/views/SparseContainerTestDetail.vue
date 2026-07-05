@@ -197,26 +197,6 @@
 
 <script setup lang="ts">
 import {
-  alertController,
-  IonBackButton,
-  IonBadge,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonInput,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { createOutline, informationCircleOutline, searchOutline, trashOutline, warningOutline } from "ionicons/icons";
-import { computed, onMounted, ref } from "vue";
-import {
   cleanupSparseContainer,
   probeSparseContainer,
   type SparseContainerProbeResponse,
@@ -226,6 +206,8 @@ import {
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
 import { isNative } from "@encv/shared-components/plugins/GoProcess";
+import { alertController } from "@ionic/vue";
+import { computed, onMounted, ref } from "vue";
 
 const { t } = useI18n();
 
@@ -256,13 +238,13 @@ const proposedBytes = computed(() => Number(cfg.value.fragmentCount || 0) * Numb
 
 const isHighRisk = computed(() => {
   // 浏览器 / Capacitor web fallback 都没有 quota 字段：> 1TB 视为高风险
-  if (!storageEstimate.value || !storageEstimate.value.quota) {
+  if (!storageEstimate.value?.quota) {
     return proposedBytes.value > 1024 ** 4;
   }
   return proposedBytes.value > storageEstimate.value.quota * 0.5;
 });
 
-const sparseRatioText = computed(() => {
+const _sparseRatioText = computed(() => {
   if (!lastResult.value) return "";
   const { virtualTotalBytes, physicalUsedBytes } = lastResult.value;
   if (physicalUsedBytes === 0) return `∞ (${formatBytes(virtualTotalBytes)} / 0 B)`;
@@ -319,7 +301,7 @@ async function confirmIfHighRisk(): Promise<boolean> {
   return role === "confirm";
 }
 
-async function handleWrite() {
+async function _handleWrite() {
   if (isWriting.value) return;
   if (!(await confirmIfHighRisk())) return;
   isWriting.value = true;
@@ -354,7 +336,7 @@ async function handleWrite() {
   }
 }
 
-async function handleProbe() {
+async function _handleProbe() {
   if (isProbing.value || !lastResult.value) return;
   isProbing.value = true;
   try {
@@ -380,7 +362,7 @@ async function handleProbe() {
   }
 }
 
-async function handleCleanup() {
+async function _handleCleanup() {
   if (isCleaning.value || !lastResult.value) return;
   const alert = await alertController.create({
     header: t("devtools.sparseContainer.cleanupConfirm"),

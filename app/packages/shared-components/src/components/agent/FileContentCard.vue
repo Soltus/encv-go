@@ -48,10 +48,9 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { documentTextOutline, hourglassOutline } from "ionicons/icons";
 import { computed, ref } from "vue";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 const props = defineProps<{
   /** 后端 tool_result.result 的 JSON 字符串 */
@@ -62,8 +61,8 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-const documentTextIcon = documentTextOutline;
-const hourglassIcon = hourglassOutline;
+const _documentTextIcon = documentTextOutline;
+const _hourglassIcon = hourglassOutline;
 const expanded = ref(false);
 
 const COLLAPSE_THRESHOLD = 4000;
@@ -106,32 +105,32 @@ const parsed = computed<{ data: ParsedFile | null; error: string; isErrorRespons
 });
 
 const content = computed(() => parsed.value.data?.content ?? "");
-const meta = computed(() => ({
+const _meta = computed(() => ({
   mimeType: parsed.value.data?.mimeType,
   size: parsed.value.data?.size,
 }));
-const rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
+const _rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
 
-const showToggle = computed(() => content.value.length > COLLAPSE_THRESHOLD);
-const truncatedContent = computed(() => {
+const _showToggle = computed(() => content.value.length > COLLAPSE_THRESHOLD);
+const _truncatedContent = computed(() => {
   if (content.value.length <= COLLAPSE_THRESHOLD) return content.value;
   return content.value.slice(0, COLLAPSE_THRESHOLD) + "\n…";
 });
 
-const titleText = computed(() => {
+const _titleText = computed(() => {
   if (props.status === "pending" || props.status === "running") return t("agent.toolCards.fileContentTitle") || "文件内容（查询中）";
   if (parsed.value.isErrorResponse) return parsed.value.error.includes("too_large") ? "文件过大" : "读取失败";
   if (parsed.value.error) return t("agent.toolCards.parseFailed") || "文件内容（数据异常）";
   return t("agent.toolCards.fileContentTitle") || "文件内容";
 });
 
-const errorBadgeLabel = computed(() => {
+const _errorBadgeLabel = computed(() => {
   const err = parsed.value.error;
   if (err?.includes("too_large")) return "过大";
   return "错误";
 });
 
-const dataSourceTag = computed(() => {
+const _dataSourceTag = computed(() => {
   if (!props.resultJson) return "";
   const s = props.resultJson;
   if (s.includes('"FAKE":true') || s.includes('"FAKE": true')) return "mock 数据";
@@ -139,21 +138,21 @@ const dataSourceTag = computed(() => {
   return "";
 });
 
-const contentLineCount = computed(() => {
+const _contentLineCount = computed(() => {
   return content.value ? content.value.split("\n").length : 0;
 });
 
-const looksBinary = computed(() => {
+const _looksBinary = computed(() => {
   if (content.value.length < 50) return false;
   const nonPrintable = (content.value.match(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g) || []).length;
   return nonPrintable > content.value.length * 0.05;
 });
 
-function toggle() {
+function _toggle() {
   expanded.value = !expanded.value;
 }
 
-function formatSize(bytes: number): string {
+function _formatSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes < 1024) return `${bytes} B`;
   const kb = bytes / 1024;

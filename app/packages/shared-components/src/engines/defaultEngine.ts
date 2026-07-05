@@ -8,10 +8,10 @@
  * 协议：AG-UI（与 TDesign 引擎共享同一份数据）
  */
 
-import { h, type VNode } from "vue";
 import DefaultMessagesView from "@encv/shared-components/components/agent/DefaultMessagesView.vue";
 import type { ChatEngine, EngineRenderProps } from "@encv/shared-components/composables/chatEngine";
 import { registerEngine } from "@encv/shared-components/composables/chatEngine";
+import { h, type VNode } from "vue";
 
 /**
  * 创建默认引擎实例

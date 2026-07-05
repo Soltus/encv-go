@@ -269,45 +269,6 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonAccordion,
-  IonAccordionGroup,
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  calendarOutline,
-  cloudUploadOutline,
-  codeSlashOutline,
-  codeWorkingOutline,
-  constructOutline,
-  cubeOutline,
-  documentOutline,
-  downloadOutline,
-  filmOutline,
-  filterOutline,
-  globeOutline,
-  linkOutline,
-  phonePortraitOutline,
-  refresh as refreshIcon,
-  searchOutline,
-  settingsOutline,
-  videocamOutline,
-  warningOutline,
-} from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { type BuildInfo, type FFmpegStatus, fetchBuildInfo, fetchFFmpegStatus } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
@@ -320,7 +281,7 @@ const buildInfoLoading = ref(true);
 const buildInfoError = ref(false);
 const buildInfoErrorMessage = ref(""); // ✅ 新增：保存详细错误信息
 
-function formatDate(dateStr: string): string {
+function _formatDate(dateStr: string): string {
   if (!dateStr) return "";
   try {
     const d = new Date(dateStr);
@@ -330,7 +291,7 @@ function formatDate(dateStr: string): string {
   }
 }
 
-async function handleRefresh() {
+async function _handleRefresh() {
   try {
     engineStatus.value = await fetchFFmpegStatus();
   } catch {}

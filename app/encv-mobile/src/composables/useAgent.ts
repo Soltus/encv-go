@@ -594,7 +594,7 @@ export function useAgent() {
       let latest: { id: string; ts: number } | null = null;
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (!key || !key.startsWith(STORAGE_PREFIX)) continue;
+        if (!key?.startsWith(STORAGE_PREFIX)) continue;
         const raw = localStorage.getItem(key);
         if (!raw) continue;
         try {
@@ -626,7 +626,7 @@ export function useAgent() {
     try {
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
-        if (!key || !key.startsWith(STORAGE_PREFIX)) continue;
+        if (!key?.startsWith(STORAGE_PREFIX)) continue;
         const raw = localStorage.getItem(key);
         if (!raw) continue;
         try {

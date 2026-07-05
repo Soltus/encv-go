@@ -59,7 +59,6 @@
 <script setup lang="ts">
 import { computed, reactive } from "vue";
 import type { EncvTask } from "@/api/encv";
-import UnifiedTimelineCard from "@/components/shared/UnifiedTimelineCard.vue";
 import { formatDateTime, formatDuration } from "@/composables/useDateFormat";
 import { useI18n } from "@/composables/useI18n";
 import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
@@ -68,7 +67,7 @@ const props = defineProps<{ task: EncvTask }>();
 const { t } = useI18n();
 
 // 展开状态映射：entry.id → 是否展开（受控模式）
-const expandedMap = reactive<Record<string, boolean>>({});
+const _expandedMap = reactive<Record<string, boolean>>({});
 
 // ==================== Phase 映射表 ====================
 
@@ -130,7 +129,7 @@ function calcDurationMs(startedAt?: string, completedAt?: string): number {
   if (!startedAt || !completedAt) return 0;
   const start = new Date(startedAt).getTime();
   const end = new Date(completedAt).getTime();
-  if (isNaN(start) || isNaN(end) || end < start) return 0;
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 0;
   return end - start;
 }
 
@@ -152,7 +151,7 @@ function getCryptoSummary(): string {
   return parts.join(" · ");
 }
 
-const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
+const _unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
   const entries: InternalTimelineEntry[] = [];
   const steps = props.task.steps ?? [];
   const isTerminal = ["completed", "failed", "cancelled"].includes(props.task.status);

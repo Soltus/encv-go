@@ -35,8 +35,8 @@
  *   - 一组失败用例必须能精确指出问题
  */
 
-import { describe, expect, it } from "vitest";
 import { operatorSymbols, renderSnippet, tokenizeQuery } from "@encv/shared-components/views/useFilesView.searchTokens";
+import { describe, expect, it } from "vitest";
 
 describe("operatorSymbols - 符号映射表", () => {
   it("TestOS_BasicMapping: AND/OR/NOT 必须映射到全角符号", () => {

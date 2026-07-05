@@ -1,29 +1,28 @@
-import { createRouter, createWebHashHistory } from '@ionic/vue-router'
-import type { RouteRecordRaw } from 'vue-router'
-
-import OpenListHome from '@/views/OpenListHome.vue'
-import OpenListConfigEditor from '@/views/OpenListConfigEditor.vue'
-import OpenListSettings from '@/views/OpenListSettings.vue'
-import OpenListWebView from '@/views/OpenListWebView.vue'
-import BackToMain from '@/views/BackToMain.vue'
-import NotFoundView from '@/views/NotFoundView.vue'
+import { createRouter, createWebHashHistory } from "@ionic/vue-router";
+import type { RouteRecordRaw } from "vue-router";
+import BackToMain from "@/views/BackToMain.vue";
+import NotFoundView from "@/views/NotFoundView.vue";
+import OpenListConfigEditor from "@/views/OpenListConfigEditor.vue";
+import OpenListHome from "@/views/OpenListHome.vue";
+import OpenListSettings from "@/views/OpenListSettings.vue";
+import OpenListWebView from "@/views/OpenListWebView.vue";
 
 export const routes: RouteRecordRaw[] = [
-  { path: '/', redirect: '/home' },
-  { path: '/home', component: OpenListHome },
-  { path: '/config', component: OpenListConfigEditor },
-  { path: '/settings', component: OpenListSettings },
-  { path: '/webview', component: OpenListWebView },
+  { path: "/", redirect: "/home" },
+  { path: "/home", component: OpenListHome },
+  { path: "/config", component: OpenListConfigEditor },
+  { path: "/settings", component: OpenListSettings },
+  { path: "/webview", component: OpenListWebView },
   // "返回 ENCV 主页面"视图：内嵌全屏 iframe 加载 encv-mobile :5173，
   // 绕过 Trae 沙箱 OpenPreview 工具「单 port 限制」(trae_web_sandbox_network.md §8.4)
-  { path: '/back-to-main', component: BackToMain },
+  { path: "/back-to-main", component: BackToMain },
   // Catch-all 404 路由（防御性 UI：开发期任何路径不匹配都显示清晰提示而不是空白）
   {
-    path: '/:pathMatch(.*)*',
-    name: 'not-found',
+    path: "/:pathMatch(.*)*",
+    name: "not-found",
     component: NotFoundView,
   },
-]
+];
 
 /**
  * 必须用 hash 模式（createWebHashHistory）！
@@ -46,6 +45,6 @@ export const routes: RouteRecordRaw[] = [
  * - 生产环境 vite.config.ts 的 base 默认 './' 仍然控制 HTML 资源路径，与 router base 解耦
  */
 export const router = createRouter({
-  history: createWebHashHistory('/openlist-ui/'),
+  history: createWebHashHistory("/openlist-ui/"),
   routes,
-})
+});

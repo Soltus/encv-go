@@ -112,34 +112,6 @@
 
 <script setup lang="ts">
 import { Capacitor } from "@capacitor/core";
-import {
-  alertController,
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  addOutline,
-  checkmarkCircle,
-  closeCircle,
-  cloudUploadOutline,
-  filmOutline,
-  informationCircle,
-  layersOutline,
-  serverOutline,
-} from "ionicons/icons";
-import { onMounted, ref } from "vue";
 import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
@@ -155,6 +127,8 @@ import {
   togglePluginEnabled,
   uninstallPlugin,
 } from "@encv/shared-components/plugins/GoProcess";
+import { alertController } from "@ionic/vue";
+import { onMounted, ref } from "vue";
 
 const { t } = useI18n();
 
@@ -205,7 +179,7 @@ async function loadExtensions() {
     );
 
     const mpvInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP["mpv-player"]];
-    const openlistInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP["openlist"]];
+    const openlistInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP.openlist];
     console.error("[SAT-DBG][Extensions] mpvInfo=", JSON.stringify(mpvInfo), "| openlistInfo=", JSON.stringify(openlistInfo));
 
     extensions.value = [
@@ -259,11 +233,11 @@ async function handleInstallFromFile() {
   }
 }
 
-async function handleInstall(_id: string) {
+async function _handleInstall(_id: string) {
   await handleInstallFromFile();
 }
 
-async function handleToggleEnabled(id: string, currentEnabled: boolean) {
+async function _handleToggleEnabled(id: string, currentEnabled: boolean) {
   if (!isNativePlatform()) return;
   const COMBO_LITE_ID: Record<string, string> = {
     "mpv-player": "com.encvgo.plugin.mpv",
@@ -287,7 +261,7 @@ async function handleToggleEnabled(id: string, currentEnabled: boolean) {
   await loadExtensions();
 }
 
-async function handleUninstall(id: string) {
+async function _handleUninstall(id: string) {
   const COMBO_LITE_ID: Record<string, string> = {
     "mpv-player": "com.encvgo.plugin.mpv",
     openlist: "com.encvgo.plugin.openlist",
@@ -347,7 +321,7 @@ async function showDebugResult(header: string, result: Record<string, any>) {
   await alert.present();
 }
 
-async function handleDebugInstall() {
+async function _handleDebugInstall() {
   try {
     const result = await debugInstallFlow();
     await showDebugResult("🔧 installPlugin诊断", result);
@@ -356,7 +330,7 @@ async function handleDebugInstall() {
   }
 }
 
-async function handleDebugKotlinReflect() {
+async function _handleDebugKotlinReflect() {
   try {
     const result = await debugKotlinReflect();
     await showDebugResult("🔧 kotlin-reflect诊断", result);
@@ -365,7 +339,7 @@ async function handleDebugKotlinReflect() {
   }
 }
 
-async function handleDebugApkValidation() {
+async function _handleDebugApkValidation() {
   try {
     const result = await debugApkValidation();
     await showDebugResult("🔧 APK校验诊断", result);
@@ -374,7 +348,7 @@ async function handleDebugApkValidation() {
   }
 }
 
-async function handleDebugValidationStrategy() {
+async function _handleDebugValidationStrategy() {
   try {
     const result = await debugValidationStrategy();
     await showDebugResult("🔧 ValidationStrategy诊断", result);
@@ -383,7 +357,7 @@ async function handleDebugValidationStrategy() {
   }
 }
 
-async function handleDebugLifecycle() {
+async function _handleDebugLifecycle() {
   try {
     const result = await debugLifecycleFlow("com.encvgo.plugin.mpv");
     await showDebugResult("🔧 插件生命周期诊断", result);

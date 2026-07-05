@@ -8,9 +8,10 @@
  * - "详情" 按钮点击展开：技术说明 + 修复建议 + 原始错误
  * - 不再用刺眼红色背景 / border-left 装饰
  */
-import { computed, ref } from "vue";
+
 import { analyzeError, type ErrorAnalysis } from "@encv/shared-components/composables/useErrorAnalyzer";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { computed, ref } from "vue";
 
 interface Props {
   task: {
@@ -44,15 +45,15 @@ const errorAnalysis = computed<ErrorAnalysis | null>(() => {
   return null;
 });
 
-const categoryLabel = computed(() => {
+const _categoryLabel = computed(() => {
   const cat = errorAnalysis.value?.category ?? "unknown";
   const key = `tasks.error.category.${cat}` as const;
   return t(key) !== key ? t(key) : (errorAnalysis.value?.summary ?? cat);
 });
 
 const copySuccess = ref(false);
-const expanded = ref(false);
-async function copyError() {
+const _expanded = ref(false);
+async function _copyError() {
   if (!errorAnalysis.value) return;
   const text = JSON.stringify(
     {

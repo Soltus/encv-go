@@ -32,13 +32,11 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon } from "@ionic/vue";
-import { closeCircle, refresh, trash } from "ionicons/icons";
 import type { EncvTask } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 
 defineProps<{ task: EncvTask }>();
-const emit = defineEmits<{
+const _emit = defineEmits<{
   (e: "cancel"): void;
   (e: "retry"): void;
   (e: "remove"): void;

@@ -15,8 +15,8 @@
  * - 加 engineInitRetry 重试机制（最多 3 次），覆盖极端 import 顺序场景
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatEngine } from "@encv/shared-components/composables/chatEngine";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 describe("useChatEngine lazy init (engine load fix)", () => {
   beforeEach(() => {

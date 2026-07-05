@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
 import type { FileItem } from "@encv/shared-components/api/encv";
+import { describe, expect, it } from "vitest";
 import { clientFilterFiles, clientSearchTokenize } from "../useFileList";
 
 // 构造测试 FileItem 的辅助函数

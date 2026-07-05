@@ -37,7 +37,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { RecycleScroller, type RecycleScrollerExposed } from "vue-virtual-scroller";
+import type { RecycleScrollerExposed } from "vue-virtual-scroller";
 import "vue-virtual-scroller/dist/vue-virtual-scroller.css";
 import type { RenderedItem } from "@encv/shared-components/composables/renderTurnItems";
 
@@ -67,7 +67,7 @@ const containerRef = ref<HTMLDivElement | null>(null);
  * - operationGroup: 列表卡 200px
  * - webSearchGroup: 搜索卡 140px
  */
-function getItemSize(item: RenderedItem): number {
+function _getItemSize(item: RenderedItem): number {
   switch (item.type) {
     case "user":
       return 80;
@@ -108,7 +108,7 @@ function scrollToBottom(behavior: "auto" | "smooth" = "smooth") {
   }
 }
 
-function onScroll(_e: Event) {
+function _onScroll(_e: Event) {
   // 子组件可监听 scroll 事件以实现"是否接近底部"判断
 }
 

@@ -101,10 +101,7 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon, IonItem, IonLabel, IonNote, IonSelect, IonSelectOption, IonToggle } from "@ionic/vue";
-import { cloudOutline, refreshOutline } from "ionicons/icons";
 import { computed } from "vue";
-import InputWithHistory from "@/components/InputWithHistory.vue";
 import { useI18n } from "@/composables/useI18n";
 import type { FieldDef } from "@/config/schemaParser";
 import { getDefaultValue } from "@/config/schemaParser";
@@ -130,11 +127,11 @@ const { t } = useI18n();
 
 const defaultVal = computed(() => getDefaultValue(props.field));
 
-const isTaskOverridable = computed(() => TASK_OVERRIDABLE.has(props.field.key));
+const _isTaskOverridable = computed(() => TASK_OVERRIDABLE.has(props.field.key));
 
-const hasDefault = computed(() => props.field.default !== undefined);
+const _hasDefault = computed(() => props.field.default !== undefined);
 
-const isCustomized = computed(() => {
+const _isCustomized = computed(() => {
   const current = props.modelValue;
   const def = defaultVal.value;
   if (current === def) return false;
@@ -142,11 +139,11 @@ const isCustomized = computed(() => {
   return String(current) !== String(def);
 });
 
-const labelWithRequired = computed(() => {
+const _labelWithRequired = computed(() => {
   return props.label + (props.field.required ? " *" : "");
 });
 
-const defaultOptionLabel = computed(() => {
+const _defaultOptionLabel = computed(() => {
   if (!props.field.selectOptions || !props.field.default) return formatDefault(defaultVal.value);
   const opt = props.field.selectOptions.find(o => o.value === String(props.field.default));
   return opt ? opt.label : formatDefault(defaultVal.value);

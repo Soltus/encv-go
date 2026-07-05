@@ -187,7 +187,7 @@ export async function generateMockFilesViaBackend(opts: MockGenerateOptions): Pr
           try {
             const diag = JSON.parse(parsed.data) as MockSpecDiag;
             opts.onSpecPlan?.(diag);
-          } catch (e) {
+          } catch (_e) {
             // 解析失败不致命
           }
         } else if (parsed.event === "spec_diag") {
@@ -196,7 +196,7 @@ export async function generateMockFilesViaBackend(opts: MockGenerateOptions): Pr
           try {
             const diag = JSON.parse(parsed.data) as MockSpecDiag;
             opts.onSpecDiag?.(diag);
-          } catch (e) {
+          } catch (_e) {
             // JSON 解析失败不致命，丢弃
           }
         } else if (parsed.event === "starting") {

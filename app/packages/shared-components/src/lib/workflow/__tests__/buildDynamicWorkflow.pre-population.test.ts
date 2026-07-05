@@ -23,16 +23,16 @@
  *   5. UI groupedTasksByRunId 立即显示 1 个真 group N task
  */
 
-import { mount, type VueWrapper } from "@vue/test-utils";
-import { createPinia, setActivePinia } from "pinia";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { nextTick } from "vue";
 import type { EncvTask, PluginMeta, TaskType } from "@encv/shared-components/api/encv";
 import * as encvApi from "@encv/shared-components/api/encv";
 import { _resetTasksListSingletonForTests, useTasksList } from "@encv/shared-components/composables/useTasksList";
 import { useWorkflowStore } from "@encv/shared-components/composables/useWorkflowStore";
 import { useWorkflowTaskService } from "@encv/shared-components/composables/useWorkflowTaskService";
 import { useTaskStore } from "@encv/shared-components/stores/taskStore";
+import { mount, type VueWrapper } from "@vue/test-utils";
+import { createPinia, setActivePinia } from "pinia";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { nextTick } from "vue";
 import { TaskListDiagSimulator } from "./fixtures/TaskListDiagSimulator";
 
 // ==================== Mock localStorage + crypto ====================

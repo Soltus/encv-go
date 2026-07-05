@@ -25,20 +25,20 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-const STATUSES = ["pending", "running", "completed", "failed", "cancelled", "cancelling"];
-const TASK_TYPES = ["encrypt", "decrypt", "move", "copy", "rename", "delete"];
+const _STATUSES = ["pending", "running", "completed", "failed", "cancelled", "cancelling"];
+const _TASK_TYPES = ["encrypt", "decrypt", "move", "copy", "rename", "delete"];
 
-function toggleArray(arr: string[], key: string, emitKey: "status" | "taskType" | "plugin") {
+function _toggleArray(arr: string[], key: string, emitKey: "status" | "taskType" | "plugin") {
   const idx = arr.indexOf(key);
   const next = idx === -1 ? [...arr, key] : arr.filter(k => k !== key);
   emit(`update:${emitKey}` as any, next);
 }
 
-function isChecked(arr: string[], key: string): boolean {
+function _isChecked(arr: string[], key: string): boolean {
   return arr.includes(key);
 }
 
-const hasAny = computed(() => props.status.length > 0 || props.taskType.length > 0 || props.plugin.length > 0);
+const _hasAny = computed(() => props.status.length > 0 || props.taskType.length > 0 || props.plugin.length > 0);
 </script>
 
 <template>

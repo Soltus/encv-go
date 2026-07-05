@@ -37,9 +37,6 @@
 import { bulbOutline, chevronDownOutline, chevronUpOutline } from "ionicons/icons";
 import { computed, ref } from "vue";
 import { useI18n } from "@/composables/useI18n";
-import MarkdownStream from "./MarkdownStream.vue";
-import MessageAuthor from "./MessageAuthor.vue";
-import StatusBadge from "./StatusBadge.vue";
 
 const props = defineProps<{
   text: string;
@@ -47,13 +44,13 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const expanded = ref(props.streaming);
-const icon = bulbOutline;
-const chevronUp = chevronUpOutline;
-const chevronDown = chevronDownOutline;
+const _expanded = ref(props.streaming);
+const _icon = bulbOutline;
+const _chevronUp = chevronUpOutline;
+const _chevronDown = chevronDownOutline;
 
-const label = computed(() => t("agent.reasoning"));
-const metaText = computed(() => (props.streaming ? t("agent.thinkingMeta") : ""));
+const _label = computed(() => t("agent.reasoning"));
+const _metaText = computed(() => (props.streaming ? t("agent.thinkingMeta") : ""));
 </script>
 
 <style scoped>

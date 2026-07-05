@@ -29,12 +29,10 @@
 </template>
 
 <script setup lang="ts">
-import { chevronDownOutline, chevronUpOutline, searchOutline } from "ionicons/icons";
-import { computed, ref } from "vue";
 import type { ToolCall } from "@encv/shared-components/composables/useAgent";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import MessageAuthor from "./MessageAuthor.vue";
-import StatusBadge from "./StatusBadge.vue";
+import { chevronDownOutline, chevronUpOutline, searchOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
 
 const props = defineProps<{
   queries: string[];
@@ -44,18 +42,18 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const expanded = ref(false);
-const icon = searchOutline;
-const chevronUp = chevronUpOutline;
-const chevronDown = chevronDownOutline;
-const label = computed(() => t("agent.webSearch"));
+const _expanded = ref(false);
+const _icon = searchOutline;
+const _chevronUp = chevronUpOutline;
+const _chevronDown = chevronDownOutline;
+const _label = computed(() => t("agent.webSearch"));
 
-const metaText = computed(() => {
+const _metaText = computed(() => {
   const n = props.queries.length;
   return n > 1 ? `${n} ${t("agent.queries")}` : `${n} ${t("agent.query")}`;
 });
 
-const totalHits = computed(() => {
+const _totalHits = computed(() => {
   if (!props.results) return null;
   let s = 0;
   for (const r of props.results) s += r;

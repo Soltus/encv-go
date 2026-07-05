@@ -14,8 +14,9 @@
  * - bool 字段不参与（避免 2^N 爆炸，由调用方按需展开）
  * - taskType / versions 由调用方传入，composable 不再自行从 taskOptions 派生
  */
-import type { Ref } from "vue";
+
 import type { PluginMeta, TaskType } from "@encv/shared-components/api/encv";
+import type { Ref } from "vue";
 
 /** 生成的测试用例 */
 export interface GeneratedTestCase {

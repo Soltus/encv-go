@@ -11,10 +11,10 @@
  * 让 user 在真机屏幕上一眼看到逃逸 task 数 + 各 runId 聚合。
  */
 
-import { mount } from "@vue/test-utils";
-import { describe, expect, it, vi } from "vitest";
 import type { EncvTask, TaskStatus } from "@encv/shared-components/api/encv";
 import TaskDebugPanel from "@encv/shared-components/components/tasks/TaskDebugPanel.vue";
+import { mount } from "@vue/test-utils";
+import { describe, expect, it, vi } from "vitest";
 
 function makeTask(
   id: string,

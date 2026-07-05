@@ -168,7 +168,7 @@ export function createToolCallAccumulator(): ToolCallAccumulator {
  *   JSON 解析失败 → 返回空对象 {}，不抛错。
  */
 export function parseAccumulatedArgs(args: string): Record<string, unknown> {
-  if (!args || !args.trim()) return {};
+  if (!args?.trim()) return {};
   try {
     const parsed = JSON.parse(args);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};

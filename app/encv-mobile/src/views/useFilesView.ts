@@ -378,7 +378,7 @@ export function useFilesView(): UseFilesViewReturn {
   async function restoreScrollTop() {
     await nextTick();
     requestAnimationFrame(() => {
-      if (mainContentRef.value && mainContentRef.value.$el && lastScrollTop.value > 0) {
+      if (mainContentRef.value?.$el && lastScrollTop.value > 0) {
         const scrollEl = mainContentRef.value.$el;
         if (scrollEl && scrollEl.scrollTop !== undefined) {
           scrollEl.scrollTop = lastScrollTop.value;
@@ -596,7 +596,7 @@ export function useFilesView(): UseFilesViewReturn {
   }
 
   function openContainingFolder(file: FileItem) {
-    if (!file || !file.path) {
+    if (!file?.path) {
       // 搜索结果可能没有完整 path，防御性处理
       searchQuery.value = "";
       searchResults.value = null;
@@ -823,7 +823,7 @@ export function useFilesView(): UseFilesViewReturn {
     if (!query) return;
     if (selectedPlugin.value) return;
 
-    if (mainContentRef.value && mainContentRef.value.$el) {
+    if (mainContentRef.value?.$el) {
       const scrollEl = mainContentRef.value.$el;
       if (scrollEl && scrollEl.scrollTop !== undefined) {
         lastScrollTop.value = scrollEl.scrollTop;
@@ -1267,7 +1267,7 @@ export function useFilesView(): UseFilesViewReturn {
         } else {
           showToast({ message: "仅支持本地文件分享", duration: 2500, color: "warning" });
         }
-      } catch (e) {
+      } catch (_e) {
         showToast({ message: "分享失败或已取消" });
       }
     } else {
@@ -1325,7 +1325,7 @@ export function useFilesView(): UseFilesViewReturn {
       await addTag(selectedFile.value.path, tag);
       editingFileTags.value.push(tag);
       newTagInput.value = "";
-    } catch (e) {
+    } catch (_e) {
       showToast({ message: "添加标签失败" });
     }
   }
@@ -1335,7 +1335,7 @@ export function useFilesView(): UseFilesViewReturn {
     try {
       await removeTag(selectedFile.value.path, tag);
       editingFileTags.value = editingFileTags.value.filter(t => t !== tag);
-    } catch (e) {
+    } catch (_e) {
       showToast({ message: "移除标签失败" });
     }
   }

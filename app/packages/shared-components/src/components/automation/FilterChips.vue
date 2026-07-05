@@ -51,9 +51,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
 import { CATEGORY_META, type ErrorCategory } from "@encv/shared-components/composables/useErrorAnalyzer";
 import type { TestCaseResult } from "@encv/shared-components/lib/workflow/types";
+import { computed } from "vue";
 
 const props = defineProps<{
   results: TestCaseResult[];
@@ -68,7 +68,7 @@ const emit = defineEmits<{
   "update:activeCategories": [Set<string>];
 }>();
 
-const statusOptions = computed(() => {
+const _statusOptions = computed(() => {
   const counts: Record<string, number> = { passed: 0, failed: 0, skipped: 0, running: 0, pending: 0 };
   for (const r of props.results) counts[r.status] = (counts[r.status] ?? 0) + 1;
   return [
@@ -80,7 +80,7 @@ const statusOptions = computed(() => {
   ].filter(opt => opt.count > 0);
 });
 
-const categoryOptions = computed(() => {
+const _categoryOptions = computed(() => {
   const counts: Partial<Record<ErrorCategory, number>> = {};
   for (const r of props.results) {
     if (r.status !== "failed") continue;
@@ -98,25 +98,25 @@ const categoryOptions = computed(() => {
     .sort((a, b) => b.count - a.count);
 });
 
-const hasAnyFilter = computed(() => {
+const _hasAnyFilter = computed(() => {
   return props.activeStatuses.size > 0 || props.activeCategories.size > 0;
 });
 
-function toggleStatus(value: string) {
+function _toggleStatus(value: string) {
   const next = new Set(props.activeStatuses);
   if (next.has(value)) next.delete(value);
   else next.add(value);
   emit("update:activeStatuses", next);
 }
 
-function toggleCategory(value: string) {
+function _toggleCategory(value: string) {
   const next = new Set(props.activeCategories);
   if (next.has(value)) next.delete(value);
   else next.add(value);
   emit("update:activeCategories", next);
 }
 
-function clearAll() {
+function _clearAll() {
   emit("update:activeStatuses", new Set());
   emit("update:activeCategories", new Set());
 }

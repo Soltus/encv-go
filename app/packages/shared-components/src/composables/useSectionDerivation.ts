@@ -1,5 +1,5 @@
-import { type ComputedRef, computed } from "vue";
 import type { EncvTask } from "@encv/shared-components/api/encv";
+import { type ComputedRef, computed } from "vue";
 
 /**
  * Section 维度枚举
@@ -123,7 +123,6 @@ export function deriveSubSection(task: EncvTask, dimension: SectionDimension): S
         label: categoryLabel(category),
       };
     }
-    case "none":
     default:
       return {
         dimension: "none",

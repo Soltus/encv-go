@@ -7,7 +7,7 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
+import { Phase } from "@encv/shared-components/lib/workflow/types";
 import {
   banOutline,
   checkmarkCircleOutline,
@@ -23,7 +23,6 @@ import {
   shieldCheckmarkOutline,
 } from "ionicons/icons";
 import { computed } from "vue";
-import { Phase } from "@encv/shared-components/lib/workflow/types";
 
 /**
  * PhaseIcon 支持的值：
@@ -60,7 +59,7 @@ const PHASE_ICON_MAP: Record<PhaseIconValue, string> = {
   cancelled: banOutline,
 };
 
-const icon = computed(() => PHASE_ICON_MAP[props.phase] ?? helpCircleOutline);
+const _icon = computed(() => PHASE_ICON_MAP[props.phase] ?? helpCircleOutline);
 </script>
 
 <style scoped>

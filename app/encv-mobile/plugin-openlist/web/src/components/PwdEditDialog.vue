@@ -50,52 +50,40 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import {
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonButton,
-  IonContent,
-  IonList,
-  IonItem,
-  IonLabel,
-  IonInput,
-  modalController,
-} from '@ionic/vue'
+import { modalController } from "@ionic/vue";
+import { computed, ref } from "vue";
 
 const props = defineProps<{
-  onConfirm: (password: string) => void | Promise<void>
-}>()
+  onConfirm: (password: string) => void | Promise<void>;
+}>();
 
-const password = ref('')
-const confirmPassword = ref('')
-const error = ref('')
+const password = ref("");
+const confirmPassword = ref("");
+const error = ref("");
 
 const canConfirm = computed(() => {
-  return password.value.length >= 4 && password.value === confirmPassword.value
-})
+  return password.value.length >= 4 && password.value === confirmPassword.value;
+});
 
 // modalController.create 加载的子组件无法 emit 关闭自己，
 // 必须调 modalController.dismiss() 才会真正 dismiss 当前 modal overlay。
-async function onConfirm() {
+async function _onConfirm() {
   if (!canConfirm.value) {
-    error.value = '密码不一致或太短（至少 4 位）'
-    return
+    error.value = "密码不一致或太短（至少 4 位）";
+    return;
   }
-  error.value = ''
+  error.value = "";
   try {
-    await props.onConfirm(password.value)
+    await props.onConfirm(password.value);
   } catch (e: any) {
-    error.value = `设置失败：${e?.message || e}`
-    return
+    error.value = `设置失败：${e?.message || e}`;
+    return;
   }
-  await modalController.dismiss()
+  await modalController.dismiss();
 }
 
-async function onDismiss() {
-  await modalController.dismiss()
+async function _onDismiss() {
+  await modalController.dismiss();
 }
 </script>
 

@@ -12,11 +12,11 @@
  * - detail slot 渲染（ffmpeg args / stderr / context 卡片）
  */
 
-import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
 import MockGenLogCard from "@encv/shared-components/components/developer/MockGenLogCard.vue";
 import UnifiedTimelineCard from "@encv/shared-components/components/shared/UnifiedTimelineCard.vue";
 import type { MockGenLogEntry, MockGenLogSummary } from "@encv/shared-components/composables/useMockGenLog";
+import { mount } from "@vue/test-utils";
+import { describe, expect, it } from "vitest";
 
 // ion-icon stub：避免 @ionic/vue 全局注册依赖
 const IonIconStub = {

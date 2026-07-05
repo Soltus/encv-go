@@ -4,8 +4,9 @@
  * 覆盖 5 档边界 + 临界值 + 防御性输入。
  * 注入 `now` 参数，避免依赖 Date.now() 的不确定性。
  */
-import { describe, expect, it } from "vitest";
+
 import { formatRelativeTime } from "@encv/shared-components/composables/relativeTime";
+import { describe, expect, it } from "vitest";
 
 // 固定 now 时间戳：2026-06-08T22:00:00.000Z（UTC）
 // 本地时区不影响相对时间计算（用毫秒差），但 >= 7d 的绝对日期分支

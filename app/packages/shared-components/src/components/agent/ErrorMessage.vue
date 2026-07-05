@@ -18,16 +18,15 @@
 
 <script setup lang="ts">
 import { alertCircleOutline, refreshOutline } from "ionicons/icons";
-import MessageAuthor from "./MessageAuthor.vue";
 
 defineProps<{
   text: string;
   onRetry?: () => void;
 }>();
 
-const icon = alertCircleOutline;
-const refreshIcon = refreshOutline;
-const label = "出错";
+const _icon = alertCircleOutline;
+const _refreshIcon = refreshOutline;
+const _label = "出错";
 </script>
 
 <style scoped>

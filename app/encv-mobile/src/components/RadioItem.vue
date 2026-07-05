@@ -27,7 +27,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonItem, IonLabel, IonRadio } from "@ionic/vue";
 import { computed } from "vue";
 
 /**
@@ -75,7 +74,7 @@ const isSelected = computed(() => props.value === props.selected);
  *   - 通过 emit 而不是直接修改 prop，是 Vue 单向数据流的最佳实践。
  *   - 不调用 radio.click() 避免双重事件触发（radio 也会 emit ionChange）。
  */
-function handleClick(event: MouseEvent) {
+function _handleClick(event: MouseEvent) {
   if (props.disabled) {
     event.preventDefault();
     event.stopPropagation();
@@ -96,7 +95,7 @@ function handleClick(event: MouseEvent) {
  * 内部 radio focus 时不抢焦点（item 已经是 button，整行 keyboard 可达）
  * 这是 Ionic 8 推荐的模式：button > radio 的可访问性树。
  */
-function onRadioFocus() {
+function _onRadioFocus() {
   // 故意不 focus，让 button 保留焦点
 }
 </script>

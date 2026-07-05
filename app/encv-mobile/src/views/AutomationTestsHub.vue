@@ -62,21 +62,6 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBackButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { cloudUploadOutline, flaskOutline, folderOpenOutline, serverOutline } from "ionicons/icons";
 import { useRouter } from "vue-router";
 import { useI18n } from "@/composables/useI18n";
 
@@ -84,25 +69,25 @@ const { t } = useI18n();
 const router = useRouter();
 
 // 2026-06-17：插件加密/解密自动化测试（重命名自 AutomationTestsDetail）
-function goPluginTests() {
+function _goPluginTests() {
   router.push("/tabs/settings/devtools/plugin-tests");
 }
 
-function goWebDavTests() {
+function _goWebDavTests() {
   router.push("/tabs/settings/devtools/webdav-tests");
 }
 
-function goSparseContainerTest() {
+function _goSparseContainerTest() {
   router.push("/tabs/settings/devtools/sparse-container-test");
 }
 
 // 🆕 2026-06-22：文件系统任务测试（move/copy/rename/delete + rollback + trash 边界）
-function goFsTests() {
+function _goFsTests() {
   router.push("/tabs/settings/devtools/fs-tests");
 }
 
 // 🆕 2026-07-03：数据库自动化测试
-function goDatabaseTests() {
+function _goDatabaseTests() {
   router.push("/tabs/settings/devtools/database-tests");
 }
 </script>

@@ -35,13 +35,11 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { chevronDownOutline, chevronUpOutline, copyOutline } from "ionicons/icons";
-import type { Component } from "vue";
 import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
-import StatusBadge from "./StatusBadge.vue";
+import { chevronDownOutline, chevronUpOutline, copyOutline } from "ionicons/icons";
+import type { Component } from "vue";
 
 const props = defineProps<{
   icon: Component | string;
@@ -55,11 +53,11 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-const copyIcon = copyOutline;
-const chevronUp = chevronUpOutline;
-const chevronDown = chevronDownOutline;
+const _copyIcon = copyOutline;
+const _chevronUp = chevronUpOutline;
+const _chevronDown = chevronDownOutline;
 
-async function handleCopy() {
+async function _handleCopy() {
   if (!props.copyText) return;
   const ok = await copyToClipboard(props.copyText);
   if (ok) {

@@ -76,7 +76,7 @@ export const MAX_FILES_PER_BATCH = 50;
  * 根据 MIME 判断是否图片。优先用 file.type，缺失时看扩展名兜底。
  */
 function isImageMime(file: File): boolean {
-  if (file.type && file.type.startsWith("image/")) return true;
+  if (file.type?.startsWith("image/")) return true;
   // 某些文件选择器在 Android/iOS 上 type 可能为空，用扩展名兜底
   const name = (file.name || "").toLowerCase();
   return /\.(png|jpe?g|gif|webp|bmp|svg|heic|heif|avif)$/.test(name);

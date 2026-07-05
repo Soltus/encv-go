@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
 import type { FileItem } from "@encv/shared-components/api/encv";
 import { cycleSortState, getSortLabel, sortFiles } from "@encv/shared-components/composables/useFileList";
+import { describe, expect, it } from "vitest";
 
 function makeFile(name: string, opts: Partial<FileItem> = {}): FileItem {
   return {

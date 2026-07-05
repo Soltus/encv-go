@@ -133,78 +133,63 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonBackButton,
-  IonButtons,
-  IonButton,
-  IonContent,
-  IonList,
-  IonItem,
-  IonLabel,
-  IonIcon,
-} from '@ionic/vue'
-import { globeOutline, homeOutline, arrowBackOutline, chevronBackOutline } from 'ionicons/icons'
-import { OpenListNative, logBuffer } from '@/plugins/openlist-native'
+import { onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
 
-const router = useRouter()
+const router = useRouter();
 
 // 防御性默认值：dev preview 模式 window.OpenListNative 不存在，OpenListNative 返 'unknown'/0/''
-const version = ref('unknown')
-const dataDir = ref('')
-const port = ref(0)
+const version = ref("unknown");
+const dataDir = ref("");
+const port = ref(0);
 
-const isDevPreview = ref(false)
-const loadingVersion = ref(false)
-const realVersion = ref('')
-const versionError = ref('')
-const isBackendReachable = ref(false)
+const isDevPreview = ref(false);
+const loadingVersion = ref(false);
+const realVersion = ref("");
+const versionError = ref("");
+const isBackendReachable = ref(false);
 
 // logBuffer 状态（用于 debug section）
-const recentLogs = ref<string[]>([])
-const currentHash = ref(window.location.hash || '(empty)')
-const registeredRoutes = ref<string[]>([])
+const recentLogs = ref<string[]>([]);
+const currentHash = ref(window.location.hash || "(empty)");
+const registeredRoutes = ref<string[]>([]);
 
-let hashPollTimer: ReturnType<typeof setInterval> | null = null
+let hashPollTimer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(async () => {
   // **核心检测**：dev preview 模式 = window.OpenListNative 不存在
   // 真机模式 = window.OpenListNative 存在（OpenListPluginJSInterface 注册过）
-  isDevPreview.value = !window.OpenListNative
+  isDevPreview.value = !window.OpenListNative;
 
   // 基础数据：从 OpenListNative stub 拿（dev preview 全部 0/unknown/''）
-  version.value = OpenListNative.getVersion()
-  dataDir.value = OpenListNative.getDataDir()
-  port.value = OpenListNative.getPort()
+  version.value = OpenListNative.getVersion();
+  dataDir.value = OpenListNative.getDataDir();
+  port.value = OpenListNative.getPort();
 
   // dev preview 模式：从 :5244 backend 拿真版本 + 真 health 状态
   if (isDevPreview.value) {
-    await fetchRealVersion()
-    await probeBackendHealth()
+    await fetchRealVersion();
+    await probeBackendHealth();
     // 启动路由诊断轮询
-    registeredRoutes.value = router.getRoutes().map(r => r.path)
+    registeredRoutes.value = router.getRoutes().map(r => r.path);
     hashPollTimer = setInterval(() => {
-      currentHash.value = window.location.hash || '(empty)'
+      currentHash.value = window.location.hash || "(empty)";
       // 同步 logBuffer 输出
-      recentLogs.value = logBuffer.getAll().slice(-5).map(formatLogLine)
-    }, 1000)
+      recentLogs.value = logBuffer.getAll().slice(-5).map(formatLogLine);
+    }, 1000);
   }
-})
+});
 
 onUnmounted(() => {
-  if (hashPollTimer) clearInterval(hashPollTimer)
-})
+  if (hashPollTimer) clearInterval(hashPollTimer);
+});
 
 function formatLogLine(entry: any): string {
-  const level = entry?.level?.toUpperCase() || 'INFO'
-  const msg = entry?.message || ''
-  const color = level === 'ERROR' ? '#ef4444' : level === 'WARN' ? '#f59e0b' : '#22c55e'
-  return `<span style="color:${color}">[${level}]</span> ${msg}`
+  const level = entry?.level?.toUpperCase() || "INFO";
+  const msg = entry?.message || "";
+  const color = level === "ERROR" ? "#ef4444" : level === "WARN" ? "#f59e0b" : "#22c55e";
+  return `<span style="color:${color}">[${level}]</span> ${msg}`;
 }
 
 /**
@@ -212,29 +197,29 @@ function formatLogLine(entry: any): string {
  * 失败时显示错误，不让 UI 一直 loading
  */
 async function fetchRealVersion() {
-  loadingVersion.value = true
-  versionError.value = ''
+  loadingVersion.value = true;
+  versionError.value = "";
   try {
     // dev preview 下 axios 直接用 http://127.0.0.1:5244/api/*（直访，无 vite proxy）
     // 但 vite proxy 会被同源策略拦（vite 起在 5174，我们从 5174 fetch 自己）—— OK 同源
-    const res = await fetch('http://127.0.0.1:5244/api/public/settings', {
-      cache: 'no-store',
+    const res = await fetch("http://127.0.0.1:5244/api/public/settings", {
+      cache: "no-store",
       signal: AbortSignal.timeout(3000),
-    })
+    });
     if (!res.ok) {
-      versionError.value = `HTTP ${res.status}`
-      return
+      versionError.value = `HTTP ${res.status}`;
+      return;
     }
-    const data = await res.json()
+    const data = await res.json();
     if (data?.code === 200 && data?.data?.version) {
-      realVersion.value = data.data.version
+      realVersion.value = data.data.version;
     } else {
-      versionError.value = 'backend 返非预期格式'
+      versionError.value = "backend 返非预期格式";
     }
   } catch (e: any) {
-    versionError.value = e?.message || String(e)
+    versionError.value = e?.message || String(e);
   } finally {
-    loadingVersion.value = false
+    loadingVersion.value = false;
   }
 }
 
@@ -243,40 +228,40 @@ async function fetchRealVersion() {
  */
 async function probeBackendHealth() {
   try {
-    const res = await fetch('/__openlist-health', {
-      cache: 'no-store',
+    const res = await fetch("/__openlist-health", {
+      cache: "no-store",
       signal: AbortSignal.timeout(3500),
-    })
+    });
     if (!res.ok) {
-      isBackendReachable.value = false
-      return
+      isBackendReachable.value = false;
+      return;
     }
-    const data = await res.json()
-    isBackendReachable.value = !!data?.alive
+    const data = await res.json();
+    isBackendReachable.value = !!data?.alive;
   } catch {
-    isBackendReachable.value = false
+    isBackendReachable.value = false;
   }
 }
 
-function openWebUi() {
+function _openWebUi() {
   // dev preview：走沙箱路径 :2025/openlist-ui/... 不行（那只能到 plugin-openlist vite）
   // 直接打开 :5244 真实 backend
-  window.open(`http://127.0.0.1:${port.value || 5244}/#/login`, '_blank', 'noopener')
+  window.open(`http://127.0.0.1:${port.value || 5244}/#/login`, "_blank", "noopener");
 }
 
-function goHome() {
-  router.push('/home')
+function _goHome() {
+  router.push("/home");
 }
 
 /**
  * toolbar 左上角返回按钮：显式 router.push 避免 ion-back-button + default-href 在
  * vue-router 4 hash 模式下行为不可靠。
  */
-function goBackToHome() {
-  router.push('/home')
+function _goBackToHome() {
+  router.push("/home");
 }
 
-function goBackToEncvMain() {
+function _goBackToEncvMain() {
   // 跳到 BackToMain 视图（plugin-openlist 内嵌全屏 iframe 加载 encv-mobile :5173）。
   // 为什么不直接 window.location.href 跳 :5173：
   //   - Trae 沙箱 OpenPreview 单 port 限制 (trae_web_sandbox_network.md §8.4)：
@@ -287,15 +272,15 @@ function goBackToEncvMain() {
   // 为什么不调 OpenPreview 切换到 :5173：
   //   - OpenPreview 是 AI agent 工具，前端无法调用
   //   - 即使能调用，多次注册会 last-write-wins 覆盖
-  logBuffer.info('[OpenListSettings] goBackToEncvMain → /back-to-main')
+  logBuffer.info("[OpenListSettings] goBackToEncvMain → /back-to-main");
   // 检查路由是否注册（如果 plugins/router 还没初始化好，fallback 跳绝对 URL）
-  const hasRoute = router.getRoutes().some(r => r.path === '/back-to-main')
+  const hasRoute = router.getRoutes().some(r => r.path === "/back-to-main");
   if (hasRoute) {
-    router.push('/back-to-main')
+    router.push("/back-to-main");
   } else {
     // Fallback：直接跳 :5173（直连模式 OK；沙箱模式会失败但允许尝试）
-    logBuffer.warn('[OpenListSettings] /back-to-main 未注册，fallback 直接跳 :5173')
-    window.location.assign('http://127.0.0.1:5173/tabs/remote')
+    logBuffer.warn("[OpenListSettings] /back-to-main 未注册，fallback 直接跳 :5173");
+    window.location.assign("http://127.0.0.1:5173/tabs/remote");
   }
 }
 </script>

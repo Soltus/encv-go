@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
 import { applyTerminalGuard, VALID_TRANSITIONS, validateTransition } from "@encv/shared-components/lib/workflow/state-machine";
 import type { StepStatus } from "@encv/shared-components/lib/workflow/types";
+import { describe, expect, it } from "vitest";
 
 // ============ applyTerminalGuard ============
 

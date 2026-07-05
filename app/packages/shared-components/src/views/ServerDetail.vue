@@ -105,36 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-  alertController,
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  batteryCharging as batteryOptimizationIcon,
-  cloudOutline,
-  copy as copyIcon,
-  folderOpen,
-  globeOutline,
-  notifications as notificationsIcon,
-  server as serverIcon,
-  shieldCheckmark,
-} from "ionicons/icons";
-import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
 import { fetchConfig, getServerUrl } from "@encv/shared-components/api/encv";
-import ServerStatusCard from "@encv/shared-components/components/ServerStatusCard.vue";
 import { copyToClipboard as clipboardWrite } from "@encv/shared-components/composables/useClipboard";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useServerStatus } from "@encv/shared-components/composables/useServerStatus";
@@ -146,12 +117,15 @@ import {
   requestNotificationPermission,
   requestStoragePermission,
 } from "@encv/shared-components/plugins/GoProcess";
+import { alertController } from "@ionic/vue";
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 
 const configData = ref<Record<string, unknown> | null>(null);
 const { isOnline: serverOnline, checkStatus, restartBackend, stopBackend } = useServerStatus();
 const { t } = useI18n();
 
-const serverUrl = ref(getServerUrl());
+const _serverUrl = ref(getServerUrl());
 const isNativePlatform = ref(isNative());
 const permNotifications = ref(false);
 const permStorage = ref(false);
@@ -160,26 +134,26 @@ let permissionCheckTimer: number | null = null;
 
 const router = useRouter();
 
-const httpPort = computed(() => (configData.value?.server as Record<string, unknown>)?.port ?? "-");
-const rootDir = computed(() => (configData.value?.server as Record<string, unknown>)?.dir ?? "/");
-const adminConfigured = computed(() => !!(configData.value?.admin as Record<string, unknown>)?.password);
-const webdavRoot = computed(() => {
+const _httpPort = computed(() => (configData.value?.server as Record<string, unknown>)?.port ?? "-");
+const _rootDir = computed(() => (configData.value?.server as Record<string, unknown>)?.dir ?? "/");
+const _adminConfigured = computed(() => !!(configData.value?.admin as Record<string, unknown>)?.password);
+const _webdavRoot = computed(() => {
   const val = (configData.value?.webdav as Record<string, unknown>)?.root;
   return typeof val === "string" ? val : "/";
 });
-const webdavUsername = computed(() => (configData.value?.webdav as Record<string, unknown>)?.username ?? "");
+const _webdavUsername = computed(() => (configData.value?.webdav as Record<string, unknown>)?.username ?? "");
 
-function goHttpServer() {
+function _goHttpServer() {
   router.push("/tabs/settings/server/http");
 }
-function goAdminServer() {
+function _goAdminServer() {
   router.push("/tabs/settings/server/admin");
 }
-function goWebdavServer() {
+function _goWebdavServer() {
   router.push("/tabs/settings/server/webdav");
 }
 
-async function copyToClipboard(text: string) {
+async function _copyToClipboard(text: string) {
   const ok = await clipboardWrite(text);
   showToast({ message: ok ? t("remote.copied") : t("devlogs.copyFailed"), duration: 1000, color: ok ? "success" : "danger" });
 }
@@ -191,7 +165,7 @@ async function refreshPermissions() {
   permBatteryOpt.value = perms.batteryOptimization;
 }
 
-async function handleRequestNotification() {
+async function _handleRequestNotification() {
   await requestNotificationPermission();
   if (permissionCheckTimer) clearTimeout(permissionCheckTimer);
   permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000);
@@ -199,7 +173,7 @@ async function handleRequestNotification() {
   setTimeout(() => refreshPermissions(), 5000);
 }
 
-async function handleRequestStorage() {
+async function _handleRequestStorage() {
   await requestStoragePermission();
   if (permissionCheckTimer) clearTimeout(permissionCheckTimer);
   permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000);
@@ -207,7 +181,7 @@ async function handleRequestStorage() {
   setTimeout(() => refreshPermissions(), 5000);
 }
 
-async function handleRequestBatteryOpt() {
+async function _handleRequestBatteryOpt() {
   await requestBatteryOptimization();
   if (permissionCheckTimer) clearTimeout(permissionCheckTimer);
   permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000);
@@ -215,7 +189,7 @@ async function handleRequestBatteryOpt() {
   setTimeout(() => refreshPermissions(), 5000);
 }
 
-async function checkServerInner() {
+async function _checkServerInner() {
   // 刷新按钮：只 ping 一次后端 + 弹 toast
   await checkStatus();
   showToast({
@@ -225,7 +199,7 @@ async function checkServerInner() {
   });
 }
 
-async function handleRestart() {
+async function _handleRestart() {
   showToast({
     message: t("settings.restarting"),
     duration: 30000,
@@ -238,7 +212,7 @@ async function handleRestart() {
   });
 }
 
-async function handleStop() {
+async function _handleStop() {
   const alert = await alertController.create({
     header: t("settings.stopConfirm"),
     buttons: [

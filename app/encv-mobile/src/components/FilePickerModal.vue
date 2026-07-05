@@ -90,39 +90,11 @@
 </template>
 
 <script setup lang="ts">
-import {
-  alertController,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonInput,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
-import {
-  add,
-  arrowBack,
-  chevronForward,
-  document,
-  documentText,
-  folder,
-  folderOpen,
-  image,
-  lockClosed,
-  musicalNotes,
-  videocam,
-} from "ionicons/icons";
+import { alertController, modalController } from "@ionic/vue";
+import { document, documentText, folder, image, lockClosed, musicalNotes, videocam } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import type { FileItem } from "@/api/encv";
-import { createDirectory, formatFileSize, getFileCategory, listFiles, PermissionDeniedError } from "@/api/encv";
+import { createDirectory, getFileCategory, listFiles, PermissionDeniedError } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 
 const props = withDefaults(
@@ -144,7 +116,7 @@ const noPermission = ref(false);
 const showNewFolder = ref(false);
 const newFolderName = ref("");
 
-const pathSegments = computed(() => {
+const _pathSegments = computed(() => {
   if (currentPath.value === "/") return [];
   const parts = currentPath.value.split("/").filter(Boolean);
   return parts.map((name, index) => ({
@@ -161,14 +133,14 @@ const sortedFiles = computed(() => {
   });
 });
 
-const displayFiles = computed(() => {
+const _displayFiles = computed(() => {
   if (props.mode === "folder") {
     return sortedFiles.value.filter(f => f.isDirectory);
   }
   return sortedFiles.value;
 });
 
-function getFileIcon(file: FileItem) {
+function _getFileIcon(file: FileItem) {
   if (file.isDirectory) return folder;
   if (file.isEncrypted) return lockClosed;
   const category = getFileCategory(file.name);
@@ -186,7 +158,7 @@ function getFileIcon(file: FileItem) {
   }
 }
 
-function getFileIconColor(file: FileItem) {
+function _getFileIconColor(file: FileItem) {
   if (file.isDirectory) return "primary";
   if (file.isEncrypted) return "warning";
   const category = getFileCategory(file.name);
@@ -222,7 +194,7 @@ function navigateTo(path: string) {
   loadFiles();
 }
 
-function goUp() {
+function _goUp() {
   if (currentPath.value === "/") return;
   const parts = currentPath.value.split("/").filter(Boolean);
   parts.pop();
@@ -230,7 +202,7 @@ function goUp() {
   loadFiles();
 }
 
-function handleFileClick(file: FileItem) {
+function _handleFileClick(file: FileItem) {
   if (file.isDirectory) {
     const newPath = currentPath.value === "/" ? "/" + file.name : currentPath.value + "/" + file.name;
     navigateTo(newPath);
@@ -241,20 +213,20 @@ function handleFileClick(file: FileItem) {
   }
 }
 
-function selectCurrentFolder() {
+function _selectCurrentFolder() {
   modalController.dismiss({ path: currentPath.value, name: currentPath.value.split("/").filter(Boolean).pop() || "/" }, "select");
 }
 
-function cancel() {
+function _cancel() {
   modalController.dismiss(null, "cancel");
 }
 
-function showNewFolderInput() {
+function _showNewFolderInput() {
   showNewFolder.value = true;
   newFolderName.value = "";
 }
 
-async function confirmNewFolder() {
+async function _confirmNewFolder() {
   const name = newFolderName.value.trim();
   if (!name) return;
   try {
@@ -274,7 +246,7 @@ async function confirmNewFolder() {
   }
 }
 
-function cancelNewFolder() {
+function _cancelNewFolder() {
   showNewFolder.value = false;
   newFolderName.value = "";
 }

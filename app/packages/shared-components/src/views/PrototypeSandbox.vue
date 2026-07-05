@@ -83,13 +83,12 @@
 </template>
 
 <script setup lang="ts">
-import { IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
-import { codeSlashOutline, copyOutline, eyeOutline, logoVue } from "ionicons/icons";
-import { computed, provide, ref, watch } from "vue";
-import { useRoute } from "vue-router";
 import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
+import { codeSlashOutline, eyeOutline, logoVue } from "ionicons/icons";
+import { computed, provide, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { getPrototype } from "./prototypes/registry";
 
 const { t } = useI18n();
@@ -104,9 +103,9 @@ const webSource = ref("");
 const composeSource = ref("");
 
 const isLandscape = ref(false);
-const frameRef = ref<HTMLElement>();
+const _frameRef = ref<HTMLElement>();
 
-const tabs = [
+const _tabs = [
   { id: "preview" as const, label: "Preview", icon: eyeOutline },
   { id: "web" as const, label: "Web", icon: logoVue },
   { id: "compose" as const, label: "Compose", icon: codeSlashOutline },
@@ -144,20 +143,20 @@ watch(activeTab, async tab => {
   if (tab === "web" && !webSource.value) {
     try {
       webSource.value = await proto.value.webSource();
-    } catch (e) {
+    } catch (_e) {
       webSource.value = "// Source not available";
     }
   }
   if (tab === "compose" && !composeSource.value) {
     try {
       composeSource.value = await proto.value.composeSource();
-    } catch (e) {
+    } catch (_e) {
       composeSource.value = "// Source not available";
     }
   }
 });
 
-async function copySource(text: string) {
+async function _copySource(text: string) {
   const ok = await copyToClipboard(text);
   showToast({ message: ok ? t("devtools.copiedCode") : t("devtools.copyFailed"), duration: 1500, color: ok ? "success" : "danger" });
 }

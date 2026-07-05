@@ -174,24 +174,6 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBackButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSelect,
-  IonSelectOption,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { addCircleOutline, closeCircleOutline, playCircleOutline, trashOutline } from "ionicons/icons";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { generateMockFilesViaBackend, resetMockFilesViaBackend } from "@/api/mockGenerator";
 import { useI18n } from "@/composables/useI18n";
@@ -200,11 +182,6 @@ import { useWorkflowStore } from "@/composables/useWorkflowStore";
 import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
 import { MOCK_GENERATE_ROOT } from "@/lib/mockConstants";
 import type { JobRun, StepRun, UnifiedRunRecord, WorkflowDefinition, WorkflowRun } from "@/lib/workflow/types";
-import JobPipelineCard from "./JobPipelineCard.vue";
-import StepDetailPanel from "./StepDetailPanel.vue";
-import StepMiniBadge from "./StepMiniBadge.vue";
-import TestReportHeader from "./TestReportHeader.vue";
-import TreeView from "./TreeView.vue";
 
 const { t } = useI18n();
 
@@ -237,12 +214,12 @@ const {
 } = useWorkflowTaskService();
 
 const selectedDefId = ref<string>("");
-const viewMode = ref<"pipeline" | "tree">("pipeline");
+const _viewMode = ref<"pipeline" | "tree">("pipeline");
 const selectedStep = ref<StepRun | null>(null);
 const _tickNow = ref(Date.now());
 let tickHandle: ReturnType<typeof setInterval> | null = null;
 
-const platform = computed(() => {
+const _platform = computed(() => {
   if (typeof navigator === "undefined") return "node";
   const ua = navigator.userAgent || "";
   if (/android/i.test(ua)) return "android";
@@ -250,7 +227,7 @@ const platform = computed(() => {
   return "web";
 });
 
-const reportDurationMs = computed(() => {
+const _reportDurationMs = computed(() => {
   if (!currentRun.value) return 0;
   if (isRunning.value) return _tickNow.value - (currentRun.value.startedAt ? new Date(currentRun.value.startedAt).getTime() : Date.now());
   return currentRun.value.durationMs ?? 0;
@@ -259,7 +236,7 @@ const reportDurationMs = computed(() => {
 const selectedDef = computed(() => definitions.value.find(d => d.id === selectedDefId.value));
 
 /** 构建 stepDefId → step name 的映射 */
-const stepNameMap = computed(() => {
+const _stepNameMap = computed(() => {
   const map = new Map<string, string>();
   const def = (selectedDef.value ?? currentRun.value) ? definitions.value.find(d => d.id === currentRun.value!.workflowDefId) : null;
   if (def) {
@@ -284,7 +261,7 @@ const jobDisplayNameMap = computed(() => {
   return map;
 });
 
-function getJobDisplayName(jobDefId: string): string {
+function _getJobDisplayName(jobDefId: string): string {
   return jobDisplayNameMap.value.get(jobDefId) ?? jobDefId;
 }
 
@@ -294,7 +271,7 @@ function findJobForStep(run: WorkflowRun, step: StepRun): JobRun | undefined {
 
 // ---- Handlers ----
 
-async function handleGenerateMock() {
+async function _handleGenerateMock() {
   if (isGenerating.value) return;
   isGenerating.value = true;
   generateProgressText.value = "";
@@ -321,7 +298,7 @@ async function handleGenerateMock() {
   }
 }
 
-async function handleResetMock() {
+async function _handleResetMock() {
   if (isResetting.value) return;
   isResetting.value = true;
   try {
@@ -335,7 +312,7 @@ async function handleResetMock() {
   }
 }
 
-async function handleRunWorkflow() {
+async function _handleRunWorkflow() {
   if (!selectedDefId.value || isRunning.value) return;
   const def = getDefinition(selectedDefId.value);
   if (!def) return;
@@ -347,25 +324,25 @@ async function handleRunWorkflow() {
   }
 }
 
-async function handleCancel() {
+async function _handleCancel() {
   if (currentRun.value) {
     await cancelRun(currentRun.value.id);
   }
   showToast({ message: "Workflow cancelled", color: "warning", duration: 1500 });
 }
 
-function selectHistoryRun(record: UnifiedRunRecord) {
+function _selectHistoryRun(record: UnifiedRunRecord) {
   // 从 UnifiedRunRecord.workflowRun 快照恢复到 currentRun（UI 回放历史运行）
   if (record.workflowRun) {
     currentRun.value = record.workflowRun;
   }
 }
 
-function onSelectStep(step: StepRun) {
+function _onSelectStep(step: StepRun) {
   selectedStep.value = step;
 }
 
-const selectedStepJob = computed(() =>
+const _selectedStepJob = computed(() =>
   currentRun.value && selectedStep.value ? findJobForStep(currentRun.value, selectedStep.value) : null
 );
 
@@ -389,13 +366,13 @@ onUnmounted(() => {
 
 // ---- Utils ----
 
-function humanSize(bytes: number): string {
+function _humanSize(bytes: number): string {
   if (bytes < 1024) return bytes + " B";
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-function formatTime(iso: string): string {
+function _formatTime(iso: string): string {
   try {
     return new Date(iso).toLocaleTimeString();
   } catch {

@@ -51,33 +51,16 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
-import { documentText, folderOpen, globeOutline, lockClosed, personOutline, settingsOutline } from "ionicons/icons";
-import { computed, ref } from "vue";
 import { testLocalWebDAV } from "@encv/shared-components/api/encv";
-import ConfigFieldItem from "@encv/shared-components/components/ConfigFieldItem.vue";
 import FilePickerModal from "@encv/shared-components/components/FilePickerModal.vue";
 import { useConfig } from "@encv/shared-components/composables/useConfig";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
 import type { FieldDef } from "@encv/shared-components/config/schemaParser";
 import { parseSchema } from "@encv/shared-components/config/schemaParser";
+import { modalController } from "@ionic/vue";
+import { documentText, folderOpen, globeOutline, lockClosed, personOutline, settingsOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
 
 const { t } = useI18n();
 const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig();
@@ -85,14 +68,14 @@ const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig()
 const SECTION_KEY = "webdav";
 
 const sectionDef = computed(() => parseSchema().find(s => s.key === SECTION_KEY));
-const childFields = computed(() => sectionDef.value?.properties ?? []);
+const _childFields = computed(() => sectionDef.value?.properties ?? []);
 const webdavTesting = ref(false);
 
 function tField(key: string): string {
   return t(`settings.${key}`);
 }
 
-function fieldLabel(key: string, required?: boolean): string {
+function _fieldLabel(key: string, required?: boolean): string {
   return tField(key) + (required ? " *" : "");
 }
 
@@ -103,7 +86,7 @@ const fieldIconMap: Record<string, string> = {
   password: lockClosed,
 };
 
-function getFieldIcon(fieldKey: string, fieldType: string): string {
+function _getFieldIcon(fieldKey: string, fieldType: string): string {
   if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey];
   if (fieldType === "boolean") return settingsOutline;
   if (fieldType === "integer") return globeOutline;
@@ -111,11 +94,11 @@ function getFieldIcon(fieldKey: string, fieldType: string): string {
   return globeOutline;
 }
 
-function setValue(path: string[], value: unknown) {
+function _setValue(path: string[], value: unknown) {
   setFieldValue(path, value);
 }
 
-function handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
+function _handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
   const val = (event.target as HTMLInputElement).value;
   if (path.length >= 2 && path[1] === "root" && val) {
     const err = validateWebdavRoute(val);
@@ -138,7 +121,7 @@ function validateWebdavRoute(val: string): string | null {
   return null;
 }
 
-async function handleBrowsePath(path: string[], field: FieldDef) {
+async function _handleBrowsePath(path: string[], field: FieldDef) {
   const isFolder = field.key !== "file";
   const currentVal = String(getFieldValue(path) || "/");
   const modal = await modalController.create({
@@ -156,7 +139,7 @@ async function handleBrowsePath(path: string[], field: FieldDef) {
   }
 }
 
-async function handleSave() {
+async function _handleSave() {
   try {
     await saveConfig();
     showToast({ message: t("settings.configSaved"), duration: 1500, color: "success" });
@@ -166,7 +149,7 @@ async function handleSave() {
   }
 }
 
-async function handleTestWebdav() {
+async function _handleTestWebdav() {
   webdavTesting.value = true;
   try {
     const result = await testLocalWebDAV();

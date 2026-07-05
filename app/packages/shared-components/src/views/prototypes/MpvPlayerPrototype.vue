@@ -230,9 +230,8 @@
 
 <script setup lang="ts">
 import { computed, inject, type Ref, ref, watch } from "vue";
-import MpvProgressBar from "./MpvProgressBarWeb.vue";
 
-const sandbox = inject<{ isLandscape: Ref<boolean>; toggleLandscape: () => void }>("sandboxLandscape", {
+const _sandbox = inject<{ isLandscape: Ref<boolean>; toggleLandscape: () => void }>("sandboxLandscape", {
   isLandscape: ref(false),
   toggleLandscape: () => {},
 });
@@ -243,12 +242,12 @@ const SPEED_ANCHORS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
 const SNAP_THRESHOLD = 0.08;
 
 const playerState = ref<"idle" | "loading" | "playing" | "paused" | "audioOnly" | "error">("paused");
-const fileName = ref("Big.Buck.Bunny.1080p.mkv");
+const _fileName = ref("Big.Buck.Bunny.1080p.mkv");
 const durationInput = ref(596000);
 const currentPosition = ref(142000);
 const isPlaying = computed(() => playerState.value === "playing" || playerState.value === "audioOnly");
 const duration = computed(() => durationInput.value);
-const progress = computed(() => (duration.value > 0 ? currentPosition.value / duration.value : 0));
+const _progress = computed(() => (duration.value > 0 ? currentPosition.value / duration.value : 0));
 const showControls = ref(true);
 const isLocked = ref(false);
 const playbackSpeed = ref(1.0);
@@ -260,18 +259,18 @@ const isSpeedDragging = ref(false);
 const speedSliderRef = ref<HTMLElement>();
 const activePanel = ref<"" | "settings" | "subtitles" | "audio">("");
 const selectedSubtitle = ref("none");
-const selectedAudio = ref("1");
-const subtitleDelay = ref(0);
-const audioDelay = ref(0);
-const bgPlayback = ref(false);
+const _selectedAudio = ref("1");
+const _subtitleDelay = ref(0);
+const _audioDelay = ref(0);
+const _bgPlayback = ref(false);
 const isPipMode = ref(false);
 const externalSubtitleName = ref("");
 
-const speedSliderPercent = computed(() => {
+const _speedSliderPercent = computed(() => {
   return ((playbackSpeed.value - SPEED_MIN) / (SPEED_MAX - SPEED_MIN)) * 100;
 });
 
-const subtitleTracks = [
+const _subtitleTracks = [
   { id: "none", label: "None" },
   { id: "1", label: "English" },
   { id: "2", label: "Chinese (Simplified)" },
@@ -279,7 +278,7 @@ const subtitleTracks = [
   { id: "4", label: "Japanese" },
 ];
 
-const audioTracks = [
+const _audioTracks = [
   { id: "1", label: "Japanese (5.1)" },
   { id: "2", label: "English (Stereo)" },
   { id: "3", label: "Chinese (Stereo)" },
@@ -301,12 +300,12 @@ function speedFromX(clientX: number) {
   playbackSpeed.value = snapSpeed(raw);
 }
 
-function onSpeedSliderClick(e: MouseEvent) {
+function _onSpeedSliderClick(e: MouseEvent) {
   if (isSpeedDragging.value) return;
   speedFromX(e.clientX);
 }
 
-function onSpeedSliderDown(e: MouseEvent) {
+function _onSpeedSliderDown(e: MouseEvent) {
   isSpeedDragging.value = true;
   speedFromX(e.clientX);
   const onMove = (ev: MouseEvent) => speedFromX(ev.clientX);
@@ -319,7 +318,7 @@ function onSpeedSliderDown(e: MouseEvent) {
   window.addEventListener("mouseup", onUp);
 }
 
-function togglePanel(panel: typeof activePanel.value) {
+function _togglePanel(panel: typeof activePanel.value) {
   if (activePanel.value === panel) {
     activePanel.value = "";
   } else {
@@ -328,7 +327,7 @@ function togglePanel(panel: typeof activePanel.value) {
   }
 }
 
-function handleTap() {
+function _handleTap() {
   if (isLocked.value) {
     isLocked.value = false;
   } else {
@@ -338,23 +337,23 @@ function handleTap() {
   }
 }
 
-function togglePlay() {
+function _togglePlay() {
   if (playerState.value === "playing") playerState.value = "paused";
   else if (playerState.value === "paused") playerState.value = "playing";
   else playerState.value = "playing";
   showControls.value = true;
 }
 
-function handleSeek(ratio: number) {
+function _handleSeek(ratio: number) {
   currentPosition.value = Math.round(ratio * duration.value);
 }
 
-function seekDelta(ms: number) {
+function _seekDelta(ms: number) {
   currentPosition.value = Math.max(0, Math.min(duration.value, currentPosition.value + ms));
   showControls.value = true;
 }
 
-function cycleSpeed() {
+function _cycleSpeed() {
   const current = playbackSpeed.value;
   let best = SPEED_ANCHORS[0];
   for (const a of SPEED_ANCHORS) {
@@ -367,7 +366,7 @@ function cycleSpeed() {
   playbackSpeed.value = best;
 }
 
-function toggleVolumeSlider() {
+function _toggleVolumeSlider() {
   showVolumeSlider.value = !showVolumeSlider.value;
   if (showVolumeSlider.value) activePanel.value = "";
 }
@@ -379,21 +378,21 @@ function onVolumeTrackClick(e: MouseEvent) {
   volume.value = Math.round(ratio * 100) / 100;
 }
 
-function onVolumeDrag(e: MouseEvent) {
+function _onVolumeDrag(e: MouseEvent) {
   if (!isDragging.value) return;
   onVolumeTrackClick(e);
 }
 
-function startDrag(e: MouseEvent) {
+function _startDrag(e: MouseEvent) {
   isDragging.value = true;
   onVolumeTrackClick(e);
 }
 
-function stopDrag() {
+function _stopDrag() {
   isDragging.value = false;
 }
 
-function pickSubtitleFile() {
+function _pickSubtitleFile() {
   const input = document.createElement("input");
   input.type = "file";
   input.accept = ".srt,.ass,.ssa,.vtt,.lrc,.sub";
@@ -408,18 +407,18 @@ function pickSubtitleFile() {
   input.click();
 }
 
-function enterPip() {
+function _enterPip() {
   isPipMode.value = true;
   activePanel.value = "";
   showControls.value = false;
 }
 
-function exitPip() {
+function _exitPip() {
   isPipMode.value = false;
   showControls.value = true;
 }
 
-function onBack() {
+function _onBack() {
   showControls.value = true;
 }
 

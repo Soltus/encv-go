@@ -54,7 +54,7 @@ export function useTasksView() {
   function ensureScrollEl(): HTMLElement | null {
     if (!contentRef.value) return null;
     const hostEl = (contentRef.value.$el || contentRef.value) as HTMLElement | undefined;
-    if (!hostEl || !hostEl.shadowRoot) return null;
+    if (!hostEl?.shadowRoot) return null;
     const el = hostEl.shadowRoot.querySelector(".inner-scroll") as HTMLElement | null;
     if (el && el !== scrollEl.value) scrollEl.value = el;
     return scrollEl.value;
