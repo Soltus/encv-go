@@ -4,3 +4,7 @@ packages:
   - 'preview-gateway'
   - 'packages/*'
   - 'simverse-frontend'
+allowBuilds:
+  core-js: false
+  cypress: false
+  esbuild: false

@@ -235,8 +235,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { Capacitor } from '@capacitor/core'
+import { ScreenOrientation } from '@capacitor/screen-orientation'
 import { closeWorld, addWorldShortcut, isWorldShortcutSupported } from '@self/plugins/SimVerse'
 import { useWorldRenderer, type WorldEntity } from '@self/composables/useWorldRenderer'
+
+const router = useRouter()
 
 const worldName = ref('SimVerse')
 const worldState = ref<any>(null)
@@ -556,9 +561,34 @@ function stopPolling() {
   }
 }
 
+async function lockLandscape() {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await ScreenOrientation.lock({
+        orientation: 'landscape-primary',
+      })
+    } catch (e) {
+      console.warn('Failed to lock landscape orientation', e)
+    }
+  }
+}
+
+async function unlockOrientation() {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      await ScreenOrientation.unlock()
+    } catch (e) {
+      console.warn('Failed to unlock orientation', e)
+    }
+  }
+}
+
 let resizeObserver: ResizeObserver | null = null
 
 onMounted(async () => {
+  // 锁定横屏
+  await lockLandscape()
+  
   await fetchWorldState()
   await fetchStorageStatus()
   await fetchNPCs()
@@ -578,6 +608,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  // 恢复竖屏
+  unlockOrientation()
+  
   stopPolling()
   if (resizeObserver) {
     resizeObserver.disconnect()

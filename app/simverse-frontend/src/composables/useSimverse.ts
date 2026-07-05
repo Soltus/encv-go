@@ -1,6 +1,4 @@
 import { ref, computed } from "vue";
-import { eventBus } from "./useEventBus";
-import type { EncvEvents } from "./useEventBus";
 
 export interface SimverseWorldState {
   tick: number;
@@ -324,7 +322,6 @@ export function useSimverse() {
         isConnected.value = true;
         error.value = "";
         console.log("[simverse] WS connected");
-        eventBus.emit("simverse:ws:connected", {});
       };
 
       ws.onmessage = (event) => {
@@ -339,7 +336,6 @@ export function useSimverse() {
       ws.onclose = () => {
         isConnected.value = false;
         console.log("[simverse] WS disconnected");
-        eventBus.emit("simverse:ws:disconnected", {});
         scheduleReconnect();
       };
 
@@ -359,7 +355,6 @@ export function useSimverse() {
           worldState.value.tick = msg.data.tick;
           worldState.value.tier = msg.data.tier;
         }
-        eventBus.emit("simverse:tick", msg.data);
         break;
       case "world:stats":
         if (worldState.value) {
@@ -370,13 +365,11 @@ export function useSimverse() {
           worldState.value.total_mb = msg.data.total_mb;
           worldState.value.focus_count = msg.data.focus_count;
         }
-        eventBus.emit("simverse:stats", msg.data);
         break;
       case "pong":
-        eventBus.emit("simverse:pong", msg.data);
         break;
       default:
-        eventBus.emit(`simverse:${msg.type}` as keyof EncvEvents, msg.data);
+        console.log("[simverse] WS event:", msg.type, msg.data);
     }
   }
 

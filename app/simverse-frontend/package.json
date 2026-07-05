@@ -11,6 +11,7 @@
   "dependencies": {
     "@capacitor/core": "^8.3.4",
     "@capacitor/screen-orientation": "^8.0.1",
+    "@encv/shared-components": "workspace:*",
     "@ionic/vue": "^8.8.7",
     "@ionic/vue-router": "^8.8.7",
     "ionicons": "^8.0.13",
@@ -19,12 +20,13 @@
     "pinia": "^3.0.4",
     "vconsole": "^3.15.1",
     "vue": "^3.5.34",
-    "vue-router": "^4.6.4",
-    "@encv/shared-components": "workspace:*"
+    "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "@cypress/vue": "^6.0.3",
     "@types/matter-js": "^0.20.2",
     "@vitejs/plugin-vue": "^6.0.7",
+    "cypress": "^15.17.0",
     "typescript": "^5.9.3",
     "vite": "^8.0.13",
     "vue-tsc": "^2.2.10"

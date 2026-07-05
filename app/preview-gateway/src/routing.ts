@@ -54,6 +54,15 @@ export const SPECIAL_UPSTREAMS: Upstream[] = [
     required: false,
     pathRewrite: (p) => p.replace(/^\/openlist(?=\/|$)/, '') || '/',
   },
+  {
+    match: '/simverse',
+    target: 'http://127.0.0.1:8200',
+    wsTarget: 'ws://127.0.0.1:8200',
+    name: 'simverse-frontend',
+    hint: 'Check pm2 status for simverse-frontend vite (:8200)',
+    required: false,
+    pathRewrite: (p) => p.replace(/^\/simverse(?=\/|$)/, '') || '/',
+  },
 ]
 
 /** 黑名单：命中走 Vite */
@@ -63,7 +72,12 @@ export const VITE_DENY: ViteDenyRule[] = [
   { match: '/player', mode: 'prefix', why: 'ArtPlayerView SPA（router/index.ts:12）' },
   { match: '/tabs',   mode: 'prefix', why: 'Tabs SPA 全部子路由（home/files/tasks/settings/devlogs/...）' },
 
-  // ② Vite dev artifacts
+  // ② SimVerse SPA 路由
+  { match: '/simverse-home', mode: 'prefix', why: 'SimVerse 首页（router/index.ts）' },
+  { match: '/simverse-world', mode: 'prefix', why: 'SimVerse 横屏世界视图（router/index.ts）' },
+  { match: '/simverse/chronicle', mode: 'prefix', why: 'SimVerse 编年史路由（router/index.ts）' },
+
+  // ③ Vite dev artifacts
   { match: '/@vite/',         mode: 'prefix', why: 'Vite HMR client + module graph' },
   { match: '/@fs/',           mode: 'prefix', why: 'Vite fs allowlist' },
   { match: '/@id/',           mode: 'prefix', why: 'Vite virtual module id' },
@@ -72,7 +86,7 @@ export const VITE_DENY: ViteDenyRule[] = [
   { match: '/src/',           mode: 'prefix', why: 'Vite 源码模块' },
   { match: '/node_modules/',  mode: 'prefix', why: 'Vite 优化后的 deps' },
 
-  // ③ 静态资源
+  // ④ 静态资源
   { match: '/assets/',     mode: 'prefix', why: 'Vite build assets' },
   { match: '/public/',     mode: 'prefix', why: 'Vite public 目录' },
   { match: '/favicon.ico', mode: 'exact',  why: 'favicon' },

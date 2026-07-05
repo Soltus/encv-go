@@ -1,27 +1,11 @@
 import { createRouter, createWebHistory } from "vue-router";
 import type { RouteRecordRaw } from "vue-router";
-import SimverseTabs from "@self/views/SimverseTabs.vue";
 
 const routes: RouteRecordRaw[] = [
-  { path: "/", redirect: "/tabs/home" },
+  { path: "/", redirect: "/simverse-home" },
   {
-    path: "/tabs/",
-    component: SimverseTabs,
-    children: [
-      { path: "", redirect: "/tabs/home" },
-      {
-        path: "home",
-        component: () => import("@self/views/SimverseHome.vue"),
-      },
-      {
-        path: "settings",
-        component: () => import("@self/views/SimverseSettings.vue"),
-      },
-      {
-        path: "devlogs",
-        component: () => import("@self/views/SimverseDevLogs.vue"),
-      },
-    ],
+    path: "/simverse-home",
+    component: () => import("@self/views/SimverseHome.vue"),
   },
   {
     path: "/world",
@@ -30,6 +14,14 @@ const routes: RouteRecordRaw[] = [
   {
     path: "/chronicle",
     component: () => import("@self/views/ChronicleDetail.vue"),
+  },
+  {
+    path: "/tabs/settings",
+    component: () => import("@self/views/SimverseSettings.vue"),
+  },
+  {
+    path: "/tabs/devlogs",
+    component: () => import("@self/views/SimverseDevLogs.vue"),
   },
 ];
 

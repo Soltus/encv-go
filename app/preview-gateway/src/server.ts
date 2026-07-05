@@ -496,6 +496,19 @@ function buildChildSpecs(paths: ReturnType<typeof resolvePaths>): ChildSpec[] {
     })
   }
 
+  // 5) simverse-frontend Vite — SimVerse 独立前端
+  if (process.env.SPAWN_SIMVERSE_VITE !== '0') {
+    specs.push({
+      name: 'simverse-frontend',
+      cmd: paths.nodeBin,
+      args: [paths.viteJsMain, '--host', '0.0.0.0', '--port', '8200', '--strictPort'],
+      env: { ...process.env, PATH: process.env.PATH ?? '' },
+      cwd: paths.simverseFrontendDir,
+      readyUrl: 'http://127.0.0.1:8200/',
+      readyTimeoutMs: 30_000,
+    })
+  }
+
   return specs
 }
 

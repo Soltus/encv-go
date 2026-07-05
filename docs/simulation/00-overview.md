@@ -385,7 +385,75 @@ type NPC struct {
 
 ---
 
-## 十一、参考资料
+## 十二、前端架构与实施计划
+
+> **详细说明**：参见 [frontend-phased-plan.md](./frontend-phased-plan.md)
+
+### 12.1 整体架构
+
+**SimVerse 是一个独立的前端 SPA 应用**，复用主应用的共享组件库：
+
+```
+simverse-frontend/          ← 独立的前端应用（Vite + Vue 3）
+├── 复用主应用组件：
+│   ├── HomePage            ← 复用 @encv/shared-components
+│   ├── SettingsPage        ← 复用 @encv/shared-components
+│   └── DevLogsPage         ← 复用 @encv/shared-components
+│
+└── SimVerse 特有页面：
+    ├── /                    ← SimVerse 首页（竖屏，世界概览 + 快速入口）
+    ├── /world               ← 横屏世界视图（从首页进入）
+    ├── /chronicles          ← 编年史列表
+    └── /chronicle/:id       ← 编年史详情
+```
+
+### 12.2 用户交互流程
+
+```
+用户点击主应用 SimVerse 卡片
+    │
+    ▼
+加载 simverse-frontend（独立前端应用）
+    │
+    ▼
+显示 SimVerse 首页（竖屏）
+    ├─ 世界概览（tick/时代/NPC 数）
+    ├─ "进入世界" 按钮
+    ├─ 设置入口（复用主应用）
+    └─ 日志入口（复用主应用）
+    │
+    └─ 用户点击"进入世界"
+            │
+            ▼
+        切换到 /world 路由
+            │
+            ├─ 锁定横屏（Capacitor screen-orientation）
+            ├─ 沉浸式全屏（隐藏状态栏/导航栏）
+            ├─ 双栏布局（左地图 + 右时间线/数据面板）
+            ├─ 实时 WebSocket 推送
+            └─ 底部手游式菜单（NPC/组织/编年史/设置/退出）
+```
+
+### 12.3 实施阶段
+
+| 阶段 | 优先级 | 目标 | 状态 |
+|------|--------|------|------|
+| **P0** | 最高 | 正确骨架（TS 配置/Pinia Store/首页/横屏/网关） | ⬜ 未开始 |
+| **P1** | 高 | 核心功能（世界视图/NPC 详情/编年史/焦点管理） | ⬜ 未开始 |
+| **P2** | 中 | 优化完善（i18n/主题/PWA/移动端适配/测试） | ⬜ 未开始 |
+| **P3** | 低 | 高级功能（干预模式/时间控制/经济/组织/脑内视图） | ⬜ 未开始 |
+
+### 12.4 技术栈
+
+- **框架**：Vue 3 + Ionic 8 + Capacitor 6
+- **状态管理**：Pinia
+- **API 层**：useProxiedFetch + useWebSocket
+- **构建**：Vite
+- **共享组件**：@encv/shared-components（复用主应用）
+
+---
+
+## 十三、参考资料
 
 - **ObjectBox Go**：高性能对象存储，按 ID 访问 O(1)
 - **LibSQL**：SQLite 超集，支持向量索引
@@ -399,3 +467,4 @@ type NPC struct {
 
 *文档版本：v0.1（规划期）*
 *创建日期：2026-07-03*
+*前端计划更新日期：2026-07-05*

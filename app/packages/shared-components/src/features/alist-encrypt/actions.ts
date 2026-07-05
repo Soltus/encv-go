@@ -2,14 +2,14 @@ import { lockClosed, lockOpen, videocam } from "ionicons/icons";
 import type { FileItem } from "@encv/shared-components/api/encv";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useNewTaskModal } from "@encv/shared-components/composables/useNewTaskModal";
-import router from "@encv/shared-components/router";
 import type { FileAction } from "@encv/shared-components/types/file-feature";
+import type { Router } from 'vue-router';
 import { promptPassword } from "./password-dialog";
 import { getDecodedName, isAlistEncrypted, loadDecodedName, setSessionPassword } from "./useAlistEncrypt";
 
 const { t } = useI18n();
 
-export function getAlistActions(file: FileItem): FileAction[] {
+export function getAlistActions(file: FileItem, router?: Router): FileAction[] {
   if (isAlistEncrypted(file)) {
     return [
       {
@@ -24,7 +24,9 @@ export function getAlistActions(file: FileItem): FileAction[] {
             setSessionPassword(f.path, password);
             await loadDecodedName(f, password);
             const decodedName = getDecodedName(f.path) || f.name;
-            router.push({ path: "/player", query: { path: f.path, name: decodedName, alistPath: f.path, alistPassword: password } });
+            if (router) {
+              router.push({ path: "/player", query: { path: f.path, name: decodedName, alistPath: f.path, alistPassword: password } });
+            }
           } catch (e) {
             console.error("[alist] stream-preview error:", e);
           }

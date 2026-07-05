@@ -3,5 +3,5 @@
 </template>
 
 <script setup lang="ts">
-import DevLogs from "@encv/shared-components/views/DevLogs.vue";
+import DevLogs from '@shared/views/DevLogs.vue';
 </script>

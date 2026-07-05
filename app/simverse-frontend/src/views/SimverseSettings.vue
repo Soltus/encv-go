@@ -3,5 +3,5 @@
 </template>
 
 <script setup lang="ts">
-import Settings from "@encv/shared-components/views/Settings.vue";
+import Settings from '@shared/views/Settings.vue';
 </script>

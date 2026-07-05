@@ -47,6 +47,8 @@ export interface ResolvedPaths {
    */
   mobileDataDir: string
   pluginWebDir: string
+  /** 🆕 SimVerse 独立前端目录 */
+  simverseFrontendDir: string
   airBin: string
   nodeBin: string
   viteJsMain: string
@@ -67,6 +69,7 @@ export function resolvePaths(): ResolvedPaths {
   // mobile 真机上此目录由系统挂载（设备自带），dev preview 沙箱里 preflight 负责建。
   const mobileDataDir = process.env.MOBILE_DATA_DIR ?? '/storage/emulated/0'
   const pluginWebDir = process.env.PLUGIN_WEB_DIR ?? `${mobileDir}/plugin-openlist/web`
+  const simverseFrontendDir = process.env.SIMVERSE_FRONTEND_DIR ?? `${repoRoot}/app/simverse-frontend`
 
   // air — 优先 env，否则 PATH，否则 mise/go 标准位置
   const airBin =
@@ -104,6 +107,7 @@ export function resolvePaths(): ResolvedPaths {
     mobileDir,
     mobileDataDir,
     pluginWebDir,
+    simverseFrontendDir,
     airBin,
     nodeBin,
     viteJsMain,

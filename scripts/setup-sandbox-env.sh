@@ -236,9 +236,9 @@ else
 fi
 
 # ============================================================================
-# 步骤 4/5: 构建前端 fork 的 dist
+# 步骤 4/6: 构建前端 fork 的 dist
 # ============================================================================
-step "4/5 构建前端 fork 的 dist (Hi-Sillot-OpenList-Frontend/dist/)"
+step "4/6 构建前端 fork 的 dist (Hi-Sillot-OpenList-Frontend/dist/)"
 
 if [[ -f "${FRONTEND_FORK_DIR}/dist/index.html" ]]; then
   ok "前端 dist 已构建: ${FRONTEND_FORK_DIR}/dist/"
@@ -267,6 +267,26 @@ else
       warn "前端 dist 构建失败（dev-openlist.sh 会 fallback 到 release tarball）"
       FAILED=$((FAILED+1))
     fi
+  fi
+fi
+
+# ============================================================================
+# 步骤 4b/6: 安装 simverse-frontend 依赖
+# ============================================================================
+SIMVERSE_DIR="${REPO_ROOT}/app/simverse-frontend"
+
+step "4b/6 安装 simverse-frontend 依赖"
+
+if [[ -d "${SIMVERSE_DIR}/node_modules/vue" ]]; then
+  ok "simverse-frontend node_modules 已就绪"
+else
+  log "pnpm install simverse-frontend ..."
+  cd "${SIMVERSE_DIR}"
+  if pnpm install --prefer-offline 2>&1 | tail -5; then
+    ok "simverse-frontend 依赖安装完成"
+  else
+    warn "simverse-frontend pnpm install 失败"
+    FAILED=$((FAILED+1))
   fi
 fi
 
@@ -304,11 +324,11 @@ else
 fi
 
 # ============================================================================
-# 步骤 6/6: 构建 preview-gateway 网关
+# 步骤 6/7: 构建 preview-gateway 网关
 # ============================================================================
 GATEWAY_DIR="${REPO_ROOT}/app/preview-gateway"
 
-step "6/6 构建 preview-gateway 网关（app/preview-gateway/）"
+step "6/7 构建 preview-gateway 网关（app/preview-gateway/）"
 
 if [[ -d "${GATEWAY_DIR}/node_modules" ]]; then
   ok "preview-gateway node_modules 已就绪"
@@ -342,6 +362,48 @@ else
 fi
 
 # ============================================================================
+# 步骤 7/7: 安装 simverse-frontend + Cypress
+# ============================================================================
+SIMVERSE_DIR="${REPO_ROOT}/app/simverse-frontend"
+
+step "7/7 安装 simverse-frontend + Cypress 测试依赖"
+
+if [[ -d "${SIMVERSE_DIR}/node_modules" ]]; then
+  ok "simverse-frontend node_modules 已就绪"
+else
+  log "pnpm install simverse-frontend ..."
+  cd "${SIMVERSE_DIR}"
+  if pnpm install --prefer-offline 2>&1 | tail -5; then
+    ok "simverse-frontend 依赖安装完成"
+  else
+    warn "simverse-frontend pnpm install 失败"
+    FAILED=$((FAILED+1))
+  fi
+fi
+
+# 安装 Cypress
+if [[ -d "${SIMVERSE_DIR}/node_modules/cypress" ]]; then
+  ok "Cypress 已安装"
+else
+  log "pnpm add -D cypress ..."
+  cd "${SIMVERSE_DIR}"
+  if pnpm add -D cypress 2>&1 | tail -5; then
+    ok "Cypress 安装完成"
+    # 安装 Cypress 二进制文件
+    log "npx cypress install ..."
+    if npx cypress install 2>&1 | tail -5; then
+      ok "Cypress 二进制安装完成"
+    else
+      warn "Cypress 二进制安装失败"
+      FAILED=$((FAILED+1))
+    fi
+  else
+    warn "Cypress 安装失败"
+    FAILED=$((FAILED+1))
+  fi
+fi
+
+# ============================================================================
 # 环境就绪报告（只展示静态资源状态，不拉起任何服务）
 # ============================================================================
 step "✅ 环境准备完成"
@@ -365,7 +427,7 @@ cat <<EOF
 
 仓库：
 EOF
-for d in "${BACKEND_FORK_DIR}" "${FRONTEND_FORK_DIR}" "${MOBILE_DIR}/node_modules/vite" "${FRONTEND_FORK_DIR}/dist/index.html" "${GATEWAY_DIR}/dist/server.js"; do
+for d in "${BACKEND_FORK_DIR}" "${FRONTEND_FORK_DIR}" "${MOBILE_DIR}/node_modules/vite" "${FRONTEND_FORK_DIR}/dist/index.html" "${GATEWAY_DIR}/dist/server.js" "${SIMVERSE_DIR}/node_modules/cypress"; do
   if [[ -e "$d" ]]; then
     if [[ -d "$d/.git" ]]; then
       branch=$(cd "$d" && git rev-parse --abbrev-ref HEAD 2>/dev/null)
