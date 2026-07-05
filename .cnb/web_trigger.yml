@@ -1,0 +1,90 @@
+branch:
+- buttons:
+  - name: 🚀 同步到GitHub
+    description: 将当前分支推送到 GitHub 仓库
+    event: web_trigger_cnb_to_github
+    inputs:
+      mode:
+        type: select
+        required: true
+        default: current
+        name: 同步范围
+        options:
+        - name: 当前分支
+          value: current
+        - name: 全部分支
+          value: all
+      branch:
+        type: input
+        required: false
+        name: 分支名
+      force:
+        type: switch
+        required: false
+        default: 'false'
+        name: 强制覆盖
+      github_repo:
+        type: input
+        required: false
+        name: GitHub 仓库
+        description: 目标 GitHub 仓库地址（如 owner/repo，留空则使用默认）
+  - name: 📥 从GitHub拉取
+    description: 从 GitHub 仓库拉取最新代码
+    event: web_trigger_github_to_cnb
+    inputs:
+      mode:
+        type: select
+        required: true
+        default: current
+        name: 同步范围
+        options:
+        - name: 当前分支
+          value: current
+        - name: 全部分支
+          value: all
+      branch:
+        type: input
+        required: false
+        name: 分支名
+      github_repo:
+        type: input
+        required: false
+        name: GitHub 仓库
+        description: 源 GitHub 仓库地址
+  - name: 🔄 双向同步
+    description: 先推送再拉取，保持两边一致
+    event: web_trigger_full_sync
+    inputs:
+      mode:
+        type: select
+        required: true
+        default: current
+        name: 同步范围
+        options:
+        - name: 当前分支
+          value: current
+        - name: 全部分支
+          value: all
+      branch:
+        type: input
+        required: false
+        name: 分支名
+      force:
+        type: switch
+        required: false
+        default: 'false'
+        name: 强制覆盖
+      github_repo:
+        type: input
+        required: false
+        name: GitHub 仓库
+      dry_run:
+        type: select
+        required: false
+        default: 'false'
+        name: 预览模式
+        options:
+        - name: 直接执行
+          value: 'false'
+        - name: 预览模式
+          value: 'true'
