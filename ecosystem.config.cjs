@@ -1,10 +1,10 @@
 /* eslint-disable */
 // =============================================================================
-// ecosystem.config.cjs — 方案 C：网关合一
+// ecosystem.config.cjs — 方案 C：网关合一（Go 版）
 // -----------------------------------------------------------------------------
 // pm2 配置：精简为 2 个 app。
 //   ① preview-gateway   (:16666) — 唯一对外入口 + 唯一进程管理者
-//      内部 child_process.spawn 管理 4 个子进程：
+//      Go 二进制，内部 os/exec 管理 4 个子进程：
 //        - encv-go         (:2025)  SPAWN_GO=1 (default)
 //        - encv-mobile-vite(:8100)  SPAWN_VITE=1 (default)
 //        - plugin-vite     (:5174)  SPAWN_PLUGIN_VITE=0 (按需)
@@ -12,6 +12,13 @@
 //   ② openpreview-stub  (:15003) — OpenPreview 工具垫脚石
 //      （agent-tool-host 要求 command_id 来自 web_server 类型命令；
 //        本服务纯返 200 OK，真实预览仍走 :16666）
+//
+// 历史变更（2026-07-06 Go 重写）：
+//   - preview-gateway 从 Node.js 重写为 Go（纯标准库，零第三方依赖）
+//   - 子进程管理从 Node child_process 改为 Go os/exec
+//   - 二进制路径：app/preview-gateway/bin/preview-gateway
+//   - 源码：app/preview-gateway/{cmd,internal}/ （Go）
+//   - 旧 Node 版源码备份在 app/preview-gateway/src.node.bak/
 //
 // 历史变更（2026-06-08 方案 C 大改）：
 //   - 删除 start-preview（amalgamated 巨脚本，子进程已下沉到 gateway）
@@ -44,26 +51,28 @@ const REPO_ROOT     = '/workspace';
 const MOBILE_DIR    = path.join(REPO_ROOT, 'app', 'encv-mobile');
 const GATEWAY_DIR   = path.join(REPO_ROOT, 'app', 'preview-gateway');
 
-const GATEWAY_SCRIPT = path.join(GATEWAY_DIR, 'dist', 'server.js');
+// Go 版二进制路径
+const GATEWAY_BIN = path.join(GATEWAY_DIR, 'bin', 'preview-gateway');
 
-// 启动前 fail-fast：dist 必须存在
-if (!fs.existsSync(GATEWAY_SCRIPT)) {
+// 启动前 fail-fast：二进制必须存在
+if (!fs.existsSync(GATEWAY_BIN)) {
   throw new Error(
-    `preview-gateway dist/server.js 不存在: ${GATEWAY_SCRIPT}\n` +
-    `请先运行 setup-sandbox-env.sh（或 cd ${GATEWAY_DIR} && pnpm install && pnpm build）`,
+    `preview-gateway Go 二进制不存在: ${GATEWAY_BIN}\n` +
+    `请先构建：cd ${GATEWAY_DIR} && make build`,
   );
 }
 
 module.exports = {
   apps: [
-    // ── ① preview-gateway (:16666) ───────────────────────────────────
+    // ── ① preview-gateway (:16666) — Go 版 ───────────────────────────
     // 方案 C 核心：单进程 = 单入口 = 单一管理。
     // gateway 内部 spawn air / vite / plugin-vite / openlist，
     // 任何子进程死 → gateway 退出 → pm2 重启整套。
     {
       name: 'preview-gateway',
-      script: GATEWAY_SCRIPT,
-      interpreter: 'node',
+      script: GATEWAY_BIN,
+      interpreter: 'none',       // Go 二进制，不需要解释器
+      exec_mode: 'fork',
       cwd: GATEWAY_DIR,
       env: {
         PATH: process.env.PATH,
@@ -74,6 +83,7 @@ module.exports = {
         SPAWN_VITE: '1',        // encv-mobile Vite (:8100)
         SPAWN_PLUGIN_VITE: '0', // plugin-openlist-web Vite (:5174)，按需 1
         SPAWN_OPENLIST: '0',    // OpenList fork (:5244)，按需 1
+        SPAWN_SIMVERSE_VITE: '1', // simverse-frontend Vite (:8200)
         // ── env 注入铁律（L1 pm2 注入） ──
         // 透传给 air 子进程，触发 ApplyMobileOverlay
         // (internal/config/config.go:292-294)
@@ -92,6 +102,7 @@ module.exports = {
         //   用 `go install github.com/air-verse/air@latest` 装到 GOPATH/bin（/root/go/bin）。
         //   验证：which air → /root/go/bin/air
         AIR_BIN: '/root/go/bin/air',
+        REPO_ROOT: REPO_ROOT,
       },
       // 网关本体轻量；子进程会跑出来几百 MB（Go 编译 + Vite + node_modules）
       max_memory_restart: '256M',
