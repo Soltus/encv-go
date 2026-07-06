@@ -3,17 +3,29 @@ from __future__ import annotations
 
 import re
 import os
+import json
+import hashlib
 from pathlib import Path
 from collections import defaultdict
 
-from .config import PROJECT_ROOT, get_app_config
+from .config import PROJECT_ROOT, CACHE_DIR, get_app_config
 from .perf import perf_tracker
 
 GO_I18N_PATTERN = re.compile(
     r"""i18n\.\s*T(?:With)?\s*\(\s*['"`]([^'"`]+)['"`]"""
 )
 
-COMMENT_PATTERN = re.compile(r'^\s*//')
+QUICK_CHECK_BYTES = b"i18n.T"
+
+
+def _file_fingerprint(fpath: Path) -> str:
+    stat = fpath.stat()
+    return f"{stat.st_size}:{stat.st_mtime_ns}"
+
+
+def _scan_cache_key(go_dirs: list[str]) -> str:
+    key = f"go-scan:{':'.join(sorted(go_dirs))}"
+    return hashlib.md5(key.encode()).hexdigest()
 
 
 def extract_go_i18n_keys(
@@ -36,6 +48,7 @@ def extract_go_i18n_keys(
         go_dirs = ["internal", "pkg"]
 
     used_keys: dict[str, list[str]] = defaultdict(list)
+    file_fingerprints: dict[str, str] = {}
 
     for go_dir in go_dirs:
         dir_path = PROJECT_ROOT / go_dir
@@ -54,8 +67,17 @@ def extract_go_i18n_keys(
 
                 fpath = Path(root) / fname
                 try:
-                    with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
-                        lines = f.readlines()
+                    fp = _file_fingerprint(fpath)
+                    file_fingerprints[str(fpath)] = fp
+
+                    with open(fpath, "rb") as f:
+                        content_bytes = f.read()
+
+                    if QUICK_CHECK_BYTES not in content_bytes:
+                        continue
+
+                    content = content_bytes.decode("utf-8", errors="ignore")
+                    lines = content.split("\n")
                 except Exception:
                     continue
 

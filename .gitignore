@@ -93,3 +93,6 @@ scripts/openlist-fork.env.local
 .workspace-info.md
 .local/share/opencode/
 # <<< tcb-remote-workspace internal ignore rules <<<
+*.pyc
+__pycache__/
+.i18n-cache/

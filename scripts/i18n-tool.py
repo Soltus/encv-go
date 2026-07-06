@@ -82,6 +82,10 @@ def main():
     p_compile.add_argument("--app", help="应用名称")
     p_compile.add_argument("--output", help="输出目录")
 
+    p_compile_android = subparsers.add_parser("compile-android", help="将 TS 字典编译为 Android strings.xml（供 Kotlin 复用）")
+    p_compile_android.add_argument("--app", help="应用名称")
+    p_compile_android.add_argument("--output", help="输出目录")
+
     p_addkey = subparsers.add_parser("add-key", help="添加翻译 key 到 TS 字典")
     p_addkey.add_argument("key", help="翻译 key")
     p_addkey.add_argument("--zh", required=True, help="中文翻译")
@@ -110,6 +114,19 @@ def main():
                 if app_cfg.go_dirs:
                     go_keys = extract_go_i18n_keys(app_cfg.go_dirs, use_cache=not args.no_cache)
                     for key, files in go_keys.items():
+                        if key in used_keys:
+                            used_keys[key].extend(files)
+                        else:
+                            used_keys[key] = files
+            except Exception:
+                pass
+
+            try:
+                from i18n_lib.scanner_kotlin import extract_kotlin_i18n_keys
+                app_cfg = get_app_config(args.app)
+                if app_cfg.kotlin_dirs:
+                    kt_keys = extract_kotlin_i18n_keys(app_cfg.kotlin_dirs)
+                    for key, files in kt_keys.items():
                         if key in used_keys:
                             used_keys[key].extend(files)
                         else:
@@ -266,6 +283,19 @@ def main():
             print()
             print(result["output"])
             print(f"✅ 编译成功: {result['locale_count']} 个语言文件, {result['total_keys']} 条翻译")
+            return 0
+
+        elif args.command == "compile-android":
+            from i18n_lib.compile_android_xml import compile_to_android_xml
+
+            print("📱 编译 TS 字典为 Android strings.xml...")
+            print()
+
+            result = compile_to_android_xml(args.app, args.output)
+
+            print()
+            print(result["output"])
+            print(f"✅ 编译成功: {result['locale_count']} 个语言, {result['total_keys']} 条翻译")
             return 0
 
         elif args.command == "add-key":

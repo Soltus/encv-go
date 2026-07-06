@@ -37,6 +37,9 @@ DEFAULT_CONFIG = {
                 "internal",
                 "pkg",
             ],
+            "kotlin_dirs": [
+                "app/encv-mobile/android/app/src/main/java",
+            ],
         }
     },
     "default_app": "encv-mobile",
@@ -64,6 +67,7 @@ class AppConfig:
     i18n_files: list[str]
     types_output: str
     go_dirs: list[str] = field(default_factory=list)
+    kotlin_dirs: list[str] = field(default_factory=list)
 
 
 _config_cache: dict | None = None
@@ -102,6 +106,7 @@ def get_app_config(app_name: str | None = None) -> AppConfig:
         i18n_files=app_cfg.get("i18n_files", []),
         types_output=app_cfg.get("types_output", ""),
         go_dirs=app_cfg.get("go_dirs", []),
+        kotlin_dirs=app_cfg.get("kotlin_dirs", []),
     )
 
 

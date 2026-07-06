@@ -261,6 +261,7 @@ def run_all_checks(
     include_dup: bool = False,
     include_dup_value: bool = False,
     include_go: bool = True,
+    include_kotlin: bool = True,
 ) -> dict:
     perf_tracker.start("Lint 检查")
 
@@ -273,6 +274,20 @@ def run_all_checks(
             if app_cfg.go_dirs:
                 go_keys = extract_go_i18n_keys(app_cfg.go_dirs)
                 for key, files in go_keys.items():
+                    if key in used_keys:
+                        used_keys[key].extend(files)
+                    else:
+                        used_keys[key] = files
+        except Exception:
+            pass
+
+    if include_kotlin:
+        try:
+            from .scanner_kotlin import extract_kotlin_i18n_keys
+            app_cfg = get_app_config(app_name)
+            if app_cfg.kotlin_dirs:
+                kt_keys = extract_kotlin_i18n_keys(app_cfg.kotlin_dirs)
+                for key, files in kt_keys.items():
                     if key in used_keys:
                         used_keys[key].extend(files)
                     else:
