@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-06T03:35:21.875Z",
+  "generated_at": "2026-07-06T04:11:34.262Z",
   "source_file": "package.json",
   "items": [
     {
@@ -90,17 +90,6 @@
       "description": "Capacitor 状态栏样式控制插件",
       "icon": "phone-portrait",
       "license": "MIT"
-    },
-    {
-      "name": "@ionic/core",
-      "version": "8.8.7",
-      "version_range": "8.8.7",
-      "source": "package.json",
-      "kind": "dependency",
-      "importance": "light",
-      "description": "",
-      "icon": "help-circle",
-      "license": "unknown"
     },
     {
       "name": "@ionic/vue",

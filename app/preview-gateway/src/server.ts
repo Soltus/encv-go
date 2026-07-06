@@ -420,30 +420,7 @@ async function handleHealth(_req: IncomingMessage, res: ServerResponse): Promise
 function buildChildSpecs(paths: ReturnType<typeof resolvePaths>): ChildSpec[] {
   const specs: ChildSpec[] = [];
 
-  // 1) encv-go (air) — mobile overlay 触发的关键
-  if (process.env.SPAWN_GO !== "0") {
-    specs.push({
-      name: "encv-go",
-      cmd: paths.airBin,
-      args: [],
-      // env 注入铁律：ENCV_DEV_PREVIEW=1 / ENCV_MOBILE=1 必须传递
-      // （go run 路径下 .air-run.sh 兜底已删除，pm2 ecosystem.config.cjs env
-      //  → preview-gateway process.env → air → go run → encv binary 一路继承）
-      // 2026-06-10 改造：删 ENCV_MOCK_ROOT（mobile overlay 直接决定 servingDir，不需要这个 env 中转）
-      env: {
-        ...process.env,
-        ENCV_DEV_PREVIEW: process.env.ENCV_DEV_PREVIEW ?? "1",
-        ENCV_MOBILE: process.env.ENCV_MOBILE ?? "1",
-      },
-      cwd: paths.repoRoot,
-      readyUrl: "http://127.0.0.1:2025/api/config",
-      // 沙箱首次冷编实测 3-5 分钟（go mod 全量 + 全量 build + 沙箱 CPU 慢）
-      // 给 10 分钟兜底，避免 pm2 死循环重启
-      readyTimeoutMs: 600_000,
-    });
-  }
-
-  // 2) encv-mobile Vite — 主 app
+  // 1) encv-mobile Vite — 主 app（优先启动，前端秒开）
   if (process.env.SPAWN_VITE !== "0") {
     specs.push({
       name: "encv-mobile-vite",
@@ -452,6 +429,19 @@ function buildChildSpecs(paths: ReturnType<typeof resolvePaths>): ChildSpec[] {
       env: { ...process.env, PATH: process.env.PATH ?? "", SPAWN_VITE: "1" },
       cwd: paths.mobileDir,
       readyUrl: "http://127.0.0.1:8100/",
+      readyTimeoutMs: 30_000,
+    });
+  }
+
+  // 2) simverse-frontend Vite — SimVerse 独立前端（次优先）
+  if (process.env.SPAWN_SIMVERSE_VITE !== "0") {
+    specs.push({
+      name: "simverse-frontend",
+      cmd: paths.nodeBin,
+      args: [paths.viteJsMain, "--host", "0.0.0.0", "--port", "8200", "--strictPort"],
+      env: { ...process.env, PATH: process.env.PATH ?? "" },
+      cwd: paths.simverseFrontendDir,
+      readyUrl: "http://127.0.0.1:8200/",
       readyTimeoutMs: 30_000,
     });
   }
@@ -465,7 +455,6 @@ function buildChildSpecs(paths: ReturnType<typeof resolvePaths>): ChildSpec[] {
       env: {
         ...process.env,
         PATH: process.env.PATH ?? "",
-        // 沙箱 dev 必须设 VITE_BASE=/openlist-ui/（D11 修复，详见 plugin README）
         VITE_BASE: "/openlist-ui/",
       },
       cwd: paths.pluginWebDir,
@@ -474,7 +463,24 @@ function buildChildSpecs(paths: ReturnType<typeof resolvePaths>): ChildSpec[] {
     });
   }
 
-  // 4) OpenList 真实 fork — 默认不启（重 + 慢 + 多数沙箱场景不需要）
+  // 4) encv-go (air) — 后端（最后启动，前端不用等后端编译）
+  if (process.env.SPAWN_GO !== "0") {
+    specs.push({
+      name: "encv-go",
+      cmd: paths.airBin,
+      args: [],
+      env: {
+        ...process.env,
+        ENCV_DEV_PREVIEW: process.env.ENCV_DEV_PREVIEW ?? "1",
+        ENCV_MOBILE: process.env.ENCV_MOBILE ?? "1",
+      },
+      cwd: paths.repoRoot,
+      readyUrl: "http://127.0.0.1:2025/api/config",
+      readyTimeoutMs: 600_000,
+    });
+  }
+
+  // 5) OpenList 真实 fork — 默认不启（重 + 慢 + 多数沙箱场景不需要）
   if (process.env.SPAWN_OPENLIST === "1") {
     specs.push({
       name: "openlist",
@@ -491,19 +497,6 @@ function buildChildSpecs(paths: ReturnType<typeof resolvePaths>): ChildSpec[] {
     });
   }
 
-  // 5) simverse-frontend Vite — SimVerse 独立前端
-  if (process.env.SPAWN_SIMVERSE_VITE !== "0") {
-    specs.push({
-      name: "simverse-frontend",
-      cmd: paths.nodeBin,
-      args: [paths.viteJsMain, "--host", "0.0.0.0", "--port", "8200", "--strictPort"],
-      env: { ...process.env, PATH: process.env.PATH ?? "" },
-      cwd: paths.simverseFrontendDir,
-      readyUrl: "http://127.0.0.1:8200/",
-      readyTimeoutMs: 30_000,
-    });
-  }
-
   return specs;
 }
 
@@ -512,38 +505,21 @@ function buildChildSpecs(paths: ReturnType<typeof resolvePaths>): ChildSpec[] {
 // =============================================================================
 
 /**
- * 主启动流程。串行：解析路径 → preflight → 子进程就绪 → server.listen。
- * 任何一步失败 throw，pm2 会看到 exit 1 → 整套重启。
+ * 主启动流程。并行优先：解析路径 → preflight → server.listen → 后台异步启子进程。
+ * 前端 Vite 优先启动，用户能快速看到页面；后端 Go 编译在后台进行，API 就绪前返回 502。
  */
 async function main(): Promise<void> {
   // ── Step 1: 路径解析（fail-fast）──
   const paths = resolvePaths();
 
   // ── Step 2：preflight 建空 mobileDataDir ──
-  // 2026-06-14 修复：传 mobileDataDir（= /storage/emulated/0），不是 mobileDir（= app/encv-mobile）
-  // 之前传错导致 service-guard 一直 BLOCK：os.Stat('/workspace/app/encv-mobile') ≠ '/storage/emulated/0'，
-  // mobile 真机/预览标准路径不匹配。
-  // ensureMockData 只建空目录，mock 数据由用户主动调后端 /api/mock/generate 生成。
   await ensureMockData(paths.mobileDataDir);
 
-  // ── Step 3: 启动子进程 ──
-  childrenManager = new ChildrenManager();
+  // ── Step 3: 启动 HTTP server（先监听，再后台启子进程，前端不用等后端）──
   const specs = buildChildSpecs(paths);
-  if (specs.length === 0) {
-    log("no children to spawn (all SPAWN_* off) — gateway serves as pure proxy");
-  } else {
-    await childrenManager.startAll(specs);
-  }
-
-  // ── Step 4: 防御守卫（黑名单机制已无 UPSTREAMS 白名单）──
-  //   历史教训：2026-06-07 曾因 UPSTREAMS 漏配 /ws 导致 WebSocket 卡死
-  //   现已统一走 ENCV_GO_UPSTREAM 默认 upstream，无需手动维护。
-  //   此处保留 hook 以便未来加新防御性检查。
-
-  // ── Step 5: 启动 HTTP server ──
   server.listen(PORT, HOST, () => {
     log(`listening on http://${HOST}:${PORT} (D1: 好记，16666)`);
-    log(`children spawned: ${specs.length} (${specs.map(s => s.name).join(", ") || "none"})`);
+    log(`children spawning (async): ${specs.length} (${specs.map(s => s.name).join(", ") || "none"})`);
     log(`routing strategy: DENYLIST (default = encv-go :2025; VITE_DENY → encv-mobile Vite :8100)`);
     log(`default upstream: ${ENCV_GO_UPSTREAM.name} → ${ENCV_GO_UPSTREAM.target}`);
     log(`vite denylist (${VITE_DENY.length} rules):`);
@@ -558,6 +534,18 @@ async function main(): Promise<void> {
     log(`health:  http://${HOST}:${PORT}/__gateway/health`);
     log(`external: :16000 (OpenPreview) → :${PORT} (this gateway) after agent-browser navigate triggers auto-register`);
   });
+
+  // ── Step 4: 后台异步启动子进程（Vite 在前，Go 在后，前端不用等后端编译）──
+  childrenManager = new ChildrenManager();
+  if (specs.length === 0) {
+    log("no children to spawn (all SPAWN_* off) — gateway serves as pure proxy");
+  } else {
+    childrenManager.startAll(specs).catch(err => {
+      log(`FATAL: children startAll failed: ${(err as Error).message}`);
+      log((err as Error).stack ?? "");
+      process.exit(1);
+    });
+  }
 }
 
 // Graceful shutdown (pm2 sends SIGINT)
