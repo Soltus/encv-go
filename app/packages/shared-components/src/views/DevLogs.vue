@@ -89,13 +89,13 @@
           <p>{{ t('devlogs.noLogs') }}</p>
         </div>
         <VirtualLogList :key="'frontend'" v-if="filteredFrontend.length > 0" :items="filteredFrontend" :scroll-el="scrollEl" @select="onLogSelect">
-          <template #default="{ item }">
-            <span class="log-source-icon" :title="getSourceIconTitle(item)">
-              {{ getSourceIcon(item) }}
+          <template #default="slotProps">
+            <span v-if="slotProps?.item" class="log-source-icon" :title="getSourceIconTitle(slotProps.item)">
+              {{ getSourceIcon(slotProps.item) }}
             </span>
-            <span class="log-time">[{{ item.timestamp }}]</span>
-            <ion-badge :color="getBadgeColor(item.level)" class="level-badge">{{ item.level.toUpperCase() }}</ion-badge>
-            <span class="log-msg" v-html="highlightMatch(item.message, searchText)"></span>
+            <span v-if="slotProps?.item" class="log-time">[{{ slotProps.item.timestamp }}]</span>
+            <ion-badge v-if="slotProps?.item" :color="getBadgeColor(slotProps.item.level)" class="level-badge">{{ slotProps.item.level.toUpperCase() }}</ion-badge>
+            <span v-if="slotProps?.item" class="log-msg" v-html="highlightMatch(slotProps.item.message, searchText)"></span>
           </template>
         </VirtualLogList>
       </div>
@@ -111,13 +111,13 @@
           <p>{{ t('devlogs.noLogs') }}</p>
         </div>
         <VirtualLogList :key="'backend'" v-if="backendFilteredItems.length > 0" :items="backendFilteredItems" :scroll-el="scrollEl" @select="onLogSelect">
-          <template #default="{ item }">
-            <span class="log-source-icon" :title="getSourceIconTitle(item)">
-              {{ getSourceIcon(item) }}
+          <template #default="slotProps">
+            <span v-if="slotProps?.item" class="log-source-icon" :title="getSourceIconTitle(slotProps.item)">
+              {{ getSourceIcon(slotProps.item) }}
             </span>
-            <span class="log-time">[{{ item.timestamp }}]</span>
-            <ion-badge :color="getBadgeColor(item.level)" class="level-badge">{{ item.level.toUpperCase() }}</ion-badge>
-            <span class="log-msg" v-html="highlightMatch(item.message, searchText)"></span>
+            <span v-if="slotProps?.item" class="log-time">[{{ slotProps.item.timestamp }}]</span>
+            <ion-badge v-if="slotProps?.item" :color="getBadgeColor(slotProps.item.level)" class="level-badge">{{ slotProps.item.level.toUpperCase() }}</ion-badge>
+            <span v-if="slotProps?.item" class="log-msg" v-html="highlightMatch(slotProps.item.message, searchText)"></span>
           </template>
         </VirtualLogList>
       </div>
