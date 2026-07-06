@@ -9,6 +9,7 @@ from .scanner import extract_used_keys
 from .loader import load_all_dicts, extract_vars_from_value
 from .search import find_near_duplicates_lsh
 from .perf import perf_tracker
+from .config import get_app_config
 
 
 @dataclass
@@ -259,10 +260,26 @@ def run_all_checks(
     include_unused: bool = False,
     include_dup: bool = False,
     include_dup_value: bool = False,
+    include_go: bool = True,
 ) -> dict:
     perf_tracker.start("Lint 检查")
 
     used_keys = extract_used_keys(app_name)
+
+    if include_go:
+        try:
+            from .scanner_go import extract_go_i18n_keys
+            app_cfg = get_app_config(app_name)
+            if app_cfg.go_dirs:
+                go_keys = extract_go_i18n_keys(app_cfg.go_dirs)
+                for key, files in go_keys.items():
+                    if key in used_keys:
+                        used_keys[key].extend(files)
+                    else:
+                        used_keys[key] = files
+        except Exception:
+            pass
+
     dicts = load_all_dicts(app_name)
 
     all_issues: list[I18nIssue] = []

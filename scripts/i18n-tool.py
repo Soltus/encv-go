@@ -82,6 +82,13 @@ def main():
     p_compile.add_argument("--app", help="应用名称")
     p_compile.add_argument("--output", help="输出目录")
 
+    p_addkey = subparsers.add_parser("add-key", help="添加翻译 key 到 TS 字典")
+    p_addkey.add_argument("key", help="翻译 key")
+    p_addkey.add_argument("--zh", required=True, help="中文翻译")
+    p_addkey.add_argument("--en", required=True, help="英文翻译")
+    p_addkey.add_argument("--app", help="应用名称")
+    p_addkey.add_argument("--file", help="目标字典文件（不指定则自动猜测）")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -92,9 +99,23 @@ def main():
         if args.command == "scan":
             from i18n_lib.scanner import extract_used_keys
             from i18n_lib.loader import load_all_dicts
+            from i18n_lib.config import get_app_config
 
             used_keys = extract_used_keys(args.app, use_cache=not args.no_cache)
             dicts = load_all_dicts(args.app, use_cache=not args.no_cache)
+
+            try:
+                from i18n_lib.scanner_go import extract_go_i18n_keys
+                app_cfg = get_app_config(args.app)
+                if app_cfg.go_dirs:
+                    go_keys = extract_go_i18n_keys(app_cfg.go_dirs, use_cache=not args.no_cache)
+                    for key, files in go_keys.items():
+                        if key in used_keys:
+                            used_keys[key].extend(files)
+                        else:
+                            used_keys[key] = files
+            except Exception:
+                pass
 
             zh_dict = dicts.get("zh-CN", {})
             missing = 0
@@ -245,6 +266,37 @@ def main():
             print()
             print(result["output"])
             print(f"✅ 编译成功: {result['locale_count']} 个语言文件, {result['total_keys']} 条翻译")
+            return 0
+
+        elif args.command == "add-key":
+            from i18n_lib.addkey import add_key
+
+            print(f"➕ 添加翻译 key: {args.key}")
+            print()
+
+            result = add_key(
+                args.key,
+                args.zh,
+                args.en,
+                args.app,
+                args.file,
+            )
+
+            if not result["success"]:
+                if result["reason"] == "already_exists":
+                    print(f"⚠️  key 已存在: {args.key}")
+                    print(f"   文件: {result['file']}")
+                    return 1
+                else:
+                    print(f"❌ 添加失败: {result.get('reason', 'unknown')}")
+                    return 1
+
+            print(f"✅ 添加成功!")
+            print(f"   文件: {result['file']}")
+            print(f"   中文: {result['zh']}")
+            print(f"   英文: {result['en']}")
+            print()
+            print("💡 提示: 运行 'compile-json' 重新编译 JSON 供 Go 使用")
             return 0
 
         else:

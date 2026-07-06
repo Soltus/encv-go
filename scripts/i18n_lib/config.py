@@ -33,6 +33,10 @@ DEFAULT_CONFIG = {
                 "app/encv-mobile/src/i18n/simverse.ts",
             ],
             "types_output": "app/packages/shared-components/src/i18n/generated-types.ts",
+            "go_dirs": [
+                "internal",
+                "pkg",
+            ],
         }
     },
     "default_app": "encv-mobile",
@@ -59,6 +63,7 @@ class AppConfig:
     src_dirs: list[str]
     i18n_files: list[str]
     types_output: str
+    go_dirs: list[str] = field(default_factory=list)
 
 
 _config_cache: dict | None = None
@@ -96,6 +101,7 @@ def get_app_config(app_name: str | None = None) -> AppConfig:
         src_dirs=app_cfg.get("src_dirs", []),
         i18n_files=app_cfg.get("i18n_files", []),
         types_output=app_cfg.get("types_output", ""),
+        go_dirs=app_cfg.get("go_dirs", []),
     )
 
 
