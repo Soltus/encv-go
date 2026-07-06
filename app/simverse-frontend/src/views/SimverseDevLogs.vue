@@ -92,7 +92,10 @@
 
       <div v-else class="log-list">
         <div class="devlog-status-card-wrap">
-          <ServerStatusCard :clickable="false" :compact="true" />
+          <div class="simple-server-status">
+            <ion-icon :icon="serverOnline ? wifiOutline : cloudOfflineOutline" :color="serverOnline ? 'success' : 'medium'" />
+            <span>{{ serverOnline ? t('devlogs.connected') : t('devlogs.disconnected') }}</span>
+          </div>
         </div>
         <div v-if="backendFilteredItems.length === 0" class="empty-logs">
           <p>{{ t('devlogs.noLogs') }}</p>
@@ -217,9 +220,8 @@ import { showToast } from "@encv/shared-components/composables/useToast";
 import { useSimverse } from "@/composables/useSimverse";
 import VirtualLogList from "@encv/shared-components/components/VirtualLogList.vue";
 import FilterDropdown from "@encv/shared-components/components/shared/FilterDropdown.vue";
-import ServerStatusCard from "@encv/shared-components/components/ServerStatusCard.vue";
 import type { DropdownOption } from "@encv/shared-components/components/shared/FilterDropdown.vue";
-import { alertController, type IonContent } from "@ionic/vue";
+import { alertController, type IonContent, IonIcon } from "@ionic/vue";
 import {
   playOutline,
   pauseOutline,
@@ -228,12 +230,16 @@ import {
   arrowUpOutline,
   arrowDownOutline,
   closeOutline,
+  wifiOutline,
+  cloudOfflineOutline,
 } from "ionicons/icons";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 const { t } = useI18n();
 const { logs: frontendLogs, clearLogs: clearFrontendLogs } = useFrontendLogs();
-const { loadChronicleWorld, loadWorldState: fetchWorldState } = useSimverse();
+const { loadChronicleWorld, loadWorldState: fetchWorldState, isConnected } = useSimverse();
+
+const serverOnline = isConnected;
 
 const activeTab = ref<"frontend" | "backend">("frontend");
 const searchText = ref("");

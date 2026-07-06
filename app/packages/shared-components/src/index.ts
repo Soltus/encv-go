@@ -16,3 +16,15 @@ export { registerIonicComponents, getIonicComponentNames } from "./composables/u
 export { usePinchZoom } from "./composables/usePinchZoom";
 export { useSearchInput } from "./composables/useSearchInput";
 export { useActiveStatus } from "./composables/activeStatus";
+
+// Settings components
+export { default as SettingsPage } from "./components/settings/SettingsPage.vue";
+export { default as SettingsGroup } from "./components/settings/SettingsGroup.vue";
+export { default as SettingsItem } from "./components/settings/SettingsItem.vue";
+export { default as SettingsSelect } from "./components/settings/SettingsSelect.vue";
+
+// Virtual Log List
+export { default as VirtualLogList } from "./components/VirtualLogList.vue";
+
+// Dev Logs
+export { default as DevLogsViewer } from "./components/DevLogsViewer.vue";

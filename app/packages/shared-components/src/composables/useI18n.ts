@@ -1,5 +1,5 @@
-import common from "@/i18n/common";
-import errors from "@/i18n/errors";
+import common from "../i18n/common";
+import errors from "../i18n/errors";
 import { ref } from "vue";
 
 export type Locale = "zh-CN" | "en";
