@@ -5,8 +5,11 @@
  *
  * 用法: node compile-android-xml.mjs <output-dir> <file1> [file2 ...]
  * 输出: output-dir/values/strings.xml, output-dir/values-zh-rCN/strings.xml, ...
+ *
+ * 合并策略: 如果目标 strings.xml 已存在，保留其中非 i18n 生成的固定资源
+ * （如 Capacitor 必需的 app_name），i18n 生成的条目以 TS 字典为准覆盖。
  */
-import { writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import { writeFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { parseDictFiles } from './dict-parser.mjs'
 
@@ -49,26 +52,39 @@ try {
   let totalKeys = 0
   let localeCount = 0
 
+  function parseExistingStrings(filePath) {
+    if (!existsSync(filePath)) return new Map()
+    try {
+      const content = readFileSync(filePath, 'utf-8')
+      const map = new Map()
+      const re = /<string\s+name="([^"]+)"\s*>([\s\S]*?)<\/string>/g
+      let m
+      while ((m = re.exec(content)) !== null) {
+        map.set(m[1], m[2])
+      }
+      return map
+    } catch {
+      return new Map()
+    }
+  }
+
   for (const [locale, dict] of Object.entries(result)) {
     const dirName = localeToAndroidDir(locale)
     const outDir = resolve(outputDir, dirName)
     mkdirSync(outDir, { recursive: true })
     const outPath = resolve(outDir, 'strings.xml')
 
-    const keys = Object.keys(dict).sort()
-    const lines = ['<?xml version="1.0" encoding="utf-8"?>', '<resources>']
+    const existing = parseExistingStrings(outPath)
 
-    const resNameMap = new Map()
+    const i18nResNames = new Map()
     const collisions = []
 
-    for (const key of keys) {
+    for (const [key, value] of Object.entries(dict)) {
       const resName = toAndroidResourceName(key)
-      const value = escapeXml(dict[key])
-      if (resNameMap.has(resName)) {
-        collisions.push({ resName, firstKey: resNameMap.get(resName), secondKey: key })
+      if (i18nResNames.has(resName)) {
+        collisions.push({ resName, firstKey: i18nResNames.get(resName).key, secondKey: key })
       } else {
-        resNameMap.set(resName, key)
-        lines.push(`    <string name="${resName}">${value}</string>`)
+        i18nResNames.set(resName, { key, value: escapeXml(value) })
       }
     }
 
@@ -80,12 +96,30 @@ try {
       process.exit(3)
     }
 
+    const merged = new Map()
+    for (const [name, val] of existing) {
+      if (!i18nResNames.has(name)) {
+        merged.set(name, val)
+      }
+    }
+    for (const [name, { value }] of i18nResNames) {
+      merged.set(name, value)
+    }
+
+    const sortedNames = [...merged.keys()].sort()
+    const lines = ['<?xml version="1.0" encoding="utf-8"?>', '<resources>']
+    for (const name of sortedNames) {
+      lines.push(`    <string name="${name}">${merged.get(name)}</string>`)
+    }
     lines.push('</resources>', '')
     writeFileSync(outPath, lines.join('\n'), 'utf-8')
 
-    totalKeys += keys.length - collisions.length
+    const preservedCount = [...existing.keys()].filter(n => !i18nResNames.has(n)).length
+    const i18nCount = i18nResNames.size
+    totalKeys += i18nCount
     localeCount++
-    console.log(`  ✅ ${dirName}/strings.xml  (${keys.length - collisions.length} keys)`)
+    console.log(`  ✅ ${dirName}/strings.xml  (${i18nCount} i18n keys` +
+      (preservedCount > 0 ? ` + ${preservedCount} preserved` : '') + ')')
   }
 
   console.log()
