@@ -2,6 +2,7 @@ package routing
 
 import (
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -21,7 +22,52 @@ type ViteDenyRule struct {
 	Why   string
 }
 
+func getDefaultFrontend() string {
+	v := os.Getenv("DEFAULT_FRONTEND")
+	if v == "simverse" || v == "encv-mobile" {
+		return v
+	}
+	return "encv-mobile"
+}
+
+func GetViteUpstream() *Upstream {
+	if getDefaultFrontend() == "simverse" {
+		return &Upstream{
+			Target:   "http://127.0.0.1:8200",
+			WsTarget: "ws://127.0.0.1:8200",
+			Name:     "simverse-frontend",
+			Hint:     "Check pm2 status for simverse-frontend vite (:8200)",
+			Required: true,
+		}
+	}
+	return &Upstream{
+		Target:   "http://127.0.0.1:8100",
+		WsTarget: "ws://127.0.0.1:8100",
+		Name:     "encv-mobile-vite",
+		Hint:     "Check pm2 status for start-preview (encv-mobile vite :8100)",
+		Required: true,
+	}
+}
+
 var SpecialUpstreams = []*Upstream{
+	{
+		Match:    "/encv-mobile",
+		Target:   "http://127.0.0.1:8100",
+		WsTarget: "ws://127.0.0.1:8100",
+		Name:     "encv-mobile-vite",
+		Hint:     "Check pm2 status for start-preview (encv-mobile vite :8100)",
+		Required: false,
+		PathRewrite: func(p string) string {
+			r := strings.TrimPrefix(p, "/encv-mobile")
+			if r == "" {
+				return "/"
+			}
+			if strings.HasPrefix(r, "/") {
+				return r
+			}
+			return "/" + r
+		},
+	},
 	{
 		Match:    "/openlist-ui",
 		Target:   "http://127.0.0.1:5174",
@@ -110,14 +156,6 @@ var EncvGoUpstream = &Upstream{
 	Required: true,
 }
 
-var ViteUpstream = &Upstream{
-	Target:   "http://127.0.0.1:8100",
-	WsTarget: "ws://127.0.0.1:8100",
-	Name:     "encv-mobile-vite",
-	Hint:     "Check pm2 status for start-preview (encv-mobile vite :8100)",
-	Required: true,
-}
-
 func MatchesPrefix(path, prefix string) bool {
 	norm := prefix
 	if strings.HasSuffix(norm, "/") {
@@ -181,7 +219,7 @@ func PickUpstream(rawURL, referer, cookie string) *Upstream {
 
 	for _, rule := range ViteDeny {
 		if MatchesViteDeny(pathOnly, rule) {
-			return ViteUpstream
+			return GetViteUpstream()
 		}
 	}
 
@@ -199,7 +237,7 @@ func GetAllUpstreams() []*Upstream {
 		result = append(result, u)
 	}
 	add(EncvGoUpstream)
-	add(ViteUpstream)
+	add(GetViteUpstream())
 	for _, u := range SpecialUpstreams {
 		add(u)
 	}

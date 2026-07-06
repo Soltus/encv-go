@@ -9,9 +9,7 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@self': resolve('src'),
-      '@': resolve('../encv-mobile/src'),
-      '@shared': resolve('../packages/shared-components/src'),
+      '@': resolve('src'),
     },
   },
   server: {

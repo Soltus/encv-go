@@ -1,21 +1,46 @@
+import { createRouter, createWebHistory } from "@ionic/vue-router";
 import type { RouteRecordRaw } from "vue-router";
-import { createRouter, createWebHistory } from "vue-router";
-import SimverseHome from "../views/SimverseHome.vue";
-import SimverseWorld from "../views/SimverseWorld.vue";
-import ChronicleDetail from "../views/ChronicleDetail.vue";
-import SimverseSettings from "../views/SimverseSettings.vue";
-import SimverseDevLogs from "../views/SimverseDevLogs.vue";
 
 const routes: RouteRecordRaw[] = [
-  { path: "/", redirect: "/simverse-home" },
-  { path: "/simverse-home", component: SimverseHome },
-  { path: "/world", component: SimverseWorld },
-  { path: "/chronicle", component: ChronicleDetail },
-  { path: "/tabs/settings", component: SimverseSettings },
-  { path: "/tabs/devlogs", component: SimverseDevLogs },
+  {
+    path: "/",
+    redirect: "/tabs/home",
+  },
+  {
+    path: "/tabs/",
+    component: () => import("@/views/Tabs.vue"),
+    children: [
+      {
+        path: "",
+        redirect: "/tabs/home",
+      },
+      {
+        path: "home",
+        component: () => import("@/views/SimverseHome.vue"),
+      },
+      {
+        path: "world",
+        component: () => import("@/views/SimverseWorld.vue"),
+      },
+      {
+        path: "settings",
+        component: () => import("@/views/SimverseSettings.vue"),
+      },
+      {
+        path: "devlogs",
+        component: () => import("@/views/SimverseDevLogs.vue"),
+      },
+    ],
+  },
+  {
+    path: "/chronicle/:id",
+    component: () => import("@/views/ChronicleDetail.vue"),
+  },
 ];
 
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes,
 });
+
+export default router;
