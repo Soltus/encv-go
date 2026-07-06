@@ -1,80 +1,194 @@
-"""源码扫描模块 - 提取 i18n key 使用情况"""
+"""源码扫描模块 - 提取 i18n key 使用情况（高性能 v3）"""
 from __future__ import annotations
 
 import re
-import pickle
+import json
 import hashlib
+import tempfile
+import os
 from pathlib import Path
 from collections import defaultdict
 
 from .config import CACHE_DIR, get_app_config, resolve_path
 from .perf import perf_tracker
-from .tokenizer import file_hash
 
-T_PATTERN = re.compile(r"""\bt\(\s*['"`]([^'"`]+)['"`]""")
-TFIELD_PATTERN = re.compile(r"""\btField\(\s*['"`]([^'"`]+)['"`]""")
-TSECTION_PATTERN = re.compile(r"""\btSectionTitle\(\s*['"`]([^'"`]+)['"`]""")
-DOLLAR_T_PATTERN = re.compile(r"""\$t\(\s*['"`]([^'"`]+)['"`]""")
+CACHE_SCHEMA_VERSION = 2
+
+COMBINED_PATTERN = re.compile(
+    r"""(?<![\w$.])(?:t|\$t|tField|tSectionTitle)\(\s*['"`]([^'"`]+)['"`]""",
+)
 
 DYNAMIC_KEY_MARKERS = ("${", "{", "`", "$", "+")
 
+_SKIP_SUFFIXES = {".d.ts"}
+_SKIP_DIRS = {"node_modules", "__tests__", "test", "tests", "dist", ".nuxt", ".next"}
+
 
 def is_dynamic_key(key: str) -> bool:
-    for marker in DYNAMIC_KEY_MARKERS:
-        if marker in key:
-            return True
-    return False
+    return any(m in key for m in DYNAMIC_KEY_MARKERS)
 
 
-def scan_file(filepath: str) -> tuple[dict[str, list[str]], dict[str, list[str]], str]:
+def _strip_comments(line: str) -> str:
+    in_string = False
+    string_char = ""
+    i = 0
+    while i < len(line):
+        c = line[i]
+        if in_string:
+            if c == "\\" and i + 1 < len(line):
+                i += 2
+                continue
+            if c == string_char:
+                in_string = False
+        else:
+            if c in ('"', "'", "`"):
+                in_string = True
+                string_char = c
+            elif c == "/" and i + 1 < len(line) and line[i + 1] == "/":
+                return line[:i]
+        i += 1
+    return line
+
+
+def scan_file(filepath: str) -> tuple[dict[str, list[str]], str]:
     direct_keys: dict[str, list[str]] = defaultdict(list)
-    field_keys: dict[str, list[str]] = defaultdict(list)
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception:
-        return dict(direct_keys), dict(field_keys), ""
+        return {}, ""
 
     rel_path = filepath
     for line_num, line in enumerate(content.split("\n"), 1):
-        for match in T_PATTERN.finditer(line):
+        if not line.strip():
+            continue
+        if "t(" not in line and "$t" not in line and "tField" not in line and "tSection" not in line:
+            continue
+
+        clean_line = _strip_comments(line)
+        if not clean_line:
+            continue
+
+        for match in COMBINED_PATTERN.finditer(clean_line):
+            full_match = match.group(0)
             key = match.group(1)
-            if not is_dynamic_key(key):
+            if is_dynamic_key(key):
+                continue
+            call_type = full_match.split("(")[0].strip()
+            if call_type in ("t", "$t"):
                 direct_keys[key].append(f"{rel_path}:{line_num}")
-        for match in DOLLAR_T_PATTERN.finditer(line):
-            key = match.group(1)
-            if not is_dynamic_key(key):
-                direct_keys[key].append(f"{rel_path}:{line_num}")
-        for match in TFIELD_PATTERN.finditer(line):
-            key = match.group(1)
-            if not is_dynamic_key(key):
-                field_keys[key].append(f"{rel_path}:{line_num}")
-        for match in TSECTION_PATTERN.finditer(line):
-            key = match.group(1)
-            if not is_dynamic_key(key):
-                field_keys[key].append(f"{rel_path}:{line_num}")
 
-    return dict(direct_keys), dict(field_keys), file_hash(filepath)
+    return dict(direct_keys), _file_fingerprint(filepath)
 
 
-def load_cache(key: str) -> dict | None:
-    cache_file = CACHE_DIR / f"{hashlib.md5(key.encode()).hexdigest()}.pkl"
-    if cache_file.exists():
-        try:
-            with open(cache_file, "rb") as f:
-                return pickle.load(f)
-        except Exception:
-            return None
-    return None
-
-
-def save_cache(key: str, data: dict):
-    cache_file = CACHE_DIR / f"{hashlib.md5(key.encode()).hexdigest()}.pkl"
+def _file_fingerprint(filepath: str) -> str:
     try:
-        with open(cache_file, "wb") as f:
-            pickle.dump(data, f)
+        p = Path(filepath)
+        stat = p.stat()
+        return f"{stat.st_size}:{stat.st_mtime_ns}"
+    except Exception:
+        return ""
+
+
+def _collect_files(app_config) -> list[str]:
+    all_files: list[str] = []
+    seen = set()
+    for src_dir_rel in app_config.src_dirs:
+        src_dir = resolve_path(src_dir_rel)
+        if not src_dir.exists():
+            continue
+        for filepath in src_dir.rglob("*"):
+            if filepath.suffix not in (".ts", ".vue", ".tsx"):
+                continue
+            if filepath.suffix in _SKIP_SUFFIXES:
+                continue
+            parts = set(filepath.parts)
+            if any(d in parts for d in _SKIP_DIRS):
+                continue
+            fp = str(filepath)
+            if fp not in seen:
+                seen.add(fp)
+                all_files.append(fp)
+    return all_files
+
+
+def _cache_key(app_name: str) -> str:
+    return f"used_keys:{app_name}:v{CACHE_SCHEMA_VERSION}"
+
+
+def _cache_path(app_name: str) -> tuple[Path, Path]:
+    key = _cache_key(app_name)
+    hashed = hashlib.md5(key.encode()).hexdigest()
+    json_path = CACHE_DIR / f"{hashed}.json"
+    lock_path = CACHE_DIR / f"{hashed}.lock"
+    return json_path, lock_path
+
+
+def _compute_files_hash(filepaths: list[str]) -> str:
+    hasher = hashlib.md5()
+    for fp in sorted(filepaths):
+        fp_str = str(fp)
+        finger = _file_fingerprint(fp_str)
+        hasher.update(f"{fp_str}:{finger}".encode())
+    return hasher.hexdigest()
+
+
+def _load_from_cache(app_name: str, files_hash: str) -> dict | None:
+    json_path, lock_path = _cache_path(app_name)
+    if lock_path.exists():
+        try:
+            import time
+            lock_mtime = lock_path.stat().st_mtime
+            if time.time() - lock_mtime > 30:
+                lock_path.unlink()
+            else:
+                return None
+        except Exception:
+            pass
+
+    if not json_path.exists():
+        return None
+
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("_files_hash") != files_hash:
+            return None
+        if data.get("_schema_version") != CACHE_SCHEMA_VERSION:
+            return None
+        return data
+    except Exception:
+        return None
+
+
+def _save_to_cache(app_name: str, files_hash: str, data: dict) -> None:
+    json_path, lock_path = _cache_path(app_name)
+    try:
+        lock_path.touch()
+        save_data = {
+            "keys": data,
+            "_files_hash": files_hash,
+            "_schema_version": CACHE_SCHEMA_VERSION,
+        }
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=str(CACHE_DIR), suffix=".tmp")
+        try:
+            with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                json.dump(save_data, f, ensure_ascii=False)
+            os.replace(tmp_path, json_path)
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except Exception:
+                    pass
     except Exception:
         pass
+    finally:
+        try:
+            if lock_path.exists():
+                lock_path.unlink()
+        except Exception:
+            pass
 
 
 def extract_used_keys(
@@ -84,48 +198,34 @@ def extract_used_keys(
     perf_tracker.start("源码扫描")
     app_config = get_app_config(app_name)
 
-    all_files: list[str] = []
-    for src_dir_rel in app_config.src_dirs:
-        src_dir = resolve_path(src_dir_rel)
-        if not src_dir.exists():
-            continue
-        for filepath in src_dir.rglob("*"):
-            if filepath.suffix not in (".ts", ".vue"):
-                continue
-            if "node_modules" in str(filepath) or "__tests__" in str(filepath):
-                continue
-            all_files.append(str(filepath))
-
-    cache_key = f"used_keys:{app_name or 'default'}"
-    file_hash_map = {}
-    for f in all_files:
-        p = Path(f)
-        if p.exists():
-            file_hash_map[f] = file_hash(f)
-
-    cache_version = hashlib.md5(
-        "|".join(f"{f}:{h}" for f, h in sorted(file_hash_map.items())).encode()
-    ).hexdigest()
+    all_files = _collect_files(app_config)
+    files_hash = _compute_files_hash(all_files)
 
     if use_cache:
-        cached = load_cache(cache_key)
-        if cached and cached.get("_version") == cache_version:
-            perf_tracker.end("源码扫描", len(cached.get("keys", {})), {"cached": True})
+        cached = _load_from_cache(app_config.name, files_hash)
+        if cached:
+            perf_tracker.end(
+                "源码扫描",
+                len(cached.get("keys", {})),
+                {"cached": True, "files": len(all_files)},
+            )
             return cached.get("keys", {})
 
-    direct_key_files: dict[str, list[str]] = defaultdict(list)
-    field_key_count = 0
+    result: dict[str, list[str]] = defaultdict(list)
 
     for f in all_files:
-        direct_keys, field_keys, _ = scan_file(f)
-        field_key_count += len(field_keys)
-        for k, files in direct_keys.items():
-            direct_key_files[k].extend(files)
+        keys, _ = scan_file(f)
+        for k, files in keys.items():
+            result[k].extend(files)
 
-    result = dict(direct_key_files)
+    final_result = dict(result)
 
     if use_cache:
-        save_cache(cache_key, {"keys": result, "_version": cache_version})
+        _save_to_cache(app_config.name, files_hash, final_result)
 
-    perf_tracker.end("源码扫描", len(result), {"files": len(all_files), "field_keys": field_key_count})
-    return result
+    perf_tracker.end(
+        "源码扫描",
+        len(final_result),
+        {"cached": False, "files": len(all_files)},
+    )
+    return final_result
