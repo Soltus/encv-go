@@ -25,6 +25,7 @@ import fs from 'node:fs'
 // scripts/ 下的 .ts 会被 vite 当 external → 守卫拿不到 devStartGuard 函数
 import { devStartGuard } from '../packages/shared-components/src/lib/dev-start-guard'
 import { frontendDepsManifestPlugin } from './vite-plugins/frontend-deps-manifest'
+import { i18nOptimizePlugin } from './vite-plugins/i18n-optimize'
 
 // =============================================================================
 // ENCV Mobile Vite Config
@@ -236,6 +237,7 @@ export default defineConfig({
   plugins: [
     devStartGuard(),  // ⚠️ 防御：禁止直接 vite 启动，必须通过 PM2 → preview-gateway
     frontendDepsManifestPlugin(),  // 🆕 2026-06-17：读 package.json 生成 frontend-deps.json manifest
+    i18nOptimizePlugin(),  // 🆕 i18n HMR 热重载 + 构建优化
     vue(),
     dynamicHmrHostPlugin(),
     // @/ alias 多路径 fallback：优先本地 src，其次 shared-components
@@ -347,6 +349,12 @@ export default defineConfig({
               if (id.includes(lib)) return 'vendor-core'
             }
             return 'vendor'
+          }
+          if (id.includes('/i18n/') || id.includes('i18n/common') || id.includes('i18n/settings') || id.includes('i18n/tasks')) {
+            return 'i18n'
+          }
+          if (id.includes('useI18n')) {
+            return 'i18n'
           }
         },
       },
