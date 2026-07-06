@@ -17,6 +17,8 @@ export default {
     "common.delete": "删除",
     "common.save": "保存",
     "common.loading": "加载中...",
+    "common.on": "开",
+    "common.off": "关",
 
     "tabs.home": "首页",
     "tabs.files": "文件",
@@ -336,6 +338,8 @@ export default {
     "common.delete": "Delete",
     "common.save": "Save",
     "common.loading": "Loading...",
+    "common.on": "On",
+    "common.off": "Off",
 
     "tabs.home": "Home",
     "tabs.files": "Files",

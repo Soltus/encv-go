@@ -74,6 +74,9 @@ def scan_file(filepath: str) -> tuple[dict[str, list[str]], str]:
             key = match.group(1)
             if is_dynamic_key(key):
                 continue
+            after_quote = clean_line[match.end():match.end() + 5].lstrip()
+            if after_quote.startswith("+"):
+                continue
             call_type = full_match.split("(")[0].strip()
             if call_type in ("t", "$t"):
                 direct_keys[key].append(f"{rel_path}:{line_num}")

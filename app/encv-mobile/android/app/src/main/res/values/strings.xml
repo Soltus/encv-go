@@ -359,7 +359,9 @@
     <string name="common_error">Error</string>
     <string name="common_failed">Failed</string>
     <string name="common_loading">Loading...</string>
+    <string name="common_off">Off</string>
     <string name="common_ok">OK</string>
+    <string name="common_on">On</string>
     <string name="common_rebuild">Rebuild</string>
     <string name="common_refresh">Refresh</string>
     <string name="common_reload">Reload</string>
@@ -715,6 +717,7 @@
     <string name="engine_staticLinking">Static Linking</string>
     <string name="engine_unavailable">Unavailable</string>
     <string name="engine_x264Version">x264 Version</string>
+    <string name="errors_error">Error</string>
     <string name="extensions_alistDecrypt">Alist-Encrypt Decrypt</string>
     <string name="extensions_alistDecryptDesc">Support decryption, encryption and streaming preview of AES-128-CTR encrypted files</string>
     <string name="extensions_disable">Disable</string>
@@ -969,6 +972,7 @@
     <string name="settings_cacheEntries">Cache Entries</string>
     <string name="settings_cancel">Cancel</string>
     <string name="settings_check">Check</string>
+    <string name="settings_checking">Checking</string>
     <string name="settings_chunkSizeMb">Chunk Size (MB)</string>
     <string name="settings_clear">Clear</string>
     <string name="settings_clearCache">Clear Cache</string>
@@ -1726,7 +1730,6 @@
     <string name="tasks_trashRestore">Restore</string>
     <string name="tasks_trashSize">Size</string>
     <string name="tasks_trashTitle">Trash</string>
-    <string name="tasks_triggeredBy">Triggered By</string>
     <string name="tasks_triggeredBy">Triggered By</string>
     <string name="tasks_triggeredBy_ai_agent">AI Agent</string>
     <string name="tasks_triggeredBy_automation">Automation</string>

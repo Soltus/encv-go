@@ -359,7 +359,9 @@
     <string name="common_error">错误</string>
     <string name="common_failed">失败</string>
     <string name="common_loading">加载中...</string>
+    <string name="common_off">关</string>
     <string name="common_ok">确定</string>
+    <string name="common_on">开</string>
     <string name="common_rebuild">重建</string>
     <string name="common_refresh">刷新</string>
     <string name="common_reload">重新加载</string>
@@ -715,6 +717,7 @@
     <string name="engine_staticLinking">静态链接</string>
     <string name="engine_unavailable">不可用</string>
     <string name="engine_x264Version">x264 版本</string>
+    <string name="errors_error">错误</string>
     <string name="extensions_alistDecrypt">Alist-Encrypt 解密</string>
     <string name="extensions_alistDecryptDesc">支持 AES-128-CTR 加密文件的解密、加密和流式预览</string>
     <string name="extensions_disable">禁用</string>
@@ -969,6 +972,7 @@
     <string name="settings_cacheEntries">缓存条目数</string>
     <string name="settings_cancel">取消</string>
     <string name="settings_check">检查</string>
+    <string name="settings_checking">检查中</string>
     <string name="settings_chunkSizeMb">分片大小(MB)</string>
     <string name="settings_clear">清除</string>
     <string name="settings_clearCache">清除缓存</string>
@@ -1726,7 +1730,6 @@
     <string name="tasks_trashRestore">还原</string>
     <string name="tasks_trashSize">大小</string>
     <string name="tasks_trashTitle">回收站</string>
-    <string name="tasks_triggeredBy">触发者</string>
     <string name="tasks_triggeredBy">触发者</string>
     <string name="tasks_triggeredBy_ai_agent">AI 智能体</string>
     <string name="tasks_triggeredBy_automation">自动化</string>

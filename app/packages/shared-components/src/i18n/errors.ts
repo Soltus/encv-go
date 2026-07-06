@@ -1,4 +1,8 @@
 export default {
-  "zh-CN": {},
-  en: {},
+  "zh-CN": {
+    "errors.error": "错误",
+  },
+  en: {
+    "errors.error": "Error",
+  },
 };

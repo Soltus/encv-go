@@ -58,18 +58,34 @@ try {
     const keys = Object.keys(dict).sort()
     const lines = ['<?xml version="1.0" encoding="utf-8"?>', '<resources>']
 
+    const resNameMap = new Map()
+    const collisions = []
+
     for (const key of keys) {
       const resName = toAndroidResourceName(key)
       const value = escapeXml(dict[key])
-      lines.push(`    <string name="${resName}">${value}</string>`)
+      if (resNameMap.has(resName)) {
+        collisions.push({ resName, firstKey: resNameMap.get(resName), secondKey: key })
+      } else {
+        resNameMap.set(resName, key)
+        lines.push(`    <string name="${resName}">${value}</string>`)
+      }
+    }
+
+    if (collisions.length > 0) {
+      console.error(`❌ ${dirName}/strings.xml: ${collisions.length} 个 Android resource name collision(s):`)
+      for (const c of collisions) {
+        console.error(`   "${c.firstKey}" and "${c.secondKey}" both map to R.string.${c.resName}`)
+      }
+      process.exit(3)
     }
 
     lines.push('</resources>', '')
     writeFileSync(outPath, lines.join('\n'), 'utf-8')
 
-    totalKeys += keys.length
+    totalKeys += keys.length - collisions.length
     localeCount++
-    console.log(`  ✅ ${dirName}/strings.xml  (${keys.length} keys)`)
+    console.log(`  ✅ ${dirName}/strings.xml  (${keys.length - collisions.length} keys)`)
   }
 
   console.log()
