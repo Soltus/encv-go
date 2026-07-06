@@ -72,7 +72,13 @@
 
 <script setup lang="ts">
 import { useI18n } from "@/composables/useI18n";
-import { documentTextOutline, gitBranchOutline, pricetagOutline, searchOutline } from "ionicons/icons";
+import {
+  documentTextOutline,
+  filmOutline,
+  gitBranchOutline,
+  pricetagOutline,
+  searchOutline,
+} from "ionicons/icons";
 import { ref } from "vue";
 
 export interface V2ScenarioEntry {
@@ -95,7 +101,7 @@ const { t } = useI18n();
 
 const isOpen = ref(false);
 
-function _openModal(): void {
+function openModal(): void {
   isOpen.value = true;
 }
 
@@ -103,13 +109,13 @@ function closeModal(): void {
   isOpen.value = false;
 }
 
-function _emitPick(s: V2ScenarioEntry): void {
+function emitPick(s: V2ScenarioEntry): void {
   closeModal();
   emit("pick", s);
 }
 
 // ─── 8 个 v2 剧本分组 ──────────────────────────────────────
-const _groups = [
+const groups = [
   {
     id: "search",
     title: t("agent.v2Scenarios.groupSearch"),

@@ -148,6 +148,19 @@
 
 <script setup lang="ts">
 import {
+  alertCircle,
+  arrowBack,
+  chevronDown,
+  chevronForward,
+  documentTextOutline,
+  helpCircleOutline,
+  informationCircle,
+  lockClosed,
+  returnDownBackOutline,
+  returnDownForwardOutline,
+} from "ionicons/icons";
+
+import {
   fetchTextPreviewExts,
   getApiBaseUrl,
   getFileCategory,
@@ -200,13 +213,13 @@ const textErrorDetail = ref<string>("");
 const _showTextErrorDetail = ref(false);
 const textWrap = ref(true);
 
-const _isEncryptedPreview = computed(() => route.query.isEncrypted === "true");
+const isEncryptedPreview = computed(() => route.query.isEncrypted === "true");
 
-function _toggleWrap() {
+function toggleWrap() {
   textWrap.value = !textWrap.value;
 }
 
-function _formatDuration(seconds: number): string {
+function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;

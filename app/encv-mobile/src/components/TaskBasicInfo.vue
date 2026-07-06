@@ -148,11 +148,17 @@ import { useI18n } from "@/composables/useI18n";
 import { type SectionDimension, useSectionDerivation } from "@/composables/useSectionDerivation";
 import { showToast } from "@/composables/useToast";
 import {
+  chevronForward,
   cogOutline,
+  documentTextOutline,
   ellipsisHorizontalCircleOutline,
   extensionPuzzle,
   folderOutline,
+  gitBranchOutline,
   hardwareChipOutline,
+  informationCircleOutline,
+  listOutline,
+  lockClosedOutline,
   person,
   swapVertical,
 } from "ionicons/icons";
@@ -161,7 +167,7 @@ import { computed } from "vue";
 const props = defineProps<{ task: EncvTask }>();
 const { t } = useI18n();
 
-async function _copyTaskId() {
+async function copyTaskId() {
   try {
     await navigator.clipboard.writeText(props.task.id);
     showToast({ message: t("tasks.idCopied"), duration: 1500, color: "success" });
@@ -170,7 +176,7 @@ async function _copyTaskId() {
   }
 }
 
-async function _copyRunId() {
+async function copyRunId() {
   if (!runId.value) return;
   try {
     await navigator.clipboard.writeText(runId.value);
@@ -180,14 +186,14 @@ async function _copyRunId() {
   }
 }
 
-const _fileName = computed(() => {
+const fileName = computed(() => {
   const parts = props.task.sourcePath.split("/");
   return parts[parts.length - 1] || props.task.sourcePath;
 });
 
 // 🆕 2026-06-18 Task 18：crypto params 区块显示判定 + extraFields 格式化
 // 旧任务（Task 16 之前）没有这 3 个字段 → 不显示空区块
-const _hasCryptoParams = computed(() => {
+const hasCryptoParams = computed(() => {
   const task = props.task;
   return (
     (task.cipherMode !== undefined && task.cipherMode !== null) ||
@@ -210,7 +216,7 @@ const EXTRA_FIELD_LABEL_I18N: Record<string, string> = {
   encType: "tasks.encType",
 };
 
-function _formatExtraFieldLabel(key: string): string {
+function formatExtraFieldLabel(key: string): string {
   // 1) 直接命中 i18n 表
   const directKey = EXTRA_FIELD_LABEL_I18N[key];
   if (directKey) return t(directKey);
@@ -223,7 +229,7 @@ function _formatExtraFieldLabel(key: string): string {
 }
 
 // extraField value → 显示值：bool 字符串 → ✓/✗；密码类 key → 脱敏（•••••）
-function _formatExtraFieldValue(value: string): string {
+function formatExtraFieldValue(value: string): string {
   if (value === undefined || value === null) return "";
   const v = String(value);
   // bool 字符串
@@ -256,7 +262,7 @@ const sectionMeta = computed(() => {
   }
   return meta;
 });
-const _sectionIcon = computed(() => {
+const sectionIcon = computed(() => {
   // 当前 sectionMeta 仅返回 'plugin' | 'none' 两个维度（type / category 留给 Tasks.vue 派生）
   // 为兼容历史 case 分支不报错，这里也覆盖 'type' | 'category'
   const dim = sectionMeta.value.dimension as "plugin" | "type" | "category" | "none";
@@ -271,7 +277,7 @@ const _sectionIcon = computed(() => {
       return ellipsisHorizontalCircleOutline;
   }
 });
-const _sectionDimensionLabel = computed(() => {
+const sectionDimensionLabel = computed(() => {
   const dim = sectionMeta.value.dimension as "plugin" | "type" | "category" | "none";
   switch (dim) {
     case "plugin":

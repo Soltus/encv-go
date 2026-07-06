@@ -63,17 +63,17 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const _icon = sparklesOutline;
-const _copyIconVar = copyOutline;
+const icon = sparklesOutline;
+const copyIconVar = copyOutline;
 
-const _label = computed(() => "AI 助手");
-const _meta = computed(() => {
+const label = computed(() => "AI 助手");
+const meta = computed(() => {
   if (props.streaming) return t("agent.thinking");
   return "";
 });
 
 /** 格式化时间戳为 HH:mm */
-const _displayTime = computed(() => {
+const displayTime = computed(() => {
   const ts = props.timestamp ?? Date.now();
   const d = new Date(ts);
   const hh = String(d.getHours()).padStart(2, "0");
@@ -82,7 +82,7 @@ const _displayTime = computed(() => {
 });
 
 /** 复制全文到剪贴板 */
-async function _handleCopy() {
+async function handleCopy() {
   try {
     if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
       await navigator.clipboard.writeText(props.text);

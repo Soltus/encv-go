@@ -94,7 +94,19 @@ import type { FileItem } from "@/api/encv";
 import { createDirectory, getFileCategory, listFiles, PermissionDeniedError } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 import { alertController, modalController } from "@ionic/vue";
-import { document, documentText, folder, image, lockClosed, musicalNotes, videocam } from "ionicons/icons";
+import {
+  add,
+  arrowBack,
+  chevronForward,
+  document,
+  documentText,
+  folder,
+  folderOpen,
+  image,
+  lockClosed,
+  musicalNotes,
+  videocam,
+} from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 
 const props = withDefaults(
@@ -116,7 +128,7 @@ const noPermission = ref(false);
 const showNewFolder = ref(false);
 const newFolderName = ref("");
 
-const _pathSegments = computed(() => {
+const pathSegments = computed(() => {
   if (currentPath.value === "/") return [];
   const parts = currentPath.value.split("/").filter(Boolean);
   return parts.map((name, index) => ({
@@ -133,14 +145,14 @@ const sortedFiles = computed(() => {
   });
 });
 
-const _displayFiles = computed(() => {
+const displayFiles = computed(() => {
   if (props.mode === "folder") {
     return sortedFiles.value.filter(f => f.isDirectory);
   }
   return sortedFiles.value;
 });
 
-function _getFileIcon(file: FileItem) {
+function getFileIcon(file: FileItem) {
   if (file.isDirectory) return folder;
   if (file.isEncrypted) return lockClosed;
   const category = getFileCategory(file.name);
@@ -158,7 +170,7 @@ function _getFileIcon(file: FileItem) {
   }
 }
 
-function _getFileIconColor(file: FileItem) {
+function getFileIconColor(file: FileItem) {
   if (file.isDirectory) return "primary";
   if (file.isEncrypted) return "warning";
   const category = getFileCategory(file.name);
@@ -194,7 +206,7 @@ function navigateTo(path: string) {
   loadFiles();
 }
 
-function _goUp() {
+function goUp() {
   if (currentPath.value === "/") return;
   const parts = currentPath.value.split("/").filter(Boolean);
   parts.pop();
@@ -202,7 +214,7 @@ function _goUp() {
   loadFiles();
 }
 
-function _handleFileClick(file: FileItem) {
+function handleFileClick(file: FileItem) {
   if (file.isDirectory) {
     const newPath = currentPath.value === "/" ? "/" + file.name : currentPath.value + "/" + file.name;
     navigateTo(newPath);
@@ -213,11 +225,11 @@ function _handleFileClick(file: FileItem) {
   }
 }
 
-function _selectCurrentFolder() {
+function selectCurrentFolder() {
   modalController.dismiss({ path: currentPath.value, name: currentPath.value.split("/").filter(Boolean).pop() || "/" }, "select");
 }
 
-function _cancel() {
+function cancel() {
   modalController.dismiss(null, "cancel");
 }
 
@@ -226,7 +238,7 @@ function _showNewFolderInput() {
   newFolderName.value = "";
 }
 
-async function _confirmNewFolder() {
+async function confirmNewFolder() {
   const name = newFolderName.value.trim();
   if (!name) return;
   try {
@@ -246,7 +258,7 @@ async function _confirmNewFolder() {
   }
 }
 
-function _cancelNewFolder() {
+function cancelNewFolder() {
   showNewFolder.value = false;
   newFolderName.value = "";
 }

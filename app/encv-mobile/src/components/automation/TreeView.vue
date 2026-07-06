@@ -113,6 +113,13 @@
 </template>
 
 <script setup lang="ts">
+import {
+  chevronDown,
+  chevronForward,
+  closeCircleOutline,
+  flashOutline,
+} from "ionicons/icons";
+
 import { isPhase, type StepStatus, type UnifiedTreeNode, type WorkflowRun } from "@/lib/workflow/types";
 import { computed, ref, watch } from "vue";
 
@@ -240,7 +247,7 @@ watch(
 
 // ==================== 搜索过滤 ====================
 
-const _filteredNodes = computed(() => {
+const filteredNodes = computed(() => {
   if (!searchQuery.value) return resolvedNodes.value;
   const q = searchQuery.value.toLowerCase();
   return resolvedNodes.value.filter(node => {

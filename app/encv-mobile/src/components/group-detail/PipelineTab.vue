@@ -18,7 +18,7 @@ const _emit = defineEmits<(e: "select-job", job: JobRun) => void>();
 
 const { t } = useI18n();
 
-const _sortedJobs = computed<JobRun[]>(() => {
+const sortedJobs = computed<JobRun[]>(() => {
   return [...props.jobs].sort((a, b) => {
     // 失败/进行中 优先 → 已完成 最后
     const sa = a.status;
@@ -28,7 +28,7 @@ const _sortedJobs = computed<JobRun[]>(() => {
   });
 });
 
-const _durationMs = computed<number>(() => {
+const durationMs = computed<number>(() => {
   if (!props.run?.durationMs) return 0;
   return props.run.durationMs;
 });

@@ -129,6 +129,21 @@
 </template>
 
 <script setup lang="ts">
+import {
+  cloudOutline,
+  documentTextOutline,
+  folderOpenOutline,
+  imageOutline,
+  lockClosed,
+  refreshCircleOutline,
+  searchOutline,
+  serverOutline,
+  statsChartOutline,
+  timeOutline,
+  timerOutline,
+  trashOutline,
+} from "ionicons/icons";
+
 import type { IndexStats } from "@/api/encv";
 import { clearIndex, getIndexStats, rebuildIndex } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
@@ -154,7 +169,7 @@ async function loadStats() {
 }
 
 // 🆕 2026-07-02 跳转全文索引二级页（FTS5 详情）
-function _goFullTextIndex() {
+function goFullTextIndex() {
   router.push("/tabs/settings/fulltext-index");
 }
 
@@ -171,7 +186,7 @@ function updateSearchCacheSize() {
   }
 }
 
-async function _handleRebuild() {
+async function handleRebuild() {
   try {
     await rebuildIndex();
     await loadStats();
@@ -181,7 +196,7 @@ async function _handleRebuild() {
   }
 }
 
-async function _handleClearIndex() {
+async function handleClearIndex() {
   const alert = await alertController.create({
     header: t("settings.clearIndex"),
     message: t("settings.clearIndexConfirm"),
@@ -204,7 +219,7 @@ async function _handleClearIndex() {
   await alert.present();
 }
 
-function _handleClearSearchCache() {
+function handleClearSearchCache() {
   const keysToRemove: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -219,7 +234,7 @@ function updateThumbCacheSize() {
   thumbCacheSize.value = getThumbCacheSize();
 }
 
-async function _handleClearThumbCache() {
+async function handleClearThumbCache() {
   const alert = await alertController.create({
     header: t("settings.clearThumbCache"),
     message: t("settings.clearIndexConfirm"),

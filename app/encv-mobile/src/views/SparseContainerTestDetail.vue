@@ -197,6 +197,14 @@
 
 <script setup lang="ts">
 import {
+  createOutline,
+  informationCircleOutline,
+  searchOutline,
+  trashOutline,
+  warningOutline,
+} from "ionicons/icons";
+
+import {
   cleanupSparseContainer,
   probeSparseContainer,
   type SparseContainerProbeResponse,
@@ -244,7 +252,7 @@ const isHighRisk = computed(() => {
   return proposedBytes.value > storageEstimate.value.quota * 0.5;
 });
 
-const _sparseRatioText = computed(() => {
+const sparseRatioText = computed(() => {
   if (!lastResult.value) return "";
   const { virtualTotalBytes, physicalUsedBytes } = lastResult.value;
   if (physicalUsedBytes === 0) return `∞ (${formatBytes(virtualTotalBytes)} / 0 B)`;
@@ -301,7 +309,7 @@ async function confirmIfHighRisk(): Promise<boolean> {
   return role === "confirm";
 }
 
-async function _handleWrite() {
+async function handleWrite() {
   if (isWriting.value) return;
   if (!(await confirmIfHighRisk())) return;
   isWriting.value = true;
@@ -336,7 +344,7 @@ async function _handleWrite() {
   }
 }
 
-async function _handleProbe() {
+async function handleProbe() {
   if (isProbing.value || !lastResult.value) return;
   isProbing.value = true;
   try {
@@ -362,7 +370,7 @@ async function _handleProbe() {
   }
 }
 
-async function _handleCleanup() {
+async function handleCleanup() {
   if (isCleaning.value || !lastResult.value) return;
   const alert = await alertController.create({
     header: t("devtools.sparseContainer.cleanupConfirm"),

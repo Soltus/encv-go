@@ -112,8 +112,8 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 // 模板用 chevronUp/chevronDown 引用，必须从 import 别名重绑定，否则
 // 模板引用未定义变量（vue-tsc 报 chevronUp/Down 不在 template scope）。
-const _chevronUp = chevronUpOutline;
-const _chevronDown = chevronDownOutline;
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
 
 const props = defineProps<{
   toolCall: ToolCall;
@@ -123,12 +123,12 @@ const props = defineProps<{
 
 const { t } = useI18n();
 const processingDecision = ref<Decision | null>(null);
-const _diffExpanded = ref(false);
+const diffExpanded = ref(false);
 let safetyTimer: number | null = null;
 
 const MAX_FILE_CHIPS = 6;
 
-const _kindIcon = computed(() => {
+const kindIcon = computed(() => {
   const map: Record<ToolKind, typeof terminalOutline> = {
     command: terminalOutline,
     fileChange: codeSlashOutline,
@@ -140,7 +140,7 @@ const _kindIcon = computed(() => {
   return map[props.toolCall.kind] || helpCircleOutline;
 });
 
-const _titleText = computed(() => {
+const titleText = computed(() => {
   const kindMap: Record<ToolKind, string> = {
     command: t("agent.tool.command"),
     fileChange: t("agent.tool.fileChange"),
@@ -153,7 +153,7 @@ const _titleText = computed(() => {
   return `${kindLabel}：${props.toolCall.name}`;
 });
 
-const _reasonText = computed(() => {
+const reasonText = computed(() => {
   // 解析 args 拿第一个 string 字段作为 "reason" 提示
   try {
     const parsed = JSON.parse(props.toolCall.args);
@@ -172,7 +172,7 @@ interface SummaryRow {
   value: string;
 }
 
-const _bodySummary = computed<SummaryRow[]>(() => {
+const bodySummary = computed<SummaryRow[]>(() => {
   const rows: SummaryRow[] = [];
   let args: Record<string, unknown> = {};
   try {
@@ -194,7 +194,7 @@ const _bodySummary = computed<SummaryRow[]>(() => {
   return rows;
 });
 
-const _filesChips = computed<string[]>(() => {
+const filesChips = computed<string[]>(() => {
   let args: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(props.toolCall.args);
@@ -220,7 +220,7 @@ const _filesChips = computed<string[]>(() => {
   return candidates.slice(0, MAX_FILE_CHIPS);
 });
 
-const _extraFilesCount = computed(() => {
+const extraFilesCount = computed(() => {
   let args: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(props.toolCall.args);
@@ -235,7 +235,7 @@ const _extraFilesCount = computed(() => {
   return Math.max(0, total - MAX_FILE_CHIPS);
 });
 
-const _diffText = computed(() => {
+const diffText = computed(() => {
   let args: Record<string, unknown> = {};
   try {
     const parsed = JSON.parse(props.toolCall.args);
@@ -250,7 +250,7 @@ const _diffText = computed(() => {
   return "";
 });
 
-const _canShowSessionGrant = computed(() => props.toolCall.kind !== "readOnly");
+const canShowSessionGrant = computed(() => props.toolCall.kind !== "readOnly");
 
 const disabled = computed(() => props.isProcessing || processingDecision.value !== null);
 
@@ -281,7 +281,7 @@ onBeforeUnmount(() => {
   }
 });
 
-function _handleDecide(decision: Decision) {
+function handleDecide(decision: Decision) {
   if (disabled.value) return;
   processingDecision.value = decision;
   try {
@@ -296,7 +296,7 @@ function _handleDecide(decision: Decision) {
   }
 }
 
-function _truncatePath(p: string): string {
+function truncatePath(p: string): string {
   if (p.length <= 28) return p;
   return "…" + p.slice(p.length - 27);
 }

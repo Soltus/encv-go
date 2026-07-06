@@ -67,7 +67,7 @@ const containerRef = ref<HTMLDivElement | null>(null);
  * - operationGroup: 列表卡 200px
  * - webSearchGroup: 搜索卡 140px
  */
-function _getItemSize(item: RenderedItem): number {
+function getItemSize(item: RenderedItem): number {
   switch (item.type) {
     case "user":
       return 80;
@@ -108,7 +108,7 @@ function scrollToBottom(behavior: "auto" | "smooth" = "smooth") {
   }
 }
 
-function _onScroll(_e: Event) {
+function onScroll(_e: Event) {
   // 子组件可监听 scroll 事件以实现"是否接近底部"判断
 }
 

@@ -119,7 +119,7 @@ interface InternalTimelineEntry extends UnifiedTimelineEntry {
  *   - step 有 startedAt + phase（运行中）→ 2 个条目（Started + Current phase）
  *   - step 有 startedAt + completedAt（已完成）→ 2-3 个条目（Started + Completed，可能含中间 phase）
  */
-const _entries = computed<UnifiedTimelineEntry[]>(() => {
+const entries = computed<UnifiedTimelineEntry[]>(() => {
   const step = props.step;
   const result: InternalTimelineEntry[] = [];
 

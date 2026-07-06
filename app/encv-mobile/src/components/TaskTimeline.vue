@@ -67,7 +67,7 @@ const props = defineProps<{ task: EncvTask }>();
 const { t } = useI18n();
 
 // 展开状态映射：entry.id → 是否展开（受控模式）
-const _expandedMap = reactive<Record<string, boolean>>({});
+const expandedMap = reactive<Record<string, boolean>>({});
 
 // ==================== Phase 映射表 ====================
 
@@ -151,7 +151,7 @@ function getCryptoSummary(): string {
   return parts.join(" · ");
 }
 
-const _unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
+const unifiedEntries = computed<UnifiedTimelineEntry[]>(() => {
   const entries: InternalTimelineEntry[] = [];
   const steps = props.task.steps ?? [];
   const isTerminal = ["completed", "failed", "cancelled"].includes(props.task.status);

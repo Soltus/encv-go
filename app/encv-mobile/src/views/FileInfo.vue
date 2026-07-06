@@ -181,6 +181,20 @@
 </template>
 
 <script setup lang="ts">
+import {
+  alertCircle,
+  arrowBack,
+  chevronDown,
+  chevronForward,
+  documentTextOutline,
+  filmOutline,
+  helpCircleOutline,
+  imageOutline,
+  listOutline,
+  lockClosed,
+  settingsOutline,
+} from "ionicons/icons";
+
 import type { FileItem, PredictPluginResponse } from "@/api/encv";
 import { getApiBaseUrl, getExternalStreamUrl, predictPlugin, proxySafeEncode } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
@@ -229,7 +243,7 @@ const isAlistEnc = ref(false);
 const thumbnailError = ref(false);
 const pluginPrediction = ref<PredictPluginResponse | null>(null);
 
-const _thumbnailUrl = computed(() => {
+const thumbnailUrl = computed(() => {
   if (!info.value || thumbnailError.value) return "";
   const path = info.value.path;
   if (!path) return "";
@@ -246,15 +260,15 @@ const isVideoFile = computed(() => {
   return mime.startsWith("video/");
 });
 
-const _isImageOrVideo = computed(() => isImageFile.value || isVideoFile.value);
+const isImageOrVideo = computed(() => isImageFile.value || isVideoFile.value);
 
-function _formatDuration(seconds: number): string {
+function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-function _formatTime(isoStr: string): string {
+function formatTime(isoStr: string): string {
   try {
     return new Date(isoStr).toLocaleString();
   } catch {
@@ -262,7 +276,7 @@ function _formatTime(isoStr: string): string {
   }
 }
 
-function _matchTypeLabel(type?: string): string {
+function matchTypeLabel(type?: string): string {
   const map: Record<string, string> = {
     mime: "MIME",
     extension: "扩展名",
@@ -272,7 +286,7 @@ function _matchTypeLabel(type?: string): string {
   return type ? map[type] || type : "-";
 }
 
-const _pluginMatchDesc = computed(() => {
+const pluginMatchDesc = computed(() => {
   const p = pluginPrediction.value;
   if (!p?.pluginName) return "";
   const candidates = p.candidates || [];
@@ -280,7 +294,7 @@ const _pluginMatchDesc = computed(() => {
   return `${t("fileInfo.pluginCandidateCount") || "候选"} ${candidates.length}`;
 });
 
-function _handlePreviewClick() {
+function handlePreviewClick() {
   router.push({ path: "/tabs/files", query: { action: "preview", path: info.value?.path } });
 }
 

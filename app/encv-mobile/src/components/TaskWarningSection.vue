@@ -10,13 +10,17 @@
 </template>
 
 <script setup lang="ts">
+import {
+  warningOutline,
+} from "ionicons/icons";
+
 import type { EncvTask } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 
 defineProps<{ task: EncvTask }>();
 const { t } = useI18n();
 
-function _formatWarningDetail(detail: string): string {
+function formatWarningDetail(detail: string): string {
   try {
     return JSON.stringify(JSON.parse(detail), null, 2);
   } catch {

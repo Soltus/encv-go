@@ -30,7 +30,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const _expanded = ref(false);
+const expanded = ref(false);
 
 const CHAR_LIMIT = 560;
 const LINE_LIMIT = 9;
@@ -38,7 +38,7 @@ const LINE_LIMIT = 9;
 const charCount = computed(() => props.text.length);
 const lineCount = computed(() => props.text.split("\n").length);
 
-const _shouldCollapse = computed(() => charCount.value > CHAR_LIMIT || lineCount.value > LINE_LIMIT);
+const shouldCollapse = computed(() => charCount.value > CHAR_LIMIT || lineCount.value > LINE_LIMIT);
 </script>
 
 <style scoped>

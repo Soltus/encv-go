@@ -111,6 +111,10 @@
 </template>
 
 <script setup lang="ts">
+import {
+  bugOutline,
+} from "ionicons/icons";
+
 import type { EncvTask } from "@/api/encv";
 import { computed } from "vue";
 
@@ -131,14 +135,14 @@ const props = defineProps<{
 }>();
 
 // ============ 派生统计 ============
-const _realGroupCount = computed(() => props.groupedTasksByRunId.filter(g => !g.runId.startsWith("__manual__")).length);
+const realGroupCount = computed(() => props.groupedTasksByRunId.filter(g => !g.runId.startsWith("__manual__")).length);
 const fakeGroupCount = computed(() => props.groupedTasksByRunId.filter(g => g.runId.startsWith("__manual__")).length);
 const escapeTaskCount = computed(() =>
   props.groupedTasksByRunId.filter(g => g.runId.startsWith("__manual__")).reduce((acc, g) => acc + g.tasks.length, 0)
 );
-const _pinnedSet = computed(() => props.pinnedRunIds);
+const pinnedSet = computed(() => props.pinnedRunIds);
 
-const _sortedGroups = computed(() => {
+const sortedGroups = computed(() => {
   return props.groupedTasksByRunId
     .map(g => {
       const isFake = g.runId.startsWith("__manual__");
@@ -185,7 +189,7 @@ const bucketCounts = computed(() => {
 
 // 自我诊断
 type Diag = { level: "ok" | "warn" | "error" | "info"; text: string };
-const _diagnostics = computed<Diag[]>(() => {
+const diagnostics = computed<Diag[]>(() => {
   const out: Diag[] = [];
   if (props.tasks.length === 0) {
     out.push({ level: "info", text: "store.tasks 是空（首次进入或已清空）" });

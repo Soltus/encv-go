@@ -20,7 +20,7 @@ const props = withDefaults(
   }
 );
 
-const _icon = computed(() => {
+const icon = computed(() => {
   switch (props.status) {
     case "success":
       return "✓";

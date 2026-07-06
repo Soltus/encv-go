@@ -77,6 +77,10 @@
 
 <script setup lang="ts">
 import {
+  analyticsOutline,
+} from "ionicons/icons";
+
+import {
   type CalibrationResult,
   type EncvTask,
   getCalibration,
@@ -101,7 +105,7 @@ interface PluginAggregation {
   trendPctChange: number;
 }
 
-const _pluginAggregation = computed<PluginAggregation[]>(() => {
+const pluginAggregation = computed<PluginAggregation[]>(() => {
   const map = new Map<string, EncvTask[]>();
   for (const task of props.runTasks) {
     if (!task.performanceSummary) continue;
@@ -143,7 +147,7 @@ const _pluginAggregation = computed<PluginAggregation[]>(() => {
   return result.sort((a, b) => b.caseCount - a.caseCount);
 });
 
-function _gradeColor(grade: string): string {
+function gradeColor(grade: string): string {
   switch (grade) {
     case "excellent":
       return "success";
@@ -156,15 +160,15 @@ function _gradeColor(grade: string): string {
   }
 }
 
-function _trendArrow(pct: number): string {
+function trendArrow(pct: number): string {
   return pct > 0 ? "↗" : "↘";
 }
 
-function _trendClass(pct: number): string {
+function trendClass(pct: number): string {
   return pct > 0 ? "trend-up" : "trend-down";
 }
 
-function _formatTime(iso: string): string {
+function formatTime(iso: string): string {
   try {
     return new Date(iso).toLocaleString();
   } catch {

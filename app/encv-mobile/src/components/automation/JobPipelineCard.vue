@@ -71,9 +71,9 @@ const props = defineProps<{
   displayName?: string;
 }>();
 
-const _expanded = ref(false);
+const expanded = ref(false);
 
-const _jobName = computed(() => props.displayName ?? props.job.jobDefId);
+const jobName = computed(() => props.displayName ?? props.job.jobDefId);
 
 const totalSteps = computed(() => props.job.steps.length);
 const completedSteps = computed(
@@ -83,12 +83,12 @@ const completedSteps = computed(
         s.status === "success" || s.status === "failure" || s.status === "cancelled" || s.status === "skipped" || s.status === "timed_out"
     ).length
 );
-const _progressPct = computed(() => {
+const progressPct = computed(() => {
   if (totalSteps.value === 0) return 0;
   return Math.round((completedSteps.value / totalSteps.value) * 100);
 });
 
-const _fillColor = computed(() => {
+const fillColor = computed(() => {
   if (props.job.status === "failure") return "fail";
   if (props.job.status === "success") return "pass";
   if (props.job.status === "running") return "run";
@@ -96,14 +96,14 @@ const _fillColor = computed(() => {
   return "default";
 });
 
-const _visibleSteps = computed(() => props.job.steps.slice(0, 5));
-const _hiddenCount = computed(() => Math.max(0, props.job.steps.length - 5));
+const visibleSteps = computed(() => props.job.steps.slice(0, 5));
+const hiddenCount = computed(() => Math.max(0, props.job.steps.length - 5));
 
 function _stepName(step: StepRun): string {
   return props.stepNames?.get(step.stepDefId) ?? step.stepDefId;
 }
 
-function _formatDur(ms: number): string {
+function formatDur(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`;

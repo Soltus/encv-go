@@ -142,9 +142,9 @@ const props = defineProps<{
 
 const expanded = ref(props.result.status === "failed" || props.result.status === "passed");
 
-const _paddedIdx = computed(() => String(props.index + 1).padStart(3, "0"));
+const paddedIdx = computed(() => String(props.index + 1).padStart(3, "0"));
 
-const _statusText = computed(() => {
+const statusText = computed(() => {
   switch (props.result.status) {
     case "passed":
       return "VERIFIED";
@@ -161,14 +161,14 @@ const _statusText = computed(() => {
   }
 });
 
-const _isExpandable = computed(() => true);
+const isExpandable = computed(() => true);
 
-const _catMeta = computed(() => {
+const catMeta = computed(() => {
   const cat = props.result.errorAnalysis?.category ?? "unknown";
   return CATEGORY_META[cat];
 });
 
-function _toggle() {
+function toggle() {
   expanded.value = !expanded.value;
 }
 </script>

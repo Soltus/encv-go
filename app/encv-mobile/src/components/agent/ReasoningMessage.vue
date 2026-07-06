@@ -44,13 +44,13 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const _expanded = ref(props.streaming);
-const _icon = bulbOutline;
-const _chevronUp = chevronUpOutline;
-const _chevronDown = chevronDownOutline;
+const expanded = ref(props.streaming);
+const icon = bulbOutline;
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
 
-const _label = computed(() => t("agent.reasoning"));
-const _metaText = computed(() => (props.streaming ? t("agent.thinkingMeta") : ""));
+const label = computed(() => t("agent.reasoning"));
+const metaText = computed(() => (props.streaming ? t("agent.thinkingMeta") : ""));
 </script>
 
 <style scoped>

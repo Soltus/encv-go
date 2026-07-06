@@ -68,14 +68,14 @@ const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig()
 const SECTION_KEY = "webdav";
 
 const sectionDef = computed(() => parseSchema().find(s => s.key === SECTION_KEY));
-const _childFields = computed(() => sectionDef.value?.properties ?? []);
+const childFields = computed(() => sectionDef.value?.properties ?? []);
 const webdavTesting = ref(false);
 
 function tField(key: string): string {
   return t(`settings.${key}`);
 }
 
-function _fieldLabel(key: string, required?: boolean): string {
+function fieldLabel(key: string, required?: boolean): string {
   return tField(key) + (required ? " *" : "");
 }
 
@@ -86,7 +86,7 @@ const fieldIconMap: Record<string, string> = {
   password: lockClosed,
 };
 
-function _getFieldIcon(fieldKey: string, fieldType: string): string {
+function getFieldIcon(fieldKey: string, fieldType: string): string {
   if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey];
   if (fieldType === "boolean") return settingsOutline;
   if (fieldType === "integer") return globeOutline;
@@ -94,11 +94,11 @@ function _getFieldIcon(fieldKey: string, fieldType: string): string {
   return globeOutline;
 }
 
-function _setValue(path: string[], value: unknown) {
+function setValue(path: string[], value: unknown) {
   setFieldValue(path, value);
 }
 
-function _handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
+function handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
   const val = (event.target as HTMLInputElement).value;
   if (path.length >= 2 && path[1] === "root" && val) {
     const err = validateWebdavRoute(val);
@@ -121,7 +121,7 @@ function validateWebdavRoute(val: string): string | null {
   return null;
 }
 
-async function _handleBrowsePath(path: string[], field: FieldDef) {
+async function handleBrowsePath(path: string[], field: FieldDef) {
   const isFolder = field.key !== "file";
   const currentVal = String(getFieldValue(path) || "/");
   const modal = await modalController.create({
@@ -139,7 +139,7 @@ async function _handleBrowsePath(path: string[], field: FieldDef) {
   }
 }
 
-async function _handleSave() {
+async function handleSave() {
   try {
     await saveConfig();
     showToast({ message: t("settings.configSaved"), duration: 1500, color: "success" });
@@ -149,7 +149,7 @@ async function _handleSave() {
   }
 }
 
-async function _handleTestWebdav() {
+async function handleTestWebdav() {
   webdavTesting.value = true;
   try {
     const result = await testLocalWebDAV();

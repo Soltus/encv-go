@@ -42,18 +42,18 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const _expanded = ref(false);
-const _icon = searchOutline;
-const _chevronUp = chevronUpOutline;
-const _chevronDown = chevronDownOutline;
-const _label = computed(() => t("agent.webSearch"));
+const expanded = ref(false);
+const icon = searchOutline;
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
+const label = computed(() => t("agent.webSearch"));
 
-const _metaText = computed(() => {
+const metaText = computed(() => {
   const n = props.queries.length;
   return n > 1 ? `${n} ${t("agent.queries")}` : `${n} ${t("agent.query")}`;
 });
 
-const _totalHits = computed(() => {
+const totalHits = computed(() => {
   if (!props.results) return null;
   let s = 0;
   for (const r of props.results) s += r;

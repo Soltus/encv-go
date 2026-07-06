@@ -111,9 +111,9 @@ const props = withDefaults(
 
 const { t } = useI18n();
 
-const _icon = gitBranchOutline;
-const _chevronUp = chevronUpOutline;
-const _chevronDown = chevronDownOutline;
+const icon = gitBranchOutline;
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
 
 const shouldCollapse = computed(() => {
   if (props.subTasks.length > AGENT_TASK_COLLAPSE_LINE_COUNT) return true;
@@ -125,14 +125,14 @@ const shouldCollapse = computed(() => {
 // 非 streaming 态按 shouldCollapse 决定初值。
 const expanded = ref<boolean>(props.streaming || !shouldCollapse.value);
 
-function _toggleExpanded() {
+function toggleExpanded() {
   expanded.value = !expanded.value;
 }
 
 const completedCount = computed(() => props.subTasks.filter(s => s.status === "completed").length);
-const _inProgressCount = computed(() => props.subTasks.filter(s => s.status === "in_progress").length);
-const _failedCount = computed(() => props.subTasks.filter(s => s.status === "failed").length);
-const _progressPct = computed(() => {
+const inProgressCount = computed(() => props.subTasks.filter(s => s.status === "in_progress").length);
+const failedCount = computed(() => props.subTasks.filter(s => s.status === "failed").length);
+const progressPct = computed(() => {
   const total = props.subTasks.length;
   if (total === 0) return 0;
   return Math.round((completedCount.value / total) * 100);
@@ -143,7 +143,7 @@ const _reasoningText = computed(() => {
   return typeof r === "string" && r.trim().length > 0 ? r.trim() : "";
 });
 
-function _statusIcon(status: SubTask["status"]) {
+function statusIcon(status: SubTask["status"]) {
   switch (status) {
     case "completed":
       return checkmarkCircle;
@@ -156,7 +156,7 @@ function _statusIcon(status: SubTask["status"]) {
   }
 }
 
-function _statusLabel(status: SubTask["status"]): string {
+function statusLabel(status: SubTask["status"]): string {
   if (status === "in_progress") return t("agent.planStatusInProgress");
   if (status === "completed") return t("agent.planStatusCompleted");
   if (status === "failed") return t("agent.failed");

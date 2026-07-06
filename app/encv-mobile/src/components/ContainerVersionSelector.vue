@@ -53,7 +53,7 @@ const { t } = useI18n();
 // 注：ECV2 已在 SupportedVersions 中移除，不再可选。
 const _versions = computed<ContainerVersionInfo[]>(() => props.versions ?? [...CONTAINER_VERSIONS]);
 
-function _handleChange(event: CustomEvent) {
+function handleChange(event: CustomEvent) {
   emit("update:modelValue", event.detail.value as number);
 }
 </script>

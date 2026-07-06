@@ -134,7 +134,7 @@ const isMountList = computed(() => {
   return false;
 });
 
-const _mountItems = computed<unknown[]>(() => {
+const mountItems = computed<unknown[]>(() => {
   if (Array.isArray(parsed.value)) return parsed.value;
   if (isObject(parsed.value) && Array.isArray((parsed.value as any).mounts)) {
     return (parsed.value as any).mounts;
@@ -143,7 +143,7 @@ const _mountItems = computed<unknown[]>(() => {
 });
 
 /** file list 检测：files[] / items[] / entries[] */
-const _isFileList = computed(() => {
+const isFileList = computed(() => {
   if (Array.isArray(parsed.value)) {
     return parsed.value.length > 0 && parsed.value.every(f => isObject(f) || typeof f === "string") && !isMountList.value;
   }
@@ -156,7 +156,7 @@ const _isFileList = computed(() => {
   return false;
 });
 
-const _fileItems = computed<unknown[]>(() => {
+const fileItems = computed<unknown[]>(() => {
   if (Array.isArray(parsed.value)) return parsed.value;
   if (isObject(parsed.value)) {
     for (const k of ["files", "items", "entries", "results"]) {
@@ -169,25 +169,25 @@ const _fileItems = computed<unknown[]>(() => {
 });
 
 /** file content 检测：content / text / contentSnippet 字段 */
-const _isFileContent = computed(() => {
+const isFileContent = computed(() => {
   if (!isObject(parsed.value)) return false;
   const p = parsed.value as any;
   return typeof p.content === "string" || typeof p.text === "string" || typeof p.contentSnippet === "string";
 });
 
-const _fileContentText = computed(() => {
+const fileContentText = computed(() => {
   if (!isObject(parsed.value)) return "";
   const p = parsed.value as any;
   return p.content || p.text || p.contentSnippet || "";
 });
 
 /** 解析失败的展示文本（去除外层引号） */
-const _displayText = computed(() => {
+const displayText = computed(() => {
   if (parsed.value !== null) return String(parsed.value);
   return props.raw || "";
 });
 
-function _formatSize(bytes: number): string {
+function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;

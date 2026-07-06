@@ -211,13 +211,13 @@ const worldData = ref<SimverseChronicleWorldResponse | null>(null);
 const minImportance = ref(2);
 const displayLimit = ref(50);
 
-const _refreshIcon = refresh;
-const _chevronForward = chevronForwardIcon;
+const refreshIcon = refresh;
+const chevronForward = chevronForwardIcon;
 
 const showEventModal = ref(false);
 const selectedEvent = ref<SimverseChronicleEvent | null>(null);
 
-function _levelIcon(level: string): string {
+function levelIcon(level: string): string {
   const map: Record<string, string> = {
     Personal: "个",
     Family: "家",
@@ -228,7 +228,7 @@ function _levelIcon(level: string): string {
   return map[level] || "?";
 }
 
-function _impBadgeColor(imp: number): string {
+function impBadgeColor(imp: number): string {
   const colors = ["medium", "tertiary", "primary", "success", "warning", "danger"];
   return colors[imp] || "medium";
 }
@@ -246,7 +246,7 @@ async function loadData() {
   }
 }
 
-async function _openEventDetail(evt: SimverseChronicleEvent) {
+async function openEventDetail(evt: SimverseChronicleEvent) {
   const detail = await loadChronicleEvent(evt.id);
   if (detail) {
     selectedEvent.value = detail;
@@ -254,7 +254,7 @@ async function _openEventDetail(evt: SimverseChronicleEvent) {
   }
 }
 
-async function _loadAndShowEvent(id: number) {
+async function loadAndShowEvent(id: number) {
   const detail = await loadChronicleEvent(id);
   if (detail) {
     selectedEvent.value = detail;

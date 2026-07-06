@@ -61,8 +61,8 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-const _documentTextIcon = documentTextOutline;
-const _hourglassIcon = hourglassOutline;
+const documentTextIcon = documentTextOutline;
+const hourglassIcon = hourglassOutline;
 const expanded = ref(false);
 
 const COLLAPSE_THRESHOLD = 4000;
@@ -105,32 +105,32 @@ const parsed = computed<{ data: ParsedFile | null; error: string; isErrorRespons
 });
 
 const content = computed(() => parsed.value.data?.content ?? "");
-const _meta = computed(() => ({
+const meta = computed(() => ({
   mimeType: parsed.value.data?.mimeType,
   size: parsed.value.data?.size,
 }));
-const _rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
+const rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
 
-const _showToggle = computed(() => content.value.length > COLLAPSE_THRESHOLD);
-const _truncatedContent = computed(() => {
+const showToggle = computed(() => content.value.length > COLLAPSE_THRESHOLD);
+const truncatedContent = computed(() => {
   if (content.value.length <= COLLAPSE_THRESHOLD) return content.value;
   return content.value.slice(0, COLLAPSE_THRESHOLD) + "\n…";
 });
 
-const _titleText = computed(() => {
+const titleText = computed(() => {
   if (props.status === "pending" || props.status === "running") return t("agent.toolCards.fileContentTitle") || "文件内容（查询中）";
   if (parsed.value.isErrorResponse) return parsed.value.error.includes("too_large") ? "文件过大" : "读取失败";
   if (parsed.value.error) return t("agent.toolCards.parseFailed") || "文件内容（数据异常）";
   return t("agent.toolCards.fileContentTitle") || "文件内容";
 });
 
-const _errorBadgeLabel = computed(() => {
+const errorBadgeLabel = computed(() => {
   const err = parsed.value.error;
   if (err?.includes("too_large")) return "过大";
   return "错误";
 });
 
-const _dataSourceTag = computed(() => {
+const dataSourceTag = computed(() => {
   if (!props.resultJson) return "";
   const s = props.resultJson;
   if (s.includes('"FAKE":true') || s.includes('"FAKE": true')) return "mock 数据";
@@ -138,21 +138,21 @@ const _dataSourceTag = computed(() => {
   return "";
 });
 
-const _contentLineCount = computed(() => {
+const contentLineCount = computed(() => {
   return content.value ? content.value.split("\n").length : 0;
 });
 
-const _looksBinary = computed(() => {
+const looksBinary = computed(() => {
   if (content.value.length < 50) return false;
   const nonPrintable = (content.value.match(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g) || []).length;
   return nonPrintable > content.value.length * 0.05;
 });
 
-function _toggle() {
+function toggle() {
   expanded.value = !expanded.value;
 }
 
-function _formatSize(bytes: number): string {
+function formatSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes < 1024) return `${bytes} B`;
   const kb = bytes / 1024;

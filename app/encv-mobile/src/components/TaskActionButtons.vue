@@ -32,6 +32,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  closeCircle,
+  refresh,
+  trash,
+} from "ionicons/icons";
+
 import type { EncvTask } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 

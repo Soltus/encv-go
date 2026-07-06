@@ -111,6 +111,17 @@
 </template>
 
 <script setup lang="ts">
+import {
+  addOutline,
+  checkmarkCircle,
+  closeCircle,
+  cloudUploadOutline,
+  filmOutline,
+  informationCircle,
+  layersOutline,
+  serverOutline,
+} from "ionicons/icons";
+
 import { Capacitor } from "@capacitor/core";
 import { copyToClipboard } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
@@ -233,11 +244,11 @@ async function handleInstallFromFile() {
   }
 }
 
-async function _handleInstall(_id: string) {
+async function handleInstall(_id: string) {
   await handleInstallFromFile();
 }
 
-async function _handleToggleEnabled(id: string, currentEnabled: boolean) {
+async function handleToggleEnabled(id: string, currentEnabled: boolean) {
   if (!isNativePlatform()) return;
   const COMBO_LITE_ID: Record<string, string> = {
     "mpv-player": "com.encvgo.plugin.mpv",
@@ -261,7 +272,7 @@ async function _handleToggleEnabled(id: string, currentEnabled: boolean) {
   await loadExtensions();
 }
 
-async function _handleUninstall(id: string) {
+async function handleUninstall(id: string) {
   const COMBO_LITE_ID: Record<string, string> = {
     "mpv-player": "com.encvgo.plugin.mpv",
     openlist: "com.encvgo.plugin.openlist",
@@ -321,7 +332,7 @@ async function showDebugResult(header: string, result: Record<string, any>) {
   await alert.present();
 }
 
-async function _handleDebugInstall() {
+async function handleDebugInstall() {
   try {
     const result = await debugInstallFlow();
     await showDebugResult("🔧 installPlugin诊断", result);
@@ -330,7 +341,7 @@ async function _handleDebugInstall() {
   }
 }
 
-async function _handleDebugKotlinReflect() {
+async function handleDebugKotlinReflect() {
   try {
     const result = await debugKotlinReflect();
     await showDebugResult("🔧 kotlin-reflect诊断", result);
@@ -339,7 +350,7 @@ async function _handleDebugKotlinReflect() {
   }
 }
 
-async function _handleDebugApkValidation() {
+async function handleDebugApkValidation() {
   try {
     const result = await debugApkValidation();
     await showDebugResult("🔧 APK校验诊断", result);
@@ -348,7 +359,7 @@ async function _handleDebugApkValidation() {
   }
 }
 
-async function _handleDebugValidationStrategy() {
+async function handleDebugValidationStrategy() {
   try {
     const result = await debugValidationStrategy();
     await showDebugResult("🔧 ValidationStrategy诊断", result);
@@ -357,7 +368,7 @@ async function _handleDebugValidationStrategy() {
   }
 }
 
-async function _handleDebugLifecycle() {
+async function handleDebugLifecycle() {
   try {
     const result = await debugLifecycleFlow("com.encvgo.plugin.mpv");
     await showDebugResult("🔧 插件生命周期诊断", result);

@@ -216,6 +216,15 @@
 </template>
 
 <script setup lang="ts">
+import {
+  addCircleOutline,
+  checkmarkCircleOutline,
+  closeCircleOutline,
+  playCircleOutline,
+  syncOutline,
+  trashOutline,
+} from "ionicons/icons";
+
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
@@ -329,7 +338,7 @@ function _clearInlineError(): void {
 const plugins = ref<PluginMeta[]>([]);
 const isLoadingPlugins = ref(false);
 const dynamicTestCases = ref<any[]>([]);
-const _pluginCount = computed(() => plugins.value.length);
+const pluginCount = computed(() => plugins.value.length);
 
 // ---- 工作流引擎 ----
 // 🆕 Task 7：useWorkflowEngine 已退役，拆分为：
@@ -348,7 +357,7 @@ const { currentRun, isRunning, totalSteps, completedSteps, successSteps, failedS
 // 历史 run 列表点击 → push 到 L2 GroupDetail，**不在本地渲染报告**
 
 // 兼容模板：实时进度（用 useWorkflowTaskService 暴露的 counters 派生）
-const _progress = computed(() => ({
+const progress = computed(() => ({
   total: totalSteps.value,
   completed: completedSteps.value,
   passed: successSteps.value,
@@ -358,7 +367,7 @@ const _progress = computed(() => ({
 
 // ---- Handlers ----
 
-async function _handleGenerateMock() {
+async function handleGenerateMock() {
   if (isGenerating.value) return;
   isGenerating.value = true;
   mockStats.value = null;
@@ -547,7 +556,7 @@ function classifyMockError(errMsg: string): { title: string; hint: string } {
   };
 }
 
-async function _handleResetMock() {
+async function handleResetMock() {
   if (isResetting.value) return;
   isResetting.value = true;
   try {
@@ -568,7 +577,7 @@ async function _handleResetMock() {
   }
 }
 
-async function _handleLoadPlugins() {
+async function handleLoadPlugins() {
   isLoadingPlugins.value = true;
   try {
     plugins.value = await fetchPlugins();
@@ -629,7 +638,7 @@ function buildDynamicWorkflow(): void {
   }
 }
 
-async function _handleRunWorkflow() {
+async function handleRunWorkflow() {
   if (isRunning.value || dynamicTestCases.value.length === 0) return;
   if (!mockGenerated.value) {
     showToast({ message: "请先生成 Mock 数据！", color: "warning", duration: 2000 });
@@ -657,7 +666,7 @@ async function _handleRunWorkflow() {
   }
 }
 
-async function _handleCancel() {
+async function handleCancel() {
   // 🆕 Task 7：cancelCurrentRun() → cancelRun(currentRun.value.id)
   if (currentRun.value) {
     await cancelRun(currentRun.value.id);
@@ -671,12 +680,12 @@ async function _handleCancel() {
  *   - 解耦 PluginTestsDetail 与报告 UI
  *   - 解耦 Tasks.vue L1 与 PluginTestsDetail（用户在 L1 group card 直接进入 GroupDetail，不经过此页）
  */
-async function _openGroupDetail(runId: string) {
+async function openGroupDetail(runId: string) {
   if (!runId) return;
   await router.push(`/tabs/tasks/group/${encodeURIComponent(runId)}`);
 }
 
-function _formatTime(iso: string): string {
+function formatTime(iso: string): string {
   try {
     return new Date(iso).toLocaleTimeString();
   } catch {
@@ -684,7 +693,7 @@ function _formatTime(iso: string): string {
   }
 }
 
-function _formatInlineErrorTime(at: number): string {
+function formatInlineErrorTime(at: number): string {
   // 把 Date.now() 渲染成「刚刚 / N 分钟前 / HH:MM:SS」
   const secAgo = Math.floor((Date.now() - at) / 1000);
   if (secAgo < 5) return "刚刚";
@@ -693,7 +702,7 @@ function _formatInlineErrorTime(at: number): string {
   return new Date(at).toLocaleTimeString();
 }
 
-function _humanSize(bytes: number): string {
+function humanSize(bytes: number): string {
   if (bytes < 1024) return bytes + " B";
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";

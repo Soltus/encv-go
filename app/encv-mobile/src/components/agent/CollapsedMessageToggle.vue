@@ -35,8 +35,8 @@ defineProps<{
   onToggle: () => void;
 }>();
 
-const _chevronUp = chevronUpOutline;
-const _chevronDown = chevronDownOutline;
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
 </script>
 
 <style scoped>

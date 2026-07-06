@@ -269,6 +269,26 @@
 </template>
 
 <script setup lang="ts">
+import {
+  calendarOutline,
+  cloudUploadOutline,
+  codeSlashOutline,
+  codeWorkingOutline,
+  constructOutline,
+  cubeOutline,
+  documentOutline,
+  downloadOutline,
+  filmOutline,
+  filterOutline,
+  globeOutline,
+  linkOutline,
+  phonePortraitOutline,
+  searchOutline,
+  settingsOutline,
+  videocamOutline,
+  warningOutline,
+} from "ionicons/icons";
+
 import { type BuildInfo, type FFmpegStatus, fetchBuildInfo, fetchFFmpegStatus } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 import { onMounted, ref } from "vue";
@@ -281,7 +301,7 @@ const buildInfoLoading = ref(true);
 const buildInfoError = ref(false);
 const buildInfoErrorMessage = ref(""); // ✅ 新增：保存详细错误信息
 
-function _formatDate(dateStr: string): string {
+function formatDate(dateStr: string): string {
   if (!dateStr) return "";
   try {
     const d = new Date(dateStr);
@@ -291,7 +311,7 @@ function _formatDate(dateStr: string): string {
   }
 }
 
-async function _handleRefresh() {
+async function handleRefresh() {
   try {
     engineStatus.value = await fetchFFmpegStatus();
   } catch {}

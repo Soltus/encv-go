@@ -50,6 +50,16 @@
 </template>
 
 <script setup lang="ts">
+import {
+  chevronDownOutline,
+  chevronUpOutline,
+  eyeOffOutline,
+  eyeOutline,
+  folderOpen,
+  refreshOutline,
+  timeOutline,
+} from "ionicons/icons";
+
 import { useI18n } from "@/composables/useI18n";
 import { clearHistory, getHistory, recordHistory } from "@/composables/useInputHistory";
 import { computed, ref } from "vue";
@@ -83,12 +93,12 @@ const showHistory = ref(false);
 
 const entries = computed(() => (props.historyKey ? getHistory(props.historyKey) : []));
 
-const _resolvedType = computed(() => {
+const resolvedType = computed(() => {
   if (props.inputType !== "password") return props.inputType || "text";
   return showPassword.value ? "text" : "password";
 });
 
-function _handleInput(e: CustomEvent) {
+function handleInput(e: CustomEvent) {
   // 防御：ionInput 事件必须是 CustomEvent 携带 detail.value
   // 但代码路径中可能存在非 CustomEvent 派发（如测试代码 dispatchEvent(new Event('ionInput'))），
   // 这种情况下 e.detail 是 undefined，原代码会抛 "Cannot read properties of undefined"
@@ -97,13 +107,13 @@ function _handleInput(e: CustomEvent) {
   emit("update:modelValue", raw);
 }
 
-function _handleFocus() {
+function handleFocus() {
   if (props.historyKey && entries.value.length > 0) {
     showHistory.value = true;
   }
 }
 
-function _handleBlur() {
+function handleBlur() {
   if (props.historyKey) {
     recordHistory(props.historyKey, props.modelValue);
   }
@@ -115,23 +125,23 @@ function _handleBlur() {
   emit("blur");
 }
 
-function _handleSelect(value: string) {
+function handleSelect(value: string) {
   emit("update:modelValue", value);
   emit("commit-history", value);
   recordHistory(props.historyKey!, value);
   showHistory.value = false;
 }
 
-function _handleClear() {
+function handleClear() {
   if (props.historyKey) clearHistory(props.historyKey);
   showHistory.value = false;
 }
 
-function _togglePassword() {
+function togglePassword() {
   showPassword.value = !showPassword.value;
 }
 
-function _handleEnter() {
+function handleEnter() {
   emit("keyup-enter");
 }
 </script>

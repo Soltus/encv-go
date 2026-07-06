@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { useI18n } from "@/composables/useI18n";
-import { checkmarkCircle, ellipsisHorizontalCircle, sync } from "ionicons/icons";
+import {
+  checkboxOutline,
+  checkmarkCircle,
+  ellipsisHorizontalCircle,
+  sync,
+} from "ionicons/icons";
 import { computed } from "vue";
 
 export interface PlanTodo {
@@ -27,7 +32,7 @@ const { t } = useI18n();
 // user's eye lands first. This is a presentational choice
 // only — the underlying id+status+content is preserved so
 // the LLM's notion of ordering can be reconstructed by id.
-const _orderedTodos = computed(() => {
+const orderedTodos = computed(() => {
   const inProgress = props.todos.filter(x => x.status === "in_progress");
   const pending = props.todos.filter(x => x.status === "pending");
   const completed = props.todos.filter(x => x.status === "completed");
@@ -36,21 +41,21 @@ const _orderedTodos = computed(() => {
 });
 
 const completedCount = computed(() => props.todos.filter(x => x.status === "completed").length);
-const _inProgressCount = computed(() => props.todos.filter(x => x.status === "in_progress").length);
-const _progressPct = computed(() => {
+const inProgressCount = computed(() => props.todos.filter(x => x.status === "in_progress").length);
+const progressPct = computed(() => {
   const total = props.todos.length;
   if (total === 0) return 0;
   return Math.round((completedCount.value / total) * 100);
 });
 
-function _statusLabel(status: string): string {
+function statusLabel(status: string): string {
   if (status === "in_progress") return t("agent.planStatusInProgress");
   if (status === "completed") return t("agent.planStatusCompleted");
   if (status === "pending") return t("agent.planStatusPending");
   return status;
 }
 
-function _statusIcon(status: string) {
+function statusIcon(status: string) {
   if (status === "completed") return checkmarkCircle;
   if (status === "in_progress") return sync;
   return ellipsisHorizontalCircle;

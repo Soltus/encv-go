@@ -86,7 +86,12 @@
 import { copyToClipboard } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
-import { codeSlashOutline, eyeOutline, logoVue } from "ionicons/icons";
+import {
+  codeSlashOutline,
+  copyOutline,
+  eyeOutline,
+  logoVue,
+} from "ionicons/icons";
 import { computed, provide, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { getPrototype } from "./prototypes/registry";
@@ -105,7 +110,7 @@ const composeSource = ref("");
 const isLandscape = ref(false);
 const _frameRef = ref<HTMLElement>();
 
-const _tabs = [
+const tabs = [
   { id: "preview" as const, label: "Preview", icon: eyeOutline },
   { id: "web" as const, label: "Web", icon: logoVue },
   { id: "compose" as const, label: "Compose", icon: codeSlashOutline },
@@ -156,7 +161,7 @@ watch(activeTab, async tab => {
   }
 });
 
-async function _copySource(text: string) {
+async function copySource(text: string) {
   const ok = await copyToClipboard(text);
   showToast({ message: ok ? t("devtools.copiedCode") : t("devtools.copyFailed"), duration: 1500, color: ok ? "success" : "danger" });
 }

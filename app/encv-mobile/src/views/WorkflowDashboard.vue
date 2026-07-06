@@ -174,6 +174,13 @@
 </template>
 
 <script setup lang="ts">
+import {
+  addCircleOutline,
+  closeCircleOutline,
+  playCircleOutline,
+  trashOutline,
+} from "ionicons/icons";
+
 import { generateMockFilesViaBackend, resetMockFilesViaBackend } from "@/api/mockGenerator";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
@@ -214,12 +221,12 @@ const {
 } = useWorkflowTaskService();
 
 const selectedDefId = ref<string>("");
-const _viewMode = ref<"pipeline" | "tree">("pipeline");
+const viewMode = ref<"pipeline" | "tree">("pipeline");
 const selectedStep = ref<StepRun | null>(null);
 const _tickNow = ref(Date.now());
 let tickHandle: ReturnType<typeof setInterval> | null = null;
 
-const _platform = computed(() => {
+const platform = computed(() => {
   if (typeof navigator === "undefined") return "node";
   const ua = navigator.userAgent || "";
   if (/android/i.test(ua)) return "android";
@@ -227,7 +234,7 @@ const _platform = computed(() => {
   return "web";
 });
 
-const _reportDurationMs = computed(() => {
+const reportDurationMs = computed(() => {
   if (!currentRun.value) return 0;
   if (isRunning.value) return _tickNow.value - (currentRun.value.startedAt ? new Date(currentRun.value.startedAt).getTime() : Date.now());
   return currentRun.value.durationMs ?? 0;
@@ -236,7 +243,7 @@ const _reportDurationMs = computed(() => {
 const selectedDef = computed(() => definitions.value.find(d => d.id === selectedDefId.value));
 
 /** 构建 stepDefId → step name 的映射 */
-const _stepNameMap = computed(() => {
+const stepNameMap = computed(() => {
   const map = new Map<string, string>();
   const def = (selectedDef.value ?? currentRun.value) ? definitions.value.find(d => d.id === currentRun.value!.workflowDefId) : null;
   if (def) {
@@ -271,7 +278,7 @@ function findJobForStep(run: WorkflowRun, step: StepRun): JobRun | undefined {
 
 // ---- Handlers ----
 
-async function _handleGenerateMock() {
+async function handleGenerateMock() {
   if (isGenerating.value) return;
   isGenerating.value = true;
   generateProgressText.value = "";
@@ -298,7 +305,7 @@ async function _handleGenerateMock() {
   }
 }
 
-async function _handleResetMock() {
+async function handleResetMock() {
   if (isResetting.value) return;
   isResetting.value = true;
   try {
@@ -312,7 +319,7 @@ async function _handleResetMock() {
   }
 }
 
-async function _handleRunWorkflow() {
+async function handleRunWorkflow() {
   if (!selectedDefId.value || isRunning.value) return;
   const def = getDefinition(selectedDefId.value);
   if (!def) return;
@@ -324,14 +331,14 @@ async function _handleRunWorkflow() {
   }
 }
 
-async function _handleCancel() {
+async function handleCancel() {
   if (currentRun.value) {
     await cancelRun(currentRun.value.id);
   }
   showToast({ message: "Workflow cancelled", color: "warning", duration: 1500 });
 }
 
-function _selectHistoryRun(record: UnifiedRunRecord) {
+function selectHistoryRun(record: UnifiedRunRecord) {
   // 从 UnifiedRunRecord.workflowRun 快照恢复到 currentRun（UI 回放历史运行）
   if (record.workflowRun) {
     currentRun.value = record.workflowRun;
@@ -366,13 +373,13 @@ onUnmounted(() => {
 
 // ---- Utils ----
 
-function _humanSize(bytes: number): string {
+function humanSize(bytes: number): string {
   if (bytes < 1024) return bytes + " B";
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-function _formatTime(iso: string): string {
+function formatTime(iso: string): string {
   try {
     return new Date(iso).toLocaleTimeString();
   } catch {

@@ -61,10 +61,10 @@ defineProps<{
 
 const { t } = useI18n();
 
-const _closeIcon = closeOutline;
-const _documentIcon = documentTextOutline;
+const closeIcon = closeOutline;
+const documentIcon = documentTextOutline;
 
-function _formatSize(bytes: number): string {
+function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;

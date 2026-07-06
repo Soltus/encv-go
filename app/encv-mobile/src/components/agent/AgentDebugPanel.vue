@@ -181,7 +181,11 @@
 
 <script setup lang="ts">
 import type { Message, ToolCall } from "@/composables/useAgent";
-import { bugOutline } from "ionicons/icons";
+import {
+  bugOutline,
+  copyOutline,
+  refreshOutline,
+} from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
 
 type RenderedItemLike = { type: string; [k: string]: unknown };
@@ -202,9 +206,9 @@ const props = defineProps<{
   rawSSEEvents?: { ts: string; type: string; dataSummary: string; seq?: number | null }[];
 }>();
 
-const _bugIcon = bugOutline;
+const bugIcon = bugOutline;
 
-const _roleCounts = computed<Record<string, number>>(() => {
+const roleCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {};
   for (const m of props.messages) {
     counts[m.role] = (counts[m.role] ?? 0) + 1;
@@ -227,7 +231,7 @@ const pairRateText = computed(() => {
   return `${paired}/${calls.size}`;
 });
 
-const _renderedTypeCounts = computed<Record<string, number>>(() => {
+const renderedTypeCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {};
   for (const r of props.renderedItems) {
     counts[r.type] = (counts[r.type] ?? 0) + 1;
@@ -235,7 +239,7 @@ const _renderedTypeCounts = computed<Record<string, number>>(() => {
   return counts;
 });
 
-const _recentMessages = computed(() => {
+const recentMessages = computed(() => {
   // 只看含 tool_calls 的最近 3 条 message（核心问题区）
   return props.messages.filter(m => m.tool_calls.length > 0).slice(-3);
 });
@@ -247,18 +251,18 @@ const operationGroups = computed(() => {
     .map(r => r as unknown as { type: "operationGroup"; toolCallIds: string[] });
 });
 
-function _findResult(msg: Message, toolCallId: string): string | null {
+function findResult(msg: Message, toolCallId: string): string | null {
   const r = msg.tool_results.find(x => x.id === toolCallId);
   return r ? r.result : null;
 }
 
-function _truncate(s: string | null, max: number): string {
+function truncate(s: string | null, max: number): string {
   if (!s) return "";
   if (s.length <= max) return s;
   return s.slice(0, max) + `… (+${s.length - max} chars)`;
 }
 
-function _resultStatusHint(status: ToolCall["status"]): string {
+function resultStatusHint(status: ToolCall["status"]): string {
   if (status === "pending" || status === "running") return "工具还在执行，正常";
   if (status === "success") return "⚠️ 工具声明 success 但 tool_result 事件没到——后端数据丢失";
   if (status === "failed") return "工具失败，等错误回传";
@@ -267,7 +271,7 @@ function _resultStatusHint(status: ToolCall["status"]): string {
 }
 
 // ─── 自我诊断 ────────────────────────────────────────
-const _diagnostics = computed<{ level: "ok" | "warn" | "error"; text: string }[]>(() => {
+const diagnostics = computed<{ level: "ok" | "warn" | "error"; text: string }[]>(() => {
   const out: { level: "ok" | "warn" | "error"; text: string }[] = [];
   if (totalToolCalls.value > 0 && totalToolResults.value === 0) {
     out.push({
@@ -377,7 +381,7 @@ const dumpText = computed(() => {
 
 const copyStatus = ref<"idle" | "copied" | "failed">("idle");
 
-async function _copyDump() {
+async function copyDump() {
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(dumpText.value);
@@ -400,7 +404,7 @@ async function _copyDump() {
 }
 
 const dumpTextarea = ref<HTMLTextAreaElement | null>(null);
-function _selectAllDump() {
+function selectAllDump() {
   dumpTextarea.value?.select();
 }
 
@@ -408,7 +412,7 @@ function _selectAllDump() {
 const sseTextarea = ref<HTMLTextAreaElement | null>(null);
 const sseCopyStatus = ref<"idle" | "copied" | "failed">("idle");
 
-const _sseTypeCounts = computed<Record<string, number>>(() => {
+const sseTypeCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {};
   if (!props.rawSSEEvents) return counts;
   for (const ev of props.rawSSEEvents) counts[ev.type] = (counts[ev.type] ?? 0) + 1;
@@ -425,11 +429,11 @@ const sseEventText = computed(() => {
     .join("\n");
 });
 
-function _selectAllSse() {
+function selectAllSse() {
   sseTextarea.value?.select();
 }
 
-async function _copySse() {
+async function copySse() {
   try {
     await navigator.clipboard?.writeText(sseEventText.value);
     sseCopyStatus.value = "copied";

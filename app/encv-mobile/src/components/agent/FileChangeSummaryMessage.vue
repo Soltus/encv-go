@@ -62,7 +62,9 @@
 <script setup lang="ts">
 import type { ToolCall, ToolStatus } from "@/composables/useAgent";
 import { useI18n } from "@/composables/useI18n";
-import { documentTextOutline } from "ionicons/icons";
+import {
+  documentTextOutline,
+} from "ionicons/icons";
 import { computed, ref } from "vue";
 import { OPERATION_COLLAPSE_INITIAL_COUNT } from "./twoLevelGrouping";
 
@@ -75,12 +77,12 @@ const { t } = useI18n();
 const listExpanded = ref(false);
 const headerExpanded = ref(false);
 
-function _toggleHeader() {
+function toggleHeader() {
   headerExpanded.value = !headerExpanded.value;
 }
 
-const _icon = documentTextOutline;
-const _documentOutline = documentTextOutline;
+const icon = documentTextOutline;
+const documentOutline = documentTextOutline;
 
 const paths = computed<string[]>(() => {
   const out: string[] = [];
@@ -106,9 +108,9 @@ const paths = computed<string[]>(() => {
 
 const lastItem = computed<ToolCall | null>(() => props.items[props.items.length - 1] ?? null);
 
-const _summary = computed(() => t("agent.ops.files", { n: String(paths.value.length) }));
+const summary = computed(() => t("agent.ops.files", { n: String(paths.value.length) }));
 
-const _status = computed(() => {
+const status = computed(() => {
   const s = lastItem.value?.status;
   if (!s) return "";
   if (s === "success") return t("agent.completed");
@@ -118,7 +120,7 @@ const _status = computed(() => {
   return "";
 });
 
-const _statusTone = computed<"ready" | "warn" | "idle">(() => {
+const statusTone = computed<"ready" | "warn" | "idle">(() => {
   const s: ToolStatus | undefined = lastItem.value?.status;
   if (s === "success") return "ready";
   if (s === "failed" || s === "cancelled") return "warn";
@@ -126,31 +128,31 @@ const _statusTone = computed<"ready" | "warn" | "idle">(() => {
   return "idle";
 });
 
-const _isActive = computed(() => lastItem.value?.status === "running" || lastItem.value?.status === "pending");
+const isActive = computed(() => lastItem.value?.status === "running" || lastItem.value?.status === "pending");
 
 // 两级折叠：hasDetail / visiblePaths / canExpand / canCollapse
-const _hasDetail = computed(() => paths.value.length > 0);
-const _visiblePaths = computed(() => {
+const hasDetail = computed(() => paths.value.length > 0);
+const visiblePaths = computed(() => {
   if (listExpanded.value) return paths.value;
   return paths.value.slice(0, OPERATION_COLLAPSE_INITIAL_COUNT);
 });
-const _canExpand = computed(() => !listExpanded.value && paths.value.length > OPERATION_COLLAPSE_INITIAL_COUNT);
-const _canCollapse = computed(() => listExpanded.value && paths.value.length > OPERATION_COLLAPSE_INITIAL_COUNT);
-const _showMoreLabel = computed(() =>
+const canExpand = computed(() => !listExpanded.value && paths.value.length > OPERATION_COLLAPSE_INITIAL_COUNT);
+const canCollapse = computed(() => listExpanded.value && paths.value.length > OPERATION_COLLAPSE_INITIAL_COUNT);
+const showMoreLabel = computed(() =>
   t("agent.ops.showMore", {
     n: String(paths.value.length - OPERATION_COLLAPSE_INITIAL_COUNT),
   })
 );
 
-function _expandList() {
+function expandList() {
   listExpanded.value = true;
 }
 
-function _collapseList() {
+function collapseList() {
   listExpanded.value = false;
 }
 
-function _truncate(p: string): string {
+function truncate(p: string): string {
   if (p.length <= 60) return p;
   return "…" + p.slice(p.length - 59);
 }

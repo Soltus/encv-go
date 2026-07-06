@@ -180,6 +180,13 @@
 </template>
 
 <script setup lang="ts">
+import {
+  cloudUploadOutline,
+  downloadOutline,
+  saveOutline,
+  warningOutline,
+} from "ionicons/icons";
+
 import { backupDatabase, exportDatabase, getDatabaseInfo, importDatabase } from "@/api/encv";
 import { useConfig } from "@/composables/useConfig";
 import { useI18n } from "@/composables/useI18n";
@@ -202,9 +209,9 @@ const {
   resetFieldToDefault,
 } = useConfig();
 
-const _configLoaded = computed(() => !configLoading.value && schemaFields.value.length > 0);
+const configLoaded = computed(() => !configLoading.value && schemaFields.value.length > 0);
 
-const _databaseSection = computed<FieldDef | undefined>(() => {
+const databaseSection = computed<FieldDef | undefined>(() => {
   return schemaFields.value.find(s => s.key === "database");
 });
 
@@ -212,7 +219,7 @@ const dbInfo = ref<any>(null);
 const dbLoading = ref(false);
 const importFileInput = ref<HTMLInputElement | null>(null);
 
-const _engineBadgeColor = computed(() => {
+const engineBadgeColor = computed(() => {
   const eng = dbInfo.value?.engine;
   if (eng === "turso" || eng === "libsql") return "success";
   if (eng === "sqlite") return "primary";
@@ -220,17 +227,17 @@ const _engineBadgeColor = computed(() => {
   return "medium";
 });
 
-const _availableEngines = computed(() => {
+const availableEngines = computed(() => {
   return dbInfo.value?.availableEngines || [];
 });
 
-function _isEngineEnabled(name: string): boolean {
+function isEngineEnabled(name: string): boolean {
   const enableMap = getFieldValue(["database", "enable_engines"]) as Record<string, boolean> | undefined;
   if (name === "sqlite") return true;
   return enableMap?.[name] ?? false;
 }
 
-function _toggleEngine(name: string, event: any) {
+function toggleEngine(name: string, event: any) {
   const checked = event.detail.checked;
   const current = (getFieldValue(["database", "enable_engines"]) as Record<string, boolean> | undefined) || {};
   const next = { ...current, [name]: checked };
@@ -254,7 +261,7 @@ async function loadDatabaseInfo() {
   }
 }
 
-async function _handleSaveConfig() {
+async function handleSaveConfig() {
   try {
     const before = getFieldValue(["database", "enable_engines"]);
     const beforeEngine = getFieldValue(["database", "engine"]);
@@ -303,28 +310,28 @@ async function askRestart() {
   await alert.present();
 }
 
-function _handleResetConfig() {
+function handleResetConfig() {
   resetConfig();
 }
 
-function _handleFieldChange(key: string, value: unknown) {
+function handleFieldChange(key: string, value: unknown) {
   setFieldValue(["database", key], value);
 }
 
-function _handleInput(key: string, _field: FieldDef, value: unknown) {
+function handleInput(key: string, _field: FieldDef, value: unknown) {
   setFieldValue(["database", key], value);
 }
 
-function _handleBrowsePath(key: string, _field: FieldDef) {
+function handleBrowsePath(key: string, _field: FieldDef) {
   // 移动端路径选择暂不实现
   console.warn("[DatabaseDetail] browse path not implemented for:", key);
 }
 
-function _resetField(key: string, field: FieldDef) {
+function resetField(key: string, field: FieldDef) {
   resetFieldToDefault(["database", key], field);
 }
 
-function _isFieldVisible(field: FieldDef): boolean {
+function isFieldVisible(field: FieldDef): boolean {
   // 根据引擎类型显示/隐藏相关字段
   const engine = getFieldValue(["database", "engine"]) as string;
   if (field.key === "path") {
@@ -336,22 +343,22 @@ function _isFieldVisible(field: FieldDef): boolean {
   return true;
 }
 
-function _fieldLabel(key: string, _required?: boolean): string {
+function fieldLabel(key: string, _required?: boolean): string {
   // 直接用字段 key 作为 label（schema 驱动）
   return key;
   // TODO: 接入 i18n
 }
 
-function _tField(key: string): string {
+function tField(key: string): string {
   return key;
 }
 
-function _getFieldIcon(_key: string, _type: string): string {
+function getFieldIcon(_key: string, _type: string): string {
   // 简单映射，不需要复杂图标
   return "";
 }
 
-async function _handleExportDatabase() {
+async function handleExportDatabase() {
   try {
     dbLoading.value = true;
     await exportDatabase();
@@ -364,11 +371,11 @@ async function _handleExportDatabase() {
   }
 }
 
-function _triggerImportFile() {
+function triggerImportFile() {
   importFileInput.value?.click();
 }
 
-async function _handleImportFileSelected(event: Event) {
+async function handleImportFileSelected(event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
@@ -394,7 +401,7 @@ async function _handleImportFileSelected(event: Event) {
   }
 }
 
-async function _handleBackupDatabase() {
+async function handleBackupDatabase() {
   try {
     dbLoading.value = true;
     const result = await backupDatabase();

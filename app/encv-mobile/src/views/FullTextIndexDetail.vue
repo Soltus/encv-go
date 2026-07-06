@@ -243,6 +243,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  bugOutline,
+  refreshOutline,
+  warningOutline,
+} from "ionicons/icons";
+
 // 🆕 2026-07-03 修复 classList 错误：必须显式 import Ionic 组件
 //   根因（cypress e2e DOM log 确认）：未显式 import 时，<ion-page> 标签未被 Vue 编译器
 //   识别为 Ionic Vue 组件，渲染成原生 <ION-PAGE> 自闭合元素，缺失 .ion-page class
@@ -276,7 +282,7 @@ interface RebuildTaskState {
 const rebuildTask = ref<RebuildTaskState | null>(null);
 const rebuildSubmitting = ref(false);
 
-const _rebuildStatusLabel = computed(() => {
+const rebuildStatusLabel = computed(() => {
   if (!rebuildTask.value) return "";
   const s = rebuildTask.value.status;
   if (s === "queued") return t("settings.rebuildQueued") || "重建任务排队中";
@@ -348,7 +354,7 @@ useTaskEventBridge({
   },
 });
 
-function _reloadPage() {
+function reloadPage() {
   if (typeof window !== "undefined") {
     window.location.reload();
   }
@@ -385,7 +391,7 @@ async function loadStats() {
 }
 
 // 🆕 2026-07-03：触发 FTS 索引重建
-async function _triggerRebuild() {
+async function triggerRebuild() {
   if (rebuildSubmitting.value) return;
   rebuildSubmitting.value = true;
   try {
@@ -419,7 +425,7 @@ async function _triggerRebuild() {
 }
 
 // 🆕 2026-07-03：取消重建任务
-async function _cancelRebuild() {
+async function cancelRebuild() {
   if (!rebuildTask.value) return;
   try {
     const baseUrl = getApiBaseUrl();
@@ -435,15 +441,15 @@ async function _cancelRebuild() {
 }
 
 // 🆕 2026-07-03：关闭重建卡片（终态后）
-function _dismissRebuildCard() {
+function dismissRebuildCard() {
   rebuildTask.value = null;
 }
 
-function _formatNumber(n: number): string {
+function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
 }
 
-function _formatBytes(b: number): string {
+function formatBytes(b: number): string {
   if (b < 1024) return `${b} B`;
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
   if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;

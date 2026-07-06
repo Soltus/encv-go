@@ -124,6 +124,18 @@
 </template>
 
 <script setup lang="ts">
+import {
+  alertCircleOutline,
+  checkboxOutline,
+  chevronDown,
+  chevronForward,
+  closeOutline,
+  downloadOutline,
+  refreshOutline,
+  stopCircleOutline,
+  trashOutline,
+} from "ionicons/icons";
+
 import { Directory, Filesystem } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
 import type { EncvTask } from "@/api/encv";
@@ -150,8 +162,8 @@ const batchOps = useBatchOperations();
 
 // ============ UI 局部状态（selection 是 per-view，不进 store） ============
 const selectedIds = ref<Set<string>>(new Set());
-const _multiSelectMode = ref(false);
-function _toggleSelect(id: string) {
+const multiSelectMode = ref(false);
+function toggleSelect(id: string) {
   if (selectedIds.value.has(id)) selectedIds.value.delete(id);
   else selectedIds.value.add(id);
   selectedIds.value = new Set(selectedIds.value);
@@ -181,7 +193,7 @@ watch(activeTab, v => {
   }
 });
 
-const _performanceSectionOpen = ref(false);
+const performanceSectionOpen = ref(false);
 
 // 衍生数据
 const run = computed(() => workflowService.getRun(runId.value));
@@ -220,7 +232,7 @@ const totals = computed(() => {
 });
 
 // ============ 操作 ============
-async function _openTaskDetail(task: EncvTask) {
+async function openTaskDetail(task: EncvTask) {
   const { default: TaskDetailModal } = await import("@/components/TaskDetailModal.vue");
   const modal = await modalController.create({
     component: TaskDetailModal,
@@ -230,27 +242,27 @@ async function _openTaskDetail(task: EncvTask) {
   await modal.present();
 }
 
-function _onJobClick(_job: JobRun) {
+function onJobClick(_job: JobRun) {
   activeTab.value = "tasks";
   // 默认打开后筛选到 failed + 选中当前 job 的 task
 }
 
-function _goBack() {
+function goBack() {
   router.replace("/tabs/tasks");
 }
 
 // ============ 多选 / 批量操作（local state + batchOps） ============
-async function _batchRetrySelected() {
+async function batchRetrySelected() {
   const ids = Array.from(selectedIds.value) as string[];
   await batchOps.batchRetry(ids);
   clearSelection();
 }
-async function _batchCancelSelected() {
+async function batchCancelSelected() {
   const ids = Array.from(selectedIds.value) as string[];
   await batchOps.batchCancel(ids);
   clearSelection();
 }
-async function _batchDeleteSelected() {
+async function batchDeleteSelected() {
   const ids = Array.from(selectedIds.value) as string[];
   const confirm = await alertController.create({
     header: t("tasks.batchDeleteConfirmHeader"),
@@ -321,7 +333,7 @@ async function shareOrDownloadFallback(blob: Blob, filename: string): Promise<vo
   URL.revokeObjectURL(url);
 }
 
-async function _exportGroupReport() {
+async function exportGroupReport() {
   if (!run.value) return;
   try {
     exporting.value = true;

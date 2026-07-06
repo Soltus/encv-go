@@ -57,6 +57,10 @@
 </template>
 
 <script setup lang="ts">
+import {
+  arrowUndoOutline,
+} from "ionicons/icons";
+
 import { type EncvTask, rollbackTask } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
@@ -101,11 +105,11 @@ async function _doRollback() {
   }
 }
 
-function _dismiss(action: "cancel" | "retry" | "remove") {
+function dismiss(action: "cancel" | "retry" | "remove") {
   return modalController.dismiss({ action, id: props.task.id });
 }
 
-function _openOutput(outputPath: string) {
+function openOutput(outputPath: string) {
   const name = outputPath.split("/").pop() || outputPath;
   router.push({ path: "/player", query: { path: outputPath, name } });
   modalController.dismiss({ action: "opened", id: props.task.id, outputPath });
@@ -115,7 +119,7 @@ function _openOutput(outputPath: string) {
 //   - 后端 task.outputPath 已统一为虚拟路径 /d/<mount>/<sub>（task_manager.absToVirtualPath）
 //   - 前端直接拆 dir + name 塞 route.query，Files.vue onIonViewWillEnter 消费
 //   - 旧版逻辑（物理绝对路径 → 前端无法解析）已废弃
-function _locateOutput(outputPath: string) {
+function locateOutput(outputPath: string) {
   const trimmed = outputPath.replace(/\/+$/, "");
   const lastSlash = trimmed.lastIndexOf("/");
   const name = lastSlash >= 0 ? trimmed.substring(lastSlash + 1) : trimmed;

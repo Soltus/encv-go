@@ -103,20 +103,20 @@ const props = defineProps<{
   platform: string;
 }>();
 
-const _formattedOpenedAt = computed(() => {
+const formattedOpenedAt = computed(() => {
   if (!props.openedAt) return "—";
   const d = new Date(props.openedAt);
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 });
 
-const _formattedDuration = computed(() => {
+const formattedDuration = computed(() => {
   if (props.durationMs < 1000) return `${props.durationMs}ms`;
   if (props.durationMs < 60_000) return `${(props.durationMs / 1000).toFixed(1)}s`;
   return `${Math.floor(props.durationMs / 60_000)}m ${Math.floor((props.durationMs % 60_000) / 1000)}s`;
 });
 
-const _passRate = computed(() => {
+const passRate = computed(() => {
   // 只统计已完成的任务（排除 pending）
   const finished = props.passed + props.failed;
   if (finished === 0) return 0;
@@ -125,18 +125,18 @@ const _passRate = computed(() => {
 
 // 🆕 2026-06-10 增强运行感：总进度条（completed / total）— 用户能看到
 // 整个 run 的推进节奏，而不是只看 pass rate
-const _totalProgressPct = computed(() => {
+const totalProgressPct = computed(() => {
   if (props.total === 0) return 0;
   const finished = props.passed + props.failed + (props.skipped ?? 0);
   return Math.round((finished / props.total) * 100);
 });
-const _completedText = computed(() => {
+const completedText = computed(() => {
   const finished = props.passed + props.failed + (props.skipped ?? 0);
   if (props.pending > 0) return `${finished} / ${props.total} EXECUTED`;
   return `${finished} / ${props.total} DONE`;
 });
 
-const _verdictClass = computed(() => {
+const verdictClass = computed(() => {
   if (props.total === 0) return "";
   // 有 pending 时，即使全部通过也显示 partial（因为还没跑完）
   if (props.pending > 0) return "verdict-stamp--partial";
@@ -145,7 +145,7 @@ const _verdictClass = computed(() => {
   return "verdict-stamp--partial";
 });
 
-const _verdictText = computed(() => {
+const verdictText = computed(() => {
   if (props.total === 0) return "NO DATA";
   if (props.pending > 0) return "IN PROGRESS";
   if (props.failed === 0) return "VERIFIED";
@@ -153,7 +153,7 @@ const _verdictText = computed(() => {
   return "PARTIAL";
 });
 
-const _verdictSubtitle = computed(() => {
+const verdictSubtitle = computed(() => {
   if (props.failed === 0) return "";
   if (props.passed === 0) return "All examinations failed. Review the case files below for diagnosis.";
   return `${props.failed} examination${props.failed === 1 ? "" : "s"} failed. Inspect individual case files for error chain and remediation.`;

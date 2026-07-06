@@ -195,6 +195,7 @@ import type { FieldDef } from "@/config/schemaParser";
 import { isNative } from "@/plugins/GoProcess";
 import { modalController } from "@ionic/vue";
 import {
+  cloudOutline,
   colorPaletteOutline,
   documentText,
   eyeOutline,
@@ -211,6 +212,7 @@ import {
   speedometerOutline,
   textOutline,
   toggleOutline,
+  warningOutline,
 } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
 
@@ -263,7 +265,7 @@ function extractAnnotations(schema: any, prefix: string = ""): { path: string; d
   return result;
 }
 
-async function _openJsonEditor() {
+async function openJsonEditor() {
   try {
     const cfg = await fetchConfig();
     jsonText.value = JSON.stringify(cfg, null, 2);
@@ -281,7 +283,7 @@ async function _openJsonEditor() {
   }
 }
 
-function _validateJson() {
+function validateJson() {
   try {
     JSON.parse(jsonText.value);
     jsonError.value = "";
@@ -290,7 +292,7 @@ function _validateJson() {
   }
 }
 
-async function _handleSaveJson() {
+async function handleSaveJson() {
   try {
     const parsed = JSON.parse(jsonText.value);
     await updateConfig(parsed);
@@ -303,7 +305,7 @@ async function _handleSaveJson() {
   }
 }
 
-const _pluginSection = computed<FieldDef | undefined>(() => {
+const pluginSection = computed<FieldDef | undefined>(() => {
   return schemaFields.value.find(s => s.key === "plugin_settings");
 });
 
@@ -315,13 +317,13 @@ function setValue(path: string[], value: unknown) {
   setFieldValue(path, value);
 }
 
-function _getMapEntries(path: string[]): [string, Record<string, unknown>][] {
+function getMapEntries(path: string[]): [string, Record<string, unknown>][] {
   const val = getFieldValue(path);
   if (!val || typeof val !== "object") return [];
   return Object.entries(val as Record<string, unknown>) as [string, Record<string, unknown>][];
 }
 
-function _handleInput(path: string[], field: FieldDef, event: CustomEvent) {
+function handleInput(path: string[], field: FieldDef, event: CustomEvent) {
   const val = (event.target as HTMLInputElement).value;
   if (field.type === "integer") {
     setFieldValue(path, val ? Number(val) : 0);
@@ -372,7 +374,7 @@ function checkTextExtsConflicts(extensions: string[]): string[] {
   return conflicts;
 }
 
-async function _handleCustomTextExtsInput(event: CustomEvent) {
+async function handleCustomTextExtsInput(event: CustomEvent) {
   const raw = (event.target as HTMLInputElement).value || "";
   setValue(["plugin_settings", "text", "custom_text_extensions"], raw);
 
@@ -386,7 +388,7 @@ async function _handleCustomTextExtsInput(event: CustomEvent) {
   }
 }
 
-async function _handleBrowsePath(path: string[], field: FieldDef) {
+async function handleBrowsePath(path: string[], field: FieldDef) {
   const isFolder = field.key !== "file";
   const currentVal = String(getFieldValue(path) || "/");
   const modal = await modalController.create({
@@ -403,7 +405,7 @@ async function _handleBrowsePath(path: string[], field: FieldDef) {
   }
 }
 
-function _fieldLabel(key: string, _required?: boolean): string {
+function fieldLabel(key: string, _required?: boolean): string {
   return tField(key);
 }
 
@@ -427,7 +429,7 @@ const fieldIconMap: Record<string, string> = {
   disable_signature_verification: shieldCheckmark,
 };
 
-function _getFieldIcon(fieldKey: string, fieldType: string): string {
+function getFieldIcon(fieldKey: string, fieldType: string): string {
   if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey];
   if (fieldType === "boolean") return toggleOutline;
   if (fieldType === "integer") return speedometerOutline;
@@ -435,14 +437,14 @@ function _getFieldIcon(fieldKey: string, fieldType: string): string {
   return settingsOutline;
 }
 
-function _isFieldVisible(field: FieldDef): boolean {
+function isFieldVisible(field: FieldDef): boolean {
   if (!field.platform || field.platform === "both") return true;
   if (field.platform === "mobile") return isNative();
   if (field.platform === "desktop") return !isNative();
   return true;
 }
 
-async function _handleSaveConfig() {
+async function handleSaveConfig() {
   try {
     const textExtsVal = String(getValue(["plugin_settings", "text", "custom_text_extensions"]) ?? "");
     if (textExtsVal) {
@@ -462,7 +464,7 @@ async function _handleSaveConfig() {
   }
 }
 
-function _handleResetConfig() {
+function handleResetConfig() {
   resetConfig();
 }
 

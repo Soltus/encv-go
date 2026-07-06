@@ -59,7 +59,7 @@ const PHASE_ICON_MAP: Record<PhaseIconValue, string> = {
   cancelled: banOutline,
 };
 
-const _icon = computed(() => PHASE_ICON_MAP[props.phase] ?? helpCircleOutline);
+const icon = computed(() => PHASE_ICON_MAP[props.phase] ?? helpCircleOutline);
 </script>
 
 <style scoped>

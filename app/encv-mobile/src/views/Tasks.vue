@@ -576,6 +576,28 @@
   </ion-page>
 </template>
 <script setup lang="ts">
+import {
+  add,
+  albumsOutline,
+  calendarOutline,
+  checkmarkCircle,
+  chevronDown,
+  chevronForward,
+  closeCircle,
+  funnel,
+  listOutline,
+  lockClosed,
+  lockClosedOutline,
+  pin,
+  pricetagOutline,
+  search,
+  swapVertical,
+  sync,
+  timer,
+  trashBin,
+  warningOutline,
+} from "ionicons/icons";
+
 // Tasks.vue 重构后只剩 thin script：调用 useTasksView() composable + 必要 imports。
 // 原 633 行 script 逻辑已全部抽到 ./useTasksView.ts。
 //

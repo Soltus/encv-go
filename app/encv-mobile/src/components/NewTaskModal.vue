@@ -104,6 +104,11 @@
 </template>
 
 <script setup lang="ts">
+import {
+  checkmarkCircle,
+  lockClosed,
+} from "ionicons/icons";
+
 import type { ContainerVersionInfo, PluginCandidate, TaskField, TaskOptions } from "@/api/encv";
 import type { NewTaskState } from "@/components/NewTaskState";
 import { useI18n } from "@/composables/useI18n";
@@ -188,20 +193,20 @@ const cands = computed<PluginCandidate[]>(() => {
   return Array.isArray(arr) ? arr : [];
 });
 const pluginName = computed(() => effectiveState.value.predictedPlugin ?? props.predictedPlugin ?? "");
-const _selectedIdx = computed(() =>
+const selectedIdx = computed(() =>
   typeof effectiveState.value.selectedPluginIndex === "number"
     ? effectiveState.value.selectedPluginIndex
     : typeof props.selectedPluginIndex === "number"
       ? props.selectedPluginIndex
       : 0
 );
-const _taskOpts = computed(() => effectiveState.value.taskOptions ?? props.taskOptions ?? null);
+const taskOpts = computed(() => effectiveState.value.taskOptions ?? props.taskOptions ?? null);
 
-const _isPredicting = computed(() => {
+const isPredicting = computed(() => {
   return src.value.length > 0 && cands.value.length === 0 && !pluginName.value;
 });
 
-function _getMatchTypeLabel(matchType: string): string {
+function getMatchTypeLabel(matchType: string): string {
   switch (matchType) {
     case "mime":
       return "MIME";
@@ -216,7 +221,7 @@ function _getMatchTypeLabel(matchType: string): string {
   }
 }
 
-async function _handleClose() {
+async function handleClose() {
   await modalController.dismiss();
 }
 </script>

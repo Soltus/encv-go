@@ -123,6 +123,15 @@
 </template>
 
 <script setup lang="ts">
+import {
+  codeSlash,
+  informationCircle,
+  logoGithub,
+  openOutline,
+  videocamOutline,
+  warningOutline,
+} from "ionicons/icons";
+
 import { type BuildInfo, fetchBuildInfo } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 import { type LibraryItem, useLibraries } from "@/composables/useLibraries";
@@ -187,11 +196,11 @@ watch([androidItems, frontendItems, backendItems], () => {
   }
 });
 
-function _openGitHub() {
+function openGitHub() {
   window.open("https://github.com/Soltus/encv-go", "_blank");
 }
 
-function _goFfmpegEngine() {
+function goFfmpegEngine() {
   // 三级页：FFmpeg 引擎详情（runtime status + build info + 7 类 components）
   router.push("/tabs/settings/about/engine");
 }

@@ -101,6 +101,11 @@
 </template>
 
 <script setup lang="ts">
+import {
+  cloudOutline,
+  refreshOutline,
+} from "ionicons/icons";
+
 import { useI18n } from "@/composables/useI18n";
 import type { FieldDef } from "@/config/schemaParser";
 import { getDefaultValue } from "@/config/schemaParser";
@@ -127,11 +132,11 @@ const { t } = useI18n();
 
 const defaultVal = computed(() => getDefaultValue(props.field));
 
-const _isTaskOverridable = computed(() => TASK_OVERRIDABLE.has(props.field.key));
+const isTaskOverridable = computed(() => TASK_OVERRIDABLE.has(props.field.key));
 
-const _hasDefault = computed(() => props.field.default !== undefined);
+const hasDefault = computed(() => props.field.default !== undefined);
 
-const _isCustomized = computed(() => {
+const isCustomized = computed(() => {
   const current = props.modelValue;
   const def = defaultVal.value;
   if (current === def) return false;
@@ -139,11 +144,11 @@ const _isCustomized = computed(() => {
   return String(current) !== String(def);
 });
 
-const _labelWithRequired = computed(() => {
+const labelWithRequired = computed(() => {
   return props.label + (props.field.required ? " *" : "");
 });
 
-const _defaultOptionLabel = computed(() => {
+const defaultOptionLabel = computed(() => {
   if (!props.field.selectOptions || !props.field.default) return formatDefault(defaultVal.value);
   const opt = props.field.selectOptions.find(o => o.value === String(props.field.default));
   return opt ? opt.label : formatDefault(defaultVal.value);

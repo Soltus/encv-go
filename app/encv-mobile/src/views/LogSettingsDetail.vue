@@ -76,6 +76,14 @@
 </template>
 
 <script setup lang="ts">
+import {
+  cloudOutline,
+  downloadOutline,
+  refreshOutline,
+  terminal,
+  trashOutline,
+} from "ionicons/icons";
+
 import { useConfig } from "@/composables/useConfig";
 import { type LogEntry, useFrontendLogs } from "@/composables/useFrontendLogs";
 import { useI18n } from "@/composables/useI18n";
@@ -89,7 +97,7 @@ const { t, tField } = useI18n();
 const { schemaFields, getFieldValue, setFieldValue, saveConfig, resetFieldToDefault } = useConfig();
 const { logs: frontendLogs } = useFrontendLogs();
 
-const _configLoaded = computed(() => schemaFields.value.length > 0);
+const configLoaded = computed(() => schemaFields.value.length > 0);
 
 const logLevel = computed(() => String(getFieldValue(["log", "level"]) ?? "info"));
 
@@ -104,15 +112,15 @@ const logDefault = computed(() => {
   return String(getDefaultValue(logLevelField.value));
 });
 
-const _isLogLevelCustomized = computed(() => logLevel.value !== logDefault.value);
+const isLogLevelCustomized = computed(() => logLevel.value !== logDefault.value);
 
-function _resetLogLevelToDefault() {
+function resetLogLevelToDefault() {
   if (!logLevelField.value) return;
   resetFieldToDefault(["log", "level"], logLevelField.value);
   saveLogConfig();
 }
 
-async function _handleLogLevelChange(value: string) {
+async function handleLogLevelChange(value: string) {
   setFieldValue(["log", "level"], value);
   await saveLogConfig();
 }
@@ -152,7 +160,7 @@ function rankOf(level: string): number {
   return LEVEL_RANK[level] ?? 1;
 }
 
-async function _handleExportLogs() {
+async function handleExportLogs() {
   if (!isNative()) return;
   try {
     const configuredLevel = String(getFieldValue(["log", "level"]) ?? "info");
@@ -170,7 +178,7 @@ async function _handleExportLogs() {
   }
 }
 
-async function _handleClearLogs() {
+async function handleClearLogs() {
   if (!isNative()) return;
   const alert = await alertController.create({
     header: t("devtools.clearLogsConfirm"),

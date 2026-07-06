@@ -22,9 +22,9 @@ import { modalController } from "@ionic/vue";
 import { sparklesOutline } from "ionicons/icons";
 
 const { t } = useI18n();
-const _sparkleIcon = sparklesOutline;
+const sparkleIcon = sparklesOutline;
 
-async function _handleOpen() {
+async function handleOpen() {
   const { default: AgentChat } = await import("@/views/AgentChat.vue");
   const modal = await modalController.create({
     component: AgentChat,

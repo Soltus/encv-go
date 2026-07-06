@@ -117,20 +117,20 @@ const virtualizerOptions = computed(() => ({
 
 const virtualizer = useVirtualizer(virtualizerOptions);
 
-const _virtualItems = computed(() => virtualizer.value.getVirtualItems());
-const _totalSize = computed(() => virtualizer.value.getTotalSize());
+const virtualItems = computed(() => virtualizer.value.getVirtualItems());
+const totalSize = computed(() => virtualizer.value.getTotalSize());
 
 // 🆕 2026-06-23 修复真机空白：scrollEl=null 时降级渲染前 N 个 item
 //   - N = overscan*2 + 20（足够覆盖首屏视口，避免空白）
 //   - 不超过 count（item 总数）
-const _fallbackCount = computed(() => Math.min(props.count, props.overscan * 2 + 20));
+const fallbackCount = computed(() => Math.min(props.count, props.overscan * 2 + 20));
 
 /**
  * measureElement ref callback — 交给 virtualizer 自动测量每个 item 的实际高度。
  * virtualizer 内部用 ResizeObserver 监听元素尺寸变化（如 task card 展开警告详情），
  * 读 data-index 属性把测量结果关联到对应 index。
  */
-function _setItemRef(el: Element | unknown | null): void {
+function setItemRef(el: Element | unknown | null): void {
   if (el instanceof HTMLElement) {
     virtualizer.value.measureElement(el);
   } else {

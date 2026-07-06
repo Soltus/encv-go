@@ -42,6 +42,13 @@
 </template>
 
 <script setup lang="ts">
+import {
+  checkmarkCircle,
+  documentTextOutline,
+  folderOpenOutline,
+  playCircleOutline,
+} from "ionicons/icons";
+
 import type { EncvTask } from "@/api/encv";
 import { formatDuration } from "@/composables/useDateFormat";
 import { useI18n } from "@/composables/useI18n";
@@ -57,7 +64,7 @@ const { t } = useI18n();
 
 const PREVIEWABLE_VIDEO = new Set(["mp4", "webm", "mov", "m4v", "mkv"]);
 
-const _durationStr = computed(() => {
+const durationStr = computed(() => {
   if (!props.task.createdAt) return "";
   const created = new Date(props.task.createdAt).getTime();
   if (Number.isNaN(created)) return "";
@@ -81,7 +88,7 @@ const outputInfo = computed(() => {
   };
 });
 
-const _canPreviewOutput = computed(() => {
+const canPreviewOutput = computed(() => {
   if (!outputInfo.value) return false;
   const ext = outputInfo.value.name.split(".").pop()?.toLowerCase() || "";
   return PREVIEWABLE_VIDEO.has(ext);
@@ -93,7 +100,7 @@ function dirOf(p: string): string {
   return p.slice(0, idx) || "/";
 }
 
-function _handleOpenOutput() {
+function handleOpenOutput() {
   if (!outputInfo.value) return;
   const ext = outputInfo.value.name.split(".").pop()?.toLowerCase() || "";
   if (PREVIEWABLE_VIDEO.has(ext)) {
@@ -103,7 +110,7 @@ function _handleOpenOutput() {
   }
 }
 
-function _handleLocateOutput() {
+function handleLocateOutput() {
   if (!outputInfo.value) return;
   emit("locate", outputInfo.value.fullPath);
 }

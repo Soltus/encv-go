@@ -185,6 +185,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  documentText,
+  folderOpen,
+  lockClosed,
+} from "ionicons/icons";
+
 import type { ContainerVersionInfo, TaskField } from "@/api/encv";
 import FilePickerModal from "@/components/FilePickerModal.vue";
 import type { NewTaskState } from "@/components/NewTaskState";
@@ -219,24 +225,24 @@ const props = withDefaults(
 
 const { t } = useI18n();
 
-const _versionOpts = computed<ContainerVersionInfo[]>(() => (Array.isArray(props.state.versionOptions) ? props.state.versionOptions : []));
+const versionOpts = computed<ContainerVersionInfo[]>(() => (Array.isArray(props.state.versionOptions) ? props.state.versionOptions : []));
 
 // v4 容器：Header 含 CipherMode 字段（offset 2040-2042），且支持 zstd seekable 压缩
 // v2/v3 容器：不显示 cipher mode / compression 控件（这两个特性 v4 独有）
-const _isV4Container = computed(() => isRecommendedVersion(Number(props.state.version)));
+const isV4Container = computed(() => isRecommendedVersion(Number(props.state.version)));
 
-const _encryptExtraFields = computed<TaskField[]>(() => {
+const encryptExtraFields = computed<TaskField[]>(() => {
   const arr = Array.isArray(props.state.filteredExtraFields) ? props.state.filteredExtraFields : [];
   return arr.filter(f => !f.condition || f.condition === "encrypt");
 });
 
-function _getExtra(key: string): string {
+function getExtra(key: string): string {
   const ev = props.state?.extraValues;
   if (!ev || typeof ev !== "object") return "";
   return ev[key] || "";
 }
 
-async function _handleBrowseSource() {
+async function handleBrowseSource() {
   const modal = await modalController.create({
     component: FilePickerModal,
     componentProps: { mode: "file" as const },
@@ -248,7 +254,7 @@ async function _handleBrowseSource() {
   }
 }
 
-async function _handleBrowseTarget() {
+async function handleBrowseTarget() {
   const modal = await modalController.create({
     component: FilePickerModal,
     componentProps: { mode: "folder" as const },

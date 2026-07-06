@@ -113,7 +113,7 @@ const loading = ref(false);
 const summary = computed<PerformanceSummary | undefined>(() => props.task.performanceSummary);
 
 // 显示用的指标：优先用完整 metrics，否则用 summary
-const _displayMetrics = computed<DisplayMetrics | null>(() => {
+const displayMetrics = computed<DisplayMetrics | null>(() => {
   if (metrics.value) {
     const m = metrics.value;
     return {
@@ -159,7 +159,7 @@ const _displayGradeScore = computed(() => {
   return "";
 });
 
-const _gradeColor = computed(() => {
+const gradeColor = computed(() => {
   switch (displayGrade.value) {
     case "excellent":
       return "success";
@@ -181,11 +181,11 @@ const maxPhaseDuration = computed(() => {
   return Math.max(...phaseTimings.value.map(p => p.durationMs), 1);
 });
 
-function _phaseBarWidth(durationMs: number): number {
+function phaseBarWidth(durationMs: number): number {
   return (durationMs / maxPhaseDuration.value) * 100;
 }
 
-function _formatBytes(bytes: number): string {
+function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB"];
@@ -193,7 +193,7 @@ function _formatBytes(bytes: number): string {
   return parseFloat((bytes / k ** i).toFixed(2)) + " " + sizes[i];
 }
 
-async function _loadFullMetrics() {
+async function loadFullMetrics() {
   loading.value = true;
   try {
     metrics.value = await getTaskPerformance(props.task.id);

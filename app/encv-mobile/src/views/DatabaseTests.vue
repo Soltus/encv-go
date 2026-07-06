@@ -193,6 +193,15 @@
 </template>
 
 <script setup lang="ts">
+import {
+  checkmarkCircleOutline,
+  closeCircleOutline,
+  listOutline,
+  playCircleOutline,
+  starOutline,
+  warningOutline,
+} from "ionicons/icons";
+
 import { type DBTestProgress, getDatabaseInfo, runDatabaseTests } from "@/api/encv_perf";
 import { showToast } from "@/composables/useToast";
 import { computed, onMounted, ref } from "vue";
@@ -225,7 +234,7 @@ const summary = ref<{
 
 const failedCount = computed(() => scenarios.value.filter(s => s.status === "failed").length);
 
-const _groupedScenarios = computed(() => {
+const groupedScenarios = computed(() => {
   const groups: Record<string, ScenarioItem[]> = {};
   for (const s of scenarios.value) {
     const cat = s.category || "其他";
@@ -235,7 +244,7 @@ const _groupedScenarios = computed(() => {
   return groups;
 });
 
-function _formatMetricValue(v: any): string {
+function formatMetricValue(v: any): string {
   if (typeof v === "number") {
     if (v > 1000 && Number.isInteger(v)) return v.toLocaleString();
     if (v < 100) return v.toFixed(2);
@@ -352,7 +361,7 @@ function handleProgress(p: DBTestProgress) {
   }
 }
 
-async function _handleRunTests() {
+async function handleRunTests() {
   if (isRunning.value) return;
 
   resetScenarios();

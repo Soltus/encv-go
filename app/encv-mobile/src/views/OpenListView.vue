@@ -85,6 +85,14 @@
 </template>
 
 <script setup lang="ts">
+import {
+  globeOutline,
+  openOutline,
+  playOutline,
+  powerOutline,
+  refreshOutline,
+} from "ionicons/icons";
+
 import type { OpenListRuntime } from "@/components-shared";
 import { OpenListNative } from "@/plugins/openlist-native";
 import { onMounted, onUnmounted, ref } from "vue";
@@ -119,7 +127,7 @@ function reloadStatus() {
   runtime.value = OpenListNative.getStatus();
 }
 
-async function _toggleService() {
+async function toggleService() {
   if (isControlling.value) return;
   isControlling.value = true;
   try {

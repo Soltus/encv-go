@@ -62,6 +62,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  checkmarkCircle,
+  closeCircle,
+  playCircleOutline,
+} from "ionicons/icons";
+
 import { useFileSystemTests } from "@/composables/useFileSystemTests";
 import { useI18n } from "@/composables/useI18n";
 import { computed } from "vue";
@@ -69,10 +75,10 @@ import { computed } from "vue";
 const { t } = useI18n();
 const { results, isRunning, runAllTests } = useFileSystemTests();
 
-const _passedCount = computed(() => results.value.filter(r => r.passed).length);
-const _failedCount = computed(() => results.value.filter(r => !r.passed).length);
+const passedCount = computed(() => results.value.filter(r => r.passed).length);
+const failedCount = computed(() => results.value.filter(r => !r.passed).length);
 
-async function _handleRunAll() {
+async function handleRunAll() {
   await runAllTests();
 }
 </script>

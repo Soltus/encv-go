@@ -53,11 +53,11 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-const _copyIcon = copyOutline;
-const _chevronUp = chevronUpOutline;
-const _chevronDown = chevronDownOutline;
+const copyIcon = copyOutline;
+const chevronUp = chevronUpOutline;
+const chevronDown = chevronDownOutline;
 
-async function _handleCopy() {
+async function handleCopy() {
   if (!props.copyText) return;
   const ok = await copyToClipboard(props.copyText);
   if (ok) {

@@ -24,7 +24,7 @@ const emit = defineEmits<{
 
 const trackRef = ref<HTMLElement>();
 
-function _formatTime(ms: number): string {
+function formatTime(ms: number): string {
   if (ms < 0) return "0:00";
   const totalSec = Math.floor(ms / 1000);
   const h = Math.floor(totalSec / 3600);
@@ -34,7 +34,7 @@ function _formatTime(ms: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function _handleTrackClick(e: MouseEvent) {
+function handleTrackClick(e: MouseEvent) {
   if (!trackRef.value) return;
   const rect = trackRef.value.getBoundingClientRect();
   const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));

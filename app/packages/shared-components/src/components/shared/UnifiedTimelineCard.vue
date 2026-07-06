@@ -136,7 +136,20 @@
 
 <script setup lang="ts">
 import type { StepStatus, UnifiedTimelineEntry } from "@encv/shared-components/lib/workflow/types";
-import { ban, checkmarkCircle, closeCircle, ellipseOutline, hourglass, syncOutline, timerOutline } from "ionicons/icons";
+import {
+  alertCircleOutline,
+  ban,
+  checkmarkCircle,
+  chevronDown,
+  chevronUp,
+  closeCircle,
+  ellipseOutline,
+  flashOutline,
+  hourglass,
+  hourglassOutline,
+  syncOutline,
+  timerOutline,
+} from "ionicons/icons";
 import { computed, ref } from "vue";
 
 /**
@@ -191,7 +204,7 @@ const internalExpanded = ref(props.defaultExpanded);
 // 实际展开状态：受控模式优先用 prop，非受控模式用内部状态
 const isExpanded = computed(() => (props.expanded !== undefined ? props.expanded : internalExpanded.value));
 
-function _toggleExpand() {
+function toggleExpand() {
   if (!props.entry.hasExpandableDetail) return;
   const newValue = !isExpanded.value;
   // 非受控模式下更新内部状态
@@ -205,7 +218,7 @@ function _toggleExpand() {
 // ==================== 🆕 v4 M4：状态图标 + 颜色映射 ====================
 
 /** 是否「running-like」（用旋转 spinner 替代静态 icon） */
-const _isRunningLike = computed(() => {
+const isRunningLike = computed(() => {
   const s: StepStatus = props.entry.status;
   return s === "running" || s === "cancelling";
 });
@@ -214,7 +227,7 @@ const _isRunningLike = computed(() => {
  * 状态 → ionicon 名称
  * 注意：running 走 ion-spinner 路径（isRunningLike），不进这里
  */
-const _statusIcon = computed(() => {
+const statusIcon = computed(() => {
   const s: StepStatus = props.entry.status;
   switch (s) {
     case "success":

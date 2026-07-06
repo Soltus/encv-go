@@ -238,6 +238,16 @@
 </template>
 
 <script setup lang="ts">
+import {
+  arrowDownOutline,
+  arrowUpOutline,
+  closeOutline,
+  copyOutline,
+  pauseOutline,
+  playOutline,
+  trashOutline,
+} from "ionicons/icons";
+
 import { type BackendLogEntry, checkServerStatus, getRecentBackendLogs } from "@/api/encv";
 import type { DropdownOption } from "@/components/shared/FilterDropdown.vue";
 import { copyToClipboard } from "@/composables/useClipboard";
@@ -393,7 +403,7 @@ async function coldStartLoadRecentLogs(): Promise<void> {
 }
 
 const selectedLevelsArray = ref<string[]>(["debug", "info", "warn", "error"]);
-const _levelDropdownOptions: DropdownOption[] = [
+const levelDropdownOptions: DropdownOption[] = [
   { value: "debug", label: "DEBUG" },
   { value: "info", label: "INFO" },
   { value: "warn", label: "WARN" },
@@ -424,7 +434,7 @@ function updateTagCounts(entry: LogEntry, counts: Map<string, number>) {
   }
 }
 
-const _tagDropdownOptions = computed<DropdownOption[]>(() => {
+const tagDropdownOptions = computed<DropdownOption[]>(() => {
   if (activeTab.value === "frontend") {
     const counts = new Map<string, number>();
     for (const entry of frontendLogs.value) {
@@ -443,7 +453,7 @@ const _tagDropdownOptions = computed<DropdownOption[]>(() => {
  * 🆕 2026-06-15 搜索高亮：转义 HTML 特殊字符 + 把 query 用 <mark> 包起来
  * 性能：30 item 虚拟列表下完全可承受
  */
-function _highlightMatch(text: string, query: string): string {
+function highlightMatch(text: string, query: string): string {
   const escapeHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   if (!query.trim()) return escapeHtml(text);
   try {
@@ -455,22 +465,22 @@ function _highlightMatch(text: string, query: string): string {
   }
 }
 
-function _onLevelsChange(_values: string[]) {
+function onLevelsChange(_values: string[]) {
   // levels 变化时，watch 会自动触发 filter 更新
 }
 
-function _onTagsChange(_values: string[]) {
+function onTagsChange(_values: string[]) {
   // tags 变化时，watch 会自动触发 filter 更新
 }
 
-function _onTagClick(tag: string) {
+function onTagClick(tag: string) {
   if (!selectedTags.value.includes(tag)) {
     selectedTags.value = [...selectedTags.value, tag];
   }
   closeLogDetail();
 }
 
-function _getSourceIcon(entry: LogEntry): string {
+function getSourceIcon(entry: LogEntry): string {
   const tags = Array.isArray(entry.tags) ? entry.tags : [];
   if (tags.includes("frontend")) {
     if (tags.includes("worker")) return "⚙";
@@ -493,7 +503,7 @@ function _getSourceIcon(entry: LogEntry): string {
   return "●";
 }
 
-function _getSourceIconTitle(entry: LogEntry): string {
+function getSourceIconTitle(entry: LogEntry): string {
   const tags = Array.isArray(entry.tags) ? entry.tags : [];
   if (tags.length === 0) return entry.source || "unknown";
   return tags.join(" · ");
@@ -525,7 +535,7 @@ const totalBackendCount = computed(() => {
 });
 const serverOnline = ref(false);
 
-function _getBadgeColor(level: string): string {
+function getBadgeColor(level: string): string {
   switch (level) {
     case "debug":
       return "medium";
@@ -574,19 +584,19 @@ const filteredFrontend = computed(() => {
   return logs;
 });
 
-const _totalCurrent = computed(() => (activeTab.value === "frontend" ? frontendLogs.value.length : totalBackendCount.value));
-const _filteredCurrent = computed(() =>
+const totalCurrent = computed(() => (activeTab.value === "frontend" ? frontendLogs.value.length : totalBackendCount.value));
+const filteredCurrent = computed(() =>
   activeTab.value === "frontend" ? filteredFrontend.value.length : backendFilteredItems.value.length
 );
 
 /** 重复点击当前 tab 按钮时滚到顶部（VS Code / Chrome DevTools 行为） */
-function _onTabClick(tab: "frontend" | "backend") {
+function onTabClick(tab: "frontend" | "backend") {
   if (activeTab.value === tab) {
     scrollToTop();
   }
 }
 
-function _onTabChange(event: CustomEvent) {
+function onTabChange(event: CustomEvent) {
   activeTab.value = (event.detail.value || "frontend") as "frontend" | "backend";
 }
 
@@ -673,7 +683,7 @@ async function onJumpToBottom() {
 }
 
 /** 浮动「↑」按钮：滚到顶部（不影响 autoScrollEnabled 状态） */
-function _onJumpToTop() {
+function onJumpToTop() {
   const el = ensureScrollEl();
   if (el) el.scrollTop = 0;
 }
@@ -692,7 +702,7 @@ function onLogScroll() {
 
 // 🆕 2026-06-15 修 #2：点击日志行展开详情
 const selectedLog = ref<LogEntry | null>(null);
-function _onLogSelect(item: LogEntry) {
+function onLogSelect(item: LogEntry) {
   selectedLog.value = item;
 }
 function closeLogDetail() {
@@ -755,7 +765,7 @@ watch(
   { flush: "post" }
 );
 
-async function _handleCopy() {
+async function handleCopy() {
   const logs = activeTab.value === "frontend" ? filteredFrontend.value : backendFilteredItems.value;
   const text = logs.map(l => `[${l.timestamp}] ${l.level.toUpperCase()} ${l.message}`).join("\n");
   const ok = await copyToClipboard(text);
@@ -770,7 +780,7 @@ async function _handleCopy() {
   }
 }
 
-async function _handleClear() {
+async function handleClear() {
   const alert = await alertController.create({
     header: t("devlogs.clearConfirm"),
     buttons: [

@@ -124,7 +124,11 @@
 
 <script setup lang="ts">
 import type { ContextUsageResponse } from "@/composables/useContextUsage";
-import { checkmarkCircle as completedIcon, sync as inProgressIcon, ellipsisHorizontal as pendingIcon } from "ionicons/icons";
+import {
+  checkmarkCircle as completedIcon,
+  ellipsisHorizontal as pendingIcon,
+  sync as inProgressIcon,
+} from "ionicons/icons";
 
 defineProps<{
   data: ContextUsageResponse | null;
@@ -135,7 +139,7 @@ defineEmits<{ close: [] }>();
 
 // ─── 计算属性 ──────────────────────────────────────────────
 
-function _getToneClass(percent: number): string {
+function getToneClass(percent: number): string {
   if (percent >= 90) return "ctx-tone-danger";
   if (percent >= 70) return "ctx-tone-warn";
   return "ctx-tone-ok";
@@ -143,13 +147,13 @@ function _getToneClass(percent: number): string {
 
 // ─── 工具函数 ──────────────────────────────────────────────
 
-function _formatTokens(n: number): string {
+function formatTokens(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
   if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
   return String(n);
 }
 
-function _todoIcon(status: string) {
+function todoIcon(status: string) {
   switch (status) {
     case "completed":
       return completedIcon;
@@ -160,7 +164,7 @@ function _todoIcon(status: string) {
   }
 }
 
-function _todoStatusLabel(status: string): string {
+function todoStatusLabel(status: string): string {
   switch (status) {
     case "completed":
       return "已完成";

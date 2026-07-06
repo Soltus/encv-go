@@ -35,7 +35,7 @@ withDefaults(
 );
 
 const { t } = useI18n();
-const _arrowDownIcon = arrowDownOutline;
+const arrowDownIcon = arrowDownOutline;
 </script>
 
 <style scoped>

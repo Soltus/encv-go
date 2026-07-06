@@ -54,9 +54,9 @@ const props = defineProps<{
 
 const { t } = useI18n();
 
-const _folderOpenIcon = folderOpenOutline;
-const _serverIcon = serverOutline;
-const _hourglassIcon = hourglassOutline;
+const folderOpenIcon = folderOpenOutline;
+const serverIcon = serverOutline;
+const hourglassIcon = hourglassOutline;
 
 interface Mount {
   id?: string;
@@ -83,16 +83,16 @@ const parsed = computed<{ mounts: Mount[]; error: string }>(() => {
   }
 });
 
-const _mounts = computed(() => parsed.value.mounts);
-const _rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
+const mounts = computed(() => parsed.value.mounts);
+const rawResult = computed(() => (parsed.value.error ? props.resultJson : ""));
 
-const _titleText = computed(() => {
+const titleText = computed(() => {
   if (props.status === "pending" || props.status === "running") return t("agent.toolCards.mountsTitle") || "挂载点（查询中）";
   if (parsed.value.error) return t("agent.toolCards.parseFailed") || "挂载点（数据异常）";
   return t("agent.toolCards.mountsTitle") || "挂载点";
 });
 
-const _dataSourceTag = computed(() => {
+const dataSourceTag = computed(() => {
   if (!props.resultJson) return "";
   const s = props.resultJson;
   if (s.includes('"FAKE":true') || s.includes('"FAKE": true')) return "mock 数据";

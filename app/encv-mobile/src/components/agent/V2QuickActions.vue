@@ -62,7 +62,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 
 /** 6 个 v2 工具快捷入口（按用户使用频率排序：搜索 > 读 > 元数据 > 写 > 跑命令） */
-const _actions: V2QuickAction[] = [
+const actions: V2QuickAction[] = [
   {
     id: "search",
     label: t("agent.v2Chip.search"),
@@ -107,7 +107,7 @@ const _actions: V2QuickAction[] = [
   },
 ];
 
-function _emitPick(a: V2QuickAction): void {
+function emitPick(a: V2QuickAction): void {
   emit("pick", a);
 }
 </script>

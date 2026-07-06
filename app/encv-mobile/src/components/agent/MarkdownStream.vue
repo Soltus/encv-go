@@ -29,7 +29,7 @@ defineProps<{
  * 自定义 markdown-it 配置：启用 linkify（自动将裸 URL 转为 <a> 标签）
  * 解决 LLM 输出中 https://... 未用 [text](url) 包裹时无法点击的问题
  */
-function _customizeMarkdownIt(md: MarkdownIt): MarkdownIt {
+function customizeMarkdownIt(md: MarkdownIt): MarkdownIt {
   // 启用 linkify：自动识别并链接裸 URL（https?://、ftp://、www. 开头等）
   // md.linkify 是 markdown-it 内置的 linkify 插件开关
   if ("linkify" in md && typeof (md as unknown as Record<string, unknown>).linkify === "boolean") {

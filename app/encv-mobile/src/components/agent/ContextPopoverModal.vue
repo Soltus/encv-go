@@ -44,7 +44,7 @@ defineProps<{
   state: ContextPopoverState;
 }>();
 
-function _handleClose() {
+function handleClose() {
   modalController.dismiss();
 }
 </script>

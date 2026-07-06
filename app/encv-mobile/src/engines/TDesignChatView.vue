@@ -318,8 +318,8 @@ const props = withDefaults(defineProps<Props>(), {
   messages: () => [] as readonly Message[],
 });
 
-const _welcomeTitle = "TDesign 风格引擎";
-const _welcomeSubtitle = "使用腾讯 TDesign 视觉组件渲染 Agent 对话。";
+const welcomeTitle = "TDesign 风格引擎";
+const welcomeSubtitle = "使用腾讯 TDesign 视觉组件渲染 Agent 对话。";
 
 /**
  * 按 eventLog 时间轴拆分 messages 为 RenderedItem[]。
@@ -332,7 +332,7 @@ const _welcomeSubtitle = "使用腾讯 TDesign 视觉组件渲染 Agent 对话�
  */
 const messagesRef = computed(() => [...props.messages]) as ComputedRef<Message[]>;
 const statusRef = computed(() => props.status as AgentStatus);
-const _renderedItems = useRenderTurnItems(messagesRef, statusRef);
+const renderedItems = useRenderTurnItems(messagesRef, statusRef);
 
 /** O(1) 工具调用查找：跨 messages 全局 id 索引 */
 const allToolCalls = computed<Map<string, ToolCall>>(() => {
@@ -362,11 +362,11 @@ function findToolCallById(id: string): ToolCall | undefined {
   return allToolCalls.value.get(id);
 }
 
-function _findToolResultById(id: string): ToolResult | undefined {
+function findToolResultById(id: string): ToolResult | undefined {
   return allToolResults.value.get(id);
 }
 
-function _statusText(status: string | undefined): string {
+function statusText(status: string | undefined): string {
   switch (status) {
     case "pending":
       return "待执行";
@@ -384,7 +384,7 @@ function _statusText(status: string | undefined): string {
   }
 }
 
-function _formatFooterTime(timestamp: number): string {
+function formatFooterTime(timestamp: number): string {
   const d = new Date(timestamp);
   const pad = (n: number) => n.toString().padStart(2, "0");
   return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -400,7 +400,7 @@ const userExpandedIds = ref(new Set<string>());
 const userCollapsedIds = ref(new Set<string>());
 
 /** 当前 id 是否展开 */
-function _isOpen(toolCallId: string): boolean {
+function isOpen(toolCallId: string): boolean {
   if (userExpandedIds.value.has(toolCallId)) return true;
   if (userCollapsedIds.value.has(toolCallId)) return false;
   // 默认规则：running/pending → 展开
@@ -415,7 +415,7 @@ function _isOpen(toolCallId: string): boolean {
  * 此时要避免把"自动展开"误记为"用户主动展开"。
  * 解决：检查 event.target.open 与 isOpen(id) 一致才记为用户操作。
  */
-function _onToolToggle(toolCallId: string, e: Event) {
+function onToolToggle(toolCallId: string, e: Event) {
   const target = e.target as HTMLDetailsElement;
   if (!target) return;
   // 首次挂载导致的 toggle 不记

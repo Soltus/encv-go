@@ -45,15 +45,15 @@ const errorAnalysis = computed<ErrorAnalysis | null>(() => {
   return null;
 });
 
-const _categoryLabel = computed(() => {
+const categoryLabel = computed(() => {
   const cat = errorAnalysis.value?.category ?? "unknown";
   const key = `tasks.error.category.${cat}` as const;
   return t(key) !== key ? t(key) : (errorAnalysis.value?.summary ?? cat);
 });
 
 const copySuccess = ref(false);
-const _expanded = ref(false);
-async function _copyError() {
+const expanded = ref(false);
+async function copyError() {
   if (!errorAnalysis.value) return;
   const text = JSON.stringify(
     {

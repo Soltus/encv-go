@@ -42,7 +42,13 @@
 
 <script setup lang="ts">
 import { useI18n } from "@/composables/useI18n";
-import { colorPaletteOutline, musicalNotesOutline, playCircleOutline, settingsOutline } from "ionicons/icons";
+import {
+  chevronForward,
+  colorPaletteOutline,
+  musicalNotesOutline,
+  playCircleOutline,
+  settingsOutline,
+} from "ionicons/icons";
 import { useRouter } from "vue-router";
 import { getAllPrototypes } from "./prototypes/registry";
 import "./prototypes/prototype-cards.css";
@@ -52,14 +58,14 @@ const router = useRouter();
 
 const prototypes = getAllPrototypes();
 
-const _iconMap: Record<string, string> = {
+const iconMap: Record<string, string> = {
   "play-circle": playCircleOutline,
   settings: settingsOutline,
   "musical-notes": musicalNotesOutline,
   "color-palette": colorPaletteOutline,
 };
 
-function _handlePrototypeClick(proto: (typeof prototypes)[0]) {
+function handlePrototypeClick(proto: (typeof prototypes)[0]) {
   router.push(`/tabs/settings/devtools/prototype/${proto.id}`);
 }
 </script>

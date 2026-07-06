@@ -58,6 +58,11 @@
 </template>
 
 <script setup lang="ts">
+import {
+  arrowBack,
+  resize,
+} from "ionicons/icons";
+
 import { getAlistEncryptStreamUrl, getFileStreamUrl } from "@/api/encv";
 import type { ErrorDetailItem, ErrorType } from "@/components/ErrorStateCard.vue";
 import { useI18n } from "@/composables/useI18n";
@@ -111,7 +116,7 @@ function formatDuration(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function _goBack() {
+function goBack() {
   destroyArtPlayer();
   router.back();
 }
@@ -423,7 +428,7 @@ function destroyArtPlayer() {
   }
 }
 
-function _retryPlay() {
+function retryPlay() {
   console.info(TAG, "retryPlay called");
   playerError.value = false;
   playerErrorMsg.value = "";

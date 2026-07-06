@@ -239,7 +239,12 @@ import { formatRelativeTime } from "@/composables/relativeTime";
 import { eventBus } from "@/composables/useEventBus";
 import { useI18n } from "@/composables/useI18n";
 import { useServerStatus } from "@/composables/useServerStatus";
-import { layersOutline, wifiOutline } from "ionicons/icons";
+import {
+  cloudOfflineOutline,
+  layersOutline,
+  speedometerOutline,
+  wifiOutline,
+} from "ionicons/icons";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 interface Props {
@@ -291,7 +296,7 @@ const state = computed<"online" | "offline" | "checking">(() => {
   if (checking.value) return "checking";
   return isOnline.value ? "online" : "offline";
 });
-const _stopping = computed(() => isStopping.value);
+const stopping = computed(() => isStopping.value);
 
 // —— 3D 翻转（Android 兼容） ——
 const isFlipped = ref(false);
@@ -313,7 +318,7 @@ watch(state, () => {
 //   - isolation: isolate（独立 stacking context，防 backdrop-filter 抓合成层）
 //   - .error-detail max-height（防离线错误文本撑爆卡片）
 //   - .back-value.monospace max-height（防长 instance_id 撑爆）
-const _flipClass = computed(() => (isFlipped.value ? "is-flipped" : ""));
+const flipClass = computed(() => (isFlipped.value ? "is-flipped" : ""));
 
 // —— 脉冲 / 光泽动画 ——
 const pulsing = ref(false);
@@ -340,7 +345,7 @@ const statusLabel = computed(() => {
 });
 
 // —— aria ——
-const _ariaLabel = computed(() => {
+const ariaLabel = computed(() => {
   const bits: string[] = [statusLabel.value];
   if (state.value === "online") {
     if (version.value) bits.push(`v${version.value}`);
@@ -354,10 +359,10 @@ const _ariaLabel = computed(() => {
 // —— detail 字段 ——
 const version = computed(() => backendVersion.value);
 const port = computed(() => backendPort.value);
-const _shortInstanceId = computed(() => {
+const shortInstanceId = computed(() => {
   return backendInstanceId.value ? backendInstanceId.value.slice(0, 8) : "";
 });
-const _error = computed(() => lastError.value);
+const error = computed(() => lastError.value);
 
 // —— instance_id 变化检测 → 闪烁 1.5s ——
 const instanceChanged = ref(false);
@@ -385,25 +390,25 @@ function onInstanceChanged(data: { previous: string; current: string }) {
 }
 
 // —— latency 分类 / 显示 ——
-const _latencyText = computed(() => {
+const latencyText = computed(() => {
   if (latencyMs.value <= 0) return "—";
   if (latencyMs.value < 1000) return `${latencyMs.value}ms`;
   return `${(latencyMs.value / 1000).toFixed(2)}s`;
 });
-const _latencyQuality = computed<"fast" | "normal" | "slow" | "unknown">(() => {
+const latencyQuality = computed<"fast" | "normal" | "slow" | "unknown">(() => {
   if (latencyMs.value <= 0) return "unknown";
   if (latencyMs.value < 100) return "fast";
   if (latencyMs.value < 500) return "normal";
   return "slow";
 });
-const _latencyPillVisible = computed(() => state.value === "online" && latencyMs.value > 0);
+const latencyPillVisible = computed(() => state.value === "online" && latencyMs.value > 0);
 
 // —— transport 显示 ——
-const _transport = computed(() => {
+const transport = computed(() => {
   const m = transportMode.value;
   return m && m !== "unknown" ? m.toUpperCase() : "";
 });
-const _transportFullLabel = computed(() => {
+const transportFullLabel = computed(() => {
   const m = transportMode.value;
   switch (m) {
     case "ws":
@@ -416,7 +421,7 @@ const _transportFullLabel = computed(() => {
       return t("serverStatus.transportUnknown");
   }
 });
-const _transportIcon = computed(() => {
+const transportIcon = computed(() => {
   const m = transportMode.value;
   // 用户要求：HTTP Polling 旁必须有 wifi 图标
   if (m === "ws" || m === "http-poll" || m === "native-bridge") return wifiOutline;
@@ -428,7 +433,7 @@ const _lastCheckText = computed(() => {
   if (!lastCheckedAt.value) return t("serverStatus.never");
   return formatRelativeTime(lastCheckedAt.value.getTime());
 });
-const _lastCheckAbsolute = computed(() => {
+const lastCheckAbsolute = computed(() => {
   if (!lastCheckedAt.value) return "—";
   const d = lastCheckedAt.value;
   const pad = (n: number) => n.toString().padStart(2, "0");
@@ -473,7 +478,7 @@ watch([isFlipped, state, isOnline, transportMode, lastError, instanceChangedBann
 });
 
 // —— 点击卡片主体翻转 ——
-function _onCardClick(event: MouseEvent) {
+function onCardClick(event: MouseEvent) {
   const target = event.target as HTMLElement;
   // 阻止子元素点击冒泡时翻转（按钮 / pill / 链接 / flip-hint）
   if (target.closest("button, a, .meta-pill, .flip-hint, .status-actions, ion-button")) {

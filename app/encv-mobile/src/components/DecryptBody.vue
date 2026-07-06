@@ -104,6 +104,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  documentText,
+  folderOpen,
+  lockClosed,
+} from "ionicons/icons";
+
 import type { TaskField } from "@/api/encv";
 import FilePickerModal from "@/components/FilePickerModal.vue";
 import type { NewTaskState } from "@/components/NewTaskState";
@@ -131,18 +137,18 @@ const props = withDefaults(
 
 const { t } = useI18n();
 
-const _decryptExtraFields = computed<TaskField[]>(() => {
+const decryptExtraFields = computed<TaskField[]>(() => {
   const arr = Array.isArray(props.state.filteredExtraFields) ? props.state.filteredExtraFields : [];
   return arr.filter(f => !f.condition || f.condition === "decrypt");
 });
 
-function _getExtra(key: string): string {
+function getExtra(key: string): string {
   const ev = props.state?.extraValues;
   if (!ev || typeof ev !== "object") return "";
   return ev[key] || "";
 }
 
-async function _handleBrowseSource() {
+async function handleBrowseSource() {
   const modal = await modalController.create({
     component: FilePickerModal,
     componentProps: { mode: "file" as const },
@@ -154,7 +160,7 @@ async function _handleBrowseSource() {
   }
 }
 
-async function _handleBrowseTarget() {
+async function handleBrowseTarget() {
   const modal = await modalController.create({
     component: FilePickerModal,
     componentProps: { mode: "folder" as const },

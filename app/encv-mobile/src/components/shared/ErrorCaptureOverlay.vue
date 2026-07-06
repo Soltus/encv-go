@@ -36,12 +36,16 @@
 </template>
 
 <script setup lang="ts">
+import {
+  alertCircle,
+} from "ionicons/icons";
+
 import { errorStore } from "@encv/shared-components/composables/useErrorCapture";
 import { computed, ref } from "vue";
 
 const expanded = ref(false);
 
-const _title = computed(() => {
+const title = computed(() => {
   const src = errorStore.latestError.value?.source;
   if (src === "vue") return "Vue 渲染错误";
   if (src === "promise") return "未捕获的异步错误";
@@ -49,7 +53,7 @@ const _title = computed(() => {
   return "应用错误";
 });
 
-const _sourceLabel = computed(() => {
+const sourceLabel = computed(() => {
   const src = errorStore.latestError.value?.source;
   if (src === "vue") return "Vue";
   if (src === "promise") return "Promise";
@@ -57,16 +61,16 @@ const _sourceLabel = computed(() => {
   return "window";
 });
 
-function _truncate(s: string, n: number) {
+function truncate(s: string, n: number) {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
-function _formatTime(ts: number) {
+function formatTime(ts: number) {
   const d = new Date(ts);
   return d.toLocaleTimeString();
 }
 
-function _onClick() {
+function onClick() {
   // 点击展开/收起堆栈
   expanded.value = !expanded.value;
   // 同时在 devtools 也能看到

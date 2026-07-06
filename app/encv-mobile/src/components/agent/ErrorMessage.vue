@@ -24,9 +24,9 @@ defineProps<{
   onRetry?: () => void;
 }>();
 
-const _icon = alertCircleOutline;
-const _refreshIcon = refreshOutline;
-const _label = "出错";
+const icon = alertCircleOutline;
+const refreshIcon = refreshOutline;
+const label = "出错";
 </script>
 
 <style scoped>

@@ -68,6 +68,15 @@
 </template>
 
 <script setup lang="ts">
+import {
+  folder,
+  globe,
+  layersOutline,
+  lockClosed,
+  planet,
+  playCircle,
+} from "ionicons/icons";
+
 import { useI18n } from "@/composables/useI18n";
 import { isNative } from "@/plugins/GoProcess";
 import { openWorld } from "@/plugins/SimVerse";
@@ -77,27 +86,27 @@ import { useRouter } from "vue-router";
 const { t } = useI18n();
 const router = useRouter();
 
-function _handleOpenPlayer() {
+function handleOpenPlayer() {
   router.push("/player");
 }
 
-function _handleOpenFiles() {
+function handleOpenFiles() {
   router.push("/tabs/files");
 }
 
-function _handleOpenTasks() {
+function handleOpenTasks() {
   router.push("/tabs/tasks");
 }
 
-function _handleOpenRemote() {
+function handleOpenRemote() {
   router.push("/tabs/remote");
 }
 
-function _handleOpenExtensions() {
+function handleOpenExtensions() {
   router.push("/tabs/extensions");
 }
 
-function _handleOpenSimverse() {
+function handleOpenSimverse() {
   if (isNative()) {
     openWorld("default", "SimVerse");
   } else {

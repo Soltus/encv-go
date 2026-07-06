@@ -103,7 +103,7 @@ const props = defineProps<{
   jobRun: JobRun;
 }>();
 
-const _stepName = computed(() => props.stepRun.stepDefId);
+const stepName = computed(() => props.stepRun.stepDefId);
 
 /** 从 matrixVars 或 stepDefId 推断加密选型参数 */
 const encryptionParams = computed(() => {
@@ -147,11 +147,11 @@ const _hasEncryptionParams = computed(() => {
   return !!(p.cipher || p.compress || p.version || p.plugin);
 });
 
-const _completedInJob = computed(
+const completedInJob = computed(
   () => props.jobRun.steps.filter(s => ["success", "failure", "cancelled", "skipped", "timed_out"].includes(s.status)).length
 );
 
-function _formatDur(ms?: number): string {
+function formatDur(ms?: number): string {
   if (!ms) return "—";
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;

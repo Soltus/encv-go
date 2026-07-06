@@ -86,7 +86,19 @@
 </template>
 
 <script setup lang="ts">
-import { alertCircleOutline, cloudOfflineOutline, documentOutline, helpCircleOutline, lockClosedOutline } from "ionicons/icons";
+import {
+  alertCircleOutline,
+  bulbOutline,
+  checkmarkCircle,
+  chevronDown,
+  chevronForward,
+  cloudOfflineOutline,
+  copyOutline,
+  documentOutline,
+  helpCircleOutline,
+  lockClosedOutline,
+  refresh,
+} from "ionicons/icons";
 import { computed, ref } from "vue";
 
 export type ErrorType = "network_error" | "gateway_error" | "format_error" | "init_failed" | "playback_failed" | "auth_error" | "unknown";
@@ -123,7 +135,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 defineEmits<(e: "retry") => void>();
 
-const _detailsExpanded = ref(false);
+const detailsExpanded = ref(false);
 const toastVisible = ref(false);
 const toastText = ref("");
 
@@ -169,8 +181,8 @@ const config = computed(() => {
   }
 });
 
-const _iconForType = computed(() => config.value.icon);
-const _suggestion = computed(() => config.value.suggestion);
+const iconForType = computed(() => config.value.icon);
+const suggestion = computed(() => config.value.suggestion);
 
 /** 拼接所有 details 为单行 JSON，用于一键复制调试信息 */
 function buildDebugInfo(): string {
@@ -188,13 +200,13 @@ function buildDebugInfo(): string {
   );
 }
 
-async function _copyDebugInfo() {
+async function copyDebugInfo() {
   const text = buildDebugInfo();
   const ok = await copyToClipboard(text);
   showToast(ok ? "✓ 调试信息已复制" : "⚠ 复制失败，请手动选择");
 }
 
-async function _copyValue(value: string) {
+async function copyValue(value: string) {
   const ok = await copyToClipboard(value);
   showToast(ok ? "✓ 已复制" : "⚠ 复制失败");
 }

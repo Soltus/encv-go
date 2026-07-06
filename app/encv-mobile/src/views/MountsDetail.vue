@@ -298,6 +298,16 @@
 
 <script setup lang="ts">
 import {
+  addOutline,
+  alertCircleOutline,
+  createOutline,
+  folderOpenOutline,
+  searchOutline,
+  serverOutline,
+  trashOutline,
+} from "ionicons/icons";
+
+import {
   createMount,
   deleteMount,
   listMounts,
@@ -388,25 +398,25 @@ onMounted(() => {
 });
 
 // ================== 工具函数 ==================
-function _driverColor(d: string): string {
+function driverColor(d: string): string {
   if (d === "local") return "primary";
   if (d === "appdata") return "success";
   if (d === "sandbox") return "warning";
   return "medium";
 }
 
-function _tDriver(d: string): string {
+function tDriver(d: string): string {
   return t(`settings.mountDriver_${d}` as any, { default: d });
 }
 
-function _formatDriverConfig(cfg: Record<string, unknown>): string {
+function formatDriverConfig(cfg: Record<string, unknown>): string {
   return Object.entries(cfg)
     .map(([k, v]) => `${k} = ${typeof v === "string" ? v : JSON.stringify(v)}`)
     .join("\n");
 }
 
 // ================== Enabled 切换 ==================
-async function _handleToggleEnabled(m: Mount, enabled: boolean) {
+async function handleToggleEnabled(m: Mount, enabled: boolean) {
   if (togglingId.value) return;
   togglingId.value = m.id;
   // 乐观更新
@@ -440,7 +450,7 @@ async function _handleToggleEnabled(m: Mount, enabled: boolean) {
 }
 
 // ================== Editor ==================
-function _openEditor(target: Mount | null) {
+function openEditor(target: Mount | null) {
   editing.value = target;
   if (target) {
     form.value = {
@@ -469,7 +479,7 @@ function closeEditor() {
   editing.value = null;
 }
 
-async function _handleSave() {
+async function handleSave() {
   if (!canSave.value) return;
   saveError.value = "";
   const input: MountInput = { ...form.value };
@@ -503,7 +513,7 @@ async function _handleSave() {
 }
 
 // ================== Delete ==================
-async function _confirmDelete(m: Mount) {
+async function confirmDelete(m: Mount) {
   if (m.name === "primary") return;
   const alert = await alertController.create({
     header: t("settings.mountDeleteTitle"),
@@ -537,7 +547,7 @@ async function _confirmDelete(m: Mount) {
 }
 
 // ================== Resolve (debug) ==================
-function _openResolve(m: Mount) {
+function openResolve(m: Mount) {
   resolving.value = m;
   resolveSubPath.value = "";
   resolveResult.value = null;
@@ -545,7 +555,7 @@ function _openResolve(m: Mount) {
   resolveOpen.value = true;
 }
 
-function _closeResolve() {
+function closeResolve() {
   resolveOpen.value = false;
   resolving.value = null;
   resolveResult.value = null;
@@ -553,7 +563,7 @@ function _closeResolve() {
   resolveSubPath.value = "";
 }
 
-async function _runResolve() {
+async function runResolve() {
   if (!resolving.value || !resolveSubPath.value) return;
   resolveError.value = "";
   resolveResult.value = null;

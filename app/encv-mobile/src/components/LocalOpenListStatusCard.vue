@@ -76,6 +76,11 @@
 </template>
 
 <script setup lang="ts">
+import {
+  bugOutline,
+  extensionPuzzleOutline,
+} from "ionicons/icons";
+
 import { formatFileSize } from "@/api/encv";
 import { eventBus } from "@/composables/useEventBus";
 import { useI18n } from "@/composables/useI18n";
@@ -176,38 +181,38 @@ function onOpenListError(data: { type: string; message: string; code?: number })
 }
 
 // ------ navigation ------
-function _goToExtensions() {
+function goToExtensions() {
   router.push("/tabs/extensions");
 }
 
-function _goToSettings() {
+function goToSettings() {
   router.push("/tabs/settings");
 }
 
-function _goToDevLogs() {
+function goToDevLogs() {
   router.push("/tabs/devlogs");
 }
 
-function _openWebUi() {
+function openWebUi() {
   window.open(`http://127.0.0.1:${port.value || 5244}/#/login`, "_system");
 }
 
 // ------ computed ------
-const _cardClass = computed(() => {
+const cardClass = computed(() => {
   if (state.value === "running") return "state-running";
   if (state.value === "port_conflict") return "state-conflict";
   if (state.value === "crash_loop") return "state-crash-loop";
   return "state-idle";
 });
 
-const _badgeColor = computed(() => {
+const badgeColor = computed(() => {
   if (state.value === "running") return "success";
   if (state.value === "port_conflict") return "danger";
   if (state.value === "crash_loop") return "danger";
   return "medium";
 });
 
-const _statusLabel = computed(() => {
+const statusLabel = computed(() => {
   if (state.value === "running") return t("remote.localOpenListRunning");
   if (state.value === "port_conflict") return t("remote.localOpenListPortConflict", { port: String(port.value || 5244) });
   if (state.value === "crash_loop") return "反复崩溃";
@@ -215,14 +220,14 @@ const _statusLabel = computed(() => {
   return t("remote.localOpenListStopped");
 });
 
-const _formattedDataSize = computed(() => formatFileSize(dataDirSize.value));
+const formattedDataSize = computed(() => formatFileSize(dataDirSize.value));
 
-const _isHeartbeatFresh = computed(() => {
+const isHeartbeatFresh = computed(() => {
   if (!lastHeartbeat.value) return false;
   return nowMs.value - lastHeartbeat.value <= HEARTBEAT_FRESH_MS;
 });
 
-const _heartbeatLabel = computed(() => {
+const heartbeatLabel = computed(() => {
   if (!lastHeartbeat.value) return "-";
   const deltaSec = Math.max(0, Math.floor((nowMs.value - lastHeartbeat.value) / 1000));
   if (deltaSec <= 5) return t("remote.localOpenListHeartbeatFresh");

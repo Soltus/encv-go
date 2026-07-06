@@ -105,6 +105,13 @@
 </template>
 
 <script setup lang="ts">
+import {
+  cloudOutline,
+  folderOpen,
+  globeOutline,
+  shieldCheckmark,
+} from "ionicons/icons";
+
 import { fetchConfig, getServerUrl } from "@/api/encv";
 import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
@@ -125,7 +132,7 @@ const configData = ref<Record<string, unknown> | null>(null);
 const { isOnline: serverOnline, checkStatus, restartBackend, stopBackend } = useServerStatus();
 const { t } = useI18n();
 
-const _serverUrl = ref(getServerUrl());
+const serverUrl = ref(getServerUrl());
 const isNativePlatform = ref(isNative());
 const permNotifications = ref(false);
 const permStorage = ref(false);
@@ -134,26 +141,26 @@ let permissionCheckTimer: number | null = null;
 
 const router = useRouter();
 
-const _httpPort = computed(() => (configData.value?.server as Record<string, unknown>)?.port ?? "-");
-const _rootDir = computed(() => (configData.value?.server as Record<string, unknown>)?.dir ?? "/");
-const _adminConfigured = computed(() => !!(configData.value?.admin as Record<string, unknown>)?.password);
-const _webdavRoot = computed(() => {
+const httpPort = computed(() => (configData.value?.server as Record<string, unknown>)?.port ?? "-");
+const rootDir = computed(() => (configData.value?.server as Record<string, unknown>)?.dir ?? "/");
+const adminConfigured = computed(() => !!(configData.value?.admin as Record<string, unknown>)?.password);
+const webdavRoot = computed(() => {
   const val = (configData.value?.webdav as Record<string, unknown>)?.root;
   return typeof val === "string" ? val : "/";
 });
-const _webdavUsername = computed(() => (configData.value?.webdav as Record<string, unknown>)?.username ?? "");
+const webdavUsername = computed(() => (configData.value?.webdav as Record<string, unknown>)?.username ?? "");
 
-function _goHttpServer() {
+function goHttpServer() {
   router.push("/tabs/settings/server/http");
 }
-function _goAdminServer() {
+function goAdminServer() {
   router.push("/tabs/settings/server/admin");
 }
-function _goWebdavServer() {
+function goWebdavServer() {
   router.push("/tabs/settings/server/webdav");
 }
 
-async function _copyToClipboard(text: string) {
+async function copyToClipboard(text: string) {
   const ok = await clipboardWrite(text);
   showToast({ message: ok ? t("remote.copied") : t("devlogs.copyFailed"), duration: 1000, color: ok ? "success" : "danger" });
 }
@@ -165,7 +172,7 @@ async function refreshPermissions() {
   permBatteryOpt.value = perms.batteryOptimization;
 }
 
-async function _handleRequestNotification() {
+async function handleRequestNotification() {
   await requestNotificationPermission();
   if (permissionCheckTimer) clearTimeout(permissionCheckTimer);
   permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000);
@@ -173,7 +180,7 @@ async function _handleRequestNotification() {
   setTimeout(() => refreshPermissions(), 5000);
 }
 
-async function _handleRequestStorage() {
+async function handleRequestStorage() {
   await requestStoragePermission();
   if (permissionCheckTimer) clearTimeout(permissionCheckTimer);
   permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000);
@@ -181,7 +188,7 @@ async function _handleRequestStorage() {
   setTimeout(() => refreshPermissions(), 5000);
 }
 
-async function _handleRequestBatteryOpt() {
+async function handleRequestBatteryOpt() {
   await requestBatteryOptimization();
   if (permissionCheckTimer) clearTimeout(permissionCheckTimer);
   permissionCheckTimer = window.setTimeout(() => refreshPermissions(), 1000);
@@ -189,7 +196,7 @@ async function _handleRequestBatteryOpt() {
   setTimeout(() => refreshPermissions(), 5000);
 }
 
-async function _checkServerInner() {
+async function checkServerInner() {
   // 刷新按钮：只 ping 一次后端 + 弹 toast
   await checkStatus();
   showToast({
@@ -199,7 +206,7 @@ async function _checkServerInner() {
   });
 }
 
-async function _handleRestart() {
+async function handleRestart() {
   showToast({
     message: t("settings.restarting"),
     duration: 30000,
@@ -212,7 +219,7 @@ async function _handleRestart() {
   });
 }
 
-async function _handleStop() {
+async function handleStop() {
   const alert = await alertController.create({
     header: t("settings.stopConfirm"),
     buttons: [

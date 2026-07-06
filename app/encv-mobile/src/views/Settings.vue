@@ -394,6 +394,7 @@ import { createAlistEncryptFeature } from "@/features/alist-encrypt";
 import { ensurePluginLoaded, getPluginFullState, isNative, pickFolder } from "@/plugins/GoProcess";
 import { alertController, modalController } from "@ionic/vue";
 import {
+  bugOutline,
   cloudOutline,
   colorPaletteOutline,
   documentText,
@@ -402,22 +403,27 @@ import {
   folderOpen,
   gitNetworkOutline,
   globeOutline,
+  hardwareChipOutline,
   imagesOutline,
+  informationCircle,
   key,
   layersOutline,
   lockClosed,
   musicalNotesOutline,
   newspaperOutline,
   personOutline,
+  phonePortraitOutline,
   readerOutline,
   refreshCircle,
   server as serverIcon,
   settingsOutline,
   shieldCheckmark,
+  sparklesOutline,
   speedometerOutline,
   terminal,
   textOutline,
   toggleOutline,
+  trash,
 } from "ionicons/icons";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
@@ -455,7 +461,7 @@ const screenOrientation = ref(localStorage.getItem("encv_screen_orientation") ||
 const mpvPluginStatus = ref<string>("unknown");
 const mpvPluginError = ref("");
 
-const _mpvStatusI18nKey = computed(() => {
+const mpvStatusI18nKey = computed(() => {
   const keyMap: Record<string, string> = {
     not_installed: "settings.pluginNotInstalled",
     disabled: "settings.pluginDisabled",
@@ -471,21 +477,21 @@ function isMpvMode(mode: string): boolean {
   return isMpvSubMode(mode) || mode === "mpv-plugin" || mode === "mpv";
 }
 
-async function _handleVideoPlayerChange(event: CustomEvent) {
+async function handleVideoPlayerChange(event: CustomEvent) {
   const value = event.detail.value;
   videoPlayerMode.value = value;
   localStorage.setItem("encv_player_video", value);
   if (isMpvMode(value)) await refreshMpvPluginStatus();
 }
 
-async function _handleAudioPlayerChange(event: CustomEvent) {
+async function handleAudioPlayerChange(event: CustomEvent) {
   const value = event.detail.value;
   audioPlayerMode.value = value;
   localStorage.setItem("encv_player_audio", value);
   if (isMpvMode(value)) await refreshMpvPluginStatus();
 }
 
-function _handleScreenOrientationChange(event: CustomEvent) {
+function handleScreenOrientationChange(event: CustomEvent) {
   const value = event.detail.value;
   screenOrientation.value = value;
   localStorage.setItem("encv_screen_orientation", value);
@@ -508,11 +514,11 @@ async function applyScreenOrientation(orientation: string) {
   }
 }
 
-function _goAppearance() {
+function goAppearance() {
   router.push("/tabs/settings/appearance");
 }
 
-function _goDevTools() {
+function goDevTools() {
   router.push("/tabs/settings/devtools");
 }
 
@@ -544,7 +550,7 @@ function extractAnnotations(schema: any, prefix: string = ""): { path: string; d
   return result;
 }
 
-async function _openJsonEditor() {
+async function openJsonEditor() {
   try {
     const cfg = await fetchConfig();
     jsonText.value = JSON.stringify(cfg, null, 2);
@@ -562,7 +568,7 @@ async function _openJsonEditor() {
   }
 }
 
-function _validateJson() {
+function validateJson() {
   try {
     JSON.parse(jsonText.value);
     jsonError.value = "";
@@ -571,7 +577,7 @@ function _validateJson() {
   }
 }
 
-async function _handleSaveJson() {
+async function handleSaveJson() {
   try {
     const parsed = JSON.parse(jsonText.value);
     await updateConfig(parsed);
@@ -584,49 +590,49 @@ async function _handleSaveJson() {
   }
 }
 
-function _goServer() {
+function goServer() {
   router.push("/tabs/settings/server");
 }
 
-function _goAbout() {
+function goAbout() {
   router.push("/tabs/settings/about");
 }
 
-function _goCache() {
+function goCache() {
   router.push("/tabs/settings/cache");
 }
 
-function _goDatabase() {
+function goDatabase() {
   router.push("/tabs/settings/database");
 }
 
-function _goMounts() {
+function goMounts() {
   router.push("/tabs/settings/mounts");
 }
 
-function _goPlugins() {
+function goPlugins() {
   router.push("/tabs/settings/plugins");
 }
 
-function _goAgent() {
+function goAgent() {
   router.push("/tabs/settings/agent");
 }
 
-function _getValue(path: string[]): unknown {
+function getValue(path: string[]): unknown {
   return getFieldValue(path);
 }
 
-function _setValue(path: string[], value: unknown) {
+function setValue(path: string[], value: unknown) {
   setFieldValue(path, value);
 }
 
-function _getMapEntries(path: string[]): [string, Record<string, unknown>][] {
+function getMapEntries(path: string[]): [string, Record<string, unknown>][] {
   const val = getFieldValue(path);
   if (!val || typeof val !== "object") return [];
   return Object.entries(val as Record<string, unknown>) as [string, Record<string, unknown>][];
 }
 
-function _handleInput(path: string[], field: FieldDef, event: CustomEvent) {
+function handleInput(path: string[], field: FieldDef, event: CustomEvent) {
   const val = (event.target as HTMLInputElement).value;
   if (path.length >= 2 && path[0] === "webdav" && path[1] === "root" && val) {
     const err = validateWebdavRoute(val);
@@ -650,7 +656,7 @@ function validateWebdavRoute(val: string): string | null {
   return null;
 }
 
-async function _handleBrowsePath(path: string[], field: FieldDef) {
+async function handleBrowsePath(path: string[], field: FieldDef) {
   if (isNative()) {
     const result = await pickFolder();
     if (result.path) {
@@ -674,7 +680,7 @@ async function _handleBrowsePath(path: string[], field: FieldDef) {
   }
 }
 
-function _fieldLabel(key: string, _required?: boolean): string {
+function fieldLabel(key: string, _required?: boolean): string {
   return tField(key);
 }
 
@@ -717,7 +723,7 @@ const fieldIconMap: Record<string, string> = {
   text: textOutline,
 };
 
-function _getFieldIcon(fieldKey: string, fieldType: string): string {
+function getFieldIcon(fieldKey: string, fieldType: string): string {
   if (fieldIconMap[fieldKey]) return fieldIconMap[fieldKey];
   if (fieldType === "boolean") return toggleOutline;
   if (fieldType === "integer") return speedometerOutline;
@@ -725,7 +731,7 @@ function _getFieldIcon(fieldKey: string, fieldType: string): string {
   return settingsOutline;
 }
 
-function _isFieldVisible(field: FieldDef): boolean {
+function isFieldVisible(field: FieldDef): boolean {
   if (field.key === "console") return false;
   if (!field.platform || field.platform === "both") return true;
   if (field.platform === "mobile") return isNative();
@@ -733,7 +739,7 @@ function _isFieldVisible(field: FieldDef): boolean {
   return true;
 }
 
-async function _handleClearCache() {
+async function handleClearCache() {
   const alert = await alertController.create({
     header: t("settings.clearCache"),
     message: t("settings.clearCacheConfirm"),
@@ -764,7 +770,7 @@ async function _handleClearCache() {
   await alert.present();
 }
 
-async function _handleResetSettings() {
+async function handleResetSettings() {
   const alert = await alertController.create({
     header: t("settings.resetSettings"),
     message: t("settings.resetConfirm"),
@@ -787,7 +793,7 @@ async function _handleResetSettings() {
   await alert.present();
 }
 
-async function _handleSaveConfig() {
+async function handleSaveConfig() {
   try {
     await saveConfig();
     if (restartNeeded.value) {
@@ -813,7 +819,7 @@ async function _handleSaveConfig() {
   }
 }
 
-function _handleResetConfig() {
+function handleResetConfig() {
   resetConfig();
 }
 

@@ -38,15 +38,24 @@
 </template>
 
 <script setup lang="ts">
+import {
+  bug,
+  folder,
+  globe,
+  home,
+  list,
+  settings,
+} from "ionicons/icons";
+
 import { useI18n } from "@/composables/useI18n";
 
 const { t } = useI18n();
 
-function _onTabsWillChange(event: CustomEvent) {
+function onTabsWillChange(event: CustomEvent) {
   void event?.detail?.tab;
 }
 
-function _onTabsDidChange(event: CustomEvent) {
+function onTabsDidChange(event: CustomEvent) {
   void event?.detail?.tab;
 }
 </script>

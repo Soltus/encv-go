@@ -604,6 +604,25 @@
   </ion-page>
 </template>
 <script setup lang="ts">
+import {
+  alertCircle,
+  arrowBack,
+  chevronForward,
+  close,
+  closeCircle,
+  closeCircleOutline,
+  cloudOffline,
+  filterOutline,
+  folder,
+  folderOpen,
+  lockClosed,
+  menuOutline,
+  pricetagOutline,
+  refresh,
+  swapVerticalOutline,
+  warningOutline,
+} from "ionicons/icons";
+
 // Files.vue 重构后只剩 thin script：调用 useFilesView() composable + 必要 imports。
 // 原 1565 行 script 逻辑已全部抽到 ./useFilesView.ts。
 //
@@ -730,10 +749,10 @@ const {
 
 // 🆕 2026-07-02 v2 简化：不需要 phraseInsertion 常量（直接调 insertSymbol('__phrase_open__')）
 // 占位：保留空的占位 hooks（focus/blur 事件，可后续加视觉反馈）
-function _onQueryFocus() {
+function onQueryFocus() {
   // 占位：input 聚焦时可以让插入按钮行高亮
 }
-function _onQueryBlur() {
+function onQueryBlur() {
   // 占位：input 失焦时不立即清空（用户可能想看高亮结果）
 }
 </script>

@@ -47,6 +47,13 @@
 </template>
 
 <script setup lang="ts">
+import {
+  copyOutline,
+  documentTextOutline,
+  folderOpenOutline,
+  gitBranchOutline,
+} from "ionicons/icons";
+
 import { copyToClipboard } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
@@ -67,7 +74,7 @@ const popoverEvent = ref<Event | undefined>(undefined);
 const _wrapRef = ref<HTMLElement | null>(null);
 
 // 显示文本：取最后一段（basename）；若与 path 相同则直接显示
-const _displayLabel = computed(() => {
+const displayLabel = computed(() => {
   const segs = props.path.split(/[\\/]/).filter(Boolean);
   return segs[segs.length - 1] || props.path;
 });
@@ -84,12 +91,12 @@ const relativePath = computed(() => {
   return props.path.replace(/^\.{1,2}[\\/]/, "");
 });
 
-function _togglePopover(event: MouseEvent) {
+function togglePopover(event: MouseEvent) {
   popoverEvent.value = event;
   popoverOpen.value = !popoverOpen.value;
 }
 
-async function _onCopyPath() {
+async function onCopyPath() {
   const ok = await copyToClipboard(fullPath.value);
   showToast({
     message: ok ? t("agent.copied") : t("agent.copyFailed"),
@@ -99,7 +106,7 @@ async function _onCopyPath() {
   popoverOpen.value = false;
 }
 
-async function _onCopyRelativePath() {
+async function onCopyRelativePath() {
   const text =
     props.line !== undefined ? `${relativePath.value}:${props.line}${props.col !== undefined ? `:${props.col}` : ""}` : relativePath.value;
   const ok = await copyToClipboard(text);
@@ -111,7 +118,7 @@ async function _onCopyRelativePath() {
   popoverOpen.value = false;
 }
 
-function _onOpenInFiles() {
+function onOpenInFiles() {
   popoverOpen.value = false;
   // 跳转到 Files tab，path 作为 query param
   router.push({

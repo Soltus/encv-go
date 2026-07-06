@@ -236,8 +236,8 @@ const props = defineProps<EngineRenderProps>();
 const { t } = useI18n();
 
 // ── 图标常量 ──────────────────────────────────────────────
-const _chatbubblesIcon = chatbubblesOutline;
-const _copyIconVar = copyOutline;
+const chatbubblesIcon = chatbubblesOutline;
+const copyIconVar = copyOutline;
 
 // ── 内部状态 ──────────────────────────────────────────────
 /** 把 readonly Message[] 包装为 shallowRef，供 useRenderTurnItems 和辅助方法使用 */
@@ -286,12 +286,12 @@ function findToolResult(id: string): ToolResult | null {
 function _findToolCallById(id: string): ToolCall | null {
   return findToolCall(id);
 }
-function _findToolResultById(id: string): ToolResult | null {
+function findToolResultById(id: string): ToolResult | null {
   return findToolResult(id);
 }
 
 /** 格式化 Footer 固定时间戳为 HH:mm */
-function _formatFooterTime(timestamp: number): string {
+function formatFooterTime(timestamp: number): string {
   const d = new Date(timestamp);
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
@@ -299,7 +299,7 @@ function _formatFooterTime(timestamp: number): string {
 }
 
 /** 复制 messageFooter 对应消息的全文内容 */
-async function _copyMessageContent(messageId: string): Promise<void> {
+async function copyMessageContent(messageId: string): Promise<void> {
   const idx = parseInt(messageId.replace(/^[au]-/, ""), 10);
   const msg = messagesRef.value[idx];
   if (!msg?.content) return;
@@ -323,7 +323,7 @@ async function _copyMessageContent(messageId: string): Promise<void> {
   }
 }
 
-function _resolveToolCalls(ids: string[]): ToolCall[] {
+function resolveToolCalls(ids: string[]): ToolCall[] {
   const out: ToolCall[] = [];
   for (const id of ids) {
     const tc = findToolCall(id);
@@ -333,7 +333,7 @@ function _resolveToolCalls(ids: string[]): ToolCall[] {
 }
 
 /** 按 id 查 tool result，构造成 name→Result 的 record 给结构化卡片用 */
-function _resolveToolResultsByCallId(ids: string[]): Record<string, ToolResult> {
+function resolveToolResultsByCallId(ids: string[]): Record<string, ToolResult> {
   const out: Record<string, ToolResult> = {};
   for (const id of ids) {
     const tr = findToolResult(id);
@@ -343,14 +343,14 @@ function _resolveToolResultsByCallId(ids: string[]): Record<string, ToolResult> 
 }
 
 // ── 事件处理 ──────────────────────────────────────────────
-function _handleDecide(toolCallId: string, decision: Decision) {
+function handleDecide(toolCallId: string, decision: Decision) {
   props.onConfirmTool(toolCallId, decision);
 }
 
 /**
  * 重试一条出错的消息：清除 error 标记 + 删除关联的 assistant 消息 + 重新发送
  */
-function _handleRetryError(item: { type: "error"; messageIndex: number }) {
+function handleRetryError(item: { type: "error"; messageIndex: number }) {
   const idx = item.messageIndex;
   if (idx < 0 || idx >= messagesRef.value.length) return;
 
@@ -388,7 +388,7 @@ function scrollToBottom(behavior: "auto" | "smooth" = "smooth") {
   });
 }
 
-function _onMainScroll() {
+function onMainScroll() {
   const el = mainRef.value;
   if (!el) return;
   const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;

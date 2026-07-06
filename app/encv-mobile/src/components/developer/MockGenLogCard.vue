@@ -107,7 +107,14 @@
 import { formatDateTime } from "@/composables/useDateFormat";
 import type { MockGenLogEntry, MockGenLogSummary } from "@/composables/useMockGenLog";
 import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
-import { documentTextOutline, flashOutline, settingsOutline } from "ionicons/icons";
+import {
+  copyOutline,
+  documentTextOutline,
+  flashOutline,
+  settingsOutline,
+  terminalOutline,
+  warningOutline,
+} from "ionicons/icons";
 import { computed } from "vue";
 
 /**
@@ -140,7 +147,7 @@ const emit = defineEmits<{
 }>();
 
 /** runner 标识 → ion-icon */
-function _runnerIcon(runner: string) {
+function runnerIcon(runner: string) {
   if (runner === "mediacodec") return flashOutline;
   if (runner === "static") return documentTextOutline;
   return settingsOutline; // ffmpeg / default
@@ -160,7 +167,7 @@ const STATUS_MAP: Record<MockGenLogEntry["status"], StepStatus> = {
  * （UnifiedTimelineCard 的 PhaseIcon 会渲染 checkmarkCircleOutline，
  *   但本组件用 #icon slot 覆盖为 runner ion-icon，phase 仅影响状态色边框）
  */
-function _toUnifiedTimelineEntry(entry: MockGenLogEntry): UnifiedTimelineEntry {
+function toUnifiedTimelineEntry(entry: MockGenLogEntry): UnifiedTimelineEntry {
   return {
     id: entry.key,
     phase: Phase.Completed,
@@ -177,7 +184,7 @@ function _toUnifiedTimelineEntry(entry: MockGenLogEntry): UnifiedTimelineEntry {
 }
 
 /** 汇总文本（保持与原 PluginTestsDetail.vue 一致的格式） */
-const _summaryText = computed(() => {
+const summaryText = computed(() => {
   if (!props.summary) return "";
   const { ok, failed, skipped } = props.summary;
   let text = `${ok} ✓ / ${failed} ✗ / ${skipped} ◌`;

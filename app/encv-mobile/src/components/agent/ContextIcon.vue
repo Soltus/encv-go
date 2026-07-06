@@ -39,6 +39,8 @@
 </template>
 
 <script setup lang="ts">
+;
+
 import type { ContextUsageResponse } from "@/composables/useContextUsage";
 import { modalController } from "@ionic/vue";
 import { computed, reactive } from "vue";
@@ -53,19 +55,19 @@ const props = defineProps<{
   compact?: boolean;
 }>();
 
-const _ariaLabel = computed(() => {
+const ariaLabel = computed(() => {
   if (!props.data) return "上下文使用（加载中）";
   return `上下文使用 ${props.data.usage.percent.toFixed(1)}%`;
 });
 
-const _percentText = computed(() => {
+const percentText = computed(() => {
   if (!props.data) return "—";
   return props.data.usage.percent.toFixed(1) + "%";
 });
 
-const _compactions = computed(() => props.data?.compactions ?? 0);
+const compactions = computed(() => props.data?.compactions ?? 0);
 
-const _toneClass = computed(() => {
+const toneClass = computed(() => {
   if (!props.data) return "tone-idle";
   const p = props.data.usage.percent;
   if (p >= 90) return "tone-danger";
@@ -77,7 +79,7 @@ const _toneClass = computed(() => {
  * 打开底部弹出面板（modalController.create 模式）
  * per workspace rules §1.1 + §1.2: 使用 reactive state object 传递数据
  */
-async function _openPopover() {
+async function openPopover() {
   const state: ContextPopoverState = reactive({
     data: props.data,
     loading: props.loading ?? false,

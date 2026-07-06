@@ -135,7 +135,7 @@ const expandedItems = ref<Set<number>>(new Set());
  * 取 item 对应的 ToolResult。
  * 返回 null 时模板不渲染结构化卡片（item 仍按原 row 显示）。
  */
-function _resultFor(id: string, name: string | undefined): ToolResult | null {
+function resultFor(id: string, name: string | undefined): ToolResult | null {
   if (!props.resultsByCallId || !name) return null;
   // 只对"已知支持结构化卡片"的工具名查 result —— 其他工具（video_encrypt 等）
   // 的 result 不在 resultsByCallId 也不影响 row 渲染。
@@ -145,11 +145,11 @@ function _resultFor(id: string, name: string | undefined): ToolResult | null {
   return props.resultsByCallId[id] ?? null;
 }
 
-function _toggleGroup() {
+function toggleGroup() {
   groupExpanded.value = !groupExpanded.value;
 }
 
-function _toggleItem(idx: number) {
+function toggleItem(idx: number) {
   if (expandedItems.value.has(idx)) {
     expandedItems.value.delete(idx);
   } else {
@@ -163,7 +163,7 @@ const kinds = computed(() => props.items.map(it => it.kind));
 const allFileChange = computed(() => kinds.value.length > 0 && kinds.value.every(k => k === "fileChange"));
 const allCommand = computed(() => kinds.value.length > 0 && kinds.value.every(k => k === "command"));
 
-const _fileItems = computed(() => props.items);
+const fileItems = computed(() => props.items);
 
 const lastItem = computed<ToolCall | null>(() => {
   return props.items.length > 0 ? props.items[props.items.length - 1] : null;
@@ -184,7 +184,7 @@ const totalDuration = computed(() => {
   return total;
 });
 
-const _summary = computed(() => {
+const summary = computed(() => {
   const n = props.items.length;
   const cmd = props.items.filter(i => i.kind === "command").length;
   const file = props.items.filter(i => i.kind === "fileChange").length;
@@ -200,12 +200,12 @@ const _summary = computed(() => {
   return t("agent.ops.toolOutputs", { n: String(n) });
 });
 
-const _icon = computed(() => {
+const icon = computed(() => {
   if (allCommand.value) return terminalOutline;
   return ellipsisHorizontalCircleOutline;
 });
 
-const _status = computed(() => {
+const status = computed(() => {
   const s = lastItem.value?.status;
   if (!s) return "";
   if (s === "success") return t("agent.completed");
@@ -215,7 +215,7 @@ const _status = computed(() => {
   return "";
 });
 
-const _statusTone = computed<"ready" | "warn" | "idle">(() => {
+const statusTone = computed<"ready" | "warn" | "idle">(() => {
   const s: ToolStatus | undefined = lastItem.value?.status;
   if (s === "success") return "ready";
   if (s === "failed" || s === "cancelled") return "warn";
@@ -223,31 +223,31 @@ const _statusTone = computed<"ready" | "warn" | "idle">(() => {
   return "idle";
 });
 
-const _isActive = computed(() => lastItem.value?.status === "running" || lastItem.value?.status === "pending");
+const isActive = computed(() => lastItem.value?.status === "running" || lastItem.value?.status === "pending");
 
 // 两级折叠：hasDetail / visibleItems / canExpand / canCollapse
-const _hasDetail = computed(() => props.items.length > 0);
-const _visibleItems = computed(() => {
+const hasDetail = computed(() => props.items.length > 0);
+const visibleItems = computed(() => {
   if (groupExpanded.value) return props.items;
   return props.items.slice(0, OPERATION_COLLAPSE_INITIAL_COUNT);
 });
-const _canExpand = computed(() => !groupExpanded.value && props.items.length > OPERATION_COLLAPSE_INITIAL_COUNT);
-const _canCollapse = computed(() => groupExpanded.value && props.items.length > OPERATION_COLLAPSE_INITIAL_COUNT);
-const _showMoreLabel = computed(() =>
+const canExpand = computed(() => !groupExpanded.value && props.items.length > OPERATION_COLLAPSE_INITIAL_COUNT);
+const canCollapse = computed(() => groupExpanded.value && props.items.length > OPERATION_COLLAPSE_INITIAL_COUNT);
+const showMoreLabel = computed(() =>
   t("agent.ops.showMore", {
     n: String(props.items.length - OPERATION_COLLAPSE_INITIAL_COUNT),
   })
 );
 
-function _expandGroup() {
+function expandGroup() {
   groupExpanded.value = true;
 }
 
-function _collapseGroup() {
+function collapseGroup() {
   groupExpanded.value = false;
 }
 
-function _itemIcon(kind: ToolKind | undefined) {
+function itemIcon(kind: ToolKind | undefined) {
   switch (kind) {
     case "command":
       return terminalOutline;
@@ -262,7 +262,7 @@ function _itemIcon(kind: ToolKind | undefined) {
   }
 }
 
-function _truncateArgs(raw: string): string {
+function truncateArgs(raw: string): string {
   if (!raw) return "";
   if (raw.length <= 80) return raw;
   return raw.slice(0, 77) + "…";

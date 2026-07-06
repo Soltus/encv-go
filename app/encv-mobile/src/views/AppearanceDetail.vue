@@ -208,6 +208,16 @@
 </template>
 
 <script setup lang="ts">
+import {
+  closeCircleOutline,
+  colorPaletteOutline,
+  eyeOutline,
+  globeOutline,
+  layersOutline,
+  sparklesOutline,
+  trendingUpOutline,
+} from "ionicons/icons";
+
 import type { Locale } from "@/composables/useI18n";
 import { useI18n } from "@/composables/useI18n";
 import { useTheme } from "@/composables/useTheme";
@@ -236,7 +246,7 @@ const { t, locale, setLocale } = useI18n();
 
 const currentGradient = ref<string | null>(null);
 
-const _bgCategories = computed(() => [
+const bgCategories = computed(() => [
   {
     key: "light",
     label: "settings.bgLight",
@@ -265,23 +275,23 @@ const _p3Modes = [
   { value: "off", label: "settings.p3Off", description: "" },
 ];
 
-function _handleLocaleChange(event: CustomEvent) {
+function handleLocaleChange(event: CustomEvent) {
   setLocale(event.detail.value as Locale);
 }
 
-function _handleBgColorChange(value: string) {
+function handleBgColorChange(value: string) {
   setBgColor(value);
   currentGradient.value = null;
 }
 
-function _handleGradientSelect(preset: (typeof BG_PRESETS)[number]) {
+function handleGradientSelect(preset: (typeof BG_PRESETS)[number]) {
   if (preset.gradientColors) {
     setBgGradient(preset.gradientColors);
     currentGradient.value = preset.name;
   }
 }
 
-function _getPresetStyle(preset: (typeof BG_PRESETS)[number]) {
+function getPresetStyle(preset: (typeof BG_PRESETS)[number]) {
   if (preset.gradientColors) {
     return {
       background: `linear-gradient(135deg, ${preset.gradientColors.join(", ")})`,
@@ -295,20 +305,20 @@ function _getPresetStyle(preset: (typeof BG_PRESETS)[number]) {
   };
 }
 
-function _handleBgBlurChange(event: Event) {
+function handleBgBlurChange(event: Event) {
   const target = event.target as HTMLInputElement;
   setBgBlur(parseInt(target.value, 10));
 }
 
-function _handleP3ModeChange(value: string) {
+function handleP3ModeChange(value: string) {
   setP3Mode(value as "off" | "on" | "auto");
 }
 
-function _handleVividToggle(event: CustomEvent) {
+function handleVividToggle(event: CustomEvent) {
   setVividMode(event.detail.checked ? "on" : "off");
 }
 
-function _handleVividIntensityChange(event: Event) {
+function handleVividIntensityChange(event: Event) {
   const target = event.target as HTMLInputElement;
   setVividIntensity(parseInt(target.value, 10));
 }

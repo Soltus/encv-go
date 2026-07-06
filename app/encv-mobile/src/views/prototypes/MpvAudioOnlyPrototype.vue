@@ -82,45 +82,45 @@
 import { computed, ref, watch } from "vue";
 
 const playerState = ref<"playing" | "paused">("paused");
-const _fileName = ref("Bohemian Rhapsody.flac");
+const fileName = ref("Bohemian Rhapsody.flac");
 const durationInput = ref(354000);
 const currentPosition = ref(86000);
 const isPlaying = computed(() => playerState.value === "playing");
 const duration = computed(() => durationInput.value);
-const _progress = computed(() => (duration.value > 0 ? currentPosition.value / duration.value : 0));
+const progress = computed(() => (duration.value > 0 ? currentPosition.value / duration.value : 0));
 const playbackSpeed = ref(1.0);
 const volume = ref(0.8);
 const volumeTrackRef = ref<HTMLElement>();
 const SPEED_OPTIONS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
-function _togglePlay() {
+function togglePlay() {
   playerState.value = playerState.value === "playing" ? "paused" : "playing";
 }
 
-function _handleSeek(ratio: number) {
+function handleSeek(ratio: number) {
   currentPosition.value = Math.round(ratio * duration.value);
 }
 
-function _seekDelta(ms: number) {
+function seekDelta(ms: number) {
   currentPosition.value = Math.max(0, Math.min(duration.value, currentPosition.value + ms));
 }
 
-function _cycleSpeed() {
+function cycleSpeed() {
   const idx = SPEED_OPTIONS.indexOf(playbackSpeed.value);
   playbackSpeed.value = SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length];
 }
 
-function _toggleMute() {
+function toggleMute() {
   volume.value = volume.value > 0 ? 0 : 0.8;
 }
 
-function _onVolumeTrackClick(e: MouseEvent) {
+function onVolumeTrackClick(e: MouseEvent) {
   if (!volumeTrackRef.value) return;
   const rect = volumeTrackRef.value.getBoundingClientRect();
   volume.value = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
 }
 
-function _onBack() {}
+function onBack() {}
 
 watch(isPlaying, val => {
   if (val) {

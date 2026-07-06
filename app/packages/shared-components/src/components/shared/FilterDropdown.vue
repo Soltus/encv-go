@@ -103,12 +103,12 @@ const selectedSet = computed(() => {
   return new Set(props.modelValue);
 });
 
-const _selectedCount = computed(() => {
+const selectedCount = computed(() => {
   if (isEmptyAll.value) return props.options.length;
   return props.modelValue.length;
 });
 
-const _triggerLabel = computed(() => {
+const triggerLabel = computed(() => {
   if (isEmptyAll.value) {
     if (props.options.length <= 1) return props.label;
     return `${props.label} (${props.options.length})`;
@@ -127,11 +127,11 @@ const filteredOptions = computed(() => {
   return props.options.filter(o => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q));
 });
 
-function _isSelected(value: string): boolean {
+function isSelected(value: string): boolean {
   return selectedSet.value.has(value);
 }
 
-function _toggleOption(value: string) {
+function toggleOption(value: string) {
   if (props.multiSelect) {
     const next = new Set(props.modelValue);
     if (next.has(value)) next.delete(value);
@@ -146,18 +146,18 @@ function _toggleOption(value: string) {
   }
 }
 
-function _selectAll() {
+function selectAll() {
   const all = filteredOptions.value.map(o => o.value);
   emit("update:modelValue", all);
   emit("change", all);
 }
 
-function _clearAll() {
+function clearAll() {
   emit("update:modelValue", []);
   emit("change", []);
 }
 
-function _toggleOpen() {
+function toggleOpen() {
   isOpen.value = !isOpen.value;
   if (isOpen.value) {
     nextTick(() => {

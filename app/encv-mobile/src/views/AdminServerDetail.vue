@@ -48,33 +48,33 @@ const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig()
 const SECTION_KEY = "admin";
 
 const sectionDef = computed(() => parseSchema().find(s => s.key === SECTION_KEY));
-const _childFields = computed(() => sectionDef.value?.properties ?? []);
+const childFields = computed(() => sectionDef.value?.properties ?? []);
 
 function tField(key: string): string {
   return t(`settings.${key}`);
 }
 
-function _fieldLabel(key: string, required?: boolean): string {
+function fieldLabel(key: string, required?: boolean): string {
   return tField(key) + (required ? " *" : "");
 }
 
-function _getFieldIcon(fieldKey: string, fieldType: string): string {
+function getFieldIcon(fieldKey: string, fieldType: string): string {
   if (fieldKey.includes("password")) return lockClosed;
   if (fieldType === "boolean") return settingsOutline;
   if (fieldType === "integer") return shieldCheckmark;
   return shieldCheckmark;
 }
 
-function _setValue(path: string[], value: unknown) {
+function setValue(path: string[], value: unknown) {
   setFieldValue(path, value);
 }
 
-function _handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
+function handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
   const val = (event.target as HTMLInputElement).value;
   setFieldValue(path, val);
 }
 
-async function _handleSave() {
+async function handleSave() {
   try {
     await saveConfig();
     showToast({ message: t("settings.configSaved"), duration: 1500, color: "success" });
