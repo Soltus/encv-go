@@ -1,14 +1,35 @@
 package com.encvgo.app
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.net.HttpURLConnection
+import java.net.URL
 
 class WorldActivity : AppCompatActivity() {
+    companion object {
+        private const val TAG = "WorldActivity"
+        private const val EXTRA_WORLD_ID = "world_id"
+        private const val EXTRA_WORLD_NAME = "world_name"
+
+        fun createIntent(context: Context, worldId: String, worldName: String): Intent {
+            return Intent(context, WorldActivity::class.java).apply {
+                putExtra(EXTRA_WORLD_ID, worldId)
+                putExtra(EXTRA_WORLD_NAME, worldName)
+            }
+        }
+    }
+
     private lateinit var webView: WebView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,21 +63,46 @@ class WorldActivity : AppCompatActivity() {
         webView.loadUrl("http://10.0.2.2:8200/#/simverse-home")
         
         // 桥接：通知 Go 后端世界页面已打开
-        EncvGoService.sendCommand("world_activity_opened")
+        notifyBackend("opened")
     }
-    
+
     override fun onBackPressed() {
         if (webView.canGoBack()) {
             webView.goBack()
         } else {
             // 退出世界，通知 Go 后端 checkpoint
-            EncvGoService.sendCommand("world_activity_closed")
+            notifyBackend("closed")
             finish()
         }
     }
-    
+
     override fun onDestroy() {
         webView.destroy()
         super.onDestroy()
+    }
+
+    private fun notifyBackend(event: String) {
+        val port = EncvGoService.lastKnownPort
+        if (port <= 0) {
+            Log.w(TAG, "notifyBackend: backend not running (port=0), event=$event")
+            return
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = URL("http://127.0.0.1:$port/api/simverse/world/control")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 2000
+                conn.readTimeout = 3000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                val body = "{\"event\":\"$event\"}"
+                conn.outputStream.write(body.toByteArray())
+                val code = conn.responseCode
+                Log.d(TAG, "notifyBackend: event=$event, status=$code")
+            } catch (e: Exception) {
+                Log.w(TAG, "notifyBackend failed: event=$event, ${e.message}")
+            }
+        }
     }
 }
