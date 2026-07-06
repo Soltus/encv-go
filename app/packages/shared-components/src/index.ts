@@ -10,6 +10,7 @@ export { eventBus } from "./composables/useEventBus";
 export { useFileFeatures } from "./composables/useFileFeatures";
 export { useFrontendLogs } from "./composables/useFrontendLogs";
 export { useI18n } from "./composables/useI18n";
+export { registerIonicComponents, getIonicComponentNames } from "./composables/useIonicAutoRegister";
 export { useProxiedFetch } from "./composables/useProxiedFetch";
 export { useRealtimeTransport } from "./composables/useRealtimeTransport";
 export { useServerStatus } from "./composables/useServerStatus";
