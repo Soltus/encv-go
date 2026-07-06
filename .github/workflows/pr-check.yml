@@ -102,7 +102,7 @@ jobs:
         if: matrix.test-group == 'frontend-quality'
         run: cd ${{ env.MONOREPO_MOBILE_DIR }} && pnpm install --frozen-lockfile
 
-      - name: Run frontend quality checks (biome + typecheck + vitest)
+      - name: Run frontend quality checks (biome + i18n + typecheck + vitest)
         if: matrix.test-group == 'frontend-quality'
         run: |
           cd ${{ env.MONOREPO_MOBILE_DIR }}
@@ -111,17 +111,24 @@ jobs:
           echo "─── Phase 1: Biome (lint + format) ───"
           pnpm exec biome ci src 2>&1 | tee -a test-output.txt || BIOME_FAILED=1
           echo ""
-          echo "─── Phase 2: TypeScript type check (vue-tsc) ───"
+          echo "─── Phase 2: i18n 完整性检查 + 变量一致性 ───"
+          cd ../..
+          python3 scripts/i18n-tool.py scan --app encv-mobile 2>&1 | tee -a ${{ env.MONOREPO_MOBILE_DIR }}/test-output.txt || I18N_FAILED=1
+          python3 scripts/i18n-tool.py var-check --app encv-mobile 2>&1 | tee -a ${{ env.MONOREPO_MOBILE_DIR }}/test-output.txt || I18N_FAILED=1
+          cd ${{ env.MONOREPO_MOBILE_DIR }}
+          echo ""
+          echo "─── Phase 3: TypeScript type check (vue-tsc) ───"
           pnpm exec vue-tsc --noEmit 2>&1 | tee -a test-output.txt || TSC_FAILED=1
           echo ""
-          echo "─── Phase 3: Vitest unit tests ───"
+          echo "─── Phase 4: Vitest unit tests ───"
           pnpm exec vitest run --reporter=verbose 2>&1 | tee -a test-output.txt || VITEST_FAILED=1
           echo ""
           echo "═══ Summary ═══"
           echo "Biome:    ${BIOME_FAILED:+❌ failed}${BIOME_FAILED:-✅ passed}"
+          echo "i18n:     ${I18N_FAILED:+❌ failed}${I18N_FAILED:-✅ passed}"
           echo "Typecheck: ${TSC_FAILED:+❌ failed}${TSC_FAILED:-✅ passed}"
           echo "Vitest:   ${VITEST_FAILED:+❌ failed}${VITEST_FAILED:-✅ passed}"
-          if [ -n "$BIOME_FAILED" ] || [ -n "$TSC_FAILED" ] || [ -n "$VITEST_FAILED" ]; then
+          if [ -n "$BIOME_FAILED" ] || [ -n "$I18N_FAILED" ] || [ -n "$TSC_FAILED" ] || [ -n "$VITEST_FAILED" ]; then
             echo ""
             echo "❌ One or more checks failed"
             exit 1

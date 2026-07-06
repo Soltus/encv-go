@@ -110,6 +110,19 @@ jobs:
       - name: Install frontend dependencies
         run: cd app && pnpm install
 
+      - name: i18n 完整性检查 + 变量一致性
+        run: |
+          echo "═══ i18n 完整性检查 ═══"
+          python3 scripts/i18n-tool.py scan --app encv-mobile 2>&1 || I18N_FAILED=1
+          echo ""
+          echo "═══ i18n 变量一致性检查 ═══"
+          python3 scripts/i18n-tool.py var-check --app encv-mobile 2>&1 || I18N_FAILED=1
+          if [ -n "$I18N_FAILED" ]; then
+            echo "❌ i18n 检查失败"
+            exit 1
+          fi
+          echo "✅ i18n 检查通过"
+
       - name: TypeScript check (main app)
         working-directory: app/encv-mobile
         run: pnpm exec vue-tsc --noEmit

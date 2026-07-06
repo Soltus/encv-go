@@ -1796,9 +1796,85 @@ export type I18nKey =
 
 export type Locale = "zh-CN" | "en";
 
-export type MessageParams = Record<string, string>;
+export type MessageParamValue = string | number | boolean;
 
-export type TFunction = (key: I18nKey, params?: MessageParams) => string;
+export type MessageParams = Record<string, MessageParamValue>;
+
+export interface I18nKeyParams {
+  "agent.attachmentCount": { n: MessageParamValue };
+  "agent.batchRenamePreview": { count: MessageParamValue };
+  "agent.lanAccessCopied": { url: MessageParamValue };
+  "agent.lanAccessInterface": { name: MessageParamValue };
+  "agent.lanAccessUseSuccess": { url: MessageParamValue };
+  "agent.mockBadgeTooltip": { scenario: MessageParamValue };
+  "agent.mockModeSet": { mode: MessageParamValue };
+  "agent.ops.commands": { ms: MessageParamValue, n: MessageParamValue };
+  "agent.ops.commandsSummary": { n: MessageParamValue };
+  "agent.ops.files": { n: MessageParamValue };
+  "agent.ops.filesSummary": { n: MessageParamValue };
+  "agent.ops.mixed": { cmd: MessageParamValue, file: MessageParamValue, n: MessageParamValue };
+  "agent.ops.showMore": { n: MessageParamValue };
+  "agent.ops.toolOutputs": { n: MessageParamValue };
+  "agent.roundProgress": { round: MessageParamValue, total: MessageParamValue };
+  "agent.subTaskProgress": { done: MessageParamValue, total: MessageParamValue };
+  "agent.syncDoctorFailed": { msg: MessageParamValue };
+  "agent.tool.duration": { s: MessageParamValue };
+  "agent.toolDuration": { ms: MessageParamValue };
+  "devlogs.copied": { count: MessageParamValue };
+  "devlogs.total": { filtered: MessageParamValue, total: MessageParamValue };
+  "devtools.fsTests.summary": { failed: MessageParamValue, passed: MessageParamValue, total: MessageParamValue };
+  "devtools.sparseContainer.cleanupConfirmMessage": { path: MessageParamValue };
+  "devtools.sparseContainer.highRiskMessage": { proposed: MessageParamValue, quota: MessageParamValue };
+  "devtools.sparseContainer.writeSuccess": { physical: MessageParamValue, virtual: MessageParamValue };
+  "devtools.webdav.attackTagged": { count: MessageParamValue };
+  "devtools.webdav.moduleAttackBadge": { count: MessageParamValue };
+  "devtools.webdav.moduleProgress": { passed: MessageParamValue, total: MessageParamValue };
+  "extensions.installedVersion": { v: MessageParamValue };
+  "extensions.sizeHint": { size: MessageParamValue };
+  "files.decryptPrompt": { name: MessageParamValue };
+  "files.deleteConfirm": { name: MessageParamValue };
+  "files.encryptPrompt": { name: MessageParamValue };
+  "files.overwriteConfirm": { name: MessageParamValue };
+  "files.previewNotSupported": { name: MessageParamValue };
+  "player.playFailed": { name: MessageParamValue };
+  "remote.localOpenListHeartbeatStale": { seconds: MessageParamValue };
+  "remote.localOpenListPortConflict": { port: MessageParamValue };
+  "settings.builtInTextExts": { count: MessageParamValue };
+  "settings.emptyPluginDesc": { name: MessageParamValue };
+  "settings.mountDeleteConfirm": { name: MessageParamValue, path: MessageParamValue };
+  "settings.mountResolveHint": { mountPath: MessageParamValue };
+  "settings.suffixConflictWarning": { plugins: MessageParamValue, suffix: MessageParamValue };
+  "settings.testConnectionFailed": { detail: MessageParamValue };
+  "settings.textExtsConflictWarning": { extensions: MessageParamValue };
+  "settings.textExtsDuplicateError": { ext: MessageParamValue };
+  "tasks.batchDeleteConfirmMessage": { count: MessageParamValue };
+  "tasks.batchSelected": { count: MessageParamValue };
+  "tasks.cancelRunMessage": { count: MessageParamValue };
+  "tasks.clearConfirmMessage": { count: MessageParamValue };
+  "tasks.cleared": { count: MessageParamValue };
+  "tasks.cryptoParamsSummary": { cipher: MessageParamValue, compression: MessageParamValue };
+  "tasks.exportShareText": { failed: MessageParamValue, passed: MessageParamValue, runId: MessageParamValue };
+  "tasks.exportSuccess": { filename: MessageParamValue };
+  "tasks.groupCard.hitFull": { total: MessageParamValue };
+  "tasks.groupCard.hitSummary": { hit: MessageParamValue, total: MessageParamValue };
+  "tasks.groupCard.hitSummaryFull": { datePreset: MessageParamValue, hit: MessageParamValue, query: MessageParamValue, total: MessageParamValue };
+  "tasks.groupCard.hitSummaryWithDate": { datePreset: MessageParamValue, hit: MessageParamValue, total: MessageParamValue };
+  "tasks.groupCard.hitSummaryWithSearch": { hit: MessageParamValue, query: MessageParamValue, total: MessageParamValue };
+  "tasks.removeRunMessage": { count: MessageParamValue };
+  "tasks.removeRunPartial": { failed: MessageParamValue };
+  "tasks.removeRunSuccess": { removed: MessageParamValue };
+  "tasks.rollbackConfirmMessage": { taskId: MessageParamValue };
+  "tasks.willBeHandledBy": { plugin: MessageParamValue };
+}
+
+export type I18nKeysWithParams = keyof I18nKeyParams;
+export type I18nKeysWithoutParams = Exclude<I18nKey, I18nKeysWithParams>;
+
+export type TFunction = {
+  (key: I18nKeysWithoutParams): string;
+  <K extends I18nKeysWithParams>(key: K, params: I18nKeyParams[K]): string;
+  (key: string, params?: MessageParams): string;
+};
 
 export type MessageModule = {
   "zh-CN": Record<string, string>;
