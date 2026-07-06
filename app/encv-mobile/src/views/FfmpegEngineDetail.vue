@@ -283,6 +283,7 @@ import {
   globeOutline,
   linkOutline,
   phonePortraitOutline,
+  refresh as refreshIcon,
   searchOutline,
   settingsOutline,
   videocamOutline,

@@ -108,6 +108,7 @@ import { formatDateTime } from "@/composables/useDateFormat";
 import type { MockGenLogEntry, MockGenLogSummary } from "@/composables/useMockGenLog";
 import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
 import {
+  checkmarkCircleOutline,
   copyOutline,
   documentTextOutline,
   flashOutline,
@@ -195,7 +196,7 @@ const summaryText = computed(() => {
 });
 
 /** UnifiedTimelineCard 的 toggle 事件转发为 toggle(key) */
-function _onToggle(key: string, _value: boolean): void {
+function onToggle(key: string, _value: boolean): void {
   emit("toggle", key);
 }
 </script>

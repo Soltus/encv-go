@@ -266,7 +266,7 @@ const bgPlayback = ref(false);
 const isPipMode = ref(false);
 const externalSubtitleName = ref("");
 
-const _speedSliderPercent = computed(() => {
+const speedSliderPercent = computed(() => {
   return ((playbackSpeed.value - SPEED_MIN) / (SPEED_MAX - SPEED_MIN)) * 100;
 });
 

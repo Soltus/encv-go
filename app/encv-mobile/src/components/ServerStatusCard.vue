@@ -244,8 +244,23 @@ import {
   layersOutline,
   speedometerOutline,
   wifiOutline,
+  refresh,
+  stopCircle,
+  playCircle,
+  refreshCircle,
+  arrowForward,
+  pulse,
+  arrowUndo,
 } from "ionicons/icons";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+
+const refreshIcon = refresh;
+const stopIcon = stopCircle;
+const playIcon = playCircle;
+const refreshCircleIcon = refreshCircle;
+const arrowForwardIcon = arrowForward;
+const pulseIcon = pulse;
+const flipBackIcon = arrowUndo;
 
 interface Props {
   /** 紧凑模式：省略反面时间戳详情 */
@@ -286,7 +301,7 @@ const {
 
 // —— refs ——
 const wrapperRef = ref<HTMLElement | null>(null);
-const _innerRef = ref<HTMLElement | null>(null);
+const innerRef = ref<HTMLElement | null>(null);
 const frontRef = ref<HTMLElement | null>(null);
 const backRef = ref<HTMLElement | null>(null);
 
@@ -429,7 +444,7 @@ const transportIcon = computed(() => {
 });
 
 // —— last check 时间（30s 滚动刷新）——
-const _lastCheckText = computed(() => {
+const lastCheckText = computed(() => {
   if (!lastCheckedAt.value) return t("serverStatus.never");
   return formatRelativeTime(lastCheckedAt.value.getTime());
 });

@@ -476,7 +476,7 @@ const manifest = useWebDavManifest();
 const totalCases = computed(() => modules.reduce((sum, m) => sum + m.cases.length, 0));
 
 // ============= manifest tone =============
-const _manifestTone = computed(() => {
+const manifestTone = computed(() => {
   if (manifest.error.value) return "tone-error";
   if (manifest.loading.value) return "tone-loading";
   if (availableMounts.value.length === 0) return "tone-empty";
@@ -517,7 +517,7 @@ function getCaseResult(moduleId: string, caseId: string) {
 function getCaseStatus(moduleId: string, caseId: string): TestCaseStatus {
   return getCaseResult(moduleId, caseId)?.status ?? "pending";
 }
-function _getCaseStatusColor(moduleId: string, caseId: string): string {
+function getCaseStatusColor(moduleId: string, caseId: string): string {
   const st = getCaseStatus(moduleId, caseId);
   if (st === "success") return "success";
   if (st === "failure" || st === "timed_out") return "danger";
@@ -593,7 +593,7 @@ async function loadWebDavLocalInfo() {
   }
 }
 
-const _maskedUsername = computed(() => {
+const maskedUsername = computed(() => {
   if (credsUsername.value) return credsUsername.value;
   if (backendUsername.value) return `${backendUsername.value} (${t("devtools.webdavAuth.fromBackend")})`;
   return t("devtools.webdavAuth.notSet");

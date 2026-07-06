@@ -71,7 +71,7 @@ const router = useRouter();
 
 const popoverOpen = ref(false);
 const popoverEvent = ref<Event | undefined>(undefined);
-const _wrapRef = ref<HTMLElement | null>(null);
+const wrapRef = ref<HTMLElement | null>(null);
 
 // 显示文本：取最后一段（basename）；若与 path 相同则直接显示
 const displayLabel = computed(() => {

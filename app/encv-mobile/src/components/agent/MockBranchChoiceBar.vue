@@ -68,7 +68,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-function _onPick(branch: { id: string; label: string; icon?: string; description?: string }): void {
+function onPick(branch: { id: string; label: string; icon?: string; description?: string }): void {
   emit("pick", branch);
 }
 </script>

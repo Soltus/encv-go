@@ -138,7 +138,7 @@ const progressPct = computed(() => {
   return Math.round((completedCount.value / total) * 100);
 });
 
-const _reasoningText = computed(() => {
+const reasoningText = computed(() => {
   const r = props.reasoning;
   return typeof r === "string" && r.trim().length > 0 ? r.trim() : "";
 });

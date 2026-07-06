@@ -364,6 +364,7 @@ import {
   medkitOutline,
   optionsOutline,
   refreshOutline,
+  save as saveIcon,
   settingsOutline,
   sparklesOutline,
   speedometerOutline,
@@ -555,7 +556,7 @@ const isApiKeyCustomized = computed(() => {
 });
 
 // 状态徽标展示
-const _apiKeyStatusBadge = computed(() => {
+const apiKeyStatusBadge = computed(() => {
   switch (apiKeyStatus.value) {
     case "empty":
       return { color: "medium" as const, icon: lockOpenIcon, label: t("agent.apiKeyStatusEmpty") };
@@ -960,9 +961,9 @@ const toolsChips = computed<string[]>(() => {
 
 const toolsText = computed(() => toolsChips.value.join(", "));
 
-const _testResultClass = computed(() => (testResultSuccess.value ? "test-result-success" : "test-result-failed"));
+const testResultClass = computed(() => (testResultSuccess.value ? "test-result-success" : "test-result-failed"));
 
-function _getValue(path: string[]): unknown {
+function getValue(path: string[]): unknown {
   return getFieldValue(path);
 }
 
@@ -1203,7 +1204,7 @@ function goToDevLogs() {
   router.push("/tabs/devlogs");
 }
 
-function _handleResetConfig() {
+function handleResetConfig() {
   resetConfig();
 }
 

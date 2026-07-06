@@ -14,7 +14,7 @@ interface Props {
   platform?: string;
 }
 const props = defineProps<Props>();
-const _emit = defineEmits<(e: "select-job", job: JobRun) => void>();
+const emit = defineEmits<(e: "select-job", job: JobRun) => void>();
 
 const { t } = useI18n();
 

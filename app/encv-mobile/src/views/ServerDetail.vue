@@ -110,6 +110,10 @@ import {
   folderOpen,
   globeOutline,
   shieldCheckmark,
+  server as serverIcon,
+  copy as copyIcon,
+  notifications as notificationsIcon,
+  batteryCharging as batteryOptimizationIcon,
 } from "ionicons/icons";
 
 import { fetchConfig, getServerUrl } from "@/api/encv";

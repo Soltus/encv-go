@@ -63,6 +63,7 @@
 import type { ToolCall, ToolStatus } from "@/composables/useAgent";
 import { useI18n } from "@/composables/useI18n";
 import {
+  chevronDown as chevronIcon,
   documentTextOutline,
 } from "ionicons/icons";
 import { computed, ref } from "vue";

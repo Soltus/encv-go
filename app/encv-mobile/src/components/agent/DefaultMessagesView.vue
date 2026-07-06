@@ -283,7 +283,7 @@ function findToolResult(id: string): ToolResult | null {
   return null;
 }
 
-function _findToolCallById(id: string): ToolCall | null {
+function findToolCallById(id: string): ToolCall | null {
   return findToolCall(id);
 }
 function findToolResultById(id: string): ToolResult | null {

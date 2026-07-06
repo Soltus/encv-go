@@ -147,6 +147,8 @@
 </template>
 
 <script setup lang="ts">
+import { formatContainerVersion } from "@/constants/containerVersion";
+import { formatFileSize } from "@/api/encv_files";
 import {
   alertCircle,
   arrowBack,
@@ -210,7 +212,7 @@ const textContent = ref("");
 const textLoading = ref(false);
 const textError = ref("");
 const textErrorDetail = ref<string>("");
-const _showTextErrorDetail = ref(false);
+const showTextErrorDetail = ref(false);
 const textWrap = ref(true);
 
 const isEncryptedPreview = computed(() => route.query.isEncrypted === "true");

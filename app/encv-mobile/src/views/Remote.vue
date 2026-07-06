@@ -320,6 +320,9 @@ import {
   home,
   lockClosed,
   person,
+  add,
+  save as saveIcon,
+  fingerPrint,
 } from "ionicons/icons";
 
 import type { OpenlistSiteInfo, RemoteWebDAVInfo, WebDAVConfig, WebDAVTestResult } from "@/api/encv";
@@ -344,7 +347,7 @@ const webdavConfigs = ref<WebDAVConfig[]>([]);
 const builtInWebdav = ref<RemoteWebDAVInfo | null>(null);
 const openlistSites = ref<Record<string, OpenlistSiteInfo>>({});
 const disabledSites = ref<Set<string>>(new Set());
-const _openlistSiteKeys = computed(() => {
+const openlistSiteKeys = computed(() => {
   const all = Object.keys(openlistSites.value);
   return [...all.filter(k => k === "local-loopback"), ...all.filter(k => k !== "local-loopback")];
 });

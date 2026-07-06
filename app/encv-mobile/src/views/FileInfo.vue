@@ -181,6 +181,8 @@
 </template>
 
 <script setup lang="ts">
+import { formatContainerVersion } from "@/constants/containerVersion";
+import { formatFileSize } from "@/api/encv_files";
 import {
   alertCircle,
   arrowBack,

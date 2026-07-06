@@ -187,7 +187,7 @@ const effectiveState = computed<NewTaskState>(() => {
 });
 
 const src = computed(() => effectiveState.value.sourcePath ?? props.sourcePath ?? "");
-const _taskType = computed(() => effectiveState.value.taskType ?? props.taskType ?? "encrypt");
+const taskType = computed(() => effectiveState.value.taskType ?? props.taskType ?? "encrypt");
 const cands = computed<PluginCandidate[]>(() => {
   const arr = effectiveState.value.candidates ?? props.candidates;
   return Array.isArray(arr) ? arr : [];

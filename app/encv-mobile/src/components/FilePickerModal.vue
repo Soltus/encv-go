@@ -90,6 +90,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatFileSize } from "@/api/encv_files";
 import type { FileItem } from "@/api/encv";
 import { createDirectory, getFileCategory, listFiles, PermissionDeniedError } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
@@ -233,7 +234,7 @@ function cancel() {
   modalController.dismiss(null, "cancel");
 }
 
-function _showNewFolderInput() {
+function showNewFolderInput() {
   showNewFolder.value = true;
   newFolderName.value = "";
 }

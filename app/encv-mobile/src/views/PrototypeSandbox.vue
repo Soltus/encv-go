@@ -108,7 +108,7 @@ const webSource = ref("");
 const composeSource = ref("");
 
 const isLandscape = ref(false);
-const _frameRef = ref<HTMLElement>();
+const frameRef = ref<HTMLElement>();
 
 const tabs = [
   { id: "preview" as const, label: "Preview", icon: eyeOutline },

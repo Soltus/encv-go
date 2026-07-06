@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import type { AppError } from "../types/appError";
-import type { AppResult } from "../types/appResult";
-import { appErr, appOk, getOrElse, isFailure, isOk, mapResult, onErr, onOk, runCatching, runCatchingAsync } from "../types/appResult";
+import type { AppError } from "@encv/shared-components/types/appError";
+import type { AppResult } from "@encv/shared-components/types/appResult";
+import { appErr, appOk, getOrElse, isFailure, isOk, mapResult, onErr, onOk, runCatching, runCatchingAsync } from "@encv/shared-components/types/appResult";
 
 // 测试用 helper：构造 AppError
 function mkAppError(type: AppError["type"], message = "x"): AppError {

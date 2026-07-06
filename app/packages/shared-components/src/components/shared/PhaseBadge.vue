@@ -31,7 +31,7 @@ const PHASE_LABEL_MAP: Record<string, string> = {
   cancelled: "已取消",
 };
 
-const _label = computed(() => props.label ?? PHASE_LABEL_MAP[props.phase] ?? props.phase);
+const label = computed(() => props.label ?? PHASE_LABEL_MAP[props.phase] ?? props.phase);
 </script>
 
 <style scoped>

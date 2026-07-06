@@ -106,6 +106,7 @@
 import type { ToolCall, ToolKind, ToolResult, ToolStatus } from "@/composables/useAgent";
 import { useI18n } from "@/composables/useI18n";
 import {
+  chevronDown as chevronIcon,
   documentTextOutline,
   ellipsisHorizontalCircleOutline,
   eyeOutline,

@@ -25,7 +25,7 @@ const tier = computed<"high" | "mid" | "low">(() => {
   return "low";
 });
 
-const _tierIcon = computed(() => {
+const tierIcon = computed(() => {
   switch (tier.value) {
     case "high":
       return sparkles;
@@ -37,7 +37,7 @@ const _tierIcon = computed(() => {
 });
 
 // 显示百分比，保留整数
-const _label = computed(() => `${Math.round(scoreValue.value * 100)}%`);
+const label = computed(() => `${Math.round(scoreValue.value * 100)}%`);
 </script>
 
 <style scoped>

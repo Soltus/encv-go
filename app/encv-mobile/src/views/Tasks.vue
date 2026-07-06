@@ -576,6 +576,8 @@
   </ion-page>
 </template>
 <script setup lang="ts">
+import { formatContainerVersion } from "@/constants/containerVersion";
+import { formatDateTime } from "@/composables/useDateFormat";
 import {
   add,
   albumsOutline,
@@ -584,6 +586,7 @@ import {
   chevronDown,
   chevronForward,
   closeCircle,
+  extensionPuzzle,
   funnel,
   listOutline,
   lockClosed,

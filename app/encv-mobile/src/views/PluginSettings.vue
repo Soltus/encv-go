@@ -207,6 +207,7 @@ import {
   musicalNotesOutline,
   newspaperOutline,
   readerOutline,
+  save as saveIcon,
   settingsOutline,
   shieldCheckmark,
   speedometerOutline,

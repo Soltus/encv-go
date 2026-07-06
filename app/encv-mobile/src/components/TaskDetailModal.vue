@@ -75,7 +75,7 @@ const router = useRouter();
 
 const showRollbackConfirm = ref(false);
 
-const _canRollback = computed(() => {
+const canRollback = computed(() => {
   const task = props.task;
   if (!task) return false;
   // 必须是 completed 状态
@@ -91,7 +91,7 @@ const _canRollback = computed(() => {
   return true;
 });
 
-async function _doRollback() {
+async function doRollback() {
   if (!props.task) return;
   try {
     const result = await rollbackTask(props.task.id);

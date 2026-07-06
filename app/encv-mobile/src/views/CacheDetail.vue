@@ -129,6 +129,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatFileSize } from "@/api/encv_files";
 import {
   cloudOutline,
   documentTextOutline,
@@ -147,7 +148,7 @@ import {
 import type { IndexStats } from "@/api/encv";
 import { clearIndex, getIndexStats, rebuildIndex } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
-import { clearThumbCache, getThumbCacheSize } from "@/composables/useThumbnailCache";
+import { clearThumbCache, getThumbCacheSize, THUMB_CACHE_MAX } from "@/composables/useThumbnailCache";
 import { showToast } from "@/composables/useToast";
 import { alertController } from "@ionic/vue";
 import { onMounted, onUnmounted, ref } from "vue";

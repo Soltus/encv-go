@@ -268,7 +268,7 @@ const jobDisplayNameMap = computed(() => {
   return map;
 });
 
-function _getJobDisplayName(jobDefId: string): string {
+function getJobDisplayName(jobDefId: string): string {
   return jobDisplayNameMap.value.get(jobDefId) ?? jobDefId;
 }
 
@@ -345,11 +345,11 @@ function selectHistoryRun(record: UnifiedRunRecord) {
   }
 }
 
-function _onSelectStep(step: StepRun) {
+function onSelectStep(step: StepRun) {
   selectedStep.value = step;
 }
 
-const _selectedStepJob = computed(() =>
+const selectedStepJob = computed(() =>
   currentRun.value && selectedStep.value ? findJobForStep(currentRun.value, selectedStep.value) : null
 );
 

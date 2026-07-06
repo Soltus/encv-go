@@ -61,7 +61,7 @@ defineProps<{
 
 const emit = defineEmits<(e: "pick", preset: MockPreset) => void>();
 
-function _onPick(preset: MockPreset): void {
+function onPick(preset: MockPreset): void {
   emit("pick", preset);
 }
 </script>

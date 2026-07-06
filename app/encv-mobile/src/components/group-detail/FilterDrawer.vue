@@ -26,8 +26,8 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
-const _STATUSES = ["pending", "running", "completed", "failed", "cancelled", "cancelling"];
-const _TASK_TYPES = ["encrypt", "decrypt", "move", "copy", "rename", "delete"];
+const STATUSES = ["pending", "running", "completed", "failed", "cancelled", "cancelling"];
+const TASK_TYPES = ["encrypt", "decrypt", "move", "copy", "rename", "delete"];
 
 function toggleArray(arr: string[], key: string, emitKey: "status" | "taskType" | "plugin") {
   const idx = arr.indexOf(key);

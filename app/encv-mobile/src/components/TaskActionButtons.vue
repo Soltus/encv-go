@@ -42,7 +42,7 @@ import type { EncvTask } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 
 defineProps<{ task: EncvTask }>();
-const _emit = defineEmits<{
+const emit = defineEmits<{
   (e: "cancel"): void;
   (e: "retry"): void;
   (e: "remove"): void;

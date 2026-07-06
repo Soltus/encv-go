@@ -604,6 +604,9 @@
   </ion-page>
 </template>
 <script setup lang="ts">
+import { getFileIcon, getFileIconColor, isImageFile } from "@/composables/useFileList";
+import { formatFileSize } from "@/api/encv_files";
+import { formatDateTime } from "@/composables/useDateFormat";
 import {
   alertCircle,
   arrowBack,
@@ -619,6 +622,7 @@ import {
   menuOutline,
   pricetagOutline,
   refresh,
+  search,
   swapVerticalOutline,
   warningOutline,
 } from "ionicons/icons";

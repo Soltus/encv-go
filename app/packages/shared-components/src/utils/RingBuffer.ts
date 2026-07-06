@@ -121,7 +121,7 @@ export class RingBuffer<T> {
    * 顺序遍历（O(N)，不复制）。
    * 回调返回 false 可提前终止。
    */
-  forEach(cb: (item: T, index: number) => undefined | false): void {
+  forEach(cb: (item: T, index: number) => void | false): void {
     if (this.size === 0) return;
     const tail = this.head >= this.size ? this.head - this.size : this.head - this.size + this.capacity;
     for (let i = 0; i < this.size; i++) {

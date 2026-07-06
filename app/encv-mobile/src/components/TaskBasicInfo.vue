@@ -143,6 +143,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatContainerVersion } from "@/constants/containerVersion";
 import type { EncvTask } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 import { type SectionDimension, useSectionDerivation } from "@/composables/useSectionDerivation";
@@ -150,6 +151,7 @@ import { showToast } from "@/composables/useToast";
 import {
   chevronForward,
   cogOutline,
+  copyOutline,
   documentTextOutline,
   ellipsisHorizontalCircleOutline,
   extensionPuzzle,
@@ -243,7 +245,7 @@ function formatExtraFieldValue(value: string): string {
 
 const triggeredBy = computed(() => props.task.triggeredBy ?? "user");
 const runId = computed(() => props.task.runId);
-const _triggeredByIcon = computed(() => {
+const triggeredByIcon = computed(() => {
   const v = triggeredBy.value;
   return v === "automation" ? cogOutline : v === "ai_agent" ? hardwareChipOutline : person;
 });

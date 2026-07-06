@@ -92,7 +92,7 @@ const isOpen = ref(false);
 const searchQuery = ref("");
 const dropdownRef = ref<HTMLElement | null>(null);
 const searchInputRef = ref<HTMLInputElement | null>(null);
-const _listRef = ref<HTMLElement | null>(null);
+const listRef = ref<HTMLElement | null>(null);
 
 const isEmptyAll = computed(() => props.emptyMeansAll && props.modelValue.length === 0);
 
@@ -168,7 +168,7 @@ function toggleOpen() {
   }
 }
 
-function _onSearchInput() {
+function onSearchInput() {
   // 搜索时不需要特殊处理，computed 自动更新
 }
 

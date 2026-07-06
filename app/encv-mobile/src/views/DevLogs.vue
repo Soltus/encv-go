@@ -708,7 +708,7 @@ function onLogSelect(item: LogEntry) {
 function closeLogDetail() {
   selectedLog.value = null;
 }
-async function _copyLogDetail() {
+async function copyLogDetail() {
   if (!selectedLog.value) return;
   const text = `[${selectedLog.value.timestamp}] ${selectedLog.value.level.toUpperCase()} ${selectedLog.value.message}`;
   const ok = await copyToClipboard(text);

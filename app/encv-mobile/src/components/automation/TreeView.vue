@@ -262,7 +262,7 @@ const filteredNodes = computed(() => {
 // ==================== 交互 ====================
 
 /** 切换父节点展开状态 */
-function _toggleNode(node: UnifiedTreeNode) {
+function toggleNode(node: UnifiedTreeNode) {
   const next = new Set(expandedSet.value);
   const wasExpanded = next.has(node.id);
   if (wasExpanded) next.delete(node.id);
@@ -272,7 +272,7 @@ function _toggleNode(node: UnifiedTreeNode) {
 }
 
 /** 子节点点击：emit select-node + 切换详情展开 */
-function _selectNode(node: UnifiedTreeNode) {
+function selectNode(node: UnifiedTreeNode) {
   const next = new Set(expandedDetailSet.value);
   if (next.has(node.id)) next.delete(node.id);
   else next.add(node.id);

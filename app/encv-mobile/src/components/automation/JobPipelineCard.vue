@@ -99,7 +99,7 @@ const fillColor = computed(() => {
 const visibleSteps = computed(() => props.job.steps.slice(0, 5));
 const hiddenCount = computed(() => Math.max(0, props.job.steps.length - 5));
 
-function _stepName(step: StepRun): string {
+function stepName(step: StepRun): string {
   return props.stepNames?.get(step.stepDefId) ?? step.stepDefId;
 }
 

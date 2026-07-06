@@ -42,6 +42,7 @@
 ;
 
 import type { ContextUsageResponse } from "@/composables/useContextUsage";
+import { layers as layersIcon } from "ionicons/icons";
 import { modalController } from "@ionic/vue";
 import { computed, reactive } from "vue";
 import type { ContextPopoverState } from "./ContextPopoverModal.vue";

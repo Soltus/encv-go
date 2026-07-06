@@ -113,13 +113,11 @@ jobs:
       - name: TypeScript check (main app)
         working-directory: app/encv-mobile
         run: pnpm exec vue-tsc --noEmit
-        continue-on-error: true
 
       - name: TypeScript check (plugin-openlist/web)
         if: inputs.skip_plugin != true
         working-directory: app/encv-mobile/plugin-openlist/web
         run: pnpm exec vue-tsc --noEmit
-        continue-on-error: true
 
       - name: Build main app web
         working-directory: app/encv-mobile

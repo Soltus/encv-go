@@ -89,6 +89,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/composables/useDateFormat";
 import {
   alertCircle,
   listOutline,
@@ -101,7 +102,7 @@ import {
 import type { EncvTask } from "@/api/encv";
 import { cancelTask, deleteTask, retryTask } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
-import { getTaskTypeIcon } from "@/lib/taskTypeLabel";
+import { getTaskTypeIcon, getTaskTypeLabel } from "@/lib/taskTypeLabel";
 import { toastController } from "@ionic/vue";
 
 const { t } = useI18n();

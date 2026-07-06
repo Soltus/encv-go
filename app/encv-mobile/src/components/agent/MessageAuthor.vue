@@ -28,7 +28,7 @@ const props = defineProps<{
   variant?: "default" | "streaming" | "error" | "tool";
 }>();
 
-const _variant = computed(() => props.variant || "default");
+const variant = computed(() => props.variant || "default");
 </script>
 
 <style scoped>

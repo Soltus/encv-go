@@ -153,7 +153,7 @@ const displayGrade = computed(() => {
   return "";
 });
 
-const _displayGradeScore = computed(() => {
+const displayGradeScore = computed(() => {
   if (metrics.value) return metrics.value.gradeScore.toFixed(0);
   if (summary.value) return summary.value.gradeScore.toFixed(0);
   return "";

@@ -79,6 +79,9 @@
 import {
   bugOutline,
   extensionPuzzleOutline,
+  server as serverIcon,
+  open as openIcon,
+  settings as settingsIcon,
 } from "ionicons/icons";
 
 import { formatFileSize } from "@/api/encv";

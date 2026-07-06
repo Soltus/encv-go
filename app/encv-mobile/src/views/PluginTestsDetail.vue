@@ -330,7 +330,7 @@ function setInlineError(err: Omit<InlineError, "at">): void {
   // eslint-disable-next-line no-console
   console.error("[PluginTestsDetail] inline error", err);
 }
-function _clearInlineError(): void {
+function clearInlineError(): void {
   inlineError.value = null;
 }
 

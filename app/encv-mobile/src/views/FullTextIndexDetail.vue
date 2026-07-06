@@ -243,6 +243,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/composables/useDateFormat";
 import {
   bugOutline,
   refreshOutline,

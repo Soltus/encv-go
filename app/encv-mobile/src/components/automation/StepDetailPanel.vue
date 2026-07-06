@@ -142,7 +142,7 @@ const encryptionParams = computed(() => {
   return result;
 });
 
-const _hasEncryptionParams = computed(() => {
+const hasEncryptionParams = computed(() => {
   const p = encryptionParams.value;
   return !!(p.cipher || p.compress || p.version || p.plugin);
 });

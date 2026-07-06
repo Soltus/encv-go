@@ -269,7 +269,7 @@ const bgCategories = computed(() => [
   },
 ]);
 
-const _p3Modes = [
+const p3Modes = [
   { value: "auto", label: "settings.p3Auto", description: "" },
   { value: "on", label: "settings.p3On", description: "" },
   { value: "off", label: "settings.p3Off", description: "" },
