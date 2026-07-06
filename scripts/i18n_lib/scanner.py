@@ -11,30 +11,50 @@ from .config import CACHE_DIR, get_app_config, resolve_path
 from .perf import perf_tracker
 from .tokenizer import file_hash
 
-I18N_PATTERNS = [
-    re.compile(r"""\bt\(\s*['"`]([^'"`]+)['"`]"""),
-    re.compile(r"""\btField\(\s*['"`]([^'"`]+)['"`]"""),
-    re.compile(r"""\btSectionTitle\(\s*['"`]([^'"`]+)['"`]"""),
-    re.compile(r"""\$t\(\s*['"`]([^'"`]+)['"`]"""),
-]
+T_PATTERN = re.compile(r"""\bt\(\s*['"`]([^'"`]+)['"`]""")
+TFIELD_PATTERN = re.compile(r"""\btField\(\s*['"`]([^'"`]+)['"`]""")
+TSECTION_PATTERN = re.compile(r"""\btSectionTitle\(\s*['"`]([^'"`]+)['"`]""")
+DOLLAR_T_PATTERN = re.compile(r"""\$t\(\s*['"`]([^'"`]+)['"`]""")
+
+DYNAMIC_KEY_MARKERS = ("${", "{", "`", "$", "+")
 
 
-def scan_file(filepath: str) -> tuple[dict[str, list[str]], str]:
-    local_keys: dict[str, list[str]] = defaultdict(list)
+def is_dynamic_key(key: str) -> bool:
+    for marker in DYNAMIC_KEY_MARKERS:
+        if marker in key:
+            return True
+    return False
+
+
+def scan_file(filepath: str) -> tuple[dict[str, list[str]], dict[str, list[str]], str]:
+    direct_keys: dict[str, list[str]] = defaultdict(list)
+    field_keys: dict[str, list[str]] = defaultdict(list)
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             content = f.read()
     except Exception:
-        return dict(local_keys), ""
+        return dict(direct_keys), dict(field_keys), ""
 
     rel_path = filepath
     for line_num, line in enumerate(content.split("\n"), 1):
-        for pattern in I18N_PATTERNS:
-            for match in pattern.finditer(line):
-                key = match.group(1)
-                local_keys[key].append(f"{rel_path}:{line_num}")
+        for match in T_PATTERN.finditer(line):
+            key = match.group(1)
+            if not is_dynamic_key(key):
+                direct_keys[key].append(f"{rel_path}:{line_num}")
+        for match in DOLLAR_T_PATTERN.finditer(line):
+            key = match.group(1)
+            if not is_dynamic_key(key):
+                direct_keys[key].append(f"{rel_path}:{line_num}")
+        for match in TFIELD_PATTERN.finditer(line):
+            key = match.group(1)
+            if not is_dynamic_key(key):
+                field_keys[key].append(f"{rel_path}:{line_num}")
+        for match in TSECTION_PATTERN.finditer(line):
+            key = match.group(1)
+            if not is_dynamic_key(key):
+                field_keys[key].append(f"{rel_path}:{line_num}")
 
-    return dict(local_keys), file_hash(filepath)
+    return dict(direct_keys), dict(field_keys), file_hash(filepath)
 
 
 def load_cache(key: str) -> dict | None:
@@ -93,17 +113,19 @@ def extract_used_keys(
             perf_tracker.end("源码扫描", len(cached.get("keys", {})), {"cached": True})
             return cached.get("keys", {})
 
-    key_files: dict[str, list[str]] = defaultdict(list)
+    direct_key_files: dict[str, list[str]] = defaultdict(list)
+    field_key_count = 0
 
     for f in all_files:
-        local_keys, _ = scan_file(f)
-        for k, files in local_keys.items():
-            key_files[k].extend(files)
+        direct_keys, field_keys, _ = scan_file(f)
+        field_key_count += len(field_keys)
+        for k, files in direct_keys.items():
+            direct_key_files[k].extend(files)
 
-    result = dict(key_files)
+    result = dict(direct_key_files)
 
     if use_cache:
         save_cache(cache_key, {"keys": result, "_version": cache_version})
 
-    perf_tracker.end("源码扫描", len(result), {"files": len(all_files)})
+    perf_tracker.end("源码扫描", len(result), {"files": len(all_files), "field_keys": field_key_count})
     return result

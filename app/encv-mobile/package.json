@@ -5,10 +5,11 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "vue-tsc --noEmit",
-    "build": "pnpm typecheck && vite build",
+    "build": "pnpm check:i18n:full && pnpm typecheck && vite build",
     "preview": "vite preview",
     "capacitor:copy:after": "node scripts/sync-native.mjs",
     "check:kotlin": "node scripts/check-kotlin.mjs",
+    "check:i18n:full": "cd ../.. && python3 scripts/i18n-tool.py scan --app encv-mobile && python3 scripts/i18n-tool.py var-check --app encv-mobile",
     "sync:android": "node scripts/sync-native.mjs",
     "rebuild:android": "echo 'To rebuild android/ from scratch: rm -rf android && npx cap add android && npx cap sync android && npx @trapezedev/configure run trapeze.yaml --android-project android'",
     "test": "pnpm test:cypress:component",

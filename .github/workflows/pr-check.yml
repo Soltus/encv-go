@@ -112,10 +112,7 @@ jobs:
           pnpm exec biome ci src 2>&1 | tee -a test-output.txt || BIOME_FAILED=1
           echo ""
           echo "─── Phase 2: i18n 完整性检查 + 变量一致性 ───"
-          cd ../..
-          python3 scripts/i18n-tool.py scan --app encv-mobile 2>&1 | tee -a ${{ env.MONOREPO_MOBILE_DIR }}/test-output.txt || I18N_FAILED=1
-          python3 scripts/i18n-tool.py var-check --app encv-mobile 2>&1 | tee -a ${{ env.MONOREPO_MOBILE_DIR }}/test-output.txt || I18N_FAILED=1
-          cd ${{ env.MONOREPO_MOBILE_DIR }}
+          pnpm check:i18n:full 2>&1 | tee -a test-output.txt || I18N_FAILED=1
           echo ""
           echo "─── Phase 3: TypeScript type check (vue-tsc) ───"
           pnpm exec vue-tsc --noEmit 2>&1 | tee -a test-output.txt || TSC_FAILED=1

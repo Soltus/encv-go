@@ -10,12 +10,18 @@ from .config import CACHE_DIR, get_app_config, resolve_path
 from .perf import perf_tracker
 from .tokenizer import file_hash
 
-DICT_KEY_PATTERN = re.compile(r'''["']([^"']+)["']\s*:\s*["']((?:[^"\\]|\\.)*)["']''')
+DICT_KEY_PATTERN = re.compile(
+    r'''["']([^"']+)["']\s*:\s*["']((?:[^"\\]|\\.)*?)["']\s*[,}]\s*(?://[^\n]*)?$''',
+    re.MULTILINE | re.DOTALL,
+)
+
+LOCALE_BLOCK_PATTERN = re.compile(
+    r'''["'](zh-CN|en)["']\s*:\s*\{''',
+)
 
 
 def parse_i18n_file(filepath: str) -> dict[str, dict[str, str]]:
     result = {"zh-CN": {}, "en": {}}
-    current_locale = None
 
     try:
         with open(filepath, "r", encoding="utf-8") as f:
@@ -23,27 +29,66 @@ def parse_i18n_file(filepath: str) -> dict[str, dict[str, str]]:
     except Exception:
         return result
 
-    lines = content.split("\n")
-    for line_num, line in enumerate(lines, 1):
-        stripped = line.strip()
+    zh_match = re.search(r'''["']zh-CN["']\s*:\s*\{''', content)
+    en_match = re.search(r'''["']?en["']?\s*:\s*\{''', content)
 
-        if '"zh-CN"' in stripped or "'zh-CN'" in stripped:
-            if "{" in stripped:
-                current_locale = "zh-CN"
-                continue
-        if re.match(r'^["\']?en["\']?\s*:\s*\{', stripped):
-            if "zh-CN" not in stripped:
-                current_locale = "en"
-                continue
+    def find_block_end(text: str, start: int) -> int:
+        depth = 0
+        in_string = False
+        string_char = ""
+        i = start
+        while i < len(text):
+            c = text[i]
+            if in_string:
+                if c == "\\" and i + 1 < len(text):
+                    i += 2
+                    continue
+                if c == string_char:
+                    in_string = False
+            else:
+                if c in ('"', "'"):
+                    in_string = True
+                    string_char = c
+                elif c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return i
+            i += 1
+        return len(text)
 
-        if current_locale and ":" in stripped and '"' in stripped:
-            match = DICT_KEY_PATTERN.search(stripped)
-            if match:
-                key = match.group(1)
-                value = match.group(2)
-                value = value.replace('\\"', '"').replace("\\'", "'").replace("\\\\", "\\")
-                if not key.startswith("//"):
-                    result[current_locale][key] = value
+    def extract_pairs(block_content: str) -> dict[str, str]:
+        pairs: dict[str, str] = {}
+        pattern = re.compile(
+            r'''["']([^"']+)["']\s*:\s*(["'])((?:[^\\]|\\.)*?)\2\s*[,}]''',
+            re.DOTALL,
+        )
+        for match in pattern.finditer(block_content):
+            key = match.group(1)
+            if key.startswith("//"):
+                continue
+            value = match.group(3)
+            quote_char = match.group(2)
+            if quote_char == '"':
+                value = value.replace('\\"', '"').replace("\\\\", "\\")
+            else:
+                value = value.replace("\\'", "'").replace("\\\\", "\\")
+            value = value.replace("\n", " ").strip()
+            pairs[key] = value
+        return pairs
+
+    if zh_match:
+        zh_start = content.find("{", zh_match.start()) + 1
+        zh_end = find_block_end(content, zh_start)
+        zh_block = content[zh_start:zh_end]
+        result["zh-CN"] = extract_pairs(zh_block)
+
+    if en_match:
+        en_start = content.find("{", en_match.start()) + 1
+        en_end = find_block_end(content, en_start)
+        en_block = content[en_start:en_end]
+        result["en"] = extract_pairs(en_block)
 
     return result
 
