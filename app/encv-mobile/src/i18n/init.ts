@@ -1,6 +1,5 @@
 import { registerI18nModules, registerFieldKeyMap, registerSectionTitleMap } from "@/composables/useI18n";
-import settings from "@/i18n/settings";
-import devlogs from "@/i18n/devlogs";
+import { initSharedI18n } from "@encv/shared-components/i18n";
 import tasks from "@/i18n/tasks";
 import files from "@/i18n/files";
 import agent from "@/i18n/agent";
@@ -10,9 +9,8 @@ import extensions from "@/i18n/extensions";
 import simverse from "@/i18n/simverse";
 
 export function initEncvI18n() {
+  initSharedI18n();
   registerI18nModules([
-    settings,
-    devlogs,
     tasks,
     files,
     player,

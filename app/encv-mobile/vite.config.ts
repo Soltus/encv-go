@@ -323,6 +323,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@encv/shared-components': path.resolve(__dirname, '../packages/shared-components/src'),
+      '@encv/shared-components/': path.resolve(__dirname, '../packages/shared-components/src') + '/',
     },
   },
   build: {

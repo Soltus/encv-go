@@ -1,4 +1,4 @@
-import { useI18n } from "./useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 export function formatDateTime(isoStr: string | undefined | null): string {
   if (!isoStr) return "";

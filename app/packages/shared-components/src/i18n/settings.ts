@@ -719,6 +719,9 @@ export default {
     "settings.defaultValue": "Default value",
     "settings.customized": "Customized",
     "settings.taskOverridable": "Task overridable",
+    "settings.localOnly": "This device only",
+    "settings.synced": "Syncable",
+    "settings.mobileOnly": "Mobile only",
     "settings.bgColor": "Background Color",
     "settings.bgColorHelp": "Independent of theme color, eye-friendly",
     "settings.bgLight": "Light",
@@ -787,6 +790,7 @@ export default {
     "bg.auroraNight": "Aurora Night",
     "bg.auroraNightDesc": "Aurora night, deep blue",
 
+    "inputHistory.recent": "Recent",
     "inputHistory.clear": "Clear",
     // v2 multi-round / branch scenarios (see .trae/specs/agent-tools-scenarios-v2/spec.md)
     "settings.toolWhitelist": "Tool whitelist",
@@ -849,6 +853,8 @@ export default {
     "serverStatus.unknownError": "Unknown error",
     "serverStatus.latencyHint": "Backend response latency",
     "serverStatus.transportHint": "Real-time transport",
+    "serverStatus.stop": "Stop backend",
+    "serverStatus.start": "Start backend",
     // Backend status card keys (3D flip + diagnostics)
     "serverStatus.instanceChangedBanner": "Backend restarted, new process online",
     "serverStatus.flipHint": "Tap to flip, view diagnostics",
