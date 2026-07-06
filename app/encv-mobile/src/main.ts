@@ -6,15 +6,15 @@ import App from "./App.vue";
 //   根因：@ionic/vue 的 IonicVue 插件在 CE 构建模式下不全局注册 Vue 组件，
 //   只初始化 Web Components，导致模板里的 <ion-xxx> 报 "Failed to resolve component"
 //   页面空白。解决方案：手动扫描 @ionic/vue 导出的所有 IonXxx 组件并全局注册。
-import { registerIonicComponents } from "./composables/useIonicAutoRegister";
+import { registerIonicComponents } from "@/composables/useIonicAutoRegister";
 // 🆕 2026-07-02 A5：三管齐下错误捕获
 //   用户强反馈："ion-page 警告 = 更底层错误没有捕获，比如不支持安卓端的调用"
 //   三管齐下：Vue errorHandler + window.onerror/unhandledrejection + console.error 重定向
-import { bindVueErrorHandler, errorStore, installErrorCapture } from "./composables/useErrorCapture";
+import { bindVueErrorHandler, errorStore, installErrorCapture } from "@/composables/useErrorCapture";
 // 🆕 2026-07-02：DevLogs 前端日志（错误捕获系统的错误同步写入这里）
-import { addFrontendLog } from "./composables/useFrontendLogs";
-import { installProxiedFetch } from "./composables/useProxiedFetch";
-import { clearLegacyLocalStorage } from "./lib/taskPersistence";
+import { addFrontendLog } from "@/composables/useFrontendLogs";
+import { installProxiedFetch } from "@/composables/useProxiedFetch";
+import { clearLegacyLocalStorage } from "@/lib/taskPersistence";
 import router from "./router";
 
 // TDesign Chat 组件库不再做全局注册：
@@ -29,9 +29,9 @@ import "@ionic/vue/css/core.css";
 import "@ionic/vue/css/normalize.css";
 import "@ionic/vue/css/structure.css";
 import "@ionic/vue/css/typography.css";
-import "./theme/variables.css";
-import "./styles/timeline-tokens.css";
-import "./styles/timeline-utilities.css";
+import "@/theme/variables.css";
+import "@/styles/timeline-tokens.css";
+import "@/styles/timeline-utilities.css";
 
 // 🆕 v6 2026-06-18：注册 Pinia（任务系统 store）
 const pinia = createPinia();

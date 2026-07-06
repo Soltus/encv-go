@@ -122,6 +122,14 @@
 
 <script setup lang="ts">
 import { onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
+import {
+  warningOutline,
+  refreshOutline,
+  bugOutline,
+  alertCircleOutline,
+  copyOutline,
+  codeSlashOutline,
+} from "ionicons/icons";
 import type { ServiceGuardResult } from "@/api/encv";
 import { checkServiceGuard } from "@/api/encv";
 import { autoInitVConsole } from "@/composables/useDevTools";
@@ -133,6 +141,7 @@ import { useRealtimeTransport } from "@/composables/useRealtimeTransport";
 import { useTheme } from "@/composables/useTheme";
 import { createAlistEncryptFeature } from "@/features/alist-encrypt";
 import { isNative, requestNotificationPermission, requestStoragePermission } from "@/plugins/GoProcess";
+import ErrorCaptureOverlay from "@/components/shared/ErrorCaptureOverlay.vue";
 
 const { initTheme, detectP3Support } = useTheme();
 const { t } = useI18n();
@@ -263,7 +272,7 @@ async function copyToClipboard(text: string): Promise<void> {
   }
 }
 
-function _copyErrorSummary() {
+function copyErrorSummary() {
   const ctx = rootErrorContext.value;
   const lines = [
     `类型: ${rootErrorSummary.value}`,
@@ -275,12 +284,12 @@ function _copyErrorSummary() {
   copyToClipboard(lines.join("\n"));
 }
 
-function _copyErrorStack() {
+function copyErrorStack() {
   const lines = [`STACK (${rootErrorSummary.value} @ ${rootErrorTime.value}):`, rootErrorStack.value];
   copyToClipboard(lines.join("\n"));
 }
 
-function _reloadPage() {
+function reloadPage() {
   if (typeof window !== "undefined") {
     window.location.reload();
   }
@@ -315,7 +324,7 @@ async function runServiceGuard(): Promise<void> {
   }
 }
 
-async function _retryServiceGuard() {
+async function retryServiceGuard() {
   try {
     await runServiceGuard();
     serviceGuardBlocked.value = false;

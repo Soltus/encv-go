@@ -21,7 +21,8 @@
     "ignoreDeprecations": "5.0",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["../packages/shared-components/src/*", "./src/*"],
+      "@encv/shared-components/*": ["../packages/shared-components/src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue", "src/**/*.json", "capacitor.config.ts"]

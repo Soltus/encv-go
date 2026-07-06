@@ -9,7 +9,8 @@ import path from 'node:path'
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, '..')
 const SRC_DIR = path.join(PROJECT_ROOT, 'src')
-const I18N_DIR = path.join(SRC_DIR, 'i18n')
+const SHARED_COMPONENTS_DIR = path.join(PROJECT_ROOT, '..', 'packages', 'shared-components', 'src')
+const I18N_DIR = path.join(SHARED_COMPONENTS_DIR, 'i18n')
 
 // 收集所有源码中的 t('key') / t(`key`) 调用
 function collectUsedKeys(dir) {
@@ -48,7 +49,11 @@ function collectDictKeys(filePath) {
 }
 
 console.log('🔍 扫描源码中使用的 i18n key...')
-const usedKeys = collectUsedKeys(SRC_DIR)
+const usedKeys = new Set()
+collectUsedKeys(SRC_DIR).forEach(k => usedKeys.add(k))
+if (fs.existsSync(SHARED_COMPONENTS_DIR)) {
+  collectUsedKeys(SHARED_COMPONENTS_DIR).forEach(k => usedKeys.add(k))
+}
 console.log(`   共找到 ${usedKeys.size} 个使用中的 key`)
 
 console.log('\n📚 读取 i18n 字典...')

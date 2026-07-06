@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
+import fs from 'node:fs'
 
 // =============================================================================
 // ⚠️ 防御机制：禁止直接 vite 启动（必须通过 PM2 → preview-gateway）
@@ -22,7 +23,7 @@ import path from 'node:path'
 // 单测：      src/composables/__tests__/dev-start-guard.test.ts
 // 文件必须在 src/ 下 — vite 5/6/7/8 默认不 transform src/ 外的 .ts，
 // scripts/ 下的 .ts 会被 vite 当 external → 守卫拿不到 devStartGuard 函数
-import { devStartGuard } from './src/lib/dev-start-guard'
+import { devStartGuard } from '../packages/shared-components/src/lib/dev-start-guard'
 import { frontendDepsManifestPlugin } from './vite-plugins/frontend-deps-manifest'
 
 // =============================================================================
@@ -237,6 +238,44 @@ export default defineConfig({
     frontendDepsManifestPlugin(),  // 🆕 2026-06-17：读 package.json 生成 frontend-deps.json manifest
     vue(),
     dynamicHmrHostPlugin(),
+    // @/ alias 多路径 fallback：优先 shared-components，其次本地 src
+    {
+      name: 'encv-alias-fallback',
+      resolveId(source, importer, options) {
+        if (source.startsWith('@/')) {
+          const relativePath = source.slice(2)
+          const dirs = [
+            path.resolve(__dirname, '../packages/shared-components/src'),
+            path.resolve(__dirname, 'src'),
+          ]
+          for (const dir of dirs) {
+            const fullPath = path.join(dir, relativePath)
+            // 尝试：直接文件、加扩展名、目录 + index
+            const candidates = [
+              fullPath,
+              fullPath + '.ts',
+              fullPath + '.vue',
+              fullPath + '.js',
+              fullPath + '.tsx',
+              fullPath + '.jsx',
+              fullPath + '.mjs',
+              fullPath + '.cjs',
+              path.join(fullPath, 'index.ts'),
+              path.join(fullPath, 'index.js'),
+              path.join(fullPath, 'index.mjs'),
+            ]
+            for (const tryPath of candidates) {
+              if (fs.existsSync(tryPath) && fs.statSync(tryPath).isFile()) {
+                return tryPath
+              }
+            }
+          }
+          // fallback：返回第一个目录的路径，让 vite 自己处理错误
+          return path.join(dirs[0], relativePath)
+        }
+        return null
+      },
+    },
     // ────────────────────────────────────────────────────────────────────────
     // ⚠️ CRITICAL: 沙箱 dev 必须删除 Vite 自动注入的 @vite/client 脚本！
     //
@@ -280,7 +319,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
+      '@encv/shared-components': path.resolve(__dirname, '../packages/shared-components/src'),
     },
   },
   build: {

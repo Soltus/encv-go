@@ -1,30 +1,34 @@
-import { HighRefreshRate } from "@ajuarezso/capacitor-high-refresh-rate";
 import { Capacitor } from "@capacitor/core";
 
 let highRefreshInitialized = false;
+let HighRefreshRate: any = null;
 
-/**
- * Safely enable high refresh rate (90–120Hz) via the
- * `@ajuarezso/capacitor-high-refresh-rate` plugin.
- *
- * Uses adaptive mode: 120Hz active / 60Hz idle with a 1.5s
- * idle timeout, driven by global touch/scroll/pointer activity.
- *
- * Call once at app boot. Idempotent (no-op on subsequent calls
- * and on non-native platforms).
- */
+async function loadHighRefreshRate() {
+  if (HighRefreshRate) return HighRefreshRate;
+  try {
+    const mod = await import(/* @vite-ignore */ "@ajuarezso/capacitor-high-refresh-rate");
+    HighRefreshRate = mod.HighRefreshRate;
+    return HighRefreshRate;
+  } catch {
+    return null;
+  }
+}
+
 export async function initHighRefreshRate() {
   if (!Capacitor.isNativePlatform()) return;
   if (highRefreshInitialized) return;
   highRefreshInitialized = true;
 
   try {
+    const HRR = await loadHighRefreshRate();
+    if (!HRR) return;
+
     console.error("[SAT-DBG][HighRefresh] init start");
 
-    const info = await HighRefreshRate.enable();
+    const info = await HRR.enable();
     console.error("[SAT-DBG][HighRefresh] enabled, info:", JSON.stringify(info));
 
-    await HighRefreshRate.setAdaptiveMode({
+    await HRR.setAdaptiveMode({
       enabled: true,
       activeHz: 120,
       idleHz: 60,
@@ -32,13 +36,12 @@ export async function initHighRefreshRate() {
     });
     console.error("[SAT-DBG][HighRefresh] adaptive mode set (120/60, 1500ms)");
 
-    // Pipe global activity events to the plugin — throttled to ~5/s.
     let lastPing = 0;
     const onActivity = () => {
       const now = performance.now();
       if (now - lastPing < 200) return;
       lastPing = now;
-      HighRefreshRate.notifyActivity();
+      HRR.notifyActivity();
     };
 
     ["touchstart", "touchmove", "scroll", "wheel", "pointerdown", "pointermove"].forEach(ev =>
@@ -51,13 +54,12 @@ export async function initHighRefreshRate() {
   }
 }
 
-/**
- * Get current refresh rate info for debug overlays / settings UI.
- */
 export async function getHighRefreshInfo() {
   if (!Capacitor.isNativePlatform()) return null;
   try {
-    return await HighRefreshRate.getInfo();
+    const HRR = await loadHighRefreshRate();
+    if (!HRR) return null;
+    return await HRR.getInfo();
   } catch {
     return null;
   }
