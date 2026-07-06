@@ -7,6 +7,7 @@ import files from "@encv/shared-components/i18n/files";
 import modals from "@encv/shared-components/i18n/modals";
 import player from "@encv/shared-components/i18n/player";
 import settings from "@encv/shared-components/i18n/settings";
+import simverse from "@encv/shared-components/i18n/simverse";
 import tasks from "@encv/shared-components/i18n/tasks";
 import { ref } from "vue";
 
@@ -40,6 +41,7 @@ const messages: Record<Locale, Record<string, string>> = mergeModules([
   errors,
   modals,
   agent,
+  simverse,
 ]);
 
 function getStoredLocale(): Locale {

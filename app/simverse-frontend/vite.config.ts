@@ -10,6 +10,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve('src'),
+      '@encv/shared-components': resolve('../packages/shared-components/src'),
     },
   },
   server: {

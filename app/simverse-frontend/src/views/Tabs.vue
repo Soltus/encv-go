@@ -30,7 +30,7 @@
 
 <script setup lang="ts">
 import { home, globe, settings, bug } from "ionicons/icons";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 const { t } = useI18n();
 
