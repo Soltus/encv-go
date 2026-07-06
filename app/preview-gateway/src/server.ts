@@ -449,7 +449,7 @@ function buildChildSpecs(paths: ReturnType<typeof resolvePaths>): ChildSpec[] {
       name: "encv-mobile-vite",
       cmd: paths.nodeBin,
       args: [paths.viteJsMain, "--host", "0.0.0.0", "--port", "8100", "--strictPort"],
-      env: { ...process.env, PATH: process.env.PATH ?? "" },
+      env: { ...process.env, PATH: process.env.PATH ?? "", SPAWN_VITE: "1" },
       cwd: paths.mobileDir,
       readyUrl: "http://127.0.0.1:8100/",
       readyTimeoutMs: 30_000,
