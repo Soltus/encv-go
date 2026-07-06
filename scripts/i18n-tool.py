@@ -47,6 +47,7 @@ def main():
     p_lint.add_argument("--app", help="应用名称")
     p_lint.add_argument("--unused", action="store_true", help="包含未使用 key 检查")
     p_lint.add_argument("--dup", action="store_true", help="包含近重复检测")
+    p_lint.add_argument("--dup-value", action="store_true", help="包含重复 value 检测")
 
     p_varcheck = subparsers.add_parser("var-check", help="检查翻译变量/参数一致性")
     p_varcheck.add_argument("--app", help="应用名称")
@@ -76,6 +77,10 @@ def main():
 
     p_bench = subparsers.add_parser("benchmark", help="运行性能基准测试")
     p_bench.add_argument("--app", help="应用名称")
+
+    p_compile = subparsers.add_parser("compile-json", help="将 TS 字典编译为 JSON（供 Go/Python 等复用）")
+    p_compile.add_argument("--app", help="应用名称")
+    p_compile.add_argument("--output", help="输出目录")
 
     args = parser.parse_args()
 
@@ -115,6 +120,7 @@ def main():
                 args.app,
                 include_unused=args.unused,
                 include_dup=args.dup,
+                include_dup_value=args.dup_value,
             )
 
             for issue in result["issues"]:
@@ -226,6 +232,19 @@ def main():
         elif args.command == "benchmark":
             from i18n_lib.benchmark import cmd_benchmark
             cmd_benchmark(args.app)
+            return 0
+
+        elif args.command == "compile-json":
+            from i18n_lib.compile_json import compile_to_json
+
+            print("📦 编译 TS 字典为 JSON...")
+            print()
+
+            result = compile_to_json(args.app, args.output)
+
+            print()
+            print(result["output"])
+            print(f"✅ 编译成功: {result['locale_count']} 个语言文件, {result['total_keys']} 条翻译")
             return 0
 
         else:

@@ -172,6 +172,56 @@ def check_unused_keys(
     return issues
 
 
+def check_duplicate_keys(
+    dicts: dict[str, dict[str, str]],
+) -> list[I18nIssue]:
+    issues: list[I18nIssue] = []
+    for locale, dict_data in dicts.items():
+        key_count: dict[str, int] = defaultdict(int)
+        for key in dict_data:
+            key_count[key] += 1
+        for key, count in key_count.items():
+            if count > 1:
+                issues.append(I18nIssue(
+                    level="error",
+                    code="DUPLICATE_KEY",
+                    message=f"重复 key: '{key}' 在 {locale} 中出现 {count} 次",
+                    key=key,
+                    locale=locale,
+                    suggestion="删除重复的 key，只保留一个定义",
+                    details={"count": count},
+                ))
+    return issues
+
+
+def check_duplicate_values(
+    dicts: dict[str, dict[str, str]],
+    locale: str = "zh-CN",
+    min_length: int = 5,
+) -> list[I18nIssue]:
+    issues: list[I18nIssue] = []
+    target_dict = dicts.get(locale, {})
+
+    value_to_keys: dict[str, list[str]] = defaultdict(list)
+    for key, value in target_dict.items():
+        if len(value) >= min_length:
+            value_to_keys[value].append(key)
+
+    for value, keys in value_to_keys.items():
+        if len(keys) > 1:
+            issues.append(I18nIssue(
+                level="warning",
+                code="DUPLICATE_VALUE",
+                message=f"重复 value: '{value[:50]}' 对应 {len(keys)} 个 key",
+                key=keys[0],
+                locale=locale,
+                suggestion=f"考虑合并这些 key: {', '.join(keys[:5])}",
+                details={"keys": keys, "value": value},
+            ))
+
+    return issues
+
+
 def check_english_quality(
     dicts: dict[str, dict[str, str]],
 ) -> list[I18nIssue]:
@@ -208,6 +258,7 @@ def run_all_checks(
     app_name: str | None = None,
     include_unused: bool = False,
     include_dup: bool = False,
+    include_dup_value: bool = False,
 ) -> dict:
     perf_tracker.start("Lint 检查")
 
@@ -218,11 +269,16 @@ def run_all_checks(
 
     all_issues.extend(check_missing_keys(used_keys, dicts))
     all_issues.extend(check_variable_consistency(dicts))
+    all_issues.extend(check_duplicate_keys(dicts))
     all_issues.extend(check_english_quality(dicts))
 
     if include_dup:
         all_issues.extend(check_near_duplicates(dicts, "zh-CN"))
         all_issues.extend(check_near_duplicates(dicts, "en"))
+
+    if include_dup_value:
+        all_issues.extend(check_duplicate_values(dicts, "zh-CN"))
+        all_issues.extend(check_duplicate_values(dicts, "en"))
 
     if include_unused:
         all_issues.extend(check_unused_keys(used_keys, dicts))
