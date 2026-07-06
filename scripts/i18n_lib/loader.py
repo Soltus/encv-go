@@ -33,7 +33,7 @@ def parse_i18n_file(filepath: str) -> dict[str, dict[str, str]]:
     en_match = re.search(r'''["']?en["']?\s*:\s*\{''', content)
 
     def find_block_end(text: str, start: int) -> int:
-        depth = 0
+        depth = 1
         in_string = False
         string_char = ""
         i = start
