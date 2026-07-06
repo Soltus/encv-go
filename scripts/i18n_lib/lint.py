@@ -1,9 +1,10 @@
-"""Lint 检查模块 - 增强的 i18n 错误检测与报告"""
+"""Lint 检查模块 - 增强的 i18n 错误检测与报告，三端并行扫描"""
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from .scanner import extract_used_keys
 from .loader import load_all_dicts, extract_vars_from_value
@@ -255,6 +256,24 @@ def check_english_quality(
     return issues
 
 
+def _scan_ts_keys(app_name: str, use_cache: bool = True) -> dict[str, list[str]]:
+    return extract_used_keys(app_name, use_cache=use_cache)
+
+
+def _scan_go_keys(go_dirs: list[str], use_cache: bool = True) -> dict[str, list[str]]:
+    from .scanner_go import extract_go_i18n_keys
+    return extract_go_i18n_keys(go_dirs, use_cache=use_cache)
+
+
+def _scan_kotlin_keys(kotlin_dirs: list[str]) -> dict[str, list[str]]:
+    from .scanner_kotlin import extract_kotlin_i18n_keys
+    return extract_kotlin_i18n_keys(kotlin_dirs)
+
+
+def _load_dicts(app_name: str, use_cache: bool = True) -> dict[str, dict[str, str]]:
+    return load_all_dicts(app_name, use_cache=use_cache)
+
+
 def run_all_checks(
     app_name: str | None = None,
     include_unused: bool = False,
@@ -262,40 +281,81 @@ def run_all_checks(
     include_dup_value: bool = False,
     include_go: bool = True,
     include_kotlin: bool = True,
+    parallel: bool = True,
 ) -> dict:
     perf_tracker.start("Lint 检查")
 
-    used_keys = extract_used_keys(app_name)
+    app_cfg = get_app_config(app_name)
 
-    if include_go:
-        try:
-            from .scanner_go import extract_go_i18n_keys
-            app_cfg = get_app_config(app_name)
-            if app_cfg.go_dirs:
-                go_keys = extract_go_i18n_keys(app_cfg.go_dirs)
-                for key, files in go_keys.items():
-                    if key in used_keys:
-                        used_keys[key].extend(files)
-                    else:
-                        used_keys[key] = files
-        except Exception:
-            pass
+    if parallel:
+        tasks = {}
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            tasks["ts"] = executor.submit(_scan_ts_keys, app_name)
 
-    if include_kotlin:
-        try:
-            from .scanner_kotlin import extract_kotlin_i18n_keys
-            app_cfg = get_app_config(app_name)
-            if app_cfg.kotlin_dirs:
-                kt_keys = extract_kotlin_i18n_keys(app_cfg.kotlin_dirs)
-                for key, files in kt_keys.items():
-                    if key in used_keys:
-                        used_keys[key].extend(files)
-                    else:
-                        used_keys[key] = files
-        except Exception:
-            pass
+            if include_go and app_cfg.go_dirs:
+                tasks["go"] = executor.submit(_scan_go_keys, app_cfg.go_dirs)
+            else:
+                tasks["go"] = None
 
-    dicts = load_all_dicts(app_name)
+            if include_kotlin and app_cfg.kotlin_dirs:
+                tasks["kt"] = executor.submit(_scan_kotlin_keys, app_cfg.kotlin_dirs)
+            else:
+                tasks["kt"] = None
+
+            tasks["dicts"] = executor.submit(_load_dicts, app_name)
+
+            used_keys = tasks["ts"].result()
+            if tasks["go"]:
+                try:
+                    go_keys = tasks["go"].result()
+                    for key, files in go_keys.items():
+                        if key in used_keys:
+                            used_keys[key].extend(files)
+                        else:
+                            used_keys[key] = files
+                except Exception:
+                    pass
+            if tasks["kt"]:
+                try:
+                    kt_keys = tasks["kt"].result()
+                    for key, files in kt_keys.items():
+                        if key in used_keys:
+                            used_keys[key].extend(files)
+                        else:
+                            used_keys[key] = files
+                except Exception:
+                    pass
+            dicts = tasks["dicts"].result()
+    else:
+        used_keys = extract_used_keys(app_name)
+
+        if include_go:
+            try:
+                from .scanner_go import extract_go_i18n_keys
+                if app_cfg.go_dirs:
+                    go_keys = extract_go_i18n_keys(app_cfg.go_dirs)
+                    for key, files in go_keys.items():
+                        if key in used_keys:
+                            used_keys[key].extend(files)
+                        else:
+                            used_keys[key] = files
+            except Exception:
+                pass
+
+        if include_kotlin:
+            try:
+                from .scanner_kotlin import extract_kotlin_i18n_keys
+                if app_cfg.kotlin_dirs:
+                    kt_keys = extract_kotlin_i18n_keys(app_cfg.kotlin_dirs)
+                    for key, files in kt_keys.items():
+                        if key in used_keys:
+                            used_keys[key].extend(files)
+                        else:
+                            used_keys[key] = files
+            except Exception:
+                pass
+
+        dicts = load_all_dicts(app_name)
 
     all_issues: list[I18nIssue] = []
 
@@ -326,6 +386,7 @@ def run_all_checks(
     })
 
     return {
+        "app_name": app_name,
         "issues": all_issues,
         "errors": errors,
         "warnings": warnings,
@@ -333,4 +394,85 @@ def run_all_checks(
         "total": len(all_issues),
         "used_keys_count": len(used_keys),
         "dict_keys_count": len(dicts.get("zh-CN", {})),
+    }
+
+
+def run_all_apps_checks(
+    app_names: list[str] | None = None,
+    include_unused: bool = False,
+    include_dup: bool = False,
+    include_dup_value: bool = False,
+    parallel_apps: bool = True,
+) -> dict:
+    """
+    并行检查多个 app 的 i18n
+
+    Args:
+        app_names: 要检查的 app 列表，None 表示检查所有 app
+        parallel_apps: 是否并行检查多个 app
+
+    Returns:
+        合并的检查结果
+    """
+    from .config import get_all_app_names
+
+    perf_tracker.start("多App检查")
+
+    if app_names is None:
+        app_names = get_all_app_names()
+
+    all_results = {}
+    all_issues = []
+    total_errors = 0
+    total_warnings = 0
+    total_infos = 0
+
+    if parallel_apps and len(app_names) > 1:
+        with ThreadPoolExecutor(max_workers=min(len(app_names), 4)) as executor:
+            futures = {}
+            for name in app_names:
+                futures[executor.submit(
+                    run_all_checks,
+                    name,
+                    include_unused=include_unused,
+                    include_dup=include_dup,
+                    include_dup_value=include_dup_value,
+                    parallel=True,
+                )] = name
+
+            for future in as_completed(futures):
+                name = futures[future]
+                try:
+                    result = future.result()
+                    all_results[name] = result
+                    all_issues.extend(result["issues"])
+                    total_errors += len(result["errors"])
+                    total_warnings += len(result["warnings"])
+                    total_infos += len(result["infos"])
+                except Exception as e:
+                    all_results[name] = {"error": str(e)}
+    else:
+        for name in app_names:
+            result = run_all_checks(
+                name,
+                include_unused=include_unused,
+                include_dup=include_dup,
+                include_dup_value=include_dup_value,
+                parallel=True,
+            )
+            all_results[name] = result
+            all_issues.extend(result["issues"])
+            total_errors += len(result["errors"])
+            total_warnings += len(result["warnings"])
+            total_infos += len(result["infos"])
+
+    perf_tracker.end("多App检查", total_errors + total_warnings)
+
+    return {
+        "apps": all_results,
+        "issues": all_issues,
+        "errors": total_errors,
+        "warnings": total_warnings,
+        "infos": total_infos,
+        "total": total_errors + total_warnings + total_infos,
     }

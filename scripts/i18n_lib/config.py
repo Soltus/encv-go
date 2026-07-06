@@ -110,5 +110,10 @@ def get_app_config(app_name: str | None = None) -> AppConfig:
     )
 
 
+def get_all_app_names() -> list[str]:
+    config = load_config()
+    return list(config.get("apps", {}).keys())
+
+
 def resolve_path(relative_path: str) -> Path:
     return PROJECT_ROOT / relative_path

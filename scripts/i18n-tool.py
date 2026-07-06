@@ -40,11 +40,14 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
 
     p_scan = subparsers.add_parser("scan", help="扫描源码中使用的 i18n key 并检查完整性")
-    p_scan.add_argument("--app", help="应用名称 (默认 encv-mobile)")
+    p_scan.add_argument("--app", help="应用名称 (不指定则检查所有 app)")
+    p_scan.add_argument("--all", action="store_true", dest="check_all", help="检查所有 app")
     p_scan.add_argument("--no-cache", action="store_true", help="禁用缓存")
 
     p_lint = subparsers.add_parser("lint", help="运行所有 i18n lint 检查")
-    p_lint.add_argument("--app", help="应用名称")
+    p_lint.add_argument("--app", help="应用名称 (不指定则检查所有 app)")
+    p_lint.add_argument("--all", action="store_true", dest="check_all", help="检查所有 app")
+    p_lint.add_argument("--serial", action="store_true", help="禁用并行（调试用）")
     p_lint.add_argument("--unused", action="store_true", help="包含未使用 key 检查")
     p_lint.add_argument("--dup", action="store_true", help="包含近重复检测")
     p_lint.add_argument("--dup-value", action="store_true", help="包含重复 value 检测")
@@ -101,82 +104,96 @@ def main():
 
     try:
         if args.command == "scan":
-            from i18n_lib.scanner import extract_used_keys
-            from i18n_lib.loader import load_all_dicts
-            from i18n_lib.config import get_app_config
+            from i18n_lib.lint import run_all_checks, run_all_apps_checks
+            from i18n_lib.config import get_all_app_names
 
-            used_keys = extract_used_keys(args.app, use_cache=not args.no_cache)
-            dicts = load_all_dicts(args.app, use_cache=not args.no_cache)
+            check_all = args.check_all or not args.app
+            target_apps = None if check_all else [args.app]
 
-            try:
-                from i18n_lib.scanner_go import extract_go_i18n_keys
-                app_cfg = get_app_config(args.app)
-                if app_cfg.go_dirs:
-                    go_keys = extract_go_i18n_keys(app_cfg.go_dirs, use_cache=not args.no_cache)
-                    for key, files in go_keys.items():
-                        if key in used_keys:
-                            used_keys[key].extend(files)
-                        else:
-                            used_keys[key] = files
-            except Exception:
-                pass
-
-            try:
-                from i18n_lib.scanner_kotlin import extract_kotlin_i18n_keys
-                app_cfg = get_app_config(args.app)
-                if app_cfg.kotlin_dirs:
-                    kt_keys = extract_kotlin_i18n_keys(app_cfg.kotlin_dirs)
-                    for key, files in kt_keys.items():
-                        if key in used_keys:
-                            used_keys[key].extend(files)
-                        else:
-                            used_keys[key] = files
-            except Exception:
-                pass
-
-            zh_dict = dicts.get("zh-CN", {})
-            missing = 0
-            for key in sorted(used_keys.keys()):
-                if key not in zh_dict:
-                    missing += 1
-                    files = used_keys[key][:3]
-                    print(f"❌ MISSING: {key}")
-                    for f in files:
-                        print(f"   ↳ {f}")
-
-            print()
-            print(f"📊 结果: {len(used_keys)} 个使用中的 key, {missing} 个缺失")
-
-            if missing > 0:
-                return 1
-            return 0
+            if check_all:
+                result = run_all_apps_checks(app_names=target_apps, parallel_apps=True)
+                total_missing = 0
+                for name, app_result in result["apps"].items():
+                    if "error" in app_result:
+                        print(f"⚠️  App '{name}': {app_result['error']}")
+                        continue
+                    errors = [i for i in app_result["issues"] if i.code == "MISSING_KEY" and i.level == "error"]
+                    if errors:
+                        print(f"\n📱 {name}: {len(errors)} 个缺失 key")
+                        for issue in errors:
+                            print(f"  ❌ {issue.key}: {issue.message}")
+                    total_missing += len(errors)
+                print()
+                print(f"📊 全部结果: 共检查 {len(result['apps'])} 个 app, {total_missing} 个缺失 key")
+                return 1 if total_missing > 0 else 0
+            else:
+                app_name = args.app or "encv-mobile"
+                result = run_all_checks(app_name, parallel=not args.serial if hasattr(args, 'serial') else True)
+                errors = [i for i in result["issues"] if i.code == "MISSING_KEY" and i.level == "error"]
+                for issue in errors:
+                    print(f"❌ MISSING: {issue.key}: {issue.message}")
+                print()
+                print(f"📊 结果: {result['used_keys_count']} 个使用中的 key, {len(errors)} 个缺失")
+                return 1 if errors else 0
 
         elif args.command == "lint":
-            from i18n_lib.lint import run_all_checks
+            from i18n_lib.lint import run_all_checks, run_all_apps_checks
+            from i18n_lib.config import get_all_app_names
 
-            result = run_all_checks(
-                args.app,
-                include_unused=args.unused,
-                include_dup=args.dup,
-                include_dup_value=args.dup_value,
-            )
+            check_all = args.check_all or not args.app
+            parallel = not args.serial
+            target_apps = None if check_all else [args.app]
 
-            for issue in result["issues"]:
-                print(issue.format())
+            if check_all:
+                result = run_all_apps_checks(
+                    app_names=target_apps,
+                    include_unused=args.unused,
+                    include_dup=args.dup,
+                    include_dup_value=args.dup_value,
+                    parallel_apps=parallel,
+                )
+                for name, app_result in result["apps"].items():
+                    if "error" in app_result:
+                        print(f"⚠️  App '{name}' 检查失败: {app_result['error']}")
+                        continue
+                    print(f"\n{'='*60}")
+                    print(f"📱 App: {name}")
+                    print(f"{'='*60}")
+                    for issue in app_result["issues"]:
+                        print(issue.format())
+                        print()
+                print("=" * 60)
+                print(f"📊 全部结果: 共 {result['total']} 个问题")
+                print(f"   ❌ 错误: {result['errors']}")
+                print(f"   ⚠️  警告: {result['warnings']}")
+                print(f"   ℹ️  信息: {result['infos']}")
+                return 1 if result["errors"] else 0
+            else:
+                app_name = args.app or "encv-mobile"
+                result = run_all_checks(
+                    app_name,
+                    include_unused=args.unused,
+                    include_dup=args.dup,
+                    include_dup_value=args.dup_value,
+                    parallel=parallel,
+                )
+
+                for issue in result["issues"]:
+                    print(issue.format())
+                    print()
+
+                print("=" * 60)
+                print(f"📊 检查结果: 共 {result['total']} 个问题")
+                print(f"   ❌ 错误: {len(result['errors'])}")
+                print(f"   ⚠️  警告: {len(result['warnings'])}")
+                print(f"   ℹ️  信息: {len(result['infos'])}")
                 print()
+                print(f"   使用中的 key: {result['used_keys_count']}")
+                print(f"   字典中的 key: {result['dict_keys_count']}")
 
-            print("=" * 60)
-            print(f"📊 检查结果: 共 {result['total']} 个问题")
-            print(f"   ❌ 错误: {len(result['errors'])}")
-            print(f"   ⚠️  警告: {len(result['warnings'])}")
-            print(f"   ℹ️  信息: {len(result['infos'])}")
-            print()
-            print(f"   使用中的 key: {result['used_keys_count']}")
-            print(f"   字典中的 key: {result['dict_keys_count']}")
-
-            if result["errors"]:
-                return 1
-            return 0
+                if result["errors"]:
+                    return 1
+                return 0
 
         elif args.command == "var-check":
             from i18n_lib.lint import check_variable_consistency
