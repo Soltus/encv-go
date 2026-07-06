@@ -2,32 +2,63 @@
   <ion-page class="world-page">
     <ion-content :fullscreen="true" class="world-content">
       <div class="game-container">
-        <canvas ref="canvasRef" class="game-canvas"></canvas>
+        <div class="world-map">
+          <div class="map-grid">
+            <div v-for="i in 48" :key="i" class="map-cell" :class="getCellClass(i)">
+              <div class="cell-icon">{{ getCellIcon(i) }}</div>
+            </div>
+          </div>
+          <div class="map-overlay">
+            <div v-for="(npc, idx) in visibleNPCs" :key="npc.id"
+                 class="npc-marker"
+                 :style="getNPCPosition(idx)"
+                 @click="selectNPC(npc)">
+              <div class="npc-dot" :class="{ alive: npc.is_alive }"></div>
+              <div class="npc-name">{{ npc.name }}</div>
+            </div>
+          </div>
+        </div>
 
         <div class="top-bar">
           <div class="resource-group">
             <div class="resource-item">
               <span class="resource-icon">⏱️</span>
-              <span class="resource-label">{{ t("simverse.tick") }}</span>
-              <span class="resource-value">{{ worldState?.tick ?? 0 }}</span>
+              <div class="resource-text">
+                <span class="resource-label">{{ t("simverse.tick") }}</span>
+                <span class="resource-value">{{ worldState?.tick ?? 0 }}</span>
+              </div>
             </div>
             <div class="resource-item">
               <span class="resource-icon">👥</span>
-              <span class="resource-label">{{ t("simverse.population") }}</span>
-              <span class="resource-value">{{ worldState?.npcCount ?? 0 }}</span>
+              <div class="resource-text">
+                <span class="resource-label">{{ t("simverse.population") }}</span>
+                <span class="resource-value">{{ worldState?.npc_count ?? 0 }}</span>
+              </div>
             </div>
             <div class="resource-item">
-              <span class="resource-icon">🌍</span>
-              <span class="resource-label">{{ t("simverse.era") }}</span>
-              <span class="resource-value">{{ eraName }}</span>
+              <span class="resource-icon">🧠</span>
+              <div class="resource-text">
+                <span class="resource-label">{{ t("simverse.brains") }}</span>
+                <span class="resource-value">{{ worldState?.brain_count ?? 0 }}</span>
+              </div>
+            </div>
+            <div class="resource-item">
+              <span class="resource-icon">💾</span>
+              <div class="resource-text">
+                <span class="resource-label">{{ t("simverse.memory") }}</span>
+                <span class="resource-value">{{ (worldState?.total_mb ?? 0).toFixed(1) }} MB</span>
+              </div>
             </div>
           </div>
           <div class="top-actions">
-            <button class="icon-btn" @click="togglePause">
-              {{ isPaused ? "▶" : "⏸" }}
+            <button class="icon-btn play-btn" :class="{ running: worldState?.running }" @click="toggleRunning">
+              {{ worldState?.running ? "⏸" : "▶" }}
             </button>
-            <button class="icon-btn" @click="exitWorld">
-              ✕
+            <button class="icon-btn" @click="stepOnce">
+              ⏭
+            </button>
+            <button class="icon-btn" @click="refreshState">
+              ↻
             </button>
           </div>
         </div>
@@ -35,10 +66,25 @@
         <div class="event-panel" v-if="recentEvents.length > 0">
           <div class="event-header">📜 {{ t("simverse.recentEvents") }}</div>
           <div class="event-list">
-            <div v-for="ev in recentEvents" :key="ev.id" class="event-item">
-              <span class="event-dot"></span>
-              <span class="event-text">{{ ev.title }}</span>
+            <div v-for="ev in recentEvents.slice(0, 5)" :key="ev.id" class="event-item">
+              <span class="event-dot" :class="'imp-' + ev.importance"></span>
+              <span class="event-text">{{ ev.type_cn }}</span>
             </div>
+          </div>
+        </div>
+
+        <div class="stats-panel">
+          <div class="stat-card">
+            <div class="stat-label">{{ t("simverse.perfTier") }}</div>
+            <div class="stat-value">{{ worldState?.tier || "-" }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">{{ t("simverse.focusNPCs") }}</div>
+            <div class="stat-value">{{ worldState?.focus_count ?? 0 }}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">{{ t("simverse.cellCount") }}</div>
+            <div class="stat-value">{{ worldState?.cell_count ?? 0 }}</div>
           </div>
         </div>
 
@@ -72,20 +118,79 @@
           </div>
           <div class="panel-content">
             <template v-if="activePanel === 'npc'">
-              <div v-for="npc in displayNPCs" :key="npc.id" class="npc-card">
+              <div v-for="npc in npcList" :key="npc.id" class="npc-card" @click="selectNPC(npc)">
                 <div class="npc-avatar">{{ npc.name?.[0] || '?' }}</div>
                 <div class="npc-info">
                   <div class="npc-name">{{ npc.name }}</div>
-                  <div class="npc-status">
-                    <span class="status-dot" :class="npc.status"></span>
-                    {{ npc.status }}
+                  <div class="npc-meta">
+                    <span class="npc-prof">{{ npc.profession }}</span>
+                    <span class="npc-level">Lv.{{ npc.level }}</span>
+                  </div>
+                </div>
+                <div class="npc-status-col">
+                  <div class="hp-bar">
+                    <div class="hp-fill" :style="{ width: (npc.health / npc.max_health * 100) + '%' }"></div>
                   </div>
                 </div>
               </div>
-              <div v-if="displayNPCs.length === 0" class="empty-state">
+              <div v-if="npcList.length === 0" class="empty-state">
+                {{ t("simverse.noData") }}
+              </div>
+              <ion-infinite-scroll v-if="hasMoreNPCs" @ionInfinite="loadMoreNPCs" threshold="100px">
+                <ion-infinite-scroll-content></ion-infinite-scroll-content>
+              </ion-infinite-scroll>
+            </template>
+
+            <template v-else-if="activePanel === 'chronicles'">
+              <div v-for="ev in recentEvents" :key="ev.id" class="chronicle-item">
+                <div class="chronicle-tick">Tick {{ ev.tick }}</div>
+                <div class="chronicle-title">{{ ev.type_cn }}</div>
+                <div class="chronicle-content">{{ ev.imp_cn }} · {{ ev.level_cn }}</div>
+              </div>
+              <div v-if="recentEvents.length === 0" class="empty-state">
                 {{ t("simverse.noData") }}
               </div>
             </template>
+
+            <template v-else-if="activePanel === 'settings'">
+              <div class="setting-group">
+                <div class="setting-label">{{ t("simverse.performanceTier") }}</div>
+                <div class="tier-buttons">
+                  <button class="tier-btn" :class="{ active: worldConfig?.tier === 'background' }"
+                          @click="changeTier('background')">
+                    {{ t("simverse.tierBackground") }}
+                  </button>
+                  <button class="tier-btn" :class="{ active: worldConfig?.tier === 'foreground' }"
+                          @click="changeTier('foreground')">
+                    {{ t("simverse.tierForeground") }}
+                  </button>
+                  <button class="tier-btn" :class="{ active: worldConfig?.tier === 'fg_idle' }"
+                          @click="changeTier('fg_idle')">
+                    {{ t("simverse.tierIdle") }}
+                  </button>
+                </div>
+              </div>
+              <div v-if="worldConfig" class="setting-group">
+                <div class="setting-label">{{ t("simverse.configDetails") }}</div>
+                <div class="config-detail">
+                  <span>{{ t("simverse.eventRate") }}</span>
+                  <span>{{ worldConfig.event_rate_mul }}x</span>
+                </div>
+                <div class="config-detail">
+                  <span>{{ t("simverse.cacheSize") }}</span>
+                  <span>{{ worldConfig.cache_size }}</span>
+                </div>
+                <div class="config-detail">
+                  <span>{{ t("simverse.subSim") }}</span>
+                  <span>{{ worldConfig.sub_sim_active ? t("common.on") : t("common.off") }}</span>
+                </div>
+                <div class="config-detail">
+                  <span>{{ t("simverse.subSimDepth") }}</span>
+                  <span>{{ worldConfig.sub_sim_depth }}</span>
+                </div>
+              </div>
+            </template>
+
             <template v-else-if="activePanel === 'gacha'">
               <div class="gacha-section">
                 <div class="gacha-banner">
@@ -117,30 +222,61 @@
                 </div>
               </div>
             </template>
-            <template v-else-if="activePanel === 'settings'">
-              <div class="setting-group">
-                <div class="setting-label">{{ t("simverse.simSpeed") }}</div>
-                <input type="range" min="1" max="100" v-model="gravity" class="setting-slider" />
-                <div class="setting-value">{{ gravity }}x</div>
-              </div>
-              <div class="setting-group">
-                <div class="setting-label">{{ t("simverse.performanceTier") }}</div>
-                <div class="tier-buttons">
-                  <button class="tier-btn" :class="{ active: perfTier === 'low' }" @click="perfTier = 'low'">
-                    {{ t("simverse.low") }}
-                  </button>
-                  <button class="tier-btn" :class="{ active: perfTier === 'mid' }" @click="perfTier = 'mid'">
-                    {{ t("simverse.mid") }}
-                  </button>
-                  <button class="tier-btn" :class="{ active: perfTier === 'high' }" @click="perfTier = 'high'">
-                    {{ t("simverse.high") }}
-                  </button>
-                </div>
-              </div>
-            </template>
+
             <template v-else>
               <div class="empty-state">{{ t("simverse.comingSoon") }}</div>
             </template>
+          </div>
+        </div>
+
+        <div v-if="selectedNPC" class="npc-detail-modal" @click.self="selectedNPC = null">
+          <div class="npc-detail-card">
+            <div class="detail-header">
+              <div class="detail-avatar">{{ selectedNPC.name?.[0] }}</div>
+              <div class="detail-info">
+                <div class="detail-name">{{ selectedNPC.name }}</div>
+                <div class="detail-subtitle">
+                  {{ selectedNPC.species }} · {{ selectedNPC.gender }} · {{ selectedNPC.age }}岁
+                </div>
+              </div>
+              <button class="close-btn" @click="selectedNPC = null">✕</button>
+            </div>
+            <div class="detail-body">
+              <div class="detail-row">
+                <span>{{ t("simverse.profession") }}</span>
+                <span>{{ selectedNPC.profession }}</span>
+              </div>
+              <div class="detail-row">
+                <span>{{ t("simverse.level") }}</span>
+                <span>Lv.{{ selectedNPC.level }}</span>
+              </div>
+              <div class="detail-row">
+                <span>{{ t("simverse.health") }}</span>
+                <span>{{ selectedNPC.health }} / {{ selectedNPC.max_health }}</span>
+              </div>
+              <div class="detail-row">
+                <span>{{ t("simverse.energy") }}</span>
+                <span>{{ selectedNPC.energy }} / {{ selectedNPC.max_energy }}</span>
+              </div>
+              <div class="detail-row">
+                <span>{{ t("simverse.wealthTier") }}</span>
+                <span>{{ selectedNPC.wealth_tier }}</span>
+              </div>
+              <div class="detail-row">
+                <span>{{ t("simverse.socialTier") }}</span>
+                <span>{{ selectedNPC.social_tier }}</span>
+              </div>
+              <div class="detail-row">
+                <span>{{ t("simverse.lifeStage") }}</span>
+                <span>{{ selectedNPC.life_stage }}</span>
+              </div>
+              <div class="detail-row">
+                <span>{{ t("simverse.alive") }}</span>
+                <span :class="{ alive: selectedNPC.is_alive, dead: !selectedNPC.is_alive }">
+                  {{ selectedNPC.is_alive ? t("common.on") : t("common.off") }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -150,275 +286,120 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import type { WorldState, Chronicle, NPC } from "@encv/shared-components/types/simverse";
+import { useSimverse, type SimverseNPC, type SimverseChronicleEvent } from "@/composables/useSimverse";
+import { IonInfiniteScroll, IonInfiniteScrollContent } from "@ionic/vue";
 
 const { t } = useI18n();
-const router = useRouter();
+const {
+  worldState,
+  worldConfig,
+  isRunning,
+  currentTick,
+  loadWorldState,
+  loadWorldConfig,
+  setPerformanceTier,
+  controlWorld,
+  loadNPCList,
+  loadChronicleWorld,
+  init,
+  cleanup,
+} = useSimverse();
 
-const canvasRef = ref<HTMLCanvasElement | null>(null);
-const isPaused = ref(false);
-const gravity = ref(50);
-const perfTier = ref<'low' | 'mid' | 'high'>('mid');
-
+const npcList = ref<SimverseNPC[]>([]);
+const npcPage = ref(1);
+const hasMoreNPCs = ref(true);
+const recentEvents = ref<SimverseChronicleEvent[]>([]);
 const activePanel = ref<string | null>(null);
-
-const worldState = ref<WorldState | null>({
-  tick: 12345,
-  era: "启蒙时代",
-  npcCount: 8642,
-  isActive: true,
-});
-
-const recentEvents = ref<Chronicle[]>([
-  { id: "1", title: "村庄发现新矿脉", content: "...", tick: 12340, timestamp: Date.now() - 5000 },
-  { id: "2", title: "两大家族联姻", content: "...", tick: 12338, timestamp: Date.now() - 15000 },
-  { id: "3", title: "商队抵达边境", content: "...", tick: 12335, timestamp: Date.now() - 30000 },
-]);
-
-const displayNPCs = ref<NPC[]>([
-  { id: "1", name: "艾尔文", status: "active" },
-  { id: "2", name: "莉莉丝", status: "active" },
-  { id: "3", name: "马库斯", status: "sleeping" },
-  { id: "4", name: "索菲亚", status: "active" },
-  { id: "5", name: "雷恩", status: "inactive" },
-  { id: "6", name: "艾米莉", status: "active" },
-]);
-
+const selectedNPC = ref<SimverseNPC | null>(null);
 const gachaResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
 
-const eraName = computed(() => worldState.value?.era ?? `时代 ${Math.floor((worldState.value?.tick ?? 0) / 1000)}`);
+let pollInterval: number | null = null;
 
-const rarityColors: Record<string, string> = {
-  N: "#9ca3af",
-  R: "#3b82f6",
-  SR: "#8b5cf6",
-  SSR: "#f59e0b",
-  UR: "#ef4444",
+const visibleNPCs = computed(() => npcList.value.slice(0, 12));
+
+const cellTypes = ["forest", "mountain", "water", "plain", "village", "city", "desert"];
+const cellIcons: Record<string, string> = {
+  forest: "🌲",
+  mountain: "⛰️",
+  water: "🌊",
+  plain: "🌾",
+  village: "🏘️",
+  city: "🏙️",
+  desert: "🏜️",
 };
 
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  radius: number;
-  color: string;
-  mass: number;
+function getCellClass(i: number): string {
+  const seed = (i * 7 + 13) % cellTypes.length;
+  return cellTypes[seed];
 }
 
-let particles: Particle[] = [];
-let animationId = 0;
-let lastTime = 0;
-let ctx: CanvasRenderingContext2D | null = null;
-let canvasWidth = 0;
-let canvasHeight = 0;
-let dpr = 1;
+function getCellIcon(i: number): string {
+  const seed = (i * 7 + 13) % cellTypes.length;
+  return cellIcons[cellTypes[seed]];
+}
 
-const particleColors = [
-  "#ff6b9d",
-  "#c44dff",
-  "#4d9fff",
-  "#4dffb8",
-  "#ffeb4d",
-  "#ff884d",
-  "#ff4d6d",
-  "#7c4dff",
-];
+function getNPCPosition(idx: number): Record<string, string> {
+  const cols = 8;
+  const col = idx % cols;
+  const row = Math.floor(idx / cols);
+  return {
+    left: `${12.5 + col * 12 + (idx % 3) * 3}%`,
+    top: `${15 + row * 18 + (idx % 2) * 5}%`,
+  };
+}
 
-function initParticles(count: number) {
-  particles = [];
-  for (let i = 0; i < count; i++) {
-    const radius = 4 + Math.random() * 12;
-    particles.push({
-      x: Math.random() * canvasWidth,
-      y: Math.random() * canvasHeight,
-      vx: (Math.random() - 0.5) * 80,
-      vy: (Math.random() - 0.5) * 40,
-      radius,
-      color: particleColors[Math.floor(Math.random() * particleColors.length)],
-      mass: radius * radius,
-    });
+async function refreshState() {
+  await Promise.all([
+    loadWorldState(),
+    loadWorldConfig(),
+  ]);
+}
+
+async function toggleRunning() {
+  if (!worldState.value) return;
+  const action = worldState.value.running ? "pause" : "resume";
+  await controlWorld(action);
+  await refreshState();
+}
+
+async function stepOnce() {
+  await controlWorld("step");
+  await refreshState();
+}
+
+async function changeTier(tier: string) {
+  const result = await setPerformanceTier(tier as any);
+  if (result) {
+    await refreshState();
   }
 }
 
-function resizeCanvas() {
-  const canvas = canvasRef.value;
-  if (!canvas) return;
-  const container = canvas.parentElement;
-  if (!container) return;
-  dpr = window.devicePixelRatio || 1;
-  canvasWidth = container.clientWidth;
-  canvasHeight = container.clientHeight;
-  canvas.width = canvasWidth * dpr;
-  canvas.height = canvasHeight * dpr;
-  canvas.style.width = `${canvasWidth}px`;
-  canvas.style.height = `${canvasHeight}px`;
-  if (ctx) {
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-}
-
-function drawParticle(p: Particle) {
-  if (!ctx) return;
-  ctx.save();
-  const gradient = ctx.createRadialGradient(p.x - p.radius * 0.3, p.y - p.radius * 0.3, 0, p.x, p.y, p.radius);
-  gradient.addColorStop(0, lightenColor(p.color, 60));
-  gradient.addColorStop(0.5, p.color);
-  gradient.addColorStop(1, darkenColor(p.color, 40));
-  ctx.fillStyle = gradient;
-  ctx.shadowColor = p.color;
-  ctx.shadowBlur = 15;
-  ctx.beginPath();
-  ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function lightenColor(color: string, percent: number): string {
-  const num = parseInt(color.replace("#", ""), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = Math.min(255, (num >> 16) + amt);
-  const G = Math.min(255, ((num >> 8) & 0x00ff) + amt);
-  const B = Math.min(255, (num & 0x0000ff) + amt);
-  return `rgb(${R},${G},${B})`;
-}
-
-function darkenColor(color: string, percent: number): string {
-  const num = parseInt(color.replace("#", ""), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = Math.max(0, (num >> 16) - amt);
-  const G = Math.max(0, ((num >> 8) & 0x00ff) - amt);
-  const B = Math.max(0, (num & 0x0000ff) - amt);
-  return `rgb(${R},${G},${B})`;
-}
-
-function updatePhysics(dt: number) {
-  const g = gravity.value * 0.2;
-  const friction = 0.995;
-  const bounce = 0.7;
-
-  for (const p of particles) {
-    p.vy += g;
-    p.vx *= friction;
-    p.vy *= friction;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-
-    if (p.x - p.radius < 0) {
-      p.x = p.radius;
-      p.vx = -p.vx * bounce;
+async function loadNPCs() {
+  const result = await loadNPCList(npcPage.value, 20);
+  if (result) {
+    if (npcPage.value === 1) {
+      npcList.value = result.items;
+    } else {
+      npcList.value = [...npcList.value, ...result.items];
     }
-    if (p.x + p.radius > canvasWidth) {
-      p.x = canvasWidth - p.radius;
-      p.vx = -p.vx * bounce;
-    }
-    if (p.y - p.radius < 0) {
-      p.y = p.radius;
-      p.vy = -p.vy * bounce;
-    }
-    if (p.y + p.radius > canvasHeight) {
-      p.y = canvasHeight - p.radius;
-      p.vy = -p.vy * bounce;
-    }
-  }
-
-  for (let i = 0; i < particles.length; i++) {
-    for (let j = i + 1; j < particles.length; j++) {
-      const a = particles[i];
-      const b = particles[j];
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const minDist = a.radius + b.radius;
-
-      if (dist < minDist && dist > 0) {
-        const angle = Math.atan2(dy, dx);
-        const overlap = minDist - dist;
-        const totalMass = a.mass + b.mass;
-
-        a.x -= Math.cos(angle) * overlap * (b.mass / totalMass);
-        a.y -= Math.sin(angle) * overlap * (b.mass / totalMass);
-        b.x += Math.cos(angle) * overlap * (a.mass / totalMass);
-        b.y += Math.sin(angle) * overlap * (a.mass / totalMass);
-
-        const v1 = { x: a.vx, y: a.vy };
-        const v2 = { x: b.vx, y: b.vy };
-        const normal = { x: Math.cos(angle), y: Math.sin(angle) };
-        const tangent = { x: -normal.y, y: normal.x };
-
-        const v1n = v1.x * normal.x + v1.y * normal.y;
-        const v1t = v1.x * tangent.x + v1.y * tangent.y;
-        const v2n = v2.x * normal.x + v2.y * normal.y;
-        const v2t = v2.x * tangent.x + v2.y * tangent.y;
-
-        const v1nAfter = (v1n * (a.mass - b.mass) + 2 * b.mass * v2n) / totalMass;
-        const v2nAfter = (v2n * (b.mass - a.mass) + 2 * a.mass * v1n) / totalMass;
-
-        a.vx = v1nAfter * normal.x + v1t * tangent.x;
-        a.vy = v1nAfter * normal.y + v1t * tangent.y;
-        b.vx = v2nAfter * normal.x + v2t * tangent.x;
-        b.vy = v2nAfter * normal.y + v2t * tangent.y;
-      }
-    }
+    hasMoreNPCs.value = npcList.value.length < result.total;
   }
 }
 
-function render() {
-  if (!ctx) return;
-  ctx.fillStyle = "rgba(15, 15, 35, 0.3)";
-  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-  for (const p of particles) {
-    drawParticle(p);
-  }
+async function loadMoreNPCs(ev: any) {
+  npcPage.value++;
+  await loadNPCs();
+  ev.target.complete();
 }
 
-function gameLoop(timestamp: number) {
-  if (!lastTime) lastTime = timestamp;
-  const dt = Math.min(0.05, (timestamp - lastTime) / 1000);
-  lastTime = timestamp;
-
-  if (!isPaused.value) {
-    updatePhysics(dt);
-  }
-  render();
-
-  animationId = requestAnimationFrame(gameLoop);
+async function loadEvents() {
+  const data = await loadChronicleWorld(0, 20);
+  recentEvents.value = data?.items || [];
 }
 
-function handlePointerDown(e: PointerEvent) {
-  const canvas = canvasRef.value;
-  if (!canvas) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-  spawnParticles(x, y, 5);
-}
-
-function spawnParticles(x: number, y: number, count: number) {
-  for (let i = 0; i < count; i++) {
-    if (particles.length >= 500) particles.shift();
-    const radius = 4 + Math.random() * 12;
-    particles.push({
-      x,
-      y,
-      vx: (Math.random() - 0.5) * 200,
-      vy: (Math.random() - 0.5) * 200 - 50,
-      radius,
-      color: particleColors[Math.floor(Math.random() * particleColors.length)],
-      mass: radius * radius,
-    });
-  }
-}
-
-function togglePause() {
-  isPaused.value = !isPaused.value;
-}
-
-function exitWorld() {
-  router.push("/tabs/home");
+function selectNPC(npc: SimverseNPC) {
+  selectedNPC.value = npc;
 }
 
 function openPanel(name: string) {
@@ -426,6 +407,15 @@ function openPanel(name: string) {
     activePanel.value = null;
   } else {
     activePanel.value = name;
+    if (name === "npc" && npcList.value.length === 0) {
+      loadNPCs();
+    }
+    if (name === "chronicles" && recentEvents.value.length === 0) {
+      loadEvents();
+    }
+    if (name === "settings" && !worldConfig.value) {
+      refreshState();
+    }
   }
 }
 
@@ -479,58 +469,29 @@ function doGacha(count: number) {
   activePanel.value = "gacha";
 }
 
-watch(perfTier, (tier) => {
-  if (tier === "low") {
-    if (particles.length > 50) particles = particles.slice(0, 50);
-  }
-  if (tier === "mid") {
-    if (particles.length < 80) initParticles(120);
-    if (particles.length > 200) particles = particles.slice(0, 200);
-  }
-  if (tier === "high") {
-    if (particles.length < 200) initParticles(300);
-  }
-});
+function startPolling() {
+  pollInterval = window.setInterval(() => {
+    refreshState();
+  }, 3000);
+}
 
-let resizeObserver: ResizeObserver | null = null;
+function stopPolling() {
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+}
 
 onMounted(async () => {
-  const canvas = canvasRef.value;
-  if (canvas) {
-    ctx = canvas.getContext("2d");
-    animationId = requestAnimationFrame(gameLoop);
-    canvas.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("resize", resizeCanvas);
-
-    const container = canvas.parentElement;
-    if (container) {
-      resizeObserver = new ResizeObserver(() => {
-        resizeCanvas();
-        if (particles.length === 0) {
-          initParticles(150);
-        }
-      });
-      resizeObserver.observe(container);
-    }
-
-    await nextTick();
-    setTimeout(() => {
-      resizeCanvas();
-      if (particles.length === 0) {
-        initParticles(150);
-      }
-    }, 100);
-  }
+  await init();
+  await refreshState();
+  await loadNPCs();
+  startPolling();
 });
 
 onUnmounted(() => {
-  if (animationId) cancelAnimationFrame(animationId);
-  if (resizeObserver) resizeObserver.disconnect();
-  const canvas = canvasRef.value;
-  if (canvas) {
-    canvas.removeEventListener("pointerdown", handlePointerDown);
-    window.removeEventListener("resize", resizeCanvas);
-  }
+  stopPolling();
+  cleanup();
 });
 </script>
 
@@ -561,13 +522,91 @@ onUnmounted(() => {
   background: linear-gradient(180deg, #1a1a3e 0%, #0f0f23 100%);
 }
 
-.game-canvas {
+.world-map {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  touch-action: none;
+  padding: 80px 20px 120px;
+}
+
+.map-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  gap: 4px;
+  height: 100%;
+  opacity: 0.6;
+}
+
+.map-cell {
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  transition: all 0.3s;
+}
+
+.map-cell.forest { background: rgba(34, 197, 94, 0.15); }
+.map-cell.mountain { background: rgba(107, 114, 128, 0.2); }
+.map-cell.water { background: rgba(59, 130, 246, 0.15); }
+.map-cell.plain { background: rgba(234, 179, 8, 0.1); }
+.map-cell.village { background: rgba(139, 92, 246, 0.15); }
+.map-cell.city { background: rgba(236, 72, 153, 0.15); }
+.map-cell.desert { background: rgba(249, 115, 22, 0.1); }
+
+.map-overlay {
+  position: absolute;
+  top: 80px;
+  left: 20px;
+  right: 20px;
+  bottom: 120px;
+  pointer-events: none;
+}
+
+.npc-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.npc-marker:hover {
+  transform: translate(-50%, -50%) scale(1.2);
+  z-index: 10;
+}
+
+.npc-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #6b7280;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+}
+
+.npc-dot.alive {
+  background: #22c55e;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(34, 197, 94, 0.5); }
+  50% { box-shadow: 0 0 12px rgba(34, 197, 94, 0.8); }
+}
+
+.npc-name {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  margin-top: 2px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
 .top-bar {
@@ -578,59 +617,63 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  padding: 16px 20px;
+  padding: 12px 16px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
   z-index: 10;
 }
 
 .resource-group {
   display: flex;
-  gap: 16px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .resource-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(10px);
-  padding: 6px 14px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .resource-icon {
-  font-size: 16px;
+  font-size: 14px;
+}
+
+.resource-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
 }
 
 .resource-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .resource-value {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #fff;
-  min-width: 30px;
-  text-align: right;
 }
 
 .top-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .icon-btn {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.15);
   color: #fff;
-  font-size: 14px;
+  font-size: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -647,54 +690,92 @@ onUnmounted(() => {
   transform: scale(0.95);
 }
 
+.icon-btn.play-btn.running {
+  background: rgba(34, 197, 94, 0.3);
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
 .event-panel {
   position: absolute;
   top: 70px;
-  right: 20px;
-  width: 280px;
-  max-height: 200px;
+  right: 16px;
+  width: 240px;
+  max-height: 160px;
   background: rgba(20, 20, 50, 0.85);
   backdrop-filter: blur(10px);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px;
   z-index: 9;
   overflow: hidden;
 }
 
 .event-header {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.9);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .event-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .event-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .event-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: #4dffb8;
   flex-shrink: 0;
 }
 
+.event-dot.warning { background: #f59e0b; }
+.event-dot.danger { background: #ef4444; }
+
 .event-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.stats-panel {
+  position: absolute;
+  bottom: 100px;
+  left: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 9;
+}
+
+.stat-card {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 8px 12px;
+  min-width: 70px;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 2px;
+}
+
+.stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
 }
 
 .bottom-menu {
@@ -705,7 +786,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-around;
   align-items: flex-end;
-  padding: 12px 24px 16px;
+  padding: 10px 20px 14px;
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
   z-index: 10;
 }
@@ -714,12 +795,12 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 8px 12px;
-  border-radius: 12px;
+  padding: 6px 10px;
+  border-radius: 10px;
   transition: all 0.2s;
 }
 
@@ -733,7 +814,7 @@ onUnmounted(() => {
 }
 
 .menu-icon {
-  font-size: 28px;
+  font-size: 24px;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
@@ -753,7 +834,7 @@ onUnmounted(() => {
 }
 
 .menu-label {
-  font-size: 11px;
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.8);
   font-weight: 500;
 }
@@ -765,19 +846,19 @@ onUnmounted(() => {
 
 .side-panel {
   position: absolute;
-  top: 60px;
-  right: 20px;
-  bottom: 100px;
-  width: 320px;
+  top: 56px;
+  right: 16px;
+  bottom: 90px;
+  width: 280px;
   background: rgba(20, 20, 50, 0.95);
   backdrop-filter: blur(20px);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 15;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transform: translateX(360px);
+  transform: translateX(320px);
   opacity: 0;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
@@ -793,25 +874,25 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 18px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
 }
 
 .panel-title {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 600;
   color: #fff;
 }
 
 .close-btn {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   border: none;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -820,14 +901,14 @@ onUnmounted(() => {
 }
 
 .close-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
   color: #fff;
 }
 
 .panel-content {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
+  padding: 10px;
 }
 
 .panel-content::-webkit-scrollbar {
@@ -839,30 +920,30 @@ onUnmounted(() => {
 }
 
 .panel-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 2px;
 }
 
 .npc-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
-  margin-bottom: 8px;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  margin-bottom: 6px;
   transition: all 0.2s;
   cursor: pointer;
 }
 
 .npc-card:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   transform: translateX(2px);
 }
 
 .npc-avatar {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   background: linear-gradient(135deg, #8b5cf6, #ec4899);
   display: flex;
@@ -870,7 +951,7 @@ onUnmounted(() => {
   justify-content: center;
   color: #fff;
   font-weight: 600;
-  font-size: 16px;
+  font-size: 14px;
   flex-shrink: 0;
 }
 
@@ -880,87 +961,168 @@ onUnmounted(() => {
 }
 
 .npc-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: #fff;
   margin-bottom: 2px;
 }
 
-.npc-status {
+.npc-meta {
   display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  text-transform: capitalize;
+  gap: 8px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
 }
 
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
+.npc-prof { text-transform: capitalize; }
+.npc-level { color: #f59e0b; }
+
+.npc-status-col {
+  width: 50px;
+  flex-shrink: 0;
 }
 
-.status-dot.active {
-  background: #22c55e;
+.hp-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
 }
 
-.status-dot.sleeping {
-  background: #f59e0b;
-}
-
-.status-dot.inactive {
-  background: #6b7280;
+.hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+  border-radius: 2px;
+  transition: width 0.3s;
 }
 
 .empty-state {
   text-align: center;
-  padding: 40px 20px;
+  padding: 30px 16px;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 12px;
+}
+
+.chronicle-item {
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  border-left: 3px solid #8b5cf6;
+}
+
+.chronicle-tick {
+  font-size: 10px;
   color: rgba(255, 255, 255, 0.4);
-  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.chronicle-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.chronicle-content {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.4;
+}
+
+.setting-group {
+  margin-bottom: 16px;
+}
+
+.setting-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 8px;
+}
+
+.tier-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.tier-btn {
+  flex: 1;
+  padding: 8px 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tier-btn.active {
+  background: rgba(139, 92, 246, 0.25);
+  border-color: rgba(139, 92, 246, 0.5);
+  color: #fff;
+}
+
+.tier-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.config-detail {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.config-detail span:last-child {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
 }
 
 .gacha-section {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 
 .gacha-banner {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(236, 72, 153, 0.3));
-  border-radius: 12px;
-  padding: 16px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(236, 72, 153, 0.25));
+  border-radius: 10px;
+  padding: 12px;
   text-align: center;
   border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .banner-title {
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
   color: #fff;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .banner-desc {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .gacha-buttons {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .gacha-btn {
   position: relative;
-  padding: 14px 16px;
-  border-radius: 12px;
+  padding: 12px;
+  border-radius: 10px;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   transition: all 0.2s;
 }
 
@@ -973,7 +1135,7 @@ onUnmounted(() => {
 }
 
 .gacha-btn:hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
   filter: brightness(1.1);
 }
 
@@ -981,89 +1143,77 @@ onUnmounted(() => {
   transform: translateY(0);
 }
 
-.btn-icon {
-  font-size: 24px;
-}
+.btn-icon { font-size: 20px; }
 
 .btn-text {
   flex: 1;
   text-align: left;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #fff;
 }
 
 .btn-cost {
-  font-size: 13px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.9);
   font-weight: 500;
 }
 
 .btn-badge {
   position: absolute;
-  top: -6px;
-  right: 10px;
+  top: -5px;
+  right: 8px;
   background: #ffd700;
   color: #1a1a1a;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: 2px 6px;
+  border-radius: 8px;
 }
 
-.gacha-results {
-  margin-top: 8px;
-}
+.gacha-results { margin-top: 4px; }
 
 .results-title {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
-  margin-bottom: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
 }
 
 .results-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
+  gap: 6px;
 }
 
 .result-card {
   aspect-ratio: 3 / 4;
-  border-radius: 8px;
+  border-radius: 6px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  animation: cardReveal 0.5s ease-out;
+  gap: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  animation: cardReveal 0.4s ease-out;
 }
 
 @keyframes cardReveal {
-  from {
-    opacity: 0;
-    transform: scale(0.8) rotateY(90deg);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) rotateY(0);
-  }
+  from { opacity: 0; transform: scale(0.8) rotateY(90deg); }
+  to { opacity: 1; transform: scale(1) rotateY(0); }
 }
 
-.result-icon {
-  font-size: 24px;
-}
+.result-icon { font-size: 20px; }
 
 .result-name {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.6);
   text-align: center;
 }
 
 .result-rarity {
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
 }
 
@@ -1073,67 +1223,97 @@ onUnmounted(() => {
 .result-card.SSR .result-rarity { color: #f59e0b; }
 .result-card.UR .result-rarity { color: #ef4444; }
 
-.setting-group {
-  margin-bottom: 20px;
+.npc-detail-modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  backdrop-filter: blur(4px);
 }
 
-.setting-label {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 8px;
+.npc-detail-card {
+  width: 85%;
+  max-width: 320px;
+  background: rgba(20, 20, 50, 0.98);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
 }
 
-.setting-slider {
-  width: 100%;
-  height: 4px;
-  -webkit-appearance: none;
-  appearance: none;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  outline: none;
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.2));
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
 }
 
-.setting-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
+.detail-avatar {
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  background: #8b5cf6;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(139, 92, 246, 0.4);
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 20px;
+  flex-shrink: 0;
 }
 
-.setting-value {
+.detail-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.detail-subtitle {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
-  margin-top: 4px;
-  text-align: right;
 }
 
-.tier-buttons {
+.detail-header .close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+}
+
+.detail-body {
+  padding: 12px 16px;
+}
+
+.detail-row {
   display: flex;
-  gap: 8px;
+  justify-content: space-between;
+  padding: 8px 0;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-.tier-btn {
-  flex: 1;
-  padding: 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
+.detail-row span:first-child {
+  color: rgba(255, 255, 255, 0.5);
 }
 
-.tier-btn.active {
-  background: rgba(139, 92, 246, 0.3);
-  border-color: rgba(139, 92, 246, 0.5);
-  color: #fff;
+.detail-row span:last-child {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
 }
 
-.tier-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
+.detail-row .alive { color: #22c55e; }
+.detail-row .dead { color: #ef4444; }
 </style>

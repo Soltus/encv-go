@@ -15,7 +15,7 @@ export interface SimverseWorldState {
 }
 
 export interface SimverseWorldConfig {
-  tier: number;
+  tier: string;
   tier_name: string;
   event_rate_mul: number;
   cache_size: number;
@@ -137,6 +137,20 @@ export interface SimverseChronicleNPCResponse {
 export type PerfTier = "background" | "foreground" | "fg_idle";
 export type FocusLevel = "none" | "distant" | "near" | "core" | "player";
 export type WorldAction = "start" | "stop" | "pause" | "resume" | "step";
+
+export interface SimverseSaveInfo {
+  has_save: boolean;
+  saved_at?: string;
+  tick?: number;
+  npc_count?: number;
+  size_bytes?: number;
+}
+
+export interface SimverseStorageStatus {
+  total_bytes: number;
+  used_bytes: number;
+  available_bytes: number;
+}
 
 const worldState = ref<SimverseWorldState | null>(null);
 const worldConfig = ref<SimverseWorldConfig | null>(null);
@@ -305,6 +319,43 @@ export function useSimverse() {
     }
   }
 
+  async function loadSaveInfo() {
+    try {
+      const data = await fetchJSON("/api/simverse/world/save");
+      return data as SimverseSaveInfo;
+    } catch (e) {
+      console.warn("Failed to load save info:", e);
+      return null;
+    }
+  }
+
+  async function saveWorld() {
+    const data = await fetchJSON("/api/simverse/world/save", {
+      method: "POST",
+    });
+    return data as SimverseSaveInfo;
+  }
+
+  async function loadWorld() {
+    const data = await fetchJSON("/api/simverse/world/load", {
+      method: "POST",
+    });
+    if (worldState.value && data.tick !== undefined) {
+      worldState.value.tick = data.tick;
+    }
+    return data as SimverseSaveInfo;
+  }
+
+  async function loadStorageStatus() {
+    try {
+      const data = await fetchJSON("/api/simverse/world/storage");
+      return data as SimverseStorageStatus;
+    } catch (e) {
+      console.warn("Failed to load storage status:", e);
+      return null;
+    }
+  }
+
   function connectWebSocket() {
     if (ws) return;
 
@@ -465,6 +516,10 @@ export function useSimverse() {
     loadChronicleWorld,
     loadChronicleNPC,
     loadChronicleEvent,
+    loadSaveInfo,
+    saveWorld,
+    loadWorld,
+    loadStorageStatus,
 
     connectWebSocket,
     disconnectWebSocket,

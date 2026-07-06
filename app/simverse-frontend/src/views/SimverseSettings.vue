@@ -2,81 +2,360 @@
   <ion-page>
     <ion-header :translucent="true">
       <ion-toolbar>
-        <ion-title>{{ t("simverse.settings.title") }}</ion-title>
+        <ion-title>{{ t('simverse.settings') }}</ion-title>
       </ion-toolbar>
     </ion-header>
 
     <ion-content class="settings-content">
-      <ion-list>
-        <ion-list-header>
-          <ion-label>{{ t("simverse.settings.physics") }}</ion-label>
-        </ion-list-header>
+      <div v-if="loading" class="loading-wrap">
+        <ion-spinner name="crescent"></ion-spinner>
+        <p>{{ t('settings.loading') }}</p>
+      </div>
 
-        <ion-item>
-          <ion-label>{{ t("simverse.settings.gravity") }}</ion-label>
-          <ion-range :value="gravity" min="0" max="100" step="1" @ionChange="onGravityChange" />
-          <ion-note slot="end">{{ gravity }}%</ion-note>
-        </ion-item>
+      <template v-else>
+        <ion-list>
+          <ion-list-header>
+            <ion-label>{{ t('simverse.performanceTier') }}</ion-label>
+          </ion-list-header>
 
-        <ion-item>
-          <ion-label>{{ t("simverse.settings.fps") }}</ion-label>
-          <ion-select :value="fpsLimit" @ionChange="onFpsChange">
-            <ion-select-option value="30">30 FPS</ion-select-option>
-            <ion-select-option value="60">60 FPS</ion-select-option>
-            <ion-select-option value="120">120 FPS</ion-select-option>
-            <ion-select-option value="0">无限制</ion-select-option>
-          </ion-select>
-        </ion-item>
-      </ion-list>
+          <ion-radio-group :value="worldConfig?.tier_name" @ionChange="onTierChange">
+            <ion-item>
+              <ion-radio value="background">
+                <div class="tier-option">
+                  <div class="tier-name">Background</div>
+                  <div class="tier-desc">后台运行，低功耗</div>
+                </div>
+              </ion-radio>
+            </ion-item>
+            <ion-item>
+              <ion-radio value="foreground">
+                <div class="tier-option">
+                  <div class="tier-name">Foreground</div>
+                  <div class="tier-desc">前台全速，高帧率</div>
+                </div>
+              </ion-radio>
+            </ion-item>
+            <ion-item>
+              <ion-radio value="fg_idle">
+                <div class="tier-option">
+                  <div class="tier-name">Foreground Idle</div>
+                  <div class="tier-desc">前台空闲，平衡模式</div>
+                </div>
+              </ion-radio>
+            </ion-item>
+          </ion-radio-group>
+        </ion-list>
 
-      <ion-list>
-        <ion-list-header>
-          <ion-label>{{ t("simverse.settings.graphics") }}</ion-label>
-        </ion-list-header>
+        <ion-list>
+          <ion-list-header>
+            <ion-label>世界配置</ion-label>
+          </ion-list-header>
 
-        <ion-item>
-          <ion-label>{{ t("simverse.settings.debugMode") }}</ion-label>
-          <ion-toggle :checked="debugMode" @ionChange="debugMode = !debugMode" />
-        </ion-item>
+          <ion-item>
+            <ion-label>
+              <h3>事件速率倍率</h3>
+              <p>{{ worldConfig?.event_rate_mul }}x</p>
+            </ion-label>
+            <ion-note slot="end">{{ worldConfig?.event_rate_mul }}x</ion-note>
+          </ion-item>
 
-        <ion-item>
-          <ion-label>{{ t("simverse.settings.showFps") }}</ion-label>
-          <ion-toggle :checked="showFps" @ionChange="showFps = !showFps" />
-        </ion-item>
-      </ion-list>
+          <ion-item>
+            <ion-label>
+              <h3>缓存大小</h3>
+              <p>{{ worldConfig?.cache_size }}</p>
+            </ion-label>
+            <ion-note slot="end">{{ worldConfig?.cache_size }}</ion-note>
+          </ion-item>
 
-      <ion-list>
-        <ion-list-header>
-          <ion-label>关于</ion-label>
-        </ion-list-header>
+          <ion-item>
+            <ion-label>
+              <h3>子模拟</h3>
+              <p>{{ worldConfig?.sub_sim_active ? '已启用' : '未启用' }}</p>
+            </ion-label>
+            <ion-toggle :checked="worldConfig?.sub_sim_active" disabled slot="end" />
+          </ion-item>
 
-        <ion-item>
-          <ion-label>版本</ion-label>
-          <ion-note slot="end">v0.1.0</ion-note>
-        </ion-item>
-      </ion-list>
+          <ion-item>
+            <ion-label>
+              <h3>子模拟深度</h3>
+              <p>{{ worldConfig?.sub_sim_depth }}</p>
+            </ion-label>
+            <ion-note slot="end">{{ worldConfig?.sub_sim_depth }}</ion-note>
+          </ion-item>
+        </ion-list>
+
+        <ion-list>
+          <ion-list-header>
+            <ion-label>世界状态</ion-label>
+          </ion-list-header>
+
+          <ion-item>
+            <ion-label>
+              <h3>运行状态</h3>
+              <p>{{ isRunning ? '运行中' : '已暂停' }}</p>
+            </ion-label>
+            <ion-badge :color="isRunning ? 'success' : 'warning'" slot="end">
+              {{ isRunning ? 'RUNNING' : 'PAUSED' }}
+            </ion-badge>
+          </ion-item>
+
+          <ion-item>
+            <ion-label>
+              <h3>当前 Tick</h3>
+              <p>{{ currentTick }}</p>
+            </ion-label>
+            <ion-note slot="end">{{ currentTick }}</ion-note>
+          </ion-item>
+
+          <ion-item>
+            <ion-label>
+              <h3>NPC 数量</h3>
+              <p>{{ worldState?.npc_count }}</p>
+            </ion-label>
+            <ion-note slot="end">{{ worldState?.npc_count }}</ion-note>
+          </ion-item>
+
+          <ion-item>
+            <ion-label>
+              <h3>Brain 数量</h3>
+              <p>{{ worldState?.brain_count }}</p>
+            </ion-label>
+            <ion-note slot="end">{{ worldState?.brain_count }}</ion-note>
+          </ion-item>
+
+          <ion-item>
+            <ion-label>
+              <h3>内存占用</h3>
+              <p>{{ totalMemoryMB?.toFixed(1) }} MB</p>
+            </ion-label>
+            <ion-note slot="end">{{ totalMemoryMB?.toFixed(1) }} MB</ion-note>
+          </ion-item>
+        </ion-list>
+
+        <ion-list>
+          <ion-list-header>
+            <ion-label>存档管理</ion-label>
+          </ion-list-header>
+
+          <ion-item button @click="handleSave">
+            <ion-icon :icon="saveOutline" slot="start"></ion-icon>
+            <ion-label>
+              <h3>保存存档</h3>
+              <p v-if="saveInfo?.saved_at">上次保存: {{ formatTime(saveInfo.saved_at) }}</p>
+              <p v-else>暂无存档</p>
+            </ion-label>
+            <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
+          </ion-item>
+
+          <ion-item button @click="handleLoad" :disabled="!saveInfo?.has_save">
+            <ion-icon :icon="downloadOutline" slot="start"></ion-icon>
+            <ion-label>
+              <h3>读取存档</h3>
+              <p v-if="saveInfo?.tick">Tick {{ saveInfo.tick }} · {{ saveInfo.npc_count }} NPCs</p>
+              <p v-else>暂无存档</p>
+            </ion-label>
+            <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
+          </ion-item>
+        </ion-list>
+
+        <ion-list>
+          <ion-list-header>
+            <ion-label>存储状态</ion-label>
+          </ion-list-header>
+
+          <ion-item>
+            <ion-label>
+              <h3>存储空间</h3>
+              <p>{{ formatBytes(storageStatus?.used_bytes || 0) }} / {{ formatBytes(storageStatus?.total_bytes || 0) }}</p>
+            </ion-label>
+            <ion-progress-bar :value="storagePercent" :color="storageColor" slot="end" class="storage-bar" />
+          </ion-item>
+
+          <ion-item>
+            <ion-label>
+              <h3>可用空间</h3>
+              <p>{{ formatBytes(storageStatus?.available_bytes || 0) }}</p>
+            </ion-label>
+            <ion-note slot="end">{{ formatBytes(storageStatus?.available_bytes || 0) }}</ion-note>
+          </ion-item>
+        </ion-list>
+
+        <ion-list>
+          <ion-list-header>
+            <ion-label>{{ t('settings.about') }}</ion-label>
+          </ion-list-header>
+
+          <ion-item>
+            <ion-label>
+              <h3>版本</h3>
+              <p>Simverse v0.1.0</p>
+            </ion-label>
+            <ion-note slot="end">v0.1.0</ion-note>
+          </ion-item>
+
+          <ion-item button @click="refreshAll">
+            <ion-icon :icon="refreshOutline" slot="start"></ion-icon>
+            <ion-label>
+              <h3>刷新数据</h3>
+              <p>重新加载所有配置和状态</p>
+            </ion-label>
+            <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
+          </ion-item>
+        </ion-list>
+      </template>
     </ion-content>
   </ion-page>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import {
+  useSimverse,
+  type SimverseSaveInfo,
+  type SimverseStorageStatus,
+} from "@/composables/useSimverse";
+import {
+  saveOutline,
+  downloadOutline,
+  chevronForwardOutline,
+  refreshOutline,
+} from "ionicons/icons";
 
 const { t } = useI18n();
+const {
+  worldState,
+  worldConfig,
+  isRunning,
+  currentTick,
+  totalMemoryMB,
+  loadWorldState,
+  loadWorldConfig,
+  setPerformanceTier,
+  loadSaveInfo,
+  saveWorld,
+  loadWorld: loadWorldFromSave,
+  loadStorageStatus,
+  init,
+  cleanup,
+} = useSimverse();
 
-const gravity = ref(50);
-const fpsLimit = ref("60");
-const debugMode = ref(false);
-const showFps = ref(true);
+const loading = ref(true);
+const saveInfo = ref<SimverseSaveInfo | null>(null);
+const storageStatus = ref<SimverseStorageStatus | null>(null);
 
-function onGravityChange(e: any) {
-  gravity.value = e.detail.value;
+const storagePercent = ref(0);
+const storageColor = ref("primary");
+
+let pollInterval: number | null = null;
+
+async function refreshAll() {
+  loading.value = true;
+  try {
+    const [state, config, save, storage] = await Promise.all([
+      loadWorldState(),
+      loadWorldConfig(),
+      loadSaveInfo(),
+      loadStorageStatus(),
+    ]);
+    saveInfo.value = save;
+    storageStatus.value = storage;
+    updateStorageStatus();
+  } catch (e) {
+    showToast({ message: "加载失败: " + String(e), color: "danger" });
+  } finally {
+    loading.value = false;
+  }
 }
 
-function onFpsChange(e: any) {
-  fpsLimit.value = e.detail.value;
+async function refreshState() {
+  try {
+    await loadWorldState();
+  } catch {}
 }
+
+function updateStorageStatus() {
+  if (!storageStatus.value?.total_bytes) return;
+  const used = storageStatus.value.used_bytes || 0;
+  const total = storageStatus.value.total_bytes;
+  storagePercent.value = Math.min(used / total, 1);
+
+  if (storagePercent.value > 0.9) {
+    storageColor.value = "danger";
+  } else if (storagePercent.value > 0.7) {
+    storageColor.value = "warning";
+  } else {
+    storageColor.value = "primary";
+  }
+}
+
+async function onTierChange(e: any) {
+  const tier = e.detail.value;
+  try {
+    const result = await setPerformanceTier(tier);
+    if (result) {
+      showToast({ message: "性能等级已切换为 " + result.tier_name });
+    }
+  } catch (e) {
+    showToast({ message: "切换失败: " + String(e), color: "danger" });
+  }
+}
+
+async function handleSave() {
+  try {
+    const result = await saveWorld();
+    if (result) {
+      saveInfo.value = result;
+      showToast({ message: "存档保存成功" });
+    }
+  } catch (e) {
+    showToast({ message: "保存失败: " + String(e), color: "danger" });
+  }
+}
+
+async function handleLoad() {
+  try {
+    const result = await loadWorldFromSave();
+    if (result) {
+      saveInfo.value = result;
+      showToast({ message: "存档读取成功" });
+      await refreshState();
+    }
+  } catch (e) {
+    showToast({ message: "读取失败: " + String(e), color: "danger" });
+  }
+}
+
+function formatTime(isoString: string): string {
+  if (!isoString) return "-";
+  try {
+    return new Date(isoString).toLocaleString();
+  } catch {
+    return isoString;
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+}
+
+onMounted(async () => {
+  await init();
+  await refreshAll();
+  pollInterval = window.setInterval(() => {
+    refreshState();
+  }, 3000);
+});
+
+onUnmounted(() => {
+  if (pollInterval) clearInterval(pollInterval);
+  cleanup();
+});
 </script>
 
 <style scoped>
@@ -84,7 +363,44 @@ function onFpsChange(e: any) {
   --background: var(--ion-color-step-50);
 }
 
+.loading-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: var(--ion-color-medium);
+  gap: 12px;
+}
+
+.loading-wrap p {
+  margin: 0;
+  font-size: 14px;
+}
+
 ion-list {
   margin-bottom: 20px;
+}
+
+.tier-option {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tier-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ion-text-color);
+}
+
+.tier-desc {
+  font-size: 12px;
+  color: var(--ion-color-medium);
+}
+
+.storage-bar {
+  width: 100px;
+  margin-inline-start: 12px;
 }
 </style>

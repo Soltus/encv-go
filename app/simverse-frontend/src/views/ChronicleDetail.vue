@@ -242,7 +242,7 @@ async function loadData() {
   }
 }
 
-async function _openEventDetail(evt: SimverseChronicleEvent) {
+async function openEventDetail(evt: SimverseChronicleEvent) {
   const detail = await loadChronicleEvent(evt.id);
   if (detail) {
     selectedEvent.value = detail;
@@ -250,7 +250,7 @@ async function _openEventDetail(evt: SimverseChronicleEvent) {
   }
 }
 
-async function _loadAndShowEvent(id: number) {
+async function loadAndShowEvent(id: number) {
   const detail = await loadChronicleEvent(id);
   if (detail) {
     selectedEvent.value = detail;
