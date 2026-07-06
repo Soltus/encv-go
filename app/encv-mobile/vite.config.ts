@@ -238,19 +238,22 @@ export default defineConfig({
     frontendDepsManifestPlugin(),  // 🆕 2026-06-17：读 package.json 生成 frontend-deps.json manifest
     vue(),
     dynamicHmrHostPlugin(),
-    // @/ alias 多路径 fallback：优先 shared-components，其次本地 src
+    // @/ alias 多路径 fallback：优先本地 src，其次 shared-components
     {
       name: 'encv-alias-fallback',
       resolveId(source, importer, options) {
         if (source.startsWith('@/')) {
           const relativePath = source.slice(2)
+          // 去掉 ?worker / ?raw / ?url 等查询参数
+          const cleanPath = relativePath.split('?')[0]
+          const query = relativePath.includes('?') ? '?' + relativePath.split('?')[1] : ''
+          
           const dirs = [
-            path.resolve(__dirname, '../packages/shared-components/src'),
             path.resolve(__dirname, 'src'),
+            path.resolve(__dirname, '../packages/shared-components/src'),
           ]
           for (const dir of dirs) {
-            const fullPath = path.join(dir, relativePath)
-            // 尝试：直接文件、加扩展名、目录 + index
+            const fullPath = path.join(dir, cleanPath)
             const candidates = [
               fullPath,
               fullPath + '.ts',
@@ -266,12 +269,12 @@ export default defineConfig({
             ]
             for (const tryPath of candidates) {
               if (fs.existsSync(tryPath) && fs.statSync(tryPath).isFile()) {
-                return tryPath
+                return tryPath + query
               }
             }
           }
-          // fallback：返回第一个目录的路径，让 vite 自己处理错误
-          return path.join(dirs[0], relativePath)
+          // fallback：返回本地 src 路径，让 vite 自己处理错误
+          return path.join(dirs[0], cleanPath) + query
         }
         return null
       },
