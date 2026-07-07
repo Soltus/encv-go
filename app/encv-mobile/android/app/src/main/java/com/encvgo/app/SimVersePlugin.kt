@@ -1,6 +1,5 @@
 package com.encvgo.app
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -11,7 +10,10 @@ import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.encvgo.app.workers.SimverseHeartbeatWorker
 import com.encvgo.combolite.EncvComboLiteHost
+import com.combo.core.api.IPluginEntryClass
 import com.combo.core.runtime.PluginManager
+import com.combo.core.runtime.loader.PluginClassLoader
+import java.io.File
 
 @CapacitorPlugin(name = "SimVerse")
 class SimVersePlugin : Plugin() {
@@ -40,7 +42,7 @@ class SimVersePlugin : Plugin() {
         val steps = mutableListOf<String>()
 
         steps.add("╔══════════════════════════════════════════════════╗")
-        steps.add("║     SimVerse 全链路饱和诊断 (v2)                  ║")
+        steps.add("║     SimVerse 全链路饱和诊断 (v4)                  ║")
         steps.add("╚══════════════════════════════════════════════════╝")
         steps.add("")
 
@@ -95,18 +97,24 @@ class SimVersePlugin : Plugin() {
         steps.add("")
 
         steps.add("═══ 3. 已安装插件列表 ═══")
-        val targetInstalled = try {
+        var targetInstalled = false
+        var targetPluginInfo: com.combo.core.model.PluginInfo? = null
+        try {
             val allPlugins = PluginManager.getAllInstallPlugins()
             steps.add("   total installed = ${allPlugins.size}")
             satLog("S03-INSTALLED", "已安装插件数: ${allPlugins.size}")
             val target = allPlugins.find { it.id == PLUGIN_ID }
             if (target != null) {
+                targetInstalled = true
+                targetPluginInfo = target
                 steps.add("   ✅ 目标插件 '$PLUGIN_ID' 已安装")
                 steps.add("      versionName = ${target.versionName}")
+                steps.add("      versionCode = ${target.versionCode}")
                 steps.add("      enabled = ${target.enabled}")
                 steps.add("      entryClass = ${target.entryClass}")
-                satLog("S03-INSTALLED", "目标插件已安装: v${target.versionName}, enabled=${target.enabled}")
-                true
+                steps.add("      path = ${target.path}")
+                steps.add("      installTime = ${target.installTime}")
+                satLog("S03-INSTALLED", "目标插件已安装: v${target.versionName}, enabled=${target.enabled}, path=${target.path}")
             } else {
                 steps.add("   ❌ 目标插件 '$PLUGIN_ID' 未在已安装列表中")
                 steps.add("   已安装插件列表:")
@@ -114,115 +122,144 @@ class SimVersePlugin : Plugin() {
                     steps.add("      - ${p.id} (v${p.versionName}, enabled=${p.enabled})")
                 }
                 satWarn("S03-INSTALLED", "目标插件未安装，已安装: ${allPlugins.map { it.id }}")
-                false
             }
         } catch (e: Exception) {
             steps.add("   ❌ getAllInstallPlugins FAILED: ${e.message}")
             satError("S03-INSTALLED", "getAllInstallPlugins 失败", e)
-            false
         }
         steps.add("")
 
-        steps.add("═══ 4. 插件 Info 详细检查 ═══")
-        val loadedInfo = try {
-            val info = PluginManager.getPluginInfo(PLUGIN_ID)
-            if (info != null) {
-                val pi = info.pluginInfo
-                steps.add("   ✅ getPluginInfo 成功（插件已加载）")
-                steps.add("      id = ${pi.id}")
-                steps.add("      name = ${pi.name}")
-                steps.add("      versionName = ${pi.versionName}")
-                steps.add("      versionCode = ${pi.versionCode}")
-                steps.add("      enabled = ${pi.enabled}")
-                steps.add("      entryClass = ${pi.entryClass}")
-                steps.add("      description = ${pi.description}")
-                satLog("S04-LOADED", "插件已加载: ${pi.id} v${pi.versionName}")
-                info
-            } else {
-                steps.add("   ⚠️  getPluginInfo 返回 null（插件未加载）")
-                satWarn("S04-LOADED", "插件未加载")
-                null
-            }
-        } catch (e: Exception) {
-            steps.add("   ❌ getPluginInfo FAILED: ${e.javaClass.simpleName}: ${e.message}")
-            steps.add("   stack = ${e.stackTraceToString().take(600)}")
-            satError("S04-LOADED", "getPluginInfo 失败", e)
-            null
-        }
-        steps.add("")
-
-        steps.add("═══ 5. 插件 APK / DEX 检查 ═══")
+        steps.add("═══ 4. 插件 APK 文件检查 ═══")
         try {
-            if (loadedInfo != null) {
-                val pi = loadedInfo.pluginInfo
-                steps.add("   插件已加载，检查 ClassLoader:")
-                val classLoader = pi.javaClass.classLoader
-                steps.add("      classLoader = $classLoader")
-                steps.add("      classLoader.parent = ${classLoader?.parent}")
-                satLog("S05-APK", "ClassLoader: $classLoader")
+            if (targetPluginInfo != null) {
+                val apkPath = targetPluginInfo.path
+                steps.add("   apkPath = $apkPath")
+                val apkFile = File(apkPath)
+                steps.add("   exists = ${apkFile.exists()}")
+                steps.add("   canRead = ${apkFile.canRead()}")
+                steps.add("   size = ${apkFile.length()} bytes (${"%.2f".format(apkFile.length() / 1024.0 / 1024.0)} MB)")
+                satLog("S04-APK", "APK 文件: exists=${apkFile.exists()}, size=${apkFile.length()}")
 
-                steps.add("")
-                steps.add("   尝试加载 plugin entry class:")
-                try {
-                    val entryClassName = pi.entryClass
-                    if (entryClassName != null) {
-                        val clazz = Class.forName(entryClassName)
-                        steps.add("      ✅ Class.forName('$entryClassName') 成功")
-                        steps.add("         superclass = ${clazz.superclass?.name}")
-                        steps.add("         interfaces = ${clazz.interfaces.map { it.name }}")
-                        steps.add("         classLoader = ${clazz.classLoader}")
-                        satLog("S05-APK", "entry class 加载成功: $entryClassName")
+                if (apkFile.exists()) {
+                    steps.add("")
+                    steps.add("   APK ZIP 内容检查:")
+                    try {
+                        val zipFile = java.util.zip.ZipFile(apkFile)
+                        val entries = zipFile.entries().toList().map { it.name }
+                        steps.add("      total entries = ${entries.size}")
+                        steps.add("      has AndroidManifest.xml = ${entries.contains("AndroidManifest.xml")}")
 
-                        val methods = clazz.declaredMethods.map { it.name }
-                        steps.add("         declared methods (first 20) = ${methods.take(20)}")
+                        val dexCount = entries.count { it.startsWith("classes") && it.endsWith(".dex") }
+                        steps.add("      dex files = $dexCount")
 
-                        val hasContent = methods.any { it == "Content" }
-                        steps.add("         has Content() = $hasContent")
-                    } else {
-                        steps.add("      ⚠️  entryClass 为 null")
-                        satWarn("S05-APK", "entryClass 为 null")
+                        val hasSimverseAssets = entries.any { it.startsWith("assets/simverse/") }
+                        steps.add("      has assets/simverse/ = $hasSimverseAssets")
+
+                        val simverseAssets = entries.filter { it.startsWith("assets/simverse/") }
+                        steps.add("      assets/simverse/ 条目数 = ${simverseAssets.size}")
+                        if (simverseAssets.isNotEmpty()) {
+                            steps.add("      前 10 个 simverse assets:")
+                            simverseAssets.take(10).forEach { steps.add("        - $it") }
+                        }
+
+                        steps.add("      has index.html = ${entries.contains("assets/simverse/index.html")}")
+
+                        zipFile.close()
+                        satLog("S04-APK", "APK 内容检查通过: entries=${entries.size}, simverseAssets=${simverseAssets.size}")
+                    } catch (e: Exception) {
+                        steps.add("      ❌ ZIP 检查失败: ${e.message}")
+                        satError("S04-APK", "ZIP 检查失败", e)
                     }
-                } catch (e: ClassNotFoundException) {
-                    steps.add("      ❌ ClassNotFoundException: ${e.message}")
-                    satError("S05-APK", "entry class 加载失败: ClassNotFoundException", e)
-                } catch (e: Exception) {
-                    steps.add("      ❌ ${e.javaClass.simpleName}: ${e.message}")
-                    satError("S05-APK", "entry class 检查失败", e)
                 }
-            } else if (targetInstalled) {
-                steps.add("   插件已安装但未加载，跳过 DEX 检查")
-                satWarn("S05-APK", "插件已安装但未加载，跳过 DEX 检查")
             } else {
                 steps.add("   ⏭️  跳过（插件未安装）")
             }
         } catch (e: Exception) {
-            steps.add("   ❌ APK/DEX 检查失败: ${e.message}")
-            satError("S05-APK", "APK/DEX 检查失败", e)
+            steps.add("   ❌ APK 文件检查失败: ${e.message}")
+            satError("S04-APK", "APK 文件检查失败", e)
         }
         steps.add("")
 
-        steps.add("═══ 6. Target Activity 解析测试 ═══")
-        val activityResolved = try {
-            val ctx = context ?: throw IllegalStateException("context is null")
-            val intent = Intent()
-            intent.setClassName(ctx, TARGET_ACTIVITY)
-            val resolveInfo = ctx.packageManager.resolveActivity(intent, 0)
-            if (resolveInfo != null) {
-                steps.add("   ✅ Target Activity 可直接解析: $TARGET_ACTIVITY")
-                steps.add("      name = ${resolveInfo.activityInfo.name}")
-                steps.add("      packageName = ${resolveInfo.activityInfo.packageName}")
-                satLog("S06-ACTIVITY", "Target Activity 可直接解析: $TARGET_ACTIVITY")
-                true
+        steps.add("═══ 5. 插件加载状态 & 实例检查 ═══")
+        var loadedInstance: IPluginEntryClass? = null
+        try {
+            val loadedInfo = EncvComboLiteHost.getLoadedPluginInfo(PLUGIN_ID)
+            if (loadedInfo != null) {
+                val pi = loadedInfo.pluginInfo
+                steps.add("   ✅ 插件已加载")
+                steps.add("      id = ${pi.id}")
+                steps.add("      name = ${pi.name}")
+                steps.add("      versionName = ${pi.versionName}")
+                steps.add("      entryClass = ${pi.entryClass}")
+                satLog("S05-LOADED", "插件已加载: ${pi.id} v${pi.versionName}")
+
+                val classLoader = loadedInfo.classLoader
+                steps.add("")
+                steps.add("   ClassLoader 信息:")
+                steps.add("      type = ${classLoader.javaClass.simpleName}")
+                steps.add("      is PluginClassLoader = ${classLoader is PluginClassLoader}")
+                steps.add("      parent = ${classLoader.parent}")
+                satLog("S05-LOADED", "ClassLoader: ${classLoader.javaClass.simpleName}")
+
+                steps.add("")
+                steps.add("   插件入口类实例检查 (PluginManager.getPluginInstance):")
+                val instance = PluginManager.getPluginInstance(PLUGIN_ID)
+                if (instance != null) {
+                    loadedInstance = instance
+                    steps.add("      ✅ getPluginInstance 返回实例")
+                    steps.add("      class = ${instance.javaClass.name}")
+                    steps.add("      classLoader = ${instance.javaClass.classLoader}")
+                    steps.add("      pluginModule size = ${instance.pluginModule.size}")
+                    satLog("S05-LOADED", "插件实例获取成功: ${instance.javaClass.name}")
+                } else {
+                    steps.add("      ❌ getPluginInstance 返回 null")
+                    satError("S05-LOADED", "getPluginInstance 返回 null")
+                }
+
+                steps.add("")
+                steps.add("   所有已加载插件实例:")
+                val allInstances = PluginManager.getAllPluginInstances()
+                steps.add("      count = ${allInstances.size}")
+                allInstances.forEach { (id, inst) ->
+                    steps.add("      - $id → ${inst.javaClass.simpleName}")
+                }
             } else {
-                steps.add("   ⚠️  Target Activity 不可直接解析（这是正常的，ComboLite 通过代理启动）")
-                steps.add("   接下来验证 ComboLite 代理启动流程...")
-                satWarn("S06-ACTIVITY", "Target Activity 不可直接解析（ComboLite 代理机制预期行为）")
-                false
+                steps.add("   ⚠️  插件未加载（getLoadedPluginInfo 返回 null）")
+                satWarn("S05-LOADED", "插件未加载")
             }
         } catch (e: Exception) {
-            steps.add("   ❌ Activity 解析测试 FAILED: ${e.javaClass.simpleName}: ${e.message}")
-            satError("S06-ACTIVITY", "Activity 解析测试失败", e)
-            false
+            steps.add("   ❌ 加载状态检查 FAILED: ${e.javaClass.simpleName}: ${e.message}")
+            steps.add("   stack = ${e.stackTraceToString().take(600)}")
+            satError("S05-LOADED", "加载状态检查失败", e)
+        }
+        steps.add("")
+
+        steps.add("═══ 6. Target Activity 类加载检查 ═══")
+        try {
+            val loadedInfo = EncvComboLiteHost.getLoadedPluginInfo(PLUGIN_ID)
+            if (loadedInfo != null) {
+                val classLoader = loadedInfo.classLoader
+                steps.add("   targetActivity = $TARGET_ACTIVITY")
+                try {
+                    val activityClass = classLoader.loadClass(TARGET_ACTIVITY)
+                    steps.add("   ✅ classLoader.loadClass 成功")
+                    steps.add("      class = ${activityClass.name}")
+                    steps.add("      superclass = ${activityClass.superclass?.name}")
+                    steps.add("      interfaces = ${activityClass.interfaces.map { it.simpleName }}")
+                    satLog("S06-ACTIVITY-CLASS", "Activity 类加载成功: ${activityClass.name}")
+                } catch (e: ClassNotFoundException) {
+                    steps.add("   ❌ ClassNotFoundException: ${e.message}")
+                    satError("S06-ACTIVITY-CLASS", "Activity 类加载失败: ClassNotFoundException", e)
+                } catch (e: Exception) {
+                    steps.add("   ❌ ${e.javaClass.simpleName}: ${e.message}")
+                    satError("S06-ACTIVITY-CLASS", "Activity 类检查失败", e)
+                }
+            } else {
+                steps.add("   ⏭️  跳过（插件未加载）")
+            }
+        } catch (e: Exception) {
+            steps.add("   ❌ Activity 类检查 FAILED: ${e.message}")
+            satError("S06-ACTIVITY-CLASS", "Activity 类检查失败", e)
         }
         steps.add("")
 
@@ -248,13 +285,30 @@ class SimVersePlugin : Plugin() {
         }
         steps.add("")
 
-        steps.add("═══ 8. createProxyIntent 构造测试 ═══")
-        val proxyIntentOk = try {
+        steps.add("═══ 8. ProxyManager 配置检查 ═══")
+        try {
+            val proxyManager = PluginManager.proxyManager
+            steps.add("   proxyManager = $proxyManager")
+
+            val hostActivity = proxyManager.getHostActivity()
+            steps.add("   hostActivityClass = ${hostActivity?.name}")
+            satLog("S08-PROXY", "hostActivityClass = ${hostActivity?.name}")
+
+            val hostProvider = proxyManager.getHostProviderAuthority()
+            steps.add("   hostProviderAuthority = $hostProvider")
+            satLog("S08-PROXY", "hostProviderAuthority = $hostProvider")
+        } catch (e: Exception) {
+            steps.add("   ❌ ProxyManager 检查 FAILED: ${e.javaClass.simpleName}: ${e.message}")
+            satError("S08-PROXY", "ProxyManager 检查失败", e)
+        }
+        steps.add("")
+
+        steps.add("═══ 9. createProxyIntent 构造测试 ═══")
+        try {
             val act = activity
             if (act == null) {
                 steps.add("   ⚠️  当前无 Activity 上下文（后台调用？）")
-                satWarn("S08-PROXY", "无 Activity 上下文")
-                false
+                satWarn("S09-PROXY-INTENT", "无 Activity 上下文")
             } else {
                 val testExtras = mapOf<String, Any>(
                     "world_id" to "debug-test",
@@ -276,94 +330,57 @@ class SimVersePlugin : Plugin() {
                 testIntent.extras?.keySet()?.forEach { key ->
                     steps.add("        $key = ${testIntent.extras?.get(key)}")
                 }
-                satLog("S08-PROXY", "createProxyIntent 成功: component=${testIntent.component}")
-                true
+                satLog("S09-PROXY-INTENT", "createProxyIntent 成功: component=${testIntent.component}")
             }
         } catch (e: Exception) {
             steps.add("   ❌ createProxyIntent FAILED: ${e.javaClass.simpleName}: ${e.message}")
             steps.add("   stack = ${e.stackTraceToString().take(600)}")
-            satError("S08-PROXY", "createProxyIntent 失败", e)
-            false
+            satError("S09-PROXY-INTENT", "createProxyIntent 失败", e)
         }
         steps.add("")
 
-        steps.add("═══ 9. API Base URL 检查 ═══")
-        val apiBaseOk = try {
+        steps.add("═══ 10. API Base URL 检查 ═══")
+        try {
             val ctx = context ?: throw IllegalStateException("context is null")
             val url = getApiBaseUrl(ctx)
             steps.add("   apiBaseUrl = $url")
             steps.add("   ✅ SharedPreferences server_port 已读取")
-            satLog("S09-API", "apiBaseUrl = $url")
-            true
+            satLog("S10-API", "apiBaseUrl = $url")
         } catch (e: Exception) {
             steps.add("   ❌ API Base URL 检查 FAILED: ${e.message}")
-            satError("S09-API", "API Base URL 检查失败", e)
-            false
+            satError("S10-API", "API Base URL 检查失败", e)
         }
         steps.add("")
 
-        steps.add("═══ 10. ensurePluginLoaded 加载测试 ═══")
+        steps.add("═══ 11. ensurePluginLoaded 加载测试 ═══")
         try {
             val state = EncvComboLiteHost.getPluginFullState(PLUGIN_ID)
             if (state.status == "not_loaded" || state.status == "load_failed") {
                 steps.add("   当前状态: ${state.status}，尝试加载...")
-                satLog("S10-LOAD", "插件未加载，尝试 ensurePluginLoaded")
+                satLog("S11-LOAD", "插件未加载，尝试 ensurePluginLoaded")
                 val loaded = EncvComboLiteHost.ensurePluginLoaded(PLUGIN_ID)
                 steps.add("   ensurePluginLoaded result = $loaded")
-                satLog("S10-LOAD", "ensurePluginLoaded result = $loaded")
+                satLog("S11-LOAD", "ensurePluginLoaded result = $loaded")
                 if (loaded) {
                     val afterState = EncvComboLiteHost.getPluginFullState(PLUGIN_ID)
                     steps.add("   加载后状态: ${afterState.status}")
-                    satLog("S10-LOAD", "加载后状态: ${afterState.status}")
+                    satLog("S11-LOAD", "加载后状态: ${afterState.status}")
+
+                    val afterInstance = PluginManager.getPluginInstance(PLUGIN_ID)
+                    if (afterInstance != null) {
+                        steps.add("   ✅ 加载后插件实例可用")
+                        steps.add("      class = ${afterInstance.javaClass.name}")
+                        satLog("S11-LOAD", "加载后插件实例可用: ${afterInstance.javaClass.name}")
+                    }
                 }
             } else {
                 steps.add("   当前状态: ${state.status}（无需加载）")
-                satLog("S10-LOAD", "当前状态: ${state.status}，无需加载")
+                satLog("S11-LOAD", "当前状态: ${state.status}，无需加载")
             }
         } catch (e: Exception) {
             steps.add("   ❌ ensurePluginLoaded 测试 FAILED: ${e.javaClass.simpleName}: ${e.message}")
             steps.add("   stack = ${e.stackTraceToString().take(600)}")
-            satError("S10-LOAD", "ensurePluginLoaded 测试失败", e)
-        }
-        steps.add("")
-
-        steps.add("═══ 11. 插件 entryClass 反射方法检查 ═══")
-        try {
-            val info = PluginManager.getPluginInfo(PLUGIN_ID)
-            if (info != null) {
-                val entryClass = info.pluginInfo.entryClass
-                steps.add("   entryClass = $entryClass")
-                if (entryClass != null) {
-                    try {
-                        val clazz = Class.forName(entryClass)
-                        steps.add("   ✅ Class.forName 成功")
-
-                        val methods = clazz.methods.map { "${it.name}(${it.parameterTypes.map { t -> t.simpleName }.joinToString(",")})" }
-                        steps.add("   public methods (first 25):")
-                        methods.take(25).forEach { m ->
-                            steps.add("      - $m")
-                        }
-
-                        val fields = clazz.fields.map { it.name }
-                        if (fields.isNotEmpty()) {
-                            steps.add("   public fields (first 10): ${fields.take(10)}")
-                        }
-
-                        satLog("S11-REFLECT", "反射检查完成，public methods=${methods.size}")
-                    } catch (e: ClassNotFoundException) {
-                        steps.add("   ❌ Class.forName FAILED: 类找不到")
-                        satError("S11-REFLECT", "Class.forName 失败: ClassNotFoundException", e)
-                    } catch (e: Exception) {
-                        steps.add("   ❌ 反射检查 FAILED: ${e.javaClass.simpleName}: ${e.message}")
-                        satError("S11-REFLECT", "反射检查失败", e)
-                    }
-                }
-            } else {
-                steps.add("   ⏭️  跳过（插件未加载）")
-            }
-        } catch (e: Exception) {
-            steps.add("   ❌ entryClass 检查 FAILED: ${e.message}")
-            satError("S11-REFLECT", "entryClass 检查失败", e)
+            satError("S11-LOAD", "ensurePluginLoaded 测试失败", e)
         }
         steps.add("")
 
@@ -402,14 +419,24 @@ class SimVersePlugin : Plugin() {
     private fun runAutoDiagnosis(reason: String): String {
         satError("AUTO-DIAG", "自动触发饱和诊断，原因: $reason")
         return try {
-            val steps = mutableListOf<String>()
-            steps.add("[自动诊断 - 原因: $reason]")
-            steps.add("frameworkInit=${EncvComboLiteHost.isInitialized}")
+            val parts = mutableListOf<String>()
+            parts.add("[自动诊断 - 原因: $reason]")
+            parts.add("frameworkInit=${EncvComboLiteHost.isInitialized}")
             val state = EncvComboLiteHost.getPluginFullState(PLUGIN_ID)
-            steps.add("pluginState=${state.status}")
-            steps.add("pluginName=${state.name}")
-            steps.add("pluginVersion=${state.version}")
-            steps.joinToString(" | ")
+            parts.add("pluginState=${state.status}")
+            parts.add("pluginName=${state.name}")
+            parts.add("pluginVersion=${state.version}")
+
+            if (state.status == "ready") {
+                try {
+                    val instance = PluginManager.getPluginInstance(PLUGIN_ID)
+                    parts.add("instanceAvailable=${instance != null}")
+                } catch (e: Exception) {
+                    parts.add("instanceCheckFailed=${e.javaClass.simpleName}")
+                }
+            }
+
+            parts.joinToString(" | ")
         } catch (e: Exception) {
             "自动诊断失败: ${e.javaClass.simpleName}: ${e.message}"
         }
@@ -465,7 +492,7 @@ class SimVersePlugin : Plugin() {
                     return
                 }
                 "not_loaded", "load_failed" -> {
-                    satLog("OPEN-WORLD", "plugin state=${state.status}, attempting load...")
+                    satLog("OPEN-WORLD", "plugin state=${state.status}, attempting load via launchPlugin...")
                     val loaded = EncvComboLiteHost.ensurePluginLoaded(PLUGIN_ID)
                     satLog("OPEN-WORLD", "ensurePluginLoaded result=$loaded")
                     if (!loaded) {
@@ -474,6 +501,9 @@ class SimVersePlugin : Plugin() {
                         call.reject("Failed to load SimVerse plugin. $diag")
                         return
                     }
+                }
+                "ready" -> {
+                    satLog("OPEN-WORLD", "plugin already loaded and ready")
                 }
             }
 
@@ -485,6 +515,15 @@ class SimVersePlugin : Plugin() {
                 return
             }
             satLog("OPEN-WORLD", "loadedInfo id=${loadedInfo.pluginInfo.id} name=${loadedInfo.pluginInfo.name}")
+
+            val instance = PluginManager.getPluginInstance(PLUGIN_ID)
+            if (instance == null) {
+                val diag = runAutoDiagnosis("pluginInstance is null after load")
+                satError("OPEN-WORLD", "pluginInstance is null, $diag")
+                call.reject("SimVerse plugin instance not available. $diag")
+                return
+            }
+            satLog("OPEN-WORLD", "pluginInstance class=${instance.javaClass.name}")
 
             val extras = mapOf<String, Any>(
                 "world_id" to worldId,
@@ -516,9 +555,36 @@ class SimVersePlugin : Plugin() {
             val activity = this.activity
             if (activity is EncvHostActivity) {
                 activity.finish()
+                satLog("CLOSE-WORLD", "EncvHostActivity finished")
+            } else {
+                satLog("CLOSE-WORLD", "current activity is not EncvHostActivity, cannot close")
             }
             call.resolve()
         } catch (e: Exception) {
+            satError("CLOSE-WORLD", "closeWorld failed: ${e.message}", e)
+            call.reject(e.message)
+        }
+    }
+
+    @PluginMethod
+    fun unloadPlugin(call: PluginCall) {
+        try {
+            if (!EncvComboLiteHost.isInitialized) {
+                call.reject("ComboLite framework not initialized")
+                return
+            }
+            val state = EncvComboLiteHost.getPluginFullState(PLUGIN_ID)
+            if (state.status != "ready") {
+                call.reject("Plugin is not loaded, current state: ${state.status}")
+                return
+            }
+            kotlinx.coroutines.runBlocking {
+                PluginManager.unloadPlugin(PLUGIN_ID)
+            }
+            satLog("UNLOAD-PLUGIN", "plugin unloaded successfully")
+            call.resolve()
+        } catch (e: Exception) {
+            satError("UNLOAD-PLUGIN", "unloadPlugin failed: ${e.message}", e)
             call.reject(e.message)
         }
     }
