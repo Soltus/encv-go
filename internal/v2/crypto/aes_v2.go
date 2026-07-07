@@ -31,7 +31,7 @@ const (
 	// SaltSize 盐值长度
 	SaltSize_v2 = 32
 	// Iterations PBKDF2 迭代次数
-	Iterations_v2 = 100000
+	Iterations_v2 = 10000
 	// StreamBufferSize 流式加解密的 buffer 大小（1MB，减少系统调用）
 	StreamBufferSize = 1 * 1024 * 1024
 )
@@ -82,7 +82,7 @@ func GenerateKey(password string, salt []byte, keyLen int) []byte {
 	if keyLen <= 0 {
 		keyLen = KeySize_v2 // 默认 AES-256
 	}
-	return pbkdf2.Key([]byte(password), salt, 100000, keyLen, sha256.New)
+	return pbkdf2.Key([]byte(password), salt, Iterations_v2, keyLen, sha256.New)
 }
 
 // GenerateKey_v4 是 v4 容器专用的密钥派生函数。
@@ -100,7 +100,7 @@ func GenerateKey_v4(password string, salt []byte, keyLen int) []byte {
 	if keyLen <= 0 {
 		keyLen = KeySize_v4_128 // v4 默认 AES-128
 	}
-	return pbkdf2.Key([]byte(password), salt, 100000, keyLen, sha256.New)
+	return pbkdf2.Key([]byte(password), salt, Iterations_v2, keyLen, sha256.New)
 }
 
 // GenerateSalt_v2 生成一个随机盐

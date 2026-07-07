@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"sync"
 
 	"github.com/Soltus/encv-go/internal/v2/types"
 	"golang.org/x/crypto/pbkdf2"
@@ -15,16 +16,56 @@ import (
 
 const (
 	KEKKeySize    = 32
-	KDFIterations = 100000
+	KDFIterations = 10000
 
 	WrappedDEKNonceSize = 12
 	WrappedDEKTagSize   = 16
+
+	masterSaltContext = "encv-v4-master-key-context"
 )
 
 var (
 	ErrInvalidKEKLength = errors.New("KEK must be 32 bytes for AES-256-GCM")
 	ErrDecryptDEKFailed = errors.New("failed to decrypt DEK: GCM tag mismatch (wrong password?)")
 )
+
+var (
+	masterKeyCache   = make(map[string][]byte)
+	masterKeyCacheMu sync.RWMutex
+)
+
+func deriveMasterKey(password string) []byte {
+	masterKeyCacheMu.RLock()
+	if mk, ok := masterKeyCache[password]; ok {
+		masterKeyCacheMu.RUnlock()
+		return mk
+	}
+	masterKeyCacheMu.RUnlock()
+
+	masterKeyCacheMu.Lock()
+	defer masterKeyCacheMu.Unlock()
+
+	if mk, ok := masterKeyCache[password]; ok {
+		return mk
+	}
+
+	mk := pbkdf2.Key([]byte(password), []byte(masterSaltContext), KDFIterations, KEKKeySize, sha256.New)
+	masterKeyCache[password] = mk
+	return mk
+}
+
+func deriveKEKFromMaster(masterKey []byte, salt []byte) []byte {
+	h := sha256.New()
+	h.Write(masterKey)
+	h.Write(salt)
+	h.Write([]byte("kek"))
+	return h.Sum(nil)
+}
+
+func DeriveKEK(password string, salt []byte) []byte {
+	mk := deriveMasterKey(password)
+	return deriveKEKFromMaster(mk, salt)
+}
 
 func GenerateDEK(keyLen int) ([]byte, error) {
 	if keyLen <= 0 {
@@ -35,10 +76,6 @@ func GenerateDEK(keyLen int) ([]byte, error) {
 		return nil, err
 	}
 	return dek, nil
-}
-
-func DeriveKEK(password string, salt []byte) []byte {
-	return pbkdf2.Key([]byte(password), salt, KDFIterations, KEKKeySize, sha256.New)
 }
 
 func WrapDEK(dek, kek, aad []byte) (*types.WrappedDEK, error) {
