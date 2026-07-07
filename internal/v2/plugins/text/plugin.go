@@ -394,6 +394,7 @@ func (p *TextPlugin) PostEncryptProcessor(result *crypto.EncryptionResult) (stri
 		SpecialIDType: types.IDType_Raw,
 		SpecialID:     nil,
 		FinalFileName: finalFilename,
+		WrappedDEK:    result.WrappedDEK,
 	}
 
 	outputPath, err := packer.StandardPostEncrypt(packParams)

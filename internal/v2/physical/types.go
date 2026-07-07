@@ -66,4 +66,6 @@ type PackRequest struct {
 	SpecialIDType types.IDType
 
 	PasswordHint [16]byte
+
+	WrappedDEK *types.WrappedDEK
 }

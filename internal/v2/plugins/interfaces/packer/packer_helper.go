@@ -39,6 +39,8 @@ type PackParams struct {
 	FinalFileName         string
 
 	PasswordHint [16]byte
+
+	WrappedDEK *types.WrappedDEK
 }
 
 // StandardPostEncrypt 执行通用的打包流程
@@ -117,6 +119,7 @@ func StandardPostEncrypt(params *PackParams) (string, error) {
 		SpecialIDType:         params.SpecialIDType,
 		FinalFileName:         params.FinalFileName,
 		PasswordHint:          params.PasswordHint,
+		WrappedDEK:            params.WrappedDEK,
 	}
 
 	outputPath, err := params.PhysicalPacker.Pack(params.Manifest, packReq)

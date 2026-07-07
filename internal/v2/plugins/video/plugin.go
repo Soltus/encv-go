@@ -664,6 +664,7 @@ func (p *VideoPlugin) PostEncryptProcessor(result *crypto.EncryptionResult) (str
 		slog.Warn("Failed to calculate password hint, using empty hint", "error", err)
 	}
 	packParams.PasswordHint = passwordHint
+	packParams.WrappedDEK = result.WrappedDEK
 
 	outputPath, err := packer.StandardPostEncrypt(packParams)
 	if err != nil {

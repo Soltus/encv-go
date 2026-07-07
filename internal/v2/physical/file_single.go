@@ -45,7 +45,11 @@ func (p *SinglePhysicalPacker) Pack(manifest *types.Manifest, req *PackRequest) 
 			return "", fmt.Errorf("failed to create v4 container writer: %w", writerErr)
 		}
 
-		finalPath, packErr := p.writeAndClose(req.EncryptedDataReader, manifest, *tempWriter, tempPath, outputPath)
+		if req.WrappedDEK != nil {
+			tempWriter.SetWrappedDEK(req.WrappedDEK)
+		}
+
+		finalPath, packErr := p.writeAndClose(req.EncryptedDataReader, manifest, tempWriter, tempPath, outputPath)
 		if packErr != nil {
 			return "", packErr
 		}
@@ -73,7 +77,7 @@ func (p *SinglePhysicalPacker) Pack(manifest *types.Manifest, req *PackRequest) 
 		return "", fmt.Errorf("failed to create container writer: %w", err)
 	}
 
-	finalPath, err := p.writeAndClose(req.EncryptedDataReader, manifest, *tempWriter, tempPath, outputPath)
+	finalPath, err := p.writeAndClose(req.EncryptedDataReader, manifest, tempWriter, tempPath, outputPath)
 	if err != nil {
 		return "", err
 	}
@@ -82,7 +86,7 @@ func (p *SinglePhysicalPacker) Pack(manifest *types.Manifest, req *PackRequest) 
 	return finalPath, nil
 }
 
-func (p *SinglePhysicalPacker) writeAndClose(data io.Reader, manifest *types.Manifest, tempWriter writer.SingleFileContainerWriter, tempPath, outputPath string) (string, error) {
+func (p *SinglePhysicalPacker) writeAndClose(data io.Reader, manifest *types.Manifest, tempWriter *writer.SingleFileContainerWriter, tempPath, outputPath string) (string, error) {
 	// 确保临时文件在函数退出时被清理，除非操作成功
 	var success bool
 	defer func() {

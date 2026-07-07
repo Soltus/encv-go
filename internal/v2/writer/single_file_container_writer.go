@@ -22,17 +22,19 @@ type SingleFileContainerWriter struct {
 	fragments               []types.Fragment
 	manifestOffset          uint64
 	manifestLength          uint64
-	currentDataStreamOffset uint64      // 用于追踪连续数据流的偏移量
-	globalHasher            hash.Hash32 // 全局哈希器
-	manifestBytes           []byte      // 缓存序列化后的 Manifest
-	manifestCRC             uint32      // 缓存 Manifest CRC 以免重复计算
-	headerVersion           int         // 3 or 4
+	currentDataStreamOffset uint64
+	globalHasher            hash.Hash32
+	manifestBytes           []byte
+	manifestCRC             uint32
+	headerVersion           int
 	v4Header                *types.EnvelopeHeaderV4
 
 	originalName    string
 	fnPassword      string
 	fnConfig        filename.FNConfig
 	encryptFilename bool
+
+	wrappedDEK *types.WrappedDEK
 }
 
 // 创建一个新的文件容器写入器，他会在关闭的时候自动写入 Footer
@@ -97,6 +99,10 @@ func (w *SingleFileContainerWriter) SetFilenameEncoding(originalName string, pas
 	w.fnPassword = password
 	w.fnConfig = cfg
 	w.encryptFilename = originalName != "" && password != ""
+}
+
+func (w *SingleFileContainerWriter) SetWrappedDEK(wd *types.WrappedDEK) {
+	w.wrappedDEK = wd
 }
 
 func (w *SingleFileContainerWriter) WriteKVI(kviData []byte) error {
@@ -187,6 +193,7 @@ func (w *SingleFileContainerWriter) writeManifestV4(manifestObj *types.Manifest)
 		IsSeekable:    w.v4Header.IsSeekable != 0,
 		Segments:      segments,
 		KVI:           manifestObj.KVI,
+		WrappedDEK:    w.wrappedDEK,
 	}
 
 	if w.encryptFilename && w.originalName != "" {

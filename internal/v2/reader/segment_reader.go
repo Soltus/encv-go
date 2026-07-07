@@ -129,22 +129,31 @@ func OpenV4Container(filePath string, password string) (*V4ContainerInfo, error)
 		}
 	}
 
-	// 派生 encrypt_key：长度由 Header.CipherMode 决定
-	keySize := crypto.KeySizeForCipherMode_v4(crypto.CipherMode_v4(hdr.CipherMode))
-	encryptKey := crypto.GenerateKey_v4(password, salt, keySize)
+	// 派生 KEK：用 encrypt_salt + password PBKDF2 派生 32 字节 KEK
+	// KEK 仅用于解包 WrappedDEK，不直接用于数据加密
+	kek := crypto.DeriveKEK(password, salt)
+
+	// 从 Manifest.WrappedDEK 解包得到随机 DEK（AES-CTR 数据加密密钥）
+	mfV4 := h.ManifestV4()
+	var encryptKey []byte
+	if mfV4 != nil && mfV4.WrappedDEK != nil && mfV4.WrappedDEK.IsValid() {
+		var err error
+		encryptKey, err = crypto.UnwrapDEK(mfV4.WrappedDEK, kek)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", types.ErrWrongPassword, err)
+		}
+	} else {
+		return nil, fmt.Errorf("v4 container missing WrappedDEK (not a hierarchical-key container)")
+	}
 
 	// MacSalt 提取：mac_salt 改存于 Manifest（v4 Header offset 36-2028 被 SpecialID
 	// 完全占据，无法插入 16 字节），详见 header_v4.go 注释。
-	//
-	// 向后兼容：旧 v4 容器的 Manifest JSON 没有 mac_salt_base64 字段
-	// → 字段为 "" → macSalt 保持 nil（长度 0）→ types.HasMACSalt 返回 false
 	var macSalt []byte
-	if mfV4 := h.ManifestV4(); mfV4 != nil && mfV4.MACSaltBase64 != "" {
+	if mfV4 != nil && mfV4.MACSaltBase64 != "" {
 		macSalt, err = base64.StdEncoding.DecodeString(mfV4.MACSaltBase64)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode mac salt from manifest: %w", err)
 		}
-		// 防御：解码后长度应严格为 MACSaltLength (16)
 		if len(macSalt) != crypto.MACSaltLength {
 			return nil, fmt.Errorf("decoded mac salt has length %d, want %d", len(macSalt), crypto.MACSaltLength)
 		}
