@@ -44,7 +44,10 @@ const props = withDefaults(defineProps<Props>(), {
 const { t } = useI18n();
 const resetText = props.resetText || t("settings.undo");
 
-const emit = defineEmits<(e: "save") => void | (e: "reset") => void>();
+const emit = defineEmits<{
+  (e: "save"): void
+  (e: "reset"): void
+}>();
 
 function onSave() {
   emit("save");

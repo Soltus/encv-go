@@ -178,12 +178,12 @@ import {
   IonSegment, IonSegmentButton, IonSearchbar, IonContent, IonBadge, IonSpinner,
 } from "@ionic/vue";
 import { playOutline, pauseOutline, copyOutline, trashOutline, arrowUpOutline, arrowDownOutline, closeOutline } from "ionicons/icons";
-import { useI18n } from "../../composables/useI18n";
-import { copyToClipboard } from "../../composables/useClipboard";
-import { showToast } from "../../composables/useToast";
-import VirtualLogList from "../VirtualLogList.vue";
-import FilterDropdown from "../shared/FilterDropdown.vue";
-import type { DropdownOption } from "../shared/FilterDropdown.vue";
+import { useI18n } from "../composables/useI18n";
+import { copyToClipboard } from "../composables/useClipboard";
+import { showToast } from "../composables/useToast";
+import VirtualLogList from "./VirtualLogList.vue";
+import FilterDropdown from "./shared/FilterDropdown.vue";
+import type { DropdownOption } from "./shared/FilterDropdown.vue";
 
 interface LogTab {
   value: string;
@@ -214,12 +214,12 @@ const props = withDefaults(defineProps<Props>(), {
   showTagFilter: true,
 });
 
-const emit = defineEmits<
-  (e: "tab-change", tab: string) => void
-  | (e: "clear") => void
-  | (e: "copy", items: readonly T[]) => void
-  | (e: "select", item: T) => void
->();
+const emit = defineEmits<{
+  (e: "tab-change", tab: string): void
+  (e: "clear"): void
+  (e: "copy", items: readonly T[]): void
+  (e: "select", item: T): void
+}>();
 
 const { t } = useI18n();
 
