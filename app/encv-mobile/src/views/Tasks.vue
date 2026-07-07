@@ -614,6 +614,9 @@ import {
 
 import { computed } from "vue";
 import { useTasksView } from "./useTasksView";
+import TaskVirtualList from "@/components/tasks/TaskVirtualList.vue";
+import TaskDebugPanel from "@/components/tasks/TaskDebugPanel.vue";
+import RelevanceBadge from "@encv/shared-components/components/shared/RelevanceBadge.vue";
 
 const {
   // i18n

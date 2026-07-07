@@ -122,6 +122,7 @@
 
 <script setup lang="ts">
 import { onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import {
   warningOutline,
   refreshOutline,
@@ -147,6 +148,7 @@ const { initTheme, detectP3Support } = useTheme();
 const { t } = useI18n();
 const transport = useRealtimeTransport();
 const { connect, disconnect } = transport;
+const router = useRouter();
 
 const serviceGuardBlocked = ref(false);
 const serviceGuardDetail = ref("");
@@ -290,8 +292,16 @@ function copyErrorStack() {
 }
 
 function reloadPage() {
+  rootError.value = false;
+  rootErrorSummary.value = "";
+  rootErrorDetails.value = "";
+  rootErrorInfo.value = "";
+  rootErrorTime.value = "";
+  rootErrorStack.value = "";
   if (typeof window !== "undefined") {
-    window.location.reload();
+    router.replace("/tabs/home").catch(() => {
+      window.location.reload();
+    });
   }
 }
 // ======================================

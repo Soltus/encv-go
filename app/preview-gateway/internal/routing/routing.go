@@ -111,16 +111,6 @@ var SpecialUpstreams = []*Upstream{
 		Name:     "simverse-frontend",
 		Hint:     "Check pm2 status for simverse-frontend vite (:8200)",
 		Required: false,
-		PathRewrite: func(p string) string {
-			r := strings.TrimPrefix(p, "/simverse")
-			if r == "" {
-				return "/"
-			}
-			if strings.HasPrefix(r, "/") {
-				return r
-			}
-			return "/" + r
-		},
 	},
 }
 
