@@ -98,6 +98,9 @@
             <ion-button expand="block" fill="outline" color="warning" @click="handleDebugLifecycle" size="small">
               🔧 插件生命周期诊断(禁用/卸载/Activity)
             </ion-button>
+            <ion-button expand="block" fill="outline" color="tertiary" @click="handleDebugSimverse" size="small">
+              🌍 SimVerse全链路饱和诊断
+            </ion-button>
           </div>
         </div>
       </template>
@@ -140,6 +143,7 @@ import {
 } from "@/plugins/GoProcess";
 import { alertController } from "@ionic/vue";
 import { onMounted, ref } from "vue";
+import { debugSimVerseFlow } from "@/plugins/SimVerse";
 
 const { t } = useI18n();
 
@@ -374,6 +378,15 @@ async function handleDebugLifecycle() {
     await showDebugResult("🔧 插件生命周期诊断", result);
   } catch (e: any) {
     await showDebugResult("🔧 诊断失败", { debugLog: e?.message || String(e) });
+  }
+}
+
+async function handleDebugSimverse() {
+  try {
+    const result = await debugSimVerseFlow();
+    await showDebugResult("🌍 SimVerse全链路饱和诊断", result);
+  } catch (e: any) {
+    await showDebugResult("🌍 诊断失败", { debugLog: e?.message || String(e) });
   }
 }
 </script>

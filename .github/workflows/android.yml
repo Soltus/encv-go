@@ -86,8 +86,9 @@ jobs:
             app/node_modules
             app/encv-mobile/node_modules
             app/encv-mobile/plugin-openlist/web/node_modules
+            app/simverse-frontend/node_modules
             app/preview-gateway/node_modules
-          key: pnpm-main-${{ hashFiles('app/pnpm-lock.yaml', 'app/encv-mobile/package.json', 'app/preview-gateway/package.json') }}
+          key: pnpm-main-${{ hashFiles('app/pnpm-lock.yaml', 'app/encv-mobile/package.json', 'app/simverse-frontend/package.json', 'app/preview-gateway/package.json') }}
           restore-keys: |
             pnpm-main-
 
@@ -117,6 +118,11 @@ jobs:
       - name: TypeScript check (plugin-openlist/web)
         if: inputs.skip_plugin != true
         working-directory: app/encv-mobile/plugin-openlist/web
+        run: pnpm exec vue-tsc --noEmit
+
+      - name: TypeScript check (simverse-frontend)
+        if: inputs.skip_plugin != true
+        working-directory: app/simverse-frontend
         run: pnpm exec vue-tsc --noEmit
 
       - name: Build main app web
@@ -1467,6 +1473,59 @@ jobs:
           cp /tmp/diagnostic.tar.gz /tmp/diagnostic-artifact/openlist-diagnostic.tar.gz
           ls -lh /tmp/diagnostic-artifact/
           echo "Diagnostic ready at /tmp/diagnostic-artifact/openlist-diagnostic.tar.gz" >> $GITHUB_STEP_SUMMARY
+
+      # === Build SimVerse Plugin ===
+      - name: Build SimVerse frontend
+        if: inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          echo "═══ Building SimVerse frontend ═══"
+          cd app/simverse-frontend
+          pnpm install --prefer-offline
+          pnpm build
+          echo "✅ SimVerse frontend built:"
+          ls -lh dist/
+
+          # Copy to plugin assets
+          PLUGIN_ASSETS="${GITHUB_WORKSPACE}/${{ env.MONOREPO_MOBILE_DIR }}/plugin-simverse/src/main/assets/simverse"
+          mkdir -p "$PLUGIN_ASSETS"
+          rm -rf "$PLUGIN_ASSETS"/*
+          cp -r dist/* "$PLUGIN_ASSETS/"
+          echo "✅ Copied to plugin assets: $PLUGIN_ASSETS"
+          ls -lh "$PLUGIN_ASSETS/"
+
+      - name: Build SimVerse plugin APK
+        if: inputs.skip_plugin != true
+        continue-on-error: true
+        run: |
+          echo "═══ Building SimVerse ComboLite Plugin APK ═══"
+          cd ${{ env.MONOREPO_MOBILE_DIR }}/android
+
+          BUILD_TYPE="${{ inputs.version && 'Release' || 'Debug' }}"
+          APK_BUILD_TYPE="${{ inputs.version && 'release' || 'debug' }}"
+
+          echo "=== Compiling SimVerse plugin (${BUILD_TYPE}) ==="
+          ./gradlew -PincludePlugins=true ":plugin-simverse:compile${BUILD_TYPE}Kotlin" --stacktrace 2>&1
+
+          echo "=== Converting to plugin APK ==="
+          ./gradlew -PincludePlugins=true "convert_plugin-simverse_${APK_BUILD_TYPE}" --stacktrace 2>&1
+
+          echo "=== Locating output ==="
+          SIMVERSE_APK="build/outputs/plugin-apks/${APK_BUILD_TYPE}/plugin-simverse-${APK_BUILD_TYPE}.apk"
+          if [ -f "$SIMVERSE_APK" ]; then
+            echo "✅ SimVerse Plugin APK:"
+            ls -lh "$SIMVERSE_APK"
+            echo ""
+            echo "=== APK contents check ==="
+            unzip -l "$SIMVERSE_APK" | head -30
+            echo ""
+            echo "=== SimVerse assets in APK ==="
+            unzip -l "$SIMVERSE_APK" | grep "simverse/index.html" || echo "(no simverse assets found)"
+          else
+            echo "::error::SimVerse Plugin APK not found after build"
+            find build/outputs -name "*.apk" 2>/dev/null | head -10 || echo "No APKs found"
+            exit 1
+          fi
 
       # === Build ===
       - name: Build ${{ inputs.version && 'Release' || 'Debug' }} APK
