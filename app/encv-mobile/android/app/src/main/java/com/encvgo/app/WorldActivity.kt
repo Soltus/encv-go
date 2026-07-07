@@ -1,22 +1,31 @@
 package com.encvgo.app
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.graphics.Bitmap
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
-import androidx.appcompat.app.AppCompatActivity
-import android.webkit.WebSettings
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.getcapacitor.BridgeActivity
+import com.encvgo.app.GoProcessPlugin
+import com.encvgo.app.ApiProxyPlugin
+import com.masterpedidos.highrefreshrate.HighRefreshRatePlugin
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.net.HttpURLConnection
 import java.net.URL
 
-class WorldActivity : AppCompatActivity() {
+class WorldActivity : BridgeActivity() {
     companion object {
         private const val TAG = "WorldActivity"
         private const val EXTRA_WORLD_ID = "world_id"
@@ -30,62 +39,200 @@ class WorldActivity : AppCompatActivity() {
         }
     }
 
-    private lateinit var webView: WebView
+    private var backendReceiverRegistered = false
+    private var simverseLoaded = false
+    private var currentPort = 0
+
+    private val backendReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                EncvGoService.BROADCAST_BACKEND_READY,
+                EncvGoService.BROADCAST_BACKEND_STATUS -> {
+                    val port = intent.getIntExtra(EncvGoService.EXTRA_PORT, 0)
+                    val running = intent.getBooleanExtra(EncvGoService.EXTRA_RUNNING, false)
+                    Log.d(TAG, "backendReceiver: action=${intent.action}, port=$port, running=$running")
+                    if (running && port > 0) {
+                        currentPort = port
+                        if (!simverseLoaded) {
+                            loadSimverse(port)
+                        } else {
+                            updateApiBase(port)
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        Log.i(TAG, "onCreate: start")
         super.onCreate(savedInstanceState)
-        
-        // 初始竖屏（显示 SimVerse 首页）
-        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        
-        // 设置状态栏透明
+
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         val decorView = window.decorView
         decorView.systemUiVisibility = (
             View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-        )
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            )
         window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
-        
-        // 创建 WebView
-        webView = WebView(this)
-        setContentView(webView)
-        
-        // WebView 设置
-        val settings = webView.settings
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        settings.mediaPlaybackRequiresUserGesture = false
-        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-        
-        // 加载 simverse-frontend（路由到 /simverse-home）
-        //   - 从 Go 后端 HTTP 服务器加载，确保 API 请求同源
-        //   - 端口从 EncvGoService 获取（默认 2025）
-        webView.webViewClient = WebViewClient()
-        val port = EncvGoService.lastKnownPort.let { if (it > 0) it else 2025 }
-        webView.loadUrl("http://127.0.0.1:$port/simverse-home/")
-        
-        // 桥接：通知 Go 后端世界页面已打开
-        notifyBackend("opened")
+
+        try {
+            registerPlugin(GoProcessPlugin::class.java)
+            registerPlugin(ApiProxyPlugin::class.java)
+            registerPlugin(HighRefreshRatePlugin::class.java)
+            registerPlugin(SimVersePlugin::class.java)
+            Log.d(TAG, "onCreate: plugins registered")
+        } catch (e: Exception) {
+            Log.e(TAG, "onCreate: registerPlugin failed", e)
+        }
+
+        bridge.webView.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        Log.i(TAG, "WebView mixedContentMode set to MIXED_CONTENT_ALWAYS_ALLOW")
+
+        registerBackendReceiver()
+
+        if (EncvGoService.isRunning && EncvGoService.lastKnownPort > 0) {
+            Log.i(TAG, "onCreate: backend already running, port=${EncvGoService.lastKnownPort}")
+            currentPort = EncvGoService.lastKnownPort
+            loadSimverse(EncvGoService.lastKnownPort)
+        } else {
+            Log.i(TAG, "onCreate: starting backend service")
+            startBackendService()
+        }
+    }
+
+    private fun loadSimverse(port: Int) {
+        if (simverseLoaded) return
+        simverseLoaded = true
+        currentPort = port
+
+        try {
+            val simverseUrl = "https://localhost/simverse/"
+            Log.i(TAG, "loadSimverse: $simverseUrl (apiPort=$port)")
+
+            val webView = bridge?.webView
+            if (webView == null) {
+                Log.e(TAG, "loadSimverse: webView is null!")
+                return
+            }
+
+            val originalClient = webView.webViewClient
+            webView.webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                    Log.i(TAG, "WVC.onPageStarted: url=$url")
+                    originalClient?.onPageStarted(view, url, favicon)
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    Log.i(TAG, "WVC.onPageFinished: url=$url")
+                    originalClient?.onPageFinished(view, url)
+                    injectApiBase(port)
+                    notifyBackend("opened")
+                }
+
+                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                    Log.e(TAG, "WVC.onReceivedError: url=${request?.url}, error=${error?.description} (${error?.errorCode}), isMain=${request?.isForMainFrame}")
+                    originalClient?.onReceivedError(view, request, error)
+                }
+
+                override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, response: WebResourceResponse?) {
+                    Log.e(TAG, "WVC.onReceivedHttpError: url=${request?.url}, status=${response?.statusCode}, reason=${response?.reasonPhrase}")
+                    originalClient?.onReceivedHttpError(view, request, response)
+                }
+
+                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                    return try {
+                        originalClient?.shouldInterceptRequest(view, request)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "WVC.shouldInterceptRequest: originalClient failed", e)
+                        null
+                    }
+                }
+            }
+
+            val settings = webView.settings
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
+            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+            webView.loadUrl(simverseUrl)
+            Log.i(TAG, "loadSimverse: loadUrl dispatched")
+        } catch (e: Exception) {
+            Log.e(TAG, "loadSimverse: failed", e)
+        }
+    }
+
+    private fun injectApiBase(port: Int) {
+        val script = """
+            (function() {
+                window.__ENCV_API_BASE__ = 'http://127.0.0.1:$port';
+                window.__ENCV_PORT__ = $port;
+                console.log('[WorldActivity] API base set to http://127.0.0.1:$port');
+                if (window.dispatchEvent) {
+                    window.dispatchEvent(new CustomEvent('encv:api-base-ready', {detail: {port: $port}}));
+                }
+            })();
+        """.trimIndent()
+        bridge?.webView?.evaluateJavascript(script, null)
+        Log.d(TAG, "injectApiBase: port=$port")
+    }
+
+    private fun updateApiBase(port: Int) {
+        currentPort = port
+        injectApiBase(port)
+    }
+
+    private fun startBackendService() {
+        val serviceIntent = EncvGoService.createIntent(this, EncvGoService.ACTION_START, "simverse")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
+        }
+    }
+
+    private fun registerBackendReceiver() {
+        if (backendReceiverRegistered) return
+        val filter = IntentFilter().apply {
+            addAction(EncvGoService.BROADCAST_BACKEND_READY)
+            addAction(EncvGoService.BROADCAST_BACKEND_STATUS)
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(backendReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATED")
+            registerReceiver(backendReceiver, filter)
+        }
+        backendReceiverRegistered = true
+        Log.d(TAG, "registerBackendReceiver: receiver registered")
     }
 
     override fun onBackPressed() {
-        if (webView.canGoBack()) {
+        val webView = bridge?.webView
+        if (webView != null && webView.canGoBack()) {
             webView.goBack()
         } else {
-            // 退出世界，通知 Go 后端 checkpoint
             notifyBackend("closed")
             finish()
         }
     }
 
     override fun onDestroy() {
-        webView.destroy()
+        Log.d(TAG, "onDestroy: cleaning up")
+        if (backendReceiverRegistered) {
+            try {
+                unregisterReceiver(backendReceiver)
+            } catch (e: Exception) {
+                Log.w(TAG, "onDestroy: unregisterReceiver failed", e)
+            }
+            backendReceiverRegistered = false
+        }
         super.onDestroy()
     }
 
     private fun notifyBackend(event: String) {
-        val port = EncvGoService.lastKnownPort
+        val port = currentPort
         if (port <= 0) {
             Log.w(TAG, "notifyBackend: backend not running (port=0), event=$event")
             return

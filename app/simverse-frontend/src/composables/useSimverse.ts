@@ -167,6 +167,9 @@ let initialized = false;
 
 function getApiBase(): string {
   if (typeof window !== "undefined") {
+    if ((window as any).__ENCV_API_BASE__) {
+      return (window as any).__ENCV_API_BASE__;
+    }
     return window.location.origin;
   }
   return "http://localhost:8780";
