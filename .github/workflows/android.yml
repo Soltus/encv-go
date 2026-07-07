@@ -1496,7 +1496,6 @@ jobs:
 
       - name: Build SimVerse plugin APK
         if: inputs.skip_plugin != true
-        continue-on-error: true
         run: |
           echo "═══ Building SimVerse ComboLite Plugin APK ═══"
           cd ${{ env.MONOREPO_MOBILE_DIR }}/android
@@ -1649,12 +1648,16 @@ jobs:
           echo | tee -a /tmp/diagnostic-apk-sizes.txt
           echo "=== Plugin APKs ===" | tee -a /tmp/diagnostic-apk-sizes.txt
           PLUGIN_FOUND=0
+          OPENLIST_FOUND=0
+          SIMVERSE_FOUND=0
           for f in $(find ${{ env.MONOREPO_MOBILE_DIR }}/android/build/outputs/plugin-apks -name "*.apk" -type f 2>/dev/null); do
             ls -lh "$f" | tee -a /tmp/diagnostic-apk-sizes.txt
             PLUGIN_FOUND=1
+            echo "$f" | grep -q "openlist" && OPENLIST_FOUND=1
+            echo "$f" | grep -q "simverse" && SIMVERSE_FOUND=1
           done
           if [ "$PLUGIN_FOUND" -eq 0 ]; then
-            echo "❌ 找不到 plugin APK" | tee -a /tmp/diagnostic-apk-sizes.txt
+            echo "❌ 找不到任何 plugin APK" | tee -a /tmp/diagnostic-apk-sizes.txt
             echo "可能根因: step 38 (Build OpenList plugin APK) 失败" | tee -a /tmp/diagnostic-apk-sizes.txt
             echo "          或 convert_plugin-openlist_release 任务被跳过" | tee -a /tmp/diagnostic-apk-sizes.txt
             # 兜底查找 (兼容 aar2apk 路径变动)
@@ -1667,6 +1670,18 @@ jobs:
             unzip -l "$APK" 2>/dev/null | grep -E "libgojni|lib/" | head -10 | tee -a /tmp/diagnostic-apk-sizes.txt
             SIZE=$(stat -c%s "$APK" 2>/dev/null || stat -f%z "$APK" 2>/dev/null)
             echo "plugin APK 字节数: $SIZE (期望 >50000000)" | tee -a /tmp/diagnostic-apk-sizes.txt
+          fi
+          echo "" | tee -a /tmp/diagnostic-apk-sizes.txt
+          echo "=== 各插件检查 ===" | tee -a /tmp/diagnostic-apk-sizes.txt
+          if [ "$OPENLIST_FOUND" -eq 1 ]; then
+            echo "✅ OpenList 插件 APK 存在" | tee -a /tmp/diagnostic-apk-sizes.txt
+          else
+            echo "⚠️  OpenList 插件 APK 不存在" | tee -a /tmp/diagnostic-apk-sizes.txt
+          fi
+          if [ "$SIMVERSE_FOUND" -eq 1 ]; then
+            echo "✅ SimVerse 插件 APK 存在" | tee -a /tmp/diagnostic-apk-sizes.txt
+          else
+            echo "⚠️  SimVerse 插件 APK 不存在（将不会出现在 artifact 中）" | tee -a /tmp/diagnostic-apk-sizes.txt
           fi
           # 把诊断日志也存到 /tmp/diagnostic-artifact 让 step 47 一并打包
           mkdir -p /tmp/diagnostic-artifact
