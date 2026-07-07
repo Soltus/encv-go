@@ -60,6 +60,9 @@ object EncvComboLiteHost {
     suspend fun launchPlugin(pluginId: String): Boolean =
         PluginLifecycleEngine.launchPlugin(pluginId)
 
+    suspend fun installBundledPlugins(context: Context, assetsDir: String = "plugins"): Int =
+        PluginLifecycleEngine.installBundledPlugins(context, assetsDir)
+
     fun createProxyIntent(
         context: Context,
         pluginId: String,

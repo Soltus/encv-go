@@ -9,8 +9,12 @@ import com.combo.core.security.crash.PluginCrashHandler
 import com.combo.core.component.activity.BaseHostActivity
 import com.encvgo.combolite.model.OperationResult
 import com.encvgo.combolite.model.PluginState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
+import java.util.LinkedList
 
 internal object PluginLifecycleEngine {
 
@@ -181,6 +185,85 @@ internal object PluginLifecycleEngine {
         } catch (e: Exception) {
             Log.e(TAG, "ensurePluginLoaded($pluginId): failed", e)
             false
+        }
+    }
+
+    suspend fun installBundledPlugins(context: Context, assetsDir: String = "plugins"): Int {
+        if (!PluginManager.isInitialized) {
+            Log.w(TAG, "installBundledPlugins: PluginManager not initialized")
+            return 0
+        }
+        return withContext(Dispatchers.IO) {
+            val installedCount = installFromAssetsRecursive(context, assetsDir, "")
+            Log.i(TAG, "installBundledPlugins: installed $installedCount plugin(s) from assets/$assetsDir")
+            installedCount
+        }
+    }
+
+    private suspend fun installFromAssetsRecursive(
+        context: Context,
+        baseDir: String,
+        subPath: String,
+    ): Int {
+        val assetPath = if (subPath.isEmpty()) baseDir else "$baseDir/$subPath"
+        val entries = try {
+            context.assets.list(assetPath) ?: return 0
+        } catch (e: IOException) {
+            Log.w(TAG, "installFromAssets: cannot list $assetPath: ${e.message}")
+            return 0
+        }
+
+        var count = 0
+        val dirs = LinkedList<String>()
+
+        for (entry in entries) {
+            val fullPath = if (subPath.isEmpty()) entry else "$subPath/$entry"
+            val relativeInBase = fullPath
+            val children = try {
+                context.assets.list("$baseDir/$relativeInBase")
+            } catch (e: IOException) {
+                null
+            }
+
+            if (children.isNullOrEmpty()) {
+                if (entry.endsWith(".apk", ignoreCase = true)) {
+                    val apkFile = extractAssetToCache(context, "$baseDir/$relativeInBase")
+                    if (apkFile != null) {
+                        val result = installPlugin(apkFile)
+                        if (result is OperationResult.Success) {
+                            Log.i(TAG, "installFromAssets: installed ${result.data.id} (${result.data.versionName}) from $relativeInBase")
+                            count++
+                        } else {
+                            Log.w(TAG, "installFromAssets: failed to install $relativeInBase: ${(result as? OperationResult.Failure)?.reason}")
+                        }
+                        apkFile.delete()
+                    }
+                }
+            } else {
+                dirs.add(relativeInBase)
+            }
+        }
+
+        for (dir in dirs) {
+            count += installFromAssetsRecursive(context, baseDir, dir)
+        }
+
+        return count
+    }
+
+    private fun extractAssetToCache(context: Context, assetPath: String): File? {
+        return try {
+            val outFile = File(context.cacheDir, "bundled_plugins/${assetPath.replace('/', '_')}")
+            outFile.parentFile?.mkdirs()
+            context.assets.open(assetPath).use { input ->
+                outFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            }
+            if (outFile.length() > 0) outFile else null
+        } catch (e: IOException) {
+            Log.e(TAG, "extractAssetToCache: failed to extract $assetPath: ${e.message}", e)
+            null
         }
     }
 
