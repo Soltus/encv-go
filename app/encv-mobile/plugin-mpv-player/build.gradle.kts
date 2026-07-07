@@ -25,6 +25,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
+    sourceSets {
+        getByName("main") {
+            assets.srcDirs("src/main/assets")
+        }
+    }
+
     buildFeatures {
         compose = true
     }
@@ -51,4 +57,45 @@ dependencies {
     compileOnly("androidx.activity:activity-ktx")
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-android")
     compileOnly("io.insert-koin:koin-core:4.1.0")
+}
+
+val mpvFrontendDir = layout.projectDirectory.dir("web").asFile
+
+tasks.register("buildMpvFrontend") {
+    description = "Build mpv frontend and copy to plugin assets"
+    group = "build"
+
+    val distDir = File(mpvFrontendDir, "dist")
+    val assetsDir = layout.projectDirectory.dir("src/main/assets/mpv").asFile
+
+    inputs.dir(mpvFrontendDir)
+    outputs.dir(assetsDir)
+
+    doLast {
+        val npmLock = File(mpvFrontendDir, "pnpm-lock.yaml")
+        val nodeModules = File(mpvFrontendDir, "node_modules")
+        if (!nodeModules.exists() && npmLock.exists()) {
+            exec {
+                workingDir = mpvFrontendDir
+                commandLine("pnpm", "install", "--prefer-offline")
+            }
+        }
+
+        exec {
+            workingDir = mpvFrontendDir
+            commandLine("pnpm", "build")
+        }
+
+        assetsDir.deleteRecursively()
+        assetsDir.mkdirs()
+
+        distDir.copyRecursively(assetsDir, overwrite = true)
+        logger.lifecycle("MPV frontend copied to ${assetsDir.absolutePath}")
+    }
+}
+
+tasks.whenTaskAdded {
+    if (name == "mergeDebugAssets" || name == "mergeReleaseAssets") {
+        dependsOn("buildMpvFrontend")
+    }
 }

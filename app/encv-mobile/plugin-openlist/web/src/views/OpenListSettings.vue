@@ -1,13 +1,13 @@
 <template>
-  <SettingsPage title="设置" :show-back-button="true" @save="onSave" @reset="onReset">
+  <SettingsPage :title="t('openlist.settings.title')" :show-back-button="true" @save="onSave" @reset="onReset">
     <div v-if="isDevPreview" class="preview-banner">
       <div class="preview-banner-row">
         <span class="preview-icon">🔥</span>
-        <span class="preview-tag">PREVIEW BUILD</span>
-        <span class="preview-tag-sub">沙箱开发预览</span>
+        <span class="preview-tag">{{ t('openlist.settings.previewBuild') }}</span>
+        <span class="preview-tag-sub">{{ t('openlist.settings.sandboxDev') }}</span>
       </div>
       <div class="preview-banner-text">
-        <strong>当前为沙箱 dev preview 模式</strong>，<code>window.OpenListNative</code> 不存在。
+        <strong>{{ t('openlist.settings.sandboxMode') }}</strong>，<code>window.OpenListNative</code> 不存在。
         <br />
         后端由 <code>/tmp/openlist</code> 独立进程提供（<code>:5244</code>），
         <strong>不能通过本界面启停</strong>（需在终端 <code>start-preview.sh</code> 控制）。
@@ -16,66 +16,76 @@
       </div>
     </div>
 
-    <SettingsGroup title="基本信息">
-      <SettingsItem :icon="informationCircleOutline" title="OpenList 版本">
+    <SettingsGroup :title="t('openlist.settings.basicInfo')">
+      <SettingsItem :icon="informationCircleOutline" :title="t('openlist.settings.openlistVersion')">
         <template #default>
           <p class="version-line">
-            <span v-if="loadingVersion" class="muted">正在探测 :5244…</span>
+            <span v-if="loadingVersion" class="muted">{{ t('openlist.settings.probing') }}</span>
             <span v-else-if="versionError" class="error-text">
               ✗ {{ versionError }}
             </span>
             <span v-else>
               <span class="version-value">v{{ realVersion || version }}</span>
-              <span v-if="isDevPreview" class="preview-chip">🔥 PREVIEW</span>
+              <span v-if="isDevPreview" class="preview-chip">🔥 {{ t('openlist.home.preview') }}</span>
             </span>
           </p>
         </template>
       </SettingsItem>
-      <SettingsItem :icon="folderOutline" title="数据目录">
+      <SettingsItem :icon="folderOutline" :title="t('openlist.settings.dataDir')">
         <template #default>
-          <p class="mono-text">{{ dataDir || '(未配置)' }}</p>
+          <p class="mono-text">{{ dataDir || t('openlist.settings.notConfigured') }}</p>
           <p v-if="isDevPreview" class="muted small">
-            沙箱模式：当前 <code>:5244</code> backend 数据目录由 <code>/tmp/openlist-data</code> 决定
+            {{ t('openlist.settings.sandboxMode') }}：当前 <code>:5244</code> backend 数据目录由 <code>/tmp/openlist-data</code> 决定
           </p>
         </template>
       </SettingsItem>
-      <SettingsItem :icon="rocketOutline" title="监听端口">
+      <SettingsItem :icon="rocketOutline" :title="t('openlist.settings.listenPort')">
         <template #default>
           <p>
-            <span class="mono-text">{{ port || '(未知)' }}</span>
-            <span v-if="isBackendReachable" class="ok-text"> ● 在线</span>
-            <span v-else class="error-text"> ● 离线</span>
+            <span class="mono-text">{{ port || t('openlist.settings.unknown') }}</span>
+            <span v-if="isBackendReachable" class="ok-text"> {{ t('openlist.home.online') }}</span>
+            <span v-else class="error-text"> {{ t('openlist.home.offline') }}</span>
           </p>
           <p v-if="isDevPreview" class="muted small">
-            沙箱模式：health 由 <code>/__openlist-health</code> Node middleware 探测
+            {{ t('openlist.settings.sandboxMode') }}：health 由 <code>/__openlist-health</code> Node middleware 探测
           </p>
         </template>
       </SettingsItem>
     </SettingsGroup>
 
-    <SettingsGroup title="操作">
+    <SettingsGroup :title="t('openlist.settings.actions')">
       <SettingsItem
         :icon="globeOutline"
-        title="打开 Web UI"
+        :title="t('openlist.settings.openWebUi')"
         description="http://127.0.0.1:{{ port || 5244 }}"
         :button="isBackendReachable"
         @click="openWebUi"
       />
       <SettingsItem
         :icon="homeOutline"
-        title="返回主页"
-        description="plugin-openlist Capacitor UI"
+        :title="t('openlist.settings.backHome')"
+        :description="t('openlist.settings.pluginUi')"
         button
         @click="goHome"
       />
       <SettingsItem
         v-if="isDevPreview"
         :icon="arrowBackOutline"
-        title="返回 ENCV 主页面"
-        description="离开 dev preview，回到 ENCV Capacitor app"
+        :title="t('openlist.settings.backToEncv')"
+        :description="t('openlist.settings.leavePreview')"
         button
         class="back-to-encv-item"
         @click="goBackToEncvMain"
+      />
+    </SettingsGroup>
+
+    <SettingsGroup :title="t('settings.about')">
+      <SettingsItem
+        :icon="informationCircleOutline"
+        :title="t('settings.about')"
+        :description="`OpenList v${realVersion || version}`"
+        button
+        @click="goAbout"
       />
     </SettingsGroup>
   </SettingsPage>
@@ -85,10 +95,13 @@
 import SettingsGroup from "@encv/shared-components/components/settings/SettingsGroup.vue";
 import SettingsItem from "@encv/shared-components/components/settings/SettingsItem.vue";
 import SettingsPage from "@encv/shared-components/components/settings/SettingsPage.vue";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { arrowBackOutline, folderOutline, globeOutline, homeOutline, informationCircleOutline, rocketOutline } from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
+
+const { t } = useI18n();
 
 const router = useRouter();
 
@@ -191,6 +204,10 @@ function goBackToEncvMain() {
     logBuffer.warn("[OpenListSettings] /back-to-main 未注册，fallback 直接跳 :5173");
     window.location.assign("http://127.0.0.1:5173/tabs/remote");
   }
+}
+
+function goAbout() {
+  router.push("/settings/about");
 }
 </script>
 

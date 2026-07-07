@@ -4,7 +4,7 @@ import { registerIonicComponents } from "@encv/shared-components/composables/use
 import { IonicVue } from "@ionic/vue";
 import { createApp } from "vue";
 import App from "./App.vue";
-import pluginI18n from "./i18n/openlist";
+import pluginI18n from "./i18n/mpv";
 import { router } from "./router";
 
 import "@ionic/vue/css/core.css";

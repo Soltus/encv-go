@@ -3,8 +3,8 @@
     <ion-header>
       <ion-toolbar>
         <ion-title>
-          <span class="home-title">OpenList</span>
-          <span v-if="isDevPreview" class="preview-mini-chip">🔥 PREVIEW</span>
+          <span class="home-title">{{ t('openlist.home.title') }}</span>
+          <span v-if="isDevPreview" class="preview-mini-chip">🔥 {{ t('openlist.home.preview') }}</span>
           <span v-if="!isDevPreview" class="version-mini">v{{ version }}</span>
         </ion-title>
         <ion-buttons slot="end">
@@ -42,16 +42,15 @@
       <div v-if="isDevPreview" class="dev-preview-notice">
         <div class="dev-preview-notice-row">
           <span class="notice-icon">🛠</span>
-          <span class="notice-title">沙箱 Preview 模式</span>
+          <span class="notice-title">{{ t('openlist.home.sandboxPreview') }}</span>
         </div>
         <div class="dev-preview-notice-text">
-          OpenList 后端在沙箱下由 <code>/tmp/openlist</code> 独立进程提供（<code>:5244</code>），
-          <strong>UI 启停按钮不可用</strong>。
+          {{ t('openlist.home.sandboxDesc') }}
           <br />
-          终端控制：<code>bash scripts/dev-openlist.sh</code> 启停。
+          {{ t('openlist.home.terminalCtrl') }}：<code>bash scripts/dev-openlist.sh</code>
           <br />
-          实时状态：<span :class="backendOnline ? 'ok-text' : 'error-text'">
-            <strong>{{ backendOnline ? '● 在线' : '● 离线' }}</strong>
+          {{ t('openlist.home.realStatus') }}：<span :class="backendOnline ? 'ok-text' : 'error-text'">
+            <strong>{{ backendOnline ? t('openlist.home.online') : t('openlist.home.offline') }}</strong>
           </span>
           <span v-if="backendOnline" class="muted small">（{{ backendLatency }}ms）</span>
         </div>
@@ -85,6 +84,7 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { modalController } from "@ionic/vue";
 import {
   codeSlashOutline,
@@ -100,6 +100,8 @@ import { useRouter } from "vue-router";
 import PwdEditDialog from "@/components/PwdEditDialog.vue";
 import type { OpenListLog, OpenListRuntime } from "@/components-shared";
 import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
+
+const { t } = useI18n();
 
 const router = useRouter();
 

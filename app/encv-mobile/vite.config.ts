@@ -25,7 +25,7 @@ import fs from 'node:fs'
 // scripts/ 下的 .ts 会被 vite 当 external → 守卫拿不到 devStartGuard 函数
 import { devStartGuard } from '../packages/shared-components/src/lib/dev-start-guard'
 import { frontendDepsManifestPlugin } from './vite-plugins/frontend-deps-manifest'
-import { i18nOptimizePlugin } from './vite-plugins/i18n-optimize'
+import { i18nOptimizePlugin } from '../packages/shared-components/src/vite-plugins/i18n-optimize'
 import { vueComponentCheckPlugin } from '../packages/shared-components/src/vite-plugins/vue-component-check'
 import Components from 'unplugin-vue-components/vite'
 

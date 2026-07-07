@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from "@ionic/vue-router";
 import type { RouteRecordRaw } from "vue-router";
 import BackToMain from "@/views/BackToMain.vue";
 import NotFoundView from "@/views/NotFoundView.vue";
+import OpenListAbout from "@/views/OpenListAbout.vue";
 import OpenListConfigEditor from "@/views/OpenListConfigEditor.vue";
 import OpenListDevLogs from "@/views/OpenListDevLogs.vue";
 import OpenListHome from "@/views/OpenListHome.vue";
@@ -13,6 +14,7 @@ export const routes: RouteRecordRaw[] = [
   { path: "/home", component: OpenListHome },
   { path: "/config", component: OpenListConfigEditor },
   { path: "/settings", component: OpenListSettings },
+  { path: "/settings/about", component: OpenListAbout },
   { path: "/webview", component: OpenListWebView },
   { path: "/devlogs", component: OpenListDevLogs },
   { path: "/back-to-main", component: BackToMain },

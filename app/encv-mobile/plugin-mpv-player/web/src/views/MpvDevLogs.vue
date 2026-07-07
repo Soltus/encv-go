@@ -1,6 +1,6 @@
 <template>
   <DevLogsViewer
-    :title="t('openlist.devlogs.title')"
+    :title="t('mpv.devlogs.title')"
     :tabs="logTabs"
     :items="currentLogs"
     :show-tag-filter="false"
@@ -10,11 +10,11 @@
     <template #status="{ tab }">
       <div v-if="tab === 'frontend'" class="log-status-bar">
         <span class="status-dot online"></span>
-        <span>{{ t('openlist.devlogs.frontendCount', { count: frontendLogs.length }) }}</span>
+        <span>前端日志 {{ frontendLogs.length }} 条</span>
       </div>
       <div v-else class="log-status-bar">
-        <span :class="['status-dot', backendOnline ? 'online' : 'offline']"></span>
-        <span>{{ t('openlist.devlogs.backendCount', { count: backendLogs.length }) }}</span>
+        <span :class="['status-dot', playerOnline ? 'online' : 'offline']"></span>
+        <span>播放器日志 {{ playerLogs.length }} 条</span>
       </div>
     </template>
     <template #log-item="{ item, tab }">
@@ -31,19 +31,18 @@
 import DevLogsViewer from "@encv/shared-components/components/DevLogsViewer.vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { computed, onMounted, onUnmounted, ref } from "vue";
-import type { OpenListLog } from "@/components-shared";
-import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
+import { logBuffer, MpvNative } from "@/plugins/mpv-native";
 
 const { t } = useI18n();
 
 const logTabs = [
-  { value: "frontend", label: t("openlist.devlogs.frontend") },
-  { value: "backend", label: t("openlist.devlogs.backend") },
+  { value: "frontend", label: t("mpv.devlogs.frontend") },
+  { value: "player", label: t("mpv.devlogs.player") },
 ];
 
-const frontendLogs = ref<OpenListLog[]>([]);
-const backendLogs = ref<OpenListLog[]>([]);
-const backendOnline = ref(false);
+const frontendLogs = ref<any[]>([]);
+const playerLogs = ref<any[]>([]);
+const playerOnline = ref(false);
 
 const currentLogs = computed(() => {
   return frontendLogs.value as any[];
@@ -58,8 +57,8 @@ onMounted(() => {
   });
   frontendLogs.value = [...logBuffer.getAll()].reverse();
 
-  pollBackendLogs();
-  pollTimer = setInterval(pollBackendLogs, 3000);
+  pollPlayerStatus();
+  pollTimer = setInterval(pollPlayerStatus, 3000);
 });
 
 onUnmounted(() => {
@@ -87,16 +86,16 @@ function getBadgeColor(level: string): string {
   }
 }
 
-function pollBackendLogs() {
-  if (!window.OpenListNative) {
-    backendOnline.value = false;
+function pollPlayerStatus() {
+  if (!window.MpvNative) {
+    playerOnline.value = false;
     return;
   }
   try {
-    const status = OpenListNative.getStatus();
-    backendOnline.value = status.running;
+    const status = MpvNative.getStatus();
+    playerOnline.value = status.playing || status.paused;
   } catch {
-    backendOnline.value = false;
+    playerOnline.value = false;
   }
 }
 
