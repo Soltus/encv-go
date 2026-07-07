@@ -596,14 +596,34 @@ function createService(options: WorkflowTaskServiceOptions): WorkflowTaskService
       });
 
       // 2. 一次性批量提交（后端生成 UUID）
+      const submitStartTime = performance.now();
+      console.info(
+        "[useWorkflowTaskService] executeJob: submitting batch",
+        batchSpecs.length,
+        "tasks for job",
+        jobDef.id
+      );
       try {
         const tasks: EncvTask[] = await batchCreateTasks(batchSpecs, runId, taskTriggeredBy);
+        const submitDur = performance.now() - submitStartTime;
+        console.info(
+          "[useWorkflowTaskService] executeJob: batch submit done",
+          tasks.length,
+          "tasks,",
+          submitDur.toFixed(1) + "ms"
+        );
 
-        // 3. 一次性 push 所有真实 task 到 store（UI 立即显示 1 个 group N task）
+        // 3. 一次性批量 push 所有真实 task 到 store（UI 立即显示 1 个 group N task）
+        const appendStartTime = performance.now();
         const taskStore = useTaskStore();
-        for (const task of tasks) {
-          taskStore.appendTask(task);
-        }
+        taskStore.bulkAppendTasks(tasks);
+        const appendDur = performance.now() - appendStartTime;
+        console.info(
+          "[useWorkflowTaskService] executeJob: bulkAppendTasks done",
+          tasks.length,
+          "tasks,",
+          appendDur.toFixed(1) + "ms"
+        );
 
         // 4. 把后端返回的 task.id 赋给对应的 stepRun
         for (let i = 0; i < executableSteps.length && i < tasks.length; i++) {
