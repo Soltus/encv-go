@@ -341,6 +341,7 @@ func (p *AudioPlugin) PostEncryptProcessor(result *crypto.EncryptionResult) (str
 		SpecialIDType:        types.IDType_Raw,
 		SpecialID:            nil,
 		FinalFileName:        finalFilename,
+		WrappedDEK:           result.WrappedDEK,
 	}
 
 	outputPath, err := packer.StandardPostEncrypt(packParams)

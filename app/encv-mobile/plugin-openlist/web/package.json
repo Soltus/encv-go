@@ -10,6 +10,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@encv/shared-components": "workspace:*",
     "@ionic/vue": "^8.8.7",
     "@ionic/vue-router": "^8.8.7",
     "ionicons": "^8.0.13",

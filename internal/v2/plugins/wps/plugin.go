@@ -352,6 +352,7 @@ func (p *WPSPlugin) PostEncryptProcessor(result *crypto.EncryptionResult) (strin
 		SpecialIDType: types.IDType_Raw,
 		SpecialID:     nil,
 		FinalFileName: finalFilename,
+		WrappedDEK:    result.WrappedDEK,
 	}
 
 	outputPath, err := packer.StandardPostEncrypt(packParams)

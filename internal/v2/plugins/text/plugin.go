@@ -2,6 +2,8 @@ package text
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/utils"
@@ -23,7 +26,17 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/reader"
 	"github.com/Soltus/encv-go/internal/v2/service"
 	"github.com/Soltus/encv-go/internal/v2/types"
+	"github.com/Soltus/encv-go/internal/v2/writer"
 )
+
+const streamBufferSize = 1 * 1024 * 1024
+
+var streamBufferPool = sync.Pool{
+	New: func() interface{} {
+		buf := make([]byte, streamBufferSize)
+		return &buf
+	},
+}
 
 type TextPlugin struct {
 	ctx              context.Context
@@ -36,6 +49,10 @@ type TextPlugin struct {
 	baseNamer        namer.BaseNamer           // 注入容器命名器
 	containerManager *service.ContainerManager // 注入 ContainerManager
 	physicalPacker   physical.PhysicalPacker
+
+	useDirectPath  bool
+	directCtx  *crypto.EncryptionContext
+	directSrc  io.Reader
 }
 
 func (p *TextPlugin) Name() string {
@@ -332,16 +349,25 @@ func (p *TextPlugin) Encrypt(dataReader io.Reader) (*crypto.EncryptionResult, er
 
 	var result *crypto.EncryptionResult
 	err := utils.Do(guardKey, func() error {
-		// 1. 执行加密
-		// crypto.EncryptToTempFile_v2 会读取 dataReader 并生成带有 Salt/IV 头的临时文件
-		var err error
-		result, err = crypto.EncryptToTempFile_v2(dataReader, p.cfg.Password, p.outputDir)
+		encCtx, err := crypto.PrepareEncryptionContext(p.cfg.Password)
 		if err != nil {
-			return fmt.Errorf("failed to encrypt to temp file: %w", err)
+			return fmt.Errorf("failed to prepare encryption context: %w", err)
 		}
 
-		log.Printf("INFO: [%s] Encrypted to temporary file: %s (Payload: %d bytes)\n", p.Name(), result.TempPath, result.EncryptedPayloadSize)
-		log.Printf("✅ [%s] Encrypted successfully.\n", p.Name())
+		p.useDirectPath = true
+		p.directCtx = encCtx
+		p.directSrc = dataReader
+
+		result = &crypto.EncryptionResult{
+			TempPath:             "",
+			Salt:                 encCtx.Salt,
+			IV:                   encCtx.IV,
+			SaltIVHeaderSize:     0,
+			EncryptedPayloadSize: 0,
+			WrappedDEK:           encCtx.WrappedDEK,
+		}
+
+		log.Printf("✅ [%s] Encryption context prepared (direct path).\n", p.Name())
 		return nil
 	})
 
@@ -351,6 +377,133 @@ func (p *TextPlugin) Encrypt(dataReader io.Reader) (*crypto.EncryptionResult, er
 // Plugin 接口实现
 // 加密后处理器
 func (p *TextPlugin) PostEncryptProcessor(result *crypto.EncryptionResult) (string, error) {
+	if p.useDirectPath && p.directCtx != nil && p.directSrc != nil {
+		return p.postEncryptDirect(result)
+	}
+	return p.postEncryptLegacy(result)
+}
+
+func (p *TextPlugin) postEncryptDirect(result *crypto.EncryptionResult) (string, error) {
+	defer func() {
+		p.useDirectPath = false
+		p.directCtx = nil
+		p.directSrc = nil
+	}()
+
+	encryptedBaseName := p.baseNamer.GenerateEncryptedBaseName(p.index.OriginalFilename)
+	finalFilename := encryptedBaseName + p.settings.Ext
+	outputPath := filepath.Join(p.outputDir, finalFilename)
+
+	header, err := types.CreateHeaderV4(
+		true,
+		p.ContainerType(),
+		p.DefaultIsSeekable(p.inputPath),
+		types.IDType_Raw,
+		nil,
+		[16]byte{},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to prepare v4 header: %w", err)
+	}
+
+	tempPath := outputPath + ".tmp"
+	tempWriter, err := writer.NewSingleFileContainerWriterV4(tempPath, header)
+	if err != nil {
+		return "", fmt.Errorf("failed to create v4 container writer: %w", err)
+	}
+
+	var success bool
+	defer func() {
+		if !success {
+			tempWriter.Close()
+			os.Remove(tempPath)
+		}
+	}()
+
+	if result.WrappedDEK != nil {
+		tempWriter.SetWrappedDEK(result.WrappedDEK)
+	}
+
+	frag := &types.Fragment{
+		ID:     "0",
+		Type:   types.FragmentType_AtomicFile,
+		Length: 0,
+	}
+	if err := tempWriter.BeginFragment(frag); err != nil {
+		return "", fmt.Errorf("failed to begin fragment: %w", err)
+	}
+
+	bufPtr := streamBufferPool.Get().(*[]byte)
+	buf := *bufPtr
+	defer streamBufferPool.Put(bufPtr)
+	var totalWritten int64 = 0
+
+	block, err := aes.NewCipher(p.directCtx.DEK)
+	if err != nil {
+		return "", fmt.Errorf("failed to create cipher block: %w", err)
+	}
+	encryptStream := cipher.NewCTR(block, p.directCtx.IV)
+
+	for {
+		n, readErr := p.directSrc.Read(buf)
+		if n > 0 {
+			encryptStream.XORKeyStream(buf[:n], buf[:n])
+			if writeErr := tempWriter.WriteFragmentData(buf[:n]); writeErr != nil {
+				return "", fmt.Errorf("failed to write encrypted data: %w", writeErr)
+			}
+			totalWritten += int64(n)
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return "", fmt.Errorf("failed to read source data: %w", readErr)
+		}
+	}
+
+	if err := tempWriter.FinishFragment(); err != nil {
+		return "", fmt.Errorf("failed to finish fragment: %w", err)
+	}
+
+	logicalFragments := []types.Fragment{
+		{
+			ID:                "0",
+			Type:              types.FragmentType_AtomicFile,
+			Length:            uint64(totalWritten),
+			GlobalStartOffset: 0,
+		},
+	}
+
+	kvi := TextKVI_v2{
+		KVI: types.KVI{
+			SaltBase64: crypto.Base64Encode_v2(result.Salt),
+			IVBase64:   crypto.Base64Encode_v2(result.IV),
+		},
+		TextIndex: &p.index,
+	}
+	manifest, err := types.NewManifest(kvi, logicalFragments)
+	if err != nil {
+		return "", fmt.Errorf("failed to create manifest: %w", err)
+	}
+
+	if err := tempWriter.WriteManifest(manifest); err != nil {
+		return "", fmt.Errorf("failed to write manifest: %w", err)
+	}
+
+	if err := tempWriter.Close(); err != nil {
+		return "", fmt.Errorf("failed to close writer: %w", err)
+	}
+
+	if err := os.Rename(tempPath, outputPath); err != nil {
+		return "", fmt.Errorf("failed to rename temp file: %w", err)
+	}
+
+	success = true
+	log.Printf("✅ [%s] packed successfully (direct path).\n", p.Name())
+	return outputPath, nil
+}
+
+func (p *TextPlugin) postEncryptLegacy(result *crypto.EncryptionResult) (string, error) {
 	logicalDataSize := result.EncryptedPayloadSize
 
 	logicalFragments, err := fragment.CreateLogicalFragmentsFromSize(logicalDataSize, logicalDataSize, types.FragmentType_AtomicFile)
@@ -394,6 +547,7 @@ func (p *TextPlugin) PostEncryptProcessor(result *crypto.EncryptionResult) (stri
 		SpecialIDType: types.IDType_Raw,
 		SpecialID:     nil,
 		FinalFileName: finalFilename,
+		WrappedDEK:    result.WrappedDEK,
 	}
 
 	outputPath, err := packer.StandardPostEncrypt(packParams)

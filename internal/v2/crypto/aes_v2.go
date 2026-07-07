@@ -31,7 +31,9 @@ const (
 	// SaltSize 盐值长度
 	SaltSize_v2 = 32
 	// Iterations PBKDF2 迭代次数
-	Iterations_v2 = 100000
+	Iterations_v2 = 10000
+	// StreamBufferSize 流式加解密的 buffer 大小（1MB，减少系统调用）
+	StreamBufferSize = 1 * 1024 * 1024
 )
 
 // CipherMode_v4 标识 v4 容器使用的 AES 密钥长度（CTR 模式）。
@@ -80,7 +82,7 @@ func GenerateKey(password string, salt []byte, keyLen int) []byte {
 	if keyLen <= 0 {
 		keyLen = KeySize_v2 // 默认 AES-256
 	}
-	return pbkdf2.Key([]byte(password), salt, 100000, keyLen, sha256.New)
+	return pbkdf2.Key([]byte(password), salt, Iterations_v2, keyLen, sha256.New)
 }
 
 // GenerateKey_v4 是 v4 容器专用的密钥派生函数。
@@ -98,7 +100,7 @@ func GenerateKey_v4(password string, salt []byte, keyLen int) []byte {
 	if keyLen <= 0 {
 		keyLen = KeySize_v4_128 // v4 默认 AES-128
 	}
-	return pbkdf2.Key([]byte(password), salt, 100000, keyLen, sha256.New)
+	return pbkdf2.Key([]byte(password), salt, Iterations_v2, keyLen, sha256.New)
 }
 
 // GenerateSalt_v2 生成一个随机盐
@@ -124,10 +126,24 @@ func EncryptStream_v2(src io.Reader, dst io.Writer, key, iv []byte) error {
 	}
 
 	stream := cipher.NewCTR(block, iv)
-	writer := &cipher.StreamWriter{S: stream, W: dst}
+	buf := make([]byte, StreamBufferSize)
 
-	_, err = io.Copy(writer, src)
-	return err
+	for {
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			stream.XORKeyStream(buf[:n], buf[:n])
+			if _, writeErr := dst.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return readErr
+		}
+	}
+	return nil
 }
 
 // DecryptStream_v2 使用 AES-CTR 解密一个 io.Reader
@@ -144,10 +160,24 @@ func DecryptStream_v2(src io.Reader, dst io.Writer, key, iv []byte) error {
 	}
 
 	stream := cipher.NewCTR(block, iv)
-	reader := &cipher.StreamReader{S: stream, R: src}
+	buf := make([]byte, StreamBufferSize)
 
-	_, err = io.Copy(dst, reader)
-	return err
+	for {
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			stream.XORKeyStream(buf[:n], buf[:n])
+			if _, writeErr := dst.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return readErr
+		}
+	}
+	return nil
 }
 
 // GenerateIV_v2 生成一个随机 IV

@@ -38,12 +38,8 @@ func NewVirtualSeekableDecryptReader(cr EncryptedContainerReader, password strin
 
 func newVirtualSeekableDecryptReader(cr EncryptedContainerReader, password string, prebuiltIndex *fragmentRangeIndex) (DecryptReader, error) {
 	manifest := cr.GetManifest()
-	kviProvider, err := cr.GetKVIProvider()
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal KVI from manifest: %w", err)
-	}
 
-	key, iv, err := deriveKeyAndIV(kviProvider, password)
+	key, iv, err := deriveKeyAndIV(cr, password)
 	if err != nil {
 		return nil, err
 	}
@@ -241,8 +237,15 @@ func (r *VirtualSeekableDecryptReader) Close() error {
 
 // --- 辅助函数 ---
 
-// deriveKeyAndIV 从 KVI 和密码派生密钥和 IV
-func deriveKeyAndIV(kviProvider types.KVIProvider, password string) (key, iv []byte, err error) {
+// deriveKeyAndIV 从容器和密码派生密钥和 IV。
+// v4 分层密钥：如果 Manifest_v4 包含有效 WrappedDEK，先派生 KEK，再解包 DEK。
+// 回退：直接从 password+salt 派生密钥（兼容旧测试和非分层路径）。
+func deriveKeyAndIV(cr EncryptedContainerReader, password string) (key, iv []byte, err error) {
+	kviProvider, err := cr.GetKVIProvider()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get KVI provider: %w", err)
+	}
+
 	salt, err := crypto.Base64Decode_v2(kviProvider.GetEncryptionInfo().SaltBase64)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to decode salt: %w", err)
@@ -251,7 +254,23 @@ func deriveKeyAndIV(kviProvider types.KVIProvider, password string) (key, iv []b
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to decode iv: %w", err)
 	}
-	key = crypto.GenerateKey(password, salt, types.KeySize_v2)
+
+	var wrappedDEK *types.WrappedDEK
+	if fcr, ok := cr.(*fileContainerReader); ok && fcr.manifestV4 != nil {
+		wrappedDEK = fcr.manifestV4.WrappedDEK
+	}
+
+	if wrappedDEK != nil && wrappedDEK.IsValid() {
+		kek := crypto.DeriveKEK(password, salt)
+		dek, unwrapErr := crypto.UnwrapDEK(wrappedDEK, kek)
+		if unwrapErr != nil {
+			return nil, nil, fmt.Errorf("%w: %v", types.ErrWrongPassword, unwrapErr)
+		}
+		key = dek
+	} else {
+		key = crypto.GenerateKey(password, salt, types.KeySize_v2)
+	}
+
 	return key, iv, nil
 }
 

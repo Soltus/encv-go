@@ -3,8 +3,8 @@
     <ion-header>
       <ion-toolbar>
         <ion-title>
-          <span class="home-title">OpenList</span>
-          <span v-if="isDevPreview" class="preview-mini-chip">🔥 PREVIEW</span>
+          <span class="home-title">{{ t('openlist.home.title') }}</span>
+          <span v-if="isDevPreview" class="preview-mini-chip">🔥 {{ t('openlist.home.preview') }}</span>
           <span v-if="!isDevPreview" class="version-mini">v{{ version }}</span>
         </ion-title>
         <ion-buttons slot="end">
@@ -13,6 +13,9 @@
           </ion-button>
           <ion-button @click="goToConfig" title="编辑 Config">
             <ion-icon :icon="codeSlashOutline" slot="icon-only" />
+          </ion-button>
+          <ion-button @click="goToDevLogs" title="日志查看">
+            <ion-icon :icon="documentTextOutline" slot="icon-only" />
           </ion-button>
           <ion-button @click="goToWebView" title="OpenList Web UI">
             <ion-icon :icon="globeOutline" slot="icon-only" />
@@ -39,16 +42,15 @@
       <div v-if="isDevPreview" class="dev-preview-notice">
         <div class="dev-preview-notice-row">
           <span class="notice-icon">🛠</span>
-          <span class="notice-title">沙箱 Preview 模式</span>
+          <span class="notice-title">{{ t('openlist.home.sandboxPreview') }}</span>
         </div>
         <div class="dev-preview-notice-text">
-          OpenList 后端在沙箱下由 <code>/tmp/openlist</code> 独立进程提供（<code>:5244</code>），
-          <strong>UI 启停按钮不可用</strong>。
+          {{ t('openlist.home.sandboxDesc') }}
           <br />
-          终端控制：<code>bash scripts/dev-openlist.sh</code> 启停。
+          {{ t('openlist.home.terminalCtrl') }}：<code>bash scripts/dev-openlist.sh</code>
           <br />
-          实时状态：<span :class="backendOnline ? 'ok-text' : 'error-text'">
-            <strong>{{ backendOnline ? '● 在线' : '● 离线' }}</strong>
+          {{ t('openlist.home.realStatus') }}：<span :class="backendOnline ? 'ok-text' : 'error-text'">
+            <strong>{{ backendOnline ? t('openlist.home.online') : t('openlist.home.offline') }}</strong>
           </span>
           <span v-if="backendOnline" class="muted small">（{{ backendLatency }}ms）</span>
         </div>
@@ -82,12 +84,24 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { modalController } from "@ionic/vue";
+import {
+  codeSlashOutline,
+  documentTextOutline,
+  globeOutline,
+  keyOutline,
+  playOutline,
+  powerOutline,
+  settingsOutline,
+} from "ionicons/icons";
 import { onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import PwdEditDialog from "@/components/PwdEditDialog.vue";
 import type { OpenListLog, OpenListRuntime } from "@/components-shared";
 import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
+
+const { t } = useI18n();
 
 const router = useRouter();
 
@@ -211,8 +225,7 @@ async function probeBackend() {
   }
 }
 
-async function _toggleService() {
-  // dev preview 模式：FAB 已隐藏，但保险起见
+async function toggleService() {
   if (isDevPreview.value) {
     logBuffer.warn("沙箱 preview 模式，启停由 :5244 进程控制（不在 UI 范围）");
     return;
@@ -241,8 +254,7 @@ async function _toggleService() {
   }
 }
 
-async function _openPasswordDialog() {
-  // 防御性：try-catch 包住整个 modal 流程（capacitor.md §1.3 modal 必须秒开）
+async function openPasswordDialog() {
   let modal: any;
   try {
     modal = await modalController.create({
@@ -251,8 +263,6 @@ async function _openPasswordDialog() {
         onConfirm: async (password: string) => {
           logBuffer.info("设置管理员密码...");
           if (isDevPreview.value) {
-            // dev preview：OpenListNative.setPassword 返 false（无 native bridge）
-            // 给用户清晰提示而不是 log "设置失败"
             logBuffer.warn("沙箱 preview 模式，密码设置需直接改 :5244 sqlite db 或用 OpenList admin UI");
             return;
           }
@@ -267,13 +277,16 @@ async function _openPasswordDialog() {
   }
 }
 
-function _goToConfig() {
+function goToConfig() {
   router.push("/config");
 }
-function _goToWebView() {
+function goToDevLogs() {
+  router.push("/devlogs");
+}
+function goToWebView() {
   router.push("/webview");
 }
-function _goToSettings() {
+function goToSettings() {
   router.push("/settings");
 }
 </script>

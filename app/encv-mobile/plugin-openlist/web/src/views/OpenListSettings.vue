@@ -1,145 +1,110 @@
 <template>
-  <ion-page>
-    <ion-header>
-      <ion-toolbar>
-        <ion-buttons slot="start">
-          <!--
-            用 ion-button + @click router.push 替代 ion-back-button
-            原因：ion-back-button 在 vue-router 4 hash 模式下 default-href 行为不可靠
-            （Ionic 8 ion-back-button 内部可能走 history.back()，popstate 不触发 hashchange）
-            router.push('/home') 显式 hash 跳，hashchange 事件一定触发
-          -->
-          <ion-button @click="goBackToHome" title="返回 home">
-            <ion-icon slot="icon-only" :icon="chevronBackOutline" />
-          </ion-button>
-        </ion-buttons>
-        <ion-title>设置</ion-title>
-      </ion-toolbar>
-    </ion-header>
-
-    <ion-content>
-      <!--
-        沙箱 dev preview 专属横幅（醒目 badge）
-        仅在 window.OpenListNative 不存在时显示（即 vite dev 沙箱预览模式）
-      -->
-      <div v-if="isDevPreview" class="preview-banner">
-        <div class="preview-banner-row">
-          <span class="preview-icon">🔥</span>
-          <span class="preview-tag">PREVIEW BUILD</span>
-          <span class="preview-tag-sub">沙箱开发预览</span>
-        </div>
-        <div class="preview-banner-text">
-          <strong>当前为沙箱 dev preview 模式</strong>，<code>window.OpenListNative</code> 不存在。
-          <br />
-          后端由 <code>/tmp/openlist</code> 独立进程提供（<code>:5244</code>），
-          <strong>不能通过本界面启停</strong>（需在终端 <code>start-preview.sh</code> 控制）。
-          <br />
-          所有数据（密码、Config、版本）都通过 <code>http://127.0.0.1:5244/api/*</code> 直访 backend（撤销 /openlist-spa/ 路由改造）。
-        </div>
-        <details class="preview-debug">
-          <summary>🔧 路由诊断（点击展开）</summary>
-          <div class="debug-section">
-            <div><strong>location.hash</strong>: <code>{{ currentHash }}</code></div>
-            <div><strong>已注册 routes</strong>: <code>{{ registeredRoutes.join(', ') }}</code></div>
-            <div><strong>logBuffer 最近 5 条</strong>:</div>
-            <ul class="debug-log">
-              <li v-for="(line, i) in recentLogs" :key="i" v-html="line"></li>
-            </ul>
-          </div>
-        </details>
+  <SettingsPage :title="t('openlist.settings.title')" :show-back-button="true" @save="onSave" @reset="onReset">
+    <div v-if="isDevPreview" class="preview-banner">
+      <div class="preview-banner-row">
+        <span class="preview-icon">🔥</span>
+        <span class="preview-tag">{{ t('openlist.settings.previewBuild') }}</span>
+        <span class="preview-tag-sub">{{ t('openlist.settings.sandboxDev') }}</span>
       </div>
+      <div class="preview-banner-text">
+        <strong>{{ t('openlist.settings.sandboxMode') }}</strong>，<code>window.OpenListNative</code> 不存在。
+        <br />
+        后端由 <code>/tmp/openlist</code> 独立进程提供（<code>:5244</code>），
+        <strong>不能通过本界面启停</strong>（需在终端 <code>start-preview.sh</code> 控制）。
+        <br />
+        所有数据（密码、Config、版本）都通过 <code>http://127.0.0.1:5244/api/*</code> 直访 backend。
+      </div>
+    </div>
 
-      <ion-list>
-        <!-- OpenList 版本：dev preview 模式从 backend 拿真版本，叠加炫酷 Preview Build 标识 -->
-        <ion-item>
-          <ion-label>
-            <h2>OpenList 版本</h2>
-            <p class="version-line">
-              <span v-if="loadingVersion" class="muted">正在探测 :5244…</span>
-              <span v-else-if="versionError" class="error-text">
-                ✗ {{ versionError }}
-              </span>
-              <span v-else>
-                <span class="version-value">v{{ realVersion || version }}</span>
-                <span v-if="isDevPreview" class="preview-chip">🔥 PREVIEW</span>
-                <span v-if="isDevPreview" class="preview-chip-sub">vite dev 实时刷新</span>
-              </span>
-            </p>
-          </ion-label>
-        </ion-item>
+    <SettingsGroup :title="t('openlist.settings.basicInfo')">
+      <SettingsItem :icon="informationCircleOutline" :title="t('openlist.settings.openlistVersion')">
+        <template #default>
+          <p class="version-line">
+            <span v-if="loadingVersion" class="muted">{{ t('openlist.settings.probing') }}</span>
+            <span v-else-if="versionError" class="error-text">
+              ✗ {{ versionError }}
+            </span>
+            <span v-else>
+              <span class="version-value">v{{ realVersion || version }}</span>
+              <span v-if="isDevPreview" class="preview-chip">🔥 {{ t('openlist.home.preview') }}</span>
+            </span>
+          </p>
+        </template>
+      </SettingsItem>
+      <SettingsItem :icon="folderOutline" :title="t('openlist.settings.dataDir')">
+        <template #default>
+          <p class="mono-text">{{ dataDir || t('openlist.settings.notConfigured') }}</p>
+          <p v-if="isDevPreview" class="muted small">
+            {{ t('openlist.settings.sandboxMode') }}：当前 <code>:5244</code> backend 数据目录由 <code>/tmp/openlist-data</code> 决定
+          </p>
+        </template>
+      </SettingsItem>
+      <SettingsItem :icon="rocketOutline" :title="t('openlist.settings.listenPort')">
+        <template #default>
+          <p>
+            <span class="mono-text">{{ port || t('openlist.settings.unknown') }}</span>
+            <span v-if="isBackendReachable" class="ok-text"> {{ t('openlist.home.online') }}</span>
+            <span v-else class="error-text"> {{ t('openlist.home.offline') }}</span>
+          </p>
+          <p v-if="isDevPreview" class="muted small">
+            {{ t('openlist.settings.sandboxMode') }}：health 由 <code>/__openlist-health</code> Node middleware 探测
+          </p>
+        </template>
+      </SettingsItem>
+    </SettingsGroup>
 
-        <ion-item>
-          <ion-label>
-            <h2>数据目录</h2>
-            <p class="mono-text">{{ dataDir || '(未配置)' }}</p>
-            <p v-if="isDevPreview" class="muted small">
-              沙箱模式：当前 <code>:5244</code> backend 数据目录由 <code>/tmp/openlist-data</code> 决定
-            </p>
-          </ion-label>
-        </ion-item>
+    <SettingsGroup :title="t('openlist.settings.actions')">
+      <SettingsItem
+        :icon="globeOutline"
+        :title="t('openlist.settings.openWebUi')"
+        description="http://127.0.0.1:{{ port || 5244 }}"
+        :button="isBackendReachable"
+        @click="openWebUi"
+      />
+      <SettingsItem
+        :icon="homeOutline"
+        :title="t('openlist.settings.backHome')"
+        :description="t('openlist.settings.pluginUi')"
+        button
+        @click="goHome"
+      />
+      <SettingsItem
+        v-if="isDevPreview"
+        :icon="arrowBackOutline"
+        :title="t('openlist.settings.backToEncv')"
+        :description="t('openlist.settings.leavePreview')"
+        button
+        class="back-to-encv-item"
+        @click="goBackToEncvMain"
+      />
+    </SettingsGroup>
 
-        <ion-item>
-          <ion-label>
-            <h2>监听端口</h2>
-            <p>
-              <span class="mono-text">{{ port || '(未知)' }}</span>
-              <span v-if="isBackendReachable" class="ok-text"> ● 在线</span>
-              <span v-else class="error-text"> ● 离线</span>
-            </p>
-            <p v-if="isDevPreview" class="muted small">
-              沙箱模式：health 由 <code>/__openlist-health</code> Node middleware 探测
-            </p>
-          </ion-label>
-        </ion-item>
-
-        <ion-item button @click="openWebUi" :disabled="!isBackendReachable">
-          <ion-icon :icon="globeOutline" slot="start" />
-          <ion-label>
-            <h2>打开 Web UI</h2>
-            <p class="mono-text">http://127.0.0.1:{{ port || 5244 }}</p>
-          </ion-label>
-        </ion-item>
-
-        <ion-item button @click="goHome">
-          <ion-icon :icon="homeOutline" slot="start" />
-          <ion-label>
-            <h2>返回主页</h2>
-            <p class="muted">plugin-openlist Capacitor UI</p>
-          </ion-label>
-        </ion-item>
-
-        <!--
-          强力的"返回 ENCV 主页面"入口
-          dev 沙箱：window.location.origin + '/tabs/remote'（encv-mobile 主 tab）
-          真机：不显示（真机在 Android WebView 内部，外部导航无意义）
-        -->
-        <ion-item
-          v-if="isDevPreview"
-          button
-          @click="goBackToEncvMain"
-          class="back-to-encv-item"
-        >
-          <ion-icon :icon="arrowBackOutline" slot="start" />
-          <ion-label>
-            <h2 class="back-to-encv-label">返回 ENCV 主页面</h2>
-            <p class="muted small">
-              离开 dev preview，回到 ENCV Capacitor app
-            </p>
-          </ion-label>
-        </ion-item>
-      </ion-list>
-    </ion-content>
-  </ion-page>
+    <SettingsGroup :title="t('settings.about')">
+      <SettingsItem
+        :icon="informationCircleOutline"
+        :title="t('settings.about')"
+        :description="`OpenList v${realVersion || version}`"
+        button
+        @click="goAbout"
+      />
+    </SettingsGroup>
+  </SettingsPage>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
+import SettingsGroup from "@encv/shared-components/components/settings/SettingsGroup.vue";
+import SettingsItem from "@encv/shared-components/components/settings/SettingsItem.vue";
+import SettingsPage from "@encv/shared-components/components/settings/SettingsPage.vue";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { arrowBackOutline, folderOutline, globeOutline, homeOutline, informationCircleOutline, rocketOutline } from "ionicons/icons";
+import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
 
+const { t } = useI18n();
+
 const router = useRouter();
 
-// 防御性默认值：dev preview 模式 window.OpenListNative 不存在，OpenListNative 返 'unknown'/0/''
 const version = ref("unknown");
 const dataDir = ref("");
 const port = ref(0);
@@ -150,46 +115,25 @@ const realVersion = ref("");
 const versionError = ref("");
 const isBackendReachable = ref(false);
 
-// logBuffer 状态（用于 debug section）
-const recentLogs = ref<string[]>([]);
-const currentHash = ref(window.location.hash || "(empty)");
-const registeredRoutes = ref<string[]>([]);
-
-let hashPollTimer: ReturnType<typeof setInterval> | null = null;
-
 onMounted(async () => {
-  // **核心检测**：dev preview 模式 = window.OpenListNative 不存在
-  // 真机模式 = window.OpenListNative 存在（OpenListPluginJSInterface 注册过）
   isDevPreview.value = !window.OpenListNative;
 
-  // 基础数据：从 OpenListNative stub 拿（dev preview 全部 0/unknown/''）
   version.value = OpenListNative.getVersion();
   dataDir.value = OpenListNative.getDataDir();
   port.value = OpenListNative.getPort();
 
-  // dev preview 模式：从 :5244 backend 拿真版本 + 真 health 状态
   if (isDevPreview.value) {
     await fetchRealVersion();
     await probeBackendHealth();
-    // 启动路由诊断轮询
-    registeredRoutes.value = router.getRoutes().map(r => r.path);
-    hashPollTimer = setInterval(() => {
-      currentHash.value = window.location.hash || "(empty)";
-      // 同步 logBuffer 输出
-      recentLogs.value = logBuffer.getAll().slice(-5).map(formatLogLine);
-    }, 1000);
   }
 });
 
-onUnmounted(() => {
-  if (hashPollTimer) clearInterval(hashPollTimer);
-});
+function onSave() {
+  logBuffer.info("保存设置");
+}
 
-function formatLogLine(entry: any): string {
-  const level = entry?.level?.toUpperCase() || "INFO";
-  const msg = entry?.message || "";
-  const color = level === "ERROR" ? "#ef4444" : level === "WARN" ? "#f59e0b" : "#22c55e";
-  return `<span style="color:${color}">[${level}]</span> ${msg}`;
+function onReset() {
+  logBuffer.info("重置设置");
 }
 
 /**
@@ -243,45 +187,27 @@ async function probeBackendHealth() {
   }
 }
 
-function _openWebUi() {
-  // dev preview：走沙箱路径 :2025/openlist-ui/... 不行（那只能到 plugin-openlist vite）
-  // 直接打开 :5244 真实 backend
+function openWebUi() {
   window.open(`http://127.0.0.1:${port.value || 5244}/#/login`, "_blank", "noopener");
 }
 
-function _goHome() {
+function goHome() {
   router.push("/home");
 }
 
-/**
- * toolbar 左上角返回按钮：显式 router.push 避免 ion-back-button + default-href 在
- * vue-router 4 hash 模式下行为不可靠。
- */
-function _goBackToHome() {
-  router.push("/home");
-}
-
-function _goBackToEncvMain() {
-  // 跳到 BackToMain 视图（plugin-openlist 内嵌全屏 iframe 加载 encv-mobile :5173）。
-  // 为什么不直接 window.location.href 跳 :5173：
-  //   - Trae 沙箱 OpenPreview 单 port 限制 (trae_web_sandbox_network.md §8.4)：
-  //     OpenPreview 注册了 :5174，16000 入口只能代理 :5174，:5173 在沙箱内对外不可达
-  //   - 直接跳 `http://localhost:5173/tabs/remote` 在沙箱下会失败
-  //   - 在 :5174 内嵌 iframe 加载 :5173 走的是 sandbox 内部端口互通（vite 监听 0.0.0.0），
-  //     不依赖 16000 代理
-  // 为什么不调 OpenPreview 切换到 :5173：
-  //   - OpenPreview 是 AI agent 工具，前端无法调用
-  //   - 即使能调用，多次注册会 last-write-wins 覆盖
+function goBackToEncvMain() {
   logBuffer.info("[OpenListSettings] goBackToEncvMain → /back-to-main");
-  // 检查路由是否注册（如果 plugins/router 还没初始化好，fallback 跳绝对 URL）
   const hasRoute = router.getRoutes().some(r => r.path === "/back-to-main");
   if (hasRoute) {
     router.push("/back-to-main");
   } else {
-    // Fallback：直接跳 :5173（直连模式 OK；沙箱模式会失败但允许尝试）
     logBuffer.warn("[OpenListSettings] /back-to-main 未注册，fallback 直接跳 :5173");
     window.location.assign("http://127.0.0.1:5173/tabs/remote");
   }
+}
+
+function goAbout() {
+  router.push("/settings/about");
 }
 </script>
 

@@ -30,12 +30,8 @@ func NewSequentialSeekableDecryptReader(cr EncryptedContainerReader, password st
 
 func newSequentialSeekableDecryptReader(cr EncryptedContainerReader, password string, prebuiltIndex *fragmentRangeIndex) (DecryptReader, error) {
 	manifest := cr.GetManifest()
-	kviProvider, err := cr.GetKVIProvider()
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal KVI from manifest: %w", err)
-	}
 
-	key, iv, err := deriveKeyAndIV(kviProvider, password)
+	key, iv, err := deriveKeyAndIV(cr, password)
 	if err != nil {
 		return nil, err
 	}

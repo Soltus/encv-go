@@ -469,6 +469,76 @@ var benchDescriptions = map[string]benchDesc{
 		ExcelNs:     2_000_000,
 		Note:        "视频拖拽场景，多个用户同时跳转",
 	},
+	"DeriveKEK": {
+		Category:    "分层密钥",
+		Description: "使用 PBKDF2-SHA256 从密码派生 32 字节 KEK（密钥加密密钥），100,000 次迭代",
+		Unit:        "延迟",
+		GoodNs:      20_000_000,
+		ExcelNs:     10_000_000,
+		Note:        "KEK 仅用于加密 DEK，不直接加密数据",
+	},
+	"GenerateDEK": {
+		Category:    "分层密钥",
+		Description: "生成随机 16 字节 DEK（数据加密密钥），使用 crypto/rand 安全随机源",
+		Unit:        "延迟",
+		GoodNs:      50_000,
+		ExcelNs:     10_000,
+	},
+	"WrapDEK": {
+		Category:    "分层密钥",
+		Description: "使用 AES-256-GCM 用 KEK 包裹 DEK，提供认证加密",
+		Unit:        "延迟",
+		GoodNs:      500_000,
+		ExcelNs:     100_000,
+		Note:        "GCM 提供完整性和认证，防止 DEK 被篡改",
+	},
+	"UnwrapDEK": {
+		Category:    "分层密钥",
+		Description: "使用 AES-256-GCM 用 KEK 解包 DEK，验证密码正确性",
+		Unit:        "延迟",
+		GoodNs:      500_000,
+		ExcelNs:     100_000,
+		Note:        "密码错误时 GCM 认证失败，返回 ErrWrongPassword",
+	},
+	"LargeFileSimulate_Encrypt": {
+		Category:    "大文件模拟",
+		Description: "大文件加密吞吐量模拟（零内存占用），测试纯算法性能上限",
+		Unit:        "吞吐量",
+		GoodMB:      1000,
+		ExcelMB:     3000,
+		Note:        "使用 zero Reader 模拟，无 I/O 干扰，反映 CPU 加密上限",
+	},
+	"LargeFileSimulate_Decrypt": {
+		Category:    "大文件模拟",
+		Description: "大文件解密吞吐量模拟（零内存占用），与加密对称",
+		Unit:        "吞吐量",
+		GoodMB:      1000,
+		ExcelMB:     3000,
+	},
+	"AlistEncrypt_Compare": {
+		Category:    "插件性能",
+		Description: "alistencrypt 插件对比基准，作为性能基线参考",
+		Unit:        "吞吐量",
+		GoodMB:      500,
+		ExcelMB:     2000,
+		Note:        "alistencrypt 使用 AES-128-CTR + PBKDF2 1000 iter + 无 MAC",
+	},
+	"CryptoCore_Throughput": {
+		Category:    "加密核心",
+		Description: "加密核心吞吐量对比（AES-128 vs AES-256、内存 vs 流式）",
+		Unit:        "吞吐量",
+		GoodMB:      1500,
+		ExcelMB:     4000,
+		Note:        "纯内存操作，无 I/O 干扰，反映算法理论峰值",
+	},
+	"PhysicalChunking_LargeFile": {
+		Category:    "大文件模拟",
+		Description: "大文件物理分片索引构建性能（纯计算，无 I/O）",
+		Unit:        "延迟",
+		GoodNs:      1_000_000,
+		ExcelNs:     100_000,
+		Note:        "分片数越多，索引构建开销越大",
+	},
 }
 
 var categoryDefs = []categoryDef{
@@ -478,8 +548,13 @@ var categoryDefs = []categoryDef{
 		BenchPrefixes: []string{"GenerateKey", "GenerateSalt", "GenerateIV"},
 	},
 	{
+		ID: "hierarchical-keys", Name: "分层密钥",
+		Description:   "信封加密架构：DEK 随机生成加密数据，KEK 由密码派生加密 DEK，支持密码更换不重加密数据",
+		BenchPrefixes: []string{"DeriveKEK", "GenerateDEK", "WrapDEK", "UnwrapDEK", "WrapUnwrapDEK"},
+	},
+	{
 		ID: "aes-ctr", Name: "AES-CTR 加解密",
-		Description:   "AES-256-CTR 流式加解密核心，支持 AES-NI 硬件加速时吞吐量可达数 GB/s",
+		Description:   "AES-128/256-CTR 流式加解密核心，支持 AES-NI 硬件加速时吞吐量可达数 GB/s",
 		BenchPrefixes: []string{"EncryptStream", "DecryptStream", "EncryptBytes", "DecryptBytes", "DeriveCTRIV"},
 	},
 	{
@@ -513,6 +588,21 @@ var categoryDefs = []categoryDef{
 		BenchPrefixes: []string{"DecryptReaderFactory", "SequentialDecryptReader", "VirtualSeekable", "SequentialSeekable", "BulkDecryptor"},
 	},
 	{
+		ID: "plugins", Name: "插件性能",
+		Description:   "各类型插件（video/audio/image/pdf/text/wps）的端到端加密/解密/往返性能对比",
+		BenchPrefixes: []string{"AllPlugins_Encrypt", "AllPlugins_Decrypt", "AllPlugins_RoundTrip", "AlistEncrypt_Compare"},
+	},
+	{
+		ID: "large-file", Name: "大文件模拟",
+		Description:   "大文件等效模拟性能（1GB/10GB/100GB），使用零 Reader 零内存占用，测试纯加密吞吐量上限",
+		BenchPrefixes: []string{"LargeFileSimulate_Encrypt", "LargeFileSimulate_Decrypt", "PhysicalChunking_LargeFile"},
+	},
+	{
+		ID: "crypto-core", Name: "加密核心",
+		Description:   "加密核心吞吐量对比（AES-128 vs AES-256、内存 vs 流式），排除 I/O 干扰的纯算法性能",
+		BenchPrefixes: []string{"CryptoCore_Throughput", "CryptoCore_WrapUnwrapDEK"},
+	},
+	{
 		ID: "concurrency", Name: "并发与 Seek 矩阵",
 		Description:   "多用户并发读取和不同分片数下的 Seek 性能，衡量生产环境下的真实表现",
 		BenchPrefixes: []string{"ConcurrentDecryptReader", "ConcurrentSeekRead", "SeekMatrix"},
@@ -523,16 +613,43 @@ var categoryDefs = []categoryDef{
 func getBenchDesc(name string) benchDesc {
 	// 去掉 "Benchmark" 前缀
 	base := strings.TrimPrefix(name, "Benchmark")
-	// 去掉子测试后缀 (如 /size=1KB)
-	if idx := strings.Index(base, "/"); idx >= 0 {
-		base = base[:idx]
+
+	// 处理子测试：先尝试匹配完整路径中的最后一段（子测试名）
+	parts := strings.Split(base, "/")
+	for i := len(parts); i > 0; i-- {
+		candidate := strings.Join(parts[:i], "/")
+		candidate = strings.TrimSuffix(candidate, "_v2")
+		if desc, ok := benchDescriptions[candidate]; ok {
+			return desc
+		}
 	}
-	// 去掉 _v2 后缀尝试匹配
-	for _, key := range []string{base, strings.TrimSuffix(base, "_v2")} {
+
+	// 处理 CryptoCore_WrapUnwrapDEK 这类包含多个子测试的情况
+	if strings.Contains(base, "WrapUnwrapDEK") && len(parts) >= 2 {
+		lastPart := parts[len(parts)-1]
+		if desc, ok := benchDescriptions[lastPart]; ok {
+			return desc
+		}
+	}
+
+	// 处理 AllPlugins_*/plugin/size/Op 格式
+	if strings.Contains(base, "AllPlugins_") && len(parts) >= 3 {
+		pluginName := parts[1]
+		opName := parts[len(parts)-1]
+		key := fmt.Sprintf("%s/%s", pluginName, opName)
 		if desc, ok := benchDescriptions[key]; ok {
 			return desc
 		}
 	}
+
+	// 去掉 _v2 后缀尝试匹配（顶层）
+	rootBase := parts[0]
+	for _, key := range []string{rootBase, strings.TrimSuffix(rootBase, "_v2")} {
+		if desc, ok := benchDescriptions[key]; ok {
+			return desc
+		}
+	}
+
 	return benchDesc{Category: "其他", Description: "基准测试项", Unit: "延迟"}
 }
 
@@ -885,6 +1002,15 @@ func groupByLayer(results []benchResult) []layerInfo {
 
 func matchCategory(name string) string {
 	base := strings.TrimPrefix(name, "Benchmark")
+	// 先匹配完整路径
+	for _, cat := range categoryDefs {
+		for _, prefix := range cat.BenchPrefixes {
+			if strings.Contains(base, prefix) {
+				return cat.ID
+			}
+		}
+	}
+	// 再匹配顶层前缀
 	if idx := strings.Index(base, "/"); idx >= 0 {
 		base = base[:idx]
 	}

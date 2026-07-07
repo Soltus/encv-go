@@ -32,7 +32,7 @@ const (
 	// MACKeyIterations 是 mac_key PBKDF2 派生迭代次数。
 	// 必须与 Iterations_v2 (100000) 保持一致——故意保持一致是为了让加密/MAC
 	// 通道在硬件加速（如 AES-NI + SHA 硬件）上获得相同的吞吐预估。
-	MACKeyIterations = 100000
+	MACKeyIterations = 10000
 
 	// MACKeyLength 是 mac_key 的输出长度（字节）。
 	// 32 字节（256 bit）与 KeySize_v2 对齐——HMAC-SHA1 可接受任意 key 长度，

@@ -1,0 +1,26 @@
+{
+  "name": "mpv-player-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@encv/shared-components": "workspace:*",
+    "@ionic/vue": "^8.8.7",
+    "@ionic/vue-router": "^8.8.7",
+    "ionicons": "^8.0.13",
+    "vue": "^3.5.34",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.7",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.13",
+    "vue-tsc": "^2.2.10"
+  }
+}
