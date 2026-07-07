@@ -1527,25 +1527,6 @@ jobs:
             exit 1
           fi
 
-      - name: Bundle SimVerse plugin into host app assets
-        if: inputs.skip_plugin != true
-        continue-on-error: true
-        run: |
-          echo "═══ Bundling SimVerse plugin APK into host assets ═══"
-          APK_BUILD_TYPE="${{ inputs.version && 'release' || 'debug' }}"
-          SIMVERSE_APK="${{ env.MONOREPO_MOBILE_DIR }}/android/build/outputs/plugin-apks/${APK_BUILD_TYPE}/plugin-simverse-${APK_BUILD_TYPE}.apk"
-          ASSETS_DIR="${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/assets/plugins"
-
-          if [ ! -f "$SIMVERSE_APK" ]; then
-            echo "::warning::SimVerse APK not found, skipping bundle"
-            exit 0
-          fi
-
-          mkdir -p "$ASSETS_DIR"
-          cp "$SIMVERSE_APK" "$ASSETS_DIR/plugin-simverse.apk"
-          echo "✅ Bundled SimVerse APK into assets/plugins/"
-          ls -lh "$ASSETS_DIR/"
-
       # === Build ===
       - name: Build ${{ inputs.version && 'Release' || 'Debug' }} APK
         env:
@@ -1648,14 +1629,7 @@ jobs:
               echo "❌ FAIL: Plugin APK should NOT be bundled in host assets (disk-based loading)"
               exit 1
             else
-              echo "✅ PASS: MPV/OpenList not bundled (loaded from filesDir/plugins/ at runtime)"
-            fi
-            echo "=== Bundled SimVerse plugin check ==="
-            if unzip -l "$APK_PATH" | grep -q "plugins/plugin-simverse.apk"; then
-              echo "✅ PASS: SimVerse plugin bundled in assets/plugins/"
-              unzip -l "$APK_PATH" | grep "plugins/plugin-simverse.apk"
-            else
-              echo "⚠️  SimVerse plugin not bundled in assets (will not be pre-installed)"
+              echo "✅ PASS: Plugin not bundled (loaded from filesDir/plugins/ at runtime)"
             fi
           else
             echo "No APK found to verify"

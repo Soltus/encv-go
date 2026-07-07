@@ -73,12 +73,7 @@ class MainActivity : BridgeActivity() {
 
     private fun loadPlugins() {
         lifecycleScope.launch {
-            try {
-                val count = com.encvgo.combolite.EncvComboLiteHost.installBundledPlugins(this@MainActivity)
-                Log.i(TAG, "Bundled plugins installed: $count")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to install bundled plugins", e)
-            }
+            Log.i(TAG, "Plugin loading deferred to frontend-driven flow")
         }
     }
 
