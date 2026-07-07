@@ -106,6 +106,7 @@ import {
   refreshOutline,
 } from "ionicons/icons";
 
+import InputWithHistory from "@/components/InputWithHistory.vue";
 import { useI18n } from "@/composables/useI18n";
 import type { FieldDef } from "@/config/schemaParser";
 import { getDefaultValue } from "@/config/schemaParser";
