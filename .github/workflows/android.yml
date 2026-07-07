@@ -97,8 +97,9 @@ jobs:
             app/encv-mobile/node_modules
             app/encv-mobile/plugin-openlist/web/node_modules
             app/encv-mobile/plugin-simverse/web/node_modules
+            app/simverse-frontend/node_modules
             app/preview-gateway/node_modules
-          key: pnpm-main-${{ hashFiles('app/pnpm-lock.yaml', 'app/encv-mobile/package.json', 'app/encv-mobile/plugin-simverse/web/package.json', 'app/preview-gateway/package.json') }}
+          key: pnpm-main-${{ hashFiles('app/pnpm-lock.yaml', 'app/encv-mobile/package.json', 'app/encv-mobile/plugin-simverse/web/package.json', 'app/simverse-frontend/package.json', 'app/preview-gateway/package.json') }}
           restore-keys: |
             pnpm-main-
 
