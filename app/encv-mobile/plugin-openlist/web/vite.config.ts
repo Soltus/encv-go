@@ -338,8 +338,8 @@ export default defineConfig({
   plugins: [vue(), openlistHealthPlugin(), injectBaseHref(process.env.VITE_BASE || '/openlist-ui/'), dynamicHmrHostPlugin()],
   resolve: {
     alias: {
-      // 与主 app vite.config.ts 一致：path.resolve(__dirname, 'src')
       '@': path.resolve(__dirname, 'src'),
+      '@encv/shared-components': path.resolve(__dirname, '../../../../app/packages/shared-components/src'),
     },
   },
   build: {

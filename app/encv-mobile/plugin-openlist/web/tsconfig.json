@@ -13,8 +13,10 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],
     "paths": {
-      "@/*": ["./src/*"]
-    }
+        "@/*": ["./src/*"],
+        "@encv/shared-components/*": ["../../../../app/packages/shared-components/src/*"],
+        "@encv/shared-components": ["../../../../app/packages/shared-components/src/index.ts"]
+      }
   },
   "include": ["src/**/*", "src/**/*.vue", "vite.config.ts"],
   "exclude": ["node_modules", "dist"]

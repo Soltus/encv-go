@@ -13,8 +13,18 @@ on:
         required: false
         default: ''
         type: string
-      skip_plugin:
-        description: 'Skip all plugin builds (MPV + OpenList). Only build host app.'
+      skip_mpv_plugin:
+        description: 'Skip MPV player plugin build'
+        required: false
+        default: 'false'
+        type: boolean
+      skip_openlist_plugin:
+        description: 'Skip OpenList plugin build'
+        required: false
+        default: 'false'
+        type: boolean
+      skip_simverse_plugin:
+        description: 'Skip SimVerse plugin build'
         required: false
         default: 'false'
         type: boolean
@@ -116,12 +126,12 @@ jobs:
         run: pnpm exec vue-tsc --noEmit
 
       - name: TypeScript check (plugin-openlist/web)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         working-directory: app/encv-mobile/plugin-openlist/web
         run: pnpm exec vue-tsc --noEmit
 
       - name: TypeScript check (simverse-frontend)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_simverse_plugin != true
         working-directory: app/simverse-frontend
         run: pnpm exec vue-tsc --noEmit
 
@@ -130,7 +140,7 @@ jobs:
         run: pnpm run build
 
       - name: Build plugin-openlist/web → assets/openlist/
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         run: bash scripts/build-plugin-openlist-web.sh
 
       - name: Run frontend unit tests (vitest)
@@ -173,7 +183,7 @@ jobs:
           done
 
       - name: Download MPV native libraries from Release
-        if: inputs.skip_plugin != true
+        if: inputs.skip_mpv_plugin != true
         env:
           PLUGIN_MPV_JNI: ${{ steps.paths.outputs.PLUGIN_MPV_JNI }}
         run: |
@@ -799,7 +809,7 @@ jobs:
       #      before the main app APK is built and uploaded.
 
       - name: Build MPV player plugin (JNI + Kotlin)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_mpv_plugin != true
         continue-on-error: true
         run: |
           cd ${{ env.MONOREPO_MOBILE_DIR }}/android
@@ -816,7 +826,7 @@ jobs:
           echo "=== Plugin compile done (${BUILD_TYPE}) ==="
 
       - name: Package MPV plugin as APK
-        if: inputs.skip_plugin != true
+        if: inputs.skip_mpv_plugin != true
         continue-on-error: true
         run: |
           cd ${{ env.MONOREPO_MOBILE_DIR }}/android
@@ -835,21 +845,21 @@ jobs:
             exit 1
           fi
 
-      - name: Verify plugin APK contents
-        if: always() && inputs.skip_plugin != true
+      - name: Verify MPV plugin APK contents
+        if: always() && inputs.skip_mpv_plugin != true
         continue-on-error: true
         run: |
           BUILD_TYPE="${{ inputs.version && 'release' || 'debug' }}"
           PLUGIN_APK=$(find ${{ env.MONOREPO_MOBILE_DIR }}/android/build -name "plugin-mpv-player-${BUILD_TYPE}.apk" -type f 2>/dev/null | head -1)
           if [ -f "$PLUGIN_APK" ]; then
-            echo "=== Plugin APK size ==="
+            echo "=== MPV Plugin APK size ==="
             ls -lh "$PLUGIN_APK"
-            echo "=== .so files in plugin APK ==="
+            echo "=== .so files in MPV plugin APK ==="
             unzip -l "$PLUGIN_APK" | grep "\.so" | head -20 || echo "(no .so)"
             echo "=== Total .so count ==="
             unzip -l "$PLUGIN_APK" | grep -c "\.so" || echo "0"
           else
-            echo "⏭️ Plugin APK not available"
+            echo "⏭️ MPV Plugin APK not available"
           fi
 
       # === Build OpenList Plugin (Phase 27: Hi-Sillot/OpenList fork 交叉编译为 libopenlist.so) ===
@@ -861,7 +871,7 @@ jobs:
       # 关键:fork clone 不在主仓库(.gitignore 排除),必须 CI step 浅拉到
       # app/openlist/Hi-Sillot-OpenList/。fork 是 public 仓库无需 token。
       - name: Checkout Hi-Sillot/OpenList fork (Phase 27)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         uses: actions/checkout@v4
         with:
           repository: Hi-Sillot/OpenList
@@ -869,7 +879,7 @@ jobs:
           path: app/openlist/Hi-Sillot-OpenList
           fetch-depth: 1
       - name: Build OpenList native libs (Go cross-compile, arm64-v8a, CGO+NDK)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         env:
           CGO_ENABLED: "1"
           GOOS: android
@@ -909,7 +919,7 @@ jobs:
           fi
           echo "✅ libopenlist-arm64.so 构建成功 (ARM aarch64 executable)"
       - name: Copy libopenlist.so to plugin-openlist jniLibs
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         run: |
           set -e
           JNI_DIR="${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/src/main/jniLibs/arm64-v8a"
@@ -920,7 +930,7 @@ jobs:
           file "$JNI_DIR/libopenlist.so"
 
       - name: Build OpenList plugin APK (aar2apk)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # Phase 18 Guard C (cheapest, fail-fast): grep for known-bad Map<String, Any?>
@@ -1060,7 +1070,7 @@ jobs:
           fi
 
       - name: Verify injectOpenlistClassesToAar task ran (A3.3 v2 diagnostic)
-        if: always() && inputs.skip_plugin != true
+        if: always() && inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.3 v2 关键诊断: build.gradle.kts 用错任务名 (下划线 vs 连字符)
@@ -1120,7 +1130,7 @@ jobs:
           ls -lh /tmp/diagnostic-aar/ 2>/dev/null
 
       - name: Verify OpenList plugin APK has openlistlib classes (dex string scan)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.4 强化验证：用 dexdump 字符串扫描 classes.dex 看 Lopenlistlib/* 类是否真在 dex
@@ -1221,7 +1231,7 @@ jobs:
           unzip -p "$APK_PATH" 'lib/arm64-v8a/libgojni.so' 2>/dev/null | wc -c | xargs -I {} echo "lib/arm64-v8a/libgojni.so bytes: {}"
 
       - name: Inspect plugin-openlist AAR classes.jar (intermediate artifact)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.4 v2: 看 aar 阶段 classes.jar 里有什么类
@@ -1277,7 +1287,7 @@ jobs:
           fi
 
       - name: Inspect injectOpenlistClassesToAar task (A3.3 v2 injection)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.4 v2: 验证 A3.3 重写版 injectOpenlistClassesToAar 任务配置
@@ -1335,7 +1345,7 @@ jobs:
           fi
 
       - name: Run kotlinc verify on OpenListBridge (sandbox sim)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.4: 用 kotlinc 直接编译 OpenListBridge.kt + libs/openlist-classes.jar
@@ -1410,7 +1420,7 @@ jobs:
           fi
 
       - name: Upload diagnostic bundle
-        if: always() && inputs.skip_plugin != true
+        if: always() && inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.4 v3: 打包**所有**诊断产物到 artifact
@@ -1476,7 +1486,7 @@ jobs:
 
       # === Build SimVerse Plugin ===
       - name: Build SimVerse frontend
-        if: inputs.skip_plugin != true
+        if: inputs.skip_simverse_plugin != true
         continue-on-error: true
         run: |
           echo "═══ Building SimVerse frontend ═══"
@@ -1495,7 +1505,7 @@ jobs:
           ls -lh "$PLUGIN_ASSETS/"
 
       - name: Build SimVerse plugin APK
-        if: inputs.skip_plugin != true
+        if: inputs.skip_simverse_plugin != true
         run: |
           echo "═══ Building SimVerse ComboLite Plugin APK ═══"
           cd ${{ env.MONOREPO_MOBILE_DIR }}/android
@@ -1622,8 +1632,8 @@ jobs:
               echo "✅ PASS: Host APK excludes MPV .so"
             fi
             echo "=== Plugin loading strategy ==="
-            if [ "${{ inputs.skip_plugin }}" = "true" ]; then
-              echo "⏭️ Skipped (skip_plugin=true)"
+            if [ "${{ inputs.skip_mpv_plugin }}" = "true" ]; then
+              echo "⏭️ Skipped (skip_mpv_plugin=true)"
             elif unzip -l "$APK_PATH" | grep -q "mpv-player.apk"; then
               echo "❌ FAIL: Plugin APK should NOT be bundled in host assets (disk-based loading)"
               exit 1
@@ -1635,7 +1645,7 @@ jobs:
           fi
 
       - name: Verify upload files exist + log sizes
-        if: always() && inputs.skip_plugin != true
+        if: always() && (inputs.skip_mpv_plugin != true || inputs.skip_openlist_plugin != true || inputs.skip_simverse_plugin != true)
         continue-on-error: true
         run: |
           # 用户多次反馈 28.5MB encv-go-android-v1.0.1 只有 host APK ——
@@ -1702,7 +1712,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload OpenList diagnostic bundle
-        if: always() && inputs.skip_plugin != true
+        if: always() && inputs.skip_openlist_plugin != true
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
