@@ -32,6 +32,8 @@ const (
 	SaltSize_v2 = 32
 	// Iterations PBKDF2 迭代次数
 	Iterations_v2 = 100000
+	// StreamBufferSize 流式加解密的 buffer 大小（1MB，减少系统调用）
+	StreamBufferSize = 1 * 1024 * 1024
 )
 
 // CipherMode_v4 标识 v4 容器使用的 AES 密钥长度（CTR 模式）。
@@ -124,10 +126,24 @@ func EncryptStream_v2(src io.Reader, dst io.Writer, key, iv []byte) error {
 	}
 
 	stream := cipher.NewCTR(block, iv)
-	writer := &cipher.StreamWriter{S: stream, W: dst}
+	buf := make([]byte, StreamBufferSize)
 
-	_, err = io.Copy(writer, src)
-	return err
+	for {
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			stream.XORKeyStream(buf[:n], buf[:n])
+			if _, writeErr := dst.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return readErr
+		}
+	}
+	return nil
 }
 
 // DecryptStream_v2 使用 AES-CTR 解密一个 io.Reader
@@ -144,10 +160,24 @@ func DecryptStream_v2(src io.Reader, dst io.Writer, key, iv []byte) error {
 	}
 
 	stream := cipher.NewCTR(block, iv)
-	reader := &cipher.StreamReader{S: stream, R: src}
+	buf := make([]byte, StreamBufferSize)
 
-	_, err = io.Copy(dst, reader)
-	return err
+	for {
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			stream.XORKeyStream(buf[:n], buf[:n])
+			if _, writeErr := dst.Write(buf[:n]); writeErr != nil {
+				return writeErr
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return readErr
+		}
+	}
+	return nil
 }
 
 // GenerateIV_v2 生成一个随机 IV

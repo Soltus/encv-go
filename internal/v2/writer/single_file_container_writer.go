@@ -2,6 +2,7 @@
 package writer
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"hash"
@@ -16,6 +17,16 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/types"
 )
 
+type pendingFragment struct {
+	id                string
+	typ               types.FragmentType
+	length            uint64
+	globalStartOffset uint64
+	physicalOffset    uint64
+	crc32             uint32
+	v2DataBuffer      *bytes.Buffer
+}
+
 // SingleFileContainerWriter 是 ContainerWriter_v2 的一个具体实现，专用于单文件容器
 type SingleFileContainerWriter struct {
 	file                    *os.File
@@ -28,6 +39,7 @@ type SingleFileContainerWriter struct {
 	manifestCRC             uint32
 	headerVersion           int
 	v4Header                *types.EnvelopeHeaderV4
+	currentFragment         *pendingFragment
 
 	originalName    string
 	fnPassword      string
@@ -123,10 +135,41 @@ func (w *SingleFileContainerWriter) WriteKVI(kviData []byte) error {
 }
 
 func (w *SingleFileContainerWriter) WriteFragment(frag *types.Fragment, data []byte) error {
+	if err := w.BeginFragment(frag); err != nil {
+		return err
+	}
+	if err := w.WriteFragmentData(data); err != nil {
+		return err
+	}
+	return w.FinishFragment()
+}
+
+func (w *SingleFileContainerWriter) BeginFragment(frag *types.Fragment) error {
 	if w.file != nil {
 		if pos, err := w.file.Seek(0, io.SeekCurrent); err == nil {
 			frag.PhysicalOffset = uint64(pos)
 		}
+	}
+
+	w.currentFragment = &pendingFragment{
+		id:                frag.ID,
+		typ:               frag.Type,
+		length:            0,
+		globalStartOffset: w.currentDataStreamOffset,
+		physicalOffset:    frag.PhysicalOffset,
+		crc32:             0,
+	}
+
+	if w.headerVersion != 4 {
+		w.currentFragment.v2DataBuffer = bytes.NewBuffer(nil)
+	}
+
+	return nil
+}
+
+func (w *SingleFileContainerWriter) WriteFragmentData(data []byte) error {
+	if w.currentFragment == nil {
+		return fmt.Errorf("BeginFragment must be called before WriteFragmentData")
 	}
 
 	if w.headerVersion == 4 {
@@ -134,16 +177,35 @@ func (w *SingleFileContainerWriter) WriteFragment(frag *types.Fragment, data []b
 			return fmt.Errorf("failed to write v4 fragment data: %w", err)
 		}
 		w.globalHasher.Write(data)
+	} else {
+		w.currentFragment.v2DataBuffer.Write(data)
+	}
+
+	w.currentFragment.length += uint64(len(data))
+	w.currentDataStreamOffset += uint64(len(data))
+	return nil
+}
+
+func (w *SingleFileContainerWriter) FinishFragment() error {
+	if w.currentFragment == nil {
+		return fmt.Errorf("BeginFragment must be called before FinishFragment")
+	}
+	defer func() { w.currentFragment = nil }()
+
+	frag := w.currentFragment
+
+	if w.headerVersion == 4 {
 		w.fragments = append(w.fragments, types.Fragment{
-			ID:                frag.ID,
-			Type:              frag.Type,
-			Length:            uint64(len(data)),
-			GlobalStartOffset: w.currentDataStreamOffset,
+			ID:                frag.id,
+			Type:              frag.typ,
+			Length:            frag.length,
+			GlobalStartOffset: frag.globalStartOffset,
 			DataCRC32:         0,
 			PhysicalPath:      "",
-			PhysicalOffset:    frag.PhysicalOffset,
+			PhysicalOffset:    frag.physicalOffset,
 		})
 	} else {
+		data := frag.v2DataBuffer.Bytes()
 		crc, err := block.WriteBlock(w.file, types.BlockTypeData_v2, data)
 		if err != nil {
 			return fmt.Errorf("failed to write data block: %w", err)
@@ -151,16 +213,16 @@ func (w *SingleFileContainerWriter) WriteFragment(frag *types.Fragment, data []b
 		header := &block.BlockHeader_v2{Type: types.BlockTypeData_v2, Length: uint64(len(data)), CRC32: crc}
 		block.WriteBlockToHasherFromHeader(w.globalHasher, header, data)
 		w.fragments = append(w.fragments, types.Fragment{
-			ID:                frag.ID,
-			Type:              frag.Type,
-			Length:            uint64(len(data)),
-			GlobalStartOffset: w.currentDataStreamOffset,
+			ID:                frag.id,
+			Type:              frag.typ,
+			Length:            frag.length,
+			GlobalStartOffset: frag.globalStartOffset,
 			DataCRC32:         crc,
 			PhysicalPath:      "",
-			PhysicalOffset:    frag.PhysicalOffset,
+			PhysicalOffset:    frag.physicalOffset,
 		})
 	}
-	w.currentDataStreamOffset += uint64(len(data))
+
 	return nil
 }
 

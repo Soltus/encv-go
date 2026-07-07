@@ -500,6 +500,45 @@ var benchDescriptions = map[string]benchDesc{
 		ExcelNs:     100_000,
 		Note:        "密码错误时 GCM 认证失败，返回 ErrWrongPassword",
 	},
+	"LargeFileSimulate_Encrypt": {
+		Category:    "大文件模拟",
+		Description: "大文件加密吞吐量模拟（零内存占用），测试纯算法性能上限",
+		Unit:        "吞吐量",
+		GoodMB:      1000,
+		ExcelMB:     3000,
+		Note:        "使用 zero Reader 模拟，无 I/O 干扰，反映 CPU 加密上限",
+	},
+	"LargeFileSimulate_Decrypt": {
+		Category:    "大文件模拟",
+		Description: "大文件解密吞吐量模拟（零内存占用），与加密对称",
+		Unit:        "吞吐量",
+		GoodMB:      1000,
+		ExcelMB:     3000,
+	},
+	"AlistEncrypt_Compare": {
+		Category:    "插件性能",
+		Description: "alistencrypt 插件对比基准，作为性能基线参考",
+		Unit:        "吞吐量",
+		GoodMB:      500,
+		ExcelMB:     2000,
+		Note:        "alistencrypt 使用 AES-128-CTR + PBKDF2 1000 iter + 无 MAC",
+	},
+	"CryptoCore_Throughput": {
+		Category:    "加密核心",
+		Description: "加密核心吞吐量对比（AES-128 vs AES-256、内存 vs 流式）",
+		Unit:        "吞吐量",
+		GoodMB:      1500,
+		ExcelMB:     4000,
+		Note:        "纯内存操作，无 I/O 干扰，反映算法理论峰值",
+	},
+	"PhysicalChunking_LargeFile": {
+		Category:    "大文件模拟",
+		Description: "大文件物理分片索引构建性能（纯计算，无 I/O）",
+		Unit:        "延迟",
+		GoodNs:      1_000_000,
+		ExcelNs:     100_000,
+		Note:        "分片数越多，索引构建开销越大",
+	},
 }
 
 var categoryDefs = []categoryDef{
@@ -551,7 +590,17 @@ var categoryDefs = []categoryDef{
 	{
 		ID: "plugins", Name: "插件性能",
 		Description:   "各类型插件（video/audio/image/pdf/text/wps）的端到端加密/解密/往返性能对比",
-		BenchPrefixes: []string{"AllPlugins_Encrypt", "AllPlugins_Decrypt", "AllPlugins_RoundTrip"},
+		BenchPrefixes: []string{"AllPlugins_Encrypt", "AllPlugins_Decrypt", "AllPlugins_RoundTrip", "AlistEncrypt_Compare"},
+	},
+	{
+		ID: "large-file", Name: "大文件模拟",
+		Description:   "大文件等效模拟性能（1GB/10GB/100GB），使用零 Reader 零内存占用，测试纯加密吞吐量上限",
+		BenchPrefixes: []string{"LargeFileSimulate_Encrypt", "LargeFileSimulate_Decrypt", "PhysicalChunking_LargeFile"},
+	},
+	{
+		ID: "crypto-core", Name: "加密核心",
+		Description:   "加密核心吞吐量对比（AES-128 vs AES-256、内存 vs 流式），排除 I/O 干扰的纯算法性能",
+		BenchPrefixes: []string{"CryptoCore_Throughput", "CryptoCore_WrapUnwrapDEK"},
 	},
 	{
 		ID: "concurrency", Name: "并发与 Seek 矩阵",

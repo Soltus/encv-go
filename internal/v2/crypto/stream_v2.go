@@ -18,7 +18,14 @@ type EncryptionResult struct {
 	WrappedDEK *types.WrappedDEK
 }
 
-func EncryptToTempFile_v2(src io.Reader, password string, outputDir string) (*EncryptionResult, error) {
+type EncryptionContext struct {
+	Salt       []byte
+	IV         []byte
+	DEK        []byte
+	WrappedDEK *types.WrappedDEK
+}
+
+func PrepareEncryptionContext(password string) (*EncryptionContext, error) {
 	salt, err := GenerateSalt_v2(types.SaltSize_v2)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate salt: %w", err)
@@ -41,6 +48,20 @@ func EncryptToTempFile_v2(src io.Reader, password string, outputDir string) (*En
 		return nil, fmt.Errorf("failed to wrap DEK: %w", err)
 	}
 
+	return &EncryptionContext{
+		Salt:       salt,
+		IV:         iv,
+		DEK:        dek,
+		WrappedDEK: wrappedDEK,
+	}, nil
+}
+
+func EncryptToTempFile_v2(src io.Reader, password string, outputDir string) (*EncryptionResult, error) {
+	ctx, err := PrepareEncryptionContext(password)
+	if err != nil {
+		return nil, err
+	}
+
 	tempFile, err := os.CreateTemp(outputDir, "*.enc.tmp")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
@@ -49,23 +70,23 @@ func EncryptToTempFile_v2(src io.Reader, password string, outputDir string) (*En
 
 	bytesWritten := 0
 
-	if _, err := tempFile.Write(salt); err != nil {
+	if _, err := tempFile.Write(ctx.Salt); err != nil {
 		tempFile.Close()
 		os.Remove(tempPath)
 		return nil, fmt.Errorf("failed to write salt: %w", err)
 	}
-	bytesWritten += len(salt)
+	bytesWritten += len(ctx.Salt)
 
-	if _, err := tempFile.Write(iv); err != nil {
+	if _, err := tempFile.Write(ctx.IV); err != nil {
 		tempFile.Close()
 		os.Remove(tempPath)
 		return nil, fmt.Errorf("failed to write iv: %w", err)
 	}
-	bytesWritten += len(iv)
+	bytesWritten += len(ctx.IV)
 
 	saltIVSize := int64(bytesWritten)
 
-	if err := EncryptStream_v2(src, tempFile, dek, iv); err != nil {
+	if err := EncryptStream_v2(src, tempFile, ctx.DEK, ctx.IV); err != nil {
 		tempFile.Close()
 		os.Remove(tempPath)
 		return nil, fmt.Errorf("failed to encrypt stream: %w", err)
@@ -88,10 +109,10 @@ func EncryptToTempFile_v2(src io.Reader, password string, outputDir string) (*En
 
 	return &EncryptionResult{
 		TempPath:             tempPath,
-		Salt:                 salt,
-		IV:                   iv,
+		Salt:                 ctx.Salt,
+		IV:                   ctx.IV,
 		SaltIVHeaderSize:     saltIVSize,
 		EncryptedPayloadSize: payloadSize,
-		WrappedDEK:           wrappedDEK,
+		WrappedDEK:           ctx.WrappedDEK,
 	}, nil
 }

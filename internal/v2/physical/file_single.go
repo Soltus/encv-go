@@ -86,8 +86,9 @@ func (p *SinglePhysicalPacker) Pack(manifest *types.Manifest, req *PackRequest) 
 	return finalPath, nil
 }
 
+const streamCopyBufferSize = 1 * 1024 * 1024
+
 func (p *SinglePhysicalPacker) writeAndClose(data io.Reader, manifest *types.Manifest, tempWriter *writer.SingleFileContainerWriter, tempPath, outputPath string) (string, error) {
-	// 确保临时文件在函数退出时被清理，除非操作成功
 	var success bool
 	defer func() {
 		if !success {
@@ -96,20 +97,26 @@ func (p *SinglePhysicalPacker) writeAndClose(data io.Reader, manifest *types.Man
 		}
 	}()
 
-	// 2. 遍历并写入 fragments
-	for i, frag := range manifest.Fragments {
-		// 【关键修复】跳过 Metadata Fragments
+	dataFrags := make([]*types.Fragment, 0, len(manifest.Fragments))
+	for i := range manifest.Fragments {
+		frag := &manifest.Fragments[i]
 		if frag.Type == types.FragmentType_Metadata {
 			log.Printf("DEBUG: Skipping metadata fragment '%s' (not part of data stream)", frag.ID)
 			continue
 		}
+		dataFrags = append(dataFrags, frag)
+	}
 
-		chunkData := make([]byte, frag.Length)
-		if _, err := io.ReadFull(data, chunkData); err != nil {
-			return "", fmt.Errorf("failed to read data for fragment %d: %w", i, err)
+	if len(dataFrags) == 1 {
+		if err := p.writeSingleFragmentStream(data, dataFrags[0], tempWriter); err != nil {
+			return "", err
 		}
-		if err := tempWriter.WriteFragment(&frag, chunkData); err != nil {
-			return "", fmt.Errorf("failed to write fragment %d: %w", i, err)
+	} else {
+		buf := make([]byte, streamCopyBufferSize)
+		for _, frag := range dataFrags {
+			if err := p.writeFragmentStream(data, frag, tempWriter, buf); err != nil {
+				return "", err
+			}
 		}
 	}
 
@@ -125,9 +132,72 @@ func (p *SinglePhysicalPacker) writeAndClose(data io.Reader, manifest *types.Man
 		return "", fmt.Errorf("failed to rename temp file: %w", err)
 	}
 
-	// 标记成功，以防止 defer 清理函数删除最终文件
 	success = true
 	return outputPath, nil
+}
+
+func (p *SinglePhysicalPacker) writeSingleFragmentStream(data io.Reader, frag *types.Fragment, tempWriter *writer.SingleFileContainerWriter) error {
+	if err := tempWriter.BeginFragment(frag); err != nil {
+		return fmt.Errorf("failed to begin fragment: %w", err)
+	}
+
+	buf := make([]byte, streamCopyBufferSize)
+	var totalWritten int64 = 0
+
+	for {
+		n, readErr := data.Read(buf)
+		if n > 0 {
+			if err := tempWriter.WriteFragmentData(buf[:n]); err != nil {
+				return fmt.Errorf("failed to write fragment data: %w", err)
+			}
+			totalWritten += int64(n)
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return fmt.Errorf("failed to read data: %w", readErr)
+		}
+	}
+
+	if err := tempWriter.FinishFragment(); err != nil {
+		return fmt.Errorf("failed to finish fragment: %w", err)
+	}
+
+	frag.Length = uint64(totalWritten)
+	return nil
+}
+
+func (p *SinglePhysicalPacker) writeFragmentStream(data io.Reader, frag *types.Fragment, tempWriter *writer.SingleFileContainerWriter, buf []byte) error {
+	if err := tempWriter.BeginFragment(frag); err != nil {
+		return fmt.Errorf("failed to begin fragment: %w", err)
+	}
+
+	remaining := int64(frag.Length)
+	for remaining > 0 {
+		readSize := int64(len(buf))
+		if remaining < readSize {
+			readSize = remaining
+		}
+		n, readErr := io.ReadFull(data, buf[:readSize])
+		if n > 0 {
+			if err := tempWriter.WriteFragmentData(buf[:n]); err != nil {
+				return fmt.Errorf("failed to write fragment data: %w", err)
+			}
+			remaining -= int64(n)
+		}
+		if readErr == io.EOF || readErr == io.ErrUnexpectedEOF {
+			break
+		}
+		if readErr != nil {
+			return fmt.Errorf("failed to read data for fragment: %w", readErr)
+		}
+	}
+
+	if err := tempWriter.FinishFragment(); err != nil {
+		return fmt.Errorf("failed to finish fragment: %w", err)
+	}
+	return nil
 }
 
 // 单一文件物理解包器
