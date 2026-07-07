@@ -1,5 +1,5 @@
-import { readFileSync, existsSync, statSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
+import { join, relative, resolve, basename, extname } from "node:path";
 
 export interface VueComponentCheckOptions {
   componentDirs?: string[];
@@ -7,18 +7,24 @@ export interface VueComponentCheckOptions {
   failOnError?: boolean;
   dev?: boolean;
   exclude?: RegExp[];
+  checkUnused?: boolean;
+  autoFix?: boolean;
 }
 
 interface FileState {
   components: Set<string>;
-  imports: Set<string>;
+  imports: Map<string, string>;
   errors: string[];
+  mtime?: number;
 }
 
 const PASCAL_TAG_RE = /<([A-Z][a-zA-Z0-9]*)(\s|\/|>)/g;
-const DYNAMIC_COMPONENT_RE = /<component[^>]+:is\s*=\s*["']([A-Z][a-zA-Z0-9]*)["']/g;
-const IMPORT_DEFAULT_RE = /import\s+(\w+)\s+from\s+["'][^"']+["']/g;
-const IMPORT_NAMED_RE = /import\s+\{\s*([^}]+)\s*\}\s+from\s+["'][^"']+["']/g;
+const KEBAB_TAG_RE = /<([a-z][a-z0-9]*-[a-z0-9-]+)(\s|\/|>)/g;
+const DYNAMIC_COMPONENT_RE = /<component[^>]+:is\s*=\s*["']([A-Za-z][a-zA-Z0-9]*)["']/g;
+const IMPORT_DEFAULT_RE = /import\s+(\w+)\s+from\s+["']([^"']+)["']/g;
+const IMPORT_NAMED_RE = /import\s+\{\s*([^}]+)\s*\}\s+from\s+["']([^"']+)["']/g;
+const IMPORT_TYPE_RE = /import\s+type\s+/g;
+
 const VUE_BUILT_INS = new Set([
   "Transition",
   "TransitionGroup",
@@ -27,7 +33,21 @@ const VUE_BUILT_INS = new Set([
   "Suspense",
   "Component",
   "Slot",
+  "nextTick",
+  "defineProps",
+  "defineEmits",
+  "defineExpose",
+  "defineOptions",
+  "withDefaults",
 ]);
+
+function pascalToKebab(name: string): string {
+  return name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+}
+
+function kebabToPascal(name: string): string {
+  return name.replace(/(^|-)([a-z])/g, (_, __, c) => c.toUpperCase());
+}
 
 function extractTemplateComponents(template: string): Set<string> {
   const components = new Set<string>();
@@ -41,40 +61,82 @@ function extractTemplateComponents(template: string): Set<string> {
     }
   }
 
+  KEBAB_TAG_RE.lastIndex = 0;
+  while ((match = KEBAB_TAG_RE.exec(template)) !== null) {
+    const kebabTag = match[1];
+    if (kebabTag.startsWith("ion-")) continue;
+    if (kebabTag.startsWith("t-")) continue;
+    const pascalTag = kebabToPascal(kebabTag);
+    if (!VUE_BUILT_INS.has(pascalTag)) {
+      components.add(pascalTag);
+    }
+  }
+
   DYNAMIC_COMPONENT_RE.lastIndex = 0;
   while ((match = DYNAMIC_COMPONENT_RE.exec(template)) !== null) {
-    components.add(match[1]);
+    const name = match[1];
+    if (/^[A-Z]/.test(name) && !VUE_BUILT_INS.has(name)) {
+      components.add(name);
+    }
   }
 
   return components;
 }
 
-function extractScriptImports(script: string): Set<string> {
-  const imports = new Set<string>();
+function extractScriptImports(script: string): Map<string, string> {
+  const imports = new Map<string, string>();
   let match;
 
+  const nonTypeScript = script.replace(/import\s+type\s+[^;]+;?/g, "");
+
   IMPORT_DEFAULT_RE.lastIndex = 0;
-  while ((match = IMPORT_DEFAULT_RE.exec(script)) !== null) {
-    imports.add(match[1]);
+  while ((match = IMPORT_DEFAULT_RE.exec(nonTypeScript)) !== null) {
+    imports.set(match[1], match[2]);
   }
 
   IMPORT_NAMED_RE.lastIndex = 0;
-  while ((match = IMPORT_NAMED_RE.exec(script)) !== null) {
+  while ((match = IMPORT_NAMED_RE.exec(nonTypeScript)) !== null) {
+    const source = match[2];
     const names = match[1].split(",").map((s) => {
       const trimmed = s.trim();
       const asMatch = trimmed.match(/(\w+)\s+as\s+(\w+)/);
       return asMatch ? asMatch[2] : trimmed;
     });
     for (const name of names) {
-      if (name) imports.add(name);
+      if (name && /^[A-Z]/.test(name)) {
+        imports.set(name, source);
+      }
     }
   }
 
   return imports;
 }
 
-function pascalToKebab(name: string): string {
-  return name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
+function scanComponentDirs(dirs: string[]): Map<string, string> {
+  const componentMap = new Map<string, string>();
+
+  for (const dir of dirs) {
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
+
+    function walk(currentDir: string) {
+      const entries = readdirSync(currentDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = join(currentDir, entry.name);
+        if (entry.isDirectory()) {
+          walk(fullPath);
+        } else if (entry.isFile() && entry.name.endsWith(".vue")) {
+          const componentName = basename(entry.name, ".vue");
+          if (!componentMap.has(componentName)) {
+            componentMap.set(componentName, fullPath);
+          }
+        }
+      }
+    }
+
+    walk(dir);
+  }
+
+  return componentMap;
 }
 
 export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) {
@@ -84,6 +146,8 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) 
     failOnError = true,
     dev = false,
     exclude = [],
+    checkUnused = false,
+    autoFix = false,
   } = options;
 
   const globalSet = new Set(globalComponents);
@@ -92,15 +156,20 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) 
   let totalErrors = 0;
   let startTime = 0;
   let totalFiles = 0;
+  let componentIndex: Map<string, string> = new Map();
 
   function resolveComponentDirs(): string[] {
-    return componentDirs.map((d) => resolve(rootDir, d)).filter((d) => existsSync(d) && statSync(d).isDirectory());
+    return componentDirs
+      .map((d) => resolve(rootDir, d))
+      .filter((d) => existsSync(d) && statSync(d).isDirectory());
   }
 
   function isGlobalComponent(name: string): boolean {
     if (globalSet.has(name)) return true;
     const kebab = pascalToKebab(name);
     if (kebab.startsWith("ion-")) return true;
+    if (kebab.startsWith("t-")) return true;
+    if (componentIndex.has(name)) return true;
     return false;
   }
 
@@ -115,9 +184,11 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) 
     const templateMatch = code.match(/<template>([\s\S]*?)<\/template>/);
     if (!templateMatch) return errors;
 
-    const scriptMatch = code.match(/<script[^>]*>([\s\S]*?)<\/script>/);
+    const scriptMatch = code.match(/<script[^>]*>([\s\S]*?)<\/script>/g);
+    const scriptContent = scriptMatch ? scriptMatch.join("\n") : "";
+
     const templateComponents = extractTemplateComponents(templateMatch[1]);
-    const scriptImports = scriptMatch ? extractScriptImports(scriptMatch[1]) : new Set<string>();
+    const scriptImports = extractScriptImports(scriptContent);
 
     for (const comp of templateComponents) {
       if (scriptImports.has(comp)) continue;
@@ -126,13 +197,22 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) 
       errors.push(`${relativePath}: 组件 <${comp}> 在模板中使用但未导入`);
     }
 
+    if (checkUnused) {
+      for (const [name, source] of scriptImports) {
+        if (!/^[A-Z]/.test(name)) continue;
+        if (!templateComponents.has(name)) {
+          errors.push(`${relativePath}: 组件 <${name}> 已导入但未在模板中使用 (from ${source})`);
+        }
+      }
+    }
+
     return errors;
   }
 
   function reportErrors(allErrors: string[]) {
     if (allErrors.length === 0) return;
 
-    console.error(`\n[vue-component-check] 发现 ${allErrors.length} 个未导入的组件：`);
+    console.error(`\n[vue-component-check] 发现 ${allErrors.length} 个问题：`);
     for (const err of allErrors) {
       console.error(`  ⚠️  ${err}`);
     }
@@ -145,6 +225,7 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) 
 
     configResolved(config: any) {
       rootDir = config.root;
+      componentIndex = scanComponentDirs(resolveComponentDirs());
     },
 
     buildStart() {
@@ -152,6 +233,7 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) 
       totalErrors = 0;
       totalFiles = 0;
       startTime = Date.now();
+      componentIndex = scanComponentDirs(resolveComponentDirs());
     },
 
     transform(code: string, id: string) {
@@ -163,7 +245,7 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) 
 
       fileStates.set(id, {
         components: new Set(),
-        imports: new Set(),
+        imports: new Map(),
         errors,
       });
 
@@ -181,7 +263,9 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) 
 
     buildEnd() {
       const duration = Date.now() - startTime;
-      console.log(`\n[vue-component-check] 扫描了 ${totalFiles} 个 Vue 文件，用时 ${duration}ms`);
+      console.log(
+        `\n[vue-component-check] 扫描了 ${totalFiles} 个 Vue 文件，用时 ${duration}ms`,
+      );
 
       if (totalErrors > 0) {
         const allErrors: string[] = [];
@@ -191,7 +275,7 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) 
         reportErrors(allErrors);
 
         if (failOnError && !dev) {
-          this.error(`发现 ${totalErrors} 个组件未导入，请检查上述文件`);
+          this.error(`发现 ${totalErrors} 个组件导入问题，请检查上述文件`);
         } else if (dev) {
           console.warn(`[vue-component-check] ⚠️  dev 模式下仅警告，构建继续\n`);
         }
@@ -213,19 +297,23 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) 
 
         if (errors.length > 0) {
           totalErrors += errors.length - prevErrors;
-          console.warn(`\n[vue-component-check] ⚠️  ${relative(rootDir, file)} 有 ${errors.length} 个未导入组件：`);
+          console.warn(
+            `\n[vue-component-check] ⚠️  ${relative(rootDir, file)} 有 ${errors.length} 个问题：`,
+          );
           for (const err of errors) {
             console.warn(`     ${err}`);
           }
           console.warn("");
         } else if (prevErrors > 0) {
           totalErrors -= prevErrors;
-          console.log(`[vue-component-check] ✅  ${relative(rootDir, file)} 已修复，剩余 ${totalErrors} 个问题\n`);
+          console.log(
+            `[vue-component-check] ✅  ${relative(rootDir, file)} 已修复，剩余 ${totalErrors} 个问题\n`,
+          );
         }
 
         fileStates.set(file, {
           components: new Set(),
-          imports: new Set(),
+          imports: new Map(),
           errors,
         });
       } catch {

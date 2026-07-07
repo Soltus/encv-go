@@ -318,7 +318,7 @@ function handleScroll() {
 async function ensureScrollEl() {
   if (!contentRef.value) return;
   try {
-    const el = await contentRef.value.getScrollElement();
+    const el = await (contentRef.value as any).getScrollElement();
     scrollEl.value = el;
     el.addEventListener("scroll", handleScroll);
   } catch (e) {
@@ -332,10 +332,10 @@ async function handleCopy() {
   const text = items.map((l) => `[${l.timestamp}] [${l.level.toUpperCase()}] ${l.message}`).join("\n");
   try {
     await copyToClipboard(text);
-    showToast(t("devlogs.copied", { count: String(items.length) }));
+    showToast({ message: t("devlogs.copied", { count: String(items.length) }) });
     emit("copy", items);
   } catch {
-    showToast(t("devlogs.copyFailed"), "error");
+    showToast({ message: t("devlogs.copyFailed"), color: "danger" });
   }
 }
 
@@ -344,7 +344,7 @@ function copyLogDetail() {
   const log = selectedLog.value;
   const text = `[${log.timestamp}] [${log.level.toUpperCase()}] ${log.message}`;
   copyToClipboard(text).then(() => {
-    showToast(t("devlogs.logDetailCopied"));
+    showToast({ message: t("devlogs.logDetailCopied") });
   });
 }
 

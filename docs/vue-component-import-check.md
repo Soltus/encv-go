@@ -291,12 +291,39 @@ export default defineConfig({
    - `<component :is="dynamicName">` 中 `dynamicName` 是变量时无法检测
    - 建议动态组件也显式导入并注册
 
-3. **kebab-case 标签检测不全**：
-   - 插件主要检测 PascalCase 标签（`InputWithHistory`）
-   - kebab-case（`input-with-history`）可能漏检
-   - 建议统一使用 PascalCase
+3. ~~kebab-case 标签检测不全~~ ✅ v2 已支持
+   - v2 版本已支持 kebab-case 标签自动转 PascalCase 检测
 
-## 十一、相关文件索引
+## 十一、更新日志
+
+### v2 (2026-07-07)
+
+**新增功能**：
+- ✅ 支持 kebab-case 标签检测（`<input-with-history>` → `InputWithHistory`）
+- ✅ 组件目录自动扫描：扫描 `componentDirs` 下的所有 `.vue` 文件，自动加入白名单
+- ✅ 支持多 script 块（`<script>` + `<script setup>` 同时存在时同时解析）
+- ✅ 自动排除 `import type` 类型导入（避免类型被误判为组件）
+- ✅ 命名导入智能过滤：只把 PascalCase 的导入当作组件（减少误报）
+- ✅ 新增 `checkUnused` 选项：检测已导入但未使用的组件
+- ✅ 新增 `t-` 前缀识别（TDesign 组件）
+
+**性能优化**：
+- 组件目录预扫描索引，避免重复判断
+- 构建开始时一次性建立索引
+
+**配置变更**：
+```typescript
+vueComponentCheckPlugin({
+  // 新增选项
+  checkUnused: false,    // 是否检测未使用的导入
+  exclude: [/prototypes/],  // 排除规则支持任意正则
+})
+```
+
+### v1 (2026-07-06)
+- 初始版本：PascalCase 标签检测、dev/build 双模式、HMR 热更新支持
+
+## 十二、相关文件索引
 
 | 文件 | 说明 |
 |------|------|

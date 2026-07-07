@@ -243,6 +243,7 @@ export default defineConfig({
     vueComponentCheckPlugin({
       dev: process.env.NODE_ENV !== 'production',
       failOnError: false,
+      exclude: [/node_modules/, /prototypes/],
       globalComponents: [
         'ChatThinking',
         'ChatMarkdown',
