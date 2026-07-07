@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-07T04:36:59.085Z",
+  "generated_at": "2026-07-07T05:02:35.279Z",
   "source_file": "package.json",
   "items": [
     {
@@ -387,6 +387,17 @@
       "description": "TypeScript — JavaScript 类型化超集",
       "icon": "code-slash",
       "license": "Apache-2.0"
+    },
+    {
+      "name": "unplugin-vue-components",
+      "version": "32.1.0",
+      "version_range": "^32.1.0",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "vite",

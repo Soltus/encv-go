@@ -127,13 +127,11 @@
       "correctness": {
         // 不可达代码 — 警告，不阻塞（调试时可能临时保留）
         "noUnreachable": "warn",
-        // 降级为 warn：未使用的变量太多（1193处），主要是：
-        //   - Vue 组件的 defineProps / defineEmits 解构变量
-        //   - 开发中预留的变量
-        //   - 大型组件中部分逻辑尚未实现
-        "noUnusedVariables": "warn",
-        // 降级为 warn：未使用的导入（287处）
-        "noUnusedImports": "warn",
+        // ⚠️ 禁用：Biome 2.x 的 Vue SFC 分析不完整，无法识别 template 中使用的变量/组件
+        // 会把 template 中使用的 import 误判为"未使用"，--fix 时会误删，导致严重 bug
+        // 详见：noUnusedImports 误删 InputWithHistory / cloudOutline 等组件/变量导入
+        "noUnusedVariables": "off",
+        "noUnusedImports": "off",
         // 降级为 warn：Biome 2.x 的 Vue template lint 还是 experimental
         "noVueDuplicateKeys": "warn"
       },
