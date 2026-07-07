@@ -1,0 +1,1 @@
+import{H as e,Q as t,q as n}from"./index-8JigzJ6x.js";import{t as r}from"./SvPagePlaceholder-CVgxjY5G.js";var i=n({__name:`WorldEconomy`,setup(n){return(n,i)=>(t(),e(r,{"title-key":`simverse.economyOverview`,"icon-name":`cash`}))}});export{i as default};

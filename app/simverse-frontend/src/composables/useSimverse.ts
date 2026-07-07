@@ -170,6 +170,13 @@ function getApiBase(): string {
     if ((window as any).__ENCV_API_BASE__) {
       return (window as any).__ENCV_API_BASE__;
     }
+    if ((window as any).SimVerseNative && typeof (window as any).SimVerseNative.getApiBaseUrl === "function") {
+      try {
+        return (window as any).SimVerseNative.getApiBaseUrl();
+      } catch (e) {
+        console.warn("[simverse] Failed to get api base from SimVerseNative:", e);
+      }
+    }
     return window.location.origin;
   }
   return "http://localhost:8780";

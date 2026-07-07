@@ -56,12 +56,14 @@ val includePlugins = gradle.startParameter.projectProperties["includePlugins"] =
 if (includePlugins) {
     include(":plugin-mpv-player")
     include(":plugin-openlist")
+    include(":plugin-simverse")
 }
 
 project(":capacitor-cordova-android-plugins").projectDir = file("./capacitor-cordova-android-plugins/")
 if (includePlugins) {
     project(":plugin-mpv-player").projectDir = file("../plugin-mpv-player")
     project(":plugin-openlist").projectDir = file("../plugin-openlist")
+    project(":plugin-simverse").projectDir = file("../plugin-simverse")
 }
 
 apply(from = "capacitor.settings.gradle")

@@ -14,10 +14,11 @@
 #   0/6  前置检查（go / node / pnpm / git / curl / cmake）
 #   1/6  装 Go 工具链 (air-verse/air live reload)
 #   2/6  装 Kotlin 工具链 (运行 .trae/scripts/setup-kotlinc.sh)
-#   3/6  clone OpenList 双 fork
+#   3/7  clone OpenList 双 fork
 #         - 后端: app/openlist/Hi-Sillot-OpenList/   (dev 分支)
 #         - 前端: app/openlist/Hi-Sillot-OpenList-Frontend/ (main 分支)
-#   4/6  构建前端 fork 的 dist (Hi-Sillot-OpenList-Frontend/dist/)
+#   3b/7 clone ComboLite fork (K-Sillot/ComboLite)
+#   4/7  构建前端 fork 的 dist (Hi-Sillot-OpenList-Frontend/dist/)
 #   5/6  pnpm install encv-mobile 主 app + plugin-openlist/web
 #   6/6  构建 preview-gateway 网关（app/preview-gateway/）
 #
@@ -236,7 +237,30 @@ else
 fi
 
 # ============================================================================
-# 步骤 4/6: 构建前端 fork 的 dist
+# 步骤 3b/7: clone ComboLite fork (K-Sillot/ComboLite)
+# ============================================================================
+step "3b/7 clone ComboLite fork (K-Sillot/ComboLite)"
+
+COMBOLITE_DIR="${REPO_ROOT}/app/combolite"
+COMBOLITE_FORK_DIR="${COMBOLITE_DIR}/ComboLite"
+
+if [[ -d "${COMBOLITE_FORK_DIR}/.git" ]]; then
+  ok "ComboLite fork 已存在: ${COMBOLITE_FORK_DIR}"
+else
+  log "git clone K-Sillot/ComboLite ..."
+  mkdir -p "${COMBOLITE_DIR}"
+  cd "${COMBOLITE_DIR}"
+  if git clone --depth 1 \
+       https://github.com/K-Sillot/ComboLite.git \
+       ComboLite 2>&1 | tail -3; then
+    ok "ComboLite fork clone 完成"
+  else
+    warn "ComboLite fork clone 失败（不影响主构建，仅用于源码参考）"
+  fi
+fi
+
+# ============================================================================
+# 步骤 4/7: 构建前端 fork 的 dist
 # ============================================================================
 step "4/6 构建前端 fork 的 dist (Hi-Sillot-OpenList-Frontend/dist/)"
 
