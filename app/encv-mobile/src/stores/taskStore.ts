@@ -248,36 +248,6 @@ export const useTaskStore = defineStore("task", () => {
     return true;
   }
 
-  /**
-   * 🆕 2026-07-08 批量 patch 任务（性能优化）
-   *
-   * 为什么需要这个方法：
-   *   - 批量更新 1000+ 任务时，循环 patchTaskById 会触发 1000 次 triggerRef
-   *   - 每次 triggerRef 都会导致视图重新计算，UI 严重卡顿
-   *   - 批量 patch 只在最后 triggerRef 一次，性能提升显著
-   */
-  function bulkPatchTasks(updates: Array<{ id: string; partial: Partial<EncvTask> }>): number {
-    let count = 0;
-    for (const { id, partial } of updates) {
-      const idx = _taskIndex.get(id);
-      if (idx === undefined) continue;
-      const prev = tasks.value[idx];
-      const merged: EncvTask = { ...prev };
-      for (const k of Object.keys(partial) as (keyof EncvTask)[]) {
-        const v = partial[k];
-        if (v === undefined) continue;
-        if (IDENTITY_FIELDS.has(k) && (v === null || v === "")) continue;
-        (merged as any)[k] = v;
-      }
-      tasks.value[idx] = merged;
-      count++;
-    }
-    if (count > 0) {
-      triggerRef(tasks);
-    }
-    return count;
-  }
-
   function appendTask(task: EncvTask): void {
     if (_taskIndex.has(task.id)) {
       patchTaskById(task.id, task);
@@ -304,57 +274,6 @@ export const useTaskStore = defineStore("task", () => {
     if (hydrated.value) {
       try {
         void persistPut(task);
-      } catch {}
-    }
-  }
-
-  /**
-   * 🆕 2026-07-08 批量追加任务（性能优化）
-   *
-   * 为什么需要这个方法：
-   *   - 自动化测试一次性创建 1000+ 任务，循环调用 appendTask 是 O(N²)（每次 rebuildIndex）
-   *   - 批量追加只 rebuildIndex 一次 + bulkPut 一次，O(N) 复杂度
-   *   - 实测 1000 任务从 ~2s 降到 ~10ms
-   *
-   * 行为：
-   *   - 新任务 prepend 到数组前面（最新的在最前面）
-   *   - 已存在的任务用 patchTaskById 更新
-   *   - 只重建一次索引
-   *   - 只做一次批量持久化
-   */
-  function bulkAppendTasks(newTasks: EncvTask[]): void {
-    if (newTasks.length === 0) return;
-
-    const toUpdate: Array<{ id: string; partial: EncvTask }> = [];
-    const toInsert: EncvTask[] = [];
-
-    for (const task of newTasks) {
-      if (_taskIndex.has(task.id)) {
-        toUpdate.push({ id: task.id, partial: task });
-      } else {
-        if (!task.runId) {
-          console.warn("[taskStore.bulkAppendTasks] 新 task runId 为空:", task.id);
-        }
-        toInsert.push(task);
-      }
-    }
-
-    // 1. 批量更新已存在的任务（只 triggerRef 一次）
-    if (toUpdate.length > 0) {
-      bulkPatchTasks(toUpdate);
-    }
-
-    // 2. 插入新任务（prepend 到前面）
-    if (toInsert.length > 0) {
-      tasks.value = [...toInsert, ...tasks.value];
-      hasAnyTask.value = true;
-      rebuildIndex();
-    }
-
-    // 3. 批量持久化
-    if (hydrated.value && toInsert.length > 0) {
-      try {
-        void persistBulkPut(toInsert);
       } catch {}
     }
   }
@@ -407,16 +326,14 @@ export const useTaskStore = defineStore("task", () => {
 
   function cancelRunTasks(runId: string): EncvTask[] {
     const targets: EncvTask[] = [];
-    const updates: Array<{ id: string; partial: Partial<EncvTask> }> = [];
     for (const t of tasks.value) {
       if (t.runId === runId && (t.status === "running" || t.status === "queued")) {
         targets.push(t);
-        updates.push({ id: t.id, partial: { status: "cancelling" } });
       }
     }
-    if (updates.length > 0) {
-      bulkPatchTasks(updates);
-      for (const t of targets) persistPutTask(t.id);
+    for (const t of targets) {
+      patchTaskById(t.id, { status: "cancelling" });
+      persistPutTask(t.id);
     }
     return targets;
   }
@@ -798,9 +715,7 @@ export const useTaskStore = defineStore("task", () => {
     hydrate,
     bulkSetTasks,
     patchTaskById,
-    bulkPatchTasks,
     appendTask,
-    bulkAppendTasks,
     appendTasksPage,
     removeTask,
     removeRunTasks,

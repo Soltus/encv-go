@@ -11,7 +11,6 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    AboutPage: typeof import('./../../packages/shared-components/src/components/about/AboutPage.vue')['default']
     AgentDebugPanel: typeof import('./components/agent/AgentDebugPanel.vue')['default']
     AgentEntry: typeof import('./components/agent/AgentEntry.vue')['default']
     AgentTaskMessage: typeof import('./components/agent/AgentTaskMessage.vue')['default']

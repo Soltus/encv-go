@@ -209,29 +209,12 @@ export async function batchCreateTasks(
   runId?: string,
   triggeredBy?: "user" | "automation" | "ai_agent"
 ): Promise<EncvTask[]> {
-  const perfStart = performance.now();
-  console.info(
-    "[API] batchCreateTasks: start",
-    specs.length,
-    "tasks",
-    "runId:",
-    runId ?? "",
-    "triggeredBy:",
-    triggeredBy ?? "user"
-  );
+  console.info("[API] batchCreateTasks:", specs.length, "tasks", "runId:", runId ?? "", "triggeredBy:", triggeredBy ?? "user");
 
   // 分批：每批 50 个，避免单次请求体过大或处理时间过长
   const BATCH_SIZE = 50;
   if (specs.length <= BATCH_SIZE) {
-    const result = await batchCreateTasksSingle(specs, runId, triggeredBy);
-    const durMs = performance.now() - perfStart;
-    console.info(
-      "[API] batchCreateTasks: done (single batch)",
-      specs.length,
-      "tasks,",
-      durMs.toFixed(1) + "ms"
-    );
-    return result;
+    return batchCreateTasksSingle(specs, runId, triggeredBy);
   }
 
   // 分批并行提交（Promise.all），最后聚合结果
@@ -241,36 +224,8 @@ export async function batchCreateTasks(
   }
   console.info("[API] batchCreateTasks: split into", batches.length, "batches");
 
-  const results = await Promise.all(
-    batches.map((batch, idx) => {
-      const batchStartTime = performance.now();
-      return batchCreateTasksSingle(batch, runId, triggeredBy).then(result => {
-        const batchDur = performance.now() - batchStartTime;
-        console.info(
-          "[API] batchCreateTasks: batch",
-          idx + 1,
-          "/",
-          batches.length,
-          "done:",
-          batch.length,
-          "tasks,",
-          batchDur.toFixed(1) + "ms"
-        );
-        return result;
-      });
-    })
-  );
-  const totalDur = performance.now() - perfStart;
-  const allTasks = results.flat();
-  console.info(
-    "[API] batchCreateTasks: all done:",
-    allTasks.length,
-    "tasks,",
-    totalDur.toFixed(1) + "ms,",
-    "batches:",
-    batches.length
-  );
-  return allTasks;
+  const results = await Promise.all(batches.map(batch => batchCreateTasksSingle(batch, runId, triggeredBy)));
+  return results.flat();
 }
 
 /** 单批批量创建（内部函数） */

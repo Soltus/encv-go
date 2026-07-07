@@ -23,7 +23,6 @@ import { useI18n } from "@/composables/useI18n";
 import { useRunSummariesSingleton } from "@/composables/useRunSummaries";
 import { useTaskEventBridge } from "@/composables/useTaskEventBridge";
 import { useTaskViewCompute } from "@/composables/useTaskViewCompute";
-import { useTaskViewComputePool } from "@/composables/useTaskViewComputePool";
 import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
 import { getTaskTypeLabel } from "@/lib/taskTypeLabel";
 import { useTaskStore } from "@/stores/taskStore";
@@ -199,13 +198,16 @@ function createUseTasksList() {
   // 🆕 2026-06-23 Task 10：dateSectionKey / buildGroupDisplayData 已迁移到
   //   useTaskViewCompute（worker + computeSync 内联），此处不再保留
 
-  // ============ displayedItems（Web Worker 池化计算） ============
-  // 🆕 2026-07-08 架构优化：Worker 池化，多核并行
-  //   - 多 Worker 并行：min(navigator.hardwareConcurrency - 1, 4) 个 Worker 分片处理
-  //   - K 路归并排序：每个 Worker 返回局部排序结果，主线程归并
-  //   - 降级策略：Worker 池初始化失败 → 回退单 Worker → 回退同步计算
-  //   - 性能日志：console.info 输出耗时统计
-  const { displayedItems: workerDisplayedItems, poolSize, lastComputeDuration, isComputing } = useTaskViewComputePool({
+  // ============ displayedItems（Web Worker 委托计算） ============
+  // 🆕 2026-06-23 Task 10：把 O(N) 视图计算委托给 Web Worker，避免阻塞 UI 主线程
+  //   - 1000+ task 时 displayedItems computed 遍历会卡顿
+  //   - Worker 接收 tasks 快照 + filter/sort/view 状态，返回 displayedItems 数组
+  //   - debounce 16ms（1 帧）→ postMessage → 接收结果 → 更新 ref
+  //   - 降级：Worker 不可用 → 主线程同步计算（computeSync）
+  //   - date section label：worker 返回 dateKey，主线程映射为 i18n label
+  //   - 旧的 dateSectionKey / buildGroupDisplayData / computeGroupCounters 函数保留
+  //     作为 fallback（computeSync 内联了相同逻辑，但保留这些函数供测试 _computeGroupCounters 用）
+  const { displayedItems: workerDisplayedItems } = useTaskViewCompute({
     tasks: storeRefs.tasks,
     viewMode: storeRefs.viewMode,
     sortBy: storeRefs.sortBy,
@@ -216,7 +218,6 @@ function createUseTasksList() {
     filterTriggeredBy: storeRefs.filterTriggeredBy,
     filterDateRange: storeRefs.filterDateRange,
     pinnedRunIds: storeRefs.pinnedRunIds,
-    enablePerfLog: true,
   });
 
   // 🆕 2026-06-24 修复：group card 计数使用 runSummaries（后端 SQL 权威）而非 store.tasks.length
