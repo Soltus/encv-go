@@ -2,7 +2,7 @@
 //
 // SimVerse ComboLite 插件：嵌入式 WebView + 本地 assets 承载 SimVerse 前端
 //
-// 架构参考 plugin-openlist：
+// 架构参考 plugin-openlist / plugin-mpv-player：
 //   - IPluginEntryClass.Content() 是 @Composable，必须开启 Compose 编译期插件
 //   - 宿主 classloader 提供 combolite-core / core-ktx / compose-ui 等，compileOnly 即可
 //   - WebView 加载 file:///android_asset/simverse/ 里的前端构建产物
@@ -66,10 +66,10 @@ dependencies {
     compileOnly("androidx.core:core-ktx")
 }
 
-val simverseFrontendDir = layout.projectDirectory.dir("../simverse-frontend").asFile
+val simverseFrontendDir = layout.projectDirectory.dir("web").asFile
 
 tasks.register("buildSimverseFrontend") {
-    description = "Build simverse-frontend and copy to plugin assets"
+    description = "Build simverse frontend and copy to plugin assets"
     group = "build"
 
     val distDir = File(simverseFrontendDir, "dist")

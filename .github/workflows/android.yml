@@ -96,9 +96,9 @@ jobs:
             app/node_modules
             app/encv-mobile/node_modules
             app/encv-mobile/plugin-openlist/web/node_modules
-            app/simverse-frontend/node_modules
+            app/encv-mobile/plugin-simverse/web/node_modules
             app/preview-gateway/node_modules
-          key: pnpm-main-${{ hashFiles('app/pnpm-lock.yaml', 'app/encv-mobile/package.json', 'app/simverse-frontend/package.json', 'app/preview-gateway/package.json') }}
+          key: pnpm-main-${{ hashFiles('app/pnpm-lock.yaml', 'app/encv-mobile/package.json', 'app/encv-mobile/plugin-simverse/web/package.json', 'app/preview-gateway/package.json') }}
           restore-keys: |
             pnpm-main-
 
@@ -130,9 +130,9 @@ jobs:
         working-directory: app/encv-mobile/plugin-openlist/web
         run: pnpm exec vue-tsc --noEmit
 
-      - name: TypeScript check (simverse-frontend)
+      - name: TypeScript check (plugin-simverse/web)
         if: inputs.skip_simverse_plugin != true
-        working-directory: app/simverse-frontend
+        working-directory: app/encv-mobile/plugin-simverse/web
         run: pnpm exec vue-tsc --noEmit
 
       - name: Build main app web
@@ -1490,7 +1490,7 @@ jobs:
         continue-on-error: true
         run: |
           echo "═══ Building SimVerse frontend ═══"
-          cd app/simverse-frontend
+          cd app/encv-mobile/plugin-simverse/web
           pnpm install --prefer-offline
           pnpm build
           echo "✅ SimVerse frontend built:"
