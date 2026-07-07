@@ -8,6 +8,7 @@ import App from "./App.vue";
 //   页面空白。解决方案：手动扫描 @ionic/vue 导出的所有 IonXxx 组件并全局注册。
 import { registerIonicComponents } from "@/composables/useIonicAutoRegister";
 import { initEncvI18n } from "@/i18n/init";
+import { vLongpress } from "@encv/shared-components/directives/longpress";
 // 🆕 2026-07-02 A5：三管齐下错误捕获
 //   用户强反馈："ion-page 警告 = 更底层错误没有捕获，比如不支持安卓端的调用"
 //   三管齐下：Vue errorHandler + window.onerror/unhandledrejection + console.error 重定向
@@ -42,6 +43,9 @@ const app = createApp(App).use(IonicVue).use(router).use(pinia);
 //   必须在 .use(IonicVue) 之后调用，确保 Web Components 初始化完成
 const { registered: ionicRegistered } = registerIonicComponents(app);
 console.log(`[ionic] Registered ${ionicRegistered.length} Ionic Vue components`);
+
+// 注册长按指令
+app.directive("longpress", vLongpress);
 
 // 🆕 2026-07-06：注册 encv 业务 i18n 字典
 initEncvI18n();

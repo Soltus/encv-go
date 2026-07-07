@@ -34,6 +34,7 @@
 </template>
 
 <script setup lang="ts">
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import { useConfig } from "@/composables/useConfig";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";

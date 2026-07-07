@@ -117,6 +117,7 @@ import {
 } from "ionicons/icons";
 
 import { fetchConfig, getServerUrl } from "@/api/encv";
+import ServerStatusCard from "@/components/ServerStatusCard.vue";
 import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
 import { useServerStatus } from "@/composables/useServerStatus";

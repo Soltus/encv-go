@@ -382,6 +382,7 @@
 <script setup lang="ts">
 import type { DatabaseInfo, IndexStats } from "@/api/encv";
 import { fetchConfig, getDatabaseInfo, getIndexStats, updateConfig } from "@/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import FilePickerModal from "@/components/FilePickerModal.vue";
 import { useConfig } from "@/composables/useConfig";
 import { registerFileFeature, unregisterFileFeature } from "@/composables/useFileFeatures";

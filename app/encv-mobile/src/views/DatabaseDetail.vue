@@ -189,6 +189,7 @@ import {
 } from "ionicons/icons";
 
 import { backupDatabase, exportDatabase, getDatabaseInfo, importDatabase } from "@/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import { useConfig } from "@/composables/useConfig";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";

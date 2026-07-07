@@ -273,4 +273,6 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 		simGroup.GET("/world/save", s.handleSimverseWorldSaveInfo)
 		simGroup.GET("/world/storage", s.handleSimverseStorageStatus)
 	}
+
+	registerSimverseWebRoutes(r)
 }

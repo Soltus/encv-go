@@ -59,8 +59,11 @@ class WorldActivity : AppCompatActivity() {
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         
         // 加载 simverse-frontend（路由到 /simverse-home）
+        //   - 从 Go 后端 HTTP 服务器加载，确保 API 请求同源
+        //   - 端口从 EncvGoService 获取（默认 2025）
         webView.webViewClient = WebViewClient()
-        webView.loadUrl("http://10.0.2.2:8200/#/simverse-home")
+        val port = EncvGoService.lastKnownPort.let { if (it > 0) it else 2025 }
+        webView.loadUrl("http://127.0.0.1:$port/simverse-home/")
         
         // 桥接：通知 Go 后端世界页面已打开
         notifyBackend("opened")

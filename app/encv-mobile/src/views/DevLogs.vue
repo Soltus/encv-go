@@ -249,7 +249,10 @@ import {
 } from "ionicons/icons";
 
 import { type BackendLogEntry, checkServerStatus, getRecentBackendLogs } from "@/api/encv";
+import FilterDropdown from "@/components/shared/FilterDropdown.vue";
 import type { DropdownOption } from "@/components/shared/FilterDropdown.vue";
+import ServerStatusCard from "@/components/ServerStatusCard.vue";
+import VirtualLogList from "@/components/VirtualLogList.vue";
 import { copyToClipboard } from "@/composables/useClipboard";
 import { eventBus } from "@/composables/useEventBus";
 import { type LogEntry, useFrontendLogs } from "@/composables/useFrontendLogs";

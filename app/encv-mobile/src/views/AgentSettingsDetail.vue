@@ -338,6 +338,7 @@
 
 <script setup lang="ts">
 import { fetchConfig, getApiBaseUrl, updateConfig } from "@/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import { devlogApiError, devlogApiInfo } from "@/composables/devlogApiError";
 import { type DoctorReport, runSyncDoctor } from "@/composables/useAgent";
 import { getAgentApiBase, getAgentApiBaseContext } from "@/composables/useAgentApiBase";

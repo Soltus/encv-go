@@ -1,0 +1,1 @@
+import{H as e,Q as t,q as n}from"./index-Def3AACJ.js";import{t as r}from"./SvPagePlaceholder-D7SvAfMu.js";var i=n({__name:`RegionList`,setup(n){return(n,i)=>(t(),e(r,{"title-key":`simverse.regions`,"icon-name":`map`}))}});export{i as default};

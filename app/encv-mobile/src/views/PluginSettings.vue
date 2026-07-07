@@ -185,6 +185,7 @@
 
 <script setup lang="ts">
 import { fetchConfig, fetchTextPreviewExts, invalidateTextExtsCache, updateConfig } from "@/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import FilePickerModal from "@/components/FilePickerModal.vue";
 import { useConfig } from "@/composables/useConfig";
 import { useI18n } from "@/composables/useI18n";

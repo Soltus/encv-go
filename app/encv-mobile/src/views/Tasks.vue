@@ -287,16 +287,21 @@
         - 旧：:items="displayedItems"（传整个数组，virtualizer 内部 O(N) 遍历）
         - 新：:count + :get-item + :get-key（virtualizer 只对可见窗口调 getItem，O(1)）
         - 配合 Task 10 Web Worker 委托视图计算，主线程不卡顿 -->
+      <!-- 🆕 2026-07-07 防御性修复：
+        - safeCount：displayedItems 为空/非数组时返回 0，避免 .length 报错
+        - safeGetItem：越界时返回 undefined（TaskVirtualList 内部会 v-if 跳过）
+        - safeGetKey：越界时返回 fallback key，避免访问 undefined.key 抛错
+        - slot 解构默认值：{ item = {} } 作为最后一道防线，确保解构永不报错 -->
       <TaskVirtualList
         v-else
-        :count="displayedItems.length"
-        :get-item="(i: number) => displayedItems[i]"
-        :get-key="(i: number) => displayedItems[i].key"
+        :count="safeDisplayedCount"
+        :get-item="safeGetDisplayedItem"
+        :get-key="safeGetDisplayedKey"
         :scroll-el="scrollEl"
         ref="virtualListRef"
         class="tasks-virtual-list"
       >
-        <template #default="{ item }">
+        <template #default="{ item = {} as any }">
           <!-- ============== Date section header（今/昨/本周/本月/更早） ============== -->
           <!-- 聚合 + 平铺两种模式都显示，按 createdAt 分段 -->
           <div
@@ -607,6 +612,7 @@ import {
 // template 内直接使用的 state/handler 都在此解构到局部变量，
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
+import { computed } from "vue";
 import { useTasksView } from "./useTasksView";
 
 const {
@@ -708,6 +714,35 @@ const {
   onGroupTouchEnd,
   openGroupActionSheet,
 } = useTasksView();
+
+// 🆕 2026-07-07 防御性安全访问：
+//   - 场景：displayedItems 数组长度快速变化时（筛选/搜索/删除），
+//     virtualizer 可能短暂请求越界 index，或 displayedItems 本身为 undefined/null
+//   - safeDisplayedCount：确保 count 永远是数字，避免 .length 报错
+//   - safeGetDisplayedItem：越界时返回 undefined（TaskVirtualList 内部会 v-if 跳过）
+//   - safeGetDisplayedKey：越界时返回 fallback key，避免访问 undefined.key 抛错
+const safeDisplayedCount = computed(() => {
+  const items = displayedItems.value;
+  return Array.isArray(items) ? items.length : 0;
+});
+
+function safeGetDisplayedItem(index: number): any {
+  const items = displayedItems.value;
+  if (!Array.isArray(items) || index < 0 || index >= items.length) return undefined;
+  return items[index];
+}
+
+function safeGetDisplayedKey(index: number): string | number {
+  const items = displayedItems.value;
+  if (!Array.isArray(items) || index < 0 || index >= items.length) return `__fallback_${index}`;
+  const item = items[index];
+  if (item == null) return `__fallback_${index}`;
+  try {
+    return item.key ?? `__fallback_${index}`;
+  } catch {
+    return `__fallback_${index}`;
+  }
+}
 </script>
 
 

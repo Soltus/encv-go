@@ -135,6 +135,7 @@
 ;
 
 import { DEFAULT_API_BASE_URL, getApiBaseUrl } from "@/api/encv";
+import ServerStatusCard from "@/components/ServerStatusCard.vue";
 import { type ProbeResult, useApiBaseProbe } from "@/composables/useApiBaseProbe";
 import { useI18n } from "@/composables/useI18n";
 import { useServerStatus } from "@/composables/useServerStatus";

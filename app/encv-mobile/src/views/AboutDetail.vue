@@ -133,6 +133,7 @@ import {
 } from "ionicons/icons";
 
 import { type BuildInfo, fetchBuildInfo } from "@/api/encv";
+import LibraryRow from "@/components/LibraryRow.vue";
 import { useI18n } from "@/composables/useI18n";
 import { type LibraryItem, useLibraries } from "@/composables/useLibraries";
 import { onMounted, ref, watch } from "vue";

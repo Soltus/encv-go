@@ -1,0 +1,1 @@
+import{H as e,Q as t,q as n}from"./index-Def3AACJ.js";import{t as r}from"./SvPagePlaceholder-D7SvAfMu.js";var i=n({__name:`WorldIntervention`,setup(n){return(n,i)=>(t(),e(r,{"title-key":`simverse.intervention`,"icon-name":`construct`}))}});export{i as default};

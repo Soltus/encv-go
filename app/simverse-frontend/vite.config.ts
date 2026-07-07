@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const resolve = (p: string) => path.resolve(__dirname, p)
 
 export default defineConfig({
+  base: '/simverse/',
   plugins: [vue()],
   resolve: {
     alias: {
