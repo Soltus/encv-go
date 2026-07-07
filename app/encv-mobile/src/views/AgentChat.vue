@@ -543,6 +543,15 @@
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
 import { useAgentChatView } from "./useAgentChatView";
+import V2ScenariosMenu from "@/components/agent/V2ScenariosMenu.vue";
+import ContextIcon from "@/components/agent/ContextIcon.vue";
+import EngineRenderer from "@/components/agent/EngineRenderer.vue";
+import SlashMenu from "@/components/agent/SlashMenu.vue";
+import AttachmentTray from "@/components/agent/AttachmentTray.vue";
+import V2QuickActions from "@/components/agent/V2QuickActions.vue";
+import MockPresetBar from "@/components/agent/MockPresetBar.vue";
+import MockBranchChoiceBar from "@/components/agent/MockBranchChoiceBar.vue";
+import AgentDebugPanel from "@/components/agent/AgentDebugPanel.vue";
 
 const {
   // i18n

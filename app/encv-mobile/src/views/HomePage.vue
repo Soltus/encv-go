@@ -80,6 +80,7 @@ import {
 import { useI18n } from "@/composables/useI18n";
 import { isNative } from "@/plugins/GoProcess";
 import { openWorld } from "@/plugins/SimVerse";
+import AgentEntry from "@/components/agent/AgentEntry.vue";
 import { onIonViewWillEnter } from "@ionic/vue";
 import { useRouter } from "vue-router";
 

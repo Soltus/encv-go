@@ -33,6 +33,7 @@
 
 <script setup lang="ts">
 import type { ContextUsageResponse } from "@/composables/useContextUsage";
+import ContextPopover from "@/components/agent/ContextPopover.vue";
 import { modalController } from "@ionic/vue";
 
 export interface ContextPopoverState {

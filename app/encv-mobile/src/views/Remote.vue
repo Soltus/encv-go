@@ -336,6 +336,8 @@ import {
   updateOpenlistSite,
 } from "@/api/encv";
 import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
+import LocalOpenListStatusCard from "@/components/LocalOpenListStatusCard.vue";
+import InputWithHistory from "@/components/InputWithHistory.vue";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import { computed, onMounted, ref } from "vue";

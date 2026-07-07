@@ -62,6 +62,7 @@
 <script setup lang="ts">
 import type { ToolCall, ToolStatus } from "@/composables/useAgent";
 import { useI18n } from "@/composables/useI18n";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
 import {
   chevronDown as chevronIcon,
   documentTextOutline,

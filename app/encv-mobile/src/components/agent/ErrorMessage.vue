@@ -17,6 +17,7 @@
 </template>
 
 <script setup lang="ts">
+import MessageAuthor from "@/components/agent/MessageAuthor.vue";
 import { alertCircleOutline, refreshOutline } from "ionicons/icons";
 
 defineProps<{

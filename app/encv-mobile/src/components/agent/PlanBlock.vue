@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from "@/composables/useI18n";
+import BlockHeader from "@/components/agent/BlockHeader.vue";
 import {
   checkboxOutline,
   checkmarkCircle,

@@ -107,6 +107,7 @@
 import { formatDateTime } from "@/composables/useDateFormat";
 import type { MockGenLogEntry, MockGenLogSummary } from "@/composables/useMockGenLog";
 import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
+import UnifiedTimelineCard from "@encv/shared-components/components/shared/UnifiedTimelineCard.vue";
 import {
   checkmarkCircleOutline,
   copyOutline,

@@ -26,7 +26,8 @@ import fs from 'node:fs'
 import { devStartGuard } from '../packages/shared-components/src/lib/dev-start-guard'
 import { frontendDepsManifestPlugin } from './vite-plugins/frontend-deps-manifest'
 import { i18nOptimizePlugin } from './vite-plugins/i18n-optimize'
-import { vueComponentCheckPlugin } from './vite-plugin-vue-component-check'
+import { vueComponentCheckPlugin } from '../packages/shared-components/src/vite-plugins/vue-component-check'
+import Components from 'unplugin-vue-components/vite'
 
 // =============================================================================
 // ENCV Mobile Vite Config
@@ -239,7 +240,23 @@ export default defineConfig({
     devStartGuard(),  // ⚠️ 防御：禁止直接 vite 启动，必须通过 PM2 → preview-gateway
     frontendDepsManifestPlugin(),  // 🆕 2026-06-17：读 package.json 生成 frontend-deps.json manifest
     i18nOptimizePlugin(),  // 🆕 i18n HMR 热重载 + 构建优化
-    vueComponentCheckPlugin({ failOnError: false }),
+    vueComponentCheckPlugin({
+      dev: process.env.NODE_ENV !== 'production',
+      failOnError: false,
+      globalComponents: [
+        'ChatThinking',
+        'ChatMarkdown',
+        'ChatList',
+        'ChatItem',
+        'MarkdownStream',
+      ],
+    }),
+    ...(process.env.NODE_ENV === 'production' ? [Components({
+      dirs: ['src/components', '../packages/shared-components/src/components'],
+      extensions: ['vue'],
+      deep: true,
+      dts: 'src/components.d.ts',
+    })] : []),
     vue(),
     dynamicHmrHostPlugin(),
     // @/ alias 多路径 fallback：优先本地 src，其次 shared-components

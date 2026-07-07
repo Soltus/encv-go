@@ -61,6 +61,7 @@
 
 <script setup lang="ts">
 import type { JobRun, StepRun } from "@/lib/workflow/types";
+import StepMiniBadge from "@/components/automation/StepMiniBadge.vue";
 import { computed, ref } from "vue";
 
 const props = defineProps<{

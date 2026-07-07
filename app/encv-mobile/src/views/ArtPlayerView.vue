@@ -65,6 +65,7 @@ import {
 } from "ionicons/icons";
 
 import { getAlistEncryptStreamUrl, getFileStreamUrl } from "@/api/encv";
+import ErrorStateCard from "@/components/ErrorStateCard.vue";
 import type { ErrorDetailItem, ErrorType } from "@/components/ErrorStateCard.vue";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";

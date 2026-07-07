@@ -229,6 +229,14 @@ import { useRenderTurnItems } from "@/composables/renderTurnItems";
 import type { Decision, Message, ToolCall, ToolResult } from "@/composables/useAgent";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
+import UserMessageBubble from "@/components/agent/UserMessageBubble.vue";
+import AssistantMessage from "@/components/agent/AssistantMessage.vue";
+import ApprovalCard from "@/components/agent/ApprovalCard.vue";
+import GroupedOperationMessage from "@/components/agent/GroupedOperationMessage.vue";
+import OperationCard from "@/components/agent/OperationCard.vue";
+import MountListCard from "@/components/agent/MountListCard.vue";
+import FileListCard from "@/components/agent/FileListCard.vue";
+import FileContentCard from "@/components/agent/FileContentCard.vue";
 import { chatbubblesOutline, copyOutline } from "ionicons/icons";
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 

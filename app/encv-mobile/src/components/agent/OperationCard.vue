@@ -102,6 +102,7 @@
 import type { ToolCall } from "@/composables/useAgent";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
 import {
   alertCircleOutline,
   chevronDownOutline,

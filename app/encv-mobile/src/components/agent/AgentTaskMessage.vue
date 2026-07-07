@@ -83,6 +83,7 @@
 <script setup lang="ts">
 import type { SubTask } from "@/composables/renderTurnItems";
 import { AGENT_TASK_COLLAPSE_CHAR_COUNT, AGENT_TASK_COLLAPSE_LINE_COUNT } from "@/composables/renderTurnItems";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
 import { useI18n } from "@/composables/useI18n";
 import {
   checkmarkCircle,

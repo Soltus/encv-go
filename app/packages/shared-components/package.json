@@ -9,6 +9,7 @@
     "./views/*": "./src/views/*",
     "./composables/*": "./src/composables/*",
     "./plugins/*": "./src/plugins/*",
+    "./vite-plugins/*": "./src/vite-plugins/*",
     "./components/*": "./src/components/*",
     "./api/*": "./src/api/*",
     "./config/*": "./src/config/*",

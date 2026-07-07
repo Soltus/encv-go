@@ -94,6 +94,7 @@ import {
 } from "ionicons/icons";
 
 import type { OpenListRuntime } from "@/components-shared";
+import OpenListStatusCard from "@/components-shared/OpenListStatusCard.vue";
 import { OpenListNative } from "@/plugins/openlist-native";
 import { onMounted, onUnmounted, ref } from "vue";
 

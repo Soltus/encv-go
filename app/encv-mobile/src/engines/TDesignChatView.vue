@@ -295,6 +295,8 @@
 
 import { useRenderTurnItems } from "@/composables/renderTurnItems";
 import type { AgentStatus, Message, ToolCall, ToolResult } from "@/composables/useAgent";
+import { ChatThinking, ChatMarkdown } from "@tdesign-vue-next/chat";
+import ToolDetailContent from "@/engines/ToolDetailContent.vue";
 import { type ComputedRef, computed, ref } from "vue";
 
 /**

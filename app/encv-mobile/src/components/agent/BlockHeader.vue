@@ -38,6 +38,7 @@
 import { copyToClipboard } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
 import { chevronDownOutline, chevronUpOutline, copyOutline } from "ionicons/icons";
 import type { Component } from "vue";
 

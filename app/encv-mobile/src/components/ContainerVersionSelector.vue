@@ -30,6 +30,7 @@
 
 <script setup lang="ts">
 import type { ContainerVersionInfo } from "@/api/encv";
+import RadioItem from "@/components/RadioItem.vue";
 import { useI18n } from "@/composables/useI18n";
 import { CONTAINER_VERSIONS, DEFAULT_CONTAINER_VERSION } from "@/constants/containerVersion";
 import { computed } from "vue";

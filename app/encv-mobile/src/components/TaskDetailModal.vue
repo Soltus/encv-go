@@ -62,6 +62,13 @@ import {
 } from "ionicons/icons";
 
 import { type EncvTask, rollbackTask } from "@/api/encv";
+import TaskBasicInfo from "@/components/TaskBasicInfo.vue";
+import TaskTimeline from "@/components/TaskTimeline.vue";
+import TaskPerformanceSection from "@/components/TaskPerformanceSection.vue";
+import TaskOutputInfo from "@/components/TaskOutputInfo.vue";
+import TaskErrorSection from "@/components/TaskErrorSection.vue";
+import TaskWarningSection from "@/components/TaskWarningSection.vue";
+import TaskActionButtons from "@/components/TaskActionButtons.vue";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import { modalController } from "@ionic/vue";
