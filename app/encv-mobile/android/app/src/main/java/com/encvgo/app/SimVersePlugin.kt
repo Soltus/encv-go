@@ -209,7 +209,6 @@ class SimVersePlugin : Plugin() {
                     steps.add("      ✅ getPluginInstance 返回实例")
                     steps.add("      class = ${instance.javaClass.name}")
                     steps.add("      classLoader = ${instance.javaClass.classLoader}")
-                    steps.add("      pluginModule size = ${instance.pluginModule.size}")
                     satLog("S05-LOADED", "插件实例获取成功: ${instance.javaClass.name}")
                 } else {
                     steps.add("      ❌ getPluginInstance 返回 null")
