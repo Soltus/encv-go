@@ -20,6 +20,9 @@ class SimVerseWebViewClient(
     private val satTag = "SimVerse-SAT"
     private val virtualHost = "simverse-plugin.local"
 
+    @Volatile
+    var backendPort: Int = 0
+
     data class WebViewDiagnosticState(
         var pageStartedUrl: String? = null,
         var pageStartedCount: Int = 0,
@@ -164,6 +167,12 @@ class SimVerseWebViewClient(
         Log.e(tag, "onPageFinished: $url (count=${diagState.pageFinishedCount}, duration=${diagState.loadDurationMs}ms)")
         satLog("S14-WV-PAGE-FINISH", "url=$url, count=${diagState.pageFinishedCount}, duration=${diagState.loadDurationMs}ms")
 
+        val port = backendPort
+        if (port > 0) {
+            Log.i(tag, "onPageFinished: injecting API base, port=$port")
+            injectApiBase(view, port)
+        }
+
         view?.evaluateJavascript(
             """
             (function() {
@@ -179,6 +188,21 @@ class SimVerseWebViewClient(
             """.trimIndent(),
             null
         )
+    }
+
+    private fun injectApiBase(view: WebView?, port: Int) {
+        view ?: return
+        val script = """
+            (function() {
+                window.__ENCV_API_BASE__ = 'http://127.0.0.1:$port';
+                window.__ENCV_PORT__ = $port;
+                console.log('[SimVerse-WVC] API base set to http://127.0.0.1:$port');
+                if (window.dispatchEvent) {
+                    window.dispatchEvent(new CustomEvent('encv:api-base-ready', {detail: {port: $port}}));
+                }
+            })();
+        """.trimIndent()
+        view.evaluateJavascript(script, null)
     }
 
     override fun onReceivedError(
