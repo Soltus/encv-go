@@ -387,6 +387,7 @@ func (s *Server) handleSimverseNPCDetail(c *gin.Context) {
 
 	world := s.simverseMgr.World()
 	npc := world.GetNPC(id, s.simverseMgr.rng)
+	behaviorState := world.GetBehaviorState(id, s.simverseMgr.rng)
 
 	skills := make(map[string]uint8)
 	for i := simverse.SkillType(0); i < simverse.SkillMax; i++ {
@@ -473,6 +474,21 @@ func (s *Server) handleSimverseNPCDetail(c *gin.Context) {
 		"org_id":          npc.OrgID,
 		"region_id":       npc.RegionID,
 		"home_region_id":  npc.HomeRegionID,
+		"behavior": gin.H{
+			"current_behavior":  behaviorState.CurrentBehavior.String(),
+			"current_behavior_cn": behaviorState.CurrentBehavior.CN(),
+			"behavior_start_tick": behaviorState.BehaviorStartTick,
+			"behavior_duration":  behaviorState.BehaviorDuration,
+			"target_id":          behaviorState.TargetID,
+			"target_pos_x":       behaviorState.TargetPosX,
+			"target_pos_y":       behaviorState.TargetPosY,
+			"needs": gin.H{
+				"hunger":       behaviorState.Needs.Hunger,
+				"energy":       behaviorState.Needs.Energy,
+				"social":       behaviorState.Needs.Social,
+				"achievement":  behaviorState.Needs.Achievement,
+			},
+		},
 		"skills":          skills,
 		"inventory":       inventory,
 		"bank":            bank,

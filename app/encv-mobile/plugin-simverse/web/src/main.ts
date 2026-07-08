@@ -5,6 +5,7 @@ import App from "./App.vue";
 import router from "./router";
 import { registerIonicComponents } from "./composables/useIonicAutoRegister";
 import { useI18n, registerI18nModule } from "@encv/shared-components/composables/useI18n";
+import { initSharedI18n } from "@encv/shared-components/i18n";
 import simverseI18n from "./i18n/simverse";
 
 import "@ionic/vue/css/core.css";
@@ -20,6 +21,7 @@ const app = createApp(App).use(IonicVue).use(router).use(pinia);
 const { registered } = registerIonicComponents(app);
 console.log(`[ionic] Registered ${registered.length} Ionic Vue components`);
 
+initSharedI18n();
 registerI18nModule(simverseI18n);
 
 const { t } = useI18n();
