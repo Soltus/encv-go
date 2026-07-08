@@ -68,7 +68,7 @@ const entityCount = ref(128);
 const worldAge = ref("3h 24m");
 
 function goToWorld() {
-  router.push("/tabs/world");
+  router.push("/world");
 }
 
 function goToChronicle() {
