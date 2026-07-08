@@ -65,9 +65,149 @@ npx -y @taptap/maker init --create --name "项目名称"
 └── engine-docs/             # 引擎 API 文档
 ```
 
-## 三、构建与手机预览
+## 三、UI 组件库（urhox-libs/UI）
 
-### 3.1 构建流程
+Maker 内置了一套完整的 UI 组件库，基于 Yoga Flexbox 布局，支持 40+ 组件。
+
+### 3.1 组件列表
+
+| 类别 | 组件 |
+|------|------|
+| **布局** | `Panel`, `ScrollView`, `SafeAreaView`, `SimpleGrid` |
+| **基础** | `Label`, `Button`, `Icon` |
+| **数据展示** | `Card`, `Badge`, `Avatar`, `List`, `Table`, `Timeline`, `Tree` |
+| **表单** | `TextField`, `Checkbox`, `Toggle`, `Slider`, `Stepper`, `Rating`, `Dropdown`, `ColorPicker`, `DatePicker`, `TimePicker`, `FileUpload` |
+| **导航** | `Tabs`, `Breadcrumb`, `Pagination`, `Menu`, `Drawer`, `Accordion` |
+| **反馈** | `Modal`, `Alert`, `Toast`, `Popover`, `Tooltip`, `Drawer`, `Skeleton`, `ProgressBar` |
+| **其他** | `Divider`, `Chip`, `Carousel`, `RichText`, `Spine`, `EditMenu` |
+
+### 3.2 常用组件示例
+
+#### Button 按钮
+
+```lua
+UI.Button {
+    text = "点击我",
+    height = 44,
+    borderRadius = 10,
+    backgroundColor = "#06b6d4",
+    color = "#ffffff",
+    fontSize = 14,
+    fontWeight = "bold",
+    onClick = function()
+        print("按钮被点击了")
+    end,
+}
+```
+
+**注意：** `backgroundColor` 必须使用字符串格式（`"#RRGGBB"` 或 `"rgba(...)"`），**不能用数字**（如 `0xFF06b6d4`），否则会导致 `Style.Lighten` 报错。
+
+#### Card 卡片
+
+```lua
+UI.Card {
+    padding = 16,
+    borderRadius = 12,
+    backgroundColor = "#1e293b",
+    borderWidth = 1,
+    borderColor = "#334155",
+    
+    UI.Label { text = "卡片标题", fontSize = 16, fontWeight = "bold" },
+}
+```
+
+#### Tabs 标签页
+
+```lua
+UI.Tabs {
+    tabs = {
+        { key = "overview", label = "总览" },
+        { key = "buildings", label = "建筑" },
+    },
+    activeTab = "overview",
+    onTabChange = function(tabKey)
+        print("切换到:", tabKey)
+    end,
+}
+```
+
+#### Slider 滑块
+
+```lua
+UI.Slider {
+    min = 0,
+    max = 100,
+    value = 50,
+    height = 36,
+    activeColor = "#8b5cf6",
+    trackColor = "#334155",
+    thumbColor = "#a78bfa",
+    onValueChange = function(val)
+        print("当前值:", val)
+    end,
+}
+```
+
+#### ProgressBar 进度条
+
+```lua
+UI.ProgressBar {
+    width = "100%",
+    height = 8,
+    value = 0.75,  -- 0-1 之间
+    color = "#22c55e",
+    backgroundColor = "#334155",
+    borderRadius = 4,
+}
+```
+
+#### Toggle 开关
+
+```lua
+UI.Toggle {
+    checked = true,
+    activeColor = "#22c55e",
+    inactiveColor = "#475569",
+    thumbColor = "#ffffff",
+    onValueChange = function(val)
+        print("开关状态:", val)
+    end,
+}
+```
+
+#### Stepper 步进器
+
+```lua
+UI.Stepper {
+    value = 1,
+    min = 1,
+    max = 5,
+    step = 1,
+    onValueChange = function(val)
+        print("当前值:", val)
+    end,
+}
+```
+
+### 3.3 布局系统
+
+基于 Yoga Flexbox，支持以下属性：
+
+| 属性 | 说明 | 示例 |
+|------|------|------|
+| `flexDirection` | 主轴方向 | `"row"` / `"column"` |
+| `justifyContent` | 主轴对齐 | `"flex-start"` / `"center"` / `"space-between"` |
+| `alignItems` | 交叉轴对齐 | `"flex-start"` / `"center"` / `"stretch"` |
+| `flex` | 弹性比例 | `1`, `2` |
+| `width` / `height` | 尺寸 | `100`, `"100%"` |
+| `padding` / `margin` | 内边距/外边距 | `16` 或 `{ left = 8, right = 8 }` |
+| `gap` | 子元素间距 | `12` |
+| `flexWrap` | 换行 | `"wrap"` / `"nowrap"` |
+| `display` | 显示 | `"flex"` / `"none"` |
+
+## 四、构建与手机预览
+
+### 4.1 构建流程
 
 `maker_build_current_directory` 工具执行以下操作：
 
@@ -77,7 +217,7 @@ npx -y @taptap/maker init --create --name "项目名称"
 4. **刷新预览** - 更新预览版本
 5. **启动日志监听** - 本地 CLI watcher 持续拉取运行日志
 
-### 3.2 构建参数
+### 4.2 构建参数
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
@@ -89,7 +229,7 @@ npx -y @taptap/maker init --create --name "项目名称"
 | `confirm_remote_build_without_submit` | boolean | 仅构建远程版本，不提交本地更改 |
 | `timeout_ms` | number | 构建超时时间（默认 10 分钟） |
 
-### 3.3 构建结果
+### 4.3 构建结果
 
 成功返回包含：
 
@@ -102,7 +242,7 @@ npx -y @taptap/maker init --create --name "项目名称"
 - remote_result: 远程构建结果详情
 ```
 
-### 3.4 手机预览
+### 4.4 手机预览
 
 构建成功后，通过以下方式在手机上预览：
 
@@ -111,9 +251,9 @@ npx -y @taptap/maker init --create --name "项目名称"
 3. 点击「预览」按钮
 4. 扫码或直接在 App 内打开
 
-## 四、美术资产生成
+## 五、美术资产生成
 
-### 4.1 图片生成 (generate_image)
+### 5.1 图片生成 (generate_image)
 
 用于生成单张游戏美术资源。生成的图片自动保存到 `assets/image/` 目录。
 
@@ -161,28 +301,28 @@ npx -y @taptap/maker init --create --name "项目名称"
 
 生成结果：可爱的 Q 版像素骑士，带有狮鹫盾牌和红色披风，透明背景，符合游戏美术风格。
 
-### 4.2 批量图片生成 (batch_generate_images)
+### 5.2 批量图片生成 (batch_generate_images)
 
 批量生成多张游戏美术资源，适用于需要一组风格统一的资源时。
 
-### 4.3 图片编辑 (edit_image)
+### 5.3 图片编辑 (edit_image)
 
 基于现有图片进行修改，支持：
 - 本地项目图片路径（`assets/image/` 下）
 - 远程 CDN URL
 - Data URL
 
-### 4.4 视频生成
+### 5.4 视频生成
 
 - `create_video_task` - 创建视频生成任务
 - `query_video_task` - 轮询任务状态
 - 视频保存到 `assets/video/` 目录（MP4 格式）
 
-### 4.5 音乐生成 (text_to_music)
+### 5.5 音乐生成 (text_to_music)
 
 生成游戏背景音乐或音效，保存到 `assets/audio/` 目录（MP3/WAV 格式）。
 
-### 4.6 3D 模型生成
+### 5.6 3D 模型生成
 
 - `create_3d_model_task` - 创建 3D 模型生成任务
 - `query_3d_model_task` - 轮询任务状态
@@ -190,9 +330,9 @@ npx -y @taptap/maker init --create --name "项目名称"
 - 输出格式：GLB/FBX + MDL
 - 自动提取到 `assets/Meshes`、`assets/Materials`、`assets/Textures`、`assets/Prefabs`
 
-## 五、资源管理规范
+## 六、资源管理规范
 
-### 5.1 目录结构
+### 6.1 目录结构
 
 ```
 assets/
@@ -202,16 +342,16 @@ assets/
 └── model/        # 3D 模型原始文件
 ```
 
-### 5.2 资源引用
+### 6.2 资源引用
 
 Maker MCP 会自动记录远程资源映射，支持：
 - 后续编辑同一资源
 - 保持版本追踪
 - 本地文件与远程 CDN 对应
 
-## 六、开发工作流
+## 七、开发工作流
 
-### 6.1 标准开发流程
+### 7.1 标准开发流程
 
 ```
 1. 编写游戏脚本 (scripts/main.lua)
@@ -222,7 +362,7 @@ Maker MCP 会自动记录远程资源映射，支持：
 6. 迭代优化
 ```
 
-### 6.2 Git 工作流
+### 7.2 Git 工作流
 
 **重要**：Maker 项目使用特殊的 Git 工作流：
 - 不要手动创建 feature 分支
@@ -230,9 +370,9 @@ Maker MCP 会自动记录远程资源映射，支持：
 - 使用 `maker_build_current_directory` 统一处理提交/推送/构建
 - 构建工具会自动检查远程同步状态
 
-## 七、与现有项目的结合点
+## 八、与现有项目的结合点
 
-### 7.1 SimVerse 游戏化 UI 参考
+### 8.1 SimVerse 游戏化 UI 参考
 
 从 Maker 的 UI 设计模式中借鉴：
 - 游戏化按钮样式（底部边框 + 按下塌陷）
@@ -240,16 +380,16 @@ Maker MCP 会自动记录远程资源映射，支持：
 - 多级圆角规范
 - 毛玻璃背景效果
 
-### 7.2 潜在应用场景
+### 8.2 潜在应用场景
 
 1. **SimVerse 美术资源** - 使用 generate_image 生成 NPC 头像、场景背景
 2. **游戏音效** - 使用 text_to_music 生成背景音乐和音效
 3. **快速原型验证** - 用 Maker 快速验证游戏玩法原型
 4. **移动端预览** - 利用 Maker 的手机预览能力快速测试横屏 UI
 
-## 八、常见问题与踩坑
+## 九、常见问题与踩坑
 
-### 8.1 颜色格式错误：attempt to index a number value
+### 9.1 颜色格式错误：attempt to index a number value
 
 **错误信息：**
 ```
@@ -291,7 +431,7 @@ backgroundColor = 0xFF4fd1c5
 | `{r,g,b}` | `{ 255, 0, 0 }` | RGB table |
 | `{r,g,b,a}` | `{ 255, 0, 0, 128 }` | RGBA table |
 
-### 8.2 手机预览调试
+### 9.2 手机预览调试
 
 **错误报告入口：**
 手机上运行出错时，TapTap Maker 会自动生成错误报告，包含：
@@ -304,18 +444,20 @@ backgroundColor = 0xFF4fd1c5
 2. 确认所有颜色属性使用字符串格式
 3. 检查是否有未定义的变量或函数调用
 
-## 九、已知限制
+## 十、已知限制
 
 1. **资产生成工具可用性** - 代理工具需要远程 MCP 服务器支持
 2. **构建需要联网** - 远程构建依赖 Maker 云端服务
 3. **Lua 语言** - Maker 使用 Lua 作为脚本语言，与项目的 TypeScript/Vue 栈不同
 4. **UrhoX 引擎** - 基于 UrhoX 引擎，与现有 WebView 架构不同
 
-## 十、后续探索方向
+## 十一、后续探索方向
 
 - [x] 实际调用 generate_image 生成游戏资源
 - [x] 在手机上实际预览效果（已验证，修复了颜色格式 bug）
 - [x] 收集 UI 库常见问题与踩坑
+- [x] 梳理 UI 组件库（40+ 组件，含常用组件示例）
+- [x] 丰富 demo 功能（Tabs/Card/Slider/ProgressBar/Toggle/Stepper）
 - [ ] 测试 text_to_music 音乐生成
 - [ ] 探索 3D 模型生成能力
 - [ ] 研究资源编辑和版本管理
