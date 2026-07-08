@@ -67,38 +67,33 @@ dependencies {
 }
 
 val simverseFrontendDir = layout.projectDirectory.dir("web").asFile
+val simverseDistDir = layout.projectDirectory.dir("web/dist").asFile
+val simverseAssetsDir = layout.projectDirectory.dir("src/main/assets/simverse").asFile
 
-tasks.register("buildSimverseFrontend") {
+tasks.register<Exec>("installSimverseFrontendDeps") {
+    description = "Install simverse frontend npm dependencies"
+    group = "build"
+    onlyIf { File(simverseFrontendDir, "pnpm-lock.yaml").exists() && !File(simverseFrontendDir, "node_modules").exists() }
+    workingDir = simverseFrontendDir
+    commandLine("pnpm", "install", "--prefer-offline")
+}
+
+tasks.register<Exec>("buildSimverseFrontendOnly") {
+    description = "Build simverse frontend (vite build)"
+    group = "build"
+    dependsOn("installSimverseFrontendDeps")
+    workingDir = simverseFrontendDir
+    commandLine("pnpm", "build")
+    inputs.dir(simverseFrontendDir)
+    outputs.dir(simverseDistDir)
+}
+
+tasks.register<Copy>("buildSimverseFrontend") {
     description = "Build simverse frontend and copy to plugin assets"
     group = "build"
-
-    val distDir = File(simverseFrontendDir, "dist")
-    val assetsDir = layout.projectDirectory.dir("src/main/assets/simverse").asFile
-
-    inputs.dir(simverseFrontendDir)
-    outputs.dir(assetsDir)
-
-    doLast {
-        val npmLock = File(simverseFrontendDir, "pnpm-lock.yaml")
-        val nodeModules = File(simverseFrontendDir, "node_modules")
-        if (!nodeModules.exists() && npmLock.exists()) {
-            project.exec {
-                workingDir = simverseFrontendDir
-                commandLine("pnpm", "install", "--prefer-offline")
-            }
-        }
-
-        project.exec {
-            workingDir = simverseFrontendDir
-            commandLine("pnpm", "build")
-        }
-
-        assetsDir.deleteRecursively()
-        assetsDir.mkdirs()
-
-        distDir.copyRecursively(assetsDir, overwrite = true)
-        logger.lifecycle("SimVerse frontend copied to ${assetsDir.absolutePath}")
-    }
+    dependsOn("buildSimverseFrontendOnly")
+    from(simverseDistDir)
+    into(simverseAssetsDir)
 }
 
 tasks.whenTaskAdded {

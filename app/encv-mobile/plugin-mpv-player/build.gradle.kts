@@ -60,38 +60,33 @@ dependencies {
 }
 
 val mpvFrontendDir = layout.projectDirectory.dir("web").asFile
+val mpvDistDir = layout.projectDirectory.dir("web/dist").asFile
+val mpvAssetsDir = layout.projectDirectory.dir("src/main/assets/mpv").asFile
 
-tasks.register("buildMpvFrontend") {
+tasks.register<Exec>("installMpvFrontendDeps") {
+    description = "Install mpv frontend npm dependencies"
+    group = "build"
+    onlyIf { File(mpvFrontendDir, "pnpm-lock.yaml").exists() && !File(mpvFrontendDir, "node_modules").exists() }
+    workingDir = mpvFrontendDir
+    commandLine("pnpm", "install", "--prefer-offline")
+}
+
+tasks.register<Exec>("buildMpvFrontendOnly") {
+    description = "Build mpv frontend (vite build)"
+    group = "build"
+    dependsOn("installMpvFrontendDeps")
+    workingDir = mpvFrontendDir
+    commandLine("pnpm", "build")
+    inputs.dir(mpvFrontendDir)
+    outputs.dir(mpvDistDir)
+}
+
+tasks.register<Copy>("buildMpvFrontend") {
     description = "Build mpv frontend and copy to plugin assets"
     group = "build"
-
-    val distDir = File(mpvFrontendDir, "dist")
-    val assetsDir = layout.projectDirectory.dir("src/main/assets/mpv").asFile
-
-    inputs.dir(mpvFrontendDir)
-    outputs.dir(assetsDir)
-
-    doLast {
-        val npmLock = File(mpvFrontendDir, "pnpm-lock.yaml")
-        val nodeModules = File(mpvFrontendDir, "node_modules")
-        if (!nodeModules.exists() && npmLock.exists()) {
-            project.exec {
-                workingDir = mpvFrontendDir
-                commandLine("pnpm", "install", "--prefer-offline")
-            }
-        }
-
-        project.exec {
-            workingDir = mpvFrontendDir
-            commandLine("pnpm", "build")
-        }
-
-        assetsDir.deleteRecursively()
-        assetsDir.mkdirs()
-
-        distDir.copyRecursively(assetsDir, overwrite = true)
-        logger.lifecycle("MPV frontend copied to ${assetsDir.absolutePath}")
-    }
+    dependsOn("buildMpvFrontendOnly")
+    from(mpvDistDir)
+    into(mpvAssetsDir)
 }
 
 tasks.whenTaskAdded {
