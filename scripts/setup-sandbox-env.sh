@@ -295,48 +295,23 @@ else
 fi
 
 # ============================================================================
-# 步骤 5/6: pnpm install encv-mobile
+# 步骤 5/6: pnpm install (workspace 一次安装所有包)
 # ============================================================================
-step "5/6 pnpm install encv-mobile + plugin-openlist/web + plugin-simverse/web"
+APP_DIR="${REPO_ROOT}/app"
 
-# 5a. 主 app
-if [[ -d "${MOBILE_DIR}/node_modules/vite" ]]; then
-  ok "encv-mobile node_modules 已就绪"
-else
-  log "pnpm install encv-mobile ..."
-  cd "${MOBILE_DIR}"
-  if pnpm install --prefer-offline 2>&1 | tail -5; then
-    ok "encv-mobile 依赖安装完成"
-  else
-    err "encv-mobile pnpm install 失败"
-    FAILED=$((FAILED+1))
-  fi
-fi
+step "5/6 pnpm install (workspace 一次安装: encv-mobile + 所有 plugin-web + preview-gateway)"
 
-# 5b. plugin web
-if [[ -d "${MOBILE_DIR}/plugin-openlist/web/node_modules/vite" ]]; then
-  ok "plugin-openlist/web node_modules 已就绪"
+if [[ -d "${MOBILE_DIR}/node_modules/vite" ]] && \
+   [[ -d "${MOBILE_DIR}/plugin-openlist/web/node_modules/vite" ]] && \
+   [[ -d "${MOBILE_DIR}/plugin-simverse/web/node_modules/vite" ]]; then
+  ok "workspace node_modules 已就绪"
 else
-  log "pnpm install plugin-openlist/web ..."
-  cd "${MOBILE_DIR}"
-  if pnpm install --prefer-offline 2>&1 | tail -5; then
-    ok "plugin-openlist/web 依赖安装完成"
+  log "pnpm install (workspace) ..."
+  cd "${APP_DIR}"
+  if pnpm install --prefer-offline 2>&1 | tail -8; then
+    ok "workspace 依赖安装完成"
   else
-    warn "plugin-openlist/web pnpm install 失败（5174 Vite 跑不起来）"
-    FAILED=$((FAILED+1))
-  fi
-fi
-
-# 5c. plugin-simverse web
-if [[ -d "${MOBILE_DIR}/plugin-simverse/web/node_modules/vite" ]]; then
-  ok "plugin-simverse/web node_modules 已就绪"
-else
-  log "pnpm install plugin-simverse/web ..."
-  cd "${MOBILE_DIR}"
-  if pnpm install --prefer-offline 2>&1 | tail -5; then
-    ok "plugin-simverse/web 依赖安装完成"
-  else
-    warn "plugin-simverse/web pnpm install 失败"
+    err "workspace pnpm install 失败"
     FAILED=$((FAILED+1))
   fi
 fi
@@ -346,31 +321,18 @@ fi
 # ============================================================================
 GATEWAY_DIR="${REPO_ROOT}/app/preview-gateway"
 
-step "6/6 构建 preview-gateway 网关（app/preview-gateway/）"
+step "6/6 构建 preview-gateway 网关（Go 版，app/preview-gateway/）"
 
-if [[ -d "${GATEWAY_DIR}/node_modules" ]]; then
-  ok "preview-gateway node_modules 已就绪"
+if [[ -f "${GATEWAY_DIR}/bin/preview-gateway" ]]; then
+  ok "preview-gateway 二进制已构建: bin/preview-gateway"
 else
-  log "pnpm install preview-gateway ..."
+  log "构建 preview-gateway (make build) ..."
   cd "${GATEWAY_DIR}"
-  if pnpm install --prefer-offline 2>&1 | tail -5; then
-    ok "preview-gateway 依赖安装完成"
-  else
-    err "preview-gateway pnpm install 失败（网关跑不起来）"
-    FAILED=$((FAILED+1))
-  fi
-fi
-
-if [[ -f "${GATEWAY_DIR}/dist/server.js" ]]; then
-  ok "preview-gateway dist/server.js 已构建"
-else
-  log "构建 preview-gateway (pnpm build) ..."
-  cd "${GATEWAY_DIR}"
-  if pnpm build 2>&1 | tail -8; then
-    if [[ -f "${GATEWAY_DIR}/dist/server.js" ]]; then
+  if make build 2>&1 | tail -5; then
+    if [[ -f "${GATEWAY_DIR}/bin/preview-gateway" ]]; then
       ok "preview-gateway 构建完成"
     else
-      warn "构建退出 0 但 dist/server.js 不存在"
+      warn "构建退出 0 但 bin/preview-gateway 不存在"
       FAILED=$((FAILED+1))
     fi
   else
@@ -403,7 +365,7 @@ cat <<EOF
 
 仓库：
 EOF
-for d in "${BACKEND_FORK_DIR}" "${FRONTEND_FORK_DIR}" "${MOBILE_DIR}/node_modules/vite" "${FRONTEND_FORK_DIR}/dist/index.html" "${GATEWAY_DIR}/dist/server.js" "${SIMVERSE_DIR}/node_modules/cypress"; do
+for d in "${BACKEND_FORK_DIR}" "${FRONTEND_FORK_DIR}" "${MOBILE_DIR}/node_modules/vite" "${FRONTEND_FORK_DIR}/dist/index.html" "${GATEWAY_DIR}/bin/preview-gateway" "${MOBILE_DIR}/plugin-simverse/web/node_modules/vite"; do
   if [[ -e "$d" ]]; then
     if [[ -d "$d/.git" ]]; then
       branch=$(cd "$d" && git rev-parse --abbrev-ref HEAD 2>/dev/null)
