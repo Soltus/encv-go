@@ -43,7 +43,7 @@ func Load() *Config {
 		UpstreamPlugin:   envStr("UPSTREAM_PLUGIN", "http://127.0.0.1:5174"),
 		UpstreamEncvGo:   envStr("UPSTREAM_ENCV_GO", "http://127.0.0.1:2025"),
 		UpstreamOpenlist: envStr("UPSTREAM_OPENLIST", "http://127.0.0.1:5244"),
-		UpstreamSimverse: envStr("UPSTREAM_SIMVERSE", "http://127.0.0.1:8200"),
+		UpstreamSimverse: envStr("UPSTREAM_SIMVERSE", "http://127.0.0.1:5176"),
 
 		SpawnGo:           envBool("SPAWN_GO", true),
 		SpawnVite:         envBool("SPAWN_VITE", true),

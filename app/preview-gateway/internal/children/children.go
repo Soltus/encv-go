@@ -92,13 +92,13 @@ func New(p *paths.Paths, spawnGo, spawnVite, spawnPluginVite, spawnOpenlist, spa
 
 	if spawnSimverseVite {
 		m.children = append(m.children, &Child{
-			Name:     "simverse-frontend",
+			Name:     "plugin-simverse-web",
 			Cmd:      p.NodeBin,
-			Args:     []string{"node_modules/vite/bin/vite.js", "--host", "0.0.0.0", "--port", "8200"},
+			Args:     []string{"node_modules/vite/bin/vite.js", "--host", "0.0.0.0", "--port", "5176"},
 			Dir:      p.SimverseFrontendDir,
 			Color:    "\033[34m",
 			Required: false,
-			ReadyURL: "http://127.0.0.1:8200/",
+			ReadyURL: "http://127.0.0.1:5176/",
 		})
 	}
 

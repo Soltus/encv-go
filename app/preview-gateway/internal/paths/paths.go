@@ -37,7 +37,7 @@ func Resolve(repoRoot, mobileDir, mobileDataDir, pluginWebDir, simverseFrontendD
 	if simverseFrontendDir != "" {
 		p.SimverseFrontendDir = simverseFrontendDir
 	} else {
-		p.SimverseFrontendDir = filepath.Join(p.RepoRoot, "app", "simverse-frontend")
+		p.SimverseFrontendDir = filepath.Join(p.RepoRoot, "app", "encv-mobile", "plugin-simverse", "web")
 	}
 
 	if airBin != "" {
