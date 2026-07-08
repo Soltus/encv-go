@@ -30,6 +30,19 @@
 
         <div class="top-bar">
           <div class="resource-group">
+            <div class="resource-item game-resource" v-tooltip="t('simverse.diamond')">
+              <span class="resource-icon">💎</span>
+              <span class="resource-value">{{ playerDiamond }}</span>
+            </div>
+            <div class="resource-item game-resource" v-tooltip="t('simverse.gold')">
+              <span class="resource-icon">🪙</span>
+              <span class="resource-value">{{ playerGold }}</span>
+            </div>
+            <div class="resource-item game-resource" v-tooltip="t('simverse.stamina')">
+              <span class="resource-icon">⚡</span>
+              <span class="resource-value">{{ playerStamina }}/120</span>
+            </div>
+            <div class="res-divider"></div>
             <div class="resource-item" v-tooltip="t('simverse.tick')">
               <span class="resource-icon">⏱️</span>
               <span class="resource-value">{{ worldState?.tick ?? 0 }}</span>
@@ -38,14 +51,6 @@
               <span class="resource-icon">👥</span>
               <span class="resource-value">{{ worldState?.npc_count ?? 0 }}</span>
             </div>
-            <div class="resource-item" v-tooltip="t('simverse.brains')">
-              <span class="resource-icon">🧠</span>
-              <span class="resource-value">{{ worldState?.brain_count ?? 0 }}</span>
-            </div>
-            <div class="resource-item" v-tooltip="t('simverse.memory')">
-              <span class="resource-icon">💾</span>
-              <span class="resource-value">{{ (worldState?.total_mb ?? 0).toFixed(1) }}M</span>
-            </div>
           </div>
           <div class="top-actions">
             <button class="game-btn play-btn" :class="{ running: worldState?.running }" @click="toggleRunning">
@@ -53,9 +58,6 @@
             </button>
             <button class="game-btn" @click="stepOnce">
               <span class="btn-icon">⏭</span>
-            </button>
-            <button class="game-btn" @click="refreshState">
-              <span class="btn-icon">↻</span>
             </button>
           </div>
         </div>
@@ -94,19 +96,29 @@
         </div>
 
         <div class="right-menu">
+          <button class="menu-btn player-btn" :class="{ active: activePanel === 'profile' }" @click="openPanel('profile')">
+            <div class="player-avatar-mini">
+              <span class="avatar-icon-mini">⚔️</span>
+              <span class="player-level-badge">Lv.{{ playerLevel }}</span>
+            </div>
+          </button>
+          <button class="menu-btn gacha-menu-btn" @click="openGachaModal">
+            <span class="menu-icon sparkle">✨</span>
+            <span class="menu-badge red">NEW</span>
+          </button>
+          <button class="menu-btn" :class="{ active: activePanel === 'training' }" @click="openPanel('training')">
+            <span class="menu-icon">⚔️</span>
+            <span class="menu-label">{{ t("simverse.training") }}</span>
+          </button>
+          <button class="menu-btn" @click="openPanel('inventory')">
+            <span class="menu-icon">🎒</span>
+            <span class="menu-label">背包</span>
+          </button>
+          <div class="menu-divider"></div>
           <button class="menu-btn" :class="{ active: activePanel === 'settings' }" @click="openPanel('settings')">
             <span class="menu-icon">⚙️</span>
             <span class="menu-label">{{ t("simverse.settings") }}</span>
           </button>
-          <button class="menu-btn" @click="openPanel('intervention')">
-            <span class="menu-icon">⚡</span>
-            <span class="menu-label">{{ t("simverse.intervention") }}</span>
-          </button>
-          <button class="menu-btn" @click="openPanel('debug')">
-            <span class="menu-icon">🔧</span>
-            <span class="menu-label">{{ t("simverse.debug") }}</span>
-          </button>
-          <div class="menu-divider"></div>
           <button class="menu-btn exit-btn" @click="handleExitWorld">
             <span class="menu-icon">🚪</span>
             <span class="menu-label">{{ t("simverse.exitWorld") }}</span>
@@ -192,6 +204,206 @@
               </div>
               <div v-if="recentEvents.length === 0" class="empty-state">
                 {{ t("simverse.noData") }}
+              </div>
+            </template>
+
+            <template v-else-if="activePanel === 'profile'">
+              <div class="profile-card-panel">
+                <div class="player-card-mini">
+                  <div class="card-bg-mini"></div>
+                  <div class="card-content-mini">
+                    <div class="player-avatar-big">
+                      <span class="avatar-icon-big">⚔️</span>
+                    </div>
+                    <div class="player-name">冒险者</div>
+                    <div class="player-title">Lv.{{ playerLevel }} 勇者</div>
+                  </div>
+                </div>
+
+                <div class="panel-section">
+                  <div class="panel-section-title">{{ t("simverse.stats") }}</div>
+                  <div class="stats-grid-compact">
+                    <div class="stat-item-compact">
+                      <span class="stat-label-comp">{{ t("simverse.hp") }}</span>
+                      <span class="stat-val-comp">{{ playerHp }}/{{ playerMaxHp }}</span>
+                      <div class="stat-bar-comp">
+                        <div class="stat-fill-comp hp" :style="{ width: playerHpPercent + '%' }"></div>
+                      </div>
+                    </div>
+                    <div class="stat-item-compact">
+                      <span class="stat-label-comp">{{ t("simverse.attack") }}</span>
+                      <span class="stat-val-comp">{{ playerAttack }}</span>
+                    </div>
+                    <div class="stat-item-compact">
+                      <span class="stat-label-comp">{{ t("simverse.defense") }}</span>
+                      <span class="stat-val-comp">{{ playerDefense }}</span>
+                    </div>
+                    <div class="stat-item-compact">
+                      <span class="stat-label-comp">{{ t("simverse.exp") }}</span>
+                      <span class="stat-val-comp">{{ playerExp }}/{{ expToNextLevel }}</span>
+                      <div class="stat-bar-comp">
+                        <div class="stat-fill-comp exp" :style="{ width: expPercent + '%' }"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="panel-section">
+                  <div class="panel-section-title">{{ t("simverse.skills") }}</div>
+                  <div class="skill-list-compact">
+                    <div v-for="skill in playerSkills.slice(0, 4)" :key="skill.id" class="skill-item-comp">
+                      <div class="skill-icon-comp">{{ skill.icon }}</div>
+                      <div class="skill-info-comp">
+                        <div class="skill-name-comp">{{ skill.name }}</div>
+                        <div class="skill-level-comp">Lv.{{ skill.level }}</div>
+                      </div>
+                      <div class="skill-rarity-comp" :class="skill.rarity">{{ skill.rarity }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template v-else-if="activePanel === 'training'">
+              <div class="training-panel">
+                <div class="training-stamina-bar">
+                  <span class="stamina-icon">⚡</span>
+                  <div class="stamina-bar-wrap">
+                    <div class="stamina-bar-fill" :style="{ width: (playerStamina / 120 * 100) + '%' }"></div>
+                  </div>
+                  <span class="stamina-text">{{ playerStamina }}/120</span>
+                </div>
+
+                <div class="panel-section">
+                  <div class="panel-section-title">{{ t("simverse.train") }}</div>
+                  <div class="training-grid-small">
+                    <div v-for="mode in trainingModes" :key="mode.id"
+                         class="training-card-small"
+                         :class="mode.type"
+                         @click="doTraining(mode)">
+                      <div class="training-icon-small">{{ mode.icon }}</div>
+                      <div class="training-name-small">{{ mode.name }}</div>
+                      <div class="training-cost-small">⚡{{ mode.staminaCost }}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="panel-section">
+                  <div class="panel-section-title">{{ t("simverse.equipment") }}</div>
+                  <div class="equipment-grid-small">
+                    <div v-for="equip in equipmentSlots" :key="equip.slot" class="equip-slot-small">
+                      <div class="equip-item-small" :class="{ empty: !equip.item }">
+                        <span v-if="equip.item" class="equip-icon-small">{{ equip.item.icon }}</span>
+                        <span v-else class="equip-empty-small">+</span>
+                      </div>
+                      <div class="equip-label-small">{{ equip.label }}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="panel-section">
+                  <div class="panel-section-title">角色等级</div>
+                  <div class="level-up-compact">
+                    <div class="level-info-comp">
+                      <span class="lv-text">Lv.{{ playerLevel }}</span>
+                      <div class="exp-bar-small">
+                        <div class="exp-fill-small" :style="{ width: expPercent + '%' }"></div>
+                      </div>
+                      <span class="exp-text-small">{{ playerExp }}/{{ expToNextLevel }}</span>
+                    </div>
+                    <button class="level-up-btn-small" :disabled="playerExp < expToNextLevel" @click="levelUp">
+                      {{ t("simverse.upgrade") }}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template v-else-if="activePanel === 'inventory'">
+              <div class="inventory-panel">
+                <div class="panel-section-title">背包 ({{ inventoryItems.length }}/50)</div>
+                <div class="inventory-grid">
+                  <div v-for="i in 20" :key="i" class="inv-slot" :class="{ filled: inventoryItems[i-1] }">
+                    <span v-if="inventoryItems[i-1]" class="inv-icon">{{ inventoryItems[i-1].icon }}</span>
+                    <span v-else class="inv-empty"></span>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template v-else-if="activePanel === 'economy'">
+              <div class="economy-panel">
+                <div class="economy-tabs">
+                  <button class="econ-tab" :class="{ active: econTab === 'prices' }" @click="econTab = 'prices'">
+                    📊 物价行情
+                  </button>
+                  <button class="econ-tab" :class="{ active: econTab === 'ranking' }" @click="econTab = 'ranking'">
+                    🏆 财富榜
+                  </button>
+                </div>
+
+                <div v-if="econTab === 'prices'" class="prices-section">
+                  <div class="econ-header">
+                    <span class="econ-title">区域物价</span>
+                    <span class="econ-region">区域 #1</span>
+                  </div>
+                  <div v-if="economyStats" class="price-list">
+                    <div v-for="(price, name) in economyStats.prices" :key="name" class="price-item">
+                      <div class="price-icon">{{ getResourceIcon(name as string) }}</div>
+                      <div class="price-info">
+                        <div class="price-name">{{ getResourceName(name as string) }}</div>
+                        <div class="price-bar-row">
+                          <div class="supply-bar">
+                            <div class="supply-fill" :style="{ width: getSupplyPercent(name as string) + '%' }"></div>
+                          </div>
+                          <div class="demand-bar">
+                            <div class="demand-fill" :style="{ width: getDemandPercent(name as string) + '%' }"></div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="price-value">
+                        <span class="price-num">{{ price.toFixed(1) }}</span>
+                        <span class="price-trend" :class="getPriceTrendClass(name as string)">
+                          {{ getPriceTrend(name as string) }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else class="loading-placeholder">
+                    <div class="loading-spinner"></div>
+                    <span>加载经济数据中...</span>
+                  </div>
+                </div>
+
+                <div v-else-if="econTab === 'ranking'" class="ranking-section">
+                  <div class="econ-header">
+                    <span class="econ-title">NPC 财富榜</span>
+                    <span class="econ-count">Top {{ wealthRankings.length }}</span>
+                  </div>
+                  <div class="ranking-list">
+                    <div v-for="(npc, index) in wealthRankings" :key="npc.id" class="rank-item" :class="'rank-' + (index + 1)">
+                      <div class="rank-badge">
+                        <span v-if="index === 0">🥇</span>
+                        <span v-else-if="index === 1">🥈</span>
+                        <span v-else-if="index === 2">🥉</span>
+                        <span v-else>{{ index + 1 }}</span>
+                      </div>
+                      <div class="rank-avatar">{{ npc.name?.[0] || '?' }}</div>
+                      <div class="rank-info">
+                        <div class="rank-name">{{ npc.name }}</div>
+                        <div class="rank-prof">{{ npc.profession }} · Lv.{{ npc.level }}</div>
+                      </div>
+                      <div class="rank-wealth">
+                        <span class="wealth-icon">💰</span>
+                        <span class="wealth-num">{{ npc.wealth.toLocaleString() }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="wealthRankings.length === 0" class="loading-placeholder">
+                    <div class="loading-spinner"></div>
+                    <span>加载排行榜中...</span>
+                  </div>
+                </div>
               </div>
             </template>
 
@@ -375,342 +587,93 @@
           </div>
         </div>
 
-        <div class="bottom-nav">
-          <button class="nav-item" :class="{ active: activeSubPage === 'home' }" @click="openSubPage('home')">
-            <span class="nav-icon">🏠</span>
-            <span class="nav-label">主页</span>
-          </button>
-          <button class="nav-item" :class="{ active: activeSubPage === 'profile' }" @click="openSubPage('profile')">
-            <span class="nav-icon">👤</span>
-            <span class="nav-label">{{ t("simverse.profile") }}</span>
-          </button>
-          <button class="nav-item gacha-nav" @click="openSubPage('gacha')">
-            <span class="nav-icon sparkle">✨</span>
-            <span class="nav-label">{{ t("simverse.gacha") }}</span>
-          </button>
-          <button class="nav-item" :class="{ active: activeSubPage === 'training' }" @click="openSubPage('training')">
-            <span class="nav-icon">⚔️</span>
-            <span class="nav-label">{{ t("simverse.training") }}</span>
-          </button>
-          <button class="nav-item" :class="{ active: activeSubPage === 'settings' }" @click="openSubPage('settings')">
-            <span class="nav-icon">⚙️</span>
-            <span class="nav-label">{{ t("simverse.settings") }}</span>
-          </button>
-        </div>
-
-        <transition name="page-slide">
-          <div v-if="activeSubPage && activeSubPage !== 'home'" class="full-screen-page" :key="activeSubPage">
-            <template v-if="activeSubPage === 'profile'">
-              <div class="profile-page">
-                <div class="page-header">
-                  <button class="back-btn" @click="closeSubPage()">
-                    <span>←</span>
-                  </button>
-                  <span class="page-title">{{ t("simverse.profileTitle") }}</span>
-                  <div class="header-spacer"></div>
+        <transition name="gacha-modal">
+          <div v-if="gachaModalOpen" class="gacha-modal-overlay" @click.self="closeGachaModal">
+            <div class="gacha-modal-content">
+              <button class="gacha-modal-close" @click="closeGachaModal">✕</button>
+              <div class="gacha-banner-large">
+                <div class="banner-bg"></div>
+                <div class="banner-content">
+                  <div class="banner-icon-large">🎴</div>
+                  <div class="banner-title-large">{{ t("simverse.gachaTitle") }}</div>
+                  <div class="banner-desc-large">{{ t("simverse.gachaDesc") }}</div>
                 </div>
-                <div class="page-content">
-                  <div class="player-card">
-                    <div class="card-bg"></div>
-                    <div class="card-content">
-                      <div class="player-avatar">
-                        <span class="avatar-icon">⚔️</span>
-                      </div>
-                      <div class="player-name">冒险者</div>
-                      <div class="player-title">Lv.{{ playerLevel }} 勇者</div>
-                      <div class="player-stats-row">
-                        <div class="mini-stat">
-                          <span class="mini-stat-icon">💎</span>
-                          <span class="mini-stat-val">{{ playerDiamond }}</span>
-                        </div>
-                        <div class="mini-stat">
-                          <span class="mini-stat-icon">🪙</span>
-                          <span class="mini-stat-val">{{ playerGold }}</span>
-                        </div>
-                        <div class="mini-stat">
-                          <span class="mini-stat-icon">⚡</span>
-                          <span class="mini-stat-val">{{ playerStamina }}/120</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                <div class="sparkle-layer">
+                  <span v-for="i in 12" :key="i" class="sparkle" :style="getSparkleStyle(i)">✦</span>
+                </div>
+              </div>
 
-                  <div class="section-card">
-                    <div class="section-title">{{ t("simverse.stats") }}</div>
-                    <div class="stats-grid">
-                      <div class="stat-item">
-                        <div class="stat-icon hp">❤️</div>
-                        <div class="stat-info">
-                          <div class="stat-name">{{ t("simverse.hp") }}</div>
-                          <div class="stat-bar">
-                            <div class="stat-fill hp-fill" :style="{ width: playerHpPercent + '%' }"></div>
-                          </div>
-                          <div class="stat-val">{{ playerHp }} / {{ playerMaxHp }}</div>
-                        </div>
-                      </div>
-                      <div class="stat-item">
-                        <div class="stat-icon atk">⚔️</div>
-                        <div class="stat-info">
-                          <div class="stat-name">{{ t("simverse.attack") }}</div>
-                          <div class="stat-val big">{{ playerAttack }}</div>
-                        </div>
-                      </div>
-                      <div class="stat-item">
-                        <div class="stat-icon def">🛡️</div>
-                        <div class="stat-info">
-                          <div class="stat-name">{{ t("simverse.defense") }}</div>
-                          <div class="stat-val big">{{ playerDefense }}</div>
-                        </div>
-                      </div>
-                      <div class="stat-item">
-                        <div class="stat-icon exp">⭐</div>
-                        <div class="stat-info">
-                          <div class="stat-name">{{ t("simverse.exp") }}</div>
-                          <div class="stat-bar">
-                            <div class="stat-fill exp-fill" :style="{ width: expPercent + '%' }"></div>
-                          </div>
-                          <div class="stat-val">{{ playerExp }} / {{ expToNextLevel }}</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+              <div class="gacha-pool-info">
+                <div class="pool-rate">
+                  <span class="rate-label">SSR</span>
+                  <span class="rate-val">1%</span>
+                </div>
+                <div class="pool-rate">
+                  <span class="rate-label">SR</span>
+                  <span class="rate-val">8%</span>
+                </div>
+                <div class="pool-rate">
+                  <span class="rate-label">R</span>
+                  <span class="rate-val">30%</span>
+                </div>
+                <div class="pool-rate">
+                  <span class="rate-label">N</span>
+                  <span class="rate-val">61%</span>
+                </div>
+              </div>
 
-                  <div class="section-card">
-                    <div class="section-title">{{ t("simverse.skills") }}</div>
-                    <div class="skill-list">
-                      <div v-for="skill in playerSkills" :key="skill.id" class="skill-item">
-                        <div class="skill-icon">{{ skill.icon }}</div>
-                        <div class="skill-info">
-                          <div class="skill-name">{{ skill.name }}</div>
-                          <div class="skill-level">Lv.{{ skill.level }}</div>
-                        </div>
-                        <div class="skill-rarity" :class="skill.rarity">{{ skill.rarity }}</div>
-                      </div>
-                    </div>
+              <div class="gacha-actions-large">
+                <button class="gacha-big-btn single" :disabled="isGachaAnimating" @click="doGachaAnimation(1)">
+                  <span class="btn-icon-large">🎴</span>
+                  <span class="btn-name">{{ t("simverse.singlePull") }}</span>
+                  <span class="btn-cost">100 💎</span>
+                </button>
+                <button class="gacha-big-btn ten" :disabled="isGachaAnimating" @click="doGachaAnimation(10)">
+                  <span class="btn-icon-large">🎴×10</span>
+                  <span class="btn-name">{{ t("simverse.tenPull") }}</span>
+                  <span class="btn-cost">900 💎</span>
+                  <span class="btn-badge">{{ t("simverse.guaranteedRare") }}</span>
+                </button>
+              </div>
+
+              <div v-if="gachaHistory.length > 0" class="gacha-history">
+                <div class="history-title">最近召唤</div>
+                <div class="history-list">
+                  <div v-for="(item, i) in gachaHistory.slice(0, 6)" :key="i"
+                       class="history-item"
+                       :class="item.rarity">
+                    <span class="hist-icon">{{ item.icon }}</span>
+                    <span class="hist-name">{{ item.name }}</span>
+                    <span class="hist-rarity">{{ item.rarity }}</span>
                   </div>
                 </div>
               </div>
-            </template>
 
-            <template v-else-if="activeSubPage === 'gacha'">
-              <div class="gacha-page">
-                <div class="page-header">
-                  <button class="back-btn" @click="closeSubPage()">
-                    <span>←</span>
-                  </button>
-                  <span class="page-title">{{ t("simverse.gachaTitle") }}</span>
-                  <div class="header-spacer"></div>
-                </div>
-                <div class="page-content">
-                  <div class="gacha-banner-large">
-                    <div class="banner-bg"></div>
-                    <div class="banner-content">
-                      <div class="banner-icon-large">🎴</div>
-                      <div class="banner-title-large">{{ t("simverse.gachaTitle") }}</div>
-                      <div class="banner-desc-large">{{ t("simverse.gachaDesc") }}</div>
-                    </div>
-                    <div class="sparkle-layer">
-                      <span v-for="i in 12" :key="i" class="sparkle" :style="getSparkleStyle(i)">✦</span>
-                    </div>
-                  </div>
-
-                  <div class="gacha-pool-info">
-                    <div class="pool-rate">
-                      <span class="rate-label">SSR</span>
-                      <span class="rate-val">1%</span>
-                    </div>
-                    <div class="pool-rate">
-                      <span class="rate-label">SR</span>
-                      <span class="rate-val">8%</span>
-                    </div>
-                    <div class="pool-rate">
-                      <span class="rate-label">R</span>
-                      <span class="rate-val">30%</span>
-                    </div>
-                    <div class="pool-rate">
-                      <span class="rate-label">N</span>
-                      <span class="rate-val">61%</span>
-                    </div>
-                  </div>
-
-                  <div class="gacha-actions-large">
-                    <button class="gacha-big-btn single" :disabled="isGachaAnimating" @click="doGachaAnimation(1)">
-                      <span class="btn-icon-large">🎴</span>
-                      <span class="btn-name">{{ t("simverse.singlePull") }}</span>
-                      <span class="btn-cost">100 💎</span>
-                    </button>
-                    <button class="gacha-big-btn ten" :disabled="isGachaAnimating" @click="doGachaAnimation(10)">
-                      <span class="btn-icon-large">🎴×10</span>
-                      <span class="btn-name">{{ t("simverse.tenPull") }}</span>
-                      <span class="btn-cost">900 💎</span>
-                      <span class="btn-badge">{{ t("simverse.guaranteedRare") }}</span>
-                    </button>
-                  </div>
-
-                  <div v-if="gachaHistory.length > 0" class="gacha-history">
-                    <div class="history-title">最近召唤</div>
-                    <div class="history-list">
-                      <div v-for="(item, i) in gachaHistory.slice(0, 6)" :key="i"
-                           class="history-item"
-                           :class="item.rarity">
-                        <span class="hist-icon">{{ item.icon }}</span>
-                        <span class="hist-name">{{ item.name }}</span>
-                        <span class="hist-rarity">{{ item.rarity }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <transition name="gacha-flash">
-                  <div v-if="isGachaAnimating" class="gacha-animation-overlay">
-                    <div class="gacha-cards-container" :class="{ reveal: gachaRevealed }">
-                      <div v-for="(item, i) in gachaAnimResults" :key="i"
-                           class="gacha-card-anim"
-                           :class="[item.rarity, { revealed: gachaRevealed }]"
-                           :style="{ animationDelay: (i * 0.1) + 's' }">
-                        <div class="card-inner">
-                          <div class="card-front">
-                            <span class="card-back-icon">✦</span>
-                          </div>
-                          <div class="card-back">
-                            <span class="gacha-item-icon">{{ item.icon }}</span>
-                            <span class="gacha-item-name">{{ item.name }}</span>
-                            <span class="gacha-item-rarity" :class="item.rarity">{{ item.rarity }}</span>
-                          </div>
+              <transition name="gacha-flash">
+                <div v-if="isGachaAnimating" class="gacha-animation-overlay">
+                  <div class="gacha-cards-container" :class="{ reveal: gachaRevealed }">
+                    <div v-for="(item, i) in gachaAnimResults" :key="i"
+                         class="gacha-card-anim"
+                         :class="[item.rarity, { revealed: gachaRevealed }]"
+                         :style="{ animationDelay: (i * 0.1) + 's' }">
+                      <div class="card-inner">
+                        <div class="card-front">
+                          <span class="card-back-icon">✦</span>
                         </div>
-                      </div>
-                    </div>
-                    <div v-if="gachaRevealed" class="gacha-skip-btn" @click="finishGachaAnimation">
-                      点击继续
-                    </div>
-                  </div>
-                </transition>
-              </div>
-            </template>
-
-            <template v-else-if="activeSubPage === 'training'">
-              <div class="training-page">
-                <div class="page-header">
-                  <button class="back-btn" @click="closeSubPage()">
-                    <span>←</span>
-                  </button>
-                  <span class="page-title">{{ t("simverse.trainingTitle") }}</span>
-                  <div class="header-spacer"></div>
-                </div>
-                <div class="page-content">
-                  <div class="training-stamina-bar">
-                    <span class="stamina-icon">⚡</span>
-                    <div class="stamina-bar-wrap">
-                      <div class="stamina-bar-fill" :style="{ width: (playerStamina / 120 * 100) + '%' }"></div>
-                    </div>
-                    <span class="stamina-text">{{ playerStamina }}/120</span>
-                  </div>
-
-                  <div class="training-section">
-                    <div class="section-title">{{ t("simverse.train") }}</div>
-                    <div class="training-grid">
-                      <div v-for="mode in trainingModes" :key="mode.id"
-                           class="training-card"
-                           :class="mode.type"
-                           @click="doTraining(mode)">
-                        <div class="training-icon">{{ mode.icon }}</div>
-                        <div class="training-name">{{ mode.name }}</div>
-                        <div class="training-effect">{{ mode.effect }}</div>
-                        <div class="training-cost">
-                          <span class="cost-stamina">⚡ {{ mode.staminaCost }}</span>
+                        <div class="card-back">
+                          <span class="gacha-item-icon">{{ item.icon }}</span>
+                          <span class="gacha-item-name">{{ item.name }}</span>
+                          <span class="gacha-item-rarity" :class="item.rarity">{{ item.rarity }}</span>
                         </div>
                       </div>
                     </div>
                   </div>
-
-                  <div class="training-section">
-                    <div class="section-title">{{ t("simverse.equipment") }}</div>
-                    <div class="equipment-grid">
-                      <div v-for="equip in equipmentSlots" :key="equip.slot" class="equip-slot">
-                        <div class="equip-slot-label">{{ equip.label }}</div>
-                        <div class="equip-item" :class="{ empty: !equip.item }">
-                          <span v-if="equip.item" class="equip-icon">{{ equip.item.icon }}</span>
-                          <span v-else class="equip-empty">+</span>
-                        </div>
-                        <div v-if="equip.item" class="equip-name">{{ equip.item.name }}</div>
-                        <div v-else class="equip-name empty">未装备</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="training-section">
-                    <div class="section-title">角色等级</div>
-                    <div class="level-up-section">
-                      <div class="level-info">
-                        <span class="current-level">Lv.{{ playerLevel }}</span>
-                        <div class="exp-bar-large">
-                          <div class="exp-fill-large" :style="{ width: expPercent + '%' }"></div>
-                        </div>
-                        <span class="exp-text">{{ playerExp }} / {{ expToNextLevel }}</span>
-                      </div>
-                      <button class="level-up-btn" :disabled="playerExp < expToNextLevel" @click="levelUp">
-                        {{ t("simverse.upgrade") }}
-                      </button>
-                    </div>
+                  <div v-if="gachaRevealed" class="gacha-skip-btn" @click="finishGachaAnimation">
+                    点击继续
                   </div>
                 </div>
-              </div>
-            </template>
-
-            <template v-else-if="activeSubPage === 'settings'">
-              <div class="settings-page">
-                <div class="page-header">
-                  <button class="back-btn" @click="closeSubPage()">
-                    <span>←</span>
-                  </button>
-                  <span class="page-title">{{ t("simverse.settings") }}</span>
-                  <div class="header-spacer"></div>
-                </div>
-                <div class="page-content">
-                  <div class="setting-section">
-                    <div class="section-title">{{ t("simverse.performanceTier") }}</div>
-                    <div class="tier-selector">
-                      <button class="tier-option" :class="{ active: worldConfig?.tier === 'background' }"
-                              @click="changeTier('background')">
-                        <span class="tier-name">{{ t("simverse.tierBackground") }}</span>
-                        <span class="tier-desc">低功耗</span>
-                      </button>
-                      <button class="tier-option" :class="{ active: worldConfig?.tier === 'foreground' }"
-                              @click="changeTier('foreground')">
-                        <span class="tier-name">{{ t("simverse.tierForeground") }}</span>
-                        <span class="tier-desc">标准</span>
-                      </button>
-                      <button class="tier-option" :class="{ active: worldConfig?.tier === 'fg_idle' }"
-                              @click="changeTier('fg_idle')">
-                        <span class="tier-name">{{ t("simverse.tierIdle") }}</span>
-                        <span class="tier-desc">高性能</span>
-                      </button>
-                    </div>
-                  </div>
-                  <div v-if="worldConfig" class="setting-section">
-                    <div class="section-title">{{ t("simverse.configDetails") }}</div>
-                    <div class="config-list">
-                      <div class="config-row">
-                        <span>{{ t("simverse.eventRate") }}</span>
-                        <span class="config-value">{{ worldConfig.event_rate_mul }}x</span>
-                      </div>
-                      <div class="config-row">
-                        <span>{{ t("simverse.cacheSize") }}</span>
-                        <span class="config-value">{{ worldConfig.cache_size }}</span>
-                      </div>
-                      <div class="config-row">
-                        <span>{{ t("simverse.subSim") }}</span>
-                        <span class="config-value">{{ worldConfig.sub_sim_active ? t("common.on") : t("common.off") }}</span>
-                      </div>
-                      <div class="config-row">
-                        <span>{{ t("simverse.subSimDepth") }}</span>
-                        <span class="config-value">{{ worldConfig.sub_sim_depth }}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </template>
+              </transition>
+            </div>
           </div>
         </transition>
       </div>
@@ -752,7 +715,24 @@ const selectedNPC = ref<SimverseNPC | null>(null);
 const gachaResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
 const behaviorStats = ref<{ total_npcs: number; alive_npcs: number; behavior_dist: Record<string, number> } | null>(null);
 
-const activeSubPage = ref<string>('home');
+const econTab = ref<'prices' | 'ranking'>('prices');
+const economyStats = ref<{
+  region_id: number;
+  prices: Record<string, number>;
+  supply: Record<string, number>;
+  demand: Record<string, number>;
+  trade_volume: number;
+} | null>(null);
+const wealthRankings = ref<{
+  id: number;
+  name: string;
+  level: number;
+  profession: string;
+  wealth: number;
+  rank: number;
+}[]>([]);
+
+const gachaModalOpen = ref(false);
 const isGachaAnimating = ref(false);
 const gachaRevealed = ref(false);
 const gachaAnimResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
@@ -789,16 +769,25 @@ const equipmentSlots = ref([
   { slot: 'rune', label: '符文', item: null },
 ]);
 
+const inventoryItems = ref([
+  { id: 1, name: '生命药水', icon: '🧪', count: 5 },
+  { id: 2, name: '攻击宝石', icon: '💎', count: 3 },
+  { id: 3, name: '经验卷轴', icon: '📜', count: 2 },
+  { id: 4, name: '强化石', icon: '🪨', count: 10 },
+  { id: 5, name: '幸运草', icon: '🍀', count: 1 },
+]);
+
 const expToNextLevel = computed(() => playerLevel.value * 100);
 const expPercent = computed(() => Math.min(100, (playerExp.value / expToNextLevel.value) * 100));
 const playerHpPercent = computed(() => (playerHp.value / playerMaxHp.value) * 100);
 
-function openSubPage(name: string) {
-  activeSubPage.value = name;
+function openGachaModal() {
+  gachaModalOpen.value = true;
 }
 
-function closeSubPage() {
-  activeSubPage.value = 'home';
+function closeGachaModal() {
+  if (isGachaAnimating.value) return;
+  gachaModalOpen.value = false;
 }
 
 function getSparkleStyle(index: number) {
@@ -1114,14 +1103,96 @@ function openPanel(name: string) {
     if (name === "settings" && !worldConfig.value) {
       refreshState();
     }
+    if (name === "economy") {
+      loadEconomyData();
+    }
   }
+}
+
+async function loadEconomyData() {
+  try {
+    const [statsRes, rankRes] = await Promise.all([
+      fetch("/api/simverse/economy/stats").then(r => r.json()),
+      fetch("/api/simverse/economy/wealth-rank?count=20").then(r => r.json())
+    ]);
+    economyStats.value = statsRes;
+    wealthRankings.value = rankRes.items || [];
+  } catch (e) {
+    console.warn("Failed to load economy data:", e);
+  }
+}
+
+function getResourceIcon(name: string): string {
+  const icons: Record<string, string> = {
+    Food: "🍞",
+    Wood: "🪵",
+    Stone: "🪨",
+    Iron: "⚙️",
+    Gold: "💰",
+    Cloth: "🧵",
+    Potion: "🧪",
+    ManaCrystal: "💎",
+    Herb: "🌿",
+    Leather: "👜",
+  };
+  return icons[name] || "📦";
+}
+
+function getResourceName(name: string): string {
+  const names: Record<string, string> = {
+    Food: "食物",
+    Wood: "木材",
+    Stone: "石料",
+    Iron: "铁矿",
+    Gold: "金币",
+    Cloth: "布匹",
+    Potion: "药水",
+    ManaCrystal: "魔晶",
+    Herb: "草药",
+    Leather: "皮革",
+  };
+  return names[name] || name;
+}
+
+function getSupplyPercent(name: string): number {
+  if (!economyStats.value) return 50;
+  const supply = economyStats.value.supply[name] || 100;
+  return Math.min(100, Math.max(0, (supply / 200) * 100));
+}
+
+function getDemandPercent(name: string): number {
+  if (!economyStats.value) return 50;
+  const demand = economyStats.value.demand[name] || 100;
+  return Math.min(100, Math.max(0, (demand / 200) * 100));
+}
+
+function getPriceTrend(name: string): string {
+  if (!economyStats.value) return "→";
+  const supply = economyStats.value.supply[name] || 100;
+  const demand = economyStats.value.demand[name] || 100;
+  const ratio = demand / supply;
+  if (ratio > 1.1) return "↑";
+  if (ratio < 0.9) return "↓";
+  return "→";
+}
+
+function getPriceTrendClass(name: string): string {
+  if (!economyStats.value) return "trend-stable";
+  const supply = economyStats.value.supply[name] || 100;
+  const demand = economyStats.value.demand[name] || 100;
+  const ratio = demand / supply;
+  if (ratio > 1.1) return "trend-up";
+  if (ratio < 0.9) return "trend-down";
+  return "trend-stable";
 }
 
 function getPanelTitle(panel: string): string {
   const titles: Record<string, string> = {
     npc: t("simverse.npc"),
     org: t("simverse.org"),
-    gacha: t("simverse.gacha"),
+    profile: t("simverse.profileTitle"),
+    training: t("simverse.trainingTitle"),
+    inventory: "背包",
     chronicles: t("simverse.chronicles"),
     settings: t("simverse.settings"),
     economy: t("simverse.economy"),
@@ -3499,5 +3570,745 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.res-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 0 6px;
+}
+
+.resource-item.game-resource {
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+.player-btn {
+  padding: 2px;
+}
+
+.player-avatar-mini {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+}
+
+.avatar-icon-mini {
+  font-size: 20px;
+}
+
+.player-level-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: linear-gradient(135deg, #f59e0b, #ef4444);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+}
+
+.gacha-menu-btn {
+  position: relative;
+}
+
+.menu-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 8px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 8px;
+  color: white;
+}
+
+.menu-badge.red {
+  background: #ef4444;
+  animation: badgePulse 2s ease-in-out infinite;
+}
+
+@keyframes badgePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+.gacha-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+}
+
+.gacha-modal-content {
+  width: 90%;
+  max-width: 500px;
+  max-height: 85%;
+  background: linear-gradient(180deg, #1a1033 0%, #0f0a1a 100%);
+  border-radius: 20px;
+  padding: 20px;
+  position: relative;
+  border: 2px solid rgba(139, 92, 246, 0.3);
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.3), inset 0 0 60px rgba(139, 92, 246, 0.05);
+  overflow-y: auto;
+}
+
+.gacha-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.gacha-modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.gacha-modal-enter-active,
+.gacha-modal-leave-active {
+  transition: all 0.3s ease;
+}
+
+.gacha-modal-enter-from,
+.gacha-modal-leave-to {
+  opacity: 0;
+}
+
+.gacha-modal-enter-from .gacha-modal-content,
+.gacha-modal-leave-to .gacha-modal-content {
+  transform: scale(0.9);
+  opacity: 0;
+}
+
+.profile-card-panel {
+  padding: 4px 0;
+}
+
+.player-card-mini {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.card-bg-mini {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(236, 72, 153, 0.2) 100%);
+}
+
+.card-content-mini {
+  position: relative;
+  padding: 20px;
+  text-align: center;
+}
+
+.player-avatar-big {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+}
+
+.avatar-icon-big {
+  font-size: 32px;
+}
+
+.panel-section {
+  margin-bottom: 16px;
+}
+
+.panel-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.stats-grid-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stat-item-compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.stat-label-comp {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.stat-val-comp {
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  width: 60px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.stat-bar-comp {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.stat-fill-comp {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+
+.stat-fill-comp.hp { background: linear-gradient(90deg, #ef4444, #f87171); }
+.stat-fill-comp.exp { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+
+.skill-list-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skill-item-comp {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+
+.skill-icon-comp {
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.skill-info-comp {
+  flex: 1;
+}
+
+.skill-name-comp {
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+}
+
+.skill-level-comp {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.skill-rarity-comp {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+}
+
+.skill-rarity-comp.SSR { background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; }
+.skill-rarity-comp.SR { background: linear-gradient(135deg, #8b5cf6, #3b82f6); color: white; }
+.skill-rarity-comp.R { background: rgba(59, 130, 246, 0.3); color: #60a5fa; }
+.skill-rarity-comp.N { background: rgba(107, 114, 128, 0.3); color: #9ca3af; }
+
+.training-panel {
+  padding: 4px 0;
+}
+
+.training-grid-small {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.training-card-small {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.training-card-small:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.3);
+  transform: translateY(-2px);
+}
+
+.training-card-small:active {
+  transform: scale(0.97);
+}
+
+.training-icon-small {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.training-name-small {
+  font-size: 11px;
+  font-weight: 500;
+  color: white;
+  margin-bottom: 2px;
+}
+
+.training-cost-small {
+  font-size: 10px;
+  color: #fbbf24;
+}
+
+.equipment-grid-small {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.equip-slot-small {
+  text-align: center;
+}
+
+.equip-item-small {
+  width: 100%;
+  aspect-ratio: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.equip-item-small.empty {
+  border-style: dashed;
+}
+
+.equip-icon-small {
+  font-size: 20px;
+}
+
+.equip-empty-small {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.equip-label-small {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.level-up-compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.level-info-comp {
+  flex: 1;
+}
+
+.lv-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fbbf24;
+}
+
+.exp-bar-small {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.exp-fill-small {
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.exp-text-small {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.level-up-btn-small {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.level-up-btn-small:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.inventory-panel {
+  padding: 4px 0;
+}
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.inv-slot {
+  aspect-ratio: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.inv-slot.filled {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.3);
+}
+
+.inv-icon {
+  font-size: 20px;
+}
+
+.economy-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.economy-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.econ-tab {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.econ-tab.active {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: white;
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
+}
+
+.prices-section,
+.ranking-section {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.econ-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.econ-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: white;
+}
+
+.econ-region,
+.econ-count {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+}
+
+.price-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.price-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.price-icon {
+  font-size: 24px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.price-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.price-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 6px;
+}
+
+.price-bar-row {
+  display: flex;
+  gap: 6px;
+}
+
+.supply-bar,
+.demand-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.supply-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.demand-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.price-value {
+  text-align: right;
+  min-width: 60px;
+}
+
+.price-num {
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+  display: block;
+}
+
+.price-trend {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.price-trend.trend-up {
+  color: #ef4444;
+}
+
+.price-trend.trend-down {
+  color: #22c55e;
+}
+
+.price-trend.trend-stable {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rank-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rank-item.rank-1 {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.05));
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.rank-item.rank-2 {
+  background: linear-gradient(135deg, rgba(156, 163, 175, 0.15), rgba(107, 114, 128, 0.05));
+  border-color: rgba(156, 163, 175, 0.3);
+}
+
+.rank-item.rank-3 {
+  background: linear-gradient(135deg, rgba(180, 83, 9, 0.15), rgba(146, 64, 14, 0.05));
+  border-color: rgba(180, 83, 9, 0.3);
+}
+
+.rank-badge {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.rank-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+}
+
+.rank-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rank-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 2px;
+}
+
+.rank-prof {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.rank-wealth {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wealth-icon {
+  font-size: 14px;
+}
+
+.wealth-num {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fbbf24;
+}
+
+.loading-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: #8b5cf6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 </style>

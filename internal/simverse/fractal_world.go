@@ -42,6 +42,7 @@ type FractalWorld struct {
 	chronicle     *ChronicleManager
 	persistence   *WorldPersistence
 	behaviorEng   *BehaviorEngine
+	economyMgr    *EconomyManager
 
 	npcCache      *EntityCache[*NPCV3]
 	behaviorCache *EntityCache[*BehaviorState]
@@ -56,11 +57,14 @@ func NewFractalWorld(dataDir string, worldName string) *FractalWorld {
 	persist := NewWorldPersistence(dataDir, worldName)
 	persist.EnsureDir()
 
+	rng := rand.New(rand.NewSource(12345))
+
 	fw := &FractalWorld{
 		perfSched:     NewPerfScheduler(),
 		chronicle:     NewChronicleManager(worldName),
 		persistence:   persist,
 		behaviorEng:   NewBehaviorEngine(),
+		economyMgr:    NewEconomyManager(rng),
 		npcCache:      NewEntityCache[*NPCV3](10000),
 		behaviorCache: NewEntityCache[*BehaviorState](10000),
 		cellCache:     make(map[uint64]*EntityCache[*Cell]),
@@ -174,11 +178,28 @@ func (fw *FractalWorld) Tick(rng *rand.Rand) {
 	fw.worldTick++
 	currentTick := fw.worldTick
 	chron := fw.chronicle
+	em := fw.economyMgr
 	fw.mu.Unlock()
 
 	fw.tickNPCs(currentTick, config, rng)
 	fw.tickBrains(currentTick, config, rng)
 	fw.tickWorldEvents(currentTick, chron, rng)
+
+	if currentTick%10 == 0 {
+		em.Tick(fw)
+	}
+}
+
+func (fw *FractalWorld) EconomyManager() *EconomyManager {
+	fw.mu.RLock()
+	defer fw.mu.RUnlock()
+	return fw.economyMgr
+}
+
+func (fw *FractalWorld) GetCachedNPCs() []*NPCV3 {
+	fw.mu.RLock()
+	defer fw.mu.RUnlock()
+	return fw.npcCache.All()
 }
 
 func (fw *FractalWorld) tickWorldEvents(currentTick uint32, chron *ChronicleManager, rng *rand.Rand) {

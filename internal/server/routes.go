@@ -274,6 +274,8 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 		simGroup.GET("/world/storage", s.handleSimverseStorageStatus)
 		simGroup.GET("/npc/behavior/stats", s.handleSimverseBehaviorStats)
 		simGroup.GET("/npc/behavior/list", s.handleSimverseBehaviorList)
+		simGroup.GET("/economy/stats", s.handleSimverseEconomyStats)
+		simGroup.GET("/economy/wealth-rank", s.handleSimverseEconomyWealthRank)
 	}
 
 	registerSimverseWebRoutes(r)

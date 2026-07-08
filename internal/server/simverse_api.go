@@ -1153,3 +1153,50 @@ func (s *Server) handleSimverseBehaviorList(c *gin.Context) {
 		"items":     items,
 	})
 }
+
+func (s *Server) handleSimverseEconomyStats(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	em := world.EconomyManager()
+	regionID := uint32(1)
+	stats := em.GetRegionalStats(regionID)
+
+	c.JSON(http.StatusOK, stats)
+}
+
+func (s *Server) handleSimverseEconomyWealthRank(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	count := 20
+	if v := c.Query("count"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			count = n
+		}
+	}
+
+	em := world.EconomyManager()
+	ranking := em.GetTopNPCsByWealth(world, count)
+
+	c.JSON(http.StatusOK, gin.H{
+		"count": len(ranking),
+		"items": ranking,
+	})
+}
