@@ -366,6 +366,27 @@ else
 fi
 
 # ============================================================================
+# 步骤 8/8: Phaser 游戏引擎源码
+# ============================================================================
+PHASER_DIR="${REPO_ROOT}/app/phaser"
+
+step "8/8 Phaser 游戏引擎源码（app/phaser/）"
+
+if [[ -d "${PHASER_DIR}/.git" ]]; then
+  ok "Phaser 源码已存在: ${PHASER_DIR}"
+else
+  log "git clone phaserjs/phaser ..."
+  mkdir -p "$(dirname "${PHASER_DIR}")"
+  if git clone --depth 1 --branch v4.2 \
+       https://github.com/phaserjs/phaser.git \
+       "${PHASER_DIR}" 2>&1 | tail -3; then
+    ok "Phaser 源码克隆完成"
+  else
+    warn "Phaser 源码克隆失败（不影响主构建，用于 simverse web 开发参考）"
+  fi
+fi
+
+# ============================================================================
 # 环境就绪报告（只展示静态资源状态，不拉起任何服务）
 # ============================================================================
 step "✅ 环境准备完成"
@@ -389,7 +410,7 @@ cat <<EOF
 
 仓库：
 EOF
-for d in "${BACKEND_FORK_DIR}" "${FRONTEND_FORK_DIR}" "${MOBILE_DIR}/node_modules/vite" "${FRONTEND_FORK_DIR}/dist/index.html" "${GATEWAY_DIR}/bin/preview-gateway" "${MOBILE_DIR}/plugin-simverse/web/node_modules/vite" "${MAKER_DIR}/.git"; do
+for d in "${BACKEND_FORK_DIR}" "${FRONTEND_FORK_DIR}" "${MOBILE_DIR}/node_modules/vite" "${FRONTEND_FORK_DIR}/dist/index.html" "${GATEWAY_DIR}/bin/preview-gateway" "${MOBILE_DIR}/plugin-simverse/web/node_modules/vite" "${MAKER_DIR}/.git" "${PHASER_DIR}/.git"; do
   if [[ -e "$d" ]]; then
     if [[ -d "$d/.git" ]]; then
       branch=$(cd "$d" && git rev-parse --abbrev-ref HEAD 2>/dev/null)

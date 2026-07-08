@@ -1,0 +1,1 @@
+import{$ as e,J as t,U as n}from"./index-D_SQfJMd.js";import{t as r}from"./SvPagePlaceholder-DZwJvZJd.js";var i=t({__name:`NPCTimeline`,setup(t){return(t,i)=>(e(),n(r,{"title-key":`simverse.npcTimeline`,"icon-name":`time`}))}});export{i as default};

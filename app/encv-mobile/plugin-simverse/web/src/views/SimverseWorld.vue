@@ -80,10 +80,6 @@
             <span class="menu-icon">⚙️</span>
             <span class="menu-label">{{ t("simverse.settings") }}</span>
           </button>
-          <button class="menu-btn" :class="{ active: activePanel === 'logs' }" @click="openPanel('logs')">
-            <span class="menu-icon">📜</span>
-            <span class="menu-label">日志</span>
-          </button>
           <button class="menu-btn" @click="openPanel('intervention')">
             <span class="menu-icon">⚡</span>
             <span class="menu-label">{{ t("simverse.intervention") }}</span>
@@ -244,34 +240,6 @@
               </div>
             </template>
 
-            <template v-else-if="activePanel === 'logs'">
-              <div class="logs-panel">
-                <div class="logs-tabs">
-                  <button class="log-tab-btn" :class="{ active: logTab === 'frontend' }" @click="logTab = 'frontend'">
-                    前端
-                  </button>
-                  <button class="log-tab-btn" :class="{ active: logTab === 'backend' }" @click="logTab = 'backend'">
-                    后端
-                  </button>
-                </div>
-                <div class="log-list-container">
-                  <div v-if="logTab === 'frontend' && frontendLogs.length === 0" class="empty-state">
-                    暂无前端日志
-                  </div>
-                  <div v-else-if="logTab === 'backend' && backendWorldLogs.length === 0" class="empty-state">
-                    暂无后端日志
-                  </div>
-                  <div v-else class="log-list">
-                    <div v-for="log in logTab === 'frontend' ? frontendLogs : backendWorldLogs" :key="log.id" class="log-item" :class="'log-' + log.level">
-                      <span class="log-time">[{{ log.timestamp }}]</span>
-                      <span class="log-level">{{ log.level.toUpperCase() }}</span>
-                      <span class="log-msg">{{ log.message }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </template>
-
             <template v-else>
               <div class="empty-state">{{ t("simverse.comingSoon") }}</div>
             </template>
@@ -338,7 +306,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useFrontendLogs, type LogEntry } from "@encv/shared-components/composables/useFrontendLogs";
 import { useSimverse, type SimverseNPC, type SimverseChronicleEvent } from "@/composables/useSimverse";
 import { IonInfiniteScroll, IonInfiniteScrollContent } from "@ionic/vue";
 import { lockScreenOrientation, unlockScreenOrientation, closeWorld, isNativePluginMode } from "@/plugins/SimVerse";
@@ -366,11 +333,6 @@ const recentEvents = ref<SimverseChronicleEvent[]>([]);
 const activePanel = ref<string | null>(null);
 const selectedNPC = ref<SimverseNPC | null>(null);
 const gachaResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
-const logTab = ref<"frontend" | "backend">("frontend");
-const { logs: frontendLogs } = useFrontendLogs();
-const backendWorldLogs = ref<LogEntry[]>([]);
-let backendLogPollInterval: number | null = null;
-let lastWorldLogId = "";
 
 let pollInterval: number | null = null;
 
@@ -489,7 +451,6 @@ function getPanelTitle(panel: string): string {
     gacha: t("simverse.gacha"),
     chronicles: t("simverse.chronicles"),
     settings: t("simverse.settings"),
-    logs: "日志",
     economy: t("simverse.economy"),
     intervention: t("simverse.intervention"),
     debug: t("simverse.debug"),
@@ -556,63 +517,12 @@ function startPolling() {
   pollInterval = window.setInterval(() => {
     refreshState();
   }, 3000);
-  backendLogPollInterval = window.setInterval(() => {
-    if (activePanel.value === "logs" && logTab.value === "backend") {
-      loadBackendWorldLogs();
-    }
-  }, 5000);
 }
 
 function stopPolling() {
   if (pollInterval) {
     clearInterval(pollInterval);
     pollInterval = null;
-  }
-  if (backendLogPollInterval) {
-    clearInterval(backendLogPollInterval);
-    backendLogPollInterval = null;
-  }
-}
-
-function chronicleLevelToLogLevel(level: string): string {
-  if (level === "critical" || level === "catastrophe") return "error";
-  if (level === "major" || level === "minor") return "warn";
-  if (level === "trivial") return "debug";
-  return "info";
-}
-
-async function loadBackendWorldLogs() {
-  try {
-    const data = await loadChronicleWorld(0, 50);
-    const events = data?.items || [];
-    const newLogs: LogEntry[] = [];
-    let logId = backendWorldLogs.value.length;
-
-    for (const evt of events) {
-      const evtId = String(evt.id || "");
-      if (evtId && evtId === lastWorldLogId) break;
-
-      const level = chronicleLevelToLogLevel(evt.level || evt.imp_name || "info");
-      const tags = ["simverse", "chronicle", evt.type || "event"];
-
-      newLogs.push({
-        id: ++logId,
-        timestamp: new Date().toLocaleTimeString(),
-        level,
-        message: `[Tick ${evt.tick}] ${evt.type_cn || evt.type}: ${(evt as any).data_tag || "(world event)"}`,
-        source: "simverse.chronicle",
-        tags,
-      });
-    }
-
-    if (newLogs.length > 0) {
-      backendWorldLogs.value = [...newLogs.reverse(), ...backendWorldLogs.value].slice(-500);
-      if (events.length > 0) {
-        lastWorldLogId = String(events[0].id || "");
-      }
-    }
-  } catch (e) {
-    // 静默失败
   }
 }
 
@@ -625,7 +535,6 @@ onMounted(async () => {
   await init();
   await refreshState();
   await loadNPCs();
-  await loadBackendWorldLogs();
   startPolling();
 });
 
@@ -1643,102 +1552,4 @@ onUnmounted(() => {
 
 .item-value.alive { color: #4ade80; }
 .item-value.dead { color: #f87171; }
-
-.logs-panel {
-  display: flex;
-  flex-direction: column;
-  height: 420px;
-  margin: -12px;
-}
-
-.logs-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 8px;
-  border-bottom: 1px solid rgba(139, 92, 246, 0.1);
-}
-
-.log-tab-btn {
-  flex: 1;
-  padding: 8px 12px;
-  border: none;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.5);
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.log-tab-btn:hover {
-  background: rgba(139, 92, 246, 0.1);
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.log-tab-btn.active {
-  background: rgba(139, 92, 246, 0.2);
-  color: #fff;
-  border: 1px solid rgba(139, 92, 246, 0.3);
-}
-
-.log-list-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px;
-}
-
-.log-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.log-item {
-  display: flex;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-  line-height: 1.4;
-}
-
-.log-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.log-time {
-  color: rgba(255, 255, 255, 0.3);
-  flex-shrink: 0;
-}
-
-.log-level {
-  font-weight: 700;
-  font-size: 9px;
-  text-transform: uppercase;
-  flex-shrink: 0;
-  min-width: 36px;
-}
-
-.log-info .log-level { color: #60a5fa; }
-.log-warn .log-level { color: #fbbf24; }
-.log-error .log-level { color: #f87171; }
-.log-debug .log-level { color: #9ca3af; }
-
-.log-msg {
-  color: rgba(255, 255, 255, 0.7);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.log-list-container::-webkit-scrollbar {
-  width: 4px;
-}
-
-.log-list-container::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.2);
-  border-radius: 2px;
-}
 </style>
