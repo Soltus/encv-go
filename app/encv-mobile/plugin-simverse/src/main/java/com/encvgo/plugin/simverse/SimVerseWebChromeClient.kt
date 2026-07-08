@@ -41,14 +41,4 @@ class SimVerseWebChromeClient(
         Log.e(tag, "console [$level] $msg ($sourceId:$lineNumber)")
         return false
     }
-
-    override fun onProgressChanged(view: WebView?, newProgress: Int) {
-        super.onProgressChanged(view, newProgress)
-        Log.d(tag, "progress: $newProgress%")
-    }
-
-    override fun onReceivedTitle(view: WebView?, title: String?) {
-        super.onReceivedTitle(view, title)
-        Log.e(tag, "onReceivedTitle: $title")
-    }
 }

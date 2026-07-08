@@ -32,8 +32,8 @@ fun SimVerseEmbedWebView(
 ) {
     val ctx = LocalContext.current
     val webViewRef = remember { mutableStateOf<WebView?>(null) }
-    val webViewClient = remember { SimVerseWebViewClient() }
-    val webChromeClient = remember { SimVerseWebChromeClient(webViewClient.diagState) }
+    val client = remember { SimVerseWebViewClient() }
+    val chromeClient = remember { SimVerseWebChromeClient(client.diagState) }
 
     AndroidView(
         modifier = Modifier.fillMaxSize(),
@@ -44,8 +44,8 @@ fun SimVerseEmbedWebView(
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 id = containerId.hashCode()
-                webViewClient = webViewClient
-                webChromeClient = webChromeClient
+                webViewClient = client
+                webChromeClient = chromeClient
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
@@ -62,7 +62,7 @@ fun SimVerseEmbedWebView(
                     "SimVerseNative"
                 )
                 Log.e("SimVerse-Embed", "[SimVerse] WebView created | containerId=$containerId | initialUrl=$initialUrl")
-                SimVerseWebViewDiagnostic.capture(webViewClient)
+                SimVerseWebViewDiagnostic.capture(client)
                 loadUrl(initialUrl)
                 webViewRef.value = this
             }
