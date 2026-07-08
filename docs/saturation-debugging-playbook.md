@@ -157,6 +157,10 @@ S09-API               API 地址
 S10-LOAD              加载测试
 S11-REFLECT           反射检查
 S12-DEVICE            设备信息
+S13-ASSETS            前端资源 / APK 资产检查
+S14-WV-PAGE           WebView 页面加载 (onPageStarted/Finished)
+S15-WV-ERROR          WebView 资源加载错误 (onReceivedError/HttpError)
+S16-WV-CONSOLE        WebView Console 消息 (JS error/warn)
 AUTO-DIAG             自动触发诊断
 OPEN-WORLD            业务操作（内嵌诊断调用）
 ```
@@ -184,6 +188,8 @@ Layer 2: 插件存在性（是否安装 / 是否启用 / 是否加载）
 Layer 3: 组件完整性（Activity 解析 / ClassLoader / entry class）
 Layer 4: 业务配置（API 地址 / extras / Intent 构造）
 Layer 5: 环境信息（设备型号 / SDK 版本 / ABI）
+Layer 6: 前端资产（APK assets 目录结构 / index.html 存在性）
+Layer 7: WebView 层（页面加载 / 资源错误 / JS console）
 ```
 
 **每一层都要独立 try-catch**，不能因为前面失败就跳过后面。
@@ -325,10 +331,12 @@ try {
 
 ### 6.1 背景
 
-SimVerse 启动卡在「正在启动 SimVerse...」，沙箱环境完全正常，真机必现。
-可能的问题横跨 6 层：前端 → Capacitor Bridge → ComboLite 框架 → 插件加载 → WebView 初始化 → 前端资源加载。
+SimVerse 启动后白屏（页面完全空白），沙箱环境完全正常，真机必现。
+可能的问题横跨 7 层：前端 → Capacitor Bridge → ComboLite 框架 → 插件加载 → WebView 初始化 → WebView 资源加载 → 前端代码执行。
 
-### 6.2 诊断步骤设计（13 步）
+**关键诊断缺口**：前 12 步全绿但依旧白屏，说明问题出在 WebView 层（S14-S16），这是初期饱和诊断的盲区。
+
+### 6.2 诊断步骤设计（16 步）
 
 | 步骤 | 名称 | 检查内容 |
 |------|------|---------|
@@ -344,11 +352,54 @@ SimVerse 启动卡在「正在启动 SimVerse...」，沙箱环境完全正常�
 | S10 | ensurePluginLoaded 测试 | 未加载则尝试加载并验证 |
 | S11 | entryClass 反射方法检查 | 全量 public methods / fields |
 | S12 | 设备信息 | SDK/BRAND/MODEL/ABIs |
-| S13 | 诊断小结 | pass/warn/fail 计数 |
+| S13 | APK 资产检查 | assets/ 目录结构、index.html 是否存在、文件数量 |
+| S14 | WebView 页面加载 | onPageStarted/onPageFinished 次数、URL、耗时 |
+| S15 | WebView 资源错误 | onReceivedError/onReceivedHttpError 次数、最后错误 |
+| S16 | WebView Console | JS error/warning 记录（最近 N 条） |
+| S17 | 诊断小结 | pass/warn/fail 计数 |
 
-### 6.3 自动触发点
+### 6.3 WebView 层诊断三要素
 
-`openWorld` 方法的所有失败路径：
+**为什么需要专门的 WebView 层诊断？**
+- WebView 内部是一个独立的渲染/JS 引擎，外部 Kotlin 代码无法直接看到内部状态
+- 白屏可能是 CSS 加载失败、JS 执行错误、CORS 拦截、MIME type 错误等多种原因
+- 前 12 步（框架+插件）全绿 ≠ WebView 里的前端正常运行
+
+**三种诊断探针：**
+
+| 探针 | 注入点 | 捕获内容 |
+|------|--------|---------|
+| WebViewClient | `onPageStarted` / `onPageFinished` / `onReceivedError` / `onReceivedHttpError` | 页面生命周期 + 资源加载错误 |
+| WebChromeClient | `onConsoleMessage` | JS console.error / console.warn / 未捕获异常 |
+| 原生悬浮按钮 | Activity 层面叠加一个半透明按钮（30% alpha，右上角） | 白屏时用户也能点开看诊断（不依赖前端 UI） |
+
+**关键发现：`file://` + CORS 导致白屏**
+
+```
+pageStartedCount = 1, pageFinishedCount = 1, loadDurationMs = 9
+errorCount = 5, consoleErrorCount = 5
+lastError = code=-1, desc=net::ERR_FAILED, url=file:///android_asset/simverse/assets/index-xxx.css
+console error: Access to CSS stylesheet at 'file:///android_asset/...' from origin 'null'
+               has been blocked by CORS policy
+```
+
+**根因**：`file://` 协议的 origin 是 `null`，WebView CORS 策略将同目录下的 CSS/JS 加载视为跨域，全部拦截 → 页面白屏。
+
+**修复**：`WebSettings.setAllowFileAccessFromFileURLs(true)` + `setAllowUniversalAccessFromFileURLs(true)`。
+
+### 6.4 原生悬浮诊断按钮模式
+
+> 白屏时前端 UI 完全不可用，必须有一个不依赖前端的诊断入口。
+
+**实现方式**：
+- Activity 的 Compose 布局中，用 `Box` 叠加 `AndroidView`（原生 `FrameLayout` + `Button`）
+- 按钮：48dp 圆形，30% 透明度，右上角，"🔍" emoji
+- 点击 → `AlertDialog` 展示诊断报告 + 复制按钮
+- 长按也触发（防止点击被前端 WebView 消费）
+
+**为什么不用 Compose 按钮？**：WebView 是 Android View，叠加在 Compose 层上面。Compose 按钮会被 WebView 覆盖（z-order 问题），所以必须用原生 AndroidView 叠加。
+
+### 6.5 自动触发点
 - `activity is null`
 - `context is null`
 - `ComboLite not initialized`
@@ -360,7 +411,7 @@ SimVerse 启动卡在「正在启动 SimVerse...」，沙箱环境完全正常�
 
 每个失败点都调用 `runAutoDiagnosis(reason)`，把轻量级诊断结果附加到 reject 消息里。
 
-### 6.4 统一 TAG
+### 6.6 统一 TAG
 
 所有日志用 `SimVerse-SAT` TAG，过滤命令：
 ```bash
@@ -394,11 +445,16 @@ adb logcat -s SimVerse-SAT:*
 
 | 文件 | 作用 |
 |------|------|
-| `app/encv-mobile/android/app/src/main/java/com/encvgo/app/SimVersePlugin.kt` | SimVerse 饱和诊断完整实现（参考模板） |
+| `app/encv-mobile/android/app/src/main/java/com/encvgo/app/SimVersePlugin.kt` | SimVerse 饱和诊断完整实现（宿主侧，参考模板） |
 | `app/encv-mobile/android/combolite-host/src/main/java/com/encvgo/combolite/diagnostic/DiagnosticKit.kt` | ComboLite 框架级诊断工具 |
 | `app/encv-mobile/src/views/ExtensionsPage.vue` | 前端诊断按钮 + 弹窗实现 |
 | `app/encv-mobile/src/plugins/SimVerse.ts` | 前端诊断方法类型定义 |
+| `app/encv-mobile/plugin-simverse/src/main/java/com/encvgo/plugin/simverse/SimVerseWebViewClient.kt` | WebViewClient 诊断探针（S14/S15） |
+| `app/encv-mobile/plugin-simverse/src/main/java/com/encvgo/plugin/simverse/SimVerseWebChromeClient.kt` | WebChromeClient 诊断探针（S16 console） |
+| `app/encv-mobile/plugin-simverse/src/main/java/com/encvgo/plugin/simverse/SimVerseEmbedWebView.kt` | WebView 初始化 + 诊断状态单例（`SimVerseWebViewDiagnostic`） |
+| `app/encv-mobile/plugin-simverse/src/main/java/com/encvgo/plugin/simverse/SimVerseActivity.kt` | 原生悬浮诊断按钮实现（白屏也能点） |
 
 ---
 
 > 沉淀：2026-07-07（SimVerse 真机调试实战）
+> 更新：2026-07-08（新增 WebView 层诊断 S14-S16 + 原生悬浮按钮模式 + file:// CORS 白屏案例）
