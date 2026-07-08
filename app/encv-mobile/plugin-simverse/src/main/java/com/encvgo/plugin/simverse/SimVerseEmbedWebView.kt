@@ -12,6 +12,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 
+object SimVerseWebViewDiagnostic {
+    var lastWebViewClient: SimVerseWebViewClient? = null
+        private set
+
+    fun capture(client: SimVerseWebViewClient) {
+        lastWebViewClient = client
+    }
+
+    fun getReport(): String {
+        return lastWebViewClient?.getDiagnosticReport() ?: "⚠️  WebView 尚未初始化（无诊断数据）"
+    }
+}
+
 @Composable
 fun SimVerseEmbedWebView(
     containerId: String = "simverse-plugin-embed",
@@ -19,6 +32,8 @@ fun SimVerseEmbedWebView(
 ) {
     val ctx = LocalContext.current
     val webViewRef = remember { mutableStateOf<WebView?>(null) }
+    val webViewClient = remember { SimVerseWebViewClient() }
+    val webChromeClient = remember { SimVerseWebChromeClient(webViewClient.diagState) }
 
     AndroidView(
         modifier = Modifier.fillMaxSize(),
@@ -29,7 +44,8 @@ fun SimVerseEmbedWebView(
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 id = containerId.hashCode()
-                webViewClient = SimVerseWebViewClient()
+                webViewClient = webViewClient
+                webChromeClient = webChromeClient
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
@@ -46,12 +62,13 @@ fun SimVerseEmbedWebView(
                     "SimVerseNative"
                 )
                 Log.e("SimVerse-Embed", "[SimVerse] WebView created | containerId=$containerId | initialUrl=$initialUrl")
+                SimVerseWebViewDiagnostic.capture(webViewClient)
                 loadUrl(initialUrl)
                 webViewRef.value = this
             }
         },
         update = { webView ->
             Log.d("SimVerse-Embed", "[SimVerse] WebView update")
-        }
+        },
     )
 }

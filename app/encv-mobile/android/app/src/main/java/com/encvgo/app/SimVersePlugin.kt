@@ -42,7 +42,7 @@ class SimVersePlugin : Plugin() {
         val steps = mutableListOf<String>()
 
         steps.add("╔══════════════════════════════════════════════════╗")
-        steps.add("║     SimVerse 全链路饱和诊断 (v4)                  ║")
+        steps.add("║     SimVerse 全链路饱和诊断 (v5)                  ║")
         steps.add("╚══════════════════════════════════════════════════╝")
         steps.add("")
 
@@ -392,7 +392,37 @@ class SimVersePlugin : Plugin() {
         satLog("S12-DEVICE", "SDK=${android.os.Build.VERSION.SDK_INT}, BRAND=${android.os.Build.BRAND}, MODEL=${android.os.Build.MODEL}")
         steps.add("")
 
-        steps.add("═══ 13. 诊断小结 ═══")
+        steps.add("═══ 14. WebView 加载诊断 ═══")
+        try {
+            if (loadedInstance != null) {
+                try {
+                    val debugMethod = loadedInstance.javaClass.getMethod("debugWebView")
+                    val webViewReport = debugMethod.invoke(loadedInstance) as? String
+                    if (webViewReport != null) {
+                        steps.add(webViewReport.prependIndent("   "))
+                        satLog("S14-WV-DIAG", "WebView 诊断获取成功")
+                    } else {
+                        steps.add("   ⚠️  debugWebView 返回 null")
+                        satWarn("S14-WV-DIAG", "debugWebView 返回 null")
+                    }
+                } catch (e: NoSuchMethodException) {
+                    steps.add("   ⚠️  插件未实现 debugWebView 方法（可能是旧版本插件）")
+                    satWarn("S14-WV-DIAG", "插件无 debugWebView 方法: ${e.message}")
+                } catch (e: Exception) {
+                    steps.add("   ❌ WebView 诊断调用失败: ${e.javaClass.simpleName}: ${e.message}")
+                    satError("S14-WV-DIAG", "调用失败", e)
+                }
+            } else {
+                steps.add("   ⏭️  跳过（插件实例未加载）")
+                satWarn("S14-WV-DIAG", "插件未加载，跳过 WebView 诊断")
+            }
+        } catch (e: Exception) {
+            steps.add("   ❌ WebView 诊断 FAILED: ${e.message}")
+            satError("S14-WV-DIAG", "失败", e)
+        }
+        steps.add("")
+
+        steps.add("═══ 15. 诊断小结 ═══")
         var passCount = 0
         var failCount = 0
         var warnCount = 0
