@@ -1,5 +1,7 @@
 import Phaser from "phaser";
 import { WorldScene } from "./WorldScene";
+import { RegionScene } from "./RegionScene";
+import { BattleScene } from "./BattleScene";
 
 export function createPhaserGame(
   container: HTMLElement,
@@ -11,7 +13,7 @@ export function createPhaserGame(
     width: config?.width || container.clientWidth,
     height: config?.height || container.clientHeight,
     backgroundColor: "#0a0a1a",
-    scene: [WorldScene],
+    scene: [WorldScene, RegionScene, BattleScene],
     scale: {
       mode: Phaser.Scale.RESIZE,
       autoCenter: Phaser.Scale.CENTER_BOTH,

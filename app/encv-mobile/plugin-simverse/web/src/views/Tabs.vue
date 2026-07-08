@@ -24,6 +24,11 @@
           <ion-label>{{ t("simverse.tabs.chronicles") }}</ion-label>
         </ion-tab-button>
 
+        <ion-tab-button tab="devlogs" href="/tabs/devlogs">
+          <ion-icon :icon="documentTextOutline" />
+          <ion-label>{{ t("simverse.tabs.devlogs") }}</ion-label>
+        </ion-tab-button>
+
         <ion-tab-button tab="settings" href="/tabs/settings">
           <ion-icon :icon="settingsOutline" />
           <ion-label>{{ t("simverse.tabs.settings") }}</ion-label>
@@ -40,6 +45,7 @@ import {
   people,
   newspaper,
   settings,
+  documentText,
 } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 
@@ -49,5 +55,6 @@ const homeOutline = home;
 const globeOutline = globe;
 const peopleOutline = people;
 const newspaperOutline = newspaper;
+const documentTextOutline = documentText;
 const settingsOutline = settings;
 </script>

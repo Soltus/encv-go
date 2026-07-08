@@ -78,6 +78,15 @@
             <span class="menu-label">{{ t("simverse.economy") }}</span>
           </button>
           <div class="menu-divider"></div>
+          <button class="menu-btn explore-btn" @click="openPanel('explore')">
+            <span class="menu-icon">🗺️</span>
+            <span class="menu-label">{{ t("simverse.explore") }}</span>
+          </button>
+          <button class="menu-btn battle-btn" @click="openPanel('battle')">
+            <span class="menu-icon">⚔️</span>
+            <span class="menu-label">{{ t("simverse.battle") }}</span>
+          </button>
+          <div class="menu-divider"></div>
           <button class="menu-btn gacha-btn" @click="openPanel('gacha')">
             <span class="menu-icon sparkle">✨</span>
             <span class="menu-label">{{ t("simverse.gacha") }}</span>
@@ -249,6 +258,50 @@
               </div>
             </template>
 
+            <template v-else-if="activePanel === 'explore'">
+              <div class="explore-banner">
+                <div class="banner-icon">🗺️</div>
+                <div class="banner-text">
+                  <div class="banner-title">{{ t("simverse.explore") }}</div>
+                  <div class="banner-desc">{{ t("simverse.exploreDesc") }}</div>
+                </div>
+              </div>
+              <div class="region-list">
+                <div v-for="region in exploreRegions" :key="region.id"
+                     class="region-card"
+                     @click="enterRegion(region)">
+                  <div class="region-icon">{{ region.icon }}</div>
+                  <div class="region-info">
+                    <div class="region-name">{{ region.name }}</div>
+                    <div class="region-type">{{ region.typeName }}</div>
+                  </div>
+                  <div class="region-arrow">→</div>
+                </div>
+              </div>
+            </template>
+
+            <template v-else-if="activePanel === 'battle'">
+              <div class="battle-banner">
+                <div class="banner-icon">⚔️</div>
+                <div class="banner-text">
+                  <div class="banner-title">{{ t("simverse.battle") }}</div>
+                  <div class="banner-desc">{{ t("simverse.battleDesc") }}</div>
+                </div>
+              </div>
+              <div class="battle-list">
+                <div v-for="enemy in battleEnemies" :key="enemy.id"
+                     class="enemy-card"
+                     @click="startBattle(enemy)">
+                  <div class="enemy-icon">{{ enemy.icon }}</div>
+                  <div class="enemy-info">
+                    <div class="enemy-name">{{ enemy.name }}</div>
+                    <div class="enemy-level">Lv.{{ enemy.level }}</div>
+                  </div>
+                  <button class="fight-btn">{{ t("simverse.fight") }}</button>
+                </div>
+              </div>
+            </template>
+
             <template v-else>
               <div class="empty-state">{{ t("simverse.comingSoon") }}</div>
             </template>
@@ -343,6 +396,22 @@ const recentEvents = ref<SimverseChronicleEvent[]>([]);
 const activePanel = ref<string | null>(null);
 const selectedNPC = ref<SimverseNPC | null>(null);
 const gachaResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
+
+const exploreRegions = ref([
+  { id: "town", name: "星光镇", typeName: "城镇", type: "town", icon: "🏘️" },
+  { id: "forest", name: "幽暗森林", typeName: "森林", type: "forest", icon: "🌲" },
+  { id: "mountain", name: "巨岩山脉", typeName: "山脉", type: "mountain", icon: "⛰️" },
+  { id: "dungeon", name: "深渊地牢", typeName: "地牢", type: "dungeon", icon: "🏚️" },
+  { id: "plains", name: "辽阔平原", typeName: "平原", type: "plains", icon: "🌾" },
+]);
+
+const battleEnemies = ref([
+  { id: "slime", name: "史莱姆", level: 1, icon: "🟢", enemyEmoji: "🟢" },
+  { id: "goblin", name: "哥布林", level: 3, icon: "👺", enemyEmoji: "👺" },
+  { id: "skeleton", name: "骷髅兵", level: 5, icon: "💀", enemyEmoji: "💀" },
+  { id: "wolf", name: "魔狼", level: 7, icon: "🐺", enemyEmoji: "🐺" },
+  { id: "dragon", name: "幼龙", level: 15, icon: "🐉", enemyEmoji: "🐉" },
+]);
 
 let pollInterval: number | null = null;
 
@@ -566,6 +635,31 @@ function doGacha(count: number) {
   activePanel.value = "gacha";
 }
 
+function enterRegion(region: { id: string; name: string; type: string }) {
+  activePanel.value = null;
+  if (usePhaser.value && phaserWorld.isReady.value) {
+    phaserWorld.enterRegion({
+      regionId: region.id,
+      regionName: region.name,
+      regionType: region.type,
+    });
+  }
+}
+
+function startBattle(enemy: { id: string; name: string; level: number; enemyEmoji: string }) {
+  activePanel.value = null;
+  if (usePhaser.value && phaserWorld.isReady.value) {
+    phaserWorld.startBattle({
+      enemyName: enemy.name,
+      enemyLevel: enemy.level,
+      enemyEmoji: enemy.enemyEmoji,
+      playerName: "勇者",
+      playerLevel: 1,
+      playerEmoji: "⚔️",
+    });
+  }
+}
+
 async function handleExitWorld() {
   try {
     if (isNativePluginMode()) {
@@ -641,8 +735,14 @@ onUnmounted(() => {
 .game-container {
   position: relative;
   width: 100%;
+  height: 100dvh;
   height: 100vh;
   overflow: hidden;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  box-sizing: border-box;
   background: 
     radial-gradient(ellipse at 30% 20%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
     radial-gradient(ellipse at 70% 80%, rgba(236, 72, 153, 0.1) 0%, transparent 50%),
@@ -1671,4 +1771,154 @@ onUnmounted(() => {
 
 .item-value.alive { color: #4ade80; }
 .item-value.dead { color: #f87171; }
+
+.explore-banner,
+.battle-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(236, 72, 153, 0.2));
+  border-radius: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.battle-banner {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(249, 115, 22, 0.2));
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.explore-banner .banner-icon,
+.battle-banner .banner-icon {
+  font-size: 36px;
+}
+
+.explore-banner .banner-title,
+.battle-banner .banner-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 2px;
+}
+
+.explore-banner .banner-desc,
+.battle-banner .banner-desc {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.region-list,
+.battle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.region-card,
+.enemy-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.region-card:hover,
+.enemy-card:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(99, 102, 241, 0.5);
+  transform: translateX(4px);
+}
+
+.enemy-card:hover {
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+.region-icon,
+.enemy-icon {
+  font-size: 32px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(99, 102, 241, 0.2);
+  border-radius: 10px;
+}
+
+.enemy-icon {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+.region-info,
+.enemy-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.region-name,
+.enemy-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.region-type,
+.enemy-level {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.enemy-level {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.region-arrow {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.fight-btn {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #ef4444, #f97316);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.fight-btn:hover {
+  transform: scale(1.05);
+}
+
+.explore-btn {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3));
+  border: 1px solid rgba(99, 102, 241, 0.4);
+}
+
+.explore-btn.active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.5));
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
+}
+
+.battle-btn {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(249, 115, 22, 0.3));
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.battle-btn.active {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.5), rgba(249, 115, 22, 0.5));
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+}
 </style>

@@ -33,6 +33,13 @@ export const PHASER_EVENTS = {
   WORLD_READY: "world:ready",
   CAMERA_MOVE: "camera:move",
   CAMERA_ZOOM: "camera:zoom",
+  REGION_READY: "region:ready",
+  REGION_ENTER: "region:enter",
+  BUILDING_CLICKED: "building:clicked",
+  NPC_CLICKED: "npc:clicked",
+  BATTLE_START: "battle:start",
+  BATTLE_END: "battle:end",
+  BACK_TO_WORLD: "back:world",
 } as const;
 
 export interface NPCSpriteData {
