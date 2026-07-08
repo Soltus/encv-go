@@ -119,7 +119,12 @@ class SimVerseActivity : BasePluginActivity() {
                                 mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
                             }
                             addJavascriptInterface(
-                                SimVersePluginJSInterface(ctx.applicationContext),
+                                SimVersePluginJSInterface(
+                                    ctx.applicationContext,
+                                    activityProvider = { proxyActivity },
+                                    onShowDiagnostic = { showDiagnosticDialog() },
+                                    onCloseWorld = { proxyActivity?.finish() },
+                                ),
                                 "SimVerseNative"
                             )
                             SimVerseWebViewDiagnostic.capture(client)

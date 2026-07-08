@@ -388,32 +388,36 @@ type NPC struct {
 ## 十二、前端架构与实施计划
 
 > **详细说明**：参见 [frontend-phased-plan.md](./frontend-phased-plan.md)
+> **ComboLite 插件化迁移**：SimVerse 前端已从独立应用迁移为 ComboLite 插件的 WebView 前端，详见 §十三。
 
 ### 12.1 整体架构
 
-**SimVerse 是一个独立的前端 SPA 应用**，复用主应用的共享组件库：
+**SimVerse 前端作为 ComboLite 插件的 WebView 部分**，复用主应用的共享组件库：
 
 ```
-simverse-frontend/          ← 独立的前端应用（Vite + Vue 3）
-├── 复用主应用组件：
-│   ├── HomePage            ← 复用 @encv/shared-components
-│   ├── SettingsPage        ← 复用 @encv/shared-components
-│   └── DevLogsPage         ← 复用 @encv/shared-components
-│
-└── SimVerse 特有页面：
-    ├── /                    ← SimVerse 首页（竖屏，世界概览 + 快速入口）
-    ├── /world               ← 横屏世界视图（从首页进入）
-    ├── /chronicles          ← 编年史列表
-    └── /chronicle/:id       ← 编年史详情
+plugin-simverse/
+├── src/main/java/...        ← Kotlin 原生代码（Activity/WebView/JSInterface）
+└── web/                      ← Vue 3 前端（WebView 加载）
+    ├── 复用主应用组件：
+    │   └── @encv/shared-components
+    │
+    └── SimVerse 特有页面：
+        ├── /                    ← SimVerse 首页（竖屏，世界概览 + 快速入口）
+        ├── /world               ← 横屏世界视图（从首页进入）
+        ├── /chronicles          ← 编年史列表
+        └── /chronicle/:id       ← 编年史详情
 ```
 
 ### 12.2 用户交互流程
 
 ```
-用户点击主应用 SimVerse 卡片
+用户点击主应用扩展管理 → SimVerse 卡片 → "打开扩展"
     │
     ▼
-加载 simverse-frontend（独立前端应用）
+启动 SimVerseActivity（ComboLite 插件代理 Activity）
+    │
+    ▼
+加载 WebView（虚拟 https 域名 simverse-plugin.local）
     │
     ▼
 显示 SimVerse 首页（竖屏）
@@ -427,7 +431,7 @@ simverse-frontend/          ← 独立的前端应用（Vite + Vue 3）
             ▼
         切换到 /world 路由
             │
-            ├─ 锁定横屏（Capacitor screen-orientation）
+            ├─ 锁定横屏（通过 JSInterface 调用原生方法）
             ├─ 沉浸式全屏（隐藏状态栏/导航栏）
             ├─ 双栏布局（左地图 + 右时间线/数据面板）
             ├─ 实时 WebSocket 推送
@@ -438,18 +442,174 @@ simverse-frontend/          ← 独立的前端应用（Vite + Vue 3）
 
 | 阶段 | 优先级 | 目标 | 状态 |
 |------|--------|------|------|
-| **P0** | 最高 | 正确骨架（TS 配置/Pinia Store/首页/横屏/网关） | ⬜ 未开始 |
-| **P1** | 高 | 核心功能（世界视图/NPC 详情/编年史/焦点管理） | ⬜ 未开始 |
-| **P2** | 中 | 优化完善（i18n/主题/PWA/移动端适配/测试） | ⬜ 未开始 |
+| **P0** | 最高 | 正确骨架（TS 配置/Pinia Store/首页/横屏/网关） | ✅ 已完成 |
+| **P1** | 高 | 核心功能（世界视图/NPC 详情/编年史/焦点管理） | ✅ 已完成 |
+| **P2** | 中 | 优化完善（i18n/主题/PWA/移动端适配/测试） | 🔄 进行中 |
 | **P3** | 低 | 高级功能（干预模式/时间控制/经济/组织/脑内视图） | ⬜ 未开始 |
 
 ### 12.4 技术栈
 
-- **框架**：Vue 3 + Ionic 8 + Capacitor 6
+- **框架**：Vue 3 + Ionic 8
+- **原生桥接**：JSInterface（SimVerseNative）替代 Capacitor 插件
 - **状态管理**：Pinia
 - **API 层**：useProxiedFetch + useWebSocket
 - **构建**：Vite
 - **共享组件**：@encv/shared-components（复用主应用）
+- **打包方式**：构建产物放入插件 APK 的 assets/simverse/ 目录
+
+---
+
+## 十三、ComboLite 插件化架构
+
+### 13.1 为什么插件化
+
+SimVerse 作为 ComboLite 插件的好处：
+
+| 维度 | 独立应用 | ComboLite 插件 |
+|------|---------|---------------|
+| **安装方式** | 单独安装 APK | 主应用内插件市场一键安装 |
+| **更新方式** | 应用商店更新 | 插件热更新，不重启主应用 |
+| **资源共享** | 各自打包 | 复用主应用的后端服务、数据库、组件库 |
+| **包体积** | 完整 APK (~30MB+) | 插件 APK (~0.5MB) + 前端资源 |
+| **生命周期** | 独立进程 | 主应用进程内，共享 ClassLoader |
+
+### 13.2 架构分层
+
+```
+┌─────────────────────────────────────────────────────┐
+│              Encv Mobile 主应用                       │
+│  ┌───────────────────────────────────────────────┐  │
+│  │           ComboLite 框架（PluginManager）      │  │
+│  └───────────────────────────────────────────────┘  │
+│                         │                           │
+│  ┌──────────────────────▼────────────────────────┐  │
+│  │          SimVerse 插件（PluginClassLoader）    │  │
+│  │  ┌─────────────────────────────────────────┐  │  │
+│  │  │  Kotlin 原生层                           │  │  │
+│  │  │  - SimVerseActivity（代理 Activity）    │  │  │
+│  │  │  - SimVerseEmbedWebView（自定义 WebView）│  │  │
+│  │  │  - SimVersePluginJSInterface（JS 桥）    │  │  │
+│  │  └─────────────────────────────────────────┘  │  │
+│  │                      │                        │  │
+│  │  ┌───────────────────▼──────────────────────┐  │  │
+│  │  │         WebView 前端（Vue 3 SPA）         │  │  │
+│  │  │  - 虚拟 https 域名（CORS 安全）           │  │  │
+│  │  │  - assets/simverse/ 静态资源              │  │  │
+│  │  │  - SimVerse.ts 双模式适配                 │  │  │
+│  │  └──────────────────────────────────────────┘  │  │
+│  └─────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────┘
+```
+
+### 13.3 关键设计决策
+
+#### 13.3.1 虚拟 HTTPS 域名（替代 file:// 协议）
+
+**问题**：file:// 协议加载 HTML 会触发 CORS 限制，Origin 为 null，无法加载 CSS/JS 子资源。
+
+**方案**：使用虚拟 HTTPS 域名 `https://simverse-plugin.local/`，通过 `shouldInterceptRequest` 拦截请求，从 assets 目录读取资源。
+
+```kotlin
+override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+    val url = request.url.toString()
+    if (url.startsWith(VIRTUAL_BASE_URL)) {
+        val path = url.removePrefix(VIRTUAL_BASE_URL).removePrefix("/")
+        val assetPath = "simverse/${if (path.isEmpty()) "index.html" else path}"
+        // 从 assets 读取，设置正确的 MIME type
+        return createWebResourceResponse(assetPath)
+    }
+    return super.shouldInterceptRequest(view, request)
+}
+```
+
+**好处**：
+- ✅ 正常的 Origin（`https://simverse-plugin.local`）
+- ✅ 支持相对路径资源加载
+- ✅ 后端 CORS 可精确控制允许的域名
+
+#### 13.3.2 JSInterface 双模式适配
+
+**问题**：前端开发时在浏览器中运行，没有原生 JSInterface；在插件 WebView 中运行时，需要调用原生方法。
+
+**方案**：SimVerse.ts 插件封装层提供双模式：
+
+```typescript
+// 检测是否运行在原生插件模式
+const nativeBridge = (window as any).SimVerseNative as SimVersePlugin | null;
+
+// 网页开发模式的 fallback 实现
+const webImpl: SimVersePlugin = {
+  async openWorld(_options) { console.warn("[SimVerse] not available in web mode"); },
+  async closeWorld() { /* ... */ },
+  // ...
+};
+
+// 调用时优先使用原生，fallback 到 web 实现
+function callNative<K extends keyof SimVersePlugin>(method: K, ...args) {
+  if (nativeBridge && typeof (nativeBridge as any)[method] === "function") {
+    return (nativeBridge as any)[method](...args);
+  }
+  return (webImpl[method] as any)(...args);
+}
+```
+
+**已替换的 Capacitor 插件**：
+
+| 功能 | Capacitor 插件 | JSInterface 方法 |
+|------|--------------|-----------------|
+| 屏幕方向锁定 | `@capacitor/screen-orientation` | `lockOrientation()` / `unlockOrientation()` |
+| 打开/关闭世界 | （自定义） | `openWorld()` / `closeWorld()` |
+| 心跳服务 | （自定义） | `startHeartbeat()` / `stopHeartbeat()` |
+| 添加桌面快捷方式 | （自定义） | `addShortcut()` / `isShortcutSupported()` |
+| 诊断面板 | （自定义） | `showDiagnostic()` |
+
+#### 13.3.3 前端构建与插件打包分离
+
+**原则**：Gradle 不负责前端构建，前端构建由 CI 或开发者手动执行。
+
+**原因**：
+1. Gradle 执行 npm/pnpm 需要 Node.js 环境，构建机可能没有
+2. 前端构建是独立的工程，不应与 Android 构建耦合
+3. 调试时可以单独改前端，不用重新编译 Kotlin
+
+**工作流**：
+
+```bash
+# 1. 前端开发（热更新）
+cd plugin-simverse/web
+pnpm dev
+
+# 2. 前端构建（产出 dist/）
+pnpm build
+
+# 3. 拷贝到 assets 目录（CI 或手动）
+cp -r dist/* ../src/main/assets/simverse/
+
+# 4. 构建插件 APK
+cd ../..
+./gradlew :plugin-simverse:assembleRelease
+```
+
+### 13.4 横屏世界视图的特殊处理
+
+世界视图是横屏的，需要特殊处理：
+
+1. **进入时锁定横屏**：`onMounted` 时调用 `lockScreenOrientation("landscape-primary")`
+2. **退出时恢复竖屏**：`onUnmounted` 时调用 `unlockScreenOrientation()`
+3. **底部菜单加退出按钮**：调用 `closeWorld()` 关闭 Activity
+4. **双模式兼容**：网页开发模式下用 `window.history.back()` 替代
+
+### 13.5 诊断工具集成
+
+插件内置全链路诊断工具，可从设置页面进入：
+
+- ComboLite 框架状态检查
+- 插件安装/加载状态
+- APK 文件完整性检查
+- Target Activity 类加载检查
+- ProxyManager 配置检查
+- WebView 加载诊断（页面加载、资源错误、控制台消息）
+- 后端 API 连通性检查
 
 ---
 

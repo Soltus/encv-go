@@ -109,6 +109,10 @@
             <div class="menu-icon">⚙️</div>
             <div class="menu-label">{{ t("simverse.settings") }}</div>
           </button>
+          <button class="menu-item exit-btn" @click="handleExitWorld">
+            <div class="menu-icon">🚪</div>
+            <div class="menu-label">{{ t("simverse.exitWorld") }}</div>
+          </button>
         </div>
 
         <div v-if="activePanel" class="side-panel" :class="{ open: !!activePanel }">
@@ -289,6 +293,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useSimverse, type SimverseNPC, type SimverseChronicleEvent } from "@/composables/useSimverse";
 import { IonInfiniteScroll, IonInfiniteScrollContent } from "@ionic/vue";
+import { lockScreenOrientation, unlockScreenOrientation, closeWorld, isNativePluginMode } from "@/plugins/SimVerse";
 
 const { t } = useI18n();
 const {
@@ -469,6 +474,22 @@ function doGacha(count: number) {
   activePanel.value = "gacha";
 }
 
+async function handleExitWorld() {
+  try {
+    if (isNativePluginMode()) {
+      await unlockScreenOrientation();
+      await closeWorld();
+    } else {
+      window.history.back();
+    }
+  } catch (e) {
+    console.warn("[SimverseWorld] Exit world failed:", e);
+    if (!isNativePluginMode()) {
+      window.history.back();
+    }
+  }
+}
+
 function startPolling() {
   pollInterval = window.setInterval(() => {
     refreshState();
@@ -483,6 +504,11 @@ function stopPolling() {
 }
 
 onMounted(async () => {
+  if (isNativePluginMode()) {
+    lockScreenOrientation("landscape-primary").catch((e) => {
+      console.warn("[SimverseWorld] Lock orientation failed:", e);
+    });
+  }
   await init();
   await refreshState();
   await loadNPCs();
@@ -492,6 +518,9 @@ onMounted(async () => {
 onUnmounted(() => {
   stopPolling();
   cleanup();
+  if (isNativePluginMode()) {
+    unlockScreenOrientation().catch(() => {});
+  }
 });
 </script>
 
@@ -842,6 +871,11 @@ onUnmounted(() => {
 .menu-item.gacha .menu-label {
   color: #ffd700;
   font-weight: 600;
+}
+
+.menu-item.exit-btn .menu-label {
+  color: #ef4444;
+  font-weight: 500;
 }
 
 .side-panel {

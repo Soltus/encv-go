@@ -201,6 +201,15 @@
             </ion-label>
             <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
           </ion-item>
+
+          <ion-item button @click="handleShowDiagnostic" v-if="isNativePlugin">
+            <ion-icon :icon="bugOutline" slot="start"></ion-icon>
+            <ion-label>
+              <h3>{{ t('simverse.diagnosticTools') }}</h3>
+              <p>{{ t('simverse.diagnosticToolsDesc') }}</p>
+            </ion-label>
+            <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
+          </ion-item>
         </ion-list>
       </template>
     </ion-content>
@@ -221,7 +230,9 @@ import {
   downloadOutline,
   chevronForwardOutline,
   refreshOutline,
+  bugOutline,
 } from "ionicons/icons";
+import { showDiagnosticPanel, isNativePluginMode } from "@/plugins/SimVerse";
 
 const { t } = useI18n();
 const {
@@ -247,6 +258,8 @@ const storageStatus = ref<SimverseStorageStatus | null>(null);
 
 const storagePercent = ref(0);
 const storageColor = ref("primary");
+
+const isNativePlugin = isNativePluginMode();
 
 let pollInterval: number | null = null;
 
@@ -324,6 +337,14 @@ async function handleLoad() {
     }
   } catch (e) {
     showToast({ message: "读取失败: " + String(e), color: "danger" });
+  }
+}
+
+async function handleShowDiagnostic() {
+  try {
+    await showDiagnosticPanel();
+  } catch (e) {
+    showToast({ message: "打开诊断工具失败: " + String(e), color: "danger" });
   }
 }
 

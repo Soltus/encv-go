@@ -1,5 +1,3 @@
-import { registerPlugin } from "@capacitor/core";
-
 export interface SimVersePlugin {
   openWorld(options: { worldId: string; worldName: string }): Promise<void>;
   closeWorld(): Promise<void>;
@@ -8,35 +6,77 @@ export interface SimVersePlugin {
   setWorldRunning(options: { running: boolean }): Promise<void>;
   addShortcut(): Promise<void>;
   isShortcutSupported(): Promise<{ supported: boolean }>;
+  lockOrientation(options: { orientation: "landscape-primary" | "portrait-primary" }): Promise<void>;
+  unlockOrientation(): Promise<void>;
+  showDiagnostic(): Promise<void>;
 }
 
-class SimVerseWeb implements SimVersePlugin {
-  async openWorld(_options: { worldId: string; worldName: string }): Promise<void> {
+const nativeBridge = (window as any).SimVerseNative as SimVersePlugin | null;
+
+const webImpl: SimVersePlugin = {
+  async openWorld(_options: { worldId: string; worldName: string }) {
     console.warn("[SimVerse] openWorld: not available in web mode");
-  }
-  async closeWorld(): Promise<void> {
+  },
+  async closeWorld() {
     console.warn("[SimVerse] closeWorld: not available in web mode");
-  }
-  async startHeartbeat(): Promise<void> {
+  },
+  async startHeartbeat() {
     console.warn("[SimVerse] startHeartbeat: not available in web mode");
-  }
-  async stopHeartbeat(): Promise<void> {
+  },
+  async stopHeartbeat() {
     console.warn("[SimVerse] stopHeartbeat: not available in web mode");
-  }
-  async setWorldRunning(_options: { running: boolean }): Promise<void> {
+  },
+  async setWorldRunning(_options: { running: boolean }) {
     console.warn("[SimVerse] setWorldRunning: not available in web mode");
-  }
-  async addShortcut(): Promise<void> {
+  },
+  async addShortcut() {
     console.warn("[SimVerse] addShortcut: not available in web mode");
-  }
-  async isShortcutSupported(): Promise<{ supported: boolean }> {
+  },
+  async isShortcutSupported() {
     return { supported: false };
+  },
+  async lockOrientation(_options: { orientation: "landscape-primary" | "portrait-primary" }) {
+    console.warn("[SimVerse] lockOrientation: not available in web mode");
+  },
+  async unlockOrientation() {
+    console.warn("[SimVerse] unlockOrientation: not available in web mode");
+  },
+  async showDiagnostic() {
+    console.warn("[SimVerse] showDiagnostic: not available in web mode");
+  },
+};
+
+function callNative<K extends keyof SimVersePlugin>(
+  method: K,
+  ...args: Parameters<SimVersePlugin[K]>
+): ReturnType<SimVersePlugin[K]> {
+  if (nativeBridge && typeof (nativeBridge as any)[method] === "function") {
+    try {
+      return (nativeBridge as any)[method](...args) as ReturnType<SimVersePlugin[K]>;
+    } catch (e) {
+      console.error(`[SimVerse] Native call ${method} failed:`, e);
+      throw e;
+    }
   }
+  return (webImpl[method] as any)(...args);
 }
 
-const SimVerse = registerPlugin<SimVersePlugin>("SimVerse", {
-  web: () => new SimVerseWeb(),
-});
+export const SimVerse: SimVersePlugin = {
+  openWorld: (options) => callNative("openWorld", options),
+  closeWorld: () => callNative("closeWorld"),
+  startHeartbeat: () => callNative("startHeartbeat"),
+  stopHeartbeat: () => callNative("stopHeartbeat"),
+  setWorldRunning: (options) => callNative("setWorldRunning", options),
+  addShortcut: () => callNative("addShortcut"),
+  isShortcutSupported: () => callNative("isShortcutSupported"),
+  lockOrientation: (options) => callNative("lockOrientation", options),
+  unlockOrientation: () => callNative("unlockOrientation"),
+  showDiagnostic: () => callNative("showDiagnostic"),
+};
+
+export function isNativePluginMode(): boolean {
+  return !!(window as any).SimVerseNative;
+}
 
 export async function openWorld(worldId: string = "default", worldName: string = "Default"): Promise<{ success: boolean; error?: string }> {
   try {
@@ -105,5 +145,35 @@ export async function isWorldShortcutSupported(): Promise<boolean> {
   } catch (e) {
     console.error("[SimVerse] isShortcutSupported failed:", e);
     return false;
+  }
+}
+
+export async function lockScreenOrientation(orientation: "landscape-primary" | "portrait-primary"): Promise<{ success: boolean }> {
+  try {
+    await SimVerse.lockOrientation({ orientation });
+    return { success: true };
+  } catch (e) {
+    console.error("[SimVerse] lockOrientation failed:", e);
+    return { success: false };
+  }
+}
+
+export async function unlockScreenOrientation(): Promise<{ success: boolean }> {
+  try {
+    await SimVerse.unlockOrientation();
+    return { success: true };
+  } catch (e) {
+    console.error("[SimVerse] unlockOrientation failed:", e);
+    return { success: false };
+  }
+}
+
+export async function showDiagnosticPanel(): Promise<{ success: boolean }> {
+  try {
+    await SimVerse.showDiagnostic();
+    return { success: true };
+  } catch (e) {
+    console.error("[SimVerse] showDiagnostic failed:", e);
+    return { success: false };
   }
 }

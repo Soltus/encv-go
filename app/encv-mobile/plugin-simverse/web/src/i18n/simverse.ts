@@ -112,6 +112,10 @@ export default {
     "simverse.wealthTier": "财富等级",
     "simverse.socialTier": "社会等级",
     "simverse.lifeStage": "人生阶段",
+    "simverse.exitWorld": "退出世界",
+    "simverse.exitWorldDesc": "退出当前世界返回首页",
+    "simverse.diagnosticTools": "诊断工具",
+    "simverse.diagnosticToolsDesc": "查看全链路诊断报告",
   },
   en: {
     "simverse.home.title": "SimVerse",
@@ -226,5 +230,9 @@ export default {
     "simverse.wealthTier": "Wealth Tier",
     "simverse.socialTier": "Social Tier",
     "simverse.lifeStage": "Life Stage",
+    "simverse.exitWorld": "Exit World",
+    "simverse.exitWorldDesc": "Exit current world and return to home",
+    "simverse.diagnosticTools": "Diagnostic Tools",
+    "simverse.diagnosticToolsDesc": "View full-stack diagnostic report",
   },
 };
