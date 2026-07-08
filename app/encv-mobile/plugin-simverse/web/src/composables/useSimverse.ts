@@ -39,6 +39,9 @@ export interface SimverseNPC {
   is_alive: boolean;
   wealth_tier: number;
   social_tier: number;
+  current_behavior?: string;
+  current_behavior_cn?: string;
+  mood?: number;
 }
 
 export interface SimverseNPCDetail extends SimverseNPC {
@@ -132,6 +135,40 @@ export interface SimverseChronicleNPCResponse {
   npc_id: number;
   count: number;
   items: SimverseChronicleEvent[];
+}
+
+export interface SimverseBehaviorNeeds {
+  hunger: number;
+  energy: number;
+  social: number;
+  achievement: number;
+}
+
+export interface SimverseBehaviorState {
+  npc_id: number;
+  npc_name: string;
+  profession: string;
+  level: number;
+  current_behavior: string;
+  current_behavior_cn: string;
+  behavior_start_tick: number;
+  behavior_duration: number;
+  mood: number;
+  energy: number;
+  needs: SimverseBehaviorNeeds;
+}
+
+export interface SimverseBehaviorStats {
+  total_npcs: number;
+  alive_npcs: number;
+  behavior_dist: Record<string, number>;
+}
+
+export interface SimverseBehaviorListResponse {
+  page: number;
+  page_size: number;
+  total: number;
+  items: SimverseBehaviorState[];
 }
 
 export type PerfTier = "background" | "foreground" | "fg_idle";
@@ -366,6 +403,33 @@ export function useSimverse() {
     }
   }
 
+  async function loadBehaviorStats() {
+    try {
+      const data = await fetchJSON("/api/simverse/npc/behavior/stats");
+      return data as SimverseBehaviorStats;
+    } catch (e) {
+      console.warn("Failed to load behavior stats:", e);
+      return null;
+    }
+  }
+
+  async function loadBehaviorList(page = 1, pageSize = 50, behavior = "") {
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+      });
+      if (behavior) {
+        params.append("behavior", behavior);
+      }
+      const data = await fetchJSON(`/api/simverse/npc/behavior/list?${params.toString()}`);
+      return data as SimverseBehaviorListResponse;
+    } catch (e) {
+      console.warn("Failed to load behavior list:", e);
+      return null;
+    }
+  }
+
   function connectWebSocket() {
     if (ws) return;
 
@@ -530,6 +594,8 @@ export function useSimverse() {
     saveWorld,
     loadWorld,
     loadStorageStatus,
+    loadBehaviorStats,
+    loadBehaviorList,
 
     connectWebSocket,
     disconnectWebSocket,

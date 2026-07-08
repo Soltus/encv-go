@@ -272,6 +272,8 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 		simGroup.POST("/world/load", s.handleSimverseWorldLoad)
 		simGroup.GET("/world/save", s.handleSimverseWorldSaveInfo)
 		simGroup.GET("/world/storage", s.handleSimverseStorageStatus)
+		simGroup.GET("/npc/behavior/stats", s.handleSimverseBehaviorStats)
+		simGroup.GET("/npc/behavior/list", s.handleSimverseBehaviorList)
 	}
 
 	registerSimverseWebRoutes(r)

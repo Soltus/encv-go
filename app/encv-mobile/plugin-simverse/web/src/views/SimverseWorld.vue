@@ -16,7 +16,7 @@
                    class="npc-marker"
                    :style="getNPCPosition(idx)"
                    @click="selectNPC(npc)">
-                <div class="npc-dot" :class="{ alive: npc.is_alive }"></div>
+                <div class="npc-dot" :class="[npc.is_alive ? 'alive' : 'dead', getBehaviorClass(npc.current_behavior || 'idle')]"></div>
                 <div class="npc-name">{{ npc.name }}</div>
               </div>
             </div>
@@ -147,6 +147,16 @@
           </div>
           <div class="panel-content">
             <template v-if="activePanel === 'npc'">
+              <div v-if="behaviorStats" class="behavior-stats-bar">
+                <div class="stats-title">活动分布</div>
+                <div class="behavior-chips">
+                  <span v-for="(count, behavior) in behaviorStats.behavior_dist" :key="behavior"
+                        class="behavior-chip" :class="behavior">
+                    <span class="chip-icon">{{ getBehaviorIcon(behavior as string) }}</span>
+                    <span class="chip-count">{{ count }}</span>
+                  </span>
+                </div>
+              </div>
               <div v-for="npc in npcList" :key="npc.id" class="list-card" @click="selectNPC(npc)">
                 <div class="card-avatar">{{ npc.name?.[0] || '?' }}</div>
                 <div class="card-info">
@@ -154,6 +164,10 @@
                   <div class="card-subtitle">
                     <span class="prof-tag">{{ npc.profession }}</span>
                     <span class="level-tag">Lv.{{ npc.level }}</span>
+                  </div>
+                  <div class="card-behavior">
+                    <span class="behavior-icon">{{ getBehaviorIcon(npc.current_behavior || 'idle') }}</span>
+                    <span class="behavior-text">{{ npc.current_behavior_cn || '空闲' }}</span>
                   </div>
                 </div>
                 <div class="card-action">
@@ -360,6 +374,345 @@
             </div>
           </div>
         </div>
+
+        <div class="bottom-nav">
+          <button class="nav-item" :class="{ active: activeSubPage === 'home' }" @click="openSubPage('home')">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">主页</span>
+          </button>
+          <button class="nav-item" :class="{ active: activeSubPage === 'profile' }" @click="openSubPage('profile')">
+            <span class="nav-icon">👤</span>
+            <span class="nav-label">{{ t("simverse.profile") }}</span>
+          </button>
+          <button class="nav-item gacha-nav" @click="openSubPage('gacha')">
+            <span class="nav-icon sparkle">✨</span>
+            <span class="nav-label">{{ t("simverse.gacha") }}</span>
+          </button>
+          <button class="nav-item" :class="{ active: activeSubPage === 'training' }" @click="openSubPage('training')">
+            <span class="nav-icon">⚔️</span>
+            <span class="nav-label">{{ t("simverse.training") }}</span>
+          </button>
+          <button class="nav-item" :class="{ active: activeSubPage === 'settings' }" @click="openSubPage('settings')">
+            <span class="nav-icon">⚙️</span>
+            <span class="nav-label">{{ t("simverse.settings") }}</span>
+          </button>
+        </div>
+
+        <transition name="page-slide">
+          <div v-if="activeSubPage && activeSubPage !== 'home'" class="full-screen-page" :key="activeSubPage">
+            <template v-if="activeSubPage === 'profile'">
+              <div class="profile-page">
+                <div class="page-header">
+                  <button class="back-btn" @click="closeSubPage()">
+                    <span>←</span>
+                  </button>
+                  <span class="page-title">{{ t("simverse.profileTitle") }}</span>
+                  <div class="header-spacer"></div>
+                </div>
+                <div class="page-content">
+                  <div class="player-card">
+                    <div class="card-bg"></div>
+                    <div class="card-content">
+                      <div class="player-avatar">
+                        <span class="avatar-icon">⚔️</span>
+                      </div>
+                      <div class="player-name">冒险者</div>
+                      <div class="player-title">Lv.{{ playerLevel }} 勇者</div>
+                      <div class="player-stats-row">
+                        <div class="mini-stat">
+                          <span class="mini-stat-icon">💎</span>
+                          <span class="mini-stat-val">{{ playerDiamond }}</span>
+                        </div>
+                        <div class="mini-stat">
+                          <span class="mini-stat-icon">🪙</span>
+                          <span class="mini-stat-val">{{ playerGold }}</span>
+                        </div>
+                        <div class="mini-stat">
+                          <span class="mini-stat-icon">⚡</span>
+                          <span class="mini-stat-val">{{ playerStamina }}/120</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="section-card">
+                    <div class="section-title">{{ t("simverse.stats") }}</div>
+                    <div class="stats-grid">
+                      <div class="stat-item">
+                        <div class="stat-icon hp">❤️</div>
+                        <div class="stat-info">
+                          <div class="stat-name">{{ t("simverse.hp") }}</div>
+                          <div class="stat-bar">
+                            <div class="stat-fill hp-fill" :style="{ width: playerHpPercent + '%' }"></div>
+                          </div>
+                          <div class="stat-val">{{ playerHp }} / {{ playerMaxHp }}</div>
+                        </div>
+                      </div>
+                      <div class="stat-item">
+                        <div class="stat-icon atk">⚔️</div>
+                        <div class="stat-info">
+                          <div class="stat-name">{{ t("simverse.attack") }}</div>
+                          <div class="stat-val big">{{ playerAttack }}</div>
+                        </div>
+                      </div>
+                      <div class="stat-item">
+                        <div class="stat-icon def">🛡️</div>
+                        <div class="stat-info">
+                          <div class="stat-name">{{ t("simverse.defense") }}</div>
+                          <div class="stat-val big">{{ playerDefense }}</div>
+                        </div>
+                      </div>
+                      <div class="stat-item">
+                        <div class="stat-icon exp">⭐</div>
+                        <div class="stat-info">
+                          <div class="stat-name">{{ t("simverse.exp") }}</div>
+                          <div class="stat-bar">
+                            <div class="stat-fill exp-fill" :style="{ width: expPercent + '%' }"></div>
+                          </div>
+                          <div class="stat-val">{{ playerExp }} / {{ expToNextLevel }}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="section-card">
+                    <div class="section-title">{{ t("simverse.skills") }}</div>
+                    <div class="skill-list">
+                      <div v-for="skill in playerSkills" :key="skill.id" class="skill-item">
+                        <div class="skill-icon">{{ skill.icon }}</div>
+                        <div class="skill-info">
+                          <div class="skill-name">{{ skill.name }}</div>
+                          <div class="skill-level">Lv.{{ skill.level }}</div>
+                        </div>
+                        <div class="skill-rarity" :class="skill.rarity">{{ skill.rarity }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template v-else-if="activeSubPage === 'gacha'">
+              <div class="gacha-page">
+                <div class="page-header">
+                  <button class="back-btn" @click="closeSubPage()">
+                    <span>←</span>
+                  </button>
+                  <span class="page-title">{{ t("simverse.gachaTitle") }}</span>
+                  <div class="header-spacer"></div>
+                </div>
+                <div class="page-content">
+                  <div class="gacha-banner-large">
+                    <div class="banner-bg"></div>
+                    <div class="banner-content">
+                      <div class="banner-icon-large">🎴</div>
+                      <div class="banner-title-large">{{ t("simverse.gachaTitle") }}</div>
+                      <div class="banner-desc-large">{{ t("simverse.gachaDesc") }}</div>
+                    </div>
+                    <div class="sparkle-layer">
+                      <span v-for="i in 12" :key="i" class="sparkle" :style="getSparkleStyle(i)">✦</span>
+                    </div>
+                  </div>
+
+                  <div class="gacha-pool-info">
+                    <div class="pool-rate">
+                      <span class="rate-label">SSR</span>
+                      <span class="rate-val">1%</span>
+                    </div>
+                    <div class="pool-rate">
+                      <span class="rate-label">SR</span>
+                      <span class="rate-val">8%</span>
+                    </div>
+                    <div class="pool-rate">
+                      <span class="rate-label">R</span>
+                      <span class="rate-val">30%</span>
+                    </div>
+                    <div class="pool-rate">
+                      <span class="rate-label">N</span>
+                      <span class="rate-val">61%</span>
+                    </div>
+                  </div>
+
+                  <div class="gacha-actions-large">
+                    <button class="gacha-big-btn single" :disabled="isGachaAnimating" @click="doGachaAnimation(1)">
+                      <span class="btn-icon-large">🎴</span>
+                      <span class="btn-name">{{ t("simverse.singlePull") }}</span>
+                      <span class="btn-cost">100 💎</span>
+                    </button>
+                    <button class="gacha-big-btn ten" :disabled="isGachaAnimating" @click="doGachaAnimation(10)">
+                      <span class="btn-icon-large">🎴×10</span>
+                      <span class="btn-name">{{ t("simverse.tenPull") }}</span>
+                      <span class="btn-cost">900 💎</span>
+                      <span class="btn-badge">{{ t("simverse.guaranteedRare") }}</span>
+                    </button>
+                  </div>
+
+                  <div v-if="gachaHistory.length > 0" class="gacha-history">
+                    <div class="history-title">最近召唤</div>
+                    <div class="history-list">
+                      <div v-for="(item, i) in gachaHistory.slice(0, 6)" :key="i"
+                           class="history-item"
+                           :class="item.rarity">
+                        <span class="hist-icon">{{ item.icon }}</span>
+                        <span class="hist-name">{{ item.name }}</span>
+                        <span class="hist-rarity">{{ item.rarity }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <transition name="gacha-flash">
+                  <div v-if="isGachaAnimating" class="gacha-animation-overlay">
+                    <div class="gacha-cards-container" :class="{ reveal: gachaRevealed }">
+                      <div v-for="(item, i) in gachaAnimResults" :key="i"
+                           class="gacha-card-anim"
+                           :class="[item.rarity, { revealed: gachaRevealed }]"
+                           :style="{ animationDelay: (i * 0.1) + 's' }">
+                        <div class="card-inner">
+                          <div class="card-front">
+                            <span class="card-back-icon">✦</span>
+                          </div>
+                          <div class="card-back">
+                            <span class="gacha-item-icon">{{ item.icon }}</span>
+                            <span class="gacha-item-name">{{ item.name }}</span>
+                            <span class="gacha-item-rarity" :class="item.rarity">{{ item.rarity }}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-if="gachaRevealed" class="gacha-skip-btn" @click="finishGachaAnimation">
+                      点击继续
+                    </div>
+                  </div>
+                </transition>
+              </div>
+            </template>
+
+            <template v-else-if="activeSubPage === 'training'">
+              <div class="training-page">
+                <div class="page-header">
+                  <button class="back-btn" @click="closeSubPage()">
+                    <span>←</span>
+                  </button>
+                  <span class="page-title">{{ t("simverse.trainingTitle") }}</span>
+                  <div class="header-spacer"></div>
+                </div>
+                <div class="page-content">
+                  <div class="training-stamina-bar">
+                    <span class="stamina-icon">⚡</span>
+                    <div class="stamina-bar-wrap">
+                      <div class="stamina-bar-fill" :style="{ width: (playerStamina / 120 * 100) + '%' }"></div>
+                    </div>
+                    <span class="stamina-text">{{ playerStamina }}/120</span>
+                  </div>
+
+                  <div class="training-section">
+                    <div class="section-title">{{ t("simverse.train") }}</div>
+                    <div class="training-grid">
+                      <div v-for="mode in trainingModes" :key="mode.id"
+                           class="training-card"
+                           :class="mode.type"
+                           @click="doTraining(mode)">
+                        <div class="training-icon">{{ mode.icon }}</div>
+                        <div class="training-name">{{ mode.name }}</div>
+                        <div class="training-effect">{{ mode.effect }}</div>
+                        <div class="training-cost">
+                          <span class="cost-stamina">⚡ {{ mode.staminaCost }}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="training-section">
+                    <div class="section-title">{{ t("simverse.equipment") }}</div>
+                    <div class="equipment-grid">
+                      <div v-for="equip in equipmentSlots" :key="equip.slot" class="equip-slot">
+                        <div class="equip-slot-label">{{ equip.label }}</div>
+                        <div class="equip-item" :class="{ empty: !equip.item }">
+                          <span v-if="equip.item" class="equip-icon">{{ equip.item.icon }}</span>
+                          <span v-else class="equip-empty">+</span>
+                        </div>
+                        <div v-if="equip.item" class="equip-name">{{ equip.item.name }}</div>
+                        <div v-else class="equip-name empty">未装备</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="training-section">
+                    <div class="section-title">角色等级</div>
+                    <div class="level-up-section">
+                      <div class="level-info">
+                        <span class="current-level">Lv.{{ playerLevel }}</span>
+                        <div class="exp-bar-large">
+                          <div class="exp-fill-large" :style="{ width: expPercent + '%' }"></div>
+                        </div>
+                        <span class="exp-text">{{ playerExp }} / {{ expToNextLevel }}</span>
+                      </div>
+                      <button class="level-up-btn" :disabled="playerExp < expToNextLevel" @click="levelUp">
+                        {{ t("simverse.upgrade") }}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+
+            <template v-else-if="activeSubPage === 'settings'">
+              <div class="settings-page">
+                <div class="page-header">
+                  <button class="back-btn" @click="closeSubPage()">
+                    <span>←</span>
+                  </button>
+                  <span class="page-title">{{ t("simverse.settings") }}</span>
+                  <div class="header-spacer"></div>
+                </div>
+                <div class="page-content">
+                  <div class="setting-section">
+                    <div class="section-title">{{ t("simverse.performanceTier") }}</div>
+                    <div class="tier-selector">
+                      <button class="tier-option" :class="{ active: worldConfig?.tier === 'background' }"
+                              @click="changeTier('background')">
+                        <span class="tier-name">{{ t("simverse.tierBackground") }}</span>
+                        <span class="tier-desc">低功耗</span>
+                      </button>
+                      <button class="tier-option" :class="{ active: worldConfig?.tier === 'foreground' }"
+                              @click="changeTier('foreground')">
+                        <span class="tier-name">{{ t("simverse.tierForeground") }}</span>
+                        <span class="tier-desc">标准</span>
+                      </button>
+                      <button class="tier-option" :class="{ active: worldConfig?.tier === 'fg_idle' }"
+                              @click="changeTier('fg_idle')">
+                        <span class="tier-name">{{ t("simverse.tierIdle") }}</span>
+                        <span class="tier-desc">高性能</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div v-if="worldConfig" class="setting-section">
+                    <div class="section-title">{{ t("simverse.configDetails") }}</div>
+                    <div class="config-list">
+                      <div class="config-row">
+                        <span>{{ t("simverse.eventRate") }}</span>
+                        <span class="config-value">{{ worldConfig.event_rate_mul }}x</span>
+                      </div>
+                      <div class="config-row">
+                        <span>{{ t("simverse.cacheSize") }}</span>
+                        <span class="config-value">{{ worldConfig.cache_size }}</span>
+                      </div>
+                      <div class="config-row">
+                        <span>{{ t("simverse.subSim") }}</span>
+                        <span class="config-value">{{ worldConfig.sub_sim_active ? t("common.on") : t("common.off") }}</span>
+                      </div>
+                      <div class="config-row">
+                        <span>{{ t("simverse.subSimDepth") }}</span>
+                        <span class="config-value">{{ worldConfig.sub_sim_depth }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </transition>
       </div>
     </ion-content>
   </ion-page>
@@ -385,6 +738,7 @@ const {
   controlWorld,
   loadNPCList,
   loadChronicleWorld,
+  loadBehaviorStats,
   init,
   cleanup,
 } = useSimverse();
@@ -396,6 +750,158 @@ const recentEvents = ref<SimverseChronicleEvent[]>([]);
 const activePanel = ref<string | null>(null);
 const selectedNPC = ref<SimverseNPC | null>(null);
 const gachaResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
+const behaviorStats = ref<{ total_npcs: number; alive_npcs: number; behavior_dist: Record<string, number> } | null>(null);
+
+const activeSubPage = ref<string>('home');
+const isGachaAnimating = ref(false);
+const gachaRevealed = ref(false);
+const gachaAnimResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
+const gachaHistory = ref<{ name: string; icon: string; rarity: string }[]>([]);
+
+const playerLevel = ref(1);
+const playerExp = ref(0);
+const playerHp = ref(100);
+const playerMaxHp = ref(100);
+const playerAttack = ref(15);
+const playerDefense = ref(10);
+const playerDiamond = ref(2500);
+const playerGold = ref(50000);
+const playerStamina = ref(120);
+
+const playerSkills = ref([
+  { id: 1, name: '烈焰斩', icon: '🔥', level: 3, rarity: 'SR' },
+  { id: 2, name: '铁壁防御', icon: '🛡️', level: 2, rarity: 'R' },
+  { id: 3, name: '疾风步', icon: '💨', level: 1, rarity: 'N' },
+  { id: 4, name: '治愈术', icon: '💚', level: 1, rarity: 'SR' },
+]);
+
+const trainingModes = ref([
+  { id: 'strength', name: '力量训练', icon: '💪', effect: '攻击 +2', staminaCost: 10, type: 'attack' },
+  { id: 'defense', name: '防御训练', icon: '🛡️', effect: '防御 +2', staminaCost: 10, type: 'defense' },
+  { id: 'endurance', name: '耐力训练', icon: '❤️', effect: '生命 +10', staminaCost: 15, type: 'hp' },
+  { id: 'meditation', name: '冥想修炼', icon: '🧘', effect: '经验 +50', staminaCost: 20, type: 'exp' },
+]);
+
+const equipmentSlots = ref([
+  { slot: 'weapon', label: '武器', item: { name: '新手剑', icon: '⚔️' } },
+  { slot: 'armor', label: '护甲', item: { name: '布甲', icon: '🎽' } },
+  { slot: 'accessory', label: '饰品', item: null },
+  { slot: 'rune', label: '符文', item: null },
+]);
+
+const expToNextLevel = computed(() => playerLevel.value * 100);
+const expPercent = computed(() => Math.min(100, (playerExp.value / expToNextLevel.value) * 100));
+const playerHpPercent = computed(() => (playerHp.value / playerMaxHp.value) * 100);
+
+function openSubPage(name: string) {
+  activeSubPage.value = name;
+}
+
+function closeSubPage() {
+  activeSubPage.value = 'home';
+}
+
+function getSparkleStyle(index: number) {
+  const angle = (index / 12) * 360;
+  const delay = index * 0.1;
+  return {
+    transform: `rotate(${angle}deg) translateY(-60px)`,
+    animationDelay: `${delay}s`,
+  };
+}
+
+function doGachaAnimation(count: number) {
+  if (isGachaAnimating.value) return;
+
+  const cost = count === 1 ? 100 : 900;
+  if (playerDiamond.value < cost) return;
+
+  playerDiamond.value -= cost;
+  isGachaAnimating.value = true;
+  gachaRevealed.value = false;
+
+  const results: { name: string; icon: string; rarity: string }[] = [];
+  const pool = [
+    { name: '普通村民', icon: '👤', rarity: 'N', weight: 61 },
+    { name: '熟练工匠', icon: '🔨', rarity: 'R', weight: 30 },
+    { name: '精英战士', icon: '⚔️', rarity: 'SR', weight: 8 },
+    { name: '传奇英雄', icon: '👑', rarity: 'SSR', weight: 1 },
+  ];
+
+  for (let i = 0; i < count; i++) {
+    const isGuaranteed = count === 10 && i === 9;
+    let rarity: string;
+
+    if (isGuaranteed) {
+      rarity = pool.filter(p => ['SR', 'SSR'].includes(p.rarity))[
+        Math.floor(Math.random() * 2)
+      ].rarity;
+    } else {
+      const total = pool.reduce((s, p) => s + p.weight, 0);
+      let rand = Math.random() * total;
+      rarity = pool[0].rarity;
+      for (const item of pool) {
+        rand -= item.weight;
+        if (rand <= 0) {
+          rarity = item.rarity;
+          break;
+        }
+      }
+    }
+
+    const matched = pool.find(p => p.rarity === rarity)!;
+    results.push({ ...matched });
+  }
+
+  gachaAnimResults.value = results;
+  gachaResults.value = results;
+
+  setTimeout(() => {
+    gachaRevealed.value = true;
+  }, 1500);
+}
+
+function finishGachaAnimation() {
+  gachaHistory.value = [...gachaAnimResults.value, ...gachaHistory.value].slice(0, 20);
+  isGachaAnimating.value = false;
+  gachaRevealed.value = false;
+}
+
+function doTraining(mode: { id: string; staminaCost: number; type: string; effect: string }) {
+  if (playerStamina.value < mode.staminaCost) return;
+
+  playerStamina.value -= mode.staminaCost;
+  playerExp.value += 30;
+
+  switch (mode.type) {
+    case 'attack':
+      playerAttack.value += 1;
+      break;
+    case 'defense':
+      playerDefense.value += 1;
+      break;
+    case 'hp':
+      playerMaxHp.value += 5;
+      playerHp.value += 5;
+      break;
+    case 'exp':
+      playerExp.value += 20;
+      break;
+  }
+
+  while (playerExp.value >= expToNextLevel.value) {
+    playerExp.value -= expToNextLevel.value;
+    levelUp();
+  }
+}
+
+function levelUp() {
+  playerLevel.value++;
+  playerMaxHp.value += 20;
+  playerHp.value = playerMaxHp.value;
+  playerAttack.value += 3;
+  playerDefense.value += 2;
+}
 
 const exploreRegions = ref([
   { id: "town", name: "星光镇", typeName: "城镇", type: "town", icon: "🏘️" },
@@ -512,6 +1018,25 @@ function getNPCPosition(idx: number): Record<string, string> {
   };
 }
 
+const behaviorIcons: Record<string, string> = {
+  idle: '😴',
+  work: '💼',
+  rest: '😌',
+  eat: '🍽️',
+  sleep: '💤',
+  socialize: '💬',
+  explore: '🚶',
+  trade: '💰',
+};
+
+function getBehaviorIcon(behavior: string): string {
+  return behaviorIcons[behavior] || '❓';
+}
+
+function getBehaviorClass(behavior: string): string {
+  return `beh-${behavior}`;
+}
+
 async function refreshState() {
   await Promise.all([
     loadWorldState(),
@@ -561,6 +1086,13 @@ async function loadEvents() {
   recentEvents.value = data?.items || [];
 }
 
+async function loadBehaviorStatsData() {
+  const data = await loadBehaviorStats();
+  if (data) {
+    behaviorStats.value = data;
+  }
+}
+
 function selectNPC(npc: SimverseNPC) {
   selectedNPC.value = npc;
 }
@@ -572,6 +1104,9 @@ function openPanel(name: string) {
     activePanel.value = name;
     if (name === "npc" && npcList.value.length === 0) {
       loadNPCs();
+    }
+    if (name === "npc") {
+      loadBehaviorStatsData();
     }
     if (name === "chronicles" && recentEvents.value.length === 0) {
       loadEvents();
@@ -694,6 +1229,12 @@ onMounted(async () => {
     lockScreenOrientation("landscape-primary").catch((e) => {
       console.warn("[SimverseWorld] Lock orientation failed:", e);
     });
+    try {
+      const { StatusBar } = await import("@capacitor/status-bar");
+      await StatusBar.hide();
+    } catch (e) {
+      console.warn("[SimverseWorld] Hide status bar failed:", e);
+    }
   }
   await init();
   await refreshState();
@@ -709,6 +1250,10 @@ onUnmounted(() => {
   cleanup();
   if (isNativePluginMode()) {
     unlockScreenOrientation().catch(() => {});
+    import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
+      StatusBar.show().catch(() => {});
+      StatusBar.setStyle({ style: Style.Default }).catch(() => {});
+    }).catch(() => {});
   }
 });
 </script>
@@ -738,10 +1283,6 @@ onUnmounted(() => {
   height: 100dvh;
   height: 100vh;
   overflow: hidden;
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
   box-sizing: border-box;
   background: 
     radial-gradient(ellipse at 30% 20%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
@@ -869,6 +1410,20 @@ onUnmounted(() => {
   background: #22c55e;
   animation: pulse 2s ease-in-out infinite;
 }
+
+.npc-dot.dead {
+  background: #6b7280;
+  animation: none;
+}
+
+.npc-dot.beh-work { background: #3b82f6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.6); }
+.npc-dot.beh-sleep { background: #8b5cf6; box-shadow: 0 0 8px rgba(139, 92, 246, 0.6); }
+.npc-dot.beh-eat { background: #f97316; box-shadow: 0 0 8px rgba(249, 115, 22, 0.6); }
+.npc-dot.beh-socialize { background: #ec4899; box-shadow: 0 0 8px rgba(236, 72, 153, 0.6); }
+.npc-dot.beh-explore { background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.6); }
+.npc-dot.beh-trade { background: #eab308; box-shadow: 0 0 8px rgba(234, 179, 8, 0.6); }
+.npc-dot.beh-rest { background: #6b7280; box-shadow: 0 0 6px rgba(107, 114, 128, 0.5); }
+.npc-dot.beh-idle { background: #4b5563; box-shadow: 0 0 4px rgba(75, 85, 99, 0.4); }
 
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 4px rgba(34, 197, 94, 0.5); }
@@ -1329,6 +1884,72 @@ onUnmounted(() => {
   background: rgba(245, 158, 11, 0.2);
   color: #fbbf24;
 }
+
+.card-behavior {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.behavior-icon {
+  font-size: 11px;
+}
+
+.behavior-text {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.behavior-stats-bar {
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.stats-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 8px;
+}
+
+.behavior-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.behavior-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+.behavior-chip .chip-icon {
+  font-size: 12px;
+}
+
+.behavior-chip .chip-count {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.behavior-chip.work { background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.3); }
+.behavior-chip.sleep { background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.3); }
+.behavior-chip.eat { background: rgba(249, 115, 22, 0.15); border-color: rgba(249, 115, 22, 0.3); }
+.behavior-chip.socialize { background: rgba(236, 72, 153, 0.15); border-color: rgba(236, 72, 153, 0.3); }
+.behavior-chip.explore { background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.3); }
+.behavior-chip.trade { background: rgba(234, 179, 8, 0.15); border-color: rgba(234, 179, 8, 0.3); }
+.behavior-chip.rest { background: rgba(107, 114, 128, 0.15); border-color: rgba(107, 114, 128, 0.3); }
+.behavior-chip.idle { background: rgba(107, 114, 128, 0.1); border-color: rgba(107, 114, 128, 0.2); }
 
 .card-action {
   width: 50px;
@@ -1920,5 +2541,963 @@ onUnmounted(() => {
 .battle-btn.active {
   background: linear-gradient(135deg, rgba(239, 68, 68, 0.5), rgba(249, 115, 22, 0.5));
   box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
+}
+
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 70px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  background: linear-gradient(180deg, transparent 0%, rgba(10, 10, 26, 0.95) 30%);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(139, 92, 246, 0.2);
+  z-index: 15;
+  padding-bottom: 8px;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.nav-item.active {
+  color: #8b5cf6;
+}
+
+.nav-item.active .nav-icon {
+  transform: scale(1.15);
+}
+
+.nav-icon {
+  font-size: 22px;
+  transition: transform 0.2s ease;
+}
+
+.nav-label {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.gacha-nav .nav-icon {
+  animation: sparkle-pulse 2s ease-in-out infinite;
+}
+
+@keyframes sparkle-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.5) drop-shadow(0 0 8px #fbbf24); }
+}
+
+.full-screen-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, #0f0f2a 0%, #0a0a1a 100%);
+  z-index: 20;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-slide-enter-active,
+.page-slide-leave-active {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-slide-enter-from {
+  transform: translateY(100%);
+}
+
+.page-slide-leave-to {
+  transform: translateY(100%);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: rgba(15, 15, 42, 0.95);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.15);
+  flex-shrink: 0;
+}
+
+.back-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.back-btn:hover {
+  background: rgba(139, 92, 246, 0.3);
+  transform: translateX(-2px);
+}
+
+.page-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.header-spacer {
+  width: 36px;
+}
+
+.page-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.profile-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-card {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.card-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
+}
+
+.card-bg::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%);
+  border-radius: 50%;
+}
+
+.card-content {
+  position: relative;
+  z-index: 1;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.player-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8b5cf6, #ec4899);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.5);
+}
+
+.avatar-icon {
+  font-size: 40px;
+}
+
+.player-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.player-title {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.player-stats-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.mini-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 6px 12px;
+  border-radius: 20px;
+}
+
+.mini-stat-icon {
+  font-size: 14px;
+}
+
+.mini-stat-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.section-card {
+  background: rgba(20, 20, 50, 0.6);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 12px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.stat-icon.hp { background: rgba(239, 68, 68, 0.2); }
+.stat-icon.atk { background: rgba(249, 115, 22, 0.2); }
+.stat-icon.def { background: rgba(59, 130, 246, 0.2); }
+.stat-icon.exp { background: rgba(234, 179, 8, 0.2); }
+
+.stat-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-name {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 2px;
+}
+
+.stat-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.stat-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.hp-fill { background: linear-gradient(90deg, #ef4444, #f87171); }
+.exp-fill { background: linear-gradient(90deg, #eab308, #fde047); }
+
+.stat-val {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+.stat-val.big {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 0;
+}
+
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skill-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.skill-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(139, 92, 246, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.skill-info {
+  flex: 1;
+}
+
+.skill-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.skill-level {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.skill-rarity {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.skill-rarity.SR { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+.skill-rarity.R { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+.skill-rarity.N { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
+
+.gacha-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.gacha-banner-large {
+  position: relative;
+  height: 180px;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.banner-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #581c87 0%, #be185d 50%, #ea580c 100%);
+}
+
+.banner-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.4) 100%);
+}
+
+.banner-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.banner-icon-large {
+  font-size: 48px;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.banner-title-large {
+  font-size: 24px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.banner-desc-large {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.sparkle-layer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  z-index: 1;
+}
+
+.sparkle {
+  position: absolute;
+  color: #fde68a;
+  font-size: 14px;
+  animation: sparkle-rotate 4s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes sparkle-rotate {
+  from { opacity: 0.3; }
+  50% { opacity: 1; }
+  to { opacity: 0.3; }
+}
+
+.gacha-pool-info {
+  display: flex;
+  justify-content: space-around;
+  background: rgba(20, 20, 50, 0.6);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.pool-rate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.rate-label {
+  font-size: 11px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #eab308, #f97316);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.rate-val {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.gacha-actions-large {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.gacha-big-btn {
+  flex: 1;
+  border: none;
+  border-radius: 14px;
+  padding: 16px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.gacha-big-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gacha-big-btn.single {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+  border: 2px solid rgba(59, 130, 246, 0.4);
+}
+
+.gacha-big-btn.ten {
+  background: linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(249, 115, 22, 0.2));
+  border: 2px solid rgba(234, 179, 8, 0.4);
+}
+
+.gacha-big-btn:not(:disabled):hover {
+  transform: translateY(-2px);
+}
+
+.gacha-big-btn:not(:disabled):active {
+  transform: translateY(1px);
+}
+
+.btn-icon-large {
+  font-size: 28px;
+}
+
+.btn-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.btn-cost {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.btn-badge {
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  background: linear-gradient(135deg, #ef4444, #f97316);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.gacha-history {
+  background: rgba(20, 20, 50, 0.6);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.history-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 10px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.hist-icon {
+  font-size: 18px;
+}
+
+.hist-name {
+  flex: 1;
+  font-size: 12px;
+  color: #fff;
+}
+
+.hist-rarity {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.hist-rarity.SSR { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+.hist-rarity.SR { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+.hist-rarity.R { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+.hist-rarity.N { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
+
+.gacha-animation-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.gacha-flash-enter-active,
+.gacha-flash-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.gacha-flash-enter-from,
+.gacha-flash-leave-to {
+  opacity: 0;
+}
+
+.gacha-cards-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  max-width: 360px;
+  padding: 20px;
+}
+
+.gacha-card-anim {
+  width: 80px;
+  height: 110px;
+  perspective: 1000px;
+}
+
+.gacha-card-anim.revealed {
+  animation: card-pop 0.5s ease forwards;
+}
+
+@keyframes card-pop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.gacha-card-anim.revealed .card-inner {
+  transform: rotateY(180deg);
+}
+
+.card-front,
+.card-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.card-front {
+  background: linear-gradient(135deg, #1e1b4b, #312e81);
+  border: 2px solid rgba(139, 92, 246, 0.5);
+}
+
+.card-back-icon {
+  font-size: 36px;
+  color: rgba(139, 92, 246, 0.6);
+}
+
+.card-back {
+  transform: rotateY(180deg);
+  background: linear-gradient(180deg, rgba(20, 20, 50, 0.95), rgba(30, 27, 75, 0.95));
+  padding: 8px;
+  text-align: center;
+}
+
+.gacha-card-anim.SSR .card-back {
+  border: 2px solid #ef4444;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+}
+
+.gacha-card-anim.SR .card-back {
+  border: 2px solid #eab308;
+  box-shadow: 0 0 15px rgba(234, 179, 8, 0.4);
+}
+
+.gacha-card-anim.R .card-back {
+  border: 2px solid #3b82f6;
+}
+
+.gacha-item-icon {
+  font-size: 30px;
+}
+
+.gacha-item-name {
+  font-size: 10px;
+  color: #fff;
+  font-weight: 600;
+}
+
+.gacha-item-rarity {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.gacha-item-rarity.SSR { background: rgba(239, 68, 68, 0.3); color: #f87171; }
+.gacha-item-rarity.SR { background: rgba(234, 179, 8, 0.3); color: #fde047; }
+.gacha-item-rarity.R { background: rgba(59, 130, 246, 0.3); color: #93c5fd; }
+.gacha-item-rarity.N { background: rgba(156, 163, 175, 0.3); color: #d1d5db; }
+
+.gacha-skip-btn {
+  margin-top: 20px;
+  padding: 10px 30px;
+  background: rgba(139, 92, 246, 0.2);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  border-radius: 20px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gacha-skip-btn:hover {
+  background: rgba(139, 92, 246, 0.4);
+}
+
+.training-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.training-stamina-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(20, 20, 50, 0.6);
+  border: 1px solid rgba(234, 179, 8, 0.2);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.stamina-icon {
+  font-size: 18px;
+}
+
+.stamina-bar-wrap {
+  flex: 1;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.stamina-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #eab308, #fde047);
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.stamina-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fde047;
+  min-width: 60px;
+  text-align: right;
+}
+
+.training-section {
+  margin-bottom: 20px;
+}
+
+.training-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.training-card {
+  background: rgba(20, 20, 50, 0.6);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.training-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(139, 92, 246, 0.4);
+}
+
+.training-card:active {
+  transform: translateY(0);
+}
+
+.training-icon {
+  font-size: 32px;
+}
+
+.training-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.training-effect {
+  font-size: 11px;
+  color: rgba(34, 197, 94, 0.9);
+}
+
+.training-cost {
+  font-size: 11px;
+  color: rgba(234, 179, 8, 0.9);
+}
+
+.equipment-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.equip-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.equip-slot-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.equip-item {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  background: rgba(139, 92, 246, 0.1);
+  border: 2px solid rgba(139, 92, 246, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.equip-item.empty {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.equip-icon {
+  font-size: 24px;
+}
+
+.equip-empty {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.equip-name {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+}
+
+.equip-name.empty {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.level-up-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.level-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.current-level {
+  font-size: 18px;
+  font-weight: 700;
+  color: #8b5cf6;
+}
+
+.exp-bar-large {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.exp-fill-large {
+  height: 100%;
+  background: linear-gradient(90deg, #eab308, #fde047);
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+.exp-text {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.level-up-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  border: none;
+  border-radius: 25px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.level-up-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.level-up-btn:not(:disabled):hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+}
+
+.settings-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 </style>
