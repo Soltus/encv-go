@@ -548,9 +548,106 @@ progress.value = 0.5
 - [x] 整理组件查找与动态更新 API（FindById, SetText, SetValue 等）
 - [x] 记录 Web 端 vs 手机端预览差异
 - [x] 简化 demo（精简稳定版，修复 17 个错误）
+- [x] 构建完整游戏 UI 架构（5 大模块：首页/世界/NPC/编年史/设置）
+- [x] 复刻 plugin-simverse/web 核心功能
+- [x] Modal / Toggle / Slider / Card 高级组件实战
 - [ ] 测试 text_to_music 音乐生成
 - [ ] 探索 3D 模型生成能力
 - [ ] 研究资源编辑和版本管理
 - [ ] 测试 batch_generate_images 批量生成
 - [ ] 测试 edit_image 图片编辑功能
 - [ ] 研究多参考图风格控制
+
+## 十三、实战：SimVerse Mini 完整游戏 UI 架构
+
+### 13.1 功能模块
+
+基于 plugin-simverse/web 的功能分析，在 Maker 中复刻了完整游戏 UI，包含 5 大模块：
+
+| Tab 模块 | 功能 | 核心组件 |
+|---------|------|---------|
+| **首页 Home** | Hero 展示 + 功能入口 + 世界概览统计 | Card, Label, Panel |
+| **世界 World** | 实时资源栏 + 地图网格 + 播放控制 + 底部状态栏 | Button, Panel, ScrollView |
+| **居民 NPCs** | NPC 卡片列表 + 详情弹窗 + HP 条 + 标签 | Card, Modal, Toggle, Slider |
+| **编年史 Chronicles** | 时间线事件列表 + 重要性分级 | Card, Panel, Label |
+| **设置 Settings** | 音频开关 + 游戏速度滑块 + 自动保存 + 关于 | Toggle, Slider, Button |
+
+### 13.2 架构设计
+
+```
+App (全局状态)
+├── currentTab       当前 Tab
+├── worldRunning     世界运行状态
+├── tick / day       世界时间
+├── worldState       世界统计数据
+├── npcs[]           NPC 数据数组
+├── chronicles[]     编年史事件
+├── settings         用户设置
+└── ui
+    ├── root         根 UI 节点
+    └── contentPanel Tab 内容容器（切换时清空重建）
+```
+
+### 13.3 底部 Tab 导航实现
+
+```lua
+-- 5 个 Tab：首页/世界/居民/编年史/设置
+local tabs = {
+    { key = "home", icon = "🏠", label = "首页" },
+    { key = "world", icon = "🌍", label = "世界" },
+    { key = "npcs", icon = "👥", label = "居民" },
+    { key = "chronicles", icon = "📜", label = "编年史" },
+    { key = "settings", icon = "⚙️", label = "设置" },
+}
+
+function SwitchTab(tabKey)
+    -- 更新 Tab 高亮
+    for _, key in ipairs(tabs) do
+        local label = App.ui.root:FindById("tabLabel_" .. key)
+        label:SetStyle({ color = key == tabKey and "#8b5cf6" or "#64748b" })
+    end
+    
+    -- 清空内容区并加载新页面
+    App.ui.contentPanel:ClearChildren()
+    if tabKey == "home" then ShowHomePage()
+    -- ... 其他页面
+    end
+end
+```
+
+### 13.4 高级组件 API 对照表
+
+| 组件 | 易出错点 | 正确 API |
+|------|---------|---------|
+| **Card** | 直接用 AddChild 加内容会乱 | `card:AddBody(widget)` / `card:AddAction(button)` |
+| **Modal** | SetContent 不存在 | `modal:AddContent(widget)` / `modal:SetFooter(widget)` |
+| **Toggle** | 用 `checked` / `onValueChange` | 用 `value` / `onChange` |
+| **Slider** | 用 `onValueChange` | 用 `onChange` |
+| **Modal** | 手动加关闭按钮 | 内置 `title` + `showCloseButton` |
+
+### 13.5 游戏循环
+
+```lua
+function HandleUpdate(eventType, eventData)
+    if App.worldRunning then
+        App.tick = App.tick + 1
+        
+        -- 每 600 tick = 1 天
+        if App.tick % 600 == 0 then
+            App.day = App.day + 1
+            -- 触发每日事件
+            TriggerDailyEvent()
+        end
+        
+        UpdateWorldUI()
+    end
+end
+```
+
+### 13.6 设计规范
+
+- **配色**：深色主题 `#0f172a` 背景 / `#1e293b` 卡片 / `#8b5cf6` 主题紫
+- **圆角**：卡片 12px，按钮 8-10px，头像 50%
+- **间距**：卡片 gap 12-16px，内边距 16px
+- **字体层级**：标题 22px bold / 副标题 16px bold / 正文 14px / 辅助 12px
+- **状态色**：成功 `#22c55e` / 警告 `#f59e0b` / 错误 `#ef4444` / 信息 `#06b6d4`
