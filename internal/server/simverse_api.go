@@ -1200,3 +1200,90 @@ func (s *Server) handleSimverseEconomyWealthRank(c *gin.Context) {
 		"items": ranking,
 	})
 }
+
+func (s *Server) handleSimverseQuestList(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	qm := world.QuestManager()
+	summary := qm.GetQuestSummary()
+
+	c.JSON(http.StatusOK, summary)
+}
+
+func (s *Server) handleSimverseQuestClaim(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	var req struct {
+		QuestID string `json:"quest_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	qm := world.QuestManager()
+	reward, ok := qm.ClaimReward(req.QuestID)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "quest not completable"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"reward":  reward,
+	})
+}
+
+func (s *Server) handleSimverseQuestAction(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	qm := world.QuestManager()
+	switch req.Action {
+	case "view_npc":
+		qm.RecordNPCView()
+	case "view_economy":
+		qm.RecordEconomyView()
+	case "gacha":
+		qm.RecordGacha()
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}

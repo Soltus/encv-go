@@ -63,6 +63,11 @@
         </div>
 
         <div class="left-menu">
+          <button class="menu-btn" :class="{ active: activePanel === 'quest' }" @click="openPanel('quest')">
+            <span class="menu-icon">📋</span>
+            <span class="menu-label">任务</span>
+            <span v-if="questCompletable > 0" class="menu-badge red">{{ questCompletable }}</span>
+          </button>
           <button class="menu-btn" :class="{ active: activePanel === 'npc' }" @click="openPanel('npc')">
             <span class="menu-icon">👤</span>
             <span class="menu-label">{{ t("simverse.npc") }}</span>
@@ -119,10 +124,6 @@
             <span class="menu-icon">⚙️</span>
             <span class="menu-label">{{ t("simverse.settings") }}</span>
           </button>
-          <button class="menu-btn exit-btn" @click="handleExitWorld">
-            <span class="menu-icon">🚪</span>
-            <span class="menu-label">{{ t("simverse.exitWorld") }}</span>
-          </button>
         </div>
 
         <div class="stats-bar">
@@ -158,6 +159,47 @@
             <button class="panel-close-btn" @click="activePanel = null">✕</button>
           </div>
           <div class="panel-content">
+            <template v-if="activePanel === 'quest'">
+              <div class="quest-panel">
+                <div class="quest-tabs">
+                  <button class="quest-tab" :class="{ active: questTab === 'daily' }" @click="questTab = 'daily'">
+                    📅 日常
+                  </button>
+                  <button class="quest-tab" :class="{ active: questTab === 'achieve' }" @click="questTab = 'achieve'">
+                    🏆 成就
+                  </button>
+                  <button class="quest-tab" :class="{ active: questTab === 'story' }" @click="questTab = 'story'">
+                    📖 剧情
+                  </button>
+                </div>
+                <div class="quest-list">
+                  <div v-for="q in filteredQuests" :key="q.id" class="quest-card"
+                       :class="{ locked: q.status === 0, completable: q.progress >= q.goal && q.status === 1, claimed: q.status === 2 }">
+                    <div class="quest-icon">{{ q.status === 0 ? '🔒' : q.icon }}</div>
+                    <div class="quest-info">
+                      <div class="quest-title">{{ q.title }}</div>
+                      <div class="quest-desc">{{ q.desc }}</div>
+                      <div class="quest-progress-row">
+                        <div class="quest-progress-bar">
+                          <div class="quest-progress-fill" :style="{ width: Math.min(100, (q.progress / q.goal) * 100) + '%' }"></div>
+                        </div>
+                        <span class="quest-progress-text">{{ q.progress }}/{{ q.goal }}</span>
+                      </div>
+                      <div class="quest-reward">
+                        <span v-if="q.reward.diamond" class="reward-item">💎 {{ q.reward.diamond }}</span>
+                        <span v-if="q.reward.gold" class="reward-item">🪙 {{ q.reward.gold }}</span>
+                        <span v-if="q.reward.exp" class="reward-item">⭐ {{ q.reward.exp }}</span>
+                      </div>
+                    </div>
+                    <button v-if="q.progress >= q.goal && q.status === 1" class="quest-claim-btn" @click="claimQuest(q.id)">
+                      领取
+                    </button>
+                    <span v-else-if="q.status === 2" class="quest-claimed">✓</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+
             <template v-if="activePanel === 'npc'">
               <div v-if="behaviorStats" class="behavior-stats-bar">
                 <div class="stats-title">活动分布</div>
@@ -449,6 +491,13 @@
                   </div>
                 </div>
               </div>
+              <div class="setting-section danger-zone">
+                <div class="section-title">{{ t("simverse.exitWorld") }}</div>
+                <button class="exit-world-btn" @click="handleExitWorld">
+                  <span class="exit-icon">🚪</span>
+                  <span class="exit-text">{{ t("simverse.exitWorld") }}</span>
+                </button>
+              </div>
             </template>
 
             <template v-else-if="activePanel === 'gacha'">
@@ -683,11 +732,21 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useSimverse, type SimverseNPC, type SimverseChronicleEvent } from "@/composables/useSimverse";
 import { usePhaserWorld } from "@/composables/usePhaserWorld";
 import { IonInfiniteScroll, IonInfiniteScrollContent } from "@ionic/vue";
-import { lockScreenOrientation, unlockScreenOrientation, closeWorld, isNativePluginMode } from "@/plugins/SimVerse";
+import {
+  lockScreenOrientation,
+  unlockScreenOrientation,
+  closeWorld,
+  isNativePluginMode,
+  hideSystemUI,
+  showSystemUI,
+} from "@/plugins/SimVerse";
+
+const router = useRouter();
 
 const { t } = useI18n();
 const {
@@ -731,6 +790,29 @@ const wealthRankings = ref<{
   wealth: number;
   rank: number;
 }[]>([]);
+
+const questTab = ref<'daily' | 'achieve' | 'story'>('daily');
+const questList = ref<{
+  id: string;
+  type: number;
+  title: string;
+  desc: string;
+  icon: string;
+  goal: number;
+  progress: number;
+  reward: { diamond: number; gold: number; exp: number; icon: string };
+  status: number;
+  sort_order: number;
+}[]>([]);
+const questCompletable = ref(0);
+
+const questTypeMap: Record<string, number> = { daily: 0, achieve: 1, story: 2 };
+const filteredQuests = computed(() => {
+  const targetType = questTypeMap[questTab.value];
+  return questList.value
+    .filter(q => q.type === targetType || (questTab.value === 'achieve' && q.type === 3))
+    .sort((a, b) => a.sort_order - b.sort_order);
+});
 
 const gachaModalOpen = ref(false);
 const isGachaAnimating = ref(false);
@@ -847,6 +929,7 @@ function doGachaAnimation(count: number) {
 
   setTimeout(() => {
     gachaRevealed.value = true;
+    recordQuestAction("gacha");
   }, 1500);
 }
 
@@ -972,7 +1055,7 @@ watch(npcList, (newList) => {
 }, { deep: true });
 
 const panelOnLeft = computed(() => {
-  const leftPanels = ['npc', 'org', 'economy', 'chronicles'];
+  const leftPanels = ['quest', 'npc', 'org', 'economy', 'chronicles'];
   return leftPanels.includes(activePanel.value || '');
 });
 
@@ -1084,6 +1167,7 @@ async function loadBehaviorStatsData() {
 
 function selectNPC(npc: SimverseNPC) {
   selectedNPC.value = npc;
+  recordQuestAction("view_npc");
 }
 
 function openPanel(name: string) {
@@ -1105,6 +1189,10 @@ function openPanel(name: string) {
     }
     if (name === "economy") {
       loadEconomyData();
+      recordQuestAction("view_economy");
+    }
+    if (name === "quest") {
+      loadQuestData();
     }
   }
 }
@@ -1119,6 +1207,52 @@ async function loadEconomyData() {
     wealthRankings.value = rankRes.items || [];
   } catch (e) {
     console.warn("Failed to load economy data:", e);
+  }
+}
+
+async function loadQuestData() {
+  try {
+    const res = await fetch("/api/simverse/quest/list");
+    const data = await res.json();
+    questList.value = data.quests || [];
+    questCompletable.value = data.completable || 0;
+  } catch (e) {
+    console.warn("Failed to load quest data:", e);
+  }
+}
+
+async function recordQuestAction(action: string) {
+  try {
+    await fetch("/api/simverse/quest/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    if (activePanel.value === "quest") {
+      loadQuestData();
+    }
+  } catch (e) {
+    console.warn("Failed to record quest action:", e);
+  }
+}
+
+async function claimQuest(questId: string) {
+  try {
+    const res = await fetch("/api/simverse/quest/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quest_id: questId }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      const r = data.reward;
+      if (r.diamond) playerDiamond.value += r.diamond;
+      if (r.gold) playerGold.value += r.gold;
+      if (r.exp) playerExp.value += r.exp;
+      loadQuestData();
+    }
+  } catch (e) {
+    console.warn("Failed to claim quest:", e);
   }
 }
 
@@ -1196,6 +1330,7 @@ function getPanelTitle(panel: string): string {
     chronicles: t("simverse.chronicles"),
     settings: t("simverse.settings"),
     economy: t("simverse.economy"),
+    quest: "任务",
     intervention: t("simverse.intervention"),
     debug: t("simverse.debug"),
   };
@@ -1269,15 +1404,16 @@ function startBattle(enemy: { id: string; name: string; level: number; enemyEmoj
 async function handleExitWorld() {
   try {
     if (isNativePluginMode()) {
+      await showSystemUI();
       await unlockScreenOrientation();
       await closeWorld();
     } else {
-      window.history.back();
+      router.push("/tabs/home");
     }
   } catch (e) {
     console.warn("[SimverseWorld] Exit world failed:", e);
     if (!isNativePluginMode()) {
-      window.history.back();
+      router.push("/tabs/home");
     }
   }
 }
@@ -1300,11 +1436,16 @@ onMounted(async () => {
     lockScreenOrientation("landscape-primary").catch((e) => {
       console.warn("[SimverseWorld] Lock orientation failed:", e);
     });
+    hideSystemUI().catch((e) => {
+      console.warn("[SimverseWorld] Hide system UI failed:", e);
+    });
+  } else {
     try {
-      const { StatusBar } = await import("@capacitor/status-bar");
-      await StatusBar.hide();
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
     } catch (e) {
-      console.warn("[SimverseWorld] Hide status bar failed:", e);
+      console.warn("[SimverseWorld] requestFullscreen failed:", e);
     }
   }
   await init();
@@ -1321,10 +1462,15 @@ onUnmounted(() => {
   cleanup();
   if (isNativePluginMode()) {
     unlockScreenOrientation().catch(() => {});
-    import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
-      StatusBar.show().catch(() => {});
-      StatusBar.setStyle({ style: Style.Default }).catch(() => {});
-    }).catch(() => {});
+    showSystemUI().catch(() => {});
+  } else {
+    try {
+      if (document.exitFullscreen && document.fullscreenElement) {
+        document.exitFullscreen();
+      }
+    } catch (e) {
+      console.warn("[SimverseWorld] exitFullscreen failed:", e);
+    }
   }
 });
 </script>
@@ -1614,6 +1760,7 @@ onUnmounted(() => {
 }
 
 .menu-btn {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1686,6 +1833,45 @@ onUnmounted(() => {
   height: 1px;
   background: rgba(139, 92, 246, 0.2);
   margin: 4px auto;
+}
+
+.setting-section.danger-zone {
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.setting-section.danger-zone .section-title {
+  color: #ef4444;
+  margin-bottom: 12px;
+}
+
+.exit-world-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.exit-world-btn:active {
+  background: rgba(239, 68, 68, 0.2);
+  transform: scale(0.98);
+}
+
+.exit-icon {
+  font-size: 18px;
 }
 
 .stats-bar {
@@ -4310,5 +4496,177 @@ onUnmounted(() => {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.quest-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.quest-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.quest-tab {
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quest-tab.active {
+  background: linear-gradient(135deg, #8b5cf6, #6366f1);
+  color: white;
+}
+
+.quest-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.quest-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s;
+}
+
+.quest-card.completable {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.3);
+  animation: quest-glow 2s ease-in-out infinite;
+}
+
+.quest-card.locked {
+  opacity: 0.5;
+}
+
+.quest-card.claimed {
+  opacity: 0.6;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+@keyframes quest-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(34, 197, 94, 0); }
+  50% { box-shadow: 0 0 12px rgba(34, 197, 94, 0.3); }
+}
+
+.quest-icon {
+  font-size: 28px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.quest-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.quest-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.quest-desc {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
+}
+
+.quest-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.quest-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.quest-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8b5cf6, #06b6d4);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.quest-card.completable .quest-progress-fill {
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+}
+
+.quest-progress-text {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  white-space: nowrap;
+}
+
+.quest-reward {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reward-item {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.quest-claim-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.quest-claim-btn:active {
+  transform: scale(0.95);
+}
+
+.quest-claimed {
+  font-size: 20px;
+  color: #22c55e;
+  flex-shrink: 0;
+  margin: auto 0;
 }
 </style>

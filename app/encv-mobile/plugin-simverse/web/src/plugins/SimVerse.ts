@@ -9,6 +9,8 @@ export interface SimVersePlugin {
   lockOrientation(options: { orientation: "landscape-primary" | "portrait-primary" }): Promise<void>;
   unlockOrientation(): Promise<void>;
   showDiagnostic(): Promise<void>;
+  hideSystemUI(): Promise<void>;
+  showSystemUI(): Promise<void>;
 }
 
 const nativeBridge = (window as any).SimVerseNative as SimVersePlugin | null;
@@ -45,6 +47,26 @@ const webImpl: SimVersePlugin = {
   async showDiagnostic() {
     console.warn("[SimVerse] showDiagnostic: not available in web mode");
   },
+  async hideSystemUI() {
+    console.warn("[SimVerse] hideSystemUI: not available in web mode, trying Fullscreen API");
+    try {
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (e) {
+      console.warn("[SimVerse] requestFullscreen failed:", e);
+    }
+  },
+  async showSystemUI() {
+    console.warn("[SimVerse] showSystemUI: not available in web mode, trying exitFullscreen");
+    try {
+      if (document.exitFullscreen && document.fullscreenElement) {
+        await document.exitFullscreen();
+      }
+    } catch (e) {
+      console.warn("[SimVerse] exitFullscreen failed:", e);
+    }
+  },
 };
 
 function callNative<K extends keyof SimVersePlugin>(
@@ -69,6 +91,14 @@ function callNative<K extends keyof SimVersePlugin>(
         }
         if (method === "showDiagnostic") {
           (nativeBridge as any).showDiagnostic();
+          return Promise.resolve() as any;
+        }
+        if (method === "hideSystemUI") {
+          (nativeBridge as any).hideSystemUI();
+          return Promise.resolve() as any;
+        }
+        if (method === "showSystemUI") {
+          (nativeBridge as any).showSystemUI();
           return Promise.resolve() as any;
         }
         console.warn(`[SimVerse] Method ${method} not available in JS Interface mode`);
@@ -96,6 +126,8 @@ export const SimVerse: SimVersePlugin = {
   lockOrientation: (options) => callNative("lockOrientation", options),
   unlockOrientation: () => callNative("unlockOrientation"),
   showDiagnostic: () => callNative("showDiagnostic"),
+  hideSystemUI: () => callNative("hideSystemUI"),
+  showSystemUI: () => callNative("showSystemUI"),
 };
 
 export function isNativePluginMode(): boolean {
@@ -198,6 +230,26 @@ export async function showDiagnosticPanel(): Promise<{ success: boolean }> {
     return { success: true };
   } catch (e) {
     console.error("[SimVerse] showDiagnostic failed:", e);
+    return { success: false };
+  }
+}
+
+export async function hideSystemUI(): Promise<{ success: boolean }> {
+  try {
+    await SimVerse.hideSystemUI();
+    return { success: true };
+  } catch (e) {
+    console.error("[SimVerse] hideSystemUI failed:", e);
+    return { success: false };
+  }
+}
+
+export async function showSystemUI(): Promise<{ success: boolean }> {
+  try {
+    await SimVerse.showSystemUI();
+    return { success: true };
+  } catch (e) {
+    console.error("[SimVerse] showSystemUI failed:", e);
     return { success: false };
   }
 }

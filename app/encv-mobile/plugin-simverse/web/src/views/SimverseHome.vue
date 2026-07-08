@@ -2,6 +2,11 @@
   <ion-page>
     <ion-header :translucent="true">
       <ion-toolbar>
+        <ion-buttons slot="start">
+          <ion-button @click="exitToMainApp">
+            <ion-icon slot="icon-only" :icon="arrowBackOutline" />
+          </ion-button>
+        </ion-buttons>
         <ion-title>{{ t("simverse.home.title") }}</ion-title>
       </ion-toolbar>
     </ion-header>
@@ -14,11 +19,11 @@
       </div>
 
       <div class="action-cards">
-        <ion-card class="action-card" button @click="goToWorld">
+        <ion-card class="action-card enter-world" button @click="goToWorld">
           <ion-card-content>
             <div class="card-icon">🎮</div>
             <ion-card-title>{{ t("simverse.home.enterWorld") }}</ion-card-title>
-            <ion-card-subtitle>进入物理模拟世界</ion-card-subtitle>
+            <ion-card-subtitle>进入横屏模拟世界</ion-card-subtitle>
           </ion-card-content>
         </ion-card>
 
@@ -51,6 +56,13 @@
           </ion-card-content>
         </ion-card>
       </div>
+
+      <div class="exit-section">
+        <ion-button expand="block" fill="outline" color="medium" @click="exitToMainApp">
+          <ion-icon slot="start" :icon="exitOutline" />
+          返回主应用
+        </ion-button>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -59,6 +71,8 @@
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { closeWorld, isNativePluginMode, unlockScreenOrientation } from "@/plugins/SimVerse";
+import { arrowBack, exit } from "ionicons/icons";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -67,12 +81,28 @@ const fps = ref(60);
 const entityCount = ref(128);
 const worldAge = ref("3h 24m");
 
+const arrowBackOutline = arrowBack;
+const exitOutline = exit;
+
 function goToWorld() {
   router.push("/world");
 }
 
 function goToChronicle() {
   router.push("/chronicle/1");
+}
+
+async function exitToMainApp() {
+  try {
+    if (isNativePluginMode()) {
+      await unlockScreenOrientation();
+      await closeWorld();
+    } else {
+      window.close();
+    }
+  } catch (e) {
+    console.warn("[SimverseHome] Exit failed:", e);
+  }
 }
 </script>
 
@@ -165,6 +195,14 @@ function goToChronicle() {
   font-weight: 700;
   color: var(--ion-color-primary);
   margin-bottom: 4px;
+}
+
+.action-card.enter-world {
+  border: 2px solid rgba(139, 92, 246, 0.3);
+}
+
+.exit-section {
+  padding: 24px 16px 40px;
 }
 
 .stat-label {
