@@ -21,119 +21,126 @@
 
         <div class="top-bar">
           <div class="resource-group">
-            <div class="resource-item">
+            <div class="resource-item" v-tooltip="t('simverse.tick')">
               <span class="resource-icon">⏱️</span>
-              <div class="resource-text">
-                <span class="resource-label">{{ t("simverse.tick") }}</span>
-                <span class="resource-value">{{ worldState?.tick ?? 0 }}</span>
-              </div>
+              <span class="resource-value">{{ worldState?.tick ?? 0 }}</span>
             </div>
-            <div class="resource-item">
+            <div class="resource-item" v-tooltip="t('simverse.population')">
               <span class="resource-icon">👥</span>
-              <div class="resource-text">
-                <span class="resource-label">{{ t("simverse.population") }}</span>
-                <span class="resource-value">{{ worldState?.npc_count ?? 0 }}</span>
-              </div>
+              <span class="resource-value">{{ worldState?.npc_count ?? 0 }}</span>
             </div>
-            <div class="resource-item">
+            <div class="resource-item" v-tooltip="t('simverse.brains')">
               <span class="resource-icon">🧠</span>
-              <div class="resource-text">
-                <span class="resource-label">{{ t("simverse.brains") }}</span>
-                <span class="resource-value">{{ worldState?.brain_count ?? 0 }}</span>
-              </div>
+              <span class="resource-value">{{ worldState?.brain_count ?? 0 }}</span>
             </div>
-            <div class="resource-item">
+            <div class="resource-item" v-tooltip="t('simverse.memory')">
               <span class="resource-icon">💾</span>
-              <div class="resource-text">
-                <span class="resource-label">{{ t("simverse.memory") }}</span>
-                <span class="resource-value">{{ (worldState?.total_mb ?? 0).toFixed(1) }} MB</span>
-              </div>
+              <span class="resource-value">{{ (worldState?.total_mb ?? 0).toFixed(1) }}M</span>
             </div>
           </div>
           <div class="top-actions">
-            <button class="icon-btn play-btn" :class="{ running: worldState?.running }" @click="toggleRunning">
-              {{ worldState?.running ? "⏸" : "▶" }}
+            <button class="game-btn play-btn" :class="{ running: worldState?.running }" @click="toggleRunning">
+              <span class="btn-icon">{{ worldState?.running ? "⏸" : "▶" }}</span>
             </button>
-            <button class="icon-btn" @click="stepOnce">
-              ⏭
+            <button class="game-btn" @click="stepOnce">
+              <span class="btn-icon">⏭</span>
             </button>
-            <button class="icon-btn" @click="refreshState">
-              ↻
+            <button class="game-btn" @click="refreshState">
+              <span class="btn-icon">↻</span>
             </button>
           </div>
         </div>
 
-        <div class="event-panel" v-if="recentEvents.length > 0">
-          <div class="event-header">📜 {{ t("simverse.recentEvents") }}</div>
-          <div class="event-list">
-            <div v-for="ev in recentEvents.slice(0, 5)" :key="ev.id" class="event-item">
-              <span class="event-dot" :class="'imp-' + ev.importance"></span>
-              <span class="event-text">{{ ev.type_cn }}</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="stats-panel">
-          <div class="stat-card">
-            <div class="stat-label">{{ t("simverse.perfTier") }}</div>
-            <div class="stat-value">{{ worldState?.tier || "-" }}</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">{{ t("simverse.focusNPCs") }}</div>
-            <div class="stat-value">{{ worldState?.focus_count ?? 0 }}</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-label">{{ t("simverse.cellCount") }}</div>
-            <div class="stat-value">{{ worldState?.cell_count ?? 0 }}</div>
-          </div>
-        </div>
-
-        <div class="bottom-menu">
-          <button class="menu-item" @click="openPanel('npc')">
-            <div class="menu-icon">👤</div>
-            <div class="menu-label">{{ t("simverse.npc") }}</div>
+        <div class="left-menu">
+          <button class="menu-btn" :class="{ active: activePanel === 'npc' }" @click="openPanel('npc')">
+            <span class="menu-icon">👤</span>
+            <span class="menu-label">{{ t("simverse.npc") }}</span>
           </button>
-          <button class="menu-item" @click="openPanel('org')">
-            <div class="menu-icon">🏰</div>
-            <div class="menu-label">{{ t("simverse.org") }}</div>
+          <button class="menu-btn" :class="{ active: activePanel === 'org' }" @click="openPanel('org')">
+            <span class="menu-icon">🏰</span>
+            <span class="menu-label">{{ t("simverse.org") }}</span>
           </button>
-          <button class="menu-item gacha" @click="openPanel('gacha')">
-            <div class="menu-icon sparkle">✨</div>
-            <div class="menu-label">{{ t("simverse.gacha") }}</div>
+          <button class="menu-btn" :class="{ active: activePanel === 'chronicles' }" @click="openPanel('chronicles')">
+            <span class="menu-icon">📖</span>
+            <span class="menu-label">{{ t("simverse.chronicles") }}</span>
           </button>
-          <button class="menu-item" @click="openPanel('chronicles')">
-            <div class="menu-icon">📖</div>
-            <div class="menu-label">{{ t("simverse.chronicles") }}</div>
+          <button class="menu-btn" :class="{ active: activePanel === 'economy' }" @click="openPanel('economy')">
+            <span class="menu-icon">💰</span>
+            <span class="menu-label">{{ t("simverse.economy") }}</span>
           </button>
-          <button class="menu-item" @click="openPanel('settings')">
-            <div class="menu-icon">⚙️</div>
-            <div class="menu-label">{{ t("simverse.settings") }}</div>
-          </button>
-          <button class="menu-item exit-btn" @click="handleExitWorld">
-            <div class="menu-icon">🚪</div>
-            <div class="menu-label">{{ t("simverse.exitWorld") }}</div>
+          <div class="menu-divider"></div>
+          <button class="menu-btn gacha-btn" @click="openPanel('gacha')">
+            <span class="menu-icon sparkle">✨</span>
+            <span class="menu-label">{{ t("simverse.gacha") }}</span>
           </button>
         </div>
 
-        <div v-if="activePanel" class="side-panel" :class="{ open: !!activePanel }">
+        <div class="right-menu">
+          <button class="menu-btn" :class="{ active: activePanel === 'settings' }" @click="openPanel('settings')">
+            <span class="menu-icon">⚙️</span>
+            <span class="menu-label">{{ t("simverse.settings") }}</span>
+          </button>
+          <button class="menu-btn" @click="openPanel('intervention')">
+            <span class="menu-icon">⚡</span>
+            <span class="menu-label">{{ t("simverse.intervention") }}</span>
+          </button>
+          <button class="menu-btn" @click="openPanel('debug')">
+            <span class="menu-icon">🔧</span>
+            <span class="menu-label">{{ t("simverse.debug") }}</span>
+          </button>
+          <div class="menu-divider"></div>
+          <button class="menu-btn exit-btn" @click="handleExitWorld">
+            <span class="menu-icon">🚪</span>
+            <span class="menu-label">{{ t("simverse.exitWorld") }}</span>
+          </button>
+        </div>
+
+        <div class="stats-bar">
+          <div class="stat-pill">
+            <span class="stat-label">{{ t("simverse.perfTier") }}</span>
+            <span class="stat-value">{{ worldState?.tier || "-" }}</span>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-label">{{ t("simverse.focusNPCs") }}</span>
+            <span class="stat-value">{{ worldState?.focus_count ?? 0 }}</span>
+          </div>
+          <div class="stat-pill">
+            <span class="stat-label">{{ t("simverse.cellCount") }}</span>
+            <span class="stat-value">{{ worldState?.cell_count ?? 0 }}</span>
+          </div>
+        </div>
+
+        <div class="event-ticker" v-if="recentEvents.length > 0">
+          <div class="ticker-icon">📜</div>
+          <div class="ticker-content">
+            <transition-group name="ticker" tag="div" class="ticker-list">
+              <div v-for="ev in recentEvents.slice(0, 3)" :key="ev.id" class="ticker-item">
+                <span class="event-dot" :class="'imp-' + ev.importance"></span>
+                <span class="event-text">{{ ev.type_cn }}</span>
+              </div>
+            </transition-group>
+          </div>
+        </div>
+
+        <div v-if="activePanel" class="side-panel" :class="{ open: !!activePanel, 'panel-left': panelOnLeft }">
           <div class="panel-header">
             <span class="panel-title">{{ getPanelTitle(activePanel) }}</span>
-            <button class="close-btn" @click="activePanel = null">✕</button>
+            <button class="panel-close-btn" @click="activePanel = null">✕</button>
           </div>
           <div class="panel-content">
             <template v-if="activePanel === 'npc'">
-              <div v-for="npc in npcList" :key="npc.id" class="npc-card" @click="selectNPC(npc)">
-                <div class="npc-avatar">{{ npc.name?.[0] || '?' }}</div>
-                <div class="npc-info">
-                  <div class="npc-name">{{ npc.name }}</div>
-                  <div class="npc-meta">
-                    <span class="npc-prof">{{ npc.profession }}</span>
-                    <span class="npc-level">Lv.{{ npc.level }}</span>
+              <div v-for="npc in npcList" :key="npc.id" class="list-card" @click="selectNPC(npc)">
+                <div class="card-avatar">{{ npc.name?.[0] || '?' }}</div>
+                <div class="card-info">
+                  <div class="card-title">{{ npc.name }}</div>
+                  <div class="card-subtitle">
+                    <span class="prof-tag">{{ npc.profession }}</span>
+                    <span class="level-tag">Lv.{{ npc.level }}</span>
                   </div>
                 </div>
-                <div class="npc-status-col">
-                  <div class="hp-bar">
-                    <div class="hp-fill" :style="{ width: (npc.health / npc.max_health * 100) + '%' }"></div>
+                <div class="card-action">
+                  <div class="mini-hp-bar">
+                    <div class="mini-hp-fill" :style="{ width: (npc.health / npc.max_health * 100) + '%' }"></div>
                   </div>
                 </div>
               </div>
@@ -146,10 +153,10 @@
             </template>
 
             <template v-else-if="activePanel === 'chronicles'">
-              <div v-for="ev in recentEvents" :key="ev.id" class="chronicle-item">
+              <div v-for="ev in recentEvents" :key="ev.id" class="chronicle-card">
                 <div class="chronicle-tick">Tick {{ ev.tick }}</div>
                 <div class="chronicle-title">{{ ev.type_cn }}</div>
-                <div class="chronicle-content">{{ ev.imp_cn }} · {{ ev.level_cn }}</div>
+                <div class="chronicle-desc">{{ ev.imp_cn }} · {{ ev.level_cn }}</div>
               </div>
               <div v-if="recentEvents.length === 0" class="empty-state">
                 {{ t("simverse.noData") }}
@@ -157,71 +164,77 @@
             </template>
 
             <template v-else-if="activePanel === 'settings'">
-              <div class="setting-group">
-                <div class="setting-label">{{ t("simverse.performanceTier") }}</div>
-                <div class="tier-buttons">
-                  <button class="tier-btn" :class="{ active: worldConfig?.tier === 'background' }"
+              <div class="setting-section">
+                <div class="section-title">{{ t("simverse.performanceTier") }}</div>
+                <div class="tier-selector">
+                  <button class="tier-option" :class="{ active: worldConfig?.tier === 'background' }"
                           @click="changeTier('background')">
-                    {{ t("simverse.tierBackground") }}
+                    <span class="tier-name">{{ t("simverse.tierBackground") }}</span>
+                    <span class="tier-desc">低功耗</span>
                   </button>
-                  <button class="tier-btn" :class="{ active: worldConfig?.tier === 'foreground' }"
+                  <button class="tier-option" :class="{ active: worldConfig?.tier === 'foreground' }"
                           @click="changeTier('foreground')">
-                    {{ t("simverse.tierForeground") }}
+                    <span class="tier-name">{{ t("simverse.tierForeground") }}</span>
+                    <span class="tier-desc">标准</span>
                   </button>
-                  <button class="tier-btn" :class="{ active: worldConfig?.tier === 'fg_idle' }"
+                  <button class="tier-option" :class="{ active: worldConfig?.tier === 'fg_idle' }"
                           @click="changeTier('fg_idle')">
-                    {{ t("simverse.tierIdle") }}
+                    <span class="tier-name">{{ t("simverse.tierIdle") }}</span>
+                    <span class="tier-desc">高性能</span>
                   </button>
                 </div>
               </div>
-              <div v-if="worldConfig" class="setting-group">
-                <div class="setting-label">{{ t("simverse.configDetails") }}</div>
-                <div class="config-detail">
-                  <span>{{ t("simverse.eventRate") }}</span>
-                  <span>{{ worldConfig.event_rate_mul }}x</span>
-                </div>
-                <div class="config-detail">
-                  <span>{{ t("simverse.cacheSize") }}</span>
-                  <span>{{ worldConfig.cache_size }}</span>
-                </div>
-                <div class="config-detail">
-                  <span>{{ t("simverse.subSim") }}</span>
-                  <span>{{ worldConfig.sub_sim_active ? t("common.on") : t("common.off") }}</span>
-                </div>
-                <div class="config-detail">
-                  <span>{{ t("simverse.subSimDepth") }}</span>
-                  <span>{{ worldConfig.sub_sim_depth }}</span>
+              <div v-if="worldConfig" class="setting-section">
+                <div class="section-title">{{ t("simverse.configDetails") }}</div>
+                <div class="config-list">
+                  <div class="config-row">
+                    <span>{{ t("simverse.eventRate") }}</span>
+                    <span class="config-value">{{ worldConfig.event_rate_mul }}x</span>
+                  </div>
+                  <div class="config-row">
+                    <span>{{ t("simverse.cacheSize") }}</span>
+                    <span class="config-value">{{ worldConfig.cache_size }}</span>
+                  </div>
+                  <div class="config-row">
+                    <span>{{ t("simverse.subSim") }}</span>
+                    <span class="config-value">{{ worldConfig.sub_sim_active ? t("common.on") : t("common.off") }}</span>
+                  </div>
+                  <div class="config-row">
+                    <span>{{ t("simverse.subSimDepth") }}</span>
+                    <span class="config-value">{{ worldConfig.sub_sim_depth }}</span>
+                  </div>
                 </div>
               </div>
             </template>
 
             <template v-else-if="activePanel === 'gacha'">
-              <div class="gacha-section">
-                <div class="gacha-banner">
-                  <div class="banner-title">🎲 {{ t("simverse.gachaTitle") }}</div>
+              <div class="gacha-banner">
+                <div class="banner-icon">🎲</div>
+                <div class="banner-text">
+                  <div class="banner-title">{{ t("simverse.gachaTitle") }}</div>
                   <div class="banner-desc">{{ t("simverse.gachaDesc") }}</div>
                 </div>
-                <div class="gacha-buttons">
-                  <button class="gacha-btn single" @click="doGacha(1)">
-                    <span class="btn-icon">🎴</span>
-                    <span class="btn-text">{{ t("simverse.singlePull") }}</span>
-                    <span class="btn-cost">100 💎</span>
-                  </button>
-                  <button class="gacha-btn ten" @click="doGacha(10)">
-                    <span class="btn-icon">🎴×10</span>
-                    <span class="btn-text">{{ t("simverse.tenPull") }}</span>
-                    <span class="btn-cost">900 💎</span>
-                    <span class="btn-badge">{{ t("simverse.guaranteedRare") }}</span>
-                  </button>
-                </div>
-                <div v-if="gachaResults.length > 0" class="gacha-results">
-                  <div class="results-title">{{ t("simverse.results") }}</div>
-                  <div class="results-grid">
-                    <div v-for="(item, i) in gachaResults" :key="i" class="result-card" :class="item.rarity">
-                      <div class="result-icon">{{ item.icon }}</div>
-                      <div class="result-name">{{ item.name }}</div>
-                      <div class="result-rarity">{{ item.rarity }}</div>
-                    </div>
+              </div>
+              <div class="gacha-actions">
+                <button class="gacha-action-btn single" @click="doGacha(1)">
+                  <span class="action-icon">🎴</span>
+                  <span class="action-name">{{ t("simverse.singlePull") }}</span>
+                  <span class="action-cost">100 💎</span>
+                </button>
+                <button class="gacha-action-btn ten" @click="doGacha(10)">
+                  <span class="action-icon">🎴×10</span>
+                  <span class="action-name">{{ t("simverse.tenPull") }}</span>
+                  <span class="action-cost">900 💎</span>
+                  <span class="action-badge">{{ t("simverse.guaranteedRare") }}</span>
+                </button>
+              </div>
+              <div v-if="gachaResults.length > 0" class="gacha-results">
+                <div class="results-header">{{ t("simverse.results") }}</div>
+                <div class="results-grid">
+                  <div v-for="(item, i) in gachaResults" :key="i" class="result-item" :class="item.rarity">
+                    <div class="result-icon">{{ item.icon }}</div>
+                    <div class="result-name">{{ item.name }}</div>
+                    <div class="result-rarity">{{ item.rarity }}</div>
                   </div>
                 </div>
               </div>
@@ -233,52 +246,54 @@
           </div>
         </div>
 
-        <div v-if="selectedNPC" class="npc-detail-modal" @click.self="selectedNPC = null">
-          <div class="npc-detail-card">
+        <div v-if="selectedNPC" class="detail-modal" @click.self="selectedNPC = null">
+          <div class="detail-card">
             <div class="detail-header">
               <div class="detail-avatar">{{ selectedNPC.name?.[0] }}</div>
               <div class="detail-info">
                 <div class="detail-name">{{ selectedNPC.name }}</div>
-                <div class="detail-subtitle">
+                <div class="detail-meta">
                   {{ selectedNPC.species }} · {{ selectedNPC.gender }} · {{ selectedNPC.age }}岁
                 </div>
               </div>
-              <button class="close-btn" @click="selectedNPC = null">✕</button>
+              <button class="detail-close" @click="selectedNPC = null">✕</button>
             </div>
             <div class="detail-body">
-              <div class="detail-row">
-                <span>{{ t("simverse.profession") }}</span>
-                <span>{{ selectedNPC.profession }}</span>
-              </div>
-              <div class="detail-row">
-                <span>{{ t("simverse.level") }}</span>
-                <span>Lv.{{ selectedNPC.level }}</span>
-              </div>
-              <div class="detail-row">
-                <span>{{ t("simverse.health") }}</span>
-                <span>{{ selectedNPC.health }} / {{ selectedNPC.max_health }}</span>
-              </div>
-              <div class="detail-row">
-                <span>{{ t("simverse.energy") }}</span>
-                <span>{{ selectedNPC.energy }} / {{ selectedNPC.max_energy }}</span>
-              </div>
-              <div class="detail-row">
-                <span>{{ t("simverse.wealthTier") }}</span>
-                <span>{{ selectedNPC.wealth_tier }}</span>
-              </div>
-              <div class="detail-row">
-                <span>{{ t("simverse.socialTier") }}</span>
-                <span>{{ selectedNPC.social_tier }}</span>
-              </div>
-              <div class="detail-row">
-                <span>{{ t("simverse.lifeStage") }}</span>
-                <span>{{ selectedNPC.life_stage }}</span>
-              </div>
-              <div class="detail-row">
-                <span>{{ t("simverse.alive") }}</span>
-                <span :class="{ alive: selectedNPC.is_alive, dead: !selectedNPC.is_alive }">
-                  {{ selectedNPC.is_alive ? t("common.on") : t("common.off") }}
-                </span>
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <span class="item-label">{{ t("simverse.profession") }}</span>
+                  <span class="item-value">{{ selectedNPC.profession }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="item-label">{{ t("simverse.level") }}</span>
+                  <span class="item-value highlight">Lv.{{ selectedNPC.level }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="item-label">{{ t("simverse.health") }}</span>
+                  <span class="item-value success">{{ selectedNPC.health }} / {{ selectedNPC.max_health }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="item-label">{{ t("simverse.energy") }}</span>
+                  <span class="item-value warning">{{ selectedNPC.energy }} / {{ selectedNPC.max_energy }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="item-label">{{ t("simverse.wealthTier") }}</span>
+                  <span class="item-value">{{ selectedNPC.wealth_tier }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="item-label">{{ t("simverse.socialTier") }}</span>
+                  <span class="item-value">{{ selectedNPC.social_tier }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="item-label">{{ t("simverse.lifeStage") }}</span>
+                  <span class="item-value">{{ selectedNPC.life_stage }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="item-label">{{ t("simverse.alive") }}</span>
+                  <span class="item-value" :class="{ alive: selectedNPC.is_alive, dead: !selectedNPC.is_alive }">
+                    {{ selectedNPC.is_alive ? t("common.on") : t("common.off") }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -322,6 +337,11 @@ const gachaResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
 let pollInterval: number | null = null;
 
 const visibleNPCs = computed(() => npcList.value.slice(0, 12));
+
+const panelOnLeft = computed(() => {
+  const leftPanels = ['npc', 'org', 'economy', 'chronicles'];
+  return leftPanels.includes(activePanel.value || '');
+});
 
 const cellTypes = ["forest", "mountain", "water", "plain", "village", "city", "desert"];
 const cellIcons: Record<string, string> = {
@@ -431,6 +451,9 @@ function getPanelTitle(panel: string): string {
     gacha: t("simverse.gacha"),
     chronicles: t("simverse.chronicles"),
     settings: t("simverse.settings"),
+    economy: t("simverse.economy"),
+    intervention: t("simverse.intervention"),
+    debug: t("simverse.debug"),
   };
   return titles[panel] || panel;
 }
@@ -526,11 +549,11 @@ onUnmounted(() => {
 
 <style scoped>
 .world-page {
-  --background: #0f0f23;
+  --background: #0a0a1a;
 }
 
 .world-content {
-  --background: #0f0f23;
+  --background: #0a0a1a;
   --padding-top: 0;
   --padding-bottom: 0;
   --offset-top: 0;
@@ -548,7 +571,10 @@ onUnmounted(() => {
   width: 100%;
   height: 100vh;
   overflow: hidden;
-  background: linear-gradient(180deg, #1a1a3e 0%, #0f0f23 100%);
+  background: 
+    radial-gradient(ellipse at 30% 20%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
+    radial-gradient(ellipse at 70% 80%, rgba(236, 72, 153, 0.1) 0%, transparent 50%),
+    linear-gradient(180deg, #12122a 0%, #0a0a1a 100%);
 }
 
 .world-map {
@@ -557,7 +583,7 @@ onUnmounted(() => {
   left: 0;
   width: 100%;
   height: 100%;
-  padding: 80px 20px 120px;
+  padding: 60px 100px 70px;
 }
 
 .map-grid {
@@ -566,32 +592,32 @@ onUnmounted(() => {
   grid-template-rows: repeat(6, 1fr);
   gap: 4px;
   height: 100%;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
 .map-cell {
-  border-radius: 8px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: 20px;
   transition: all 0.3s;
 }
 
-.map-cell.forest { background: rgba(34, 197, 94, 0.15); }
-.map-cell.mountain { background: rgba(107, 114, 128, 0.2); }
-.map-cell.water { background: rgba(59, 130, 246, 0.15); }
-.map-cell.plain { background: rgba(234, 179, 8, 0.1); }
-.map-cell.village { background: rgba(139, 92, 246, 0.15); }
-.map-cell.city { background: rgba(236, 72, 153, 0.15); }
-.map-cell.desert { background: rgba(249, 115, 22, 0.1); }
+.map-cell.forest { background: rgba(34, 197, 94, 0.12); }
+.map-cell.mountain { background: rgba(107, 114, 128, 0.18); }
+.map-cell.water { background: rgba(59, 130, 246, 0.12); }
+.map-cell.plain { background: rgba(234, 179, 8, 0.08); }
+.map-cell.village { background: rgba(139, 92, 246, 0.12); }
+.map-cell.city { background: rgba(236, 72, 153, 0.12); }
+.map-cell.desert { background: rgba(249, 115, 22, 0.08); }
 
 .map-overlay {
   position: absolute;
-  top: 80px;
-  left: 20px;
-  right: 20px;
-  bottom: 120px;
+  top: 60px;
+  left: 100px;
+  right: 100px;
+  bottom: 70px;
   pointer-events: none;
 }
 
@@ -645,48 +671,38 @@ onUnmounted(() => {
   right: 0;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  padding: 12px 16px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
+  align-items: center;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
   z-index: 10;
 }
 
 .resource-group {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .resource-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
+  gap: 6px;
+  background: rgba(20, 20, 40, 0.8);
+  backdrop-filter: blur(12px);
   padding: 6px 12px;
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-bottom: 3px solid rgba(139, 92, 246, 0.3);
 }
 
 .resource-icon {
   font-size: 14px;
 }
 
-.resource-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-}
-
-.resource-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
 .resource-value {
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   color: #fff;
+  font-variant-numeric: tabular-nums;
 }
 
 .top-actions {
@@ -694,157 +710,100 @@ onUnmounted(() => {
   gap: 6px;
 }
 
-.icon-btn {
-  width: 32px;
-  height: 32px;
+.game-btn {
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(20, 20, 40, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+  border-bottom: 3px solid rgba(139, 92, 246, 0.35);
   color: #fff;
-  font-size: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
 }
 
-.icon-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
+.game-btn:hover {
+  background: rgba(139, 92, 246, 0.2);
+  transform: translateY(-1px);
 }
 
-.icon-btn:active {
-  transform: scale(0.95);
+.game-btn:active {
+  transform: translateY(2px);
+  border-bottom-width: 1px;
 }
 
-.icon-btn.play-btn.running {
-  background: rgba(34, 197, 94, 0.3);
-  border-color: rgba(34, 197, 94, 0.5);
-}
-
-.event-panel {
-  position: absolute;
-  top: 70px;
-  right: 16px;
-  width: 240px;
-  max-height: 160px;
-  background: rgba(20, 20, 50, 0.85);
-  backdrop-filter: blur(10px);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 10px;
-  z-index: 9;
-  overflow: hidden;
-}
-
-.event-header {
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
-  margin-bottom: 6px;
-}
-
-.event-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.event-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.event-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #4dffb8;
-  flex-shrink: 0;
-}
-
-.event-dot.warning { background: #f59e0b; }
-.event-dot.danger { background: #ef4444; }
-
-.event-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stats-panel {
-  position: absolute;
-  bottom: 100px;
-  left: 16px;
-  display: flex;
-  gap: 8px;
-  z-index: 9;
-}
-
-.stat-card {
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  padding: 8px 12px;
-  min-width: 70px;
-}
-
-.stat-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
-  margin-bottom: 2px;
-}
-
-.stat-value {
+.game-btn .btn-icon {
   font-size: 14px;
-  font-weight: 600;
-  color: #fff;
+  line-height: 1;
 }
 
-.bottom-menu {
+.game-btn.play-btn.running {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.4);
+  border-bottom-color: rgba(34, 197, 94, 0.5);
+}
+
+.left-menu,
+.right-menu {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
-  justify-content: space-around;
-  align-items: flex-end;
-  padding: 10px 20px 14px;
-  background: linear-gradient(0deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
+  flex-direction: column;
+  gap: 8px;
   z-index: 10;
+  padding: 10px 8px;
 }
 
-.menu-item {
+.left-menu {
+  left: 10px;
+}
+
+.right-menu {
+  right: 10px;
+}
+
+.menu-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  background: none;
-  border: none;
+  gap: 4px;
+  background: rgba(20, 20, 40, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-bottom: 3px solid rgba(139, 92, 246, 0.3);
+  border-radius: 12px;
   cursor: pointer;
-  padding: 6px 10px;
-  border-radius: 10px;
-  transition: all 0.2s;
+  padding: 10px 8px;
+  min-width: 56px;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.menu-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-2px);
+.menu-btn:hover {
+  background: rgba(139, 92, 246, 0.2);
+  transform: translateY(-1px);
 }
 
-.menu-item:active {
-  transform: translateY(0);
+.menu-btn:active {
+  transform: translateY(2px);
+  border-bottom-width: 1px;
+}
+
+.menu-btn.active {
+  background: rgba(139, 92, 246, 0.3);
+  border-color: rgba(139, 92, 246, 0.6);
+  border-bottom-color: rgba(139, 92, 246, 0.7);
 }
 
 .menu-icon {
-  font-size: 24px;
+  font-size: 22px;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  line-height: 1;
 }
 
 .menu-icon.sparkle {
@@ -868,34 +827,156 @@ onUnmounted(() => {
   font-weight: 500;
 }
 
-.menu-item.gacha .menu-label {
+.menu-btn.gacha-btn .menu-label {
   color: #ffd700;
   font-weight: 600;
 }
 
-.menu-item.exit-btn .menu-label {
+.menu-btn.exit-btn .menu-label {
   color: #ef4444;
-  font-weight: 500;
+}
+
+.menu-divider {
+  width: 40px;
+  height: 1px;
+  background: rgba(139, 92, 246, 0.2);
+  margin: 4px auto;
+}
+
+.stats-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 9;
+}
+
+.stat-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(20, 20, 40, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 16px;
+  padding: 5px 12px;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.stat-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.event-ticker {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(20, 20, 40, 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  border-radius: 20px;
+  padding: 6px 14px;
+  z-index: 9;
+  max-width: 400px;
+}
+
+.ticker-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.ticker-content {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+.ticker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ticker-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ticker-enter-active,
+.ticker-leave-active {
+  transition: all 0.3s ease;
+}
+
+.ticker-enter-from {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.ticker-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+.event-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4ade80;
+  flex-shrink: 0;
+}
+
+.event-dot.warning { background: #f59e0b; }
+.event-dot.danger { background: #ef4444; }
+
+.event-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .side-panel {
   position: absolute;
-  top: 56px;
-  right: 16px;
-  bottom: 90px;
-  width: 280px;
-  background: rgba(20, 20, 50, 0.95);
+  top: 50px;
+  bottom: 60px;
+  width: 300px;
+  background: rgba(15, 15, 35, 0.95);
   backdrop-filter: blur(20px);
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
   z-index: 15;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transform: translateX(320px);
+  right: 80px;
+  transform: translateX(20px);
   opacity: 0;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
+}
+
+.side-panel.panel-left {
+  left: 80px;
+  right: auto;
+  transform: translateX(-20px);
 }
 
 .side-panel.open {
@@ -908,20 +989,21 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.1);
   flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(236, 72, 153, 0.05) 100%);
 }
 
 .panel-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   color: #fff;
 }
 
-.close-btn {
-  width: 26px;
-  height: 26px;
+.panel-close-btn {
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.08);
   border: none;
@@ -934,7 +1016,7 @@ onUnmounted(() => {
   transition: all 0.2s;
 }
 
-.close-btn:hover {
+.panel-close-btn:hover {
   background: rgba(255, 255, 255, 0.15);
   color: #fff;
 }
@@ -942,11 +1024,11 @@ onUnmounted(() => {
 .panel-content {
   flex: 1;
   overflow-y: auto;
-  padding: 10px;
+  padding: 12px;
 }
 
 .panel-content::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
 }
 
 .panel-content::-webkit-scrollbar-track {
@@ -954,80 +1036,98 @@ onUnmounted(() => {
 }
 
 .panel-content::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 2px;
+  background: rgba(139, 92, 246, 0.25);
+  border-radius: 3px;
 }
 
-.npc-card {
+.list-card {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 12px;
+  padding: 12px;
   background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  margin-bottom: 6px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(139, 92, 246, 0.1);
   transition: all 0.2s;
   cursor: pointer;
 }
 
-.npc-card:hover {
-  background: rgba(255, 255, 255, 0.08);
+.list-card:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.25);
   transform: translateX(2px);
 }
 
-.npc-avatar {
-  width: 36px;
-  height: 36px;
+.card-avatar {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: linear-gradient(135deg, #8b5cf6, #ec4899);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-weight: 600;
-  font-size: 14px;
+  font-weight: 700;
+  font-size: 16px;
   flex-shrink: 0;
+  border: 2px solid rgba(255, 255, 255, 0.1);
 }
 
-.npc-info {
+.card-info {
   flex: 1;
   min-width: 0;
 }
 
-.npc-name {
+.card-title {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: #fff;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
-.npc-meta {
+.card-subtitle {
   display: flex;
-  gap: 8px;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  gap: 6px;
+  align-items: center;
 }
 
-.npc-prof { text-transform: capitalize; }
-.npc-level { color: #f59e0b; }
+.prof-tag,
+.level-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-weight: 500;
+}
 
-.npc-status-col {
+.prof-tag {
+  background: rgba(139, 92, 246, 0.2);
+  color: #c4b5fd;
+  text-transform: capitalize;
+}
+
+.level-tag {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.card-action {
   width: 50px;
   flex-shrink: 0;
 }
 
-.hp-bar {
+.mini-hp-bar {
   width: 100%;
-  height: 4px;
+  height: 5px;
   background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
 }
 
-.hp-fill {
+.mini-hp-fill {
   height: 100%;
   background: linear-gradient(90deg, #22c55e, #4ade80);
-  border-radius: 2px;
+  border-radius: 3px;
   transition: width 0.3s;
 }
 
@@ -1038,96 +1138,138 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-.chronicle-item {
-  padding: 10px;
+.chronicle-card {
+  padding: 12px;
   background: rgba(255, 255, 255, 0.04);
-  border-radius: 8px;
-  margin-bottom: 6px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  border-left: 3px solid #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.1);
   border-left: 3px solid #8b5cf6;
 }
 
 .chronicle-tick {
   font-size: 10px;
   color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 2px;
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
 }
 
 .chronicle-title {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
   color: #fff;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
-.chronicle-content {
+.chronicle-desc {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
   line-height: 1.4;
 }
 
-.setting-group {
-  margin-bottom: 16px;
+.setting-section {
+  margin-bottom: 20px;
 }
 
-.setting-label {
+.section-title {
   font-size: 12px;
+  font-weight: 600;
   color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  padding-left: 2px;
+  letter-spacing: 0.3px;
 }
 
-.tier-buttons {
+.tier-selector {
   display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
-.tier-btn {
-  flex: 1;
-  padding: 8px 4px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.tier-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  text-align: left;
 }
 
-.tier-btn.active {
-  background: rgba(139, 92, 246, 0.25);
-  border-color: rgba(139, 92, 246, 0.5);
+.tier-option:hover {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.35);
+}
+
+.tier-option.active {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: rgba(139, 92, 246, 0.6);
   color: #fff;
 }
 
-.tier-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+.tier-name {
+  font-weight: 600;
 }
 
-.config-detail {
+.tier-desc {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.tier-option.active .tier-desc {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.config-list {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  border: 1px solid rgba(139, 92, 246, 0.1);
+  overflow: hidden;
+}
+
+.config-row {
   display: flex;
   justify-content: space-between;
-  padding: 6px 0;
+  padding: 10px 14px;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.05);
 }
 
-.config-detail span:last-child {
-  color: rgba(255, 255, 255, 0.8);
+.config-row:last-child {
+  border-bottom: none;
+}
+
+.config-value {
+  color: rgba(255, 255, 255, 0.9);
   font-weight: 500;
 }
 
-.gacha-section {
+.gacha-banner {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 12px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(236, 72, 153, 0.2));
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  margin-bottom: 14px;
 }
 
-.gacha-banner {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(236, 72, 153, 0.25));
-  border-radius: 10px;
-  padding: 12px;
-  text-align: center;
-  border: 1px solid rgba(139, 92, 246, 0.3);
+.banner-icon {
+  font-size: 36px;
+  flex-shrink: 0;
+}
+
+.banner-text {
+  flex: 1;
+  min-width: 0;
 }
 
 .banner-title {
@@ -1140,97 +1282,107 @@ onUnmounted(() => {
 .banner-desc {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.5);
+  line-height: 1.4;
 }
 
-.gacha-buttons {
+.gacha-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
-.gacha-btn {
+.gacha-action-btn {
   position: relative;
-  padding: 12px;
-  border-radius: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 10px;
-  transition: all 0.2s;
+  gap: 12px;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  border-bottom: 4px solid rgba(0, 0, 0, 0.2);
 }
 
-.gacha-btn.single {
+.gacha-action-btn.single {
   background: linear-gradient(135deg, #3b82f6, #6366f1);
 }
 
-.gacha-btn.ten {
+.gacha-action-btn.ten {
   background: linear-gradient(135deg, #f59e0b, #ef4444);
 }
 
-.gacha-btn:hover {
+.gacha-action-btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.1);
 }
 
-.gacha-btn:active {
-  transform: translateY(0);
+.gacha-action-btn:active {
+  transform: translateY(3px);
+  border-bottom-width: 1px;
 }
 
-.btn-icon { font-size: 20px; }
+.action-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
 
-.btn-text {
+.action-name {
   flex: 1;
   text-align: left;
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   color: #fff;
 }
 
-.btn-cost {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 500;
+.action-cost {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
 }
 
-.btn-badge {
+.action-badge {
   position: absolute;
-  top: -5px;
-  right: 8px;
+  top: -6px;
+  right: 12px;
   background: #ffd700;
   color: #1a1a1a;
   font-size: 9px;
   font-weight: 700;
-  padding: 2px 6px;
+  padding: 2px 8px;
   border-radius: 8px;
 }
 
-.gacha-results { margin-top: 4px; }
+.gacha-results {
+  margin-top: 4px;
+}
 
-.results-title {
+.results-header {
   font-size: 12px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .results-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
 
-.result-card {
+.result-item {
   aspect-ratio: 3 / 4;
-  border-radius: 6px;
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 4px;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.15);
   animation: cardReveal 0.4s ease-out;
+  padding: 6px 4px;
 }
 
 @keyframes cardReveal {
@@ -1238,32 +1390,33 @@ onUnmounted(() => {
   to { opacity: 1; transform: scale(1) rotateY(0); }
 }
 
-.result-icon { font-size: 20px; }
+.result-item .result-icon { font-size: 22px; }
 
-.result-name {
+.result-item .result-name {
   font-size: 8px;
   color: rgba(255, 255, 255, 0.6);
   text-align: center;
+  line-height: 1.2;
 }
 
-.result-rarity {
-  font-size: 8px;
+.result-item .result-rarity {
+  font-size: 9px;
   font-weight: 700;
 }
 
-.result-card.N .result-rarity { color: #9ca3af; }
-.result-card.R .result-rarity { color: #3b82f6; }
-.result-card.SR .result-rarity { color: #8b5cf6; }
-.result-card.SSR .result-rarity { color: #f59e0b; }
-.result-card.UR .result-rarity { color: #ef4444; }
+.result-item.N .result-rarity { color: #9ca3af; }
+.result-item.R .result-rarity { color: #3b82f6; }
+.result-item.SR .result-rarity { color: #a78bfa; }
+.result-item.SSR .result-rarity { color: #fbbf24; }
+.result-item.UR .result-rarity { color: #f87171; }
 
-.npc-detail-modal {
+.detail-modal {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1271,28 +1424,40 @@ onUnmounted(() => {
   backdrop-filter: blur(4px);
 }
 
-.npc-detail-card {
+.detail-card {
   width: 85%;
-  max-width: 320px;
-  background: rgba(20, 20, 50, 0.98);
-  border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  max-width: 360px;
+  background: rgba(15, 15, 35, 0.98);
+  border-radius: 18px;
+  border: 1px solid rgba(139, 92, 246, 0.25);
   overflow: hidden;
+  animation: modalIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .detail-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.2));
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 14px;
+  padding: 18px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.15));
+  border-bottom: 1px solid rgba(139, 92, 246, 0.1);
   position: relative;
 }
 
 .detail-avatar {
-  width: 48px;
-  height: 48px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   background: linear-gradient(135deg, #8b5cf6, #ec4899);
   display: flex;
@@ -1300,8 +1465,9 @@ onUnmounted(() => {
   justify-content: center;
   color: #fff;
   font-weight: 700;
-  font-size: 20px;
+  font-size: 24px;
   flex-shrink: 0;
+  border: 3px solid rgba(255, 255, 255, 0.15);
 }
 
 .detail-info {
@@ -1310,44 +1476,80 @@ onUnmounted(() => {
 }
 
 .detail-name {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 700;
   color: #fff;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
-.detail-subtitle {
+.detail-meta {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);
 }
 
-.detail-header .close-btn {
+.detail-close {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.detail-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 .detail-body {
-  padding: 12px 16px;
+  padding: 16px 18px 18px;
 }
 
-.detail-row {
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 16px;
+}
+
+.detail-item {
   display: flex;
-  justify-content: space-between;
-  padding: 8px 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.item-value {
   font-size: 13px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.detail-row span:first-child {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.detail-row span:last-child {
   color: rgba(255, 255, 255, 0.9);
   font-weight: 500;
 }
 
-.detail-row .alive { color: #22c55e; }
-.detail-row .dead { color: #ef4444; }
+.item-value.highlight {
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+.item-value.success {
+  color: #4ade80;
+}
+
+.item-value.warning {
+  color: #fbbf24;
+}
+
+.item-value.alive { color: #4ade80; }
+.item-value.dead { color: #f87171; }
 </style>
