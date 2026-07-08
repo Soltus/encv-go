@@ -317,11 +317,11 @@ else
 fi
 
 # ============================================================================
-# 步骤 6/6: 构建 preview-gateway 网关
+# 步骤 6/7: 构建 preview-gateway 网关
 # ============================================================================
 GATEWAY_DIR="${REPO_ROOT}/app/preview-gateway"
 
-step "6/6 构建 preview-gateway 网关（Go 版，app/preview-gateway/）"
+step "6/7 构建 preview-gateway 网关（Go 版，app/preview-gateway/）"
 
 if [[ -f "${GATEWAY_DIR}/bin/preview-gateway" ]]; then
   ok "preview-gateway 二进制已构建: bin/preview-gateway"
@@ -339,6 +339,29 @@ else
     err "preview-gateway 构建失败（pm2 启动会失败）"
     FAILED=$((FAILED+1))
   fi
+fi
+
+# ============================================================================
+# 步骤 7/7: TapTap Maker 项目
+# ============================================================================
+MAKER_DIR="${REPO_ROOT}/app/taptap-maker-demo"
+
+step "7/7 TapTap Maker 项目（app/taptap-maker-demo/）"
+
+if [[ -d "${MAKER_DIR}/.git" ]]; then
+  ok "Maker 项目已存在: ${MAKER_DIR}"
+elif [[ -n "${MAKER_GIT_URL:-}" ]]; then
+  log "从 ${MAKER_GIT_URL} 克隆 Maker 项目 ..."
+  mkdir -p "$(dirname "${MAKER_DIR}")"
+  if git clone --depth 1 "${MAKER_GIT_URL}" "${MAKER_DIR}" 2>&1 | tail -3; then
+    ok "Maker 项目克隆完成"
+  else
+    warn "Maker 项目克隆失败（跳过，不影响主构建）"
+    FAILED=$((FAILED+1))
+  fi
+else
+  warn "未设置 MAKER_GIT_URL 环境变量，跳过 Maker 项目克隆"
+  log "  如需克隆，请设置: export MAKER_GIT_URL=https://maker.taptap.cn/git/xxx.git"
 fi
 
 # ============================================================================
@@ -365,7 +388,7 @@ cat <<EOF
 
 仓库：
 EOF
-for d in "${BACKEND_FORK_DIR}" "${FRONTEND_FORK_DIR}" "${MOBILE_DIR}/node_modules/vite" "${FRONTEND_FORK_DIR}/dist/index.html" "${GATEWAY_DIR}/bin/preview-gateway" "${MOBILE_DIR}/plugin-simverse/web/node_modules/vite"; do
+for d in "${BACKEND_FORK_DIR}" "${FRONTEND_FORK_DIR}" "${MOBILE_DIR}/node_modules/vite" "${FRONTEND_FORK_DIR}/dist/index.html" "${GATEWAY_DIR}/bin/preview-gateway" "${MOBILE_DIR}/plugin-simverse/web/node_modules/vite" "${MAKER_DIR}/.git"; do
   if [[ -e "$d" ]]; then
     if [[ -d "$d/.git" ]]; then
       branch=$(cd "$d" && git rev-parse --abbrev-ref HEAD 2>/dev/null)
