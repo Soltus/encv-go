@@ -210,7 +210,7 @@ class SimVerseActivity : BasePluginActivity() {
 
     private fun isPortAlive(port: Int): Boolean {
         return try {
-            val url = URL("http://127.0.0.1:$port/api/health")
+            val url = URL("http://127.0.0.1:$port/health")
             val conn = url.openConnection() as HttpURLConnection
             conn.connectTimeout = 500
             conn.readTimeout = 500
