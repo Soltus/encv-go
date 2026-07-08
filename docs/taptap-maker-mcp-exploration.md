@@ -247,19 +247,77 @@ Maker MCP 会自动记录远程资源映射，支持：
 3. **快速原型验证** - 用 Maker 快速验证游戏玩法原型
 4. **移动端预览** - 利用 Maker 的手机预览能力快速测试横屏 UI
 
-## 八、已知限制
+## 八、常见问题与踩坑
+
+### 8.1 颜色格式错误：attempt to index a number value
+
+**错误信息：**
+```
+[string "urhox-libs/UI/Core/Style"]:268: attempt to index a number value (local 'color')
+stack traceback:
+    [string "urhox-libs/UI/Core/Style"]:268: in field 'Lighten'
+    [string "urhox-libs/UI/Widgets/Button"]:126: in method 'Init'
+```
+
+**根因：**
+`Style.Lighten` / `Style.Darken` 等颜色处理函数只接受 **RGBA table**（`{ r, g, b, a }`），不接受数字格式的颜色（如 `0xFF4fd1c5`）。
+
+`Style.NormalizeColorProps` 函数会自动转换颜色格式，但**只支持字符串和 table**，不支持数字类型：
+
+```lua
+-- ✅ 正确：字符串格式（自动转换）
+backgroundColor = "#4fd1c5"
+backgroundColor = "rgba(255, 0, 0, 0.5)"
+
+-- ✅ 正确：RGBA table 格式
+backgroundColor = { 79, 209, 197, 255 }
+
+-- ❌ 错误：数字格式（不会被自动转换）
+backgroundColor = 0xFF4fd1c5
+```
+
+**修复方案：**
+将所有颜色值改为**十六进制字符串**格式（推荐）或 RGBA table 格式。
+
+**支持的颜色格式：**
+| 格式 | 示例 | 说明 |
+|------|------|------|
+| `#RGB` | `"#f00"` | 短格式红色 |
+| `#RGBA` | `"#f00f"` | 短格式带 alpha |
+| `#RRGGBB` | `"#ff0000"` | 标准 6 位十六进制 |
+| `#RRGGBBAA` | `"#ff000080"` | 8 位带 alpha |
+| `rgb(r,g,b)` | `"rgb(255, 0, 0)"` | CSS rgb 格式 |
+| `rgba(r,g,b,a)` | `"rgba(255,0,0,0.5)"` | CSS rgba 格式 |
+| `{r,g,b}` | `{ 255, 0, 0 }` | RGB table |
+| `{r,g,b,a}` | `{ 255, 0, 0, 128 }` | RGBA table |
+
+### 8.2 手机预览调试
+
+**错误报告入口：**
+手机上运行出错时，TapTap Maker 会自动生成错误报告，包含：
+- 错误时间和版本号
+- 浏览器/User-Agent 信息
+- 完整的 Lua 调用栈
+
+**调试技巧：**
+1. 优先检查 `main.lua` 中 CreateUI 函数的按钮颜色配置
+2. 确认所有颜色属性使用字符串格式
+3. 检查是否有未定义的变量或函数调用
+
+## 九、已知限制
 
 1. **资产生成工具可用性** - 代理工具需要远程 MCP 服务器支持
 2. **构建需要联网** - 远程构建依赖 Maker 云端服务
 3. **Lua 语言** - Maker 使用 Lua 作为脚本语言，与项目的 TypeScript/Vue 栈不同
 4. **UrhoX 引擎** - 基于 UrhoX 引擎，与现有 WebView 架构不同
 
-## 九、后续探索方向
+## 十、后续探索方向
 
 - [x] 实际调用 generate_image 生成游戏资源
+- [x] 在手机上实际预览效果（已验证，修复了颜色格式 bug）
+- [x] 收集 UI 库常见问题与踩坑
 - [ ] 测试 text_to_music 音乐生成
 - [ ] 探索 3D 模型生成能力
-- [ ] 在手机上实际预览效果
 - [ ] 研究资源编辑和版本管理
 - [ ] 测试 batch_generate_images 批量生成
 - [ ] 测试 edit_image 图片编辑功能
