@@ -1,1 +1,0 @@
-import{$ as e,J as t,U as n}from"./index-dbGusM0X.js";import{t as r}from"./SvPagePlaceholder-CNTBGSo-.js";var i=t({__name:`WorldDebugPerf`,setup(t){return(t,i)=>(e(),n(r,{"title-key":`simverse.perfMon`,"icon-name":`laptop`}))}});export{i as default};

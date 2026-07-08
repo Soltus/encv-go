@@ -3,6 +3,10 @@ import { TerrainGenerator, TerrainType, TERRAIN_COLORS } from "./TerrainGenerato
 import { NPCSprite } from "./NPCSprite";
 import { BuildingSprite, BuildingType } from "./BuildingSprite";
 import { phaserEventBus, PHASER_EVENTS } from "./PhaserEventBus";
+import { EventEffectManager, type EventEffectType } from "./EventEffectManager";
+import { TerritoryRenderer, type OrgTerritory } from "./TerritoryRenderer";
+import { MiniMap } from "./MiniMap";
+import { DayNightCycle, type TimeOfDay } from "./DayNightCycle";
 import type { SimverseNPC } from "@/composables/useSimverse";
 
 export class WorldScene extends Phaser.Scene {
@@ -20,6 +24,19 @@ export class WorldScene extends Phaser.Scene {
   private lastPointerY = 0;
   private minZoom = 0.3;
   private maxZoom = 2;
+
+  private eventEffectManager!: EventEffectManager;
+  private territoryRenderer!: TerritoryRenderer;
+  private miniMap!: MiniMap;
+  private dayNightCycle!: DayNightCycle;
+
+  private npcMoveTimer = 0;
+  private npcMoveInterval = 5000;
+
+  private isPinching = false;
+  private initialPinchDistance = 0;
+  private initialZoom = 1;
+  private pinchMidpoint = { x: 0, y: 0 };
 
   constructor() {
     super("WorldScene");
@@ -41,7 +58,84 @@ export class WorldScene extends Phaser.Scene {
     this.setupCamera();
     this.setupInput();
 
+    const worldW = this.mapWidth * this.tileSize;
+    const worldH = this.mapHeight * this.tileSize;
+
+    this.dayNightCycle = new DayNightCycle(this, worldW, worldH);
+    this.dayNightCycle.setCycleDuration(60000);
+
+    this.territoryRenderer = new TerritoryRenderer(
+      this,
+      this.terrainGenerator,
+      this.mapWidth,
+      this.mapHeight,
+      this.tileSize
+    );
+    this.createSampleTerritories();
+
+    this.eventEffectManager = new EventEffectManager(this);
+
+    this.miniMap = new MiniMap(
+      this,
+      this.terrainGenerator,
+      this.mapWidth,
+      this.mapHeight,
+      this.tileSize
+    );
+
+    this.cameras.main.on("camerazoomupdate", () => {
+      this.miniMap.updateViewport();
+    });
+
+    this.cameras.main.on("camerascroll", () => {
+      this.miniMap.updateViewport();
+    });
+
+    this.setupKeyboardShortcuts();
+
     phaserEventBus.emit(PHASER_EVENTS.WORLD_READY);
+
+    this.time.delayedCall(2000, () => {
+      this.spawnSampleEffects();
+    });
+  }
+
+  private createSampleTerritories(): void {
+    const orgColors = [0x8b5cf6, 0xec4899, 0xf59e0b, 0x06b6d4, 0x22c55e];
+    const orgNames = ["紫月王国", "玫瑰联盟", "金阳帝国", "碧海商会", "翠林部落"];
+
+    const settlements = this.terrainGenerator.findSettlementLocations(
+      this.mapWidth,
+      this.mapHeight,
+      5
+    );
+
+    const territories: OrgTerritory[] = settlements.map((s, i) => ({
+      id: `org_${i}`,
+      name: orgNames[i % orgNames.length],
+      color: orgColors[i % orgColors.length],
+      centerX: s.x,
+      centerY: s.y,
+      size: 15 + s.size * 8,
+    }));
+
+    this.territoryRenderer.setTerritories(territories);
+  }
+
+  private spawnSampleEffects(): void {
+    this.buildingSprites.forEach((building, index) => {
+      if (index % 3 === 0) {
+        const types: EventEffectType[] = ["celebration", "fire", "birth", "discovery"];
+        const type = types[index % types.length];
+        this.eventEffectManager.spawnEffect({
+          type,
+          x: building.x,
+          y: building.y,
+          duration: 8000,
+          intensity: 0.8,
+        });
+      }
+    });
   }
 
   private createTerrainTexture(): void {
@@ -153,6 +247,10 @@ export class WorldScene extends Phaser.Scene {
 
   private setupInput(): void {
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (this.checkPinchStart()) {
+        return;
+      }
+
       if (pointer.button === 1 || pointer.button === 2) {
         this.isDragging = true;
         this.lastPointerX = pointer.x;
@@ -162,6 +260,11 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
+      if (this.isPinching && !this.hasTwoActivePointers()) {
+        this.isPinching = false;
+        return;
+      }
+
       if (this.isDragging && pointer.button !== 0) {
         this.isDragging = false;
         this.game.canvas.style.cursor = "default";
@@ -169,6 +272,11 @@ export class WorldScene extends Phaser.Scene {
     });
 
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      if (this.isPinching) {
+        this.updatePinch();
+        return;
+      }
+
       if (this.isDragging) {
         const dx = pointer.x - this.lastPointerX;
         const dy = pointer.y - this.lastPointerY;
@@ -193,13 +301,97 @@ export class WorldScene extends Phaser.Scene {
       this.cameras.main.zoom = newZoom;
       this.cameras.main.centerOn(worldPoint.x, worldPoint.y);
     });
+  }
 
+  private checkPinchStart(): boolean {
+    const p1 = this.input.pointer1;
+    const p2 = this.input.pointer2;
+
+    if (p1 && p2 && p1.active && p2.active) {
+      this.startPinch(p1, p2);
+      return true;
+    }
+    return false;
+  }
+
+  private hasTwoActivePointers(): boolean {
+    const p1 = this.input.pointer1;
+    const p2 = this.input.pointer2;
+    return !!(p1 && p2 && p1.active && p2.active);
+  }
+
+  private startPinch(p1: Phaser.Input.Pointer, p2: Phaser.Input.Pointer): void {
+    this.isPinching = true;
+    this.isDragging = false;
+
+    this.initialPinchDistance = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+    this.initialZoom = this.cameras.main.zoom;
+    this.pinchMidpoint = {
+      x: (p1.x + p2.x) / 2,
+      y: (p1.y + p2.y) / 2,
+    };
+  }
+
+  private updatePinch(): void {
+    const p1 = this.input.pointer1;
+    const p2 = this.input.pointer2;
+
+    if (!p1 || !p2 || !p1.active || !p2.active) {
+      this.isPinching = false;
+      return;
+    }
+
+    const currentDistance = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+    if (this.initialPinchDistance === 0) return;
+
+    const zoomRatio = currentDistance / this.initialPinchDistance;
+    const newZoom = Phaser.Math.Clamp(
+      this.initialZoom * zoomRatio,
+      this.minZoom,
+      this.maxZoom
+    );
+
+    const worldPoint = this.cameras.main.getWorldPoint(this.pinchMidpoint.x, this.pinchMidpoint.y);
+    this.cameras.main.zoom = newZoom;
+    this.cameras.main.centerOn(worldPoint.x, worldPoint.y);
+  }
+
+  private setupKeyboardShortcuts(): void {
     this.input.keyboard?.on("keydown-SPACE", () => {
       this.cameras.main.centerOn(
         (this.mapWidth * this.tileSize) / 2,
         (this.mapHeight * this.tileSize) / 2
       );
       this.cameras.main.setZoom(0.5);
+    });
+
+    this.input.keyboard?.on("keydown-M", () => {
+      this.miniMap.toggle();
+    });
+
+    this.input.keyboard?.on("keydown-N", () => {
+      this.dayNightCycle.toggle();
+    });
+
+    this.input.keyboard?.on("keydown-T", () => {
+      const isVisible = this.territoryRenderer.isVisible();
+      this.territoryRenderer.setVisible(!isVisible);
+    });
+
+    this.input.keyboard?.on("keydown-ONE", () => {
+      this.dayNightCycle.setTimeOfDay("dawn");
+    });
+
+    this.input.keyboard?.on("keydown-TWO", () => {
+      this.dayNightCycle.setTimeOfDay("day");
+    });
+
+    this.input.keyboard?.on("keydown-THREE", () => {
+      this.dayNightCycle.setTimeOfDay("dusk");
+    });
+
+    this.input.keyboard?.on("keydown-FOUR", () => {
+      this.dayNightCycle.setTimeOfDay("night");
     });
   }
 
@@ -245,6 +437,8 @@ export class WorldScene extends Phaser.Scene {
 
     this.npcSprites.length = displayNPCs.length;
     this.updateNPCLOD();
+    this.miniMap.updateNPCs(this.npcSprites);
+    this.miniMap.updateBuildings(this.buildingSprites);
   }
 
   private updateNPCLOD(): void {
@@ -259,8 +453,38 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
+  private updateNPCMovements(delta: number): void {
+    this.npcMoveTimer += delta;
+
+    if (this.npcMoveTimer >= this.npcMoveInterval) {
+      this.npcMoveTimer = 0;
+
+      const worldW = this.mapWidth * this.tileSize;
+      const worldH = this.mapHeight * this.tileSize;
+
+      this.npcSprites.forEach((sprite) => {
+        if (!sprite.visible || !sprite.active || sprite.isMoving()) return;
+        if (Math.random() > 0.3) return;
+
+        const moveRange = 100;
+        let newX = sprite.x + (Math.random() - 0.5) * moveRange * 2;
+        let newY = sprite.y + (Math.random() - 0.5) * moveRange * 2;
+
+        newX = Phaser.Math.Clamp(newX, 50, worldW - 50);
+        newY = Phaser.Math.Clamp(newY, 50, worldH - 50);
+
+        sprite.moveNPCTo(newX, newY, 4000);
+      });
+    }
+  }
+
   update(time: number, delta: number): void {
     super.update(time, delta);
+
+    this.dayNightCycle.update(delta);
+    this.eventEffectManager.update(delta);
+    this.updateNPCMovements(delta);
+    this.miniMap.updateViewport();
   }
 
   getZoom(): number {
@@ -277,5 +501,39 @@ export class WorldScene extends Phaser.Scene {
       this.cameras.main.centerOn(sprite.x, sprite.y);
       this.cameras.main.setZoom(1.2);
     }
+  }
+
+  getDayNightCycle(): DayNightCycle {
+    return this.dayNightCycle;
+  }
+
+  getTimeOfDay(): TimeOfDay {
+    return this.dayNightCycle.getTimeOfDay();
+  }
+
+  setDayNightEnabled(enabled: boolean): void {
+    this.dayNightCycle.setEnabled(enabled);
+  }
+
+  toggleMiniMap(): boolean {
+    return this.miniMap.toggle();
+  }
+
+  setMiniMapVisible(visible: boolean): void {
+    this.miniMap.setVisible(visible);
+  }
+
+  setTerritoriesVisible(visible: boolean): void {
+    this.territoryRenderer.setVisible(visible);
+  }
+
+  spawnEffect(type: EventEffectType, x: number, y: number, duration = 5000, intensity = 1): string {
+    return this.eventEffectManager.spawnEffect({
+      type,
+      x,
+      y,
+      duration,
+      intensity,
+    });
   }
 }
