@@ -1,0 +1,266 @@
+# TapTap Maker MCP 探索报告
+
+> 探索日期：2026-07-09
+> 探索目标：了解 TapTap Maker 本地开发模式的 MCP 工具能力，包括美术资产生成、手机预览等功能
+
+## 一、概述
+
+TapTap Maker 是 TapTap 推出的本地游戏开发平台，通过 MCP（Model Context Protocol）协议与 AI 客户端集成，提供游戏开发全流程的工具支持。
+
+### 核心能力
+
+| 能力类别 | 工具名称 | 说明 |
+|---------|---------|------|
+| **项目状态** | `maker_status_lite` | 检查本地 Maker 项目状态 |
+| **构建/预览** | `maker_build_current_directory` | 提交代码 + 远程构建 + 手机预览 |
+| **图片生成** | `generate_image` | 单张游戏美术资产生成 |
+| **批量图片** | `batch_generate_images` | 批量生成游戏美术资源 |
+| **图片编辑** | `edit_image` | 编辑现有项目图片 |
+| **视频生成** | `create_video_task` | 创建视频生成任务 |
+| **视频查询** | `query_video_task` | 查询视频任务状态 |
+| **音乐生成** | `text_to_music` | 游戏音乐/音效生成 |
+| **3D模型生成** | `create_3d_model_task` | 3D 模型资产生成 |
+| **3D模型查询** | `query_3d_model_task` | 查询 3D 模型任务状态 |
+
+## 二、环境配置
+
+### 2.1 安装 Maker MCP
+
+```bash
+npx -y @taptap/maker install --ide codex,cursor,claude
+```
+
+### 2.2 初始化项目
+
+```bash
+# 交互式初始化（选择已有项目或创建新项目）
+npx -y @taptap/maker init
+
+# 直接创建新项目
+npx -y @taptap/maker init --create --name "项目名称"
+```
+
+### 2.3 授权登录
+
+- CLI 会自动打开浏览器授权页面
+- 点击「确认登录」完成授权
+- 授权成功后自动获取项目列表
+
+### 2.4 项目结构
+
+```
+项目根/
+├── .maker-mcp/              # Maker MCP 配置
+│   └── config.json          # 项目绑定信息
+├── scripts/                 # 游戏脚本（Lua）
+│   └── main.lua             # 入口脚本
+├── assets/                  # 游戏资源
+│   ├── image/               # 图片资源
+│   ├── video/               # 视频资源
+│   ├── audio/               # 音频资源
+│   └── model/               # 3D 模型资源
+├── urhox-libs/              # 引擎工具库（只读参考）
+├── templates/               # 项目脚手架模板
+├── examples/                # 示例代码
+└── engine-docs/             # 引擎 API 文档
+```
+
+## 三、构建与手机预览
+
+### 3.1 构建流程
+
+`maker_build_current_directory` 工具执行以下操作：
+
+1. **检查远程同步状态** - 确保本地 main 分支与远程同步
+2. **提交本地变更** - 自动 commit + push
+3. **触发远程构建** - 在 Maker 云端构建游戏
+4. **刷新预览** - 更新预览版本
+5. **启动日志监听** - 本地 CLI watcher 持续拉取运行日志
+
+### 3.2 构建参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `target_dir` | string | 项目目录（可选，默认 MCP cwd） |
+| `entry` | string | 入口 Lua 文件，如 "main.lua" |
+| `scriptsPath` | string | 脚本目录，如 "scripts" |
+| `message` | string | 提交信息 |
+| `files` | string[] | 指定提交的文件（默认全部） |
+| `confirm_remote_build_without_submit` | boolean | 仅构建远程版本，不提交本地更改 |
+| `timeout_ms` | number | 构建超时时间（默认 10 分钟） |
+
+### 3.3 构建结果
+
+成功返回包含：
+
+```
+- maker_url: 预览页面 URL
+- preview_refresh_url: 预览刷新 API
+- runtime_logs: 运行时日志配置
+  - local_file: 本地日志文件路径
+  - watch_command: 日志监听命令
+- remote_result: 远程构建结果详情
+```
+
+### 3.4 手机预览
+
+构建成功后，通过以下方式在手机上预览：
+
+1. 在手机上打开 TapTap Maker App
+2. 进入对应项目
+3. 点击「预览」按钮
+4. 扫码或直接在 App 内打开
+
+## 四、美术资产生成
+
+### 4.1 图片生成 (generate_image)
+
+用于生成单张游戏美术资源。生成的图片自动保存到 `assets/image/` 目录。
+
+**输出格式**：PNG
+
+#### 参数说明
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `prompt` | string | ✅ | 图片描述（中文，建议简短） |
+| `name` | string | ✅ | 文件名（不含扩展名） |
+| `target_size` | string | ✅ | 最终尺寸，如 "256x256"、"512x512" |
+| `aspect_ratio` | string | ❌ | 宽高比，默认 "1:1" |
+| `transparent` | boolean | ❌ | 是否透明背景 |
+| `reference_images` | string[] | ❌ | 参考图片列表（路径或 data URL） |
+| `seed` | number | ❌ | 随机种子，用于复现结果 |
+| `thinking_level` | string | ❌ | "minimal" 或 "high" |
+| `resolution` | string | ❌ | "0.5K" / "1K" / "2K" / "4K"，默认 "1K" |
+| `model` | string | ❌ | "nanobanana" 或 "gpt"（不建议手动设置） |
+
+#### 宽高比与生成尺寸
+
+| 比例 | AI 生成尺寸 | 用途 |
+|------|------------|------|
+| 1:1 | 1024×1024 | 图标、头像、方形资源（默认） |
+| 2:3 | 832×1248 | 竖版海报、角色立绘 |
+| 3:2 | 1248×832 | 横版场景、风景图 |
+| 16:9 | 1344×768 | 宽屏、游戏场景、视频封面 |
+| 9:16 | 768×1344 | 全屏竖版、短视频封面 |
+
+#### 常见游戏资源尺寸
+
+- 图标：64x64 / 128x128 / 256x256
+- UI 元素：256x256 / 512x512
+- 角色精灵：256x512 / 512x1024
+- 纹理贴图：512x512 / 1024x1024
+
+#### 测试结果
+
+**测试用例**：像素风格骑士角色
+- prompt: "可爱的像素风格游戏角色，中世纪骑士，正面视角，头盔和盾牌"
+- size: 256x256, 1:1, 透明背景
+- 耗时：约 30-60 秒
+- 输出：`assets/image/knight-pixel_20260708163212.png`
+
+生成结果：可爱的 Q 版像素骑士，带有狮鹫盾牌和红色披风，透明背景，符合游戏美术风格。
+
+### 4.2 批量图片生成 (batch_generate_images)
+
+批量生成多张游戏美术资源，适用于需要一组风格统一的资源时。
+
+### 4.3 图片编辑 (edit_image)
+
+基于现有图片进行修改，支持：
+- 本地项目图片路径（`assets/image/` 下）
+- 远程 CDN URL
+- Data URL
+
+### 4.4 视频生成
+
+- `create_video_task` - 创建视频生成任务
+- `query_video_task` - 轮询任务状态
+- 视频保存到 `assets/video/` 目录（MP4 格式）
+
+### 4.5 音乐生成 (text_to_music)
+
+生成游戏背景音乐或音效，保存到 `assets/audio/` 目录（MP3/WAV 格式）。
+
+### 4.6 3D 模型生成
+
+- `create_3d_model_task` - 创建 3D 模型生成任务
+- `query_3d_model_task` - 轮询任务状态
+- 支持 `rig=true` 为两足人形角色添加骨骼和动画
+- 输出格式：GLB/FBX + MDL
+- 自动提取到 `assets/Meshes`、`assets/Materials`、`assets/Textures`、`assets/Prefabs`
+
+## 五、资源管理规范
+
+### 5.1 目录结构
+
+```
+assets/
+├── image/        # 图片资源（generate_image 等输出）
+├── video/        # 视频资源
+├── audio/        # 音频资源
+└── model/        # 3D 模型原始文件
+```
+
+### 5.2 资源引用
+
+Maker MCP 会自动记录远程资源映射，支持：
+- 后续编辑同一资源
+- 保持版本追踪
+- 本地文件与远程 CDN 对应
+
+## 六、开发工作流
+
+### 6.1 标准开发流程
+
+```
+1. 编写游戏脚本 (scripts/main.lua)
+2. 生成美术资源 (generate_image / text_to_music)
+3. 本地验证 Lua 语法 (maker-lua-lsp)
+4. 构建并预览 (maker_build_current_directory)
+5. 查看运行日志 (taptap-maker logs watch)
+6. 迭代优化
+```
+
+### 6.2 Git 工作流
+
+**重要**：Maker 项目使用特殊的 Git 工作流：
+- 不要手动创建 feature 分支
+- 不要手动 PR/MR
+- 使用 `maker_build_current_directory` 统一处理提交/推送/构建
+- 构建工具会自动检查远程同步状态
+
+## 七、与现有项目的结合点
+
+### 7.1 SimVerse 游戏化 UI 参考
+
+从 Maker 的 UI 设计模式中借鉴：
+- 游戏化按钮样式（底部边框 + 按下塌陷）
+- Flexbox 布局系统（Yoga）
+- 多级圆角规范
+- 毛玻璃背景效果
+
+### 7.2 潜在应用场景
+
+1. **SimVerse 美术资源** - 使用 generate_image 生成 NPC 头像、场景背景
+2. **游戏音效** - 使用 text_to_music 生成背景音乐和音效
+3. **快速原型验证** - 用 Maker 快速验证游戏玩法原型
+4. **移动端预览** - 利用 Maker 的手机预览能力快速测试横屏 UI
+
+## 八、已知限制
+
+1. **资产生成工具可用性** - 代理工具需要远程 MCP 服务器支持
+2. **构建需要联网** - 远程构建依赖 Maker 云端服务
+3. **Lua 语言** - Maker 使用 Lua 作为脚本语言，与项目的 TypeScript/Vue 栈不同
+4. **UrhoX 引擎** - 基于 UrhoX 引擎，与现有 WebView 架构不同
+
+## 九、后续探索方向
+
+- [x] 实际调用 generate_image 生成游戏资源
+- [ ] 测试 text_to_music 音乐生成
+- [ ] 探索 3D 模型生成能力
+- [ ] 在手机上实际预览效果
+- [ ] 研究资源编辑和版本管理
+- [ ] 测试 batch_generate_images 批量生成
+- [ ] 测试 edit_image 图片编辑功能
+- [ ] 研究多参考图风格控制
