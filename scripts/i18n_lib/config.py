@@ -44,6 +44,14 @@ def _discover_apps() -> dict:
             web_dir = child / "web"
             if web_dir.exists() and web_dir.is_dir():
                 candidate_dirs.append(web_dir)
+            # 遍历子目录中的 plugin-* 目录（插件 webview 前端）
+            for sub in child.iterdir():
+                if not sub.is_dir():
+                    continue
+                if sub.name.startswith("plugin-"):
+                    sub_web = sub / "web"
+                    if sub_web.exists() and sub_web.is_dir():
+                        candidate_dirs.append(sub_web)
 
     for proj_dir in candidate_dirs:
         i18n_dir = proj_dir / "src" / "i18n"
@@ -86,8 +94,8 @@ def _discover_apps() -> dict:
             kotlin_dirs.append(rel)
 
         app_name = proj_dir.name
-        if proj_dir.parent.name == "web" and proj_dir.parent.parent.name in {"plugin-openlist"}:
-            app_name = proj_dir.parent.parent.name
+        if proj_dir.name == "web" and proj_dir.parent.name.startswith("plugin-"):
+            app_name = proj_dir.parent.name
 
         existing = discovered.get(app_name, {})
         discovered[app_name] = {
