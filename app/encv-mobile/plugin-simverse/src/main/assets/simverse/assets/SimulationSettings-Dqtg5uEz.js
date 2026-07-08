@@ -1,1 +1,0 @@
-import{$ as e,J as t,U as n}from"./index-D_SQfJMd.js";import{t as r}from"./SvPagePlaceholder-DZwJvZJd.js";var i=t({__name:`SimulationSettings`,setup(t){return(t,i)=>(e(),n(r,{"title-key":`simverse.simulationSettings`,"icon-name":`settings`}))}});export{i as default};

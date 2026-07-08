@@ -1,0 +1,1 @@
+import{$ as e,J as t,U as n}from"./index-dbGusM0X.js";import{t as r}from"./SvPagePlaceholder-CNTBGSo-.js";var i=t({__name:`PerformanceSettings`,setup(t){return(t,i)=>(e(),n(r,{"title-key":`simverse.performanceSettings`,"icon-name":`construct`}))}});export{i as default};

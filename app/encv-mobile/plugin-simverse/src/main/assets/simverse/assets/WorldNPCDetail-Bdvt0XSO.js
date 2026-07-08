@@ -1,1 +1,0 @@
-import{$ as e,J as t,U as n}from"./index-D_SQfJMd.js";import{t as r}from"./SvPagePlaceholder-DZwJvZJd.js";var i=t({__name:`WorldNPCDetail`,setup(t){return(t,i)=>(e(),n(r,{"title-key":`simverse.npcDetail`,"icon-name":`person`}))}});export{i as default};

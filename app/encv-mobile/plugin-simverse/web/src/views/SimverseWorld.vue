@@ -3,19 +3,28 @@
     <ion-content :fullscreen="true" class="world-content">
       <div class="game-container">
         <div class="world-map">
-          <div class="map-grid">
-            <div v-for="i in 48" :key="i" class="map-cell" :class="getCellClass(i)">
-              <div class="cell-icon">{{ getCellIcon(i) }}</div>
+          <div ref="phaserContainerRef" class="phaser-container"></div>
+
+          <template v-if="!usePhaser || phaserHasError">
+            <div class="map-grid">
+              <div v-for="i in 48" :key="i" class="map-cell" :class="getCellClass(i)">
+                <div class="cell-icon">{{ getCellIcon(i) }}</div>
+              </div>
             </div>
-          </div>
-          <div class="map-overlay">
-            <div v-for="(npc, idx) in visibleNPCs" :key="npc.id"
-                 class="npc-marker"
-                 :style="getNPCPosition(idx)"
-                 @click="selectNPC(npc)">
-              <div class="npc-dot" :class="{ alive: npc.is_alive }"></div>
-              <div class="npc-name">{{ npc.name }}</div>
+            <div class="map-overlay">
+              <div v-for="(npc, idx) in visibleNPCs" :key="npc.id"
+                   class="npc-marker"
+                   :style="getNPCPosition(idx)"
+                   @click="selectNPC(npc)">
+                <div class="npc-dot" :class="{ alive: npc.is_alive }"></div>
+                <div class="npc-name">{{ npc.name }}</div>
+              </div>
             </div>
+          </template>
+
+          <div v-if="phaserLoading && usePhaser && !phaserHasError" class="phaser-loading">
+            <div class="loading-spinner"></div>
+            <span class="loading-text">加载世界中...</span>
           </div>
         </div>
 
@@ -307,6 +316,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useSimverse, type SimverseNPC, type SimverseChronicleEvent } from "@/composables/useSimverse";
+import { usePhaserWorld } from "@/composables/usePhaserWorld";
 import { IonInfiniteScroll, IonInfiniteScrollContent } from "@ionic/vue";
 import { lockScreenOrientation, unlockScreenOrientation, closeWorld, isNativePluginMode } from "@/plugins/SimVerse";
 
@@ -337,6 +347,65 @@ const gachaResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
 let pollInterval: number | null = null;
 
 const visibleNPCs = computed(() => npcList.value.slice(0, 12));
+
+const phaserContainerRef = ref<HTMLElement | null>(null);
+const usePhaser = ref(true);
+const phaserLoading = ref(true);
+const phaserHasError = ref(false);
+
+const phaserWorld = usePhaserWorld();
+
+phaserWorld.onNPCClick((npc) => {
+  selectedNPC.value = npc;
+});
+
+async function initPhaser() {
+  if (!usePhaser.value || !phaserContainerRef.value) return;
+
+  try {
+    phaserLoading.value = true;
+    phaserHasError.value = false;
+
+    phaserWorld.setGameContainer(phaserContainerRef.value);
+    const success = await phaserWorld.initPhaser(12345);
+
+    if (success) {
+      const checkReady = setInterval(() => {
+        if (phaserWorld.isReady.value) {
+          clearInterval(checkReady);
+          phaserLoading.value = false;
+          if (npcList.value.length > 0) {
+            phaserWorld.setNPCs(npcList.value);
+          }
+        }
+      }, 100);
+
+      setTimeout(() => {
+        clearInterval(checkReady);
+        if (!phaserWorld.isReady.value) {
+          console.warn("[SimverseWorld] Phaser init timeout, fallback to DOM mode");
+          phaserHasError.value = true;
+          phaserLoading.value = false;
+        }
+      }, 10000);
+    } else {
+      phaserHasError.value = true;
+      phaserLoading.value = false;
+      usePhaser.value = false;
+    }
+  } catch (e) {
+    console.warn("[SimverseWorld] Phaser init failed, fallback to DOM mode:", e);
+    phaserHasError.value = true;
+    phaserLoading.value = false;
+    usePhaser.value = false;
+  }
+}
+
+watch(npcList, (newList) => {
+  if (usePhaser.value && phaserWorld.isReady.value) {
+    phaserWorld.setNPCs(newList);
+  }
+}, { deep: true });
 
 const panelOnLeft = computed(() => {
   const leftPanels = ['npc', 'org', 'economy', 'chronicles'];
@@ -536,6 +605,9 @@ onMounted(async () => {
   await refreshState();
   await loadNPCs();
   startPolling();
+
+  await nextTick();
+  initPhaser();
 });
 
 onUnmounted(() => {
@@ -584,6 +656,53 @@ onUnmounted(() => {
   width: 100%;
   height: 100%;
   padding: 60px 100px 70px;
+}
+
+.phaser-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.phaser-container :deep(canvas) {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.phaser-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(10, 10, 26, 0.9);
+  z-index: 5;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(139, 92, 246, 0.2);
+  border-top-color: #8b5cf6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .map-grid {

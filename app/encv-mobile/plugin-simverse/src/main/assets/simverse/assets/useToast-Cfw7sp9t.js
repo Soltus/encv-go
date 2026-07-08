@@ -1,1 +1,0 @@
-import{T as e}from"./index-D_SQfJMd.js";import{d as t}from"./icons-Cs_CcNCh.js";async function n(n){let{message:r,duration:i=2400,color:a=`primary`}=n;await(await e.create({message:r,duration:i,position:`top`,cssClass:`encv-toast encv-toast--${a}`,buttons:[{icon:t,side:`end`,role:`cancel`}]})).present()}export{n as t};
