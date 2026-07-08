@@ -205,6 +205,41 @@ UI.Stepper {
 | `flexWrap` | 换行 | `"wrap"` / `"nowrap"` |
 | `display` | 显示 | `"flex"` / `"none"` |
 
+### 3.4 组件查找与动态更新
+
+#### 查找组件
+
+```lua
+-- 按 id 递归查找（推荐）
+local widget = root:FindById("myButton")
+```
+
+#### 常用更新方法
+
+```lua
+-- Label
+label:SetText("新文本")
+
+-- ProgressBar
+progress:SetValue(0.75)  -- 0-1
+
+-- Slider
+slider:SetValue(50)
+
+-- Toggle
+toggle:SetValue(true)
+
+-- 通用：设置单个属性
+widget:SetProp("backgroundColor", "#ff0000")
+
+-- 通用：设置多个样式
+widget:SetStyle({
+    width = 200,
+    height = 100,
+    backgroundColor = "#1e293b",
+})
+```
+
 ## 四、构建与手机预览
 
 ### 4.1 构建流程
@@ -444,6 +479,59 @@ backgroundColor = 0xFF4fd1c5
 2. 确认所有颜色属性使用字符串格式
 3. 检查是否有未定义的变量或函数调用
 
+### 9.3 组件查找 API 错误：FindChild 不存在
+
+**错误信息：**
+```
+attempt to call a nil value (method 'FindChild')
+```
+
+**根因：**
+UI 组件的查找方法是 `FindById`，不是 `FindChild`。
+
+**正确 API：**
+```lua
+-- ✅ 正确：按 id 递归查找子组件
+local label = uiRoot_:FindById("popLabel")
+
+-- ❌ 错误：FindChild 方法不存在
+local label = uiRoot_:FindChild("popLabel")
+```
+
+### 9.4 属性更新 API：不要直接赋值 .text / .value
+
+**错误模式：**
+```lua
+-- ❌ 错误：直接赋值可能不会触发布局更新
+label.text = "新文本"
+progress.value = 0.5
+```
+
+**正确 API 对照表：**
+
+| 组件 | 操作 | 正确写法 |
+|------|------|---------|
+| **Label** | 设置文本 | `label:SetText("新文本")` |
+| **ProgressBar** | 设置进度 | `progress:SetValue(0.75)` |
+| **Slider** | 设置值 | `slider:SetValue(50)` |
+| **Toggle** | 设置开关 | `toggle:SetValue(true)` |
+| **通用** | 设置任意属性 | `widget:SetProp("key", value)` |
+| **通用** | 设置多个样式 | `widget:SetStyle({ key1 = val1, key2 = val2 })` |
+
+**说明：** 虽然直接赋值 `widget.props.text = "xxx"` 可能也能工作，但推荐使用官方的 `SetXXX` 方法，因为它们会正确触发布局更新和过渡动画。
+
+### 9.5 Web 端预览 vs 手机端预览
+
+| 环境 | 状态 | 说明 |
+|------|------|------|
+| **手机 App 预览** | ✅ 正常 | 真机环境，完整功能 |
+| **Web 浏览器预览** | ⚠️ 可能卡住 | 可能缺少某些原生能力，UrhoX 引擎加载可能失败 |
+
+**建议：**
+- 优先使用手机 App 预览测试
+- Web 端仅用于快速查看布局，不作为功能验证标准
+- 错误报告以手机端为准
+
 ## 十、已知限制
 
 1. **资产生成工具可用性** - 代理工具需要远程 MCP 服务器支持
@@ -451,13 +539,15 @@ backgroundColor = 0xFF4fd1c5
 3. **Lua 语言** - Maker 使用 Lua 作为脚本语言，与项目的 TypeScript/Vue 栈不同
 4. **UrhoX 引擎** - 基于 UrhoX 引擎，与现有 WebView 架构不同
 
-## 十一、后续探索方向
+## 十二、后续探索方向
 
 - [x] 实际调用 generate_image 生成游戏资源
 - [x] 在手机上实际预览效果（已验证，修复了颜色格式 bug）
-- [x] 收集 UI 库常见问题与踩坑
+- [x] 收集 UI 库常见问题与踩坑（颜色格式 + API 差异）
 - [x] 梳理 UI 组件库（40+ 组件，含常用组件示例）
-- [x] 丰富 demo 功能（Tabs/Card/Slider/ProgressBar/Toggle/Stepper）
+- [x] 整理组件查找与动态更新 API（FindById, SetText, SetValue 等）
+- [x] 记录 Web 端 vs 手机端预览差异
+- [x] 简化 demo（精简稳定版，修复 17 个错误）
 - [ ] 测试 text_to_music 音乐生成
 - [ ] 探索 3D 模型生成能力
 - [ ] 研究资源编辑和版本管理
