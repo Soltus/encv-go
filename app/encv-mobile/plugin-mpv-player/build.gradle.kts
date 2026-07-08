@@ -75,13 +75,13 @@ tasks.register("buildMpvFrontend") {
         val npmLock = File(mpvFrontendDir, "pnpm-lock.yaml")
         val nodeModules = File(mpvFrontendDir, "node_modules")
         if (!nodeModules.exists() && npmLock.exists()) {
-            exec {
+            project.exec {
                 workingDir = mpvFrontendDir
                 commandLine("pnpm", "install", "--prefer-offline")
             }
         }
 
-        exec {
+        project.exec {
             workingDir = mpvFrontendDir
             commandLine("pnpm", "build")
         }

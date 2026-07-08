@@ -82,13 +82,13 @@ tasks.register("buildSimverseFrontend") {
         val npmLock = File(simverseFrontendDir, "pnpm-lock.yaml")
         val nodeModules = File(simverseFrontendDir, "node_modules")
         if (!nodeModules.exists() && npmLock.exists()) {
-            exec {
+            project.exec {
                 workingDir = simverseFrontendDir
                 commandLine("pnpm", "install", "--prefer-offline")
             }
         }
 
-        exec {
+        project.exec {
             workingDir = simverseFrontendDir
             commandLine("pnpm", "build")
         }
