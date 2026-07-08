@@ -58,39 +58,3 @@ dependencies {
     compileOnly("org.jetbrains.kotlinx:kotlinx-coroutines-android")
     compileOnly("io.insert-koin:koin-core:4.1.0")
 }
-
-val mpvFrontendDir = layout.projectDirectory.dir("web").asFile
-val mpvDistDir = layout.projectDirectory.dir("web/dist").asFile
-val mpvAssetsDir = layout.projectDirectory.dir("src/main/assets/mpv").asFile
-
-tasks.register<Exec>("installMpvFrontendDeps") {
-    description = "Install mpv frontend npm dependencies"
-    group = "build"
-    onlyIf { File(mpvFrontendDir, "pnpm-lock.yaml").exists() && !File(mpvFrontendDir, "node_modules").exists() }
-    workingDir = mpvFrontendDir
-    commandLine("pnpm", "install", "--prefer-offline")
-}
-
-tasks.register<Exec>("buildMpvFrontendOnly") {
-    description = "Build mpv frontend (vite build)"
-    group = "build"
-    dependsOn("installMpvFrontendDeps")
-    workingDir = mpvFrontendDir
-    commandLine("pnpm", "build")
-    inputs.dir(mpvFrontendDir)
-    outputs.dir(mpvDistDir)
-}
-
-tasks.register<Copy>("buildMpvFrontend") {
-    description = "Build mpv frontend and copy to plugin assets"
-    group = "build"
-    dependsOn("buildMpvFrontendOnly")
-    from(mpvDistDir)
-    into(mpvAssetsDir)
-}
-
-tasks.whenTaskAdded {
-    if (name == "mergeDebugAssets" || name == "mergeReleaseAssets") {
-        dependsOn("buildMpvFrontend")
-    }
-}

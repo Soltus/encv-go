@@ -65,39 +65,3 @@ dependencies {
 
     compileOnly("androidx.core:core-ktx")
 }
-
-val simverseFrontendDir = layout.projectDirectory.dir("web").asFile
-val simverseDistDir = layout.projectDirectory.dir("web/dist").asFile
-val simverseAssetsDir = layout.projectDirectory.dir("src/main/assets/simverse").asFile
-
-tasks.register<Exec>("installSimverseFrontendDeps") {
-    description = "Install simverse frontend npm dependencies"
-    group = "build"
-    onlyIf { File(simverseFrontendDir, "pnpm-lock.yaml").exists() && !File(simverseFrontendDir, "node_modules").exists() }
-    workingDir = simverseFrontendDir
-    commandLine("pnpm", "install", "--prefer-offline")
-}
-
-tasks.register<Exec>("buildSimverseFrontendOnly") {
-    description = "Build simverse frontend (vite build)"
-    group = "build"
-    dependsOn("installSimverseFrontendDeps")
-    workingDir = simverseFrontendDir
-    commandLine("pnpm", "build")
-    inputs.dir(simverseFrontendDir)
-    outputs.dir(simverseDistDir)
-}
-
-tasks.register<Copy>("buildSimverseFrontend") {
-    description = "Build simverse frontend and copy to plugin assets"
-    group = "build"
-    dependsOn("buildSimverseFrontendOnly")
-    from(simverseDistDir)
-    into(simverseAssetsDir)
-}
-
-tasks.whenTaskAdded {
-    if (name == "mergeDebugAssets" || name == "mergeReleaseAssets") {
-        dependsOn("buildSimverseFrontend")
-    }
-}
