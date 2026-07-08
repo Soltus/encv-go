@@ -96,9 +96,10 @@ func New(p *paths.Paths, spawnGo, spawnVite, spawnPluginVite, spawnOpenlist, spa
 			Cmd:      p.NodeBin,
 			Args:     []string{"node_modules/vite/bin/vite.js", "--host", "0.0.0.0", "--port", "5176"},
 			Dir:      p.SimverseFrontendDir,
+			Env:      []string{"VITE_BASE=/simverse/"},
 			Color:    "\033[34m",
 			Required: false,
-			ReadyURL: "http://127.0.0.1:5176/",
+			ReadyURL: "http://127.0.0.1:5176/simverse/",
 		})
 	}
 
