@@ -809,6 +809,24 @@ jobs:
       #      still shows FAILED (red, real error) but does NOT kill the job
       #      before the main app APK is built and uploaded.
 
+      - name: Build MPV player frontend
+        if: inputs.skip_mpv_plugin != true
+        continue-on-error: true
+        run: |
+          echo "═══ Building MPV frontend ═══"
+          cd app/encv-mobile/plugin-mpv-player/web
+          pnpm install --prefer-offline
+          pnpm build
+          echo "✅ MPV frontend built:"
+          ls -lh dist/
+
+          PLUGIN_ASSETS="${GITHUB_WORKSPACE}/${{ env.MONOREPO_MOBILE_DIR }}/plugin-mpv-player/src/main/assets/mpv"
+          mkdir -p "$PLUGIN_ASSETS"
+          rm -rf "$PLUGIN_ASSETS"/*
+          cp -r dist/* "$PLUGIN_ASSETS/"
+          echo "✅ Copied to plugin assets: $PLUGIN_ASSETS"
+          ls -lh "$PLUGIN_ASSETS/"
+
       - name: Build MPV player plugin (JNI + Kotlin)
         if: inputs.skip_mpv_plugin != true
         continue-on-error: true
