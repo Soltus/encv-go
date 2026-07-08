@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "vite",
     "typecheck": "vue-tsc --noEmit",
-    "build": "pnpm typecheck && pnpm build:simverse && vite build",
-    "build:simverse": "cd ../simverse-frontend && pnpm build && rm -rf ../encv-mobile/dist/simverse && mkdir -p ../encv-mobile/dist && cp -r dist ../encv-mobile/dist/simverse",
+    "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
     "capacitor:copy:after": "node scripts/sync-native.mjs",
     "check:kotlin": "node scripts/check-kotlin.mjs",

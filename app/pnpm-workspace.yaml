@@ -3,7 +3,6 @@ packages:
   - 'encv-mobile/plugin-openlist/web'
   - 'encv-mobile/plugin-mpv-player/web'
   - 'encv-mobile/plugin-simverse/web'
-  - 'simverse-frontend'
   - 'preview-gateway'
   - 'packages/*'
 allowBuilds:

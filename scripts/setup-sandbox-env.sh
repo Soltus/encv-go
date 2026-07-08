@@ -295,29 +295,9 @@ else
 fi
 
 # ============================================================================
-# 步骤 4b/6: 安装 simverse-frontend 依赖
+# 步骤 5/6: pnpm install encv-mobile
 # ============================================================================
-SIMVERSE_DIR="${REPO_ROOT}/app/simverse-frontend"
-
-step "4b/6 安装 simverse-frontend 依赖"
-
-if [[ -d "${SIMVERSE_DIR}/node_modules/vue" ]]; then
-  ok "simverse-frontend node_modules 已就绪"
-else
-  log "pnpm install simverse-frontend ..."
-  cd "${SIMVERSE_DIR}"
-  if pnpm install --prefer-offline 2>&1 | tail -5; then
-    ok "simverse-frontend 依赖安装完成"
-  else
-    warn "simverse-frontend pnpm install 失败"
-    FAILED=$((FAILED+1))
-  fi
-fi
-
-# ============================================================================
-# 步骤 5/5: pnpm install encv-mobile
-# ============================================================================
-step "5/6 pnpm install encv-mobile + plugin-openlist/web"
+step "5/6 pnpm install encv-mobile + plugin-openlist/web + plugin-simverse/web"
 
 # 5a. 主 app
 if [[ -d "${MOBILE_DIR}/node_modules/vite" ]]; then
@@ -347,12 +327,26 @@ else
   fi
 fi
 
+# 5c. plugin-simverse web
+if [[ -d "${MOBILE_DIR}/plugin-simverse/web/node_modules/vite" ]]; then
+  ok "plugin-simverse/web node_modules 已就绪"
+else
+  log "pnpm install plugin-simverse/web ..."
+  cd "${MOBILE_DIR}"
+  if pnpm install --prefer-offline 2>&1 | tail -5; then
+    ok "plugin-simverse/web 依赖安装完成"
+  else
+    warn "plugin-simverse/web pnpm install 失败"
+    FAILED=$((FAILED+1))
+  fi
+fi
+
 # ============================================================================
-# 步骤 6/7: 构建 preview-gateway 网关
+# 步骤 6/6: 构建 preview-gateway 网关
 # ============================================================================
 GATEWAY_DIR="${REPO_ROOT}/app/preview-gateway"
 
-step "6/7 构建 preview-gateway 网关（app/preview-gateway/）"
+step "6/6 构建 preview-gateway 网关（app/preview-gateway/）"
 
 if [[ -d "${GATEWAY_DIR}/node_modules" ]]; then
   ok "preview-gateway node_modules 已就绪"
@@ -381,48 +375,6 @@ else
     fi
   else
     err "preview-gateway 构建失败（pm2 启动会失败）"
-    FAILED=$((FAILED+1))
-  fi
-fi
-
-# ============================================================================
-# 步骤 7/7: 安装 simverse-frontend + Cypress
-# ============================================================================
-SIMVERSE_DIR="${REPO_ROOT}/app/simverse-frontend"
-
-step "7/7 安装 simverse-frontend + Cypress 测试依赖"
-
-if [[ -d "${SIMVERSE_DIR}/node_modules" ]]; then
-  ok "simverse-frontend node_modules 已就绪"
-else
-  log "pnpm install simverse-frontend ..."
-  cd "${SIMVERSE_DIR}"
-  if pnpm install --prefer-offline 2>&1 | tail -5; then
-    ok "simverse-frontend 依赖安装完成"
-  else
-    warn "simverse-frontend pnpm install 失败"
-    FAILED=$((FAILED+1))
-  fi
-fi
-
-# 安装 Cypress
-if [[ -d "${SIMVERSE_DIR}/node_modules/cypress" ]]; then
-  ok "Cypress 已安装"
-else
-  log "pnpm add -D cypress ..."
-  cd "${SIMVERSE_DIR}"
-  if pnpm add -D cypress 2>&1 | tail -5; then
-    ok "Cypress 安装完成"
-    # 安装 Cypress 二进制文件
-    log "npx cypress install ..."
-    if npx cypress install 2>&1 | tail -5; then
-      ok "Cypress 二进制安装完成"
-    else
-      warn "Cypress 二进制安装失败"
-      FAILED=$((FAILED+1))
-    fi
-  else
-    warn "Cypress 安装失败"
     FAILED=$((FAILED+1))
   fi
 fi
