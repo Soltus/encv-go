@@ -210,6 +210,15 @@
             </ion-label>
             <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
           </ion-item>
+
+          <ion-item button @click="handleOpenDevLogs">
+            <ion-icon :icon="documentTextOutline" slot="start"></ion-icon>
+            <ion-label>
+              <h3>开发者日志</h3>
+              <p>查看前端和后端日志</p>
+            </ion-label>
+            <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
+          </ion-item>
         </ion-list>
       </template>
     </ion-content>
@@ -218,6 +227,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
 import {
@@ -231,6 +241,7 @@ import {
   chevronForwardOutline,
   refreshOutline,
   bugOutline,
+  documentTextOutline,
 } from "ionicons/icons";
 import { showDiagnosticPanel, isNativePluginMode } from "@/plugins/SimVerse";
 
@@ -260,6 +271,12 @@ const storagePercent = ref(0);
 const storageColor = ref("primary");
 
 const isNativePlugin = isNativePluginMode();
+
+const router = useRouter();
+
+function handleOpenDevLogs() {
+  router.push("/tabs/devlogs");
+}
 
 let pollInterval: number | null = null;
 

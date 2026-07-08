@@ -1,0 +1,1 @@
+import{ct as e}from"./index-C2mZU7vq.js";var t=e([]);function n(){t.value=[]}function r(){return{logs:t,clearLogs:n}}export{r as t};

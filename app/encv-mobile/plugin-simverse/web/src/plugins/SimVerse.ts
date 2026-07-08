@@ -12,6 +12,7 @@ export interface SimVersePlugin {
 }
 
 const nativeBridge = (window as any).SimVerseNative as SimVersePlugin | null;
+const isJSInterfaceMode = !!(window as any).SimVerseNative && typeof (window as any).SimVerseNative.lockOrientation === "function";
 
 const webImpl: SimVersePlugin = {
   async openWorld(_options: { worldId: string; worldName: string }) {
@@ -50,9 +51,32 @@ function callNative<K extends keyof SimVersePlugin>(
   method: K,
   ...args: Parameters<SimVersePlugin[K]>
 ): ReturnType<SimVersePlugin[K]> {
-  if (nativeBridge && typeof (nativeBridge as any)[method] === "function") {
+  if (nativeBridge) {
     try {
-      return (nativeBridge as any)[method](...args) as ReturnType<SimVersePlugin[K]>;
+      if (isJSInterfaceMode) {
+        if (method === "lockOrientation") {
+          const options = args[0] as { orientation: string };
+          (nativeBridge as any).lockOrientation(options.orientation);
+          return Promise.resolve() as any;
+        }
+        if (method === "unlockOrientation") {
+          (nativeBridge as any).unlockOrientation();
+          return Promise.resolve() as any;
+        }
+        if (method === "closeWorld") {
+          (nativeBridge as any).closeWorld();
+          return Promise.resolve() as any;
+        }
+        if (method === "showDiagnostic") {
+          (nativeBridge as any).showDiagnostic();
+          return Promise.resolve() as any;
+        }
+        console.warn(`[SimVerse] Method ${method} not available in JS Interface mode`);
+        return (webImpl[method] as any)(...args);
+      }
+      if (typeof (nativeBridge as any)[method] === "function") {
+        return (nativeBridge as any)[method](...args) as ReturnType<SimVersePlugin[K]>;
+      }
     } catch (e) {
       console.error(`[SimVerse] Native call ${method} failed:`, e);
       throw e;

@@ -345,23 +345,24 @@ fi
 # 步骤 7/7: TapTap Maker 项目
 # ============================================================================
 MAKER_DIR="${REPO_ROOT}/app/taptap-maker-demo"
+DEFAULT_MAKER_GIT_URL="https://maker.taptap.cn/git/c2ed6318-a2e3-4a6c-bcd4-40e170c14556.git"
+MAKER_GIT_URL="${MAKER_GIT_URL:-${DEFAULT_MAKER_GIT_URL}}"
 
 step "7/7 TapTap Maker 项目（app/taptap-maker-demo/）"
 
 if [[ -d "${MAKER_DIR}/.git" ]]; then
   ok "Maker 项目已存在: ${MAKER_DIR}"
-elif [[ -n "${MAKER_GIT_URL:-}" ]]; then
+else
   log "从 ${MAKER_GIT_URL} 克隆 Maker 项目 ..."
   mkdir -p "$(dirname "${MAKER_DIR}")"
   if git clone --depth 1 "${MAKER_GIT_URL}" "${MAKER_DIR}" 2>&1 | tail -3; then
     ok "Maker 项目克隆完成"
   else
-    warn "Maker 项目克隆失败（跳过，不影响主构建）"
+    warn "Maker 项目克隆失败（可能需要认证 token，跳过，不影响主构建）"
+    log "  如需认证，请设置带 token 的 URL:"
+    log "    export MAKER_GIT_URL=https://git:YOUR_TOKEN@maker.taptap.cn/git/xxx.git"
     FAILED=$((FAILED+1))
   fi
-else
-  warn "未设置 MAKER_GIT_URL 环境变量，跳过 Maker 项目克隆"
-  log "  如需克隆，请设置: export MAKER_GIT_URL=https://maker.taptap.cn/git/xxx.git"
 fi
 
 # ============================================================================

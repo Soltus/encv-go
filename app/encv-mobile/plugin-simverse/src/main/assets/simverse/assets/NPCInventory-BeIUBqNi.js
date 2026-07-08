@@ -1,0 +1,1 @@
+import{$ as e,J as t,U as n}from"./index-C2mZU7vq.js";import{t as r}from"./SvPagePlaceholder-CJgIARtz.js";var i=t({__name:`NPCInventory`,setup(t){return(t,i)=>(e(),n(r,{"title-key":`simverse.npcInventory`,"icon-name":`bag`}))}});export{i as default};

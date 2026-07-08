@@ -1,1 +1,0 @@
-import{H as e,Q as t,q as n}from"./index-8JigzJ6x.js";import{t as r}from"./SvPagePlaceholder-CVgxjY5G.js";var i=n({__name:`OrgList`,setup(n){return(n,i)=>(t(),e(r,{"title-key":`simverse.orgs`,"icon-name":`business`}))}});export{i as default};

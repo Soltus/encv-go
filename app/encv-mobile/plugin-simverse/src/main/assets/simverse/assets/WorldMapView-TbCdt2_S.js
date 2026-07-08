@@ -1,0 +1,1 @@
+import{$ as e,J as t,U as n}from"./index-C2mZU7vq.js";import{t as r}from"./SvPagePlaceholder-CJgIARtz.js";var i=t({__name:`WorldMapView`,setup(t){return(t,i)=>(e(),n(r,{"title-key":`tabs.world`,"icon-name":`globe`}))}});export{i as default};
