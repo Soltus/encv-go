@@ -28,9 +28,7 @@ class MpvWebViewActivity : BasePluginActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MpvEmbedWebView(
-                        initialUrl = "file:///android_asset/mpv/index.html"
-                    )
+                    MpvEmbedWebView()
                 }
             }
         }

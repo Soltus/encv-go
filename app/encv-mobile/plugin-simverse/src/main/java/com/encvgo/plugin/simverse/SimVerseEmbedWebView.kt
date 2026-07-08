@@ -28,11 +28,11 @@ object SimVerseWebViewDiagnostic {
 @Composable
 fun SimVerseEmbedWebView(
     containerId: String = "simverse-plugin-embed",
-    initialUrl: String = "file:///android_asset/simverse/index.html",
+    initialUrl: String = "https://simverse-plugin.local/",
 ) {
     val ctx = LocalContext.current
     val webViewRef = remember { mutableStateOf<WebView?>(null) }
-    val client = remember { SimVerseWebViewClient() }
+    val client = remember { SimVerseWebViewClient(ctx.applicationContext) }
     val chromeClient = remember { SimVerseWebChromeClient(client.diagState) }
 
     AndroidView(
@@ -49,10 +49,8 @@ fun SimVerseEmbedWebView(
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                    allowFileAccess = true
-                    allowContentAccess = true
-                    allowFileAccessFromFileURLs = true
-                    allowUniversalAccessFromFileURLs = true
+                    allowFileAccess = false
+                    allowContentAccess = false
                     databaseEnabled = true
                     cacheMode = WebSettings.LOAD_DEFAULT
                     useWideViewPort = true

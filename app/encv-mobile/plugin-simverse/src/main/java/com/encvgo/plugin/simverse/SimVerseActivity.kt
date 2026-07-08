@@ -43,7 +43,6 @@ class SimVerseActivity : BasePluginActivity() {
             ) {
                 SimVerseEmbedWebView(
                     containerId = "simverse-activity-embed",
-                    initialUrl = "file:///android_asset/simverse/index.html"
                 )
 
                 AndroidView(

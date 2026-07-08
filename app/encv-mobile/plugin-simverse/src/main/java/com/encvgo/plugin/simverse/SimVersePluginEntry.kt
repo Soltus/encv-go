@@ -34,7 +34,6 @@ class SimVersePluginEntry : IPluginEntryClass {
     override fun Content() {
         SimVerseEmbedWebView(
             containerId = "simverse-plugin-embed",
-            initialUrl = "file:///android_asset/simverse/index.html"
         )
     }
 }

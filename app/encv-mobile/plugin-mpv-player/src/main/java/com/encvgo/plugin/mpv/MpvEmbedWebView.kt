@@ -15,7 +15,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 @Composable
 fun MpvEmbedWebView(
     containerId: String = "mpv-plugin-embed",
-    initialUrl: String = "file:///android_asset/mpv/index.html",
+    initialUrl: String = "https://mpv-plugin.local/",
 ) {
     val ctx = LocalContext.current
     val webViewRef = remember { mutableStateOf<WebView?>(null) }
@@ -29,16 +29,17 @@ fun MpvEmbedWebView(
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
                 id = containerId.hashCode()
-                webViewClient = MpvWebViewClient()
+                webViewClient = MpvWebViewClient(c.applicationContext)
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                    allowFileAccess = true
-                    allowContentAccess = true
+                    allowFileAccess = false
+                    allowContentAccess = false
                     databaseEnabled = true
                     cacheMode = WebSettings.LOAD_DEFAULT
                     useWideViewPort = true
                     loadWithOverviewMode = true
+                    mediaPlaybackRequiresUserGesture = false
                 }
                 addJavascriptInterface(
                     MpvPluginJSInterface(c.applicationContext),

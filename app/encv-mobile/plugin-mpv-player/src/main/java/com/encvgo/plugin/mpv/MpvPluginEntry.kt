@@ -18,8 +18,6 @@ class MpvPluginEntry : IPluginEntryClass {
 
     @Composable
     override fun Content() {
-        MpvEmbedWebView(
-            initialUrl = "file:///android_asset/mpv/index.html"
-        )
+        MpvEmbedWebView()
     }
 }
