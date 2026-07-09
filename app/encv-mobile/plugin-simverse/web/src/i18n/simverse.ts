@@ -6,6 +6,7 @@ export default {
     "simverse.home.chronicle": "世界编年史",
 
     "simverse.comingSoon": "敬请期待...",
+    "simverse.live": "实时",
     "simverse.search": "搜索...",
     "simverse.total": "总数",
     "simverse.yearsOld": "岁",
@@ -158,7 +159,6 @@ export default {
 
     "simverse.explore": "探索",
     "simverse.exploreDesc": "前往不同区域冒险",
-    "simverse.battle": "战斗",
     "simverse.battleDesc": "挑战各种敌人",
     "simverse.fight": "战斗",
     "simverse.profession": "职业",
@@ -295,6 +295,7 @@ export default {
     "simverse.home.chronicle": "Chronicles",
 
     "simverse.comingSoon": "Coming soon...",
+    "simverse.live": "LIVE",
     "simverse.search": "Search...",
     "simverse.total": "Total",
     "simverse.yearsOld": " yrs",
@@ -447,7 +448,6 @@ export default {
 
     "simverse.explore": "Explore",
     "simverse.exploreDesc": "Adventure to different regions",
-    "simverse.battle": "Battle",
     "simverse.battleDesc": "Challenge various enemies",
     "simverse.fight": "Fight",
     "simverse.profession": "Profession",

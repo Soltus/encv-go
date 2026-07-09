@@ -57,7 +57,8 @@ FractalWorld 引擎 (internal/simverse)
 | 区域 | `loadRegionList` / `loadRegionDetail` |
 | 组织 | `loadOrgList` / `loadOrgDetail` / `loadOrgMembers` / `loadOrgTerritory` |
 | 经济 | `loadEconomyPrices` / `loadEconomyShocks` |
-| 实时 | `connectWebSocket`（推送 `world:tick` / `world:stats`） + 2s 轮询兜底 |
+| 实时 | `connectWebSocket`（推送 `world:tick` / `world:stats` / `economy:update` / `chronicle:event`） + 2s 轮询兜底 |
+| 实时刷新 | `useLiveRefresh`（WS 信号 `economySignal`/`chronicleSignal` 优先 + WS 断连时兜底轮询，节流防抖 + 卸载清理） |
 | 渲染设置 | `useWorldRenderSettings`（帧率 30/45/60/90/120、等效渲染 720P/1080P/2K，localStorage 持久化 + `simverse:render-settings` 事件） |
 
 ---
@@ -73,7 +74,7 @@ FractalWorld 引擎 (internal/simverse)
 | P4 | 行为引擎可视化 | ✅ 已完成（`WorldBehavior` + `WorldScene` NPC 行为气泡） |
 | P5 | 经济与演化可视化（组织/区域/经济/纪元） | ✅ 已完成（后端聚合接口 + 13 视图） |
 | P6 | 集成与优化（微内核/任务系统） | ✅ 已完成（`QuestView` + 渲染设置 Phaser 联动 + 任务埋点） |
-| P7 | 持续演化（世界实时感） | 🔶 进行中（NPC 行为气泡每 5s 实时刷新；经济/编年史轮询待补） |
+| P7 | 持续演化（世界实时感） | ✅ 已完成（NPC 行为气泡每 5s 刷新；经济/编年史经 WS 实时推送 + 兜底轮询自动刷新） |
 | P8 | 社交关系系统（关系图/亲密度/分布统计） | ✅ 已完成（后端 `SocialGraph` + `social/stats`、`npc/:id/relations` 路由 + `SocialOverview`/`NPCRelations` 视图） |
 
 > 注：早期 `docs/simulation/frontend-phased-plan.md` 曾声称 P0–P3 全部完成，但代码实测当时约 26/35 路由为空壳；
@@ -202,7 +203,20 @@ FractalWorld 引擎 (internal/simverse)
 ### 5.7 P7 持续演化（世界实时感）
 - `SimverseWorld` 新增 `behaviorPollInterval`：Phaser 就绪后每 5s 调用 `loadNPCBehaviors()` 重新拉取行为分布，
   使 WorldScene 内 NPC 行为气泡随世界演化实时更新；组件卸载时清理定时器。
-- 后续可扩展：经济行情（`loadEconomyPrices`）、编年史（`loadChronicleWorld`）的定时轮询刷新，强化"活生态"观感。
+- **经济/编年史 WS 实时推送（本轮补齐，2026-07-09 续）**：
+  - **后端**（`internal/server/simverse_api.go` · `wsBroadcastLoop`）：世界运行时新增两条节流广播——
+    `economy:update`（每 3s，携带 `tick`）、`chronicle:event`（每 4s，携带 `tick`/`count`/`era`）。仅发"变化信号"，
+    不推送全量数据，避免大 payload；世界停止（`running=false`）时不广播。
+  - **数据层**（`composables/useSimverse.ts`）：新增 `economySignal` / `chronicleSignal` 两个递增计数 ref，
+    在 `handleWSMessage` 中收到对应 WS 事件时自增；随组合式单例导出。
+  - **通用组合式**（新 `composables/useLiveRefresh.ts`）：封装"WS 信号优先 + 兜底轮询"策略——
+    WS 已连接时由 signal 变化驱动刷新；WS 未连接则按 `pollMs` 兜底轮询，连接恢复即自动停止轮询
+    （真正做到"实时推送替代轮询"）。内置 `throttleMs`（默认 2s）防抖 + 卸载自动清理。
+  - **视图接入（7 个）**：`EconomyOverview` / `EconomyPrices` / `EconomyTrade` / `WorldEconomy`（经济，监听 `economySignal`）、
+    `EraOverview` / `ChronicleList` / `WorldChronicles`（编年史，监听 `chronicleSignal`）。
+    各视图 `reload`/`loadEvents` 增加 `silent` 参数：后台刷新不触发 loading 骨架、不重复埋点、错误仅告警，避免闪烁；
+    工具栏新增脉冲式「实时/LIVE」指示灯。
+  - **i18n**：新增 `simverse.live`（中「实时」/ 英「LIVE」）。
 
 ### 5.8 P8 社交关系系统（SocialGraph）
 - **后端**（`internal/simverse/social.go`，新文件）：
@@ -236,9 +250,11 @@ FractalWorld 引擎 (internal/simverse)
 - ✅ 已完成：`WorldSettings` 渲染设置（帧率/等效渲染等级）经 `simverse:render-settings` 事件端到端联动 Phaser 世界画布（见 5.2）。
 - ✅ 已完成：任务行为埋点——查看 NPC 详情调 `recordQuestAction("view_npc")`，查看经济行情（经济概览/物价/世界经济）调 `recordQuestAction("view_economy")`，抽卡调 `recordQuestAction("gacha")`，驱动日常任务进度。
 
-### 6.4 P7 持续演化（进行中）
+### 6.4 P7 持续演化（已完成）
 - ✅ 已完成：NPC 行为气泡每 5s 实时刷新（`SimverseWorld.behaviorPollInterval`，见 5.7）。
-- 待做：经济行情、编年史的定时轮询刷新；行为/经济变化的实时事件推送（WebSocket）替代轮询。
+- ✅ 已完成：经济行情、编年史经 WebSocket 实时推送（`economy:update` / `chronicle:event`）+ 兜底轮询自动刷新
+  （`useLiveRefresh`，7 视图接入，见 5.7）。
+- 待做（可选增强）：将 NPC 行为气泡刷新也切换到 WS 信号（当前仍为 5s 轮询）；对推送内容做增量 diff 进一步降带宽。
 
 ### 6.5 质量保障
 - 沙箱内执行 `pnpm --filter simverse-web build` 做最终类型/构建校验；
@@ -246,4 +262,4 @@ FractalWorld 引擎 (internal/simverse)
 
 ---
 
-*最后更新：2026-07-09（合并 docs/simulation → docs/simverse 完成；全部 37 路由已实现，后端聚合接口已落地；P4 行为气泡/交互流、P6 任务系统/渲染联动、P7 行为实时刷新、P8 社交关系系统（SocialGraph 后端 + social/stats、npc/:id/relations 路由 + SocialOverview/NPCRelations 视图）已补齐）*
+*最后更新：2026-07-09（合并 docs/simulation → docs/simverse 完成；全部 37 路由已实现，后端聚合接口已落地；P4 行为气泡/交互流、P6 任务系统/渲染联动、P7 持续演化（行为实时刷新 + 经济/编年史 WS 实时推送 `economy:update`/`chronicle:event` + `useLiveRefresh` 7 视图接入，P7 完成）、P8 社交关系系统（SocialGraph 后端 + social/stats、npc/:id/relations 路由 + SocialOverview/NPCRelations 视图）已补齐）*

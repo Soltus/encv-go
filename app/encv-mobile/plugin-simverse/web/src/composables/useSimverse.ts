@@ -417,6 +417,10 @@ const isConnected = ref(false);
 const isLoading = ref(false);
 const error = ref("");
 
+// P7 持续演化：WebSocket 实时推送信号（递增计数，供视图 watch 触发刷新，替代轮询）
+const economySignal = ref(0);
+const chronicleSignal = ref(0);
+
 let ws: WebSocket | null = null;
 let wsReconnectTimer: number | null = null;
 let pollTimer: number | null = null;
@@ -893,6 +897,12 @@ export function useSimverse() {
         break;
       case "pong":
         break;
+      case "economy:update":
+        economySignal.value++;
+        break;
+      case "chronicle:event":
+        chronicleSignal.value++;
+        break;
       default:
         console.log("[simverse] WS event:", msg.type, msg.data);
     }
@@ -977,6 +987,9 @@ export function useSimverse() {
     isConnected,
     isLoading,
     error,
+
+    economySignal,
+    chronicleSignal,
 
     isRunning,
     currentTick,

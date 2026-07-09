@@ -658,6 +658,13 @@ func (sm *SimverseManager) wsBroadcastLoop() {
 	statsTicker := time.NewTicker(1 * time.Second)
 	defer statsTicker.Stop()
 
+	// P7 持续演化：经济/编年史实时推送（世界运行时，节流广播以替代前端轮询）
+	econTicker := time.NewTicker(3 * time.Second)
+	defer econTicker.Stop()
+
+	chronTicker := time.NewTicker(4 * time.Second)
+	defer chronTicker.Stop()
+
 	for {
 		select {
 		case msg, ok := <-sm.wsBroadcast:
@@ -710,6 +717,39 @@ func (sm *SimverseManager) wsBroadcastLoop() {
 					"cell_count":  stats["cell_cache_count"],
 					"total_mb":    stats["total_mb"],
 					"focus_count": stats["focus_npc_count"],
+				},
+			}
+		case <-econTicker.C:
+			sm.mu.RLock()
+			running := sm.running
+			sm.mu.RUnlock()
+			if !running {
+				continue
+			}
+			world := sm.World()
+			// 仅发信号（tick/是否变化），前端据此重新拉取各自区域的最新物价与冲击
+			sm.wsBroadcast <- simverseWSMessage{
+				Type: "economy:update",
+				Data: gin.H{
+					"tick": world.WorldTick(),
+				},
+			}
+		case <-chronTicker.C:
+			sm.mu.RLock()
+			running := sm.running
+			sm.mu.RUnlock()
+			if !running {
+				continue
+			}
+			world := sm.World()
+			chron := world.Chronicle()
+			// 仅发信号（最新事件计数/纪元），前端据此刷新编年史流
+			sm.wsBroadcast <- simverseWSMessage{
+				Type: "chronicle:event",
+				Data: gin.H{
+					"tick":  world.WorldTick(),
+					"count": chron.Count(),
+					"era":   chron.CurrentEra(),
 				},
 			}
 		}

@@ -7,6 +7,7 @@
         </ion-buttons>
         <ion-title>{{ t("simverse.eraOverview") }}</ion-title>
         <ion-buttons slot="end">
+          <span class="live-pill"><span class="live-dot" />{{ t("simverse.live") }}</span>
           <ion-button @click="reload">
             <ion-icon :icon="refreshOutline" slot="icon-only" />
           </ion-button>
@@ -65,27 +66,34 @@ import {
 import { refreshOutline, alertCircleOutline, flag } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useSimverse, type SimverseEra } from "@/composables/useSimverse";
+import { useLiveRefresh } from "@/composables/useLiveRefresh";
 
 const { t } = useI18n();
-const { loadEra } = useSimverse();
+const { loadEra, chronicleSignal } = useSimverse();
 
 const loading = ref(false);
 const error = ref("");
 const era = ref<SimverseEra | null>(null);
 
-async function reload() {
-  loading.value = true;
-  error.value = "";
+async function reload(silent = false) {
+  if (!silent) {
+    loading.value = true;
+    error.value = "";
+  }
   try {
     era.value = await loadEra(50);
   } catch (e: any) {
-    error.value = e.message || "Failed to load era";
+    if (silent) console.warn("[simverse] era refresh failed:", e);
+    else error.value = e.message || "Failed to load era";
   } finally {
-    loading.value = false;
+    if (!silent) loading.value = false;
   }
 }
 
 onMounted(reload);
+
+// P7 持续演化：时代/编年史随世界演化实时刷新（WS 推送优先，未连接时 8s 兜底轮询）
+useLiveRefresh(() => reload(true), { signal: chronicleSignal, pollMs: 8000 });
 </script>
 
 <style scoped>
@@ -104,5 +112,28 @@ onMounted(reload);
 .stat-val {
   font-size: 22px;
   font-weight: 700;
+}
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ion-color-success, #22c55e);
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(34, 197, 94, 0.12);
+  margin-right: 4px;
+}
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ion-color-success, #22c55e);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
 }
 </style>

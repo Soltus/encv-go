@@ -7,6 +7,7 @@
         </ion-buttons>
         <ion-title>{{ t("simverse.chronicles") }}</ion-title>
         <ion-buttons slot="end">
+          <span class="live-pill"><span class="live-dot" />{{ t("simverse.live") }}</span>
           <ion-button @click="loadData" :disabled="loading">
             <ion-icon :icon="refreshIcon" slot="icon-only" />
           </ion-button>
@@ -125,9 +126,10 @@ import {
   IonItem, IonBadge, IonNote, IonSpinner, IonAvatar, IonModal,
 } from "@ionic/vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useLiveRefresh } from "../composables/useLiveRefresh";
 
 const { t } = useI18n();
-const { loadChronicleWorld, loadChronicleEvent } = useSimverse();
+const { loadChronicleWorld, loadChronicleEvent, chronicleSignal } = useSimverse();
 
 const loading = ref(false);
 const loaded = ref(false);
@@ -173,6 +175,9 @@ async function loadAndShowEvent(id: number) {
 }
 
 onMounted(loadData);
+
+// P7 持续演化：世界编年史随时间线实时刷新（WS 推送优先，未连接时 8s 兜底轮询）
+useLiveRefresh(loadData, { signal: chronicleSignal, pollMs: 8000 });
 </script>
 
 <style scoped>
@@ -211,5 +216,28 @@ onMounted(loadData);
   justify-content: center;
   color: var(--ion-color-medium);
   padding: 30px 0;
+}
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ion-color-success, #22c55e);
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(34, 197, 94, 0.12);
+  margin-right: 4px;
+}
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ion-color-success, #22c55e);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
 }
 </style>
