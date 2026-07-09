@@ -106,40 +106,109 @@ do_push() {
     else
       local PUSH_FLAGS=""
       [ "${FORCE:-false}" = "true" ] && PUSH_FLAGS="--force"
-      git push $PUSH_FLAGS "$GITHUB_REMOTE" "$branch" 2>&1 || info "  ⚠️ 分支 $branch 推送失败"
+      git push $PUSH_FLAGS "$GITHUB_REMOTE" "$branch" 2>&1 || error "分支 $branch 推送失败"
     fi
   done <<< "$branches"
   
   log "  推送所有标签..."
   if [ "${DRY_RUN:-false}" != "true" ]; then
-    git push "$GITHUB_REMOTE" --tags 2>&1 || info "  ⚠️ 标签推送失败"
+    git push "$GITHUB_REMOTE" --tags 2>&1 || error "标签推送失败"
   fi
   
   ok "推送完成"
 }
 
-# 单向拉取: GitHub → cnb
+# 单向拉取: GitHub → cnb（拉取后推回 cnb 远端，使同步持久化）
 do_pull() {
   log "📥 开始拉取: GitHub → cnb(${CNB_REPO_SLUG})"
+  
+  # cnb 远端（本地仓库克隆自 cnb，默认 remote 名为 origin）
+  local CNB_REMOTE="origin"
+  if ! git remote get-url "$CNB_REMOTE" >/dev/null 2>&1; then
+    error "未找到 cnb 远端 ($CNB_REMOTE)，无法将拉取结果推回 cnb"
+  fi
   
   local TARGET_URL
   TARGET_URL=$(get_github_repo_url)
   setup_remote "$TARGET_URL"
   
+  # 先抓取全部远程引用，建立远程跟踪分支（供后续存在性校验与更新使用）
+  log "  获取 GitHub 远程引用..."
+  git fetch "$GITHUB_REMOTE" --prune 2>&1 || error "无法连接 GitHub 或 fetch 失败"
+  
   local branches
   branches=$(get_branches)
   
+  local current_branch=""
+  current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+  
+  # 记录实际被更新的本地分支，最后统一推回 cnb 远端
+  local updated_branches=""
+  
   while IFS= read -r branch; do
     [ -z "$branch" ] && continue
-    log "  拉取分支: $branch"
-    if [ "${DRY_RUN:-false}" = "true" ]; then
-      info "  [DRY RUN] git pull $GITHUB_REMOTE $branch"
-    else
-      git pull "$GITHUB_REMOTE" "$branch" 2>&1 || info "  ⚠️ 分支 $branch 拉取失败"
+    log "  处理分支: $branch"
+    
+    # 1. 校验远程分支是否存在（不存在必须报错，不再静默视为成功）
+    if ! git show-ref --verify --quiet "refs/remotes/${GITHUB_REMOTE}/${branch}"; then
+      error "分支 '$branch' 在 GitHub 上不存在，拉取失败"
     fi
+    
+    if [ "${DRY_RUN:-false}" = "true" ]; then
+      info "  [DRY RUN] 将把本地分支 $branch 更新为 ${GITHUB_REMOTE}/${branch} 并推送到 cnb 远端"
+      continue
+    fi
+    
+    # 2. 本地分支不存在则直接基于远程跟踪分支创建
+    if ! git show-ref --verify --quiet "refs/heads/${branch}"; then
+      git branch "$branch" "${GITHUB_REMOTE}/${branch}"
+      ok "  ✅ 已创建本地分支 $branch"
+      updated_branches="$updated_branches $branch"
+      continue
+    fi
+    
+    # 3. 将本地分支更新到与远程一致
+    if [ "$branch" = "$current_branch" ]; then
+      # 当前分支：通过快进合并更新工作区与引用
+      if [ "${FORCE:-false}" = "true" ]; then
+        git reset --hard "${GITHUB_REMOTE}/${branch}" 2>&1 \
+          || error "分支 $branch 强制重置失败"
+      else
+        git merge --ff-only "${GITHUB_REMOTE}/${branch}" 2>&1 \
+          || error "分支 $branch 合并失败（本地与远程存在分叉，可开启 FORCE 覆盖）"
+      fi
+    else
+      # 非当前分支：直接快进更新本地引用（不会触碰工作区）
+      if [ "${FORCE:-false}" = "true" ]; then
+        git fetch "${GITHUB_REMOTE}" "+${branch}:${branch}" 2>&1 \
+          || error "分支 $branch 强制更新失败"
+      else
+        git fetch "${GITHUB_REMOTE}" "${branch}:${branch}" 2>&1 \
+          || error "分支 $branch 更新失败（非快进，可能存在分叉，可开启 FORCE）"
+      fi
+    fi
+    ok "  ✅ 分支 $branch 已更新"
+    updated_branches="$updated_branches $branch"
   done <<< "$branches"
   
-  ok "拉取完成"
+  log "  拉取标签..."
+  git fetch "$GITHUB_REMOTE" --tags 2>&1 || info "  ⚠️ 标签拉取失败"
+  
+  # 4. 将更新后的分支推回 cnb 远端，使 GitHub → cnb 的同步真正持久化
+  if [ "${DRY_RUN:-false}" = "true" ]; then
+    info "  [DRY RUN] 将把更新后的分支推送到 cnb 远端 ($CNB_REMOTE)"
+  elif [ -n "$updated_branches" ]; then
+    local PUSH_FLAGS=""
+    [ "${FORCE:-false}" = "true" ] && PUSH_FLAGS="--force"
+    log "  推送更新到 cnb 远端 ($CNB_REMOTE)..."
+    for branch in $updated_branches; do
+      git push $PUSH_FLAGS "$CNB_REMOTE" "$branch" 2>&1 \
+        || error "分支 $branch 推送回 cnb 失败"
+    done
+    git push $PUSH_FLAGS "$CNB_REMOTE" --tags 2>&1 || info "  ⚠️ 标签推送回 cnb 失败"
+  fi
+  
+  ok "拉取完成（已同步至 cnb 远端）"
 }
 
 # 双向同步
