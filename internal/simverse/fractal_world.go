@@ -61,10 +61,11 @@ func NewFractalWorld(dataDir string, worldName string) *FractalWorld {
 	persist.EnsureDir()
 
 	rng := rand.New(rand.NewSource(12345))
+	chron := NewChronicleManager(worldName)
 
 	fw := &FractalWorld{
 		perfSched:     NewPerfScheduler(),
-		chronicle:     NewChronicleManager(worldName),
+		chronicle:     chron,
 		persistence:   persist,
 		behaviorEng:   NewBehaviorEngine(),
 		economyMgr:    NewEconomyManager(rng),

@@ -150,6 +150,31 @@
           </ion-item>
         </ion-list>
 
+        <!-- 流派 / Build (P14) -->
+        <ion-list v-if="build" :inset="true">
+          <ion-list-header><ion-label>{{ t("simverse.build") }}</ion-label></ion-list-header>
+          <ion-item>
+            <ion-label class="ion-text-wrap">
+              <div class="build-primary">
+                <ion-badge :color="archColor(build.primary)" class="build-badge">{{ archLabel(build.primary) }}</ion-badge>
+                <span class="build-stars" :aria-label="t('simverse.build.synergy')">
+                  <ion-icon
+                    v-for="i in 5"
+                    :key="i"
+                    :icon="i <= build.synergy ? star : starOutline"
+                    :color="i <= build.synergy ? 'warning' : 'medium'"
+                  />
+                </span>
+              </div>
+              <div v-if="build.tags.length > 1" class="chip-row">
+                <ion-chip v-for="tag in build.tags.slice(1)" :key="tag" :color="archColor(tag)" outline>
+                  {{ archLabel(tag) }}
+                </ion-chip>
+              </div>
+            </ion-label>
+          </ion-item>
+        </ion-list>
+
         <!-- 大五人格 -->
         <ion-list v-if="bigFiveEntries.length" :inset="true">
           <ion-list-header><ion-label>{{ t("simverse.detail.bigFive") }}</ion-label></ion-list-header>
@@ -186,9 +211,10 @@ import {
   IonButton, IonIcon, IonContent, IonList, IonListHeader, IonLabel,
   IonItem, IonBadge, IonNote, IonSpinner, IonChip,
 } from "@ionic/vue";
-import { refreshOutline, alertCircleOutline, bagOutline, timeOutline, gitNetworkOutline, pulseOutline } from "ionicons/icons";
+import { refreshOutline, alertCircleOutline, bagOutline, timeOutline, gitNetworkOutline, pulseOutline, star, starOutline } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useSimverse, type SimverseNPCDetail } from "@/composables/useSimverse";
+import { deriveNPCBuild, type ArchetypeKey } from "@/game/builds";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -211,6 +237,21 @@ const skillEntries = computed(() =>
 const bigFiveEntries = computed(() =>
   npc.value ? Object.entries(npc.value.big_five || {}).map(([key, value]) => ({ key, value })) : []
 );
+
+// P14 流派派生（确定性，复用 NPC 既有属性）
+const build = computed(() => (npc.value ? deriveNPCBuild(npc.value) : null));
+
+const ARCH_COLOR: Record<ArchetypeKey, string> = {
+  warrior: "danger", guardian: "warning", scholar: "primary", merchant: "success",
+  artisan: "tertiary", healer: "success", leader: "secondary", hermit: "medium",
+  rogue: "dark", artist: "tertiary",
+};
+function archLabel(key: ArchetypeKey): string {
+  return t(`simverse.build.${key}`);
+}
+function archColor(key: ArchetypeKey): string {
+  return ARCH_COLOR[key] || "medium";
+}
 
 function professionColor(profession: string): string {
   const map: Record<string, string> = {
@@ -305,5 +346,22 @@ watch(() => route.params.id, reload);
   flex-wrap: wrap;
   gap: 6px;
   padding: 6px 0;
+}
+.build-primary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.build-badge {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 12px;
+}
+.build-stars {
+  display: inline-flex;
+  gap: 2px;
+  font-size: 14px;
 }
 </style>

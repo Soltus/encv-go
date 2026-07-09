@@ -262,4 +262,22 @@ FractalWorld 引擎 (internal/simverse)
 
 ---
 
+## 七、下一阶段开发计划（P9+，借鉴 2024 年后手游）
+
+前瞻性路线图已独立沉淀于 **[`ROADMAP.md`](./ROADMAP.md)**，要点：
+
+- **调研基线**：恋与深空（AI 伴侣/羁绊）、鸣潮（开放世界/co-op）、绝区零（活城枢纽）、
+  七日世界（动态事件/玩家交易/赛季）、无限暖暖（UGC/分享）、原神/星穹铁道（长线运营）、
+  幻兽帕鲁（自动化基地）、Roblox（UGC 生态）。
+- **P9 智能 NPC 与情感陪伴**：LLM 驱动焦点 NPC 对话 + 记忆回溯 + 羁绊/好感升级（复用 `SocialGraph`）。
+- **P10 活态世界与玩家共创**：NPC 昼夜作息、区域动态事件 2.0、UGC 叙事、拍照分享（复用 `chronicle`/实时推送/Phaser）。
+- **P11 玩家驱动经济与组织**：玩家市场叠加模拟物价、公会/领地战、声望榜（复用 `EconomyManager`/`BattleManager`）。
+- **P12 赛季制与长线运营**：Battle Pass + 限时活动 + 世界演化回放（扩展 `QuestManager`）。
+- **P13 多人共存与社交场**：同世界多玩家化身、组队探索、协作事件（Phaser `WorldScene` 扩展）。
+- **P14 流派系统与卡牌化界面**（补充卡片手游参考：龙息：神寂 / 潮汐守望者 / 云顶之弈 / 炉石）：NPC/组织"流派"派生 + 自走棋式编队协同 + 卡牌化 UI（卡片/标签 chips/编队网格/关系网卡牌连线/抽卡动画），复用 `personality.go`/`aggregates.go`/`SocialGraph`/`gacha`。
+  - ✅ 已落地（2026-07-10）：`src/game/builds.ts` 的 `deriveNPCBuild()`（前端确定性流派派生）+ `NPCDetail`「流派」卡片（彩色徽章 + 契合度星级 + 次要流派 chips）+ i18n `simverse.build*`；组织流派/编队协同/卡牌连线待续。
+- **MVP 路径**：P9 → P10 → P11 → P12 → P13 → P14（情感陪伴留存杠杆最高，多人架构改动最大放最后；P14 为低风险表现层升级，可并行）。
+
+---
+
 *最后更新：2026-07-09（合并 docs/simulation → docs/simverse 完成；全部 37 路由已实现，后端聚合接口已落地；P4 行为气泡/交互流、P6 任务系统/渲染联动、P7 持续演化（行为实时刷新 + 经济/编年史 WS 实时推送 `economy:update`/`chronicle:event` + `useLiveRefresh` 7 视图接入，P7 完成）、P8 社交关系系统（SocialGraph 后端 + social/stats、npc/:id/relations 路由 + SocialOverview/NPCRelations 视图）已补齐）*
