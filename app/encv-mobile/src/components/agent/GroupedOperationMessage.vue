@@ -103,9 +103,15 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
+import type { ToolCall, ToolKind, ToolResult, ToolStatus } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
+import FileChangeSummaryMessage from "@/components/agent/FileChangeSummaryMessage.vue";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
+import MountListCard from "@/components/agent/MountListCard.vue";
+import FileListCard from "@/components/agent/FileListCard.vue";
+import FileContentCard from "@/components/agent/FileContentCard.vue";
 import {
-  chevronForward as chevronIcon,
+  chevronDown as chevronIcon,
   documentTextOutline,
   ellipsisHorizontalCircleOutline,
   eyeOutline,
@@ -114,13 +120,6 @@ import {
   terminalOutline,
 } from "ionicons/icons";
 import { computed, ref } from "vue";
-import type { ToolCall, ToolKind, ToolResult, ToolStatus } from "@/composables/useAgent";
-import { useI18n } from "@/composables/useI18n";
-import FileChangeSummaryMessage from "./FileChangeSummaryMessage.vue";
-import FileContentCard from "./FileContentCard.vue";
-import FileListCard from "./FileListCard.vue";
-import MountListCard from "./MountListCard.vue";
-import StatusBadge from "./StatusBadge.vue";
 import { OPERATION_COLLAPSE_INITIAL_COUNT } from "./twoLevelGrouping";
 
 const props = defineProps<{

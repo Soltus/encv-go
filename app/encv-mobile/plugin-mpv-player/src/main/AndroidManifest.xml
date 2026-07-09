@@ -14,5 +14,9 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|smallestScreenSize"
             android:launchMode="singleTop" />
+        <activity
+            android:name=".MpvWebViewActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize" />
     </application>
 </manifest>

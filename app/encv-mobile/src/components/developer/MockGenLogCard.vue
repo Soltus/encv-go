@@ -103,7 +103,11 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
+// v3 2026-06-18：FFMPEG 日志时间格式化（避免 ISO 字符串撑满宽度导致溢出）
+import { formatDateTime } from "@/composables/useDateFormat";
+import type { MockGenLogEntry, MockGenLogSummary } from "@/composables/useMockGenLog";
+import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
+import UnifiedTimelineCard from "@encv/shared-components/components/shared/UnifiedTimelineCard.vue";
 import {
   checkmarkCircleOutline,
   copyOutline,
@@ -114,11 +118,6 @@ import {
   warningOutline,
 } from "ionicons/icons";
 import { computed } from "vue";
-import UnifiedTimelineCard from "@/components/shared/UnifiedTimelineCard.vue";
-// v3 2026-06-18：FFMPEG 日志时间格式化（避免 ISO 字符串撑满宽度导致溢出）
-import { formatDateTime } from "@/composables/useDateFormat";
-import type { MockGenLogEntry, MockGenLogSummary } from "@/composables/useMockGenLog";
-import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
 
 /**
  * MockGenLogCard — FFMPEG 流程日志卡（Task 13 SubTask 13.2/13.3）

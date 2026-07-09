@@ -6,12 +6,17 @@
 #
 # 支持的架构：arm64-v8a, armeabi-v7a, x86, x86_64
 #
-# 输出：pkg/tasksystem/store/objectbox/libs/android_<arch>/libobjectbox.so
+# 输出：pkg/tasksystem/store/objectbox/libs/android_<arch>/libobjectbox-jni.so
 #
 # 说明：
 #   - ObjectBox C 核心库是闭源的，但官方 Android AAR 包含了完整 C API 的 .so
 #   - libobjectbox-jni.so 同时导出 JNI API + C API (obx_*) + Dart API
-#   - 我们直接提取并重命名为 libobjectbox.so，供 Go CGO 交叉编译链接使用
+#   - 保持原名 libobjectbox-jni.so（不改为 libobjectbox.so），原因：
+#     (a) ObjectBox Go SDK (v1.9.0) 自身 CGO 写死 -lobjectbox-jni
+#     (b) .so 的 ELF SONAME 字段也是 libobjectbox-jni.so（AAR 原始命名），
+#         改名不会改变 SONAME，会导致 linker 按 SONAME 查找时找不到匹配的名字
+#     (c) APK 只需 libobjectbox-jni.so 一个文件，三方（SDK / 本代码 / linker）统一
+#   - 详见 pkg/tasksystem/store/objectbox/objectbox.go 中 LDFLAGS 注释
 #
 # CI 友好：
 #   - 成功退出码 0，失败退出码 1
@@ -103,7 +108,7 @@ for arch in "${ARCHS[@]}"; do
   echo "────────────────────────────────"
 
   # 检查是否已有产物
-  if [[ -f "$out_dir/libobjectbox.so" ]]; then
+  if [[ -f "$out_dir/libobjectbox-jni.so" ]]; then
     echo "  ✅ 产物已存在，跳过"
     ls -lh "$out_dir/" | sed 's/^/     /'
     SUCCESS_ARCHS+=("$arch")
@@ -115,7 +120,12 @@ for arch in "${ARCHS[@]}"; do
 
   echo "  提取 $SO_PATH_IN_AAR ..."
   if unzip -o -q "$AAR_FILE" "$SO_PATH_IN_AAR" -d "$WORK_DIR"; then
-    # 重命名为 libobjectbox.so（CGO 期望的名字）
+    # 保持原名 libobjectbox-jni.so（不改名字、不改 SONAME）：
+    #   - ObjectBox Go SDK 写死了 -lobjectbox，链接时需要 libobjectbox.so
+    #   - 但 .so 的 ELF SONAME = libobjectbox-jni.so，linker 记录的 DT_NEEDED 也是它
+    #   - 运行时 linker 按 DT_NEEDED 找 libobjectbox-jni.so
+    # 因此两个名字都要有（内容相同），一个给 CGO 链接用，一个给 runtime 用。
+    cp "$WORK_DIR/$SO_PATH_IN_AAR" "$out_dir/libobjectbox-jni.so"
     cp "$WORK_DIR/$SO_PATH_IN_AAR" "$out_dir/libobjectbox.so"
     echo "  ✅ 提取成功"
     ls -lh "$out_dir/" | sed 's/^/     /'

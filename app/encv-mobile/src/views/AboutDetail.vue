@@ -124,28 +124,20 @@
 
 <script setup lang="ts">
 import {
-  IonBackButton,
-  IonBadge,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { codeSlash, informationCircle, logoGithub, openOutline, videocamOutline, warningOutline } from "ionicons/icons";
-import { onMounted, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+  codeSlash,
+  informationCircle,
+  logoGithub,
+  openOutline,
+  videocamOutline,
+  warningOutline,
+} from "ionicons/icons";
+
 import { type BuildInfo, fetchBuildInfo } from "@/api/encv";
 import LibraryRow from "@/components/LibraryRow.vue";
 import { useI18n } from "@/composables/useI18n";
 import { type LibraryItem, useLibraries } from "@/composables/useLibraries";
+import { onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 
 const { t } = useI18n();
 const router = useRouter();

@@ -146,6 +146,8 @@ type Manifest_v4 struct {
 	// JSON tag 使用 omitempty：旧 v4 容器的 Manifest 序列化结果不会包含此字段，
 	// 保持向前兼容的 JSON 形态（diff 友好）。
 	MACSaltBase64 string `json:"mac_salt_base64,omitempty"`
+
+	WrappedDEK *WrappedDEK `json:"wrapped_dek,omitempty"`
 }
 
 var manifestV4BufferPool = sync.Pool{

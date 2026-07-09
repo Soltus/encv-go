@@ -90,23 +90,11 @@
 </template>
 
 <script setup lang="ts">
-import {
-  alertController,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonInput,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
+import { formatFileSize } from "@/api/encv_files";
+import type { FileItem } from "@/api/encv";
+import { createDirectory, getFileCategory, listFiles, PermissionDeniedError } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
+import { alertController, modalController } from "@ionic/vue";
 import {
   add,
   arrowBack,
@@ -121,9 +109,6 @@ import {
   videocam,
 } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
-import type { FileItem } from "@/api/encv";
-import { createDirectory, formatFileSize, getFileCategory, listFiles, PermissionDeniedError } from "@/api/encv";
-import { useI18n } from "@/composables/useI18n";
 
 const props = withDefaults(
   defineProps<{

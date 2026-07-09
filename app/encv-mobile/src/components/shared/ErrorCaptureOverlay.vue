@@ -36,9 +36,12 @@
 </template>
 
 <script setup lang="ts">
-import { alertCircle } from "ionicons/icons";
+import {
+  alertCircle,
+} from "ionicons/icons";
+
+import { errorStore } from "@encv/shared-components/composables/useErrorCapture";
 import { computed, ref } from "vue";
-import { errorStore } from "@/composables/useErrorCapture";
 
 const expanded = ref(false);
 

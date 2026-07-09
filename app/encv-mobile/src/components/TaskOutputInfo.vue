@@ -42,13 +42,18 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon } from "@ionic/vue";
-import { checkmarkCircle, documentTextOutline, folderOpenOutline, playCircleOutline } from "ionicons/icons";
-import { computed } from "vue";
+import {
+  checkmarkCircle,
+  documentTextOutline,
+  folderOpenOutline,
+  playCircleOutline,
+} from "ionicons/icons";
+
 import type { EncvTask } from "@/api/encv";
 import { formatDuration } from "@/composables/useDateFormat";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
+import { computed } from "vue";
 
 const props = defineProps<{ task: EncvTask }>();
 const emit = defineEmits<{
@@ -62,10 +67,10 @@ const PREVIEWABLE_VIDEO = new Set(["mp4", "webm", "mov", "m4v", "mkv"]);
 const durationStr = computed(() => {
   if (!props.task.createdAt) return "";
   const created = new Date(props.task.createdAt).getTime();
-  if (isNaN(created)) return "";
+  if (Number.isNaN(created)) return "";
   if (props.task.completedAt) {
     const completed = new Date(props.task.completedAt).getTime();
-    if (isNaN(completed)) return "";
+    if (Number.isNaN(completed)) return "";
     return formatDuration(completed - created);
   }
   return "";

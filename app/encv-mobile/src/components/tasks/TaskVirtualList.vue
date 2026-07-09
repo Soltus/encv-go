@@ -29,41 +29,49 @@
       - 修法：scrollEl=null 时用 fallbackItems 渲染前 N 个 item（N=overscan*2+20）
       - scrollEl 就绪后自动切回虚拟滚动
       - jsdom 测试环境也走此路径（无 shadow DOM）
+
+    🆕 2026-07-07 防御性修复：item 为 undefined 时跳过渲染
+      - 场景：displayedItems 数组长度快速变化时（筛选/搜索/删除），
+        virtualizer 可能短暂请求越界 index → getItem 返回 undefined
+      - 修法：v-if="safeItem != null" 跳过渲染，避免下游解构错误
+      - 同时：safeGetKey 提供 fallback key，避免 getKey 抛错中断渲染
   -->
   <div
     v-if="!scrollEl"
     class="task-virtual-list task-virtual-list--fallback"
   >
-    <div
-      v-for="i in fallbackCount"
-      :key="getKey(i - 1)"
-      :data-index="i - 1"
-      class="task-virtual-item"
-    >
-      <slot :item="getItem(i - 1)" :index="i - 1" />
-    </div>
+    <template v-for="i in fallbackCount" :key="safeGetKey(i - 1)">
+      <div
+        v-if="safeGetItem(i - 1) != null"
+        :data-index="i - 1"
+        class="task-virtual-item"
+      >
+        <slot :item="safeGetItem(i - 1)!" :index="i - 1" />
+      </div>
+    </template>
   </div>
   <div
     v-else
     class="task-virtual-list"
     :style="{ height: `${totalSize}px`, position: 'relative', width: '100%' }"
   >
-    <div
-      v-for="vItem in virtualItems"
-      :key="getKey(vItem.index)"
-      :ref="setItemRef"
-      :data-index="vItem.index"
-      :style="{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        transform: `translateY(${vItem.start}px)`,
-      }"
-      class="task-virtual-item"
-    >
-      <slot :item="getItem(vItem.index)" :index="vItem.index" />
-    </div>
+    <template v-for="vItem in virtualItems" :key="safeGetKey(vItem.index)">
+      <div
+        v-if="safeGetItem(vItem.index) != null"
+        :ref="setItemRef"
+        :data-index="vItem.index"
+        :style="{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          transform: `translateY(${vItem.start}px)`,
+        }"
+        class="task-virtual-item"
+      >
+        <slot :item="safeGetItem(vItem.index)!" :index="vItem.index" />
+      </div>
+    </template>
   </div>
 </template>
 
@@ -124,6 +132,31 @@ const totalSize = computed(() => virtualizer.value.getTotalSize());
 //   - N = overscan*2 + 20（足够覆盖首屏视口，避免空白）
 //   - 不超过 count（item 总数）
 const fallbackCount = computed(() => Math.min(props.count, props.overscan * 2 + 20));
+
+// 🆕 2026-07-07 防御性安全访问：
+//   - 场景：displayedItems 数组长度快速变化时（筛选/搜索/删除），
+//     virtualizer 可能短暂请求越界 index → getItem 返回 undefined
+//   - safeGetItem：返回 item 或 null（v-if 判断用），绝不抛错
+//   - safeGetKey：返回 key 或 fallback index（v-for key 用），绝不抛错
+function safeGetItem(index: number): T | null {
+  if (index < 0 || index >= props.count) return null;
+  try {
+    const item = props.getItem(index);
+    return item != null ? item : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeGetKey(index: number): string | number {
+  if (index < 0 || index >= props.count) return `__fallback_${index}`;
+  try {
+    const key = props.getKey(index);
+    return key != null ? key : `__fallback_${index}`;
+  } catch {
+    return `__fallback_${index}`;
+  }
+}
 
 /**
  * measureElement ref callback — 交给 virtualizer 自动测量每个 item 的实际高度。

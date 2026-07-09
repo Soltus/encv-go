@@ -1,0 +1,20 @@
+{
+  "projectName": "encv-mobile",
+  "version": "1.0.0",
+  "description": "项目专用 CodeBuddy 配置，包含超时规则",
+  "commands": {
+    "timeoutCheck": {
+      "script": "./.codebuddy/scripts/check_timeout.sh",
+      "description": "自动为命令添加超时参数"
+    }
+  },
+  "safety": {
+    "requireTimeout": true,
+    "defaultTimeout": {
+      "curl": 30,
+      "ssh": 10,
+      "nc": 5,
+      "ping": 5
+    }
+  }
+}

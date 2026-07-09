@@ -243,38 +243,25 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/composables/useDateFormat";
+import {
+  bugOutline,
+  refreshOutline,
+  warningOutline,
+} from "ionicons/icons";
+
 // 🆕 2026-07-03 修复 classList 错误：必须显式 import Ionic 组件
 //   根因（cypress e2e DOM log 确认）：未显式 import 时，<ion-page> 标签未被 Vue 编译器
 //   识别为 Ionic Vue 组件，渲染成原生 <ION-PAGE> 自闭合元素，缺失 .ion-page class
 //   和 z-index 样式，导致页面被前一个 CacheDetail（z-index:101）覆盖。
 //   对比 ServerDetail.vue / DatabaseDetail.vue / CacheDetail.vue 都显式 import。
-import {
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
-  IonPage,
-  IonProgressBar,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { bugOutline, refreshOutline, warningOutline } from "ionicons/icons";
-import { computed, onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
+
 import { getApiBaseUrl } from "@/api/encv_core";
 import { type FullTextIndexStats, getFullTextIndexStats, rebuildFullTextIndex } from "@/api/encv_search";
-import { formatDateTime } from "@/composables/useDateFormat";
 import { errorStore } from "@/composables/useErrorCapture";
 import { useI18n } from "@/composables/useI18n";
 import { useTaskEventBridge } from "@/composables/useTaskEventBridge";
+import { computed, onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
 
 const { t } = useI18n();
 
@@ -449,7 +436,7 @@ async function cancelRebuild() {
       ...rebuildTask.value,
       status: "cancelling",
     };
-  } catch (e) {
+  } catch (_e) {
     // 取消失败不阻断，用户可重试
   }
 }

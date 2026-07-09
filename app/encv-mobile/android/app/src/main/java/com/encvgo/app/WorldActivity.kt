@@ -4,30 +4,34 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.ActivityInfo
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.view.WindowManager
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
-import android.webkit.WebSettings
 import android.webkit.WebViewClient
-import androidx.core.content.ContextCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import com.getcapacitor.BridgeActivity
+import com.encvgo.app.GoProcessPlugin
+import com.encvgo.app.ApiProxyPlugin
+import com.masterpedidos.highrefreshrate.HighRefreshRatePlugin
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.net.HttpURLConnection
+import java.net.URL
 
 class WorldActivity : BridgeActivity() {
     companion object {
         private const val TAG = "WorldActivity"
-        private const val WORLD_URL = "https://localhost/simverse-world.html"
         private const val EXTRA_WORLD_ID = "world_id"
         private const val EXTRA_WORLD_NAME = "world_name"
 
-        fun createIntent(context: Context, worldId: String = "default", worldName: String = "Default"): Intent {
+        fun createIntent(context: Context, worldId: String, worldName: String): Intent {
             return Intent(context, WorldActivity::class.java).apply {
                 putExtra(EXTRA_WORLD_ID, worldId)
                 putExtra(EXTRA_WORLD_NAME, worldName)
@@ -36,7 +40,8 @@ class WorldActivity : BridgeActivity() {
     }
 
     private var backendReceiverRegistered = false
-    private var immersiveMode = true
+    private var simverseLoaded = false
+    private var currentPort = 0
 
     private val backendReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -45,65 +50,145 @@ class WorldActivity : BridgeActivity() {
                 EncvGoService.BROADCAST_BACKEND_STATUS -> {
                     val port = intent.getIntExtra(EncvGoService.EXTRA_PORT, 0)
                     val running = intent.getBooleanExtra(EncvGoService.EXTRA_RUNNING, false)
-                    val error = intent.getStringExtra(EncvGoService.EXTRA_ERROR)
-                    Log.d(TAG, "backendReceiver: port=$port, running=$running, error=$error")
-                    notifyFrontend(port, running, error)
+                    Log.d(TAG, "backendReceiver: action=${intent.action}, port=$port, running=$running")
+                    if (running && port > 0) {
+                        currentPort = port
+                        if (!simverseLoaded) {
+                            loadSimverse(port)
+                        } else {
+                            updateApiBase(port)
+                        }
+                    }
                 }
             }
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        Log.i(TAG, "onCreate")
+        Log.i(TAG, "onCreate: start")
         super.onCreate(savedInstanceState)
 
-        setupImmersiveMode()
-        setupLandscape()
+        window.statusBarColor = android.graphics.Color.TRANSPARENT
+        val decorView = window.decorView
+        decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+            )
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
 
         try {
             registerPlugin(GoProcessPlugin::class.java)
+            registerPlugin(ApiProxyPlugin::class.java)
+            registerPlugin(HighRefreshRatePlugin::class.java)
             registerPlugin(SimVersePlugin::class.java)
-            Log.d(TAG, "plugins registered")
+            Log.d(TAG, "onCreate: plugins registered")
         } catch (e: Exception) {
-            Log.e(TAG, "registerPlugin failed", e)
+            Log.e(TAG, "onCreate: registerPlugin failed", e)
         }
 
+        bridge.webView.settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        Log.i(TAG, "WebView mixedContentMode set to MIXED_CONTENT_ALWAYS_ALLOW")
+
         registerBackendReceiver()
-        loadWorldPage()
-    }
 
-    private fun setupLandscape() {
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        Log.i(TAG, "setupLandscape: sensorLandscape")
-    }
-
-    private fun setupImmersiveMode() {
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        window.statusBarColor = android.graphics.Color.TRANSPARENT
-        window.navigationBarColor = android.graphics.Color.TRANSPARENT
-
-        hideSystemBars()
-    }
-
-    private fun hideSystemBars() {
-        val controller = WindowInsetsControllerCompat(window, window.decorView)
-        controller.hide(WindowInsetsCompat.Type.systemBars())
-        controller.systemBarsBehavior =
-            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        immersiveMode = true
-    }
-
-    private fun showSystemBars() {
-        val controller = WindowInsetsControllerCompat(window, window.decorView)
-        controller.show(WindowInsetsCompat.Type.systemBars())
-        immersiveMode = false
-    }
-
-    private fun toggleSystemBars() {
-        if (immersiveMode) {
-            showSystemBars()
+        if (EncvGoService.isRunning && EncvGoService.lastKnownPort > 0) {
+            Log.i(TAG, "onCreate: backend already running, port=${EncvGoService.lastKnownPort}")
+            currentPort = EncvGoService.lastKnownPort
+            loadSimverse(EncvGoService.lastKnownPort)
         } else {
-            hideSystemBars()
+            Log.i(TAG, "onCreate: starting backend service")
+            startBackendService()
+        }
+    }
+
+    private fun loadSimverse(port: Int) {
+        if (simverseLoaded) return
+        simverseLoaded = true
+        currentPort = port
+
+        try {
+            val simverseUrl = "https://localhost/simverse/"
+            Log.i(TAG, "loadSimverse: $simverseUrl (apiPort=$port)")
+
+            val webView = bridge?.webView
+            if (webView == null) {
+                Log.e(TAG, "loadSimverse: webView is null!")
+                return
+            }
+
+            val originalClient = webView.webViewClient
+            webView.webViewClient = object : WebViewClient() {
+                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                    Log.i(TAG, "WVC.onPageStarted: url=$url")
+                    originalClient?.onPageStarted(view, url, favicon)
+                }
+
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    Log.i(TAG, "WVC.onPageFinished: url=$url")
+                    originalClient?.onPageFinished(view, url)
+                    injectApiBase(port)
+                    notifyBackend("opened")
+                }
+
+                override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                    Log.e(TAG, "WVC.onReceivedError: url=${request?.url}, error=${error?.description} (${error?.errorCode}), isMain=${request?.isForMainFrame}")
+                    originalClient?.onReceivedError(view, request, error)
+                }
+
+                override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, response: WebResourceResponse?) {
+                    Log.e(TAG, "WVC.onReceivedHttpError: url=${request?.url}, status=${response?.statusCode}, reason=${response?.reasonPhrase}")
+                    originalClient?.onReceivedHttpError(view, request, response)
+                }
+
+                override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+                    return try {
+                        originalClient?.shouldInterceptRequest(view, request)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "WVC.shouldInterceptRequest: originalClient failed", e)
+                        null
+                    }
+                }
+            }
+
+            val settings = webView.settings
+            settings.javaScriptEnabled = true
+            settings.domStorageEnabled = true
+            settings.mediaPlaybackRequiresUserGesture = false
+            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+
+            webView.loadUrl(simverseUrl)
+            Log.i(TAG, "loadSimverse: loadUrl dispatched")
+        } catch (e: Exception) {
+            Log.e(TAG, "loadSimverse: failed", e)
+        }
+    }
+
+    private fun injectApiBase(port: Int) {
+        val script = """
+            (function() {
+                window.__ENCV_API_BASE__ = 'http://127.0.0.1:$port';
+                window.__ENCV_PORT__ = $port;
+                console.log('[WorldActivity] API base set to http://127.0.0.1:$port');
+                if (window.dispatchEvent) {
+                    window.dispatchEvent(new CustomEvent('encv:api-base-ready', {detail: {port: $port}}));
+                }
+            })();
+        """.trimIndent()
+        bridge?.webView?.evaluateJavascript(script, null)
+        Log.d(TAG, "injectApiBase: port=$port")
+    }
+
+    private fun updateApiBase(port: Int) {
+        currentPort = port
+        injectApiBase(port)
+    }
+
+    private fun startBackendService() {
+        val serviceIntent = EncvGoService.createIntent(this, EncvGoService.ACTION_START, "simverse")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(serviceIntent)
+        } else {
+            startService(serviceIntent)
         }
     }
 
@@ -113,108 +198,61 @@ class WorldActivity : BridgeActivity() {
             addAction(EncvGoService.BROADCAST_BACKEND_READY)
             addAction(EncvGoService.BROADCAST_BACKEND_STATUS)
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(backendReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(backendReceiver, filter, RECEIVER_NOT_EXPORTED)
         } else {
-            @Suppress("UnspecifiedRegisterReceiverFlag")
+            @Suppress("DEPRECATED")
             registerReceiver(backendReceiver, filter)
         }
         backendReceiverRegistered = true
-        Log.i(TAG, "backend receiver registered")
-    }
-
-    private fun loadWorldPage() {
-        val webView = bridge?.webView
-        if (webView == null) {
-            Log.e(TAG, "loadWorldPage: webView is null!")
-            return
-        }
-
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
-        webView.settings.databaseEnabled = true
-        webView.settings.allowFileAccess = true
-        webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-
-        val originalClient = webView.webViewClient
-        webView.webViewClient = object : WebViewClient() {
-            override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                Log.i(TAG, "WVC.onPageStarted: $url")
-                originalClient?.onPageStarted(view, url, favicon)
-            }
-
-            override fun onPageFinished(view: WebView?, url: String?) {
-                Log.i(TAG, "WVC.onPageFinished: $url")
-                originalClient?.onPageFinished(view, url)
-            }
-
-            override fun onReceivedError(
-                view: WebView?,
-                request: WebResourceRequest?,
-                error: android.webkit.WebResourceError?
-            ) {
-                Log.e(TAG, "WVC.onReceivedError: url=${request?.url}, error=${error?.description}")
-                originalClient?.onReceivedError(view, request, error)
-            }
-
-            override fun shouldInterceptRequest(
-                view: WebView?,
-                request: WebResourceRequest?
-            ): WebResourceResponse? {
-                return try {
-                    originalClient?.shouldInterceptRequest(view, request)
-                } catch (e: Exception) {
-                    Log.w(TAG, "WVC.shouldInterceptRequest: originalClient failed", e)
-                    @Suppress("UNCHECKED_CAST")
-                    (bridge as? com.getcapacitor.Bridge)?.localServer?.shouldInterceptRequest(request)
-                }
-            }
-        }
-
-        webView.loadUrl(WORLD_URL)
-        Log.i(TAG, "loadWorldPage: loading $WORLD_URL")
-    }
-
-    private fun notifyFrontend(port: Int, running: Boolean, error: String?) {
-        bridge?.webView?.evaluateJavascript(
-            """
-            if (typeof window.__onBackendReady === 'function') {
-                window.__onBackendReady({ port: $port, running: $running, error: ${if (error != null) "'$error'" else "null"} });
-            }
-            """.trimIndent(),
-            null
-        )
-    }
-
-    override fun onDestroy() {
-        if (backendReceiverRegistered) {
-            try {
-                unregisterReceiver(backendReceiver)
-                backendReceiverRegistered = false
-            } catch (e: Exception) {
-                Log.w(TAG, "unregisterReceiver failed", e)
-            }
-        }
-        super.onDestroy()
+        Log.d(TAG, "registerBackendReceiver: receiver registered")
     }
 
     override fun onBackPressed() {
         val webView = bridge?.webView
-        if (webView?.canGoBack() == true) {
+        if (webView != null && webView.canGoBack()) {
             webView.goBack()
         } else {
-            super.onBackPressed()
+            notifyBackend("closed")
+            finish()
         }
     }
 
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus && immersiveMode) {
-            hideSystemBars()
+    override fun onDestroy() {
+        Log.d(TAG, "onDestroy: cleaning up")
+        if (backendReceiverRegistered) {
+            try {
+                unregisterReceiver(backendReceiver)
+            } catch (e: Exception) {
+                Log.w(TAG, "onDestroy: unregisterReceiver failed", e)
+            }
+            backendReceiverRegistered = false
         }
+        super.onDestroy()
     }
 
-    fun exitWorld() {
-        finish()
+    private fun notifyBackend(event: String) {
+        val port = currentPort
+        if (port <= 0) {
+            Log.w(TAG, "notifyBackend: backend not running (port=0), event=$event")
+            return
+        }
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val url = URL("http://127.0.0.1:$port/api/simverse/world/control")
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "POST"
+                conn.connectTimeout = 2000
+                conn.readTimeout = 3000
+                conn.doOutput = true
+                conn.setRequestProperty("Content-Type", "application/json")
+                val body = "{\"event\":\"$event\"}"
+                conn.outputStream.write(body.toByteArray())
+                val code = conn.responseCode
+                Log.d(TAG, "notifyBackend: event=$event, status=$code")
+            } catch (e: Exception) {
+                Log.w(TAG, "notifyBackend failed: event=$event, ${e.message}")
+            }
+        }
     }
 }

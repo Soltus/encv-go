@@ -18,9 +18,9 @@
  * 给 mock scrollEl 注入非零 clientHeight / offsetHeight。
  */
 
+import TaskVirtualList from "@/components/tasks/TaskVirtualList.vue";
 import { flushPromises, mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import TaskVirtualList from "@/components/tasks/TaskVirtualList.vue";
 
 interface TestItem {
   key: string;

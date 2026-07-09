@@ -94,7 +94,7 @@ func (p *VideoPlugin) GetDefaultSettings() json.RawMessage {
 		TrackExtensions:                ".ass,.srt,.dm.ass",
 		KeepMkvForMkvSource:            true,
 		VerifyAfterPack:                false,
-		AllowNoReencode:                false,
+		AllowNoReencode:                true,
 		DefaultStreamPreset:            "balanced",
 	}
 	data, _ := json.Marshal(defaultCfg) // 忽略错误，因为默认值是硬编码的，不会出错
@@ -154,7 +154,7 @@ func (p *VideoPlugin) GetSettingFields() []pluginInterfaces.SettingField {
 		{
 			Key:          "allow_no_reencode",
 			Type:         "bool",
-			DefaultValue: false,
+			DefaultValue: true,
 			Help:         "Whether to allow encrypting video without re-encoding.",
 		},
 		{
@@ -664,6 +664,7 @@ func (p *VideoPlugin) PostEncryptProcessor(result *crypto.EncryptionResult) (str
 		slog.Warn("Failed to calculate password hint, using empty hint", "error", err)
 	}
 	packParams.PasswordHint = passwordHint
+	packParams.WrappedDEK = result.WrappedDEK
 
 	outputPath, err := packer.StandardPostEncrypt(packParams)
 	if err != nil {

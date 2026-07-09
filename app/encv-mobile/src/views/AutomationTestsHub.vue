@@ -63,22 +63,14 @@
 
 <script setup lang="ts">
 import {
-  IonBackButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { cloudUploadOutline, flaskOutline, folderOpenOutline, serverOutline } from "ionicons/icons";
-import { useRouter } from "vue-router";
+  cloudUploadOutline,
+  flaskOutline,
+  folderOpenOutline,
+  serverOutline,
+} from "ionicons/icons";
+
 import { useI18n } from "@/composables/useI18n";
+import { useRouter } from "vue-router";
 
 const { t } = useI18n();
 const router = useRouter();

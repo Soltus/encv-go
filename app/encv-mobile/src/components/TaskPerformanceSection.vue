@@ -81,10 +81,15 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonButton } from "@ionic/vue";
-import { computed, ref } from "vue";
-import { type EncvTask, getTaskPerformance, type PerformanceMetrics, type PerformanceSummary, type PhaseTiming } from "@/api/encv";
+import {
+  type EncvTask,
+  getTaskPerformance,
+  type PerformanceMetrics,
+  type PerformanceSummary,
+  type PhaseTiming,
+} from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
+import { computed, ref } from "vue";
 
 interface DisplayMetrics {
   sourceSize: number;

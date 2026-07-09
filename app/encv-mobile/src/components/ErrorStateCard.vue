@@ -86,7 +86,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonButton, IonIcon } from "@ionic/vue";
 import {
   alertCircleOutline,
   bulbOutline,

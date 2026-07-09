@@ -21,12 +21,13 @@
  *   - iOS WKWebView 支持 Web Worker（iOS 10+）
  *   - 无需 polyfill
  */
-import { type ComputedRef, computed, type Ref, ref, toRaw, watch } from "vue";
+
 import type { EncvTask } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 import type { ComputeInput, ComputeOutput } from "@/workers/taskViewCompute.worker";
 // 🆕 Vite 原生支持 ?worker import（dev 用 esbuild，build 用 rollup 单独打包）
 import TaskViewComputeWorker from "@/workers/taskViewCompute.worker?worker";
+import { type ComputedRef, computed, type Ref, ref, toRaw, watch } from "vue";
 
 export interface UseTaskViewComputeOptions {
   /** 任务列表（响应式） */
@@ -338,7 +339,7 @@ export function useTaskViewCompute(options: UseTaskViewComputeOptions): UseTaskV
   if (worker) {
     worker.onmessage = (e: MessageEvent<ComputeOutput>) => {
       const output = e.data;
-      if (!output || output.type !== "result") return;
+      if (output?.type !== "result") return;
       isComputing.value = false;
       workerHasResult.value = true;
       // date section: dateKey → i18n label

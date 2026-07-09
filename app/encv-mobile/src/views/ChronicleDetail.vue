@@ -195,97 +195,75 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
 import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonBackButton,
-  IonButtons,
-  IonButton,
-  IonIcon,
-  IonContent,
-  IonList,
-  IonListHeader,
-  IonLabel,
-  IonItem,
-  IonNote,
-  IonAvatar,
-  IonBadge,
-  IonSelect,
-  IonSelectOption,
-  IonSpinner,
-  IonModal,
-} from '@ionic/vue'
-import { refresh, chevronForward as chevronForwardIcon } from 'ionicons/icons'
-import {
-  useSimverse,
-  type SimverseChronicleWorldResponse,
   type SimverseChronicleEvent,
-} from '@/composables/useSimverse'
+  type SimverseChronicleWorldResponse,
+  useSimverse,
+} from "@/composables/useSimverse";
+import { chevronForward as chevronForwardIcon, refresh } from "ionicons/icons";
+import { onMounted, ref } from "vue";
 
-const { loadChronicleWorld, loadChronicleEvent, currentTick } = useSimverse()
+const { loadChronicleWorld, loadChronicleEvent, currentTick } = useSimverse();
 
-const loading = ref(false)
-const loaded = ref(false)
-const worldData = ref<SimverseChronicleWorldResponse | null>(null)
-const minImportance = ref(2)
-const displayLimit = ref(50)
+const loading = ref(false);
+const loaded = ref(false);
+const worldData = ref<SimverseChronicleWorldResponse | null>(null);
+const minImportance = ref(2);
+const displayLimit = ref(50);
 
-const refreshIcon = refresh
-const chevronForward = chevronForwardIcon
+const refreshIcon = refresh;
+const chevronForward = chevronForwardIcon;
 
-const showEventModal = ref(false)
-const selectedEvent = ref<SimverseChronicleEvent | null>(null)
+const showEventModal = ref(false);
+const selectedEvent = ref<SimverseChronicleEvent | null>(null);
 
 function levelIcon(level: string): string {
   const map: Record<string, string> = {
-    Personal: '个',
-    Family: '家',
-    Organization: '组',
-    Regional: '区',
-    World: '世',
-  }
-  return map[level] || '?'
+    Personal: "个",
+    Family: "家",
+    Organization: "组",
+    Regional: "区",
+    World: "世",
+  };
+  return map[level] || "?";
 }
 
 function impBadgeColor(imp: number): string {
-  const colors = ['medium', 'tertiary', 'primary', 'success', 'warning', 'danger']
-  return colors[imp] || 'medium'
+  const colors = ["medium", "tertiary", "primary", "success", "warning", "danger"];
+  return colors[imp] || "medium";
 }
 
 async function loadData() {
-  loading.value = true
+  loading.value = true;
   try {
-    const data = await loadChronicleWorld(minImportance.value, displayLimit.value)
-    worldData.value = data
-    loaded.value = true
+    const data = await loadChronicleWorld(minImportance.value, displayLimit.value);
+    worldData.value = data;
+    loaded.value = true;
   } catch (e) {
-    console.warn('Failed to load chronicle:', e)
+    console.warn("Failed to load chronicle:", e);
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 async function openEventDetail(evt: SimverseChronicleEvent) {
-  const detail = await loadChronicleEvent(evt.id)
+  const detail = await loadChronicleEvent(evt.id);
   if (detail) {
-    selectedEvent.value = detail
-    showEventModal.value = true
+    selectedEvent.value = detail;
+    showEventModal.value = true;
   }
 }
 
 async function loadAndShowEvent(id: number) {
-  const detail = await loadChronicleEvent(id)
+  const detail = await loadChronicleEvent(id);
   if (detail) {
-    selectedEvent.value = detail
+    selectedEvent.value = detail;
   }
 }
 
 onMounted(() => {
-  loadData()
-})
+  loadData();
+});
 </script>
 
 <style scoped>

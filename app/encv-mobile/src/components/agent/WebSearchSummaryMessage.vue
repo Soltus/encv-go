@@ -29,12 +29,12 @@
 </template>
 
 <script setup lang="ts">
-import { chevronDownOutline, chevronUpOutline, searchOutline } from "ionicons/icons";
-import { computed, ref } from "vue";
 import type { ToolCall } from "@/composables/useAgent";
 import { useI18n } from "@/composables/useI18n";
-import MessageAuthor from "./MessageAuthor.vue";
-import StatusBadge from "./StatusBadge.vue";
+import MessageAuthor from "@/components/agent/MessageAuthor.vue";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
+import { chevronDownOutline, chevronUpOutline, searchOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
 
 const props = defineProps<{
   queries: string[];

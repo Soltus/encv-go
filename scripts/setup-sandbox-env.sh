@@ -14,10 +14,11 @@
 #   0/6  前置检查（go / node / pnpm / git / curl / cmake）
 #   1/6  装 Go 工具链 (air-verse/air live reload)
 #   2/6  装 Kotlin 工具链 (运行 .trae/scripts/setup-kotlinc.sh)
-#   3/6  clone OpenList 双 fork
+#   3/7  clone OpenList 双 fork
 #         - 后端: app/openlist/Hi-Sillot-OpenList/   (dev 分支)
 #         - 前端: app/openlist/Hi-Sillot-OpenList-Frontend/ (main 分支)
-#   4/6  构建前端 fork 的 dist (Hi-Sillot-OpenList-Frontend/dist/)
+#   3b/7 clone ComboLite fork (K-Sillot/ComboLite)
+#   4/7  构建前端 fork 的 dist (Hi-Sillot-OpenList-Frontend/dist/)
 #   5/6  pnpm install encv-mobile 主 app + plugin-openlist/web
 #   6/6  构建 preview-gateway 网关（app/preview-gateway/）
 #
@@ -236,9 +237,32 @@ else
 fi
 
 # ============================================================================
-# 步骤 4/5: 构建前端 fork 的 dist
+# 步骤 3b/7: clone ComboLite fork (K-Sillot/ComboLite)
 # ============================================================================
-step "4/5 构建前端 fork 的 dist (Hi-Sillot-OpenList-Frontend/dist/)"
+step "3b/7 clone ComboLite fork (K-Sillot/ComboLite)"
+
+COMBOLITE_DIR="${REPO_ROOT}/app/combolite"
+COMBOLITE_FORK_DIR="${COMBOLITE_DIR}/ComboLite"
+
+if [[ -d "${COMBOLITE_FORK_DIR}/.git" ]]; then
+  ok "ComboLite fork 已存在: ${COMBOLITE_FORK_DIR}"
+else
+  log "git clone K-Sillot/ComboLite ..."
+  mkdir -p "${COMBOLITE_DIR}"
+  cd "${COMBOLITE_DIR}"
+  if git clone --depth 1 \
+       https://github.com/K-Sillot/ComboLite.git \
+       ComboLite 2>&1 | tail -3; then
+    ok "ComboLite fork clone 完成"
+  else
+    warn "ComboLite fork clone 失败（不影响主构建，仅用于源码参考）"
+  fi
+fi
+
+# ============================================================================
+# 步骤 4/7: 构建前端 fork 的 dist
+# ============================================================================
+step "4/6 构建前端 fork 的 dist (Hi-Sillot-OpenList-Frontend/dist/)"
 
 if [[ -f "${FRONTEND_FORK_DIR}/dist/index.html" ]]; then
   ok "前端 dist 已构建: ${FRONTEND_FORK_DIR}/dist/"
@@ -271,73 +295,94 @@ else
 fi
 
 # ============================================================================
-# 步骤 5/5: pnpm install encv-mobile
+# 步骤 5/6: pnpm install (workspace 一次安装所有包)
 # ============================================================================
-step "5/6 pnpm install encv-mobile + plugin-openlist/web"
+APP_DIR="${REPO_ROOT}/app"
 
-# 5a. 主 app
-if [[ -d "${MOBILE_DIR}/node_modules/vite" ]]; then
-  ok "encv-mobile node_modules 已就绪"
-else
-  log "pnpm install encv-mobile ..."
-  cd "${MOBILE_DIR}"
-  if pnpm install --prefer-offline 2>&1 | tail -5; then
-    ok "encv-mobile 依赖安装完成"
-  else
-    err "encv-mobile pnpm install 失败"
-    FAILED=$((FAILED+1))
-  fi
-fi
+step "5/6 pnpm install (workspace 一次安装: encv-mobile + 所有 plugin-web + preview-gateway)"
 
-# 5b. plugin web
-if [[ -d "${MOBILE_DIR}/plugin-openlist/web/node_modules/vite" ]]; then
-  ok "plugin-openlist/web node_modules 已就绪"
+if [[ -d "${MOBILE_DIR}/node_modules/vite" ]] && \
+   [[ -d "${MOBILE_DIR}/plugin-openlist/web/node_modules/vite" ]] && \
+   [[ -d "${MOBILE_DIR}/plugin-simverse/web/node_modules/vite" ]]; then
+  ok "workspace node_modules 已就绪"
 else
-  log "pnpm install plugin-openlist/web ..."
-  cd "${MOBILE_DIR}"
-  if pnpm install --prefer-offline 2>&1 | tail -5; then
-    ok "plugin-openlist/web 依赖安装完成"
+  log "pnpm install (workspace) ..."
+  cd "${APP_DIR}"
+  if pnpm install --prefer-offline 2>&1 | tail -8; then
+    ok "workspace 依赖安装完成"
   else
-    warn "plugin-openlist/web pnpm install 失败（5174 Vite 跑不起来）"
+    err "workspace pnpm install 失败"
     FAILED=$((FAILED+1))
   fi
 fi
 
 # ============================================================================
-# 步骤 6/6: 构建 preview-gateway 网关
+# 步骤 6/7: 构建 preview-gateway 网关
 # ============================================================================
 GATEWAY_DIR="${REPO_ROOT}/app/preview-gateway"
 
-step "6/6 构建 preview-gateway 网关（app/preview-gateway/）"
+step "6/7 构建 preview-gateway 网关（Go 版，app/preview-gateway/）"
 
-if [[ -d "${GATEWAY_DIR}/node_modules" ]]; then
-  ok "preview-gateway node_modules 已就绪"
+if [[ -f "${GATEWAY_DIR}/bin/preview-gateway" ]]; then
+  ok "preview-gateway 二进制已构建: bin/preview-gateway"
 else
-  log "pnpm install preview-gateway ..."
+  log "构建 preview-gateway (make build) ..."
   cd "${GATEWAY_DIR}"
-  if pnpm install --prefer-offline 2>&1 | tail -5; then
-    ok "preview-gateway 依赖安装完成"
-  else
-    err "preview-gateway pnpm install 失败（网关跑不起来）"
-    FAILED=$((FAILED+1))
-  fi
-fi
-
-if [[ -f "${GATEWAY_DIR}/dist/server.js" ]]; then
-  ok "preview-gateway dist/server.js 已构建"
-else
-  log "构建 preview-gateway (pnpm build) ..."
-  cd "${GATEWAY_DIR}"
-  if pnpm build 2>&1 | tail -8; then
-    if [[ -f "${GATEWAY_DIR}/dist/server.js" ]]; then
+  if make build 2>&1 | tail -5; then
+    if [[ -f "${GATEWAY_DIR}/bin/preview-gateway" ]]; then
       ok "preview-gateway 构建完成"
     else
-      warn "构建退出 0 但 dist/server.js 不存在"
+      warn "构建退出 0 但 bin/preview-gateway 不存在"
       FAILED=$((FAILED+1))
     fi
   else
     err "preview-gateway 构建失败（pm2 启动会失败）"
     FAILED=$((FAILED+1))
+  fi
+fi
+
+# ============================================================================
+# 步骤 7/7: TapTap Maker 项目
+# ============================================================================
+MAKER_DIR="${REPO_ROOT}/app/taptap-maker-demo"
+DEFAULT_MAKER_GIT_URL="https://maker.taptap.cn/git/c2ed6318-a2e3-4a6c-bcd4-40e170c14556.git"
+MAKER_GIT_URL="${MAKER_GIT_URL:-${DEFAULT_MAKER_GIT_URL}}"
+
+step "7/7 TapTap Maker 项目（app/taptap-maker-demo/）"
+
+if [[ -d "${MAKER_DIR}/.git" ]]; then
+  ok "Maker 项目已存在: ${MAKER_DIR}"
+else
+  log "从 ${MAKER_GIT_URL} 克隆 Maker 项目 ..."
+  mkdir -p "$(dirname "${MAKER_DIR}")"
+  if git clone --depth 1 "${MAKER_GIT_URL}" "${MAKER_DIR}" 2>&1 | tail -3; then
+    ok "Maker 项目克隆完成"
+  else
+    warn "Maker 项目克隆失败（可能需要认证 token，跳过，不影响主构建）"
+    log "  如需认证，请设置带 token 的 URL:"
+    log "    export MAKER_GIT_URL=https://git:YOUR_TOKEN@maker.taptap.cn/git/xxx.git"
+    FAILED=$((FAILED+1))
+  fi
+fi
+
+# ============================================================================
+# 步骤 8/8: Phaser 游戏引擎源码
+# ============================================================================
+PHASER_DIR="${REPO_ROOT}/app/phaser"
+
+step "8/8 Phaser 游戏引擎源码（app/phaser/）"
+
+if [[ -d "${PHASER_DIR}/.git" ]]; then
+  ok "Phaser 源码已存在: ${PHASER_DIR}"
+else
+  log "git clone phaserjs/phaser ..."
+  mkdir -p "$(dirname "${PHASER_DIR}")"
+  if git clone --depth 1 --branch v4.2 \
+       https://github.com/phaserjs/phaser.git \
+       "${PHASER_DIR}" 2>&1 | tail -3; then
+    ok "Phaser 源码克隆完成"
+  else
+    warn "Phaser 源码克隆失败（不影响主构建，用于 simverse web 开发参考）"
   fi
 fi
 
@@ -365,7 +410,7 @@ cat <<EOF
 
 仓库：
 EOF
-for d in "${BACKEND_FORK_DIR}" "${FRONTEND_FORK_DIR}" "${MOBILE_DIR}/node_modules/vite" "${FRONTEND_FORK_DIR}/dist/index.html" "${GATEWAY_DIR}/dist/server.js"; do
+for d in "${BACKEND_FORK_DIR}" "${FRONTEND_FORK_DIR}" "${MOBILE_DIR}/node_modules/vite" "${FRONTEND_FORK_DIR}/dist/index.html" "${GATEWAY_DIR}/bin/preview-gateway" "${MOBILE_DIR}/plugin-simverse/web/node_modules/vite" "${MAKER_DIR}/.git" "${PHASER_DIR}/.git"; do
   if [[ -e "$d" ]]; then
     if [[ -d "$d/.git" ]]; then
       branch=$(cd "$d" && git rev-parse --abbrev-ref HEAD 2>/dev/null)

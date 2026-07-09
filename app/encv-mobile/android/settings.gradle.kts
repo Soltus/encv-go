@@ -15,14 +15,15 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_PROJECT)
     repositories {
+        google()
         mavenCentral()
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        // CI 环境在腾讯云，优先用腾讯镜像；阿里云镜像偶发 502 放在最后做兜底
         if (System.getenv("CI") == null) {
             maven { url = uri("https://mirrors.tencent.com/nexus/repository/maven-public/") }
         }
         maven { url = uri("https://mirrors.tencent.com/repository/maven-tencent/") }
         maven { url = uri("https://maven.aliyun.com/repository/public") }
-        google()
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
         maven { url = uri("https://jitpack.io") }
         flatDir {
             dirs("${rootProject.projectDir}/capacitor-cordova-android-plugins/src/main/libs", "${rootProject.projectDir}/app/libs")
@@ -55,12 +56,14 @@ val includePlugins = gradle.startParameter.projectProperties["includePlugins"] =
 if (includePlugins) {
     include(":plugin-mpv-player")
     include(":plugin-openlist")
+    include(":plugin-simverse")
 }
 
 project(":capacitor-cordova-android-plugins").projectDir = file("./capacitor-cordova-android-plugins/")
 if (includePlugins) {
     project(":plugin-mpv-player").projectDir = file("../plugin-mpv-player")
     project(":plugin-openlist").projectDir = file("../plugin-openlist")
+    project(":plugin-simverse").projectDir = file("../plugin-simverse")
 }
 
 apply(from = "capacitor.settings.gradle")

@@ -283,6 +283,53 @@ func BenchmarkEncryptToTempFile_v2(b *testing.B) {
 	}
 }
 
+// --- 分层密钥（信封加密）基准 ---
+
+func BenchmarkDeriveKEK(b *testing.B) {
+	salt := make([]byte, SaltSize_v2)
+	rand.Read(salt)
+	password := "benchmark-password"
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		_ = DeriveKEK(password, salt)
+	}
+}
+
+func BenchmarkGenerateDEK(b *testing.B) {
+	b.ReportAllocs()
+	for b.Loop() {
+		_, _ = GenerateDEK(KeySize_v4_128)
+	}
+}
+
+func BenchmarkWrapUnwrapDEK(b *testing.B) {
+	salt := make([]byte, SaltSize_v2)
+	rand.Read(salt)
+	password := "benchmark-password"
+	kek := DeriveKEK(password, salt)
+	dek, _ := GenerateDEK(KeySize_v4_128)
+	aad := []byte("benchmark-aad")
+
+	b.Run("WrapDEK", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for b.Loop() {
+			_, _ = WrapDEK(dek, kek, aad)
+		}
+	})
+
+	wd, _ := WrapDEK(dek, kek, aad)
+	b.Run("UnwrapDEK", func(b *testing.B) {
+		b.ReportAllocs()
+		b.ResetTimer()
+		for b.Loop() {
+			_, _ = UnwrapDEK(wd, kek)
+		}
+	})
+}
+
 // --- 辅助函数 ---
 
 func humanBytes(n int64) string {

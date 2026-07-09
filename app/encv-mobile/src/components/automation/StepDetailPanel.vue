@@ -95,10 +95,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
 import type { JobRun, StepRun } from "@/lib/workflow/types";
-import ErrorChainNode from "./ErrorChainNode.vue";
-import StepMiniBadge from "./StepMiniBadge.vue";
+import { computed } from "vue";
 
 const props = defineProps<{
   stepRun: StepRun;

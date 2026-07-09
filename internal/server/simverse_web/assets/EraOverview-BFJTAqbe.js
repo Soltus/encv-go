@@ -1,0 +1,1 @@
+import{H as e,Q as t,q as n}from"./index-Def3AACJ.js";import{t as r}from"./SvPagePlaceholder-D7SvAfMu.js";var i=n({__name:`EraOverview`,setup(n){return(n,i)=>(t(),e(r,{"title-key":`simverse.eraOverview`,"icon-name":`time`}))}});export{i as default};

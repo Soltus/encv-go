@@ -13,8 +13,18 @@ on:
         required: false
         default: ''
         type: string
-      skip_plugin:
-        description: 'Skip all plugin builds (MPV + OpenList). Only build host app.'
+      skip_mpv_plugin:
+        description: 'Skip MPV player plugin build'
+        required: false
+        default: 'false'
+        type: boolean
+      skip_openlist_plugin:
+        description: 'Skip OpenList plugin build'
+        required: false
+        default: 'false'
+        type: boolean
+      skip_simverse_plugin:
+        description: 'Skip SimVerse plugin build'
         required: false
         default: 'false'
         type: boolean
@@ -86,8 +96,9 @@ jobs:
             app/node_modules
             app/encv-mobile/node_modules
             app/encv-mobile/plugin-openlist/web/node_modules
+            app/encv-mobile/plugin-simverse/web/node_modules
             app/preview-gateway/node_modules
-          key: pnpm-main-${{ hashFiles('app/pnpm-lock.yaml', 'app/encv-mobile/package.json', 'app/preview-gateway/package.json') }}
+          key: pnpm-main-${{ hashFiles('app/pnpm-lock.yaml', 'app/encv-mobile/package.json', 'app/encv-mobile/plugin-simverse/web/package.json', 'app/preview-gateway/package.json') }}
           restore-keys: |
             pnpm-main-
 
@@ -115,8 +126,13 @@ jobs:
         run: pnpm exec vue-tsc --noEmit
 
       - name: TypeScript check (plugin-openlist/web)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         working-directory: app/encv-mobile/plugin-openlist/web
+        run: pnpm exec vue-tsc --noEmit
+
+      - name: TypeScript check (plugin-simverse/web)
+        if: inputs.skip_simverse_plugin != true
+        working-directory: app/encv-mobile/plugin-simverse/web
         run: pnpm exec vue-tsc --noEmit
 
       - name: Build main app web
@@ -124,7 +140,7 @@ jobs:
         run: pnpm run build
 
       - name: Build plugin-openlist/web → assets/openlist/
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         run: bash scripts/build-plugin-openlist-web.sh
 
       - name: Run frontend unit tests (vitest)
@@ -167,7 +183,7 @@ jobs:
           done
 
       - name: Download MPV native libraries from Release
-        if: inputs.skip_plugin != true
+        if: inputs.skip_mpv_plugin != true
         env:
           PLUGIN_MPV_JNI: ${{ steps.paths.outputs.PLUGIN_MPV_JNI }}
         run: |
@@ -369,7 +385,7 @@ jobs:
           
           # 检查产物
           OBJECTBOX_READY=0
-          if [ -f "$OB_DIR/libobjectbox.so" ]; then
+          if [ -f "$OB_DIR/libobjectbox-jni.so" ]; then
             OBJECTBOX_READY=1
             echo "✅ ObjectBox native library found:"
             ls -lh "$OB_DIR/"
@@ -434,6 +450,7 @@ jobs:
           else
             echo "⚠️  Building WITHOUT objectbox support"
           fi
+          echo "ℹ️  Objectbox disabled on mobile: using gliderlabs/sqlite stub"
           BUILD_TAGS="${BUILD_TAGS# }"
           BUILD_TAGS="-tags ${BUILD_TAGS}"
           echo "Final BUILD_TAGS='${BUILD_TAGS}'"
@@ -460,15 +477,18 @@ jobs:
           fi
 
           # 如果是动态链接 objectbox，把 .so 复制到 jniLibs
+          # build-objectbox-android.sh 同时输出 libobjectbox.so（供 SDK/自己 CGO -lobjectbox 用）
+          # 和 libobjectbox-jni.so（SONAME 匹配，运行时 linker 需要）。
+          # 这里复制 libobjectbox-jni.so 进入 APK jniLibs，供 linker 按 SONAME 查找。
           if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
-            if [ -f "pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox.so" ]; then
+            if [ -f "pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox-jni.so" ]; then
               mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
-              cp pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox.so \
+              cp pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox-jni.so \
                  ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
-              echo "✅ Copied libobjectbox.so to jniLibs/arm64-v8a/"
+              echo "✅ Copied libobjectbox-jni.so to jniLibs/arm64-v8a/"
             fi
           fi
-          
+
           # 检查二进制是否包含 libsql
           # 注意：-ldflags="-s -w" 会 strip 符号表，nm 找不到符号。
           # 用 strings 搜索 libsql_ 前缀的函数名作为替代检测方式。
@@ -747,7 +767,7 @@ jobs:
         run: |
           echo "═══ HOST APP jniLibs (Go backend + native libs) ═══"
           HOST_LIBS="${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a"
-          for lib in libencv-go.so libffmpeg.so libffprobe.so libsql_experimental.so libobjectbox.so; do
+          for lib in libencv-go.so libffmpeg.so libffprobe.so libsql_experimental.so libobjectbox-jni.so; do
             if [ -f "$HOST_LIBS/$lib" ]; then
               echo "  ✅ $lib $(ls -lh "$HOST_LIBS/$lib" | awk '{print $5}')"
             else
@@ -788,8 +808,26 @@ jobs:
       #      still shows FAILED (red, real error) but does NOT kill the job
       #      before the main app APK is built and uploaded.
 
+      - name: Build MPV player frontend
+        if: inputs.skip_mpv_plugin != true
+        continue-on-error: true
+        run: |
+          echo "═══ Building MPV frontend ═══"
+          cd app/encv-mobile/plugin-mpv-player/web
+          pnpm install --prefer-offline
+          pnpm build
+          echo "✅ MPV frontend built:"
+          ls -lh dist/
+
+          PLUGIN_ASSETS="${GITHUB_WORKSPACE}/${{ env.MONOREPO_MOBILE_DIR }}/plugin-mpv-player/src/main/assets/mpv"
+          mkdir -p "$PLUGIN_ASSETS"
+          rm -rf "$PLUGIN_ASSETS"/*
+          cp -r dist/* "$PLUGIN_ASSETS/"
+          echo "✅ Copied to plugin assets: $PLUGIN_ASSETS"
+          ls -lh "$PLUGIN_ASSETS/"
+
       - name: Build MPV player plugin (JNI + Kotlin)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_mpv_plugin != true
         continue-on-error: true
         run: |
           cd ${{ env.MONOREPO_MOBILE_DIR }}/android
@@ -806,7 +844,7 @@ jobs:
           echo "=== Plugin compile done (${BUILD_TYPE}) ==="
 
       - name: Package MPV plugin as APK
-        if: inputs.skip_plugin != true
+        if: inputs.skip_mpv_plugin != true
         continue-on-error: true
         run: |
           cd ${{ env.MONOREPO_MOBILE_DIR }}/android
@@ -825,21 +863,21 @@ jobs:
             exit 1
           fi
 
-      - name: Verify plugin APK contents
-        if: always() && inputs.skip_plugin != true
+      - name: Verify MPV plugin APK contents
+        if: always() && inputs.skip_mpv_plugin != true
         continue-on-error: true
         run: |
           BUILD_TYPE="${{ inputs.version && 'release' || 'debug' }}"
           PLUGIN_APK=$(find ${{ env.MONOREPO_MOBILE_DIR }}/android/build -name "plugin-mpv-player-${BUILD_TYPE}.apk" -type f 2>/dev/null | head -1)
           if [ -f "$PLUGIN_APK" ]; then
-            echo "=== Plugin APK size ==="
+            echo "=== MPV Plugin APK size ==="
             ls -lh "$PLUGIN_APK"
-            echo "=== .so files in plugin APK ==="
+            echo "=== .so files in MPV plugin APK ==="
             unzip -l "$PLUGIN_APK" | grep "\.so" | head -20 || echo "(no .so)"
             echo "=== Total .so count ==="
             unzip -l "$PLUGIN_APK" | grep -c "\.so" || echo "0"
           else
-            echo "⏭️ Plugin APK not available"
+            echo "⏭️ MPV Plugin APK not available"
           fi
 
       # === Build OpenList Plugin (Phase 27: Hi-Sillot/OpenList fork 交叉编译为 libopenlist.so) ===
@@ -851,7 +889,7 @@ jobs:
       # 关键:fork clone 不在主仓库(.gitignore 排除),必须 CI step 浅拉到
       # app/openlist/Hi-Sillot-OpenList/。fork 是 public 仓库无需 token。
       - name: Checkout Hi-Sillot/OpenList fork (Phase 27)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         uses: actions/checkout@v4
         with:
           repository: Hi-Sillot/OpenList
@@ -859,7 +897,7 @@ jobs:
           path: app/openlist/Hi-Sillot-OpenList
           fetch-depth: 1
       - name: Build OpenList native libs (Go cross-compile, arm64-v8a, CGO+NDK)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         env:
           CGO_ENABLED: "1"
           GOOS: android
@@ -899,7 +937,7 @@ jobs:
           fi
           echo "✅ libopenlist-arm64.so 构建成功 (ARM aarch64 executable)"
       - name: Copy libopenlist.so to plugin-openlist jniLibs
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         run: |
           set -e
           JNI_DIR="${{ env.MONOREPO_MOBILE_DIR }}/plugin-openlist/src/main/jniLibs/arm64-v8a"
@@ -910,7 +948,7 @@ jobs:
           file "$JNI_DIR/libopenlist.so"
 
       - name: Build OpenList plugin APK (aar2apk)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # Phase 18 Guard C (cheapest, fail-fast): grep for known-bad Map<String, Any?>
@@ -1050,7 +1088,7 @@ jobs:
           fi
 
       - name: Verify injectOpenlistClassesToAar task ran (A3.3 v2 diagnostic)
-        if: always() && inputs.skip_plugin != true
+        if: always() && inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.3 v2 关键诊断: build.gradle.kts 用错任务名 (下划线 vs 连字符)
@@ -1110,7 +1148,7 @@ jobs:
           ls -lh /tmp/diagnostic-aar/ 2>/dev/null
 
       - name: Verify OpenList plugin APK has openlistlib classes (dex string scan)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.4 强化验证：用 dexdump 字符串扫描 classes.dex 看 Lopenlistlib/* 类是否真在 dex
@@ -1211,7 +1249,7 @@ jobs:
           unzip -p "$APK_PATH" 'lib/arm64-v8a/libgojni.so' 2>/dev/null | wc -c | xargs -I {} echo "lib/arm64-v8a/libgojni.so bytes: {}"
 
       - name: Inspect plugin-openlist AAR classes.jar (intermediate artifact)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.4 v2: 看 aar 阶段 classes.jar 里有什么类
@@ -1267,7 +1305,7 @@ jobs:
           fi
 
       - name: Inspect injectOpenlistClassesToAar task (A3.3 v2 injection)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.4 v2: 验证 A3.3 重写版 injectOpenlistClassesToAar 任务配置
@@ -1325,7 +1363,7 @@ jobs:
           fi
 
       - name: Run kotlinc verify on OpenListBridge (sandbox sim)
-        if: inputs.skip_plugin != true
+        if: inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.4: 用 kotlinc 直接编译 OpenListBridge.kt + libs/openlist-classes.jar
@@ -1400,7 +1438,7 @@ jobs:
           fi
 
       - name: Upload diagnostic bundle
-        if: always() && inputs.skip_plugin != true
+        if: always() && inputs.skip_openlist_plugin != true
         continue-on-error: true
         run: |
           # A3.4 v3: 打包**所有**诊断产物到 artifact
@@ -1463,6 +1501,58 @@ jobs:
           cp /tmp/diagnostic.tar.gz /tmp/diagnostic-artifact/openlist-diagnostic.tar.gz
           ls -lh /tmp/diagnostic-artifact/
           echo "Diagnostic ready at /tmp/diagnostic-artifact/openlist-diagnostic.tar.gz" >> $GITHUB_STEP_SUMMARY
+
+      # === Build SimVerse Plugin ===
+      - name: Build SimVerse frontend
+        if: inputs.skip_simverse_plugin != true
+        continue-on-error: true
+        run: |
+          echo "═══ Building SimVerse frontend ═══"
+          cd app/encv-mobile/plugin-simverse/web
+          pnpm install --prefer-offline
+          pnpm build
+          echo "✅ SimVerse frontend built:"
+          ls -lh dist/
+
+          # Copy to plugin assets
+          PLUGIN_ASSETS="${GITHUB_WORKSPACE}/${{ env.MONOREPO_MOBILE_DIR }}/plugin-simverse/src/main/assets/simverse"
+          mkdir -p "$PLUGIN_ASSETS"
+          rm -rf "$PLUGIN_ASSETS"/*
+          cp -r dist/* "$PLUGIN_ASSETS/"
+          echo "✅ Copied to plugin assets: $PLUGIN_ASSETS"
+          ls -lh "$PLUGIN_ASSETS/"
+
+      - name: Build SimVerse plugin APK
+        if: inputs.skip_simverse_plugin != true
+        run: |
+          echo "═══ Building SimVerse ComboLite Plugin APK ═══"
+          cd ${{ env.MONOREPO_MOBILE_DIR }}/android
+
+          BUILD_TYPE="${{ inputs.version && 'Release' || 'Debug' }}"
+          APK_BUILD_TYPE="${{ inputs.version && 'release' || 'debug' }}"
+
+          echo "=== Compiling SimVerse plugin (${BUILD_TYPE}) ==="
+          ./gradlew -PincludePlugins=true ":plugin-simverse:compile${BUILD_TYPE}Kotlin" --stacktrace 2>&1
+
+          echo "=== Converting to plugin APK ==="
+          ./gradlew -PincludePlugins=true "convert_plugin-simverse_${APK_BUILD_TYPE}" --stacktrace 2>&1
+
+          echo "=== Locating output ==="
+          SIMVERSE_APK="build/outputs/plugin-apks/${APK_BUILD_TYPE}/plugin-simverse-${APK_BUILD_TYPE}.apk"
+          if [ -f "$SIMVERSE_APK" ]; then
+            echo "✅ SimVerse Plugin APK:"
+            ls -lh "$SIMVERSE_APK"
+            echo ""
+            echo "=== APK contents check ==="
+            unzip -l "$SIMVERSE_APK" | head -30
+            echo ""
+            echo "=== SimVerse assets in APK ==="
+            unzip -l "$SIMVERSE_APK" | grep "simverse/index.html" || echo "(no simverse assets found)"
+          else
+            echo "::error::SimVerse Plugin APK not found after build"
+            find build/outputs -name "*.apk" 2>/dev/null | head -10 || echo "No APKs found"
+            exit 1
+          fi
 
       # === Build ===
       - name: Build ${{ inputs.version && 'Release' || 'Debug' }} APK
@@ -1560,8 +1650,8 @@ jobs:
               echo "✅ PASS: Host APK excludes MPV .so"
             fi
             echo "=== Plugin loading strategy ==="
-            if [ "${{ inputs.skip_plugin }}" = "true" ]; then
-              echo "⏭️ Skipped (skip_plugin=true)"
+            if [ "${{ inputs.skip_mpv_plugin }}" = "true" ]; then
+              echo "⏭️ Skipped (skip_mpv_plugin=true)"
             elif unzip -l "$APK_PATH" | grep -q "mpv-player.apk"; then
               echo "❌ FAIL: Plugin APK should NOT be bundled in host assets (disk-based loading)"
               exit 1
@@ -1573,7 +1663,7 @@ jobs:
           fi
 
       - name: Verify upload files exist + log sizes
-        if: always() && inputs.skip_plugin != true
+        if: always() && (inputs.skip_mpv_plugin != true || inputs.skip_openlist_plugin != true || inputs.skip_simverse_plugin != true)
         continue-on-error: true
         run: |
           # 用户多次反馈 28.5MB encv-go-android-v1.0.1 只有 host APK ——
@@ -1586,12 +1676,16 @@ jobs:
           echo | tee -a /tmp/diagnostic-apk-sizes.txt
           echo "=== Plugin APKs ===" | tee -a /tmp/diagnostic-apk-sizes.txt
           PLUGIN_FOUND=0
+          OPENLIST_FOUND=0
+          SIMVERSE_FOUND=0
           for f in $(find ${{ env.MONOREPO_MOBILE_DIR }}/android/build/outputs/plugin-apks -name "*.apk" -type f 2>/dev/null); do
             ls -lh "$f" | tee -a /tmp/diagnostic-apk-sizes.txt
             PLUGIN_FOUND=1
+            echo "$f" | grep -q "openlist" && OPENLIST_FOUND=1
+            echo "$f" | grep -q "simverse" && SIMVERSE_FOUND=1
           done
           if [ "$PLUGIN_FOUND" -eq 0 ]; then
-            echo "❌ 找不到 plugin APK" | tee -a /tmp/diagnostic-apk-sizes.txt
+            echo "❌ 找不到任何 plugin APK" | tee -a /tmp/diagnostic-apk-sizes.txt
             echo "可能根因: step 38 (Build OpenList plugin APK) 失败" | tee -a /tmp/diagnostic-apk-sizes.txt
             echo "          或 convert_plugin-openlist_release 任务被跳过" | tee -a /tmp/diagnostic-apk-sizes.txt
             # 兜底查找 (兼容 aar2apk 路径变动)
@@ -1604,6 +1698,18 @@ jobs:
             unzip -l "$APK" 2>/dev/null | grep -E "libgojni|lib/" | head -10 | tee -a /tmp/diagnostic-apk-sizes.txt
             SIZE=$(stat -c%s "$APK" 2>/dev/null || stat -f%z "$APK" 2>/dev/null)
             echo "plugin APK 字节数: $SIZE (期望 >50000000)" | tee -a /tmp/diagnostic-apk-sizes.txt
+          fi
+          echo "" | tee -a /tmp/diagnostic-apk-sizes.txt
+          echo "=== 各插件检查 ===" | tee -a /tmp/diagnostic-apk-sizes.txt
+          if [ "$OPENLIST_FOUND" -eq 1 ]; then
+            echo "✅ OpenList 插件 APK 存在" | tee -a /tmp/diagnostic-apk-sizes.txt
+          else
+            echo "⚠️  OpenList 插件 APK 不存在" | tee -a /tmp/diagnostic-apk-sizes.txt
+          fi
+          if [ "$SIMVERSE_FOUND" -eq 1 ]; then
+            echo "✅ SimVerse 插件 APK 存在" | tee -a /tmp/diagnostic-apk-sizes.txt
+          else
+            echo "⚠️  SimVerse 插件 APK 不存在（将不会出现在 artifact 中）" | tee -a /tmp/diagnostic-apk-sizes.txt
           fi
           # 把诊断日志也存到 /tmp/diagnostic-artifact 让 step 47 一并打包
           mkdir -p /tmp/diagnostic-artifact
@@ -1624,7 +1730,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload OpenList diagnostic bundle
-        if: always() && inputs.skip_plugin != true
+        if: always() && inputs.skip_openlist_plugin != true
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
@@ -1653,6 +1759,9 @@ jobs:
           done
           find ${{ env.MONOREPO_MOBILE_DIR }}/android/build -name "plugin-openlist-*.apk" -type f 2>/dev/null | while read apk; do
             echo "| OpenList Plugin APK | $(basename "$apk") ($(\ls -lh "$apk" | awk '{print $5}')) |" >> $GITHUB_STEP_SUMMARY
+          done
+          find ${{ env.MONOREPO_MOBILE_DIR }}/android/build -name "plugin-simverse-*.apk" -type f 2>/dev/null | while read apk; do
+            echo "| SimVerse Plugin APK | $(basename "$apk") ($(\ls -lh "$apk" | awk '{print $5}')) |" >> $GITHUB_STEP_SUMMARY
           done
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### A3.4 诊断产物" >> $GITHUB_STEP_SUMMARY

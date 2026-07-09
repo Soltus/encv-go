@@ -1,0 +1,32 @@
+{
+  "name": "simverse-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SimVerse Plugin Web UI",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@encv/shared-components": "workspace:*",
+    "@ionic/vue": "^8.8.7",
+    "@ionic/vue-router": "^8.8.7",
+    "ionicons": "^8.0.13",
+    "leafer-ui": "^2.1.10",
+    "matter-js": "^0.20.0",
+    "phaser": "4.2.0",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.34",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@types/matter-js": "^0.20.2",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.13",
+    "vue-tsc": "^2.2.10"
+  }
+}

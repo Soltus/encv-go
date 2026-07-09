@@ -5,8 +5,9 @@
  * 三个多选分组：状态 / 任务类型 / 插件
  * 双向绑定到父组件的数组（与 useTaskFilter 形状一致）
  */
-import { computed } from "vue";
+
 import { useI18n } from "@/composables/useI18n";
+import { computed } from "vue";
 
 interface Props {
   status: string[];

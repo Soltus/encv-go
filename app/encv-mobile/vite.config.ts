@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
+import fs from 'node:fs'
 
 // =============================================================================
 // ⚠️ 防御机制：禁止直接 vite 启动（必须通过 PM2 → preview-gateway）
@@ -22,8 +23,11 @@ import path from 'node:path'
 // 单测：      src/composables/__tests__/dev-start-guard.test.ts
 // 文件必须在 src/ 下 — vite 5/6/7/8 默认不 transform src/ 外的 .ts，
 // scripts/ 下的 .ts 会被 vite 当 external → 守卫拿不到 devStartGuard 函数
-import { devStartGuard } from './src/lib/dev-start-guard'
+import { devStartGuard } from '../packages/shared-components/src/lib/dev-start-guard'
 import { frontendDepsManifestPlugin } from './vite-plugins/frontend-deps-manifest'
+import { i18nOptimizePlugin } from '../packages/shared-components/src/vite-plugins/i18n-optimize'
+import { vueComponentCheckPlugin } from '../packages/shared-components/src/vite-plugins/vue-component-check'
+import Components from 'unplugin-vue-components/vite'
 
 // =============================================================================
 // ENCV Mobile Vite Config
@@ -235,8 +239,68 @@ export default defineConfig({
   plugins: [
     devStartGuard(),  // ⚠️ 防御：禁止直接 vite 启动，必须通过 PM2 → preview-gateway
     frontendDepsManifestPlugin(),  // 🆕 2026-06-17：读 package.json 生成 frontend-deps.json manifest
+    i18nOptimizePlugin(),  // 🆕 i18n HMR 热重载 + 构建优化
+    vueComponentCheckPlugin({
+      dev: process.env.NODE_ENV !== 'production',
+      failOnError: false,
+      exclude: [/node_modules/, /prototypes/],
+      globalComponents: [
+        'ChatThinking',
+        'ChatMarkdown',
+        'ChatList',
+        'ChatItem',
+        'MarkdownStream',
+      ],
+    }),
+    ...(process.env.NODE_ENV === 'production' ? [Components({
+      dirs: ['src/components', '../packages/shared-components/src/components'],
+      extensions: ['vue'],
+      deep: true,
+      dts: 'src/components.d.ts',
+    })] : []),
     vue(),
     dynamicHmrHostPlugin(),
+    // @/ alias 多路径 fallback：优先本地 src，其次 shared-components
+    {
+      name: 'encv-alias-fallback',
+      resolveId(source, importer, options) {
+        if (source.startsWith('@/')) {
+          const relativePath = source.slice(2)
+          // 去掉 ?worker / ?raw / ?url 等查询参数
+          const cleanPath = relativePath.split('?')[0]
+          const query = relativePath.includes('?') ? '?' + relativePath.split('?')[1] : ''
+          
+          const dirs = [
+            path.resolve(__dirname, 'src'),
+            path.resolve(__dirname, '../packages/shared-components/src'),
+          ]
+          for (const dir of dirs) {
+            const fullPath = path.join(dir, cleanPath)
+            const candidates = [
+              fullPath,
+              fullPath + '.ts',
+              fullPath + '.vue',
+              fullPath + '.js',
+              fullPath + '.tsx',
+              fullPath + '.jsx',
+              fullPath + '.mjs',
+              fullPath + '.cjs',
+              path.join(fullPath, 'index.ts'),
+              path.join(fullPath, 'index.js'),
+              path.join(fullPath, 'index.mjs'),
+            ]
+            for (const tryPath of candidates) {
+              if (fs.existsSync(tryPath) && fs.statSync(tryPath).isFile()) {
+                return tryPath + query
+              }
+            }
+          }
+          // fallback：返回本地 src 路径，让 vite 自己处理错误
+          return path.join(dirs[0], cleanPath) + query
+        }
+        return null
+      },
+    },
     // ────────────────────────────────────────────────────────────────────────
     // ⚠️ CRITICAL: 沙箱 dev 必须删除 Vite 自动注入的 @vite/client 脚本！
     //
@@ -280,7 +344,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src'),
+      '@encv/shared-components': path.resolve(__dirname, '../packages/shared-components/src'),
+      '@encv/shared-components/': path.resolve(__dirname, '../packages/shared-components/src') + '/',
     },
   },
   build: {
@@ -290,7 +355,6 @@ export default defineConfig({
       input: {
         main: path.resolve(__dirname, 'index.html'),
         'debug-decrypt': path.resolve(__dirname, 'public/debug-decrypt.html'),
-        'simverse-world': path.resolve(__dirname, 'simverse-world.html'),
       },
       output: {
         // Vite 8 (rolldown) requires manualChunks to be a function, not an object.
@@ -305,6 +369,12 @@ export default defineConfig({
               if (id.includes(lib)) return 'vendor-core'
             }
             return 'vendor'
+          }
+          if (id.includes('/i18n/') || id.includes('i18n/common') || id.includes('i18n/settings') || id.includes('i18n/tasks')) {
+            return 'i18n'
+          }
+          if (id.includes('useI18n')) {
+            return 'i18n'
           }
         },
       },

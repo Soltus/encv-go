@@ -63,25 +63,14 @@
 
 <script setup lang="ts">
 import {
-  IonBackButton,
-  IonBadge,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { checkmarkCircle, closeCircle, playCircleOutline } from "ionicons/icons";
-import { computed } from "vue";
+  checkmarkCircle,
+  closeCircle,
+  playCircleOutline,
+} from "ionicons/icons";
+
 import { useFileSystemTests } from "@/composables/useFileSystemTests";
 import { useI18n } from "@/composables/useI18n";
+import { computed } from "vue";
 
 const { t } = useI18n();
 const { results, isRunning, runAllTests } = useFileSystemTests();

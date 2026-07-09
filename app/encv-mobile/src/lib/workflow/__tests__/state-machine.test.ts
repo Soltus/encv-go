@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
 import { applyTerminalGuard, VALID_TRANSITIONS, validateTransition } from "@/lib/workflow/state-machine";
 import type { StepStatus } from "@/lib/workflow/types";
+import { describe, expect, it } from "vitest";
 
 // ============ applyTerminalGuard ============
 

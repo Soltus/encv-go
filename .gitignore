@@ -31,6 +31,15 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+# pnpm / npm / yarn (recursive)
+**/node_modules/
+**/pnpm-lock.yaml
+**/package-lock.json
+**/yarn.lock
+**/.pnpm-store/
+
+**/screenshots/
+
 # Go workspace file
 go.work
 
@@ -61,6 +70,9 @@ __mock_data__/
 # Test run artifacts (test-architecture-refactor-defense-awareness, 2026-06-15)
 .test-runs/
 
+# i18n tool cache
+.i18n-cache.db
+
 # Local overrides for tracked env-style config files
 scripts/openlist-fork.env.local
 
@@ -72,3 +84,15 @@ scripts/openlist-fork.env.local
 /agent/agent-demo
 /agent/cmd/agent-demo/agent-demo
 *.exe
+
+# >>> tcb-remote-workspace internal ignore rules >>>
+.session-env.json
+.mcporter/
+.skills/
+.capabilities/
+.workspace-info.md
+.local/share/opencode/
+# <<< tcb-remote-workspace internal ignore rules <<<
+*.pyc
+__pycache__/
+.i18n-cache/

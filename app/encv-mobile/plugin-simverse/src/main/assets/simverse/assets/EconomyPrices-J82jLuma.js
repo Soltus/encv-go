@@ -1,0 +1,1 @@
+import{$ as e,J as t,U as n}from"./index-DXYJezc-.js";import{t as r}from"./SvPagePlaceholder-B08sTlYU.js";var i=t({__name:`EconomyPrices`,setup(t){return(t,i)=>(e(),n(r,{"title-key":`simverse.prices`,"icon-name":`pricetag`}))}});export{i as default};

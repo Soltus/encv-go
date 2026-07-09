@@ -209,25 +209,6 @@
 
 <script setup lang="ts">
 import {
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSelect,
-  IonSelectOption,
-  IonTitle,
-  IonToggle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
   closeCircleOutline,
   colorPaletteOutline,
   eyeOutline,
@@ -236,10 +217,11 @@ import {
   sparklesOutline,
   trendingUpOutline,
 } from "ionicons/icons";
-import { computed, ref } from "vue";
+
 import type { Locale } from "@/composables/useI18n";
 import { useI18n } from "@/composables/useI18n";
 import { useTheme } from "@/composables/useTheme";
+import { computed, ref } from "vue";
 
 const {
   isDark,

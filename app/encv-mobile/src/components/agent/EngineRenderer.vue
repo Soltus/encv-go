@@ -9,8 +9,8 @@
   <script setup> + options render() 混用会导致追踪断裂。
 -->
 <script lang="ts">
-import { defineComponent, type PropType } from "vue";
 import type { ChatEngine, EngineRenderProps } from "@/composables/chatEngine";
+import { defineComponent, type PropType } from "vue";
 
 export default defineComponent({
   name: "EngineRenderer",

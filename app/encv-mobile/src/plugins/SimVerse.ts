@@ -8,6 +8,7 @@ export interface SimVersePlugin {
   setWorldRunning(options: { running: boolean }): Promise<void>;
   addShortcut(): Promise<void>;
   isShortcutSupported(): Promise<{ supported: boolean }>;
+  debugSimVerseFlow(): Promise<{ debugLog: string }>;
 }
 
 class SimVerseWeb implements SimVersePlugin {
@@ -32,16 +33,16 @@ class SimVerseWeb implements SimVersePlugin {
   async isShortcutSupported(): Promise<{ supported: boolean }> {
     return { supported: false };
   }
+  async debugSimVerseFlow(): Promise<{ debugLog: string }> {
+    return { debugLog: "[SimVerse] debugSimVerseFlow: not available in web mode" };
+  }
 }
 
 const SimVerse = registerPlugin<SimVersePlugin>("SimVerse", {
   web: () => new SimVerseWeb(),
 });
 
-export async function openWorld(
-  worldId: string = "default",
-  worldName: string = "Default",
-): Promise<{ success: boolean; error?: string }> {
+export async function openWorld(worldId: string = "default", worldName: string = "Default"): Promise<{ success: boolean; error?: string }> {
   try {
     await SimVerse.openWorld({ worldId, worldName });
     return { success: true };
@@ -108,5 +109,15 @@ export async function isWorldShortcutSupported(): Promise<boolean> {
   } catch (e) {
     console.error("[SimVerse] isShortcutSupported failed:", e);
     return false;
+  }
+}
+
+export async function debugSimVerseFlow(): Promise<{ debugLog: string }> {
+  try {
+    const result = await SimVerse.debugSimVerseFlow();
+    return result;
+  } catch (e) {
+    console.error("[SimVerse] debugSimVerseFlow failed:", e);
+    return { debugLog: e instanceof Error ? `${e.name}: ${e.message}` : String(e) };
   }
 }

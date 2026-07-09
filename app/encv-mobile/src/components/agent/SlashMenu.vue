@@ -77,10 +77,9 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { computed } from "vue";
 import { useI18n } from "@/composables/useI18n";
 import type { SlashMenuItem } from "@/composables/useSlashMenu";
+import { computed } from "vue";
 
 /**
  * 必填 props：items / query / onApply / onClose（与 spec 一致）

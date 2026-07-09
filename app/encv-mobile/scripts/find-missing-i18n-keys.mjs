@@ -9,11 +9,16 @@ import path from 'node:path'
 
 const PROJECT_ROOT = path.resolve(import.meta.dirname, '..')
 const SRC_DIR = path.join(PROJECT_ROOT, 'src')
-const I18N_DIR = path.join(SRC_DIR, 'i18n')
+const SHARED_COMPONENTS_DIR = path.join(PROJECT_ROOT, '..', 'packages', 'shared-components', 'src')
+const I18N_DIRS = [
+  path.join(SHARED_COMPONENTS_DIR, 'i18n'),
+  path.join(PROJECT_ROOT, 'src', 'i18n'),
+]
 
 // 收集所有源码中的 t('key') / t(`key`) 调用
 function collectUsedKeys(dir) {
   const keys = new Set()
+  if (!fs.existsSync(dir)) return keys
   const files = fs.readdirSync(dir, { withFileTypes: true })
 
   for (const file of files) {
@@ -48,16 +53,24 @@ function collectDictKeys(filePath) {
 }
 
 console.log('🔍 扫描源码中使用的 i18n key...')
-const usedKeys = collectUsedKeys(SRC_DIR)
+const usedKeys = new Set()
+collectUsedKeys(SRC_DIR).forEach(k => usedKeys.add(k))
+if (fs.existsSync(SHARED_COMPONENTS_DIR)) {
+  collectUsedKeys(SHARED_COMPONENTS_DIR).forEach(k => usedKeys.add(k))
+}
 console.log(`   共找到 ${usedKeys.size} 个使用中的 key`)
 
 console.log('\n📚 读取 i18n 字典...')
-const dictFiles = fs.readdirSync(I18N_DIR).filter(f => f.endsWith('.ts'))
 const allDictKeys = new Set()
-for (const f of dictFiles) {
-  const keys = collectDictKeys(path.join(I18N_DIR, f))
-  console.log(`   ${f}: ${keys.size} 个 key`)
-  keys.forEach(k => allDictKeys.add(k))
+for (const i18nDir of I18N_DIRS) {
+  if (!fs.existsSync(i18nDir)) continue
+  const dictFiles = fs.readdirSync(i18nDir).filter(f => f.endsWith('.ts'))
+  for (const f of dictFiles) {
+    const keys = collectDictKeys(path.join(i18nDir, f))
+    const dirName = path.basename(path.dirname(i18nDir))
+    console.log(`   ${dirName}/${f}: ${keys.size} 个 key`)
+    keys.forEach(k => allDictKeys.add(k))
+  }
 }
 
 console.log(`\n   合并后字典共 ${allDictKeys.size} 个 key`)

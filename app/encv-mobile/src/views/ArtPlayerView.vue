@@ -58,16 +58,21 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonButtons, IonChip, IonContent, IonHeader, IonIcon, IonPage, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
-import type Artplayer from "artplayer";
-import { arrowBack, resize, time } from "ionicons/icons";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import {
+  arrowBack,
+  resize,
+  time,
+} from "ionicons/icons";
+
 import { getAlistEncryptStreamUrl, getFileStreamUrl } from "@/api/encv";
-import ErrorStateCard, { type ErrorDetailItem, type ErrorType } from "@/components/ErrorStateCard.vue";
+import ErrorStateCard from "@/components/ErrorStateCard.vue";
+import type { ErrorDetailItem, ErrorType } from "@/components/ErrorStateCard.vue";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import { isNative } from "@/plugins/GoProcess";
+import type Artplayer from "artplayer";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 const TAG = "[ArtPlayer]";
 
@@ -351,7 +356,7 @@ async function initArtPlayer() {
           artContainer.value.style.height = `${finalHeight}px`;
         }
       }
-      if (video.duration && isFinite(video.duration)) {
+      if (video.duration && Number.isFinite(video.duration)) {
         mediaInfo.value.duration = formatDuration(video.duration);
       }
     }

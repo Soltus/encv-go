@@ -20,6 +20,7 @@ import (
 type fileContainerReader struct {
 	// 核心元数据，在构造时解析并缓存
 	manifest     *types.Manifest
+	manifestV4   *types.Manifest_v4
 	footer       *types.EnvelopeFooter_v2 // 可能为 nil
 	kviProvider  types.KVIProvider
 	containerDir string
@@ -109,6 +110,7 @@ func NewEncryptedContainerReaderFromFile(mainFilePath string) (EncryptedContaine
 		mainFilePath:         mainFilePath,
 		containerDir:         filepath.Dir(mainFilePath),
 		manifest:             h.Manifest(),
+		manifestV4:           h.ManifestV4(),
 		headerVersion:        h.Version(),
 		physicalOffsets:      make(map[string]uint64),
 		openExternalFiles:    make(map[string]*os.File),

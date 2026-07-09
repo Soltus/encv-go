@@ -34,12 +34,11 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@/composables/useI18n";
+import MessageAuthor from "@/components/agent/MessageAuthor.vue";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
 import { bulbOutline, chevronDownOutline, chevronUpOutline } from "ionicons/icons";
 import { computed, ref } from "vue";
-import { useI18n } from "@/composables/useI18n";
-import MarkdownStream from "./MarkdownStream.vue";
-import MessageAuthor from "./MessageAuthor.vue";
-import StatusBadge from "./StatusBadge.vue";
 
 const props = defineProps<{
   text: string;

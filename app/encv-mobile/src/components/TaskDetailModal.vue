@@ -58,31 +58,22 @@
 
 <script setup lang="ts">
 import {
-  IonAlert,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonPage,
-  IonProgressBar,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
-import { arrowUndoOutline } from "ionicons/icons";
-import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
+  arrowUndoOutline,
+} from "ionicons/icons";
+
 import { type EncvTask, rollbackTask } from "@/api/encv";
+import TaskBasicInfo from "@/components/TaskBasicInfo.vue";
+import TaskTimeline from "@/components/TaskTimeline.vue";
+import TaskPerformanceSection from "@/components/TaskPerformanceSection.vue";
+import TaskOutputInfo from "@/components/TaskOutputInfo.vue";
+import TaskErrorSection from "@/components/TaskErrorSection.vue";
+import TaskWarningSection from "@/components/TaskWarningSection.vue";
+import TaskActionButtons from "@/components/TaskActionButtons.vue";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
-import TaskActionButtons from "./TaskActionButtons.vue";
-import TaskBasicInfo from "./TaskBasicInfo.vue";
-import TaskErrorSection from "./TaskErrorSection.vue";
-import TaskOutputInfo from "./TaskOutputInfo.vue";
-import TaskPerformanceSection from "./TaskPerformanceSection.vue";
-import TaskTimeline from "./TaskTimeline.vue";
-import TaskWarningSection from "./TaskWarningSection.vue";
+import { modalController } from "@ionic/vue";
+import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
 
 const props = defineProps<{ task: EncvTask }>();
 const emit = defineEmits<(e: "rollback", taskId: string) => void>();

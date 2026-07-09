@@ -104,14 +104,19 @@
 </template>
 
 <script setup lang="ts">
-import { IonItem, IonLabel, IonNote, IonSelect, IonSelectOption, IonToggle, modalController } from "@ionic/vue";
-import { documentText, folderOpen, lockClosed } from "ionicons/icons";
-import { computed } from "vue";
+import {
+  documentText,
+  folderOpen,
+  lockClosed,
+} from "ionicons/icons";
+
 import type { TaskField } from "@/api/encv";
 import FilePickerModal from "@/components/FilePickerModal.vue";
 import InputWithHistory from "@/components/InputWithHistory.vue";
 import type { NewTaskState } from "@/components/NewTaskState";
 import { useI18n } from "@/composables/useI18n";
+import { modalController } from "@ionic/vue";
+import { computed } from "vue";
 
 const props = withDefaults(
   defineProps<{

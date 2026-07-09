@@ -1,5 +1,5 @@
-import { onMounted, onUnmounted, ref } from "vue";
 import { addOpenListStatusListener, getOpenListRuntime, isNative } from "@/plugins/GoProcess";
+import { onMounted, onUnmounted, ref } from "vue";
 import { eventBus } from "./useEventBus";
 
 /**

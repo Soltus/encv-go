@@ -197,25 +197,13 @@
 
 <script setup lang="ts">
 import {
-  alertController,
-  IonBackButton,
-  IonBadge,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonInput,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { createOutline, informationCircleOutline, searchOutline, trashOutline, warningOutline } from "ionicons/icons";
-import { computed, onMounted, ref } from "vue";
+  createOutline,
+  informationCircleOutline,
+  searchOutline,
+  trashOutline,
+  warningOutline,
+} from "ionicons/icons";
+
 import {
   cleanupSparseContainer,
   probeSparseContainer,
@@ -226,6 +214,8 @@ import {
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import { isNative } from "@/plugins/GoProcess";
+import { alertController } from "@ionic/vue";
+import { computed, onMounted, ref } from "vue";
 
 const { t } = useI18n();
 
@@ -256,7 +246,7 @@ const proposedBytes = computed(() => Number(cfg.value.fragmentCount || 0) * Numb
 
 const isHighRisk = computed(() => {
   // 浏览器 / Capacitor web fallback 都没有 quota 字段：> 1TB 视为高风险
-  if (!storageEstimate.value || !storageEstimate.value.quota) {
+  if (!storageEstimate.value?.quota) {
     return proposedBytes.value > 1024 ** 4;
   }
   return proposedBytes.value > storageEstimate.value.quota * 0.5;

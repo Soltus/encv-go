@@ -17,7 +17,13 @@
  *  - 'unknown'：default
  */
 
-import type { AssertionFailure, TestCaseResult, TestCaseStatus, TestDescriptor, WebDavTestContext } from "@/types/webdav-test";
+import type {
+  AssertionFailure,
+  TestCaseResult,
+  TestCaseStatus,
+  TestDescriptor,
+  WebDavTestContext,
+} from "@/types/webdav-test";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 
@@ -60,8 +66,8 @@ export function useWebDavTestRunner() {
 
     // 注入 Basic Auth（如果 ctx.auth 有 username）
     const finalHeaders: Record<string, string> = { ...headers };
-    if (ctx.auth.username && finalHeaders["Authorization"] === undefined) {
-      finalHeaders["Authorization"] = basicAuthHeader(ctx.auth);
+    if (ctx.auth.username && finalHeaders.Authorization === undefined) {
+      finalHeaders.Authorization = basicAuthHeader(ctx.auth);
     }
 
     const timeoutMs = desc.timeoutMs ?? DEFAULT_TIMEOUT_MS;

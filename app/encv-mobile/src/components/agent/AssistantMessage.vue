@@ -36,14 +36,13 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { copyOutline, sparklesOutline } from "ionicons/icons";
-import { computed } from "vue";
 import type { AgentStatus } from "@/composables/useAgent";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
-import MarkdownStream from "./MarkdownStream.vue";
-import MessageAuthor from "./MessageAuthor.vue";
+import MessageAuthor from "@/components/agent/MessageAuthor.vue";
+import MarkdownStream from "markstream-vue";
+import { copyOutline, sparklesOutline } from "ionicons/icons";
+import { computed } from "vue";
 
 const props = defineProps<{
   text: string;

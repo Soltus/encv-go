@@ -37,7 +37,8 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { RecycleScroller, type RecycleScrollerExposed } from "vue-virtual-scroller";
+import { RecycleScroller } from "vue-virtual-scroller";
+import type { RecycleScrollerExposed } from "vue-virtual-scroller";
 import "vue-virtual-scroller/dist/vue-virtual-scroller.css";
 import type { RenderedItem } from "@/composables/renderTurnItems";
 

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-03T12:51:35.391Z",
+  "generated_at": "2026-07-07T06:15:41.893Z",
   "source_file": "package.json",
   "items": [
     {
@@ -180,9 +180,31 @@
       "license": "unknown"
     },
     {
+      "name": "leafer-ui",
+      "version": "2.1.10",
+      "version_range": "^2.1.10",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
       "name": "markstream-vue",
       "version": "1.0.1-beta.5",
       "version_range": "1.0.1-beta.5",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
+      "name": "matter-js",
+      "version": "0.20.0",
+      "version_range": "^0.20.0",
       "source": "package.json",
       "kind": "dependency",
       "importance": "light",
@@ -266,6 +288,17 @@
       "description": "Capacitor CLI — 平台 sync/build 命令行",
       "icon": "terminal",
       "license": "MIT"
+    },
+    {
+      "name": "@types/matter-js",
+      "version": "0.20.2",
+      "version_range": "^0.20.2",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "@vitejs/plugin-vue",
@@ -354,6 +387,17 @@
       "description": "TypeScript — JavaScript 类型化超集",
       "icon": "code-slash",
       "license": "Apache-2.0"
+    },
+    {
+      "name": "unplugin-vue-components",
+      "version": "32.1.0",
+      "version_range": "^32.1.0",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "vite",

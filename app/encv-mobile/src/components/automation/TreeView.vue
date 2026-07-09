@@ -113,12 +113,15 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { chevronDown, chevronForward, closeCircleOutline, flashOutline } from "ionicons/icons";
-import { computed, ref, watch } from "vue";
-import PhaseIcon from "@/components/shared/PhaseIcon.vue";
+import {
+  chevronDown,
+  chevronForward,
+  closeCircleOutline,
+  flashOutline,
+} from "ionicons/icons";
+
 import { isPhase, type StepStatus, type UnifiedTreeNode, type WorkflowRun } from "@/lib/workflow/types";
-import StepMiniBadge from "./StepMiniBadge.vue";
+import { computed, ref, watch } from "vue";
 
 /**
  * 通用树形视图组件（UnifiedTreeView）

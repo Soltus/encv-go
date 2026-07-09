@@ -121,13 +121,18 @@
 </template>
 
 <script setup lang="ts">
-import { IonApp, IonButton, IonIcon, IonRouterOutlet } from "@ionic/vue";
-import { alertCircleOutline, bugOutline, codeSlashOutline, copyOutline, refreshOutline, warningOutline } from "ionicons/icons";
 import { onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import {
+  warningOutline,
+  refreshOutline,
+  bugOutline,
+  alertCircleOutline,
+  copyOutline,
+  codeSlashOutline,
+} from "ionicons/icons";
 import type { ServiceGuardResult } from "@/api/encv";
 import { checkServiceGuard } from "@/api/encv";
-// 🆕 2026-07-02 A5：错误捕获浮窗（三管齐下的第 3 件：console 重定向 + 浮窗）
-import ErrorCaptureOverlay from "@/components/shared/ErrorCaptureOverlay.vue";
 import { autoInitVConsole } from "@/composables/useDevTools";
 import { registerFileFeature } from "@/composables/useFileFeatures";
 import { hijackConsole } from "@/composables/useFrontendLogs";
@@ -137,11 +142,13 @@ import { useRealtimeTransport } from "@/composables/useRealtimeTransport";
 import { useTheme } from "@/composables/useTheme";
 import { createAlistEncryptFeature } from "@/features/alist-encrypt";
 import { isNative, requestNotificationPermission, requestStoragePermission } from "@/plugins/GoProcess";
+import ErrorCaptureOverlay from "@/components/shared/ErrorCaptureOverlay.vue";
 
 const { initTheme, detectP3Support } = useTheme();
 const { t } = useI18n();
 const transport = useRealtimeTransport();
 const { connect, disconnect } = transport;
+const router = useRouter();
 
 const serviceGuardBlocked = ref(false);
 const serviceGuardDetail = ref("");
@@ -285,8 +292,16 @@ function copyErrorStack() {
 }
 
 function reloadPage() {
+  rootError.value = false;
+  rootErrorSummary.value = "";
+  rootErrorDetails.value = "";
+  rootErrorInfo.value = "";
+  rootErrorTime.value = "";
+  rootErrorStack.value = "";
   if (typeof window !== "undefined") {
-    window.location.reload();
+    router.replace("/tabs/home").catch(() => {
+      window.location.reload();
+    });
   }
 }
 // ======================================

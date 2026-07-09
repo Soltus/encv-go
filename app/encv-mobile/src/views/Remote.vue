@@ -312,44 +312,19 @@
 
 <script setup lang="ts">
 import {
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonChip,
-  IonContent,
-  IonFab,
-  IonFabButton,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonItemOption,
-  IonItemOptions,
-  IonItemSliding,
-  IonLabel,
-  IonList,
-  IonModal,
-  IonNote,
-  IonPage,
-  IonSegment,
-  IonSegmentButton,
-  IonTitle,
-  IonToggle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
-  add,
   cloud,
   documentText,
-  fingerPrint,
   flash,
   folderOpen,
   globe,
   home,
   lockClosed,
   person,
+  add,
   save as saveIcon,
+  fingerPrint,
 } from "ionicons/icons";
-import { computed, onMounted, ref } from "vue";
+
 import type { OpenlistSiteInfo, RemoteWebDAVInfo, WebDAVConfig, WebDAVTestResult } from "@/api/encv";
 import {
   addOpenlistSite,
@@ -360,11 +335,12 @@ import {
   testWebDAVConnection,
   updateOpenlistSite,
 } from "@/api/encv";
-import InputWithHistory from "@/components/InputWithHistory.vue";
-import LocalOpenListStatusCard from "@/components/LocalOpenListStatusCard.vue";
 import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
+import LocalOpenListStatusCard from "@/components/LocalOpenListStatusCard.vue";
+import InputWithHistory from "@/components/InputWithHistory.vue";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
+import { computed, onMounted, ref } from "vue";
 
 const { t } = useI18n();
 
@@ -430,7 +406,7 @@ function onTabChange() {
 async function loadRemoteInfo() {
   try {
     const info = await fetchRemoteInfo();
-    if (info.webdav && info.webdav.enabled) {
+    if (info.webdav?.enabled) {
       builtInWebdav.value = info.webdav;
     } else {
       builtInWebdav.value = null;

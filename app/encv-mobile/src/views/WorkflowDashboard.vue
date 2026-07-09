@@ -175,24 +175,12 @@
 
 <script setup lang="ts">
 import {
-  IonBackButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSelect,
-  IonSelectOption,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { addCircleOutline, closeCircleOutline, playCircleOutline, trashOutline } from "ionicons/icons";
-import { computed, onMounted, onUnmounted, ref } from "vue";
+  addCircleOutline,
+  closeCircleOutline,
+  playCircleOutline,
+  trashOutline,
+} from "ionicons/icons";
+
 import { generateMockFilesViaBackend, resetMockFilesViaBackend } from "@/api/mockGenerator";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
@@ -200,11 +188,7 @@ import { useWorkflowStore } from "@/composables/useWorkflowStore";
 import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
 import { MOCK_GENERATE_ROOT } from "@/lib/mockConstants";
 import type { JobRun, StepRun, UnifiedRunRecord, WorkflowDefinition, WorkflowRun } from "@/lib/workflow/types";
-import JobPipelineCard from "./JobPipelineCard.vue";
-import StepDetailPanel from "./StepDetailPanel.vue";
-import StepMiniBadge from "./StepMiniBadge.vue";
-import TestReportHeader from "./TestReportHeader.vue";
-import TreeView from "./TreeView.vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 
 const { t } = useI18n();
 

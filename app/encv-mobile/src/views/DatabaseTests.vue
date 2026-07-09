@@ -194,27 +194,17 @@
 
 <script setup lang="ts">
 import {
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonProgressBar,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { checkmarkCircleOutline, closeCircleOutline, listOutline, playCircleOutline, starOutline, warningOutline } from "ionicons/icons";
-import { computed, onMounted, ref } from "vue";
-import { getDatabaseInfo, runDatabaseTests, type DBTestProgress } from "@/api/encv_perf";
+  checkmarkCircleOutline,
+  closeCircleOutline,
+  listOutline,
+  playCircleOutline,
+  starOutline,
+  warningOutline,
+} from "ionicons/icons";
+
+import { type DBTestProgress, getDatabaseInfo, runDatabaseTests } from "@/api/encv_perf";
 import { showToast } from "@/composables/useToast";
+import { computed, onMounted, ref } from "vue";
 
 interface ScenarioItem {
   id: string;
@@ -278,12 +268,42 @@ function resetScenarios() {
   scenarios.value = [
     { id: "crud", name: "CRUD 基础操作", description: "创建、读取、更新、删除任务", status: "pending", category: "基础功能" },
     { id: "batch_write", name: "批量写入性能", description: "批量创建 1000 条任务，测写入吞吐", status: "pending", category: "基础功能" },
-    { id: "query_filter", name: "查询过滤", description: "按类型、状态、触发器、runId 等多维度过滤", status: "pending", category: "基础功能" },
+    {
+      id: "query_filter",
+      name: "查询过滤",
+      description: "按类型、状态、触发器、runId 等多维度过滤",
+      status: "pending",
+      category: "基础功能",
+    },
     { id: "concurrency", name: "并发压测", description: "5 协程并发写入，测事务隔离性", status: "pending", category: "基础功能" },
-    { id: "export_import", name: "导出导入一致性", description: "导出 JSON → 删除 → 导入 → 验证数据一致", status: "pending", category: "基础功能" },
-    { id: "large_table_query", name: "大表查询性能", description: "5000 条数据下的单条件/多条件/分页查询", status: "pending", category: "基础功能" },
-    { id: "concurrent_rw", name: "并发读写分离", description: "3 写 + 5 读同时跑，测读写阻塞情况", status: "pending", category: "基础功能" },
-    { id: "transaction", name: "ACID 事务验证", description: "导入导出一致性 / 回滚 / 更新原子性", status: "pending", category: "基础功能" },
+    {
+      id: "export_import",
+      name: "导出导入一致性",
+      description: "导出 JSON → 删除 → 导入 → 验证数据一致",
+      status: "pending",
+      category: "基础功能",
+    },
+    {
+      id: "large_table_query",
+      name: "大表查询性能",
+      description: "5000 条数据下的单条件/多条件/分页查询",
+      status: "pending",
+      category: "基础功能",
+    },
+    {
+      id: "concurrent_rw",
+      name: "并发读写分离",
+      description: "3 写 + 5 读同时跑，测读写阻塞情况",
+      status: "pending",
+      category: "基础功能",
+    },
+    {
+      id: "transaction",
+      name: "ACID 事务验证",
+      description: "导入导出一致性 / 回滚 / 更新原子性",
+      status: "pending",
+      category: "基础功能",
+    },
   ];
   summary.value = null;
 }

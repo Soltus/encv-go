@@ -844,7 +844,7 @@ const encryptedContainerModule: TestModule = {
       url: ctx => {
         // 攻击者尝试直接读容器物理路径（用 container_path 字段）
         const m = ctx.activeMount.manifest.container_map[0];
-        if (!m || !m.container_path) return joinUrl(ctx);
+        if (!m?.container_path) return joinUrl(ctx);
         return mountUrl(ctx, m.container_path);
       },
       // 🆕 2026-06-17：去掉 500（500 = 后端 crash，不应合法；fixture 缺失由 runner 兜底）
@@ -972,7 +972,7 @@ const encryptedContainerModule: TestModule = {
         const container = ctx.activeMount.manifest.container_map[0];
         if (!container) return {} as Record<string, string>;
         const vf = ctx.activeMount.manifest.virtual_tree.find(e => !e.is_dir && e.virtual_path.startsWith(container.virtual_path + "/"));
-        if (!vf || !vf.size || vf.size < 1024) return {} as Record<string, string>;
+        if (!vf?.size || vf.size < 1024) return {} as Record<string, string>;
         return { Range: "bytes=0-1023" };
       },
       // 期望：206 Partial Content（Range 支持）或 200（不支持但能 GET）
@@ -1007,7 +1007,7 @@ const encryptedContainerModule: TestModule = {
           const ext = getFirstContainerExt(ctx);
           const encodedExt = encodeURIComponent(encodeURIComponent(ext));
           return target.toString() + `?_x=${encodedExt}`; // 探针参数：URL 中含 ext 用于反推
-        } catch (e) {
+        } catch (_e) {
           return joinUrl(ctx, "noop_cross_mount_error");
         }
       },

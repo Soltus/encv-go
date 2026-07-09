@@ -17,9 +17,9 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon, modalController } from "@ionic/vue";
-import { sparklesOutline } from "ionicons/icons";
 import { useI18n } from "@/composables/useI18n";
+import { modalController } from "@ionic/vue";
+import { sparklesOutline } from "ionicons/icons";
 
 const { t } = useI18n();
 const sparkleIcon = sparklesOutline;

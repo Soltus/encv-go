@@ -18,11 +18,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import UnifiedTimelineCard from "@/components/shared/UnifiedTimelineCard.vue";
 import { formatDateTime, formatDuration } from "@/composables/useDateFormat";
 import { useI18n } from "@/composables/useI18n";
 import { Phase, type StepRun, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
+import { computed } from "vue";
 
 const props = defineProps<{
   step: StepRun;
@@ -80,7 +79,7 @@ function calcDurationMs(startedAt?: string, completedAt?: string): number {
   if (!startedAt || !completedAt) return 0;
   const start = new Date(startedAt).getTime();
   const end = new Date(completedAt).getTime();
-  if (isNaN(start) || isNaN(end) || end < start) return 0;
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 0;
   return end - start;
 }
 

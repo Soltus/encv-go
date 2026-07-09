@@ -31,70 +31,62 @@
  * 跑测试时 Node 环境原生支持 node:fs/path/url 协议。
  */
 
-import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
 
 // __tests__/ → 仓库根
 //  - __tests__/ 在 /workspace/app/encv-mobile/__tests__/
 //  - 仓库根 = /workspace
 //  - __dirname 是 /workspace/app/encv-mobile/__tests__/，上 3 级 = /workspace
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const REPO_ROOT = resolve(__dirname, '..', '..', '..')
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const REPO_ROOT = resolve(__dirname, "..", "..", "..");
 
 // 🆕 2026-06-15 multi-mount：父目录断言改为 mount 虚拟路径
 //  - 旧值：/storage/emulated/0/encv-automation（绝对路径，前端可读）
 //  - 新值：/d/automation（虚拟 mount 路径，运行时由后端 mount registry 解析）
-const EXPECTED_AUTOMATION_NS = '/d/automation'
+const _EXPECTED_AUTOMATION_NS = "/d/automation";
 
-describe('path-chain — 配置文件防回归（跨链路一致）', () => {
+describe("path-chain — 配置文件防回归（跨链路一致）", () => {
   // 2026-06-18 spec unify-workflow-task-service：useAutomationTests.ts 已删除，
   // 自动化测试 sourcePath 命名空间真相源迁移到 mockConstants.ts 的 MOCK_GENERATE_ROOT。
   // useTestCaseGeneration.ts 通过 mockRoot 参数接收 MOCK_GENERATE_ROOT 并派生 sourcePath。
-  it('【防回归】mockConstants.MOCK_GENERATE_ROOT 必须以 /d/automation/ 为前缀（multi-mount）', () => {
-    const src = readFileSync(
-      resolve(REPO_ROOT, 'app/encv-mobile/src/lib/mockConstants.ts'),
-      'utf-8',
-    )
+  it("【防回归】mockConstants.MOCK_GENERATE_ROOT 必须以 /d/automation/ 为前缀（multi-mount）", () => {
+    const src = readFileSync(resolve(REPO_ROOT, "app/encv-mobile/src/lib/mockConstants.ts"), "utf-8");
     // 提取 MOCK_GENERATE_ROOT 派生链：必须由 AUTOMATION_MOUNT_PATH + '/' 构造
     expect(
-      src.includes('MOCK_GENERATE_ROOT = AUTOMATION_MOUNT_PATH +'),
-      'MOCK_GENERATE_ROOT must be derived from AUTOMATION_MOUNT_PATH in mockConstants.ts',
-    ).toBe(true)
+      src.includes("MOCK_GENERATE_ROOT = AUTOMATION_MOUNT_PATH +"),
+      "MOCK_GENERATE_ROOT must be derived from AUTOMATION_MOUNT_PATH in mockConstants.ts"
+    ).toBe(true);
     // AUTOMATION_MOUNT_PATH 必须由 mountPath(AUTOMATION_MOUNT_NAME) 构造
     expect(
-      src.includes('AUTOMATION_MOUNT_PATH = mountPath(AUTOMATION_MOUNT_NAME)'),
-      'AUTOMATION_MOUNT_PATH must be derived from mountPath(AUTOMATION_MOUNT_NAME)',
-    ).toBe(true)
-  })
+      src.includes("AUTOMATION_MOUNT_PATH = mountPath(AUTOMATION_MOUNT_NAME)"),
+      "AUTOMATION_MOUNT_PATH must be derived from mountPath(AUTOMATION_MOUNT_NAME)"
+    ).toBe(true);
+  });
 
-  it('【防回归】useTestCaseGeneration.selectSourcePath 必须以 ${mockRoot.value}01-plain-media/ 派生（命名空间硬约束）', () => {
-    const src = readFileSync(
-      resolve(REPO_ROOT, 'app/encv-mobile/src/composables/useTestCaseGeneration.ts'),
-      'utf-8',
-    )
+  it("【防回归】useTestCaseGeneration.selectSourcePath 必须以 ${mockRoot.value}01-plain-media/ 派生（命名空间硬约束）", () => {
+    const src = readFileSync(resolve(REPO_ROOT, "app/encv-mobile/src/composables/useTestCaseGeneration.ts"), "utf-8");
     // selectSourcePath 必须用 mockRoot.value 拼接 01-plain-media 子目录
     expect(
-      src.includes('${mockRoot.value}01-plain-media/'),
-      'useTestCaseGeneration.selectSourcePath must derive from mockRoot.value + 01-plain-media/',
-    ).toBe(true)
-  })
+      src.includes("${mockRoot.value}01-plain-media/"),
+      "useTestCaseGeneration.selectSourcePath must derive from mockRoot.value + 01-plain-media/"
+    ).toBe(true);
+  });
 
-  it('【防回归】ecosystem.config.cjs 不再注入 ENCV_MOCK_ROOT（2026-06-10 废弃）', () => {
-    const cfg = readFileSync(resolve(REPO_ROOT, 'ecosystem.config.cjs'), 'utf-8')
+  it("【防回归】ecosystem.config.cjs 不再注入 ENCV_MOCK_ROOT（2026-06-10 废弃）", () => {
+    const cfg = readFileSync(resolve(REPO_ROOT, "ecosystem.config.cjs"), "utf-8");
     // ENCV_MOCK_ROOT 应该从 ecosystem.config.cjs 移除（mobile overlay 直接决定 servingDir）
-    expect(cfg).not.toMatch(/ENCV_MOCK_ROOT/)
-  })
+    expect(cfg).not.toMatch(/ENCV_MOCK_ROOT/);
+  });
 
-  it('【防回归】scripts/generate-mock-files.ts 不应再存在（Node CLI 已废弃）', () => {
-    const { existsSync } = require('node:fs') as typeof import('node:fs')
-    const exists = existsSync(
-      resolve(REPO_ROOT, 'app/encv-mobile/scripts/generate-mock-files.ts'),
-    )
-    expect(exists, 'generate-mock-files.ts should be removed (2026-06-10)').toBe(false)
-  })
+  it("【防回归】scripts/generate-mock-files.ts 不应再存在（Node CLI 已废弃）", () => {
+    const { existsSync } = require("node:fs") as typeof import("node:fs");
+    const exists = existsSync(resolve(REPO_ROOT, "app/encv-mobile/scripts/generate-mock-files.ts"));
+    expect(exists, "generate-mock-files.ts should be removed (2026-06-10)").toBe(false);
+  });
 
   // 🆕 2026-06-15 multi-mount：mockRoot 必须是声明式常量 MOCK_GENERATE_ROOT
   //   禁用 .split('/').slice(N) 的隐式推导（fragile：源路径改前缀就静默错）
@@ -105,47 +97,40 @@ describe('path-chain — 配置文件防回归（跨链路一致）', () => {
   // 2026-06-18 v5-bug3fix：PluginTestsDetail.vue 已恢复（误删修复），
   //   测试报告数据并入任务系统 group card 的 exportGroupReport（zip 导出）。
   it.each([
-    'WorkflowDashboard.vue',
-    'PluginTestsDetail.vue',
-  ])('【防回归】%s 必须 import MOCK_GENERATE_ROOT 声明式常量（禁 split/slice 推导）', (viewFile) => {
-    const src = readFileSync(
-      resolve(REPO_ROOT, `app/encv-mobile/src/views/${viewFile}`),
-      'utf-8',
-    )
+    "WorkflowDashboard.vue",
+    "PluginTestsDetail.vue",
+  ])("【防回归】%s 必须 import MOCK_GENERATE_ROOT 声明式常量（禁 split/slice 推导）", viewFile => {
+    const src = readFileSync(resolve(REPO_ROOT, `app/encv-mobile/src/views/${viewFile}`), "utf-8");
     // ① 必须 import 声明式常量
     expect(
-      src.includes("from '@/lib/mockConstants'") &&
-        (src.includes('MOCK_GENERATE_ROOT') || src.includes('MOCK_MOUNT')),
-      `${viewFile} must import MOCK_GENERATE_ROOT from '@/lib/mockConstants'`,
-    ).toBe(true)
+      src.includes("from '@/lib/mockConstants'") && (src.includes("MOCK_GENERATE_ROOT") || src.includes("MOCK_MOUNT")),
+      `${viewFile} must import MOCK_GENERATE_ROOT from '@/lib/mockConstants'`
+    ).toBe(true);
     // ② 严禁再出现 .split('/').slice(0, 派生 mockRoot 的隐式逻辑
     expect(
       /\.split\(['"`]\/['"`]\)\.slice\(/.test(src),
-      `${viewFile} must NOT use .split('/').slice(...) for mockRoot derivation (2026-06-15 禁用)`,
-    ).toBe(false)
+      `${viewFile} must NOT use .split('/').slice(...) for mockRoot derivation (2026-06-15 禁用)`
+    ).toBe(false);
     // ③ 严禁再 import DEFAULT_AUTOMATION_SOURCE 用于 mockRoot 派生
     const usesDefaultForMockRoot =
-      /import\s*\{[^}]*DEFAULT_AUTOMATION_SOURCE[^}]*\}\s*from\s*['"]@\/composables\/useAutomationTests['"]/.test(src)
-    expect(
-      usesDefaultForMockRoot,
-      `${viewFile} must NOT import DEFAULT_AUTOMATION_SOURCE (used to derive mockRoot via slice)`,
-    ).toBe(false)
-  })
+      /import\s*\{[^}]*DEFAULT_AUTOMATION_SOURCE[^}]*\}\s*from\s*['"]@\/composables\/useAutomationTests['"]/.test(src);
+    expect(usesDefaultForMockRoot, `${viewFile} must NOT import DEFAULT_AUTOMATION_SOURCE (used to derive mockRoot via slice)`).toBe(false);
+  });
 
   // 🆕 2026-06-15 mount path 单一真相源验证
-  it('【防回归】mountPath() 必须以 /d/ 前缀构造（与后端 mount.go 一致）', async () => {
-    const mod = await import('../src/lib/mountPath')
-    expect(mod.mountPath('automation')).toBe('/d/automation')
-    expect(mod.mountPath('primary')).toBe('/d/primary')
-    expect(mod.unmountPath('/d/automation/foo')).toBe('automation')
-    expect(mod.unmountPath('/d')).toBe('')
-  })
+  it("【防回归】mountPath() 必须以 /d/ 前缀构造（与后端 mount.go 一致）", async () => {
+    const mod = await import("../src/lib/mountPath");
+    expect(mod.mountPath("automation")).toBe("/d/automation");
+    expect(mod.mountPath("primary")).toBe("/d/primary");
+    expect(mod.unmountPath("/d/automation/foo")).toBe("automation");
+    expect(mod.unmountPath("/d")).toBe("");
+  });
 
   // 🆕 2026-06-15 mockConstants 一致性验证
   it('【防回归】MOCK_GENERATE_ROOT 必须 = mountPath("automation") + "/"', async () => {
-    const m = await import('../src/lib/mockConstants')
-    const mp = await import('../src/lib/mountPath')
-    expect(m.MOCK_GENERATE_ROOT).toBe(mp.mountPath(m.AUTOMATION_MOUNT_NAME) + '/')
-    expect(m.MOCK_GENERATE_ROOT).toBe('/d/automation/')
-  })
-})
+    const m = await import("../src/lib/mockConstants");
+    const mp = await import("../src/lib/mountPath");
+    expect(m.MOCK_GENERATE_ROOT).toBe(mp.mountPath(m.AUTOMATION_MOUNT_NAME) + "/");
+    expect(m.MOCK_GENERATE_ROOT).toBe("/d/automation/");
+  });
+});

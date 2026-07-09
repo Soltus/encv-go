@@ -60,12 +60,14 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { chevronForward as chevronIcon, documentTextOutline } from "ionicons/icons";
-import { computed, ref } from "vue";
 import type { ToolCall, ToolStatus } from "@/composables/useAgent";
 import { useI18n } from "@/composables/useI18n";
-import StatusBadge from "./StatusBadge.vue";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
+import {
+  chevronDown as chevronIcon,
+  documentTextOutline,
+} from "ionicons/icons";
+import { computed, ref } from "vue";
 import { OPERATION_COLLAPSE_INITIAL_COUNT } from "./twoLevelGrouping";
 
 const props = defineProps<{

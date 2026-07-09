@@ -17,7 +17,8 @@
 </template>
 
 <script setup lang="ts">
-import { type MarkdownIt, MarkdownRender } from "markstream-vue";
+import MarkdownRender from "markstream-vue";
+import type { MarkdownIt } from "markstream-vue";
 import "markstream-vue/index.css";
 
 defineProps<{

@@ -76,14 +76,20 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon } from "@ionic/vue";
-import { bugOutline, extensionPuzzleOutline, open as openIcon, server as serverIcon, settings as settingsIcon } from "ionicons/icons";
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
+import {
+  bugOutline,
+  extensionPuzzleOutline,
+  server as serverIcon,
+  open as openIcon,
+  settings as settingsIcon,
+} from "ionicons/icons";
+
 import { formatFileSize } from "@/api/encv";
 import { eventBus } from "@/composables/useEventBus";
 import { useI18n } from "@/composables/useI18n";
 import { useOpenListBridge } from "@/composables/useOpenListBridge";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
 
 const HEARTBEAT_FRESH_MS = 5000;
 const CRASH_LOOP_WINDOW_MS = 10_000;
@@ -148,7 +154,7 @@ function onOpenListStatus(data: {
     state.value = "not_installed";
     return;
   }
-  if (data.lastError && data.lastError.toLowerCase().includes("port")) {
+  if (data.lastError?.toLowerCase().includes("port")) {
     state.value = "port_conflict";
     return;
   }

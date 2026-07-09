@@ -20,9 +20,8 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { arrowDownOutline } from "ionicons/icons";
 import { useI18n } from "@/composables/useI18n";
+import { arrowDownOutline } from "ionicons/icons";
 
 withDefaults(
   defineProps<{

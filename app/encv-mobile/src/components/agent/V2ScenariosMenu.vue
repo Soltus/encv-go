@@ -71,9 +71,9 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonModal, IonTitle, IonToolbar } from "@ionic/vue";
+import { useI18n } from "@/composables/useI18n";
 import {
-  closeOutline as closeIcon,
+  close as closeIcon,
   documentTextOutline,
   filmOutline,
   gitBranchOutline,
@@ -81,7 +81,6 @@ import {
   searchOutline,
 } from "ionicons/icons";
 import { ref } from "vue";
-import { useI18n } from "@/composables/useI18n";
 
 export interface V2ScenarioEntry {
   id: string;

@@ -216,6 +216,15 @@
 </template>
 
 <script setup lang="ts">
+import {
+  addCircleOutline,
+  checkmarkCircleOutline,
+  closeCircleOutline,
+  playCircleOutline,
+  syncOutline,
+  trashOutline,
+} from "ionicons/icons";
+
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 
@@ -252,29 +261,10 @@ function onBackendStatus(ev: Event) {
   };
 }
 
-import {
-  IonBackButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonProgressBar,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { addCircleOutline, checkmarkCircleOutline, closeCircleOutline, playCircleOutline, syncOutline, trashOutline } from "ionicons/icons";
 import { fetchPlugins, type PluginMeta } from "@/api/encv";
 import { generateMockFilesViaBackend, resetMockFilesViaBackend } from "@/api/mockGenerator";
-// 🆕 2026-06-22：buildDynamicWorkflowPure 返回 wfDef（已含 WorkflowDefinition 类型）
-// StepDefinition 不再需要（派生逻辑在 pure 函数里）
-import StepMiniBadge from "@/components/automation/StepMiniBadge.vue";
 import MockGenLogCard from "@/components/developer/MockGenLogCard.vue";
+import StepMiniBadge from "@/components/automation/StepMiniBadge.vue";
 import { useI18n } from "@/composables/useI18n";
 // 🆕 2026-06-18 Task 13：抽取 FFMPEG 流程日志为独立 composable + 组件
 import { useMockGenLog } from "@/composables/useMockGenLog";

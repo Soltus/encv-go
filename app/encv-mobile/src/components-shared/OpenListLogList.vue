@@ -12,7 +12,7 @@
 </template>
 
 <script setup lang="ts">
-import { IonItem, type IonList } from "@ionic/vue";
+import type { IonList } from "@ionic/vue";
 import { nextTick, ref, watch } from "vue";
 import type { OpenListLog } from "./index";
 

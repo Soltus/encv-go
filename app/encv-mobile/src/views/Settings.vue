@@ -380,32 +380,24 @@
 </template>
 
 <script setup lang="ts">
-import {
-  alertController,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonItemDivider,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSelect,
-  IonSelectOption,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
+import type { DatabaseInfo, IndexStats } from "@/api/encv";
+import { fetchConfig, getDatabaseInfo, getIndexStats, updateConfig } from "@/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
+import FilePickerModal from "@/components/FilePickerModal.vue";
+import { useConfig } from "@/composables/useConfig";
+import { registerFileFeature, unregisterFileFeature } from "@/composables/useFileFeatures";
+import { useI18n } from "@/composables/useI18n";
+import { useServerStatus } from "@/composables/useServerStatus";
+import { showToast } from "@/composables/useToast";
+import type { FieldDef } from "@/config/schemaParser";
+import { isMpvSubMode, PLAY_MODE } from "@/constants/player";
+import { createAlistEncryptFeature } from "@/features/alist-encrypt";
+import { ensurePluginLoaded, getPluginFullState, isNative, pickFolder } from "@/plugins/GoProcess";
+import { alertController, modalController } from "@ionic/vue";
 import {
   bugOutline,
   cloudOutline,
   colorPaletteOutline,
-  fileTrayFull as databaseIcon,
   documentText,
   eyeOutline,
   filmOutline,
@@ -426,6 +418,7 @@ import {
   refreshCircle,
   save as saveIcon,
   server as serverIcon,
+  server as databaseIcon,
   settingsOutline,
   shieldCheckmark,
   sparklesOutline,
@@ -437,19 +430,6 @@ import {
 } from "ionicons/icons";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import type { DatabaseInfo, IndexStats } from "@/api/encv";
-import { fetchConfig, getDatabaseInfo, getIndexStats, updateConfig } from "@/api/encv";
-import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
-import FilePickerModal from "@/components/FilePickerModal.vue";
-import { useConfig } from "@/composables/useConfig";
-import { registerFileFeature, unregisterFileFeature } from "@/composables/useFileFeatures";
-import { useI18n } from "@/composables/useI18n";
-import { useServerStatus } from "@/composables/useServerStatus";
-import { showToast } from "@/composables/useToast";
-import type { FieldDef } from "@/config/schemaParser";
-import { isMpvSubMode, PLAY_MODE } from "@/constants/player";
-import { createAlistEncryptFeature } from "@/features/alist-encrypt";
-import { ensurePluginLoaded, getPluginFullState, isNative, pickFolder } from "@/plugins/GoProcess";
 
 const router = useRouter();
 const {

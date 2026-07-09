@@ -1,6 +1,8 @@
 import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
+import { vueComponentCheckPlugin } from '../../../../app/packages/shared-components/src/vite-plugins/vue-component-check'
+import { i18nOptimizePlugin } from '../../../../app/packages/shared-components/src/vite-plugins/i18n-optimize'
 
 // ⚠️ 沙箱 dev 必须只用 `path.resolve(__dirname, ...)`，**禁止**用
 //   `import { fileURLToPath } from 'node:url' + new URL(...)` 模式！
@@ -335,11 +337,11 @@ export default defineConfig({
   // 沙箱 dev：HTML 内 <base href="/openlist-ui/">，vite 处理 /openlist-ui/* 前缀
   // 生产：HTML 内 <base href="./">，Android WebView file:// 协议下加载相对资源
   base: process.env.VITE_BASE || './',
-  plugins: [vue(), openlistHealthPlugin(), injectBaseHref(process.env.VITE_BASE || '/openlist-ui/'), dynamicHmrHostPlugin()],
+  plugins: [vueComponentCheckPlugin(), vue(), i18nOptimizePlugin(), openlistHealthPlugin(), injectBaseHref(process.env.VITE_BASE || '/openlist-ui/'), dynamicHmrHostPlugin()],
   resolve: {
     alias: {
-      // 与主 app vite.config.ts 一致：path.resolve(__dirname, 'src')
       '@': path.resolve(__dirname, 'src'),
+      '@encv/shared-components': path.resolve(__dirname, '../../../../app/packages/shared-components/src'),
     },
   },
   build: {

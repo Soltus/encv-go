@@ -32,9 +32,9 @@
 </template>
 
 <script setup lang="ts">
-import { IonContent, IonPage, modalController } from "@ionic/vue";
 import type { ContextUsageResponse } from "@/composables/useContextUsage";
-import ContextPopover from "./ContextPopover.vue";
+import ContextPopover from "@/components/agent/ContextPopover.vue";
+import { modalController } from "@ionic/vue";
 
 export interface ContextPopoverState {
   data: ContextUsageResponse | null;

@@ -14,11 +14,11 @@
  * - searchable=false 时隐藏搜索框
  */
 
-import { mount } from "@vue/test-utils";
-import { describe, expect, it } from "vitest";
 import TreeView from "@/components/automation/TreeView.vue";
 import PhaseIcon from "@/components/shared/PhaseIcon.vue";
 import { Phase, type UnifiedTreeNode, type WorkflowRun } from "@/lib/workflow/types";
+import { mount } from "@vue/test-utils";
+import { describe, expect, it } from "vitest";
 
 // ion-icon stub：避免 @ionic/vue 全局注册依赖
 const IonIconStub = {

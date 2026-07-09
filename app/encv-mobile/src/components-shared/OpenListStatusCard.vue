@@ -52,8 +52,10 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { serverOutline } from "ionicons/icons";
+import {
+  serverOutline,
+} from "ionicons/icons";
+
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { OpenListRuntime } from "./index";
 

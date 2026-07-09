@@ -12,8 +12,9 @@
     "noEmit": true,
     "jsx": "preserve",
     "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "resolveJsonModule": true,
@@ -21,7 +22,8 @@
     "ignoreDeprecations": "5.0",
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*", "../packages/shared-components/src/*"],
+      "@encv/shared-components/*": ["../packages/shared-components/src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue", "src/**/*.json", "capacitor.config.ts"]

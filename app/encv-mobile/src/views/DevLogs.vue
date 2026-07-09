@@ -89,13 +89,13 @@
           <p>{{ t('devlogs.noLogs') }}</p>
         </div>
         <VirtualLogList :key="'frontend'" v-if="filteredFrontend.length > 0" :items="filteredFrontend" :scroll-el="scrollEl" @select="onLogSelect">
-          <template #default="{ item }">
-            <span class="log-source-icon" :title="getSourceIconTitle(item)">
-              {{ getSourceIcon(item) }}
+          <template #default="slotProps">
+            <span v-if="slotProps?.item" class="log-source-icon" :title="getSourceIconTitle(slotProps.item)">
+              {{ getSourceIcon(slotProps.item) }}
             </span>
-            <span class="log-time">[{{ item.timestamp }}]</span>
-            <ion-badge :color="getBadgeColor(item.level)" class="level-badge">{{ item.level.toUpperCase() }}</ion-badge>
-            <span class="log-msg" v-html="highlightMatch(item.message, searchText)"></span>
+            <span v-if="slotProps?.item" class="log-time">[{{ slotProps.item.timestamp }}]</span>
+            <ion-badge v-if="slotProps?.item" :color="getBadgeColor(slotProps.item.level)" class="level-badge">{{ slotProps.item.level.toUpperCase() }}</ion-badge>
+            <span v-if="slotProps?.item" class="log-msg" v-html="highlightMatch(slotProps.item.message, searchText)"></span>
           </template>
         </VirtualLogList>
       </div>
@@ -111,13 +111,13 @@
           <p>{{ t('devlogs.noLogs') }}</p>
         </div>
         <VirtualLogList :key="'backend'" v-if="backendFilteredItems.length > 0" :items="backendFilteredItems" :scroll-el="scrollEl" @select="onLogSelect">
-          <template #default="{ item }">
-            <span class="log-source-icon" :title="getSourceIconTitle(item)">
-              {{ getSourceIcon(item) }}
+          <template #default="slotProps">
+            <span v-if="slotProps?.item" class="log-source-icon" :title="getSourceIconTitle(slotProps.item)">
+              {{ getSourceIcon(slotProps.item) }}
             </span>
-            <span class="log-time">[{{ item.timestamp }}]</span>
-            <ion-badge :color="getBadgeColor(item.level)" class="level-badge">{{ item.level.toUpperCase() }}</ion-badge>
-            <span class="log-msg" v-html="highlightMatch(item.message, searchText)"></span>
+            <span v-if="slotProps?.item" class="log-time">[{{ slotProps.item.timestamp }}]</span>
+            <ion-badge v-if="slotProps?.item" :color="getBadgeColor(slotProps.item.level)" class="level-badge">{{ slotProps.item.level.toUpperCase() }}</ion-badge>
+            <span v-if="slotProps?.item" class="log-msg" v-html="highlightMatch(slotProps.item.message, searchText)"></span>
           </template>
         </VirtualLogList>
       </div>
@@ -239,25 +239,19 @@
 
 <script setup lang="ts">
 import {
-  alertController,
-  IonBadge,
-  IonButton,
-  type IonContent,
-  IonFooter,
-  IonHeader,
-  IonIcon,
-  IonPage,
-  IonSearchbar,
-  IonSegment,
-  IonSegmentButton,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { arrowDownOutline, arrowUpOutline, closeOutline, copyOutline, pauseOutline, playOutline, trashOutline } from "ionicons/icons";
-import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, triggerRef, watch } from "vue";
+  arrowDownOutline,
+  arrowUpOutline,
+  closeOutline,
+  copyOutline,
+  pauseOutline,
+  playOutline,
+  trashOutline,
+} from "ionicons/icons";
+
 import { type BackendLogEntry, checkServerStatus, getRecentBackendLogs } from "@/api/encv";
-import type { DropdownOption } from "@/components/shared/FilterDropdown.vue";
 import FilterDropdown from "@/components/shared/FilterDropdown.vue";
+import type { DropdownOption } from "@/components/shared/FilterDropdown.vue";
+import ServerStatusCard from "@/components/ServerStatusCard.vue";
 import VirtualLogList from "@/components/VirtualLogList.vue";
 import { copyToClipboard } from "@/composables/useClipboard";
 import { eventBus } from "@/composables/useEventBus";
@@ -266,6 +260,8 @@ import { useI18n } from "@/composables/useI18n";
 import { useRealtimeTransport } from "@/composables/useRealtimeTransport";
 import { showToast } from "@/composables/useToast";
 import { IncrementalFilter, type Level } from "@/utils/IncrementalFilter";
+import { alertController, type IonContent } from "@ionic/vue";
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, triggerRef, watch } from "vue";
 
 const { t } = useI18n();
 const transport = useRealtimeTransport();
@@ -626,7 +622,7 @@ function ensureScrollEl(): HTMLElement | null {
     return null;
   }
   const hostEl = ((contentRef.value as any).$el || (contentRef.value as any)) as HTMLElement | undefined;
-  if (!hostEl || !hostEl.shadowRoot) {
+  if (!hostEl?.shadowRoot) {
     if (typeof window !== "undefined" && (window as any).__DEVLOGS_DEBUG__) {
       throw new Error(`DEBUG ensureScrollEl: hostEl=${!!hostEl} shadowRoot=${!!hostEl?.shadowRoot}`);
     }
@@ -827,7 +823,7 @@ function onWsMessage(data: any) {
     });
     return;
   }
-  if (data && data.type && data.type !== "log" && data.type !== "pong" && data.type !== "server:status") {
+  if (data?.type && data.type !== "log" && data.type !== "pong" && data.type !== "server:status") {
     const msg = typeof data === "string" ? data : JSON.stringify(data);
     queueBackendLog({
       id: ++nextId,

@@ -20,10 +20,10 @@
  * SPEC: /workspace/.trae/specs/agui-real-llm-path-completion/ Phase 4
  */
 
+import type { Message, ToolCall, ToolResult } from "@/composables/useAgent";
 import { mount } from "@vue/test-utils";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defineComponent, h } from "vue";
-import type { Message, ToolCall, ToolResult } from "@/composables/useAgent";
 
 // Mock @tdesign-vue-next/chat：ChatThinking + ChatMarkdown
 vi.mock("@tdesign-vue-next/chat", () => {

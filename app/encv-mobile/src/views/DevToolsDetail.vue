@@ -95,24 +95,17 @@
 
 <script setup lang="ts">
 import {
-  IonBackButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonTitle,
-  IonToggle,
-  IonToolbar,
-} from "@ionic/vue";
-import { bugOutline, extensionPuzzleOutline, eyeOutline, flaskOutline, terminal, bookOutline } from "ionicons/icons";
-import { useRouter } from "vue-router";
+  bookOutline,
+  bugOutline,
+  extensionPuzzleOutline,
+  eyeOutline,
+  flaskOutline,
+  terminal,
+} from "ionicons/icons";
+
 import { useDevTools } from "@/composables/useDevTools";
 import { useI18n } from "@/composables/useI18n";
+import { useRouter } from "vue-router";
 
 const { t } = useI18n();
 const router = useRouter();

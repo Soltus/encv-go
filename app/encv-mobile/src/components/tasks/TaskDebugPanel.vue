@@ -111,10 +111,12 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { bugOutline } from "ionicons/icons";
-import { computed } from "vue";
+import {
+  bugOutline,
+} from "ionicons/icons";
+
 import type { EncvTask } from "@/api/encv";
+import { computed } from "vue";
 
 const props = defineProps<{
   tasks: EncvTask[];

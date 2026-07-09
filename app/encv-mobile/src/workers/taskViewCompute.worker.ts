@@ -334,7 +334,7 @@ function buildDisplayedItems(input: ComputeInput): any[] {
 // ============ Worker 消息处理 ============
 self.onmessage = (e: MessageEvent<ComputeInput>) => {
   const input = e.data;
-  if (!input || input.type !== "compute") return;
+  if (input?.type !== "compute") return;
   try {
     const items = buildDisplayedItems(input);
     const output: ComputeOutput = { type: "result", items, requestId: input.requestId };

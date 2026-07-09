@@ -51,6 +51,34 @@ class GoProcessPlugin : Plugin() {
 
     companion object {
         private const val TAG = "ENCV-go"
+        private const val EVENT_KOTLIN_LOG = "kotlin:log"
+
+        /** plugin 实例引用，供 LogBridge 等静态上下文推送实时日志到前端 DevLogs */
+        @Volatile
+        private var pluginInstance: GoProcessPlugin? = null
+
+        /**
+         * 🆕 2026-07-04：静态方法，从任意 Kotlin 代码（包括 LogBridge）向 JS 端推送实时日日志。
+         * 通过 Capacitor notifyListeners 直接推送，不依赖文件 IO。
+         */
+        fun pushKotlinLog(level: String, tag: String, message: String, stack: String? = null) {
+            val inst = pluginInstance ?: return
+            try {
+                val js = JSObject().apply {
+                    put("timestamp", java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date()))
+                    put("level", level.lowercase(java.util.Locale.ROOT))
+                    put("message", message)
+                    put("source", tag)
+                    val tagsArr = org.json.JSONArray()
+                    listOf("kotlin", "android", tag.lowercase(java.util.Locale.ROOT)).forEach { tagsArr.put(it) }
+                    put("tags", tagsArr)
+                    stack?.let { put("stack", it) }
+                }
+                inst.notifyListeners(EVENT_KOTLIN_LOG, js, true)
+            } catch (e: Throwable) {
+                Log.w(TAG, "pushKotlinLog failed", e)
+            }
+        }
     }
 
     private val pendingCalls = ConcurrentHashMap<String, PluginCall>()
@@ -108,11 +136,13 @@ class GoProcessPlugin : Plugin() {
 
     override fun load() {
         super.load()
+        pluginInstance = this
         registerStatusReceiver()
         registerPluginStatusListener()
     }
 
     override fun handleOnDestroy() {
+        pluginInstance = null
         if (receiverRegistered) { context.unregisterReceiver(statusReceiver); receiverRegistered = false }
         unregisterPluginStatusListener()
         pendingCalls.clear()
@@ -636,6 +666,8 @@ class GoProcessPlugin : Plugin() {
         val p = LogExporter.saveDevLogs(context, call.getString("logs") ?: run { call.reject("logs required"); return })
         if (p != null) call.resolve(JSObject().apply { put("success", true); put("path", p) }) else call.reject("Failed to save dev logs")
     }
+
+    // 🆕 2026-06-17：读取 android-deps.json manifest
 
     // 🆕 2026-06-17：读取 android-deps.json manifest（由 Gradle task generateAndroidDepsManifest 在
     //   :app:preBuild 阶段生成到 app/src/main/assets/android-deps.json）

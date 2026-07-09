@@ -80,7 +80,6 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import MpvProgressBar from "./MpvProgressBarWeb.vue";
 
 const playerState = ref<"playing" | "paused">("paused");
 const fileName = ref("Bohemian Rhapsody.flac");

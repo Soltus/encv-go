@@ -41,10 +41,15 @@
 </template>
 
 <script setup lang="ts">
-import { IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from "@ionic/vue";
-import { chevronForward, colorPaletteOutline, musicalNotesOutline, playCircleOutline, settingsOutline } from "ionicons/icons";
-import { useRouter } from "vue-router";
 import { useI18n } from "@/composables/useI18n";
+import {
+  chevronForward,
+  colorPaletteOutline,
+  musicalNotesOutline,
+  playCircleOutline,
+  settingsOutline,
+} from "ionicons/icons";
+import { useRouter } from "vue-router";
 import { getAllPrototypes } from "./prototypes/registry";
 import "./prototypes/prototype-cards.css";
 

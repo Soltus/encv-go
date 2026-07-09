@@ -123,20 +123,19 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon, IonSpinner } from "@ionic/vue";
+import type { ContextUsageResponse } from "@/composables/useContextUsage";
 import {
-  checkbox as checkboxIcon,
-  close as closeIcon,
   checkmarkCircle as completedIcon,
-  archiveOutline as compressIcon,
+  ellipsisHorizontal as pendingIcon,
+  sync as inProgressIcon,
+  layers as layersIcon,
+  close as closeIcon,
+  contract as compressIcon,
+  checkbox as checkboxIcon,
   document as documentIcon,
   documentText as documentTextIcon,
   informationCircle as informationCircleIcon,
-  sync as inProgressIcon,
-  layers as layersIcon,
-  ellipsisHorizontal as pendingIcon,
 } from "ionicons/icons";
-import type { ContextUsageResponse } from "@/composables/useContextUsage";
 
 defineProps<{
   data: ContextUsageResponse | null;

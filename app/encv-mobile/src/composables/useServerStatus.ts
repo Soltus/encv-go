@@ -1,6 +1,6 @@
-import { onMounted, onUnmounted, type Ref, ref } from "vue";
 import { checkServerStatus, DEFAULT_API_BASE_URL, getPersistedBackendIdentity, setApiBaseUrl } from "@/api/encv";
 import { getBackendStatus, isNative, restartBackend, stopBackend } from "@/plugins/GoProcess";
+import { onMounted, onUnmounted, type Ref, ref } from "vue";
 import { useApiBaseProbe } from "./useApiBaseProbe";
 import { eventBus } from "./useEventBus";
 import { type TransportMode, useRealtimeTransport } from "./useRealtimeTransport";

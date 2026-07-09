@@ -2,6 +2,21 @@
 // 拆分自 AgentChat.vue。所有 reactive state / handler / lifecycle 集中在此。
 // AgentChat.vue 只剩 template + 调 useAgentChatView() 拿到返回值后解构使用。
 
+// Task 8: 缩放 composable + 共享相对时间格式化
+import { formatRelativeTime } from "@/composables/relativeTime";
+import { useRenderTurnItems } from "@/composables/renderTurnItems";
+import { type Decision, getLanAccess, type LanAddress, useAgent } from "@/composables/useAgent";
+import { getAgentApiBase } from "@/composables/useAgentApiBase";
+import { useApiBaseProbe } from "@/composables/useApiBaseProbe";
+import { useAttachments } from "@/composables/useAttachments";
+// 多渲染引擎架构：引入引擎系统和已注册的引擎实现
+import { useChatEngine } from "@/composables/useChatEngine";
+import { getDeviceIdSync } from "@/composables/useDeviceId";
+import { useI18n } from "@/composables/useI18n";
+import { usePinchZoom } from "@/composables/usePinchZoom";
+import { useServerStatus } from "@/composables/useServerStatus";
+import { useSlashMenu } from "@/composables/useSlashMenu";
+import { showToast } from "@/composables/useToast";
 import { alertController, modalController } from "@ionic/vue";
 import {
   addOutline,
@@ -23,21 +38,6 @@ import {
 } from "ionicons/icons";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-// Task 8: 缩放 composable + 共享相对时间格式化
-import { formatRelativeTime } from "@/composables/relativeTime";
-import { useRenderTurnItems } from "@/composables/renderTurnItems";
-import { type Decision, getLanAccess, type LanAddress, useAgent } from "@/composables/useAgent";
-import { getAgentApiBase } from "@/composables/useAgentApiBase";
-import { useApiBaseProbe } from "@/composables/useApiBaseProbe";
-import { useAttachments } from "@/composables/useAttachments";
-// 多渲染引擎架构：引入引擎系统和已注册的引擎实现
-import { useChatEngine } from "@/composables/useChatEngine";
-import { getDeviceIdSync } from "@/composables/useDeviceId";
-import { useI18n } from "@/composables/useI18n";
-import { usePinchZoom } from "@/composables/usePinchZoom";
-import { useServerStatus } from "@/composables/useServerStatus";
-import { useSlashMenu } from "@/composables/useSlashMenu";
-import { showToast } from "@/composables/useToast";
 // 触发引擎注册（模块副作用自动注册到 EngineRegistry）
 import "@/engines/defaultEngine";
 import "@/engines/tdesignEngine";

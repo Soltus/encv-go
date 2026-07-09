@@ -101,13 +101,16 @@
 </template>
 
 <script setup lang="ts">
-import { IonButton, IonIcon, IonItem, IonLabel, IonNote, IonSelect, IonSelectOption, IonToggle } from "@ionic/vue";
-import { cloudOutline, refreshOutline } from "ionicons/icons";
-import { computed } from "vue";
+import {
+  cloudOutline,
+  refreshOutline,
+} from "ionicons/icons";
+
 import InputWithHistory from "@/components/InputWithHistory.vue";
 import { useI18n } from "@/composables/useI18n";
 import type { FieldDef } from "@/config/schemaParser";
 import { getDefaultValue } from "@/config/schemaParser";
+import { computed } from "vue";
 
 const TASK_OVERRIDABLE = new Set(["password", "output_path", "recover"]);
 

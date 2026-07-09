@@ -1,14 +1,9 @@
 <script setup lang="ts">
-/**
- * 流水线 Tab - 用 JobPipelineCard 渲染（ion-card + icon-bubble + 状态 badge + 渐变 border）
- *
- * 继承自 1d8b95e 干净版本（v3 完全重写前的设计）
- */
-import { computed } from "vue";
-import JobPipelineCard from "@/components/automation/JobPipelineCard.vue";
-import TestReportHeader from "@/components/automation/TestReportHeader.vue";
 import { useI18n } from "@/composables/useI18n";
+import TestReportHeader from "@/components/automation/TestReportHeader.vue";
+import JobPipelineCard from "@/components/automation/JobPipelineCard.vue";
 import type { JobRun, WorkflowRun } from "@/lib/workflow/types";
+import { computed } from "vue";
 
 interface Props {
   run?: WorkflowRun;

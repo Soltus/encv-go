@@ -41,8 +41,12 @@ type FractalWorld struct {
 	perfSched     *PerfScheduler
 	chronicle     *ChronicleManager
 	persistence   *WorldPersistence
+	behaviorEng   *BehaviorEngine
+	economyMgr    *EconomyManager
+	questMgr      *QuestManager
 
 	npcCache      *EntityCache[*NPCV3]
+	behaviorCache *EntityCache[*BehaviorState]
 	cellCache     map[uint64]*EntityCache[*Cell]
 	brainCache    map[uint64]*Brain
 
@@ -54,11 +58,17 @@ func NewFractalWorld(dataDir string, worldName string) *FractalWorld {
 	persist := NewWorldPersistence(dataDir, worldName)
 	persist.EnsureDir()
 
+	rng := rand.New(rand.NewSource(12345))
+
 	fw := &FractalWorld{
 		perfSched:     NewPerfScheduler(),
 		chronicle:     NewChronicleManager(worldName),
 		persistence:   persist,
+		behaviorEng:   NewBehaviorEngine(),
+		economyMgr:    NewEconomyManager(rng),
+		questMgr:      NewQuestManager(rng),
 		npcCache:      NewEntityCache[*NPCV3](10000),
+		behaviorCache: NewEntityCache[*BehaviorState](10000),
 		cellCache:     make(map[uint64]*EntityCache[*Cell]),
 		brainCache:    make(map[uint64]*Brain),
 		focusNPCs:     make(map[uint64]FocusLevel),
@@ -79,6 +89,7 @@ func (fw *FractalWorld) SetPerformanceTier(tier PerformanceTier) {
 
 	config := PerfTiers[tier]
 	fw.npcCache.Resize(config.CacheSize)
+	fw.behaviorCache.Resize(config.CacheSize)
 }
 
 func (fw *FractalWorld) AddFocusNPC(npcID uint64, level FocusLevel) {
@@ -112,8 +123,30 @@ func (fw *FractalWorld) GetNPC(npcID uint64, rng *rand.Rand) *NPCV3 {
 
 	fw.mu.Lock()
 	fw.npcCache.Put(npcID, npc)
+	bs := fw.behaviorEng.InitNPC(npc, rng)
+	fw.behaviorCache.Put(npcID, &bs)
 	fw.mu.Unlock()
 	return npc
+}
+
+func (fw *FractalWorld) GetBehaviorState(npcID uint64, rng *rand.Rand) *BehaviorState {
+	fw.mu.RLock()
+	if bs, ok := fw.behaviorCache.Get(npcID); ok {
+		fw.mu.RUnlock()
+		return bs
+	}
+	fw.mu.RUnlock()
+
+	npc := fw.GetNPC(npcID, rng)
+	fw.mu.Lock()
+	if bs, ok := fw.behaviorCache.Get(npcID); ok {
+		fw.mu.Unlock()
+		return bs
+	}
+	bs := fw.behaviorEng.InitNPC(npc, rng)
+	fw.behaviorCache.Put(npcID, &bs)
+	fw.mu.Unlock()
+	return &bs
 }
 
 func (fw *FractalWorld) GetBrain(npcID uint64) *Brain {
@@ -147,11 +180,37 @@ func (fw *FractalWorld) Tick(rng *rand.Rand) {
 	fw.worldTick++
 	currentTick := fw.worldTick
 	chron := fw.chronicle
+	em := fw.economyMgr
+	qm := fw.questMgr
 	fw.mu.Unlock()
 
 	fw.tickNPCs(currentTick, config, rng)
 	fw.tickBrains(currentTick, config, rng)
 	fw.tickWorldEvents(currentTick, chron, rng)
+
+	if currentTick%10 == 0 {
+		em.Tick(fw)
+	}
+
+	qm.UpdateWorldTick(int(currentTick))
+}
+
+func (fw *FractalWorld) EconomyManager() *EconomyManager {
+	fw.mu.RLock()
+	defer fw.mu.RUnlock()
+	return fw.economyMgr
+}
+
+func (fw *FractalWorld) QuestManager() *QuestManager {
+	fw.mu.RLock()
+	defer fw.mu.RUnlock()
+	return fw.questMgr
+}
+
+func (fw *FractalWorld) GetCachedNPCs() []*NPCV3 {
+	fw.mu.RLock()
+	defer fw.mu.RUnlock()
+	return fw.npcCache.All()
 }
 
 func (fw *FractalWorld) tickWorldEvents(currentTick uint32, chron *ChronicleManager, rng *rand.Rand) {
@@ -181,6 +240,8 @@ func (fw *FractalWorld) tickNPCs(currentTick uint32, config PerfTierConfig, rng 
 	fw.mu.RLock()
 	npcs := fw.npcCache.All()
 	chron := fw.chronicle
+	be := fw.behaviorEng
+	behaviorCache := fw.behaviorCache
 	fw.mu.RUnlock()
 
 	eventRate := config.EventRateMul
@@ -189,6 +250,9 @@ func (fw *FractalWorld) tickNPCs(currentTick uint32, config PerfTierConfig, rng 
 			if rng.Float64() < eventRate {
 				result := npc.CatchUp(currentTick, rng)
 				fw.recordChronicleEvents(chron, npc, currentTick, result)
+				if bs, ok := behaviorCache.Get(npc.ID); ok {
+					be.Tick(npc, bs, currentTick, rng)
+				}
 			}
 		}
 	} else {
@@ -197,6 +261,9 @@ func (fw *FractalWorld) tickNPCs(currentTick uint32, config PerfTierConfig, rng 
 			for _, npc := range npcs {
 				result := npc.CatchUp(currentTick, rng)
 				fw.recordChronicleEvents(chron, npc, currentTick, result)
+				if bs, ok := behaviorCache.Get(npc.ID); ok {
+					be.Tick(npc, bs, currentTick, rng)
+				}
 			}
 		}
 	}

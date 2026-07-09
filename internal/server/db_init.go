@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/Soltus/encv-go/internal/kernel"
 	"github.com/Soltus/encv-go/pkg/tasksystem"
@@ -22,31 +23,58 @@ import (
 //
 // 为了不真的创建数据库文件，我们用临时目录 + 立即清理的方式。
 func initObjectBoxAvailability() {
-	tmpDir, err := os.MkdirTemp("", "encv-objectbox-probe-*")
-	if err != nil {
-		// 临时目录创建失败，保守认为不可用
-		slog.Warn("objectbox probe: failed to create temp dir", "err", err)
-		objectBoxAvailable = false
-		return
-	}
-	defer os.RemoveAll(tmpDir)
-
-	store, err := objectboxstore.New(tmpDir)
-	if err != nil {
-		if err == objectboxstore.ErrObjectBoxUnavailable {
-			// stub 构建 — 正常情况
+	// 2026-07-04：添加 panic recovery 和 goroutine 超时保护。
+	// 原因：Android 真机上如果 binary 包含 objectbox CGO 但 C 库缺失/不匹配，
+	// objectboxstore.New() 在 C 层可能 panic 或 hang，导致整个 Go 进程 crash。
+	// 该函数在 InitDatabase 的 switch 之前被调用，不在 switch 的 recover 保护内。
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("objectbox probe: panicked, treating as unavailable", "panic", r)
 			objectBoxAvailable = false
-		} else {
-			// 真实构建但初始化失败（可能 C 库没装等），也算可用（只是有问题）
-			slog.Warn("objectbox probe: init failed but engine is available", "err", err)
-			objectBoxAvailable = true
 		}
-		return
+	}()
+
+	// 使用带超时的 goroutine 执行探测，避免 C 层 hang 导致整个启动卡住。
+	type probeResult struct {
+		available bool
+		err       error
 	}
-	// 真实构建且初始化成功
-	objectBoxAvailable = true
-	if store != nil {
-		_ = store.Close()
+	probeCh := make(chan probeResult, 1)
+	go func() {
+		tmpDir, err := os.MkdirTemp("", "encv-objectbox-probe-*")
+		if err != nil {
+			slog.Warn("objectbox probe: failed to create temp dir", "err", err)
+			probeCh <- probeResult{available: false, err: err}
+			return
+		}
+		defer os.RemoveAll(tmpDir)
+
+		store, err := objectboxstore.New(tmpDir)
+		if err != nil {
+			if err == objectboxstore.ErrObjectBoxUnavailable {
+				probeCh <- probeResult{available: false, err: err}
+			} else {
+				slog.Warn("objectbox probe: init failed but engine is available", "err", err)
+				probeCh <- probeResult{available: true, err: err}
+			}
+			return
+		}
+		probeCh <- probeResult{available: true, err: nil}
+		if store != nil {
+			_ = store.Close()
+		}
+	}()
+
+	select {
+	case res := <-probeCh:
+		objectBoxAvailable = res.available
+		if res.err != nil && res.err != objectboxstore.ErrObjectBoxUnavailable {
+			slog.Warn("objectbox probe: init error", "err", res.err)
+		}
+	case <-time.After(3 * time.Second):
+		// 3 秒超时：C 层 hang 或设备性能极差
+		slog.Error("objectbox probe: timed out after 3s, treating as unavailable")
+		objectBoxAvailable = false
 	}
 }
 

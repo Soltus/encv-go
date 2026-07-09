@@ -18,16 +18,6 @@ class MpvPluginEntry : IPluginEntryClass {
 
     @Composable
     override fun Content() {
-        val context = LocalContext.current
-        val engine = remember { MpvEngine(context) }
-        MpvPlayerScreen(
-            filePath = "",
-            fileName = "",
-            mimeType = "",
-            isExternal = false,
-            backendUrl = "",
-            engine = engine,
-            onBack = {}
-        )
+        MpvEmbedWebView()
     }
 }

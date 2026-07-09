@@ -27,7 +27,7 @@
             <ion-card-header>
               <div class="ext-header-row">
                 <div class="ext-title-area">
-                  <ion-icon :icon="ext.id === 'openlist' ? serverOutline : filmOutline" class="ext-icon"></ion-icon>
+                  <ion-icon :icon="getExtIcon(ext.id)" class="ext-icon"></ion-icon>
                   <ion-card-title>{{ ext.name }}</ion-card-title>
                 </div>
                 <ion-badge :color="ext.installed ? 'success' : 'medium'">
@@ -55,6 +55,14 @@
               </template>
               <template v-else>
                 <ion-button
+                  color="primary"
+                  size="small"
+                  @click="handleOpenExtension(ext.id)"
+                >
+                  <ion-icon :icon="openOutline" slot="start"></ion-icon>
+                  {{ t('extensions.openExtension') }}
+                </ion-button>
+                <ion-button
                   fill="outline"
                   size="small"
                   @click="handleToggleEnabled(ext.id, ext.enabled)"
@@ -68,7 +76,7 @@
                   size="small"
                   @click="handleUninstall(ext.id)"
                 >
-                  <ion-icon :icon="closeCircle" slot="start"></ion-icon>
+                  <ion-icon :icon="trashOutline" slot="start"></ion-icon>
                   {{ t('extensions.uninstall') }}
                 </ion-button>
               </template>
@@ -98,6 +106,9 @@
             <ion-button expand="block" fill="outline" color="warning" @click="handleDebugLifecycle" size="small">
               🔧 插件生命周期诊断(禁用/卸载/Activity)
             </ion-button>
+            <ion-button expand="block" fill="outline" color="tertiary" @click="handleDebugSimverse" size="small">
+              🌍 SimVerse全链路饱和诊断
+            </ion-button>
           </div>
         </div>
       </template>
@@ -111,24 +122,6 @@
 </template>
 
 <script setup lang="ts">
-import { Capacitor } from "@capacitor/core";
-import {
-  alertController,
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonCard,
-  IonCardHeader,
-  IonCardTitle,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
 import {
   addOutline,
   checkmarkCircle,
@@ -137,9 +130,13 @@ import {
   filmOutline,
   informationCircle,
   layersOutline,
+  openOutline,
+  planet,
   serverOutline,
+  trashOutline,
 } from "ionicons/icons";
-import { onMounted, ref } from "vue";
+
+import { Capacitor } from "@capacitor/core";
 import { copyToClipboard } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
@@ -155,8 +152,13 @@ import {
   togglePluginEnabled,
   uninstallPlugin,
 } from "@/plugins/GoProcess";
+import { alertController } from "@ionic/vue";
+import { onMounted, ref } from "vue";
+import { debugSimVerseFlow, openWorld } from "@/plugins/SimVerse";
+import { useRouter } from "vue-router";
 
 const { t } = useI18n();
+const router = useRouter();
 
 interface ExtensionInfo {
   id: string;
@@ -172,6 +174,19 @@ const isLoading = ref(true);
 const installError = ref("");
 const isInstalling = ref(false);
 
+function getExtIcon(id: string) {
+  switch (id) {
+    case "mpv-player":
+      return filmOutline;
+    case "openlist":
+      return serverOutline;
+    case "simverse":
+      return planet;
+    default:
+      return layersOutline;
+  }
+}
+
 function isNativePlatform(): boolean {
   return isNative();
 }
@@ -186,6 +201,7 @@ async function loadExtensions() {
     const COMBOLITE_PLUGIN_ID_MAP: Record<string, string> = {
       "mpv-player": "com.encvgo.plugin.mpv",
       openlist: "com.encvgo.plugin.openlist",
+      simverse: "com.encvgo.plugin.simverse",
     };
 
     interface PluginStatus {
@@ -205,8 +221,9 @@ async function loadExtensions() {
     );
 
     const mpvInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP["mpv-player"]];
-    const openlistInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP["openlist"]];
-    console.error("[SAT-DBG][Extensions] mpvInfo=", JSON.stringify(mpvInfo), "| openlistInfo=", JSON.stringify(openlistInfo));
+    const openlistInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP.openlist];
+    const simverseInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP.simverse];
+    console.error("[SAT-DBG][Extensions] mpvInfo=", JSON.stringify(mpvInfo), "| openlistInfo=", JSON.stringify(openlistInfo), "| simverseInfo=", JSON.stringify(simverseInfo));
 
     extensions.value = [
       {
@@ -224,6 +241,14 @@ async function loadExtensions() {
         installed: !!openlistInfo?.installed,
         enabled: openlistInfo?.enabled ?? false,
         sizeDisplay: "~40 MB",
+      },
+      {
+        id: "simverse",
+        name: t("extensions.simverse"),
+        description: t("extensions.simverseDesc"),
+        installed: !!simverseInfo?.installed,
+        enabled: simverseInfo?.enabled ?? false,
+        sizeDisplay: "~5 MB",
       },
     ];
     console.error("[SAT-DBG][Extensions] extensions.value.length=", extensions.value.length);
@@ -263,11 +288,28 @@ async function handleInstall(_id: string) {
   await handleInstallFromFile();
 }
 
+async function handleOpenExtension(id: string) {
+  if (id === "simverse") {
+    if (isNative()) {
+      openWorld("default", "SimVerse");
+    } else {
+      router.push("/simverse/world");
+    }
+    return;
+  }
+  if (id === "mpv-player") {
+    router.push("/player");
+    return;
+  }
+  showToast({ message: `打开 ${id}`, duration: 1500, color: "primary" });
+}
+
 async function handleToggleEnabled(id: string, currentEnabled: boolean) {
   if (!isNativePlatform()) return;
   const COMBO_LITE_ID: Record<string, string> = {
     "mpv-player": "com.encvgo.plugin.mpv",
     openlist: "com.encvgo.plugin.openlist",
+    simverse: "com.encvgo.plugin.simverse",
   };
   const pluginId = COMBO_LITE_ID[id] || id;
   const newEnabled = !currentEnabled;
@@ -291,6 +333,7 @@ async function handleUninstall(id: string) {
   const COMBO_LITE_ID: Record<string, string> = {
     "mpv-player": "com.encvgo.plugin.mpv",
     openlist: "com.encvgo.plugin.openlist",
+    simverse: "com.encvgo.plugin.simverse",
   };
   const pluginId = COMBO_LITE_ID[id] || id;
   const alert = await alertController.create({
@@ -389,6 +432,15 @@ async function handleDebugLifecycle() {
     await showDebugResult("🔧 插件生命周期诊断", result);
   } catch (e: any) {
     await showDebugResult("🔧 诊断失败", { debugLog: e?.message || String(e) });
+  }
+}
+
+async function handleDebugSimverse() {
+  try {
+    const result = await debugSimVerseFlow();
+    await showDebugResult("🌍 SimVerse全链路饱和诊断", result);
+  } catch (e: any) {
+    await showDebugResult("🌍 诊断失败", { debugLog: e?.message || String(e) });
   }
 }
 </script>

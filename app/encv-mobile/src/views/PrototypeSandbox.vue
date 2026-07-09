@@ -83,13 +83,17 @@
 </template>
 
 <script setup lang="ts">
-import { IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
-import { codeSlashOutline, copyOutline, eyeOutline, logoVue } from "ionicons/icons";
-import { computed, provide, ref, watch } from "vue";
-import { useRoute } from "vue-router";
 import { copyToClipboard } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
+import {
+  codeSlashOutline,
+  copyOutline,
+  eyeOutline,
+  logoVue,
+} from "ionicons/icons";
+import { computed, provide, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { getPrototype } from "./prototypes/registry";
 
 const { t } = useI18n();
@@ -144,14 +148,14 @@ watch(activeTab, async tab => {
   if (tab === "web" && !webSource.value) {
     try {
       webSource.value = await proto.value.webSource();
-    } catch (e) {
+    } catch (_e) {
       webSource.value = "// Source not available";
     }
   }
   if (tab === "compose" && !composeSource.value) {
     try {
       composeSource.value = await proto.value.composeSource();
-    } catch (e) {
+    } catch (_e) {
       composeSource.value = "// Source not available";
     }
   }

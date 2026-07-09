@@ -1,4 +1,11 @@
 packages:
   - 'encv-mobile'
   - 'encv-mobile/plugin-openlist/web'
+  - 'encv-mobile/plugin-mpv-player/web'
+  - 'encv-mobile/plugin-simverse/web'
   - 'preview-gateway'
+  - 'packages/*'
+allowBuilds:
+  core-js: false
+  cypress: false
+  esbuild: false

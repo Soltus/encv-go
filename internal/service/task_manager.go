@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -284,11 +285,21 @@ func NewTaskManager(servingDir string, cfg *config.Config, broadcaster Broadcast
 
 	tm.loadTasks()
 
-	workerCount := 1
+	workerCount := runtime.NumCPU()
+	if workerCount < 1 {
+		workerCount = 1
+	}
+	if workerCount > 8 {
+		workerCount = 8
+	}
 	tm.wg.Add(workerCount)
 	for i := 0; i < workerCount; i++ {
 		go tm.worker()
 	}
+	slog.Info("TaskManager workers started", "count", workerCount)
+
+	go tm.EnsureCalibration()
+
 	return tm
 }
 

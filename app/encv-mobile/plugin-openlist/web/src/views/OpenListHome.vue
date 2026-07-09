@@ -3,8 +3,8 @@
     <ion-header>
       <ion-toolbar>
         <ion-title>
-          <span class="home-title">OpenList</span>
-          <span v-if="isDevPreview" class="preview-mini-chip">🔥 PREVIEW</span>
+          <span class="home-title">{{ t('openlist.home.title') }}</span>
+          <span v-if="isDevPreview" class="preview-mini-chip">🔥 {{ t('openlist.home.preview') }}</span>
           <span v-if="!isDevPreview" class="version-mini">v{{ version }}</span>
         </ion-title>
         <ion-buttons slot="end">
@@ -13,6 +13,9 @@
           </ion-button>
           <ion-button @click="goToConfig" title="编辑 Config">
             <ion-icon :icon="codeSlashOutline" slot="icon-only" />
+          </ion-button>
+          <ion-button @click="goToDevLogs" title="日志查看">
+            <ion-icon :icon="documentTextOutline" slot="icon-only" />
           </ion-button>
           <ion-button @click="goToWebView" title="OpenList Web UI">
             <ion-icon :icon="globeOutline" slot="icon-only" />
@@ -39,16 +42,15 @@
       <div v-if="isDevPreview" class="dev-preview-notice">
         <div class="dev-preview-notice-row">
           <span class="notice-icon">🛠</span>
-          <span class="notice-title">沙箱 Preview 模式</span>
+          <span class="notice-title">{{ t('openlist.home.sandboxPreview') }}</span>
         </div>
         <div class="dev-preview-notice-text">
-          OpenList 后端在沙箱下由 <code>/tmp/openlist</code> 独立进程提供（<code>:5244</code>），
-          <strong>UI 启停按钮不可用</strong>。
+          {{ t('openlist.home.sandboxDesc') }}
           <br />
-          终端控制：<code>bash scripts/dev-openlist.sh</code> 启停。
+          {{ t('openlist.home.terminalCtrl') }}：<code>bash scripts/dev-openlist.sh</code>
           <br />
-          实时状态：<span :class="backendOnline ? 'ok-text' : 'error-text'">
-            <strong>{{ backendOnline ? '● 在线' : '● 离线' }}</strong>
+          {{ t('openlist.home.realStatus') }}：<span :class="backendOnline ? 'ok-text' : 'error-text'">
+            <strong>{{ backendOnline ? t('openlist.home.online') : t('openlist.home.offline') }}</strong>
           </span>
           <span v-if="backendOnline" class="muted small">（{{ backendLatency }}ms）</span>
         </div>
@@ -82,115 +84,106 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { modalController } from "@ionic/vue";
 import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
-  IonButtons,
-  IonButton,
-  IonContent,
-  IonIcon,
-  IonFab,
-  IonFabButton,
-  IonSpinner,
-  modalController,
-} from '@ionic/vue'
-import {
-  keyOutline,
   codeSlashOutline,
-  settingsOutline,
+  documentTextOutline,
   globeOutline,
-  powerOutline,
+  keyOutline,
   playOutline,
-} from 'ionicons/icons'
-import { OpenListStatusCard, OpenListLogList, type OpenListRuntime, type OpenListLog } from '@/components-shared'
-import { OpenListNative, logBuffer } from '@/plugins/openlist-native'
-import PwdEditDialog from '@/components/PwdEditDialog.vue'
+  powerOutline,
+  settingsOutline,
+} from "ionicons/icons";
+import { onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import PwdEditDialog from "@/components/PwdEditDialog.vue";
+import type { OpenListLog, OpenListRuntime } from "@/components-shared";
+import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
 
-const router = useRouter()
+const { t } = useI18n();
+
+const router = useRouter();
 
 const runtime = ref<OpenListRuntime>({
   running: false,
   port: 0,
   pid: 0,
   dataSizeBytes: 0,
-  lastError: '',
+  lastError: "",
   lastUpdateTs: 0,
-  dataDir: '',
+  dataDir: "",
   isInstalled: true,
-})
-const version = ref('unknown')
-const isControlling = ref(false)
-const logs = ref<OpenListLog[]>([])
+});
+const version = ref("unknown");
+const isControlling = ref(false);
+const logs = ref<OpenListLog[]>([]);
 
-const isDevPreview = ref(false)
-const backendOnline = ref(false)
-const backendLatency = ref(0)
+const isDevPreview = ref(false);
+const backendOnline = ref(false);
+const backendLatency = ref(0);
 
-let refreshTimer: ReturnType<typeof setInterval> | null = null
-let healthTimer: ReturnType<typeof setInterval> | null = null
-let unsubscribeLog: (() => void) | null = null
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
+let healthTimer: ReturnType<typeof setInterval> | null = null;
+let unsubscribeLog: (() => void) | null = null;
 
 onMounted(async () => {
-  isDevPreview.value = !window.OpenListNative
+  isDevPreview.value = !window.OpenListNative;
 
   // 订阅日志流
-  unsubscribeLog = logBuffer.subscribe((all) => {
-    logs.value = [...all]
-  })
+  unsubscribeLog = logBuffer.subscribe(all => {
+    logs.value = [...all];
+  });
 
   // 初始刷新
-  await refreshStatus()
-  version.value = OpenListNative.getVersion()
+  await refreshStatus();
+  version.value = OpenListNative.getVersion();
 
   // 真机模式：定时刷新 runtime 状态
   if (!isDevPreview.value) {
-    refreshTimer = setInterval(refreshStatus, 3000)
+    refreshTimer = setInterval(refreshStatus, 3000);
   } else {
     // dev preview 模式：定时探测 :5244 health
-    await probeBackend()
-    healthTimer = setInterval(probeBackend, 5000)
+    await probeBackend();
+    healthTimer = setInterval(probeBackend, 5000);
   }
 
   // 记录启动日志
-  logBuffer.info('OpenList Web UI 已启动')
+  logBuffer.info("OpenList Web UI 已启动");
   if (isDevPreview.value) {
-    logBuffer.info('当前为沙箱 dev preview 模式，启停由 :5244 进程控制')
+    logBuffer.info("当前为沙箱 dev preview 模式，启停由 :5244 进程控制");
     if (backendOnline.value) {
-      logBuffer.info(`backend :5244 在线 (${backendLatency.value}ms)`)
+      logBuffer.info(`backend :5244 在线 (${backendLatency.value}ms)`);
     } else {
-      logBuffer.warn('backend :5244 离线')
+      logBuffer.warn("backend :5244 离线");
     }
   } else if (runtime.value.running) {
-    logBuffer.info(`后端运行中，端口 ${runtime.value.port}`)
+    logBuffer.info(`后端运行中，端口 ${runtime.value.port}`);
   } else {
-    logBuffer.info('后端未运行')
+    logBuffer.info("后端未运行");
   }
-})
+});
 
 onUnmounted(() => {
   if (refreshTimer) {
-    clearInterval(refreshTimer)
-    refreshTimer = null
+    clearInterval(refreshTimer);
+    refreshTimer = null;
   }
   if (healthTimer) {
-    clearInterval(healthTimer)
-    healthTimer = null
+    clearInterval(healthTimer);
+    healthTimer = null;
   }
   if (unsubscribeLog) {
-    unsubscribeLog()
-    unsubscribeLog = null
+    unsubscribeLog();
+    unsubscribeLog = null;
   }
-})
+});
 
 async function refreshStatus() {
   try {
-    runtime.value = OpenListNative.getStatus()
+    runtime.value = OpenListNative.getStatus();
   } catch (e: any) {
-    logBuffer.error(`refreshStatus 异常: ${e?.message || e}`)
+    logBuffer.error(`refreshStatus 异常: ${e?.message || e}`);
   }
 }
 
@@ -200,102 +193,101 @@ async function refreshStatus() {
  */
 async function probeBackend() {
   try {
-    const res = await fetch('/__openlist-health', {
-      cache: 'no-store',
+    const res = await fetch("/__openlist-health", {
+      cache: "no-store",
       signal: AbortSignal.timeout(3500),
-    })
+    });
     if (!res.ok) {
-      backendOnline.value = false
-      return
+      backendOnline.value = false;
+      return;
     }
-    const data = await res.json()
-    backendOnline.value = !!data?.alive
-    backendLatency.value = data?.latency ?? 0
+    const data = await res.json();
+    backendOnline.value = !!data?.alive;
+    backendLatency.value = data?.latency ?? 0;
 
     // 同步 runtime 状态（用 health 探测代替 OpenListNative.getStatus）
     if (backendOnline.value) {
-      runtime.value.running = true
-      runtime.value.port = 5244
-      runtime.value.lastUpdateTs = Date.now()
-      runtime.value.lastError = ''
+      runtime.value.running = true;
+      runtime.value.port = 5244;
+      runtime.value.lastUpdateTs = Date.now();
+      runtime.value.lastError = "";
     } else {
-      runtime.value.running = false
-      runtime.value.port = 0
-      runtime.value.lastError = 'backend 离线'
-      runtime.value.lastUpdateTs = Date.now()
+      runtime.value.running = false;
+      runtime.value.port = 0;
+      runtime.value.lastError = "backend 离线";
+      runtime.value.lastUpdateTs = Date.now();
     }
   } catch (e: any) {
-    backendOnline.value = false
-    runtime.value.running = false
-    runtime.value.lastError = e?.message || '探测失败'
-    runtime.value.lastUpdateTs = Date.now()
+    backendOnline.value = false;
+    runtime.value.running = false;
+    runtime.value.lastError = e?.message || "探测失败";
+    runtime.value.lastUpdateTs = Date.now();
   }
 }
 
 async function toggleService() {
-  // dev preview 模式：FAB 已隐藏，但保险起见
   if (isDevPreview.value) {
-    logBuffer.warn('沙箱 preview 模式，启停由 :5244 进程控制（不在 UI 范围）')
-    return
+    logBuffer.warn("沙箱 preview 模式，启停由 :5244 进程控制（不在 UI 范围）");
+    return;
   }
-  if (isControlling.value) return
-  isControlling.value = true
+  if (isControlling.value) return;
+  isControlling.value = true;
   try {
     if (runtime.value.running) {
-      logBuffer.info('正在停止 OpenList...')
-      const ok = OpenListNative.stopOpenList()
-      logBuffer[ok ? 'info' : 'error'](ok ? '已停止' : '停止失败')
+      logBuffer.info("正在停止 OpenList...");
+      const ok = OpenListNative.stopOpenList();
+      logBuffer[ok ? "info" : "error"](ok ? "已停止" : "停止失败");
     } else {
-      logBuffer.info('正在启动 OpenList...')
-      const port = OpenListNative.startOpenList()
+      logBuffer.info("正在启动 OpenList...");
+      const port = OpenListNative.startOpenList();
       if (port > 0) {
-        logBuffer.info(`已启动，端口 ${port}`)
+        logBuffer.info(`已启动，端口 ${port}`);
       } else {
-        logBuffer.error('启动失败')
+        logBuffer.error("启动失败");
       }
     }
-    setTimeout(refreshStatus, 1000)
+    setTimeout(refreshStatus, 1000);
   } catch (e: any) {
-    logBuffer.error(`toggleService 异常: ${e?.message || e}`)
+    logBuffer.error(`toggleService 异常: ${e?.message || e}`);
   } finally {
-    isControlling.value = false
+    isControlling.value = false;
   }
 }
 
 async function openPasswordDialog() {
-  // 防御性：try-catch 包住整个 modal 流程（capacitor.md §1.3 modal 必须秒开）
-  let modal: any
+  let modal: any;
   try {
     modal = await modalController.create({
       component: PwdEditDialog,
       componentProps: {
         onConfirm: async (password: string) => {
-          logBuffer.info('设置管理员密码...')
+          logBuffer.info("设置管理员密码...");
           if (isDevPreview.value) {
-            // dev preview：OpenListNative.setPassword 返 false（无 native bridge）
-            // 给用户清晰提示而不是 log "设置失败"
-            logBuffer.warn('沙箱 preview 模式，密码设置需直接改 :5244 sqlite db 或用 OpenList admin UI')
-            return
+            logBuffer.warn("沙箱 preview 模式，密码设置需直接改 :5244 sqlite db 或用 OpenList admin UI");
+            return;
           }
-          const ok = OpenListNative.setPassword(password)
-          logBuffer[ok ? 'info' : 'error'](ok ? '密码已设置' : '设置失败')
+          const ok = OpenListNative.setPassword(password);
+          logBuffer[ok ? "info" : "error"](ok ? "密码已设置" : "设置失败");
         },
       },
-    })
-    await modal.present()
+    });
+    await modal.present();
   } catch (e: any) {
-    logBuffer.error(`密码对话框打开失败: ${e?.message || e}`)
+    logBuffer.error(`密码对话框打开失败: ${e?.message || e}`);
   }
 }
 
 function goToConfig() {
-  router.push('/config')
+  router.push("/config");
+}
+function goToDevLogs() {
+  router.push("/devlogs");
 }
 function goToWebView() {
-  router.push('/webview')
+  router.push("/webview");
 }
 function goToSettings() {
-  router.push('/settings')
+  router.push("/settings");
 }
 </script>
 

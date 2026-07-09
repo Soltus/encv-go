@@ -38,8 +38,15 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon, IonLabel, IonPage, IonRouterOutlet, IonTabBar, IonTabButton, IonTabs } from "@ionic/vue";
-import { bug, folder, globe, home, list, settings } from "ionicons/icons";
+import {
+  bug,
+  folder,
+  globe,
+  home,
+  list,
+  settings,
+} from "ionicons/icons";
+
 import { useI18n } from "@/composables/useI18n";
 
 const { t } = useI18n();

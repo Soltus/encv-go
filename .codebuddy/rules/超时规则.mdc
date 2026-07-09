@@ -1,0 +1,9 @@
+---
+description: 
+alwaysApply: true
+enabled: true
+updatedAt: 2026-07-05T15:55:39.201Z
+provider: 
+---
+
+可能超时命令必须加上超时参数，比如curl

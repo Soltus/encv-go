@@ -272,5 +272,14 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 		simGroup.POST("/world/load", s.handleSimverseWorldLoad)
 		simGroup.GET("/world/save", s.handleSimverseWorldSaveInfo)
 		simGroup.GET("/world/storage", s.handleSimverseStorageStatus)
+		simGroup.GET("/npc/behavior/stats", s.handleSimverseBehaviorStats)
+		simGroup.GET("/npc/behavior/list", s.handleSimverseBehaviorList)
+		simGroup.GET("/economy/stats", s.handleSimverseEconomyStats)
+		simGroup.GET("/economy/wealth-rank", s.handleSimverseEconomyWealthRank)
+		simGroup.GET("/quest/list", s.handleSimverseQuestList)
+		simGroup.POST("/quest/claim", s.handleSimverseQuestClaim)
+		simGroup.POST("/quest/action", s.handleSimverseQuestAction)
 	}
+
+	registerSimverseWebRoutes(r)
 }

@@ -17,7 +17,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
 import type { Component } from "vue";
 import { computed } from "vue";
 

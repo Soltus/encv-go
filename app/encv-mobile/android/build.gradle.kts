@@ -52,6 +52,11 @@ aar2apk {
                 includeDependenciesJni.set(true)
             }
         }
+        if (findProject(":plugin-simverse") != null) {
+            module(":plugin-simverse") {
+                includeDependenciesJni.set(true)
+            }
+        }
     }
     signing {
         keystorePath.set(ksPath)

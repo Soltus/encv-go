@@ -23,7 +23,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
 import { chevronDownOutline, chevronUpOutline } from "ionicons/icons";
 import type { Component } from "vue";
 

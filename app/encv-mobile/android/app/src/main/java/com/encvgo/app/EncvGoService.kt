@@ -330,18 +330,27 @@ class EncvGoService : Service() {
         startForeground(NOTIFICATION_ID, buildNotification("后端启动中"))
         acquireWakeLock()
         resetStateForStart(source)
+        GoProcessPlugin.pushKotlinLog("warn", TAG, "Go backend startup initiated by: $source")
 
         try {
             ensureConfigExists()
             ensureBuildInfoExists()
             configPort = readConfigPort()
             val binary = findExecutableBinary() ?: run {
+                GoProcessPlugin.pushKotlinLog("error", TAG, "Go backend start failed: no binary found")
                 publishFailure("no_binary", source, command)
                 return
             }
 
             val configPath = File(filesDir, "config.user.json").absolutePath
             Log.i(TAG, "Starting backend: ${binary.absolutePath} start")
+            GoProcessPlugin.pushKotlinLog("info", TAG, "Starting Go binary: ${binary.absolutePath}")
+
+            // 🆕 2026-07-04：预检 ObjectBox 依赖。
+            // Go 二进制如果以 -tags objectbox 编译，运行时需要 libobjectbox-jni.so。
+            // 若 APK 内未打包该 .so，Android linker 会直接拒绝执行（CANNOT LINK EXECUTABLE）。
+            // 此处提前检测并给出清晰错误，同时尝试改 config 为 sqlite。
+            checkObjectBoxNativeLib()
 
             // 🆕 2026-06-14：先探测 servingDir 是否可写，不可写则降级到 filesDir。
             //
@@ -381,6 +390,13 @@ class EncvGoService : Service() {
                 //   改用 subprocess worker 调 ffmpeg 后，父进程 ctx cancel 时可以 SIGKILL worker
                 //   解锁（之前 in-process cgo 阻塞 OS thread 没法 cancel，hang spinner forever）
                 environment()["ENCV_LIB_DIR"] = applicationInfo.nativeLibraryDir
+                // 🆕 2026-07-04：LD_LIBRARY_PATH 让 Android linker 能找到子进程的 .so。
+                // Go 二进制 (libencv-go.so) 通过 ProcessBuilder 直接 exec 执行，
+                // 不是用 System.loadLibrary 加载。linker64 解析 DT_NEEDED 时默认
+                // 不搜应用私有 native lib 目录，必须显式设置 LD_LIBRARY_PATH。
+                // 否则 libobjectbox-jni.so、libsql_experimental.so 等会“not found”。
+                val oldLd = environment()["LD_LIBRARY_PATH"]?.takeIf { it.isNotBlank() }
+                environment()["LD_LIBRARY_PATH"] = listOfNotNull(oldLd, applicationInfo.nativeLibraryDir).joinToString(":")
                 environment()["ENCV_FFMPEG_WORKER"] =
                     File(applicationInfo.nativeLibraryDir, "libffmpeg-worker.so").absolutePath
                 // 🆕 2026-06-14：删除 ENCV_SERVING_DIR / ENCV_HEARTBEAT_PATH
@@ -395,6 +411,7 @@ class EncvGoService : Service() {
             waitForBackendReady(startupGeneration.get(), source, command)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start backend", e)
+            GoProcessPlugin.pushKotlinLog("error", TAG, "Start exception: ${e.message}")
             publishFailure("start_failed:${e.message ?: "unknown"}", source, command)
         }
     }
@@ -445,15 +462,22 @@ class EncvGoService : Service() {
                     synchronized(outputBuffer) {
                         outputBuffer.append(content).append('\n')
                     }
-                    if (!processReady.get() && readyKeywords.any { content.contains(it, ignoreCase = true) }) {
-                        maybeMarkReady(generation, source, command)
-                    }
+                    // 🆕 2026-07-04：将 Go 进程 stderr 通过 notifyListeners 实时推送到前端 DevLogs
                     if (content.contains("error", ignoreCase = true) ||
                         content.contains("fatal", ignoreCase = true) ||
                         content.contains("panic", ignoreCase = true) ||
                         content.contains("permission denied", ignoreCase = true)) {
                         lastError = "go_error:$content"
                         publishStatus(lastError, source, command)
+                        GoProcessPlugin.pushKotlinLog("error", TAG, "[go] $content")
+                    } else if (content.contains("warn", ignoreCase = true) ||
+                               content.contains("failed", ignoreCase = true)) {
+                        GoProcessPlugin.pushKotlinLog("warn", TAG, "[go] $content")
+                    } else {
+                        GoProcessPlugin.pushKotlinLog("info", TAG, "[go] $content")
+                    }
+                    if (!processReady.get() && readyKeywords.any { content.contains(it, ignoreCase = true) }) {
+                        maybeMarkReady(generation, source, command)
                     }
                 }
 
@@ -546,6 +570,7 @@ class EncvGoService : Service() {
         updateNotification("后端启动失败")
         publishStatus(error, source, command)
         sendExternalResult(false, error, source, command)
+        GoProcessPlugin.pushKotlinLog("error", TAG, "Backend failure: $error (source=$source)")
     }
 
     private fun publishStatus(error: String?, source: String = currentSource, command: String? = null) {
@@ -885,5 +910,50 @@ class EncvGoService : Service() {
             }
         }
         wakeLock = null
+    }
+
+    /**
+     * 🆕 2026-07-04：预检 Go 二进制需要的 native 依赖。
+     *
+     * Go 二进制如果以 `-tags objectbox` 编译，Android linker 会在 exec 时
+     * 立即解析 libobjectbox-jni.so，缺失则直接拒绝执行（CANNOT LINK EXECUTABLE）。
+     *
+     * 该检查无法从代码层面修复构建问题，但能做到：
+     * 1. 提前发现并推送清晰错误到 DevLogs
+     * 2. 尝试改写 config.user.json 为 sqlite（虽然二进制加载时已失败，但为后续修复后的启动做准备）
+     * 3. 防止用户反复重试时每次都是同一个 cryptic linker 错误
+     */
+    private fun checkObjectBoxNativeLib() {
+        val nativeLibDir = applicationInfo.nativeLibraryDir
+        val objectBoxJni = File(nativeLibDir, "libobjectbox-jni.so")
+        if (objectBoxJni.exists()) return  // 正常，lib 已打包
+
+        // libobjectbox-jni.so 不存在 → Go 二进制无法 exec
+        val msg = "预检失败：APK 缺少 libobjectbox-jni.so！" +
+            " Go 二进制以 -tags objectbox 编译，但 APK 未打包该 native lib。" +
+            " 修复：./scripts/build-objectbox-android.sh 下载后重新编译 Go，" +
+            " 或将 libobjectbox-jni.so 放入 android/app/src/main/jniLibs/<arch>/"
+        Log.e(TAG, msg)
+        GoProcessPlugin.pushKotlinLog("error", TAG, msg)
+
+        // 尝试改写 config 为 sqlite，为旧版二进制或不带 objectbox 的二进制做准备
+        try {
+            val configFile = File(filesDir, "config.user.json")
+            if (configFile.exists()) {
+                val json = org.json.JSONObject(configFile.readText())
+                val db = json.optJSONObject("database") ?: org.json.JSONObject()
+                val engine = db.optString("engine", "")
+                if (engine == "objectbox") {
+                    db.put("engine", "sqlite")
+                    db.put("engineFallbackReason", "libobjectbox-jni.so not packaged in APK")
+                    json.put("database", db)
+                    configFile.writeText(json.toString(2))
+                    Log.i(TAG, "Config rewritten: database.engine → sqlite (was objectbox)")
+                    GoProcessPlugin.pushKotlinLog("warn", TAG, "config.user.json: database.engine 已从 objectbox 改为 sqlite（降级）")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to update config for objectbox fallback", e)
+        }
     }
 }

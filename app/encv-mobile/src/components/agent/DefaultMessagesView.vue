@@ -224,29 +224,21 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { chatbubblesOutline, copyOutline } from "ionicons/icons";
-import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
-import AgentTaskMessage from "@/components/agent/AgentTaskMessage.vue";
-import ApprovalCard from "@/components/agent/ApprovalCard.vue";
-import AssistantMessage from "@/components/agent/AssistantMessage.vue";
-import ContextCompactionDivider from "@/components/agent/ContextCompactionDivider.vue";
-import ErrorMessage from "@/components/agent/ErrorMessage.vue";
-import FileContentCard from "@/components/agent/FileContentCard.vue";
-import FileListCard from "@/components/agent/FileListCard.vue";
-import GroupedOperationMessage from "@/components/agent/GroupedOperationMessage.vue";
-import MessageVirtualList from "@/components/agent/MessageVirtualList.vue";
-import MountListCard from "@/components/agent/MountListCard.vue";
-import OperationCard from "@/components/agent/OperationCard.vue";
-import PlanBlock from "@/components/agent/PlanBlock.vue";
-import ReasoningMessage from "@/components/agent/ReasoningMessage.vue";
-import UserMessageBubble from "@/components/agent/UserMessageBubble.vue";
-import WebSearchSummaryMessage from "@/components/agent/WebSearchSummaryMessage.vue";
 import type { EngineRenderProps } from "@/composables/chatEngine";
 import { useRenderTurnItems } from "@/composables/renderTurnItems";
 import type { Decision, Message, ToolCall, ToolResult } from "@/composables/useAgent";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
+import UserMessageBubble from "@/components/agent/UserMessageBubble.vue";
+import AssistantMessage from "@/components/agent/AssistantMessage.vue";
+import ApprovalCard from "@/components/agent/ApprovalCard.vue";
+import GroupedOperationMessage from "@/components/agent/GroupedOperationMessage.vue";
+import OperationCard from "@/components/agent/OperationCard.vue";
+import MountListCard from "@/components/agent/MountListCard.vue";
+import FileListCard from "@/components/agent/FileListCard.vue";
+import FileContentCard from "@/components/agent/FileContentCard.vue";
+import { chatbubblesOutline, copyOutline } from "ionicons/icons";
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
 
 const props = defineProps<EngineRenderProps>();
 const { t } = useI18n();
@@ -371,7 +363,7 @@ function handleRetryError(item: { type: "error"; messageIndex: number }) {
   if (idx < 0 || idx >= messagesRef.value.length) return;
 
   const targetMsg = messagesRef.value[idx];
-  if (!targetMsg || targetMsg.role !== "user") return;
+  if (targetMsg?.role !== "user") return;
 
   let text = "";
   if (typeof targetMsg.content === "string") {

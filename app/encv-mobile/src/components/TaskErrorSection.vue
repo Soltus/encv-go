@@ -8,9 +8,10 @@
  * - "详情" 按钮点击展开：技术说明 + 修复建议 + 原始错误
  * - 不再用刺眼红色背景 / border-left 装饰
  */
-import { computed, ref } from "vue";
+
 import { analyzeError, type ErrorAnalysis } from "@/composables/useErrorAnalyzer";
 import { useI18n } from "@/composables/useI18n";
+import { computed, ref } from "vue";
 
 interface Props {
   task: {

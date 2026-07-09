@@ -77,30 +77,21 @@
 
 <script setup lang="ts">
 import {
-  alertController,
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import { cloudOutline, downloadOutline, refreshOutline, terminal, trashOutline } from "ionicons/icons";
-import { computed } from "vue";
+  cloudOutline,
+  downloadOutline,
+  refreshOutline,
+  terminal,
+  trashOutline,
+} from "ionicons/icons";
+
 import { useConfig } from "@/composables/useConfig";
 import { type LogEntry, useFrontendLogs } from "@/composables/useFrontendLogs";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import { getDefaultValue } from "@/config/schemaParser";
 import { clearLogs, exportLogs, isNative, saveDevLogs } from "@/plugins/GoProcess";
+import { alertController } from "@ionic/vue";
+import { computed } from "vue";
 
 const { t, tField } = useI18n();
 const { schemaFields, getFieldValue, setFieldValue, saveConfig, resetFieldToDefault } = useConfig();
@@ -112,7 +103,7 @@ const logLevel = computed(() => String(getFieldValue(["log", "level"]) ?? "info"
 
 const logLevelField = computed(() => {
   const logSection = schemaFields.value.find(s => s.key === "log");
-  if (!logSection || !logSection.properties) return null;
+  if (!logSection?.properties) return null;
   return logSection.properties.find(p => p.key === "level") || null;
 });
 

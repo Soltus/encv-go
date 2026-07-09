@@ -366,6 +366,9 @@ export default {
     "agent.loadingModels": "Loading models",
     "agent.modelsError": "Failed to load",
     "agent.noApiKeyHint": "API Key not configured. Please enter it above and save.",
+    "agent.noApiKeyTitle": "API Key Not Configured",
+    "agent.noApiKeyHint2": "Stored key cannot be decrypted on this device. Please go to AI Settings and re-enter.",
+    "agent.goToApiKeySettings": "Go to settings",
     "agent.modelFallbackPlaceholder": "Enter model name manually",
     "agent.noModelsAvailable": "No models available, type manually",
     "agent.apiKeyPlaceholder": "sk-...",
@@ -583,6 +586,7 @@ export default {
     "agent.v2Scenarios.title": "v2 Scenarios",
     "agent.v2Scenarios.hint":
       'Clicking a scenario auto-switches to "built-in mock" mode and sends the trigger keyword. All scenarios go through the real ToolRegistry and execute real tools (search_files / command_run / batch_rename).',
+    "agent.v2Scenarios.busy": "Request in progress, please wait",
     "agent.v2Scenarios.mock": "MOCK",
     "agent.v2Scenarios.triggerKw": "kw",
     "agent.v2Scenarios.groupSearch": "Search",

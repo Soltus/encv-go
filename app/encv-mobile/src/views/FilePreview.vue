@@ -147,7 +147,8 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
+import { formatContainerVersion } from "@/constants/containerVersion";
+import { formatFileSize } from "@/api/encv_files";
 import {
   alertCircle,
   arrowBack,
@@ -160,11 +161,9 @@ import {
   returnDownBackOutline,
   returnDownForwardOutline,
 } from "ionicons/icons";
-import { computed, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+
 import {
   fetchTextPreviewExts,
-  formatFileSize,
   getApiBaseUrl,
   getFileCategory,
   getFileExtension,
@@ -173,8 +172,9 @@ import {
   proxySafeEncode,
 } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
-import { formatContainerVersion } from "@/constants/containerVersion";
 import { isNative, openPlayer } from "@/plugins/GoProcess";
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 type PreviewType = "image" | "pdf" | "text" | "container" | "unsupported";
 

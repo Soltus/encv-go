@@ -25,6 +25,12 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
+    sourceSets {
+        getByName("main") {
+            assets.srcDirs("src/main/assets")
+        }
+    }
+
     buildFeatures {
         compose = true
     }

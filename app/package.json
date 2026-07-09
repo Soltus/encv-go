@@ -2,6 +2,15 @@
   "name": "encv-go-monorepo",
   "version": "0.0.0",
   "private": true,
-  "scripts": {},
+  "scripts": {
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format .",
+    "format:fix": "biome format --write .",
+    "biome:ci": "biome ci ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.2"
+  },
   "pnpm": {}
 }

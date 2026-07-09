@@ -96,7 +96,8 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
+import type { Decision, ToolCall, ToolKind } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
 import {
   chevronDownOutline,
   chevronUpOutline,
@@ -108,8 +109,6 @@ import {
   terminalOutline,
 } from "ionicons/icons";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import type { Decision, ToolCall, ToolKind } from "@/composables/useAgent";
-import { useI18n } from "@/composables/useI18n";
 
 // 模板用 chevronUp/chevronDown 引用，必须从 import 别名重绑定，否则
 // 模板引用未定义变量（vue-tsc 报 chevronUp/Down 不在 template scope）。

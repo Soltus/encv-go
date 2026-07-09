@@ -81,7 +81,10 @@
 </template>
 
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
+import type { SubTask } from "@/composables/renderTurnItems";
+import { AGENT_TASK_COLLAPSE_CHAR_COUNT, AGENT_TASK_COLLAPSE_LINE_COUNT } from "@/composables/renderTurnItems";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
+import { useI18n } from "@/composables/useI18n";
 import {
   checkmarkCircle,
   chevronDownOutline,
@@ -92,10 +95,6 @@ import {
   sync,
 } from "ionicons/icons";
 import { computed, ref } from "vue";
-import type { SubTask } from "@/composables/renderTurnItems";
-import { AGENT_TASK_COLLAPSE_CHAR_COUNT, AGENT_TASK_COLLAPSE_LINE_COUNT } from "@/composables/renderTurnItems";
-import { useI18n } from "@/composables/useI18n";
-import StatusBadge from "./StatusBadge.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -153,7 +152,6 @@ function statusIcon(status: SubTask["status"]) {
       return sync;
     case "failed":
       return closeCircle;
-    case "pending":
     default:
       return ellipsisHorizontalCircle;
   }

@@ -60,9 +60,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
 import type { JobRun, StepRun } from "@/lib/workflow/types";
-import StepMiniBadge from "./StepMiniBadge.vue";
+import StepMiniBadge from "@/components/automation/StepMiniBadge.vue";
+import { computed, ref } from "vue";
 
 const props = defineProps<{
   job: JobRun;

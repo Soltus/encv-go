@@ -35,22 +35,6 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
-import { cloudOutline, folderOpen, settingsOutline, speedometerOutline } from "ionicons/icons";
-import { computed } from "vue";
 import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import FilePickerModal from "@/components/FilePickerModal.vue";
 import { useConfig } from "@/composables/useConfig";
@@ -58,6 +42,9 @@ import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import type { FieldDef } from "@/config/schemaParser";
 import { parseSchema } from "@/config/schemaParser";
+import { modalController } from "@ionic/vue";
+import { cloudOutline, folderOpen, settingsOutline, speedometerOutline } from "ionicons/icons";
+import { computed } from "vue";
 
 const { t } = useI18n();
 const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig();

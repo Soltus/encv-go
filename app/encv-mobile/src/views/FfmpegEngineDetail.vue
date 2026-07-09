@@ -270,25 +270,6 @@
 
 <script setup lang="ts">
 import {
-  IonAccordion,
-  IonAccordionGroup,
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
-import {
   calendarOutline,
   cloudUploadOutline,
   codeSlashOutline,
@@ -308,9 +289,10 @@ import {
   videocamOutline,
   warningOutline,
 } from "ionicons/icons";
-import { onMounted, ref } from "vue";
+
 import { type BuildInfo, type FFmpegStatus, fetchBuildInfo, fetchFFmpegStatus } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
+import { onMounted, ref } from "vue";
 
 const { t } = useI18n();
 

@@ -184,26 +184,17 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonBackButton,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonInput,
-  IonItem,
-  IonItemDivider,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonModal,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-  modalController,
-} from "@ionic/vue";
+import { fetchConfig, fetchTextPreviewExts, invalidateTextExtsCache, updateConfig } from "@/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
+import FilePickerModal from "@/components/FilePickerModal.vue";
+import { useConfig } from "@/composables/useConfig";
+import { useI18n } from "@/composables/useI18n";
+import { usePluginExtensions } from "@/composables/usePluginExtensions";
+import { useServerStatus } from "@/composables/useServerStatus";
+import { showToast } from "@/composables/useToast";
+import type { FieldDef } from "@/config/schemaParser";
+import { isNative } from "@/plugins/GoProcess";
+import { modalController } from "@ionic/vue";
 import {
   cloudOutline,
   colorPaletteOutline,
@@ -226,16 +217,6 @@ import {
   warningOutline,
 } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
-import { fetchConfig, fetchTextPreviewExts, invalidateTextExtsCache, updateConfig } from "@/api/encv";
-import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
-import FilePickerModal from "@/components/FilePickerModal.vue";
-import { useConfig } from "@/composables/useConfig";
-import { useI18n } from "@/composables/useI18n";
-import { usePluginExtensions } from "@/composables/usePluginExtensions";
-import { useServerStatus } from "@/composables/useServerStatus";
-import { showToast } from "@/composables/useToast";
-import type { FieldDef } from "@/config/schemaParser";
-import { isNative } from "@/plugins/GoProcess";
 
 const { isOnline: serverOnline } = useServerStatus();
 const {

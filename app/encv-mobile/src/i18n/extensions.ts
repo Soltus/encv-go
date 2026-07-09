@@ -30,6 +30,9 @@ export default {
     "extensions.alistDecryptDesc": "支持 AES-128-CTR 加密文件的解密、加密和流式预览",
     "extensions.openlist": "OpenList",
     "extensions.openlistDesc": "本地文件管理服务，支持 ENCV 容器透明解密和多存储源挂载",
+    "extensions.simverse": "SimVerse 世界",
+    "extensions.simverseDesc": "横屏模拟世界，沉浸式模拟经营体验",
+    "extensions.openExtension": "打开扩展",
   },
   en: {
     "extensions.title": "Extensions",
@@ -62,5 +65,8 @@ export default {
     "extensions.alistDecryptDesc": "Support decryption, encryption and streaming preview of AES-128-CTR encrypted files",
     "extensions.openlist": "OpenList",
     "extensions.openlistDesc": "Local file management service with ENCV container transparent decryption and multi-storage mounting",
+    "extensions.simverse": "SimVerse",
+    "extensions.simverseDesc": "Landscape simulation world with immersive simulation experience",
+    "extensions.openExtension": "Open Extension",
   },
 };

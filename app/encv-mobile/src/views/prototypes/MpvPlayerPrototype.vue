@@ -230,7 +230,6 @@
 
 <script setup lang="ts">
 import { computed, inject, type Ref, ref, watch } from "vue";
-import MpvProgressBar from "./MpvProgressBarWeb.vue";
 
 const sandbox = inject<{ isLandscape: Ref<boolean>; toggleLandscape: () => void }>("sandboxLandscape", {
   isLandscape: ref(false),

@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { IonIcon } from "@ionic/vue";
-import { checkboxOutline, checkmarkCircle, ellipsisHorizontalCircle, sync } from "ionicons/icons";
-import { computed } from "vue";
 import { useI18n } from "@/composables/useI18n";
-import BlockHeader from "./BlockHeader.vue";
+import BlockHeader from "@/components/agent/BlockHeader.vue";
+import {
+  checkboxOutline,
+  checkmarkCircle,
+  ellipsisHorizontalCircle,
+  sync,
+} from "ionicons/icons";
+import { computed } from "vue";
 
 export interface PlanTodo {
   id: string;

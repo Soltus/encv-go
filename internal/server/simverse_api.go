@@ -345,22 +345,26 @@ func (s *Server) handleSimverseNPCList(c *gin.Context) {
 	for i := 0; i < pageSize; i++ {
 		id := uint64(startID + i)
 		npc := world.GetNPC(id, s.simverseMgr.rng)
+		bs := world.GetBehaviorState(id, s.simverseMgr.rng)
 		npcs = append(npcs, gin.H{
-			"id":          npc.ID,
-			"name":        npc.Name,
-			"species":     npc.Species.String(),
-			"gender":      npc.Gender.String(),
-			"age":         npc.Age,
-			"life_stage":  npc.LifeStage.String(),
-			"profession":  npc.Profession.String(),
-			"level":       npc.Level,
-			"health":      npc.Health,
-			"max_health":  npc.MaxHealth,
-			"energy":      npc.Energy,
-			"max_energy":  npc.MaxEnergy,
-			"is_alive":    npc.IsAlive,
-			"wealth_tier": npc.WealthTier,
-			"social_tier": npc.SocialTier,
+			"id":              npc.ID,
+			"name":            npc.Name,
+			"species":         npc.Species.String(),
+			"gender":          npc.Gender.String(),
+			"age":             npc.Age,
+			"life_stage":      npc.LifeStage.String(),
+			"profession":      npc.Profession.String(),
+			"level":           npc.Level,
+			"health":          npc.Health,
+			"max_health":      npc.MaxHealth,
+			"energy":          npc.Energy,
+			"max_energy":      npc.MaxEnergy,
+			"is_alive":        npc.IsAlive,
+			"wealth_tier":     npc.WealthTier,
+			"social_tier":     npc.SocialTier,
+			"current_behavior": bs.CurrentBehavior.String(),
+			"current_behavior_cn": bs.CurrentBehavior.CN(),
+			"mood":            npc.Mood,
 		})
 	}
 
@@ -387,6 +391,7 @@ func (s *Server) handleSimverseNPCDetail(c *gin.Context) {
 
 	world := s.simverseMgr.World()
 	npc := world.GetNPC(id, s.simverseMgr.rng)
+	behaviorState := world.GetBehaviorState(id, s.simverseMgr.rng)
 
 	skills := make(map[string]uint8)
 	for i := simverse.SkillType(0); i < simverse.SkillMax; i++ {
@@ -473,6 +478,21 @@ func (s *Server) handleSimverseNPCDetail(c *gin.Context) {
 		"org_id":          npc.OrgID,
 		"region_id":       npc.RegionID,
 		"home_region_id":  npc.HomeRegionID,
+		"behavior": gin.H{
+			"current_behavior":  behaviorState.CurrentBehavior.String(),
+			"current_behavior_cn": behaviorState.CurrentBehavior.CN(),
+			"behavior_start_tick": behaviorState.BehaviorStartTick,
+			"behavior_duration":  behaviorState.BehaviorDuration,
+			"target_id":          behaviorState.TargetID,
+			"target_pos_x":       behaviorState.TargetPosX,
+			"target_pos_y":       behaviorState.TargetPosY,
+			"needs": gin.H{
+				"hunger":       behaviorState.Needs.Hunger,
+				"energy":       behaviorState.Needs.Energy,
+				"social":       behaviorState.Needs.Social,
+				"achievement":  behaviorState.Needs.Achievement,
+			},
+		},
 		"skills":          skills,
 		"inventory":       inventory,
 		"bank":            bank,
@@ -1026,4 +1046,244 @@ func (s *Server) handleSimverseStorageStatus(c *gin.Context) {
 		"low_threshold":      simverse.StorageLowBytes,
 		"critical_threshold": simverse.StorageCriticalBytes,
 	})
+}
+
+func (s *Server) handleSimverseBehaviorStats(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	stats := world.MemoryStats()
+	total := int(stats["npc_cache_count"])
+	if total > 500 {
+		total = 500
+	}
+
+	behaviorCounts := make(map[string]int)
+	aliveCount := 0
+
+	for i := 0; i < total; i++ {
+		id := uint64(i)
+		npc := world.GetNPC(id, s.simverseMgr.rng)
+		if !npc.IsAlive {
+			continue
+		}
+		aliveCount++
+		bs := world.GetBehaviorState(id, s.simverseMgr.rng)
+		behaviorCounts[bs.CurrentBehavior.String()]++
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total_npcs":   total,
+		"alive_npcs":   aliveCount,
+		"behavior_dist": behaviorCounts,
+	})
+}
+
+func (s *Server) handleSimverseBehaviorList(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))
+	behaviorFilter := c.DefaultQuery("behavior", "")
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 50
+	}
+
+	world := s.simverseMgr.World()
+	stats := world.MemoryStats()
+	total := int(stats["npc_cache_count"])
+
+	startID := (page - 1) * pageSize
+	items := make([]gin.H, 0, pageSize)
+	filteredTotal := 0
+
+	for i := 0; i < total; i++ {
+		id := uint64(i)
+		npc := world.GetNPC(id, s.simverseMgr.rng)
+		if !npc.IsAlive {
+			continue
+		}
+
+		bs := world.GetBehaviorState(id, s.simverseMgr.rng)
+
+		if behaviorFilter != "" && bs.CurrentBehavior.String() != behaviorFilter {
+			continue
+		}
+
+		filteredTotal++
+
+		if i < startID || i >= startID+pageSize {
+			continue
+		}
+
+		items = append(items, gin.H{
+			"npc_id":              npc.ID,
+			"npc_name":            npc.Name,
+			"profession":          npc.Profession.String(),
+			"level":               npc.Level,
+			"current_behavior":    bs.CurrentBehavior.String(),
+			"current_behavior_cn": bs.CurrentBehavior.CN(),
+			"behavior_start_tick": bs.BehaviorStartTick,
+			"behavior_duration":   bs.BehaviorDuration,
+			"mood":                npc.Mood,
+			"energy":              npc.Energy,
+			"needs": gin.H{
+				"hunger":      bs.Needs.Hunger,
+				"energy":      bs.Needs.Energy,
+				"social":      bs.Needs.Social,
+				"achievement": bs.Needs.Achievement,
+			},
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"page":      page,
+		"page_size": pageSize,
+		"total":     filteredTotal,
+		"items":     items,
+	})
+}
+
+func (s *Server) handleSimverseEconomyStats(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	em := world.EconomyManager()
+	regionID := uint32(1)
+	stats := em.GetRegionalStats(regionID)
+
+	c.JSON(http.StatusOK, stats)
+}
+
+func (s *Server) handleSimverseEconomyWealthRank(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	count := 20
+	if v := c.Query("count"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			count = n
+		}
+	}
+
+	em := world.EconomyManager()
+	ranking := em.GetTopNPCsByWealth(world, count)
+
+	c.JSON(http.StatusOK, gin.H{
+		"count": len(ranking),
+		"items": ranking,
+	})
+}
+
+func (s *Server) handleSimverseQuestList(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	qm := world.QuestManager()
+	summary := qm.GetQuestSummary()
+
+	c.JSON(http.StatusOK, summary)
+}
+
+func (s *Server) handleSimverseQuestClaim(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	var req struct {
+		QuestID string `json:"quest_id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	qm := world.QuestManager()
+	reward, ok := qm.ClaimReward(req.QuestID)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "quest not completable"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"reward":  reward,
+	})
+}
+
+func (s *Server) handleSimverseQuestAction(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	var req struct {
+		Action string `json:"action"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	qm := world.QuestManager()
+	switch req.Action {
+	case "view_npc":
+		qm.RecordNPCView()
+	case "view_economy":
+		qm.RecordEconomyView()
+	case "gacha":
+		qm.RecordGacha()
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown action"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }

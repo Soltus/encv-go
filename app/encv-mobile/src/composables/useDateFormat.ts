@@ -1,10 +1,10 @@
-import { useI18n } from "./useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 export function formatDateTime(isoStr: string | undefined | null): string {
   if (!isoStr) return "";
   try {
     const d = new Date(isoStr);
-    if (isNaN(d.getTime())) return "";
+    if (Number.isNaN(d.getTime())) return "";
     const { getLocale } = useI18n();
     const locale = getLocale();
     return new Intl.DateTimeFormat(locale, {

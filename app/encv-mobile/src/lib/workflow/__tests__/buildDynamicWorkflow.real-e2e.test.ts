@@ -40,11 +40,11 @@ const mockLocalStorage: Storage = {
 } as unknown as Storage;
 vi.stubGlobal("localStorage", mockLocalStorage);
 
-import { createPinia, setActivePinia } from "pinia";
 import type { EncvTask, PluginMeta, TaskStatus } from "@/api/encv";
 import { _resetTasksListSingletonForTests, useTasksList } from "@/composables/useTasksList";
 import { buildDynamicWorkflowPure, type DynamicTestCase } from "@/lib/workflow/buildDynamicWorkflow";
 import { useTaskStore } from "@/stores/taskStore";
+import { createPinia, setActivePinia } from "pinia";
 import { TaskListDiagSimulator } from "./fixtures/TaskListDiagSimulator";
 
 vi.mock("@/composables/useTaskEventBridge", () => ({

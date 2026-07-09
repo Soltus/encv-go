@@ -83,103 +83,89 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonButtons,
-  IonButton,
-  IonBackButton,
-  IonTitle,
-  IonContent,
-  IonFooter,
-  IonSpinner,
-  IonIcon,
-  modalController,
-} from '@ionic/vue'
-import { openOutline } from 'ionicons/icons'
-import { OpenListNative, logBuffer } from '@/plugins/openlist-native'
-import SaveOptionsDialog from '@/components/SaveOptionsDialog.vue'
+import { modalController } from "@ionic/vue";
+import { onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import SaveOptionsDialog from "@/components/SaveOptionsDialog.vue";
+import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
 
-const router = useRouter()
+const router = useRouter();
 
-const content = ref('')
-const hasError = ref(false)
-const error = ref('')
-const isSaving = ref(false)
-const isDevPreview = ref(false)
-const readOnlyMode = ref(false)
-let debounceTimer: ReturnType<typeof setTimeout> | null = null
+const content = ref("");
+const hasError = ref(false);
+const error = ref("");
+const isSaving = ref(false);
+const isDevPreview = ref(false);
+const readOnlyMode = ref(false);
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 onMounted(async () => {
-  isDevPreview.value = !window.OpenListNative
+  isDevPreview.value = !window.OpenListNative;
   if (isDevPreview.value) {
     // dev preview：不自动加载，避免无 token 报 401 弹错
-    logBuffer.info('沙箱 preview 模式：config 需 admin token，请到 :5244 Admin Web UI 编辑')
-    return
+    logBuffer.info("沙箱 preview 模式：config 需 admin token，请到 :5244 Admin Web UI 编辑");
+    return;
   }
-  content.value = OpenListNative.readConfig()
-  validate()
-})
+  content.value = OpenListNative.readConfig();
+  validate();
+});
 
-function onInput() {
-  if (debounceTimer) clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(validate, 300)
+function _onInput() {
+  if (debounceTimer) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(validate, 300);
 }
 
 function validate() {
   if (!content.value.trim()) {
-    hasError.value = true
-    error.value = '内容为空'
-    return
+    hasError.value = true;
+    error.value = "内容为空";
+    return;
   }
   try {
-    JSON.parse(content.value)
-    hasError.value = false
-    error.value = ''
+    JSON.parse(content.value);
+    hasError.value = false;
+    error.value = "";
   } catch (e: any) {
-    hasError.value = true
-    error.value = e.message
+    hasError.value = true;
+    error.value = e.message;
   }
 }
 
-async function showSaveOptions() {
+async function _showSaveOptions() {
   const modal = await modalController.create({
     component: SaveOptionsDialog,
-  })
-  await modal.present()
-  const { data } = await modal.onDidDismiss()
-  if (data === 'saveOnly' || data === 'saveAndRestart') {
-    await doSave(data === 'saveAndRestart')
+  });
+  await modal.present();
+  const { data } = await modal.onDidDismiss();
+  if (data === "saveOnly" || data === "saveAndRestart") {
+    await doSave(data === "saveAndRestart");
   }
 }
 
 async function doSave(restart: boolean) {
-  isSaving.value = true
+  isSaving.value = true;
   try {
-    const ok = OpenListNative.writeConfig(content.value)
-    logBuffer[ok ? 'info' : 'error'](ok ? 'config.json 已保存' : '保存失败')
+    const ok = OpenListNative.writeConfig(content.value);
+    logBuffer[ok ? "info" : "error"](ok ? "config.json 已保存" : "保存失败");
     if (ok && restart) {
-      logBuffer.info('重启 OpenList...')
-      OpenListNative.stopOpenList()
+      logBuffer.info("重启 OpenList...");
+      OpenListNative.stopOpenList();
       setTimeout(() => {
-        OpenListNative.startOpenList()
-        router.back()
-      }, 1500)
+        OpenListNative.startOpenList();
+        router.back();
+      }, 1500);
     } else if (ok) {
-      router.back()
+      router.back();
     }
   } catch (e: any) {
-    logBuffer.error(`保存异常: ${e?.message || e}`)
+    logBuffer.error(`保存异常: ${e?.message || e}`);
   } finally {
-    isSaving.value = false
+    isSaving.value = false;
   }
 }
 
-function discard() {
-  router.back()
+function _discard() {
+  router.back();
 }
 
 /**
@@ -187,46 +173,46 @@ function discard() {
  * OpenList admin API 实际路径是 /api/admin/setting/get（不是 /api/admin/config）
  * 失败时显示错误，但不让 UI 崩溃
  */
-async function loadAsReadOnly() {
-  readOnlyMode.value = true
-  content.value = ''
-  hasError.value = false
-  error.value = ''
+async function _loadAsReadOnly() {
+  readOnlyMode.value = true;
+  content.value = "";
+  hasError.value = false;
+  error.value = "";
 
-  const token = localStorage.getItem('openlist-token') || ''
+  const token = localStorage.getItem("openlist-token") || "";
   try {
     // OpenList v4 admin settings API: /api/admin/setting/list
-    const res = await fetch('http://127.0.0.1:5244/api/admin/setting/list', {
-      cache: 'no-store',
+    const res = await fetch("http://127.0.0.1:5244/api/admin/setting/list", {
+      cache: "no-store",
       signal: AbortSignal.timeout(5000),
       headers: token ? { Authorization: token } : {},
-    })
+    });
     if (!res.ok) {
-      const errBody = await res.text().catch(() => '')
+      const errBody = await res.text().catch(() => "");
       if (res.status === 401) {
-        logBuffer.warn('admin setting 需要 token：先在 :5244 Admin Web UI 用 admin/admin 登录')
-        error.value = '401 未授权（需要在 :5244 Admin Web UI 登录后把 token 粘到 localStorage）'
+        logBuffer.warn("admin setting 需要 token：先在 :5244 Admin Web UI 用 admin/admin 登录");
+        error.value = "401 未授权（需要在 :5244 Admin Web UI 登录后把 token 粘到 localStorage）";
       } else {
-        error.value = `HTTP ${res.status}: ${errBody.slice(0, 100)}`
+        error.value = `HTTP ${res.status}: ${errBody.slice(0, 100)}`;
       }
-      hasError.value = true
-      return
+      hasError.value = true;
+      return;
     }
-    const data = await res.json()
-    content.value = JSON.stringify(data?.data ?? data, null, 2)
-    validate()
-    logBuffer.info('已加载 :5244 admin setting (只读模式)')
+    const data = await res.json();
+    content.value = JSON.stringify(data?.data ?? data, null, 2);
+    validate();
+    logBuffer.info("已加载 :5244 admin setting (只读模式)");
   } catch (e: any) {
-    error.value = e?.message || String(e)
-    hasError.value = true
-    logBuffer.error(`加载 admin setting 失败: ${error.value}`)
+    error.value = e?.message || String(e);
+    hasError.value = true;
+    logBuffer.error(`加载 admin setting 失败: ${error.value}`);
   }
 }
 
-function openAdminWebUi() {
+function _openAdminWebUi() {
   // 沙箱下直接打 :5244 backend 的 Web UI（dev preview 用户已经在 sandbox 内）
   // 真实 port 用 vite proxy rewrite 后打到 5244，但这里直接打开 5244 避开 vite proxy
-  window.open('http://127.0.0.1:5244/#/login', '_blank', 'noopener')
+  window.open("http://127.0.0.1:5244/#/login", "_blank", "noopener");
 }
 </script>
 

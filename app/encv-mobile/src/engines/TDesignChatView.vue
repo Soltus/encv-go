@@ -292,11 +292,12 @@
 <script setup lang="ts">
 // TDesign Chat 自家组件：ChatThinking + ChatMarkdown（cherry-markdown 引擎）
 // 统一 TDesign 视觉风格
-import { ChatMarkdown, ChatThinking } from "@tdesign-vue-next/chat";
-import { type ComputedRef, computed, ref } from "vue";
+
 import { useRenderTurnItems } from "@/composables/renderTurnItems";
 import type { AgentStatus, Message, ToolCall, ToolResult } from "@/composables/useAgent";
-import ToolDetailContent from "./ToolDetailContent.vue";
+import { ChatThinking, ChatMarkdown } from "@tdesign-vue-next/chat";
+import ToolDetailContent from "@/engines/ToolDetailContent.vue";
+import { type ComputedRef, computed, ref } from "vue";
 
 /**
  * 适配 TDesign 视觉的 turn-items 渲染器

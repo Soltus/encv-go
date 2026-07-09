@@ -181,34 +181,22 @@
 
 <script setup lang="ts">
 import {
-  IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToggle,
-  IonToolbar,
-} from "@ionic/vue";
-import { cloudUploadOutline, downloadOutline, save as saveIcon, saveOutline, warningOutline } from "ionicons/icons";
-import { computed, onMounted, ref } from "vue";
+  cloudUploadOutline,
+  downloadOutline,
+  saveOutline,
+  saveOutline as saveIcon,
+  warningOutline,
+} from "ionicons/icons";
+
 import { backupDatabase, exportDatabase, getDatabaseInfo, importDatabase } from "@/api/encv";
 import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import { useConfig } from "@/composables/useConfig";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import type { FieldDef } from "@/config/schemaParser";
-import { alertController } from "@ionic/vue";
 import { restartBackend } from "@/plugins/GoProcess";
+import { alertController } from "@ionic/vue";
+import { computed, onMounted, ref } from "vue";
 
 const { t } = useI18n();
 const {
@@ -261,7 +249,7 @@ function toggleEngine(name: string, event: any) {
 onMounted(async () => {
   try {
     await loadConfig();
-  } catch (e) {
+  } catch (_e) {
     // config 加载失败在 Settings 主页面已经提示过了
   }
   loadDatabaseInfo().catch(() => {});

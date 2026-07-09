@@ -39,10 +39,12 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonButton, IonIcon, modalController } from "@ionic/vue";
-import { layers as layersIcon } from "ionicons/icons";
-import { computed, reactive } from "vue";
+;
+
 import type { ContextUsageResponse } from "@/composables/useContextUsage";
+import { layers as layersIcon } from "ionicons/icons";
+import { modalController } from "@ionic/vue";
+import { computed, reactive } from "vue";
 import type { ContextPopoverState } from "./ContextPopoverModal.vue";
 import ContextPopoverModal from "./ContextPopoverModal.vue";
 

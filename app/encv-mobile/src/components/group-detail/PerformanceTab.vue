@@ -76,11 +76,19 @@
 </template>
 
 <script setup lang="ts">
-import { IonBadge, IonCard, IonCardContent, IonCardHeader, IonCardTitle, IonIcon, IonSpinner } from "@ionic/vue";
-import { analyticsOutline } from "ionicons/icons";
-import { computed, onMounted, ref } from "vue";
-import { type CalibrationResult, type EncvTask, getCalibration, getPerformanceHistory, type PerformanceMetrics } from "@/api/encv";
+import {
+  analyticsOutline,
+} from "ionicons/icons";
+
+import {
+  type CalibrationResult,
+  type EncvTask,
+  getCalibration,
+  getPerformanceHistory,
+  type PerformanceMetrics,
+} from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
+import { computed, onMounted, ref } from "vue";
 
 const props = defineProps<{ runTasks: EncvTask[] }>();
 const { t } = useI18n();

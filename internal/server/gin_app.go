@@ -50,6 +50,12 @@ func NewGinApp(cfg *config.Config) *gin.Engine {
 				strings.HasPrefix(origin, "https://localhost") {
 				return true
 			}
+			// 允许 ComboLite 插件的虚拟 https 域名（plugin-simverse, plugin-mpv-player 等）
+			// 格式：https://{name}-plugin.local
+			if strings.HasSuffix(origin, "-plugin.local") &&
+				strings.HasPrefix(origin, "https://") {
+				return true
+			}
 			return false
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"},

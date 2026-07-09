@@ -124,7 +124,7 @@ const AGUI_TO_AGENT_TYPE: Readonly<Record<AGUIEventType, AgentEvent["type"] | nu
  *   - AgentEvent：data 字段是 JSON 字符串（与现有 AgentEvent 契约一致）
  */
 export function parseAGUIEvent(raw: string): AgentEvent | null {
-  if (!raw || !raw.trim()) return null;
+  if (!raw?.trim()) return null;
 
   let eventType = "";
   const dataLines: string[] = [];

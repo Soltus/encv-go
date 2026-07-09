@@ -27,7 +27,6 @@
 </template>
 
 <script setup lang="ts">
-import { IonItem, IonLabel, IonRadio } from "@ionic/vue";
 import { computed } from "vue";
 
 /**
