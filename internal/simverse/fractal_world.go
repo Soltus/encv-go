@@ -49,6 +49,8 @@ type FractalWorld struct {
 	behaviorCache *EntityCache[*BehaviorState]
 	cellCache     map[uint64]*EntityCache[*Cell]
 	brainCache    map[uint64]*Brain
+	socialGraph   *SocialGraph
+	battleMgr     *BattleManager
 
 	focusNPCs     map[uint64]FocusLevel
 	cellCoreCount int
@@ -71,6 +73,8 @@ func NewFractalWorld(dataDir string, worldName string) *FractalWorld {
 		behaviorCache: NewEntityCache[*BehaviorState](10000),
 		cellCache:     make(map[uint64]*EntityCache[*Cell]),
 		brainCache:    make(map[uint64]*Brain),
+		socialGraph:   NewSocialGraph(),
+		battleMgr:     NewBattleManager(chron),
 		focusNPCs:     make(map[uint64]FocusLevel),
 		cellCoreCount: 1000,
 	}
@@ -187,6 +191,7 @@ func (fw *FractalWorld) Tick(rng *rand.Rand) {
 	fw.tickNPCs(currentTick, config, rng)
 	fw.tickBrains(currentTick, config, rng)
 	fw.tickWorldEvents(currentTick, chron, rng)
+	fw.tickBattles(currentTick, rng)
 
 	if currentTick%10 == 0 {
 		em.Tick(fw)
@@ -234,6 +239,26 @@ func (fw *FractalWorld) tickWorldEvents(currentTick uint32, chron *ChronicleMana
 		era := chron.CurrentEra()
 		chron.SetEra(era+1, currentTick, "")
 	}
+}
+
+// tickBattles 以一定概率抽取两名缓存 NPC 模拟对战，使战斗成为持续演化的活系统
+func (fw *FractalWorld) tickBattles(currentTick uint32, rng *rand.Rand) {
+	if currentTick%50 != 0 {
+		return
+	}
+	if rng.Float64() < 0.5 {
+		return
+	}
+	npcs := fw.GetCachedNPCs()
+	if len(npcs) < 2 {
+		return
+	}
+	a := npcs[rng.Intn(len(npcs))]
+	b := npcs[rng.Intn(len(npcs))]
+	if a.ID == b.ID {
+		return
+	}
+	fw.battleMgr.Simulate(a, b, currentTick, rng)
 }
 
 func (fw *FractalWorld) tickNPCs(currentTick uint32, config PerfTierConfig, rng *rand.Rand) {
@@ -343,6 +368,28 @@ func (fw *FractalWorld) MemoryStats() map[string]float64 {
 
 func (fw *FractalWorld) Chronicle() *ChronicleManager {
 	return fw.chronicle
+}
+
+// Social 返回社交关系图子系统
+func (fw *FractalWorld) Social() *SocialGraph {
+	return fw.socialGraph
+}
+
+// Battle 返回战斗系统管理器
+func (fw *FractalWorld) Battle() *BattleManager {
+	return fw.battleMgr
+}
+
+// GetNPCRelationships 返回指定 NPC 的（派生并缓存的）关系列表
+func (fw *FractalWorld) GetNPCRelationships(npcID uint64, rng *rand.Rand) []Relationship {
+	npc := fw.GetNPC(npcID, rng)
+	return fw.socialGraph.Get(npcID, func() []Relationship { return generateRelationships(npc) })
+}
+
+// GetSocialStats 返回（可选按区域 / 组织过滤的）社交关系统计
+func (fw *FractalWorld) GetSocialStats(regionFilter, orgFilter uint32) SocialStats {
+	npcs := fw.GetCachedNPCs()
+	return fw.socialGraph.Stats(npcs, regionFilter, orgFilter)
 }
 
 func (fw *FractalWorld) WorldTick() uint32 {

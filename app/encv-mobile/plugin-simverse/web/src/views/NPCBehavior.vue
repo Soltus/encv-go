@@ -3,9 +3,9 @@
     <ion-header :translucent="true">
       <ion-toolbar>
         <ion-buttons slot="start">
-          <ion-back-button default-href="/tabs/regions" />
+          <ion-back-button default-href="/tabs/npcs" />
         </ion-buttons>
-        <ion-title>{{ t("simverse.regionDetail") }}</ion-title>
+        <ion-title>{{ t("simverse.detail.viewBehavior") }}</ion-title>
         <ion-buttons slot="end">
           <ion-button @click="reload">
             <ion-icon :icon="refreshOutline" slot="icon-only" />
@@ -24,29 +24,31 @@
         <p>{{ error }}</p>
         <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
       </div>
-      <template v-else-if="region">
-        <ion-card>
+      <template v-else>
+        <!-- 当前行为快照 -->
+        <ion-card v-if="behavior">
           <ion-card-header>
-            <ion-card-title>{{ t("simverse.regions") }} #{{ region.region_id }}</ion-card-title>
+            <ion-card-title>{{ t("simverse.behavior") }}</ion-card-title>
           </ion-card-header>
           <ion-card-content>
+            <div class="behavior-now">
+              <span class="behavior-badge">{{ behavior.current_behavior_cn || behavior.current_behavior }}</span>
+            </div>
             <ion-grid>
               <ion-row>
-                <ion-col><div class="stat-label">{{ t("simverse.npcCount") }}</div><div class="stat-val">{{ region.npc_count }}</div></ion-col>
-                <ion-col><div class="stat-label">{{ t("simverse.aliveCount") }}</div><div class="stat-val">{{ region.alive_count }}</div></ion-col>
+                <ion-col><div class="stat-label">{{ t("simverse.detail.mood") }}</div><div class="stat-val">{{ behavior.mood }}</div></ion-col>
+                <ion-col><div class="stat-label">{{ t("simverse.detail.energy") }}</div><div class="stat-val">{{ behavior.energy }}</div></ion-col>
               </ion-row>
               <ion-row>
-                <ion-col><div class="stat-label">{{ t("simverse.population") }}</div><div class="stat-val">{{ region.population }}</div></ion-col>
-                <ion-col><div class="stat-label">{{ t("simverse.avgLevel") }}</div><div class="stat-val">{{ region.avg_level.toFixed(1) }}</div></ion-col>
-              </ion-row>
-              <ion-row>
-                <ion-col><div class="stat-label">{{ t("simverse.avgWealthTier") }}</div><div class="stat-val">{{ region.avg_wealth_tier.toFixed(1) }}</div></ion-col>
+                <ion-col><div class="stat-label">{{ t("simverse.behaviorStart") }}</div><div class="stat-val">{{ behavior.behavior_start_tick }}</div></ion-col>
+                <ion-col><div class="stat-label">{{ t("simverse.behaviorDuration") }}</div><div class="stat-val">{{ behavior.behavior_duration }}</div></ion-col>
               </ion-row>
             </ion-grid>
           </ion-card-content>
         </ion-card>
 
-        <ion-list-header><ion-label>{{ t("simverse.events") }}</ion-label></ion-list-header>
+        <!-- 行为时间线（该 NPC 的编年史事件流） -->
+        <ion-list-header><ion-label>{{ t("simverse.chronicleTimeline") }}</ion-label></ion-list-header>
         <ion-list v-if="events.length" :inset="true">
           <ion-item v-for="ev in events" :key="ev.id">
             <ion-label>
@@ -65,7 +67,7 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import {
   IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
   IonButton, IonIcon, IonContent, IonCard, IonCardHeader, IonCardTitle,
@@ -74,30 +76,38 @@ import {
 } from "@ionic/vue";
 import { refreshOutline, alertCircleOutline } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseRegion, type SimverseEraEvent } from "@/composables/useSimverse";
+import {
+  useSimverse,
+  type SimverseBehaviorState,
+  type SimverseChronicleEvent,
+} from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const route = useRoute();
-const router = useRouter();
-const { loadRegionDetail } = useSimverse();
+const { loadBehaviorList, loadChronicleNPC } = useSimverse();
 
-const regionId = Number(route.params.id);
+const npcId = Number(route.params.id);
 const loading = ref(false);
 const error = ref("");
-const region = ref<SimverseRegion | null>(null);
-const events = ref<SimverseEraEvent[]>([]);
+const behavior = ref<SimverseBehaviorState | null>(null);
+const events = ref<SimverseChronicleEvent[]>([]);
 
 async function reload() {
   loading.value = true;
   error.value = "";
   try {
-    const data = await loadRegionDetail(regionId);
-    if (data) {
-      region.value = data.region;
-      events.value = data.events;
+    const [list, chron] = await Promise.all([
+      loadBehaviorList(1, 500),
+      loadChronicleNPC(npcId, 30),
+    ]);
+    if (list) {
+      behavior.value = list.items.find((b) => b.npc_id === npcId) || null;
+    }
+    if (chron) {
+      events.value = chron.items;
     }
   } catch (e: any) {
-    error.value = e.message || "Failed to load region";
+    error.value = e.message || "Failed to load behavior";
   } finally {
     loading.value = false;
   }
@@ -115,12 +125,24 @@ onMounted(reload);
   padding: 40px 20px;
   gap: 16px;
 }
+.behavior-now {
+  margin-bottom: 12px;
+}
+.behavior-badge {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 16px;
+  background: var(--ion-color-warning-tint, #fef3c7);
+  color: var(--ion-color-warning-shade, #92400e);
+  font-weight: 600;
+  font-size: 14px;
+}
 .stat-label {
   font-size: 12px;
   color: var(--ion-color-medium, #6b7280);
 }
 .stat-val {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 700;
 }
 </style>

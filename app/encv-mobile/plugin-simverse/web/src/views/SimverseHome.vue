@@ -39,20 +39,20 @@
       <div class="stats-grid">
         <ion-card class="stat-card">
           <ion-card-content>
-            <div class="stat-value">{{ fps }}</div>
-            <div class="stat-label">FPS</div>
+            <div class="stat-value">{{ npcCount }}</div>
+            <div class="stat-label">{{ t("simverse.population") }}</div>
           </ion-card-content>
         </ion-card>
         <ion-card class="stat-card">
           <ion-card-content>
-            <div class="stat-value">{{ entityCount }}</div>
-            <div class="stat-label">实体</div>
+            <div class="stat-value">{{ totalMemoryMB }}<span class="unit">MB</span></div>
+            <div class="stat-label">{{ t("simverse.memory") }}</div>
           </ion-card-content>
         </ion-card>
         <ion-card class="stat-card">
           <ion-card-content>
-            <div class="stat-value">{{ worldAge }}</div>
-            <div class="stat-label">世界年龄</div>
+            <div class="stat-value">{{ era }}</div>
+            <div class="stat-label">{{ t("simverse.tick") }}</div>
           </ion-card-content>
         </ion-card>
       </div>
@@ -68,18 +68,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { closeWorld, isNativePluginMode, unlockScreenOrientation } from "@/plugins/SimVerse";
+import { useSimverse } from "@/composables/useSimverse";
 import { arrowBack, exit } from "ionicons/icons";
 
 const { t } = useI18n();
 const router = useRouter();
+const { npcCount, totalMemoryMB, currentTick, loadWorldState } = useSimverse();
 
-const fps = ref(60);
-const entityCount = ref(128);
-const worldAge = ref("3h 24m");
+const era = computed(() => Math.floor(currentTick.value / 1000));
 
 const arrowBackOutline = arrowBack;
 const exitOutline = exit;
@@ -89,8 +89,12 @@ function goToWorld() {
 }
 
 function goToChronicle() {
-  router.push("/chronicle/1");
+  router.push("/tabs/chronicles");
 }
+
+onMounted(() => {
+  loadWorldState().catch(() => {});
+});
 
 async function exitToMainApp() {
   try {
@@ -195,6 +199,13 @@ async function exitToMainApp() {
   font-weight: 700;
   color: var(--ion-color-primary);
   margin-bottom: 4px;
+}
+
+.stat-value .unit {
+  font-size: 12px;
+  font-weight: 500;
+  margin-left: 2px;
+  color: var(--ion-color-medium);
 }
 
 .action-card.enter-world {

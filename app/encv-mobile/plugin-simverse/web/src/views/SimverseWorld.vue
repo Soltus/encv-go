@@ -761,6 +761,7 @@ const {
   loadNPCList,
   loadChronicleWorld,
   loadBehaviorStats,
+  loadBehaviorList,
   init,
   cleanup,
 } = useSimverse();
@@ -992,6 +993,7 @@ const battleEnemies = ref([
 ]);
 
 let pollInterval: number | null = null;
+let behaviorPollInterval: number | null = null;
 
 const visibleNPCs = computed(() => npcList.value.slice(0, 12));
 
@@ -1023,6 +1025,7 @@ async function initPhaser() {
           phaserLoading.value = false;
           if (npcList.value.length > 0) {
             phaserWorld.setNPCs(npcList.value);
+            loadNPCBehaviors();
           }
         }
       }, 100);
@@ -1051,6 +1054,7 @@ async function initPhaser() {
 watch(npcList, (newList) => {
   if (usePhaser.value && phaserWorld.isReady.value) {
     phaserWorld.setNPCs(newList);
+    loadNPCBehaviors();
   }
 }, { deep: true });
 
@@ -1163,6 +1167,17 @@ async function loadBehaviorStatsData() {
   if (data) {
     behaviorStats.value = data;
   }
+}
+
+async function loadNPCBehaviors() {
+  if (!usePhaser.value || !phaserWorld.isReady.value) return;
+  const data = await loadBehaviorList(1, 200);
+  if (!data) return;
+  const map = new Map<number, string>();
+  for (const b of data.items) {
+    if (b.current_behavior_cn) map.set(b.npc_id, b.current_behavior_cn);
+  }
+  phaserWorld.setNPCBehaviors(map);
 }
 
 function selectNPC(npc: SimverseNPC) {
@@ -1429,6 +1444,27 @@ function stopPolling() {
     clearInterval(pollInterval);
     pollInterval = null;
   }
+  if (behaviorPollInterval) {
+    clearInterval(behaviorPollInterval);
+    behaviorPollInterval = null;
+  }
+}
+
+// 行为实时刷新：让 NPC 行为气泡随世界演化更新
+function startBehaviorPolling() {
+  stopBehaviorPolling();
+  behaviorPollInterval = window.setInterval(() => {
+    if (usePhaser.value && phaserWorld.isReady.value) {
+      loadNPCBehaviors();
+    }
+  }, 5000);
+}
+
+function stopBehaviorPolling() {
+  if (behaviorPollInterval) {
+    clearInterval(behaviorPollInterval);
+    behaviorPollInterval = null;
+  }
 }
 
 onMounted(async () => {
@@ -1455,10 +1491,12 @@ onMounted(async () => {
 
   await nextTick();
   initPhaser();
+  startBehaviorPolling();
 });
 
 onUnmounted(() => {
   stopPolling();
+  stopBehaviorPolling();
   cleanup();
   if (isNativePluginMode()) {
     unlockScreenOrientation().catch(() => {});

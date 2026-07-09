@@ -33,6 +33,10 @@ export class WorldScene extends Phaser.Scene {
   private npcMoveTimer = 0;
   private npcMoveInterval = 5000;
 
+  private interactionGfx!: Phaser.GameObjects.Graphics;
+  private interactionTimer = 0;
+  private interactionEnabled = true;
+
   private isPinching = false;
   private initialPinchDistance = 0;
   private initialZoom = 1;
@@ -74,6 +78,9 @@ export class WorldScene extends Phaser.Scene {
     this.createSampleTerritories();
 
     this.eventEffectManager = new EventEffectManager(this);
+
+    this.interactionGfx = this.add.graphics();
+    this.interactionGfx.setDepth(5);
 
     this.miniMap = new MiniMap(
       this,
@@ -393,6 +400,23 @@ export class WorldScene extends Phaser.Scene {
     this.input.keyboard?.on("keydown-FOUR", () => {
       this.dayNightCycle.setTimeOfDay("night");
     });
+
+    this.input.keyboard?.on("keydown-I", () => {
+      this.interactionEnabled = !this.interactionEnabled;
+      if (!this.interactionEnabled && this.interactionGfx) {
+        this.interactionGfx.clear();
+      }
+    });
+  }
+
+  setNPCBehaviors(behaviors: Map<number, string>): void {
+    this.npcSprites.forEach((sprite) => {
+      const id = sprite.getNPCData().id;
+      const cn = behaviors.get(id);
+      if (cn !== undefined) {
+        sprite.setBehavior(cn);
+      }
+    });
   }
 
   setNPCs(npcs: SimverseNPC[]): void {
@@ -485,6 +509,48 @@ export class WorldScene extends Phaser.Scene {
     this.eventEffectManager.update(delta);
     this.updateNPCMovements(delta);
     this.miniMap.updateViewport();
+
+    this.interactionTimer += delta;
+    if (this.interactionTimer >= 800) {
+      this.interactionTimer = 0;
+      this.drawInteractions();
+    }
+  }
+
+  // NPC 间交互事件流：把处于社交/交易等互动行为的 NPC 用连线可视化
+  private drawInteractions(): void {
+    if (!this.interactionGfx) return;
+    this.interactionGfx.clear();
+    if (!this.interactionEnabled) return;
+
+    const social: NPCSprite[] = [];
+    for (const s of this.npcSprites) {
+      if (!s.visible || !s.active) continue;
+      const b = s.getBehaviorCN();
+      if (b && (b.includes("社交") || b.includes("交易") || b.includes("会谈") || b.includes("恋爱"))) {
+        social.push(s);
+      }
+    }
+
+    const maxLines = 60;
+    const maxDist = 150;
+    let drawn = 0;
+    for (let i = 0; i < social.length && drawn < maxLines; i++) {
+      for (let j = i + 1; j < social.length && drawn < maxLines; j++) {
+        const a = social[i];
+        const c = social[j];
+        const d = Phaser.Math.Distance.Between(a.x, a.y, c.x, c.y);
+        if (d <= maxDist) {
+          const alpha = 0.5 * (1 - d / maxDist);
+          this.interactionGfx.lineStyle(1.5, 0x60a5fa, alpha);
+          this.interactionGfx.beginPath();
+          this.interactionGfx.moveTo(a.x, a.y);
+          this.interactionGfx.lineTo(c.x, c.y);
+          this.interactionGfx.strokePath();
+          drawn++;
+        }
+      }
+    }
   }
 
   getZoom(): number {

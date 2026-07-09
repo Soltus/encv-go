@@ -5,6 +5,8 @@ export class NPCSprite extends Phaser.GameObjects.Container {
   private npcData: SimverseNPC;
   private circle: Phaser.GameObjects.Arc;
   private nameText: Phaser.GameObjects.Text;
+  private behaviorText: Phaser.GameObjects.Text | null = null;
+  private behaviorCN: string = "";
   private isHovered = false;
   private moveTween: Phaser.Tweens.Tween | null = null;
   private trail: Phaser.GameObjects.Graphics | null = null;
@@ -32,6 +34,17 @@ export class NPCSprite extends Phaser.GameObjects.Container {
     this.nameText.setOrigin(0.5);
     this.nameText.setStroke("#000000", 3);
     this.add(this.nameText);
+
+    this.behaviorText = scene.add.text(0, -24, "", {
+      fontSize: "9px",
+      color: "#ffffff",
+      backgroundColor: "#00000099",
+      padding: { x: 3, y: 1 },
+      align: "center",
+    });
+    this.behaviorText.setOrigin(0.5);
+    this.behaviorText.setVisible(false);
+    this.add(this.behaviorText);
 
     this.setSize(12, 28);
 
@@ -73,11 +86,27 @@ export class NPCSprite extends Phaser.GameObjects.Container {
     return this.npcData;
   }
 
+  getBehaviorCN(): string {
+    return this.behaviorCN;
+  }
+
   updateNPC(npc: SimverseNPC): void {
     this.npcData = npc;
     const dotColor = npc.is_alive ? 0x22c55e : 0x6b7280;
     this.circle.setFillStyle(dotColor);
     this.nameText.setText(npc.name);
+  }
+
+  setBehavior(behaviorCN: string): void {
+    this.behaviorCN = behaviorCN;
+    if (this.behaviorText) {
+      if (behaviorCN) {
+        this.behaviorText.setText(behaviorCN);
+        this.behaviorText.setVisible(true);
+      } else {
+        this.behaviorText.setVisible(false);
+      }
+    }
   }
 
   moveNPCTo(targetX: number, targetY: number, duration = 3000): void {
@@ -181,16 +210,19 @@ export class NPCSprite extends Phaser.GameObjects.Container {
         this.nameText.setVisible(true);
         this.nameText.setFontSize("10px");
         if (this.trail) this.trail.setVisible(true);
+        if (this.behaviorText) this.behaviorText.setVisible(!!this.behaviorCN);
         break;
       case "medium":
         this.circle.setVisible(true);
         this.nameText.setVisible(false);
         if (this.trail) this.trail.setVisible(true);
+        if (this.behaviorText) this.behaviorText.setVisible(false);
         break;
       case "low":
         this.circle.setScale(0.6);
         this.nameText.setVisible(false);
         if (this.trail) this.trail.setVisible(false);
+        if (this.behaviorText) this.behaviorText.setVisible(false);
         break;
     }
   }

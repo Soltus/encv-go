@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -1286,4 +1287,524 @@ func (s *Server) handleSimverseQuestAction(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+// ============================================================
+// 纪元 / 区域 / 组织 / 经济 聚合接口（Phase 后端补全）
+// ============================================================
+
+func npcBrief(npc *simverse.NPCV3) gin.H {
+	return gin.H{
+		"id":           npc.ID,
+		"name":         npc.Name,
+		"species":      npc.Species.String(),
+		"gender":       npc.Gender.String(),
+		"age":          npc.Age,
+		"profession":   npc.Profession.String(),
+		"level":        npc.Level,
+		"org_id":       npc.OrgID,
+		"region_id":    npc.RegionID,
+		"wealth_tier":  npc.WealthTier,
+		"career_stage": npc.CareerStage,
+		"is_alive":     npc.IsAlive,
+	}
+}
+
+// GET /api/simverse/era/current : 当前纪元 + 世界编年史概览
+func (s *Server) handleSimverseEraCurrent(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	chron := world.Chronicle()
+	era := chron.CurrentEra()
+
+	limit := 50
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+
+	events := chron.WorldTimeline(simverse.ImpMajor, limit)
+	eventDTOs := make([]gin.H, 0, len(events))
+	for _, e := range events {
+		eventDTOs = append(eventDTOs, gin.H{
+			"id":         e.ID,
+			"tick":       e.Tick,
+			"type":       e.Type.String(),
+			"importance": e.Importance,
+			"data_tag":   e.DataTag,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"era":          era,
+		"world_tick":   world.WorldTick(),
+		"event_count":  chron.Count(),
+		"events":       eventDTOs,
+	})
+}
+
+// GET /api/simverse/region/list : 区域聚合列表
+func (s *Server) handleSimverseRegionList(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	aggs := world.GetRegionAggregates()
+	c.JSON(http.StatusOK, gin.H{
+		"count": len(aggs),
+		"items": aggs,
+	})
+}
+
+// GET /api/simverse/region/:id : 单个区域详情
+func (s *Server) handleSimverseRegionDetail(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid region id"})
+		return
+	}
+
+	agg, ok := world.GetRegionAggregate(uint32(id))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "region not found"})
+		return
+	}
+
+	chron := world.Chronicle()
+	regionEvents := chron.RegionHistory(uint32(id), 20)
+	eventDTOs := make([]gin.H, 0, len(regionEvents))
+	for _, e := range regionEvents {
+		eventDTOs = append(eventDTOs, gin.H{
+			"id":         e.ID,
+			"tick":       e.Tick,
+			"type":       e.Type.String(),
+			"importance": e.Importance,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"region": agg,
+		"events": eventDTOs,
+	})
+}
+
+// GET /api/simverse/org/list : 组织聚合列表
+func (s *Server) handleSimverseOrgList(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	aggs := world.GetOrgAggregates()
+	c.JSON(http.StatusOK, gin.H{
+		"count": len(aggs),
+		"items": aggs,
+	})
+}
+
+// GET /api/simverse/org/:id : 单个组织详情
+func (s *Server) handleSimverseOrgDetail(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid org id"})
+		return
+	}
+
+	agg, ok := world.GetOrgAggregate(uint32(id))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "org not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, agg)
+}
+
+// GET /api/simverse/org/:id/members : 组织成员（分页）
+func (s *Server) handleSimverseOrgMembers(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid org id"})
+		return
+	}
+
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))
+	members, total := world.GetOrgMembers(uint32(id), page, pageSize)
+
+	items := make([]gin.H, 0, len(members))
+	for _, npc := range members {
+		items = append(items, npcBrief(npc))
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"org_id":     uint32(id),
+		"page":       page,
+		"page_size":  pageSize,
+		"total":      total,
+		"count":      len(items),
+		"items":      items,
+	})
+}
+
+// GET /api/simverse/org/:id/territory : 组织领地（成员区域分布）
+func (s *Server) handleSimverseOrgTerritory(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid org id"})
+		return
+	}
+
+	agg, ok := world.GetOrgAggregate(uint32(id))
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "org not found"})
+		return
+	}
+
+	// 领地按成员数量降序
+	type terr struct {
+		RegionID uint32 `json:"region_id"`
+		Members  int    `json:"members"`
+	}
+	territory := make([]terr, 0, len(agg.RegionDist))
+	for rid, cnt := range agg.RegionDist {
+		territory = append(territory, terr{RegionID: rid, Members: cnt})
+	}
+	sort.Slice(territory, func(i, j int) bool {
+		return territory[i].Members > territory[j].Members
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"org_id":    uint32(id),
+		"name":      agg.Name,
+		"territory": territory,
+	})
+}
+
+// GET /api/simverse/social/stats?region=:id&org=:id : 社交关系统计
+func (s *Server) handleSimverseSocialStats(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	var regionFilter, orgFilter uint32
+	if v := c.Query("region"); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 32); err == nil {
+			regionFilter = uint32(n)
+		}
+	}
+	if v := c.Query("org"); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 32); err == nil {
+			orgFilter = uint32(n)
+		}
+	}
+
+	stats := world.GetSocialStats(regionFilter, orgFilter)
+	c.JSON(http.StatusOK, gin.H{
+		"sampled_npcs":   stats.SampledNPCs,
+		"total_relations": stats.TotalRelations,
+		"by_type":        stats.ByType,
+		"by_region":      stats.ByRegion,
+		"by_org":         stats.ByOrg,
+	})
+}
+
+// GET /api/simverse/npc/:id/relations : 指定 NPC 的关系列表（含目标档案）
+func (s *Server) handleSimverseNPCRelations(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid npc id"})
+		return
+	}
+
+	npc := world.GetNPC(id, s.simverseMgr.rng)
+	rels := world.GetNPCRelationships(id, s.simverseMgr.rng)
+
+	byType := make(map[string]int)
+	items := make([]gin.H, 0, len(rels))
+	for _, r := range rels {
+		byType[r.RelType.String()]++
+		target := world.GetNPC(r.TargetID, s.simverseMgr.rng)
+		items = append(items, gin.H{
+			"target_id":   r.TargetID,
+			"rel_type":    r.RelType.String(),
+			"rel_type_id": int(r.RelType),
+			"affinity":    r.Affinity,
+			"last_meet":   r.LastMeet,
+			"target":      npcBrief(target),
+		})
+	}
+
+	// 按亲密度降序
+	sort.Slice(items, func(i, j int) bool {
+		return items[i]["affinity"].(int16) > items[j]["affinity"].(int16)
+	})
+
+	c.JSON(http.StatusOK, gin.H{
+		"npc_id":    id,
+		"name":      npc.Name,
+		"count":     len(items),
+		"counts":    byType,
+		"relations": items,
+	})
+}
+
+// GET /api/simverse/battle/recent?limit= : 近期战斗记录
+func (s *Server) handleSimverseBattleRecent(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	limit := 20
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+
+	recs := world.Battle().GetRecent(limit)
+	items := make([]gin.H, 0, len(recs))
+	for _, r := range recs {
+		items = append(items, gin.H{
+			"id":             r.ID,
+			"tick":           r.Tick,
+			"attacker_id":    r.AttackerID,
+			"attacker_name":  r.AttackerName,
+			"defender_id":    r.DefenderID,
+			"defender_name":  r.DefenderName,
+			"winner_id":      r.WinnerID,
+			"loser_id":       r.LoserID,
+			"outcome":        r.Outcome,
+			"damage":         r.Damage,
+			"attacker_hp":    r.AttackerHP,
+			"defender_hp":    r.DefenderHP,
+			"loot_gold":      r.LootGold,
+			"log":            r.Log,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"total":   world.Battle().TotalBattles(),
+		"count":   len(items),
+		"battles": items,
+	})
+}
+
+// GET /api/simverse/battle/rank?limit= : 胜场榜
+func (s *Server) handleSimverseBattleRank(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	limit := 20
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+
+	rank := world.Battle().GetRank(limit)
+	items := make([]gin.H, 0, len(rank))
+	for _, e := range rank {
+		npc := world.GetNPC(e.NPCID, s.simverseMgr.rng)
+		items = append(items, gin.H{
+			"npc_id": e.NPCID,
+			"name":   npc.Name,
+			"wins":   e.Wins,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"count": len(items),
+		"rank":  items,
+	})
+}
+
+// POST /api/simverse/battle/simulate { attacker_id, defender_id } : 即时模拟一场战斗
+func (s *Server) handleSimverseBattleSimulate(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	var body struct {
+		AttackerID uint64 `json:"attacker_id"`
+		DefenderID uint64 `json:"defender_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+	if body.AttackerID == 0 || body.DefenderID == 0 || body.AttackerID == body.DefenderID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid npc ids"})
+		return
+	}
+
+	attacker := world.GetNPC(body.AttackerID, s.simverseMgr.rng)
+	defender := world.GetNPC(body.DefenderID, s.simverseMgr.rng)
+	rec := world.Battle().Simulate(attacker, defender, world.WorldTick(), s.simverseMgr.rng)
+
+	c.JSON(http.StatusOK, gin.H{
+		"id":             rec.ID,
+		"tick":           rec.Tick,
+		"attacker_id":    rec.AttackerID,
+		"attacker_name":  rec.AttackerName,
+		"defender_id":    rec.DefenderID,
+		"defender_name":  rec.DefenderName,
+		"winner_id":      rec.WinnerID,
+		"loser_id":       rec.LoserID,
+		"outcome":        rec.Outcome,
+		"damage":         rec.Damage,
+		"attacker_hp":    rec.AttackerHP,
+		"defender_hp":    rec.DefenderHP,
+		"loot_gold":      rec.LootGold,
+		"log":            rec.Log,
+	})
+}
+
+// GET /api/simverse/economy/prices?region=:id : 区域物价
+func (s *Server) handleSimverseEconomyPrices(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	regionID := uint32(1)
+	if v := c.Query("region"); v != "" {
+		if n, err := strconv.ParseUint(v, 10, 32); err == nil {
+			regionID = uint32(n)
+		}
+	}
+
+	em := world.EconomyManager()
+	c.JSON(http.StatusOK, em.GetRegionalStats(regionID))
+}
+
+// GET /api/simverse/economy/shocks : 价格冲击事件
+func (s *Server) handleSimverseEconomyShocks(c *gin.Context) {
+	if s.simverseMgr == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "simverse not initialized"})
+		return
+	}
+	world := s.simverseMgr.World()
+	if world == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world not initialized"})
+		return
+	}
+
+	em := world.EconomyManager()
+	shocks := em.CheckPriceShocks()
+	items := make([]gin.H, 0, len(shocks))
+	for _, sh := range shocks {
+		items = append(items, gin.H{
+			"type":       sh.Type,
+			"region_id":  sh.RegionID,
+			"resource":   sh.Resource.String(),
+			"price":      sh.Price,
+			"change":     sh.Change,
+			"message":    sh.Message,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"count": len(items),
+		"items": items,
+	})
 }

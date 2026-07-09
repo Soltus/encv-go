@@ -4,6 +4,7 @@ import { createPhaserGame, destroyPhaserGame } from "@/game/main";
 import { phaserEventBus, PHASER_EVENTS } from "@/game/PhaserEventBus";
 import { WorldScene } from "@/game/WorldScene";
 import type { SimverseNPC } from "@/composables/useSimverse";
+import { useWorldRenderSettings, QUALITY_RESOLUTION, type RenderQuality } from "@/composables/useWorldRenderSettings";
 
 export interface RegionEnterData {
   regionId: string;
@@ -29,6 +30,7 @@ export function usePhaserWorld() {
   const currentZoom = ref(1);
   const selectedNPC = ref<SimverseNPC | null>(null);
   const currentScene = ref("WorldScene");
+  const renderSettings = useWorldRenderSettings();
 
   const npcClickHandlers: ((npc: SimverseNPC) => void)[] = [];
   const regionEnterHandlers: ((data: RegionEnterData) => void)[] = [];
@@ -54,6 +56,34 @@ export function usePhaserWorld() {
   function handleNPCClick(npc: SimverseNPC) {
     selectedNPC.value = npc;
     npcClickHandlers.forEach((h) => h(npc));
+  }
+
+  // 将 WorldSettings 的帧率/等效渲染等级应用到运行中的 Phaser 游戏
+  function resolutionScale(q: RenderQuality): number {
+    const base = 1080;
+    return QUALITY_RESOLUTION[q].height / base;
+  }
+
+  function applyRenderSettings(): void {
+    if (!game.value || !isReady.value) return;
+    try {
+      const fps = renderSettings.fps.value;
+      const quality = renderSettings.quality.value;
+      const loop = game.value.loop as any;
+      loop.targetFps = fps;
+      // 低于 60 时强制 setTimeout 限速以省电；60/90/120 走 RAF（显示器刷新率）
+      loop.forceSetTimeOut = fps < 60;
+      const renderer = game.value.renderer as any;
+      if (renderer && typeof renderer.setResolution === "function") {
+        renderer.setResolution(resolutionScale(quality));
+      }
+    } catch (e) {
+      console.warn("[Phaser] applyRenderSettings failed:", e);
+    }
+  }
+
+  function onRenderSettingsEvent(): void {
+    applyRenderSettings();
   }
 
   function handleRegionEnter(data: RegionEnterData) {
@@ -86,7 +116,10 @@ export function usePhaserWorld() {
       phaserEventBus.on(PHASER_EVENTS.WORLD_READY, () => {
         isReady.value = true;
         currentScene.value = "WorldScene";
+        applyRenderSettings();
       });
+
+      window.addEventListener("simverse:render-settings", onRenderSettingsEvent);
 
       phaserEventBus.on(PHASER_EVENTS.REGION_READY, (data: any) => {
         currentScene.value = "RegionScene";
@@ -154,6 +187,15 @@ export function usePhaserWorld() {
     }
   }
 
+  function setNPCBehaviors(behaviors: Map<number, string>) {
+    if (!game.value || !isReady.value) return;
+
+    const scene = game.value.scene.getScene("WorldScene") as WorldScene;
+    if (scene) {
+      scene.setNPCBehaviors(behaviors);
+    }
+  }
+
   function centerOnNPC(npcId: number) {
     if (!game.value || !isReady.value) return;
 
@@ -185,6 +227,7 @@ export function usePhaserWorld() {
     hasError.value = false;
     currentScene.value = "WorldScene";
     phaserEventBus.clear();
+    window.removeEventListener("simverse:render-settings", onRenderSettingsEvent);
     npcClickHandlers.length = 0;
     regionEnterHandlers.length = 0;
     battleStartHandlers.length = 0;
@@ -208,6 +251,7 @@ export function usePhaserWorld() {
     setGameContainer,
     initPhaser,
     setNPCs,
+    setNPCBehaviors,
     centerOnNPC,
     setZoom,
     getZoom,

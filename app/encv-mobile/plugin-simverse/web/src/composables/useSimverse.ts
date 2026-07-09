@@ -39,6 +39,8 @@ export interface SimverseNPC {
   is_alive: boolean;
   wealth_tier: number;
   social_tier: number;
+  region_id?: number;
+  org_id?: number;
   current_behavior?: string;
   current_behavior_cn?: string;
   mood?: number;
@@ -188,6 +190,224 @@ export interface SimverseStorageStatus {
   used_bytes: number;
   available_bytes: number;
 }
+
+export interface SimverseEraEvent {
+  id: number;
+  tick: number;
+  type: string;
+  importance: number;
+  data_tag: number;
+}
+
+export interface SimverseEra {
+  era: number;
+  world_tick: number;
+  event_count: number;
+  events: SimverseEraEvent[];
+}
+
+export interface SimverseRegion {
+  region_id: number;
+  npc_count: number;
+  alive_count: number;
+  population: number;
+  avg_level: number;
+  avg_wealth_tier: number;
+  economy?: Record<string, any>;
+}
+
+export interface SimverseRegionListResponse {
+  count: number;
+  items: SimverseRegion[];
+}
+
+export interface SimverseOrg {
+  org_id: number;
+  name: string;
+  org_type: string;
+  member_count: number;
+  alive_count: number;
+  region_distribution: Record<string, number>;
+  avg_level: number;
+  avg_wealth_tier: number;
+  avg_career_stage: number;
+}
+
+export interface SimverseOrgListResponse {
+  count: number;
+  items: SimverseOrg[];
+}
+
+export interface SimverseOrgMember {
+  id: number;
+  name: string;
+  species: string;
+  gender: string;
+  age: number;
+  profession: string;
+  level: number;
+  org_id: number;
+  region_id: number;
+  wealth_tier: number;
+  career_stage: number;
+  is_alive: boolean;
+}
+
+export interface SimverseOrgMembersResponse {
+  org_id: number;
+  page: number;
+  page_size: number;
+  total: number;
+  count: number;
+  items: SimverseOrgMember[];
+}
+
+export interface SimverseOrgTerritory {
+  region_id: number;
+  members: number;
+}
+
+export interface SimverseOrgTerritoryResponse {
+  org_id: number;
+  name: string;
+  territory: SimverseOrgTerritory[];
+}
+
+export interface SimverseEconomyPrices {
+  region_id: number;
+  prices: Record<string, number>;
+  supply: Record<string, number>;
+  demand: Record<string, number>;
+  trade_volume: number;
+}
+
+export interface SimverseEconomyShock {
+  type: string;
+  region_id: number;
+  resource: string;
+  price: number;
+  change: number;
+  message: string;
+}
+
+export interface SimverseEconomyShocksResponse {
+  count: number;
+  items: SimverseEconomyShock[];
+}
+
+export type SimverseQuestType = "daily" | "achieve" | "story" | "economy";
+export type SimverseQuestStatus = "locked" | "active" | "claimed" | "expired";
+
+export interface SimverseQuestReward {
+  diamond: number;
+  gold: number;
+  exp: number;
+  icon: string;
+}
+export interface SimverseQuest {
+  id: string;
+  type: SimverseQuestType;
+  title: string;
+  desc: string;
+  icon: string;
+  goal: number;
+  progress: number;
+  reward: SimverseQuestReward;
+  status: SimverseQuestStatus;
+  sort_order: number;
+}
+export interface SimversePlayerStats {
+  total_ticks_observed: number;
+  total_npcs_checked: number;
+  total_economy_checks: number;
+  total_gacha_pulls: number;
+  total_battles: number;
+  world_ticks_seen: number;
+}
+export interface SimverseQuestSummary {
+  quests: SimverseQuest[];
+  active_count: number;
+  claimed_count: number;
+  completable: number;
+  player_stats: SimversePlayerStats;
+}
+
+// 社交关系系统
+export type SimverseRelationType =
+  | "stranger"
+  | "acquaintance"
+  | "friend"
+  | "lover"
+  | "spouse"
+  | "parent"
+  | "child"
+  | "sibling"
+  | "master"
+  | "apprentice"
+  | "enemy"
+  | "rival";
+
+export interface SimverseRelation {
+  target_id: number;
+  rel_type: SimverseRelationType;
+  rel_type_id: number;
+  affinity: number;
+  last_meet: number;
+  target: SimverseNPC;
+}
+
+export interface SimverseRelationListResponse {
+  npc_id: number;
+  name: string;
+  count: number;
+  counts: Record<string, number>;
+  relations: SimverseRelation[];
+}
+
+export interface SimverseSocialStats {
+  sampled_npcs: number;
+  total_relations: number;
+  by_type: Record<string, number>;
+  by_region: Record<string, number>;
+  by_org: Record<string, number>;
+}
+
+// 战斗系统
+export interface SimverseBattle {
+  id: number;
+  tick: number;
+  attacker_id: number;
+  attacker_name: string;
+  defender_id: number;
+  defender_name: string;
+  winner_id: number;
+  loser_id: number;
+  outcome: "attacker" | "defender" | "draw";
+  damage: number;
+  attacker_hp: number;
+  defender_hp: number;
+  loot_gold: number;
+  log: string[];
+}
+
+export interface SimverseBattleListResponse {
+  total: number;
+  count: number;
+  battles: SimverseBattle[];
+}
+
+export interface SimverseBattleRankEntry {
+  npc_id: number;
+  name: string;
+  wins: number;
+}
+
+export interface SimverseBattleRankResponse {
+  count: number;
+  rank: SimverseBattleRankEntry[];
+}
+
+export interface SimverseBattleSimulateResponse extends SimverseBattle {}
 
 const worldState = ref<SimverseWorldState | null>(null);
 const worldConfig = ref<SimverseWorldConfig | null>(null);
@@ -430,6 +650,192 @@ export function useSimverse() {
     }
   }
 
+  async function loadEra(limit = 50) {
+    try {
+      const data = await fetchJSON(`/api/simverse/era/current?limit=${limit}`);
+      return data as SimverseEra;
+    } catch (e) {
+      console.warn("Failed to load era:", e);
+      return null;
+    }
+  }
+
+  async function loadRegionList() {
+    try {
+      const data = await fetchJSON("/api/simverse/region/list");
+      return data as SimverseRegionListResponse;
+    } catch (e) {
+      console.warn("Failed to load region list:", e);
+      return null;
+    }
+  }
+
+  async function loadRegionDetail(id: number) {
+    try {
+      const data = await fetchJSON(`/api/simverse/region/${id}`);
+      return data as { region: SimverseRegion; events: SimverseEraEvent[] };
+    } catch (e) {
+      console.warn(`Failed to load region ${id}:`, e);
+      return null;
+    }
+  }
+
+  async function loadOrgList() {
+    try {
+      const data = await fetchJSON("/api/simverse/org/list");
+      return data as SimverseOrgListResponse;
+    } catch (e) {
+      console.warn("Failed to load org list:", e);
+      return null;
+    }
+  }
+
+  async function loadOrgDetail(id: number) {
+    try {
+      const data = await fetchJSON(`/api/simverse/org/${id}`);
+      return data as SimverseOrg;
+    } catch (e) {
+      console.warn(`Failed to load org ${id}:`, e);
+      return null;
+    }
+  }
+
+  async function loadOrgMembers(id: number, page = 1, pageSize = 50) {
+    try {
+      const data = await fetchJSON(
+        `/api/simverse/org/${id}/members?page=${page}&page_size=${pageSize}`
+      );
+      return data as SimverseOrgMembersResponse;
+    } catch (e) {
+      console.warn(`Failed to load org ${id} members:`, e);
+      return null;
+    }
+  }
+
+  async function loadOrgTerritory(id: number) {
+    try {
+      const data = await fetchJSON(`/api/simverse/org/${id}/territory`);
+      return data as SimverseOrgTerritoryResponse;
+    } catch (e) {
+      console.warn(`Failed to load org ${id} territory:`, e);
+      return null;
+    }
+  }
+
+  async function loadEconomyPrices(region = 1) {
+    try {
+      const data = await fetchJSON(`/api/simverse/economy/prices?region=${region}`);
+      return data as SimverseEconomyPrices;
+    } catch (e) {
+      console.warn("Failed to load economy prices:", e);
+      return null;
+    }
+  }
+
+  async function loadEconomyShocks() {
+    try {
+      const data = await fetchJSON("/api/simverse/economy/shocks");
+      return data as SimverseEconomyShocksResponse;
+    } catch (e) {
+      console.warn("Failed to load economy shocks:", e);
+      return null;
+    }
+  }
+
+  async function loadQuestSummary() {
+    try {
+      const data = await fetchJSON("/api/simverse/quest/list");
+      return data as SimverseQuestSummary;
+    } catch (e) {
+      console.warn("Failed to load quest summary:", e);
+      return null;
+    }
+  }
+
+  async function claimQuest(questId: string) {
+    try {
+      const data = await fetchJSON("/api/simverse/quest/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quest_id: questId }),
+      });
+      return data as { success: boolean; reward: SimverseQuestReward };
+    } catch (e) {
+      console.warn(`Failed to claim quest ${questId}:`, e);
+      return null;
+    }
+  }
+
+  async function recordQuestAction(action: "view_npc" | "view_economy" | "gacha") {
+    try {
+      await fetchJSON("/api/simverse/quest/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+    } catch (e) {
+      console.warn(`Failed to record quest action ${action}:`, e);
+    }
+  }
+
+  async function loadSocialStats(region?: number, org?: number) {
+    try {
+      const qs: string[] = [];
+      if (region) qs.push(`region=${region}`);
+      if (org) qs.push(`org=${org}`);
+      const q = qs.length ? `?${qs.join("&")}` : "";
+      const data = await fetchJSON(`/api/simverse/social/stats${q}`);
+      return data as SimverseSocialStats;
+    } catch (e) {
+      console.warn("Failed to load social stats:", e);
+      return null;
+    }
+  }
+
+  async function loadNPCRelations(id: number) {
+    try {
+      const data = await fetchJSON(`/api/simverse/npc/${id}/relations`);
+      return data as SimverseRelationListResponse;
+    } catch (e) {
+      console.warn(`Failed to load relations for npc ${id}:`, e);
+      return null;
+    }
+  }
+
+  async function loadBattleRecent(limit = 20) {
+    try {
+      const data = await fetchJSON(`/api/simverse/battle/recent?limit=${limit}`);
+      return data as SimverseBattleListResponse;
+    } catch (e) {
+      console.warn("Failed to load battle recent:", e);
+      return null;
+    }
+  }
+
+  async function loadBattleRank(limit = 20) {
+    try {
+      const data = await fetchJSON(`/api/simverse/battle/rank?limit=${limit}`);
+      return data as SimverseBattleRankResponse;
+    } catch (e) {
+      console.warn("Failed to load battle rank:", e);
+      return null;
+    }
+  }
+
+  async function simulateBattle(attackerId: number, defenderId: number) {
+    try {
+      const data = await fetchJSON("/api/simverse/battle/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ attacker_id: attackerId, defender_id: defenderId }),
+      });
+      return data as SimverseBattleSimulateResponse;
+    } catch (e) {
+      console.warn("Failed to simulate battle:", e);
+      return null;
+    }
+  }
+
   function connectWebSocket() {
     if (ws) return;
 
@@ -596,6 +1002,26 @@ export function useSimverse() {
     loadStorageStatus,
     loadBehaviorStats,
     loadBehaviorList,
+
+    loadEra,
+    loadRegionList,
+    loadRegionDetail,
+    loadOrgList,
+    loadOrgDetail,
+    loadOrgMembers,
+    loadOrgTerritory,
+    loadEconomyPrices,
+    loadEconomyShocks,
+    loadQuestSummary,
+    claimQuest,
+    recordQuestAction,
+
+    loadSocialStats,
+    loadNPCRelations,
+
+    loadBattleRecent,
+    loadBattleRank,
+    simulateBattle,
 
     connectWebSocket,
     disconnectWebSocket,

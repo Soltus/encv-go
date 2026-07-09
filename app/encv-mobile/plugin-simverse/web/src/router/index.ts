@@ -61,6 +61,10 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/views/NPCRelations.vue"),
   },
   {
+    path: "/npc/:id/behavior",
+    component: () => import("@/views/NPCBehavior.vue"),
+  },
+  {
     path: "/npc/:id/timeline",
     component: () => import("@/views/NPCTimeline.vue"),
   },
@@ -143,6 +147,22 @@ const routes: RouteRecordRaw[] = [
   {
     path: "/world/intervention",
     component: () => import("@/views/WorldIntervention.vue"),
+  },
+  {
+    path: "/world/behavior",
+    component: () => import("@/views/WorldBehavior.vue"),
+  },
+  {
+    path: "/world/settings",
+    component: () => import("@/views/WorldSettings.vue"),
+  },
+  {
+    path: "/world/quests",
+    component: () => import("@/views/QuestView.vue"),
+  },
+  {
+    path: "/world/social",
+    component: () => import("@/views/SocialOverview.vue"),
   },
   {
     path: "/world/debug/perf",
