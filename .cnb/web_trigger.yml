@@ -9,6 +9,7 @@ branch:
         required: true
         default: current
         name: 同步范围
+        description: 选择同步范围
         options:
         - name: 当前分支
           value: current
@@ -18,11 +19,13 @@ branch:
         type: input
         required: false
         name: 分支名
+        description: 指定要推送的分支（当前分支模式下可留空）
       force:
         type: switch
         required: false
         default: 'false'
         name: 强制覆盖
+        description: 是否使用 --force 推送（谨慎使用）
       github_repo:
         type: input
         required: false
@@ -37,6 +40,7 @@ branch:
         required: true
         default: current
         name: 同步范围
+        description: 选择同步范围
         options:
         - name: 当前分支
           value: current
@@ -46,11 +50,18 @@ branch:
         type: input
         required: false
         name: 分支名
+        description: 指定要拉取的分支（当前分支模式下可留空）
+      force:
+        type: switch
+        required: false
+        default: 'false'
+        name: 强制覆盖
+        description: 拉取时是否使用 --force（以 GitHub 为准，丢弃本地分叉）
       github_repo:
         type: input
         required: false
         name: GitHub 仓库
-        description: 源 GitHub 仓库地址
+        description: 源 GitHub 仓库地址（如 owner/repo，留空则使用默认）
   - name: 🔄 双向同步
     description: 先推送再拉取，保持两边一致
     event: web_trigger_full_sync
@@ -60,6 +71,7 @@ branch:
         required: true
         default: current
         name: 同步范围
+        description: 选择同步范围
         options:
         - name: 当前分支
           value: current
@@ -69,20 +81,24 @@ branch:
         type: input
         required: false
         name: 分支名
+        description: 指定操作的分支（当前分支模式下可留空）
       force:
         type: switch
         required: false
         default: 'false'
         name: 强制覆盖
+        description: 推送时是否使用 --force
       github_repo:
         type: input
         required: false
         name: GitHub 仓库
+        description: GitHub 仓库地址（如 owner/repo，留空则使用默认）
       dry_run:
         type: select
         required: false
         default: 'false'
         name: 预览模式
+        description: true=预览不执行, false=直接执行
         options:
         - name: 直接执行
           value: 'false'
