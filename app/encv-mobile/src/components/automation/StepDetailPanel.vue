@@ -95,8 +95,8 @@
 </template>
 
 <script setup lang="ts">
-import type { JobRun, StepRun } from "@/lib/workflow/types";
 import { computed } from "vue";
+import type { JobRun, StepRun } from "@/lib/workflow/types";
 
 const props = defineProps<{
   stepRun: StepRun;

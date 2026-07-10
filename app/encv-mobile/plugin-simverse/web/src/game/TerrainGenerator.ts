@@ -146,11 +146,7 @@ export class TerrainGenerator {
     return map;
   }
 
-  findSettlementLocations(
-    mapWidth: number,
-    mapHeight: number,
-    count: number
-  ): { x: number; y: number; size: number }[] {
+  findSettlementLocations(mapWidth: number, mapHeight: number, count: number): { x: number; y: number; size: number }[] {
     const locations: { x: number; y: number; size: number }[] = [];
     const minDist = Math.min(mapWidth, mapHeight) / Math.sqrt(count);
 

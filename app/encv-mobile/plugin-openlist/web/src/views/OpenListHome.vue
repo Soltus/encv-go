@@ -98,9 +98,9 @@ import {
 import { onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import PwdEditDialog from "@/components/PwdEditDialog.vue";
-import OpenListStatusCard from "@/components-shared/OpenListStatusCard.vue";
-import OpenListLogList from "@/components-shared/OpenListLogList.vue";
 import type { OpenListLog, OpenListRuntime } from "@/components-shared";
+import OpenListLogList from "@/components-shared/OpenListLogList.vue";
+import OpenListStatusCard from "@/components-shared/OpenListStatusCard.vue";
 import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
 
 const { t } = useI18n();

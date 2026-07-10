@@ -56,17 +56,34 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonCard, IonCardHeader, IonCardTitle,
-  IonCardContent, IonGrid, IonRow, IonCol, IonList, IonListHeader, IonLabel,
-  IonItem, IonSpinner,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline, flag } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseEra } from "@/composables/useSimverse";
+import {
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonCard,
+  IonCardContent,
+  IonCardHeader,
+  IonCardTitle,
+  IonCol,
+  IonContent,
+  IonGrid,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonRow,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, flag, refreshOutline } from "ionicons/icons";
+import { onMounted, ref } from "vue";
 import { useLiveRefresh } from "@/composables/useLiveRefresh";
+import { type SimverseEra, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const { loadEra, chronicleSignal } = useSimverse();

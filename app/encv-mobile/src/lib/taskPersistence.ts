@@ -18,8 +18,8 @@
  * - meta: { key, value } 存最后打开 tab / 折叠态等小数据
  */
 
-import type { EncvTask } from "@/api/encv";
 import Dexie, { type Table } from "dexie";
+import type { EncvTask } from "@/api/encv";
 
 // ============ Schema ============
 

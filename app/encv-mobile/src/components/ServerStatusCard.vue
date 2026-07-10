@@ -235,24 +235,24 @@
 </template>
 
 <script setup lang="ts">
+import {
+  arrowForward,
+  arrowUndo,
+  cloudOfflineOutline,
+  layersOutline,
+  playCircle,
+  pulse,
+  refresh,
+  refreshCircle,
+  speedometerOutline,
+  stopCircle,
+  wifiOutline,
+} from "ionicons/icons";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { formatRelativeTime } from "@/composables/relativeTime";
 import { eventBus } from "@/composables/useEventBus";
 import { useI18n } from "@/composables/useI18n";
 import { useServerStatus } from "@/composables/useServerStatus";
-import {
-  cloudOfflineOutline,
-  layersOutline,
-  speedometerOutline,
-  wifiOutline,
-  refresh,
-  stopCircle,
-  playCircle,
-  refreshCircle,
-  arrowForward,
-  pulse,
-  arrowUndo,
-} from "ionicons/icons";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
 const refreshIcon = refresh;
 const stopIcon = stopCircle;

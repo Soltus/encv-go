@@ -312,19 +312,19 @@
 
 <script setup lang="ts">
 import {
+  add,
   cloud,
   documentText,
+  fingerPrint,
   flash,
   folderOpen,
   globe,
   home,
   lockClosed,
   person,
-  add,
   save as saveIcon,
-  fingerPrint,
 } from "ionicons/icons";
-
+import { computed, onMounted, ref } from "vue";
 import type { OpenlistSiteInfo, RemoteWebDAVInfo, WebDAVConfig, WebDAVTestResult } from "@/api/encv";
 import {
   addOpenlistSite,
@@ -335,12 +335,11 @@ import {
   testWebDAVConnection,
   updateOpenlistSite,
 } from "@/api/encv";
-import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
-import LocalOpenListStatusCard from "@/components/LocalOpenListStatusCard.vue";
 import InputWithHistory from "@/components/InputWithHistory.vue";
+import LocalOpenListStatusCard from "@/components/LocalOpenListStatusCard.vue";
+import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
-import { computed, onMounted, ref } from "vue";
 
 const { t } = useI18n();
 

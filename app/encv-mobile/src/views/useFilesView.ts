@@ -7,12 +7,12 @@
 //   /selectedFile/renameValue 等），如果分多个 composable 要 props 双向同步，反而更乱。
 //   所以采用「单 composable + 内部注释分块」的方式：拆出大文件，但保持 state 共享。
 
-// 🆕 2026-07-02: contenteditable 搜索框 + span units（替换原 ion-searchbar + 外部 overlay）
-import { useSearchInput } from "@/composables/useSearchInput";
-import { type QueryToken, renderSnippet, tokenizeQuery } from "@/views/useFilesView.searchTokens";
 import { actionSheetController, alertController, menuController, onIonViewWillEnter } from "@ionic/vue";
 import { computed, nextTick, onMounted, onUnmounted, type Ref, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+// 🆕 2026-07-02: contenteditable 搜索框 + span units（替换原 ion-searchbar + 外部 overlay）
+import { useSearchInput } from "@/composables/useSearchInput";
+import { type QueryToken, renderSnippet, tokenizeQuery } from "@/views/useFilesView.searchTokens";
 
 // 🆕 2026-07-02: 显式 return type（用 Record<string, any> 兼容所有字段）— 避免 vue-tsc 推断丢字段
 // (历史踩坑：isSelectedModelAvailable / switchSession / lanAccessLoaded / fetchModels / temperature 都从推断 type 中消失过)
@@ -31,6 +31,25 @@ export type UseFilesViewReturn = {
 };
 
 import { Share } from "@capacitor/share";
+import {
+  add,
+  arrowForwardOutline,
+  copyOutline,
+  createOutline,
+  documentOutline,
+  documentTextOutline,
+  eyeOutline,
+  filmOutline,
+  folderOpen,
+  imageOutline,
+  informationCircle,
+  lockClosed,
+  musicalNotesOutline,
+  playCircle,
+  pricetagOutline,
+  shareOutline,
+  trash,
+} from "ionicons/icons";
 import type { FileItem, IndexStats, PluginMeta, SearchMode, TagInfo } from "@/api/encv";
 import {
   addTag,
@@ -80,25 +99,6 @@ import {
   setSessionPassword,
 } from "@/features/alist-encrypt/useAlistEncrypt";
 import { getLocalFilePath, isNative, openExternal, openPlayer, requestStoragePermission } from "@/plugins/GoProcess";
-import {
-  add,
-  arrowForwardOutline,
-  copyOutline,
-  createOutline,
-  documentOutline,
-  documentTextOutline,
-  eyeOutline,
-  filmOutline,
-  folderOpen,
-  imageOutline,
-  informationCircle,
-  lockClosed,
-  musicalNotesOutline,
-  playCircle,
-  pricetagOutline,
-  shareOutline,
-  trash,
-} from "ionicons/icons";
 import { formatDateInput, getPlayMode, mountDriverOf, mountPathOf, mountRootOf, SIZE_PRESETS, TIME_PRESETS } from "./useFilesHelpers";
 
 /**

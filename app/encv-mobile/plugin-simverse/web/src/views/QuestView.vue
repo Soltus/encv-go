@@ -95,21 +95,33 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonCard, IonCardContent, IonList,
-  IonItemGroup, IonItemDivider, IonLabel, IonItem, IonBadge, IonProgressBar,
-  IonSegment, IonSegmentButton, IonSpinner,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
-  useSimverse,
-  type SimverseQuest,
-  type SimverseQuestSummary,
-  type SimverseQuestType,
-} from "@/composables/useSimverse";
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonCard,
+  IonCardContent,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonItemDivider,
+  IonItemGroup,
+  IonLabel,
+  IonList,
+  IonPage,
+  IonProgressBar,
+  IonSegment,
+  IonSegmentButton,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, refreshOutline } from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
+import { type SimverseQuest, type SimverseQuestSummary, type SimverseQuestType, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const { loadQuestSummary, claimQuest } = useSimverse();
@@ -130,12 +142,8 @@ const TYPE_LABELS: Record<SimverseQuestType, string> = {
 const grouped = computed(() => {
   if (!summary.value) return [];
   const quests = summary.value.quests.slice().sort((a, b) => a.sort_order - b.sort_order);
-  const types: SimverseQuestType[] = filter.value === "all"
-    ? ["daily", "achieve", "story", "economy"]
-    : [filter.value];
-  return types
-    .map((key) => ({ key, label: TYPE_LABELS[key], quests: quests.filter((q) => q.type === key) }))
-    .filter((g) => g.quests.length > 0);
+  const types: SimverseQuestType[] = filter.value === "all" ? ["daily", "achieve", "story", "economy"] : [filter.value];
+  return types.map(key => ({ key, label: TYPE_LABELS[key], quests: quests.filter(q => q.type === key) })).filter(g => g.quests.length > 0);
 });
 
 function progressRatio(q: SimverseQuest): number {

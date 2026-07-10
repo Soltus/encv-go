@@ -2,14 +2,9 @@ import { getApiBaseUrl } from "./encv_core";
 
 // encv_perf.ts - 拆分自 encv.ts
 
-export interface PerformanceSummary {
-  avgThroughput: number;
-  grade: "excellent" | "good" | "warn";
-  gradeScore: number;
-  totalDurationMs: number;
-  sourceSize: number;
-  outputSize: number;
-}
+// PerformanceSummary 已提升为共享类型层 @/types/task（见 packages/shared-components/src/types/task.ts）。
+// 此处 re-export 以兼容现有 `import ... from '@/api/encv_perf'`。
+export type { PerformanceSummary } from "@/types/task";
 
 /** Phase 耗时 */
 

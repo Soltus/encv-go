@@ -5,8 +5,8 @@
 </template>
 
 <script setup lang="ts">
+import { alertCircleOutline, bugOutline, codeSlashOutline, copyOutline, refreshOutline } from "ionicons/icons";
 import { onErrorCaptured, ref } from "vue";
-import { bugOutline, alertCircleOutline, codeSlashOutline, copyOutline, refreshOutline } from "ionicons/icons";
 
 const rootError = ref(false);
 const rootErrorSummary = ref("");

@@ -105,17 +105,19 @@
 </template>
 
 <script setup lang="ts">
+import { alertController } from "@ionic/vue";
 import {
+  batteryCharging as batteryOptimizationIcon,
   cloudOutline,
+  copy as copyIcon,
   folderOpen,
   globeOutline,
-  shieldCheckmark,
-  server as serverIcon,
-  copy as copyIcon,
   notifications as notificationsIcon,
-  batteryCharging as batteryOptimizationIcon,
+  server as serverIcon,
+  shieldCheckmark,
 } from "ionicons/icons";
-
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { fetchConfig, getServerUrl } from "@/api/encv";
 import ServerStatusCard from "@/components/ServerStatusCard.vue";
 import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
@@ -129,9 +131,6 @@ import {
   requestNotificationPermission,
   requestStoragePermission,
 } from "@/plugins/GoProcess";
-import { alertController } from "@ionic/vue";
-import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
 
 const configData = ref<Record<string, unknown> | null>(null);
 const { isOnline: serverOnline, checkStatus, restartBackend, stopBackend } = useServerStatus();

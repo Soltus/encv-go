@@ -50,9 +50,9 @@
 </template>
 
 <script setup lang="ts">
+import { closeOutline, documentTextOutline } from "ionicons/icons";
 import type { Attachment } from "@/composables/useAttachments";
 import { useI18n } from "@/composables/useI18n";
-import { closeOutline, documentTextOutline } from "ionicons/icons";
 
 defineProps<{
   attachments: Attachment[];

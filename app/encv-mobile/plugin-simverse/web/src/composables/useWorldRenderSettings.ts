@@ -46,12 +46,12 @@ function notify() {
     window.dispatchEvent(
       new CustomEvent("simverse:render-settings", {
         detail: { fps: fps.value, quality: quality.value },
-      }),
+      })
     );
   }
 }
 
-watch(fps, (v) => {
+watch(fps, v => {
   try {
     localStorage.setItem(STORAGE_FPS, String(v));
   } catch {
@@ -60,7 +60,7 @@ watch(fps, (v) => {
   notify();
 });
 
-watch(quality, (v) => {
+watch(quality, v => {
   try {
     localStorage.setItem(STORAGE_QUALITY, v);
   } catch {

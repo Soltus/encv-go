@@ -238,20 +238,13 @@
 </template>
 
 <script setup lang="ts">
-import {
-  arrowDownOutline,
-  arrowUpOutline,
-  closeOutline,
-  copyOutline,
-  pauseOutline,
-  playOutline,
-  trashOutline,
-} from "ionicons/icons";
-
+import { alertController, type IonContent } from "@ionic/vue";
+import { arrowDownOutline, arrowUpOutline, closeOutline, copyOutline, pauseOutline, playOutline, trashOutline } from "ionicons/icons";
+import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, triggerRef, watch } from "vue";
 import { type BackendLogEntry, checkServerStatus, getRecentBackendLogs } from "@/api/encv";
-import FilterDropdown from "@/components/shared/FilterDropdown.vue";
-import type { DropdownOption } from "@/components/shared/FilterDropdown.vue";
 import ServerStatusCard from "@/components/ServerStatusCard.vue";
+import type { DropdownOption } from "@/components/shared/FilterDropdown.vue";
+import FilterDropdown from "@/components/shared/FilterDropdown.vue";
 import VirtualLogList from "@/components/VirtualLogList.vue";
 import { copyToClipboard } from "@/composables/useClipboard";
 import { eventBus } from "@/composables/useEventBus";
@@ -260,8 +253,6 @@ import { useI18n } from "@/composables/useI18n";
 import { useRealtimeTransport } from "@/composables/useRealtimeTransport";
 import { showToast } from "@/composables/useToast";
 import { IncrementalFilter, type Level } from "@/utils/IncrementalFilter";
-import { alertController, type IonContent } from "@ionic/vue";
-import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, triggerRef, watch } from "vue";
 
 const { t } = useI18n();
 const transport = useRealtimeTransport();

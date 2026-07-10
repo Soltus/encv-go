@@ -113,16 +113,30 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonAvatar,
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonChip,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, refreshOutline } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonList, IonListHeader, IonLabel,
-  IonItem, IonNote, IonSpinner, IonChip, IonAvatar,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline } from "ionicons/icons";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseRelationListResponse } from "@/composables/useSimverse";
+import { type SimverseRelationListResponse, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -168,9 +182,7 @@ const cy = 150;
 
 const graphNodes = computed(() => {
   if (!data.value) return [];
-  const rels = [...data.value.relations]
-    .sort((a, b) => Math.abs(b.affinity) - Math.abs(a.affinity))
-    .slice(0, GRAPH_MAX);
+  const rels = [...data.value.relations].sort((a, b) => Math.abs(b.affinity) - Math.abs(a.affinity)).slice(0, GRAPH_MAX);
   const N = rels.length;
   const R = 110;
   return rels.map((r, i) => {

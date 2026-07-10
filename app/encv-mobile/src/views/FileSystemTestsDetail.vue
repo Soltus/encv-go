@@ -62,15 +62,10 @@
 </template>
 
 <script setup lang="ts">
-import {
-  checkmarkCircle,
-  closeCircle,
-  playCircleOutline,
-} from "ionicons/icons";
-
+import { checkmarkCircle, closeCircle, playCircleOutline } from "ionicons/icons";
+import { computed } from "vue";
 import { useFileSystemTests } from "@/composables/useFileSystemTests";
 import { useI18n } from "@/composables/useI18n";
-import { computed } from "vue";
 
 const { t } = useI18n();
 const { results, isRunning, runAllTests } = useFileSystemTests();

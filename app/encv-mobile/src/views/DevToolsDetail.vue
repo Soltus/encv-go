@@ -94,18 +94,10 @@
 </template>
 
 <script setup lang="ts">
-import {
-  bookOutline,
-  bugOutline,
-  extensionPuzzleOutline,
-  eyeOutline,
-  flaskOutline,
-  terminal,
-} from "ionicons/icons";
-
+import { bookOutline, bugOutline, extensionPuzzleOutline, eyeOutline, flaskOutline, terminal } from "ionicons/icons";
+import { useRouter } from "vue-router";
 import { useDevTools } from "@/composables/useDevTools";
 import { useI18n } from "@/composables/useI18n";
-import { useRouter } from "vue-router";
 
 const { t } = useI18n();
 const router = useRouter();

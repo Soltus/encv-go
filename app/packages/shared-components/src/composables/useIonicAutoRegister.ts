@@ -1,5 +1,5 @@
-import type { App } from "vue";
 import * as IonicVueComponents from "@ionic/vue";
+import type { App } from "vue";
 
 const ION_PREFIX = "Ion";
 
@@ -56,19 +56,18 @@ function pascalToKebab(pascal: string): string {
  * 本函数扫描 @ionic/vue 的所有导出，找出所有以 Ion 开头的组件，
  * 并将它们全局注册到 Vue app 实例上。
  */
-export function registerIonicComponents(
-  app: App,
-  options: IonicRegisterOptions = {},
-): { registered: string[]; skipped: string[] } {
+export function registerIonicComponents(app: App, options: IonicRegisterOptions = {}): { registered: string[]; skipped: string[] } {
   const { extraComponents = {}, skip = [] } = options;
 
   const registered: string[] = [];
   const skipped: string[] = [];
 
-  const skipSet = new Set(skip.map(name => {
-    if (name.startsWith(ION_PREFIX)) return name;
-    return ION_PREFIX + name.charAt(0).toUpperCase() + name.slice(1);
-  }));
+  const skipSet = new Set(
+    skip.map(name => {
+      if (name.startsWith(ION_PREFIX)) return name;
+      return ION_PREFIX + name.charAt(0).toUpperCase() + name.slice(1);
+    })
+  );
 
   for (const [name, component] of Object.entries(IonicVueComponents)) {
     if (!isIonComponent(name)) continue;
@@ -96,6 +95,6 @@ export function getIonicComponentNames(): string[] {
   return Object.keys(IonicVueComponents).filter(isIonComponent).sort();
 }
 
-export { pascalToKebab, kebabToPascal };
+export { kebabToPascal, pascalToKebab };
 
 export default registerIonicComponents;

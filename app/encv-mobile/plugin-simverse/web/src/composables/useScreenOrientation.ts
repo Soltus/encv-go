@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted } from "vue";
-import { lockScreenOrientation, unlockScreenOrientation, isNativePluginMode } from "@/plugins/SimVerse";
+import { isNativePluginMode, lockScreenOrientation, unlockScreenOrientation } from "@/plugins/SimVerse";
 
 export function useScreenOrientation(type: "landscape-primary" | "portrait-primary" = "portrait-primary") {
   onMounted(() => {

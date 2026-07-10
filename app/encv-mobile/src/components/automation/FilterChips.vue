@@ -51,9 +51,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import { CATEGORY_META, type ErrorCategory } from "@/composables/useErrorAnalyzer";
 import type { TestCaseResult } from "@/lib/workflow/types";
-import { computed } from "vue";
 
 const props = defineProps<{
   results: TestCaseResult[];

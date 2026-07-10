@@ -20,8 +20,8 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "@/composables/useI18n";
 import { arrowDownOutline } from "ionicons/icons";
+import { useI18n } from "@/composables/useI18n";
 
 withDefaults(
   defineProps<{

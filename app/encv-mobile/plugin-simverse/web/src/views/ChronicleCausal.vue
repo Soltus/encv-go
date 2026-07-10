@@ -80,16 +80,28 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, chevronForward, refreshOutline } from "ionicons/icons";
 import { onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonList, IonListHeader, IonLabel,
-  IonItem, IonNote, IonSpinner,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline, chevronForward } from "ionicons/icons";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseChronicleEvent } from "@/composables/useSimverse";
+import { type SimverseChronicleEvent, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const route = useRoute();

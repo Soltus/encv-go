@@ -15,8 +15,8 @@
  * - taskType / versions 由调用方传入，composable 不再自行从 taskOptions 派生
  */
 
-import type { PluginMeta, TaskType } from "@/api/encv";
 import type { Ref } from "vue";
+import type { PluginMeta, TaskType } from "@/api/encv";
 
 /** 生成的测试用例 */
 export interface GeneratedTestCase {

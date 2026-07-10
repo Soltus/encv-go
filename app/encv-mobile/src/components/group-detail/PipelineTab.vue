@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { useI18n } from "@/composables/useI18n";
-import TestReportHeader from "@/components/automation/TestReportHeader.vue";
-import JobPipelineCard from "@/components/automation/JobPipelineCard.vue";
-import type { JobRun, WorkflowRun } from "@/lib/workflow/types";
 import { computed } from "vue";
+import JobPipelineCard from "@/components/automation/JobPipelineCard.vue";
+import TestReportHeader from "@/components/automation/TestReportHeader.vue";
+import { useI18n } from "@/composables/useI18n";
+import type { JobRun, WorkflowRun } from "@/lib/workflow/types";
 
 interface Props {
   run?: WorkflowRun;

@@ -1,24 +1,16 @@
-import { registerI18nModules, registerFieldKeyMap, registerSectionTitleMap } from "@/composables/useI18n";
 import { initSharedI18n } from "@encv/shared-components/i18n";
-import tasks from "@/i18n/tasks";
-import files from "@/i18n/files";
+import { registerFieldKeyMap, registerI18nModules, registerSectionTitleMap } from "@/composables/useI18n";
 import agent from "@/i18n/agent";
-import player from "@/i18n/player";
-import modals from "@/i18n/modals";
 import extensions from "@/i18n/extensions";
+import files from "@/i18n/files";
+import modals from "@/i18n/modals";
+import player from "@/i18n/player";
 import simverse from "@/i18n/simverse";
+import tasks from "@/i18n/tasks";
 
 export function initEncvI18n() {
   initSharedI18n();
-  registerI18nModules([
-    tasks,
-    files,
-    player,
-    extensions,
-    modals,
-    agent,
-    simverse,
-  ]);
+  registerI18nModules([tasks, files, player, extensions, modals, agent, simverse]);
 
   registerFieldKeyMap({
     password: "settings.password",
@@ -74,13 +66,13 @@ export function initEncvI18n() {
   });
 
   registerSectionTitleMap({
-    "全局设置": "settings.globalSettings",
+    全局设置: "settings.globalSettings",
     "加密/解密设置": "settings.encryptDecryptSettings",
     "内置HTTP服务器 设置": "settings.httpServerSettings",
     "管理后台服务器 设置": "settings.adminServerSettings",
     "WebDAV 服务器设置": "settings.webdavServerSettings",
     "Openlist 代理服务器设置": "settings.proxyServerSettings",
-    "日志设置": "settings.logSettings",
+    日志设置: "settings.logSettings",
     "AI 助手设置": "settings.agentSettings",
   });
 }

@@ -8,6 +8,8 @@
  * 视图组件 import 路径不变（继续用 useTasksList），内部委托给 useTaskStore
  */
 
+import { storeToRefs } from "pinia";
+import { computed, ref } from "vue";
 import type { RunSummary } from "@/api/encv";
 import {
   getTasks as apiGetTasks,
@@ -26,8 +28,6 @@ import { useTaskViewCompute } from "@/composables/useTaskViewCompute";
 import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
 import { getTaskTypeLabel } from "@/lib/taskTypeLabel";
 import { useTaskStore } from "@/stores/taskStore";
-import { storeToRefs } from "pinia";
-import { computed, ref } from "vue";
 
 // ============ helper：单例 ref state（UI 局部） ============
 // 这些状态属于"视图临时态"（popover / expanded warning / search 框显示）

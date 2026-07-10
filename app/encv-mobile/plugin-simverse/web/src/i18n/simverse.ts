@@ -637,7 +637,8 @@ export default {
     "simverse.perf.tier": "Current Tier",
 
     "simverse.about.title": "About SimVerse",
-    "simverse.about.desc": "An evolvable virtual world engine: tens of millions of NPCs and millions of organizations, continuously generating random events.",
+    "simverse.about.desc":
+      "An evolvable virtual world engine: tens of millions of NPCs and millions of organizations, continuously generating random events.",
     "simverse.about.version": "Version",
     "simverse.about.backend": "Backend Engine",
     "simverse.about.frontend": "Frontend",

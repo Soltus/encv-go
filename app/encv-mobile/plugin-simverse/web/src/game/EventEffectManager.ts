@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+import type Phaser from "phaser";
 
 export type EventEffectType = "fire" | "celebration" | "war" | "birth" | "death" | "discovery";
 

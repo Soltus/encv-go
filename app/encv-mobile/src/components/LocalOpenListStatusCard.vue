@@ -76,20 +76,13 @@
 </template>
 
 <script setup lang="ts">
-import {
-  bugOutline,
-  extensionPuzzleOutline,
-  server as serverIcon,
-  open as openIcon,
-  settings as settingsIcon,
-} from "ionicons/icons";
-
+import { bugOutline, extensionPuzzleOutline, open as openIcon, server as serverIcon, settings as settingsIcon } from "ionicons/icons";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { formatFileSize } from "@/api/encv";
 import { eventBus } from "@/composables/useEventBus";
 import { useI18n } from "@/composables/useI18n";
 import { useOpenListBridge } from "@/composables/useOpenListBridge";
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
 
 const HEARTBEAT_FRESH_MS = 5000;
 const CRASH_LOOP_WINDOW_MS = 10_000;

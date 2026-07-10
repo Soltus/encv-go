@@ -124,6 +124,9 @@
 </template>
 
 <script setup lang="ts">
+import { Directory, Filesystem } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
+import { alertController, modalController, toastController } from "@ionic/vue";
 import {
   alertCircleOutline,
   checkboxOutline,
@@ -135,14 +138,13 @@ import {
   stopCircleOutline,
   trashOutline,
 } from "ionicons/icons";
-
-import { Directory, Filesystem } from "@capacitor/filesystem";
-import { Share } from "@capacitor/share";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import type { EncvTask } from "@/api/encv";
 import { getCalibration } from "@/api/encv";
+import PerformanceTab from "@/components/group-detail/PerformanceTab.vue";
 import PipelineTab from "@/components/group-detail/PipelineTab.vue";
 import TasksTab from "@/components/group-detail/TasksTab.vue";
-import PerformanceTab from "@/components/group-detail/PerformanceTab.vue";
 import { useBatchOperations } from "@/composables/useBatchOperations";
 import { useI18n } from "@/composables/useI18n";
 import { useRunSummariesSingleton } from "@/composables/useRunSummaries";
@@ -151,9 +153,6 @@ import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
 import { buildReportZip } from "@/lib/buildReportZip";
 import type { JobRun } from "@/lib/workflow/types";
 import { useRunTasksStoreSingleton } from "@/stores/runTasksStore";
-import { alertController, modalController, toastController } from "@ionic/vue";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
 
 const { t } = useI18n();
 const route = useRoute();

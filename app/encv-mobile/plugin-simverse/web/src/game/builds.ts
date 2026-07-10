@@ -23,8 +23,16 @@ export interface SimverseBuild {
 }
 
 export const ARCHETYPES: ArchetypeKey[] = [
-  "warrior", "guardian", "scholar", "merchant",
-  "artisan", "healer", "leader", "hermit", "rogue", "artist",
+  "warrior",
+  "guardian",
+  "scholar",
+  "merchant",
+  "artisan",
+  "healer",
+  "leader",
+  "hermit",
+  "rogue",
+  "artist",
 ];
 
 // 兼容 0-1 与 0-100 两种量纲
@@ -72,7 +80,7 @@ const VALUE_KEYWORDS: [RegExp, ArchetypeKey, number][] = [
 
 export function deriveNPCBuild(npc: SimverseNPCDetail): SimverseBuild {
   const scores = {} as Record<ArchetypeKey, number>;
-  ARCHETYPES.forEach((a) => (scores[a] = 0));
+  ARCHETYPES.forEach(a => (scores[a] = 0));
   const add = (k: ArchetypeKey, p: number) => {
     scores[k] += p;
   };
@@ -155,21 +163,21 @@ export interface ArchetypeMeta {
 }
 
 export const ARCH_META: Record<ArchetypeKey, ArchetypeMeta> = {
-  warrior:  { key: "warrior",  labelKey: "simverse.build.warrior",  name: "战士", color: 0xef4444, colorCss: "#ef4444", emoji: "🗡️" },
+  warrior: { key: "warrior", labelKey: "simverse.build.warrior", name: "战士", color: 0xef4444, colorCss: "#ef4444", emoji: "🗡️" },
   guardian: { key: "guardian", labelKey: "simverse.build.guardian", name: "守护", color: 0xf59e0b, colorCss: "#f59e0b", emoji: "🛡️" },
-  scholar:  { key: "scholar",  labelKey: "simverse.build.scholar",  name: "学者", color: 0x3b82f6, colorCss: "#3b82f6", emoji: "📜" },
+  scholar: { key: "scholar", labelKey: "simverse.build.scholar", name: "学者", color: 0x3b82f6, colorCss: "#3b82f6", emoji: "📜" },
   merchant: { key: "merchant", labelKey: "simverse.build.merchant", name: "商人", color: 0x22c55e, colorCss: "#22c55e", emoji: "💰" },
-  artisan:  { key: "artisan",  labelKey: "simverse.build.artisan",  name: "工匠", color: 0xa855f7, colorCss: "#a855f7", emoji: "🔨" },
-  healer:   { key: "healer",   labelKey: "simverse.build.healer",   name: "治疗", color: 0xec4899, colorCss: "#ec4899", emoji: "⚕️" },
-  leader:   { key: "leader",   labelKey: "simverse.build.leader",   name: "领袖", color: 0x6366f1, colorCss: "#6366f1", emoji: "👑" },
-  hermit:   { key: "hermit",   labelKey: "simverse.build.hermit",   name: "隐士", color: 0x64748b, colorCss: "#64748b", emoji: "🌙" },
-  rogue:    { key: "rogue",    labelKey: "simverse.build.rogue",    name: "游侠", color: 0x1f2937, colorCss: "#1f2937", emoji: "🥷" },
-  artist:   { key: "artist",   labelKey: "simverse.build.artist",   name: "艺术家", color: 0x14b8a6, colorCss: "#14b8a6", emoji: "🎨" },
+  artisan: { key: "artisan", labelKey: "simverse.build.artisan", name: "工匠", color: 0xa855f7, colorCss: "#a855f7", emoji: "🔨" },
+  healer: { key: "healer", labelKey: "simverse.build.healer", name: "治疗", color: 0xec4899, colorCss: "#ec4899", emoji: "⚕️" },
+  leader: { key: "leader", labelKey: "simverse.build.leader", name: "领袖", color: 0x6366f1, colorCss: "#6366f1", emoji: "👑" },
+  hermit: { key: "hermit", labelKey: "simverse.build.hermit", name: "隐士", color: 0x64748b, colorCss: "#64748b", emoji: "🌙" },
+  rogue: { key: "rogue", labelKey: "simverse.build.rogue", name: "游侠", color: 0x1f2937, colorCss: "#1f2937", emoji: "🥷" },
+  artist: { key: "artist", labelKey: "simverse.build.artist", name: "艺术家", color: 0x14b8a6, colorCss: "#14b8a6", emoji: "🎨" },
 };
 
 export function deriveBuildFromNPC(npc: NPCSummary): { primary: ArchetypeKey; tags: ArchetypeKey[]; synergy: number } {
   const scores = {} as Record<ArchetypeKey, number>;
-  ARCHETYPES.forEach((a) => (scores[a] = 0));
+  ARCHETYPES.forEach(a => (scores[a] = 0));
   const add = (k: ArchetypeKey, p: number) => {
     scores[k] += p;
   };

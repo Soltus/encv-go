@@ -217,11 +217,10 @@ import {
   sparklesOutline,
   trendingUpOutline,
 } from "ionicons/icons";
-
+import { computed, ref } from "vue";
 import type { Locale } from "@/composables/useI18n";
 import { useI18n } from "@/composables/useI18n";
 import { useTheme } from "@/composables/useTheme";
-import { computed, ref } from "vue";
 
 const {
   isDark,

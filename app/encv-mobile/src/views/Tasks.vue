@@ -581,8 +581,6 @@
   </ion-page>
 </template>
 <script setup lang="ts">
-import { formatContainerVersion } from "@/constants/containerVersion";
-import { formatDateTime } from "@/composables/useDateFormat";
 import {
   add,
   albumsOutline,
@@ -605,6 +603,8 @@ import {
   trashBin,
   warningOutline,
 } from "ionicons/icons";
+import { formatDateTime } from "@/composables/useDateFormat";
+import { formatContainerVersion } from "@/constants/containerVersion";
 
 // Tasks.vue 重构后只剩 thin script：调用 useTasksView() composable + 必要 imports。
 // 原 633 行 script 逻辑已全部抽到 ./useTasksView.ts。
@@ -612,11 +612,11 @@ import {
 // template 内直接使用的 state/handler 都在此解构到局部变量，
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
-import { computed } from "vue";
-import { useTasksView } from "./useTasksView";
-import TaskVirtualList from "@/components/tasks/TaskVirtualList.vue";
-import TaskDebugPanel from "@/components/tasks/TaskDebugPanel.vue";
 import RelevanceBadge from "@encv/shared-components/components/shared/RelevanceBadge.vue";
+import { computed } from "vue";
+import TaskDebugPanel from "@/components/tasks/TaskDebugPanel.vue";
+import TaskVirtualList from "@/components/tasks/TaskVirtualList.vue";
+import { useTasksView } from "./useTasksView";
 
 const {
   // i18n

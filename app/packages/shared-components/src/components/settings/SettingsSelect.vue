@@ -23,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-import { IonItem, IonIcon, IonSelect, IonSelectOption } from "@ionic/vue";
+import { IonIcon, IonItem, IonSelect, IonSelectOption } from "@ionic/vue";
 
 interface SelectOption {
   value: string | number;

@@ -21,8 +21,8 @@
  * - validateTransition：状态机校验，基于 VALID_TRANSITIONS 判断转换合法性
  */
 
-import { eventBus } from "@/composables/useEventBus";
 import { onMounted, onUnmounted } from "vue";
+import { eventBus } from "@/composables/useEventBus";
 
 // re-export 状态机工具函数（供 useWorkflowTaskService / 调用方直接使用）
 export { applyTerminalGuard, VALID_TRANSITIONS, validateTransition } from "@/lib/workflow/state-machine";

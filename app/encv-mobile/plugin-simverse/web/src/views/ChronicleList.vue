@@ -77,17 +77,27 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonPage,
+  IonSegment,
+  IonSegmentButton,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, refreshOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonSegment, IonSegmentButton, IonContent,
-  IonBadge, IonSpinner,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline } from "ionicons/icons";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseChronicleEvent } from "@/composables/useSimverse";
 import { useLiveRefresh } from "@/composables/useLiveRefresh";
+import { type SimverseChronicleEvent, useSimverse } from "@/composables/useSimverse";
 
 const props = defineProps<{
   npcId?: number;
@@ -108,7 +118,7 @@ const filterLevel = ref("all");
 const filteredEvents = computed(() => {
   if (filterLevel.value === "all") return events.value;
   const minImp = parseInt(filterLevel.value, 10);
-  return events.value.filter((e) => e.importance >= minImp);
+  return events.value.filter(e => e.importance >= minImp);
 });
 
 async function loadEvents(silent = false) {

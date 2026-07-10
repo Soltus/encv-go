@@ -22,13 +22,7 @@ export class BuildingSprite extends Phaser.GameObjects.Container {
   private nameText: Phaser.GameObjects.Text;
   private glow: Phaser.GameObjects.Arc;
 
-  constructor(
-    scene: Phaser.Scene,
-    x: number,
-    y: number,
-    type: BuildingType,
-    name: string
-  ) {
+  constructor(scene: Phaser.Scene, x: number, y: number, type: BuildingType, name: string) {
     super(scene, x, y);
     this.buildingType = type;
 

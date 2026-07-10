@@ -204,17 +204,40 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonChip,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import {
+  alertCircleOutline,
+  bagOutline,
+  gitNetworkOutline,
+  pulseOutline,
+  refreshOutline,
+  star,
+  starOutline,
+  timeOutline,
+} from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonList, IonListHeader, IonLabel,
-  IonItem, IonBadge, IonNote, IonSpinner, IonChip,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline, bagOutline, timeOutline, gitNetworkOutline, pulseOutline, star, starOutline } from "ionicons/icons";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseNPCDetail } from "@/composables/useSimverse";
-import { deriveNPCBuild, type ArchetypeKey } from "@/game/builds";
+import { type SimverseNPCDetail, useSimverse } from "@/composables/useSimverse";
+import { type ArchetypeKey, deriveNPCBuild } from "@/game/builds";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -231,20 +254,23 @@ const avatarEmoji = computed(() => {
   return avatars[id % avatars.length];
 });
 
-const skillEntries = computed(() =>
-  npc.value ? Object.entries(npc.value.skills || {}).map(([key, value]) => ({ key, value })) : []
-);
-const bigFiveEntries = computed(() =>
-  npc.value ? Object.entries(npc.value.big_five || {}).map(([key, value]) => ({ key, value })) : []
-);
+const skillEntries = computed(() => (npc.value ? Object.entries(npc.value.skills || {}).map(([key, value]) => ({ key, value })) : []));
+const bigFiveEntries = computed(() => (npc.value ? Object.entries(npc.value.big_five || {}).map(([key, value]) => ({ key, value })) : []));
 
 // P14 流派派生（确定性，复用 NPC 既有属性）
 const build = computed(() => (npc.value ? deriveNPCBuild(npc.value) : null));
 
 const ARCH_COLOR: Record<ArchetypeKey, string> = {
-  warrior: "danger", guardian: "warning", scholar: "primary", merchant: "success",
-  artisan: "tertiary", healer: "success", leader: "secondary", hermit: "medium",
-  rogue: "dark", artist: "tertiary",
+  warrior: "danger",
+  guardian: "warning",
+  scholar: "primary",
+  merchant: "success",
+  artisan: "tertiary",
+  healer: "success",
+  leader: "secondary",
+  hermit: "medium",
+  rogue: "dark",
+  artist: "tertiary",
 };
 function archLabel(key: ArchetypeKey): string {
   return t(`simverse.build.${key}`);
@@ -255,8 +281,12 @@ function archColor(key: ArchetypeKey): string {
 
 function professionColor(profession: string): string {
   const map: Record<string, string> = {
-    farmer: "success", warrior: "danger", mage: "primary",
-    merchant: "warning", priest: "tertiary", rogue: "medium",
+    farmer: "success",
+    warrior: "danger",
+    mage: "primary",
+    merchant: "warning",
+    priest: "tertiary",
+    rogue: "medium",
   };
   return map[profession?.toLowerCase()] || "medium";
 }

@@ -430,12 +430,6 @@
 </template>
 
 <script setup lang="ts">
-import { fetchWebDavLocalInfo, type WebDavLocalInfo } from "@/api/encv";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import { useWebDavManifest } from "@/composables/useWebDavManifest";
-import { useWebDavAutomationTests } from "@/composables/useWebDavWorkflowAdapter";
-import type { TestCaseStatus, TestRun } from "@/types/webdav-test";
 import { alertController } from "@ionic/vue";
 import {
   archiveOutline,
@@ -465,6 +459,12 @@ import {
   warningOutline,
 } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
+import { fetchWebDavLocalInfo, type WebDavLocalInfo } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
+import { useWebDavManifest } from "@/composables/useWebDavManifest";
+import { useWebDavAutomationTests } from "@/composables/useWebDavWorkflowAdapter";
+import type { TestCaseStatus, TestRun } from "@/types/webdav-test";
 
 const { t } = useI18n();
 const automation = useWebDavAutomationTests();

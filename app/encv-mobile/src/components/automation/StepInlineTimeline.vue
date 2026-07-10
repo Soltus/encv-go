@@ -18,10 +18,10 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from "vue";
 import { formatDateTime, formatDuration } from "@/composables/useDateFormat";
 import { useI18n } from "@/composables/useI18n";
 import { Phase, type StepRun, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
-import { computed } from "vue";
 
 const props = defineProps<{
   step: StepRun;

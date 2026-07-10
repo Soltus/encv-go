@@ -135,8 +135,8 @@
 </template>
 
 <script setup lang="ts">
-import type { StepStatus, UnifiedTimelineEntry } from "@encv/shared-components/lib/workflow/types";
 import PhaseIcon from "@encv/shared-components/components/shared/PhaseIcon.vue";
+import type { StepStatus, UnifiedTimelineEntry } from "@encv/shared-components/lib/workflow/types";
 import {
   alertCircleOutline,
   ban,

@@ -34,14 +34,14 @@
 </template>
 
 <script setup lang="ts">
+import { lockClosed, settingsOutline, shieldCheckmark } from "ionicons/icons";
+import { computed } from "vue";
 import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import { useConfig } from "@/composables/useConfig";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import type { FieldDef } from "@/config/schemaParser";
 import { parseSchema } from "@/config/schemaParser";
-import { lockClosed, settingsOutline, shieldCheckmark } from "ionicons/icons";
-import { computed } from "vue";
 
 const { t } = useI18n();
 const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig();

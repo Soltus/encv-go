@@ -121,18 +121,12 @@
 </template>
 
 <script setup lang="ts">
+import { alertCircleOutline, bugOutline, codeSlashOutline, copyOutline, refreshOutline, warningOutline } from "ionicons/icons";
 import { onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import {
-  warningOutline,
-  refreshOutline,
-  bugOutline,
-  alertCircleOutline,
-  copyOutline,
-  codeSlashOutline,
-} from "ionicons/icons";
 import type { ServiceGuardResult } from "@/api/encv";
 import { checkServiceGuard } from "@/api/encv";
+import ErrorCaptureOverlay from "@/components/shared/ErrorCaptureOverlay.vue";
 import { autoInitVConsole } from "@/composables/useDevTools";
 import { registerFileFeature } from "@/composables/useFileFeatures";
 import { hijackConsole } from "@/composables/useFrontendLogs";
@@ -142,7 +136,6 @@ import { useRealtimeTransport } from "@/composables/useRealtimeTransport";
 import { useTheme } from "@/composables/useTheme";
 import { createAlistEncryptFeature } from "@/features/alist-encrypt";
 import { isNative, requestNotificationPermission, requestStoragePermission } from "@/plugins/GoProcess";
-import ErrorCaptureOverlay from "@/components/shared/ErrorCaptureOverlay.vue";
 
 const { initTheme, detectP3Support } = useTheme();
 const { t } = useI18n();

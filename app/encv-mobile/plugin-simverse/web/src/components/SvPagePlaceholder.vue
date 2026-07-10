@@ -24,39 +24,30 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-import {
-  IonPage,
-  IonHeader,
-  IonToolbar,
-  IonButtons,
-  IonBackButton,
-  IonTitle,
-  IonContent,
-  IonIcon,
-} from "@ionic/vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonTitle, IonToolbar } from "@ionic/vue";
 import {
-  globe,
-  people,
+  bag,
+  bug,
   business,
+  cash,
+  construct,
+  flag,
+  gitNetwork,
+  globe,
+  informationCircle,
+  laptop,
+  location,
   map,
   newspaper,
-  cash,
-  settings,
-  bug,
+  people,
   person,
-  flag,
-  location,
-  time,
-  bag,
   pricetag,
-  gitNetwork,
   save,
-  informationCircle,
-  construct,
-  laptop,
+  settings,
+  time,
 } from "ionicons/icons";
+import { computed } from "vue";
 
 const props = defineProps<{
   titleKey?: string;
@@ -87,8 +78,6 @@ const iconMap: Record<string, any> = {
   laptop,
 };
 
-const title = computed(() =>
-  props.titleKey ? t(props.titleKey as any) : "SimVerse"
-);
+const title = computed(() => (props.titleKey ? t(props.titleKey as any) : "SimVerse"));
 const icon = computed(() => iconMap[props.iconName || "globe"] || globe);
 </script>

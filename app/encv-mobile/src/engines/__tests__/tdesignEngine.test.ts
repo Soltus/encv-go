@@ -10,9 +10,9 @@
  * SPEC: /workspace/.trae/specs/agui-real-llm-path-completion/ Phase 4
  */
 
-import type { EngineRenderProps } from "@/composables/chatEngine";
 import { describe, expect, it } from "vitest";
 import type { VNode } from "vue";
+import type { EngineRenderProps } from "@/composables/chatEngine";
 import TDesignChatView from "../TDesignChatView.vue";
 import { createTDesignEngine } from "../tdesignEngine";
 

@@ -58,17 +58,32 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonInfiniteScroll,
+  IonInfiniteScrollContent,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonSearchbar,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, refreshOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonList, IonListHeader, IonLabel,
-  IonItem, IonBadge, IonNote, IonSpinner, IonSearchbar, IonInfiniteScroll,
-  IonInfiniteScrollContent,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline } from "ionicons/icons";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseOrgMember } from "@/composables/useSimverse";
+import { type SimverseOrgMember, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -88,7 +103,7 @@ const hasMore = ref(true);
 const filtered = computed(() => {
   if (!searchQuery.value) return members.value;
   const q = searchQuery.value.toLowerCase();
-  return members.value.filter((m) => m.name.toLowerCase().includes(q) || m.profession.toLowerCase().includes(q));
+  return members.value.filter(m => m.name.toLowerCase().includes(q) || m.profession.toLowerCase().includes(q));
 });
 
 async function reload(isRefresh = false) {
@@ -125,8 +140,12 @@ function goNPC(id: number) {
 
 function profColor(p: string): string {
   const map: Record<string, string> = {
-    farmer: "success", warrior: "danger", mage: "primary",
-    merchant: "warning", priest: "tertiary", rogue: "medium",
+    farmer: "success",
+    warrior: "danger",
+    mage: "primary",
+    merchant: "warning",
+    priest: "tertiary",
+    rogue: "medium",
   };
   return map[p.toLowerCase()] || "medium";
 }

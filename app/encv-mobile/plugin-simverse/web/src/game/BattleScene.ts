@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { phaserEventBus, PHASER_EVENTS } from "./PhaserEventBus";
+import { PHASER_EVENTS, phaserEventBus } from "./PhaserEventBus";
 
 export interface BattleSceneData {
   enemyName: string;
@@ -116,15 +116,19 @@ export class BattleScene extends Phaser.Scene {
     const shadow = this.add.circle(0, 60, 50, 0x000000, 0.3);
     shadow.setScale(1, 0.3);
 
-    const sprite = this.add.text(0, 0, this.player.emoji, {
-      fontSize: "80px",
-    }).setOrigin(0.5);
+    const sprite = this.add
+      .text(0, 0, this.player.emoji, {
+        fontSize: "80px",
+      })
+      .setOrigin(0.5);
 
-    const nameText = this.add.text(0, 70, `${this.player.name} Lv.${this.player.level}`, {
-      fontSize: "16px",
-      color: "#ffffff",
-      fontStyle: "bold",
-    }).setOrigin(0.5);
+    const nameText = this.add
+      .text(0, 70, `${this.player.name} Lv.${this.player.level}`, {
+        fontSize: "16px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
 
     const hpBarBg = this.add.graphics();
     hpBarBg.fillStyle(0x333333, 1);
@@ -140,10 +144,12 @@ export class BattleScene extends Phaser.Scene {
     const mpBar = this.add.graphics();
     this.updateHpBar(mpBar, this.player.mp, this.player.maxMp, 0x3b82f6, 6);
 
-    const hpText = this.add.text(0, 125, `${this.player.hp}/${this.player.maxHp}`, {
-      fontSize: "12px",
-      color: "#ffffff",
-    }).setOrigin(0.5);
+    const hpText = this.add
+      .text(0, 125, `${this.player.hp}/${this.player.maxHp}`, {
+        fontSize: "12px",
+        color: "#ffffff",
+      })
+      .setOrigin(0.5);
 
     container.add([shadow, sprite, nameText, hpBarBg, hpBar, mpBarBg, mpBar, hpText]);
 
@@ -172,16 +178,20 @@ export class BattleScene extends Phaser.Scene {
     const shadow = this.add.circle(0, 60, 50, 0x000000, 0.3);
     shadow.setScale(1, 0.3);
 
-    const sprite = this.add.text(0, 0, this.enemy.emoji, {
-      fontSize: "80px",
-    }).setOrigin(0.5);
+    const sprite = this.add
+      .text(0, 0, this.enemy.emoji, {
+        fontSize: "80px",
+      })
+      .setOrigin(0.5);
     sprite.setFlipX(true);
 
-    const nameText = this.add.text(0, 70, `${this.enemy.name} Lv.${this.enemy.level}`, {
-      fontSize: "16px",
-      color: "#f87171",
-      fontStyle: "bold",
-    }).setOrigin(0.5);
+    const nameText = this.add
+      .text(0, 70, `${this.enemy.name} Lv.${this.enemy.level}`, {
+        fontSize: "16px",
+        color: "#f87171",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5);
 
     const hpBarBg = this.add.graphics();
     hpBarBg.fillStyle(0x333333, 1);
@@ -190,10 +200,12 @@ export class BattleScene extends Phaser.Scene {
     const hpBar = this.add.graphics();
     this.updateHpBar(hpBar, this.enemy.hp, this.enemy.maxHp, 0xef4444);
 
-    const hpText = this.add.text(0, 115, `${this.enemy.hp}/${this.enemy.maxHp}`, {
-      fontSize: "12px",
-      color: "#ffffff",
-    }).setOrigin(0.5);
+    const hpText = this.add
+      .text(0, 115, `${this.enemy.hp}/${this.enemy.maxHp}`, {
+        fontSize: "12px",
+        color: "#ffffff",
+      })
+      .setOrigin(0.5);
 
     container.add([shadow, sprite, nameText, hpBarBg, hpBar, hpText]);
 
@@ -251,11 +263,13 @@ export class BattleScene extends Phaser.Scene {
       bg.fillStyle(action.color, 0.8);
       bg.fillRoundedRect(-btnWidth / 2, -btnHeight / 2, btnWidth, btnHeight, 8);
 
-      const label = this.add.text(0, 0, action.label, {
-        fontSize: "16px",
-        color: "#ffffff",
-        fontStyle: "bold",
-      }).setOrigin(0.5);
+      const label = this.add
+        .text(0, 0, action.label, {
+          fontSize: "16px",
+          color: "#ffffff",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5);
 
       container.add([bg, label]);
       container.setSize(btnWidth, btnHeight);
@@ -288,12 +302,14 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private createBackButton(): void {
-    const btn = this.add.text(20, 20, "← 返回", {
-      fontSize: "16px",
-      color: "#ffffff",
-      backgroundColor: "rgba(0,0,0,0.6)",
-      padding: { x: 12, y: 6 },
-    }).setInteractive({ useHandCursor: true });
+    const btn = this.add
+      .text(20, 20, "← 返回", {
+        fontSize: "16px",
+        color: "#ffffff",
+        backgroundColor: "rgba(0,0,0,0.6)",
+        padding: { x: 12, y: 6 },
+      })
+      .setInteractive({ useHandCursor: true });
 
     btn.on("pointerdown", () => {
       this.endBattle("flee");
@@ -374,13 +390,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.addLog(`${this.player.name} 使用了火焰术！`);
 
-    const effect = this.add.circle(
-      this.enemy.container!.x,
-      this.enemy.container!.y,
-      10,
-      0xf97316,
-      0.8
-    );
+    const effect = this.add.circle(this.enemy.container!.x, this.enemy.container!.y, 10, 0xf97316, 0.8);
 
     this.tweens.add({
       targets: effect,
@@ -458,7 +468,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private setButtonsEnabled(enabled: boolean): void {
-    this.actionButtons.forEach((btn) => {
+    this.actionButtons.forEach(btn => {
       btn.setInteractive(enabled);
       btn.setAlpha(enabled ? 1 : 0.5);
     });

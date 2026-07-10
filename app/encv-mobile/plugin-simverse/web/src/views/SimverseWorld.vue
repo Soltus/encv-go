@@ -900,21 +900,21 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { IonInfiniteScroll, IonInfiniteScrollContent, IonLabel, IonSegment, IonSegmentButton } from "@ionic/vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseNPC, type SimverseChronicleEvent, type SimverseRelation } from "@/composables/useSimverse";
 import { usePhaserWorld } from "@/composables/usePhaserWorld";
-import { useWorldRenderSettings, type RenderFps, type RenderQuality } from "@/composables/useWorldRenderSettings";
-import { deriveBuildFromNPC, ARCH_META } from "@/game/builds";
-import { IonInfiniteScroll, IonInfiniteScrollContent, IonSegment, IonSegmentButton, IonLabel } from "@ionic/vue";
+import { type SimverseChronicleEvent, type SimverseNPC, type SimverseRelation, useSimverse } from "@/composables/useSimverse";
+import { type RenderFps, type RenderQuality, useWorldRenderSettings } from "@/composables/useWorldRenderSettings";
+import { ARCH_META, deriveBuildFromNPC } from "@/game/builds";
 import {
-  lockScreenOrientation,
-  unlockScreenOrientation,
   closeWorld,
-  isNativePluginMode,
   hideSystemUI,
+  isNativePluginMode,
+  lockScreenOrientation,
   showSystemUI,
+  unlockScreenOrientation,
 } from "@/plugins/SimVerse";
 
 const router = useRouter();
@@ -989,7 +989,7 @@ function toggleSquad() {
   if (!selectedNPC.value) return;
   const id = selectedNPC.value.id;
   if (squadIds.value.includes(id)) {
-    squadIds.value = squadIds.value.filter((x) => x !== id);
+    squadIds.value = squadIds.value.filter(x => x !== id);
   } else {
     if (squadIds.value.length >= MAX_SQUAD) return;
     squadIds.value = [...squadIds.value, id];
@@ -1041,7 +1041,7 @@ function openCharacter() {
 const gachaResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
 const behaviorStats = ref<{ total_npcs: number; alive_npcs: number; behavior_dist: Record<string, number> } | null>(null);
 
-const econTab = ref<'prices' | 'ranking'>('prices');
+const econTab = ref<"prices" | "ranking">("prices");
 const economyStats = ref<{
   region_id: number;
   prices: Record<string, number>;
@@ -1049,35 +1049,39 @@ const economyStats = ref<{
   demand: Record<string, number>;
   trade_volume: number;
 } | null>(null);
-const wealthRankings = ref<{
-  id: number;
-  name: string;
-  level: number;
-  profession: string;
-  wealth: number;
-  rank: number;
-}[]>([]);
+const wealthRankings = ref<
+  {
+    id: number;
+    name: string;
+    level: number;
+    profession: string;
+    wealth: number;
+    rank: number;
+  }[]
+>([]);
 
-const questTab = ref<'daily' | 'achieve' | 'story'>('daily');
-const questList = ref<{
-  id: string;
-  type: number;
-  title: string;
-  desc: string;
-  icon: string;
-  goal: number;
-  progress: number;
-  reward: { diamond: number; gold: number; exp: number; icon: string };
-  status: number;
-  sort_order: number;
-}[]>([]);
+const questTab = ref<"daily" | "achieve" | "story">("daily");
+const questList = ref<
+  {
+    id: string;
+    type: number;
+    title: string;
+    desc: string;
+    icon: string;
+    goal: number;
+    progress: number;
+    reward: { diamond: number; gold: number; exp: number; icon: string };
+    status: number;
+    sort_order: number;
+  }[]
+>([]);
 const questCompletable = ref(0);
 
 const questTypeMap: Record<string, number> = { daily: 0, achieve: 1, story: 2 };
 const filteredQuests = computed(() => {
   const targetType = questTypeMap[questTab.value];
   return questList.value
-    .filter(q => q.type === targetType || (questTab.value === 'achieve' && q.type === 3))
+    .filter(q => q.type === targetType || (questTab.value === "achieve" && q.type === 3))
     .sort((a, b) => a.sort_order - b.sort_order);
 });
 
@@ -1098,32 +1102,32 @@ const playerGold = ref(50000);
 const playerStamina = ref(120);
 
 const playerSkills = ref([
-  { id: 1, name: '烈焰斩', icon: '🔥', level: 3, rarity: 'SR' },
-  { id: 2, name: '铁壁防御', icon: '🛡️', level: 2, rarity: 'R' },
-  { id: 3, name: '疾风步', icon: '💨', level: 1, rarity: 'N' },
-  { id: 4, name: '治愈术', icon: '💚', level: 1, rarity: 'SR' },
+  { id: 1, name: "烈焰斩", icon: "🔥", level: 3, rarity: "SR" },
+  { id: 2, name: "铁壁防御", icon: "🛡️", level: 2, rarity: "R" },
+  { id: 3, name: "疾风步", icon: "💨", level: 1, rarity: "N" },
+  { id: 4, name: "治愈术", icon: "💚", level: 1, rarity: "SR" },
 ]);
 
 const trainingModes = ref([
-  { id: 'strength', name: '力量训练', icon: '💪', effect: '攻击 +2', staminaCost: 10, type: 'attack' },
-  { id: 'defense', name: '防御训练', icon: '🛡️', effect: '防御 +2', staminaCost: 10, type: 'defense' },
-  { id: 'endurance', name: '耐力训练', icon: '❤️', effect: '生命 +10', staminaCost: 15, type: 'hp' },
-  { id: 'meditation', name: '冥想修炼', icon: '🧘', effect: '经验 +50', staminaCost: 20, type: 'exp' },
+  { id: "strength", name: "力量训练", icon: "💪", effect: "攻击 +2", staminaCost: 10, type: "attack" },
+  { id: "defense", name: "防御训练", icon: "🛡️", effect: "防御 +2", staminaCost: 10, type: "defense" },
+  { id: "endurance", name: "耐力训练", icon: "❤️", effect: "生命 +10", staminaCost: 15, type: "hp" },
+  { id: "meditation", name: "冥想修炼", icon: "🧘", effect: "经验 +50", staminaCost: 20, type: "exp" },
 ]);
 
 const equipmentSlots = ref([
-  { slot: 'weapon', label: '武器', item: { name: '新手剑', icon: '⚔️' } },
-  { slot: 'armor', label: '护甲', item: { name: '布甲', icon: '🎽' } },
-  { slot: 'accessory', label: '饰品', item: null },
-  { slot: 'rune', label: '符文', item: null },
+  { slot: "weapon", label: "武器", item: { name: "新手剑", icon: "⚔️" } },
+  { slot: "armor", label: "护甲", item: { name: "布甲", icon: "🎽" } },
+  { slot: "accessory", label: "饰品", item: null },
+  { slot: "rune", label: "符文", item: null },
 ]);
 
 const inventoryItems = ref([
-  { id: 1, name: '生命药水', icon: '🧪', count: 5 },
-  { id: 2, name: '攻击宝石', icon: '💎', count: 3 },
-  { id: 3, name: '经验卷轴', icon: '📜', count: 2 },
-  { id: 4, name: '强化石', icon: '🪨', count: 10 },
-  { id: 5, name: '幸运草', icon: '🍀', count: 1 },
+  { id: 1, name: "生命药水", icon: "🧪", count: 5 },
+  { id: 2, name: "攻击宝石", icon: "💎", count: 3 },
+  { id: 3, name: "经验卷轴", icon: "📜", count: 2 },
+  { id: 4, name: "强化石", icon: "🪨", count: 10 },
+  { id: 5, name: "幸运草", icon: "🍀", count: 1 },
 ]);
 
 const expToNextLevel = computed(() => playerLevel.value * 100);
@@ -1160,10 +1164,10 @@ function doGachaAnimation(count: number) {
 
   const results: { name: string; icon: string; rarity: string }[] = [];
   const pool = [
-    { name: '普通村民', icon: '👤', rarity: 'N', weight: 61 },
-    { name: '熟练工匠', icon: '🔨', rarity: 'R', weight: 30 },
-    { name: '精英战士', icon: '⚔️', rarity: 'SR', weight: 8 },
-    { name: '传奇英雄', icon: '👑', rarity: 'SSR', weight: 1 },
+    { name: "普通村民", icon: "👤", rarity: "N", weight: 61 },
+    { name: "熟练工匠", icon: "🔨", rarity: "R", weight: 30 },
+    { name: "精英战士", icon: "⚔️", rarity: "SR", weight: 8 },
+    { name: "传奇英雄", icon: "👑", rarity: "SSR", weight: 1 },
   ];
 
   for (let i = 0; i < count; i++) {
@@ -1171,9 +1175,7 @@ function doGachaAnimation(count: number) {
     let rarity: string;
 
     if (isGuaranteed) {
-      rarity = pool.filter(p => ['SR', 'SSR'].includes(p.rarity))[
-        Math.floor(Math.random() * 2)
-      ].rarity;
+      rarity = pool.filter(p => ["SR", "SSR"].includes(p.rarity))[Math.floor(Math.random() * 2)].rarity;
     } else {
       const total = pool.reduce((s, p) => s + p.weight, 0);
       let rand = Math.random() * total;
@@ -1213,17 +1215,17 @@ function doTraining(mode: { id: string; staminaCost: number; type: string; effec
   playerExp.value += 30;
 
   switch (mode.type) {
-    case 'attack':
+    case "attack":
       playerAttack.value += 1;
       break;
-    case 'defense':
+    case "defense":
       playerDefense.value += 1;
       break;
-    case 'hp':
+    case "hp":
       playerMaxHp.value += 5;
       playerHp.value += 5;
       break;
-    case 'exp':
+    case "exp":
       playerExp.value += 20;
       break;
   }
@@ -1270,7 +1272,7 @@ const phaserHasError = ref(false);
 
 const phaserWorld = usePhaserWorld();
 
-phaserWorld.onNPCClick((npc) => {
+phaserWorld.onNPCClick(npc => {
   selectNPC(npc);
 });
 
@@ -1317,16 +1319,20 @@ async function initPhaser() {
   }
 }
 
-watch(npcList, (newList) => {
-  if (usePhaser.value && phaserWorld.isReady.value) {
-    phaserWorld.setNPCs(newList);
-    loadNPCBehaviors();
-  }
-}, { deep: true });
+watch(
+  npcList,
+  newList => {
+    if (usePhaser.value && phaserWorld.isReady.value) {
+      phaserWorld.setNPCs(newList);
+      loadNPCBehaviors();
+    }
+  },
+  { deep: true }
+);
 
 const panelOnLeft = computed(() => {
-  const leftPanels = ['quest', 'npc', 'org', 'economy', 'chronicles'];
-  return leftPanels.includes(activePanel.value || '');
+  const leftPanels = ["quest", "npc", "org", "economy", "chronicles"];
+  return leftPanels.includes(activePanel.value || "");
 });
 
 const cellTypes = ["forest", "mountain", "water", "plain", "village", "city", "desert"];
@@ -1361,18 +1367,18 @@ function getNPCPosition(idx: number): Record<string, string> {
 }
 
 const behaviorIcons: Record<string, string> = {
-  idle: '😴',
-  work: '💼',
-  rest: '😌',
-  eat: '🍽️',
-  sleep: '💤',
-  socialize: '💬',
-  explore: '🚶',
-  trade: '💰',
+  idle: "😴",
+  work: "💼",
+  rest: "😌",
+  eat: "🍽️",
+  sleep: "💤",
+  socialize: "💬",
+  explore: "🚶",
+  trade: "💰",
 };
 
 function getBehaviorIcon(behavior: string): string {
-  return behaviorIcons[behavior] || '❓';
+  return behaviorIcons[behavior] || "❓";
 }
 
 function getBehaviorClass(behavior: string): string {
@@ -1380,10 +1386,7 @@ function getBehaviorClass(behavior: string): string {
 }
 
 async function refreshState() {
-  await Promise.all([
-    loadWorldState(),
-    loadWorldConfig(),
-  ]);
+  await Promise.all([loadWorldState(), loadWorldConfig()]);
 }
 
 async function toggleRunning() {
@@ -1463,10 +1466,7 @@ async function selectNPC(npc: SimverseNPC) {
 async function loadFocusContext(id: number) {
   focusLoading.value = true;
   try {
-    const [chronicle, rels] = await Promise.all([
-      loadChronicleNPC(id, 30),
-      loadNPCRelations(id),
-    ]);
+    const [chronicle, rels] = await Promise.all([loadChronicleNPC(id, 30), loadNPCRelations(id)]);
     npcChronicle.value = chronicle?.items ?? [];
     npcRelations.value = rels?.relations ?? [];
   } catch (e) {
@@ -1523,7 +1523,7 @@ async function loadEconomyData() {
   try {
     const [statsRes, rankRes] = await Promise.all([
       fetch("/api/simverse/economy/stats").then(r => r.json()),
-      fetch("/api/simverse/economy/wealth-rank?count=20").then(r => r.json())
+      fetch("/api/simverse/economy/wealth-rank?count=20").then(r => r.json()),
     ]);
     economyStats.value = statsRes;
     wealthRankings.value = rankRes.items || [];
@@ -1674,9 +1674,7 @@ function doGacha(count: number) {
     let rarity: string;
 
     if (isGuaranteed) {
-      rarity = pool.filter((p) => ["SR", "SSR", "UR"].includes(p.rarity))[
-        Math.floor(Math.random() * 3)
-      ].rarity;
+      rarity = pool.filter(p => ["SR", "SSR", "UR"].includes(p.rarity))[Math.floor(Math.random() * 3)].rarity;
     } else {
       const total = pool.reduce((s, p) => s + p.weight, 0);
       let rand = Math.random() * total;
@@ -1690,7 +1688,7 @@ function doGacha(count: number) {
       }
     }
 
-    const matched = pool.filter((p) => p.rarity === rarity)[0];
+    const matched = pool.filter(p => p.rarity === rarity)[0];
     results.push({ ...matched });
   }
 
@@ -1776,10 +1774,10 @@ function stopBehaviorPolling() {
 
 onMounted(async () => {
   if (isNativePluginMode()) {
-    lockScreenOrientation("landscape-primary").catch((e) => {
+    lockScreenOrientation("landscape-primary").catch(e => {
       console.warn("[SimverseWorld] Lock orientation failed:", e);
     });
-    hideSystemUI().catch((e) => {
+    hideSystemUI().catch(e => {
       console.warn("[SimverseWorld] Hide system UI failed:", e);
     });
   } else {

@@ -226,24 +226,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
-import {
-  useSimverse,
-  type SimverseSaveInfo,
-  type SimverseStorageStatus,
-} from "@/composables/useSimverse";
-import {
-  saveOutline,
-  downloadOutline,
-  chevronForwardOutline,
-  refreshOutline,
-  bugOutline,
-  documentTextOutline,
-} from "ionicons/icons";
-import { showDiagnosticPanel, isNativePluginMode } from "@/plugins/SimVerse";
+import { bugOutline, chevronForwardOutline, documentTextOutline, downloadOutline, refreshOutline, saveOutline } from "ionicons/icons";
+import { onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import { type SimverseSaveInfo, type SimverseStorageStatus, useSimverse } from "@/composables/useSimverse";
+import { isNativePluginMode, showDiagnosticPanel } from "@/plugins/SimVerse";
 
 const { t } = useI18n();
 const {
@@ -283,12 +272,7 @@ let pollInterval: number | null = null;
 async function refreshAll() {
   loading.value = true;
   try {
-    const [state, config, save, storage] = await Promise.all([
-      loadWorldState(),
-      loadWorldConfig(),
-      loadSaveInfo(),
-      loadStorageStatus(),
-    ]);
+    const [state, config, save, storage] = await Promise.all([loadWorldState(), loadWorldConfig(), loadSaveInfo(), loadStorageStatus()]);
     saveInfo.value = save;
     storageStatus.value = storage;
     updateStorageStatus();
@@ -379,7 +363,7 @@ function formatBytes(bytes: number): string {
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  return parseFloat((bytes / k ** i).toFixed(1)) + " " + sizes[i];
 }
 
 onMounted(async () => {

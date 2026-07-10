@@ -22,12 +22,12 @@
  *   - 无需 polyfill
  */
 
+import { type ComputedRef, computed, type Ref, ref, toRaw, watch } from "vue";
 import type { EncvTask } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 import type { ComputeInput, ComputeOutput } from "@/workers/taskViewCompute.worker";
 // 🆕 Vite 原生支持 ?worker import（dev 用 esbuild，build 用 rollup 单独打包）
 import TaskViewComputeWorker from "@/workers/taskViewCompute.worker?worker";
-import { type ComputedRef, computed, type Ref, ref, toRaw, watch } from "vue";
 
 export interface UseTaskViewComputeOptions {
   /** 任务列表（响应式） */

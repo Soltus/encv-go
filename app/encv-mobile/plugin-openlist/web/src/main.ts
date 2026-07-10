@@ -1,6 +1,6 @@
 import { registerI18nModule, useI18n } from "@encv/shared-components/composables/useI18n";
-import { initSharedI18n } from "@encv/shared-components/i18n";
 import { registerIonicComponents } from "@encv/shared-components/composables/useIonicAutoRegister";
+import { initSharedI18n } from "@encv/shared-components/i18n";
 import { IonicVue } from "@ionic/vue";
 import { createApp } from "vue";
 import App from "./App.vue";

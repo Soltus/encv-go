@@ -706,9 +706,7 @@ export function useSimverse() {
 
   async function loadOrgMembers(id: number, page = 1, pageSize = 50) {
     try {
-      const data = await fetchJSON(
-        `/api/simverse/org/${id}/members?page=${page}&page_size=${pageSize}`
-      );
+      const data = await fetchJSON(`/api/simverse/org/${id}/members?page=${page}&page_size=${pageSize}`);
       return data as SimverseOrgMembersResponse;
     } catch (e) {
       console.warn(`Failed to load org ${id} members:`, e);

@@ -8,9 +8,9 @@
  * 总延迟 = 500ms(防抖) + API耗时(~100-300ms) = 600-800ms
  */
 
+import { computed, nextTick, ref, watch } from "vue";
 import { type PluginCandidate, predictPlugin, type TaskField, type TaskOptions } from "@/api/encv";
 import { usePathResolver } from "@/composables/usePathResolver";
-import { computed, nextTick, ref, watch } from "vue";
 
 const { normalize } = usePathResolver();
 

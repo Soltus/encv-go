@@ -172,18 +172,29 @@
 </template>
 
 <script setup lang="ts" generic="T extends { id: number; level: string; message: string; timestamp: string; tags?: string[] }">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonButton, IonIcon,
-  IonSegment, IonSegmentButton, IonSearchbar, IonContent, IonBadge, IonSpinner,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  type IonContent,
+  IonHeader,
+  IonIcon,
+  IonPage,
+  IonSearchbar,
+  IonSegment,
+  IonSegmentButton,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
 } from "@ionic/vue";
-import { playOutline, pauseOutline, copyOutline, trashOutline, arrowUpOutline, arrowDownOutline, closeOutline } from "ionicons/icons";
-import { useI18n } from "../composables/useI18n";
+import { arrowDownOutline, arrowUpOutline, closeOutline, copyOutline, pauseOutline, playOutline, trashOutline } from "ionicons/icons";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { copyToClipboard } from "../composables/useClipboard";
+import { useI18n } from "../composables/useI18n";
 import { showToast } from "../composables/useToast";
-import VirtualLogList from "./VirtualLogList.vue";
-import FilterDropdown from "./shared/FilterDropdown.vue";
 import type { DropdownOption } from "./shared/FilterDropdown.vue";
+import FilterDropdown from "./shared/FilterDropdown.vue";
+import VirtualLogList from "./VirtualLogList.vue";
 
 interface LogTab {
   value: string;
@@ -215,10 +226,10 @@ const props = withDefaults(defineProps<Props>(), {
 });
 
 const emit = defineEmits<{
-  (e: "tab-change", tab: string): void
-  (e: "clear"): void
-  (e: "copy", items: readonly T[]): void
-  (e: "select", item: T): void
+  (e: "tab-change", tab: string): void;
+  (e: "clear"): void;
+  (e: "copy", items: readonly T[]): void;
+  (e: "select", item: T): void;
 }>();
 
 const { t } = useI18n();
@@ -240,14 +251,14 @@ const selectedLevelsArray = computed(() => Array.from(selectedLevels.value));
 const filteredItems = computed(() => {
   let items = props.items;
   if (selectedLevels.value.size > 0) {
-    items = items.filter((l) => selectedLevels.value.has(l.level));
+    items = items.filter(l => selectedLevels.value.has(l.level));
   }
   if (selectedTags.value.length > 0) {
-    items = items.filter((l) => l.tags?.some((t: string) => selectedTags.value.includes(t)));
+    items = items.filter(l => l.tags?.some((t: string) => selectedTags.value.includes(t)));
   }
   if (searchText.value) {
     const q = searchText.value.toLowerCase();
-    items = items.filter((l) => l.message.toLowerCase().includes(q));
+    items = items.filter(l => l.message.toLowerCase().includes(q));
   }
   return items;
 });
@@ -282,11 +293,16 @@ function closeLogDetail() {
 
 function getBadgeColor(level: string): string {
   switch (level) {
-    case "error": return "danger";
-    case "warn": return "warning";
-    case "info": return "primary";
-    case "debug": return "medium";
-    default: return "medium";
+    case "error":
+      return "danger";
+    case "warn":
+      return "warning";
+    case "info":
+      return "primary";
+    case "debug":
+      return "medium";
+    default:
+      return "medium";
   }
 }
 
@@ -329,7 +345,7 @@ async function ensureScrollEl() {
 async function handleCopy() {
   const items = filteredItems.value;
   if (items.length === 0) return;
-  const text = items.map((l) => `[${l.timestamp}] [${l.level.toUpperCase()}] ${l.message}`).join("\n");
+  const text = items.map(l => `[${l.timestamp}] [${l.level.toUpperCase()}] ${l.message}`).join("\n");
   try {
     await copyToClipboard(text);
     showToast({ message: t("devlogs.copied", { count: String(items.length) }) });

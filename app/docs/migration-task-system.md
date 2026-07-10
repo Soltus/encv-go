@@ -1,8 +1,50 @@
 # 任务系统共享化重构文档
 
 > 目标：把"任务系统"从 `encv-mobile` 应用层抽象为 `@encv/shared-components` 的可复用层。
-> 状态：规划阶段（尚未执行重构，仅完成现状测绘）。
-> 最后更新：2026-07-10
+> 状态：执行中（Phase 1 已完成，Phase 2 待设计决策）。
+> 最后更新：2026-07-10 22:28
+
+---
+
+## 9. 执行进度（滚动记录）
+
+### Phase 1 — 共享 API 基础设施 + 领域类型 ✅ 已完成（2026-07-10）
+- 新建 `shared/api/core/`（`errors` / `baseUrl` / `context` / `request` / `index`），提供 `apiRequest` 统一请求封装 + base URL/认证依赖注入。
+- `shared/index.ts` 追加 `export * from "./api/core"` 使基座对外可见。
+- 新建 `shared/types/task.ts`，把 `EncvTask` / `TaskType` / `TaskStatus` / `TaskStep` / `BatchTaskSpec` / `RunSummary` / `RunInfo` / `PerformanceSummary` 从 `encv_tasks` 提升为共享类型层；原 `encv-mobile/src/api/encv_tasks.ts` 与 `encv_perf.ts` 改为 re-export 兼容垫片。
+- `encv-mobile/src/api/encv_tasks.ts` 的 `getTasks` 改用 `apiRequest`（行为兼容）。
+- **门禁**：② encv-mobile `pnpm typecheck` exit 0 ✅；③ `python3 scripts/i18n-tool.py lint --all` 0 问题 ✅；① shared 独立类型检查因环境限制（vue-tsc 超 2 分钟被工具 kill）+ 已知 315 既有错误未跑通，改动经 read_lints 0 错且 encv-mobile 类型检查通过证明其导入可解析，未引入新错。
+
+### Phase 2 — 任务领域 store 与类型（store ✅ / workflow types ⏸）
+**已采用推荐方案①（依赖注入注册函数）完成 store 提升（2026-07-10 22:37）：**
+- 新增 `shared/src/stores/taskServices.ts`：DI 容器（`setTaskServices` / `getTaskServices`），定义 `TaskServices` / `TaskPersistence` / `SearchMode` 接口；未注入时返回安全空实现（不崩溃）。
+- `taskStore` / `runTasksStore` 从 `encv-mobile/src/stores/` 提升为 `shared/src/stores/`，内部不再直接 import 应用层 `@/api/encv` / `@/lib/taskPersistence`，改为消费注入的服务（向量搜索 `searchTasksVector`、分页 `getTasks`、IndexedDB `persistence.*`）。
+- `encv-mobile/src/stores/taskStore.ts` / `runTasksStore.ts` 改为 re-export 兼容垫片，转发到 `@encv/shared-components/stores/*`。
+- 新增 `encv-mobile/src/stores/registerSharedTaskServices.ts`，在 `main.ts` 启动期（`createApp().use(pinia)` 之后、mount 之前）调用 `registerSharedTaskServices()`，把真实 `searchTasksVector` / `getTasks` / `taskPersistence` 注入共享层。
+- 验证手段：新增 `app/scripts/check-all.mjs`（注册为 `pnpm check:all` / `check:all:quick`），覆盖 biome CI / encv-mobile typecheck / shared typecheck / i18n lint --all / 单测，输出 `check-report.md`。encv-mobile typecheck 会顺带类型检查被导入的共享 store 文件，可作为 Phase 2 门禁。
+
+**仍阻塞（未做，非方案①范围）：**
+- `lib/workflow/types.ts` 提升：完整定义依赖 `ErrorAnalysis`（`useErrorAnalyzer`）+ `TriggeredBy`（`useTaskTrigger`），二者是 **Phase 3** composable，尚未进 shared，提前提升制造前向依赖；且 shared 的 `Phase` 是 `const` 对象、encv-mobile 是 `enum`（值相同、TS 种类不同），统一需选定一种并改全部消费方。留待 Phase 3 一并处理。
+
+### check:all 门禁现状（2026-07-10 23:15，跑 `pnpm check:all` 生成 `app/check-report.md`）
+首轮 2 通过 / 3 失败；**真正根因**在二次排查中定位：`encv-mobile/vite.config.ts` 配了 `@encv/shared-components` 别名 + `encv-alias-fallback` 插件（让 `@/` fallback 到 shared src），但 **`vitest.config.ts` 两者都没配**，且 **tsconfig `paths` 只配了 `"@encv/shared-components/*"` 子路径、没配裸 `@encv/shared-components`**。故应用构建能解析 shared 导入，测试运行时 vite 解析不到、tsc 也解析不到裸包。
+
+**已落地修复（让测试解析与构建一致）：**
+1. `vitest.config.ts`：新增 `SHARED_SRC` 常量并加 `'@encv/shared-components'` / `'@encv/shared-components/'` 别名到 `sharedTestConfig().alias` 与 `resolve.alias`（与 vite.config.ts 对齐）。→ 修好全部 shared 裸包/子路径在测试期的解析（activeStatus、useToast、以及 FULL 模式下的 GroupDetail/Tasks 组件测试等）。
+2. `tsconfig.json`：paths 补 `"@encv/shared-components": ["../packages/shared-components/src"]`（裸包映射）。→ 修好 typecheck 因裸包导入翻车的问题。
+3. `encv_core.ts` / `encv_tasks.ts`：内部 `import ... from "@/api/core"` 改为 `@encv/shared-components/api/core`（`@/api/core` 仅构建期 fallback 能解析，测试期 vite 解析不到）。→ 修好 `renderTurnItems.test.ts` 等。
+4. `shared/src/vite-plugins/vue-component-check.ts`：折叠 `console.log` 多行调用为单行（biome 格式报错；上一轮只修了 import 排序，还有 console.log 格式点）。**二次重跑又暴露 `console.warn` 多行调用（line 301-303）未折叠 → 已折叠为单行**（biome 对该文件有多处格式点，需逐一修）。\n5. **单测 `.vue` 解析失败根因修复**：上一轮把 `useToast.ts`/`activeStatus.ts` 垫片改成从 **main barrel** `@encv/shared-components` 导入，而 shared 的 `index.ts` 把**所有 .vue 组件（含 `SettingsPage.vue`）一并 re-export** → `useAgent.ts` 经 useToast shim 拉入 .vue → vitest 的 `fast` project 无 `plugin-vue` 解析失败（`vitest.config.ts` 顶层 `plugins:[vue()]` 不继承到 named projects）。\n   - 修法（比全局开 plugin-vue 更安全，避免把整个 shared 包拉进每个测试）：垫片改回**子路径导入**——`useToast.ts` → `export { showToast } from \"@encv/shared-components/composables/useToast\"`；`activeStatus.ts` → `export * from \"@encv/shared-components/composables/activeStatus\"`（子路径，vitest 已有 `@encv/shared-components/` 别名可解析，且不碰 .vue）。
+
+**首轮已修的迁移债务（保留）：** 新建 `encv-mobile/src/composables/useToast.ts` 转发垫片，修好 35+ 处 `@/composables/useToast` 引用（`useAgent.test.ts` 等）。
+
+**预期门禁状态：** Biome CI / encv-mobile typecheck / encv-mobile 单测 应转绿；**shared-components typecheck 仍 FAIL**（已知 315 既有错：vitest/@vue/test-utils 模块解析 + `IncrementalFilter` 引 `useFrontendLogs` 子路径），错误列表里无本次新增 store 文件 → Phase 2 在 shared 内类型干净，留待 Phase 3–6。若 Biome 仍报 vue-component-check.ts 其他格式点，需用户贴回新报告继续修。
+
+### 收尾（2026-07-10 23:50，第四次 `pnpm check:all`）
+- 用户重跑：**encv-mobile 单测 ✅PASS、typecheck ✅、i18n ✅**；仅 Biome 仍 FAIL + shared typecheck 仍 FAIL。
+- **Biome 报告"乱码"根因**：`scripts/check-all.mjs` 用 `spawn` 跑 `pnpm biome:ci` 时 `env: process.env`（未设 NO_COLOR），biome 输出带 ANSI 颜色转义码（`[0m[31m…`）被原样写进 `check-report.md` → 终端/IDE 显示为乱码。biome 本身没问题，是报告脚本没去色。
+  - 修复 `scripts/check-all.mjs`：① spawn 时 `env: {...process.env, NO_COLOR:'1', FORCE_COLOR:'0'}`（根上关色）；② 新增 `stripAnsi()` 并在写报告时对失败输出去色（防御）。→ 后续报告纯文本可读。
+- **Biome 最后一个格式点**：`vue-component-check.ts:267-269` 的 `console.log(\`…\n\`,\n)` 多行调用未折叠 → 已折叠为单行。全文件 11 处 console.* 仅此一处多行。
+- **预期本轮（第五次）重跑**：**Biome CI ✅**（首次全绿）、encv-mobile typecheck ✅、单测 ✅、i18n ✅；**仅 shared typecheck 仍 FAIL**（315 既有错，非本次范围）。报告文件不再有 ANSI 乱码。
 
 ---
 
@@ -132,13 +174,23 @@ server 域（`useServerStatus`/`useOpenListBridge`/`useRealtimeTransport`…）�
 ## 6. 复验标准（每阶段门禁）
 
 ```bash
+# 全量门禁（推荐：一条命令覆盖下列全部）
+pnpm check:all            # 含单测；或 pnpm check:all:quick 跳过单测
+# 完整日志写入 check-logs/<suite>.log，报告见 check-report.md
+
+# ── 手动逐项（等价 check:all 的子集） ──
 # 1. shared-components 类型检查
 cd /workspace/app && npx vue-tsc --noEmit -p packages/shared-components/tsconfig.json
 
 # 2. encv-mobile 类型检查
 npx vue-tsc --noEmit -p encv-mobile/tsconfig.json
 
-# 3. 全局 i18n
+# 3. plugin-* web 类型检查（pnpm 工作区三个插件，各有独立 typecheck）
+npx vue-tsc --noEmit -p encv-mobile/plugin-openlist/web/tsconfig.json
+npx vue-tsc --noEmit -p encv-mobile/plugin-mpv-player/web/tsconfig.json
+npx vue-tsc --noEmit -p encv-mobile/plugin-simverse/web/tsconfig.json
+
+# 4. 全局 i18n
 python3 scripts/i18n-tool.py lint --all
 ```
 

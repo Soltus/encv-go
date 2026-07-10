@@ -10,7 +10,7 @@
 
 <script setup lang="ts">
 import AboutPage from "@encv/shared-components/components/about/AboutPage.vue";
-import { ref, onMounted } from "vue";
+import { onMounted, ref } from "vue";
 import { OpenListNative } from "@/plugins/openlist-native";
 
 const version = ref("unknown");

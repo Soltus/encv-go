@@ -604,9 +604,6 @@
   </ion-page>
 </template>
 <script setup lang="ts">
-import { getFileIcon, getFileIconColor, isImageFile } from "@/composables/useFileList";
-import { formatFileSize } from "@/api/encv_files";
-import { formatDateTime } from "@/composables/useDateFormat";
 import {
   alertCircle,
   arrowBack,
@@ -626,6 +623,9 @@ import {
   swapVerticalOutline,
   warningOutline,
 } from "ionicons/icons";
+import { formatFileSize } from "@/api/encv_files";
+import { formatDateTime } from "@/composables/useDateFormat";
+import { getFileIcon, getFileIconColor, isImageFile } from "@/composables/useFileList";
 
 // Files.vue 重构后只剩 thin script：调用 useFilesView() composable + 必要 imports。
 // 原 1565 行 script 逻辑已全部抽到 ./useFilesView.ts。

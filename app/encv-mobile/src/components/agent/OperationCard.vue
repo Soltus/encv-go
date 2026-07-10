@@ -99,10 +99,6 @@
 </template>
 
 <script setup lang="ts">
-import type { ToolCall } from "@/composables/useAgent";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import StatusBadge from "@/components/agent/StatusBadge.vue";
 import {
   alertCircleOutline,
   chevronDownOutline,
@@ -115,6 +111,10 @@ import {
   terminalOutline,
 } from "ionicons/icons";
 import { computed, ref } from "vue";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
+import type { ToolCall } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
+import { showToast } from "@/composables/useToast";
 
 const props = defineProps<{
   toolCall: ToolCall;

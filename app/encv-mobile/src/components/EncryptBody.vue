@@ -185,22 +185,17 @@
 </template>
 
 <script setup lang="ts">
-import {
-  documentText,
-  folderOpen,
-  lockClosed,
-} from "ionicons/icons";
-
+import { modalController } from "@ionic/vue";
+import { documentText, folderOpen, lockClosed } from "ionicons/icons";
+import { computed } from "vue";
 import type { ContainerVersionInfo, TaskField } from "@/api/encv";
+import ContainerVersionSelector from "@/components/ContainerVersionSelector.vue";
 import FilePickerModal from "@/components/FilePickerModal.vue";
 import InputWithHistory from "@/components/InputWithHistory.vue";
-import ContainerVersionSelector from "@/components/ContainerVersionSelector.vue";
-import RadioItem from "@/components/RadioItem.vue";
 import type { NewTaskState } from "@/components/NewTaskState";
+import RadioItem from "@/components/RadioItem.vue";
 import { useI18n } from "@/composables/useI18n";
 import { isRecommendedVersion } from "@/constants/containerVersion";
-import { modalController } from "@ionic/vue";
-import { computed } from "vue";
 
 const props = withDefaults(
   defineProps<{

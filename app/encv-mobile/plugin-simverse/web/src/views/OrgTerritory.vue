@@ -57,16 +57,32 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonCard,
+  IonCardHeader,
+  IonCardSubtitle,
+  IonCardTitle,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, location, refreshOutline } from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonCard, IonCardHeader, IonCardTitle,
-  IonCardSubtitle, IonList, IonListHeader, IonLabel, IonItem, IonNote, IonSpinner,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline, location } from "ionicons/icons";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseOrgTerritoryResponse } from "@/composables/useSimverse";
+import { type SimverseOrgTerritoryResponse, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const route = useRoute();

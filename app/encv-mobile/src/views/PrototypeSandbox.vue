@@ -83,17 +83,12 @@
 </template>
 
 <script setup lang="ts">
+import { codeSlashOutline, copyOutline, eyeOutline, logoVue } from "ionicons/icons";
+import { computed, provide, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { copyToClipboard } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
-import {
-  codeSlashOutline,
-  copyOutline,
-  eyeOutline,
-  logoVue,
-} from "ionicons/icons";
-import { computed, provide, ref, watch } from "vue";
-import { useRoute } from "vue-router";
 import { getPrototype } from "./prototypes/registry";
 
 const { t } = useI18n();

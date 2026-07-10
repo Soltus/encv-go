@@ -47,18 +47,12 @@
 </template>
 
 <script setup lang="ts">
-import {
-  copyOutline,
-  documentTextOutline,
-  folderOpenOutline,
-  gitBranchOutline,
-} from "ionicons/icons";
-
+import { copyOutline, documentTextOutline, folderOpenOutline, gitBranchOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
 import { copyToClipboard } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
-import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
 
 const props = defineProps<{
   path: string;

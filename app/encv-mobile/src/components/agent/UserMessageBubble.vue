@@ -22,8 +22,8 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "@/composables/useI18n";
 import { computed, ref } from "vue";
+import { useI18n } from "@/composables/useI18n";
 
 const props = defineProps<{
   text: string;

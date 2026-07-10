@@ -1,4 +1,4 @@
-import { onUnmounted, watch, type Ref } from "vue";
+import { onUnmounted, type Ref, watch } from "vue";
 import { useSimverse } from "./useSimverse";
 
 export interface LiveRefreshOptions {
@@ -15,10 +15,7 @@ export interface LiveRefreshOptions {
  * - 主路径：监听 WS 实时信号（economy:update / chronicle:event），世界运行时自动刷新；
  * - 兜底：WS 未连接时按 pollMs 轮询，连接恢复即停止轮询（"实时推送替代轮询"）。
  */
-export function useLiveRefresh(
-  refresh: () => void | Promise<void>,
-  opts: LiveRefreshOptions = {}
-) {
+export function useLiveRefresh(refresh: () => void | Promise<void>, opts: LiveRefreshOptions = {}) {
   const { isConnected } = useSimverse();
   const throttleMs = opts.throttleMs ?? 2000;
   let pollTimer: number | null = null;
@@ -59,7 +56,7 @@ export function useLiveRefresh(
   // WS 未连接 → 兜底轮询；连接恢复 → 停止轮询
   watch(
     isConnected,
-    (connected) => {
+    connected => {
       if (connected) stopPoll();
       else startPoll();
     },

@@ -14,8 +14,8 @@
  *  - localStorage 用真实实现（happy-dom 提供）
  */
 
-import { checkServerStatus, getPersistedBackendIdentity } from "@/api/encv";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { checkServerStatus, getPersistedBackendIdentity } from "@/api/encv";
 
 function makePingResponse(
   overrides: Partial<{

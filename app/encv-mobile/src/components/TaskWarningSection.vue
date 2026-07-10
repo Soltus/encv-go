@@ -10,9 +10,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-  warningOutline,
-} from "ionicons/icons";
+import { warningOutline } from "ionicons/icons";
 
 import type { EncvTask } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";

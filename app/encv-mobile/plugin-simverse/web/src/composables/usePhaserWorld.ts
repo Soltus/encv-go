@@ -1,10 +1,10 @@
-import { ref, onMounted, onUnmounted, shallowRef } from "vue";
-import Phaser from "phaser";
-import { createPhaserGame, destroyPhaserGame } from "@/game/main";
-import { phaserEventBus, PHASER_EVENTS } from "@/game/PhaserEventBus";
-import { WorldScene } from "@/game/WorldScene";
+import type Phaser from "phaser";
+import { onMounted, onUnmounted, ref, shallowRef } from "vue";
 import type { SimverseNPC } from "@/composables/useSimverse";
-import { useWorldRenderSettings, QUALITY_RESOLUTION, type RenderQuality } from "@/composables/useWorldRenderSettings";
+import { QUALITY_RESOLUTION, type RenderQuality, useWorldRenderSettings } from "@/composables/useWorldRenderSettings";
+import { createPhaserGame, destroyPhaserGame } from "@/game/main";
+import { PHASER_EVENTS, phaserEventBus } from "@/game/PhaserEventBus";
+import type { WorldScene } from "@/game/WorldScene";
 
 export interface RegionEnterData {
   regionId: string;
@@ -55,7 +55,7 @@ export function usePhaserWorld() {
 
   function handleNPCClick(npc: SimverseNPC) {
     selectedNPC.value = npc;
-    npcClickHandlers.forEach((h) => h(npc));
+    npcClickHandlers.forEach(h => h(npc));
   }
 
   // 将 WorldSettings 的帧率/等效渲染等级应用到运行中的 Phaser 游戏
@@ -87,15 +87,15 @@ export function usePhaserWorld() {
   }
 
   function handleRegionEnter(data: RegionEnterData) {
-    regionEnterHandlers.forEach((h) => h(data));
+    regionEnterHandlers.forEach(h => h(data));
   }
 
   function handleBattleStart(data: BattleStartData) {
-    battleStartHandlers.forEach((h) => h(data));
+    battleStartHandlers.forEach(h => h(data));
   }
 
   function handleBattleEnd(result: string) {
-    battleEndHandlers.forEach((h) => h(result));
+    battleEndHandlers.forEach(h => h(result));
   }
 
   function setGameContainer(el: HTMLElement) {

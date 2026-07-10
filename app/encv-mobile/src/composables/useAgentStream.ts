@@ -11,26 +11,26 @@
  * useAgent() 在定义好所有闭包函数后，构造 ctx 并调用 createAgentStream(ctx)
  * 取回 processSSE / handleAgentEvent 等函数，行为与原实现完全一致。
  */
-import { type Ref } from "vue";
+import type { Ref } from "vue";
+import { processAGUISSE as processAGUISSEImpl } from "./useAGUIParser";
 import {
+  type AgentEvent,
+  type AgentStatus,
   appendSequencedChunk,
   CONTEXT_COMPACTION_MARKER,
   MAX_TRACKED_REALTIME_SEQUENCES,
+  type Message,
+  type MockBranch,
+  type MockPreset,
+  type MockRoundState,
   parseCompactionData,
   parseContentDelta,
   parseStreamStatusData,
   parseToolCallData,
   parseToolResultData,
   parseToolStatus,
-  type AgentEvent,
-  type AgentStatus,
-  type Message,
-  type MockBranch,
-  type MockPreset,
-  type MockRoundState,
   type ToolCall,
 } from "./useAgent_helpers";
-import { processAGUISSE as processAGUISSEImpl } from "./useAGUIParser";
 
 /** useAgent() 闭包状态 / 内部函数的显式访问上下文 */
 export interface AgentStreamContext {
@@ -121,10 +121,7 @@ export function createAgentStream(ctx: AgentStreamContext) {
    *   - morePending:   最后一个有意义事件是否为 stream_status.more_pending
    *                    （若 true 且 !streamEnded，runResumeChain 应继续下一轮）
    */
-  async function processSSE(
-    stream: ReadableStream<Uint8Array> | null,
-    protocol: "agui" | "legacy" = "legacy"
-  ): Promise<ProcessSSEResult> {
+  async function processSSE(stream: ReadableStream<Uint8Array> | null, protocol: "agui" | "legacy" = "legacy"): Promise<ProcessSSEResult> {
     if (protocol === "agui") {
       return processAGUISSEWithHandlers(stream);
     }
@@ -248,9 +245,7 @@ export function createAgentStream(ctx: AgentStreamContext) {
    * AG-UI 协议路径：包装 useAGUIParser.processAGUISSE 把
    * 11 种 AG-UI 事件归一化为内部 AgentEvent，再走 handleAgentEvent。
    */
-  async function processAGUISSEWithHandlers(
-    stream: ReadableStream<Uint8Array> | null
-  ): Promise<ProcessSSEResult> {
+  async function processAGUISSEWithHandlers(stream: ReadableStream<Uint8Array> | null): Promise<ProcessSSEResult> {
     return processAGUISSEImpl(stream, {
       onEvent: event => {
         const dataSummary =

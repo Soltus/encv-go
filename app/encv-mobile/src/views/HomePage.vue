@@ -60,19 +60,12 @@
 </template>
 
 <script setup lang="ts">
-import {
-  folder,
-  globe,
-  layersOutline,
-  lockClosed,
-  playCircle,
-} from "ionicons/icons";
-
+import { onIonViewWillEnter } from "@ionic/vue";
+import { folder, globe, layersOutline, lockClosed, playCircle } from "ionicons/icons";
+import { useRouter } from "vue-router";
+import AgentEntry from "@/components/agent/AgentEntry.vue";
 import { useI18n } from "@/composables/useI18n";
 import { isNative } from "@/plugins/GoProcess";
-import AgentEntry from "@/components/agent/AgentEntry.vue";
-import { onIonViewWillEnter } from "@ionic/vue";
-import { useRouter } from "vue-router";
 
 const { t } = useI18n();
 const router = useRouter();

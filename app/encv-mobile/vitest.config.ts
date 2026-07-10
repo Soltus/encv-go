@@ -8,6 +8,9 @@ import path from 'path'
 // '@/...'" errors even though vue-tsc compiles fine.
 const SRC_DIR = path.resolve(__dirname, './src')
 const TDESIGN_STUB = path.resolve(__dirname, './src/engines/__tests__/__mocks__/tdesign-chat.mjs')
+// 与 vite.config.ts 对齐：让 `@encv/shared-components`（含子路径）在测试运行时可解析。
+// 否则 vite 不读 tsconfig 的 paths 映射，shared 子路径/裸包导入在测试里解析不到。
+const SHARED_SRC = path.resolve(__dirname, '../packages/shared-components/src')
 
 // ═══════════════════════════════════════════════════════════════════
 // 2026-07-02 性能优化：和 Go 对齐的"分层 + 守卫"模式
@@ -137,6 +140,8 @@ function sharedTestConfig() {
     alias: {
       '@': SRC_DIR,
       '@tdesign-vue-next/chat': TDESIGN_STUB,
+      '@encv/shared-components': SHARED_SRC,
+      '@encv/shared-components/': SHARED_SRC + '/',
     },
     exclude: [
       '**/node_modules/**',
@@ -172,6 +177,8 @@ export default defineConfig({
     alias: {
       '@': SRC_DIR,
       '@tdesign-vue-next/chat': TDESIGN_STUB,
+      '@encv/shared-components': SHARED_SRC,
+      '@encv/shared-components/': SHARED_SRC + '/',
     },
   },
   test: {

@@ -47,16 +47,27 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonList, IonListHeader, IonLabel,
-  IonItem, IonSpinner,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline, swapHorizontal, trendingUp } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseEconomyShocksResponse } from "@/composables/useSimverse";
+import {
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, refreshOutline, swapHorizontal, trendingUp } from "ionicons/icons";
+import { onMounted, ref } from "vue";
 import { useLiveRefresh } from "@/composables/useLiveRefresh";
+import { type SimverseEconomyShocksResponse, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const { loadEconomyShocks, economySignal } = useSimverse();

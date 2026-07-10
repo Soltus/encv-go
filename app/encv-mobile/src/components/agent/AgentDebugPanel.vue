@@ -180,13 +180,9 @@
 </template>
 
 <script setup lang="ts">
-import type { Message, ToolCall } from "@/composables/useAgent";
-import {
-  bugOutline,
-  copyOutline,
-  refreshOutline,
-} from "ionicons/icons";
+import { bugOutline, copyOutline, refreshOutline } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
+import type { Message, ToolCall } from "@/composables/useAgent";
 
 type RenderedItemLike = { type: string; [k: string]: unknown };
 

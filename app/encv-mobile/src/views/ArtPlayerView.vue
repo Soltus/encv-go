@@ -58,21 +58,16 @@
 </template>
 
 <script setup lang="ts">
-import {
-  arrowBack,
-  resize,
-  time,
-} from "ionicons/icons";
-
+import type Artplayer from "artplayer";
+import { arrowBack, resize, time } from "ionicons/icons";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { getAlistEncryptStreamUrl, getFileStreamUrl } from "@/api/encv";
-import ErrorStateCard from "@/components/ErrorStateCard.vue";
 import type { ErrorDetailItem, ErrorType } from "@/components/ErrorStateCard.vue";
+import ErrorStateCard from "@/components/ErrorStateCard.vue";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import { isNative } from "@/plugins/GoProcess";
-import type Artplayer from "artplayer";
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
 
 const TAG = "[ArtPlayer]";
 

@@ -42,18 +42,12 @@
 </template>
 
 <script setup lang="ts">
-import {
-  checkmarkCircle,
-  documentTextOutline,
-  folderOpenOutline,
-  playCircleOutline,
-} from "ionicons/icons";
-
+import { checkmarkCircle, documentTextOutline, folderOpenOutline, playCircleOutline } from "ionicons/icons";
+import { computed } from "vue";
 import type { EncvTask } from "@/api/encv";
 import { formatDuration } from "@/composables/useDateFormat";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
-import { computed } from "vue";
 
 const props = defineProps<{ task: EncvTask }>();
 const emit = defineEmits<{

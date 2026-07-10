@@ -50,11 +50,11 @@ import {
 // 重新导出所有 helpers 以保持向后兼容（`import { ... } from '@/composables/useAgent'`）
 export * from "./useAgent_helpers";
 
-import { showToast } from "@/composables/useToast";
 import { computed, ref } from "vue";
+import { showToast } from "@/composables/useToast";
 import { getAgentApiBaseContext, shouldSendAGUIHeader } from "./useAgentApiBase";
 // SSE 解析器 + 事件分发（拆分到 useAgentStream.ts，通过 ctx 访问闭包状态）
-import { createAgentStream, type AgentStreamContext } from "./useAgentStream";
+import { type AgentStreamContext, createAgentStream } from "./useAgentStream";
 import { type Attachment, type MessageContentPart, serializeAttachments } from "./useAttachments";
 import { useContextUsage } from "./useContextUsage";
 import { getDeviceIdSync } from "./useDeviceId";

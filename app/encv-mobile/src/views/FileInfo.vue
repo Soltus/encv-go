@@ -181,8 +181,6 @@
 </template>
 
 <script setup lang="ts">
-import { formatContainerVersion } from "@/constants/containerVersion";
-import { formatFileSize } from "@/api/encv_files";
 import {
   alertCircle,
   arrowBack,
@@ -196,13 +194,15 @@ import {
   lockClosed,
   settingsOutline,
 } from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 import type { FileItem, PredictPluginResponse } from "@/api/encv";
 import { getApiBaseUrl, getExternalStreamUrl, predictPlugin, proxySafeEncode } from "@/api/encv";
+import { formatFileSize } from "@/api/encv_files";
 import { useI18n } from "@/composables/useI18n";
+import { formatContainerVersion } from "@/constants/containerVersion";
 import { getDecodedName, isAlistEncrypted, loadDecodedName } from "@/features/alist-encrypt/useAlistEncrypt";
-import { computed, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
 
 const { t } = useI18n();
 const router = useRouter();

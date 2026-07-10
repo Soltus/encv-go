@@ -34,14 +34,8 @@
 </template>
 
 <script setup lang="ts">
-import {
-  home,
-  people,
-  newspaper,
-  settings,
-  documentText,
-} from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { documentText, home, newspaper, people, settings } from "ionicons/icons";
 
 const { t } = useI18n();
 

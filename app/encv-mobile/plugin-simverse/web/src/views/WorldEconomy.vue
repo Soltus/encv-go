@@ -74,21 +74,37 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonCard, IonCardHeader, IonCardTitle,
-  IonCardContent, IonGrid, IonRow, IonCol, IonList, IonListHeader, IonLabel,
-  IonItem, IonNote, IonSpinner, IonSegment, IonSegmentButton,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
-  useSimverse,
-  type SimverseEconomyPrices,
-  type SimverseEconomyShocksResponse,
-} from "@/composables/useSimverse";
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonCard,
+  IonCardContent,
+  IonCardHeader,
+  IonCardTitle,
+  IonCol,
+  IonContent,
+  IonGrid,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonRow,
+  IonSegment,
+  IonSegmentButton,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, refreshOutline } from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
 import { useLiveRefresh } from "@/composables/useLiveRefresh";
+import { type SimverseEconomyPrices, type SimverseEconomyShocksResponse, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const { loadEconomyPrices, loadEconomyShocks, recordQuestAction, economySignal } = useSimverse();

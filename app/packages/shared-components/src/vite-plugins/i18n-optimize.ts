@@ -1,12 +1,10 @@
-import type { Plugin } from "vite";
-import path from "node:path";
 import fs from "node:fs";
+import path from "node:path";
+import type { Plugin } from "vite";
 
 const I18N_FILE_REGEX = /[\\/]i18n[\\/].+\.ts$/;
 
-export function i18nOptimizePlugin(options?: {
-  i18nDirs?: string[];
-}): Plugin {
+export function i18nOptimizePlugin(options?: { i18nDirs?: string[] }): Plugin {
   const i18nDirs = options?.i18nDirs ?? [];
   let isDev = false;
   let isBuild = false;
@@ -52,10 +50,7 @@ export function i18nOptimizePlugin(options?: {
         const match = trimmed.match(/["']([^"']+)["']\s*:\s*["']((?:[^"\\]|\\.)*)["']/);
         if (match) {
           const key = match[1];
-          const value = match[2]
-            .replace(/\\"/g, '"')
-            .replace(/\\'/g, "'")
-            .replace(/\\\\/g, "\\");
+          const value = match[2].replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\\/g, "\\");
           if (!key.startsWith("//")) {
             result[currentLocale][key] = value;
           }
@@ -69,10 +64,7 @@ export function i18nOptimizePlugin(options?: {
   function compactI18nStrings(code: string): string {
     let result = code;
 
-    result = result.replace(
-      /"([a-zA-Z0-9_.-]{3,})"\s*:\s*"((?:[^"\\]|\\.){2,})"(?=\s*[,}\]])/g,
-      '"$1":"$2"',
-    );
+    result = result.replace(/"([a-zA-Z0-9_.-]{3,})"\s*:\s*"((?:[^"\\]|\\.){2,})"(?=\s*[,}\]])/g, '"$1":"$2"');
 
     return result;
   }
@@ -133,8 +125,7 @@ export function i18nOptimizePlugin(options?: {
 
         const moduleIds = (chunk as any).moduleIds as string[] | undefined;
         const hasI18nModule =
-          fileName.includes("i18n") ||
-          (moduleIds && moduleIds.some((mid) => mid.includes("/i18n/") || mid.includes("useI18n")));
+          fileName.includes("i18n") || (moduleIds && moduleIds.some(mid => mid.includes("/i18n/") || mid.includes("useI18n")));
 
         if (!hasI18nModule) continue;
 
@@ -157,7 +148,7 @@ export function i18nOptimizePlugin(options?: {
         console.info(
           `\n  [i18n-optimize] ${i18nChunkCount} i18n chunk(s): ` +
             `${(i18nOriginalSize / 1024).toFixed(1)} KB → ${(i18nOptimizedSize / 1024).toFixed(1)} KB ` +
-            `(${(saved).toFixed(1)}% reduced)\n`,
+            `(${(saved).toFixed(1)}% reduced)\n`
         );
       }
     },

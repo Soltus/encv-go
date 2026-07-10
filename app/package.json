@@ -7,7 +7,9 @@
     "lint:fix": "biome check --write .",
     "format": "biome format .",
     "format:fix": "biome format --write .",
-    "biome:ci": "biome ci ."
+    "biome:ci": "biome ci .",
+    "check:all": "node scripts/check-all.mjs",
+    "check:all:quick": "node scripts/check-all.mjs --no-tests"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2"

@@ -11,7 +11,7 @@
 </template>
 
 <script setup lang="ts">
-import { IonItem, IonIcon, IonLabel } from "@ionic/vue";
+import { IonIcon, IonItem, IonLabel } from "@ionic/vue";
 
 interface Props {
   icon?: any;

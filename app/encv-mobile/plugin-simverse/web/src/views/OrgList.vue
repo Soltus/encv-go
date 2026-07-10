@@ -56,16 +56,29 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, business, gitNetwork, refreshOutline } from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonList, IonListHeader, IonLabel,
-  IonItem, IonBadge, IonNote, IonSpinner,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline, business, gitNetwork } from "ionicons/icons";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseOrg } from "@/composables/useSimverse";
+import { type SimverseOrg, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const router = useRouter();

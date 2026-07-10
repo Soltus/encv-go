@@ -104,18 +104,14 @@
 </template>
 
 <script setup lang="ts">
-import {
-  checkmarkCircle,
-  lockClosed,
-} from "ionicons/icons";
-
-import type { ContainerVersionInfo, PluginCandidate, TaskField, TaskOptions } from "@/api/encv";
-import type { NewTaskState } from "@/components/NewTaskState";
-import EncryptBody from "@/components/EncryptBody.vue";
-import DecryptBody from "@/components/DecryptBody.vue";
-import { useI18n } from "@/composables/useI18n";
 import { modalController } from "@ionic/vue";
+import { checkmarkCircle, lockClosed } from "ionicons/icons";
 import { computed, reactive } from "vue";
+import type { ContainerVersionInfo, PluginCandidate, TaskField, TaskOptions } from "@/api/encv";
+import DecryptBody from "@/components/DecryptBody.vue";
+import EncryptBody from "@/components/EncryptBody.vue";
+import type { NewTaskState } from "@/components/NewTaskState";
+import { useI18n } from "@/composables/useI18n";
 
 const { t } = useI18n();
 

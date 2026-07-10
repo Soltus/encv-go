@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import type { SimverseNPC } from "@/composables/useSimverse";
-import { deriveBuildFromNPC, ARCH_META } from "./builds";
+import { ARCH_META, deriveBuildFromNPC } from "./builds";
 
 // 横屏世界的 NPC 头像：以 P14 流派系统驱动外观——
 // 彩色流派圆底 + emoji 头像 + 白色描边 + 清爽名牌，替代原本统一的绿/灰小圆点。
@@ -197,7 +197,7 @@ export class NPCSprite extends Phaser.GameObjects.Container {
       from: 1,
       to: 0,
       duration: 500,
-      onUpdate: (counter) => {
+      onUpdate: counter => {
         const v = counter.getValue() as number;
         for (const p of this.trailPoints) {
           p.alpha = p.alpha * v;
@@ -216,7 +216,7 @@ export class NPCSprite extends Phaser.GameObjects.Container {
     for (let i = 0; i < this.trailPoints.length - 1; i++) {
       const p1 = this.trailPoints[i];
       const p2 = this.trailPoints[i + 1];
-      const alpha = (p1.alpha + p2.alpha) / 2 * 0.4;
+      const alpha = ((p1.alpha + p2.alpha) / 2) * 0.4;
       const thickness = 2 * (1 - i / this.trailPoints.length);
 
       if (alpha <= 0) continue;

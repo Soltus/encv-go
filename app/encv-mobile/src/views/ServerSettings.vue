@@ -132,22 +132,20 @@
 </template>
 
 <script setup lang="ts">
-;
-
+import {
+  checkmark as checkmarkIcon,
+  create as createIcon,
+  globe as globeIcon,
+  home as homeIcon,
+  refresh as refreshIcon,
+  search as searchIcon,
+} from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
 import { DEFAULT_API_BASE_URL, getApiBaseUrl } from "@/api/encv";
 import ServerStatusCard from "@/components/ServerStatusCard.vue";
 import { type ProbeResult, useApiBaseProbe } from "@/composables/useApiBaseProbe";
 import { useI18n } from "@/composables/useI18n";
 import { useServerStatus } from "@/composables/useServerStatus";
-import {
-  refresh as refreshIcon,
-  search as searchIcon,
-  home as homeIcon,
-  globe as globeIcon,
-  checkmark as checkmarkIcon,
-  create as createIcon,
-} from "ionicons/icons";
-import { computed, onMounted, ref } from "vue";
 
 const { t } = useI18n();
 const server = useServerStatus();

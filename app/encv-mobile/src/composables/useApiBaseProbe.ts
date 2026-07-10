@@ -44,8 +44,8 @@
 // 探活 endpoint 选用 /api/config 而不是 /api/chat，是因为 /api/config 是 GET、轻量
 // 且不依赖任何 agent 状态。
 
-import { DEFAULT_API_BASE_URL, DEV_SANDBOX_ENTRY, setApiBaseUrl } from "@/api/encv";
 import { type Ref, ref } from "vue";
+import { DEFAULT_API_BASE_URL, DEV_SANDBOX_ENTRY, setApiBaseUrl } from "@/api/encv";
 
 /** 单次探测结果 */
 export interface ProbeResult {

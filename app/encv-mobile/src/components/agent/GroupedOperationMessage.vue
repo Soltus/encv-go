@@ -103,13 +103,6 @@
 </template>
 
 <script setup lang="ts">
-import type { ToolCall, ToolKind, ToolResult, ToolStatus } from "@/composables/useAgent";
-import { useI18n } from "@/composables/useI18n";
-import FileChangeSummaryMessage from "@/components/agent/FileChangeSummaryMessage.vue";
-import StatusBadge from "@/components/agent/StatusBadge.vue";
-import MountListCard from "@/components/agent/MountListCard.vue";
-import FileListCard from "@/components/agent/FileListCard.vue";
-import FileContentCard from "@/components/agent/FileContentCard.vue";
 import {
   chevronDown as chevronIcon,
   documentTextOutline,
@@ -120,6 +113,13 @@ import {
   terminalOutline,
 } from "ionicons/icons";
 import { computed, ref } from "vue";
+import FileChangeSummaryMessage from "@/components/agent/FileChangeSummaryMessage.vue";
+import FileContentCard from "@/components/agent/FileContentCard.vue";
+import FileListCard from "@/components/agent/FileListCard.vue";
+import MountListCard from "@/components/agent/MountListCard.vue";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
+import type { ToolCall, ToolKind, ToolResult, ToolStatus } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
 import { OPERATION_COLLAPSE_INITIAL_COUNT } from "./twoLevelGrouping";
 
 const props = defineProps<{

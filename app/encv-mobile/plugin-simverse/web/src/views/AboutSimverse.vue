@@ -35,11 +35,20 @@
 </template>
 
 <script setup lang="ts">
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonLabel, IonItem, IonNote,
-} from "@ionic/vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonNote,
+  IonPage,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
 
 const { t } = useI18n();
 </script>

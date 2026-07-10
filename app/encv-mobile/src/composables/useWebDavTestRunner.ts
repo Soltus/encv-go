@@ -17,13 +17,7 @@
  *  - 'unknown'：default
  */
 
-import type {
-  AssertionFailure,
-  TestCaseResult,
-  TestCaseStatus,
-  TestDescriptor,
-  WebDavTestContext,
-} from "@/types/webdav-test";
+import type { AssertionFailure, TestCaseResult, TestCaseStatus, TestDescriptor, WebDavTestContext } from "@/types/webdav-test";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 

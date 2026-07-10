@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, statSync, type Dirent } from "node:fs";
+import { type Dirent, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import type { Plugin } from "vite";
 
@@ -21,13 +21,7 @@ export interface FileSizeLimitOptions {
   workspaceRoot?: string;
 }
 
-const DEFAULT_EXCLUDE: RegExp[] = [
-  /[\\/]node_modules[\\/]/,
-  /[\\/]dist[\\/]/,
-  /[\\/]\.git[\\/]/,
-  /[\\/]coverage[\\/]/,
-  /\.d\.ts$/,
-];
+const DEFAULT_EXCLUDE: RegExp[] = [/[\\/]node_modules[\\/]/, /[\\/]dist[\\/]/, /[\\/]\.git[\\/]/, /[\\/]coverage[\\/]/, /\.d\.ts$/];
 
 function findWorkspaceRoot(start: string): string {
   let dir = start;
@@ -48,7 +42,7 @@ function collectFiles(dir: string, exts: Set<string>, exclude: RegExp[], out: st
   }
   for (const e of entries) {
     const full = join(dir, e.name);
-    if (exclude.some((re) => re.test(full))) continue;
+    if (exclude.some(re => re.test(full))) continue;
     if (e.isDirectory()) {
       collectFiles(full, exts, exclude, out);
     } else if (e.isFile()) {
@@ -93,13 +87,9 @@ export function fileSizeLimitPlugin(options: FileSizeLimitOptions = {}): Plugin 
 
     buildStart() {
       violations.length = 0;
-      const base = scanWorkspace
-        ? workspaceRoot
-          ? resolve(root, workspaceRoot)
-          : findWorkspaceRoot(root)
-        : root;
+      const base = scanWorkspace ? (workspaceRoot ? resolve(root, workspaceRoot) : findWorkspaceRoot(root)) : root;
 
-      const exts = new Set(extensions.map((e) => (e.startsWith(".") ? e : "." + e)));
+      const exts = new Set(extensions.map(e => (e.startsWith(".") ? e : "." + e)));
       const files: string[] = [];
       collectFiles(base, exts, exclude, files);
 
@@ -117,22 +107,18 @@ export function fileSizeLimitPlugin(options: FileSizeLimitOptions = {}): Plugin 
 
       if (violations.length === 0) {
         console.log(
-          `\n[file-size-limit] ✅ 未发现超过 ${maxLines} 行的文件（扫描 ${files.length} 个 .vue/.ts，范围：${scanWorkspace ? "工作区" : "当前包"}）\n`,
+          `\n[file-size-limit] ✅ 未发现超过 ${maxLines} 行的文件（扫描 ${files.length} 个 .vue/.ts，范围：${scanWorkspace ? "工作区" : "当前包"}）\n`
         );
         return;
       }
 
       violations.sort((a, b) => b.lines - a.lines);
-      const list = violations
-        .map((v) => `  🚫 ${v.rel}  (${v.lines} 行，超过 ${maxLines})`)
-        .join("\n");
-      console.error(
-        `\n[file-size-limit] 发现 ${violations.length} 个超过 ${maxLines} 行的文件，必须拆分：\n${list}\n`,
-      );
+      const list = violations.map(v => `  🚫 ${v.rel}  (${v.lines} 行，超过 ${maxLines})`).join("\n");
+      console.error(`\n[file-size-limit] 发现 ${violations.length} 个超过 ${maxLines} 行的文件，必须拆分：\n${list}\n`);
 
       if (command === "build" && failOnError) {
         this.error(
-          `[file-size-limit] ${violations.length} 个 .vue/.ts 文件超过 ${maxLines} 行上限，请拆分后再构建（如需全工作区门禁，置 scanWorkspace:true）`,
+          `[file-size-limit] ${violations.length} 个 .vue/.ts 文件超过 ${maxLines} 行上限，请拆分后再构建（如需全工作区门禁，置 scanWorkspace:true）`
         );
       } else {
         console.warn(`[file-size-limit] ⚠️ ${command === "serve" ? "dev 模式" : "failOnError=false"} 仅警告，不阻断构建\n`);

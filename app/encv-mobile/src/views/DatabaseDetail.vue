@@ -180,14 +180,9 @@
 </template>
 
 <script setup lang="ts">
-import {
-  cloudUploadOutline,
-  downloadOutline,
-  saveOutline,
-  saveOutline as saveIcon,
-  warningOutline,
-} from "ionicons/icons";
-
+import { alertController } from "@ionic/vue";
+import { cloudUploadOutline, downloadOutline, saveOutline as saveIcon, saveOutline, warningOutline } from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
 import { backupDatabase, exportDatabase, getDatabaseInfo, importDatabase } from "@/api/encv";
 import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import { useConfig } from "@/composables/useConfig";
@@ -195,8 +190,6 @@ import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import type { FieldDef } from "@/config/schemaParser";
 import { restartBackend } from "@/plugins/GoProcess";
-import { alertController } from "@ionic/vue";
-import { computed, onMounted, ref } from "vue";
 
 const { t } = useI18n();
 const {

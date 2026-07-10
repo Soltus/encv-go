@@ -1,7 +1,7 @@
 import Phaser from "phaser";
-import { TerrainGenerator, TerrainType, TERRAIN_COLORS } from "./TerrainGenerator";
-import type { NPCSprite } from "./NPCSprite";
 import type { BuildingSprite } from "./BuildingSprite";
+import type { NPCSprite } from "./NPCSprite";
+import { TERRAIN_COLORS, type TerrainGenerator, TerrainType } from "./TerrainGenerator";
 
 export class MiniMap {
   private scene: Phaser.Scene;
@@ -20,13 +20,7 @@ export class MiniMap {
   private scaleY: number;
   private isDragging = false;
 
-  constructor(
-    scene: Phaser.Scene,
-    terrainGenerator: TerrainGenerator,
-    mapWidth: number,
-    mapHeight: number,
-    tileSize: number
-  ) {
+  constructor(scene: Phaser.Scene, terrainGenerator: TerrainGenerator, mapWidth: number, mapHeight: number, tileSize: number) {
     this.scene = scene;
     this.terrainGenerator = terrainGenerator;
     this.mapWidth = mapWidth;
@@ -66,23 +60,13 @@ export class MiniMap {
     this.npcDots = scene.add.graphics();
     this.container.add(this.npcDots);
 
-    this.viewportRect = scene.add.rectangle(
-      this.miniMapSize / 2,
-      this.miniMapSize / 2,
-      60,
-      40,
-      0xffffff,
-      0.1
-    );
+    this.viewportRect = scene.add.rectangle(this.miniMapSize / 2, this.miniMapSize / 2, 60, 40, 0xffffff, 0.1);
     this.viewportRect.setStrokeStyle(2, 0xffffff, 0.8);
     this.container.add(this.viewportRect);
 
     this.renderTerrainMiniMap();
 
-    this.container.setInteractive(
-      new Phaser.Geom.Rectangle(0, 0, this.miniMapSize, this.miniMapSize),
-      Phaser.Geom.Rectangle.Contains
-    );
+    this.container.setInteractive(new Phaser.Geom.Rectangle(0, 0, this.miniMapSize, this.miniMapSize), Phaser.Geom.Rectangle.Contains);
 
     this.setupInteraction();
 
@@ -161,7 +145,7 @@ export class MiniMap {
   updateNPCs(npcs: NPCSprite[]): void {
     this.npcDots.clear();
 
-    npcs.forEach((npc) => {
+    npcs.forEach(npc => {
       if (!npc.visible) return;
 
       const mx = (npc.x / (this.mapWidth * this.tileSize)) * this.miniMapSize;
@@ -178,7 +162,7 @@ export class MiniMap {
   updateBuildings(buildings: BuildingSprite[]): void {
     this.buildingDots.clear();
 
-    buildings.forEach((building) => {
+    buildings.forEach(building => {
       const mx = (building.x / (this.mapWidth * this.tileSize)) * this.miniMapSize;
       const my = (building.y / (this.mapHeight * this.tileSize)) * this.miniMapSize;
 

@@ -1,14 +1,14 @@
 import Phaser from "phaser";
-import { TerrainGenerator, TerrainType, TERRAIN_COLORS } from "./TerrainGenerator";
-import { NPCSprite } from "./NPCSprite";
-import { BuildingSprite, BuildingType } from "./BuildingSprite";
-import { phaserEventBus, PHASER_EVENTS } from "./PhaserEventBus";
-import { EventEffectManager, type EventEffectType } from "./EventEffectManager";
-import { TerritoryRenderer, type OrgTerritory } from "./TerritoryRenderer";
-import { MiniMap } from "./MiniMap";
-import { DayNightCycle, type TimeOfDay } from "./DayNightCycle";
-import { ARCH_META, ARCHETYPES } from "./builds";
 import type { SimverseNPC } from "@/composables/useSimverse";
+import { BuildingSprite, type BuildingType } from "./BuildingSprite";
+import { ARCH_META, ARCHETYPES } from "./builds";
+import { DayNightCycle, type TimeOfDay } from "./DayNightCycle";
+import { EventEffectManager, type EventEffectType } from "./EventEffectManager";
+import { MiniMap } from "./MiniMap";
+import { NPCSprite } from "./NPCSprite";
+import { PHASER_EVENTS, phaserEventBus } from "./PhaserEventBus";
+import { TERRAIN_COLORS, TerrainGenerator, TerrainType } from "./TerrainGenerator";
+import { type OrgTerritory, TerritoryRenderer } from "./TerritoryRenderer";
 
 export class WorldScene extends Phaser.Scene {
   private terrainGenerator!: TerrainGenerator;
@@ -34,8 +34,14 @@ export class WorldScene extends Phaser.Scene {
   // 环境粒子（萤火/尘埃）：让空旷的世界持续有"呼吸感"，避免 HUD/世界发呆。
   private ambientGfx!: Phaser.GameObjects.Graphics;
   private ambientParticles: {
-    x: number; y: number; vx: number; vy: number; r: number;
-    baseAlpha: number; phase: number; speed: number;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    r: number;
+    baseAlpha: number;
+    phase: number;
+    speed: number;
   }[] = [];
 
   private npcMoveTimer = 0;
@@ -76,13 +82,7 @@ export class WorldScene extends Phaser.Scene {
     this.dayNightCycle = new DayNightCycle(this, worldW, worldH);
     this.dayNightCycle.setCycleDuration(60000);
 
-    this.territoryRenderer = new TerritoryRenderer(
-      this,
-      this.terrainGenerator,
-      this.mapWidth,
-      this.mapHeight,
-      this.tileSize
-    );
+    this.territoryRenderer = new TerritoryRenderer(this, this.terrainGenerator, this.mapWidth, this.mapHeight, this.tileSize);
     this.createSampleTerritories();
 
     this.eventEffectManager = new EventEffectManager(this);
@@ -90,13 +90,7 @@ export class WorldScene extends Phaser.Scene {
     this.interactionGfx = this.add.graphics();
     this.interactionGfx.setDepth(5);
 
-    this.miniMap = new MiniMap(
-      this,
-      this.terrainGenerator,
-      this.mapWidth,
-      this.mapHeight,
-      this.tileSize
-    );
+    this.miniMap = new MiniMap(this, this.terrainGenerator, this.mapWidth, this.mapHeight, this.tileSize);
 
     this.cameras.main.on("camerazoomupdate", () => {
       this.miniMap.updateViewport();
@@ -123,11 +117,7 @@ export class WorldScene extends Phaser.Scene {
     const orgColors = [0x8b5cf6, 0xec4899, 0xf59e0b, 0x06b6d4, 0x22c55e];
     const orgNames = ["紫月王国", "玫瑰联盟", "金阳帝国", "碧海商会", "翠林部落"];
 
-    const settlements = this.terrainGenerator.findSettlementLocations(
-      this.mapWidth,
-      this.mapHeight,
-      5
-    );
+    const settlements = this.terrainGenerator.findSettlementLocations(this.mapWidth, this.mapHeight, 5);
 
     const territories: OrgTerritory[] = settlements.map((s, i) => ({
       id: `org_${i}`,
@@ -206,29 +196,32 @@ export class WorldScene extends Phaser.Scene {
       return Math.max(0, Math.min(1, adjusted));
     };
 
-    return (
-      (Math.floor(adjust(r) * 255) << 16) |
-      (Math.floor(adjust(g) * 255) << 8) |
-      Math.floor(adjust(b) * 255)
-    );
+    return (Math.floor(adjust(r) * 255) << 16) | (Math.floor(adjust(g) * 255) << 8) | Math.floor(adjust(b) * 255);
   }
 
   private createBuildings(): void {
-    const settlements = this.terrainGenerator.findSettlementLocations(
-      this.mapWidth,
-      this.mapHeight,
-      15
-    );
+    const settlements = this.terrainGenerator.findSettlementLocations(this.mapWidth, this.mapHeight, 15);
 
     const villageNames = [
-      "橡树村", "河边镇", "山谷村", "麦田村", "青石镇",
-      "松柏林", "湖畔村", "风车镇", "玫瑰村", "晨曦镇",
-      "雾灵山", "月光村", "艳阳镇", "丰收村", "清泉镇",
+      "橡树村",
+      "河边镇",
+      "山谷村",
+      "麦田村",
+      "青石镇",
+      "松柏林",
+      "湖畔村",
+      "风车镇",
+      "玫瑰村",
+      "晨曦镇",
+      "雾灵山",
+      "月光村",
+      "艳阳镇",
+      "丰收村",
+      "清泉镇",
     ];
 
     settlements.forEach((settlement, index) => {
-      const type: BuildingType =
-        settlement.size >= 3 ? "city" : settlement.size === 2 ? "village" : "village";
+      const type: BuildingType = settlement.size >= 3 ? "city" : settlement.size === 2 ? "village" : "village";
       const name = villageNames[index % villageNames.length];
 
       const sprite = new BuildingSprite(
@@ -310,11 +303,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.input.on("wheel", (pointer: Phaser.Input.Pointer, gameObjects: any[], deltaX: number, deltaY: number) => {
       const zoomFactor = deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Phaser.Math.Clamp(
-        this.cameras.main.zoom * zoomFactor,
-        this.minZoom,
-        this.maxZoom
-      );
+      const newZoom = Phaser.Math.Clamp(this.cameras.main.zoom * zoomFactor, this.minZoom, this.maxZoom);
 
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       this.cameras.main.zoom = newZoom;
@@ -364,11 +353,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.initialPinchDistance === 0) return;
 
     const zoomRatio = currentDistance / this.initialPinchDistance;
-    const newZoom = Phaser.Math.Clamp(
-      this.initialZoom * zoomRatio,
-      this.minZoom,
-      this.maxZoom
-    );
+    const newZoom = Phaser.Math.Clamp(this.initialZoom * zoomRatio, this.minZoom, this.maxZoom);
 
     const worldPoint = this.cameras.main.getWorldPoint(this.pinchMidpoint.x, this.pinchMidpoint.y);
     this.cameras.main.zoom = newZoom;
@@ -377,10 +362,7 @@ export class WorldScene extends Phaser.Scene {
 
   private setupKeyboardShortcuts(): void {
     this.input.keyboard?.on("keydown-SPACE", () => {
-      this.cameras.main.centerOn(
-        (this.mapWidth * this.tileSize) / 2,
-        (this.mapHeight * this.tileSize) / 2
-      );
+      this.cameras.main.centerOn((this.mapWidth * this.tileSize) / 2, (this.mapHeight * this.tileSize) / 2);
       this.cameras.main.setZoom(0.5);
     });
 
@@ -485,10 +467,7 @@ export class WorldScene extends Phaser.Scene {
     if (!canvasTex) return;
 
     const ctx = canvasTex.getContext();
-    const grd = ctx.createRadialGradient(
-      w / 2, h / 2, Math.min(w, h) * 0.3,
-      w / 2, h / 2, Math.max(w, h) * 0.75
-    );
+    const grd = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.75);
     grd.addColorStop(0, "rgba(0,0,0,0)");
     grd.addColorStop(1, "rgba(0,0,0,0.35)");
     ctx.fillStyle = grd;
@@ -547,7 +526,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   setNPCBehaviors(behaviors: Map<number, string>): void {
-    this.npcSprites.forEach((sprite) => {
+    this.npcSprites.forEach(sprite => {
       const id = sprite.getNPCData().id;
       const cn = behaviors.get(id);
       if (cn !== undefined) {
@@ -559,7 +538,7 @@ export class WorldScene extends Phaser.Scene {
   setNPCs(npcs: SimverseNPC[]): void {
     const worldCenterX = (this.mapWidth * this.tileSize) / 2;
     const worldCenterY = (this.mapHeight * this.tileSize) / 2;
-    const spread = (Math.min(this.mapWidth, this.mapHeight) * this.tileSize) * 0.4;
+    const spread = Math.min(this.mapWidth, this.mapHeight) * this.tileSize * 0.4;
 
     const displayNPCs = npcs.slice(0, this.maxVisibleNPCs);
 
@@ -611,7 +590,7 @@ export class WorldScene extends Phaser.Scene {
     if (zoom > 0.8) lodLevel = "full";
     else if (zoom > 0.5) lodLevel = "medium";
 
-    this.npcSprites.forEach((sprite) => {
+    this.npcSprites.forEach(sprite => {
       sprite.setLODLevel(lodLevel);
     });
   }
@@ -625,7 +604,7 @@ export class WorldScene extends Phaser.Scene {
       const worldW = this.mapWidth * this.tileSize;
       const worldH = this.mapHeight * this.tileSize;
 
-      this.npcSprites.forEach((sprite) => {
+      this.npcSprites.forEach(sprite => {
         if (!sprite.visible || !sprite.active || sprite.isMoving()) return;
         if (Math.random() > 0.5) return;
 
@@ -702,7 +681,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   centerOnNPC(npcId: number): void {
-    const sprite = this.npcSprites.find((s) => s.getNPCData().id === npcId);
+    const sprite = this.npcSprites.find(s => s.getNPCData().id === npcId);
     if (sprite) {
       this.cameras.main.centerOn(sprite.x, sprite.y);
       this.cameras.main.setZoom(1.2);

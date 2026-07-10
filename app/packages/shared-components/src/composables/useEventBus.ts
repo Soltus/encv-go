@@ -10,7 +10,7 @@ type Handler<T = any> = (data: T) => void;
 //   WsBackend.ts:88 → emit(msg.type, msg.data) 透传 → 完整结构
 //   HttpPollBackend.ts:100 → emit('task:created', {id, type, sourcePath}) ✗ 截断了！需要修
 //   ⚠️ 上面那条要同步改 backend/poll → emit 完整 task（见 HttpPollBackend.ts）
-import type { EncvTask } from "@/api/encv";
+import type { EncvTask } from "@/types/task";
 export interface EncvEvents {
   "task:update": Partial<EncvTask> & { id: string; type: string; status: string; progress: number };
   "task:progress": { id: string; progress: number; phase: string; speed: string; eta: string };

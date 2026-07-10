@@ -97,16 +97,27 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonIcon, IonSegment, IonSegmentButton, IonLabel,
-  IonList, IonItem, IonNote,
-} from "@ionic/vue";
-import { brushOutline, speedometerOutline, informationCircleOutline } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useWorldRenderSettings, type RenderFps, type RenderQuality } from "@/composables/useWorldRenderSettings";
-import { useSimverse, type PerfTier } from "@/composables/useSimverse";
+import {
+  IonBackButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonNote,
+  IonPage,
+  IonSegment,
+  IonSegmentButton,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { brushOutline, informationCircleOutline, speedometerOutline } from "ionicons/icons";
+import { onMounted, ref } from "vue";
+import { type PerfTier, useSimverse } from "@/composables/useSimverse";
+import { type RenderFps, type RenderQuality, useWorldRenderSettings } from "@/composables/useWorldRenderSettings";
 
 const { t } = useI18n();
 const { fps, quality, FPS_OPTIONS, QUALITY_OPTIONS, QUALITY_RESOLUTION } = useWorldRenderSettings();

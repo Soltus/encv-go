@@ -101,16 +101,29 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonSearchbar,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonContent, IonList, IonListHeader, IonLabel, IonItem,
-  IonBadge, IonNote, IonSpinner, IonSearchbar,
-} from "@ionic/vue";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseNPC } from "@/composables/useSimverse";
-import { deriveBuildFromNPC, type ArchetypeKey } from "@/game/builds";
+import { type SimverseNPC, useSimverse } from "@/composables/useSimverse";
+import { type ArchetypeKey, deriveBuildFromNPC } from "@/game/builds";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -127,22 +140,22 @@ const filter = ref("");
 const isFull = computed(() => squadIds.value.length >= MAX_SQUAD);
 
 const squadMembers = computed(() =>
-  squadIds.value
-    .map((id) => pool.value.find((n) => n.id === id))
-    .filter((n): n is SimverseNPC => Boolean(n))
+  squadIds.value.map(id => pool.value.find(n => n.id === id)).filter((n): n is SimverseNPC => Boolean(n))
 );
 
-const squadBuilds = computed(() => squadMembers.value.map((m) => deriveBuildFromNPC(m)));
+const squadBuilds = computed(() => squadMembers.value.map(m => deriveBuildFromNPC(m)));
 
 // 自走棋式羁绊：同流派主流派数量达 2/4/6 触发（初/盛/极）
 const synergyResult = computed(() => {
   const counts = {} as Record<ArchetypeKey, number>;
-  (["warrior","guardian","scholar","merchant","artisan","healer","leader","hermit","rogue","artist"] as ArchetypeKey[]).forEach((a) => (counts[a] = 0));
-  squadBuilds.value.forEach((b) => {
+  (["warrior", "guardian", "scholar", "merchant", "artisan", "healer", "leader", "hermit", "rogue", "artist"] as ArchetypeKey[]).forEach(
+    a => (counts[a] = 0)
+  );
+  squadBuilds.value.forEach(b => {
     counts[b.primary]++;
   });
   const out: { key: ArchetypeKey; count: number; tier: number }[] = [];
-  (Object.keys(counts) as ArchetypeKey[]).forEach((a) => {
+  (Object.keys(counts) as ArchetypeKey[]).forEach(a => {
     const c = counts[a];
     if (c >= 2) out.push({ key: a, count: c, tier: c >= 6 ? 3 : c >= 4 ? 2 : 1 });
   });
@@ -151,9 +164,7 @@ const synergyResult = computed(() => {
 
 const filteredPool = computed(() => {
   const q = filter.value.trim().toLowerCase();
-  return pool.value
-    .filter((n) => !q || (n.name || "").toLowerCase().includes(q))
-    .slice(0, 80);
+  return pool.value.filter(n => !q || (n.name || "").toLowerCase().includes(q)).slice(0, 80);
 });
 
 function inSquad(id: number): boolean {
@@ -166,9 +177,16 @@ function archLabel(key: ArchetypeKey): string {
   return t(`simverse.build.${key}`);
 }
 const ARCH_COLOR: Record<ArchetypeKey, string> = {
-  warrior: "danger", guardian: "warning", scholar: "primary", merchant: "success",
-  artisan: "tertiary", healer: "success", leader: "secondary", hermit: "medium",
-  rogue: "dark", artist: "tertiary",
+  warrior: "danger",
+  guardian: "warning",
+  scholar: "primary",
+  merchant: "success",
+  artisan: "tertiary",
+  healer: "success",
+  leader: "secondary",
+  hermit: "medium",
+  rogue: "dark",
+  artist: "tertiary",
 };
 function archColor(key: ArchetypeKey): string {
   return ARCH_COLOR[key] || "medium";
@@ -184,7 +202,7 @@ function persist() {
 function loadSquad(): number[] {
   try {
     const v = JSON.parse(localStorage.getItem(SQUAD_KEY) || "[]");
-    return Array.isArray(v) ? v.filter((x) => typeof x === "number").slice(0, MAX_SQUAD) : [];
+    return Array.isArray(v) ? v.filter(x => typeof x === "number").slice(0, MAX_SQUAD) : [];
   } catch {
     return [];
   }
@@ -196,7 +214,7 @@ function addToSquad(id: number) {
   persist();
 }
 function removeFromSquad(id: number) {
-  squadIds.value = squadIds.value.filter((x) => x !== id);
+  squadIds.value = squadIds.value.filter(x => x !== id);
   persist();
 }
 function clearSquad() {

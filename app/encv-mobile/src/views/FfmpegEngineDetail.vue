@@ -289,10 +289,9 @@ import {
   videocamOutline,
   warningOutline,
 } from "ionicons/icons";
-
+import { onMounted, ref } from "vue";
 import { type BuildInfo, type FFmpegStatus, fetchBuildInfo, fetchFFmpegStatus } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
-import { onMounted, ref } from "vue";
 
 const { t } = useI18n();
 

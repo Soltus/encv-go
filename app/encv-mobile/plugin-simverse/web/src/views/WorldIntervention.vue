@@ -77,15 +77,29 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonCard, IonCardHeader, IonCardTitle,
-  IonCardContent, IonBadge, IonSegment, IonSegmentButton, IonLabel,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type PerfTier, type WorldAction } from "@/composables/useSimverse";
+import {
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonCard,
+  IonCardContent,
+  IonCardHeader,
+  IonCardTitle,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonLabel,
+  IonPage,
+  IonSegment,
+  IonSegmentButton,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, refreshOutline } from "ionicons/icons";
+import { onMounted, ref } from "vue";
+import { type PerfTier, useSimverse, type WorldAction } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const { isRunning, currentTick, currentTier, controlWorld, setPerformanceTier, loadWorldState, loadWorldConfig } = useSimverse();

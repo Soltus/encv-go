@@ -131,9 +131,9 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import { CATEGORY_META } from "@/composables/useErrorAnalyzer";
 import type { TestCaseResult } from "@/lib/workflow/types";
-import { computed, ref } from "vue";
 
 const props = defineProps<{
   result: TestCaseResult;

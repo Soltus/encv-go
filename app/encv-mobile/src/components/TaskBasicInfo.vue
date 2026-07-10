@@ -143,11 +143,6 @@
 </template>
 
 <script setup lang="ts">
-import { formatContainerVersion } from "@/constants/containerVersion";
-import type { EncvTask } from "@/api/encv";
-import { useI18n } from "@/composables/useI18n";
-import { type SectionDimension, useSectionDerivation } from "@/composables/useSectionDerivation";
-import { showToast } from "@/composables/useToast";
 import {
   chevronForward,
   cogOutline,
@@ -165,6 +160,11 @@ import {
   swapVertical,
 } from "ionicons/icons";
 import { computed } from "vue";
+import type { EncvTask } from "@/api/encv";
+import { useI18n } from "@/composables/useI18n";
+import { type SectionDimension, useSectionDerivation } from "@/composables/useSectionDerivation";
+import { showToast } from "@/composables/useToast";
+import { formatContainerVersion } from "@/constants/containerVersion";
 
 const props = defineProps<{ task: EncvTask }>();
 const { t } = useI18n();

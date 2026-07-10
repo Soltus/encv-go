@@ -129,7 +129,7 @@
 </template>
 
 <script setup lang="ts">
-import { formatFileSize } from "@/api/encv_files";
+import { alertController } from "@ionic/vue";
 import {
   cloudOutline,
   documentTextOutline,
@@ -144,15 +144,14 @@ import {
   timerOutline,
   trashOutline,
 } from "ionicons/icons";
-
+import { onMounted, onUnmounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import type { IndexStats } from "@/api/encv";
 import { clearIndex, getIndexStats, rebuildIndex } from "@/api/encv";
+import { formatFileSize } from "@/api/encv_files";
 import { useI18n } from "@/composables/useI18n";
 import { clearThumbCache, getThumbCacheSize, THUMB_CACHE_MAX } from "@/composables/useThumbnailCache";
 import { showToast } from "@/composables/useToast";
-import { alertController } from "@ionic/vue";
-import { onMounted, onUnmounted, ref } from "vue";
-import { useRouter } from "vue-router";
 
 const router = useRouter();
 const { t } = useI18n();

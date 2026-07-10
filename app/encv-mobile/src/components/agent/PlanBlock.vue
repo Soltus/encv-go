@@ -1,13 +1,8 @@
 <script setup lang="ts">
-import { useI18n } from "@/composables/useI18n";
-import BlockHeader from "@/components/agent/BlockHeader.vue";
-import {
-  checkboxOutline,
-  checkmarkCircle,
-  ellipsisHorizontalCircle,
-  sync,
-} from "ionicons/icons";
+import { checkboxOutline, checkmarkCircle, ellipsisHorizontalCircle, sync } from "ionicons/icons";
 import { computed } from "vue";
+import BlockHeader from "@/components/agent/BlockHeader.vue";
+import { useI18n } from "@/composables/useI18n";
 
 export interface PlanTodo {
   id: string;

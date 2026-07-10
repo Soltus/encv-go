@@ -70,8 +70,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from "vue";
 import { refreshOutline } from "ionicons/icons";
+import { onMounted, onUnmounted, ref } from "vue";
 
 // 目标 encv-mobile vite dev server 直连地址。
 // 用 127.0.0.1 而非 localhost：避免某些环境 DNS 解析 localhost 到 ::1 失败。

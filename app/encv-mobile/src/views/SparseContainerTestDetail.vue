@@ -196,14 +196,9 @@
 </template>
 
 <script setup lang="ts">
-import {
-  createOutline,
-  informationCircleOutline,
-  searchOutline,
-  trashOutline,
-  warningOutline,
-} from "ionicons/icons";
-
+import { alertController } from "@ionic/vue";
+import { createOutline, informationCircleOutline, searchOutline, trashOutline, warningOutline } from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
 import {
   cleanupSparseContainer,
   probeSparseContainer,
@@ -214,8 +209,6 @@ import {
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import { isNative } from "@/plugins/GoProcess";
-import { alertController } from "@ionic/vue";
-import { computed, onMounted, ref } from "vue";
 
 const { t } = useI18n();
 

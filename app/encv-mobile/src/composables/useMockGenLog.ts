@@ -14,8 +14,8 @@
  * 完整迁移自 PluginTestsDetail.vue 608-707 行，保持状态转移 / 自动展开 / _marked 标记等逻辑不变。
  */
 
-import type { MockProgress, MockSpecDiag, MockSpecFailed } from "@/api/mockGenerator";
 import { computed, ref } from "vue";
+import type { MockProgress, MockSpecDiag, MockSpecFailed } from "@/api/mockGenerator";
 
 /**
  * 单条 FFMPEG 流程日志条目

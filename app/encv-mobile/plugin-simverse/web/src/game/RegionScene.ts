@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { phaserEventBus, PHASER_EVENTS } from "./PhaserEventBus";
+import { PHASER_EVENTS, phaserEventBus } from "./PhaserEventBus";
 
 export interface RegionSceneData {
   regionId: string;
@@ -92,17 +92,21 @@ export class RegionScene extends Phaser.Scene {
       const shadow = this.add.circle(0, 20, 30 * scale, 0x000000, 0.3);
       shadow.setScale(1, 0.3);
 
-      const buildingText = this.add.text(0, 0, type, {
-        fontSize: `${40 * scale}px`,
-      }).setOrigin(0.5);
+      const buildingText = this.add
+        .text(0, 0, type, {
+          fontSize: `${40 * scale}px`,
+        })
+        .setOrigin(0.5);
 
       const buildingName = this.generateBuildingName(i);
-      const nameText = this.add.text(0, 50 * scale, buildingName, {
-        fontSize: "14px",
-        color: "#ffffff",
-        backgroundColor: "rgba(0,0,0,0.6)",
-        padding: { x: 8, y: 4 },
-      }).setOrigin(0.5);
+      const nameText = this.add
+        .text(0, 50 * scale, buildingName, {
+          fontSize: "14px",
+          color: "#ffffff",
+          backgroundColor: "rgba(0,0,0,0.6)",
+          padding: { x: 8, y: 4 },
+        })
+        .setOrigin(0.5);
 
       container.add([shadow, buildingText, nameText]);
       container.setSize(80, 100);
@@ -148,16 +152,20 @@ export class RegionScene extends Phaser.Scene {
       const shadow = this.add.circle(0, 15, 15, 0x000000, 0.3);
       shadow.setScale(1, 0.3);
 
-      const npcText = this.add.text(0, 0, emoji, {
-        fontSize: "32px",
-      }).setOrigin(0.5);
+      const npcText = this.add
+        .text(0, 0, emoji, {
+          fontSize: "32px",
+        })
+        .setOrigin(0.5);
 
-      const nameText = this.add.text(0, 25, `NPC${i + 1}`, {
-        fontSize: "12px",
-        color: "#ffffff",
-        backgroundColor: "rgba(0,0,0,0.5)",
-        padding: { x: 6, y: 2 },
-      }).setOrigin(0.5);
+      const nameText = this.add
+        .text(0, 25, `NPC${i + 1}`, {
+          fontSize: "12px",
+          color: "#ffffff",
+          backgroundColor: "rgba(0,0,0,0.5)",
+          padding: { x: 6, y: 2 },
+        })
+        .setOrigin(0.5);
 
       container.add([shadow, npcText, nameText]);
       container.setSize(50, 60);
@@ -207,12 +215,14 @@ export class RegionScene extends Phaser.Scene {
   }
 
   private createBackButton(): void {
-    const btn = this.add.text(30, 30, "← 返回", {
-      fontSize: "18px",
-      color: "#ffffff",
-      backgroundColor: "rgba(0,0,0,0.6)",
-      padding: { x: 16, y: 8 },
-    }).setInteractive({ useHandCursor: true });
+    const btn = this.add
+      .text(30, 30, "← 返回", {
+        fontSize: "18px",
+        color: "#ffffff",
+        backgroundColor: "rgba(0,0,0,0.6)",
+        padding: { x: 16, y: 8 },
+      })
+      .setInteractive({ useHandCursor: true });
 
     btn.setScrollFactor(0);
 
@@ -224,18 +234,22 @@ export class RegionScene extends Phaser.Scene {
 
   private createRegionTitle(): void {
     const { width } = this.scale;
-    const title = this.add.text(width / 2, 30, this.regionData.regionName, {
-      fontSize: "24px",
-      color: "#ffffff",
-      fontStyle: "bold",
-    }).setOrigin(0.5, 0);
+    const title = this.add
+      .text(width / 2, 30, this.regionData.regionName, {
+        fontSize: "24px",
+        color: "#ffffff",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5, 0);
 
     title.setScrollFactor(0);
 
-    const typeText = this.add.text(width / 2, 65, this.getRegionTypeName(), {
-      fontSize: "14px",
-      color: "#aaaaaa",
-    }).setOrigin(0.5, 0);
+    const typeText = this.add
+      .text(width / 2, 65, this.getRegionTypeName(), {
+        fontSize: "14px",
+        color: "#aaaaaa",
+      })
+      .setOrigin(0.5, 0);
 
     typeText.setScrollFactor(0);
   }

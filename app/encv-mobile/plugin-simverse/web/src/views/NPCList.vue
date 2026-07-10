@@ -86,17 +86,32 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonInfiniteScroll,
+  IonInfiniteScrollContent,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonSearchbar,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, refreshOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonSearchbar, IonContent, IonList, IonListHeader,
-  IonLabel, IonItem, IonBadge, IonNote, IonSpinner, IonInfiniteScroll,
-  IonInfiniteScrollContent,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline } from "ionicons/icons";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseNPC } from "@/composables/useSimverse";
+import { type SimverseNPC, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -115,10 +130,7 @@ const filteredNPCs = computed(() => {
   if (!searchQuery.value) return npcs.value;
   const q = searchQuery.value.toLowerCase();
   return npcs.value.filter(
-    (n) =>
-      n.name.toLowerCase().includes(q) ||
-      n.profession.toLowerCase().includes(q) ||
-      n.species.toLowerCase().includes(q)
+    n => n.name.toLowerCase().includes(q) || n.profession.toLowerCase().includes(q) || n.species.toLowerCase().includes(q)
   );
 });
 

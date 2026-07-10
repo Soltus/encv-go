@@ -66,21 +66,34 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { useRoute } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonCard, IonCardHeader, IonCardTitle,
-  IonCardContent, IonGrid, IonRow, IonCol, IonList, IonListHeader, IonLabel,
-  IonItem, IonSpinner,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline } from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
-  useSimverse,
-  type SimverseBehaviorState,
-  type SimverseChronicleEvent,
-} from "@/composables/useSimverse";
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonCard,
+  IonCardContent,
+  IonCardHeader,
+  IonCardTitle,
+  IonCol,
+  IonContent,
+  IonGrid,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonPage,
+  IonRow,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, refreshOutline } from "ionicons/icons";
+import { onMounted, ref } from "vue";
+import { useRoute } from "vue-router";
+import { type SimverseBehaviorState, type SimverseChronicleEvent, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -96,12 +109,9 @@ async function reload() {
   loading.value = true;
   error.value = "";
   try {
-    const [list, chron] = await Promise.all([
-      loadBehaviorList(1, 500),
-      loadChronicleNPC(npcId, 30),
-    ]);
+    const [list, chron] = await Promise.all([loadBehaviorList(1, 500), loadChronicleNPC(npcId, 30)]);
     if (list) {
-      behavior.value = list.items.find((b) => b.npc_id === npcId) || null;
+      behavior.value = list.items.find(b => b.npc_id === npcId) || null;
     }
     if (chron) {
       events.value = chron.items;

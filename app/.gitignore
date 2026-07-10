@@ -3,3 +3,6 @@ dist/
 *.local
 *.log
 combolite/ComboLite/
+# 检查脚本生成的报告与完整日志
+check-report.md
+check-logs/

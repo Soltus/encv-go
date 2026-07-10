@@ -95,16 +95,29 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, refreshOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonList, IonListHeader, IonLabel,
-  IonItem, IonNote, IonBadge, IonSpinner,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline } from "ionicons/icons";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseBehaviorStats, type SimverseBehaviorState } from "@/composables/useSimverse";
+import { type SimverseBehaviorState, type SimverseBehaviorStats, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -116,8 +129,14 @@ const stats = ref<SimverseBehaviorStats | null>(null);
 const behaviorList = ref<{ total: number; items: SimverseBehaviorState[] }>({ total: 0, items: [] });
 
 const behaviorLabels: Record<string, string> = {
-  idle: "闲置", work: "工作", rest: "休息", eat: "进食",
-  sleep: "睡眠", socialize: "社交", explore: "探索", trade: "交易",
+  idle: "闲置",
+  work: "工作",
+  rest: "休息",
+  eat: "进食",
+  sleep: "睡眠",
+  socialize: "社交",
+  explore: "探索",
+  trade: "交易",
 };
 
 const behaviorDist = computed(() => {
@@ -136,8 +155,13 @@ const behaviorDist = computed(() => {
 
 function behaviorColor(behavior: string): string {
   const map: Record<string, string> = {
-    work: "primary", rest: "medium", eat: "warning",
-    sleep: "tertiary", socialize: "success", explore: "secondary", trade: "danger",
+    work: "primary",
+    rest: "medium",
+    eat: "warning",
+    sleep: "tertiary",
+    socialize: "success",
+    explore: "secondary",
+    trade: "danger",
   };
   return map[behavior?.toLowerCase()] || "medium";
 }
@@ -155,10 +179,7 @@ async function reload() {
   loading.value = true;
   error.value = "";
   try {
-    const [s, list] = await Promise.all([
-      loadBehaviorStats(),
-      loadBehaviorList(1, 50),
-    ]);
+    const [s, list] = await Promise.all([loadBehaviorStats(), loadBehaviorList(1, 50)]);
     stats.value = s;
     if (list) behaviorList.value = { total: list.total, items: list.items };
     if (!s && !list) error.value = t("simverse.noData");

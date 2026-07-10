@@ -84,9 +84,9 @@
 
 <script setup lang="ts">
 import { modalController } from "@ionic/vue";
+import { openOutline } from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { openOutline } from "ionicons/icons";
 import SaveOptionsDialog from "@/components/SaveOptionsDialog.vue";
 import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
 

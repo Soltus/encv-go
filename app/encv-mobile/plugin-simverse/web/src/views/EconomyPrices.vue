@@ -51,16 +51,29 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonList, IonListHeader, IonLabel,
-  IonItem, IonNote, IonSpinner, IonSearchbar,
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonSearchbar,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
 } from "@ionic/vue";
 import { alertCircleOutline } from "ionicons/icons";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseEconomyPrices } from "@/composables/useSimverse";
+import { computed, onMounted, ref } from "vue";
 import { useLiveRefresh } from "@/composables/useLiveRefresh";
+import { type SimverseEconomyPrices, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const { loadEconomyPrices, recordQuestAction, economySignal } = useSimverse();

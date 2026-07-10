@@ -122,6 +122,8 @@
 </template>
 
 <script setup lang="ts">
+import { Capacitor } from "@capacitor/core";
+import { alertController } from "@ionic/vue";
 import {
   addOutline,
   checkmarkCircle,
@@ -135,8 +137,8 @@ import {
   serverOutline,
   trashOutline,
 } from "ionicons/icons";
-
-import { Capacitor } from "@capacitor/core";
+import { onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { copyToClipboard } from "@/composables/useClipboard";
 import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
@@ -152,10 +154,7 @@ import {
   togglePluginEnabled,
   uninstallPlugin,
 } from "@/plugins/GoProcess";
-import { alertController } from "@ionic/vue";
-import { onMounted, ref } from "vue";
 import { debugSimVerseFlow, openWorld } from "@/plugins/SimVerse";
-import { useRouter } from "vue-router";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -223,7 +222,14 @@ async function loadExtensions() {
     const mpvInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP["mpv-player"]];
     const openlistInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP.openlist];
     const simverseInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP.simverse];
-    console.error("[SAT-DBG][Extensions] mpvInfo=", JSON.stringify(mpvInfo), "| openlistInfo=", JSON.stringify(openlistInfo), "| simverseInfo=", JSON.stringify(simverseInfo));
+    console.error(
+      "[SAT-DBG][Extensions] mpvInfo=",
+      JSON.stringify(mpvInfo),
+      "| openlistInfo=",
+      JSON.stringify(openlistInfo),
+      "| simverseInfo=",
+      JSON.stringify(simverseInfo)
+    );
 
     extensions.value = [
       {

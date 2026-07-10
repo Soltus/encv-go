@@ -1,7 +1,7 @@
-import type { FileItem } from "@/api/encv";
-import { getFileCategory } from "@/api/encv";
 import { document as documentIcon, documentText, folder, image, lockClosed, musicalNotes, videocam } from "ionicons/icons";
 import { computed, ref } from "vue";
+import type { FileItem } from "@/api/encv";
+import { getFileCategory } from "@/api/encv";
 
 export const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg", ".heic", ".heif", ".avif"]);
 

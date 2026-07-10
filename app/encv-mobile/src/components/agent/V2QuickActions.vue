@@ -31,7 +31,6 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "@/composables/useI18n";
 import {
   documentTextOutline,
   informationCircleOutline,
@@ -40,6 +39,7 @@ import {
   swapHorizontalOutline,
   terminalOutline,
 } from "ionicons/icons";
+import { useI18n } from "@/composables/useI18n";
 
 export interface V2QuickAction {
   id: string;

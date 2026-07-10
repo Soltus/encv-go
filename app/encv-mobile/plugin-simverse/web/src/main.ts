@@ -1,12 +1,12 @@
+import { registerI18nModule, useI18n } from "@encv/shared-components/composables/useI18n";
+import { initSharedI18n } from "@encv/shared-components/i18n";
 import { IonicVue } from "@ionic/vue";
 import { createPinia } from "pinia";
 import { createApp } from "vue";
 import App from "./App.vue";
-import router from "./router";
 import { registerIonicComponents } from "./composables/useIonicAutoRegister";
-import { useI18n, registerI18nModule } from "@encv/shared-components/composables/useI18n";
-import { initSharedI18n } from "@encv/shared-components/i18n";
 import simverseI18n from "./i18n/simverse";
+import router from "./router";
 
 import "@ionic/vue/css/core.css";
 import "@ionic/vue/css/normalize.css";

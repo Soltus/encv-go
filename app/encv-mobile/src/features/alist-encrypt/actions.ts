@@ -1,9 +1,9 @@
+import { lockClosed, lockOpen, videocam } from "ionicons/icons";
+import type { Router } from "vue-router";
 import type { FileItem } from "@/api/encv";
 import { useI18n } from "@/composables/useI18n";
 import { useNewTaskModal } from "@/composables/useNewTaskModal";
 import type { FileAction } from "@/types/file-feature";
-import { lockClosed, lockOpen, videocam } from "ionicons/icons";
-import type { Router } from "vue-router";
 import { promptPassword } from "./password-dialog";
 import { getDecodedName, isAlistEncrypted, loadDecodedName, setSessionPassword } from "./useAlistEncrypt";
 

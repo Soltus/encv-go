@@ -151,7 +151,16 @@
 
 <script setup lang="ts">
 import { toastController } from "@ionic/vue";
-import { alertCircleOutline, bugOutline, checkmarkCircleOutline, cloudOfflineOutline, copyOutline, openOutline, refreshOutline, timerOutline } from "ionicons/icons";
+import {
+  alertCircleOutline,
+  bugOutline,
+  checkmarkCircleOutline,
+  cloudOfflineOutline,
+  copyOutline,
+  openOutline,
+  refreshOutline,
+  timerOutline,
+} from "ionicons/icons";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { logBuffer, OpenListNative } from "@/plugins/openlist-native";

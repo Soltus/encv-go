@@ -29,12 +29,12 @@
 </template>
 
 <script setup lang="ts">
-import type { ToolCall } from "@/composables/useAgent";
-import { useI18n } from "@/composables/useI18n";
-import MessageAuthor from "@/components/agent/MessageAuthor.vue";
-import StatusBadge from "@/components/agent/StatusBadge.vue";
 import { chevronDownOutline, chevronUpOutline, searchOutline } from "ionicons/icons";
 import { computed, ref } from "vue";
+import MessageAuthor from "@/components/agent/MessageAuthor.vue";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
+import type { ToolCall } from "@/composables/useAgent";
+import { useI18n } from "@/composables/useI18n";
 
 const props = defineProps<{
   queries: string[];

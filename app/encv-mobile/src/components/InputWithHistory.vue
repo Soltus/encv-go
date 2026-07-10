@@ -50,19 +50,10 @@
 </template>
 
 <script setup lang="ts">
-import {
-  chevronDownOutline,
-  chevronUpOutline,
-  eyeOffOutline,
-  eyeOutline,
-  folderOpen,
-  refreshOutline,
-  timeOutline,
-} from "ionicons/icons";
-
+import { chevronDownOutline, chevronUpOutline, eyeOffOutline, eyeOutline, folderOpen, refreshOutline, timeOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
 import { useI18n } from "@/composables/useI18n";
 import { clearHistory, getHistory, recordHistory } from "@/composables/useInputHistory";
-import { computed, ref } from "vue";
 
 const props = defineProps<{
   modelValue: string;

@@ -52,8 +52,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
 import { serverOutline } from "ionicons/icons";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { OpenListRuntime } from "./index";
 
 const props = defineProps<{

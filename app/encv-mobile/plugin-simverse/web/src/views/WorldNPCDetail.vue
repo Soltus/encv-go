@@ -87,16 +87,28 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonNote,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { alertCircleOutline, bagOutline, gitNetworkOutline, refreshOutline, timeOutline } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonList, IonLabel, IonItem,
-  IonBadge, IonNote, IonSpinner,
-} from "@ionic/vue";
-import { refreshOutline, alertCircleOutline, bagOutline, timeOutline, gitNetworkOutline } from "ionicons/icons";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseNPCDetail } from "@/composables/useSimverse";
+import { type SimverseNPCDetail, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -115,8 +127,12 @@ const avatarEmoji = computed(() => {
 
 function professionColor(profession: string): string {
   const map: Record<string, string> = {
-    farmer: "success", warrior: "danger", mage: "primary",
-    merchant: "warning", priest: "tertiary", rogue: "medium",
+    farmer: "success",
+    warrior: "danger",
+    mage: "primary",
+    merchant: "warning",
+    priest: "tertiary",
+    rogue: "medium",
   };
   return map[profession?.toLowerCase()] || "medium";
 }

@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { TerrainGenerator } from "./TerrainGenerator";
+import type { TerrainGenerator } from "./TerrainGenerator";
 
 export interface OrgTerritory {
   id: string;
@@ -20,13 +20,7 @@ export class TerritoryRenderer {
   private mapHeight: number;
   private tileSize: number;
 
-  constructor(
-    scene: Phaser.Scene,
-    terrainGenerator: TerrainGenerator,
-    mapWidth: number,
-    mapHeight: number,
-    tileSize: number
-  ) {
+  constructor(scene: Phaser.Scene, terrainGenerator: TerrainGenerator, mapWidth: number, mapHeight: number, tileSize: number) {
     this.scene = scene;
     this.terrainGenerator = terrainGenerator;
     this.mapWidth = mapWidth;
@@ -51,7 +45,7 @@ export class TerritoryRenderer {
 
     const renderGraphics = this.scene.add.graphics();
 
-    this.territories.forEach((territory) => {
+    this.territories.forEach(territory => {
       this.drawVoronoiRegion(renderGraphics, territory);
     });
 
@@ -82,11 +76,7 @@ export class TerritoryRenderer {
 
     for (let i = 0; i < segments; i++) {
       const angle = (i / segments) * Math.PI * 2;
-      const noise = this.terrainGenerator.getHeight(
-        centerX + Math.cos(angle) * size * 0.5,
-        centerY + Math.sin(angle) * size * 0.5,
-        0.05
-      );
+      const noise = this.terrainGenerator.getHeight(centerX + Math.cos(angle) * size * 0.5, centerY + Math.sin(angle) * size * 0.5, 0.05);
       const r = radius * (0.7 + noise * 0.5 + Math.random() * 0.1);
       const x = centerWorldX + Math.cos(angle) * r;
       const y = centerWorldY + Math.sin(angle) * r;
@@ -119,7 +109,7 @@ export class TerritoryRenderer {
   }
 
   removeTerritory(id: string): void {
-    this.territories = this.territories.filter((t) => t.id !== id);
+    this.territories = this.territories.filter(t => t.id !== id);
     this.renderTerritories();
   }
 

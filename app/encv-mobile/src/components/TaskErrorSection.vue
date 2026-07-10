@@ -9,9 +9,9 @@
  * - 不再用刺眼红色背景 / border-left 装饰
  */
 
+import { computed, ref } from "vue";
 import { analyzeError, type ErrorAnalysis } from "@/composables/useErrorAnalyzer";
 import { useI18n } from "@/composables/useI18n";
-import { computed, ref } from "vue";
 
 interface Props {
   task: {

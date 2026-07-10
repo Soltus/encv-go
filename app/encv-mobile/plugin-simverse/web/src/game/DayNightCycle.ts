@@ -31,14 +31,7 @@ export class DayNightCycle {
   constructor(scene: Phaser.Scene, worldWidth: number, worldHeight: number) {
     this.scene = scene;
 
-    this.overlay = scene.add.rectangle(
-      worldWidth / 2,
-      worldHeight / 2,
-      worldWidth,
-      worldHeight,
-      0xffffff,
-      0
-    );
+    this.overlay = scene.add.rectangle(worldWidth / 2, worldHeight / 2, worldWidth, worldHeight, 0xffffff, 0);
     this.overlay.setDepth(50);
     this.overlay.setBlendMode(Phaser.BlendModes.MULTIPLY);
 
@@ -83,21 +76,9 @@ export class DayNightCycle {
 
     this.timeOfDay = current.name;
 
-    const tintR = this.lerpColor(
-      (current.tintColor >> 16) & 255,
-      (next.tintColor >> 16) & 255,
-      phaseProgress
-    );
-    const tintG = this.lerpColor(
-      (current.tintColor >> 8) & 255,
-      (next.tintColor >> 8) & 255,
-      phaseProgress
-    );
-    const tintB = this.lerpColor(
-      current.tintColor & 255,
-      next.tintColor & 255,
-      phaseProgress
-    );
+    const tintR = this.lerpColor((current.tintColor >> 16) & 255, (next.tintColor >> 16) & 255, phaseProgress);
+    const tintG = this.lerpColor((current.tintColor >> 8) & 255, (next.tintColor >> 8) & 255, phaseProgress);
+    const tintB = this.lerpColor(current.tintColor & 255, next.tintColor & 255, phaseProgress);
     const tintColor = (tintR << 16) | (tintG << 8) | tintB;
     const tintAlpha = Phaser.Math.Linear(current.tintAlpha, next.tintAlpha, phaseProgress);
 
@@ -119,7 +100,7 @@ export class DayNightCycle {
 
     const time = this.scene.time.now / 1000;
 
-    this.starPositions.forEach((star) => {
+    this.starPositions.forEach(star => {
       const twinkle = 0.5 + 0.5 * Math.sin(time * 2 + star.twinkleOffset);
       const alpha = nightFactor * twinkle;
 
@@ -165,7 +146,7 @@ export class DayNightCycle {
   }
 
   setTimeOfDay(time: TimeOfDay): void {
-    const index = DAY_PHASES.findIndex((p) => p.name === time);
+    const index = DAY_PHASES.findIndex(p => p.name === time);
     if (index >= 0) {
       this.cycleTime = index / DAY_PHASES.length;
       this.updateTint();

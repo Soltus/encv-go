@@ -64,8 +64,6 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "@/composables/useI18n";
-import type { LibraryItem } from "@/composables/useLibraries";
 import { addIcons } from "ionicons";
 import {
   analytics,
@@ -111,6 +109,8 @@ import {
   text,
 } from "ionicons/icons";
 import { computed, ref, watch } from "vue";
+import { useI18n } from "@/composables/useI18n";
+import type { LibraryItem } from "@/composables/useLibraries";
 
 const props = defineProps<{ item: LibraryItem }>();
 const { t } = useI18n();

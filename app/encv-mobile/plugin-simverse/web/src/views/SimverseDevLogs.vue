@@ -212,28 +212,28 @@
 </template>
 
 <script setup lang="ts">
+import type { DropdownOption } from "@encv/shared-components/components/shared/FilterDropdown.vue";
+import FilterDropdown from "@encv/shared-components/components/shared/FilterDropdown.vue";
+import VirtualLogList from "@encv/shared-components/components/VirtualLogList.vue";
+import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
 import type { LogEntry } from "@encv/shared-components/composables/useFrontendLogs";
 import { useFrontendLogs } from "@encv/shared-components/composables/useFrontendLogs";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
 import { showToast } from "@encv/shared-components/composables/useToast";
-import { useSimverse } from "@/composables/useSimverse";
-import VirtualLogList from "@encv/shared-components/components/VirtualLogList.vue";
-import FilterDropdown from "@encv/shared-components/components/shared/FilterDropdown.vue";
-import type { DropdownOption } from "@encv/shared-components/components/shared/FilterDropdown.vue";
 import { alertController, type IonContent, IonIcon } from "@ionic/vue";
 import {
-  playOutline,
-  pauseOutline,
-  copyOutline,
-  trashOutline,
-  arrowUpOutline,
   arrowDownOutline,
+  arrowUpOutline,
   closeOutline,
-  wifiOutline,
   cloudOfflineOutline,
+  copyOutline,
+  pauseOutline,
+  playOutline,
+  trashOutline,
+  wifiOutline,
 } from "ionicons/icons";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const { logs: frontendLogs, clearLogs: clearFrontendLogs } = useFrontendLogs();
@@ -270,14 +270,14 @@ let lastEventId = "";
 const filteredFrontend = computed(() => {
   let items = frontendLogs.value;
   if (selectedLevels.value.size > 0) {
-    items = items.filter((l) => selectedLevels.value.has(l.level));
+    items = items.filter(l => selectedLevels.value.has(l.level));
   }
   if (selectedTags.value.length > 0) {
-    items = items.filter((l) => l.tags?.some((t) => selectedTags.value.includes(t)));
+    items = items.filter(l => l.tags?.some(t => selectedTags.value.includes(t)));
   }
   if (searchText.value) {
     const q = searchText.value.toLowerCase();
-    items = items.filter((l) => l.message.toLowerCase().includes(q));
+    items = items.filter(l => l.message.toLowerCase().includes(q));
   }
   return items;
 });
@@ -285,21 +285,19 @@ const filteredFrontend = computed(() => {
 const backendFilteredItems = computed(() => {
   let items = backendLogs.value;
   if (selectedLevels.value.size > 0) {
-    items = items.filter((l) => selectedLevels.value.has(l.level));
+    items = items.filter(l => selectedLevels.value.has(l.level));
   }
   if (selectedTags.value.length > 0) {
-    items = items.filter((l) => l.tags?.some((t) => selectedTags.value.includes(t)));
+    items = items.filter(l => l.tags?.some(t => selectedTags.value.includes(t)));
   }
   if (searchText.value) {
     const q = searchText.value.toLowerCase();
-    items = items.filter((l) => l.message.toLowerCase().includes(q));
+    items = items.filter(l => l.message.toLowerCase().includes(q));
   }
   return items;
 });
 
-const totalCurrent = computed(() =>
-  activeTab.value === "frontend" ? frontendLogs.value.length : backendLogs.value.length
-);
+const totalCurrent = computed(() => (activeTab.value === "frontend" ? frontendLogs.value.length : backendLogs.value.length));
 
 const filteredCurrent = computed(() =>
   activeTab.value === "frontend" ? filteredFrontend.value.length : backendFilteredItems.value.length
@@ -410,7 +408,7 @@ async function copyLogDetail() {
 
 async function handleCopy() {
   const items = activeTab.value === "frontend" ? filteredFrontend.value : backendFilteredItems.value;
-  const text = items.map((l) => `[${l.timestamp}] ${l.level.toUpperCase()} ${l.message}`).join("\n");
+  const text = items.map(l => `[${l.timestamp}] ${l.level.toUpperCase()} ${l.message}`).join("\n");
   const ok = await copyToClipboard(text);
   showToast(ok ? { message: t("devlogs.copied", { count: String(items.length) }) } : { message: t("devlogs.copyFailed"), color: "danger" });
 }
@@ -490,7 +488,7 @@ function updateTagOptions() {
       for (const t of log.tags) tagSet.add(t);
     }
   }
-  tagDropdownOptions.value = Array.from(tagSet).map((t) => ({ value: t, label: t }));
+  tagDropdownOptions.value = Array.from(tagSet).map(t => ({ value: t, label: t }));
 }
 
 async function setupScrollEl() {

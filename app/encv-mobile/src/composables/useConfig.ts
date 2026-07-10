@@ -1,7 +1,7 @@
+import { computed, ref } from "vue";
 import { fetchConfig, updateConfig } from "@/api/encv";
 import type { FieldDef } from "@/config/schemaParser";
 import { getDefaultValue, parseSchema } from "@/config/schemaParser";
-import { computed, ref } from "vue";
 
 const config = ref<Record<string, unknown>>({});
 const loading = ref(false);

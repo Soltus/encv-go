@@ -117,16 +117,31 @@
 </template>
 
 <script setup lang="ts">
-import { type SimverseChronicleEvent, type SimverseChronicleWorldResponse, useSimverse } from "../composables/useSimverse";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonAvatar,
+  IonBackButton,
+  IonBadge,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonModal,
+  IonNote,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
 import { chevronForward as chevronForwardIcon, refresh } from "ionicons/icons";
 import { onMounted, ref } from "vue";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonButton, IonIcon, IonContent, IonList, IonListHeader, IonLabel,
-  IonItem, IonBadge, IonNote, IonSpinner, IonAvatar, IonModal,
-} from "@ionic/vue";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useLiveRefresh } from "../composables/useLiveRefresh";
+import { type SimverseChronicleEvent, type SimverseChronicleWorldResponse, useSimverse } from "../composables/useSimverse";
 
 const { t } = useI18n();
 const { loadChronicleWorld, loadChronicleEvent, chronicleSignal } = useSimverse();
@@ -141,7 +156,11 @@ const selectedEvent = ref<SimverseChronicleEvent | null>(null);
 
 function levelIcon(level: string): string {
   const map: Record<string, string> = {
-    Personal: "个", Family: "家", Organization: "组", Regional: "区", World: "世",
+    Personal: "个",
+    Family: "家",
+    Organization: "组",
+    Regional: "区",
+    World: "世",
   };
   return map[level] || "?";
 }

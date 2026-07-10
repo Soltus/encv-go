@@ -1,5 +1,5 @@
-import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
-import { join, relative, resolve, basename, extname } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { basename, extname, join, relative, resolve } from "node:path";
 import type { Plugin } from "vite";
 
 export interface VueComponentCheckOptions {
@@ -98,7 +98,7 @@ function extractScriptImports(script: string): Map<string, string> {
   IMPORT_NAMED_RE.lastIndex = 0;
   while ((match = IMPORT_NAMED_RE.exec(nonTypeScript)) !== null) {
     const source = match[2];
-    const names = match[1].split(",").map((s) => {
+    const names = match[1].split(",").map(s => {
       const trimmed = s.trim();
       const asMatch = trimmed.match(/(\w+)\s+as\s+(\w+)/);
       return asMatch ? asMatch[2] : trimmed;
@@ -160,9 +160,7 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}):
   let componentIndex: Map<string, string> = new Map();
 
   function resolveComponentDirs(): string[] {
-    return componentDirs
-      .map((d) => resolve(rootDir, d))
-      .filter((d) => existsSync(d) && statSync(d).isDirectory());
+    return componentDirs.map(d => resolve(rootDir, d)).filter(d => existsSync(d) && statSync(d).isDirectory());
   }
 
   function isGlobalComponent(name: string): boolean {
@@ -175,7 +173,7 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}):
   }
 
   function shouldExclude(id: string): boolean {
-    return exclude.some((re) => re.test(id));
+    return exclude.some(re => re.test(id));
   }
 
   function checkFile(id: string, code: string): string[] {
@@ -264,9 +262,7 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}):
 
     buildEnd() {
       const duration = Date.now() - startTime;
-      console.log(
-        `\n[vue-component-check] 扫描了 ${totalFiles} 个 Vue 文件，用时 ${duration}ms`,
-      );
+      console.log(`\n[vue-component-check] 扫描了 ${totalFiles} 个 Vue 文件，用时 ${duration}ms`);
 
       if (totalErrors > 0) {
         const allErrors: string[] = [];
@@ -298,18 +294,14 @@ export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}):
 
         if (errors.length > 0) {
           totalErrors += errors.length - prevErrors;
-          console.warn(
-            `\n[vue-component-check] ⚠️  ${relative(rootDir, file)} 有 ${errors.length} 个问题：`,
-          );
+          console.warn(`\n[vue-component-check] ⚠️  ${relative(rootDir, file)} 有 ${errors.length} 个问题：`);
           for (const err of errors) {
             console.warn(`     ${err}`);
           }
           console.warn("");
         } else if (prevErrors > 0) {
           totalErrors -= prevErrors;
-          console.log(
-            `[vue-component-check] ✅  ${relative(rootDir, file)} 已修复，剩余 ${totalErrors} 个问题\n`,
-          );
+          console.log(`[vue-component-check] ✅  ${relative(rootDir, file)} 已修复，剩余 ${totalErrors} 个问题\n`);
         }
 
         fileStates.set(file, {

@@ -92,18 +92,28 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import {
-  IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton,
-  IonContent, IonList, IonListHeader, IonItem, IonLabel, IonIcon,
-  IonNote, IonSpinner, IonProgressBar,
-} from "@ionic/vue";
-import {
-  saveOutline, cloudUploadOutline, cloudDownloadOutline, trashOutline,
-} from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseSaveInfo, type SimverseStorageStatus } from "@/composables/useSimverse";
-import { alertController } from "@ionic/vue";
+import {
+  alertController,
+  IonBackButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonItem,
+  IonLabel,
+  IonList,
+  IonListHeader,
+  IonNote,
+  IonPage,
+  IonProgressBar,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { cloudDownloadOutline, cloudUploadOutline, saveOutline, trashOutline } from "ionicons/icons";
+import { onMounted, ref } from "vue";
+import { type SimverseSaveInfo, type SimverseStorageStatus, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const { loadSaveInfo, saveWorld, loadWorld, loadStorageStatus } = useSimverse();
@@ -116,10 +126,7 @@ const storage = ref<SimverseStorageStatus | null>(null);
 async function loadData() {
   loading.value = true;
   try {
-    const [info, st] = await Promise.all([
-      loadSaveInfo(),
-      loadStorageStatus().catch(() => null),
-    ]);
+    const [info, st] = await Promise.all([loadSaveInfo(), loadStorageStatus().catch(() => null)]);
     saveInfo.value = info;
     storage.value = st;
   } finally {

@@ -21,9 +21,9 @@
  *   - 结果缓存到 localStorage["encv_lib_desc_cache_v1"]，TTL 7 天
  */
 
+import { computed, ref } from "vue";
 import frontendDeps from "@/generated/frontend-deps.json";
 import { getAndroidDeps, isNative } from "@/plugins/GoProcess";
-import { computed, ref } from "vue";
 
 export type LibSource = "package.json" | "libs.versions.toml" | "build.gradle.kts" | "go.mod" | "runtime.Version()" | "unknown";
 

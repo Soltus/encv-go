@@ -193,18 +193,10 @@
 </template>
 
 <script setup lang="ts">
-import {
-  checkmarkCircleOutline,
-  closeCircleOutline,
-  listOutline,
-  playCircleOutline,
-  starOutline,
-  warningOutline,
-} from "ionicons/icons";
-
+import { checkmarkCircleOutline, closeCircleOutline, listOutline, playCircleOutline, starOutline, warningOutline } from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
 import { type DBTestProgress, getDatabaseInfo, runDatabaseTests } from "@/api/encv_perf";
 import { showToast } from "@/composables/useToast";
-import { computed, onMounted, ref } from "vue";
 
 interface ScenarioItem {
   id: string;

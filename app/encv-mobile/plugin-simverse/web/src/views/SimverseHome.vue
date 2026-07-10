@@ -68,12 +68,12 @@
 </template>
 
 <script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { arrowBack, exit } from "ionicons/icons";
 import { computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { closeWorld, isNativePluginMode, unlockScreenOrientation } from "@/plugins/SimVerse";
 import { useSimverse } from "@/composables/useSimverse";
-import { arrowBack, exit } from "ionicons/icons";
+import { closeWorld, isNativePluginMode, unlockScreenOrientation } from "@/plugins/SimVerse";
 
 const { t } = useI18n();
 const router = useRouter();

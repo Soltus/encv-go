@@ -1,5 +1,5 @@
-import type { FileFeature } from "@/types/file-feature";
 import { lockClosed } from "ionicons/icons";
+import type { FileFeature } from "@/types/file-feature";
 import { getAlistActions } from "./actions";
 import { getAlistBadge } from "./badge";
 import { getAlistSubtitle, preloadSubtitles } from "./subtitle";

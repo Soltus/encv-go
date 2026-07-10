@@ -85,18 +85,11 @@
 </template>
 
 <script setup lang="ts">
-import {
-  globeOutline,
-  openOutline,
-  playOutline,
-  powerOutline,
-  refreshOutline,
-} from "ionicons/icons";
-
+import { globeOutline, openOutline, playOutline, powerOutline, refreshOutline } from "ionicons/icons";
+import { onMounted, onUnmounted, ref } from "vue";
 import type { OpenListRuntime } from "@/components-shared";
 import OpenListStatusCard from "@/components-shared/OpenListStatusCard.vue";
 import { OpenListNative } from "@/plugins/openlist-native";
-import { onMounted, onUnmounted, ref } from "vue";
 
 const runtime = ref<OpenListRuntime>({
   running: false,

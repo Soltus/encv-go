@@ -195,9 +195,9 @@
 </template>
 
 <script setup lang="ts">
-import { type SimverseChronicleEvent, type SimverseChronicleWorldResponse, useSimverse } from "../composables/useSimverse";
 import { chevronForward as chevronForwardIcon, refresh } from "ionicons/icons";
 import { onMounted, ref } from "vue";
+import { type SimverseChronicleEvent, type SimverseChronicleWorldResponse, useSimverse } from "../composables/useSimverse";
 
 const { loadChronicleWorld, loadChronicleEvent, currentTick } = useSimverse();
 

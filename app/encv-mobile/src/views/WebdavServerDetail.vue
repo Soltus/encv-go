@@ -51,6 +51,9 @@
 </template>
 
 <script setup lang="ts">
+import { modalController } from "@ionic/vue";
+import { documentText, folderOpen, globeOutline, lockClosed, personOutline, settingsOutline } from "ionicons/icons";
+import { computed, ref } from "vue";
 import { testLocalWebDAV } from "@/api/encv";
 import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import FilePickerModal from "@/components/FilePickerModal.vue";
@@ -59,9 +62,6 @@ import { useI18n } from "@/composables/useI18n";
 import { showToast } from "@/composables/useToast";
 import type { FieldDef } from "@/config/schemaParser";
 import { parseSchema } from "@/config/schemaParser";
-import { modalController } from "@ionic/vue";
-import { documentText, folderOpen, globeOutline, lockClosed, personOutline, settingsOutline } from "ionicons/icons";
-import { computed, ref } from "vue";
 
 const { t } = useI18n();
 const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig();

@@ -6,8 +6,8 @@
  * 双向绑定到父组件的数组（与 useTaskFilter 形状一致）
  */
 
-import { useI18n } from "@/composables/useI18n";
 import { computed } from "vue";
+import { useI18n } from "@/composables/useI18n";
 
 interface Props {
   status: string[];

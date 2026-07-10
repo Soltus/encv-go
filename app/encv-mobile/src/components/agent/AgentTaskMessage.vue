@@ -81,10 +81,6 @@
 </template>
 
 <script setup lang="ts">
-import type { SubTask } from "@/composables/renderTurnItems";
-import { AGENT_TASK_COLLAPSE_CHAR_COUNT, AGENT_TASK_COLLAPSE_LINE_COUNT } from "@/composables/renderTurnItems";
-import StatusBadge from "@/components/agent/StatusBadge.vue";
-import { useI18n } from "@/composables/useI18n";
 import {
   checkmarkCircle,
   chevronDownOutline,
@@ -95,6 +91,10 @@ import {
   sync,
 } from "ionicons/icons";
 import { computed, ref } from "vue";
+import StatusBadge from "@/components/agent/StatusBadge.vue";
+import type { SubTask } from "@/composables/renderTurnItems";
+import { AGENT_TASK_COLLAPSE_CHAR_COUNT, AGENT_TASK_COLLAPSE_LINE_COUNT } from "@/composables/renderTurnItems";
+import { useI18n } from "@/composables/useI18n";
 
 const props = withDefaults(
   defineProps<{

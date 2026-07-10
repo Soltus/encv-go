@@ -19,8 +19,8 @@
  *   - 首次加载失败时返回空 Map（group card 显示 loading 或 0）
  */
 
-import { getRunSummary, listRuns, type RunInfo, type RunSummary } from "@/api/encv";
 import { type ComputedRef, computed, type Ref, ref } from "vue";
+import { getRunSummary, listRuns, type RunInfo, type RunSummary } from "@/api/encv";
 
 export interface UseRunSummaries {
   /** 所有 run 的 summary 缓存（按 runId 索引） */

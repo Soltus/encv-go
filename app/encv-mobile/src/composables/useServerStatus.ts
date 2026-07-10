@@ -1,8 +1,8 @@
-import { checkServerStatus, DEFAULT_API_BASE_URL, getPersistedBackendIdentity, setApiBaseUrl } from "@/api/encv";
-import { getBackendStatus, isNative, restartBackend, stopBackend } from "@/plugins/GoProcess";
 import { onMounted, onUnmounted, type Ref, ref } from "vue";
-import { useApiBaseProbe } from "./useApiBaseProbe";
+import { checkServerStatus, DEFAULT_API_BASE_URL, getPersistedBackendIdentity, setApiBaseUrl } from "@/api/encv";
 import { eventBus } from "@/composables/useEventBus";
+import { getBackendStatus, isNative, restartBackend, stopBackend } from "@/plugins/GoProcess";
+import { useApiBaseProbe } from "./useApiBaseProbe";
 import { type TransportMode, useRealtimeTransport } from "./useRealtimeTransport";
 
 const isOnline = ref(false);

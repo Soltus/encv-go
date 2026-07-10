@@ -6,8 +6,8 @@
 </template>
 
 <script setup lang="ts">
-import type { StepStatus } from "@/lib/workflow/types";
 import { computed } from "vue";
+import type { StepStatus } from "@/lib/workflow/types";
 
 const props = withDefaults(
   defineProps<{

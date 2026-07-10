@@ -74,9 +74,9 @@
 </template>
 
 <script setup lang="ts">
+import { alertCircleOutline, helpCircleOutline, homeOutline, refreshOutline } from "ionicons/icons";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { alertCircleOutline, helpCircleOutline, homeOutline, refreshOutline } from "ionicons/icons";
 
 const route = useRoute();
 const router = useRouter();

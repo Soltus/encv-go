@@ -57,12 +57,12 @@
 </template>
 
 <script setup lang="ts">
+import UnifiedTimelineCard from "@encv/shared-components/components/shared/UnifiedTimelineCard.vue";
+import { computed, reactive } from "vue";
 import type { EncvTask } from "@/api/encv";
 import { formatDateTime, formatDuration } from "@/composables/useDateFormat";
 import { useI18n } from "@/composables/useI18n";
 import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
-import UnifiedTimelineCard from "@encv/shared-components/components/shared/UnifiedTimelineCard.vue";
-import { computed, reactive } from "vue";
 
 const props = defineProps<{ task: EncvTask }>();
 const { t } = useI18n();

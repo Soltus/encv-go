@@ -113,15 +113,9 @@
 </template>
 
 <script setup lang="ts">
-import {
-  chevronDown,
-  chevronForward,
-  closeCircleOutline,
-  flashOutline,
-} from "ionicons/icons";
-
-import { isPhase, type StepStatus, type UnifiedTreeNode, type WorkflowRun } from "@/lib/workflow/types";
+import { chevronDown, chevronForward, closeCircleOutline, flashOutline } from "ionicons/icons";
 import { computed, ref, watch } from "vue";
+import { isPhase, type StepStatus, type UnifiedTreeNode, type WorkflowRun } from "@/lib/workflow/types";
 
 /**
  * 通用树形视图组件（UnifiedTreeView）

@@ -85,13 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import {
-  alertCircleOutline,
-  appsOutline,
-  helpCircleOutline,
-  homeOutline,
-  refreshOutline,
-} from "ionicons/icons";
+import { alertCircleOutline, appsOutline, helpCircleOutline, homeOutline, refreshOutline } from "ionicons/icons";
 
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
