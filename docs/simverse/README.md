@@ -34,14 +34,16 @@ FractalWorld 引擎 (internal/simverse)
 
 | 层 | 技术 | 说明 |
 |----|------|------|
-| 框架 | Vue 3 + Ionic 8 | 移动端 UI（竖屏浏览 + 横屏世界） |
+| 后台管理/数据浏览 | Vue 3 + Ionic 8 | **`Tabs` 各页（home/world/npcs/orgs/…）是模拟器管理台，不是游戏** |
 | 状态/数据 | `useSimverse` 单例组合式 | REST(`fetchJSON`) + WebSocket，无独立 Pinia store |
-| 路由 | Vue Router | 竖屏 tab + 横屏 `/world` 沉浸视图 |
-| 游戏渲染 | Phaser 4 + leafer-ui + matter-js | `src/game/` 世界/区域/战斗场景 |
+| 路由 | Vue Router | 后台 tab + 横屏 `/world` 沉浸视图 |
+| **游戏本体** | **Phaser 4 + leafer-ui + matter-js**（`src/game/` + `SimverseWorld.vue`） | **玩家真正"玩"的只有这一屏（横屏世界）** |
 | 原生桥接 | `plugins/SimVerse.ts` | JSInterface 双模式（native / web fallback） |
 | 构建 | Vite | 产物拷贝至插件 `assets/simverse/` |
 | 后端 | Go 1.25.1 + gin (`github.com/gin-gonic/gin v1.12.0`) | 模块 `github.com/Soltus/encv-go` |
 | 共享组件 | `@encv/shared-components` | 复用主应用组件/主题/i18n |
+
+> ⚠️ **认知纠偏（2026-07-10）**：Ionic 各页是**后台管理**，横屏世界（Phaser）才是**游戏本体**。此前多轮"UI 改造"作用在 Ionic 数据视图或横屏世界的表面装饰（配色/NPC 贴图/粒子/辉光/图例），属**屎上雕花**——未触及根本。根本缺失是**页面骨架**（屏幕状态机 + 多页转场），见 `GAME_ARCHITECTURE.md`。
 
 ### 数据层（`src/composables/useSimverse.ts`）
 
@@ -165,6 +167,7 @@ FractalWorld 引擎 (internal/simverse)
 - 路由 `/world/settings` 已注册；`WorldMapView` 增加「设置」入口。
 - **端到端联动（已落地）**：`usePhaserWorld` 监听 `simverse:render-settings` 事件，将设置实时应用到运行中的 Phaser 游戏——
   帧率经 `game.loop.targetFps`（<60 时 `forceSetTimeOut` 限速省电）生效；等效渲染等级经 `renderer.setResolution(高度/1080)` 调整画布内部分辨率（720P≈0.67 / 1080P=1.0 / 2K≈1.33）。
+- **画面设置入口（2026-07-10 修正）**：帧率/画质原仅在 `/world/settings`（`WorldMapView` 入口页「设置」）可调；现已把同一套 `useWorldRenderSettings`（单例，改即经 `simverse:render-settings` 事件实时生效）接入**实时世界 HUD 的 ⚙️ 设置面板**，无需退回入口页即可在横屏世界里调帧率/画质。
 
 ### 5.3 后端：补齐组织/区域/经济/纪元聚合接口（Go）
 - 安装 Go 1.25.1（mirrors.aliyun.com），`go env -w GOPROXY=https://goproxy.cn,direct`，`go mod download` 成功。
@@ -236,7 +239,40 @@ FractalWorld 引擎 (internal/simverse)
   - `NPCRelations.vue`：重写为真实关系视图——关系计数 chips + 关系卡片（目标名/类型/亲密度，点击跳转目标关系网）。
   - `WorldMapView` 增加「💞 社交关系」入口；`NPCDetail` 已有「查看关系」子入口指向 `/npc/:id/relations`。
 
+### 5.9 横屏世界 UI 改造（Phaser 渲染层，2026-07-10）
+- **问题定位**：此前 P7/P8/P14 的改动均在 Ionic/Vue 数据视图层，而横屏世界是独立的 Phaser canvas（`WorldScene`/`NPCSprite`），二者完全隔离；NPC 此前只是 6px 绿/灰小圆点 + 白字黑描边，故真机预览"辣眼睛且毫无变化"。
+- **根因**：渲染层从未接入 P14 流派系统；`SimverseNPC` 已含 `profession/level/wealth_tier/social_tier`，可直接复用 `deriveBuildFromNPC`。
+- **改动**（`src/game/`）：
+  - `builds.ts` 新增共享元数据 `ARCH_META`（`color` 数值色 / `colorCss` / `emoji` / 中文 `name`），供 Phaser 与 Ionic 两端共用，保证配色/图标一致。
+  - `NPCSprite.ts` 重写：以流派驱动外观——彩色流派圆底（按 `ARCH_META.color`）+ emoji 头像（覆盖在圆底上）+ 白色描边；名牌改为深色半透明胶囊背景（去除刺眼黑描边）；移动轨迹 `drawTrail` 改用流派色；死亡 NPC 显示灰底 💀。呼吸/悬停缩放作用于整个头像主体。
+  - `WorldScene.ts`：新增 `createLegend()` 左上角「流派图例」（固定不随相机缩放/平移，按 `L` 键开关），帮助识别彩色头像对应流派；新增 `createVignette()` 暗角叠加（径向渐变，固定相机），给平坦地形瓦片增加纵深感，缓解平铺"辣眼睛"。
+- **验证**：`read_lints` 对 `src/game/*` 0 错误；最终构建请在沙箱内 `pnpm --filter simverse-web build` + `go build` 确认（沙箱无 node_modules/Go 工具链）。
+
+### 5.10 横屏世界生命感（game-feel，2026-07-10）
+- **认知修正**：用户指出"辣眼睛"的根源不是配色/贴图，而是**界面与地图整体发呆、没有生命感**——这正是现代手游（原神/星穹铁道/龙息：神寂）靠持续运动 + 微交互 + 反馈动画解决的核心体验问题。
+- **世界层（`WorldScene.ts`）**：
+  - 新增 `createAmbientParticles()`：90 个环境粒子（萤火/尘埃），在世界空间持续缓缓漂浮、正弦明灭，给空旷地图注入"呼吸感"；`updateAmbientParticles(delta)` 每帧更新（循环回收 + 透明度波动），`depth=1` 置于地形之上、NPC 之下。
+  - NPC 运动频率翻倍：`npcMoveInterval` 5000→3000ms，移动触发概率 0.3→0.5，地图肉眼可见地"活"起来。
+  - 头像/粒子分层：`NPCSprite` 统一 `setDepth(10)`，避免被粒子/地形遮挡。
+- **HUD 层（`SimverseWorld.vue`，纯 CSS 动画，零逻辑风险）**：
+  - 背景星云 `bgDrift` 26s 缓动漂移；
+  - 资源数值（💎/🪙/⚡）变动时 `valuePop` 弹跳高亮（`:key` 触发重挂载重放动画）；
+  - 运行中播放键 `runPulse` 绿色脉冲辉光；
+  - 抽卡按钮 `gachaGlow` 呼吸式粉光高亮（引导注意力，仿手游常驻抽卡入口）；
+  - 激活菜单 `activeGlow` 紫色辉光；
+  - 侧栏 `side-panel` 弹性滑入（spring 缓动 `cubic-bezier(0.34,1.56,0.64,1)` + 轻微 scale）。
+- **验证**：`read_lints` 对 `SimverseWorld.vue` / `WorldScene.ts` 0 错误。
+- ⚠️ **事后纠偏（2026-07-10 末）**：§5.9/§5.10 的"流派贴图/粒子/辉光/弹性滑入"仍是**表面装饰**。用户最终点明：横屏世界缺的是**页面骨架**——它只是一页永远不变的东西（常驻画布 + 永远可见的浮动按钮 + 通用抽屉 + 小卡片浮层），没有屏幕状态机、没有会变形的页面、没有转场。这些动画贴在"一页"上依旧是屎上雕花。真正的改造是建立多页屏幕架构（world/focus/event/intervene/character + 转场），见 `GAME_ARCHITECTURE.md`，并已启动重构。
+
 ---
+
+### 5.11 横屏世界页面骨架·焦点页升级（对象上下文页，2026-07-10 续）
+- **承上**：`GAME_ARCHITECTURE.md` 地基第六块。把 `focus` 页从"小卡片浮层"升级为真正的**对象上下文页**，落实"镜头推近 + 身份/时间线/关系/编入编队"的页面骨架要求。
+- **镜头转场**：进入焦点页 `phaserWorld.centerOnNPC(id)`（相机推近 1.2x），返回 `setZoom(0.5)` 复位俯瞰；地图点击 NPC 统一走 `selectNPC`。
+- **身份**：头部流派徽章（复用 P14 `deriveBuildFromNPC` + `ARCH_META`）。
+- **时间线**：`loadChronicleNPC` 拉取该 NPC 编年史（真实后端）；**关系**：`loadNPCRelations` 拉取关系网，点击跳转对方焦点页（关系网导航）；均经 `simverse.rel.*` 本地化。
+- **编入编队**：`toggleSquad` 复用 `simverse:squad` localStorage（与 `SquadSynergy.vue` 同键），呼应 P14 编队协同。
+- `read_lints` 0 错误；i18n 新增 `simverse.focus.*` + `simverse.loading`。
 
 ## 六、下一步 / 阻塞项
 
@@ -276,8 +312,12 @@ FractalWorld 引擎 (internal/simverse)
 - **P13 多人共存与社交场**：同世界多玩家化身、组队探索、协作事件（Phaser `WorldScene` 扩展）。
 - **P14 流派系统与卡牌化界面**（补充卡片手游参考：龙息：神寂 / 潮汐守望者 / 云顶之弈 / 炉石）：NPC/组织"流派"派生 + 自走棋式编队协同 + 卡牌化 UI（卡片/标签 chips/编队网格/关系网卡牌连线/抽卡动画），复用 `personality.go`/`aggregates.go`/`SocialGraph`/`gacha`。
   - ✅ 已落地（2026-07-10）：`src/game/builds.ts` 的 `deriveNPCBuild()`（前端确定性流派派生）+ `NPCDetail`「流派」卡片（彩色徽章 + 契合度星级 + 次要流派 chips）+ i18n `simverse.build*`；组织流派/编队协同/卡牌连线待续。
+  - ✅ 已落地（2026-07-10）：`NPCRelations.vue` 新增 SVG「关系网」卡片连线可视化（中心自身节点 + 按亲密度环状排布的关系目标卡牌 + 类型着色/亲密度加权的连线，点击跳转），呼应 P8 `SocialGraph` 与卡片连线范式；i18n `simverse.relGraph`/`relGraphHint`。
+  - ✅ 已落地（2026-07-10）：新增 `SquadSynergy.vue`（路由 `/world/squad`，`WorldMapView`「🃏 编队」入口）——玩家组最多 6 人编队（`localStorage` 持久化），基于 `deriveBuildFromNPC` 统计流派，达 2/4/6 触发「初/盛/极」羁绊，直接呼应《潮汐守望者》/云顶之弈流派协同；i18n `simverse.squad*`/`synergy*`。
+  - ✅ 已落地（2026-07-10）：横屏世界 Phaser 渲染层接入 P14 流派——`NPCSprite` 改为「彩色流派圆底 + emoji 头像 + 清爽名牌」（`ARCH_META` 共享元数据），`WorldScene` 新增「流派图例」(`L` 键) 与暗角纵深叠加，根治"辣眼睛"的统一绿/灰小圆点。详见 5.9。
+  - ✅ 已落地（2026-07-10，「生命感 / game-feel」修正）：此前多轮改造都停留在"配色/贴图"层，但横屏世界真正的"辣眼睛"根源是**界面与地图没有生命感（发呆）**。本轮注入运动与反馈——`WorldScene` 新增 90 个环境粒子（萤火/尘埃，持续漂浮明灭）+ NPC 移动频率翻倍（间隔 5s→3s、触发概率 0.3→0.5）+ 头像/粒子分层（NPC depth 10）；`SimverseWorld.vue` HUD 新增：背景星云缓动漂移、资源数值变动弹跳、运行中播放键脉冲辉光、抽卡按钮呼吸式高亮、激活菜单辉光、侧栏弹性滑入（spring 缓动）。详见 5.10。
 - **MVP 路径**：P9 → P10 → P11 → P12 → P13 → P14（情感陪伴留存杠杆最高，多人架构改动最大放最后；P14 为低风险表现层升级，可并行）。
 
 ---
 
-*最后更新：2026-07-09（合并 docs/simulation → docs/simverse 完成；全部 37 路由已实现，后端聚合接口已落地；P4 行为气泡/交互流、P6 任务系统/渲染联动、P7 持续演化（行为实时刷新 + 经济/编年史 WS 实时推送 `economy:update`/`chronicle:event` + `useLiveRefresh` 7 视图接入，P7 完成）、P8 社交关系系统（SocialGraph 后端 + social/stats、npc/:id/relations 路由 + SocialOverview/NPCRelations 视图）已补齐）*
+*最后更新：2026-07-10（合并 docs/simulation → docs/simverse 完成；全部 37 路由已实现，后端聚合接口已落地；P4 行为气泡/交互流、P6 任务系统/渲染联动、P7 持续演化（行为实时刷新 + 经济/编年史 WS 实时推送 `economy:update`/`chronicle:event` + `useLiveRefresh` 7 视图接入，P7 完成）、P8 社交关系系统（SocialGraph 后端 + social/stats、npc/:id/relations 路由 + SocialOverview/NPCRelations 视图）已补齐；横屏世界页面骨架（屏幕状态机 world/focus/event/intervene/character + 底部主操作条 + 焦点页升级为对象上下文页：镜头推近 + 身份/时间线/关系/编入编队）已落地，详见 `GAME_ARCHITECTURE.md`）*

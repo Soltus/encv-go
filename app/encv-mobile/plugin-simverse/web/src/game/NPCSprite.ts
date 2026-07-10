@@ -1,9 +1,14 @@
 import Phaser from "phaser";
 import type { SimverseNPC } from "@/composables/useSimverse";
+import { deriveBuildFromNPC, ARCH_META } from "./builds";
 
+// 横屏世界的 NPC 头像：以 P14 流派系统驱动外观——
+// 彩色流派圆底 + emoji 头像 + 白色描边 + 清爽名牌，替代原本统一的绿/灰小圆点。
 export class NPCSprite extends Phaser.GameObjects.Container {
   private npcData: SimverseNPC;
+  private avatar: Phaser.GameObjects.Container;
   private circle: Phaser.GameObjects.Arc;
+  private emojiText: Phaser.GameObjects.Text;
   private nameText: Phaser.GameObjects.Text;
   private behaviorText: Phaser.GameObjects.Text | null = null;
   private behaviorCN: string = "";
@@ -11,34 +16,52 @@ export class NPCSprite extends Phaser.GameObjects.Container {
   private moveTween: Phaser.Tweens.Tween | null = null;
   private trail: Phaser.GameObjects.Graphics | null = null;
   private trailPoints: { x: number; y: number; alpha: number }[] = [];
+  private archColor = 0x22c55e;
 
   constructor(scene: Phaser.Scene, x: number, y: number, npc: SimverseNPC) {
     super(scene, x, y);
     this.npcData = npc;
 
-    const dotColor = npc.is_alive ? 0x22c55e : 0x6b7280;
+    const build = deriveBuildFromNPC(npc);
+    const meta = ARCH_META[build.primary];
+    this.archColor = npc.is_alive ? meta.color : 0x6b7280;
 
     this.trail = scene.add.graphics();
     this.add(this.trail);
 
-    this.circle = scene.add.circle(0, 0, 6, dotColor);
-    this.circle.setStrokeStyle(2, 0xffffff, 0.5);
-    this.add(this.circle);
+    // 头像主体（呼吸/悬停时整体缩放）
+    this.avatar = scene.add.container(0, 0);
 
-    this.nameText = scene.add.text(0, 12, npc.name, {
+    const r = 8;
+    this.circle = scene.add.circle(0, 0, r, this.archColor);
+    this.circle.setStrokeStyle(2, 0xffffff, 0.85);
+    this.avatar.add(this.circle);
+
+    this.emojiText = scene.add.text(0, 0, npc.is_alive ? meta.emoji : "💀", {
+      fontSize: "12px",
+      color: "#ffffff",
+    });
+    this.emojiText.setOrigin(0.5);
+    this.avatar.add(this.emojiText);
+
+    this.add(this.avatar);
+
+    // 名牌：深色半透明胶囊背景，替代刺眼的黑描边
+    this.nameText = scene.add.text(0, 16, npc.name, {
       fontSize: "10px",
       color: "#ffffff",
+      backgroundColor: "#000000aa",
+      padding: { x: 3, y: 1 },
       align: "center",
       fontStyle: "500",
     });
     this.nameText.setOrigin(0.5);
-    this.nameText.setStroke("#000000", 3);
     this.add(this.nameText);
 
-    this.behaviorText = scene.add.text(0, -24, "", {
+    this.behaviorText = scene.add.text(0, -22, "", {
       fontSize: "9px",
       color: "#ffffff",
-      backgroundColor: "#00000099",
+      backgroundColor: "#000000cc",
       padding: { x: 3, y: 1 },
       align: "center",
     });
@@ -46,15 +69,15 @@ export class NPCSprite extends Phaser.GameObjects.Container {
     this.behaviorText.setVisible(false);
     this.add(this.behaviorText);
 
-    this.setSize(12, 28);
+    this.setSize(20, 40);
 
     this.setInteractive({ useHandCursor: true });
 
     this.on("pointerover", () => {
       this.isHovered = true;
       this.scene.tweens.add({
-        targets: this.circle,
-        scale: 1.3,
+        targets: this.avatar,
+        scale: 1.35,
         duration: 150,
         ease: "Power2.out",
       });
@@ -63,7 +86,7 @@ export class NPCSprite extends Phaser.GameObjects.Container {
     this.on("pointerout", () => {
       this.isHovered = false;
       this.scene.tweens.add({
-        targets: this.circle,
+        targets: this.avatar,
         scale: 1,
         duration: 150,
         ease: "Power2.out",
@@ -72,8 +95,8 @@ export class NPCSprite extends Phaser.GameObjects.Container {
 
     if (npc.is_alive) {
       scene.tweens.add({
-        targets: this.circle,
-        scale: { from: 1, to: 1.15 },
+        targets: this.avatar,
+        scale: { from: 1, to: 1.12 },
         duration: 1000,
         yoyo: true,
         repeat: -1,
@@ -92,8 +115,11 @@ export class NPCSprite extends Phaser.GameObjects.Container {
 
   updateNPC(npc: SimverseNPC): void {
     this.npcData = npc;
-    const dotColor = npc.is_alive ? 0x22c55e : 0x6b7280;
-    this.circle.setFillStyle(dotColor);
+    const build = deriveBuildFromNPC(npc);
+    const meta = ARCH_META[build.primary];
+    this.archColor = npc.is_alive ? meta.color : 0x6b7280;
+    this.circle.setFillStyle(this.archColor);
+    this.emojiText.setText(npc.is_alive ? meta.emoji : "💀");
     this.nameText.setText(npc.name);
   }
 
@@ -185,7 +211,7 @@ export class NPCSprite extends Phaser.GameObjects.Container {
     if (!this.trail) return;
 
     this.trail.clear();
-    const color = this.npcData.is_alive ? 0x22c55e : 0x6b7280;
+    const color = this.archColor;
 
     for (let i = 0; i < this.trailPoints.length - 1; i++) {
       const p1 = this.trailPoints[i];
@@ -206,20 +232,22 @@ export class NPCSprite extends Phaser.GameObjects.Container {
   setLODLevel(level: "full" | "medium" | "low"): void {
     switch (level) {
       case "full":
-        this.circle.setVisible(true);
+        this.avatar.setVisible(true);
+        this.avatar.setScale(1);
         this.nameText.setVisible(true);
-        this.nameText.setFontSize("10px");
         if (this.trail) this.trail.setVisible(true);
         if (this.behaviorText) this.behaviorText.setVisible(!!this.behaviorCN);
         break;
       case "medium":
-        this.circle.setVisible(true);
+        this.avatar.setVisible(true);
+        this.avatar.setScale(1);
         this.nameText.setVisible(false);
         if (this.trail) this.trail.setVisible(true);
         if (this.behaviorText) this.behaviorText.setVisible(false);
         break;
       case "low":
-        this.circle.setScale(0.6);
+        this.avatar.setVisible(true);
+        this.avatar.setScale(0.6);
         this.nameText.setVisible(false);
         if (this.trail) this.trail.setVisible(false);
         if (this.behaviorText) this.behaviorText.setVisible(false);

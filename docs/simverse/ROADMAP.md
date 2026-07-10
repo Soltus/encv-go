@@ -7,6 +7,19 @@
 
 ---
 
+> ⚠️ **认知前置（2026-07-10 纠偏，落地前必读 `GAME_ARCHITECTURE.md`）**
+> - **游戏本体 = 横屏世界（`SimverseWorld.vue` + Phaser）**；Ionic 的 `Tabs` 各页（home/world/npcs/orgs/…）是**后台管理/数据浏览，不是游戏**。
+> - 当前横屏世界**缺页面骨架**：只有一页永远不变（常驻画布 + 永远可见的浮动按钮 + 通用抽屉 + 小卡片浮层），没有屏幕状态机、没有会变形的页面、没有转场。任何 P9–P14 玩法都必须挂在"多页屏幕架构"之上，否则又是屎上雕花。
+> - **`SimverseWorld` 里 profile/training/inventory/gacha/battle/explore 全是写死桩**（未接后端）。以 A 上帝视角为主时这些应移除或折叠；若做 B 化身体验，必须接到真实后端角色系统，而非桩。
+
+## 〇、必须先做：页面骨架（地基）
+
+在任何 P9–P14 之前，先把横屏世界从"一页"重构成**屏幕状态机 + 多页转场**：
+`world`（主世界，底部主操作条收敛 13 个浮动按钮）→ `focus`（点对象镜头推近、变成该对象上下文页）→ `event`（重大事件占屏时刻）→ `intervene`（干预模式）→ `character`（B 化身页）→ 弹窗层（gacha/settings/battle）。
+**没有这层骨架，后续所有玩法都挂在不存在的结构上。**
+
+---
+
 ## 一、2024+ 手游可借鉴特征速查
 
 | 游戏（上线） | 厂商 | 与 SimVerse 最相关的特征 | 可迁移方向 |
@@ -51,7 +64,7 @@
   - *流派标签 chips*：在 `NPCDetail` 展示"流派 / 羁绊"标签组（与 P8 关系网呼应）。
   - *编队 / 收藏界面*：网格卡牌 + 协同指示（类似战棋编队）。
   - *关系网卡牌连线*：用卡牌 + 连线呈现 `SocialGraph`（强化 P8）。
-  - *抽卡（已有 `gacha`）*：结果以卡牌翻面动画呈现，提升仪式感。
+  - *抽卡*：结果以卡牌翻面动画呈现，提升仪式感。⚠️ 注意：当前 `SimverseWorld` 里的 `gacha` 是**写死桩**（本地 `Math.random` 抽、未接后端），需先决定移除（A 为主）或接真实后端抽卡系统（B 体验）后再做卡牌动画。
 
 ---
 
@@ -105,8 +118,17 @@
   `primary` 主流派 + 1~2 个次要 `tags` + 契合度 `synergy`(1-5)；同输入同输出，无需后端。
 - ✅ **NPCDetail 卡片化展示**：新增「流派」卡片——主流派彩色徽章 + 契合度星级 + 次要流派 chips；
   i18n 新增 `simverse.build` 及 10 个 `simverse.build.<key>`（中/英）。
-- ⏳ 待做：组织流派（后端 `aggregates.go`/`OrgTerritory`）、玩家编队协同（自走棋式 2/4/6 羁绊）、
-  关系网卡牌连线、抽卡卡牌翻面动画、NPC 卡片稀有度边框/数值条化。
+- ⏳ 待做：组织流派（后端 `aggregates.go`/`OrgTerritory`）、
+  抽卡卡牌翻面动画、NPC 卡片稀有度边框/数值条化。
+- ✅ **关系网卡牌连线（前端）**：`NPCRelations.vue` 新增 SVG「关系网」可视化——中心为自身节点，
+  按亲密度（`affinity`）降序取前 9 个关系目标呈环状排布，节点圆形卡牌（首字母 + 亲密度数值），
+  连线颜色按关系类型（`relColor`）、线宽/透明度按亲密度强度；点击节点跳转对方关系网。
+  i18n 新增 `simverse.relGraph` / `simverse.relGraphHint`（中/英）。呼应 P8 `SocialGraph` 与卡片连线范式。
+- ✅ **玩家编队协同（前端，自走棋式 2/4/6 羁绊）**：新增 `SquadSynergy.vue`（路由 `/world/squad`，
+  `WorldMapView` 增加「🃏 编队」入口）。玩家从候选列表（基于 `loadNPCList`）挑选最多 6 名角色组成编队，
+  本地 `localStorage` 持久化；基于 `deriveBuildFromNPC`（复用流派枚举与职业权重）统计各流派主流派数量，
+  达 2/4/6 触发「初/盛/极」三档羁绊。i18n 新增 `simverse.squad*` / `simverse.synergy*`（中/英）。
+  直接呼应《潮汐守望者》/ 云顶之弈的流派协同范式。
 
 ---
 
@@ -132,4 +154,4 @@
 - `QuestManager`（`quest.go`）→ P12 赛季任务树。
 - `useLiveRefresh` + WS 推送（`economy:update`/`chronicle:event`）→ P9/P10 实时陪伴与事件流的基础通道。
 - Phaser `WorldScene` + `NPCSprite` → P10 作息可视化、P13 多玩家化身。
-- `personality.go` / `npc_v3.go`（技能/人格）→ P14 NPC 流派派生；`aggregates.go` / `OrgTerritory` → 组织流派；`SocialGraph` → P14 卡牌连线可视化；`gacha` → P14 抽卡卡牌动画。
+- `personality.go` / `npc_v3.go`（技能/人格）→ P14 NPC 流派派生；`aggregates.go` / `OrgTerritory` → 组织流派；`SocialGraph` → P14 卡牌连线可视化；`gacha`（当前为桩，见上文⚠️）→ P14 抽卡卡牌动画（需先落地真实抽卡后端）。

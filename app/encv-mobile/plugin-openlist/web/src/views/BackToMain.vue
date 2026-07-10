@@ -71,6 +71,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
+import { refreshOutline } from "ionicons/icons";
 
 // 目标 encv-mobile vite dev server 直连地址。
 // 用 127.0.0.1 而非 localhost：避免某些环境 DNS 解析 localhost 到 ::1 失败。
@@ -79,7 +80,7 @@ import { onMounted, onUnmounted, ref } from "vue";
 //   /tabs/remote  → 主 app Remote tab（不再硬编码 :5173，因为主 app vite 已迁到 :8100）
 const ENCV_MAIN_URL = "http://localhost:16666/tabs/remote";
 
-const _iframeRef = ref<HTMLIFrameElement | null>(null);
+const iframeRef = ref<HTMLIFrameElement | null>(null);
 const iframeSrc = ref(ENCV_MAIN_URL);
 const loadError = ref("");
 let probeTimer: ReturnType<typeof setInterval> | null = null;
@@ -96,19 +97,19 @@ onUnmounted(() => {
   }
 });
 
-function _reload() {
+function reload() {
   loadError.value = "";
   // 给 iframe 加 cache buster 参数强制重载
   const sep = ENCV_MAIN_URL.includes("?") ? "&" : "?";
   iframeSrc.value = `${ENCV_MAIN_URL}${sep}_t=${Date.now()}`;
 }
 
-function _onIframeError() {
+function onIframeError() {
   // iframe @error 不一定靠谱（sandboxed 跨源时静默），但保险起见监听
   loadError.value = "iframe 触发 error 事件（可能是 :5173 离线或 sandbox 拒访问）";
 }
 
-function _onIframeLoad() {
+function onIframeLoad() {
   // iframe @load 触发：能加载就清掉错误（即使加载的是错误页也算 load）
   // 进一步状态由 probeHealth 检查
   if (loadError.value) {

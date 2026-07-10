@@ -47,6 +47,41 @@
           </div>
         </ion-list>
 
+        <!-- 关系网卡牌连线 (P14) -->
+        <div class="rel-graph-card">
+          <div class="graph-title">{{ t("simverse.relGraph") }} · {{ t("simverse.socialAffinity") }}</div>
+          <svg class="rel-graph" viewBox="0 0 320 320" width="100%">
+            <line
+              v-for="n in graphNodes"
+              :key="'l' + n.id"
+              :x1="cx" :y1="cy" :x2="n.x" :y2="n.y"
+              :stroke="relStroke(n.relType)"
+              :stroke-width="lineWidth(n.affinity)"
+              :stroke-opacity="lineOpacity(n.affinity)"
+            />
+            <g class="self-node">
+              <circle :cx="cx" :cy="cy" r="30" fill="var(--ion-color-primary)" />
+              <text :x="cx" :y="cy + 5" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">{{ initial(data.name) }}</text>
+              <text :x="cx" :y="cy + 48" text-anchor="middle" font-size="11" fill="var(--ion-color-medium)">{{ data.name }}</text>
+            </g>
+            <g
+              v-for="n in graphNodes"
+              :key="n.id"
+              class="rel-node"
+              @click="goTarget(n.id)"
+            >
+              <circle
+                :cx="n.x" :cy="n.y" r="22"
+                :fill="relStroke(n.relType)" fill-opacity="0.16"
+                :stroke="relStroke(n.relType)" stroke-width="2"
+              />
+              <text :x="n.x" :y="n.y + 5" text-anchor="middle" font-size="13" font-weight="700" :fill="relStroke(n.relType)">{{ initial(n.name) }}</text>
+              <text :x="n.x" :y="n.y + 40" text-anchor="middle" font-size="10" :fill="relStroke(n.relType)">{{ n.affinity > 0 ? "+" : "" }}{{ n.affinity }}</text>
+            </g>
+          </svg>
+          <p class="graph-hint">{{ t("simverse.relGraphHint") }}</p>
+        </div>
+
         <!-- 关系列表 -->
         <ion-list :inset="true">
           <ion-list-header><ion-label>{{ t("simverse.npcRelations") }}</ion-label></ion-list-header>
@@ -126,6 +161,44 @@ function relColor(type: string): string {
   }
 }
 
+// P14 关系网卡牌连线：SVG 坐标与连线样式
+const GRAPH_MAX = 9;
+const cx = 160;
+const cy = 150;
+
+const graphNodes = computed(() => {
+  if (!data.value) return [];
+  const rels = [...data.value.relations]
+    .sort((a, b) => Math.abs(b.affinity) - Math.abs(a.affinity))
+    .slice(0, GRAPH_MAX);
+  const N = rels.length;
+  const R = 110;
+  return rels.map((r, i) => {
+    const ang = ((-90 + (i * 360) / Math.max(1, N)) * Math.PI) / 180;
+    return {
+      id: r.target_id,
+      name: r.target.name,
+      relType: r.rel_type,
+      affinity: r.affinity,
+      x: cx + R * Math.cos(ang),
+      y: cy + R * Math.sin(ang),
+    };
+  });
+});
+
+function relStroke(type: string): string {
+  return `var(--ion-color-${relColor(type)})`;
+}
+function initial(name: string): string {
+  return String(name || "?").charAt(0);
+}
+function lineWidth(affinity: number): number {
+  return Math.max(1, Math.min(5, Math.abs(affinity) / 10));
+}
+function lineOpacity(affinity: number): number {
+  return 0.25 + Math.min(0.6, Math.abs(affinity) / 50);
+}
+
 function goTarget(id: number) {
   router.push(`/npc/${id}/relations`);
 }
@@ -194,5 +267,34 @@ watch(() => route.params.id, reload);
   text-align: center;
   color: var(--ion-color-medium);
   padding: 24px;
+}
+.rel-graph-card {
+  margin: 12px 16px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--ion-color-light, #f3f4f6);
+}
+.graph-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ion-color-medium);
+  margin-bottom: 4px;
+}
+.rel-graph {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+}
+.rel-node {
+  cursor: pointer;
+}
+.rel-node:active circle {
+  fill-opacity: 0.32;
+}
+.graph-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--ion-color-medium);
+  margin: 4px 0 0;
 }
 </style>

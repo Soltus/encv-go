@@ -3,8 +3,28 @@ packages:
   - 'encv-mobile/plugin-openlist/web'
   - 'encv-mobile/plugin-mpv-player/web'
   - 'encv-mobile/plugin-simverse/web'
-  - 'preview-gateway'
   - 'packages/*'
+
+# ─── 统一依赖版本管理（pnpm catalog） ───────────────────────────────
+# 所有共用依赖（构建工具链 / 框架 / 样式栈）在此单点定义版本，
+# 各 package.json 用 "catalog:" 引用，避免版本漂移、升级只需改一处。
+catalog:
+  # 构建工具链
+  typescript: ^5.9.3
+  vite: ^8.0.13
+  vue-tsc: ^2.2.10
+  '@vitejs/plugin-vue': ^6.0.7
+  # 框架核心
+  vue: ^3.5.34
+  vue-router: ^4.6.4
+  '@ionic/vue': ^8.8.7
+  '@ionic/vue-router': ^8.8.7
+  ionicons: ^8.0.13
+  # 样式栈（Tailwind v4 + daisyUI v5，工作区共享样式）
+  tailwindcss: ^4.1.0
+  '@tailwindcss/vite': ^4.1.0
+  daisyui: ^5.0.0
+
 allowBuilds:
   core-js: false
   cypress: false

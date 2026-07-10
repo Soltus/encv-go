@@ -1,0 +1,88 @@
+/* =============================================================================
+ * ENCV 工作区共享样式入口（daisyUI + Tailwind v4）
+ *
+ * 这是「统筹 pnpm 工作区共享样式」的唯一事实源：
+ *   - 各插件 vite 配置统一引入 daisyUiPlugin()（见 ../vite-plugins/daisy-ui.ts）
+ *   - 各插件 main.ts 统一 import "@encv/shared-components/styles/daisyui.css"
+ *
+ * 设计令牌与现有 Ionic 调色板（theme/variables.css 的紫色主色 #8b5cf6）对齐，
+ * 保证 daisyUI 组件与既有 Ionic 视觉一致。
+ *
+ * daisyUI v5 自定义主题写法：
+ *   - 主插件 @plugin "daisyui" 的 themes 列表只声明「启用哪些主题」；
+ *   - 真正的颜色令牌由 @plugin "daisyui/theme" 以完整 --color-* 变量给出。
+ * ========================================================================== */
+
+@import "tailwindcss";
+
+/* 声明工作区使用的主题（encv 为默认亮色，encv-dark 跟随系统暗色） */
+@plugin "daisyui" {
+  themes: encv --default, encv-dark --prefersdark;
+}
+
+/* 亮色主题：encv */
+@plugin "daisyui/theme" {
+  name: "encv";
+  default: true;
+  color-scheme: light;
+  --color-primary: #8b5cf6;
+  --color-primary-content: #ffffff;
+  --color-secondary: #06b6d4;
+  --color-secondary-content: #ffffff;
+  --color-accent: #ec4899;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #ffffff;
+  --color-base-200: #f3f4f6;
+  --color-base-300: #e5e7eb;
+  --color-base-content: #1f2937;
+  --color-info: #3b82f6;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+}
+
+/* 暗色主题：encv-dark（跟随 prefers-color-scheme: dark） */
+@plugin "daisyui/theme" {
+  name: "encv-dark";
+  prefersdark: true;
+  color-scheme: dark;
+  --color-primary: #9c6df7;
+  --color-primary-content: #ffffff;
+  --color-secondary: #1fbdd8;
+  --color-secondary-content: #ffffff;
+  --color-accent: #ee5aa3;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #0f172a;
+  --color-base-200: #1e293b;
+  --color-base-300: #334155;
+  --color-base-content: #e2e8f0;
+  --color-info: #3b82f6;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+}
+
+/* 共享组件层：统一卡片/容器风格，供各插件复用，避免重复造样式 */
+@layer components {
+  .encv-card {
+    @apply rounded-2xl bg-base-100 shadow-sm border border-base-300;
+  }
+
+  .encv-panel {
+    @apply rounded-3xl bg-base-200 p-4;
+  }
+
+  .encv-btn {
+    @apply btn btn-primary;
+  }
+}

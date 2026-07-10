@@ -27,6 +27,7 @@ import { devStartGuard } from '../packages/shared-components/src/lib/dev-start-g
 import { frontendDepsManifestPlugin } from './vite-plugins/frontend-deps-manifest'
 import { i18nOptimizePlugin } from '../packages/shared-components/src/vite-plugins/i18n-optimize'
 import { vueComponentCheckPlugin } from '../packages/shared-components/src/vite-plugins/vue-component-check'
+import { fileSizeLimitPlugin } from '../packages/shared-components/src/vite-plugins/file-size-limit'
 import Components from 'unplugin-vue-components/vite'
 
 // =============================================================================
@@ -239,6 +240,7 @@ export default defineConfig({
   plugins: [
     devStartGuard(),  // ⚠️ 防御：禁止直接 vite 启动，必须通过 PM2 → preview-gateway
     frontendDepsManifestPlugin(),  // 🆕 2026-06-17：读 package.json 生成 frontend-deps.json manifest
+    fileSizeLimitPlugin({ failOnError: true }),  // 🆕 工作区文件行数门禁（useAgent.ts 已拆分，主 app 一并强制）
     i18nOptimizePlugin(),  // 🆕 i18n HMR 热重载 + 构建优化
     vueComponentCheckPlugin({
       dev: process.env.NODE_ENV !== 'production',

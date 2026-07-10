@@ -67,7 +67,7 @@ const canConfirm = computed(() => {
 
 // modalController.create 加载的子组件无法 emit 关闭自己，
 // 必须调 modalController.dismiss() 才会真正 dismiss 当前 modal overlay。
-async function _onConfirm() {
+async function onConfirm() {
   if (!canConfirm.value) {
     error.value = "密码不一致或太短（至少 4 位）";
     return;
@@ -82,7 +82,7 @@ async function _onConfirm() {
   await modalController.dismiss();
 }
 
-async function _onDismiss() {
+async function onDismiss() {
   await modalController.dismiss();
 }
 </script>

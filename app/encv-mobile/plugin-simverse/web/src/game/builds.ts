@@ -134,3 +134,68 @@ export function deriveNPCBuild(npc: SimverseNPCDetail): SimverseBuild {
 
   return { primary, tags, synergy, scores };
 }
+
+// 轻量流派派生：仅用列表级字段（职业/等级/阶层），用于编队候选快速判定，
+// 与 deriveNPCBuild 共享同一套职业权重与流派枚举，结果方向一致。
+export interface NPCSummary {
+  profession?: string;
+  level?: number;
+  wealth_tier?: number;
+  social_tier?: number;
+}
+
+// 流派展示元数据：供 Phaser 横屏世界与 Ionic 数据视图共用，保证配色/图标一致。
+export interface ArchetypeMeta {
+  key: ArchetypeKey;
+  labelKey: string; // i18n key: simverse.build.<key>
+  name: string; // 中文展示名（Phaser 图例用，免依赖 i18n）
+  color: number; // Phaser 数值色
+  colorCss: string; // CSS 十六进制
+  emoji: string;
+}
+
+export const ARCH_META: Record<ArchetypeKey, ArchetypeMeta> = {
+  warrior:  { key: "warrior",  labelKey: "simverse.build.warrior",  name: "战士", color: 0xef4444, colorCss: "#ef4444", emoji: "🗡️" },
+  guardian: { key: "guardian", labelKey: "simverse.build.guardian", name: "守护", color: 0xf59e0b, colorCss: "#f59e0b", emoji: "🛡️" },
+  scholar:  { key: "scholar",  labelKey: "simverse.build.scholar",  name: "学者", color: 0x3b82f6, colorCss: "#3b82f6", emoji: "📜" },
+  merchant: { key: "merchant", labelKey: "simverse.build.merchant", name: "商人", color: 0x22c55e, colorCss: "#22c55e", emoji: "💰" },
+  artisan:  { key: "artisan",  labelKey: "simverse.build.artisan",  name: "工匠", color: 0xa855f7, colorCss: "#a855f7", emoji: "🔨" },
+  healer:   { key: "healer",   labelKey: "simverse.build.healer",   name: "治疗", color: 0xec4899, colorCss: "#ec4899", emoji: "⚕️" },
+  leader:   { key: "leader",   labelKey: "simverse.build.leader",   name: "领袖", color: 0x6366f1, colorCss: "#6366f1", emoji: "👑" },
+  hermit:   { key: "hermit",   labelKey: "simverse.build.hermit",   name: "隐士", color: 0x64748b, colorCss: "#64748b", emoji: "🌙" },
+  rogue:    { key: "rogue",    labelKey: "simverse.build.rogue",    name: "游侠", color: 0x1f2937, colorCss: "#1f2937", emoji: "🥷" },
+  artist:   { key: "artist",   labelKey: "simverse.build.artist",   name: "艺术家", color: 0x14b8a6, colorCss: "#14b8a6", emoji: "🎨" },
+};
+
+export function deriveBuildFromNPC(npc: NPCSummary): { primary: ArchetypeKey; tags: ArchetypeKey[]; synergy: number } {
+  const scores = {} as Record<ArchetypeKey, number>;
+  ARCHETYPES.forEach((a) => (scores[a] = 0));
+  const add = (k: ArchetypeKey, p: number) => {
+    scores[k] += p;
+  };
+
+  const prof = (npc.profession || "").toLowerCase();
+  const pm = PROF_MAP[prof];
+  if (pm) {
+    for (const [k, v] of Object.entries(pm)) add(k as ArchetypeKey, v as number);
+  } else {
+    add("rogue", 1);
+  }
+  add("merchant", (npc.wealth_tier || 0) * 0.3);
+  add("leader", (npc.social_tier || 0) * 0.3);
+  add("warrior", (npc.level || 0) / 40);
+  add("guardian", (npc.level || 0) / 60);
+
+  const ranked = [...ARCHETYPES].sort((a, b) => {
+    const d = scores[b] - scores[a];
+    if (Math.abs(d) > 1e-6) return d;
+    return a.localeCompare(b);
+  });
+  const primary = ranked[0];
+  const tags: ArchetypeKey[] = [primary];
+  for (const a of ranked.slice(1, 3)) {
+    if (scores[a] > 0) tags.push(a);
+  }
+  const synergy = Math.max(1, Math.min(5, Math.round(scores[primary] / 2.5)));
+  return { primary, tags, synergy };
+}

@@ -7,6 +7,7 @@ import { EventEffectManager, type EventEffectType } from "./EventEffectManager";
 import { TerritoryRenderer, type OrgTerritory } from "./TerritoryRenderer";
 import { MiniMap } from "./MiniMap";
 import { DayNightCycle, type TimeOfDay } from "./DayNightCycle";
+import { ARCH_META, ARCHETYPES } from "./builds";
 import type { SimverseNPC } from "@/composables/useSimverse";
 
 export class WorldScene extends Phaser.Scene {
@@ -30,8 +31,15 @@ export class WorldScene extends Phaser.Scene {
   private miniMap!: MiniMap;
   private dayNightCycle!: DayNightCycle;
 
+  // 环境粒子（萤火/尘埃）：让空旷的世界持续有"呼吸感"，避免 HUD/世界发呆。
+  private ambientGfx!: Phaser.GameObjects.Graphics;
+  private ambientParticles: {
+    x: number; y: number; vx: number; vy: number; r: number;
+    baseAlpha: number; phase: number; speed: number;
+  }[] = [];
+
   private npcMoveTimer = 0;
-  private npcMoveInterval = 5000;
+  private npcMoveInterval = 3000;
 
   private interactionGfx!: Phaser.GameObjects.Graphics;
   private interactionTimer = 0;
@@ -97,6 +105,10 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.on("camerascroll", () => {
       this.miniMap.updateViewport();
     });
+
+    this.createLegend();
+    this.createVignette();
+    this.createAmbientParticles();
 
     this.setupKeyboardShortcuts();
 
@@ -407,6 +419,131 @@ export class WorldScene extends Phaser.Scene {
         this.interactionGfx.clear();
       }
     });
+
+    this.input.keyboard?.on("keydown-L", () => {
+      this.toggleLegend();
+    });
+  }
+
+  // 流派图例：固定在左上角（不随相机缩放/平移），帮助识别彩色头像对应的流派。
+  // 按 L 键开关。
+  private legend?: Phaser.GameObjects.Container;
+  private legendVisible = true;
+
+  private createLegend(): void {
+    const c = this.add.container(14, 14);
+    c.setScrollFactor(0);
+    c.setDepth(1000);
+    c.setAlpha(0.92);
+
+    const rowH = 18;
+    const title = this.add.text(0, 0, "流派图例", {
+      fontSize: "11px",
+      color: "#ffffff",
+      fontStyle: "bold",
+    });
+    title.setShadow(0, 1, "#000000", 3);
+    c.add(title);
+
+    ARCHETYPES.forEach((key, i) => {
+      const meta = ARCH_META[key];
+      const y = 20 + i * rowH;
+      const dot = this.add.circle(9, y + 8, 7, meta.color).setStrokeStyle(1, 0xffffff, 0.85);
+      const em = this.add.text(9, y + 8, meta.emoji, { fontSize: "10px" }).setOrigin(0.5);
+      const label = this.add.text(22, y + 3, meta.name, {
+        fontSize: "11px",
+        color: "#ffffff",
+      });
+      label.setShadow(0, 1, "#000000", 3);
+      c.add([dot, em, label]);
+    });
+
+    const totalH = 20 + ARCHETYPES.length * rowH + 6;
+    const bg = this.add.graphics();
+    bg.fillStyle(0x000000, 0.45);
+    bg.fillRoundedRect(-6, -4, 86, totalH, 8);
+    c.addAt(bg, 0);
+
+    this.legend = c;
+  }
+
+  private toggleLegend(): void {
+    if (!this.legend) return;
+    this.legendVisible = !this.legendVisible;
+    this.legend.setVisible(this.legendVisible);
+  }
+
+  // 暗角（vignette）叠加：给平坦的地形瓦片增加空间纵深感，缓解"辣眼睛"的平铺感。
+  // 固定不随相机移动，置于图例之下。
+  private createVignette(): void {
+    const w = this.scale.width || 800;
+    const h = this.scale.height || 600;
+    const key = "world-vignette";
+    if (this.textures.exists(key)) this.textures.remove(key);
+
+    const canvasTex = this.textures.createCanvas(key, w, h);
+    if (!canvasTex) return;
+
+    const ctx = canvasTex.getContext();
+    const grd = ctx.createRadialGradient(
+      w / 2, h / 2, Math.min(w, h) * 0.3,
+      w / 2, h / 2, Math.max(w, h) * 0.75
+    );
+    grd.addColorStop(0, "rgba(0,0,0,0)");
+    grd.addColorStop(1, "rgba(0,0,0,0.35)");
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, w, h);
+    canvasTex.refresh();
+
+    this.add.image(0, 0, key).setOrigin(0).setScrollFactor(0).setDepth(900);
+  }
+
+  // 环境粒子（萤火/尘埃）：在世界空间持续缓缓漂浮、明灭，给空旷地图注入"活着"的呼吸感。
+  private createAmbientParticles(): void {
+    const worldW = this.mapWidth * this.tileSize;
+    const worldH = this.mapHeight * this.tileSize;
+
+    this.ambientGfx = this.add.graphics();
+    this.ambientGfx.setDepth(1);
+
+    const count = 90;
+    for (let i = 0; i < count; i++) {
+      this.ambientParticles.push({
+        x: Math.random() * worldW,
+        y: Math.random() * worldH,
+        vx: (Math.random() - 0.5) * 6,
+        vy: -4 - Math.random() * 8,
+        r: 1 + Math.random() * 2,
+        baseAlpha: 0.12 + Math.random() * 0.35,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.5 + Math.random() * 1.5,
+      });
+    }
+  }
+
+  private updateAmbientParticles(delta: number): void {
+    if (!this.ambientGfx) return;
+    const dt = delta / 1000;
+    const worldW = this.mapWidth * this.tileSize;
+    const worldH = this.mapHeight * this.tileSize;
+
+    this.ambientGfx.clear();
+    for (const p of this.ambientParticles) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.phase += dt * p.speed;
+
+      if (p.y < -10) {
+        p.y = worldH + 10;
+        p.x = Math.random() * worldW;
+      }
+      if (p.x < -10) p.x = worldW + 10;
+      if (p.x > worldW + 10) p.x = -10;
+
+      const a = p.baseAlpha * (0.5 + 0.5 * Math.sin(p.phase));
+      this.ambientGfx.fillStyle(0xffe9a8, a);
+      this.ambientGfx.fillCircle(p.x, p.y, p.r);
+    }
   }
 
   setNPCBehaviors(behaviors: Map<number, string>): void {
@@ -438,9 +575,11 @@ export class WorldScene extends Phaser.Scene {
         sprite.setVisible(true);
         sprite.setActive(true);
         sprite.setPosition(x, y);
+        sprite.setDepth(10);
         sprite.updateNPC(npc);
       } else {
         sprite = new NPCSprite(this, x, y, npc);
+        sprite.setDepth(10);
         this.add.existing(sprite);
         this.npcPool.push(sprite);
 
@@ -488,7 +627,7 @@ export class WorldScene extends Phaser.Scene {
 
       this.npcSprites.forEach((sprite) => {
         if (!sprite.visible || !sprite.active || sprite.isMoving()) return;
-        if (Math.random() > 0.3) return;
+        if (Math.random() > 0.5) return;
 
         const moveRange = 100;
         let newX = sprite.x + (Math.random() - 0.5) * moveRange * 2;
@@ -508,6 +647,7 @@ export class WorldScene extends Phaser.Scene {
     this.dayNightCycle.update(delta);
     this.eventEffectManager.update(delta);
     this.updateNPCMovements(delta);
+    this.updateAmbientParticles(delta);
     this.miniMap.updateViewport();
 
     this.interactionTimer += delta;

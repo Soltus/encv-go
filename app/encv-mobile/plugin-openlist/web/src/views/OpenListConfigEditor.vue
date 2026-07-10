@@ -86,6 +86,7 @@
 import { modalController } from "@ionic/vue";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { openOutline } from "ionicons/icons";
 import SaveOptionsDialog from "@/components/SaveOptionsDialog.vue";
 import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
 
@@ -110,7 +111,7 @@ onMounted(async () => {
   validate();
 });
 
-function _onInput() {
+function onInput() {
   if (debounceTimer) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(validate, 300);
 }
@@ -131,7 +132,7 @@ function validate() {
   }
 }
 
-async function _showSaveOptions() {
+async function showSaveOptions() {
   const modal = await modalController.create({
     component: SaveOptionsDialog,
   });
@@ -164,7 +165,7 @@ async function doSave(restart: boolean) {
   }
 }
 
-function _discard() {
+function discard() {
   router.back();
 }
 
@@ -173,7 +174,7 @@ function _discard() {
  * OpenList admin API 实际路径是 /api/admin/setting/get（不是 /api/admin/config）
  * 失败时显示错误，但不让 UI 崩溃
  */
-async function _loadAsReadOnly() {
+async function loadAsReadOnly() {
   readOnlyMode.value = true;
   content.value = "";
   hasError.value = false;
@@ -209,7 +210,7 @@ async function _loadAsReadOnly() {
   }
 }
 
-function _openAdminWebUi() {
+function openAdminWebUi() {
   // 沙箱下直接打 :5244 backend 的 Web UI（dev preview 用户已经在 sandbox 内）
   // 真实 port 用 vite proxy rewrite 后打到 5244，但这里直接打开 5244 避开 vite proxy
   window.open("http://127.0.0.1:5244/#/login", "_blank", "noopener");

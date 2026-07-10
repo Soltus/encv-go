@@ -12,21 +12,24 @@
   },
   "dependencies": {
     "@encv/shared-components": "workspace:*",
-    "@ionic/vue": "^8.8.7",
-    "@ionic/vue-router": "^8.8.7",
-    "ionicons": "^8.0.13",
+    "@ionic/vue": "catalog:",
+    "@ionic/vue-router": "catalog:",
+    "ionicons": "catalog:",
     "leafer-ui": "^2.1.10",
     "matter-js": "^0.20.0",
     "phaser": "4.2.0",
     "pinia": "^3.0.4",
-    "vue": "^3.5.34",
-    "vue-router": "^4.6.4"
+    "vue": "catalog:",
+    "vue-router": "catalog:"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
     "@types/matter-js": "^0.20.2",
-    "@vitejs/plugin-vue": "^6.0.7",
-    "typescript": "^5.9.3",
-    "vite": "^8.0.13",
-    "vue-tsc": "^2.2.10"
+    "@vitejs/plugin-vue": "catalog:",
+    "daisyui": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vue-tsc": "catalog:"
   }
 }

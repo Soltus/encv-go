@@ -151,7 +151,7 @@
 
 <script setup lang="ts">
 import { toastController } from "@ionic/vue";
-import { checkmarkCircleOutline, cloudOfflineOutline, refreshOutline, timerOutline } from "ionicons/icons";
+import { alertCircleOutline, bugOutline, checkmarkCircleOutline, cloudOfflineOutline, copyOutline, openOutline, refreshOutline, timerOutline } from "ionicons/icons";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
@@ -165,14 +165,14 @@ interface DebugEntry {
   data?: string;
 }
 
-const _router = useRouter();
+const router = useRouter();
 
 const port = ref(0);
 const state = ref<IframeState>("probing");
 const lastError = ref("");
 const retryCount = ref(0);
 const frameRef = ref<HTMLIFrameElement | null>(null);
-const _debugOpen = ref(false);
+const debugOpen = ref(false);
 const debugEntries = ref<DebugEntry[]>([]);
 
 const PROBE_TIMEOUT_MS = 5000;
@@ -187,14 +187,14 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
  */
 const isSandbox = computed(() => import.meta.env.DEV);
 
-const _iframeUrl = computed(() => {
+const iframeUrl = computed(() => {
   const hash = "#/login";
   // 走 preview-gateway 统一收口 :16666/openlist/ → :5244 OpenList upstream
   //   不再硬编码 :5244 — 沙箱 dev 唯一对外端口是 :16666（agent-tool-host :16000 代理过来）
   return `http://localhost:16666/openlist/${hash}`;
 });
 
-const _stateText = computed(() => {
+const stateText = computed(() => {
   switch (state.value) {
     case "probing":
       return "连接中…";
@@ -207,7 +207,7 @@ const _stateText = computed(() => {
   }
 });
 
-const _stateColor = computed(() => {
+const stateColor = computed(() => {
   switch (state.value) {
     case "connected":
       return "success";
@@ -222,7 +222,7 @@ const _stateColor = computed(() => {
   }
 });
 
-const _stateIcon = computed(() => {
+const stateIcon = computed(() => {
   switch (state.value) {
     case "connected":
       return checkmarkCircleOutline;
@@ -385,7 +385,7 @@ async function probeBackend(reason: string = "manual") {
 
 // ============== iframe 事件 ==============
 
-function _onIframeLoad() {
+function onIframeLoad() {
   debug("info", "iframe @load fired", {
     currentState: state.value,
     src: frameRef.value?.src?.slice(0, 80),
@@ -417,7 +417,7 @@ async function verifyAfterIframeLoad() {
   }
 }
 
-function _onError() {
+function onError() {
   debug("error", "iframe @error fired");
   logBuffer.error("iframe 加载失败");
   if (isSandbox.value) {
@@ -428,7 +428,7 @@ function _onError() {
 
 // ============== 用户操作 ==============
 
-function _reload() {
+function reload() {
   retryCount.value++;
   if (isSandbox.value) {
     probeBackend("manual");
@@ -445,12 +445,12 @@ function _reload() {
   }
 }
 
-function _openExternal() {
+function openExternal() {
   const url = `http://127.0.0.1:${port.value || 5244}/`;
   window.open(url, "_blank");
 }
 
-async function _copyCommand() {
+async function copyCommand() {
   const cmd = "bash scripts/dev-openlist.sh";
   try {
     await navigator.clipboard.writeText(cmd);

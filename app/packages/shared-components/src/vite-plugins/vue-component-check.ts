@@ -1,5 +1,6 @@
 import { readFileSync, existsSync, statSync, readdirSync } from "node:fs";
 import { join, relative, resolve, basename, extname } from "node:path";
+import type { Plugin } from "vite";
 
 export interface VueComponentCheckOptions {
   componentDirs?: string[];
@@ -139,7 +140,7 @@ function scanComponentDirs(dirs: string[]): Map<string, string> {
   return componentMap;
 }
 
-export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}) {
+export function vueComponentCheckPlugin(options: VueComponentCheckOptions = {}): Plugin {
   const {
     componentDirs = ["src/components"],
     globalComponents = [],

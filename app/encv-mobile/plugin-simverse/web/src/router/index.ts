@@ -165,6 +165,10 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/views/SocialOverview.vue"),
   },
   {
+    path: "/world/squad",
+    component: () => import("@/views/SquadSynergy.vue"),
+  },
+  {
     path: "/world/debug/perf",
     component: () => import("@/views/WorldDebugPerf.vue"),
   },

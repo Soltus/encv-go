@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-07T06:15:41.893Z",
+  "generated_at": "2026-07-10T08:54:39.179Z",
   "source_file": "package.json",
   "items": [
     {
@@ -93,8 +93,8 @@
     },
     {
       "name": "@ionic/vue",
-      "version": "8.8.7",
-      "version_range": "^8.8.7",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
@@ -104,8 +104,8 @@
     },
     {
       "name": "@ionic/vue-router",
-      "version": "8.8.7",
-      "version_range": "^8.8.7",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
@@ -159,8 +159,8 @@
     },
     {
       "name": "ionicons",
-      "version": "8.0.13",
-      "version_range": "^8.0.13",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
@@ -236,8 +236,8 @@
     },
     {
       "name": "vue",
-      "version": "3.5.34",
-      "version_range": "^3.5.34",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
@@ -247,8 +247,8 @@
     },
     {
       "name": "vue-router",
-      "version": "4.6.4",
-      "version_range": "^4.6.4",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
@@ -302,8 +302,8 @@
     },
     {
       "name": "@vitejs/plugin-vue",
-      "version": "6.0.7",
-      "version_range": "^6.0.7",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
@@ -379,8 +379,8 @@
     },
     {
       "name": "typescript",
-      "version": "5.9.3",
-      "version_range": "^5.9.3",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
@@ -401,8 +401,8 @@
     },
     {
       "name": "vite",
-      "version": "8.0.13",
-      "version_range": "^8.0.13",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
@@ -423,8 +423,8 @@
     },
     {
       "name": "vue-tsc",
-      "version": "2.2.10",
-      "version_range": "^2.2.10",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",

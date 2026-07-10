@@ -13,6 +13,7 @@ import "@ionic/vue/css/structure.css";
 import "@ionic/vue/css/typography.css";
 
 import "./theme/variables.css";
+import "@encv/shared-components/styles/daisyui.css";
 
 const app = createApp(App);
 app.use(IonicVue);

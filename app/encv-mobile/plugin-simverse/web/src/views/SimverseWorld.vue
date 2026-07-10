@@ -32,15 +32,15 @@
           <div class="resource-group">
             <div class="resource-item game-resource" v-tooltip="t('simverse.diamond')">
               <span class="resource-icon">💎</span>
-              <span class="resource-value">{{ playerDiamond }}</span>
+              <span class="resource-value" :key="playerDiamond">{{ playerDiamond }}</span>
             </div>
             <div class="resource-item game-resource" v-tooltip="t('simverse.gold')">
               <span class="resource-icon">🪙</span>
-              <span class="resource-value">{{ playerGold }}</span>
+              <span class="resource-value" :key="playerGold">{{ playerGold }}</span>
             </div>
             <div class="resource-item game-resource" v-tooltip="t('simverse.stamina')">
               <span class="resource-icon">⚡</span>
-              <span class="resource-value">{{ playerStamina }}/120</span>
+              <span class="resource-value" :key="playerStamina">{{ playerStamina }}/120</span>
             </div>
             <div class="res-divider"></div>
             <div class="resource-item" v-tooltip="t('simverse.tick')">
@@ -62,69 +62,70 @@
           </div>
         </div>
 
-        <div class="left-menu">
-          <button class="menu-btn" :class="{ active: activePanel === 'quest' }" @click="openPanel('quest')">
-            <span class="menu-icon">📋</span>
-            <span class="menu-label">任务</span>
-            <span v-if="questCompletable > 0" class="menu-badge red">{{ questCompletable }}</span>
-          </button>
-          <button class="menu-btn" :class="{ active: activePanel === 'npc' }" @click="openPanel('npc')">
-            <span class="menu-icon">👤</span>
-            <span class="menu-label">{{ t("simverse.npc") }}</span>
-          </button>
-          <button class="menu-btn" :class="{ active: activePanel === 'org' }" @click="openPanel('org')">
-            <span class="menu-icon">🏰</span>
-            <span class="menu-label">{{ t("simverse.org") }}</span>
-          </button>
-          <button class="menu-btn" :class="{ active: activePanel === 'chronicles' }" @click="openPanel('chronicles')">
-            <span class="menu-icon">📖</span>
-            <span class="menu-label">{{ t("simverse.chronicles") }}</span>
-          </button>
-          <button class="menu-btn" :class="{ active: activePanel === 'economy' }" @click="openPanel('economy')">
-            <span class="menu-icon">💰</span>
-            <span class="menu-label">{{ t("simverse.economy") }}</span>
-          </button>
-          <div class="menu-divider"></div>
-          <button class="menu-btn explore-btn" @click="openPanel('explore')">
-            <span class="menu-icon">🗺️</span>
-            <span class="menu-label">{{ t("simverse.explore") }}</span>
-          </button>
-          <button class="menu-btn battle-btn" @click="openPanel('battle')">
-            <span class="menu-icon">⚔️</span>
-            <span class="menu-label">{{ t("simverse.battle") }}</span>
-          </button>
-          <div class="menu-divider"></div>
-          <button class="menu-btn gacha-btn" @click="openPanel('gacha')">
-            <span class="menu-icon sparkle">✨</span>
-            <span class="menu-label">{{ t("simverse.gacha") }}</span>
-          </button>
-        </div>
+        <!-- 主世界底部主操作条：屏幕状态机 world 页专属导航，替代原先散落在两侧的浮动按钮 -->
+        <transition name="bottom-bar">
+          <div v-if="screen === 'world'" class="bottom-bar">
+            <button class="bar-btn" :class="{ active: activePanel === 'npc' }" @click="openPanel('npc')">
+              <span class="bar-icon">🔍</span>
+              <span class="bar-label">{{ t("simverse.focus") }}</span>
+            </button>
+            <button class="bar-btn" :class="{ active: activePanel === 'chronicles' }" @click="openPanel('chronicles')">
+              <span class="bar-icon">📖</span>
+              <span class="bar-label">{{ t("simverse.chronicles") }}</span>
+            </button>
+            <button class="bar-btn" :class="{ active: activePanel === 'economy' }" @click="openPanel('economy')">
+              <span class="bar-icon">💰</span>
+              <span class="bar-label">{{ t("simverse.economy") }}</span>
+            </button>
+            <button class="bar-btn" :class="{ active: isIntervene }" @click="openIntervene">
+              <span class="bar-icon">🎛️</span>
+              <span class="bar-label">{{ t("simverse.intervene") }}</span>
+            </button>
+            <button class="bar-btn more" :class="{ active: bottomMoreOpen }" @click="toggleBottomMore">
+              <span class="bar-icon">⋯</span>
+              <span class="bar-label">{{ t("simverse.more") }}</span>
+            </button>
+            <button class="bar-btn" :class="{ active: activePanel === 'settings' }" @click="openPanel('settings')">
+              <span class="bar-icon">⚙️</span>
+              <span class="bar-label">{{ t("simverse.settings") }}</span>
+            </button>
+          </div>
+        </transition>
 
-        <div class="right-menu">
-          <button class="menu-btn player-btn" :class="{ active: activePanel === 'profile' }" @click="openPanel('profile')">
-            <div class="player-avatar-mini">
-              <span class="avatar-icon-mini">⚔️</span>
-              <span class="player-level-badge">Lv.{{ playerLevel }}</span>
+        <!-- 更多：二级功能（含 B 类体验桩）收拢于此，避免主操作条过载 -->
+        <transition name="more-pop">
+          <div v-if="screen === 'world' && bottomMoreOpen" class="more-pop" @click.self="toggleBottomMore">
+            <div class="more-grid">
+              <button class="more-item" @click="openPanel('quest'); bottomMoreOpen = false">
+                <span class="more-icon">📋</span><span class="more-label">任务</span>
+              </button>
+              <button class="more-item" @click="openPanel('org'); bottomMoreOpen = false">
+                <span class="more-icon">🏰</span><span class="more-label">{{ t("simverse.org") }}</span>
+              </button>
+              <button class="more-item" @click="openCharacter(); bottomMoreOpen = false">
+                <span class="more-icon">🧑</span><span class="more-label">{{ t("simverse.character") }}</span>
+              </button>
+              <button class="more-item" @click="openPanel('profile'); bottomMoreOpen = false">
+                <span class="more-icon">👤</span><span class="more-label">{{ t("simverse.profile") }}</span>
+              </button>
+              <button class="more-item" @click="openPanel('training'); bottomMoreOpen = false">
+                <span class="more-icon">⚔️</span><span class="more-label">{{ t("simverse.training") }}</span>
+              </button>
+              <button class="more-item" @click="openPanel('inventory'); bottomMoreOpen = false">
+                <span class="more-icon">🎒</span><span class="more-label">背包</span>
+              </button>
+              <button class="more-item" @click="openPanel('explore'); bottomMoreOpen = false">
+                <span class="more-icon">🗺️</span><span class="more-label">{{ t("simverse.explore") }}</span>
+              </button>
+              <button class="more-item" @click="openPanel('battle'); bottomMoreOpen = false">
+                <span class="more-icon">🗡️</span><span class="more-label">{{ t("simverse.battle") }}</span>
+              </button>
+              <button class="more-item gacha" @click="openGachaModal(); bottomMoreOpen = false">
+                <span class="more-icon">✨</span><span class="more-label">{{ t("simverse.gacha") }}</span>
+              </button>
             </div>
-          </button>
-          <button class="menu-btn gacha-menu-btn" @click="openGachaModal">
-            <span class="menu-icon sparkle">✨</span>
-            <span class="menu-badge red">NEW</span>
-          </button>
-          <button class="menu-btn" :class="{ active: activePanel === 'training' }" @click="openPanel('training')">
-            <span class="menu-icon">⚔️</span>
-            <span class="menu-label">{{ t("simverse.training") }}</span>
-          </button>
-          <button class="menu-btn" @click="openPanel('inventory')">
-            <span class="menu-icon">🎒</span>
-            <span class="menu-label">背包</span>
-          </button>
-          <div class="menu-divider"></div>
-          <button class="menu-btn" :class="{ active: activePanel === 'settings' }" @click="openPanel('settings')">
-            <span class="menu-icon">⚙️</span>
-            <span class="menu-label">{{ t("simverse.settings") }}</span>
-          </button>
-        </div>
+          </div>
+        </transition>
 
         <div class="stats-bar">
           <div class="stat-pill">
@@ -141,7 +142,7 @@
           </div>
         </div>
 
-        <div class="event-ticker" v-if="recentEvents.length > 0">
+        <div class="event-ticker" v-if="recentEvents.length > 0" @click="openEventPage">
           <div class="ticker-icon">📜</div>
           <div class="ticker-content">
             <transition-group name="ticker" tag="div" class="ticker-list">
@@ -451,6 +452,28 @@
 
             <template v-else-if="activePanel === 'settings'">
               <div class="setting-section">
+                <div class="section-title">{{ t("simverse.graphics") }}</div>
+                <div class="option-block">
+                  <div class="option-label">{{ t("simverse.frameRate") }}</div>
+                  <ion-segment :value="String(fps)" @ionChange="onFpsChange" scrollable>
+                    <ion-segment-button v-for="opt in FPS_OPTIONS" :key="opt" :value="String(opt)">
+                      <ion-label>{{ opt }}</ion-label>
+                    </ion-segment-button>
+                  </ion-segment>
+                </div>
+                <div class="option-block">
+                  <div class="option-label">{{ t("simverse.renderQuality") }}</div>
+                  <ion-segment :value="quality" @ionChange="onQualityChange">
+                    <ion-segment-button v-for="opt in QUALITY_OPTIONS" :key="opt.value" :value="opt.value">
+                      <ion-label>{{ opt.label }}</ion-label>
+                    </ion-segment-button>
+                  </ion-segment>
+                  <p class="option-hint">
+                    {{ QUALITY_RESOLUTION[quality].width }} × {{ QUALITY_RESOLUTION[quality].height }}
+                  </p>
+                </div>
+              </div>
+              <div class="setting-section">
                 <div class="section-title">{{ t("simverse.performanceTier") }}</div>
                 <div class="tier-selector">
                   <button class="tier-option" :class="{ active: worldConfig?.tier === 'background' }"
@@ -583,20 +606,55 @@
           </div>
         </div>
 
-        <div v-if="selectedNPC" class="detail-modal" @click.self="selectedNPC = null">
-          <div class="detail-card">
+        <transition name="focus-slide">
+          <div v-if="screen === 'focus' && selectedNPC" class="detail-modal" @click.self="backToWorld">
+            <div class="detail-card">
             <div class="detail-header">
-              <div class="detail-avatar">{{ selectedNPC.name?.[0] }}</div>
+              <div class="detail-avatar" :style="focusBuild ? { background: `linear-gradient(135deg, ${ARCH_META[focusBuild.primary].colorCss}, #ec4899)` } : {}">
+                {{ selectedNPC.name?.[0] }}
+              </div>
               <div class="detail-info">
                 <div class="detail-name">{{ selectedNPC.name }}</div>
                 <div class="detail-meta">
-                  {{ selectedNPC.species }} · {{ selectedNPC.gender }} · {{ selectedNPC.age }}岁
+                  {{ selectedNPC.species }} · {{ selectedNPC.gender }} · {{ selectedNPC.age }}{{ t("simverse.yearsOld") }}
+                </div>
+                <div v-if="focusBuild" class="detail-build">
+                  <span class="build-chip" :style="{ background: ARCH_META[focusBuild.primary].colorCss }">
+                    {{ ARCH_META[focusBuild.primary].emoji }} {{ ARCH_META[focusBuild.primary].name }}
+                  </span>
+                  <span class="build-synergy">★{{ focusBuild.synergy }}</span>
                 </div>
               </div>
-              <button class="detail-close" @click="selectedNPC = null">✕</button>
+              <button class="detail-close" @click="backToWorld">✕</button>
             </div>
+
+            <!-- 编队操作条：把焦点 NPC 编入/移出玩家编队（复用 simverse:squad 持久化） -->
+            <div class="focus-actions">
+              <button class="focus-action-btn" :class="{ active: inSquad }"
+                      :disabled="!inSquad && squadIds.length >= MAX_SQUAD" @click="toggleSquad">
+                {{ inSquad ? t("simverse.focus.removeFromSquad") : t("simverse.focus.addToSquad") }}
+              </button>
+              <span v-if="!inSquad && squadIds.length >= MAX_SQUAD" class="focus-action-hint">
+                {{ t("simverse.focus.squadFull") }}
+              </span>
+            </div>
+
+            <!-- 对象上下文标签：身份 / 时间线 / 关系 -->
+            <ion-segment :value="focusTab" @ionChange="onFocusTabChange" class="focus-tabs" scrollable>
+              <ion-segment-button value="identity">
+                <ion-label>{{ t("simverse.focus.identity") }}</ion-label>
+              </ion-segment-button>
+              <ion-segment-button value="timeline">
+                <ion-label>{{ t("simverse.focus.timeline") }}</ion-label>
+              </ion-segment-button>
+              <ion-segment-button value="relations">
+                <ion-label>{{ t("simverse.focus.relations") }}</ion-label>
+              </ion-segment-button>
+            </ion-segment>
+
             <div class="detail-body">
-              <div class="detail-grid">
+              <!-- 身份：基础档案 -->
+              <div v-if="focusTab === 'identity'" class="detail-grid">
                 <div class="detail-item">
                   <span class="item-label">{{ t("simverse.profession") }}</span>
                   <span class="item-value">{{ selectedNPC.profession }}</span>
@@ -632,9 +690,42 @@
                   </span>
                 </div>
               </div>
+
+              <!-- 时间线：该 NPC 的编年史事件流（接真实后端） -->
+              <div v-else-if="focusTab === 'timeline'" class="focus-panel">
+                <div v-if="focusLoading" class="empty-state">{{ t("simverse.loading") }}</div>
+                <template v-else>
+                  <div v-for="ev in npcChronicle" :key="ev.id" class="chrono-row" :class="'imp-' + ev.importance">
+                    <div class="chrono-tick">Tick {{ ev.tick }}</div>
+                    <div class="chrono-title">{{ ev.type_cn }}</div>
+                    <div class="chrono-meta">{{ ev.imp_cn }} · {{ ev.level_cn }}</div>
+                  </div>
+                  <div v-if="npcChronicle.length === 0" class="empty-state">{{ t("simverse.focus.chronicleEmpty") }}</div>
+                </template>
+              </div>
+
+              <!-- 关系：关系网（接真实后端 SocialGraph），点击跳转对方焦点页 -->
+              <div v-else-if="focusTab === 'relations'" class="focus-panel">
+                <div v-if="focusLoading" class="empty-state">{{ t("simverse.loading") }}</div>
+                <template v-else>
+                  <div v-for="rel in npcRelations" :key="rel.target_id" class="rel-row" @click="selectNPC(rel.target)">
+                    <div class="rel-avatar">{{ rel.target?.name?.[0] }}</div>
+                    <div class="rel-info">
+                      <div class="rel-name">{{ rel.target?.name }}</div>
+                      <div class="rel-type">{{ t("simverse.rel." + rel.rel_type) }}</div>
+                    </div>
+                    <div class="rel-affinity">
+                      <span class="rel-affinity-val">{{ rel.affinity }}</span>
+                      <span class="rel-affinity-label">{{ t("simverse.focus.affinity") }}</span>
+                    </div>
+                  </div>
+                  <div v-if="npcRelations.length === 0" class="empty-state">{{ t("simverse.focus.relEmpty") }}</div>
+                </template>
+              </div>
             </div>
           </div>
-        </div>
+          </div>
+        </transition>
 
         <transition name="gacha-modal">
           <div v-if="gachaModalOpen" class="gacha-modal-overlay" @click.self="closeGachaModal">
@@ -725,7 +816,85 @@
             </div>
           </div>
         </transition>
-      </div>
+
+        <!-- 事件页：屏幕状态机 event 页，重大编年史事件全屏呈现，替代“一页不变” -->
+        <transition name="event-page">
+          <div v-if="screen === 'event'" class="event-page">
+            <div class="event-page-header">
+              <button class="event-back" @click="backToWorld">← {{ t("simverse.back") }}</button>
+              <span class="event-page-title">📜 {{ t("simverse.chronicles") }}</span>
+            </div>
+            <div class="event-feed">
+              <div v-for="ev in recentEvents" :key="ev.id" class="event-row" :class="'imp-' + ev.importance">
+                <div class="event-row-tick">Tick {{ ev.tick }}</div>
+                <div class="event-row-title">{{ ev.type_cn }}</div>
+                <div class="event-row-meta">{{ ev.imp_cn }} · {{ ev.level_cn }}</div>
+              </div>
+              <div v-if="recentEvents.length === 0" class="empty-state">{{ t("simverse.noData") }}</div>
+            </div>
+          </div>
+        </transition>
+
+        <!-- 干预页：屏幕状态机 intervene 页，上帝视角的世界控制，全部接真实后端能力 -->
+        <transition name="intervene-page">
+          <div v-if="screen === 'intervene'" class="intervene-page">
+            <div class="event-page-header">
+              <button class="event-back" @click="backToWorld">← {{ t("simverse.back") }}</button>
+              <span class="event-page-title">🎛️ {{ t("simverse.intervene") }}</span>
+            </div>
+            <div class="intervene-body">
+              <section class="ctrl-section">
+                <div class="ctrl-title">{{ t("simverse.timeControl") }}</div>
+                <div class="ctrl-row">
+                  <button class="ctrl-btn primary" @click="toggleRunning">
+                    {{ worldState?.running ? "⏸ " + t("simverse.pause") : "▶ " + t("simverse.resume") }}
+                  </button>
+                  <button class="ctrl-btn" @click="stepOnce">⏭ {{ t("simverse.step") }}</button>
+                </div>
+                <div class="ctrl-row">
+                  <span class="ctrl-hint">{{ t("simverse.fastForward") }}</span>
+                  <input class="ff-input" type="number" min="1" max="200" v-model.number="ffSteps" />
+                  <span class="ctrl-hint">{{ t("simverse.steps") }}</span>
+                  <button class="ctrl-btn" @click="fastForward">⏩</button>
+                </div>
+              </section>
+              <section class="ctrl-section">
+                <div class="ctrl-title">{{ t("simverse.worldSnapshot") }}</div>
+                <div class="ctrl-row">
+                  <button class="ctrl-btn" @click="doSave">💾 {{ t("simverse.saveNow") }}</button>
+                  <button class="ctrl-btn" @click="doLoad">📂 {{ t("simverse.loadSave") }}</button>
+                </div>
+                <div v-if="saveMsg" class="ctrl-msg">{{ saveMsg }}</div>
+              </section>
+            </div>
+          </div>
+        </transition>
+
+        <!-- 化身页：屏幕状态机 character 页，B 体验（后端角色系统未接入，诚实标注为占位） -->
+        <transition name="character-page">
+          <div v-if="screen === 'character'" class="character-page">
+            <div class="event-page-header">
+              <button class="event-back" @click="backToWorld">← {{ t("simverse.back") }}</button>
+              <span class="event-page-title">🧑 {{ t("simverse.character") }}</span>
+            </div>
+            <div class="character-body">
+              <div class="stub-banner">⚠️ {{ t("simverse.bStubHint") }}</div>
+              <div class="char-card">
+                <div class="char-avatar">⚔️</div>
+                <div class="char-name">冒险者 · Lv.{{ playerLevel }}</div>
+                <div class="char-res">
+                  <span>💎 {{ playerDiamond }}</span>
+                  <span>🪙 {{ playerGold }}</span>
+                  <span>⚡ {{ playerStamina }}/120</span>
+                </div>
+                <div class="char-skills">
+                  <span v-for="s in playerSkills.slice(0, 4)" :key="s.id" class="char-skill">{{ s.icon }} {{ s.name }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </transition>
+    </div>
     </ion-content>
   </ion-page>
 </template>
@@ -734,9 +903,11 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { useSimverse, type SimverseNPC, type SimverseChronicleEvent } from "@/composables/useSimverse";
+import { useSimverse, type SimverseNPC, type SimverseChronicleEvent, type SimverseRelation } from "@/composables/useSimverse";
 import { usePhaserWorld } from "@/composables/usePhaserWorld";
-import { IonInfiniteScroll, IonInfiniteScrollContent } from "@ionic/vue";
+import { useWorldRenderSettings, type RenderFps, type RenderQuality } from "@/composables/useWorldRenderSettings";
+import { deriveBuildFromNPC, ARCH_META } from "@/game/builds";
+import { IonInfiniteScroll, IonInfiniteScrollContent, IonSegment, IonSegmentButton, IonLabel } from "@ionic/vue";
 import {
   lockScreenOrientation,
   unlockScreenOrientation,
@@ -758,13 +929,27 @@ const {
   loadWorldConfig,
   setPerformanceTier,
   controlWorld,
+  saveWorld,
+  loadWorld,
   loadNPCList,
   loadChronicleWorld,
   loadBehaviorStats,
   loadBehaviorList,
+  loadChronicleNPC,
+  loadNPCRelations,
   init,
   cleanup,
 } = useSimverse();
+
+// 画面设置（帧率/等效渲染）接入实时世界：改动经 useWorldRenderSettings 的
+// localStorage + `simverse:render-settings` 事件，由 usePhaserWorld 实时应用到运行中的 Phaser 游戏。
+const { fps, quality, FPS_OPTIONS, QUALITY_OPTIONS, QUALITY_RESOLUTION } = useWorldRenderSettings();
+function onFpsChange(ev: any) {
+  fps.value = Number(ev.detail.value) as RenderFps;
+}
+function onQualityChange(ev: any) {
+  quality.value = ev.detail.value as RenderQuality;
+}
 
 const npcList = ref<SimverseNPC[]>([]);
 const npcPage = ref(1);
@@ -772,6 +957,87 @@ const hasMoreNPCs = ref(true);
 const recentEvents = ref<SimverseChronicleEvent[]>([]);
 const activePanel = ref<string | null>(null);
 const selectedNPC = ref<SimverseNPC | null>(null);
+// 焦点页（屏幕状态机 focus 页）上下文：身份/时间线/关系 + 编队状态。
+// 升级自"小卡片浮层"——进入后镜头推近对象（Phaser centerOnNPC），页面切换为对象上下文页。
+const focusTab = ref<"identity" | "timeline" | "relations">("identity");
+const npcChronicle = ref<SimverseChronicleEvent[]>([]);
+const npcRelations = ref<SimverseRelation[]>([]);
+const focusLoading = ref(false);
+const SQUAD_KEY = "simverse:squad";
+const MAX_SQUAD = 6;
+const squadIds = ref<number[]>(loadSquadIds());
+const inSquad = computed(() => !!selectedNPC.value && squadIds.value.includes(selectedNPC.value.id));
+// 焦点对象的流派（确定性派生，复用 P14 builds.ts），用于身份徽章
+const focusBuild = computed(() => (selectedNPC.value ? deriveBuildFromNPC(selectedNPC.value) : null));
+
+function loadSquadIds(): number[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(SQUAD_KEY) || "[]");
+    return Array.isArray(v) ? v.filter((x: unknown) => typeof x === "number").slice(0, MAX_SQUAD) : [];
+  } catch {
+    return [];
+  }
+}
+function persistSquadIds() {
+  try {
+    localStorage.setItem(SQUAD_KEY, JSON.stringify(squadIds.value));
+  } catch (e) {
+    console.warn("[simverse] squad persist failed:", e);
+  }
+}
+function toggleSquad() {
+  if (!selectedNPC.value) return;
+  const id = selectedNPC.value.id;
+  if (squadIds.value.includes(id)) {
+    squadIds.value = squadIds.value.filter((x) => x !== id);
+  } else {
+    if (squadIds.value.length >= MAX_SQUAD) return;
+    squadIds.value = [...squadIds.value, id];
+  }
+  persistSquadIds();
+}
+// 屏幕状态机：横屏世界由多页组成、会互相切换（不再是一页永远不变）。
+// world=主世界 / focus=焦点对象页 / event=事件页 / intervene=干预页 / character=化身页(B)
+const screen = ref<"world" | "focus" | "event" | "intervene" | "character">("world");
+// 独立 computed，避免模板在 v-if="screen === 'world'" 块内将 screen 收窄为 "world" 而误报比较无交集
+const isIntervene = computed(() => screen.value === "intervene");
+const bottomMoreOpen = ref(false);
+function toggleBottomMore() {
+  bottomMoreOpen.value = !bottomMoreOpen.value;
+}
+
+// 事件页：从主世界进入全屏编年史事件流（屏幕状态机 event 页）
+function openEventPage() {
+  if (recentEvents.value.length === 0) loadEvents();
+  screen.value = "event";
+}
+
+// 干预页：上帝视角的世界控制（屏幕状态机 intervene 页），全部接真实后端能力
+function openIntervene() {
+  screen.value = "intervene";
+}
+const ffSteps = ref(10);
+const saveMsg = ref("");
+async function fastForward() {
+  for (let i = 0; i < ffSteps.value; i++) {
+    await controlWorld("step");
+  }
+  await refreshState();
+}
+async function doSave() {
+  await saveWorld();
+  saveMsg.value = t("simverse.saveSuccess");
+}
+async function doLoad() {
+  await loadWorld();
+  await refreshState();
+  saveMsg.value = t("simverse.loadSuccess");
+}
+
+// 化身页：B 体验（屏幕状态机 character 页），后端角色系统未接入，诚实标注为占位
+function openCharacter() {
+  screen.value = "character";
+}
 const gachaResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
 const behaviorStats = ref<{ total_npcs: number; alive_npcs: number; behavior_dist: Record<string, number> } | null>(null);
 
@@ -1005,7 +1271,7 @@ const phaserHasError = ref(false);
 const phaserWorld = usePhaserWorld();
 
 phaserWorld.onNPCClick((npc) => {
-  selectedNPC.value = npc;
+  selectNPC(npc);
 });
 
 async function initPhaser() {
@@ -1180,9 +1446,50 @@ async function loadNPCBehaviors() {
   phaserWorld.setNPCBehaviors(map);
 }
 
-function selectNPC(npc: SimverseNPC) {
+// 进入焦点页：屏幕状态机 world → focus，镜头推近对象 + 加载对象上下文（身份/时间线/关系）
+async function selectNPC(npc: SimverseNPC) {
   selectedNPC.value = npc;
+  screen.value = "focus";
+  focusTab.value = "identity";
+  // 镜头推近：Phaser 相机居中并放大到该 NPC，构成"world → focus"的镜头转场
+  if (usePhaser.value && phaserWorld.isReady.value) {
+    phaserWorld.centerOnNPC(npc.id);
+  }
   recordQuestAction("view_npc");
+  await loadFocusContext(npc.id);
+}
+
+// 加载焦点对象的编年史时间线与关系网（接真实后端，非桩）
+async function loadFocusContext(id: number) {
+  focusLoading.value = true;
+  try {
+    const [chronicle, rels] = await Promise.all([
+      loadChronicleNPC(id, 30),
+      loadNPCRelations(id),
+    ]);
+    npcChronicle.value = chronicle?.items ?? [];
+    npcRelations.value = rels?.relations ?? [];
+  } catch (e) {
+    console.warn("Failed to load focus context:", e);
+    npcChronicle.value = [];
+    npcRelations.value = [];
+  } finally {
+    focusLoading.value = false;
+  }
+}
+
+// 从焦点页返回主世界（屏幕状态机回退）：复位镜头缩放，回到俯瞰视角
+function backToWorld() {
+  selectedNPC.value = null;
+  screen.value = "world";
+  if (usePhaser.value && phaserWorld.isReady.value) {
+    phaserWorld.setZoom(0.5);
+  }
+}
+
+// 焦点页标签切换（身份/时间线/关系）
+function onFocusTabChange(ev: CustomEvent) {
+  focusTab.value = ev.detail.value as "identity" | "timeline" | "relations";
 }
 
 function openPanel(name: string) {
@@ -1513,3198 +1820,4 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
-.world-page {
-  --background: #0a0a1a;
-}
-
-.world-content {
-  --background: #0a0a1a;
-  --padding-top: 0;
-  --padding-bottom: 0;
-  --offset-top: 0;
-  --offset-bottom: 0;
-}
-
-.world-content :deep(.inner-scroll) {
-  height: 100%;
-  padding: 0 !important;
-  overflow: hidden;
-}
-
-.game-container {
-  position: relative;
-  width: 100%;
-  height: 100dvh;
-  height: 100vh;
-  overflow: hidden;
-  box-sizing: border-box;
-  background: 
-    radial-gradient(ellipse at 30% 20%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
-    radial-gradient(ellipse at 70% 80%, rgba(236, 72, 153, 0.1) 0%, transparent 50%),
-    linear-gradient(180deg, #12122a 0%, #0a0a1a 100%);
-}
-
-.world-map {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  padding: 60px 100px 70px;
-}
-
-.phaser-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.phaser-container :deep(canvas) {
-  display: block;
-  width: 100% !important;
-  height: 100% !important;
-}
-
-.phaser-loading {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  background: rgba(10, 10, 26, 0.9);
-  z-index: 5;
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(139, 92, 246, 0.2);
-  border-top-color: #8b5cf6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.loading-text {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.map-grid {
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  grid-template-rows: repeat(6, 1fr);
-  gap: 4px;
-  height: 100%;
-  opacity: 0.5;
-}
-
-.map-cell {
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  transition: all 0.3s;
-}
-
-.map-cell.forest { background: rgba(34, 197, 94, 0.12); }
-.map-cell.mountain { background: rgba(107, 114, 128, 0.18); }
-.map-cell.water { background: rgba(59, 130, 246, 0.12); }
-.map-cell.plain { background: rgba(234, 179, 8, 0.08); }
-.map-cell.village { background: rgba(139, 92, 246, 0.12); }
-.map-cell.city { background: rgba(236, 72, 153, 0.12); }
-.map-cell.desert { background: rgba(249, 115, 22, 0.08); }
-
-.map-overlay {
-  position: absolute;
-  top: 60px;
-  left: 100px;
-  right: 100px;
-  bottom: 70px;
-  pointer-events: none;
-}
-
-.npc-marker {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  pointer-events: auto;
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.npc-marker:hover {
-  transform: translate(-50%, -50%) scale(1.2);
-  z-index: 10;
-}
-
-.npc-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #6b7280;
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
-}
-
-.npc-dot.alive {
-  background: #22c55e;
-  animation: pulse 2s ease-in-out infinite;
-}
-
-.npc-dot.dead {
-  background: #6b7280;
-  animation: none;
-}
-
-.npc-dot.beh-work { background: #3b82f6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.6); }
-.npc-dot.beh-sleep { background: #8b5cf6; box-shadow: 0 0 8px rgba(139, 92, 246, 0.6); }
-.npc-dot.beh-eat { background: #f97316; box-shadow: 0 0 8px rgba(249, 115, 22, 0.6); }
-.npc-dot.beh-socialize { background: #ec4899; box-shadow: 0 0 8px rgba(236, 72, 153, 0.6); }
-.npc-dot.beh-explore { background: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.6); }
-.npc-dot.beh-trade { background: #eab308; box-shadow: 0 0 8px rgba(234, 179, 8, 0.6); }
-.npc-dot.beh-rest { background: #6b7280; box-shadow: 0 0 6px rgba(107, 114, 128, 0.5); }
-.npc-dot.beh-idle { background: #4b5563; box-shadow: 0 0 4px rgba(75, 85, 99, 0.4); }
-
-@keyframes pulse {
-  0%, 100% { box-shadow: 0 0 4px rgba(34, 197, 94, 0.5); }
-  50% { box-shadow: 0 0 12px rgba(34, 197, 94, 0.8); }
-}
-
-.npc-name {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.7);
-  white-space: nowrap;
-  margin-top: 2px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-}
-
-.top-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 16px;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
-  z-index: 10;
-}
-
-.resource-group {
-  display: flex;
-  gap: 8px;
-}
-
-.resource-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(20, 20, 40, 0.8);
-  backdrop-filter: blur(12px);
-  padding: 6px 12px;
-  border-radius: 20px;
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  border-bottom: 3px solid rgba(139, 92, 246, 0.3);
-}
-
-.resource-icon {
-  font-size: 14px;
-}
-
-.resource-value {
-  font-size: 13px;
-  font-weight: 700;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-}
-
-.top-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.game-btn {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: rgba(20, 20, 40, 0.8);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(139, 92, 246, 0.25);
-  border-bottom: 3px solid rgba(139, 92, 246, 0.35);
-  color: #fff;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  padding: 0;
-}
-
-.game-btn:hover {
-  background: rgba(139, 92, 246, 0.2);
-  transform: translateY(-1px);
-}
-
-.game-btn:active {
-  transform: translateY(2px);
-  border-bottom-width: 1px;
-}
-
-.game-btn .btn-icon {
-  font-size: 14px;
-  line-height: 1;
-}
-
-.game-btn.play-btn.running {
-  background: rgba(34, 197, 94, 0.2);
-  border-color: rgba(34, 197, 94, 0.4);
-  border-bottom-color: rgba(34, 197, 94, 0.5);
-}
-
-.left-menu,
-.right-menu {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  z-index: 10;
-  padding: 10px 8px;
-}
-
-.left-menu {
-  left: 10px;
-}
-
-.right-menu {
-  right: 10px;
-}
-
-.menu-btn {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  background: rgba(20, 20, 40, 0.8);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  border-bottom: 3px solid rgba(139, 92, 246, 0.3);
-  border-radius: 12px;
-  cursor: pointer;
-  padding: 10px 8px;
-  min-width: 56px;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.menu-btn:hover {
-  background: rgba(139, 92, 246, 0.2);
-  transform: translateY(-1px);
-}
-
-.menu-btn:active {
-  transform: translateY(2px);
-  border-bottom-width: 1px;
-}
-
-.menu-btn.active {
-  background: rgba(139, 92, 246, 0.3);
-  border-color: rgba(139, 92, 246, 0.6);
-  border-bottom-color: rgba(139, 92, 246, 0.7);
-}
-
-.menu-icon {
-  font-size: 22px;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
-  line-height: 1;
-}
-
-.menu-icon.sparkle {
-  animation: sparkle 2s ease-in-out infinite;
-}
-
-@keyframes sparkle {
-  0%, 100% {
-    transform: scale(1);
-    filter: drop-shadow(0 2px 4px rgba(255, 215, 0, 0.3));
-  }
-  50% {
-    transform: scale(1.1);
-    filter: drop-shadow(0 2px 8px rgba(255, 215, 0, 0.6));
-  }
-}
-
-.menu-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.8);
-  font-weight: 500;
-}
-
-.menu-btn.gacha-btn .menu-label {
-  color: #ffd700;
-  font-weight: 600;
-}
-
-.menu-btn.exit-btn .menu-label {
-  color: #ef4444;
-}
-
-.menu-divider {
-  width: 40px;
-  height: 1px;
-  background: rgba(139, 92, 246, 0.2);
-  margin: 4px auto;
-}
-
-.setting-section.danger-zone {
-  margin-top: 20px;
-  padding: 16px;
-  background: rgba(239, 68, 68, 0.08);
-  border-radius: 12px;
-  border: 1px solid rgba(239, 68, 68, 0.2);
-}
-
-.setting-section.danger-zone .section-title {
-  color: #ef4444;
-  margin-bottom: 12px;
-}
-
-.exit-world-btn {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 14px 16px;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 10px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.exit-world-btn:active {
-  background: rgba(239, 68, 68, 0.2);
-  transform: scale(0.98);
-}
-
-.exit-icon {
-  font-size: 18px;
-}
-
-.stats-bar {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-  z-index: 9;
-}
-
-.stat-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(20, 20, 40, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(139, 92, 246, 0.15);
-  border-radius: 16px;
-  padding: 5px 12px;
-}
-
-.stat-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.stat-value {
-  font-size: 12px;
-  font-weight: 600;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-}
-
-.event-ticker {
-  position: absolute;
-  top: 58px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(20, 20, 40, 0.8);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  border-radius: 20px;
-  padding: 6px 14px;
-  z-index: 9;
-  max-width: 400px;
-}
-
-.ticker-icon {
-  font-size: 14px;
-  flex-shrink: 0;
-}
-
-.ticker-content {
-  overflow: hidden;
-  flex: 1;
-  min-width: 0;
-}
-
-.ticker-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.ticker-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.ticker-enter-active,
-.ticker-leave-active {
-  transition: all 0.3s ease;
-}
-
-.ticker-enter-from {
-  opacity: 0;
-  transform: translateY(-10px);
-}
-
-.ticker-leave-to {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
-.event-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #4ade80;
-  flex-shrink: 0;
-}
-
-.event-dot.warning { background: #f59e0b; }
-.event-dot.danger { background: #ef4444; }
-
-.event-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.side-panel {
-  position: absolute;
-  top: 50px;
-  bottom: 60px;
-  width: 300px;
-  background: rgba(15, 15, 35, 0.95);
-  backdrop-filter: blur(20px);
-  border-radius: 16px;
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  z-index: 15;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  right: 80px;
-  transform: translateX(20px);
-  opacity: 0;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  pointer-events: none;
-}
-
-.side-panel.panel-left {
-  left: 80px;
-  right: auto;
-  transform: translateX(-20px);
-}
-
-.side-panel.open {
-  transform: translateX(0);
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 18px;
-  border-bottom: 1px solid rgba(139, 92, 246, 0.1);
-  flex-shrink: 0;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(236, 72, 153, 0.05) 100%);
-}
-
-.panel-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.panel-close-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 11px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.panel-close-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: #fff;
-}
-
-.panel-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-}
-
-.panel-content::-webkit-scrollbar {
-  width: 5px;
-}
-
-.panel-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.panel-content::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.25);
-  border-radius: 3px;
-}
-
-.list-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 12px;
-  margin-bottom: 8px;
-  border: 1px solid rgba(139, 92, 246, 0.1);
-  transition: all 0.2s;
-  cursor: pointer;
-}
-
-.list-card:hover {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.25);
-  transform: translateX(2px);
-}
-
-.card-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #8b5cf6, #ec4899);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 700;
-  font-size: 16px;
-  flex-shrink: 0;
-  border: 2px solid rgba(255, 255, 255, 0.1);
-}
-
-.card-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.card-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-  margin-bottom: 4px;
-}
-
-.card-subtitle {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-.prof-tag,
-.level-tag {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-weight: 500;
-}
-
-.prof-tag {
-  background: rgba(139, 92, 246, 0.2);
-  color: #c4b5fd;
-  text-transform: capitalize;
-}
-
-.level-tag {
-  background: rgba(245, 158, 11, 0.2);
-  color: #fbbf24;
-}
-
-.card-behavior {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.behavior-icon {
-  font-size: 11px;
-}
-
-.behavior-text {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.behavior-stats-bar {
-  background: rgba(139, 92, 246, 0.1);
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  border-radius: 10px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
-}
-
-.stats-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 8px;
-}
-
-.behavior-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.behavior-chip {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 3px 8px;
-  font-size: 10px;
-}
-
-.behavior-chip .chip-icon {
-  font-size: 12px;
-}
-
-.behavior-chip .chip-count {
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.behavior-chip.work { background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.3); }
-.behavior-chip.sleep { background: rgba(139, 92, 246, 0.15); border-color: rgba(139, 92, 246, 0.3); }
-.behavior-chip.eat { background: rgba(249, 115, 22, 0.15); border-color: rgba(249, 115, 22, 0.3); }
-.behavior-chip.socialize { background: rgba(236, 72, 153, 0.15); border-color: rgba(236, 72, 153, 0.3); }
-.behavior-chip.explore { background: rgba(34, 197, 94, 0.15); border-color: rgba(34, 197, 94, 0.3); }
-.behavior-chip.trade { background: rgba(234, 179, 8, 0.15); border-color: rgba(234, 179, 8, 0.3); }
-.behavior-chip.rest { background: rgba(107, 114, 128, 0.15); border-color: rgba(107, 114, 128, 0.3); }
-.behavior-chip.idle { background: rgba(107, 114, 128, 0.1); border-color: rgba(107, 114, 128, 0.2); }
-
-.card-action {
-  width: 50px;
-  flex-shrink: 0;
-}
-
-.mini-hp-bar {
-  width: 100%;
-  height: 5px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.mini-hp-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #22c55e, #4ade80);
-  border-radius: 3px;
-  transition: width 0.3s;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 30px 16px;
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 12px;
-}
-
-.chronicle-card {
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border-radius: 12px;
-  margin-bottom: 8px;
-  border-left: 3px solid #8b5cf6;
-  border: 1px solid rgba(139, 92, 246, 0.1);
-  border-left: 3px solid #8b5cf6;
-}
-
-.chronicle-tick {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 4px;
-  font-variant-numeric: tabular-nums;
-}
-
-.chronicle-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-  margin-bottom: 4px;
-}
-
-.chronicle-desc {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  line-height: 1.4;
-}
-
-.setting-section {
-  margin-bottom: 20px;
-}
-
-.section-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 10px;
-  padding-left: 2px;
-  letter-spacing: 0.3px;
-}
-
-.tier-selector {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.tier-option {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(139, 92, 246, 0.2);
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-align: left;
-}
-
-.tier-option:hover {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.35);
-}
-
-.tier-option.active {
-  background: rgba(139, 92, 246, 0.2);
-  border-color: rgba(139, 92, 246, 0.6);
-  color: #fff;
-}
-
-.tier-name {
-  font-weight: 600;
-}
-
-.tier-desc {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.tier-option.active .tier-desc {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.config-list {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 10px;
-  border: 1px solid rgba(139, 92, 246, 0.1);
-  overflow: hidden;
-}
-
-.config-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 14px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  border-bottom: 1px solid rgba(139, 92, 246, 0.05);
-}
-
-.config-row:last-child {
-  border-bottom: none;
-}
-
-.config-value {
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 500;
-}
-
-.gacha-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(236, 72, 153, 0.2));
-  border-radius: 14px;
-  padding: 16px;
-  border: 1px solid rgba(139, 92, 246, 0.35);
-  margin-bottom: 14px;
-}
-
-.banner-icon {
-  font-size: 36px;
-  flex-shrink: 0;
-}
-
-.banner-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.banner-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 2px;
-}
-
-.banner-desc {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  line-height: 1.4;
-}
-
-.gacha-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.gacha-action-btn {
-  position: relative;
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  border-bottom: 4px solid rgba(0, 0, 0, 0.2);
-}
-
-.gacha-action-btn.single {
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
-}
-
-.gacha-action-btn.ten {
-  background: linear-gradient(135deg, #f59e0b, #ef4444);
-}
-
-.gacha-action-btn:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.1);
-}
-
-.gacha-action-btn:active {
-  transform: translateY(3px);
-  border-bottom-width: 1px;
-}
-
-.action-icon {
-  font-size: 24px;
-  flex-shrink: 0;
-}
-
-.action-name {
-  flex: 1;
-  text-align: left;
-  font-size: 14px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.action-cost {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.95);
-  font-weight: 600;
-}
-
-.action-badge {
-  position: absolute;
-  top: -6px;
-  right: 12px;
-  background: #ffd700;
-  color: #1a1a1a;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 8px;
-}
-
-.gacha-results {
-  margin-top: 4px;
-}
-
-.results-header {
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 10px;
-}
-
-.results-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-}
-
-.result-item {
-  aspect-ratio: 3 / 4;
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(139, 92, 246, 0.15);
-  animation: cardReveal 0.4s ease-out;
-  padding: 6px 4px;
-}
-
-@keyframes cardReveal {
-  from { opacity: 0; transform: scale(0.8) rotateY(90deg); }
-  to { opacity: 1; transform: scale(1) rotateY(0); }
-}
-
-.result-item .result-icon { font-size: 22px; }
-
-.result-item .result-name {
-  font-size: 8px;
-  color: rgba(255, 255, 255, 0.6);
-  text-align: center;
-  line-height: 1.2;
-}
-
-.result-item .result-rarity {
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.result-item.N .result-rarity { color: #9ca3af; }
-.result-item.R .result-rarity { color: #3b82f6; }
-.result-item.SR .result-rarity { color: #a78bfa; }
-.result-item.SSR .result-rarity { color: #fbbf24; }
-.result-item.UR .result-rarity { color: #f87171; }
-
-.detail-modal {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 20;
-  backdrop-filter: blur(4px);
-}
-
-.detail-card {
-  width: 85%;
-  max-width: 360px;
-  background: rgba(15, 15, 35, 0.98);
-  border-radius: 18px;
-  border: 1px solid rgba(139, 92, 246, 0.25);
-  overflow: hidden;
-  animation: modalIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-@keyframes modalIn {
-  from {
-    opacity: 0;
-    transform: scale(0.9) translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-.detail-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 18px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.15));
-  border-bottom: 1px solid rgba(139, 92, 246, 0.1);
-  position: relative;
-}
-
-.detail-avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #8b5cf6, #ec4899);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 700;
-  font-size: 24px;
-  flex-shrink: 0;
-  border: 3px solid rgba(255, 255, 255, 0.15);
-}
-
-.detail-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.detail-name {
-  font-size: 20px;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 4px;
-}
-
-.detail-meta {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.detail-close {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.detail-close:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: #fff;
-}
-
-.detail-body {
-  padding: 16px 18px 18px;
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px 16px;
-}
-
-.detail-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.item-label {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.item-value {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.9);
-  font-weight: 500;
-}
-
-.item-value.highlight {
-  color: #fbbf24;
-  font-weight: 600;
-}
-
-.item-value.success {
-  color: #4ade80;
-}
-
-.item-value.warning {
-  color: #fbbf24;
-}
-
-.item-value.alive { color: #4ade80; }
-.item-value.dead { color: #f87171; }
-
-.explore-banner,
-.battle-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(236, 72, 153, 0.2));
-  border-radius: 12px;
-  border: 1px solid rgba(99, 102, 241, 0.3);
-}
-
-.battle-banner {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(249, 115, 22, 0.2));
-  border-color: rgba(239, 68, 68, 0.3);
-}
-
-.explore-banner .banner-icon,
-.battle-banner .banner-icon {
-  font-size: 36px;
-}
-
-.explore-banner .banner-title,
-.battle-banner .banner-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 2px;
-}
-
-.explore-banner .banner-desc,
-.battle-banner .banner-desc {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.region-list,
-.battle-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.region-card,
-.enemy-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.region-card:hover,
-.enemy-card:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(99, 102, 241, 0.5);
-  transform: translateX(4px);
-}
-
-.enemy-card:hover {
-  border-color: rgba(239, 68, 68, 0.5);
-}
-
-.region-icon,
-.enemy-icon {
-  font-size: 32px;
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(99, 102, 241, 0.2);
-  border-radius: 10px;
-}
-
-.enemy-icon {
-  background: rgba(239, 68, 68, 0.2);
-}
-
-.region-info,
-.enemy-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.region-name,
-.enemy-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: #ffffff;
-}
-
-.region-type,
-.enemy-level {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.enemy-level {
-  color: #fbbf24;
-  font-weight: 600;
-}
-
-.region-arrow {
-  font-size: 20px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.fight-btn {
-  padding: 8px 16px;
-  background: linear-gradient(135deg, #ef4444, #f97316);
-  color: #ffffff;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.2s ease;
-}
-
-.fight-btn:hover {
-  transform: scale(1.05);
-}
-
-.explore-btn {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3));
-  border: 1px solid rgba(99, 102, 241, 0.4);
-}
-
-.explore-btn.active {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.5));
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.4);
-}
-
-.battle-btn {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(249, 115, 22, 0.3));
-  border: 1px solid rgba(239, 68, 68, 0.4);
-}
-
-.battle-btn.active {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.5), rgba(249, 115, 22, 0.5));
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
-}
-
-.bottom-nav {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 70px;
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  background: linear-gradient(180deg, transparent 0%, rgba(10, 10, 26, 0.95) 30%);
-  backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(139, 92, 246, 0.2);
-  z-index: 15;
-  padding-bottom: 8px;
-}
-
-.nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  background: transparent;
-  border: none;
-  color: rgba(255, 255, 255, 0.6);
-  padding: 6px 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-}
-
-.nav-item.active {
-  color: #8b5cf6;
-}
-
-.nav-item.active .nav-icon {
-  transform: scale(1.15);
-}
-
-.nav-icon {
-  font-size: 22px;
-  transition: transform 0.2s ease;
-}
-
-.nav-label {
-  font-size: 10px;
-  font-weight: 500;
-}
-
-.gacha-nav .nav-icon {
-  animation: sparkle-pulse 2s ease-in-out infinite;
-}
-
-@keyframes sparkle-pulse {
-  0%, 100% { filter: brightness(1); }
-  50% { filter: brightness(1.5) drop-shadow(0 0 8px #fbbf24); }
-}
-
-.full-screen-page {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(180deg, #0f0f2a 0%, #0a0a1a 100%);
-  z-index: 20;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.page-slide-enter-active,
-.page-slide-leave-active {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.page-slide-enter-from {
-  transform: translateY(100%);
-}
-
-.page-slide-leave-to {
-  transform: translateY(100%);
-}
-
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  background: rgba(15, 15, 42, 0.95);
-  backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(139, 92, 246, 0.15);
-  flex-shrink: 0;
-}
-
-.back-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(139, 92, 246, 0.15);
-  border: 1px solid rgba(139, 92, 246, 0.25);
-  color: #fff;
-  font-size: 18px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-}
-
-.back-btn:hover {
-  background: rgba(139, 92, 246, 0.3);
-  transform: translateX(-2px);
-}
-
-.page-title {
-  font-size: 17px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.header-spacer {
-  width: 36px;
-}
-
-.page-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-
-.profile-page {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.player-card {
-  position: relative;
-  border-radius: 16px;
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-
-.card-bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
-}
-
-.card-bg::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -20%;
-  width: 300px;
-  height: 300px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%);
-  border-radius: 50%;
-}
-
-.card-content {
-  position: relative;
-  z-index: 1;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-
-.player-avatar {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #8b5cf6, #ec4899);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 3px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 0 30px rgba(139, 92, 246, 0.5);
-}
-
-.avatar-icon {
-  font-size: 40px;
-}
-
-.player-name {
-  font-size: 22px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.player-title {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.player-stats-row {
-  display: flex;
-  gap: 16px;
-  margin-top: 8px;
-}
-
-.mini-stat {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(0, 0, 0, 0.25);
-  padding: 6px 12px;
-  border-radius: 20px;
-}
-
-.mini-stat-icon {
-  font-size: 14px;
-}
-
-.mini-stat-val {
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-}
-
-.section-card {
-  background: rgba(20, 20, 50, 0.6);
-  border: 1px solid rgba(139, 92, 246, 0.15);
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
-}
-
-.section-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 12px;
-}
-
-.stats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.stat-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.stat-icon.hp { background: rgba(239, 68, 68, 0.2); }
-.stat-icon.atk { background: rgba(249, 115, 22, 0.2); }
-.stat-icon.def { background: rgba(59, 130, 246, 0.2); }
-.stat-icon.exp { background: rgba(234, 179, 8, 0.2); }
-
-.stat-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.stat-name {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 2px;
-}
-
-.stat-bar {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.stat-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.hp-fill { background: linear-gradient(90deg, #ef4444, #f87171); }
-.exp-fill { background: linear-gradient(90deg, #eab308, #fde047); }
-
-.stat-val {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
-  margin-top: 2px;
-}
-
-.stat-val.big {
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-  margin-top: 0;
-}
-
-.skill-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.skill-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 10px 12px;
-  border-radius: 10px;
-}
-
-.skill-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: rgba(139, 92, 246, 0.15);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-}
-
-.skill-info {
-  flex: 1;
-}
-
-.skill-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-}
-
-.skill-level {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.skill-rarity {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 4px;
-}
-
-.skill-rarity.SR { background: rgba(234, 179, 8, 0.2); color: #eab308; }
-.skill-rarity.R { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
-.skill-rarity.N { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
-
-.gacha-page {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-.gacha-banner-large {
-  position: relative;
-  height: 180px;
-  border-radius: 16px;
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-
-.banner-bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, #581c87 0%, #be185d 50%, #ea580c 100%);
-}
-
-.banner-bg::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.4) 100%);
-}
-
-.banner-content {
-  position: relative;
-  z-index: 2;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.banner-icon-large {
-  font-size: 48px;
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-
-.banner-title-large {
-  font-size: 24px;
-  font-weight: 800;
-  color: #fff;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
-}
-
-.banner-desc-large {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.sparkle-layer {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  z-index: 1;
-}
-
-.sparkle {
-  position: absolute;
-  color: #fde68a;
-  font-size: 14px;
-  animation: sparkle-rotate 4s linear infinite;
-  transform-origin: center;
-}
-
-@keyframes sparkle-rotate {
-  from { opacity: 0.3; }
-  50% { opacity: 1; }
-  to { opacity: 0.3; }
-}
-
-.gacha-pool-info {
-  display: flex;
-  justify-content: space-around;
-  background: rgba(20, 20, 50, 0.6);
-  border: 1px solid rgba(139, 92, 246, 0.15);
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 16px;
-}
-
-.pool-rate {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.rate-label {
-  font-size: 11px;
-  font-weight: 700;
-  background: linear-gradient(135deg, #eab308, #f97316);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.rate-val {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.gacha-actions-large {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.gacha-big-btn {
-  flex: 1;
-  border: none;
-  border-radius: 14px;
-  padding: 16px 12px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.2s ease;
-  position: relative;
-}
-
-.gacha-big-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.gacha-big-btn.single {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
-  border: 2px solid rgba(59, 130, 246, 0.4);
-}
-
-.gacha-big-btn.ten {
-  background: linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(249, 115, 22, 0.2));
-  border: 2px solid rgba(234, 179, 8, 0.4);
-}
-
-.gacha-big-btn:not(:disabled):hover {
-  transform: translateY(-2px);
-}
-
-.gacha-big-btn:not(:disabled):active {
-  transform: translateY(1px);
-}
-
-.btn-icon-large {
-  font-size: 28px;
-}
-
-.btn-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: #fff;
-}
-
-.btn-cost {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.btn-badge {
-  position: absolute;
-  top: -8px;
-  right: 8px;
-  background: linear-gradient(135deg, #ef4444, #f97316);
-  color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 8px;
-}
-
-.gacha-history {
-  background: rgba(20, 20, 50, 0.6);
-  border: 1px solid rgba(139, 92, 246, 0.15);
-  border-radius: 12px;
-  padding: 12px;
-}
-
-.history-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 10px;
-}
-
-.history-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.history-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 8px 10px;
-  border-radius: 8px;
-}
-
-.hist-icon {
-  font-size: 18px;
-}
-
-.hist-name {
-  flex: 1;
-  font-size: 12px;
-  color: #fff;
-}
-
-.hist-rarity {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.hist-rarity.SSR { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
-.hist-rarity.SR { background: rgba(234, 179, 8, 0.2); color: #eab308; }
-.hist-rarity.R { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
-.hist-rarity.N { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
-
-.gacha-animation-overlay {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.9);
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.gacha-flash-enter-active,
-.gacha-flash-leave-active {
-  transition: opacity 0.3s ease;
-}
-
-.gacha-flash-enter-from,
-.gacha-flash-leave-to {
-  opacity: 0;
-}
-
-.gacha-cards-container {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: center;
-  max-width: 360px;
-  padding: 20px;
-}
-
-.gacha-card-anim {
-  width: 80px;
-  height: 110px;
-  perspective: 1000px;
-}
-
-.gacha-card-anim.revealed {
-  animation: card-pop 0.5s ease forwards;
-}
-
-@keyframes card-pop {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.1); }
-  100% { transform: scale(1); }
-}
-
-.card-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  transform-style: preserve-3d;
-  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.gacha-card-anim.revealed .card-inner {
-  transform: rotateY(180deg);
-}
-
-.card-front,
-.card-back {
-  position: absolute;
-  inset: 0;
-  backface-visibility: hidden;
-  border-radius: 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.card-front {
-  background: linear-gradient(135deg, #1e1b4b, #312e81);
-  border: 2px solid rgba(139, 92, 246, 0.5);
-}
-
-.card-back-icon {
-  font-size: 36px;
-  color: rgba(139, 92, 246, 0.6);
-}
-
-.card-back {
-  transform: rotateY(180deg);
-  background: linear-gradient(180deg, rgba(20, 20, 50, 0.95), rgba(30, 27, 75, 0.95));
-  padding: 8px;
-  text-align: center;
-}
-
-.gacha-card-anim.SSR .card-back {
-  border: 2px solid #ef4444;
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
-}
-
-.gacha-card-anim.SR .card-back {
-  border: 2px solid #eab308;
-  box-shadow: 0 0 15px rgba(234, 179, 8, 0.4);
-}
-
-.gacha-card-anim.R .card-back {
-  border: 2px solid #3b82f6;
-}
-
-.gacha-item-icon {
-  font-size: 30px;
-}
-
-.gacha-item-name {
-  font-size: 10px;
-  color: #fff;
-  font-weight: 600;
-}
-
-.gacha-item-rarity {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 5px;
-  border-radius: 3px;
-}
-
-.gacha-item-rarity.SSR { background: rgba(239, 68, 68, 0.3); color: #f87171; }
-.gacha-item-rarity.SR { background: rgba(234, 179, 8, 0.3); color: #fde047; }
-.gacha-item-rarity.R { background: rgba(59, 130, 246, 0.3); color: #93c5fd; }
-.gacha-item-rarity.N { background: rgba(156, 163, 175, 0.3); color: #d1d5db; }
-
-.gacha-skip-btn {
-  margin-top: 20px;
-  padding: 10px 30px;
-  background: rgba(139, 92, 246, 0.2);
-  border: 1px solid rgba(139, 92, 246, 0.4);
-  border-radius: 20px;
-  color: #fff;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.gacha-skip-btn:hover {
-  background: rgba(139, 92, 246, 0.4);
-}
-
-.training-page {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.training-stamina-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(20, 20, 50, 0.6);
-  border: 1px solid rgba(234, 179, 8, 0.2);
-  border-radius: 12px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
-}
-
-.stamina-icon {
-  font-size: 18px;
-}
-
-.stamina-bar-wrap {
-  flex: 1;
-  height: 12px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.stamina-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #eab308, #fde047);
-  border-radius: 6px;
-  transition: width 0.3s ease;
-}
-
-.stamina-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: #fde047;
-  min-width: 60px;
-  text-align: right;
-}
-
-.training-section {
-  margin-bottom: 20px;
-}
-
-.training-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.training-card {
-  background: rgba(20, 20, 50, 0.6);
-  border: 1px solid rgba(139, 92, 246, 0.15);
-  border-radius: 12px;
-  padding: 16px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.training-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(139, 92, 246, 0.4);
-}
-
-.training-card:active {
-  transform: translateY(0);
-}
-
-.training-icon {
-  font-size: 32px;
-}
-
-.training-name {
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-}
-
-.training-effect {
-  font-size: 11px;
-  color: rgba(34, 197, 94, 0.9);
-}
-
-.training-cost {
-  font-size: 11px;
-  color: rgba(234, 179, 8, 0.9);
-}
-
-.equipment-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-}
-
-.equip-slot {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-}
-
-.equip-slot-label {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.equip-item {
-  width: 50px;
-  height: 50px;
-  border-radius: 12px;
-  background: rgba(139, 92, 246, 0.1);
-  border: 2px solid rgba(139, 92, 246, 0.3);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.equip-item.empty {
-  border-style: dashed;
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.equip-icon {
-  font-size: 24px;
-}
-
-.equip-empty {
-  font-size: 20px;
-  color: rgba(255, 255, 255, 0.2);
-}
-
-.equip-name {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.7);
-  text-align: center;
-}
-
-.equip-name.empty {
-  color: rgba(255, 255, 255, 0.3);
-}
-
-.level-up-section {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.level-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.current-level {
-  font-size: 18px;
-  font-weight: 700;
-  color: #8b5cf6;
-}
-
-.exp-bar-large {
-  height: 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 5px;
-  overflow: hidden;
-}
-
-.exp-fill-large {
-  height: 100%;
-  background: linear-gradient(90deg, #eab308, #fde047);
-  border-radius: 5px;
-  transition: width 0.3s ease;
-}
-
-.exp-text {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.level-up-btn {
-  padding: 12px 24px;
-  background: linear-gradient(135deg, #8b5cf6, #6366f1);
-  border: none;
-  border-radius: 25px;
-  color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.level-up-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.level-up-btn:not(:disabled):hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
-}
-
-.settings-page {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.res-divider {
-  width: 1px;
-  height: 20px;
-  background: rgba(255, 255, 255, 0.15);
-  margin: 0 6px;
-}
-
-.resource-item.game-resource {
-  background: rgba(139, 92, 246, 0.15);
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  padding: 4px 10px;
-  border-radius: 12px;
-}
-
-.player-btn {
-  padding: 2px;
-}
-
-.player-avatar-mini {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #8b5cf6, #ec4899);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
-}
-
-.avatar-icon-mini {
-  font-size: 20px;
-}
-
-.player-level-badge {
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  background: linear-gradient(135deg, #f59e0b, #ef4444);
-  color: white;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.3);
-  white-space: nowrap;
-}
-
-.gacha-menu-btn {
-  position: relative;
-}
-
-.menu-badge {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  font-size: 8px;
-  font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 8px;
-  color: white;
-}
-
-.menu-badge.red {
-  background: #ef4444;
-  animation: badgePulse 2s ease-in-out infinite;
-}
-
-@keyframes badgePulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.15); }
-}
-
-.gacha-modal-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-  backdrop-filter: blur(8px);
-}
-
-.gacha-modal-content {
-  width: 90%;
-  max-width: 500px;
-  max-height: 85%;
-  background: linear-gradient(180deg, #1a1033 0%, #0f0a1a 100%);
-  border-radius: 20px;
-  padding: 20px;
-  position: relative;
-  border: 2px solid rgba(139, 92, 246, 0.3);
-  box-shadow: 0 0 40px rgba(139, 92, 246, 0.3), inset 0 0 60px rgba(139, 92, 246, 0.05);
-  overflow-y: auto;
-}
-
-.gacha-modal-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 14px;
-  cursor: pointer;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.gacha-modal-close:hover {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-}
-
-.gacha-modal-enter-active,
-.gacha-modal-leave-active {
-  transition: all 0.3s ease;
-}
-
-.gacha-modal-enter-from,
-.gacha-modal-leave-to {
-  opacity: 0;
-}
-
-.gacha-modal-enter-from .gacha-modal-content,
-.gacha-modal-leave-to .gacha-modal-content {
-  transform: scale(0.9);
-  opacity: 0;
-}
-
-.profile-card-panel {
-  padding: 4px 0;
-}
-
-.player-card-mini {
-  position: relative;
-  border-radius: 16px;
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-
-.card-bg-mini {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(236, 72, 153, 0.2) 100%);
-}
-
-.card-content-mini {
-  position: relative;
-  padding: 20px;
-  text-align: center;
-}
-
-.player-avatar-big {
-  width: 70px;
-  height: 70px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #8b5cf6, #ec4899);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 12px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
-}
-
-.avatar-icon-big {
-  font-size: 32px;
-}
-
-.panel-section {
-  margin-bottom: 16px;
-}
-
-.panel-section-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.stats-grid-compact {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.stat-item-compact {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 8px 10px;
-  border-radius: 8px;
-}
-
-.stat-label-comp {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  width: 36px;
-  flex-shrink: 0;
-}
-
-.stat-val-comp {
-  font-size: 12px;
-  font-weight: 600;
-  color: white;
-  width: 60px;
-  flex-shrink: 0;
-  text-align: right;
-}
-
-.stat-bar-comp {
-  flex: 1;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.stat-fill-comp {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.3s;
-}
-
-.stat-fill-comp.hp { background: linear-gradient(90deg, #ef4444, #f87171); }
-.stat-fill-comp.exp { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
-
-.skill-list-compact {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.skill-item-comp {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-}
-
-.skill-icon-comp {
-  font-size: 20px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-}
-
-.skill-info-comp {
-  flex: 1;
-}
-
-.skill-name-comp {
-  font-size: 12px;
-  font-weight: 500;
-  color: white;
-}
-
-.skill-level-comp {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.skill-rarity-comp {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 4px;
-  text-transform: uppercase;
-}
-
-.skill-rarity-comp.SSR { background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; }
-.skill-rarity-comp.SR { background: linear-gradient(135deg, #8b5cf6, #3b82f6); color: white; }
-.skill-rarity-comp.R { background: rgba(59, 130, 246, 0.3); color: #60a5fa; }
-.skill-rarity-comp.N { background: rgba(107, 114, 128, 0.3); color: #9ca3af; }
-
-.training-panel {
-  padding: 4px 0;
-}
-
-.training-grid-small {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-
-.training-card-small {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 12px 8px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.training-card-small:hover {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.3);
-  transform: translateY(-2px);
-}
-
-.training-card-small:active {
-  transform: scale(0.97);
-}
-
-.training-icon-small {
-  font-size: 24px;
-  margin-bottom: 4px;
-}
-
-.training-name-small {
-  font-size: 11px;
-  font-weight: 500;
-  color: white;
-  margin-bottom: 2px;
-}
-
-.training-cost-small {
-  font-size: 10px;
-  color: #fbbf24;
-}
-
-.equipment-grid-small {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.equip-slot-small {
-  text-align: center;
-}
-
-.equip-item-small {
-  width: 100%;
-  aspect-ratio: 1;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 4px;
-}
-
-.equip-item-small.empty {
-  border-style: dashed;
-}
-
-.equip-icon-small {
-  font-size: 20px;
-}
-
-.equip-empty-small {
-  font-size: 16px;
-  color: rgba(255, 255, 255, 0.2);
-}
-
-.equip-label-small {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.level-up-compact {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.level-info-comp {
-  flex: 1;
-}
-
-.lv-text {
-  font-size: 12px;
-  font-weight: 600;
-  color: #fbbf24;
-}
-
-.exp-bar-small {
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
-  margin: 4px 0;
-}
-
-.exp-fill-small {
-  height: 100%;
-  background: linear-gradient(90deg, #f59e0b, #fbbf24);
-  border-radius: 3px;
-  transition: width 0.3s;
-}
-
-.exp-text-small {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.level-up-btn-small {
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: none;
-  background: linear-gradient(135deg, #8b5cf6, #6366f1);
-  color: white;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-}
-
-.level-up-btn-small:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.inventory-panel {
-  padding: 4px 0;
-}
-
-.inventory-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
-}
-
-.inv-slot {
-  aspect-ratio: 1;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.inv-slot.filled {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.3);
-}
-
-.inv-icon {
-  font-size: 20px;
-}
-
-.economy-panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.economy-tabs {
-  display: flex;
-  gap: 8px;
-  padding: 12px 16px;
-  background: rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.econ-tab {
-  flex: 1;
-  padding: 10px 16px;
-  border: none;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.econ-tab.active {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: white;
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-}
-
-.prices-section,
-.ranking-section {
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-}
-
-.econ-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.econ-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: white;
-}
-
-.econ-region,
-.econ-count {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.5);
-  padding: 4px 10px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-}
-
-.price-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.price-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.price-icon {
-  font-size: 24px;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-}
-
-.price-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.price-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: white;
-  margin-bottom: 6px;
-}
-
-.price-bar-row {
-  display: flex;
-  gap: 6px;
-}
-
-.supply-bar,
-.demand-bar {
-  flex: 1;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.supply-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #22c55e, #4ade80);
-  border-radius: 3px;
-  transition: width 0.3s;
-}
-
-.demand-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #f59e0b, #fbbf24);
-  border-radius: 3px;
-  transition: width 0.3s;
-}
-
-.price-value {
-  text-align: right;
-  min-width: 60px;
-}
-
-.price-num {
-  font-size: 16px;
-  font-weight: 700;
-  color: white;
-  display: block;
-}
-
-.price-trend {
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.price-trend.trend-up {
-  color: #ef4444;
-}
-
-.price-trend.trend-down {
-  color: #22c55e;
-}
-
-.price-trend.trend-stable {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.ranking-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.rank-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.rank-item.rank-1 {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.05));
-  border-color: rgba(245, 158, 11, 0.3);
-}
-
-.rank-item.rank-2 {
-  background: linear-gradient(135deg, rgba(156, 163, 175, 0.15), rgba(107, 114, 128, 0.05));
-  border-color: rgba(156, 163, 175, 0.3);
-}
-
-.rank-item.rank-3 {
-  background: linear-gradient(135deg, rgba(180, 83, 9, 0.15), rgba(146, 64, 14, 0.05));
-  border-color: rgba(180, 83, 9, 0.3);
-}
-
-.rank-badge {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.rank-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #8b5cf6, #6366f1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 700;
-  color: white;
-}
-
-.rank-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.rank-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: white;
-  margin-bottom: 2px;
-}
-
-.rank-prof {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.rank-wealth {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.wealth-icon {
-  font-size: 14px;
-}
-
-.wealth-num {
-  font-size: 14px;
-  font-weight: 700;
-  color: #fbbf24;
-}
-
-.loading-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  gap: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
-}
-
-.loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid rgba(255, 255, 255, 0.1);
-  border-top-color: #8b5cf6;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.quest-panel {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.quest-tabs {
-  display: flex;
-  gap: 6px;
-  padding: 12px 16px;
-  background: rgba(0, 0, 0, 0.2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.quest-tab {
-  flex: 1;
-  padding: 8px 12px;
-  border: none;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.quest-tab.active {
-  background: linear-gradient(135deg, #8b5cf6, #6366f1);
-  color: white;
-}
-
-.quest-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.quest-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: all 0.2s;
-}
-
-.quest-card.completable {
-  background: rgba(34, 197, 94, 0.1);
-  border-color: rgba(34, 197, 94, 0.3);
-  animation: quest-glow 2s ease-in-out infinite;
-}
-
-.quest-card.locked {
-  opacity: 0.5;
-}
-
-.quest-card.claimed {
-  opacity: 0.6;
-  background: rgba(255, 255, 255, 0.03);
-}
-
-@keyframes quest-glow {
-  0%, 100% { box-shadow: 0 0 0 rgba(34, 197, 94, 0); }
-  50% { box-shadow: 0 0 12px rgba(34, 197, 94, 0.3); }
-}
-
-.quest-icon {
-  font-size: 28px;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  flex-shrink: 0;
-}
-
-.quest-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.quest-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: white;
-  margin-bottom: 4px;
-}
-
-.quest-desc {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-  margin-bottom: 8px;
-}
-
-.quest-progress-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.quest-progress-bar {
-  flex: 1;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.quest-progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #8b5cf6, #06b6d4);
-  border-radius: 3px;
-  transition: width 0.3s;
-}
-
-.quest-card.completable .quest-progress-fill {
-  background: linear-gradient(90deg, #22c55e, #4ade80);
-}
-
-.quest-progress-text {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
-  white-space: nowrap;
-}
-
-.quest-reward {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.reward-item {
-  font-size: 11px;
-  padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.quest-claim-btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #22c55e, #16a34a);
-  color: white;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.2s;
-}
-
-.quest-claim-btn:active {
-  transform: scale(0.95);
-}
-
-.quest-claimed {
-  font-size: 20px;
-  color: #22c55e;
-  flex-shrink: 0;
-  margin: auto 0;
-}
-</style>
+<style scoped src="./SimverseWorld.css"></style>

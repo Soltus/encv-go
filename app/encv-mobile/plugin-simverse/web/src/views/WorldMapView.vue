@@ -71,6 +71,9 @@
         <ion-button expand="block" fill="outline" @click="goSocial">
           💞 {{ t("simverse.social") }}
         </ion-button>
+        <ion-button expand="block" fill="outline" @click="goSquad">
+          🃏 {{ t("simverse.squad") }}
+        </ion-button>
       </div>
     </ion-content>
   </ion-page>
@@ -114,6 +117,9 @@ function goQuests() {
 }
 function goSocial() {
   router.push("/world/social");
+}
+function goSquad() {
+  router.push("/world/squad");
 }
 
 async function reload() {
