@@ -11,7 +11,7 @@
  * - 失败任务单独记入 batchOpsResult
  * - 完成后弹 toast 汇总
  */
-import { showToast } from "./useToast";
+import { showToast } from "@/composables/useToast";
 
 export interface BatchOpResult {
   id: string;

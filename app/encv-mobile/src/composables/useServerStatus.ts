@@ -2,7 +2,7 @@ import { checkServerStatus, DEFAULT_API_BASE_URL, getPersistedBackendIdentity, s
 import { getBackendStatus, isNative, restartBackend, stopBackend } from "@/plugins/GoProcess";
 import { onMounted, onUnmounted, type Ref, ref } from "vue";
 import { useApiBaseProbe } from "./useApiBaseProbe";
-import { eventBus } from "./useEventBus";
+import { eventBus } from "@/composables/useEventBus";
 import { type TransportMode, useRealtimeTransport } from "./useRealtimeTransport";
 
 const isOnline = ref(false);

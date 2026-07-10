@@ -1,6 +1,6 @@
 import { addOpenListStatusListener, getOpenListRuntime, isNative } from "@/plugins/GoProcess";
 import { onMounted, onUnmounted, ref } from "vue";
-import { eventBus } from "./useEventBus";
+import { eventBus } from "@/composables/useEventBus";
 
 /**
  * Phase 22: 事件驱动替代 3s 轮询。

@@ -10,9 +10,12 @@ packages:
 # 各 package.json 用 "catalog:" 引用，避免版本漂移、升级只需改一处。
 catalog:
   # 构建工具链
-  typescript: ^5.9.3
+  # TypeScript 暂定 6.x：TS 7 为原生(Go)重写，移除了经典 `ts` JS API 与 `./lib/tsc` 导出，
+  # 当前所有 vue-tsc 发行版（含最新 3.3.7）均无法在其下运行，类型检查会直接崩溃。
+  # TODO: 待 TS 7.2 正式发布、且 vue-tsc 适配新的 unstable/* API 后，再升级到 7.x。
+  typescript: ^6
   vite: ^8.0.13
-  vue-tsc: ^2.2.10
+  vue-tsc: ^3.3.7
   '@vitejs/plugin-vue': ^6.0.7
   # 框架核心
   vue: ^3.5.34

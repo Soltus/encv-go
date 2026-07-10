@@ -1,6 +1,6 @@
 import { getApiBaseUrl } from "@/api/encv";
 import { onMounted, onUnmounted, ref } from "vue";
-import { eventBus } from "./useEventBus";
+import { eventBus } from "@/composables/useEventBus";
 
 /**
  * 向量搜索可用性状态。

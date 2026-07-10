@@ -39,7 +39,7 @@ import type { Backend, ConnectionState } from "./realtime/Backend";
 import { createHttpPollBackend } from "./realtime/HttpPollBackend";
 import { createNativeBridgeBackend } from "./realtime/NativeBridgeBackend";
 import { createWsBackend } from "./realtime/WsBackend";
-import { eventBus } from "./useEventBus";
+import { eventBus } from "@/composables/useEventBus";
 
 export type TransportMode = "ws" | "http-poll" | "native-bridge" | "unknown";
 
