@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compactStatus, isActiveStatus, readTurnStatus } from "./activeStatus";
+import { compactStatus, isActiveStatus, readTurnStatus } from "@/composables/activeStatus";
 
 describe("compactStatus", () => {
   describe("字符串直接输入", () => {

@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
+import { encvAliasFallback } from './vite-plugins/encv-alias-fallback'
 
 // vitest 4.x: use test.alias (not resolve.alias) for tsconfig paths to be
 // resolved correctly via vite's resolver. resolve.alias is silently ignored
@@ -11,6 +12,12 @@ const TDESIGN_STUB = path.resolve(__dirname, './src/engines/__tests__/__mocks__/
 // 与 vite.config.ts 对齐：让 `@encv/shared-components`（含子路径）在测试运行时可解析。
 // 否则 vite 不读 tsconfig 的 paths 映射，shared 子路径/裸包导入在测试里解析不到。
 const SHARED_SRC = path.resolve(__dirname, '../packages/shared-components/src')
+
+// ⚠️ 关键：vitest projects 模式下，根配置的 plugins【不会】自动继承到各 project。
+// 每个 project 是独立的 Vite 配置，必须各自带 plugins，否则 `@/...` 无人解析
+// （连本地 src 下的文件都 Failed to resolve）。因此抽成 BASE_PLUGINS，根配置
+// 与各 project 都引用同一份。
+const BASE_PLUGINS = [vue(), encvAliasFallback({ roots: [SRC_DIR, SHARED_SRC] })]
 
 // ═══════════════════════════════════════════════════════════════════
 // 2026-07-02 性能优化：和 Go 对齐的"分层 + 守卫"模式
@@ -138,7 +145,11 @@ function sharedTestConfig() {
     reporters: ['default'],
     bail: 0,
     alias: {
-      '@': SRC_DIR,
+      // ⚠️ 故意不设置 '@' 别名：所有 `@/...` 统一由 encvAliasFallback 插件解析
+      // （本地 src 优先、shared 次之）。若这里设 '@': SRC_DIR，Vite 会把
+      // `@/composables/useToast` 先解析成本地绝对路径（已删除→不存在），
+      // 导致插件来不及回退 shared 就报 "Failed to resolve"。这与 vite.config.ts
+      // （无 '@' 别名、仅靠插件）保持一致。
       '@tdesign-vue-next/chat': TDESIGN_STUB,
       '@encv/shared-components': SHARED_SRC,
       '@encv/shared-components/': SHARED_SRC + '/',
@@ -170,12 +181,18 @@ function sharedTestConfig() {
 }
 
 export default defineConfig({
-  plugins: [vue()],
+  // ⚠️ 根配置也带 BASE_PLUGINS（覆盖单文件 `vitest run xxx.test.ts` 走默认 project 的场景）。
+  // 各 project（fast/isolated）在下方各自也引用 BASE_PLUGINS，否则 `@/...` 无人解析。
+  plugins: BASE_PLUGINS,
   root: __dirname,
   cacheDir: 'node_modules/.vite',
   resolve: {
     alias: {
-      '@': SRC_DIR,
+      // ⚠️ 故意不设置 '@' 别名：所有 `@/...` 统一由 encvAliasFallback 插件解析
+      // （本地 src 优先、shared 次之）。若这里设 '@': SRC_DIR，Vite 会把
+      // `@/composables/useToast` 先解析成本地绝对路径（已删除→不存在），
+      // 导致插件来不及回退 shared 就报 "Failed to resolve"。这与 vite.config.ts
+      // （无 '@' 别名、仅靠插件）保持一致。
       '@tdesign-vue-next/chat': TDESIGN_STUB,
       '@encv/shared-components': SHARED_SRC,
       '@encv/shared-components/': SHARED_SRC + '/',
@@ -199,6 +216,7 @@ export default defineConfig({
       ? [
           // Project 1: FAST（isolate:false，~30 个文件，~8-12s）
           {
+            plugins: BASE_PLUGINS,
             test: {
               name: 'fast',
               ...sharedTestConfig(),
@@ -208,6 +226,7 @@ export default defineConfig({
           },
           // Project 2: ISOLATED（isolate:true，~35 个文件，~40-50s）
           {
+            plugins: BASE_PLUGINS,
             test: {
               name: 'isolated',
               ...sharedTestConfig(),
@@ -219,6 +238,7 @@ export default defineConfig({
       : [
           // 默认只有 FAST project（日常开发用）
           {
+            plugins: BASE_PLUGINS,
             test: {
               name: 'fast',
               ...sharedTestConfig(),

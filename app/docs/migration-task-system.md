@@ -46,6 +46,40 @@
 - **Biome 最后一个格式点**：`vue-component-check.ts:267-269` 的 `console.log(\`…\n\`,\n)` 多行调用未折叠 → 已折叠为单行。全文件 11 处 console.* 仅此一处多行。
 - **预期本轮（第五次）重跑**：**Biome CI ✅**（首次全绿）、encv-mobile typecheck ✅、单测 ✅、i18n ✅；**仅 shared typecheck 仍 FAIL**（315 既有错，非本次范围）。报告文件不再有 ANSI 乱码。
 
+### Module G 去重进度（2026-07-11，事实核查驱动）
+- **G-1/G-2 通用 composables 去重已完成**：`encv-mobile/src/composables/` 下与 shared 重复的副本**全部删除**——
+  - `useToast` / `useClipboard` / `useDateFormat` / `relativeTime` / `activeStatus`：已是 re-export 垫片（指向 `@encv/shared-components/composables/*`）；
+  - `useSearchInput`：与 shared 版**逐字节相同**的完整副本（491 行）。
+  - 删除依据：① `encv-mobile/tsconfig.json` 的 `"@/*": ["./src/*", "../packages/shared-components/src/*"]` 二级回退已确认；② 全部 58 处引用均用 `@/composables/useX` 别名（**无相对路径引用**，故删除不破引用）；③ `useSearchInput` 经逐行比对与 shared 等价。共清理约 520 行重复代码。
+  - 副作用：单例模块（如 `errorStore`/`logs`）此前因"本地 + shared 两份并存、别名本地优先"而分裂的问题，随本地副本删除自然消除（错误浮窗 bug 修复）。
+- **剩余 Module G 项（待做）**：
+  - **G-3** `VirtualLogList.vue`：**已完成（无需操作，2026-07-11 事实核查）**。本地 `encv-mobile/src/components/VirtualLogList.vue` **已不存在**（早被删），仅 shared 有 `components/VirtualLogList.vue`；`DevLogs.vue:248` 用 `@/components/VirtualLogList.vue` 经 `@/` fallback 解析到 shared。文档原"删本地重复"前提不成立。唯一残留：`components.d.ts:101` 有陈旧的 `./components/VirtualLogList.vue` 相对类型声明（unplugin-vue-components 生成文件，下次生产构建自愈，首跑 typecheck 未报错，不阻塞）。
+  - **G-4** `useEventBus`：**结论已反转（见 §8.1.1 ② 修正）**。`encv-mobile/src/composables/useEventBus.ts` 已被删除，11 处 `@/composables/useEventBus` 引用经 `@/*` 别名回退到 shared 副本——**shared 副本即事实 canonical**。故**保留 shared 的 `useEventBus.ts` 为唯一真源，禁止删除**（原"删 shared 孤儿"指令会断 11 处引用）。
+- **复验 / 事实核查修正（2026-07-11 02:17 首跑 `check:all` → FAIL，已修）**：
+  - **首跑结果**：encv-mobile typecheck FAIL + 单测 FAIL（3 suite）。
+    - typecheck：`activeStatus.test.ts` 报 `Cannot find module './activeStatus'`——该测试在 `composables/` 内用**相对** `./activeStatus` 导入，本地副本删除后断链。
+    - 单测：`useAgent.ts` 的 `@/composables/useToast` 在 vitest 运行时解析失败，拖挂 `renderTurnItems.test.ts` / `renderTurnItems.agentTask.test.ts` / `activeStatus.test.ts` 3 个 suite。
+  - **根因（推翻了上一轮的错误假设）**：此前以为"tsconfig `@/*` 二级回退到 shared"对运行时也生效——**只对 TypeScript 类型检查成立，Vite/vitest 运行时默认不读 tsconfig paths**。`vite.config.ts` 有 `encv-alias-fallback` 插件（本地优先、shared 次之）所以 dev/build 正常；但 `vitest.config.ts` 的 `resolve.alias['@']` **仅指向本地 src、无 shared 回退**，且 `plugins:[vue()]` 里没有该插件 → 测试环境解析不到 shared。
+  - **修复（架构对齐，非回退垫片）**：
+    1. 提取共享插件 `encv-mobile/vite-plugins/encv-alias-fallback.ts`（逻辑同 vite.config.ts，加 `enforce:'pre'` 以便在 vitest 的本地 `@` 别名之前生效），加入 `vitest.config.ts` 的 `plugins`。
+    2. `activeStatus.test.ts` 的 `./activeStatus` → `@/composables/activeStatus`（经 fallback 解析到 shared；typecheck 也走 tsconfig 二级回退）。
+  - ⚠️ **二次失败（02:57 用户复跑仍 FAIL，同 3 suite）**：插件已注册但 `resolveId` 静默返回 null。当时误判为"vitest 打包导致插件内 `__dirname` 指向 config 目录"，并改为显式传 `roots`——这是稳妥的健壮性改进（保留），但**不是决定性修复**：复跑仍 FAIL。
+  - ⚠️ **三次修复（03:18 复跑仍 FAIL → 定位真正根因）**：
+    - **真正根因**：`vitest.config.ts` 的 `test.alias` 与 `resolve.alias` 里都设了 **`'@': SRC_DIR`**。该别名会把 `@/composables/useToast` **先解析成本地绝对路径** `/workspace/app/encv-mobile/src/composables/useToast`（已删除→不存在），于是我的 fallback 插件来不及把 `@/...` 回退到 shared 就直接报 "Failed to resolve"。并且 `enforce:'pre'` 的 `resolveId` 在 vitest transform 期的 `this.resolve()` 里并不可靠地被咨询到，进一步让插件形同虚设。
+    - **对照 `vite.config.ts`**：其 `resolve.alias` **根本没有 `'@'` 别名**，仅靠 inline `encv-alias-fallback` 插件（normal 阶段、无 enforce）解析所有 `@/...`——所以 dev/build 一直正常。vitest 缺的就是这一点。
+    - **修复（与 vite.config.ts 完全对齐）**：
+      1. 从 `vitest.config.ts` 的 `test.alias`（`sharedTestConfig`）**和** `resolve.alias` **同时移除 `'@': SRC_DIR`**——所有 `@/...` 改由插件统一解析。
+      2. 插件去掉 `enforce:'pre'`，保持 normal 阶段（与 vite.config 的 inline 版一致），确保 transform 期能被 `this.resolve()` 咨询到。
+      3. 插件仍保留"调用方显式传 `roots`"的健壮性（二次失败的改进不丢）。
+  - ⚠️ `vite.config.ts` 仍保留其 inline 版 `encv-alias-fallback`（未合并，避免改动无法被 `check:all` 验证的 dev 配置；待后续统一）。
+  - ⚠️ **四次修复（03:28 复跑仍 FAIL → 定位【决定性】根因）**：
+    - 现象变化：这次失败的不只是 shared 回退项，连**本地 src 下真实存在的文件**（`@/composables/renderTurnItems`、`@/composables/appServerRealtimeReducer`、`@/lib/workflow/state-machine`、`@/lib/workflow/types`）也 `Failed to resolve`。连本地文件都解析不了，说明 `encvAliasFallback` 插件**根本没被调用**。
+    - **真正根因（决定性）**：测试跑在 `'fast'` **project** 下，而 `plugins` 只配在**根配置**。`vitest`/`vite 8` 的 **projects 模式不继承根配置的 `plugins`**——每个 project 是独立 Vite 配置，必须各自带 `plugins`。于是 `'fast'` project 里没有任何插件，`@/...` 无人解析 → 全部失败（与"没加插件"完全一样）。
+    - **对照 `vite.config.ts`**：它是**单配置、无 projects**，根 `plugins` 直接生效，所以 dev/build 一直正常。vitest 用 projects 才暴露这个差异。
+    - **修复**：抽 `BASE_PLUGINS = [vue(), encvAliasFallback({ roots: [SRC_DIR, SHARED_SRC] })]`，**根配置 + 每个 project（fast/isolated）都引用同一份**。同时为插件加了"仅解析失败时 `console.error('[encv-alias-fallback] NOT FOUND', source, dirs)`"调试日志，便于下次复跑一锤定音（若仍 FAIL 且日志无 NOT FOUND → 插件仍未被调用；若有 NOT FOUND → 路径错）。
+  - **待复验**：请重跑 `pnpm check:all` 确认 encv-mobile typecheck + 单测转绿（预期全绿，且单例分裂 bug 已消除）。
+- **Module G 状态（2026-07-11）**：**全部闭环** ✅。G-1/G-2（composables 去重，已修 vitest 回退）、G-3（无本地副本，DevLogs 经 `@/` 解析 shared）、G-4（shared 为 canonical，保留）。encv-mobile 与 shared 的通用 composables/components 重复已消除，统一经 `@/` 别名回退 shared。后续仅余 `shared/api/` 非任务域 encv_* 暂存残留（A-ext/Phase 6，高风险的 api/core 重写，未启动）。
+
 ---
 
 ## 0. 为什么不能"简单迁移"
@@ -335,6 +369,8 @@ src/
 
 ### 8.1 Module G — 通用抽象去重对齐（高优先级，证据确凿）
 
+> **进度（2026-07-11）**：下表中的 composables 重复**已全部去重完成**（本地副本删除、`@/composables/useX` 别名回退 shared，见 §9）。仅 `VirtualLogList.vue`（G-3）与 `useEventBus`（G-4）待处理。下表保留作历史证据。
+
 **现状（已核实）**：以下通用能力在 `shared-components` 已是真抽象，但 `encv-mobile/src` 又**独立实现了一份**：
 
 | 模块 | shared 真源 | encv-mobile 重复副本 | 重复性质 |
@@ -368,6 +404,8 @@ src/
 - 它是**模块级单例**（`listeners` Map）。
 - 引用方核查：`@/composables/useEventBus`（→ encv-mobile 副本）被 6 个模块消费（`useFilesView`/`DevLogs`/`useTaskEventBridge`/`useNewTaskModal`/`ServerStatusCard`/`LocalOpenListStatusCard`），**是 canonical**；shared 副本仅被 `app/scripts/setup-simverse-refactor.sh` 一个 setup 脚本引用，**是孤儿**。
 - 结论：**保留 encv-mobile 的 canonical 副本，删除 shared 的孤儿副本**（注意：删除前需把该 setup 脚本的 import 改指 encv-mobile 副本，或随脚本废弃一并删除）。这与"提升进 shared"方向相反——`useEventBus` 含 app 层 `EncvTask` 依赖，当前不宜进 shared。
+
+> **2026-07-11 事实核查修正（重要）**：上述 ② 的"两边都有 / encv-mobile 是 canonical"**已不成立**。当前 `encv-mobile/src/composables/useEventBus.ts` **不存在**（已被删除），而 11 处引用（`useFilesView`/`DevLogs`/`useTaskEventBridge`/`useNewTaskModal`/`ServerStatusCard`/`LocalOpenListStatusCard`/`useServerStatus`/`useVectorSearchStatus`/`useRealtimeTransport`/`useOpenListBridge`/`useTestBackdoor`）仍写 `@/composables/useEventBus`，经 `tsconfig` 的 `@/*` 二级回退解析到 **`shared/src/composables/useEventBus.ts`**——即 **shared 副本已成为事实 canonical**。因此原 G-4 计划"删 shared 孤儿、保留 encv-mobile"**反向且有害**（删 shared 会直接断这 11 处引用）。正确做法：**保留 shared 的 `useEventBus.ts` 作为唯一真源**，并清理 `app/scripts/setup-simverse-refactor.sh` 对其的引用（如有残留）。`useEventBus` 含的 `EncvTask` 依赖经 `@encv/shared-components/api/encv` 解析，在 shared 内自洽，无需回退 encv-mobile。
 
 **③ 别名回退机制 → 去重策略可简化，且揭示"单例分裂"真实 bug**
 - 因 `@/*` 别名二级回退到 shared：**删除本地重复副本后，`@/composables/useX` 会自动解析到 shared**，无需 re-export 垫片（G-1 已用垫片，等价且安全；后续阶段直接删除本地文件更干净）。

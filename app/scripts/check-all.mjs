@@ -46,35 +46,37 @@ const SUITES = [
     name: "encv-mobile typecheck",
     cwd: resolve(APP_ROOT, "encv-mobile"),
     cmd: "pnpm",
-    args: ["typecheck"],
+    // 直接调 vue-tsc --incremental：跳过 pnpm typecheck 的 pretypecheck(i18n) 钩子
+    // （i18n 已由独立套件覆盖），并用增量缓存让热重跑 <5s。
+    args: ["exec", "vue-tsc", "--noEmit", "--incremental"],
     timeoutMs: 300_000,
   },
   {
     name: "plugin-openlist/web typecheck",
     cwd: resolve(APP_ROOT, "encv-mobile/plugin-openlist/web"),
     cmd: "pnpm",
-    args: ["typecheck"],
+    args: ["exec", "vue-tsc", "--noEmit", "--incremental"],
     timeoutMs: 300_000,
   },
   {
     name: "plugin-mpv-player/web typecheck",
     cwd: resolve(APP_ROOT, "encv-mobile/plugin-mpv-player/web"),
     cmd: "pnpm",
-    args: ["typecheck"],
+    args: ["exec", "vue-tsc", "--noEmit", "--incremental"],
     timeoutMs: 300_000,
   },
   {
     name: "plugin-simverse/web typecheck",
     cwd: resolve(APP_ROOT, "encv-mobile/plugin-simverse/web"),
     cmd: "pnpm",
-    args: ["typecheck"],
+    args: ["exec", "vue-tsc", "--noEmit", "--incremental"],
     timeoutMs: 300_000,
   },
   {
     name: "shared-components typecheck",
     cwd: resolve(APP_ROOT, "packages/shared-components"),
     cmd: "pnpm",
-    args: ["exec", "vue-tsc", "--noEmit", "-p", "tsconfig.json"],
+    args: ["exec", "vue-tsc", "--noEmit", "-p", "tsconfig.json", "--incremental"],
     timeoutMs: 300_000,
   },
   {
@@ -211,8 +213,50 @@ function fmtDuration(ms) {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/** 运行单个套件：打印进度、写完整日志，返回结果对象 */
+async function runOne(suite) {
+  if (suite.skip) {
+    console.log(`${c("yellow", "SKIP")}  ${suite.name}`);
+    return { ...suite, status: "SKIP", durationMs: 0, stdout: "", stderr: "", slug: slugify(suite.name) };
+  }
+  process.stdout.write(`${c("bold", "RUN")}   ${suite.name} ... `);
+  const r = await runSuite(suite);
+  const dur = fmtDuration(r.durationMs);
+  const tag =
+    r.status === "PASS"
+      ? c("green", "PASS")
+      : r.status === "TIMEOUT"
+        ? c("yellow", "TIMEOUT")
+        : c("red", r.status);
+  console.log(`${tag}  ${c("dim", dur)}`);
+  if (r.status !== "PASS") {
+    const tail = (r.stderr || r.stdout || "").trim().split("\n").slice(-25).join("\n");
+    console.log(c("dim", "────────── 输出尾部 ──────────"));
+    console.log(tail);
+    console.log(c("dim", "──────────────────────────────"));
+  }
+  const slug = slugify(suite.name);
+  const logFile = resolve(LOGS_DIR, `${slug}.log`);
+  writeFileSync(logFile, stripAnsi(`${r.stdout || ""}\n${r.stderr || ""}`), "utf8");
+  return { ...suite, ...r, slug };
+}
+
+/** 带并发上限地运行所有套件，结果按传入顺序返回（保证报告表格顺序稳定） */
+async function runAllConcurrent(suites, limit) {
+  const results = new Array(suites.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < suites.length) {
+      const i = cursor++;
+      results[i] = await runOne(suites[i]);
+    }
+  }
+  const n = Math.max(1, Math.min(limit, suites.length));
+  await Promise.all(Array.from({ length: n }, worker));
+  return results;
+}
+
 async function main() {
-  const results = [];
   console.log(c("bold", "══════════ pnpm 工作区全量检查 ══════════"));
   console.log(c("dim", `app-root: ${APP_ROOT}`));
   console.log(c("dim", `i18n-tool: ${I18N_TOOL}`));
@@ -221,34 +265,9 @@ async function main() {
   // 第一步：清理上一轮的 check-logs（避免旧日志与新结果混在一起）
   cleanLogsDir();
 
-  for (const suite of SUITES) {
-    if (suite.skip) {
-      console.log(`${c("yellow", "SKIP")}  ${suite.name}`);
-      results.push({ ...suite, status: "SKIP", durationMs: 0, stdout: "", stderr: "" });
-      continue;
-    }
-    process.stdout.write(`${c("bold", "RUN")}   ${suite.name} ... `);
-    const r = await runSuite(suite);
-    const dur = fmtDuration(r.durationMs);
-    const tag =
-      r.status === "PASS"
-        ? c("green", "PASS")
-        : r.status === "TIMEOUT"
-          ? c("yellow", "TIMEOUT")
-          : c("red", r.status);
-    console.log(`${tag}  ${c("dim", dur)}`);
-    if (r.status !== "PASS") {
-      const tail = (r.stderr || r.stdout || "").trim().split("\n").slice(-25).join("\n");
-      console.log(c("dim", "────────── 输出尾部 ──────────"));
-      console.log(tail);
-      console.log(c("dim", "──────────────────────────────"));
-    }
-    // 完整输出写入独立日志文件（相对路径在报告中引用）
-    const slug = slugify(suite.name);
-    const logFile = resolve(LOGS_DIR, `${slug}.log`);
-    writeFileSync(logFile, stripAnsi(`${r.stdout || ""}\n${r.stderr || ""}`), "utf8");
-    results.push({ ...suite, ...r, slug });
-  }
+  // 并发执行所有套件（并发上限 4，避免 5+ 个 vue-tsc 同时跑撑爆内存）；
+  // 结果按 SUITES 定义顺序收集，报告表格顺序稳定。
+  const results = await runAllConcurrent(SUITES, 4);
 
   // 汇总
   const pass = results.filter((r) => r.status === "PASS").length;

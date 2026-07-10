@@ -1,7 +1,13 @@
+> ⚠️ **本文档已过时，请勿按此执行。**
+> 当前权威架构文档是 **`app/docs/migration-task-system.md`**（拆分抽象与实现：`@encv/shared-components` = 纯抽象层/库，只依赖 vue/pinia/ionic/通用第三方，**不依赖** `@/config` `@/constants` `@/router`；`encv-mobile` = 应用层，提供共享抽象所需的注入上下文）。
+> 本文档的核心理念（“encv 业务全搬回 encv-mobile，shared 只放通用”）与已落地的 **DI 共享抽象层直接相反**；尤其 Phase 1/2/3 要求把 `stores/`、`api/` 搬出 shared，会**摧毁已建好的共享抽象层**（`taskStore`/`runTasksStore` 等已提升进 shared，经依赖注入解耦应用层）。
+> 保留本文档仅作历史参考。实际重构进度与边界判定见 `migration-task-system.md`（§2 目标架构、§7 模块地图、§9 执行进度）。
+
 # shared-components 边界规范（SPEC）
 
 > **核心原则**：shared-components 只放「两个项目都真正能用」的公共部分。
 > 不是「把 encv-mobile 全搬过去让 simverse 挑着用」，而是「两边都需要的才放进去」。
+> ⚠️ 注意：上述“公共部分”包含**经依赖注入解耦后的任务系统抽象**（已在 migration-task-system.md 落地），并非仅限 UI/工具。详见权威文档。
 
 ## 一、现状诊断
 
