@@ -26,13 +26,15 @@ RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.cloud.tencent.com/deb
 #   系统依赖用官方命令 `cypress install --dependencies` 按当前发行版自动解析安装
 #   （xvfb + GTK/ATK 等），避免硬编码冷门包（跨 Debian 版本易漂移，如
 #   libasound2 → libasound2t64）。
+#   注意：cypress@13+ 已废弃 `--dependencies` 选项，该选项改为交由 OS 包管理器解析，
+#   故此处去掉该参数，仅安装 Cypress 二进制本体（依赖项在运行端到端测试时按需自备）。
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       curl wget git build-essential ca-certificates \
       cmake default-jdk \
       python3 \
     && npm install -g cypress@15 \
-    && cypress install --dependencies \
+    && cypress install \
     && rm -rf /var/lib/apt/lists/*
 
 COPY .ide/settings.json /root/.vscode-server/data/Machine/settings.json
