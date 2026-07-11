@@ -6,7 +6,7 @@
 $:
   vscode:
     - runner:
-        cpus: 4
+        cpus: 8
       docker:
         # 自定义开发环境
         build:
