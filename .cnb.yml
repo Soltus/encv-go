@@ -1,2 +1,38 @@
+# ENCV 远程开发环境自动准备流水线
+#
+# 通过 $.vscode 事件，每次启动「云原生开发」时自动完成环境准备：
+#   - 使用 .ide/Dockerfile 构建自定义镜像（Go 1.25.1 + pnpm 11 + Python3 + cmake + JDK + xvfb）
+#   - 运行 scripts/setup-sandbox-env.sh：装工具链 / clone fork / pnpm workspace 安装 / 构建网关
+$:
+  vscode:
+    - runner:
+        cpus: 4
+      docker:
+        # 自定义开发环境
+        build:
+          # 指定构建镜像的 Dockerfile 文件
+          dockerfile: .ide/Dockerfile
+          # 声明构建过程依赖的文件列表（用于缓存判定）。
+          # 注意：如构建过程用到其他文件，也需在此声明。
+          # 参考文档：https://docs.cnb.cool/zh/grammar/pipeline.html#build
+          by:
+            - .ide/settings.json
+      services:
+        # docker 写在 vscode 前面
+        - docker
+        - vscode
+      env:
+        # 关键：默认 NODE_ENV=production 会让 pnpm install 跳过 devDependencies，
+        # 导致 typescript / vue-tsc / vite / vitest / cypress 等开发工具全部缺失。
+        NODE_ENV: development
+        GOPROXY: https://goproxy.cn,direct
+      stages:
+        - name: 准备沙箱开发环境
+          # 一键准备：Go/Kotlin 工具链、OpenList/ComboLite/Maker/Phaser fork、
+          # pnpm workspace 依赖、preview-gateway 网关（详见脚本头注释）。
+          script: |
+            export NODE_ENV=development
+            bash scripts/setup-sandbox-env.sh
+
 include:
   - https://cnb.cool/sc.hwd/cnb-sync/-/blob/main/.cnb/workflows/sync.yml

@@ -96,3 +96,5 @@ scripts/openlist-fork.env.local
 *.pyc
 __pycache__/
 .i18n-cache/
+
+**/.codemogger

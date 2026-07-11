@@ -1,8 +1,8 @@
 # 任务系统共享化重构文档
 
 > 目标：把"任务系统"从 `encv-mobile` 应用层抽象为 `@encv/shared-components` 的可复用层。
-> 状态：执行中（Phase 1 已完成，Phase 2 待设计决策）。
-> 最后更新：2026-07-10 22:28
+> 状态：执行中（Phase 1 ✅、Phase 2 ✅ 已完成；Phase 3 进行中：2 个 type-only 叶子已提升，剩余为依赖簇）。
+> 最后更新：2026-07-11 21:10
 
 ---
 
@@ -176,8 +176,33 @@ server 域（`useServerStatus`/`useOpenListBridge`/`useRealtimeTransport`…）�
 - 复验。
 
 ### Phase 3 — 任务领域 composables（大，含 worker / 常量 / 组件钉子）
+
 - 重写提升：`useTasksList`、`useTaskEventBridge`、`useWorkflowTaskService`、`useTaskForm`、`usePathResolver`、`useErrorAnalyzer`、`useBatchOperations`、`useSectionDerivation`、`useTaskTrigger`、`useTaskCancel`、`useRunSummaries`、`useNewTaskModal`。
 - 处理钉子：`?worker`（纯函数化或 shared worker 入口）、`containerVersion`（注入）、`NewTaskModal`（提升/插槽）。
+
+#### Phase 3 进度（2026-07-11 事实核查）
+
+**✅ 已完成 — type-only 叶子（零运行时依赖，安全提升）**
+- `usePathResolver`：仅 `import type { FileItem }`（`@/api/encv_files`），已提升到 `shared/src/composables/usePathResolver.ts`；`encv-mobile/src/composables/usePathResolver.ts` 改为 `export * from "@encv/shared-components/composables/usePathResolver"` 垫片。5 处 app 引用方（`useTaskForm`/`useNewTaskModal`/`__tests__` 等）经垫片无感。
+- `useSectionDerivation`：仅 `vue` + `import type { EncvTask }`（`@/api/encv`），同样提升 + 垫片。`TaskBasicInfo.vue` 引用无感。
+- 两个源文件的 type-only 导入已改为 shared 自身路径（`@/api/encv_files` / `@/api/encv`），与 shared 内部约定一致（如 `taskStore` 用 `@/types/task`）。
+
+**⚠️ 关键发现 — 剩余项不是"逐个提升"，而是依赖簇**
+- `useTasksList`（代表项）的源**只在 `encv-mobile`**，但其编译依赖 **4 个未提升的 Phase 3 composable**：`useRunSummaries` / `useTaskEventBridge` / `useTaskViewCompute` / `useWorkflowTaskService`，外加 **1 个 Phase 4 lib** `taskTypeLabel`。`useTaskViewCompute` 还带 `?worker` 钉子。
+- → **必须整簇一起提升**（建议单个 PR），不能单拎 `useTasksList`。原清单漏列 `useTaskViewCompute`，需补入（它是 `useTasksList` 的硬依赖且带 `?worker`）。
+
+**非干净叶子（提升前需先解耦）**
+- `useBatchOperations`：运行时依赖 `@/composables/useToast`（shared 已有）+ 动态 `import("@/api/encv")`（shared 暂存残留有）。可提升，但会带入暂存 api 耦合，建议与簇一起处理。
+- `useTaskCancel`：**硬依赖 `@/plugins/GoProcess`**（`enqueueCancelWorker` / `isNative`，native 插件）→ 不是干净叶子。需先抽象为注入式（参照 Phase 2 store 的 DI 模式：把 `enqueueCancelWorker`/`isNative` 注入 shared，web 端返回 noop）才能提升。
+
+**待分析（未逐一核查依赖）**
+- `useTaskForm` / `useErrorAnalyzer` / `useTaskTrigger` / `useNewTaskModal`：其中 `useNewTaskModal` 含组件钉子（需提升或插槽化），`useTaskForm` 可能依赖簇内其他 composable。整簇提升时一并核查。
+
+**执行建议**
+1. 先整簇提升 `useTasksList` 依赖组（`useRunSummaries` / `useTaskEventBridge` / `useTaskViewCompute` / `useWorkflowTaskService` + 提前 `taskTypeLabel`），`useTaskViewCompute` 的 `?worker` 纯函数化或改为 shared worker 入口。
+2. 再处理 `useTaskCancel`（先抽 GoProcess 为注入）。
+3. `useTaskForm` / `useErrorAnalyzer` / `useTaskTrigger` / `useNewTaskModal` 随簇或单独 PR，按依赖核查结果定。
+4. 每步复验 §6 门禁（shared 0 错 + encv-mobile 0 错 + i18n 0 问题）。
 - 复验。
 
 ### Phase 4 — 任务领域 lib 与组件（大）

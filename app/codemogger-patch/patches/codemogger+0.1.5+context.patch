@@ -1,0 +1,108 @@
+--- a/node_modules/codemogger/dist/cli.mjs
++++ b/node_modules/codemogger/dist/cli.mjs
+@@ -264,5 +264,13 @@ class Store {
+     return (match ?? codebases[0]).id;
+   }
++  async listChunksByFile(codebaseId, filePath) {
++    const rows = await (await this.db.prepare("SELECT chunk_key, file_path, name, kind, signature, snippet, start_line, end_line FROM chunks WHERE codebase_id = ? AND (file_path = ? OR file_path LIKE ?) ORDER BY start_line")).all(codebaseId, filePath, "%" + filePath);
++    return rows.map((r) => ({ chunkKey: r.chunk_key, filePath: r.file_path, name: r.name, kind: r.kind, signature: r.signature, snippet: r.snippet, startLine: r.start_line, endLine: r.end_line }));
++  }
++  async findChunksByName(codebaseId, name) {
++    const rows = await (await this.db.prepare("SELECT chunk_key, file_path, name, kind, signature, snippet, start_line, end_line FROM chunks WHERE codebase_id = ? AND name = ? ORDER BY file_path, start_line")).all(codebaseId, name);
++    return rows.map((r) => ({ chunkKey: r.chunk_key, filePath: r.file_path, name: r.name, kind: r.kind, signature: r.signature, snippet: r.snippet, startLine: r.start_line, endLine: r.end_line }));
++  }
+   async batchUpsertEmbeddings(items) {
+     if (items.length === 0)
+       return;
+@@ -1695,6 +1703,20 @@ class CodeIndex {
+       return [];
+     return store.listImports(codebaseId, filePath);
+   }
++  async listChunksByFile(filePath) {
++    const store = await this.getStore();
++    const codebaseId = await store.getDefaultCodebaseId();
++    if (codebaseId == null)
++      return [];
++    return store.listChunksByFile(codebaseId, filePath);
++  }
++  async findChunksByName(name) {
++    const store = await this.getStore();
++    const codebaseId = await store.getDefaultCodebaseId();
++    if (codebaseId == null)
++      return [];
++    return store.findChunksByName(codebaseId, name);
++  }
+   async close() {
+     if (this.store) {
+       this.store.close();
+@@ -2136,6 +2158,20 @@ class CodeIndex {
+       return [];
+     return store.listImports(codebaseId, filePath);
+   }
++  async listChunksByFile(filePath) {
++    const store = await this.getStore();
++    const codebaseId = await store.getDefaultCodebaseId();
++    if (codebaseId == null)
++      return [];
++    return store.listChunksByFile(codebaseId, filePath);
++  }
++  async findChunksByName(name) {
++    const store = await this.getStore();
++    const codebaseId = await store.getDefaultCodebaseId();
++    if (codebaseId == null)
++      return [];
++    return store.findChunksByName(codebaseId, name);
++  }
+   async close() {
+     if (this.store) {
+       this.store.close();
+@@ -2345,6 +2381,49 @@ program.command("references")
+     await db.close();
+   }
+ });
++program.command("context").description("Show the file context around a symbol or file (comprehension view)").argument("<target>", "symbol name or file path (suffix LIKE supported)").option("--expand", "also print each chunk's snippet body").option("--format <fmt>", "output format: json|text", "text").action(async (target, opts) => {
++  const dbPath = resolveDbPath();
++  const db = new CodeIndex({ dbPath, embedder: localEmbed, embeddingModel: LOCAL_MODEL_NAME });
++  try {
++    const store = await db.getStore();
++    const codebaseId = await store.getDefaultCodebaseId();
++    if (codebaseId == null) {
++      console.log("No codebase indexed.");
++      return;
++    }
++    let hitChunks = [];
++    if (!target.includes("/")) {
++      hitChunks = await store.findChunksByName(codebaseId, target);
++    }
++    let files;
++    if (hitChunks.length > 0) {
++      files = [...new Set(hitChunks.map((c) => c.filePath))];
++    } else {
++      const like = await store.listChunksByFile(codebaseId, target);
++      files = [...new Set(like.map((c) => c.filePath))];
++      hitChunks = like;
++    }
++    if (files.length === 0) {
++      console.log(`No context found for: ${target}`);
++      return;
++    }
++    const hitKeys = new Set(hitChunks.map((c) => c.chunkKey));
++    for (const fp of files) {
++      const chunks = await store.listChunksByFile(codebaseId, fp);
++      console.log(`\n${fp}  (${chunks.length} chunk(s))`);
++      for (const c of chunks) {
++        const mark = hitKeys.has(c.chunkKey) ? "  <<<" : "";
++        console.log(`  L${c.startLine}-${c.endLine}  [${c.kind}] ${c.name}${mark}`);
++        if (opts.expand) {
++          const snip = (c.snippet || "").split("\n").map((l) => "      " + l).join("\n");
++          console.log(snip);
++        }
++      }
++    }
++  } finally {
++    await db.close();
++  }
++});
+ program.command("list").description("List all indexed files").option("--format <fmt>", "output format: json|text", "text").action(async (opts) => {
+   const dbPath = resolveDbPath();
+   const db = new CodeIndex({ dbPath, embedder: localEmbed, embeddingModel: LOCAL_MODEL_NAME });

@@ -1,0 +1,28 @@
+{
+  "go.gopath": "/root/go",
+  "go.goroot": "/root/.g/go",
+  "go.toolsManagement.autoUpdate": false,
+  "gopls": {
+    "build.directoryFilters": ["-app", "-node_modules"]
+  },
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.formatOnSave": true
+  },
+  "npm.packageManager": "pnpm",
+  "typescript.tsdk": "app/node_modules/typescript/lib",
+  "eslint.enable": false,
+  "editor.codeActionsOnSave": {
+    "quickfix.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
+  "[javascript][typescript][json][jsonc][vue]": {
+    "editor.defaultFormatter": "biomejs.biome",
+    "editor.formatOnSave": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true,
+    "**/dist/**": true,
+    "**/android/**": true
+  }
+}

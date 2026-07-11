@@ -1,0 +1,173 @@
+# codemogger patch package (v0.1.5)
+
+Self-contained patch for [`codemogger@0.1.5`](https://github.com/glommer/codemogger)
+that bundles all experimental changes made to the global CLI install.
+
+## Contents
+
+```
+codemogger-patch/
+├── apply.sh                         # idempotent installer
+├── README.md                        # this file
+├── patches/
+│   └── codemogger+0.1.5.patch       # git/UNIX diff of dist/cli.mjs
+└── vendor/
+    └── tree-sitter-kotlin/          # @tree-sitter-grammars/tree-sitter-kotlin@1.1.0
+                                      # (only the .wasm grammar, prebuilds/src stripped)
+```
+
+## What the patch changes
+
+All changes live in `dist/cli.mjs` (the bundled CLI). They are captured as a
+unified diff against the pristine `codemogger@0.1.5` tarball.
+
+> **Version note.** The published *dist* of codemogger may report itself as
+> `0.2.0` while the source / npm registry latest is `0.1.5` — a packaging
+> quirk on the package's side, not a doc error. The patch is keyed to the
+> `0.1.5` *source* `cli.mjs`, which is exactly what `npm install codemogger`
+> serves today, so it applies cleanly.
+
+### 0. Vue (`.vue`) language support
+- Adds a `VUE` language config (`.vue`) that **reuses the already-bundled
+  `tree-sitter-typescript` wasm** (zero new dependencies).
+- `chunkFile` detects `config.isVue` and first runs `extractVueScript(content)`:
+  it regex-extracts every `<script>…</script>` block and back-fills it into a
+  blank-line matrix at the **original line offsets**, so each chunk's
+  `startLine`/`endLine` match the real `.vue` file. The result is then parsed
+  by the TS grammar exactly like a `.ts` file.
+- Verified in the experiment: a real `MpvAbout.vue` (`<script setup>`) indexed
+  `4 chunks` with correct line numbers; `keyword "mpvVersion"` and
+  `semantic "display software version info"` both hit.
+
+### 1. Kotlin language support
+- Adds a `KOTLIN` language config (`.kt` / `.kts`) using
+  `@tree-sitter-grammars/tree-sitter-kotlin`'s `tree-sitter-kotlin.wasm`.
+- Registers `KOTLIN` in the `LANGUAGES` array and `EXT_MAP`.
+- Maps Kotlin node types (`object_declaration`, `property_declaration`,
+  `type_alias`, `secondary_constructor`) to chunk kinds.
+- Adds an `extractName` branch for `property_declaration` (top-level
+  `val`/`const` have no `name` field — the identifier is pulled from the
+  nested `variable_declaration` / `simple_identifier`).
+
+### 2. Full-text search over code bodies
+- Adds a `body` column to the `chunks` table.
+- Extends the FTS5 table `fts_<id>` to index `name, signature, body` with
+  weights `name=5.0, signature=3.0, body=1.0`.
+- New `normalizeBodyForFts()` splits camelCase / PascalCase / snake_case /
+  kebab-case identifiers and strips comments, so keyword search matches
+  tokens *inside* identifiers (e.g. searching `validation` hits
+  `orderValidationResult`).
+- `makeChunk` now emits `body: normalizeBodyForFts(snippet)` and the
+  upsert/FTS-populate SQL threads it through.
+
+### 3. Impact analysis: the `references` command
+Addresses the "blind-men" gap — semantic/keyword search finds *what* a symbol
+is, but not *who depends on it*. The patch builds an import graph at index time
+and exposes it through a new `references` command.
+
+- New `imports` table `(codebase_id, file_path, module, name)` capturing every
+  cross-file `import` / `export … from` edge (symbol + module specifier).
+- `chunkFile` now also runs `extractImports(tree)` (tree-sitter walk over
+  `import_statement` / `export_statement`) and returns `{ chunks, imports }`.
+- Index flow calls `store.batchUpsertImports(...)` after chunk upsert.
+- New CLI command:
+
+  ```bash
+  codemogger references <target>            # files that import symbol <target>
+  codemogger references <target> --module   # treat <target> as a module specifier
+  codemogger references <file>   --file     # list the imports OF <file>
+  codemogger references <target> --format json
+  ```
+
+  - **symbol mode** → "blast radius" of a symbol (e.g. `useTaskStore` → 9
+    importers in this repo).
+  - **`--module`** → boundary view: who imports a given module alias
+    (`@/stores/taskStore` → 6 files).
+  - **`--file`** → reverse coupling: what a file itself depends on
+    (`taskStore.ts` → pinia, vue, `@/types/task`, `./taskServices`, …).
+
+> Limitation: `--module` matches the import specifier **exactly** (alias
+> differences like `@/stores/taskStore` vs `@encv/shared-components/stores/taskStore`
+> are distinct rows). Symbol mode is alias-agnostic.
+
+### 4. Context comprehension command (second-stage patch)
+Addresses gap **D** — once you've located a chunk, you still can't see its
+neighbours or the shape of the whole file (e.g. a 618-line `taskStore.ts`
+collapsed into one chunk). This is delivered as a **separate, second-stage
+patch** (`patches/codemogger+0.1.5+context.patch`) that must be applied *after*
+the main patch above.
+
+- Store gains `listChunksByFile(codebaseId, filePath)` — `file_path = ? OR
+  file_path LIKE ?`, so a suffix/partial path expands to the whole file's chunk
+  outline — and `findChunksByName(codebaseId, name)`.
+- New CLI command:
+
+  ```bash
+  codemogger context useTaskStore          # symbol -> outline of its whole file, hit chunk marked <<<
+  codemogger context useTaskStore --expand # same, but also prints each chunk's snippet body
+  codemogger context stores/taskStore.ts  # file path (exact or suffix LIKE) -> that file's chunk outline
+  ```
+
+- Symbol mode: `findChunksByName` → for each hit file `listChunksByFile` →
+  outline with the hit chunk tagged `<<<`. File mode: straight
+  `listChunksByFile`. No re-index needed (data is already in `chunks`).
+
+> Status: the `context` command is delivered as this second-stage patch
+> (`codemogger+0.1.5+context.patch`), regenerated to match the main-patched
+> `cli.mjs` exactly (the earlier draft had stale hunk line numbers that failed
+> to apply past hunk 1). It inserts `Store.listChunksByFile` /
+> `findChunksByName`, the two `CodeIndex` wrappers, and the `context` CLI
+> command. Apply it *after* the main patch.
+
+## Applying
+
+```bash
+# default: global install at /usr/local/lib/node_modules/codemogger
+cd codemogger-patch
+./apply.sh                 # apply (idempotent)
+./apply.sh --check         # dry-run only
+
+# or point at a project-local install
+CODEMOGGER_DIR=./node_modules/codemogger ./apply.sh
+```
+
+`apply.sh` will:
+1. Copy the vendored `tree-sitter-kotlin` grammar into codemogger's
+   `node_modules` (skipped if already present).
+2. `patch -p1` the `dist/cli.mjs` diff (skipped if already applied).
+
+> **Optional second stage — `context` command.** After `apply.sh` succeeds,
+> apply the supplementary patch from the `node_modules` parent of your
+> codemogger install (same working dir `apply.sh` uses):
+>
+> ```bash
+> cd "$(dirname "$(dirname "$CODEMOGGER_DIR")")"   # node_modules parent
+> patch -p1 --forward < /path/to/codemogger-patch/patches/codemogger+0.1.5+context.patch
+> ```
+>
+> It must run *after* the main patch (it edits the already-patched
+> `cli.mjs`). Re-test `codemogger context <symbol>` before relying on it.
+
+> Note: changes are to the **bundled** `dist/cli.mjs`. Reinstalling or
+> upgrading codemogger overwrites it — re-run `apply.sh` afterwards. For an
+> upstream fix, port the logic to `src/` (languages, treesitter, db/schema,
+> db/store) and rebuild.
+
+## Reverting
+
+```bash
+cd /usr/local/lib            # node_modules parent
+patch -p1 -R < /path/to/codemogger-patch/patches/codemogger+0.1.5.patch
+# then remove the vendored grammar if desired:
+rm -rf /usr/local/lib/node_modules/codemogger/node_modules/@tree-sitter-grammars/tree-sitter-kotlin
+```
+
+## Verification (as tested)
+
+- `Service.kt` → 8 chunks indexed; large class (>150 lines) → method-level
+  split (169 chunks); keyword `gcd` matched.
+- Keyword `validation` matched `orderValidationResult` after the `body`
+  normalization change.
+- `codemogger references useTaskStore` → 9 importers; `references <taskStore.ts>
+  --file` → 11 of its own dependencies. Confirms the import graph is populated
+  after a full re-index.

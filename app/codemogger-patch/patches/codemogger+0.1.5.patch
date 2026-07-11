@@ -1,0 +1,531 @@
+diff --git a/node_modules/codemogger/dist/cli.mjs b/node_modules/codemogger/dist/cli.mjs
+index 84d69f4..f050195 100755
+--- a/node_modules/codemogger/dist/cli.mjs
++++ b/node_modules/codemogger/dist/cli.mjs
+@@ -26,7 +26,8 @@ function createFtsTableSQL(codebaseId) {
+ CREATE TABLE IF NOT EXISTS ${table} (
+     chunk_id    INTEGER NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+     name        TEXT NOT NULL DEFAULT '',
+-    signature   TEXT NOT NULL DEFAULT ''
++    signature   TEXT NOT NULL DEFAULT '',
++    body        TEXT NOT NULL DEFAULT ''
+ )
+ `;
+ }
+@@ -34,18 +35,18 @@ function createFtsIndexSQL(codebaseId) {
+   const table = ftsTableName(codebaseId);
+   return `
+ CREATE INDEX IF NOT EXISTS idx_${table} ON ${table}
+-    USING fts (name, signature)
++    USING fts (name, signature, body)
+     WITH (
+         tokenizer = 'default',
+-        weights = 'name=5.0,signature=3.0'
++        weights = 'name=5.0,signature=3.0,body=1.0'
+     )
+ `;
+ }
+ function populateFtsForFileSQL(codebaseId) {
+   const table = ftsTableName(codebaseId);
+   return `
+-INSERT INTO ${table} (chunk_id, name, signature)
+-SELECT id, name, signature FROM chunks WHERE codebase_id = ? AND file_path = ?
++INSERT INTO ${table} (chunk_id, name, signature, body)
++SELECT id, name, signature, body FROM chunks WHERE codebase_id = ? AND file_path = ?
+ `;
+ }
+ var CREATE_CODEBASES_TABLE = `
+@@ -66,6 +67,7 @@ CREATE TABLE IF NOT EXISTS chunks (
+     name            TEXT NOT NULL DEFAULT '',
+     signature       TEXT NOT NULL DEFAULT '',
+     snippet         TEXT NOT NULL,
++    body            TEXT NOT NULL DEFAULT '',
+     start_line      INTEGER NOT NULL,
+     end_line        INTEGER NOT NULL,
+     file_hash       TEXT NOT NULL,
+@@ -83,9 +85,18 @@ CREATE TABLE IF NOT EXISTS indexed_files (
+     indexed_at  INTEGER NOT NULL,
+     UNIQUE(codebase_id, file_path)
+ )
++`, CREATE_IMPORTS_TABLE = `
++CREATE TABLE IF NOT EXISTS imports (
++    id          INTEGER PRIMARY KEY AUTOINCREMENT,
++    codebase_id INTEGER NOT NULL REFERENCES codebases(id),
++    file_path   TEXT NOT NULL,
++    module      TEXT NOT NULL,
++    name        TEXT NOT NULL DEFAULT '',
++    UNIQUE(codebase_id, file_path, module, name)
++)
+ `, ALL_SCHEMA;
+ var init_schema = __esm(() => {
+-  ALL_SCHEMA = [CREATE_CODEBASES_TABLE, CREATE_CHUNKS_TABLE, CREATE_FILES_TABLE];
++  ALL_SCHEMA = [CREATE_CODEBASES_TABLE, CREATE_CHUNKS_TABLE, CREATE_FILES_TABLE, CREATE_IMPORTS_TABLE];
+ });
+ 
+ // src/db/store.ts
+@@ -151,8 +162,8 @@ class Store {
+       const now = Date.now();
+       const deleteStmt = await this.db.prepare("DELETE FROM chunks WHERE codebase_id = ? AND file_path = ?");
+       const insertStmt = await this.db.prepare(`
+-        INSERT INTO chunks (codebase_id, file_path, chunk_key, language, kind, name, signature, snippet, start_line, end_line, file_hash, indexed_at)
+-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
++        INSERT INTO chunks (codebase_id, file_path, chunk_key, language, kind, name, signature, snippet, body, start_line, end_line, file_hash, indexed_at)
++        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(chunk_key) DO UPDATE SET
+           codebase_id = excluded.codebase_id,
+           language = excluded.language,
+@@ -160,6 +171,7 @@ class Store {
+           name = excluded.name,
+           signature = excluded.signature,
+           snippet = excluded.snippet,
++          body = excluded.body,
+           start_line = excluded.start_line,
+           end_line = excluded.end_line,
+           file_hash = excluded.file_hash,
+@@ -178,7 +190,7 @@ class Store {
+       for (const { filePath, fileHash, chunks } of fileChunks) {
+         await deleteStmt.run(codebaseId, filePath);
+         for (const chunk of chunks) {
+-          await insertStmt.run(codebaseId, chunk.filePath, chunk.chunkKey, chunk.language, chunk.kind, chunk.name, chunk.signature, chunk.snippet, chunk.startLine, chunk.endLine, chunk.fileHash, now);
++          await insertStmt.run(codebaseId, chunk.filePath, chunk.chunkKey, chunk.language, chunk.kind, chunk.name, chunk.signature, chunk.snippet, chunk.body, chunk.startLine, chunk.endLine, chunk.fileHash, now);
+         }
+         await fileStmt.run(codebaseId, filePath, fileHash, chunks.length, now);
+       }
+@@ -191,6 +203,7 @@ class Store {
+   async removeCodebaseChunks(codebaseId) {
+     await (await this.db.prepare("DELETE FROM chunks WHERE codebase_id = ?")).run(codebaseId);
+     await (await this.db.prepare("DELETE FROM indexed_files WHERE codebase_id = ?")).run(codebaseId);
++    await (await this.db.prepare("DELETE FROM imports WHERE codebase_id = ?")).run(codebaseId);
+   }
+   async removeStaleFiles(codebaseId, activeFiles) {
+     const all = await (await this.db.prepare("SELECT file_path FROM indexed_files WHERE codebase_id = ?")).all(codebaseId);
+@@ -211,6 +224,45 @@ class Store {
+     }
+     return removed;
+   }
++  async batchUpsertImports(codebaseId, fileImports) {
++    if (fileImports.length === 0)
++      return;
++    await this.db.exec("BEGIN");
++    try {
++      const delStmt = await this.db.prepare("DELETE FROM imports WHERE codebase_id = ? AND file_path = ?");
++      const insStmt = await this.db.prepare("INSERT INTO imports (codebase_id, file_path, module, name) VALUES (?, ?, ?, ?) ON CONFLICT(codebase_id, file_path, module, name) DO NOTHING");
++      for (const { filePath, imports } of fileImports) {
++        await delStmt.run(codebaseId, filePath);
++        for (const imp of imports) {
++          await insStmt.run(codebaseId, filePath, imp.module, imp.name);
++        }
++      }
++      await this.db.exec("COMMIT");
++    } catch (e) {
++      await this.db.exec("ROLLBACK");
++      throw e;
++    }
++  }
++  async findReferences(codebaseId, name) {
++    const rows = await (await this.db.prepare("SELECT file_path, module, name FROM imports WHERE codebase_id = ? AND name = ? ORDER BY file_path")).all(codebaseId, name);
++    return rows.map((r) => ({ filePath: r.file_path, module: r.module, name: r.name }));
++  }
++  async findImporting(codebaseId, module) {
++    const rows = await (await this.db.prepare("SELECT file_path, module, name FROM imports WHERE codebase_id = ? AND module = ? ORDER BY file_path")).all(codebaseId, module);
++    return rows.map((r) => ({ filePath: r.file_path, module: r.module, name: r.name }));
++  }
++  async listImports(codebaseId, filePath) {
++    const rows = await (await this.db.prepare("SELECT file_path, module, name FROM imports WHERE codebase_id = ? AND file_path = ? ORDER BY module, name")).all(codebaseId, filePath);
++    return rows.map((r) => ({ filePath: r.file_path, module: r.module, name: r.name }));
++  }
++  async getDefaultCodebaseId() {
++    const codebases = await this.listCodebases();
++    if (codebases.length === 0)
++      return null;
++    const cwd = process.cwd();
++    const match = codebases.filter((c) => cwd === c.rootPath || cwd.startsWith(c.rootPath + "/")).sort((a, b) => b.rootPath.length - a.rootPath.length)[0];
++    return (match ?? codebases[0]).id;
++  }
+   async batchUpsertEmbeddings(items) {
+     if (items.length === 0)
+       return;
+@@ -296,10 +348,10 @@ class Store {
+         const snippetCol = includeSnippet ? "c.snippet," : "";
+         const rows = await (await this.db.prepare(`SELECT c.chunk_key, c.file_path, c.name, c.kind, c.signature,
+                   ${snippetCol} c.start_line, c.end_line,
+-                  fts_score(f.name, f.signature, ?1) AS score
++                  fts_score(f.name, f.signature, f.body, ?1) AS score
+            FROM ${table} f
+            JOIN chunks c ON c.id = f.chunk_id
+-           WHERE fts_match(f.name, f.signature, ?1)
++           WHERE fts_match(f.name, f.signature, f.body, ?1)
+            ORDER BY score DESC
+            LIMIT ?`)).all(query, limit);
+         for (const row of rows) {
+@@ -356,7 +408,7 @@ function detectLanguage(filePath) {
+   const ext = filePath.slice(dot);
+   return EXT_MAP.get(ext) ?? null;
+ }
+-var _require, RUST, JAVASCRIPT, TYPESCRIPT, TSX, C, PYTHON, GO, ZIG, JAVA, SCALA, CPP, PHP, CSHARP, RUBY, LANGUAGES, EXT_MAP;
++var _require, RUST, JAVASCRIPT, TYPESCRIPT, TSX, VUE, KOTLIN, C, PYTHON, GO, ZIG, JAVA, SCALA, CPP, PHP, CSHARP, RUBY, LANGUAGES, EXT_MAP;
+ var init_languages = __esm(() => {
+   _require = createRequire(import.meta.url);
+   RUST = {
+@@ -427,6 +479,25 @@ var init_languages = __esm(() => {
+     ],
+     splitNodes: ["class_declaration", "abstract_class_declaration", "interface_declaration"]
+   };
++  VUE = {
++    name: "vue",
++    extensions: [".vue"],
++    wasmPath: _require.resolve("tree-sitter-typescript/tree-sitter-typescript.wasm"),
++    topLevelNodes: [
++      "function_declaration",
++      "generator_function_declaration",
++      "class_declaration",
++      "abstract_class_declaration",
++      "interface_declaration",
++      "type_alias_declaration",
++      "enum_declaration",
++      "variable_declaration",
++      "lexical_declaration",
++      "export_statement"
++    ],
++    splitNodes: ["class_declaration", "abstract_class_declaration", "interface_declaration"],
++    isVue: true
++  };
+   C = {
+     name: "c",
+     extensions: [".c", ".h"],
+@@ -558,7 +629,21 @@ var init_languages = __esm(() => {
+     ],
+     splitNodes: ["module", "class"]
+   };
+-  LANGUAGES = [RUST, JAVASCRIPT, TYPESCRIPT, TSX, C, CPP, CSHARP, PYTHON, GO, ZIG, JAVA, SCALA, PHP, RUBY];
++  KOTLIN = {
++    name: "kotlin",
++    extensions: [".kt", ".kts"],
++    wasmPath: _require.resolve("@tree-sitter-grammars/tree-sitter-kotlin/tree-sitter-kotlin.wasm"),
++    topLevelNodes: [
++      "function_declaration",
++      "class_declaration",
++      "object_declaration",
++      "property_declaration",
++      "type_alias",
++      "secondary_constructor"
++    ],
++    splitNodes: ["class_declaration", "object_declaration"]
++  };
++  LANGUAGES = [RUST, JAVASCRIPT, TYPESCRIPT, TSX, VUE, KOTLIN, C, CPP, CSHARP, PYTHON, GO, ZIG, JAVA, SCALA, PHP, RUBY];
+   EXT_MAP = new Map;
+   for (const lang of LANGUAGES) {
+     for (const ext of lang.extensions) {
+@@ -798,6 +883,13 @@ function extractName(node) {
+         return nameNode.text;
+     }
+   }
++  if (node.type === "property_declaration") {
++    const vd = node.namedChildren.find((c) => c.type === "variable_declaration" || c.type === "multi_variable_declaration");
++    const target = vd ?? node;
++    const ident = target.namedChildren.find((c) => c.type === "identifier" || c.type === "simple_identifier");
++    if (ident)
++      return ident.text;
++  }
+   return "";
+ }
+ function unwrapExport(node) {
+@@ -810,11 +902,118 @@ function unwrapExport(node) {
+   }
+   return null;
+ }
++function extractVueScript(content) {
++  const lines = content.split("\n");
++  const out = new Array(lines.length).fill("");
++  const re = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
++  let m;
++  while ((m = re.exec(content)) !== null) {
++    const openTag = m[0].slice(0, m[0].indexOf(">") + 1);
++    const before = content.slice(0, m.index + openTag.length);
++    const startLine = before.split("\n").length - 1;
++    const bodyLines = m[1].replace(/^\r?\n/, "").split("\n");
++    for (let i = 0; i < bodyLines.length && startLine + i < out.length; i++) {
++      out[startLine + i] = bodyLines[i];
++    }
++  }
++  return out.join("\n");
++}
+ function extractSignature(node, sourceLines) {
+   const startLine = node.startPosition.row;
+   return sourceLines[startLine]?.trim() ?? "";
+ }
++function normalizeBodyForFts(text) {
++  if (!text)
++    return "";
++  return text
++    .replace(/\/\*[\s\S]*?\*\//g, " ")
++    .replace(/\/\/.*$/gm, " ")
++    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
++    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
++    .replace(/[_-]+/g, " ")
++    .replace(/[^a-zA-Z0-9\s]/g, " ")
++    .replace(/\s+/g, " ")
++    .toLowerCase()
++    .trim();
++}
++function extractImports(tree) {
++  const out = [];
++  const seen = new Set();
++  function add(module, name) {
++    const key = module + "\u0000" + name;
++    if (seen.has(key))
++      return;
++    seen.add(key);
++    out.push({ module, name });
++  }
++  function collectNames(node) {
++    const names = [];
++    for (const child of node.namedChildren) {
++      if (child.type === "import_clause" || child.type === "export_clause") {
++        for (const c2 of child.namedChildren) {
++          if (c2.type === "identifier") {
++            names.push(c2.text);
++          } else if (c2.type === "namespace_import") {
++            const id = c2.childForFieldName("name");
++            if (id)
++              names.push(id.text);
++          } else if (c2.type === "named_imports" || c2.type === "named_exports") {
++            for (const spec of c2.namedChildren) {
++              const specType = spec.type === "import_specifier" ? "import_specifier" : spec.type === "export_specifier" ? "export_specifier" : "";
++              if (specType) {
++                const nm = spec.childForFieldName("name");
++                if (nm)
++                  names.push(nm.text);
++              }
++            }
++          }
++        }
++      }
++    }
++    return names;
++  }
++  function visit(node) {
++    if (node.type === "import_statement") {
++      let src = null;
++      for (const c of node.children) {
++        if (c.type === "string") {
++          src = c.text.slice(1, -1);
++          break;
++        }
++      }
++      if (src) {
++        const names = collectNames(node);
++        if (names.length === 0)
++          add(src, "");
++        else
++          names.forEach((n) => add(src, n));
++      }
++    } else if (node.type === "export_statement") {
++      let src = null, hasSource = false;
++      for (const c of node.children) {
++        if (c.type === "string") {
++          src = c.text.slice(1, -1);
++          hasSource = true;
++        }
++      }
++      if (hasSource && src) {
++        const names = collectNames(node);
++        if (names.length === 0)
++          add(src, "");
++        else
++          names.forEach((n) => add(src, n));
++      }
++    }
++    for (const c of node.children)
++      visit(c);
++  }
++  visit(tree.rootNode);
++  return out;
++}
+ async function chunkFile(filePath, content, fileHash, config) {
++  if (config.isVue) {
++    content = extractVueScript(content);
++  }
+   const p = await ensureParser();
+   const lang = await getLanguage(config);
+   p.setLanguage(lang);
+@@ -840,6 +1039,7 @@ async function chunkFile(filePath, content, fileHash, config) {
+       name,
+       signature,
+       snippet,
++      body: normalizeBodyForFts(snippet),
+       startLine,
+       endLine,
+       fileHash
+@@ -892,6 +1092,14 @@ async function chunkFile(filePath, content, fileHash, config) {
+       return "record";
+     if (type === "constructor_declaration")
+       return "constructor";
++    if (type === "object_declaration" || type === "companion_object")
++      return "object";
++    if (type === "property_declaration")
++      return "variable";
++    if (type === "type_alias")
++      return "type";
++    if (type === "secondary_constructor")
++      return "constructor";
+     return type;
+   }
+   function processNode(node) {
+@@ -980,8 +1188,9 @@ async function chunkFile(filePath, content, fileHash, config) {
+   for (const child of tree.rootNode.children) {
+     processNode(child);
+   }
++  const imports = extractImports(tree);
+   tree.delete();
+-  return chunks;
++  return { chunks, imports };
+ }
+ var MAX_CHUNK_LINES = 150, parserReady = null, parser = null, loadedLanguages;
+ var init_treesitter = __esm(() => {
+@@ -1343,11 +1552,12 @@ ${preview}`;
+         if (!langConfig)
+           continue;
+         try {
+-          const chunks = await chunkFile(file.absPath, file.content, file.hash, langConfig);
++          const { chunks, imports } = await chunkFile(file.absPath, file.content, file.hash, langConfig);
+           batchChunks.push({
+             filePath: file.absPath,
+             fileHash: file.hash,
+-            chunks
++            chunks,
++            imports
+           });
+           filesProcessed++;
+           chunksCreated += chunks.length;
+@@ -1358,6 +1568,7 @@ ${preview}`;
+       }
+       if (batchChunks.length > 0) {
+         await store.batchUpsertAllFileChunks(codebaseId, batchChunks);
++        await store.batchUpsertImports(codebaseId, batchChunks.map((f) => ({ filePath: f.filePath, imports: f.imports })));
+         await store.populateFtsForFiles(codebaseId, batchChunks.map((f) => f.filePath));
+       }
+     }
+@@ -1459,6 +1670,31 @@ ${preview}`;
+     const store = await this.getStore();
+     return store.listCodebases();
+   }
++  async resolveCodebaseId() {
++    const store = await this.getStore();
++    return store.getDefaultCodebaseId();
++  }
++  async findReferences(name) {
++    const store = await this.getStore();
++    const codebaseId = await store.getDefaultCodebaseId();
++    if (codebaseId == null)
++      return [];
++    return store.findReferences(codebaseId, name);
++  }
++  async findImporting(module) {
++    const store = await this.getStore();
++    const codebaseId = await store.getDefaultCodebaseId();
++    if (codebaseId == null)
++      return [];
++    return store.findImporting(codebaseId, module);
++  }
++  async listImports(filePath) {
++    const store = await this.getStore();
++    const codebaseId = await store.getDefaultCodebaseId();
++    if (codebaseId == null)
++      return [];
++    return store.listImports(codebaseId, filePath);
++  }
+   async close() {
+     if (this.store) {
+       this.store.close();
+@@ -1757,11 +1993,12 @@ ${preview}`;
+         if (!langConfig)
+           continue;
+         try {
+-          const chunks = await chunkFile(file.absPath, file.content, file.hash, langConfig);
++          const { chunks, imports } = await chunkFile(file.absPath, file.content, file.hash, langConfig);
+           batchChunks.push({
+             filePath: file.absPath,
+             fileHash: file.hash,
+-            chunks
++            chunks,
++            imports
+           });
+           filesProcessed++;
+           chunksCreated += chunks.length;
+@@ -1772,6 +2009,7 @@ ${preview}`;
+       }
+       if (batchChunks.length > 0) {
+         await store.batchUpsertAllFileChunks(codebaseId, batchChunks);
++        await store.batchUpsertImports(codebaseId, batchChunks.map((f) => ({ filePath: f.filePath, imports: f.imports })));
+         await store.populateFtsForFiles(codebaseId, batchChunks.map((f) => f.filePath));
+       }
+     }
+@@ -1873,6 +2111,31 @@ ${preview}`;
+     const store = await this.getStore();
+     return store.listCodebases();
+   }
++  async resolveCodebaseId() {
++    const store = await this.getStore();
++    return store.getDefaultCodebaseId();
++  }
++  async findReferences(name) {
++    const store = await this.getStore();
++    const codebaseId = await store.getDefaultCodebaseId();
++    if (codebaseId == null)
++      return [];
++    return store.findReferences(codebaseId, name);
++  }
++  async findImporting(module) {
++    const store = await this.getStore();
++    const codebaseId = await store.getDefaultCodebaseId();
++    if (codebaseId == null)
++      return [];
++    return store.findImporting(codebaseId, module);
++  }
++  async listImports(filePath) {
++    const store = await this.getStore();
++    const codebaseId = await store.getDefaultCodebaseId();
++    if (codebaseId == null)
++      return [];
++    return store.listImports(codebaseId, filePath);
++  }
+   async close() {
+     if (this.store) {
+       this.store.close();
+@@ -2053,6 +2316,35 @@ program.command("search").description("Search indexed code semantically").argume
+     await db.close();
+   }
+ });
++program.command("references").description("Impact analysis: find files that import a symbol or module").argument("<target>", "symbol name (e.g. useTaskStore) or module specifier").option("--module", "treat target as a module specifier instead of a symbol name").option("--file", "list the imports OF the given file instead of searching for importers").option("--format <fmt>", "output format: json|text", "text").action(async (target, opts) => {
++  const dbPath = resolveDbPath();
++  const db = new CodeIndex({ dbPath, embedder: localEmbed, embeddingModel: LOCAL_MODEL_NAME });
++  try {
++    let rows;
++    if (opts.file) {
++      rows = await db.listImports(target);
++    } else if (opts.module) {
++      rows = await db.findImporting(target);
++    } else {
++      rows = await db.findReferences(target);
++    }
++    if (opts.format === "json") {
++      console.log(JSON.stringify(rows, null, 2));
++    } else {
++      if (rows.length === 0) {
++        console.log(`No imports found for: ${target}`);
++        return;
++      }
++      console.log(`${rows.length} reference(s) for "${target}":\n`);
++      for (const r of rows) {
++        const label = r.name ? `${r.name}  <-  ${r.module}` : `${r.module}`;
++        console.log(`  ${r.filePath}\n      imports ${label}`);
++      }
++    }
++  } finally {
++    await db.close();
++  }
++});
+ program.command("list").description("List all indexed files").option("--format <fmt>", "output format: json|text", "text").action(async (opts) => {
+   const dbPath = resolveDbPath();
+   const db = new CodeIndex({ dbPath, embedder: localEmbed, embeddingModel: LOCAL_MODEL_NAME });
