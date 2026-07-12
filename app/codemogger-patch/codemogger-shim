@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+#
+# codemogger auto-reindex shim
+#
+# Transparent wrapper around the real `codemogger` CLI. Before any *read*
+# query (references / context / search) it runs an incremental `index` of the
+# relevant codebase so the agent never sees stale data and never has to
+# "remember" to re-index. Freshness is enforced at the tool layer, not by
+# agent discipline.
+#
+# Installed by apply.sh over the `codemogger` entrypoint. The real CLI is the
+# bundled `dist/cli.mjs`; this shim just calls it (no recursion).
+#
+# Env overrides:
+#   CODEMOGGER_NO_AUTOINDEX=1   disable auto-reindex (pass-through only)
+#   CODEMOGGER_CLI=<path>       explicit path to the real dist/cli.mjs
+#
+# --- UX pitfall mitigations layered on top of `references` -------------------
+#   坑1 (symbol-name exact match): `references <sym>` is an exact match on the
+#        imported symbol name. Guessing the wrong name yields "No imports found"
+#        (e.g. the real export is `useRunSummariesSingleton`, not
+#         `useRunSummaries`; `lib/taskTypeLabel.ts` exports `getTaskTypeLabel`,
+#         not `taskTypeLabel`). Mitigation: when a bare `references <sym>` finds
+#         nothing AND a file named `<sym>.{ts,tsx,vue}` exists under the
+#         codebase root, re-query with `--module "@/<relpath>"` (module-level
+#         match is name-agnostic and catches every importer). The assumption is
+#         that the `@/` alias root equals the codebase root (true for
+#         app/encv-mobile/src). A stderr hint announces the fallback.
+#   坑2 (--file needs an absolute path): `references <file> --file` lists the
+#        file's own imports, but `imports.file_path` stores absolute paths, so a
+#        relative path silently matches nothing. Mitigation: rewrite a relative
+#        target into an absolute path before invoking the real CLI.
+#   坑3 (static imports only): the walker resolves only static `import`/
+#        `export ... from`. Dynamic `import()` / string specifiers are invisible.
+#        This is a parser limitation in cli.mjs and is NOT mitigated here (would
+#        require patching the upstream walker). Callers should corroborate with
+#        grep for dynamic-import cases.
+#
+set -euo pipefail
+
+# --- resolve the real CLI entrypoint -----------------------------------------
+REAL_CLI="${CODEMOGGER_CLI:-}"
+if [ -z "$REAL_CLI" ]; then
+  _bin="$(command -v codemogger 2>/dev/null || true)"
+  if [ -n "$_bin" ]; then
+    _resolved="$(readlink -f "$_bin" 2>/dev/null || echo "$_bin")"
+    case "$_resolved" in
+      */dist/cli.mjs) REAL_CLI="$_resolved" ;;
+      *) REAL_CLI="/usr/local/lib/node_modules/codemogger/dist/cli.mjs" ;;
+    esac
+  else
+    REAL_CLI="/usr/local/lib/node_modules/codemogger/dist/cli.mjs"
+  fi
+fi
+
+NO_AUTOINDEX="${CODEMOGGER_NO_AUTOINDEX:-0}"
+
+# --- scan global options that may appear anywhere ----------------------------
+DB_PATH=""
+HAS_FILE=0
+HAS_MODULE=0
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--db" ]; then DB_PATH="$a"; fi
+  case "$a" in
+    --db=*) DB_PATH="${a#--db=}" ;;
+    --file) HAS_FILE=1 ;;
+    --module) HAS_MODULE=1 ;;
+  esac
+  prev="$a"
+done
+
+# --- resolve codebase root dir (shared by reindex + 坑1 fallback) ------------
+DIR="."
+if [ -n "$DB_PATH" ]; then
+  # db path is <dir>/.codemogger/index.db
+  DIR="$(cd "$(dirname "$(dirname "$DB_PATH")")" && pwd)"
+fi
+
+SUBCMD="${1:-}"
+
+# 坑2: --file with a relative target -> rewrite to absolute (imports.file_path
+# is absolute, so a relative path silently matches nothing).
+if [ "$SUBCMD" = "references" ] && [ "$HAS_FILE" = "1" ]; then
+  tgt="${2:-}"
+  case "$tgt" in
+    ""|/*) ;;   # empty or already absolute
+    *)
+      if [ -e "$tgt" ]; then
+        tgt="$(cd "$(dirname "$tgt")" && pwd)/$(basename "$tgt")"
+        set -- "$1" "$tgt" "${@:3}"
+      fi
+      ;;
+  esac
+fi
+
+maybe_reindex() {
+  [ "$NO_AUTOINDEX" = "1" ] && return 0
+  case "$SUBCMD" in
+    references|context|search) ;;   # read queries -> refresh first
+    *) return 0 ;;                  # index/list/mcp/help -> pass through
+  esac
+
+  if [ -n "$DB_PATH" ]; then
+    node "$REAL_CLI" index "$DIR" --db "$DB_PATH" >/dev/null 2>&1 || true
+  else
+    node "$REAL_CLI" index "$DIR" >/dev/null 2>&1 || true
+  fi
+  return 0
+}
+
+# 坑1: bare `references <sym>` with no result -> fall back to module-level match
+# by locating a same-named file under the codebase root.
+if [ "$SUBCMD" = "references" ] && [ "$HAS_FILE" = "0" ] && [ "$HAS_MODULE" = "0" ]; then
+  maybe_reindex
+  sym="${2:-}"
+  out="$(node "$REAL_CLI" "$@" 2>&1)" || true
+  if echo "$out" | grep -q "No imports found for:"; then
+    hit="$(find "$DIR" \( -path '*/node_modules/*' -o -path '*/.git/*' \) -prune -o \
+            \( -name "$sym.ts" -o -name "$sym.tsx" -o -name "$sym.vue" \) -print 2>/dev/null | head -1)"
+    if [ -n "$hit" ]; then
+      rel="${hit#$DIR/}"; rel="${rel%.*}"   # strip root prefix + extension
+      mod="@/${rel}"                         # assume @/ alias root == codebase root
+      echo "(codemogger-shim: symbol '$sym' had no importers; fell back to module '$mod')" >&2
+      node "$REAL_CLI" references "$mod" --module "${@:3}" 2>&1 || true
+      exit 0
+    fi
+  fi
+  echo "$out"
+  exit 0
+fi
+
+maybe_reindex
+exec node "$REAL_CLI" "$@"

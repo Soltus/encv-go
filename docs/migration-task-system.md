@@ -205,6 +205,26 @@ server 域（`useServerStatus`/`useOpenListBridge`/`useRealtimeTransport`…）�
 4. 每步复验 §6 门禁（shared 0 错 + encv-mobile 0 错 + i18n 0 问题）。
 - 复验。
 
+**📊 codemogger 实测波及面（2026-07-12，索引 `app/encv-mobile/src`，按模块 `references --module` 查，最全）**
+
+簇成员 → **生产**下游消费方（提升后 import 需改指 `@encv/shared-components/...`；已排除测试/fixture）：
+
+| 簇成员（真实导出符号） | 生产下游消费方 | 钉子 |
+|---|---|---|
+| `useTasksList` | `views/useTasksView.ts` | Pinia `useTaskStore`（@/stores/taskStore） |
+| `useRunSummaries` / **`useRunSummariesSingleton`** | `views/GroupDetail.vue` | — |
+| `useTaskEventBridge` | `views/FullTextIndexDetail.vue`、`views/GroupDetail.vue` | `useEventBus`（shared canonical） |
+| `useTaskViewCompute` | **仅簇内 `useTasksList`**（无其他消费方） | **`?worker`**（`@/workers/taskViewCompute.worker?worker`，line 30） |
+| `useWorkflowTaskService` | `useWebDavWorkflowAdapter.ts`、`views/GroupDetail.vue`、`views/PluginTestsDetail.vue`、`views/WorkflowDashboard.vue` | — |
+| `lib/taskTypeLabel`（导出 **`getTaskTypeLabel`** 等一族，**无同名 `taskTypeLabel` 符号**） | `components/group-detail/TasksTab.vue` | — |
+| `useTaskCancel` | **无（未接线孤儿**：全仓仅自身文件出现，注释明示"未来"才接线） | `@/plugins/GoProcess` |
+
+**据此的执行结论（修订）**：
+1. **`?worker` 钉子影响面最小** — `useTaskViewCompute` 下游只有簇内 `useTasksList`，故 `?worker` 处理（纯函数化 / shared worker 入口）不外溢到任何 view，风险最低，可优先动。
+2. **需改 import 的生产文件共 7 个**：`views/useTasksView.ts`、`views/GroupDetail.vue`（引用 3 个簇成员，最重）、`views/FullTextIndexDetail.vue`、`views/WorkflowDashboard.vue`、`views/PluginTestsDetail.vue`、`composables/useWebDavWorkflowAdapter.ts`、`components/group-detail/TasksTab.vue`（+ 4 个测试/fixture）。若各源文件保留 `export * from "@encv/..."` 垫片，则这些消费方经 `@/` 别名无感，无需逐处改。
+3. **`useTaskCancel` 从本轮簇提升中剔除** — 未接线孤儿（0 下游），提升它只会无谓引入 `GoProcess` 钉子，无收益。按执行建议 2 单列，待其真正接线（替换 `useTasksList.cancelTaskById`）时再连 GoProcess DI 一起做。
+4. **barrel/re-export 用真实符号名** — `taskTypeLabel` 模块导出的是 `getTaskTypeLabel`/`getTaskTypeMeta`/`getTaskTypeIcon` 等一族（无 `taskTypeLabel` 同名符号），`useRunSummaries` 导出 `useRunSummaries` + `useRunSummariesSingleton` 两个，提升时勿按臆想的单符号名 re-export。
+
 ### Phase 4 — 任务领域 lib 与组件（大）
 - 提升 `lib/workflow/*`、`lib/taskTypeLabel`、`lib/taskPersistence`、`lib/buildReportZip`。
 - 重写提升任务组件（`TaskTimeline`/`TaskBasicInfo`/`TaskDetailModal`/`tasks/*`/`group-detail/*`/`automation/*`），解耦 `containerVersion`。
@@ -215,7 +235,7 @@ server 域（`useServerStatus`/`useOpenListBridge`/`useRealtimeTransport`…）�
 - 复验。
 
 ### Phase 6 — 清理与收尾（小）
-- 删除 shared 里的孤儿 `useEventBus.ts`。
+- `useEventBus.ts`：**保留 shared 副本为唯一真源，禁止删除**（2026-07-11 事实核查反转：encv-mobile 副本已不存在，11+ 处 `@/composables/useEventBus` 引用经 `@/*` 别名回退到 shared = 事实 canonical；删 shared 会直接断这些引用。详见 §8.1.1 ② 修正）。
 - 处理 13 个暂存 `api/encv_*`：任务相关部分已重写为 Phase 1 抽象层模块；非任务部分（files/admin/…）**回退到 `encv-mobile` 作为应用层**，移除 shared 副本与 re-export 垫片。
 - 全量复验：shared 0 错误 + encv-mobile 0 错误 + i18n `--all` 0 问题。
 
@@ -225,7 +245,7 @@ server 域（`useServerStatus`/`useOpenListBridge`/`useRealtimeTransport`…）�
 
 - `shared-components/src/api/encv_*.ts` = 上一轮物理副本（错配 A），**暂存**，待 Phase 6 清理。
 - `encv-mobile/src/api/encv_*.ts` = re-export 垫片，转发到 shared 副本，保证现有导入不红。
-- `shared-components/src/composables/useEventBus.ts` = 孤儿重复文件，待 Phase 6 删除。
+- `shared-components/src/composables/useEventBus.ts` = **事实 canonical（保留，禁止删除）**：encv-mobile 副本已不存在，11+ 处 `@/composables/useEventBus` 引用经 `@/*` 回退到此处（见 §8.1.1 ② 修正）。
 - 真实构建（`encv-mobile` + 3 个 plugin）此前已验证 0 错误；shared 自身的 315 错误来自未迁移的 task 测试与孤儿文件，将在 Phase 3–6 随重写一并消除。
 
 ---
@@ -291,7 +311,7 @@ src/
 │   ├── config/mock域/          [OUT-SCOPE-APP] useConfig/useMockGenLog/useDeviceId/useTestCaseGeneration
 │   └── 通用工具域/              [OUT-SCOPE-APP] useClipboard/useDateFormat/usePinchZoom/useHighRefreshRate/
 │                                 useSearchInput/useErrorCapture/useIonicAutoRegister/useTheme/useToast/useDevTools
-│                                 （注：useTheme/useToast 应用层版待与 shared 对齐；useEventBus 为孤儿，见 §7.2）
+│                                 （注：useTheme/useToast 应用层版待与 shared 对齐；useEventBus 为 shared canonical，保留，见 §8.1.1 ②）
 ├── components/                   [混合域]
 │   ├── tasks/                    [IN-SCOPE] TaskVirtualList/TaskDebugPanel
 │   ├── group-detail/             [IN-SCOPE] TasksTab/PipelineTab/PerformanceTab/FilterDrawer
@@ -342,7 +362,7 @@ src/
 │   ├── useClipboard/usePinchZoom/useHighRefreshRate/useDevTools/useSearchInput/
 │   │   useErrorCapture/useFrontendLogs/useIonicAutoRegister              [OUT-SCOPE-SHARED]
 │   ├── __tests__/                [混合] 含任务相关测试（useTaskViewCompute/useWorkflowTaskService/useSectionDerivation…）
-│   └── useEventBus.ts            [暂存残留 · 孤儿] 无引用，应清理或移回应用层
+│   └── useEventBus.ts            [CANONICAL · 保留] shared 为唯一真源（encv-mobile 副本已删，引用经 @/* 回退），禁止清理
 ├── components/                   [混合]
 │   ├── shared/                   [IN-SCOPE] PhaseBadge/PhaseIcon/UnifiedTimelineCard/FilterDropdown/RelevanceBadge
 │   │                             + __tests__（TaskBasicInfo/TaskTimeline）
@@ -374,7 +394,7 @@ src/
 **shared 三类标注**：
 - `OUT-SCOPE-SHARED` 真抽象：`useTheme`/`useI18n`/`useToast`/`useDateFormat`/`useClipboard`/`usePinchZoom`/`useSearchInput`/`useErrorCapture`/`useFrontendLogs`/`useIonicAutoRegister`、`components/settings/*`、`AboutPage`、`DevLogsViewer`、`VirtualLogList`、`NotFoundView`、`appError`/`appResult`、`utils/*`、`i18n/*`、`vite-plugins/*`、`directives/*`、`theme/*`、`styles/*` —— 保持不动。
 - `IN-SCOPE`（任务相关）：`components/shared/*`、`types/phase.ts`、`lib/workflow/`（含 WorkflowRun 等）、`api/encv_tasks.ts`（暂存残留）。
-- `暂存残留`：`api/encv*`（非任务域误放入，应移回 encv-mobile）、`composables/useEventBus.ts`（孤儿，无引用）。
+- `暂存残留`：`api/encv*`（非任务域误放入，应移回 encv-mobile）。（注：`composables/useEventBus.ts` 非孤儿——encv-mobile 副本已删、shared 为 canonical，保留，见 §8.1.1 ②。）
 
 ### 7.3 迁移边界速查
 
@@ -383,7 +403,7 @@ src/
 | `IN-SCOPE` | 任务系统（api/encv_tasks、taskStore/runTasksStore、use*Task*/useWorkflow*/useRunSummaries/useBatchOperations/useSectionDerivation/useNewTaskModal/useTaskForm/usePathResolver/useErrorAnalyzer/useTaskTrigger/useTaskCancel/useTaskEventBridge/useTaskViewCompute、lib/workflow、lib/taskTypeLabel、lib/taskPersistence、lib/buildReportZip、components/tasks\|group-detail\|automation\|Task*、views/Tasks\|GroupDetail\|WorkflowDashboard、workers/taskViewCompute.worker、shared 的 components/shared/*+types/phase+lib/workflow） | **改（重写式提升）** |
 | `OUT-SCOPE-APP` | encv-mobile 的 server/agent/chat/file/webdav/config/mock/router/engines/features/plugins/i18n 等 | 不动 |
 | `OUT-SCOPE-SHARED` | shared 已有真抽象（useTheme/useI18n/useToast/Settings*/VirtualLogList/DevLogsViewer/NotFoundView/appError/appResult/utils/i18n/vite-plugins/directives/theme/styles） | 不动 |
-| `暂存残留` | shared 内 `api/encv*`（非任务）、`composables/useEventBus` 孤儿 | **清理（Phase 6）** |
+| `暂存残留` | shared 内 `api/encv*`（非任务域误放入，应移回 encv-mobile） | **清理（Phase 6）** |
 
 ---
 
@@ -428,7 +448,7 @@ src/
 - 两边**都有** `useEventBus.ts`，且逐字节相同（仅第 13 行 `EncvTask` 类型 import 源不同：encv-mobile 引 `@/api/encv_tasks`，shared 引 `@encv/shared-components/api/encv`）。
 - 它是**模块级单例**（`listeners` Map）。
 - 引用方核查：`@/composables/useEventBus`（→ encv-mobile 副本）被 6 个模块消费（`useFilesView`/`DevLogs`/`useTaskEventBridge`/`useNewTaskModal`/`ServerStatusCard`/`LocalOpenListStatusCard`），**是 canonical**；shared 副本仅被 `app/scripts/setup-simverse-refactor.sh` 一个 setup 脚本引用，**是孤儿**。
-- 结论：**保留 encv-mobile 的 canonical 副本，删除 shared 的孤儿副本**（注意：删除前需把该 setup 脚本的 import 改指 encv-mobile 副本，或随脚本废弃一并删除）。这与"提升进 shared"方向相反——`useEventBus` 含 app 层 `EncvTask` 依赖，当前不宜进 shared。
+- 结论（**旧，已被 §8.1.1 ② 下方修正推翻**）：原拟保留 encv-mobile 的 canonical 副本、删除 shared 的孤儿副本（注意：删除前需把该 setup 脚本的 import 改指 encv-mobile 副本，或随脚本废弃一并删除）。这与"提升进 shared"方向相反——`useEventBus` 含 app 层 `EncvTask` 依赖，当前不宜进 shared。
 
 > **2026-07-11 事实核查修正（重要）**：上述 ② 的"两边都有 / encv-mobile 是 canonical"**已不成立**。当前 `encv-mobile/src/composables/useEventBus.ts` **不存在**（已被删除），而 11 处引用（`useFilesView`/`DevLogs`/`useTaskEventBridge`/`useNewTaskModal`/`ServerStatusCard`/`LocalOpenListStatusCard`/`useServerStatus`/`useVectorSearchStatus`/`useRealtimeTransport`/`useOpenListBridge`/`useTestBackdoor`）仍写 `@/composables/useEventBus`，经 `tsconfig` 的 `@/*` 二级回退解析到 **`shared/src/composables/useEventBus.ts`**——即 **shared 副本已成为事实 canonical**。因此原 G-4 计划"删 shared 孤儿、保留 encv-mobile"**反向且有害**（删 shared 会直接断这 11 处引用）。正确做法：**保留 shared 的 `useEventBus.ts` 作为唯一真源**，并清理 `app/scripts/setup-simverse-refactor.sh` 对其的引用（如有残留）。`useEventBus` 含的 `EncvTask` 依赖经 `@encv/shared-components/api/encv` 解析，在 shared 内自洽，无需回退 encv-mobile。
 
@@ -442,13 +462,13 @@ src/
 
 **问题**：重复实现 → ① 行为漂移、bug 修复需改两处、真源不清；② 单例模块（errorStore/logs/eventBus）因别名本地优先而**分裂成两个实例**，引发真实功能 bug（错误浮窗失效）。
 
-**目标**：`shared-components` 为唯一真源；encv-mobile 的重复副本**直接删除**（依赖别名回退到 shared），现有 `@/composables/useX` 导入无需逐处改。`useEventBus` 例外：删 shared 孤儿副本、保留 encv-mobile canonical。
+**目标**：`shared-components` 为唯一真源；encv-mobile 的重复副本**直接删除**（依赖别名回退到 shared），现有 `@/composables/useX` 导入无需逐处改。`useEventBus` 例外**已反转**：encv-mobile 副本已删，shared 副本为事实 canonical，**保留 shared、禁止删除**（原"删 shared 保留 encv-mobile"反向且有害，见 §8.1.1 ② 修正）。
 
 **阶段（按风险从低到高）**：
 - **G-1（低）纯函数/无状态**：`useDateFormat`、`useClipboard`、`useSearchInput`、`relativeTime`、`activeStatus` → 删除 encv-mobile 副本，原路径改 re-export 垫片指向 shared。
 - **G-2（中）有状态/依赖 DOM**：`useTheme`、`useToast`、`useErrorCapture`、`useFrontendLogs`、`useHighRefreshRate`、`useIonicAutoRegister`、`usePinchZoom`、`useDevTools`（文档原漏列）→ 因别名回退机制，**直接删除本地副本**即可（无需垫片）；删除前核对导出签名与 shared 一致（尤其 `useErrorCapture` 的 `errorStore` 单例，删除后全 app 统一共用 shared 实例，顺带修复浮窗不显示 bug）。
 - **G-3（中）组件**：`VirtualLogList.vue` → 确认 encv-mobile 的 `DevLogs.vue` 改用 shared 版本（两版仅差 `useI18n` import 路径，逻辑一致），删除本地重复方。
-- **G-4（修正项）`useEventBus`**：删 shared 孤儿副本、保留 encv-mobile canonical（含修 setup 脚本引用）。
+- **G-4（已反转）`useEventBus`**：encv-mobile 副本已删，shared 副本为事实 canonical，**保留 shared、禁止删除**（原"删 shared 保留 encv-mobile"反向且有害，见 §8.1.1 ② 修正）。
 - 每子阶段复验：shared 0 错误 + encv-mobile 0 错误 + `i18n --all` 0 问题。
 
 ### 8.2 Module A-ext — API 层全局基座（跨所有 api 模块）

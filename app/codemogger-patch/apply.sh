@@ -57,4 +57,29 @@ else
   echo "[skip] patch already applied or not applicable (dry-run failed)"
 fi
 
+# 2.5) Apply the stale-imports fix: removeStaleFiles must also clear the
+#      patched `imports` table, otherwise deleted files linger in `references`.
+STALE_PATCH="$SCRIPT_DIR/patches/codemogger+0.1.5+stale-imports.patch"
+if [ -f "$STALE_PATCH" ]; then
+  if patch -p1 --forward --dry-run < "$STALE_PATCH" >/dev/null 2>&1; then
+    patch -p1 --forward < "$STALE_PATCH"
+    echo "[ok] applied stale-imports fix to $CODEMOGGER_DIR/dist/cli.mjs"
+  else
+    echo "[skip] stale-imports fix already applied or not applicable"
+  fi
+fi
+
+# 3) Install the auto-reindex shim over the `codemogger` entrypoint.
+#    The shim runs an incremental `index` before references/context/search so
+#    the agent never sees stale data and never has to re-index manually.
+SHIM_SRC="$SCRIPT_DIR/codemogger-shim"
+BIN="$(command -v codemogger 2>/dev/null || true)"
+if [ -n "$BIN" ] && [ -f "$SHIM_SRC" ]; then
+  install -m 0755 "$SHIM_SRC" "$BIN"
+  echo "[ok] installed auto-reindex shim at $BIN (real CLI resolved at runtime)"
+else
+  echo "[skip] codemogger bin not found or shim missing; install manually:"
+  echo "        install -m 0755 $SHIM_SRC \$(command -v codemogger)"
+fi
+
 echo "Done."

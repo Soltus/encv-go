@@ -193,7 +193,7 @@ FTS 改为 `USING fts (name, signature, body)`（weights 加 `body=1.0`）。
 边界规则 + 设计意图。只摸一块（一个函数定义）永远不够。
 
 用两个真实需求案例验证（`docs/shared-components-boundary-spec.md`、
-`app/docs/migration-task-system.md` 的 Phase 2「把 `useTaskStore` 提升进 shared、解耦 Pinia 单例」）：
+`docs/migration-task-system.md` 的 Phase 2「把 `useTaskStore` 提升进 shared、解耦 Pinia 单例」）：
 - 要安全动手，agent 实际需要的上下文：✅ 定义（codemogger 能定位）❌ **全部 ~12 个消费者**
   （无引用查找）❌ **边界违例 / 钉子依赖**（无 import 关系图）❌ **"为什么"**（codemogger 读不了文档）。
 - `shared-components-boundary-spec.md` 顶部自注「**已过时，与 migration 文档相反**」——
@@ -232,6 +232,29 @@ FTS 改为 `USING fts (name, signature, body)`（weights 加 `body=1.0`）。
   11 个自身依赖。grep 全量 24 文件含该串（含定义/re-export/注释），`references` 精准隔离 9 个真实导入点。
 - 局限：`--module` 按模块说明符**精确**匹配（别名差异如 `@/stores/taskStore` vs
   `@encv/shared-components/stores/taskStore` 是不同行）；符号模式与别名无关。
+
+### 8.3.1 `references` 三坑与 shim 层缓解（2026-07-12 实战）
+
+真实影响面分析时 `references` 连踩三坑，根因与缓解分层如下：
+
+| 坑 | 根因 | 能否 patch cli.mjs 解决 | 实际缓解方式 |
+|---|---|---|---|
+| **1. 符号名精确匹配** | `references <sym>` 精确匹配 `imports.name`；猜错名即空（如真实导出 `useRunSummariesSingleton`/`getTaskTypeLabel`，臆想名 `useRunSummaries`/`taskTypeLabel` 恒空） | 可（改 SQL 为 LIKE/模糊），但会放大噪声 | **shim 启发式回退**：裸 `references <sym>` 无结果且 codebase 根下存在同名 `<sym>.{ts,tsx,vue}` 时，自动以 `--module "@/relpath"` 重查（模块级匹配与符号名无关，最全）。stderr 提示已回退 |
+| **2. `--file` 需绝对路径** | `imports.file_path` 存绝对路径，传相对路径 `composables/x.ts` 静默零命中 | 可（shim 内转即可，无需动上游） | **shim 直接转**：检测到 `--file` 且 target 为相对路径时，改写为绝对路径再调真实 CLI |
+| **3. 只解析静态 import** | walker 的 `extractImports` 仅遍历静态 `import`/`export ... from`，动态 `import()`/字符串说明符不可见 | **能**（需改 cli.mjs 的 walker 解析动态 import），但成本高、Vue 动态 import 少、收益低 | **不写 patch**：shim 不掩盖；调用方对动态引用用 grep 复核（如 `useTaskCancel` 即靠 grep 发现是未接线孤儿） |
+
+> 坑 1/2 在 **shim 层**解决，不污染上游 `cli.mjs`（升级不冲突、patch 仍干净）；坑 3 是解析器限制，留给上游或按需单独 patch。
+
+shim 安装/复测（在 codebase 根下跑，否则 shim 自动重索引会建错库）：
+```bash
+# 安装 shim 覆盖 codemogger bin（apply.sh 第 3 步等价）
+install -m 0755 app/codemogger-patch/codemogger-shim "$(command -v codemogger)"
+
+cd /workspace/app/encv-mobile/src
+codemogger references useRunSummaries          # 坑1：原空 → 回退 @/composables/useRunSummaries 命中
+codemogger references taskTypeLabel            # 坑1：原空 → 回退 @/lib/taskTypeLabel 命中（含 getTaskTypeLabel 引用）
+codemogger references composables/useTasksList.ts --file   # 坑2：相对路径 → 自动转绝对，命中 19 条依赖
+```
 
 ### 8.4 仍缺的能力（7 项缺口）
 1. **A. 引用/反向查找（影响分析）** —— ✅ 已由 `references` 部分覆盖（符号/模块/文件三向）。

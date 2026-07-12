@@ -1,5 +1,5 @@
 > ⚠️ **本文档已过时，请勿按此执行。**
-> 当前权威架构文档是 **`app/docs/migration-task-system.md`**（拆分抽象与实现：`@encv/shared-components` = 纯抽象层/库，只依赖 vue/pinia/ionic/通用第三方，**不依赖** `@/config` `@/constants` `@/router`；`encv-mobile` = 应用层，提供共享抽象所需的注入上下文）。
+> 当前权威架构文档是 **`docs/migration-task-system.md`**（拆分抽象与实现：`@encv/shared-components` = 纯抽象层/库，只依赖 vue/pinia/ionic/通用第三方，**不依赖** `@/config` `@/constants` `@/router`；`encv-mobile` = 应用层，提供共享抽象所需的注入上下文）。
 > 本文档的核心理念（“encv 业务全搬回 encv-mobile，shared 只放通用”）与已落地的 **DI 共享抽象层直接相反**；尤其 Phase 1/2/3 要求把 `stores/`、`api/` 搬出 shared，会**摧毁已建好的共享抽象层**（`taskStore`/`runTasksStore` 等已提升进 shared，经依赖注入解耦应用层）。
 > 保留本文档仅作历史参考。实际重构进度与边界判定见 `migration-task-system.md`（§2 目标架构、§7 模块地图、§9 执行进度）。
 
