@@ -61,9 +61,15 @@ RUN apt-get update && \
       cmake temurin-17-jdk \
       unzip openjdk-21-jdk jq \
       python3 \
-    && npm install -g cypress@15 \
-    && cypress install \
     && rm -rf /var/lib/apt/lists/*
+# Cypress：设置国内镜像并重试安装
+ENV CYPRESS_INSTALL_BINARY=0
+RUN npm config set registry https://mirrors.cloud.tencent.com/npm/ || true && \
+    npm install -g cypress@15 && \
+    export CYPRESS_INSTALL_BINARY=1 && \
+    for i in 1 2 3; do \
+      npx cypress install && break || sleep 5; \
+    done
 
 # 安装 code-server(VSCode WebIDE ）插件
 RUN code-server --install-extension itv3.kilo-code-plus \
