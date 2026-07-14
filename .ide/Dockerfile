@@ -27,8 +27,14 @@ ENV ANDROID_HOME="/opt/android-sdk" \
 # 1. 基础系统与镜像源配置
 # ==========================================
 USER root
-RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.cloud.tencent.com/debian|g' /etc/apt/sources.list && \
-    sed -i 's|http://security.debian.org/debian-security|https://mirrors.cloud.tencent.com/debian-security|g' /etc/apt/sources.list || true
+RUN if [ -f /etc/apt/sources.list ]; then \
+        sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list; \
+        sed -i 's|security.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list; \
+    fi; \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources; \
+        sed -i 's|security.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources; \
+    fi
 
 # build-essential + ca-certificates：cgo 编译（pkg/ 下含 .c/.h/.a）
 # cmake：scripts/setup-sandbox-env.sh 前置检查强依赖（第 121 行）
