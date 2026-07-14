@@ -44,7 +44,6 @@ RUN apt-get update && \
       curl wget git build-essential ca-certificates \
       cmake openjdk-17-jdk \
       unzip openjdk-21-jdk jq \
-
       python3 \
     && npm install -g cypress@15 \
     && cypress install \
@@ -85,19 +84,20 @@ RUN set -eux; \
     update-alternatives --install /usr/bin/javac javac ${JAVA_HOME}/bin/javac 2111; \
     update-alternatives --set java ${JAVA_HOME}/bin/java; \
     update-alternatives --set javac ${JAVA_HOME}/bin/javac; \
-    cat > /usr/local/bin/use-jdk <<'EOF'
-#!/bin/sh
-case "$1" in
-  17) J=/usr/lib/jvm/java-17-openjdk-amd64 ;;
-  21) J=/usr/lib/jvm/java-21-openjdk-amd64 ;;
-  *) echo "usage: use-jdk 17|21" >&2; exit 1 ;;
-esac
-update-alternatives --set java "$J/bin/java" >/dev/null
-update-alternatives --set javac "$J/bin/javac" >/dev/null
-echo "JAVA_HOME=$J"
-EOF
+    printf '%s\n' \
+      '#!/bin/sh' \
+      'case "$1" in' \
+      '  17) J=/usr/lib/jvm/java-17-openjdk-amd64 ;;' \
+      '  21) J=/usr/lib/jvm/java-21-openjdk-amd64 ;;' \
+      '  *) echo "usage: use-jdk 17|21" >&2; exit 1 ;;' \
+      'esac' \
+      'update-alternatives --set java "$J/bin/java" >/dev/null' \
+      'update-alternatives --set javac "$J/bin/javac" >/dev/null' \
+      'echo "JAVA_HOME=$J"' \
+      > /usr/local/bin/use-jdk; \
     chmod +x /usr/local/bin/use-jdk; \
     java -version
+
 
 # 接受许可 + 安装本项目所需 SDK 包
 #   platform-tools        : adb / 设备调试
