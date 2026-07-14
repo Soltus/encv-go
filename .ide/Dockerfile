@@ -38,11 +38,14 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
     fi
 
 # 引入 Adoptium 仓库：提供 temurin-17-jdk，规避基础镜像源缺失 openjdk-17-jdk 的问题
-RUN mkdir -p /etc/apt/keyrings && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends gnupg && \
+    mkdir -p /etc/apt/keyrings && \
     wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public \
       | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg && \
     echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print $2}' /etc/os-release) main" \
-      > /etc/apt/sources.list.d/adoptium.list
+      > /etc/apt/sources.list.d/adoptium.list && \
+    rm -rf /var/lib/apt/lists/*
 
 # build-essential + ca-certificates：cgo 编译（pkg/ 下含 .c/.h/.a）
 # cmake：scripts/setup-sandbox-env.sh 前置检查强依赖（第 121 行））
