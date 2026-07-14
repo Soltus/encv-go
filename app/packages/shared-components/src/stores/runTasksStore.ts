@@ -14,8 +14,10 @@
  */
 
 import { type ComputedRef, computed, type Ref, ref } from "vue";
-import type { EncvTask } from "@/types/task";
+import type { EncvTask } from "@encv/shared-components/types/task";
 import { getTaskServices } from "./taskServices";
+import { createTaskCollection } from "@encv/shared-components/lib/taskCollection";
+import { defineSingleton } from "@encv/shared-components/lib/singleton";
 
 const PAGE_SIZE = 100;
 
@@ -39,12 +41,26 @@ export function useRunTasksStore(): UseRunTasksStore {
   const { getTasks } = getTaskServices();
 
   const currentRunId = ref<string>("");
-  const tasks = ref<EncvTask[]>([]);
   const isLoading = ref(false);
   const hasMore = ref(false);
   const isLoadingMore = ref(false);
   const _totalCount = ref(0);
   const _paginationOffset = ref(0);
+
+  // 任务集合核心归约（getTaskById / patchTaskById / appendTask / applyEvent / 索引）
+  // 由共享层 createTaskCollection 提供单一真源；runId 守卫 + totalCount 经 hooks 参数化。
+  const coll = createTaskCollection({
+    acceptCreated: t => {
+      const taskRunId = (t as EncvTask).runId;
+      if (taskRunId && taskRunId !== currentRunId.value) return false;
+      if (coll.tasks.value.some(x => x.id === t.id)) return false;
+      return true;
+    },
+    onCreated: () => {
+      _totalCount.value++;
+    },
+  });
+  const tasks = coll.tasks;
 
   const totalCount = computed(() => _totalCount.value);
 
@@ -57,6 +73,7 @@ export function useRunTasksStore(): UseRunTasksStore {
     try {
       const list = await getTasks({ runId, offset: 0, limit: PAGE_SIZE });
       tasks.value = list;
+      coll.rebuildIndex();
       _paginationOffset.value = 0;
       hasMore.value = list.length >= PAGE_SIZE;
       _totalCount.value = list.length;
@@ -77,6 +94,7 @@ export function useRunTasksStore(): UseRunTasksStore {
       const nextOffset = _paginationOffset.value + PAGE_SIZE;
       const list = await getTasks({ runId: currentRunId.value, offset: nextOffset, limit: PAGE_SIZE });
       tasks.value = [...tasks.value, ...list];
+      coll.rebuildIndex();
       _paginationOffset.value = nextOffset;
       hasMore.value = list.length >= PAGE_SIZE;
       if (hasMore.value) {
@@ -94,6 +112,7 @@ export function useRunTasksStore(): UseRunTasksStore {
   function clear(): void {
     currentRunId.value = "";
     tasks.value = [];
+    coll.rebuildIndex();
     hasMore.value = false;
     isLoadingMore.value = false;
     _totalCount.value = 0;
@@ -101,27 +120,15 @@ export function useRunTasksStore(): UseRunTasksStore {
   }
 
   function applyEvent(type: "created" | "update" | "progress" | "completed", data: any): void {
-    if (!data?.id) return;
-    if (type === "created") {
-      const taskRunId = (data as EncvTask).runId;
-      if (taskRunId && taskRunId !== currentRunId.value) return;
-      if (tasks.value.some(t => t.id === data.id)) return;
-      tasks.value = [data as EncvTask, ...tasks.value];
-      _totalCount.value++;
-      return;
-    }
-    patchTaskById(data.id, data);
+    coll.applyEvent(type, data);
   }
 
   function getTaskById(id: string): EncvTask | undefined {
-    return tasks.value.find(t => t.id === id);
+    return coll.getTaskById(id);
   }
 
   function patchTaskById(id: string, patch: Partial<EncvTask>): boolean {
-    const idx = tasks.value.findIndex(t => t.id === id);
-    if (idx < 0) return false;
-    tasks.value = tasks.value.map((t, i) => (i === idx ? { ...t, ...patch } : t));
-    return true;
+    return coll.patchTaskById(id, patch);
   }
 
   return {
@@ -140,16 +147,14 @@ export function useRunTasksStore(): UseRunTasksStore {
   };
 }
 
-/** 模块级单例（GroupDetail 页跨组件共享） */
-let _cachedInstance: UseRunTasksStore | null = null;
+/** 模块级单例（GroupDetail 页跨组件共享），经 defineSingleton 收敛样板 */
+const _runTasksStore = defineSingleton(useRunTasksStore);
 
 export function useRunTasksStoreSingleton(): UseRunTasksStore {
-  if (_cachedInstance) return _cachedInstance;
-  _cachedInstance = useRunTasksStore();
-  return _cachedInstance;
+  return _runTasksStore.get();
 }
 
 /** 测试用：重置单例 */
 export function __resetRunTasksStoreForTests(): void {
-  _cachedInstance = null;
+  _runTasksStore.reset();
 }

@@ -20,7 +20,10 @@
 - 删除 Module G 本地副本后的标准复验：`cd /workspace/app && pnpm check:all`（用户在自己终端跑；encv-mobile typecheck + 单测应全绿）。
 
 ## 工具/环境注意
-- `execute_command` 在工具后端偶发 10s 启动超时（报 "failed to start within 10 seconds"，连 `mv`/`echo` 都失败），与 shell 配置无关，**且是瞬时的**：单条命令超时后等约 10 秒直接重试即可恢复，**不要据此判定环境失联，也不要把命令直接甩给用户在自己终端跑**。文件编辑/读取/搜索类工具完全不受影响。仅长耗时/阻塞命令（构建、`pnpm check:all`）才交用户本端跑。
+- `execute_command` 在工具后端偶发 10s 启动超时（报 "failed to start within 10 seconds"，连 `mv`/`echo` 都失败），与 shell 配置无关，**且是瞬时的**：单条命令超时后**直接重试原命令**即可恢复（重试 2–3 次仍失败再判定环境失联）。**严禁用 `echo`/空命令做"探测"**——探测本身也会超时、且对恢复毫无意义，纯属浪费轮次。文件编辑/读取/搜索类工具完全不受影响，可并行使用。
+- **门禁命令（含 `pnpm check:all`、构建、`make-shim`）由 agent 自己跑**，不要甩给用户。长耗时命令加超时参数（如 `timeout 600 ...`），超时即重试或报告失败，不要无脑阻塞。
+- **⚠️ `read_lints` 绝不是门禁（2026-07-14 用户纠正 + 13:19 实测）**：`read_lints` 只承载 **TypeScript 语言服务 (tsserver) 诊断（Source: ts）**——能抓语法/类型红线（实测：用户在 `useTasksView.ts` L23 故意写非法字符，`read_lints` 报 `[ERROR] Line 23: Invalid character. (Source: ts, Code: 1127)`）。但 **`read_lints` 不接 Biome 诊断源——全程无任何 `Source: biome`**；Biome 的 lint 规则（noAssignInExpressions/useConst/noUselessElse 等）**不会**出现在 read_lints 里（故此前那些只有 Biome warning 的文件 read_lints 恒为 0，与文件是否打开无关）。**查 Biome 只能靠 `biome ci <path>` CLI（终端可用时）或用户 VS Code 自身红线**。`read_lints` 也不跑完整 `tsc --noEmit` 工程构建 / 单测，故仍**不能当「绿」的证据**。真实门禁是 **`node scripts/check-all.mjs`**（在 `app/` 根目录跑），报告写 `app/check-report.md`，逐套件完整日志在 `app/check-logs/<slug>.log`（如 `encv-mobile-unit-tests.log` 含每个测试文件 `✓/❯` 通过行，是确认某测试「是否被收集+通过」的权威来源）。**所有重构批次一律以 check-all.mjs 真实 PASS/FAIL 为准，不得用 read_lints 冒充门禁。**
+- **Biome 配置环境事实（2026-07-14）**：biome 配置已迁到仓库根 `/workspace/biome.jsonc`（原在 `app/biome.jsonc`，用户判定根目录才正确，已删除 app 那份）。真实 IDE 设置 `.vscode/settings.json` 有 `"biome.enabled": true`（VS Code 侧 Biome 已启用，用户那边应能看到内联报错/Problems）。**`.ide/settings.json` 是镜像拷贝源，不被任何 IDE 实时读取**（改它无即时作用，需部署/同步到真实位置才生效）。终端在本环境常不可用 → Biome 查错依赖用户侧 VS Code 红线，或终端可用时 `biome ci`。
 - 超时命令必须加超时参数（如 curl 加 `--max-time`）。
 - **codemogger 自动重索引（✅ 2026-07-12 已落地并端到端验证）**：codemogger 索引是静态快照，`references`/`context`/`search` 只读快照、原生不自动重索引；"边改边差"会读到旧代码。方案 = **不靠 agent 自觉，把"查询前自动增量重索引"下沉为工具强制**：
   - **前提已确认**：`index` 原生就是**基于内容 hash 的增量**（`cli.mjs` `getFileHash`→`storedHash===file.hash` 则 `skipped++`，只重解析/重嵌入变更文件，`removeStaleFiles` 清理已删文件）。所以查询前重索引对未变文件很廉价（只重 hash，不重嵌入）。**不是 mtime，是内容 hash，更可靠**。watch 守护进程不采用（长驻进程按"环境保持"规矩绝不能 kill，新增风险）。
@@ -36,3 +39,51 @@
   - **三坑已用 shim 缓解（2026-07-12，`codemogger-shim` 已重写 + `apply.sh` 第3步 install 生效）**：坑1（符号名精确匹配→空）shim 在裸 `references <sym>` 无结果且 codebase 根下存在同名 `<sym>.{ts,tsx,vue}` 时，自动以 `--module "@/relpath"` 回退重查（模块级匹配与符号名无关，最全，stderr 提示）；坑2（`--file` 需绝对路径）shim 检测 `--file` 且 target 相对时改写为绝对路径；坑3（只解析静态 import，动态 `import()` 不可见）**不写 patch**（改 cli.mjs walker 成本高、Vue 动态 import 少），靠 grep 复核。`CODEMOGGER_EXPERIMENT.md` §8.3.1 已记三坑根因与 shim/patch 决策表。
   - **完整安装顺序**（重装 codemogger 后必做，因补丁是打进易失的全局安装、非改仓库源码）：`npm i -g codemogger@0.1.5` → `cd app/codemogger-patch && ./apply.sh`（装 kotlin grammar + 主补丁 + stale-imports + shim）→ **手动补 context 补丁**（apply.sh 未含，README 定为第二阶段）：`cd /usr/local/lib && patch -p1 --forward < .../codemogger+0.1.5+context.patch`。四命令 index/search/references/context 齐全即成功。
   - ⚠️ **两层区分（易混）**：`patches/*.patch` 文件在仓库里是**耐久的源真相**，重装/重装系统都不丢；但 `apply.sh` 把补丁打进的是**全局安装目录的单体文件** `/usr/local/lib/node_modules/codemogger/dist/cli.mjs` 并用 shim 覆盖 `/usr/local/bin/codemogger` bin 软链——这两处都是 codemogger 包自己的文件，`npm install -g codemogger` 解压 tarball 会**原样覆盖 cli.mjs、重建指向原始 cli.mjs 的 bin 软链**，故"应用后的修改"在重装 codemogger 时被抹掉。所以"重装即失效"指**已应用的修改**，不是 patch 文件；`apply.sh` 就是幂等重放器，重装后跑一次即可恢复。详见 `app/codemogger-patch/README.md` 与 `/workspace/CODEMOGGER_EXPERIMENT.md`。
+
+## 任务系统 lift 重构状态补充（2026-07-13）
+
+- **`lib/workflow/types` 真源分歧已调和（REFACTOR_LIFT.md #16）**：app 版 417 行 vs shared 版 291 行，现已统一——shared 为唯一真源（含 `UnifiedTreeNode`/`isUnifiedTreeNode`/`TestCaseSpec`/`TestCaseResult`/`ALL_PHASES`/`isPhase`/`WORKFLOW_STORE_KEY`/`isUnifiedTimelineEntry`），app 原位为 `export * from "@encv/shared-components/lib/workflow/types"` 垫片。
+  - ⚠️ **#16 调和漏搬坑（2026-07-13 修复）**：app 原版 417 行有 `isUnifiedTimelineEntry` 类型守卫函数，shared 291 行版只搬了 `UnifiedTimelineEntry` 接口 + `isUnifiedTreeNode` 守卫、独漏该函数，导致 `unified-types.test.ts` 报 `isUnifiedTimelineEntry is not a function` + `TS2724`。已补回 `packages/shared-components/src/lib/workflow/types.ts`。**教训**：调和 `lib/workflow/types` 这类「app 版比 shared 版多 N 行」的真源分歧时，必须逐符号 diff 两侧 `export` 清单，不能只搬文档里列举的「知名类型」——函数/守卫极易漏搬，且门禁（单测 + typecheck）才会暴露。
+- **`Phase` 表示统一决策（长期有效）**：shared 用 **const 对象 + 联合类型**（`export const Phase = {...} as const; export type Phase = ...`），**不用 enum**。理由：grep 全仓无 `Phase[...]` 反向映射 / `Object.keys(Phase)` / `instanceof Phase` 等 enum-only 用法，`Phase.Created` 值访问 / `Record<Phase,string>` / `toPhase():Phase` 在 union 形式下完全等价，且 const-object 更 library-friendly（无 enum 运行时）。**未来提升任何用到 `Phase` 的模块，统一用 const-object 形式，勿 reintroduce enum。**
+- **`TaskTimeline.vue` / `TaskDetailModal.vue` 已提升进 shared**（`shared/components/`，import 全用 `@encv/shared-components/...`），app 副本删除、`components.d.ts` 改指 shared 路径、`tasks.*` i18n key 已在 `shared/i18n/tasks.ts` 双 locale 齐备。
+- ⚠️ **并行编辑风险**：长任务重构中用户会**并行修改同一批文件**（REFACTOR_LIFT.md / components.d.ts / 删 app 副本 / 给 shared 加类型或 i18n key）。表现：我对这些文件 `replace_in_file` 报 not found / `delete_file` 报 ENOENT（用户已做）。**对策：动文件前先 `read_file` 确认当前状态；replace 报 not found 时先核验是否被用户并行处理，勿强行覆盖破坏用户成果。** 验证类命令（`pnpm check:all` / `make-shim` / `codemogger`）交用户在本地终端跑（工具后端偶发 10s 启动超时，文件编辑/搜索类工具不受影响）。
+- **codemogger-patch 已安装（2026-07-13）**：`npm i -g codemogger@0.1.5` → `cd app/codemogger-patch && ./apply.sh`（kotlin grammar + 主补丁 + stale-imports + shim）→ 手动 `cd /usr/local/lib && patch -p1 --forward < .../codemogger+0.1.5+context.patch`。四命令 `index/search/references/context` 齐全；索引用本地 onnxruntime 嵌入（无需 API key）。索引范围用 `app/encv-mobile/src`（在 codebase 根目录下跑命令，或读命令带 `--db app/encv-mobile/src/.codemogger/index.db`）。`references`/`context`/`search` 由 shim 自动增量重索引。
+- **任务系统 lift 组件层已全部完成（#11–#19，2026-07-13）**：`automation/*` 9 组件 + `group-detail/PipelineTab` 已于 #19 提升进 shared（`PipelineTab` 顺带把 `tasks.pipelineEmpty` 沉入 shared i18n）。至此所有任务系统相关组件/composables/lib/api/常量/i18n 均在 shared 并留 app 垫片，shared 非测试代码 `@/`-free。**`pnpm check:all` 已 8/8 全绿（2026-07-13 收尾）**。
+
+## 去垫片纯化（结构性改革范式 · 2026-07-13）
+
+- **垫片是「迁移的谎言」，现已进入去垫片阶段**：模块提升进 shared 后，app 原位的
+  `export * / export {…} from "@encv/shared-components/..."` 垫片只是转发壳，不是真源。
+  纯化目标 = **删除全部垫片**，让 `@/` 经二级回退（tsconfig `@/*` + vite/vitest 的
+  `encv-alias-fallback` 插件）**直接解析到 shared 真源**。这样 shared 是唯一事实来源、
+  app 只剩组合 + DI 胶水。
+- **安全机制 `scripts/make-shim.mjs prune`**（已落地）：`prune`（dry-run 列出可删同名垫片 +
+  需先改 importer 的错位垫片）；`prune --apply` **只删同名垫片**，错位垫片保持不动避免静默断链。
+  `check-all` 在 0 垫片时输出「✔ 无残留垫片（已纯化）」。
+- **⚠️ 2026-07-14 更新：73 转发壳已全部删除，`prune --apply` 的「删后 @/x 自动落 shared 零风险」前提已失效。**
+  批 9 已摘除 `encv-alias-fallback` 的 shared 兜底分支（`vite.config.ts`/`vitest.config.ts` 的 `dirs`/`roots` 仅留本地 src），
+  现在 `@/x` **只解析本地**，不再回退 shared。因此**删壳前必须先把所有 `@/<壳>` 与相对路径 importer 改写为
+  `@encv/shared-components/<壳>`**（本次即此顺序：改 114 处 importer 跨 47 文件 → 删 73 壳，check-all PASS 8/FAIL 0 + vite build ✓）。
+  纯壳判定用结构判定（只有 `export ... from "@encv/shared-components/..."`，无 import/本地引用/其它 export），
+  精确排除 `api/encv.ts`(barrel)/`i18n/index.ts`/`useAgent.ts` 等混合文件。今后若再有壳需删，沿用「先改 importer 再删壳」。
+- **同名 vs 错位判定**：shim 相对路径 == shared 真源相对路径 → 同名（可删）；否则错位。
+  已知错位两例（#35 已手动清理）：`api/encv_core`→shared `api/core`（importer
+  `FullTextIndexDetail.vue:256` 改 `@/api/core`）、`features/alist-encrypt/useAlistEncrypt`→
+  shared `composables/useAlistEncrypt`（importers `useFilesView.ts:100`/`FileInfo.vue:205` 改
+  `@/composables/useAlistEncrypt`）。清理后 `grep` 两路径全仓 0 命中。
+- **后续**：终端恢复后跑 `node scripts/make-shim.mjs prune --apply` + `node scripts/make-shim.mjs
+  check-all` + `pnpm check:all`（8/8）。若 check:all 报「找不到导出」，说明有未预见的错位垫片，
+  回到 `prune` dry-run 列出的错位项按 #35 范式改 importer 再删（删除均 git 可还原，勿盲目回滚）。
+- **✅ 逻辑抽象改革（批 J / 2026-07-14）：格式化单一真源**：shared 内文件大小格式化 3 处重复
+  （`api/encv_files.formatFileSize` 经 `api/encv` barrel 公开导出 + `lib/buildReportZip.formatBytes` +
+  `components/TaskPerformanceSection.formatBytes`）已收敛到 **`lib/format.ts` 的 `formatBytes(bytes?)`**（1024 进制、
+  B/KB/MB/GB/TB、undefined→""、<=0→"0 B"、clamp 越界、toFixed(1)）。`formatFileSize` 是其公开别名（委托，消费方无感）。
+  门禁 PASS 8/FAIL 0 + vite build ✓。日期格式化（`useDateFormat.formatDateTime` vs `PerformanceTab.formatTime`）
+  与 `formatDateInput`（HTML date input 契约，不可动）仍分散，收敛 `formatTime→formatDateTime` 待用户拍板（涉及显示格式统一）。
+- ⚠️ **`encv-alias-fallback` 插件是路径拼接式回退**：`@/<rel>` 先试 `encv-mobile/src/<rel>` 再试
+  `packages/shared-components/src/<rel>`（含 `.ts/.vue/index` 候选）。删除同名垫片后 `@/x` 直接落
+  shared；但**名称错位垫片删除前必须改 importer**，否则插件拼不出 shared 真源路径会断链。
+- ✅ **`add_key` 两个引号 bug + `move-key` 重复注册缺陷（2026-07-13 踩坑，已于同日修复）**：原 `scripts/i18n_lib/addkey.py` 的 `add_key` 在批量下沉 i18n key 时会破坏 shared 字典——① value 含双引号（如 `"{query}"`）时双引号包裹插入 → TS 语法破坏（`Expected ',', got '{'`）；② shared 字典 en 键是 `en: {`（无引号），正则只匹配 `"en": {` → **en 部分从不插入**（MISSING_EN 根因）。**已修复**：`insert_key_into_section` 的 locale 正则改为 `["']?{locale}["']?` 同时匹配带/不带引号；value 含双引号时改用单引号包裹（与字典现有约定一致），同时含单双引号则转义双引号。另 `movekey.py` 的 `_register_shared_module` 原幂等判断只看 `, {module}]` 字面量、且数组末元素后无 `]` 会误判 → **已修复为数组元素级匹配** `(^|,\s*){module}(\s*,|\s*\]|\s*$)`，重复注册（如 `tasks` 出现两次）不再发生。**现在可安全用 `move-key "<prefix>." --from encv-mobile --to shared --keep --register` 批量下沉 i18n key**，无需再 `cp` 整文件绕过。
+- **⚠️ flat-shared + 子目录 consumer 导入坑（2026-07-13 实测修复）**：shared `components/` 是**扁平**的（无 `automation/`/`group-detail/`/`tasks/` 子目录），但 #17/#18/#19 把这几个子目录组件提升进 shared 扁平层后，**consumer 视图仍用 `@/components/<subdir>/X.vue` 旧路径**——`encv-alias-fallback` 只做「本地 src → shared 同路径」精确回退，无法把 `@/components/group-detail/X` 映射到扁平的 `shared/components/X`，导致解析失败。已修复的 6 处：`PluginTestsDetail.vue:259`（`automation/StepMiniBadge`）、`GroupDetail.vue:145-147`（`group-detail/{PerformanceTab,TasksTab,PipelineTab}`）、`Tasks.vue:617-618`（`tasks/{TaskDebugPanel,TaskVirtualList}`）——全部改写为 `@encv/shared-components/components/<FlatName>.vue`。**今后提升带子目录的组件时，必须同步改写所有 consumer 的 import 到扁平 shared 路径**，否则构建/单测静默失败（`pnpm check:all` 才暴露）。`agent/`、`developer/`、`shared/` 子目录仍在 app 或 shared 中保留，其 `@/components/<subdir>/` 导入正常。
+
+

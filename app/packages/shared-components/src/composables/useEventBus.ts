@@ -1,3 +1,5 @@
+import { onMounted, onUnmounted } from "vue";
+
 type Handler<T = any> = (data: T) => void;
 
 // 🆕 2026-06-10 修复：task:* 事件 payload 是完整的 Task 快照（不是只 3 个字段）
@@ -10,7 +12,7 @@ type Handler<T = any> = (data: T) => void;
 //   WsBackend.ts:88 → emit(msg.type, msg.data) 透传 → 完整结构
 //   HttpPollBackend.ts:100 → emit('task:created', {id, type, sourcePath}) ✗ 截断了！需要修
 //   ⚠️ 上面那条要同步改 backend/poll → emit 完整 task（见 HttpPollBackend.ts）
-import type { EncvTask } from "@/types/task";
+import type { EncvTask } from "@encv/shared-components/types/task";
 export interface EncvEvents {
   "task:update": Partial<EncvTask> & { id: string; type: string; status: string; progress: number };
   "task:progress": { id: string; progress: number; phase: string; speed: string; eta: string };
@@ -65,7 +67,7 @@ export interface EncvEvents {
   "simverse:pong": any;
 }
 
-type EventKey = keyof EncvEvents;
+export type EventKey = keyof EncvEvents;
 
 const listeners = new Map<string, Set<Handler>>();
 
@@ -92,6 +94,24 @@ function emit<K extends EventKey>(event: K, data: EncvEvents[K]) {
 
 function clear() {
   listeners.clear();
+}
+
+/**
+ * 组件作用域的事件订阅（K17）。
+ *
+ * 收敛「`eventBus.on` + 手动 `eventBus.off` + `onUnmounted` 清理」的样板：
+ * 在组件 setup 期间调用，自动在 `onMounted` 注册、`onUnmounted` 注销。
+ *
+ * ⚠️ 仅用于**组件作用域**的订阅。模块级单例（如 `useServerStatus` 故意跨组件保活、
+ * `useRealtimeTransport` 的 transport 级清理）应自行管理生命周期，不要套用本封装。
+ */
+export function useEventBusListener<K extends EventKey>(event: K, handler: Handler<EncvEvents[K]>): void {
+  onMounted(() => {
+    eventBus.on(event, handler);
+  });
+  onUnmounted(() => {
+    eventBus.off(event, handler);
+  });
 }
 
 export const eventBus = {

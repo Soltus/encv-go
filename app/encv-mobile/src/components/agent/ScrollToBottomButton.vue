@@ -21,7 +21,7 @@
 
 <script setup lang="ts">
 import { arrowDownOutline } from "ionicons/icons";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 withDefaults(
   defineProps<{

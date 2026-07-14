@@ -62,11 +62,11 @@ import type Artplayer from "artplayer";
 import { arrowBack, resize, time } from "ionicons/icons";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { getAlistEncryptStreamUrl, getFileStreamUrl } from "@/api/encv";
+import { getAlistEncryptStreamUrl, getFileStreamUrl } from "@encv/shared-components/api/encv";
 import type { ErrorDetailItem, ErrorType } from "@/components/ErrorStateCard.vue";
 import ErrorStateCard from "@/components/ErrorStateCard.vue";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
 import { isNative } from "@/plugins/GoProcess";
 
 const TAG = "[ArtPlayer]";

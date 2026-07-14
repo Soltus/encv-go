@@ -96,6 +96,14 @@ def main():
     p_addkey.add_argument("--app", help="应用名称")
     p_addkey.add_argument("--file", help="目标字典文件（不指定则自动猜测）")
 
+    p_movekey = subparsers.add_parser("move-key", help="迁移翻译 key（app→shared 或跨字典）")
+    p_movekey.add_argument("key", help="翻译 key / 尾星前缀(tasks.report*) / 尾点子树(tasks.performance.)")
+    p_movekey.add_argument("--from", dest="app", default="encv-mobile", help="源 app（默认 encv-mobile）")
+    p_movekey.add_argument("--to", dest="to", default="shared", help="目标：shared 或某 app 名（默认 shared）")
+    p_movekey.add_argument("--keep", action="store_true", help="保留源字典中的 key（仅复制）")
+    p_movekey.add_argument("--dry-run", dest="dry_run", action="store_true", help="只规划不落盘")
+    p_movekey.add_argument("--register", action="store_true", help="--to shared 时把模块注册进 sharedI18nModules")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -125,6 +133,9 @@ def main():
                     total_missing += len(errors)
                 print()
                 print(f"📊 全部结果: 共检查 {len(result['apps'])} 个 app, {total_missing} 个缺失 key")
+                from i18n_lib.perf import perf_tracker
+                print()
+                print(perf_tracker.generate_report())
                 return 1 if total_missing > 0 else 0
             else:
                 app_name = args.app or "encv-mobile"
@@ -167,6 +178,9 @@ def main():
                 print(f"   ❌ 错误: {result['errors']}")
                 print(f"   ⚠️  警告: {result['warnings']}")
                 print(f"   ℹ️  信息: {result['infos']}")
+                from i18n_lib.perf import perf_tracker
+                print()
+                print(perf_tracker.generate_report())
                 return 1 if result["errors"] else 0
             else:
                 app_name = args.app or "encv-mobile"
@@ -345,6 +359,10 @@ def main():
             print()
             print("💡 提示: 运行 'compile-json' 重新编译 JSON 供 Go 使用")
             return 0
+
+        elif args.command == "move-key":
+            from i18n_lib.movekey import cmd_move_key
+            return cmd_move_key(args)
 
         else:
             parser.print_help()

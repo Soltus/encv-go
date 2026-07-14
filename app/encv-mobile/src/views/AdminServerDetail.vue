@@ -37,11 +37,11 @@
 import { lockClosed, settingsOutline, shieldCheckmark } from "ionicons/icons";
 import { computed } from "vue";
 import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
-import { useConfig } from "@/composables/useConfig";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import type { FieldDef } from "@/config/schemaParser";
-import { parseSchema } from "@/config/schemaParser";
+import { useConfig } from "@encv/shared-components/composables/useConfig";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import type { FieldDef } from "@encv/shared-components/config/schemaParser";
+import { parseSchema } from "@encv/shared-components/config/schemaParser";
 
 const { t } = useI18n();
 const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig();

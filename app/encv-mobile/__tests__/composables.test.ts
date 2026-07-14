@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getExternalStreamUrl } from "@/api/encv";
+import { getExternalStreamUrl } from "@encv/shared-components/api/encv";
 import { clearThumbCache, getThumbCacheSize, THUMB_CACHE_MAX, useThumbnailCache } from "@/composables/useThumbnailCache";
 
 vi.mock("@/api/encv", () => ({

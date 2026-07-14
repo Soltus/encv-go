@@ -11,7 +11,7 @@
  *   - §Requirement: Context 图标
  */
 import { onUnmounted, type Ref, ref, watch } from "vue";
-import { getAgentApiBase } from "./useAgentApiBase";
+import { getAgentApiBase } from "@encv/shared-components/composables/useAgentApiBase";
 
 const AGENT_API_BASE = getAgentApiBase();
 

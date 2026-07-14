@@ -180,15 +180,15 @@
 </template>
 
 <script setup lang="ts">
-import { alertController } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import { cloudUploadOutline, downloadOutline, saveOutline as saveIcon, saveOutline, warningOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
-import { backupDatabase, exportDatabase, getDatabaseInfo, importDatabase } from "@/api/encv";
+import { backupDatabase, exportDatabase, getDatabaseInfo, importDatabase } from "@encv/shared-components/api/encv";
 import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
-import { useConfig } from "@/composables/useConfig";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import type { FieldDef } from "@/config/schemaParser";
+import { useConfig } from "@encv/shared-components/composables/useConfig";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import type { FieldDef } from "@encv/shared-components/config/schemaParser";
 import { restartBackend } from "@/plugins/GoProcess";
 
 const { t } = useI18n();
@@ -278,31 +278,23 @@ async function handleSaveConfig() {
 }
 
 async function askRestart() {
-  const alert = await alertController.create({
-    header: "需要重启生效",
-    message: "数据库引擎配置已修改，需要重启后端才能生效。是否立即重启？",
-    buttons: [
-      {
-        text: "稍后再说",
-        role: "cancel",
-      },
-      {
-        text: "立即重启",
-        handler: async () => {
-          showToast({ message: "正在重启后端...", color: "primary" });
-          try {
-            await restartBackend();
-            showToast({ message: "后端重启成功", color: "success" });
-            loadDatabaseInfo().catch(() => {});
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            showToast({ message: "重启失败: " + msg, color: "danger" });
-          }
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: "需要重启生效",
+      message: "数据库引擎配置已修改，需要重启后端才能生效。是否立即重启？",
+      confirmText: "立即重启",
+    })
+  ) {
+    showToast({ message: "正在重启后端...", color: "primary" });
+    try {
+      await restartBackend();
+      showToast({ message: "后端重启成功", color: "success" });
+      loadDatabaseInfo().catch(() => {});
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast({ message: "重启失败: " + msg, color: "danger" });
+    }
+  }
 }
 
 function handleResetConfig() {

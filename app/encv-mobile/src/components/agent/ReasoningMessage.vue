@@ -38,7 +38,7 @@ import { bulbOutline, chevronDownOutline, chevronUpOutline } from "ionicons/icon
 import { computed, ref } from "vue";
 import MessageAuthor from "@/components/agent/MessageAuthor.vue";
 import StatusBadge from "@/components/agent/StatusBadge.vue";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 const props = defineProps<{
   text: string;

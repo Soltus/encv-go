@@ -249,10 +249,10 @@ import {
   wifiOutline,
 } from "ionicons/icons";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { formatRelativeTime } from "@/composables/relativeTime";
-import { eventBus } from "@/composables/useEventBus";
-import { useI18n } from "@/composables/useI18n";
-import { useServerStatus } from "@/composables/useServerStatus";
+import { formatRelativeTime } from "@encv/shared-components/composables/relativeTime";
+import { eventBus } from "@encv/shared-components/composables/useEventBus";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useServerStatus } from "@encv/shared-components/composables/useServerStatus";
 
 const refreshIcon = refresh;
 const stopIcon = stopCircle;

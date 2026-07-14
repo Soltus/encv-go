@@ -361,18 +361,18 @@ import {
 } from "ionicons/icons";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { fetchConfig, getApiBaseUrl, updateConfig } from "@/api/encv";
+import { fetchConfig, getApiBaseUrl, updateConfig } from "@encv/shared-components/api/encv";
 import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
 import ServerStatusCard from "@/components/ServerStatusCard.vue";
 import { devlogApiError, devlogApiInfo } from "@/composables/devlogApiError";
 import { type DoctorReport, runSyncDoctor } from "@/composables/useAgent";
-import { getAgentApiBase, getAgentApiBaseContext } from "@/composables/useAgentApiBase";
-import { useConfig } from "@/composables/useConfig";
-import { getDeviceId } from "@/composables/useDeviceId";
-import { useI18n } from "@/composables/useI18n";
-import { useServerStatus } from "@/composables/useServerStatus";
-import { showToast } from "@/composables/useToast";
-import type { FieldDef } from "@/config/schemaParser";
+import { getAgentApiBase, getAgentApiBaseContext } from "@encv/shared-components/composables/useAgentApiBase";
+import { useConfig } from "@encv/shared-components/composables/useConfig";
+import { getDeviceId } from "@encv/shared-components/composables/useDeviceId";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useServerStatus } from "@encv/shared-components/composables/useServerStatus";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import type { FieldDef } from "@encv/shared-components/config/schemaParser";
 
 /** 健壮的错误序列化 — 处理 TypeError/DOMException/AbortError/普通 Error 等所有情况 */
 function serializeError(e: unknown): string {

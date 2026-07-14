@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 defineProps<{
   /** 父组件用 mockScenarioPaused 控制显隐；这里再做一次防御（v-if 双向） */

@@ -15,7 +15,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { checkServerStatus, getPersistedBackendIdentity } from "@/api/encv";
+import { checkServerStatus, getPersistedBackendIdentity } from "@encv/shared-components/api/encv";
 
 function makePingResponse(
   overrides: Partial<{

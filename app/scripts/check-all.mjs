@@ -2,15 +2,16 @@
 /**
  * check-all.mjs — pnpm 工作区全量检查 + 报告
  *
- * 覆盖（与 migration-task-system.md §6 门禁对齐，并补全 plugin-* 项目）：
+ * 覆盖（补全 plugin-* 项目）：
  *   1. Biome CI（根 workspace，lint 全部包，含 plugin-*）
- *   2. encv-mobile 类型检查（含 pretypecheck 的 i18n scan + var-check）
- *   3. shared-components 独立类型检查
+ *   2. encv-mobile 类型检查（vue-tsc --noEmit）
+ *   3. shared-components 独立类型检查（vue-tsc --noEmit）
  *   4. plugin-openlist/web 类型检查（vue-tsc --noEmit）
  *   5. plugin-mpv-player/web 类型检查（vue-tsc --noEmit）
  *   6. plugin-simverse/web 类型检查（vue-tsc --noEmit）
  *   7. i18n 全局 lint --all（仓库根 scripts/i18n-tool.py）
  *   8. encv-mobile 单元测试（vitest run，可用 --no-tests 跳过）
+ *   9. encv-mobile 构建校验（vite build，纯 web 打包；typecheck 已由套件 2 覆盖）
  *
  * 用法：
  *   pnpm check:all            # 跑全部
@@ -39,14 +40,18 @@ const SUITES = [
     name: "Biome CI (workspace)",
     cwd: APP_ROOT,
     cmd: "pnpm",
-    args: ["biome:ci"],
+    // 用 JSON reporter：biome 文本报告器会把"计数里有、但渲染缺失"的 error
+    // 吞掉（本次就遇到 Found 1 error 却无任何 ✖ 诊断）。JSON 结构化输出
+    // 必然包含 severity:error 的诊断，从根上解决 check:all 抓不到真正错误的问题。
+    args: ["exec", "biome", "ci", "--reporter=json", "."],
+    json: true,
     timeoutMs: 180_000,
   },
   {
     name: "encv-mobile typecheck",
     cwd: resolve(APP_ROOT, "encv-mobile"),
     cmd: "pnpm",
-    // 直接调 vue-tsc --incremental：跳过 pnpm typecheck 的 pretypecheck(i18n) 钩子
+    // 直接调 vue-tsc --noEmit：跳过 pnpm typecheck 的 pretypecheck(i18n) 钩子
     // （i18n 已由独立套件覆盖），并用增量缓存让热重跑 <5s。
     args: ["exec", "vue-tsc", "--noEmit", "--incremental"],
     timeoutMs: 300_000,
@@ -76,7 +81,7 @@ const SUITES = [
     name: "shared-components typecheck",
     cwd: resolve(APP_ROOT, "packages/shared-components"),
     cmd: "pnpm",
-    args: ["exec", "vue-tsc", "--noEmit", "-p", "tsconfig.json", "--incremental"],
+    args: ["exec", "vue-tsc", "--noEmit", "--incremental"],
     timeoutMs: 300_000,
   },
   {
@@ -93,6 +98,15 @@ const SUITES = [
     args: ["test:unit"],
     timeoutMs: 600_000,
     skip: NO_TESTS,
+  },
+  {
+    name: "encv-mobile build (vite)",
+    cwd: resolve(APP_ROOT, "encv-mobile"),
+    cmd: "pnpm",
+    // 纯 web 打包校验：typecheck 已由独立套件覆盖，这里只跑 vite build，
+    // 用于捕获"类型通过但构建期才报错"的回归（动态 import / 资源缺失 / 插件配置等）。
+    args: ["exec", "vite", "build"],
+    timeoutMs: 600_000,
   },
 ];
 
@@ -213,6 +227,82 @@ function fmtDuration(ms) {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+/**
+ * 从捕获输出里抽取"强错误特征行"，作为无结构化输出时的回退。
+ * 覆盖 tsc(error TS)、vitest(FAIL)、模块找不到、异常等常见失败信号。
+ */
+function extractErrorLines(text, max = 80) {
+  const lines = String(text || "").split("\n");
+  const STRONG = /(✖|error\s+TS\d+|cannot\s+find|module\s+not\s+found|failed\s+to\s+(load|resolve)|SyntaxError|TypeError|ReferenceError|deserialize|DEPRECATED|deprecated|✗|\bFAIL\b|not valid|did you mean|Usage:|Error:)/i;
+  const out = [];
+  for (const ln of lines) {
+    const t = ln.trim();
+    if (t && STRONG.test(t)) out.push(t);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
+/**
+ * 收集某个套件的"真正错误"，用于在终端与报告中直接呈现，
+ * 而不必翻开 check-logs 里成百上千行的原始输出。
+ *
+ * 优先走结构化输出（biome 的 JSON reporter）：biome 文本报告器会把
+ * "计数里有、但渲染缺失"的 error 吞掉，JSON 则必然包含 severity:error
+ * 的诊断。无结构化输出时回退到文本特征行抓取。
+ */
+function collectErrors(suite, r) {
+  if (suite.json) {
+    // biome 的 --json 会把完整 JSON 输出为单行，但前后可能混入非 JSON 文本
+    // （如 "The --json option is unstable..." 警告、"✖ Some errors..." 总结行），
+    // 直接 JSON.parse(整个 stdout) 会失败。这里先整体尝试，再逐行找 JSON 行。
+    const data = parseBiomeJson(r.stdout);
+    if (data) {
+      const diags = Array.isArray(data.diagnostics) ? data.diagnostics : [];
+      const errs = diags
+        .filter((d) => d && d.severity === "error")
+        .map((d) => {
+          const loc = d.location || {};
+          // biome JSON: location.path 是字符串，行列在 location.start.{line,column}
+          const start = loc.start || (loc.span && loc.span.start) || {};
+          const hasLine = start.line != null && start.line > 0;
+          const where = loc.path
+            ? `${loc.path}${hasLine ? `:${start.line}:${start.column != null ? start.column : 0}` : ""}`
+            : "(配置/全局)";
+          return `${where}  ${d.category || ""}  ${d.message || ""}`.replace(/\s+/g, " ").trim();
+        });
+      if (errs.length) return errs;
+    }
+  }
+  return extractErrorLines(`${r.stdout || ""}\n${r.stderr || ""}`);
+}
+
+/**
+ * 从可能混入非 JSON 文本的 biome --json 输出里稳健地取出 JSON 对象。
+ * 先整体 parse；失败则逐行找以 { 开头、} 结尾且能 parse 的行（biome 输出为单行）。
+ */
+function parseBiomeJson(stdout) {
+  // 关键：即便设了 NO_COLOR/FORCE_COLOR=0，biome 仍会在 JSON 前输出 ANSI 复位码
+  // (\x1b[0m)，导致 JSON.parse 与逐行 startsWith("{") 全部失败。必须先剥离 ANSI。
+  const s = stripAnsi(String(stdout || ""));
+  try {
+    return JSON.parse(s);
+  } catch {
+    // 继续逐行找
+  }
+  for (const line of s.split("\n")) {
+    const t = line.trim();
+    if (t.startsWith("{") && t.endsWith("}")) {
+      try {
+        return JSON.parse(t);
+      } catch {
+        // 试下一行
+      }
+    }
+  }
+  return null;
+}
+
 /** 运行单个套件：打印进度、写完整日志，返回结果对象 */
 async function runOne(suite) {
   if (suite.skip) {
@@ -229,16 +319,32 @@ async function runOne(suite) {
         ? c("yellow", "TIMEOUT")
         : c("red", r.status);
   console.log(`${tag}  ${c("dim", dur)}`);
+  const errors = r.status !== "PASS" ? collectErrors(suite, r) : [];
   if (r.status !== "PASS") {
-    const tail = (r.stderr || r.stdout || "").trim().split("\n").slice(-25).join("\n");
-    console.log(c("dim", "────────── 输出尾部 ──────────"));
-    console.log(tail);
-    console.log(c("dim", "──────────────────────────────"));
+    if (suite.json) {
+      // JSON 套件：终端只呈现提炼出的错误，不刷原始 JSON（避免上千行噪音）
+      console.log(c("dim", "────────── 错误（结构化提取） ──────────"));
+      if (errors.length) errors.forEach((e) => console.log(c("red", e)));
+      else {
+        // 结构化提取落空（如命令自身用法错误）：回退显示原始输出前若干行，
+        // 绝不把"命令挂了"这类问题掩盖成"(无错误)"。
+        console.log(c("yellow", "⚠ 未能从结构化输出提取错误，原始输出前 40 行："));
+        const raw = `${r.stdout || ""}\n${r.stderr || ""}`.trim().split("\n").slice(0, 40);
+        raw.forEach((l) => console.log(c("dim", l)));
+      }
+      console.log(c("dim", "──────────────────────────────────────────"));
+    } else {
+      // 完整输出原始结果（不截断），全量日志另存于 check-logs/<slug>.log
+      const out = (r.stderr || r.stdout || "").trim();
+      console.log(c("dim", "────────── 输出（完整，未截断） ──────────"));
+      console.log(out);
+      console.log(c("dim", "──────────────────────────────────────────"));
+    }
   }
   const slug = slugify(suite.name);
   const logFile = resolve(LOGS_DIR, `${slug}.log`);
   writeFileSync(logFile, stripAnsi(`${r.stdout || ""}\n${r.stderr || ""}`), "utf8");
-  return { ...suite, ...r, slug };
+  return { ...suite, ...r, slug, errors };
 }
 
 /** 带并发上限地运行所有套件，结果按传入顺序返回（保证报告表格顺序稳定） */
@@ -257,7 +363,7 @@ async function runAllConcurrent(suites, limit) {
 }
 
 async function main() {
-  console.log(c("bold", "══════════ pnpm 工作区全量检查 ══════════"));
+  console.log(c("bold", "═══════════ pnpm 工作区全量检查 ═══════════"));
   console.log(c("dim", `app-root: ${APP_ROOT}`));
   console.log(c("dim", `i18n-tool: ${I18N_TOOL}`));
   console.log("");
@@ -276,7 +382,7 @@ async function main() {
   const total = results.length;
 
   console.log("");
-  console.log(c("bold", "══════════ 汇总 ══════════"));
+  console.log(c("bold", "═══════════ 汇总 ═══════════"));
   console.log(`${c("green", "PASS")}    ${pass}`);
   console.log(`${c("red", "FAIL")}    ${fail}`);
   if (skip) console.log(`${c("yellow", "SKIP")}    ${skip}`);
@@ -286,7 +392,17 @@ async function main() {
   const lines = [];
   lines.push(`# pnpm 工作区检查报告`);
   lines.push("");
-  lines.push(`- 生成时间：${new Date().toISOString()}`);
+  // 用本地时区格式化（toISOString() 是 UTC，会与实际跑检查的时间差 8h，造成"时间不准"的错觉）
+  const _now = new Date();
+  const _pad = (n) => String(n).padStart(2, "0");
+  const _tz = -_now.getTimezoneOffset(); // 分钟，东正西负
+  const _tzSign = _tz >= 0 ? "+" : "-";
+  const _tzH = _pad(Math.floor(Math.abs(_tz) / 60));
+  const _tzM = _pad(Math.abs(_tz) % 60);
+  const localTs = `${_now.getFullYear()}-${_pad(_now.getMonth() + 1)}-${_pad(_now.getDate())} ` +
+    `${_pad(_now.getHours())}:${_pad(_now.getMinutes())}:${_pad(_now.getSeconds())} ` +
+    `(UTC${_tzSign}${_tzH}:${_tzM})`;
+  lines.push(`- 生成时间：${localTs}`);
   lines.push(`- app-root：\`${APP_ROOT}\``);
   lines.push("");
   lines.push(`| 检查 | 状态 | 耗时 |`);
@@ -305,6 +421,19 @@ async function main() {
       lines.push("");
       lines.push(`### ${r.name} — ${r.status}`);
       lines.push(`- 完整输出：[\`check-logs/${r.slug}.log\`](./check-logs/${r.slug}.log)`);
+      const errs = r.errors || [];
+      if (errs.length) {
+        lines.push("");
+        lines.push("<details><summary>错误摘要</summary>");
+        lines.push("");
+        lines.push("```");
+        errs.forEach((e) => lines.push(e));
+        lines.push("```");
+        lines.push("</details>");
+      } else {
+        lines.push("");
+        lines.push("> ⚠ 未能从输出中提取结构化错误，请直接查看上方日志文件。若日志是 biome 用法错误，说明 `--reporter` 在该版本不被 `ci` 支持，需改用 `biome check --reporter=json`。");
+      }
     }
   }
   writeFileSync(resolve(APP_ROOT, "check-report.md"), lines.join("\n"), "utf8");

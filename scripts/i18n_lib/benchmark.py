@@ -61,6 +61,24 @@ def cmd_benchmark(app_name: str | None = None):
     extract_used_keys(app_name, use_cache=True)
     load_all_dicts(app_name, use_cache=True)
 
+    print("\n📦 阶段 2.5: shared 字典去重 + move-key 覆盖")
+    print("-" * 60)
+
+    from .config import get_all_app_names
+    from .loader import _shared_cache
+    from .movekey import move_key
+
+    perf_tracker.start("多App字典加载(shared去重)")
+    for nm in get_all_app_names():
+        load_all_dicts(nm, use_cache=True)
+    perf_tracker.end("多App字典加载(shared去重)", len(_shared_cache))
+    print(f"\n   shared 字典解析次数: {len(_shared_cache)}（跨 app 复用，理想为 1）")
+
+    perf_tracker.start("move-key(干跑)规划")
+    mr = move_key("tasks.report", from_app="encv-mobile", to_target="shared", dry_run=True)
+    perf_tracker.end("move-key(干跑)规划", mr["matched"], {"dry_run": True})
+    print(f"   move-key 干跑: 匹配 {mr['matched']} 个 key（不落盘，安全覆盖新命令）")
+
     print("\n📦 阶段 3: 大规模压力测试（2万值级别）")
     print("-" * 60)
 

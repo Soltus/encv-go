@@ -430,7 +430,7 @@
 </template>
 
 <script setup lang="ts">
-import { alertController } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import {
   archiveOutline,
   checkmarkCircle,
@@ -459,12 +459,13 @@ import {
   warningOutline,
 } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
-import { fetchWebDavLocalInfo, type WebDavLocalInfo } from "@/api/encv";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import { useWebDavManifest } from "@/composables/useWebDavManifest";
-import { useWebDavAutomationTests } from "@/composables/useWebDavWorkflowAdapter";
-import type { TestCaseStatus, TestRun } from "@/types/webdav-test";
+import { fetchWebDavLocalInfo, type WebDavLocalInfo } from "@encv/shared-components/api/encv";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import { useWebDavManifest } from "@encv/shared-components/composables/useWebDavManifest";
+import { useWebDavAutomationTests } from "@encv/shared-components/composables/useWebDavWorkflowAdapter";
+import { formatDateTime } from "@encv/shared-components/composables/useDateFormat";
+import type { TestCaseStatus, TestRun } from "@encv/shared-components/types/webdav-test";
 
 const { t } = useI18n();
 const automation = useWebDavAutomationTests();
@@ -671,22 +672,15 @@ function refreshHistory() {
 }
 
 async function handleClearHistory() {
-  const alert = await alertController.create({
-    header: t("devtools.confirmClearHistory"),
-    message: t("devtools.confirmClearHistoryMsg"),
-    buttons: [
-      { text: t("common.cancel"), role: "cancel" },
-      {
-        text: t("common.confirm"),
-        role: "confirm",
-        handler: () => {
-          clearHistory();
-          showToast({ message: t("devtools.historyCleared"), duration: 1500, color: "success" });
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("devtools.confirmClearHistory"),
+      message: t("devtools.confirmClearHistoryMsg"),
+    })
+  ) {
+    clearHistory();
+    showToast({ message: t("devtools.historyCleared"), duration: 1500, color: "success" });
+  }
 }
 
 function openRunDetail(run: TestRun) {
@@ -695,8 +689,7 @@ function openRunDetail(run: TestRun) {
 
 function formatTime(iso: string): string {
   if (!iso) return "-";
-  const d = new Date(iso);
-  return d.toLocaleString("zh-CN", { hour12: false });
+  return formatDateTime(iso, { locale: "zh-CN" });
 }
 function formatDuration(start?: string, end?: string): string {
   if (!start || !end) return "-";

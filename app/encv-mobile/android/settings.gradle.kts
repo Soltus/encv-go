@@ -21,6 +21,8 @@ dependencyResolutionManagement {
         if (System.getenv("CI") == null) {
             maven { url = uri("https://mirrors.tencent.com/nexus/repository/maven-public/") }
         }
+        maven { url=uri ("https://mirrors.cloud.tencent.com/nexus/repository/maven-public/")}
+        maven { url=uri ("https://mirrors.tencent.com/nexus/repository/gradle-plugins/")}
         maven { url = uri("https://mirrors.tencent.com/repository/maven-tencent/") }
         maven { url = uri("https://maven.aliyun.com/repository/public") }
         maven { url = uri("https://maven.aliyun.com/repository/google") }

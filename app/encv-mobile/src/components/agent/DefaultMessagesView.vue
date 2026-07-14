@@ -237,8 +237,8 @@ import UserMessageBubble from "@/components/agent/UserMessageBubble.vue";
 import type { EngineRenderProps } from "@/composables/chatEngine";
 import { useRenderTurnItems } from "@/composables/renderTurnItems";
 import type { Decision, Message, ToolCall, ToolResult } from "@/composables/useAgent";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
 
 const props = defineProps<EngineRenderProps>();
 const { t } = useI18n();

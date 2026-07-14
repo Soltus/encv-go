@@ -31,9 +31,9 @@
  *  - 不含样式（class 名保留但 style 不写，测试只关心结构 + 交互 + 派生值）
  */
 import { defineComponent, h, computed, type PropType, type VNode } from 'vue'
-import type { useTasksList } from '@/composables/useTasksList'
-import type { useTaskStore } from '@/stores/taskStore'
-import type { EncvTask, TaskStatus } from '@/api/encv'
+import type { useTasksList } from '@encv/shared-components/composables/useTasksList'
+import type { useTaskStore } from '@encv/shared-components/stores/taskStore'
+import type { EncvTask, TaskStatus } from '@encv/shared-components/api/encv'
 
 /** 终态 status 集合（用于判断 group 是否还有可取消的 task） */
 const TERMINAL_STATUSES: ReadonlySet<TaskStatus> = new Set(['completed', 'failed', 'cancelled'])

@@ -141,7 +141,7 @@
             <ion-icon :icon="saveOutline" slot="start"></ion-icon>
             <ion-label>
               <h3>保存存档</h3>
-              <p v-if="saveInfo?.saved_at">上次保存: {{ formatTime(saveInfo.saved_at) }}</p>
+              <p v-if="saveInfo?.saved_at">上次保存: {{ formatDateTime(saveInfo.saved_at, { withSeconds: true }) }}</p>
               <p v-else>暂无存档</p>
             </ion-label>
             <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
@@ -233,6 +233,8 @@ import { onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { type SimverseSaveInfo, type SimverseStorageStatus, useSimverse } from "@/composables/useSimverse";
 import { isNativePluginMode, showDiagnosticPanel } from "@/plugins/SimVerse";
+import { formatBytes } from "@encv/shared-components/lib/format";
+import { formatDateTime } from "@encv/shared-components/composables/useDateFormat";
 
 const { t } = useI18n();
 const {
@@ -347,23 +349,6 @@ async function handleShowDiagnostic() {
   } catch (e) {
     showToast({ message: "打开诊断工具失败: " + String(e), color: "danger" });
   }
-}
-
-function formatTime(isoString: string): string {
-  if (!isoString) return "-";
-  try {
-    return new Date(isoString).toLocaleString();
-  } catch {
-    return isoString;
-  }
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / k ** i).toFixed(1)) + " " + sizes[i];
 }
 
 onMounted(async () => {

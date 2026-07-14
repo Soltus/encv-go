@@ -40,8 +40,8 @@ vi.mock("@/composables/useConfig", () => ({
   getFieldValue: (_keys: string[]) => TEST_SUFFIX,
 }));
 
-import type { FileItem } from "@/api/encv";
-import { decodeAlistFilename } from "@/api/encv";
+import type { FileItem } from "@encv/shared-components/api/encv";
+import { decodeAlistFilename } from "@encv/shared-components/api/encv";
 import { getAlistActions } from "@/features/alist-encrypt/actions";
 import { getAlistBadge } from "@/features/alist-encrypt/badge";
 import { createAlistEncryptFeature } from "@/features/alist-encrypt/index";

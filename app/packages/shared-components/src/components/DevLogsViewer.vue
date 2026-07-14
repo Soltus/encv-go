@@ -192,6 +192,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { copyToClipboard } from "../composables/useClipboard";
 import { useI18n } from "../composables/useI18n";
 import { showToast } from "../composables/useToast";
+import { useIonContentScroll } from "../composables/useIonContentScroll";
 import type { DropdownOption } from "./shared/FilterDropdown.vue";
 import FilterDropdown from "./shared/FilterDropdown.vue";
 import VirtualLogList from "./VirtualLogList.vue";
@@ -238,7 +239,16 @@ const activeTab = ref(props.tabs[0]?.value || "frontend");
 const searchText = ref("");
 const autoScrollEnabled = ref(true);
 const contentRef = ref<InstanceType<typeof IonContent> | null>(null);
-const scrollEl = ref<HTMLElement | null>(null);
+// 滚动容器获取收敛到 useIonContentScroll（K7）：shadowRoot .inner-scroll 查询 + 重试 + ResizeObserver 兜底
+const { scrollEl, initScrollElWithRetry } = useIonContentScroll(contentRef);
+// scroll 监听（scroll-to-top/bottom 状态）在 scrollEl 就绪后挂载
+watch(
+  scrollEl,
+  el => {
+    if (el) el.addEventListener("scroll", handleScroll);
+  },
+  { immediate: true }
+);
 const selectedLog = ref<T | null>(null);
 const showScrollToTop = ref(false);
 const showScrollToBottom = ref(false);
@@ -331,17 +341,6 @@ function handleScroll() {
   showScrollToBottom.value = !atBottom && !autoScrollEnabled.value;
 }
 
-async function ensureScrollEl() {
-  if (!contentRef.value) return;
-  try {
-    const el = await (contentRef.value as any).getScrollElement();
-    scrollEl.value = el;
-    el.addEventListener("scroll", handleScroll);
-  } catch (e) {
-    console.warn("[DevLogsViewer] getScrollElement failed:", e);
-  }
-}
-
 async function handleCopy() {
   const items = filteredItems.value;
   if (items.length === 0) return;
@@ -378,7 +377,7 @@ watch(
 );
 
 onMounted(() => {
-  ensureScrollEl();
+  initScrollElWithRetry();
 });
 
 onBeforeUnmount(() => {

@@ -64,7 +64,7 @@ import { onIonViewWillEnter } from "@ionic/vue";
 import { folder, globe, layersOutline, lockClosed, playCircle } from "ionicons/icons";
 import { useRouter } from "vue-router";
 import AgentEntry from "@/components/agent/AgentEntry.vue";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { isNative } from "@/plugins/GoProcess";
 
 const { t } = useI18n();

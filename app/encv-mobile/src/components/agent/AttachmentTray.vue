@@ -52,7 +52,7 @@
 <script setup lang="ts">
 import { closeOutline, documentTextOutline } from "ionicons/icons";
 import type { Attachment } from "@/composables/useAttachments";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 defineProps<{
   attachments: Attachment[];

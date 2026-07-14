@@ -27,7 +27,7 @@ import {
   rollbackTask,
   type TaskStatus,
   uploadFile,
-} from "@/api/encv";
+} from "@encv/shared-components/api/encv";
 
 // ==================== 类型定义 ====================
 

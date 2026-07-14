@@ -51,13 +51,13 @@ import {
 export * from "./useAgent_helpers";
 
 import { computed, ref } from "vue";
-import { showToast } from "@/composables/useToast";
-import { getAgentApiBaseContext, shouldSendAGUIHeader } from "./useAgentApiBase";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import { getAgentApiBaseContext, shouldSendAGUIHeader } from "@encv/shared-components/composables/useAgentApiBase";
 // SSE 解析器 + 事件分发（拆分到 useAgentStream.ts，通过 ctx 访问闭包状态）
 import { type AgentStreamContext, createAgentStream } from "./useAgentStream";
 import { type Attachment, type MessageContentPart, serializeAttachments } from "./useAttachments";
 import { useContextUsage } from "./useContextUsage";
-import { getDeviceIdSync } from "./useDeviceId";
+import { getDeviceIdSync } from "@encv/shared-components/composables/useDeviceId";
 
 export function useAgent() {
   const messages = ref<Message[]>([]);

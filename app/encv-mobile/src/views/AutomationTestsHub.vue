@@ -64,7 +64,7 @@
 <script setup lang="ts">
 import { cloudUploadOutline, flaskOutline, folderOpenOutline, serverOutline } from "ionicons/icons";
 import { useRouter } from "vue-router";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 const { t } = useI18n();
 const router = useRouter();

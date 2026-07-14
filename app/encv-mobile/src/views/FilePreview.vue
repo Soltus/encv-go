@@ -170,10 +170,10 @@ import {
   getFilePreviewUrl,
   getFileStreamUrl,
   proxySafeEncode,
-} from "@/api/encv";
-import { formatFileSize } from "@/api/encv_files";
-import { useI18n } from "@/composables/useI18n";
-import { formatContainerVersion } from "@/constants/containerVersion";
+} from "@encv/shared-components/api/encv";
+import { formatFileSize } from "@encv/shared-components/api/encv_files";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { formatContainerVersion } from "@encv/shared-components/constants/containerVersion";
 import { isNative, openPlayer } from "@/plugins/GoProcess";
 
 type PreviewType = "image" | "pdf" | "text" | "container" | "unsupported";

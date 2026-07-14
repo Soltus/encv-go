@@ -38,9 +38,9 @@
 import { chevronDownOutline, chevronUpOutline, copyOutline } from "ionicons/icons";
 import type { Component } from "vue";
 import StatusBadge from "@/components/agent/StatusBadge.vue";
-import { copyToClipboard } from "@/composables/useClipboard";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
+import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
 
 const props = defineProps<{
   icon: Component | string;

@@ -7,8 +7,8 @@
  * - 对齐 GitHub Actions 作业生命周期
  */
 
-import type { JobConclusion, JobRun, StepRun, StepStatus, WorkflowStatus } from "./types";
-import { isTerminalStep } from "./types";
+import type { JobConclusion, JobRun, StepRun, StepStatus, WorkflowStatus } from "@encv/shared-components/lib/workflow/types";
+import { isTerminalStep } from "@encv/shared-components/lib/workflow/types";
 
 // ==================== 合法转换表 ====================
 

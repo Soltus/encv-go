@@ -5,7 +5,7 @@
 // 业务依赖（getAgentApiBase/useContextUsage 等）都保留在主文件 useAgent.ts，
 // 因为这些只在主函数内部使用，搬过来反而冗余。
 
-import { getAgentApiBase } from "./useAgentApiBase";
+import { getAgentApiBase } from "@encv/shared-components/composables/useAgentApiBase";
 import type { MessageContentPart } from "./useAttachments";
 
 // =============================================================================

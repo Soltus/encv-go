@@ -254,18 +254,18 @@ function onBackendStatus(ev: Event) {
   };
 }
 
-import { fetchPlugins, type PluginMeta } from "@/api/encv";
-import { generateMockFilesViaBackend, resetMockFilesViaBackend } from "@/api/mockGenerator";
-import StepMiniBadge from "@/components/automation/StepMiniBadge.vue";
+import { fetchPlugins, type PluginMeta } from "@encv/shared-components/api/encv";
+import { generateMockFilesViaBackend, resetMockFilesViaBackend } from "@encv/shared-components/api/mockGenerator";
+import StepMiniBadge from "@encv/shared-components/components/StepMiniBadge.vue";
 import MockGenLogCard from "@/components/developer/MockGenLogCard.vue";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 // 🆕 2026-06-18 Task 13：抽取 FFMPEG 流程日志为独立 composable + 组件
-import { useMockGenLog } from "@/composables/useMockGenLog";
-import { showToast } from "@/composables/useToast";
-import { useWorkflowStore } from "@/composables/useWorkflowStore";
-import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
+import { useMockGenLog } from "@encv/shared-components/composables/useMockGenLog";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import { useWorkflowStore } from "@encv/shared-components/composables/useWorkflowStore";
+import { useWorkflowTaskService } from "@encv/shared-components/composables/useWorkflowTaskService";
 // 🆕 2026-06-22：extToRelativePath / formatContainerVersion 移到 pure 函数（src/lib/workflow/buildDynamicWorkflow.ts）
-import { MOCK_GENERATE_ROOT } from "@/lib/mockConstants";
+import { MOCK_GENERATE_ROOT } from "@encv/shared-components/lib/mockConstants";
 // 🆕 2026-06-22：buildDynamicWorkflow 派生逻辑抽到 pure 函数（0 行为变化）
 import { buildDynamicWorkflowPure } from "@/lib/workflow/buildDynamicWorkflow";
 

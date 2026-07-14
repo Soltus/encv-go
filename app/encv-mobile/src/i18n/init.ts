@@ -1,5 +1,5 @@
 import { initSharedI18n } from "@encv/shared-components/i18n";
-import { registerFieldKeyMap, registerI18nModules, registerSectionTitleMap } from "@/composables/useI18n";
+import { registerFieldKeyMap, registerI18nModules, registerSectionTitleMap } from "@encv/shared-components/composables/useI18n";
 import agent from "@/i18n/agent";
 import extensions from "@/i18n/extensions";
 import files from "@/i18n/files";

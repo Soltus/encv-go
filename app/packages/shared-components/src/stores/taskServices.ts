@@ -9,7 +9,8 @@
 // 应用层（encv-mobile）在 main.ts 启动期调用 setTaskServices(...) 注入真实实现；
 // 未注册时返回安全空实现（不崩溃，仅行为为空），便于 shared 自身类型检查与测试。
 
-import type { EncvTask } from "@/types/task";
+import type { BatchTaskSpec, EncvTask, PredictPluginResponse, RunInfo, RunSummary, TaskType } from "@encv/shared-components/types/task";
+import type { TriggeredBy } from "../lib/workflow/types";
 
 /** 搜索模式（与后端 search_mode 对齐） */
 export type SearchMode = "none" | "strict" | "combined" | "greedy";
@@ -30,6 +31,24 @@ export interface TaskServices {
   searchTasksVector(query: string, limit?: number): Promise<{ results: EncvTask[]; search_mode: SearchMode }>;
   /** 按 runId 分页拉取 task（来自应用层 api/encv_tasks） */
   getTasks(params?: { runId?: string; offset?: number; limit?: number }): Promise<EncvTask[]>;
+  /** 拉取所有 run 列表（带 summary，来自应用层 api/encv_tasks） */
+  listRuns(): Promise<RunInfo[]>;
+  /** 拉取单个 run 的 summary（来自应用层 api/encv_tasks） */
+  getRunSummary(runId: string): Promise<RunSummary>;
+  /** 批量创建 task（来自应用层 api/encv_tasks，后端生成 UUID） */
+  batchCreateTasks(specs: BatchTaskSpec[], runId?: string, triggeredBy?: TriggeredBy): Promise<EncvTask[]>;
+  /** 取消整个 run（来自应用层 api/encv_tasks） */
+  cancelRun(runId: string): Promise<void>;
+  /** 插件预测（来自应用层 api/encv_plugins，经 @/api/encv 再导出） */
+  predictPlugin(sourcePath: string, type: TaskType): Promise<PredictPluginResponse>;
+  /** 取消单个 task（来自应用层 api/encv_tasks） */
+  cancelTask(id: string): Promise<void>;
+  /** 重试单个 task（来自应用层 api/encv_tasks） */
+  retryTask(id: string): Promise<void>;
+  /** 删除单个 task（来自应用层 api/encv_tasks） */
+  deleteTask(id: string): Promise<void>;
+  /** 将 task 追加进 store（来自应用层 stores/taskStore 的 appendTask） */
+  appendTask(task: EncvTask): void;
   /** IndexedDB 持久化（来自应用层 lib/taskPersistence） */
   persistence: TaskPersistence;
 }
@@ -58,6 +77,23 @@ const NULL_TASK_SERVICES: TaskServices = {
   async getTasks() {
     return [];
   },
+  async listRuns() {
+    return [];
+  },
+  async getRunSummary() {
+    return { runId: "", total: 0, passed: 0, failed: 0, running: 0, pending: 0, cancelled: 0, percent: 0 };
+  },
+  async batchCreateTasks() {
+    return [];
+  },
+  async cancelRun() {},
+  async predictPlugin() {
+    return { candidates: [], pluginName: null, taskOptions: null };
+  },
+  async cancelTask() {},
+  async retryTask() {},
+  async deleteTask() {},
+  appendTask() {},
   persistence: {
     async loadAllTasks() {
       return [];

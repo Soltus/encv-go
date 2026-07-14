@@ -5,35 +5,55 @@
 import { evaluateCondition } from "@encv/shared-components/lib/workflow/conditionEvaluator";
 import { expandMatrix } from "@encv/shared-components/lib/workflow/matrixExpander";
 import { getNextReadyJobs, resolveExecutionOrder } from "@encv/shared-components/lib/workflow/scheduler";
-import { canTransition, computeJobConclusion, inferWorkflowStatus, transition } from "@encv/shared-components/lib/workflow/stateMachine";
+import {
+  computeJobConclusion,
+  inferWorkflowStatus,
+  transition,
+  validateTransition,
+} from "@encv/shared-components/lib/workflow/state-machine";
 import type { JobRun, StepRun, StepStatus } from "@encv/shared-components/lib/workflow/types";
 import { describe, expect, it } from "vitest";
 
 // ==================== State Machine ====================
 
-describe("canTransition", () => {
+describe("validateTransition (loose, default)", () => {
   it("允许 pending → submitted", () => {
-    expect(canTransition("pending", "submitted")).toBe(true);
+    expect(validateTransition("pending", "submitted")).toBe(true);
   });
   it("允许 pending → cancelled", () => {
-    expect(canTransition("pending", "cancelled")).toBe(true);
+    expect(validateTransition("pending", "cancelled")).toBe(true);
   });
-  it("拒绝 pending → running（必须经过 submitted → queued）", () => {
-    expect(canTransition("pending", "running")).toBe(false);
+  it("允许跳级 pending → running（宽松，兼容后端跳发事件）", () => {
+    expect(validateTransition("pending", "running")).toBe(true);
   });
   it("拒绝终态转出", () => {
-    expect(canTransition("success", "running")).toBe(false);
-    expect(canTransition("failure", "queued")).toBe(false);
-    expect(canTransition("cancelled", "pending")).toBe(false);
+    expect(validateTransition("success", "running")).toBe(false);
+    expect(validateTransition("failure", "queued")).toBe(false);
+    expect(validateTransition("cancelled", "pending")).toBe(false);
   });
   it("允许 queued → running", () => {
-    expect(canTransition("queued", "running")).toBe(true);
+    expect(validateTransition("queued", "running")).toBe(true);
   });
   it("允许 running → success/failure/cancelled/timed_out", () => {
-    expect(canTransition("running", "success")).toBe(true);
-    expect(canTransition("running", "failure")).toBe(true);
-    expect(canTransition("running", "cancelled")).toBe(true);
-    expect(canTransition("running", "timed_out")).toBe(true);
+    expect(validateTransition("running", "success")).toBe(true);
+    expect(validateTransition("running", "failure")).toBe(true);
+    expect(validateTransition("running", "cancelled")).toBe(true);
+    expect(validateTransition("running", "timed_out")).toBe(true);
+  });
+});
+
+describe("validateTransition (strict)", () => {
+  it("严格模式拒绝 pending → running（必须经过 submitted → queued）", () => {
+    expect(validateTransition("pending", "running", { strict: true })).toBe(false);
+  });
+  it("严格模式允许 pending → submitted", () => {
+    expect(validateTransition("pending", "submitted", { strict: true })).toBe(true);
+  });
+  it("严格模式允许 pending → cancelled", () => {
+    expect(validateTransition("pending", "cancelled", { strict: true })).toBe(true);
+  });
+  it("严格模式拒绝终态转出", () => {
+    expect(validateTransition("success", "running", { strict: true })).toBe(false);
   });
 });
 

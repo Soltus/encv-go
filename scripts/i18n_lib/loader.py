@@ -12,6 +12,14 @@ from collections import defaultdict
 from .config import CACHE_DIR, get_app_config, resolve_path
 from .perf import perf_tracker
 
+import threading
+
+# shared 字典进程内只解析一次（跨 app 复用），避免每个 app 重复起 node 子进程
+_shared_lock = threading.Lock()
+_shared_cache: dict[str, dict] = {}
+_mem_cache: dict[str, dict] = {}
+SHARED_I18N_MARKER = "shared-components/src/i18n"
+
 PARSER_VERSION = "3.0.0"
 SCHEMA_VERSION = 2
 
@@ -147,6 +155,50 @@ def parse_i18n_files(filepaths: list[str]) -> dict[str, dict[str, str]]:
     return data
 
 
+def _split_shared(filepaths: list[str]) -> tuple[list[str], list[str]]:
+    """把 i18n 文件列表拆成 (shared 文件, app 文件)。shared 文件只解析一次。"""
+    shared, app = [], []
+    for f in filepaths:
+        norm = f.replace("\\", "/")
+        if SHARED_I18N_MARKER in norm:
+            shared.append(f)
+        else:
+            app.append(f)
+    return shared, app
+
+
+def _get_shared_dict(shared_files: list[str]) -> dict[str, dict[str, str]]:
+    """解析 shared 字典，进程内仅解析一次（多线程共享，防缓存击穿）。
+
+    双重检查锁定：第一个线程持锁解析，其余线程在锁上等待，
+    醒来后命中缓存直接返回，避免多个 node 子进程重复解析 shared。
+    """
+    if not shared_files:
+        return {"zh-CN": {}, "en": {}}
+    h = _compute_files_hash([str(resolve_path(f)) for f in shared_files])
+    perf_tracker.start("Shared字典加载")
+
+    # 第一次检查（无锁快路径）
+    cached = _shared_cache.get(h)
+    if cached is not None:
+        perf_tracker.end("Shared字典加载", len(cached.get("zh-CN", {})), {"cached": True})
+        return cached
+
+    with _shared_lock:
+        # 第二次检查（持锁）：等待期间可能已被其它线程解析
+        cached = _shared_cache.get(h)
+        if cached is not None:
+            perf_tracker.end("Shared字典加载", len(cached.get("zh-CN", {})), {"cached": "wait"})
+            return cached
+        # 持锁解析：保证进程内 shared 只冷解析一次
+        parsed = parse_i18n_files(shared_files)
+        result = {k: dict(v) for k, v in parsed.items() if not str(k).startswith("_")}
+        _shared_cache[h] = result
+
+    perf_tracker.end("Shared字典加载", len(result.get("zh-CN", {})), {"cached": False})
+    return result
+
+
 def load_all_dicts(
     app_name: str | None = None,
     use_cache: bool = True,
@@ -162,30 +214,44 @@ def load_all_dicts(
 
     files_hash = _compute_files_hash(existing_files)
 
+    # 进程内内存缓存：同一进程内重复加载（benchmark 冷/热、并行 lint）直接命中
+    if files_hash in _mem_cache:
+        cached = _mem_cache[files_hash]
+        perf_tracker.end("字典加载", len(cached.get("zh-CN", {})), {"cached": "mem", "parser": "node"})
+        return {k: v for k, v in cached.items()}
+
     if use_cache:
         cached = _load_from_cache(app_config.name, files_hash)
         if cached:
-            perf_tracker.end(
-                "字典加载",
-                len(cached.get("zh-CN", {})),
-                {"cached": True, "parser": "node"},
-            )
-            return {k: v for k, v in cached.items() if not k.startswith("_")}
+            clean = {k: v for k, v in cached.items() if not str(k).startswith("_")}
+            _mem_cache[files_hash] = clean
+            perf_tracker.end("字典加载", len(clean.get("zh-CN", {})), {"cached": True, "parser": "node"})
+            return clean
 
-    parsed = parse_i18n_files(app_config.i18n_files)
+    # shared 字典仅解析一次（跨 app 复用）；app 专属文件各自解析
+    shared_files, app_files = _split_shared(app_config.i18n_files)
+    shared_dict = _get_shared_dict(shared_files)
+    app_dict = parse_i18n_files(app_files) if app_files else {"zh-CN": {}, "en": {}}
 
-    result = {}
-    for locale, pairs in parsed.items():
-        if locale.startswith("_"):
-            result[locale] = pairs
-        else:
-            result[locale] = dict(pairs)
+    result: dict[str, dict[str, str]] = {}
+    for locale in set(list(shared_dict.keys()) + list(app_dict.keys())):
+        if str(locale).startswith("_"):
+            continue
+        merged = {}
+        merged.update(app_dict.get(locale, {}))
+        merged.update(shared_dict.get(locale, {}))  # shared 覆盖 app（保持 append-last 语义）
+        result[locale] = merged
 
     if use_cache:
         _save_to_cache(app_config.name, files_hash, result)
 
+    _mem_cache[files_hash] = result
     zh_count = len(result.get("zh-CN", {}))
-    perf_tracker.end("字典加载", zh_count, {"cached": False, "parser": "node"})
+    perf_tracker.end(
+        "字典加载",
+        zh_count,
+        {"cached": False, "parser": "node", "shared_keys": len(shared_dict.get("zh-CN", {}))},
+    )
     return result
 
 

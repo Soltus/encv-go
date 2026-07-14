@@ -17,7 +17,11 @@ const SHARED_SRC = path.resolve(__dirname, '../packages/shared-components/src')
 // 每个 project 是独立的 Vite 配置，必须各自带 plugins，否则 `@/...` 无人解析
 // （连本地 src 下的文件都 Failed to resolve）。因此抽成 BASE_PLUGINS，根配置
 // 与各 project 都引用同一份。
-const BASE_PLUGINS = [vue(), encvAliasFallback({ roots: [SRC_DIR, SHARED_SRC] })]
+// 2026-07-14 批 9：移除 shared 兜底分支（roots 仅留本地 src）。
+// 此前 encv-alias-fallback 是 app 唯一 @/ 解析器，且「本地优先、shared 次之」；
+// 批 9 已把全部 136 处落到 shared 的 @/x 改写为显式 @encv/shared-components/x
+// （_measure-fallback.mjs 归零），故 shared 兜底已成死代码，摘除后 @/ 严格只解析本地。
+const BASE_PLUGINS = [vue(), encvAliasFallback({ roots: [SRC_DIR] })]
 
 // ═══════════════════════════════════════════════════════════════════
 // 2026-07-02 性能优化：和 Go 对齐的"分层 + 守卫"模式
@@ -67,7 +71,7 @@ const FAST_INCLUDE = [
   'src/composables/__tests__/useSearchInput.test.ts',
   'src/composables/__tests__/useSectionDerivation.test.ts',
   'src/composables/__tests__/useToolCallAccumulator.test.ts',
-  'src/composables/__tests__/workflow-core.test.ts',
+  '../packages/shared-components/src/composables/__tests__/workflow-core.test.ts',
   'src/composables/activeStatus.test.ts',
   'src/composables/appServerRealtimeReducer.test.ts',
   'src/composables/inlineFileReference.test.ts',
@@ -75,6 +79,13 @@ const FAST_INCLUDE = [
   // lib: 纯数据生成/状态机
   'src/lib/workflow/__tests__/state-machine.test.ts',
   'src/lib/workflow/__tests__/unified-types.test.ts',
+  // shared: 纯逻辑（SSE 解析 + composable 状态机）
+  '../packages/shared-components/src/api/__tests__/mockGenerator.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useMockGenLog.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useDisclosure.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useClickOutside.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useModal.test.ts',
+  '../packages/shared-components/src/lib/__tests__/taskEvent.test.ts',
   // utils: RingBuffer bench（纯算法）
   'src/utils/RingBuffer.bench.test.ts',
   // view 层纯逻辑（无模块级状态）
@@ -97,8 +108,8 @@ const ISOLATED_INCLUDE = [
   'src/components/shared/__tests__/PhaseIcon.test.ts',
   'src/components/shared/__tests__/RelevanceBadge.test.ts',
   'src/components/shared/__tests__/UnifiedTimelineCard.test.ts',
-  'src/components/tasks/__tests__/TaskDebugPanel.test.ts',
-  'src/components/tasks/__tests__/TaskVirtualList.test.ts',
+  '../packages/shared-components/src/components/__tests__/TaskDebugPanel.test.ts',
+  '../packages/shared-components/src/components/__tests__/TaskVirtualList.test.ts',
   'src/composables/__tests__/dev-start-guard.test.ts',
   'src/composables/__tests__/path-chain-e2e.test.ts',
   'src/composables/__tests__/realtime/HttpPollBackend.test.ts',
@@ -109,7 +120,7 @@ const ISOLATED_INCLUDE = [
   'src/composables/__tests__/useFileList.clientFilter.test.ts',
   'src/composables/__tests__/usePathResolver.test.ts',
   'src/composables/__tests__/usePinchZoom.test.ts',
-  'src/composables/__tests__/useProxiedFetch.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useProxiedFetch.test.ts',
   'src/composables/__tests__/useRealtimeTransport.test.ts',
   'src/composables/__tests__/useTaskTrigger.test.ts',
   'src/composables/__tests__/useTaskViewCompute.test.ts',
@@ -120,7 +131,8 @@ const ISOLATED_INCLUDE = [
   'src/composables/__tests__/useTasksList.escape-reverse.test.ts',
   'src/composables/__tests__/useTasksList.grouping.test.ts',
   'src/composables/__tests__/useTestCaseGeneration.test.ts',
-  'src/composables/__tests__/useVectorSearchStatus.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useVectorSearchStatus.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useWebDavWorkflowAdapter.test.ts',
   'src/composables/__tests__/useWorkflowStore.test.ts',
   'src/composables/__tests__/useWorkflowTaskService.test.ts',
   'src/composables/useAttachments.test.ts',
@@ -162,7 +174,6 @@ function sharedTestConfig() {
       // 复杂 component test → cypress.component
       'src/views/__tests__/**/*.component.test.ts',
       'src/components/agent/**',
-      'src/components/tasks/__tests__/**',
       'src/engines/__tests__/**',
       // 旧的根目录集成测试 → cypress
       '__tests__/ApprovalCard.test.ts',

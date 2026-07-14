@@ -1,5 +1,6 @@
 import { type ComputedRef, computed } from "vue";
-import type { EncvTask } from "@/api/encv";
+import { normalizeExt } from "@encv/shared-components/lib/string";
+import type { EncvTask } from "@encv/shared-components/types/task";
 
 /**
  * Section 维度枚举
@@ -68,7 +69,7 @@ const CATEGORY_LABELS: Record<string, string> = {
  * ext → category 映射（公开，方便单测 / 其他模块复用）
  */
 export function categoryForExt(ext: string): string {
-  const e = ext.toLowerCase().replace(/^\./, "");
+  const e = normalizeExt(ext);
   return EXT_TO_CATEGORY[e] ?? "misc";
 }
 

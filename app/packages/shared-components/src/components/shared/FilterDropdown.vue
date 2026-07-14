@@ -50,7 +50,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
+import { useDisclosure } from "../../composables/useDisclosure";
+import { useClickOutside } from "../../composables/useClickOutside";
 
 export interface DropdownOption {
   value: string;
@@ -88,7 +90,7 @@ const emit = defineEmits<{
   (e: "change", value: string[]): void;
 }>();
 
-const isOpen = ref(false);
+const { isOpen, toggle, close } = useDisclosure();
 const searchQuery = ref("");
 const dropdownRef = ref<HTMLElement | null>(null);
 const searchInputRef = ref<HTMLInputElement | null>(null);
@@ -142,7 +144,7 @@ function toggleOption(value: string) {
   } else {
     emit("update:modelValue", [value]);
     emit("change", [value]);
-    isOpen.value = false;
+    close();
   }
 }
 
@@ -158,7 +160,7 @@ function clearAll() {
 }
 
 function toggleOpen() {
-  isOpen.value = !isOpen.value;
+  toggle();
   if (isOpen.value) {
     nextTick(() => {
       if (props.searchable && searchInputRef.value) {
@@ -172,28 +174,8 @@ function onSearchInput() {
   // 搜索时不需要特殊处理，computed 自动更新
 }
 
-function handleClickOutside(e: MouseEvent) {
-  if (!dropdownRef.value) return;
-  if (!dropdownRef.value.contains(e.target as Node)) {
-    isOpen.value = false;
-  }
-}
-
-function handleEscape(e: KeyboardEvent) {
-  if (e.key === "Escape" && isOpen.value) {
-    isOpen.value = false;
-  }
-}
-
-onMounted(() => {
-  document.addEventListener("mousedown", handleClickOutside);
-  document.addEventListener("keydown", handleEscape);
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener("mousedown", handleClickOutside);
-  document.removeEventListener("keydown", handleEscape);
-});
+// 外部点击 + Escape 关闭（替代原手搓的 mousedown/keydown 监听 + 生命周期清理）
+useClickOutside(dropdownRef, () => close());
 
 watch(isOpen, open => {
   if (!open) searchQuery.value = "";

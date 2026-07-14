@@ -113,8 +113,8 @@ import {
 import { computed, ref } from "vue";
 import StatusBadge from "@/components/agent/StatusBadge.vue";
 import type { ToolCall } from "@/composables/useAgent";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
 
 const props = defineProps<{
   toolCall: ToolCall;

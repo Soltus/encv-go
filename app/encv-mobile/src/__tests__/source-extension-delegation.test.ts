@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { type ContainerExtensionsResponse, fetchContainerExtensions } from "@/api/encv";
-import { usePluginExtensions } from "@/composables/usePluginExtensions";
+import { type ContainerExtensionsResponse, fetchContainerExtensions } from "@encv/shared-components/api/encv";
+import { usePluginExtensions } from "@encv/shared-components/composables/usePluginExtensions";
 
 vi.mock("@/api/encv", () => ({
   fetchContainerExtensions: vi.fn(),

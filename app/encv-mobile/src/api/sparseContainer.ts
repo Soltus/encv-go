@@ -14,7 +14,7 @@
  * 🆕 2026-06-11 v1：与 internal/v2/testutil/sparse_container.go 对齐
  */
 
-import { getApiBaseUrl } from "./encv";
+import { getApiBaseUrl } from "@encv/shared-components/api/core";
 
 export interface SparseContainerRequest {
   outputDir: string;

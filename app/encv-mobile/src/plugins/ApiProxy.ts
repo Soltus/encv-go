@@ -66,6 +66,10 @@ export interface ApiProxyPlugin {
   streamStart(options: ProxyFetchOptions): Promise<ProxyStreamStartResult>;
   /** 主动取消一个 stream（SSE 断开 / 切 tab） */
   streamCancel(options: { streamId: string }): Promise<void>;
+  /** 订阅插件事件（stream:data / stream:end）。 */
+  addListener(eventName: string, listener: (event: any) => void): Promise<any>;
+  /** 注销某事件的全部监听器。 */
+  removeAllListeners(eventName: string): Promise<void>;
 }
 
 const ApiProxy = registerPlugin<ApiProxyPlugin>("ApiProxy", {

@@ -94,7 +94,6 @@
 <script setup lang="ts">
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
-  alertController,
   IonBackButton,
   IonButtons,
   IonContent,
@@ -111,6 +110,7 @@ import {
   IonTitle,
   IonToolbar,
 } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import { cloudDownloadOutline, cloudUploadOutline, saveOutline, trashOutline } from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { type SimverseSaveInfo, type SimverseStorageStatus, useSimverse } from "@/composables/useSimverse";
@@ -139,79 +139,64 @@ async function doSave() {
   try {
     await saveWorld();
     await loadData();
-    const alert = await alertController.create({
+    await useConfirmDialog().showAlert({
       header: t("simverse.saveSuccess"),
       message: t("simverse.saveSuccessDesc"),
-      buttons: ["OK"],
+      okText: "OK",
     });
-    await alert.present();
   } catch (e: any) {
-    const alert = await alertController.create({
+    await useConfirmDialog().showAlert({
       header: t("errors.error"),
       message: e.message || "Save failed",
-      buttons: ["OK"],
+      okText: "OK",
     });
-    await alert.present();
   } finally {
     saving.value = false;
   }
 }
 
 async function doLoad() {
-  const alert = await alertController.create({
-    header: t("simverse.confirmLoad"),
-    message: t("simverse.confirmLoadDesc"),
-    buttons: [
-      { text: t("settings.cancel"), role: "cancel" },
-      {
-        text: t("simverse.load"),
-        handler: async () => {
-          try {
-            await loadWorld();
-            await loadData();
-            const ok = await alertController.create({
-              header: t("simverse.loadSuccess"),
-              message: t("simverse.loadSuccessDesc"),
-              buttons: ["OK"],
-            });
-            await ok.present();
-          } catch (e: any) {
-            const err = await alertController.create({
-              header: t("errors.error"),
-              message: e.message || "Load failed",
-              buttons: ["OK"],
-            });
-            await err.present();
-          }
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("simverse.confirmLoad"),
+      message: t("simverse.confirmLoadDesc"),
+      confirmText: t("simverse.load"),
+    })
+  ) {
+    try {
+      await loadWorld();
+      await loadData();
+      await useConfirmDialog().showAlert({
+        header: t("simverse.loadSuccess"),
+        message: t("simverse.loadSuccessDesc"),
+        okText: "OK",
+      });
+    } catch (e: any) {
+      await useConfirmDialog().showAlert({
+        header: t("errors.error"),
+        message: e.message || "Load failed",
+        okText: "OK",
+      });
+    }
+  }
 }
 
 async function confirmDelete() {
-  const alert = await alertController.create({
-    header: t("simverse.confirmDelete"),
-    message: t("simverse.confirmDeleteDesc"),
-    buttons: [
-      { text: t("settings.cancel"), role: "cancel" },
-      {
-        text: t("simverse.delete"),
-        role: "destructive",
-        handler: async () => {
-          // TODO: delete save API
-          const err = await alertController.create({
-            header: t("simverse.notImplemented"),
-            message: t("simverse.notImplementedDesc"),
-            buttons: ["OK"],
-          });
-          await err.present();
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("simverse.confirmDelete"),
+      message: t("simverse.confirmDeleteDesc"),
+      confirmText: t("simverse.delete"),
+      danger: true,
+    })
+  ) {
+    // TODO: delete save API
+    await useConfirmDialog().showAlert({
+      header: t("simverse.notImplemented"),
+      message: t("simverse.notImplementedDesc"),
+      okText: "OK",
+    });
+  }
 }
 
 function formatDate(s?: string): string {

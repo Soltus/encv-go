@@ -126,10 +126,10 @@
 import { codeSlash, informationCircle, logoGithub, openOutline, videocamOutline, warningOutline } from "ionicons/icons";
 import { onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import { type BuildInfo, fetchBuildInfo } from "@/api/encv";
+import { type BuildInfo, fetchBuildInfo } from "@encv/shared-components/api/encv";
 import LibraryRow from "@/components/LibraryRow.vue";
-import { useI18n } from "@/composables/useI18n";
-import { type LibraryItem, useLibraries } from "@/composables/useLibraries";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { type LibraryItem, useLibraries } from "@encv/shared-components/composables/useLibraries";
 
 const { t } = useI18n();
 const router = useRouter();

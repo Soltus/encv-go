@@ -196,7 +196,7 @@
 </template>
 
 <script setup lang="ts">
-import { alertController } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import { createOutline, informationCircleOutline, searchOutline, trashOutline, warningOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import {
@@ -206,9 +206,13 @@ import {
   type SparseContainerResponse,
   writeSparseContainer,
 } from "@/api/sparseContainer";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
 import { isNative } from "@/plugins/GoProcess";
+import { formatBytes as formatBytesShared } from "@encv/shared-components/lib/format";
+// K3：本地仅保留 SparseContainer 专属选项（全 toFixed(2) + 非法值 "?" sentinel），
+// 1024 进制数学逻辑统一走共享 formatBytes，避免重复实现。
+const formatBytes = (n: number | string | undefined | null): string => formatBytesShared(n, { decimals: 2, invalid: "?" });
 
 const { t } = useI18n();
 
@@ -257,16 +261,6 @@ const sparseRatioText = computed(() => {
   return `${ratio.toFixed(2)}× (${left} / ${right})`;
 });
 
-function formatBytes(n: number | string | undefined | null): string {
-  const v = Number(n);
-  if (!Number.isFinite(v) || v < 0) return "?";
-  if (v >= 1024 ** 4) return `${(v / 1024 ** 4).toFixed(2)} TB`;
-  if (v >= 1024 ** 3) return `${(v / 1024 ** 3).toFixed(2)} GB`;
-  if (v >= 1024 ** 2) return `${(v / 1024 ** 2).toFixed(2)} MB`;
-  if (v >= 1024) return `${(v / 1024).toFixed(2)} KB`;
-  return `${v} B`;
-}
-
 onMounted(async () => {
   // 真机降级：拉 storage estimate
   if (typeof navigator !== "undefined" && navigator.storage?.estimate) {
@@ -286,20 +280,13 @@ onMounted(async () => {
 
 async function confirmIfHighRisk(): Promise<boolean> {
   if (!isHighRisk.value) return true;
-  const alert = await alertController.create({
+  return await useConfirmDialog().confirm({
     header: t("devtools.sparseContainer.highRiskTitle"),
     message: t("devtools.sparseContainer.highRiskMessage", {
       proposed: formatBytes(proposedBytes.value),
       quota: formatBytes(storageEstimate.value?.quota ?? 0),
     }),
-    buttons: [
-      { text: t("common.cancel"), role: "cancel" },
-      { text: t("common.confirm"), role: "confirm" },
-    ],
   });
-  await alert.present();
-  const { role } = await alert.onDidDismiss();
-  return role === "confirm";
 }
 
 async function handleWrite() {
@@ -365,19 +352,15 @@ async function handleProbe() {
 
 async function handleCleanup() {
   if (isCleaning.value || !lastResult.value) return;
-  const alert = await alertController.create({
-    header: t("devtools.sparseContainer.cleanupConfirm"),
-    message: t("devtools.sparseContainer.cleanupConfirmMessage", {
-      path: lastResult.value.mainFilePath,
-    }),
-    buttons: [
-      { text: t("common.cancel"), role: "cancel" },
-      { text: t("common.confirm"), role: "confirm" },
-    ],
-  });
-  await alert.present();
-  const { role } = await alert.onDidDismiss();
-  if (role !== "confirm") return;
+  if (
+    !(await useConfirmDialog().confirm({
+      header: t("devtools.sparseContainer.cleanupConfirm"),
+      message: t("devtools.sparseContainer.cleanupConfirmMessage", {
+        path: lastResult.value.mainFilePath,
+      }),
+    }))
+  )
+    return;
   isCleaning.value = true;
   try {
     await cleanupSparseContainer({

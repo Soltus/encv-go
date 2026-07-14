@@ -16,9 +16,9 @@
 
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
-import TreeView from "@/components/automation/TreeView.vue";
-import PhaseIcon from "@/components/shared/PhaseIcon.vue";
-import { Phase, type UnifiedTreeNode, type WorkflowRun } from "@/lib/workflow/types";
+import TreeView from "@encv/shared-components/components/TreeView.vue";
+import PhaseIcon from "@encv/shared-components/components/shared/PhaseIcon.vue";
+import { Phase, type UnifiedTreeNode, type WorkflowRun } from "@encv/shared-components/lib/workflow/types";
 
 // ion-icon stub：避免 @ionic/vue 全局注册依赖
 const IonIconStub = {

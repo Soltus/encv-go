@@ -152,7 +152,7 @@
           </ion-item>
           <ion-item>
             <ion-label>{{ t('settings.totalSize') || '索引大小' }}</ion-label>
-            <ion-note slot="end" class="stat-number">{{ formatBytes(stats?.totalSize ?? 0) }}</ion-note>
+            <ion-note slot="end" class="stat-number">{{ formatBytes(stats?.totalSize ?? 0, { decimals: 2 }) }}</ion-note>
           </ion-item>
           <ion-item v-if="stats?.lastBuildMs && stats.lastBuildMs > 0">
             <ion-label>{{ t('settings.lastBuildTime') || '上次构建耗时' }}</ion-label>
@@ -244,7 +244,8 @@
 
 <script setup lang="ts">
 import { bugOutline, refreshOutline, warningOutline } from "ionicons/icons";
-import { formatDateTime } from "@/composables/useDateFormat";
+import { formatDateTime } from "@encv/shared-components/composables/useDateFormat";
+import { formatBytes } from "@encv/shared-components/lib/format";
 
 // 🆕 2026-07-03 修复 classList 错误：必须显式 import Ionic 组件
 //   根因（cypress e2e DOM log 确认）：未显式 import 时，<ion-page> 标签未被 Vue 编译器
@@ -253,11 +254,11 @@ import { formatDateTime } from "@/composables/useDateFormat";
 //   对比 ServerDetail.vue / DatabaseDetail.vue / CacheDetail.vue 都显式 import。
 
 import { computed, onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
-import { getApiBaseUrl } from "@/api/encv_core";
-import { type FullTextIndexStats, getFullTextIndexStats, rebuildFullTextIndex } from "@/api/encv_search";
-import { errorStore } from "@/composables/useErrorCapture";
-import { useI18n } from "@/composables/useI18n";
-import { useTaskEventBridge } from "@/composables/useTaskEventBridge";
+import { getApiBaseUrl } from "@encv/shared-components/api/core";
+import { type FullTextIndexStats, getFullTextIndexStats, rebuildFullTextIndex } from "@encv/shared-components/api/encv_search";
+import { errorStore } from "@encv/shared-components/composables/useErrorCapture";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useTaskEventBridge } from "@encv/shared-components/composables/useTaskEventBridge";
 
 const { t } = useI18n();
 
@@ -444,13 +445,6 @@ function dismissRebuildCard() {
 
 function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
-}
-
-function formatBytes(b: number): string {
-  if (b < 1024) return `${b} B`;
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
-  if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
-  return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 onMounted(() => {

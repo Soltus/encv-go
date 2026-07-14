@@ -272,9 +272,11 @@ export default defineConfig({
           const cleanPath = relativePath.split('?')[0]
           const query = relativePath.includes('?') ? '?' + relativePath.split('?')[1] : ''
           
+          // 2026-07-14 批 9：dirs 仅留本地 src（摘除 shared 兜底分支）。
+          // 批 9 已把全部落到 shared 的 @/x 改写为显式 @encv/shared-components/x
+          // （_measure-fallback.mjs 归零），shared 兜底已成死代码，@/ 严格只解析本地。
           const dirs = [
             path.resolve(__dirname, 'src'),
-            path.resolve(__dirname, '../packages/shared-components/src'),
           ]
           for (const dir of dirs) {
             const fullPath = path.join(dir, cleanPath)

@@ -380,7 +380,8 @@
 </template>
 
 <script setup lang="ts">
-import { alertController, modalController } from "@ionic/vue";
+import { useModal } from "@encv/shared-components/composables/useModal";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import {
   bugOutline,
   cloudOutline,
@@ -417,18 +418,18 @@ import {
 } from "ionicons/icons";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
-import type { DatabaseInfo, IndexStats } from "@/api/encv";
-import { fetchConfig, getDatabaseInfo, getIndexStats, updateConfig } from "@/api/encv";
+import type { DatabaseInfo, IndexStats } from "@encv/shared-components/api/encv";
+import { fetchConfig, getDatabaseInfo, getIndexStats, updateConfig } from "@encv/shared-components/api/encv";
 import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
-import FilePickerModal from "@/components/FilePickerModal.vue";
-import { useConfig } from "@/composables/useConfig";
-import { registerFileFeature, unregisterFileFeature } from "@/composables/useFileFeatures";
-import { useI18n } from "@/composables/useI18n";
-import { useServerStatus } from "@/composables/useServerStatus";
-import { showToast } from "@/composables/useToast";
-import type { FieldDef } from "@/config/schemaParser";
-import { isMpvSubMode, PLAY_MODE } from "@/constants/player";
-import { createAlistEncryptFeature } from "@/features/alist-encrypt";
+import FilePickerModal from "@encv/shared-components/components/FilePickerModal.vue";
+import { useConfig } from "@encv/shared-components/composables/useConfig";
+import { registerFileFeature, unregisterFileFeature } from "@encv/shared-components/composables/useFileFeatures";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useServerStatus } from "@encv/shared-components/composables/useServerStatus";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import type { FieldDef } from "@encv/shared-components/config/schemaParser";
+import { isMpvSubMode, PLAY_MODE } from "@encv/shared-components/constants/player";
+import { createAlistEncryptFeature } from "@encv/shared-components/features/alist-encrypt/index";
 import { ensurePluginLoaded, getPluginFullState, isNative, pickFolder } from "@/plugins/GoProcess";
 
 const router = useRouter();
@@ -669,15 +670,14 @@ async function handleBrowsePath(path: string[], field: FieldDef) {
   }
   const isFolder = field.key !== "file";
   const currentVal = String(getFieldValue(path) || "/");
-  const modal = await modalController.create({
+  const { openModal } = useModal();
+  const { data, role } = await openModal<{ path: string }>({
     component: FilePickerModal,
     componentProps: {
       mode: isFolder ? "folder" : "file",
       initialPath: currentVal,
     },
   });
-  await modal.present();
-  const { data, role } = await modal.onDidDismiss();
   if (role === "select" && data) {
     setFieldValue(path, data.path);
   }
@@ -743,57 +743,47 @@ function isFieldVisible(field: FieldDef): boolean {
 }
 
 async function handleClearCache() {
-  const alert = await alertController.create({
-    header: t("settings.clearCache"),
-    message: t("settings.clearCacheConfirm"),
-    buttons: [
-      { text: t("settings.cancel"), role: "cancel" },
-      {
-        text: t("settings.clear"),
-        role: "destructive",
-        handler: () => {
-          const themePref = localStorage.getItem("encv-theme-preference");
-          const serverPref = localStorage.getItem("encv-server-url");
-          const webdavPref = localStorage.getItem("encv-webdav-configs");
-          const localePref = localStorage.getItem("encv-locale");
-          localStorage.clear();
-          if (themePref) localStorage.setItem("encv-theme-preference", themePref);
-          if (serverPref) localStorage.setItem("encv-server-url", serverPref);
-          if (webdavPref) localStorage.setItem("encv-webdav-configs", webdavPref);
-          if (localePref) localStorage.setItem("encv-locale", localePref);
-          showToast({
-            message: t("settings.cacheCleared"),
-            duration: 1500,
-            color: "success",
-          });
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("settings.clearCache"),
+      message: t("settings.clearCacheConfirm"),
+      confirmText: t("settings.clear"),
+      danger: true,
+    })
+  ) {
+    const themePref = localStorage.getItem("encv-theme-preference");
+    const serverPref = localStorage.getItem("encv-server-url");
+    const webdavPref = localStorage.getItem("encv-webdav-configs");
+    const localePref = localStorage.getItem("encv-locale");
+    localStorage.clear();
+    if (themePref) localStorage.setItem("encv-theme-preference", themePref);
+    if (serverPref) localStorage.setItem("encv-server-url", serverPref);
+    if (webdavPref) localStorage.setItem("encv-webdav-configs", webdavPref);
+    if (localePref) localStorage.setItem("encv-locale", localePref);
+    showToast({
+      message: t("settings.cacheCleared"),
+      duration: 1500,
+      color: "success",
+    });
+  }
 }
 
 async function handleResetSettings() {
-  const alert = await alertController.create({
-    header: t("settings.resetSettings"),
-    message: t("settings.resetConfirm"),
-    buttons: [
-      { text: t("settings.cancel"), role: "cancel" },
-      {
-        text: t("settings.reset"),
-        role: "destructive",
-        handler: () => {
-          localStorage.clear();
-          showToast({
-            message: t("settings.settingsReset"),
-            duration: 1500,
-            color: "success",
-          });
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("settings.resetSettings"),
+      message: t("settings.resetConfirm"),
+      confirmText: t("settings.reset"),
+      danger: true,
+    })
+  ) {
+    localStorage.clear();
+    showToast({
+      message: t("settings.settingsReset"),
+      duration: 1500,
+      color: "success",
+    });
+  }
 }
 
 async function handleSaveConfig() {

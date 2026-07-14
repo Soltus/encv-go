@@ -35,16 +35,16 @@
 </template>
 
 <script setup lang="ts">
-import { modalController } from "@ionic/vue";
+import { useModal } from "@encv/shared-components/composables/useModal";
 import { cloudOutline, folderOpen, settingsOutline, speedometerOutline } from "ionicons/icons";
 import { computed } from "vue";
 import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
-import FilePickerModal from "@/components/FilePickerModal.vue";
-import { useConfig } from "@/composables/useConfig";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import type { FieldDef } from "@/config/schemaParser";
-import { parseSchema } from "@/config/schemaParser";
+import FilePickerModal from "@encv/shared-components/components/FilePickerModal.vue";
+import { useConfig } from "@encv/shared-components/composables/useConfig";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import type { FieldDef } from "@encv/shared-components/config/schemaParser";
+import { parseSchema } from "@encv/shared-components/config/schemaParser";
 
 const { t } = useI18n();
 const { getFieldValue, setFieldValue, dirty, loading, saveConfig } = useConfig();
@@ -91,7 +91,8 @@ function handleInput(path: string[], _field: FieldDef, event: CustomEvent) {
 async function handleBrowsePath(path: string[], field: FieldDef) {
   const isFolder = field.key !== "file";
   const currentVal = String(getFieldValue(path) || "/");
-  const modal = await modalController.create({
+  const { openModal } = useModal();
+  const result = await openModal<string>({
     component: FilePickerModal,
     componentProps: {
       initialPath: currentVal,
@@ -99,8 +100,6 @@ async function handleBrowsePath(path: string[], field: FieldDef) {
       title: `Select ${isFolder ? "Directory" : "File"}`,
     },
   });
-  await modal.present();
-  const result = await modal.onDidDismiss<string>();
   if (result.data && result.data !== currentVal) {
     setFieldValue(path, result.data);
   }

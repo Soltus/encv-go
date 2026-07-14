@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALL_PHASES, isPhase, isUnifiedTimelineEntry, isUnifiedTreeNode, Phase } from "@/lib/workflow/types";
+import { ALL_PHASES, isPhase, isUnifiedTimelineEntry, isUnifiedTreeNode, Phase } from "@encv/shared-components/lib/workflow/types";
 
 // ============ Phase 枚举值校验 ============
 

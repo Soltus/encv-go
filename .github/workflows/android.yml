@@ -16,17 +16,17 @@ on:
       skip_mpv_plugin:
         description: 'Skip MPV player plugin build'
         required: false
-        default: 'false'
+        default: false
         type: boolean
       skip_openlist_plugin:
         description: 'Skip OpenList plugin build'
         required: false
-        default: 'false'
+        default: false
         type: boolean
       skip_simverse_plugin:
         description: 'Skip SimVerse plugin build'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 env:
@@ -86,7 +86,7 @@ jobs:
         run: yes | sdkmanager --install "ndk;${{ env.NDK_VERSION }}" > /dev/null 2>&1 && echo "✅ NDK installed"
 
       - name: Install Android platform & build tools
-        run: yes | sdkmanager --install "platforms;android-35" "build-tools;35.0.0" > /dev/null 2>&1 && echo "✅ Platform & build tools installed"
+        run: yes | sdkmanager --install "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 && echo "✅ Platform & build tools installed"
 
       - name: Cache pnpm dependencies (main)
         id: cache-pnpm
@@ -419,77 +419,21 @@ jobs:
             echo "- 🔄 运行时自动使用 glebarez/sqlite（纯 Go）" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # Go 二进制交叉编译统一走 scripts/android-common.sh build-go
+      # （与本地 scripts/build-android.sh 同源，单一真相来源，避免维护冲突）
       - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen + libsql + objectbox)
         working-directory: ${{ github.workspace }}
         env:
-          CGO_ENABLED: "1"
-          GOOS: android
-          GOARCH: arm64
-          CC: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
-          CGO_LDFLAGS: "-L${GITHUB_WORKSPACE}/pkg/libsql/libs/android_arm64 -L${GITHUB_WORKSPACE}/pkg/tasksystem/store/objectbox/libs/android_arm64"
-          GOFLAGS: "-mod=mod"
+          ANDROID_NDK: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
+          LIBSQL_READY: ${{ env.LIBSQL_READY }}
+          OBJECTBOX_READY: ${{ env.OBJECTBOX_READY }}
         run: |
           set -x
-          # 诊断信息
-          echo "=== Build diagnostics ==="
-          echo "PWD=$(pwd)"
-          echo "go.mod exists=$(test -f go.mod && echo yes || echo no)"
-          go env GOMOD GO111MODULE GOPATH GOROOT GOTOOLCHAIN GOFLAGS GOWORK
-          echo "BUILD_TAGS expanded: LIBSQL=${LIBSQL_READY:-0}, OBJECTBOX=${OBJECTBOX_READY:-0}"
-          # 构建参数
-          BUILD_TAGS=""
-          if [ "${LIBSQL_READY:-0}" = "1" ]; then
-            BUILD_TAGS="libsql"
-            echo "✅ Building with libsql support"
-          else
-            echo "⚠️  Building WITHOUT libsql support (fallback to SQLite only)"
-          fi
-          if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
-            BUILD_TAGS="$BUILD_TAGS,objectbox"
-            echo "✅ Building with objectbox support"
-          else
-            echo "⚠️  Building WITHOUT objectbox support"
-          fi
-          echo "ℹ️  Objectbox disabled on mobile: using gliderlabs/sqlite stub"
-          BUILD_TAGS="${BUILD_TAGS# }"
-          BUILD_TAGS="-tags ${BUILD_TAGS}"
-          echo "Final BUILD_TAGS='${BUILD_TAGS}'"
-
-          # working-directory: ${{ github.workspace }} 已在上方 step 级设定，当前目录即 go.mod 所在
-          echo "=== Final go build command ==="
-          echo "go build ${BUILD_TAGS} -ldflags=\"-s -w -X main.version=${{ inputs.version || 'dev' }}\" -o ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64 ./cmd/encv-mobile"
-          go build \
-            ${BUILD_TAGS} \
-            -ldflags="-s -w -X main.version=${{ inputs.version || 'dev' }}" \
-            -o ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64 \
-            ./cmd/encv-mobile
-          echo "Go binary size:"
+          bash scripts/android-common.sh build-go "${{ inputs.version || 'dev' }}"
+          echo "=== Go binary size ==="
           ls -lh ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64
-          
-          # 如果是动态链接 libsql，把 .so 复制到 jniLibs
-          if [ "${LIBSQL_READY:-0}" = "1" ]; then
-            if [ -f "pkg/libsql/libs/android_arm64/libsql_experimental.so" ]; then
-              mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
-              cp pkg/libsql/libs/android_arm64/libsql_experimental.so \
-                 ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
-              echo "✅ Copied libsql_experimental.so to jniLibs/arm64-v8a/"
-            fi
-          fi
 
-          # 如果是动态链接 objectbox，把 .so 复制到 jniLibs
-          # build-objectbox-android.sh 同时输出 libobjectbox.so（供 SDK/自己 CGO -lobjectbox 用）
-          # 和 libobjectbox-jni.so（SONAME 匹配，运行时 linker 需要）。
-          # 这里复制 libobjectbox-jni.so 进入 APK jniLibs，供 linker 按 SONAME 查找。
-          if [ "${OBJECTBOX_READY:-0}" = "1" ]; then
-            if [ -f "pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox-jni.so" ]; then
-              mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
-              cp pkg/tasksystem/store/objectbox/libs/android_arm64/libobjectbox-jni.so \
-                 ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/
-              echo "✅ Copied libobjectbox-jni.so to jniLibs/arm64-v8a/"
-            fi
-          fi
-
-          # 检查二进制是否包含 libsql
+          # 检查二进制是否包含 libsql（build-go 已拷贝到 jniLibs，此处仅做 CI 诊断）
           # 注意：-ldflags="-s -w" 会 strip 符号表，nm 找不到符号。
           # 用 strings 搜索 libsql_ 前缀的函数名作为替代检测方式。
           BIN_PATH="${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64"
@@ -511,23 +455,11 @@ jobs:
           path: ${{ env.MONOREPO_MOBILE_DIR }}/keystore
           key: encv-release-keystore
 
+      # release keystore 生成 + keystore.properties 写入统一走 scripts/android-common.sh
+      # （与本地 scripts/build-android.sh 同源）
       - name: Ensure release keystore exists
         run: |
-          KEYSTORE="${{ env.MONOREPO_MOBILE_DIR }}/keystore/release.jks"
-          if [ -f "$KEYSTORE" ]; then
-            echo "Keystore ready:"
-            ls -lh "$KEYSTORE"
-          else
-            echo "Creating new release keystore..."
-            mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/keystore
-            keytool -genkeypair -v -keystore "$KEYSTORE" \
-              -storepass encv2025 -alias encvrelease \
-              -keypass encv2025 \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=ENCV-go, OU=Personal, O=ENCV, L=Unknown, ST=Unknown, C=CN"
-            echo "Keystore created:"
-            ls -lh "$KEYSTORE"
-          fi
+          bash scripts/android-common.sh ensure-keystore "${{ env.MONOREPO_MOBILE_DIR }}"
 
       # android/ is in git — cap sync copies web assets (dist/ → assets/public/) AND regenerates capacitor.plugins.json
       # 🆕 2026-06-22 修复：必须用 cap sync 而非 cap copy
@@ -754,12 +686,8 @@ jobs:
             fi
           fi
 
-      - name: Copy Go binary to jniLibs
-        run: |
-          mkdir -p ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a
-          cp ${{ env.MONOREPO_MOBILE_DIR }}/encv-go-arm64 ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/arm64-v8a/libencv-go.so
-          echo "=== Host jniLibs BEFORE build ==="
-          ls -lhR ${{ env.MONOREPO_MOBILE_DIR }}/android/app/src/main/jniLibs/
+      # 注：Go 二进制 → libencv-go.so 的拷贝已由 scripts/android-common.sh build-go 完成，
+      # 不再需要单独的 Copy 步骤。
 
 
 
@@ -1564,14 +1492,8 @@ jobs:
           if [ -n "${{ inputs.version }}" ]; then
             echo "=== Building RELEASE APK v${{ inputs.version }} ==="
 
-            echo "=== Generating keystore.properties for signing ==="
-            {
-              echo "storeFile=${{ github.workspace }}/${{ env.MONOREPO_MOBILE_DIR }}/keystore/release.jks"
-              echo "storePassword=encv2025"
-              echo "keyAlias=encvrelease"
-              echo "keyPassword=encv2025"
-            } > android/keystore.properties
-            echo "keystore.properties created"
+            # keystore.properties 由 Ensure release keystore 步骤已写入（共用脚本）
+            bash scripts/android-common.sh ensure-keystore "${{ env.MONOREPO_MOBILE_DIR }}"
 
             cd android
             chmod +x gradlew

@@ -43,7 +43,7 @@
 <script setup lang="ts">
 import { chevronForward, colorPaletteOutline, musicalNotesOutline, playCircleOutline, settingsOutline } from "ionicons/icons";
 import { useRouter } from "vue-router";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { getAllPrototypes } from "./prototypes/registry";
 import "./prototypes/prototype-cards.css";
 

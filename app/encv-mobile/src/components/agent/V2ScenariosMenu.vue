@@ -73,7 +73,7 @@
 <script setup lang="ts">
 import { close as closeIcon, documentTextOutline, filmOutline, gitBranchOutline, pricetagOutline, searchOutline } from "ionicons/icons";
 import { ref } from "vue";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 export interface V2ScenarioEntry {
   id: string;

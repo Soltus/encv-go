@@ -1,4 +1,8 @@
-import type { FileItem } from "@/api/encv_files";
+// shared 包内自有的最小文件类型（仅用到 path；mobile 的 FileItem 结构兼容，调用方无需改动）。
+// 不依赖 mobile 的 @/api/encv_files，避免 shared 反向依赖应用层。
+interface FileItem {
+  path?: string;
+}
 
 const MOCK_PATHS = ["/mock/video.mp4", "/mock/doc.txt", "/mock/report.pdf", "/mock/data.csv"] as const;
 

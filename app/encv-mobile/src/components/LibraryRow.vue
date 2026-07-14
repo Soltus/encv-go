@@ -109,8 +109,8 @@ import {
   text,
 } from "ionicons/icons";
 import { computed, ref, watch } from "vue";
-import { useI18n } from "@/composables/useI18n";
-import type { LibraryItem } from "@/composables/useLibraries";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import type { LibraryItem } from "@encv/shared-components/composables/useLibraries";
 
 const props = defineProps<{ item: LibraryItem }>();
 const { t } = useI18n();

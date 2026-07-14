@@ -297,7 +297,7 @@
 </template>
 
 <script setup lang="ts">
-import { alertController } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import {
   addOutline,
   alertCircleOutline,
@@ -318,9 +318,9 @@ import {
   type ResolveMountResponse,
   resolveMountPath,
   updateMount,
-} from "@/api/encv";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
+} from "@encv/shared-components/api/encv";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
 
 const { t } = useI18n();
 
@@ -514,35 +514,15 @@ async function handleSave() {
 // ================== Delete ==================
 async function confirmDelete(m: Mount) {
   if (m.name === "primary") return;
-  const alert = await alertController.create({
-    header: t("settings.mountDeleteTitle"),
-    message: t("settings.mountDeleteConfirm", { name: m.name, path: m.mount_path }),
-    buttons: [
-      { text: t("common.cancel"), role: "cancel" },
-      {
-        text: t("common.delete"),
-        role: "destructive",
-        handler: async () => {
-          try {
-            await deleteMount(m.id);
-            showToast({ message: t("settings.mountDeleted"), duration: 1500, color: "success" });
-            await loadAll();
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            // 🆕 2026-06-16：内联错误 banner（持久展示）
-            operationError.value = {
-              title: "挂载点删除失败",
-              subtitle: `挂载点 ${m.name} (${m.mount_path}) 删除失败`,
-              message: msg,
-              hint: "primary mount 不可删（后端 ErrPrimaryProtected 保护）。其他 mount 删除会校验 root_path 引用计数。",
-            };
-            showToast({ message: t("settings.mountDeleteFailed") + ": " + msg, duration: 3000, color: "danger" });
-          }
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    !(await useConfirmDialog().confirm({
+      header: t("settings.mountDeleteTitle"),
+      message: t("settings.mountDeleteConfirm", { name: m.name, path: m.mount_path }),
+      confirmText: t("common.delete"),
+      danger: true,
+    }))
+  )
+    return;
 }
 
 // ================== Resolve (debug) ==================

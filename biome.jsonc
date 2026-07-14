@@ -1,0 +1,161 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.2/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "maxSize": 5888888,
+    "ignoreUnknown": true,
+    "includes": [
+      "**/src/**/*.{ts,js,vue,json}",
+      "**/__tests__/**/*.{ts,js,vue,json}",
+      "**/*.test.ts",
+      "**/*.spec.ts",
+      "!!**/node_modules",
+      "!!**/dist",
+      "!!**/android",
+      "!!**/ios",
+      "!!**/cypress",
+      "!!**/public",
+      "!!**/*.assets",
+      "!!**/plugin-*/src/main/assets"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 140,
+    "formatWithErrors": true,
+    "attributePosition": "auto"
+  },
+  "javascript": {
+    "parser": {
+      "unsafeParameterDecoratorsEnabled": false
+    },
+    "formatter": {
+      "enabled": true,
+      "arrowParentheses": "asNeeded",
+      "bracketSameLine": false,
+      "bracketSpacing": true,
+      "quoteProperties": "asNeeded",
+      "semicolons": "always",
+      "trailingCommas": "es5",
+      "attributePosition": "auto",
+      "jsxQuoteStyle": "double",
+      "quoteStyle": "double"
+    }
+  },
+  "json": {
+    "parser": {
+      "allowComments": true,
+      "allowTrailingCommas": true
+    },
+    "formatter": {
+      "enabled": true,
+      "indentStyle": "space",
+      "indentWidth": 2,
+      "lineWidth": 140,
+      "trailingCommas": "none"
+    }
+  },
+  // ═══════════════════════════════════════════════════════════
+  // assist — 代码整理动作（非 lint 规则）
+  // organizeImports 会强制排序 import 语句及其命名成员，且在 `biome ci`
+  // 中被当作阻塞级 error。assist 动作不支持 warn 级别，故直接关闭：
+  // import/export 命名成员的字母排序不应阻塞构建（等价于"降级为非阻塞"）。
+  // ═══════════════════════════════════════════════════════════
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "off"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      // Biome 2.x：原 rules.recommended 已废弃，改用 rules.preset（二者等价，
+      // 但 recommended 字段在 `biome ci` 中会被当作阻塞级 deserialize 错误）。
+      // preset:"recommended" 启用推荐规则集，下方各组的显式覆盖依然生效。
+      "preset": "recommended",
+      // ═══════════════════════════════════════════════════════════
+      // suspicious — 可疑代码检测
+      // ═══════════════════════════════════════════════════════════
+      "suspicious": {
+        // 项目中大量使用 any（与 Go 互操作 / 动态数据），完全禁用以避免误报
+        "noExplicitAny": "off",
+        // 异步 Promise executor 在某些流式处理场景下是合理的
+        "noAsyncPromiseExecutor": "off",
+        // 隐式 any 的 let 声明 — 警告级别，提醒但不阻塞
+        "noImplicitAnyLet": "warn",
+        // 降级为 warn：二进制内容检测正则（如 [\x00-\x08]）合理需要匹配控制字符
+        "noControlCharactersInRegex": "warn",
+        // 降级为 warn：while ((idx = buffer.indexOf(...)) >= 0) 是常见且清晰的模式
+        "noAssignInExpressions": "warn",
+        // 降级为 warn：部分数组方法的回调确实不需要返回值
+        "useIterableCallbackReturn": "warn"
+      },
+      // ═══════════════════════════════════════════════════════════
+      // performance — 性能相关
+      // ═══════════════════════════════════════════════════════════
+      "performance": {
+        // delete 操作在清理对象属性时是合理的，不强制用 Reflect.deleteProperty
+        "noDelete": "off"
+      },
+      // ═══════════════════════════════════════════════════════════
+      // style — 代码风格
+      // ═══════════════════════════════════════════════════════════
+      "style": {
+        // 字符串模板不是万能的，有些场景拼接更清晰
+        "useTemplate": "off",
+        // 用 const 是好习惯，但不强求（旧代码迁移成本高）
+        "useConst": "warn",
+        // 默认参数放最后 — 部分场景下放在前面更符合 API 设计
+        "useDefaultParameterLast": "off",
+        // 无用的 else — 警告，不阻塞
+        "noUselessElse": "warn",
+        // 不允许重新赋值参数 — 警告，某些场景下（如默认值填充）是合理的
+        "noParameterAssign": "warn",
+        // 不强制使用 node: 协议导入，兼容旧代码
+        "useNodejsImportProtocol": "off",
+        // 非空断言 (!) 在 Vue ref / 与 Go 互操作中是必要的
+        "noNonNullAssertion": "off"
+      },
+      // ═══════════════════════════════════════════════════════════
+      // complexity — 复杂度检测
+      // ═══════════════════════════════════════════════════════════
+      "complexity": {
+        // 简化逻辑表达式不是必须的，有些显式写法更清晰
+        "useSimplifiedLogicExpression": "off",
+        // 用字面量 key 而非动态计算 — 警告级别
+        "useLiteralKeys": "warn",
+        // 可选链 (?.) 是好习惯，但不强求
+        "useOptionalChain": "warn",
+        // forEach 没问题，不强制用 for...of
+        "noForEach": "off"
+      },
+      // ═══════════════════════════════════════════════════════════
+      // correctness — 正确性检测
+      // ═══════════════════════════════════════════════════════════
+      "correctness": {
+        // 不可达代码 — 警告，不阻塞（调试时可能临时保留）
+        "noUnreachable": "warn",
+        // ⚠️ 禁用：Biome 2.x 的 Vue SFC 分析不完整，无法识别 template 中使用的变量/组件
+        // 会把 template 中使用的 import 误判为"未使用"，--fix 时会误删，导致严重 bug
+        // 详见：noUnusedImports 误删 InputWithHistory / cloudOutline 等组件/变量导入
+        "noUnusedVariables": "off",
+        "noUnusedImports": "off",
+        // 降级为 warn：Biome 2.x 的 Vue template lint 还是 experimental
+        "noVueDuplicateKeys": "warn"
+      },
+      // ═══════════════════════════════════════════════════════════
+      // security — 安全检测
+      // ═══════════════════════════════════════════════════════════
+      "security": {}
+    }
+  }
+}

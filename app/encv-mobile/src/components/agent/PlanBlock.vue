@@ -2,7 +2,7 @@
 import { checkboxOutline, checkmarkCircle, ellipsisHorizontalCircle, sync } from "ionicons/icons";
 import { computed } from "vue";
 import BlockHeader from "@/components/agent/BlockHeader.vue";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 export interface PlanTodo {
   id: string;

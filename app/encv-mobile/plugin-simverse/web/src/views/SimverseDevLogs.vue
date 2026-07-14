@@ -220,7 +220,9 @@ import type { LogEntry } from "@encv/shared-components/composables/useFrontendLo
 import { useFrontendLogs } from "@encv/shared-components/composables/useFrontendLogs";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
-import { alertController, type IonContent, IonIcon } from "@ionic/vue";
+import { useIonContentScroll } from "@encv/shared-components/composables/useIonContentScroll";
+import { type IonContent, IonIcon } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import {
   arrowDownOutline,
   arrowUpOutline,
@@ -245,7 +247,8 @@ const activeTab = ref<"frontend" | "backend">("frontend");
 const searchText = ref("");
 const autoScrollEnabled = ref(true);
 const contentRef = ref<InstanceType<typeof IonContent> | null>(null);
-const scrollEl = ref<HTMLElement | null>(null);
+// K42：统一走 useIonContentScroll 取 ion-content 滚动元素（含重试 / ResizeObserver 兜底）
+const { scrollEl, initScrollElWithRetry } = useIonContentScroll(contentRef);
 const selectedLog = ref<LogEntry | null>(null);
 const showScrollToTop = ref(false);
 
@@ -414,26 +417,21 @@ async function handleCopy() {
 }
 
 async function handleClear() {
-  const alert = await alertController.create({
-    header: t("devlogs.clear"),
-    message: t("devlogs.clearConfirm"),
-    buttons: [
-      { text: t("devlogs.cancel"), role: "cancel" },
-      {
-        text: t("devlogs.clear"),
-        role: "destructive",
-        handler: () => {
-          if (activeTab.value === "frontend") {
-            clearFrontendLogs();
-          } else {
-            backendLogs.value = [];
-            lastEventId = "";
-          }
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("devlogs.clear"),
+      message: t("devlogs.clearConfirm"),
+      confirmText: t("devlogs.clear"),
+      danger: true,
+    })
+  ) {
+    if (activeTab.value === "frontend") {
+      clearFrontendLogs();
+    } else {
+      backendLogs.value = [];
+      lastEventId = "";
+    }
+  }
 }
 
 function chronicleLevelToLogLevel(level: string): string {
@@ -491,14 +489,14 @@ function updateTagOptions() {
   tagDropdownOptions.value = Array.from(tagSet).map(t => ({ value: t, label: t }));
 }
 
-async function setupScrollEl() {
-  await nextTick();
-  if (contentRef.value) {
-    const scroll = await (contentRef.value as any).getScrollElement();
-    scrollEl.value = scroll;
-    scroll.addEventListener("scroll", onScroll);
-  }
-}
+// scroll 元素就绪后挂载滚动监听（K42：元素经 useIonContentScroll 异步解析）
+watch(
+  scrollEl,
+  el => {
+    if (el) el.addEventListener("scroll", onScroll);
+  },
+  { immediate: true }
+);
 
 function onScroll() {
   if (!scrollEl.value) return;
@@ -514,7 +512,7 @@ function onScroll() {
 }
 
 onMounted(async () => {
-  await setupScrollEl();
+  initScrollElWithRetry();
   await loadBackendLogs();
   pollInterval = window.setInterval(() => {
     if (activeTab.value === "backend") {

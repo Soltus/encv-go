@@ -1,6 +1,6 @@
 import type { Ref } from "vue";
-import type { FileItem } from "@/api/encv";
-import { eventBus } from "@/composables/useEventBus";
+import type { FileItem } from "@encv/shared-components/api/encv";
+import { eventBus } from "@encv/shared-components/composables/useEventBus";
 
 export interface TestBackdoorAPI {
   simulateLongPress: (fileName: string) => Promise<void>;

@@ -49,7 +49,7 @@ vi.mock("@/components/NewTaskModal.vue", () => ({
 }));
 
 import { modalController } from "@ionic/vue";
-import { createTask } from "@/api/encv";
+import { createTask } from "@encv/shared-components/api/encv";
 import { useNewTaskModal } from "@/composables/useNewTaskModal";
 
 const mockedCreate = vi.mocked(createTask);

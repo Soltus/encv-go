@@ -130,5 +130,70 @@ if [ "$SUBCMD" = "references" ] && [ "$HAS_FILE" = "0" ] && [ "$HAS_MODULE" = "0
   exit 0
 fi
 
+# --- refactoring helpers (alias-aware impact + leak detection) ----------------
+# These two subcommands turn codemogger's import graph into a refactoring
+# assistant for the encv-mobile -> @encv/shared-components lift.
+#
+#   impact <target>   alias-agnostic blast radius of a module/symbol. Closes the
+#                     gap noted in README ("--module matches the specifier
+#                     EXACTLY; @/stores/taskStore vs @encv/shared-components/...
+#                     are distinct rows"): it queries BOTH alias forms and merges
+#                     the importer lists, so a lift/decouple never misses one side.
+#   leaks  [dir]      list every shared->app reverse `@/` import under <dir>
+#                     (default: indexed codebase root). Directly verifies the
+#                     "shared layer must not depend on the app layer" invariant
+#                     after a decoupling pass.
+
+if [ "$SUBCMD" = "impact" ]; then
+  maybe_reindex
+  target="${2:-}"
+  if [ -z "$target" ]; then
+    echo "usage: codemogger impact <module|symbol>" >&2
+    echo "  e.g. codemogger impact @/api/encv" >&2
+    echo "       codemogger impact @encv/shared-components/api/encv" >&2
+    echo "       codemogger impact useTaskStore" >&2
+    exit 2
+  fi
+  # derive the alias-variant specifier so both forms are queried
+  alt=""
+  case "$target" in
+    @/*)                        alt="@encv/shared-components/${target#@/}" ;;
+    @encv/shared-components/*)  alt="@/${target#@encv/shared-components/}" ;;
+  esac
+  # IMPORTANT: pass --db through. The MCP server always sets --db to pin the
+  # index, but its cwd is not fixed, so a bare `references` (which defaults the
+  # db to cwd) would read the wrong index. Carry DB_PATH explicitly.
+  dbarg=()
+  if [ -n "$DB_PATH" ]; then dbarg=(--db "$DB_PATH"); fi
+  if [ "${target#@}" != "$target" ]; then
+    echo "== importers of module '$target' (exact) =="
+    node "$REAL_CLI" references "$target" --module "${dbarg[@]}" 2>&1 || true
+    if [ -n "$alt" ]; then
+      echo "== importers of module '$alt' (alias variant) =="
+      node "$REAL_CLI" references "$alt" --module "${dbarg[@]}" 2>&1 || true
+    fi
+  else
+    # bare symbol -> alias-agnostic symbol mode (README: symbol mode is alias-agnostic)
+    echo "== importers of symbol '$target' (alias-agnostic) =="
+    node "$REAL_CLI" references "$target" "${dbarg[@]}" 2>&1 || true
+  fi
+  exit 0
+fi
+
+if [ "$SUBCMD" = "leaks" ]; then
+  maybe_reindex
+  pkg="${2:-$DIR}"
+  echo "== reverse (shared->app) '@/' imports under: $pkg ==" >&2
+  hits="$(grep -rnE "(import|export)[^;]*from[[:space:]]*['\"]@/" "$pkg" \
+            --include='*.ts' --include='*.tsx' --include='*.vue' 2>/dev/null \
+            | grep -v '/node_modules/')" || true
+  if [ -z "$hits" ]; then
+    echo "(none — shared layer is clean)"
+  else
+    echo "$hits"
+  fi
+  exit 0
+fi
+
 maybe_reindex
 exec node "$REAL_CLI" "$@"

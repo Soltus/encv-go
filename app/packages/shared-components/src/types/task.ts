@@ -134,3 +134,42 @@ export interface RunInfo {
   triggeredBy: string;
   summary: RunSummary;
 }
+
+// ─── 插件 / task 表单领域类型（2026-07-12 从 encv-mobile/src/api/encv_plugins 提升为共享类型层） ───
+// 原位置保留 re-export 兼容（见 encv-mobile/src/api/encv_plugins.ts）。
+
+export type PasswordStrategy = "global" | "independent" | "none";
+
+export interface TaskField {
+  key: string;
+  label: string;
+  type: "string" | "password" | "select" | "bool";
+  required: boolean;
+  defaultValue: string;
+  help: string;
+  options?: string[];
+  optionLabels?: Record<string, string>;
+  condition?: "" | "encrypt" | "decrypt";
+}
+
+export interface TaskOptions {
+  passwordStrategy: PasswordStrategy;
+  supportVersionSelect: boolean;
+  supportedVersions: number[] | null;
+  defaultVersion: number;
+  extraFields: TaskField[];
+}
+
+export interface PluginCandidate {
+  name: string;
+  matchType: "mime" | "extension" | "general" | "container";
+  priority: number;
+  taskOptions: TaskOptions | null;
+}
+
+export interface PredictPluginResponse {
+  candidates: PluginCandidate[];
+  pluginName: string | null;
+  error?: string;
+  taskOptions: TaskOptions | null;
+}

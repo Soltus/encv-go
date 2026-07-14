@@ -15,8 +15,8 @@
 import { mount } from "@vue/test-utils";
 import { describe, expect, it } from "vitest";
 import MockGenLogCard from "@/components/developer/MockGenLogCard.vue";
-import UnifiedTimelineCard from "@/components/shared/UnifiedTimelineCard.vue";
-import type { MockGenLogEntry, MockGenLogSummary } from "@/composables/useMockGenLog";
+import UnifiedTimelineCard from "@encv/shared-components/components/shared/UnifiedTimelineCard.vue";
+import type { MockGenLogEntry, MockGenLogSummary } from "@encv/shared-components/composables/useMockGenLog";
 
 // ion-icon stub：避免 @ionic/vue 全局注册依赖
 const IonIconStub = {

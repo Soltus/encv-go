@@ -9,7 +9,9 @@
     "format:fix": "biome format --write .",
     "biome:ci": "biome ci .",
     "check:all": "node scripts/check-all.mjs",
-    "check:all:quick": "node scripts/check-all.mjs --no-tests"
+    "check:all:quick": "node scripts/check-all.mjs --no-tests",
+    "shim": "node scripts/make-shim.mjs",
+    "shim:check": "node scripts/make-shim.mjs check-all"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2"

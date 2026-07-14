@@ -105,7 +105,7 @@
 </template>
 
 <script setup lang="ts">
-import { alertController } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import {
   batteryCharging as batteryOptimizationIcon,
   cloudOutline,
@@ -118,12 +118,12 @@ import {
 } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { fetchConfig, getServerUrl } from "@/api/encv";
+import { fetchConfig, getServerUrl } from "@encv/shared-components/api/encv";
 import ServerStatusCard from "@/components/ServerStatusCard.vue";
-import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
-import { useI18n } from "@/composables/useI18n";
-import { useServerStatus } from "@/composables/useServerStatus";
-import { showToast } from "@/composables/useToast";
+import { copyToClipboard as clipboardWrite } from "@encv/shared-components/composables/useClipboard";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useServerStatus } from "@encv/shared-components/composables/useServerStatus";
+import { showToast } from "@encv/shared-components/composables/useToast";
 import {
   checkPermissions,
   isNative,
@@ -224,25 +224,20 @@ async function handleRestart() {
 }
 
 async function handleStop() {
-  const alert = await alertController.create({
-    header: t("settings.stopConfirm"),
-    buttons: [
-      { text: t("settings.cancel"), role: "cancel" },
-      {
-        text: t("settings.stop"),
-        role: "destructive",
-        handler: async () => {
-          const success = await stopBackend();
-          showToast({
-            message: success ? t("settings.stopped") : t("settings.stopFailed"),
-            duration: 2000,
-            color: success ? "success" : "danger",
-          });
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("settings.stopConfirm"),
+      confirmText: t("settings.stop"),
+      danger: true,
+    })
+  ) {
+    const success = await stopBackend();
+    showToast({
+      message: success ? t("settings.stopped") : t("settings.stopFailed"),
+      duration: 2000,
+      color: success ? "success" : "danger",
+    });
+  }
 }
 
 onMounted(async () => {

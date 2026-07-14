@@ -5,8 +5,26 @@
 // setTaskServices 注入。必须早于任何 useTaskStore() / useRunTasksStore() 调用。
 
 import { setTaskServices } from "@encv/shared-components/stores/taskServices";
-import { getTasks, searchTasksVector } from "@/api/encv";
-import { bulkPutTasks, clearPutThrottle, deleteTask, ensureLRUCache, loadAllTasks, putTask } from "@/lib/taskPersistence";
+import {
+  batchCreateTasks,
+  cancelRun,
+  cancelTask,
+  getRunSummary,
+  getTasks,
+  listRuns,
+  predictPlugin,
+  retryTask,
+  searchTasksVector,
+} from "@encv/shared-components/api/encv";
+import {
+  bulkPutTasks,
+  clearPutThrottle,
+  deleteTask,
+  ensureLRUCache,
+  loadAllTasks,
+  putTask,
+} from "@encv/shared-components/lib/taskPersistence";
+import { useTaskStore } from "@encv/shared-components/stores/taskStore";
 
 let registered = false;
 
@@ -17,6 +35,20 @@ export function registerSharedTaskServices(): void {
   setTaskServices({
     searchTasksVector,
     getTasks,
+    listRuns,
+    getRunSummary,
+    batchCreateTasks,
+    cancelRun,
+    predictPlugin,
+    cancelTask,
+    retryTask,
+    // deleteTask 走 store.removeTask（store + IndexedDB + 后端 DELETE）。
+    // shared 的 api/encv_tasks.deleteTask 经 getTaskServices().deleteTask 委托到此，
+    // 从而共享层不感知应用层 taskStore。
+    deleteTask: async (id: string) => {
+      await useTaskStore().removeTask(id);
+    },
+    appendTask: task => useTaskStore().appendTask(task),
     persistence: {
       loadAllTasks,
       ensureLRUCache,

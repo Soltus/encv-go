@@ -124,6 +124,7 @@
 <script setup lang="ts">
 import { Capacitor } from "@capacitor/core";
 import { alertController } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import {
   addOutline,
   checkmarkCircle,
@@ -139,9 +140,9 @@ import {
 } from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { copyToClipboard } from "@/composables/useClipboard";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
+import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
 import {
   checkInstalledPlugins,
   debugApkValidation,
@@ -342,34 +343,27 @@ async function handleUninstall(id: string) {
     simverse: "com.encvgo.plugin.simverse",
   };
   const pluginId = COMBO_LITE_ID[id] || id;
-  const alert = await alertController.create({
-    header: t("extensions.uninstallConfirm"),
-    buttons: [
-      { text: t("common.cancel"), role: "cancel" },
-      {
-        text: t("common.confirm"),
-        role: "confirm",
-        handler: async () => {
-          if (!isNativePlatform()) return;
-          console.log("Uninstall extension:", pluginId);
-          try {
-            const result = await uninstallPlugin(pluginId);
-            if (result.success) {
-              showToast({ message: t("extensions.uninstalled"), duration: 1500, color: "success" });
-              window.dispatchEvent(new CustomEvent("plugin-state-changed"));
-            } else {
-              showToast({ message: t("extensions.uninstallFailed"), duration: 2000, color: "danger" });
-            }
-          } catch (e: any) {
-            console.error("uninstallPlugin failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
-            showToast({ message: e?.message || t("extensions.uninstallFailed"), duration: 2000, color: "danger" });
-          }
-          await loadExtensions();
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("extensions.uninstallConfirm"),
+    })
+  ) {
+    if (!isNativePlatform()) return;
+    console.log("Uninstall extension:", pluginId);
+    try {
+      const result = await uninstallPlugin(pluginId);
+      if (result.success) {
+        showToast({ message: t("extensions.uninstalled"), duration: 1500, color: "success" });
+        window.dispatchEvent(new CustomEvent("plugin-state-changed"));
+      } else {
+        showToast({ message: t("extensions.uninstallFailed"), duration: 2000, color: "danger" });
+      }
+    } catch (e: any) {
+      console.error("uninstallPlugin failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      showToast({ message: e?.message || t("extensions.uninstallFailed"), duration: 2000, color: "danger" });
+    }
+    await loadExtensions();
+  }
 }
 
 async function showDebugResult(header: string, result: Record<string, any>) {

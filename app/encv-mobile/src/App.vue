@@ -124,17 +124,17 @@
 import { alertCircleOutline, bugOutline, codeSlashOutline, copyOutline, refreshOutline, warningOutline } from "ionicons/icons";
 import { onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import type { ServiceGuardResult } from "@/api/encv";
-import { checkServiceGuard } from "@/api/encv";
+import type { ServiceGuardResult } from "@encv/shared-components/api/encv";
+import { checkServiceGuard } from "@encv/shared-components/api/encv";
 import ErrorCaptureOverlay from "@/components/shared/ErrorCaptureOverlay.vue";
-import { autoInitVConsole } from "@/composables/useDevTools";
-import { registerFileFeature } from "@/composables/useFileFeatures";
-import { hijackConsole } from "@/composables/useFrontendLogs";
-import { initHighRefreshRate } from "@/composables/useHighRefreshRate";
-import { useI18n } from "@/composables/useI18n";
-import { useRealtimeTransport } from "@/composables/useRealtimeTransport";
-import { useTheme } from "@/composables/useTheme";
-import { createAlistEncryptFeature } from "@/features/alist-encrypt";
+import { autoInitVConsole } from "@encv/shared-components/composables/useDevTools";
+import { registerFileFeature } from "@encv/shared-components/composables/useFileFeatures";
+import { hijackConsole } from "@encv/shared-components/composables/useFrontendLogs";
+import { initHighRefreshRate } from "@encv/shared-components/composables/useHighRefreshRate";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useRealtimeTransport } from "@encv/shared-components/composables/useRealtimeTransport";
+import { useTheme } from "@encv/shared-components/composables/useTheme";
+import { createAlistEncryptFeature } from "@encv/shared-components/features/alist-encrypt/index";
 import { isNative, requestNotificationPermission, requestStoragePermission } from "@/plugins/GoProcess";
 
 const { initTheme, detectP3Support } = useTheme();

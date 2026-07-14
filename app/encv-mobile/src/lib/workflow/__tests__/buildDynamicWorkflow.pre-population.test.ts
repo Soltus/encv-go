@@ -27,12 +27,12 @@ import { mount, type VueWrapper } from "@vue/test-utils";
 import { createPinia, setActivePinia } from "pinia";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
-import type { EncvTask, PluginMeta, TaskType } from "@/api/encv";
-import * as encvApi from "@/api/encv";
-import { _resetTasksListSingletonForTests, useTasksList } from "@/composables/useTasksList";
-import { useWorkflowStore } from "@/composables/useWorkflowStore";
-import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
-import { useTaskStore } from "@/stores/taskStore";
+import type { EncvTask, PluginMeta, TaskType } from "@encv/shared-components/api/encv";
+import * as encvApi from "@encv/shared-components/api/encv";
+import { _resetTasksListSingletonForTests, useTasksList } from "@encv/shared-components/composables/useTasksList";
+import { useWorkflowStore } from "@encv/shared-components/composables/useWorkflowStore";
+import { useWorkflowTaskService } from "@encv/shared-components/composables/useWorkflowTaskService";
+import { useTaskStore } from "@encv/shared-components/stores/taskStore";
 import { TaskListDiagSimulator } from "./fixtures/TaskListDiagSimulator";
 
 // ==================== Mock localStorage + crypto ====================
@@ -208,7 +208,7 @@ const noopHandlers = {
 
 // ==================== 构造测试用 WorkflowDefinition ====================
 import { buildDynamicWorkflowPure } from "@/lib/workflow/buildDynamicWorkflow";
-import type { WorkflowDefinition } from "@/lib/workflow/types";
+import type { WorkflowDefinition } from "@encv/shared-components/lib/workflow/types";
 
 function buildTestWorkflowDef(plugins: PluginMeta[]): WorkflowDefinition {
   const { wfDef } = buildDynamicWorkflowPure(plugins, "/mock/");
@@ -250,7 +250,7 @@ describe('真机"任务逃逸"e2e — 批量创建 task（真实架构实现）'
       wrapper = null;
     }
     _resetTasksListSingletonForTests();
-    const { __resetServiceForTests: resetService } = await import("@/composables/useWorkflowTaskService");
+    const { __resetServiceForTests: resetService } = await import("@encv/shared-components/composables/useWorkflowTaskService");
     resetService();
   });
 

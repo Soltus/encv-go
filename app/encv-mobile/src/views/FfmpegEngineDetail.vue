@@ -290,8 +290,8 @@ import {
   warningOutline,
 } from "ionicons/icons";
 import { onMounted, ref } from "vue";
-import { type BuildInfo, type FFmpegStatus, fetchBuildInfo, fetchFFmpegStatus } from "@/api/encv";
-import { useI18n } from "@/composables/useI18n";
+import { type BuildInfo, type FFmpegStatus, fetchBuildInfo, fetchFFmpegStatus } from "@encv/shared-components/api/encv";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 const { t } = useI18n();
 

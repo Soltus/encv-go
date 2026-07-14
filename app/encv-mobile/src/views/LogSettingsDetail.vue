@@ -76,14 +76,14 @@
 </template>
 
 <script setup lang="ts">
-import { alertController } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import { cloudOutline, downloadOutline, refreshOutline, terminal, trashOutline } from "ionicons/icons";
 import { computed } from "vue";
-import { useConfig } from "@/composables/useConfig";
-import { type LogEntry, useFrontendLogs } from "@/composables/useFrontendLogs";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import { getDefaultValue } from "@/config/schemaParser";
+import { useConfig } from "@encv/shared-components/composables/useConfig";
+import { type LogEntry, useFrontendLogs } from "@encv/shared-components/composables/useFrontendLogs";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import { getDefaultValue } from "@encv/shared-components/config/schemaParser";
 import { clearLogs, exportLogs, isNative, saveDevLogs } from "@/plugins/GoProcess";
 
 const { t, tField } = useI18n();
@@ -173,25 +173,18 @@ async function handleExportLogs() {
 
 async function handleClearLogs() {
   if (!isNative()) return;
-  const alert = await alertController.create({
-    header: t("devtools.clearLogsConfirm"),
-    buttons: [
-      { text: t("common.cancel"), role: "cancel" },
-      {
-        text: t("common.confirm"),
-        role: "confirm",
-        handler: async () => {
-          const result = await clearLogs();
-          if (result.success) {
-            showToast({ message: t("devtools.clearSuccess"), duration: 1500, color: "success" });
-          } else {
-            showToast({ message: t("devtools.clearFailed"), duration: 2000, color: "danger" });
-          }
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("devtools.clearLogsConfirm"),
+    })
+  ) {
+    const result = await clearLogs();
+    if (result.success) {
+      showToast({ message: t("devtools.clearSuccess"), duration: 1500, color: "success" });
+    } else {
+      showToast({ message: t("devtools.clearFailed"), duration: 2000, color: "danger" });
+    }
+  }
 }
 </script>
 

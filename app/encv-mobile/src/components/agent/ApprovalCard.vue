@@ -29,7 +29,7 @@
     <!-- Files chips -->
     <div v-if="filesChips.length > 0" class="approvalFiles">
       <div v-for="path in filesChips" :key="path" class="approvalFileChip" :title="path">
-        {{ truncatePath(path) }}
+        {{ truncatePath(path, 28, "…") }}
       </div>
       <div v-if="extraFilesCount > 0" class="approvalFileChip approvalFileChip_more">
         +{{ extraFilesCount }}
@@ -108,7 +108,8 @@ import {
 } from "ionicons/icons";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { Decision, ToolCall, ToolKind } from "@/composables/useAgent";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { truncatePath } from "@encv/shared-components/lib/format";
 
 // 模板用 chevronUp/chevronDown 引用，必须从 import 别名重绑定，否则
 // 模板引用未定义变量（vue-tsc 报 chevronUp/Down 不在 template scope）。
@@ -294,11 +295,6 @@ function handleDecide(decision: Decision) {
       safetyTimer = null;
     }, 5000);
   }
-}
-
-function truncatePath(p: string): string {
-  if (p.length <= 28) return p;
-  return "…" + p.slice(p.length - 27);
 }
 </script>
 

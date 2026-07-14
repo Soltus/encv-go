@@ -20,7 +20,10 @@ $:
       services:
         # docker 写在 vscode 前面
         - docker
-        - vscode
+        - name: vscode
+          options:
+            # 保活时间，单位毫秒，不设置默认 10 分钟没有心跳（检测不到开发环境内的 http/ssh 连接）就关闭开发环境
+            keepAliveTimeout: 30m
       env:
         # 关键：默认 NODE_ENV=production 会让 pnpm install 跳过 devDependencies，
         # 导致 typescript / vue-tsc / vite / vitest / cypress 等开发工具全部缺失。
@@ -33,6 +36,58 @@ $:
           script: |
             export NODE_ENV=development
             bash scripts/setup-sandbox-env.sh
+
+        - name: 构建 codemogger-patch 并注册 MCP
+          # 自包含：① 确保全局 codemogger@0.1.5 已装（patch 基准版本）；
+          # ② 应用 codemogger 补丁；③ 写入 CodeBuddy MCP 注册
+          # （~/.codebuddy/mcp.json），让 agent 以工具调用查询代码图谱与项目
+          # 门禁（check:all / typecheck / i18n），不依赖终端。
+          script: |
+            export NODE_ENV=development
+            set -uo pipefail
+            REPO_ROOT="$(pwd)"
+            PATCH_DIR="${REPO_ROOT}/app/codemogger-patch"
+            if [ ! -d "${PATCH_DIR}" ]; then
+              PATCH_DIR="$(cd "$(dirname "$0")/../app/codemogger-patch" 2>/dev/null && pwd)" || PATCH_DIR=""
+            fi
+            if [ -z "${PATCH_DIR}" ] || [ ! -f "${PATCH_DIR}/mcp-server.mjs" ]; then
+              echo "⚠️ 找不到 codemogger-patch，跳过 MCP 注册"
+              exit 0
+            fi
+            # 0) 确保全局 codemogger 已装（patch 基于 0.1.5 源码，见 README）
+            if command -v codemogger >/dev/null 2>&1 || [ -f /usr/local/lib/node_modules/codemogger/dist/cli.mjs ]; then
+              echo "✅ codemogger 已存在，跳过安装"
+            else
+              echo "📦 安装 codemogger@0.1.5 (patch 基准版本) ..."
+              npm install -g codemogger@0.1.5 --no-audit --no-fund \
+                || echo "⚠️ codemogger 安装失败，MCP 仅 leaks(grep) 可用"
+            fi
+            # 1) 应用补丁（全局 codemogger 存在时才做）
+            if command -v codemogger >/dev/null 2>&1 || [ -f /usr/local/lib/node_modules/codemogger/dist/cli.mjs ]; then
+              bash "${PATCH_DIR}/apply.sh"
+              ( cd /usr/local/lib && patch -p1 --forward < "${PATCH_DIR}/patches/codemogger+0.1.5+context.patch" ) || true
+            else
+              echo "⚠️ codemogger 未安装，跳过 apply（MCP server 仍可注册）"
+            fi
+            # 2) 写入 MCP 注册（用 printf 写文件，避免 heredoc 在 YAML 缩进下
+            #    结束分隔符无法顶格、导致 bash 吞掉后续脚本的问题）
+            #    同时注册 codemogger（代码图谱）与 app-dev（项目门禁工具）。
+            mkdir -p /root/.codebuddy
+            printf '%s\n' \
+              '{' \
+              '  "mcpServers": {' \
+              '    "codemogger": {' \
+              '      "command": "node",' \
+              '      "args": ["'"${PATCH_DIR}"'/mcp-server.mjs"],' \
+              '      "env": { "CODEMOGGER_ROOT": "'"${REPO_ROOT}"'/app/encv-mobile" }' \
+              '    },' \
+              '    "app-dev": {' \
+              '      "command": "node",' \
+              '      "args": ["'"${REPO_ROOT}"'/scripts/app-dev-mcp.mjs"]' \
+              '    }' \
+              '  }' \
+              '}' > /root/.codebuddy/mcp.json
+            echo "✅ MCP 已注册 (codemogger + app-dev): /root/.codebuddy/mcp.json"
 
 include:
   - https://cnb.cool/sc.hwd/cnb-sync/-/blob/main/.cnb/workflows/sync.yml

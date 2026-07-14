@@ -1,4 +1,5 @@
 {
+  "biome.enabled": true,
   "go.gopath": "/root/go",
   "go.goroot": "/root/.g/go",
   "go.toolsManagement.autoUpdate": false,

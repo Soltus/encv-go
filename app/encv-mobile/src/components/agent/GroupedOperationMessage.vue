@@ -119,7 +119,7 @@ import FileListCard from "@/components/agent/FileListCard.vue";
 import MountListCard from "@/components/agent/MountListCard.vue";
 import StatusBadge from "@/components/agent/StatusBadge.vue";
 import type { ToolCall, ToolKind, ToolResult, ToolStatus } from "@/composables/useAgent";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { OPERATION_COLLAPSE_INITIAL_COUNT } from "./twoLevelGrouping";
 
 const props = defineProps<{

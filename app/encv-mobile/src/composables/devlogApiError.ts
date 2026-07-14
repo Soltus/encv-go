@@ -18,7 +18,7 @@
  *   - 所以走 console 路线 + 在 helper 里加结构化前缀
  */
 
-import { getAgentApiBaseContext } from "./useAgentApiBase";
+import { getAgentApiBaseContext } from "@encv/shared-components/composables/useAgentApiBase";
 
 export type ApiErrorKind =
   | "encrypt" // POST /api/encrypt-key

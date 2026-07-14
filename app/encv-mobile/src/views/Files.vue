@@ -623,9 +623,9 @@ import {
   swapVerticalOutline,
   warningOutline,
 } from "ionicons/icons";
-import { formatFileSize } from "@/api/encv_files";
-import { formatDateTime } from "@/composables/useDateFormat";
-import { getFileIcon, getFileIconColor, isImageFile } from "@/composables/useFileList";
+import { formatFileSize } from "@encv/shared-components/api/encv_files";
+import { formatDateTime } from "@encv/shared-components/composables/useDateFormat";
+import { getFileIcon, getFileIconColor, isImageFile } from "@encv/shared-components/composables/useFileList";
 
 // Files.vue 重构后只剩 thin script：调用 useFilesView() composable + 必要 imports。
 // 原 1565 行 script 逻辑已全部抽到 ./useFilesView.ts。
@@ -633,7 +633,7 @@ import { getFileIcon, getFileIconColor, isImageFile } from "@/composables/useFil
 // template 内直接使用的 state/handler 都在此解构到局部变量，
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
-import { useFilesView } from "./useFilesView";
+import { useFilesView } from "@encv/shared-components/views/useFilesView";
 
 const {
   // i18n + composable re-exposed values

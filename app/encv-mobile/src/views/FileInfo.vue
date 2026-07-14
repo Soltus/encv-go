@@ -197,12 +197,13 @@ import {
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
-import type { FileItem, PredictPluginResponse } from "@/api/encv";
-import { getApiBaseUrl, getExternalStreamUrl, predictPlugin, proxySafeEncode } from "@/api/encv";
-import { formatFileSize } from "@/api/encv_files";
-import { useI18n } from "@/composables/useI18n";
-import { formatContainerVersion } from "@/constants/containerVersion";
-import { getDecodedName, isAlistEncrypted, loadDecodedName } from "@/features/alist-encrypt/useAlistEncrypt";
+import type { FileItem, PredictPluginResponse } from "@encv/shared-components/api/encv";
+import { getApiBaseUrl, getExternalStreamUrl, predictPlugin, proxySafeEncode } from "@encv/shared-components/api/encv";
+import { formatFileSize } from "@encv/shared-components/api/encv_files";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { formatDateTime } from "@encv/shared-components/composables/useDateFormat";
+import { formatContainerVersion } from "@encv/shared-components/constants/containerVersion";
+import { getDecodedName, isAlistEncrypted, loadDecodedName } from "@encv/shared-components/composables/useAlistEncrypt";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -271,11 +272,7 @@ function formatDuration(seconds: number): string {
 }
 
 function formatTime(isoStr: string): string {
-  try {
-    return new Date(isoStr).toLocaleString();
-  } catch {
-    return isoStr;
-  }
+  return formatDateTime(isoStr, { withSeconds: true });
 }
 
 function matchTypeLabel(type?: string): string {

@@ -325,7 +325,7 @@ import {
   save as saveIcon,
 } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
-import type { OpenlistSiteInfo, RemoteWebDAVInfo, WebDAVConfig, WebDAVTestResult } from "@/api/encv";
+import type { OpenlistSiteInfo, RemoteWebDAVInfo, WebDAVConfig, WebDAVTestResult } from "@encv/shared-components/api/encv";
 import {
   addOpenlistSite,
   deleteOpenlistSite,
@@ -334,12 +334,12 @@ import {
   saveWebDAVConfigs,
   testWebDAVConnection,
   updateOpenlistSite,
-} from "@/api/encv";
-import InputWithHistory from "@/components/InputWithHistory.vue";
+} from "@encv/shared-components/api/encv";
+import InputWithHistory from "@encv/shared-components/components/InputWithHistory.vue";
 import LocalOpenListStatusCard from "@/components/LocalOpenListStatusCard.vue";
-import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
+import { copyToClipboard as clipboardWrite } from "@encv/shared-components/composables/useClipboard";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
 
 const { t } = useI18n();
 

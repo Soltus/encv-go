@@ -129,7 +129,7 @@
 </template>
 
 <script setup lang="ts">
-import { alertController } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import {
   cloudOutline,
   documentTextOutline,
@@ -146,12 +146,12 @@ import {
 } from "ionicons/icons";
 import { onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import type { IndexStats } from "@/api/encv";
-import { clearIndex, getIndexStats, rebuildIndex } from "@/api/encv";
-import { formatFileSize } from "@/api/encv_files";
-import { useI18n } from "@/composables/useI18n";
-import { clearThumbCache, getThumbCacheSize, THUMB_CACHE_MAX } from "@/composables/useThumbnailCache";
-import { showToast } from "@/composables/useToast";
+import type { IndexStats } from "@encv/shared-components/api/encv";
+import { clearIndex, getIndexStats, rebuildIndex } from "@encv/shared-components/api/encv";
+import { formatFileSize } from "@encv/shared-components/api/encv_files";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { clearThumbCache, getThumbCacheSize, THUMB_CACHE_MAX } from "@encv/shared-components/composables/useThumbnailCache";
+import { showToast } from "@encv/shared-components/composables/useToast";
 
 const router = useRouter();
 const { t } = useI18n();
@@ -197,26 +197,21 @@ async function handleRebuild() {
 }
 
 async function handleClearIndex() {
-  const alert = await alertController.create({
-    header: t("settings.clearIndex"),
-    message: t("settings.clearIndexConfirm"),
-    buttons: [
-      { text: t("files.cancelSelect"), role: "cancel" },
-      {
-        text: t("settings.clearIndex"),
-        role: "destructive",
-        handler: async () => {
-          try {
-            await clearIndex();
-            await loadStats();
-          } catch {
-            showToast({ message: t("settings.clearFailed"), duration: 2000, color: "danger" });
-          }
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("settings.clearIndex"),
+      message: t("settings.clearIndexConfirm"),
+      confirmText: t("settings.clearIndex"),
+      danger: true,
+    })
+  ) {
+    try {
+      await clearIndex();
+      await loadStats();
+    } catch {
+      showToast({ message: t("settings.clearFailed"), duration: 2000, color: "danger" });
+    }
+  }
 }
 
 function handleClearSearchCache() {
@@ -235,23 +230,18 @@ function updateThumbCacheSize() {
 }
 
 async function handleClearThumbCache() {
-  const alert = await alertController.create({
-    header: t("settings.clearThumbCache"),
-    message: t("settings.clearIndexConfirm"),
-    buttons: [
-      { text: t("files.cancelSelect"), role: "cancel" },
-      {
-        text: t("settings.clearThumbCache"),
-        role: "destructive",
-        handler: () => {
-          clearThumbCache();
-          thumbCacheSize.value = 0;
-          showToast({ message: t("settings.cleared"), duration: 1200, color: "medium" });
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("settings.clearThumbCache"),
+      message: t("settings.clearIndexConfirm"),
+      confirmText: t("settings.clearThumbCache"),
+      danger: true,
+    })
+  ) {
+    clearThumbCache();
+    thumbCacheSize.value = 0;
+    showToast({ message: t("settings.cleared"), duration: 1200, color: "medium" });
+  }
 }
 
 onMounted(() => {

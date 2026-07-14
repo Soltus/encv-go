@@ -16,10 +16,12 @@
  */
 
 import { defineStore } from "pinia";
-import { computed, ref, shallowRef, triggerRef, watch } from "vue";
-import type { EncvTask, TaskStatus, TaskType } from "@/types/task";
+import { computed, ref, triggerRef, watch } from "vue";
+import type { EncvTask, TaskStatus, TaskType } from "@encv/shared-components/types/task";
 import type { SearchMode } from "./taskServices";
 import { getTaskServices } from "./taskServices";
+import { createTaskCollection } from "@encv/shared-components/lib/taskCollection";
+import { filterTasks, sortTasks, groupByRunId } from "@encv/shared-components/lib/taskViewComputeCore";
 
 export type ViewMode = "group" | "flat";
 export type DatePreset = "today" | "7d" | "30d" | "all" | "custom";
@@ -37,27 +39,34 @@ export const useTaskStore = defineStore("task", () => {
   const { persistence, searchTasksVector } = getTaskServices();
 
   // ============ 原始数据 ============
-  const tasks = shallowRef<EncvTask[]>([]);
   const hydrated = ref(false);
   const isRefreshing = ref(false);
   const hasAnyTask = ref(false);
   const pinnedRunIds = ref<Set<string>>(new Set());
 
-  // O(1) id→index 索引（patch / getTaskById 性能优化）
-  const _taskIndex = new Map<string, number>();
+  // 任务集合核心归约（getTaskById / patchTaskById / appendTask / applyEvent / 索引）
+  // 由共享层 createTaskCollection 提供单一真源；两 store 差异经 hooks 参数化。
+  const coll = createTaskCollection({
+    acceptCreated: t => {
+      if (hydrated.value && tasks.value.length >= MAX_LOADED_TASKS && !coll.getTaskById(t.id)) return false;
+      return true;
+    },
+    onCreated: t => {
+      afterAppend(t);
+    },
+    onPatched: (type, data) => {
+      if (type === "completed") persistPutTask(data.id);
+      else if (type === "update" && data.status) persistPutTask(data.id);
+    },
+  });
+  const tasks = coll.tasks;
 
   function rebuildIndex(): void {
-    _taskIndex.clear();
-    const arr = tasks.value;
-    for (let i = 0; i < arr.length; i++) {
-      _taskIndex.set(arr[i].id, i);
-    }
+    coll.rebuildIndex();
   }
 
   function getTaskById(id: string): EncvTask | undefined {
-    const idx = _taskIndex.get(id);
-    if (idx === undefined) return undefined;
-    return tasks.value[idx];
+    return coll.getTaskById(id);
   }
 
   // ============ 视图状态（统一 owner） ============
@@ -162,8 +171,8 @@ export const useTaskStore = defineStore("task", () => {
   function bulkSetTasks(newTasks: EncvTask[]): void {
     const _IDENTITY_FIELDS: (keyof EncvTask)[] = ["runId", "triggeredBy", "pluginName", "type", "createdAt"];
     const merged: EncvTask[] = newTasks.map(newTk => {
-      const idx = _taskIndex.get(newTk.id);
-      if (idx === undefined) return newTk;
+      const idx = tasks.value.findIndex(t => t.id === newTk.id);
+      if (idx === -1) return newTk;
       const prev = tasks.value[idx];
       const result: EncvTask = { ...newTk };
       for (const k of _IDENTITY_FIELDS) {
@@ -184,28 +193,12 @@ export const useTaskStore = defineStore("task", () => {
     }
   }
 
-  const IDENTITY_FIELDS = new Set<keyof EncvTask>(["runId", "triggeredBy", "pluginName", "type"]);
   function patchTaskById(id: string, partial: Partial<EncvTask>): boolean {
-    const idx = _taskIndex.get(id);
-    if (idx === undefined) return false;
-    const prev = tasks.value[idx];
-    const merged: EncvTask = { ...prev };
-    for (const k of Object.keys(partial) as (keyof EncvTask)[]) {
-      const v = partial[k];
-      if (v === undefined) continue;
-      if (IDENTITY_FIELDS.has(k) && (v === null || v === "")) continue;
-      (merged as any)[k] = v;
-    }
-    tasks.value[idx] = merged;
-    triggerRef(tasks);
-    return true;
+    return coll.patchTaskById(id, partial);
   }
 
-  function appendTask(task: EncvTask): void {
-    if (_taskIndex.has(task.id)) {
-      patchTaskById(task.id, task);
-      return;
-    }
+  function afterAppend(task: EncvTask): void {
+    hasAnyTask.value = true;
     if (!task.runId) {
       // eslint-disable-next-line no-console
       console.warn("[taskStore.appendTask] 新 task runId 为空 → 推入 store 后会成孤儿 group（__manual__${id}）:", {
@@ -217,9 +210,6 @@ export const useTaskStore = defineStore("task", () => {
         createdAt: task.createdAt,
       });
     }
-    tasks.value = [task, ...tasks.value];
-    hasAnyTask.value = true;
-    rebuildIndex();
     if (hydrated.value) {
       try {
         void persistence.putTask(task);
@@ -227,10 +217,14 @@ export const useTaskStore = defineStore("task", () => {
     }
   }
 
+  function appendTask(task: EncvTask): void {
+    coll.appendTask(task);
+    afterAppend(task);
+  }
+
   function appendTasksPage(newTasks: EncvTask[]): void {
     if (newTasks.length === 0) return;
-    const existing = _taskIndex;
-    const toAdd = newTasks.filter(t => !existing.has(t.id));
+    const toAdd = newTasks.filter(t => !coll.getTaskById(t.id));
     if (toAdd.length === 0) return;
     tasks.value = [...tasks.value, ...toAdd];
     rebuildIndex();
@@ -243,7 +237,7 @@ export const useTaskStore = defineStore("task", () => {
   }
 
   function removeTask(id: string): void {
-    if (!_taskIndex.has(id)) return;
+    if (!coll.getTaskById(id)) return;
     tasks.value = tasks.value.filter(t => t.id !== id);
     hasAnyTask.value = tasks.value.length > 0;
     rebuildIndex();
@@ -298,41 +292,22 @@ export const useTaskStore = defineStore("task", () => {
     return pinnedRunIds.value.has(runId);
   }
 
-  // ============ WS 4 件套 → 单一 applyEvent ============
+  // ============ WS 4 件套 → 单一 applyEvent（委托共享归约核心） ============
   function applyEvent(type: "created" | "update" | "progress" | "completed", data: any): void {
-    if (!data?.id) return;
-    const id = data.id;
-    if (type === "created") {
-      if (hydrated.value && tasks.value.length >= MAX_LOADED_TASKS && !_taskIndex.has(id)) {
-        return;
-      }
-      appendTask(data as EncvTask);
-      persistPutTask(id);
-    } else if (type === "update" || type === "progress") {
-      patchTaskById(id, data);
-      if (type === "update" && data.status) persistPutTask(id);
-    } else if (type === "completed") {
-      patchTaskById(id, {
-        ...data,
-        status: data.error ? "failed" : "completed",
-        completedAt: new Date().toISOString(),
-        ...(data.error ? {} : { progress: 100 }),
-      });
-      persistPutTask(id);
-    }
+    coll.applyEvent(type, data);
   }
 
   function applyTaskUpdate(data: any) {
-    applyEvent("update", data);
+    coll.applyEvent("update", data);
   }
   function applyTaskProgress(data: any) {
-    applyEvent("progress", data);
+    coll.applyEvent("progress", data);
   }
   function applyTaskCreated(data: any) {
-    applyEvent("created", data);
+    coll.applyEvent("created", data);
   }
   function applyTaskCompleted(data: any) {
-    applyEvent("completed", data);
+    coll.applyEvent("completed", data);
   }
 
   function rebuildFromBackend(serverTasks: EncvTask[]): void {
@@ -341,8 +316,8 @@ export const useTaskStore = defineStore("task", () => {
     let changed = false;
     const toAdd: EncvTask[] = [];
     for (const newTk of serverTasks) {
-      const idx = _taskIndex.get(newTk.id);
-      if (idx === undefined) {
+      const idx = tasks.value.findIndex(t => t.id === newTk.id);
+      if (idx === -1) {
         toAdd.push(newTk);
         changed = true;
       } else {
@@ -416,79 +391,20 @@ export const useTaskStore = defineStore("task", () => {
   const hasCompletedTasks = computed(() => tasks.value.some(tk => TERMINAL_STATUSES.has(tk.status)));
 
   const filteredTasks = computed<EncvTask[]>(() => {
-    const q = searchQuery.value.trim().toLowerCase();
-    const fromTs = filterDateRange.value.from;
-    const toTs = filterDateRange.value.to;
-    const hasDate = !!fromTs || !!toTs;
-    const hasSearch = q.length > 0;
-    const plugins = filterPlugins.value;
-    const types = filterTypes.value;
-    const statuses = filterStatuses.value;
-    const triggeredBy = filterTriggeredBy.value;
-    const useBackendSearch = hasSearch && backendSearchResultIds.value !== null;
-    const out: EncvTask[] = [];
-    for (const t of tasks.value) {
-      if (plugins.length > 0 && !plugins.includes(t.pluginName || "__unknown__")) continue;
-      if (types.length > 0 && !types.includes(t.type)) continue;
-      if (statuses.length > 0 && !statuses.includes(t.status)) continue;
-      if (triggeredBy.length > 0) {
-        const by = t.triggeredBy ?? "user";
-        if (!triggeredBy.includes(by as any)) continue;
-      }
-      if (hasDate) {
-        if (fromTs && t.createdAt < fromTs) continue;
-        if (toTs && t.createdAt >= toTs) continue;
-      }
-      if (hasSearch) {
-        if (useBackendSearch) {
-          if (!backendSearchResultIds.value!.has(t.id)) continue;
-        } else {
-          const name = (t.targetPath?.split("/").pop() ?? t.sourcePath?.split("/").pop() ?? t.id.slice(0, 8)).toLowerCase();
-          const plugin = (t.pluginName || "").toLowerCase();
-          const error = (t.error || "").toLowerCase();
-          const id = t.id.toLowerCase();
-          if (!name.includes(q) && !plugin.includes(q) && !error.includes(q) && !id.includes(q)) continue;
-        }
-      }
-      out.push(t);
-    }
-    return out;
-  });
-
-  const sortedTasks = computed<EncvTask[]>(() => {
-    const arr = [...filteredTasks.value];
-    if (sortBy.value === "activity") {
-      arr.sort((a, b) => {
-        const aKey = Math.max(new Date(a.createdAt).getTime(), a.completedAt ? new Date(a.completedAt).getTime() : 0);
-        const bKey = Math.max(new Date(b.createdAt).getTime(), b.completedAt ? new Date(b.completedAt).getTime() : 0);
-        return bKey - aKey;
-      });
-    } else {
-      arr.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }
-    return arr;
-  });
-
-  const groupedTasksByRunId = computed<any[]>(() => {
-    const groups = new Map<string, { runId: string; tasks: EncvTask[]; startedAt: string }>();
-    for (const tk of sortedTasks.value) {
-      const key = tk.runId || `__manual__${tk.id}`;
-      const g = groups.get(key);
-      if (g) g.tasks.push(tk);
-      else groups.set(key, { runId: tk.runId || key, tasks: [tk], startedAt: tk.createdAt });
-    }
-    const result: any[] = [];
-    for (const [key, g] of groups) {
-      result.push({ key, runId: g.runId, startedAt: g.startedAt, tasks: g.tasks });
-    }
-    result.sort((a, b) => {
-      const aPinned = pinnedRunIds.value.has(a.runId);
-      const bPinned = pinnedRunIds.value.has(b.runId);
-      if (aPinned !== bPinned) return aPinned ? -1 : 1;
-      return new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime();
+    return filterTasks(tasks.value, {
+      searchQuery: searchQuery.value,
+      filterPlugins: filterPlugins.value,
+      filterTypes: filterTypes.value,
+      filterStatuses: filterStatuses.value,
+      filterTriggeredBy: filterTriggeredBy.value,
+      filterDateRange: filterDateRange.value,
+      backendSearchResultIds: backendSearchResultIds.value,
     });
-    return result;
   });
+
+  const sortedTasks = computed<EncvTask[]>(() => sortTasks(filteredTasks.value, sortBy.value));
+
+  const groupedTasksByRunId = computed<any[]>(() => groupByRunId(sortedTasks.value, pinnedRunIds.value));
 
   const flatTaskList = computed<any[]>(() => sortedTasks.value.map(tk => ({ key: `t-${tk.id}`, task: tk })));
 
@@ -576,7 +492,7 @@ export const useTaskStore = defineStore("task", () => {
   // ============ Reset ============
   function $reset(): void {
     tasks.value = [];
-    _taskIndex.clear();
+    coll.rebuildIndex();
     hydrated.value = false;
     hasAnyTask.value = false;
     isRefreshing.value = false;

@@ -5,12 +5,23 @@
 ARG GO_VERSION=1.25.1
 ARG G_VERSION=1.8.0
 ARG PNPM_VERSION=11
+ARG ANDROID_SDK_TOOLS_VERSION=13114758
 
 FROM cnbcool/default-dev-env:latest
 
 ARG GO_VERSION
 ARG G_VERSION
 ARG PNPM_VERSION
+ARG ANDROID_SDK_TOOLS_VERSION
+
+# Android SDK 开发环境（encv-mobile 安卓构建所需）
+# compileSdk/targetSdk=36, AGP=8.13.0, Gradle=9.0.0, Kotlin=2.3.21
+ENV ANDROID_HOME="/opt/android-sdk" \
+    ANDROID_SDK_ROOT="/opt/android-sdk" \
+    ANDROID_SDK_MANAGER="/opt/android-sdk/cmdline-tools/latest/bin/sdkmanager" \
+    ANDROID_NDK="/opt/android-sdk/ndk/latest" \
+    ANDROID_NDK_ROOT="/opt/android-sdk/ndk/latest" \
+    JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
 
 # ==========================================
 # 1. 基础系统与镜像源配置
@@ -21,7 +32,7 @@ RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.cloud.tencent.com/deb
 
 # build-essential + ca-certificates：cgo 编译（pkg/ 下含 .c/.h/.a）
 # cmake：scripts/setup-sandbox-env.sh 前置检查强依赖（第 121 行）
-# default-jdk：同上，脚本前置检查 java + 后续 setup-kotlinc.sh 需要 JRE
+# openjdk-17-jdk：脚本前置检查 java + 后续 setup-kotlinc.sh 需要 JRE（与 21 共存）
 # Cypress：全局安装 cypress@15（含二进制）并保留在镜像中，供运行测试直接使用；
 #   系统依赖用官方命令 `cypress install --dependencies` 按当前发行版自动解析安装
 #   （xvfb + GTK/ATK 等），避免硬编码冷门包（跨 Debian 版本易漂移，如
@@ -31,14 +42,79 @@ RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.cloud.tencent.com/deb
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       curl wget git build-essential ca-certificates \
-      cmake default-jdk \
+      cmake openjdk-17-jdk \
+      unzip openjdk-21-jdk jq \
+
       python3 \
     && npm install -g cypress@15 \
     && cypress install \
     && rm -rf /var/lib/apt/lists/*
 
+# 安装 code-server(VSCode WebIDE ）插件
+RUN code-server --install-extension itv3.kilo-code-plus \
+  && code-server --install-extension AMiner.codegeex \
+  && code-server --install-extension usernamehw.errorlens \
+  && code-server --install-extension shardulm94.trailing-spaces \
+  && code-server --install-extension IBM.output-colorizer \
+  && code-server --install-extension ruban-s.fast-import-cost \
+  && code-server --install-extension Vue.volar \
+  && code-server --install-extension golang.go
+
 COPY .ide/settings.json /root/.vscode-server/data/Machine/settings.json
 COPY .ide/settings.json /root/.local/share/code-server/Machine/settings.json
+
+# ==========================================
+# 1.5 Android SDK 开发环境（encv-mobile 安卓构建）
+# ==========================================
+# 下载并安装 commandline-tools（优先腾讯云镜像，回退 Google 官方）
+RUN set -eux; \
+    mkdir -p ${ANDROID_HOME}/cmdline-tools /tmp/androidsdk; \
+    cd /tmp/androidsdk; \
+    ( curl -fsSL "https://mirrors.cloud.tencent.com/AndroidSDK/commandlinetools-linux-${ANDROID_SDK_TOOLS_VERSION}_latest.zip" -o cmdtools.zip || \
+      curl -fsSL "https://dl.google.com/android/repository/commandlinetools-linux-${ANDROID_SDK_TOOLS_VERSION}_latest.zip" -o cmdtools.zip ); \
+    unzip -q cmdtools.zip -d ${ANDROID_HOME}/cmdline-tools; \
+    mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest; \
+    rm -f /tmp/androidsdk/cmdtools.zip
+
+# JDK 17 与 21 共存：两者均安装，默认 21（AGP 8.13 + Gradle 9.0 要求 JDK 17+，本工程 jvmTarget=21），
+# 17 保留供其他工具使用；用 `use-jdk 17|21` 可随时切换默认 java。
+RUN set -eux; \
+    update-alternatives --install /usr/bin/java java /usr/lib/jvm/java-17-openjdk-amd64/bin/java 1711; \
+    update-alternatives --install /usr/bin/javac javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac 1711; \
+    update-alternatives --install /usr/bin/java java ${JAVA_HOME}/bin/java 2111; \
+    update-alternatives --install /usr/bin/javac javac ${JAVA_HOME}/bin/javac 2111; \
+    update-alternatives --set java ${JAVA_HOME}/bin/java; \
+    update-alternatives --set javac ${JAVA_HOME}/bin/javac; \
+    cat > /usr/local/bin/use-jdk <<'EOF'
+#!/bin/sh
+case "$1" in
+  17) J=/usr/lib/jvm/java-17-openjdk-amd64 ;;
+  21) J=/usr/lib/jvm/java-21-openjdk-amd64 ;;
+  *) echo "usage: use-jdk 17|21" >&2; exit 1 ;;
+esac
+update-alternatives --set java "$J/bin/java" >/dev/null
+update-alternatives --set javac "$J/bin/javac" >/dev/null
+echo "JAVA_HOME=$J"
+EOF
+    chmod +x /usr/local/bin/use-jdk; \
+    java -version
+
+# 接受许可 + 安装本项目所需 SDK 包
+#   platform-tools        : adb / 设备调试
+#   platforms;android-36  : compileSdk/targetSdk = 36
+#   build-tools;36.0.0    : AGP 8.13 构建工具
+#   ndk;28.1.13356709     : gomobile 编译 libgojni.so 等原生代码所需
+RUN set -eux; \
+    mkdir -p ${ANDROID_HOME}/.android && \
+    echo '### User Sources for Android SDK Manager' > ${ANDROID_HOME}/.android/repositories.cfg && \
+    yes | ${ANDROID_SDK_MANAGER} --licenses > /dev/null || true; \
+    yes | ${ANDROID_SDK_MANAGER} "platform-tools" > /dev/null; \
+    yes | ${ANDROID_SDK_MANAGER} "platforms;android-36" > /dev/null; \
+    yes | ${ANDROID_SDK_MANAGER} "build-tools;36.0.0" > /dev/null; \
+    yes | ${ANDROID_SDK_MANAGER} "ndk;28.1.13356709" > /dev/null; \
+    ln -sv ${ANDROID_HOME}/ndk/28.1.13356709 ${ANDROID_NDK}; \
+    chmod -R 775 ${ANDROID_HOME}; \
+    rm -rf /tmp/androidsdk
 
 # ==========================================
 # 2. 开发工具链安装
@@ -65,7 +141,7 @@ RUN g install ${GO_VERSION} && g use ${GO_VERSION}
 # ==========================================
 # 5. 容器级环境变量 (关键！CI 和非交互式 shell 也继承)
 # ==========================================
-ENV PATH="/root/.g/bin:/root/.g/go/bin:/root/go/bin:/usr/local/bin:$PATH" \
+ENV PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/tools:${ANDROID_NDK}:${JAVA_HOME}/bin:/root/.g/bin:/root/.g/go/bin:/root/go/bin:/usr/local/bin:$PATH" \
     G_MIRROR="https://golang.google.cn/dl/" \
     GOPATH="/root/go" \
     GOPROXY="https://goproxy.cn,direct"
@@ -99,6 +175,10 @@ RUN echo "====================================" && \
     echo "py:   $(python3 --version)" && \
     echo "cmake:$(cmake --version | head -1)" && \
     echo "java: $(java -version 2>&1 | head -1)" && \
+    echo "android sdk: $ANDROID_HOME" && \
+    echo "adb:  $(adb --version 2>&1 | head -1)" && \
+    echo "sdkmanager: $(${ANDROID_SDK_MANAGER} --version 2>&1 | head -1)" && \
+    echo "ndk:  $(readlink -f ${ANDROID_NDK})" && \
     echo "g:    $(g --version)" && \
     echo "go:   $(go version)" && \
     echo "cypress: $(cypress --version)" && \

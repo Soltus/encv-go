@@ -88,7 +88,8 @@ and exposes it through a new `references` command.
 
 > Limitation: `--module` matches the import specifier **exactly** (alias
 > differences like `@/stores/taskStore` vs `@encv/shared-components/stores/taskStore`
-> are distinct rows). Symbol mode is alias-agnostic.
+> are distinct rows). Symbol mode is alias-agnostic. **This gap is closed by the
+> `impact` subcommand added in `codemogger-shim` (see §5).**
 
 ### 4. Context comprehension command (second-stage patch)
 Addresses gap **D** — once you've located a chunk, you still can't see its
@@ -118,6 +119,97 @@ the main patch above.
 > to apply past hunk 1). It inserts `Store.listChunksByFile` /
 > `findChunksByName`, the two `CodeIndex` wrappers, and the `context` CLI
 > command. Apply it *after* the main patch.
+
+### 5. Refactoring helpers (added in `codemogger-shim`)
+
+The shim wraps the real CLI and (per §0–§4) auto-reindexes before read
+queries and mitigates three UX pitfalls. On top of that it adds two
+subcommands that turn codemogger's import graph into a **refactoring
+assistant** for the `encv-mobile` → `@encv/shared-components` lift:
+
+```bash
+# impact: alias-agnostic blast radius of a module/symbol.
+# Closes the §3 limitation — it queries BOTH "@/x" and
+# "@encv/shared-components/x" and merges the importer lists, so a
+# lift/decouple never silently misses one alias form.
+codemogger impact @/api/encv
+codemogger impact @encv/shared-components/api/encv
+codemogger impact useTaskStore          # bare symbol -> alias-agnostic
+
+# leaks: list every shared->app reverse `@/` import under a dir
+# (default: indexed root). Directly verifies the
+# "shared layer must NOT depend on the app layer" invariant
+# after a decoupling pass.
+codemogger leaks packages/shared-components/src
+```
+
+- `impact` is what you run **before** moving/decoupling a module: it tells
+  you the full set of callers across both alias spellings, so you can size
+  the change and not break a hidden importer.
+- `leaks` is what you run **after** a decoupling pass: an empty result
+  means the shared package is clean (no `@/` pointing at the app layer).
+
+## MCP server (terminal-free queries)
+
+`codemogger` can also be exposed to CodeBuddy as an **MCP server**, so the
+agent queries the code-graph (references / context / search / impact / leaks) as
+MCP *tools* — no `execute_command` round-trip, no terminal flakiness.
+
+### Files
+- `mcp-server.mjs` — Node stdio JSON-RPC server wrapping `./codemogger-shim`.
+  Exposes 7 tools:
+
+  | tool | purpose |
+  |------|---------|
+  | `codemogger_references` | who imports a symbol/module/file (mode: symbol\|module\|file) |
+  | `codemogger_context` | chunk outline of a symbol's file / a file path (`expand` for bodies) |
+  | `codemogger_search` | full-text search over code bodies |
+  | `codemogger_impact` | alias-agnostic blast radius (queries both `@/` and `@encv/...`) |
+  | `codemogger_leaks` | reverse shared→app `@/` imports under a dir |
+  | `codemogger_index` | (re)build the index explicitly |
+  | `codemogger_list` | list indexed codebases |
+
+### Register (CodeBuddy reads `~/.codebuddy/mcp.json`)
+```json
+{
+  "mcpServers": {
+    "codemogger": {
+      "command": "node",
+      "args": ["/abs/path/to/codemogger-patch/mcp-server.mjs"],
+      "env": { "CODEMOGGER_ROOT": "/abs/path/to/encv-mobile" }
+    }
+  }
+}
+```
+
+Idempotent one-liner (run from inside `codemogger-patch/`):
+```bash
+mkdir -p ~/.codebuddy && cat > ~/.codebuddy/mcp.json <<'JSON'
+{
+  "mcpServers": {
+    "codemogger": {
+      "command": "node",
+      "args": ["$(pwd)/mcp-server.mjs"],
+      "env": { "CODEMOGGER_ROOT": "$(pwd)/../encv-mobile" }
+    }
+  }
+}
+JSON
+```
+
+### Env (all optional)
+- `CODEMOGGER_ROOT` — codebase root to index (default `/workspace/app/encv-mobile`)
+- `CODEMOGGER_SHIM` — path to the shim (default: `./codemogger-shim` beside the server)
+- `CODEMOGGER_AUTOINDEX` — `"1"` lets the shim auto-reindex before every read
+  query (default **off**, to avoid MCP-request timeouts; call `codemogger_index`
+  explicitly when fresh data is needed)
+
+### Why terminal-free
+The shim's `impact`/`leaks` turn codemogger into a refactoring assistant
+(e.g. sizing the blast radius of the `@/api/encv` → `@encv/shared-components/api/encv`
+lift, or verifying the shared layer has no reverse `@/` deps after a decouple).
+Wrapping them as MCP tools lets the agent run these checks without spawning a
+shell — robust against the flaky `execute_command` channel.
 
 ## Applying
 

@@ -2,7 +2,8 @@
 // 拆分自 AgentChat.vue。所有 reactive state / handler / lifecycle 集中在此。
 // AgentChat.vue 只剩 template + 调 useAgentChatView() 拿到返回值后解构使用。
 
-import { alertController, modalController } from "@ionic/vue";
+import { modalController } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import {
   addOutline,
   attachOutline,
@@ -24,20 +25,20 @@ import {
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 // Task 8: 缩放 composable + 共享相对时间格式化
-import { formatRelativeTime } from "@/composables/relativeTime";
+import { formatRelativeTime } from "@encv/shared-components/composables/relativeTime";
 import { useRenderTurnItems } from "@/composables/renderTurnItems";
 import { type Decision, getLanAccess, type LanAddress, useAgent } from "@/composables/useAgent";
-import { getAgentApiBase } from "@/composables/useAgentApiBase";
-import { useApiBaseProbe } from "@/composables/useApiBaseProbe";
+import { getAgentApiBase } from "@encv/shared-components/composables/useAgentApiBase";
+import { useApiBaseProbe } from "@encv/shared-components/composables/useApiBaseProbe";
 import { useAttachments } from "@/composables/useAttachments";
 // 多渲染引擎架构：引入引擎系统和已注册的引擎实现
 import { useChatEngine } from "@/composables/useChatEngine";
-import { getDeviceIdSync } from "@/composables/useDeviceId";
-import { useI18n } from "@/composables/useI18n";
-import { usePinchZoom } from "@/composables/usePinchZoom";
-import { useServerStatus } from "@/composables/useServerStatus";
+import { getDeviceIdSync } from "@encv/shared-components/composables/useDeviceId";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { usePinchZoom } from "@encv/shared-components/composables/usePinchZoom";
+import { useServerStatus } from "@encv/shared-components/composables/useServerStatus";
 import { useSlashMenu } from "@/composables/useSlashMenu";
-import { showToast } from "@/composables/useToast";
+import { showToast } from "@encv/shared-components/composables/useToast";
 // 触发引擎注册（模块副作用自动注册到 EngineRegistry）
 import "@/engines/defaultEngine";
 import "@/engines/tdesignEngine";
@@ -708,17 +709,13 @@ export function useAgentChatView() {
 
   async function handleDeleteSession(sessionId: string, event: Event) {
     event.stopPropagation();
-    const alert = await alertController.create({
-      header: t("agent.deleteSession"),
-      message: t("agent.confirmDeleteSession"),
-      buttons: [
-        { text: t("common.cancel"), role: "cancel" },
-        { text: t("common.confirm"), role: "destructive" },
-      ],
-    });
-    await alert.present();
-    const { role } = await alert.onDidDismiss();
-    if (role === "destructive") {
+    if (
+      await useConfirmDialog().confirm({
+        header: t("agent.deleteSession"),
+        message: t("agent.confirmDeleteSession"),
+        danger: true,
+      })
+    ) {
       deleteSession(sessionId);
     }
   }

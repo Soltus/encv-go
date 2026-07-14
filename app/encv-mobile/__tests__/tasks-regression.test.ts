@@ -100,17 +100,22 @@ describe("Tasks.vue 防护性回归测试", () => {
       expect(source).not.toMatch(/handleBrowse/);
     });
 
-    it("EncryptBody/DecryptBody 必须提供源/目标文件的浏览按钮（InputWithHistory browsable）", () => {
+    it("EncryptBody/DecryptBody 必须提供源/目标文件的浏览按钮（经共享 TaskFormFields 的 InputWithHistory browsable）", () => {
       const fs = require("fs");
-      const encryptSource = fs.readFileSync(require("path").resolve(__dirname, "../src/components/EncryptBody.vue"), "utf-8");
-      const decryptSource = fs.readFileSync(require("path").resolve(__dirname, "../src/components/DecryptBody.vue"), "utf-8");
+      const path = require("path");
+      const encryptSource = fs.readFileSync(path.resolve(__dirname, "../src/components/EncryptBody.vue"), "utf-8");
+      const decryptSource = fs.readFileSync(path.resolve(__dirname, "../src/components/DecryptBody.vue"), "utf-8");
+      const formFieldsSource = fs.readFileSync(
+        path.resolve(__dirname, "../src/../../packages/shared-components/src/components/TaskFormFields.vue"),
+        "utf-8"
+      );
 
-      // EncryptBody 应使用 InputWithHistory + browsable
-      expect(encryptSource).toMatch(/InputWithHistory/);
-      expect(encryptSource).toMatch(/browsable/);
-      // DecryptBody 同理
-      expect(decryptSource).toMatch(/InputWithHistory/);
-      expect(decryptSource).toMatch(/browsable/);
+      // EncryptBody/DecryptBody 应组合共享 TaskFormFields（不再各自内联 InputWithHistory）
+      expect(encryptSource).toMatch(/TaskFormFields/);
+      expect(decryptSource).toMatch(/TaskFormFields/);
+      // 真正的 InputWithHistory + browsable 在共享 TaskFormFields 内（单一真源，避免两份复制）
+      expect(formFieldsSource).toMatch(/InputWithHistory/);
+      expect(formFieldsSource).toMatch(/browsable/);
     });
   });
 });

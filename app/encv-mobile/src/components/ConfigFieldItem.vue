@@ -103,10 +103,10 @@
 <script setup lang="ts">
 import { cloudOutline, refreshOutline } from "ionicons/icons";
 import { computed } from "vue";
-import InputWithHistory from "@/components/InputWithHistory.vue";
-import { useI18n } from "@/composables/useI18n";
-import type { FieldDef } from "@/config/schemaParser";
-import { getDefaultValue } from "@/config/schemaParser";
+import InputWithHistory from "@encv/shared-components/components/InputWithHistory.vue";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import type { FieldDef } from "@encv/shared-components/config/schemaParser";
+import { getDefaultValue } from "@encv/shared-components/config/schemaParser";
 
 const TASK_OVERRIDABLE = new Set(["password", "output_path", "recover"]);
 

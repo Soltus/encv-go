@@ -65,7 +65,7 @@
 import { checkmarkCircle, closeCircle, playCircleOutline } from "ionicons/icons";
 import { computed } from "vue";
 import { useFileSystemTests } from "@/composables/useFileSystemTests";
-import { useI18n } from "@/composables/useI18n";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 const { t } = useI18n();
 const { results, isRunning, runAllTests } = useFileSystemTests();

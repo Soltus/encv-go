@@ -116,9 +116,9 @@ import {
   warningOutline,
 } from "ionicons/icons";
 import { computed } from "vue";
-import { formatDateTime } from "@/composables/useDateFormat";
-import type { MockGenLogEntry, MockGenLogSummary } from "@/composables/useMockGenLog";
-import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@/lib/workflow/types";
+import { formatDateTime } from "@encv/shared-components/composables/useDateFormat";
+import type { MockGenLogEntry, MockGenLogSummary } from "@encv/shared-components/composables/useMockGenLog";
+import { Phase, type StepStatus, type UnifiedTimelineEntry } from "@encv/shared-components/lib/workflow/types";
 
 /**
  * MockGenLogCard — FFMPEG 流程日志卡（Task 13 SubTask 13.2/13.3）

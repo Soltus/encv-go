@@ -141,11 +141,11 @@ import {
   search as searchIcon,
 } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
-import { DEFAULT_API_BASE_URL, getApiBaseUrl } from "@/api/encv";
+import { DEFAULT_API_BASE_URL, getApiBaseUrl } from "@encv/shared-components/api/encv";
 import ServerStatusCard from "@/components/ServerStatusCard.vue";
-import { type ProbeResult, useApiBaseProbe } from "@/composables/useApiBaseProbe";
-import { useI18n } from "@/composables/useI18n";
-import { useServerStatus } from "@/composables/useServerStatus";
+import { type ProbeResult, useApiBaseProbe } from "@encv/shared-components/composables/useApiBaseProbe";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useServerStatus } from "@encv/shared-components/composables/useServerStatus";
 
 const { t } = useI18n();
 const server = useServerStatus();

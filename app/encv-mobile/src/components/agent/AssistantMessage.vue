@@ -41,8 +41,8 @@ import MarkdownStream from "markstream-vue";
 import { computed } from "vue";
 import MessageAuthor from "@/components/agent/MessageAuthor.vue";
 import type { AgentStatus } from "@/composables/useAgent";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
 
 const props = defineProps<{
   text: string;
