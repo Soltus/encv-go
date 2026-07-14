@@ -27,18 +27,25 @@ ENV ANDROID_HOME="/opt/android-sdk" \
 # 1. 基础系统与镜像源配置
 # ==========================================
 USER root
-RUN if [ -f /etc/apt/sources.list ]; then \
-        sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list; \
-        sed -i 's|security.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list; \
-    fi; \
-    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+# 兼容 deb822（trixie/bookworm）与传统 sources.list 两种格式
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources; \
         sed -i 's|security.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list.d/debian.sources; \
+    fi; \
+    if [ -f /etc/apt/sources.list ]; then \
+        sed -i 's|deb.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list; \
+        sed -i 's|security.debian.org|mirrors.cloud.tencent.com|g' /etc/apt/sources.list; \
     fi
 
+# 引入 Adoptium 仓库：提供 temurin-17-jdk，规避基础镜像源缺失 openjdk-17-jdk 的问题
+RUN mkdir -p /etc/apt/keyrings && \
+    wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public \
+      | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print $2}' /etc/os-release) main" \
+      > /etc/apt/sources.list.d/adoptium.list
+
 # build-essential + ca-certificates：cgo 编译（pkg/ 下含 .c/.h/.a）
-# cmake：scripts/setup-sandbox-env.sh 前置检查强依赖（第 121 行）
-# openjdk-17-jdk：脚本前置检查 java + 后续 setup-kotlinc.sh 需要 JRE（与 21 共存）
+# cmake：scripts/setup-sandbox-env.sh 前置检查强依赖（第 121 行））
 # Cypress：全局安装 cypress@15（含二进制）并保留在镜像中，供运行测试直接使用；
 #   系统依赖用官方命令 `cypress install --dependencies` 按当前发行版自动解析安装
 #   （xvfb + GTK/ATK 等），避免硬编码冷门包（跨 Debian 版本易漂移，如
@@ -48,7 +55,7 @@ RUN if [ -f /etc/apt/sources.list ]; then \
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       curl wget git build-essential ca-certificates \
-      cmake openjdk-17-jdk \
+      cmake temurin-17-jdk \
       unzip openjdk-21-jdk jq \
       python3 \
     && npm install -g cypress@15 \
@@ -84,8 +91,8 @@ RUN set -eux; \
 # JDK 17 与 21 共存：两者均安装，默认 21（AGP 8.13 + Gradle 9.0 要求 JDK 17+，本工程 jvmTarget=21），
 # 17 保留供其他工具使用；用 `use-jdk 17|21` 可随时切换默认 java。
 RUN set -eux; \
-    update-alternatives --install /usr/bin/java java /usr/lib/jvm/java-17-openjdk-amd64/bin/java 1711; \
-    update-alternatives --install /usr/bin/javac javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac 1711; \
+    update-alternatives --install /usr/bin/java java /usr/lib/jvm/temurin-17-jdk-amd64/bin/java 1711; \
+    update-alternatives --install /usr/bin/javac javac /usr/lib/jvm/temurin-17-jdk-amd64/bin/javac 1711; \
     update-alternatives --install /usr/bin/java java ${JAVA_HOME}/bin/java 2111; \
     update-alternatives --install /usr/bin/javac javac ${JAVA_HOME}/bin/javac 2111; \
     update-alternatives --set java ${JAVA_HOME}/bin/java; \
@@ -93,7 +100,7 @@ RUN set -eux; \
     printf '%s\n' \
       '#!/bin/sh' \
       'case "$1" in' \
-      '  17) J=/usr/lib/jvm/java-17-openjdk-amd64 ;;' \
+      '  17) J=/usr/lib/jvm/temurin-17-jdk-amd64 ;;' \
       '  21) J=/usr/lib/jvm/java-21-openjdk-amd64 ;;' \
       '  *) echo "usage: use-jdk 17|21" >&2; exit 1 ;;' \
       'esac' \
