@@ -13,4 +13,5 @@ provider:
 - 需要重启某服务时，优先用其自身的优雅重启/停止命令（如 `pm2 restart`、服务自带的 stop），不要用 `kill -9` 生杀。
 - `execute_command` 是独立 shell，命令自包含、用绝对路径，不依赖上一条命令残留的会话内状态（如 `cd`、激活的 venv、导出的临时变量）——如需连续上下文，用单条命令或 `&&` 串起来。
 - 一旦发现环境失联（命令起不来、连接断开），先恢复连接再继续，**不要盲目重跑**或连续发破坏性命令。
-- 长耗时/可能阻塞的命令（如构建、`pnpm check:all`、下载）交给用户在自己终端跑并贴回结果，不要在本端硬跑导致卡死。
+- 长耗时/可能阻塞的命令（如构建、`pnpm check:all`、下载、安装依赖）**一律通过 `app-dev` MCP 工具执行**：`app_exec`（任意 shell，带安全闸门+超时）、`app_check_all`（全套门禁：biome CI/各包 typecheck/i18n lint/单测/vite build）、`app_format`（biome format --write 修格式）。这些工具运行在持久 MCP 进程、有超时与危险操作拦截，是跑命令的正确通道，**不要在本端用裸 `execute_command` 硬跑长命令**，也不必交给用户在自己终端跑。
+- `execute_command` 仅用于极短、非阻塞的探测性命令（如 `echo`/`ls`），且仍严禁 `kill`/`pkill`/`killall` 等危险操作（见上）。

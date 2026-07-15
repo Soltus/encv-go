@@ -23,9 +23,10 @@
  */
 
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { readFileSync, watch } from "node:fs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { dirname, resolve, basename } from "node:path";
+import * as skillManager from "./skill-manager.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, ".."); // /workspace
@@ -75,6 +76,48 @@ function run(cmd, args, cwd, timeoutMs) {
 function trim(s) {
   if (s.length <= MAX_OUT) return s;
   return `…(truncated ${s.length - MAX_OUT} chars)…\n` + s.slice(-MAX_OUT);
+}
+
+// --- safety gate for app_exec (HMR) -------------------------------------
+// The destructive-command rules live in app-dev-guard.mjs. This server watches
+// that file and re-imports it on change, so editing the rules takes effect
+// immediately — no MCP server restart, no new conversation (HMR-style reload).
+const GUARD_MODULE = resolve(__dirname, "app-dev-guard.mjs");
+let guardRef = null; // { APP_EXEC_DENY, guardAppExec }; null => fail-closed
+
+async function loadGuard() {
+  try {
+    const mod = await import(pathToFileURL(GUARD_MODULE).href + `?t=${Date.now()}`);
+    guardRef = mod;
+    process.stderr.write(`[app-dev] guard reloaded: ${mod.APP_EXEC_DENY.length} rules\n`);
+  } catch (e) {
+    process.stderr.write(`[app-dev] guard load FAILED (kept previous): ${e.message}\n`);
+  }
+}
+
+await loadGuard();
+
+// --- skill manager (CRUD + multi-path + monitoring) ------------------------
+await skillManager.loadRegistry();
+skillManager.startWatching();
+// Watch the DIRECTORY (not the file inode): editors / write_to_file do atomic
+// save (write temp + rename), which unlinks the original inode and silently
+// stops an inotify watch on the FILE. Watching the dir + filtering by basename
+// survives atomic saves. (This was the HMR bug: guard edits didn't reload.)
+const GUARD_DIR = dirname(GUARD_MODULE);
+const GUARD_BASENAME = basename(GUARD_MODULE);
+let guardWatchTimer = null;
+const onGuardChange = () => {
+  clearTimeout(guardWatchTimer);
+  guardWatchTimer = setTimeout(loadGuard, 80); // debounce double-fire
+};
+try {
+  watch(GUARD_DIR, (event, filename) => {
+    if (filename === GUARD_BASENAME) onGuardChange();
+  });
+  process.stderr.write(`[app-dev] HMR watching ${GUARD_DIR}/${GUARD_BASENAME}\n`);
+} catch (e) {
+  process.stderr.write(`[app-dev] HMR watch FAILED: ${e.message}\n`);
 }
 
 function textResult(text, isError = false) {
@@ -148,7 +191,7 @@ const TOOLS = [
   {
     name: "app_exec",
     description:
-      "Run an arbitrary shell command via `bash -c` inside the repo (cwd must stay under /workspace, defaults to /workspace). Stable alternative to the flaky built-in terminal: runs in this persistent MCP process, captures stdout/stderr, enforces a timeout. Use for commands that hang/crash the normal terminal (e.g. gradle, long builds, docker). WARNING: executes arbitrary commands — use with care.",
+      "Run an arbitrary shell command via `bash -c` inside the repo (cwd must stay under /workspace, defaults to /workspace). Stable alternative to the flaky built-in terminal: runs in this persistent MCP process, captures stdout/stderr, enforces a timeout. Use for commands that hang/crash the normal terminal (e.g. gradle, long builds, docker). WARNING: executes arbitrary commands — use with care. A safety gate blocks destructive ops: batch/recursive deletes (rm -rf/rmdir/shred), dangerous git (reset --hard, clean -f, checkout -- ., push --force, branch -D), process kills (kill/pkill/killall), privilege escalation (sudo/su), and curl|sh / wget|sh.",
     inputSchema: {
       type: "object",
       properties: {
@@ -168,6 +211,106 @@ const TOOLS = [
       },
       required: ["command"],
     },
+  },
+  {
+    name: "app_guard_reload",
+    description:
+      "Manually re-load the app_exec safety-gate rules from scripts/app-dev-guard.mjs (HMR). Use to confirm the running MCP server picked up edits, or to force a reload after changing the guard file. Returns the active rule count.",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "app_skill_list",
+    description:
+      "List all registered project skills (name, path, source, hash). Optional `filter` matches name/displayName/description. Skills live under multiple base paths and are auto-discovered + watched.",
+    inputSchema: {
+      type: "object",
+      properties: { filter: { type: "string", description: "case-insensitive substring filter" } },
+    },
+  },
+  {
+    name: "app_skill_get",
+    description: "Get one skill's full metadata by name (path, source, sourceType, hash, description).",
+    inputSchema: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+  {
+    name: "app_skill_add",
+    description:
+      "Add a skill. method=import copies a local dir/file into a skill path; method=npx runs `npm install <package>` then copies the first SKILL.md found; method=git does `git clone --depth 1 <url>` (optional subdir/ref) then copies skill(s). Optional name (else derived), targetPath (else first writable base path).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        method: { type: "string", enum: ["import", "npx", "git"] },
+        src: { type: "string", description: "import: local path (file or dir) of the skill" },
+        package: { type: "string", description: "npx: npm package name to install" },
+        bin: { type: "string", description: "npx: optional installer command args to run after install" },
+        url: { type: "string", description: "git: repo URL to clone" },
+        subdir: { type: "string", description: "git: subpath within repo holding the skill(s)" },
+        ref: { type: "string", description: "git: branch/tag to clone (default default branch)" },
+        name: { type: "string", description: "override skill name (else derived from source/dir)" },
+        targetPath: { type: "string", description: "base skill path key (repo-relative), else first writable" },
+      },
+      required: ["method"],
+    },
+  },
+  {
+    name: "app_skill_update",
+    description:
+      "Update a skill. With `method` re-fetches via import/npx/git into the same path. Without `method` just refreshes the stored hash from disk (after manual edits).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        method: { type: "string", enum: ["import", "npx", "git"] },
+        src: { type: "string" },
+        package: { type: "string" },
+        url: { type: "string" },
+        subdir: { type: "string" },
+        ref: { type: "string" },
+        targetPath: { type: "string" },
+      },
+      required: ["name"],
+    },
+  },
+  {
+    name: "app_skill_remove",
+    description: "Remove a skill: delete its directory and drop it from the registry.",
+    inputSchema: {
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    },
+  },
+  {
+    name: "app_skill_paths",
+    description: "List the configured skill base paths (editable list; skills are discovered under each).",
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "app_skill_path_add",
+    description: "Add a skill base path (repo-relative, e.g. .codebuddy/skills). Enables discovery + watching there.",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string" } },
+      required: ["path"],
+    },
+  },
+  {
+    name: "app_skill_path_remove",
+    description: "Remove a skill base path from the tracked list (does not delete skills already there).",
+    inputSchema: {
+      type: "object",
+      properties: { path: { type: "string" } },
+      required: ["path"],
+    },
+  },
+  {
+    name: "app_skill_rescan",
+    description: "Force a re-scan of all skill paths: re-discover skills, recompute hashes, resync the registry. Returns the discovered skill count.",
+    inputSchema: { type: "object", properties: {} },
   },
 ];
 
@@ -219,6 +362,9 @@ async function dispatch(name, args = {}) {
   if (name === "app_exec") {
     const raw = String(args.command || "").trim();
     if (!raw) return textResult("command is required", true);
+    if (!guardRef) return textResult("⛔ 安全门禁模块未就绪，拒绝执行以防误放行。", true);
+    const blocked = guardRef.guardAppExec(raw);
+    if (blocked) return textResult(`⛔ 命令被安全门禁拦截（${blocked}），如需执行请改用更安全的等价命令。`, true);
     const cwd =
       args.cwd && String(args.cwd).startsWith("/workspace")
         ? String(args.cwd)
@@ -229,6 +375,55 @@ async function dispatch(name, args = {}) {
       `exit=${r.code}${r.timedOut ? " (TIMED OUT)" : ""}\n--- stdout ---\n${trim(r.stdout)}\n--- stderr ---\n${trim(r.stderr)}`,
       r.code !== 0
     );
+  }
+
+  if (name === "app_guard_reload") {
+    await loadGuard();
+    const n = guardRef ? guardRef.APP_EXEC_DENY.length : 0;
+    return textResult(`guard reloaded: ${n} rules active`);
+  }
+
+  // --- skill management -----------------------------------------------------
+  if (name === "app_skill_list") {
+    const list = skillManager.listSkills(args.filter);
+    return textResult(JSON.stringify(list, null, 2));
+  }
+  if (name === "app_skill_get") {
+    const s = skillManager.getSkill(args.name);
+    return s ? textResult(JSON.stringify(s, null, 2)) : textResult(`skill not found: ${args.name}`, true);
+  }
+  if (name === "app_skill_add") {
+    const r = await skillManager.addSkill(args);
+    if (!r.ok) return textResult(`add failed: ${r.error}`, true);
+    await skillManager.scanAndSync();
+    return textResult(`skill added: ${JSON.stringify(r)}`);
+  }
+  if (name === "app_skill_update") {
+    const r = await skillManager.updateSkill(args.name, args);
+    if (!r.ok) return textResult(`update failed: ${r.error}`, true);
+    return textResult(`skill updated: ${JSON.stringify(r)}`);
+  }
+  if (name === "app_skill_remove") {
+    const r = await skillManager.removeSkill(args.name);
+    if (!r.ok) return textResult(`remove failed: ${r.error}`, true);
+    return textResult(`skill removed: ${JSON.stringify(r)}`);
+  }
+  if (name === "app_skill_paths") {
+    return textResult(JSON.stringify(skillManager.listSkillPaths(), null, 2));
+  }
+  if (name === "app_skill_path_add") {
+    const r = skillManager.addSkillPath(args.path);
+    if (!r.ok) return textResult(`add path failed: ${r.error}`, true);
+    return textResult(`skill path added: ${JSON.stringify(r)}`);
+  }
+  if (name === "app_skill_path_remove") {
+    const r = skillManager.removeSkillPath(args.path);
+    if (!r.ok) return textResult(`remove path failed: ${r.error}`, true);
+    return textResult(`skill path removed: ${JSON.stringify(r)}`);
+  }
+  if (name === "app_skill_rescan") {
+    const synced = await skillManager.scanAndSync();
+    return textResult(`rescanned: ${Object.keys(synced).length} skill(s)`);
   }
 
   return textResult(`Unknown tool: ${name}`, true);

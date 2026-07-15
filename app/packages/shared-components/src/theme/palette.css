@@ -1,0 +1,64 @@
+/* =============================================================================
+ * ENCV 主题调色板（纯 CSS，Chromium 114 ✅，与 daisyUI v5 主题值完全一致）
+ *
+ * 这是 daisyUI encv / encv-dark 主题的「纯 CSS 等价」定义，作为不需要
+ * Tailwind 构建管线的消费方（当前为 encv-mobile 主应用）的调色板单一来源。
+ * 使用 @plugin "daisyui/theme" 的插件 web 与此处的 --color-* 值保持一致，
+ * 任何改动需同步 daisyui.css 的 @plugin "daisyui/theme" 块（见 §2.7）。
+ *
+ * 兼容性：仅 hex + 标准自定义属性，无 light-dark()/allow-discrete/field-sizing
+ * 等越基线特性（见 §2.8）。
+ * ========================================================================== */
+
+/* 亮色：encv（默认） */
+:root,
+[data-theme="encv"] {
+  color-scheme: light;
+
+  --color-primary: #8b5cf6;
+  --color-primary-content: #ffffff;
+  --color-secondary: #06b6d4;
+  --color-secondary-content: #ffffff;
+  --color-accent: #ec4899;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #ffffff;
+  --color-base-200: #f3f4f6;
+  --color-base-300: #e5e7eb;
+  --color-base-content: #1f2937;
+  --color-info: #3b82f6;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+}
+
+/* 暗色：encv-dark（跟随 prefers-color-scheme: dark 或 [data-theme="encv-dark"]） */
+[data-theme="encv-dark"] {
+  color-scheme: dark;
+
+  --color-primary: #9c6df7;
+  --color-primary-content: #ffffff;
+  --color-secondary: #1fbdd8;
+  --color-secondary-content: #ffffff;
+  --color-accent: #ee5aa3;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #0f172a;
+  --color-base-200: #1e293b;
+  --color-base-300: #334155;
+  --color-base-content: #e2e8f0;
+  --color-info: #3b82f6;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+}

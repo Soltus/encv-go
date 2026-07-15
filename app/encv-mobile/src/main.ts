@@ -32,6 +32,10 @@ import "@ionic/vue/css/normalize.css";
 import "@ionic/vue/css/structure.css";
 import "@ionic/vue/css/typography.css";
 import "@encv/shared-components/theme/variables.css";
+// 🆕 Phase 1：引入共享主题核心（调色板 + Ionic←daisyUI 桥接令牌，纯 CSS 不依赖 Tailwind）。
+// 必须在 variables.css 之后，桥接的 --ion-color-* 才能覆盖其字面量，
+// 让 Ionic 组件跟随与插件一致的 daisyUI encv / encv-dark 单一调色板。
+import "@encv/shared-components/styles/theme-core.css";
 import "@encv/shared-components/styles/timeline-tokens.css";
 import "@encv/shared-components/styles/timeline-utilities.css";
 

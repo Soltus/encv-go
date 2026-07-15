@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "codemogger": {
+      "command": "node",
+      "args": ["/workspace/app/codemogger-patch/mcp-server.mjs"],
+      "env": { "CODEMOGGER_ROOT": "/workspace/app/encv-mobile" }
+    },
+    "app-dev": {
+      "command": "node",
+      "args": ["/workspace/scripts/app-dev-mcp.mjs"]
+    },
+    "web-fetch": {
+      "command": "node",
+      "args": ["/workspace/scripts/web-fetch-mcp.mjs"]
+    }
+  }
+}

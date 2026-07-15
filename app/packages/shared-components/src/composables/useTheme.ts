@@ -205,34 +205,16 @@ function applyColor(color: string) {
   const rgb = hexToRgb(color);
   const contrast = getContrastColor(color);
 
-  const lighter = (hex: string, percent: number): string => {
-    const clean = hex.replace("#", "");
-    let r = parseInt(clean.substring(0, 2), 16);
-    let g = parseInt(clean.substring(2, 4), 16);
-    let b = parseInt(clean.substring(4, 6), 16);
-    r = Math.min(255, Math.round(r + ((255 - r) * percent) / 100));
-    g = Math.min(255, Math.round(g + ((255 - g) * percent) / 100));
-    b = Math.min(255, Math.round(b + ((255 - b) * percent) / 100));
-    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
-  };
-
-  const darker = (hex: string, percent: number): string => {
-    const clean = hex.replace("#", "");
-    let r = parseInt(clean.substring(0, 2), 16);
-    let g = parseInt(clean.substring(2, 4), 16);
-    let b = parseInt(clean.substring(4, 6), 16);
-    r = Math.max(0, Math.round(r * (1 - percent / 100)));
-    g = Math.max(0, Math.round(g * (1 - percent / 100)));
-    b = Math.max(0, Math.round(b * (1 - percent / 100)));
-    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
-  };
-
+  // 单一语义源：写入 daisyUI 的 --color-primary，shade/tint 由 bridge.css
+  // 经 color-mix(var(--color-primary) ...) 自动派生（Chromium 111+ ✅）。
+  // 这样换主题/自定义主色时，Ionic 与 daisyUI 组件共用同一派生链，
+  // useTheme 不再手搓 Ionic 的 shade/tint 数学（ACL 解耦：业务只认 --color-*）。
+  root.style.setProperty("--color-primary", color);
+  // Ionic web component 仍需 -rgb / contrast（bridge.css 对自定义色不负责，见其注释）：
   root.style.setProperty("--ion-color-primary", color);
   root.style.setProperty("--ion-color-primary-rgb", rgb);
   root.style.setProperty("--ion-color-primary-contrast", contrast);
   root.style.setProperty("--ion-color-primary-contrast-rgb", hexToRgb(contrast));
-  root.style.setProperty("--ion-color-primary-shade", darker(color, 10));
-  root.style.setProperty("--ion-color-primary-tint", lighter(color, 10));
 
   localStorage.setItem(COLOR_KEY, color);
 }
@@ -348,6 +330,9 @@ function setThemeColor(color: string) {
   applyColor(color);
 }
 
+/** 语义化别名（与 setThemeColor 等价），指向 daisyUI 语义主色令牌。 */
+export const setPrimaryColor = setThemeColor;
+
 export function setBgBlur(blur: number) {
   applyBgBlur(blur);
 }
@@ -383,6 +368,7 @@ export function useTheme() {
     initTheme,
     detectP3Support,
     setThemeColor,
+    setPrimaryColor,
     setBgColor,
     setBgGradient,
     setBgBlur,

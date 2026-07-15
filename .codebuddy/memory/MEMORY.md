@@ -87,3 +87,29 @@
 - **⚠️ flat-shared + 子目录 consumer 导入坑（2026-07-13 实测修复）**：shared `components/` 是**扁平**的（无 `automation/`/`group-detail/`/`tasks/` 子目录），但 #17/#18/#19 把这几个子目录组件提升进 shared 扁平层后，**consumer 视图仍用 `@/components/<subdir>/X.vue` 旧路径**——`encv-alias-fallback` 只做「本地 src → shared 同路径」精确回退，无法把 `@/components/group-detail/X` 映射到扁平的 `shared/components/X`，导致解析失败。已修复的 6 处：`PluginTestsDetail.vue:259`（`automation/StepMiniBadge`）、`GroupDetail.vue:145-147`（`group-detail/{PerformanceTab,TasksTab,PipelineTab}`）、`Tasks.vue:617-618`（`tasks/{TaskDebugPanel,TaskVirtualList}`）——全部改写为 `@encv/shared-components/components/<FlatName>.vue`。**今后提升带子目录的组件时，必须同步改写所有 consumer 的 import 到扁平 shared 路径**，否则构建/单测静默失败（`pnpm check:all` 才暴露）。`agent/`、`developer/`、`shared/` 子目录仍在 app 或 shared 中保留，其 `@/components/<subdir>/` 导入正常。
 
 
+
+## 项目 skill 注册约定（2026-07-15）
+- 项目内 skill 真源在 .agents/skills(capawesome/ionic/skill-creator)、.trae/skills(cypress/ffmpeg)、agent/.../video-encrypt。
+- 注册清单 skills-lock.json(agentskills.io 规范)的 skillPath 必须指向真实目录(.agents/skills/...)，曾错误地写 skills/ 导致失效。
+- 让 CodeBuddy 识别：在 .codebuddy/skills/<name> 建符号链接到上述真源(单一真源，无复制)。**已确认 CodeBuddy 正常识别 .codebuddy/skills 下的符号链接 skill**（用户 2026-07-15 验证）。
+- **skill 由 MCP 管理（scripts/skill-manager.mjs，app-dev MCP 的 9 个 app_skill_* 工具）**：多 skill 路径列表(skillPaths，默认 .codebuddy/.agents/.trae skills)持久化于 .codebuddy/skill-registry.json；路径可增删、skill 可 CRUD(add 三法 import/npx/git)、全程 fs.watch 监视(跟随符号链接、抗原子保存)。扫描/列表/增删改均走此模块，是 skill 生命周期的权威。注意：扫描时跟随符号链接，故 .codebuddy/skills/* 符号链接也能被识别(共 31 个 skill)。
+- app_exec MCP 安全门禁规则位于 scripts/app-dev-guard.mjs，server 热更新(监听目录按 basename 过滤，抗原子保存)，改规则即时生效无需重启；`app_guard_reload` 工具可手动重载并返回规则数。
+
+## MCP 注册单一真源（2026-07-15）
+- 权威文件：**/workspace/.codebuddy/mcp.json**（`mcpServers` 含 codemogger/app-dev/web-fetch，绝对 /workspace 路径）。.cnb.yml 流水线「构建 codemogger-patch 并注册 MCP」stage 用 `cp /workspace/.codebuddy/mcp.json /root/.codebuddy/mcp.json` 覆盖用户级注册，去掉原内联 printf 块。**改 MCP 只改项目文件 + 重跑流水线**，不要直接改 /root/.codebuddy/mcp.json（会被下次流水线覆盖）。
+- 注册后开新对话生效（同会话内工具列表缓存需刷新），不必重启 IDE。
+
+## web-fetch MCP（2026-07-15）
+- 高级 web_fetch 替代：`scripts/web-fetch-mcp.mjs`（stdio MCP server，注册名 `web-fetch`）。能力：retry(指数退避+Retry-After)、内容嗅探(magic bytes 复核声明的 content-type)、SPA 检测+可选 headless 渲染(puppeteer/playwright)、代理(HTTP/HTTPS CONNECT 隧道，零依赖)。核心函数导出，main 守卫启动 server，可 `node -e "import('/workspace/scripts/web-fetch-mcp.mjs')"` 单测。门禁/构建类走 app-dev，网页抓取走 web-fetch。
+
+## 前端主题重构（ENCV 共享包 / daisyUI / Ionic 桥接 · 2026-07-15）
+- 权威方案文档：`/workspace/ENCV前端主题重构方案.md`（daisyUI v5 + GSAP 重塑，共享包为主；Phase 0–5）。
+- **⚠️ vite 8 (rolldown) 打包 vite.config 的 ESM interop 坑（长期）**：把 `@tailwindcss/vite` 接入 encv-mobile vite 配置（`daisyUiPlugin()`，来自 `packages/shared-components/src/vite-plugins/daisy-ui.ts`）时，rolldown 把该依赖默认导出 interop 弄坏 → 构建报 `tailwindcss_vite_..._index_mjs.default is not a function`。运行时 `import('@tailwindcss/vite').default` 确为 function（node 验证过），纯属配置打包 interop。**影响**：主应用无法经 Tailwind 管线接入 daisyUI。**已采用替代**：encv-mobile 改引纯 CSS 入口 `packages/shared-components/src/styles/theme-core.css`（`@import tokens.css + palette.css + bridge.css + components.css`，不依赖 Tailwind）统一调色板；插件 web 仍用 `daisyui.css`(@plugin daisyui/theme 经 Tailwind)。**后续要让主应用用 Tailwind 工具类，须先解决此 interop**（daisy-ui.ts 做 default 兜底，或 vite 配置 external 化 @tailwindcss/vite），勿重复踩坑。
+- **调色板单一来源现状**：插件走 `daisyui.css` 的 `@plugin "daisyui/theme"`(encv/encv-dark)；主应用走 `palette.css`(纯 CSS 等价，值须与前者同步)。`bridge.css` 把 Ionic `--ion-color-*` 桥接到 daisyUI `--color-*`，主应用与插件共用。
+- **🔒 技术栈解耦 ACL（2026-07-15 落地，app_check_all 全绿）**：设计目标「换 gsap+daisyui，下游应用/插件零改动」。
+  - 动效：gsap 收敛进唯一 `packages/shared-components/src/motion/internal/gsap-engine.ts`（全仓唯一 `import gsap`）。对外契约 `src/motion/internal/types.ts` 的 `MotionEngine` 接口（引擎无关类型，无动画库 import）。12 个 composable + guard + index 全部经 `import { motion } from "./internal"`，公共签名仅用我们的类型（无 `gsap.TweenVars`/`ScrollTrigger`/`Flip` 泄漏）。`tokens.ts` 的 `EASE` 为语义键，由引擎 `EASE_MAP` 映射。`internal/index.ts` 的 `export { motion }` 是「换库唯一开关」。
+  - **noop 引擎 + 全局开关（2026-07-15 续7 加）**：`motion/internal/noop-engine.ts` 实现 `MotionEngine` 全 no-op（直接落终态），桶导出 `noopMotion`（改 `internal/index.ts` 一行即全局换 no-op）。`motion/guard.ts` 新增运行时总闸 `setMotionDisabled(bool|null)`/`getMotionDisabled()`（null=跟随系统 reduced-motion；true=强制全关；false=强制开），`getMotionProfile().enabled` 据此算。**注意与 `registry.ts` 的 `setMotionEnabled(name, enabled)`（按命名动画开关）同名冲突——全局开关必须叫 `setMotionDisabled`**，否则 TS2308。
+  - 主题：稳定视觉词汇 = CSS 变量(`palette.css`) + `.encv-*` 组件/工具类(`theme/components.css`，纯 CSS、零 `@apply`、只吃令牌)；daisyui 的 `@plugin` 块是唯一切换点。`daisyui.css` 已移除泄漏 daisyui 类的 `@layer components` 块。
+  - **useTheme 解耦（2026-07-15 续7）**：`applyColor` 不再手搓 Ionic `--ion-color-primary*` 的 shade/tint（原 lighter/darker 数学已删），改为只写 daisyUI 语义令牌 `--color-primary` + JS 补 `--ion-color-primary`/`-rgb`/contrast/`-contrast-rgb`；shade/tint 由 `bridge.css` 的 `color-mix(var(--color-primary)...)` 自动派生。新增语义别名 `setPrimaryColor`(=setThemeColor)。换主色时 Ionic 与 daisyUI 组件共用同一派生链。
+  - 换栈步骤：(a) 新增一个实现 `MotionEngine` 的文件，改 `internal/index.ts` 一行；(b) 重写 `daisyui.css` 的 `@plugin` 块（palette.css/components.css 不动）。下游零改动。
+- Phase 0/1/ACL/noop 引擎/useTheme 解耦已落地，`app_check_all` 全绿。Phase 3 动效试点已接通首个真实下游 `encv-mobile/src/views/ExtensionsPage.vue`（`useScrollReveal` 对 `.extensions-list` 错峰淡入，含 `ready` 异步闸门）。Phase 4=组件迁移到 .encv-*/bg-base-* + Appearance 重组；Phase 5=用户主题/Snippets 闭环。

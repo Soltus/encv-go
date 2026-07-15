@@ -69,25 +69,17 @@ $:
             else
               echo "⚠️ codemogger 未安装，跳过 apply（MCP server 仍可注册）"
             fi
-            # 2) 写入 MCP 注册（用 printf 写文件，避免 heredoc 在 YAML 缩进下
-            #    结束分隔符无法顶格、导致 bash 吞掉后续脚本的问题）
-            #    同时注册 codemogger（代码图谱）与 app-dev（项目门禁工具）。
+            # 2) 用项目内单一真源覆盖用户级注册，避免不一致：
+            #    /workspace/.codebuddy/mcp.json 是权威（含 codemogger / app-dev /
+            #    web-fetch），直接覆盖 /root/.codebuddy/mcp.json。之后改 MCP 只需
+            #    改项目文件并重新触发流水线，无需再动 printf 内联块。
             mkdir -p /root/.codebuddy
-            printf '%s\n' \
-              '{' \
-              '  "mcpServers": {' \
-              '    "codemogger": {' \
-              '      "command": "node",' \
-              '      "args": ["'"${PATCH_DIR}"'/mcp-server.mjs"],' \
-              '      "env": { "CODEMOGGER_ROOT": "'"${REPO_ROOT}"'/app/encv-mobile" }' \
-              '    },' \
-              '    "app-dev": {' \
-              '      "command": "node",' \
-              '      "args": ["'"${REPO_ROOT}"'/scripts/app-dev-mcp.mjs"]' \
-              '    }' \
-              '  }' \
-              '}' > /root/.codebuddy/mcp.json
-            echo "✅ MCP 已注册 (codemogger + app-dev): /root/.codebuddy/mcp.json"
+            if [ -f "${REPO_ROOT}/.codebuddy/mcp.json" ]; then
+              cp "${REPO_ROOT}/.codebuddy/mcp.json" /root/.codebuddy/mcp.json
+              echo "✅ MCP 已注册 (from .codebuddy/mcp.json): /root/.codebuddy/mcp.json"
+            else
+              echo "⚠️ 找不到 ${REPO_ROOT}/.codebuddy/mcp.json，跳过 MCP 覆盖"
+            fi
 
 include:
   - https://cnb.cool/sc.hwd/cnb-sync/-/blob/main/.cnb/workflows/sync.yml

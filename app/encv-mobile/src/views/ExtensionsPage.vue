@@ -22,7 +22,7 @@
           <p>{{ t('extensions.hint') }}</p>
         </div>
 
-        <div class="extensions-list">
+        <div class="extensions-list" ref="extensionsListEl">
           <ion-card v-for="ext in extensions" :key="ext.id" class="extension-card">
             <ion-card-header>
               <div class="ext-header-row">
@@ -138,11 +138,12 @@ import {
   serverOutline,
   trashOutline,
 } from "ionicons/icons";
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
+import { useScrollReveal } from "@encv/shared-components/motion";
 import {
   checkInstalledPlugins,
   debugApkValidation,
@@ -173,6 +174,13 @@ const extensions = ref<ExtensionInfo[]>([]);
 const isLoading = ref(true);
 const installError = ref("");
 const isInstalling = ref(false);
+
+// 动效试点（§2.5.2）：扩展卡片进入视口时错峰淡入。
+// ready 闸门等待异步加载完成后才落初始态，避免空列表不入场（gsap 经 ACL 全透明，
+// 下游不感知具体动画库；reduced-motion / setMotionDisabled(true) 自动落终态）。
+const extensionsListEl = ref<HTMLElement | null>(null);
+const extensionsReady = computed(() => !isLoading.value && extensions.value.length > 0);
+useScrollReveal(extensionsListEl, { stagger: true, ready: extensionsReady });
 
 function getExtIcon(id: string) {
   switch (id) {

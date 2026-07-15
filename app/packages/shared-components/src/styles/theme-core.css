@@ -1,0 +1,20 @@
+/* =============================================================================
+ * ENCV 主应用主题核心入口（共享，纯 CSS，不依赖 Tailwind 构建管线）
+ *
+ * 用途：encv-mobile 主应用引入此文件，获得与插件 daisyUI 完全一致的
+ *       「单一调色板」+ Ionic←daisyUI 桥接令牌，且无需把 @tailwindcss/vite
+ *       管线接入主应用 vite 配置（避免 vite 8 rolldown 打包配置时的
+ *       ESM interop 问题）。
+ *
+ * 组成：
+ *   - tokens.css     动效设计令牌（§2.6）
+ *   - palette.css    daisyUI encv/encv-dark 调色板（纯 CSS 等价，单一来源）
+ *   - bridge.css      Ionic ← daisyUI 桥接（让 Ionic 组件跟随同一调色板）
+ *
+ * 加载顺序：在 main.ts 中置于 variables.css 之后，桥接才能覆盖其字面量。
+ * ========================================================================== */
+
+@import "../theme/tokens.css";
+@import "../theme/palette.css";
+@import "../theme/bridge.css";
+@import "../theme/components.css";

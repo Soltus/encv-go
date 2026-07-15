@@ -1,0 +1,38 @@
+/* =============================================================================
+ * ENCV 动效设计令牌（与 ENCV前端主题重构方案.md §2.6 对应）
+ *
+ * 由 src/motion/guard.ts 在运行期读取 ::encv-vivid / ::encv-p3 计算
+ * MotionProfile（enabled / intensity），这里给出 CSS 侧同名变量，
+ * 让「纯 CSS 动画（非 GSAP）」也遵守同一套缓动 / 时长 / 强度。
+ *
+ * 兼容性：全部为 2023 年前已广泛支持的特性，Chromium 114 零风险（见 §2.8）。
+ * ========================================================================== */
+
+:root {
+  /* 缓动（与 GSAP ease 等价） */
+  --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);     /* power2.out */
+  --motion-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);  /* power1.inOut */
+  --motion-ease-back: cubic-bezier(0.34, 1.56, 0.64, 1); /* back.out */
+
+  /* 时长 */
+  --motion-dur-fast: 160ms;
+  --motion-dur-base: 320ms;
+  --motion-dur-slow: 520ms;
+  --motion-stagger: 0.04s;
+
+  /* 强度：vivid / P3 时由 theme 层上调到 1.3；reduced-motion 时不使用 */
+  --motion-intensity: 1;
+}
+
+/* vivid / P3 增强（与 guard.ts getMotionProfile 的 vivid 分支对齐） */
+.encv-vivid,
+.encv-p3 {
+  --motion-intensity: 1.3;
+}
+
+/* 尊重 reduced-motion：纯 CSS 动画也直接落终态 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-intensity: 0;
+  }
+}

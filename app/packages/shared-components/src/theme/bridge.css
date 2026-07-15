@@ -1,0 +1,186 @@
+/* =============================================================================
+ * ENCV Ionic ← daisyUI 桥接令牌（Phase 1，与 ENCV前端主题重构方案.md §2.x 对应）
+ *
+ * 目的：让 Ionic 组件（web component，shadow DOM 内使用 --ion-color-*）跟随
+ *       共享包 daisyUI 主题（encv / encv-dark）的单一调色板，消除「主应用蓝、
+ *       插件紫」的分裂。
+ *
+ * 机制：
+ *   - Ionic 颜色令牌重写为 daisyUI --color-* 的 var() 别名，主题切换时自动跟随。
+ *   - shade / tint / contrast 用 color-mix() 派生（Chromium 111+ ✅，见 §2.8）。
+ *   - -rgb 三元组无法在 114 用相对颜色语法提取（119+ 才有），故对内置两主题
+ *     硬编码（与 daisyUI 主题值一致）；自定义主色（Phase 2 重写 useTheme）由
+ *     JS 同步写入 --ion-color-*-rgb，本文件不负责。
+ *   - 兼容遗留 body.dark 暗色切换（与 [data-theme="encv-dark"] 取同一套暗色值）。
+ *
+ * 加载：由 styles/daisyui.css 顶部 @import 引入；encv-mobile 在 variables.css
+ *       之后 import daisyui.css，故本桥接在级联上覆盖 variables.css 的字面量。
+ * ========================================================================== */
+
+/* ── 亮色（默认 :root / [data-theme="encv"]） ───────────────────────────── */
+:root,
+[data-theme="encv"] {
+  /* primary */
+  --ion-color-primary: var(--color-primary);
+  --ion-color-primary-rgb: 139, 92, 246;
+  --ion-color-primary-contrast: var(--color-primary-content);
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: color-mix(in srgb, var(--color-primary) 85%, #000);
+  --ion-color-primary-tint: color-mix(in srgb, var(--color-primary) 85%, #fff);
+
+  /* secondary */
+  --ion-color-secondary: var(--color-secondary);
+  --ion-color-secondary-rgb: 6, 182, 212;
+  --ion-color-secondary-contrast: var(--color-secondary-content);
+  --ion-color-secondary-contrast-rgb: 255, 255, 255;
+  --ion-color-secondary-shade: color-mix(in srgb, var(--color-secondary) 85%, #000);
+  --ion-color-secondary-tint: color-mix(in srgb, var(--color-secondary) 85%, #fff);
+
+  /* tertiary → daisyUI accent */
+  --ion-color-tertiary: var(--color-accent);
+  --ion-color-tertiary-rgb: 236, 72, 153;
+  --ion-color-tertiary-contrast: var(--color-accent-content);
+  --ion-color-tertiary-contrast-rgb: 255, 255, 255;
+  --ion-color-tertiary-shade: color-mix(in srgb, var(--color-accent) 85%, #000);
+  --ion-color-tertiary-tint: color-mix(in srgb, var(--color-accent) 85%, #fff);
+
+  /* success */
+  --ion-color-success: var(--color-success);
+  --ion-color-success-rgb: 34, 197, 94;
+  --ion-color-success-contrast: var(--color-success-content);
+  --ion-color-success-contrast-rgb: 255, 255, 255;
+  --ion-color-success-shade: color-mix(in srgb, var(--color-success) 85%, #000);
+  --ion-color-success-tint: color-mix(in srgb, var(--color-success) 85%, #fff);
+
+  /* warning（黄/琥珀，文字用黑保持可读） */
+  --ion-color-warning: var(--color-warning);
+  --ion-color-warning-rgb: 245, 158, 11;
+  --ion-color-warning-contrast: #000000;
+  --ion-color-warning-contrast-rgb: 0, 0, 0;
+  --ion-color-warning-shade: color-mix(in srgb, var(--color-warning) 85%, #000);
+  --ion-color-warning-tint: color-mix(in srgb, var(--color-warning) 85%, #fff);
+
+  /* danger → daisyUI error */
+  --ion-color-danger: var(--color-error);
+  --ion-color-danger-rgb: 239, 68, 68;
+  --ion-color-danger-contrast: var(--color-error-content);
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: color-mix(in srgb, var(--color-error) 85%, #000);
+  --ion-color-danger-tint: color-mix(in srgb, var(--color-error) 85%, #fff);
+
+  /* medium（中性灰，由 base-content / base-100 混合派生） */
+  --ion-color-medium: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
+  --ion-color-medium-rgb: 143, 148, 155;
+  --ion-color-medium-contrast: #ffffff;
+  --ion-color-medium-contrast-rgb: 255, 255, 255;
+  --ion-color-medium-shade: color-mix(in srgb, var(--ion-color-medium) 85%, #000);
+  --ion-color-medium-tint: color-mix(in srgb, var(--ion-color-medium) 85%, #fff);
+
+  /* light → base-200 */
+  --ion-color-light: var(--color-base-200);
+  --ion-color-light-rgb: 243, 244, 246;
+  --ion-color-light-contrast: #000000;
+  --ion-color-light-contrast-rgb: 0, 0, 0;
+  --ion-color-light-shade: color-mix(in srgb, var(--color-base-200) 85%, #000);
+  --ion-color-light-tint: color-mix(in srgb, var(--color-base-200) 85%, #fff);
+
+  /* 背景 / 文本 / 表面 */
+  --ion-background-color: var(--color-base-100);
+  --ion-background-color-rgb: 255, 255, 255;
+  --ion-text-color: var(--color-base-content);
+  --ion-text-color-rgb: 31, 41, 55;
+
+  --ion-item-background: var(--color-base-100);
+  --ion-card-background: var(--color-base-100);
+  --ion-toolbar-background: var(--color-base-200);
+
+  --ion-overlay-background-color: var(--color-base-200);
+  --ion-action-sheet-background: var(--color-base-200);
+  --ion-alert-background: var(--color-base-100);
+  --ion-popover-background: var(--color-base-100);
+
+  /* 业务自定义令牌 */
+  --encv-bg-secondary: var(--color-base-200);
+  --encv-text-secondary: color-mix(in srgb, var(--color-base-content) 65%, var(--color-base-100));
+  --encv-border-color: var(--color-base-300);
+  --encv-hover-bg: var(--color-base-200);
+}
+
+/* ── 暗色（[data-theme="encv-dark"] / 遗留 body.dark） ──────────────────── */
+[data-theme="encv-dark"],
+body.dark {
+  --ion-color-primary: var(--color-primary);
+  --ion-color-primary-rgb: 156, 109, 247;
+  --ion-color-primary-contrast: var(--color-primary-content);
+  --ion-color-primary-contrast-rgb: 255, 255, 255;
+  --ion-color-primary-shade: color-mix(in srgb, var(--color-primary) 85%, #000);
+  --ion-color-primary-tint: color-mix(in srgb, var(--color-primary) 85%, #fff);
+
+  --ion-color-secondary: var(--color-secondary);
+  --ion-color-secondary-rgb: 31, 189, 216;
+  --ion-color-secondary-contrast: var(--color-secondary-content);
+  --ion-color-secondary-contrast-rgb: 255, 255, 255;
+  --ion-color-secondary-shade: color-mix(in srgb, var(--color-secondary) 85%, #000);
+  --ion-color-secondary-tint: color-mix(in srgb, var(--color-secondary) 85%, #fff);
+
+  --ion-color-tertiary: var(--color-accent);
+  --ion-color-tertiary-rgb: 238, 90, 163;
+  --ion-color-tertiary-contrast: var(--color-accent-content);
+  --ion-color-tertiary-contrast-rgb: 255, 255, 255;
+  --ion-color-tertiary-shade: color-mix(in srgb, var(--color-accent) 85%, #000);
+  --ion-color-tertiary-tint: color-mix(in srgb, var(--color-accent) 85%, #fff);
+
+  --ion-color-success: var(--color-success);
+  --ion-color-success-rgb: 34, 197, 94;
+  --ion-color-success-contrast: var(--color-success-content);
+  --ion-color-success-contrast-rgb: 255, 255, 255;
+  --ion-color-success-shade: color-mix(in srgb, var(--color-success) 85%, #000);
+  --ion-color-success-tint: color-mix(in srgb, var(--color-success) 85%, #fff);
+
+  --ion-color-warning: var(--color-warning);
+  --ion-color-warning-rgb: 245, 158, 11;
+  --ion-color-warning-contrast: #000000;
+  --ion-color-warning-contrast-rgb: 0, 0, 0;
+  --ion-color-warning-shade: color-mix(in srgb, var(--color-warning) 85%, #000);
+  --ion-color-warning-tint: color-mix(in srgb, var(--color-warning) 85%, #fff);
+
+  --ion-color-danger: var(--color-error);
+  --ion-color-danger-rgb: 239, 68, 68;
+  --ion-color-danger-contrast: var(--color-error-content);
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: color-mix(in srgb, var(--color-error) 85%, #000);
+  --ion-color-danger-tint: color-mix(in srgb, var(--color-error) 85%, #fff);
+
+  --ion-color-medium: color-mix(in srgb, var(--color-base-content) 65%, var(--color-base-100));
+  --ion-color-medium-rgb: 121, 128, 141;
+  --ion-color-medium-contrast: #ffffff;
+  --ion-color-medium-contrast-rgb: 255, 255, 255;
+  --ion-color-medium-shade: color-mix(in srgb, var(--ion-color-medium) 85%, #000);
+  --ion-color-medium-tint: color-mix(in srgb, var(--ion-color-medium) 85%, #fff);
+
+  --ion-color-light: var(--color-base-200);
+  --ion-color-light-rgb: 30, 41, 59;
+  --ion-color-light-contrast: #ffffff;
+  --ion-color-light-contrast-rgb: 255, 255, 255;
+  --ion-color-light-shade: color-mix(in srgb, var(--color-base-200) 85%, #000);
+  --ion-color-light-tint: color-mix(in srgb, var(--color-base-200) 85%, #fff);
+
+  --ion-background-color: var(--color-base-100);
+  --ion-background-color-rgb: 15, 23, 42;
+  --ion-text-color: var(--color-base-content);
+  --ion-text-color-rgb: 226, 232, 240;
+
+  --ion-item-background: var(--color-base-100);
+  --ion-card-background: var(--color-base-100);
+  --ion-toolbar-background: var(--color-base-200);
+
+  --ion-overlay-background-color: var(--color-base-200);
+  --ion-action-sheet-background: var(--color-base-200);
+  --ion-alert-background: var(--color-base-100);
+  --ion-popover-background: var(--color-base-100);
+
+  --encv-bg-secondary: var(--color-base-200);
+  --encv-text-secondary: color-mix(in srgb, var(--color-base-content) 65%, var(--color-base-100));
+  --encv-border-color: var(--color-base-300);
+  --encv-hover-bg: var(--color-base-200);
+}
