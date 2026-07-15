@@ -165,7 +165,7 @@
           <ion-label>
             <h3>Run Workflow（DAG 引擎）</h3>
             <p>
-              <span v-if="!mockGenerated" style="color: var(--ion-color-danger)">⚠ 请先生成 Mock 数据</span>
+              <span v-if="!mockGenerated" style="color: var(--color-error)">⚠ 请先生成 Mock 数据</span>
               <span v-else>矩阵展开 → 依赖调度 → WS 回调驱动状态转移</span>
             </p>
           </ion-label>
@@ -716,29 +716,29 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.section-hint { font-size: 12px; color: var(--ion-color-medium-shade); padding: 8px 16px 4px; margin: 0; }
-.mock-root-path { font-family: monospace; font-size: 12px; background: var(--ion-color-light-shade); padding: 2px 6px; border-radius: 4px; }
+.section-hint { font-size: 12px; color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black)); padding: 8px 16px 4px; margin: 0; }
+.mock-root-path { font-family: monospace; font-size: 12px; background: color-mix(in srgb, var(--color-base-200) 85%, var(--color-black)); padding: 2px 6px; border-radius: 4px; }
 
-.mock-stats-card { margin: 8px 16px; padding: 12px 16px; background: var(--ion-color-light); border-radius: 8px; }
+.mock-stats-card { margin: 8px 16px; padding: 12px 16px; background: var(--color-base-200); border-radius: 8px; }
 .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 14px; }
 .stat-value { font-weight: 600; font-family: monospace; }
 .stat-value--warn { color: #B8860B; }
 
 /* ========== 🆕 2026-06-17 插件权威扩展名卡片 ========== */
-.plugin-ext-card { margin: 8px 16px; padding: 12px 16px; background: rgba(79, 140, 255, 0.06); border-radius: 8px; border-left: 3px solid var(--ion-color-primary); }
-.plugin-ext-header { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ion-color-primary-shade); font-weight: 600; margin-bottom: 8px; }
+.plugin-ext-card { margin: 8px 16px; padding: 12px 16px; background: rgba(79, 140, 255, 0.06); border-radius: 8px; border-left: 3px solid var(--color-primary); }
+.plugin-ext-header { display: flex; align-items: center; gap: 8px; font-size: 13px; color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black)); font-weight: 600; margin-bottom: 8px; }
 .plugin-ext-header ion-icon { font-size: 18px; }
 .plugin-ext-title { letter-spacing: 0.2px; }
 .plugin-ext-list { display: flex; flex-direction: column; gap: 4px; }
 .plugin-ext-row { display: grid; grid-template-columns: 120px 100px 1fr; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
 .plugin-ext-name { font-weight: 500; color: var(--ion-text-color); }
-.plugin-ext-value { font-family: monospace; background: var(--ion-color-light-shade); padding: 1px 6px; border-radius: 3px; color: var(--ion-color-primary-shade); font-weight: 600; }
-.plugin-ext-supports { color: var(--ion-color-medium); font-family: monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.progress-text { font-size: 12px; color: var(--ion-color-medium); padding: 4px 16px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.progress-card { margin: 8px 16px; padding: 12px 16px; background: var(--ion-color-light); border-radius: 8px; }
+.plugin-ext-value { font-family: monospace; background: color-mix(in srgb, var(--color-base-200) 85%, var(--color-black)); padding: 1px 6px; border-radius: 3px; color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black)); font-weight: 600; }
+.plugin-ext-supports { color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)); font-family: monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progress-text { font-size: 12px; color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)); padding: 4px 16px; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progress-card { margin: 8px 16px; padding: 12px 16px; background: var(--color-base-200); border-radius: 8px; }
 .progress-stats { display: flex; justify-content: space-between; margin-top: 6px; font-size: 13px; }
-.progress-stats .passed { color: var(--ion-color-success); }
-.progress-stats .failed { color: var(--ion-color-danger); }
+.progress-stats .passed { color: var(--color-success); }
+.progress-stats .failed { color: var(--color-error); }
 .progress-stats .pending { color: #B8860B; }
 
 /* 🆕 2026-06-18 Task 13：mock-gen-log-* 样式已迁移到 MockGenLogCard.vue */
@@ -751,17 +751,17 @@ onUnmounted(() => {
   margin: 12px 16px;
   padding: 14px 16px;
   background: linear-gradient(180deg, rgba(220, 38, 38, 0.08) 0%, rgba(220, 38, 38, 0.04) 100%);
-  border-left: 4px solid var(--ion-color-danger);
+  border-left: 4px solid var(--color-error);
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(220, 38, 38, 0.15);
 }
 .inline-error-header { display: flex; align-items: flex-start; gap: 10px; }
 .inline-error-icon { font-size: 24px; flex-shrink: 0; margin-top: 2px; }
 .inline-error-title-block { flex: 1; min-width: 0; }
-.inline-error-title { font-size: 15px; font-weight: 600; color: var(--ion-color-danger-shade); line-height: 1.3; }
-.inline-error-source { font-size: 11px; color: var(--ion-color-medium); margin-top: 2px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
-.inline-error-close { background: none; border: none; font-size: 24px; line-height: 1; color: var(--ion-color-medium); cursor: pointer; padding: 0 4px; flex-shrink: 0; }
-.inline-error-close:hover { color: var(--ion-color-danger); }
+.inline-error-title { font-size: 15px; font-weight: 600; color: color-mix(in srgb, var(--color-error) 85%, var(--color-black)); line-height: 1.3; }
+.inline-error-source { font-size: 11px; color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)); margin-top: 2px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+.inline-error-close { background: none; border: none; font-size: 24px; line-height: 1; color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)); cursor: pointer; padding: 0 4px; flex-shrink: 0; }
+.inline-error-close:hover { color: var(--color-error); }
 .inline-error-message {
   margin: 10px 0 0 34px;
   padding: 10px 12px;
@@ -770,7 +770,7 @@ onUnmounted(() => {
   font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ion-color-dark);
+  color: var(--color-base-300);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 200px;
@@ -780,16 +780,16 @@ onUnmounted(() => {
   margin: 10px 0 0 34px;
   padding: 8px 10px;
   background: rgba(59, 130, 246, 0.08);
-  border-left: 3px solid var(--ion-color-primary);
+  border-left: 3px solid var(--color-primary);
   border-radius: 4px;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ion-color-dark);
+  color: var(--color-base-300);
 }
 .inline-error-actions { margin: 12px 0 0 34px; display: flex; gap: 8px; }
 .inline-error-retry {
   padding: 6px 14px;
-  background: var(--ion-color-danger);
+  background: var(--color-error);
   color: white;
   border: none;
   border-radius: 4px;
@@ -797,6 +797,6 @@ onUnmounted(() => {
   cursor: pointer;
   font-weight: 500;
 }
-.inline-error-retry:hover { background: var(--ion-color-danger-shade); }
+.inline-error-retry:hover { background: color-mix(in srgb, var(--color-error) 85%, var(--color-black)); }
 .inline-error-retry:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

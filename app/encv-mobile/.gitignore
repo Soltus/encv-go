@@ -28,3 +28,11 @@ android/app/src/main/jniLibs/
 android-overlay/app/src/main/jniLibs/
 
 encv-go-arm64
+
+# Cypress 视觉回归产物（compareSnapshot: baseline 入库作对比基，diff/运行截图忽略）
+cypress/visual/
+cypress/screenshots/
+cypress/videos/
+# Playwright 产物
+test-results/
+playwright-report/

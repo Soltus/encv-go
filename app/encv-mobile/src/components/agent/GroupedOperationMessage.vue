@@ -280,43 +280,43 @@ function truncateArgs(raw: string): string {
   margin: 6px 0;
 }
 
+/* chip 外观以设计令牌内联表达，组件自包含、不依赖共享类词汇；active/expanded 仅叠加状态色 */
 .groupedOpHeader {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
   padding: 6px 10px;
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
-  border-radius: 14px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
+  border-radius: var(--radius-selector, 1rem);
+  border: 1px solid var(--color-base-300);
+  background: var(--color-base-200);
+  color: var(--color-base-content);
   font-size: 12px;
-  color: var(--ion-text-color);
   max-width: 100%;
   flex-wrap: wrap;
-  /* button reset */
-  font-family: inherit;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  text-align: left;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
-
 .groupedOpHeader:hover {
-  background: rgba(var(--ion-color-medium-rgb), 0.14);
-  border-color: rgba(var(--ion-color-medium-rgb), 0.28);
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-base-300));
+  box-shadow: 0 2px 6px -2px rgb(0 0 0 / 0.1);
 }
 
 .groupedOpHeader_active {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
   animation: groupedOpPulse 1.4s ease-in-out infinite;
 }
 
 .groupedOpHeader_expanded {
-  background: rgba(var(--ion-color-medium-rgb), 0.14);
-  border-color: rgba(var(--ion-color-medium-rgb), 0.28);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 14%, transparent);
+  border-color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 28%, transparent);
 }
 
 .groupedOpIcon {
   font-size: 13px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -343,9 +343,9 @@ function truncateArgs(raw: string): string {
   gap: 3px;
   margin-top: 6px;
   padding: 6px 8px;
-  background: rgba(var(--ion-color-medium-rgb), 0.06);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 6%, transparent);
   border-radius: 6px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.16);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 16%, transparent);
   font-size: 11.5px;
 }
 
@@ -362,7 +362,7 @@ function truncateArgs(raw: string): string {
 }
 
 .groupedOpItem:hover {
-  background: rgba(var(--ion-color-medium-rgb), 0.1);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 10%, transparent);
 }
 
 .groupedOpItemIcon {
@@ -391,7 +391,7 @@ function truncateArgs(raw: string): string {
 .groupedOpItem:has(.groupedOpItemChevron_open) .groupedOpItemArgs {
   white-space: pre-wrap;
   word-break: break-all;
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
   padding: 4px 6px;
   border-radius: 3px;
   font-size: 10.5px;
@@ -429,7 +429,7 @@ function truncateArgs(raw: string): string {
   border: 0;
   padding: 2px 0;
   font-size: 11.5px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   cursor: pointer;
   font-family: inherit;
 }
@@ -439,7 +439,7 @@ function truncateArgs(raw: string): string {
 }
 
 @keyframes groupedOpPulse {
-  0%, 100% { background-color: rgba(var(--ion-color-primary-rgb), 0.12); }
-  50% { background-color: rgba(var(--ion-color-primary-rgb), 0.22); }
+  0%, 100% { background-color: color-mix(in srgb, var(--color-primary) 12%, transparent); }
+  50% { background-color: color-mix(in srgb, var(--color-primary) 22%, transparent); }
 }
 </style>

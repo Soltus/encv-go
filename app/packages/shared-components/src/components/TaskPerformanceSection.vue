@@ -200,7 +200,7 @@ async function loadFullMetrics() {
 
 <style scoped>
 .detail-section {
-  background: var(--ion-card-background, #fff);
+  background: var(--ion-card-background, var(--color-white));
   border-radius: 12px;
   padding: 16px;
   margin: 8px 0;
@@ -214,7 +214,7 @@ async function loadFullMetrics() {
 .section-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--encv-text-primary, #000);
+  color: var(--encv-text-primary, var(--color-black));
 }
 .metrics-grid {
   display: grid;
@@ -234,7 +234,7 @@ async function loadFullMetrics() {
 .metric-value {
   font-size: 13px;
   font-weight: 500;
-  color: var(--encv-text-primary, #000);
+  color: var(--encv-text-primary, var(--color-black));
 }
 .phase-timings {
   margin-top: 12px;
@@ -256,7 +256,7 @@ async function loadFullMetrics() {
 }
 .phase-name {
   flex: 1;
-  color: var(--encv-text-primary, #000);
+  color: var(--encv-text-primary, var(--color-black));
 }
 .phase-duration {
   color: var(--encv-text-secondary, #999);

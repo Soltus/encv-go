@@ -162,41 +162,42 @@ function truncate(p: string): string {
   margin: 6px 0;
 }
 
+/* chip 外观（含主色 tint）以设计令牌内联表达，组件自包含、不依赖共享类词汇；active/expanded 仅叠加状态 */
 .fileChangeHeader {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
   padding: 6px 10px;
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  border-radius: 14px;
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.2);
+  border-radius: var(--radius-selector, 1rem);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, var(--color-base-300));
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-base-100));
+  color: color-mix(in srgb, var(--color-primary) 75%, var(--color-base-content));
   font-size: 12px;
-  color: var(--ion-text-color);
   max-width: 100%;
   flex-wrap: wrap;
-  /* button reset */
-  font-family: inherit;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  text-align: left;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
-
 .fileChangeHeader:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+  transform: translateY(-1px);
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-base-100));
+  box-shadow: 0 2px 6px -2px rgb(0 0 0 / 0.1);
 }
-
+.fileChangeHeader:active { transform: scale(0.98); }
 .fileChangeHeader_active {
   animation: fileChangeActivePulse 1.4s ease-in-out infinite;
 }
 
 .fileChangeHeader_expanded {
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+  background: color-mix(in srgb, var(--color-primary) 16%, var(--color-base-100));
+  border-color: color-mix(in srgb, var(--color-primary) 30%, var(--color-base-300));
 }
 
 .fileChangeIcon {
   font-size: 13px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -206,7 +207,7 @@ function truncate(p: string): string {
 
 .fileChangeChevron {
   font-size: 12px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
   margin-inline-start: 2px;
   transition: transform 0.2s ease;
@@ -222,9 +223,9 @@ function truncate(p: string): string {
   gap: 3px;
   margin-top: 6px;
   padding: 6px 8px;
-  background: rgba(var(--ion-color-medium-rgb), 0.06);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 6%, transparent);
   border-radius: 6px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.16);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 16%, transparent);
 }
 
 .fileChangeItem {
@@ -256,7 +257,7 @@ function truncate(p: string): string {
   border: 0;
   padding: 2px 0;
   font-size: 11.5px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   cursor: pointer;
   font-family: inherit;
 }
@@ -266,7 +267,7 @@ function truncate(p: string): string {
 }
 
 @keyframes fileChangeActivePulse {
-  0%, 100% { background-color: rgba(var(--ion-color-primary-rgb), 0.08); }
-  50% { background-color: rgba(var(--ion-color-primary-rgb), 0.18); }
+  0%, 100% { background-color: color-mix(in srgb, var(--color-primary) 10%, var(--color-base-100)); }
+  50% { background-color: color-mix(in srgb, var(--color-primary) 20%, var(--color-base-100)); }
 }
 </style>

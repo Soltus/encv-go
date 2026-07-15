@@ -116,16 +116,16 @@ function customizeMarkdownIt(md: MarkdownIt): MarkdownIt {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12.5px;
   padding: 1px 5px;
-  background: rgba(var(--ion-color-medium-rgb), 0.16);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 16%, transparent);
   border-radius: 4px;
 }
 
 .markdownStream pre {
   margin: 6px 0;
   padding: 8px 12px;
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
   border-radius: 6px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   overflow: auto;
 }
 .markdownStream pre code {
@@ -137,14 +137,14 @@ function customizeMarkdownIt(md: MarkdownIt): MarkdownIt {
 .markdownStream blockquote {
   margin: 6px 0;
   padding: 4px 10px;
-  border-left: 3px solid rgba(var(--ion-color-primary-rgb), 0.4);
+  border-left: 3px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
   color: var(--encv-text-secondary);
-  background: rgba(var(--ion-color-primary-rgb), 0.04);
+  background: color-mix(in srgb, var(--color-primary) 4%, transparent);
   border-radius: 0 4px 4px 0;
 }
 
 .markdownStream a {
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   text-decoration: none;
 }
 .markdownStream a:hover {
@@ -160,11 +160,11 @@ function customizeMarkdownIt(md: MarkdownIt): MarkdownIt {
 .markdownStream th,
 .markdownStream td {
   padding: 4px 8px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.3);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 30%, transparent);
   text-align: left;
 }
 .markdownStream th {
-  background: rgba(var(--ion-color-medium-rgb), 0.12);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   font-weight: 600;
 }
 

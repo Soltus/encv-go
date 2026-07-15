@@ -285,7 +285,7 @@ const statusIcon = computed(() => {
   flex-shrink: 0;
   z-index: 2;
   background: var(--tl-state-created);
-  color: #fff;
+  color: var(--color-white);
   box-shadow: 0 0 0 3px var(--tl-card-bg-gradient-start, #FAFBFC);
   transition: transform 0.2s ease;
 }
@@ -293,7 +293,7 @@ const statusIcon = computed(() => {
 .utc__icon {
   font-size: 14px;
   line-height: 1;
-  color: #fff;
+  color: var(--color-white);
 }
 .utc__icon--spin {
   width: 14px;

@@ -20,7 +20,8 @@
       "!!**/cypress",
       "!!**/public",
       "!!**/*.assets",
-      "!!**/plugin-*/src/main/assets"
+      "!!**/plugin-*/src/main/assets",
+      "!!**/components.d.ts"
     ]
   },
   "formatter": {

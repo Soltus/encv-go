@@ -59,7 +59,7 @@
         v-show="!loadError"
         ref="iframeRef"
         :src="iframeSrc"
-        class="encv-iframe"
+        class="openlistFrame"
         @error="onIframeError"
         @load="onIframeLoad"
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
@@ -141,7 +141,7 @@ async function probeHealth() {
 </script>
 
 <style scoped>
-.encv-iframe {
+.openlistFrame {
   width: 100%;
   height: 100%;
   border: 0;
@@ -156,7 +156,7 @@ async function probeHealth() {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.3px;
-  color: #fff;
+  color: var(--color-white);
   background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
   border-radius: 3px;
   vertical-align: middle;

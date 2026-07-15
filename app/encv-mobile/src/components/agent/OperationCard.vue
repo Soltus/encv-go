@@ -285,8 +285,8 @@ const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
 <style scoped>
 .operationCard {
   margin: 3px 0 5px;
-  background: rgba(var(--ion-color-medium-rgb), 0.05);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.16);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 5%, transparent);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 16%, transparent);
   border-radius: 7px;
   padding: 6px 10px;
   font-size: 11.5px;
@@ -294,13 +294,13 @@ const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
 }
 
 .operationCard_streaming {
-  border-color: rgba(var(--ion-color-primary-rgb), 0.35);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
   animation: opPulse 2s ease-in-out infinite;
 }
 
 @keyframes opPulse {
-  0%, 100% { border-color: rgba(var(--ion-color-primary-rgb), 0.25); }
-  50% { border-color: rgba(var(--ion-color-primary-rgb), 0.55); }
+  0%, 100% { border-color: color-mix(in srgb, var(--color-primary) 25%, transparent); }
+  50% { border-color: color-mix(in srgb, var(--color-primary) 55%, transparent); }
 }
 
 .operationCardHead {
@@ -318,7 +318,7 @@ const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
 
 .operationCardIcon {
   font-size: 14px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -339,8 +339,8 @@ const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
   display: inline-block;
   font-size: 9px;
   padding: 1px 5px;
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
   border-radius: 4px;
   font-weight: 600;
   letter-spacing: 0.05em;
@@ -416,13 +416,13 @@ const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
 
 .operationCardErrorIcon {
   font-size: 13px;
-  color: var(--ion-color-danger, #ef4444);
+  color: var(--color-error);
   flex-shrink: 0;
 }
 
 .operationCardErrorLabel {
   font-size: 10.5px;
-  color: var(--ion-color-danger-shade, #c53030);
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   flex: 1;
   min-width: 0;
@@ -438,7 +438,7 @@ const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
   width: 20px !important;
   margin: 0;
   flex-shrink: 0;
-  color: var(--ion-color-danger, #ef4444);
+  color: var(--color-error);
 }
 
 .operationCardErrorCopyBtn ion-icon {
@@ -458,7 +458,7 @@ const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
   padding: 4px 6px;
   background: rgba(var(--ion-color-danger-rgb, 239, 68, 68), 0.06);
   border-radius: 4px;
-  border-left: 2px solid var(--ion-color-danger, #ef4444);
+  border-left: 2px solid var(--color-error);
 }
 
 .operationCardErrorRow {
@@ -475,7 +475,7 @@ const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
 
 .operationCardErrorKey {
   font-weight: 600;
-  color: var(--ion-color-danger-shade, #c53030);
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
   flex-shrink: 0;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
 }
@@ -503,7 +503,7 @@ const isV2Tool = computed(() => V2_TOOL_NAMES.has(props.toolCall.name));
 }
 
 .operationCardDurationWarn {
-  color: var(--ion-color-warning-shade, #e0ac08);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
   font-weight: 600;
 }
 

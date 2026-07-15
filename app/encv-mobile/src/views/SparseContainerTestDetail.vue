@@ -394,20 +394,20 @@ async function handleCleanup() {
   gap: 10px;
   padding: 12px 16px;
   margin: 12px 16px 0;
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
   border-radius: 10px;
   font-size: 12px;
   line-height: 1.5;
 }
 .banner-icon {
   font-size: 20px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
   margin-top: 2px;
 }
 .banner-text { flex: 1; min-width: 0; }
 .warning-text {
-  color: var(--ion-color-warning-shade, #b36b00);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
   margin-top: 6px;
   display: flex;
   align-items: center;
@@ -421,7 +421,7 @@ async function handleCleanup() {
 }
 .hint-row small {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   line-height: 1.4;
 }
 ion-input { --background: transparent; }

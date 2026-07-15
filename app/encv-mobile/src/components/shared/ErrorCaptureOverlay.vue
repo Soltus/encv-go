@@ -82,10 +82,10 @@ function onClick() {
   right: 8px;
   bottom: 80px; /* 避开 tab bar */
   z-index: 9999;
-  background: var(--ion-color-light, #ffffff);
+  background: var(--color-base-200);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  border-left: 4px solid var(--ion-color-danger, #eb445a);
+  border-left: 4px solid var(--color-error);
   overflow: hidden;
   cursor: pointer;
   max-width: 600px;
@@ -97,8 +97,8 @@ function onClick() {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--ion-color-danger-tint, #fbd6d6);
-  color: var(--ion-color-danger-shade, #b00020);
+  background: color-mix(in srgb, var(--color-error) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
   font-weight: 600;
   font-size: 0.9em;
 }
@@ -139,7 +139,7 @@ function onClick() {
 .error-overlay-meta {
   margin-top: 4px;
   font-size: 0.8em;
-  color: var(--ion-color-medium, #666);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 /* 🆕 2026-07-02：展开时显示完整堆栈 */
@@ -152,7 +152,7 @@ function onClick() {
 .error-overlay-stack-title {
   font-size: 0.8em;
   font-weight: 600;
-  color: var(--ion-color-danger, #eb445a);
+  color: var(--color-error);
   margin-bottom: 4px;
 }
 
@@ -168,13 +168,13 @@ function onClick() {
   background: rgba(var(--ion-color-danger-rgb, 235, 68, 90), 0.05);
   border-radius: 4px;
   padding: 6px 8px;
-  color: var(--ion-color-danger-shade, #b00020);
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
 }
 
 .error-overlay-hint {
   margin-top: 6px;
   font-size: 0.75em;
-  color: var(--ion-color-medium, #666);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   text-align: right;
 }
 

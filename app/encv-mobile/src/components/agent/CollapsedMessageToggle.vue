@@ -8,7 +8,7 @@
 <template>
   <div
     class="collapsedToggle"
-    :class="{ collapsedToggle_active: active, collapsedToggle_expanded: expanded }"
+    :class="{ 'collapsedToggle--primary': active || expanded, collapsedToggle_active: active }"
     @click="onToggle"
   >
     <ion-icon :icon="icon" class="collapsedIcon" />
@@ -40,41 +40,44 @@ const chevronDown = chevronDownOutline;
 </script>
 
 <style scoped>
+/* chip 外观以设计令牌内联表达，组件自包含、不依赖共享类词汇 */
 .collapsedToggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
-  border-radius: 14px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
-  font-size: 12px;
-  color: var(--ion-text-color);
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-selector, 1rem);
+  border: 1px solid var(--color-base-300);
+  background: var(--color-base-200);
+  color: var(--color-base-content);
+  font-size: 0.8125rem;
   cursor: pointer;
-  user-select: none;
-  transition: background-color 0.15s;
-  max-width: 100%;
-  min-height: 24px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
-
 .collapsedToggle:hover {
-  background: rgba(var(--ion-color-medium-rgb), 0.16);
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-base-300));
+  box-shadow: 0 2px 6px -2px rgb(0 0 0 / 0.1);
 }
-
-.collapsedToggle_expanded {
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.22);
+.collapsedToggle--primary {
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-base-300));
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-base-100));
+  color: color-mix(in srgb, var(--color-primary) 75%, var(--color-base-content));
 }
-
+.collapsedToggle--primary:hover {
+  transform: translateY(-1px);
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-base-100));
+  box-shadow: 0 2px 6px -2px rgb(0 0 0 / 0.1);
+}
+.collapsedToggle--primary:active { transform: scale(0.98); }
 .collapsedToggle_active {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
   animation: collapsedActivePulse 1.4s ease-in-out infinite;
 }
 
 .collapsedIcon {
   font-size: 13px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -101,7 +104,7 @@ const chevronDown = chevronDownOutline;
 }
 
 @keyframes collapsedActivePulse {
-  0%, 100% { background-color: rgba(var(--ion-color-primary-rgb), 0.12); }
-  50% { background-color: rgba(var(--ion-color-primary-rgb), 0.22); }
+  0%, 100% { background-color: color-mix(in srgb, var(--color-primary) 14%, var(--color-base-100)); }
+  50% { background-color: color-mix(in srgb, var(--color-primary) 24%, var(--color-base-100)); }
 }
 </style>

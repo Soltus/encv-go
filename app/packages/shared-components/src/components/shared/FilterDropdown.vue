@@ -225,7 +225,7 @@ watch(isOpen, open => {
   padding: 0 5px;
   border-radius: 9px;
   background: var(--ion-color-primary, #3880ff);
-  color: #fff;
+  color: var(--color-white);
   font-size: 11px;
   font-weight: 600;
 }
@@ -247,7 +247,7 @@ watch(isOpen, open => {
   min-width: 220px;
   max-width: 320px;
   max-height: 360px;
-  background: var(--ion-color-light, #fff);
+  background: var(--ion-color-light, var(--color-white));
   border: 1px solid var(--ion-color-medium-tint, #ddd);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
@@ -322,7 +322,7 @@ watch(isOpen, open => {
 }
 
 .check-mark {
-  color: #fff;
+  color: var(--color-white);
   font-size: 11px;
   font-weight: bold;
   line-height: 1;
@@ -361,7 +361,7 @@ watch(isOpen, open => {
   padding: 6px 8px;
   border: 1px solid var(--ion-color-medium-tint, #ddd);
   border-radius: 6px;
-  background: var(--ion-color-light, #fff);
+  background: var(--ion-color-light, var(--color-white));
   color: var(--ion-color-primary, #3880ff);
   font-size: 12px;
   font-weight: 500;

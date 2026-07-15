@@ -278,7 +278,7 @@ onMounted(async () => {
   height: 34px;
   border-radius: 50%;
   background: var(--ion-color-primary);
-  color: #fff;
+  color: var(--color-white);
   font-weight: 700;
   display: flex;
   align-items: center;

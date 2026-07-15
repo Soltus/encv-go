@@ -266,7 +266,7 @@ function goAbout() {
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.5px;
-  color: #fff;
+  color: var(--color-white);
   background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
   border-radius: 6px;
   box-shadow: 0 1px 4px rgba(168, 85, 247, 0.4);
@@ -305,7 +305,7 @@ function goAbout() {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 1px;
-  color: #fff;
+  color: var(--color-white);
   background: linear-gradient(90deg, #f97316 0%, #ef4444 50%, #ec4899 100%);
   border-radius: 4px;
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);

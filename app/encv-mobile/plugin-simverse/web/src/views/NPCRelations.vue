@@ -271,7 +271,7 @@ watch(() => route.params.id, reload);
   align-items: center;
   justify-content: center;
   background: var(--ion-color-primary);
-  color: #fff;
+  color: var(--color-white);
   font-weight: 600;
   border-radius: 50%;
 }

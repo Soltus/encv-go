@@ -166,7 +166,7 @@ function formatDefault(val: unknown): string {
 .config-field-card {
   display: block;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
   background: transparent;
 }
 
@@ -175,24 +175,24 @@ body.dark .config-field-card {
 }
 
 .config-field-card.field-modified {
-  border-left: 3px solid var(--ion-color-primary);
+  border-left: 3px solid var(--color-primary);
   padding-left: 13px;
 }
 
 .field-icon {
   font-size: 18px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   flex-shrink: 0;
 }
 
 .default-hint-row {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 6px;
 }
 
 .config-field.field-modified {
-  border-left: 3px solid var(--ion-color-primary);
+  border-left: 3px solid var(--color-primary);
   --padding-start: 13px;
 }
 
@@ -210,7 +210,7 @@ body.dark .config-field-card {
 
 .field-description {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   white-space: normal;
   line-height: 1.4;
 }
@@ -224,37 +224,37 @@ body.dark .config-field-card {
 
 .field-description-text {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   white-space: normal;
   margin: 2px 0 0;
 }
 
 .default-hint {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .override-hint {
   font-size: 11px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   font-weight: 500;
 }
 
 .required-mark {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   margin-left: 2px;
 }
 
 .sync-indicator {
   font-size: 12px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   opacity: 0.4;
   flex-shrink: 0;
 }
 
 .sync-indicator-inline {
   font-size: 11px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   opacity: 0.5;
   flex-shrink: 0;
 }
@@ -309,7 +309,7 @@ body.dark .config-field-card {
 
 .preset-card {
   padding: 10px 8px;
-  border: 2px solid var(--ion-color-light-shade, #e0e0e0);
+  border: 2px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s;
@@ -318,8 +318,8 @@ body.dark .config-field-card {
 }
 
 .preset-card-active {
-  border-color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 .preset-card-title {
@@ -329,7 +329,7 @@ body.dark .config-field-card {
 
 .preset-card-desc {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 3px;
   line-height: 1.3;
 }
@@ -369,7 +369,7 @@ body.dark .preset-card {
 }
 
 body.dark .preset-card-active {
-  border-color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 </style>

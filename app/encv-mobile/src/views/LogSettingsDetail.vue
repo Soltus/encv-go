@@ -205,13 +205,13 @@ async function handleClearLogs() {
   font-size: 12px;
 }
 .scope-synced {
-  --background: rgba(var(--ion-color-primary-rgb), 0.12);
-  --color: var(--ion-color-primary);
+  --background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --color: var(--color-primary);
 }
 
 .log-level-card {
   padding: 12px 16px;
-  border-bottom: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
 }
 
 body.dark .log-level-card {
@@ -220,7 +220,7 @@ body.dark .log-level-card {
 
 .field-icon {
   font-size: 18px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   flex-shrink: 0;
 }
 
@@ -239,13 +239,13 @@ body.dark .log-level-card {
 }
 
 .required-mark {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   margin-left: 2px;
 }
 
 .sync-indicator {
   font-size: 12px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   opacity: 0.4;
   flex-shrink: 0;
 }
@@ -272,7 +272,7 @@ body.dark .log-level-card {
 
 .preset-card {
   padding: 10px 8px;
-  border: 2px solid var(--ion-color-light-shade, #e0e0e0);
+  border: 2px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s;
@@ -281,8 +281,8 @@ body.dark .log-level-card {
 }
 
 .preset-card-active {
-  border-color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 .preset-card-title {
@@ -292,7 +292,7 @@ body.dark .log-level-card {
 
 .preset-card-desc {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 3px;
   line-height: 1.3;
 }
@@ -317,7 +317,7 @@ body.dark .preset-card {
 }
 
 body.dark .preset-card-active {
-  border-color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 </style>

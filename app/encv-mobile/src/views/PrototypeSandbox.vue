@@ -190,7 +190,7 @@ async function copySource(text: string) {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--ion-color-primary, #BB86FC);
+  color: var(--color-primary);
   flex-shrink:0;
   width: 64px;
 }
@@ -198,7 +198,7 @@ async function copySource(text: string) {
 .meta-value {
   font-size: 12px;
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
-  color: var(--ion-text-color, #fff);
+  color: var(--ion-text-color, var(--color-white));
   background: rgba(var(--ion-color-medium-rgb, 128,128,128), 0.08);
   padding: 2px 8px;
   border-radius: 4px;
@@ -222,8 +222,8 @@ async function copySource(text: string) {
 }
 
 .landscape-toggle.active {
-  border-color: var(--ion-color-primary, #BB86FC);
-  color: var(--ion-color-primary, #BB86FC);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
   background: rgba(187,134,252,0.1);
 }
 
@@ -249,8 +249,8 @@ async function copySource(text: string) {
 }
 
 .tab-btn.active {
-  color: var(--ion-color-primary, #BB86FC);
-  border-bottom-color: var(--ion-color-primary, #BB86FC);
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
 }
 
 .tab-icon {
@@ -320,7 +320,7 @@ async function copySource(text: string) {
   border: 1px solid rgba(var(--ion-color-medium-rgb, 128,128,128), 0.2);
   border-radius: 6px;
   background: transparent;
-  color: var(--ion-text-color, #fff);
+  color: var(--ion-text-color, var(--color-white));
   font-size: 12px;
   cursor: pointer;
   transition: background 0.15s;

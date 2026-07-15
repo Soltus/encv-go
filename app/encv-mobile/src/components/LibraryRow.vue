@@ -202,7 +202,7 @@ watch(
 <style scoped>
 .lib-row {
   padding: 10px 16px;
-  border-bottom: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -230,12 +230,12 @@ body.dark .lib-row {
 
 .lib-icon {
   font-size: 18px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
 body.dark .lib-icon {
-  color: var(--ion-color-primary-tint);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
 }
 
 .lib-name {
@@ -247,7 +247,7 @@ body.dark .lib-icon {
 
 .lib-version {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-family: monospace;
   flex-shrink: 0;
 }
@@ -274,58 +274,58 @@ body.dark .lib-icon {
 }
 
 .lib-source-badge {
-  background: var(--ion-color-light-shade, #e0e0e0);
-  color: var(--ion-color-medium-shade);
+  background: color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
 }
 
 body.dark .lib-source-badge {
   background: #3a3a3c;
-  color: var(--ion-color-medium-tint);
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-white));
 }
 
 .lib-status-active {
-  background: rgba(var(--ion-color-success-rgb), 0.16);
-  color: var(--ion-color-success-shade);
+  background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  color: color-mix(in srgb, var(--color-success) 85%, var(--color-black));
 }
 
 .lib-status-broken {
-  background: rgba(var(--ion-color-danger-rgb), 0.16);
-  color: var(--ion-color-danger-shade);
+  background: color-mix(in srgb, var(--color-error) 16%, transparent);
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
 }
 
 .lib-status-historical {
-  background: rgba(var(--ion-color-medium-rgb), 0.16);
-  color: var(--ion-color-medium-shade);
+  background: color-mix(in srgb, var(--color-base-content) 16%, var(--color-base-100));
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
 }
 
 .lib-importance-core {
-  background: rgba(var(--ion-color-primary-rgb), 0.16);
-  color: var(--ion-color-primary-shade);
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
 }
 
 .lib-importance-light {
-  background: rgba(var(--ion-color-tertiary-rgb, var(--ion-color-secondary-rgb)), 0.16);
-  color: var(--ion-color-tertiary-shade, var(--ion-color-secondary-shade));
+  background: color-mix(in srgb, var(--color-accent, var(--color-secondary)) 16%, transparent);
+  color: color-mix(in srgb, var(--color-accent) 85%, var(--color-black));
 }
 
 .lib-importance-transitive {
-  background: rgba(var(--ion-color-medium-rgb), 0.12);
-  color: var(--ion-color-medium-shade);
+  background: color-mix(in srgb, var(--color-base-content) 12%, var(--color-base-100));
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
 }
 
 .lib-license-badge {
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  color: var(--ion-color-primary-shade);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
   font-family: monospace;
 }
 
 body.dark .lib-license-badge {
-  background: rgba(var(--ion-color-primary-rgb), 0.20);
+  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
 .lib-license-unknown {
-  background: rgba(var(--ion-color-medium-rgb), 0.10);
-  color: var(--ion-color-medium-shade);
+  background: color-mix(in srgb, var(--color-base-content) 10%, var(--color-base-100));
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
   font-style: italic;
 }
 
@@ -344,25 +344,25 @@ body.dark .lib-license-badge {
 }
 
 .lib-description-fetched {
-  color: var(--ion-color-medium-shade);
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
   font-style: italic;
 }
 
 .lib-description-placeholder {
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-style: italic;
   opacity: 0.6;
 }
 
 .lib-description-fetching {
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .lib-description-spinner {
   display: inline-block;
   width: 10px;
   height: 10px;
-  border: 2px solid var(--ion-color-medium);
+  border: 2px solid color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   border-top-color: transparent;
   border-radius: 50%;
   animation: lib-spin 0.8s linear infinite;

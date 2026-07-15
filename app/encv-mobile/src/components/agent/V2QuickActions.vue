@@ -17,7 +17,6 @@
         :key="a.id"
         type="button"
         class="v2Chip"
-        :class="{ 'v2Chip_disabled': disabled }"
         :disabled="disabled"
         :title="a.title"
         @click="emitPick(a)"
@@ -128,35 +127,35 @@ function emitPick(a: V2QuickAction): void {
 .v2QuickActionsScroll::-webkit-scrollbar {
   display: none;
 }
+/* chip 外观以设计令牌内联表达，组件自包含、不依赖共享类词汇 */
 .v2Chip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 4px 9px;
-  background: var(--encv-bg-elevated, rgba(127, 127, 127, 0.08));
-  border: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.18));
-  border-radius: 14px;
+  border-radius: var(--radius-selector, 1rem);
+  border: 1px solid var(--color-base-300);
+  background: var(--color-base-200);
+  color: var(--color-base-content);
   font-size: 11.5px;
-  color: var(--ion-text-color);
   white-space: nowrap;
   flex-shrink: 0;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
-.v2Chip:hover:not(.v2Chip_disabled) {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.4);
+.v2Chip:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-base-300));
+  box-shadow: 0 2px 6px -2px rgb(0 0 0 / 0.1);
 }
-.v2Chip:active:not(.v2Chip_disabled) {
-  transform: scale(0.97);
-}
-.v2Chip_disabled {
+.v2Chip:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+  pointer-events: none;
 }
 .v2ChipIcon {
   font-size: 13px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 .v2ChipLabel {
@@ -165,8 +164,8 @@ function emitPick(a: V2QuickAction): void {
 .v2ChipTag {
   font-size: 9px;
   padding: 1px 4px;
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
   border-radius: 4px;
   font-weight: 600;
   letter-spacing: 0.04em;

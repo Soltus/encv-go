@@ -10,7 +10,7 @@
   - 真实数据来自 read_file handler，mock 模式下走 execute_real=true
 -->
 <template>
-  <div class="fileContentCard">
+  <div class="fileContentCard ui-card--subtle">
     <div class="fileContentCardHeader">
       <ion-icon :icon="documentTextIcon" class="fileContentCardIcon" />
       <span class="fileContentCardTitle">{{ titleText }}</span>
@@ -164,12 +164,10 @@ function formatSize(bytes: number): string {
 </script>
 
 <style scoped>
+/* 表面（背景/描边/圆角/内距）已上提到全局 .ui-card--subtle（默认对齐原外观，零回退）。
+   本 scoped 仅保留外距/字号。 */
 .fileContentCard {
   margin: 4px 0 6px;
-  background: rgba(var(--ion-color-medium-rgb), 0.05);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
-  border-radius: 8px;
-  padding: 8px 10px;
   font-size: 12px;
 }
 
@@ -183,7 +181,7 @@ function formatSize(bytes: number): string {
 
 .fileContentCardIcon {
   font-size: 14px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .fileContentCardTitle {
@@ -201,15 +199,15 @@ function formatSize(bytes: number): string {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 8px;
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
 }
 
 .fileContentCardBody {
   margin: 0;
   padding: 8px 10px;
-  background: rgba(var(--ion-color-medium-rgb), 0.04);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 4%, transparent);
   border-radius: 5px;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   font-size: 11.5px;
@@ -245,7 +243,7 @@ function formatSize(bytes: number): string {
   border: 0;
   padding: 2px 0;
   font-size: 11.5px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   cursor: pointer;
   font-family: inherit;
 }
@@ -266,10 +264,10 @@ function formatSize(bytes: number): string {
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  background: rgba(var(--ion-color-danger-rgb), 0.06);
+  background: color-mix(in srgb, var(--color-error) 6%, transparent);
   border-radius: 6px;
   font-size: 11.5px;
-  color: var(--ion-color-danger, #eb445a);
+  color: var(--color-error);
 }
 
 .fileContentCardErrorIcon {
@@ -295,7 +293,7 @@ function formatSize(bytes: number): string {
 .fileContentCardRaw pre {
   margin: 4px 0 0;
   padding: 6px 8px;
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
   border-radius: 4px;
   overflow-x: auto;
   font-size: 10.5px;
@@ -313,12 +311,12 @@ function formatSize(bytes: number): string {
   text-transform: uppercase;
 }
 .fileContentCardBadge_warn {
-  background: rgba(var(--ion-color-warning-rgb), 0.18);
-  color: var(--ion-color-warning-shade);
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 .fileContentCardBadge_error {
-  background: rgba(var(--ion-color-danger-rgb), 0.15);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 15%, transparent);
+  color: var(--color-error);
 }
 
 .fileContentCardSource {
@@ -337,8 +335,8 @@ function formatSize(bytes: number): string {
   margin-top: 4px;
   padding: 4px 8px;
   font-size: 10.5px;
-  color: var(--ion-color-warning-shade, #e68a00);
-  background: rgba(var(--ion-color-warning-rgb), 0.1);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
   border-radius: 4px;
 }
 

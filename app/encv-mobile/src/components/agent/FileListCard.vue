@@ -13,7 +13,7 @@
   - 真实数据来自 list_files handler，mock 模式下走 execute_real=true
 -->
 <template>
-  <div class="fileListCard">
+  <div class="fileListCard ui-card--subtle">
     <div class="fileListCardHeader">
       <ion-icon :icon="listIcon" class="fileListCardIcon" />
       <span class="fileListCardTitle">{{ titleText }}</span>
@@ -165,12 +165,10 @@ function formatSize(bytes?: number): string {
 </script>
 
 <style scoped>
+/* 表面（背景/描边/圆角/内距）已上提到全局 .ui-card--subtle（默认对齐原外观，零回退）。
+   本 scoped 仅保留布局/字号。 */
 .fileListCard {
   margin: 4px 0 6px;
-  background: rgba(var(--ion-color-medium-rgb), 0.05);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
-  border-radius: 8px;
-  padding: 8px 10px;
   font-size: 12px;
 }
 
@@ -183,7 +181,7 @@ function formatSize(bytes?: number): string {
 
 .fileListCardIcon {
   font-size: 14px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .fileListCardTitle {
@@ -200,8 +198,8 @@ function formatSize(bytes?: number): string {
   height: 18px;
   padding: 0 6px;
   border-radius: 9px;
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
   font-size: 10px;
   font-weight: 600;
 }
@@ -210,7 +208,7 @@ function formatSize(bytes?: number): string {
   display: flex;
   flex-direction: column;
   gap: 1px;
-  background: rgba(var(--ion-color-medium-rgb), 0.06);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 6%, transparent);
   border-radius: 5px;
   overflow: hidden;
 }
@@ -227,7 +225,7 @@ function formatSize(bytes?: number): string {
 }
 
 .fileListCardRowHead {
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
   font-size: 10.5px;
   font-weight: 600;
   color: var(--encv-text-secondary, #888);
@@ -240,7 +238,7 @@ function formatSize(bytes?: number): string {
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .fileListCardColName {
@@ -261,7 +259,7 @@ function formatSize(bytes?: number): string {
 
 .fileListCardNameText_dir {
   font-weight: 600;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .fileListCardNameMeta {
@@ -306,7 +304,7 @@ function formatSize(bytes?: number): string {
 .fileListCardRaw pre {
   margin: 4px 0 0;
   padding: 6px 8px;
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
   border-radius: 4px;
   overflow-x: auto;
   font-size: 10.5px;
@@ -324,12 +322,12 @@ function formatSize(bytes?: number): string {
   text-transform: uppercase;
 }
 .fileListCardBadge_warn {
-  background: rgba(var(--ion-color-warning-rgb), 0.18);
-  color: var(--ion-color-warning-shade);
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 .fileListCardBadge_error {
-  background: rgba(var(--ion-color-danger-rgb), 0.15);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 15%, transparent);
+  color: var(--color-error);
 }
 
 .fileListCardSource {

@@ -36,3 +36,54 @@
     --motion-intensity: 0;
   }
 }
+
+/* =============================================================================
+ * 排版 / 间距 / 密度令牌（主题「表面」类的易用路径，续26+）
+ * 仅补充维度，不改动既有 --color-* / --radius-* / --motion-*。
+ * 主题想换字 / 密度 / 字距，覆写这里即可一次性生效。
+ * ========================================================================== */
+:root {
+  /* 字体族 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* 字号阶梯 */
+  --text-xs: 0.6875rem;   /* 11px */
+  --text-sm: 0.8125rem;   /* 13px */
+  --text-base: 0.875rem;  /* 14px */
+  --text-md: 1rem;        /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.25rem;     /* 20px */
+
+  /* 行高 */
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+
+  /* 字重 */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* 间距标度 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* 密度倍率：主题一键调紧凑 / 宽松（0.85 紧凑 · 1 默认 · 1.15 宽松） */
+  --density: 1;
+
+  /* 语义间距（随 --density 缩放，<style scoped> 内联字面量应改为消费这些） */
+  --pad-chip-y: calc(4px * var(--density));
+  --pad-chip-x: calc(9px * var(--density));
+  --gap-chip: calc(4px * var(--density));
+  --pad-btn-y: calc(8px * var(--density));
+  --pad-btn-x: calc(14px * var(--density));
+  --pad-card-y: calc(12px * var(--density));
+  --pad-card-x: calc(12px * var(--density));
+}

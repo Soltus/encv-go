@@ -10,6 +10,28 @@
     </ion-header>
 
     <ion-content>
+      <!-- 主题（用户主题 / 可扩展，Phase 5） -->
+      <ion-list>
+        <ion-list-header>
+          <ion-label>{{ t('settings.themes') }}</ion-label>
+        </ion-list-header>
+        <ion-item
+          v-for="theme in themes"
+          :key="theme.id"
+          button
+          :detail="false"
+          @click="applyTheme(theme.id)"
+        >
+          <ion-icon
+            v-if="isActive(theme.id)"
+            :icon="checkmarkOutline"
+            slot="start"
+            color="primary"
+          ></ion-icon>
+          <ion-label>{{ t(theme.nameKey) }}</ion-label>
+        </ion-item>
+      </ion-list>
+
       <!-- 背景色（驱动暗黑/亮色模式） -->
       <ion-list>
         <ion-list-header>
@@ -190,6 +212,45 @@
         </div>
       </ion-list>
 
+      <!-- 动效 -->
+      <ion-list>
+        <ion-list-header>
+          <ion-label>{{ t('settings.motion') }}</ion-label>
+        </ion-list-header>
+        <ion-item lines="none">
+          <ion-icon :icon="flashOffOutline" slot="start"></ion-icon>
+          <ion-label>
+            <h3>{{ t('settings.reduceMotion') }}</h3>
+            <p>{{ t('settings.reduceMotionHelp') }}</p>
+          </ion-label>
+          <ion-toggle
+            slot="end"
+            :checked="isForcedOff"
+            @ionChange="handleMotionToggle"
+          ></ion-toggle>
+        </ion-item>
+      </ion-list>
+
+      <!-- Snippets（局部覆盖，热开关，Phase 5） -->
+      <ion-list>
+        <ion-list-header>
+          <ion-label>{{ t('settings.snippets') }}</ion-label>
+          <ion-badge slot="end" color="medium" class="scope-badge">{{ snippets.length }}</ion-badge>
+        </ion-list-header>
+        <ion-item lines="none" v-for="snip in snippets" :key="snip.id">
+          <ion-icon :icon="codeOutline" slot="start"></ion-icon>
+          <ion-label>
+            <h3>{{ t(snip.labelKey) }}</h3>
+            <p>{{ t(snip.labelKey + 'Help') }}</p>
+          </ion-label>
+          <ion-toggle
+            slot="end"
+            :checked="isEnabled(snip.id)"
+            @ionChange="handleSnippetToggle(snip.id)"
+          ></ion-toggle>
+        </ion-item>
+      </ion-list>
+
       <!-- 语言 -->
       <ion-list>
         <ion-list-header>
@@ -209,9 +270,12 @@
 
 <script setup lang="ts">
 import {
+  checkmarkOutline,
   closeCircleOutline,
+  codeOutline,
   colorPaletteOutline,
   eyeOutline,
+  flashOffOutline,
   globeOutline,
   layersOutline,
   sparklesOutline,
@@ -221,6 +285,9 @@ import { computed, ref } from "vue";
 import type { Locale } from "@encv/shared-components/composables/useI18n";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useTheme } from "@encv/shared-components/composables/useTheme";
+import { useMotionPreference } from "@encv/shared-components/composables/useMotionPreference";
+import { useUserThemes } from "@encv/shared-components/composables/useUserThemes";
+import { useSnippets } from "@encv/shared-components/composables/useSnippets";
 
 const {
   isDark,
@@ -242,6 +309,9 @@ const {
   setBgGradient,
 } = useTheme();
 const { t, locale, setLocale } = useI18n();
+const { isForcedOff, setForcedOff } = useMotionPreference();
+const { themes, applyTheme, isActive } = useUserThemes();
+const { snippets, isEnabled, toggle: toggleSnippet } = useSnippets();
 
 const currentGradient = ref<string | null>(null);
 
@@ -321,6 +391,14 @@ function handleVividIntensityChange(event: Event) {
   const target = event.target as HTMLInputElement;
   setVividIntensity(parseInt(target.value, 10));
 }
+
+function handleMotionToggle(event: CustomEvent) {
+  setForcedOff(event.detail.checked);
+}
+
+function handleSnippetToggle(id: string) {
+  toggleSnippet(id);
+}
 </script>
 
 <style scoped>
@@ -362,7 +440,7 @@ function handleVividIntensityChange(event: Event) {
   width: 40px;
   height: 32px;
   padding: 0;
-  border: 1px solid var(--ion-color-medium, #ccc);
+  border: 1px solid color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   border-radius: 6px;
   cursor: pointer;
   background: none;
@@ -397,7 +475,7 @@ function handleVividIntensityChange(event: Event) {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-bottom: 8px;
 }
 .bg-preset-grid {
@@ -410,18 +488,32 @@ function handleVividIntensityChange(event: Event) {
   align-items: center;
   justify-content: center;
   padding: 14px 8px;
-  border: 2px solid transparent;
-  border-radius: 12px;
+  border: 1px solid var(--color-base-300);
+  border-radius: 14px;
   cursor: pointer;
-  transition: all 0.2s;
-  background-color: #f0f2f5;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.25s ease, border-color 0.2s ease, background-color 0.2s ease;
+  background-color: var(--color-base-200);
   min-height: 52px;
   outline: none;
   -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 3px 10px -6px rgba(0, 0, 0, 0.1);
+}
+.bg-preset-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-base-300));
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.16),
+    0 2px 8px -3px color-mix(in srgb, var(--color-primary) 22%, transparent);
 }
 .bg-preset-active {
-  border-color: var(--ion-color-primary);
-  box-shadow: 0 0 0 2px rgba(var(--ion-color-primary-rgb), 0.2);
+  border-color: var(--color-primary);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-primary) 16%, transparent),
+    color-mix(in srgb, var(--color-primary) 4%, transparent)
+  );
+  box-shadow: 0 0 0 1px var(--color-primary),
+    0 8px 22px -8px color-mix(in srgb, var(--color-primary) 50%, transparent);
 }
 .bg-preset-name {
   font-size: 11px;
@@ -458,8 +550,8 @@ function handleVividIntensityChange(event: Event) {
   padding: 2px;
   background: linear-gradient(135deg, var(--gradient-colors));
   -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
+    linear-gradient(var(--color-white) 0 0) content-box,
+    linear-gradient(var(--color-white) 0 0);
   mask-composite: exclude;
   pointer-events: none;
 }
@@ -476,7 +568,7 @@ function handleVividIntensityChange(event: Event) {
   gap: 8px;
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  border-top: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
 }
 body.dark .custom-bg-row {
   border-top-color: #2a2a2c;
@@ -491,11 +583,11 @@ body.dark .custom-bg-row {
 .blur-slider {
   flex: 1;
   --thumb-size: 20px;
-  accent-color: var(--ion-color-primary);
+  accent-color: var(--color-primary);
 }
 .blur-label-off, .blur-label-max {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   width: 20px;
   text-align: center;
   flex-shrink: 0;
@@ -522,20 +614,33 @@ body.dark .custom-bg-row {
   align-items: center;
   justify-content: center;
   padding: 14px 8px;
-  border: 2px solid var(--ion-color-light-shade, #e0e0e0);
-  border-radius: 12px;
+  border: 1px solid var(--color-base-300);
+  border-radius: 14px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.25s ease, border-color 0.2s ease;
   text-align: center;
-  background: var(--ion-background-color, transparent);
+  background: var(--color-base-100, transparent);
   min-height: 56px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 3px 10px -6px rgba(0, 0, 0, 0.1);
+}
+.p3-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-base-300));
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.16);
 }
 body.dark .p3-card {
-  border-color: #3a3a3c;
+  border-color: var(--color-base-300);
 }
 .p3-card-active {
-  border-color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  border-color: var(--color-primary);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-primary) 13%, transparent),
+    color-mix(in srgb, var(--color-primary) 3%, transparent)
+  );
+  box-shadow: 0 0 0 1px var(--color-primary),
+    0 8px 22px -8px color-mix(in srgb, var(--color-primary) 50%, transparent);
 }
 .p3-card-title {
   font-weight: 600;
@@ -543,7 +648,7 @@ body.dark .p3-card {
 }
 .p3-card-desc {
   font-size: 10px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 3px;
   line-height: 1.2;
 }

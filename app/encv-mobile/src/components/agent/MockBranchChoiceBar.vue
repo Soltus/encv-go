@@ -77,7 +77,7 @@ function onPick(branch: { id: string; label: string; icon?: string; description?
 /* =========================================================================
  * 容器
  * 与 MockPresetBar 风格保持一致：半透明 primary tint + backdrop-filter blur
- * + rounded corners + 内边距。深色模式用 rgba(var(--ion-color-primary-rgb), 0.12)
+ * + rounded corners + 内边距。深色模式用 color-mix(in srgb, var(--color-primary) 12%, transparent)
  * ========================================================================= */
 .mock-branch-bar {
   position: relative;
@@ -87,8 +87,8 @@ function onPick(branch: { id: string; label: string; icon?: string; description?
   padding: 10px 12px;
   margin: 6px 8px 4px 8px;
   border-radius: 12px;
-  background: rgba(var(--ion-color-primary-rgb), 0.10);
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.25);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -109,7 +109,7 @@ function onPick(branch: { id: string; label: string; icon?: string; description?
 
 .mock-branch-scenario {
   font-weight: 600;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   letter-spacing: 0.2px;
   /* 长 scenario 名时截断 */
   overflow: hidden;
@@ -121,11 +121,11 @@ function onPick(branch: { id: string; label: string; icon?: string; description?
 .mock-branch-round {
   font-variant-numeric: tabular-nums;
   font-weight: 500;
-  color: var(--ion-color-primary-shade);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
   /* 半透明胶囊背景增强识别度 */
   padding: 1px 8px;
   border-radius: 999px;
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 /* =========================================================================
@@ -169,7 +169,7 @@ function onPick(branch: { id: string; label: string; icon?: string; description?
 }
 
 .mock-branch-chips::-webkit-scrollbar-thumb {
-  background: rgba(var(--ion-color-primary-rgb), 0.30);
+  background: color-mix(in srgb, var(--color-primary) 30%, transparent);
   border-radius: 2px;
 }
 
@@ -188,9 +188,9 @@ function onPick(branch: { id: string; label: string; icon?: string; description?
   max-width: 200px;
   padding: 8px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.35);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
   background: rgba(255, 255, 255, 0.85);
-  color: var(--ion-color-primary-shade);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
   font-size: 12px;
   font-weight: 500;
   line-height: 1.3;
@@ -204,22 +204,22 @@ function onPick(branch: { id: string; label: string; icon?: string; description?
 /* 暗黑模式：白底 → 半透明深色（与 app 整体暗黑风格一致） */
 @media (prefers-color-scheme: dark) {
   .mock-branch-chip {
-    background: rgba(var(--ion-color-primary-rgb), 0.18);
-    color: var(--ion-color-primary-tint);
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    color: color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
   }
 }
 
 .mock-branch-chip:hover,
 .mock-branch-chip:focus-visible {
-  background: rgba(var(--ion-color-primary-rgb), 0.20);
-  border-color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+  border-color: var(--color-primary);
   transform: translateY(-1px);
   outline: none;
 }
 
 .mock-branch-chip:active {
   transform: translateY(0);
-  background: rgba(var(--ion-color-primary-rgb), 0.28);
+  background: color-mix(in srgb, var(--color-primary) 28%, transparent);
 }
 
 .mock-branch-icon {

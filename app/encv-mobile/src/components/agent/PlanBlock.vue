@@ -108,14 +108,14 @@ function statusIcon(status: string) {
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem 0.875rem;
-  border: 1px solid var(--ion-color-step-200, #e4e4e7);
+  border: 1px solid var(--color-base-200);
   border-radius: 0.5rem;
-  background: var(--ion-color-step-50, #fafafa);
+  background: var(--color-base-100);
 }
 
 .plan-block.is-streaming {
-  border-color: var(--ion-color-primary);
-  box-shadow: 0 0 0 1px var(--ion-color-primary-tint, rgba(79, 140, 255, 0.3));
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
 }
 
 /* 进度条 */
@@ -130,7 +130,7 @@ function statusIcon(status: string) {
 .plan-progress-bar {
   flex: 1;
   height: 4px;
-  background: rgba(var(--ion-color-medium-rgb), 0.15);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 15%, transparent);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -150,7 +150,7 @@ function statusIcon(status: string) {
 
 .plan-progress-count {
   font-weight: 600;
-  color: var(--ion-color-success, #16a34a);
+  color: var(--color-success);
 }
 
 .plan-progress-sep,
@@ -160,7 +160,7 @@ function statusIcon(status: string) {
 
 .plan-progress-hint {
   margin-left: 4px;
-  color: var(--ion-color-primary, #4f8cff);
+  color: var(--color-primary);
   font-weight: 500;
 }
 
@@ -184,20 +184,20 @@ function statusIcon(status: string) {
 
 .plan-item--completed .plan-content {
   text-decoration: line-through;
-  color: var(--ion-color-step-600, #6b7280);
+  color: color-mix(in srgb, var(--color-base-content) 57%, var(--color-base-100));
 }
 
 .plan-item--in_progress .plan-content {
   font-weight: 600;
-  color: var(--ion-color-primary-shade, #1d4ed8);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
 }
 
 .plan-item--pending .plan-content {
-  color: var(--ion-color-step-700, #374151);
+  color: color-mix(in srgb, var(--color-base-content) 71%, var(--color-base-100));
 }
 
 .plan-item--unknown .plan-content {
-  color: var(--ion-color-step-700, #374151);
+  color: color-mix(in srgb, var(--color-base-content) 71%, var(--color-base-100));
 }
 
 .plan-marker {
@@ -215,20 +215,20 @@ function statusIcon(status: string) {
 }
 
 .plan-item--completed .plan-marker-icon {
-  color: var(--ion-color-success, #16a34a);
+  color: var(--color-success);
 }
 
 .plan-item--in_progress .plan-marker-icon {
-  color: var(--ion-color-primary, #4f8cff);
+  color: var(--color-primary);
   animation: plan-marker-spin 1.6s linear infinite;
 }
 
 .plan-item--pending .plan-marker-icon {
-  color: var(--ion-color-step-400, #9ca3af);
+  color: color-mix(in srgb, var(--color-base-content) 29%, var(--color-base-100));
 }
 
 .plan-item--unknown .plan-marker-icon {
-  color: var(--ion-color-step-400, #9ca3af);
+  color: color-mix(in srgb, var(--color-base-content) 29%, var(--color-base-100));
 }
 
 @keyframes plan-marker-spin {
@@ -251,13 +251,13 @@ function statusIcon(status: string) {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--ion-color-step-500, #6b7280);
+  color: color-mix(in srgb, var(--color-base-content) 43%, var(--color-base-100));
 }
 
 .plan-empty {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--ion-color-step-500, #6b7280);
+  color: color-mix(in srgb, var(--color-base-content) 43%, var(--color-base-100));
   font-style: italic;
 }
 </style>

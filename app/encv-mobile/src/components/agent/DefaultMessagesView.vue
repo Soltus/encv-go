@@ -498,7 +498,7 @@ defineExpose({
 
 .emptyIcon {
   font-size: 40px;
-  color: rgba(var(--ion-color-primary-rgb), 0.3);
+  color: color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .renderedItemWrap {
@@ -513,7 +513,7 @@ defineExpose({
   justify-content: space-between;
   padding-left: 36px;
   margin-top: 2px;
-  border-top: 1px solid rgba(var(--ion-color-medium-rgb), 0.12);
+  border-top: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   padding-top: 4px;
 }
 
@@ -543,7 +543,7 @@ defineExpose({
 
 .messageFooterStandalone .footerCopyBtn:hover,
 .messageFooterStandalone .footerCopyBtn:active {
-  color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 </style>

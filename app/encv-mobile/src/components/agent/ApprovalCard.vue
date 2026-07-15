@@ -325,7 +325,7 @@ function handleDecide(decision: Decision) {
 
 .approvalKindIcon {
   font-size: 18px;
-  color: var(--ion-color-warning-shade, #e0ac08);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
   flex-shrink: 0;
 }
 
@@ -354,7 +354,7 @@ function handleDecide(decision: Decision) {
   padding: 8px 10px;
   background: rgba(var(--ion-background-color-rgb), 0.4);
   border-radius: 6px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.16);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 16%, transparent);
 }
 
 .approvalBodyRow {
@@ -389,8 +389,8 @@ function handleDecide(decision: Decision) {
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
   border-radius: 10px;
   font-size: 11px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -401,12 +401,12 @@ function handleDecide(decision: Decision) {
 }
 
 .approvalFileChip_more {
-  background: rgba(var(--ion-color-medium-rgb), 0.18);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   color: var(--encv-text-secondary);
 }
 
 .approvalDiff {
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.2);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 20%, transparent);
   border-radius: 6px;
   background: rgba(var(--ion-background-color-rgb), 0.5);
   overflow: hidden;
@@ -474,26 +474,26 @@ function handleDecide(decision: Decision) {
 
 .approvalBtn_accept {
   grid-column: 1 / -1;
-  background: var(--ion-color-primary);
-  color: var(--ion-color-primary-contrast, #fff);
+  background: var(--color-primary);
+  color: var(--color-primary-content);
 }
 
 .approvalBtn_acceptSession {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
-  color: var(--ion-color-primary);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .approvalBtn_decline {
-  background: rgba(var(--ion-color-medium-rgb), 0.18);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   color: var(--ion-text-color);
-  border-color: rgba(var(--ion-color-medium-rgb), 0.3);
+  border-color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 30%, transparent);
 }
 
 .approvalBtn_cancel {
-  background: rgba(var(--ion-color-danger-rgb), 0.12);
-  color: var(--ion-color-danger);
-  border-color: rgba(var(--ion-color-danger-rgb), 0.3);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  color: var(--color-error);
+  border-color: color-mix(in srgb, var(--color-error) 30%, transparent);
 }
 
 .approvalBtn_processing {

@@ -503,7 +503,7 @@ watch(isPlaying, val => {
 
 .top-title {
   flex: 1;
-  color: #fff;
+  color: var(--color-white);
   font-size: 14px;
   font-weight: 500;
   overflow: hidden;
@@ -879,7 +879,7 @@ watch(isPlaying, val => {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--color-white);
   transition: transform 0.2s;
 }
 
@@ -915,7 +915,7 @@ watch(isPlaying, val => {
   box-shadow: 0 4px 24px rgba(0,0,0,0.6);
   z-index: 40;
   cursor: pointer;
-  background: #000;
+  background: var(--color-black);
 }
 
 .pip-video {
@@ -956,7 +956,7 @@ watch(isPlaying, val => {
   border-radius: 50%;
   border: none;
   background: rgba(255,255,255,0.2);
-  color: #fff;
+  color: var(--color-white);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -1074,7 +1074,7 @@ watch(isPlaying, val => {
   height: 40px;
   border: none;
   background: none;
-  color: #fff;
+  color: var(--color-white);
   cursor: pointer;
   display: flex;
   align-items: center;

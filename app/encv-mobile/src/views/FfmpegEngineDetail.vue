@@ -335,7 +335,7 @@ onMounted(async () => {
 
 <style scoped>
 .engine-detail-text {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 11px;
   margin-left: 4px;
   word-break: break-all;
@@ -364,12 +364,12 @@ onMounted(async () => {
 
 .error-title {
   font-weight: 500;
-  color: var(--ion-color-warning);
+  color: var(--color-warning);
 }
 
 .error-detail {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-family: monospace;
   word-break: break-all;
 }
@@ -406,18 +406,18 @@ onMounted(async () => {
 }
 
 .license-badge {
-  --background: rgba(var(--ion-color-danger-rgb), 0.12);
-  --color: var(--ion-color-danger);
+  --background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  --color: var(--color-error);
 }
 
 .version-badge {
-  --background: rgba(var(--ion-color-medium-rgb), 0.12);
-  --color: var(--ion-color-medium-shade);
+  --background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
+  --color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
 }
 
 .count-badge {
-  --background: rgba(var(--ion-color-medium-rgb), 0.08);
-  --color: var(--ion-color-medium);
+  --background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
+  --color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .mono-text {
@@ -451,43 +451,43 @@ onMounted(async () => {
 }
 
 .decoder-tag {
-  background: rgba(var(--ion-color-success-rgb), 0.1);
-  color: var(--ion-color-success-shade);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+  color: color-mix(in srgb, var(--color-success) 85%, var(--color-black));
 }
 
 .encoder-tag {
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
-  color: var(--ion-color-primary-shade);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
 }
 
 .muxer-tag {
-  background: rgba(var(--ion-color-warning-rgb), 0.1);
-  color: var(--ion-color-warning-shade);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 
 .demuxer-tag {
-  background: rgba(var(--ion-color-tertiary-rgb), 0.1);
-  color: var(--ion-color-tertiary-shade);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: color-mix(in srgb, var(--color-accent) 85%, var(--color-black));
 }
 
 .parser-tag {
-  background: rgba(var(--ion-color-medium-rgb), 0.1);
-  color: var(--ion-color-medium-shade);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 10%, transparent);
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
 }
 
 .protocol-tag {
-  background: rgba(var(--ion-color-danger-rgb), 0.08);
-  color: var(--ion-color-danger-shade);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
 }
 
 .filter-tag {
-  background: rgba(var(--ion-color-success-rgb), 0.08);
-  color: var(--ion-color-success-shade);
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
+  color: color-mix(in srgb, var(--color-success) 85%, var(--color-black));
 }
 
 .lib-tag {
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
-  color: var(--ion-color-medium);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-size: 10px;
 }
 </style>

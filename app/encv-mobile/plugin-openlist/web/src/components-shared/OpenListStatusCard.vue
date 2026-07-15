@@ -119,7 +119,7 @@ const statusLabel = computed(() => {
   margin: 12px 12px 0;
   padding: 12px 14px;
   border-radius: 10px;
-  background: var(--ion-background-color, #ffffff);
+  background: var(--ion-background-color, var(--color-white));
   border: 1px solid var(--ion-color-light-shade, #e0e0e0);
   border-left-width: 3px;
 }
@@ -134,9 +134,9 @@ const statusLabel = computed(() => {
 .card-icon { font-size: 16px; color: var(--ion-color-primary); flex-shrink: 0; }
 .card-title { font-size: 14px; font-weight: 600; flex: 1 1 auto; }
 .status-badge { font-size: 11px; flex-shrink: 0; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-.badge-success { background: var(--ion-color-success, #2dd36f); color: #fff; }
-.badge-danger { background: var(--ion-color-danger, #eb445a); color: #fff; }
-.badge-medium { background: var(--ion-color-medium, #92949c); color: #fff; }
+.badge-success { background: var(--ion-color-success, #2dd36f); color: var(--color-white); }
+.badge-danger { background: var(--ion-color-danger, #eb445a); color: var(--color-white); }
+.badge-medium { background: var(--ion-color-medium, #92949c); color: var(--color-white); }
 
 .card-body { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
 .status-line { margin: 0; font-size: 13px; font-weight: 500; }

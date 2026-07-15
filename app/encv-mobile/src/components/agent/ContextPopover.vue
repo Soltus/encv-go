@@ -208,7 +208,7 @@ function todoStatusLabel(status: string): string {
 
 .ctx-header-icon {
   font-size: 18px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 

@@ -86,7 +86,7 @@ async function handleRunAll() {
   line-height: 1.5;
 }
 .error-text {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;

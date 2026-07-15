@@ -309,7 +309,7 @@ ion-fab {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.5px;
-  color: #fff;
+  color: var(--color-white);
   background: linear-gradient(90deg, #f97316 0%, #ec4899 100%);
   border-radius: 3px;
   vertical-align: middle;

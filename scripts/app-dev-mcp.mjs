@@ -191,7 +191,7 @@ const TOOLS = [
   {
     name: "app_exec",
     description:
-      "Run an arbitrary shell command via `bash -c` inside the repo (cwd must stay under /workspace, defaults to /workspace). Stable alternative to the flaky built-in terminal: runs in this persistent MCP process, captures stdout/stderr, enforces a timeout. Use for commands that hang/crash the normal terminal (e.g. gradle, long builds, docker). WARNING: executes arbitrary commands — use with care. A safety gate blocks destructive ops: batch/recursive deletes (rm -rf/rmdir/shred), dangerous git (reset --hard, clean -f, checkout -- ., push --force, branch -D), process kills (kill/pkill/killall), privilege escalation (sudo/su), and curl|sh / wget|sh.",
+      "Run an arbitrary shell command via `bash -c` inside the repo (cwd must stay under /workspace, defaults to /workspace). Stable alternative to the flaky built-in terminal: runs in this persistent MCP process, captures stdout/stderr, enforces a timeout. Use for commands that hang/crash the normal terminal (e.g. gradle, long builds, docker). WARNING: executes arbitrary commands — use with care. A safety gate blocks destructive ops: batch/recursive deletes (rm -rf/rmdir/shred), dangerous git (reset --hard, clean -f, checkout -- ., push --force, branch -D), privilege escalation (sudo/su), curl|sh / wget|sh. Process kills (kill/pkill/killall/fuser) are ALLOWED when targeting same-identity or non-critical processes (e.g. clearing a stale local dev server / occupied port); they are only blocked when they would hit an environment-connection process (ssh tunnel, code-server, the dev MCP, session daemon, self/ancestors, init) or an unverified other-identity live process.",
     inputSchema: {
       type: "object",
       properties: {
@@ -363,7 +363,7 @@ async function dispatch(name, args = {}) {
     const raw = String(args.command || "").trim();
     if (!raw) return textResult("command is required", true);
     if (!guardRef) return textResult("⛔ 安全门禁模块未就绪，拒绝执行以防误放行。", true);
-    const blocked = guardRef.guardAppExec(raw);
+    const blocked = await guardRef.guardAppExec(raw);
     if (blocked) return textResult(`⛔ 命令被安全门禁拦截（${blocked}），如需执行请改用更安全的等价命令。`, true);
     const cwd =
       args.cwd && String(args.cwd).startsWith("/workspace")

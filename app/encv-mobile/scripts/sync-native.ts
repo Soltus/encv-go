@@ -1,6 +1,11 @@
-import { rmSync, mkdirSync, copyFileSync, cpSync, readdirSync, statSync, existsSync } from 'fs'
-import { join, dirname } from 'path'
-import { fileURLToPath } from 'url'
+#!/usr/bin/env bun
+/**
+ * 用 bun 运行：bun scripts/sync-native.ts
+ * encv-sync-native — 同步原生库到 Android 工程（ESM-only，bun 直跑 .ts）
+ */
+import { rmSync, mkdirSync, copyFileSync, cpSync, readdirSync, statSync, existsSync } from 'node:fs'
+import { join, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ANDROID_DIR = join(__dirname, '..', 'android')
@@ -51,11 +56,11 @@ if (existsSync(overlayInc)) {
 const configSrc = join(__dirname, '..', '..', '..', 'config.user.json')
 const configDest = join(ANDROID_DIR, 'app', 'src', 'main', 'assets', 'config.user.json')
 if (existsSync(configSrc)) {
-    mkdirSync(dirname(configDest), { recursive: true })
-    copyFileSync(configSrc, configDest)
-    console.log(`  config: config.user.json → assets`)
+  mkdirSync(dirname(configDest), { recursive: true })
+  copyFileSync(configSrc, configDest)
+  console.log('  config: config.user.json → assets')
 } else {
-    console.warn(`  config: config.user.json not found at project root (expected for fresh clones)`)
+  console.warn('  config: config.user.json not found at project root (expected for fresh clones)')
 }
 
 console.log('encv-sync-native: done')

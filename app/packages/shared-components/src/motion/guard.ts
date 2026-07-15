@@ -27,10 +27,23 @@ export interface MotionProfile {
  * 注意：与 registry.ts 的 setMotionEnabled(name, enabled)（按命名动画开关）不冲突，
  * 这里是「全局」总闸。
  */
-let forcedDisabled: boolean | null = null;
+const MOTION_DISABLED_KEY = "encv-motion-disabled";
+
+/** 模块加载即水合：从 localStorage 恢复「减少动效」持久偏好（应用级全局生效）。 */
+function readStoredDisabled(): boolean | null {
+  if (typeof localStorage === "undefined") return null;
+  const v = localStorage.getItem(MOTION_DISABLED_KEY);
+  if (v === null) return null;
+  return v === "true";
+}
+
+let forcedDisabled: boolean | null = readStoredDisabled();
 
 export function setMotionDisabled(disabled: boolean | null): void {
   forcedDisabled = disabled;
+  if (typeof localStorage === "undefined") return;
+  if (disabled === null) localStorage.removeItem(MOTION_DISABLED_KEY);
+  else localStorage.setItem(MOTION_DISABLED_KEY, disabled ? "true" : "false");
 }
 
 export function getMotionDisabled(): boolean | null {

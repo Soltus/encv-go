@@ -193,11 +193,11 @@ const groups = [
 
 <style scoped>
 .v2ScenariosBtn {
-  --color: var(--ion-color-primary);
+  --color: var(--color-primary);
   font-size: 11px;
   margin: 0 4px;
   height: 26px;
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.4);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
   border-radius: 13px;
   padding: 0 10px;
 }
@@ -220,8 +220,8 @@ const groups = [
   color: var(--encv-text-secondary, rgba(127, 127, 127, 0.7));
   margin: 4px 0 14px;
   padding: 8px 10px;
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  border-left: 3px solid var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border-left: 3px solid var(--color-primary);
   border-radius: 4px;
   line-height: 1.5;
 }
@@ -242,7 +242,7 @@ const groups = [
 }
 .v2ScenariosGroupIcon {
   font-size: 14px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 .v2ScenariosGroupCount {
   margin-left: auto;
@@ -269,8 +269,8 @@ const groups = [
   transition: border-color 0.15s, background 0.15s, transform 0.1s;
 }
 .v2ScenarioCard:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.35);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
 }
 .v2ScenarioCard:active {
   transform: scale(0.99);
@@ -290,8 +290,8 @@ const groups = [
 .v2ScenarioCardTag {
   font-size: 9px;
   padding: 1px 5px;
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
   border-radius: 4px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -316,7 +316,7 @@ const groups = [
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10.5px;
   padding: 1px 5px;
-  background: rgba(var(--ion-color-medium-rgb), 0.12);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   color: var(--ion-text-color);
   border-radius: 3px;
   border: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.1));

@@ -424,7 +424,7 @@ defineExpose({
   --padding-end: 0;
 }
 .log-content {
-  --background: var(--ion-background-color, #fff);
+  --background: var(--ion-background-color, var(--color-white));
 }
 .log-list {
   position: relative;
@@ -501,7 +501,7 @@ defineExpose({
   padding: 20px;
 }
 .log-detail-modal {
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   border-radius: 12px;
   width: 100%;
   max-width: 600px;

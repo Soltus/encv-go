@@ -75,14 +75,14 @@ async function handleCopy() {
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
-  background: rgba(var(--ion-color-primary-rgb), 0.06);
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
   border-radius: 8px;
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.12);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 12%, transparent);
   min-height: 30px;
 }
 
 .blockHeader_expanded {
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 
 .blockTitle {
@@ -97,7 +97,7 @@ async function handleCopy() {
 
 .blockIcon {
   font-size: 14px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -133,8 +133,8 @@ async function handleCopy() {
 }
 
 .blockActionBtn:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
 }
 
 .blockActionBtn ion-icon {

@@ -404,12 +404,12 @@ async function handleBackupDatabase() {
 
 <style scoped>
 .engine-mismatch-item {
-  --background: var(--ion-color-warning-50, #fff8e1);
+  --background: color-mix(in srgb, var(--color-warning) 5%, var(--color-white));
 }
 
 .mismatch-warning {
   font-size: 0.85em;
-  color: var(--ion-color-warning);
+  color: var(--color-warning);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -436,7 +436,7 @@ async function handleBackupDatabase() {
   justify-content: center;
   padding: 40px;
   gap: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .engine-item {
@@ -478,7 +478,7 @@ async function handleBackupDatabase() {
 
 .engine-desc {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin: 4px 0 0;
   line-height: 1.4;
 }
@@ -494,8 +494,8 @@ async function handleBackupDatabase() {
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 4px;
-  background: var(--ion-color-light, #f4f5f8);
-  color: var(--ion-color-medium, #92949c);
+  background: var(--color-base-200);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   white-space: nowrap;
 }
 
@@ -513,15 +513,15 @@ body.dark .cap-tag {
 
 .base-hint {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .unavailable-hint {
   font-size: 12px;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
 }
 
 .engine-item-base {
-  --background: var(--ion-color-primary-50, rgba(79, 140, 255, 0.08));
+  --background: color-mix(in srgb, var(--color-primary) 5%, var(--color-white));
 }
 </style>

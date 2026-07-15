@@ -104,8 +104,8 @@ const dataSourceTag = computed(() => {
 <style scoped>
 .mountListCard {
   margin: 4px 0 6px;
-  background: rgba(var(--ion-color-medium-rgb), 0.05);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 5%, transparent);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 12px;
@@ -120,7 +120,7 @@ const dataSourceTag = computed(() => {
 
 .mountListCardIcon {
   font-size: 14px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .mountListCardTitle {
@@ -137,8 +137,8 @@ const dataSourceTag = computed(() => {
   height: 18px;
   padding: 0 6px;
   border-radius: 9px;
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
   font-size: 10px;
   font-weight: 600;
 }
@@ -157,7 +157,7 @@ const dataSourceTag = computed(() => {
   align-items: center;
   gap: 8px;
   padding: 5px 8px;
-  background: rgba(var(--ion-color-medium-rgb), 0.04);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 4%, transparent);
   border-radius: 5px;
   min-width: 0;
 }
@@ -177,7 +177,7 @@ const dataSourceTag = computed(() => {
 
 .mountListCardItemIcon {
   font-size: 12px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -212,7 +212,7 @@ const dataSourceTag = computed(() => {
 .mountListCardRaw pre {
   margin: 4px 0 0;
   padding: 6px 8px;
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
   border-radius: 4px;
   overflow-x: auto;
   font-size: 10.5px;
@@ -230,12 +230,12 @@ const dataSourceTag = computed(() => {
   text-transform: uppercase;
 }
 .mountListCardBadge_warn {
-  background: rgba(var(--ion-color-warning-rgb), 0.18);
-  color: var(--ion-color-warning-shade);
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 .mountListCardBadge_error {
-  background: rgba(var(--ion-color-danger-rgb), 0.15);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 15%, transparent);
+  color: var(--color-error);
 }
 
 .mountListCardSource {

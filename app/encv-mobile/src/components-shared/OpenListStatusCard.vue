@@ -120,35 +120,35 @@ const statusLabel = computed(() => {
   margin: 12px 12px 0;
   padding: 12px 14px;
   border-radius: 10px;
-  background: var(--ion-background-color, #ffffff);
-  border: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  background: var(--ion-background-color, var(--color-white));
+  border: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
   border-left-width: 3px;
 }
-.openlist-status-card.state-running { border-left-color: var(--ion-color-success); }
+.openlist-status-card.state-running { border-left-color: var(--color-success); }
 .openlist-status-card.state-conflict,
-.openlist-status-card.state-port_conflict { border-left-color: var(--ion-color-warning); }
+.openlist-status-card.state-port_conflict { border-left-color: var(--color-warning); }
 .openlist-status-card.state-stopped,
-.openlist-status-card.state-not_installed { border-left-color: var(--ion-color-medium); }
+.openlist-status-card.state-not_installed { border-left-color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)); }
 
 .card-header { margin-bottom: 8px; }
 .card-title-row { display: flex; align-items: center; gap: 6px; }
-.card-icon { font-size: 16px; color: var(--ion-color-primary); flex-shrink: 0; }
+.card-icon { font-size: 16px; color: var(--color-primary); flex-shrink: 0; }
 .card-title { font-size: 14px; font-weight: 600; flex: 1 1 auto; }
 .status-badge { font-size: 11px; flex-shrink: 0; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-.badge-success { background: var(--ion-color-success, #2dd36f); color: #fff; }
-.badge-danger { background: var(--ion-color-danger, #eb445a); color: #fff; }
-.badge-medium { background: var(--ion-color-medium, #92949c); color: #fff; }
+.badge-success { background: var(--color-success); color: var(--color-white); }
+.badge-danger { background: var(--color-error); color: var(--color-white); }
+.badge-medium { background: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)); color: var(--color-white); }
 
 .card-body { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
 .status-line { margin: 0; font-size: 13px; font-weight: 500; }
 .status-line-warning { color: #e65100; }
 .card-body-warning { background: #fff8e1; border-radius: 6px; padding: 8px; }
-.card-body-medium { color: var(--ion-color-medium); }
+.card-body-medium { color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)); }
 
 .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 14px; }
 .info-item { display: flex; flex-direction: column; gap: 1px; }
-.info-label { font-size: 11px; color: var(--ion-color-medium); }
+.info-label { font-size: 11px; color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)); }
 .info-value { font-size: 13px; font-weight: 500; font-family: monospace; }
-.heartbeat-fresh { color: var(--ion-color-success); }
-.card-error { margin-top: 6px; font-size: 11px; color: var(--ion-color-danger); word-break: break-word; }
+.heartbeat-fresh { color: var(--color-success); }
+.card-error { margin-top: 6px; font-size: 11px; color: var(--color-error); word-break: break-word; }
 </style>

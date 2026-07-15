@@ -19,7 +19,7 @@
     - codex_web 风格：agent task + 多子任务状态徽章 + 折叠
 -->
 <template>
-  <div class="agent-task" :class="{ 'is-streaming': props.streaming }">
+  <div class="agent-task ui-panel" :class="{ 'is-streaming': props.streaming }">
     <div class="agentTaskHeader" @click="toggleExpanded">
       <ion-icon :icon="icon" class="agentTaskIcon" />
       <span class="agentTaskTitle">{{ t('agent.agentTask') }}</span>
@@ -167,19 +167,18 @@ function statusLabel(status: SubTask["status"]): string {
 </script>
 
 <style scoped>
+/* 表面（背景/边框/圆角/内距）已上提到全局 .ui-panel，供用户主题以 .ui-panel{} 覆写。
+   本 scoped 仅保留结构/交互差异；is-streaming 的状态覆写仍在此（scoped
+   特异性 0,2,0 高于 .ui-panel 的 0,1,0，故 border-color/box-shadow 生效）。 */
 .agent-task {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0.625rem 0.875rem;
-  border: 1px solid var(--ion-color-step-200, #e4e4e7);
-  border-radius: 0.5rem;
-  background: var(--ion-color-step-50, #fafafa);
 }
 
 .agent-task.is-streaming {
-  border-color: var(--ion-color-primary);
-  box-shadow: 0 0 0 1px var(--ion-color-primary-tint, rgba(79, 140, 255, 0.3));
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
 }
 
 .agentTaskHeader {
@@ -193,7 +192,7 @@ function statusLabel(status: SubTask["status"]): string {
 
 .agentTaskIcon {
   font-size: 16px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -207,7 +206,7 @@ function statusLabel(status: SubTask["status"]): string {
 .agentTaskProgress {
   flex: 1 1 auto;
   font-size: 11px;
-  color: var(--ion-color-step-500, #6b7280);
+  color: color-mix(in srgb, var(--color-base-content) 43%, var(--color-base-100));
   font-variant-numeric: tabular-nums;
   text-align: right;
   overflow: hidden;
@@ -231,7 +230,7 @@ function statusLabel(status: SubTask["status"]): string {
 .agentTaskProgressBarTrack {
   flex: 1;
   height: 4px;
-  background: rgba(var(--ion-color-medium-rgb), 0.15);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 15%, transparent);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -273,20 +272,20 @@ function statusLabel(status: SubTask["status"]): string {
 
 .agentTaskItem--completed .agentTaskDescription {
   text-decoration: line-through;
-  color: var(--ion-color-step-600, #6b7280);
+  color: color-mix(in srgb, var(--color-base-content) 57%, var(--color-base-100));
 }
 
 .agentTaskItem--in_progress .agentTaskDescription {
   font-weight: 600;
-  color: var(--ion-color-primary-shade, #1d4ed8);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
 }
 
 .agentTaskItem--failed .agentTaskDescription {
-  color: var(--ion-color-danger, #ef4444);
+  color: var(--color-error);
 }
 
 .agentTaskItem--pending .agentTaskDescription {
-  color: var(--ion-color-step-700, #374151);
+  color: color-mix(in srgb, var(--color-base-content) 71%, var(--color-base-100));
 }
 
 .agentTaskMarker {
@@ -304,20 +303,20 @@ function statusLabel(status: SubTask["status"]): string {
 }
 
 .agentTaskItem--completed .agentTaskMarkerIcon {
-  color: var(--ion-color-success, #16a34a);
+  color: var(--color-success);
 }
 
 .agentTaskItem--in_progress .agentTaskMarkerIcon {
-  color: var(--ion-color-primary, #4f8cff);
+  color: var(--color-primary);
   animation: agent-task-spin 1.6s linear infinite;
 }
 
 .agentTaskItem--failed .agentTaskMarkerIcon {
-  color: var(--ion-color-danger, #ef4444);
+  color: var(--color-error);
 }
 
 .agentTaskItem--pending .agentTaskMarkerIcon {
-  color: var(--ion-color-step-400, #9ca3af);
+  color: color-mix(in srgb, var(--color-base-content) 29%, var(--color-base-100));
 }
 
 @keyframes agent-task-spin {
@@ -340,13 +339,13 @@ function statusLabel(status: SubTask["status"]): string {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--ion-color-step-500, #6b7280);
+  color: color-mix(in srgb, var(--color-base-content) 43%, var(--color-base-100));
 }
 
 .agentTaskEmpty {
   margin: 0;
   font-size: 0.85rem;
-  color: var(--ion-color-step-500, #6b7280);
+  color: color-mix(in srgb, var(--color-base-content) 43%, var(--color-base-100));
   font-style: italic;
   padding: 0 0 0 22px;
 }

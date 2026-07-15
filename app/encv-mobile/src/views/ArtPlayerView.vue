@@ -550,7 +550,7 @@ onBeforeUnmount(async () => {
   justify-content: center;
   min-height: 100%;
   padding: 24px 16px;
-  background: linear-gradient(180deg, transparent 0%, var(--ion-background-color, #fff) 100%);
+  background: linear-gradient(180deg, transparent 0%, var(--ion-background-color, var(--color-white)) 100%);
 }
 
 .player-container {
@@ -561,7 +561,7 @@ onBeforeUnmount(async () => {
 
 .video-player {
   width: 100%;
-  background: #000;
+  background: var(--color-black);
   position: relative;
   overflow: hidden;
 }

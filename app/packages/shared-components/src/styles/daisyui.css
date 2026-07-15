@@ -16,7 +16,6 @@
 @import "tailwindcss";
 @import "../theme/tokens.css";
 @import "../theme/bridge.css";
-@import "../theme/components.css";
 
 /* 声明工作区使用的主题（encv 为默认亮色，encv-dark 跟随系统暗色） */
 @plugin "daisyui" {
@@ -75,5 +74,6 @@
   --radius-box: 1rem;
 }
 
-/* 共享组件层见 ../theme/components.css（纯 CSS、与 daisyUI 无关，换肤不变）。
-   注意：components.css 已在本文件顶部 @import，请勿在此再用 @apply 引入 daisyUI 类。 */
+/* 组件样式归属：各组件自行以 scoped 样式 + 设计令牌（--color-* / --radius-*）表达，
+   不依赖任何共享「组件类词汇」。daisyUI 组件类（card / badge / btn …）仅在插件 web 路径可用，
+   主应用（theme-core.css，纯 CSS、无 daisyUI 运行时）由各组件内联令牌样式覆盖。 */

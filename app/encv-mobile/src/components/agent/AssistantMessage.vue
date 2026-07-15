@@ -153,7 +153,7 @@ async function handleCopy() {
 .assistantMessageBody :deep(.markdownStream) :deep(.inline-code) {
   border-radius: 5px;
   padding: 1px 5px;
-  background: var(--ion-color-light);
+  background: var(--color-base-200);
   font-size: 0.9em;
 }
 
@@ -163,7 +163,7 @@ async function handleCopy() {
   display: inline-block;
   width: 2px;
   height: 1em;
-  background: var(--ion-color-primary);
+  background: var(--color-primary);
   margin-left: 2px;
   vertical-align: text-bottom;
   animation: cursorBlink 1s step-end infinite;
@@ -182,7 +182,7 @@ async function handleCopy() {
   justify-content: space-between;
   padding-left: 36px;
   margin-top: 4px;
-  border-top: 1px solid rgba(var(--ion-color-medium-rgb), 0.12);
+  border-top: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   padding-top: 4px;
 }
 
@@ -212,7 +212,7 @@ async function handleCopy() {
 
 .footerCopyBtn:hover,
 .footerCopyBtn:active {
-  color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 </style>

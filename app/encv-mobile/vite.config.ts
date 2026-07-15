@@ -2,6 +2,10 @@ import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
 import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // =============================================================================
 // ⚠️ 防御机制：禁止直接 vite 启动（必须通过 PM2 → preview-gateway）

@@ -16,5 +16,5 @@
 
 @import "../theme/tokens.css";
 @import "../theme/palette.css";
+@import "../theme/user-themes.css";
 @import "../theme/bridge.css";
-@import "../theme/components.css";

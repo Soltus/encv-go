@@ -469,19 +469,19 @@ onUnmounted(() => {
 
 .unavailable-icon {
   font-size: 64px;
-  color: var(--ion-color-warning);
+  color: var(--color-warning);
   margin-bottom: 16px;
 }
 
 .error-reason {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-family: monospace;
   font-size: 0.9em;
   margin: 8px 0;
 }
 
 .hint {
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-size: 0.9em;
   max-width: 360px;
 }
@@ -494,16 +494,16 @@ onUnmounted(() => {
 .bench-number {
   font-family: 'SFMono-Regular', Consolas, monospace;
   font-weight: 700;
-  color: var(--ion-color-success);
+  color: var(--color-success);
 }
 
 .bench-desc {
   font-size: 0.8em;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .secondary-note {
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-size: 0.85em;
   margin-left: 4px;
 }
@@ -522,7 +522,7 @@ onUnmounted(() => {
 /* 🆕 2026-07-03：FTS 索引重建任务卡片样式 */
 .rebuild-idle .rebuild-hint {
   font-size: 0.85em;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 4px;
 }
 
@@ -539,7 +539,7 @@ onUnmounted(() => {
 
 .rebuild-phase {
   font-size: 0.85em;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   margin: 4px 0;
   font-family: 'SFMono-Regular', Consolas, monospace;
 }
@@ -554,13 +554,13 @@ onUnmounted(() => {
   display: flex;
   gap: 12px;
   font-size: 0.8em;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin: 4px 0;
 }
 
 .rebuild-meta > span:first-child {
   font-weight: 600;
-  color: var(--ion-color-dark);
+  color: var(--color-base-300);
 }
 
 .rebuild-speed,
@@ -569,7 +569,7 @@ onUnmounted(() => {
 }
 
 .rebuild-error {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 0.85em;
   margin: 4px 0;
   word-break: break-word;
@@ -577,7 +577,7 @@ onUnmounted(() => {
 
 /* 🆕 2026-07-02 A5：渲染错误卡片样式 */
 .render-error .error-reason {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-family: monospace;
   font-size: 0.95em;
   margin: 8px 0;
@@ -592,14 +592,14 @@ onUnmounted(() => {
   overflow-y: auto;
   font-family: monospace;
   font-size: 0.75em;
-  background: rgba(var(--ion-color-danger-rgb), 0.08);
-  border: 1px solid rgba(var(--ion-color-danger-rgb), 0.2);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-error) 20%, transparent);
   border-radius: 6px;
   padding: 8px 12px;
   text-align: left;
   white-space: pre-wrap;
   word-break: break-all;
-  color: var(--ion-color-danger-shade, #b00020);
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
 }
 
 .render-error-reload {

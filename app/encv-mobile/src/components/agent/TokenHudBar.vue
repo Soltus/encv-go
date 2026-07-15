@@ -116,7 +116,7 @@ const formatLatency = (ms: number): string => (ms < 1000 ? `${ms}ms` : `${(ms / 
   flex-direction: column;
   gap: 2px;
   padding: 6px 10px;
-  background: var(--ion-color-step-50, #f7f7f7);
+  background: var(--color-base-100);
   border-left: 3px solid #4caf50;
   border-radius: 4px;
   font-family: var(--ion-font-family-monospace, monospace);
@@ -139,16 +139,16 @@ const formatLatency = (ms: number): string => (ms < 1000 ? `${ms}ms` : `${(ms / 
   gap: 8px;
 }
 .hud-label {
-  color: var(--ion-color-step-600, #666);
+  color: color-mix(in srgb, var(--color-base-content) 57%, var(--color-base-100));
 }
 .hud-value {
-  color: var(--ion-color-step-900, #222);
+  color: color-mix(in srgb, var(--color-base-content) 92%, transparent);
   font-weight: 500;
 }
 .hud-meta {
   margin-top: 2px;
   font-size: 9px;
-  color: var(--ion-color-step-500, #999);
+  color: color-mix(in srgb, var(--color-base-content) 43%, var(--color-base-100));
   text-align: right;
 }
 </style>

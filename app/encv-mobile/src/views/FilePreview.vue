@@ -505,7 +505,7 @@ onMounted(() => loadFile());
   border-radius: 8px;
   padding: 14px;
   margin: 12px 16px 0;
-  border-left: 3px solid var(--ion-color-primary);
+  border-left: 3px solid var(--color-primary);
 }
 
 .container-error {
@@ -525,7 +525,7 @@ onMounted(() => loadFile());
   background: rgba(255, 255, 255, 0.04);
   border-radius: 8px;
   padding: 14px;
-  border-left: 3px solid var(--ion-color-primary);
+  border-left: 3px solid var(--color-primary);
 }
 
 .card-title {
@@ -537,7 +537,7 @@ onMounted(() => loadFile());
   align-items: center;
   gap: 8px;
 }
-.title-icon { color: var(--ion-color-primary); }
+.title-icon { color: var(--color-primary); }
 
 .info-grid {
   display: flex;

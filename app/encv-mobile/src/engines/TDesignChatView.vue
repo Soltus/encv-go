@@ -500,11 +500,11 @@ function onToolToggle(toolCallId: string, e: Event) {
 }
 .td-msg-bubble--user {
   background: var(--td-brand-color, #4f8cff);
-  color: #fff;
+  color: var(--color-white);
   border-bottom-right-radius: 4px;
 }
 .td-msg-bubble--assistant {
-  background: var(--td-bg-color-container, #fff);
+  background: var(--td-bg-color-container, var(--color-white));
   color: var(--td-text-color-primary, #333);
   border-bottom-left-radius: 4px;
   border: 1px solid var(--td-component-stroke, #e7e7e7);
@@ -532,7 +532,7 @@ function onToolToggle(toolCallId: string, e: Event) {
 /* v4: 改为 <details> 折叠态 + TDesign 风格 */
 .td-tool-card {
   width: 100%;
-  background: var(--td-bg-color-container, #fff);
+  background: var(--td-bg-color-container, var(--color-white));
   border: 1px solid var(--td-component-stroke, #e7e7e7);
   border-radius: 8px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -587,16 +587,16 @@ function onToolToggle(toolCallId: string, e: Event) {
 }
 .td-tool-card-status[data-status='running'] {
   background: var(--td-brand-color, #4f8cff);
-  color: #fff;
+  color: var(--color-white);
 }
 .td-tool-card-status[data-status='success'] {
   background: var(--td-success-color, #2ba471);
-  color: #fff;
+  color: var(--color-white);
 }
 .td-tool-card-status[data-status='error'],
 .td-tool-card-status[data-status='failed'] {
   background: var(--td-error-color, #d54941);
-  color: #fff;
+  color: var(--color-white);
 }
 .td-tool-card-chevron {
   font-size: 12px;
@@ -645,7 +645,7 @@ function onToolToggle(toolCallId: string, e: Event) {
 /* ── 工具结果独立卡片（备用）── */
 .td-tool-result-card {
   width: 100%;
-  background: var(--td-bg-color-container, #fff);
+  background: var(--td-bg-color-container, var(--color-white));
   border: 1px solid var(--td-component-stroke, #e7e7e7);
   border-radius: 8px;
   padding: 10px 12px;
@@ -654,7 +654,7 @@ function onToolToggle(toolCallId: string, e: Event) {
 /* ── Plan 块 ── */
 .td-plan-card {
   width: 100%;
-  background: var(--td-bg-color-container, #fff);
+  background: var(--td-bg-color-container, var(--color-white));
   border: 1px solid var(--td-component-stroke, #e7e7e7);
   border-radius: 8px;
   padding: 10px 14px;
@@ -715,24 +715,24 @@ function onToolToggle(toolCallId: string, e: Event) {
   border-radius: 4px;
   font-size: 12px;
   border: 1px solid var(--td-component-stroke, #e7e7e7);
-  background: #fff;
+  background: var(--color-white);
   cursor: pointer;
 }
 .td-approval-btn--approve {
   background: var(--td-success-color, #2ba471);
-  color: #fff;
+  color: var(--color-white);
   border-color: var(--td-success-color, #2ba471);
 }
 .td-approval-btn--reject {
   background: var(--td-error-color, #d54941);
-  color: #fff;
+  color: var(--color-white);
   border-color: var(--td-error-color, #d54941);
 }
 
 /* ── Reasoning ── */
 .td-reasoning {
   width: 100%;
-  background: var(--td-bg-color-container, #fff);
+  background: var(--td-bg-color-container, var(--color-white));
   border: 1px solid var(--td-component-stroke, #e7e7e7);
   border-radius: 8px;
   padding: 8px 12px;
@@ -775,7 +775,7 @@ function onToolToggle(toolCallId: string, e: Event) {
 /* ── Agent Task ── */
 .td-agent-task-card {
   width: 100%;
-  background: var(--td-bg-color-container, #fff);
+  background: var(--td-bg-color-container, var(--color-white));
   border: 1px solid var(--td-component-stroke, #e7e7e7);
   border-radius: 8px;
   padding: 10px 14px;
@@ -794,7 +794,7 @@ function onToolToggle(toolCallId: string, e: Event) {
 /* ── Tool group (webSearch / operationGroup) ── */
 .td-tool-group-card {
   width: 100%;
-  background: var(--td-bg-color-container, #fff);
+  background: var(--td-bg-color-container, var(--color-white));
   border: 1px solid var(--td-component-stroke, #e7e7e7);
   border-radius: 8px;
   padding: 10px 12px;

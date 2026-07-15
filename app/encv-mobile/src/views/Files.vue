@@ -513,7 +513,7 @@
                 <span class="mount-root-inline">→ {{ mountRootOf(file) }}</span>
               </p>
               <p v-else-if="file.isDirectory">{{ t('files.directory') }}</p>
-              <p v-for="sub in fileSubtitles[file.path]" :key="'sub-' + sub.text" class="real-name" :style="{ color: sub.color || 'var(--ion-color-danger)' }">{{ sub.text }}</p>
+              <p v-for="sub in fileSubtitles[file.path]" :key="'sub-' + sub.text" class="real-name" :style="{ color: sub.color || 'var(--color-error)' }">{{ sub.text }}</p>
               <div v-if="!file.isDirectory && !searchQuery && file._tags && file._tags.length > 0" class="file-tag-chips">
                 <ion-chip v-for="tag in file._tags" :key="tag" size="small" color="tertiary" outline>{{ tag }}</ion-chip>
               </div>
@@ -766,8 +766,8 @@ function onQueryBlur() {
 .fulltext-preview {
   margin-top: 4px;
   padding: 6px 8px;
-  background: var(--ion-color-light-shade, #f4f4f4);
-  border-left: 3px solid var(--ion-color-primary, #4f8cff);
+  background: color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
+  border-left: 3px solid var(--color-primary);
   border-radius: 4px;
   font-size: 0.85em;
   line-height: 1.4;
@@ -779,8 +779,8 @@ function onQueryBlur() {
   flex-wrap: wrap;
   gap: 4px;
   padding: 6px 12px;
-  border-top: 1px solid var(--ion-color-light-shade, #e0e0e0);
-  background: var(--ion-color-light-tint, #fafafa);
+  border-top: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
+  background: color-mix(in srgb, var(--color-base-200) 85%, var(--color-white));
   min-height: 32px;
   align-items: center;
   font-size: 0.85em;
@@ -801,40 +801,40 @@ function onQueryBlur() {
   font-weight: 700;
   padding: 0 4px;
   border-radius: 3px;
-  background: var(--ion-color-warning-tint, #fff4d6);
-  color: var(--ion-color-warning-shade, #b07a00);
+  background: color-mix(in srgb, var(--color-warning) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 
 .syntax-token-text.syntax-or {
   font-weight: 700;
   padding: 0 4px;
   border-radius: 3px;
-  background: var(--ion-color-primary-tint, #d6e6ff);
-  color: var(--ion-color-primary-shade, #2962cc);
+  background: color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
 }
 
 .syntax-token-text.syntax-not {
   font-weight: 700;
   padding: 0 4px;
   border-radius: 3px;
-  background: var(--ion-color-danger-tint, #ffd6d6);
-  color: var(--ion-color-danger-shade, #b00020);
+  background: color-mix(in srgb, var(--color-error) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
 }
 
 .syntax-token-text.syntax-phrase {
   font-style: italic;
   padding: 0 4px;
   border-radius: 3px;
-  background: var(--ion-color-success-tint, #d6f5d6);
-  color: var(--ion-color-success-shade, #1b6b1b);
+  background: color-mix(in srgb, var(--color-success) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-success) 85%, var(--color-black));
 }
 
 .syntax-token-text.syntax-regex {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
   padding: 0 4px;
   border-radius: 3px;
-  background: var(--ion-color-tertiary-tint, #e6d6f5);
-  color: var(--ion-color-tertiary-shade, #6b3aa0);
+  background: color-mix(in srgb, var(--color-accent) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-accent) 85%, var(--color-black));
 }
 
 /* 🆕 2026-07-02 插入操作符按钮行（搜索框内操作） */
@@ -843,15 +843,15 @@ function onQueryBlur() {
   flex-wrap: wrap;
   gap: 4px;
   padding: 4px 12px;
-  border-top: 1px solid var(--ion-color-light-shade, #e0e0e0);
-  background: var(--ion-color-light, #ffffff);
+  border-top: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
+  background: var(--color-base-200);
   align-items: center;
   min-height: 36px;
 }
 
 .search-insert-bar .insert-label {
   font-size: 0.75em;
-  color: var(--ion-color-medium, #666);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-right: 4px;
 }
 
@@ -861,21 +861,21 @@ function onQueryBlur() {
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 3px;
-  border: 1px solid var(--ion-color-light-shade, #e0e0e0);
-  background: var(--ion-color-light-tint, #fafafa);
+  border: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
+  background: color-mix(in srgb, var(--color-base-200) 85%, var(--color-white));
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .search-insert-bar .insert-btn:hover {
-  background: var(--ion-color-light-shade, #f0f0f0);
+  background: color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
 }
 
-.search-insert-bar .insert-btn.op-and { color: var(--ion-color-warning-shade, #b07a00); }
-.search-insert-bar .insert-btn.op-or { color: var(--ion-color-primary-shade, #2962cc); }
-.search-insert-bar .insert-btn.op-not { color: var(--ion-color-danger-shade, #b00020); }
-.search-insert-bar .insert-btn.op-phrase { color: var(--ion-color-success-shade, #1b6b1b); }
-.search-insert-bar .insert-btn.op-regex { color: var(--ion-color-tertiary-shade, #6b3aa0); }
+.search-insert-bar .insert-btn.op-and { color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black)); }
+.search-insert-bar .insert-btn.op-or { color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black)); }
+.search-insert-bar .insert-btn.op-not { color: color-mix(in srgb, var(--color-error) 85%, var(--color-black)); }
+.search-insert-bar .insert-btn.op-phrase { color: color-mix(in srgb, var(--color-success) 85%, var(--color-black)); }
+.search-insert-bar .insert-btn.op-regex { color: color-mix(in srgb, var(--color-accent) 85%, var(--color-black)); }
 
 /* 🆕 2026-07-02 A3：contenteditable 搜索输入框 + span units（替换 ion-searchbar） */
 .search-input-wrapper {
@@ -883,7 +883,7 @@ function onQueryBlur() {
   display: flex;
   align-items: center;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
 }
 
 .query-input {
@@ -892,9 +892,9 @@ function onQueryBlur() {
   padding: 4px 8px;
   font-size: 0.95em;
   line-height: 1.4;
-  border: 1px solid var(--ion-color-light-shade, #d0d0d0);
+  border: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
   border-radius: 4px;
-  background: var(--ion-color-light, #ffffff);
+  background: var(--color-base-200);
   outline: none;
   white-space: pre-wrap;
   word-break: break-word;
@@ -903,15 +903,15 @@ function onQueryBlur() {
 }
 
 .query-input:focus {
-  border-color: var(--ion-color-primary, #4f8cff);
-  box-shadow: 0 0 0 2px var(--ion-color-primary-tint, #d6e4ff);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
 }
 
 /* 空内容时显示 placeholder（用 :empty + ::before） */
 .query-input:empty::before,
 .query-input[data-empty="true"]::before {
   content: attr(placeholder);
-  color: var(--ion-color-medium, #999);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   pointer-events: none;
 }
 
@@ -929,29 +929,29 @@ function onQueryBlur() {
 }
 
 .query-input :deep(.syntax-op-span.syntax-op) {
-  background: var(--ion-color-warning-tint, #fff4d6);
-  color: var(--ion-color-warning-shade, #b07a00);
+  background: color-mix(in srgb, var(--color-warning) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 
 .query-input :deep(.syntax-op-span.syntax-or) {
-  background: var(--ion-color-primary-tint, #d6e4ff);
-  color: var(--ion-color-primary-shade, #2962cc);
+  background: color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
 }
 
 .query-input :deep(.syntax-op-span.syntax-not) {
-  background: var(--ion-color-danger-tint, #fbd6d6);
-  color: var(--ion-color-danger-shade, #b00020);
+  background: color-mix(in srgb, var(--color-error) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
 }
 
 .query-input :deep(.syntax-op-span.syntax-phrase) {
-  background: var(--ion-color-success-tint, #d6f5d6);
-  color: var(--ion-color-success-shade, #1b6b1b);
+  background: color-mix(in srgb, var(--color-success) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-success) 85%, var(--color-black));
   font-style: italic;
 }
 
 .query-input :deep(.syntax-op-span.syntax-regex) {
-  background: var(--ion-color-tertiary-tint, #e6d6f5);
-  color: var(--ion-color-tertiary-shade, #6b3aa0);
+  background: color-mix(in srgb, var(--color-accent) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-accent) 85%, var(--color-black));
   font-family: 'SFMono-Regular', Consolas, monospace;
   font-size: 0.9em;
 }
@@ -964,7 +964,7 @@ function onQueryBlur() {
   width: 24px;
   height: 24px;
   border: none;
-  background: var(--ion-color-medium, #999);
+  background: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   color: white;
   border-radius: 50%;
   font-size: 1.1em;
@@ -976,7 +976,7 @@ function onQueryBlur() {
 }
 
 .query-clear-btn:hover {
-  background: var(--ion-color-medium-shade, #666);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
 }
 
 /* 🆕 2026-07-02 A6：FTS 失败降级 banner（不破坏现有结果） */
@@ -992,15 +992,15 @@ function onQueryBlur() {
 }
 
 .fulltext-banner-unavailable {
-  background: var(--ion-color-warning-tint, #fff4d6);
-  border-left: 4px solid var(--ion-color-warning, #ffc409);
-  color: var(--ion-color-warning-shade, #b07a00);
+  background: color-mix(in srgb, var(--color-warning) 85%, var(--color-white));
+  border-left: 4px solid var(--color-warning);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 
 .fulltext-banner-error {
-  background: var(--ion-color-danger-tint, #fbd6d6);
-  border-left: 4px solid var(--ion-color-danger, #eb445a);
-  color: var(--ion-color-danger-shade, #b00020);
+  background: color-mix(in srgb, var(--color-error) 85%, var(--color-white));
+  border-left: 4px solid var(--color-error);
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
 }
 
 .fulltext-banner-icon {
@@ -1043,16 +1043,16 @@ function onQueryBlur() {
 
 /* === v3 2026-06-18 Task 8：route.query.highlight 驱动的文件高亮 === */
 .file-highlight {
-  --background: rgba(var(--ion-color-primary-rgb), 0.12);
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
-  box-shadow: inset 3px 0 0 var(--ion-color-primary);
+  --background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-primary);
   transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 /* === 播放错误展示区域 === */
 .play-error-banner {
-  background: rgba(var(--ion-color-danger-rgb), 0.08);
-  border-left: 3px solid var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  border-left: 3px solid var(--color-error);
   border-radius: 6px;
   margin: 8px 12px;
   padding: 10px 12px;
@@ -1064,11 +1064,11 @@ function onQueryBlur() {
 }
 .play-error-file {
   font-weight: 500;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 14px;
 }
 .play-error-message {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 12px;
   margin-top: 4px;
   margin-bottom: 0;
@@ -1086,11 +1086,11 @@ function onQueryBlur() {
   align-items: center;
   gap: 6px;
   padding: 4px 12px;
-  background: var(--ion-color-primary-tint);
-  color: var(--ion-color-primary-contrast);
+  background: color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
+  color: var(--color-primary-content);
   font-size: 11px;
   font-weight: 500;
-  border-bottom: 1px solid var(--ion-color-primary-shade);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
   animation: files-refresh-bar-enter 0.15s ease-out;
 }
 .files-refresh-bar__spinner {
@@ -1118,7 +1118,7 @@ function onQueryBlur() {
 }
 .breadcrumb-item {
   cursor: pointer;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   font-size: 14px;
 }
 .breadcrumb-item:hover {
@@ -1165,26 +1165,26 @@ function onQueryBlur() {
   flex-shrink: 0;
 }
 .search-mode-greedy {
-  background: rgba(var(--ion-color-warning-rgb), 0.12);
-  border: 1px dashed var(--ion-color-warning);
-  color: var(--ion-color-warning-shade);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border: 1px dashed var(--color-warning);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 .search-mode-combined {
-  background: rgba(var(--ion-color-tertiary-rgb), 0.10);
-  border: 1px solid var(--ion-color-tertiary);
-  color: var(--ion-color-tertiary-shade);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  border: 1px solid var(--color-accent);
+  color: color-mix(in srgb, var(--color-accent) 85%, var(--color-black));
 }
 /* greedy 模式下，结果项加左侧橙色虚线条 */
 .greedy-match {
-  --background: rgba(var(--ion-color-warning-rgb), 0.06);
-  box-shadow: inset 3px 0 0 var(--ion-color-warning);
+  --background: color-mix(in srgb, var(--color-warning) 6%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-warning);
 }
 @media (prefers-color-scheme: dark) {
   .search-mode-greedy {
-    color: var(--ion-color-warning-tint);
+    color: color-mix(in srgb, var(--color-warning) 85%, var(--color-white));
   }
   .search-mode-combined {
-    color: var(--ion-color-tertiary-tint);
+    color: color-mix(in srgb, var(--color-accent) 85%, var(--color-white));
   }
 }
 
@@ -1198,7 +1198,7 @@ function onQueryBlur() {
 }
 .open-folder-icon {
   font-size: 20px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 /* === Tag 编辑器 === */
@@ -1295,7 +1295,7 @@ ion-item {
 .plugin-title {
   font-size: 16px;
   font-weight: 600;
-  color: var(--ion-color-dark);
+  color: var(--color-base-300);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1325,7 +1325,7 @@ ion-item {
 
 /* === 真实文件名（alist 加密解码后）=== */
 .real-name {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
@@ -1343,8 +1343,8 @@ ion-item {
 .mount-path-inline {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
-  color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
   padding: 1px 4px;
   border-radius: 3px;
 }
@@ -1362,29 +1362,29 @@ ion-item {
 }
 :global(.file-action-sheet .action-section_view),
 :global(.file-action-sheet .action-section-view) {
-  --color: var(--ion-color-primary);
+  --color: var(--color-primary);
 }
 :global(.file-action-sheet .action-section_view .action-button-icon),
 :global(.file-action-sheet .action-section-view .action-button-icon) {
-  color: var(--ion-color-primary) !important;
+  color: var(--color-primary) !important;
 }
 :global(.file-action-sheet .action-section-crypto) {
-  --color: var(--ion-color-warning);
+  --color: var(--color-warning);
 }
 :global(.file-action-sheet .action-section-crypto .action-button-icon) {
   color: #e6a000 !important;
 }
 :global(.file-action-sheet .action-section-manage) {
-  --color: var(--ion-color-medium);
+  --color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 :global(.file-action-sheet .action-section-manage .action-button-icon) {
-  color: var(--ion-color-medium-shade) !important;
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black)) !important;
 }
 :global(.file-action-sheet .action-section-danger) {
-  --color: var(--ion-color-danger);
+  --color: var(--color-error);
 }
 :global(.file-action-sheet .action-section-danger .action-button-icon) {
-  color: var(--ion-color-danger) !important;
+  color: var(--color-error) !important;
 }
 
 /* 🆕 2026-07-02 修复 loading 样式丢失 */
@@ -1403,13 +1403,13 @@ ion-item {
   width: 40px;
   height: 40px;
   margin-bottom: 12px;
-  color: var(--ion-color-primary, #4f8cff);
+  color: var(--color-primary);
 }
 
 .loading-container p {
   margin: 0;
   font-size: 0.9em;
-  color: var(--ion-color-medium, #666);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .search-spinner-pulse {
@@ -1443,13 +1443,13 @@ ion-item {
 .empty-state p {
   margin: 0 0 16px;
   font-size: 0.9em;
-  color: var(--ion-color-medium, #666);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   max-width: 320px;
 }
 
 .empty-state .empty-icon {
   font-size: 64px;
-  color: var(--ion-color-medium, #999);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-bottom: 8px;
 }
 
@@ -1477,14 +1477,14 @@ body.dark .search-diagnostics-card {
   font-weight: 600;
   font-size: 13.5px;
   margin-bottom: 10px;
-  color: var(--ion-color-warning, #ff9800);
+  color: var(--color-warning);
 }
 .diag-card-icon { font-size: 16px; }
 .diag-card-time {
   margin-left: auto;
   font-size: 11px;
   font-weight: 400;
-  color: var(--ion-color-medium, #999);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-family: 'SFMono-Regular', Consolas, monospace;
 }
 
@@ -1508,7 +1508,7 @@ body.dark .diag-item {
 }
 .diag-label {
   font-size: 11px;
-  color: var(--ion-color-medium, #666);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-weight: 500;
 }
 .diag-value {
@@ -1536,17 +1536,17 @@ body.dark .diag-item {
   margin-bottom: 8px;
   border-radius: 6px;
   background: rgba(var(--ion-color-danger-rgb, 240, 60, 60), 0.08);
-  border-left: 3px solid var(--ion-color-danger, #f53d3d);
+  border-left: 3px solid var(--color-error);
 }
 .diag-error-icon {
   font-size: 14px;
-  color: var(--ion-color-danger, #f53d3d);
+  color: var(--color-error);
   flex-shrink: 0;
   margin-top: 1px;
 }
 .diag-error-text {
   font-size: 12px;
-  color: var(--ion-color-danger, #f53d3d);
+  color: var(--color-error);
   font-family: 'SFMono-Regular', Consolas, monospace;
   word-break: break-all;
   line-height: 1.4;
@@ -1560,7 +1560,7 @@ body.dark .diag-item {
   margin-bottom: 8px;
   border-top: 1px dashed rgba(var(--ion-color-medium-rgb, 100, 100, 100), 0.15);
   font-size: 11.5px;
-  color: var(--ion-color-medium, #666);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 .diag-meta-item code {
   font-family: 'SFMono-Regular', Consolas, monospace;
@@ -1601,7 +1601,7 @@ body.dark .diag-item {
 }
 
 .fulltext-preview-source {
-  color: var(--ion-color-medium, #666);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-size: 0.8em;
 }
 
@@ -1612,8 +1612,8 @@ body.dark .diag-item {
 }
 
 .fulltext-snippet .snippet-highlight {
-  background: var(--ion-color-primary-tint, #cce0ff);
-  color: var(--ion-color-primary-shade, #2962cc);
+  background: color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
   font-weight: 600;
   padding: 0 2px;
   border-radius: 2px;

@@ -150,8 +150,8 @@ onIonViewWillEnter(() => {});
   gap: 16px;
   padding: 24px 20px;
   min-height: 100px;
-  background: linear-gradient(135deg, rgba(var(--ion-color-primary-rgb), 0.12), rgba(var(--ion-color-primary-rgb), 0.04));
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.2);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, transparent), color-mix(in srgb, var(--color-primary) 4%, transparent));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
 .card-icon {
@@ -162,19 +162,19 @@ onIonViewWillEnter(() => {});
 .player-card .card-icon {
   font-size: 44px;
   margin-bottom: 0;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .files-icon {
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .tasks-icon {
-  color: var(--ion-color-warning);
+  color: var(--color-warning);
 }
 
 .remote-icon {
-  color: var(--ion-color-success);
+  color: var(--color-success);
 }
 
 .extensions-icon {

@@ -70,7 +70,7 @@
 
 .proto-arrow {
   font-size: 18px;
-  color: var(--ion-color-medium, #999);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   flex-shrink: 0;
 }
 
@@ -89,7 +89,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--ion-color-primary, #3880ff);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 

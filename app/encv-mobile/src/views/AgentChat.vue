@@ -699,7 +699,7 @@ defineExpose({});
   gap: 8px;
   padding: 10px 12px;
   background: var(--ion-toolbar-background, var(--ion-background-color));
-  border-bottom: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
+  border-bottom: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   flex-shrink: 0;
 }
 
@@ -719,7 +719,7 @@ defineExpose({});
 }
 
 .headerBtn:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
 .headerBtnIcon ion-icon {
@@ -737,7 +737,7 @@ defineExpose({});
 }
 
 .headerTitleIcon {
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   font-size: 18px;
 }
 
@@ -749,8 +749,8 @@ defineExpose({});
   padding: 3px 8px;
   border: 0;
   border-radius: 12px;
-  background: rgba(var(--ion-color-medium-rgb), 0.12);
-  color: var(--ion-color-medium);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-size: 11px;
   font-weight: 500;
   line-height: 1.4;
@@ -761,7 +761,7 @@ defineExpose({});
 }
 
 .mockBadge:hover {
-  background: rgba(var(--ion-color-medium-rgb), 0.22);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 22%, transparent);
 }
 
 .mockBadge:active {
@@ -769,18 +769,18 @@ defineExpose({});
 }
 
 .mockBadge:focus-visible {
-  outline: 2px solid var(--ion-color-primary);
+  outline: 2px solid var(--color-primary);
   outline-offset: 1px;
 }
 
 /* 启用 mock（builtin / custom）时的强调色 */
 .mockBadge_active {
-  background: rgba(var(--ion-color-primary-rgb), 0.16);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
+  color: var(--color-primary);
 }
 
 .mockBadge_active:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.24);
+  background: color-mix(in srgb, var(--color-primary) 24%, transparent);
 }
 
 .mockBadgeIcon {
@@ -810,10 +810,10 @@ defineExpose({});
   gap: 2px;
   height: 26px;
   padding: 0 8px;
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.25);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
   border-radius: 8px;
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  color: var(--color-primary);
   cursor: pointer;
   font-size: 11px;
   font-weight: 500;
@@ -822,8 +822,8 @@ defineExpose({});
 }
 
 .enginePickerBtn:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .enginePickerLabel {
@@ -835,7 +835,7 @@ defineExpose({});
 .enginePickerArrow {
   font-size: 12px;
   transition: transform 0.2s ease;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   opacity: 0.7;
 }
 
@@ -851,7 +851,7 @@ defineExpose({});
   min-width: 140px;
   max-width: 220px;
   background: var(--ion-background-color);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.2);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 20%, transparent);
   border-radius: 10px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.14);
   z-index: 50;
@@ -874,13 +874,13 @@ defineExpose({});
 }
 
 .enginePickerOption:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 .enginePickerOption_active {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
   font-weight: 600;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .enginePickerOptionName {
@@ -913,7 +913,7 @@ defineExpose({});
 
 .emptyIcon {
   font-size: 40px;
-  color: rgba(var(--ion-color-primary-rgb), 0.3);
+  color: color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .renderedItemWrap {
@@ -928,7 +928,7 @@ defineExpose({});
   justify-content: space-between;
   padding-left: 36px;
   margin-top: 2px;
-  border-top: 1px solid rgba(var(--ion-color-medium-rgb), 0.12);
+  border-top: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   padding-top: 4px;
 }
 
@@ -958,23 +958,23 @@ defineExpose({});
 
 .messageFooterStandalone .footerCopyBtn:hover,
 .messageFooterStandalone .footerCopyBtn:active {
-  color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 .agentChatFooter {
   flex-shrink: 0;
   padding: 8px 12px 12px;
   background: var(--ion-toolbar-background, var(--ion-background-color));
-  border-top: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
+  border-top: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
 }
 
 .footerInputRow {
   display: flex;
   align-items: flex-end;
   gap: 6px;
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.2);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 20%, transparent);
   border-radius: 12px;
   padding: 4px 6px;
 }
@@ -1010,7 +1010,7 @@ defineExpose({});
   cursor: pointer;
   font-size: 18px;
   flex-shrink: 0;
-  color: #fff;
+  color: var(--color-white);
 }
 
 /* Task 12：附件 `+` 按钮（与发送按钮同尺寸，无背景色） */
@@ -1023,7 +1023,7 @@ defineExpose({});
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   cursor: pointer;
   font-size: 18px;
   flex-shrink: 0;
@@ -1033,7 +1033,7 @@ defineExpose({});
 
 .footerAttachBtn:hover,
 .footerAttachBtn:active {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
 /* 隐藏原生 file input —— 用按钮触发 */
@@ -1053,10 +1053,10 @@ defineExpose({});
   gap: 2px;
   height: 30px;
   padding: 0 8px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.25);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 25%, transparent);
   border-radius: 8px;
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  color: var(--color-primary);
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
@@ -1065,8 +1065,8 @@ defineExpose({});
 }
 
 .modelPickerBtn:hover:not(:disabled) {
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .modelPickerBtn:disabled {
@@ -1083,7 +1083,7 @@ defineExpose({});
 .modelPickerArrow {
   font-size: 12px;
   transition: transform 0.2s ease;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   opacity: 0.7;
 }
 
@@ -1100,7 +1100,7 @@ defineExpose({});
   max-height: 240px;
   overflow-y: auto;
   background: var(--ion-background-color);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.2);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 20%, transparent);
   border-radius: 10px;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.14);
   z-index: 50;
@@ -1132,13 +1132,13 @@ defineExpose({});
 }
 
 .modelPickerOption:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 .modelPickerOption_active {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
   font-weight: 600;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .modelPickerOptionName {
@@ -1171,16 +1171,16 @@ defineExpose({});
 }
 
 .footerSendBtn {
-  background: var(--ion-color-primary);
+  background: var(--color-primary);
 }
 
 .footerSendBtn:disabled {
-  background: rgba(var(--ion-color-medium-rgb), 0.4);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 40%, transparent);
   cursor: not-allowed;
 }
 
 .footerStopBtn {
-  background: var(--ion-color-danger);
+  background: var(--color-error);
 }
 
 /* ── no_api_key 自愈 banner ─────────────────────────────
@@ -1197,11 +1197,11 @@ defineExpose({});
   padding: 8px 12px;
   background: linear-gradient(
     90deg,
-    rgba(var(--ion-color-danger-rgb), 0.16),
-    rgba(var(--ion-color-danger-rgb), 0.08)
+    color-mix(in srgb, var(--color-error) 16%, transparent),
+    color-mix(in srgb, var(--color-error) 8%, transparent)
   );
-  border-bottom: 1px solid rgba(var(--ion-color-danger-rgb), 0.4);
-  color: var(--ion-color-danger-shade);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-error) 40%, transparent);
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
   font-size: 13px;
   flex-shrink: 0;
 }
@@ -1225,8 +1225,8 @@ defineExpose({});
   opacity: 0.85;
 }
 .noApiKeyBannerBtn {
-  background: var(--ion-color-danger);
-  color: var(--ion-color-danger-contrast, #fff);
+  background: var(--color-error);
+  color: var(--color-error-content);
   border: none;
   border-radius: 6px;
   padding: 5px 12px;
@@ -1241,7 +1241,7 @@ defineExpose({});
 .noApiKeyBannerClose {
   background: transparent;
   border: none;
-  color: var(--ion-color-danger-shade);
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
   cursor: pointer;
   padding: 4px;
   display: flex;
@@ -1260,15 +1260,15 @@ defineExpose({});
   align-items: center;
   gap: 10px;
   padding: 6px 12px;
-  background: rgba(var(--ion-color-medium-rgb), 0.06);
-  border-bottom: 1px solid rgba(var(--ion-color-medium-rgb), 0.12);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 6%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   flex-shrink: 0;
 }
 
 /* ── LAN Access 折叠面板（Task 26） ─────────────────── */
 .lanAccessPanel {
   background: var(--ion-toolbar-background, var(--ion-background-color));
-  border-bottom: 1px solid rgba(var(--ion-color-medium-rgb), 0.12);
+  border-bottom: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   flex-shrink: 0;
   font-size: 13px;
 }
@@ -1298,7 +1298,7 @@ defineExpose({});
 
 .lanAccessSummaryIcon {
   font-size: 16px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -1316,8 +1316,8 @@ defineExpose({});
   height: 20px;
   padding: 0 6px;
   border-radius: 10px;
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
@@ -1357,9 +1357,9 @@ defineExpose({});
   align-items: center;
   gap: 8px;
   padding: 6px 8px;
-  background: rgba(var(--ion-color-medium-rgb), 0.06);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 6%, transparent);
   border-radius: 8px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.12);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
 }
 
 .lanAccessItemMain {
@@ -1373,7 +1373,7 @@ defineExpose({});
 .lanAccessUrl {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   font-size: 12px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   word-break: break-all;
   line-height: 1.35;
 }
@@ -1392,7 +1392,7 @@ defineExpose({});
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   cursor: pointer;
   font-size: 16px;
   padding: 0;
@@ -1402,7 +1402,7 @@ defineExpose({});
 
 .lanAccessCopyBtn:hover,
 .lanAccessCopyBtn:active {
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
 
 /* Task 26 扩展：LAN 列表项右侧动作组（使用 + 复制） */
@@ -1419,10 +1419,10 @@ defineExpose({});
   gap: 3px;
   height: 30px;
   padding: 0 10px;
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.4);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 40%, transparent);
   border-radius: 8px;
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  color: var(--color-primary);
   cursor: pointer;
   font-size: 11.5px;
   font-weight: 500;
@@ -1435,8 +1435,8 @@ defineExpose({});
 
 .lanAccessUseBtn:hover,
 .lanAccessUseBtn:active {
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.6);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 60%, transparent);
 }
 
 .lanAccessRefresh {
@@ -1457,7 +1457,7 @@ defineExpose({});
 
 .lanAccessRefresh:hover:not(:disabled),
 .lanAccessRefresh:active:not(:disabled) {
-  background: rgba(var(--ion-color-medium-rgb), 0.1);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 10%, transparent);
   color: var(--ion-text-color);
 }
 
@@ -1487,7 +1487,7 @@ defineExpose({});
   font-size: 12px;
   padding: 2px 4px;
   border-radius: 6px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.25);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 25%, transparent);
   background: var(--ion-background-color);
   color: var(--ion-text-color);
   outline: none;
@@ -1499,7 +1499,7 @@ defineExpose({});
   font-size: 12px;
   padding: 2px 4px;
   border-radius: 6px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.25);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 25%, transparent);
   background: var(--ion-background-color);
   color: var(--ion-text-color);
   outline: none;
@@ -1518,7 +1518,7 @@ defineExpose({});
 /* ── Tool Palette ("/" 命令面板) ───────────────────────── */
 .tool-palette {
   background: var(--ion-background-color);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.25);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 25%, transparent);
   border-radius: 10px 10px 0 0;
   margin: 0 12px;
   max-height: 220px;
@@ -1529,7 +1529,7 @@ defineExpose({});
 
 .tool-palette-header {
   padding: 8px 12px 4px;
-  border-bottom: 1px solid rgba(var(--ion-color-medium-rgb), 0.12);
+  border-bottom: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
 }
 
 .tool-palette-title {
@@ -1552,16 +1552,16 @@ defineExpose({});
 .tool-palette-item:hover,
 .tool-palette-item:active,
 .tool-palette-active {
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 
 .tool-palette-active {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
 .tool-palette-icon {
   font-size: 18px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -1620,7 +1620,7 @@ defineExpose({});
   gap: 12px;
   padding: 12px 14px;
   background: var(--ion-toolbar-background, var(--ion-background-color));
-  border-bottom: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
+  border-bottom: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   flex-shrink: 0;
 }
 .historyHeaderTitle {
@@ -1633,7 +1633,7 @@ defineExpose({});
 }
 .historyHeaderIcon {
   font-size: 18px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 .historyHeaderTitle h3 {
   margin: 0;
@@ -1648,8 +1648,8 @@ defineExpose({});
   height: 22px;
   padding: 0 8px;
   border-radius: 11px;
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
   font-size: 12px;
   font-weight: 600;
   line-height: 1;
@@ -1679,7 +1679,7 @@ defineExpose({});
   padding: 14px 16px;
   margin: 0 12px 8px;
   background: var(--ion-toolbar-background, var(--ion-background-color));
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.12);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.15s;
@@ -1687,22 +1687,22 @@ defineExpose({});
 }
 .historyItem:hover,
 .historyItem:active {
-  border-color: rgba(var(--ion-color-primary-rgb), 0.4);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
   transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(var(--ion-color-primary-rgb), 0.12);
+  box-shadow: 0 3px 10px color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 .historyItemActive {
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  border-color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border-color: var(--color-primary);
 }
 .historyItemActive .historyItemTitle {
   font-weight: 600;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .historyItemIcon {
   font-size: 24px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -1733,8 +1733,8 @@ defineExpose({});
   height: 36px;
   border: 0;
   border-radius: 10px;
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
   cursor: pointer;
   flex-shrink: 0;
   font-size: 18px;
@@ -1743,7 +1743,7 @@ defineExpose({});
 }
 .historyItemDelete:hover,
 .historyItemDelete:active {
-  background: rgba(var(--ion-color-danger-rgb), 0.22);
+  background: color-mix(in srgb, var(--color-error) 22%, transparent);
   transform: scale(1.05);
 }
 .historyItemDelete ion-icon {
@@ -1762,7 +1762,7 @@ defineExpose({});
 }
 .historyEmptyIcon {
   font-size: 56px;
-  color: rgba(var(--ion-color-primary-rgb), 0.25);
+  color: color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 .historyEmpty p {
   margin: 0;
@@ -1790,18 +1790,18 @@ defineExpose({});
   padding: 0 20px;
   border: 0;
   border-radius: 24px;
-  background: var(--ion-color-primary);
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-white);
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
-  box-shadow: 0 4px 16px rgba(var(--ion-color-primary-rgb), 0.4);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--color-primary) 40%, transparent);
   transition: all 0.15s;
   user-select: none;
 }
 .historyNewSessionFab:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(var(--ion-color-primary-rgb), 0.5);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--color-primary) 50%, transparent);
 }
 .historyNewSessionFab:active {
   transform: scale(0.97);
@@ -1856,7 +1856,7 @@ defineExpose({});
   min-width: 16px;
   max-height: 80vh;
   background: rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.9);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   border-radius: 10px;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -1868,8 +1868,8 @@ defineExpose({});
 
 /* 拖动模式：加阴影 + 放大 + 触觉反馈（vibrate if available） */
 .dotNavigation--dragging {
-  box-shadow: 0 4px 20px rgba(var(--ion-color-primary-rgb), 0.28);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.4);
+  box-shadow: 0 4px 20px color-mix(in srgb, var(--color-primary) 28%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 
 /*
@@ -1885,7 +1885,7 @@ defineExpose({});
   height: 8px;
   border-radius: 50%;
   border: none;
-  background: rgba(var(--ion-color-medium-rgb), 0.45);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 45%, transparent);
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
@@ -1901,14 +1901,14 @@ defineExpose({});
 }
 
 .dotNavDot:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.55);
+  background: color-mix(in srgb, var(--color-primary) 55%, transparent);
   transform: scale(1.25);
 }
 
 /* 自然滚动时的当前 user 消息对应圆点 */
 .dotNavDot_active {
-  background: var(--ion-color-primary);
-  box-shadow: 0 0 0 2px rgba(var(--ion-color-primary-rgb), 0.28);
+  background: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 28%, transparent);
   transform: scale(1.35);
 }
 
@@ -1922,10 +1922,10 @@ defineExpose({});
   width: 5px;
   height: 34px;
   border-radius: 2.5px;
-  background: var(--ion-color-primary);
+  background: var(--color-primary);
   box-shadow:
-    0 0 0 2px rgba(var(--ion-color-primary-rgb), 0.32),
-    0 0 8px rgba(var(--ion-color-primary-rgb), 0.55);
+    0 0 0 2px color-mix(in srgb, var(--color-primary) 32%, transparent),
+    0 0 8px color-mix(in srgb, var(--color-primary) 55%, transparent);
   transform: scale(1);
   cursor: grabbing;
 }
@@ -1980,8 +1980,8 @@ body.dark .zoomControls {
 }
 
 .zoomBtn:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
 }
 
 .zoomBtn:active {
@@ -1990,7 +1990,7 @@ body.dark .zoomControls {
 
 /* 非默认缩放时高亮 reset 按钮：提示用户当前偏离 1.0 */
 .zoomControls_zoomed .zoomBtn:nth-child(2) {
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
 }
 </style>

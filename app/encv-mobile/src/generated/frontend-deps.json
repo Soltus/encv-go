@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-15T13:02:44.240Z",
+  "generated_at": "2026-07-15T19:54:59.192Z",
   "source_file": "package.json",
   "items": [
     {
@@ -290,9 +290,31 @@
       "license": "MIT"
     },
     {
+      "name": "@playwright/test",
+      "version": "1.61.1",
+      "version_range": "1.61.1",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
       "name": "@types/matter-js",
       "version": "0.20.2",
       "version_range": "^0.20.2",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
+      "name": "@types/pngjs",
+      "version": "6.0.5",
+      "version_range": "^6.0.5",
       "source": "package.json",
       "kind": "devDependency",
       "importance": "light",
@@ -365,6 +387,39 @@
       "description": "jsdom — 浏览器 DOM 的 Node 实现",
       "icon": "globe",
       "license": "MIT"
+    },
+    {
+      "name": "pixelmatch",
+      "version": "7.2.0",
+      "version_range": "7.2.0",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
+      "name": "pngjs",
+      "version": "7.0.0",
+      "version_range": "7.0.0",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
+      "name": "sass-embedded",
+      "version": "1.100.0",
+      "version_range": "^1.100.0",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "sirv",

@@ -482,7 +482,7 @@ async function handleDebugSimverse() {
 
 .empty-icon {
   font-size: 56px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-bottom: 16px;
 }
 
@@ -552,7 +552,7 @@ async function handleDebugSimverse() {
   display: flex;
   gap: 8px;
   padding: 12px 16px;
-  border-top: 1px solid var(--ion-color-light, #f4f5f8);
+  border-top: 1px solid var(--color-base-200);
 }
 
 .install-section {
@@ -573,8 +573,8 @@ async function handleDebugSimverse() {
   margin: 12px 16px;
   padding: 10px 14px;
   border-radius: 8px;
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
   font-size: 13px;
 }
 </style>

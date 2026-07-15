@@ -1,0 +1,66 @@
+/* =============================================================================
+ * ENCV 用户主题（Phase 5 · 可扩展主题闭环 · 纯 CSS，Chromium 114 ✅）
+ *
+ * 每个用户主题是一组「完整 19 色 daisyUI 令牌 + 形状/深度令牌」的纯 CSS 覆盖，
+ * 通过 `[data-theme="<id>"]` 选择器生效。运行时仅切换 documentElement 的
+ * data-theme 属性即可换肤（见 composables/useUserThemes.ts），无需构建期注册。
+ *
+ * ⚠️ 与插件 web 路径的区别：插件 web 走 @plugin "daisyui/theme"（编译期注册，
+ *    运行时只能切换已注册名）；encv-mobile 主应用走纯 CSS theme-core.css，
+ *    故用户主题用纯 CSS 覆盖即可，零构建依赖、即时热切换。
+ *
+ * 新增用户主题：复制一个 [data-theme="..."] 块、补全 19 色 + radius，并在
+ * useUserThemes.ts 的 USER_THEMES 注册表登记 id + i18n 名即可。
+ * ========================================================================== */
+
+/* 日落暖橙（示例用户主题） */
+[data-theme="sunset"] {
+  color-scheme: light;
+
+  --color-primary: #f97316;
+  --color-primary-content: #ffffff;
+  --color-secondary: #fb923c;
+  --color-secondary-content: #ffffff;
+  --color-accent: #f43f5e;
+  --color-accent-content: #ffffff;
+  --color-neutral: #44403c;
+  --color-neutral-content: #fafaf9;
+  --color-base-100: #fffaf5;
+  --color-base-200: #fdeede;
+  --color-base-300: #f5d9be;
+  --color-base-content: #431407;
+  --color-info: #0ea5e9;
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-error: #dc2626;
+
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+}
+
+/* 薄荷青绿（示例用户主题） */
+[data-theme="mint"] {
+  color-scheme: light;
+
+  --color-primary: #10b981;
+  --color-primary-content: #ffffff;
+  --color-secondary: #06b6d4;
+  --color-secondary-content: #ffffff;
+  --color-accent: #14b8a6;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #f3faf7;
+  --color-base-200: #d9f2ea;
+  --color-base-300: #b6e3d4;
+  --color-base-content: #04332a;
+  --color-info: #3b82f6;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+}

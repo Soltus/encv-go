@@ -26,8 +26,7 @@
         v-for="preset in presets"
         :key="preset.id"
         type="button"
-        class="mock-preset-chip"
-        :class="{ 'mock-preset-chip-disabled': disabled }"
+        class="mockPresetChip ui-chip"
         :disabled="disabled"
         :title="preset.tooltip || preset.label"
         :data-testid="`mock-preset-chip-${preset.id}`"
@@ -112,7 +111,7 @@ function onPick(preset: MockPreset): void {
   gap: 4px;
   min-width: 0;
   font-weight: 600;
-  color: var(--ion-color-primary-shade, #3960a8);
+  color: color-mix(in srgb, var(--color-primary) 75%, var(--color-base-content));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -158,45 +157,6 @@ function onPick(preset: MockPreset): void {
   border-radius: 2px;
 }
 
-.mock-preset-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  height: 28px;
-  padding: 0 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(79, 140, 255, 0.32);
-  background: rgba(79, 140, 255, 0.10);
-  color: var(--ion-color-primary-shade, #3960a8);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 120ms ease, transform 80ms ease, box-shadow 120ms ease;
-}
-
-.mock-preset-chip:hover {
-  background: rgba(79, 140, 255, 0.18);
-}
-
-.mock-preset-chip:active {
-  transform: scale(0.97);
-}
-
-.mock-preset-chip:focus-visible {
-  outline: 2px solid var(--ion-color-primary, #4f8cff);
-  outline-offset: 2px;
-}
-
-.mock-preset-chip-disabled,
-.mock-preset-chip:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
 .mock-preset-chip-icon {
   font-size: 13px;
   line-height: 1;
@@ -206,6 +166,12 @@ function onPick(preset: MockPreset): void {
   display: inline-block;
 }
 
+/* chip 外观（含主色 tint）已上提到全局语义层 surface.css 的 .ui-chip：
+   无 scoped [data-v-x]，故用户主题 .ui-chip { ... } 运行时注入更晚 → 直接胜出，
+   无需 !important（SiYuan 式自由度）。本组件 scoped 仅保留结构/交互差异。 */
+.mockPresetChip {
+  /* 结构性钩子保留（如需组件级微调可在此，但视觉统一由 .ui-chip 控制） */
+}
 /* 暗黑模式适配 */
 body.dark .mock-preset-bar {
   background: linear-gradient(
@@ -218,17 +184,7 @@ body.dark .mock-preset-bar {
 }
 
 body.dark .mock-preset-bar-title {
-  color: var(--ion-color-primary-tint, #8ab1ff);
-}
-
-body.dark .mock-preset-chip {
-  border-color: rgba(138, 177, 255, 0.40);
-  background: rgba(79, 140, 255, 0.18);
-  color: var(--ion-color-primary-tint, #8ab1ff);
-}
-
-body.dark .mock-preset-chip:hover {
-  background: rgba(79, 140, 255, 0.28);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
 }
 
 body.dark .mock-preset-bar-chips::-webkit-scrollbar-thumb {

@@ -566,13 +566,13 @@ async function runResolve() {
   align-items: flex-start;
   margin: 12px 16px 8px;
   padding: 14px 16px;
-  background: rgba(var(--ion-color-primary-rgb), 0.06);
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
   border-radius: 12px;
-  border-left: 3px solid var(--ion-color-primary);
+  border-left: 3px solid var(--color-primary);
 }
 .intro-icon {
   font-size: 24px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -602,7 +602,7 @@ async function runResolve() {
   opacity: 0.6;
 }
 .status-block--error {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
 }
 .status-block--empty {
   font-style: italic;
@@ -618,7 +618,7 @@ async function runResolve() {
 
 .mount-card {
   background: var(--ion-background-color);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.2);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 20%, transparent);
   border-radius: 14px;
   padding: 14px 16px 12px;
   display: flex;
@@ -663,7 +663,7 @@ async function runResolve() {
   margin-top: 4px;
   font-size: 12px;
   color: var(--ion-text-secondary);
-  background: rgba(var(--ion-color-medium-rgb), 0.12);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
@@ -709,7 +709,7 @@ async function runResolve() {
   margin: 0;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 11px;
-  background: rgba(var(--ion-color-medium-rgb), 0.1);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 10%, transparent);
   padding: 6px 8px;
   border-radius: 6px;
   white-space: pre-wrap;
@@ -724,7 +724,7 @@ async function runResolve() {
   flex-wrap: wrap;
   gap: 8px;
   padding-top: 8px;
-  border-top: 1px solid rgba(var(--ion-color-medium-rgb), 0.15);
+  border-top: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 15%, transparent);
 }
 .toggle-group {
   display: flex;
@@ -754,9 +754,9 @@ async function runResolve() {
 .resolve-result {
   margin: 16px;
   padding: 12px 16px;
-  background: rgba(var(--ion-color-success-rgb), 0.06);
+  background: color-mix(in srgb, var(--color-success) 6%, transparent);
   border-radius: 10px;
-  border-left: 3px solid var(--ion-color-success);
+  border-left: 3px solid var(--color-success);
 }
 .resolve-result h4 {
   margin: 0 0 8px;
@@ -792,9 +792,9 @@ async function runResolve() {
   align-items: flex-start;
   margin: 12px 16px;
   padding: 10px 12px;
-  background: rgba(var(--ion-color-danger-rgb), 0.08);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
   border-radius: 8px;
-  border-left: 3px solid var(--ion-color-danger);
+  border-left: 3px solid var(--color-error);
 }
 .inline-error-card ion-icon {
   flex-shrink: 0;
@@ -807,7 +807,7 @@ async function runResolve() {
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
 }
 
 /* ========== 🆕 2026-06-16：mount 启动期错误 banner / 操作错误 banner ========== */
@@ -815,7 +815,7 @@ async function runResolve() {
   margin: 10px 16px 4px;
   padding: 12px 14px;
   background: linear-gradient(180deg, rgba(220, 38, 38, 0.10) 0%, rgba(220, 38, 38, 0.04) 100%);
-  border-left: 4px solid var(--ion-color-danger);
+  border-left: 4px solid var(--color-error);
   border-radius: 10px;
   box-shadow: 0 2px 6px rgba(220, 38, 38, 0.12);
 }
@@ -836,12 +836,12 @@ async function runResolve() {
 .bootstrap-error-title {
   font-size: 15px;
   font-weight: 600;
-  color: var(--ion-color-danger-shade);
+  color: color-mix(in srgb, var(--color-error) 85%, var(--color-black));
   line-height: 1.3;
 }
 .bootstrap-error-subtitle {
   font-size: 11.5px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 2px;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
 }
@@ -850,13 +850,13 @@ async function runResolve() {
   border: none;
   font-size: 24px;
   line-height: 1;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   cursor: pointer;
   padding: 0 4px;
   flex-shrink: 0;
 }
 .bootstrap-error-close:hover {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
 }
 .bootstrap-error-list {
   list-style: none;
@@ -877,7 +877,7 @@ async function runResolve() {
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ion-color-dark);
+  color: var(--color-base-300);
   white-space: pre-wrap;
   word-break: break-word;
   max-height: 200px;
@@ -887,10 +887,10 @@ async function runResolve() {
   margin: 10px 0 0 34px;
   padding: 8px 10px;
   background: rgba(59, 130, 246, 0.08);
-  border-left: 3px solid var(--ion-color-primary);
+  border-left: 3px solid var(--color-primary);
   border-radius: 6px;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--ion-color-dark);
+  color: var(--color-base-300);
 }
 </style>

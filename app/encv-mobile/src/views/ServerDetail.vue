@@ -258,7 +258,7 @@ onMounted(async () => {
    ServerDetail 父级只负责传 @click / @check / @stop / @restart 监听 */
 
 .connection-error {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 12px;
   margin-top: 4px;
 }
@@ -271,7 +271,7 @@ onMounted(async () => {
   font-size: 12px;
   opacity: 0.7;
   margin-left: 2px;
-  color: var(--ion-color-primary-shade);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
 }
 .transport-info {
   font-size: 12px;
@@ -279,13 +279,13 @@ onMounted(async () => {
   font-weight: 500;
 }
 .transport-ws {
-  color: var(--ion-color-success-shade);
+  color: color-mix(in srgb, var(--color-success) 85%, var(--color-black));
 }
 .transport-http-poll {
-  color: var(--ion-color-warning-shade);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 .transport-native-bridge {
-  color: var(--ion-color-tertiary-shade);
+  color: color-mix(in srgb, var(--color-accent) 85%, var(--color-black));
 }
 .status-line {
   display: flex;
@@ -295,13 +295,13 @@ onMounted(async () => {
 }
 .status-meta {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 4px;
 }
 .status-warning {
   font-size: 11px;
-  color: var(--ion-color-warning-shade);
-  background: var(--ion-color-warning-tint);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
+  background: color-mix(in srgb, var(--color-warning) 85%, var(--color-white));
   padding: 4px 8px;
   border-radius: 4px;
   margin-top: 6px;
@@ -315,7 +315,7 @@ onMounted(async () => {
 .readonly-url {
   font-family: 'Courier New', Courier, monospace;
   font-size: 13px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   word-break: break-all;
   cursor: pointer;
   user-select: all;

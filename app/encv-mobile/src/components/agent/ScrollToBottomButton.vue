@@ -53,7 +53,7 @@ const arrowDownIcon = arrowDownOutline;
   border: 0;
   border-radius: 50%;
   background: var(--ion-toolbar-background, var(--ion-background-color));
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.12);
   cursor: pointer;
   padding: 0;
@@ -81,8 +81,8 @@ const arrowDownIcon = arrowDownOutline;
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: var(--ion-color-danger, #eb445a);
-  color: #fff;
+  background: var(--color-error);
+  color: var(--color-white);
   font-size: 11px;
   font-weight: 600;
   line-height: 18px;
@@ -92,7 +92,7 @@ const arrowDownIcon = arrowDownOutline;
 
 body.dark .scrollToBottomBtn {
   background: var(--ion-toolbar-background, var(--ion-background-color));
-  color: var(--ion-color-primary);
-  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(var(--ion-color-primary-rgb), 0.3);
+  color: var(--color-primary);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5), 0 0 0 1px color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 </style>

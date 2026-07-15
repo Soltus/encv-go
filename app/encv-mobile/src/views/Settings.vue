@@ -965,8 +965,8 @@ watch(
   font-size: 12px;
 }
 .scope-synced {
-  --background: rgba(var(--ion-color-primary-rgb), 0.12);
-  --color: var(--ion-color-primary);
+  --background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --color: var(--color-primary);
 }
 @media (max-width: 599px) {
   .scope-badge {
@@ -995,17 +995,17 @@ watch(
 .instance-info .instance-id {
   font-family: var(--ion-font-family-monospace, monospace);
   font-size: 11px;
-  background: var(--ion-color-light);
+  background: var(--color-base-200);
   padding: 1px 5px;
   border-radius: 3px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 .instance-info .version-info {
   font-size: 11px;
   opacity: 0.7;
 }
 .connection-error-inline {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 12px;
 }
 .browse-btn {
@@ -1023,7 +1023,7 @@ watch(
   height: 100%;
 }
 .json-annotations {
-  border-bottom: 1px solid var(--ion-color-light);
+  border-bottom: 1px solid var(--color-base-200);
   max-height: 40%;
   overflow-y: auto;
   padding: 12px 16px;
@@ -1038,7 +1038,7 @@ watch(
   display: flex;
   flex-direction: column;
   padding: 4px 0;
-  border-bottom: 1px solid rgba(var(--ion-color-medium-rgb), 0.15);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-content) 15%, var(--color-base-100));
 }
 .annotation-item:last-child {
   border-bottom: none;
@@ -1046,7 +1046,7 @@ watch(
 .annotation-path {
   font-size: 12px;
   font-weight: 600;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   font-family: monospace;
 }
 .annotation-desc {
@@ -1078,8 +1078,8 @@ watch(
 }
 .json-error {
   padding: 8px 16px;
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
   font-size: 12px;
   font-family: monospace;
 }

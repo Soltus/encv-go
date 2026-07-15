@@ -1517,7 +1517,7 @@ function handleGoToDevLogs() {
   font-size: 13px;
   line-height: 1.5;
   max-width: 320px;
-  color: var(--ion-color-medium-shade, #6b6c70);
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
   word-break: break-word;
 }
 .configErrorRetryBtn,
@@ -1537,12 +1537,12 @@ function handleGoToDevLogs() {
   transition: background 0.15s, color 0.15s;
 }
 .configErrorRetryBtn {
-  background: var(--ion-color-primary, #4f8cff);
-  color: #fff;
-  border: 1px solid var(--ion-color-primary, #4f8cff);
+  background: var(--color-primary);
+  color: var(--color-white);
+  border: 1px solid var(--color-primary);
 }
 .configErrorRetryBtn:hover:not(:disabled) {
-  background: var(--ion-color-primary-shade, #3a6fd8);
+  background: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
 }
 .configErrorRetryBtn:disabled {
   opacity: 0.5;
@@ -1550,8 +1550,8 @@ function handleGoToDevLogs() {
 }
 .configErrorSecondaryBtn {
   background: transparent;
-  color: var(--ion-color-medium-shade, #6b6c70);
-  border: 1px solid var(--ion-color-medium, #c8c8cc);
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
+  border: 1px solid color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 .configErrorSecondaryBtn:hover {
   background: rgba(var(--ion-color-medium-rgb, 146, 148, 156), 0.1);
@@ -1572,8 +1572,8 @@ function handleGoToDevLogs() {
   font-size: 12px;
 }
 .scope-synced {
-  --background: rgba(var(--ion-color-primary-rgb), 0.12);
-  --color: var(--ion-color-primary);
+  --background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --color: var(--color-primary);
 }
 @media (max-width: 599px) {
   .scope-badge {
@@ -1597,8 +1597,8 @@ function handleGoToDevLogs() {
   gap: 6px;
 }
 .tool-chip {
-  --background: rgba(var(--ion-color-primary-rgb), 0.12);
-  --color: var(--ion-color-primary);
+  --background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --color: var(--color-primary);
   font-size: 12px;
   cursor: pointer;
 }
@@ -1610,17 +1610,17 @@ function handleGoToDevLogs() {
 
 .field-description {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   white-space: normal;
   line-height: 1.4;
 }
 
 .test-result-success {
-  color: var(--ion-color-success);
+  color: var(--color-success);
   font-size: 12px;
 }
 .test-result-failed {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 12px;
 }
 
@@ -1643,8 +1643,8 @@ function handleGoToDevLogs() {
 }
 .json-error {
   padding: 8px 16px;
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
   font-size: 12px;
   font-family: monospace;
 }
@@ -1655,7 +1655,7 @@ function handleGoToDevLogs() {
   align-items: center;
   gap: 8px;
   padding: 12px 0;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-size: 13px;
 }
 .model-spinner {
@@ -1667,7 +1667,7 @@ function handleGoToDevLogs() {
   padding: 8px 0;
 }
 .model-error-text {
-  color: var(--ion-color-danger, #eb445a);
+  color: var(--color-error);
   font-size: 12px;
   margin: 0 0 6px;
 }
@@ -1688,21 +1688,21 @@ function handleGoToDevLogs() {
   font-family: inherit;
   font-weight: 500;
   line-height: 1.4;
-  color: var(--ion-color-primary, #4f8cff);
+  color: var(--color-primary);
   background: transparent;
-  border: 1px solid var(--ion-color-primary, #4f8cff);
+  border: 1px solid var(--color-primary);
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 .model-error-fix-btn:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 .model-error-fix-btn:active {
-  background: rgba(var(--ion-color-primary-rgb), 0.16);
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
 }
 .model-error-fix-btn:focus-visible {
-  outline: 2px solid var(--ion-color-primary, #4f8cff);
+  outline: 2px solid var(--color-primary);
   outline-offset: 1px;
 }
 .model-error-fix-icon {
@@ -1714,13 +1714,13 @@ function handleGoToDevLogs() {
 }
 .api-key-input-wrap.api-key-broken {
   /* 当 API Key 损坏时，输入框周围加红色高亮，提示用户这里有"事故点" */
-  outline: 1px solid var(--ion-color-danger, #eb445a);
+  outline: 1px solid var(--color-error);
   outline-offset: -1px;
   border-radius: 6px;
   animation: api-key-broken-pulse 2.4s ease-in-out infinite;
 }
 @keyframes api-key-broken-pulse {
-  0%, 100% { outline-color: var(--ion-color-danger, #eb445a); }
+  0%, 100% { outline-color: var(--color-error); }
   50% { outline-color: transparent; }
 }
 .api-key-mask-hint {
@@ -1728,7 +1728,7 @@ function handleGoToDevLogs() {
   align-items: center;
   gap: 6px;
   margin: 4px 12px 8px;
-  color: var(--ion-color-danger, #eb445a);
+  color: var(--color-error);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -1739,7 +1739,7 @@ function handleGoToDevLogs() {
 .model-fallback-input {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.3);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 30%, transparent);
   border-radius: 8px;
   background: var(--ion-background-color);
   color: var(--ion-text-color);
@@ -1749,10 +1749,10 @@ function handleGoToDevLogs() {
   box-sizing: border-box;
 }
 .model-fallback-input:focus {
-  border-color: var(--ion-color-primary);
+  border-color: var(--color-primary);
 }
 .model-empty p {
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-size: 12px;
   margin: 0 0 6px;
 }
@@ -1770,7 +1770,7 @@ function handleGoToDevLogs() {
 }
 .preset-card {
   padding: 10px 8px;
-  border: 2px solid var(--ion-color-light-shade, #e0e0e0);
+  border: 2px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1778,8 +1778,8 @@ function handleGoToDevLogs() {
   background: var(--ion-background-color, transparent);
 }
 .preset-card-active {
-  border-color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 .preset-card-title {
   font-weight: 600;
@@ -1787,7 +1787,7 @@ function handleGoToDevLogs() {
 }
 .preset-card-desc {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 3px;
   line-height: 1.3;
 }
@@ -1803,7 +1803,7 @@ function handleGoToDevLogs() {
   margin-top: 4px;
 }
 .apiKeyStatusIcon {
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-size: 18px;
   align-self: flex-start;
   margin-top: 4px;
@@ -1835,7 +1835,7 @@ function handleGoToDevLogs() {
 }
 .apiKeyStatusDetail {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-family: monospace;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1844,7 +1844,7 @@ function handleGoToDevLogs() {
 }
 .apiKeyBackendLine {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin: 8px 0 0;
   display: flex;
   flex-wrap: wrap;
@@ -1856,13 +1856,13 @@ function handleGoToDevLogs() {
 }
 .apiKeyBackendBase {
   font-family: monospace;
-  background: rgba(var(--ion-color-medium-rgb), 0.1);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 10%, transparent);
   padding: 1px 4px;
   border-radius: 3px;
   color: var(--ion-text-color);
 }
 .apiKeyBackendSource {
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-style: italic;
 }
 
@@ -1886,7 +1886,7 @@ function handleGoToDevLogs() {
   margin: 0;
   padding: 10px 12px;
   border-radius: 8px;
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
   color: var(--ion-text-color);
   font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace;
   font-size: 11px;
@@ -1910,7 +1910,7 @@ function handleGoToDevLogs() {
 .configErrorDiag summary {
   cursor: pointer;
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   user-select: none;
 }
 .configErrorDiagPre {
@@ -1922,7 +1922,7 @@ function handleGoToDevLogs() {
   white-space: pre-wrap;
   word-break: break-all;
   margin-top: 6px;
-  color: var(--ion-color-medium-shade);
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
 }
 .retryCount {
   font-size: 11px;

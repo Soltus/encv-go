@@ -74,7 +74,7 @@ function formatSize(bytes: number): string {
 <style scoped>
 .attachmentTray {
   padding: 4px 0 6px;
-  border-bottom: 1px dashed rgba(var(--ion-color-medium-rgb), 0.18);
+  border-bottom: 1px dashed color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   margin-bottom: 4px;
 }
 
@@ -91,8 +91,8 @@ function formatSize(bytes: number): string {
   gap: 6px;
   padding: 4px 6px;
   border-radius: 10px;
-  background: rgba(var(--ion-color-medium-rgb), 0.1);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 10%, transparent);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   max-width: 220px;
   min-width: 0;
   position: relative;
@@ -111,7 +111,7 @@ function formatSize(bytes: number): string {
   border-radius: 6px;
   overflow: hidden;
   flex-shrink: 0;
-  background: rgba(var(--ion-color-medium-rgb), 0.15);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 15%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -126,7 +126,7 @@ function formatSize(bytes: number): string {
 
 .attachmentFileIcon {
   font-size: 22px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -167,7 +167,7 @@ function formatSize(bytes: number): string {
   height: 20px;
   border: 0;
   border-radius: 50%;
-  background: rgba(var(--ion-color-medium-rgb), 0.2);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 20%, transparent);
   color: var(--ion-text-color-step-500, #666);
   cursor: pointer;
   padding: 0;
@@ -177,8 +177,8 @@ function formatSize(bytes: number): string {
 }
 
 .attachmentRemove:hover {
-  background: var(--ion-color-danger);
-  color: #fff;
+  background: var(--color-error);
+  color: var(--color-white);
 }
 
 .attachmentRemove ion-icon {

@@ -519,11 +519,11 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
    见 L596-628 配套规则。
    */
 .server-status-card {
-  --card-bg: var(--ion-background-color, #fff);
-  --card-border: var(--ion-color-medium, #92949c);
-  --card-text: var(--ion-text-color, #000);
-  --card-text-muted: color-mix(in srgb, var(--ion-text-color, #000) 60%, transparent);
-  --card-accent: var(--ion-color-primary, #3880ff);
+  --card-bg: var(--ion-background-color, var(--color-white));
+  --card-border: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
+  --card-text: var(--ion-text-color, var(--color-black));
+  --card-text-muted: color-mix(in srgb, var(--ion-text-color, var(--color-black)) 60%, transparent);
+  --card-accent: var(--color-primary);
   --card-radius: 14px;
   --transition-3d: 0.6s cubic-bezier(0.4, 0.0, 0.2, 1);
   --transition-fast: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -685,16 +685,16 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
 
 /* ============ 状态变体：边框 + 主题色 ============ */
 .server-status-card.state-online {
-  --card-accent: var(--ion-color-success, #2dd55b);
-  --card-border: color-mix(in srgb, var(--ion-color-success, #2dd55b) 30%, var(--ion-color-medium, #92949c));
+  --card-accent: var(--color-success);
+  --card-border: color-mix(in srgb, var(--color-success) 30%, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)));
 }
 .server-status-card.state-offline {
-  --card-accent: var(--ion-color-danger, #eb445a);
-  --card-border: color-mix(in srgb, var(--ion-color-danger, #eb445a) 35%, var(--ion-color-medium, #92949c));
+  --card-accent: var(--color-error);
+  --card-border: color-mix(in srgb, var(--color-error) 35%, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)));
 }
 .server-status-card.state-checking {
-  --card-accent: var(--ion-color-warning, #ffc409);
-  --card-border: color-mix(in srgb, var(--ion-color-warning, #ffc409) 35%, var(--ion-color-medium, #92949c));
+  --card-accent: var(--color-warning);
+  --card-border: color-mix(in srgb, var(--color-warning) 35%, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)));
 }
 .card-face { border-left-color: var(--card-accent); }
 
@@ -766,7 +766,7 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
     inset 1px 0 0 rgba(255, 255, 255, 0.18),
     inset -1px 0 0 rgba(0, 0, 0, 0.06),
     inset 0 2px 6px rgba(0, 0, 0, 0.04),
-    inset 0 -2px 4px color-mix(in srgb, var(--ion-color-success, #2dd55b) 8%, transparent);
+    inset 0 -2px 4px color-mix(in srgb, var(--color-success) 8%, transparent);
 }
 .server-status-card.state-offline .card-face {
   box-shadow:
@@ -775,7 +775,7 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
     inset 1px 0 0 rgba(255, 255, 255, 0.18),
     inset -1px 0 0 rgba(0, 0, 0, 0.06),
     inset 0 2px 6px rgba(0, 0, 0, 0.04),
-    inset 0 -2px 4px color-mix(in srgb, var(--ion-color-danger, #eb445a) 8%, transparent);
+    inset 0 -2px 4px color-mix(in srgb, var(--color-error) 8%, transparent);
 }
 .server-status-card.state-checking .card-face {
   box-shadow:
@@ -784,7 +784,7 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
     inset 1px 0 0 rgba(255, 255, 255, 0.18),
     inset -1px 0 0 rgba(0, 0, 0, 0.06),
     inset 0 2px 6px rgba(0, 0, 0, 0.04),
-    inset 0 -2px 4px color-mix(in srgb, var(--ion-color-warning, #ffc409) 8%, transparent);
+    inset 0 -2px 4px color-mix(in srgb, var(--color-warning) 8%, transparent);
 }
 
 /* ============ 状态行（正面） ============ */
@@ -862,11 +862,11 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
   animation: ssc-pulse 2s ease-out infinite;
   z-index: -1;
 }
-.pulse-online { color: var(--ion-color-success, #2dd55b); }
+.pulse-online { color: var(--color-success); }
 .pulse-online::after { animation-name: ssc-pulse-success; }
-.pulse-offline { color: var(--ion-color-danger, #eb445a); }
+.pulse-offline { color: var(--color-error); }
 .pulse-offline::after { animation-name: ssc-pulse-danger; }
-.pulse-checking { color: var(--ion-color-warning, #ffc409); }
+.pulse-checking { color: var(--color-warning); }
 .pulse-checking::after { animation-name: ssc-pulse-warning; }
 @keyframes ssc-pulse-success {
   0% { transform: scale(0.8); opacity: 0.7; }
@@ -897,7 +897,7 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--ion-color-medium, #92949c) 18%, transparent);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   color: var(--card-text);
   transition: background-color var(--transition-fast);
 }
@@ -907,24 +907,24 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
   height: 12px;
 }
 .meta-pill.latency-fast {
-  background: color-mix(in srgb, var(--ion-color-success, #2dd55b) 22%, transparent);
-  color: var(--ion-color-success, #2dd55b);
+  background: color-mix(in srgb, var(--color-success) 22%, transparent);
+  color: var(--color-success);
 }
 .meta-pill.latency-normal {
-  background: color-mix(in srgb, var(--ion-color-primary, #3880ff) 18%, transparent);
-  color: var(--ion-color-primary, #3880ff);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
 }
 .meta-pill.latency-slow {
-  background: color-mix(in srgb, var(--ion-color-warning, #ffc409) 24%, transparent);
-  color: var(--ion-color-warning-shade, #cc8a00);
+  background: color-mix(in srgb, var(--color-warning) 24%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 .meta-pill.latency-unknown {
-  background: color-mix(in srgb, var(--ion-color-medium, #92949c) 18%, transparent);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   color: var(--card-text-muted);
 }
 .meta-pill.transport-pill {
-  background: color-mix(in srgb, var(--ion-color-primary, #3880ff) 18%, transparent);
-  color: var(--ion-color-primary, #3880ff);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
 }
 
 /* ============ instance-changed banner ============ */
@@ -934,11 +934,11 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
   gap: 8px;
   margin: 4px 0 0;
   padding: 7px 10px;
-  background: color-mix(in srgb, var(--ion-color-warning, #ffc409) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ion-color-warning, #ffc409) 30%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
   border-radius: 6px;
   font-size: 12px;
-  color: var(--ion-color-warning-shade, #cc8a00);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
   animation: banner-in 0.3s ease-out;
 }
 @keyframes banner-in {
@@ -951,13 +951,13 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   padding: 0 4px;
-  background: var(--ion-color-light, #f4f5f8);
+  background: var(--color-base-200);
   border-radius: 3px;
-  color: var(--ion-text-color, #000);
+  color: var(--ion-text-color, var(--color-black));
 }
 .banner-curr {
-  background: color-mix(in srgb, var(--ion-color-warning, #ffc409) 20%, transparent);
-  color: var(--ion-color-warning-shade, #cc8a00);
+  background: color-mix(in srgb, var(--color-warning) 20%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 .banner-arrow { font-size: 12px; opacity: 0.6; vertical-align: middle; }
 .banner-close {
@@ -1003,7 +1003,7 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
 .detail-value.monospace {
   font-family: var(--ion-font-family-monospace, 'SF Mono', Menlo, Consolas, monospace);
   font-size: 12px;
-  background: color-mix(in srgb, var(--ion-color-medium, #92949c) 12%, transparent);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   padding: 1px 5px;
   border-radius: 3px;
   display: inline-block;
@@ -1014,16 +1014,16 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
   animation: ssc-instance-change 1.5s ease-out;
 }
 @keyframes ssc-instance-change {
-  0%   { background: color-mix(in srgb, var(--ion-color-warning, #ffc409) 50%, transparent); transform: scale(1.04); }
-  100% { background: color-mix(in srgb, var(--ion-color-medium, #92949c) 12%, transparent); transform: scale(1); }
+  0%   { background: color-mix(in srgb, var(--color-warning) 50%, transparent); transform: scale(1.04); }
+  100% { background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent); transform: scale(1); }
 }
 .detail-value.port-value {
   font-family: var(--ion-font-family-monospace, monospace);
-  color: var(--ion-color-primary, #3880ff);
+  color: var(--color-primary);
   font-weight: 600;
 }
 .detail-value.version-value {
-  color: var(--ion-color-primary, #3880ff);
+  color: var(--color-primary);
   font-weight: 500;
 }
 .time-roll {
@@ -1044,8 +1044,8 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
   border-top: 1px solid color-mix(in srgb, var(--card-border) 50%, transparent);
 }
 .error-body.checking-body { align-items: center; }
-.error-icon { font-size: 22px; color: var(--ion-color-danger, #eb445a); flex-shrink: 0; }
-.checking-spinner { width: 22px; height: 22px; color: var(--ion-color-warning, #ffc409); }
+.error-icon { font-size: 22px; color: var(--color-error); flex-shrink: 0; }
+.checking-spinner { width: 22px; height: 22px; color: var(--color-warning); }
 .error-text {
   display: flex;
   flex-direction: column;
@@ -1054,7 +1054,7 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
   flex: 1;
   min-height: 0;
 }
-.error-title { font-size: 13px; font-weight: 600; color: var(--ion-color-danger, #eb445a); }
+.error-title { font-size: 13px; font-weight: 600; color: var(--color-error); }
 /* 🆕 2026-06-16 限制 error-detail 高度 — 错误文本可能很长（如 stack trace / multiline log），
    不限 max-height 会把卡片撑到 1 屏高度，物理越界到 ion-tab-bar 区域 */
 .error-detail {
@@ -1075,7 +1075,7 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
 }
 .back-header-icon {
   font-size: 18px;
-  color: var(--ion-color-primary, #3880ff);
+  color: var(--color-primary);
 }
 .back-header-title {
   font-size: 14px;
@@ -1105,7 +1105,7 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
 }
 .back-value.monospace {
   font-family: var(--ion-font-family-monospace, 'SF Mono', Menlo, Consolas, monospace);
-  background: color-mix(in srgb, var(--ion-color-medium, #92949c) 12%, transparent);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   padding: 2px 6px;
   border-radius: 3px;
   display: inline-block;
@@ -1121,11 +1121,11 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
 }
 .back-value.error-text-mono {
   font-family: var(--ion-font-family-monospace, monospace);
-  color: var(--ion-color-danger, #eb445a);
-  background: color-mix(in srgb, var(--ion-color-danger, #eb445a) 8%, transparent);
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
   padding: 4px 8px;
   border-radius: 4px;
-  border-left: 2px solid var(--ion-color-danger, #eb445a);
+  border-left: 2px solid var(--color-error);
   white-space: pre-wrap;
   max-height: 80px;
   overflow-y: auto;
@@ -1134,7 +1134,7 @@ defineExpose({ checkStatus, restartBackend, stopBackend });
   font-size: 14px;
   width: 14px;
   height: 14px;
-  color: var(--ion-color-primary, #3880ff);
+  color: var(--color-primary);
 }
 
 /* ============ 翻转提示 ============ */

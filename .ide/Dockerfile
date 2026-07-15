@@ -49,12 +49,7 @@ RUN apt-get update && \
 
 # build-essential + ca-certificates：cgo 编译（pkg/ 下含 .c/.h/.a）
 # cmake：scripts/setup-sandbox-env.sh 前置检查强依赖（第 121 行））
-# Cypress：全局安装 cypress@15（含二进制）并保留在镜像中，供运行测试直接使用；
-#   系统依赖用官方命令 `cypress install --dependencies` 按当前发行版自动解析安装
-#   （xvfb + GTK/ATK 等），避免硬编码冷门包（跨 Debian 版本易漂移，如
-#   libasound2 → libasound2t64）。
-#   注意：cypress@13+ 已废弃 `--dependencies` 选项，该选项改为交由 OS 包管理器解析，
-#   故此处去掉该参数，仅安装 Cypress 二进制本体（依赖项在运行端到端测试时按需自备）。
+# 注意：端到端测试（Cypress/Playwright）不再全局装进镜像，按需在运行端自备。
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       curl wget git build-essential ca-certificates \
@@ -142,6 +137,10 @@ RUN npm config set registry https://mirrors.cloud.tencent.com/npm/ || true
 RUN npm install -g pnpm@${PNPM_VERSION} && \
     pnpm config set registry https://mirrors.cloud.tencent.com/npm/ || true
 
+# 2.3 bun（ESM-only 工具链）：可直接运行 .ts，基本可无感替代 nodejs。
+#   项目脚本统一 .ts（顶部注释「用 bun 运行」），不再有 CJS/裸 node 跑脚本。
+RUN npm install -g bun && bun --version
+
 # ==========================================
 # 3. 目录预创建
 # ==========================================
@@ -186,6 +185,7 @@ RUN echo "====================================" && \
     echo "====================================" && \
     echo "PATH: $PATH" && \
     echo "node: $(node --version)" && \
+    echo "bun:  $(bun --version)" && \
     echo "pnpm: $(pnpm --version)" && \
     echo "py:   $(python3 --version)" && \
     echo "cmake:$(cmake --version | head -1)" && \
@@ -196,6 +196,5 @@ RUN echo "====================================" && \
     echo "ndk:  $(readlink -f ${ANDROID_NDK})" && \
     echo "g:    $(g --version)" && \
     echo "go:   $(go version)" && \
-    echo "cypress: $(cypress --version)" && \
     echo "====================================" && \
     echo "✅ 环境准备完成"

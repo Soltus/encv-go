@@ -481,7 +481,7 @@ async function copyCommand() {
   height: 100%;
   border: none;
   display: block;
-  background: #fff;
+  background: var(--color-white);
 }
 .iframe-loading {
   opacity: 0.6;
@@ -496,7 +496,7 @@ async function copyCommand() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--ion-background-color, #ffffff);
+  background: var(--ion-background-color, var(--color-white));
   z-index: 10;
   padding: 24px;
 }
@@ -528,7 +528,7 @@ async function copyCommand() {
   font-size: 17px;
   font-weight: 600;
   margin: 0;
-  color: var(--ion-text-color, #000);
+  color: var(--ion-text-color, var(--color-black));
 }
 .state-hint {
   font-size: 13px;
@@ -555,12 +555,12 @@ async function copyCommand() {
 .state-cmd {
   display: inline-block;
   padding: 6px 10px;
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   border: 1px solid var(--ion-color-light-shade, #e0e0e0);
   border-radius: 4px;
   font-family: monospace;
   font-size: 12px;
-  color: var(--ion-text-color, #000);
+  color: var(--ion-text-color, var(--color-black));
   user-select: all;
   word-break: break-all;
 }
@@ -585,11 +585,11 @@ async function copyCommand() {
 }
 .status-bar[color="danger"] {
   --background: var(--ion-color-danger);
-  --color: #fff;
+  --color: var(--color-white);
 }
 .status-bar[color="warning"] {
   --background: var(--ion-color-warning);
-  --color: #000;
+  --color: var(--color-black);
 }
 
 .status-title {
@@ -642,7 +642,7 @@ async function copyCommand() {
   cursor: pointer;
   padding: 0 4px;
 }
-.debug-close:hover { color: #fff; }
+.debug-close:hover { color: var(--color-white); }
 .debug-list {
   overflow-y: auto;
   padding: 4px 0;

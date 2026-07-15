@@ -1,7 +1,11 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
+import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
 import { encvAliasFallback } from './vite-plugins/encv-alias-fallback'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // vitest 4.x: use test.alias (not resolve.alias) for tsconfig paths to be
 // resolved correctly via vite's resolver. resolve.alias is silently ignored

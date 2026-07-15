@@ -68,7 +68,7 @@ const shouldCollapse = computed(() => charCount.value > CHAR_LIMIT || lineCount.
 /* 暗黑模式适配 */
 @media (prefers-color-scheme: dark) {
   .userBubbleText {
-    background: rgba(var(--ion-color-medium-rgb), 0.15);
+    background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 15%, transparent);
     color: var(--ion-text-color);
   }
 }
@@ -95,7 +95,7 @@ const shouldCollapse = computed(() => charCount.value > CHAR_LIMIT || lineCount.
   border: 0;
   padding: 2px 4px;
   font-size: 11.5px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   cursor: pointer;
   font-weight: 500;
 }

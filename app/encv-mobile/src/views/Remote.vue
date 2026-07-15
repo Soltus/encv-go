@@ -645,12 +645,12 @@ onMounted(() => {
 }
 
 .built-in-item {
-  --background: rgba(var(--ion-color-primary-rgb), 0.05);
+  --background: color-mix(in srgb, var(--color-primary) 5%, transparent);
 }
 
 .proxy-url {
   font-size: 12px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .test-result-area {
@@ -661,11 +661,11 @@ onMounted(() => {
 }
 
 .result-ok {
-  border-left: 3px solid var(--ion-color-success);
+  border-left: 3px solid var(--color-success);
 }
 
 .result-error {
-  border-left: 3px solid var(--ion-color-danger);
+  border-left: 3px solid var(--color-error);
 }
 
 .result-title {
@@ -708,20 +708,20 @@ onMounted(() => {
 .result-error-msg {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(var(--ion-color-danger-rgb), 0.15);
+  border-top: 1px solid color-mix(in srgb, var(--color-error) 15%, transparent);
 }
 
 .result-error-msg p:first-child {
   margin: 0 0 4px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
 }
 
 .error-detail {
   margin: 0;
   font-size: 13px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   line-height: 1.5;
   word-break: break-word;
 }
@@ -732,11 +732,11 @@ onMounted(() => {
 }
 
 .list-test-result-area.result-ok {
-  border-left: 3px solid var(--ion-color-success);
+  border-left: 3px solid var(--color-success);
 }
 
 .list-test-result-area.result-error {
-  border-left: 3px solid var(--ion-color-danger);
+  border-left: 3px solid var(--color-error);
 }
 
 .mini-badge {
@@ -746,7 +746,7 @@ onMounted(() => {
 }
 
 .result-error-inline {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 12px;
   margin-top: 4px;
   word-break: break-word;
@@ -770,7 +770,7 @@ onMounted(() => {
 .site-toggle-label-row {
   display: block;
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 4px;
 }
 
@@ -779,6 +779,6 @@ onMounted(() => {
 }
 
 .site-disabled .proxy-url {
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 </style>

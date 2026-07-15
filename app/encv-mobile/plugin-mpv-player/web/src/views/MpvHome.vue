@@ -147,7 +147,7 @@ function goToSettings() {
   align-items: center;
   justify-content: center;
   font-size: 24px;
-  color: #fff;
+  color: var(--color-white);
   flex-shrink: 0;
 }
 

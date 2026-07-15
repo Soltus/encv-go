@@ -1407,7 +1407,7 @@ function safeGetDisplayedKey(index: number): string | number {
 /* active（已选中筛选） */
 .tl-counter-chip--active {
   background: var(--ion-color-primary);
-  color: #fff;
+  color: var(--color-white);
   border-color: var(--ion-color-primary);
 }
 .tl-counter-chip--active .tl-counter-chip__ratio {

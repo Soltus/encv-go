@@ -221,7 +221,7 @@ useLiveRefresh(() => loadEvents(true), { signal: chronicleSignal, pollMs: 8000 }
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   border: 2px solid var(--ion-color-medium, #6b7280);
   z-index: 1;
 }

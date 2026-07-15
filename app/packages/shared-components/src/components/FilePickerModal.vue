@@ -337,7 +337,7 @@ onMounted(() => {
   text-align: center;
   font-size: 14px;
   color: var(--ion-color-primary);
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   border-top: 1px solid var(--ion-color-light, #f4f5f8);
   z-index: 10;
 }
@@ -351,7 +351,7 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   border-top: 1px solid var(--ion-color-light, #f4f5f8);
   z-index: 10;
 }
@@ -382,7 +382,7 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   border-top: 1px solid var(--ion-color-light, #f4f5f8);
   z-index: 20;
 }

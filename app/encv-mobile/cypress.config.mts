@@ -28,10 +28,25 @@
  *   - defaultBrowser: 'electron' 全局生效，无需每次 --browser electron
  *   - includeShadowDom: true 启用 .shadow() 跨 shadow DOM 查询
  *   - baseUrl: Vite dev server（cypress 启动前需手动起，或用 devServer 自动起）
+ *
+ * 2026-07-15：本配置以 ESM 形式加载（.mts），不使用 require / __dirname。
+ *   - 纯 ESM 依赖：pixelmatch@7 + pngjs@7（均为 ESM-only），用于视觉回归截图对比。
+ *   - 视觉回归用法：spec 内 `cy.compareSnapshot('name', threshold?)`，
+ *     首次运行写 baseline，之后每次比对并在不匹配时产出 diff 图。
  */
 import { defineConfig } from 'cypress'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
+import { fileURLToPath, dirname } from 'node:url'
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
+import pixelmatch from 'pixelmatch'
+import { PNG } from 'pngjs'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+// 视觉回归产物目录（已 gitignore）
+const VISUAL_DIR = path.resolve(__dirname, 'cypress', 'visual')
 
 const IS_FULL = process.env.ENCV_TEST_FULL === '1'
 
@@ -45,6 +60,7 @@ const FAST_INCLUDE = [
   'cypress/component/TaskBasicInfo.cy.ts',
   'cypress/component/TaskOutputInfo.cy.ts',
   'cypress/component/TaskDebugPanel.cy.ts',
+  'cypress/component/visual-appearance.cy.ts',
 ]
 
 // 慢速集成测试（ENCV_TEST_FULL=1 才跑）— 大规模数据 + WS + 虚拟列表 + file watcher
@@ -61,9 +77,65 @@ const SLOW_INCLUDE = [
   'cypress/component/GroupDetail-search-filter.cy.ts',
 ]
 
-const COMPONENT_SPECS = IS_FULL
-  ? [...FAST_INCLUDE, ...SLOW_INCLUDE]
-  : FAST_INCLUDE
+const COMPONENT_SPECS = process.env.ENCV_TEST_VISUAL === '1'
+  ? ['cypress/component/visual-appearance.cy.ts']
+  : IS_FULL
+    ? [...FAST_INCLUDE, ...SLOW_INCLUDE]
+    : FAST_INCLUDE
+
+// 视觉回归 task：对比当前截图与 baseline
+//   - 首次（baseline 不存在）：直接写入 baseline，返回 { matched: true, firstRun: true }
+//   - 之后：pixelmatch 比对，mismatch > threshold 时写 diff 图并返回 matched:false
+function registerVisualTask(on: Cypress.PluginEvents) {
+  on('task', {
+    compareSnapshot(
+      opts: { name: string; threshold?: number },
+    ): { matched: boolean; firstRun?: boolean; mismatchPixels?: number; mismatchPercent?: number; diffPath?: string } {
+      const { name, threshold = 0.1 } = opts
+      const candidatePath = path.resolve(__dirname, 'cypress', 'screenshots', `${name}.png`)
+      const baselinePath = path.resolve(VISUAL_DIR, 'baseline', `${name}.png`)
+      const diffPath = path.resolve(VISUAL_DIR, 'diff', `${name}.png`)
+
+      if (!existsSync(candidatePath)) {
+        throw new Error(`[compareSnapshot] 缺少候选截图: ${candidatePath}（请先 cy.screenshot 写入该路径）`)
+      }
+
+      if (!existsSync(baselinePath)) {
+        mkdirSync(path.dirname(baselinePath), { recursive: true })
+        writeFileSync(baselinePath, readFileSync(candidatePath))
+        return { matched: true, firstRun: true }
+      }
+
+      const imgA = PNG.sync.read(readFileSync(baselinePath))
+      const imgB = PNG.sync.read(readFileSync(candidatePath))
+      if (imgA.width !== imgB.width || imgA.height !== imgB.height) {
+        throw new Error(
+          `[compareSnapshot] 尺寸不一致 baseline ${imgA.width}x${imgA.height} vs candidate ${imgB.width}x${imgB.height}`,
+        )
+      }
+      const { width, height } = imgA
+      const diff = new PNG({ width, height })
+      const mismatchPixels = pixelmatch(imgA.data, imgB.data, diff.data, width, height, {
+        threshold,
+      })
+      const total = width * height
+      const mismatchPercent = (mismatchPixels / total) * 100
+      const matched = mismatchPixels / total <= threshold
+
+      if (!matched) {
+        mkdirSync(path.dirname(diffPath), { recursive: true })
+        writeFileSync(diffPath, PNG.sync.write(diff))
+      }
+
+      return {
+        matched,
+        mismatchPixels,
+        mismatchPercent: Number(mismatchPercent.toFixed(2)),
+        diffPath: matched ? undefined : diffPath,
+      }
+    },
+  })
+}
 
 export default defineConfig({
   // 全局默认用 Electron（避免 Chrome 下载）
@@ -120,8 +192,10 @@ export default defineConfig({
   viewportWidth: 1280,
   viewportHeight: 720,
   // Electron 沙箱参数（--no-sandbox 必需，root 权限下）
-  // 通过 setupNodeEvents 注入
   setupNodeEvents(on, config) {
+    // 视觉回归 task（ESM：pixelmatch@7 + pngjs@7）
+    registerVisualTask(on)
+
     on('before:browser:launch', (browser, launchOptions) => {
       if (browser.name === 'electron') {
         // Electron 沙箱

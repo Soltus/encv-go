@@ -1,19 +1,15 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
- * biome-stats.mjs — Biome lint 统计工具
+ * 用 bun 运行：bun scripts/biome-stats.ts [src]
+ * biome-stats.ts — Biome lint 统计工具（ESM-only，bun 直跑 .ts）
  *
  * 用法：
- *   node scripts/biome-stats.mjs [src]       统计指定目录（默认 src）
+ *   bun scripts/biome-stats.ts [src]       统计指定目录（默认 src）
  *
  * 输出：
  *   - 控制台打印 Top N 规则统计
  *   - 完整 JSON 输出到 /tmp/biome-stats.json
- *
- * 示例：
- *   pnpm biome:stats          # 统计 src
- *   pnpm biome:stats src/composables  # 只统计 composables 目录
  */
-
 import { execSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -26,18 +22,18 @@ console.log(`\n🔍 Biome Stats — 统计目录: ${target}\n`)
 
 try {
   const cmd = `npx biome lint ${target} --reporter=json`
-  let raw
+  let raw: string
   try {
     raw = execSync(cmd, { cwd: projectRoot, encoding: 'utf8', maxBuffer: 50 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'] })
   } catch (e) {
     // biome lint 有错误时退出码非 0，但 stdout 里还是有 JSON
-    raw = e.stdout || ''
+    raw = (e as { stdout?: string }).stdout || ''
   }
   const data = JSON.parse(raw.trim())
 
-  const ruleCounts = {}
-  const sevCounts = {}
-  const fileCounts = {}
+  const ruleCounts: Record<string, number> = {}
+  const sevCounts: Record<string, number> = {}
+  const fileCounts: Record<string, number> = {}
 
   for (const d of data.diagnostics) {
     const cat = d.category || 'unknown'
@@ -93,6 +89,6 @@ try {
   const hasErrors = sevCounts['error'] && sevCounts['error'] > 0
   process.exit(hasErrors ? 1 : 0)
 } catch (e) {
-  console.error('❌ 执行失败:', e.message)
+  console.error('❌ 执行失败:', (e as Error).message)
   process.exit(1)
 }

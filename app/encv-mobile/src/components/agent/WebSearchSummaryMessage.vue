@@ -92,9 +92,9 @@ const totalHits = computed(() => {
   gap: 3px;
   margin-top: 4px;
   padding: 6px 8px;
-  background: rgba(var(--ion-color-medium-rgb), 0.06);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 6%, transparent);
   border-radius: 6px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.16);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 16%, transparent);
 }
 
 .webSearchItem {
@@ -122,7 +122,7 @@ const totalHits = computed(() => {
 .webSearchItemHits {
   font-size: 10.5px;
   color: var(--encv-text-secondary);
-  background: rgba(var(--ion-color-medium-rgb), 0.12);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   padding: 1px 5px;
   border-radius: 6px;
   flex-shrink: 0;

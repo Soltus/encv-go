@@ -401,18 +401,23 @@ onUnmounted(() => {
   justify-content: center;
   height: 100%;
   width: 100%;
-  background: var(--ion-background-color);
+  background: var(--color-base-100);
   padding: 24px;
 }
 
 .guard-content {
   text-align: center;
   max-width: 400px;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: 20px;
+  box-shadow: 0 24px 64px -24px rgba(0, 0, 0, 0.18);
+  padding: 32px;
 }
 
 .guard-icon {
   font-size: 64px;
-  color: var(--ion-color-warning);
+  color: var(--color-warning);
   margin-bottom: 16px;
 }
 
@@ -441,8 +446,8 @@ onUnmounted(() => {
 .guard-detail {
   display: block;
   font-size: 12px;
-  color: var(--ion-color-danger);
-  background: rgba(var(--ion-color-danger-rgb), 0.08);
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
   border-radius: 8px;
   padding: 10px 14px;
   margin: 0 0 12px;
@@ -454,8 +459,8 @@ onUnmounted(() => {
 .guard-hint {
   display: block;
   font-size: 11px;
-  color: var(--ion-color-medium);
-  background: rgba(var(--ion-color-medium-rgb), 0.06);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
+  background: color-mix(in srgb, var(--color-base-content) 6%, var(--color-base-100));
   border-radius: 6px;
   padding: 8px 12px;
   margin: 0 0 20px;
@@ -475,7 +480,7 @@ onUnmounted(() => {
   justify-content: center;
   height: 100%;
   width: 100%;
-  background: var(--ion-background-color);
+  background: var(--color-base-100);
   padding: 24px;
   overflow-y: auto;
 }
@@ -497,11 +502,16 @@ onUnmounted(() => {
   text-align: center;
   max-width: 560px;
   width: 100%;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: 20px;
+  box-shadow: 0 24px 64px -24px rgba(0, 0, 0, 0.18);
+  padding: 32px;
 }
 
 .error-icon {
   font-size: 64px;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   margin-bottom: 16px;
 }
 
@@ -521,8 +531,8 @@ onUnmounted(() => {
 
 /* ===== 上：红色 detail 区域（详细信息） ===== */
 .error-detail-panel {
-  background: rgba(var(--ion-color-danger-rgb), 0.08);
-  border-left: 3px solid var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  border-left: 3px solid var(--color-error);
   border-radius: 8px;
   padding: 12px 14px;
   margin: 0 0 12px;
@@ -536,25 +546,25 @@ onUnmounted(() => {
   gap: 6px;
   margin-bottom: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid rgba(var(--ion-color-medium-rgb), 0.15);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-content) 15%, var(--color-base-100));
 }
 
 .error-detail-icon {
   font-size: 16px;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
 }
 
 .error-detail-title,
 .error-stack-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   flex: 1;
 }
 
 .copy-btn {
   background: transparent;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.3);
+  border: 1px solid color-mix(in srgb, var(--color-base-content) 30%, var(--color-base-100));
   border-radius: 4px;
   padding: 2px 6px;
   cursor: pointer;
@@ -566,7 +576,7 @@ onUnmounted(() => {
 }
 
 .copy-btn:hover {
-  background: rgba(var(--ion-color-medium-rgb), 0.1);
+  background: color-mix(in srgb, var(--color-base-content) 10%, var(--color-base-100));
 }
 
 .copy-btn ion-icon {
@@ -600,7 +610,7 @@ onUnmounted(() => {
   flex: 1;
   font-family: ui-monospace, Menlo, monospace;
   font-size: 11.5px;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   word-break: break-all;
   white-space: pre-wrap;
 }
@@ -608,7 +618,7 @@ onUnmounted(() => {
 .error-trace-block {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px dashed rgba(var(--ion-color-danger-rgb), 0.2);
+  border-top: 1px dashed color-mix(in srgb, var(--color-error) 20%, transparent);
 }
 
 .error-trace-label {
@@ -621,8 +631,8 @@ onUnmounted(() => {
 .error-trace-body {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 10.5px;
-  color: var(--ion-color-danger);
-  background: rgba(var(--ion-color-danger-rgb), 0.04);
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 4%, transparent);
   border-radius: 4px;
   padding: 6px 8px;
   margin: 0;
@@ -634,8 +644,8 @@ onUnmounted(() => {
 
 /* ===== 下：灰色 stack 区域（原始堆栈 + 排错文档） ===== */
 .error-stack-panel {
-  background: rgba(var(--ion-color-medium-rgb), 0.06);
-  border-left: 3px solid var(--ion-color-medium);
+  background: color-mix(in srgb, var(--color-base-content) 6%, var(--color-base-100));
+  border-left: 3px solid color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   border-radius: 8px;
   padding: 12px 14px;
   margin: 0 0 16px;
@@ -674,7 +684,7 @@ onUnmounted(() => {
 }
 
 .error-stack-footer {
-  border-top: 1px solid rgba(var(--ion-color-medium-rgb), 0.15);
+  border-top: 1px solid color-mix(in srgb, var(--color-base-content) 15%, var(--color-base-100));
   padding-top: 8px;
 }
 
@@ -702,7 +712,7 @@ onUnmounted(() => {
 }
 
 .error-stack-hints code {
-  background: rgba(var(--ion-color-medium-rgb), 0.12);
+  background: color-mix(in srgb, var(--color-base-content) 12%, var(--color-base-100));
   padding: 0 4px;
   border-radius: 2px;
   font-size: 10.5px;
@@ -711,8 +721,8 @@ onUnmounted(() => {
 
 .hint-tag {
   display: inline-block;
-  background: var(--ion-color-warning);
-  color: #000;
+  background: var(--color-warning);
+  color: var(--color-black);
   font-size: 9.5px;
   font-weight: 700;
   padding: 1px 5px;
@@ -733,14 +743,14 @@ onUnmounted(() => {
 /* 通用 ion-toggle 暗黑模式适配 — 非 scoped，作用于所有 toggle */
 ion-toggle {
   --track-background: #424242;
-  --track-background-checked: var(--ion-color-primary);
-  --handle-background: var(--ion-color-primary);
-  --handle-background-checked: #ffffff;
+  --track-background-checked: var(--color-primary);
+  --handle-background: var(--color-primary);
+  --handle-background-checked: var(--color-white);
 }
 
 /* 覆盖 ion-item 内部 .ion-color 上下文导致的 ON 状态手柄变黑 */
 ion-toggle.toggle-checked::part(handle) {
-  background: #ffffff;
+  background: var(--color-white);
 }
 
 /* 背景高斯模糊 + 全面透明化设计规范 */
@@ -777,7 +787,7 @@ body.dark ion-toolbar {
 ion-tab-bar {
   --background: rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.78);
   --color: var(--ion-text-color);
-  --color-selected: var(--ion-color-primary);
+  --color-selected: var(--color-primary);
   --border: none;
   background: rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.78);
   backdrop-filter: blur(20px) saturate(1.8);
@@ -816,10 +826,10 @@ ion-tab-bar > * {
 
 ion-tab-button {
   --background: transparent;
-  --background-focused: rgba(var(--ion-color-primary-rgb), 0.12);
-  --background-hover: rgba(var(--ion-color-primary-rgb), 0.06);
-  --color: var(--ion-color-medium);
-  --color-selected: var(--ion-color-primary);
+  --background-focused: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --background-hover: color-mix(in srgb, var(--color-primary) 6%, transparent);
+  --color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
+  --color-selected: var(--color-primary);
   transition: color 0.2s ease, transform 0.2s ease;
   background: transparent;
   font-weight: 500;
@@ -836,7 +846,7 @@ ion-tab-button ion-icon {
 
 ion-tab-button.tab-selected ion-icon {
   transform: scale(1.15);
-  filter: drop-shadow(0 0 4px rgba(var(--ion-color-primary-rgb), 0.4));
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--color-primary) 40%, transparent));
 }
 
 @keyframes encvTabBarShine {
@@ -895,7 +905,7 @@ ion-input .input-clear-icon {
   width: 20px;
   height: 20px;
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 ion-input .input-clear-icon:hover {
   background: rgba(var(--ion-text-color-rgb), 0.14);
@@ -903,7 +913,7 @@ ion-input .input-clear-icon:hover {
 }
 
 .player-card {
-  background: linear-gradient(135deg, rgba(var(--ion-color-primary-rgb), 0.12), rgba(var(--ion-color-primary-rgb), 0.04)) !important;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, transparent), color-mix(in srgb, var(--color-primary) 4%, transparent)) !important;
   backdrop-filter: blur(12px);
 }
 
@@ -923,7 +933,7 @@ ion-input .input-clear-icon:hover {
     color: color(display-p3 1 0 0);
   }
   .p3-enhanced .preset-card-active {
-    background: color(display-p3 var(--ion-color-primary-rgb) / 0.08);
+    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
   }
 }
 
@@ -993,28 +1003,28 @@ ion-input .input-clear-icon:hover {
   min-width: 28px;
   min-height: 28px;
   font-size: 15px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-left: 2px;
   flex-shrink: 0;
 }
 
 .encv-toast--primary {
-  --background: rgba(var(--ion-color-primary-rgb), 0.92);
-  --color: #ffffff;
+  --background: color-mix(in srgb, var(--color-primary) 92%, transparent);
+  --color: var(--color-white);
 }
 body.dark .encv-toast--primary {
-  --background: rgba(var(--ion-color-primary-rgb), 0.88);
+  --background: color-mix(in srgb, var(--color-primary) 88%, transparent);
 }
 
 .encv-toast--success {
   --background: rgba(34, 197, 94, 0.92);
-  --color: #ffffff;
+  --color: var(--color-white);
 }
 
 .encv-toast--danger,
 .encv-toast--error {
   --background: rgba(239, 68, 68, 0.92);
-  --color: #ffffff;
+  --color: var(--color-white);
 }
 
 .encv-toast--warning {
@@ -1024,7 +1034,7 @@ body.dark .encv-toast--primary {
 
 .encv-toast--medium {
   --background: rgba(115, 115, 128, 0.9);
-  --color: #ffffff;
+  --color: var(--color-white);
 }
 
 /* ============================================

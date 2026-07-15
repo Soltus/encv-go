@@ -254,8 +254,8 @@ onUnmounted(() => {
   margin: 12px 12px 0;
   padding: 12px 14px;
   border-radius: 10px;
-  background: var(--ion-background-color, #ffffff);
-  border: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  background: var(--ion-background-color, var(--color-white));
+  border: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
   border-left-width: 3px;
   transition: border-color 0.2s;
 }
@@ -266,11 +266,11 @@ body.dark .local-openlist-card {
 }
 
 .local-openlist-card.state-running {
-  border-left-color: var(--ion-color-success);
+  border-left-color: var(--color-success);
 }
 
 .local-openlist-card.state-conflict {
-  border-left-color: var(--ion-color-warning);
+  border-left-color: var(--color-warning);
   background: #fff8e1;
 }
 
@@ -288,7 +288,7 @@ body.dark .local-openlist-card.state-crash-loop {
 }
 
 .local-openlist-card.state-idle {
-  border-left-color: var(--ion-color-medium);
+  border-left-color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .card-header {
@@ -303,14 +303,14 @@ body.dark .local-openlist-card.state-crash-loop {
 
 .card-icon {
   font-size: 16px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
 .card-title {
   font-size: 14px;
   font-weight: 600;
-  color: var(--ion-text-color, #000);
+  color: var(--ion-text-color, var(--color-black));
   flex: 1 1 auto;
 }
 
@@ -323,18 +323,18 @@ body.dark .local-openlist-card.state-crash-loop {
 }
 
 .badge-success {
-  background: var(--ion-color-success, #2dd36f);
-  color: #fff;
+  background: var(--color-success);
+  color: var(--color-white);
 }
 
 .badge-danger {
-  background: var(--ion-color-danger, #eb445a);
-  color: #fff;
+  background: var(--color-error);
+  color: var(--color-white);
 }
 
 .badge-medium {
-  background: var(--ion-color-medium, #92949c);
-  color: #fff;
+  background: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
+  color: var(--color-white);
 }
 
 .card-body {
@@ -347,14 +347,14 @@ body.dark .local-openlist-card.state-crash-loop {
 .status-line {
   margin: 0;
   font-size: 13px;
-  color: var(--ion-text-color, #000);
+  color: var(--ion-text-color, var(--color-black));
   font-weight: 500;
 }
 
 .status-desc {
   margin: 0;
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .status-line-warning {
@@ -388,12 +388,12 @@ body.dark .status-line-error {
 
 .info-label {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .info-value {
   font-size: 13px;
-  color: var(--ion-text-color, #000);
+  color: var(--ion-text-color, var(--color-black));
   font-weight: 500;
   font-family: monospace;
   overflow: hidden;
@@ -402,11 +402,11 @@ body.dark .status-line-error {
 }
 
 .heartbeat-fresh {
-  color: var(--ion-color-success);
+  color: var(--color-success);
 }
 
 .heartbeat-stale {
-  color: var(--ion-color-warning);
+  color: var(--color-warning);
 }
 
 .open-webui-btn {
@@ -416,7 +416,7 @@ body.dark .status-line-error {
 .card-error {
   margin-top: 6px;
   font-size: 11px;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   word-break: break-word;
 }
 </style>

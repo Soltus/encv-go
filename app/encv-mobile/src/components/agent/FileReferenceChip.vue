@@ -7,7 +7,7 @@
   <span class="fileRefWrap" ref="wrapRef">
     <button
       type="button"
-      class="fileRefChip"
+      class="fileRefChip ui-chip ui-chip--mono"
       :class="{ fileRefChip_open: popoverOpen }"
       :title="fullPath"
       @click.stop="togglePopover"
@@ -128,17 +128,13 @@ function onOpenInFiles() {
   position: relative;
 }
 
+/* 表面（背景/边框/圆角/内距/字体）已上提到全局 .ui-chip + .ui-chip--mono，
+   供用户主题以 .ui-chip{} 覆写。本 scoped 仅保留结构/交互差异；
+   :hover / .fileRefChip_open 的状态覆写仍在此（scoped 0,2,0 胜出）。 */
 .fileRefChip {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 1px 6px 1px 5px;
-  background: rgba(var(--ion-color-primary-rgb), 0.10);
-  color: var(--ion-color-primary);
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.22);
-  border-radius: 4px;
-  font-size: 12px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   line-height: 1.4;
   cursor: pointer;
   transition: background-color 0.12s, border-color 0.12s, color 0.12s;
@@ -148,13 +144,13 @@ function onOpenInFiles() {
 }
 
 .fileRefChip:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.42);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 42%, transparent);
 }
 
 .fileRefChip_open {
-  background: rgba(var(--ion-color-primary-rgb), 0.22);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.55);
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 55%, transparent);
 }
 
 .fileRefIcon {
@@ -171,7 +167,7 @@ function onOpenInFiles() {
 }
 
 .fileRefLoc {
-  color: var(--ion-color-primary-shade);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
   opacity: 0.85;
   flex-shrink: 0;
 }
@@ -189,7 +185,7 @@ function onOpenInFiles() {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: var(--encv-text-secondary);
   padding: 8px 12px 6px;
-  border-bottom: 1px solid rgba(var(--ion-color-medium-rgb), 0.15);
+  border-bottom: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 15%, transparent);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -211,12 +207,12 @@ function onOpenInFiles() {
 }
 
 .fileRefMenuItem:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.10);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 
 .fileRefMenuIcon {
   font-size: 15px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 </style>

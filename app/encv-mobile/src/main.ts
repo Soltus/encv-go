@@ -36,6 +36,9 @@ import "@encv/shared-components/theme/variables.css";
 // 必须在 variables.css 之后，桥接的 --ion-color-* 才能覆盖其字面量，
 // 让 Ionic 组件跟随与插件一致的 daisyUI encv / encv-dark 单一调色板。
 import "@encv/shared-components/styles/theme-core.css";
+// 🆕 续27：全局语义「表面」类（.ui-chip / .ui-badge / ...），无 scoped，
+// 供用户主题以极简选择器任意覆写（SiYuan 式自由度 + 令牌易用路径）。
+import "@encv/shared-components/theme/surface.css";
 import "@encv/shared-components/styles/timeline-tokens.css";
 import "@encv/shared-components/styles/timeline-utilities.css";
 

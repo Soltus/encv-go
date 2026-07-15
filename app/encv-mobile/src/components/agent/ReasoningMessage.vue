@@ -61,13 +61,13 @@ const metaText = computed(() => (props.streaming ? t("agent.thinkingMeta") : "")
   flex-direction: column;
   gap: 4px;
   padding: 8px 0 8px 8px;
-  border-left: 3px solid rgba(var(--ion-color-medium-rgb), 0.25);
+  border-left: 3px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 25%, transparent);
   margin: 6px 0;
   transition: border-color 0.3s ease;
 }
 
 .reasoningMessage_streaming {
-  border-left-color: rgba(var(--ion-color-primary-rgb), 0.5);
+  border-left-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
 }
 
 .reasoningHeader {
@@ -89,7 +89,7 @@ const metaText = computed(() => (props.streaming ? t("agent.thinkingMeta") : "")
   padding-left: 30px;
   font-size: 13px;
   color: var(--encv-text-secondary);
-  background: rgba(var(--ion-color-medium-rgb), 0.05);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 5%, transparent);
   border-radius: 4px;
   padding: 8px 10px 8px 30px;
   margin-top: 4px;

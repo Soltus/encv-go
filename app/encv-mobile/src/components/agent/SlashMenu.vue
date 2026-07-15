@@ -8,7 +8,7 @@
   <Teleport to="body">
     <div
       v-if="items.length > 0 || hasQuery"
-      class="slash-menu"
+      class="slash-menu ui-panel--overlay"
       role="listbox"
       :aria-label="t('agent.slashMenuTitle')"
       @mouseleave="onMouseLeaveList"
@@ -140,6 +140,8 @@ function onMouseLeaveList() {
 </script>
 
 <style scoped>
+/* 表面（背景/描边/圆角/投影/文本色）已上提到全局 .ui-panel--overlay（默认对齐原外观，零回退）。
+   本 scoped 仅保留定位/布局/字号；position 等结构属性不可上提（浮层专属，非通用表面）。 */
 .slash-menu {
   position: fixed;
   /* 默认靠底——具体 left/bottom 由父级在包裹层覆盖（这里是 fixed 居中策略） */
@@ -149,15 +151,10 @@ function onMouseLeaveList() {
   width: min(420px, calc(100vw - 24px));
   max-height: 60vh;
   overflow-y: auto;
-  background: var(--ion-background-color, #fff);
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.25);
-  border-radius: 12px;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.12);
   z-index: 9999;
   display: flex;
   flex-direction: column;
   font-size: 13px;
-  color: var(--ion-text-color, #222);
   -webkit-overflow-scrolling: touch;
 }
 
@@ -166,7 +163,7 @@ function onMouseLeaveList() {
   align-items: center;
   justify-content: space-between;
   padding: 10px 14px 6px;
-  border-bottom: 1px solid rgba(var(--ion-color-medium-rgb), 0.12);
+  border-bottom: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   flex-shrink: 0;
 }
 
@@ -181,7 +178,7 @@ function onMouseLeaveList() {
 .slash-menu-query {
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
   font-size: 12px;
-  color: var(--ion-color-primary, #4f8cff);
+  color: var(--color-primary);
   font-weight: 600;
 }
 
@@ -192,7 +189,7 @@ function onMouseLeaveList() {
 }
 
 .slash-menu-group + .slash-menu-group {
-  border-top: 1px solid rgba(var(--ion-color-medium-rgb), 0.08);
+  border-top: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
 }
 
 .slash-menu-group-label {
@@ -220,11 +217,11 @@ function onMouseLeaveList() {
 
 .slash-menu-item:hover,
 .slash-menu-item-active {
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
 }
 
 .slash-menu-item-active {
-  background: rgba(var(--ion-color-primary-rgb), 0.14);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
 }
 
 .slash-menu-item-icon {
@@ -235,15 +232,15 @@ function onMouseLeaveList() {
   align-items: center;
   justify-content: center;
   border-radius: 6px;
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
-  color: var(--ion-color-primary, #4f8cff);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
   font-size: 14px;
   margin-top: 1px;
 }
 
 .slash-menu-item-icon-skill {
   background: rgba(var(--ion-color-warning-rgb, 255, 206, 0), 0.16);
-  color: var(--ion-color-warning-shade, #b45309);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 
 .slash-menu-item-text {
@@ -283,7 +280,7 @@ function onMouseLeaveList() {
   font-size: 10px;
   color: var(--ion-text-color-step-350, #999);
   text-align: center;
-  border-top: 1px solid rgba(var(--ion-color-medium-rgb), 0.08);
+  border-top: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
   flex-shrink: 0;
 }
 </style>
