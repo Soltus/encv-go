@@ -145,6 +145,30 @@ const TOOLS = [
       },
     },
   },
+  {
+    name: "app_exec",
+    description:
+      "Run an arbitrary shell command via `bash -c` inside the repo (cwd must stay under /workspace, defaults to /workspace). Stable alternative to the flaky built-in terminal: runs in this persistent MCP process, captures stdout/stderr, enforces a timeout. Use for commands that hang/crash the normal terminal (e.g. gradle, long builds, docker). WARNING: executes arbitrary commands — use with care.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description: "full shell command, e.g. 'bash scripts/build-android.sh' or 'ls -la app'",
+        },
+        cwd: {
+          type: "string",
+          description: "absolute working dir; must be under /workspace. Default /workspace.",
+        },
+        timeoutMs: {
+          type: "number",
+          default: 120000,
+          description: "kill the command after this many ms (hard cap 600000).",
+        },
+      },
+      required: ["command"],
+    },
+  },
 ];
 
 async function dispatch(name, args = {}) {
@@ -190,6 +214,21 @@ async function dispatch(name, args = {}) {
         ];
     const r = await run("pnpm", ["exec", "biome", "format", "--write", ...files], APP_ROOT, 120_000);
     return textResult(`exit=${r.code}${r.timedOut ? " (TIMED OUT)" : ""}\n--- stdout ---\n${trim(r.stdout)}\n--- stderr ---\n${trim(r.stderr)}`, r.code !== 0);
+  }
+
+  if (name === "app_exec") {
+    const raw = String(args.command || "").trim();
+    if (!raw) return textResult("command is required", true);
+    const cwd =
+      args.cwd && String(args.cwd).startsWith("/workspace")
+        ? String(args.cwd)
+        : REPO_ROOT;
+    const timeoutMs = Math.min(Number(args.timeoutMs) || 120000, 600_000);
+    const r = await run("bash", ["-c", raw], cwd, timeoutMs);
+    return textResult(
+      `exit=${r.code}${r.timedOut ? " (TIMED OUT)" : ""}\n--- stdout ---\n${trim(r.stdout)}\n--- stderr ---\n${trim(r.stderr)}`,
+      r.code !== 0
+    );
   }
 
   return textResult(`Unknown tool: ${name}`, true);

@@ -26,7 +26,20 @@ dependencyResolutionManagement {
         maven { url = uri("https://mirrors.tencent.com/repository/maven-tencent/") }
         maven { url = uri("https://maven.aliyun.com/repository/public") }
         maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://jitpack.io") }
+        // com.github.*（如 getActivity:Logcat 及其传递依赖 EasyWindow）只在 JitPack 构建发布。
+        // 腾讯云/阿里云的 maven-public 代理会为这些包返回 200 的 POM 但 404 的 aar/jar：
+        // 一旦 Gradle 从代理拿到 POM，就会把该模块"钉"在代理仓库，后续 aar 下载只找代理、
+        // 拿到 404 后不再回退到排在最后的 JitPack —— 这正是 build-logs 里"只搜了 maven-public"的原因。
+        // 用 exclusiveContent 强制 com.github.* 只经由 JitPack 解析，既绕开代理"投毒"，
+        // 也避免 JitPack 参与其它依赖的解析（保持镜像加速）。
+        exclusiveContent {
+            forRepository {
+                maven { url = uri("https://jitpack.io") }
+            }
+            filter {
+                includeGroupByRegex("com\\.github\\..*")
+            }
+        }
         flatDir {
             dirs("${rootProject.projectDir}/capacitor-cordova-android-plugins/src/main/libs", "${rootProject.projectDir}/app/libs")
         }

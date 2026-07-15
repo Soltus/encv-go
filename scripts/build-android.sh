@@ -39,6 +39,49 @@ source "$SCRIPT_DIR/android-common.sh"
 MOBILE_DIR="$ROOT_DIR/$MONOREPO_MOBILE_DIR"
 ANDROID_DIR="$MOBILE_DIR/android"
 
+# run_gradle <label> <gradle-task> [extra-gradle-args...]
+# 运行 Gradle：完整输出写入独立目录 android/build-logs/<slug>.log，
+# 终端只显示进度与失败时的"关键错误行"（参考 app/scripts/check-all.mjs 的做法：
+# 完整输出另存，终端仅呈现结构化提取的错误，避免刷屏）。
+# 返回 Gradle 退出码。
+run_gradle() {
+  local label="$1"; shift
+  local android_dir="$ROOT_DIR/$MONOREPO_MOBILE_DIR/android"
+  local log_dir="$android_dir/build-logs"
+  mkdir -p "$log_dir"
+  local slug
+  slug=$(printf '%s' "$label" | tr '[:upper:]' '[:lower:]' | tr -s ' .' '--' | tr -cd 'a-z0-9-')
+  local log_file="$log_dir/${slug}.log"
+
+  echo "  ▶ $label"
+  echo "    完整输出 → $log_file"
+  local start; start=$(date +%s)
+  local rc=0
+  ( cd "$android_dir" && chmod +x gradlew && ./gradlew "$@" --console=plain ) > "$log_file" 2>&1 || rc=$?
+  local end; end=$(date +%s)
+  echo "    ⏱ $((end-start))s  退出码=$rc"
+
+  if [[ $rc -ne 0 ]]; then
+    echo "  ❌ $label 失败 — 关键错误："
+    grep -nE -e 'BUILD FAILED' \
+             -e 'FAILURE:' \
+             -e 'What went wrong:' \
+             -e 'Execution failed for task' \
+             -e '> Task .*FAILED' \
+             -e '^e: .*error:' \
+             -e 'error: ' \
+             -e 'Caused by:' \
+             -e 'Exception in thread' \
+             -e 'Could not (GET|HEAD|resolve|download|find|create)' \
+             -e 'Received status code' \
+             "$log_file" 2>/dev/null | sed 's/^/    /' | tail -40 || true
+    echo "  📄 完整日志: $log_file"
+  else
+    echo "  ✅ $label 完成"
+  fi
+  return $rc
+}
+
 # ---- 默认值 / 参数 ----
 VERSION=""
 WITH_PLUGINS=0
@@ -127,7 +170,11 @@ if [[ $SKIP_WEB -eq 0 ]]; then
   echo "  Step 1: 前端依赖安装 + 构建"
   echo "══════════════════════════════════"
   ( cd "$ROOT_DIR/app" && pnpm install )
-  ( cd "$MOBILE_DIR" && pnpm build )
+  # 强制生产模式：云开发环境的 .cnb.yml 全局 NODE_ENV=development 会泄漏进
+  # 本脚本，使 vite build 以开发模式产出（import.meta.env.DEV=true），
+  # 导致 APK 的 getApiBaseUrl() 回退到 :16666 沙箱入口而非真机 :2025。
+  # 仅在 build 这步覆盖 NODE_ENV，不影响上面的 pnpm install（仍需 devDeps）。
+  ( cd "$MOBILE_DIR" && NODE_ENV=production pnpm build )
   echo "✅ 前端构建完成"
   echo ""
 fi
@@ -220,22 +267,20 @@ npx cap sync android
 echo "✅ cap sync 完成"
 echo ""
 
-# ---- Step 5: Gradle 构建 ----
+# ---- Step 5: Gradle 构建（完整输出写入 build-logs/，终端仅显示关键错误）----
 echo "══════════════════════════════════"
 echo "  Step 5: Gradle assemble${BUILD_TYPE^}"
 echo "══════════════════════════════════"
-cd "$ANDROID_DIR"
-chmod +x gradlew
 if [[ -n "$VERSION" ]]; then
   echo "=== Building RELEASE APK v$VERSION ==="
   ensure_android_keystore "$MONOREPO_MOBILE_DIR"
-  ./gradlew assembleRelease --stacktrace
-  APK=$(find app/build/outputs/apk/release -name "*.apk" ! -name "*-unsigned*" -type f | head -1)
+  run_gradle "assemble-release-v$VERSION" assembleRelease --stacktrace
+  APK=$(find "$ANDROID_DIR/app/build/outputs/apk/release" -name "*.apk" ! -name "*-unsigned*" -type f 2>/dev/null | head -1)
 else
-  ./gradlew assembleDebug --stacktrace
-  APK=$(find app/build/outputs/apk/debug -name "*.apk" -type f | head -1)
+  run_gradle "assemble-debug" assembleDebug --stacktrace
+  APK=$(find "$ANDROID_DIR/app/build/outputs/apk/debug" -name "*.apk" -type f 2>/dev/null | head -1)
 fi
-[[ -n "$APK" && -f "$APK" ]] || { echo "❌ 未找到 APK"; exit 1; }
+[[ -n "$APK" && -f "$APK" ]] || { echo "❌ 未找到 APK（详见 build-logs/ 日志）"; exit 1; }
 echo "✅ APK: $APK ($(ls -lh "$APK" | awk '{print $5}'))"
 echo ""
 
@@ -246,7 +291,7 @@ if [[ $WITH_PLUGINS -eq 1 ]]; then
   echo "══════════════════════════════════"
 
   # openlist 前端
-  ( cd "$MOBILE_DIR/plugin-openlist/web" && pnpm install --prefer-offline && pnpm build )
+  ( cd "$MOBILE_DIR/plugin-openlist/web" && pnpm install --prefer-offline && NODE_ENV=production pnpm build )
   OL_ASSETS="$ROOT_DIR/$MONOREPO_MOBILE_DIR/plugin-openlist/src/main/assets/openlist"
   mkdir -p "$OL_ASSETS"; rm -rf "$OL_ASSETS"/*
   cp -r "$MOBILE_DIR/plugin-openlist/web/dist/." "$OL_ASSETS"/
@@ -264,21 +309,21 @@ if [[ $WITH_PLUGINS -eq 1 ]]; then
   set -e
 
   # mpv 前端
-  ( cd "$MOBILE_DIR/plugin-mpv-player/web" && pnpm install --prefer-offline && pnpm build )
+  ( cd "$MOBILE_DIR/plugin-mpv-player/web" && pnpm install --prefer-offline && NODE_ENV=production pnpm build )
   MPV_ASSETS="$ROOT_DIR/$MONOREPO_MOBILE_DIR/plugin-mpv-player/src/main/assets/mpv"
   mkdir -p "$MPV_ASSETS"; rm -rf "$MPV_ASSETS"/*
   cp -r "$MOBILE_DIR/plugin-mpv-player/web/dist/." "$MPV_ASSETS"/
 
   # simverse 前端
-  ( cd "$MOBILE_DIR/plugin-simverse/web" && pnpm install --prefer-offline && pnpm build )
+  ( cd "$MOBILE_DIR/plugin-simverse/web" && pnpm install --prefer-offline && NODE_ENV=production pnpm build )
   SV_ASSETS="$ROOT_DIR/$MONOREPO_MOBILE_DIR/plugin-simverse/src/main/assets/simverse"
   mkdir -p "$SV_ASSETS"; rm -rf "$SV_ASSETS"/*
   cp -r "$MOBILE_DIR/plugin-simverse/web/dist/." "$SV_ASSETS"/
 
   # Gradle convert（best-effort，失败不阻断主 APK）
-  ./gradlew -PincludePlugins=true "convert_plugin-openlist_${APK_BUILD_TYPE}" --stacktrace 2>&1 | tail -20 || echo "⚠️ openlist 插件构建失败（继续）"
-  ./gradlew -PincludePlugins=true "convert_plugin-mpv-player_${APK_BUILD_TYPE}" --stacktrace 2>&1 | tail -20 || echo "⚠️ mpv 插件构建失败（继续）"
-  ./gradlew -PincludePlugins=true "convert_plugin-simverse_${APK_BUILD_TYPE}" --stacktrace 2>&1 | tail -20 || echo "⚠️ simverse 插件构建失败（继续）"
+  run_gradle "plugin-openlist-${APK_BUILD_TYPE}" -PincludePlugins=true "convert_plugin-openlist_${APK_BUILD_TYPE}" --stacktrace || echo "⚠️ openlist 插件构建失败（继续）"
+  run_gradle "plugin-mpv-player-${APK_BUILD_TYPE}" -PincludePlugins=true "convert_plugin-mpv-player_${APK_BUILD_TYPE}" --stacktrace || echo "⚠️ mpv 插件构建失败（继续）"
+  run_gradle "plugin-simverse-${APK_BUILD_TYPE}" -PincludePlugins=true "convert_plugin-simverse_${APK_BUILD_TYPE}" --stacktrace || echo "⚠️ simverse 插件构建失败（继续）"
   echo "✅ 插件 APK 构建完成（见 build/outputs/plugin-apks/）"
   echo ""
 fi

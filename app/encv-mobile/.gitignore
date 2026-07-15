@@ -26,3 +26,5 @@ ios/
 android/app/src/main/jniLibs/
 
 android-overlay/app/src/main/jniLibs/
+
+encv-go-arm64

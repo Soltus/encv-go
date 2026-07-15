@@ -32,6 +32,10 @@ proguard/
 # Log Files
 *.log
 
+# Local build logs (full Gradle output captured by scripts/build-android.sh)
+build-logs/
+*.salive
+
 # Android Studio Navigation editor temp files
 .navigation/
 
