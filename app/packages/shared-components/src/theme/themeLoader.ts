@@ -40,6 +40,21 @@ export interface ThemeSource {
  * 指向一个主题【文件夹】（或其 theme.json）即可发现 id/名字/CSS/JS/资源，这才是真正「可分发」
  * （对齐 Obsidian/思源集市：指向清单即可安装）。
  */
+/** 主题调色板声明（2026-07-17 优化）：主题「声明」其默认主色 / 背景色 + 一组风格化取色预设，
+ *  外观页取色器据此驱动（不再用固定全局预设）。背景色指 app 衬底（--material-bg），
+ *  不声明则沿用主题自身 base-100。 */
+export interface ThemePalette {
+  /** 默认主题色（主色），与 theme.css --color-primary 对齐。 */
+  primary?: string;
+  /** 默认背景色（app 衬底），与 --material-bg 对应；不声明则沿用主题自身 base-100。 */
+  bg?: string;
+  /** 该主题风格的取色预设（供外观页取色器，按主题语义配色）。 */
+  presets?: {
+    primary?: string[];
+    bg?: string[];
+  };
+}
+
 export interface ThemeManifest {
   id: string;
   name?: string;
@@ -54,6 +69,8 @@ export interface ThemeManifest {
   js?: string;
   /** 资源相对路径清单（原样透传，供展示/校验）。 */
   assets?: string[];
+  /** 主题调色板声明（2026-07-17）：默认主色 / 背景色 + 风格化取色预设。 */
+  palette?: ThemePalette;
 }
 
 interface RawManifest {
@@ -67,6 +84,7 @@ interface RawManifest {
   css?: unknown;
   js?: unknown;
   assets?: unknown;
+  palette?: unknown;
 }
 
 /** 把主题文件夹 URL（或 theme.json URL）规整为 { 清单URL, 目录基址 }。 */
@@ -106,7 +124,26 @@ export async function fetchThemeManifest(folderOrJsonUrl: string): Promise<Theme
     css: abs(cssRel),
     js: typeof raw.js === "string" && raw.js.trim() ? abs(raw.js) : undefined,
     assets: Array.isArray(raw.assets) ? raw.assets.filter((a): a is string => typeof a === "string") : undefined,
+    palette: parsePalette(raw.palette),
   };
+}
+
+/** 校验并规范化 theme.json 的 palette 字段（仅接受合法结构，其余忽略）。 */
+function parsePalette(raw: unknown): ThemePalette | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const o = raw as Record<string, unknown>;
+  const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v);
+  const arrOfHex = (v: unknown): string[] | undefined => (Array.isArray(v) && v.every(isHex) ? (v as string[]) : undefined);
+  const palette: ThemePalette = {};
+  if (isHex(o.primary)) palette.primary = o.primary;
+  if (isHex(o.bg)) palette.bg = o.bg;
+  if (o.presets && typeof o.presets === "object") {
+    const p = o.presets as Record<string, unknown>;
+    const primary = arrOfHex(p.primary);
+    const bg = arrOfHex(p.bg);
+    if (primary || bg) palette.presets = { ...(primary ? { primary } : {}), ...(bg ? { bg } : {}) };
+  }
+  return Object.keys(palette).length ? palette : undefined;
 }
 
 export interface ThemeLoadMetric {

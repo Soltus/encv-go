@@ -3,5 +3,26 @@
   "name": "Paper",
   "builtIn": false,
   "css": "theme.css",
-  "desc": "暖纸感：米色底 + 衬线感 + 柔圆角 + 细描边"
+  "desc": "暖纸感：米色底 + 衬线感 + 柔圆角 + 细描边",
+  "palette": {
+    "primary": "#a0785a",
+    "bg": "#f7f1e6",
+    "presets": {
+      "primary": [
+        "#a0785a",
+        "#7d9b76",
+        "#c08552",
+        "#b08968",
+        "#8a7a66",
+        "#9c7a52"
+      ],
+      "bg": [
+        "#f7f1e6",
+        "#efe6d6",
+        "#faf6ee",
+        "#f3ebdc",
+        "#f9f3ea"
+      ]
+    }
+  }
 }

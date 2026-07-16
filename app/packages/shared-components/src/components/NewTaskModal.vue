@@ -245,8 +245,8 @@ async function handleClose() {
   padding: 10px 14px;
   border-radius: 10px;
   background: rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.5);
-  backdrop-filter: blur(var(--encv-bg-blur, 8px));
-  -webkit-backdrop-filter: blur(var(--encv-bg-blur, 8px));
+  backdrop-filter: blur(var(--material-blur, 8px));
+  -webkit-backdrop-filter: blur(var(--material-blur, 8px));
 }
 
 body.dark .plugin-section {

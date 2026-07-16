@@ -4,5 +4,26 @@
   "author": "Community",
   "mode": "light",
   "version": "1.0.0",
-  "builtIn": false
+  "builtIn": false,
+  "palette": {
+    "primary": "#f97316",
+    "bg": "#fffaf5",
+    "presets": {
+      "primary": [
+        "#f97316",
+        "#fb923c",
+        "#f43f5e",
+        "#f59e0b",
+        "#ea580c",
+        "#fb7185"
+      ],
+      "bg": [
+        "#fffaf5",
+        "#fdeede",
+        "#fff7ed",
+        "#ffedd5",
+        "#fff1e6"
+      ]
+    }
+  }
 }

@@ -1,0 +1,44 @@
+/* =============================================================================
+ * 臻彩（Vivid / Wide-Gamut）P3 宽色域孪生 —— SCSS 编译期派生
+ * -----------------------------------------------------------------------------
+ * 与 useTheme.ts 的 applyP3Mode / applyColor 配合：P3 屏 + 根类 .encv-p3 时，
+ * vivid.scss 的 @media (color-gamut: p3) 把品牌色换成 --color-*-p3 宽色域定义。
+ *
+ * 此前 --color-*-p3 是手写 color(display-p3 ...) 字面量，散落在 palette.css
+ * （secondary / accent），且与基色 hex（#8b5cf6 等）两处维护、易漂移。
+ * 这里集中为「基色 hex 单一来源 + @function 派生 P3 孪生」，同 surface.scss
+ * 的 --tint-* 派生范式（派生令牌编译期生成，基色单一来源仍在 palette.css）。
+ *
+ * p3() 语义与 useTheme.hexToP3Token 完全一致：把归一化 sRGB 通道直接塞进更宽
+ * 的 display-p3 基色 = 更艳的「臻彩」。运行时自定义色仍由 JS 写 --color-primary-p3
+ * （内联特异性更高，覆盖本文件编译值），二者视觉一致、不冲突。
+ *
+ * 注：本 sass-embedded 构建未暴露 color.display-p3() 构造器，故用 color.channel()
+ * 取 0..1 通道 + math.round 匹配 JS 的 toFixed(4)，手工拼 color(display-p3 ...) 令牌。
+ * ========================================================================== */
+
+@use "sass:color";
+@use "sass:math";
+
+/// 任意 sRGB hex → color(display-p3 ...) 宽色域令牌（naive 归一化，语义同 hexToP3Token）。
+@function p3($hex) {
+  $r: math.div(math.round(color.channel($hex, "red", $space: srgb) * 10000), 10000);
+  $g: math.div(math.round(color.channel($hex, "green", $space: srgb) * 10000), 10000);
+  $b: math.div(math.round(color.channel($hex, "blue", $space: srgb) * 10000), 10000);
+  @return unquote("color(display-p3 #{$r} #{$g} #{$b})");
+}
+
+/// encv 品牌色（亮色基态）的 sRGB 单一来源，键与 palette.css 的 --color-* 一致。
+/// P3 孪生由 emit-p3-twins 自动派生，新增角色只需在此 map 加一行。
+$encv-brand: (
+  "primary": #8b5cf6,
+  "secondary": #06b6d4,
+  "accent": #ec4899,
+);
+
+/// 在调用处作用域内生成 --color-<role>-p3: color(display-p3 ...) 孪生。
+@mixin emit-p3-twins {
+  @each $role, $hex in $encv-brand {
+    --color-#{$role}-p3: #{p3($hex)};
+  }
+}

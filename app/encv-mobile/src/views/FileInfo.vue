@@ -381,8 +381,8 @@ onMounted(() => loadInfo());
   border-radius: 10px;
   padding: 16px;
   border-left: 3px solid color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(var(--material-blur, 8px));
+  -webkit-backdrop-filter: blur(var(--material-blur, 8px));
 }
 .section-card.container-card { border-left-color: var(--color-primary); }
 .section-card.alist-enc-card { border-left-color: var(--color-error); }
@@ -433,7 +433,7 @@ onMounted(() => loadInfo());
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 4px;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(var(--material-blur, 4px));
 }
 
 .card-title {

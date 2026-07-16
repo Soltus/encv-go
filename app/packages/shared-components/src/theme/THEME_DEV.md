@@ -703,3 +703,250 @@ Snippet = 一段可热开关的局部 CSS，注入到 `<head>` 的
   文档正确性由本次提交保证。
 - **验证**：`app_check_all` → **9 PASS / 0 FAIL**（含 `motion-guard.test.ts` 该描述块）；`app_check_all`
   经 MCP 通道（`app_check_all`）跑，未碰裸终端。
+
+### 6.17 续48：臻彩显示（Vivid / P3 宽色域）真正生效（修复三处历史失效）
+
+> 用户纠正：外观里的「臻彩显示」此前**形同虚设**——宣传的提色 / 宽色域效果从未真实出现。
+> 经「先红后绿」复现（见 `encv-mobile/src/motion/__tests__/vivid.test.ts`，修复前 5/6 RED）→ 定位三处根因。
+
+- **根因（诊断）**：
+  1. **默认恒等滤镜**：旧 `syncVividFilter` 把 intensity 直接当 `--encv-vivid-filter` 拼成
+     `contrast(intensity/100) saturate(...)`，默认 intensity=100 → `contrast(1) saturate(1)` = **恒等**，
+     肉眼零变化。
+  2. **`.encv-vivid` 根类从未添加**：`applyVividMode` 只切 `vividMode.value` 状态，**从没**给
+     `document.documentElement` 加 `.encv-vivid` 类 → `motion/guard.ts` / `tokens.css` 里
+     `encv-vivid` 根类驱动的动效强度 1.3 boost **永不触发**（guard/tokens 侧已就绪，业务侧没接上）。
+  3. **P3 写无效属性**：旧 `applyP3Mode` 写 `--encv-color-gamut: p3` 之类的「属性」，
+     `color-gamut` 是**只读媒体特性（media feature）**，**不是作者可设的 CSS 属性** → 写出来无任何效果，
+     宽色域从未生效。
+  4. **滤镜选择器命中不到页面（2026-07-17 二次复现）**：`vivid.css` 滤镜规则写 `.encv-vivid ion-page`，
+     但 Ionic Vue 在 CE 注册模式（`registerIonicComponents`）下把 `<ion-page>` 渲染为 `<div class="ion-page">`
+     （**TAG 是 div，不是 ion-page**）。真实浏览器复现：`getComputedStyle(.ion-page).filter` **恒为 `none`**——
+     即便 `.encv-vivid` 类与 `--encv-vivid-amount`（gsap 确实写入了 0.33）都正确，滤镜也从不生效。
+  5. **P3 交换被内联压过（2026-07-17 二次复现）**：`@media (color-gamut: p3) :root.encv-p3 { --color-primary:
+     var(--color-primary-p3, var(--color-primary)) }` 是普通作者规则，而 `applyColor` 把 `--color-primary`
+     以**内联**写在 `:root` 上；内联优先级高于作者规则（无 `!important`）→ P3 屏下品牌主色恒为内联 srgb 值，
+     宽色域从不生效。真实浏览器复现：`withoutImportant` 时 computed `--color-primary` = 内联值；且原回退写
+     `var(--color-primary)` 是**自引用**（无效声明→令牌丢失）。仅 `--color-primary` 被内联（secondary/accent 未内联，
+     故不受影响），但 primary 是主色，视觉上 P3「没效果」。
+  6. **刷新后 vivid 失效（2026-07-17 二次复现）**：`initTheme` 读 localStorage 的 vivid 偏好后只置
+     `vividMode.value`，**从未调用 `applyVividMode`** → 刷新后 `.encv-vivid` 根类丢失、滤镜不挂（须手动再开关一次才恢复）。
+- **修复（让臻彩真生效，零行为回归）**：
+  1. `vividAmountFromIntensity(intensity)`：50→0（近关）、100→**0.34**（默认即可见）、200→1（最浓）。
+     不再恒等。
+  2. `applyVividMode('on')` 现在给根元素加 `.encv-vivid` 类（'off' 移除）；`syncVividFilter` 用
+     `MotionEngine`（gsap）把 `--encv-vivid-amount` 平滑过渡到目标值（reduced-motion 下直接落终态，
+     走 `getMotionProfile()` 闸门——ACL 解耦，换 anime.js 下游零改动）。
+  3. P3 改为「`.encv-p3` 根类 + `@media (color-gamut: p3)`」控制：`applyP3Mode` 只加 / 去 `.encv-p3` 类，
+     不再写无效属性；`vivid.css` 在真 P3 屏下把 `--color-primary/-secondary/-accent` 替换成对应
+     `-p3` 令牌（`color(display-p3 ...)`）。
+  4. `applyColor` 内用 `hexToP3Token(color)`（任意有效 hex → `color(display-p3 r g b)`，
+     srgb 归一化值直接塞入更宽基色 = 更艳）写 `--color-primary-p3`；**不再写死内置 7 色**——
+     自定义取色 / 远程主题色也全自动派生。非法 hex `removeProperty` → 回退 srgb，不报错。
+     `palette.css` 补 `--color-secondary-p3` / `--color-accent-p3` 默认值。
+  5. `App.vue` 删除失效的 `ion-page { filter: var(--encv-vivid-filter, none) }` 与整个
+     `@media (color-gamut: p3)` / `.encv-force-p3` 无效块（改注释说明已迁 `vivid.css`）。
+    6. `theme-core.css` / `daisyui.css` 均 `@import "../theme/vivid.scss"`。
+  7. **（修复 4）滤镜选择器改为 `.encv-vivid ion-page, .encv-vivid .ion-page`**（两条并存，兼容
+     `<ion-page>` TAG 与 `<div class="ion-page">` 两种 DOM 形态）。真实浏览器验证修复后
+     `getComputedStyle(.ion-page).filter` 含 `contrast`/`saturate`（修复前恒 `none`）。
+  8. **（修复 5）P3 交换规则加 `!important`** 越过 `applyColor` 内联覆盖；`--color-primary` 回退改用
+     `applyColor` 新存的 `--color-primary-srgb`（srgb 基色），**严禁** `var(--color-primary)` 自引用；
+     secondary/accent 标 `!important` 仅为防御一致；`--material-bg-active` 同理 `!important`。
+  9. **（修复 6）`initTheme` 末尾改调 `applyVividMode(vividMode.value)`**（重新挂 `.encv-vivid` 根类 + 滤镜），
+     修复刷新后类丢失。
+- **关键认知（长期）**：`color-gamut` / `prefers-color-scheme` 等是**媒体特性、只读**，绝不能作为
+  作者属性写在 `style` / 内联 / `setProperty` 上——要「响应式宽色域」只能靠 `@media (color-gamut: p3)`
+  + 根类切换。这是本 bug 的隐蔽根因，下次动色彩 / 屏幕能力特性务必记住。
+  - **CE 注册模式 DOM 形态（2026-07-17）**：`registerIonicComponents` 把 `<ion-*>` 渲染为 `<div class="ion-*">`
+    （TAG 是 div，不是自定义元素名）。**任何依赖 `<ion-*>` TAG 的 CSS 选择器都会命中不到**——一律改用
+    `.ion-*` 类选择器（不止 `ion-page`，`ion-content` 等若用 TAG 选择器同理要改类）。本环境真实浏览器复现过。
+  - **内联 CSS 变量交换必须 `!important`**：当某 CSS 变量被 JS 以 `setProperty` **内联**写在 `:root` 上，
+    普通作者规则（含 `@media` 块）优先级低于内联、**永远压不过**；要拿它做主题/媒体交换只能在该规则上加
+    `!important`。回退值**不能**写 `var(--同名)`（自引用→无效声明→令牌丢失），应另存一份非循环基色变量。
+- **契约锁（防复发，先红后绿）**：`encv-mobile/src/motion/__tests__/vivid.test.ts`（已入 `vitest.config.ts`
+  FAST_INCLUDE）断言——开 vivid 加 `.encv-vivid` 根类、默认强度 100 即 `amount>0`、关 vivid 移除类且
+  amount 归零、开 P3 加 `.encv-p3` 且不再写 `--encv-color-gamut`、任意（含非内置）色自动派生 `display-p3` 令牌、
+  非法色回退 srgb、**`initTheme` 重新应用 `.encv-vivid` 根类**（修复刷新丢失）。
+  - **真实浏览器回归（2026-07-17）**：`encv-mobile/test-visual/vivid-diag.visual.ts`（Playwright，3 用例）
+    在 test-visual 挂载壳跑**真实主题 CSS + 真实 gsap**，断言：① 开启 vivid 后 `getComputedStyle(.ion-page).filter`
+    含 `contrast`/`saturate`（修复前恒 `none`）；② 真实样式表里 `@media (color-gamut:p3) :root.encv-p3` 规则带
+    `!important` 且回退 `--color-primary-srgb`；③ 级联复现：无 `!important` 时内联压过作者规则、有 `!important`
+    时覆盖内联。这是「先红后绿」的权威证据（修复前 `realRuleFilter==='none'`）。
+  - **编译期契约锁（2026-07-17）**：`src/theme/__tests__/vividScss.test.ts` 新增断言——compiled `vivid.css`
+    含 `.encv-vivid .ion-page` 选择器、P3 块含 `!important` 与 `--color-primary-srgb`、且不再自引用
+    `var(--color-primary)`。
+
+### 6.17b 臻彩显示二次优化（2026-07-17，实测生效后）：滤镜拆分 + 明暗分调 + P3 自动化
+- **用户实测「臻彩显示」已生效**，提出三项优化并全部落地、真实浏览器回归（见下）：
+  1. **色彩滤镜与对比度拆开调节**：原单一 `vividIntensity` 滑块同时驱动 contrast + saturate。
+     拆为 `vividSaturation`（色彩浓度）+ `vividContrast`（对比度）两个独立滑块（50..200，默认 100），
+     对应 CSS 变量 `--encv-vivid-sat` / `--encv-vivid-contrast`（0..1），由 `syncVividFilter` 经 gsap
+     分别平滑过渡。`useTheme` 导出 `setVividSaturation` / `setVividContrast`，localStorage 键
+     `encv-vivid-mode-saturation` / `encv-vivid-mode-contrast`。旧的 `vividIntensity` / `--encv-vivid-amount` 已移除。
+  2. **删除 P3「自动/始终开启/关闭」选项组**：该选择组冗余（"on"/"auto" 在 `@media (color-gamut:p3)` 下
+     行为等价，区别只在 "off"）。UI 移除 `p3Modes` 卡片，`initTheme` 改为始终 `applyP3Mode("auto")`
+     （`.encv-p3` 常驻，真实 P3 屏由媒体查询决定，srgb 屏仅强化 vivid 饱和）。`setP3Mode`/`p3Mode` 仍导出供测试。
+  3. **明暗场景分别调优**：新增暗色专属规则 `:root.encv-vivid body.dark .ion-page`（specificity 高于亮色规则），
+     暗色下对比度增益收敛 `*0.12`（避免暗部过硬）、色彩浓度增益加大 `*0.72`（让颜色更跳）；
+     亮色规则 `*0.25` / `*0.45`（避免过艳刺眼）。选择器用 `:root.encv-vivid body.dark` 精确命中
+     「html 带 .encv-vivid 且 body 带 .dark」的暗色臻彩态（CE 模式 `body.dark` 在 `html.encv-vivid` 之内）。
+- **验证（先红后绿）**：
+  - 真实浏览器 `encv-mobile/test-visual/vivid-diag.visual.ts`（Playwright，4 用例）全绿：① 开启 vivid 后
+    `.ion-page` filter 含 contrast/saturate；② 暗色专属规则下 `saturate` 增益 > 亮色、`contrast` 增益 < 亮色
+    （真实 computed 断言）；③ P3 `!important` + `--color-primary-srgb`；④ 级联复现内联压过/!important 覆盖。
+  - 编译期 `vividScss.test.ts` 新增：滤镜拆为 `--encv-vivid-sat`/`--encv-vivid-contrast` 两条独立变量；
+    暗色 `body.dark` 规则存在且含 `0.72`(浓度)/`0.12`(对比度)，亮色含 `0.45`/`0.25`。
+  - 单测 `vivid.test.ts` 新增「浓度与对比度可独立调节」；`app_check_all` 全绿（9 PASS / 0 FAIL）。
+- **纪律（`.codebuddy/rules/文档同步.mdc`）**：本次补本文档 §6.17；门禁只验代码不验文档，文档正确性由本次提交保证。
+- **验证**：`app_check_all` → **9 PASS / 0 FAIL**（含 `vivid.test.ts`）；Biome 用 `pnpm exec biome check --write`
+  实写（非 `app_format`）。
+
+### 6.18 外观即「表面材质（surface material）」—— 统一主题 / 动态背景 / 模糊 / P3
+
+> 2026-07-16 续49 用户指出：动态渐变背景（BG_PRESETS + `applyBgColor`）与后来的主题系统是**共存却冲突**的平行子系统；
+> 高斯模糊（`--encv-bg-blur` 全局开关）不该是全局开关，而应交给主题控制（参考 iOS / 鸿蒙流行的**液态玻璃**）。
+> 加上 §6.17 暴露的「背景/渐变拿不到真·P3 宽色域」缺口，外观层需要一次整合。
+
+- **被取代的旧做法（已废除，已被本 § 取代）**：
+  - ❌ 「**动态背景/渐变是独立于主题的平行系统**」（`BG_PRESETS` + `applyBgColor` 直接写 `--ion-background-color` / `body` 渐变）。
+    它和主题写的 `--color-base-100` 叠成两套背景、深浅色多处各自处理。→ 背景/渐变**改为主题的属性**（见材质契约）。
+  - ❌ 「**高斯模糊是全局开关**」（`applyBgBlur` → `--encv-bg-blur`，UI 上一个独立滑块）。
+    实测它**不全局**：只有 `App.vue` + `HomePage` header 读 `--encv-bg-blur`，`codemogger_grep`（`format:json`、`dir` 限定 `src`）证实约 27 处组件硬编码 `backdrop-filter: blur(8/12/20px)` 根本不读它（另共享主题层 `NewTaskModal.vue` / `timeline-utilities.css` 各 1 处）。
+    → 模糊**改为主题材质的一部分**（`--material-blur`），所有磨砂面统一读它。
+  - ❌ 「**背景/渐变不享 P3 宽色域**」（§6.17 遗留缺口）。→ 背景也带 `-p3` 孪生令牌，随主题在 `@media (color-gamut: p3)` 下切换。
+- **核心模型：一个主题 = 一套表面材质（material）**。外观 UI 只选「一个主题」，不再有独立的背景/模糊全局开关。
+  主题（官方或预设）在 `theme.css` 里声明材质契约令牌；缺失时回落到全局默认材质。
+- **材质契约（surface material tokens）**：
+  ```css
+  --material-bg:        <color | gradient>;   /* 原 BG_PRESETS → 主题属性；默认回落 --color-base-100 */
+  --material-bg-p3:     <display-p3 gradient>;  /* 背景的宽色域孪生，关掉 §6.17 缺口 */
+  --material-blur:      <px>;                    /* 原 --encv-bg-blur → 主题决定；0 = 关闭磨砂 */
+  --material-saturate:  <number>;               /* 液态玻璃的饱和增强（叠加在 vivid 之上） */
+  --material-tint:      <rgba>;                 /* 磨砂填充色（半透明） */
+  --material-highlight: <color>;                /* 镜面高光描边（液态玻璃的灵魂边） */
+  ```
+- **液态玻璃（liquid glass）实现要点**（能力设备上的默认材质）：
+  磨砂面 = 半透明 `var(--material-tint)` 填充 + `backdrop-filter: blur(var(--material-blur)) saturate(var(--material-saturate))`
+  + 1px `inset` 高光描边（`box-shadow: inset 0 0 0 1px var(--material-highlight)`）。
+  其**前提是背景够鲜艳**（故背景与模糊必须同主题自洽）；低配 / `prefers-reduced-motion` 主题给 `--material-blur: 0` + 不透明回落。
+- **分期落地（按性价比）**：
+  1. **本设计文档**（先钉事实，再动码）——即本 §。✅ 完成。
+  2. `--encv-bg-blur` → `--material-blur`：
+     - ✅ **已新增 canonical 材质令牌**：`--material-blur` 现作为材质令牌存在（钳制 0..40px 的语义由主题/使用者约定），
+       `--encv-bg-blur` 保留为兼容别名（迁移期不破坏现有读者）。**2026-07-17 重要变更**：外观页的
+       「背景模糊」独立设置项（原 `setBgBlur` / `bgBlur` / 滑块 UI）已**整体移除**——模糊不再作为全局开关，
+       完全由主题材质 `--material-blur` 控制；`:root` 在 `variables.css` 里给出默认 `12px`，主题可在自身 `theme.css`
+       覆写。`useTheme` 不再导出 `setBgBlur` / `bgBlur`（契约锁见 `surfaceMaterial.test.ts`：断言二者已 `undefined`）。
+     - ✅ **已全量接入（2026-07-17）**：用 `codemogger_grep`（`format:json`、`dir` 限定 `src`）拿到的清单，
+       把 `encv-mobile/src` 内约 27 处裸 `backdrop-filter: blur(<px>)` 全部改为 `blur(var(--material-blur, <原px>))`
+       （含 `App.vue` 的液态玻璃 `saturate(1.8)` 站点 792 行、`.home-card` / `.player-card`；`HomePage.vue` /
+       `ServerStatusCard.vue` 说明注释不计入），并把原读 `--encv-bg-blur` 的读者（App.vue / HomePage / NewTaskModal）
+       统一到 `--material-blur`。共享主题层 `NewTaskModal.vue`、`timeline-utilities.css` 一并迁移。
+       新增**回归锁**「全仓无裸 `blur(<px>)` 字面量」：`walk()` 扫描两套 `src` 树（剥离 `/* */` 与 `//` 注释避免
+       ServerStatusCard.vue 注释误报），发现裸字面量即红。已做红验证（临时 `__blur_lock_scratch.vue` 的 `blur(5px)`
+       被准确抓出 → 红；删除后转绿）。→ 模糊现已真正全局一致、由主题控制。
+  3. ✅ **背景预设并入主题材质（2026-07-17）**：`applyBgColor` 现写 canonical `--material-bg`
+     （纯色直接写；渐变写 `linear-gradient`）。`--ion-background-color` 与 `document.body` 不再写死
+     字面量，统一改读中转变量 `--material-bg-active`（`vivid.css` 定义，默认回落
+     `--material-bg` → `--color-base-100`）。`BG_PRESETS` 仍作为预设列表存在（未删，避免动 UI 选择器），
+     但**写入路径已并入材质契约**——即「一个主题=一套表面材质」的写侧已落地。`bridge.css` 亮/暗块
+     的 `--ion-background-color` 默认也改为 `var(--material-bg-active, var(--color-base-100))`。
+  4. ✅ **补 `--material-bg-p3` 关掉 P3 背景缺口（2026-07-17）**：`applyBgColor` 对渐变预设用
+     `hexToP3Token` 把每个停色转 `color(display-p3 ...)` 写 `--material-bg-p3`；`vivid.css` 的
+     `@media (color-gamut: p3) { :root.encv-p3 }` 内把 `--material-bg-active` 换成
+     `var(--material-bg-p3, var(--material-bg, var(--color-base-100)))`。**关键设计**：P3 切换作用在
+     `--material-bg-active`（此变量只由 stylesheet 定义、从不被 `applyBgColor` 内联设置），故媒体查询
+     可覆盖它——规避 §6.17 中 `--color-primary` 被内联设置、媒体查询可能压不住的潜在失效。纯色预设不写
+     `-p3` 孪生（srgb 纯色已够艳，缺口本在渐变）。契约锁：`surfaceMaterial.test.ts` 的「背景并入材质令牌」
+     描述块（断言 `--material-bg` / `--material-bg-p3` / 绘制面读 `--material-bg-active`；先红后绿：
+     回退 `applyBgColor` 写字面量即 3 断言全红）。
+  5. 液态玻璃高光描边（`--material-highlight`）作为默认材质变体接入。
+- **对 codemogger 的要求（实践中完善）**：本次重构依赖「跨文件找 CSS 自定义属性 / `backdrop-filter` 字面量」，
+  `references`/`impact` 只认 JS symbol、抓不到 CSS var；必须以 `codemogger_grep` 兜底。已给 `codemogger_grep`/`codemogger_search`
+  补 `format: "json"` 输出（见 `codemogger-patch/mcp-server.mjs`），使迁移清单可机读、可脚本化替换。
+- **纪律（`.codebuddy/rules/文档同步.mdc`）**：本次补本文档 §6.18；门禁只验代码不验文档，文档正确性由本次提交保证。
+
+### 6.18.1 续51（2026-07-17）：主题「声明」调色板 + per-theme 主色/背景定制（不再固定全局预设）
+
+> 用户优化外观（4 项）：① 去掉背景模糊设置项（见 §6.18 第 2 点）；② 主题卡片加「自定义」按钮，
+> 背景色/主题色不再是固定的全局预设，改为**按主题声明的调色板**驱动；③ 所有主题据此各自实现可定制；
+> ④ 充分利用 gsap + daisyUI + scss，框架层（composable）与 UI 解耦。
+
+- **旧做法（已废除）**：外观页主色/背景色用**一套固定全局预设**（`THEME_PRESETS` / `BG_PRESETS` 的分类卡片），
+  用户改的色是「全局」的，切主题不会回落、也记不住「每个主题各自的偏好」。
+- **新模型：每个主题声明自己的调色板（palette）**，取色器据此驱动；用户可**按主题**改主色/背景并持久化覆盖。
+  - **声明位置（双写、互锁）**：
+    1. TS 单一来源：`useUserThemes.ts` 的 `USER_THEMES` / `BAZAAR` 每项带 `palette: ThemePalette`
+       （`{ primary?, bg?, presets?: { primary?: string[], bg?: string[] } }`，颜色均为 `#rrggbb`）。
+    2. 忠实镜像：`public/themes/<id>/theme.json` 的 `palette` 字段（由 `scripts/patch-theme-palettes.mjs`
+       批量写入 **public + dist + android 三处**，共 33 个 theme.json）。`themeLoader.ts` 的 `parsePalette`
+       负责校验并把声明带进 `ThemeManifest.palette`。
+  - **取色器驱动源**：`useUserThemes.getThemePalette(id)` → 返回该主题声明的 `ThemePalette`（内置注册表优先，
+    其次已安装主题）。`AppearanceDetail.vue` 用 `activeThemePalette`（`useTheme` 暴露的 computed）渲染
+    `activePrimaryPresets` / `activeBgPresets`，**不再引用固定全局 `THEME_PRESETS` / `BG_PRESETS`**。
+  - **per-theme 覆盖（持久化）**：`useTheme` 新增 `THEME_CUSTOM_KEY = "encv-theme-custom"`（结构
+    `Record<themeId, { primary?, bg? }>`，`bg: string | null`，`null` = 用主题默认）。API：
+    `setThemePrimary(color)` / `setThemeBg(color|null)` / `resetThemePrimary()` / `resetThemeBg()`。
+    切主题时 `useTheme` 内 `watch(activeThemeId, reapplyActiveTheme)` 重放该主题的覆盖（或回落主题声明默认），
+    `initTheme` 末也调用一次（并把旧全局 `COLOR_KEY` / `BG_COLOR_KEY` 迁移成「当前主题的覆盖」，保留用户历史选择）。
+  - **框架解耦**：颜色/背景的**写入**只在 composable 内（`applyColor` / `applyBgColor` 写 `--color-primary` /
+    `--material-bg` 等语义令牌），UI 组件只调 API；gsap 过渡只在 `applyColor` 内（见下），不污染组件。
+- **gsap 平滑过渡主色（视觉优化 ④）**：`applyColor` 在写入终态 hex 的同时，若 `getMotionProfile().enabled`
+  且 `motion.to` 可用，用 gsap 把代理对象 `{r,g,b}` 从 `prev` 补间到 `target`，`onUpdate` 逐帧把
+  `--color-primary` 覆写为 `rgb(...)`（终态 = 目标色）。reduced-motion / 无 gsap 时直接落终态 hex，
+  保证测试/无动效环境也能拿到正确终值。背景色**不**走 gsap（直接写 hex，终态即 hex）。
+- **UI（AppearanceDetail.vue）**：
+  - 每个主题卡片加「自定义」按钮（`.theme-customize`，`colorPaletteOutline` 图标）+ 已定制标记
+    （`.theme-customized-mark`，`sparklesOutline`，当该主题有覆盖时显示）。点按钮 = `applyTheme(id)` +
+     滚动到取色器（`#theme-customize` / `#theme-primary`）。
+  - 背景色 / 主题色两块改为**按当前主题声明的预设**渲染色板（纯色 swatch，不再分类卡片），并显示当前/覆盖态、
+    提供原生 `<input type=color>` 自定义 + 一键复位。两块头部 badge 显示当前主题名（取代原来的 Dark/Light）。
+- **防复发（契约锁）**：
+  - `themeCustomization.test.ts`：断言 `setThemePrimary`/`setThemeBg` 写入响应式真值 + 持久化覆盖；
+    切主题后 per-theme 覆盖**互相隔离并随主题重放**；`resetThemePrimary/Bg` 回落主题声明默认；
+    `getThemePalette` 对各主题返回声明预设。**契约锁**：遍历 `USER_THEMES`，断言每项 `palette`
+    与 `public/themes/<id>/theme.json` 的 `palette.primary` / `presets.primary` **逐字节一致**（TS 源 = 镜像源）。
+  - 真实浏览器门禁：`test-visual/appearance-customize.visual.ts`（Playwright 挂 `AppearanceDetail`）
+    断言「真实 DOM 有 `.theme-customize` 按钮」「改主色 → `--color-primary` 真实变为 `rgb(...)` 且 localStorage 记录覆盖」
+    「改背景 → `--material-bg` 真实变化」「切主题不串色（per-theme 隔离）」。
+- **纪律（`.codebuddy/rules/文档同步.mdc`）**：本次补本文档 §6.18.1；门禁只验代码不验文档，文档正确性由本次提交保证。
+
+### 6.19 续50：CSS 产物 → SCSS 源溯源（codemogger css-source）+ vivid P3 孪生 SCSS 化
+
+> 2026-07-17 用户要求：增强 codemogger，使其能「通过 CSS 产物溯源到 SCSS 源」；溯源能力到位后，
+> 放心用 SCSS 高级能力（@function / @mixin / @each / @use）重写主题，不再怕「生成的规则找不到出处」。
+
+- **codemogger `css-source`（CSS 产物溯源）**：新增 `codemogger css-source <file.css>` 子命令 + MCP
+  `codemogger_css_source`。读取 CSS 同目录的 `*.css.map`（Sass/Vite 产出），手工解码 base64-VLQ
+  source map（纯 Node，无新依赖），把「CSS 第 N 行」映射回「`.scss` partial 的 file:line:col + 片段」。
+  两种模式：① 无 `--line` → 按源汇总（每个 `.scss` 源贡献了多少生成行，含样例映射）；
+  ② `--line N` → 单行溯源。`--json` 机器可读。**关键点**：`@mixin`/`@function`/`@each` 生成的规则
+  在 scss 中不以字面量出现，但 Sass 仍把它们精确记入 source map，故溯源对此类规则完全有效——
+  这正是「放心用 SCSS 高级能力」的安全网。
+  - 实现：`codemogger-patch/css-source.mjs`（VLQ 解码器）+ `codemogger-shim` 的 `css-source` 分支
+    + `mcp-server.mjs` 的 `codemogger_css_source` 工具（含别名 `file`/`path`/`f`、`line`/`l`）。
+  - Vite 产物注意：Vite 8(rolldown) 的 `build.cssSourcemap` 在本环境**不实际产出** `.css.map`，
+    故另起专用编译步骤产出可溯源产物（见下），`vite.config.ts` 仍保留 `css.preprocessorOptions.scss.sourceMap`
+    + `build.cssSourcemap: true`（意图正确、环境修复后即生效）。
+- **vivid P3 孪生 SCSS 化（尽情用 SCSS 高级能力）**：
+  - `vivid.css` → `vivid.scss`：`theme-core.css` 与 `daisyui.css` 的 `@import` 改为 `../theme/vivid.scss`。
+  - 新增 `_vivid-p3.scss` partial（现代 `@use "sass:color"` + `@use "sass:math"`）：
+    - `@function p3($hex)`：用 `color.channel()` 取归一化 sRGB 通道 + `math.round` 匹配 JS `toFixed(4)`，
+      拼 `color(display-p3 ...)` 令牌（语义与 `useTheme.hexToP3Token` 完全一致，保证默认/自定义主题在 P3 屏视觉统一）。
+      ⚠️ 本 sass-embedded 构建未暴露 `color.display-p3()` 构造器，故用 `color.channel` + 手工拼装。
+    - `$encv-brand` map：encv 品牌色（primary/secondary/accent）的 sRGB 单一来源，键与 `palette.css` 一致。
+    - `@mixin emit-p3-twins`：`@each $role, $hex in $encv-brand` 生成 `--color-#{$role}-p3: #{p3($hex)};`。
+  - `palette.css` 里手写的两处 `--color-*-p3: color(display-p3 ...)` 字面量**已删除**（单一事实源迁到 SCSS，
+    消除与基色 hex 的漂移）；encv 默认 `primary` 现也编译出 `-p3` 孪生（此前仅有 JS 运行时补，P3 覆盖更完整）。
+  - 作用域：孪生生成在 `:root, [data-theme="encv"]`（与 palette.css 基色块对齐），仅 encv 默认主题生效；
+    自定义/远程主题色仍由 JS 写 `--color-primary-p3` 内联覆盖，secondary/accent 回落 srgb（与既有设计一致）。
+- **可溯源产物生成器**：`packages/shared-components/scripts/build-theme-scss.mjs`（npm `build:scss`）用
+  `sass-embedded` 编译 `surface.scss` / `vivid.scss` → `src/theme/.dist/*.css` + `.css.map`
+  （`.dist` 已 gitignore）。`codemogger css-source src/theme/.dist/vivid.css` 即可把
+  `--color-secondary-p3: color(display-p3 ...)` 精确溯源到 `_vivid-p3.scss:42:5` 的 `@each` 循环体。
+- **契约锁（`src/theme/__tests__/vividScss.test.ts`，3 用例，先红后绿）**：
+  ① 编译 `vivid.scss` 断言 primary/secondary/accent 的 `-p3` 孪生值（naive 归一化匹配 `hexToP3Token`）；
+  ② 断言 `palette.css` 不再含手写 `-p3` 字面量（防回潮）；
+  ③ 解码 source map 断言生成的 `--color-secondary-p3` 行**精确溯源到 `_vivid-p3.scss`**（与 css-source 同源校验）。
+- **验证**：`app_check_all` 全绿（9 PASS）；`codemogger css-source` 对 `surface.scss`/`vivid.scss` 产物均验证回源。

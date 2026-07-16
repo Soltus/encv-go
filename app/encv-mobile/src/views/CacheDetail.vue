@@ -270,8 +270,8 @@ onUnmounted(() => {
   padding: 16px;
   border-radius: 14px;
   background: rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.65);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(var(--material-blur, 10px));
+  -webkit-backdrop-filter: blur(var(--material-blur, 10px));
   border-left: 3px solid var(--color-primary);
 }
 body.dark .section-card {

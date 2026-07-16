@@ -89,8 +89,8 @@ function onPick(branch: { id: string; label: string; icon?: string; description?
   border-radius: 12px;
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-primary) 25%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(var(--material-blur, 12px));
+  -webkit-backdrop-filter: blur(var(--material-blur, 12px));
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   /* 防止被 IonFooter 截断时溢出的 chip 抢占横向滚动条 */
   overflow: hidden;

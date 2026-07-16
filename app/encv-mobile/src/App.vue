@@ -758,15 +758,14 @@ ion-content,
 ion-header,
 ion-toolbar,
 .encv-blur-surface {
-  --backdrop-filter: blur(var(--encv-bg-blur, 0px));
-  backdrop-filter: blur(var(--encv-bg-blur, 0px));
-  -webkit-backdrop-filter: blur(var(--encv-bg-blur, 0px));
+  --backdrop-filter: blur(var(--material-blur, 0px));
+  backdrop-filter: blur(var(--material-blur, 0px));
+  -webkit-backdrop-filter: blur(var(--material-blur, 0px));
 }
 
-/* 瑰彩显示：CSS 滤镜增强对比度与饱和度（网页端也生效） */
-ion-page {
-  filter: var(--encv-vivid-filter, none);
-}
+/* 瑰彩显示（vivid / P3）的滤镜与真·宽色域实现已统一迁到
+   共享主题层 theme/vivid.css（经 useTheme 的 .encv-vivid / .encv-p3 根类驱动），
+   此处不再重复，避免与主题系统漂移。 */
 
 ion-content {
   --background: var(--ion-background-color);
@@ -790,8 +789,8 @@ ion-tab-bar {
   --color-selected: var(--color-primary);
   --border: none;
   background: rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.78);
-  backdrop-filter: blur(20px) saturate(1.8);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  backdrop-filter: blur(var(--material-blur, 20px)) saturate(1.8);
+  -webkit-backdrop-filter: blur(var(--material-blur, 20px)) saturate(1.8);
   border-top: 1px solid rgba(var(--ion-text-color-rgb), 0.08);
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.04);
   position: relative;
@@ -866,8 +865,8 @@ ion-list {
 ion-item {
   --background: rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.55);
   background: rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.55);
-  backdrop-filter: blur(var(--encv-bg-blur, 8px));
-  -webkit-backdrop-filter: blur(var(--encv-bg-blur, 8px));
+  backdrop-filter: blur(var(--material-blur, 8px));
+  -webkit-backdrop-filter: blur(var(--material-blur, 8px));
   --border-color: rgba(var(--ion-text-color-rgb), 0.06);
   --inner-border-width: 0;
 }
@@ -889,8 +888,8 @@ body.dark ion-list-header {
 
 .home-card {
   background: rgba(var(--ion-background-color-rgb, 255, 255, 255), 0.6) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(var(--material-blur, 12px));
+  -webkit-backdrop-filter: blur(var(--material-blur, 12px));
 }
 
 body.dark .home-card {
@@ -914,54 +913,12 @@ ion-input .input-clear-icon:hover {
 
 .player-card {
   background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, transparent), color-mix(in srgb, var(--color-primary) 4%, transparent)) !important;
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(var(--material-blur, 12px));
 }
 
-/* P3 瑰彩显示：增强颜色饱和度与对比度 */
-@media (color-gamut: p3) {
-  :root {
-    color-scheme: light dark;
-  }
-  ion-card,
-  .preset-card,
-  .config-field,
-  .task-card,
-  .theme-color-picker {
-    --encv-color-gamut: p3;
-  }
-  .p3-enhanced ion-icon {
-    color: color(display-p3 1 0 0);
-  }
-  .p3-enhanced .preset-card-active {
-    background: color-mix(in srgb, var(--color-primary) 8%, transparent);
-  }
-}
-
-/* 强制 P3 模式：当用户手动开启时，通过 CSS 变量应用 display-p3 色域 */
-:root {
-  --encv-color-gamut: srgb;
-}
-
-/* 当 --encv-color-gamut 为 display-p3 时，强制使用 P3 色彩空间渲染关键元素 */
-@supports (color: color(display-p3 1 0 0)) {
-  :root:has([style*="--encv-color-gamut: display-p3"]) ion-page,
-  :root[style*="--encv-color-gamut: display-p3"] ion-page {
-    color-gamut: display-p3;
-  }
-
-  :root:has([style*="--encv-color-gamut: display-p3"]) *,
-  :root[style*="--encv-color-gamut: display-p3"] * {
-    color-gamut: display-p3;
-  }
-}
-
-/* 降级方案：不支持 :has() 时，用 class 方式触发 */
-.encv-force-p3 {
-  color-gamut: display-p3 !important;
-}
-.encv-force-p3 * {
-  color-gamut: display-p3 !important;
-}
+/* P3 宽色域的真实实现已迁到共享主题层 theme/vivid.css：
+   @media (color-gamut: p3) + .encv-p3 根类把品牌色换成 color(display-p3 ...)。
+   此前在此处写的 `color-gamut` 属性方案无效（该属性不可由作者设置），已删除。 */
 
 /* ============================================
    ENCV Toast 系统 — 顶部展示 + 堆叠 + Ionic 官方动画

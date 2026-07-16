@@ -7,6 +7,7 @@ import {
   getThemePerf,
   type ThemeSource,
   type ThemePerfReport,
+  type ThemePalette,
 } from "@encv/shared-components/theme/themeLoader";
 import { getThemeStorage } from "@encv/shared-components/theme/themeStorage";
 import { DEFAULT_THEME, type ThemeManifest } from "@encv/shared-components/theme/themeLoader";
@@ -43,6 +44,8 @@ export interface UserThemeMeta {
   /** 是否已下载到本地 store（续43：本地优先，云拉取也落地本地同一目录）。
    *  true ⇒ 激活时从本地 store 解析 css/js（离线可用），而非热链远程 URL。 */
   local?: boolean;
+  /** 主题调色板声明（2026-07-17）：默认主色 / 背景色 + 风格化取色预设，供外观页取色器驱动。 */
+  palette?: ThemePalette;
 }
 
 /** 集市（Bazaar）目录条目：用户可一键安装到用户空间的主题。 */
@@ -52,6 +55,8 @@ export interface BazaarEntry {
   descKey?: string;
   /** 资源地址：省略则按本地资源包 /themes/<id>/theme.css 解析；给出则为远程 URL。 */
   url?: string;
+  /** 主题调色板声明（集市主题同样声明，保证安装后即可定制）。 */
+  palette?: ThemePalette;
 }
 
 /** 主题资产包基址（public/themes → 运行时 /themes/<id>/theme.css）。 */
@@ -80,31 +85,164 @@ function toSource(meta: UserThemeMeta): ThemeSource {
  *   2) 此处登记 { id, nameKey, builtIn: true }
  *   3) i18n settings.ts 加 settings.theme<Id> 名
  *   ❌ 不再 @import 进 theme-core.css（那会让主题被编译期烤进产物，丧失「可加载/卸载/分发」）。 */
+/** 各主题的默认调色板（2026-07-17）：与各自 theme.css 的 --color-primary / base-100 对齐，
+ *  并给出一组「风格化」取色预设供外观页取色器驱动（不再用固定全局预设）。
+ *  此 TS 声明是取色器的【同步来源】；同源 palette 也写入各 theme.json 做忠实镜像（契约锁见测试）。 */
 export const USER_THEMES: UserThemeMeta[] = [
-  { id: "encv", nameKey: "settings.themeBuiltIn", builtIn: true },
-  { id: "encv-dark", nameKey: "settings.themeBuiltInDark", builtIn: true },
-  { id: "rose", nameKey: "settings.themeRose", builtIn: true },
-  { id: "ocean", nameKey: "settings.themeOcean", builtIn: true },
-  { id: "forest", nameKey: "settings.themeForest", builtIn: true },
-  { id: "midnight", nameKey: "settings.themeMidnight", builtIn: true },
+  {
+    id: "encv",
+    nameKey: "settings.themeBuiltIn",
+    builtIn: true,
+    palette: {
+      primary: "#8b5cf6",
+      bg: "#ffffff",
+      presets: {
+        primary: ["#8b5cf6", "#06b6d4", "#ec4899", "#6366f1", "#0ea5e9", "#a855f7"],
+        bg: ["#ffffff", "#f3f4f6", "#faf5ff", "#eef2ff", "#f5f3ff"],
+      },
+    },
+  },
+  {
+    id: "encv-dark",
+    nameKey: "settings.themeBuiltInDark",
+    builtIn: true,
+    palette: {
+      primary: "#9c6df7",
+      bg: "#0f172a",
+      presets: {
+        primary: ["#9c6df7", "#1fbdd8", "#ee5aa3", "#818cf8", "#38bdf8", "#c084fc"],
+        bg: ["#0f172a", "#1e293b", "#0b1120", "#171923", "#121218"],
+      },
+    },
+  },
+  {
+    id: "rose",
+    nameKey: "settings.themeRose",
+    builtIn: true,
+    palette: {
+      primary: "#e11d48",
+      bg: "#fffafb",
+      presets: {
+        primary: ["#e11d48", "#0ea5e9", "#db2777", "#f43f5e", "#be123c", "#fb7185"],
+        bg: ["#fffafb", "#ffeef2", "#fff1f2", "#fce7ef", "#fff0f5"],
+      },
+    },
+  },
+  {
+    id: "ocean",
+    nameKey: "settings.themeOcean",
+    builtIn: true,
+    palette: {
+      primary: "#22d3ee",
+      bg: "#0b1120",
+      presets: {
+        primary: ["#22d3ee", "#2dd4bf", "#818cf8", "#38bdf8", "#0ea5e9", "#34d399"],
+        bg: ["#0b1120", "#111c33", "#0a0e14", "#0f172a", "#101a2e"],
+      },
+    },
+  },
+  {
+    id: "forest",
+    nameKey: "settings.themeForest",
+    builtIn: true,
+    palette: {
+      primary: "#16a34a",
+      bg: "#f3faf5",
+      presets: {
+        primary: ["#16a34a", "#0d9488", "#65a30d", "#22c55e", "#10b981", "#84cc16"],
+        bg: ["#f3faf5", "#dcfce7", "#ecfdf5", "#f0fdf4", "#effaf1"],
+      },
+    },
+  },
+  {
+    id: "midnight",
+    nameKey: "settings.themeMidnight",
+    builtIn: true,
+    palette: {
+      primary: "#818cf8",
+      bg: "#0a0a14",
+      presets: {
+        primary: ["#818cf8", "#a78bfa", "#c084fc", "#6366f1", "#8b5cf6", "#a855f7"],
+        bg: ["#0a0a14", "#13131f", "#0a0e14", "#121218", "#1a1a2e"],
+      },
+    },
+  },
   // 示例第三方主题：与官方【同形态、同加载机制】，仅 builtIn:false（可卸载、LRU 回收）。
-  { id: "sunset", nameKey: "settings.userThemeSunset" },
-  { id: "mint", nameKey: "settings.userThemeMint" },
+  {
+    id: "sunset",
+    nameKey: "settings.userThemeSunset",
+    palette: {
+      primary: "#f97316",
+      bg: "#fffaf5",
+      presets: {
+        primary: ["#f97316", "#fb923c", "#f43f5e", "#f59e0b", "#ea580c", "#fb7185"],
+        bg: ["#fffaf5", "#fdeede", "#fff7ed", "#ffedd5", "#fff1e6"],
+      },
+    },
+  },
+  {
+    id: "mint",
+    nameKey: "settings.userThemeMint",
+    palette: {
+      primary: "#10b981",
+      bg: "#f3faf7",
+      presets: {
+        primary: ["#10b981", "#06b6d4", "#14b8a6", "#22c55e", "#0ea5e9", "#2dd4bf"],
+        bg: ["#f3faf7", "#d9f2ea", "#ecfdf5", "#effaf7", "#e6f7f1"],
+      },
+    },
+  },
   // 全能力示例（真主题证明）：自带 assets/ 图片 + @font-face 字体 + theme.js 装饰钩子。
   // 这就是「Hello Kitty 主题怎么实现」的可运行答案——不只是换色。
-  { id: "kitty", nameKey: "settings.userThemeKitty", js: true },
+  {
+    id: "kitty",
+    nameKey: "settings.userThemeKitty",
+    js: true,
+    palette: {
+      primary: "#ff5fa2",
+      bg: "#fff5fa",
+      presets: {
+        primary: ["#ff5fa2", "#ffb3d1", "#ff8fab", "#fb7185", "#f472b6", "#f9a8d4"],
+        bg: ["#fff5fa", "#ffe6f0", "#fff0f6", "#ffeef5", "#fff1f7"],
+      },
+    },
+  },
 ];
 
 /** 集市（Bazaar）示例目录：用户可一键安装到用户空间的本地资源包（安装前不出现在主网格）。 */
 export const BAZAAR: BazaarEntry[] = [
-  { id: "neon", nameKey: "settings.bazaarNeon", descKey: "settings.bazaarNeonDesc" },
-  { id: "paper", nameKey: "settings.bazaarPaper", descKey: "settings.bazaarPaperDesc" },
+  {
+    id: "neon",
+    nameKey: "settings.bazaarNeon",
+    descKey: "settings.bazaarNeonDesc",
+    palette: {
+      primary: "#39ff14",
+      bg: "#0a0e14",
+      presets: {
+        primary: ["#39ff14", "#00e5ff", "#ff2bd6", "#38bdf8", "#a3e635", "#22d3ee"],
+        bg: ["#0a0e14", "#121823", "#0b1120", "#0d1117", "#0a0e14"],
+      },
+    },
+  },
+  {
+    id: "paper",
+    nameKey: "settings.bazaarPaper",
+    descKey: "settings.bazaarPaperDesc",
+    palette: {
+      primary: "#a0785a",
+      bg: "#f7f1e6",
+      presets: {
+        primary: ["#a0785a", "#7d9b76", "#c08552", "#b08968", "#8a7a66", "#9c7a52"],
+        bg: ["#f7f1e6", "#efe6d6", "#faf6ee", "#f3ebdc", "#f9f3ea"],
+      },
+    },
+  },
 ];
 
 const SOURCES = new Map<string, ThemeSource>(USER_THEMES.map(m => [m.id, toSource(m)] as const));
 const DEFAULT_SOURCE = SOURCES.get(DEFAULT_THEME)!;
 
-const activeThemeId = ref<string>(DEFAULT_THEME);
+export const activeThemeId = ref<string>(DEFAULT_THEME);
 const installedThemes = ref<UserThemeMeta[]>([]);
 const themePerf = ref<ThemePerfReport>(getThemePerf());
 
@@ -116,6 +254,14 @@ function registerSource(meta: UserThemeMeta): ThemeSource {
   const src = toSource(meta);
   SOURCES.set(meta.id, src);
   return src;
+}
+
+/** 取某主题的调色板声明（2026-07-17）：内置注册表优先，其次已安装主题。取色器据此驱动。 */
+export function getThemePalette(id: string): ThemePalette | undefined {
+  const reg = USER_THEMES.find(t => t.id === id);
+  if (reg?.palette) return reg.palette;
+  const inst = installedThemes.value.find(t => t.id === id);
+  return inst?.palette;
 }
 
 function loadInstalled(): UserThemeMeta[] {
@@ -150,7 +296,7 @@ export function installTheme(meta: UserThemeMeta): ThemeSource {
 
 /** 从集市一键安装。 */
 export function installFromBazaar(entry: BazaarEntry): ThemeSource {
-  return installTheme({ id: entry.id, nameKey: entry.nameKey, url: entry.url, builtIn: false });
+  return installTheme({ id: entry.id, nameKey: entry.nameKey, url: entry.url, builtIn: false, palette: entry.palette });
 }
 
 /**
@@ -170,6 +316,7 @@ export async function installThemeFromUrl(folderOrJsonUrl: string): Promise<Them
     builtIn: false,
     local: true, // 激活时从同源 /themes/<id>/ 解析，而非热链远程 CDN
     js: Boolean(manifest.js),
+    palette: manifest.palette,
   });
 }
 

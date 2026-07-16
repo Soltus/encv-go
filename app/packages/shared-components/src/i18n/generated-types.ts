@@ -954,8 +954,6 @@ export type I18nKey =
   | "settings.audioPlayer"
   | "settings.basicInfo"
   | "settings.batteryOptimization"
-  | "settings.bgBlur"
-  | "settings.bgBlurHelp"
   | "settings.bgColor"
   | "settings.bgColorHelp"
   | "settings.bgDark"

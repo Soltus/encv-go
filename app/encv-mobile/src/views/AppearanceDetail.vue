@@ -45,6 +45,15 @@
         <div class="theme-meta">
           <span class="theme-name">{{ themeLabel(theme) }}</span>
           <ion-icon v-if="isActive(theme.id)" :icon="checkmarkOutline" class="theme-check"></ion-icon>
+          <ion-icon v-if="isCustomized(theme.id)" :icon="sparklesOutline" class="theme-customized-mark" :aria-label="t('settings.customized')"></ion-icon>
+          <button
+            type="button"
+            class="theme-customize"
+            :aria-label="t('settings.customizeTheme')"
+            @click.stop="customizeTheme(theme.id)"
+          >
+            <ion-icon :icon="colorPaletteOutline" />
+          </button>
           <button
             v-if="!isBuiltIn(theme.id)"
             type="button"
@@ -119,13 +128,11 @@
       </ion-item>
     </ion-list>
 
-      <!-- 背景色（驱动暗黑/亮色模式） -->
-      <ion-list>
+      <!-- 背景色（按主题声明的调色板驱动，可 per-theme 定制） -->
+      <ion-list id="theme-customize">
         <ion-list-header>
           <ion-label>{{ t('settings.bgColor') }}</ion-label>
-          <ion-badge slot="end" :color="isDark ? 'dark' : 'light'" class="scope-badge">
-            {{ isDark ? 'Dark' : 'Light' }}
-          </ion-badge>
+          <ion-badge slot="end" color="primary" class="scope-badge">{{ activeThemeName }}</ion-badge>
         </ion-list-header>
         <ion-item lines="full">
           <ion-icon :icon="layersOutline" slot="start"></ion-icon>
@@ -136,24 +143,16 @@
         </ion-item>
 
         <div class="bg-section">
-          <div class="bg-category" v-for="cat in bgCategories" :key="cat.key">
-            <div class="bg-category-title">{{ t(cat.label) }}</div>
-            <div class="bg-preset-grid">
-              <button
-                v-for="(preset, idx) in cat.presets"
-                :key="`${cat.key}-${idx}`"
-                class="bg-preset-card"
-                :class="{
-                  'bg-preset-active': cat.key === 'gradient' ? currentGradient === preset.name : currentBgColor === preset.value,
-                  'bg-gradient-card': preset.category === 'gradient',
-                }"
-                :style="getPresetStyle(preset)"
-                :title="t(preset.name)"
-                @click="cat.key === 'gradient' ? handleGradientSelect(preset) : handleBgColorChange(preset.value!)"
-              >
-                <span class="bg-preset-name">{{ t(preset.name) }}</span>
-              </button>
-            </div>
+          <div class="bg-preset-grid">
+            <button
+              v-for="c in activeBgPresets"
+              :key="c"
+              class="bg-preset-card"
+              :class="{ 'bg-preset-active': isBgActive(c) }"
+              :style="{ backgroundColor: c }"
+              :title="c"
+              @click="handleBgSelect(c)"
+            ></button>
           </div>
 
           <div class="custom-bg-row">
@@ -161,21 +160,22 @@
             <input
               type="color"
               class="color-input"
-              :value="currentBgColor || '#ffffff'"
-              @input="setBgColor(($event.target as HTMLInputElement).value)"
+              :value="currentThemeBg || '#ffffff'"
+              @input="handleBgCustom($event)"
             />
-            <span class="color-hex">{{ (currentBgColor || '--').toUpperCase() }}</span>
-            <ion-button v-if="currentBgColor" fill="clear" size="small" @click="setBgColor(null)">
+            <span class="color-hex">{{ (currentThemeBg || '--').toUpperCase() }}</span>
+            <ion-button v-if="themeBgOverride !== undefined" fill="clear" size="small" @click="resetThemeBg()">
               <ion-icon :icon="closeCircleOutline" slot="icon-only"></ion-icon>
             </ion-button>
           </div>
         </div>
       </ion-list>
 
-      <!-- 主题色 -->
-      <ion-list>
+      <!-- 主题色（按主题声明的调色板驱动，可 per-theme 定制） -->
+      <ion-list id="theme-primary">
         <ion-list-header>
           <ion-label>{{ t('settings.themeColor') }}</ion-label>
+          <ion-badge slot="end" color="primary" class="scope-badge">{{ activeThemeName }}</ion-badge>
         </ion-list-header>
         <ion-item lines="full">
           <ion-icon :icon="colorPaletteOutline" slot="start"></ion-icon>
@@ -187,13 +187,13 @@
         <div class="theme-color-picker">
           <div class="preset-colors">
             <button
-              v-for="preset in THEME_PRESETS"
-              :key="preset.value"
+              v-for="c in activePrimaryPresets"
+              :key="c"
               class="color-dot"
-              :class="{ active: currentColor === preset.value }"
-              :style="{ backgroundColor: preset.value }"
-              :title="preset.name"
-              @click="setThemeColor(preset.value)"
+              :class="{ active: isPrimaryActive(c) }"
+              :style="{ backgroundColor: c }"
+              :title="c"
+              @click="handlePrimarySelect(c)"
             ></button>
           </div>
           <div class="custom-color-row">
@@ -201,39 +201,14 @@
             <input
               type="color"
               class="color-input"
-              :value="currentColor"
-              @input="setThemeColor(($event.target as HTMLInputElement).value)"
+              :value="currentThemePrimary"
+              @input="handlePrimaryCustom($event)"
             />
-            <span class="color-hex">{{ currentColor.toUpperCase() }}</span>
+            <span class="color-hex">{{ currentThemePrimary.toUpperCase() }}</span>
+            <ion-button v-if="themePrimaryOverride !== undefined" fill="clear" size="small" @click="resetThemePrimary()">
+              <ion-icon :icon="closeCircleOutline" slot="icon-only"></ion-icon>
+            </ion-button>
           </div>
-        </div>
-      </ion-list>
-
-      <!-- 背景模糊 -->
-      <ion-list>
-        <ion-list-header>
-          <ion-label>{{ t('settings.bgBlur') }}</ion-label>
-        </ion-list-header>
-        <ion-item>
-          <ion-icon :icon="eyeOutline" slot="start"></ion-icon>
-          <ion-label>
-            <h3>{{ t('settings.bgBlur') }}</h3>
-            <p>{{ t('settings.bgBlurHelp') }}</p>
-          </ion-label>
-          <ion-badge slot="end" color="primary" class="blur-value-badge">{{ bgBlur }}px</ion-badge>
-        </ion-item>
-        <div class="blur-slider-row">
-          <span class="blur-label-off">0</span>
-          <input
-            type="range"
-            class="blur-slider"
-            min="0"
-            max="40"
-            step="1"
-            :value="bgBlur"
-            @input="handleBgBlurChange($event)"
-          />
-          <span class="blur-label-max">40</span>
         </div>
       </ion-list>
 
@@ -259,15 +234,15 @@
           <ion-toggle slot="end" :checked="vividMode === 'on'" @ionChange="handleVividToggle"></ion-toggle>
         </ion-item>
 
-        <!-- 滤镜强度 -->
+        <!-- 色彩浓度（saturate） -->
         <div v-if="vividMode === 'on'" class="vivid-controls">
           <ion-item>
-            <ion-icon :icon="trendingUpOutline" slot="start"></ion-icon>
+            <ion-icon :icon="colorPaletteOutline" slot="start"></ion-icon>
             <ion-label>
-              <h3>{{ t('settings.vividIntensity') }}</h3>
-              <p>{{ t('settings.vividIntensityHelp') }}</p>
+              <h3>{{ t('settings.vividSaturation') }}</h3>
+              <p>{{ t('settings.vividSaturationHelp') }}</p>
             </ion-label>
-            <ion-badge slot="end" color="primary" class="blur-value-badge">{{ vividIntensity }}%</ion-badge>
+            <ion-badge slot="end" color="primary" class="blur-value-badge">{{ vividSaturation }}%</ion-badge>
           </ion-item>
           <div class="blur-slider-row">
             <span class="blur-label-off">50</span>
@@ -277,24 +252,33 @@
               min="50"
               max="200"
               step="5"
-              :value="vividIntensity"
-              @input="handleVividIntensityChange($event)"
+              :value="vividSaturation"
+              @input="handleVividSaturationChange($event)"
             />
             <span class="blur-label-max">200</span>
           </div>
-        </div>
 
-        <!-- P3 色域 -->
-        <div class="p3-cards">
-          <div
-            v-for="mode in p3Modes"
-            :key="mode.value"
-            class="p3-card"
-            :class="{ 'p3-card-active': p3Mode === mode.value }"
-            @click="handleP3ModeChange(mode.value)"
-          >
-            <div class="p3-card-title">{{ t(mode.label) }}</div>
-            <div v-if="mode.description" class="p3-card-desc">{{ t(mode.description) }}</div>
+          <!-- 对比度（contrast） -->
+          <ion-item>
+            <ion-icon :icon="contrastOutline" slot="start"></ion-icon>
+            <ion-label>
+              <h3>{{ t('settings.vividContrast') }}</h3>
+              <p>{{ t('settings.vividContrastHelp') }}</p>
+            </ion-label>
+            <ion-badge slot="end" color="primary" class="blur-value-badge">{{ vividContrast }}%</ion-badge>
+          </ion-item>
+          <div class="blur-slider-row">
+            <span class="blur-label-off">50</span>
+            <input
+              type="range"
+              class="blur-slider"
+              min="50"
+              max="200"
+              step="5"
+              :value="vividContrast"
+              @input="handleVividContrastChange($event)"
+            />
+            <span class="blur-label-max">200</span>
           </div>
         </div>
       </ion-list>
@@ -361,13 +345,12 @@ import {
   closeCircleOutline,
   codeOutline,
   colorPaletteOutline,
-  eyeOutline,
+  contrastOutline,
   flashOffOutline,
   globeOutline,
   layersOutline,
   sparklesOutline,
   trashOutline,
-  trendingUpOutline,
 } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import type { Locale } from "@encv/shared-components/composables/useI18n";
@@ -381,25 +364,25 @@ const {
   isDark,
   currentColor,
   currentBgColor,
-  bgBlur,
-  p3Mode,
   vividMode,
-  vividIntensity,
+  vividSaturation,
+  vividContrast,
   isP3Supported,
-  THEME_PRESETS,
-  BG_PRESETS,
-  setThemeColor,
-  setBgColor,
-  setBgBlur,
-  setP3Mode,
+  activeThemePalette,
+  themeCustom,
+  setThemePrimary,
+  setThemeBg,
+  resetThemePrimary,
+  resetThemeBg,
   setVividMode,
-  setVividIntensity,
-  setBgGradient,
+  setVividSaturation,
+  setVividContrast,
 } = useTheme();
 const { t, locale, setLocale } = useI18n();
 const { isForcedOff, setForcedOff } = useMotionPreference();
 const {
   allThemes,
+  activeTheme,
   applyTheme,
   isActive,
   isBuiltIn,
@@ -448,83 +431,75 @@ onMounted(() => {
   for (const theme of allThemes.value) ensureThemeLoaded(theme.id);
 });
 
-const currentGradient = ref<string | null>(null);
+const activeThemeName = computed(() => {
+  const meta = allThemes.value.find(t => t.id === activeTheme.value);
+  return meta ? themeLabel(meta) : "";
+});
 
-const bgCategories = computed(() => [
-  {
-    key: "light",
-    label: "settings.bgLight",
-    presets: BG_PRESETS.filter(p => p.category === "light"),
-  },
-  {
-    key: "eye",
-    label: "settings.bgEyeCare",
-    presets: BG_PRESETS.filter(p => p.category === "eye"),
-  },
-  {
-    key: "dark",
-    label: "settings.bgDark",
-    presets: BG_PRESETS.filter(p => p.category === "dark"),
-  },
-  {
-    key: "gradient",
-    label: "settings.bgGradient",
-    presets: BG_PRESETS.filter(p => p.category === "gradient"),
-  },
-]);
+// 主题声明的取色预设（驱动取色器，不再用固定全局预设）
+const activePrimaryPresets = computed<string[]>(
+  () => activeThemePalette.value.presets?.primary ?? (activeThemePalette.value.primary ? [activeThemePalette.value.primary] : [])
+);
+const activeBgPresets = computed<string[]>(() => activeThemePalette.value.presets?.bg ?? []);
 
-const p3Modes = [
-  { value: "auto", label: "settings.p3Auto", description: "" },
-  { value: "on", label: "settings.p3On", description: "" },
-  { value: "off", label: "settings.p3Off", description: "" },
-];
+// 当前激活主题的 per-theme 覆盖（undefined = 未定制，跟随主题默认）
+const themePrimaryOverride = computed(() => themeCustom.value[activeTheme.value]?.primary);
+const themeBgOverride = computed(() => themeCustom.value[activeTheme.value]?.bg);
+
+// 取色器显示值：覆盖优先，否则主题声明默认
+const currentThemePrimary = computed(() => themePrimaryOverride.value ?? activeThemePalette.value.primary ?? currentColor.value);
+const currentThemeBg = computed(() =>
+  themeBgOverride.value !== undefined ? themeBgOverride.value : (activeThemePalette.value.bg ?? currentBgColor.value)
+);
+
+function isPrimaryActive(c: string): boolean {
+  return themePrimaryOverride.value ? themePrimaryOverride.value === c : c === activeThemePalette.value.primary;
+}
+function isBgActive(c: string): boolean {
+  return themeBgOverride.value ? themeBgOverride.value === c : c === activeThemePalette.value.bg;
+}
+function isCustomized(id: string): boolean {
+  const ov = themeCustom.value[id];
+  return Boolean(ov && (ov.primary || ov.bg !== undefined));
+}
+
+// 点击主题卡片「自定义」：激活该主题并滚动到取色器（外观页取色器即该主题的定制入口）
+function customizeTheme(id: string) {
+  applyTheme(id);
+  requestAnimationFrame(() => {
+    document.getElementById("theme-customize")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+function handlePrimarySelect(c: string) {
+  setThemePrimary(c);
+}
+function handlePrimaryCustom(event: Event) {
+  setThemePrimary((event.target as HTMLInputElement).value);
+}
+function handleBgSelect(c: string) {
+  setThemeBg(c);
+}
+function handleBgCustom(event: Event) {
+  setThemeBg((event.target as HTMLInputElement).value);
+}
 
 function handleLocaleChange(event: CustomEvent) {
   setLocale(event.detail.value as Locale);
-}
-
-function handleBgColorChange(value: string) {
-  setBgColor(value);
-  currentGradient.value = null;
-}
-
-function handleGradientSelect(preset: (typeof BG_PRESETS)[number]) {
-  if (preset.gradientColors) {
-    setBgGradient(preset.gradientColors);
-    currentGradient.value = preset.name;
-  }
-}
-
-function getPresetStyle(preset: (typeof BG_PRESETS)[number]) {
-  if (preset.gradientColors) {
-    return {
-      background: `linear-gradient(135deg, ${preset.gradientColors.join(", ")})`,
-      color: preset.textColor,
-      "--gradient-colors": preset.gradientColors.join(", "),
-    } as Record<string, string>;
-  }
-  return {
-    backgroundColor: preset.value ?? "#ffffff",
-    color: preset.textColor,
-  };
-}
-
-function handleBgBlurChange(event: Event) {
-  const target = event.target as HTMLInputElement;
-  setBgBlur(parseInt(target.value, 10));
-}
-
-function handleP3ModeChange(value: string) {
-  setP3Mode(value as "off" | "on" | "auto");
 }
 
 function handleVividToggle(event: CustomEvent) {
   setVividMode(event.detail.checked ? "on" : "off");
 }
 
-function handleVividIntensityChange(event: Event) {
+function handleVividSaturationChange(event: Event) {
   const target = event.target as HTMLInputElement;
-  setVividIntensity(parseInt(target.value, 10));
+  setVividSaturation(parseInt(target.value, 10));
+}
+
+function handleVividContrastChange(event: Event) {
+  const target = event.target as HTMLInputElement;
+  setVividContrast(parseInt(target.value, 10));
 }
 
 function handleMotionToggle(event: CustomEvent) {
@@ -950,6 +925,42 @@ body.dark .p3-card {
 .theme-perf span {
   color: var(--ion-text-secondary);
 }
+/* ── 主题卡片「自定义」按钮 + 已定制标记（2026-07-17 优化）── */
+.theme-customize {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: 18px;
+  flex-shrink: 0;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.theme-customize:hover {
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  transform: scale(1.08);
+}
+.theme-customized-mark {
+  color: var(--color-primary);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+/* 背景色取色器改为纯色板（按主题声明，不再用分类卡片） */
+.bg-preset-grid {
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+}
+.bg-preset-card {
+  padding: 0;
+  min-height: 40px;
+  height: 40px;
+  border-radius: 10px;
+}
 @media (max-width: 599px) {
   .theme-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -958,6 +969,14 @@ body.dark .p3-card {
   .theme-preview {
     padding: 12px;
     min-height: 88px;
+  }
+  .bg-preset-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+  .bg-preset-card {
+    height: 36px;
+    min-height: 36px;
   }
 }
 </style>

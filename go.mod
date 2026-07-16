@@ -7,6 +7,7 @@ require golang.org/x/crypto v0.48.0
 require (
 	github.com/SaveTheRbtz/zstd-seekable-format-go/pkg v0.10.0
 	github.com/abema/go-mp4 v1.4.1
+	github.com/antlr4-go/antlr/v4 v4.13.0
 	github.com/dsoprea/go-exif/v3 v3.0.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fsnotify/fsnotify v1.9.0
@@ -17,6 +18,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/klauspost/compress v1.18.6
+	github.com/libsql/sqlite-antlr4-parser v0.0.0-20240327125255-dbf53b6cbf06
 	github.com/objectbox/objectbox-go v1.9.0
 	github.com/pterm/pterm v0.12.83
 	github.com/spf13/cobra v1.10.2

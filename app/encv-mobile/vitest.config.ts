@@ -96,6 +96,8 @@ const FAST_INCLUDE = [
   'src/views/__tests__/useFilesView.searchTokens.test.ts',
   // theme: SCSS 编译期契约快照（纯 sass 编译，无模块级状态）
   'src/theme/__tests__/surface.test.ts',
+  // theme: vivid.scss P3 孪生由 @function/@each 派生 + sourcemap 溯源（css-source 同源校验）
+  'src/theme/__tests__/vividScss.test.ts',
   // theme: 运行时资源包 + themeLoader 指标/优化（happy-dom，resetThemeLoaderForTest 防污染）
   'src/theme/__tests__/official-themes.test.ts',
   // motion: 动效 ACL 闸门契约（guard 行为 + 设计令牌导出），happy-dom
@@ -104,6 +106,12 @@ const FAST_INCLUDE = [
   'src/motion/__tests__/scroll-reveal.test.ts',
   // motion: v-reveal 指令同根因修复（Ionic 内滚空白），happy-dom
   'src/motion/__tests__/directive-reveal.test.ts',
+  // theme: 臻彩显示（vivid / P3）真实生效回归（先红后绿），happy-dom
+  'src/motion/__tests__/vivid.test.ts',
+  // theme: 表面材质模糊令牌 --material-blur 契约（先红后绿），happy-dom
+  'src/theme/__tests__/surfaceMaterial.test.ts',
+  // theme: per-theme 主色/背景色定制（2026-07-17 优化），happy-dom
+  'src/theme/__tests__/themeCustomization.test.ts',
 ]
 
 // ── ISOLATED：有模块级状态 / 用 vi.resetModules / 依赖 localStorage ──

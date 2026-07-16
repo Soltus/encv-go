@@ -620,7 +620,7 @@ watch(isPlaying, val => {
   border-radius: 12px;
   padding: 6px 0;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(var(--material-blur, 12px));
   z-index: 20;
 }
 
@@ -689,7 +689,7 @@ watch(isPlaying, val => {
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 8px 40px rgba(0,0,0,0.5);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(var(--material-blur, 16px));
 }
 
 .settings-group {
@@ -961,7 +961,7 @@ watch(isPlaying, val => {
   display: flex;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(var(--material-blur, 4px));
   transition: background 0.15s;
 }
 
@@ -999,7 +999,7 @@ watch(isPlaying, val => {
   border-radius: 20px;
   padding: 12px 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(var(--material-blur, 8px));
   z-index: 10;
 }
 

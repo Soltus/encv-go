@@ -4,6 +4,9 @@
   "description": "Shared page components and utilities for ENCV apps",
   "type": "module",
   "main": "./src/index.ts",
+  "scripts": {
+    "build:scss": "node scripts/build-theme-scss.mjs"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./views/*": "./src/views/*",

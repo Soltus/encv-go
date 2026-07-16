@@ -4,5 +4,26 @@
   "author": "ENCV",
   "mode": "dark",
   "version": "1.0.0",
-  "builtIn": true
+  "builtIn": true,
+  "palette": {
+    "primary": "#9c6df7",
+    "bg": "#0f172a",
+    "presets": {
+      "primary": [
+        "#9c6df7",
+        "#1fbdd8",
+        "#ee5aa3",
+        "#818cf8",
+        "#38bdf8",
+        "#c084fc"
+      ],
+      "bg": [
+        "#0f172a",
+        "#1e293b",
+        "#0b1120",
+        "#171923",
+        "#121218"
+      ]
+    }
+  }
 }

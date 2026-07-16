@@ -6,7 +6,7 @@ include ':ajuarezso-capacitor-high-refresh-rate'
 project(':ajuarezso-capacitor-high-refresh-rate').projectDir = new File('../../node_modules/.pnpm/@ajuarezso+capacitor-high-refresh-rate@0.6.0_@capacitor+core@8.4.2/node_modules/@ajuarezso/capacitor-high-refresh-rate/android')
 
 include ':capacitor-device'
-project(':capacitor-device').projectDir = new File('../../node_modules/.pnpm/@capacitor+device@8.0.2_@capacitor+core@8.4.2/node_modules/@capacitor/device/android')
+project(':capacitor-device').projectDir = new File('../../node_modules/.pnpm/@capacitor+device@8.0.3_@capacitor+core@8.4.2/node_modules/@capacitor/device/android')
 
 include ':capacitor-filesystem'
 project(':capacitor-filesystem').projectDir = new File('../../node_modules/.pnpm/@capacitor+filesystem@8.1.2_@capacitor+core@8.4.2/node_modules/@capacitor/filesystem/android')
@@ -18,4 +18,4 @@ include ':capacitor-share'
 project(':capacitor-share').projectDir = new File('../../node_modules/.pnpm/@capacitor+share@8.0.1_@capacitor+core@8.4.2/node_modules/@capacitor/share/android')
 
 include ':capacitor-status-bar'
-project(':capacitor-status-bar').projectDir = new File('../../node_modules/.pnpm/@capacitor+status-bar@8.0.2_@capacitor+core@8.4.2/node_modules/@capacitor/status-bar/android')
+project(':capacitor-status-bar').projectDir = new File('../../node_modules/.pnpm/@capacitor+status-bar@8.0.3_@capacitor+core@8.4.2/node_modules/@capacitor/status-bar/android')

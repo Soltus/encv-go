@@ -16,6 +16,7 @@
 @import "tailwindcss";
 @import "../theme/tokens.css";
 @import "../theme/bridge.css";
+@import "../theme/vivid.scss";
 
 /* 声明工作区使用的主题（encv 为默认亮色，encv-dark 跟随系统暗色） */
 @plugin "daisyui" {

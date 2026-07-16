@@ -17,6 +17,7 @@
 @import "../theme/tokens.css";
 @import "../theme/palette.css";
 @import "../theme/bridge.css";
+@import "../theme/vivid.scss";
 
 /* ⚠️ 主题（官方 + 第三方）【不再】在此 @import 编译进产物。
  * 主题 = 运行时可加载的文件夹资产包（public/themes/<id>/theme.json + theme.css + 可选

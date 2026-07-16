@@ -8,5 +8,29 @@
   "description": "全能力示例主题：自带 assets/ 图片资源 + @font-face 字体族 + theme.js 装饰钩子。证明「真主题」（Hello Kitty 式皮肤）在本架构下可完整实现，而非只换色。",
   "css": "theme.css",
   "js": "theme.js",
-  "assets": ["assets/bg.svg", "assets/sticker.svg"]
+  "assets": [
+    "assets/bg.svg",
+    "assets/sticker.svg"
+  ],
+  "palette": {
+    "primary": "#ff5fa2",
+    "bg": "#fff5fa",
+    "presets": {
+      "primary": [
+        "#ff5fa2",
+        "#ffb3d1",
+        "#ff8fab",
+        "#fb7185",
+        "#f472b6",
+        "#f9a8d4"
+      ],
+      "bg": [
+        "#fff5fa",
+        "#ffe6f0",
+        "#fff0f6",
+        "#ffeef5",
+        "#fff1f7"
+      ]
+    }
+  }
 }

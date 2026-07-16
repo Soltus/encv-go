@@ -9,6 +9,8 @@
 /*.7z
 /encv-proxy
 /dist
+# 主题 SCSS 编译产物（带 source map，供 codemogger css-source 溯源，非运行时产物）
+**/.dist/
 /*.token
 
 # dict

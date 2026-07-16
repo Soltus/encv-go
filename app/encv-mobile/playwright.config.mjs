@@ -21,7 +21,7 @@ export default defineConfig({
   fullyParallel: false,
   reporter: [['list']],
   use: {
-    baseURL: 'http://localhost:5198',
+    baseURL: 'http://localhost:5199',
     viewport: { width: 390, height: 844 },
     launchOptions: {
       args: ['--no-sandbox', '--disable-dev-shm-usage'],

@@ -1071,7 +1071,7 @@ defineExpose({
 .status-bar {
   --background: var(--ion-toolbar-background, rgba(var(--ion-background-color-rgb), 0.92));
   --border-width: 1px 0 0 0;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(var(--material-blur, 8px));
 }
 .status-bar ion-toolbar { --padding-start: 12px; --padding-end: 12px; --min-height: 38px; }
 
