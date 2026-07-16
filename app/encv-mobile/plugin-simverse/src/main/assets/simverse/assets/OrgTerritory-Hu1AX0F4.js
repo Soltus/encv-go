@@ -1,1 +1,0 @@
-import{$ as e,J as t,U as n}from"./index-DXYJezc-.js";import{t as r}from"./SvPagePlaceholder-B08sTlYU.js";var i=t({__name:`OrgTerritory`,setup(t){return(t,i)=>(e(),n(r,{"title-key":`simverse.orgTerritory`,"icon-name":`map`}))}});export{i as default};

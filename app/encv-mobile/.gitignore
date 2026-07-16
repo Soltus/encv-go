@@ -36,3 +36,18 @@ cypress/videos/
 # Playwright 产物
 test-results/
 playwright-report/
+
+# ---- 插件构建产物（plugin-* 共用，集中在此，避免各插件各自维护 .gitignore） ----
+plugin-*/build/
+# 前端 web 构建产物拷贝进插件 assets（由 build-android*.sh 生成）
+plugin-*/src/main/assets/*/
+# openlist 插件：下载/解出的原生库与提取的类 jar
+plugin-openlist/src/main/jniLibs/
+plugin-openlist/openlist-classes.jar
+plugin-openlist/libs/openlist-classes.jar
+
+# release 签名 keystore（ensure_android_keystore 生成，含密钥，禁止入库）
+keystore/
+
+# 本地构建门禁日志（build-android*.sh 的 run_gradle 输出）
+**/build-logs/
