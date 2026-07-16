@@ -163,10 +163,11 @@ MCP *tools* — no `execute_command` round-trip, no terminal flakiness.
   |------|---------|
   | `codemogger_references` | who imports a symbol/module/file (mode: symbol\|module\|file) |
   | `codemogger_context` | chunk outline of a symbol's file / a file path (`expand` for bodies) |
-  | `codemogger_search` | full-text search over code bodies |
+  | `codemogger_search` | **multi-root hybrid** search: codemogger FTS over each root in `.codemogger.json` (labeled + ordered by weight) ∪ **per-root** grep complement over the configurable general-knowledge file set (docs + config + source codemogger's FTS can't parse) — backend/config roots get first-class labeled blocks; concept-aware |
+  | `codemogger_grep` | direct grep over the configurable general-knowledge file set in `.codemogger.json` `grep.include` (default: go/md/json/yaml/kt/ts/vue/css/scss/less/Dockerfile/toml) — surfaces backend, config, doc & style facts the structured index misses. Optional `dir` scopes to a single folder (sets `CODEMOGGER_GREP_ROOT`) — the MCP-native replacement for terminal `grep -r <path>`. Supports `|` as OR for multiple literals (e.g. `foo|bar`) |
   | `codemogger_impact` | alias-agnostic blast radius (queries both `@/` and `@encv/...`) |
   | `codemogger_leaks` | reverse shared→app `@/` imports under a dir |
-  | `codemogger_index` | (re)build the index explicitly |
+  | `codemogger_index` | **multi-root** (re)index: indexes every root in `.codemogger.json` into its own `<root>/.codemogger/index.db` |
   | `codemogger_list` | list indexed codebases |
 
 ### Register (CodeBuddy reads `~/.codebuddy/mcp.json`)
@@ -210,6 +211,85 @@ The shim's `impact`/`leaks` turn codemogger into a refactoring assistant
 lift, or verifying the shared layer has no reverse `@/` deps after a decouple).
 Wrapping them as MCP tools lets the agent run these checks without spawning a
 shell — robust against the flaky `execute_command` channel.
+
+## 6. Multi-root search + concept glossary (workspace `.codemogger.json`)
+
+A single codemogger root is unsuitable for this workspace: it mixes the primary
+frontend (`encv-mobile`), a shared frontend package (`packages/shared-components`),
+a Go backend (`internal`), and **managed sibling projects** (`combolite` Kotlin,
+`openlist` Go+TS, `preview-gateway` Go) that all need to be searchable. codemogger
+itself only parses TS/Vue/Kotlin, so the Go roots can't contribute to its FTS — but
+they must still be retrievable.
+
+### `.codemogger.json` (workspace root)
+Declares the roots (with weights) and a concept glossary:
+
+```json
+{
+  "roots": [
+    { "path": "app/encv-mobile",                "weight": 1.0 },
+    { "path": "app/packages/shared-components", "weight": 1.0 },
+    { "path": "internal",                       "weight": 0.9 },
+    { "path": "app/openlist",                   "weight": 0.8 },
+    { "path": "app/combolite",                  "weight": 0.7 },
+    { "path": "app/preview-gateway",            "weight": 0.6 }
+  ],
+  "concepts": {
+    "SPA":        ["index.html", "Vite", "WebView", "loadUrl", "assetBasePath", "file:///android_asset", "encv-go"],
+    "servingDir": ["servingDir", "Server.Dir", "cfg.Server.Dir"],
+    "docker":     ["Dockerfile", "docker-compose", "image:", "container:"],
+    "config":     ["ENCV_", "CODEMOGGER_", "vite.config", "biome.jsonc", "pnpm-workspace"]
+  },
+    "grep": {
+    "include": ["*.go","*.md","*.json","*.jsonc","*.yaml","*.yml","*.kt","*.kts",
+                "*.ts","*.tsx","*.vue","*.css","*.scss","*.less",
+                "Dockerfile","*.toml","*.sh","*.gradle","*.gradle.kts"],
+    "exclude": ["node_modules",".git",".codemogger",".agents",".codebuddy",".trae",
+                "dist","build",".next",".output","coverage"]
+  }
+}
+```
+
+- `weight` orders and labels the per-root FTS blocks (higher = more primary).
+- `concepts` maps an architectural term to the **precise tokens** that locate it.
+  This cuts substring noise — a bare `SPA` query would otherwise match
+  `xcworkspace`; expanding to `Vite`/`WebView`/`loadUrl`/`assetBasePath` pinpoints
+  the SPA-serving architecture instead.
+- `grep` declares the **general-knowledge retrieval set** — docs + config files
+  that codemogger's FTS can't index but the agent must be able to search. Two keys:
+  - `include` — glob patterns (e.g. `*.go`, `*.md`, `*.json`, `*.yaml`, `*.yml`,
+    `Dockerfile`, `*.toml`, `*.sh`, `*.kt`, `*.ts`, `*.vue`, `*.css`, `*.scss`,
+    `*.less` …). Drives both `search`'s grep complement and the standalone `grep` tool.
+  - `exclude` — directory names to skip (build output, tooling dirs, VCS, …).
+  - Omit the whole `grep` block to fall back to built-in defaults (same set above).
+
+### How `search` / `index` behave
+- `codemogger index` → loops every root, building `<root>/.codemogger/index.db`
+  each (codemogger has no native multi-root mode). Missing dirs are skipped.
+- `codemogger search <q>`:
+  1. If `<q>` matches a `concepts` key → grep each precise term **per root**
+     (labeled `[root · w=…]` blocks). The bare-query grep is skipped to avoid
+     substring noise. Because it's per-root, backend/config roots also contribute
+     concept hits with proper attribution.
+  2. Otherwise → codemogger FTS over each root's DB (labeled `[root · w=…]`,
+     ordered by weight desc), **then** a **per-root** grep complement over the
+     `grep.include` general-knowledge file set. The complement is per-root (not a
+     flat wasted grep): each root emits its own labeled, weight-ordered block, so
+     `internal`/`openlist`/`combolite` get FIRST-CLASS visibility for Go/config/doc
+     hits — exactly the architectural facts codemogger's FTS can't reach.
+- `codemogger grep <q>` → direct grep over the `grep.include` set (the complement
+  step, standalone; flat over the workspace unless `CODEMOGGER_GREP_ROOT` scopes it).
+- `references` / `context` / `impact` / `leaks` remain **single-root** (they target
+  the frontend root via `--db`); multi-root FTS + per-root grep discovery is what
+  `search` adds.
+
+### Env
+- `CODEMOGGER_CONFIG` — path to `.codemogger.json` (default `/workspace/.codemogger.json`).
+- `CODEMOGGER_GREP_ROOT` — override the full-repo grep tree (default: the workspace
+  dir containing `.codemogger.json`).
+
+> Without a `.codemogger.json` present, the shim falls back to the original
+> single-root behavior (`CODEMOGGER_ROOT` / `--db`), so it's backward compatible.
 
 ## Applying
 

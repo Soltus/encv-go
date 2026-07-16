@@ -7,7 +7,10 @@
 -->
 <template>
   <div class="userBubble">
-    <div class="userBubbleText" :class="{ userBubbleText_collapsed: shouldCollapse && !expanded }">
+    <div
+      class="userBubbleText ui-bubble ui-bubble--user"
+      :class="{ userBubbleText_collapsed: shouldCollapse && !expanded }"
+    >
       <pre class="userBubblePre">{{ text }}</pre>
     </div>
     <button
@@ -51,26 +54,13 @@ const shouldCollapse = computed(() => charCount.value > CHAR_LIMIT || lineCount.
   max-width: 100%;
 }
 
-/* 参照 codex_web .userMessageEditor: 浅灰底 + 大圆角 */
+/* 表面（背景/圆角/字号/前景色）已上提到全局 .ui-bubble.ui-bubble--user（随主题翻转）。
+   此处仅留结构与折叠状态（scoped [data-v-x] 特异性胜出，不抢表面）。 */
 .userBubbleText {
   max-width: min(72%, 620px);
   min-width: min(100%, 280px);
-  padding: 10px 14px 8px;
-  background: #f0f1f3;
-  color: #111827;
-  border-radius: 18px;
-  font-size: 14px;
-  line-height: 1.48;
   word-break: break-word;
   overflow-wrap: anywhere;
-}
-
-/* 暗黑模式适配 */
-@media (prefers-color-scheme: dark) {
-  .userBubbleText {
-    background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 15%, transparent);
-    color: var(--ion-text-color);
-  }
 }
 
 .userBubbleText_collapsed {

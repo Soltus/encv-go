@@ -6,11 +6,12 @@
  *       插件紫」的分裂。
  *
  * 机制：
- *   - Ionic 颜色令牌重写为 daisyUI --color-* 的 var() 别名，主题切换时自动跟随。
+ *   - Ionic 颜色令牌重写为 daisyUI --color-* 的 var() 别名，主题切换时自动跟随（实体色）。
  *   - shade / tint / contrast 用 color-mix() 派生（Chromium 111+ ✅，见 §2.8）。
- *   - -rgb 三元组无法在 114 用相对颜色语法提取（119+ 才有），故对内置两主题
- *     硬编码（与 daisyUI 主题值一致）；自定义主色（Phase 2 重写 useTheme）由
- *     JS 同步写入 --ion-color-*-rgb，本文件不负责。
+ *   - -rgb 三元组无法在 <119 用相对颜色语法提取；本文件对内置两主题【硬编码兜底】，
+ *     但真正驱动任意主题的是 themeLoader.syncIonicRgb()：每次激活主题后读取当前
+ *     --color-* 派生 --ion-color-*-rgb（含 contrast / background / text），使 Ionic 半透明层
+ *     （进度条 / 焦点环 / overlay / ripple）也跟随 rose/ocean/neon 等任意官方·第三方·远程主题。
  *   - 兼容遗留 body.dark 暗色切换（与 [data-theme="encv-dark"] 取同一套暗色值）。
  *
  * 加载：由 styles/daisyui.css 顶部 @import 引入；encv-mobile 在 variables.css

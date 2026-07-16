@@ -1,0 +1,38 @@
+@use 'sass:map';
+@use 'color-fns' as cf;
+@use 'config' as cfg;
+
+// ── 通用实体表面填充（背景 + 描边 + 圆角 + 前景）──
+@mixin surface-fill($bg-token, $border-token, $radius) {
+  background: cf.css-var('color', $bg-token);
+  border: 1px solid cf.css-var('color', $border-token);
+  border-radius: $radius;
+  color: cf.css-var('color', 'base-content');
+}
+
+// ── 胶囊骨架（仅布局/排版，不含 tint；gap/weight 交给消费方，避免重复声明）──
+@mixin pill-base {
+  display: inline-flex;
+  align-items: center;
+  line-height: var(--leading-tight);
+  font-weight: var(--weight-medium);
+  // 胶囊形状语言令牌（续36）：主题可整体改写圆角，chip/badge 跟随。
+  border-radius: var(--radius-pill, 9999px);
+}
+
+// ── tint（统一机制，消灭「mixin + 函数」两套 tint）──
+// 消费 --tint-* 派生令牌（项目主题 sass:color 编译值）；
+// 令牌未定义时回退到运行时 color-mix(var())（用户主题换肤生效）。
+// 百分比来自 $tint-config（单一事实来源），无 @if 100% 魔法分支。
+@mixin surface-tint($color-token) {
+  $conf: map.get(cfg.$tint-config, $color-token);
+  border-color: var(--tint-#{$color-token}-border, #{cf.runtime-tint($color-token, map.get($conf, 'border'), 'base-300')});
+  background:   var(--tint-#{$color-token}-bg,    #{cf.runtime-tint($color-token, map.get($conf, 'bg'), 'base-100')});
+  color:        var(--tint-#{$color-token}-fg,   #{cf.runtime-tint($color-token, map.get($conf, 'fg'), 'base-content')});
+}
+
+// ── 中性半透明表面（subtle / overlay）：消费 --tint-base-content-soft-<name> 令牌，
+//    回退运行时 neutral color-mix（name 如 '5'/'18'/'25'，对应百分比 #{$name}%）。──
+@mixin neutral-surface($name) {
+  background: var(--tint-base-content-soft-#{$name}, #{cf.runtime-neutral(#{$name + '%'})});
+}

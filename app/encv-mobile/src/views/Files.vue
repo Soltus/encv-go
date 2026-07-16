@@ -1,5 +1,5 @@
 <template>
-  <ion-page>
+  <ion-page v-page-transition>
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">

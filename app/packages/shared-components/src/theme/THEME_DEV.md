@@ -209,7 +209,9 @@ Snippet = 一段可热开关的局部 CSS，注入到 `<head>` 的
      本就是与 daisyUI 同步的单一来源（主方案 §2.7），改动同步该块即可。
 - **验收**：`app_check_all` 全绿；新增用户主题时徽章/胶囊自动跟随其调色板。
 
-### 6.4 决策（2026-07-16）：废除共享品牌类词汇，组件以令牌自包含样式
+### 6.4 决策（2026-07-16）：废除共享品牌类词汇，组件以令牌自包含样式 ~~（已被 §6.5 + §6.7 推翻）~~
+
+> ⚠️ **本节决策已被推翻**：续27（§6.5）恢复稳定的语义全局类 `.ui-*`（SiYuan 式主题自由度），续32（§6.7）进一步用 **SCSS 程序化生成** `.ui-*` 词汇、`sass-embedded` 为**必需**依赖（原「devDep 随后可清理」作废）。共享「语义表面」类词汇 `.ui-*` 是正确形态（无品牌前缀、全局、专为被主题覆写而生），不是 §6.4 所批的「品牌化类词汇 `.encv-*`」。详见 §6.7。
 
 - **背景**：§6.2 的「重命名间接层」（SCSS `$prefix` + `@each` + TS `encv.chip` 映射）落地后，
   被认定为**掩耳盗铃的解耦**——它仅让前缀可改名，组件仍强耦合于一个品牌化共享类词汇
@@ -320,3 +322,384 @@ Snippet = 一段可热开关的局部 CSS，注入到 `<head>` 的
   3. `AttachmentTray.vue` 内 chip → `.ui-chip`
   4. 输入框（搜索/命令）→ `.ui-input`；开关行 → `.ui-toggle`
   5. 词汇扩展评估：`.ui-list`/`.ui-divider`/`.ui-tooltip`/`.ui-scroll` 是否必要。
+
+### 6.7 续32（05:5x）：SCSS 生成表面词汇 + 分层主题（推翻 §6.4，sass-embedded 必需）
+
+- **背景**：§6.4 把「品牌共享类词汇 `.encv-*`」连同「稳定语义全局类」一并废了，组件改 scoped + 字面量，
+  结果主题只能换色板、且 scoped 的 `[data-v-x]`（0,2,0）封死用户覆写（比废除前还退步，见 §6.5）。
+  §6.5 恢复 `.ui-*` 语义钩子，但初版 `surface.css` 是**手写重复 CSS** + 全局/scoped 特异性拉扯，维护性差、
+  且 `sass:color` 完全没用上——违反「项目自身 + 用户主题都不妥协 / 用满 SCSS 高级特性」。
+- **新架构（问题解决 + 用满 SCSS 高级特性）**：把 `surface.css` 重写为 SCSS 模块系统
+  （`@use`+`@forward` 现代模块边界），并用满 maps / `@each` / `@function` / `@mixin` / `@if` / `sass:color`：
+  - `_palette`：项目默认调色板具体值（sass:color 输入）。
+  - `_config`：所有生成配置（tint 配方 / 变体 map / 档位）**单一事实来源**——加一个变体 = map 加一行，O(1)。
+  - `_color-fns`：sass:color 封装，**编译期 `compiled-*` / 运行时 `runtime-*` 双路径**。
+  - `_theme-tokens`：`@each` 遍历调色板，用 `sass:color` 在**构建期**算出 `--tint-*`（边框/背景/前景三件套）
+    + `--color-*-hover/-active`（明暗派生）+ `--tint-base-content-soft-*`；另发全局交互令牌
+    （`--elevation-*`/`--lift-hover`/`--press-scale`/`--ring-focus`）。
+  - `_mixins`：`surface-fill` / `pill-base` / `surface-tint` / `neutral-surface`——**统一 tint 机制**
+    （消灭旧版「mixin + neutral-surface 函数」两套 tint）；`pill-base` 不再重复声明 `gap`/`font-weight`，
+    交给消费方单次声明（修复坏味道）。
+  - `_surfaces`：`@each` 驱动生成全部 `.ui-*`，基态与变体**共用同一套 tint 算法**，无 `@if 100%` 魔法分支。
+  - `_user-theme`：用户主题作者 API（`@mixin surface` + `@function blend`），让构建期用户主题也复用 SCSS
+    颜色力（解决「用户主题能力不打折」的另一半）。
+- **分层（项目自身 + 用户主题都不妥协）**：
+  - 项目主题：【构建期】用真实色值 + `sass:color` 算出 `--tint-*` 具体颜色 → 项目自身拿到完整 SCSS 颜色力。
+  - 用户主题：【运行时】注入覆写 `--color-*`；`--tint-*` 未定义时表面自动回退到 `runtime color-mix(var())`
+    → 整套表面随用户调色板自动换肤，零折扣。派生令牌只定义在 `[data-theme=encv]`/`[data-theme=encv-dark]`，
+    故默认（`:root` 无 attr）走运行时回退，与旧 `surface.css` 行为一致，**零视觉回归**。
+  - ⚠️ **上述「官方主题编译期特权」已于续35（§6.9）被推翻**：主题 ≠ 调色板，官方与第三方必须同待遇。
+    `_theme-palette.scss` 已删除，所有主题的 tint/hover/active 改由 `:root` 的 `color-mix(var(--color-*))`
+    **运行时统一派生**（见 §6.9）。本节保留仅作溯源。
+- **纪律（本仓强制规则 `.codebuddy/rules/文档同步.mdc`）**：本次改动同步修订本文档——§6.4 标注「已被推翻」，
+  新增本节记录决策；门禁只验代码不验文档，文档正确性由本次提交保证。
+- **验证**：`app_check_all`（含单测）→ 8 PASS / 0 FAIL；新增 `surface.test.ts` 编译期断言
+  （`--tint-*` 为具体色非 var、hover/active 派生、交互令牌全局可用、表面消费 `--tint-*` 且保留运行时回退、
+  基态/变体单一 map 驱动、暗色主题同编译）；vite build 重建 `frontend-deps.json`（sass-embedded 恢复为必需）。
+- **re-surface 候选全部完成（续33）**：§6.6 列的 4 个候选均已挂 `.ui-*`，并 Reverse 了 §6.4 式内联 `color-mix`
+  （「组件自包含、不依赖共享类词汇」已推翻）：
+  - 用户气泡（`UserMessageBubble.vue`）→ `.ui-bubble.ui-bubble--user`（续31 已挂）。
+  - 调试 chip（`AgentDebugPanel.vue` 的 `ui-chip ui-chip--neutral`）→ 续31 已挂。
+  - 附件 tray（`AttachmentTray.vue` 的 `.attachmentItem`）→ 续33 挂 `.ui-card--subtle`（scoped 仅留布局/尺寸，
+    表面随主题翻转；缩略图/移除按钮等子元素仍是组件细节）。
+  - 输入 toggle（`CollapsedMessageToggle.vue`）→ 续33 挂 `.ui-chip` / `.ui-chip--neutral`
+    （active||expanded=主色 chip，否则中性 chip；scoped 仅留布局 + 活跃脉冲动画，悬停/按下沿用 `.ui-chip:hover/:active`）。
+- **词汇扩展评估（续33，结论：暂不新增）**：
+  - `.ui-list` / `.ui-tooltip` / `.ui-scroll`：无可复用的通用消费者（popover 是 bespoke ion-popover，滚动容器布局特异性强）→ 不新增。
+  - `.ui-divider`：唯一 divider 形态消费者 `ContextCompactionDivider.vue` 是 bespoke（两侧渐变线 + 居中文字），
+    通用 `.ui-divider`(<hr> 形态) 套不上 → 不新增；该组件保持自包含。
+  - 现有词汇（`.ui-chip`/`.ui-badge`/`.ui-card`/`.ui-panel`/`.ui-button`/`.ui-toggle`/`.ui-bubble`/`.ui-header`/`.ui-input`）
+    已覆盖绝大多数形态；`FileReferenceChip.vue` 已用 `.ui-chip.ui-chip--mono`，`StatusBadge.vue`/`BlockHeader.vue`
+    为 bespoke（改挂会改观感）列为**未来机会性 re-surface 候选**，不强制。
+  - 决策纪律：新增词汇 = `_config` 的 map 加一行 + `_surfaces` 生成 + 本文件补契约；当前无强需求，避免早产抽象。
+
+### 6.8 续34：官方主题扩展（rose / ocean / forest / midnight）（⚠️ 已被续35 §6.9 推翻）
+
+- **⚠️ 本节决策已废除（续35 §6.9 推翻）**：「官方主题 = 编译期派生令牌特权」违背「主题 ≠ 调色板 /
+  官方 == 第三方」原则，且导致第三方主题（sunset/mint）连 `--color-primary-hover` 都 undefined（按钮 hover 失效）。
+  正确做法见 §6.9：所有主题统一走运行时 `color-mix(var())` 派生，官方与第三方零特权差异。
+- **背景（溯源）**：§6.5/§6.7 把「表面词汇」升级为可被用户主题覆写的全局 `.ui-*`，但**官方主题本身**只有
+  `encv`（亮紫）/ `encv-dark`（暗紫）两个。用户要求「实现多个官方主题」，于是续34 新增 4 个官方主题，
+  并错误地把它们塞进编译期 `_theme-palette.scss`（赋予第三方拿不到的派生令牌特权）。续35 已纠正。
+- **官方 vs 示例用户主题（分层，项目自身 + 用户主题都不妥协）**：
+  - **官方（builtIn=true）**：调色板同时进 `_theme-palette.scss`（→ `_theme-tokens` 编译 `--tint-*`/
+    `--color-*-hover/-active` 具体色）+ `palette.css`（基色 `[data-theme="<id>"]` 块）。
+    故官方主题拿到**完整 SCSS 颜色力**，与 `encv`/`encv-dark` 完全平级。
+  - **示例用户主题（sunset/mint）**：仅 `user-themes.css` 基色块 + 注册（非 builtIn），
+    走运行时 `var()` 回退路径（证明用户主题能力不打折）；不进 `_theme-palette`，故无编译派生令牌。
+- **官方主题清单（6 个）**：`encv`/`encv-dark`（紫）、`rose`（亮·玫瑰）、`ocean`（暗·海洋）、
+  `forest`（亮·森林）、`midnight`（暗·午夜）。亮/暗由 `color-scheme` 声明；暗色基色加深、content 提亮。
+- **新增官方主题的「四处同步」纪律（门禁只验代码不验文档，故此处显式记录）**：
+  1. `_theme-palette.scss` 的 `$palettes` 加一项（12 色，键与 `palette.css` 一致）；
+  2. `palette.css` 加 `[data-theme="<id>"]` 基色块（含 `--color-*` + `--radius-*`）；
+  3. `useUserThemes.ts` 的 `USER_THEMES` 加 `{ id, nameKey, builtIn: true }`；
+  4. `i18n/settings.ts` 的 zh-CN + en 各加 `settings.theme<Id>` 名。
+  - **契约锁**：`surface.test.ts` 新增用例断言——每个 `builtIn` 主题都编译出 `[data-theme=id]{--tint-primary-bg;--color-primary-hover}`，
+    防止「只注册不进 `_theme-palette`」导致该主题 silently 退回运行时回退（视觉降级、且违背官方主题契约）。
+- **选择器/Hydration**：沿用 `useUserThemes` 既有机制——默认 `encv` 移除 `data-theme` 回落 `:root`，
+  其它主题 `setAttribute('data-theme', id)`；偏好存 `localStorage`，模块加载即水合。无需改 AppearanceDetail.vue
+  （它已 `v-for theme in themes` 渲染 `t(theme.nameKey)`，新主题自动出现在外观页列表）。
+- **注意（既有行为，非本次引入）**：暗色官方主题的「暗」由 `color-scheme: dark` 驱动原生控件，
+  Ionic 侧的 `body.dark` 类由 `useTheme` 的 bgColor 逻辑控制，与 `data-theme` 切换解耦——与 `encv-dark` 既有行为一致，无回归。
+- **验证**：`app_check_all`（含单测）→ 见汇总；`surface.test.ts` 新增官方主题契约用例；i18n lint 两语言键齐备。
+
+### 6.9 续35：主题 = 声明式数据资产，官方 == 第三方（推翻 §6.7/§6.8 的编译期特权）
+
+> ⚠️ **本节「加载方式」已被续37 §6.10 推翻**：续35/续36 把官方主题放在
+> `official-themes/<id>/theme.css` 并由 `theme-core.css` **构建期 `@import`** 烤进产物——
+> 这仍剥夺了「可加载 / 可卸载 / 可分发」能力，且让官方主题无法携带自有资源（图片 / 字体 / 贴纸），
+> 不是真主题（Hello Kitty 主题即需此）。续37 改为**运行时资产包 + themeLoader**（见 §6.10）。
+> 本节「零特权 / 官方 == 第三方 / tint·hover·active 运行时派生」结论**仍成立**，仅加载机制作废。
+
+- **用户原则（早已确立，本次才真正落实）**：**主题 ≠ 调色板**。主方案 `ENCV前端主题重构方案.md` §2.3 / §2.7.6
+  已定义「主题 = 清单 + 令牌 CSS（+ 可选 JS 钩子），可加载、可卸载、可分发」，官方与第三方**同形态**。
+  续26 用户亦点破「主题 ≠ 换色板」。续34 把官方主题硬塞进编译期 `_theme-palette.scss`，给官方主题发了
+  第三方主题**永远拿不到**的「编译期派生令牌」特权——直接违背该原则，故本次推翻。
+- **根因 bug（顺带暴露）**：§6.7 的 `--color-*-hover/-active` 只在 `[data-theme=encv/encv-dark]` 编译块里定义；
+  第三方主题（sunset/mint）未进 `_theme-palette`，其 `--color-primary-hover` 为 `undefined`，
+  `.ui-button:hover` 背景失效。官方特权与第三方缺陷同源。
+- **新架构（官方 == 第三方，零特权）**：
+  1. **删除 `_theme-palette.scss`**（编译期主题调色板）。不再有任何主题在 SCSS 编译期被烘焙。
+  2. **tint / hover / active 全部运行时派生**：`_theme-tokens.scss` 在 `:root` 用
+     `color-mix(in srgb, var(--color-*), white/black)` 对每个交互色派生 hover/active；
+     表面 tint 沿用 `_mixins` 的 `var(--tint-*, color-mix(var(--color-*)))` 回退。
+     因 `var(--color-*)` 在元素上解析为**当前主题**的语义色，单个 `:root` 定义即对所有主题
+     （官方 + 第三方）生效 → 派生结果完全一致，**零特权差异**。
+  3. **唯一区别 = 分发方式，不是颜色力**：`builtIn:true` 表示随包发布 + 外观页展示 + 不可卸载；
+     官方主题资产在 `official-themes/<id>/theme.css`（随包），与第三方 `user-themes/<id>/theme.css`
+     同形态、同加载方式，**但（续37 前）由 `theme-core.css` 用 `@import` 引入**——
+     ⚠️ 此「构建期 @import」加载方式已被续37 §6.10 推翻，改为运行时资产包 + themeLoader。
+- **契约锁（反方向，防复发）**：`surface.test.ts` 断言编译产物**不含**任何
+  `[data-theme=X]{ --tint-* / --color-*-hover }` 声明（即无主题被编译期烘焙），且 `:root` 提供
+  `color-mix(var(--color-primary))` 派生的 hover/active。防止「某官方主题又被塞回编译期」。
+- **新增官方主题的正确做法（四处同步，续36 起必须是「主题」而非「换色」）**：
+  1. 建 `official-themes/<id>/theme.css`：定义**完整设计语言**——除 `--color-*` 色相外，
+     必须覆写形状（`--radius-*`）、密度（`--density`）、立体感（`--elevation-*`/`--lift-hover`/`--press-scale`）、
+     焦点环（`--ring-focus`）、动效（`--motion-*`）等令牌，让主题有独立「设计语言」而不仅是换色；
+  2. ~~`theme-core.css` `@import "../theme/official-themes/<id>/theme.css";`~~
+     ⚠️ 已废除（续37）：主题**不再**编译进 theme-core.css，改为运行时资产包。
+  3. `useUserThemes.ts` 的 `USER_THEMES` 加 `{ id, nameKey, builtIn: true }`；
+  4. `i18n/settings.ts` 的 zh-CN + en 加 `settings.theme<Id>` 名。
+  ❌ **不再**需要、也**不应**在 `_theme-palette.scss` 登记（该文件已删除）；
+  ❌ **不应**把官方主题塞进 `palette.css`（那是 encv 品牌调色板/默认基态，仅留 encv/encv-dark）。
+- **验证**：`app_check_all`（含单测）→ 见汇总；官方/第三方主题均经同一运行时派生，按钮 hover 对第三方亦生效。
+
+### 6.9.1 续36：换色 ≠ 主题（官方主题重写为设计语言资产）（⚠️ 加载方式已被续37 §6.10 推翻）
+
+- **⚠️ 本节「加载方式」已被续37 §6.10 推翻**：续36 把官方主题资产放在
+  `official-themes/<id>/theme.css` 并由 `theme-core.css` 构建期 `@import` 加载——
+  这仍把主题烤进产物，不是真「可加载 / 可卸载 / 可分发」资产包。续37 改为运行时加载（见 §6.10）。
+  本节「设计语言（形状/密度/立体感）而非换色」的结论仍成立并被保留。
+- **用户再次强调**：「换色不是主题，能懂吗」。续35 虽消除了编译期特权，但官方主题仍只是
+  「换色」——6 个主题半径全相同（`1rem/0.5rem/1rem`），表面层还有**字面量圆角**
+  （`8px`/`12px`/`9999px`/`4px`）导致形状语言根本无法被主题改写。这才是「换色」的本质。
+- **本次修正（让主题真成主题）**：
+  1. **迁出 `palette.css`**：rose/ocean/forest/midnight 从 encv 品牌调色板移到
+     `official-themes/<id>/theme.css` 独立主题资产（与 `user-themes/<id>/theme.css` 同形态、
+     同 `@import` 加载），`palette.css` 仅留 encv/encv-dark 默认基态。
+  2. **表面层字面量圆角 token 化**（仍成立）：`--radius-box` / `--radius-pill` / `--radius-mono`
+     基线定义在 `tokens.css :root`，`_surfaces.scss` 改消费这些令牌（卡片/面板/胶囊/mono）。
+     主题从此可整体改写「形状语言」，不再被硬编码卡死。
+  3. **每个官方主题定义独立设计语言**（不仅是色相）：
+     - `rose`：更圆润（1.5rem）+ 略宽松（density 1.05）+ 柔和彩色阴影 + 明显抬升 + 回弹动效；
+     - `ocean`：科技暗色 + 利落小圆角（0.75rem）+ 紧凑（0.9）+ 青色辉光 + 敏捷动效；
+     - `forest`：圆角盒（1.25rem）+ 宽松（1.12）+ 柔和绿影 + 缓入缓出；
+     - `midnight`：极简暗色 + 锐利小圆角（0.375rem，胶囊也近方）+ 近扁平（无抬升）+ 细锐环 + 沉稳。
+- **契约锁（防复发，反向）**：`official-themes.test.ts` 断言 4 个官方主题资产**各自定义不同的**
+  `--radius-*` / `--density` / `--elevation-*`，且**不仅**含 `--color-*`（防止「又退化成换色」）；
+  并断言 `palette.css` 不再含这 4 个官方主题（证明没回塞品牌调色板）。`surface.test.ts` 既有契约
+  （无编译期烘焙）仍有效——这些主题资产是纯 CSS 数据，不进 `surface.scss` 编译。
+
+### 6.10 续37：主题 = 运行时可加载的「文件夹资产包」，官方 == 第三方（附性能指标与优化）
+
+- **用户点破的根因（第四次纠正）**：前几版把主题实现成「填 `--color-*` 令牌槽」（换色）→
+  退一步成「填设计语言令牌」（色+形状+密度+立体感），但**本质仍是编译进 `theme-core.css` 的 CSS 块**：
+  1. 主题被构建期 `@import` 烤进产物 → 用户**无法加载 / 卸载 / 分发**一个主题（违背方案文档 §2.3）；
+  2. 主题不能携带自有资源（图片 / 字体 / 贴纸）→ **Hello Kitty 主题根本做不了**（只能换色）。
+  真正的主题（思源集市式）= **一份能运行时加载、能用自己的选择器覆写真实组件、能 url() 自有资源 /
+  字体、能 theme.js 钩子装饰的独立样式表**。令牌只是「懒人快捷层」，不是主题本身。
+- **新架构（落实方案文档 §2.3 / 对比表「theme.json + theme.css + 可选 theme.js，可加载/卸载/分发」）**：
+  1. **主题 = 文件夹资产包**：`public/themes/<id>/theme.json` + `theme.css` + 可选 `theme.js` / `assets/`。
+     官方 6 个（encv / encv-dark / rose / ocean / forest / midnight）+ 示例第三方（sunset / mint）**同形态**。
+  2. **运行时加载，不再编译进产物**：`theme-core.css` **不再 `@import` 任何主题**；`palette.css` 仅留
+     `:root` 的 encv 默认基态（无 `data-theme` 块）。主题由 `themeLoader`（`theme/themeLoader.ts`）
+     在运行时 `document.createElement('link')` 注入 `<link rel="stylesheet">` 并切 `[data-theme]`。
+  3. **官方 == 第三方，唯一区别 = 预装（builtIn）**：
+     - `builtIn:true`（官方）：随包发布于 `public/themes/`、启动期**预加载**、**不可卸载**；
+     - `builtIn:false`（第三方）：来自用户空间 / 集市（远程 URL），**可卸载**、LRU 回收。
+     两者走**同一套 `themeLoader` 注入/切换代码**，颜色力与加载机制零差异。
+  4. **资源包能力（真主题的证明）**：`rose/theme.css` 用 `url("data:image/svg+xml,...")` 给 `body` 加
+     极淡点纹，演示「主题能自带装饰资源」。Hello Kitty 主题即靠此贴贴纸、换背景图案、`@font-face` 换字体、
+     `::before` 加装饰——全部无需编译期支持。**新增官方/第三方主题 = 复制 `public/themes/<id>/` 文件夹**。
+- **themeLoader 性能指标（getThemePerf / window.__encvThemePerf）**：
+  - 每主题 `loadMs`（注入→onload）、`cached`（去重命中）、`loadedAt`；
+  - 全局 `lastSwitchMs`（切换耗时）、`cacheHits`（去重命中次数）、`loaded`（常驻 link 数）、
+    `active`（当前主题）、`firstPaintMs`（首帧）、`thirdPartyLoaded`（LRU 下第三方常驻数）。
+- **themeLoader 优化（对应指标）**：
+  1. **预加载**：`preloadOfficial()` 启动期并行注入官方主题 `<link>`，切换零等待 → 压低 `lastSwitchMs`；
+  2. **去重缓存**：同主题只注入一次，重复激活命中缓存（`cacheHits++`，`loadMs=0`）→ 切回已加载主题零成本；
+  3. **LRU 卸载**：第三方超 `MAX_THIRD_PARTY_LINKS=4` 自动回收 `<link>` + `unmount` → 控制内存；
+  4. **防 FOUC**：先 `await` CSS `onload` 再置 `[data-theme]`，确保样式到位才生效；默认主题回落 `:root`；
+  5. **安全网**：个别环境 `link` 事件不触发时 2s 超时兜底，避免永久挂起。
+- **契约锁（防复发，反向）**：`official-themes.test.ts` 现断言——
+  - 8 个主题都是 `themes/<id>/{theme.json,theme.css}` 文件夹资产；官方 `builtIn=true`、第三方 `false`；
+  - 官方主题定义**互不相同**的 `--radius-box` / `--density`（防止退化成换色）；
+  - 所有主题**不含** `--color-primary-hover` / `--tint-*`（无编译期特权回潮）；
+  - `rose` 含 `url()`（资源包能力）；
+  - `palette.css` **不含**任何 `[data-theme]` 块（主题已迁出，零编译特权）；
+  - `themeLoader`：注入 `<link>`、默认回落 `:root`、去重缓存命中、`unloadTheme` 仅卸第三方、预加载后切回零成本。
+- **新增主题（官方 / 第三方完全一致）**：
+  1. `public/themes/<id>/theme.json`（id 匹配、builtIn）+ `theme.css`（可含 url() 资源 / @font-face / 装饰）；
+  2. `useUserThemes.ts` 的 `USER_THEMES` 加 `{ id, nameKey, builtIn }`（第三方可带 `url` 远程地址）；
+  3. `i18n/settings.ts` 加 `settings.theme<Id>` 名。
+  ❌ **不再** `@import` 进 `theme-core.css`（那会剥夺「可加载/卸载/分发」并造特权，正是续37 推翻的）。
+- **验证**：`app_check_all`（含单测）→ 见汇总；`official-themes.test.ts` 覆盖资源包 + loader 全契约；
+  i18n lint 两语言键齐备。
+
+### 6.11 续38：主题系统对用户真正可用（可视预览 + 集市安装 + URL 分发 + 管理 + 性能可见）
+
+> 前几版（到续37）只把**引擎**做对了：运行时资产包 + loader + 指标都在，但**用户面**仍是
+> 「一行纯文本列表 + 勾选」，既看不出主题的「设计语言」，也无法安装/卸载/分发——「可加载/可卸载/
+> 可分发」对终端用户只是内部能力，不是体验。用户第五次纠正「远远不够」点破此缺口。
+
+- **外观页（AppearanceDetail.vue）主题区重做为三块**：
+  1. **可视实时预览网格**：每个主题一张卡片，卡片上 `:data-theme="<id>"` 让该主题 CSS 作用域落到卡片，
+     **直接渲染真实语义组件**（`.ui-bubble--user` 气泡 / `.ui-chip` 胶囊 / `.ui-panel` 面板 / 主·辅·强调·底色色块），
+     因此**主题的「组件覆写」也原样可见**——neon 的发光描边、paper 的衬线字体、各主题的 `--radius-box` 圆角差异
+     都能在预览里一眼看出，而非仅靠名字。
+     ⚠️ 修订（续39）：初版预览用的是占位 `.pv-bubble`/`.pv-chip`（只显示令牌颜色，不显示主题对组件的覆写），
+     已改为真实语义组件类（占位样式删除），每个卡片自身 `data-theme` 作用域内继承主题，覆写即生效。
+     卡片文字统一用「该主题自身」令牌（`color: var(--color-base-content)`），保证暗/亮卡片上都可读。切回即 applyTheme。
+  2. **主题集市（Bazaar）**：`BAZAAR` 注册表列出可安装条目（示例 `neon` / `paper`，本地资源包），
+     一键 `installFromBazaar` → 进用户空间 → 出现在网格。证明「集市式分发」。
+  3. **从链接安装（可分发）**：粘贴远程 `theme.css` URL → `installTheme({ id, url })` 注册为第三方，
+     loader 按远程 URL 注入 `<link>`。这是「主题可跨设备/跨用户分发」的可运行证据。
+  4. **管理**：每个非官方主题显示卸载按钮 → `unloadTheme` 移除 `<link>` + 删持久化；官方 `builtIn` 不可卸载。
+  5. **性能可见**：外观页底部展示 `themeLoader` 实时指标（切换耗时 `lastSwitchMs` / 去重命中 `cacheHits`
+     / 已加载 `loaded`），让「性能指标与优化」从代码承诺变成用户可观测项。
+- **useUserThemes 新增运行时能力**：
+  - `installTheme(meta)` / `installFromBazaar(entry)` / `uninstallTheme(id)`：运行期增删主题；
+  - 已安装主题持久化到 `localStorage["encv-installed-themes"]`，`initUserThemes()` 启动期水合；
+  - `ensureThemeLoaded(id)`：安装/进页面时预热 `<link>`，保证可视预览即带正确样式；
+  - `themePerf`（响应式）：暴露 `getThemePerf()` 快照，apply/install/uninstall 后刷新。
+- **契约锁（防复发，反向）**：`official-themes.test.ts` 新增 `useUserThemes` 描述块断言——
+  - 集市条目可安装并进入 `allThemes`、持久化到 localStorage；
+  - 卸载第三方主题同步移除注册 + 删持久化 + loader 卸载 `<link>`；
+  - 从 URL 安装的主题按远程地址注入 `<link>`（可分发证据）；
+  - 官方主题 `builtIn` 为真、`uninstall` 静默忽略（不可卸载）。
+- **新增主题（用户侧，完全自服务）**：
+  - 集市新增条目：`BAZAAR` 加 `{ id, nameKey, descKey }`（资源在 `public/themes/<id>/`）；
+  - 或用户自己从 URL 装任意远程主题——**无需改任何编译配置 / 无需发版**。
+- **验证**：`app_check_all`（含单测）→ 9 PASS；i18n lint 两语言键齐备（bazaar/install/perf 等）。
+
+### 6.12 续40：Ionic 半透明层跟随任意主题（换肤不再是「半成品」）
+
+> 续38/续39 把用户面与预览 fidelity 做对了，但核验桥接时发现**真正的换肤缺口**：
+> `bridge.css` 的实体色用 `var(--color-*)` 间接（任意主题跟随），但 **`-rgb` 三元组硬编码成
+> encv 紫**（lines 25/33/41/…）。Ionic 的半透明层（`rgba(var(--ion-color-primary-rgb), a)`：
+> 进度条 / 焦点环 / overlay / ripple / 选中态）因此【只认 encv 紫】——切到 rose/ocean/neon
+> 后实体色换了、半透明层却残留紫，换肤「半成品」。
+
+- **修复（themeLoader.syncIonicRgb）**：每次 `activateTheme` 置位 `[data-theme]` 后，读取当前主题
+  已落到 `<html>` 的 `--color-*`，用 `hexToRgbTriple()` 派生并写回 `--ion-color-*-rgb`
+  （primary/secondary/tertiary=accent/success/warning/danger/medium/base-100=light）+
+  `--ion-color-primary-contrast-rgb` / `--ion-background-color-rgb` / `--ion-text-color-rgb`。
+  主题无关：官方 / 第三方 / 远程 URL 主题全部生效；写在内联 `<html>` 上（特异性高于桥接 `:root`），
+  覆盖硬编码兜底值。`bridge.css` 的硬编码 -rgb 降级为「JS 未跑时的兜底」（注释同步更新）。
+- **价值**：切主题后整个 Ionic App（含半透明层、进度、焦点、overlay）真正统一换肤，不再紫绿混杂。
+- **契约锁（反向）**：`official-themes.test.ts` 新增 `themeLoader.syncIonicRgb` 描述块断言——
+  - 当前 `--color-primary=#e11d48`(rose) → `--ion-color-primary-rgb` 派生为 `225, 29, 72`、
+    contrast/background/text -rgb 同步；
+  - 即使 bridge.css 硬编码 `--ion-color-primary-rgb: 139, 92, 246`(encv 紫) 已存在，
+    syncIonicRgb 仍覆盖为 neon 绿 `57, 255, 20`，证明任意主题不会残留紫色半透明层。
+- **验证**：`app_check_all` → **9 PASS / 0 FAIL**（Biome/各包 typecheck/i18n lint/单测/vite build 全绿）。
+
+### 6.13 续41：切换主题卸载上一主题的 JS 装饰（不残留 / 不丢挂载）
+
+> 续40 把颜色换肤做对了，但核验「真主题能力（theme.js 运行时装饰）」时发现**切换生命周期 bug**：
+> `activateTheme` 调 `ensureJs` 在激活时 `mount()` 一次，但【切走时不调上一主题的 `unmount()`】
+> （只有 `unloadTheme`/LRU 回收才调）。于是 kitty 这类挂 `<body>` 的装饰（固定角标贴纸）
+> 切到 rose 后【永久残留】；更糟的是 `jsCache` 仍持有 kitty，切回时 `ensureJs` 的
+> `jsCache.has` 守卫会使它【不再重新 mount】——不刷新就再也拿不回装饰。
+
+- **修复（activateTheme 内）**：置新主题前，若 `prevId` 存在且 ≠ 新主题，取其 `jsCache` 中的
+  `unmount` 并调用、随后 `jsCache.delete(prevId)`。这样：① 切走即卸载上一主题装饰（不残留/堆积）；
+  ② 删掉缓存使【切回时能重新 mount】（不丢挂载能力）。同主题重复激活走 `prevId === src.id` 守卫，
+  幂等（不重复挂载、不误卸载）。
+- **测试桩（__stubJsModule）**：为在 jsdom 下对「动态 import」做确定性单测，新增 `__stubJsModule(id, mod)`
+  注入假模块、`ensureJs` 优先用桩、`resetThemeLoaderForTest` 一并清桩，避免跨用例污染。
+- **契约锁**：`official-themes.test.ts` 新增 `themeLoader 切换生命周期` 描述块断言——
+  - 切到 kitty 装饰存在；切到无 JS 的 rose 后装饰被卸载；
+  - 离开再切回 kitty → 装饰重新挂载（证明 jsCache 清除生效）；
+  - 重复激活同一主题 → 仅挂载一次（幂等）。
+- **验证**：`app_check_all` → **9 PASS / 0 FAIL**（Biome 用 `pnpm exec biome check --write` 修，非 app_format）。
+
+### 6.14 续42：theme.json 成为运行时活清单（清单驱动分发，非死数据）
+
+> 续37–41 把「运行时资产包 + loader + 装饰生命周期」都做对了，但核验「可分发」时发现：
+> 每个主题都随包放着 `theme.json`（架构文档也称主题为「theme.json + theme.css 文件夹资产包」），
+> **但运行时从不 fetch/parse 它 —— 是彻头彻尾的死数据**。后果：① 元信息（名字/作者/版本/是否带 js/资源）
+> 全在 TS 注册表 `USER_THEMES` 里硬编码，与磁盘清单**两处真相、可静默漂移**；② 从 URL 分发主题时
+> 无法发现主题自身元信息，必须让用户手填 id + **直连 theme.css**（不是「指向文件夹即可安装」的真分发）。
+
+- **修复（让清单成为活契约）**：
+  1. `themeLoader.ts` 新增 `ThemeManifest` 接口 + `fetchThemeManifest(folderOrJsonUrl)`：接受主题
+     **文件夹 URL**（如 `/themes/rose` 或 `https://x/themes/rose`）或直接的 `theme.json` URL，
+     fetch 并解析清单，把相对 `css`/`js` 按清单所在目录**解析为绝对 URL**（绝对 / data: 原样保留），
+     校验 `id`、HTTP 失败即抛错。这是对齐 Obsidian / 思源集市「指向清单即可安装」的分发范式。
+  2. `useUserThemes.ts`：`UserThemeMeta` 增 `jsUrl`（清单声明的 theme.js 绝对 URL），`toSource` 优先用它
+     （否则回退本地 `js:true` 推导）；新增 `installThemeFromUrl(folderOrJsonUrl)`（async）——读清单自动
+     发现 id/名字/CSS/JS 并安装，不再要用户手填 id 或直连 css。安装经 `ThemeStorage` 端口让【后端】把远程
+     主题拉取到【本地同一目录】（详见 §6.15），前端从同源 `/themes/<id>/` 加载，本地优先、不热链 CDN。
+  3. `AppearanceDetail.vue` 的「从链接安装」改为：非 `.css` 结尾走 `installThemeFromUrl`（清单路径），
+     `.css` 结尾保留旧直连回退；加安装中/错误态（`installing` i18n 键 + 错误 `ion-note`）。
+     placeholder 文案改为「主题文件夹 / theme.json 地址」。
+- **契约锁（防复发）**：`official-themes.test.ts` 新增三块——
+  - **防漂移**：每个本地主题 `theme.json` 的 `builtIn`/`js` 与 TS 注册表 `USER_THEMES` 一致；
+  - `fetchThemeManifest`：文件夹 URL / theme.json URL / 绝对 css 直连 / 缺 id / HTTP 404 各分支（mock fetch）；
+  - `installThemeFromUrl`：读远程清单派生 id/名字，经 `ThemeStorage` 端口拉取到后端本地同一目录，
+    同源 `/themes/<id>/` 注入 `<link>`（本地优先，非热链远程 CDN）。
+- **说明**：内置主题随包发布，其 TS 注册表仍是启动期零 fetch 的权威（避免 N 次启动请求），
+  清单一致性由防漂移测试保证；**远程/集市分发**才走 `fetchThemeManifest` 活清单路径。
+- **验证**：`app_check_all` → **9 PASS / 0 FAIL**（Biome 用 `pnpm exec biome check --write` 修，非 app_format）。
+
+### 6.15 续43（修订）：本地优先 / 云拉取落本地同一目录 —— 框架端口化，存储后端是 Go
+
+> 续42 的 `installThemeFromUrl` 初版只把远程 css 当 `<link>` **热链**（运行时依赖 CDN、断网即失效、与内置
+> 「两套来源」）。用户要求：**本地优先，云拉取也下载到本地同一目录**。初稿曾错用 `@capacitor/filesystem`
+> 把主题字节存进设备文件系统——但本工程后端是 **Go（encv-go）**，主题「本地同一目录」=
+> **Go 后端托管的同源 `/themes/<id>/`**，不是设备文件系统；且「字节下载到哪、怎么存」是【应用层职责】，
+> 不应耦合进 `shared-components` 框架（违背「避免框架与应用耦合」）。故推倒重来如下。
+
+- **架构（框架 ↔ 后端解耦）**：
+  - `theme/themeStorage.ts`（框架）：只定义【端口（抽象）`ThemeStorage`】——
+    `pullToLocal(req)` / `removeLocal(id)`，以及 `setThemeStorage` / `getThemeStorage` 注入点。
+    默认 `sameOriginThemeStorage` 不下载、不存字节（单测 / 后端已就绪场景），保证框架零后端依赖、零 Capacitor 依赖。
+  - `encv-mobile/src/stores/registerSharedThemeStorage.ts`（应用）：注入 `ThemeStorage` 的
+    **Go 后端适配器**——`pullToLocal` → `POST {getAgentApiBase()}/api/themes/pull`、
+    `removeLocal` → `DELETE {getAgentApiBase()}/api/themes/<id>`。沿用 `getAgentApiBase()`
+    三态拼装（dev 网关 `/agent-api`、native 相对路径、web SPA 绝对 URL），与项目既有的
+    `setApiProxy` / `getApiProxy` 解耦范式完全一致。`main.ts` 启动期调用 `registerSharedThemeStorage()`。
+- **本地优先语义（Go 后端视角，前端永远从同源 `/themes/<id>/` 加载）**：
+  - **存储根 = 数据目录，绝非 servingDir**：用户安装的远程主题落盘到 `themeDataPath()` 派生目录
+    （`internal/server` 的 `themeDataPath()`，与 `kernelDataPath` / `simverseDataPath` 同脉络，
+    复用 `mountRegistryDataPath` 的目录派生逻辑，见 `server.go`）：
+    - Android：`<ENCV_APP_FILES_DIR>/.encv/themes`（**app 私有 files 目录**——可写、不污染媒体视图；
+      servingDir 在 Android 上是打包的私有只读资产，写不进去也不该混）。
+    - 桌面：Linux/Mac `$XDG_DATA_HOME/encv(-dev)/themes`、Windows `%LOCALAPPDATA%\encv(-dev)\themes`。
+    - 优先级：`ENCV_THEMES_DIR`（显式）> 派生默认值。
+    - **严禁**把用户数据写进 `servingDir`（静态 web 根）—— 用户于 2026-07-16 明确纠正过此错误初稿。
+  - 内置主题：随包发布在 `servingDir/themes/<id>/`，由 `/themes/*` 路由回退服务。
+  - 云拉取主题：前端安装时 `getThemeStorage().pullToLocal({ id, sourceUrl, manifest })` →
+    **Go 后端把远程主题下载到【数据目录】`themes/<id>/`**（与内置同形态、同加载机制，但物理位置不同）。
+    前端不热链远程 CDN —— 同源即本地优先、离线可用。
+  - `GET /themes/*` 静态路由（local-first）：先查数据目录（用户主题），**再回退 `servingDir/themes`**（内置），
+    两侧均做路径穿越防护；用户主题优先覆盖同名内置。
+  - `toSource` 据此：已落地（`meta.local`）的主题一律从 `/themes/<id>/theme.css` 解析；`js` 同理解析
+    `/themes/<id>/theme.js`；远程 `jsUrl` 仅作非本地兜底的遗留兼容。
+- **裸 .css 直链回退**：`installThemeFromCssLink(cssUrl)` 走 `pullToLocal({ cssOnly: true })`，
+  同样拉取到后端本地同一目录，本地优先；id 由文件名推导（无清单元信息）。
+- **契约锁（续42 已建 + 本轮修正）**：`installThemeFromUrl` 单测断言改为——清单派生 id/名字后，
+  注入的 `<link>` 为**同源 `/themes/<id>/theme.css`**（本地优先），而非远程 CDN URL。
+- **废弃说明**：续43 初稿 `themeStore.ts`（Capacitor + localStorage 存主题字节 + data: URL 注入）**已废除**，
+  被本节的 `themeStorage.ts`【端口】方案取代——主题字节存哪、怎么存，全归 Go 后端，框架不持有。
+- **验证**：`app_check_all` → **9 PASS / 0 FAIL**（见上）。
+
+### 6.16 续44/45：gsap 赋能主题 —— GSAP 运行时读取主题的 --motion-* 令牌
+
+> 续44/45（§2.5.10 / §2.5.11 / §2.6）把动效防腐层 + 指令层接入真实 UI，但核验「主题 ≠ 换色」时发现
+> **最后一块短板**：`theme/tokens.css` 早已定义 `--motion-dur-*` / `--motion-stagger` / `--motion-intensity`
+> （见 §2.6），但此前**只有纯 CSS 动画**消费它们；GSAP（JS 动画引擎）侧的时长 / stagger / 强度是写死的
+> JS 常量（见 `motion/tokens.ts` 旧版）。于是**主题 / 用户片段覆写 `--motion-*` 令牌对 GSAP 动画毫无影响
+> —— 主题能换色、换形、换密度，却换不了动效节奏**，与「主题 ≠ 换色」原则相悖。
+
+- **修复（让 GSAP 也读主题令牌，gsap 赋能主题）**：新增 `motion/theme-read.ts` 运行时读取层——
+  1. 在运行时读取 `documentElement` 上 `--motion-*` 的**计算值**（带 250ms 节流缓存，按变量名缓存，
+     避免磁性跟手等高频路径每帧 `getComputedStyle` 触发回流风暴；主题切换最多 250ms 内反映）；
+  2. `motion/tokens.ts` 的 `DUR.fast/base/slow` getter、`getStagger()`，`motion/guard.ts` 的
+     `intensity` 全部改为经 `readMotionSeconds()` / `readMotionNumber()` 实时读令牌，读不到 / 非法时
+     回退常量默认（`DUR_FALLBACK` = 0.16/0.32/0.52s、`STAGGER` = 0.04s、`intensity` = vivid?1.3:1）。
+  3. 导出 `invalidateMotionTokenCache()`：主题切换（切 `data-theme` / 注入用户片段）后可显式调用，
+     立即让 GSAP 读到新令牌（否则最多 250ms 后自动生效）。
+- **结果**：覆写 `--motion-*` 令牌**同时作用于纯 CSS 动画（直接 `var()`）与 GSAP 动画（运行时读取）**，
+  二者表现一致，消费方零改动——**主题真能定制动效节奏**。
+- **主题作者公开 API（在主题 `theme.css` 覆写即可，无需改代码）**：
+  - `--motion-dur-fast / --motion-dur-base / --motion-dur-slow`：时长（支持 `ms` / `s`）；
+  - `--motion-stagger`：列表 / 级联入场的基础节奏（会再乘 `intensity`）；
+  - `--motion-intensity`：强度（0.8 克制 / 1 默认 / 1.5 张扬；`encv-vivid` / `encv-p3` 根类自动 1.3；
+    `prefers-reduced-motion` 下 `tokens.css` 置 0 → `guard` 直接关动画落终态）；
+  - `--motion-ease-*`：缓动（目前仅供纯 CSS 动画；GSAP 缓动走语义键 + 引擎 `EASE_MAP`，见 tokens.ts）。
+- **已落地样例（证明主题已真能定制动效）**：
+  - `ocean` 覆写 `--motion-dur-fast: 140ms`（比默认 160ms 更敏捷）；
+  - `midnight` 覆写 `--motion-dur-fast: 200ms`（沉稳、略慢）；
+  - `rose` / `kitty` 覆写 `--motion-ease-back`（明显回弹）；`forest` 覆写 `--motion-ease-out`（缓入缓出柔）。
+  这些令牌现在对 GSAP 与 CSS 动画**同时生效**。
+- **契约锁（防复发，反向）**：`motion-guard.test.ts` 新增 `motion tokens — gsap 赋能主题` 描述块断言——
+  - `DUR.fast/base/slow` 从 `--motion-dur-*`（ms/s 皆可）实时读取，未覆写回退默认；
+  - `getStagger()` 从 `--motion-stagger` 读取，缺失回退默认；
+  - `intensity` 从 `--motion-intensity` 读取（主题可克制 0.8 / 张扬 1.5）；
+  - 令牌 `<=0` 但被 `setMotionDisabled(false)` 强制开启时，`intensity` 钳制为正（避免「开启却零幅度」矛盾）。
+- **纪律（本仓强制规则 `.codebuddy/rules/文档同步.mdc`）**：本次补本文档 §6.16；门禁只验代码不验文档，
+  文档正确性由本次提交保证。
+- **验证**：`app_check_all` → **9 PASS / 0 FAIL**（含 `motion-guard.test.ts` 该描述块）；`app_check_all`
+  经 MCP 通道（`app_check_all`）跑，未碰裸终端。

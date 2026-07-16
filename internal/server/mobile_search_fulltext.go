@@ -75,17 +75,10 @@ func CloseFullTextIndex() error {
 
 // fulltextDBPath 返回 FTS5 数据库文件路径。
 //
-// 设计：
-//   - 桌面端：<servingDir>/.encv/fts5.db
-//   - Android：<ENCV_APP_FILES_DIR>/.encv/fts5.db（与 mounts.json 同目录）
-//
-// 不存在时 NewFileIndex 会创建空库，初始 stats.TotalFiles = 0。
-func fulltextDBPath(servingDir string) string {
-	if servingDir == "" {
-		// 无 servingDir 兜底：放 /tmp（不持久化，重启丢失）
-		return filepath.Join(os.TempDir(), "encv-fts5.db")
-	}
-	return filepath.Join(servingDir, ".encv", "fts5.db")
+// 续43 脉络：FTS 索引是应用数据，必须落数据目录（config.AppDataDir("fts")），
+// 绝不进 servingDir（用户媒体根；Android 上是私有只读打包资产，写不进去也不该混）。
+func fulltextDBPath() string {
+	return filepath.Join(ftsDataPath(), "fts5.db")
 }
 
 // InitFullTextIndexWithBuild 初始化 FTS5 索引 + 异步后台 build。
@@ -100,7 +93,7 @@ func fulltextDBPath(servingDir string) string {
 // 容器跳过：跳过 .encv 加密容器（已在 search cache 层处理）
 // content 截断：读前 64KB（IO 限制，避免大文件拖慢启动）
 func (s *Server) InitFullTextIndexWithBuild(servingDir string) error {
-	dbPath := fulltextDBPath(servingDir)
+	dbPath := fulltextDBPath()
 	// 确保 .encv 目录存在
 	if dir := filepath.Dir(dbPath); dir != "" {
 		_ = os.MkdirAll(dir, 0o755)

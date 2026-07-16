@@ -42,6 +42,10 @@ export function useRipple(el: Ref<HTMLElement | null>): void {
   onMounted(() => {
     const node = el.value;
     if (!node) return;
+    // 宿主需相对定位 + 裁剪溢出，ripple 圆形才被正确限制在卡片内。
+    // 仅在尚未显式设置时补默认，避免覆盖组件既有定位。
+    if (getComputedStyle(node).position === "static") node.style.position = "relative";
+    if (getComputedStyle(node).overflow === "visible") node.style.overflow = "hidden";
     node.addEventListener("pointerdown", (e: PointerEvent) => {
       if (disabled()) return;
       const rect = node.getBoundingClientRect();

@@ -44,6 +44,9 @@ class NoopEngine implements MotionEngine {
   createScrollTrigger(): ScrollTriggerHandle {
     return NOOP_TRIGGER;
   }
+  refreshScrollTriggers(): void {
+    /* no-op：无滚动触发器需要刷新 */
+  }
   flipGetState(): FlipState {
     return undefined;
   }

@@ -1,0 +1,48 @@
+/* =============================================================================
+ * 官方主题资源包：午夜（Midnight）—— 极简暗色 · 锐利 · 近扁平
+ * 与第三方主题同形态、同加载机制（themeLoader 运行时注入）。
+ * ========================================================================== */
+
+[data-theme="midnight"] {
+  color-scheme: dark;
+
+  /* 色相：靛紫 */
+  --color-primary: #818cf8;
+  --color-primary-content: #1e1b4b;
+  --color-secondary: #a78bfa;
+  --color-secondary-content: #2e1065;
+  --color-accent: #c084fc;
+  --color-accent-content: #3b0764;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #0a0a14;
+  --color-base-200: #13131f;
+  --color-base-300: #26263a;
+  --color-base-content: #e0e0f0;
+  --color-info: #60a5fa;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+
+  /* 形状语言：锐利（小圆角，胶囊也近方） */
+  --radius-selector: 0.375rem;
+  --radius-field: 0.375rem;
+  --radius-box: 0.5rem;
+  --radius-pill: 0.5rem;
+  --radius-mono: 2px;
+
+  /* 密度：略紧凑 */
+  --density: 0.95;
+
+  /* 立体感：近扁平，仅极淡阴影（极简） */
+  --elevation-chip-hover: 0 1px 3px -1px rgb(0 0 0 / 0.3);
+  --elevation-panel-overlay: 0 2px 14px -6px rgb(0 0 0 / 0.5);
+  --lift-hover: 0px;
+  --press-scale: 0.99;
+
+  /* 焦点环：细锐 */
+  --ring-focus: 0 0 0 2px color-mix(in srgb, var(--color-primary) 45%, transparent);
+
+  /* 动效：沉稳 */
+  --motion-dur-fast: 200ms;
+}

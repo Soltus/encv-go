@@ -193,6 +193,24 @@ src/theme/themes/<theme-id>/
 
 > 上述全部走 `guard.ts`：reduced-motion 时落终态、vivid 时增强幅度/粒子数、P3 时色更艳。
 
+#### 2.5.10 落地进度（2026-07-16）
+
+动效防腐层（`src/motion/` ACL）已建成，本日把 Phase 3 动效全集**开始接入真实 UI**（续44 同批）：
+
+- `ExtensionsPage.vue`：页面进入转场 `usePageTransition`（作用 `ion-page.$el`）+ 列表 `useScrollReveal` stagger（已有试点，加 `ready` 闸门等待异步加载后入场）。
+- `Settings.vue`：页面进入转场 `usePageTransition` + 设置分组 `useScrollReveal` stagger（作用 `ion-content.$el` 的各 `ion-list`）。
+- `micro.ts` 的 `useRipple` 自动把宿主设为 `position:relative; overflow:hidden`，ripple 圆形无需额外 CSS 即可被正确裁剪（`.encv-ripple` 由 JS 内联样式驱动）。
+- **契约测试** `encv-mobile/src/motion/__tests__/motion-guard.test.ts`（已入 `FAST_INCLUDE`）：锁死 `guard` 闸门口径（reduced-motion / vivid-P3 / 总闸覆盖）+ 设计令牌导出 + **指令层 7 指令的注册与 API**。这是「换 gsap+daisyui 技术栈、下游零改动」的运行时兜底——换引擎（改 `internal/index.ts` 一行）不会改变闸门口径。
+
+#### 2.5.11 动效指令层（应用层 · 自助接入，2026-07-16 续45）
+composables（usePageTransition / useScrollReveal / ...）内部用 `onMounted/onUnmounted`，必须在组件 setup 上下文调用，无法直接用于 Vue 指令。为让动效「一行接入」全应用，新增 **指令层** `packages/shared-components/src/directives/motion.ts`：
+- 7 个指令：`v-reveal`（滚动揭示，支持 `{ stagger: true }`）、`v-page-transition`（页面进入淡入上移）、`v-ripple`（点击波纹）、`v-press`（按压弹性回弹）、`v-hover`（悬浮抬升）、`v-magnetic`（磁性跟手，可传 strength）、`v-count-up`（数字滚动，绑定 number）。
+- 指令内**直接驱动 `motion` 引擎 + `guard` 闸门**（用指令生命周期 `mounted/unmounted/updated`，cleanup 存 `WeakMap`），不经过 composables 的 `onMounted`——因此仍受 ACL 约束、引擎可透明替换，换栈下游零改动。
+- `main.ts` 已 `installMotionDirectives(app)` 全局注册，任意组件一行 `v-page-transition` 即可用。
+- 已接入：`Files.vue` 的 `<ion-page v-page-transition>`、`AgentChat.vue` 模态根 `<div v-page-transition>`（高频页面/模态进入转场）。
+
+> 接入原则（与主题 re-surface 一致）：**bespoke 交互组件（如 `ServerStatusCard` 的 3D 翻转/脉冲）保留专属动画，不套共享动效层**；通用列表/页面/卡片才接 `v-reveal`/`v-page-transition`/`v-ripple`/`v-press`。后续按本清单继续铺开（文件长列表 Files.vue 的列表项 `v-reveal`、Toast/BottomSheet 浮层、FAB 展开、数字 count-up 等）。
+
 ### 2.6 动效设计令牌（缓动 / 时长 / 强度）
 
 集中定义，组件不再各写魔法数：
@@ -211,6 +229,13 @@ src/theme/themes/<theme-id>/
 ```
 
 `guard.ts` 读 `--motion-intensity` + `matchMedia('(prefers-reduced-motion)')` + `vividMode` 计算 `MotionProfile`：`{ enabled, intensity, respectsReduced }`，所有动画工厂读取后缩放时长/位移。
+
+> **gsap 赋能主题（运行时读令牌）**：上述 `--motion-*` 令牌的「单一真源」在 `theme/tokens.css`，
+> 纯 CSS 动画直接 `var()` 消费；GSAP（JS 引擎）侧经 `src/motion/theme-read.ts` 在运行时读取根节点
+> `--motion-dur-*` / `--motion-stagger` / `--motion-intensity` 计算值（`tokens.ts` 的 `DUR` getter、
+> `getStagger()`、`guard.ts` 的 `intensity` 均走此路径）。因此**主题 / 用户片段覆写这些令牌会同时作用于
+> 纯 CSS 与 GSAP 动画**（250ms 节流缓存，主题切换调 `invalidateMotionTokenCache()` 即时生效），
+> 消费方零改动——主题真能定制动效节奏（见 THEME_DEV.md §6.16）。
 
 ---
 
@@ -253,6 +278,13 @@ src/theme/themes/<theme-id>/
 - 内置主题写死在 `daisyui.css` 的 `@plugin "daisyui/theme"` 块（2.7.1）。
 - 用户主题（`src/theme/user-themes/<id>/theme.css`）走**构建期拼接**：在 `vite-plugins/daisy-ui.ts` 扫描这些目录，生成对应的 `@plugin "daisyui/theme"` 块（或在 CI 生成 `themes:` 列表）。
 - ⚠️ **重要**：daisyUI 主题是"声明式 + 编译期"，运行时不能动态新增 `data-theme` 名。用户主题必须在构建期注册进 config，运行时只是切换 `data-theme="<已注册名>"`（这正是思源"集市"式分发 + 构建期打包的折中）。
+- 🆕 **续37（主应用 encv-mobile 纯 CSS 路径，已落地）**：主应用不走 daisyUI 编译期拼接，
+  而是把主题实现为**运行时可加载的文件夹资产包**（`public/themes/<id>/theme.json` + `theme.css`
+  + 可选 `theme.js` / `assets/`），由 `themeLoader`（`packages/shared-components/src/theme/themeLoader.ts`）
+  运行时注入 `<link>` 并切 `[data-theme]`，**官方 == 第三方同形态、同加载机制**（仅 `builtIn` 区分预装），
+  真正满足 §2.3「可加载 / 可卸载 / 可分发」。配套性能指标（load/switch/cache/FOUC）+ 优化
+  （预加载 / 去重缓存 / LRU 卸载 / 防 FOUC）。详见 `THEME_DEV.md` §6.10。
+  ⚠️ 因此主应用路径**不再**把任何主题 `@import` 进 `theme-core.css`（那会剥夺运行时装卸能力）。
 
 ### 2.8 浏览器兼容性：Chromium 114 基线验证
 

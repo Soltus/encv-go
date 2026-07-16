@@ -1,0 +1,12 @@
+{
+  "id": "kitty",
+  "name": "Kitty",
+  "author": "Community",
+  "mode": "light",
+  "version": "1.0.0",
+  "builtIn": false,
+  "description": "全能力示例主题：自带 assets/ 图片资源 + @font-face 字体族 + theme.js 装饰钩子。证明「真主题」（Hello Kitty 式皮肤）在本架构下可完整实现，而非只换色。",
+  "css": "theme.css",
+  "js": "theme.js",
+  "assets": ["assets/bg.svg", "assets/sticker.svg"]
+}

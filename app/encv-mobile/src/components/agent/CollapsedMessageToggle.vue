@@ -6,9 +6,11 @@
   - 点击 → onToggle()
 -->
 <template>
+  <!-- 表面（bg/border/fg/圆角/悬停）上提到全局 .ui-chip / .ui-chip--neutral（随主题翻转，用户主题可覆写）。
+       scoped 仅留布局 + 活跃脉冲动画（[data-v-x] 特异性胜出，不抢表面）。 -->
   <div
-    class="collapsedToggle"
-    :class="{ 'collapsedToggle--primary': active || expanded, collapsedToggle_active: active }"
+    class="collapsedToggle ui-chip"
+    :class="{ 'ui-chip--neutral': !(active || expanded), collapsedToggle_active: active }"
     @click="onToggle"
   >
     <ion-icon :icon="icon" class="collapsedIcon" />
@@ -40,37 +42,14 @@ const chevronDown = chevronDownOutline;
 </script>
 
 <style scoped>
-/* chip 外观以设计令牌内联表达，组件自包含、不依赖共享类词汇 */
+/* 表面（bg/border/fg/悬停/按下）由全局 .ui-chip / .ui-chip--neutral 提供（随主题翻转）。
+   scoped 仅留布局 + 尺寸（[data-v-x] 胜出）；悬停/按下沿用 .ui-chip:hover/:active。 */
 .collapsedToggle {
-  display: inline-flex;
-  align-items: center;
   gap: 0.375rem;
   padding: 0.25rem 0.75rem;
   border-radius: var(--radius-selector, 1rem);
-  border: 1px solid var(--color-base-300);
-  background: var(--color-base-200);
-  color: var(--color-base-content);
   font-size: 0.8125rem;
-  cursor: pointer;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
-.collapsedToggle:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--color-primary) 40%, var(--color-base-300));
-  box-shadow: 0 2px 6px -2px rgb(0 0 0 / 0.1);
-}
-.collapsedToggle--primary {
-  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-base-300));
-  background: color-mix(in srgb, var(--color-primary) 12%, var(--color-base-100));
-  color: color-mix(in srgb, var(--color-primary) 75%, var(--color-base-content));
-}
-.collapsedToggle--primary:hover {
-  transform: translateY(-1px);
-  border-color: var(--color-primary);
-  background: color-mix(in srgb, var(--color-primary) 18%, var(--color-base-100));
-  box-shadow: 0 2px 6px -2px rgb(0 0 0 / 0.1);
-}
-.collapsedToggle--primary:active { transform: scale(0.98); }
 .collapsedToggle_active {
   animation: collapsedActivePulse 1.4s ease-in-out infinite;
 }

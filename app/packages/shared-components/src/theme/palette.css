@@ -17,7 +17,12 @@
   --color-black: #000000;
 }
 
-/* 亮色：encv（默认） */
+/* ── encv 默认基态（唯一编译进产物的主题相关定义）──
+ * 这是默认主题（encv 亮色）的回落基态：当 documentElement 无 data-theme 属性时即生效，
+ * 保证「零加载成本 / 无 FOUC」。各主题（含 encv 自身）的完整设计语言资产都在
+ * public/themes/<id>/theme.css，运行时由 themeLoader 注入。本文件【不再】包含任何
+ * [data-theme="..."] 主题块——那会让主题被编译期烤进产物，违背「可加载/卸载/分发」
+ * 与「官方 == 第三方」（详见 THEME_DEV.md §6.9/§6.10）。 */
 :root,
 [data-theme="encv"] {
   color-scheme: light;
@@ -34,32 +39,6 @@
   --color-base-200: #f3f4f6;
   --color-base-300: #e5e7eb;
   --color-base-content: #1f2937;
-  --color-info: #3b82f6;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-error: #ef4444;
-
-  --radius-selector: 1rem;
-  --radius-field: 0.5rem;
-  --radius-box: 1rem;
-}
-
-/* 暗色：encv-dark（跟随 prefers-color-scheme: dark 或 [data-theme="encv-dark"]） */
-[data-theme="encv-dark"] {
-  color-scheme: dark;
-
-  --color-primary: #9c6df7;
-  --color-primary-content: #ffffff;
-  --color-secondary: #1fbdd8;
-  --color-secondary-content: #ffffff;
-  --color-accent: #ee5aa3;
-  --color-accent-content: #ffffff;
-  --color-neutral: #1f2937;
-  --color-neutral-content: #f9fafb;
-  --color-base-100: #0f172a;
-  --color-base-200: #1e293b;
-  --color-base-300: #334155;
-  --color-base-content: #e2e8f0;
   --color-info: #3b82f6;
   --color-success: #22c55e;
   --color-warning: #f59e0b;

@@ -89,6 +89,7 @@ class GsapEngine implements MotionEngine {
   createScrollTrigger(config: ScrollTriggerConfig): ScrollTriggerHandle {
     const st = ScrollTrigger.create({
       trigger: config.trigger,
+      scroller: config.scroller,
       start: config.start,
       end: config.end,
       once: config.once,
@@ -102,6 +103,10 @@ class GsapEngine implements MotionEngine {
         return st.progress;
       },
     };
+  }
+
+  refreshScrollTriggers(): void {
+    ScrollTrigger.refresh();
   }
 
   flipGetState(target: MotionTarget): FlipState {

@@ -172,6 +172,12 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 
 	s.registerAgentRoutes(r)
 
+	// 🆕 续43 修订：本地优先主题存储 —— Go 后端把远程主题拉取/删除到【数据目录】(themesDir)，
+	//   GET /themes/* 只从数据目录提供用户主题；servingDir 是用户媒体，应用数据绝不写入/读出。与 dev 网关兼容。
+	r.POST("/api/themes/pull", s.HandleThemePull)
+	r.DELETE("/api/themes/:id", s.HandleThemeDelete)
+	r.GET("/themes/*filepath", s.HandleThemeStatic)
+
 	r.Any("/api/preview/plugin-openlist/*filepath", s.handlePluginOpenlistProxyGin)
 	r.Any("/api/preview/plugin-openlist", s.handlePluginOpenlistProxyGin)
 

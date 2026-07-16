@@ -55,6 +55,76 @@ fi
 
 NO_AUTOINDEX="${CODEMOGGER_NO_AUTOINDEX:-0}"
 
+# --- multi-root config (.codemogger.json) ------------------------------------
+# Workspace-maintained list of roots codemogger should index/search, each with
+# a weight. Single-root (CODEMOGGER_ROOT / --db) is the fallback when absent.
+# codemogger only parses TS/Vue/Kotlin, so Go roots (internal/openlist/...) are
+# covered by the full-repo grep complement, not FTS — but they still get a
+# weighted, labeled search block and are indexed for any future grammar support.
+CONFIG_WORKSPACE=""
+ROOTS_TSV=""
+CONCEPTS_TSV=""
+GREP_INCLUDE=()
+GREP_EXCLUDE=()
+_load_config() {
+  local cfg="${CODEMOGGER_CONFIG:-/workspace/.codemogger.json}"
+  [ -f "$cfg" ] || return 0
+  CONFIG_WORKSPACE="$(cd "$(dirname "$cfg")" && pwd)"
+  ROOTS_TSV="$(node -e '
+    const fs=require("fs"),path=require("path");
+    let cfg; try{cfg=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));}catch(e){process.exit(0);}
+    const ws=path.dirname(process.argv[1]);
+    for(const r of (cfg&&cfg.roots)||[]){
+      if(!r||!r.path) continue;
+      let rp=r.path; if(!path.isAbsolute(rp)) rp=path.join(ws,rp);
+      const w=(typeof r.weight==="number"&&r.weight>0)?r.weight:1.0;
+      console.log(rp+"\t"+w);
+    }
+  ' "$cfg" 2>/dev/null)"
+  CONCEPTS_TSV="$(node -e '
+    const fs=require("fs");
+    let cfg; try{cfg=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));}catch(e){process.exit(0);}
+    const cs=(cfg&&cfg.concepts)||{};
+    for(const k of Object.keys(cs)){
+      const v=cs[k];
+      if(!Array.isArray(v)) continue;
+      console.log(k+"\t"+v.join(" "));
+    }
+  ' "$cfg" 2>/dev/null)"
+  # grep include/exclude (general-knowledge retrieval: docs + config that
+  # codemogger's FTS can't index). Falls back to built-in defaults if absent.
+  local raw
+  raw="$(node -e '
+    const fs=require("fs");
+    let cfg; try{cfg=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));}catch(e){process.exit(0);}
+    const g=cfg&&cfg.grep;
+    if(g&&Array.isArray(g.include)) for(const x of g.include) console.log("I\t"+x);
+    if(g&&Array.isArray(g.exclude)) for(const x of g.exclude) console.log("E\t"+x);
+  ' "$cfg" 2>/dev/null)"
+  local mode val
+  while IFS=$'\t' read -r mode val; do
+    [ -z "$val" ] && continue
+    case "$mode" in
+      I) GREP_INCLUDE+=("$val") ;;
+      E) GREP_EXCLUDE+=("$val") ;;
+    esac
+  done <<< "$raw"
+}
+_load_config
+
+# defaults for general-knowledge grep (docs + config) when .codemogger.json
+# doesn't supply a `grep` block.
+if [ ${#GREP_INCLUDE[@]} -eq 0 ]; then
+  GREP_INCLUDE=( '*.go' '*.md' '*.json' '*.jsonc' '*.yaml' '*.yml' \
+                 '*.kt' '*.kts' '*.ts' '*.tsx' '*.vue' \
+                 '*.css' '*.scss' '*.less' \
+                 'Dockerfile' '*.toml' '*.sh' '*.gradle' '*.gradle.kts' )
+fi
+if [ ${#GREP_EXCLUDE[@]} -eq 0 ]; then
+  GREP_EXCLUDE=( node_modules .git .codemogger .agents .codebuddy .trae \
+                 dist build .next .output coverage )
+fi
+
 # --- scan global options that may appear anywhere ----------------------------
 DB_PATH=""
 HAS_FILE=0
@@ -191,6 +261,141 @@ if [ "$SUBCMD" = "leaks" ]; then
     echo "(none — shared layer is clean)"
   else
     echo "$hits"
+  fi
+  exit 0
+fi
+
+# --- multi-root index (from .codemogger.json) --------------------------------
+# Indexes every declared root into its own <root>/.codemogger/index.db. Single
+# codemogger `index` only ever covers ONE root, so multi-root must loop.
+if [ "$SUBCMD" = "index" ]; then
+  if [ -n "$ROOTS_TSV" ]; then
+    echo "== multi-root index (from $(basename "$CONFIG_WORKSPACE")/.codemogger.json) ==" >&2
+    while IFS=$'\t' read -r rp w; do
+      [ -z "$rp" ] && continue
+      if [ ! -d "$rp" ]; then echo "  (skip $(basename "$rp"): dir not found)" >&2; continue; fi
+      echo "  indexing $(basename "$rp") (weight=$w) -> $rp/.codemogger/index.db" >&2
+      node "$REAL_CLI" index "$rp" --db "$rp/.codemogger/index.db" >/dev/null 2>&1 \
+        || echo "  (index failed for $rp)" >&2
+    done <<< "$ROOTS_TSV"
+    exit 0
+  fi
+  # fallback: single-root index (DIR from --db, or cwd)
+  maybe_reindex
+  exec node "$REAL_CLI" "$@"
+fi
+
+# --- full-repo grep (architecture-concept search) ----------------------------
+# codemogger only parses TS/Vue/Kotlin and indexes a SINGLE frontend root, so the
+# Go backend (internal/server: servingDir, SPA/WebView serving, themes, ...) and
+# docs are INVISIBLE to `search`. That made concept questions like "where is the
+# SPA served from" / "what is servingDir" absurdly hard to answer.
+#
+# Fix (pain-point optimization): a full-repo grep over go/md/kt/ts/vue that
+# codemogger can't parse, exposed both as a standalone `grep` subcommand and as a
+# complement to `search` (hybrid: codemogger FTS ∪ grep). Fixed-string (-F) so
+# arbitrary query text can never break the command.
+grep_root() {
+  local g="${CODEMOGGER_GREP_ROOT:-}"
+  if [ -n "$g" ]; then echo "$g"; return; fi
+  if [ -n "$CONFIG_WORKSPACE" ]; then echo "$CONFIG_WORKSPACE"; return; fi
+  if [ "$DIR" != "." ] && [ -d "$DIR/../.." ]; then
+    ( cd "$DIR/../.." && pwd )
+  else
+    echo "/workspace"
+  fi
+}
+
+# Build GREP_OPTS from the (configurable) general-knowledge include/exclude set.
+# codemogger's FTS can't index these, so they're the grep-complement surface:
+# docs (md) + config (json/yaml/toml/Dockerfile/...) + all source codemogger
+# can't parse (go/kt). Fixed-string (-F) so arbitrary query text never breaks it.
+GREP_OPTS=(-rniF)
+for p in "${GREP_INCLUDE[@]}"; do GREP_OPTS+=(--include="$p"); done
+for d in "${GREP_EXCLUDE[@]}"; do GREP_OPTS+=(--exclude-dir="$d"); done
+
+# Build fixed-string `-e PATTERN` array from a query. Supports `|` as OR so a
+# single codemogger_grep query can match several literals (e.g. `foo|bar|baz`).
+# Without `|` it's a single `-e` (preserves exact fixed-string semantics).
+_pat_opts() {
+  pats=()
+  local IFS='|'
+  local t
+  for t in $1; do
+    [ -n "$t" ] && pats+=(-e "$t")
+  done
+}
+
+# Per-root labeled grep over the general-knowledge file set. This is what makes
+# backend/config roots FIRST-CLASS in `search` instead of a flat wasted grep:
+# each root contributes a labeled, weight-ordered block — same attribution flow
+# as the codemogger FTS. Without ROOTS_TSV it falls back to a single workspace grep.
+grep_roots() {
+  local q="$1" cap="${2:-20}"
+  [ -z "$q" ] && return 0
+  _pat_opts "$q"
+  if [ -z "$ROOTS_TSV" ]; then
+    grep "${GREP_OPTS[@]}" "${pats[@]}" -- "$(grep_root)" 2>/dev/null | head -"$cap" || true
+    return 0
+  fi
+  while IFS=$'\t' read -r rp w; do
+    [ -z "$rp" ] && continue
+    [ -d "$rp" ] || continue
+    local hits
+    hits="$(grep "${GREP_OPTS[@]}" "${pats[@]}" -- "$rp" 2>/dev/null | head -"$cap")" || true
+    if [ -n "$hits" ]; then
+      echo "---- [$(basename "$rp") · w=$w] ----"
+      echo "$hits"
+    fi
+  done < <(printf '%s\n' "$ROOTS_TSV" | sort -t$'\t' -k2 -nr)
+}
+
+if [ "$SUBCMD" = "grep" ]; then
+  q="${2:-}"
+  if [ -z "$q" ]; then echo "usage: codemogger grep <string>" >&2; exit 2; fi
+  _pat_opts "$q"
+  grep "${GREP_OPTS[@]}" "${pats[@]}" -- "$(grep_root)" 2>/dev/null | head -80 || true
+  exit 0
+fi
+
+if [ "$SUBCMD" = "search" ]; then
+  q="${2:-}"
+  # concept expansion: if q is a known concept, grep its precise terms (cuts
+  # substring noise — e.g. bare 'SPA' would otherwise match 'xcworkspace').
+  cmatch=""
+  if [ -n "$CONCEPTS_TSV" ] && [ -n "$q" ]; then
+    cmatch="$(printf '%s\n' "$CONCEPTS_TSV" | awk -F'\t' -v k="$q" '{ if (tolower($1)==tolower(k)) {print $2; exit} }')"
+    if [ -n "$cmatch" ]; then
+      echo "== concept '$q' -> expanding to terms: $cmatch =="
+      for t in $cmatch; do
+        echo "---- term: $t ----"
+        grep_roots "$t" 20 || true
+      done
+    fi
+  fi
+  if [ -n "$ROOTS_TSV" ]; then
+    # multi-root FTS: each root's DB queried, results labeled + ordered by weight desc.
+    echo "== multi-root codemogger FTS for: $q (ordered by weight desc) =="
+    while IFS=$'\t' read -r rp w; do
+      [ -z "$rp" ] && continue
+      db="$rp/.codemogger/index.db"
+      [ -f "$db" ] || { echo "(skip $(basename "$rp"): not indexed — run codemogger index)" >&2; continue; }
+      echo "---- [$(basename "$rp") · w=$w] ----"
+      node "$REAL_CLI" search "$q" --db "$db" 2>&1 || true
+    done < <(printf '%s\n' "$ROOTS_TSV" | sort -t$'\t' -k2 -nr)
+  else
+    # single-root fallback
+    maybe_reindex
+    node "$REAL_CLI" "$@" 2>&1 || true
+  fi
+  # complement: per-root grep over the general-knowledge file set (docs + config
+  # + all source codemogger can't FTS-index). This makes backend/config roots
+  # FIRST-CLASS in `search` — labeled, weight-ordered blocks, not a flat wasted
+  # grep. Skipped when a concept matched (its expanded terms already cover the
+  # intent without the bare-query substring noise).
+  if [ -n "$q" ] && [ -z "$cmatch" ]; then
+    echo "== general-knowledge grep (per-root, docs+config+src) for: $q =="
+    grep_roots "$q" 50 || true
   fi
   exit 0
 fi

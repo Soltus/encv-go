@@ -1,0 +1,48 @@
+/* =============================================================================
+ * 官方主题资源包：森林（Forest）—— 自然清新 · 宽松 · 柔和
+ * 与第三方主题同形态、同加载机制（themeLoader 运行时注入）。
+ * ========================================================================== */
+
+[data-theme="forest"] {
+  color-scheme: light;
+
+  /* 色相：自然绿 */
+  --color-primary: #16a34a;
+  --color-primary-content: #ffffff;
+  --color-secondary: #0d9488;
+  --color-secondary-content: #ffffff;
+  --color-accent: #65a30d;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #f3faf5;
+  --color-base-200: #dcfce7;
+  --color-base-300: #bbf7d0;
+  --color-base-content: #052e16;
+  --color-info: #0ea5e9;
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-error: #dc2626;
+
+  /* 形状语言：圆角盒 + 中等胶囊 */
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1.25rem;
+  --radius-pill: 9999px;
+  --radius-mono: 4px;
+
+  /* 密度：宽松 */
+  --density: 1.12;
+
+  /* 立体感：柔和绿影 */
+  --elevation-chip-hover: 0 3px 10px -3px rgb(22 163 74 / 0.24);
+  --elevation-panel-overlay: 0 10px 30px -10px rgb(5 46 22 / 0.16);
+  --lift-hover: -1px;
+  --press-scale: 0.985;
+
+  /* 焦点环：柔和 */
+  --ring-focus: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
+
+  /* 动效：缓入缓出柔 */
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}

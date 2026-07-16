@@ -1,0 +1,27 @@
+@use 'sass:color';
+@use 'sass:map';
+@use 'mixins' as m;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 用户主题作者 API（构建期主题路径可用，如插件 web daisyUI / 自定义 SCSS 主题）
+//
+// 让「用户主题」也同样享受 SCSS 高级特性，而非只能手写纯 CSS：
+//   - blend()：直接复用 sass:color 混合，计算自定义派生色。
+//   - surface()：复用项目同一套 tint 算法与 --tint-* 契约生成自己的表面类，
+//     与运行时注入的用户主题保持同一套视觉语言。
+//
+// 例：
+//   @use '.../theme/user-theme' as ut;
+//   [data-theme='my-theme'] {
+//     @include ut.surface('ui-chip', 'primary');
+//     --color-primary: #{ut.blend(#8b5cf6, #000, 20%)};
+//   }
+// ═══════════════════════════════════════════════════════════════════════════
+
+@mixin surface($sel, $color-token) {
+  .#{$sel} { @include m.surface-tint($color-token); }
+}
+
+@function blend($a, $b, $pct) {
+  @return color.mix($a, $b, $pct);
+}

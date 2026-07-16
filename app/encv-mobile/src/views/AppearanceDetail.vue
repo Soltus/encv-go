@@ -10,27 +10,114 @@
     </ion-header>
 
     <ion-content>
-      <!-- 主题（用户主题 / 可扩展，Phase 5） -->
-      <ion-list>
-        <ion-list-header>
-          <ion-label>{{ t('settings.themes') }}</ion-label>
-        </ion-list-header>
-        <ion-item
-          v-for="theme in themes"
-          :key="theme.id"
-          button
-          :detail="false"
-          @click="applyTheme(theme.id)"
+    <!-- 主题（运行时资产包：官方 == 第三方，可加载 / 卸载 / 分发） -->
+    <ion-list>
+      <ion-list-header>
+        <ion-label>{{ t('settings.themes') }}</ion-label>
+        <ion-badge slot="end" color="primary" class="scope-badge">{{ allThemes.length }}</ion-badge>
+      </ion-list-header>
+    </ion-list>
+    <div class="theme-grid">
+      <button
+        v-for="theme in allThemes"
+        :key="theme.id"
+        type="button"
+        class="theme-card"
+        :class="{ 'theme-card-active': isActive(theme.id) }"
+        :data-theme="theme.id"
+        @click="applyTheme(theme.id)"
+      >
+        <div class="theme-preview">
+          <!-- 真实语义组件：继承卡片 data-theme，直接呈现该主题的「形状 + 组件覆写」（霓虹发光 / 纸感衬线） -->
+          <div class="ui-bubble ui-bubble--user">Aa</div>
+          <div class="pv-row">
+            <span class="ui-chip">Chip</span>
+            <span class="ui-panel pv-panel">Panel</span>
+          </div>
+          <div class="pv-swatches">
+            <span class="sw" :style="{ background: 'var(--color-primary)' }"></span>
+            <span class="sw" :style="{ background: 'var(--color-accent)' }"></span>
+            <span class="sw" :style="{ background: 'var(--color-secondary)' }"></span>
+            <span class="sw" :style="{ background: 'var(--color-base-100)' }"></span>
+            <span class="sw" :style="{ background: 'var(--color-base-300)' }"></span>
+          </div>
+        </div>
+        <div class="theme-meta">
+          <span class="theme-name">{{ themeLabel(theme) }}</span>
+          <ion-icon v-if="isActive(theme.id)" :icon="checkmarkOutline" class="theme-check"></ion-icon>
+          <button
+            v-if="!isBuiltIn(theme.id)"
+            type="button"
+            class="theme-uninstall"
+            :aria-label="t('settings.uninstall')"
+            @click.stop="uninstallTheme(theme.id)"
+          >
+            <ion-icon :icon="trashOutline" />
+          </button>
+        </div>
+      </button>
+    </div>
+
+    <!-- 主题集市（Bazaar）：一键安装到用户空间 -->
+    <ion-list>
+      <ion-list-header>
+        <ion-label>{{ t('settings.bazaar') }}</ion-label>
+      </ion-list-header>
+      <ion-item v-for="entry in bazaar" :key="entry.id" :detail="false">
+        <ion-label>
+          <h3>{{ t(entry.nameKey) }}</h3>
+          <p v-if="entry.descKey">{{ t(entry.descKey) }}</p>
+        </ion-label>
+        <ion-button
+          v-if="!isInstalled(entry.id)"
+          size="small"
+          slot="end"
+          @click="installFromBazaar(entry)"
         >
-          <ion-icon
-            v-if="isActive(theme.id)"
-            :icon="checkmarkOutline"
-            slot="start"
-            color="primary"
-          ></ion-icon>
-          <ion-label>{{ t(theme.nameKey) }}</ion-label>
-        </ion-item>
-      </ion-list>
+          {{ t('settings.install') }}
+        </ion-button>
+        <ion-badge v-else slot="end" color="success">{{ t('settings.installed') }}</ion-badge>
+      </ion-item>
+    </ion-list>
+
+    <!-- 从链接安装（可分发：粘贴主题文件夹 / theme.json 地址，读取清单自动发现元信息） -->
+    <ion-list>
+      <ion-list-header>
+        <ion-label>{{ t('settings.installFromUrl') }}</ion-label>
+      </ion-list-header>
+      <ion-item>
+        <ion-input
+          :placeholder="t('settings.themeUrlPlaceholder')"
+          :value="themeUrl"
+          @ionInput="themeUrl = ($event.target as HTMLInputElement).value"
+        ></ion-input>
+        <ion-button
+          slot="end"
+          size="small"
+          :disabled="!themeUrlValid || themeInstalling"
+          @click="installFromUrl"
+        >
+          {{ themeInstalling ? t('settings.installing') : t('settings.install') }}
+        </ion-button>
+      </ion-item>
+      <ion-item v-if="themeInstallError" lines="none">
+        <ion-note color="danger">{{ themeInstallError }}</ion-note>
+      </ion-item>
+    </ion-list>
+
+    <!-- 主题性能指标（themeLoader 实时） -->
+    <ion-list>
+      <ion-list-header>
+        <ion-label>{{ t('settings.themePerf') }}</ion-label>
+      </ion-list-header>
+      <ion-item lines="none">
+        <ion-label class="theme-perf">
+          <span>{{ t('settings.themePerfSwitch') }}：{{ themePerf.lastSwitchMs ?? '—' }} ms</span>
+          <span>{{ t('settings.themePerfCache') }}：{{ themePerf.cacheHits }}</span>
+          <span>{{ t('settings.themePerfLoaded') }}：{{ themePerf.loaded }}</span>
+        </ion-label>
+      </ion-item>
+    </ion-list>
 
       <!-- 背景色（驱动暗黑/亮色模式） -->
       <ion-list>
@@ -279,14 +366,15 @@ import {
   globeOutline,
   layersOutline,
   sparklesOutline,
+  trashOutline,
   trendingUpOutline,
 } from "ionicons/icons";
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import type { Locale } from "@encv/shared-components/composables/useI18n";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useTheme } from "@encv/shared-components/composables/useTheme";
 import { useMotionPreference } from "@encv/shared-components/composables/useMotionPreference";
-import { useUserThemes } from "@encv/shared-components/composables/useUserThemes";
+import { useUserThemes, type UserThemeMeta } from "@encv/shared-components/composables/useUserThemes";
 import { useSnippets } from "@encv/shared-components/composables/useSnippets";
 
 const {
@@ -310,8 +398,55 @@ const {
 } = useTheme();
 const { t, locale, setLocale } = useI18n();
 const { isForcedOff, setForcedOff } = useMotionPreference();
-const { themes, applyTheme, isActive } = useUserThemes();
+const {
+  allThemes,
+  applyTheme,
+  isActive,
+  isBuiltIn,
+  isInstalled,
+  themeLabel,
+  installFromBazaar,
+  installTheme,
+  installThemeFromUrl,
+  installThemeFromCssLink,
+  uninstallTheme,
+  ensureThemeLoaded,
+  bazaar,
+  themePerf,
+} = useUserThemes();
 const { snippets, isEnabled, toggle: toggleSnippet } = useSnippets();
+
+// 从链接安装主题（可分发）：
+//   - 主题文件夹 / theme.json 地址 → 读取清单自动发现 id/名字/CSS/JS（真正「可分发」路径）
+//   - 直连 theme.css 地址 → 回退旧行为（从文件名推导 id，无清单元信息）
+const themeUrl = ref("");
+const themeInstalling = ref(false);
+const themeInstallError = ref("");
+const themeUrlValid = computed(() => /^https?:\/\/.+/i.test(themeUrl.value.trim()));
+async function installFromUrl() {
+  const url = themeUrl.value.trim();
+  if (!themeUrlValid.value || themeInstalling.value) return;
+  themeInstalling.value = true;
+  themeInstallError.value = "";
+  try {
+    if (/\.css$/i.test(url)) {
+      // 裸 .css 直链回退：同样拉取到后端本地同一目录，本地优先。
+      await installThemeFromCssLink(url);
+    } else {
+      await installThemeFromUrl(url);
+    }
+    themeUrl.value = "";
+  } catch (e) {
+    themeInstallError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    themeInstalling.value = false;
+  }
+}
+
+// 预热所有主题 CSS，让可视预览在渲染时即带正确样式
+onMounted(() => {
+  for (const theme of allThemes.value) ensureThemeLoaded(theme.id);
+});
 
 const currentGradient = ref<string | null>(null);
 
@@ -699,6 +834,130 @@ body.dark .p3-card {
   }
   .p3-card-title {
     font-size: 12px;
+  }
+}
+
+/* ── 主题目视实时预览网格（真主题：每个卡片用该主题自身 CSS 渲染，显示设计语言）── */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding: 8px 16px 16px;
+}
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  border: 1px solid var(--color-base-300);
+  border-radius: 16px;
+  background: var(--color-base-100);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  font: inherit;
+  /* 卡片文字统一用「该主题自身」的令牌，保证在暗/亮卡片上都可读（不继承文档级主题色） */
+  color: var(--color-base-content);
+  text-align: left;
+}
+.theme-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-base-300));
+}
+.theme-card-active {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 40%, transparent);
+}
+.theme-preview {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 96px;
+}
+/* 预览元素消费卡片作用域内的该主题变量 —— 形状/颜色/组件覆写差异直观可见。
+   直接用真实语义组件（.ui-bubble--user / .ui-chip / .ui-panel），不另造样式：
+   主题对组件的覆写（如 neon 发光描边、paper 衬线）会原样呈现。 */
+.theme-preview .ui-bubble--user {
+  align-self: flex-end;
+  max-width: 78%;
+}
+.pv-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pv-panel {
+  font-size: 11px;
+  padding: 2px 8px;
+}
+.pv-swatches {
+  display: flex;
+  gap: 6px;
+  margin-top: auto;
+}
+.sw {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.theme-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--color-base-200);
+}
+.theme-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.theme-check {
+  color: var(--color-primary);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.theme-uninstall {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-base-content);
+  cursor: pointer;
+  font-size: 18px;
+}
+.theme-uninstall:hover {
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+  color: var(--color-error);
+}
+.theme-perf {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: 12px;
+}
+.theme-perf span {
+  color: var(--ion-text-secondary);
+}
+@media (max-width: 599px) {
+  .theme-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .theme-preview {
+    padding: 12px;
+    min-height: 88px;
   }
 }
 </style>

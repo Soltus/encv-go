@@ -12,7 +12,7 @@
   接收 props: { apiBase: string }  （spec 7.5 要求；当前 useAgent 内部固定 /agent-api，参数保留供以后扩展）
 -->
 <template>
-  <div class="agentChat">
+  <div class="agentChat" v-page-transition>
     <header class="agentChatHeader">
       <!--
         v3 修复：关闭按钮放在最左侧（time 历史按钮之前）

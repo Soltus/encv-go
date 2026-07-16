@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/pkg/tasksystem"
 	"github.com/google/uuid"
 )
@@ -37,7 +38,8 @@ var _ tasksystem.TrashManager = (*TrashManagerImpl)(nil)
 //   - store: 任务系统存储接口（含 trash 表 CRUD）
 //   - broadcaster: 文件变更事件广播器，可为 nil
 func NewTrashManager(servingDir string, store tasksystem.Store, broadcaster Broadcaster) *TrashManagerImpl {
-	trashDir := filepath.Join(servingDir, ".trash")
+	// 续43 脉络：回收站是应用管理状态，落数据目录（config.AppDataDir），绝不进 servingDir（用户媒体根）。
+	trashDir := filepath.Join(config.AppDataDir("tasks"), ".trash")
 	if err := os.MkdirAll(trashDir, 0755); err != nil {
 		slog.Warn("Failed to create trash directory", "path", trashDir, "error", err)
 	}

@@ -13,7 +13,7 @@
       <div
         v-for="att in attachments"
         :key="att.id"
-        class="attachmentItem"
+        class="attachmentItem ui-card--subtle"
         :class="`attachmentItem-${att.kind}`"
       >
         <!-- 图片：缩略图 -->
@@ -85,14 +85,14 @@ function formatSize(bytes: number): string {
   align-items: stretch;
 }
 
+/* 表面（bg/border/fg）由全局 .ui-card--subtle 提供（随主题翻转，用户主题可覆写）。
+   scoped 仅留布局 + 尺寸（[data-v-x] 胜出）；缩略图/移除按钮等子元素是组件细节，保持原样。 */
 .attachmentItem {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 4px 6px;
   border-radius: 10px;
-  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 10%, transparent);
-  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 18%, transparent);
   max-width: 220px;
   min-width: 0;
   position: relative;

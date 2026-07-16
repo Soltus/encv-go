@@ -1,0 +1,48 @@
+/* =============================================================================
+ * 官方主题资源包：海洋（Ocean）—— 科技暗色 · 紧凑 · 利落
+ * 与第三方主题同形态、同加载机制（themeLoader 运行时注入）。
+ * ========================================================================== */
+
+[data-theme="ocean"] {
+  color-scheme: dark;
+
+  /* 色相：科技青蓝 */
+  --color-primary: #22d3ee;
+  --color-primary-content: #083344;
+  --color-secondary: #2dd4bf;
+  --color-secondary-content: #042f2e;
+  --color-accent: #818cf8;
+  --color-accent-content: #1e1b4b;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #0b1120;
+  --color-base-200: #111c33;
+  --color-base-300: #1e293b;
+  --color-base-content: #e0f2fe;
+  --color-info: #3b82f6;
+  --color-success: #4ade80;
+  --color-warning: #fbbf24;
+  --color-error: #f87171;
+
+  /* 形状语言：更利落（偏小圆角） */
+  --radius-selector: 0.75rem;
+  --radius-field: 0.5rem;
+  --radius-box: 0.75rem;
+  --radius-pill: 9999px;
+  --radius-mono: 4px;
+
+  /* 密度：紧凑 */
+  --density: 0.9;
+
+  /* 立体感：清冷青色辉光 + 深景 */
+  --elevation-chip-hover: 0 2px 10px -2px rgb(34 211 238 / 0.32);
+  --elevation-panel-overlay: 0 8px 30px -8px rgb(8 51 68 / 0.45);
+  --lift-hover: -1px;
+  --press-scale: 0.97;
+
+  /* 焦点环：青色 */
+  --ring-focus: 0 0 0 3px color-mix(in srgb, var(--color-primary) 32%, transparent);
+
+  /* 动效：更敏捷 */
+  --motion-dur-fast: 140ms;
+}

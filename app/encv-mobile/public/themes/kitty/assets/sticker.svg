@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="28" height="24" viewBox="0 0 28 24">
+  <!-- 主题自带贴纸资源：一枚粉色蝴蝶结（由 theme.css ::before 与 theme.js 装饰钩子引用）。
+       Hello Kitty 式皮肤即靠此把装饰「贴」到界面上，无需任何编译期支持。 -->
+  <g fill="#ff5fa2" stroke="#ffffff" stroke-width="1">
+    <path d="M14 12 L4 5 Q1 4 2 8 L4 12 L2 16 Q1 20 4 19 Z"/>
+    <path d="M14 12 L24 5 Q27 4 26 8 L24 12 L26 16 Q27 20 24 19 Z"/>
+    <circle cx="14" cy="12" r="3.2"/>
+  </g>
+</svg>

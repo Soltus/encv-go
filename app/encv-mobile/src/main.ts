@@ -16,6 +16,9 @@ import { registerIonicComponents } from "@encv/shared-components/composables/use
 import { installProxiedFetch } from "@encv/shared-components/composables/useProxiedFetch";
 import { initEncvI18n } from "@/i18n/init";
 import { clearLegacyLocalStorage } from "@encv/shared-components/lib/taskPersistence";
+// 🆕 续37：主题运行时闭环 —— 启动期预加载官方主题 + 水合上次选中的主题。
+// 主题不再编译进 theme-core.css，而是 public/themes/<id>/ 资源包，由 themeLoader 运行时注入。
+import { initUserThemes } from "@encv/shared-components/composables/useUserThemes";
 import App from "./App.vue";
 import router from "./router";
 
@@ -38,7 +41,7 @@ import "@encv/shared-components/theme/variables.css";
 import "@encv/shared-components/styles/theme-core.css";
 // 🆕 续27：全局语义「表面」类（.ui-chip / .ui-badge / ...），无 scoped，
 // 供用户主题以极简选择器任意覆写（SiYuan 式自由度 + 令牌易用路径）。
-import "@encv/shared-components/theme/surface.css";
+import "@encv/shared-components/theme/surface.scss";
 import "@encv/shared-components/styles/timeline-tokens.css";
 import "@encv/shared-components/styles/timeline-utilities.css";
 
@@ -54,6 +57,7 @@ import { registerSharedAppNavigation } from "@/stores/registerSharedAppNavigatio
 import { registerSharedNativeBridge } from "@/stores/registerSharedNativeBridge";
 import { registerSharedAppAssets } from "@/stores/registerSharedAppAssets";
 import { registerSharedApiProxy } from "@/stores/registerSharedApiProxy";
+import { registerSharedThemeStorage } from "@/stores/registerSharedThemeStorage";
 
 registerSharedTaskServices();
 registerSharedAppCapabilities();
@@ -61,6 +65,7 @@ registerSharedAppNavigation();
 registerSharedNativeBridge();
 registerSharedAppAssets();
 registerSharedApiProxy();
+registerSharedThemeStorage();
 
 // 🆕 2026-07-06：全局注册所有 Ionic Vue 组件
 //   必须在 .use(IonicVue) 之后调用，确保 Web Components 初始化完成
@@ -69,6 +74,12 @@ console.log(`[ionic] Registered ${ionicRegistered.length} Ionic Vue components`)
 
 // 注册长按指令
 app.directive("longpress", vLongpress);
+
+// 🆕 续45：全局注册动效指令层（v-reveal / v-page-transition / v-ripple / v-press /
+// v-hover / v-magnetic / v-count-up）。全部走 motion 引擎 ACL + guard 闸门，
+// 与 useXxx composables 同一套出/入口，换 gsap+daisyui 技术栈下游零改动。
+import { installMotionDirectives } from "@encv/shared-components/directives/motion";
+installMotionDirectives(app);
 
 // 🆕 2026-07-06：注册 encv 业务 i18n 字典
 initEncvI18n();
@@ -103,6 +114,10 @@ watch(
 
 // 🆕 v6 2026-06-18：清理旧 localStorage key（v6 决定：清空迁移，从零开始）
 clearLegacyLocalStorage();
+
+// 🆕 续37：预加载官方主题（并行注入 <link>）+ 水合偏好；与 router.isReady 并发，
+// 本地资源包加载极快，mount 前通常已就绪，避免换肤闪烁。
+void initUserThemes();
 
 router.isReady().then(() => {
   app.mount("#app");

@@ -356,6 +356,17 @@ export default defineConfig({
       '@encv/shared-components/': path.resolve(__dirname, '../packages/shared-components/src') + '/',
     },
   },
+  css: {
+    preprocessorOptions: {
+      // 用 sass-embedded 的现代 compiler API（@use/@forward 现代模块系统 + 原生嵌入式协议）。
+      scss: {
+        api: 'modern-compiler',
+        // 静默 Sass 弃用警告，避免传递依赖（daisyUI/legacy @import）告警干扰构建。
+        // 注意：'mixed-decls' 在 sass 1.100 已废除，列入反而触发 obsolete 警告，故不列。
+        silenceDeprecations: ['import', 'global-builtin', 'color-functions'],
+      },
+    },
+  },
   build: {
     rollupOptions: {
       // ⚠️ 防御：显式声明入口 HTML，防止 Vite 自动扫描 plugin-openlist 等子目录的 index.html

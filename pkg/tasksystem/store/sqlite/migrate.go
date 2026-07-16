@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/pkg/tasksystem"
 )
 
@@ -149,26 +150,41 @@ type migrateTask struct {
 // MigrateIfNeeded 检查并执行迁移（便捷函数）。
 //
 // 参数：
-//   - dbPath: SQLite 数据库文件路径
-//   - servingDir: serving 目录（用于查找 .encv-tasks.json）
+//   - dbPath: SQLite 数据库文件路径（必落应用数据目录，绝不进 servingDir）
+//   - servingDir: serving 目录（仅用于向后兼容查找 Legacy 的 .encv-tasks.json）
+//
+// 续43 脉络：任务持久化已从 servingDir 迁到 config.AppDataDir("tasks")。本函数同时
+// 在「遗留 servingDir」与「数据目录」查找旧 json，任一存在即迁移（避免迁移顺序变化
+// 导致漏迁）。绝不把任何新数据写回 servingDir。
 //
 // 若 dbPath 不存在且 jsonPath 存在，执行迁移。
 func MigrateIfNeeded(dbPath, servingDir string) error {
-	jsonPath := filepath.Join(servingDir, ".encv-tasks.json")
+	// 候选旧 json：先遗留 servingDir（旧版误放），再数据目录（migrateLegacyAppData 已迁出）。
+	candidates := []string{
+		filepath.Join(servingDir, ".encv-tasks.json"),
+		filepath.Join(config.AppDataDir("tasks"), ".encv-tasks.json"),
+	}
+	jsonPath := ""
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			jsonPath = c
+			break
+		}
+	}
+	if jsonPath == "" {
+		// 无旧 json，无需迁移（db 可能已存在或首次启动）。
+		return nil
+	}
 
 	// dbPath 已存在，检查是否已迁移
 	if _, err := os.Stat(dbPath); err == nil {
 		// db 已存在，但 JSON 也存在（未重命名为 .migrated），说明上次迁移中断
-		if _, err := os.Stat(jsonPath); err == nil {
-			// 尝试重新迁移（CreateTask 用 INSERT，若 ID 冲突会报错，需调用方处理）
-			store, err := New(dbPath)
-			if err != nil {
-				return fmt.Errorf("open store for re-migrate: %w", err)
-			}
-			defer store.Close()
-			return MigrateFromJSON(store, jsonPath)
+		store, err := New(dbPath)
+		if err != nil {
+			return fmt.Errorf("open store for re-migrate: %w", err)
 		}
-		return nil
+		defer store.Close()
+		return MigrateFromJSON(store, jsonPath)
 	}
 
 	// dbPath 不存在，创建新 store 并迁移

@@ -1,5 +1,5 @@
 <template>
-  <ion-page>
+  <ion-page ref="pageEl">
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
@@ -143,7 +143,7 @@ import { useRouter } from "vue-router";
 import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
-import { useScrollReveal } from "@encv/shared-components/motion";
+import { usePageTransition, useScrollReveal } from "@encv/shared-components/motion";
 import {
   checkInstalledPlugins,
   debugApkValidation,
@@ -181,6 +181,12 @@ const isInstalling = ref(false);
 const extensionsListEl = ref<HTMLElement | null>(null);
 const extensionsReady = computed(() => !isLoading.value && extensions.value.length > 0);
 useScrollReveal(extensionsListEl, { stagger: true, ready: extensionsReady });
+
+// 页面进入转场（§2.5.1）：ion-page 整体淡入 + 微上移，与下方列表 reveal 叠加成连贯入场。
+// 走 guard 闸门，reduced-motion / 关动效 时自动落终态，下游不感知具体动画库（gsap 经 ACL 全透明）。
+const pageEl = ref<any>(null);
+const pageRoot = computed<HTMLElement | null>(() => pageEl.value?.$el ?? null);
+usePageTransition(pageRoot);
 
 function getExtIcon(id: string) {
   switch (id) {

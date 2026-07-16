@@ -7,6 +7,7 @@
  *   - 根节点带 .encv-vivid 或 .encv-p3 => 强度上浮到 1.3
  */
 import { motion } from "./internal";
+import { readMotionNumber } from "./theme-read";
 
 export interface MotionProfile {
   /** reduced-motion 时为 false：调用方应直接 set 终态，不要播放入场动画 */
@@ -58,9 +59,15 @@ export function getMotionProfile(): MotionProfile {
   const root = document.documentElement;
   const vivid = root.classList.contains("encv-vivid") || root.classList.contains("encv-p3");
   const enabled = forcedDisabled !== null ? !forcedDisabled : !reduced;
+  // 强度源自主题 --motion-intensity 令牌（gsap 赋能主题）：默认 1、vivid/P3 上调 1.3、
+  // 主题可自定义（如 0.8 克制 / 1.5 张扬）。令牌读不到时回退 vivid 类判断。
+  // reduced-motion 下 tokens.css 把该令牌置 0——但若被 setMotionDisabled(false) 显式开启，
+  // enabled=true 而令牌=0 会导致「开启却零幅度」的矛盾，此时钳制回 vivid?1.3:1。
+  let intensity = readMotionNumber("--motion-intensity", vivid ? 1.3 : 1);
+  if (enabled && intensity <= 0) intensity = vivid ? 1.3 : 1;
   return {
     enabled,
-    intensity: vivid ? 1.3 : 1,
+    intensity,
     respectsReduced: reduced,
   };
 }

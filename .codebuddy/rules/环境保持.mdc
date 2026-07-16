@@ -1,17 +1,26 @@
 ---
-description: 禁止执行会杀死维持环境连接的进程、导致运行环境失联的命令（重点是 kill，清屏无妨）
+description: 禁止 execute_command 跑任何实质命令（含 kill）；长/阻塞命令一律走 MCP 工具，若 MCP 能力不全则先扩展 MCP 而非回退终端
 alwaysApply: true
 enabled: true
-updatedAt: 2026-07-12T02:30:00.000Z
-provider: 
+updatedAt: 2026-07-16T21:50:00.000Z
+provider:
 ---
 
-执行命令时严禁杀死维持环境连接的进程，避免把环境干失联。**注意：清屏（`clear`/`reset`/空行）本身没问题，问题在 `kill`。**
+执行命令的正确通道是 **MCP，不是本端 `execute_command`**（裸终端在本沙箱里易失联/卡死，且绕开了安全闸门）。
 
-- 禁止 `kill`/`pkill`/`killall` 任何维持当前远程环境连接的进程：SSH tunnel、dev server、后台 agent、会话守护进程等。误杀其中之一即会环境失联。
-- 跑 `kill` 前必须确认目标 PID/进程名，且**明确不属于环境连接链路**；拿不准一律先问，不要凭 `ps`/`grep` 猜了就杀。
-- 需要重启某服务时，优先用其自身的优雅重启/停止命令（如 `pm2 restart`、服务自带的 stop），不要用 `kill -9` 生杀。
-- `execute_command` 是独立 shell，命令自包含、用绝对路径，不依赖上一条命令残留的会话内状态（如 `cd`、激活的 venv、导出的临时变量）——如需连续上下文，用单条命令或 `&&` 串起来。
-- 一旦发现环境失联（命令起不来、连接断开），先恢复连接再继续，**不要盲目重跑**或连续发破坏性命令。
-- 长耗时/可能阻塞的命令（如构建、`pnpm check:all`、下载、安装依赖）**一律通过 `app-dev` MCP 工具执行**：`app_exec`（任意 shell，带安全闸门+超时）、`app_check_all`（全套门禁：biome CI/各包 typecheck/i18n lint/单测/vite build）、`app_format`（biome format --write 修格式）。这些工具运行在持久 MCP 进程、有超时与危险操作拦截，是跑命令的正确通道，**不要在本端用裸 `execute_command` 硬跑长命令**，也不必交给用户在自己终端跑。
-- `execute_command` 仅用于极短、非阻塞的探测性命令（如 `echo`/`ls`），且仍严禁 `kill`/`pkill`/`killall` 等危险操作（见上）。
+## 铁律
+- **`execute_command` 仅限极短、非阻塞的探测性命令**（`echo`/`ls`/`pwd`/`cat` 看小文件等），且依旧严禁 `kill`/`pkill`/`killall` 等危险操作。除此之外**一律禁止**用 `execute_command` 跑任何实质命令（构建、`pnpm`、`biome`、`git`、`grep`/`rg`、`codemogger`、docker、gradle、下载、安装依赖等）。
+- 实质命令改走对应 MCP 工具：
+  - 任意 shell / 长命令 → `app-dev` 的 **`app_exec`**（持久进程 + 安全闸门 + 超时，等价于稳定终端）。
+  - 全套门禁 → **`app_check_all`**；单包 typecheck → **`app_typecheck`**；i18n lint → **`app_i18n`**；biome 格式化 → **`app_format`**。
+  - 代码图检索（引用/上下文/搜索/影响面/泄漏）→ **`codemogger`** 系列工具（`codemogger_grep`/`codemogger_search`/`codemogger_references`/`codemogger_context`/`codemogger_impact`/`codemogger_leaks`），**不要**为了绕开 MCP 而在终端跑 `grep`/`rg`/`codemogger`。
+- **若某 MCP 能力不全（缺参数/缺子命令/行为不对），先扩展 MCP 服务本身，再回头用，绝不回退到 `execute_command`**：
+  - `app-dev` → `/workspace/scripts/app-dev-mcp.mjs`（dev 门禁 / shell / skill 管理）。
+  - `codemogger` → `/workspace/app/codemogger-patch/mcp-server.mjs`（已修：去掉死的重复 `codemogger_index` 分支；`list` 不再误带 `--db`；`codemogger_grep`/`codemogger_search` 新增 `dir` 作用域参数，覆盖「按目录抓 grep」的终端回退场景）。
+  - 改完用 `app_exec` 跑 `node --check <file>` 验证语法（不要裸 `execute_command`）。
+
+## 环境连接守护（kill 红线）
+- 严禁 `kill`/`pkill`/`killall` 任何维持当前远程环境连接的进程：SSH tunnel、dev server、后台 agent、会话守护进程、code-server、MCP 服务自身及其祖先、init 等。误杀即环境失联。
+- 跑 `kill` 前必须确认 PID/进程名且**明确不在环境连接链路**；拿不准先问，不凭 `ps`/`grep` 猜了就杀。
+- 重启服务优先用其自身优雅命令（`pm2 restart`、服务自带 stop），不用 `kill -9` 生杀。
+- 一旦发现失联（命令起不来/连接断），先恢复连接再继续，不盲目重跑或连发破坏性命令。

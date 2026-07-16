@@ -1,0 +1,40 @@
+/* 📜 paper：暖纸感主题（真主题能力的另一例：可辨认的视觉身份）
+ * 设计语言：米色纸底 + 茶棕主色 + 柔和大圆角 + 细描边 + 衬线感字体。 */
+[data-theme="paper"] {
+  color-scheme: light;
+
+  --color-primary: #a0785a;
+  --color-primary-content: #fffaf2;
+  --color-secondary: #7d9b76;
+  --color-secondary-content: #fffaf2;
+  --color-accent: #c08552;
+  --color-accent-content: #fffaf2;
+  --color-neutral: #8a7a66;
+  --color-neutral-content: #fffaf2;
+  --color-base-100: #f7f1e6;
+  --color-base-200: #efe6d6;
+  --color-base-300: #e3d6c0;
+  --color-base-content: #4a3f30;
+  --color-info: #6b8fb5;
+  --color-success: #7d9b76;
+  --color-warning: #d9a441;
+  --color-error: #b5564f;
+
+  /* 形状：柔和大圆角 */
+  --radius-selector: 1.25rem;
+  --radius-field: 0.75rem;
+  --radius-box: 1.25rem;
+  /* 密度：宽松 */
+  --density: 1.08;
+  /* 立体感：极弱投影 + 细描边 */
+  --elevation-surface: 0 1px 2px rgba(74, 63, 48, 0.08), 0 6px 18px -12px rgba(74, 63, 48, 0.25);
+}
+
+/* 真实选择器覆盖：气泡用纸面底色 + 细描边 + 柔圆角，衬线感字体 */
+[data-theme="paper"] .ui-bubble--user {
+  border: 1px solid var(--color-base-300);
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+}
+[data-theme="paper"] .ui-panel {
+  box-shadow: var(--elevation-surface);
+}

@@ -1,0 +1,7 @@
+{
+  "id": "neon",
+  "name": "Neon",
+  "builtIn": false,
+  "css": "theme.css",
+  "desc": "暗色霓虹：荧光绿主色 + 直角 + 发光描边"
+}

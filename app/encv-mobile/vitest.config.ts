@@ -94,6 +94,16 @@ const FAST_INCLUDE = [
   'src/utils/RingBuffer.bench.test.ts',
   // view 层纯逻辑（无模块级状态）
   'src/views/__tests__/useFilesView.searchTokens.test.ts',
+  // theme: SCSS 编译期契约快照（纯 sass 编译，无模块级状态）
+  'src/theme/__tests__/surface.test.ts',
+  // theme: 运行时资源包 + themeLoader 指标/优化（happy-dom，resetThemeLoaderForTest 防污染）
+  'src/theme/__tests__/official-themes.test.ts',
+  // motion: 动效 ACL 闸门契约（guard 行为 + 设计令牌导出），happy-dom
+  'src/motion/__tests__/motion-guard.test.ts',
+  // motion: 滚动揭示 IntersectionObserver 修复（复现「Ionic 内滚整页空白」），happy-dom
+  'src/motion/__tests__/scroll-reveal.test.ts',
+  // motion: v-reveal 指令同根因修复（Ionic 内滚空白），happy-dom
+  'src/motion/__tests__/directive-reveal.test.ts',
 ]
 
 // ── ISOLATED：有模块级状态 / 用 vi.resetModules / 依赖 localStorage ──

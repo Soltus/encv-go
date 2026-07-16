@@ -1,5 +1,5 @@
 <template>
-  <ion-page>
+  <ion-page ref="pageEl">
     <ion-header>
       <ion-toolbar>
         <ion-title>{{ t('settings.title') }}</ion-title>
@@ -12,7 +12,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content>
+    <ion-content ref="contentEl">
       <ion-list>
         <ion-list-header>
           <ion-label>{{ t('settings.appearance') }}</ion-label>
@@ -431,6 +431,7 @@ import type { FieldDef } from "@encv/shared-components/config/schemaParser";
 import { isMpvSubMode, PLAY_MODE } from "@encv/shared-components/constants/player";
 import { createAlistEncryptFeature } from "@encv/shared-components/features/alist-encrypt/index";
 import { ensurePluginLoaded, getPluginFullState, isNative, pickFolder } from "@/plugins/GoProcess";
+import { usePageTransition, useScrollReveal } from "@encv/shared-components/motion";
 
 const router = useRouter();
 const {
@@ -454,6 +455,15 @@ const {
   resetFieldToDefault,
 } = useConfig();
 const { t, tField, tSectionTitle } = useI18n();
+
+// 动效（§2.5.1 / §2.5.2）：页面进入转场 + 设置分组 stagger 入场。全部走 guard 闸门，
+// reduced-motion / 关动效 时自动落终态，下游不感知具体动画库（gsap 经 ACL 全透明）。
+const pageEl = ref<any>(null);
+const pageRoot = computed<HTMLElement | null>(() => pageEl.value?.$el ?? null);
+usePageTransition(pageRoot);
+const contentEl = ref<any>(null);
+const settingsRoot = computed<HTMLElement | null>(() => contentEl.value?.$el ?? null);
+useScrollReveal(settingsRoot, { stagger: true });
 
 const configLoaded = ref(false);
 const indexStats = ref<IndexStats | null>(null);

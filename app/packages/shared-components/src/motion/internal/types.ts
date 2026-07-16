@@ -35,6 +35,11 @@ export type FlipState = unknown;
 
 export interface ScrollTriggerConfig {
   trigger: Element;
+  /** 滚动容器。不传则默认 window。注意：Ionic 的 ion-content 在内部 shadow DOM 的
+   *  .inner-scroll 滚动（非 window），直接以 window 为 scroller 的 ScrollTrigger 在 Ionic
+   *  页面内永不触发 onEnter。揭示类动效（useScrollReveal / v-reveal）已改用 IntersectionObserver
+   *  规避此问题；本参数保留给真正需要自定义 scroller 的 ScrollTrigger 场景（如 useScrollParallax）。 */
+  scroller?: Element;
   start?: string;
   end?: string;
   once?: boolean;
@@ -60,6 +65,8 @@ export interface MotionEngine {
   /** 延时回调，返回可取消句柄 */
   delayedCall(delay: number, cb: () => void): MotionTween;
   createScrollTrigger(config: ScrollTriggerConfig): ScrollTriggerHandle;
+  /** 重新量测所有 ScrollTrigger（页面进场 transition 结束后调用，修正被缓存的「未进入」位置）。 */
+  refreshScrollTriggers(): void;
   flipGetState(target: MotionTarget): FlipState;
   flipFrom(state: FlipState, vars: MotionVars): void;
 }

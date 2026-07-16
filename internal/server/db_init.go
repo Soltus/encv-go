@@ -87,13 +87,14 @@ func initObjectBoxAvailability() {
 //
 // 2026-07-02 修复：此前 handleDatabaseInfo 把所有 libsql/turso 降级都说成"当前平台不支持"，
 // 但真实原因可能是 C 库加载失败、PRAGMA 失败、schema 失败、panic 等，严重误导调试。
-func (s *Server) InitDatabase(servingDir string) (string, string) {
+func (s *Server) InitDatabase() (string, string) {
 	// 先检测各引擎可用性（设置全局变量供 getAvailableEngines 使用）
 	initObjectBoxAvailability()
 
 	dbPath := s.cfg.Database.Path
 	if dbPath == "" {
-		dbPath = filepath.Join(servingDir, "encv-tasks.db")
+		// 续43 脉络：DB 是应用数据，必须落数据目录，绝不进 servingDir（用户媒体根）。
+		dbPath = filepath.Join(tasksDataPath(), "encv-tasks.db")
 	}
 	var dbStore tasksystem.Store
 	var err error

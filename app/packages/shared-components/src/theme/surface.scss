@@ -1,0 +1,36 @@
+/* =============================================================================
+ * ENCV 语义化「表面」类（Theming Surface Vocabulary）— SCSS 生成版 v2
+ * -----------------------------------------------------------------------------
+ * 目标：提供 SiYuan 式的「稳定 / 语义 / 全局」定位器，让任意用户主题用极简选择器
+ *       即可改写任意元素外观，达到甚至超越 SiYuan 的自由度；同时项目自身主题
+ *       用满 SCSS 高级特性（maps / @each / @function / @mixin / @if / @use+@forward
+ *       / sass:color），维护性从 O(N) 降到 O(1)。
+ *
+ * 模块边界（@use 现代模块系统，无 @import 全局污染）：
+ *   _palette  → 项目默认调色板具体值（sass:color 输入）
+ *   _config   → 所有生成配置（tint 配方 / 变体 map / 档位）单一事实来源
+ *   _color-fns→ sass:color 封装（编译期 compiled-* / 运行时 runtime-* 双路径）
+ *   _theme-tokens → 编译期派生令牌（--tint-* / --color-*-hover/-active / 交互令牌）
+ *   _mixins   → surface-fill / pill-base / surface-tint / neutral-surface
+ *   _surfaces → 选择器 + @each 驱动生成全部 .ui-*
+ *   _user-theme → 用户主题作者 API（blend / surface）
+ *
+ * 两层契约（项目自身 + 用户主题都不妥协，分层 = 编译期 vs 运行时）：
+ *   1) 选择器层（本文件生成）：.ui-* 是公开主题 API，用户想改结构/形状/任意属性直接写。
+ *   2) 令牌层：表面消费 var(--color-*) / var(--tint-*) / var(--radius-*) 等。
+ *      - 项目主题：_theme-tokens 用 sass:color 在【构建期】算出 --tint-* 具体值。
+ *      - 用户主题：运行时注入覆写 --color-*，--tint-* 未定义 → 表面回退 runtime
+ *        color-mix(var()) → 整套表面随用户调色板自动换肤，零折扣。
+ *
+ * 用户主题为何不打折：用户主题经 useUserThemes 在运行时注入 <head>，晚于打包 CSS
+ * 出现，specificity 相同（0,1,0）时后加载者胜出 → 用户 .ui-chip{} 直接赢，无需 !important；
+ * 覆写 --color-* 则整套 .ui-* 经运行时 color-mix 自动换肤。
+ *
+ * 契约稳定性：ui-chip / ui-badge / ui-card / ui-panel / ui-button / ui-toggle /
+ *   ui-bubble / ui-header / ui-input 是公开主题 API，不轻易改名；演进优先走令牌，
+ *   同一角色的多套表面家族用「--变体」后缀区分。新增变体 = _config 的 map 加一行。
+ * ========================================================================== */
+
+@use 'theme-tokens';
+@use 'surfaces';
+@use 'user-theme';

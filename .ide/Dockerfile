@@ -6,6 +6,7 @@ ARG GO_VERSION=1.25.1
 ARG G_VERSION=1.8.0
 ARG PNPM_VERSION=11
 ARG ANDROID_SDK_TOOLS_VERSION=13114758
+ARG RUST_VERSION=stable
 
 FROM cnbcool/default-dev-env:latest
 
@@ -13,6 +14,7 @@ ARG GO_VERSION
 ARG G_VERSION
 ARG PNPM_VERSION
 ARG ANDROID_SDK_TOOLS_VERSION
+ARG RUST_VERSION
 
 # Android SDK 开发环境（encv-mobile 安卓构建所需）
 # compileSdk/targetSdk=36, AGP=8.13.0, Gradle=9.0.0, Kotlin=2.3.21
@@ -49,10 +51,12 @@ RUN apt-get update && \
 
 # build-essential + ca-certificates：cgo 编译（pkg/ 下含 .c/.h/.a）
 # cmake：scripts/setup-sandbox-env.sh 前置检查强依赖（第 121 行））
+# pkg-config + libssl-dev：Rust/cgo 依赖（如 libsql 经 CGO 编译时需要的 openssl-sys）常用
 # 注意：端到端测试（Cypress/Playwright）不再全局装进镜像，按需在运行端自备。
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       curl wget git build-essential ca-certificates \
+      pkg-config libssl-dev \
       cmake temurin-17-jdk \
       unzip openjdk-21-jdk jq \
       python3 \
@@ -141,6 +145,32 @@ RUN npm install -g pnpm@${PNPM_VERSION} && \
 #   项目脚本统一 .ts（顶部注释「用 bun 运行」），不再有 CJS/裸 node 跑脚本。
 RUN npm install -g bun && bun --version
 
+# 2.4 Rust 工具链：libsql 等 Rust 源码依赖经 CGO 编译为 Go 绑定所需。
+#   走 rsproxy.cn 镜像加速 rustup 与 crates.io（国内源），并启用 sparse 协议。
+ENV RUSTUP_DIST_SERVER="https://rsproxy.cn" \
+    RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup" \
+    CARGO_HOME="/root/.cargo" \
+    RUSTUP_HOME="/root/.rustup"
+RUN set -eux; \
+    ( curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh -o /tmp/rustup-init.sh || \
+      curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh ); \
+    sh /tmp/rustup-init.sh -y --default-toolchain ${RUST_VERSION} --profile minimal; \
+    rm -f /tmp/rustup-init.sh; \
+    rustc --version && cargo --version
+# crates.io 镜像（sparse 协议，rsproxy.cn）
+RUN set -eux; \
+    mkdir -p ${CARGO_HOME}; \
+    printf '%s\n' \
+      '[source.crates-io]' \
+      'replace-with = "rsproxy-sparse"' \
+      '[source.rsproxy-sparse]' \
+      'registry = "sparse+https://rsproxy.cn/index/"' \
+      '[registries.rsproxy]' \
+      'index = "https://rsproxy.cn/crates.io-index"' \
+      '[net]' \
+      'git-fetch-with-cli = true' \
+      > ${CARGO_HOME}/config.toml
+
 # ==========================================
 # 3. 目录预创建
 # ==========================================
@@ -155,7 +185,9 @@ RUN g install ${GO_VERSION} && g use ${GO_VERSION}
 # ==========================================
 # 5. 容器级环境变量 (关键！CI 和非交互式 shell 也继承)
 # ==========================================
-ENV PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/tools:${ANDROID_NDK}:${JAVA_HOME}/bin:/root/.g/bin:/root/.g/go/bin:/root/go/bin:/usr/local/bin:$PATH" \
+ENV PATH="${CARGO_HOME}/bin:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/tools:${ANDROID_NDK}:${JAVA_HOME}/bin:/root/.g/bin:/root/.g/go/bin:/root/go/bin:/usr/local/bin:$PATH" \
+    CARGO_HOME="/root/.cargo" \
+    RUSTUP_HOME="/root/.rustup" \
     G_MIRROR="https://golang.google.cn/dl/" \
     GOPATH="/root/go" \
     GOPROXY="https://goproxy.cn,direct"
@@ -165,13 +197,17 @@ ENV PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tool
 # ==========================================
 RUN echo '' >> /etc/zsh/zshenv && \
     echo '# ===== Custom Dev Tools PATH =====' >> /etc/zsh/zshenv && \
-    echo 'export PATH="/root/.g/bin:/root/.g/go/bin:/root/go/bin:/usr/local/bin:$PATH"' >> /etc/zsh/zshenv && \
+    echo 'export PATH="/root/.cargo/bin:/root/.g/bin:/root/.g/go/bin:/root/go/bin:/usr/local/bin:$PATH"' >> /etc/zsh/zshenv && \
+    echo 'export CARGO_HOME="/root/.cargo"' >> /etc/zsh/zshenv && \
+    echo 'export RUSTUP_HOME="/root/.rustup"' >> /etc/zsh/zshenv && \
     echo 'export G_MIRROR="https://golang.google.cn/dl/"' >> /etc/zsh/zshenv && \
     echo 'export GOPATH="/root/go"' >> /etc/zsh/zshenv && \
     echo 'export GOPROXY="https://goproxy.cn,direct"' >> /etc/zsh/zshenv
 RUN echo '[ -f /etc/zsh/zshenv ] && source /etc/zsh/zshenv' >> /root/.zshrc
 RUN echo '#!/bin/sh' > /etc/profile.d/custom_tools.sh && \
-    echo 'export PATH="/root/.g/bin:/root/.g/go/bin:/root/go/bin:/usr/local/bin:$PATH"' >> /etc/profile.d/custom_tools.sh && \
+    echo 'export PATH="/root/.cargo/bin:/root/.g/bin:/root/.g/go/bin:/root/go/bin:/usr/local/bin:$PATH"' >> /etc/profile.d/custom_tools.sh && \
+    echo 'export CARGO_HOME="/root/.cargo"' >> /etc/profile.d/custom_tools.sh && \
+    echo 'export RUSTUP_HOME="/root/.rustup"' >> /etc/profile.d/custom_tools.sh && \
     echo 'export GOPATH="/root/go"' >> /etc/profile.d/custom_tools.sh && \
     echo 'export GOPROXY="https://goproxy.cn,direct"' >> /etc/profile.d/custom_tools.sh && \
     chmod +x /etc/profile.d/custom_tools.sh
@@ -196,5 +232,7 @@ RUN echo "====================================" && \
     echo "ndk:  $(readlink -f ${ANDROID_NDK})" && \
     echo "g:    $(g --version)" && \
     echo "go:   $(go version)" && \
+    echo "rustc:$(rustc --version)" && \
+    echo "cargo:$(cargo --version)" && \
     echo "====================================" && \
     echo "✅ 环境准备完成"

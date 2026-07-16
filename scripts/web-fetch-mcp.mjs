@@ -314,6 +314,72 @@ function textResult(text, isError = false) {
   return { content: [{ type: "text", text: text || "(empty)" }], isError };
 }
 
+// --- argument normalization: alias resolution + unknown-arg feedback --------
+// 传错参数名（如把 url 写成 uri/link）会被静默当成 undefined，工具退化为错误行为
+// 且无任何报错。这里统一：① 参数别名 ② 未知参数名直接报错。
+function lev(a, b) {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+  return dp[m][n];
+}
+function suggest(candidates, word) {
+  let best = null, bestD = Infinity;
+  for (const c of candidates) {
+    const d = lev(word, c);
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  return bestD <= Math.max(2, Math.floor(word.length / 2)) ? best : null;
+}
+function checkArgs(name, args, toolDefs, aliasMap, passThrough) {
+  const tool = toolDefs.find((t) => t.name === name);
+  const aliases = aliasMap[name] || {};
+  const props = (tool && tool.inputSchema && tool.inputSchema.properties) || {};
+  const canonical = Object.keys(props);
+  const accepted = new Set([...canonical, ...Object.keys(aliases), ...Object.values(aliases)]);
+  for (const [alias, canon] of Object.entries(aliases)) {
+    if (args[canon] === undefined && args[alias] !== undefined) args[canon] = args[alias];
+  }
+  const unknown = Object.keys(args).filter((k) => !accepted.has(k));
+  if (unknown.length && !(passThrough && passThrough.has(name))) {
+    const valid = [...new Set([...canonical, ...Object.keys(aliases)])].sort();
+    const tip = unknown
+      .map((k) => {
+        const g = suggest(canonical, k);
+        return g ? `'${k}' (did you mean '${g}'?)` : `'${k}'`;
+      })
+      .join(", ");
+    return {
+      error:
+        `Unknown parameter(s): ${tip}.\n` +
+        `Valid parameters for '${name}': ${valid.join(", ")}.\n` +
+        `(Unknown parameters are rejected so typos don't silently no-op.)`,
+    };
+  }
+  return { args, error: null };
+}
+
+// 参数别名表（覆盖本服务全部工具）。
+const ARG_ALIASES = {
+  web_fetch: {
+    uri: "url", link: "url",
+    verb: "method",
+    header: "headers",
+    data: "body",
+    timeout: "timeoutMs",
+    retry: "retries",
+    proxyUrl: "proxy",
+    headless: "render",
+    follow: "followRedirects",
+  },
+};
+const PASS_THROUGH = new Set();
+
 async function dispatch(name, args = {}) {
   if (name === "web_fetch") {
     const url = String(args.url || "").trim();
@@ -429,8 +495,13 @@ function startServer() {
       send({ jsonrpc: "2.0", id, result: { tools: TOOLS } });
     } else if (method === "tools/call") {
       const name = msg.params?.name;
-      const a = msg.params?.arguments || {};
-      dispatch(name, a)
+      const rawArgs = msg.params?.arguments || {};
+      const norm = checkArgs(name, rawArgs, TOOLS, ARG_ALIASES, PASS_THROUGH);
+      if (norm.error) {
+        send({ jsonrpc: "2.0", id, result: textResult(norm.error, true) });
+        return;
+      }
+      dispatch(name, norm.args)
         .then((res) => send({ jsonrpc: "2.0", id, result: res }))
         .catch((e) => send({ jsonrpc: "2.0", id, result: textResult(String(e), true) }));
     } else if (id !== undefined) {

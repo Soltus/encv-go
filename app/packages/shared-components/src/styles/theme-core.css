@@ -16,5 +16,11 @@
 
 @import "../theme/tokens.css";
 @import "../theme/palette.css";
-@import "../theme/user-themes.css";
 @import "../theme/bridge.css";
+
+/* ⚠️ 主题（官方 + 第三方）【不再】在此 @import 编译进产物。
+ * 主题 = 运行时可加载的文件夹资产包（public/themes/<id>/theme.json + theme.css + 可选
+ * theme.js / assets/），由 themeLoader 在运行时注入 <link> 并切 [data-theme]。
+ * 官方与第三方同形态、同加载机制，仅 builtIn 区分「随包 / 用户空间」。
+ * 把主题编译进本文件会剥夺「可加载 / 可卸载 / 可分发」能力，并让官方获得第三方没有的特权，
+ * 违背 ENCV前端主题重构方案.md §2.3 与「官方 == 第三方」原则（详见 THEME_DEV.md §6.9/§6.10）。 */

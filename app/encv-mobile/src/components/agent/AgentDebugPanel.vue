@@ -23,14 +23,14 @@
       <section class="agentDebugSection">
         <h4>① messages ({{ messages.length }})</h4>
         <div class="agentDebugStats">
-          <span v-for="(c, role) in roleCounts" :key="role" class="agentDebugChip">
+          <span v-for="(c, role) in roleCounts" :key="role" class="ui-chip ui-chip--neutral">
             {{ role }}: {{ c }}
           </span>
         </div>
         <div class="agentDebugStats">
-          <span class="agentDebugChip">tool_calls: {{ totalToolCalls }}</span>
-          <span class="agentDebugChip">tool_results: {{ totalToolResults }}</span>
-          <span class="agentDebugChip">pairing: {{ pairRateText }}</span>
+          <span class="ui-chip ui-chip--neutral">tool_calls: {{ totalToolCalls }}</span>
+          <span class="ui-chip ui-chip--neutral">tool_results: {{ totalToolResults }}</span>
+          <span class="ui-chip ui-chip--neutral">pairing: {{ pairRateText }}</span>
         </div>
       </section>
 
@@ -41,7 +41,7 @@
           <span
             v-for="(c, t) in renderedTypeCounts"
             :key="t"
-            class="agentDebugChip"
+            class="ui-chip ui-chip--neutral"
             :class="{ agentDebugChip_emphasis: t === 'operationGroup' && c > 0 }"
           >
             {{ t }}: {{ c }}
@@ -54,18 +54,18 @@
         <h4>③ 最近 {{ recentMessages.length }} 条 message 的 tool_calls ↔ tool_results</h4>
         <div v-for="(m, i) in recentMessages" :key="i" class="agentDebugMsg">
           <div class="agentDebugMsgHead">
-            <span class="agentDebugChip">{{ m.role }}</span>
+            <span class="ui-chip ui-chip--neutral">{{ m.role }}</span>
             <span class="agentDebugMsgId">#{{ i }}</span>
-            <span class="agentDebugChip">tool_calls: {{ m.tool_calls.length }}</span>
-            <span class="agentDebugChip">tool_results: {{ m.tool_results.length }}</span>
+            <span class="ui-chip ui-chip--neutral">tool_calls: {{ m.tool_calls.length }}</span>
+            <span class="ui-chip ui-chip--neutral">tool_results: {{ m.tool_results.length }}</span>
           </div>
           <ul v-if="m.tool_calls.length > 0" class="agentDebugList">
             <li v-for="tc in m.tool_calls" :key="tc.id" class="agentDebugListItem">
               <div class="agentDebugListHead">
                 <span class="agentDebugName">{{ tc.name }}</span>
                 <span class="agentDebugId">{{ tc.id }}</span>
-                <span class="agentDebugChip" :class="`agentDebugStatus_${tc.status}`">{{ tc.status }}</span>
-                <span class="agentDebugChip">kind: {{ tc.kind }}</span>
+                <span class="ui-chip ui-chip--neutral" :class="`agentDebugStatus_${tc.status}`">{{ tc.status }}</span>
+                <span class="ui-chip ui-chip--neutral">kind: {{ tc.kind }}</span>
               </div>
               <div v-if="findResult(m, tc.id)" class="agentDebugResult">
                 <span class="agentDebugResultTag">↳ result</span>
@@ -86,7 +86,7 @@
         <div v-for="(g, gi) in operationGroups" :key="gi" class="agentDebugGroup">
           <div class="agentDebugGroupHead">
             <span>{{ g.type }}</span>
-            <span class="agentDebugChip">toolCallIds: {{ g.toolCallIds.length }}</span>
+            <span class="ui-chip ui-chip--neutral">toolCallIds: {{ g.toolCallIds.length }}</span>
           </div>
           <div class="agentDebugGroupHint">
             👉 看下面正式 chat 流里的 GroupedOperationMessage 是否真的展开并显示了 MountListCard/FileListCard/FileContentCard
@@ -151,7 +151,7 @@
       <section class="agentDebugSection">
         <h4>⑦ 原始 SSE 事件流 ({{ (rawSSEEvents || []).length }} 条)</h4>
         <div class="agentDebugSseStats">
-          <span v-for="(c, t) in sseTypeCounts" :key="t" class="agentDebugChip" :class="{ agentDebugChip_emphasis: t === 'tool_call' || t === 'tool_result' }">
+          <span v-for="(c, t) in sseTypeCounts" :key="t" class="ui-chip ui-chip--neutral" :class="{ agentDebugChip_emphasis: t === 'tool_call' || t === 'tool_result' }">
             {{ t }}: {{ c }}
           </span>
         </div>
@@ -565,14 +565,15 @@ watch(
   margin-bottom: 3px;
 }
 
+/* 表面（背景/描边/前景）已上提到全局 .ui-chip.ui-chip--neutral（随主题翻转）。
+   此处仅留调试 chip 的紧凑尺寸 / 不可点击光标（scoped 覆盖，[data-v-x] 胜出）。 */
 .agentDebugChip {
   display: inline-flex;
   align-items: center;
   padding: 1px 6px;
   border-radius: 6px;
-  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
-  color: var(--ion-text-color);
   font-size: 10px;
+  cursor: default;
 }
 
 .agentDebugChip_emphasis {

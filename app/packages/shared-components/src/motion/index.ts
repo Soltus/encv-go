@@ -19,6 +19,8 @@ installMotion();
 
 export * from "./guard";
 export * from "./tokens";
+// 主题切换后可调用 invalidateMotionTokenCache() 让 GSAP 立即读到新的 --motion-* 令牌。
+export { invalidateMotionTokenCache } from "./theme-read";
 export * from "./registry";
 export * from "./transition";
 export * from "./reveal";

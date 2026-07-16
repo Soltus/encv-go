@@ -1,0 +1,61 @@
+/* =============================================================================
+ * 官方主题资源包：玫瑰（Rose）—— 浪漫玫红 · 圆润 · 宽松 · 柔彩阴影
+ *
+ * 与第三方主题【同形态、同加载机制】：都是 themes/<id>/theme.css 数据资产，
+ * 由 themeLoader 运行时注入 <link> 并切到 [data-theme="rose"]。
+ * 本资产定义完整「设计语言」（色 + 形状 + 密度 + 立体感 + 焦点环 + 动效），
+ * 且演示【资源包能力】：可用 url() 引用主题自带图片 / 字体 / 贴纸
+ * （如 Hello Kitty 主题即靠此贴装饰、换图标、加背景图案），无编译期限制。
+ * ========================================================================== */
+
+[data-theme="rose"] {
+  color-scheme: light;
+
+  /* 色相：浪漫玫红 */
+  --color-primary: #e11d48;
+  --color-primary-content: #ffffff;
+  --color-secondary: #0ea5e9;
+  --color-secondary-content: #ffffff;
+  --color-accent: #db2777;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #fffafb;
+  --color-base-200: #ffeef2;
+  --color-base-300: #fecdd3;
+  --color-base-content: #4c0519;
+  --color-info: #3b82f6;
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-error: #dc2626;
+
+  /* 形状语言：更圆润 */
+  --radius-selector: 1.5rem;
+  --radius-field: 0.875rem;
+  --radius-box: 1.5rem;
+  --radius-pill: 9999px;
+  --radius-mono: 6px;
+
+  /* 密度：略宽松 */
+  --density: 1.05;
+
+  /* 立体感：柔和彩色阴影 + 明显抬升 */
+  --elevation-chip-hover: 0 4px 12px -2px rgb(225 29 72 / 0.28);
+  --elevation-panel-overlay: 0 12px 32px -10px rgb(76 5 25 / 0.18);
+  --lift-hover: -2px;
+  --press-scale: 0.96;
+
+  /* 焦点环：宽柔 */
+  --ring-focus: 0 0 0 4px color-mix(in srgb, var(--color-primary) 30%, transparent);
+
+  /* 动效：带回弹 */
+  --motion-ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 资源包能力演示：主题可自带装饰资源（url() 自有 SVG/图片/字体）。
+   这里用内联 SVG 数据 URI 给 body 加极淡点纹，证明「主题能贴东西」而不只是换色。
+   真正的皮肤（如 Hello Kitty）可换成 png/sticker、背景图案、@font-face 等。 */
+[data-theme="rose"] body {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Ccircle cx='20' cy='20' r='1.5' fill='%23e11d48' fill-opacity='0.07'/%3E%3C/svg%3E");
+  background-blend-mode: soft-light;
+}
