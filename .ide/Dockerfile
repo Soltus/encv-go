@@ -151,12 +151,15 @@ ENV RUSTUP_DIST_SERVER="https://rsproxy.cn" \
     RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup" \
     CARGO_HOME="/root/.cargo" \
     RUSTUP_HOME="/root/.rustup"
+
 RUN set -eux; \
     ( curl --proto '=https' --tlsv1.2 -sSf https://rsproxy.cn/rustup-init.sh -o /tmp/rustup-init.sh || \
       curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup-init.sh ); \
-    sh /tmp/rustup-init.sh -y --default-toolchain ${RUST_VERSION} --profile minimal; \
+    sh /tmp/rustup-init.sh -y --default-toolchain ${RUST_VERSION} --profile minimal --no-modify-path; \
     rm -f /tmp/rustup-init.sh; \
+    export PATH="$CARGO_HOME/bin:$PATH"; \
     rustc --version && cargo --version
+
 # crates.io 镜像（sparse 协议，rsproxy.cn）
 RUN set -eux; \
     mkdir -p ${CARGO_HOME}; \
@@ -170,6 +173,7 @@ RUN set -eux; \
       '[net]' \
       'git-fetch-with-cli = true' \
       > ${CARGO_HOME}/config.toml
+
 
 # ==========================================
 # 3. 目录预创建
