@@ -1493,7 +1493,7 @@ jobs:
             echo "=== Building RELEASE APK v${{ inputs.version }} ==="
 
             # keystore.properties 由 Ensure release keystore 步骤已写入（共用脚本）
-            bash scripts/android-common.sh ensure-keystore "${{ env.MONOREPO_MOBILE_DIR }}"
+            bash /scripts/android-common.sh ensure-keystore "${{ env.MONOREPO_MOBILE_DIR }}"
 
             cd android
             chmod +x gradlew
