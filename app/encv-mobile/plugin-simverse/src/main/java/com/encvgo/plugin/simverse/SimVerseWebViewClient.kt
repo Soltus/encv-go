@@ -10,6 +10,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import java.io.InputStream
+import org.json.JSONObject
 
 class SimVerseWebViewClient(
     private val context: Context,
@@ -22,6 +23,14 @@ class SimVerseWebViewClient(
 
     @Volatile
     var backendPort: Int = 0
+
+    /**
+     * 宿主注入的主题 CSS 变量块（由 SimVerseActivity 从 openWorld 的 theme_css extra 传入）。
+     * onPageFinished 时注入 window.__ENCV_THEME__ 并写 <style id="encv-host-theme">，
+     * 使主应用外观设置在独立 WebView 内生效（插件不共享主应用 window / CSS 变量）。
+     */
+    @Volatile
+    var hostThemeCss: String = ""
 
     data class WebViewDiagnosticState(
         var pageStartedUrl: String? = null,
@@ -173,6 +182,12 @@ class SimVerseWebViewClient(
             injectApiBase(view, port)
         }
 
+        val theme = hostThemeCss
+        if (theme.isNotBlank()) {
+            Log.i(tag, "onPageFinished: injecting host theme (len=${theme.length})")
+            injectTheme(view, theme)
+        }
+
         view?.evaluateJavascript(
             """
             (function() {
@@ -199,6 +214,34 @@ class SimVerseWebViewClient(
                 console.log('[SimVerse-WVC] API base set to http://127.0.0.1:$port');
                 if (window.dispatchEvent) {
                     window.dispatchEvent(new CustomEvent('encv:api-base-ready', {detail: {port: $port}}));
+                }
+            })();
+        """.trimIndent()
+        view.evaluateJavascript(script, null)
+    }
+
+    private fun injectTheme(view: WebView?, themeCss: String) {
+        view ?: return
+        // JSONObject.quote 生成合法 JSON 字符串字面量，安全容纳换行/引号等任意 CSS 内容。
+        val cssJson = JSONObject.quote(themeCss)
+        val script = """
+            (function() {
+                try {
+                    var css = $cssJson;
+                    window.__ENCV_THEME__ = { css: css };
+                    var el = document.getElementById('encv-host-theme');
+                    if (!el) {
+                        el = document.createElement('style');
+                        el.id = 'encv-host-theme';
+                        document.head.appendChild(el);
+                    }
+                    el.textContent = css;
+                    if (window.dispatchEvent) {
+                        window.dispatchEvent(new CustomEvent('encv:theme-change', { detail: { source: 'host' } }));
+                    }
+                    console.log('[SimVerse-WVC] host theme injected (len=${themeCss.length})');
+                } catch (e) {
+                    console.error('[SimVerse-WVC] theme inject failed: ' + e.message);
                 }
             })();
         """.trimIndent()
