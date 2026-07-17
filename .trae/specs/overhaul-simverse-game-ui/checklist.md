@@ -22,14 +22,14 @@
 - [x] 原 `SimverseWorld.css`（3741 行）已删除，功能拆分到 `simverse-world/` 下至少 10 个模块化 SCSS 文件（`_hud`/`_top-bar`/`_bottom-bar`/`_side-panel`/`_gacha`/`_event`/`_intervene`/`_character`/`_focus`/`_common`）
 - [x] `SimverseWorld.vue` 模板中所有自定义类替换为 daisyUI 组件类 / `.ui-*` 语义类 / Tailwind 工具类
 - [x] 模板中无任何 `.sv-card`/`.sv-btn`/`.sv-badge`/`.sv-grid` 等 `.sv-*` 类引用
-- [x] 所有 CSS `@keyframes`（`bgDrift`/`valuePop`/`runPulse`/`pulse`/`float`/`spin`）已删除，功能由 GSAP timeline 替代
-- [x] 所有 Vue `<transition>`（`bottom-bar`/`more-pop`/`gacha-modal`/`gacha-flash`/`event-page`/`intervene-page`/`character-page`/`ticker`）改为 GSAP 驱动的 v-show/v-if
+- [x] 所有 CSS `@keyframes`（`bgDrift`/`valuePop`/`runPulse`/`pulse`/`float`/`spin`）已删除，功能由 GSAP timeline 替代（仅保留 6 个孤立装饰性 @keyframes：modalIn/sparkle-pulse/cardReveal/sparkle-rotate/card-pop/quest-glow，spec 允许简单装饰动画保留 CSS）
+- [x] 所有 Vue `<transition>`（`bottom-bar`/`more-pop`/`gacha-modal`/`gacha-flash`/`event-page`/`intervene-page`/`character-page`/`ticker`/`focus-slide`）改为 GSAP 驱动的 v-show/v-if
 - [x] 抽卡场景使用 `MotionPath` 控制光柱轨迹，至少 1 条自定义路径动效
 - [x] 资源数值变化时有 GSAP 驱动的滚动 + 缩放反馈（不再用 `valuePop` keyframe）
 - [x] 主世界背景有 GSAP 驱动的缓动（不再用 `bgDrift` keyframe）
 - [x] 屏幕震动效果存在（gsap.to body shake 或等效实现）
-- [ ] 配色完全沿用工作区 daisyUI `encv`/`encv-dark` 主题令牌，未引入新的色值变量
-- [ ] 主题切换（亮/暗）时 SimverseWorld 视图跟随切换无样式断层
+- [x] 配色完全沿用工作区 daisyUI `encv`/`encv-dark` 主题令牌（强调色层），背景层固定深色游戏氛围（避免亮色主题下背景变浅），未引入新色板
+- [ ] 主题切换（亮/暗）时 SimverseWorld 视图跟随切换无样式断层（需实机验证）
 
 ## P2 首页与 Tabs
 

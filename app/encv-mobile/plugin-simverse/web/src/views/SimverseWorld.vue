@@ -644,7 +644,7 @@
         </div>
 
         <div ref="hudSceneContainer" class="hud-scene-container">
-        <transition name="focus-slide">
+          <!-- 转场由 useSceneTransition.transitionToScene 处理，不再使用 <transition> 包裹 -->
           <div v-if="screen === 'focus' && selectedNPC" class="detail-modal" @click.self="backToWorld">
             <div class="detail-card">
             <div class="detail-header">
@@ -763,7 +763,6 @@
             </div>
           </div>
           </div>
-        </transition>
 
         <!-- 抽卡页：屏幕状态机 gacha 页，转场由 useSceneTransition.transitionToScene 处理 -->
         <div v-if="screen === 'gacha'" ref="gachaModalRef" class="gacha-modal-overlay" @click.self="closeGachaModal">

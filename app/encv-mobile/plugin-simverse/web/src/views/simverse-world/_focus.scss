@@ -3,7 +3,6 @@
 // -----------------------------------------------------------------------------
 // 点击 NPC 后屏幕整体切换的"对象上下文页"。包括：
 //   - .detail-modal / .detail-card 弹窗容器（含 modalIn 动画）
-//   - .focus-slide-* 转场
 //   - .detail-header / .detail-avatar / .detail-info / .detail-name / .detail-meta
 //   - .detail-close / .detail-body / .detail-grid / .detail-item / .item-*
 //   - .detail-build / .build-chip / .build-synergy 身份徽章
@@ -14,6 +13,9 @@
 //   - .explore-banner / .battle-banner / .region-list / .battle-list
 //   - .region-card / .enemy-card / .fight-btn / .explore-btn / .battle-btn
 //   - .bottom-nav / .nav-item / .nav-icon / .nav-label / .gacha-nav（焦点场景底部导航）
+//
+// 注：焦点页场景过渡由 useSceneTransition.transitionToScene 驱动（GSAP Flip），
+// 不再使用 Vue <transition> + .focus-slide-* CSS 类。
 // =============================================================================
 
 @use './tokens' as *;
@@ -45,24 +47,6 @@
   border: 1px solid rgba(139, 92, 246, 0.25); // TODO: tokenize
   overflow: hidden;
   animation: modalIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-// 焦点页转场：点 NPC 后屏幕整体切换（从右滑入 + 缩放），肉眼可见"页面变了"
-.focus-slide-enter-active,
-.focus-slide-leave-active {
-  transition: opacity 0.28s ease;
-
-  .detail-card {
-    transition: transform 0.34s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.28s ease;
-  }
-}
-
-.focus-slide-enter-from,
-.focus-slide-leave-to {
-  .detail-card {
-    transform: translateX(48px) scale(0.96);
-    opacity: 0;
-  }
 }
 
 // —— 详情头部 ——
@@ -546,7 +530,8 @@
   animation: sparkle-pulse 2s ease-in-out infinite;
 }
 
-// —— @keyframes：Task 1.3 将替换为 GSAP ——
+// —— 装饰性 @keyframes（保留为 CSS：孤立装饰动画，无需时序控制） ——
+// spec 允许简单装饰动画保留 CSS，GSAP 仅接管需时序/联动的动效
 @keyframes modalIn {
   from {
     opacity: 0;

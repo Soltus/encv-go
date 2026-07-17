@@ -2,14 +2,20 @@
 // SimverseWorld 设计令牌
 // -----------------------------------------------------------------------------
 // 将 daisyUI CSS 变量映射到 SCSS 变量，保留运行时主题切换能力。
-// 所有颜色均通过 var(--*) 引用 daisyUI 令牌，不引入硬编码调色板。
+//
+// 设计原则：
+//   1. 横屏世界是游戏场景，始终保持深色游戏氛围（即使宿主为亮色主题）
+//      —— 背景层不依赖 daisyUI base 令牌，使用固定的深色游戏背景
+//   2. 强调色（primary / success / warning / error）跟随 daisyUI 令牌
+//      —— 主题切换时强调色跟随变化，但背景保持深色游戏感
+//   3. 紫色系派生 rgba（border / glow）基于 daisyUI primary 派生，不引入新色板
 //
 // 关联：
 //   - 共享样式入口：app/packages/shared-components/src/styles/daisyui.css
 //   - daisyUI 主题：encv（亮色）/ encv-dark（暗色）
 // =============================================================================
 
-// ---- daisyUI 基础令牌映射 -------------------------------------------------
+// ---- daisyUI 强调色令牌映射（跟随主题切换） --------------------------------
 // 使用 var(--*) 形式以保留运行时主题切换能力
 
 $color-primary: var(--color-primary, #8b5cf6);
@@ -26,15 +32,24 @@ $color-error: var(--color-error, #ef4444);
 $color-info: var(--color-info, #3b82f6);
 
 // ---- 横屏世界专属语义令牌 -------------------------------------------------
-// 基于 daisyUI 令牌派生，不引入新色值
-$sv-bg-deep: var(--color-base-300, #0a0a1a);
-$sv-bg-surface: var(--color-base-200, #15152e);
-$sv-bg-elevated: rgba(0, 0, 0, 0.4);
-$sv-text-primary: var(--color-base-content, #ffffff);
+// 背景层：固定深色游戏氛围（不依赖 daisyUI base 令牌，避免亮色主题下背景变浅）
+// 强调层：基于 daisyUI primary 派生的紫色系 rgba（#8b5cf6 = primary 默认值）
+
+// 背景层：固定深色，保证游戏场景氛围
+$sv-bg-deep: #0a0a1a;          // 最深层（页面背景）
+$sv-bg-surface: #15152e;       // 表面层（卡片背景）
+$sv-bg-elevated: rgba(0, 0, 0, 0.4); // 浮层（模态/弹窗遮罩）
+
+// 文字层：白色系（深色背景上的文字）
+$sv-text-primary: #ffffff;
 $sv-text-secondary: rgba(255, 255, 255, 0.7);
 $sv-text-muted: rgba(255, 255, 255, 0.45);
+
+// 边框层：紫色系派生（基于 daisyUI primary #8b5cf6）
 $sv-border-subtle: rgba(139, 92, 246, 0.18);
 $sv-border-active: rgba(139, 92, 246, 0.55);
+
+// 辉光层：紫色系派生（基于 daisyUI primary）
 $sv-glow-primary: rgba(139, 92, 246, 0.4);
 $sv-glow-success: rgba(34, 197, 94, 0.4);
 $sv-glow-warning: rgba(245, 158, 11, 0.4);

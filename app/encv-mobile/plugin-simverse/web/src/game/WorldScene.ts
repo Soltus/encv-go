@@ -64,7 +64,7 @@ export class WorldScene extends Phaser.Scene {
   init(data: { seed?: number; mapWidth?: number; mapHeight?: number }): void {
     if (data.seed) this.worldSeed = data.seed;
     if (data.mapWidth) this.mapWidth = data.mapWidth;
-    if (data.mapHeight) data.mapHeight;
+    if (data.mapHeight) this.mapHeight = data.mapHeight;
   }
 
   preload(): void {}
