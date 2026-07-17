@@ -1,10 +1,17 @@
-# TRAE 全局 MCP 伪装方案 — 项目级 MCP 配置的动态注册
+# TRAE Solo Web 全局 MCP 伪装方案 — 项目级 MCP 配置的动态注册
+
+## 适用范围
+
+> ⚠️ **本方案仅适用于 TRAE Solo Web 环境**，不适用于 TRAE IDE / TRAE CLI 等其他 TRAE 产品形态。
+>
+> 在 TRAE Solo Web 中，`agent-tool-host` 运行在沙箱容器内，不支持项目级 `.trae/mcp.json` 的自动加载。
+> 本方案通过逆向工程发现的 gRPC 接口实现等效效果。
 
 ## 背景
 
-TRAE 当前版本**不支持项目级 MCP 配置**（即 `.trae/mcp.json` 不会被自动加载）。
+TRAE Solo Web 当前版本**不支持项目级 MCP 配置**（即 `.trae/mcp.json` 不会被自动加载）。
 
-但 TRAE 的 `agent-tool-host` 提供了通过 gRPC 动态管理 MCP 服务器的能力。本方案利用这个能力，将项目级 MCP 配置"伪装"成全局用户级配置，实现项目级 MCP 的等效效果。
+但 TRAE Solo Web 的 `agent-tool-host` 提供了通过 gRPC 动态管理 MCP 服务器的能力。本方案利用这个能力，将项目级 MCP 配置"伪装"成全局用户级配置，实现项目级 MCP 的等效效果。
 
 ## 方案原理
 
@@ -55,25 +62,25 @@ TRAE 当前版本**不支持项目级 MCP 配置**（即 `.trae/mcp.json` 不会
 
 ### 脚本位置
 
-[register-mcp.mjs](file:///workspace/scripts/register-mcp.mjs)
+[trae_solo_web_register_mcp.mjs](file:///workspace/scripts/trae_solo_web_register_mcp.mjs)
 
 ### 基本用法
 
 ```bash
 # 注册 .trae/mcp.json 中的所有 MCP 服务器
-node scripts/register-mcp.mjs
+node scripts/trae_solo_web_register_mcp.mjs
 
 # 显式指定 add 操作
-node scripts/register-mcp.mjs add
+node scripts/trae_solo_web_register_mcp.mjs add
 
 # 移除所有项目级 MCP 服务器
-node scripts/register-mcp.mjs remove
+node scripts/trae_solo_web_register_mcp.mjs remove
 
 # 使用指定配置文件
-node scripts/register-mcp.mjs --config /path/to/mcp.json
+node scripts/trae_solo_web_register_mcp.mjs --config /path/to/mcp.json
 
 # 查看帮助
-node scripts/register-mcp.mjs --help
+node scripts/trae_solo_web_register_mcp.mjs --help
 ```
 
 ### 配置文件格式
@@ -139,7 +146,7 @@ run_mcp server_name=app-dev tool_name=app_check_all args={"noTests": true}
 
 通过 gRPC 动态添加的 MCP 服务器**不会持久化**，`agent-tool-host` 进程重启后会丢失。
 
-**应对方案**：每次环境启动后手动运行 `node scripts/register-mcp.mjs` 重新注册。
+**应对方案**：每次环境启动后手动运行 `node scripts/trae_solo_web_register_mcp.mjs` 重新注册。
 
 ### 2. 原子性
 
@@ -156,7 +163,7 @@ run_mcp server_name=app-dev tool_name=app_check_all args={"noTests": true}
 
 ### 4. 与用户级配置的关系
 
-`/data/user/mcp/mcp-servers.json` 是用户级 MCP 配置文件，但当前版本的 TRAE 不会自动加载它。必须通过 `MCP_CONFIG_PATH` 环境变量或 gRPC 命令手动触发加载。
+`/data/user/mcp/mcp-servers.json` 是用户级 MCP 配置文件，但当前版本的 TRAE Solo Web 不会自动加载它。必须通过 `MCP_CONFIG_PATH` 环境变量或 gRPC 命令手动触发加载。
 
 本方案选择 gRPC 动态注册的方式，因为它：
 - 不依赖环境变量注入
@@ -211,7 +218,7 @@ grep "tool_count" /var/log/tool/agent-tool-host.stdout.log | tail -5
 | 1 | command | string | 命令名 |
 | 2 | params | string | JSON 字符串格式的参数 |
 
-> 注：params 采用 JSON 字符串而非嵌套 Protobuf message，这是 TRAE 内部的设计选择。
+> 注：params 采用 JSON 字符串而非嵌套 Protobuf message，这是 TRAE Solo Web 内部的设计选择。
 
 ### gRPC 帧格式
 
@@ -228,7 +235,7 @@ grep "tool_count" /var/log/tool/agent-tool-host.stdout.log | tail -5
 
 ## 相关文件
 
-- [register-mcp.mjs](file:///workspace/scripts/register-mcp.mjs) — 注册脚本
+- [trae_solo_web_register_mcp.mjs](file:///workspace/scripts/trae_solo_web_register_mcp.mjs) — 注册脚本
 - [.trae/mcp.json](file:///workspace/.trae/mcp.json) — 项目级 MCP 配置
 - [app-dev-mcp.mjs](file:///workspace/scripts/app-dev-mcp.mjs) — app-dev MCP 服务器
 - [web-fetch-mcp.mjs](file:///workspace/scripts/web-fetch-mcp.mjs) — web-fetch MCP 服务器

@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 /**
- * TRAE 全局 MCP 伪装注册脚本
+ * TRAE Solo Web 全局 MCP 伪装注册脚本
  *
  * 通过 gRPC 动态调用 agent-tool-host 的 manageMcpServers 命令，
  * 将项目级 .trae/mcp.json 中的 MCP 服务器注册为用户级 MCP 服务器。
  *
- * 背景：TRAE 当前不支持项目级 .trae/mcp.json，但支持通过 gRPC
+ * 背景：TRAE Solo Web 当前不支持项目级 .trae/mcp.json，但支持通过 gRPC
  *       动态管理 MCP 服务器。本脚本封装了这个调用，使得项目级
  *       MCP 配置可以被"伪装"成全局用户级配置。
  *
  * 用法：
- *   node scripts/register-mcp.mjs            # 注册 .trae/mcp.json 中的所有服务器
- *   node scripts/register-mcp.mjs add        # 同上，显式指定 add
- *   node scripts/register-mcp.mjs remove     # 移除 .trae/mcp.json 中的所有服务器
- *   node scripts/register-mcp.mjs --config /path/to/mcp.json  # 指定配置文件
+ *   node scripts/trae_solo_web_register_mcp.mjs            # 注册 .trae/mcp.json 中的所有服务器
+ *   node scripts/trae_solo_web_register_mcp.mjs add        # 同上，显式指定 add
+ *   node scripts/trae_solo_web_register_mcp.mjs remove     # 移除 .trae/mcp.json 中的所有服务器
+ *   node scripts/trae_solo_web_register_mcp.mjs --config /path/to/mcp.json  # 指定配置文件
  *
  * 原理：
  *   - gRPC 服务: command.CommandService / Execute
@@ -166,10 +166,10 @@ function parseArgs() {
 
 function printHelp() {
   console.log(`
-TRAE 全局 MCP 伪装注册脚本
+TRAE Solo Web 全局 MCP 伪装注册脚本
 
 用法:
-  node scripts/register-mcp.mjs [action] [--config <path>]
+  node scripts/trae_solo_web_register_mcp.mjs [action] [--config <path>]
 
 参数:
   action              add (默认) 或 remove
@@ -177,9 +177,9 @@ TRAE 全局 MCP 伪装注册脚本
   -h, --help          显示帮助
 
 示例:
-  node scripts/register-mcp.mjs                        # 注册项目级 MCP
-  node scripts/register-mcp.mjs remove                 # 移除项目级 MCP
-  node scripts/register-mcp.mjs --config /path/to.json # 使用指定配置
+  node scripts/trae_solo_web_register_mcp.mjs                        # 注册项目级 MCP
+  node scripts/trae_solo_web_register_mcp.mjs remove                 # 移除项目级 MCP
+  node scripts/trae_solo_web_register_mcp.mjs --config /path/to.json # 使用指定配置
 `);
 }
 
