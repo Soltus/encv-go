@@ -1,0 +1,156 @@
+// =============================================================================
+// 顶栏模块：资源条 / 操作按钮 / 玩家头像 / 状态徽标
+// -----------------------------------------------------------------------------
+// 横屏世界顶部 HUD，包括：
+//   - .top-bar 顶部容器
+//   - .resource-group / .resource-item / .resource-icon / .resource-value
+//   - .res-divider 资源分隔线
+//   - .top-actions / .game-btn / .game-btn.play-btn.running 运行按钮
+//   - .stats-bar / .stat-pill / .stat-label / .stat-value 底部状态条
+//   - .player-btn / .player-avatar-mini / .avatar-icon-mini / .player-level-badge
+// =============================================================================
+
+@use './tokens' as *;
+@use './mixins' as *;
+
+.top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.7) 0%, transparent 100%);
+  z-index: 10;
+}
+
+.resource-group {
+  display: flex;
+  gap: 8px;
+}
+
+.resource-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(20, 20, 40, 0.8); // TODO: tokenize
+  backdrop-filter: blur(12px);
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(139, 92, 246, 0.2); // TODO: tokenize
+  border-bottom: 3px solid rgba(139, 92, 246, 0.3); // TODO: tokenize
+
+  &.game-resource {
+    background: rgba(139, 92, 246, 0.15); // TODO: tokenize
+    border: 1px solid rgba(139, 92, 246, 0.3); // TODO: tokenize
+    padding: 4px 10px;
+    border-radius: 12px;
+  }
+}
+
+.resource-icon {
+  font-size: 14px;
+}
+
+.resource-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: $sv-text-primary;
+  font-variant-numeric: tabular-nums;
+  // valuePop 动画已迁移至 SimverseWorld.vue 的 GSAP watcher
+}
+
+.res-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 0 6px;
+}
+
+.top-actions {
+  display: flex;
+  gap: 6px;
+}
+
+// .game-btn 已迁移到 daisyUI .btn .btn-circle + Tailwind 工具类（见 SimverseWorld.vue 模板）
+// 仅保留运行态修饰符：与 GSAP runPulseTween 协同，呈现绿色"运行中"高亮
+.play-btn.running {
+  background: rgba(34, 197, 94, 0.2); // TODO: tokenize
+  border-color: rgba(34, 197, 94, 0.4); // TODO: tokenize
+  border-bottom-color: rgba(34, 197, 94, 0.5); // TODO: tokenize
+  // runPulse 动画已迁移至 SimverseWorld.vue 的 GSAP runPulseTween
+}
+
+// —— 状态徽标条（地图底部统计） ——
+.stats-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 9;
+}
+
+.stat-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(20, 20, 40, 0.7); // TODO: tokenize
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(139, 92, 246, 0.15); // TODO: tokenize
+  border-radius: 16px;
+  padding: 5px 12px;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.stat-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: $sv-text-primary;
+  font-variant-numeric: tabular-nums;
+}
+
+// —— 玩家头像按钮 ——
+.player-btn {
+  padding: 2px;
+}
+
+.player-avatar-mini {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, $color-primary, #ec4899); // TODO: tokenize #ec4899
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 10px rgba(139, 92, 246, 0.5); // TODO: tokenize
+}
+
+.avatar-icon-mini {
+  font-size: 20px;
+}
+
+.player-level-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  background: linear-gradient(135deg, $color-warning, $color-error);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+}
+
+// —— @keyframes（valuePop / runPulse）已迁移至 SimverseWorld.vue 的 GSAP ——

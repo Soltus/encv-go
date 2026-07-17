@@ -126,7 +126,7 @@ async function reload() {
 onMounted(reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
@@ -142,14 +142,15 @@ onMounted(reload);
   display: inline-block;
   padding: 6px 14px;
   border-radius: 16px;
-  background: var(--ion-color-warning-tint, #fef3c7);
-  color: var(--ion-color-warning-shade, #92400e);
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: var(--color-warning);
   font-weight: 600;
   font-size: 14px;
 }
 .stat-label {
   font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
 .stat-val {
   font-size: 20px;

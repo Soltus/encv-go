@@ -15,6 +15,7 @@
     </ion-header>
 
     <ion-content>
+      <div class="page-root">
       <div v-if="loading" class="state-container">
         <ion-spinner name="crescent" />
         <p>{{ t("settings.loading") }}</p>
@@ -82,6 +83,7 @@
           </ion-item>
         </ion-list>
       </div>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -108,12 +110,19 @@ import {
 import { alertCircleOutline, bagOutline, gitNetworkOutline, refreshOutline, timeOutline } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useGsap } from "@/composables/useGsap";
+import { useRouteTransition } from "@/composables/useRouteTransition";
 import { type SimverseNPCDetail, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const { loadNPCDetail } = useSimverse();
+const { gsap } = useGsap();
+// useRouteTransition exposes onEnter/onLeave hooks for a parent <Transition> wrapper.
+// App.vue currently uses plain ion-router-outlet, so this view self-animates
+// .page-root via gsap.fromTo as a fallback (matches useRouteTransition defaults).
+useRouteTransition();
 
 const loading = ref(false);
 const error = ref("");
@@ -153,11 +162,18 @@ async function reload() {
     loading.value = false;
   }
 }
-onMounted(reload);
+onMounted(() => {
+  reload();
+  // 详情路由入场动效（与 useRouteTransition 默认参数一致）
+  const el = document.querySelector(".page-root");
+  if (el) {
+    gsap.fromTo(el, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" });
+  }
+});
 watch(() => route.params.id, reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -166,17 +182,17 @@ watch(() => route.params.id, reload);
   padding: 60px 20px;
   gap: 16px;
 }
-.state-container p { color: var(--ion-color-danger); margin: 0; }
+.state-container p { color: var(--color-error); margin: 0; }
 .hero { display: flex; align-items: center; gap: 16px; padding: 20px 16px 8px; }
 .hero-avatar {
   width: 56px; height: 56px; border-radius: 50%;
-  background: var(--ion-color-light, #f3f4f6);
+  background: var(--color-base-200);
   display: flex; align-items: center; justify-content: center;
   font-size: 30px; flex-shrink: 0;
 }
 .hero-info h2 { margin: 0 0 4px; font-size: 18px; }
-.hero-info p { margin: 0 0 4px; font-size: 12px; color: var(--ion-color-medium); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.hero-info p { margin: 0 0 4px; font-size: 12px; color: var(--color-base-content); opacity: 0.7; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .hero-meta { font-weight: 600; }
-.alive { color: var(--ion-color-success); }
-.dead { color: var(--ion-color-medium); }
+.alive { color: var(--color-success); }
+.dead { color: var(--color-base-content); opacity: 0.6; }
 </style>

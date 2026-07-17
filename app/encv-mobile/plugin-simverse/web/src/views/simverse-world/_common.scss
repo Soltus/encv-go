@@ -1,0 +1,234 @@
+// =============================================================================
+// 公共模块：任务面板 / 标签 / 行为图标 / 全屏页骨架 / 加载占位
+// -----------------------------------------------------------------------------
+// 跨场景复用的通用组件：
+//   - .quest-panel / .quest-tabs / .quest-tab / .quest-list / .quest-card.* / @keyframes quest-glow
+//     .quest-icon / .quest-info / .quest-title / .quest-desc
+//     .quest-progress-row / .quest-progress-bar / .quest-progress-fill / .quest-progress-text
+//     .quest-reward / .reward-item / .quest-claim-btn / .quest-claimed
+//   - .prof-tag / .level-tag 职业 / 等级标签
+//   - .behavior-icon / .behavior-text 行为指示图标
+//   - .full-screen-page / .page-slide-* 全屏页骨架与转场
+//   - .page-header / .back-btn / .page-title / .header-spacer / .page-content 页头工具
+//   - .settings-page 设置页骨架
+//   - .loading-placeholder / .loading-spinner 通用加载占位（与 _hud.scss 中同名但尺寸不同）
+// =============================================================================
+
+@use './tokens' as *;
+@use './mixins' as *;
+
+// —— 任务面板 ——
+.quest-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+// .quest-tabs / .quest-tab 已迁移到 Tailwind 工具类（保留 .active 修饰符在模板 :class 中处理）
+
+.quest-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.quest-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.2s;
+
+  &.completable {
+    background: rgba(34, 197, 94, 0.1); // TODO: tokenize
+    border-color: rgba(34, 197, 94, 0.3); // TODO: tokenize
+    animation: quest-glow 2s ease-in-out infinite;
+    // .quest-progress-fill 的渐变已迁移到模板 :class（completable 时切换为绿色渐变）
+  }
+
+  &.locked {
+    opacity: 0.5;
+  }
+
+  &.claimed {
+    opacity: 0.6;
+    background: rgba(255, 255, 255, 0.03);
+  }
+}
+
+.quest-icon {
+  font-size: 28px;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.quest-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.quest-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.quest-desc {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 8px;
+}
+
+// .quest-progress-row / .quest-progress-bar / .quest-progress-fill / .quest-progress-text
+// 已迁移到 Tailwind 工具类（保留 .completable 修饰符在模板 :class 中处理 fill 渐变色）
+
+.quest-reward {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reward-item {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+// .quest-claim-btn 已迁移到 daisyUI .btn .btn-primary .btn-sm + Tailwind 工具类
+
+.quest-claimed {
+  font-size: 20px;
+  color: $color-success;
+  flex-shrink: 0;
+  margin: auto 0;
+}
+
+// —— 职业 / 等级标签 ——
+// .prof-tag / .level-tag 已迁移到 daisyUI .badge .badge-sm + Tailwind 工具类
+
+// —— 行为指示图标 ——
+// .behavior-icon / .behavior-text 已迁移到 Tailwind 工具类
+
+// —— 全屏页骨架 ——
+.full-screen-page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, #0f0f2a 0%, #{$sv-bg-deep} 100%); // TODO: tokenize
+  z-index: 20;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-slide-enter-active,
+.page-slide-leave-active {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.page-slide-enter-from {
+  transform: translateY(100%);
+}
+
+.page-slide-leave-to {
+  transform: translateY(100%);
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: rgba(15, 15, 42, 0.95); // TODO: tokenize
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.15); // TODO: tokenize
+  flex-shrink: 0;
+}
+
+.back-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.15); // TODO: tokenize
+  border: 1px solid rgba(139, 92, 246, 0.25); // TODO: tokenize
+  color: $sv-text-primary;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(139, 92, 246, 0.3); // TODO: tokenize
+    transform: translateX(-2px);
+  }
+}
+
+.page-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: $sv-text-primary;
+}
+
+.header-spacer {
+  width: 36px;
+}
+
+.page-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+// —— 设置页骨架 ——
+.settings-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+// —— 通用加载占位（与 _hud.scss 中 .loading-spinner 同名但尺寸不同，CSS 后定义者优先） ——
+.loading-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: $color-primary;
+  border-radius: 50%;
+  // spin 动画已迁移至 SimverseWorld.vue 的 GSAP loadingSpinTween
+}
+
+// —— @keyframes：Task 1.3 将替换为 GSAP ——
+@keyframes quest-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(34, 197, 94, 0); }
+  50%      { box-shadow: 0 0 12px rgba(34, 197, 94, 0.3); }
+}

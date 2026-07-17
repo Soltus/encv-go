@@ -125,7 +125,7 @@ async function reload() {
 onMounted(reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -133,9 +133,10 @@ onMounted(reload);
   justify-content: center;
   padding: 60px 20px;
   gap: 16px;
-}
-.state-container p {
-  color: var(--ion-color-danger);
-  margin: 0;
+
+  p {
+    color: var(--color-error);
+    margin: 0;
+  }
 }
 </style>

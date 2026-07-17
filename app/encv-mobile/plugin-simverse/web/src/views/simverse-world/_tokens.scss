@@ -1,0 +1,41 @@
+// =============================================================================
+// SimverseWorld 设计令牌
+// -----------------------------------------------------------------------------
+// 将 daisyUI CSS 变量映射到 SCSS 变量，保留运行时主题切换能力。
+// 所有颜色均通过 var(--*) 引用 daisyUI 令牌，不引入硬编码调色板。
+//
+// 关联：
+//   - 共享样式入口：app/packages/shared-components/src/styles/daisyui.css
+//   - daisyUI 主题：encv（亮色）/ encv-dark（暗色）
+// =============================================================================
+
+// ---- daisyUI 基础令牌映射 -------------------------------------------------
+// 使用 var(--*) 形式以保留运行时主题切换能力
+
+$color-primary: var(--color-primary, #8b5cf6);
+$color-primary-contrast: var(--color-primary-contrast, #ffffff);
+$color-base-100: var(--color-base-100, #ffffff);
+$color-base-200: var(--color-base-200, #f4f4f5);
+$color-base-300: var(--color-base-300, #e4e4e7);
+$color-base-content: var(--color-base-content, #1f2937);
+$color-neutral: var(--color-neutral, #1f2937);
+$color-neutral-content: var(--color-neutral-content, #ffffff);
+$color-success: var(--color-success, #22c55e);
+$color-warning: var(--color-warning, #f59e0b);
+$color-error: var(--color-error, #ef4444);
+$color-info: var(--color-info, #3b82f6);
+
+// ---- 横屏世界专属语义令牌 -------------------------------------------------
+// 基于 daisyUI 令牌派生，不引入新色值
+$sv-bg-deep: var(--color-base-300, #0a0a1a);
+$sv-bg-surface: var(--color-base-200, #15152e);
+$sv-bg-elevated: rgba(0, 0, 0, 0.4);
+$sv-text-primary: var(--color-base-content, #ffffff);
+$sv-text-secondary: rgba(255, 255, 255, 0.7);
+$sv-text-muted: rgba(255, 255, 255, 0.45);
+$sv-border-subtle: rgba(139, 92, 246, 0.18);
+$sv-border-active: rgba(139, 92, 246, 0.55);
+$sv-glow-primary: rgba(139, 92, 246, 0.4);
+$sv-glow-success: rgba(34, 197, 94, 0.4);
+$sv-glow-warning: rgba(245, 158, 11, 0.4);
+$sv-glow-error: rgba(239, 68, 68, 0.4);

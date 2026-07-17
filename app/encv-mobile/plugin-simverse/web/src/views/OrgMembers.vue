@@ -153,7 +153,7 @@ function profColor(p: string): string {
 onMounted(() => reload(true));
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
@@ -162,9 +162,11 @@ onMounted(() => reload(true));
   padding: 60px 20px;
   gap: 16px;
 }
+
 .meta {
   font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
+  color: var(--color-base-content);
+  opacity: 0.7;
   margin-left: 8px;
 }
 </style>

@@ -113,7 +113,7 @@ onMounted(reload);
 useLiveRefresh(() => reload(true), { signal: chronicleSignal, pollMs: 8000 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
@@ -124,7 +124,8 @@ useLiveRefresh(() => reload(true), { signal: chronicleSignal, pollMs: 8000 });
 }
 .stat-label {
   font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
 .stat-val {
   font-size: 22px;
@@ -136,17 +137,17 @@ useLiveRefresh(() => reload(true), { signal: chronicleSignal, pollMs: 8000 });
   gap: 5px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--ion-color-success, #22c55e);
+  color: var(--color-success);
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(34, 197, 94, 0.12);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
   margin-right: 4px;
 }
 .live-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--ion-color-success, #22c55e);
+  background: var(--color-success);
   animation: live-pulse 1.6s ease-in-out infinite;
 }
 @keyframes live-pulse {

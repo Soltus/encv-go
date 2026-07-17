@@ -14,7 +14,6 @@ import "@ionic/vue/css/normalize.css";
 import "@ionic/vue/css/structure.css";
 import "@ionic/vue/css/typography.css";
 import "./theme/variables.css";
-import "./theme/simverse.css";
 import "@encv/shared-components/styles/daisyui.css";
 // 🆕 表面语义类（.ui-chip / .ui-badge / ...）+ daisyUI 桥接令牌，让插件 UI 与主应用
 // 使用同一套调色板词汇；实际颜色由宿主注入的 window.__ENCV_THEME__ 覆盖。

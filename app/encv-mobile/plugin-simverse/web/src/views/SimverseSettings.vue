@@ -359,20 +359,21 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .loading-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   gap: 12px;
-}
 
-.loading-wrap p {
-  margin: 0;
-  font-size: 14px;
+  p {
+    margin: 0;
+    font-size: 14px;
+  }
 }
 
 ion-list {
@@ -388,12 +389,13 @@ ion-list {
 .tier-name {
   font-size: 15px;
   font-weight: 500;
-  color: var(--ion-text-color);
+  color: var(--color-base-content);
 }
 
 .tier-desc {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
 
 .storage-bar {

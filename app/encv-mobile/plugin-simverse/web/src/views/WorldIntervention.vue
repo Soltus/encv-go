@@ -135,7 +135,7 @@ async function reload() {
 onMounted(reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -143,27 +143,33 @@ onMounted(reload);
   justify-content: center;
   padding: 40px 20px;
   gap: 12px;
+
+  p {
+    color: var(--color-error);
+    margin: 0;
+  }
 }
-.state-container p {
-  color: var(--ion-color-danger);
-  margin: 0;
-}
+
 .status-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
 }
+
 .tick {
   font-family: monospace;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
+
 .btn-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-}
-.btn-grid ion-button[expand="block"] {
-  margin: 0;
+
+  ion-button[expand="block"] {
+    margin: 0;
+  }
 }
 </style>

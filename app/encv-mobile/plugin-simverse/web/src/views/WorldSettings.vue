@@ -149,22 +149,24 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .settings-layout {
   display: flex;
   height: 100%;
   min-height: 100%;
 }
+
 .settings-nav {
   width: 132px;
   flex-shrink: 0;
-  border-right: 1px solid var(--ion-color-step-150, #e0e0e0);
+  border-right: 1px solid var(--color-base-300);
   padding: 12px 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: var(--ion-color-step-50, #fafafa);
+  background: var(--color-base-200);
 }
+
 .nav-item {
   display: flex;
   flex-direction: column;
@@ -174,46 +176,58 @@ onMounted(() => {
   border: none;
   border-radius: 12px;
   background: transparent;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   font-size: 12px;
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
+
+  ion-icon {
+    font-size: 22px;
+  }
+
+  &.active {
+    background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+    color: var(--color-primary);
+    opacity: 1;
+    font-weight: 600;
+  }
 }
-.nav-item ion-icon {
-  font-size: 22px;
-}
-.nav-item.active {
-  background: var(--ion-color-primary-tint, #e6e0ff);
-  color: var(--ion-color-primary);
-  font-weight: 600;
-}
+
 .settings-panel {
   flex: 1;
   padding: 16px;
   overflow-y: auto;
 }
+
 .section-title {
   font-size: 16px;
   font-weight: 700;
   margin: 0 0 16px;
 }
+
 .option-block {
   margin-bottom: 24px;
 }
+
 .option-label {
   font-size: 13px;
   font-weight: 600;
-  color: var(--ion-color-dark);
+  color: var(--color-base-content);
   margin-bottom: 8px;
 }
+
 .option-hint {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   margin: 8px 0 0;
   font-family: monospace;
 }
+
 .about-desc {
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   font-size: 13px;
   line-height: 1.6;
   margin: 0 0 12px;

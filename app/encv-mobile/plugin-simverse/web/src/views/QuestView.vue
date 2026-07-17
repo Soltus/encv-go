@@ -40,10 +40,19 @@
       <template v-else-if="summary">
         <ion-card>
           <ion-card-content>
-            <div class="stat-row">
-              <div class="stat"><div class="stat-val">{{ summary.active_count }}</div><div class="stat-label">{{ t("simverse.questActiveCount") }}</div></div>
-              <div class="stat"><div class="stat-val">{{ summary.completable }}</div><div class="stat-label">{{ t("simverse.questCompletable") }}</div></div>
-              <div class="stat"><div class="stat-val">{{ summary.claimed_count }}</div><div class="stat-label">{{ t("simverse.questClaimed") }}</div></div>
+            <div class="stats stats-vertical sm:stats-horizontal shadow w-full">
+              <div class="stat">
+                <div class="stat-value">{{ summary.active_count }}</div>
+                <div class="stat-title">{{ t("simverse.questActiveCount") }}</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value">{{ summary.completable }}</div>
+                <div class="stat-title">{{ t("simverse.questCompletable") }}</div>
+              </div>
+              <div class="stat">
+                <div class="stat-value">{{ summary.claimed_count }}</div>
+                <div class="stat-title">{{ t("simverse.questClaimed") }}</div>
+              </div>
             </div>
           </ion-card-content>
         </ion-card>
@@ -182,7 +191,7 @@ function onFilter(ev: any) {
 onMounted(reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
@@ -191,55 +200,53 @@ onMounted(reload);
   padding: 60px 20px;
   gap: 16px;
 }
-.stat-row {
-  display: flex;
-  justify-content: space-around;
-}
-.stat {
-  text-align: center;
-}
-.stat-val {
-  font-size: 22px;
-  font-weight: 700;
-}
-.stat-label {
-  font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
-}
+
 .quest-card {
   margin: 8px 0;
 }
+
 .quest-head {
   display: flex;
   gap: 10px;
   align-items: flex-start;
 }
+
 .quest-icon {
   font-size: 24px;
 }
-.quest-title h3 {
-  margin: 0;
-  font-size: 15px;
+
+.quest-title {
+  h3 {
+    margin: 0;
+    font-size: 15px;
+  }
+
+  p {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--color-base-content);
+    opacity: 0.7;
+  }
 }
-.quest-title p {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
-}
+
 .quest-meta {
   font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
+  color: var(--color-base-content);
+  opacity: 0.7;
   margin: 8px 0 4px;
 }
+
 .quest-reward {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
   margin-top: 8px;
 }
+
 .claim-btn {
   margin-top: 10px;
 }
+
 .status-badge {
   display: block;
   margin-top: 10px;

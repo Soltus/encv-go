@@ -53,24 +53,28 @@ import {
 const { t } = useI18n();
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .about-hero {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   padding: 32px 16px 16px;
+
+  h2 {
+    margin: 0 0 8px;
+    font-size: 20px;
+  }
 }
+
 .about-logo {
   font-size: 56px;
   margin-bottom: 8px;
 }
-.about-hero h2 {
-  margin: 0 0 8px;
-  font-size: 20px;
-}
+
 .about-desc {
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   font-size: 13px;
   max-width: 320px;
   line-height: 1.6;

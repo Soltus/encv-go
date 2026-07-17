@@ -53,79 +53,84 @@
             </div>
           </div>
           <div class="top-actions">
-            <button class="game-btn play-btn" :class="{ running: worldState?.running }" @click="toggleRunning">
-              <span class="btn-icon">{{ worldState?.running ? "⏸" : "▶" }}</span>
+            <button
+              class="btn btn-circle w-[38px] h-[38px] p-0 backdrop-blur-md bg-[rgba(20,20,40,0.8)] border border-[rgba(139,92,246,0.25)] border-b-[3px] border-b-[rgba(139,92,246,0.35)] text-white text-sm leading-none hover:bg-[rgba(139,92,246,0.2)] hover:-translate-y-[1px] active:translate-y-[2px] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)] play-btn"
+              :class="{ running: worldState?.running }"
+              @click="toggleRunning"
+            >
+              {{ worldState?.running ? "⏸" : "▶" }}
             </button>
-            <button class="game-btn" @click="stepOnce">
-              <span class="btn-icon">⏭</span>
+            <button
+              class="btn btn-circle w-[38px] h-[38px] p-0 backdrop-blur-md bg-[rgba(20,20,40,0.8)] border border-[rgba(139,92,246,0.25)] border-b-[3px] border-b-[rgba(139,92,246,0.35)] text-white text-sm leading-none hover:bg-[rgba(139,92,246,0.2)] hover:-translate-y-[1px] active:translate-y-[2px] transition-all duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]"
+              @click="stepOnce"
+            >
+              ⏭
             </button>
           </div>
         </div>
 
         <!-- 主世界底部主操作条：屏幕状态机 world 页专属导航，替代原先散落在两侧的浮动按钮 -->
-        <transition name="bottom-bar">
-          <div v-if="screen === 'world'" class="bottom-bar">
-            <button class="bar-btn" :class="{ active: activePanel === 'npc' }" @click="openPanel('npc')">
-              <span class="bar-icon">🔍</span>
-              <span class="bar-label">{{ t("simverse.focus") }}</span>
-            </button>
-            <button class="bar-btn" :class="{ active: activePanel === 'chronicles' }" @click="openPanel('chronicles')">
-              <span class="bar-icon">📖</span>
-              <span class="bar-label">{{ t("simverse.chronicles") }}</span>
-            </button>
-            <button class="bar-btn" :class="{ active: activePanel === 'economy' }" @click="openPanel('economy')">
-              <span class="bar-icon">💰</span>
-              <span class="bar-label">{{ t("simverse.economy") }}</span>
-            </button>
-            <button class="bar-btn" :class="{ active: isIntervene }" @click="openIntervene">
-              <span class="bar-icon">🎛️</span>
-              <span class="bar-label">{{ t("simverse.intervene") }}</span>
-            </button>
-            <button class="bar-btn more" :class="{ active: bottomMoreOpen }" @click="toggleBottomMore">
-              <span class="bar-icon">⋯</span>
-              <span class="bar-label">{{ t("simverse.more") }}</span>
-            </button>
-            <button class="bar-btn" :class="{ active: activePanel === 'settings' }" @click="openPanel('settings')">
-              <span class="bar-icon">⚙️</span>
-              <span class="bar-label">{{ t("simverse.settings") }}</span>
-            </button>
-          </div>
-        </transition>
+        <!-- 转场已迁移至 GSAP（bottomBarRef watcher），不再使用 <transition> 包裹 -->
+        <div v-if="screen === 'world'" ref="bottomBarRef" class="bottom-bar">
+          <button class="bar-btn" :class="{ active: activePanel === 'npc' }" @click="openHudScene('focus')">
+            <span class="bar-icon">🔍</span>
+            <span class="bar-label">{{ t("simverse.focus") }}</span>
+          </button>
+          <button class="bar-btn" :class="{ active: activePanel === 'chronicles' }" @click="openDetailRoute('chronicles')">
+            <span class="bar-icon">📖</span>
+            <span class="bar-label">{{ t("simverse.chronicles") }}</span>
+          </button>
+          <button class="bar-btn" :class="{ active: activePanel === 'economy' }" @click="openDetailRoute('economy')">
+            <span class="bar-icon">💰</span>
+            <span class="bar-label">{{ t("simverse.economy") }}</span>
+          </button>
+          <button class="bar-btn" :class="{ active: isIntervene }" @click="openHudScene('intervene')">
+            <span class="bar-icon">🎛️</span>
+            <span class="bar-label">{{ t("simverse.intervene") }}</span>
+          </button>
+          <button class="bar-btn more" :class="{ active: bottomMoreOpen }" @click="toggleBottomMore">
+            <span class="bar-icon">⋯</span>
+            <span class="bar-label">{{ t("simverse.more") }}</span>
+          </button>
+          <button class="bar-btn" :class="{ active: activePanel === 'settings' }" @click="openDetailRoute('settings')">
+            <span class="bar-icon">⚙️</span>
+            <span class="bar-label">{{ t("simverse.settings") }}</span>
+          </button>
+        </div>
 
         <!-- 更多：二级功能（含 B 类体验桩）收拢于此，避免主操作条过载 -->
-        <transition name="more-pop">
-          <div v-if="screen === 'world' && bottomMoreOpen" class="more-pop" @click.self="toggleBottomMore">
-            <div class="more-grid">
-              <button class="more-item" @click="openPanel('quest'); bottomMoreOpen = false">
-                <span class="more-icon">📋</span><span class="more-label">任务</span>
-              </button>
-              <button class="more-item" @click="openPanel('org'); bottomMoreOpen = false">
-                <span class="more-icon">🏰</span><span class="more-label">{{ t("simverse.org") }}</span>
-              </button>
-              <button class="more-item" @click="openCharacter(); bottomMoreOpen = false">
-                <span class="more-icon">🧑</span><span class="more-label">{{ t("simverse.character") }}</span>
-              </button>
-              <button class="more-item" @click="openPanel('profile'); bottomMoreOpen = false">
-                <span class="more-icon">👤</span><span class="more-label">{{ t("simverse.profile") }}</span>
-              </button>
-              <button class="more-item" @click="openPanel('training'); bottomMoreOpen = false">
-                <span class="more-icon">⚔️</span><span class="more-label">{{ t("simverse.training") }}</span>
-              </button>
-              <button class="more-item" @click="openPanel('inventory'); bottomMoreOpen = false">
-                <span class="more-icon">🎒</span><span class="more-label">背包</span>
-              </button>
-              <button class="more-item" @click="openPanel('explore'); bottomMoreOpen = false">
-                <span class="more-icon">🗺️</span><span class="more-label">{{ t("simverse.explore") }}</span>
-              </button>
-              <button class="more-item" @click="openPanel('battle'); bottomMoreOpen = false">
-                <span class="more-icon">🗡️</span><span class="more-label">{{ t("simverse.battle") }}</span>
-              </button>
-              <button class="more-item gacha" @click="openGachaModal(); bottomMoreOpen = false">
-                <span class="more-icon">✨</span><span class="more-label">{{ t("simverse.gacha") }}</span>
-              </button>
-            </div>
+        <!-- 转场已迁移至 GSAP（morePopRef watcher），不再使用 <transition> 包裹 -->
+        <div v-if="screen === 'world' && bottomMoreOpen" ref="morePopRef" class="more-pop" @click.self="toggleBottomMore">
+          <div class="more-grid">
+            <button class="more-item" @click="openDetailRoute('quest'); bottomMoreOpen = false">
+              <span class="more-icon">📋</span><span class="more-label">任务</span>
+            </button>
+            <button class="more-item" @click="openDetailRoute('org'); bottomMoreOpen = false">
+              <span class="more-icon">🏰</span><span class="more-label">{{ t("simverse.org") }}</span>
+            </button>
+            <button class="more-item" @click="openHudScene('character'); bottomMoreOpen = false">
+              <span class="more-icon">🧑</span><span class="more-label">{{ t("simverse.character") }}</span>
+            </button>
+            <button class="more-item" @click="openDetailRoute('profile'); bottomMoreOpen = false">
+              <span class="more-icon">👤</span><span class="more-label">{{ t("simverse.profile") }}</span>
+            </button>
+            <button class="more-item" @click="openDetailRoute('training'); bottomMoreOpen = false">
+              <span class="more-icon">⚔️</span><span class="more-label">{{ t("simverse.training") }}</span>
+            </button>
+            <button class="more-item" @click="openDetailRoute('inventory'); bottomMoreOpen = false">
+              <span class="more-icon">🎒</span><span class="more-label">背包</span>
+            </button>
+            <button class="more-item" @click="openDetailRoute('explore'); bottomMoreOpen = false">
+              <span class="more-icon">🗺️</span><span class="more-label">{{ t("simverse.explore") }}</span>
+            </button>
+            <button class="more-item" @click="openDetailRoute('battle'); bottomMoreOpen = false">
+              <span class="more-icon">🗡️</span><span class="more-label">{{ t("simverse.battle") }}</span>
+            </button>
+            <button class="more-item gacha" @click="openHudScene('gacha'); bottomMoreOpen = false">
+              <span class="more-icon">✨</span><span class="more-label">{{ t("simverse.gacha") }}</span>
+            </button>
           </div>
-        </transition>
+        </div>
 
         <div class="stats-bar">
           <div class="stat-pill">
@@ -145,31 +150,47 @@
         <div class="event-ticker" v-if="recentEvents.length > 0" @click="openEventPage">
           <div class="ticker-icon">📜</div>
           <div class="ticker-content">
-            <transition-group name="ticker" tag="div" class="ticker-list">
+            <!-- 转场已迁移至 GSAP（recentEvents watcher），不再使用 <transition-group> -->
+            <div class="ticker-list">
               <div v-for="ev in recentEvents.slice(0, 3)" :key="ev.id" class="ticker-item">
                 <span class="event-dot" :class="'imp-' + ev.importance"></span>
                 <span class="event-text">{{ ev.type_cn }}</span>
               </div>
-            </transition-group>
+            </div>
           </div>
         </div>
 
         <div v-if="activePanel" class="side-panel" :class="{ open: !!activePanel, 'panel-left': panelOnLeft }">
           <div class="panel-header">
             <span class="panel-title">{{ getPanelTitle(activePanel) }}</span>
-            <button class="panel-close-btn" @click="activePanel = null">✕</button>
+            <button
+              class="btn btn-circle btn-xs w-[28px] h-[28px] p-0 min-h-0 bg-white/[0.08] border-none text-white/60 hover:bg-white/[0.15] hover:text-white text-[11px] transition-all duration-200"
+              @click="activePanel = null"
+            >✕</button>
           </div>
           <div class="panel-content">
             <template v-if="activePanel === 'quest'">
               <div class="quest-panel">
-                <div class="quest-tabs">
-                  <button class="quest-tab" :class="{ active: questTab === 'daily' }" @click="questTab = 'daily'">
+                <div class="flex gap-1.5 p-3 bg-black/20 border-b border-white/10">
+                  <button
+                    class="flex-1 py-2 px-3 border-none rounded-lg text-white/60 text-[13px] font-medium cursor-pointer transition-all duration-200"
+                    :class="questTab === 'daily' ? 'bg-gradient-to-br from-[var(--color-primary)] to-[#6366f1] text-white' : 'bg-white/[0.05]'"
+                    @click="questTab = 'daily'"
+                  >
                     📅 日常
                   </button>
-                  <button class="quest-tab" :class="{ active: questTab === 'achieve' }" @click="questTab = 'achieve'">
+                  <button
+                    class="flex-1 py-2 px-3 border-none rounded-lg text-white/60 text-[13px] font-medium cursor-pointer transition-all duration-200"
+                    :class="questTab === 'achieve' ? 'bg-gradient-to-br from-[var(--color-primary)] to-[#6366f1] text-white' : 'bg-white/[0.05]'"
+                    @click="questTab = 'achieve'"
+                  >
                     🏆 成就
                   </button>
-                  <button class="quest-tab" :class="{ active: questTab === 'story' }" @click="questTab = 'story'">
+                  <button
+                    class="flex-1 py-2 px-3 border-none rounded-lg text-white/60 text-[13px] font-medium cursor-pointer transition-all duration-200"
+                    :class="questTab === 'story' ? 'bg-gradient-to-br from-[var(--color-primary)] to-[#6366f1] text-white' : 'bg-white/[0.05]'"
+                    @click="questTab = 'story'"
+                  >
                     📖 剧情
                   </button>
                 </div>
@@ -180,11 +201,17 @@
                     <div class="quest-info">
                       <div class="quest-title">{{ q.title }}</div>
                       <div class="quest-desc">{{ q.desc }}</div>
-                      <div class="quest-progress-row">
-                        <div class="quest-progress-bar">
-                          <div class="quest-progress-fill" :style="{ width: Math.min(100, (q.progress / q.goal) * 100) + '%' }"></div>
+                      <div class="flex items-center gap-2 mb-1.5">
+                        <div class="flex-1 h-1.5 bg-white/10 rounded-sm overflow-hidden">
+                          <div
+                            class="h-full rounded-sm transition-[width] duration-300"
+                            :class="q.progress >= q.goal && q.status === 1
+                              ? 'bg-gradient-to-r from-[var(--color-success)] to-[#4ade80]'
+                              : 'bg-gradient-to-r from-[var(--color-primary)] to-[#06b6d4]'"
+                            :style="{ width: Math.min(100, (q.progress / q.goal) * 100) + '%' }"
+                          ></div>
                         </div>
-                        <span class="quest-progress-text">{{ q.progress }}/{{ q.goal }}</span>
+                        <span class="text-[11px] text-white/50 whitespace-nowrap">{{ q.progress }}/{{ q.goal }}</span>
                       </div>
                       <div class="quest-reward">
                         <span v-if="q.reward.diamond" class="reward-item">💎 {{ q.reward.diamond }}</span>
@@ -192,7 +219,11 @@
                         <span v-if="q.reward.exp" class="reward-item">⭐ {{ q.reward.exp }}</span>
                       </div>
                     </div>
-                    <button v-if="q.progress >= q.goal && q.status === 1" class="quest-claim-btn" @click="claimQuest(q.id)">
+                    <button
+                      v-if="q.progress >= q.goal && q.status === 1"
+                      class="btn btn-primary btn-sm bg-gradient-to-br from-[var(--color-success)] to-[#16a34a] border-none text-white rounded-lg px-4 py-2 text-[13px] font-semibold flex-shrink-0 active:scale-95 transition-all duration-200"
+                      @click="claimQuest(q.id)"
+                    >
                       领取
                     </button>
                     <span v-else-if="q.status === 2" class="quest-claimed">✓</span>
@@ -206,26 +237,32 @@
                 <div class="stats-title">活动分布</div>
                 <div class="behavior-chips">
                   <span v-for="(count, behavior) in behaviorStats.behavior_dist" :key="behavior"
-                        class="behavior-chip" :class="behavior">
-                    <span class="chip-icon">{{ getBehaviorIcon(behavior as string) }}</span>
-                    <span class="chip-count">{{ count }}</span>
+                        class="badge badge-sm behavior-chip inline-flex items-center gap-1 bg-white/[0.05] border border-white/10 rounded-xl px-2 py-0.5 text-[10px]"
+                        :class="behavior">
+                    <span class="text-xs">{{ getBehaviorIcon(behavior as string) }}</span>
+                    <span class="font-semibold text-white/80">{{ count }}</span>
                   </span>
                 </div>
               </div>
-              <div v-for="npc in npcList" :key="npc.id" class="list-card" @click="selectNPC(npc)">
-                <div class="card-avatar">{{ npc.name?.[0] || '?' }}</div>
-                <div class="card-info">
-                  <div class="card-title">{{ npc.name }}</div>
-                  <div class="card-subtitle">
-                    <span class="prof-tag">{{ npc.profession }}</span>
-                    <span class="level-tag">Lv.{{ npc.level }}</span>
+              <div
+                v-for="npc in npcList"
+                :key="npc.id"
+                class="card flex items-center gap-3 p-3 mb-2 bg-white/[0.04] rounded-xl border border-[rgba(139,92,246,0.1)] cursor-pointer transition-all duration-200 hover:bg-[rgba(139,92,246,0.1)] hover:border-[rgba(139,92,246,0.25)] hover:translate-x-0.5"
+                @click="selectNPC(npc)"
+              >
+                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--color-primary)] to-[#ec4899] flex items-center justify-center text-white font-bold text-base flex-shrink-0 border-2 border-white/10">{{ npc.name?.[0] || '?' }}</div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-[13px] font-semibold text-white mb-1">{{ npc.name }}</div>
+                  <div class="flex gap-1.5 items-center">
+                    <span class="badge badge-sm bg-[rgba(139,92,246,0.2)] text-[#c4b5fd] text-[10px] px-1.5 py-0.5 rounded-md font-medium capitalize">{{ npc.profession }}</span>
+                    <span class="badge badge-sm bg-[rgba(245,158,11,0.2)] text-[#fbbf24] text-[10px] px-1.5 py-0.5 rounded-md font-medium">Lv.{{ npc.level }}</span>
                   </div>
-                  <div class="card-behavior">
-                    <span class="behavior-icon">{{ getBehaviorIcon(npc.current_behavior || 'idle') }}</span>
-                    <span class="behavior-text">{{ npc.current_behavior_cn || '空闲' }}</span>
+                  <div class="flex items-center gap-1 mt-1">
+                    <span class="text-[11px]">{{ getBehaviorIcon(npc.current_behavior || 'idle') }}</span>
+                    <span class="text-[10px] text-white/50">{{ npc.current_behavior_cn || '空闲' }}</span>
                   </div>
                 </div>
-                <div class="card-action">
+                <div class="w-[50px] flex-shrink-0">
                   <div class="mini-hp-bar">
                     <div class="mini-hp-fill" :style="{ width: (npc.health / npc.max_health * 100) + '%' }"></div>
                   </div>
@@ -606,6 +643,7 @@
           </div>
         </div>
 
+        <div ref="hudSceneContainer" class="hud-scene-container">
         <transition name="focus-slide">
           <div v-if="screen === 'focus' && selectedNPC" class="detail-modal" @click.self="backToWorld">
             <div class="detail-card">
@@ -727,175 +765,195 @@
           </div>
         </transition>
 
-        <transition name="gacha-modal">
-          <div v-if="gachaModalOpen" class="gacha-modal-overlay" @click.self="closeGachaModal">
-            <div class="gacha-modal-content">
-              <button class="gacha-modal-close" @click="closeGachaModal">✕</button>
-              <div class="gacha-banner-large">
-                <div class="banner-bg"></div>
-                <div class="banner-content">
-                  <div class="banner-icon-large">🎴</div>
-                  <div class="banner-title-large">{{ t("simverse.gachaTitle") }}</div>
-                  <div class="banner-desc-large">{{ t("simverse.gachaDesc") }}</div>
-                </div>
-                <div class="sparkle-layer">
-                  <span v-for="i in 12" :key="i" class="sparkle" :style="getSparkleStyle(i)">✦</span>
+        <!-- 抽卡页：屏幕状态机 gacha 页，转场由 useSceneTransition.transitionToScene 处理 -->
+        <div v-if="screen === 'gacha'" ref="gachaModalRef" class="gacha-modal-overlay" @click.self="closeGachaModal">
+          <div class="gacha-modal-content">
+            <button class="gacha-modal-close" @click="closeGachaModal">✕</button>
+            <div class="gacha-banner-large">
+              <div class="banner-bg"></div>
+              <div class="banner-content">
+                <div class="banner-icon-large">🎴</div>
+                <div class="banner-title-large">{{ t("simverse.gachaTitle") }}</div>
+                <div class="banner-desc-large">{{ t("simverse.gachaDesc") }}</div>
+              </div>
+              <div class="sparkle-layer">
+                <span v-for="i in 12" :key="i" class="sparkle" :style="getSparkleStyle(i)">✦</span>
+              </div>
+            </div>
+
+            <div class="gacha-pool-info">
+              <div class="pool-rate">
+                <span class="rate-label">SSR</span>
+                <span class="rate-val">1%</span>
+              </div>
+              <div class="pool-rate">
+                <span class="rate-label">SR</span>
+                <span class="rate-val">8%</span>
+              </div>
+              <div class="pool-rate">
+                <span class="rate-label">R</span>
+                <span class="rate-val">30%</span>
+              </div>
+              <div class="pool-rate">
+                <span class="rate-label">N</span>
+                <span class="rate-val">61%</span>
+              </div>
+            </div>
+
+            <div class="gacha-actions-large">
+              <button class="gacha-big-btn single" :disabled="isGachaAnimating" @click="doGachaAnimation(1)">
+                <span class="btn-icon-large">🎴</span>
+                <span class="btn-name">{{ t("simverse.singlePull") }}</span>
+                <span class="btn-cost">100 💎</span>
+              </button>
+              <button class="gacha-big-btn ten" :disabled="isGachaAnimating" @click="doGachaAnimation(10)">
+                <span class="btn-icon-large">🎴×10</span>
+                <span class="btn-name">{{ t("simverse.tenPull") }}</span>
+                <span class="btn-cost">900 💎</span>
+                <span class="btn-badge">{{ t("simverse.guaranteedRare") }}</span>
+              </button>
+            </div>
+
+            <div v-if="gachaHistory.length > 0" class="gacha-history">
+              <div class="history-title">最近召唤</div>
+              <div class="history-list">
+                <div v-for="(item, i) in gachaHistory.slice(0, 6)" :key="i"
+                     class="history-item"
+                     :class="item.rarity">
+                  <span class="hist-icon">{{ item.icon }}</span>
+                  <span class="hist-name">{{ item.name }}</span>
+                  <span class="hist-rarity">{{ item.rarity }}</span>
                 </div>
               </div>
+            </div>
 
-              <div class="gacha-pool-info">
-                <div class="pool-rate">
-                  <span class="rate-label">SSR</span>
-                  <span class="rate-val">1%</span>
-                </div>
-                <div class="pool-rate">
-                  <span class="rate-label">SR</span>
-                  <span class="rate-val">8%</span>
-                </div>
-                <div class="pool-rate">
-                  <span class="rate-label">R</span>
-                  <span class="rate-val">30%</span>
-                </div>
-                <div class="pool-rate">
-                  <span class="rate-label">N</span>
-                  <span class="rate-val">61%</span>
-                </div>
-              </div>
-
-              <div class="gacha-actions-large">
-                <button class="gacha-big-btn single" :disabled="isGachaAnimating" @click="doGachaAnimation(1)">
-                  <span class="btn-icon-large">🎴</span>
-                  <span class="btn-name">{{ t("simverse.singlePull") }}</span>
-                  <span class="btn-cost">100 💎</span>
-                </button>
-                <button class="gacha-big-btn ten" :disabled="isGachaAnimating" @click="doGachaAnimation(10)">
-                  <span class="btn-icon-large">🎴×10</span>
-                  <span class="btn-name">{{ t("simverse.tenPull") }}</span>
-                  <span class="btn-cost">900 💎</span>
-                  <span class="btn-badge">{{ t("simverse.guaranteedRare") }}</span>
-                </button>
-              </div>
-
-              <div v-if="gachaHistory.length > 0" class="gacha-history">
-                <div class="history-title">最近召唤</div>
-                <div class="history-list">
-                  <div v-for="(item, i) in gachaHistory.slice(0, 6)" :key="i"
-                       class="history-item"
-                       :class="item.rarity">
-                    <span class="hist-icon">{{ item.icon }}</span>
-                    <span class="hist-name">{{ item.name }}</span>
-                    <span class="hist-rarity">{{ item.rarity }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <transition name="gacha-flash">
-                <div v-if="isGachaAnimating" class="gacha-animation-overlay">
-                  <div class="gacha-cards-container" :class="{ reveal: gachaRevealed }">
-                    <div v-for="(item, i) in gachaAnimResults" :key="i"
-                         class="gacha-card-anim"
-                         :class="[item.rarity, { revealed: gachaRevealed }]"
-                         :style="{ animationDelay: (i * 0.1) + 's' }">
-                      <div class="card-inner">
-                        <div class="card-front">
-                          <span class="card-back-icon">✦</span>
-                        </div>
-                        <div class="card-back">
-                          <span class="gacha-item-icon">{{ item.icon }}</span>
-                          <span class="gacha-item-name">{{ item.name }}</span>
-                          <span class="gacha-item-rarity" :class="item.rarity">{{ item.rarity }}</span>
-                        </div>
-                      </div>
+            <!-- 转场已迁移至 GSAP（gachaFlashRef watcher），不再使用 <transition> 包裹 -->
+            <div v-if="isGachaAnimating" ref="gachaFlashRef" class="gacha-animation-overlay">
+              <div class="gacha-cards-container" :class="{ reveal: gachaRevealed }">
+                <div v-for="(item, i) in gachaAnimResults" :key="i"
+                     class="gacha-card-anim"
+                     :class="[item.rarity, { revealed: gachaRevealed }]"
+                     :style="{ animationDelay: (i * 0.1) + 's' }">
+                  <div class="card-inner">
+                    <div class="card-front">
+                      <span class="card-back-icon">✦</span>
+                    </div>
+                    <div class="card-back">
+                      <span class="gacha-item-icon">{{ item.icon }}</span>
+                      <span class="gacha-item-name">{{ item.name }}</span>
+                      <span class="gacha-item-rarity" :class="item.rarity">{{ item.rarity }}</span>
                     </div>
                   </div>
-                  <div v-if="gachaRevealed" class="gacha-skip-btn" @click="finishGachaAnimation">
-                    点击继续
-                  </div>
                 </div>
-              </transition>
+              </div>
+              <div v-if="gachaRevealed" class="gacha-skip-btn" @click="finishGachaAnimation">
+                点击继续
+              </div>
             </div>
           </div>
-        </transition>
+        </div>
 
         <!-- 事件页：屏幕状态机 event 页，重大编年史事件全屏呈现，替代“一页不变” -->
-        <transition name="event-page">
-          <div v-if="screen === 'event'" class="event-page">
-            <div class="event-page-header">
-              <button class="event-back" @click="backToWorld">← {{ t("simverse.back") }}</button>
-              <span class="event-page-title">📜 {{ t("simverse.chronicles") }}</span>
-            </div>
-            <div class="event-feed">
-              <div v-for="ev in recentEvents" :key="ev.id" class="event-row" :class="'imp-' + ev.importance">
-                <div class="event-row-tick">Tick {{ ev.tick }}</div>
-                <div class="event-row-title">{{ ev.type_cn }}</div>
-                <div class="event-row-meta">{{ ev.imp_cn }} · {{ ev.level_cn }}</div>
-              </div>
-              <div v-if="recentEvents.length === 0" class="empty-state">{{ t("simverse.noData") }}</div>
-            </div>
+        <!-- 转场由 useSceneTransition.transitionToScene 处理，不再使用 <transition> 包裹 -->
+        <div v-if="screen === 'event'" class="event-page">
+          <div class="event-page-header">
+            <button
+              class="btn btn-sm bg-[rgba(139,92,246,0.18)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-3.5 py-2 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
+              @click="backToWorld"
+            >← {{ t("simverse.back") }}</button>
+            <span class="event-page-title">📜 {{ t("simverse.chronicles") }}</span>
           </div>
-        </transition>
+          <div class="event-feed">
+            <div v-for="ev in recentEvents" :key="ev.id" class="event-row" :class="'imp-' + ev.importance">
+              <div class="event-row-tick">Tick {{ ev.tick }}</div>
+              <div class="event-row-title">{{ ev.type_cn }}</div>
+              <div class="event-row-meta">{{ ev.imp_cn }} · {{ ev.level_cn }}</div>
+            </div>
+            <div v-if="recentEvents.length === 0" class="empty-state">{{ t("simverse.noData") }}</div>
+          </div>
+        </div>
 
         <!-- 干预页：屏幕状态机 intervene 页，上帝视角的世界控制，全部接真实后端能力 -->
-        <transition name="intervene-page">
-          <div v-if="screen === 'intervene'" class="intervene-page">
-            <div class="event-page-header">
-              <button class="event-back" @click="backToWorld">← {{ t("simverse.back") }}</button>
-              <span class="event-page-title">🎛️ {{ t("simverse.intervene") }}</span>
-            </div>
-            <div class="intervene-body">
-              <section class="ctrl-section">
-                <div class="ctrl-title">{{ t("simverse.timeControl") }}</div>
-                <div class="ctrl-row">
-                  <button class="ctrl-btn primary" @click="toggleRunning">
-                    {{ worldState?.running ? "⏸ " + t("simverse.pause") : "▶ " + t("simverse.resume") }}
-                  </button>
-                  <button class="ctrl-btn" @click="stepOnce">⏭ {{ t("simverse.step") }}</button>
-                </div>
-                <div class="ctrl-row">
-                  <span class="ctrl-hint">{{ t("simverse.fastForward") }}</span>
-                  <input class="ff-input" type="number" min="1" max="200" v-model.number="ffSteps" />
-                  <span class="ctrl-hint">{{ t("simverse.steps") }}</span>
-                  <button class="ctrl-btn" @click="fastForward">⏩</button>
-                </div>
-              </section>
-              <section class="ctrl-section">
-                <div class="ctrl-title">{{ t("simverse.worldSnapshot") }}</div>
-                <div class="ctrl-row">
-                  <button class="ctrl-btn" @click="doSave">💾 {{ t("simverse.saveNow") }}</button>
-                  <button class="ctrl-btn" @click="doLoad">📂 {{ t("simverse.loadSave") }}</button>
-                </div>
-                <div v-if="saveMsg" class="ctrl-msg">{{ saveMsg }}</div>
-              </section>
-            </div>
+        <!-- 转场由 useSceneTransition.transitionToScene 处理，不再使用 <transition> 包裹 -->
+        <div v-if="screen === 'intervene'" class="intervene-page">
+          <div class="event-page-header">
+            <button
+              class="btn btn-sm bg-[rgba(139,92,246,0.18)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-3.5 py-2 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
+              @click="backToWorld"
+            >← {{ t("simverse.back") }}</button>
+            <span class="event-page-title">🎛️ {{ t("simverse.intervene") }}</span>
           </div>
-        </transition>
+          <div class="intervene-body">
+            <section class="card bg-white/[0.04] border border-[rgba(139,92,246,0.18)] rounded-2xl p-4">
+              <div class="card-title text-[13px] font-bold text-white/85 mb-3">{{ t("simverse.timeControl") }}</div>
+              <div class="ctrl-row">
+                <button
+                  class="btn btn-sm primary bg-[rgba(34,197,94,0.2)] border border-[rgba(34,197,94,0.45)] text-white rounded-xl px-4 py-2.5 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
+                  @click="toggleRunning"
+                >
+                  {{ worldState?.running ? "⏸ " + t("simverse.pause") : "▶ " + t("simverse.resume") }}
+                </button>
+                <button
+                  class="btn btn-sm bg-[rgba(139,92,246,0.16)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-4 py-2.5 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
+                  @click="stepOnce"
+                >⏭ {{ t("simverse.step") }}</button>
+              </div>
+              <div class="ctrl-row">
+                <span class="ctrl-hint">{{ t("simverse.fastForward") }}</span>
+                <input class="ff-input" type="number" min="1" max="200" v-model.number="ffSteps" />
+                <span class="ctrl-hint">{{ t("simverse.steps") }}</span>
+                <button
+                  class="btn btn-sm bg-[rgba(139,92,246,0.16)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-4 py-2.5 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
+                  @click="fastForward"
+                >⏩</button>
+              </div>
+            </section>
+            <section class="card bg-white/[0.04] border border-[rgba(139,92,246,0.18)] rounded-2xl p-4">
+              <div class="card-title text-[13px] font-bold text-white/85 mb-3">{{ t("simverse.worldSnapshot") }}</div>
+              <div class="ctrl-row">
+                <button
+                  class="btn btn-sm bg-[rgba(139,92,246,0.16)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-4 py-2.5 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
+                  @click="doSave"
+                >💾 {{ t("simverse.saveNow") }}</button>
+                <button
+                  class="btn btn-sm bg-[rgba(139,92,246,0.16)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-4 py-2.5 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
+                  @click="doLoad"
+                >📂 {{ t("simverse.loadSave") }}</button>
+              </div>
+              <div v-if="saveMsg" class="ctrl-msg">{{ saveMsg }}</div>
+            </section>
+          </div>
+        </div>
 
         <!-- 化身页：屏幕状态机 character 页，B 体验（后端角色系统未接入，诚实标注为占位） -->
-        <transition name="character-page">
-          <div v-if="screen === 'character'" class="character-page">
-            <div class="event-page-header">
-              <button class="event-back" @click="backToWorld">← {{ t("simverse.back") }}</button>
-              <span class="event-page-title">🧑 {{ t("simverse.character") }}</span>
-            </div>
-            <div class="character-body">
-              <div class="stub-banner">⚠️ {{ t("simverse.bStubHint") }}</div>
-              <div class="char-card">
-                <div class="char-avatar">⚔️</div>
-                <div class="char-name">冒险者 · Lv.{{ playerLevel }}</div>
-                <div class="char-res">
-                  <span>💎 {{ playerDiamond }}</span>
-                  <span>🪙 {{ playerGold }}</span>
-                  <span>⚡ {{ playerStamina }}/120</span>
-                </div>
-                <div class="char-skills">
-                  <span v-for="s in playerSkills.slice(0, 4)" :key="s.id" class="char-skill">{{ s.icon }} {{ s.name }}</span>
-                </div>
+        <!-- 转场由 useSceneTransition.transitionToScene 处理，不再使用 <transition> 包裹 -->
+        <div v-if="screen === 'character'" class="character-page">
+          <div class="event-page-header">
+            <button
+              class="btn btn-sm bg-[rgba(139,92,246,0.18)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-3.5 py-2 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
+              @click="backToWorld"
+            >← {{ t("simverse.back") }}</button>
+            <span class="event-page-title">🧑 {{ t("simverse.character") }}</span>
+          </div>
+          <div class="character-body">
+            <div class="stub-banner">⚠️ {{ t("simverse.bStubHint") }}</div>
+            <div class="char-card">
+              <div class="char-avatar">⚔️</div>
+              <div class="char-name">冒险者 · Lv.{{ playerLevel }}</div>
+              <div class="char-res">
+                <span>💎 {{ playerDiamond }}</span>
+                <span>🪙 {{ playerGold }}</span>
+                <span>⚡ {{ playerStamina }}/120</span>
+              </div>
+              <div class="char-skills">
+                <span v-for="s in playerSkills.slice(0, 4)" :key="s.id" class="char-skill">{{ s.icon }} {{ s.name }}</span>
               </div>
             </div>
           </div>
-        </transition>
+        </div>
+        </div>
     </div>
-    </ion-content>
+  </ion-content>
   </ion-page>
 </template>
 
@@ -904,7 +962,9 @@ import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { IonInfiniteScroll, IonInfiniteScrollContent, IonLabel, IonSegment, IonSegmentButton } from "@ionic/vue";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { useSimverseAnimations } from "@/composables/useSimverseAnimations";
 import { usePhaserWorld } from "@/composables/usePhaserWorld";
+import { useSceneTransition } from "@/composables/useSceneTransition";
 import { type SimverseChronicleEvent, type SimverseNPC, type SimverseRelation, useSimverse } from "@/composables/useSimverse";
 import { type RenderFps, type RenderQuality, useWorldRenderSettings } from "@/composables/useWorldRenderSettings";
 import { ARCH_META, deriveBuildFromNPC } from "@/game/builds";
@@ -918,6 +978,13 @@ import {
 } from "@/plugins/SimVerse";
 
 const router = useRouter();
+
+// HUD 场景过渡：用 GSAP Flip 做 world ↔ focus/event/intervene/character/gacha 的镜头转场
+const { transitionToScene, recordState, playTransition, reverseTransition } = useSceneTransition();
+const hudSceneContainer = ref<HTMLElement | null>(null);
+
+// GSAP 动画：通过 useSimverseAnimations composable 集中托管（Task 1.3 / 1.4 / 1.5）
+// 详见 composables/useSimverseAnimations.ts —— 替换 @keyframes + <transition> + 游戏级动效
 
 const { t } = useI18n();
 const {
@@ -997,8 +1064,15 @@ function toggleSquad() {
   persistSquadIds();
 }
 // 屏幕状态机：横屏世界由多页组成、会互相切换（不再是一页永远不变）。
-// world=主世界 / focus=焦点对象页 / event=事件页 / intervene=干预页 / character=化身页(B)
-const screen = ref<"world" | "focus" | "event" | "intervene" | "character">("world");
+// world=主世界 / focus=焦点对象页 / event=事件页 / intervene=干预页 / character=化身页(B) / gacha=抽卡页
+type ScreenState =
+  | 'world'        // 主世界
+  | 'focus'        // NPC 焦点 HUD 场景
+  | 'event'        // 事件流 HUD 场景
+  | 'intervene'    // 干预 HUD 场景
+  | 'character'    // 化身 HUD 场景
+  | 'gacha'        // 抽卡 HUD 场景（从 modal 升级为场景）
+const screen = ref<ScreenState>("world");
 // 独立 computed，避免模板在 v-if="screen === 'world'" 块内将 screen 收窄为 "world" 而误报比较无交集
 const isIntervene = computed(() => screen.value === "intervene");
 const bottomMoreOpen = ref(false);
@@ -1006,16 +1080,13 @@ function toggleBottomMore() {
   bottomMoreOpen.value = !bottomMoreOpen.value;
 }
 
-// 事件页：从主世界进入全屏编年史事件流（屏幕状态机 event 页）
-function openEventPage() {
-  if (recentEvents.value.length === 0) loadEvents();
-  screen.value = "event";
+// 事件页：从主世界进入全屏编年史事件流（屏幕状态机 event 页），用 GSAP Flip 过渡
+async function openEventPage() {
+  if (recentEvents.value.length === 0) await loadEvents();
+  await openHudScene('event');
 }
 
-// 干预页：上帝视角的世界控制（屏幕状态机 intervene 页），全部接真实后端能力
-function openIntervene() {
-  screen.value = "intervene";
-}
+// 干预页：现在通过 openHudScene('intervene') 从底部操作条直接调用
 const ffSteps = ref(10);
 const saveMsg = ref("");
 async function fastForward() {
@@ -1034,10 +1105,7 @@ async function doLoad() {
   saveMsg.value = t("simverse.loadSuccess");
 }
 
-// 化身页：B 体验（屏幕状态机 character 页），后端角色系统未接入，诚实标注为占位
-function openCharacter() {
-  screen.value = "character";
-}
+// 化身页：现在通过 openHudScene('character') 从"更多"面板直接调用
 const gachaResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
 const behaviorStats = ref<{ total_npcs: number; alive_npcs: number; behavior_dist: Record<string, number> } | null>(null);
 
@@ -1085,7 +1153,6 @@ const filteredQuests = computed(() => {
     .sort((a, b) => a.sort_order - b.sort_order);
 });
 
-const gachaModalOpen = ref(false);
 const isGachaAnimating = ref(false);
 const gachaRevealed = ref(false);
 const gachaAnimResults = ref<{ name: string; icon: string; rarity: string }[]>([]);
@@ -1134,13 +1201,10 @@ const expToNextLevel = computed(() => playerLevel.value * 100);
 const expPercent = computed(() => Math.min(100, (playerExp.value / expToNextLevel.value) * 100));
 const playerHpPercent = computed(() => (playerHp.value / playerMaxHp.value) * 100);
 
-function openGachaModal() {
-  gachaModalOpen.value = true;
-}
-
-function closeGachaModal() {
+// 抽卡：现在通过 openHudScene('gacha') 从"更多"面板直接调用（gacha 已从 modal 升级为 HUD 场景）
+async function closeGachaModal() {
   if (isGachaAnimating.value) return;
-  gachaModalOpen.value = false;
+  await openHudScene('world');
 }
 
 function getSparkleStyle(index: number) {
@@ -1199,6 +1263,15 @@ function doGachaAnimation(count: number) {
   setTimeout(() => {
     gachaRevealed.value = true;
     recordQuestAction("gacha");
+    // Task 1.5: 抽卡揭晓时触发游戏级动效（光柱 + 屏幕震动 + 粒子）
+    nextTick(() => {
+      playGachaLightBeam();
+      shakeScreen(6, 0.4);
+      const overlay = document.querySelector(".gacha-animation-overlay");
+      if (overlay instanceof HTMLElement) {
+        spawnParticles(overlay, 16, "#8b5cf6");
+      }
+    });
   }, 1500);
 }
 
@@ -1450,16 +1523,22 @@ async function loadNPCBehaviors() {
 }
 
 // 进入焦点页：屏幕状态机 world → focus，镜头推近对象 + 加载对象上下文（身份/时间线/关系）
+// 用 GSAP Flip 做焦点 HUD 场景过渡；selectNPC 仍保留本地 focus 状态用于 panel→fullscreen 转场
 async function selectNPC(npc: SimverseNPC) {
   selectedNPC.value = npc;
-  screen.value = "focus";
   focusTab.value = "identity";
   // 镜头推近：Phaser 相机居中并放大到该 NPC，构成"world → focus"的镜头转场
   if (usePhaser.value && phaserWorld.isReady.value) {
     phaserWorld.centerOnNPC(npc.id);
   }
   recordQuestAction("view_npc");
+  await openHudScene('focus');
   await loadFocusContext(npc.id);
+}
+
+// 跳转 NPC 详情独立路由（深度页面，从 focus HUD 场景进入完整 NPC 详情）
+function viewNPCDetail(id: number | string) {
+  openDetailRoute('npc', { id: String(id) });
 }
 
 // 加载焦点对象的编年史时间线与关系网（接真实后端，非桩）
@@ -1478,13 +1557,14 @@ async function loadFocusContext(id: number) {
   }
 }
 
-// 从焦点页返回主世界（屏幕状态机回退）：复位镜头缩放，回到俯瞰视角
-function backToWorld() {
+// 从焦点页返回主世界（屏幕状态机回退）：GSAP 驱动的镜头复位（居中世界中心 + 缩放回 1.0）
+// 用 GSAP Flip 做逆向转场，让回退也有过渡动画
+async function backToWorld() {
   selectedNPC.value = null;
-  screen.value = "world";
   if (usePhaser.value && phaserWorld.isReady.value) {
-    phaserWorld.setZoom(0.5);
+    phaserWorld.returnToWorldView();
   }
+  await openHudScene('world');
 }
 
 // 焦点页标签切换（身份/时间线/关系）
@@ -1492,30 +1572,56 @@ function onFocusTabChange(ev: CustomEvent) {
   focusTab.value = ev.detail.value as "identity" | "timeline" | "relations";
 }
 
+// HUD 场景切换：focus/gacha/intervene/character/event 保留在单页面内，用 GSAP Flip 过渡
+async function openHudScene(target: ScreenState) {
+  if (!hudSceneContainer.value) {
+    screen.value = target;
+    return;
+  }
+  await transitionToScene(
+    hudSceneContainer.value,
+    () => { screen.value = target; },
+    { duration: 0.45, ease: 'power3.inOut' },
+  );
+}
+
+// 详情路由：导航到独立路由（NPC/编年史/经济/组织/区域/任务/训练/背包/探索/战斗/化身资料/设置）
+function openDetailRoute(name: string, params?: Record<string, string>) {
+  const routeMap: Record<string, string> = {
+    npc: '/world/npc/:id',
+    chronicles: '/world/chronicles',
+    economy: '/world/economy',
+    quest: '/world/quest/detail',
+    org: '/tabs/orgs',
+    training: '/world/training',
+    inventory: '/world/inventory',
+    explore: '/world/explore',
+    battle: '/world/battle',
+    profile: '/world/profile',
+    settings: '/world/settings',
+  };
+  const path = routeMap[name];
+  if (!path) {
+    console.warn(`[SimverseWorld] unknown panel: ${name}`);
+    return;
+  }
+  // 处理 params（如 NPC id）
+  let finalPath = path;
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      finalPath = finalPath.replace(`:${key}?`, value).replace(`:${key}`, value);
+    }
+  }
+  router.push(finalPath);
+}
+
+// 兼容旧调用：根据 panel 名字自动分流（HUD 场景 vs 详情路由）
 function openPanel(name: string) {
-  if (activePanel.value === name) {
-    activePanel.value = null;
+  const hudScenes = new Set<string>(['focus', 'event', 'intervene', 'character', 'gacha']);
+  if (hudScenes.has(name)) {
+    openHudScene(name as ScreenState);
   } else {
-    activePanel.value = name;
-    if (name === "npc" && npcList.value.length === 0) {
-      loadNPCs();
-    }
-    if (name === "npc") {
-      loadBehaviorStatsData();
-    }
-    if (name === "chronicles" && recentEvents.value.length === 0) {
-      loadEvents();
-    }
-    if (name === "settings" && !worldConfig.value) {
-      refreshState();
-    }
-    if (name === "economy") {
-      loadEconomyData();
-      recordQuestAction("view_economy");
-    }
-    if (name === "quest") {
-      loadQuestData();
-    }
+    openDetailRoute(name);
   }
 }
 
@@ -1772,6 +1878,40 @@ function stopBehaviorPolling() {
   }
 }
 
+// 元素引用：用于 GSAP 触发入场/退场动画（Task 1.4）
+const bottomBarRef = ref<HTMLElement | null>(null);
+const morePopRef = ref<HTMLElement | null>(null);
+const gachaModalRef = ref<HTMLElement | null>(null);
+const gachaFlashRef = ref<HTMLElement | null>(null);
+
+// Task 1.3 / 1.4 / 1.5：GSAP 动画通过 useSimverseAnimations composable 集中托管
+// 详见 composables/useSimverseAnimations.ts —— 替换 @keyframes + <transition> + 游戏级动效
+const {
+  playGachaLightBeam,
+  shakeScreen,
+  spawnParticles,
+  startAmbientLoops,
+  stopAll: stopAllAnimations,
+} = useSimverseAnimations({
+  bottomBarRef,
+  morePopRef,
+  gachaFlashRef,
+  phaserLoading,
+  usePhaser,
+  phaserHasError,
+  worldState,
+  screen,
+  bottomMoreOpen,
+  isGachaAnimating,
+  recentEvents,
+  playerDiamond,
+  playerGold,
+  playerStamina,
+  activePanel,
+  econTab,
+  economyStats,
+});
+
 onMounted(async () => {
   if (isNativePluginMode()) {
     lockScreenOrientation("landscape-primary").catch(e => {
@@ -1797,12 +1937,17 @@ onMounted(async () => {
   await nextTick();
   initPhaser();
   startBehaviorPolling();
+
+  // 启动常驻 GSAP 循环动画（bgDrift + npcPulse，替换 @keyframes）
+  startAmbientLoops();
 });
 
 onUnmounted(() => {
   stopPolling();
   stopBehaviorPolling();
   cleanup();
+  // 清理所有 GSAP tween，防止内存泄漏（由 useSimverseAnimations composable 托管）
+  stopAllAnimations();
   if (isNativePluginMode()) {
     unlockScreenOrientation().catch(() => {});
     showSystemUI().catch(() => {});
@@ -1818,4 +1963,4 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped src="./SimverseWorld.css"></style>
+<style scoped lang="scss" src="./simverse-world/SimverseWorld.scss"></style>

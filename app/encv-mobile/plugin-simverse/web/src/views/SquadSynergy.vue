@@ -239,7 +239,7 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -248,12 +248,14 @@ onMounted(async () => {
   padding: 60px 20px;
   gap: 16px;
 }
+
 .slot-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   padding: 8px 4px;
 }
+
 .slot {
   border-radius: 12px;
   padding: 10px 6px;
@@ -264,26 +266,31 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   gap: 4px;
+
+  &.filled {
+    background: var(--color-base-200);
+    border: 1px solid var(--color-base-300);
+  }
+
+  &.empty {
+    border: 1px dashed var(--color-base-content);
+    color: var(--color-base-content);
+    opacity: 0.5;
+  }
 }
-.slot.filled {
-  background: var(--ion-color-light, #f3f4f6);
-  border: 1px solid var(--ion-color-step-200, #e5e7eb);
-}
-.slot.empty {
-  border: 1px dashed var(--ion-color-medium, #9ca3af);
-  color: var(--ion-color-medium);
-}
+
 .slot-avatar {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--ion-color-primary);
-  color: var(--color-white);
+  background: var(--color-primary);
+  color: var(--color-primary-content);
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+
 .slot-name {
   font-size: 12px;
   font-weight: 600;
@@ -292,21 +299,27 @@ onMounted(async () => {
   text-overflow: ellipsis;
   max-width: 100%;
 }
+
 .slot-badge {
   font-size: 10px;
 }
+
 .slot-plus {
   font-size: 28px;
   font-weight: 300;
 }
+
 .syn-count {
   font-size: 13px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   margin-left: 6px;
 }
+
 .hint {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   padding: 4px 12px 10px;
   margin: 0;
 }

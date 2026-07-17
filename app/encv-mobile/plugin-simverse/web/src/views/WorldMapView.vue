@@ -21,7 +21,7 @@
       </div>
 
       <div class="world-hero">
-        <div class="world-icon">🌍</div>
+        <div ref="worldIconRef" class="world-icon">🌍</div>
         <h2>{{ t("simverse.home.title") }}</h2>
         <p class="world-sub">{{ t("simverse.home.subtitle") }}</p>
         <ion-badge :color="isRunning ? 'success' : 'medium'" size="large">
@@ -101,13 +101,16 @@ import {
 import { alertCircleOutline, refreshOutline } from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useGsap } from "@/composables/useGsap";
 import { useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const router = useRouter();
+const { gsap } = useGsap();
 const { isRunning, currentTick, npcCount, totalMemoryMB, currentTier, loadWorldState } = useSimverse();
 
 const error = ref("");
+const worldIconRef = ref<HTMLElement | null>(null);
 
 function enterWorld() {
   router.push("/world");
@@ -142,10 +145,15 @@ async function reload() {
   }
 }
 
-onMounted(reload);
+onMounted(() => {
+  reload();
+  if (worldIconRef.value) {
+    gsap.to(worldIconRef.value, { y: -8, duration: 1.5, ease: "sine.inOut", repeat: -1, yoyo: true });
+  }
+});
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -153,33 +161,38 @@ onMounted(reload);
   justify-content: center;
   padding: 40px 20px;
   gap: 12px;
+
+  p {
+    color: var(--color-error);
+    margin: 0;
+  }
 }
-.state-container p { color: var(--ion-color-danger); margin: 0; }
+
 .world-hero {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   padding: 24px 16px 16px;
+
+  h2 {
+    margin: 0 0 4px;
+    font-size: 20px;
+  }
 }
+
 .world-icon {
   font-size: 56px;
   margin-bottom: 8px;
-  animation: float 3s ease-in-out infinite;
 }
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
-.world-hero h2 {
-  margin: 0 0 4px;
-  font-size: 20px;
-}
+
 .world-sub {
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   font-size: 13px;
   margin: 0 0 12px;
 }
+
 .entry-grid {
   display: grid;
   gap: 10px;

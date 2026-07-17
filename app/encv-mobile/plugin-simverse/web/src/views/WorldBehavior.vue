@@ -193,7 +193,7 @@ async function reload() {
 onMounted(reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -201,49 +201,63 @@ onMounted(reload);
   justify-content: center;
   padding: 60px 20px;
   gap: 16px;
+
+  p {
+    color: var(--color-error);
+    margin: 0;
+  }
 }
-.state-container p { color: var(--ion-color-danger); margin: 0; }
+
 .dist-label {
   width: 100%;
 }
+
 .dist-bar {
   height: 6px;
   border-radius: 3px;
-  background: var(--ion-color-light, #e5e7eb);
+  background: var(--color-base-300);
   overflow: hidden;
   margin-top: 6px;
 }
+
 .dist-fill {
   height: 100%;
-  background: var(--ion-color-primary);
+  background: var(--color-primary);
   transition: width 0.3s ease;
 }
+
 .npc-avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--ion-color-light, #f3f4f6);
+  background: var(--color-base-200);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 20px;
 }
+
 .npc-meta {
   font-size: 12px;
   margin-left: 8px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
+
 .npc-sub {
   font-size: 12px;
   display: flex;
   gap: 12px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
+
 .empty-item {
   --padding-start: 0;
   --inner-padding-end: 0;
   justify-content: center;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   padding: 24px 0;
 }
 </style>

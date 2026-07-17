@@ -1,0 +1,158 @@
+// =============================================================================
+// 事件模块：事件页 + 事件 Ticker
+// -----------------------------------------------------------------------------
+//   - .event-page 全屏编年史事件流
+//   - .event-page-header / .event-back / .event-page-title
+//   - .event-feed / .event-row.imp-3 / .event-row.imp-4
+//   - .event-ticker 顶部滚动条 / .ticker-* / .event-dot 变体
+//   - 转场已迁移至 SimverseWorld.vue 的 GSAP（event-page / ticker）
+// =============================================================================
+
+@use './tokens' as *;
+@use './mixins' as *;
+
+// 事件页（event 屏幕状态）：全屏编年史事件流
+.event-page {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(124, 58, 237, 0.18) 0%, transparent 55%),
+    linear-gradient(180deg, #{$sv-bg-surface} 0%, #{$sv-bg-deep} 100%);
+  padding: 14px 16px 24px;
+  box-sizing: border-box;
+}
+
+.event-page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+// .event-back 已迁移到 daisyUI .btn .btn-sm + Tailwind 工具类（见 SimverseWorld.vue 模板）
+
+.event-page-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: $sv-text-primary;
+}
+
+.event-feed {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-right: 4px;
+}
+
+.event-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-left: 4px solid rgba(139, 92, 246, 0.5); // TODO: tokenize
+
+  &.imp-3 {
+    border-left-color: $color-warning;
+    background: rgba(245, 158, 11, 0.08); // TODO: tokenize
+  }
+
+  &.imp-4 {
+    border-left-color: $color-error;
+    background: rgba(239, 68, 68, 0.1); // TODO: tokenize
+  }
+}
+
+.event-row-tick {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.event-row-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: $sv-text-primary;
+}
+
+.event-row-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+// —— 顶部 Ticker：实时事件滚动条 ——
+.event-ticker {
+  position: absolute;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(20, 20, 40, 0.8); // TODO: tokenize
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(139, 92, 246, 0.2); // TODO: tokenize
+  border-radius: 20px;
+  padding: 6px 14px;
+  z-index: 9;
+  max-width: 400px;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+
+  &:hover {
+    border-color: rgba(139, 92, 246, 0.45); // TODO: tokenize
+    background: rgba(28, 28, 52, 0.85); // TODO: tokenize
+  }
+}
+
+.ticker-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.ticker-content {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+.ticker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ticker-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #4ade80; // TODO: tokenize
+  flex-shrink: 0;
+
+  &.warning { background: $color-warning; }
+  &.danger  { background: $color-error; }
+}
+
+.event-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// —— 转场类（event-page / ticker）已迁移至 SimverseWorld.vue 的 GSAP ——

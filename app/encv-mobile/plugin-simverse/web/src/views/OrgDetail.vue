@@ -34,19 +34,32 @@
             </ion-card-subtitle>
           </ion-card-header>
           <ion-card-content>
-            <ion-grid>
-              <ion-row>
-                <ion-col><div class="stat-label">{{ t("simverse.memberCount") }}</div><div class="stat-val">{{ org.member_count }}</div></ion-col>
-                <ion-col><div class="stat-label">{{ t("simverse.aliveCount") }}</div><div class="stat-val">{{ org.alive_count }}</div></ion-col>
-              </ion-row>
-              <ion-row>
-                <ion-col><div class="stat-label">{{ t("simverse.avgLevel") }}</div><div class="stat-val">{{ org.avg_level.toFixed(1) }}</div></ion-col>
-                <ion-col><div class="stat-label">{{ t("simverse.avgWealthTier") }}</div><div class="stat-val">{{ org.avg_wealth_tier.toFixed(1) }}</div></ion-col>
-              </ion-row>
-              <ion-row>
-                <ion-col><div class="stat-label">{{ t("simverse.avgCareerStage") }}</div><div class="stat-val">{{ org.avg_career_stage.toFixed(1) }}</div></ion-col>
-              </ion-row>
-            </ion-grid>
+            <div class="stats stats-vertical sm:stats-horizontal shadow w-full mb-3">
+              <div class="stat">
+                <div class="stat-title">{{ t("simverse.memberCount") }}</div>
+                <div class="stat-value">{{ org.member_count }}</div>
+              </div>
+              <div class="stat">
+                <div class="stat-title">{{ t("simverse.aliveCount") }}</div>
+                <div class="stat-value">{{ org.alive_count }}</div>
+              </div>
+            </div>
+            <div class="stats stats-vertical sm:stats-horizontal shadow w-full mb-3">
+              <div class="stat">
+                <div class="stat-title">{{ t("simverse.avgLevel") }}</div>
+                <div class="stat-value">{{ org.avg_level.toFixed(1) }}</div>
+              </div>
+              <div class="stat">
+                <div class="stat-title">{{ t("simverse.avgWealthTier") }}</div>
+                <div class="stat-value">{{ org.avg_wealth_tier.toFixed(1) }}</div>
+              </div>
+            </div>
+            <div class="stats stats-vertical sm:stats-horizontal shadow w-full">
+              <div class="stat">
+                <div class="stat-title">{{ t("simverse.avgCareerStage") }}</div>
+                <div class="stat-value">{{ org.avg_career_stage.toFixed(1) }}</div>
+              </div>
+            </div>
           </ion-card-content>
         </ion-card>
 
@@ -85,9 +98,7 @@ import {
   IonCardSubtitle,
   IonCardTitle,
   IonChip,
-  IonCol,
   IonContent,
-  IonGrid,
   IonHeader,
   IonIcon,
   IonItem,
@@ -95,7 +106,6 @@ import {
   IonList,
   IonListHeader,
   IonPage,
-  IonRow,
   IonSpinner,
   IonTitle,
   IonToolbar,
@@ -137,7 +147,7 @@ function goRegion(id: number) {
 onMounted(reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
@@ -146,14 +156,7 @@ onMounted(reload);
   padding: 60px 20px;
   gap: 16px;
 }
-.stat-label {
-  font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
-}
-.stat-val {
-  font-size: 22px;
-  font-weight: 700;
-}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

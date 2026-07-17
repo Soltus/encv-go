@@ -115,7 +115,7 @@ onMounted(reload);
 watch(() => route.params.id, reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -125,7 +125,7 @@ watch(() => route.params.id, reload);
   gap: 16px;
 }
 .state-container p {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   margin: 0;
 }
 .mem-item {
@@ -135,28 +135,31 @@ watch(() => route.params.id, reload);
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--ion-color-medium);
+  background: var(--color-base-content);
 }
-.mem-dot.imp-0 { background: var(--ion-color-medium); }
-.mem-dot.imp-1 { background: var(--ion-color-tertiary); }
-.mem-dot.imp-2 { background: var(--ion-color-primary); }
-.mem-dot.imp-3 { background: var(--ion-color-success); }
-.mem-dot.imp-4 { background: var(--ion-color-warning); }
-.mem-dot.imp-5 { background: var(--ion-color-danger); }
+.mem-dot.imp-0 { background: var(--color-base-content); opacity: 0.5; }
+.mem-dot.imp-1 { background: var(--color-accent); }
+.mem-dot.imp-2 { background: var(--color-primary); }
+.mem-dot.imp-3 { background: var(--color-success); }
+.mem-dot.imp-4 { background: var(--color-warning); }
+.mem-dot.imp-5 { background: var(--color-error); }
 .tick-info {
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   font-size: 12px;
   margin-right: 10px;
 }
 .strength {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
 .empty-item {
   --padding-start: 0;
   --inner-padding-end: 0;
   justify-content: center;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   padding: 24px 0;
 }
 </style>

@@ -320,7 +320,7 @@ onMounted(reload);
 watch(() => route.params.id, reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -330,7 +330,7 @@ watch(() => route.params.id, reload);
   gap: 16px;
 }
 .state-container p {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   margin: 0;
 }
 .hero {
@@ -343,7 +343,7 @@ watch(() => route.params.id, reload);
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: var(--ion-color-light, #f3f4f6);
+  background: var(--color-base-200);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -357,7 +357,8 @@ watch(() => route.params.id, reload);
 .hero-info p {
   margin: 0 0 4px;
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -369,8 +370,8 @@ watch(() => route.params.id, reload);
 .hero-sub {
   font-size: 12px;
 }
-.alive { color: var(--ion-color-success); }
-.dead { color: var(--ion-color-medium); }
+.alive { color: var(--color-success); }
+.dead { color: var(--color-base-content); opacity: 0.6; }
 .chip-row {
   display: flex;
   flex-wrap: wrap;

@@ -60,9 +60,9 @@
               :stroke-opacity="lineOpacity(n.affinity)"
             />
             <g class="self-node">
-              <circle :cx="cx" :cy="cy" r="30" fill="var(--ion-color-primary)" />
+              <circle :cx="cx" :cy="cy" r="30" fill="var(--color-primary)" />
               <text :x="cx" :y="cy + 5" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">{{ initial(data.name) }}</text>
-              <text :x="cx" :y="cy + 48" text-anchor="middle" font-size="11" fill="var(--ion-color-medium)">{{ data.name }}</text>
+              <text :x="cx" :y="cy + 48" text-anchor="middle" font-size="11" fill="var(--color-base-content)">{{ data.name }}</text>
             </g>
             <g
               v-for="n in graphNodes"
@@ -199,7 +199,16 @@ const graphNodes = computed(() => {
 });
 
 function relStroke(type: string): string {
-  return `var(--ion-color-${relColor(type)})`;
+  // Map Ionic color names (used by ion-chip :color) to daisyUI CSS variables for SVG strokes.
+  const ionicToDaisy: Record<string, string> = {
+    danger: "--color-error",
+    success: "--color-success",
+    primary: "--color-primary",
+    warning: "--color-warning",
+    tertiary: "--color-accent",
+    medium: "--color-base-content",
+  };
+  return `var(${ionicToDaisy[relColor(type)] || "--color-base-content"})`;
 }
 function initial(name: string): string {
   return String(name || "?").charAt(0);
@@ -234,7 +243,7 @@ onMounted(reload);
 watch(() => route.params.id, reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -244,7 +253,7 @@ watch(() => route.params.id, reload);
   gap: 16px;
 }
 .state-container p {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   margin: 0;
 }
 .hero {
@@ -255,7 +264,8 @@ watch(() => route.params.id, reload);
   font-size: 22px;
 }
 .muted {
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   margin: 4px 0 0;
 }
 .chip-row {
@@ -270,26 +280,28 @@ watch(() => route.params.id, reload);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--ion-color-primary);
-  color: var(--color-white);
+  background: var(--color-primary);
+  color: #fff;
   font-weight: 600;
   border-radius: 50%;
 }
 .empty-note {
   text-align: center;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   padding: 24px;
 }
 .rel-graph-card {
   margin: 12px 16px;
   padding: 12px;
   border-radius: 14px;
-  background: var(--ion-color-light, #f3f4f6);
+  background: var(--color-base-200);
 }
 .graph-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   margin-bottom: 4px;
 }
 .rel-graph {
@@ -306,7 +318,8 @@ watch(() => route.params.id, reload);
 .graph-hint {
   text-align: center;
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   margin: 4px 0 0;
 }
 </style>

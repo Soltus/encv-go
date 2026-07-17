@@ -262,7 +262,7 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -270,7 +270,8 @@ onMounted(() => {
   justify-content: center;
   padding: 40px;
   gap: 12px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
 
 .level-avatar {
@@ -281,24 +282,24 @@ onMounted(() => {
   justify-content: center;
   font-size: 14px;
   font-weight: 600;
-  color: white;
-  background: var(--ion-color-medium);
+  color: #fff;
+  background: var(--color-base-content);
 }
 
 .level-avatar.level-Personal {
-  background: var(--ion-color-tertiary);
+  background: var(--color-accent);
 }
 .level-avatar.level-Family {
-  background: var(--ion-color-success);
+  background: var(--color-success);
 }
 .level-avatar.level-Organization {
-  background: var(--ion-color-primary);
+  background: var(--color-primary);
 }
 .level-avatar.level-Regional {
-  background: var(--ion-color-warning);
+  background: var(--color-warning);
 }
 .level-avatar.level-World {
-  background: var(--ion-color-danger);
+  background: var(--color-error);
 }
 
 .avatar-text {
@@ -315,7 +316,8 @@ onMounted(() => {
 }
 
 .tick-info {
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   font-size: 12px;
 }
 
@@ -323,7 +325,8 @@ onMounted(() => {
   --padding-start: 0;
   --inner-padding-end: 0;
   justify-content: center;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   padding: 30px 0;
 }
 </style>

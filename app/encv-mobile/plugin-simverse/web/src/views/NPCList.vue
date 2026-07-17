@@ -34,13 +34,14 @@
         <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
       </div>
 
-      <ion-list v-else :inset="true">
+      <ion-list v-else :inset="true" class="list-container">
         <ion-list-header>
           <ion-label>{{ t("simverse.total") }}: {{ total }}</ion-label>
         </ion-list-header>
         <ion-item
           v-for="npc in filteredNPCs"
           :key="npc.id"
+          class="list-item"
           button
           detail
           @click="goToDetail(npc.id)"
@@ -111,11 +112,13 @@ import {
 import { alertCircleOutline, refreshOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { useGsap } from "@/composables/useGsap";
 import { type SimverseNPC, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const router = useRouter();
 const { loadNPCList } = useSimverse();
+const { gsap, ScrollTrigger } = useGsap();
 
 const loading = ref(false);
 const error = ref("");
@@ -195,10 +198,23 @@ function getProfessionColor(profession: string): string {
 
 onMounted(() => {
   loadNPCs(true);
+  // 列表项入场动效：滚动到视口时渐入
+  gsap.from(".list-item", {
+    opacity: 0,
+    y: 20,
+    duration: 0.4,
+    stagger: 0.05,
+    ease: "power2.out",
+    scrollTrigger: {
+      trigger: ".list-container",
+      start: "top 80%",
+    },
+  });
+  void ScrollTrigger;
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .loading-container,
 .error-container {
   display: flex;
@@ -209,14 +225,14 @@ onMounted(() => {
   gap: 16px;
 }
 .error-container p {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   margin: 0;
 }
 .npc-avatar {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: var(--ion-color-light, #f3f4f6);
+  background: var(--color-base-200);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -229,7 +245,7 @@ h3 {
 }
 p {
   font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
+  color: var(--color-base-content);
   margin: 0 0 4px 0;
   display: flex;
   align-items: center;
@@ -244,10 +260,11 @@ p {
   gap: 12px;
 }
 .alive {
-  color: var(--ion-color-success, #10b981);
+  color: var(--color-success);
 }
 .dead {
-  color: var(--ion-color-medium, #6b7280);
+  color: var(--color-base-content);
+  opacity: 0.6;
 }
 .hp-bar {
   font-family: monospace;

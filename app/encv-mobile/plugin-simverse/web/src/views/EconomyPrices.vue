@@ -7,7 +7,7 @@
         </ion-buttons>
         <ion-title>{{ t("simverse.prices") }}</ion-title>
         <ion-buttons slot="end">
-          <span class="live-pill"><span class="live-dot" />{{ t("simverse.live") }}</span>
+          <span class="badge badge-success badge-sm gap-1 live-pill"><span class="live-dot" />{{ t("simverse.live") }}</span>
         </ion-buttons>
       </ion-toolbar>
       <ion-toolbar>
@@ -116,7 +116,7 @@ onMounted(reload);
 useLiveRefresh(() => reload(true), { signal: economySignal, pollMs: 8000 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
@@ -125,28 +125,27 @@ useLiveRefresh(() => reload(true), { signal: economySignal, pollMs: 8000 });
   padding: 60px 20px;
   gap: 16px;
 }
+
 .mini {
   font-size: 11px;
   margin-left: 10px;
 }
+
 .live-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
   font-weight: 600;
-  color: var(--ion-color-success, #22c55e);
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: rgba(34, 197, 94, 0.12);
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
 }
+
 .live-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--ion-color-success, #22c55e);
+  background: var(--color-success);
+  box-shadow: 0 0 6px var(--color-success);
   animation: live-pulse 1.6s ease-in-out infinite;
 }
+
 @keyframes live-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.7); }

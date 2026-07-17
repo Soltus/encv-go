@@ -15,6 +15,7 @@
     </ion-header>
 
     <ion-content class="ion-padding">
+      <div class="page-root">
       <div v-if="loading" class="state-box">
         <ion-spinner name="crescent" />
         <p>{{ t("settings.loading") }}</p>
@@ -58,6 +59,7 @@
           </ion-item>
         </ion-list>
       </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -91,12 +93,19 @@ import {
 import { alertCircleOutline, map, people, refreshOutline } from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useGsap } from "@/composables/useGsap";
+import { useRouteTransition } from "@/composables/useRouteTransition";
 import { type SimverseOrg, useSimverse } from "@/composables/useSimverse";
 
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const { loadOrgDetail } = useSimverse();
+const { gsap } = useGsap();
+// useRouteTransition exposes onEnter/onLeave hooks for a parent <Transition> wrapper.
+// App.vue currently uses plain ion-router-outlet, so this view self-animates
+// .page-root via gsap.fromTo as a fallback (matches useRouteTransition defaults).
+useRouteTransition();
 
 const orgId = Number(route.params.id);
 const loading = ref(false);
@@ -119,10 +128,17 @@ function go(path: string) {
   router.push(path);
 }
 
-onMounted(reload);
+onMounted(() => {
+  reload();
+  // 详情路由入场动效（与 useRouteTransition 默认参数一致）
+  const el = document.querySelector(".page-root");
+  if (el) {
+    gsap.fromTo(el, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" });
+  }
+});
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
@@ -133,7 +149,8 @@ onMounted(reload);
 }
 .stat-label {
   font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
 .stat-val {
   font-size: 22px;

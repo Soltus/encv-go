@@ -133,7 +133,7 @@ onMounted(reload);
 watch(() => route.params.id, reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -142,12 +142,13 @@ watch(() => route.params.id, reload);
   padding: 60px 20px;
   gap: 16px;
 }
-.state-container p { color: var(--ion-color-danger); margin: 0; }
+.state-container p { color: var(--color-error); margin: 0; }
 .empty-item {
   --padding-start: 0;
   --inner-padding-end: 0;
   justify-content: center;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   padding: 20px 0;
 }
 </style>

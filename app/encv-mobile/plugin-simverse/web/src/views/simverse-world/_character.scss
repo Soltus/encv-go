@@ -1,0 +1,518 @@
+// =============================================================================
+// 化身模块：化身卡片 / 玩家档案 / 训练页 / 装备页
+// -----------------------------------------------------------------------------
+// 化身相关的全屏页面与卡片样式。包括：
+//   - .char-card / .char-avatar / .char-name / .char-res / .char-skills / .char-skill
+//     （页面级化身卡片，用于 .character-page 内）
+//   - .profile-page 玩家档案全屏页
+//   - .player-card / .card-bg / .card-content / .player-avatar / .player-name
+//   - .section-card / .stats-grid / .stat-item / .stat-bar / .stat-fill
+//   - .skill-list / .skill-item / .skill-rarity
+//   - .training-page / .training-stamina-bar / .training-grid / .training-card
+//   - .equipment-grid / .equip-slot / .equip-item / .level-up-section / .level-up-btn
+//
+// 注：.character-page 与 .character-body 容器样式与 .intervene-page 共享，
+//     定义在 _intervene.scss 中（保留原 CSS 的合并选择器结构）。
+// =============================================================================
+
+@use './tokens' as *;
+@use './mixins' as *;
+
+// —— 化身卡片：在 .character-page 中显示 NPC 简要信息 ——
+.char-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(139, 92, 246, 0.2); // TODO: tokenize
+  border-radius: 18px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.char-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.2); // TODO: tokenize
+  border: 2px solid rgba(139, 92, 246, 0.5); // TODO: tokenize
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+}
+
+.char-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: $sv-text-primary;
+}
+
+.char-res {
+  display: flex;
+  gap: 14px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.char-skills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.char-skill {
+  background: rgba(139, 92, 246, 0.14); // TODO: tokenize
+  border: 1px solid rgba(139, 92, 246, 0.28); // TODO: tokenize
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+// —— 玩家档案全屏页 ——
+.profile-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-card {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.card-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%); // TODO: tokenize
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -20%;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.3) 0%, transparent 70%); // TODO: tokenize
+    border-radius: 50%;
+  }
+}
+
+.card-content {
+  position: relative;
+  z-index: 1;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.player-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, $color-primary, #ec4899); // TODO: tokenize
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.5); // TODO: tokenize
+}
+
+.avatar-icon {
+  font-size: 40px;
+}
+
+.player-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: $sv-text-primary;
+}
+
+.player-title {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.player-stats-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.mini-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 6px 12px;
+  border-radius: 20px;
+}
+
+.mini-stat-icon {
+  font-size: 14px;
+}
+
+.mini-stat-val {
+  font-size: 13px;
+  font-weight: 600;
+  color: $sv-text-primary;
+}
+
+.section-card {
+  background: rgba(20, 20, 50, 0.6); // TODO: tokenize
+  border: 1px solid rgba(139, 92, 246, 0.15); // TODO: tokenize
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: $sv-text-primary;
+  margin-bottom: 12px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.stat-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+
+  &.hp  { background: rgba(239, 68, 68, 0.2); }
+  &.atk { background: rgba(249, 115, 22, 0.2); }
+  &.def { background: rgba(59, 130, 246, 0.2); }
+  &.exp { background: rgba(234, 179, 8, 0.2); }
+}
+
+.stat-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-name {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 2px;
+}
+
+.stat-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.stat-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.hp-fill  { background: linear-gradient(90deg, $color-error, #f87171); }
+.exp-fill { background: linear-gradient(90deg, #eab308, #fde047); }
+
+.stat-val {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+
+  &.big {
+    font-size: 16px;
+    font-weight: 700;
+    color: $sv-text-primary;
+    margin-top: 0;
+  }
+}
+
+// —— 技能列表（全屏页版本） ——
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.skill-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.skill-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(139, 92, 246, 0.15); // TODO: tokenize
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.skill-info {
+  flex: 1;
+}
+
+.skill-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: $sv-text-primary;
+}
+
+.skill-level {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.skill-rarity {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+
+  &.SR { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+  &.R  { background: rgba(59, 130, 246, 0.2); color: $color-info; }
+  &.N  { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
+}
+
+// —— 训练页 ——
+.training-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.training-stamina-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(20, 20, 50, 0.6); // TODO: tokenize
+  border: 1px solid rgba(234, 179, 8, 0.2); // TODO: tokenize
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.stamina-icon {
+  font-size: 18px;
+}
+
+.stamina-bar-wrap {
+  flex: 1;
+  height: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.stamina-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #eab308, #fde047); // TODO: tokenize
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.stamina-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #fde047; // TODO: tokenize
+  min-width: 60px;
+  text-align: right;
+}
+
+.training-section {
+  margin-bottom: 20px;
+}
+
+.training-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.training-card {
+  background: rgba(20, 20, 50, 0.6); // TODO: tokenize
+  border: 1px solid rgba(139, 92, 246, 0.15); // TODO: tokenize
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+
+  &:hover {
+    transform: translateY(-2px);
+    border-color: rgba(139, 92, 246, 0.4); // TODO: tokenize
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+.training-icon {
+  font-size: 32px;
+}
+
+.training-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: $sv-text-primary;
+}
+
+.training-effect {
+  font-size: 11px;
+  color: rgba(34, 197, 94, 0.9); // TODO: tokenize
+}
+
+.training-cost {
+  font-size: 11px;
+  color: rgba(234, 179, 8, 0.9); // TODO: tokenize
+}
+
+// —— 装备网格 ——
+.equipment-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.equip-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.equip-slot-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.equip-item {
+  width: 50px;
+  height: 50px;
+  border-radius: 12px;
+  background: rgba(139, 92, 246, 0.1); // TODO: tokenize
+  border: 2px solid rgba(139, 92, 246, 0.3); // TODO: tokenize
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &.empty {
+    border-style: dashed;
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+}
+
+.equip-icon {
+  font-size: 24px;
+}
+
+.equip-empty {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.equip-name {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+
+  &.empty {
+    color: rgba(255, 255, 255, 0.3);
+  }
+}
+
+// —— 升级区域 ——
+.level-up-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.level-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.current-level {
+  font-size: 18px;
+  font-weight: 700;
+  color: $color-primary;
+}
+
+.exp-bar-large {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.exp-fill-large {
+  height: 100%;
+  background: linear-gradient(90deg, #eab308, #fde047); // TODO: tokenize
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+.exp-text {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.level-up-btn {
+  padding: 12px 24px;
+  background: linear-gradient(135deg, $color-primary, #6366f1); // TODO: tokenize #6366f1
+  border: none;
+  border-radius: 25px;
+  color: $sv-text-primary;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  &:not(:disabled):hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.5); // TODO: tokenize
+  }
+}

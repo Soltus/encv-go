@@ -16,6 +16,7 @@
     </ion-header>
 
     <ion-content>
+      <div class="page-root">
       <div v-if="loading && !loaded" class="state-container">
         <ion-spinner name="crescent" />
         <p>{{ t("settings.loading") }}</p>
@@ -112,6 +113,7 @@
           </ion-list>
         </ion-content>
       </ion-modal>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -140,11 +142,18 @@ import {
 } from "@ionic/vue";
 import { chevronForward as chevronForwardIcon, refresh } from "ionicons/icons";
 import { onMounted, ref } from "vue";
+import { useGsap } from "@/composables/useGsap";
+import { useRouteTransition } from "@/composables/useRouteTransition";
 import { useLiveRefresh } from "../composables/useLiveRefresh";
 import { type SimverseChronicleEvent, type SimverseChronicleWorldResponse, useSimverse } from "../composables/useSimverse";
 
 const { t } = useI18n();
 const { loadChronicleWorld, loadChronicleEvent, chronicleSignal } = useSimverse();
+const { gsap } = useGsap();
+// useRouteTransition exposes onEnter/onLeave hooks for a parent <Transition> wrapper.
+// App.vue currently uses plain ion-router-outlet, so this view self-animates
+// .page-root via gsap.fromTo as a fallback (matches useRouteTransition defaults).
+useRouteTransition();
 
 const loading = ref(false);
 const loaded = ref(false);
@@ -193,13 +202,20 @@ async function loadAndShowEvent(id: number) {
   if (detail) selectedEvent.value = detail;
 }
 
-onMounted(loadData);
+onMounted(() => {
+  loadData();
+  // 详情路由入场动效（与 useRouteTransition 默认参数一致）
+  const el = document.querySelector(".page-root");
+  if (el) {
+    gsap.fromTo(el, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" });
+  }
+});
 
 // P7 持续演化：世界编年史随时间线实时刷新（WS 推送优先，未连接时 8s 兜底轮询）
 useLiveRefresh(loadData, { signal: chronicleSignal, pollMs: 8000 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -207,7 +223,8 @@ useLiveRefresh(loadData, { signal: chronicleSignal, pollMs: 8000 });
   justify-content: center;
   padding: 40px;
   gap: 12px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
 .level-avatar {
   width: 36px;
@@ -217,23 +234,24 @@ useLiveRefresh(loadData, { signal: chronicleSignal, pollMs: 8000 });
   justify-content: center;
   font-size: 14px;
   font-weight: 600;
-  color: white;
-  background: var(--ion-color-medium);
+  color: #fff;
+  background: var(--color-base-content);
 }
-.level-avatar.level-Personal { background: var(--ion-color-tertiary); }
-.level-avatar.level-Family { background: var(--ion-color-success); }
-.level-avatar.level-Organization { background: var(--ion-color-primary); }
-.level-avatar.level-Regional { background: var(--ion-color-warning); }
-.level-avatar.level-World { background: var(--ion-color-danger); }
+.level-avatar.level-Personal { background: var(--color-accent); }
+.level-avatar.level-Family { background: var(--color-success); }
+.level-avatar.level-Organization { background: var(--color-primary); }
+.level-avatar.level-Regional { background: var(--color-warning); }
+.level-avatar.level-World { background: var(--color-error); }
 .avatar-text { font-size: 12px; }
 .chronicle-item { --padding-start: 12px; --inner-padding-end: 8px; }
 .imp-badge { margin-right: 8px; }
-.tick-info { color: var(--ion-color-medium); font-size: 12px; }
+.tick-info { color: var(--color-base-content); opacity: 0.7; font-size: 12px; }
 .empty-item {
   --padding-start: 0;
   --inner-padding-end: 0;
   justify-content: center;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   padding: 30px 0;
 }
 .live-pill {
@@ -242,17 +260,17 @@ useLiveRefresh(loadData, { signal: chronicleSignal, pollMs: 8000 });
   gap: 5px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--ion-color-success, #22c55e);
+  color: var(--color-success);
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(34, 197, 94, 0.12);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
   margin-right: 4px;
 }
 .live-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--ion-color-success, #22c55e);
+  background: var(--color-success);
   animation: live-pulse 1.6s ease-in-out infinite;
 }
 @keyframes live-pulse {

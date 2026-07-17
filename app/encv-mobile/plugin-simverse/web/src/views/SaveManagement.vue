@@ -221,7 +221,7 @@ onMounted(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -230,7 +230,8 @@ onMounted(() => {
   padding: 60px 20px;
   gap: 16px;
 }
+
 .danger-item h3 {
-  color: var(--ion-color-danger, #ef4444);
+  color: var(--color-error);
 }
 </style>

@@ -214,6 +214,18 @@ export function usePhaserWorld() {
     }
   }
 
+  /**
+   * GSAP 驱动的镜头回退到世界俯瞰视角：smoothCenterOn + smoothZoom。
+   * 用于 focus HUD 场景退回 world，与 UI 侧 useSceneTransition.transitionToScene 同步触发。
+   */
+  function returnToWorldView() {
+    if (!game.value || !isReady.value) return;
+    const scene = game.value.scene.getScene("WorldScene") as WorldScene;
+    if (scene) {
+      scene.returnToWorldView();
+    }
+  }
+
   function getZoom(): number {
     return currentZoom.value;
   }
@@ -254,6 +266,7 @@ export function usePhaserWorld() {
     setNPCBehaviors,
     centerOnNPC,
     setZoom,
+    returnToWorldView,
     getZoom,
     enterRegion,
     startBattle,

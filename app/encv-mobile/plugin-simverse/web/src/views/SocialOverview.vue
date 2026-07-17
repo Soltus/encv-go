@@ -28,18 +28,18 @@
 
       <template v-else-if="stats">
         <!-- 概览卡片 -->
-        <div class="stat-grid">
-          <div class="stat-card">
-            <span class="stat-value">{{ stats.total_relations }}</span>
-            <span class="stat-label">{{ t("simverse.socialTotal") }}</span>
+        <div class="stats stats-vertical sm:stats-horizontal shadow w-full m-4">
+          <div class="stat">
+            <div class="stat-value text-primary">{{ stats.total_relations }}</div>
+            <div class="stat-title">{{ t("simverse.socialTotal") }}</div>
           </div>
-          <div class="stat-card">
-            <span class="stat-value">{{ stats.sampled_npcs }}</span>
-            <span class="stat-label">{{ t("simverse.socialSampled") }}</span>
+          <div class="stat">
+            <div class="stat-value text-primary">{{ stats.sampled_npcs }}</div>
+            <div class="stat-title">{{ t("simverse.socialSampled") }}</div>
           </div>
-          <div class="stat-card">
-            <span class="stat-value">{{ typeCount }}</span>
-            <span class="stat-label">{{ t("simverse.socialByType") }}</span>
+          <div class="stat">
+            <div class="stat-value text-primary">{{ typeCount }}</div>
+            <div class="stat-title">{{ t("simverse.socialByType") }}</div>
           </div>
         </div>
 
@@ -151,7 +151,7 @@ async function reload() {
 onMounted(reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -159,35 +159,13 @@ onMounted(reload);
   justify-content: center;
   padding: 60px 20px;
   gap: 16px;
+
+  p {
+    color: var(--color-error);
+    margin: 0;
+  }
 }
-.state-container p {
-  color: var(--ion-color-danger);
-  margin: 0;
-}
-.stat-grid {
-  display: flex;
-  gap: 10px;
-  padding: 16px;
-}
-.stat-card {
-  flex: 1;
-  background: var(--ion-color-light, #f4f5f8);
-  border-radius: 12px;
-  padding: 14px 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--ion-color-primary);
-}
-.stat-label {
-  font-size: 12px;
-  color: var(--ion-color-medium);
-}
+
 .rel-bar {
   width: 80px;
   margin-left: 12px;

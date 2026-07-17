@@ -113,7 +113,7 @@ function goRegion(id: number) {
 onMounted(reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
