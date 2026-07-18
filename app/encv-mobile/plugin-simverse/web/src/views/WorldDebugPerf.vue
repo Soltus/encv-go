@@ -14,67 +14,81 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <div v-if="loading" class="state-container">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
+    <ion-content>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
+
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
+
+        <template v-else-if="metrics">
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.perf.tier") }}</div>
+              <div class="space-y-1">
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.tier") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.tier }}</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.tps") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.ticks_per_sec }}</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.samples") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.samples }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.perf.avgTick") }} (ns)</div>
+              <div class="space-y-1">
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.avgTick") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.avg_tick_ns.toFixed(1) }}</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.minTick") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.min_tick_ns }}</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.maxTick") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.max_tick_ns }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.memory") }}</div>
+              <div class="space-y-1">
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.npcMb") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.npc_mb.toFixed(1) }} MB</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.totalMb") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.total_mb.toFixed(1) }} MB</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.population") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.npc_count }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
-
-      <div v-else-if="error" class="state-container">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-
-      <template v-else-if="metrics">
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.perf.tier") }}</ion-label></ion-list-header>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.tier") }}</ion-label>
-            <ion-note slot="end">{{ metrics.tier }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.tps") }}</ion-label>
-            <ion-note slot="end">{{ metrics.ticks_per_sec }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.samples") }}</ion-label>
-            <ion-note slot="end">{{ metrics.samples }}</ion-note>
-          </ion-item>
-        </ion-list>
-
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.perf.avgTick") }} (ns)</ion-label></ion-list-header>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.avgTick") }}</ion-label>
-            <ion-note slot="end">{{ metrics.avg_tick_ns.toFixed(1) }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.minTick") }}</ion-label>
-            <ion-note slot="end">{{ metrics.min_tick_ns }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.maxTick") }}</ion-label>
-            <ion-note slot="end">{{ metrics.max_tick_ns }}</ion-note>
-          </ion-item>
-        </ion-list>
-
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.memory") }}</ion-label></ion-list-header>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.npcMb") }}</ion-label>
-            <ion-note slot="end">{{ metrics.npc_mb.toFixed(1) }} MB</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.totalMb") }}</ion-label>
-            <ion-note slot="end">{{ metrics.total_mb.toFixed(1) }} MB</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.population") }}</ion-label>
-            <ion-note slot="end">{{ metrics.npc_count }}</ion-note>
-          </ion-item>
-        </ion-list>
-      </template>
     </ion-content>
   </ion-page>
 </template>
@@ -83,16 +97,10 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonButton,
   IonButtons,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSpinner,
   IonTitle,
@@ -126,7 +134,7 @@ onMounted(reload);
 </script>
 
 <style scoped lang="scss">
-.state-container {
+.state-box {
   display: flex;
   flex-direction: column;
   align-items: center;

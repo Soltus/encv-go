@@ -9,27 +9,34 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <div class="about-hero">
-        <div class="about-logo">🌌</div>
-        <h2>{{ t("simverse.about.title") }}</h2>
-        <p class="about-desc">{{ t("simverse.about.desc") }}</p>
-      </div>
+    <ion-content>
+      <div class="p-4 space-y-4">
+        <div class="about-hero">
+          <div class="about-logo">🌌</div>
+          <h2>{{ t("simverse.about.title") }}</h2>
+          <p class="about-desc">{{ t("simverse.about.desc") }}</p>
+        </div>
 
-      <ion-list :inset="true">
-        <ion-item>
-          <ion-label>{{ t("simverse.about.version") }}</ion-label>
-          <ion-note slot="end">v0.1.0</ion-note>
-        </ion-item>
-        <ion-item>
-          <ion-label>{{ t("simverse.about.backend") }}</ion-label>
-          <ion-note slot="end">Go · FractalWorld</ion-note>
-        </ion-item>
-        <ion-item>
-          <ion-label>{{ t("simverse.about.frontend") }}</ion-label>
-          <ion-note slot="end">Vue 3 · Ionic · Vite</ion-note>
-        </ion-item>
-      </ion-list>
+        <div class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.about.info") }}</div>
+            <div class="space-y-1">
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.about.version") }}</span>
+                <span class="text-xs text-base-content/70 font-mono">v0.1.0</span>
+              </div>
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.about.backend") }}</span>
+                <span class="text-xs text-base-content/70 font-mono">Go · FractalWorld</span>
+              </div>
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.about.frontend") }}</span>
+                <span class="text-xs text-base-content/70 font-mono">Vue 3 · Ionic · Vite</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -41,10 +48,6 @@ import {
   IonButtons,
   IonContent,
   IonHeader,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonNote,
   IonPage,
   IonTitle,
   IonToolbar,

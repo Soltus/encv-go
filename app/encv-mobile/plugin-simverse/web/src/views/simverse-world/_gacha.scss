@@ -23,10 +23,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(236, 72, 153, 0.2)); // TODO: tokenize
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(236, 72, 153, 0.2));
   border-radius: 14px;
   padding: 16px;
-  border: 1px solid rgba(139, 92, 246, 0.35); // TODO: tokenize
+  border: 1px solid $sv-border-active; 
   margin-bottom: 14px;
 }
 
@@ -74,7 +74,7 @@
   border-bottom: 4px solid rgba(0, 0, 0, 0.2);
 
   &.single {
-    background: linear-gradient(135deg, $color-info, #6366f1); // TODO: tokenize
+    background: linear-gradient(135deg, $color-info, #6366f1); 
   }
 
   &.ten {
@@ -115,7 +115,7 @@
   position: absolute;
   top: -6px;
   right: 12px;
-  background: #ffd700; // TODO: tokenize
+  background: #ffd700; 
   color: #1a1a1a;
   font-size: 9px;
   font-weight: 700;
@@ -150,8 +150,8 @@
   justify-content: center;
   gap: 4px;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(139, 92, 246, 0.15); // TODO: tokenize
-  animation: cardReveal 0.4s ease-out;
+  border: 1px solid $sv-border-subtle; 
+  animation: cardReveal 0.25s ease-out;
   padding: 6px 4px;
 
   .result-icon { font-size: 22px; }
@@ -198,7 +198,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, #581c87 0%, #be185d 50%, #ea580c 100%); // TODO: tokenize
+  background: linear-gradient(135deg, #581c87 0%, #be185d 50%, #ea580c 100%); 
 
   &::after {
     content: '';
@@ -247,17 +247,16 @@
 
 .sparkle {
   position: absolute;
-  color: #fde68a; // TODO: tokenize
+  color: #fde68a; 
   font-size: 14px;
-  animation: sparkle-rotate 4s linear infinite;
   transform-origin: center;
 }
 
 .gacha-pool-info {
   display: flex;
   justify-content: space-around;
-  background: rgba(20, 20, 50, 0.6); // TODO: tokenize
-  border: 1px solid rgba(139, 92, 246, 0.15); // TODO: tokenize
+  background: rgba(0, 0, 0, 0.4); 
+  border: 1px solid $sv-border-subtle; 
   border-radius: 12px;
   padding: 12px;
   margin-bottom: 16px;
@@ -273,7 +272,7 @@
 .rate-label {
   font-size: 11px;
   font-weight: 700;
-  background: linear-gradient(135deg, #eab308, #f97316); // TODO: tokenize
+  background: linear-gradient(135deg, #eab308, #f97316); 
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -310,13 +309,13 @@
   }
 
   &.single {
-    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2)); // TODO: tokenize
-    border: 2px solid rgba(59, 130, 246, 0.4); // TODO: tokenize
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+    border: 2px solid rgba(59, 130, 246, 0.4); 
   }
 
   &.ten {
-    background: linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(249, 115, 22, 0.2)); // TODO: tokenize
-    border: 2px solid rgba(234, 179, 8, 0.4); // TODO: tokenize
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(249, 115, 22, 0.2));
+    border: 2px solid rgba(234, 179, 8, 0.4); 
   }
 
   &:not(:disabled):hover {
@@ -347,7 +346,7 @@
   position: absolute;
   top: -8px;
   right: 8px;
-  background: linear-gradient(135deg, $color-error, #f97316); // TODO: tokenize
+  background: linear-gradient(135deg, $color-error, #f97316); 
   color: $sv-text-primary;
   font-size: 9px;
   font-weight: 700;
@@ -357,8 +356,8 @@
 
 // —— 抽卡历史 ——
 .gacha-history {
-  background: rgba(20, 20, 50, 0.6); // TODO: tokenize
-  border: 1px solid rgba(139, 92, 246, 0.15); // TODO: tokenize
+  background: rgba(0, 0, 0, 0.4); 
+  border: 1px solid $sv-border-subtle; 
   border-radius: 12px;
   padding: 12px;
 }
@@ -434,7 +433,7 @@
   perspective: 1000px;
 
   &.revealed {
-    animation: card-pop 0.5s ease forwards;
+    animation: card-pop 0.2s ease-out forwards;
 
     .card-inner {
       transform: rotateY(180deg);
@@ -443,12 +442,12 @@
 
   &.SSR .card-back {
     border: 2px solid $color-error;
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); // TODO: tokenize
+    box-shadow: 0 0 20px $sv-glow-error; 
   }
 
   &.SR .card-back {
     border: 2px solid #eab308;
-    box-shadow: 0 0 15px rgba(234, 179, 8, 0.4); // TODO: tokenize
+    box-shadow: 0 0 15px rgba(234, 179, 8, 0.4); 
   }
 
   &.R .card-back {
@@ -478,18 +477,18 @@
 }
 
 .card-front {
-  background: linear-gradient(135deg, #1e1b4b, #312e81); // TODO: tokenize
-  border: 2px solid rgba(139, 92, 246, 0.5); // TODO: tokenize
+  background: linear-gradient(135deg, #1e1b4b, #312e81); 
+  border: 2px solid $sv-glow-primary; 
 }
 
 .card-back-icon {
   font-size: 36px;
-  color: rgba(139, 92, 246, 0.6); // TODO: tokenize
+  color: $sv-glow-primary; 
 }
 
 .card-back {
   transform: rotateY(180deg);
-  background: linear-gradient(180deg, rgba(20, 20, 50, 0.95), rgba(30, 27, 75, 0.95)); // TODO: tokenize
+  background: linear-gradient(180deg, rgba(20, 20, 50, 0.95), rgba(30, 27, 75, 0.95));
   padding: 8px;
   text-align: center;
 }
@@ -519,8 +518,8 @@
 .gacha-skip-btn {
   margin-top: 20px;
   padding: 10px 30px;
-  background: rgba(139, 92, 246, 0.2); // TODO: tokenize
-  border: 1px solid rgba(139, 92, 246, 0.4); // TODO: tokenize
+  background: $sv-border-subtle; 
+  border: 1px solid $sv-glow-primary; 
   border-radius: 20px;
   color: $sv-text-primary;
   font-size: 14px;
@@ -528,7 +527,7 @@
   transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(139, 92, 246, 0.4); // TODO: tokenize
+    background: $sv-glow-primary; 
   }
 }
 
@@ -551,12 +550,12 @@
   width: 90%;
   max-width: 500px;
   max-height: 85%;
-  background: linear-gradient(180deg, #1a1033 0%, #0f0a1a 100%); // TODO: tokenize
+  background: linear-gradient(180deg, #1a1033 0%, #0f0a1a 100%); 
   border-radius: 20px;
   padding: 20px;
   position: relative;
-  border: 2px solid rgba(139, 92, 246, 0.3); // TODO: tokenize
-  box-shadow: 0 0 40px rgba(139, 92, 246, 0.3), inset 0 0 60px rgba(139, 92, 246, 0.05); // TODO: tokenize
+  border: 2px solid $sv-border-active; 
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.3), inset 0 0 60px rgba(139, 92, 246, 0.05); 
   overflow-y: auto;
 }
 
@@ -589,20 +588,13 @@
 // —— 装饰性 @keyframes（保留为 CSS：卡牌翻转/闪光等孤立装饰动画，无需时序控制） ——
 // spec 允许简单装饰动画保留 CSS，GSAP 仅接管需时序/联动的动效
 @keyframes cardReveal {
-  from { opacity: 0; transform: scale(0.8) rotateY(90deg); }
-  to   { opacity: 1; transform: scale(1) rotateY(0); }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 // float @keyframes 已迁移至 SimverseWorld.vue 的 GSAP bannerFloatTween
 
-@keyframes sparkle-rotate {
-  from { opacity: 0.3; }
-  50%  { opacity: 1; }
-  to   { opacity: 0.3; }
-}
-
 @keyframes card-pop {
-  0%   { transform: scale(1); }
-  50%  { transform: scale(1.1); }
-  100% { transform: scale(1); }
+  0%   { opacity: 0; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
 }

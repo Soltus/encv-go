@@ -9,38 +9,11 @@
 
 // 玻璃拟态面板：半透明背景 + backdrop-filter blur + 边框
 @mixin glass-panel {
-  background: rgba(20, 20, 40, 0.8);
+  background: $sv-bg-elevated;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid $sv-border-subtle;
   border-radius: 16px;
-}
-
-// 霓虹辉光：box-shadow 多层
-@mixin neon-glow($color: $sv-glow-primary, $intensity: 1) {
-  box-shadow:
-    0 0 calc(8px * $intensity) $color,
-    0 0 calc(16px * $intensity) $color,
-    inset 0 0 calc(4px * $intensity) rgba(255, 255, 255, 0.1);
-}
-
-// 扫描线效果：repeating-linear-gradient 叠加
-@mixin scanlines($opacity: 0.04) {
-  position: relative;
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: repeating-linear-gradient(
-      0deg,
-      rgba(0, 0, 0, $opacity) 0,
-      rgba(0, 0, 0, $opacity) 1px,
-      transparent 1px,
-      transparent 3px
-    );
-    border-radius: inherit;
-  }
 }
 
 // HUD 卡片：圆角 + 玻璃拟态 + 内阴影

@@ -56,16 +56,16 @@
   padding: 14px 16px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
-  border-left: 4px solid rgba(139, 92, 246, 0.5); // TODO: tokenize
+  border-left: 4px solid $sv-glow-primary; 
 
   &.imp-3 {
     border-left-color: $color-warning;
-    background: rgba(245, 158, 11, 0.08); // TODO: tokenize
+    background: rgba(245, 158, 11, 0.08);
   }
 
   &.imp-4 {
     border-left-color: $color-error;
-    background: rgba(239, 68, 68, 0.1); // TODO: tokenize
+    background: rgba(239, 68, 68, 0.1); 
   }
 }
 
@@ -94,9 +94,9 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(20, 20, 40, 0.8); // TODO: tokenize
+  background: rgba(0, 0, 0, 0.4); 
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(139, 92, 246, 0.2); // TODO: tokenize
+  border: 1px solid $sv-border-subtle; 
   border-radius: 20px;
   padding: 6px 14px;
   z-index: 9;
@@ -105,8 +105,8 @@
   transition: border-color 0.16s ease, background 0.16s ease;
 
   &:hover {
-    border-color: rgba(139, 92, 246, 0.45); // TODO: tokenize
-    background: rgba(28, 28, 52, 0.85); // TODO: tokenize
+    border-color: rgba(139, 92, 246, 0.45);
+    background: $sv-bg-surface; 
   }
 }
 
@@ -142,7 +142,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #4ade80; // TODO: tokenize
+  background: #4ade80; 
   flex-shrink: 0;
 
   &.warning { background: $color-warning; }

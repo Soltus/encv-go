@@ -23,181 +23,242 @@
       <div v-else-if="error" class="state-container">
         <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
         <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
+        <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
       </div>
 
-      <div v-else-if="npc" class="detail">
+      <div v-else-if="npc" class="p-4 space-y-4">
         <!-- 头部卡片 -->
-        <div class="hero">
-          <div class="hero-avatar">{{ avatarEmoji }}</div>
-          <div class="hero-info">
-            <h2>{{ npc.name }}</h2>
-            <p>
-              <ion-badge :color="professionColor(npc.profession)" size="small">
-                {{ npc.profession }}
-              </ion-badge>
-              <span class="hero-meta">Lv.{{ npc.level }}</span>
-              <span :class="npc.is_alive ? 'alive' : 'dead'">
-                {{ npc.is_alive ? '❤' : '💀' }}
-                {{ npc.is_alive ? t("simverse.alive") : t("simverse.deceased") }}
-              </span>
-            </p>
-            <p class="hero-sub">
-              {{ npc.age }}{{ t("simverse.yearsOld") }} ·
-              {{ npc.species }} ·
-              {{ npc.life_stage }}
-              <span v-if="npc.current_behavior_cn">· {{ npc.current_behavior_cn }}</span>
-            </p>
+        <div class="ui-card">
+          <div class="p-4 flex items-start gap-4">
+            <div class="ui-bubble w-16 h-16 flex items-center justify-center text-3xl flex-shrink-0">
+              {{ avatarEmoji }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <h2 class="text-xl font-bold m-0 mb-2">{{ npc.name }}</h2>
+              <div class="flex items-center gap-2 flex-wrap mb-2">
+                <span class="ui-chip !text-xs" :class="profChipClass(npc.profession)">
+                  {{ npc.profession }}
+                </span>
+                <span class="text-sm font-semibold text-base-content/80">Lv.{{ npc.level }}</span>
+                <span :class="npc.is_alive ? 'text-success' : 'text-base-content/50'" class="flex items-center gap-1 text-sm">
+                  <ion-icon :icon="npc.is_alive ? heartOutline : skullOutline" :class="npc.is_alive ? 'text-success' : 'text-base-content/50'" />
+                  {{ npc.is_alive ? t("simverse.alive") : t("simverse.deceased") }}
+                </span>
+              </div>
+              <p class="text-sm text-base-content/70 m-0">
+                {{ npc.age }}{{ t("simverse.yearsOld") }} ·
+                {{ npc.species }} ·
+                {{ npc.life_stage }}
+                <span v-if="npc.current_behavior_cn">· {{ npc.current_behavior_cn }}</span>
+              </p>
+            </div>
           </div>
         </div>
 
         <!-- 快捷入口 -->
-        <ion-list :inset="true">
-          <ion-item button detail @click="goSub('inventory')">
-            <ion-icon :icon="bagOutline" slot="start" color="primary" />
-            <ion-label>{{ t("simverse.detail.viewInventory") }}</ion-label>
-          </ion-item>
-          <ion-item button detail @click="goSub('timeline')">
-            <ion-icon :icon="timeOutline" slot="start" color="tertiary" />
-            <ion-label>{{ t("simverse.detail.viewTimeline") }}</ion-label>
-          </ion-item>
-          <ion-item button detail @click="goSub('relations')">
-            <ion-icon :icon="gitNetworkOutline" slot="start" color="success" />
-            <ion-label>{{ t("simverse.detail.viewRelations") }}</ion-label>
-          </ion-item>
-          <ion-item button detail @click="goSub('behavior')">
-            <ion-icon :icon="pulseOutline" slot="start" color="warning" />
-            <ion-label>{{ t("simverse.detail.viewBehavior") }}</ion-label>
-          </ion-item>
-        </ion-list>
+        <div class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.detail.quickAccess") }}</div>
+            <div class="grid grid-cols-2 gap-2">
+              <button type="button" class="ui-button ui-button--ghost justify-start" @click="goSub('inventory')">
+                <ion-icon :icon="bagOutline" class="mr-2 text-primary" />
+                {{ t("simverse.detail.viewInventory") }}
+              </button>
+              <button type="button" class="ui-button ui-button--ghost justify-start" @click="goSub('timeline')">
+                <ion-icon :icon="timeOutline" class="mr-2 text-tertiary" />
+                {{ t("simverse.detail.viewTimeline") }}
+              </button>
+              <button type="button" class="ui-button ui-button--ghost justify-start" @click="goSub('relations')">
+                <ion-icon :icon="gitNetworkOutline" class="mr-2 text-success" />
+                {{ t("simverse.detail.viewRelations") }}
+              </button>
+              <button type="button" class="ui-button ui-button--ghost justify-start" @click="goSub('behavior')">
+                <ion-icon :icon="pulseOutline" class="mr-2 text-warning" />
+                {{ t("simverse.detail.viewBehavior") }}
+              </button>
+            </div>
+          </div>
+        </div>
 
         <!-- 核心属性 -->
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.stats") }}</ion-label></ion-list-header>
-          <ion-item>
-            <ion-label>{{ t("simverse.health") }}</ion-label>
-            <ion-note slot="end">{{ Math.round(npc.health) }}/{{ npc.max_health }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.energy") }}</ion-label>
-            <ion-note slot="end">{{ Math.round(npc.energy) }}/{{ npc.max_energy }}</ion-note>
-          </ion-item>
-          <ion-item v-if="npc.mana !== undefined">
-            <ion-label>{{ t("simverse.detail.mana") }}</ion-label>
-            <ion-note slot="end">{{ Math.round(npc.mana) }}/{{ npc.max_mana }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.detail.mood") }}</ion-label>
-            <ion-note slot="end">{{ npc.mood ?? '—' }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.detail.satisfaction") }}</ion-label>
-            <ion-note slot="end">{{ npc.satisfaction ?? '—' }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.detail.experience") }}</ion-label>
-            <ion-note slot="end">{{ npc.experience ?? '—' }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.wealthTier") }}</ion-label>
-            <ion-note slot="end">{{ npc.wealth_tier }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.socialTier") }}</ion-label>
-            <ion-note slot="end">{{ npc.social_tier }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.detail.children") }}</ion-label>
-            <ion-note slot="end">{{ npc.num_children ?? '—' }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.detail.marriages") }}</ion-label>
-            <ion-note slot="end">{{ npc.num_marriages ?? '—' }}</ion-note>
-          </ion-item>
-        </ion-list>
+        <div class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.stats") }}</div>
+            <div class="space-y-2">
+              <div class="flex items-center justify-between py-2 border-b border-base-200">
+                <span class="text-sm text-base-content/80">{{ t("simverse.health") }}</span>
+                <span class="text-sm font-mono font-medium">{{ Math.round(npc.health) }}/{{ npc.max_health }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2 border-b border-base-200">
+                <span class="text-sm text-base-content/80">{{ t("simverse.energy") }}</span>
+                <span class="text-sm font-mono font-medium">{{ Math.round(npc.energy) }}/{{ npc.max_energy }}</span>
+              </div>
+              <div v-if="npc.mana !== undefined" class="flex items-center justify-between py-2 border-b border-base-200">
+                <span class="text-sm text-base-content/80">{{ t("simverse.detail.mana") }}</span>
+                <span class="text-sm font-mono font-medium">{{ Math.round(npc.mana) }}/{{ npc.max_mana }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2 border-b border-base-200">
+                <span class="text-sm text-base-content/80">{{ t("simverse.detail.mood") }}</span>
+                <span class="text-sm font-medium">{{ npc.mood ?? '—' }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2 border-b border-base-200">
+                <span class="text-sm text-base-content/80">{{ t("simverse.detail.satisfaction") }}</span>
+                <span class="text-sm font-medium">{{ npc.satisfaction ?? '—' }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2 border-b border-base-200">
+                <span class="text-sm text-base-content/80">{{ t("simverse.detail.experience") }}</span>
+                <span class="text-sm font-mono font-medium">{{ npc.experience ?? '—' }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2 border-b border-base-200">
+                <span class="text-sm text-base-content/80">{{ t("simverse.wealthTier") }}</span>
+                <span class="text-sm font-medium">{{ npc.wealth_tier }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2 border-b border-base-200">
+                <span class="text-sm text-base-content/80">{{ t("simverse.socialTier") }}</span>
+                <span class="text-sm font-medium">{{ npc.social_tier }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2 border-b border-base-200">
+                <span class="text-sm text-base-content/80">{{ t("simverse.detail.children") }}</span>
+                <span class="text-sm font-mono font-medium">{{ npc.num_children ?? '—' }}</span>
+              </div>
+              <div class="flex items-center justify-between py-2">
+                <span class="text-sm text-base-content/80">{{ t("simverse.detail.marriages") }}</span>
+                <span class="text-sm font-mono font-medium">{{ npc.num_marriages ?? '—' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- 归属 -->
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.detail.personality") }}</ion-label></ion-list-header>
-          <ion-item button detail v-if="npc.org_id" @click="goOrg(npc.org_id)">
-            <ion-label>{{ t("simverse.detail.orgId") }}</ion-label>
-            <ion-note slot="end">#{{ npc.org_id }}</ion-note>
-          </ion-item>
-          <ion-item button detail v-if="npc.region_id" @click="goRegion(npc.region_id)">
-            <ion-label>{{ t("simverse.detail.regionId") }}</ion-label>
-            <ion-note slot="end">#{{ npc.region_id }}</ion-note>
-          </ion-item>
-          <ion-item v-if="npc.home_region_id">
-            <ion-label>{{ t("simverse.detail.homeRegion") }}</ion-label>
-            <ion-note slot="end">#{{ npc.home_region_id }}</ion-note>
-          </ion-item>
-          <ion-item v-if="npc.born_at">
-            <ion-label>{{ t("simverse.detail.bornAt") }}</ion-label>
-            <ion-note slot="end">tick {{ npc.born_at }}</ion-note>
-          </ion-item>
-          <ion-item v-if="npc.died_at">
-            <ion-label>{{ t("simverse.detail.diedAt") }}</ion-label>
-            <ion-note slot="end">tick {{ npc.died_at }}</ion-note>
-          </ion-item>
-        </ion-list>
+        <div class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.detail.personality") }}</div>
+            <div class="space-y-2">
+              <button
+                v-if="npc.org_id"
+                type="button"
+                class="ui-button ui-button--ghost w-full justify-between"
+                @click="goOrg(npc.org_id)"
+              >
+                <span>{{ t("simverse.detail.orgId") }}</span>
+                <span class="text-base-content/70 font-mono">#{{ npc.org_id }}</span>
+              </button>
+              <button
+                v-if="npc.region_id"
+                type="button"
+                class="ui-button ui-button--ghost w-full justify-between"
+                @click="goRegion(npc.region_id)"
+              >
+                <span>{{ t("simverse.detail.regionId") }}</span>
+                <span class="text-base-content/70 font-mono">#{{ npc.region_id }}</span>
+              </button>
+              <div v-if="npc.home_region_id" class="flex items-center justify-between py-2">
+                <span class="text-sm text-base-content/80">{{ t("simverse.detail.homeRegion") }}</span>
+                <span class="text-sm font-mono text-base-content/70">#{{ npc.home_region_id }}</span>
+              </div>
+              <div v-if="npc.born_at" class="flex items-center justify-between py-2">
+                <span class="text-sm text-base-content/80">{{ t("simverse.detail.bornAt") }}</span>
+                <span class="text-sm font-mono text-base-content/70">tick {{ npc.born_at }}</span>
+              </div>
+              <div v-if="npc.died_at" class="flex items-center justify-between py-2">
+                <span class="text-sm text-base-content/80">{{ t("simverse.detail.diedAt") }}</span>
+                <span class="text-sm font-mono text-base-content/70">tick {{ npc.died_at }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- 技能 -->
-        <ion-list v-if="skillEntries.length" :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.skills") }}</ion-label></ion-list-header>
-          <ion-item v-for="s in skillEntries" :key="s.key">
-            <ion-label>{{ s.key }}</ion-label>
-            <ion-note slot="end">{{ s.value }}</ion-note>
-          </ion-item>
-        </ion-list>
+        <div v-if="skillEntries.length" class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.skills") }}</div>
+            <div class="space-y-2">
+              <div
+                v-for="s in skillEntries"
+                :key="s.key"
+                class="flex items-center justify-between py-2 border-b border-base-200 last:border-b-0 last:pb-0"
+              >
+                <span class="text-sm text-base-content/80">{{ s.key }}</span>
+                <span class="text-sm font-mono font-medium">{{ s.value }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- 流派 / Build (P14) -->
-        <ion-list v-if="build" :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.build") }}</ion-label></ion-list-header>
-          <ion-item>
-            <ion-label class="ion-text-wrap">
-              <div class="build-primary">
-                <ion-badge :color="archColor(build.primary)" class="build-badge">{{ archLabel(build.primary) }}</ion-badge>
-                <span class="build-stars" :aria-label="t('simverse.build.synergy')">
+        <div v-if="build" class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.build") }}</div>
+            <div class="space-y-3">
+              <div class="flex items-center gap-3 flex-wrap">
+                <span class="ui-chip !text-sm !font-semibold" :class="archChipClass(build.primary)">
+                  {{ archLabel(build.primary) }}
+                </span>
+                <span class="build-stars flex items-center gap-1" :aria-label="t('simverse.build.synergy')">
                   <ion-icon
                     v-for="i in 5"
                     :key="i"
                     :icon="i <= build.synergy ? star : starOutline"
-                    :color="i <= build.synergy ? 'warning' : 'medium'"
+                    :class="i <= build.synergy ? 'text-warning' : 'text-base-content/30'"
                   />
                 </span>
               </div>
-              <div v-if="build.tags.length > 1" class="chip-row">
-                <ion-chip v-for="tag in build.tags.slice(1)" :key="tag" :color="archColor(tag)" outline>
+              <div v-if="build.tags.length > 1" class="flex flex-wrap gap-2">
+                <span
+                  v-for="tag in build.tags.slice(1)"
+                  :key="tag"
+                  class="ui-chip ui-chip--mono !text-xs"
+                >
                   {{ archLabel(tag) }}
-                </ion-chip>
+                </span>
               </div>
-            </ion-label>
-          </ion-item>
-        </ion-list>
+            </div>
+          </div>
+        </div>
 
         <!-- 大五人格 -->
-        <ion-list v-if="bigFiveEntries.length" :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.detail.bigFive") }}</ion-label></ion-list-header>
-          <ion-item v-for="b in bigFiveEntries" :key="b.key">
-            <ion-label>{{ b.key }}</ion-label>
-            <ion-note slot="end">{{ b.value }}</ion-note>
-          </ion-item>
-        </ion-list>
+        <div v-if="bigFiveEntries.length" class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.detail.bigFive") }}</div>
+            <div class="space-y-2">
+              <div
+                v-for="b in bigFiveEntries"
+                :key="b.key"
+                class="flex items-center justify-between py-2 border-b border-base-200 last:border-b-0 last:pb-0"
+              >
+                <span class="text-sm text-base-content/80">{{ b.key }}</span>
+                <span class="text-sm font-mono font-medium">{{ b.value }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <!-- 价值观 / 兴趣 -->
-        <ion-list v-if="npc.top_values?.length || npc.top_interests?.length" :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.detail.values") }} / {{ t("simverse.detail.interests") }}</ion-label></ion-list-header>
-          <ion-item>
-            <ion-label class="ion-text-wrap">
-              <div v-if="npc.top_values?.length" class="chip-row">
-                <ion-chip v-for="v in npc.top_values" :key="v" color="tertiary" outline>{{ v }}</ion-chip>
+        <div v-if="npc.top_values?.length || npc.top_interests?.length" class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.detail.values") }} / {{ t("simverse.detail.interests") }}</div>
+            <div class="space-y-3">
+              <div v-if="npc.top_values?.length" class="flex flex-wrap gap-2">
+                <span
+                  v-for="v in npc.top_values"
+                  :key="v"
+                  class="ui-chip !text-xs !bg-tertiary/15 !text-tertiary !border-tertiary/30"
+                >
+                  {{ v }}
+                </span>
               </div>
-              <div v-if="npc.top_interests?.length" class="chip-row">
-                <ion-chip v-for="i in npc.top_interests" :key="i" color="success" outline>{{ i }}</ion-chip>
+              <div v-if="npc.top_interests?.length" class="flex flex-wrap gap-2">
+                <span
+                  v-for="i in npc.top_interests"
+                  :key="i"
+                  class="ui-chip !text-xs !bg-success/15 !text-success !border-success/30"
+                >
+                  {{ i }}
+                </span>
               </div>
-            </ion-label>
-          </ion-item>
-        </ion-list>
+            </div>
+          </div>
+        </div>
       </div>
     </ion-content>
   </ion-page>
@@ -207,18 +268,10 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonBadge,
-  IonButton,
   IonButtons,
-  IonChip,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSpinner,
   IonTitle,
@@ -233,6 +286,8 @@ import {
   star,
   starOutline,
   timeOutline,
+  heartOutline,
+  skullOutline,
 } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -257,7 +312,6 @@ const avatarEmoji = computed(() => {
 const skillEntries = computed(() => (npc.value ? Object.entries(npc.value.skills || {}).map(([key, value]) => ({ key, value })) : []));
 const bigFiveEntries = computed(() => (npc.value ? Object.entries(npc.value.big_five || {}).map(([key, value]) => ({ key, value })) : []));
 
-// P14 流派派生（确定性，复用 NPC 既有属性）
 const build = computed(() => (npc.value ? deriveNPCBuild(npc.value) : null));
 
 const ARCH_COLOR: Record<ArchetypeKey, string> = {
@@ -272,23 +326,36 @@ const ARCH_COLOR: Record<ArchetypeKey, string> = {
   rogue: "dark",
   artist: "tertiary",
 };
+
 function archLabel(key: ArchetypeKey): string {
   return t(`simverse.build.${key}`);
 }
-function archColor(key: ArchetypeKey): string {
-  return ARCH_COLOR[key] || "medium";
+
+function archChipClass(key: ArchetypeKey): string {
+  const color = ARCH_COLOR[key] || "medium";
+  const map: Record<string, string> = {
+    danger: "!bg-error/15 !text-error !border-error/30",
+    warning: "!bg-warning/15 !text-warning !border-warning/30",
+    primary: "!bg-primary/15 !text-primary !border-primary/30",
+    success: "!bg-success/15 !text-success !border-success/30",
+    tertiary: "!bg-tertiary/15 !text-tertiary !border-tertiary/30",
+    secondary: "!bg-secondary/15 !text-secondary !border-secondary/30",
+    medium: "!bg-base-content/15 !text-base-content/70 !border-base-content/20",
+    dark: "!bg-base-content/15 !text-base-content/70 !border-base-content/20",
+  };
+  return map[color] || map.medium;
 }
 
-function professionColor(profession: string): string {
+function profChipClass(p: string): string {
   const map: Record<string, string> = {
-    farmer: "success",
-    warrior: "danger",
-    mage: "primary",
-    merchant: "warning",
-    priest: "tertiary",
-    rogue: "medium",
+    farmer: "!bg-success/15 !text-success !border-success/30",
+    warrior: "!bg-error/15 !text-error !border-error/30",
+    mage: "!bg-primary/15 !text-primary !border-primary/30",
+    merchant: "!bg-warning/15 !text-warning !border-warning/30",
+    priest: "!bg-tertiary/15 !text-tertiary !border-tertiary/30",
+    rogue: "!bg-base-content/15 !text-base-content/70 !border-base-content/20",
   };
-  return map[profession?.toLowerCase()] || "medium";
+  return map[p?.toLowerCase()] || "!bg-base-content/15 !text-base-content/70 !border-base-content/20";
 }
 
 function goSub(which: "inventory" | "timeline" | "relations" | "behavior") {
@@ -333,66 +400,7 @@ watch(() => route.params.id, reload);
   color: var(--color-error);
   margin: 0;
 }
-.hero {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 20px 16px 8px;
-}
-.hero-avatar {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--color-base-200);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 30px;
-  flex-shrink: 0;
-}
-.hero-info h2 {
-  margin: 0 0 4px;
-  font-size: 18px;
-}
-.hero-info p {
-  margin: 0 0 4px;
-  font-size: 12px;
-  color: var(--color-base-content);
-  opacity: 0.7;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.hero-meta {
-  font-weight: 600;
-}
-.hero-sub {
-  font-size: 12px;
-}
-.alive { color: var(--color-success); }
-.dead { color: var(--color-base-content); opacity: 0.6; }
-.chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px 0;
-}
-.build-primary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.build-badge {
-  font-size: 13px;
-  font-weight: 700;
-  padding: 5px 12px;
-  border-radius: 12px;
-}
 .build-stars {
-  display: inline-flex;
-  gap: 2px;
   font-size: 14px;
 }
 </style>

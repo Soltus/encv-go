@@ -16,32 +16,45 @@
     </ion-header>
 
     <ion-content>
-      <div v-if="loading" class="state-box">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
-      <div v-else-if="error" class="state-box">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-      <div v-else-if="!shocks || !shocks.items.length" class="state-box">
-        <ion-icon :icon="swapHorizontal" size="large" color="medium" />
-        <p>{{ t("simverse.noEconomy") }}</p>
-      </div>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
+        <div v-else-if="!shocks || !shocks.items.length" class="state-box">
+          <ion-icon :icon="swapHorizontal" size="large" class="text-base-content/40" />
+          <p class="text-base-content/70">{{ t("simverse.noEconomy") }}</p>
+        </div>
 
-      <ion-list v-else :inset="true">
-        <ion-list-header>
-          <ion-label>{{ t("simverse.shock") }}: {{ shocks.count }}</ion-label>
-        </ion-list-header>
-        <ion-item v-for="(s, i) in shocks.items" :key="i">
-          <ion-icon :icon="trendingUp" slot="start" :color="s.change >= 0 ? 'success' : 'danger'" />
-          <ion-label>
-            <h3>{{ s.message }}</h3>
-            <p>{{ t("simverse.regions") }} #{{ s.region_id }} · {{ s.resource }} · {{ t("simverse.price") }}: {{ s.price }}</p>
-          </ion-label>
-        </ion-item>
-      </ion-list>
+        <template v-else>
+          <div class="flex items-center justify-between">
+            <span class="ui-chip ui-chip--mono">{{ t("simverse.shock") }}: {{ shocks.count }}</span>
+          </div>
+
+          <div class="ui-card">
+            <div class="p-3 space-y-1">
+              <div
+                v-for="(s, i) in shocks.items"
+                :key="i"
+                class="flex items-start gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors"
+              >
+                <ion-icon :icon="trendingUp" :class="s.change >= 0 ? 'text-success' : 'text-error'" class="text-xl mt-0.5" />
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium">{{ s.message }}</div>
+                  <div class="text-xs text-base-content/70 mt-1">
+                    {{ t("simverse.regions") }} #{{ s.region_id }} · {{ s.resource }} · {{ t("simverse.price") }}: {{ s.price }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -55,10 +68,6 @@ import {
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
   IonPage,
   IonSpinner,
   IonTitle,
@@ -76,24 +85,24 @@ const loading = ref(false);
 const error = ref("");
 const shocks = ref<SimverseEconomyShocksResponse | null>(null);
 
-async function reload(silent = false) {
-  if (!silent) {
+async function reload(silent?: boolean | Event) {
+  const isSilent = silent === true;
+  if (!isSilent) {
     loading.value = true;
     error.value = "";
   }
   try {
     shocks.value = await loadEconomyShocks();
   } catch (e: any) {
-    if (silent) console.warn("[simverse] shocks refresh failed:", e);
+    if (isSilent) console.warn("[simverse] shocks refresh failed:", e);
     else error.value = e.message || "Failed to load shocks";
   } finally {
-    if (!silent) loading.value = false;
+    if (!isSilent) loading.value = false;
   }
 }
 
 onMounted(reload);
 
-// P7 持续演化：价格冲击流随世界演化实时刷新（WS 推送优先，未连接时 8s 兜底轮询）
 useLiveRefresh(() => reload(true), { signal: economySignal, pollMs: 8000 });
 </script>
 

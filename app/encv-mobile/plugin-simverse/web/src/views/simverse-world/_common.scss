@@ -2,7 +2,7 @@
 // 公共模块：任务面板 / 标签 / 行为图标 / 全屏页骨架 / 加载占位
 // -----------------------------------------------------------------------------
 // 跨场景复用的通用组件：
-//   - .quest-panel / .quest-tabs / .quest-tab / .quest-list / .quest-card.* / @keyframes quest-glow
+//   - .quest-panel / .quest-tabs / .quest-tab / .quest-list / .quest-card.*
 //     .quest-icon / .quest-info / .quest-title / .quest-desc
 //     .quest-progress-row / .quest-progress-bar / .quest-progress-fill / .quest-progress-text
 //     .quest-reward / .reward-item / .quest-claim-btn / .quest-claimed
@@ -46,9 +46,9 @@
   transition: all 0.2s;
 
   &.completable {
-    background: rgba(34, 197, 94, 0.1); // TODO: tokenize
-    border-color: rgba(34, 197, 94, 0.3); // TODO: tokenize
-    animation: quest-glow 2s ease-in-out infinite;
+    background: rgba(34, 197, 94, 0.1); 
+    border-color: $sv-glow-success; 
+    box-shadow: 0 0 8px var(--color-success);
     // .quest-progress-fill 的渐变已迁移到模板 :class（completable 时切换为绿色渐变）
   }
 
@@ -131,7 +131,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(180deg, #0f0f2a 0%, #{$sv-bg-deep} 100%); // TODO: tokenize
+  background: linear-gradient(180deg, #0f0f2a 0%, #{$sv-bg-deep} 100%); 
   z-index: 20;
   overflow: hidden;
   display: flex;
@@ -156,9 +156,9 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
-  background: rgba(15, 15, 42, 0.95); // TODO: tokenize
+  background: $sv-bg-deep; 
   backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(139, 92, 246, 0.15); // TODO: tokenize
+  border-bottom: 1px solid $sv-border-subtle; 
   flex-shrink: 0;
 }
 
@@ -166,8 +166,8 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: rgba(139, 92, 246, 0.15); // TODO: tokenize
-  border: 1px solid rgba(139, 92, 246, 0.25); // TODO: tokenize
+  background: $sv-border-subtle; 
+  border: 1px solid $sv-border-active; 
   color: $sv-text-primary;
   font-size: 18px;
   cursor: pointer;
@@ -177,7 +177,7 @@
   transition: all 0.15s ease;
 
   &:hover {
-    background: rgba(139, 92, 246, 0.3); // TODO: tokenize
+    background: $sv-border-active; 
     transform: translateX(-2px);
   }
 }
@@ -227,9 +227,4 @@
   // spin 动画已迁移至 SimverseWorld.vue 的 GSAP loadingSpinTween
 }
 
-// —— 装饰性 @keyframes（保留为 CSS：任务可领取状态的呼吸光晕，孤立装饰动画） ——
-// spec 允许简单装饰动画保留 CSS，GSAP 仅接管需时序/联动的动效
-@keyframes quest-glow {
-  0%, 100% { box-shadow: 0 0 0 rgba(34, 197, 94, 0); }
-  50%      { box-shadow: 0 0 12px rgba(34, 197, 94, 0.3); }
-}
+

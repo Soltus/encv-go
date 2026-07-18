@@ -15,99 +15,121 @@
     </ion-header>
 
     <ion-content>
-      <div v-if="loading" class="state-container">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
-
-      <div v-else-if="error" class="state-container">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-
-      <template v-else-if="data">
-        <div class="hero">
-          <h2>{{ data.name }}</h2>
-          <p class="muted">#{{ data.npc_id }} · {{ t("simverse.socialTotal") }}: {{ data.count }}</p>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-container">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
         </div>
 
-        <!-- 关系计数概览 -->
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.socialCounts") }}</ion-label></ion-list-header>
-          <div class="chip-row">
-            <ion-chip
-              v-for="(cnt, type) in sortedCounts"
-              :key="type"
-              :color="relColor(type)"
-              outline
-            >
-              {{ t("simverse.rel." + type) }} {{ cnt }}
-            </ion-chip>
+        <div v-else-if="error" class="state-container">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
+
+        <template v-else-if="data">
+          <!-- Hero -->
+          <div class="ui-card">
+            <div class="p-4">
+              <h2 class="text-xl font-bold m-0 mb-1">{{ data.name }}</h2>
+              <p class="text-sm text-base-content/60 m-0">
+                #{{ data.npc_id }} · {{ t("simverse.socialTotal") }}: {{ data.count }}
+              </p>
+            </div>
           </div>
-        </ion-list>
 
-        <!-- 关系网卡牌连线 (P14) -->
-        <div class="rel-graph-card">
-          <div class="graph-title">{{ t("simverse.relGraph") }} · {{ t("simverse.socialAffinity") }}</div>
-          <svg class="rel-graph" viewBox="0 0 320 320" width="100%">
-            <line
-              v-for="n in graphNodes"
-              :key="'l' + n.id"
-              :x1="cx" :y1="cy" :x2="n.x" :y2="n.y"
-              :stroke="relStroke(n.relType)"
-              :stroke-width="lineWidth(n.affinity)"
-              :stroke-opacity="lineOpacity(n.affinity)"
-            />
-            <g class="self-node">
-              <circle :cx="cx" :cy="cy" r="30" fill="var(--color-primary)" />
-              <text :x="cx" :y="cy + 5" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">{{ initial(data.name) }}</text>
-              <text :x="cx" :y="cy + 48" text-anchor="middle" font-size="11" fill="var(--color-base-content)">{{ data.name }}</text>
-            </g>
-            <g
-              v-for="n in graphNodes"
-              :key="n.id"
-              class="rel-node"
-              @click="goTarget(n.id)"
-            >
-              <circle
-                :cx="n.x" :cy="n.y" r="22"
-                :fill="relStroke(n.relType)" fill-opacity="0.16"
-                :stroke="relStroke(n.relType)" stroke-width="2"
-              />
-              <text :x="n.x" :y="n.y + 5" text-anchor="middle" font-size="13" font-weight="700" :fill="relStroke(n.relType)">{{ initial(n.name) }}</text>
-              <text :x="n.x" :y="n.y + 40" text-anchor="middle" font-size="10" :fill="relStroke(n.relType)">{{ n.affinity > 0 ? "+" : "" }}{{ n.affinity }}</text>
-            </g>
-          </svg>
-          <p class="graph-hint">{{ t("simverse.relGraphHint") }}</p>
-        </div>
+          <!-- 关系计数概览 -->
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.socialCounts") }}</div>
+              <div class="flex flex-wrap gap-2">
+                <span
+                  v-for="(cnt, type) in sortedCounts"
+                  :key="type"
+                  class="ui-chip !text-xs"
+                  :class="relChipClass(type)"
+                >
+                  {{ t("simverse.rel." + type) }} {{ cnt }}
+                </span>
+              </div>
+            </div>
+          </div>
 
-        <!-- 关系列表 -->
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.npcRelations") }}</ion-label></ion-list-header>
-          <ion-item
-            v-for="rel in data.relations"
-            :key="rel.target_id"
-            button
-            detail
-            @click="goTarget(rel.target_id)"
-          >
-            <ion-avatar slot="start" class="rel-avatar">{{ rel.target.name.charAt(0) }}</ion-avatar>
-            <ion-label>
-              <h3>{{ rel.target.name }}</h3>
-              <p>{{ t("simverse.rel." + rel.rel_type) }} · #{{ rel.target_id }}</p>
-            </ion-label>
-            <ion-note
-              slot="end"
-              :color="rel.affinity >= 0 ? 'success' : 'danger'"
-            >
-              {{ rel.affinity > 0 ? "+" : "" }}{{ rel.affinity }}
-            </ion-note>
-          </ion-item>
-        </ion-list>
+          <!-- 关系网卡牌连线 (P14) -->
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.relGraph") }} · {{ t("simverse.socialAffinity") }}</div>
+              <svg class="rel-graph" viewBox="0 0 320 320" width="100%">
+                <line
+                  v-for="n in graphNodes"
+                  :key="'l' + n.id"
+                  :x1="cx" :y1="cy" :x2="n.x" :y2="n.y"
+                  :stroke="relStroke(n.relType)"
+                  :stroke-width="lineWidth(n.affinity)"
+                  :stroke-opacity="lineOpacity(n.affinity)"
+                />
+                <g class="self-node">
+                  <circle :cx="cx" :cy="cy" r="30" fill="var(--color-primary)" />
+                  <text :x="cx" :y="cy + 5" text-anchor="middle" fill="#fff" font-size="14" font-weight="700">{{ initial(data.name) }}</text>
+                  <text :x="cx" :y="cy + 48" text-anchor="middle" font-size="11" fill="var(--color-base-content)">{{ data.name }}</text>
+                </g>
+                <g
+                  v-for="n in graphNodes"
+                  :key="n.id"
+                  class="rel-node cursor-pointer"
+                  @click="goTarget(n.id)"
+                >
+                  <circle
+                    :cx="n.x" :cy="n.y" r="22"
+                    :fill="relStroke(n.relType)" fill-opacity="0.16"
+                    :stroke="relStroke(n.relType)" stroke-width="2"
+                  />
+                  <text :x="n.x" :y="n.y + 5" text-anchor="middle" font-size="13" font-weight="700" :fill="relStroke(n.relType)">{{ initial(n.name) }}</text>
+                  <text :x="n.x" :y="n.y + 40" text-anchor="middle" font-size="10" :fill="relStroke(n.relType)">{{ n.affinity > 0 ? "+" : "" }}{{ n.affinity }}</text>
+                </g>
+              </svg>
+              <p class="text-center text-xs text-base-content/60 mt-2 mb-0">{{ t("simverse.relGraphHint") }}</p>
+            </div>
+          </div>
 
-        <p v-if="!data.relations.length" class="empty-note">{{ t("simverse.socialNoRelations") }}</p>
-      </template>
+          <!-- 关系列表 -->
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.npcRelations") }}</div>
+              <div v-if="data.relations.length" class="space-y-2">
+                <button
+                  v-for="rel in data.relations"
+                  :key="rel.target_id"
+                  type="button"
+                  class="ui-button ui-button--ghost w-full justify-between !px-3 !py-2"
+                  @click="goTarget(rel.target_id)"
+                >
+                  <div class="flex items-center gap-3">
+                    <div class="ui-bubble w-9 h-9 flex items-center justify-center text-sm font-semibold flex-shrink-0" :class="relBubbleClass(rel.rel_type)">
+                      {{ rel.target.name.charAt(0) }}
+                    </div>
+                    <div class="text-left">
+                      <div class="text-sm font-medium text-base-content">{{ rel.target.name }}</div>
+                      <div class="text-xs text-base-content/60">
+                        {{ t("simverse.rel." + rel.rel_type) }} · #{{ rel.target_id }}
+                      </div>
+                    </div>
+                  </div>
+                  <span
+                    class="text-sm font-mono font-medium"
+                    :class="rel.affinity >= 0 ? 'text-success' : 'text-error'"
+                  >
+                    {{ rel.affinity > 0 ? "+" : "" }}{{ rel.affinity }}
+                  </span>
+                </button>
+              </div>
+              <div v-else class="text-center py-6 text-base-content/60 text-sm">
+                {{ t("simverse.socialNoRelations") }}
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -115,19 +137,11 @@
 <script setup lang="ts">
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
-  IonAvatar,
   IonBackButton,
-  IonButton,
   IonButtons,
-  IonChip,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSpinner,
   IonTitle,
@@ -175,6 +189,28 @@ function relColor(type: string): string {
   }
 }
 
+function relChipClass(type: string): string {
+  const color = relColor(type);
+  const map: Record<string, string> = {
+    danger: "!bg-error/15 !text-error !border-error/30",
+    success: "!bg-success/15 !text-success !border-success/30",
+    tertiary: "!bg-tertiary/15 !text-tertiary !border-tertiary/30",
+    medium: "!bg-base-content/15 !text-base-content/70 !border-base-content/20",
+  };
+  return map[color] || map.medium;
+}
+
+function relBubbleClass(type: string): string {
+  const color = relColor(type);
+  const map: Record<string, string> = {
+    danger: "!bg-error/15 !text-error",
+    success: "!bg-success/15 !text-success",
+    tertiary: "!bg-tertiary/15 !text-tertiary",
+    medium: "!bg-base-content/15 !text-base-content/70",
+  };
+  return map[color] || map.medium;
+}
+
 // P14 关系网卡牌连线：SVG 坐标与连线样式
 const GRAPH_MAX = 9;
 const cx = 160;
@@ -199,7 +235,6 @@ const graphNodes = computed(() => {
 });
 
 function relStroke(type: string): string {
-  // Map Ionic color names (used by ion-chip :color) to daisyUI CSS variables for SVG strokes.
   const ionicToDaisy: Record<string, string> = {
     danger: "--color-error",
     success: "--color-success",
@@ -256,70 +291,12 @@ watch(() => route.params.id, reload);
   color: var(--color-error);
   margin: 0;
 }
-.hero {
-  padding: 16px 20px 4px;
-}
-.hero h2 {
-  margin: 0;
-  font-size: 22px;
-}
-.muted {
-  color: var(--color-base-content);
-  opacity: 0.7;
-  margin: 4px 0 0;
-}
-.chip-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px 0;
-}
-.rel-avatar {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-primary);
-  color: #fff;
-  font-weight: 600;
-  border-radius: 50%;
-}
-.empty-note {
-  text-align: center;
-  color: var(--color-base-content);
-  opacity: 0.7;
-  padding: 24px;
-}
-.rel-graph-card {
-  margin: 12px 16px;
-  padding: 12px;
-  border-radius: 14px;
-  background: var(--color-base-200);
-}
-.graph-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--color-base-content);
-  opacity: 0.7;
-  margin-bottom: 4px;
-}
 .rel-graph {
   display: block;
   width: 100%;
   max-height: 340px;
 }
-.rel-node {
-  cursor: pointer;
-}
 .rel-node:active circle {
   fill-opacity: 0.32;
-}
-.graph-hint {
-  text-align: center;
-  font-size: 11px;
-  color: var(--color-base-content);
-  opacity: 0.7;
-  margin: 4px 0 0;
 }
 </style>

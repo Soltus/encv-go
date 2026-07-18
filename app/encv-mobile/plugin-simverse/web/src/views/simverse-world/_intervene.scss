@@ -63,8 +63,8 @@
 
 .ff-input {
   width: 64px;
-  background: rgba(20, 20, 40, 0.8); // TODO: tokenize
-  border: 1px solid rgba(139, 92, 246, 0.35); // TODO: tokenize
+  background: rgba(0, 0, 0, 0.4); 
+  border: 1px solid $sv-border-active; 
   color: $sv-text-primary;
   border-radius: 8px;
   padding: 6px 8px;
@@ -73,14 +73,14 @@
 
 .ctrl-msg {
   font-size: 12px;
-  color: #4ade80; // TODO: tokenize
+  color: #4ade80; 
   margin-top: 4px;
 }
 
 .stub-banner {
-  background: rgba(245, 158, 11, 0.12); // TODO: tokenize
-  border: 1px solid rgba(245, 158, 11, 0.4); // TODO: tokenize
-  color: #fcd34d; // TODO: tokenize
+  background: rgba(245, 158, 11, 0.12); 
+  border: 1px solid rgba(245, 158, 11, 0.4); 
+  color: #fcd34d;
   border-radius: 12px;
   padding: 12px 14px;
   font-size: 12px;
@@ -91,9 +91,9 @@
 .setting-section.danger-zone {
   margin-top: 20px;
   padding: 16px;
-  background: rgba(239, 68, 68, 0.08); // TODO: tokenize
+  background: rgba(239, 68, 68, 0.08); 
   border-radius: 12px;
-  border: 1px solid rgba(239, 68, 68, 0.2); // TODO: tokenize
+  border: 1px solid $sv-glow-error; 
 
   .section-title {
     color: $color-error;
@@ -108,9 +108,9 @@
   justify-content: center;
   gap: 8px;
   padding: 14px 16px;
-  border: 1px solid rgba(239, 68, 68, 0.3); // TODO: tokenize
+  border: 1px solid $sv-glow-error; 
   border-radius: 10px;
-  background: rgba(239, 68, 68, 0.1); // TODO: tokenize
+  background: rgba(239, 68, 68, 0.1); 
   color: $color-error;
   font-size: 15px;
   font-weight: 600;
@@ -118,7 +118,7 @@
   transition: all 0.2s;
 
   &:active {
-    background: rgba(239, 68, 68, 0.2); // TODO: tokenize
+    background: $sv-glow-error; 
     transform: scale(0.98);
   }
 }

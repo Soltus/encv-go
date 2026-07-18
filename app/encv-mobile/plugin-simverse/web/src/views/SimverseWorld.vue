@@ -644,312 +644,57 @@
         </div>
 
         <div ref="hudSceneContainer" class="hud-scene-container">
-          <!-- 转场由 useSceneTransition.transitionToScene 处理，不再使用 <transition> 包裹 -->
-          <div v-if="screen === 'focus' && selectedNPC" class="detail-modal" @click.self="backToWorld">
-            <div class="detail-card">
-            <div class="detail-header">
-              <div class="detail-avatar" :style="focusBuild ? { background: `linear-gradient(135deg, ${ARCH_META[focusBuild.primary].colorCss}, #ec4899)` } : {}">
-                {{ selectedNPC.name?.[0] }}
-              </div>
-              <div class="detail-info">
-                <div class="detail-name">{{ selectedNPC.name }}</div>
-                <div class="detail-meta">
-                  {{ selectedNPC.species }} · {{ selectedNPC.gender }} · {{ selectedNPC.age }}{{ t("simverse.yearsOld") }}
-                </div>
-                <div v-if="focusBuild" class="detail-build">
-                  <span class="build-chip" :style="{ background: ARCH_META[focusBuild.primary].colorCss }">
-                    {{ ARCH_META[focusBuild.primary].emoji }} {{ ARCH_META[focusBuild.primary].name }}
-                  </span>
-                  <span class="build-synergy">★{{ focusBuild.synergy }}</span>
-                </div>
-              </div>
-              <button class="detail-close" @click="backToWorld">✕</button>
-            </div>
-
-            <!-- 编队操作条：把焦点 NPC 编入/移出玩家编队（复用 simverse:squad 持久化） -->
-            <div class="focus-actions">
-              <button class="focus-action-btn" :class="{ active: inSquad }"
-                      :disabled="!inSquad && squadIds.length >= MAX_SQUAD" @click="toggleSquad">
-                {{ inSquad ? t("simverse.focus.removeFromSquad") : t("simverse.focus.addToSquad") }}
-              </button>
-              <span v-if="!inSquad && squadIds.length >= MAX_SQUAD" class="focus-action-hint">
-                {{ t("simverse.focus.squadFull") }}
-              </span>
-            </div>
-
-            <!-- 对象上下文标签：身份 / 时间线 / 关系 -->
-            <ion-segment :value="focusTab" @ionChange="onFocusTabChange" class="focus-tabs" scrollable>
-              <ion-segment-button value="identity">
-                <ion-label>{{ t("simverse.focus.identity") }}</ion-label>
-              </ion-segment-button>
-              <ion-segment-button value="timeline">
-                <ion-label>{{ t("simverse.focus.timeline") }}</ion-label>
-              </ion-segment-button>
-              <ion-segment-button value="relations">
-                <ion-label>{{ t("simverse.focus.relations") }}</ion-label>
-              </ion-segment-button>
-            </ion-segment>
-
-            <div class="detail-body">
-              <!-- 身份：基础档案 -->
-              <div v-if="focusTab === 'identity'" class="detail-grid">
-                <div class="detail-item">
-                  <span class="item-label">{{ t("simverse.profession") }}</span>
-                  <span class="item-value">{{ selectedNPC.profession }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="item-label">{{ t("simverse.level") }}</span>
-                  <span class="item-value highlight">Lv.{{ selectedNPC.level }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="item-label">{{ t("simverse.health") }}</span>
-                  <span class="item-value success">{{ selectedNPC.health }} / {{ selectedNPC.max_health }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="item-label">{{ t("simverse.energy") }}</span>
-                  <span class="item-value warning">{{ selectedNPC.energy }} / {{ selectedNPC.max_energy }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="item-label">{{ t("simverse.wealthTier") }}</span>
-                  <span class="item-value">{{ selectedNPC.wealth_tier }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="item-label">{{ t("simverse.socialTier") }}</span>
-                  <span class="item-value">{{ selectedNPC.social_tier }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="item-label">{{ t("simverse.lifeStage") }}</span>
-                  <span class="item-value">{{ selectedNPC.life_stage }}</span>
-                </div>
-                <div class="detail-item">
-                  <span class="item-label">{{ t("simverse.alive") }}</span>
-                  <span class="item-value" :class="{ alive: selectedNPC.is_alive, dead: !selectedNPC.is_alive }">
-                    {{ selectedNPC.is_alive ? t("common.on") : t("common.off") }}
-                  </span>
-                </div>
-              </div>
-
-              <!-- 时间线：该 NPC 的编年史事件流（接真实后端） -->
-              <div v-else-if="focusTab === 'timeline'" class="focus-panel">
-                <div v-if="focusLoading" class="empty-state">{{ t("simverse.loading") }}</div>
-                <template v-else>
-                  <div v-for="ev in npcChronicle" :key="ev.id" class="chrono-row" :class="'imp-' + ev.importance">
-                    <div class="chrono-tick">Tick {{ ev.tick }}</div>
-                    <div class="chrono-title">{{ ev.type_cn }}</div>
-                    <div class="chrono-meta">{{ ev.imp_cn }} · {{ ev.level_cn }}</div>
-                  </div>
-                  <div v-if="npcChronicle.length === 0" class="empty-state">{{ t("simverse.focus.chronicleEmpty") }}</div>
-                </template>
-              </div>
-
-              <!-- 关系：关系网（接真实后端 SocialGraph），点击跳转对方焦点页 -->
-              <div v-else-if="focusTab === 'relations'" class="focus-panel">
-                <div v-if="focusLoading" class="empty-state">{{ t("simverse.loading") }}</div>
-                <template v-else>
-                  <div v-for="rel in npcRelations" :key="rel.target_id" class="rel-row" @click="selectNPC(rel.target)">
-                    <div class="rel-avatar">{{ rel.target?.name?.[0] }}</div>
-                    <div class="rel-info">
-                      <div class="rel-name">{{ rel.target?.name }}</div>
-                      <div class="rel-type">{{ t("simverse.rel." + rel.rel_type) }}</div>
-                    </div>
-                    <div class="rel-affinity">
-                      <span class="rel-affinity-val">{{ rel.affinity }}</span>
-                      <span class="rel-affinity-label">{{ t("simverse.focus.affinity") }}</span>
-                    </div>
-                  </div>
-                  <div v-if="npcRelations.length === 0" class="empty-state">{{ t("simverse.focus.relEmpty") }}</div>
-                </template>
-              </div>
-            </div>
-          </div>
-          </div>
-
-        <!-- 抽卡页：屏幕状态机 gacha 页，转场由 useSceneTransition.transitionToScene 处理 -->
-        <div v-if="screen === 'gacha'" ref="gachaModalRef" class="gacha-modal-overlay" @click.self="closeGachaModal">
-          <div class="gacha-modal-content">
-            <button class="gacha-modal-close" @click="closeGachaModal">✕</button>
-            <div class="gacha-banner-large">
-              <div class="banner-bg"></div>
-              <div class="banner-content">
-                <div class="banner-icon-large">🎴</div>
-                <div class="banner-title-large">{{ t("simverse.gachaTitle") }}</div>
-                <div class="banner-desc-large">{{ t("simverse.gachaDesc") }}</div>
-              </div>
-              <div class="sparkle-layer">
-                <span v-for="i in 12" :key="i" class="sparkle" :style="getSparkleStyle(i)">✦</span>
-              </div>
-            </div>
-
-            <div class="gacha-pool-info">
-              <div class="pool-rate">
-                <span class="rate-label">SSR</span>
-                <span class="rate-val">1%</span>
-              </div>
-              <div class="pool-rate">
-                <span class="rate-label">SR</span>
-                <span class="rate-val">8%</span>
-              </div>
-              <div class="pool-rate">
-                <span class="rate-label">R</span>
-                <span class="rate-val">30%</span>
-              </div>
-              <div class="pool-rate">
-                <span class="rate-label">N</span>
-                <span class="rate-val">61%</span>
-              </div>
-            </div>
-
-            <div class="gacha-actions-large">
-              <button class="gacha-big-btn single" :disabled="isGachaAnimating" @click="doGachaAnimation(1)">
-                <span class="btn-icon-large">🎴</span>
-                <span class="btn-name">{{ t("simverse.singlePull") }}</span>
-                <span class="btn-cost">100 💎</span>
-              </button>
-              <button class="gacha-big-btn ten" :disabled="isGachaAnimating" @click="doGachaAnimation(10)">
-                <span class="btn-icon-large">🎴×10</span>
-                <span class="btn-name">{{ t("simverse.tenPull") }}</span>
-                <span class="btn-cost">900 💎</span>
-                <span class="btn-badge">{{ t("simverse.guaranteedRare") }}</span>
-              </button>
-            </div>
-
-            <div v-if="gachaHistory.length > 0" class="gacha-history">
-              <div class="history-title">最近召唤</div>
-              <div class="history-list">
-                <div v-for="(item, i) in gachaHistory.slice(0, 6)" :key="i"
-                     class="history-item"
-                     :class="item.rarity">
-                  <span class="hist-icon">{{ item.icon }}</span>
-                  <span class="hist-name">{{ item.name }}</span>
-                  <span class="hist-rarity">{{ item.rarity }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 转场已迁移至 GSAP（gachaFlashRef watcher），不再使用 <transition> 包裹 -->
-            <div v-if="isGachaAnimating" ref="gachaFlashRef" class="gacha-animation-overlay">
-              <div class="gacha-cards-container" :class="{ reveal: gachaRevealed }">
-                <div v-for="(item, i) in gachaAnimResults" :key="i"
-                     class="gacha-card-anim"
-                     :class="[item.rarity, { revealed: gachaRevealed }]"
-                     :style="{ animationDelay: (i * 0.1) + 's' }">
-                  <div class="card-inner">
-                    <div class="card-front">
-                      <span class="card-back-icon">✦</span>
-                    </div>
-                    <div class="card-back">
-                      <span class="gacha-item-icon">{{ item.icon }}</span>
-                      <span class="gacha-item-name">{{ item.name }}</span>
-                      <span class="gacha-item-rarity" :class="item.rarity">{{ item.rarity }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div v-if="gachaRevealed" class="gacha-skip-btn" @click="finishGachaAnimation">
-                点击继续
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 事件页：屏幕状态机 event 页，重大编年史事件全屏呈现，替代“一页不变” -->
-        <!-- 转场由 useSceneTransition.transitionToScene 处理，不再使用 <transition> 包裹 -->
-        <div v-if="screen === 'event'" class="event-page">
-          <div class="event-page-header">
-            <button
-              class="btn btn-sm bg-[rgba(139,92,246,0.18)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-3.5 py-2 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
-              @click="backToWorld"
-            >← {{ t("simverse.back") }}</button>
-            <span class="event-page-title">📜 {{ t("simverse.chronicles") }}</span>
-          </div>
-          <div class="event-feed">
-            <div v-for="ev in recentEvents" :key="ev.id" class="event-row" :class="'imp-' + ev.importance">
-              <div class="event-row-tick">Tick {{ ev.tick }}</div>
-              <div class="event-row-title">{{ ev.type_cn }}</div>
-              <div class="event-row-meta">{{ ev.imp_cn }} · {{ ev.level_cn }}</div>
-            </div>
-            <div v-if="recentEvents.length === 0" class="empty-state">{{ t("simverse.noData") }}</div>
-          </div>
-        </div>
-
-        <!-- 干预页：屏幕状态机 intervene 页，上帝视角的世界控制，全部接真实后端能力 -->
-        <!-- 转场由 useSceneTransition.transitionToScene 处理，不再使用 <transition> 包裹 -->
-        <div v-if="screen === 'intervene'" class="intervene-page">
-          <div class="event-page-header">
-            <button
-              class="btn btn-sm bg-[rgba(139,92,246,0.18)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-3.5 py-2 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
-              @click="backToWorld"
-            >← {{ t("simverse.back") }}</button>
-            <span class="event-page-title">🎛️ {{ t("simverse.intervene") }}</span>
-          </div>
-          <div class="intervene-body">
-            <section class="card bg-white/[0.04] border border-[rgba(139,92,246,0.18)] rounded-2xl p-4">
-              <div class="card-title text-[13px] font-bold text-white/85 mb-3">{{ t("simverse.timeControl") }}</div>
-              <div class="ctrl-row">
-                <button
-                  class="btn btn-sm primary bg-[rgba(34,197,94,0.2)] border border-[rgba(34,197,94,0.45)] text-white rounded-xl px-4 py-2.5 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
-                  @click="toggleRunning"
-                >
-                  {{ worldState?.running ? "⏸ " + t("simverse.pause") : "▶ " + t("simverse.resume") }}
-                </button>
-                <button
-                  class="btn btn-sm bg-[rgba(139,92,246,0.16)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-4 py-2.5 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
-                  @click="stepOnce"
-                >⏭ {{ t("simverse.step") }}</button>
-              </div>
-              <div class="ctrl-row">
-                <span class="ctrl-hint">{{ t("simverse.fastForward") }}</span>
-                <input class="ff-input" type="number" min="1" max="200" v-model.number="ffSteps" />
-                <span class="ctrl-hint">{{ t("simverse.steps") }}</span>
-                <button
-                  class="btn btn-sm bg-[rgba(139,92,246,0.16)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-4 py-2.5 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
-                  @click="fastForward"
-                >⏩</button>
-              </div>
-            </section>
-            <section class="card bg-white/[0.04] border border-[rgba(139,92,246,0.18)] rounded-2xl p-4">
-              <div class="card-title text-[13px] font-bold text-white/85 mb-3">{{ t("simverse.worldSnapshot") }}</div>
-              <div class="ctrl-row">
-                <button
-                  class="btn btn-sm bg-[rgba(139,92,246,0.16)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-4 py-2.5 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
-                  @click="doSave"
-                >💾 {{ t("simverse.saveNow") }}</button>
-                <button
-                  class="btn btn-sm bg-[rgba(139,92,246,0.16)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-4 py-2.5 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
-                  @click="doLoad"
-                >📂 {{ t("simverse.loadSave") }}</button>
-              </div>
-              <div v-if="saveMsg" class="ctrl-msg">{{ saveMsg }}</div>
-            </section>
-          </div>
-        </div>
-
-        <!-- 化身页：屏幕状态机 character 页，B 体验（后端角色系统未接入，诚实标注为占位） -->
-        <!-- 转场由 useSceneTransition.transitionToScene 处理，不再使用 <transition> 包裹 -->
-        <div v-if="screen === 'character'" class="character-page">
-          <div class="event-page-header">
-            <button
-              class="btn btn-sm bg-[rgba(139,92,246,0.18)] border border-[rgba(139,92,246,0.3)] text-white rounded-xl px-3.5 py-2 text-sm hover:bg-[rgba(139,92,246,0.28)] active:scale-95 transition-all duration-150"
-              @click="backToWorld"
-            >← {{ t("simverse.back") }}</button>
-            <span class="event-page-title">🧑 {{ t("simverse.character") }}</span>
-          </div>
-          <div class="character-body">
-            <div class="stub-banner">⚠️ {{ t("simverse.bStubHint") }}</div>
-            <div class="char-card">
-              <div class="char-avatar">⚔️</div>
-              <div class="char-name">冒险者 · Lv.{{ playerLevel }}</div>
-              <div class="char-res">
-                <span>💎 {{ playerDiamond }}</span>
-                <span>🪙 {{ playerGold }}</span>
-                <span>⚡ {{ playerStamina }}/120</span>
-              </div>
-              <div class="char-skills">
-                <span v-for="s in playerSkills.slice(0, 4)" :key="s.id" class="char-skill">{{ s.icon }} {{ s.name }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+          <WorldFocusScene
+            v-if="screen === 'focus' && selectedNPC"
+            :selected-npc="selectedNPC"
+            :focus-tab="focusTab"
+            :npc-chronicle="npcChronicle"
+            :npc-relations="npcRelations"
+            :focus-loading="focusLoading"
+            :squad-ids="squadIds"
+            :max-squad="MAX_SQUAD"
+            @close="backToWorld"
+            @toggle-squad="toggleSquad"
+            @focus-tab-change="(tab: 'identity' | 'timeline' | 'relations') => focusTab = tab"
+            @select-npc="selectNPC"
+          />
+          <WorldGachaScene
+            v-if="screen === 'gacha'"
+            :is-gacha-animating="isGachaAnimating"
+            :gacha-revealed="gachaRevealed"
+            :gacha-anim-results="gachaAnimResults"
+            :gacha-history="gachaHistory"
+            @close="closeGachaModal"
+            @gacha="doGachaAnimation"
+            @finish-gacha="finishGachaAnimation"
+          />
+          <WorldEventScene
+            v-if="screen === 'event'"
+            :recent-events="recentEvents"
+            @close="backToWorld"
+          />
+          <WorldInterveneScene
+            v-if="screen === 'intervene'"
+            :world-state="worldState"
+            :ff-steps="ffSteps"
+            :save-msg="saveMsg"
+            @close="backToWorld"
+            @toggle-running="toggleRunning"
+            @step-once="stepOnce"
+            @update:ffSteps="ffSteps = $event"
+            @fast-forward="fastForward"
+            @save="doSave"
+            @load="doLoad"
+          />
+          <WorldCharacterScene
+            v-if="screen === 'character'"
+            :player-level="playerLevel"
+            :player-diamond="playerDiamond"
+            :player-gold="playerGold"
+            :player-stamina="playerStamina"
+            :player-skills="playerSkills"
+            @close="backToWorld"
+          />
         </div>
     </div>
   </ion-content>
@@ -959,7 +704,13 @@
 <script setup lang="ts">
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { IonInfiniteScroll, IonInfiniteScrollContent, IonLabel, IonSegment, IonSegmentButton } from "@ionic/vue";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+
+const WorldFocusScene = defineAsyncComponent(() => import('./WorldFocusScene.vue'))
+const WorldGachaScene = defineAsyncComponent(() => import('./WorldGachaScene.vue'))
+const WorldEventScene = defineAsyncComponent(() => import('./WorldEventScene.vue'))
+const WorldInterveneScene = defineAsyncComponent(() => import('./WorldInterveneScene.vue'))
+const WorldCharacterScene = defineAsyncComponent(() => import('./WorldCharacterScene.vue'))
 import { useRouter } from "vue-router";
 import { useSimverseAnimations } from "@/composables/useSimverseAnimations";
 import { usePhaserWorld } from "@/composables/usePhaserWorld";

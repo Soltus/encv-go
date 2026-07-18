@@ -20,9 +20,9 @@
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  background: rgba(18, 18, 38, 0.82); // TODO: tokenize
+  background: $sv-bg-surface; 
   backdrop-filter: blur(14px);
-  border: 1px solid rgba(139, 92, 246, 0.25); // TODO: tokenize
+  border: 1px solid $sv-border-active; 
   border-radius: 20px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
   z-index: 20;
@@ -43,7 +43,7 @@
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 
   &:hover {
-    background: rgba(139, 92, 246, 0.16); // TODO: tokenize
+    background: rgba(139, 92, 246, 0.16);
   }
 
   &:active {
@@ -51,8 +51,8 @@
   }
 
   &.active {
-    background: rgba(139, 92, 246, 0.28); // TODO: tokenize
-    box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.55); // TODO: tokenize
+    background: $sv-border-active; 
+    box-shadow: inset 0 0 0 1px $sv-glow-primary; 
 
     .bar-label {
       color: $sv-text-primary;
@@ -80,7 +80,7 @@
 .more-pop {
   position: absolute;
   inset: 0;
-  background: rgba(8, 8, 20, 0.55); // TODO: tokenize
+  background: rgba(0, 0, 0, 0.4); 
   backdrop-filter: blur(2px);
   display: flex;
   align-items: flex-end;
@@ -95,8 +95,8 @@
   width: min(92%, 520px);
   margin-bottom: 92px;
   padding: 18px;
-  background: rgba(20, 20, 42, 0.94); // TODO: tokenize
-  border: 1px solid rgba(139, 92, 246, 0.3); // TODO: tokenize
+  background: $sv-bg-surface; 
+  border: 1px solid $sv-border-active; 
   border-radius: 20px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
 }
@@ -107,14 +107,14 @@
   align-items: center;
   gap: 6px;
   padding: 14px 6px;
-  background: rgba(139, 92, 246, 0.1); // TODO: tokenize
-  border: 1px solid rgba(139, 92, 246, 0.18); // TODO: tokenize
+  background: rgba(139, 92, 246, 0.1); 
+  border: 1px solid $sv-border-subtle; 
   border-radius: 14px;
   cursor: pointer;
   transition: all 0.16s ease;
 
   &:hover {
-    background: rgba(139, 92, 246, 0.22); // TODO: tokenize
+    background: rgba(139, 92, 246, 0.22);
   }
 
   &:active {
@@ -122,8 +122,8 @@
   }
 
   &.gacha {
-    background: rgba(255, 215, 0, 0.12); // TODO: tokenize
-    border-color: rgba(255, 215, 0, 0.35); // TODO: tokenize
+    background: rgba(255, 215, 0, 0.12); 
+    border-color: rgba(255, 215, 0, 0.35); 
   }
 }
 

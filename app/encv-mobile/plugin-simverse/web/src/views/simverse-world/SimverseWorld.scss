@@ -11,11 +11,6 @@
 @use './top-bar';
 @use './bottom-bar';
 @use './side-panel';
-@use './gacha';
-@use './event';
-@use './intervene';
-@use './character';
-@use './focus';
 @use './common';
 
 // 全局基础容器样式（最小集，详细样式由各模块补充）

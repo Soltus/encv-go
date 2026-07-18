@@ -14,66 +14,80 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <div v-if="error" class="state-container">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-      </div>
+    <ion-content>
+      <div class="p-4 space-y-4">
+        <div v-if="error" class="state-container">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+        </div>
 
-      <div class="world-hero">
-        <div ref="worldIconRef" class="world-icon">🌍</div>
-        <h2>{{ t("simverse.home.title") }}</h2>
-        <p class="world-sub">{{ t("simverse.home.subtitle") }}</p>
-        <ion-badge :color="isRunning ? 'success' : 'medium'" size="large">
-          {{ isRunning ? t("simverse.intervention.running") : t("simverse.intervention.stopped") }}
-        </ion-badge>
-      </div>
+        <div class="world-hero">
+          <div ref="worldIconRef" class="world-icon">🌍</div>
+          <h2>{{ t("simverse.home.title") }}</h2>
+          <p class="world-sub">{{ t("simverse.home.subtitle") }}</p>
+          <span class="ui-chip" :class="isRunning ? '!bg-success/15 !text-success !border-success/30' : '!bg-base-content/15 !text-base-content/70 !border-base-content/20'">
+            {{ isRunning ? t("simverse.intervention.running") : t("simverse.intervention.stopped") }}
+          </span>
+        </div>
 
-      <ion-list :inset="true">
-        <ion-list-header><ion-label>{{ t("simverse.configDetails") }}</ion-label></ion-list-header>
-        <ion-item>
-          <ion-label>{{ t("simverse.tick") }}</ion-label>
-          <ion-note slot="end">{{ currentTick }}</ion-note>
-        </ion-item>
-        <ion-item>
-          <ion-label>{{ t("simverse.population") }}</ion-label>
-          <ion-note slot="end">{{ npcCount }}</ion-note>
-        </ion-item>
-        <ion-item>
-          <ion-label>{{ t("simverse.memory") }}</ion-label>
-          <ion-note slot="end">{{ totalMemoryMB.toFixed(1) }} MB</ion-note>
-        </ion-item>
-        <ion-item>
-          <ion-label>{{ t("simverse.perfTier") }}</ion-label>
-          <ion-note slot="end">{{ currentTier }}</ion-note>
-        </ion-item>
-      </ion-list>
+        <div class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.configDetails") }}</div>
+            <div class="space-y-1">
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.tick") }}</span>
+                <span class="text-sm text-base-content/70 font-mono">{{ currentTick }}</span>
+              </div>
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.population") }}</span>
+                <span class="text-sm text-base-content/70 font-mono">{{ npcCount }}</span>
+              </div>
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.memory") }}</span>
+                <span class="text-sm text-base-content/70 font-mono">{{ totalMemoryMB.toFixed(1) }} MB</span>
+              </div>
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.perfTier") }}</span>
+                <span class="text-sm text-base-content/70 font-mono">{{ currentTier }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-      <div class="entry-grid">
-        <ion-button expand="block" color="primary" @click="enterWorld">
-          🎮 {{ t("simverse.home.enterWorld") }}
-        </ion-button>
-        <ion-button expand="block" fill="outline" @click="goBehavior">
-          🧠 {{ t("simverse.behavior") }}
-        </ion-button>
-        <ion-button expand="block" fill="outline" @click="goChronicles">
-          📜 {{ t("simverse.chronicles") }}
-        </ion-button>
-        <ion-button expand="block" fill="outline" @click="goIntervention">
-          🛠️ {{ t("simverse.intervention") }}
-        </ion-button>
-        <ion-button expand="block" fill="outline" @click="goSettings">
-          ⚙️ {{ t("simverse.settings") }}
-        </ion-button>
-        <ion-button expand="block" fill="outline" @click="goQuests">
-          📜 {{ t("simverse.quests") }}
-        </ion-button>
-        <ion-button expand="block" fill="outline" @click="goSocial">
-          💞 {{ t("simverse.social") }}
-        </ion-button>
-        <ion-button expand="block" fill="outline" @click="goSquad">
-          🃏 {{ t("simverse.squad") }}
-        </ion-button>
+        <div class="entry-grid">
+          <button type="button" class="ui-button w-full" @click="enterWorld">
+            <ion-icon :icon="gameControllerOutline" class="mr-2" />
+            {{ t("simverse.home.enterWorld") }}
+          </button>
+          <button type="button" class="ui-button w-full !bg-base-200 !text-base-content hover:!bg-base-300" @click="goBehavior">
+            <ion-icon :icon="sparklesOutline" class="mr-2" />
+            {{ t("simverse.behavior") }}
+          </button>
+          <button type="button" class="ui-button w-full !bg-base-200 !text-base-content hover:!bg-base-300" @click="goChronicles">
+            <ion-icon :icon="documentTextOutline" class="mr-2" />
+            {{ t("simverse.chronicles") }}
+          </button>
+          <button type="button" class="ui-button w-full !bg-base-200 !text-base-content hover:!bg-base-300" @click="goIntervention">
+            <ion-icon :icon="constructOutline" class="mr-2" />
+            {{ t("simverse.intervention") }}
+          </button>
+          <button type="button" class="ui-button w-full !bg-base-200 !text-base-content hover:!bg-base-300" @click="goSettings">
+            <ion-icon :icon="settingsOutline" class="mr-2" />
+            {{ t("simverse.settings") }}
+          </button>
+          <button type="button" class="ui-button w-full !bg-base-200 !text-base-content hover:!bg-base-300" @click="goQuests">
+            <ion-icon :icon="ribbonOutline" class="mr-2" />
+            {{ t("simverse.quests") }}
+          </button>
+          <button type="button" class="ui-button w-full !bg-base-200 !text-base-content hover:!bg-base-300" @click="goSocial">
+            <ion-icon :icon="heartOutline" class="mr-2" />
+            {{ t("simverse.social") }}
+          </button>
+          <button type="button" class="ui-button w-full !bg-base-200 !text-base-content hover:!bg-base-300" @click="goSquad">
+            <ion-icon :icon="peopleOutline" class="mr-2" />
+            {{ t("simverse.squad") }}
+          </button>
+        </div>
       </div>
     </ion-content>
   </ion-page>
@@ -83,22 +97,26 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonBadge,
-  IonButton,
   IonButtons,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonTitle,
   IonToolbar,
 } from "@ionic/vue";
-import { alertCircleOutline, refreshOutline } from "ionicons/icons";
+import {
+  alertCircleOutline,
+  constructOutline,
+  documentTextOutline,
+  gameControllerOutline,
+  heartOutline,
+  peopleOutline,
+  refreshOutline,
+  ribbonOutline,
+  settingsOutline,
+  sparklesOutline,
+} from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useGsap } from "@/composables/useGsap";

@@ -42,11 +42,11 @@
   max-height: 86%;
   display: flex;
   flex-direction: column;
-  background: rgba(15, 15, 35, 0.98); // TODO: tokenize
+  background: $sv-bg-deep; 
   border-radius: 18px;
-  border: 1px solid rgba(139, 92, 246, 0.25); // TODO: tokenize
+  border: 1px solid $sv-border-active; 
   overflow: hidden;
-  animation: modalIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: modalIn 0.25s ease-out;
 }
 
 // —— 详情头部 ——
@@ -55,8 +55,8 @@
   align-items: center;
   gap: 14px;
   padding: 18px;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.15)); // TODO: tokenize
-  border-bottom: 1px solid rgba(139, 92, 246, 0.1); // TODO: tokenize
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.15));
+  border-bottom: 1px solid rgba(139, 92, 246, 0.1); 
   position: relative;
 }
 
@@ -64,7 +64,7 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, $color-primary, #ec4899); // TODO: tokenize
+  background: linear-gradient(135deg, $color-primary, #ec4899); 
   display: flex;
   align-items: center;
   justify-content: center;
@@ -172,7 +172,7 @@
 
 .build-synergy {
   font-size: 11px;
-  color: #fbbf24; // TODO: tokenize
+  color: #fbbf24; 
   font-weight: 600;
 }
 
@@ -188,8 +188,8 @@
   flex: 1;
   padding: 9px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(139, 92, 246, 0.5); // TODO: tokenize
-  background: rgba(139, 92, 246, 0.18); // TODO: tokenize
+  border: 1px solid $sv-glow-primary; 
+  background: $sv-border-subtle; 
   color: $sv-text-primary;
   font-size: 13px;
   font-weight: 600;
@@ -197,13 +197,13 @@
   transition: all 0.2s;
 
   &:hover:not(:disabled) {
-    background: rgba(139, 92, 246, 0.32); // TODO: tokenize
+    background: rgba(139, 92, 246, 0.32);
   }
 
   &.active {
-    background: rgba(239, 68, 68, 0.18); // TODO: tokenize
-    border-color: rgba(239, 68, 68, 0.5); // TODO: tokenize
-    color: #fca5a5; // TODO: tokenize
+    background: rgba(239, 68, 68, 0.18); 
+    border-color: $sv-glow-error; 
+    color: #fca5a5; 
   }
 
   &:disabled {
@@ -223,7 +223,7 @@
   --background: transparent;
 
   &::part(indicator) {
-    background: rgba(139, 92, 246, 0.4); // TODO: tokenize
+    background: $sv-glow-primary; 
   }
 }
 
@@ -283,7 +283,7 @@
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: linear-gradient(135deg, $color-primary, #ec4899); // TODO: tokenize
+  background: linear-gradient(135deg, $color-primary, #ec4899); 
   display: flex;
   align-items: center;
   justify-content: center;
@@ -319,7 +319,7 @@
 .rel-affinity-val {
   font-size: 15px;
   font-weight: 700;
-  color: #fbbf24; // TODO: tokenize
+  color: #fbbf24; 
 }
 
 .rel-affinity-label {
@@ -335,14 +335,14 @@
   gap: 12px;
   padding: 16px;
   margin-bottom: 16px;
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(236, 72, 153, 0.2)); // TODO: tokenize
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(236, 72, 153, 0.2));
   border-radius: 12px;
-  border: 1px solid rgba(99, 102, 241, 0.3); // TODO: tokenize
+  border: 1px solid rgba(99, 102, 241, 0.3); 
 }
 
 .battle-banner {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(249, 115, 22, 0.2)); // TODO: tokenize
-  border-color: rgba(239, 68, 68, 0.3); // TODO: tokenize
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(249, 115, 22, 0.2));
+  border-color: $sv-glow-error; 
 }
 
 .explore-banner .banner-icon,
@@ -385,13 +385,13 @@
 
   &:hover {
     background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(99, 102, 241, 0.5); // TODO: tokenize
+    border-color: rgba(99, 102, 241, 0.5); 
     transform: translateX(4px);
   }
 }
 
 .enemy-card:hover {
-  border-color: rgba(239, 68, 68, 0.5); // TODO: tokenize
+  border-color: $sv-glow-error; 
 }
 
 .region-icon,
@@ -402,12 +402,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(99, 102, 241, 0.2); // TODO: tokenize
+  background: rgba(99, 102, 241, 0.2); 
   border-radius: 10px;
 }
 
 .enemy-icon {
-  background: rgba(239, 68, 68, 0.2); // TODO: tokenize
+  background: $sv-glow-error; 
 }
 
 .region-info,
@@ -432,7 +432,7 @@
 }
 
 .enemy-level {
-  color: #fbbf24; // TODO: tokenize
+  color: #fbbf24; 
   font-weight: 600;
 }
 
@@ -443,7 +443,7 @@
 
 .fight-btn {
   padding: 8px 16px;
-  background: linear-gradient(135deg, $color-error, #f97316); // TODO: tokenize
+  background: linear-gradient(135deg, $color-error, #f97316); 
   color: #ffffff;
   border: none;
   border-radius: 8px;
@@ -458,22 +458,22 @@
 }
 
 .explore-btn {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3)); // TODO: tokenize
-  border: 1px solid rgba(99, 102, 241, 0.4); // TODO: tokenize
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3));
+  border: 1px solid rgba(99, 102, 241, 0.4); 
 
   &.active {
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.5)); // TODO: tokenize
-    box-shadow: 0 0 20px rgba(99, 102, 241, 0.4); // TODO: tokenize
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.5));
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.4); 
   }
 }
 
 .battle-btn {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(249, 115, 22, 0.3)); // TODO: tokenize
-  border: 1px solid rgba(239, 68, 68, 0.4); // TODO: tokenize
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(249, 115, 22, 0.3));
+  border: 1px solid $sv-glow-error; 
 
   &.active {
-    background: linear-gradient(135deg, rgba(239, 68, 68, 0.5), rgba(249, 115, 22, 0.5)); // TODO: tokenize
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); // TODO: tokenize
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.5), rgba(249, 115, 22, 0.5));
+    box-shadow: 0 0 20px $sv-glow-error; 
   }
 }
 
@@ -487,9 +487,9 @@
   display: flex;
   justify-content: space-around;
   align-items: center;
-  background: linear-gradient(180deg, transparent 0%, rgba(10, 10, 26, 0.95) 30%); // TODO: tokenize
+  background: linear-gradient(180deg, transparent 0%, rgba(10, 10, 26, 0.95) 30%);
   backdrop-filter: blur(20px);
-  border-top: 1px solid rgba(139, 92, 246, 0.2); // TODO: tokenize
+  border-top: 1px solid $sv-border-subtle; 
   z-index: 15;
   padding-bottom: 8px;
 }
@@ -527,7 +527,7 @@
 }
 
 .gacha-nav .nav-icon {
-  animation: sparkle-pulse 2s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.6));
 }
 
 // —— 装饰性 @keyframes（保留为 CSS：孤立装饰动画，无需时序控制） ——
@@ -535,15 +535,12 @@
 @keyframes modalIn {
   from {
     opacity: 0;
-    transform: scale(0.9) translateY(20px);
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
-    transform: scale(1) translateY(0);
+    transform: translateY(0);
   }
 }
 
-@keyframes sparkle-pulse {
-  0%, 100% { filter: brightness(1); }
-  50%      { filter: brightness(1.5) drop-shadow(0 0 8px #fbbf24); }
-}
+

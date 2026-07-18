@@ -15,42 +15,52 @@
     </ion-header>
 
     <ion-content>
-      <div v-if="loading" class="state-box">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
-      <div v-else-if="error" class="state-box">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-      <div v-else-if="!regions.length" class="state-box">
-        <ion-icon :icon="map" size="large" color="medium" />
-        <p>{{ t("simverse.noRegions") }}</p>
-      </div>
+      <div class="p-4 space-y-3">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
+        <div v-else-if="!regions.length" class="state-box">
+          <ion-icon :icon="map" size="large" color="medium" />
+          <p>{{ t("simverse.noRegions") }}</p>
+        </div>
 
-      <ion-list v-else :inset="true">
-        <ion-list-header>
-          <ion-label>{{ t("simverse.total") }}: {{ total }}</ion-label>
-        </ion-list-header>
-        <ion-item
-          v-for="r in regions"
-          :key="r.region_id"
-          button
-          detail
-          @click="goDetail(r.region_id)"
-        >
-          <ion-icon :icon="location" slot="start" color="success" />
-          <ion-label>
-            <h3>{{ t("simverse.regions") }} #{{ r.region_id }}</h3>
-            <p>
-              <span class="meta">{{ t("simverse.population") }}: {{ r.population }}</span>
-              <span class="meta">{{ t("simverse.npc") }}s: {{ r.npc_count }}</span>
-            </p>
-          </ion-label>
-          <ion-note slot="end" color="medium">Lv.{{ r.avg_level.toFixed(1) }}</ion-note>
-        </ion-item>
-      </ion-list>
+        <template v-else>
+          <div class="ui-header justify-between">
+            <span>{{ t("simverse.total") }}: {{ total }}</span>
+          </div>
+
+          <div class="space-y-2">
+            <div
+              v-for="r in regions"
+              :key="r.region_id"
+              class="ui-card cursor-pointer hover:scale-[0.98] active:scale-[0.97] transition-transform"
+              @click="goDetail(r.region_id)"
+            >
+              <div class="p-3 flex items-center gap-3">
+                <div class="ui-bubble !p-0 !w-10 !h-10 flex items-center justify-center flex-shrink-0 !bg-success/15 !border-success/30">
+                  <ion-icon :icon="location" class="text-success" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-base font-semibold m-0 mb-1">{{ t("simverse.regions") }} #{{ r.region_id }}</h3>
+                  <div class="flex items-center gap-3 text-xs text-base-content/60">
+                    <span>{{ t("simverse.population") }}: {{ r.population }}</span>
+                    <span>{{ t("simverse.npc") }}s: {{ r.npc_count }}</span>
+                  </div>
+                </div>
+                <div class="flex-shrink-0 text-xs font-mono text-base-content/70">
+                  Lv.{{ r.avg_level.toFixed(1) }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -59,16 +69,10 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonButton,
   IonButtons,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSpinner,
   IonTitle,
@@ -119,12 +123,5 @@ onMounted(reload);
   justify-content: center;
   padding: 60px 20px;
   gap: 16px;
-}
-
-.meta {
-  font-size: 12px;
-  color: var(--color-base-content);
-  opacity: 0.7;
-  margin-right: 8px;
 }
 </style>

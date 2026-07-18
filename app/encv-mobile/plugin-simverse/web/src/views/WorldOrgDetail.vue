@@ -14,8 +14,8 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <div class="page-root">
+    <ion-content>
+      <div class="page-root p-4 space-y-4">
       <div v-if="loading" class="state-box">
         <ion-spinner name="crescent" />
         <p>{{ t("settings.loading") }}</p>
@@ -23,41 +23,72 @@
       <div v-else-if="error" class="state-box">
         <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
         <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
+        <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
       </div>
       <template v-else-if="org">
-        <ion-card>
-          <ion-card-header>
-            <ion-card-title>{{ org.name }}</ion-card-title>
-            <ion-card-subtitle>
-              <ion-badge color="tertiary">{{ org.org_type }}</ion-badge>
-              #{{ org.org_id }}
-            </ion-card-subtitle>
-          </ion-card-header>
-          <ion-card-content>
-            <ion-grid>
-              <ion-row>
-                <ion-col><div class="stat-label">{{ t("simverse.memberCount") }}</div><div class="stat-val">{{ org.member_count }}</div></ion-col>
-                <ion-col><div class="stat-label">{{ t("simverse.aliveCount") }}</div><div class="stat-val">{{ org.alive_count }}</div></ion-col>
-              </ion-row>
-              <ion-row>
-                <ion-col><div class="stat-label">{{ t("simverse.avgLevel") }}</div><div class="stat-val">{{ org.avg_level.toFixed(1) }}</div></ion-col>
-                <ion-col><div class="stat-label">{{ t("simverse.avgWealthTier") }}</div><div class="stat-val">{{ org.avg_wealth_tier.toFixed(1) }}</div></ion-col>
-              </ion-row>
-            </ion-grid>
-          </ion-card-content>
-        </ion-card>
+        <div class="ui-card">
+          <div class="p-4">
+            <h2 class="text-xl font-bold m-0 mb-1">{{ org.name }}</h2>
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="ui-chip !text-xs !py-0.5 !bg-tertiary/15 !text-tertiary !border-tertiary/30">
+                {{ org.org_type }}
+              </span>
+              <span class="text-xs text-base-content/70 font-mono">#{{ org.org_id }}</span>
+            </div>
+          </div>
+        </div>
 
-        <ion-list :inset="true">
-          <ion-item button detail @click="go(`/org/${org.org_id}/members`)">
-            <ion-icon :icon="people" slot="start" color="primary" />
-            <ion-label>{{ t("simverse.orgMembers") }}</ion-label>
-          </ion-item>
-          <ion-item button detail @click="go(`/org/${org.org_id}/territory`)">
-            <ion-icon :icon="map" slot="start" color="success" />
-            <ion-label>{{ t("simverse.orgTerritory") }}</ion-label>
-          </ion-item>
-        </ion-list>
+        <div class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.stats") }}</div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="p-3 bg-base-200 rounded-lg text-center">
+                <div class="stat-label">{{ t("simverse.memberCount") }}</div>
+                <div class="stat-val">{{ org.member_count }}</div>
+              </div>
+              <div class="p-3 bg-base-200 rounded-lg text-center">
+                <div class="stat-label">{{ t("simverse.aliveCount") }}</div>
+                <div class="stat-val">{{ org.alive_count }}</div>
+              </div>
+              <div class="p-3 bg-base-200 rounded-lg text-center">
+                <div class="stat-label">{{ t("simverse.avgLevel") }}</div>
+                <div class="stat-val">{{ org.avg_level.toFixed(1) }}</div>
+              </div>
+              <div class="p-3 bg-base-200 rounded-lg text-center">
+                <div class="stat-label">{{ t("simverse.avgWealthTier") }}</div>
+                <div class="stat-val">{{ org.avg_wealth_tier.toFixed(1) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.actions") }}</div>
+            <div class="space-y-1">
+              <div
+                class="flex items-center gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+                @click="go(`/org/${org.org_id}/members`)"
+              >
+                <ion-icon :icon="peopleOutline" class="text-primary text-xl" />
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium">{{ t("simverse.orgMembers") }}</div>
+                </div>
+                <ion-icon :icon="chevronForwardOutline" class="text-base-content/40" />
+              </div>
+              <div
+                class="flex items-center gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+                @click="go(`/org/${org.org_id}/territory`)"
+              >
+                <ion-icon :icon="mapOutline" class="text-success text-xl" />
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium">{{ t("simverse.orgTerritory") }}</div>
+                </div>
+                <ion-icon :icon="chevronForwardOutline" class="text-base-content/40" />
+              </div>
+            </div>
+          </div>
+        </div>
       </template>
       </div>
     </ion-content>
@@ -68,29 +99,17 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonBadge,
   IonButton,
   IonButtons,
-  IonCard,
-  IonCardContent,
-  IonCardHeader,
-  IonCardSubtitle,
-  IonCardTitle,
-  IonCol,
   IonContent,
-  IonGrid,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
   IonPage,
-  IonRow,
   IonSpinner,
   IonTitle,
   IonToolbar,
 } from "@ionic/vue";
-import { alertCircleOutline, map, people, refreshOutline } from "ionicons/icons";
+import { alertCircleOutline, chevronForwardOutline, mapOutline, peopleOutline, refreshOutline } from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useGsap } from "@/composables/useGsap";
@@ -102,9 +121,6 @@ const route = useRoute();
 const router = useRouter();
 const { loadOrgDetail } = useSimverse();
 const { gsap } = useGsap();
-// useRouteTransition exposes onEnter/onLeave hooks for a parent <Transition> wrapper.
-// App.vue currently uses plain ion-router-outlet, so this view self-animates
-// .page-root via gsap.fromTo as a fallback (matches useRouteTransition defaults).
 useRouteTransition();
 
 const orgId = Number(route.params.id);
@@ -130,7 +146,6 @@ function go(path: string) {
 
 onMounted(() => {
   reload();
-  // 详情路由入场动效（与 useRouteTransition 默认参数一致）
   const el = document.querySelector(".page-root");
   if (el) {
     gsap.fromTo(el, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out" });
@@ -155,5 +170,6 @@ onMounted(() => {
 .stat-val {
   font-size: 22px;
   font-weight: 700;
+  margin-top: 4px;
 }
 </style>

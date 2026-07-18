@@ -60,14 +60,14 @@
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background: rgba(10, 10, 26, 0.9); // TODO: tokenize (基于 sv-bg-deep 的半透明)
+  background: rgba(0, 0, 0, 0.7); 
   z-index: 5;
 }
 
 .loading-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid rgba(139, 92, 246, 0.2); // TODO: tokenize
+  border: 3px solid $sv-border-subtle; 
   border-top-color: $color-primary;
   border-radius: 50%;
   // spin 动画已迁移至 SimverseWorld.vue 的 GSAP loadingSpinTween
@@ -75,7 +75,7 @@
 
 .loading-text {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.6); // TODO: tokenize
+  color: $sv-text-secondary; 
 }
 
 .map-grid {

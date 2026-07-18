@@ -15,42 +15,56 @@
     </ion-header>
 
     <ion-content>
-      <div v-if="loading" class="state-box">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
-      <div v-else-if="error" class="state-box">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-      <div v-else-if="!orgs.length" class="state-box">
-        <ion-icon :icon="business" size="large" color="medium" />
-        <p>{{ t("simverse.noOrgs") }}</p>
-      </div>
+      <div class="p-4 space-y-3">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
+        <div v-else-if="!orgs.length" class="state-box">
+          <ion-icon :icon="business" size="large" color="medium" />
+          <p>{{ t("simverse.noOrgs") }}</p>
+        </div>
 
-      <ion-list v-else :inset="true">
-        <ion-list-header>
-          <ion-label>{{ t("simverse.total") }}: {{ total }}</ion-label>
-        </ion-list-header>
-        <ion-item
-          v-for="org in orgs"
-          :key="org.org_id"
-          button
-          detail
-          @click="goDetail(org.org_id)"
-        >
-          <ion-icon :icon="gitNetwork" slot="start" color="primary" />
-          <ion-label>
-            <h3>{{ org.name }}</h3>
-            <p>
-              <ion-badge color="tertiary" size="small">{{ org.org_type }}</ion-badge>
-              <span class="meta">{{ t("simverse.memberCount") }}: {{ org.member_count }}</span>
-            </p>
-          </ion-label>
-          <ion-note slot="end" color="medium">Lv.{{ org.avg_level.toFixed(1) }}</ion-note>
-        </ion-item>
-      </ion-list>
+        <template v-else>
+          <div class="ui-header justify-between">
+            <span>{{ t("simverse.total") }}: {{ total }}</span>
+          </div>
+
+          <div class="space-y-2">
+            <div
+              v-for="org in orgs"
+              :key="org.org_id"
+              class="ui-card cursor-pointer hover:scale-[0.98] active:scale-[0.97] transition-transform"
+              @click="goDetail(org.org_id)"
+            >
+              <div class="p-3 flex items-center gap-3">
+                <div class="ui-bubble !p-0 !w-10 !h-10 flex items-center justify-center flex-shrink-0 !bg-primary/15 !border-primary/30">
+                  <ion-icon :icon="gitNetwork" class="text-primary" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-base font-semibold m-0 mb-1 truncate">{{ org.name }}</h3>
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="ui-chip !text-xs !py-0.5 !bg-tertiary/15 !text-tertiary !border-tertiary/30">
+                      {{ org.org_type }}
+                    </span>
+                    <span class="text-xs text-base-content/60">
+                      {{ t("simverse.memberCount") }}: {{ org.member_count }}
+                    </span>
+                  </div>
+                </div>
+                <div class="flex-shrink-0 text-xs font-mono text-base-content/70">
+                  Lv.{{ org.avg_level.toFixed(1) }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -59,17 +73,10 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonBadge,
-  IonButton,
   IonButtons,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSpinner,
   IonTitle,
@@ -120,12 +127,5 @@ onMounted(reload);
   justify-content: center;
   padding: 60px 20px;
   gap: 16px;
-}
-
-.meta {
-  font-size: 12px;
-  color: var(--color-base-content);
-  opacity: 0.7;
-  margin-left: 8px;
 }
 </style>

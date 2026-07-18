@@ -8,14 +8,14 @@
         <ion-title>{{ title }}</ion-title>
       </ion-toolbar>
     </ion-header>
-    <ion-content class="ion-padding">
-      <div class="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+    <ion-content>
+      <div class="p-4 flex flex-col items-center justify-center min-h-[60vh] gap-4">
         <div class="text-5xl opacity-60">{{ icon }}</div>
         <h2 class="text-2xl font-bold">{{ title }}</h2>
         <p class="text-base-content/60 text-center max-w-md">
           该功能正在重构中，敬请期待。这是混合架构拆分后的详情路由占位页面，将在 P3/P4 阶段实现完整功能。
         </p>
-        <button class="btn btn-primary" @click="goBack">返回世界</button>
+        <button type="button" class="ui-button" @click="goBack">返回世界</button>
       </div>
     </ion-content>
   </ion-page>

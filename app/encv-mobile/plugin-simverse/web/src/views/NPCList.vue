@@ -13,75 +13,86 @@
         </ion-buttons>
       </ion-toolbar>
       <ion-toolbar>
-        <ion-searchbar
-          v-model="searchQuery"
-          :placeholder="t('simverse.search')"
-          mode="ios"
-          :debounce="200"
-        />
+        <div class="px-2 w-full">
+          <div class="ui-input">
+            <ion-icon :icon="searchOutline" class="text-base-content/50 mr-2" />
+            <input
+              v-model="searchQuery"
+              :placeholder="t('simverse.search')"
+              class="flex-1 bg-transparent outline-none text-base-content"
+            />
+          </div>
+        </div>
       </ion-toolbar>
     </ion-header>
 
     <ion-content>
-      <div v-if="loading" class="loading-container">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
+      <div class="p-4 space-y-3">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
 
-      <div v-else-if="error" class="error-container">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
 
-      <ion-list v-else :inset="true" class="list-container">
-        <ion-list-header>
-          <ion-label>{{ t("simverse.total") }}: {{ total }}</ion-label>
-        </ion-list-header>
-        <ion-item
-          v-for="npc in filteredNPCs"
-          :key="npc.id"
-          class="list-item"
-          button
-          detail
-          @click="goToDetail(npc.id)"
-        >
-          <div slot="start" class="npc-avatar">
-            {{ getAvatarEmoji(npc) }}
+        <template v-else>
+          <div class="ui-header justify-between">
+            <span>{{ t("simverse.total") }}: {{ total }}</span>
           </div>
-          <ion-label>
-            <h3>{{ npc.name }}</h3>
-            <p>
-              <ion-badge :color="getProfessionColor(npc.profession)" size="small">
-                {{ npc.profession }}
-              </ion-badge>
-              <span class="npc-meta">
-                {{ npc.age }}{{ t("simverse.yearsOld") }} · {{ npc.species }}
-              </span>
-            </p>
-            <p class="npc-secondary">
-              <span :class="{ 'alive': npc.is_alive, 'dead': !npc.is_alive }">
-                {{ npc.is_alive ? '❤' : '💀' }}
-                {{ npc.is_alive ? t("simverse.alive") : t("simverse.deceased") }}
-              </span>
-              <span v-if="npc.health !== undefined" class="hp-bar">
-                HP: {{ Math.round(npc.health) }}/{{ npc.max_health }}
-              </span>
-            </p>
-          </ion-label>
-          <ion-note slot="end" color="medium">Lv.{{ npc.level }}</ion-note>
-        </ion-item>
-      </ion-list>
 
-      <ion-infinite-scroll
-        v-if="!loading && !error && hasMore"
-        @ionInfinite="loadMore"
-        threshold="100px"
-      >
-        <ion-infinite-scroll-content
-          :loading-text="t('settings.loading')"
-        />
-      </ion-infinite-scroll>
+          <div class="space-y-2 list-container">
+            <div
+              v-for="npc in filteredNPCs"
+              :key="npc.id"
+              class="ui-card list-item cursor-pointer hover:scale-[0.98] active:scale-[0.97] transition-transform"
+              @click="goToDetail(npc.id)"
+            >
+              <div class="p-3 flex items-center gap-3">
+                <div class="ui-bubble !p-0 !w-10 !h-10 flex items-center justify-center text-xl flex-shrink-0">
+                  {{ getAvatarEmoji(npc) }}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-base font-semibold m-0 mb-1 truncate">{{ npc.name }}</h3>
+                  <div class="flex items-center gap-2 flex-wrap mb-1">
+                    <span class="ui-chip !text-xs !py-0.5" :class="profChipClass(npc.profession)">
+                      {{ npc.profession }}
+                    </span>
+                    <span class="text-xs text-base-content/60">
+                      {{ npc.age }}{{ t("simverse.yearsOld") }} · {{ npc.species }}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-3 text-xs">
+                    <span :class="{ 'text-success': npc.is_alive, 'text-base-content/50': !npc.is_alive }" class="flex items-center gap-1">
+                      <ion-icon :icon="npc.is_alive ? heartOutline : skullOutline" :class="npc.is_alive ? 'text-success' : 'text-base-content/50'" />
+                      {{ npc.is_alive ? t("simverse.alive") : t("simverse.deceased") }}
+                    </span>
+                    <span v-if="npc.health !== undefined" class="text-xs font-mono text-base-content/70">
+                      HP: {{ Math.round(npc.health) }}/{{ npc.max_health }}
+                    </span>
+                  </div>
+                </div>
+                <div class="flex-shrink-0 text-xs font-mono text-base-content/70">
+                  Lv.{{ npc.level }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <ion-infinite-scroll
+          v-if="!loading && !error && hasMore"
+          @ionInfinite="loadMore"
+          threshold="100px"
+        >
+          <ion-infinite-scroll-content
+            :loading-text="t('settings.loading')"
+          />
+        </ion-infinite-scroll>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -90,26 +101,18 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonBadge,
-  IonButton,
   IonButtons,
   IonContent,
   IonHeader,
   IonIcon,
   IonInfiniteScroll,
   IonInfiniteScrollContent,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
-  IonSearchbar,
   IonSpinner,
   IonTitle,
   IonToolbar,
 } from "@ionic/vue";
-import { alertCircleOutline, refreshOutline } from "ionicons/icons";
+import { alertCircleOutline, refreshOutline, searchOutline, heartOutline, skullOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { useGsap } from "@/composables/useGsap";
@@ -184,21 +187,20 @@ function getAvatarEmoji(npc: SimverseNPC): string {
   return avatars[idx];
 }
 
-function getProfessionColor(profession: string): string {
+function profChipClass(p: string): string {
   const map: Record<string, string> = {
-    farmer: "success",
-    warrior: "danger",
-    mage: "primary",
-    merchant: "warning",
-    priest: "tertiary",
-    rogue: "medium",
+    farmer: "!bg-success/15 !text-success !border-success/30",
+    warrior: "!bg-error/15 !text-error !border-error/30",
+    mage: "!bg-primary/15 !text-primary !border-primary/30",
+    merchant: "!bg-warning/15 !text-warning !border-warning/30",
+    priest: "!bg-tertiary/15 !text-tertiary !border-tertiary/30",
+    rogue: "!bg-base-content/15 !text-base-content/70 !border-base-content/20",
   };
-  return map[profession.toLowerCase()] || "medium";
+  return map[p.toLowerCase()] || "!bg-base-content/15 !text-base-content/70 !border-base-content/20";
 }
 
 onMounted(() => {
   loadNPCs(true);
-  // 列表项入场动效：滚动到视口时渐入
   gsap.from(".list-item", {
     opacity: 0,
     y: 20,
@@ -215,58 +217,12 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.loading-container,
-.error-container {
+.state-box {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
   gap: 16px;
-}
-.error-container p {
-  color: var(--color-error);
-  margin: 0;
-}
-.npc-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--color-base-200);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 22px;
-}
-h3 {
-  font-size: 15px;
-  font-weight: 600;
-  margin: 0 0 4px 0;
-}
-p {
-  font-size: 12px;
-  color: var(--color-base-content);
-  margin: 0 0 4px 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.npc-meta {
-  font-size: 12px;
-}
-.npc-secondary {
-  font-size: 11px;
-  gap: 12px;
-}
-.alive {
-  color: var(--color-success);
-}
-.dead {
-  color: var(--color-base-content);
-  opacity: 0.6;
-}
-.hp-bar {
-  font-family: monospace;
 }
 </style>

@@ -15,64 +15,80 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <div v-if="loading" class="state-box">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
-      <div v-else-if="error" class="state-box">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-      <template v-else-if="prices">
-        <ion-segment :value="String(selectedRegion)" @ionChange="onRegionChange">
-          <ion-segment-button v-for="r in regionOptions" :key="r" :value="String(r)">
-            <ion-label>#{{ r }}</ion-label>
-          </ion-segment-button>
-        </ion-segment>
+    <ion-content>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
+        <template v-else-if="prices">
+          <ion-segment :value="String(selectedRegion)" @ionChange="onRegionChange">
+            <ion-segment-button v-for="r in regionOptions" :key="r" :value="String(r)">
+              <ion-label>#{{ r }}</ion-label>
+            </ion-segment-button>
+          </ion-segment>
 
-        <ion-card class="bar">
-          <ion-card-header>
-            <ion-card-title>{{ t("simverse.prices") }} · #{{ prices.region_id }}</ion-card-title>
-          </ion-card-header>
-          <ion-card-content>
-            <div class="stats stats-vertical sm:stats-horizontal shadow w-full">
-              <div class="stat">
-                <div class="stat-title">{{ t("simverse.tradeVolume") }}</div>
-                <div class="stat-value">{{ prices.trade_volume }}</div>
-              </div>
-              <div class="stat">
-                <div class="stat-title">{{ t("simverse.shock") }}</div>
-                <div class="stat-value">{{ shocks?.count ?? 0 }}</div>
+          <div class="ui-card bar">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.prices") }} · #{{ prices.region_id }}</div>
+              <div class="grid grid-cols-2 gap-3">
+                <div class="bg-base-200 rounded-lg p-3">
+                  <div class="text-xs text-base-content/70 mb-1">{{ t("simverse.tradeVolume") }}</div>
+                  <div class="text-lg font-semibold font-mono">{{ prices.trade_volume }}</div>
+                </div>
+                <div class="bg-base-200 rounded-lg p-3">
+                  <div class="text-xs text-base-content/70 mb-1">{{ t("simverse.shock") }}</div>
+                  <div class="text-lg font-semibold font-mono">{{ shocks?.count ?? 0 }}</div>
+                </div>
               </div>
             </div>
-          </ion-card-content>
-        </ion-card>
+          </div>
 
-        <ion-list-header><ion-label>{{ t("simverse.prices") }}</ion-label></ion-list-header>
-        <ion-list :inset="true">
-          <ion-item v-for="res in priceRows" :key="res.key" class="bar">
-            <ion-label>{{ res.key }}</ion-label>
-            <ion-note slot="end" color="medium">
-              {{ t("simverse.price") }} {{ res.price }} · {{ t("simverse.supply") }} {{ res.supply }} · {{ t("simverse.demand") }} {{ res.demand }}
-            </ion-note>
-          </ion-item>
-        </ion-list>
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.prices") }}</div>
+              <div class="space-y-1">
+                <div
+                  v-for="res in priceRows"
+                  :key="res.key"
+                  class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors bar"
+                >
+                  <span class="text-sm font-medium">{{ res.key }}</span>
+                  <span class="text-xs text-base-content/70">
+                    {{ t("simverse.price") }} {{ res.price }} · {{ t("simverse.supply") }} {{ res.supply }} · {{ t("simverse.demand") }} {{ res.demand }}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-        <ion-list-header v-if="shocks && shocks.items.length"><ion-label>{{ t("simverse.shock") }}</ion-label></ion-list-header>
-        <ion-list v-if="shocks && shocks.items.length" :inset="true">
-          <ion-item v-for="(sh, i) in shocks.items" :key="i" class="rank-item">
-            <ion-label>
-              <h3>{{ sh.resource }}</h3>
-              <p>{{ sh.message }}</p>
-            </ion-label>
-            <ion-note slot="end" :color="sh.change >= 0 ? 'success' : 'danger'">
-              {{ sh.change >= 0 ? "+" : "" }}{{ sh.change.toFixed(1) }}%
-            </ion-note>
-          </ion-item>
-        </ion-list>
-      </template>
+          <div v-if="shocks && shocks.items.length" class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.shock") }}</div>
+              <div class="space-y-1">
+                <div
+                  v-for="(sh, i) in shocks.items"
+                  :key="i"
+                  class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors rank-item"
+                >
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium">{{ sh.resource }}</div>
+                    <div class="text-xs text-base-content/70 mt-0.5">{{ sh.message }}</div>
+                  </div>
+                  <span :class="sh.change >= 0 ? 'text-success' : 'text-error'" class="text-sm font-mono font-medium ml-2">
+                    {{ sh.change >= 0 ? "+" : "" }}{{ sh.change.toFixed(1) }}%
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -83,22 +99,11 @@ import {
   IonBackButton,
   IonButton,
   IonButtons,
-  IonCard,
-  IonCardContent,
-  IonCardHeader,
-  IonCardTitle,
-  IonCol,
   IonContent,
-  IonGrid,
   IonHeader,
   IonIcon,
-  IonItem,
   IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
-  IonRow,
   IonSegment,
   IonSegmentButton,
   IonSpinner,
@@ -137,20 +142,21 @@ const priceRows = computed(() => {
   return out;
 });
 
-async function reload(silent = false) {
-  if (!silent) {
+async function reload(silent?: boolean | Event) {
+  const isSilent = silent === true;
+  if (!isSilent) {
     loading.value = true;
     error.value = "";
   }
   try {
     prices.value = await loadEconomyPrices(selectedRegion.value);
     shocks.value = await loadEconomyShocks();
-    if (!silent) recordQuestAction("view_economy");
+    if (!isSilent) recordQuestAction("view_economy");
   } catch (e: any) {
-    if (silent) console.warn("[simverse] world economy refresh failed:", e);
+    if (isSilent) console.warn("[simverse] world economy refresh failed:", e);
     else error.value = e.message || "Failed to load economy";
   } finally {
-    if (!silent) loading.value = false;
+    if (!isSilent) loading.value = false;
   }
 }
 
@@ -165,7 +171,6 @@ onMounted(() => {
   gsap.from(".rank-item", { y: 20, opacity: 0, stagger: 0.08, duration: 0.4 });
 });
 
-// P7 持续演化：世界经济随世界演化实时刷新（WS 推送优先，未连接时 8s 兜底轮询）
 useLiveRefresh(() => reload(true), { signal: economySignal, pollMs: 8000 });
 </script>
 

@@ -15,67 +15,100 @@
     </ion-header>
 
     <ion-content>
-      <div v-if="loading" class="state-container">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
-
-      <div v-else-if="error" class="state-container">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-
-      <template v-else-if="stats">
-        <!-- 概览卡片 -->
-        <div class="stats stats-vertical sm:stats-horizontal shadow w-full m-4">
-          <div class="stat">
-            <div class="stat-value text-primary">{{ stats.total_relations }}</div>
-            <div class="stat-title">{{ t("simverse.socialTotal") }}</div>
-          </div>
-          <div class="stat">
-            <div class="stat-value text-primary">{{ stats.sampled_npcs }}</div>
-            <div class="stat-title">{{ t("simverse.socialSampled") }}</div>
-          </div>
-          <div class="stat">
-            <div class="stat-value text-primary">{{ typeCount }}</div>
-            <div class="stat-title">{{ t("simverse.socialByType") }}</div>
-          </div>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
         </div>
 
-        <!-- 关系类型分布 -->
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.socialByType") }}</ion-label></ion-list-header>
-          <ion-item v-for="(cnt, type) in stats.by_type" :key="type">
-            <ion-label>{{ t("simverse.rel." + type) }}</ion-label>
-            <ion-note slot="end">{{ cnt }}</ion-note>
-            <ion-progress-bar
-              :value="maxCount ? cnt / maxCount : 0"
-              slot="end"
-              class="rel-bar"
-              :color="barColor(type)"
-            />
-          </ion-item>
-        </ion-list>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
 
-        <!-- 区域分布 -->
-        <ion-list v-if="regionEntries.length" :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.socialByRegion") }}</ion-label></ion-list-header>
-          <ion-item v-for="[rid, cnt] in regionEntries" :key="'r' + rid" button detail @click="goRegion(rid)">
-            <ion-label>{{ t("simverse.regions") }} #{{ rid }}</ion-label>
-            <ion-note slot="end">{{ cnt }}</ion-note>
-          </ion-item>
-        </ion-list>
+        <template v-else-if="stats">
+          <div class="grid grid-cols-3 gap-3">
+            <div class="ui-card p-3 text-center">
+              <div class="text-xl font-semibold text-primary font-mono">{{ stats.total_relations }}</div>
+              <div class="text-xs text-base-content/70 mt-1">{{ t("simverse.socialTotal") }}</div>
+            </div>
+            <div class="ui-card p-3 text-center">
+              <div class="text-xl font-semibold text-primary font-mono">{{ stats.sampled_npcs }}</div>
+              <div class="text-xs text-base-content/70 mt-1">{{ t("simverse.socialSampled") }}</div>
+            </div>
+            <div class="ui-card p-3 text-center">
+              <div class="text-xl font-semibold text-primary font-mono">{{ typeCount }}</div>
+              <div class="text-xs text-base-content/70 mt-1">{{ t("simverse.socialByType") }}</div>
+            </div>
+          </div>
 
-        <!-- 组织分布 -->
-        <ion-list v-if="orgEntries.length" :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.socialByOrg") }}</ion-label></ion-list-header>
-          <ion-item v-for="[oid, cnt] in orgEntries" :key="'o' + oid" button detail @click="goOrg(oid)">
-            <ion-label>{{ t("simverse.orgs") }} #{{ oid }}</ion-label>
-            <ion-note slot="end">{{ cnt }}</ion-note>
-          </ion-item>
-        </ion-list>
-      </template>
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.socialByType") }}</div>
+              <div class="space-y-1">
+                <div
+                  v-for="(cnt, type) in stats.by_type"
+                  :key="type"
+                  class="flex items-center gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors"
+                >
+                  <span class="text-sm font-medium flex-1">{{ t("simverse.rel." + type) }}</span>
+                  <div class="flex items-center gap-2">
+                    <div class="w-20 h-2 bg-base-300 rounded-full overflow-hidden">
+                      <div
+                        class="h-full rounded-full transition-all"
+                        :class="barBgColor(type)"
+                        :style="{ width: maxCount ? (cnt / maxCount) * 100 + '%' : '0%' }"
+                      ></div>
+                    </div>
+                    <span class="text-xs text-base-content/70 font-mono w-8 text-right">{{ cnt }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="regionEntries.length" class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.socialByRegion") }}</div>
+              <div class="space-y-1">
+                <div
+                  v-for="[rid, cnt] in regionEntries"
+                  :key="'r' + rid"
+                  class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+                  @click="goRegion(rid)"
+                >
+                  <span class="text-sm font-medium">{{ t("simverse.regions") }} #{{ rid }}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-base-content/70 font-mono">{{ cnt }}</span>
+                    <ion-icon :icon="chevronForward" class="text-base-content/40" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="orgEntries.length" class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.socialByOrg") }}</div>
+              <div class="space-y-1">
+                <div
+                  v-for="[oid, cnt] in orgEntries"
+                  :key="'o' + oid"
+                  class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+                  @click="goOrg(oid)"
+                >
+                  <span class="text-sm font-medium">{{ t("simverse.orgs") }} #{{ oid }}</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs text-base-content/70 font-mono">{{ cnt }}</span>
+                    <ion-icon :icon="chevronForward" class="text-base-content/40" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -89,18 +122,12 @@ import {
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
-  IonProgressBar,
   IonSpinner,
   IonTitle,
   IonToolbar,
 } from "@ionic/vue";
-import { alertCircleOutline, refreshOutline } from "ionicons/icons";
+import { alertCircleOutline, chevronForward, refreshOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { type SimverseSocialStats, useSimverse } from "@/composables/useSimverse";
@@ -121,11 +148,11 @@ const maxCount = computed(() => {
 const regionEntries = computed(() => Object.entries(stats.value?.by_region || {}).sort((a, b) => b[1] - a[1]));
 const orgEntries = computed(() => Object.entries(stats.value?.by_org || {}).sort((a, b) => b[1] - a[1]));
 
-function barColor(type: string): string {
-  if (type === "enemy" || type === "rival") return "danger";
-  if (type === "friend" || type === "lover" || type === "spouse") return "success";
-  if (type === "parent" || type === "child" || type === "sibling" || type === "master" || type === "apprentice") return "tertiary";
-  return "primary";
+function barBgColor(type: string): string {
+  if (type === "enemy" || type === "rival") return "bg-error";
+  if (type === "friend" || type === "lover" || type === "spouse") return "bg-success";
+  if (type === "parent" || type === "child" || type === "sibling" || type === "master" || type === "apprentice") return "bg-tertiary";
+  return "bg-primary";
 }
 
 function goRegion(id: string) {
@@ -152,7 +179,7 @@ onMounted(reload);
 </script>
 
 <style scoped lang="scss">
-.state-container {
+.state-box {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -164,10 +191,5 @@ onMounted(reload);
     color: var(--color-error);
     margin: 0;
   }
-}
-
-.rel-bar {
-  width: 80px;
-  margin-left: 12px;
 }
 </style>
