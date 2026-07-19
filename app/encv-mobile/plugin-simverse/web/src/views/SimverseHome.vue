@@ -12,56 +12,106 @@
     </ion-header>
 
     <ion-content :fullscreen="true" class="home-content">
-      <div class="hero-section">
-        <div class="hero-icon">🌍</div>
-        <h1 class="hero-title">{{ t("simverse.home.title") }}</h1>
-        <p class="hero-subtitle">{{ t("simverse.home.subtitle") }}</p>
+      <!-- Hero -->
+      <div class="px-4 pt-8 pb-5">
+        <div class="ui-card">
+          <div class="p-6 text-center">
+            <div class="ui-bubble hero-icon w-20 h-20 mx-auto mb-4 flex items-center justify-center text-4xl">
+              🌍
+            </div>
+            <h1
+              class="text-2xl font-bold m-0 mb-2 bg-gradient-to-br from-primary to-secondary bg-clip-text text-transparent"
+            >
+              {{ t("simverse.home.title") }}
+            </h1>
+            <p class="text-sm text-base-content/60 m-0">
+              {{ t("simverse.home.subtitle") }}
+            </p>
+            <div class="flex gap-3 justify-center mt-5">
+              <button type="button" class="ui-button" @click="goToWorld">
+                <ion-icon :icon="gameControllerOutline" class="mr-2" />
+                {{ t("simverse.home.enterWorld") }}
+              </button>
+              <button type="button" class="ui-button ui-button--ghost" @click="goToChronicle">
+                <ion-icon :icon="documentTextOutline" class="mr-2" />
+                {{ t("simverse.home.chronicle") }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="action-cards">
-        <ion-card class="action-card enter-world" button @click="goToWorld">
-          <ion-card-content>
-            <div class="card-icon">🎮</div>
-            <ion-card-title>{{ t("simverse.home.enterWorld") }}</ion-card-title>
-            <ion-card-subtitle>进入横屏模拟世界</ion-card-subtitle>
-          </ion-card-content>
-        </ion-card>
+      <!-- Action cards -->
+      <div class="grid grid-cols-2 gap-3 px-4 mb-5">
+        <button
+          type="button"
+          class="ui-card hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.97] transition-transform duration-200 cursor-pointer w-full text-left"
+          @click="goToWorld"
+        >
+          <div class="p-4 flex flex-col items-center text-center">
+            <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+              <ion-icon :icon="gameControllerOutline" class="text-primary text-2xl" />
+            </div>
+            <h2 class="text-base font-semibold m-0 mb-1">
+              {{ t("simverse.home.enterWorld") }}
+            </h2>
+            <p class="text-xs text-base-content/60 m-0">进入横屏模拟世界</p>
+          </div>
+        </button>
 
-        <ion-card class="action-card" button @click="goToChronicle">
-          <ion-card-content>
-            <div class="card-icon">📜</div>
-            <ion-card-title>{{ t("simverse.home.chronicle") }}</ion-card-title>
-            <ion-card-subtitle>查看世界历史事件</ion-card-subtitle>
-          </ion-card-content>
-        </ion-card>
+        <button
+          type="button"
+          class="ui-card hover:-translate-y-0.5 hover:shadow-lg active:scale-[0.97] transition-transform duration-200 cursor-pointer w-full text-left"
+          @click="goToChronicle"
+        >
+          <div class="p-4 flex flex-col items-center text-center">
+            <div class="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center mb-3">
+              <ion-icon :icon="documentTextOutline" class="text-secondary text-2xl" />
+            </div>
+            <h2 class="text-base font-semibold m-0 mb-1">
+              {{ t("simverse.home.chronicle") }}
+            </h2>
+            <p class="text-xs text-base-content/60 m-0">查看世界历史事件</p>
+          </div>
+        </button>
       </div>
 
-      <div class="stats-grid">
-        <ion-card class="stat-card">
-          <ion-card-content>
-            <div class="stat-value">{{ npcCount }}</div>
-            <div class="stat-label">{{ t("simverse.population") }}</div>
-          </ion-card-content>
-        </ion-card>
-        <ion-card class="stat-card">
-          <ion-card-content>
-            <div class="stat-value">{{ totalMemoryMB }}<span class="unit">MB</span></div>
-            <div class="stat-label">{{ t("simverse.memory") }}</div>
-          </ion-card-content>
-        </ion-card>
-        <ion-card class="stat-card">
-          <ion-card-content>
-            <div class="stat-value">{{ era }}</div>
-            <div class="stat-label">{{ t("simverse.tick") }}</div>
-          </ion-card-content>
-        </ion-card>
+      <!-- Stats -->
+      <div class="grid grid-cols-3 gap-2.5 px-4">
+        <div class="ui-card">
+          <div class="p-4 flex flex-col items-center text-center">
+            <div class="text-2xl font-bold text-primary mb-1">{{ npcCount }}</div>
+            <div class="text-[11px] uppercase tracking-[0.5px] text-base-content/60">
+              {{ t("simverse.population") }}
+            </div>
+          </div>
+        </div>
+        <div class="ui-card">
+          <div class="p-4 flex flex-col items-center text-center">
+            <div class="text-2xl font-bold text-primary mb-1">
+              {{ totalMemoryMB }}<span class="text-xs font-medium ml-0.5 text-base-content/60">MB</span>
+            </div>
+            <div class="text-[11px] uppercase tracking-[0.5px] text-base-content/60">
+              {{ t("simverse.memory") }}
+            </div>
+          </div>
+        </div>
+        <div class="ui-card">
+          <div class="p-4 flex flex-col items-center text-center">
+            <div class="text-2xl font-bold text-primary mb-1">{{ era }}</div>
+            <div class="text-[11px] uppercase tracking-[0.5px] text-base-content/60">
+              {{ t("simverse.tick") }}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div class="exit-section">
-        <ion-button expand="block" fill="outline" color="medium" @click="exitToMainApp">
-          <ion-icon slot="start" :icon="exitOutline" />
+      <!-- Exit -->
+      <div class="px-4 pt-6 pb-10">
+        <button type="button" class="ui-button ui-button--ghost w-full" @click="exitToMainApp">
+          <ion-icon :icon="exitOutline" class="mr-2" />
           返回主应用
-        </ion-button>
+        </button>
       </div>
     </ion-content>
   </ion-page>
@@ -69,9 +119,10 @@
 
 <script setup lang="ts">
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { arrowBack, exit } from "ionicons/icons";
-import { computed, onMounted } from "vue";
+import { arrowBack, exit, gameController, documentText } from "ionicons/icons";
+import { computed, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
+import { gsap } from "@/composables/useGsap";
 import { useSimverse } from "@/composables/useSimverse";
 import { closeWorld, isNativePluginMode, unlockScreenOrientation } from "@/plugins/SimVerse";
 
@@ -83,6 +134,10 @@ const era = computed(() => Math.floor(currentTick.value / 1000));
 
 const arrowBackOutline = arrowBack;
 const exitOutline = exit;
+const gameControllerOutline = gameController;
+const documentTextOutline = documentText;
+
+let floatTween: gsap.core.Tween | null = null;
 
 function goToWorld() {
   router.push("/world");
@@ -94,6 +149,20 @@ function goToChronicle() {
 
 onMounted(() => {
   loadWorldState().catch(() => {});
+  floatTween = gsap.to(".hero-icon", {
+    y: -10,
+    duration: 2,
+    ease: "sine.inOut",
+    yoyo: true,
+    repeat: -1,
+  });
+});
+
+onUnmounted(() => {
+  if (floatTween) {
+    floatTween.kill();
+    floatTween = null;
+  }
 });
 
 async function exitToMainApp() {
@@ -110,116 +179,12 @@ async function exitToMainApp() {
 }
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .home-content {
-  --background: linear-gradient(180deg, rgba(139, 92, 246, 0.08) 0%, transparent 30%);
-}
-
-.hero-section {
-  text-align: center;
-  padding: 40px 20px 20px;
-}
-
-.hero-icon {
-  font-size: 72px;
-  margin-bottom: 16px;
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-
-.hero-title {
-  font-size: 28px;
-  font-weight: 700;
-  margin: 0 0 8px;
-  background: linear-gradient(135deg, #8b5cf6, #06b6d4);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.hero-subtitle {
-  font-size: 14px;
-  color: var(--ion-color-medium);
-  margin: 0;
-}
-
-.action-cards {
-  padding: 0 16px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.action-card {
-  margin: 0;
-  transition: transform 0.2s ease;
-}
-
-.action-card:active {
-  transform: scale(0.97);
-}
-
-.card-icon {
-  font-size: 36px;
-  margin-bottom: 8px;
-}
-
-.action-card ion-card-title {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.action-card ion-card-subtitle {
-  font-size: 12px;
-}
-
-.stats-grid {
-  padding: 0 16px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-
-.stat-card {
-  margin: 0;
-  text-align: center;
-}
-
-.stat-card ion-card-content {
-  padding: 16px 8px;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--ion-color-primary);
-  margin-bottom: 4px;
-}
-
-.stat-value .unit {
-  font-size: 12px;
-  font-weight: 500;
-  margin-left: 2px;
-  color: var(--ion-color-medium);
-}
-
-.action-card.enter-world {
-  border: 2px solid rgba(139, 92, 246, 0.3);
-}
-
-.exit-section {
-  padding: 24px 16px 40px;
-}
-
-.stat-label {
-  font-size: 11px;
-  color: var(--ion-color-medium);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  --background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--color-primary) 8%, transparent) 0%,
+    transparent 30%
+  );
 }
 </style>

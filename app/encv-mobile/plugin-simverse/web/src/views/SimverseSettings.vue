@@ -6,213 +6,191 @@
     </div>
 
     <template v-else>
-      <ion-list>
-        <ion-list-header>
-          <ion-label>{{ t('simverse.performanceTier') }}</ion-label>
-        </ion-list-header>
+      <div class="ui-card">
+        <div class="p-3">
+          <div class="ui-header mb-2">{{ t('simverse.performanceTier') }}</div>
+          <ion-segment :value="worldConfig?.tier_name" @ionChange="onTierChange" class="w-full">
+            <ion-segment-button value="background">
+              <ion-label>Background</ion-label>
+            </ion-segment-button>
+            <ion-segment-button value="foreground">
+              <ion-label>Foreground</ion-label>
+            </ion-segment-button>
+            <ion-segment-button value="fg_idle">
+              <ion-label>Foreground Idle</ion-label>
+            </ion-segment-button>
+          </ion-segment>
+          <div class="space-y-1 mt-3">
+            <div class="flex items-center gap-2 p-2 rounded-lg">
+              <span class="text-xs font-medium">Background</span>
+              <span class="text-xs text-base-content/70">后台运行，低功耗</span>
+            </div>
+            <div class="flex items-center gap-2 p-2 rounded-lg">
+              <span class="text-xs font-medium">Foreground</span>
+              <span class="text-xs text-base-content/70">前台全速，高帧率</span>
+            </div>
+            <div class="flex items-center gap-2 p-2 rounded-lg">
+              <span class="text-xs font-medium">Foreground Idle</span>
+              <span class="text-xs text-base-content/70">前台空闲，平衡模式</span>
+            </div>
+          </div>
+        </div>
+      </div>
 
-        <ion-radio-group :value="worldConfig?.tier_name" @ionChange="onTierChange">
-          <ion-item>
-            <ion-radio value="background">
-              <div class="tier-option">
-                <div class="tier-name">Background</div>
-                <div class="tier-desc">后台运行，低功耗</div>
+      <div class="ui-card">
+        <div class="p-3">
+          <div class="ui-header mb-2">世界配置</div>
+          <div class="space-y-1">
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+              <span class="text-sm font-medium">事件速率倍率</span>
+              <span class="text-xs text-base-content/70 font-mono">{{ worldConfig?.event_rate_mul }}x</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+              <span class="text-sm font-medium">缓存大小</span>
+              <span class="text-xs text-base-content/70 font-mono">{{ worldConfig?.cache_size }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+              <span class="text-sm font-medium">子模拟</span>
+              <span class="text-xs text-base-content/70 font-mono">{{ worldConfig?.sub_sim_active ? '已启用' : '未启用' }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+              <span class="text-sm font-medium">子模拟深度</span>
+              <span class="text-xs text-base-content/70 font-mono">{{ worldConfig?.sub_sim_depth }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ui-card">
+        <div class="p-3">
+          <div class="ui-header mb-2">世界状态</div>
+          <div class="space-y-1">
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+              <span class="text-sm font-medium">运行状态</span>
+              <span class="ui-chip" :class="isRunning ? '!bg-success/15 !text-success' : '!bg-base-300 !text-base-content/70'">
+                {{ isRunning ? 'RUNNING' : 'PAUSED' }}
+              </span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+              <span class="text-sm font-medium">当前 Tick</span>
+              <span class="text-xs text-base-content/70 font-mono">{{ currentTick }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+              <span class="text-sm font-medium">NPC 数量</span>
+              <span class="text-xs text-base-content/70 font-mono">{{ worldState?.npc_count }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+              <span class="text-sm font-medium">Brain 数量</span>
+              <span class="text-xs text-base-content/70 font-mono">{{ worldState?.brain_count }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+              <span class="text-sm font-medium">内存占用</span>
+              <span class="text-xs text-base-content/70 font-mono">{{ totalMemoryMB?.toFixed(1) }} MB</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ui-card">
+        <div class="p-3">
+          <div class="ui-header mb-2">存档管理</div>
+          <div class="space-y-1">
+            <div
+              class="flex items-center gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+              @click="handleSave"
+            >
+              <ion-icon :icon="saveOutline" class="text-primary text-xl" />
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">保存存档</div>
+                <p v-if="saveInfo?.saved_at" class="text-xs text-base-content/70 mt-0.5">上次保存: {{ formatDateTime(saveInfo.saved_at, { withSeconds: true }) }}</p>
+                <p v-else class="text-xs text-base-content/70 mt-0.5">暂无存档</p>
               </div>
-            </ion-radio>
-          </ion-item>
-          <ion-item>
-            <ion-radio value="foreground">
-              <div class="tier-option">
-                <div class="tier-name">Foreground</div>
-                <div class="tier-desc">前台全速，高帧率</div>
+              <ion-icon :icon="chevronForwardOutline" class="text-base-content/40" />
+            </div>
+
+            <div
+              class="flex items-center gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+              :class="{ 'opacity-50 pointer-events-none': !saveInfo?.has_save }"
+              @click="handleLoad"
+            >
+              <ion-icon :icon="downloadOutline" class="text-success text-xl" />
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">读取存档</div>
+                <p v-if="saveInfo?.tick" class="text-xs text-base-content/70 mt-0.5">Tick {{ saveInfo.tick }} · {{ saveInfo.npc_count }} NPCs</p>
+                <p v-else class="text-xs text-base-content/70 mt-0.5">暂无存档</p>
               </div>
-            </ion-radio>
-          </ion-item>
-          <ion-item>
-            <ion-radio value="fg_idle">
-              <div class="tier-option">
-                <div class="tier-name">Foreground Idle</div>
-                <div class="tier-desc">前台空闲，平衡模式</div>
+              <ion-icon :icon="chevronForwardOutline" class="text-base-content/40" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="ui-card">
+        <div class="p-3">
+          <div class="ui-header mb-2">存储状态</div>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between p-3">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">{{ formatBytes(storageStatus?.used_bytes || 0) }} / {{ formatBytes(storageStatus?.total_bytes || 0) }}</div>
+                <div class="text-xs text-base-content/70 mt-0.5">可用空间: {{ formatBytes(storageStatus?.available_bytes || 0) }}</div>
               </div>
-            </ion-radio>
-          </ion-item>
-        </ion-radio-group>
-      </ion-list>
+            </div>
+            <div class="h-2 bg-base-300 rounded-full overflow-hidden mx-3">
+              <div
+                class="h-full transition-all"
+                :class="storageColorClass"
+                :style="{ width: `${storagePercent * 100}%` }"
+              ></div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <ion-list>
-        <ion-list-header>
-          <ion-label>世界配置</ion-label>
-        </ion-list-header>
-
-        <ion-item>
-          <ion-label>
-            <h3>事件速率倍率</h3>
-            <p>{{ worldConfig?.event_rate_mul }}x</p>
-          </ion-label>
-          <ion-note slot="end">{{ worldConfig?.event_rate_mul }}x</ion-note>
-        </ion-item>
-
-        <ion-item>
-          <ion-label>
-            <h3>缓存大小</h3>
-            <p>{{ worldConfig?.cache_size }}</p>
-          </ion-label>
-          <ion-note slot="end">{{ worldConfig?.cache_size }}</ion-note>
-        </ion-item>
-
-        <ion-item>
-          <ion-label>
-            <h3>子模拟</h3>
-            <p>{{ worldConfig?.sub_sim_active ? '已启用' : '未启用' }}</p>
-          </ion-label>
-          <ion-toggle :checked="worldConfig?.sub_sim_active" disabled slot="end" />
-        </ion-item>
-
-        <ion-item>
-          <ion-label>
-            <h3>子模拟深度</h3>
-            <p>{{ worldConfig?.sub_sim_depth }}</p>
-          </ion-label>
-          <ion-note slot="end">{{ worldConfig?.sub_sim_depth }}</ion-note>
-        </ion-item>
-      </ion-list>
-
-      <ion-list>
-        <ion-list-header>
-          <ion-label>世界状态</ion-label>
-        </ion-list-header>
-
-        <ion-item>
-          <ion-label>
-            <h3>运行状态</h3>
-            <p>{{ isRunning ? '运行中' : '已暂停' }}</p>
-          </ion-label>
-          <ion-badge :color="isRunning ? 'success' : 'warning'" slot="end">
-            {{ isRunning ? 'RUNNING' : 'PAUSED' }}
-          </ion-badge>
-        </ion-item>
-
-        <ion-item>
-          <ion-label>
-            <h3>当前 Tick</h3>
-            <p>{{ currentTick }}</p>
-          </ion-label>
-          <ion-note slot="end">{{ currentTick }}</ion-note>
-        </ion-item>
-
-        <ion-item>
-          <ion-label>
-            <h3>NPC 数量</h3>
-            <p>{{ worldState?.npc_count }}</p>
-          </ion-label>
-          <ion-note slot="end">{{ worldState?.npc_count }}</ion-note>
-        </ion-item>
-
-        <ion-item>
-          <ion-label>
-            <h3>Brain 数量</h3>
-            <p>{{ worldState?.brain_count }}</p>
-          </ion-label>
-          <ion-note slot="end">{{ worldState?.brain_count }}</ion-note>
-        </ion-item>
-
-        <ion-item>
-          <ion-label>
-            <h3>内存占用</h3>
-            <p>{{ totalMemoryMB?.toFixed(1) }} MB</p>
-          </ion-label>
-          <ion-note slot="end">{{ totalMemoryMB?.toFixed(1) }} MB</ion-note>
-        </ion-item>
-      </ion-list>
-
-      <ion-list>
-        <ion-list-header>
-          <ion-label>存档管理</ion-label>
-        </ion-list-header>
-
-        <ion-item button @click="handleSave">
-          <ion-icon :icon="saveOutline" slot="start"></ion-icon>
-          <ion-label>
-            <h3>保存存档</h3>
-            <p v-if="saveInfo?.saved_at">上次保存: {{ formatDateTime(saveInfo.saved_at, { withSeconds: true }) }}</p>
-            <p v-else>暂无存档</p>
-          </ion-label>
-          <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
-        </ion-item>
-
-        <ion-item button @click="handleLoad" :disabled="!saveInfo?.has_save">
-          <ion-icon :icon="downloadOutline" slot="start"></ion-icon>
-          <ion-label>
-            <h3>读取存档</h3>
-            <p v-if="saveInfo?.tick">Tick {{ saveInfo.tick }} · {{ saveInfo.npc_count }} NPCs</p>
-            <p v-else>暂无存档</p>
-          </ion-label>
-          <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
-        </ion-item>
-      </ion-list>
-
-      <ion-list>
-        <ion-list-header>
-          <ion-label>存储状态</ion-label>
-        </ion-list-header>
-
-        <ion-item>
-          <ion-label>
-            <h3>存储空间</h3>
-            <p>{{ formatBytes(storageStatus?.used_bytes || 0) }} / {{ formatBytes(storageStatus?.total_bytes || 0) }}</p>
-          </ion-label>
-          <ion-progress-bar :value="storagePercent" :color="storageColor" slot="end" class="storage-bar" />
-        </ion-item>
-
-        <ion-item>
-          <ion-label>
-            <h3>可用空间</h3>
-            <p>{{ formatBytes(storageStatus?.available_bytes || 0) }}</p>
-          </ion-label>
-          <ion-note slot="end">{{ formatBytes(storageStatus?.available_bytes || 0) }}</ion-note>
-        </ion-item>
-      </ion-list>
-
-      <ion-list>
-        <ion-list-header>
-          <ion-label>{{ t('settings.about') }}</ion-label>
-        </ion-list-header>
-
-        <ion-item>
-          <ion-label>
-            <h3>版本</h3>
-            <p>Simverse v0.1.0</p>
-          </ion-label>
-          <ion-note slot="end">v0.1.0</ion-note>
-        </ion-item>
-
-        <ion-item button @click="refreshAll">
-          <ion-icon :icon="refreshOutline" slot="start"></ion-icon>
-          <ion-label>
-            <h3>刷新数据</h3>
-            <p>重新加载所有配置和状态</p>
-          </ion-label>
-          <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
-        </ion-item>
-
-        <ion-item button @click="handleShowDiagnostic" v-if="isNativePlugin">
-          <ion-icon :icon="bugOutline" slot="start"></ion-icon>
-          <ion-label>
-            <h3>{{ t('simverse.diagnosticTools') }}</h3>
-            <p>{{ t('simverse.diagnosticToolsDesc') }}</p>
-          </ion-label>
-          <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
-        </ion-item>
-
-        <ion-item button @click="handleOpenDevLogs">
-          <ion-icon :icon="documentTextOutline" slot="start"></ion-icon>
-          <ion-label>
-            <h3>开发者日志</h3>
-            <p>查看前端和后端日志</p>
-          </ion-label>
-          <ion-icon :icon="chevronForwardOutline" slot="end"></ion-icon>
-        </ion-item>
-      </ion-list>
+      <div class="ui-card">
+        <div class="p-3">
+          <div class="ui-header mb-2">{{ t('settings.about') }}</div>
+          <div class="space-y-1">
+            <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+              <span class="text-sm font-medium">版本</span>
+              <span class="text-xs text-base-content/70 font-mono">v0.1.0</span>
+            </div>
+            <div
+              class="flex items-center gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+              @click="refreshAll"
+            >
+              <ion-icon :icon="refreshOutline" class="text-primary text-xl" />
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">刷新数据</div>
+                <div class="text-xs text-base-content/70 mt-0.5">重新加载所有配置和状态</div>
+              </div>
+              <ion-icon :icon="chevronForwardOutline" class="text-base-content/40" />
+            </div>
+            <div
+              v-if="isNativePlugin"
+              class="flex items-center gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+              @click="handleShowDiagnostic"
+            >
+              <ion-icon :icon="bugOutline" class="text-warning text-xl" />
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">{{ t('simverse.diagnosticTools') }}</div>
+                <div class="text-xs text-base-content/70 mt-0.5">{{ t('simverse.diagnosticToolsDesc') }}</div>
+              </div>
+              <ion-icon :icon="chevronForwardOutline" class="text-base-content/40" />
+            </div>
+            <div
+              class="flex items-center gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+              @click="handleOpenDevLogs"
+            >
+              <ion-icon :icon="documentTextOutline" class="text-tertiary text-xl" />
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium">开发者日志</div>
+                <div class="text-xs text-base-content/70 mt-0.5">查看前端和后端日志</div>
+              </div>
+              <ion-icon :icon="chevronForwardOutline" class="text-base-content/40" />
+            </div>
+          </div>
+        </div>
+      </div>
     </template>
   </SettingsPage>
 </template>
@@ -222,8 +200,8 @@ import SettingsPage from "@encv/shared-components/components/settings/SettingsPa
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
 import { bugOutline, chevronForwardOutline, documentTextOutline, downloadOutline, refreshOutline, saveOutline } from "ionicons/icons";
-import { IonBadge, IonItem, IonLabel, IonList, IonListHeader, IonNote, IonProgressBar, IonRadio, IonRadioGroup, IonSpinner } from "@ionic/vue";
-import { onMounted, onUnmounted, ref } from "vue";
+import { IonIcon, IonLabel, IonSegment, IonSegmentButton, IonSpinner } from "@ionic/vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { type SimverseSaveInfo, type SimverseStorageStatus, useSimverse } from "@/composables/useSimverse";
 import { isNativePluginMode, showDiagnosticPanel } from "@/plugins/SimVerse";
@@ -254,6 +232,12 @@ const storageStatus = ref<SimverseStorageStatus | null>(null);
 
 const storagePercent = ref(0);
 const storageColor = ref("primary");
+
+const storageColorClass = computed(() => {
+  if (storagePercent.value > 0.9) return "bg-error";
+  if (storagePercent.value > 0.7) return "bg-warning";
+  return "bg-primary";
+});
 
 const isNativePlugin = isNativePluginMode();
 
@@ -359,45 +343,20 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .loading-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   gap: 12px;
-}
 
-.loading-wrap p {
-  margin: 0;
-  font-size: 14px;
-}
-
-ion-list {
-  margin-bottom: 20px;
-}
-
-.tier-option {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.tier-name {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--ion-text-color);
-}
-
-.tier-desc {
-  font-size: 12px;
-  color: var(--ion-color-medium);
-}
-
-.storage-bar {
-  width: 100px;
-  margin-inline-start: 12px;
+  p {
+    margin: 0;
+    font-size: 14px;
+  }
 }
 </style>

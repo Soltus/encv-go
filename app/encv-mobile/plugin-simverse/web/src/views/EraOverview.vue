@@ -15,42 +15,56 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <div v-if="loading" class="state-box">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
-      <div v-else-if="error" class="state-box">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-      <template v-else-if="era">
-        <ion-card>
-          <ion-card-header>
-            <ion-card-title>{{ t("simverse.currentEra") }} · {{ era.era }}</ion-card-title>
-          </ion-card-header>
-          <ion-card-content>
-            <ion-grid>
-              <ion-row>
-                <ion-col><div class="stat-label">{{ t("simverse.worldTick") }}</div><div class="stat-val">{{ era.world_tick }}</div></ion-col>
-                <ion-col><div class="stat-label">{{ t("simverse.eventCount") }}</div><div class="stat-val">{{ era.event_count }}</div></ion-col>
-              </ion-row>
-            </ion-grid>
-          </ion-card-content>
-        </ion-card>
+    <ion-content>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="() => reload()">{{ t("settings.check") }}</button>
+        </div>
+        <template v-else-if="era">
+          <div class="ui-card">
+            <div class="p-4">
+              <h2 class="text-lg font-bold m-0 mb-3">{{ t("simverse.currentEra") }} · {{ era.era }}</h2>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="text-center">
+                  <div class="stat-label">{{ t("simverse.worldTick") }}</div>
+                  <div class="stat-val">{{ era.world_tick }}</div>
+                </div>
+                <div class="text-center">
+                  <div class="stat-label">{{ t("simverse.eventCount") }}</div>
+                  <div class="stat-val">{{ era.event_count }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
 
-        <ion-list-header><ion-label>{{ t("simverse.events") }}</ion-label></ion-list-header>
-        <ion-list :inset="true">
-          <ion-item v-for="ev in era.events" :key="ev.id">
-            <ion-icon :icon="flag" slot="start" color="warning" />
-            <ion-label>
-              <h3>{{ ev.type }}</h3>
-              <p>{{ t("simverse.tick") }}: {{ ev.tick }} · {{ t("simverse.importance") }}: {{ ev.importance }}</p>
-            </ion-label>
-          </ion-item>
-        </ion-list>
-      </template>
+          <div class="ui-header">{{ t("simverse.events") }}</div>
+          <div class="space-y-2">
+            <div
+              v-for="ev in era.events"
+              :key="ev.id"
+              class="ui-card"
+            >
+              <div class="p-3 flex items-start gap-3">
+                <div class="ui-bubble !p-0 !w-10 !h-10 flex items-center justify-center flex-shrink-0 !bg-warning/15 !border-warning/30">
+                  <ion-icon :icon="flag" class="text-warning" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-base font-semibold m-0 mb-1">{{ ev.type }}</h3>
+                  <p class="text-xs text-base-content/60 m-0">
+                    {{ t("simverse.tick") }}: {{ ev.tick }} · {{ t("simverse.importance") }}: {{ ev.importance }}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -59,23 +73,11 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonButton,
   IonButtons,
-  IonCard,
-  IonCardContent,
-  IonCardHeader,
-  IonCardTitle,
-  IonCol,
   IonContent,
-  IonGrid,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
   IonPage,
-  IonRow,
   IonSpinner,
   IonTitle,
   IonToolbar,
@@ -109,11 +111,10 @@ async function reload(silent = false) {
 
 onMounted(reload);
 
-// P7 持续演化：时代/编年史随世界演化实时刷新（WS 推送优先，未连接时 8s 兜底轮询）
 useLiveRefresh(() => reload(true), { signal: chronicleSignal, pollMs: 8000 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
@@ -124,7 +125,8 @@ useLiveRefresh(() => reload(true), { signal: chronicleSignal, pollMs: 8000 });
 }
 .stat-label {
   font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
 .stat-val {
   font-size: 22px;
@@ -136,17 +138,17 @@ useLiveRefresh(() => reload(true), { signal: chronicleSignal, pollMs: 8000 });
   gap: 5px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--ion-color-success, #22c55e);
+  color: var(--color-success);
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(34, 197, 94, 0.12);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
   margin-right: 4px;
 }
 .live-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--ion-color-success, #22c55e);
+  background: var(--color-success);
   animation: live-pulse 1.6s ease-in-out infinite;
 }
 @keyframes live-pulse {

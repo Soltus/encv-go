@@ -15,81 +15,101 @@
     </ion-header>
 
     <ion-content>
-      <div v-if="loading" class="state-container">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
 
-      <div v-else-if="error" class="state-container">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
 
-      <template v-else-if="stats">
-        <!-- 概览 -->
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.configDetails") }}</ion-label></ion-list-header>
-          <ion-item>
-            <ion-label>{{ t("simverse.population") }}</ion-label>
-            <ion-note slot="end">{{ stats.total_npcs }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.alive") }}</ion-label>
-            <ion-note slot="end">{{ stats.alive_npcs }}</ion-note>
-          </ion-item>
-        </ion-list>
-
-        <!-- 行为分布 -->
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.behavior") }}</ion-label></ion-list-header>
-          <ion-item v-for="b in behaviorDist" :key="b.key">
-            <ion-label class="dist-label">
-              <span>{{ b.label }}</span>
-              <div class="dist-bar">
-                <div class="dist-fill" :style="{ width: b.pct + '%' }" />
+        <template v-else-if="stats">
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.configDetails") }}</div>
+              <div class="space-y-1">
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.population") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ stats.total_npcs }}</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.alive") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ stats.alive_npcs }}</span>
+                </div>
               </div>
-            </ion-label>
-            <ion-note slot="end">{{ b.value }} · {{ b.pct }}%</ion-note>
-          </ion-item>
-          <ion-item v-if="!behaviorDist.length" class="empty-item">
-            <ion-label class="ion-text-center">{{ t("simverse.noData") }}</ion-label>
-          </ion-item>
-        </ion-list>
+            </div>
+          </div>
 
-        <!-- NPC 行为列表 -->
-        <ion-list :inset="true">
-          <ion-list-header>
-            <ion-label>{{ t("simverse.npcs") }}</ion-label>
-            <ion-note slot="end">{{ behaviorList.total }}</ion-note>
-          </ion-list-header>
-          <ion-item
-            v-for="npc in behaviorList.items"
-            :key="npc.npc_id"
-            button
-            detail
-            @click="goNpc(npc.npc_id)"
-          >
-            <div slot="start" class="npc-avatar">{{ avatarEmoji(npc.npc_id) }}</div>
-            <ion-label class="ion-text-wrap">
-              <h3>{{ npc.npc_name }}</h3>
-              <p>
-                <ion-badge :color="behaviorColor(npc.current_behavior)" size="small">
-                  {{ npc.current_behavior_cn || npc.current_behavior }}
-                </ion-badge>
-                <span class="npc-meta">Lv.{{ npc.level }} · {{ npc.profession }}</span>
-              </p>
-              <p class="npc-sub">
-                <span>😊 {{ npc.mood }}</span>
-                <span>⚡ {{ npc.energy }}</span>
-              </p>
-            </ion-label>
-          </ion-item>
-          <ion-item v-if="!behaviorList.items.length" class="empty-item">
-            <ion-label class="ion-text-center">{{ t("simverse.noData") }}</ion-label>
-          </ion-item>
-        </ion-list>
-      </template>
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.behavior") }}</div>
+              <div class="space-y-2">
+                <div
+                  v-for="b in behaviorDist"
+                  :key="b.key"
+                  class="p-3 rounded-lg hover:bg-base-200 transition-colors"
+                >
+                  <div class="flex items-center justify-between mb-1">
+                    <span class="text-sm font-medium">{{ b.label }}</span>
+                    <span class="text-xs text-base-content/70 font-mono">{{ b.value }} · {{ b.pct }}%</span>
+                  </div>
+                  <div class="h-1.5 bg-base-300 rounded-full overflow-hidden">
+                    <div
+                      class="h-full bg-primary rounded-full transition-all"
+                      :style="{ width: b.pct + '%' }"
+                    ></div>
+                  </div>
+                </div>
+                <div v-if="!behaviorDist.length" class="p-4 text-center text-sm text-base-content/50">
+                  {{ t("simverse.noData") }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">
+                <span>{{ t("simverse.npcs") }}</span>
+                <span class="text-xs text-base-content/70 font-normal">{{ behaviorList.total }}</span>
+              </div>
+              <div class="space-y-1">
+                <div
+                  v-for="npc in behaviorList.items"
+                  :key="npc.npc_id"
+                  class="flex items-center gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+                  @click="goNpc(npc.npc_id)"
+                >
+                  <div class="ui-bubble flex-shrink-0">
+                    <span class="text-lg">{{ avatarEmoji(npc.npc_id) }}</span>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium">{{ npc.npc_name }}</div>
+                    <div class="flex items-center gap-2 mt-0.5">
+                      <span class="ui-chip !text-xs !py-0.5" :class="behaviorChipClass(npc.current_behavior)">
+                        {{ npc.current_behavior_cn || npc.current_behavior }}
+                      </span>
+                      <span class="text-xs text-base-content/70">Lv.{{ npc.level }} · {{ npc.profession }}</span>
+                    </div>
+                    <div class="flex items-center gap-3 mt-1">
+                      <span class="text-xs text-base-content/70">😊 {{ npc.mood }}</span>
+                      <span class="text-xs text-base-content/70">⚡ {{ npc.energy }}</span>
+                    </div>
+                  </div>
+                  <ion-icon :icon="chevronForward" class="text-base-content/40" />
+                </div>
+                <div v-if="!behaviorList.items.length" class="p-4 text-center text-sm text-base-content/50">
+                  {{ t("simverse.noData") }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -98,23 +118,17 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonBadge,
   IonButton,
   IonButtons,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSpinner,
   IonTitle,
   IonToolbar,
 } from "@ionic/vue";
-import { alertCircleOutline, refreshOutline } from "ionicons/icons";
+import { alertCircleOutline, chevronForward, refreshOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { type SimverseBehaviorState, type SimverseBehaviorStats, useSimverse } from "@/composables/useSimverse";
@@ -153,17 +167,17 @@ const behaviorDist = computed(() => {
     .sort((a, b) => b.value - a.value);
 });
 
-function behaviorColor(behavior: string): string {
+function behaviorChipClass(behavior: string): string {
   const map: Record<string, string> = {
-    work: "primary",
-    rest: "medium",
-    eat: "warning",
-    sleep: "tertiary",
-    socialize: "success",
-    explore: "secondary",
-    trade: "danger",
+    work: "!bg-primary/15 !text-primary",
+    rest: "!bg-base-300 !text-base-content/70",
+    eat: "!bg-warning/15 !text-warning",
+    sleep: "!bg-tertiary/15 !text-tertiary",
+    socialize: "!bg-success/15 !text-success",
+    explore: "!bg-secondary/15 !text-secondary",
+    trade: "!bg-error/15 !text-error",
   };
-  return map[behavior?.toLowerCase()] || "medium";
+  return map[behavior?.toLowerCase()] || "!bg-base-300 !text-base-content/70";
 }
 
 function avatarEmoji(id: number): string {
@@ -193,57 +207,18 @@ async function reload() {
 onMounted(reload);
 </script>
 
-<style scoped>
-.state-container {
+<style scoped lang="scss">
+.state-box {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
   gap: 16px;
-}
-.state-container p { color: var(--ion-color-danger); margin: 0; }
-.dist-label {
-  width: 100%;
-}
-.dist-bar {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--ion-color-light, #e5e7eb);
-  overflow: hidden;
-  margin-top: 6px;
-}
-.dist-fill {
-  height: 100%;
-  background: var(--ion-color-primary);
-  transition: width 0.3s ease;
-}
-.npc-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: var(--ion-color-light, #f3f4f6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-}
-.npc-meta {
-  font-size: 12px;
-  margin-left: 8px;
-  color: var(--ion-color-medium);
-}
-.npc-sub {
-  font-size: 12px;
-  display: flex;
-  gap: 12px;
-  color: var(--ion-color-medium);
-}
-.empty-item {
-  --padding-start: 0;
-  --inner-padding-end: 0;
-  justify-content: center;
-  color: var(--ion-color-medium);
-  padding: 24px 0;
+
+  p {
+    color: var(--color-error);
+    margin: 0;
+  }
 }
 </style>

@@ -7,7 +7,7 @@
         </ion-buttons>
         <ion-title>{{ t("simverse.prices") }}</ion-title>
         <ion-buttons slot="end">
-          <span class="live-pill"><span class="live-dot" />{{ t("simverse.live") }}</span>
+          <span class="badge badge-success badge-sm gap-1 live-pill"><span class="live-dot" />{{ t("simverse.live") }}</span>
         </ion-buttons>
       </ion-toolbar>
       <ion-toolbar>
@@ -23,29 +23,41 @@
     </ion-header>
 
     <ion-content>
-      <div v-if="loading" class="state-box">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
+        <template v-else-if="prices">
+          <div class="flex items-center justify-between">
+            <span class="ui-chip ui-chip--mono">{{ t("simverse.regions") }} #{{ prices.region_id }}</span>
+            <span class="text-sm text-base-content/70">{{ t("simverse.tradeVolume") }}: {{ prices.trade_volume }}</span>
+          </div>
+
+          <div class="ui-card">
+            <div class="p-3 space-y-1">
+              <div
+                v-for="r in resourceKeys"
+                :key="r"
+                class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors"
+              >
+                <span class="text-sm font-medium">{{ r }}</span>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs text-base-content/70">
+                    {{ t("simverse.supply") }}:{{ prices.supply[r] }} / {{ t("simverse.demand") }}:{{ prices.demand[r] }}
+                  </span>
+                  <span class="text-sm font-mono font-medium text-warning">{{ prices.prices[r] }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
-      <div v-else-if="error" class="state-box">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-      <template v-else-if="prices">
-        <ion-list-header>
-          <ion-label>{{ t("simverse.regions") }} #{{ prices.region_id }} · {{ t("simverse.tradeVolume") }}: {{ prices.trade_volume }}</ion-label>
-        </ion-list-header>
-        <ion-list :inset="true">
-          <ion-item v-for="r in resourceKeys" :key="r">
-            <ion-label>{{ r }}</ion-label>
-            <ion-note slot="end" color="warning">{{ prices.prices[r] }}</ion-note>
-            <ion-note slot="end" color="medium" class="mini">
-              {{ t("simverse.supply") }}:{{ prices.supply[r] }} / {{ t("simverse.demand") }}:{{ prices.demand[r] }}
-            </ion-note>
-          </ion-item>
-        </ion-list>
-      </template>
     </ion-content>
   </ion-page>
 </template>
@@ -59,11 +71,6 @@ import {
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSearchbar,
   IonSpinner,
@@ -94,29 +101,29 @@ function onRegionChange() {
   }
 }
 
-async function reload(silent = false) {
-  if (!silent) {
+async function reload(silent?: boolean | Event) {
+  const isSilent = silent === true;
+  if (!isSilent) {
     loading.value = true;
     error.value = "";
   }
   try {
     prices.value = await loadEconomyPrices(region.value);
-    if (!silent) recordQuestAction("view_economy");
+    if (!isSilent) recordQuestAction("view_economy");
   } catch (e: any) {
-    if (silent) console.warn("[simverse] prices refresh failed:", e);
+    if (isSilent) console.warn("[simverse] prices refresh failed:", e);
     else error.value = e.message || "Failed to load prices";
   } finally {
-    if (!silent) loading.value = false;
+    if (!isSilent) loading.value = false;
   }
 }
 
 onMounted(reload);
 
-// P7 持续演化：物价随世界演化实时刷新（WS 推送优先，未连接时 8s 兜底轮询）
 useLiveRefresh(() => reload(true), { signal: economySignal, pollMs: 8000 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
@@ -125,28 +132,22 @@ useLiveRefresh(() => reload(true), { signal: economySignal, pollMs: 8000 });
   padding: 60px 20px;
   gap: 16px;
 }
-.mini {
-  font-size: 11px;
-  margin-left: 10px;
-}
+
 .live-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
   font-weight: 600;
-  color: var(--ion-color-success, #22c55e);
-  padding: 2px 8px;
-  border-radius: 10px;
-  background: rgba(34, 197, 94, 0.12);
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
 }
+
 .live-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--ion-color-success, #22c55e);
+  background: var(--color-success);
+  box-shadow: 0 0 6px var(--color-success);
   animation: live-pulse 1.6s ease-in-out infinite;
 }
+
 @keyframes live-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.7); }

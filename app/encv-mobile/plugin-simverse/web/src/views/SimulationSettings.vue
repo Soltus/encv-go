@@ -14,54 +14,58 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <div v-if="error" class="state-container">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
+    <ion-content>
+      <div class="p-4 space-y-4">
+        <div v-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+        </div>
+
+        <div class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.perfTier") }}</div>
+            <ion-segment :value="currentTier" @ionChange="onTierChange">
+              <ion-segment-button value="background">
+                <ion-label>{{ t("simverse.tierBackground") }}</ion-label>
+              </ion-segment-button>
+              <ion-segment-button value="foreground">
+                <ion-label>{{ t("simverse.tierForeground") }}</ion-label>
+              </ion-segment-button>
+              <ion-segment-button value="fg_idle">
+                <ion-label>{{ t("simverse.tierIdle") }}</ion-label>
+              </ion-segment-button>
+            </ion-segment>
+          </div>
+        </div>
+
+        <div v-if="config" class="ui-card">
+          <div class="p-3">
+            <div class="ui-header mb-2">{{ t("simverse.configDetails") }}</div>
+            <div class="space-y-1">
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.perfTier") }}</span>
+                <span class="text-xs text-base-content/70 font-mono">{{ config.tier_name }}</span>
+              </div>
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.eventRate") }}</span>
+                <span class="text-xs text-base-content/70 font-mono">{{ config.event_rate_mul }}</span>
+              </div>
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.cacheSize") }}</span>
+                <span class="text-xs text-base-content/70 font-mono">{{ config.cache_size }}</span>
+              </div>
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.subSim") }}</span>
+                <span class="text-xs text-base-content/70 font-mono">{{ config.sub_sim_active ? '✓' : '—' }}</span>
+              </div>
+              <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                <span class="text-sm font-medium">{{ t("simverse.subSimDepth") }}</span>
+                <span class="text-xs text-base-content/70 font-mono">{{ config.sub_sim_depth }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-
-      <ion-card>
-        <ion-card-header>
-          <ion-card-title>{{ t("simverse.perfTier") }}</ion-card-title>
-        </ion-card-header>
-        <ion-card-content>
-          <ion-segment :value="currentTier" @ionChange="onTierChange">
-            <ion-segment-button value="background">
-              <ion-label>{{ t("simverse.tierBackground") }}</ion-label>
-            </ion-segment-button>
-            <ion-segment-button value="foreground">
-              <ion-label>{{ t("simverse.tierForeground") }}</ion-label>
-            </ion-segment-button>
-            <ion-segment-button value="fg_idle">
-              <ion-label>{{ t("simverse.tierIdle") }}</ion-label>
-            </ion-segment-button>
-          </ion-segment>
-        </ion-card-content>
-      </ion-card>
-
-      <ion-list v-if="config" :inset="true">
-        <ion-list-header><ion-label>{{ t("simverse.configDetails") }}</ion-label></ion-list-header>
-        <ion-item>
-          <ion-label>{{ t("simverse.perfTier") }}</ion-label>
-          <ion-note slot="end">{{ config.tier_name }}</ion-note>
-        </ion-item>
-        <ion-item>
-          <ion-label>{{ t("simverse.eventRate") }}</ion-label>
-          <ion-note slot="end">{{ config.event_rate_mul }}</ion-note>
-        </ion-item>
-        <ion-item>
-          <ion-label>{{ t("simverse.cacheSize") }}</ion-label>
-          <ion-note slot="end">{{ config.cache_size }}</ion-note>
-        </ion-item>
-        <ion-item>
-          <ion-label>{{ t("simverse.subSim") }}</ion-label>
-          <ion-note slot="end">{{ config.sub_sim_active ? '✅' : '—' }}</ion-note>
-        </ion-item>
-        <ion-item>
-          <ion-label>{{ t("simverse.subSimDepth") }}</ion-label>
-          <ion-note slot="end">{{ config.sub_sim_depth }}</ion-note>
-        </ion-item>
-      </ion-list>
     </ion-content>
   </ion-page>
 </template>
@@ -72,18 +76,10 @@ import {
   IonBackButton,
   IonButton,
   IonButtons,
-  IonCard,
-  IonCardContent,
-  IonCardHeader,
-  IonCardTitle,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
   IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSegment,
   IonSegmentButton,
@@ -120,14 +116,18 @@ async function reload() {
 onMounted(reload);
 </script>
 
-<style scoped>
-.state-container {
+<style scoped lang="scss">
+.state-box {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
   gap: 12px;
+
+  p {
+    color: var(--color-error);
+    margin: 0;
+  }
 }
-.state-container p { color: var(--ion-color-danger); margin: 0; }
 </style>

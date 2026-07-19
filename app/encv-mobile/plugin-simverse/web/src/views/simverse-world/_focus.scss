@@ -1,0 +1,546 @@
+// =============================================================================
+// 焦点模块：NPC 焦点 HUD 场景
+// -----------------------------------------------------------------------------
+// 点击 NPC 后屏幕整体切换的"对象上下文页"。包括：
+//   - .detail-modal / .detail-card 弹窗容器（含 modalIn 动画）
+//   - .detail-header / .detail-avatar / .detail-info / .detail-name / .detail-meta
+//   - .detail-close / .detail-body / .detail-grid / .detail-item / .item-*
+//   - .detail-build / .build-chip / .build-synergy 身份徽章
+//   - .focus-actions / .focus-action-btn / .focus-action-hint 操作条
+//   - .focus-tabs / .focus-panel 标签与面板
+//   - .chrono-row / .chrono-tick / .chrono-title / .chrono-meta 时间线
+//   - .rel-row / .rel-avatar / .rel-info / .rel-name / .rel-type / .rel-affinity 关系
+//   - .explore-banner / .battle-banner / .region-list / .battle-list
+//   - .region-card / .enemy-card / .fight-btn / .explore-btn / .battle-btn
+//   - .bottom-nav / .nav-item / .nav-icon / .nav-label / .gacha-nav（焦点场景底部导航）
+//
+// 注：焦点页场景过渡由 useSceneTransition.transitionToScene 驱动（GSAP Flip），
+// 不再使用 Vue <transition> + .focus-slide-* CSS 类。
+// =============================================================================
+
+@use './tokens' as *;
+@use './mixins' as *;
+
+// —— 详情弹窗 ——
+.detail-modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  backdrop-filter: blur(4px);
+}
+
+.detail-card {
+  width: 92%;
+  max-width: 440px;
+  max-height: 86%;
+  display: flex;
+  flex-direction: column;
+  background: $sv-bg-deep; 
+  border-radius: 18px;
+  border: 1px solid $sv-border-active; 
+  overflow: hidden;
+  animation: modalIn 0.25s ease-out;
+}
+
+// —— 详情头部 ——
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.15));
+  border-bottom: 1px solid rgba(139, 92, 246, 0.1); 
+  position: relative;
+}
+
+.detail-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, $color-primary, #ec4899); 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: $sv-text-primary;
+  font-weight: 700;
+  font-size: 24px;
+  flex-shrink: 0;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+}
+
+.detail-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.detail-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: $sv-text-primary;
+  margin-bottom: 4px;
+}
+
+.detail-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.detail-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: $sv-text-primary;
+  }
+}
+
+.detail-body {
+  padding: 16px 18px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 16px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.item-value {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+
+  &.highlight { color: #fbbf24; font-weight: 600; }
+  &.success   { color: #4ade80; }
+  &.warning   { color: #fbbf24; }
+  &.alive     { color: #4ade80; }
+  &.dead      { color: #f87171; }
+}
+
+// 焦点页升级：对象上下文页（身份徽章 / 编队操作条 / 标签 / 时间线 / 关系）
+.detail-build {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.build-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: $sv-text-primary;
+  line-height: 1.4;
+}
+
+.build-synergy {
+  font-size: 11px;
+  color: #fbbf24; 
+  font-weight: 600;
+}
+
+.focus-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.focus-action-btn {
+  flex: 1;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid $sv-glow-primary; 
+  background: $sv-border-subtle; 
+  color: $sv-text-primary;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background: rgba(139, 92, 246, 0.32);
+  }
+
+  &.active {
+    background: rgba(239, 68, 68, 0.18); 
+    border-color: $sv-glow-error; 
+    color: #fca5a5; 
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+.focus-action-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  white-space: nowrap;
+}
+
+.focus-tabs {
+  padding: 10px 18px 0;
+  --background: transparent;
+
+  &::part(indicator) {
+    background: $sv-glow-primary; 
+  }
+}
+
+.focus-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+// —— 编年史行 ——
+.chrono-row {
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 3px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+
+  &.imp-4 { border-left-color: $color-warning; }
+  &.imp-5 { border-left-color: $color-error; }
+}
+
+.chrono-tick {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 2px;
+}
+
+.chrono-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: $sv-text-primary;
+}
+
+.chrono-meta {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+// —— 关系行 ——
+.rel-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.09);
+  }
+}
+
+.rel-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, $color-primary, #ec4899); 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: $sv-text-primary;
+  font-weight: 700;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.rel-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rel-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: $sv-text-primary;
+}
+
+.rel-type {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+.rel-affinity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.rel-affinity-val {
+  font-size: 15px;
+  font-weight: 700;
+  color: #fbbf24; 
+}
+
+.rel-affinity-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+// —— 探索 / 战斗 横幅 ——
+.explore-banner,
+.battle-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(236, 72, 153, 0.2));
+  border-radius: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.3); 
+}
+
+.battle-banner {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(249, 115, 22, 0.2));
+  border-color: $sv-glow-error; 
+}
+
+.explore-banner .banner-icon,
+.battle-banner .banner-icon {
+  font-size: 36px;
+}
+
+.explore-banner .banner-title,
+.battle-banner .banner-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 2px;
+}
+
+.explore-banner .banner-desc,
+.battle-banner .banner-desc {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.region-list,
+.battle-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.region-card,
+.enemy-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(99, 102, 241, 0.5); 
+    transform: translateX(4px);
+  }
+}
+
+.enemy-card:hover {
+  border-color: $sv-glow-error; 
+}
+
+.region-icon,
+.enemy-icon {
+  font-size: 32px;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(99, 102, 241, 0.2); 
+  border-radius: 10px;
+}
+
+.enemy-icon {
+  background: $sv-glow-error; 
+}
+
+.region-info,
+.enemy-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.region-name,
+.enemy-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.region-type,
+.enemy-level {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.enemy-level {
+  color: #fbbf24; 
+  font-weight: 600;
+}
+
+.region-arrow {
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.fight-btn {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, $color-error, #f97316); 
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
+}
+
+.explore-btn {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3));
+  border: 1px solid rgba(99, 102, 241, 0.4); 
+
+  &.active {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.5));
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.4); 
+  }
+}
+
+.battle-btn {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(249, 115, 22, 0.3));
+  border: 1px solid $sv-glow-error; 
+
+  &.active {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.5), rgba(249, 115, 22, 0.5));
+    box-shadow: 0 0 20px $sv-glow-error; 
+  }
+}
+
+// —— 焦点场景底部导航 ——
+.bottom-nav {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 70px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  background: linear-gradient(180deg, transparent 0%, rgba(10, 10, 26, 0.95) 30%);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid $sv-border-subtle; 
+  z-index: 15;
+  padding-bottom: 8px;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+
+  &.active {
+    color: $color-primary;
+
+    .nav-icon {
+      transform: scale(1.15);
+    }
+  }
+}
+
+.nav-icon {
+  font-size: 22px;
+  transition: transform 0.2s ease;
+}
+
+.nav-label {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.gacha-nav .nav-icon {
+  filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.6));
+}
+
+// —— 装饰性 @keyframes（保留为 CSS：孤立装饰动画，无需时序控制） ——
+// spec 允许简单装饰动画保留 CSS，GSAP 仅接管需时序/联动的动效
+@keyframes modalIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+

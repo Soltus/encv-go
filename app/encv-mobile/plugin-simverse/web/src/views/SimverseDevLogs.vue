@@ -163,27 +163,33 @@ onUnmounted(() => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .log-status-bar {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
 }
+
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
+
+  &.online {
+    background: var(--color-success);
+    box-shadow: 0 0 6px var(--color-success);
+  }
+
+  &.offline {
+    background: var(--color-base-content);
+    opacity: 0.5;
+  }
 }
-.status-dot.online {
-  background: var(--ion-color-success);
-  box-shadow: 0 0 6px var(--ion-color-success);
-}
-.status-dot.offline {
-  background: var(--ion-color-medium);
-}
+
 .log-source-icon {
   display: inline-flex;
   align-items: center;
@@ -195,16 +201,20 @@ onUnmounted(() => {
   line-height: 1;
   user-select: none;
 }
+
 .log-time {
-  color: var(--ion-color-medium, #6b7280);
+  color: var(--color-base-content);
+  opacity: 0.7;
   font-size: 11px;
   flex-shrink: 0;
 }
+
 .level-badge {
   font-size: 10px;
   padding: 1px 6px;
   flex-shrink: 0;
 }
+
 .log-msg {
   flex: 1;
   overflow: hidden;

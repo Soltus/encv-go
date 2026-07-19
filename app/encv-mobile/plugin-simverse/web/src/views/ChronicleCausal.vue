@@ -15,66 +15,89 @@
     </ion-header>
 
     <ion-content>
-      <div v-if="loading" class="state-container">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
+
+        <template v-else-if="event">
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.events") }}</div>
+              <div class="space-y-1">
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.events") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ event.type_cn }}</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.tier") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ event.level_cn }}</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.tick") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ event.tick }}</span>
+                </div>
+                <div v-if="event.entity_id" class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">关联实体</span>
+                  <span class="text-xs text-base-content/70 font-mono">#{{ event.entity_id }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.causal.cause") }} ({{ event.causes?.length || 0 }})</div>
+              <div v-if="event.causes?.length" class="space-y-1">
+                <div
+                  v-for="cause in event.causes"
+                  :key="cause.id"
+                  class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+                  @click="loadAndShowEvent(cause.id)"
+                >
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium truncate">{{ cause.type_cn }}</div>
+                    <div class="text-xs text-base-content/70">tick {{ cause.tick }} · {{ cause.level_cn }}</div>
+                  </div>
+                  <ion-icon :icon="chevronForward" class="text-base-content/40 ml-2" />
+                </div>
+              </div>
+              <div v-else class="p-4 text-center text-sm text-base-content/50">
+                {{ t("simverse.causal.noEvent") }}
+              </div>
+            </div>
+          </div>
+
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.causal.effect") }} ({{ event.effects?.length || 0 }})</div>
+              <div v-if="event.effects?.length" class="space-y-1">
+                <div
+                  v-for="eff in event.effects"
+                  :key="eff.id"
+                  class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors cursor-pointer"
+                  @click="loadAndShowEvent(eff.id)"
+                >
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm font-medium truncate">{{ eff.type_cn }}</div>
+                    <div class="text-xs text-base-content/70">tick {{ eff.tick }} · {{ eff.level_cn }}</div>
+                  </div>
+                  <ion-icon :icon="chevronForward" class="text-base-content/40 ml-2" />
+                </div>
+              </div>
+              <div v-else class="p-4 text-center text-sm text-base-content/50">
+                {{ t("simverse.causal.noEvent") }}
+              </div>
+            </div>
+          </div>
+        </template>
       </div>
-      <div v-else-if="error" class="state-container">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-
-      <template v-else-if="event">
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.events") }}</ion-label></ion-list-header>
-          <ion-item>
-            <ion-label>{{ t("simverse.events") }}</ion-label>
-            <ion-note slot="end">{{ event.type_cn }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.tier") }}</ion-label>
-            <ion-note slot="end">{{ event.level_cn }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.tick") }}</ion-label>
-            <ion-note slot="end">{{ event.tick }}</ion-note>
-          </ion-item>
-          <ion-item v-if="event.entity_id">
-            <ion-label>#{{ event.entity_id }}</ion-label>
-          </ion-item>
-        </ion-list>
-
-        <ion-list v-if="event && event.causes?.length" :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.causal.cause") }} ({{ event.causes.length }})</ion-label></ion-list-header>
-          <ion-item v-for="cause in event.causes" :key="cause.id" button @click="loadAndShowEvent(cause.id)">
-            <ion-label class="ion-text-wrap">
-              <h3>{{ cause.type_cn }}</h3>
-              <p>tick {{ cause.tick }} · {{ cause.level_cn }}</p>
-            </ion-label>
-            <ion-icon :icon="chevronForward" slot="end" />
-          </ion-item>
-        </ion-list>
-        <ion-list v-else :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.causal.cause") }}</ion-label></ion-list-header>
-          <ion-item class="empty-item"><ion-label class="ion-text-center">{{ t("simverse.causal.noEvent") }}</ion-label></ion-item>
-        </ion-list>
-
-        <ion-list v-if="event && event.effects?.length" :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.causal.effect") }} ({{ event.effects.length }})</ion-label></ion-list-header>
-          <ion-item v-for="eff in event.effects" :key="eff.id" button @click="loadAndShowEvent(eff.id)">
-            <ion-label class="ion-text-wrap">
-              <h3>{{ eff.type_cn }}</h3>
-              <p>tick {{ eff.tick }} · {{ eff.level_cn }}</p>
-            </ion-label>
-            <ion-icon :icon="chevronForward" slot="end" />
-          </ion-item>
-        </ion-list>
-        <ion-list v-else :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.causal.effect") }}</ion-label></ion-list-header>
-          <ion-item class="empty-item"><ion-label class="ion-text-center">{{ t("simverse.causal.noEvent") }}</ion-label></ion-item>
-        </ion-list>
-      </template>
     </ion-content>
   </ion-page>
 </template>
@@ -88,11 +111,6 @@ import {
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSpinner,
   IonTitle,
@@ -133,8 +151,8 @@ onMounted(reload);
 watch(() => route.params.id, reload);
 </script>
 
-<style scoped>
-.state-container {
+<style scoped lang="scss">
+.state-box {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -142,12 +160,5 @@ watch(() => route.params.id, reload);
   padding: 60px 20px;
   gap: 16px;
 }
-.state-container p { color: var(--ion-color-danger); margin: 0; }
-.empty-item {
-  --padding-start: 0;
-  --inner-padding-end: 0;
-  justify-content: center;
-  color: var(--ion-color-medium);
-  padding: 20px 0;
-}
+.state-box p { color: var(--color-error); margin: 0; }
 </style>

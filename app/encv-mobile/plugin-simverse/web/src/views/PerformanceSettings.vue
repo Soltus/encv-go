@@ -14,57 +14,61 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <div v-if="loading" class="state-container">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
-      <div v-else-if="error" class="state-container">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
+    <ion-content>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
 
-      <template v-else>
-        <ion-card>
-          <ion-card-header>
-            <ion-card-title>{{ t("simverse.perfTier") }}</ion-card-title>
-          </ion-card-header>
-          <ion-card-content>
-            <ion-segment :value="currentTier" @ionChange="onTierChange">
-              <ion-segment-button value="background">
-                <ion-label>{{ t("simverse.tierBackground") }}</ion-label>
-              </ion-segment-button>
-              <ion-segment-button value="foreground">
-                <ion-label>{{ t("simverse.tierForeground") }}</ion-label>
-              </ion-segment-button>
-              <ion-segment-button value="fg_idle">
-                <ion-label>{{ t("simverse.tierIdle") }}</ion-label>
-              </ion-segment-button>
-            </ion-segment>
-          </ion-card-content>
-        </ion-card>
+        <template v-else>
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.perfTier") }}</div>
+              <ion-segment :value="currentTier" @ionChange="onTierChange">
+                <ion-segment-button value="background">
+                  <ion-label>{{ t("simverse.tierBackground") }}</ion-label>
+                </ion-segment-button>
+                <ion-segment-button value="foreground">
+                  <ion-label>{{ t("simverse.tierForeground") }}</ion-label>
+                </ion-segment-button>
+                <ion-segment-button value="fg_idle">
+                  <ion-label>{{ t("simverse.tierIdle") }}</ion-label>
+                </ion-segment-button>
+              </ion-segment>
+            </div>
+          </div>
 
-        <ion-list v-if="metrics" :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.perf.tier") }}</ion-label></ion-list-header>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.tps") }}</ion-label>
-            <ion-note slot="end">{{ metrics.ticks_per_sec }}</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.avgTick") }}</ion-label>
-            <ion-note slot="end">{{ metrics.avg_tick_ns.toFixed(1) }} ns</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.perf.totalMb") }}</ion-label>
-            <ion-note slot="end">{{ metrics.total_mb.toFixed(1) }} MB</ion-note>
-          </ion-item>
-          <ion-item>
-            <ion-label>{{ t("simverse.population") }}</ion-label>
-            <ion-note slot="end">{{ metrics.npc_count }}</ion-note>
-          </ion-item>
-        </ion-list>
-      </template>
+          <div v-if="metrics" class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.perf.tier") }}</div>
+              <div class="space-y-1">
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.tps") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.ticks_per_sec }}</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.avgTick") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.avg_tick_ns.toFixed(1) }} ns</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.perf.totalMb") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.total_mb.toFixed(1) }} MB</span>
+                </div>
+                <div class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <span class="text-sm font-medium">{{ t("simverse.population") }}</span>
+                  <span class="text-xs text-base-content/70 font-mono">{{ metrics.npc_count }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -75,18 +79,10 @@ import {
   IonBackButton,
   IonButton,
   IonButtons,
-  IonCard,
-  IonCardContent,
-  IonCardHeader,
-  IonCardTitle,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
   IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSegment,
   IonSegmentButton,
@@ -126,14 +122,18 @@ async function reload() {
 onMounted(reload);
 </script>
 
-<style scoped>
-.state-container {
+<style scoped lang="scss">
+.state-box {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
   gap: 16px;
+
+  p {
+    color: var(--color-error);
+    margin: 0;
+  }
 }
-.state-container p { color: var(--ion-color-danger); margin: 0; }
 </style>

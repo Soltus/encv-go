@@ -1,0 +1,42 @@
+// =============================================================================
+// SimverseWorld Mixins
+// -----------------------------------------------------------------------------
+// 可复用的视觉混合宏：玻璃拟态 / 霓虹辉光 / 扫描线 / HUD 卡片 / 赛博边框 / 焦点环
+// 所有颜色均来自 _tokens.scss 派生的语义令牌，不引入硬编码调色板。
+// =============================================================================
+
+@use './tokens' as *;
+
+// 玻璃拟态面板：半透明背景 + backdrop-filter blur + 边框
+@mixin glass-panel {
+  background: $sv-bg-elevated;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid $sv-border-subtle;
+  border-radius: 16px;
+}
+
+// HUD 卡片：圆角 + 玻璃拟态 + 内阴影
+@mixin hud-card {
+  @include glass-panel;
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+// 赛博边框：渐变 border-image 或双层 border
+@mixin cyber-border {
+  border: 1px solid transparent;
+  background-image:
+    linear-gradient($sv-bg-surface, $sv-bg-surface),
+    linear-gradient(135deg, $color-primary, transparent 50%, $color-primary);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
+// 焦点环：outline + box-shadow
+@mixin focus-ring {
+  outline: 2px solid $color-primary;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.2);
+}

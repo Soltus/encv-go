@@ -14,44 +14,53 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <div v-if="loading" class="state-box">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
-      <div v-else-if="error" class="state-box">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-      <template v-else-if="data">
-        <ion-card>
-          <ion-card-header>
-            <ion-card-title>{{ data.name }}</ion-card-title>
-            <ion-card-subtitle>#{{ data.org_id }}</ion-card-subtitle>
-          </ion-card-header>
-        </ion-card>
-
-        <ion-list-header v-if="data.territory.length">
-          <ion-label>{{ t("simverse.regionDistribution") }}</ion-label>
-        </ion-list-header>
-        <ion-list v-if="data.territory.length" :inset="true">
-          <ion-item
-            v-for="terr in data.territory"
-            :key="terr.region_id"
-            button
-            detail
-            @click="goRegion(terr.region_id)"
-          >
-            <ion-icon :icon="location" slot="start" color="success" />
-            <ion-label>{{ t("simverse.regions") }} #{{ terr.region_id }}</ion-label>
-            <ion-note slot="end" color="medium">{{ terr.members }}</ion-note>
-          </ion-item>
-        </ion-list>
-        <div v-else class="state-box">
-          <p>{{ t("simverse.noRegions") }}</p>
+    <ion-content>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
         </div>
-      </template>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
+        <template v-else-if="data">
+          <div class="ui-card">
+            <div class="p-4">
+              <h2 class="text-lg font-bold m-0 mb-1">{{ data.name }}</h2>
+              <p class="text-sm text-base-content/60 m-0">#{{ data.org_id }}</p>
+            </div>
+          </div>
+
+          <template v-if="data.territory.length">
+            <div class="ui-header">{{ t("simverse.regionDistribution") }}</div>
+            <div class="space-y-2">
+              <div
+                v-for="terr in data.territory"
+                :key="terr.region_id"
+                class="ui-card cursor-pointer hover:scale-[0.98] active:scale-[0.97] transition-transform"
+                @click="goRegion(terr.region_id)"
+              >
+                <div class="p-3 flex items-center gap-3">
+                  <div class="ui-bubble !p-0 !w-10 !h-10 flex items-center justify-center flex-shrink-0 !bg-success/15 !border-success/30">
+                    <ion-icon :icon="location" class="text-success" />
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <h3 class="text-base font-semibold m-0">{{ t("simverse.regions") }} #{{ terr.region_id }}</h3>
+                  </div>
+                  <div class="flex-shrink-0 text-sm font-mono text-base-content/70">
+                    {{ terr.members }}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+          <div v-else class="state-box">
+            <p>{{ t("simverse.noRegions") }}</p>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -60,20 +69,10 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonButton,
   IonButtons,
-  IonCard,
-  IonCardHeader,
-  IonCardSubtitle,
-  IonCardTitle,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSpinner,
   IonTitle,
@@ -113,7 +112,7 @@ function goRegion(id: number) {
 onMounted(reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;

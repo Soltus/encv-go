@@ -85,16 +85,18 @@ export enum TerrainType {
   DESERT = "desert",
 }
 
+// 地形配色：与 encv-mobile 紫色主题协调。
+// 水体偏蓝紫，平原暖米色，森林略去饱和的绿，山地冷灰带紫调，沙漠暖橙。
 export const TERRAIN_COLORS: Record<TerrainType, number> = {
-  [TerrainType.DEEP_WATER]: 0x1e3a5f,
-  [TerrainType.SHALLOW_WATER]: 0x2d5a87,
-  [TerrainType.BEACH]: 0xd4c4a0,
-  [TerrainType.PLAIN]: 0x4a7c39,
-  [TerrainType.FOREST]: 0x2d5a27,
-  [TerrainType.HILLS]: 0x6b8e6b,
-  [TerrainType.MOUNTAIN]: 0x7a7a7a,
-  [TerrainType.SNOW]: 0xe8e8e8,
-  [TerrainType.DESERT]: 0xc9a96e,
+  [TerrainType.DEEP_WATER]: 0x2a2a5a, // 深水：蓝紫底
+  [TerrainType.SHALLOW_WATER]: 0x3a3a7a, // 浅水：蓝紫
+  [TerrainType.BEACH]: 0xd4c4a0, // 沙滩：暖沙
+  [TerrainType.PLAIN]: 0xb8a878, // 平原：暖米色
+  [TerrainType.FOREST]: 0x3a5a3a, // 森林：略去饱和的绿
+  [TerrainType.HILLS]: 0x6b7a6b, // 丘陵：森林→山地过渡
+  [TerrainType.MOUNTAIN]: 0x6b6b85, // 山地：冷灰带紫调
+  [TerrainType.SNOW]: 0xe8e8f0, // 雪山：偏冷的近白
+  [TerrainType.DESERT]: 0xd4a06e, // 沙漠：暖橙
 };
 
 export class TerrainGenerator {

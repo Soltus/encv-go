@@ -15,52 +15,76 @@
     </ion-header>
 
     <ion-content class="ion-padding">
-      <div v-if="loading" class="state-box">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
-      <div v-else-if="error" class="state-box">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-      <template v-else>
-        <!-- 当前行为快照 -->
-        <ion-card v-if="behavior">
-          <ion-card-header>
-            <ion-card-title>{{ t("simverse.behavior") }}</ion-card-title>
-          </ion-card-header>
-          <ion-card-content>
-            <div class="behavior-now">
-              <span class="behavior-badge">{{ behavior.current_behavior_cn || behavior.current_behavior }}</span>
-            </div>
-            <ion-grid>
-              <ion-row>
-                <ion-col><div class="stat-label">{{ t("simverse.detail.mood") }}</div><div class="stat-val">{{ behavior.mood }}</div></ion-col>
-                <ion-col><div class="stat-label">{{ t("simverse.detail.energy") }}</div><div class="stat-val">{{ behavior.energy }}</div></ion-col>
-              </ion-row>
-              <ion-row>
-                <ion-col><div class="stat-label">{{ t("simverse.behaviorStart") }}</div><div class="stat-val">{{ behavior.behavior_start_tick }}</div></ion-col>
-                <ion-col><div class="stat-label">{{ t("simverse.behaviorDuration") }}</div><div class="stat-val">{{ behavior.behavior_duration }}</div></ion-col>
-              </ion-row>
-            </ion-grid>
-          </ion-card-content>
-        </ion-card>
-
-        <!-- 行为时间线（该 NPC 的编年史事件流） -->
-        <ion-list-header><ion-label>{{ t("simverse.chronicleTimeline") }}</ion-label></ion-list-header>
-        <ion-list v-if="events.length" :inset="true">
-          <ion-item v-for="ev in events" :key="ev.id">
-            <ion-label>
-              <h3>{{ ev.type }}</h3>
-              <p>Tick {{ ev.tick }} · {{ t("simverse.importance") }} {{ ev.importance }}</p>
-            </ion-label>
-          </ion-item>
-        </ion-list>
-        <div v-else class="state-box">
-          <p>{{ t("simverse.causal.noEvent") }}</p>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
         </div>
-      </template>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="reload">{{ t("settings.check") }}</button>
+        </div>
+        <template v-else>
+          <!-- 当前行为快照 -->
+          <div v-if="behavior" class="ui-card">
+            <div class="p-4">
+              <div class="ui-header mb-4">{{ t("simverse.behavior") }}</div>
+              <div class="behavior-now mb-4">
+                <span class="ui-chip !text-sm !font-semibold !bg-warning/15 !text-warning !border-warning/30">
+                  <ion-icon :icon="pulseOutline" class="mr-1" />
+                  {{ behavior.current_behavior_cn || behavior.current_behavior }}
+                </span>
+              </div>
+              <div class="grid grid-cols-2 gap-4">
+                <div class="stat-item">
+                  <div class="stat-label text-xs text-base-content/60 mb-1">{{ t("simverse.detail.mood") }}</div>
+                  <div class="stat-val text-xl font-bold">{{ behavior.mood }}</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label text-xs text-base-content/60 mb-1">{{ t("simverse.detail.energy") }}</div>
+                  <div class="stat-val text-xl font-bold">{{ behavior.energy }}</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label text-xs text-base-content/60 mb-1">{{ t("simverse.behaviorStart") }}</div>
+                  <div class="stat-val text-xl font-bold font-mono">{{ behavior.behavior_start_tick }}</div>
+                </div>
+                <div class="stat-item">
+                  <div class="stat-label text-xs text-base-content/60 mb-1">{{ t("simverse.behaviorDuration") }}</div>
+                  <div class="stat-val text-xl font-bold font-mono">{{ behavior.behavior_duration }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 行为时间线（该 NPC 的编年史事件流） -->
+          <div class="ui-card">
+            <div class="p-4">
+              <div class="ui-header mb-3">{{ t("simverse.chronicleTimeline") }}</div>
+              <div v-if="events.length" class="space-y-3">
+                <div
+                  v-for="ev in events"
+                  :key="ev.id"
+                  class="flex items-start gap-3 py-2 border-b border-base-200 last:border-b-0 last:pb-0"
+                >
+                  <div class="ui-bubble w-8 h-8 flex items-center justify-center text-xs flex-shrink-0 !bg-primary/10">
+                    <ion-icon :icon="timeOutline" class="text-primary" />
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <h3 class="text-sm font-medium m-0 mb-1">{{ ev.type }}</h3>
+                    <p class="text-xs text-base-content/60 m-0">
+                      Tick {{ ev.tick }} · {{ t("simverse.importance") }} {{ ev.importance }}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="state-box py-10">
+                <p class="text-base-content/60 m-0">{{ t("simverse.causal.noEvent") }}</p>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -69,28 +93,16 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonButton,
   IonButtons,
-  IonCard,
-  IonCardContent,
-  IonCardHeader,
-  IonCardTitle,
-  IonCol,
   IonContent,
-  IonGrid,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
   IonPage,
-  IonRow,
   IonSpinner,
   IonTitle,
   IonToolbar,
 } from "@ionic/vue";
-import { alertCircleOutline, refreshOutline } from "ionicons/icons";
+import { alertCircleOutline, refreshOutline, pulseOutline, timeOutline } from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { type SimverseBehaviorState, type SimverseChronicleEvent, useSimverse } from "@/composables/useSimverse";
@@ -126,7 +138,7 @@ async function reload() {
 onMounted(reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
@@ -135,24 +147,7 @@ onMounted(reload);
   padding: 40px 20px;
   gap: 16px;
 }
-.behavior-now {
-  margin-bottom: 12px;
-}
-.behavior-badge {
-  display: inline-block;
-  padding: 6px 14px;
-  border-radius: 16px;
-  background: var(--ion-color-warning-tint, #fef3c7);
-  color: var(--ion-color-warning-shade, #92400e);
-  font-weight: 600;
-  font-size: 14px;
-}
-.stat-label {
-  font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
-}
-.stat-val {
-  font-size: 20px;
-  font-weight: 700;
+.stat-item {
+  text-align: left;
 }
 </style>

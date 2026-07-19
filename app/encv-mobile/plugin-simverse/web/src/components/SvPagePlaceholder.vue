@@ -1,11 +1,11 @@
 <template>
-  <ion-page class="sv-page">
+  <ion-page>
     <ion-header>
       <ion-toolbar color="transparent">
         <ion-buttons slot="start">
           <ion-back-button default-href="/tabs/home" />
         </ion-buttons>
-        <ion-title class="sv-card-title">
+        <ion-title class="flex items-center gap-2">
           <ion-icon :icon="icon" />
           {{ title }}
         </ion-title>
@@ -13,11 +13,13 @@
     </ion-header>
 
     <ion-content fullscreen class="ion-padding">
-      <div class="sv-empty">
-        <div class="sv-empty-icon">
+      <div
+        class="flex flex-col items-center justify-center text-center py-10 px-5 text-base-content/60"
+      >
+        <div class="text-5xl mb-3 opacity-50">
           <ion-icon :icon="icon" />
         </div>
-        <div class="sv-empty-text">{{ t("simverse.comingSoon") }}</div>
+        <div class="text-sm">{{ t("simverse.comingSoon") }}</div>
       </div>
     </ion-content>
   </ion-page>

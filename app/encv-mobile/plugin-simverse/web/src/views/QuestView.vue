@@ -27,69 +27,95 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <div v-if="loading" class="state-box">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
-      <div v-else-if="error" class="state-box">
-        <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
-        <p>{{ error }}</p>
-        <ion-button @click="reload">{{ t("settings.check") }}</ion-button>
-      </div>
-      <template v-else-if="summary">
-        <ion-card>
-          <ion-card-content>
-            <div class="stat-row">
-              <div class="stat"><div class="stat-val">{{ summary.active_count }}</div><div class="stat-label">{{ t("simverse.questActiveCount") }}</div></div>
-              <div class="stat"><div class="stat-val">{{ summary.completable }}</div><div class="stat-label">{{ t("simverse.questCompletable") }}</div></div>
-              <div class="stat"><div class="stat-val">{{ summary.claimed_count }}</div><div class="stat-label">{{ t("simverse.questClaimed") }}</div></div>
+    <ion-content>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-box">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
+        <div v-else-if="error" class="state-box">
+          <ion-icon :icon="alertCircleOutline" color="danger" size="large" />
+          <p>{{ error }}</p>
+          <button type="button" class="ui-button" @click="() => reload()">{{ t("settings.check") }}</button>
+        </div>
+        <template v-else-if="summary">
+          <div class="ui-card">
+            <div class="p-4">
+              <div class="stats stats-vertical sm:stats-horizontal shadow w-full">
+                <div class="stat">
+                  <div class="stat-value">{{ summary.active_count }}</div>
+                  <div class="stat-title">{{ t("simverse.questActiveCount") }}</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-value">{{ summary.completable }}</div>
+                  <div class="stat-title">{{ t("simverse.questCompletable") }}</div>
+                </div>
+                <div class="stat">
+                  <div class="stat-value">{{ summary.claimed_count }}</div>
+                  <div class="stat-title">{{ t("simverse.questClaimed") }}</div>
+                </div>
+              </div>
             </div>
-          </ion-card-content>
-        </ion-card>
+          </div>
 
-        <ion-list :inset="true">
-          <ion-item-group v-for="grp in grouped" :key="grp.key">
-            <ion-item-divider>
-              <ion-label>{{ grp.label }}</ion-label>
-            </ion-item-divider>
-            <ion-card v-for="q in grp.quests" :key="q.id" class="quest-card">
-              <ion-card-content>
-                <div class="quest-head">
-                  <span class="quest-icon">{{ q.icon }}</span>
-                  <div class="quest-title">
-                    <h3>{{ q.title }}</h3>
-                    <p>{{ q.desc }}</p>
+          <div class="space-y-4">
+            <div v-for="grp in grouped" :key="grp.key" class="space-y-2">
+              <div class="ui-header">{{ grp.label }}</div>
+              <div class="space-y-2">
+                <div v-for="q in grp.quests" :key="q.id" class="ui-card">
+                  <div class="p-4 space-y-3">
+                    <div class="quest-head">
+                      <span class="quest-icon">{{ q.icon }}</span>
+                      <div class="quest-title">
+                        <h3 class="text-base font-semibold m-0">{{ q.title }}</h3>
+                        <p class="text-sm text-base-content/70 m-0">{{ q.desc }}</p>
+                      </div>
+                    </div>
+                    <div class="progress-bar">
+                      <div class="progress-fill" :style="{ width: (progressRatio(q) * 100) + '%' }"></div>
+                    </div>
+                    <div class="quest-meta text-xs text-base-content/70">
+                      {{ t("simverse.questProgress") }} {{ q.progress }} / {{ q.goal }}
+                    </div>
+                    <div class="quest-reward flex gap-2 flex-wrap">
+                      <span class="ui-chip !text-xs !py-0.5 !bg-tertiary/15 !text-tertiary !border-tertiary/30">
+                        {{ q.reward.icon }} {{ q.reward.diamond }} {{ t("simverse.questDiamond") }}
+                      </span>
+                      <span class="ui-chip !text-xs !py-0.5 !bg-warning/15 !text-warning !border-warning/30">
+                        {{ q.reward.gold }} {{ t("simverse.questGold") }}
+                      </span>
+                      <span class="ui-chip !text-xs !py-0.5 !bg-success/15 !text-success !border-success/30">
+                        {{ q.reward.exp }} {{ t("simverse.questExp") }}
+                      </span>
+                    </div>
+                    <button
+                      v-if="q.status === 'active'"
+                      type="button"
+                      class="ui-button w-full"
+                      :disabled="q.progress < q.goal || claiming"
+                      @click="claim(q)"
+                    >
+                      {{ q.progress >= q.goal ? t("simverse.questClaim") : t("simverse.questActiveCount") }}
+                    </button>
+                    <span
+                      v-else-if="q.status === 'claimed'"
+                      class="block text-center text-sm text-base-content/50 py-2"
+                    >
+                      {{ t("simverse.questClaimed") }}
+                    </span>
+                    <span
+                      v-else
+                      class="block text-center text-sm text-base-content/50 py-2"
+                    >
+                      {{ q.status }}
+                    </span>
                   </div>
                 </div>
-                <ion-progress-bar :value="progressRatio(q)" color="primary" />
-                <div class="quest-meta">
-                  <span>{{ t("simverse.questProgress") }} {{ q.progress }} / {{ q.goal }}</span>
-                </div>
-                <div class="quest-reward">
-                  <ion-badge color="tertiary">{{ q.reward.icon }} {{ q.reward.diamond }} {{ t("simverse.questDiamond") }}</ion-badge>
-                  <ion-badge color="warning">{{ q.reward.gold }} {{ t("simverse.questGold") }}</ion-badge>
-                  <ion-badge color="success">{{ q.reward.exp }} {{ t("simverse.questExp") }}</ion-badge>
-                </div>
-                <ion-button
-                  v-if="q.status === 'active'"
-                  expand="block"
-                  size="small"
-                  class="claim-btn"
-                  :disabled="q.progress < q.goal || claiming"
-                  @click="claim(q)"
-                >
-                  {{ q.progress >= q.goal ? t("simverse.questClaim") : t("simverse.questActiveCount") }}
-                </ion-button>
-                <ion-badge v-else-if="q.status === 'claimed'" color="medium" class="status-badge">
-                  {{ t("simverse.questClaimed") }}
-                </ion-badge>
-                <ion-badge v-else color="light" class="status-badge">{{ q.status }}</ion-badge>
-              </ion-card-content>
-            </ion-card>
-          </ion-item-group>
-        </ion-list>
-      </template>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -98,21 +124,11 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonBadge,
-  IonButton,
   IonButtons,
-  IonCard,
-  IonCardContent,
   IonContent,
   IonHeader,
   IonIcon,
-  IonItem,
-  IonItemDivider,
-  IonItemGroup,
-  IonLabel,
-  IonList,
   IonPage,
-  IonProgressBar,
   IonSegment,
   IonSegmentButton,
   IonSpinner,
@@ -182,7 +198,7 @@ function onFilter(ev: any) {
 onMounted(reload);
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-box {
   display: flex;
   flex-direction: column;
@@ -191,58 +207,29 @@ onMounted(reload);
   padding: 60px 20px;
   gap: 16px;
 }
-.stat-row {
-  display: flex;
-  justify-content: space-around;
-}
-.stat {
-  text-align: center;
-}
-.stat-val {
-  font-size: 22px;
-  font-weight: 700;
-}
-.stat-label {
-  font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
-}
-.quest-card {
-  margin: 8px 0;
-}
+
 .quest-head {
   display: flex;
   gap: 10px;
   align-items: flex-start;
 }
+
 .quest-icon {
   font-size: 24px;
 }
-.quest-title h3 {
-  margin: 0;
-  font-size: 15px;
+
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: var(--color-base-200);
+  border-radius: 3px;
+  overflow: hidden;
 }
-.quest-title p {
-  margin: 2px 0 0;
-  font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
-}
-.quest-meta {
-  font-size: 12px;
-  color: var(--ion-color-medium, #6b7280);
-  margin: 8px 0 4px;
-}
-.quest-reward {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-}
-.claim-btn {
-  margin-top: 10px;
-}
-.status-badge {
-  display: block;
-  margin-top: 10px;
-  text-align: center;
+
+.progress-fill {
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
 }
 </style>

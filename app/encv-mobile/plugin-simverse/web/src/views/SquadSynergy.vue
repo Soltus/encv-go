@@ -7,95 +7,112 @@
         </ion-buttons>
         <ion-title>{{ t("simverse.squad") }}</ion-title>
         <ion-buttons slot="end">
-          <ion-button @click="clearSquad" :disabled="!squadIds.length">{{ t("simverse.squadClear") }}</ion-button>
+          <button
+            type="button"
+            class="ui-button !text-sm !py-1 !px-3"
+            :class="!squadIds.length ? 'opacity-50 cursor-not-allowed' : ''"
+            :disabled="!squadIds.length"
+            @click="clearSquad"
+          >
+            {{ t("simverse.squadClear") }}
+          </button>
         </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
-    <ion-content class="ion-padding">
-      <div v-if="loading" class="state-container">
-        <ion-spinner name="crescent" />
-        <p>{{ t("settings.loading") }}</p>
-      </div>
+    <ion-content>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-container">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
 
-      <template v-else>
-        <!-- 编队席位 -->
-        <ion-list :inset="true">
-          <ion-list-header>
-            <ion-label>{{ t("simverse.squadSlots") }} ({{ squadIds.length }}/6)</ion-label>
-          </ion-list-header>
-          <div class="slot-grid">
-            <div
-              v-for="i in 6"
-              :key="i"
-              class="slot"
-              :class="squadMembers[i - 1] ? 'filled' : 'empty'"
-            >
-              <template v-if="squadMembers[i - 1]">
-                <div class="slot-avatar">{{ initial(squadMembers[i - 1].name) }}</div>
-                <div class="slot-name">{{ squadMembers[i - 1].name }}</div>
-                <ion-badge :color="archColor(deriveBuildFromNPC(squadMembers[i - 1]).primary)" class="slot-badge">
-                  {{ archLabel(deriveBuildFromNPC(squadMembers[i - 1]).primary) }}
-                </ion-badge>
-                <ion-button
-                  fill="clear"
-                  size="small"
-                  class="slot-remove"
-                  @click="removeFromSquad(squadMembers[i - 1].id)"
+        <template v-else>
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">
+              {{ t("simverse.squadSlots") }} ({{ squadIds.length }}/6)
+              </div>
+              <div class="slot-grid">
+                <div
+                  v-for="i in 6"
+                  :key="i"
+                  class="slot"
+                  :class="squadMembers[i - 1] ? 'filled' : 'empty'"
                 >
-                  {{ t("simverse.squadRemove") }}
-                </ion-button>
-              </template>
-              <template v-else>
-                <div class="slot-plus">+</div>
-              </template>
+                  <template v-if="squadMembers[i - 1]">
+                    <div class="slot-avatar">{{ initial(squadMembers[i - 1].name) }}</div>
+                    <div class="slot-name">{{ squadMembers[i - 1].name }}</div>
+                    <span class="ui-chip !text-xs !py-0.5" :class="archChipClass(deriveBuildFromNPC(squadMembers[i - 1]).primary)">
+                      {{ archLabel(deriveBuildFromNPC(squadMembers[i - 1]).primary) }}
+                    </span>
+                    <button
+                      type="button"
+                      class="text-xs text-error hover:underline mt-1"
+                      @click="removeFromSquad(squadMembers[i - 1].id)"
+                    >
+                      {{ t("simverse.squadRemove") }}
+                    </button>
+                  </template>
+                  <template v-else>
+                    <div class="slot-plus">+</div>
+                  </template>
+                </div>
+              </div>
+              <p v-if="!squadIds.length" class="hint">{{ t("simverse.squadEmpty") }}</p>
             </div>
           </div>
-          <p v-if="!squadIds.length" class="hint">{{ t("simverse.squadEmpty") }}</p>
-        </ion-list>
 
-        <!-- 羁绊（自走棋式 2/4/6 协同） -->
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.squadSynergy") }}</ion-label></ion-list-header>
-          <ion-item v-for="s in synergyResult" :key="s.key">
-            <ion-label>
-              <ion-badge :color="archColor(s.key)">{{ archLabel(s.key) }}</ion-badge>
-              <span class="syn-count"> ×{{ s.count }} · {{ t("simverse.synergyTier" + s.tier) }}</span>
-            </ion-label>
-            <ion-note slot="end" color="success">{{ t("simverse.synergyActive") }}</ion-note>
-          </ion-item>
-          <p v-if="!synergyResult.length" class="hint">{{ t("simverse.synergyHint") }}</p>
-        </ion-list>
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.squadSynergy") }}</div>
+              <div class="space-y-1">
+                <div v-for="s in synergyResult" :key="s.key" class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <div class="flex items-center gap-2">
+                    <span class="ui-chip !text-xs !py-0.5" :class="archChipClass(s.key)">
+                      {{ archLabel(s.key) }}
+                    </span>
+                    <span class="text-sm text-base-content/70"> ×{{ s.count }} · {{ t("simverse.synergyTier" + s.tier) }}</span>
+                  </div>
+                  <span class="text-xs text-success font-medium">{{ t("simverse.synergyActive") }}</span>
+                </div>
+              </div>
+              <p v-if="!synergyResult.length" class="hint">{{ t("simverse.synergyHint") }}</p>
+            </div>
+          </div>
 
-        <!-- 候选角色 -->
-        <ion-list :inset="true">
-          <ion-list-header><ion-label>{{ t("simverse.squadPick") }}</ion-label></ion-list-header>
-          <ion-searchbar v-model="filter" :placeholder="t('simverse.search')" />
-          <ion-item
-            v-for="npc in filteredPool"
-            :key="npc.id"
-            :disabled="isFull && !inSquad(npc.id)"
-          >
-            <ion-label>
-              <h3>{{ npc.name }}</h3>
-              <p>{{ npc.profession }} · Lv.{{ npc.level }}</p>
-            </ion-label>
-            <ion-badge slot="end" :color="archColor(deriveBuildFromNPC(npc).primary)" outline>
-              {{ archLabel(deriveBuildFromNPC(npc).primary) }}
-            </ion-badge>
-            <ion-button
-              slot="end"
-              fill="clear"
-              size="small"
-              :disabled="inSquad(npc.id) || isFull"
-              @click="addToSquad(npc.id)"
-            >
-              {{ inSquad(npc.id) ? "✓" : t("simverse.squadAdd") }}
-            </ion-button>
-          </ion-item>
-          <p v-if="!filteredPool.length" class="hint">{{ t("simverse.squadFull") }}</p>
-        </ion-list>
-      </template>
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.squadPick") }}</div>
+              <ion-searchbar v-model="filter" :placeholder="t('simverse.search')" />
+              <div class="space-y-1 max-h-96 overflow-y-auto">
+                <div
+                  v-for="npc in filteredPool" :key="npc.id" class="flex items-center gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors"
+                  :class="{ 'opacity-50 pointer-events-none': isFull && !inSquad(npc.id) }"
+                >
+                  <div class="flex-1 min-w-0">
+                    <h3 class="text-sm font-semibold m-0 mb-1">{{ npc.name }}</h3>
+                    <p class="text-xs text-base-content/60 m-0">{{ npc.profession }} · Lv.{{ npc.level }}</p>
+                  </div>
+                  <span class="ui-chip !text-xs !py-0.5" :class="archChipClass(deriveBuildFromNPC(npc).primary)">
+                    {{ archLabel(deriveBuildFromNPC(npc).primary) }}
+                  </span>
+                  <button
+                    type="button"
+                    class="ui-button !text-xs !py-1 !px-3"
+                    :class="{ 'opacity-50 cursor-not-allowed': inSquad(npc.id) || isFull }"
+                    :disabled="inSquad(npc.id) || isFull"
+                    @click="addToSquad(npc.id)"
+                  >
+                    {{ inSquad(npc.id) ? "✓" : t("simverse.squadAdd") }}
+                  </button>
+                </div>
+              </div>
+              <p v-if="!filteredPool.length" class="hint">{{ t("simverse.squadFull") }}</p>
+            </div>
+          </div>
+        </template>
+      </div>
     </ion-content>
   </ion-page>
 </template>
@@ -104,16 +121,8 @@
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   IonBackButton,
-  IonBadge,
-  IonButton,
-  IonButtons,
   IonContent,
   IonHeader,
-  IonItem,
-  IonLabel,
-  IonList,
-  IonListHeader,
-  IonNote,
   IonPage,
   IonSearchbar,
   IonSpinner,
@@ -145,7 +154,6 @@ const squadMembers = computed(() =>
 
 const squadBuilds = computed(() => squadMembers.value.map(m => deriveBuildFromNPC(m)));
 
-// 自走棋式羁绊：同流派主流派数量达 2/4/6 触发（初/盛/极）
 const synergyResult = computed(() => {
   const counts = {} as Record<ArchetypeKey, number>;
   (["warrior", "guardian", "scholar", "merchant", "artisan", "healer", "leader", "hermit", "rogue", "artist"] as ArchetypeKey[]).forEach(
@@ -176,20 +184,20 @@ function initial(name: string): string {
 function archLabel(key: ArchetypeKey): string {
   return t(`simverse.build.${key}`);
 }
-const ARCH_COLOR: Record<ArchetypeKey, string> = {
-  warrior: "danger",
-  guardian: "warning",
-  scholar: "primary",
-  merchant: "success",
-  artisan: "tertiary",
-  healer: "success",
-  leader: "secondary",
-  hermit: "medium",
-  rogue: "dark",
-  artist: "tertiary",
+const ARCH_CHIP_CLASS: Record<ArchetypeKey, string> = {
+  warrior: "!bg-error/15 !text-error !border-error/30",
+  guardian: "!bg-warning/15 !text-warning !border-warning/30",
+  scholar: "!bg-primary/15 !text-primary !border-primary/30",
+  merchant: "!bg-success/15 !text-success !border-success/30",
+  artisan: "!bg-tertiary/15 !text-tertiary !border-tertiary/30",
+  healer: "!bg-success/15 !text-success !border-success/30",
+  leader: "!bg-secondary/15 !text-secondary !border-secondary/30",
+  hermit: "!bg-base-content/15 !text-base-content/70 !border-base-content/20",
+  rogue: "!bg-base-content/15 !text-base-content/70 !border-base-content/20",
+  artist: "!bg-tertiary/15 !text-tertiary !border-tertiary/30",
 };
-function archColor(key: ArchetypeKey): string {
-  return ARCH_COLOR[key] || "medium";
+function archChipClass(key: ArchetypeKey): string {
+  return ARCH_CHIP_CLASS[key] || "!bg-base-content/15 !text-base-content/70 !border-base-content/20";
 }
 
 function persist() {
@@ -239,7 +247,7 @@ onMounted(async () => {
 });
 </script>
 
-<style scoped>
+<style scoped lang="scss">
 .state-container {
   display: flex;
   flex-direction: column;
@@ -248,12 +256,14 @@ onMounted(async () => {
   padding: 60px 20px;
   gap: 16px;
 }
+
 .slot-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
   padding: 8px 4px;
 }
+
 .slot {
   border-radius: 12px;
   padding: 10px 6px;
@@ -264,26 +274,31 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   gap: 4px;
+
+  &.filled {
+    background: var(--color-base-200);
+    border: 1px solid var(--color-base-300);
+  }
+
+  &.empty {
+    border: 1px dashed var(--color-base-content);
+    color: var(--color-base-content);
+    opacity: 0.5;
+  }
 }
-.slot.filled {
-  background: var(--ion-color-light, #f3f4f6);
-  border: 1px solid var(--ion-color-step-200, #e5e7eb);
-}
-.slot.empty {
-  border: 1px dashed var(--ion-color-medium, #9ca3af);
-  color: var(--ion-color-medium);
-}
+
 .slot-avatar {
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  background: var(--ion-color-primary);
-  color: var(--color-white);
+  background: var(--color-primary);
+  color: var(--color-primary-content);
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+
 .slot-name {
   font-size: 12px;
   font-weight: 600;
@@ -292,21 +307,16 @@ onMounted(async () => {
   text-overflow: ellipsis;
   max-width: 100%;
 }
-.slot-badge {
-  font-size: 10px;
-}
+
 .slot-plus {
   font-size: 28px;
   font-weight: 300;
 }
-.syn-count {
-  font-size: 13px;
-  color: var(--ion-color-medium);
-  margin-left: 6px;
-}
+
 .hint {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: var(--color-base-content);
+  opacity: 0.7;
   padding: 4px 12px 10px;
   margin: 0;
 }

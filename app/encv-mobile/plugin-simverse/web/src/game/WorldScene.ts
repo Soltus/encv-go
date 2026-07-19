@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { gsap } from "gsap";
 import type { SimverseNPC } from "@/composables/useSimverse";
 import { BuildingSprite, type BuildingType } from "./BuildingSprite";
 import { ARCH_META, ARCHETYPES } from "./builds";
@@ -63,7 +64,7 @@ export class WorldScene extends Phaser.Scene {
   init(data: { seed?: number; mapWidth?: number; mapHeight?: number }): void {
     if (data.seed) this.worldSeed = data.seed;
     if (data.mapWidth) this.mapWidth = data.mapWidth;
-    if (data.mapHeight) data.mapHeight;
+    if (data.mapHeight) this.mapHeight = data.mapHeight;
   }
 
   preload(): void {}
@@ -362,8 +363,8 @@ export class WorldScene extends Phaser.Scene {
 
   private setupKeyboardShortcuts(): void {
     this.input.keyboard?.on("keydown-SPACE", () => {
-      this.cameras.main.centerOn((this.mapWidth * this.tileSize) / 2, (this.mapHeight * this.tileSize) / 2);
-      this.cameras.main.setZoom(0.5);
+      // GSAP 驱动的镜头回退：与 returnToWorldView 一致，键盘快捷键也走平滑过渡
+      this.returnToWorldView();
     });
 
     this.input.keyboard?.on("keydown-M", () => {
@@ -581,6 +582,8 @@ export class WorldScene extends Phaser.Scene {
     this.updateNPCLOD();
     this.miniMap.updateNPCs(this.npcSprites);
     this.miniMap.updateBuildings(this.buildingSprites);
+    // 同步领土到小地图（紫色描边圆圈），让玩家看到组织分布
+    this.miniMap.updateTerritories(this.territoryRenderer.getTerritories());
   }
 
   private updateNPCLOD(): void {
@@ -683,9 +686,49 @@ export class WorldScene extends Phaser.Scene {
   centerOnNPC(npcId: number): void {
     const sprite = this.npcSprites.find(s => s.getNPCData().id === npcId);
     if (sprite) {
-      this.cameras.main.centerOn(sprite.x, sprite.y);
-      this.cameras.main.setZoom(1.2);
+      // GSAP 驱动的镜头推近：平滑居中到 NPC + 放大缩放
+      // 与 UI 侧 useSceneTransition.transitionToScene() 配合，构成"world → focus"镜头转场
+      this.smoothCenterOn(this.cameras.main, sprite.x, sprite.y, 800);
+      this.smoothZoom(this.cameras.main, 1.5, 600);
     }
+  }
+
+  /**
+   * 返回世界俯瞰视角：GSAP 驱动的镜头回退（居中世界中心 + 缩放回 1.0）。
+   * 用于 focus HUD 场景退回 world，与 UI 侧 useSceneTransition 同步触发。
+   */
+  returnToWorldView(): void {
+    const worldCenterX = (this.mapWidth * this.tileSize) / 2;
+    const worldCenterY = (this.mapHeight * this.tileSize) / 2;
+    this.smoothCenterOn(this.cameras.main, worldCenterX, worldCenterY, 800);
+    this.smoothZoom(this.cameras.main, 1.0, 600);
+  }
+
+  /**
+   * GSAP 驱动的相机平滑居中：替代 Phaser 默认的 camera.centerOn()，
+   * 提供 power3.inOut 缓动以匹配 encv-mobile 的 GSAP 动效基调。
+   */
+  private smoothCenterOn(camera: Phaser.Cameras.Scene2D.Camera, x: number, y: number, duration: number = 800): void {
+    gsap.to(camera, {
+      scrollX: x - camera.width / 2,
+      scrollY: y - camera.height / 2,
+      duration: duration / 1000,
+      ease: "power3.inOut",
+      overwrite: "auto",
+    });
+  }
+
+  /**
+   * GSAP 驱动的相机平滑缩放：替代 Phaser 默认的 camera.zoomTo()/setZoom()，
+   * 提供 power2.inOut 缓动。覆盖 auto 避免与 wheel/pinch 即时缩放叠加冲突。
+   */
+  private smoothZoom(camera: Phaser.Cameras.Scene2D.Camera, zoom: number, duration: number = 600): void {
+    gsap.to(camera, {
+      zoom: zoom,
+      duration: duration / 1000,
+      ease: "power2.inOut",
+      overwrite: "auto",
+    });
   }
 
   getDayNightCycle(): DayNightCycle {

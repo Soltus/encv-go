@@ -52,7 +52,7 @@ export class RegionScene extends Phaser.Scene {
     }
 
     const ground = this.add.graphics();
-    ground.fillStyle(0x2d3436, 1);
+    ground.fillStyle(0x1f1b34, 1);
     ground.fillRect(0, height * 0.6, width, height * 0.4);
 
     const groundGradient = this.add.graphics();
@@ -66,12 +66,13 @@ export class RegionScene extends Phaser.Scene {
 
   private getRegionColors(): { top: [number, number, number]; bottom: [number, number, number] } {
     const type = this.regionData.regionType;
+    // 区域背景配色：统一向紫色主题靠拢。每种区域保留差异化色相，但底色都偏紫。
     const colors: Record<string, { top: [number, number, number]; bottom: [number, number, number] }> = {
-      town: { top: [30, 30, 60], bottom: [20, 20, 40] },
-      forest: { top: [20, 50, 30], bottom: [10, 30, 20] },
-      mountain: { top: [50, 50, 60], bottom: [30, 30, 40] },
-      dungeon: { top: [30, 20, 20], bottom: [15, 10, 10] },
-      plains: { top: [40, 50, 30], bottom: [25, 35, 20] },
+      town: { top: [40, 30, 70], bottom: [25, 20, 50] }, // 城镇：紫蓝
+      forest: { top: [30, 50, 45], bottom: [18, 32, 30] }, // 森林：绿带紫
+      mountain: { top: [55, 55, 80], bottom: [35, 35, 55] }, // 山脉：冷灰紫
+      dungeon: { top: [40, 25, 50], bottom: [20, 12, 28] }, // 地牢：暗紫
+      plains: { top: [60, 55, 80], bottom: [40, 38, 60] }, // 平原：暖紫米
     };
     return colors[type] || colors.town;
   }

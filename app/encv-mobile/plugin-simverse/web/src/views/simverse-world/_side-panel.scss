@@ -1,0 +1,903 @@
+// =============================================================================
+// 侧栏模块：侧栏容器 + 各类面板内容
+// -----------------------------------------------------------------------------
+// 横屏世界右侧/左侧浮动面板：
+//   - .side-panel / .side-panel.panel-left / .side-panel.open 容器与转场
+//   - .panel-header / .panel-title / .panel-close-btn / .panel-content 头部与内容
+//   - .list-card / .card-avatar / .card-info / .card-title / .card-subtitle / .card-action
+//   - .card-behavior 行为指示
+//   - .behavior-stats-bar / .stats-title / .behavior-chips / .behavior-chip.* / .chip-icon / .chip-count
+//   - .mini-hp-bar / .mini-hp-fill
+//   - .empty-state
+//   - .chronicle-card / .chronicle-tick / .chronicle-title / .chronicle-desc
+//   - .setting-section / .section-title / .option-block / .option-label / .option-hint
+//   - .setting-section ion-segment / ion-segment-button
+//   - .tier-selector / .tier-option / .tier-name / .tier-desc
+//   - .config-list / .config-row / .config-value
+//   - .profile-card-panel / .player-card-mini / .card-bg-mini / .card-content-mini / .player-avatar-big
+//   - .panel-section / .panel-section-title
+//   - .stats-grid-compact / .stat-item-compact / .stat-label-comp / .stat-val-comp / .stat-bar-comp / .stat-fill-comp
+//   - .skill-list-compact / .skill-item-comp / .skill-icon-comp / .skill-info-comp / .skill-name-comp
+//     .skill-level-comp / .skill-rarity-comp
+//   - .training-panel / .training-grid-small / .training-card-small / .training-icon-small
+//     .training-name-small / .training-cost-small
+//   - .equipment-grid-small / .equip-slot-small / .equip-item-small / .equip-icon-small
+//     .equip-empty-small / .equip-label-small
+//   - .level-up-compact / .level-info-comp / .lv-text / .exp-bar-small / .exp-fill-small
+//     .exp-text-small / .level-up-btn-small
+//   - .inventory-panel / .inventory-grid / .inv-slot / .inv-icon
+//   - .economy-panel / .economy-tabs / .econ-tab / .prices-section / .ranking-section
+//     .econ-header / .econ-title / .econ-region / .econ-count
+//     .price-list / .price-item / .price-icon / .price-info / .price-name
+//     .price-bar-row / .supply-bar / .demand-bar / .supply-fill / .demand-fill
+//     .price-value / .price-num / .price-trend.* / .ranking-list / .rank-item.*
+//     .rank-badge / .rank-avatar / .rank-info / .rank-name / .rank-prof / .rank-wealth / .wealth-icon / .wealth-num
+// =============================================================================
+
+@use './tokens' as *;
+@use './mixins' as *;
+
+// —— 侧栏容器 ——
+.side-panel {
+  position: absolute;
+  top: 50px;
+  bottom: 60px;
+  width: 300px;
+  background: $sv-bg-deep; 
+  backdrop-filter: blur(20px);
+  border-radius: 16px;
+  border: 1px solid $sv-border-subtle; 
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  right: 80px;
+  transform: translateX(20px) scale(0.98);
+  opacity: 0;
+  transition: transform 0.42s cubic-bezier(0.34, 1.56, 0.64, 1),
+              opacity 0.3s ease;
+  pointer-events: none;
+
+  &.panel-left {
+    left: 80px;
+    right: auto;
+    transform: translateX(-20px) scale(0.98);
+  }
+
+  &.open {
+    transform: translateX(0) scale(1);
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(139, 92, 246, 0.1); 
+  flex-shrink: 0;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(236, 72, 153, 0.05) 100%);
+}
+
+.panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: $sv-text-primary;
+}
+
+// .panel-close-btn 已迁移到 daisyUI .btn .btn-circle .btn-xs + Tailwind 工具类
+
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+
+  &::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: $sv-border-active; 
+    border-radius: 3px;
+  }
+}
+
+// —— 列表卡片（NPC 列表等） ——
+// .list-card / .card-avatar / .card-info / .card-title / .card-subtitle / .card-behavior / .card-action
+// 已迁移到 daisyUI .card + Tailwind 工具类（见 SimverseWorld.vue 模板）
+// .prof-tag / .level-tag 已迁移到 daisyUI .badge .badge-sm + Tailwind 工具类
+// .behavior-icon / .behavior-text 已迁移到 Tailwind 工具类
+
+// —— HP 条（游戏专属，保留为自定义） ——
+.mini-hp-bar {
+  width: 100%;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.mini-hp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, $color-success, #4ade80); 
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 30px 16px;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 12px;
+}
+
+// —— 编年史卡片 ——
+.chronicle-card {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(139, 92, 246, 0.1); 
+  border-left: 3px solid $color-primary;
+}
+
+.chronicle-tick {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chronicle-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: $sv-text-primary;
+  margin-bottom: 4px;
+}
+
+.chronicle-desc {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.4;
+}
+
+// —— 行为统计 ——
+.behavior-stats-bar {
+  background: rgba(139, 92, 246, 0.1); 
+  border: 1px solid $sv-border-subtle; 
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.stats-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 8px;
+}
+
+.behavior-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.behavior-chip {
+  // 基础样式由 daisyUI .badge .badge-sm + Tailwind 工具类提供（见模板）
+  // 此处仅保留行为颜色修饰符：每种行为对应专属背景/边框色
+  &.work        { background: rgba(59, 130, 246, 0.15);  border-color: rgba(59, 130, 246, 0.3); }
+  &.sleep       { background: rgba(139, 92, 246, 0.15);  border-color: rgba(139, 92, 246, 0.3); }
+  &.eat         { background: rgba(249, 115, 22, 0.15); border-color: rgba(249, 115, 22, 0.3); }
+  &.socialize   { background: rgba(236, 72, 153, 0.15);  border-color: rgba(236, 72, 153, 0.3); }
+  &.explore     { background: rgba(34, 197, 94, 0.15);   border-color: rgba(34, 197, 94, 0.3); }
+  &.trade       { background: rgba(234, 179, 8, 0.15);  border-color: rgba(234, 179, 8, 0.3); }
+  &.rest        { background: rgba(107, 114, 128, 0.15); border-color: rgba(107, 114, 128, 0.3); }
+  &.idle        { background: rgba(107, 114, 128, 0.1);  border-color: rgba(107, 114, 128, 0.2); }
+}
+
+// —— 设置区段（侧栏内） ——
+.setting-section {
+  margin-bottom: 20px;
+
+  ion-segment {
+    --background: rgba(0, 0, 0, 0.4); 
+    border-radius: 10px;
+    padding: 2px;
+  }
+
+  ion-segment-button {
+    --color: rgba(255, 255, 255, 0.55);
+    --color-checked: $sv-text-primary;
+    --background-checked: rgba(139, 92, 246, 0.85); 
+    --indicator-color: transparent;
+    min-width: 44px;
+    max-width: 64px;
+    border-radius: 8px;
+
+    ion-label {
+      font-size: 12px;
+    }
+  }
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 10px;
+  padding-left: 2px;
+  letter-spacing: 0.3px;
+}
+
+.option-block {
+  margin-bottom: 16px;
+}
+
+.option-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+  padding-left: 2px;
+}
+
+.option-hint {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.4);
+  margin: 8px 0 0;
+  font-family: monospace;
+}
+
+// —— 配置档位选择器 ——
+.tier-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tier-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid $sv-border-subtle; 
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+
+  &:hover {
+    background: rgba(139, 92, 246, 0.1); 
+    border-color: $sv-border-active; 
+  }
+
+  &.active {
+    background: $sv-border-subtle; 
+    border-color: $sv-glow-primary; 
+    color: $sv-text-primary;
+
+    .tier-desc {
+      color: rgba(255, 255, 255, 0.6);
+    }
+  }
+}
+
+.tier-name {
+  font-weight: 600;
+}
+
+.tier-desc {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.config-list {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  border: 1px solid rgba(139, 92, 246, 0.1); 
+  overflow: hidden;
+}
+
+.config-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.05); 
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.config-value {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+}
+
+// —— 玩家档案卡（面板内迷你版） ——
+.profile-card-panel {
+  padding: 4px 0;
+}
+
+.player-card-mini {
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.card-bg-mini {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(236, 72, 153, 0.2) 100%);
+}
+
+.card-content-mini {
+  position: relative;
+  padding: 20px;
+  text-align: center;
+}
+
+.player-avatar-big {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, $color-primary, #ec4899); 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 20px $sv-glow-primary; 
+}
+
+.avatar-icon-big {
+  font-size: 32px;
+}
+
+// —— 面板段（panel-section） ——
+.panel-section {
+  margin-bottom: 16px;
+}
+
+.panel-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+// —— 紧凑统计网格 ——
+.stats-grid-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stat-item-compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.stat-label-comp {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.stat-val-comp {
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  width: 60px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.stat-bar-comp {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.stat-fill-comp {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s;
+
+  &.hp  { background: linear-gradient(90deg, $color-error, #f87171); }
+  &.exp { background: linear-gradient(90deg, $color-warning, #fbbf24); }
+}
+
+// —— 紧凑技能列表 ——
+.skill-list-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skill-item-comp {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+
+.skill-icon-comp {
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.skill-info-comp {
+  flex: 1;
+}
+
+.skill-name-comp {
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+}
+
+.skill-level-comp {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.skill-rarity-comp {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+
+  &.SSR { background: linear-gradient(135deg, $color-warning, $color-error); color: white; }
+  &.SR  { background: linear-gradient(135deg, $color-primary, $color-info); color: white; }
+  &.R   { background: rgba(59, 130, 246, 0.3); color: #60a5fa; }
+  &.N   { background: rgba(107, 114, 128, 0.3); color: #9ca3af; }
+}
+
+// —— 训练面板（侧栏内迷你版） ——
+.training-panel {
+  padding: 4px 0;
+}
+
+.training-grid-small {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.training-card-small {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(139, 92, 246, 0.1); 
+    border-color: $sv-border-active; 
+    transform: translateY(-2px);
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+.training-icon-small {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.training-name-small {
+  font-size: 11px;
+  font-weight: 500;
+  color: white;
+  margin-bottom: 2px;
+}
+
+.training-cost-small {
+  font-size: 10px;
+  color: #fbbf24; 
+}
+
+// —— 装备网格（迷你版） ——
+.equipment-grid-small {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.equip-slot-small {
+  text-align: center;
+}
+
+.equip-item-small {
+  width: 100%;
+  aspect-ratio: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+
+  &.empty {
+    border-style: dashed;
+  }
+}
+
+.equip-icon-small {
+  font-size: 20px;
+}
+
+.equip-empty-small {
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.2);
+}
+
+.equip-label-small {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+// —— 升级区（迷你版） ——
+.level-up-compact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.level-info-comp {
+  flex: 1;
+}
+
+.lv-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fbbf24; 
+}
+
+.exp-bar-small {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+
+.exp-fill-small {
+  height: 100%;
+  background: linear-gradient(90deg, $color-warning, #fbbf24); 
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.exp-text-small {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.level-up-btn-small {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, $color-primary, #6366f1); 
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+// —— 背包面板 ——
+.inventory-panel {
+  padding: 4px 0;
+}
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.inv-slot {
+  aspect-ratio: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+
+  &.filled {
+    background: rgba(139, 92, 246, 0.1); 
+    border-color: $sv-border-active; 
+  }
+}
+
+.inv-icon {
+  font-size: 20px;
+}
+
+// —— 经济面板 ——
+.economy-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.economy-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.econ-tab {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &.active {
+    background: linear-gradient(135deg, $color-warning, #d97706); 
+    color: white;
+    box-shadow: 0 4px 12px $sv-glow-warning; 
+  }
+}
+
+.prices-section,
+.ranking-section {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.econ-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.econ-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: white;
+}
+
+.econ-region,
+.econ-count {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+}
+
+.price-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.price-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.price-icon {
+  font-size: 24px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.price-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.price-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 6px;
+}
+
+.price-bar-row {
+  display: flex;
+  gap: 6px;
+}
+
+.supply-bar,
+.demand-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.supply-fill {
+  height: 100%;
+  background: linear-gradient(90deg, $color-success, #4ade80); 
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.demand-fill {
+  height: 100%;
+  background: linear-gradient(90deg, $color-warning, #fbbf24); 
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.price-value {
+  text-align: right;
+  min-width: 60px;
+}
+
+.price-num {
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+  display: block;
+}
+
+.price-trend {
+  font-size: 12px;
+  font-weight: 600;
+
+  &.trend-up     { color: $color-error; }
+  &.trend-down   { color: $color-success; }
+  &.trend-stable { color: rgba(255, 255, 255, 0.5); }
+}
+
+.ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rank-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+
+  &.rank-1 {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.05));
+    border-color: $sv-glow-warning; 
+  }
+
+  &.rank-2 {
+    background: linear-gradient(135deg, rgba(156, 163, 175, 0.15), rgba(107, 114, 128, 0.05));
+    border-color: rgba(156, 163, 175, 0.3); 
+  }
+
+  &.rank-3 {
+    background: linear-gradient(135deg, rgba(180, 83, 9, 0.15), rgba(146, 64, 14, 0.05));
+    border-color: rgba(180, 83, 9, 0.3); 
+  }
+}
+
+.rank-badge {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.rank-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, $color-primary, #6366f1); 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  color: white;
+}
+
+.rank-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rank-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 2px;
+}
+
+.rank-prof {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.rank-wealth {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wealth-icon {
+  font-size: 14px;
+}
+
+.wealth-num {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fbbf24; 
+}
