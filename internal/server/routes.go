@@ -172,6 +172,12 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 
 	s.registerAgentRoutes(r)
 
+	// 🆕 续43 修订：本地优先主题存储 —— Go 后端把远程主题拉取/删除到【数据目录】(themesDir)，
+	//   GET /themes/* 只从数据目录提供用户主题；servingDir 是用户媒体，应用数据绝不写入/读出。与 dev 网关兼容。
+	r.POST("/api/themes/pull", s.HandleThemePull)
+	r.DELETE("/api/themes/:id", s.HandleThemeDelete)
+	r.GET("/themes/*filepath", s.HandleThemeStatic)
+
 	r.Any("/api/preview/plugin-openlist/*filepath", s.handlePluginOpenlistProxyGin)
 	r.Any("/api/preview/plugin-openlist", s.handlePluginOpenlistProxyGin)
 
@@ -276,6 +282,20 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 		simGroup.GET("/npc/behavior/list", s.handleSimverseBehaviorList)
 		simGroup.GET("/economy/stats", s.handleSimverseEconomyStats)
 		simGroup.GET("/economy/wealth-rank", s.handleSimverseEconomyWealthRank)
+		simGroup.GET("/economy/prices", s.handleSimverseEconomyPrices)
+		simGroup.GET("/economy/shocks", s.handleSimverseEconomyShocks)
+		simGroup.GET("/era/current", s.handleSimverseEraCurrent)
+		simGroup.GET("/region/list", s.handleSimverseRegionList)
+		simGroup.GET("/region/:id", s.handleSimverseRegionDetail)
+		simGroup.GET("/org/list", s.handleSimverseOrgList)
+		simGroup.GET("/org/:id", s.handleSimverseOrgDetail)
+		simGroup.GET("/org/:id/members", s.handleSimverseOrgMembers)
+		simGroup.GET("/org/:id/territory", s.handleSimverseOrgTerritory)
+		simGroup.GET("/social/stats", s.handleSimverseSocialStats)
+		simGroup.GET("/npc/:id/relations", s.handleSimverseNPCRelations)
+		simGroup.GET("/battle/recent", s.handleSimverseBattleRecent)
+		simGroup.GET("/battle/rank", s.handleSimverseBattleRank)
+		simGroup.POST("/battle/simulate", s.handleSimverseBattleSimulate)
 		simGroup.GET("/quest/list", s.handleSimverseQuestList)
 		simGroup.POST("/quest/claim", s.handleSimverseQuestClaim)
 		simGroup.POST("/quest/action", s.handleSimverseQuestAction)

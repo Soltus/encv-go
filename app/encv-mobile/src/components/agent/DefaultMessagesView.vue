@@ -224,21 +224,21 @@
 </template>
 
 <script setup lang="ts">
+import { chatbubblesOutline, copyOutline } from "ionicons/icons";
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
+import ApprovalCard from "@/components/agent/ApprovalCard.vue";
+import AssistantMessage from "@/components/agent/AssistantMessage.vue";
+import FileContentCard from "@/components/agent/FileContentCard.vue";
+import FileListCard from "@/components/agent/FileListCard.vue";
+import GroupedOperationMessage from "@/components/agent/GroupedOperationMessage.vue";
+import MountListCard from "@/components/agent/MountListCard.vue";
+import OperationCard from "@/components/agent/OperationCard.vue";
+import UserMessageBubble from "@/components/agent/UserMessageBubble.vue";
 import type { EngineRenderProps } from "@/composables/chatEngine";
 import { useRenderTurnItems } from "@/composables/renderTurnItems";
 import type { Decision, Message, ToolCall, ToolResult } from "@/composables/useAgent";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import UserMessageBubble from "@/components/agent/UserMessageBubble.vue";
-import AssistantMessage from "@/components/agent/AssistantMessage.vue";
-import ApprovalCard from "@/components/agent/ApprovalCard.vue";
-import GroupedOperationMessage from "@/components/agent/GroupedOperationMessage.vue";
-import OperationCard from "@/components/agent/OperationCard.vue";
-import MountListCard from "@/components/agent/MountListCard.vue";
-import FileListCard from "@/components/agent/FileListCard.vue";
-import FileContentCard from "@/components/agent/FileContentCard.vue";
-import { chatbubblesOutline, copyOutline } from "ionicons/icons";
-import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from "vue";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
 
 const props = defineProps<EngineRenderProps>();
 const { t } = useI18n();
@@ -498,7 +498,7 @@ defineExpose({
 
 .emptyIcon {
   font-size: 40px;
-  color: rgba(var(--ion-color-primary-rgb), 0.3);
+  color: color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .renderedItemWrap {
@@ -513,7 +513,7 @@ defineExpose({
   justify-content: space-between;
   padding-left: 36px;
   margin-top: 2px;
-  border-top: 1px solid rgba(var(--ion-color-medium-rgb), 0.12);
+  border-top: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   padding-top: 4px;
 }
 
@@ -543,7 +543,7 @@ defineExpose({
 
 .messageFooterStandalone .footerCopyBtn:hover,
 .messageFooterStandalone .footerCopyBtn:active {
-  color: var(--ion-color-primary);
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 }
 </style>

@@ -39,12 +39,10 @@
 </template>
 
 <script setup lang="ts">
-;
-
-import type { ContextUsageResponse } from "@/composables/useContextUsage";
-import { layers as layersIcon } from "ionicons/icons";
 import { modalController } from "@ionic/vue";
+import { layers as layersIcon } from "ionicons/icons";
 import { computed, reactive } from "vue";
+import type { ContextUsageResponse } from "@/composables/useContextUsage";
 import type { ContextPopoverState } from "./ContextPopoverModal.vue";
 import ContextPopoverModal from "./ContextPopoverModal.vue";
 
@@ -101,7 +99,7 @@ async function openPopover() {
 .context-icon-btn {
   --padding-start: 6px;
   --padding-end: 6px;
-  --color: var(--ion-color-primary);
+  --color: var(--color-primary);
   font-size: 11.5px;
   position: relative;
 }
@@ -126,7 +124,7 @@ async function openPopover() {
 
 /* tone: ok（< 70%） */
 .tone-ok {
-  --color: var(--ion-color-primary);
+  --color: var(--color-primary);
 }
 
 /* tone: warn（70% - 90%） */

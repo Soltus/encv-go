@@ -1,0 +1,33 @@
+// =============================================================================
+// SimverseWorld 主入口样式
+// -----------------------------------------------------------------------------
+// 横屏世界主入口：仅包含全局基础容器样式，各场景模块按 @use 引入。
+// 模块拆分见 P1 Task 1.1（overhaul-simverse-game-ui spec）。
+// =============================================================================
+
+@use './tokens' as *;
+@use './mixins' as *;
+@use './hud';
+@use './top-bar';
+@use './bottom-bar';
+@use './side-panel';
+@use './common';
+
+// 全局基础容器样式（最小集，详细样式由各模块补充）
+.world-page {
+  --background: #{$sv-bg-deep};
+}
+
+.world-content {
+  --background: #{$sv-bg-deep};
+  --padding-top: 0;
+  --padding-bottom: 0;
+  --offset-top: 0;
+  --offset-bottom: 0;
+}
+
+.world-content :deep(.inner-scroll) {
+  height: 100%;
+  padding: 0 !important;
+  overflow: hidden;
+}

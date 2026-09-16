@@ -1,0 +1,29 @@
+{
+  "id": "rose",
+  "name": "Rose",
+  "author": "ENCV",
+  "mode": "light",
+  "version": "1.0.0",
+  "builtIn": true,
+  "palette": {
+    "primary": "#e11d48",
+    "bg": "#fffafb",
+    "presets": {
+      "primary": [
+        "#e11d48",
+        "#0ea5e9",
+        "#db2777",
+        "#f43f5e",
+        "#be123c",
+        "#fb7185"
+      ],
+      "bg": [
+        "#fffafb",
+        "#ffeef2",
+        "#fff1f2",
+        "#fce7ef",
+        "#fff0f5"
+      ]
+    }
+  }
+}

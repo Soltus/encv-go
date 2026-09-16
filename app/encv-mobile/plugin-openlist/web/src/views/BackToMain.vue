@@ -59,7 +59,7 @@
         v-show="!loadError"
         ref="iframeRef"
         :src="iframeSrc"
-        class="encv-iframe"
+        class="openlistFrame"
         @error="onIframeError"
         @load="onIframeLoad"
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
@@ -70,6 +70,7 @@
 </template>
 
 <script setup lang="ts">
+import { refreshOutline } from "ionicons/icons";
 import { onMounted, onUnmounted, ref } from "vue";
 
 // 目标 encv-mobile vite dev server 直连地址。
@@ -79,7 +80,7 @@ import { onMounted, onUnmounted, ref } from "vue";
 //   /tabs/remote  → 主 app Remote tab（不再硬编码 :5173，因为主 app vite 已迁到 :8100）
 const ENCV_MAIN_URL = "http://localhost:16666/tabs/remote";
 
-const _iframeRef = ref<HTMLIFrameElement | null>(null);
+const iframeRef = ref<HTMLIFrameElement | null>(null);
 const iframeSrc = ref(ENCV_MAIN_URL);
 const loadError = ref("");
 let probeTimer: ReturnType<typeof setInterval> | null = null;
@@ -96,19 +97,19 @@ onUnmounted(() => {
   }
 });
 
-function _reload() {
+function reload() {
   loadError.value = "";
   // 给 iframe 加 cache buster 参数强制重载
   const sep = ENCV_MAIN_URL.includes("?") ? "&" : "?";
   iframeSrc.value = `${ENCV_MAIN_URL}${sep}_t=${Date.now()}`;
 }
 
-function _onIframeError() {
+function onIframeError() {
   // iframe @error 不一定靠谱（sandboxed 跨源时静默），但保险起见监听
   loadError.value = "iframe 触发 error 事件（可能是 :5173 离线或 sandbox 拒访问）";
 }
 
-function _onIframeLoad() {
+function onIframeLoad() {
   // iframe @load 触发：能加载就清掉错误（即使加载的是错误页也算 load）
   // 进一步状态由 probeHealth 检查
   if (loadError.value) {
@@ -140,7 +141,7 @@ async function probeHealth() {
 </script>
 
 <style scoped>
-.encv-iframe {
+.openlistFrame {
   width: 100%;
   height: 100%;
   border: 0;
@@ -155,7 +156,7 @@ async function probeHealth() {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.3px;
-  color: #fff;
+  color: var(--color-white);
   background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
   border-radius: 3px;
   vertical-align: middle;

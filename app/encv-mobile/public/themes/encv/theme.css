@@ -1,0 +1,50 @@
+/* =============================================================================
+ * 官方主题资源包：ENCV（默认亮色基态）
+ *
+ * 这是「默认主题」的运行时资源包，与 encv-dark / rose / ocean / forest / midnight
+ * 及任意第三方主题【同形态、同加载机制】：都是 themes/<id>/theme.css 数据资产，
+ * 由 themeLoader 在运行时注入 <link> 并切到 [data-theme="encv"]。
+ * 唯一区别：encv 是预装默认，回落 :root（零加载成本、无 FOUC）；其余主题显式注入。
+ * 主题可整体改写设计语言（色 / 形状 / 密度 / 立体感 / 动效 / 焦点环 + 自有资源）。
+ * ========================================================================== */
+
+[data-theme="encv"] {
+  color-scheme: light;
+
+  /* 色相（encv 品牌紫） */
+  --color-primary: #8b5cf6;
+  --color-primary-content: #ffffff;
+  --color-secondary: #06b6d4;
+  --color-secondary-content: #ffffff;
+  --color-accent: #ec4899;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #ffffff;
+  --color-base-200: #f3f4f6;
+  --color-base-300: #e5e7eb;
+  --color-base-content: #1f2937;
+  --color-info: #3b82f6;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  /* 形状语言（默认） */
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+  --radius-pill: 9999px;
+  --radius-mono: 4px;
+
+  /* 密度（默认） */
+  --density: 1;
+
+  /* 立体感（默认，柔和抬升） */
+  --elevation-chip-hover: 0 2px 8px -2px rgb(139 92 246 / 0.22);
+  --elevation-panel-overlay: 0 10px 30px -10px rgb(31 41 55 / 0.18);
+  --lift-hover: -1px;
+  --press-scale: 0.98;
+
+  /* 焦点环（默认） */
+  --ring-focus: 0 0 0 3px color-mix(in srgb, var(--color-primary) 28%, transparent);
+}

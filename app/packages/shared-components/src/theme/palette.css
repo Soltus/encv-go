@@ -1,0 +1,52 @@
+/* =============================================================================
+ * ENCV 主题调色板（纯 CSS，Chromium 114 ✅，与 daisyUI v5 主题值完全一致）
+ *
+ * 这是 daisyUI encv / encv-dark 主题的「纯 CSS 等价」定义，作为不需要
+ * Tailwind 构建管线的消费方（当前为 encv-mobile 主应用）的调色板单一来源。
+ * 使用 @plugin "daisyui/theme" 的插件 web 与此处的 --color-* 值保持一致，
+ * 任何改动需同步 daisyui.css 的 @plugin "daisyui/theme" 块（见 §2.7）。
+ *
+ * 兼容性：仅 hex + 标准自定义属性，无 light-dark()/allow-discrete/field-sizing
+ * 等越基线特性（见 §2.8）。
+ * ========================================================================== */
+
+/* 中性墨色令牌：白 / 黑。供组件消去 `#fff`/`#000` 字面量，
+   使纯黑白也可被主题覆写（默认仍为纯白/纯黑，零行为变化）。 */
+:root {
+  --color-white: #ffffff;
+  --color-black: #000000;
+}
+
+/* ── encv 默认基态（唯一编译进产物的主题相关定义）──
+ * 这是默认主题（encv 亮色）的回落基态：当 documentElement 无 data-theme 属性时即生效，
+ * 保证「零加载成本 / 无 FOUC」。各主题（含 encv 自身）的完整设计语言资产都在
+ * public/themes/<id>/theme.css，运行时由 themeLoader 注入。本文件【不再】包含任何
+ * [data-theme="..."] 主题块——那会让主题被编译期烤进产物，违背「可加载/卸载/分发」
+ * 与「官方 == 第三方」（详见 THEME_DEV.md §6.9/§6.10）。 */
+:root,
+[data-theme="encv"] {
+  color-scheme: light;
+
+  --color-primary: #8b5cf6;
+  --color-primary-content: #ffffff;
+  --color-secondary: #06b6d4;
+  --color-secondary-content: #ffffff;
+  --color-accent: #ec4899;
+  --color-accent-content: #ffffff;
+  /* --color-*-p3 宽色域孪生不再手写：由 _vivid-p3.scss 用 @function p3() + @each
+     从上方基色 hex 编译期派生（见 vivid.scss），消除字面量与基色漂移。 */
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #ffffff;
+  --color-base-200: #f3f4f6;
+  --color-base-300: #e5e7eb;
+  --color-base-content: #1f2937;
+  --color-info: #3b82f6;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+}

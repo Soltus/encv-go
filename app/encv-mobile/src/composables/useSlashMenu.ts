@@ -19,7 +19,7 @@
 
 import { attachOutline, ribbonOutline, shieldCheckmarkOutline, sparklesOutline } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
-import { getAgentApiBase } from "./useAgentApiBase";
+import { getAgentApiBase } from "@encv/shared-components/composables/useAgentApiBase";
 
 export type SlashMenuGroup = "功能" | "技能";
 

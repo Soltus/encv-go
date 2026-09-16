@@ -1,0 +1,42 @@
+/* =============================================================================
+ * 示例第三方主题资源包：日落（Sunset）—— 暖橙
+ *
+ * 注意：本文件夹形态与官方主题【完全一致】（theme.json + theme.css + 可选 theme.js /
+ * assets），由 themeLoader 同一套机制运行时注入。区别仅在于 builtIn=false
+ * （来自用户空间 / 集市，可卸载、LRU 回收），官方主题为 builtIn=true（随包、常驻）。
+ * 这就是「官方 == 第三方」的具体落地。
+ * ========================================================================== */
+
+[data-theme="sunset"] {
+  color-scheme: light;
+
+  --color-primary: #f97316;
+  --color-primary-content: #ffffff;
+  --color-secondary: #fb923c;
+  --color-secondary-content: #ffffff;
+  --color-accent: #f43f5e;
+  --color-accent-content: #ffffff;
+  --color-neutral: #44403c;
+  --color-neutral-content: #fafaf9;
+  --color-base-100: #fffaf5;
+  --color-base-200: #fdeede;
+  --color-base-300: #f5d9be;
+  --color-base-content: #431407;
+  --color-info: #0ea5e9;
+  --color-success: #16a34a;
+  --color-warning: #f59e0b;
+  --color-error: #dc2626;
+
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+  --radius-pill: 9999px;
+  --radius-mono: 4px;
+
+  --density: 1;
+  --elevation-chip-hover: 0 2px 8px -2px rgb(249 115 22 / 0.24);
+  --elevation-panel-overlay: 0 10px 28px -10px rgb(67 20 7 / 0.16);
+  --lift-hover: -1px;
+  --press-scale: 0.98;
+  --ring-focus: 0 0 0 3px color-mix(in srgb, var(--color-primary) 26%, transparent);
+}

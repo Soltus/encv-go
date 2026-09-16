@@ -58,21 +58,16 @@
 </template>
 
 <script setup lang="ts">
-import {
-  arrowBack,
-  resize,
-  time,
-} from "ionicons/icons";
-
-import { getAlistEncryptStreamUrl, getFileStreamUrl } from "@/api/encv";
-import ErrorStateCard from "@/components/ErrorStateCard.vue";
-import type { ErrorDetailItem, ErrorType } from "@/components/ErrorStateCard.vue";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import { isNative } from "@/plugins/GoProcess";
 import type Artplayer from "artplayer";
+import { arrowBack, resize, time } from "ionicons/icons";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { getAlistEncryptStreamUrl, getFileStreamUrl } from "@encv/shared-components/api/encv";
+import type { ErrorDetailItem, ErrorType } from "@/components/ErrorStateCard.vue";
+import ErrorStateCard from "@/components/ErrorStateCard.vue";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import { isNative } from "@/plugins/GoProcess";
 
 const TAG = "[ArtPlayer]";
 
@@ -555,7 +550,7 @@ onBeforeUnmount(async () => {
   justify-content: center;
   min-height: 100%;
   padding: 24px 16px;
-  background: linear-gradient(180deg, transparent 0%, var(--ion-background-color, #fff) 100%);
+  background: linear-gradient(180deg, transparent 0%, var(--ion-background-color, var(--color-white)) 100%);
 }
 
 .player-container {
@@ -566,7 +561,7 @@ onBeforeUnmount(async () => {
 
 .video-player {
   width: 100%;
-  background: #000;
+  background: var(--color-black);
   position: relative;
   overflow: hidden;
 }

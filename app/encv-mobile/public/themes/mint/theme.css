@@ -1,0 +1,38 @@
+/* =============================================================================
+ * 示例第三方主题资源包：薄荷（Mint）—— 青绿
+ * 形态与官方主题完全一致（见 sunset/theme.css 头注）。builtIn=false。
+ * ========================================================================== */
+
+[data-theme="mint"] {
+  color-scheme: light;
+
+  --color-primary: #10b981;
+  --color-primary-content: #ffffff;
+  --color-secondary: #06b6d4;
+  --color-secondary-content: #ffffff;
+  --color-accent: #14b8a6;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #f3faf7;
+  --color-base-200: #d9f2ea;
+  --color-base-300: #b6e3d4;
+  --color-base-content: #04332a;
+  --color-info: #3b82f6;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+  --radius-pill: 9999px;
+  --radius-mono: 4px;
+
+  --density: 1;
+  --elevation-chip-hover: 0 2px 8px -2px rgb(16 185 129 / 0.24);
+  --elevation-panel-overlay: 0 10px 28px -10px rgb(4 51 42 / 0.16);
+  --lift-hover: -1px;
+  --press-scale: 0.98;
+  --ring-focus: 0 0 0 3px color-mix(in srgb, var(--color-primary) 26%, transparent);
+}

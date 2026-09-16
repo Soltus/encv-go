@@ -1,6 +1,12 @@
 import { createRouter, createWebHistory } from "@ionic/vue-router";
 import type { RouteRecordRaw } from "vue-router";
 
+declare module "vue-router" {
+  interface RouteMeta {
+    transition?: "gsap" | "default";
+  }
+}
+
 const routes: RouteRecordRaw[] = [
   {
     path: "/",
@@ -59,6 +65,10 @@ const routes: RouteRecordRaw[] = [
   {
     path: "/npc/:id/relations",
     component: () => import("@/views/NPCRelations.vue"),
+  },
+  {
+    path: "/npc/:id/behavior",
+    component: () => import("@/views/NPCBehavior.vue"),
   },
   {
     path: "/npc/:id/timeline",
@@ -145,12 +155,75 @@ const routes: RouteRecordRaw[] = [
     component: () => import("@/views/WorldIntervention.vue"),
   },
   {
+    path: "/world/behavior",
+    component: () => import("@/views/WorldBehavior.vue"),
+  },
+  {
+    path: "/world/settings",
+    component: () => import("@/views/WorldSettings.vue"),
+  },
+  {
+    path: "/world/quests",
+    component: () => import("@/views/QuestView.vue"),
+  },
+  {
+    path: "/world/social",
+    component: () => import("@/views/SocialOverview.vue"),
+  },
+  {
+    path: "/world/squad",
+    component: () => import("@/views/SquadSynergy.vue"),
+  },
+  {
     path: "/world/debug/perf",
     component: () => import("@/views/WorldDebugPerf.vue"),
   },
   {
     path: "/world/debug/entities",
     component: () => import("@/views/WorldDebugEntities.vue"),
+  },
+  // === Hybrid architecture: world detail routes (split off from SimverseWorld side panels) ===
+  // Quest detail panel (singular). Existing /world/quests (plural) is the list view.
+  {
+    path: "/world/quest/detail/:id?",
+    component: () => import("@/views/QuestView.vue"),
+    meta: { transition: "gsap" },
+  },
+  // Training panel (placeholder, will be created in P3/P4)
+  {
+    path: "/world/training",
+    component: () => import("@/views/WorldTraining.vue"),
+    meta: { transition: "gsap" },
+  },
+  // Inventory panel (placeholder, will be created in P3/P4)
+  {
+    path: "/world/inventory",
+    component: () => import("@/views/WorldInventory.vue"),
+    meta: { transition: "gsap" },
+  },
+  // Explore panel (placeholder, will be created in P3/P4)
+  {
+    path: "/world/explore",
+    component: () => import("@/views/WorldExplore.vue"),
+    meta: { transition: "gsap" },
+  },
+  // Battle panel (placeholder, will be created in P3/P4)
+  {
+    path: "/world/battle",
+    component: () => import("@/views/WorldBattle.vue"),
+    meta: { transition: "gsap" },
+  },
+  // Profile panel (placeholder, will be created in P3/P4)
+  {
+    path: "/world/profile",
+    component: () => import("@/views/WorldProfile.vue"),
+    meta: { transition: "gsap" },
+  },
+  // Gacha panel (placeholder, optional - gacha may stay as HUD scene in SimverseWorld.vue)
+  {
+    path: "/world/gacha",
+    component: () => import("@/views/WorldGacha.vue"),
+    meta: { transition: "gsap" },
   },
 ];
 

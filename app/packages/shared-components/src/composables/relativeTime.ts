@@ -14,11 +14,6 @@
  *   简化方案：直接返回中文字符串。如需多语言，调用方在外面 wrap。
  * - 接受 `now` 参数注入：让单测可以构造确定性时间点。
  * - 未来时间（diff < 0）使用 `Math.abs` 同样处理（"3 分钟后" 会落入 < 60s）。
- *
- * 调用方迁移：
- *   - AgentChat.vue L1037 的局部 formatRelativeTime → 改为 import 这个
- *   - sessionList 列表项时间 → 改为 import 这个
- *   - 30s 自动刷新：调用方用 setInterval 触发重新计算（参考 Task 8 集成）
  */
 
 // 各档阈值（毫秒）

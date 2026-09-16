@@ -1,6 +1,6 @@
 import { documentText, folder, image, lockClosed, musicalNotes, videocam } from "ionicons/icons";
 import { describe, expect, it } from "vitest";
-import type { FileItem } from "@/api/encv";
+import type { FileItem } from "@encv/shared-components/api/encv";
 import {
   cycleSortState,
   getFileIcon,

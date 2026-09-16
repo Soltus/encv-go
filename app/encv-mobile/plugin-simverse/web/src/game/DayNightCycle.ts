@@ -9,11 +9,14 @@ interface DayPhaseConfig {
   ambientLight: number;
 }
 
+// 昼夜配色：与 encv-mobile 紫色主题协调。
+// dawn 紫粉，day 暖黄白带极淡紫调，dusk 橙紫过渡，night 深紫蓝。
+// 各相位的 tintAlpha 经 BlendModes.MULTIPLY 叠加到场景，过渡时颜色在相邻相位间 lerp。
 const DAY_PHASES: DayPhaseConfig[] = [
-  { name: "dawn", tintColor: 0xffa07a, tintAlpha: 0.25, ambientLight: 0.7 },
-  { name: "day", tintColor: 0xffffff, tintAlpha: 0, ambientLight: 1 },
-  { name: "dusk", tintColor: 0xff6347, tintAlpha: 0.3, ambientLight: 0.75 },
-  { name: "night", tintColor: 0x191970, tintAlpha: 0.5, ambientLight: 0.35 },
+  { name: "dawn", tintColor: 0x9f7aea, tintAlpha: 0.25, ambientLight: 0.7 }, // 紫粉
+  { name: "day", tintColor: 0xfff8dc, tintAlpha: 0.05, ambientLight: 1 }, // 暖黄白（轻微紫调）
+  { name: "dusk", tintColor: 0xff7f50, tintAlpha: 0.3, ambientLight: 0.75 }, // 橙紫过渡
+  { name: "night", tintColor: 0x1a1a3e, tintAlpha: 0.5, ambientLight: 0.35 }, // 深紫蓝
 ];
 
 export class DayNightCycle {
@@ -31,14 +34,7 @@ export class DayNightCycle {
   constructor(scene: Phaser.Scene, worldWidth: number, worldHeight: number) {
     this.scene = scene;
 
-    this.overlay = scene.add.rectangle(
-      worldWidth / 2,
-      worldHeight / 2,
-      worldWidth,
-      worldHeight,
-      0xffffff,
-      0
-    );
+    this.overlay = scene.add.rectangle(worldWidth / 2, worldHeight / 2, worldWidth, worldHeight, 0xffffff, 0);
     this.overlay.setDepth(50);
     this.overlay.setBlendMode(Phaser.BlendModes.MULTIPLY);
 
@@ -83,21 +79,9 @@ export class DayNightCycle {
 
     this.timeOfDay = current.name;
 
-    const tintR = this.lerpColor(
-      (current.tintColor >> 16) & 255,
-      (next.tintColor >> 16) & 255,
-      phaseProgress
-    );
-    const tintG = this.lerpColor(
-      (current.tintColor >> 8) & 255,
-      (next.tintColor >> 8) & 255,
-      phaseProgress
-    );
-    const tintB = this.lerpColor(
-      current.tintColor & 255,
-      next.tintColor & 255,
-      phaseProgress
-    );
+    const tintR = this.lerpColor((current.tintColor >> 16) & 255, (next.tintColor >> 16) & 255, phaseProgress);
+    const tintG = this.lerpColor((current.tintColor >> 8) & 255, (next.tintColor >> 8) & 255, phaseProgress);
+    const tintB = this.lerpColor(current.tintColor & 255, next.tintColor & 255, phaseProgress);
     const tintColor = (tintR << 16) | (tintG << 8) | tintB;
     const tintAlpha = Phaser.Math.Linear(current.tintAlpha, next.tintAlpha, phaseProgress);
 
@@ -119,7 +103,7 @@ export class DayNightCycle {
 
     const time = this.scene.time.now / 1000;
 
-    this.starPositions.forEach((star) => {
+    this.starPositions.forEach(star => {
       const twinkle = 0.5 + 0.5 * Math.sin(time * 2 + star.twinkleOffset);
       const alpha = nightFactor * twinkle;
 
@@ -165,7 +149,7 @@ export class DayNightCycle {
   }
 
   setTimeOfDay(time: TimeOfDay): void {
-    const index = DAY_PHASES.findIndex((p) => p.name === time);
+    const index = DAY_PHASES.findIndex(p => p.name === time);
     if (index >= 0) {
       this.cycleTime = index / DAY_PHASES.length;
       this.updateTint();

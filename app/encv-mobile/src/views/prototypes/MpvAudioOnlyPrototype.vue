@@ -229,7 +229,7 @@ watch(isPlaying, val => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--color-white);
   z-index: 1;
 }
 
@@ -239,7 +239,7 @@ watch(isPlaying, val => {
 }
 
 .track-title {
-  color: #fff;
+  color: var(--color-white);
   font-size: 20px;
   font-weight: 600;
   margin: 0 0 4px;
@@ -272,7 +272,7 @@ watch(isPlaying, val => {
   border-radius: 50%;
   border: none;
   background: linear-gradient(135deg, #BB86FC, #7C4DFF);
-  color: #fff;
+  color: var(--color-white);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -373,7 +373,7 @@ watch(isPlaying, val => {
   height: 40px;
   border: none;
   background: none;
-  color: #fff;
+  color: var(--color-white);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -395,7 +395,7 @@ watch(isPlaying, val => {
 
 .prototype-toolbar label {
   font-weight: 600;
-  color: var(--ion-text-color, #fff);
+  color: var(--ion-text-color, var(--color-white));
 }
 
 .prototype-toolbar select,
@@ -404,7 +404,7 @@ watch(isPlaying, val => {
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 6px;
   padding: 4px 8px;
-  color: var(--ion-text-color, #fff);
+  color: var(--ion-text-color, var(--color-white));
   font-size: 12px;
 }
 

@@ -60,19 +60,12 @@
 </template>
 
 <script setup lang="ts">
-import {
-  folder,
-  globe,
-  layersOutline,
-  lockClosed,
-  playCircle,
-} from "ionicons/icons";
-
-import { useI18n } from "@/composables/useI18n";
-import { isNative } from "@/plugins/GoProcess";
-import AgentEntry from "@/components/agent/AgentEntry.vue";
 import { onIonViewWillEnter } from "@ionic/vue";
+import { folder, globe, layersOutline, lockClosed, playCircle } from "ionicons/icons";
 import { useRouter } from "vue-router";
+import AgentEntry from "@/components/agent/AgentEntry.vue";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { isNative } from "@/plugins/GoProcess";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -138,8 +131,8 @@ onIonViewWillEnter(() => {});
   padding: 24px 12px;
   border-radius: 16px;
   background: rgba(var(--ion-background-color-rgb), 0.55);
-  backdrop-filter: blur(var(--encv-bg-blur, 8px));
-  -webkit-backdrop-filter: blur(var(--encv-bg-blur, 8px));
+  backdrop-filter: blur(var(--material-blur, 8px));
+  -webkit-backdrop-filter: blur(var(--material-blur, 8px));
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -157,8 +150,8 @@ onIonViewWillEnter(() => {});
   gap: 16px;
   padding: 24px 20px;
   min-height: 100px;
-  background: linear-gradient(135deg, rgba(var(--ion-color-primary-rgb), 0.12), rgba(var(--ion-color-primary-rgb), 0.04));
-  border: 1px solid rgba(var(--ion-color-primary-rgb), 0.2);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, transparent), color-mix(in srgb, var(--color-primary) 4%, transparent));
+  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
 }
 
 .card-icon {
@@ -169,19 +162,19 @@ onIonViewWillEnter(() => {});
 .player-card .card-icon {
   font-size: 44px;
   margin-bottom: 0;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .files-icon {
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .tasks-icon {
-  color: var(--ion-color-warning);
+  color: var(--color-warning);
 }
 
 .remote-icon {
-  color: var(--ion-color-success);
+  color: var(--color-success);
 }
 
 .extensions-icon {

@@ -8,7 +8,7 @@ import {
   NotFoundError,
   PermissionDeniedError,
   searchFiles,
-} from "@/api/encv";
+} from "@encv/shared-components/api/encv";
 
 const _originalFetch = globalThis.fetch;
 

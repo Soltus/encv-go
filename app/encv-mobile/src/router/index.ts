@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from "@ionic/vue-router";
 import type { RouteRecordRaw } from "vue-router";
-import NotFoundView from "@/views/NotFoundView.vue";
+import NotFoundView from "@encv/shared-components/views/NotFoundView.vue";
 import Tabs from "@/views/Tabs.vue";
 
 const routes: RouteRecordRaw[] = [
@@ -30,7 +30,7 @@ const routes: RouteRecordRaw[] = [
       },
       {
         path: "tasks",
-        component: () => import("@/views/Tasks.vue"),
+        component: () => import("@encv/shared-components/views/Tasks.vue"),
       },
       {
         // 🆕 2026-06-18 v5-bug3fix：L2 GroupDetail 页面
@@ -39,7 +39,7 @@ const routes: RouteRecordRaw[] = [
         //   - 不与 PluginTestsDetail 耦合（插件测试在设置 tab 独立）
         //   - 设计理由：100+ 任务的 group 不应在一级页面直接展开
         path: "tasks/group/:runId",
-        component: () => import("@/views/GroupDetail.vue"),
+        component: () => import("@encv/shared-components/views/GroupDetail.vue"),
         props: true,
       },
       {

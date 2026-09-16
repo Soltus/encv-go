@@ -1,6 +1,6 @@
 import { registerI18nModule, useI18n } from "@encv/shared-components/composables/useI18n";
-import { initSharedI18n } from "@encv/shared-components/i18n";
 import { registerIonicComponents } from "@encv/shared-components/composables/useIonicAutoRegister";
+import { initSharedI18n } from "@encv/shared-components/i18n";
 import { IonicVue } from "@ionic/vue";
 import { createApp } from "vue";
 import App from "./App.vue";
@@ -13,6 +13,7 @@ import "@ionic/vue/css/structure.css";
 import "@ionic/vue/css/typography.css";
 
 import "./theme/variables.css";
+import "@encv/shared-components/styles/daisyui.css";
 
 const app = createApp(App);
 app.use(IonicVue);

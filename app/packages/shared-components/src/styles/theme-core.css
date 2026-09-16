@@ -1,0 +1,27 @@
+/* =============================================================================
+ * ENCV 主应用主题核心入口（共享，纯 CSS，不依赖 Tailwind 构建管线）
+ *
+ * 用途：encv-mobile 主应用引入此文件，获得与插件 daisyUI 完全一致的
+ *       「单一调色板」+ Ionic←daisyUI 桥接令牌，且无需把 @tailwindcss/vite
+ *       管线接入主应用 vite 配置（避免 vite 8 rolldown 打包配置时的
+ *       ESM interop 问题）。
+ *
+ * 组成：
+ *   - tokens.css     动效设计令牌（§2.6）
+ *   - palette.css    daisyUI encv/encv-dark 调色板（纯 CSS 等价，单一来源）
+ *   - bridge.css      Ionic ← daisyUI 桥接（让 Ionic 组件跟随同一调色板）
+ *
+ * 加载顺序：在 main.ts 中置于 variables.css 之后，桥接才能覆盖其字面量。
+ * ========================================================================== */
+
+@import "../theme/tokens.css";
+@import "../theme/palette.css";
+@import "../theme/bridge.css";
+@import "../theme/vivid.scss";
+
+/* ⚠️ 主题（官方 + 第三方）【不再】在此 @import 编译进产物。
+ * 主题 = 运行时可加载的文件夹资产包（public/themes/<id>/theme.json + theme.css + 可选
+ * theme.js / assets/），由 themeLoader 在运行时注入 <link> 并切 [data-theme]。
+ * 官方与第三方同形态、同加载机制，仅 builtIn 区分「随包 / 用户空间」。
+ * 把主题编译进本文件会剥夺「可加载 / 可卸载 / 可分发」能力，并让官方获得第三方没有的特权，
+ * 违背 ENCV前端主题重构方案.md §2.3 与「官方 == 第三方」原则（详见 THEME_DEV.md §6.9/§6.10）。 */

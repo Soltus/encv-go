@@ -12,6 +12,7 @@
  *  8) MAX_TRACKED_REALTIME_SEQUENCES —— 超过上限时淘汰最早 sequence
  */
 
+import { describe, expect, it } from "vitest";
 import {
   asRecord,
   createRealtimeSequenceTrackerState,
@@ -25,7 +26,6 @@ import {
   readString,
   updateRealtimeServerInstance,
 } from "@/composables/appServerRealtimeReducer";
-import { describe, expect, it } from "vitest";
 
 // =============================================================================
 // asRecord

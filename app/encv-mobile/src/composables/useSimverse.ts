@@ -23,10 +23,7 @@ export interface SimverseChronicleWorldResponse {
 const currentTick = ref(0);
 
 export function useSimverse() {
-  async function loadChronicleWorld(
-    _minImportance: number,
-    _limit: number,
-  ): Promise<SimverseChronicleWorldResponse> {
+  async function loadChronicleWorld(_minImportance: number, _limit: number): Promise<SimverseChronicleWorldResponse> {
     return {
       era: 0,
       total_events: 0,

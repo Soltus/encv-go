@@ -312,20 +312,20 @@
 
 <script setup lang="ts">
 import {
+  add,
   cloud,
   documentText,
+  fingerPrint,
   flash,
   folderOpen,
   globe,
   home,
   lockClosed,
   person,
-  add,
   save as saveIcon,
-  fingerPrint,
 } from "ionicons/icons";
-
-import type { OpenlistSiteInfo, RemoteWebDAVInfo, WebDAVConfig, WebDAVTestResult } from "@/api/encv";
+import { computed, onMounted, ref } from "vue";
+import type { OpenlistSiteInfo, RemoteWebDAVInfo, WebDAVConfig, WebDAVTestResult } from "@encv/shared-components/api/encv";
 import {
   addOpenlistSite,
   deleteOpenlistSite,
@@ -334,13 +334,12 @@ import {
   saveWebDAVConfigs,
   testWebDAVConnection,
   updateOpenlistSite,
-} from "@/api/encv";
-import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
+} from "@encv/shared-components/api/encv";
+import InputWithHistory from "@encv/shared-components/components/InputWithHistory.vue";
 import LocalOpenListStatusCard from "@/components/LocalOpenListStatusCard.vue";
-import InputWithHistory from "@/components/InputWithHistory.vue";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import { computed, onMounted, ref } from "vue";
+import { copyToClipboard as clipboardWrite } from "@encv/shared-components/composables/useClipboard";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
 
 const { t } = useI18n();
 
@@ -646,12 +645,12 @@ onMounted(() => {
 }
 
 .built-in-item {
-  --background: rgba(var(--ion-color-primary-rgb), 0.05);
+  --background: color-mix(in srgb, var(--color-primary) 5%, transparent);
 }
 
 .proxy-url {
   font-size: 12px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .test-result-area {
@@ -662,11 +661,11 @@ onMounted(() => {
 }
 
 .result-ok {
-  border-left: 3px solid var(--ion-color-success);
+  border-left: 3px solid var(--color-success);
 }
 
 .result-error {
-  border-left: 3px solid var(--ion-color-danger);
+  border-left: 3px solid var(--color-error);
 }
 
 .result-title {
@@ -709,20 +708,20 @@ onMounted(() => {
 .result-error-msg {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(var(--ion-color-danger-rgb), 0.15);
+  border-top: 1px solid color-mix(in srgb, var(--color-error) 15%, transparent);
 }
 
 .result-error-msg p:first-child {
   margin: 0 0 4px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
 }
 
 .error-detail {
   margin: 0;
   font-size: 13px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   line-height: 1.5;
   word-break: break-word;
 }
@@ -733,11 +732,11 @@ onMounted(() => {
 }
 
 .list-test-result-area.result-ok {
-  border-left: 3px solid var(--ion-color-success);
+  border-left: 3px solid var(--color-success);
 }
 
 .list-test-result-area.result-error {
-  border-left: 3px solid var(--ion-color-danger);
+  border-left: 3px solid var(--color-error);
 }
 
 .mini-badge {
@@ -747,7 +746,7 @@ onMounted(() => {
 }
 
 .result-error-inline {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 12px;
   margin-top: 4px;
   word-break: break-word;
@@ -771,7 +770,7 @@ onMounted(() => {
 .site-toggle-label-row {
   display: block;
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 4px;
 }
 
@@ -780,6 +779,6 @@ onMounted(() => {
 }
 
 .site-disabled .proxy-url {
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 </style>

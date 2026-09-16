@@ -14,8 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // vi.mock 是 hoisted 的，mock 工厂内不能引用模块顶层变量。
 // 用 vi.hoisted 把可变状态提到模块顶层
 const mocks = vi.hoisted(() => ({
-  isNativePlatform: false,
-  platform: "web",
+  isAndroid: false,
   fetchOnce: vi.fn(),
   streamStart: vi.fn(),
   streamCancel: vi.fn(),
@@ -23,24 +22,19 @@ const mocks = vi.hoisted(() => ({
   removeAllListeners: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("@capacitor/core", () => ({
-  Capacitor: {
-    isNativePlatform: () => mocks.isNativePlatform,
-    getPlatform: () => mocks.platform,
-  },
-}));
-
-vi.mock("@/plugins/ApiProxy", () => ({
-  ApiProxy: {
-    fetchOnce: mocks.fetchOnce,
-    streamStart: mocks.streamStart,
-    streamCancel: mocks.streamCancel,
-    addListener: mocks.addListener,
-    removeAllListeners: mocks.removeAllListeners,
-  },
-}));
-
+import { setApiProxy } from "@encv/shared-components/runtime/apiProxy";
 import { installProxiedFetch, isProxiedFetchInstalled, uninstallProxiedFetch } from "@encv/shared-components/composables/useProxiedFetch";
+
+// 共享层经 getApiProxy() 取用能力，不 import @capacitor/core / @/plugins/ApiProxy。
+// 测试通过 setApiProxy 注入 mock 实现，覆盖默认（isAndroid=false / 原生函数抛错）桥。
+setApiProxy({
+  isAndroid: () => mocks.isAndroid,
+  fetchOnce: mocks.fetchOnce,
+  streamStart: mocks.streamStart,
+  streamCancel: mocks.streamCancel,
+  addListener: mocks.addListener,
+  removeAllListeners: mocks.removeAllListeners,
+});
 
 describe("useProxiedFetch", () => {
   let originalFetch: typeof window.fetch;
@@ -50,8 +44,7 @@ describe("useProxiedFetch", () => {
     mocks.streamStart.mockReset();
     mocks.streamCancel.mockReset();
     uninstallProxiedFetch();
-    mocks.isNativePlatform = false;
-    mocks.platform = "web";
+    mocks.isAndroid = false;
   });
   afterEach(() => {
     uninstallProxiedFetch();
@@ -59,30 +52,26 @@ describe("useProxiedFetch", () => {
   });
 
   it("dev/web 平台：installProxiedFetch 不替换 window.fetch", () => {
-    mocks.isNativePlatform = false;
-    mocks.platform = "web";
+    mocks.isAndroid = false;
     installProxiedFetch();
     expect(isProxiedFetchInstalled()).toBe(false);
   });
 
   it("native Android 平台：installProxiedFetch 替换 window.fetch", () => {
-    mocks.isNativePlatform = true;
-    mocks.platform = "android";
+    mocks.isAndroid = true;
     installProxiedFetch();
     expect(isProxiedFetchInstalled()).toBe(true);
     expect(window.fetch).not.toBe(originalFetch);
   });
 
   it("native iOS 平台：installProxiedFetch 不替换（暂只支持 Android）", () => {
-    mocks.isNativePlatform = true;
-    mocks.platform = "ios";
+    mocks.isAndroid = false;
     installProxiedFetch();
     expect(isProxiedFetchInstalled()).toBe(false);
   });
 
   it("native Android 替换后 fetch 走 ApiProxy.fetchOnce，返回 Response 包装", async () => {
-    mocks.isNativePlatform = true;
-    mocks.platform = "android";
+    mocks.isAndroid = true;
     installProxiedFetch();
 
     mocks.fetchOnce.mockResolvedValue({
@@ -113,8 +102,7 @@ describe("useProxiedFetch", () => {
   });
 
   it("SSE 请求（Accept: text/event-stream）走 ApiProxy.streamStart", async () => {
-    mocks.isNativePlatform = true;
-    mocks.platform = "android";
+    mocks.isAndroid = true;
     installProxiedFetch();
 
     mocks.streamStart.mockResolvedValue({
@@ -145,8 +133,7 @@ describe("useProxiedFetch", () => {
   });
 
   it("uninstallProxiedFetch 还原原 fetch", () => {
-    mocks.isNativePlatform = true;
-    mocks.platform = "android";
+    mocks.isAndroid = true;
     installProxiedFetch();
     expect(isProxiedFetchInstalled()).toBe(true);
     uninstallProxiedFetch();
@@ -156,8 +143,7 @@ describe("useProxiedFetch", () => {
   });
 
   it("幂等：多次 installProxiedFetch 不会重复替换", () => {
-    mocks.isNativePlatform = true;
-    mocks.platform = "android";
+    mocks.isAndroid = true;
     installProxiedFetch();
     const firstReplacement = window.fetch;
     installProxiedFetch();

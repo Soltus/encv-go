@@ -24,15 +24,15 @@ import (
 )
 
 func TestFullTextDBPath(t *testing.T) {
-	// 空 servingDir 兜底 → /tmp
-	if got := fulltextDBPath(""); got == "" {
-		t.Errorf("fulltextDBPath(\"\") should return /tmp fallback, got empty string")
+	// FTS 索引必须落应用数据目录，绝不进 servingDir（用户媒体根）。
+	servingDir := "/d/test"
+	got := fulltextDBPath()
+	if strings.Contains(got, servingDir) {
+		t.Errorf("fulltextDBPath must not be under servingDir %q, got %q", servingDir, got)
 	}
-	// 非空 servingDir → <servingDir>/.encv/fts5.db
-	dir := "/d/test"
-	want := filepath.Join("/d/test", ".encv", "fts5.db")
-	if got := fulltextDBPath(dir); got != want {
-		t.Errorf("fulltextDBPath(%q) = %q, want %q", dir, got, want)
+	want := filepath.Join(ftsDataPath(), "fts5.db")
+	if got != want {
+		t.Errorf("fulltextDBPath() = %q, want %q", got, want)
 	}
 }
 
@@ -287,7 +287,7 @@ func TestInitFullTextIndexWithBuild_Populates(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(servingDir, "movie.encv.zip"), []byte("encrypted movie"), 0o644)
 
 	// 2. Init (synchronous part)
-	dbPath := fulltextDBPath(servingDir)
+	dbPath := fulltextDBPath()
 	_ = os.MkdirAll(filepath.Dir(dbPath), 0o755) // ensure .encv/ exists
 	if err := InitFullTextIndex(dbPath); err != nil {
 		t.Fatalf("InitFullTextIndex: %v", err)

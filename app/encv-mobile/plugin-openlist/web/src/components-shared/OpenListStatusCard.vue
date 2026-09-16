@@ -52,6 +52,7 @@
 </template>
 
 <script setup lang="ts">
+import { serverOutline } from "ionicons/icons";
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { OpenListRuntime } from "./index";
 
@@ -82,7 +83,7 @@ const state = computed(() => {
   return props.runtime.running ? "running" : "stopped";
 });
 
-const _formattedDataSize = computed(() => {
+const formattedDataSize = computed(() => {
   const b = props.runtime.dataSizeBytes || 0;
   if (b < 1024) return `${b} B`;
   if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
@@ -90,22 +91,22 @@ const _formattedDataSize = computed(() => {
   return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
 });
 
-const _heartbeatLabel = computed(() => {
+const heartbeatLabel = computed(() => {
   if (!props.runtime.lastUpdateTs) return "-";
   const deltaSec = Math.max(0, Math.floor((nowMs.value - props.runtime.lastUpdateTs) / 1000));
   if (deltaSec <= 5) return "正常";
   return `${deltaSec}s 前`;
 });
 
-const _cardClass = computed(() => `state-${state.value}`);
+const cardClass = computed(() => `state-${state.value}`);
 
-const _badgeColor = computed(() => {
+const badgeColor = computed(() => {
   if (state.value === "running") return "success";
   if (state.value === "port_conflict") return "danger";
   return "medium";
 });
 
-const _statusLabel = computed(() => {
+const statusLabel = computed(() => {
   if (state.value === "running") return "运行中";
   if (state.value === "port_conflict") return "端口冲突";
   if (state.value === "not_installed") return "未安装";
@@ -118,7 +119,7 @@ const _statusLabel = computed(() => {
   margin: 12px 12px 0;
   padding: 12px 14px;
   border-radius: 10px;
-  background: var(--ion-background-color, #ffffff);
+  background: var(--ion-background-color, var(--color-white));
   border: 1px solid var(--ion-color-light-shade, #e0e0e0);
   border-left-width: 3px;
 }
@@ -133,9 +134,9 @@ const _statusLabel = computed(() => {
 .card-icon { font-size: 16px; color: var(--ion-color-primary); flex-shrink: 0; }
 .card-title { font-size: 14px; font-weight: 600; flex: 1 1 auto; }
 .status-badge { font-size: 11px; flex-shrink: 0; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-.badge-success { background: var(--ion-color-success, #2dd36f); color: #fff; }
-.badge-danger { background: var(--ion-color-danger, #eb445a); color: #fff; }
-.badge-medium { background: var(--ion-color-medium, #92949c); color: #fff; }
+.badge-success { background: var(--ion-color-success, #2dd36f); color: var(--color-white); }
+.badge-danger { background: var(--ion-color-danger, #eb445a); color: var(--color-white); }
+.badge-medium { background: var(--ion-color-medium, #92949c); color: var(--color-white); }
 
 .card-body { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
 .status-line { margin: 0; font-size: 13px; font-weight: 500; }

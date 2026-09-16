@@ -62,15 +62,10 @@
 </template>
 
 <script setup lang="ts">
-import {
-  checkmarkCircle,
-  closeCircle,
-  playCircleOutline,
-} from "ionicons/icons";
-
-import { useFileSystemTests } from "@/composables/useFileSystemTests";
-import { useI18n } from "@/composables/useI18n";
+import { checkmarkCircle, closeCircle, playCircleOutline } from "ionicons/icons";
 import { computed } from "vue";
+import { useFileSystemTests } from "@/composables/useFileSystemTests";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 const { t } = useI18n();
 const { results, isRunning, runAllTests } = useFileSystemTests();
@@ -91,7 +86,7 @@ async function handleRunAll() {
   line-height: 1.5;
 }
 .error-text {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 12px;
   white-space: pre-wrap;
   word-break: break-word;

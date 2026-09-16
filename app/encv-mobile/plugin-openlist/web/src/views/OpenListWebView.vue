@@ -151,7 +151,16 @@
 
 <script setup lang="ts">
 import { toastController } from "@ionic/vue";
-import { checkmarkCircleOutline, cloudOfflineOutline, refreshOutline, timerOutline } from "ionicons/icons";
+import {
+  alertCircleOutline,
+  bugOutline,
+  checkmarkCircleOutline,
+  cloudOfflineOutline,
+  copyOutline,
+  openOutline,
+  refreshOutline,
+  timerOutline,
+} from "ionicons/icons";
 import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { logBuffer, OpenListNative } from "@/plugins/openlist-native";
@@ -165,14 +174,14 @@ interface DebugEntry {
   data?: string;
 }
 
-const _router = useRouter();
+const router = useRouter();
 
 const port = ref(0);
 const state = ref<IframeState>("probing");
 const lastError = ref("");
 const retryCount = ref(0);
 const frameRef = ref<HTMLIFrameElement | null>(null);
-const _debugOpen = ref(false);
+const debugOpen = ref(false);
 const debugEntries = ref<DebugEntry[]>([]);
 
 const PROBE_TIMEOUT_MS = 5000;
@@ -187,14 +196,14 @@ let pollTimer: ReturnType<typeof setInterval> | null = null;
  */
 const isSandbox = computed(() => import.meta.env.DEV);
 
-const _iframeUrl = computed(() => {
+const iframeUrl = computed(() => {
   const hash = "#/login";
   // 走 preview-gateway 统一收口 :16666/openlist/ → :5244 OpenList upstream
   //   不再硬编码 :5244 — 沙箱 dev 唯一对外端口是 :16666（agent-tool-host :16000 代理过来）
   return `http://localhost:16666/openlist/${hash}`;
 });
 
-const _stateText = computed(() => {
+const stateText = computed(() => {
   switch (state.value) {
     case "probing":
       return "连接中…";
@@ -207,7 +216,7 @@ const _stateText = computed(() => {
   }
 });
 
-const _stateColor = computed(() => {
+const stateColor = computed(() => {
   switch (state.value) {
     case "connected":
       return "success";
@@ -222,7 +231,7 @@ const _stateColor = computed(() => {
   }
 });
 
-const _stateIcon = computed(() => {
+const stateIcon = computed(() => {
   switch (state.value) {
     case "connected":
       return checkmarkCircleOutline;
@@ -385,7 +394,7 @@ async function probeBackend(reason: string = "manual") {
 
 // ============== iframe 事件 ==============
 
-function _onIframeLoad() {
+function onIframeLoad() {
   debug("info", "iframe @load fired", {
     currentState: state.value,
     src: frameRef.value?.src?.slice(0, 80),
@@ -417,7 +426,7 @@ async function verifyAfterIframeLoad() {
   }
 }
 
-function _onError() {
+function onError() {
   debug("error", "iframe @error fired");
   logBuffer.error("iframe 加载失败");
   if (isSandbox.value) {
@@ -428,7 +437,7 @@ function _onError() {
 
 // ============== 用户操作 ==============
 
-function _reload() {
+function reload() {
   retryCount.value++;
   if (isSandbox.value) {
     probeBackend("manual");
@@ -445,12 +454,12 @@ function _reload() {
   }
 }
 
-function _openExternal() {
+function openExternal() {
   const url = `http://127.0.0.1:${port.value || 5244}/`;
   window.open(url, "_blank");
 }
 
-async function _copyCommand() {
+async function copyCommand() {
   const cmd = "bash scripts/dev-openlist.sh";
   try {
     await navigator.clipboard.writeText(cmd);
@@ -472,7 +481,7 @@ async function _copyCommand() {
   height: 100%;
   border: none;
   display: block;
-  background: #fff;
+  background: var(--color-white);
 }
 .iframe-loading {
   opacity: 0.6;
@@ -487,7 +496,7 @@ async function _copyCommand() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--ion-background-color, #ffffff);
+  background: var(--ion-background-color, var(--color-white));
   z-index: 10;
   padding: 24px;
 }
@@ -519,7 +528,7 @@ async function _copyCommand() {
   font-size: 17px;
   font-weight: 600;
   margin: 0;
-  color: var(--ion-text-color, #000);
+  color: var(--ion-text-color, var(--color-black));
 }
 .state-hint {
   font-size: 13px;
@@ -546,12 +555,12 @@ async function _copyCommand() {
 .state-cmd {
   display: inline-block;
   padding: 6px 10px;
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   border: 1px solid var(--ion-color-light-shade, #e0e0e0);
   border-radius: 4px;
   font-family: monospace;
   font-size: 12px;
-  color: var(--ion-text-color, #000);
+  color: var(--ion-text-color, var(--color-black));
   user-select: all;
   word-break: break-all;
 }
@@ -576,11 +585,11 @@ async function _copyCommand() {
 }
 .status-bar[color="danger"] {
   --background: var(--ion-color-danger);
-  --color: #fff;
+  --color: var(--color-white);
 }
 .status-bar[color="warning"] {
   --background: var(--ion-color-warning);
-  --color: #000;
+  --color: var(--color-black);
 }
 
 .status-title {
@@ -633,7 +642,7 @@ async function _copyCommand() {
   cursor: pointer;
   padding: 0 4px;
 }
-.debug-close:hover { color: #fff; }
+.debug-close:hover { color: var(--color-white); }
 .debug-list {
   overflow-y: auto;
   padding: 4px 0;

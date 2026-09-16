@@ -1,5 +1,5 @@
-import type { App } from "vue";
 import * as IonicVueComponents from "@ionic/vue";
+import type { App } from "vue";
 
 const ION_PREFIX = "Ion";
 
@@ -12,19 +12,18 @@ function isIonComponent(name: string): boolean {
   return name.startsWith(ION_PREFIX) && name.length > ION_PREFIX.length;
 }
 
-export function registerIonicComponents(
-  app: App,
-  options: IonicRegisterOptions = {},
-): { registered: string[]; skipped: string[] } {
+export function registerIonicComponents(app: App, options: IonicRegisterOptions = {}): { registered: string[]; skipped: string[] } {
   const { extraComponents = {}, skip = [] } = options;
 
   const registered: string[] = [];
   const skipped: string[] = [];
 
-  const skipSet = new Set(skip.map(name => {
-    if (name.startsWith(ION_PREFIX)) return name;
-    return ION_PREFIX + name.charAt(0).toUpperCase() + name.slice(1);
-  }));
+  const skipSet = new Set(
+    skip.map(name => {
+      if (name.startsWith(ION_PREFIX)) return name;
+      return ION_PREFIX + name.charAt(0).toUpperCase() + name.slice(1);
+    })
+  );
 
   for (const [name, component] of Object.entries(IonicVueComponents)) {
     if (!isIonComponent(name)) continue;

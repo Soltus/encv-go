@@ -17,9 +17,9 @@
 </template>
 
 <script setup lang="ts">
-import { useI18n } from "@/composables/useI18n";
 import { modalController } from "@ionic/vue";
 import { sparklesOutline } from "ionicons/icons";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 const { t } = useI18n();
 const sparkleIcon = sparklesOutline;
@@ -48,9 +48,9 @@ async function handleOpen() {
   height: 52px;
   border: 0;
   border-radius: 50%;
-  background: var(--ion-color-primary);
-  color: var(--ion-color-primary-contrast, #fff);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(var(--ion-color-primary-rgb), 0.4);
+  background: var(--color-primary);
+  color: var(--color-primary-content);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25), 0 2px 4px color-mix(in srgb, var(--color-primary) 40%, transparent);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -60,7 +60,7 @@ async function handleOpen() {
 
 .agentEntry:hover {
   transform: scale(1.05);
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3), 0 3px 6px rgba(var(--ion-color-primary-rgb), 0.5);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3), 0 3px 6px color-mix(in srgb, var(--color-primary) 50%, transparent);
 }
 
 .agentEntry:active {
@@ -73,7 +73,7 @@ async function handleOpen() {
 
 /* 暗黑模式额外 glow */
 body.dark .agentEntry {
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(var(--ion-color-primary-rgb), 0.4);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px color-mix(in srgb, var(--color-primary) 40%, transparent);
 }
 </style>
 

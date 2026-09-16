@@ -12,6 +12,7 @@
  *  - 回收站机制（/api/trash）
  */
 
+import { ref } from "vue";
 import {
   checkFileExists,
   checkServiceGuard,
@@ -26,8 +27,7 @@ import {
   rollbackTask,
   type TaskStatus,
   uploadFile,
-} from "@/api/encv";
-import { ref } from "vue";
+} from "@encv/shared-components/api/encv";
 
 // ==================== 类型定义 ====================
 

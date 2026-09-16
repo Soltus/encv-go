@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import time
+import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -24,27 +25,41 @@ class PerfMetric:
 class PerfTracker:
     def __init__(self):
         self.metrics: list[PerfMetric] = []
-        self._active: dict[str, float] = {}
+        self._lock = threading.Lock()
+        self._local = threading.local()
+
+    def _active(self) -> dict[str, float]:
+        d = getattr(self._local, "_active", None)
+        if d is None:
+            d = {}
+            self._local._active = d
+        return d
 
     def start(self, name: str):
-        self._active[name] = time.perf_counter()
+        # 线程局部存储：并行 lint 多个 app 时同名指标互不覆盖
+        self._active()[name] = time.perf_counter()
 
     def end(self, name: str, items_count: int = 0, extra: Optional[dict] = None):
-        start_time = self._active.pop(name, None)
+        start_time = self._active().pop(name, None)
         if start_time is None:
             return
 
         duration_ms = (time.perf_counter() - start_time) * 1000
-        self.metrics.append(PerfMetric(
-            name=name,
-            duration_ms=duration_ms,
-            items_count=items_count,
-            extra=extra or {},
-        ))
+        with self._lock:
+            self.metrics.append(PerfMetric(
+                name=name,
+                duration_ms=duration_ms,
+                items_count=items_count,
+                extra=extra or {},
+            ))
 
     def reset(self):
-        self.metrics.clear()
-        self._active.clear()
+        with self._lock:
+            self.metrics.clear()
+        try:
+            self._local._active.clear()
+        except Exception:
+            pass
 
     def generate_report(self) -> str:
         lines = [
@@ -110,6 +125,35 @@ class PerfTracker:
             lines.append(f"- 目标: < 10ms (交互式搜索)")
         else:
             lines.append("- 未测试")
+
+        lines.extend([
+            "",
+            "### 共享字典去重 / Key 迁移",
+            "",
+        ])
+
+        shared_metrics = [m for m in self.metrics if "Shared字典加载" in m.name]
+        if shared_metrics:
+            cold = [m for m in shared_metrics if not m.extra.get("cached")]
+            hits = [m for m in shared_metrics if m.extra.get("cached")]
+            lines.append(f"- shared 字典冷解析次数: **{len(cold)}**（理想为 1，跨 app 复用）")
+            lines.append(f"- shared 字典缓存命中: **{len(hits)}** 次")
+            if cold:
+                lines.append(f"- 单次解析耗时: {cold[0].duration_ms:.1f} ms")
+        else:
+            lines.append("- 未涉及 shared 字典")
+
+        move_metrics = [m for m in self.metrics if "Key迁移" in m.name or "move-key" in m.name]
+        if move_metrics:
+            for m in move_metrics:
+                lines.append(
+                    f"- {m.name}: 匹配 {m.extra.get('matched', m.items_count)} 个"
+                    f"（skipped={m.extra.get('skipped', 0)}, "
+                    f"removed={m.extra.get('removed', 0)}, "
+                    f"dry_run={m.extra.get('dry_run', False)}）"
+                )
+        else:
+            lines.append("- 未执行 move-key")
 
         total_ms = sum(m.duration_ms for m in self.metrics)
         lines.extend([

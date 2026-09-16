@@ -50,7 +50,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, ref, watch } from "vue";
+import { useDisclosure } from "../../composables/useDisclosure";
+import { useClickOutside } from "../../composables/useClickOutside";
 
 export interface DropdownOption {
   value: string;
@@ -88,7 +90,7 @@ const emit = defineEmits<{
   (e: "change", value: string[]): void;
 }>();
 
-const isOpen = ref(false);
+const { isOpen, toggle, close } = useDisclosure();
 const searchQuery = ref("");
 const dropdownRef = ref<HTMLElement | null>(null);
 const searchInputRef = ref<HTMLInputElement | null>(null);
@@ -142,7 +144,7 @@ function toggleOption(value: string) {
   } else {
     emit("update:modelValue", [value]);
     emit("change", [value]);
-    isOpen.value = false;
+    close();
   }
 }
 
@@ -158,7 +160,7 @@ function clearAll() {
 }
 
 function toggleOpen() {
-  isOpen.value = !isOpen.value;
+  toggle();
   if (isOpen.value) {
     nextTick(() => {
       if (props.searchable && searchInputRef.value) {
@@ -172,28 +174,8 @@ function onSearchInput() {
   // 搜索时不需要特殊处理，computed 自动更新
 }
 
-function handleClickOutside(e: MouseEvent) {
-  if (!dropdownRef.value) return;
-  if (!dropdownRef.value.contains(e.target as Node)) {
-    isOpen.value = false;
-  }
-}
-
-function handleEscape(e: KeyboardEvent) {
-  if (e.key === "Escape" && isOpen.value) {
-    isOpen.value = false;
-  }
-}
-
-onMounted(() => {
-  document.addEventListener("mousedown", handleClickOutside);
-  document.addEventListener("keydown", handleEscape);
-});
-
-onBeforeUnmount(() => {
-  document.removeEventListener("mousedown", handleClickOutside);
-  document.removeEventListener("keydown", handleEscape);
-});
+// 外部点击 + Escape 关闭（替代原手搓的 mousedown/keydown 监听 + 生命周期清理）
+useClickOutside(dropdownRef, () => close());
 
 watch(isOpen, open => {
   if (!open) searchQuery.value = "";
@@ -243,7 +225,7 @@ watch(isOpen, open => {
   padding: 0 5px;
   border-radius: 9px;
   background: var(--ion-color-primary, #3880ff);
-  color: #fff;
+  color: var(--color-white);
   font-size: 11px;
   font-weight: 600;
 }
@@ -265,7 +247,7 @@ watch(isOpen, open => {
   min-width: 220px;
   max-width: 320px;
   max-height: 360px;
-  background: var(--ion-color-light, #fff);
+  background: var(--ion-color-light, var(--color-white));
   border: 1px solid var(--ion-color-medium-tint, #ddd);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
@@ -340,7 +322,7 @@ watch(isOpen, open => {
 }
 
 .check-mark {
-  color: #fff;
+  color: var(--color-white);
   font-size: 11px;
   font-weight: bold;
   line-height: 1;
@@ -379,7 +361,7 @@ watch(isOpen, open => {
   padding: 6px 8px;
   border: 1px solid var(--ion-color-medium-tint, #ddd);
   border-radius: 6px;
-  background: var(--ion-color-light, #fff);
+  background: var(--ion-color-light, var(--color-white));
   color: var(--ion-color-primary, #3880ff);
   font-size: 12px;
   font-weight: 500;

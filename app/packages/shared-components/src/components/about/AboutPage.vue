@@ -64,16 +64,10 @@
 </template>
 
 <script setup lang="ts">
-import {
-  codeSlash,
-  documentTextOutline,
-  informationCircle,
-  logoGithub,
-  openOutline,
-} from "ionicons/icons";
+import { codeSlash, documentTextOutline, informationCircle, logoGithub, openOutline } from "ionicons/icons";
 
 import { computed } from "vue";
-import { useI18n } from "../composables/useI18n";
+import { useI18n } from "../../composables/useI18n";
 
 interface Props {
   title?: string;
@@ -90,7 +84,7 @@ const props = defineProps<Props>();
 
 const { t } = useI18n();
 
-const computedTitle = computed(() => props.title || t('settings.about'));
+const computedTitle = computed(() => props.title || t("settings.about"));
 
 function openGitHub() {
   if (props.githubUrl) {

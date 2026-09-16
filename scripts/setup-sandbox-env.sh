@@ -45,51 +45,27 @@ warn() { printf "${Y}[setup]${N} %s\n" "$*" >&2; }
 err()  { printf "${R}[setup]${N} %s\n" "$*" >&2; }
 step() { echo ""; printf "${C}==>${N} %s\n" "$*"; }
 
-FAILED=0
-
-# ============================================================================
-# 步骤 pre-0: 安装 Cypress / Electron 系统依赖（沙箱无 GUI 需 xvfb + GTK 库）
-# ============================================================================
-step "pre-0/6 安装 Cypress/Electron 系统依赖（xvfb + GTK + ATK）"
-
-CYPRESS_DEPS=(
-  xvfb
-  libatk1.0-0
-  libatk-bridge2.0-0
-  libgtk-3-0
-  libgbm1
-  libxdamage1
-  libxcomposite1
-  libxcursor1
-  libxi6
-  libxtst6
-  libxrandr2
-  libxss1
-  libasound2
-  libpango-1.0-0
-  libcairo2
-  libdbus-1-3
-  libdbus-glib-1-2
-  libnss3
-  libx11-xcb1
-)
-
-# 检查哪些缺
-MISSING_DEPS=()
-for pkg in "${CYPRESS_DEPS[@]}"; do
-  if ! dpkg -l "$pkg" >/dev/null 2>&1; then
-    MISSING_DEPS+=("$pkg")
+# 回退：硬编码 Cypress 系统依赖清单（仅在 cypress CLI 不可用时使用，
+# 例如未执行 pnpm install 的环境）。跨 Debian 版本可能漂移，故仅作兜底。
+install_cypress_deps_fallback() {
+  local CYPRESS_DEPS_FALLBACK=(
+    xvfb libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libgbm1
+    libxdamage1 libxcomposite1 libxcursor1 libxi6 libxtst6
+    libxrandr2 libxss1 libasound2 libpango-1.0-0 libcairo2
+    libdbus-1-3 libdbus-glib-1-2 libnss3 libx11-xcb1
+  )
+  local missing=()
+  for pkg in "${CYPRESS_DEPS_FALLBACK[@]}"; do
+    if ! dpkg -l "$pkg" >/dev/null 2>&1; then missing+=("$pkg"); fi
+  done
+  if [[ ${#missing[@]} -eq 0 ]]; then
+    ok "Cypress/Electron 系统依赖全部就绪"
+    return 0
   fi
-done
-
-if [[ ${#MISSING_DEPS[@]} -eq 0 ]]; then
-  ok "Cypress/Electron 系统依赖全部就绪（${#CYPRESS_DEPS[@]} 个包）"
-else
-  log "缺失 ${#MISSING_DEPS[@]} 个包，apt-get install ..."
-  log "  缺失: ${MISSING_DEPS[*]}"
+  log "缺失 ${#missing[@]} 个包，apt-get install ..."
   if apt-get update -qq 2>&1 | tail -3; then
-    if DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${MISSING_DEPS[@]}" 2>&1 | tail -10; then
-      ok "Cypress/Electron 系统依赖安装完成"
+    if DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${missing[@]}" 2>&1 | tail -10; then
+      ok "Cypress/Electron 系统依赖安装完成（回退清单）"
     else
       warn "Cypress 系统依赖安装失败（测试可能跑不起来）"
       FAILED=$((FAILED+1))
@@ -98,7 +74,18 @@ else
     warn "apt-get update 失败（跳过 Cypress 系统依赖安装）"
     FAILED=$((FAILED+1))
   fi
-fi
+}
+
+FAILED=0
+
+# ============================================================================
+# 步骤 pre-0: Cypress / Electron 系统依赖
+#   说明：不再硬编码 GTK/ATK 包清单（跨 Debian 版本易漂移，如
+#   libasound2 → libasound2t64）。统一在「步骤 5/6 pnpm install 之后」用
+#   `pnpm exec cypress install --dependencies` 按当前发行版自动安装（见该处）。
+#   此处仅做预留说明，真正的安装逻辑在下方 step 5b。
+# ============================================================================
+step "pre-0/6 Cypress/Electron 系统依赖（将在 pnpm install 后由 cypress 自动安装）"
 
 # ============================================================================
 # 步骤 pre-0: 清理沙箱内残留 orphan 进程（必须）
@@ -314,6 +301,25 @@ else
     err "workspace pnpm install 失败"
     FAILED=$((FAILED+1))
   fi
+fi
+
+# ============================================================================
+# 步骤 5b/7: 安装 Cypress / Electron 系统依赖（xvfb + GTK + ATK）
+#   用 cypress 官方命令按当前发行版自动解析并安装全部所需库，避免硬编码冷门包。
+#   cypress 已在上方 pnpm install 后位于 node_modules；不可用时回退硬编码清单。
+# ============================================================================
+step "5b/7 安装 Cypress/Electron 系统依赖（cypress install --dependencies）"
+if command -v pnpm >/dev/null 2>&1; then
+  pnpm exec cypress install --dependencies 2>&1 | tail -8
+  if [[ ${PIPESTATUS[0]} -eq 0 ]]; then
+    ok "Cypress/Electron 系统依赖安装完成（cypress 自动解析）"
+  else
+    warn "cypress install --dependencies 失败，回退硬编码清单"
+    install_cypress_deps_fallback
+  fi
+else
+  warn "pnpm 不可用，回退硬编码清单"
+  install_cypress_deps_fallback
 fi
 
 # ============================================================================

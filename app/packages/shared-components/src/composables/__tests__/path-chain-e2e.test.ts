@@ -6,7 +6,7 @@
  *     → PluginTestsDetail.vue 的 mockRoot 计算
  *       → generateMockFilesViaBackend({ root: mockRoot })  [前端发请求]
  *         → 后端 handleMockGenerateGin 接收 root + filepath.Join(root, relativePath) 写盘
- *           → useWorkflowEngine.executeJob() 取 sourcePath
+ *           → 工作流任务服务取 sourcePath（矩阵展开 + worker 池提交）
  *             → withSafetyBoundary(sourcePath, { forceAutomation: true })
  *               → createTask(taskType, safeSource, ...) 提交给后端
  *                 → 后端 stat(文件路径) 检查文件是否存在
@@ -262,7 +262,7 @@ describe("端到端路径一致性测试", () => {
      *     },
      *   })
      *
-     * useWorkflowEngine.executeJob() 中：
+     * 工作流任务服务（submitRun）中：
      *   const source = step.action.params.sourcePath
      *   const safeSource = withSafetyBoundary(source, { forceAutomation: true })
      *   createTask(..., safeSource, ...)

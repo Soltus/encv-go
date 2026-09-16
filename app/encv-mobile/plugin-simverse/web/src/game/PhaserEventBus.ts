@@ -17,7 +17,7 @@ class PhaserEventBus {
   }
 
   emit(event: string, ...args: any[]): void {
-    this.events.get(event)?.forEach((cb) => cb(...args));
+    this.events.get(event)?.forEach(cb => cb(...args));
   }
 
   clear(): void {

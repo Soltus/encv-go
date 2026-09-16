@@ -1,9 +1,10 @@
-import { ref, onMounted, onUnmounted, shallowRef } from "vue";
-import Phaser from "phaser";
-import { createPhaserGame, destroyPhaserGame } from "@/game/main";
-import { phaserEventBus, PHASER_EVENTS } from "@/game/PhaserEventBus";
-import { WorldScene } from "@/game/WorldScene";
+import type Phaser from "phaser";
+import { onMounted, onUnmounted, ref, shallowRef } from "vue";
 import type { SimverseNPC } from "@/composables/useSimverse";
+import { QUALITY_RESOLUTION, type RenderQuality, useWorldRenderSettings } from "@/composables/useWorldRenderSettings";
+import { createPhaserGame, destroyPhaserGame } from "@/game/main";
+import { PHASER_EVENTS, phaserEventBus } from "@/game/PhaserEventBus";
+import type { WorldScene } from "@/game/WorldScene";
 
 export interface RegionEnterData {
   regionId: string;
@@ -29,6 +30,7 @@ export function usePhaserWorld() {
   const currentZoom = ref(1);
   const selectedNPC = ref<SimverseNPC | null>(null);
   const currentScene = ref("WorldScene");
+  const renderSettings = useWorldRenderSettings();
 
   const npcClickHandlers: ((npc: SimverseNPC) => void)[] = [];
   const regionEnterHandlers: ((data: RegionEnterData) => void)[] = [];
@@ -53,19 +55,47 @@ export function usePhaserWorld() {
 
   function handleNPCClick(npc: SimverseNPC) {
     selectedNPC.value = npc;
-    npcClickHandlers.forEach((h) => h(npc));
+    npcClickHandlers.forEach(h => h(npc));
+  }
+
+  // 将 WorldSettings 的帧率/等效渲染等级应用到运行中的 Phaser 游戏
+  function resolutionScale(q: RenderQuality): number {
+    const base = 1080;
+    return QUALITY_RESOLUTION[q].height / base;
+  }
+
+  function applyRenderSettings(): void {
+    if (!game.value || !isReady.value) return;
+    try {
+      const fps = renderSettings.fps.value;
+      const quality = renderSettings.quality.value;
+      const loop = game.value.loop as any;
+      loop.targetFps = fps;
+      // 低于 60 时强制 setTimeout 限速以省电；60/90/120 走 RAF（显示器刷新率）
+      loop.forceSetTimeOut = fps < 60;
+      const renderer = game.value.renderer as any;
+      if (renderer && typeof renderer.setResolution === "function") {
+        renderer.setResolution(resolutionScale(quality));
+      }
+    } catch (e) {
+      console.warn("[Phaser] applyRenderSettings failed:", e);
+    }
+  }
+
+  function onRenderSettingsEvent(): void {
+    applyRenderSettings();
   }
 
   function handleRegionEnter(data: RegionEnterData) {
-    regionEnterHandlers.forEach((h) => h(data));
+    regionEnterHandlers.forEach(h => h(data));
   }
 
   function handleBattleStart(data: BattleStartData) {
-    battleStartHandlers.forEach((h) => h(data));
+    battleStartHandlers.forEach(h => h(data));
   }
 
   function handleBattleEnd(result: string) {
-    battleEndHandlers.forEach((h) => h(result));
+    battleEndHandlers.forEach(h => h(result));
   }
 
   function setGameContainer(el: HTMLElement) {
@@ -86,7 +116,10 @@ export function usePhaserWorld() {
       phaserEventBus.on(PHASER_EVENTS.WORLD_READY, () => {
         isReady.value = true;
         currentScene.value = "WorldScene";
+        applyRenderSettings();
       });
+
+      window.addEventListener("simverse:render-settings", onRenderSettingsEvent);
 
       phaserEventBus.on(PHASER_EVENTS.REGION_READY, (data: any) => {
         currentScene.value = "RegionScene";
@@ -154,6 +187,15 @@ export function usePhaserWorld() {
     }
   }
 
+  function setNPCBehaviors(behaviors: Map<number, string>) {
+    if (!game.value || !isReady.value) return;
+
+    const scene = game.value.scene.getScene("WorldScene") as WorldScene;
+    if (scene) {
+      scene.setNPCBehaviors(behaviors);
+    }
+  }
+
   function centerOnNPC(npcId: number) {
     if (!game.value || !isReady.value) return;
 
@@ -172,6 +214,18 @@ export function usePhaserWorld() {
     }
   }
 
+  /**
+   * GSAP 驱动的镜头回退到世界俯瞰视角：smoothCenterOn + smoothZoom。
+   * 用于 focus HUD 场景退回 world，与 UI 侧 useSceneTransition.transitionToScene 同步触发。
+   */
+  function returnToWorldView() {
+    if (!game.value || !isReady.value) return;
+    const scene = game.value.scene.getScene("WorldScene") as WorldScene;
+    if (scene) {
+      scene.returnToWorldView();
+    }
+  }
+
   function getZoom(): number {
     return currentZoom.value;
   }
@@ -185,6 +239,7 @@ export function usePhaserWorld() {
     hasError.value = false;
     currentScene.value = "WorldScene";
     phaserEventBus.clear();
+    window.removeEventListener("simverse:render-settings", onRenderSettingsEvent);
     npcClickHandlers.length = 0;
     regionEnterHandlers.length = 0;
     battleStartHandlers.length = 0;
@@ -208,8 +263,10 @@ export function usePhaserWorld() {
     setGameContainer,
     initPhaser,
     setNPCs,
+    setNPCBehaviors,
     centerOnNPC,
     setZoom,
+    returnToWorldView,
     getZoom,
     enterRegion,
     startBattle,

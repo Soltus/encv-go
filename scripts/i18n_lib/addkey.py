@@ -78,19 +78,27 @@ def add_key(
             "file": str(filepath),
         }
 
-    zh_pattern = re.compile(r'("zh-CN":\s*\{[^}]*"[^"]+"\s*:\s*"[^"]*")', re.DOTALL)
-    en_pattern = re.compile(r'("en":\s*\{[^}]*"[^"]+"\s*:\s*"[^"]*")', re.DOTALL)
-
     def insert_key_into_section(content: str, locale: str, key: str, value: str) -> str:
+        # locale key 可能带引号（"zh-CN": {）或不带引号（en: {），两种都匹配
         pattern = re.compile(
-            rf'("{locale}":\s*\{{)',
+            rf'(["\']?{re.escape(locale)}["\']?\s*:\s*\{{)',
         )
         match = pattern.search(content)
         if not match:
             return content
 
         insert_pos = match.end()
-        new_entry = f'\n    "{key}": "{value}",'
+        # value 含双引号时改用单引号包裹，避免破坏 TS 字符串语法
+        # （字典现有约定：含双引号的 value 用单引号包裹，如 '搜索 "{query}"'）
+        if '"' in value:
+            if "'" in value:
+                # 同时含单双引号：转义双引号后仍以双引号包裹
+                escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+                new_entry = f'\n    "{key}": "{escaped}",'
+            else:
+                new_entry = f'\n    "{key}": \'{value}\','
+        else:
+            new_entry = f'\n    "{key}": "{value}",'
         return content[:insert_pos] + new_entry + content[insert_pos:]
 
     content = insert_key_into_section(content, "zh-CN", key, zh_value)

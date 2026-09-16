@@ -1,0 +1,45 @@
+/* =============================================================================
+ * 官方主题资源包：ENCV Dark（暗色）
+ * 与第三方主题同形态、同加载机制（themeLoader 运行时注入）。详见 encv/theme.css 头注。
+ * ========================================================================== */
+
+[data-theme="encv-dark"] {
+  color-scheme: dark;
+
+  /* 色相（暗紫） */
+  --color-primary: #9c6df7;
+  --color-primary-content: #ffffff;
+  --color-secondary: #1fbdd8;
+  --color-secondary-content: #ffffff;
+  --color-accent: #ee5aa3;
+  --color-accent-content: #ffffff;
+  --color-neutral: #1f2937;
+  --color-neutral-content: #f9fafb;
+  --color-base-100: #0f172a;
+  --color-base-200: #1e293b;
+  --color-base-300: #334155;
+  --color-base-content: #e2e8f0;
+  --color-info: #3b82f6;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+
+  /* 形状语言（默认） */
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+  --radius-pill: 9999px;
+  --radius-mono: 4px;
+
+  /* 密度（默认） */
+  --density: 1;
+
+  /* 立体感（暗色，更深景） */
+  --elevation-chip-hover: 0 2px 8px -2px rgb(156 109 247 / 0.3);
+  --elevation-panel-overlay: 0 12px 34px -10px rgb(2 6 23 / 0.55);
+  --lift-hover: -1px;
+  --press-scale: 0.98;
+
+  /* 焦点环（暗色） */
+  --ring-focus: 0 0 0 3px color-mix(in srgb, var(--color-primary) 34%, transparent);
+}

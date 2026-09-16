@@ -1,0 +1,101 @@
+/* =============================================================================
+ * ENCV 动效设计令牌（与 ENCV前端主题重构方案.md §2.6 对应）
+ *
+ * 这些是动效的【单一真源】：GSAP（JS 动画）与纯 CSS 动画都读同一套令牌。
+ *   - GSAP 侧：src/motion/theme-read.ts 在运行期读取 --motion-dur-* / --motion-stagger /
+ *     --motion-intensity（tokens.ts 的 DUR getter、getStagger()、guard.ts 的 intensity），
+ *     因此主题 / 用户片段覆写这些令牌会同时改变 GSAP 与 CSS 动画（gsap 赋能主题）。
+ *   - CSS 侧：直接 var(--motion-*) 即可。
+ * 缓动（--motion-ease-*）目前仅供纯 CSS 动画；GSAP 缓动走语义键 + 引擎 EASE_MAP。
+ *
+ * 兼容性：全部为 2023 年前已广泛支持的特性，Chromium 114 零风险（见 §2.8）。
+ * ========================================================================== */
+
+:root {
+  /* 缓动（与 GSAP ease 等价） */
+  --motion-ease-out: cubic-bezier(0.22, 1, 0.36, 1);     /* power2.out */
+  --motion-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);  /* power1.inOut */
+  --motion-ease-back: cubic-bezier(0.34, 1.56, 0.64, 1); /* back.out */
+
+  /* 时长 */
+  --motion-dur-fast: 160ms;
+  --motion-dur-base: 320ms;
+  --motion-dur-slow: 520ms;
+  --motion-stagger: 0.04s;
+
+  /* 强度：vivid / P3 时由 theme 层上调到 1.3；reduced-motion 时不使用 */
+  --motion-intensity: 1;
+}
+
+/* vivid / P3 增强（与 guard.ts getMotionProfile 的 vivid 分支对齐） */
+.encv-vivid,
+.encv-p3 {
+  --motion-intensity: 1.3;
+}
+
+/* 尊重 reduced-motion：纯 CSS 动画也直接落终态 */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-intensity: 0;
+  }
+}
+
+/* =============================================================================
+ * 排版 / 间距 / 密度令牌（主题「表面」类的易用路径，续26+）
+ * 仅补充维度，不改动既有 --color-* / --radius-* / --motion-*。
+ * 主题想换字 / 密度 / 字距，覆写这里即可一次性生效。
+ * ========================================================================== */
+:root {
+  /* 字体族 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /* 字号阶梯 */
+  --text-xs: 0.6875rem;   /* 11px */
+  --text-sm: 0.8125rem;   /* 13px */
+  --text-base: 0.875rem;  /* 14px */
+  --text-md: 1rem;        /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.25rem;     /* 20px */
+
+  /* 行高 */
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+
+  /* 字重 */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* 间距标度 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* 密度倍率：主题一键调紧凑 / 宽松（0.85 紧凑 · 1 默认 · 1.15 宽松） */
+  --density: 1;
+
+  /* 语义间距（随 --density 缩放，<style scoped> 内联字面量应改为消费这些） */
+  --pad-chip-y: calc(4px * var(--density));
+  --pad-chip-x: calc(9px * var(--density));
+  --gap-chip: calc(4px * var(--density));
+  --pad-btn-y: calc(8px * var(--density));
+  --pad-btn-x: calc(14px * var(--density));
+  --pad-card-y: calc(12px * var(--density));
+  --pad-card-x: calc(12px * var(--density));
+
+  /* 形状语言令牌（续36）：主题可整体改写「设计语言」（圆角），而非仅换色。
+     此前官方主题只改色、半径全相同（1rem/0.5rem/1rem），属「换色」而非「主题」。
+     表面层字面量圆角已 token 化为 --radius-box / --radius-pill / --radius-mono，由主题覆写。 */
+  --radius-selector: 1rem;
+  --radius-field: 0.5rem;
+  --radius-box: 1rem;
+  --radius-pill: 9999px;
+  --radius-mono: 4px;
+}

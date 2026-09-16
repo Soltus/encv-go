@@ -1,16 +1,13 @@
-import type { MessageModule } from "./types";
 import { registerI18nModules } from "../composables/useI18n";
 import common from "./common";
-import errors from "./errors";
-import settings from "./settings";
 import devlogs from "./devlogs";
+import errors from "./errors";
+import files from "./files";
+import settings from "./settings";
+import tasks from "./tasks";
+import type { MessageModule } from "./types";
 
-export const sharedI18nModules: MessageModule[] = [
-  common,
-  errors,
-  settings,
-  devlogs,
-];
+export const sharedI18nModules: MessageModule[] = [common, errors, settings, devlogs, tasks, files];
 
 export function initSharedI18n() {
   registerI18nModules(sharedI18nModules);

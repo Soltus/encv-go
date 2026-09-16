@@ -330,4 +330,4 @@ vueComponentCheckPlugin({
 | `packages/shared-components/src/vite-plugins/vue-component-check.ts` | 自定义 Vite 插件源码 |
 | `app/encv-mobile/vite.config.ts` | encv-mobile 配置示例 |
 | `app/simverse-frontend/vite.config.ts` | simverse-frontend 配置示例 |
-| `app/biome.jsonc` | Biome 配置（已禁用相关规则） |
+| `biome.jsonc` | 根路径 Biome 配置（已禁用相关规则） |

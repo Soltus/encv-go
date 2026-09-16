@@ -3,7 +3,7 @@
     <ion-tabs>
       <ion-router-outlet />
 
-      <ion-tab-bar slot="bottom">
+      <ion-tab-bar slot="bottom" class="bg-base-100 border-t border-base-300">
         <ion-tab-button tab="home" href="/tabs/home">
           <ion-icon :icon="homeOutline" />
           <ion-label>{{ t("simverse.tabs.home") }}</ion-label>
@@ -34,14 +34,8 @@
 </template>
 
 <script setup lang="ts">
-import {
-  home,
-  people,
-  newspaper,
-  settings,
-  documentText,
-} from "ionicons/icons";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { documentText, home, newspaper, people, settings } from "ionicons/icons";
 
 const { t } = useI18n();
 
@@ -51,3 +45,18 @@ const newspaperOutline = newspaper;
 const documentTextOutline = documentText;
 const settingsOutline = settings;
 </script>
+
+<style scoped lang="scss">
+// Ionic tab-bar theming via daisyUI tokens.
+// Ionic uses --background on ion-tab-bar and --color / --color-selected on
+// ion-tab-button, so we feed daisyUI CSS variables into those custom
+// properties to keep runtime light/dark theme switching intact.
+ion-tab-bar {
+  --background: var(--color-base-100);
+
+  ion-tab-button {
+    --color: color-mix(in srgb, var(--color-base-content) 60%, transparent);
+    --color-selected: var(--color-primary);
+  }
+}
+</style>

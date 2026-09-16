@@ -31,7 +31,7 @@
  * 跑测试时 Node 环境原生支持 node:fs/path/url 协议。
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -83,7 +83,6 @@ describe("path-chain — 配置文件防回归（跨链路一致）", () => {
   });
 
   it("【防回归】scripts/generate-mock-files.ts 不应再存在（Node CLI 已废弃）", () => {
-    const { existsSync } = require("node:fs") as typeof import("node:fs");
     const exists = existsSync(resolve(REPO_ROOT, "app/encv-mobile/scripts/generate-mock-files.ts"));
     expect(exists, "generate-mock-files.ts should be removed (2026-06-10)").toBe(false);
   });

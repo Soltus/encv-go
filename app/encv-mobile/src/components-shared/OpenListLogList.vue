@@ -59,7 +59,7 @@ if (props.logs.length > maxLen) {
   padding: 16px;
   text-align: center;
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 .log-list {
   max-height: 300px;
@@ -76,7 +76,7 @@ if (props.logs.length > maxLen) {
   --inner-padding-end: 0;
 }
 .log-timestamp {
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-right: 8px;
   font-size: 11px;
 }
@@ -92,8 +92,8 @@ if (props.logs.length > maxLen) {
   word-break: break-word;
   font-size: 12px;
 }
-.log-item.level-info .log-level { color: var(--ion-color-primary); }
-.log-item.level-warn .log-level { color: var(--ion-color-warning); }
-.log-item.level-error .log-level { color: var(--ion-color-danger); }
-.log-item.level-debug .log-level { color: var(--ion-color-medium); }
+.log-item.level-info .log-level { color: var(--color-primary); }
+.log-item.level-warn .log-level { color: var(--color-warning); }
+.log-item.level-error .log-level { color: var(--color-error); }
+.log-item.level-debug .log-level { color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)); }
 </style>

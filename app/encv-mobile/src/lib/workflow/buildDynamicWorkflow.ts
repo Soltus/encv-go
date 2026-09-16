@@ -26,10 +26,10 @@
  *   task 数 = step 数（1 step → 1 task）
  */
 
-import type { PluginMeta } from "@/api/encv";
-import { formatContainerVersion } from "@/constants/containerVersion";
-import { extToRelativePath } from "@/lib/mockDataGenerator";
-import type { StepDefinition, WorkflowDefinition } from "@/lib/workflow/types";
+import type { PluginMeta } from "@encv/shared-components/api/encv";
+import { formatContainerVersion } from "@encv/shared-components/constants/containerVersion";
+import { extToRelativePath } from "@encv/shared-components/lib/mockDataGenerator";
+import type { StepDefinition, WorkflowDefinition } from "@encv/shared-components/lib/workflow/types";
 
 // ==================== 工具函数 ====================
 

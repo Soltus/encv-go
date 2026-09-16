@@ -1,0 +1,41 @@
+/* ⚡ neon：暗色霓虹主题（真主题能力的另一例：不只是换色）
+ * 设计语言：荧光绿主色 + 青色辅色 + 近乎直角（硬朗）+ 发光描边 + 等宽字体感。 */
+[data-theme="neon"] {
+  color-scheme: dark;
+
+  --color-primary: #39ff14;
+  --color-primary-content: #04140a;
+  --color-secondary: #00e5ff;
+  --color-secondary-content: #04141a;
+  --color-accent: #ff2bd6;
+  --color-accent-content: #1a0418;
+  --color-neutral: #1b1f2a;
+  --color-neutral-content: #d7e6df;
+  --color-base-100: #0a0e14;
+  --color-base-200: #121823;
+  --color-base-300: #1e2735;
+  --color-base-content: #d7f5e6;
+  --color-info: #38bdf8;
+  --color-success: #39ff14;
+  --color-warning: #ffe600;
+  --color-error: #ff3b6b;
+
+  /* 形状：硬朗直角 */
+  --radius-selector: 2px;
+  --radius-field: 2px;
+  --radius-box: 4px;
+  /* 密度：紧凑 */
+  --density: 0.92;
+  /* 立体感：发光描边（靠 theme.js 之外的纯 CSS 也能加 ::before 光晕） */
+  --elevation-surface: 0 0 0 1px color-mix(in srgb, var(--color-primary) 55%, transparent),
+    0 0 14px color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
+/* 真实选择器覆盖：气泡用主色 + 发光投影，证明主题能改组件形态，不止令牌 */
+[data-theme="neon"] .ui-bubble--user {
+  border: 1px solid color-mix(in srgb, var(--color-primary) 60%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--color-primary) 35%, transparent);
+}
+[data-theme="neon"] .ui-panel {
+  box-shadow: var(--elevation-surface);
+}

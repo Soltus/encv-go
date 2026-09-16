@@ -1,6 +1,6 @@
+import { ref } from "vue";
 import common from "../i18n/common";
 import errors from "../i18n/errors";
-import { ref } from "vue";
 
 export type Locale = "zh-CN" | "en";
 export type MessageParamValue = string | number | boolean;
@@ -177,10 +177,7 @@ function compileTemplate(template: string): CompiledTemplate {
     return fn;
   }
 
-  const parts: Array<
-    | { type: "literal"; value: string }
-    | { type: "var"; key: string; format?: string }
-  > = [];
+  const parts: Array<{ type: "literal"; value: string } | { type: "var"; key: string; format?: string }> = [];
 
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -292,7 +289,7 @@ function flushMissingKeys() {
     const keys = Array.from(missingKeysBatch);
     console.warn(
       `[i18n] ${keys.length} missing keys:\n  ${keys.slice(0, 20).join("\n  ")}` +
-        (keys.length > 20 ? `\n  ... and ${keys.length - 20} more` : ""),
+        (keys.length > 20 ? `\n  ... and ${keys.length - 20} more` : "")
     );
     missingKeysBatch.clear();
   }
@@ -369,7 +366,7 @@ function t(key: string, params?: MessageParams): string {
 function tField(key: string): string {
   const i18nKey = fieldKeyMap[key];
   if (i18nKey) return t(i18nKey);
-  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function tSectionTitle(title: string): string {
@@ -407,22 +404,16 @@ export function useI18n(): {
 }
 
 if (import.meta.hot) {
-  import.meta.hot.on(
-    "i18n-update",
-    (data: { locale: Locale; changes: Record<string, string> }) => {
-      const targetMap = messageMaps[data.locale];
-      const simpleCache = simpleResultCache[data.locale];
-      const paramCache = paramResultCache[data.locale];
-      for (const key in data.changes) {
-        targetMap.set(key, data.changes[key]);
-        simpleCache.delete(key);
-        paramCache.delete(key);
-        compiledTemplates.delete(data.changes[key]);
-      }
-      currentLocale.value = currentLocale.value;
-      console.debug(
-        `[i18n-hmr] Updated ${Object.keys(data.changes).length} keys for ${data.locale}`,
-      );
-    },
-  );
+  import.meta.hot.on("i18n-update", (data: { locale: Locale; changes: Record<string, string> }) => {
+    const targetMap = messageMaps[data.locale];
+    const simpleCache = simpleResultCache[data.locale];
+    const paramCache = paramResultCache[data.locale];
+    for (const key in data.changes) {
+      targetMap.set(key, data.changes[key]);
+      simpleCache.delete(key);
+      paramCache.delete(key);
+      compiledTemplates.delete(data.changes[key]);
+    }
+    console.debug(`[i18n-hmr] Updated ${Object.keys(data.changes).length} keys for ${data.locale}`);
+  });
 }

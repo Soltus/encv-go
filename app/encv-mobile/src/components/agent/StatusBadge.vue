@@ -9,18 +9,29 @@
   pulse: 是否显示脉冲（流式 / 进行中状态）
 -->
 <template>
-  <span class="statusBadge" :class="[`statusBadge_${tone}`, { statusBadge_pulse: pulse }]">{{ label }}</span>
+  <span class="statusBadge" :class="[badgeToneClass, { statusBadge_pulse: pulse }]">{{ label }}</span>
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { computed } from "vue";
+
+const props = defineProps<{
   label: string;
   tone: "ready" | "warn" | "idle" | "danger";
   pulse?: boolean;
 }>();
+
+const toneClassMap = {
+  ready: "tone-success",
+  warn: "tone-warning",
+  idle: "tone-neutral",
+  danger: "tone-error",
+} as const;
+const badgeToneClass = computed(() => toneClassMap[props.tone]);
 </script>
 
 <style scoped>
+/* 尺寸/字重等 bespoke 细节归本组件；色调由下方 tone-* 以设计令牌表达，不依赖共享词汇 */
 .statusBadge {
   display: inline-flex;
   align-items: center;
@@ -34,48 +45,19 @@ defineProps<{
   white-space: nowrap;
 }
 
-.statusBadge_ready {
-  background: rgba(45, 211, 111, 0.14);
-  color: var(--ion-color-success-shade, #28ba62);
-}
-
-.statusBadge_warn {
-  background: rgba(255, 196, 9, 0.16);
-  color: var(--ion-color-warning-shade, #e0ac08);
-}
-
-.statusBadge_idle {
-  background: rgba(146, 148, 156, 0.16);
-  color: var(--ion-color-medium-shade, #808289);
-}
-
-/* Task 4：危险 / 失败状态红色 badge（保留供未来扩展，
-   当前 OperationCard 仍把 failed 映射到 warn 以保持视觉一致；
-   新组件想表达"严重错误"时可直接用 danger）。 */
-.statusBadge_danger {
-  background: rgba(239, 68, 68, 0.16);
-  color: var(--ion-color-danger-shade, #c53030);
-}
-
 .statusBadge_pulse {
   animation: statusBadgePulse 1.4s ease-in-out infinite;
 }
 
+/* 色调：前景朝主题自有 --color-base-content、背景朝 --color-base-100 派生，
+   明暗随主题自动翻转，无需 body.dark；任意用户主题免费获得正确对比（§6.3 tint 提级已非必需） */
+.tone-success { background: color-mix(in srgb, var(--color-success) 14%, var(--color-base-100)); color: color-mix(in srgb, var(--color-success) 75%, var(--color-base-content)); }
+.tone-warning { background: color-mix(in srgb, var(--color-warning) 16%, var(--color-base-100)); color: color-mix(in srgb, var(--color-warning) 72%, var(--color-base-content)); }
+.tone-error   { background: color-mix(in srgb, var(--color-error) 16%, var(--color-base-100));   color: color-mix(in srgb, var(--color-error) 72%, var(--color-base-content)); }
+.tone-neutral { background: color-mix(in srgb, var(--color-base-content) 14%, var(--color-base-100)); color: var(--color-base-content); }
+
 @keyframes statusBadgePulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
-}
-
-body.dark .statusBadge_ready {
-  background: rgba(47, 223, 117, 0.18);
-  color: #3de283;
-}
-body.dark .statusBadge_warn {
-  background: rgba(255, 213, 72, 0.18);
-  color: #ffda5a;
-}
-body.dark .statusBadge_danger {
-  background: rgba(239, 68, 68, 0.22);
-  color: #ff5e5e;
 }
 </style>

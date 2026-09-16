@@ -958,8 +958,6 @@
     <string name="settings_audioPlayer">Audio Player</string>
     <string name="settings_basicInfo">Basic Info</string>
     <string name="settings_batteryOptimization">Battery Optimization</string>
-    <string name="settings_bgBlur">Background Blur</string>
-    <string name="settings_bgBlurHelp">Gaussian blur effect for visual depth</string>
     <string name="settings_bgColor">Background Color</string>
     <string name="settings_bgColorHelp">Independent of theme color, eye-friendly</string>
     <string name="settings_bgDark">Dark</string>

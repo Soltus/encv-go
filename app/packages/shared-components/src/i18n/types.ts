@@ -1,1 +1,1 @@
-export type { I18nKey, Locale, MessageParams, TFunction, MessageModule } from "./generated-types";
+export type { I18nKey, Locale, MessageModule, MessageParams, TFunction } from "./generated-types";

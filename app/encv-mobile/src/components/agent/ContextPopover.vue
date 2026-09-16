@@ -123,19 +123,19 @@
 </template>
 
 <script setup lang="ts">
-import type { ContextUsageResponse } from "@/composables/useContextUsage";
 import {
-  checkmarkCircle as completedIcon,
-  ellipsisHorizontal as pendingIcon,
-  sync as inProgressIcon,
-  layers as layersIcon,
-  close as closeIcon,
-  contract as compressIcon,
   checkbox as checkboxIcon,
+  close as closeIcon,
+  checkmarkCircle as completedIcon,
+  contract as compressIcon,
   document as documentIcon,
   documentText as documentTextIcon,
   informationCircle as informationCircleIcon,
+  sync as inProgressIcon,
+  layers as layersIcon,
+  ellipsisHorizontal as pendingIcon,
 } from "ionicons/icons";
+import type { ContextUsageResponse } from "@/composables/useContextUsage";
 
 defineProps<{
   data: ContextUsageResponse | null;
@@ -208,7 +208,7 @@ function todoStatusLabel(status: string): string {
 
 .ctx-header-icon {
   font-size: 18px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 

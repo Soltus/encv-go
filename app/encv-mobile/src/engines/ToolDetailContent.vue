@@ -270,7 +270,7 @@ function formatSize(bytes: number): string {
   font-size: 10px;
   padding: 1px 6px;
   background: var(--td-brand-color, #4f8cff);
-  color: #fff;
+  color: var(--color-white);
   border-radius: 3px;
   text-transform: uppercase;
   letter-spacing: 0.5px;

@@ -6,9 +6,11 @@
   - 点击 → onToggle()
 -->
 <template>
+  <!-- 表面（bg/border/fg/圆角/悬停）上提到全局 .ui-chip / .ui-chip--neutral（随主题翻转，用户主题可覆写）。
+       scoped 仅留布局 + 活跃脉冲动画（[data-v-x] 特异性胜出，不抢表面）。 -->
   <div
-    class="collapsedToggle"
-    :class="{ collapsedToggle_active: active, collapsedToggle_expanded: expanded }"
+    class="collapsedToggle ui-chip"
+    :class="{ 'ui-chip--neutral': !(active || expanded), collapsedToggle_active: active }"
     @click="onToggle"
   >
     <ion-icon :icon="icon" class="collapsedIcon" />
@@ -40,41 +42,21 @@ const chevronDown = chevronDownOutline;
 </script>
 
 <style scoped>
+/* 表面（bg/border/fg/悬停/按下）由全局 .ui-chip / .ui-chip--neutral 提供（随主题翻转）。
+   scoped 仅留布局 + 尺寸（[data-v-x] 胜出）；悬停/按下沿用 .ui-chip:hover/:active。 */
 .collapsedToggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
-  border-radius: 14px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.18);
-  font-size: 12px;
-  color: var(--ion-text-color);
-  cursor: pointer;
-  user-select: none;
-  transition: background-color 0.15s;
-  max-width: 100%;
-  min-height: 24px;
+  gap: 0.375rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-selector, 1rem);
+  font-size: 0.8125rem;
 }
-
-.collapsedToggle:hover {
-  background: rgba(var(--ion-color-medium-rgb), 0.16);
-}
-
-.collapsedToggle_expanded {
-  background: rgba(var(--ion-color-primary-rgb), 0.1);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.22);
-}
-
 .collapsedToggle_active {
-  background: rgba(var(--ion-color-primary-rgb), 0.12);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.3);
   animation: collapsedActivePulse 1.4s ease-in-out infinite;
 }
 
 .collapsedIcon {
   font-size: 13px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
 }
 
@@ -101,7 +83,7 @@ const chevronDown = chevronDownOutline;
 }
 
 @keyframes collapsedActivePulse {
-  0%, 100% { background-color: rgba(var(--ion-color-primary-rgb), 0.12); }
-  50% { background-color: rgba(var(--ion-color-primary-rgb), 0.22); }
+  0%, 100% { background-color: color-mix(in srgb, var(--color-primary) 14%, var(--color-base-100)); }
+  50% { background-color: color-mix(in srgb, var(--color-primary) 24%, var(--color-base-100)); }
 }
 </style>

@@ -1,0 +1,35 @@
+// ── 表面生成配置（单一事实来源）────────────────────────────────────
+// 加一个 tint 色 / 一个变体 = 在此 map 加一行，零手写重复。
+// 基态与变体共用同一套 tint 算法（见 _mixins surface-tint），消灭「两套 tint 机制」。
+
+// tint 配方：边框 / 背景 / 前景 三处混入百分比。
+// 百分比即「用多少主色」，其余混入中性基色（边框→base-300，背景→base-100，前景→base-content）。
+$tint-config: (
+  'primary':      (border: 35%, bg: 12%, fg: 75%),
+  'base-content': (border: 18%, bg: 12%, fg: 100%),
+  'success':      (border: 35%, bg: 14%, fg: 72%),
+  'warning':      (border: 35%, bg: 16%, fg: 70%),
+  'error':        (border: 35%, bg: 16%, fg: 72%),
+);
+
+// 参与 hover/active 明暗派生的交互色（sass:color.adjust）。
+$interactive: ('primary', 'secondary', 'accent', 'info', 'success', 'warning', 'error');
+
+// 中性半透明表面（subtle / overlay）档位：key=token 名后缀（不含 %），value=真实 Sass 百分比。
+// token 名不能含 %（% 非法于 CSS 自定义属性名），但编译期 color.mix 必须收真实百分比。
+$soft: ('5': 5%, '18': 18%, '25': 25%);
+
+// 基态：选择器 → 主色令牌。布局在 _surfaces 的 @each 内按选择器分支给出。
+$surface-base: (
+  'ui-chip': 'primary',
+  'ui-badge': 'base-content',
+);
+
+// 变体：选择器 → 主色令牌（纯 tint 覆写，单一 map 行驱动）。
+$surface-variants: (
+  'ui-chip--neutral': 'base-content',
+  'ui-badge--success': 'success',
+  'ui-badge--warning': 'warning',
+  'ui-badge--error': 'error',
+  'ui-badge--neutral': 'base-content',
+);

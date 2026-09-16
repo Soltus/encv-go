@@ -1,4 +1,8 @@
 :root {
+  /* 表面材质：模糊默认由主题控制（背景模糊已不再是独立全局设置，2026-07-17）。
+     各磨砂面读 var(--material-blur, <各自兜底>)；主题可在自身 theme.css 覆写此令牌。 */
+  --material-blur: 12px;
+
   --ion-color-primary: #4f8cff;
   --ion-color-primary-rgb: 79, 140, 255;
   --ion-color-primary-contrast: #ffffff;

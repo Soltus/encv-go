@@ -3,6 +3,8 @@ import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
 import { vueComponentCheckPlugin } from '../../../../app/packages/shared-components/src/vite-plugins/vue-component-check'
 import { i18nOptimizePlugin } from '../../../../app/packages/shared-components/src/vite-plugins/i18n-optimize'
+import { fileSizeLimitPlugin } from '../../../../app/packages/shared-components/src/vite-plugins/file-size-limit'
+import { daisyUiPlugin } from '../../../../app/packages/shared-components/src/vite-plugins/daisy-ui'
 
 function injectBaseHref(href: string): Plugin {
   const basePrefix = href.replace(/\/$/, '')
@@ -147,7 +149,7 @@ function dynamicHmrHostPlugin(): Plugin {
 
 export default defineConfig({
   base: process.env.VITE_BASE || './',
-  plugins: [vueComponentCheckPlugin(), vue(), i18nOptimizePlugin(), injectBaseHref(process.env.VITE_BASE || '/mpv-ui/'), dynamicHmrHostPlugin()],
+  plugins: [fileSizeLimitPlugin(), daisyUiPlugin(), vueComponentCheckPlugin(), vue(), i18nOptimizePlugin(), injectBaseHref(process.env.VITE_BASE || '/mpv-ui/'), dynamicHmrHostPlugin()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),

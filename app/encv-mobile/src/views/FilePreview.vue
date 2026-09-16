@@ -147,8 +147,6 @@
 </template>
 
 <script setup lang="ts">
-import { formatContainerVersion } from "@/constants/containerVersion";
-import { formatFileSize } from "@/api/encv_files";
 import {
   alertCircle,
   arrowBack,
@@ -161,6 +159,8 @@ import {
   returnDownBackOutline,
   returnDownForwardOutline,
 } from "ionicons/icons";
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 
 import {
   fetchTextPreviewExts,
@@ -170,11 +170,11 @@ import {
   getFilePreviewUrl,
   getFileStreamUrl,
   proxySafeEncode,
-} from "@/api/encv";
-import { useI18n } from "@/composables/useI18n";
+} from "@encv/shared-components/api/encv";
+import { formatFileSize } from "@encv/shared-components/api/encv_files";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { formatContainerVersion } from "@encv/shared-components/constants/containerVersion";
 import { isNative, openPlayer } from "@/plugins/GoProcess";
-import { computed, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vue-router";
 
 type PreviewType = "image" | "pdf" | "text" | "container" | "unsupported";
 
@@ -505,7 +505,7 @@ onMounted(() => loadFile());
   border-radius: 8px;
   padding: 14px;
   margin: 12px 16px 0;
-  border-left: 3px solid var(--ion-color-primary);
+  border-left: 3px solid var(--color-primary);
 }
 
 .container-error {
@@ -525,7 +525,7 @@ onMounted(() => loadFile());
   background: rgba(255, 255, 255, 0.04);
   border-radius: 8px;
   padding: 14px;
-  border-left: 3px solid var(--ion-color-primary);
+  border-left: 3px solid var(--color-primary);
 }
 
 .card-title {
@@ -537,7 +537,7 @@ onMounted(() => loadFile());
   align-items: center;
   gap: 8px;
 }
-.title-icon { color: var(--ion-color-primary); }
+.title-icon { color: var(--color-primary); }
 
 .info-grid {
   display: flex;

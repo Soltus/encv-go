@@ -1,0 +1,130 @@
+// =============================================================================
+// 干预模块：干预页 / 危险区 / 控制条
+// -----------------------------------------------------------------------------
+// 干预页与化身页共享相同的页面容器规则（此处保留原 CSS 的合并选择器）。
+//   - .intervene-page / .character-page（共享页面容器）
+//   - .intervene-body / .character-body（共享主体）
+//   - .ctrl-section / .ctrl-title / .ctrl-row / .ctrl-btn / .ctrl-btn.primary
+//   - .ctrl-hint / .ff-input / .ctrl-msg / .stub-banner
+//   - .setting-section.danger-zone / .exit-world-btn / .exit-icon
+//   - 转场：.intervene-page-* / .character-page-*
+//
+// 注：.character-page / .character-body 容器样式在此处与 .intervene-page 合并定义，
+//     符合原始 CSS 结构。其他化身专属卡片（.char-card 等）见 _character.scss。
+// =============================================================================
+
+@use './tokens' as *;
+@use './mixins' as *;
+
+// 干预页 / 化身页：与事件页同属全屏屏幕状态，复用布局基调
+.intervene-page,
+.character-page {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(124, 58, 237, 0.18) 0%, transparent 55%),
+    linear-gradient(180deg, #{$sv-bg-surface} 0%, #{$sv-bg-deep} 100%);
+  padding: 14px 16px 24px;
+  box-sizing: border-box;
+}
+
+.intervene-body,
+.character-body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 8px;
+}
+
+// .ctrl-section / .ctrl-title 已迁移到 daisyUI .card / .card-title + Tailwind 工具类
+// .ctrl-btn 已迁移到 daisyUI .btn .btn-sm + Tailwind 工具类（保留 .primary 修饰符为绿色变体）
+
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+}
+
+.ctrl-hint {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.ff-input {
+  width: 64px;
+  background: rgba(0, 0, 0, 0.4); 
+  border: 1px solid $sv-border-active; 
+  color: $sv-text-primary;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 14px;
+}
+
+.ctrl-msg {
+  font-size: 12px;
+  color: #4ade80; 
+  margin-top: 4px;
+}
+
+.stub-banner {
+  background: rgba(245, 158, 11, 0.12); 
+  border: 1px solid rgba(245, 158, 11, 0.4); 
+  color: #fcd34d;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+// —— 危险区：退出世界按钮 ——
+.setting-section.danger-zone {
+  margin-top: 20px;
+  padding: 16px;
+  background: rgba(239, 68, 68, 0.08); 
+  border-radius: 12px;
+  border: 1px solid $sv-glow-error; 
+
+  .section-title {
+    color: $color-error;
+    margin-bottom: 12px;
+  }
+}
+
+.exit-world-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid $sv-glow-error; 
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.1); 
+  color: $color-error;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:active {
+    background: $sv-glow-error; 
+    transform: scale(0.98);
+  }
+}
+
+.exit-icon {
+  font-size: 18px;
+}
+
+// —— 转场（intervene-page / character-page）已迁移至 SimverseWorld.vue 的 GSAP ——

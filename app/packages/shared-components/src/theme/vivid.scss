@@ -1,0 +1,83 @@
+/* =============================================================================
+ * 臻彩显示（Vivid / Wide-Gamut）—— 真实生效实现（SCSS 高级版）
+ *
+ * 与 useTheme.ts 的 applyVividMode / applyP3Mode / applyColor 配合：
+ *   - Vivid（硬可见，所有屏幕）：根类 .encv-vivid 存在时，ion-page 经两条独立变量挂
+ *     contrast + saturate 滤镜：--encv-vivid-contrast（0..1）→ contrast，--encv-vivid-sat
+ *     （0..1）→ saturate。两者由 gsap 在切换时分别平滑过渡（useTheme.syncVividFilter），
+ *     可在 UI 分别调节（2026-07-17 拆分）。关闭 vivid 时根类移除 → ion-page 无 filter
+ *     （不建无谓堆叠上下文、不影响 fixed 定位的子元素）。
+ *   - P3（真宽色域，硬件依赖）：仅 @media (color-gamut: p3) 且根类 .encv-p3 存在时，
+ *     把品牌色换为 color(display-p3 ...) 宽色域定义。srgb 屏下 @media 不命中 → P3
+ *     模式此时仅强化 vivid 饱和，不再写无效的 color-gamut 属性。
+ *     品牌色的 -p3 孪生由 _vivid-p3.scss 用 @function p3() + @each 编译期派生
+ *     （消除 palette.css 里手写 color(display-p3 ...) 字面量与基色 hex 的漂移）。
+ * ========================================================================== */
+
+@use "vivid-p3" as vp;
+
+:root {
+  /* 臻彩滤镜双变量（0..1），由 useTheme.syncVividFilter 经 gsap 写入；关闭 vivid 时归零。 */
+  --encv-vivid-sat: 0;
+  --encv-vivid-contrast: 0;
+
+  /* 表面材质：背景材质活动值（THEME_DEV.md §6.18 step 3/4）。
+     默认回落 --material-bg → --color-base-100；真 P3 屏 + .encv-p3 时换 --material-bg-p3
+     宽色域孪生（关掉 §6.17 的 P3 背景缺口）。
+     --material-bg / --material-bg-p3 由 useTheme.applyBgColor 写入（inline），本变量只做
+     「活动值路由」，故 P3 媒体查询可覆盖它，而不会被 inline 的 --material-bg 直接压制
+     （规避 §6.17 中 --color-primary 内联覆盖的潜在失效）。 */
+  --material-bg-active: var(--material-bg, var(--color-base-100));
+}
+
+/* P3 宽色域孪生：encv 亮色基态的 --color-*-p3 由 _vivid-p3 的 @each 自动派生。
+   作用域与 palette.css 的 [data-theme="encv"] 对齐，仅 encv 默认主题生效；
+   自定义/远程主题色经 JS 写 --color-primary-p3 内联覆盖，secondary/accent 回落 srgb，
+   与既有设计一致。 */
+:root,
+[data-theme="encv"] {
+  @include vp.emit-p3-twins;
+}
+
+/* 仅 vivid 开时挂滤镜：色彩浓度(saturate) 与 对比度(contrast) 由两条独立变量驱动，UI 可分别调节
+   （2026-07-17 拆分）：
+     --encv-vivid-sat (0..1)      → saturate
+     --encv-vivid-contrast (0..1) → contrast
+   亮色场景：对比度增益略高(0.25)、浓度适中(0.45)（避免过艳刺眼）。
+   注意：Ionic Vue 在 CE 注册模式下把 <ion-page> 渲染为 <div class="ion-page">（TAG 是 div，
+   不是 ion-page），故必须同时匹配「类选择器 .ion-page」才能真正命中页面根（实测：
+   仅写 .encv-vivid ion-page 时 getComputedStyle(.ion-page).filter 恒为 none → 臻彩无效果）。
+   两条选择器并存以兼容两种 DOM 形态。 */
+.encv-vivid ion-page,
+.encv-vivid .ion-page {
+  filter:
+    contrast(calc(1 + var(--encv-vivid-contrast, 0) * 0.25))
+    saturate(calc(1 + var(--encv-vivid-sat, 0) * 0.45));
+}
+
+/* 暗色场景专属调优（2026-07-17 优化）：暗部已深，对比度增益收敛(0.12) 避免过硬，
+   浓度增益加大(0.72) 让颜色更跳。:root.encv-vivid body.dark 组合精准命中
+   「html 带 .encv-vivid 且 body 带 .dark」的暗色臻彩态（specificity 高于上方亮色规则）。 */
+:root.encv-vivid body.dark ion-page,
+:root.encv-vivid body.dark .ion-page {
+  filter:
+    contrast(calc(1 + var(--encv-vivid-contrast, 0) * 0.12))
+    saturate(calc(1 + var(--encv-vivid-sat, 0) * 0.72));
+}
+
+/* 真实 P3 宽色域：仅设备支持 P3 时把品牌色换成 display-p3 定义。
+   必须 !important：applyColor 把 --color-primary 以【内联】写在 :root 上，普通作者规则
+   （本 @media 块）优先级低于内联、永远压不过 → P3 交换在真实设备上恒不生效（实测复现：
+   无 !important 时 computed --color-primary 仍是内联 srgb 值）。!important 越过内联覆盖。
+   --color-primary 回退用 --color-primary-srgb（applyColor 另存的 srgb 基色），不能写
+   var(--color-primary) 自引用（无效声明→令牌丢失）。secondary/accent 非内联，标 !important
+   仅为一致与防御。 */
+@media (color-gamut: p3) {
+  :root.encv-p3 {
+    --color-primary: var(--color-primary-p3, var(--color-primary-srgb, #8b5cf6)) !important;
+    --color-secondary: var(--color-secondary-p3, var(--color-secondary, #06b6d4)) !important;
+    --color-accent: var(--color-accent-p3, var(--color-accent, #ec4899)) !important;
+    /* 背景同样享 P3 宽色域：换 --material-bg-p3 孪生（仅渐变预设会写 -p3，纯色回落 srgb）。 */
+    --material-bg-active: var(--material-bg-p3, var(--material-bg, var(--color-base-100))) !important;
+  }
+}

@@ -1,2 +1,85 @@
+# ENCV 远程开发环境自动准备流水线
+#
+# 通过 $.vscode 事件，每次启动「云原生开发」时自动完成环境准备：
+#   - 使用 .ide/Dockerfile 构建自定义镜像（Go 1.25.1 + pnpm 11 + Python3 + cmake + JDK + xvfb）
+#   - 运行 scripts/setup-sandbox-env.sh：装工具链 / clone fork / pnpm workspace 安装 / 构建网关
+$:
+  vscode:
+    - runner:
+        cpus: 6
+      docker:
+        # 自定义开发环境
+        build:
+          # 指定构建镜像的 Dockerfile 文件
+          dockerfile: .ide/Dockerfile
+          # 声明构建过程依赖的文件列表（用于缓存判定）。
+          # 注意：如构建过程用到其他文件，也需在此声明。
+          # 参考文档：https://docs.cnb.cool/zh/grammar/pipeline.html#build
+          by:
+            - .ide/settings.json
+      services:
+        # docker 写在 vscode 前面
+        - docker
+        - name: vscode
+          options:
+            # 保活时间，单位毫秒，不设置默认 10 分钟没有心跳（检测不到开发环境内的 http/ssh 连接）就关闭开发环境
+            keepAliveTimeout: 30m
+      env:
+        # 关键：默认 NODE_ENV=production 会让 pnpm install 跳过 devDependencies，
+        # 导致 typescript / vue-tsc / vite / vitest / cypress 等开发工具全部缺失。
+        NODE_ENV: development
+        GOPROXY: https://goproxy.cn,direct
+      stages:
+        - name: 准备沙箱开发环境
+          # 一键准备：Go/Kotlin 工具链、OpenList/ComboLite/Maker/Phaser fork、
+          # pnpm workspace 依赖、preview-gateway 网关（详见脚本头注释）。
+          script: |
+            export NODE_ENV=development
+            bash scripts/setup-sandbox-env.sh
+
+        - name: 构建 codemogger-patch 并注册 MCP
+          # 自包含：① 确保全局 codemogger@0.1.5 已装（patch 基准版本）；
+          # ② 应用 codemogger 补丁；③ 写入 CodeBuddy MCP 注册
+          # （~/.codebuddy/mcp.json），让 agent 以工具调用查询代码图谱与项目
+          # 门禁（check:all / typecheck / i18n），不依赖终端。
+          script: |
+            export NODE_ENV=development
+            set -uo pipefail
+            REPO_ROOT="$(pwd)"
+            PATCH_DIR="${REPO_ROOT}/app/codemogger-patch"
+            if [ ! -d "${PATCH_DIR}" ]; then
+              PATCH_DIR="$(cd "$(dirname "$0")/../app/codemogger-patch" 2>/dev/null && pwd)" || PATCH_DIR=""
+            fi
+            if [ -z "${PATCH_DIR}" ] || [ ! -f "${PATCH_DIR}/mcp-server.mjs" ]; then
+              echo "⚠️ 找不到 codemogger-patch，跳过 MCP 注册"
+              exit 0
+            fi
+            # 0) 确保全局 codemogger 已装（patch 基于 0.1.5 源码，见 README）
+            if command -v codemogger >/dev/null 2>&1 || [ -f /usr/local/lib/node_modules/codemogger/dist/cli.mjs ]; then
+              echo "✅ codemogger 已存在，跳过安装"
+            else
+              echo "📦 安装 codemogger@0.1.5 (patch 基准版本) ..."
+              npm install -g codemogger@0.1.5 --no-audit --no-fund \
+                || echo "⚠️ codemogger 安装失败，MCP 仅 leaks(grep) 可用"
+            fi
+            # 1) 应用补丁（全局 codemogger 存在时才做）
+            if command -v codemogger >/dev/null 2>&1 || [ -f /usr/local/lib/node_modules/codemogger/dist/cli.mjs ]; then
+              bash "${PATCH_DIR}/apply.sh"
+              ( cd /usr/local/lib && patch -p1 --forward < "${PATCH_DIR}/patches/codemogger+0.1.5+context.patch" ) || true
+            else
+              echo "⚠️ codemogger 未安装，跳过 apply（MCP server 仍可注册）"
+            fi
+            # 2) 用项目内单一真源覆盖用户级注册，避免不一致：
+            #    /workspace/.codebuddy/mcp.json 是权威（含 codemogger / app-dev /
+            #    web-fetch），直接覆盖 /root/.codebuddy/mcp.json。之后改 MCP 只需
+            #    改项目文件并重新触发流水线，无需再动 printf 内联块。
+            mkdir -p /root/.codebuddy
+            if [ -f "${REPO_ROOT}/.codebuddy/mcp.json" ]; then
+              cp "${REPO_ROOT}/.codebuddy/mcp.json" /root/.codebuddy/mcp.json
+              echo "✅ MCP 已注册 (from .codebuddy/mcp.json): /root/.codebuddy/mcp.json"
+            else
+              echo "⚠️ 找不到 ${REPO_ROOT}/.codebuddy/mcp.json，跳过 MCP 覆盖"
+            fi
+
 include:
   - https://cnb.cool/sc.hwd/cnb-sync/-/blob/main/.cnb/workflows/sync.yml

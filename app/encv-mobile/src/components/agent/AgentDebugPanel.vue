@@ -23,14 +23,14 @@
       <section class="agentDebugSection">
         <h4>① messages ({{ messages.length }})</h4>
         <div class="agentDebugStats">
-          <span v-for="(c, role) in roleCounts" :key="role" class="agentDebugChip">
+          <span v-for="(c, role) in roleCounts" :key="role" class="ui-chip ui-chip--neutral">
             {{ role }}: {{ c }}
           </span>
         </div>
         <div class="agentDebugStats">
-          <span class="agentDebugChip">tool_calls: {{ totalToolCalls }}</span>
-          <span class="agentDebugChip">tool_results: {{ totalToolResults }}</span>
-          <span class="agentDebugChip">pairing: {{ pairRateText }}</span>
+          <span class="ui-chip ui-chip--neutral">tool_calls: {{ totalToolCalls }}</span>
+          <span class="ui-chip ui-chip--neutral">tool_results: {{ totalToolResults }}</span>
+          <span class="ui-chip ui-chip--neutral">pairing: {{ pairRateText }}</span>
         </div>
       </section>
 
@@ -41,7 +41,7 @@
           <span
             v-for="(c, t) in renderedTypeCounts"
             :key="t"
-            class="agentDebugChip"
+            class="ui-chip ui-chip--neutral"
             :class="{ agentDebugChip_emphasis: t === 'operationGroup' && c > 0 }"
           >
             {{ t }}: {{ c }}
@@ -54,18 +54,18 @@
         <h4>③ 最近 {{ recentMessages.length }} 条 message 的 tool_calls ↔ tool_results</h4>
         <div v-for="(m, i) in recentMessages" :key="i" class="agentDebugMsg">
           <div class="agentDebugMsgHead">
-            <span class="agentDebugChip">{{ m.role }}</span>
+            <span class="ui-chip ui-chip--neutral">{{ m.role }}</span>
             <span class="agentDebugMsgId">#{{ i }}</span>
-            <span class="agentDebugChip">tool_calls: {{ m.tool_calls.length }}</span>
-            <span class="agentDebugChip">tool_results: {{ m.tool_results.length }}</span>
+            <span class="ui-chip ui-chip--neutral">tool_calls: {{ m.tool_calls.length }}</span>
+            <span class="ui-chip ui-chip--neutral">tool_results: {{ m.tool_results.length }}</span>
           </div>
           <ul v-if="m.tool_calls.length > 0" class="agentDebugList">
             <li v-for="tc in m.tool_calls" :key="tc.id" class="agentDebugListItem">
               <div class="agentDebugListHead">
                 <span class="agentDebugName">{{ tc.name }}</span>
                 <span class="agentDebugId">{{ tc.id }}</span>
-                <span class="agentDebugChip" :class="`agentDebugStatus_${tc.status}`">{{ tc.status }}</span>
-                <span class="agentDebugChip">kind: {{ tc.kind }}</span>
+                <span class="ui-chip ui-chip--neutral" :class="`agentDebugStatus_${tc.status}`">{{ tc.status }}</span>
+                <span class="ui-chip ui-chip--neutral">kind: {{ tc.kind }}</span>
               </div>
               <div v-if="findResult(m, tc.id)" class="agentDebugResult">
                 <span class="agentDebugResultTag">↳ result</span>
@@ -86,7 +86,7 @@
         <div v-for="(g, gi) in operationGroups" :key="gi" class="agentDebugGroup">
           <div class="agentDebugGroupHead">
             <span>{{ g.type }}</span>
-            <span class="agentDebugChip">toolCallIds: {{ g.toolCallIds.length }}</span>
+            <span class="ui-chip ui-chip--neutral">toolCallIds: {{ g.toolCallIds.length }}</span>
           </div>
           <div class="agentDebugGroupHint">
             👉 看下面正式 chat 流里的 GroupedOperationMessage 是否真的展开并显示了 MountListCard/FileListCard/FileContentCard
@@ -151,7 +151,7 @@
       <section class="agentDebugSection">
         <h4>⑦ 原始 SSE 事件流 ({{ (rawSSEEvents || []).length }} 条)</h4>
         <div class="agentDebugSseStats">
-          <span v-for="(c, t) in sseTypeCounts" :key="t" class="agentDebugChip" :class="{ agentDebugChip_emphasis: t === 'tool_call' || t === 'tool_result' }">
+          <span v-for="(c, t) in sseTypeCounts" :key="t" class="ui-chip ui-chip--neutral" :class="{ agentDebugChip_emphasis: t === 'tool_call' || t === 'tool_result' }">
             {{ t }}: {{ c }}
           </span>
         </div>
@@ -180,13 +180,9 @@
 </template>
 
 <script setup lang="ts">
-import type { Message, ToolCall } from "@/composables/useAgent";
-import {
-  bugOutline,
-  copyOutline,
-  refreshOutline,
-} from "ionicons/icons";
+import { bugOutline, copyOutline, refreshOutline } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
+import type { Message, ToolCall } from "@/composables/useAgent";
 
 type RenderedItemLike = { type: string; [k: string]: unknown };
 
@@ -500,9 +496,9 @@ watch(
 <style scoped>
 .agentDebugPanel {
   margin: 8px 12px 4px;
-  border: 1px dashed rgba(var(--ion-color-warning-rgb), 0.5);
+  border: 1px dashed color-mix(in srgb, var(--color-warning) 50%, transparent);
   border-radius: 8px;
-  background: rgba(var(--ion-color-warning-rgb), 0.05);
+  background: color-mix(in srgb, var(--color-warning) 5%, transparent);
   font-size: 11px;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
 }
@@ -516,7 +512,7 @@ watch(
   user-select: none;
   list-style: none;
   outline: none;
-  color: var(--ion-color-warning-shade, #b8761e);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 
 .agentDebugSummary::-webkit-details-marker {
@@ -535,8 +531,8 @@ watch(
   margin-inline-start: auto;
   padding: 1px 6px;
   border-radius: 8px;
-  background: rgba(var(--ion-color-warning-rgb), 0.18);
-  color: var(--ion-color-warning-shade, #b8761e);
+  background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
   font-size: 10px;
   font-weight: 600;
 }
@@ -549,7 +545,7 @@ watch(
 }
 
 .agentDebugSection {
-  border-top: 1px solid rgba(var(--ion-color-medium-rgb), 0.12);
+  border-top: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   padding-top: 6px;
 }
 
@@ -569,26 +565,27 @@ watch(
   margin-bottom: 3px;
 }
 
+/* 表面（背景/描边/前景）已上提到全局 .ui-chip.ui-chip--neutral（随主题翻转）。
+   此处仅留调试 chip 的紧凑尺寸 / 不可点击光标（scoped 覆盖，[data-v-x] 胜出）。 */
 .agentDebugChip {
   display: inline-flex;
   align-items: center;
   padding: 1px 6px;
   border-radius: 6px;
-  background: rgba(var(--ion-color-medium-rgb), 0.12);
-  color: var(--ion-text-color);
   font-size: 10px;
+  cursor: default;
 }
 
 .agentDebugChip_emphasis {
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
   font-weight: 600;
 }
 
 .agentDebugMsg {
   margin-top: 4px;
   padding: 4px 6px;
-  background: rgba(var(--ion-color-medium-rgb), 0.06);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 6%, transparent);
   border-radius: 4px;
 }
 
@@ -615,8 +612,8 @@ watch(
 
 .agentDebugListItem {
   padding: 3px 6px;
-  background: rgba(var(--ion-color-medium-rgb), 0.04);
-  border-left: 2px solid var(--ion-color-primary);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 4%, transparent);
+  border-left: 2px solid var(--color-primary);
   border-radius: 0 4px 4px 0;
   font-size: 10.5px;
 }
@@ -640,37 +637,37 @@ watch(
 
 .agentDebugStatus_pending,
 .agentDebugStatus_running {
-  background: rgba(var(--ion-color-primary-rgb), 0.18);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+  color: var(--color-primary);
 }
 
 .agentDebugStatus_success {
   background: rgba(var(--ion-color-success-rgb, 56, 161, 105), 0.18);
-  color: var(--ion-color-success, #38a169);
+  color: var(--color-success);
 }
 
 .agentDebugStatus_failed,
 .agentDebugStatus_cancelled {
-  background: rgba(var(--ion-color-danger-rgb), 0.18);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 18%, transparent);
+  color: var(--color-error);
 }
 
 .agentDebugResult {
   margin-top: 3px;
   padding: 3px 6px;
-  background: rgba(var(--ion-color-medium-rgb), 0.04);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 4%, transparent);
   border-radius: 3px;
   font-size: 10px;
 }
 
 .agentDebugResult_missing {
-  background: rgba(var(--ion-color-warning-rgb), 0.08);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
 }
 
 .agentDebugResultTag {
   display: inline-block;
   margin-inline-end: 4px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   font-weight: 600;
 }
 
@@ -689,7 +686,7 @@ watch(
 .agentDebugGroup {
   margin-top: 4px;
   padding: 4px 6px;
-  background: rgba(var(--ion-color-primary-rgb), 0.06);
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
   border-radius: 4px;
 }
 
@@ -723,17 +720,17 @@ watch(
 
 .agentDebugDiag_ok {
   background: rgba(var(--ion-color-success-rgb, 56, 161, 105), 0.1);
-  color: var(--ion-color-success, #38a169);
+  color: var(--color-success);
 }
 
 .agentDebugDiag_warn {
-  background: rgba(var(--ion-color-warning-rgb), 0.12);
-  color: var(--ion-color-warning-shade, #b8761e);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 
 .agentDebugDiag_error {
-  background: rgba(var(--ion-color-danger-rgb), 0.12);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  color: var(--color-error);
 }
 
 .agentDebugDiagLevel {
@@ -748,7 +745,7 @@ watch(
 }
 
 .agentDebugDiag_empty {
-  background: rgba(var(--ion-color-medium-rgb), 0.12);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
   color: var(--encv-text-secondary, #888);
   font-style: italic;
 }
@@ -765,9 +762,9 @@ watch(
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.3);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 30%, transparent);
   border-radius: 4px;
-  background: rgba(var(--ion-color-medium-rgb), 0.08);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 8%, transparent);
   color: var(--ion-text-color);
   font-size: 11px;
   font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
@@ -775,7 +772,7 @@ watch(
 }
 
 .agentDebugBtn:hover {
-  background: rgba(var(--ion-color-medium-rgb), 0.14);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 14%, transparent);
 }
 
 .agentDebugBtn ion-icon {
@@ -789,7 +786,7 @@ watch(
   font-size: 10.5px;
   line-height: 1.5;
   padding: 8px 10px;
-  border: 1px solid rgba(var(--ion-color-medium-rgb), 0.3);
+  border: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 30%, transparent);
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.25);
   color: #d4d4d4;
@@ -802,7 +799,7 @@ watch(
 }
 
 .agentDebugDumpText:focus {
-  outline: 1px solid var(--ion-color-primary);
+  outline: 1px solid var(--color-primary);
 }
 
 .agentDebugDumpHint {

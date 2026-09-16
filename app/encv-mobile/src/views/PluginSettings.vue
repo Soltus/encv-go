@@ -184,17 +184,7 @@
 </template>
 
 <script setup lang="ts">
-import { fetchConfig, fetchTextPreviewExts, invalidateTextExtsCache, updateConfig } from "@/api/encv";
-import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
-import FilePickerModal from "@/components/FilePickerModal.vue";
-import { useConfig } from "@/composables/useConfig";
-import { useI18n } from "@/composables/useI18n";
-import { usePluginExtensions } from "@/composables/usePluginExtensions";
-import { useServerStatus } from "@/composables/useServerStatus";
-import { showToast } from "@/composables/useToast";
-import type { FieldDef } from "@/config/schemaParser";
-import { isNative } from "@/plugins/GoProcess";
-import { modalController } from "@ionic/vue";
+import { useModal } from "@encv/shared-components/composables/useModal";
 import {
   cloudOutline,
   colorPaletteOutline,
@@ -217,6 +207,16 @@ import {
   warningOutline,
 } from "ionicons/icons";
 import { computed, onMounted, ref, watch } from "vue";
+import { fetchConfig, fetchTextPreviewExts, invalidateTextExtsCache, updateConfig } from "@encv/shared-components/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
+import FilePickerModal from "@encv/shared-components/components/FilePickerModal.vue";
+import { useConfig } from "@encv/shared-components/composables/useConfig";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { usePluginExtensions } from "@encv/shared-components/composables/usePluginExtensions";
+import { useServerStatus } from "@encv/shared-components/composables/useServerStatus";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import type { FieldDef } from "@encv/shared-components/config/schemaParser";
+import { isNative } from "@/plugins/GoProcess";
 
 const { isOnline: serverOnline } = useServerStatus();
 const {
@@ -393,15 +393,14 @@ async function handleCustomTextExtsInput(event: CustomEvent) {
 async function handleBrowsePath(path: string[], field: FieldDef) {
   const isFolder = field.key !== "file";
   const currentVal = String(getFieldValue(path) || "/");
-  const modal = await modalController.create({
+  const { openModal } = useModal();
+  const { data, role } = await openModal<{ path: string }>({
     component: FilePickerModal,
     componentProps: {
       mode: isFolder ? "folder" : "file",
       initialPath: currentVal,
     },
   });
-  await modal.present();
-  const { data, role } = await modal.onDidDismiss();
   if (role === "select" && data) {
     setFieldValue(path, data.path);
   }
@@ -541,8 +540,8 @@ watch(serverOnline, async online => {
   font-size: 12px;
 }
 .scope-synced {
-  --background: rgba(var(--ion-color-primary-rgb), 0.12);
-  --color: var(--ion-color-primary);
+  --background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --color: var(--color-primary);
 }
 @media (max-width: 599px) {
   .scope-badge {
@@ -557,7 +556,7 @@ watch(serverOnline, async online => {
 }
 .sync-indicator {
   font-size: 14px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   opacity: 0.4;
   margin-left: 4px;
 }
@@ -607,7 +606,7 @@ watch(serverOnline, async online => {
   height: 100%;
 }
 .json-annotations {
-  border-bottom: 1px solid var(--ion-color-light);
+  border-bottom: 1px solid var(--color-base-200);
   max-height: 40%;
   overflow-y: auto;
   padding: 12px 16px;
@@ -622,7 +621,7 @@ watch(serverOnline, async online => {
   display: flex;
   flex-direction: column;
   padding: 4px 0;
-  border-bottom: 1px solid rgba(var(--ion-color-medium-rgb), 0.15);
+  border-bottom: 1px solid color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 15%, transparent);
 }
 .annotation-item:last-child {
   border-bottom: none;
@@ -630,7 +629,7 @@ watch(serverOnline, async online => {
 .annotation-path {
   font-size: 12px;
   font-weight: 600;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   font-family: monospace;
 }
 .annotation-desc {
@@ -662,8 +661,8 @@ watch(serverOnline, async online => {
 }
 .json-error {
   padding: 8px 16px;
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
   font-size: 12px;
   font-family: monospace;
 }
@@ -680,9 +679,9 @@ watch(serverOnline, async online => {
   font-size: 13px;
 }
 .suffix-conflict-warning.api-unavailable {
-  background: rgba(var(--ion-color-danger-rgb), 0.08);
-  border-left-color: var(--ion-color-danger);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 8%, transparent);
+  border-left-color: var(--color-error);
+  color: var(--color-error);
 }
 .suffix-conflict-warning ion-icon {
   font-size: 20px;
@@ -690,7 +689,7 @@ watch(serverOnline, async online => {
 }
 .error-text p {
   font-size: 13px;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   margin: 0;
 }
 .conflict-text p {

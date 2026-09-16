@@ -33,7 +33,7 @@
     </div>
 
     <!-- 错误详情卡片（可折叠） -->
-    <div v-if="details && details.length > 0" class="error-details">
+    <div v-if="details && details.length > 0" class="error-details ui-card">
       <button
         type="button"
         class="details-toggle"
@@ -274,7 +274,7 @@ function showToast(text: string) {
   align-items: center;
   justify-content: center;
   margin-bottom: 16px;
-  background: rgba(var(--ion-color-danger-rgb), 0.12);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
   position: relative;
 }
 
@@ -283,38 +283,38 @@ function showToast(text: string) {
   position: absolute;
   inset: -8px;
   border-radius: 50%;
-  border: 2px solid rgba(var(--ion-color-danger-rgb), 0.18);
+  border: 2px solid color-mix(in srgb, var(--color-error) 18%, transparent);
   animation: pulse 2.4s ease-out infinite;
 }
 
 .error-icon-wrap--gateway_error,
 .error-icon-wrap--auth_error {
-  background: rgba(var(--ion-color-warning-rgb), 0.12);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 .error-icon-wrap--gateway_error::after,
 .error-icon-wrap--auth_error::after {
-  border-color: rgba(var(--ion-color-warning-rgb), 0.18);
+  border-color: color-mix(in srgb, var(--color-warning) 18%, transparent);
 }
 
 .error-icon-wrap--format_error {
-  background: rgba(var(--ion-color-medium-rgb), 0.18);
+  background: color-mix(in srgb, var(--color-base-content) 18%, var(--color-base-100));
 }
 .error-icon-wrap--format_error::after {
-  border-color: rgba(var(--ion-color-medium-rgb), 0.18);
+  border-color: color-mix(in srgb, var(--color-base-content) 18%, var(--color-base-100));
 }
 
 .error-icon {
   font-size: 48px;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
 }
 
 .error-icon-wrap--gateway_error .error-icon,
 .error-icon-wrap--auth_error .error-icon {
-  color: var(--ion-color-warning);
+  color: var(--color-warning);
 }
 
 .error-icon-wrap--format_error .error-icon {
-  color: var(--ion-color-medium-shade);
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
 }
 
 .error-title {
@@ -327,7 +327,7 @@ function showToast(text: string) {
 
 .error-subtitle {
   font-size: 13px;
-  color: var(--encv-text-secondary, var(--ion-color-medium));
+  color: var(--encv-text-secondary, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)));
   margin: 0;
   line-height: 1.5;
 }
@@ -346,11 +346,10 @@ function showToast(text: string) {
 }
 
 /* 详情列表 */
+/* 表面（背景/圆角/描边）已上提到全局 .ui-card（默认对齐原外观，零回退）。
+   本 scoped 仅保留 overflow:hidden（功能裁剪，非主题表面）。 */
 .error-details {
-  background: var(--ion-color-step-50, rgba(0, 0, 0, 0.03));
-  border-radius: 12px;
   overflow: hidden;
-  border: 1px solid var(--ion-color-step-100, rgba(0, 0, 0, 0.06));
 }
 
 .details-toggle {
@@ -374,7 +373,7 @@ function showToast(text: string) {
 
 .toggle-icon {
   font-size: 16px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .details-count {
@@ -395,13 +394,13 @@ function showToast(text: string) {
   align-items: flex-start;
   gap: 10px;
   padding: 8px 14px;
-  border-top: 1px solid var(--ion-color-step-100, rgba(0, 0, 0, 0.06));
+  border-top: 1px solid var(--color-base-200);
 }
 
 .detail-label {
   flex: 0 0 80px;
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   text-transform: uppercase;
   letter-spacing: 0.5px;
   font-weight: 600;
@@ -423,12 +422,12 @@ function showToast(text: string) {
   font-size: 12px;
   line-height: 1.5;
   color: var(--ion-text-color);
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   padding: 2px 6px;
   border-radius: 4px;
   word-break: break-all;
   display: block;
-  border: 1px solid var(--ion-color-step-100, rgba(0, 0, 0, 0.08));
+  border: 1px solid var(--color-base-200);
 }
 
 .detail-value--copyable {
@@ -437,13 +436,13 @@ function showToast(text: string) {
 }
 
 .detail-value--copyable:hover {
-  background: rgba(var(--ion-color-primary-rgb), 0.08);
-  border-color: rgba(var(--ion-color-primary-rgb), 0.25);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border-color: color-mix(in srgb, var(--color-primary) 25%, transparent);
 }
 
 .copy-icon {
   font-size: 14px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 4px;
   flex-shrink: 0;
 }
@@ -455,14 +454,14 @@ function showToast(text: string) {
   gap: 10px;
   margin-top: 20px;
   padding: 12px 14px;
-  background: rgba(var(--ion-color-primary-rgb), 0.06);
+  background: color-mix(in srgb, var(--color-primary) 6%, transparent);
   border-radius: 10px;
-  border-left: 3px solid var(--ion-color-primary);
+  border-left: 3px solid var(--color-primary);
 }
 
 .suggestion-icon {
   font-size: 20px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   flex-shrink: 0;
   margin-top: 2px;
 }
@@ -482,8 +481,8 @@ function showToast(text: string) {
   bottom: 32px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--ion-color-step-900, rgba(0, 0, 0, 0.85));
-  color: #fff;
+  background: color-mix(in srgb, var(--color-base-content) 85%, transparent);
+  color: var(--color-white);
   padding: 10px 18px;
   border-radius: 24px;
   font-size: 13px;
@@ -497,7 +496,7 @@ function showToast(text: string) {
 
 .copy-toast ion-icon {
   font-size: 18px;
-  color: var(--ion-color-success);
+  color: var(--color-success);
 }
 
 @keyframes pulse {

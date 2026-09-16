@@ -1,0 +1,10 @@
+--- a/node_modules/codemogger/dist/cli.mjs
++++ b/node_modules/codemogger/dist/cli.mjs
+@@ -214,7 +214,8 @@
+         if (!activeFiles.has(row.file_path)) {
+           await (await this.db.prepare("DELETE FROM chunks WHERE codebase_id = ? AND file_path = ?")).run(codebaseId, row.file_path);
+           await (await this.db.prepare("DELETE FROM indexed_files WHERE codebase_id = ? AND file_path = ?")).run(codebaseId, row.file_path);
++          await (await this.db.prepare("DELETE FROM imports WHERE codebase_id = ? AND file_path = ?")).run(codebaseId, row.file_path);
+           removed++;
+         }
+       }

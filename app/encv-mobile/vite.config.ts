@@ -2,6 +2,10 @@ import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'node:path'
 import fs from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // =============================================================================
 // ⚠️ 防御机制：禁止直接 vite 启动（必须通过 PM2 → preview-gateway）
@@ -27,6 +31,7 @@ import { devStartGuard } from '../packages/shared-components/src/lib/dev-start-g
 import { frontendDepsManifestPlugin } from './vite-plugins/frontend-deps-manifest'
 import { i18nOptimizePlugin } from '../packages/shared-components/src/vite-plugins/i18n-optimize'
 import { vueComponentCheckPlugin } from '../packages/shared-components/src/vite-plugins/vue-component-check'
+import { fileSizeLimitPlugin } from '../packages/shared-components/src/vite-plugins/file-size-limit'
 import Components from 'unplugin-vue-components/vite'
 
 // =============================================================================
@@ -239,6 +244,7 @@ export default defineConfig({
   plugins: [
     devStartGuard(),  // ⚠️ 防御：禁止直接 vite 启动，必须通过 PM2 → preview-gateway
     frontendDepsManifestPlugin(),  // 🆕 2026-06-17：读 package.json 生成 frontend-deps.json manifest
+    fileSizeLimitPlugin({ failOnError: true }),  // 🆕 工作区文件行数门禁（useAgent.ts 已拆分，主 app 一并强制）
     i18nOptimizePlugin(),  // 🆕 i18n HMR 热重载 + 构建优化
     vueComponentCheckPlugin({
       dev: process.env.NODE_ENV !== 'production',
@@ -270,9 +276,11 @@ export default defineConfig({
           const cleanPath = relativePath.split('?')[0]
           const query = relativePath.includes('?') ? '?' + relativePath.split('?')[1] : ''
           
+          // 2026-07-14 批 9：dirs 仅留本地 src（摘除 shared 兜底分支）。
+          // 批 9 已把全部落到 shared 的 @/x 改写为显式 @encv/shared-components/x
+          // （_measure-fallback.mjs 归零），shared 兜底已成死代码，@/ 严格只解析本地。
           const dirs = [
             path.resolve(__dirname, 'src'),
-            path.resolve(__dirname, '../packages/shared-components/src'),
           ]
           for (const dir of dirs) {
             const fullPath = path.join(dir, cleanPath)
@@ -348,7 +356,24 @@ export default defineConfig({
       '@encv/shared-components/': path.resolve(__dirname, '../packages/shared-components/src') + '/',
     },
   },
+  css: {
+    preprocessorOptions: {
+      // 用 sass-embedded 的现代 compiler API（@use/@forward 现代模块系统 + 原生嵌入式协议）。
+      scss: {
+        api: 'modern-compiler',
+        // 静默 Sass 弃用警告，避免传递依赖（daisyUI/legacy @import）告警干扰构建。
+        // 注意：'mixed-decls' 在 sass 1.100 已废除，列入反而触发 obsolete 警告，故不列。
+        silenceDeprecations: ['import', 'global-builtin', 'color-functions'],
+        // 编译期产出 source map，使 codemogger css-source 能由 CSS 产物溯源到
+        // .scss 源（含 @mixin/@function/@each 生成的规则）。仅开发辅助，不影响产物功能。
+        sourceMap: true,
+      },
+    },
+  },
   build: {
+    // 产出 CSS source map，配合 css.preprocessorOptions.scss.sourceMap，使 codemogger
+    // css-source 能由 dist 里的 CSS 产物溯源到 .scss 源（即便规则由 @mixin/@each 生成）。
+    cssSourcemap: true,
     rollupOptions: {
       // ⚠️ 防御：显式声明入口 HTML，防止 Vite 自动扫描 plugin-openlist 等子目录的 index.html
       // 导致去 src/views/ 找 OpenListWebView.vue 等不存在的文件（子项目有自己的 vite 配置和 @ alias）

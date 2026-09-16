@@ -57,7 +57,7 @@ ion-app {
   justify-content: center;
   height: 100vh;
   width: 100vw;
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   padding: 24px;
 }
 
@@ -74,7 +74,7 @@ ion-app {
 .error-content h2 {
   font-size: 20px;
   font-weight: 700;
-  color: var(--ion-text-color, #000);
+  color: var(--ion-text-color, var(--color-black));
   margin: 0 0 8px;
 }
 

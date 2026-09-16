@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <!-- 主题自带背景图案资源：淡粉碎花点纹（由 theme.css 用 url(./assets/bg.svg) 引用）。
+       这就是「主题携带自有图片资源」的证明——不是编译进产物，而是随资源包分发。 -->
+  <g fill="#ff5fa2" fill-opacity="0.06">
+    <circle cx="8" cy="8" r="2.2"/>
+    <circle cx="32" cy="20" r="1.6"/>
+    <circle cx="16" cy="36" r="2"/>
+    <circle cx="40" cy="40" r="1.4"/>
+  </g>
+</svg>

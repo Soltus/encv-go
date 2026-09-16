@@ -94,18 +94,10 @@
 </template>
 
 <script setup lang="ts">
-import {
-  bookOutline,
-  bugOutline,
-  extensionPuzzleOutline,
-  eyeOutline,
-  flaskOutline,
-  terminal,
-} from "ionicons/icons";
-
-import { useDevTools } from "@/composables/useDevTools";
-import { useI18n } from "@/composables/useI18n";
+import { bookOutline, bugOutline, extensionPuzzleOutline, eyeOutline, flaskOutline, terminal } from "ionicons/icons";
 import { useRouter } from "vue-router";
+import { useDevTools } from "@encv/shared-components/composables/useDevTools";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -186,15 +178,15 @@ function handleVConsoleToggle(event: CustomEvent) {
   font-size: 12px;
 }
 .scope-synced {
-  --background: rgba(var(--ion-color-primary-rgb), 0.12);
-  --color: var(--ion-color-primary);
+  --background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --color: var(--color-primary);
 }
 .scope-dev {
-  --background: rgba(var(--ion-color-warning-rgb), 0.18);
-  --color: var(--ion-color-warning-shade);
+  --background: color-mix(in srgb, var(--color-warning) 18%, transparent);
+  --color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 .scope-prod {
-  --background: rgba(var(--ion-color-success-rgb), 0.16);
-  --color: var(--ion-color-success-shade);
+  --background: color-mix(in srgb, var(--color-success) 16%, transparent);
+  --color: color-mix(in srgb, var(--color-success) 85%, var(--color-black));
 }
 </style>

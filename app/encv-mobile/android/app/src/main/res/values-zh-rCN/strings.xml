@@ -958,8 +958,6 @@
     <string name="settings_audioPlayer">音频播放方式</string>
     <string name="settings_basicInfo">基础信息</string>
     <string name="settings_batteryOptimization">忽略耗电优化</string>
-    <string name="settings_bgBlur">背景模糊</string>
-    <string name="settings_bgBlurHelp">高斯模糊效果，让内容更突出</string>
     <string name="settings_bgColor">背景色</string>
     <string name="settings_bgColorHelp">独立于主题色，保护视力</string>
     <string name="settings_bgDark">深色系</string>

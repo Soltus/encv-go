@@ -238,30 +238,22 @@
 </template>
 
 <script setup lang="ts">
-import {
-  arrowDownOutline,
-  arrowUpOutline,
-  closeOutline,
-  copyOutline,
-  pauseOutline,
-  playOutline,
-  trashOutline,
-} from "ionicons/icons";
-
-import { type BackendLogEntry, checkServerStatus, getRecentBackendLogs } from "@/api/encv";
-import FilterDropdown from "@/components/shared/FilterDropdown.vue";
-import type { DropdownOption } from "@/components/shared/FilterDropdown.vue";
-import ServerStatusCard from "@/components/ServerStatusCard.vue";
-import VirtualLogList from "@/components/VirtualLogList.vue";
-import { copyToClipboard } from "@/composables/useClipboard";
-import { eventBus } from "@/composables/useEventBus";
-import { type LogEntry, useFrontendLogs } from "@/composables/useFrontendLogs";
-import { useI18n } from "@/composables/useI18n";
-import { useRealtimeTransport } from "@/composables/useRealtimeTransport";
-import { showToast } from "@/composables/useToast";
-import { IncrementalFilter, type Level } from "@/utils/IncrementalFilter";
-import { alertController, type IonContent } from "@ionic/vue";
+import { type IonContent } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
+import { arrowDownOutline, arrowUpOutline, closeOutline, copyOutline, pauseOutline, playOutline, trashOutline } from "ionicons/icons";
 import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, shallowRef, triggerRef, watch } from "vue";
+import { type BackendLogEntry, checkServerStatus, getRecentBackendLogs } from "@encv/shared-components/api/encv";
+import ServerStatusCard from "@/components/ServerStatusCard.vue";
+import type { DropdownOption } from "@encv/shared-components/components/shared/FilterDropdown.vue";
+import FilterDropdown from "@encv/shared-components/components/shared/FilterDropdown.vue";
+import VirtualLogList from "@encv/shared-components/components/VirtualLogList.vue";
+import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
+import { eventBus } from "@encv/shared-components/composables/useEventBus";
+import { type LogEntry, useFrontendLogs } from "@encv/shared-components/composables/useFrontendLogs";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useRealtimeTransport } from "@encv/shared-components/composables/useRealtimeTransport";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import { IncrementalFilter, type Level } from "@encv/shared-components/utils/IncrementalFilter";
 
 const { t } = useI18n();
 const transport = useRealtimeTransport();
@@ -784,25 +776,19 @@ async function handleCopy() {
 }
 
 async function handleClear() {
-  const alert = await alertController.create({
-    header: t("devlogs.clearConfirm"),
-    buttons: [
-      { text: t("common.cancel"), role: "cancel" },
-      {
-        text: t("common.confirm"),
-        role: "destructive",
-        handler: () => {
-          if (activeTab.value === "frontend") {
-            clearFrontendLogs();
-          } else {
-            backendFilter.clear();
-            backendTagCounts.clear();
-          }
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("devlogs.clearConfirm"),
+      danger: true,
+    })
+  ) {
+    if (activeTab.value === "frontend") {
+      clearFrontendLogs();
+    } else {
+      backendFilter.clear();
+      backendTagCounts.clear();
+    }
+  }
 }
 
 function onWsMessage(data: any) {
@@ -1085,7 +1071,7 @@ defineExpose({
 .status-bar {
   --background: var(--ion-toolbar-background, rgba(var(--ion-background-color-rgb), 0.92));
   --border-width: 1px 0 0 0;
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(var(--material-blur, 8px));
 }
 .status-bar ion-toolbar { --padding-start: 12px; --padding-end: 12px; --min-height: 38px; }
 
@@ -1120,7 +1106,7 @@ defineExpose({
   border: 0;
   border-radius: 50%;
   background: var(--ion-toolbar-background, var(--ion-background-color));
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.12);
   cursor: pointer;
   padding: 0;
@@ -1140,7 +1126,7 @@ defineExpose({
   border: 0;
   border-radius: 50%;
   background: var(--ion-toolbar-background, var(--ion-background-color));
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.12);
   cursor: pointer;
   padding: 0;
@@ -1162,7 +1148,7 @@ defineExpose({
 
 /* status-bar 自动滚动状态文字：暂停时 warning 色 */
 .auto-scroll-status { font-weight: 500; }
-.auto-scroll-status.paused { color: var(--ion-color-warning); }
+.auto-scroll-status.paused { color: var(--color-warning); }
 
 /*
   🆕 2026-06-15 修 #2：日志详情模态样式
@@ -1190,7 +1176,7 @@ defineExpose({
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   border-radius: 10px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   overflow: hidden;
@@ -1211,7 +1197,7 @@ defineExpose({
   background: transparent;
   border: 0;
   cursor: pointer;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   font-size: 22px;
   display: inline-flex;
   align-items: center;
@@ -1222,7 +1208,7 @@ defineExpose({
   padding: 0;
 }
 .log-detail-close:hover {
-  background: var(--ion-color-light);
+  background: var(--color-base-200);
 }
 .log-detail-body {
   flex: 1;
@@ -1242,14 +1228,14 @@ defineExpose({
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 .log-detail-value {
   font-family: var(--ion-font-family-monospace, 'Courier New', monospace);
   font-size: 12px;
   word-break: break-all;
 }
-.log-time-detail { color: var(--ion-color-medium); }
+.log-time-detail { color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)); }
 /* 🆕 2026-06-16：紧凑 1 行 2 列 — 时间 + 级别共用一行 */
 .log-detail-meta-row {
   flex-direction: row;
@@ -1264,10 +1250,10 @@ defineExpose({
   gap: 4px;
 }
 .log-source-detail {
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   font-weight: 600;
   font-size: 11px;
-  background: var(--ion-color-light);
+  background: var(--color-base-200);
   padding: 2px 6px;
   border-radius: 3px;
   display: inline-block;
@@ -1280,7 +1266,7 @@ defineExpose({
 .log-detail-message {
   margin: 0;
   padding: 10px 12px;
-  background: var(--ion-color-light);
+  background: var(--color-base-200);
   border-radius: 6px;
   font-family: var(--ion-font-family-monospace, 'Courier New', monospace);
   font-size: 12px;
@@ -1354,27 +1340,27 @@ defineExpose({
   font-size: 11px;
   font-weight: 500;
   border-radius: 12px;
-  background: var(--ion-color-light-shade, #eee);
-  color: var(--ion-color-dark, #333);
+  background: color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
+  color: var(--color-base-300);
   cursor: pointer;
   transition: all 0.15s ease;
   font-family: var(--ion-font-family, sans-serif);
 }
 
 .log-tag-chip:hover {
-  background: var(--ion-color-primary-tint, #e8f0fe);
-  color: var(--ion-color-primary, #3880ff);
+  background: color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
+  color: var(--color-primary);
 }
 
 @media (prefers-color-scheme: dark) {
   .log-tag-chip {
-    background: var(--ion-color-dark-shade, #2a2a2a);
-    color: var(--ion-color-light, #ddd);
+    background: color-mix(in srgb, var(--color-base-300) 85%, var(--color-black));
+    color: var(--color-base-200);
   }
 
   .log-tag-chip:hover {
     background: rgba(56, 128, 255, 0.2);
-    color: var(--ion-color-primary, #6ba3ff);
+    color: var(--color-primary);
   }
 }
 </style>

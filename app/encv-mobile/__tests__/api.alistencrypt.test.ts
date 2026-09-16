@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { decodeAlistFilename, getAlistEncryptStreamUrl } from "@/api/encv";
+import { decodeAlistFilename, getAlistEncryptStreamUrl } from "@encv/shared-components/api/encv";
 
 function mockFetch(responseData: any, status = 200, ok = true) {
   return vi.fn().mockResolvedValue({

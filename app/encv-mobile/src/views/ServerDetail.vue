@@ -105,23 +105,25 @@
 </template>
 
 <script setup lang="ts">
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import {
+  batteryCharging as batteryOptimizationIcon,
   cloudOutline,
+  copy as copyIcon,
   folderOpen,
   globeOutline,
-  shieldCheckmark,
-  server as serverIcon,
-  copy as copyIcon,
   notifications as notificationsIcon,
-  batteryCharging as batteryOptimizationIcon,
+  server as serverIcon,
+  shieldCheckmark,
 } from "ionicons/icons";
-
-import { fetchConfig, getServerUrl } from "@/api/encv";
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import { fetchConfig, getServerUrl } from "@encv/shared-components/api/encv";
 import ServerStatusCard from "@/components/ServerStatusCard.vue";
-import { copyToClipboard as clipboardWrite } from "@/composables/useClipboard";
-import { useI18n } from "@/composables/useI18n";
-import { useServerStatus } from "@/composables/useServerStatus";
-import { showToast } from "@/composables/useToast";
+import { copyToClipboard as clipboardWrite } from "@encv/shared-components/composables/useClipboard";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useServerStatus } from "@encv/shared-components/composables/useServerStatus";
+import { showToast } from "@encv/shared-components/composables/useToast";
 import {
   checkPermissions,
   isNative,
@@ -129,9 +131,6 @@ import {
   requestNotificationPermission,
   requestStoragePermission,
 } from "@/plugins/GoProcess";
-import { alertController } from "@ionic/vue";
-import { computed, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
 
 const configData = ref<Record<string, unknown> | null>(null);
 const { isOnline: serverOnline, checkStatus, restartBackend, stopBackend } = useServerStatus();
@@ -225,25 +224,20 @@ async function handleRestart() {
 }
 
 async function handleStop() {
-  const alert = await alertController.create({
-    header: t("settings.stopConfirm"),
-    buttons: [
-      { text: t("settings.cancel"), role: "cancel" },
-      {
-        text: t("settings.stop"),
-        role: "destructive",
-        handler: async () => {
-          const success = await stopBackend();
-          showToast({
-            message: success ? t("settings.stopped") : t("settings.stopFailed"),
-            duration: 2000,
-            color: success ? "success" : "danger",
-          });
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("settings.stopConfirm"),
+      confirmText: t("settings.stop"),
+      danger: true,
+    })
+  ) {
+    const success = await stopBackend();
+    showToast({
+      message: success ? t("settings.stopped") : t("settings.stopFailed"),
+      duration: 2000,
+      color: success ? "success" : "danger",
+    });
+  }
 }
 
 onMounted(async () => {
@@ -264,7 +258,7 @@ onMounted(async () => {
    ServerDetail 父级只负责传 @click / @check / @stop / @restart 监听 */
 
 .connection-error {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 12px;
   margin-top: 4px;
 }
@@ -277,7 +271,7 @@ onMounted(async () => {
   font-size: 12px;
   opacity: 0.7;
   margin-left: 2px;
-  color: var(--ion-color-primary-shade);
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
 }
 .transport-info {
   font-size: 12px;
@@ -285,13 +279,13 @@ onMounted(async () => {
   font-weight: 500;
 }
 .transport-ws {
-  color: var(--ion-color-success-shade);
+  color: color-mix(in srgb, var(--color-success) 85%, var(--color-black));
 }
 .transport-http-poll {
-  color: var(--ion-color-warning-shade);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
 }
 .transport-native-bridge {
-  color: var(--ion-color-tertiary-shade);
+  color: color-mix(in srgb, var(--color-accent) 85%, var(--color-black));
 }
 .status-line {
   display: flex;
@@ -301,13 +295,13 @@ onMounted(async () => {
 }
 .status-meta {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 4px;
 }
 .status-warning {
   font-size: 11px;
-  color: var(--ion-color-warning-shade);
-  background: var(--ion-color-warning-tint);
+  color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black));
+  background: color-mix(in srgb, var(--color-warning) 85%, var(--color-white));
   padding: 4px 8px;
   border-radius: 4px;
   margin-top: 6px;
@@ -321,7 +315,7 @@ onMounted(async () => {
 .readonly-url {
   font-family: 'Courier New', Courier, monospace;
   font-size: 13px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   word-break: break-all;
   cursor: pointer;
   user-select: all;

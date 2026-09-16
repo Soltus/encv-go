@@ -1,0 +1,31 @@
+@use 'config' as cfg;
+@use 'color-fns' as cf;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 主题无关的交互/派生令牌（全局，:root）。
+//
+// 续35 推翻 §6.7/§6.8 的「编译期主题特权」：主题 ≠ 调色板，官方与第三方同待遇。
+// 不再有任何主题被编译期烘焙——所有主题的 tint / hover / active 都在【运行时】
+// 由 color-mix(var(--color-*)) 统一派生。因为 var(--color-*) 在元素上解析为
+// 当前主题的语义色，所以官方主题与第三方主题拿到**完全一致**的派生结果，零特权。
+//
+// 旧方案（§6.7）：只有 encv/encv-dark 在 _theme-palette 编译出 --tint-* /
+//   --color-*-hover；第三方主题（sunset/mint）未进 _theme-palette，连
+//   --color-primary-hover 都 undefined（按钮 hover 失效）。现已根除。
+// ═══════════════════════════════════════════════════════════════════════════
+
+:root {
+  // 派生 hover/active：对每个交互色用 color-mix(var(--color-*)) 运行时派生。
+  // var(--color-*) 按当前主题解析 → 单个 :root 定义即对所有主题（官方+第三方）生效，零特权。
+  @each $c in cfg.$interactive {
+    --color-#{$c}-hover: color-mix(in srgb, #{cf.css-var('color', $c)} 94%, white);
+    --color-#{$c}-active: color-mix(in srgb, #{cf.css-var('color', $c)} 94%, black);
+  }
+
+  // 全局交互令牌（始终可用，不随 data-theme 失效，供用户主题覆写）
+  --elevation-chip-hover: 0 2px 6px -2px rgb(0 0 0 / 0.1);
+  --elevation-panel-overlay: 0 -4px 20px rgba(0, 0, 0, 0.12);
+  --lift-hover: -1px;
+  --press-scale: 0.98;
+  --ring-focus: 0 0 0 3px color-mix(in srgb, var(--color-primary) 25%, transparent);
+}

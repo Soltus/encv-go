@@ -83,15 +83,7 @@ def _discover_apps() -> dict:
                 src_dirs.append(rel)
 
         go_dirs = []
-        go_mod = PROJECT_ROOT / "go.mod"
-        if go_mod.exists() and proj_dir.name == "encv-mobile":
-            go_dirs = ["internal", "pkg"]
-
         kotlin_dirs = []
-        android_kotlin = proj_dir / "android" / "app" / "src" / "main" / "java"
-        if android_kotlin.exists():
-            rel = android_kotlin.relative_to(PROJECT_ROOT).as_posix()
-            kotlin_dirs.append(rel)
 
         app_name = proj_dir.name
         if proj_dir.name == "web" and proj_dir.parent.name.startswith("plugin-"):
@@ -104,6 +96,36 @@ def _discover_apps() -> dict:
             "types_output": existing.get("types_output", ""),
             "go_dirs": sorted(set(existing.get("go_dirs", []) + go_dirs)),
             "kotlin_dirs": sorted(set(existing.get("kotlin_dirs", []) + kotlin_dirs)),
+        }
+
+    # ── Go + Kotlin 后端（项目级，独立于前端 app） ──
+    # Go 后端模块根在仓库根（go.mod 位于 /workspace），源码散落在根级子目录；
+    # Kotlin 后端为 Android 原生层（app/encv-mobile/android 及各 plugin 的 src/main/java）。
+    # 二者当前不一定直接调用 i18n.T(...)，但作为项目级 i18n 检查必须被纳入扫描，
+    # 以便后端一旦引入 i18n key 即可被 lint 捕获。共享字典由下方 shared_i18n 合并注入。
+    backend_go_dirs = [
+        d for d in ("internal", "pkg", "cmd", "agent")
+        if (PROJECT_ROOT / d).is_dir()
+    ]
+    backend_kotlin_dirs = []
+    for p in (
+        "app/encv-mobile/android/app/src/main/java",
+        "app/encv-mobile/android/combolite-host/src/main/java",
+        "app/encv-mobile/plugin-openlist/src/main/java",
+        "app/encv-mobile/plugin-mpv-player/src/main/java",
+        "app/encv-mobile/plugin-simverse/src/main/java",
+    ):
+        pp = PROJECT_ROOT / p
+        if pp.is_dir():
+            backend_kotlin_dirs.append(p)
+
+    if backend_go_dirs or backend_kotlin_dirs:
+        discovered["backend"] = {
+            "src_dirs": [],
+            "i18n_files": [],
+            "types_output": "",
+            "go_dirs": backend_go_dirs,
+            "kotlin_dirs": backend_kotlin_dirs,
         }
 
     shared_i18n = PROJECT_ROOT / "app" / "packages" / "shared-components" / "src" / "i18n"

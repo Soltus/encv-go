@@ -69,10 +69,7 @@ const webImpl: SimVersePlugin = {
   },
 };
 
-function callNative<K extends keyof SimVersePlugin>(
-  method: K,
-  ...args: Parameters<SimVersePlugin[K]>
-): ReturnType<SimVersePlugin[K]> {
+function callNative<K extends keyof SimVersePlugin>(method: K, ...args: Parameters<SimVersePlugin[K]>): ReturnType<SimVersePlugin[K]> {
   if (nativeBridge) {
     try {
       if (isJSInterfaceMode) {
@@ -116,14 +113,14 @@ function callNative<K extends keyof SimVersePlugin>(
 }
 
 export const SimVerse: SimVersePlugin = {
-  openWorld: (options) => callNative("openWorld", options),
+  openWorld: options => callNative("openWorld", options),
   closeWorld: () => callNative("closeWorld"),
   startHeartbeat: () => callNative("startHeartbeat"),
   stopHeartbeat: () => callNative("stopHeartbeat"),
-  setWorldRunning: (options) => callNative("setWorldRunning", options),
+  setWorldRunning: options => callNative("setWorldRunning", options),
   addShortcut: () => callNative("addShortcut"),
   isShortcutSupported: () => callNative("isShortcutSupported"),
-  lockOrientation: (options) => callNative("lockOrientation", options),
+  lockOrientation: options => callNative("lockOrientation", options),
   unlockOrientation: () => callNative("unlockOrientation"),
   showDiagnostic: () => callNative("showDiagnostic"),
   hideSystemUI: () => callNative("hideSystemUI"),

@@ -78,6 +78,9 @@ class SimVerseActivity : BasePluginActivity() {
         val worldId = hostIntent.getStringExtra("world_id") ?: "default"
         val worldName = hostIntent.getStringExtra("world_name") ?: "Default"
         val apiBaseUrl = hostIntent.getStringExtra("api_base_url") ?: ""
+        // 🆕 主应用外观设置桥接：宿主（主应用 openWorld）把当前主题的已解析 CSS 变量块传进来，
+        // 由 WebViewClient 注入插件 WebView（与 __ENCV_API_BASE__ 同源机制）。
+        val themeCss = hostIntent.getStringExtra("theme_css") ?: ""
 
         android.util.Log.e(TAG, "onCreate: worldId=$worldId worldName=$worldName apiBaseUrl=$apiBaseUrl")
 
@@ -104,6 +107,9 @@ class SimVerseActivity : BasePluginActivity() {
                             val client = SimVerseWebViewClient(ctx.applicationContext)
                             if (backendPort > 0) {
                                 client.backendPort = backendPort
+                            }
+                            if (themeCss.isNotBlank()) {
+                                client.hostThemeCss = themeCss
                             }
                             webViewClient = client
                             webChromeClient = SimVerseWebChromeClient(client.diagState)

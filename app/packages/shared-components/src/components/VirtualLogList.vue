@@ -39,9 +39,9 @@
 </template>
 
 <script setup lang="ts" generic="T extends { id: number; level: string }">
-import { useI18n } from "../composables/useI18n";
 import { useVirtualizer } from "@tanstack/vue-virtual";
 import { computed, watch } from "vue";
+import { useI18n } from "../composables/useI18n";
 
 interface Props {
   /** 🆕 2026-06-15 1M+ 优化：接受 readonly 数组，IncrementalFilter.getResult() 内部结果

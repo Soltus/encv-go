@@ -180,23 +180,16 @@
 </template>
 
 <script setup lang="ts">
-import {
-  cloudUploadOutline,
-  downloadOutline,
-  saveOutline,
-  saveOutline as saveIcon,
-  warningOutline,
-} from "ionicons/icons";
-
-import { backupDatabase, exportDatabase, getDatabaseInfo, importDatabase } from "@/api/encv";
-import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
-import { useConfig } from "@/composables/useConfig";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import type { FieldDef } from "@/config/schemaParser";
-import { restartBackend } from "@/plugins/GoProcess";
-import { alertController } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
+import { cloudUploadOutline, downloadOutline, saveOutline as saveIcon, saveOutline, warningOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
+import { backupDatabase, exportDatabase, getDatabaseInfo, importDatabase } from "@encv/shared-components/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
+import { useConfig } from "@encv/shared-components/composables/useConfig";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import type { FieldDef } from "@encv/shared-components/config/schemaParser";
+import { restartBackend } from "@/plugins/GoProcess";
 
 const { t } = useI18n();
 const {
@@ -285,31 +278,23 @@ async function handleSaveConfig() {
 }
 
 async function askRestart() {
-  const alert = await alertController.create({
-    header: "需要重启生效",
-    message: "数据库引擎配置已修改，需要重启后端才能生效。是否立即重启？",
-    buttons: [
-      {
-        text: "稍后再说",
-        role: "cancel",
-      },
-      {
-        text: "立即重启",
-        handler: async () => {
-          showToast({ message: "正在重启后端...", color: "primary" });
-          try {
-            await restartBackend();
-            showToast({ message: "后端重启成功", color: "success" });
-            loadDatabaseInfo().catch(() => {});
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            showToast({ message: "重启失败: " + msg, color: "danger" });
-          }
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: "需要重启生效",
+      message: "数据库引擎配置已修改，需要重启后端才能生效。是否立即重启？",
+      confirmText: "立即重启",
+    })
+  ) {
+    showToast({ message: "正在重启后端...", color: "primary" });
+    try {
+      await restartBackend();
+      showToast({ message: "后端重启成功", color: "success" });
+      loadDatabaseInfo().catch(() => {});
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      showToast({ message: "重启失败: " + msg, color: "danger" });
+    }
+  }
 }
 
 function handleResetConfig() {
@@ -419,12 +404,12 @@ async function handleBackupDatabase() {
 
 <style scoped>
 .engine-mismatch-item {
-  --background: var(--ion-color-warning-50, #fff8e1);
+  --background: color-mix(in srgb, var(--color-warning) 5%, var(--color-white));
 }
 
 .mismatch-warning {
   font-size: 0.85em;
-  color: var(--ion-color-warning);
+  color: var(--color-warning);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -451,7 +436,7 @@ async function handleBackupDatabase() {
   justify-content: center;
   padding: 40px;
   gap: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .engine-item {
@@ -493,7 +478,7 @@ async function handleBackupDatabase() {
 
 .engine-desc {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin: 4px 0 0;
   line-height: 1.4;
 }
@@ -509,8 +494,8 @@ async function handleBackupDatabase() {
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 4px;
-  background: var(--ion-color-light, #f4f5f8);
-  color: var(--ion-color-medium, #92949c);
+  background: var(--color-base-200);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   white-space: nowrap;
 }
 
@@ -528,15 +513,15 @@ body.dark .cap-tag {
 
 .base-hint {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .unavailable-hint {
   font-size: 12px;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
 }
 
 .engine-item-base {
-  --background: var(--ion-color-primary-50, rgba(79, 140, 255, 0.08));
+  --background: color-mix(in srgb, var(--color-primary) 5%, var(--color-white));
 }
 </style>

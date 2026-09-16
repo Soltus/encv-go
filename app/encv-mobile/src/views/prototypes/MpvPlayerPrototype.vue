@@ -503,7 +503,7 @@ watch(isPlaying, val => {
 
 .top-title {
   flex: 1;
-  color: #fff;
+  color: var(--color-white);
   font-size: 14px;
   font-weight: 500;
   overflow: hidden;
@@ -620,7 +620,7 @@ watch(isPlaying, val => {
   border-radius: 12px;
   padding: 6px 0;
   box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(var(--material-blur, 12px));
   z-index: 20;
 }
 
@@ -689,7 +689,7 @@ watch(isPlaying, val => {
   border-radius: 16px;
   padding: 16px;
   box-shadow: 0 8px 40px rgba(0,0,0,0.5);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(var(--material-blur, 16px));
 }
 
 .settings-group {
@@ -879,7 +879,7 @@ watch(isPlaying, val => {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: #fff;
+  background: var(--color-white);
   transition: transform 0.2s;
 }
 
@@ -915,7 +915,7 @@ watch(isPlaying, val => {
   box-shadow: 0 4px 24px rgba(0,0,0,0.6);
   z-index: 40;
   cursor: pointer;
-  background: #000;
+  background: var(--color-black);
 }
 
 .pip-video {
@@ -956,12 +956,12 @@ watch(isPlaying, val => {
   border-radius: 50%;
   border: none;
   background: rgba(255,255,255,0.2);
-  color: #fff;
+  color: var(--color-white);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  backdrop-filter: blur(4px);
+  backdrop-filter: blur(var(--material-blur, 4px));
   transition: background 0.15s;
 }
 
@@ -999,7 +999,7 @@ watch(isPlaying, val => {
   border-radius: 20px;
   padding: 12px 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  backdrop-filter: blur(8px);
+  backdrop-filter: blur(var(--material-blur, 8px));
   z-index: 10;
 }
 
@@ -1074,7 +1074,7 @@ watch(isPlaying, val => {
   height: 40px;
   border: none;
   background: none;
-  color: #fff;
+  color: var(--color-white);
   cursor: pointer;
   display: flex;
   align-items: center;

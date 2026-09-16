@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import { IonList, IonListHeader, IonLabel, IonBadge, IonIcon } from "@ionic/vue";
+import { IonBadge, IonIcon, IonLabel, IonList, IonListHeader } from "@ionic/vue";
 
 interface Props {
   title?: string;

@@ -1,12 +1,9 @@
 import Phaser from "phaser";
-import { WorldScene } from "./WorldScene";
-import { RegionScene } from "./RegionScene";
 import { BattleScene } from "./BattleScene";
+import { RegionScene } from "./RegionScene";
+import { WorldScene } from "./WorldScene";
 
-export function createPhaserGame(
-  container: HTMLElement,
-  config?: { width?: number; height?: number; seed?: number }
-): Phaser.Game {
+export function createPhaserGame(container: HTMLElement, config?: { width?: number; height?: number; seed?: number }): Phaser.Game {
   const gameConfig: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
     parent: container,

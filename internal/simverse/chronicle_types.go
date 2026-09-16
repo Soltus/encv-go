@@ -113,6 +113,7 @@ const (
 	ChronEventAging          ChronicleEventType = 11
 	ChronEventIllness        ChronicleEventType = 12
 	ChronEventDeath          ChronicleEventType = 13
+	ChronEventPersonalFight  ChronicleEventType = 14
 	ChronEventPersonalEnd    ChronicleEventType = 99
 
 	ChronEventFamilyStart   ChronicleEventType = 100
@@ -216,6 +217,8 @@ func (t ChronicleEventType) String() string {
 		return "Illness"
 	case ChronEventDeath:
 		return "Death"
+	case ChronEventPersonalFight:
+		return "Fight"
 	case ChronEventFamilyFounded:
 		return "FamilyFounded"
 	case ChronEventFamilyMarriage:

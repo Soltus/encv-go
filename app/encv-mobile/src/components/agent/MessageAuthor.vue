@@ -50,18 +50,18 @@ const variant = computed(() => props.variant || "default");
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: rgba(var(--ion-color-primary-rgb), 0.10);
-  color: var(--ion-color-primary);
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
 }
 
 .avatar_streaming {
-  background: rgba(var(--ion-color-primary-rgb), 0.16);
+  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
   animation: authorAvatarPulse 1.6s ease-in-out infinite;
 }
 
 .avatar_error {
-  background: rgba(var(--ion-color-danger-rgb), 0.12);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  color: var(--color-error);
 }
 
 .avatar_tool {
@@ -88,7 +88,7 @@ const variant = computed(() => props.variant || "default");
 
 .authorMeta {
   font-size: 11.5px;
-  color: var(--encv-text-secondary, var(--ion-color-medium));
+  color: var(--encv-text-secondary, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)));
   margin-top: 1px;
 }
 

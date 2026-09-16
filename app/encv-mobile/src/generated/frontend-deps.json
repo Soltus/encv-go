@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-07-07T06:15:41.893Z",
+  "generated_at": "2026-07-17T17:13:41.436Z",
   "source_file": "package.json",
   "items": [
     {
@@ -93,8 +93,8 @@
     },
     {
       "name": "@ionic/vue",
-      "version": "8.8.7",
-      "version_range": "^8.8.7",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
@@ -104,8 +104,8 @@
     },
     {
       "name": "@ionic/vue-router",
-      "version": "8.8.7",
-      "version_range": "^8.8.7",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
@@ -159,8 +159,8 @@
     },
     {
       "name": "ionicons",
-      "version": "8.0.13",
-      "version_range": "^8.0.13",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
@@ -236,8 +236,8 @@
     },
     {
       "name": "vue",
-      "version": "3.5.34",
-      "version_range": "^3.5.34",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
@@ -247,8 +247,8 @@
     },
     {
       "name": "vue-router",
-      "version": "4.6.4",
-      "version_range": "^4.6.4",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "dependency",
       "importance": "core",
@@ -290,6 +290,17 @@
       "license": "MIT"
     },
     {
+      "name": "@playwright/test",
+      "version": "1.61.1",
+      "version_range": "1.61.1",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
       "name": "@types/matter-js",
       "version": "0.20.2",
       "version_range": "^0.20.2",
@@ -301,9 +312,20 @@
       "license": "unknown"
     },
     {
+      "name": "@types/pngjs",
+      "version": "6.0.5",
+      "version_range": "^6.0.5",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
       "name": "@vitejs/plugin-vue",
-      "version": "6.0.7",
-      "version_range": "^6.0.7",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
@@ -367,6 +389,39 @@
       "license": "MIT"
     },
     {
+      "name": "pixelmatch",
+      "version": "7.2.0",
+      "version_range": "7.2.0",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
+      "name": "pngjs",
+      "version": "7.0.0",
+      "version_range": "7.0.0",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
+      "name": "sass-embedded",
+      "version": "1.100.0",
+      "version_range": "^1.100.0",
+      "source": "package.json",
+      "kind": "devDependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
+    },
+    {
       "name": "sirv",
       "version": "3.0.2",
       "version_range": "^3.0.2",
@@ -379,8 +434,8 @@
     },
     {
       "name": "typescript",
-      "version": "5.9.3",
-      "version_range": "^5.9.3",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
@@ -401,8 +456,8 @@
     },
     {
       "name": "vite",
-      "version": "8.0.13",
-      "version_range": "^8.0.13",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",
@@ -423,8 +478,8 @@
     },
     {
       "name": "vue-tsc",
-      "version": "2.2.10",
-      "version_range": "^2.2.10",
+      "version": "catalog:",
+      "version_range": "catalog:",
       "source": "package.json",
       "kind": "devDependency",
       "importance": "core",

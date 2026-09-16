@@ -50,6 +50,10 @@ type Server struct {
 	// 加全局互斥串行化（dev tool，低频，代价可接受）
 	mockGenMu      sync.Mutex
 	servingDir     string
+	// themesDir 是用户安装主题的【数据目录】——与 servingDir（静态 web 根）严格分离。
+	// 平台/env 派生见 themeDataPath()：Android 落在 app 私有 files 目录（可写、不污染媒体视图），
+	// 桌面端走 XDG / 标准路径。绝不把用户数据写进 servingDir。
+	themesDir      string
 	version        string
 	instanceID     string
 	actualPort     int
@@ -286,6 +290,85 @@ func simverseDataPath() string {
 	return filepath.Join(parent, "simverse")
 }
 
+// themeDataPath 返回用户安装主题的持久化目录。
+//
+// 平台/env 矩阵与 mountRegistryDataPath 对齐（复用其目录派生逻辑，取同级 .encv/themes）：
+//
+//	平台    环境              路径
+//	─────  ───────────       ──────────────────────────────────────────
+//	Android 任意              <ENCV_APP_FILES_DIR>/.encv/themes
+//	Linux   dev               $XDG_DATA_HOME/encv-dev/themes
+//	Linux   production        $XDG_DATA_HOME/encv/themes
+//	macOS   dev               $HOME/Library/Application Support/encv-dev/themes
+//	macOS   production        $HOME/Library/Application Support/encv/themes
+//	Windows dev               %LOCALAPPDATA%\encv-dev\themes
+//	Windows production        %LOCALAPPDATA%\encv\themes
+//
+// 关键：用户数据（可写、可变）必须落在 app 私有/标准数据目录，**绝不**放进 servingDir
+// （静态 web 根；Android 上它是打包的私有只读资产，写不进去也不该混）。
+// 优先级：ENCV_THEMES_DIR（明确指定） > 派生默认值。
+//
+// 续43 修订：最初错误地把主题写进 servingDir/.encv/themes，用户指出「应用数据不该放 servingDir，
+// 且安卓是私有路径」——改走本函数（与 kernelDataPath / simverseDataPath 同一脉络）。
+func themeDataPath() string {
+	if v := os.Getenv("ENCV_THEMES_DIR"); v != "" {
+		return v
+	}
+	mountsFile := mountRegistryDataPath(nil) // cfg 不影响 env-driven 路径
+	parent := filepath.Dir(mountsFile)       // .../.encv  或 .../encv(-dev)
+	return filepath.Join(parent, "themes")
+}
+
+// tasksDataPath 返回任务系统（DB + 任务持久化 + 回收站）的应用数据目录。
+//
+// 与 themeDataPath / kernelDataPath / simverseDataPath 同一脉络：绝不进 servingDir。
+// 复用 config.AppDataDir("tasks")（平台/env 矩阵一致）。
+// 优先级：ENCV_TASKS_DIR > 派生默认值（mountRegistryDataPath 同级 .encv/tasks）。
+func tasksDataPath() string {
+	return config.AppDataDir("tasks")
+}
+
+// ftsDataPath 返回 FTS5 全文索引的应用数据目录（同脉络，绝不进 servingDir）。
+// 优先级：ENCV_FTS_DIR > 派生默认值（.encv/fts）。
+func ftsDataPath() string {
+	return config.AppDataDir("fts")
+}
+
+// migrateLegacyAppData 把遗留（旧版本误放在 servingDir 下的）应用数据迁移到数据目录。
+//
+// 续43 脉络：应用数据本不该进 servingDir。此前 task_manager/trash_manager/db/fts 误把
+// 状态写进 servingDir，启动期 best-effort 迁移避免既有用户数据丢失。
+// 必须在 NewMobileService / InitDatabase 之前调用（此时 servingDir 已知、新数据目录尚未落盘）。
+func migrateLegacyAppData(servingDir string) {
+	type legacy struct{ src, dst string }
+	items := []legacy{
+		{filepath.Join(servingDir, "encv-tasks.db"), filepath.Join(tasksDataPath(), "encv-tasks.db")},
+		{filepath.Join(servingDir, ".encv-tasks.json"), filepath.Join(tasksDataPath(), ".encv-tasks.json")},
+		{filepath.Join(servingDir, ".trash"), filepath.Join(tasksDataPath(), ".trash")},
+		{filepath.Join(servingDir, ".encv", "fts5.db"), filepath.Join(ftsDataPath(), "fts5.db")},
+	}
+	for _, it := range items {
+		if it.src == it.dst {
+			continue
+		}
+		if _, err := os.Stat(it.src); err != nil {
+			continue // 无遗留
+		}
+		if _, err := os.Stat(it.dst); err == nil {
+			continue // 目标已存在，不覆盖（避免覆盖新数据）
+		}
+		if err := os.MkdirAll(filepath.Dir(it.dst), 0o755); err != nil {
+			slog.Warn("migrateLegacyAppData mkdir failed", "dst", it.dst, "err", err)
+			continue
+		}
+		if err := os.Rename(it.src, it.dst); err != nil {
+			slog.Warn("migrateLegacyAppData rename failed", "src", it.src, "dst", it.dst, "err", err)
+		} else {
+			slog.Info("migrateLegacyAppData moved app data out of servingDir", "src", it.src, "dst", it.dst)
+		}
+	}
+}
+
 // resolveUserPath 解析用户路径为绝对路径（multi-mount-aware）。
 //
 // 优先级：
@@ -312,6 +395,16 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	containerManager := service.NewContainerManager()
 	readerService := service.NewReaderService(containerManager)
 	contentHandler := handler.NewContentHandler()
+	// 🆕 续43 脉络：把遗留（误放 servingDir 的）应用数据迁移到数据目录，
+	// 必须在 NewMobileService / InitDatabase 之前（避免新数据目录已落盘后被跳过）。
+	if sd := cfg.Server.Dir; sd != "" {
+		if absSD, err := filepath.Abs(sd); err == nil {
+			migrateLegacyAppData(absSD)
+		} else {
+			migrateLegacyAppData(sd)
+		}
+	}
+
 	mobileSvc := mobileservice.NewMobileService("", cfg)
 	s := &Server{
 		cfg:            cfg,
@@ -321,6 +414,7 @@ func NewServer(ctx context.Context, configPath string) *Server {
 		contentHandler: contentHandler,
 		instanceID:     fmt.Sprintf("%x", time.Now().UnixNano()),
 		mockEngine:     NewMockEngine(),
+		themesDir:      themeDataPath(),
 	}
 	// 把 mock 引擎的 tool_call.execute_real 真实执行器绑到 s.executeAgentTool
 	// ——剧本里声明 execute_real=true 的工具调用会被实际执行（覆盖硬编码 result）。
@@ -386,7 +480,7 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	)
 
 	// 🆕 2026-07-01：数据库存储引擎初始化
-	actualEngine, dbPath := s.InitDatabase(s.servingDir)
+	actualEngine, dbPath := s.InitDatabase()
 
 	// 🆕 2026-07-03：向量搜索服务初始化
 	s.InitVectorSearch(dbPath, actualEngine)

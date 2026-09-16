@@ -1,6 +1,11 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
+import { fileURLToPath } from 'node:url'
+import { dirname } from 'node:path'
+import { encvAliasFallback } from './vite-plugins/encv-alias-fallback'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // vitest 4.x: use test.alias (not resolve.alias) for tsconfig paths to be
 // resolved correctly via vite's resolver. resolve.alias is silently ignored
@@ -8,6 +13,19 @@ import path from 'path'
 // '@/...'" errors even though vue-tsc compiles fine.
 const SRC_DIR = path.resolve(__dirname, './src')
 const TDESIGN_STUB = path.resolve(__dirname, './src/engines/__tests__/__mocks__/tdesign-chat.mjs')
+// 与 vite.config.ts 对齐：让 `@encv/shared-components`（含子路径）在测试运行时可解析。
+// 否则 vite 不读 tsconfig 的 paths 映射，shared 子路径/裸包导入在测试里解析不到。
+const SHARED_SRC = path.resolve(__dirname, '../packages/shared-components/src')
+
+// ⚠️ 关键：vitest projects 模式下，根配置的 plugins【不会】自动继承到各 project。
+// 每个 project 是独立的 Vite 配置，必须各自带 plugins，否则 `@/...` 无人解析
+// （连本地 src 下的文件都 Failed to resolve）。因此抽成 BASE_PLUGINS，根配置
+// 与各 project 都引用同一份。
+// 2026-07-14 批 9：移除 shared 兜底分支（roots 仅留本地 src）。
+// 此前 encv-alias-fallback 是 app 唯一 @/ 解析器，且「本地优先、shared 次之」；
+// 批 9 已把全部 136 处落到 shared 的 @/x 改写为显式 @encv/shared-components/x
+// （_measure-fallback.mjs 归零），故 shared 兜底已成死代码，摘除后 @/ 严格只解析本地。
+const BASE_PLUGINS = [vue(), encvAliasFallback({ roots: [SRC_DIR] })]
 
 // ═══════════════════════════════════════════════════════════════════
 // 2026-07-02 性能优化：和 Go 对齐的"分层 + 守卫"模式
@@ -57,7 +75,7 @@ const FAST_INCLUDE = [
   'src/composables/__tests__/useSearchInput.test.ts',
   'src/composables/__tests__/useSectionDerivation.test.ts',
   'src/composables/__tests__/useToolCallAccumulator.test.ts',
-  'src/composables/__tests__/workflow-core.test.ts',
+  '../packages/shared-components/src/composables/__tests__/workflow-core.test.ts',
   'src/composables/activeStatus.test.ts',
   'src/composables/appServerRealtimeReducer.test.ts',
   'src/composables/inlineFileReference.test.ts',
@@ -65,10 +83,35 @@ const FAST_INCLUDE = [
   // lib: 纯数据生成/状态机
   'src/lib/workflow/__tests__/state-machine.test.ts',
   'src/lib/workflow/__tests__/unified-types.test.ts',
+  // shared: 纯逻辑（SSE 解析 + composable 状态机）
+  '../packages/shared-components/src/api/__tests__/mockGenerator.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useMockGenLog.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useDisclosure.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useClickOutside.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useModal.test.ts',
+  '../packages/shared-components/src/lib/__tests__/taskEvent.test.ts',
   // utils: RingBuffer bench（纯算法）
   'src/utils/RingBuffer.bench.test.ts',
   // view 层纯逻辑（无模块级状态）
   'src/views/__tests__/useFilesView.searchTokens.test.ts',
+  // theme: SCSS 编译期契约快照（纯 sass 编译，无模块级状态）
+  'src/theme/__tests__/surface.test.ts',
+  // theme: vivid.scss P3 孪生由 @function/@each 派生 + sourcemap 溯源（css-source 同源校验）
+  'src/theme/__tests__/vividScss.test.ts',
+  // theme: 运行时资源包 + themeLoader 指标/优化（happy-dom，resetThemeLoaderForTest 防污染）
+  'src/theme/__tests__/official-themes.test.ts',
+  // motion: 动效 ACL 闸门契约（guard 行为 + 设计令牌导出），happy-dom
+  'src/motion/__tests__/motion-guard.test.ts',
+  // motion: 滚动揭示 IntersectionObserver 修复（复现「Ionic 内滚整页空白」），happy-dom
+  'src/motion/__tests__/scroll-reveal.test.ts',
+  // motion: v-reveal 指令同根因修复（Ionic 内滚空白），happy-dom
+  'src/motion/__tests__/directive-reveal.test.ts',
+  // theme: 臻彩显示（vivid / P3）真实生效回归（先红后绿），happy-dom
+  'src/motion/__tests__/vivid.test.ts',
+  // theme: 表面材质模糊令牌 --material-blur 契约（先红后绿），happy-dom
+  'src/theme/__tests__/surfaceMaterial.test.ts',
+  // theme: per-theme 主色/背景色定制（2026-07-17 优化），happy-dom
+  'src/theme/__tests__/themeCustomization.test.ts',
 ]
 
 // ── ISOLATED：有模块级状态 / 用 vi.resetModules / 依赖 localStorage ──
@@ -87,8 +130,8 @@ const ISOLATED_INCLUDE = [
   'src/components/shared/__tests__/PhaseIcon.test.ts',
   'src/components/shared/__tests__/RelevanceBadge.test.ts',
   'src/components/shared/__tests__/UnifiedTimelineCard.test.ts',
-  'src/components/tasks/__tests__/TaskDebugPanel.test.ts',
-  'src/components/tasks/__tests__/TaskVirtualList.test.ts',
+  '../packages/shared-components/src/components/__tests__/TaskDebugPanel.test.ts',
+  '../packages/shared-components/src/components/__tests__/TaskVirtualList.test.ts',
   'src/composables/__tests__/dev-start-guard.test.ts',
   'src/composables/__tests__/path-chain-e2e.test.ts',
   'src/composables/__tests__/realtime/HttpPollBackend.test.ts',
@@ -99,7 +142,7 @@ const ISOLATED_INCLUDE = [
   'src/composables/__tests__/useFileList.clientFilter.test.ts',
   'src/composables/__tests__/usePathResolver.test.ts',
   'src/composables/__tests__/usePinchZoom.test.ts',
-  'src/composables/__tests__/useProxiedFetch.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useProxiedFetch.test.ts',
   'src/composables/__tests__/useRealtimeTransport.test.ts',
   'src/composables/__tests__/useTaskTrigger.test.ts',
   'src/composables/__tests__/useTaskViewCompute.test.ts',
@@ -110,7 +153,8 @@ const ISOLATED_INCLUDE = [
   'src/composables/__tests__/useTasksList.escape-reverse.test.ts',
   'src/composables/__tests__/useTasksList.grouping.test.ts',
   'src/composables/__tests__/useTestCaseGeneration.test.ts',
-  'src/composables/__tests__/useVectorSearchStatus.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useVectorSearchStatus.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useWebDavWorkflowAdapter.test.ts',
   'src/composables/__tests__/useWorkflowStore.test.ts',
   'src/composables/__tests__/useWorkflowTaskService.test.ts',
   'src/composables/useAttachments.test.ts',
@@ -135,8 +179,14 @@ function sharedTestConfig() {
     reporters: ['default'],
     bail: 0,
     alias: {
-      '@': SRC_DIR,
+      // ⚠️ 故意不设置 '@' 别名：所有 `@/...` 统一由 encvAliasFallback 插件解析
+      // （本地 src 优先、shared 次之）。若这里设 '@': SRC_DIR，Vite 会把
+      // `@/composables/useToast` 先解析成本地绝对路径（已删除→不存在），
+      // 导致插件来不及回退 shared 就报 "Failed to resolve"。这与 vite.config.ts
+      // （无 '@' 别名、仅靠插件）保持一致。
       '@tdesign-vue-next/chat': TDESIGN_STUB,
+      '@encv/shared-components': SHARED_SRC,
+      '@encv/shared-components/': SHARED_SRC + '/',
     },
     exclude: [
       '**/node_modules/**',
@@ -146,7 +196,6 @@ function sharedTestConfig() {
       // 复杂 component test → cypress.component
       'src/views/__tests__/**/*.component.test.ts',
       'src/components/agent/**',
-      'src/components/tasks/__tests__/**',
       'src/engines/__tests__/**',
       // 旧的根目录集成测试 → cypress
       '__tests__/ApprovalCard.test.ts',
@@ -165,13 +214,21 @@ function sharedTestConfig() {
 }
 
 export default defineConfig({
-  plugins: [vue()],
+  // ⚠️ 根配置也带 BASE_PLUGINS（覆盖单文件 `vitest run xxx.test.ts` 走默认 project 的场景）。
+  // 各 project（fast/isolated）在下方各自也引用 BASE_PLUGINS，否则 `@/...` 无人解析。
+  plugins: BASE_PLUGINS,
   root: __dirname,
   cacheDir: 'node_modules/.vite',
   resolve: {
     alias: {
-      '@': SRC_DIR,
+      // ⚠️ 故意不设置 '@' 别名：所有 `@/...` 统一由 encvAliasFallback 插件解析
+      // （本地 src 优先、shared 次之）。若这里设 '@': SRC_DIR，Vite 会把
+      // `@/composables/useToast` 先解析成本地绝对路径（已删除→不存在），
+      // 导致插件来不及回退 shared 就报 "Failed to resolve"。这与 vite.config.ts
+      // （无 '@' 别名、仅靠插件）保持一致。
       '@tdesign-vue-next/chat': TDESIGN_STUB,
+      '@encv/shared-components': SHARED_SRC,
+      '@encv/shared-components/': SHARED_SRC + '/',
     },
   },
   test: {
@@ -192,6 +249,7 @@ export default defineConfig({
       ? [
           // Project 1: FAST（isolate:false，~30 个文件，~8-12s）
           {
+            plugins: BASE_PLUGINS,
             test: {
               name: 'fast',
               ...sharedTestConfig(),
@@ -201,6 +259,7 @@ export default defineConfig({
           },
           // Project 2: ISOLATED（isolate:true，~35 个文件，~40-50s）
           {
+            plugins: BASE_PLUGINS,
             test: {
               name: 'isolated',
               ...sharedTestConfig(),
@@ -212,6 +271,7 @@ export default defineConfig({
       : [
           // 默认只有 FAST project（日常开发用）
           {
+            plugins: BASE_PLUGINS,
             test: {
               name: 'fast',
               ...sharedTestConfig(),

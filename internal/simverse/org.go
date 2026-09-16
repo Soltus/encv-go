@@ -20,6 +20,45 @@ const (
 	OrgMax                  = 12
 )
 
+func (t OrgType) String() string {
+	switch t {
+	case OrgFamily:
+		return "家族"
+	case OrgClan:
+		return "氏族"
+	case OrgVillage:
+		return "村庄"
+	case OrgTown:
+		return "城镇"
+	case OrgKingdom:
+		return "王国"
+	case OrgGuild:
+		return "公会"
+	case OrgReligion:
+		return "教团"
+	case OrgMerchant:
+		return "商会"
+	case OrgMercenary:
+		return "佣兵团"
+	case OrgThieves:
+		return "盗贼团"
+	case OrgMageGuild:
+		return "法师协会"
+	case OrgAdventurer:
+		return "冒险者公会"
+	default:
+		return "未知"
+	}
+}
+
+// OrgIDToType 将合成的组织 ID 反推为组织类型
+func OrgIDToType(orgID uint32) OrgType {
+	if orgID == 0 {
+		return OrgMax
+	}
+	return OrgType((orgID - 1) % OrgMax)
+}
+
 type OrganizationV2 struct {
 	ID         uint32
 	Name       string

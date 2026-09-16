@@ -193,18 +193,10 @@
 </template>
 
 <script setup lang="ts">
-import {
-  checkmarkCircleOutline,
-  closeCircleOutline,
-  listOutline,
-  playCircleOutline,
-  starOutline,
-  warningOutline,
-} from "ionicons/icons";
-
-import { type DBTestProgress, getDatabaseInfo, runDatabaseTests } from "@/api/encv_perf";
-import { showToast } from "@/composables/useToast";
+import { checkmarkCircleOutline, closeCircleOutline, listOutline, playCircleOutline, starOutline, warningOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
+import { type DBTestProgress, getDatabaseInfo, runDatabaseTests } from "@encv/shared-components/api/encv_perf";
+import { showToast } from "@encv/shared-components/composables/useToast";
 
 interface ScenarioItem {
   id: string;
@@ -420,14 +412,14 @@ async function handleRunTests() {
 
 .engine-desc {
   font-size: 12px;
-  color: var(--ion-color-medium, #999);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin: 4px 0 0 0;
   white-space: normal;
 }
 
 .engine-unavailable-text {
   font-size: 12px;
-  color: var(--ion-color-danger, #eb445a);
+  color: var(--color-error);
   margin: 4px 0 0 0;
 }
 
@@ -439,7 +431,7 @@ async function handleRunTests() {
 
 .build-tag-note {
   font-size: 11px;
-  color: var(--ion-color-medium, #999);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .engine-mismatch-item {
@@ -448,7 +440,7 @@ async function handleRunTests() {
 
 .mismatch-warning {
   font-size: 13px;
-  color: var(--ion-color-warning, #ffc107);
+  color: var(--color-warning);
   margin: 0;
   display: flex;
   align-items: center;
@@ -463,7 +455,7 @@ async function handleRunTests() {
 
 .mismatch-detail {
   font-size: 12px;
-  color: var(--ion-color-medium, #999);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin: 6px 0 0 0;
 }
 
@@ -494,7 +486,7 @@ async function handleRunTests() {
 
 .scenario-engine-specific {
   --background: rgba(255, 193, 7, 0.08);
-  border-left: 3px solid var(--ion-color-warning, #ffc107);
+  border-left: 3px solid var(--color-warning);
 }
 
 .capability-badge {
@@ -528,7 +520,7 @@ async function handleRunTests() {
 
 .scenario-desc {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin: 4px 0 0;
 }
 
@@ -538,14 +530,14 @@ async function handleRunTests() {
 
 .scenario-meta {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-top: 6px;
 }
 
 .metrics-card {
   margin-top: 8px;
   padding: 8px 10px;
-  background: var(--ion-color-light, #f4f5f8);
+  background: var(--color-base-200);
   border-radius: 6px;
 }
 
@@ -561,7 +553,7 @@ body.dark .metrics-card {
 }
 
 .metric-key {
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .metric-value {
@@ -571,7 +563,7 @@ body.dark .metrics-card {
 .error-card {
   margin-top: 8px;
   padding: 8px 10px;
-  background: var(--ion-color-danger-50, #fef0f0);
+  background: color-mix(in srgb, var(--color-error) 5%, var(--color-white));
   border-radius: 6px;
   display: flex;
   align-items: flex-start;
@@ -590,17 +582,17 @@ body.dark .error-card {
 
 .error-text {
   font-size: 11px;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   line-height: 1.4;
   word-break: break-all;
 }
 
 .scenario-passed {
-  --background: var(--ion-color-success-50, rgba(34, 197, 94, 0.08));
+  --background: color-mix(in srgb, var(--color-success) 5%, var(--color-white));
 }
 
 .scenario-failed {
-  --background: var(--ion-color-danger-50, rgba(239, 68, 68, 0.08));
+  --background: color-mix(in srgb, var(--color-error) 5%, var(--color-white));
 }
 
 .action-section {
@@ -614,14 +606,14 @@ body.dark .error-card {
   gap: 8px;
   margin-top: 12px;
   font-size: 13px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .summary-card {
   margin: 0 16px 24px;
   padding: 16px;
   border-radius: 12px;
-  border: 1px solid var(--ion-color-light-shade, #e0e0e0);
+  border: 1px solid color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
 }
 
 body.dark .summary-card {
@@ -629,13 +621,13 @@ body.dark .summary-card {
 }
 
 .summary-passed {
-  background: var(--ion-color-success-50, rgba(34, 197, 94, 0.08));
-  border-color: var(--ion-color-success-200, #86efac);
+  background: color-mix(in srgb, var(--color-success) 5%, var(--color-white));
+  border-color: color-mix(in srgb, var(--color-success) 40%, var(--color-white));
 }
 
 .summary-failed {
-  background: var(--ion-color-danger-50, rgba(239, 68, 68, 0.08));
-  border-color: var(--ion-color-danger-200, #fca5a5);
+  background: color-mix(in srgb, var(--color-error) 5%, var(--color-white));
+  border-color: color-mix(in srgb, var(--color-error) 40%, var(--color-white));
 }
 
 .summary-title {
@@ -662,7 +654,7 @@ body.dark .summary-card {
 
 .stat-label {
   font-size: 11px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
 }
 
 .stat-value {
@@ -671,10 +663,10 @@ body.dark .summary-card {
 }
 
 .stat-passed {
-  color: var(--ion-color-success);
+  color: var(--color-success);
 }
 
 .stat-failed {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
 }
 </style>

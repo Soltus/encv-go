@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
+	"strings"
 
 	"github.com/Soltus/encv-go/internal/v2/types"
 )
@@ -663,4 +665,73 @@ func GetTextPreviewExtensions() []string {
 		}
 	}
 	return exts
+}
+
+// AppDataDir 返回某子系统【应用数据】的持久化目录（与 server.mountRegistryDataPath 同脉络）。
+//
+// 平台/env 矩阵（复用 mountRegistryDataPath 的目录派生，取同级 .encv/<subdir>）：
+//
+//	Android 任意   <ENCV_APP_FILES_DIR>/.encv/<subdir>
+//	Linux   dev    $XDG_DATA_HOME/encv-dev/.encv/<subdir>
+//	Linux   prod   $XDG_DATA_HOME/encv/.encv/<subdir>
+//	macOS   dev    $HOME/Library/Application Support/encv-dev/.encv/<subdir>
+//	macOS   prod   $HOME/Library/Application Support/encv/.encv/<subdir>
+//	Windows dev    %LOCALAPPDATA%\encv-dev\.encv\<subdir>
+//	Windows prod   %LOCALAPPDATA%\encv\.encv\<subdir>
+//
+// 设计原则（续43 用户硬要求）：应用数据（DB / 任务持久化 / 回收站 / FTS 索引）必须落在
+// app 私有/标准数据目录，绝不进 servingDir（静态 web 根；Android 上是打包私有只读资产，
+// 写不进去也不该混用户媒体）。servingDir 只装用户内容。
+//
+// 优先级：ENCV_<SUBDIR_UPPER>_DIR（明确指定）> 派生默认值。
+func AppDataDir(subdir string) string {
+	envKey := "ENCV_" + strings.ToUpper(subdir) + "_DIR"
+	if v := os.Getenv(envKey); v != "" {
+		return v
+	}
+	// 与 themeDataPath/kernelDataPath/simverseDataPath 完全一致：
+	// 复用 mountRegistryDataPath 的目录派生（filepath.Dir(mountRegistryDataPath)），再拼子目录。
+	return filepath.Join(appDataParent(), subdir)
+}
+
+// appDataParent 返回 mountRegistryDataPath 的父目录（与 filepath.Dir(mountRegistryDataPath(nil)) 一致）。
+//
+//	Android：<ENCV_APP_FILES_DIR>/.encv   （mounts.json 在 <base>/.encv/mounts.json）
+//	桌面：   <XDG/LOCALAPPDATA/...>/encv(-dev)
+func appDataParent() string {
+	isAndroid := os.Getenv("ENCV_MOBILE") == "1"
+	if isAndroid {
+		base := os.Getenv("ENCV_APP_FILES_DIR")
+		if base == "" {
+			base = "/data/user/0/com.encvgo.app/files"
+		}
+		return filepath.Join(base, ".encv")
+	}
+	isDev := os.Getenv("ENCV_DEV") == "1" || os.Getenv("ENCV_DEV_PREVIEW") == "1"
+	switch runtime.GOOS {
+	case "windows":
+		base := os.Getenv("LOCALAPPDATA")
+		if base == "" {
+			base = filepath.Join(os.Getenv("USERPROFILE"), "AppData", "Local")
+		}
+		if isDev {
+			return filepath.Join(base, "encv-dev")
+		}
+		return filepath.Join(base, "encv")
+	case "darwin":
+		base := filepath.Join(os.Getenv("HOME"), "Library", "Application Support")
+		if isDev {
+			return filepath.Join(base, "encv-dev")
+		}
+		return filepath.Join(base, "encv")
+	default: // linux 等
+		base := os.Getenv("XDG_DATA_HOME")
+		if base == "" {
+			base = filepath.Join(os.Getenv("HOME"), ".local", "share")
+		}
+		if isDev {
+			return filepath.Join(base, "encv-dev")
+		}
+		return filepath.Join(base, "encv")
+	}
 }

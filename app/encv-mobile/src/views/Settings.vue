@@ -1,5 +1,5 @@
 <template>
-  <ion-page>
+  <ion-page ref="pageEl">
     <ion-header>
       <ion-toolbar>
         <ion-title>{{ t('settings.title') }}</ion-title>
@@ -12,7 +12,7 @@
       </ion-toolbar>
     </ion-header>
 
-    <ion-content>
+    <ion-content ref="contentEl">
       <ion-list>
         <ion-list-header>
           <ion-label>{{ t('settings.appearance') }}</ion-label>
@@ -380,24 +380,13 @@
 </template>
 
 <script setup lang="ts">
-import type { DatabaseInfo, IndexStats } from "@/api/encv";
-import { fetchConfig, getDatabaseInfo, getIndexStats, updateConfig } from "@/api/encv";
-import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
-import FilePickerModal from "@/components/FilePickerModal.vue";
-import { useConfig } from "@/composables/useConfig";
-import { registerFileFeature, unregisterFileFeature } from "@/composables/useFileFeatures";
-import { useI18n } from "@/composables/useI18n";
-import { useServerStatus } from "@/composables/useServerStatus";
-import { showToast } from "@/composables/useToast";
-import type { FieldDef } from "@/config/schemaParser";
-import { isMpvSubMode, PLAY_MODE } from "@/constants/player";
-import { createAlistEncryptFeature } from "@/features/alist-encrypt";
-import { ensurePluginLoaded, getPluginFullState, isNative, pickFolder } from "@/plugins/GoProcess";
-import { alertController, modalController } from "@ionic/vue";
+import { useModal } from "@encv/shared-components/composables/useModal";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import {
   bugOutline,
   cloudOutline,
   colorPaletteOutline,
+  server as databaseIcon,
   documentText,
   eyeOutline,
   filmOutline,
@@ -418,7 +407,6 @@ import {
   refreshCircle,
   save as saveIcon,
   server as serverIcon,
-  server as databaseIcon,
   settingsOutline,
   shieldCheckmark,
   sparklesOutline,
@@ -430,6 +418,20 @@ import {
 } from "ionicons/icons";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import type { DatabaseInfo, IndexStats } from "@encv/shared-components/api/encv";
+import { fetchConfig, getDatabaseInfo, getIndexStats, updateConfig } from "@encv/shared-components/api/encv";
+import ConfigFieldItem from "@/components/ConfigFieldItem.vue";
+import FilePickerModal from "@encv/shared-components/components/FilePickerModal.vue";
+import { useConfig } from "@encv/shared-components/composables/useConfig";
+import { registerFileFeature, unregisterFileFeature } from "@encv/shared-components/composables/useFileFeatures";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useServerStatus } from "@encv/shared-components/composables/useServerStatus";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import type { FieldDef } from "@encv/shared-components/config/schemaParser";
+import { isMpvSubMode, PLAY_MODE } from "@encv/shared-components/constants/player";
+import { createAlistEncryptFeature } from "@encv/shared-components/features/alist-encrypt/index";
+import { ensurePluginLoaded, getPluginFullState, isNative, pickFolder } from "@/plugins/GoProcess";
+import { usePageTransition, useScrollReveal } from "@encv/shared-components/motion";
 
 const router = useRouter();
 const {
@@ -453,6 +455,15 @@ const {
   resetFieldToDefault,
 } = useConfig();
 const { t, tField, tSectionTitle } = useI18n();
+
+// 动效（§2.5.1 / §2.5.2）：页面进入转场 + 设置分组 stagger 入场。全部走 guard 闸门，
+// reduced-motion / 关动效 时自动落终态，下游不感知具体动画库（gsap 经 ACL 全透明）。
+const pageEl = ref<any>(null);
+const pageRoot = computed<HTMLElement | null>(() => pageEl.value?.$el ?? null);
+usePageTransition(pageRoot);
+const contentEl = ref<any>(null);
+const settingsRoot = computed<HTMLElement | null>(() => contentEl.value?.$el ?? null);
+useScrollReveal(settingsRoot, { stagger: true });
 
 const configLoaded = ref(false);
 const indexStats = ref<IndexStats | null>(null);
@@ -669,15 +680,14 @@ async function handleBrowsePath(path: string[], field: FieldDef) {
   }
   const isFolder = field.key !== "file";
   const currentVal = String(getFieldValue(path) || "/");
-  const modal = await modalController.create({
+  const { openModal } = useModal();
+  const { data, role } = await openModal<{ path: string }>({
     component: FilePickerModal,
     componentProps: {
       mode: isFolder ? "folder" : "file",
       initialPath: currentVal,
     },
   });
-  await modal.present();
-  const { data, role } = await modal.onDidDismiss();
   if (role === "select" && data) {
     setFieldValue(path, data.path);
   }
@@ -743,57 +753,47 @@ function isFieldVisible(field: FieldDef): boolean {
 }
 
 async function handleClearCache() {
-  const alert = await alertController.create({
-    header: t("settings.clearCache"),
-    message: t("settings.clearCacheConfirm"),
-    buttons: [
-      { text: t("settings.cancel"), role: "cancel" },
-      {
-        text: t("settings.clear"),
-        role: "destructive",
-        handler: () => {
-          const themePref = localStorage.getItem("encv-theme-preference");
-          const serverPref = localStorage.getItem("encv-server-url");
-          const webdavPref = localStorage.getItem("encv-webdav-configs");
-          const localePref = localStorage.getItem("encv-locale");
-          localStorage.clear();
-          if (themePref) localStorage.setItem("encv-theme-preference", themePref);
-          if (serverPref) localStorage.setItem("encv-server-url", serverPref);
-          if (webdavPref) localStorage.setItem("encv-webdav-configs", webdavPref);
-          if (localePref) localStorage.setItem("encv-locale", localePref);
-          showToast({
-            message: t("settings.cacheCleared"),
-            duration: 1500,
-            color: "success",
-          });
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("settings.clearCache"),
+      message: t("settings.clearCacheConfirm"),
+      confirmText: t("settings.clear"),
+      danger: true,
+    })
+  ) {
+    const themePref = localStorage.getItem("encv-theme-preference");
+    const serverPref = localStorage.getItem("encv-server-url");
+    const webdavPref = localStorage.getItem("encv-webdav-configs");
+    const localePref = localStorage.getItem("encv-locale");
+    localStorage.clear();
+    if (themePref) localStorage.setItem("encv-theme-preference", themePref);
+    if (serverPref) localStorage.setItem("encv-server-url", serverPref);
+    if (webdavPref) localStorage.setItem("encv-webdav-configs", webdavPref);
+    if (localePref) localStorage.setItem("encv-locale", localePref);
+    showToast({
+      message: t("settings.cacheCleared"),
+      duration: 1500,
+      color: "success",
+    });
+  }
 }
 
 async function handleResetSettings() {
-  const alert = await alertController.create({
-    header: t("settings.resetSettings"),
-    message: t("settings.resetConfirm"),
-    buttons: [
-      { text: t("settings.cancel"), role: "cancel" },
-      {
-        text: t("settings.reset"),
-        role: "destructive",
-        handler: () => {
-          localStorage.clear();
-          showToast({
-            message: t("settings.settingsReset"),
-            duration: 1500,
-            color: "success",
-          });
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("settings.resetSettings"),
+      message: t("settings.resetConfirm"),
+      confirmText: t("settings.reset"),
+      danger: true,
+    })
+  ) {
+    localStorage.clear();
+    showToast({
+      message: t("settings.settingsReset"),
+      duration: 1500,
+      color: "success",
+    });
+  }
 }
 
 async function handleSaveConfig() {
@@ -975,8 +975,8 @@ watch(
   font-size: 12px;
 }
 .scope-synced {
-  --background: rgba(var(--ion-color-primary-rgb), 0.12);
-  --color: var(--ion-color-primary);
+  --background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  --color: var(--color-primary);
 }
 @media (max-width: 599px) {
   .scope-badge {
@@ -1005,17 +1005,17 @@ watch(
 .instance-info .instance-id {
   font-family: var(--ion-font-family-monospace, monospace);
   font-size: 11px;
-  background: var(--ion-color-light);
+  background: var(--color-base-200);
   padding: 1px 5px;
   border-radius: 3px;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 .instance-info .version-info {
   font-size: 11px;
   opacity: 0.7;
 }
 .connection-error-inline {
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   font-size: 12px;
 }
 .browse-btn {
@@ -1033,7 +1033,7 @@ watch(
   height: 100%;
 }
 .json-annotations {
-  border-bottom: 1px solid var(--ion-color-light);
+  border-bottom: 1px solid var(--color-base-200);
   max-height: 40%;
   overflow-y: auto;
   padding: 12px 16px;
@@ -1048,7 +1048,7 @@ watch(
   display: flex;
   flex-direction: column;
   padding: 4px 0;
-  border-bottom: 1px solid rgba(var(--ion-color-medium-rgb), 0.15);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-content) 15%, var(--color-base-100));
 }
 .annotation-item:last-child {
   border-bottom: none;
@@ -1056,7 +1056,7 @@ watch(
 .annotation-path {
   font-size: 12px;
   font-weight: 600;
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
   font-family: monospace;
 }
 .annotation-desc {
@@ -1088,8 +1088,8 @@ watch(
 }
 .json-error {
   padding: 8px 16px;
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
   font-size: 12px;
   font-family: monospace;
 }

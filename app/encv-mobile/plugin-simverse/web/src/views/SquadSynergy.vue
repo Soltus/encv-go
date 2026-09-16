@@ -1,0 +1,323 @@
+<template>
+  <ion-page>
+    <ion-header :translucent="true">
+      <ion-toolbar>
+        <ion-buttons slot="start">
+          <ion-back-button default-href="/tabs/world" />
+        </ion-buttons>
+        <ion-title>{{ t("simverse.squad") }}</ion-title>
+        <ion-buttons slot="end">
+          <button
+            type="button"
+            class="ui-button !text-sm !py-1 !px-3"
+            :class="!squadIds.length ? 'opacity-50 cursor-not-allowed' : ''"
+            :disabled="!squadIds.length"
+            @click="clearSquad"
+          >
+            {{ t("simverse.squadClear") }}
+          </button>
+        </ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+
+    <ion-content>
+      <div class="p-4 space-y-4">
+        <div v-if="loading" class="state-container">
+          <ion-spinner name="crescent" />
+          <p>{{ t("settings.loading") }}</p>
+        </div>
+
+        <template v-else>
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">
+              {{ t("simverse.squadSlots") }} ({{ squadIds.length }}/6)
+              </div>
+              <div class="slot-grid">
+                <div
+                  v-for="i in 6"
+                  :key="i"
+                  class="slot"
+                  :class="squadMembers[i - 1] ? 'filled' : 'empty'"
+                >
+                  <template v-if="squadMembers[i - 1]">
+                    <div class="slot-avatar">{{ initial(squadMembers[i - 1].name) }}</div>
+                    <div class="slot-name">{{ squadMembers[i - 1].name }}</div>
+                    <span class="ui-chip !text-xs !py-0.5" :class="archChipClass(deriveBuildFromNPC(squadMembers[i - 1]).primary)">
+                      {{ archLabel(deriveBuildFromNPC(squadMembers[i - 1]).primary) }}
+                    </span>
+                    <button
+                      type="button"
+                      class="text-xs text-error hover:underline mt-1"
+                      @click="removeFromSquad(squadMembers[i - 1].id)"
+                    >
+                      {{ t("simverse.squadRemove") }}
+                    </button>
+                  </template>
+                  <template v-else>
+                    <div class="slot-plus">+</div>
+                  </template>
+                </div>
+              </div>
+              <p v-if="!squadIds.length" class="hint">{{ t("simverse.squadEmpty") }}</p>
+            </div>
+          </div>
+
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.squadSynergy") }}</div>
+              <div class="space-y-1">
+                <div v-for="s in synergyResult" :key="s.key" class="flex items-center justify-between p-3 rounded-lg hover:bg-base-200 transition-colors">
+                  <div class="flex items-center gap-2">
+                    <span class="ui-chip !text-xs !py-0.5" :class="archChipClass(s.key)">
+                      {{ archLabel(s.key) }}
+                    </span>
+                    <span class="text-sm text-base-content/70"> ×{{ s.count }} · {{ t("simverse.synergyTier" + s.tier) }}</span>
+                  </div>
+                  <span class="text-xs text-success font-medium">{{ t("simverse.synergyActive") }}</span>
+                </div>
+              </div>
+              <p v-if="!synergyResult.length" class="hint">{{ t("simverse.synergyHint") }}</p>
+            </div>
+          </div>
+
+          <div class="ui-card">
+            <div class="p-3">
+              <div class="ui-header mb-2">{{ t("simverse.squadPick") }}</div>
+              <ion-searchbar v-model="filter" :placeholder="t('simverse.search')" />
+              <div class="space-y-1 max-h-96 overflow-y-auto">
+                <div
+                  v-for="npc in filteredPool" :key="npc.id" class="flex items-center gap-3 p-3 rounded-lg hover:bg-base-200 transition-colors"
+                  :class="{ 'opacity-50 pointer-events-none': isFull && !inSquad(npc.id) }"
+                >
+                  <div class="flex-1 min-w-0">
+                    <h3 class="text-sm font-semibold m-0 mb-1">{{ npc.name }}</h3>
+                    <p class="text-xs text-base-content/60 m-0">{{ npc.profession }} · Lv.{{ npc.level }}</p>
+                  </div>
+                  <span class="ui-chip !text-xs !py-0.5" :class="archChipClass(deriveBuildFromNPC(npc).primary)">
+                    {{ archLabel(deriveBuildFromNPC(npc).primary) }}
+                  </span>
+                  <button
+                    type="button"
+                    class="ui-button !text-xs !py-1 !px-3"
+                    :class="{ 'opacity-50 cursor-not-allowed': inSquad(npc.id) || isFull }"
+                    :disabled="inSquad(npc.id) || isFull"
+                    @click="addToSquad(npc.id)"
+                  >
+                    {{ inSquad(npc.id) ? "✓" : t("simverse.squadAdd") }}
+                  </button>
+                </div>
+              </div>
+              <p v-if="!filteredPool.length" class="hint">{{ t("simverse.squadFull") }}</p>
+            </div>
+          </div>
+        </template>
+      </div>
+    </ion-content>
+  </ion-page>
+</template>
+
+<script setup lang="ts">
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import {
+  IonBackButton,
+  IonContent,
+  IonHeader,
+  IonPage,
+  IonSearchbar,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import { type SimverseNPC, useSimverse } from "@/composables/useSimverse";
+import { type ArchetypeKey, deriveBuildFromNPC } from "@/game/builds";
+
+const { t } = useI18n();
+const router = useRouter();
+const { loadNPCList } = useSimverse();
+
+const SQUAD_KEY = "simverse:squad";
+const MAX_SQUAD = 6;
+
+const loading = ref(false);
+const pool = ref<SimverseNPC[]>([]);
+const squadIds = ref<number[]>([]);
+const filter = ref("");
+
+const isFull = computed(() => squadIds.value.length >= MAX_SQUAD);
+
+const squadMembers = computed(() =>
+  squadIds.value.map(id => pool.value.find(n => n.id === id)).filter((n): n is SimverseNPC => Boolean(n))
+);
+
+const squadBuilds = computed(() => squadMembers.value.map(m => deriveBuildFromNPC(m)));
+
+const synergyResult = computed(() => {
+  const counts = {} as Record<ArchetypeKey, number>;
+  (["warrior", "guardian", "scholar", "merchant", "artisan", "healer", "leader", "hermit", "rogue", "artist"] as ArchetypeKey[]).forEach(
+    a => (counts[a] = 0)
+  );
+  squadBuilds.value.forEach(b => {
+    counts[b.primary]++;
+  });
+  const out: { key: ArchetypeKey; count: number; tier: number }[] = [];
+  (Object.keys(counts) as ArchetypeKey[]).forEach(a => {
+    const c = counts[a];
+    if (c >= 2) out.push({ key: a, count: c, tier: c >= 6 ? 3 : c >= 4 ? 2 : 1 });
+  });
+  return out.sort((x, y) => y.count - x.count);
+});
+
+const filteredPool = computed(() => {
+  const q = filter.value.trim().toLowerCase();
+  return pool.value.filter(n => !q || (n.name || "").toLowerCase().includes(q)).slice(0, 80);
+});
+
+function inSquad(id: number): boolean {
+  return squadIds.value.includes(id);
+}
+function initial(name: string): string {
+  return String(name || "?").charAt(0);
+}
+function archLabel(key: ArchetypeKey): string {
+  return t(`simverse.build.${key}`);
+}
+const ARCH_CHIP_CLASS: Record<ArchetypeKey, string> = {
+  warrior: "!bg-error/15 !text-error !border-error/30",
+  guardian: "!bg-warning/15 !text-warning !border-warning/30",
+  scholar: "!bg-primary/15 !text-primary !border-primary/30",
+  merchant: "!bg-success/15 !text-success !border-success/30",
+  artisan: "!bg-tertiary/15 !text-tertiary !border-tertiary/30",
+  healer: "!bg-success/15 !text-success !border-success/30",
+  leader: "!bg-secondary/15 !text-secondary !border-secondary/30",
+  hermit: "!bg-base-content/15 !text-base-content/70 !border-base-content/20",
+  rogue: "!bg-base-content/15 !text-base-content/70 !border-base-content/20",
+  artist: "!bg-tertiary/15 !text-tertiary !border-tertiary/30",
+};
+function archChipClass(key: ArchetypeKey): string {
+  return ARCH_CHIP_CLASS[key] || "!bg-base-content/15 !text-base-content/70 !border-base-content/20";
+}
+
+function persist() {
+  try {
+    localStorage.setItem(SQUAD_KEY, JSON.stringify(squadIds.value));
+  } catch (e) {
+    console.warn("[simverse] squad persist failed:", e);
+  }
+}
+function loadSquad(): number[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(SQUAD_KEY) || "[]");
+    return Array.isArray(v) ? v.filter(x => typeof x === "number").slice(0, MAX_SQUAD) : [];
+  } catch {
+    return [];
+  }
+}
+
+function addToSquad(id: number) {
+  if (inSquad(id) || isFull.value) return;
+  squadIds.value = [...squadIds.value, id];
+  persist();
+}
+function removeFromSquad(id: number) {
+  squadIds.value = squadIds.value.filter(x => x !== id);
+  persist();
+}
+function clearSquad() {
+  squadIds.value = [];
+  persist();
+}
+function goNPC(id: number) {
+  router.push(`/npc/${id}`);
+}
+
+onMounted(async () => {
+  loading.value = true;
+  squadIds.value = loadSquad();
+  try {
+    const data = await loadNPCList(1, 200);
+    pool.value = data.items || [];
+  } catch (e) {
+    console.warn("[simverse] failed to load NPC list for squad:", e);
+  } finally {
+    loading.value = false;
+  }
+});
+</script>
+
+<style scoped lang="scss">
+.state-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  gap: 16px;
+}
+
+.slot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 8px 4px;
+}
+
+.slot {
+  border-radius: 12px;
+  padding: 10px 6px;
+  text-align: center;
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+
+  &.filled {
+    background: var(--color-base-200);
+    border: 1px solid var(--color-base-300);
+  }
+
+  &.empty {
+    border: 1px dashed var(--color-base-content);
+    color: var(--color-base-content);
+    opacity: 0.5;
+  }
+}
+
+.slot-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-primary-content);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.slot-name {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.slot-plus {
+  font-size: 28px;
+  font-weight: 300;
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--color-base-content);
+  opacity: 0.7;
+  padding: 4px 12px 10px;
+  margin: 0;
+}
+</style>

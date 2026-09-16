@@ -132,22 +132,20 @@
 </template>
 
 <script setup lang="ts">
-;
-
-import { DEFAULT_API_BASE_URL, getApiBaseUrl } from "@/api/encv";
-import ServerStatusCard from "@/components/ServerStatusCard.vue";
-import { type ProbeResult, useApiBaseProbe } from "@/composables/useApiBaseProbe";
-import { useI18n } from "@/composables/useI18n";
-import { useServerStatus } from "@/composables/useServerStatus";
 import {
-  refresh as refreshIcon,
-  search as searchIcon,
-  home as homeIcon,
-  globe as globeIcon,
   checkmark as checkmarkIcon,
   create as createIcon,
+  globe as globeIcon,
+  home as homeIcon,
+  refresh as refreshIcon,
+  search as searchIcon,
 } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";
+import { DEFAULT_API_BASE_URL, getApiBaseUrl } from "@encv/shared-components/api/encv";
+import ServerStatusCard from "@/components/ServerStatusCard.vue";
+import { type ProbeResult, useApiBaseProbe } from "@encv/shared-components/composables/useApiBaseProbe";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { useServerStatus } from "@encv/shared-components/composables/useServerStatus";
 
 const { t } = useI18n();
 const server = useServerStatus();
@@ -313,8 +311,8 @@ onMounted(async () => {
 .statusSublineUrl {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
-  background: var(--ion-color-light);
-  color: var(--ion-color-light-contrast, #000);
+  background: var(--color-base-200);
+  color: var(--color-base-content);
   padding: 2px 6px;
   border-radius: 4px;
   word-break: break-all;
@@ -324,13 +322,13 @@ onMounted(async () => {
   font-weight: 500;
   padding: 2px 8px;
   border-radius: 10px;
-  background: var(--ion-color-medium-tint, rgba(127, 127, 127, 0.15));
-  color: var(--ion-color-medium-shade, #74788c);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-white)));
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
 }
-.statusSourceTag_loopback { background: var(--ion-color-primary-tint); color: var(--ion-color-primary-shade); }
-.statusSourceTag_lan-candidate { background: var(--ion-color-success-tint); color: var(--ion-color-success-shade); }
-.statusSourceTag_current-origin { background: var(--ion-color-warning-tint); color: var(--ion-color-warning-shade); }
-.statusSourceTag_cached { background: var(--ion-color-medium-tint); color: var(--ion-color-medium-shade); }
+.statusSourceTag_loopback { background: color-mix(in srgb, var(--color-primary) 85%, var(--color-white)); color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black)); }
+.statusSourceTag_lan-candidate { background: color-mix(in srgb, var(--color-success) 85%, var(--color-white)); color: color-mix(in srgb, var(--color-success) 85%, var(--color-black)); }
+.statusSourceTag_current-origin { background: color-mix(in srgb, var(--color-warning) 85%, var(--color-white)); color: color-mix(in srgb, var(--color-warning) 85%, var(--color-black)); }
+.statusSourceTag_cached { background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-white)); color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black)); }
 
 /* ② 探测 / 重置按钮 */
 .actionRow {
@@ -354,8 +352,8 @@ onMounted(async () => {
 .sectionCount {
   margin-left: auto;
   font-size: 11px;
-  background: var(--ion-color-primary-tint);
-  color: var(--ion-color-primary-shade);
+  background: color-mix(in srgb, var(--color-primary) 85%, var(--color-white));
+  color: color-mix(in srgb, var(--color-primary) 85%, var(--color-black));
   padding: 1px 6px;
   border-radius: 8px;
   font-weight: 500;
@@ -381,14 +379,14 @@ onMounted(async () => {
   padding: 8px 12px;
   border: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.2));
   border-radius: 6px;
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   cursor: pointer;
   font: inherit;
   text-align: left;
   transition: background-color 0.15s ease;
 }
-.lanItem:hover { background: var(--ion-color-light); }
-.lanItem:focus-visible { outline: 2px solid var(--ion-color-primary); }
+.lanItem:hover { background: var(--color-base-200); }
+.lanItem:focus-visible { outline: 2px solid var(--color-primary); }
 .lanAddr {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
@@ -397,7 +395,7 @@ onMounted(async () => {
 }
 .lanUseIcon {
   font-size: 18px;
-  color: var(--ion-color-success);
+  color: var(--color-success);
   flex-shrink: 0;
 }
 
@@ -416,15 +414,15 @@ onMounted(async () => {
   padding: 8px 10px;
   border: 1px solid var(--encv-border-color, rgba(127, 127, 127, 0.3));
   border-radius: 6px;
-  background: var(--ion-background-color, #fff);
+  background: var(--ion-background-color, var(--color-white));
   color: var(--ion-text-color);
   outline: none;
   min-width: 0;
 }
-.manualInput:focus { border-color: var(--ion-color-primary); }
+.manualInput:focus { border-color: var(--color-primary); }
 .manualError {
   font-size: 12px;
-  color: var(--ion-color-danger);
+  color: var(--color-error);
   margin: 6px 0 0;
 }
 </style>

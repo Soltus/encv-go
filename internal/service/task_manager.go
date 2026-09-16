@@ -271,7 +271,8 @@ func (tm *TaskManager) tryAttachMount(task *MobileTask, sourcePath string, isTar
 }
 
 func NewTaskManager(servingDir string, cfg *config.Config, broadcaster Broadcaster) *TaskManager {
-	persistPath := filepath.Join(servingDir, ".encv-tasks.json")
+	// 续43 脉络：任务持久化是应用数据，落数据目录（config.AppDataDir），绝不进 servingDir（用户媒体根）。
+	persistPath := filepath.Join(config.AppDataDir("tasks"), ".encv-tasks.json")
 
 	tm := &TaskManager{
 		tasks:       make(map[string]*MobileTask),
@@ -304,7 +305,8 @@ func NewTaskManager(servingDir string, cfg *config.Config, broadcaster Broadcast
 }
 
 func NewTaskManagerWithStore(servingDir string, cfg *config.Config, broadcaster Broadcaster, store tasksystem.Store) *TaskManager {
-	persistPath := filepath.Join(servingDir, ".encv-tasks.json")
+	// 续43 脉络：任务持久化是应用数据，落数据目录（config.AppDataDir），绝不进 servingDir（用户媒体根）。
+	persistPath := filepath.Join(config.AppDataDir("tasks"), ".encv-tasks.json")
 
 	tm := &TaskManager{
 		tasks:       make(map[string]*MobileTask),

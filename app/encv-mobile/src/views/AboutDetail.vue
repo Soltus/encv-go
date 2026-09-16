@@ -123,21 +123,13 @@
 </template>
 
 <script setup lang="ts">
-import {
-  codeSlash,
-  informationCircle,
-  logoGithub,
-  openOutline,
-  videocamOutline,
-  warningOutline,
-} from "ionicons/icons";
-
-import { type BuildInfo, fetchBuildInfo } from "@/api/encv";
-import LibraryRow from "@/components/LibraryRow.vue";
-import { useI18n } from "@/composables/useI18n";
-import { type LibraryItem, useLibraries } from "@/composables/useLibraries";
+import { codeSlash, informationCircle, logoGithub, openOutline, videocamOutline, warningOutline } from "ionicons/icons";
 import { onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
+import { type BuildInfo, fetchBuildInfo } from "@encv/shared-components/api/encv";
+import LibraryRow from "@/components/LibraryRow.vue";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { type LibraryItem, useLibraries } from "@encv/shared-components/composables/useLibraries";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -214,7 +206,7 @@ function goFfmpegEngine() {
 }
 
 .ffmpeg-icon {
-  color: var(--ion-color-primary);
+  color: var(--color-primary);
 }
 
 .lib-title-row {
@@ -245,13 +237,13 @@ function goFfmpegEngine() {
 }
 
 .license-badge {
-  --background: rgba(var(--ion-color-danger-rgb), 0.12);
-  --color: var(--ion-color-danger);
+  --background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  --color: var(--color-error);
 }
 
 .version-badge {
-  --background: rgba(var(--ion-color-medium-rgb), 0.12);
-  --color: var(--ion-color-medium-shade);
+  --background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
+  --color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
 }
 
 .build-info-loading {

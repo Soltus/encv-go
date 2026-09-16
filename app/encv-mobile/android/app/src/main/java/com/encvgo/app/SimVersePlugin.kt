@@ -476,6 +476,7 @@ class SimVersePlugin : Plugin() {
         try {
             val worldId = call.getString("worldId") ?: "default"
             val worldName = call.getString("worldName") ?: "Default"
+            val themeCss = call.getString("themeCss") ?: ""
             val activity = this.activity ?: run {
                 val diag = runAutoDiagnosis("activity is null")
                 satError("OPEN-WORLD", "activity is null, $diag")
@@ -558,6 +559,7 @@ class SimVersePlugin : Plugin() {
                 "world_id" to worldId,
                 "world_name" to worldName,
                 "api_base_url" to getApiBaseUrl(ctx),
+                "theme_css" to themeCss,
             )
             val intent = EncvComboLiteHost.createProxyIntent(
                 context = activity,

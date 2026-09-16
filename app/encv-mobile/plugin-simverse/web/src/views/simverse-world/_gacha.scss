@@ -1,0 +1,600 @@
+// =============================================================================
+// 抽卡模块：抽卡页 / 抽卡弹窗 / 抽卡动画
+// -----------------------------------------------------------------------------
+// 横屏世界抽卡相关：
+//   - .gacha-banner / .banner-icon / .banner-text / .banner-title / .banner-desc
+//   - .gacha-actions / .gacha-action-btn / .action-icon / .action-name / .action-cost / .action-badge
+//   - .gacha-results / .results-header / .results-grid / .result-item.* 稀有度变体
+//   - .gacha-page / .gacha-banner-large / .banner-bg / .banner-content / .banner-icon-large
+//   - .sparkle-layer / .sparkle / .gacha-pool-info / .pool-rate / .rate-label / .rate-val
+//   - .gacha-actions-large / .gacha-big-btn / .btn-icon-large / .btn-name / .btn-cost / .btn-badge
+//   - .gacha-history / .history-list / .history-item / .hist-icon / .hist-name / .hist-rarity
+//   - .gacha-animation-overlay / .gacha-cards-container / .gacha-card-anim / .card-inner
+//     .card-front / .card-back / .gacha-item-* / .gacha-skip-btn
+//   - .gacha-modal-overlay / .gacha-modal-content / .gacha-modal-close
+//   - 转场：.gacha-flash-* / .gacha-modal-*
+// =============================================================================
+
+@use './tokens' as *;
+@use './mixins' as *;
+
+// —— 抽卡页内的小型 Banner（在面板内） ——
+.gacha-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(236, 72, 153, 0.2));
+  border-radius: 14px;
+  padding: 16px;
+  border: 1px solid $sv-border-active; 
+  margin-bottom: 14px;
+}
+
+.banner-icon {
+  font-size: 36px;
+  flex-shrink: 0;
+}
+
+.banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.banner-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: $sv-text-primary;
+  margin-bottom: 2px;
+}
+
+.banner-desc {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.4;
+}
+
+// —— 抽卡操作按钮（小尺寸） ——
+.gacha-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.gacha-action-btn {
+  position: relative;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  border-bottom: 4px solid rgba(0, 0, 0, 0.2);
+
+  &.single {
+    background: linear-gradient(135deg, $color-info, #6366f1); 
+  }
+
+  &.ten {
+    background: linear-gradient(135deg, $color-warning, $color-error);
+  }
+
+  &:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.1);
+  }
+
+  &:active {
+    transform: translateY(3px);
+    border-bottom-width: 1px;
+  }
+}
+
+.action-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.action-name {
+  flex: 1;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 700;
+  color: $sv-text-primary;
+}
+
+.action-cost {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+}
+
+.action-badge {
+  position: absolute;
+  top: -6px;
+  right: 12px;
+  background: #ffd700; 
+  color: #1a1a1a;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+// —— 抽卡结果展示 ——
+.gacha-results {
+  margin-top: 4px;
+}
+
+.results-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 10px;
+}
+
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+
+.result-item {
+  aspect-ratio: 3 / 4;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid $sv-border-subtle; 
+  animation: cardReveal 0.25s ease-out;
+  padding: 6px 4px;
+
+  .result-icon { font-size: 22px; }
+
+  .result-name {
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: center;
+    line-height: 1.2;
+  }
+
+  .result-rarity {
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  &.N .result-rarity   { color: #9ca3af; }
+  &.R .result-rarity   { color: $color-info; }
+  &.SR .result-rarity  { color: #a78bfa; }
+  &.SSR .result-rarity { color: #fbbf24; }
+  &.UR .result-rarity  { color: #f87171; }
+}
+
+// —— 抽卡全屏页 ——
+.gacha-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.gacha-banner-large {
+  position: relative;
+  height: 180px;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.banner-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #581c87 0%, #be185d 50%, #ea580c 100%); 
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.4) 100%);
+  }
+}
+
+.banner-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.banner-icon-large {
+  font-size: 48px;
+  // float 动画已迁移至 SimverseWorld.vue 的 GSAP bannerFloatTween
+}
+
+.banner-title-large {
+  font-size: 24px;
+  font-weight: 800;
+  color: $sv-text-primary;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+.banner-desc-large {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.sparkle-layer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  z-index: 1;
+}
+
+.sparkle {
+  position: absolute;
+  color: #fde68a; 
+  font-size: 14px;
+  transform-origin: center;
+}
+
+.gacha-pool-info {
+  display: flex;
+  justify-content: space-around;
+  background: rgba(0, 0, 0, 0.4); 
+  border: 1px solid $sv-border-subtle; 
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.pool-rate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.rate-label {
+  font-size: 11px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #eab308, #f97316); 
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.rate-val {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+// —— 抽卡大按钮 ——
+.gacha-actions-large {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.gacha-big-btn {
+  flex: 1;
+  border: none;
+  border-radius: 14px;
+  padding: 16px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  position: relative;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.single {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(139, 92, 246, 0.2));
+    border: 2px solid rgba(59, 130, 246, 0.4); 
+  }
+
+  &.ten {
+    background: linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(249, 115, 22, 0.2));
+    border: 2px solid rgba(234, 179, 8, 0.4); 
+  }
+
+  &:not(:disabled):hover {
+    transform: translateY(-2px);
+  }
+
+  &:not(:disabled):active {
+    transform: translateY(1px);
+  }
+}
+
+.btn-icon-large {
+  font-size: 28px;
+}
+
+.btn-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: $sv-text-primary;
+}
+
+.btn-cost {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.btn-badge {
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  background: linear-gradient(135deg, $color-error, #f97316); 
+  color: $sv-text-primary;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+// —— 抽卡历史 ——
+.gacha-history {
+  background: rgba(0, 0, 0, 0.4); 
+  border: 1px solid $sv-border-subtle; 
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.history-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 10px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.hist-icon {
+  font-size: 18px;
+}
+
+.hist-name {
+  flex: 1;
+  font-size: 12px;
+  color: $sv-text-primary;
+}
+
+.hist-rarity {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+
+  &.SSR { background: rgba(239, 68, 68, 0.2); color: $color-error; }
+  &.SR  { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+  &.R   { background: rgba(59, 130, 246, 0.2); color: $color-info; }
+  &.N   { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
+}
+
+// —— 抽卡动画 overlay ——
+.gacha-animation-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.9);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.gacha-cards-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  max-width: 360px;
+  padding: 20px;
+}
+
+.gacha-card-anim {
+  width: 80px;
+  height: 110px;
+  perspective: 1000px;
+
+  &.revealed {
+    animation: card-pop 0.2s ease-out forwards;
+
+    .card-inner {
+      transform: rotateY(180deg);
+    }
+  }
+
+  &.SSR .card-back {
+    border: 2px solid $color-error;
+    box-shadow: 0 0 20px $sv-glow-error; 
+  }
+
+  &.SR .card-back {
+    border: 2px solid #eab308;
+    box-shadow: 0 0 15px rgba(234, 179, 8, 0.4); 
+  }
+
+  &.R .card-back {
+    border: 2px solid $color-info;
+  }
+}
+
+.card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-front,
+.card-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.card-front {
+  background: linear-gradient(135deg, #1e1b4b, #312e81); 
+  border: 2px solid $sv-glow-primary; 
+}
+
+.card-back-icon {
+  font-size: 36px;
+  color: $sv-glow-primary; 
+}
+
+.card-back {
+  transform: rotateY(180deg);
+  background: linear-gradient(180deg, rgba(20, 20, 50, 0.95), rgba(30, 27, 75, 0.95));
+  padding: 8px;
+  text-align: center;
+}
+
+.gacha-item-icon {
+  font-size: 30px;
+}
+
+.gacha-item-name {
+  font-size: 10px;
+  color: $sv-text-primary;
+  font-weight: 600;
+}
+
+.gacha-item-rarity {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+
+  &.SSR { background: rgba(239, 68, 68, 0.3); color: #f87171; }
+  &.SR  { background: rgba(234, 179, 8, 0.3); color: #fde047; }
+  &.R   { background: rgba(59, 130, 246, 0.3); color: #93c5fd; }
+  &.N   { background: rgba(156, 163, 175, 0.3); color: #d1d5db; }
+}
+
+.gacha-skip-btn {
+  margin-top: 20px;
+  padding: 10px 30px;
+  background: $sv-border-subtle; 
+  border: 1px solid $sv-glow-primary; 
+  border-radius: 20px;
+  color: $sv-text-primary;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: $sv-glow-primary; 
+  }
+}
+
+// —— 抽卡弹窗（独立 modal） ——
+.gacha-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+}
+
+.gacha-modal-content {
+  width: 90%;
+  max-width: 500px;
+  max-height: 85%;
+  background: linear-gradient(180deg, #1a1033 0%, #0f0a1a 100%); 
+  border-radius: 20px;
+  padding: 20px;
+  position: relative;
+  border: 2px solid $sv-border-active; 
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.3), inset 0 0 60px rgba(139, 92, 246, 0.05); 
+  overflow-y: auto;
+}
+
+.gacha-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  cursor: pointer;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+  }
+}
+
+// —— 转场类（gacha-flash / gacha-modal）已迁移至 SimverseWorld.vue 的 GSAP ——
+
+// —— 装饰性 @keyframes（保留为 CSS：卡牌翻转/闪光等孤立装饰动画，无需时序控制） ——
+// spec 允许简单装饰动画保留 CSS，GSAP 仅接管需时序/联动的动效
+@keyframes cardReveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+// float @keyframes 已迁移至 SimverseWorld.vue 的 GSAP bannerFloatTween
+
+@keyframes card-pop {
+  0%   { opacity: 0; transform: scale(1.02); }
+  100% { opacity: 1; transform: scale(1); }
+}

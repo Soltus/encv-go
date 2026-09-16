@@ -1,13 +1,15 @@
 import Phaser from "phaser";
-import { TerrainGenerator, TerrainType, TERRAIN_COLORS } from "./TerrainGenerator";
-import { NPCSprite } from "./NPCSprite";
-import { BuildingSprite, BuildingType } from "./BuildingSprite";
-import { phaserEventBus, PHASER_EVENTS } from "./PhaserEventBus";
-import { EventEffectManager, type EventEffectType } from "./EventEffectManager";
-import { TerritoryRenderer, type OrgTerritory } from "./TerritoryRenderer";
-import { MiniMap } from "./MiniMap";
-import { DayNightCycle, type TimeOfDay } from "./DayNightCycle";
+import { gsap } from "gsap";
 import type { SimverseNPC } from "@/composables/useSimverse";
+import { BuildingSprite, type BuildingType } from "./BuildingSprite";
+import { ARCH_META, ARCHETYPES } from "./builds";
+import { DayNightCycle, type TimeOfDay } from "./DayNightCycle";
+import { EventEffectManager, type EventEffectType } from "./EventEffectManager";
+import { MiniMap } from "./MiniMap";
+import { NPCSprite } from "./NPCSprite";
+import { PHASER_EVENTS, phaserEventBus } from "./PhaserEventBus";
+import { TERRAIN_COLORS, TerrainGenerator, TerrainType } from "./TerrainGenerator";
+import { type OrgTerritory, TerritoryRenderer } from "./TerritoryRenderer";
 
 export class WorldScene extends Phaser.Scene {
   private terrainGenerator!: TerrainGenerator;
@@ -30,8 +32,25 @@ export class WorldScene extends Phaser.Scene {
   private miniMap!: MiniMap;
   private dayNightCycle!: DayNightCycle;
 
+  // 环境粒子（萤火/尘埃）：让空旷的世界持续有"呼吸感"，避免 HUD/世界发呆。
+  private ambientGfx!: Phaser.GameObjects.Graphics;
+  private ambientParticles: {
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    r: number;
+    baseAlpha: number;
+    phase: number;
+    speed: number;
+  }[] = [];
+
   private npcMoveTimer = 0;
-  private npcMoveInterval = 5000;
+  private npcMoveInterval = 3000;
+
+  private interactionGfx!: Phaser.GameObjects.Graphics;
+  private interactionTimer = 0;
+  private interactionEnabled = true;
 
   private isPinching = false;
   private initialPinchDistance = 0;
@@ -45,7 +64,7 @@ export class WorldScene extends Phaser.Scene {
   init(data: { seed?: number; mapWidth?: number; mapHeight?: number }): void {
     if (data.seed) this.worldSeed = data.seed;
     if (data.mapWidth) this.mapWidth = data.mapWidth;
-    if (data.mapHeight) data.mapHeight;
+    if (data.mapHeight) this.mapHeight = data.mapHeight;
   }
 
   preload(): void {}
@@ -64,24 +83,15 @@ export class WorldScene extends Phaser.Scene {
     this.dayNightCycle = new DayNightCycle(this, worldW, worldH);
     this.dayNightCycle.setCycleDuration(60000);
 
-    this.territoryRenderer = new TerritoryRenderer(
-      this,
-      this.terrainGenerator,
-      this.mapWidth,
-      this.mapHeight,
-      this.tileSize
-    );
+    this.territoryRenderer = new TerritoryRenderer(this, this.terrainGenerator, this.mapWidth, this.mapHeight, this.tileSize);
     this.createSampleTerritories();
 
     this.eventEffectManager = new EventEffectManager(this);
 
-    this.miniMap = new MiniMap(
-      this,
-      this.terrainGenerator,
-      this.mapWidth,
-      this.mapHeight,
-      this.tileSize
-    );
+    this.interactionGfx = this.add.graphics();
+    this.interactionGfx.setDepth(5);
+
+    this.miniMap = new MiniMap(this, this.terrainGenerator, this.mapWidth, this.mapHeight, this.tileSize);
 
     this.cameras.main.on("camerazoomupdate", () => {
       this.miniMap.updateViewport();
@@ -90,6 +100,10 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.on("camerascroll", () => {
       this.miniMap.updateViewport();
     });
+
+    this.createLegend();
+    this.createVignette();
+    this.createAmbientParticles();
 
     this.setupKeyboardShortcuts();
 
@@ -104,11 +118,7 @@ export class WorldScene extends Phaser.Scene {
     const orgColors = [0x8b5cf6, 0xec4899, 0xf59e0b, 0x06b6d4, 0x22c55e];
     const orgNames = ["紫月王国", "玫瑰联盟", "金阳帝国", "碧海商会", "翠林部落"];
 
-    const settlements = this.terrainGenerator.findSettlementLocations(
-      this.mapWidth,
-      this.mapHeight,
-      5
-    );
+    const settlements = this.terrainGenerator.findSettlementLocations(this.mapWidth, this.mapHeight, 5);
 
     const territories: OrgTerritory[] = settlements.map((s, i) => ({
       id: `org_${i}`,
@@ -187,29 +197,32 @@ export class WorldScene extends Phaser.Scene {
       return Math.max(0, Math.min(1, adjusted));
     };
 
-    return (
-      (Math.floor(adjust(r) * 255) << 16) |
-      (Math.floor(adjust(g) * 255) << 8) |
-      Math.floor(adjust(b) * 255)
-    );
+    return (Math.floor(adjust(r) * 255) << 16) | (Math.floor(adjust(g) * 255) << 8) | Math.floor(adjust(b) * 255);
   }
 
   private createBuildings(): void {
-    const settlements = this.terrainGenerator.findSettlementLocations(
-      this.mapWidth,
-      this.mapHeight,
-      15
-    );
+    const settlements = this.terrainGenerator.findSettlementLocations(this.mapWidth, this.mapHeight, 15);
 
     const villageNames = [
-      "橡树村", "河边镇", "山谷村", "麦田村", "青石镇",
-      "松柏林", "湖畔村", "风车镇", "玫瑰村", "晨曦镇",
-      "雾灵山", "月光村", "艳阳镇", "丰收村", "清泉镇",
+      "橡树村",
+      "河边镇",
+      "山谷村",
+      "麦田村",
+      "青石镇",
+      "松柏林",
+      "湖畔村",
+      "风车镇",
+      "玫瑰村",
+      "晨曦镇",
+      "雾灵山",
+      "月光村",
+      "艳阳镇",
+      "丰收村",
+      "清泉镇",
     ];
 
     settlements.forEach((settlement, index) => {
-      const type: BuildingType =
-        settlement.size >= 3 ? "city" : settlement.size === 2 ? "village" : "village";
+      const type: BuildingType = settlement.size >= 3 ? "city" : settlement.size === 2 ? "village" : "village";
       const name = villageNames[index % villageNames.length];
 
       const sprite = new BuildingSprite(
@@ -291,11 +304,7 @@ export class WorldScene extends Phaser.Scene {
 
     this.input.on("wheel", (pointer: Phaser.Input.Pointer, gameObjects: any[], deltaX: number, deltaY: number) => {
       const zoomFactor = deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Phaser.Math.Clamp(
-        this.cameras.main.zoom * zoomFactor,
-        this.minZoom,
-        this.maxZoom
-      );
+      const newZoom = Phaser.Math.Clamp(this.cameras.main.zoom * zoomFactor, this.minZoom, this.maxZoom);
 
       const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
       this.cameras.main.zoom = newZoom;
@@ -345,11 +354,7 @@ export class WorldScene extends Phaser.Scene {
     if (this.initialPinchDistance === 0) return;
 
     const zoomRatio = currentDistance / this.initialPinchDistance;
-    const newZoom = Phaser.Math.Clamp(
-      this.initialZoom * zoomRatio,
-      this.minZoom,
-      this.maxZoom
-    );
+    const newZoom = Phaser.Math.Clamp(this.initialZoom * zoomRatio, this.minZoom, this.maxZoom);
 
     const worldPoint = this.cameras.main.getWorldPoint(this.pinchMidpoint.x, this.pinchMidpoint.y);
     this.cameras.main.zoom = newZoom;
@@ -358,11 +363,8 @@ export class WorldScene extends Phaser.Scene {
 
   private setupKeyboardShortcuts(): void {
     this.input.keyboard?.on("keydown-SPACE", () => {
-      this.cameras.main.centerOn(
-        (this.mapWidth * this.tileSize) / 2,
-        (this.mapHeight * this.tileSize) / 2
-      );
-      this.cameras.main.setZoom(0.5);
+      // GSAP 驱动的镜头回退：与 returnToWorldView 一致，键盘快捷键也走平滑过渡
+      this.returnToWorldView();
     });
 
     this.input.keyboard?.on("keydown-M", () => {
@@ -393,12 +395,151 @@ export class WorldScene extends Phaser.Scene {
     this.input.keyboard?.on("keydown-FOUR", () => {
       this.dayNightCycle.setTimeOfDay("night");
     });
+
+    this.input.keyboard?.on("keydown-I", () => {
+      this.interactionEnabled = !this.interactionEnabled;
+      if (!this.interactionEnabled && this.interactionGfx) {
+        this.interactionGfx.clear();
+      }
+    });
+
+    this.input.keyboard?.on("keydown-L", () => {
+      this.toggleLegend();
+    });
+  }
+
+  // 流派图例：固定在左上角（不随相机缩放/平移），帮助识别彩色头像对应的流派。
+  // 按 L 键开关。
+  private legend?: Phaser.GameObjects.Container;
+  private legendVisible = true;
+
+  private createLegend(): void {
+    const c = this.add.container(14, 14);
+    c.setScrollFactor(0);
+    c.setDepth(1000);
+    c.setAlpha(0.92);
+
+    const rowH = 18;
+    const title = this.add.text(0, 0, "流派图例", {
+      fontSize: "11px",
+      color: "#ffffff",
+      fontStyle: "bold",
+    });
+    title.setShadow(0, 1, "#000000", 3);
+    c.add(title);
+
+    ARCHETYPES.forEach((key, i) => {
+      const meta = ARCH_META[key];
+      const y = 20 + i * rowH;
+      const dot = this.add.circle(9, y + 8, 7, meta.color).setStrokeStyle(1, 0xffffff, 0.85);
+      const em = this.add.text(9, y + 8, meta.emoji, { fontSize: "10px" }).setOrigin(0.5);
+      const label = this.add.text(22, y + 3, meta.name, {
+        fontSize: "11px",
+        color: "#ffffff",
+      });
+      label.setShadow(0, 1, "#000000", 3);
+      c.add([dot, em, label]);
+    });
+
+    const totalH = 20 + ARCHETYPES.length * rowH + 6;
+    const bg = this.add.graphics();
+    bg.fillStyle(0x000000, 0.45);
+    bg.fillRoundedRect(-6, -4, 86, totalH, 8);
+    c.addAt(bg, 0);
+
+    this.legend = c;
+  }
+
+  private toggleLegend(): void {
+    if (!this.legend) return;
+    this.legendVisible = !this.legendVisible;
+    this.legend.setVisible(this.legendVisible);
+  }
+
+  // 暗角（vignette）叠加：给平坦的地形瓦片增加空间纵深感，缓解"辣眼睛"的平铺感。
+  // 固定不随相机移动，置于图例之下。
+  private createVignette(): void {
+    const w = this.scale.width || 800;
+    const h = this.scale.height || 600;
+    const key = "world-vignette";
+    if (this.textures.exists(key)) this.textures.remove(key);
+
+    const canvasTex = this.textures.createCanvas(key, w, h);
+    if (!canvasTex) return;
+
+    const ctx = canvasTex.getContext();
+    const grd = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.75);
+    grd.addColorStop(0, "rgba(0,0,0,0)");
+    grd.addColorStop(1, "rgba(0,0,0,0.35)");
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, w, h);
+    canvasTex.refresh();
+
+    this.add.image(0, 0, key).setOrigin(0).setScrollFactor(0).setDepth(900);
+  }
+
+  // 环境粒子（萤火/尘埃）：在世界空间持续缓缓漂浮、明灭，给空旷地图注入"活着"的呼吸感。
+  private createAmbientParticles(): void {
+    const worldW = this.mapWidth * this.tileSize;
+    const worldH = this.mapHeight * this.tileSize;
+
+    this.ambientGfx = this.add.graphics();
+    this.ambientGfx.setDepth(1);
+
+    const count = 90;
+    for (let i = 0; i < count; i++) {
+      this.ambientParticles.push({
+        x: Math.random() * worldW,
+        y: Math.random() * worldH,
+        vx: (Math.random() - 0.5) * 6,
+        vy: -4 - Math.random() * 8,
+        r: 1 + Math.random() * 2,
+        baseAlpha: 0.12 + Math.random() * 0.35,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.5 + Math.random() * 1.5,
+      });
+    }
+  }
+
+  private updateAmbientParticles(delta: number): void {
+    if (!this.ambientGfx) return;
+    const dt = delta / 1000;
+    const worldW = this.mapWidth * this.tileSize;
+    const worldH = this.mapHeight * this.tileSize;
+
+    this.ambientGfx.clear();
+    for (const p of this.ambientParticles) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.phase += dt * p.speed;
+
+      if (p.y < -10) {
+        p.y = worldH + 10;
+        p.x = Math.random() * worldW;
+      }
+      if (p.x < -10) p.x = worldW + 10;
+      if (p.x > worldW + 10) p.x = -10;
+
+      const a = p.baseAlpha * (0.5 + 0.5 * Math.sin(p.phase));
+      this.ambientGfx.fillStyle(0xffe9a8, a);
+      this.ambientGfx.fillCircle(p.x, p.y, p.r);
+    }
+  }
+
+  setNPCBehaviors(behaviors: Map<number, string>): void {
+    this.npcSprites.forEach(sprite => {
+      const id = sprite.getNPCData().id;
+      const cn = behaviors.get(id);
+      if (cn !== undefined) {
+        sprite.setBehavior(cn);
+      }
+    });
   }
 
   setNPCs(npcs: SimverseNPC[]): void {
     const worldCenterX = (this.mapWidth * this.tileSize) / 2;
     const worldCenterY = (this.mapHeight * this.tileSize) / 2;
-    const spread = (Math.min(this.mapWidth, this.mapHeight) * this.tileSize) * 0.4;
+    const spread = Math.min(this.mapWidth, this.mapHeight) * this.tileSize * 0.4;
 
     const displayNPCs = npcs.slice(0, this.maxVisibleNPCs);
 
@@ -414,9 +555,11 @@ export class WorldScene extends Phaser.Scene {
         sprite.setVisible(true);
         sprite.setActive(true);
         sprite.setPosition(x, y);
+        sprite.setDepth(10);
         sprite.updateNPC(npc);
       } else {
         sprite = new NPCSprite(this, x, y, npc);
+        sprite.setDepth(10);
         this.add.existing(sprite);
         this.npcPool.push(sprite);
 
@@ -439,6 +582,8 @@ export class WorldScene extends Phaser.Scene {
     this.updateNPCLOD();
     this.miniMap.updateNPCs(this.npcSprites);
     this.miniMap.updateBuildings(this.buildingSprites);
+    // 同步领土到小地图（紫色描边圆圈），让玩家看到组织分布
+    this.miniMap.updateTerritories(this.territoryRenderer.getTerritories());
   }
 
   private updateNPCLOD(): void {
@@ -448,7 +593,7 @@ export class WorldScene extends Phaser.Scene {
     if (zoom > 0.8) lodLevel = "full";
     else if (zoom > 0.5) lodLevel = "medium";
 
-    this.npcSprites.forEach((sprite) => {
+    this.npcSprites.forEach(sprite => {
       sprite.setLODLevel(lodLevel);
     });
   }
@@ -462,9 +607,9 @@ export class WorldScene extends Phaser.Scene {
       const worldW = this.mapWidth * this.tileSize;
       const worldH = this.mapHeight * this.tileSize;
 
-      this.npcSprites.forEach((sprite) => {
+      this.npcSprites.forEach(sprite => {
         if (!sprite.visible || !sprite.active || sprite.isMoving()) return;
-        if (Math.random() > 0.3) return;
+        if (Math.random() > 0.5) return;
 
         const moveRange = 100;
         let newX = sprite.x + (Math.random() - 0.5) * moveRange * 2;
@@ -484,7 +629,50 @@ export class WorldScene extends Phaser.Scene {
     this.dayNightCycle.update(delta);
     this.eventEffectManager.update(delta);
     this.updateNPCMovements(delta);
+    this.updateAmbientParticles(delta);
     this.miniMap.updateViewport();
+
+    this.interactionTimer += delta;
+    if (this.interactionTimer >= 800) {
+      this.interactionTimer = 0;
+      this.drawInteractions();
+    }
+  }
+
+  // NPC 间交互事件流：把处于社交/交易等互动行为的 NPC 用连线可视化
+  private drawInteractions(): void {
+    if (!this.interactionGfx) return;
+    this.interactionGfx.clear();
+    if (!this.interactionEnabled) return;
+
+    const social: NPCSprite[] = [];
+    for (const s of this.npcSprites) {
+      if (!s.visible || !s.active) continue;
+      const b = s.getBehaviorCN();
+      if (b && (b.includes("社交") || b.includes("交易") || b.includes("会谈") || b.includes("恋爱"))) {
+        social.push(s);
+      }
+    }
+
+    const maxLines = 60;
+    const maxDist = 150;
+    let drawn = 0;
+    for (let i = 0; i < social.length && drawn < maxLines; i++) {
+      for (let j = i + 1; j < social.length && drawn < maxLines; j++) {
+        const a = social[i];
+        const c = social[j];
+        const d = Phaser.Math.Distance.Between(a.x, a.y, c.x, c.y);
+        if (d <= maxDist) {
+          const alpha = 0.5 * (1 - d / maxDist);
+          this.interactionGfx.lineStyle(1.5, 0x60a5fa, alpha);
+          this.interactionGfx.beginPath();
+          this.interactionGfx.moveTo(a.x, a.y);
+          this.interactionGfx.lineTo(c.x, c.y);
+          this.interactionGfx.strokePath();
+          drawn++;
+        }
+      }
+    }
   }
 
   getZoom(): number {
@@ -496,11 +684,51 @@ export class WorldScene extends Phaser.Scene {
   }
 
   centerOnNPC(npcId: number): void {
-    const sprite = this.npcSprites.find((s) => s.getNPCData().id === npcId);
+    const sprite = this.npcSprites.find(s => s.getNPCData().id === npcId);
     if (sprite) {
-      this.cameras.main.centerOn(sprite.x, sprite.y);
-      this.cameras.main.setZoom(1.2);
+      // GSAP 驱动的镜头推近：平滑居中到 NPC + 放大缩放
+      // 与 UI 侧 useSceneTransition.transitionToScene() 配合，构成"world → focus"镜头转场
+      this.smoothCenterOn(this.cameras.main, sprite.x, sprite.y, 800);
+      this.smoothZoom(this.cameras.main, 1.5, 600);
     }
+  }
+
+  /**
+   * 返回世界俯瞰视角：GSAP 驱动的镜头回退（居中世界中心 + 缩放回 1.0）。
+   * 用于 focus HUD 场景退回 world，与 UI 侧 useSceneTransition 同步触发。
+   */
+  returnToWorldView(): void {
+    const worldCenterX = (this.mapWidth * this.tileSize) / 2;
+    const worldCenterY = (this.mapHeight * this.tileSize) / 2;
+    this.smoothCenterOn(this.cameras.main, worldCenterX, worldCenterY, 800);
+    this.smoothZoom(this.cameras.main, 1.0, 600);
+  }
+
+  /**
+   * GSAP 驱动的相机平滑居中：替代 Phaser 默认的 camera.centerOn()，
+   * 提供 power3.inOut 缓动以匹配 encv-mobile 的 GSAP 动效基调。
+   */
+  private smoothCenterOn(camera: Phaser.Cameras.Scene2D.Camera, x: number, y: number, duration: number = 800): void {
+    gsap.to(camera, {
+      scrollX: x - camera.width / 2,
+      scrollY: y - camera.height / 2,
+      duration: duration / 1000,
+      ease: "power3.inOut",
+      overwrite: "auto",
+    });
+  }
+
+  /**
+   * GSAP 驱动的相机平滑缩放：替代 Phaser 默认的 camera.zoomTo()/setZoom()，
+   * 提供 power2.inOut 缓动。覆盖 auto 避免与 wheel/pinch 即时缩放叠加冲突。
+   */
+  private smoothZoom(camera: Phaser.Cameras.Scene2D.Camera, zoom: number, duration: number = 600): void {
+    gsap.to(camera, {
+      zoom: zoom,
+      duration: duration / 1000,
+      ease: "power2.inOut",
+      overwrite: "auto",
+    });
   }
 
   getDayNightCycle(): DayNightCycle {

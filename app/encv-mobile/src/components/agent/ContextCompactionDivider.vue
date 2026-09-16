@@ -8,7 +8,7 @@
     - 中间一行小字 "上下文已自动压缩"，两侧各有 1px 渐变线
     - 不可点击 / 不可展开（区别于 CollapsedMessageToggle）
     - 暗黑模式自适应：line 颜色用 CSS 变量 + 透明度，文字颜色用
-      --ion-color-medium 跟随主题
+      --color-base-content 跟随主题
     - 不使用 ion-icon，避免 Shadow DOM 嵌套在深色模式下的渲染
       不一致问题（参见项目 rules §六）
     - 渲染成 inline-flex 而不是 block，让它与左右消息气泡
@@ -43,7 +43,7 @@ defineProps<{ text: string }>();
   background: linear-gradient(
     to right,
     transparent 0%,
-    rgba(var(--ion-color-medium-rgb), 0.35) 100%
+    color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 35%, transparent) 100%
   );
 }
 
@@ -51,19 +51,19 @@ defineProps<{ text: string }>();
   background: linear-gradient(
     to left,
     transparent 0%,
-    rgba(var(--ion-color-medium-rgb), 0.35) 100%
+    color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 35%, transparent) 100%
   );
 }
 
 .ctx-compaction__text {
   flex: 0 0 auto;
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   letter-spacing: 0.4px;
   white-space: nowrap;
   /* 与文字的同色系半透明背景，让分隔线在视觉上不"飘" */
   padding: 2px 8px;
   border-radius: 10px;
-  background: rgba(var(--ion-color-medium-rgb), 0.06);
+  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 6%, transparent);
 }
 </style>

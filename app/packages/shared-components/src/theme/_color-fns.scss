@@ -1,0 +1,21 @@
+// 仅保留「运行时」令牌派生（消费 var()），服务于所有主题统一的运行时回退层。
+//
+// 续35：编译期主题调色板（_theme-palette.scss）已删除——主题 = 声明式数据资产，
+// 官方与第三方同待遇，任何主题都不应在 SCSS 编译期被烘焙（见 THEME_DEV.md §6.9）。
+// 因此本文件不再提供 compiled-tint / compiled-neutral / shade 等「编译期」函数。
+
+// ── 令牌引用：css-var('color','primary') => var(--color-primary) ──
+@function css-var($group, $name) {
+  @return unquote('var(--#{$group}-#{$name})');
+}
+
+// ── 运行时 tint（消费 var()，供任意主题运行时换肤的回退层）──
+// 输出：color-mix(in srgb, var(--color-#{$c}) #{$pct}, var(--color-#{$base}))
+@function runtime-tint($color-token, $pct, $base-token) {
+  @return unquote('color-mix(in srgb, #{css-var('color', $color-token)} #{$pct}, #{css-var('color', $base-token)})');
+}
+
+// ── 运行时中性半透明表面（消费 var()，回退层）──
+@function runtime-neutral($pct) {
+  @return unquote('color-mix(in srgb, color-mix(in srgb, #{css-var('color', 'base-content')} 50%, #{css-var('color', 'base-100')}) #{$pct}, transparent)');
+}

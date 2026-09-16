@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { proxySafeEncode } from "@/api/encv";
+import { proxySafeEncode } from "@encv/shared-components/api/encv";
 
 function decodeDouble(raw: string): string {
   try {

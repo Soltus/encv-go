@@ -22,7 +22,18 @@
 </template>
 
 <script setup lang="ts">
-import { IonPage, IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonButton, IonIcon, IonContent, IonSpinner } from "@ionic/vue";
+import {
+  IonBackButton,
+  IonButton,
+  IonButtons,
+  IonContent,
+  IonHeader,
+  IonIcon,
+  IonPage,
+  IonSpinner,
+  IonTitle,
+  IonToolbar,
+} from "@ionic/vue";
 import { save as saveIcon } from "ionicons/icons";
 import { useI18n } from "../../composables/useI18n";
 
@@ -45,8 +56,8 @@ const { t } = useI18n();
 const resetText = props.resetText || t("settings.undo");
 
 const emit = defineEmits<{
-  (e: "save"): void
-  (e: "reset"): void
+  (e: "save"): void;
+  (e: "reset"): void;
 }>();
 
 function onSave() {

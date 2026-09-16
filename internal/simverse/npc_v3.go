@@ -263,7 +263,7 @@ func GenerateNPCV3(id uint64, rng *rand.Rand) *NPCV3 {
 		Skills:         skills,
 		Inventory:      inventory,
 		Bank:           bank,
-		OrgID:          0,
+		OrgID:          uint32(prof)%OrgMax + 1,
 		RegionID:       uint32(id % 100),
 		HomeRegionID:   uint32(id % 100),
 		BornAt:         0,

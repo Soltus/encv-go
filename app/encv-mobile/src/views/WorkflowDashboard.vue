@@ -174,21 +174,15 @@
 </template>
 
 <script setup lang="ts">
-import {
-  addCircleOutline,
-  closeCircleOutline,
-  playCircleOutline,
-  trashOutline,
-} from "ionicons/icons";
-
-import { generateMockFilesViaBackend, resetMockFilesViaBackend } from "@/api/mockGenerator";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
-import { useWorkflowStore } from "@/composables/useWorkflowStore";
-import { useWorkflowTaskService } from "@/composables/useWorkflowTaskService";
-import { MOCK_GENERATE_ROOT } from "@/lib/mockConstants";
-import type { JobRun, StepRun, UnifiedRunRecord, WorkflowDefinition, WorkflowRun } from "@/lib/workflow/types";
+import { addCircleOutline, closeCircleOutline, playCircleOutline, trashOutline } from "ionicons/icons";
 import { computed, onMounted, onUnmounted, ref } from "vue";
+import { generateMockFilesViaBackend, resetMockFilesViaBackend } from "@encv/shared-components/api/mockGenerator";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import { useWorkflowStore } from "@encv/shared-components/composables/useWorkflowStore";
+import { useWorkflowTaskService } from "@encv/shared-components/composables/useWorkflowTaskService";
+import { MOCK_GENERATE_ROOT } from "@encv/shared-components/lib/mockConstants";
+import type { JobRun, StepRun, UnifiedRunRecord, WorkflowDefinition, WorkflowRun } from "@encv/shared-components/lib/workflow/types";
 
 const { t } = useI18n();
 
@@ -504,21 +498,21 @@ const BUILTIN_TEMPLATES: WorkflowDefinition[] = [
 <style scoped>
 .section-hint {
   font-size: 12px;
-  color: var(--ion-color-medium-shade);
+  color: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 85%, var(--color-black));
   padding: 8px 16px 4px;
   margin: 0;
 }
 .mock-root-path {
   font-family: monospace;
   font-size: 12px;
-  background: var(--ion-color-light-shade);
+  background: color-mix(in srgb, var(--color-base-200) 85%, var(--color-black));
   padding: 2px 6px;
   border-radius: 4px;
 }
 .mock-stats-card {
   margin: 8px 16px;
   padding: 12px 16px;
-  background: var(--ion-color-light);
+  background: var(--color-base-200);
   border-radius: 8px;
 }
 .stat-row {
@@ -531,7 +525,7 @@ const BUILTIN_TEMPLATES: WorkflowDefinition[] = [
 .stat-value { font-weight: 600; font-family: monospace; }
 .progress-text {
   font-size: 12px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   padding: 4px 16px;
   font-family: monospace;
 }

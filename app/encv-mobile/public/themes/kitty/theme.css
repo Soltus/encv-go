@@ -1,0 +1,90 @@
+/* =============================================================================
+ * 全能力示例主题资源包：Kitty —— 「真主题」能力的完整证明（非官方，builtIn=false）
+ *
+ * 本主题存在的意义：把「Hello Kitty 主题怎么实现」从口头承诺变成可运行的产物。
+ * 它同时行使真主题的四类能力，全部无需编译期支持、全部随资源包分发：
+ *   1) 令牌快捷层        —— 改色 / 形状 / 密度 / 立体感（懒人层，最不重要的一层）；
+ *   2) 自有图片资源      —— url("./assets/bg.svg") / sticker.svg（相对本 CSS 解析到资源包）；
+ *   3) 自有字体族        —— @font-face（此处用 local() 回退栈，作者可换成 assets/*.woff2）；
+ *   4) 用真实选择器装饰  —— [data-theme="kitty"] .ui-panel::before 贴纸、body 背景图案。
+ * 另配 theme.js（mount/unmount）挂运行时装饰，见同目录 theme.js。
+ *
+ * 与官方主题【同形态、同加载机制】，仅 builtIn=false（可卸载、LRU 回收）。
+ * ========================================================================== */
+
+/* 自有字体族：主题可携带 @font-face。为避免示例引入二进制字体文件，这里用 local()
+   回退栈演示「主题声明并使用自有字体族」的机制；真皮肤可改为 url("./assets/cute.woff2")。 */
+@font-face {
+  font-family: "KittyCute";
+  font-display: swap;
+  src: local("Comic Sans MS"), local("Chalkboard SE"), local("Segoe Print"), local("PingFang SC");
+}
+
+[data-theme="kitty"] {
+  color-scheme: light;
+
+  /* 1) 令牌快捷层：粉调 */
+  --color-primary: #ff5fa2;
+  --color-primary-content: #ffffff;
+  --color-secondary: #ffb3d1;
+  --color-secondary-content: #7a1140;
+  --color-accent: #ff8fab;
+  --color-accent-content: #ffffff;
+  --color-neutral: #7a1140;
+  --color-neutral-content: #fff0f6;
+  --color-base-100: #fff5fa;
+  --color-base-200: #ffe6f0;
+  --color-base-300: #ffc2dc;
+  --color-base-content: #5c0d33;
+  --color-info: #38bdf8;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-error: #fb7185;
+
+  /* 形状语言：极圆润 */
+  --radius-selector: 1.75rem;
+  --radius-field: 1rem;
+  --radius-box: 1.75rem;
+  --radius-pill: 9999px;
+  --radius-mono: 8px;
+
+  /* 密度：宽松可爱 */
+  --density: 1.08;
+
+  /* 立体感：柔粉阴影 */
+  --elevation-chip-hover: 0 6px 16px -3px rgb(255 95 162 / 0.32);
+  --elevation-panel-overlay: 0 14px 36px -12px rgb(92 13 51 / 0.22);
+  --lift-hover: -3px;
+  --press-scale: 0.95;
+
+  /* 焦点环：粉色宽柔 */
+  --ring-focus: 0 0 0 4px color-mix(in srgb, var(--color-primary) 34%, transparent);
+
+  /* 动效：明显回弹 */
+  --motion-ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 3) 自有字体族落地：整主题换用 KittyCute。 */
+[data-theme="kitty"] body {
+  font-family: "KittyCute", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  /* 2) 自有图片资源：背景碎花点纹（相对本 CSS 解析到 ./assets/bg.svg）。 */
+  background-image: url("./assets/bg.svg");
+  background-repeat: repeat;
+  background-blend-mode: soft-light;
+}
+
+/* 4) 用真实选择器装饰：面板右上角「贴」一枚自带贴纸（Hello Kitty 式贴装饰即此机制）。 */
+[data-theme="kitty"] .ui-panel {
+  position: relative;
+}
+[data-theme="kitty"] .ui-panel::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  right: 10px;
+  width: 28px;
+  height: 24px;
+  background: url("./assets/sticker.svg") center / contain no-repeat;
+  pointer-events: none;
+  z-index: 2;
+}

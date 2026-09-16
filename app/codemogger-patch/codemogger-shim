@@ -1,0 +1,425 @@
+#!/usr/bin/env bash
+#
+# codemogger auto-reindex shim
+#
+# Transparent wrapper around the real `codemogger` CLI. Before any *read*
+# query (references / context / search) it runs an incremental `index` of the
+# relevant codebase so the agent never sees stale data and never has to
+# "remember" to re-index. Freshness is enforced at the tool layer, not by
+# agent discipline.
+#
+# Installed by apply.sh over the `codemogger` entrypoint. The real CLI is the
+# bundled `dist/cli.mjs`; this shim just calls it (no recursion).
+#
+# Env overrides:
+#   CODEMOGGER_NO_AUTOINDEX=1   disable auto-reindex (pass-through only)
+#   CODEMOGGER_CLI=<path>       explicit path to the real dist/cli.mjs
+#
+# --- UX pitfall mitigations layered on top of `references` -------------------
+#   坑1 (symbol-name exact match): `references <sym>` is an exact match on the
+#        imported symbol name. Guessing the wrong name yields "No imports found"
+#        (e.g. the real export is `useRunSummariesSingleton`, not
+#         `useRunSummaries`; `lib/taskTypeLabel.ts` exports `getTaskTypeLabel`,
+#         not `taskTypeLabel`). Mitigation: when a bare `references <sym>` finds
+#         nothing AND a file named `<sym>.{ts,tsx,vue}` exists under the
+#         codebase root, re-query with `--module "@/<relpath>"` (module-level
+#         match is name-agnostic and catches every importer). The assumption is
+#         that the `@/` alias root equals the codebase root (true for
+#         app/encv-mobile/src). A stderr hint announces the fallback.
+#   坑2 (--file needs an absolute path): `references <file> --file` lists the
+#        file's own imports, but `imports.file_path` stores absolute paths, so a
+#        relative path silently matches nothing. Mitigation: rewrite a relative
+#        target into an absolute path before invoking the real CLI.
+#   坑3 (static imports only): the walker resolves only static `import`/
+#        `export ... from`. Dynamic `import()` / string specifiers are invisible.
+#        This is a parser limitation in cli.mjs and is NOT mitigated here (would
+#        require patching the upstream walker). Callers should corroborate with
+#        grep for dynamic-import cases.
+#
+set -euo pipefail
+
+# scripts living beside this shim (css-source.mjs, …)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --- resolve the real CLI entrypoint -----------------------------------------
+REAL_CLI="${CODEMOGGER_CLI:-}"
+if [ -z "$REAL_CLI" ]; then
+  _bin="$(command -v codemogger 2>/dev/null || true)"
+  if [ -n "$_bin" ]; then
+    _resolved="$(readlink -f "$_bin" 2>/dev/null || echo "$_bin")"
+    case "$_resolved" in
+      */dist/cli.mjs) REAL_CLI="$_resolved" ;;
+      *) REAL_CLI="/usr/local/lib/node_modules/codemogger/dist/cli.mjs" ;;
+    esac
+  else
+    REAL_CLI="/usr/local/lib/node_modules/codemogger/dist/cli.mjs"
+  fi
+fi
+
+NO_AUTOINDEX="${CODEMOGGER_NO_AUTOINDEX:-0}"
+
+# --- multi-root config (.codemogger.json) ------------------------------------
+# Workspace-maintained list of roots codemogger should index/search, each with
+# a weight. Single-root (CODEMOGGER_ROOT / --db) is the fallback when absent.
+# codemogger only parses TS/Vue/Kotlin, so Go roots (internal/openlist/...) are
+# covered by the full-repo grep complement, not FTS — but they still get a
+# weighted, labeled search block and are indexed for any future grammar support.
+CONFIG_WORKSPACE=""
+ROOTS_TSV=""
+CONCEPTS_TSV=""
+GREP_INCLUDE=()
+GREP_EXCLUDE=()
+_load_config() {
+  local cfg="${CODEMOGGER_CONFIG:-/workspace/.codemogger.json}"
+  [ -f "$cfg" ] || return 0
+  CONFIG_WORKSPACE="$(cd "$(dirname "$cfg")" && pwd)"
+  ROOTS_TSV="$(node -e '
+    const fs=require("fs"),path=require("path");
+    let cfg; try{cfg=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));}catch(e){process.exit(0);}
+    const ws=path.dirname(process.argv[1]);
+    for(const r of (cfg&&cfg.roots)||[]){
+      if(!r||!r.path) continue;
+      let rp=r.path; if(!path.isAbsolute(rp)) rp=path.join(ws,rp);
+      const w=(typeof r.weight==="number"&&r.weight>0)?r.weight:1.0;
+      console.log(rp+"\t"+w);
+    }
+  ' "$cfg" 2>/dev/null)"
+  CONCEPTS_TSV="$(node -e '
+    const fs=require("fs");
+    let cfg; try{cfg=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));}catch(e){process.exit(0);}
+    const cs=(cfg&&cfg.concepts)||{};
+    for(const k of Object.keys(cs)){
+      const v=cs[k];
+      if(!Array.isArray(v)) continue;
+      console.log(k+"\t"+v.join(" "));
+    }
+  ' "$cfg" 2>/dev/null)"
+  # grep include/exclude (general-knowledge retrieval: docs + config that
+  # codemogger's FTS can't index). Falls back to built-in defaults if absent.
+  local raw
+  raw="$(node -e '
+    const fs=require("fs");
+    let cfg; try{cfg=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));}catch(e){process.exit(0);}
+    const g=cfg&&cfg.grep;
+    if(g&&Array.isArray(g.include)) for(const x of g.include) console.log("I\t"+x);
+    if(g&&Array.isArray(g.exclude)) for(const x of g.exclude) console.log("E\t"+x);
+  ' "$cfg" 2>/dev/null)"
+  local mode val
+  while IFS=$'\t' read -r mode val; do
+    [ -z "$val" ] && continue
+    case "$mode" in
+      I) GREP_INCLUDE+=("$val") ;;
+      E) GREP_EXCLUDE+=("$val") ;;
+    esac
+  done <<< "$raw"
+}
+_load_config
+
+# defaults for general-knowledge grep (docs + config) when .codemogger.json
+# doesn't supply a `grep` block.
+if [ ${#GREP_INCLUDE[@]} -eq 0 ]; then
+  GREP_INCLUDE=( '*.go' '*.md' '*.json' '*.jsonc' '*.yaml' '*.yml' \
+                 '*.kt' '*.kts' '*.ts' '*.tsx' '*.vue' \
+                 '*.css' '*.scss' '*.less' \
+                 'Dockerfile' '*.toml' '*.sh' '*.gradle' '*.gradle.kts' )
+fi
+if [ ${#GREP_EXCLUDE[@]} -eq 0 ]; then
+  GREP_EXCLUDE=( node_modules .git .codemogger .agents .codebuddy .trae \
+                 dist build .next .output coverage )
+fi
+
+# --- scan global options that may appear anywhere ----------------------------
+DB_PATH=""
+HAS_FILE=0
+HAS_MODULE=0
+prev=""
+for a in "$@"; do
+  if [ "$prev" = "--db" ]; then DB_PATH="$a"; fi
+  case "$a" in
+    --db=*) DB_PATH="${a#--db=}" ;;
+    --file) HAS_FILE=1 ;;
+    --module) HAS_MODULE=1 ;;
+  esac
+  prev="$a"
+done
+
+# --- resolve codebase root dir (shared by reindex + 坑1 fallback) ------------
+DIR="."
+if [ -n "$DB_PATH" ]; then
+  # db path is <dir>/.codemogger/index.db
+  DIR="$(cd "$(dirname "$(dirname "$DB_PATH")")" && pwd)"
+fi
+
+SUBCMD="${1:-}"
+
+# 坑2: --file with a relative target -> rewrite to absolute (imports.file_path
+# is absolute, so a relative path silently matches nothing).
+if [ "$SUBCMD" = "references" ] && [ "$HAS_FILE" = "1" ]; then
+  tgt="${2:-}"
+  case "$tgt" in
+    ""|/*) ;;   # empty or already absolute
+    *)
+      if [ -e "$tgt" ]; then
+        tgt="$(cd "$(dirname "$tgt")" && pwd)/$(basename "$tgt")"
+        set -- "$1" "$tgt" "${@:3}"
+      fi
+      ;;
+  esac
+fi
+
+maybe_reindex() {
+  [ "$NO_AUTOINDEX" = "1" ] && return 0
+  case "$SUBCMD" in
+    references|context|search) ;;   # read queries -> refresh first
+    *) return 0 ;;                  # index/list/mcp/help -> pass through
+  esac
+
+  if [ -n "$DB_PATH" ]; then
+    node "$REAL_CLI" index "$DIR" --db "$DB_PATH" >/dev/null 2>&1 || true
+  else
+    node "$REAL_CLI" index "$DIR" >/dev/null 2>&1 || true
+  fi
+  return 0
+}
+
+# 坑1: bare `references <sym>` with no result -> fall back to module-level match
+# by locating a same-named file under the codebase root.
+if [ "$SUBCMD" = "references" ] && [ "$HAS_FILE" = "0" ] && [ "$HAS_MODULE" = "0" ]; then
+  maybe_reindex
+  sym="${2:-}"
+  out="$(node "$REAL_CLI" "$@" 2>&1)" || true
+  if echo "$out" | grep -q "No imports found for:"; then
+    hit="$(find "$DIR" \( -path '*/node_modules/*' -o -path '*/.git/*' \) -prune -o \
+            \( -name "$sym.ts" -o -name "$sym.tsx" -o -name "$sym.vue" \) -print 2>/dev/null | head -1)"
+    if [ -n "$hit" ]; then
+      rel="${hit#$DIR/}"; rel="${rel%.*}"   # strip root prefix + extension
+      mod="@/${rel}"                         # assume @/ alias root == codebase root
+      echo "(codemogger-shim: symbol '$sym' had no importers; fell back to module '$mod')" >&2
+      node "$REAL_CLI" references "$mod" --module "${@:3}" 2>&1 || true
+      exit 0
+    fi
+  fi
+  echo "$out"
+  exit 0
+fi
+
+# --- refactoring helpers (alias-aware impact + leak detection) ----------------
+# These two subcommands turn codemogger's import graph into a refactoring
+# assistant for the encv-mobile -> @encv/shared-components lift.
+#
+#   impact <target>   alias-agnostic blast radius of a module/symbol. Closes the
+#                     gap noted in README ("--module matches the specifier
+#                     EXACTLY; @/stores/taskStore vs @encv/shared-components/...
+#                     are distinct rows"): it queries BOTH alias forms and merges
+#                     the importer lists, so a lift/decouple never misses one side.
+#   leaks  [dir]      list every shared->app reverse `@/` import under <dir>
+#                     (default: indexed codebase root). Directly verifies the
+#                     "shared layer must not depend on the app layer" invariant
+#                     after a decoupling pass.
+
+if [ "$SUBCMD" = "impact" ]; then
+  maybe_reindex
+  target="${2:-}"
+  if [ -z "$target" ]; then
+    echo "usage: codemogger impact <module|symbol>" >&2
+    echo "  e.g. codemogger impact @/api/encv" >&2
+    echo "       codemogger impact @encv/shared-components/api/encv" >&2
+    echo "       codemogger impact useTaskStore" >&2
+    exit 2
+  fi
+  # derive the alias-variant specifier so both forms are queried
+  alt=""
+  case "$target" in
+    @/*)                        alt="@encv/shared-components/${target#@/}" ;;
+    @encv/shared-components/*)  alt="@/${target#@encv/shared-components/}" ;;
+  esac
+  # IMPORTANT: pass --db through. The MCP server always sets --db to pin the
+  # index, but its cwd is not fixed, so a bare `references` (which defaults the
+  # db to cwd) would read the wrong index. Carry DB_PATH explicitly.
+  dbarg=()
+  if [ -n "$DB_PATH" ]; then dbarg=(--db "$DB_PATH"); fi
+  if [ "${target#@}" != "$target" ]; then
+    echo "== importers of module '$target' (exact) =="
+    node "$REAL_CLI" references "$target" --module "${dbarg[@]}" 2>&1 || true
+    if [ -n "$alt" ]; then
+      echo "== importers of module '$alt' (alias variant) =="
+      node "$REAL_CLI" references "$alt" --module "${dbarg[@]}" 2>&1 || true
+    fi
+  else
+    # bare symbol -> alias-agnostic symbol mode (README: symbol mode is alias-agnostic)
+    echo "== importers of symbol '$target' (alias-agnostic) =="
+    node "$REAL_CLI" references "$target" "${dbarg[@]}" 2>&1 || true
+  fi
+  exit 0
+fi
+
+if [ "$SUBCMD" = "leaks" ]; then
+  maybe_reindex
+  pkg="${2:-$DIR}"
+  echo "== reverse (shared->app) '@/' imports under: $pkg ==" >&2
+  hits="$(grep -rnE "(import|export)[^;]*from[[:space:]]*['\"]@/" "$pkg" \
+            --include='*.ts' --include='*.tsx' --include='*.vue' 2>/dev/null \
+            | grep -v '/node_modules/')" || true
+  if [ -z "$hits" ]; then
+    echo "(none — shared layer is clean)"
+  else
+    echo "$hits"
+  fi
+  exit 0
+fi
+
+# --- multi-root index (from .codemogger.json) --------------------------------
+# Indexes every declared root into its own <root>/.codemogger/index.db. Single
+# codemogger `index` only ever covers ONE root, so multi-root must loop.
+if [ "$SUBCMD" = "index" ]; then
+  if [ -n "$ROOTS_TSV" ]; then
+    echo "== multi-root index (from $(basename "$CONFIG_WORKSPACE")/.codemogger.json) ==" >&2
+    while IFS=$'\t' read -r rp w; do
+      [ -z "$rp" ] && continue
+      if [ ! -d "$rp" ]; then echo "  (skip $(basename "$rp"): dir not found)" >&2; continue; fi
+      echo "  indexing $(basename "$rp") (weight=$w) -> $rp/.codemogger/index.db" >&2
+      node "$REAL_CLI" index "$rp" --db "$rp/.codemogger/index.db" >/dev/null 2>&1 \
+        || echo "  (index failed for $rp)" >&2
+    done <<< "$ROOTS_TSV"
+    exit 0
+  fi
+  # fallback: single-root index (DIR from --db, or cwd)
+  maybe_reindex
+  exec node "$REAL_CLI" "$@"
+fi
+
+# --- full-repo grep (architecture-concept search) ----------------------------
+# codemogger only parses TS/Vue/Kotlin and indexes a SINGLE frontend root, so the
+# Go backend (internal/server: servingDir, SPA/WebView serving, themes, ...) and
+# docs are INVISIBLE to `search`. That made concept questions like "where is the
+# SPA served from" / "what is servingDir" absurdly hard to answer.
+#
+# Fix (pain-point optimization): a full-repo grep over go/md/kt/ts/vue that
+# codemogger can't parse, exposed both as a standalone `grep` subcommand and as a
+# complement to `search` (hybrid: codemogger FTS ∪ grep). Fixed-string (-F) so
+# arbitrary query text can never break the command.
+grep_root() {
+  local g="${CODEMOGGER_GREP_ROOT:-}"
+  if [ -n "$g" ]; then echo "$g"; return; fi
+  if [ -n "$CONFIG_WORKSPACE" ]; then echo "$CONFIG_WORKSPACE"; return; fi
+  if [ "$DIR" != "." ] && [ -d "$DIR/../.." ]; then
+    ( cd "$DIR/../.." && pwd )
+  else
+    echo "/workspace"
+  fi
+}
+
+# Build GREP_OPTS from the (configurable) general-knowledge include/exclude set.
+# codemogger's FTS can't index these, so they're the grep-complement surface:
+# docs (md) + config (json/yaml/toml/Dockerfile/...) + all source codemogger
+# can't parse (go/kt). Fixed-string (-F) so arbitrary query text never breaks it.
+GREP_OPTS=(-rniF)
+for p in "${GREP_INCLUDE[@]}"; do GREP_OPTS+=(--include="$p"); done
+for d in "${GREP_EXCLUDE[@]}"; do GREP_OPTS+=(--exclude-dir="$d"); done
+
+# Build fixed-string `-e PATTERN` array from a query. Supports `|` as OR so a
+# single codemogger_grep query can match several literals (e.g. `foo|bar|baz`).
+# Without `|` it's a single `-e` (preserves exact fixed-string semantics).
+_pat_opts() {
+  pats=()
+  local IFS='|'
+  local t
+  for t in $1; do
+    [ -n "$t" ] && pats+=(-e "$t")
+  done
+}
+
+# Per-root labeled grep over the general-knowledge file set. This is what makes
+# backend/config roots FIRST-CLASS in `search` instead of a flat wasted grep:
+# each root contributes a labeled, weight-ordered block — same attribution flow
+# as the codemogger FTS. Without ROOTS_TSV it falls back to a single workspace grep.
+grep_roots() {
+  local q="$1" cap="${2:-20}"
+  [ -z "$q" ] && return 0
+  _pat_opts "$q"
+  if [ -z "$ROOTS_TSV" ]; then
+    grep "${GREP_OPTS[@]}" "${pats[@]}" -- "$(grep_root)" 2>/dev/null | head -"$cap" || true
+    return 0
+  fi
+  while IFS=$'\t' read -r rp w; do
+    [ -z "$rp" ] && continue
+    [ -d "$rp" ] || continue
+    local hits
+    hits="$(grep "${GREP_OPTS[@]}" "${pats[@]}" -- "$rp" 2>/dev/null | head -"$cap")" || true
+    if [ -n "$hits" ]; then
+      echo "---- [$(basename "$rp") · w=$w] ----"
+      echo "$hits"
+    fi
+  done < <(printf '%s\n' "$ROOTS_TSV" | sort -t$'\t' -k2 -nr)
+}
+
+# --- css → scss source provenance (CSS product → SCSS source) --------------
+# Given a compiled CSS *product* (with a sibling `*.css.map` source map — emitted
+# by Sass or Vite's sass pipeline), trace each generated CSS line back to the
+# `.scss` partial + line that produced it. Even rules generated by @mixin /
+# @function / @each (which never appear literally in SCSS) resolve exactly,
+# because Sass records them in the source map. This is the safety net that lets
+# us use SCSS advanced capabilities freely: any CSS rule is always traceable.
+#   codemogger css-source <file.css> [--line N] [--json] [--summary] [--top N]
+if [ "$SUBCMD" = "css-source" ]; then
+  target="${2:-}"
+  if [ -z "$target" ]; then
+    echo "usage: codemogger css-source <compiled.css> [--line N] [--json] [--summary] [--top N]" >&2
+    exit 2
+  fi
+  node "$SCRIPT_DIR/css-source.mjs" "${@:2}" 2>&1 || true
+  exit 0
+fi
+
+if [ "$SUBCMD" = "grep" ]; then
+  q="${2:-}"
+  if [ -z "$q" ]; then echo "usage: codemogger grep <string>" >&2; exit 2; fi
+  _pat_opts "$q"
+  grep "${GREP_OPTS[@]}" "${pats[@]}" -- "$(grep_root)" 2>/dev/null | head -80 || true
+  exit 0
+fi
+
+if [ "$SUBCMD" = "search" ]; then
+  q="${2:-}"
+  # concept expansion: if q is a known concept, grep its precise terms (cuts
+  # substring noise — e.g. bare 'SPA' would otherwise match 'xcworkspace').
+  cmatch=""
+  if [ -n "$CONCEPTS_TSV" ] && [ -n "$q" ]; then
+    cmatch="$(printf '%s\n' "$CONCEPTS_TSV" | awk -F'\t' -v k="$q" '{ if (tolower($1)==tolower(k)) {print $2; exit} }')"
+    if [ -n "$cmatch" ]; then
+      echo "== concept '$q' -> expanding to terms: $cmatch =="
+      for t in $cmatch; do
+        echo "---- term: $t ----"
+        grep_roots "$t" 20 || true
+      done
+    fi
+  fi
+  if [ -n "$ROOTS_TSV" ]; then
+    # multi-root FTS: each root's DB queried, results labeled + ordered by weight desc.
+    echo "== multi-root codemogger FTS for: $q (ordered by weight desc) =="
+    while IFS=$'\t' read -r rp w; do
+      [ -z "$rp" ] && continue
+      db="$rp/.codemogger/index.db"
+      [ -f "$db" ] || { echo "(skip $(basename "$rp"): not indexed — run codemogger index)" >&2; continue; }
+      echo "---- [$(basename "$rp") · w=$w] ----"
+      node "$REAL_CLI" search "$q" --db "$db" 2>&1 || true
+    done < <(printf '%s\n' "$ROOTS_TSV" | sort -t$'\t' -k2 -nr)
+  else
+    # single-root fallback
+    maybe_reindex
+    node "$REAL_CLI" "$@" 2>&1 || true
+  fi
+  # complement: per-root grep over the general-knowledge file set (docs + config
+  # + all source codemogger can't FTS-index). This makes backend/config roots
+  # FIRST-CLASS in `search` — labeled, weight-ordered blocks, not a flat wasted
+  # grep. Skipped when a concept matched (its expanded terms already cover the
+  # intent without the bare-query substring noise).
+  if [ -n "$q" ] && [ -z "$cmatch" ]; then
+    echo "== general-knowledge grep (per-root, docs+config+src) for: $q =="
+    grep_roots "$q" 50 || true
+  fi
+  exit 0
+fi
+
+maybe_reindex
+exec node "$REAL_CLI" "$@"

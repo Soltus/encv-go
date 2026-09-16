@@ -19,7 +19,7 @@
 <script setup lang="ts">
 import { modalController } from "@ionic/vue";
 
-function _dismiss(result: "saveOnly" | "saveAndRestart" | "cancel") {
+function dismiss(result: "saveOnly" | "saveAndRestart" | "cancel") {
   modalController.dismiss(result);
 }
 </script>

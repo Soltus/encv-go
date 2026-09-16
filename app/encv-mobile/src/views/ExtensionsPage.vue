@@ -1,5 +1,5 @@
 <template>
-  <ion-page>
+  <ion-page ref="pageEl">
     <ion-header>
       <ion-toolbar>
         <ion-buttons slot="start">
@@ -22,7 +22,7 @@
           <p>{{ t('extensions.hint') }}</p>
         </div>
 
-        <div class="extensions-list">
+        <div class="extensions-list" ref="extensionsListEl">
           <ion-card v-for="ext in extensions" :key="ext.id" class="extension-card">
             <ion-card-header>
               <div class="ext-header-row">
@@ -122,6 +122,9 @@
 </template>
 
 <script setup lang="ts">
+import { Capacitor } from "@capacitor/core";
+import { alertController } from "@ionic/vue";
+import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import {
   addOutline,
   checkmarkCircle,
@@ -135,11 +138,12 @@ import {
   serverOutline,
   trashOutline,
 } from "ionicons/icons";
-
-import { Capacitor } from "@capacitor/core";
-import { copyToClipboard } from "@/composables/useClipboard";
-import { useI18n } from "@/composables/useI18n";
-import { showToast } from "@/composables/useToast";
+import { computed, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
+import { copyToClipboard } from "@encv/shared-components/composables/useClipboard";
+import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import { usePageTransition, useScrollReveal } from "@encv/shared-components/motion";
 import {
   checkInstalledPlugins,
   debugApkValidation,
@@ -152,10 +156,7 @@ import {
   togglePluginEnabled,
   uninstallPlugin,
 } from "@/plugins/GoProcess";
-import { alertController } from "@ionic/vue";
-import { onMounted, ref } from "vue";
 import { debugSimVerseFlow, openWorld } from "@/plugins/SimVerse";
-import { useRouter } from "vue-router";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -173,6 +174,19 @@ const extensions = ref<ExtensionInfo[]>([]);
 const isLoading = ref(true);
 const installError = ref("");
 const isInstalling = ref(false);
+
+// 动效试点（§2.5.2）：扩展卡片进入视口时错峰淡入。
+// ready 闸门等待异步加载完成后才落初始态，避免空列表不入场（gsap 经 ACL 全透明，
+// 下游不感知具体动画库；reduced-motion / setMotionDisabled(true) 自动落终态）。
+const extensionsListEl = ref<HTMLElement | null>(null);
+const extensionsReady = computed(() => !isLoading.value && extensions.value.length > 0);
+useScrollReveal(extensionsListEl, { stagger: true, ready: extensionsReady });
+
+// 页面进入转场（§2.5.1）：ion-page 整体淡入 + 微上移，与下方列表 reveal 叠加成连贯入场。
+// 走 guard 闸门，reduced-motion / 关动效 时自动落终态，下游不感知具体动画库（gsap 经 ACL 全透明）。
+const pageEl = ref<any>(null);
+const pageRoot = computed<HTMLElement | null>(() => pageEl.value?.$el ?? null);
+usePageTransition(pageRoot);
 
 function getExtIcon(id: string) {
   switch (id) {
@@ -223,7 +237,14 @@ async function loadExtensions() {
     const mpvInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP["mpv-player"]];
     const openlistInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP.openlist];
     const simverseInfo = installedMap[COMBOLITE_PLUGIN_ID_MAP.simverse];
-    console.error("[SAT-DBG][Extensions] mpvInfo=", JSON.stringify(mpvInfo), "| openlistInfo=", JSON.stringify(openlistInfo), "| simverseInfo=", JSON.stringify(simverseInfo));
+    console.error(
+      "[SAT-DBG][Extensions] mpvInfo=",
+      JSON.stringify(mpvInfo),
+      "| openlistInfo=",
+      JSON.stringify(openlistInfo),
+      "| simverseInfo=",
+      JSON.stringify(simverseInfo)
+    );
 
     extensions.value = [
       {
@@ -336,34 +357,27 @@ async function handleUninstall(id: string) {
     simverse: "com.encvgo.plugin.simverse",
   };
   const pluginId = COMBO_LITE_ID[id] || id;
-  const alert = await alertController.create({
-    header: t("extensions.uninstallConfirm"),
-    buttons: [
-      { text: t("common.cancel"), role: "cancel" },
-      {
-        text: t("common.confirm"),
-        role: "confirm",
-        handler: async () => {
-          if (!isNativePlatform()) return;
-          console.log("Uninstall extension:", pluginId);
-          try {
-            const result = await uninstallPlugin(pluginId);
-            if (result.success) {
-              showToast({ message: t("extensions.uninstalled"), duration: 1500, color: "success" });
-              window.dispatchEvent(new CustomEvent("plugin-state-changed"));
-            } else {
-              showToast({ message: t("extensions.uninstallFailed"), duration: 2000, color: "danger" });
-            }
-          } catch (e: any) {
-            console.error("uninstallPlugin failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
-            showToast({ message: e?.message || t("extensions.uninstallFailed"), duration: 2000, color: "danger" });
-          }
-          await loadExtensions();
-        },
-      },
-    ],
-  });
-  await alert.present();
+  if (
+    await useConfirmDialog().confirm({
+      header: t("extensions.uninstallConfirm"),
+    })
+  ) {
+    if (!isNativePlatform()) return;
+    console.log("Uninstall extension:", pluginId);
+    try {
+      const result = await uninstallPlugin(pluginId);
+      if (result.success) {
+        showToast({ message: t("extensions.uninstalled"), duration: 1500, color: "success" });
+        window.dispatchEvent(new CustomEvent("plugin-state-changed"));
+      } else {
+        showToast({ message: t("extensions.uninstallFailed"), duration: 2000, color: "danger" });
+      }
+    } catch (e: any) {
+      console.error("uninstallPlugin failed:", e instanceof Error ? `${e.name}: ${e.message}` : String(e));
+      showToast({ message: e?.message || t("extensions.uninstallFailed"), duration: 2000, color: "danger" });
+    }
+    await loadExtensions();
+  }
 }
 
 async function showDebugResult(header: string, result: Record<string, any>) {
@@ -474,7 +488,7 @@ async function handleDebugSimverse() {
 
 .empty-icon {
   font-size: 56px;
-  color: var(--ion-color-medium);
+  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
   margin-bottom: 16px;
 }
 
@@ -544,7 +558,7 @@ async function handleDebugSimverse() {
   display: flex;
   gap: 8px;
   padding: 12px 16px;
-  border-top: 1px solid var(--ion-color-light, #f4f5f8);
+  border-top: 1px solid var(--color-base-200);
 }
 
 .install-section {
@@ -565,8 +579,8 @@ async function handleDebugSimverse() {
   margin: 12px 16px;
   padding: 10px 14px;
   border-radius: 8px;
-  background: rgba(var(--ion-color-danger-rgb), 0.1);
-  color: var(--ion-color-danger);
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
   font-size: 13px;
 }
 </style>

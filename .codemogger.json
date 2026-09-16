@@ -1,0 +1,32 @@
+{
+  "_comment": "Workspace-maintained codemogger root list + concept glossary. Single-root indexing is unsuitable because the workspace mixes the primary frontend (encv-mobile), a shared frontend package, a Go backend (internal), and managed sibling projects (combolite/openlist/preview-gateway) that must all be searchable. `weight` orders/labels multi-root FTS results (higher = more primary). Paths are relative to this file's directory (workspace root). codemogger only parses TS/Vue/Kotlin, so Go roots contribute via the full-repo grep complement, not FTS. `concepts` maps an architectural term to the precise tokens that actually locate it — this cuts substring noise (e.g. bare 'SPA' matches 'xcworkspace') by expanding to targeted terms.",
+  "roots": [
+    { "path": "app/encv-mobile", "weight": 1.0, "type": "frontend" },
+    { "path": "app/packages/shared-components", "weight": 1.0, "type": "frontend-shared" },
+    { "path": "internal", "weight": 0.9, "type": "backend-go" },
+    { "path": "app/openlist", "weight": 0.8, "type": "managed-go-ts" },
+    { "path": "app/combolite", "weight": 0.7, "type": "managed-kotlin" },
+    { "path": "app/preview-gateway", "weight": 0.6, "type": "backend-go" }
+  ],
+  "concepts": {
+    "SPA": ["index.html", "Vite", "WebView", "loadUrl", "assetBasePath", "file:///android_asset", "encv-go"],
+    "servingDir": ["servingDir", "Server.Dir", "cfg.Server.Dir"],
+    "themesDir": ["themesDir", "themeDataPath"],
+    "theme storage": ["themeStorage", "pullToLocal", "removeLocal", "ThemeStorage"],
+    "data dir": ["themeDataPath", "mountRegistryDataPath", "kernelDataPath", "simverseDataPath", "DataDir"],
+    "docker": ["Dockerfile", "docker-compose", "image:", "container:"],
+    "config": ["ENCV_", "CODEMOGGER_", "vite.config", "biome.jsonc", "pnpm-workspace"]
+  },
+  "grep": {
+    "include": [
+      "*.go", "*.md", "*.json", "*.jsonc", "*.yaml", "*.yml",
+      "*.kt", "*.kts", "*.ts", "*.tsx", "*.vue",
+      "*.css", "*.scss", "*.less",
+      "Dockerfile", "*.toml", "*.sh", "*.gradle", "*.gradle.kts"
+    ],
+    "exclude": [
+      "node_modules", ".git", ".codemogger", ".agents", ".codebuddy", ".trae",
+      "dist", "build", ".next", ".output", "coverage"
+    ]
+  }
+}
