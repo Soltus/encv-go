@@ -143,7 +143,7 @@ pnpm shim:check          # = node scripts/make-shim.mjs check-all
 | `shared-components/src/composables/useEventBus.ts` | 孤儿重复文件 | `encv-mobile` 有一份**真正被使用**的 `useEventBus.ts`（被 11 处引用），两者仅第 13 行 import 源不同（shared 版引 `@encv/shared-components/api/encv`，mobile 版引 `@/api/encv_tasks`），其余 106 行逐字相同 |
 
 > 注：`encv-mobile/src/api/encv_*.ts` 现在已是 re-export 垫片，转发到 shared 的副本。
-> **校正（2026-07-13）**：本节是**历史错配快照**，现状已变——经 Tier 2 重写，shared 内 13 个 `api/encv_*` 已全部改为经 `shared/api/core` 的 `apiRequest` 做依赖注入式请求（base URL/认证来自注入），**不再残留 `@/stores/taskStore` / `@/types/webdav-test` 等应用专属依赖**（`codemogger leaks shared` 与全局 grep 确认 shared 内无真实 `@/` 导入，仅 2 处注释提及）。即它们已从「错配 A 暂存残留」转为**合法的自包含共享后端契约层**（§8.2 选项 (a)），**不再「应回退到 encv-mobile」**。原「直接回退 app」结论作废，详见 §5 / §7.2 / §8.2。
+> **校正（2026-07-13）**：本节是**历史错配快照**，现状已变——经 Tier 2 重写，shared 内 13 个 `api/encv_*` 已全部改为经 `shared/api/core` 的 `apiRequest` 做依赖注入式请求（base URL/认证来自注入），**不再残留 `@/stores/taskStore` / `@/types/webdav-test` 等应用专属依赖**（`反向依赖扫描 shared` 与全局 grep 确认 shared 内无真实 `@/` 导入，仅 2 处注释提及）。即它们已从「错配 A 暂存残留」转为**合法的自包含共享后端契约层**（§8.2 选项 (a)），**不再「应回退到 encv-mobile」**。原「直接回退 app」结论作废，详见 §5 / §7.2 / §8.2。
 
 ### 错配 B — 共享包应有的抽象层，因迁移麻烦停留在 `encv-mobile`
 
@@ -224,9 +224,9 @@ server 域（`useServerStatus`/`useOpenListBridge`/`useRealtimeTransport`…）�
 **✅ 已完成 — type-only 叶子（零运行时依赖，安全提升）**
 - `usePathResolver`：仅 `import type { FileItem }`（`@/api/encv_files`），已提升到 `shared/src/composables/usePathResolver.ts`；`encv-mobile/src/composables/usePathResolver.ts` 改为 `export * from "@encv/shared-components/composables/usePathResolver"` 垫片。5 处 app 引用方（`useTaskForm`/`useNewTaskModal`/`__tests__` 等）经垫片无感。
 - `useSectionDerivation`：仅 `vue` + `import type { EncvTask }`（`@/api/encv`），同样提升 + 垫片。`TaskBasicInfo.vue` 引用无感。
-- `taskTypeLabel`（lib）：纯函数查表（getTaskTypeLabel/Icon/Color/Meta 等 12 种类型 + 微服务 `{svc}.{method}` 动态解析），仅 `import type { TFunction }`（`@/composables/useI18n`，shared 内指向自身 useI18n），**零运行时/Pinia/worker 钉子**。已提升到 `shared/src/lib/taskTypeLabel.ts`；`encv-mobile/src/lib/taskTypeLabel.ts` 改为 `export * from "@encv/shared-components/lib/taskTypeLabel"` 垫片。下游 `TasksTab.vue` + `useTasksList` 经 `@/lib/taskTypeLabel` 别名 fallback 无感（codemogger 实测仅此 2 处生产消费方，无相对路径引用）。
+- `taskTypeLabel`（lib）：纯函数查表（getTaskTypeLabel/Icon/Color/Meta 等 12 种类型 + 微服务 `{svc}.{method}` 动态解析），仅 `import type { TFunction }`（`@/composables/useI18n`，shared 内指向自身 useI18n），**零运行时/Pinia/worker 钉子**。已提升到 `shared/src/lib/taskTypeLabel.ts`；`encv-mobile/src/lib/taskTypeLabel.ts` 改为 `export * from "@encv/shared-components/lib/taskTypeLabel"` 垫片。下游 `TasksTab.vue` + `useTasksList` 经 `@/lib/taskTypeLabel` 别名 fallback 无感（检索工具 实测仅此 2 处生产消费方，无相对路径引用）。
 - 四个源文件的 type-only / 纯函数导入已改为 shared 自身路径（`@/api/encv_files` / `@/api/encv` / `@/composables/useI18n` / `@/types/task`），与 shared 内部约定一致（如 `taskStore` 用 `@/types/task`）。
-- `useTaskViewCompute`：含 `?worker` 钉子（O(N) 视图计算委托 Worker）。纯计算核心抽到 `shared/src/lib/taskViewComputeCore.ts`（无 Worker/DOM/响应式，导出 `buildDisplayedItems`），原 worker 文件改为壳（`import { buildDisplayedItems } from "@/lib/taskViewComputeCore"`）；`shared/src/composables/useTaskViewCompute.ts` 用 DI `workerFactory` 参数（沿用 Phase 2 模式），**不含 `?worker`/Worker 实例化**——Worker 实例化留应用层。mobile 版改为薄壳（`export function useTaskViewCompute(opts) => sharedUseTaskViewCompute({ ...opts, workerFactory: () => new TaskViewComputeWorker() })`），下游 `useTasksList` 经 `@/composables/useTaskViewCompute` 无感。codemogger 实测其下游仅簇内 `useTasksList`（?worker 影响面最小，故优先动）。
+- `useTaskViewCompute`：含 `?worker` 钉子（O(N) 视图计算委托 Worker）。纯计算核心抽到 `shared/src/lib/taskViewComputeCore.ts`（无 Worker/DOM/响应式，导出 `buildDisplayedItems`），原 worker 文件改为壳（`import { buildDisplayedItems } from "@/lib/taskViewComputeCore"`）；`shared/src/composables/useTaskViewCompute.ts` 用 DI `workerFactory` 参数（沿用 Phase 2 模式），**不含 `?worker`/Worker 实例化**——Worker 实例化留应用层。mobile 版改为薄壳（`export function useTaskViewCompute(opts) => sharedUseTaskViewCompute({ ...opts, workerFactory: () => new TaskViewComputeWorker() })`），下游 `useTasksList` 经 `@/composables/useTaskViewCompute` 无感。检索工具 实测其下游仅簇内 `useTasksList`（?worker 影响面最小，故优先动）。
 - `useRunSummaries` + **`useRunSummariesSingleton`** + `__resetRunSummariesForTests`：运行时依赖 `@/api/encv` 的 `listRuns`/`getRunSummary`（应用层 base URL，shared 内不可自行实现）。沿用 Phase 2 的 `TaskServices` DI：在 `shared/src/stores/taskServices.ts` 的 `TaskServices` 接口（及 `NULL_TASK_SERVICES` 空实现）新增 `listRuns()` / `getRunSummary(runId)`，真实实现由 `encv-mobile/src/stores/registerSharedTaskServices.ts` 注入（`listRuns`/`getRunSummary` 从 `@/api/encv` 引入）；`shared/src/composables/useRunSummaries.ts` 内部改调 `getTaskServices().listRuns()` / `getTaskServices().getRunSummary()`，`RunInfo`/`RunSummary` 类型取 `@/types/task`（Phase 1 已在 shared）。mobile 版改为薄壳（`export { useRunSummaries, useRunSummariesSingleton, __resetRunSummariesForTests, type UseRunSummaries } from "@encv/shared-components/composables/useRunSummaries"`），下游 `views/GroupDetail.vue` 经 `@/composables/useRunSummaries` 无感。migration gate 已追加该项映射。
 - `useTaskEventBridge`（+ re-export `applyTerminalGuard`/`VALID_TRANSITIONS`/`validateTransition`）：运行时依赖 `@/composables/useEventBus`（shared canonical，已在 shared）与 `@/lib/workflow/state-machine`（Phase 4 lib，作为硬依赖随簇**提前提升**，参照 `taskTypeLabel`）。
   - **未触碰 Phase enum/const 分歧**：`state-machine.ts` 只需 `StepStatus` / `StepRun` / `isTerminalStep`，**不用 `Phase`**，故可绕开文档记录的 `lib/workflow/types.ts` 统一阻塞项独立提升。
@@ -262,7 +262,7 @@ server 域（`useServerStatus`/`useOpenListBridge`/`useRealtimeTransport`…）�
 4. 每步复验 §6 门禁（shared 0 错 + encv-mobile 0 错 + i18n 0 问题）。
 - 复验。
 
-**📊 codemogger 实测波及面（2026-07-12，索引 `app/encv-mobile/src`，按模块 `references --module` 查，最全）**
+**📊 依赖核查实测波及面（2026-07-12，索引 `app/encv-mobile/src`，按模块 `references --module` 查，最全）**
 
 簇成员 → **生产**下游消费方（提升后 import 需改指 `@encv/shared-components/...`；已排除测试/fixture）：
 
@@ -301,8 +301,8 @@ server 域（`useServerStatus`/`useOpenListBridge`/`useRealtimeTransport`…）�
 
 ### Phase 6 — 清理与收尾（小）
 - `useEventBus.ts`：**保留 shared 副本为唯一真源，禁止删除**（2026-07-11 事实核查反转：encv-mobile 副本已不存在，11+ 处 `@/composables/useEventBus` 引用经 `@/*` 别名回退到 shared = 事实 canonical；删 shared 会直接断这些引用。详见 §8.1.1 ② 修正）。
-- **`api/encv_*` 现状校正（2026-07-13，推翻原「移回 app」指引）**：原 Phase 6 计划把 13 个 `api/encv_*`「非任务部分回退到 `encv-mobile`」。但经 Tier 2 重写，这些文件已全部改为经 `shared/api/core` 的 `apiRequest` 做**依赖注入式**请求（base URL/认证来自注入，不再 `import("@/config")`），`codemogger leaks shared` 与全局 grep 均确认 **shared 内无任何真实 `@/` 导入**（仅 2 处注释提及 `@/api/...` 作兼容说明）。即它们已是**合法的自包含共享后端契约**，并非「误放入的暂存残留」。→ **原「移回 app」指引作废**；这些模块保留在 shared，作为多 app 复用的后端契约层（即 §8.2 选项 (a)）。`encv-mobile/src/api/encv_*.ts` 维持 re-export 薄壳垫片（向后兼容 `@/api/encv_*` 既有导入），不删除。
-- 全量复验：shared 0 错误 + encv-mobile 0 错误 + i18n `--all` 0 问题（`codemogger leaks shared` 应为空，除注释外无 `@/` 反向依赖）。
+- **`api/encv_*` 现状校正（2026-07-13，推翻原「移回 app」指引）**：原 Phase 6 计划把 13 个 `api/encv_*`「非任务部分回退到 `encv-mobile`」。但经 Tier 2 重写，这些文件已全部改为经 `shared/api/core` 的 `apiRequest` 做**依赖注入式**请求（base URL/认证来自注入，不再 `import("@/config")`），`反向依赖扫描 shared` 与全局 grep 均确认 **shared 内无任何真实 `@/` 导入**（仅 2 处注释提及 `@/api/...` 作兼容说明）。即它们已是**合法的自包含共享后端契约**，并非「误放入的暂存残留」。→ **原「移回 app」指引作废**；这些模块保留在 shared，作为多 app 复用的后端契约层（即 §8.2 选项 (a)）。`encv-mobile/src/api/encv_*.ts` 维持 re-export 薄壳垫片（向后兼容 `@/api/encv_*` 既有导入），不删除。
+- 全量复验：shared 0 错误 + encv-mobile 0 错误 + i18n `--all` 0 问题（`反向依赖扫描 shared` 应为空，除注释外无 `@/` 反向依赖）。
 
 ---
 
@@ -311,7 +311,7 @@ server 域（`useServerStatus`/`useOpenListBridge`/`useRealtimeTransport`…）�
 - `shared-components/src/api/encv_*.ts` = **合法的自包含共享后端契约层**（经 `api/core` 的 `apiRequest` 依赖注入式请求，无 `@/` 应用层依赖）。原「错配 A 暂存残留」判定已推翻（2026-07-13），它们属 §8.2 选项 (a)「留在 shared 的多 app 复用后端契约」，非「误放入」。
 - `encv-mobile/src/api/encv_*.ts` = re-export 薄壳垫片，转发到 shared 真源，保证现有 `@/api/encv_*` 导入不红。
 - `shared-components/src/composables/useEventBus.ts` = **事实 canonical（保留，禁止删除）**：encv-mobile 副本已不存在，11+ 处 `@/composables/useEventBus` 引用经 `@/*` 回退到此处（见 §8.1.1 ② 修正）。
-- 真实构建（`encv-mobile` + 3 个 plugin）此前已验证 0 错误；shared 自身类型检查在 Phase 3–5 随重写已转绿（`codemogger leaks shared` 除注释外为空）。
+- 真实构建（`encv-mobile` + 3 个 plugin）此前已验证 0 错误；shared 自身类型检查在 Phase 3–5 随重写已转绿（`反向依赖扫描 shared` 除注释外为空）。
 
 ---
 
@@ -545,7 +545,7 @@ src/
 - （a）经 `api/core` 重写后**留在 shared**（若确属多 app 复用的后端契约）；或
 - （b）**回退到 `encv-mobile` 应用层**（若仅 encv-mobile 使用），移除 shared 副本与 re-export 垫片。
 
-**进度（2026-07-13）**：**A-1（`api/core` 基座）已落地**，`shared/api/core/` 提供 `apiRequest` + base URL/认证注入；全部 13 个 `api/encv_*` 已重写为经 `api/core` 的注入式请求，**`codemogger leaks shared` 与全局 grep 确认 shared 内无任何真实 `@/` 导入**（仅 2 处注释提及 `@/api/...` 作兼容说明）。→ **实际采用了选项 (a)**：这些非任务 api 作为多 app 复用的自包含后端契约**保留在 shared**，**原「A-3 清理/移回 app」指引作废**（它们不是「误放入的暂存残留」，而是合法共享层）。`encv-mobile/src/api/encv_*.ts` 维持 re-export 薄壳垫片（向后兼容 `@/api/encv_*` 既有导入）。Module A-ext 实质已收尾，无需进一步代码动作，仅需本文档 §5/§7.2 的标注校正。
+**进度（2026-07-13）**：**A-1（`api/core` 基座）已落地**，`shared/api/core/` 提供 `apiRequest` + base URL/认证注入；全部 13 个 `api/encv_*` 已重写为经 `api/core` 的注入式请求，**`反向依赖扫描 shared` 与全局 grep 确认 shared 内无任何真实 `@/` 导入**（仅 2 处注释提及 `@/api/...` 作兼容说明）。→ **实际采用了选项 (a)**：这些非任务 api 作为多 app 复用的自包含后端契约**保留在 shared**，**原「A-3 清理/移回 app」指引作废**（它们不是「误放入的暂存残留」，而是合法共享层）。`encv-mobile/src/api/encv_*.ts` 维持 re-export 薄壳垫片（向后兼容 `@/api/encv_*` 既有导入）。Module A-ext 实质已收尾，无需进一步代码动作，仅需本文档 §5/§7.2 的标注校正。
 
 **阶段（原规划，已修订）**：
 - ~~A-1：`api/core` 基座落地~~ → **已完成**。

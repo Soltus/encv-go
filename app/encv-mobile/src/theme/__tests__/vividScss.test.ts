@@ -3,12 +3,12 @@ import * as sass from "sass-embedded";
 import fs from "node:fs";
 import path from "node:path";
 
-// 编译期契约（续 vivid.css → vivid.scss 重构 + codemogger css-source 溯源）：
+// 编译期契约（续 vivid.css → vivid.scss 重构 + css-source 溯源）：
 //   - P3 宽色域孪生 --color-*-p3 由 _vivid-p3.scss 的 @function p3() + @each 自动派生，
 //     不再手写 color(display-p3 ...) 字面量（消除与 palette.css 基色 hex 的漂移）。
 //   - 语义与 useTheme.hexToP3Token 完全一致（naive 归一化），保证默认 encv 与
 //     自定义主题在 P3 屏视觉统一。
-//   - 任何经 @mixin/@each 生成的规则都能被 codemogger css-source 由产物溯源回 .scss 源
+//   - 任何经 @mixin/@each 生成的规则都能被 css-source 由产物溯源回 .scss 源
 //     （此处用同源解码校验 sourcemap 的 line→source 归属，作为回归锁）。
 
 function resolveEntry(): string {

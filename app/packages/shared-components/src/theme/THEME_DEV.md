@@ -812,7 +812,7 @@ Snippet = 一段可热开关的局部 CSS，注入到 `<head>` 的
   - ❌ 「**动态背景/渐变是独立于主题的平行系统**」（`BG_PRESETS` + `applyBgColor` 直接写 `--ion-background-color` / `body` 渐变）。
     它和主题写的 `--color-base-100` 叠成两套背景、深浅色多处各自处理。→ 背景/渐变**改为主题的属性**（见材质契约）。
   - ❌ 「**高斯模糊是全局开关**」（`applyBgBlur` → `--encv-bg-blur`，UI 上一个独立滑块）。
-    实测它**不全局**：只有 `App.vue` + `HomePage` header 读 `--encv-bg-blur`，`codemogger_grep`（`format:json`、`dir` 限定 `src`）证实约 27 处组件硬编码 `backdrop-filter: blur(8/12/20px)` 根本不读它（另共享主题层 `NewTaskModal.vue` / `timeline-utilities.css` 各 1 处）。
+    实测它**不全局**：只有 `App.vue` + `HomePage` header 读 `--encv-bg-blur`，`跨文件检索`（`format:json`、`dir` 限定 `src`）证实约 27 处组件硬编码 `backdrop-filter: blur(8/12/20px)` 根本不读它（另共享主题层 `NewTaskModal.vue` / `timeline-utilities.css` 各 1 处）。
     → 模糊**改为主题材质的一部分**（`--material-blur`），所有磨砂面统一读它。
   - ❌ 「**背景/渐变不享 P3 宽色域**」（§6.17 遗留缺口）。→ 背景也带 `-p3` 孪生令牌，随主题在 `@media (color-gamut: p3)` 下切换。
 - **核心模型：一个主题 = 一套表面材质（material）**。外观 UI 只选「一个主题」，不再有独立的背景/模糊全局开关。
@@ -838,7 +838,7 @@ Snippet = 一段可热开关的局部 CSS，注入到 `<head>` 的
        「背景模糊」独立设置项（原 `setBgBlur` / `bgBlur` / 滑块 UI）已**整体移除**——模糊不再作为全局开关，
        完全由主题材质 `--material-blur` 控制；`:root` 在 `variables.css` 里给出默认 `12px`，主题可在自身 `theme.css`
        覆写。`useTheme` 不再导出 `setBgBlur` / `bgBlur`（契约锁见 `surfaceMaterial.test.ts`：断言二者已 `undefined`）。
-     - ✅ **已全量接入（2026-07-17）**：用 `codemogger_grep`（`format:json`、`dir` 限定 `src`）拿到的清单，
+     - ✅ **已全量接入（2026-07-17）**：用 `跨文件检索`（`format:json`、`dir` 限定 `src`）拿到的清单，
        把 `encv-mobile/src` 内约 27 处裸 `backdrop-filter: blur(<px>)` 全部改为 `blur(var(--material-blur, <原px>))`
        （含 `App.vue` 的液态玻璃 `saturate(1.8)` 站点 792 行、`.home-card` / `.player-card`；`HomePage.vue` /
        `ServerStatusCard.vue` 说明注释不计入），并把原读 `--encv-bg-blur` 的读者（App.vue / HomePage / NewTaskModal）
@@ -862,9 +862,9 @@ Snippet = 一段可热开关的局部 CSS，注入到 `<head>` 的
      描述块（断言 `--material-bg` / `--material-bg-p3` / 绘制面读 `--material-bg-active`；先红后绿：
      回退 `applyBgColor` 写字面量即 3 断言全红）。
   5. 液态玻璃高光描边（`--material-highlight`）作为默认材质变体接入。
-- **对 codemogger 的要求（实践中完善）**：本次重构依赖「跨文件找 CSS 自定义属性 / `backdrop-filter` 字面量」，
-  `references`/`impact` 只认 JS symbol、抓不到 CSS var；必须以 `codemogger_grep` 兜底。已给 `codemogger_grep`/`codemogger_search`
-  补 `format: "json"` 输出（见 `codemogger-patch/mcp-server.mjs`），使迁移清单可机读、可脚本化替换。
+- **对检索工具的要求（实践中完善）**：本次重构依赖「跨文件找 CSS 自定义属性 / `backdrop-filter` 字面量」，
+  `references`/`impact` 只认 JS symbol、抓不到 CSS var；必须以 `跨文件检索` 兜底；已为其补充
+  `format: "json"` 输出（见检索服务），使迁移清单可机读、可脚本化替换。
 - **纪律（`.codebuddy/rules/文档同步.mdc`）**：本次补本文档 §6.18；门禁只验代码不验文档，文档正确性由本次提交保证。
 
 ### 6.18.1 续51（2026-07-17）：主题「声明」调色板 + per-theme 主色/背景定制（不再固定全局预设）
@@ -912,20 +912,20 @@ Snippet = 一段可热开关的局部 CSS，注入到 `<head>` 的
     「改背景 → `--material-bg` 真实变化」「切主题不串色（per-theme 隔离）」。
 - **纪律（`.codebuddy/rules/文档同步.mdc`）**：本次补本文档 §6.18.1；门禁只验代码不验文档，文档正确性由本次提交保证。
 
-### 6.19 续50：CSS 产物 → SCSS 源溯源（codemogger css-source）+ vivid P3 孪生 SCSS 化
+### 6.19 续50：CSS 产物 → SCSS 源溯源（css-source）+ vivid P3 孪生 SCSS 化
 
-> 2026-07-17 用户要求：增强 codemogger，使其能「通过 CSS 产物溯源到 SCSS 源」；溯源能力到位后，
+> 2026-07-17 用户要求：增强检索工具，使其能「通过 CSS 产物溯源到 SCSS 源」；溯源能力到位后，
 > 放心用 SCSS 高级能力（@function / @mixin / @each / @use）重写主题，不再怕「生成的规则找不到出处」。
 
-- **codemogger `css-source`（CSS 产物溯源）**：新增 `codemogger css-source <file.css>` 子命令 + MCP
-  `codemogger_css_source`。读取 CSS 同目录的 `*.css.map`（Sass/Vite 产出），手工解码 base64-VLQ
+- **`css-source`（CSS 产物溯源）**：新增 `css-source <file.css>` 子命令 + MCP
+  `css-source`。读取 CSS 同目录的 `*.css.map`（Sass/Vite 产出），手工解码 base64-VLQ
   source map（纯 Node，无新依赖），把「CSS 第 N 行」映射回「`.scss` partial 的 file:line:col + 片段」。
   两种模式：① 无 `--line` → 按源汇总（每个 `.scss` 源贡献了多少生成行，含样例映射）；
   ② `--line N` → 单行溯源。`--json` 机器可读。**关键点**：`@mixin`/`@function`/`@each` 生成的规则
   在 scss 中不以字面量出现，但 Sass 仍把它们精确记入 source map，故溯源对此类规则完全有效——
   这正是「放心用 SCSS 高级能力」的安全网。
-  - 实现：`codemogger-patch/css-source.mjs`（VLQ 解码器）+ `codemogger-shim` 的 `css-source` 分支
-    + `mcp-server.mjs` 的 `codemogger_css_source` 工具（含别名 `file`/`path`/`f`、`line`/`l`）。
+  - 实现：`CSS 溯源脚本`（VLQ 解码器）+ `检索 shim` 的 `css-source` 分支
+    + `mcp-server.mjs` 的 `css-source` 工具（含别名 `file`/`path`/`f`、`line`/`l`）。
   - Vite 产物注意：Vite 8(rolldown) 的 `build.cssSourcemap` 在本环境**不实际产出** `.css.map`，
     故另起专用编译步骤产出可溯源产物（见下），`vite.config.ts` 仍保留 `css.preprocessorOptions.scss.sourceMap`
     + `build.cssSourcemap: true`（意图正确、环境修复后即生效）。
@@ -943,10 +943,10 @@ Snippet = 一段可热开关的局部 CSS，注入到 `<head>` 的
     自定义/远程主题色仍由 JS 写 `--color-primary-p3` 内联覆盖，secondary/accent 回落 srgb（与既有设计一致）。
 - **可溯源产物生成器**：`packages/shared-components/scripts/build-theme-scss.mjs`（npm `build:scss`）用
   `sass-embedded` 编译 `surface.scss` / `vivid.scss` → `src/theme/.dist/*.css` + `.css.map`
-  （`.dist` 已 gitignore）。`codemogger css-source src/theme/.dist/vivid.css` 即可把
+  （`.dist` 已 gitignore）。`css-source src/theme/.dist/vivid.css` 即可把
   `--color-secondary-p3: color(display-p3 ...)` 精确溯源到 `_vivid-p3.scss:42:5` 的 `@each` 循环体。
 - **契约锁（`src/theme/__tests__/vividScss.test.ts`，3 用例，先红后绿）**：
   ① 编译 `vivid.scss` 断言 primary/secondary/accent 的 `-p3` 孪生值（naive 归一化匹配 `hexToP3Token`）；
   ② 断言 `palette.css` 不再含手写 `-p3` 字面量（防回潮）；
   ③ 解码 source map 断言生成的 `--color-secondary-p3` 行**精确溯源到 `_vivid-p3.scss`**（与 css-source 同源校验）。
-- **验证**：`app_check_all` 全绿（9 PASS）；`codemogger css-source` 对 `surface.scss`/`vivid.scss` 产物均验证回源。
+- **验证**：`app_check_all` 全绿（9 PASS）；`css-source` 对 `surface.scss`/`vivid.scss` 产物均验证回源。

@@ -97,13 +97,6 @@ node scripts/trae_solo_web_register_mcp.mjs --help
     "web-fetch": {
       "command": "node",
       "args": ["/workspace/scripts/web-fetch-mcp.mjs"]
-    },
-    "codemogger": {
-      "command": "node",
-      "args": ["/workspace/app/codemogger-patch/mcp-server.mjs"],
-      "env": {
-        "CODEMOGGER_ROOT": "/workspace/app/encv-mobile"
-      }
     }
   }
 }
@@ -116,7 +109,7 @@ node scripts/trae_solo_web_register_mcp.mjs --help
 ### 1. 检查进程
 
 ```bash
-ps aux | grep -E "app-dev|web-fetch|codemogger" | grep -v grep
+ps aux | grep -E "app-dev|web-fetch" | grep -v grep
 ```
 
 成功注册后应能看到对应的 node 进程。

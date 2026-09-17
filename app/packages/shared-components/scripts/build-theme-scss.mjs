@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * 主题 SCSS → CSS 产物编译（带 source map），供 codemogger css-source 溯源。
+ * 主题 SCSS → CSS 产物编译（带 source map），供 css-source 溯源。
  *
  * Vite 8(rolldown) 的 build.cssSourcemap 在本环境不实际产出 .css.map，故这里用
  * sass-embedded 直接编译主题入口 scss 为「CSS 产物 + .css.map」，作为稳定的可溯源
- * 中间产物：codemogger css-source <产物.css> 即可由生成的 CSS 规则精确回到 .scss
+ * 中间产物：css-source <产物.css> 即可由生成的 CSS 规则精确回到 .scss
  * 源（含 @mixin/@function/@each 生成的规则，它们从不在 scss 中以字面量出现）。
  *
  * 用法：node scripts/build-theme-scss.mjs
@@ -67,4 +67,4 @@ for (const entry of ENTRIES) {
   const nSrc = (result.sourceMap.sources || []).length;
   console.log(`[ok] ${entry} -> ${path.relative(process.cwd(), outFile)} (${result.css.length} bytes, ${nSrc} scss sources)`);
 }
-console.log("Done. Trace with: codemogger css-source <产物.css>");
+console.log("Done. Trace with: css-source <产物.css>");

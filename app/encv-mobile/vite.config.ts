@@ -364,14 +364,14 @@ export default defineConfig({
         // 静默 Sass 弃用警告，避免传递依赖（daisyUI/legacy @import）告警干扰构建。
         // 注意：'mixed-decls' 在 sass 1.100 已废除，列入反而触发 obsolete 警告，故不列。
         silenceDeprecations: ['import', 'global-builtin', 'color-functions'],
-        // 编译期产出 source map，使 codemogger css-source 能由 CSS 产物溯源到
+        // 编译期产出 source map，使 css-source 能由 CSS 产物溯源到
         // .scss 源（含 @mixin/@function/@each 生成的规则）。仅开发辅助，不影响产物功能。
         sourceMap: true,
       },
     },
   },
   build: {
-    // 产出 CSS source map，配合 css.preprocessorOptions.scss.sourceMap，使 codemogger
+    // 产出 CSS source map，配合 css.preprocessorOptions.scss.sourceMap，使 检索工具
     // css-source 能由 dist 里的 CSS 产物溯源到 .scss 源（即便规则由 @mixin/@each 生成）。
     cssSourcemap: true,
     rollupOptions: {

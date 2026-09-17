@@ -2,7 +2,7 @@
 //
 // 历史 bug（复现优先：本测试在修复前为 RED）：
 //   高斯模糊长期是「全局开关」（`--encv-bg-blur`），实测它**不全局**——
-//   codemogger_grep 证实只有 App.vue + HomePage header 读它，约 27 处组件
+//   跨文件检索 证实只有 App.vue + HomePage header 读它，约 27 处组件
 //   硬编码 `backdrop-filter: blur(8/12/20px)` 根本不读它。模糊应改为
 //   **主题材质的一部分**（`--material-blur`），所有磨砂面统一读它，且由主题控制。
 //

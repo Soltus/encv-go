@@ -10,6 +10,12 @@
  *   app_typecheck   pnpm exec vue-tsc --noEmit --incremental  (per project)
  *   app_i18n        python3 scripts/i18n-tool.py <sub> --app encv-mobile
  *   app_format       pnpm exec biome format --write <files>  (cosmetic; avoids flaky terminal)
+ *   app_skill_*     project skill registry (CRUD + multi-path + watching)
+ *
+ * ⚠️ 2026-09-18: the generic shell tool `app_exec` was REMOVED. Arbitrary
+ * command execution is now served by the environment image's **cmd-run** MCP
+ * (`cmd_run`, with its own safety gate + approval portal). This server keeps
+ * only the project-specific dev gates above.
  *
  * Paths are derived from this file's location so the server is portable inside
  * the repo:
@@ -23,9 +29,9 @@
  */
 
 import { spawn } from "node:child_process";
-import { readFileSync, watch } from "node:fs";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { dirname, resolve, basename } from "node:path";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import * as skillManager from "./skill-manager.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -78,47 +84,9 @@ function trim(s) {
   return `…(truncated ${s.length - MAX_OUT} chars)…\n` + s.slice(-MAX_OUT);
 }
 
-// --- safety gate for app_exec (HMR) -------------------------------------
-// The destructive-command rules live in app-dev-guard.mjs. This server watches
-// that file and re-imports it on change, so editing the rules takes effect
-// immediately — no MCP server restart, no new conversation (HMR-style reload).
-const GUARD_MODULE = resolve(__dirname, "app-dev-guard.mjs");
-let guardRef = null; // { APP_EXEC_DENY, guardAppExec }; null => fail-closed
-
-async function loadGuard() {
-  try {
-    const mod = await import(pathToFileURL(GUARD_MODULE).href + `?t=${Date.now()}`);
-    guardRef = mod;
-    process.stderr.write(`[app-dev] guard reloaded: ${mod.APP_EXEC_DENY.length} rules\n`);
-  } catch (e) {
-    process.stderr.write(`[app-dev] guard load FAILED (kept previous): ${e.message}\n`);
-  }
-}
-
-await loadGuard();
-
 // --- skill manager (CRUD + multi-path + monitoring) ------------------------
 await skillManager.loadRegistry();
 skillManager.startWatching();
-// Watch the DIRECTORY (not the file inode): editors / write_to_file do atomic
-// save (write temp + rename), which unlinks the original inode and silently
-// stops an inotify watch on the FILE. Watching the dir + filtering by basename
-// survives atomic saves. (This was the HMR bug: guard edits didn't reload.)
-const GUARD_DIR = dirname(GUARD_MODULE);
-const GUARD_BASENAME = basename(GUARD_MODULE);
-let guardWatchTimer = null;
-const onGuardChange = () => {
-  clearTimeout(guardWatchTimer);
-  guardWatchTimer = setTimeout(loadGuard, 80); // debounce double-fire
-};
-try {
-  watch(GUARD_DIR, (event, filename) => {
-    if (filename === GUARD_BASENAME) onGuardChange();
-  });
-  process.stderr.write(`[app-dev] HMR watching ${GUARD_DIR}/${GUARD_BASENAME}\n`);
-} catch (e) {
-  process.stderr.write(`[app-dev] HMR watch FAILED: ${e.message}\n`);
-}
 
 function textResult(text, isError = false) {
   return { content: [{ type: "text", text: text || "(empty)" }], isError };
@@ -181,7 +149,7 @@ const ARG_ALIASES = {
   app_typecheck:      { proj: "project", dir: "project", target: "project" },
   app_i18n:           { cmd: "command", sub: "command", k: "key", t: "threshold", target: "app" },
   app_format:         { file: "files", path: "files", paths: "files" },
-  app_exec:           { cmd: "command", dir: "cwd", workingDir: "cwd", timeout: "timeoutMs" },
+
   app_skill_list:     { f: "filter", q: "filter" },
   app_skill_get:      { n: "name", skill: "name" },
   app_skill_add:      { m: "method", source: "src", repo: "url", n: "name", target: "targetPath" },
@@ -255,36 +223,6 @@ const TOOLS = [
         },
       },
     },
-  },
-  {
-    name: "app_exec",
-    description:
-      "Run an arbitrary shell command via `bash -c` inside the repo (cwd must stay under /workspace, defaults to /workspace). Stable alternative to the flaky built-in terminal: runs in this persistent MCP process, captures stdout/stderr, enforces a timeout. Use for commands that hang/crash the normal terminal (e.g. gradle, long builds, docker). WARNING: executes arbitrary commands — use with care. A safety gate blocks destructive ops: batch/recursive deletes (rm -rf/rmdir/shred), dangerous git (reset --hard, clean -f, checkout -- ., push --force, branch -D), privilege escalation (sudo/su), curl|sh / wget|sh. Process kills (kill/pkill/killall/fuser) are ALLOWED when targeting same-identity or non-critical processes (e.g. clearing a stale local dev server / occupied port); they are only blocked when they would hit an environment-connection process (ssh tunnel, code-server, the dev MCP, session daemon, self/ancestors, init) or an unverified other-identity live process.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        command: {
-          type: "string",
-          description: "full shell command, e.g. 'bash scripts/build-android.sh' or 'ls -la app'",
-        },
-        cwd: {
-          type: "string",
-          description: "absolute working dir; must be under /workspace. Default /workspace.",
-        },
-        timeoutMs: {
-          type: "number",
-          default: 120000,
-          description: "kill the command after this many ms (hard cap 600000).",
-        },
-      },
-      required: ["command"],
-    },
-  },
-  {
-    name: "app_guard_reload",
-    description:
-      "Manually re-load the app_exec safety-gate rules from scripts/app-dev-guard.mjs (HMR). Use to confirm the running MCP server picked up edits, or to force a reload after changing the guard file. Returns the active rule count.",
-    inputSchema: { type: "object", properties: {} },
   },
   {
     name: "app_skill_list",
@@ -425,30 +363,6 @@ async function dispatch(name, args = {}) {
         ];
     const r = await run("pnpm", ["exec", "biome", "format", "--write", ...files], APP_ROOT, 120_000);
     return textResult(`exit=${r.code}${r.timedOut ? " (TIMED OUT)" : ""}\n--- stdout ---\n${trim(r.stdout)}\n--- stderr ---\n${trim(r.stderr)}`, r.code !== 0);
-  }
-
-  if (name === "app_exec") {
-    const raw = String(args.command || "").trim();
-    if (!raw) return textResult("command is required", true);
-    if (!guardRef) return textResult("⛔ 安全门禁模块未就绪，拒绝执行以防误放行。", true);
-    const blocked = await guardRef.guardAppExec(raw);
-    if (blocked) return textResult(`⛔ 命令被安全门禁拦截（${blocked}），如需执行请改用更安全的等价命令。`, true);
-    const cwd =
-      args.cwd && String(args.cwd).startsWith("/workspace")
-        ? String(args.cwd)
-        : REPO_ROOT;
-    const timeoutMs = Math.min(Number(args.timeoutMs) || 120000, 600_000);
-    const r = await run("bash", ["-c", raw], cwd, timeoutMs);
-    return textResult(
-      `exit=${r.code}${r.timedOut ? " (TIMED OUT)" : ""}\n--- stdout ---\n${trim(r.stdout)}\n--- stderr ---\n${trim(r.stderr)}`,
-      r.code !== 0
-    );
-  }
-
-  if (name === "app_guard_reload") {
-    await loadGuard();
-    const n = guardRef ? guardRef.APP_EXEC_DENY.length : 0;
-    return textResult(`guard reloaded: ${n} rules active`);
   }
 
   // --- skill management -----------------------------------------------------

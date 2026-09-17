@@ -107,7 +107,7 @@ shared 内原本指向应用层的泄漏：`packages/shared-components/src/api/`
   使 shared 非测试代码彻底 `@/`-free。
 - 门禁：`pnpm check:all` → **8/8 PASS**（shared-components typecheck、encv-mobile typecheck、
   3 个 plugin typecheck、i18n lint、encv-mobile 单测、Biome CI 全过）。
-- `codemogger leaks` 本版本无该子命令（报错 `unknown command 'leaks'`），改用
+- 反向依赖扫描子命令本版本不可用（报错 `unknown command 'leaks'`），改用
   `search_content` + `scripts/make-shim.mjs check-all` 校验 shim 一致性。
 
 **复核结果（终端恢复后已执行）**
@@ -129,7 +129,7 @@ pnpm check:all                         # ✔ 8/8 PASS（含 encv_system.ts @/ �
    已补 `index.ts/tsx/vue` 候选。修复后 `app/api/encv_core.ts` 的
    `export * from "@encv/shared-components/api/core"` 被正确识别为一致垫片。
 
-> 注：`codemogger leaks` 本版本无该子命令（报错 `unknown command 'leaks'`），
+> 注：反向依赖扫描子命令本版本不可用（报错 `unknown command 'leaks'`），
 > shim 机械一致性改以 `node scripts/make-shim.mjs check-all` 为准。
 
 ### Tier 3 — 收敛 shared 反向依赖 app 的真实实现（IN PROGRESS）
@@ -318,7 +318,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
 **已落地（#12，双门禁全绿：`make-shim check-all` 52/52 + `pnpm check:all` 8/8）：**
 
 12. **`constants/containerVersion.ts`（纯常量叶子，直接提升——修正上轮「需 props/inject 注入」的误判）**
-   - 用 codemogger 驱动决策（先 `codemogger impact @/constants/containerVersion` 看清 9 个
+   - 用依赖核查驱动决策（先 `波及面核查 @/constants/containerVersion` 看清 9 个
      importer 暴露的 4 个符号：`CONTAINER_VERSIONS`/`DEFAULT_CONTAINER_VERSION`/
      `isRecommendedVersion`/`formatContainerVersion`），再读源确认它是**零 import 的纯常量+纯函数**
      （无 `@/`、无 vue、无任何运行时状态）。**结论：它根本不需要注入**，跟其它纯叶子一样直接提升。
@@ -335,12 +335,12 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
      两个真源导出（下游 `import { computeJobConclusion } from "@/lib/workflow/state-machine"` 本会
      静默断链，因垫片被跳过而一直未被发现）→ 已补齐。
    - 验证：`make-shim check-all` 52/52 一致；`pnpm check:all` 8/8（biome ci + 5 类型检查 +
-     i18n lint + 单测）；`codemogger leaks packages/shared-components/src` 无新增反向依赖。
+     i18n lint + 单测）；`反向依赖扫描 packages/shared-components/src` 无新增反向依赖。
 
 **已落地（#13，双门禁：`make-shim check-all` 53/53 一致；`pnpm check:all` 待用户本地跑）：**
 
 13. **`components/NewTaskModal` 组件簇（自底向上 7 个 `.vue` + `NewTaskState` 类型）**
-   - 依赖核查（codemogger + grep）：`useNewTaskModal` 仅 3 引用、`NewTaskModal.vue` 经 `@/components/`
+   - 依赖核查（grep）：`useNewTaskModal` 仅 3 引用、`NewTaskModal.vue` 经 `@/components/`
      别名消费；整簇**无相对路径引用**（删本地不会断链）；Vite `encv-alias-fallback` 插件 +
      tsconfig `@/*` 已含 shared fallback，`.vue` 可走「移到 shared + 删本地 + 别名 fallback」范式
      （与既有 shared `.vue` 如 AboutPage 一致）。`make-shim` 的 `buildShim` 显式跳过 `default` 导出，
@@ -359,7 +359,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
      `features/alist-encrypt/*` 本就是 re-export 垫片，真源早在 shared
      （`composables/useAlistEncrypt` + `features/alist-encrypt/*`）。故 #8 并非真阻塞——见 #14。
    - 验证：`make-shim check-all` 53/53 一致（含新增 NewTaskState 垫片）；`pnpm check:all` 交用户本地
-     跑（biome + 5 类型检查 + i18n lint + 单测）；`codemogger leaks packages/shared-components/src`
+     跑（biome + 5 类型检查 + i18n lint + 单测）；`反向依赖扫描 packages/shared-components/src`
      应在搬后无新增反向依赖（组件簇内 `@/` 已全改写为 `@encv/shared-components/`）。
 
 **已落地（#14，双门禁：`make-shim check-all` 54/54 一致；`pnpm check:all` 待用户本地跑）：**
@@ -375,7 +375,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
      `@encv/shared-components/composables/useAlistEncrypt`（指向 shared 真源，避免 shared 反向依赖
      app 垫片）；app 本地 `useNewTaskModal.ts` 删除，`make-shim gen` 生成 `export { useNewTaskModal }`
      垫片（1 值）。
-   - 验证：`make-shim check-all` 53 → **54**（+useNewTaskModal）；`codemogger leaks shared` 无新增反向
+   - 验证：`make-shim check-all` 53 → **54**（+useNewTaskModal）；`反向依赖扫描 shared` 无新增反向
      依赖（仅 `api/encv_perf.ts`/`encv_tasks.ts` 两处兼容注释文本命中，非真实 import）；下游
      `stores/registerSharedAppCapabilities.ts`、`views/useTasksView.ts`、`views/useFilesView.ts`
      （动态 import）经 `@/composables/useNewTaskModal` 垫片无感解析到 shared。
@@ -396,11 +396,11 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
      `lib/workflow/types` 存在**真源分歧**——app 版 417 行、shared 版 291 行，双方都**不** re-export
      对方（既非垫片也非统一真源）。`TaskTimeline` 经 `@/lib/workflow/types` 取该模块，若盲目改写到
      `@encv/shared-components/lib/workflow/types` 会丢失 app 版独有类型、且 `TaskDetailModal` 提升后会
-     经 `@/components/TaskTimeline.vue` 形成 shared→app 反向依赖（违反 `codemogger leaks`）。故先冻结，
+     经 `@/components/TaskTimeline.vue` 形成 shared→app 反向依赖（违反「shared 不依赖 app」约束）。故先冻结，
      待单独调和 `lib/workflow/types` 分歧（统一真源到 shared + app 留垫片）后再提 `TaskTimeline` 与
      `TaskDetailModal`。当前 `TaskDetailModal`（仍留 app）经 `@/components/*` 已能无感解析到本次提升的
      6 个叶子，运行时无影响。
-   - 验证：`codemogger leaks shared` 无新增反向依赖（仅 `api/encv_perf.ts`/`encv_tasks.ts` 两处兼容注释
+   - 验证：`反向依赖扫描 shared` 无新增反向依赖（仅 `api/encv_perf.ts`/`encv_tasks.ts` 两处兼容注释
      文本命中）；`make-shim check-all` 54/54 不变（本轮无新 `.ts` 垫片）。
 
 **已落地（#16，双门禁待用户本地跑 `make-shim check-all` + `pnpm check:all`）：**
@@ -437,7 +437,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
      --register`，但执行时终端后端不可用，改为手动等价追加；待后端恢复可重跑 move-key 幂等对齐。）
    - **`components.d.ts` 修正**：`TaskTimeline` / `TaskDetailModal` 两行 `./components/X.vue` 改为
      `./../../packages/shared-components/src/components/X.vue`（与 #13/#15 其余叶子一致）。
-   - 验证：`codemogger leaks shared` 应为空（两组件 `@/components/*` 解析到 shared 自身，无 shared→app
+   - 验证：`反向依赖扫描 shared` 应为空（两组件 `@/components/*` 解析到 shared 自身，无 shared→app
      反向依赖）；`make-shim check-all` 含新增 `lib/workflow/types` 垫片；`pnpm check:all` 待用户本地跑
      （biome + 5 类型检查 + i18n lint + 单测）。
 
@@ -473,7 +473,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
    - **`vitest.config.ts` 同步**：`ISOLATED_INCLUDE` 的 `src/components/tasks/__tests__/{TaskDebugPanel,
      TaskVirtualList}.test.ts` 改为 `../packages/shared-components/src/components/__tests__/{...}`；
      移除 `exclude` 中已失效的 `src/components/tasks/__tests__/**` glob（目录已空）。
-   - 验证：`codemogger leaks shared` 应为空（两组件 `@/` 已全改写为 `@encv/shared-components/`，无
+   - 验证：`反向依赖扫描 shared` 应为空（两组件 `@/` 已全改写为 `@encv/shared-components/`，无
      shared→app 反向依赖）；`make-shim check-all` 不变（本轮无新 `.ts` 垫片）；`pnpm check:all` 待用户本地跑
      （biome + 5 类型检查 + i18n lint + 单测，含迁移到 shared 的 2 个测试）。
 
@@ -502,7 +502,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
    - **`components.d.ts` 修正**：`FilterDrawer` / `PerformanceTab` / `TasksTab` 三行
      `./components/group-detail/X.vue` 改为 `./../../packages/shared-components/src/components/X.vue`
      （与 #13/#15/#16/#17 一致）；`PipelineTab` 行保持 `./components/group-detail/PipelineTab.vue` 不变。
-   - 验证：`codemogger leaks shared` 应为空（三组件 `@/` 已全改写为 `@encv/shared-components/`）；
+   - 验证：`反向依赖扫描 shared` 应为空（三组件 `@/` 已全改写为 `@encv/shared-components/`）；
      `make-shim check-all` 不变（本轮无新 `.ts` 垫片）；`pnpm check:all` 待用户本地跑
      （biome + 5 类型检查 + i18n lint + 单测）。
 
@@ -530,7 +530,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
        `components.d.ts` 对应行改指 shared。
      - **i18n key 下沉**：`PipelineTab` 用到的 `tasks.pipelineEmpty`（中英两语 `暂无任务`/`No tasks yet`）
        新增进 `packages/shared-components/src/i18n/tasks.ts`（此前 shared 无此 key，mobile 源保留、合并覆盖不报错）。
-   - 验证：`codemogger leaks shared` 应为空（automation 9 组件 + PipelineTab 的 `@/` 均已改写为
+   - 验证：`反向依赖扫描 shared` 应为空（automation 9 组件 + PipelineTab 的 `@/` 均已改写为
      `@encv/shared-components/`，无 shared→app 反向依赖）；`make-shim check-all` 不变（本轮无新 `.ts` 垫片）；
      `pnpm check:all` 待用户本地跑（biome + 5 类型检查 + i18n lint + 单测，含改写 import 的 2 个 automation 测试）。
    - **修正（2026-07-13 续做）**：shared `components/` 为**扁平**层（无 `automation/`/`group-detail/`/`tasks/`
@@ -572,7 +572,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
      （`.vue` 与 composable 均走显式 shared 路径，无需 app 垫片）；`router/index.ts:33` 懒加载
      `import("@/views/Tasks.vue")` 改为 `import("@encv/shared-components/views/Tasks.vue")`。
    - 验证：`make-shim check-all` 55/55 一致（本轮无新 `.ts` 垫片）；`pnpm check:all` 8/8（Biome + 5 类型检查 +
-     i18n lint + 单测，含新 `registerSharedAppNavigation.ts`）；`codemogger leaks shared` 应为空
+     i18n lint + 单测，含新 `registerSharedAppNavigation.ts`）；`反向依赖扫描 shared` 应为空
      （`useTasksView`/`Tasks.vue` 的 `@/` 已全改写为 `@encv/shared-components/`，vue-router 经 `appNavigation` DI 解耦，
      无 shared→app 反向依赖）。
    - **注意**：`Files.vue` 注释称「调用 useTasksView()」但实测并未 import（注释过时），故无跨视图耦合，提升无牵连。
@@ -592,11 +592,11 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
      → `import("@encv/shared-components/components/TaskDetailModal.vue")`；真源复制到 `shared/src/views/GroupDetail.vue`，
      删 app 原位，router/index.ts:42 懒加载改指 `@encv/shared-components/views/GroupDetail.vue`。
    - 验证：`make-shim check-all` 55/55；`pnpm check:all` 8/8（含 `registerSharedAppNavigation.ts` 格式修正）；
-     `codemogger leaks shared` 仅 2 处**注释**提及 `@/api/...`，无真实反向依赖；shared `GroupDetail.vue` grep `from "@/"` 命中 0。
+     `反向依赖扫描 shared` 仅 2 处**注释**提及 `@/api/...`，无真实反向依赖；shared `GroupDetail.vue` grep `from "@/"` 命中 0。
    - **Phase 5 至此全绿**：`Tasks.vue` + `useTasksView.ts`（#20）+ `GroupDetail.vue`（#21）均已进 shared，任务系统视图层完成。
 
 22. **Phase 6 清理 — 文档校正（无代码动作，门禁已绿）**：原迁移计划把 shared 内 13 个 `api/encv_*` 标为「错配 A 暂存残留、应移回 app」，
-   但经 Tier 2 重写它们已全改为经 `shared/api/core` 的 `apiRequest` 依赖注入式请求（base URL/认证来自注入），`codemogger leaks shared` 与全局 grep
+   但经 Tier 2 重写它们已全改为经 `shared/api/core` 的 `apiRequest` 依赖注入式请求（base URL/认证来自注入），`反向依赖扫描 shared` 与全局 grep
    确认 shared 内**无任何真实 `@/` 导入**（仅 2 处注释提及 `@/api/...` 作兼容说明）→ 已是**合法的自包含共享后端契约层**（§8.2 选项 (a)），
    原「移回 app / A-3 清理」指引**作废**。`encv-mobile/src/api/encv_*.ts` 维持 re-export 薄壳垫片（向后兼容）。已同步校正
    `migration-task-system.md` 的 §1 错配 A、§4 Phase 6、§5 过渡态、§7.2 api 地图、§7.3 速查表、§8.2 Module A-ext 共 6 处陈旧标注。
@@ -608,7 +608,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
    - 依赖核查：三者均仅依赖 shared 已自包含能力 —— `useWebDavTestModules`/`useWebDavTestRunner` 仅 `import type` 自 `@/types/webdav-test`（#2 已提升）；`useWebDavManifest` 仅 `@/api/encv`（`fetchWebDavManifest`/`fetchWebDavLocalInfo` 实际定义在 `shared/api/encv_system.ts`，经 `api/encv` barrel 透传）+ `@/types/webdav-test`。无任何 app-only 能力耦合（无 `@/router`/`@/config`/`@/plugins`/`@/stores`），是纯叶子。
    - 动作：真源复制到 `packages/shared-components/src/composables/`，3 处 `@/` import 改写为 `@encv/shared-components/...`；app 原位经 `make-shim gen` **就地改写为 re-export 垫片**（导出 2 值 / 1 值+2 类型 / 1 值）。
    - 下游无感：`WebDavAutomationTestsDetail.vue` 与 `useWebDavWorkflowAdapter.ts` 仍经 `@/composables/useWebDav*` 解析到 shared 真源；无测试需迁移。
-   - 验证：`make-shim check-all` 58/58（原 55 → +3）；`pnpm check:all` 8/8（Biome 格式化 make-shim 生成的 `useWebDavManifest` 垫片与 shared `useWebDavTestRunner` 副本后全绿）；`codemogger leaks shared` 无新增反向依赖。
+   - 验证：`make-shim check-all` 58/58（原 55 → +3）；`pnpm check:all` 8/8（Biome 格式化 make-shim 生成的 `useWebDavManifest` 垫片与 shared `useWebDavTestRunner` 副本后全绿）；`反向依赖扫描 shared` 无新增反向依赖。
    - **范式微调（更安全）**：本轮改用「先 `cp` 复制 → `replace_in_file` 改写 shared 副本 import → `make-shim gen` 就地把 app 原位覆盖为垫片」的逐步可审查流程，避免此前 `cp+sed+rm` 一键批量脚本（不透明且直接删源）。后续 lift 均沿用此流程。
 
 **已落地（#24，双门禁全绿：`make-shim check-all` 62/62 + `pnpm check:all` 8/8）：**
@@ -621,7 +621,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
      - `useApiBaseProbe`：`@/api/encv` 的 `DEFAULT_API_BASE_URL`/`DEV_SANDBOX_ENTRY`/`setApiBaseUrl`（经 `encv_core` 透传）+ `vue` + `window`/`localStorage`/`fetch`。
    - 动作：真源复制到 `packages/shared-components/src/composables/`，4 处 `@/` import 改写为 `@encv/shared-components/...`；app 原位经 `make-shim gen` 就地改写为 re-export 垫片（导出 12 值+2 类型 / 1 值+2 类型 / 1 值 / 2 值+1 类型；`useApiBaseProbe` 的内部 `__resetApiBaseProbeForTest` 一并透传）。
    - 下游无感：consumer 仍经 `@/composables/useX` 解析到 shared 真源；无测试需迁移。
-   - 验证：`make-shim check-all` 62/62（58 → +4）；`pnpm check:all` 8/8（Biome 格式化 1 文件后全绿）；`codemogger leaks shared` 无新增反向依赖。
+   - 验证：`make-shim check-all` 62/62（58 → +4）；`pnpm check:all` 8/8（Biome 格式化 1 文件后全绿）；`反向依赖扫描 shared` 无新增反向依赖。
    - **架构注记**：`useFileList`（file 域）/`useApiBaseProbe`（server 域）按 `migration-task-system.md` §8 本属"正确留在 app"的域，但二者仅依赖 shared、不引入任何泄漏，提升为无害的「域逻辑归一进 shared」；`useWorkflowStore`（workflow 域，任务系统已用）/ `useTestCaseGeneration`（automation）更接近 shared 形状。若后续要严格遵循 §8 的"域留 app"，可将其改为 app 内 import shared 抽象——但当前无功能影响，且双门禁已锁绿。
 
 **已落地（#25，双门禁全绿：`make-shim check-all` 66/66 + `pnpm check:all` 8/8）：**
@@ -634,7 +634,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
      - `NativeBridgeBackend.ts`：**仅** `./Backend`（占位 noop，无 `@/plugins/GoProcess` 等耦合——此前对 realtime 簇"有 app-only 钉子"的判断系 grep 误读，已更正）。
    - 动作：整目录 `cp` 到 `packages/shared-components/src/composables/realtime/`（`@/` import 改写 2 处；`Backend.ts`/`NativeBridgeBackend.ts` 无 `@/` 无需改；相对 `./Backend` 搬目录后仍有效）；app 原位 4 文件经 `make-shim gen` **就地改写为 re-export 垫片**（导出 0值/3类型、1值/1类型、1值/1类型、1值/0类型）。
    - 下游无感：`useRealtimeTransport.ts`（消费方，本轮不提升）经相对导入 `./realtime/*` 解析到 app shim → 自动转发 shared 真源；无测试需迁移。
-   - 验证：`make-shim check-all` 66/66（62 → +4）；`pnpm check:all` 8/8（Biome 格式化 1 文件后全绿）；`codemogger leaks shared` 无新增反向依赖。
+   - 验证：`make-shim check-all` 66/66（62 → +4）；`pnpm check:all` 8/8（Biome 格式化 1 文件后全绿）；`反向依赖扫描 shared` 无新增反向依赖。
    - **架构注记**：realtime transport backend 是 WS/HTTP-poll/native-bridge 通用传输抽象，属"任务系统实时通道"的核心，比 #23/#24 更核心；按"纯叶子可提升"标准达标。不依赖任何 app-only 能力，提升为无害归一。
 
 **已落地（#26，双门禁全绿：`make-shim check-all` 67/67 + `pnpm check:all` 8/8）：**
@@ -643,7 +643,7 @@ tsconfig 的 `@/* → ../packages/shared-components/src/*` 映射反向引用**�
    - 依赖核查：纯叶子，零 app-only 钉子 —— `vue` + `@/api/encv`（`getApiBaseUrl`/`isOpenPreviewBrowser`，shared）+ `eventBus`（shared `useEventBus.ts`，已确认真源在 `packages/shared-components/src/composables/useEventBus.ts`）+ 相对 `./realtime/*`（#25 真源）。内部 `isNative()` 是**自包含**实现（`window.Capacitor` 检测），不依赖 `@/plugins/GoProcess`（此前误以为 server 域都带 GoProcess 钉子，useRealtimeTransport 实际无）。
    - 动作：真源复制到 `packages/shared-components/src/composables/`，2 处 `@/` import 改写为 `@encv/shared-components/...`（api/encv + composables/useEventBus）；app 原位经 `make-shim gen` 就地改写为 re-export 垫片（导出 3 值 `useRealtimeTransport`/`getActiveTransportMode`/`getTransportDebugInfo` + 2 类型 `TransportMode`/`RealtimeTransport`）。
    - 下游无感：`App.vue` 经 `@/composables/useRealtimeTransport` → shim → shared 真源；shared 内 `__tests__/useRealtimeTransport.test.ts` 仍经 `@/composables/useRealtimeTransport` 解析到 shim；相对 `./realtime/*` 在 shared 副本里自动解析到 #25 真源，无断链。
-   - 验证：`make-shim check-all` 67/67（66 → +1）；`pnpm check:all` 8/8（Biome 无需修正）；`codemogger leaks shared` 无新增反向依赖。
+   - 验证：`make-shim check-all` 67/67（66 → +1）；`pnpm check:all` 8/8（Biome 无需修正）；`反向依赖扫描 shared` 无新增反向依赖。
    - **架构注记**：提升后实时传输层（WsBackend/HttpPollBackend/NativeBridgeBackend/Backend + useRealtimeTransport）全部在 shared，encv-mobile 仅留 shim。这是"纯叶子功能逻辑归一"的收尾簇——剩余未提升的 composables 已无更多纯叶子功能逻辑。
 
 **已落地（Module H 选项2 · 双门禁全绿：`make-shim check-all` 70/70 + `pnpm check:all` 8/8）：**
@@ -738,27 +738,3 @@ node scripts/make-shim.mjs check-all     # ✔ 无残留垫片（应用层已纯
 > gen <shared> <app>` 生成，避免手写出错）；③ 跑 `make-shim check-all` + `pnpm check:all` 双门禁。
 > 严禁把 shim 当真源写入（此前会话曾误把 11 个 api 写成自引用 shim 丢真源，务必从 git HEAD
 > 取真源再搬）。
-
-## codemogger-shim 在重构中的角色
-
-`codemogger-patch/codemogger-shim` 已增强两个重构子命令（详见 `codemogger-patch/README.md §5`）：
-
-- `codemogger impact <target>` — 别名无关的「爆炸半径」。同时查 `@/x` 与
-  `@encv/shared-components/x` 两种拼写并合并，闭合原 `--module` 按 specifier 精确匹配导致的
-  alias 分叉漏查。搬模块前用它看清调用方全貌。
-- `codemogger leaks [dir]` — 扫出某包内残留的 `shared → app` 反向 `@/` 导入，
-  直接验证「共享层不得依赖应用层」是否达标（搬之后应为空）。
-
-## 验证命令
-
-```bash
-# 搬之前：看清爆炸半径（两种别名都会查）
-codemogger impact @/api/encv
-codemogger impact @encv/shared-components/api/encv
-
-# 搬之后：shared 内不应再有指向 app 的 @/ 依赖
-codemogger leaks packages/shared-components/src
-
-# 全量门禁（typecheck + biome + 单测）
-pnpm check:all
-```
