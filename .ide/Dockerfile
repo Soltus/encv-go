@@ -8,7 +8,7 @@ ARG PNPM_VERSION=11
 ARG ANDROID_SDK_TOOLS_VERSION=13114758
 ARG RUST_VERSION=stable
 
-FROM cnbcool/default-dev-env:latest
+FROM soltus/default-dev-env:dev
 
 ARG GO_VERSION
 ARG G_VERSION
