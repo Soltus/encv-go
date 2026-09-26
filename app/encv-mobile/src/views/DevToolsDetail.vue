@@ -77,6 +77,30 @@
         </ion-item>
       </ion-list>
 
+      <!-- 插件生命周期状态：数据来自 /api/plugins 的 state/error/disposable 字段。
+           用途是排障——「某个插件为什么不可用」过去只能翻后端日志，
+           现在在开发者选项里直接可见（失败插件会带出 error 原因）。 -->
+      <ion-list>
+        <ion-list-header>
+          <ion-label>插件状态</ion-label>
+        </ion-list-header>
+        <ion-item v-if="pluginLoadError">
+          <ion-label color="danger">
+            <h3>加载插件状态失败</h3>
+            <p>{{ pluginLoadError }}</p>
+          </ion-label>
+        </ion-item>
+        <ion-item v-for="p in plugins" :key="p.name">
+          <ion-label>
+            <h3>{{ p.name }}</h3>
+            <p v-if="p.error" class="plugin-error">{{ p.error }}</p>
+            <p v-else class="plugin-hint">{{ p.containerExtension }}</p>
+          </ion-label>
+          <ion-badge slot="end" :color="stateColor(p.state)">{{ p.state ?? "unknown" }}</ion-badge>
+          <ion-note v-if="p.disposable" slot="end" class="plugin-disposable">可回收</ion-note>
+        </ion-item>
+      </ion-list>
+
       <ion-list>
         <ion-list-header>
           <ion-label>模拟世界</ion-label>
@@ -95,13 +119,43 @@
 
 <script setup lang="ts">
 import { bookOutline, bugOutline, extensionPuzzleOutline, eyeOutline, flaskOutline, terminal } from "ionicons/icons";
+import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
+import { fetchPlugins, type PluginMeta } from "@encv/shared-components/api/encv";
 import { useDevTools } from "@encv/shared-components/composables/useDevTools";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 
 const { t } = useI18n();
 const router = useRouter();
 const { vconsoleEnabled, toggleVConsole } = useDevTools();
+
+// 插件生命周期状态（pending/loading/active/failed/disposing/disposed）。
+// 失败插件的 error 字段直接展示在列表里，省去翻后端日志。
+const plugins = ref<PluginMeta[]>([]);
+const pluginLoadError = ref("");
+
+onMounted(async () => {
+  try {
+    plugins.value = await fetchPlugins();
+  } catch (e) {
+    pluginLoadError.value = e instanceof Error ? e.message : String(e);
+  }
+});
+
+function stateColor(state: PluginMeta["state"]) {
+  switch (state) {
+    case "active":
+      return "success";
+    case "failed":
+      return "danger";
+    case "loading":
+    case "disposing":
+      return "warning";
+    // pending / disposed / 未知状态一律中性色
+    default:
+      return "medium";
+  }
+}
 
 function goLogSettings() {
   router.push("/tabs/settings/devtools/log-settings");
@@ -160,6 +214,21 @@ function handleVConsoleToggle(event: CustomEvent) {
   color: var(--encv-text-secondary, #999);
   margin: 0 16px 8px;
   line-height: 1.5;
+}
+
+.plugin-error {
+  color: var(--ion-color-danger, #eb445a);
+  white-space: normal;
+}
+
+.plugin-hint {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+.plugin-disposable {
+  font-size: 11px;
+  margin-inline-start: 6px;
 }
 
 .scope-badge {
