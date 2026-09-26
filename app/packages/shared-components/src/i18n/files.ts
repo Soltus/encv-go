@@ -38,7 +38,7 @@ export default {
     "files.encrypted": "加密文件",
     "files.encryptPrompt": '输入密码以加密 "{name}"',
     "files.decryptPrompt": '输入密码以解密 "{name}"',
-    "files.overwriteConfirm": '目标文件 "{name}" 已存在，加密/解密后将覆盖该文件，确定继续吗？',
+    "files.overwriteConfirm": '目标文件 "{name}" 已存在，继续将覆盖该文件（原文件会先移入回收站，可还原），确定继续吗？',
     "files.searchPlaceholder": "搜索文件...",
     "files.recursive": "递归",
     "files.fullText": "全文",
@@ -107,7 +107,8 @@ export default {
     "files.encrypted": "Encrypted file",
     "files.encryptPrompt": 'Enter password to encrypt "{name}"',
     "files.decryptPrompt": 'Enter password to decrypt "{name}"',
-    "files.overwriteConfirm": 'Target file "{name}" already exists. Encryption/decryption will overwrite it. Continue?',
+    "files.overwriteConfirm":
+      'Target file "{name}" already exists. Continuing will overwrite it (the original is moved to trash first and can be restored). Continue?',
     "files.searchPlaceholder": "Search files...",
     "files.recursive": "Recursive",
     "files.fullText": "Full Text",

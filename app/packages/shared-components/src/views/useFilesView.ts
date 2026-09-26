@@ -54,6 +54,7 @@ import {
 import type { FileItem, IndexStats, PluginMeta, SearchMode, TagInfo } from "@encv/shared-components/api/encv";
 import {
   addTag,
+  checkFileExists,
   copyFile,
   deleteFile,
   fetchPlugins,
@@ -1161,13 +1162,39 @@ export function useFilesView(): UseFilesViewReturn {
   // 7) 文件操作（copy / rename / move / share / delete / tag）
   // =============================================================================
 
+  /**
+   * 目标已存在时的覆盖确认。
+   *
+   * 后端默认拒绝覆盖（会返回任务 failed），所以这里必须先问用户：
+   * 用户确认后才带 overwrite=true，后端会先把目标移入回收站再覆盖（可回滚还原）。
+   * 检测失败（网络异常）时放行：后端仍会安全地拒绝，不会静默覆盖。
+   */
+  async function confirmOverwrite(destPath: string, destName: string): Promise<{ proceed: boolean; overwrite: boolean }> {
+    let exists = false;
+    try {
+      exists = await checkFileExists(destPath);
+    } catch (e) {
+      // 检测失败时放行但不带 overwrite：后端仍会安全地拒绝，不会静默覆盖
+      console.warn("[Files] check destination failed, let backend decide:", e);
+      return { proceed: true, overwrite: false };
+    }
+    if (!exists) return { proceed: true, overwrite: false };
+    const ok = await confirm({
+      message: t("files.overwriteConfirm", { name: destName }),
+      danger: true,
+    });
+    return { proceed: ok, overwrite: ok };
+  }
+
   async function handleCopy(file: FileItem) {
     const baseName = file.name.replace(/\.[^.]+$/, "");
     const ext = file.name.includes(".") ? "." + file.name.split(".").pop() : "";
     const destName = `${baseName}_copy${ext}`;
     const destPath = currentPath.value === "/d" ? `/d/${destName}` : `${currentPath.value}/${destName}`;
     try {
-      await copyFile(file.path, destPath);
+      const { proceed, overwrite } = await confirmOverwrite(destPath, destName);
+      if (!proceed) return;
+      await copyFile(file.path, destPath, overwrite);
       showToast({ message: t("tasks.copy") + " " + t("tasks.taskCreated"), duration: 1500, color: "success" });
     } catch (err: any) {
       showErrorToast(err.message || "Copy failed");
@@ -1189,7 +1216,11 @@ export function useFilesView(): UseFilesViewReturn {
           showToast({ message: "原始文件名已更新", duration: 1500, color: "success" });
         }
       } else {
-        await renameFile(file.path, renameValue.value.trim());
+        const newName = renameValue.value.trim();
+        const destPath = file.path.replace(/[^/]+$/, newName);
+        const { proceed, overwrite } = await confirmOverwrite(destPath, newName);
+        if (!proceed) return;
+        await renameFile(file.path, newName, overwrite);
         showToast({ message: t("tasks.rename") + " " + t("tasks.taskCreated"), duration: 1500, color: "success" });
       }
       showRenameDialog.value = false;
@@ -1206,7 +1237,9 @@ export function useFilesView(): UseFilesViewReturn {
     if (!moveTargetPath.value || moveTargetPath.value === file.path) return;
     const destPath = moveTargetPath.value.endsWith("/") ? `${moveTargetPath.value}${file.name}` : `${moveTargetPath.value}/${file.name}`;
     try {
-      await moveFile(file.path, destPath);
+      const { proceed, overwrite } = await confirmOverwrite(destPath, file.name);
+      if (!proceed) return;
+      await moveFile(file.path, destPath, overwrite);
       showMoveDialog.value = false;
       showToast({ message: t("tasks.move") + " " + t("tasks.taskCreated"), duration: 1500, color: "success" });
     } catch (err: any) {

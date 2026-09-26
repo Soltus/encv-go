@@ -44,12 +44,17 @@ export function isWrongPasswordError(error: unknown): boolean {
   return msg.includes("wrong password") || msg.includes("密码");
 }
 
-export async function renameFile(oldPath: string, newName: string): Promise<{ taskId: string }> {
-  console.info("[API] renameFile:", oldPath, "→", newName);
+/**
+ * overwrite 语义（与后端 internal/service/file_task_handler.go 对齐）：
+ * - 不传 / false（默认）：目标已存在时任务失败，绝不覆盖；
+ * - true：允许覆盖，后端会先把目标移入回收站，可回滚还原。
+ */
+export async function renameFile(oldPath: string, newName: string, overwrite = false): Promise<{ taskId: string }> {
+  console.info("[API] renameFile:", oldPath, "→", newName, "overwrite:", overwrite);
   return apiRequest<{ taskId: string }>("/api/file/rename", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ oldPath, newName }),
+    body: JSON.stringify({ oldPath, newName, ...(overwrite ? { overwrite: true } : {}) }),
   });
 }
 
@@ -68,20 +73,20 @@ export async function renameOriginalName(path: string, newName: string, password
   });
 }
 
-export async function copyFile(srcPath: string, destPath: string): Promise<{ taskId: string }> {
-  console.info("[API] copyFile:", srcPath, "→", destPath);
+export async function copyFile(srcPath: string, destPath: string, overwrite = false): Promise<{ taskId: string }> {
+  console.info("[API] copyFile:", srcPath, "→", destPath, "overwrite:", overwrite);
   return apiRequest<{ taskId: string }>("/api/file/copy", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ srcPath, destPath }),
+    body: JSON.stringify({ srcPath, destPath, ...(overwrite ? { overwrite: true } : {}) }),
   });
 }
 
-export async function moveFile(srcPath: string, destPath: string): Promise<{ taskId: string }> {
-  console.info("[API] moveFile:", srcPath, "→", destPath);
+export async function moveFile(srcPath: string, destPath: string, overwrite = false): Promise<{ taskId: string }> {
+  console.info("[API] moveFile:", srcPath, "→", destPath, "overwrite:", overwrite);
   return apiRequest<{ taskId: string }>("/api/file/move", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ srcPath, destPath }),
+    body: JSON.stringify({ srcPath, destPath, ...(overwrite ? { overwrite: true } : {}) }),
   });
 }
