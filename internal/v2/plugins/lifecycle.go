@@ -21,9 +21,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"sort"
-	"strings"
 	"sync"
 )
 
@@ -145,19 +143,10 @@ func InitializeAll(ctx context.Context, list []Plugin) error {
 }
 
 // InitializePlugins 初始化全局插件列表（Plugins），语义同 InitializeAll。
+//
+// 等价于 InitializePluginsWith(ctx, nil)：不裁剪、按声明顺序。
 func InitializePlugins(ctx context.Context) error {
-	if err := InitializeAll(ctx, Plugins); err != nil {
-		return err
-	}
-	if conflicts := ValidateExtensionUniqueness(); len(conflicts) > 0 {
-		for _, c := range conflicts {
-			slog.Error("container extension conflict detected",
-				"extension", c.Extension,
-				"conflicting_plugins", strings.Join(c.PluginNames, ", "),
-			)
-		}
-	}
-	return nil
+	return InitializePluginsWith(ctx, nil)
 }
 
 // DisposeAll 逆序卸载插件列表，返回与入参同序的状态快照。

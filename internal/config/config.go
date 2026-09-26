@@ -45,6 +45,9 @@ type Config struct {
 	// BinExtGroup types.BinExtGroup `json:"bin_ext_group"`
 	//  map 键是插件名，值是该插件的原始JSON配置
 	PluginSettings map[string]json.RawMessage `json:"plugin_settings"`
+	// PluginAssembly 插件装配：启用哪些插件、以及期望的装载顺序。
+	// 零值等于「全部启用、按编译期声明顺序」，既有配置文件不需要改就能继续工作。
+	PluginAssembly PluginAssembly `json:"plugin_assembly,omitempty"`
 	// 【关键新增】Provider 是一个可选的动态配置提供者
 	// 如果 Provider 不为 nil，它将优先于 PluginSettings 被使用
 	Provider ConfigProvider            `json:"-"` // 使用 `json:"-"` 确保它不会被序列化到文件
@@ -64,6 +67,26 @@ type Config struct {
 	// AgentSettings AI agent 配置（openai_api_key, model 等）
 	// 使用 json.RawMessage 透传，避免定义详细子结构
 	AgentSettings json.RawMessage `json:"agent_settings,omitempty"`
+}
+
+// PluginAssembly 插件装配配置，对标「按场景裁剪插件集」。
+//
+// 过去启用哪些插件、以什么顺序装载，完全由 Plugins 切片的编译期下标决定：
+// 移动端想少装几个插件、某个环境想禁用 ffmpeg 相关插件，只能改代码重新编译。
+// 这里把它变成配置。
+//
+// 最终装载顺序仍是「配置顺序 + 依赖拓扑修正」（见 plugins.SortByDependencies）：
+// 声明了依赖关系的插件，依赖关系优先于配置顺序——配置表达「期望」，
+// 依赖表达「约束」，约束赢。
+type PluginAssembly struct {
+	// Enabled 按期望顺序列出要启用的插件名（与插件 Name() 一致）。
+	//
+	//   - nil / 空：启用全部插件，顺序沿用编译期声明顺序（向后兼容）。
+	//   - 非空：只装载列出的插件，未列出的插件不会被初始化。
+	//
+	// 名字写错会直接报错退出，而不是静默忽略——「以为禁用了实际还在跑」
+	// 和「以为启用了实际没跑」都比启动失败更难排查。
+	Enabled []string `json:"enabled,omitempty"`
 }
 
 // Agent 是 agent_settings 段的类型化表示。
