@@ -59,6 +59,15 @@ type MobileTask struct {
 	CipherMode      int    `json:"cipherMode,omitempty"`
 	CompressionMode string `json:"compressionMode,omitempty"`
 
+	// Overwrite 仅对 copy / move / rename 有意义：
+	//   - false（默认）：目标已存在 → 任务失败，绝不覆盖；
+	//   - true：允许覆盖，但 FileTaskHandler 会先把目标移入回收站，可回滚还原。
+	//
+	// 该字段是「当次任务」的运行期标记，不进 TaskData（不落库）：
+	// 进程重启后未执行的任务会丢失此标记，届时按默认语义拒绝覆盖——
+	// 丢失方向是安全的（fail-safe），不会变成静默覆盖。
+	Overwrite bool `json:"overwrite,omitempty"`
+
 	// 🆕 v6 2026-06-18：runId + triggeredBy 作为 task 一等字段（单一数据源）
 	//   - runId：自动化测试/AI agent 产生的 task 共享同一个 runId，前端按 runId 聚合
 	//   - triggeredBy：'user' | 'automation' | 'ai_agent'

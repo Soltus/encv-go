@@ -56,6 +56,16 @@ func (tm *TrashManagerImpl) MoveToTrash(originalPath string, taskID string) (tas
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
+	// 【关键】没有 store 时拒绝入回收站，而不是 panic。
+	//
+	// 原因：不落库 = 无法列出/还原，等于「软性永久删除」。
+	// 覆盖（copy/move/rename 的 overwrite=true）依赖回收站条目做回滚还原，
+	// 没有 store 就必须让整个操作失败，绝不能先挪文件再说。
+	// 典型场景：server 启动早期 NewMobileService(..., nil) 阶段 store 尚未注入。
+	if tm.store == nil {
+		return tasksystem.TrashItem{}, fmt.Errorf("trash manager has no store: refusing to move %s (unrecoverable)", originalPath)
+	}
+
 	trashID := uuid.NewString()
 	trashPath := filepath.Join(tm.trashDir, fmt.Sprintf("%d_%s", time.Now().UnixNano(), filepath.Base(originalPath)))
 

@@ -347,6 +347,60 @@ CREATE INDEX idx_snapshots_task_id ON rollback_snapshots(task_id);
 - **AND** 异步执行 `io.Copy`，进度按字节推送
 - **AND** 执行完成后广播 `file:change` 事件（action=create for destPath，srcPath 不变）
 
+#### Scenario: 目标已存在（move/copy/rename 通用）
+
+- **WHEN** move / copy / rename 任务执行前发现 `targetPath` 已存在
+- **THEN** 任务失败（status=failed，error 含 `already exists`）
+- **AND** 目标文件**保持原样**（不得覆盖），源文件也不得被破坏
+- **AND** 边界：`sourcePath == targetPath` 时
+  - move / rename 视为 no-op 成功（原地同名无害）
+  - copy 必须失败（`copyFile` 用 `os.Create` 会把目标截断成 0 字节，等于自我销毁）
+
+> **为什么不能覆盖（2026-09-27 补充）**
+> 1. 覆盖不可逆：既无快照也不入回收站，用户文件直接消失；
+> 2. 回滚会变成破坏：`CopyRollbackStrategy` 只做 `os.Remove(target)`，
+>    一旦覆盖过，回滚等于把用户**原有文件**删掉（比覆盖更糟）；
+>    而 `MoveRollbackStrategy` / `RenameRollbackStrategy` 也明确要求 originalPath 未被占用；
+> 3. 全仓无 `overwrite` 参数，覆盖是默认值而非用户选择（i18n 里
+>    `files.overwriteConfirm` 已确立「覆盖需显式确认」的产品惯例）。
+>
+> 校验必须放在 `FileTaskHandler`（任务真正执行前）：
+> HTTP 层的 stat 与任务执行之间存在 TOCTOU 窗口，且无法覆盖非 HTTP 入口。
+>
+### Requirement: 显式覆盖（overwrite）
+
+系统 SHALL 支持**显式** `overwrite: true` 的覆盖语义，默认（不传或 false）为拒绝。
+
+#### Scenario: 默认拒绝覆盖
+- **WHEN** 调用 `POST /api/file/copy|move` 或 `POST /api/file/rename`
+- **AND** 未传 `overwrite` 或 `overwrite=false`
+- **AND** `targetPath` 已存在
+- **THEN** 任务 status=failed，error 含 `already exists`
+- **AND** 目标文件内容保持原样
+
+#### Scenario: 显式覆盖且可回收
+- **WHEN** 请求带 `overwrite: true` 且 `targetPath` 已存在
+- **THEN** `FileTaskHandler` 在执行前调用 `TrashManager.MoveToTrash(dst, taskID)`
+  把目标移入回收站（条目 `task_id` 指向本任务）
+- **AND** 随后执行 copy/move/rename，任务 completed
+
+#### Scenario: 覆盖不可恢复时必须拒绝（fail-safe）
+- **WHEN** 请求带 `overwrite: true`
+- **AND** `FileTaskHandler` 无 TrashManager，或 TrashManager 无 store（无法落库）
+- **THEN** 任务 status=failed，**绝不执行覆盖**
+- **AND** 目标文件保持原样
+- 理由：不落库的回收站条目无法列出/还原，等于软性永久删除
+
+#### Scenario: 回滚覆盖
+- **WHEN** 用户对「覆盖过目标」的 copy/move/rename 任务调用回滚
+- **THEN** 先执行原回滚动作（删副本 / 移回原位 / 改回原名）
+- **AND** 再按原任务 ID 查回收站条目，把被覆盖的文件还原到原路径
+- **AND** 还原成功后删除该回收站条目
+- **AND** 若按原任务 ID 查不到条目（普通非覆盖任务）→ 跳过，不影响回滚结果
+
+> 备注：`MobileTask.Overwrite` 是运行期标记，不落库。进程重启后未执行的任务
+> 会丢失该标记，届时按默认语义拒绝覆盖——丢失方向是安全的（fail-safe）。
+
 #### Scenario: 文件重命名（rename）作为任务
 - **WHEN** 用户调用 `POST /api/file/rename` body `{ oldPath, newName }`
 - **THEN** 后端创建 Task(type=rename, sourcePath=oldPath, targetPath=newPath, originalPath=oldPath)
@@ -518,6 +572,13 @@ CREATE INDEX idx_snapshots_task_id ON rollback_snapshots(task_id);
 - **THEN** 调用对应 API（moveFile/copyFile/renameFile/deleteFile）
 - **AND** API 返回 `{ taskId }`，前端显示 toast "任务已创建"
 - **AND** 不调用 `await loadFiles()`（依赖 file:change 增量更新）
+
+#### Scenario: 前端覆盖确认
+- **WHEN** 用户在 Files 视图执行 copy / move / rename
+- **THEN** 先调用 `GET /api/files/exists?path=<dest>` 检测目标是否已存在
+- **AND** 不存在 → 直接发起操作（不带 overwrite）
+- **AND** 已存在 → 弹确认框（`files.overwriteConfirm`），用户确认后才带 `overwrite: true`
+- **AND** 检测接口异常时放行但**不带** overwrite（后端仍会安全拒绝，不会静默覆盖）
 
 #### Scenario: 文件操作进度反馈
 - **WHEN** move/copy 大文件任务执行中

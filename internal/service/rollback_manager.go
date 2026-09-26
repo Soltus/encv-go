@@ -37,9 +37,11 @@ func NewRollbackManager(store tasksystem.Store, tm *TaskManager, trash *TrashMan
 	}
 	rm.strategies[tasksystem.TaskTypeEncrypt] = &EncryptRollbackStrategy{}
 	rm.strategies[tasksystem.TaskTypeDecrypt] = &DecryptRollbackStrategy{}
-	rm.strategies[tasksystem.TaskTypeMove] = &MoveRollbackStrategy{}
-	rm.strategies[tasksystem.TaskTypeCopy] = &CopyRollbackStrategy{}
-	rm.strategies[tasksystem.TaskTypeRename] = &RenameRollbackStrategy{}
+	// copy/move/rename 需要 store：回滚时若发现原任务覆盖过目标（覆盖前已入回收站），
+	// 要顺带把被覆盖的文件还原回来（见 restoreOverwrittenFromTrash）。
+	rm.strategies[tasksystem.TaskTypeMove] = &MoveRollbackStrategy{store: store}
+	rm.strategies[tasksystem.TaskTypeCopy] = &CopyRollbackStrategy{store: store}
+	rm.strategies[tasksystem.TaskTypeRename] = &RenameRollbackStrategy{store: store}
 	rm.strategies[tasksystem.TaskTypeDelete] = &DeleteRollbackStrategy{store: store}
 	return rm
 }
@@ -299,8 +301,11 @@ func (s *DecryptRollbackStrategy) ExecuteRollback(task tasksystem.TaskData, snap
 }
 
 // MoveRollbackStrategy 移动任务回滚策略。
-// 回滚操作：将文件从 TargetPath 移回 OriginalPath/SourcePath。
-type MoveRollbackStrategy struct{}
+// 回滚操作：将文件从 TargetPath 移回 OriginalPath/SourcePath；
+// 若当初是覆盖进去的，再还原被覆盖的文件。
+type MoveRollbackStrategy struct {
+	store tasksystem.Store
+}
 
 var _ tasksystem.RollbackStrategy = (*MoveRollbackStrategy)(nil)
 
@@ -340,12 +345,15 @@ func (s *MoveRollbackStrategy) ExecuteRollback(task tasksystem.TaskData, snapsho
 	if err := moveWithFallback(task.SourcePath, task.TargetPath); err != nil {
 		return fmt.Errorf("move back failed: %w", err)
 	}
-	return nil
+	// 目标位已空出 → 还原被覆盖的文件（若有）
+	return restoreOverwrittenFromTrash(s.store, task.RollbackOf)
 }
 
 // CopyRollbackStrategy 复制任务回滚策略。
-// 回滚操作：删除副本（original.TargetPath）。
-type CopyRollbackStrategy struct{}
+// 回滚操作：删除副本（original.TargetPath）；若当初是覆盖写入，再还原被覆盖的文件。
+type CopyRollbackStrategy struct {
+	store tasksystem.Store
+}
 
 var _ tasksystem.RollbackStrategy = (*CopyRollbackStrategy)(nil)
 
@@ -368,16 +376,50 @@ func (s *CopyRollbackStrategy) ExecuteRollback(task tasksystem.TaskData, snapsho
 	if err := os.Remove(task.SourcePath); err != nil {
 		if os.IsNotExist(err) {
 			// 文件不存在视为已回滚（不报错）
-			return nil
+			return restoreOverwrittenFromTrash(s.store, task.RollbackOf)
 		}
 		return fmt.Errorf("remove copy failed: %w", err)
 	}
+	// 副本已删除，目标位空出来 → 若当初是覆盖写入的，把被覆盖的原文件还原回来
+	return restoreOverwrittenFromTrash(s.store, task.RollbackOf)
+}
+
+// restoreOverwrittenFromTrash 回滚「覆盖」时为被覆盖的文件兜底。
+//
+// copy / move / rename 在 overwrite=true 且目标已存在时，会先调用
+// TrashManager.MoveToTrash(dst, taskID) 把目标移入回收站，条目 task_id 指向该任务。
+// 因此这里只要能按原任务 ID 查到回收站条目，就说明本次任务覆盖过东西，
+// 回滚时把它还原；查不到则说明是普通（非覆盖）任务，直接跳过。
+//
+// 没有 store（单测/未配置）时静默跳过——不能因为兜底失败就让整个回滚失败。
+func restoreOverwrittenFromTrash(store tasksystem.Store, originalTaskID string) error {
+	if store == nil || originalTaskID == "" {
+		return nil
+	}
+	item, err := store.GetTrashByTaskID(originalTaskID)
+	if err != nil || item.ID == "" {
+		// 未覆盖过（绝大多数任务的正常路径）
+		return nil
+	}
+	if _, statErr := os.Stat(item.OriginalPath); statErr == nil {
+		return fmt.Errorf("cannot restore overwritten file, path already occupied: %s", item.OriginalPath)
+	}
+	if err := moveWithFallback(item.TrashPath, item.OriginalPath); err != nil {
+		return fmt.Errorf("restore overwritten file failed: %w", err)
+	}
+	if err := store.DeleteTrash(item.ID); err != nil {
+		slog.Warn("Failed to delete trash item after restoring overwritten file",
+			"id", item.ID, "error", err)
+	}
+	slog.Info("Restored overwritten file during rollback", "path", item.OriginalPath)
 	return nil
 }
 
 // RenameRollbackStrategy 重命名任务回滚策略。
-// 回滚操作：将文件从新名改回原名。
-type RenameRollbackStrategy struct{}
+// 回滚操作：将文件从新名改回原名；若当初覆盖了同名文件，再还原被覆盖的文件。
+type RenameRollbackStrategy struct {
+	store tasksystem.Store
+}
 
 var _ tasksystem.RollbackStrategy = (*RenameRollbackStrategy)(nil)
 
@@ -417,7 +459,8 @@ func (s *RenameRollbackStrategy) ExecuteRollback(task tasksystem.TaskData, snaps
 	if err := moveWithFallback(task.SourcePath, task.TargetPath); err != nil {
 		return fmt.Errorf("rename back failed: %w", err)
 	}
-	return nil
+	// 目标位已空出 → 还原被覆盖的文件（若有）
+	return restoreOverwrittenFromTrash(s.store, task.RollbackOf)
 }
 
 // DeleteRollbackStrategy 删除任务回滚策略。

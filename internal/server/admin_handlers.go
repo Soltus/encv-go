@@ -246,6 +246,8 @@ func (s *Server) handleFileRenameGin(c *gin.Context) {
 	var req struct {
 		OldPath string `json:"oldPath" binding:"required"`
 		NewName string `json:"newName" binding:"required"`
+		// 语义同 copy/move：默认不覆盖；true 时先入回收站再覆盖。
+		Overwrite bool `json:"overwrite"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -279,6 +281,7 @@ func (s *Server) handleFileRenameGin(c *gin.Context) {
 
 	task := s.mobileSvc.GetTaskManager().Create("rename", oldAbsPath, newAbsPath, "", 0, "")
 	task.OriginalPath = oldAbsPath
+	task.Overwrite = req.Overwrite
 	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补 RunId 兜底 + 持久化 + 广播
 	s.mobileSvc.GetTaskManager().FinalizeCreatedTask(task)
 
@@ -291,6 +294,9 @@ func (s *Server) handleFileCopyGin(c *gin.Context) {
 	var req struct {
 		SrcPath  string `json:"srcPath" binding:"required"`
 		DestPath string `json:"destPath" binding:"required"`
+		// Overwrite 默认 false：目标已存在时任务失败。
+		// 置 true 时允许覆盖，但 FileTaskHandler 会先把目标移入回收站（可还原）。
+		Overwrite bool `json:"overwrite"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -322,6 +328,7 @@ func (s *Server) handleFileCopyGin(c *gin.Context) {
 	}
 
 	task := s.mobileSvc.GetTaskManager().Create("copy", srcAbsPath, destAbsPath, "", 0, "")
+	task.Overwrite = req.Overwrite
 	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补 RunId 兜底 + 持久化 + 广播
 	s.mobileSvc.GetTaskManager().FinalizeCreatedTask(task)
 
@@ -334,6 +341,8 @@ func (s *Server) handleFileMoveGin(c *gin.Context) {
 	var req struct {
 		SrcPath  string `json:"srcPath" binding:"required"`
 		DestPath string `json:"destPath" binding:"required"`
+		// 语义同 copy：默认不覆盖；true 时先入回收站再覆盖。
+		Overwrite bool `json:"overwrite"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -366,6 +375,7 @@ func (s *Server) handleFileMoveGin(c *gin.Context) {
 
 	task := s.mobileSvc.GetTaskManager().Create("move", srcAbsPath, destAbsPath, "", 0, "")
 	task.OriginalPath = srcAbsPath
+	task.Overwrite = req.Overwrite
 	// 🆕 2026-06-23 WS 时序修复：Create 不再内部广播，外部补 RunId 兜底 + 持久化 + 广播
 	s.mobileSvc.GetTaskManager().FinalizeCreatedTask(task)
 
