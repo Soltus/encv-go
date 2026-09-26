@@ -18,6 +18,15 @@ type PluginMeta struct {
 	SupportedMimePrefixes []string `json:"supportedMimePrefixes"`
 	ContainerExtension    string   `json:"containerExtension"`
 	TaskOptions           gin.H    `json:"taskOptions"`
+
+	// State 生命周期状态（见 internal/v2/plugins/lifecycle.go）：
+	// pending / loading / active / failed / disposing / disposed。
+	// 从未登记过的插件按 pending 上报（已声明、尚未初始化）。
+	State string `json:"state"`
+	// Error 初始化或卸载失败的原因；正常时为空串。
+	Error string `json:"error,omitempty"`
+	// Disposable 该插件是否实现了 Disposable——即停机时能否被统一回收副作用。
+	Disposable bool `json:"disposable"`
 }
 
 func (s *Server) handleTagsListGin(c *gin.Context) {
@@ -61,6 +70,12 @@ func (s *Server) handleTagsMutateGin(c *gin.Context) {
 }
 
 func (s *Server) handlePluginsGin(c *gin.Context) {
+	// 生命周期状态按插件名索引（注册表里的顺序与 Plugins 列表不一定一致）
+	states := make(map[string]plugins.PluginStatus, len(plugins.Plugins))
+	for _, st := range plugins.GetPluginStates() {
+		states[st.Name] = st
+	}
+
 	var metas []PluginMeta
 	for _, p := range plugins.Plugins {
 		opts := p.GetTaskOptions()
@@ -79,12 +94,22 @@ func (s *Server) handlePluginsGin(c *gin.Context) {
 			supportedMimes = []string{}
 		}
 
+		st, known := states[p.Name()]
+		state := st.State
+		if !known {
+			state = plugins.StatePending
+		}
+		_, disposable := p.(plugins.Disposable)
+
 		metas = append(metas, PluginMeta{
 			Name:                  p.Name(),
 			SupportedExtensions:   supportedExts,
 			SupportedMimePrefixes: supportedMimes,
 			ContainerExtension:    p.GetContainerExtension(),
 			TaskOptions:           taskOptionsToGinH(opts),
+			State:                 string(state),
+			Error:                 st.Error,
+			Disposable:            disposable,
 		})
 	}
 	c.JSON(200, gin.H{"plugins": metas})

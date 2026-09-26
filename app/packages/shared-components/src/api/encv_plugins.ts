@@ -6,12 +6,27 @@ import type { TaskType } from "./encv_tasks";
 
 // encv_plugins.ts - 拆分自 encv.ts
 
+/**
+ * 插件生命周期状态（后端 internal/v2/plugins/lifecycle.go）。
+ * pending → loading → active，失败时 failed；卸载时 disposing → disposed。
+ */
+export type PluginState = "pending" | "loading" | "active" | "failed" | "disposing" | "disposed";
+
 export interface PluginMeta {
   name: string;
   supportedExtensions: string[];
   supportedMimePrefixes: string[];
   containerExtension: string;
   taskOptions: TaskOptions;
+  /**
+   * 生命周期状态；用于排障「某个插件为什么不可用」。
+   * 后端总是下发，这里标可选是为了不破坏既有的测试夹具（它们只填业务字段）。
+   */
+  state?: PluginState;
+  /** 初始化/卸载失败原因，正常时为空。 */
+  error?: string;
+  /** 是否实现了 Disposable（停机时能否被统一回收临时产物）。 */
+  disposable?: boolean;
 }
 
 export type PasswordStrategy = "global" | "independent" | "none";

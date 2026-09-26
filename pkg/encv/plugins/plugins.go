@@ -20,6 +20,20 @@ func InitializePlugins(ctx context.Context) error {
 	return encvPlugins.InitializePlugins(ctx)
 }
 
+// DisposePlugins 逆序卸载全部插件，回收它们注册的副作用（临时文件、子进程等）。
+//
+// 宿主应在「退出进程」或「重载插件配置」时调用它；
+// 实现了 Disposable 的插件会被真正回收，未实现的插件只是被标记为已卸载。
+// 返回每个插件的最终状态，便于排障（哪个插件 Dispose 失败了）。
+func DisposePlugins() []encvPlugins.PluginStatus {
+	return encvPlugins.DisposePlugins()
+}
+
+// GetPluginStates 返回全部插件的生命周期状态快照（pending/loading/active/failed/disposing/disposed）。
+func GetPluginStates() []encvPlugins.PluginStatus {
+	return encvPlugins.GetPluginStates()
+}
+
 // Plugins 返回已注册的插件列表（由 internal/v2/plugins 维护）。
 // 供 agent 集成等需要直接遍历插件的调用方使用。
 func Plugins() []encvPlugins.Plugin {
@@ -106,10 +120,14 @@ func initializeSinglePlugin(p encvPlugins.Plugin, rawUserSettings json.RawMessag
 	// 4. 调用插件的 Initialize
 	// 【关键】即使插件内部初始化失败，也只记录错误，不中断流程
 	if err := p.Initialize(ctx); err != nil {
+		// 统一登记到注册表状态表，让 /api 与日志看到的生命周期是一致的
+		// （这条路径绕过了 internal 的 InitializePlugins，所以必须自己登记）。
+		encvPlugins.SetPluginState(pluginName, encvPlugins.StateFailed, err)
 		log.Printf("ERROR: Plugin '%s' failed to initialize even with default settings. It will be disabled. Error: %v", pluginName, err)
 		// 插件初始化失败，意味着它可能无法正常工作（如解密、加密），
 		// 但至少服务启动了，管理员可以在日志中看到问题并去修复。
-	} else {
-		log.Printf("INFO: Plugin '%s' initialized successfully.", pluginName)
+		return
 	}
+	encvPlugins.SetPluginState(pluginName, encvPlugins.StateActive, nil)
+	log.Printf("INFO: Plugin '%s' initialized successfully.", pluginName)
 }

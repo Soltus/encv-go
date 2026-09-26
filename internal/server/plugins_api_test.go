@@ -89,6 +89,51 @@ func TestHandlePluginsGin_EachPluginHasRequiredFields(t *testing.T) {
 	}
 }
 
+// TestHandlePluginsGin_ExposesLifecycleState 锁住「/api/plugins 暴露生命周期状态」：
+// 状态是排障的关键信息（哪个插件初始化失败、哪个插件能被回收），不能被悄悄删掉。
+func TestHandlePluginsGin_ExposesLifecycleState(t *testing.T) {
+	router := setupPluginsTestRouter(t)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/plugins", nil)
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var response struct {
+		Plugins []struct {
+			Name       string `json:"name"`
+			State      string `json:"state"`
+			Error      string `json:"error"`
+			Disposable bool   `json:"disposable"`
+		} `json:"plugins"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.NotEmpty(t, response.Plugins)
+
+	validStates := map[string]bool{
+		"pending": true, "loading": true, "active": true,
+		"failed": true, "disposing": true, "disposed": true,
+	}
+
+	byName := map[string]int{}
+	for i, p := range response.Plugins {
+		byName[p.Name] = i
+		assert.True(t, validStates[p.State],
+			"插件 %s 的 state 必须是合法状态之一，实际为 %q", p.Name, p.State)
+	}
+
+	// video 是目前唯一实现 Disposable 的插件（见 internal/v2/plugins/video/dispose.go）
+	videoIdx, ok := byName["video"]
+	require.True(t, ok)
+	assert.True(t, response.Plugins[videoIdx].Disposable, "video 插件应上报 disposable=true")
+
+	// text 插件没有临时产物，不应声称可被回收
+	textIdx, ok := byName["text"]
+	require.True(t, ok)
+	assert.False(t, response.Plugins[textIdx].Disposable, "text 插件未实现 Disposable，应上报 false")
+}
+
 func TestHandlePluginsGin_VideoPluginHasVideoMimePrefix(t *testing.T) {
 	router := setupPluginsTestRouter(t)
 

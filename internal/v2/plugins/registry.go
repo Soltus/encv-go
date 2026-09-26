@@ -347,27 +347,8 @@ func BuildFullPluginSettings(userSettings map[string]json.RawMessage) (map[strin
 	return fullSettings, nil
 }
 
-func InitializePlugins(ctx context.Context) error {
-	for _, p := range Plugins {
-		pluginName := p.Name()
-		slog.Info("Initializing plugin", "name", pluginName)
-
-		if err := p.Initialize(ctx); err != nil {
-			return fmt.Errorf("failed to initialize plugin %s: %w", pluginName, err)
-		}
-	}
-
-	if conflicts := ValidateExtensionUniqueness(); len(conflicts) > 0 {
-		for _, c := range conflicts {
-			slog.Error("container extension conflict detected",
-				"extension", c.Extension,
-				"conflicting_plugins", strings.Join(c.PluginNames, ", "),
-			)
-		}
-	}
-
-	return nil
-}
+// 注意：InitializePlugins 已迁移到 lifecycle.go（带状态记录与失败回滚），
+// 这里只保留查找/调度相关的逻辑，避免同一份初始化逻辑散在两个文件里。
 
 // FindEncryptingPlugin 为给定的输入文件查找合适的加密插件
 // 优先级：
@@ -576,9 +557,8 @@ func ProcessFileWithPlugin(p Plugin, inputPath string) (types.Index, io.ReadClos
 
 func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputRootDir, outputDir string, collector *performance.Collector) (string, error) {
 	var outputPath string
-	if vp, ok := plugin.(*video.VideoPlugin); ok {
-		vp.SetOutputDir(outputDir)
-	}
+	// 可选能力注入（替代对具体插件类型的特判）：谁需要输出目录谁就实现该接口。
+	applyOutputDir(plugin, outputDir)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -639,9 +619,7 @@ func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputR
 		collector.StartPhase("packing")
 	}
 
-	if vp, ok := plugin.(*video.VideoPlugin); ok {
-		vp.SetPostEncryptVerify(true)
-	}
+	applyPostEncryptVerify(plugin)
 	outputPath, err = plugin.PostEncryptProcessor(result)
 	if err != nil {
 		return "", fmt.Errorf("post-encryption failed for '%s': %w", inputPath, err)
@@ -651,18 +629,8 @@ func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputR
 		collector.EndPhase("packing", 0)
 	}
 
-	if vp, ok := plugin.(*video.VideoPlugin); ok {
-		sourcePath := vp.EncryptedSourcePath()
-		if sourcePath != "" && sourcePath != inputPath {
-			tempDir := filepath.Dir(sourcePath)
-			if strings.Contains(filepath.Base(tempDir), ".encv_tmp") {
-				slog.Info("Cleaning up preprocessed temp file", "path", sourcePath)
-				if rmErr := os.Remove(sourcePath); rmErr != nil {
-					slog.Warn("Failed to clean up preprocessed temp file", "path", sourcePath, "error", rmErr)
-				}
-			}
-		}
-	}
+	// 中间产物清理走可选能力，调度层不再认识任何具体插件类型。
+	cleanupPreprocessedSource(plugin, inputPath)
 
 	return outputPath, nil
 }

@@ -46,6 +46,30 @@ type ContentVerifier interface {
 	Verify(originalPath, decryptedPath string, opts ...*VerifyOptions) (error, []*VerifyWarning)
 }
 
+// ─────────── 可选能力（Optional Capabilities）───────────
+//
+// 这些接口是「框架认识插件」的替代方案：调度层只依赖能力，不依赖具体插件类型，
+// 从而避免 registry 里出现 `if vp, ok := plugin.(*video.VideoPlugin)` 这类
+// 对某个插件的硬编码特判（Cordis 称之为「需要打补丁的特权核心」）。
+//
+// 插件按需实现；未实现的插件被自动跳过，不影响调度。
+
+// OutputDirSetter 可选能力：插件需要知道本次任务的输出目录。
+type OutputDirSetter interface {
+	SetOutputDir(dir string)
+}
+
+// PostEncryptVerifySetter 可选能力：插件在加密完成后可以做一次自检。
+type PostEncryptVerifySetter interface {
+	SetPostEncryptVerify(enabled bool)
+}
+
+// EncryptedSourceProvider 可选能力：插件可暴露「预处理产生的中间产物路径」，
+// 供调度层在任务结束后统一清理（副作用不留在插件内部各自 defer）。
+type EncryptedSourceProvider interface {
+	EncryptedSourcePath() string
+}
+
 // FragmentBuilder 定义了自定义逻辑分片策略的接口（如视频 GOP 对齐）
 type FragmentBuilder interface {
 	// BuildFragments 根据逻辑文件大小生成分片元数据

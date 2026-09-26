@@ -872,13 +872,27 @@ func (s *Server) Start(version string) (string, error) {
 
 func (s *Server) Stop() error {
 	s.readerService.Cleanup()
+
+	var shutdownErr error
 	if s.server != nil {
 		slog.Info("Shutting down server")
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		return s.server.Shutdown(ctx)
+		shutdownErr = s.server.Shutdown(ctx)
 	}
-	return nil
+
+	// 插件卸载：回收各插件注册的副作用（预处理临时目录、自检目录等）。
+	// 必须在 HTTP 停机之后执行——否则还有请求正在使用插件。
+	// 实现了 Disposable 的插件被真正回收，其余插件仅标记为 disposed。
+	for _, st := range plugins.DisposePlugins() {
+		if st.Error != "" {
+			slog.Warn("plugin dispose failed", "plugin", st.Name, "error", st.Error)
+			continue
+		}
+		slog.Debug("plugin disposed", "plugin", st.Name, "state", st.State)
+	}
+
+	return shutdownErr
 }
 
 // handleRequest 是主路由 / 处理器
