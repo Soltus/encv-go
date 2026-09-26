@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -109,19 +110,28 @@ func ResetPluginStates() {
 	defer lifecycleMu.Unlock()
 	pluginStates = make(map[string]PluginStatus)
 	pluginOrder = nil
+	initOrder = nil
 }
 
-// InitializeAll 按顺序初始化插件列表。
+// InitializeAll 按依赖关系排序后逐个初始化插件列表（见 SortByDependencies）。
 //
-// 失败语义：单个插件初始化失败只把它自己标记为 StateFailed，**不拖垮其余插件**。
-// 这与 ENCV 既有的容错哲学一致（pkg/encv/plugins.InitializeWithSettings 也是
-// 「失败的插件被禁用，服务照常启动」），也让调用方可以忽略聚合错误而仍然
-// 拿到一部分可用插件。真正的「生命周期包含」体现在卸载侧：DisposeAll 严格逆序。
+// 两种失败，语义刻意不同：
+//   - 依赖缺失 / 成环：装配错误，**一个都不初始化**直接返回。继续装载只会得到
+//     「某个插件的提供方不存在」的半初始化状态，比不启动更难排查。
+//   - 单个插件 Initialize 报错：只把它自己标记为 StateFailed，不拖垮其余插件。
+//     这与 ENCV 既有的容错哲学一致（pkg/encv/plugins.InitializeWithSettings 也是
+//     「失败的插件被禁用，服务照常启动」），错误用 errors.Join 聚合返回。
 //
-// 返回值是所有失败的组合（errors.Join）；全部成功时为 nil。
+// 「生命周期包含」体现在卸载侧：实际装载顺序会被记下，DisposePlugins 严格逆序回收。
 func InitializeAll(ctx context.Context, list []Plugin) error {
+	ordered, err := SortByDependencies(list)
+	if err != nil {
+		return err
+	}
+	recordInitOrder(ordered)
+
 	var errs []error
-	for _, p := range list {
+	for _, p := range ordered {
 		name := p.Name()
 		SetPluginState(name, StateLoading, nil)
 		if err := p.Initialize(ctx); err != nil {
@@ -183,8 +193,52 @@ func DisposeAll(list []Plugin) []PluginStatus {
 }
 
 // DisposePlugins 卸载全局插件列表（Plugins），返回状态快照。
+//
+// 顺序取「最近一次实际装载顺序」的逆序：装载时按依赖拓扑排过序，
+// 卸载必须逆着来，否则会先回收掉仍有消费方在用的提供方。
 func DisposePlugins() []PluginStatus {
-	return DisposeAll(Plugins)
+	return DisposeAll(orderedByLastInit(Plugins))
+}
+
+// initOrder 记录最近一次实际装载顺序，供卸载逆序使用。
+var initOrder []string
+
+func recordInitOrder(list []Plugin) {
+	lifecycleMu.Lock()
+	defer lifecycleMu.Unlock()
+	initOrder = make([]string, 0, len(list))
+	for _, p := range list {
+		initOrder = append(initOrder, p.Name())
+	}
+}
+
+// orderedByLastInit 按最近一次装载顺序重排列表。
+//
+// 没有装载记录时（例如走了 pkg/encv/plugins.InitializeWithSettings 那条不经过
+// InitializeAll 的路径）保持声明顺序，行为与今天一致。
+// 有记录时只回收真正装载过的插件——没初始化过的插件没有副作用可收。
+func orderedByLastInit(list []Plugin) []Plugin {
+	lifecycleMu.RLock()
+	rank := make(map[string]int, len(initOrder))
+	for i, name := range initOrder {
+		rank[name] = i
+	}
+	lifecycleMu.RUnlock()
+
+	if len(rank) == 0 {
+		return list
+	}
+
+	known := make([]Plugin, 0, len(list))
+	for _, p := range list {
+		if _, ok := rank[p.Name()]; ok {
+			known = append(known, p)
+		}
+	}
+	sort.SliceStable(known, func(i, j int) bool {
+		return rank[known[i].Name()] < rank[known[j].Name()]
+	})
+	return known
 }
 
 func mustStatus(name string) PluginStatus {

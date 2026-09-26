@@ -70,6 +70,25 @@ type EncryptedSourceProvider interface {
 	EncryptedSourcePath() string
 }
 
+// DependencyAware 可选能力：声明插件提供与依赖的「服务名」。
+//
+// 服务名是团队约定的自由字符串（例如 "container.text"、"ffmpeg"、"crypto.v4"），
+// 注册表据此做拓扑排序，从而把「装载顺序」从 Plugins 切片的隐式下标顺序
+// 变成显式声明：
+//   - 提供方先于消费方初始化；
+//   - 消费方先于提供方卸载（生命周期包含）；
+//   - 依赖缺失或成环时**在装载前**报错，而不是运行到一半才炸。
+//
+// 未实现该接口的插件视为「既不提供也不依赖」，行为与今天完全一致——
+// 这样 7 个插件可以按自身需要逐步接入，不必一次性改完。
+type DependencyAware interface {
+	// Provides 返回本插件对外提供的服务名。
+	Provides() []string
+	// Requires 返回本插件依赖的服务名。自身 Provides 中已有的名字视为已满足
+	// （允许插件声明「我提供并复用某个能力」而不被判成自环）。
+	Requires() []string
+}
+
 // FragmentBuilder 定义了自定义逻辑分片策略的接口（如视频 GOP 对齐）
 type FragmentBuilder interface {
 	// BuildFragments 根据逻辑文件大小生成分片元数据
@@ -131,13 +150,13 @@ type TaskStateResetter interface {
 // SearchableContentType 预定义的搜索内容类型。
 // 插件可在 SearchableContentsManifest.Types 里引用这些常量。
 const (
-	SearchableTypeSubtitle  = "subtitle"  // 字幕
-	SearchableTypeTitle     = "title"     // 标题
-	SearchableTypeLyrics    = "lyrics"    // 歌词
-	SearchableTypeMetadata  = "metadata"  // 元数据
-	SearchableTypeBody      = "body"      // 正文（如 text 插件整文）
-	SearchableTypeChapters  = "chapters"  // 章节
-	SearchableTypeOCR       = "ocr"       // OCR 文本（图片插件）
+	SearchableTypeSubtitle   = "subtitle"   // 字幕
+	SearchableTypeTitle      = "title"      // 标题
+	SearchableTypeLyrics     = "lyrics"     // 歌词
+	SearchableTypeMetadata   = "metadata"   // 元数据
+	SearchableTypeBody       = "body"       // 正文（如 text 插件整文）
+	SearchableTypeChapters   = "chapters"   // 章节
+	SearchableTypeOCR        = "ocr"        // OCR 文本（图片插件）
 	SearchableTypeTranscript = "transcript" // 语音转写（音频/视频）
 )
 
@@ -147,11 +166,12 @@ const (
 // （透明告知用户加密容器可以被搜到什么内容）
 //
 // 插件实现示例（video 插件）：
-//   func (p *VideoPlugin) GetSearchableContentsManifest() SearchableContentsManifest {
-//     return SearchableContentsManifest{Enabled: true, Types: []string{
-//       SearchableTypeSubtitle, SearchableTypeTitle, SearchableTypeChapters,
-//     }}
-//   }
+//
+//	func (p *VideoPlugin) GetSearchableContentsManifest() SearchableContentsManifest {
+//	  return SearchableContentsManifest{Enabled: true, Types: []string{
+//	    SearchableTypeSubtitle, SearchableTypeTitle, SearchableTypeChapters,
+//	  }}
+//	}
 type SearchableContentsManifest struct {
 	Enabled bool     // false = 插件不参与全文搜索（容器内任何内容都不进 FTS5）
 	Types   []string // 插件支持的可搜索内容类型（见 SearchableType* 常量）
@@ -168,9 +188,9 @@ type SearchableContentItem struct {
 // SearchableContentsExtractor 定义从加密容器中提取可搜索内容的能力。
 //
 // FTS5 索引构建（mobile_search_fulltext.go）会：
-//   1. 扫描到 .sccgv/.ae 等容器文件
-//   2. 调 ExtractSearchableContents() 拿到 SearchableContentItem 列表
-//   3. 把每条 item 写成 FileEntry{Content: item.Text, ...} 进 FTS5
+//  1. 扫描到 .sccgv/.ae 等容器文件
+//  2. 调 ExtractSearchableContents() 拿到 SearchableContentItem 列表
+//  3. 把每条 item 写成 FileEntry{Content: item.Text, ...} 进 FTS5
 //
 // 返回 error 表示该容器提取失败（跳过该文件即可，不阻断）
 type SearchableContentsExtractor interface {
