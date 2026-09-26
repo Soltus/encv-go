@@ -42,6 +42,9 @@
 
 **/screenshots/
 
+# 前端 WASM 加密内核构建产物（make wasm / scripts/build-wasm.sh 生成，不入库）
+app/packages/encv-crypto/wasm/
+
 # Go workspace file
 go.work
 

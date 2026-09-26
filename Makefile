@@ -1,4 +1,4 @@
-.PHONY: encv copy-files build-all build-artifacts run clean dev-backend dev-mobile test-go test-diagnose test-self test-all-go
+.PHONY: encv copy-files build-all build-artifacts run clean dev-backend dev-mobile test-go test-diagnose test-self test-all-go wasm wasm-vectors
 
 OUTPUT_DIR ?= dist
 
@@ -34,6 +34,15 @@ dev-backend:
 dev-mobile:
 	@echo "Starting backend (mobile preview mode, no mock pre-generation)..."
 	ENCV_MOBILE=1 ENCV_DEV_PREVIEW=1 go run ./cmd/encv start
+
+# 构建前端 WASM 加密内核（Go 加密层 → wasm），产物在 app/packages/encv-crypto/wasm/
+# VuePress / Obsidian / 思源插件共用这一份产物，杜绝各写一套加密实现。
+wasm:
+	@bash scripts/build-wasm.sh
+
+# 只重新生成 Go 与前端共享的黄金测试向量（加密层的契约锁）
+wasm-vectors:
+	@go run ./cmd/encv-crypto-vectors
 
 # Go 测试唯一入口（强超时链 + pre-flight 清理 + 崩溃落盘）
 # 2026-06-15 创建（test-architecture-refactor-defense-awareness Sprint 1）

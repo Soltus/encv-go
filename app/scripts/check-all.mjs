@@ -10,8 +10,9 @@
  *   5. plugin-mpv-player/web 类型检查（vue-tsc --noEmit）
  *   6. plugin-simverse/web 类型检查（vue-tsc --noEmit）
  *   7. i18n 全局 lint --all（仓库根 scripts/i18n-tool.py）
- *   8. encv-mobile 单元测试（vitest run，可用 --no-tests 跳过）
- *   9. encv-mobile 构建校验（vite build，纯 web 打包；typecheck 已由套件 2 覆盖）
+ *   8. encv-crypto 对等测试（wasm ↔ go 黄金向量；wasm 未构建则跳过）
+ *   9. encv-mobile 单元测试（vitest run，可用 --no-tests 跳过）
+ *   10. encv-mobile 构建校验（vite build，纯 web 打包；typecheck 已由套件 2 覆盖）
  *
  * 用法：
  *   pnpm check:all            # 跑全部
@@ -90,6 +91,17 @@ const SUITES = [
     cmd: "python3",
     args: [I18N_TOOL, "lint", "--all"],
     timeoutMs: 180_000,
+  },
+  {
+    // 「Go 加密层 ↔ 前端 wasm」的对等契约测试。
+    // wasm 是构建产物（已 gitignore），没构建过就跳过而不是判失败——
+    // 它的职责是「构建过就必须逐字节一致」，不是要求所有人本地都先构建。
+    name: "encv-crypto parity (wasm <-> go)",
+    cwd: resolve(APP_ROOT, "packages/encv-crypto"),
+    cmd: "node",
+    args: ["--test", "test/parity.test.mjs"],
+    timeoutMs: 120_000,
+    skip: NO_TESTS || !existsSync(resolve(APP_ROOT, "packages/encv-crypto/wasm/encv.wasm")),
   },
   {
     name: "encv-mobile unit tests",
