@@ -27,6 +27,11 @@ func setupTestServer(t *testing.T, webdavUsername, webdavPassword string) (*Serv
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 
+	// 【关键】挂载注册表默认是全局文件（mountRegistryDataPath 派生的 mounts.json）；
+	// 同进程内多个测试各自 NewServer 会互相看到对方的 mount（实测 primary mount 指向了
+	// 上一次测试已删除的临时目录 → /webdav/test.txt 404）。用 ENCV_MOUNTS_FILE 隔离到本次临时目录。
+	t.Setenv("ENCV_MOUNTS_FILE", filepath.Join(tmpDir, "mounts.json"))
+
 	subDir := filepath.Join(tmpDir, "subdir")
 	if err := os.MkdirAll(subDir, 0755); err != nil {
 		os.RemoveAll(tmpDir)
@@ -233,16 +238,27 @@ func TestWebDAV_GetFile(t *testing.T) {
 	_, baseURL, teardown := setupTestServer(t, "testuser", "testpass")
 	defer teardown()
 
-	req, err := http.NewRequest("GET", baseURL+"/webdav/test.txt", nil)
-	if err != nil {
-		t.Fatalf("Failed to create GET request: %v", err)
-	}
-	req.SetBasicAuth("testuser", "testpass")
-
+	// WebDAV FS 启动时是「index building in background」，索引就绪前的首请求会 404
+	// （日志可见 fs_v2.go:208）。因此这里轮询等待，而不是一次性断言。
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("GET request failed: %v", err)
+	var resp *http.Response
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		req, err := http.NewRequest("GET", baseURL+"/webdav/test.txt", nil)
+		if err != nil {
+			t.Fatalf("Failed to create GET request: %v", err)
+		}
+		req.SetBasicAuth("testuser", "testpass")
+
+		resp, err = client.Do(req)
+		if err != nil {
+			t.Fatalf("GET request failed: %v", err)
+		}
+		if resp.StatusCode == http.StatusOK || time.Now().After(deadline) {
+			break
+		}
+		resp.Body.Close()
+		time.Sleep(50 * time.Millisecond)
 	}
 	defer resp.Body.Close()
 

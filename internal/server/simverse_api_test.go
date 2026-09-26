@@ -13,6 +13,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// skipSimverseIfShort 让本文件的集成用例在短模式下跳过。
+//
+// 背景：这些用例各自要起一个 SimverseManager 并跑若干 world.Tick，单条实测 49s+；
+// 此前整个 server 包在中途就 panic/失败，几乎跑不到这里，把耗时问题掩盖了。
+// 与仓库约定一致：scripts/test-go.sh 默认 -short，重量集成/E2E 用 ENCV_TEST_LONG=1 解除。
+func skipSimverseIfShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping heavy simverse integration test in short mode (use ENCV_TEST_LONG=1)")
+	}
+}
+
 func setupSimverseTestServer() (*gin.Engine, *SimverseManager, string) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -38,6 +50,7 @@ func setupSimverseTestServer() (*gin.Engine, *SimverseManager, string) {
 }
 
 func TestSimverseAPI_WorldState(t *testing.T) {
+	skipSimverseIfShort(t)
 	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
@@ -69,6 +82,7 @@ func TestSimverseAPI_WorldState(t *testing.T) {
 }
 
 func TestSimverseAPI_WorldConfig(t *testing.T) {
+	skipSimverseIfShort(t)
 	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
@@ -100,6 +114,7 @@ func TestSimverseAPI_WorldConfig(t *testing.T) {
 }
 
 func TestSimverseAPI_SetConfig(t *testing.T) {
+	skipSimverseIfShort(t)
 	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
@@ -149,6 +164,7 @@ func TestSimverseAPI_SetConfig(t *testing.T) {
 }
 
 func TestSimverseAPI_WorldControl(t *testing.T) {
+	skipSimverseIfShort(t)
 	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
@@ -182,6 +198,7 @@ func TestSimverseAPI_WorldControl(t *testing.T) {
 }
 
 func TestSimverseAPI_NPCList(t *testing.T) {
+	skipSimverseIfShort(t)
 	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
@@ -229,6 +246,7 @@ func TestSimverseAPI_NPCList(t *testing.T) {
 }
 
 func TestSimverseAPI_NPCDetail(t *testing.T) {
+	skipSimverseIfShort(t)
 	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
@@ -267,6 +285,7 @@ func TestSimverseAPI_NPCDetail(t *testing.T) {
 }
 
 func TestSimverseAPI_FocusList(t *testing.T) {
+	skipSimverseIfShort(t)
 	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
@@ -290,6 +309,7 @@ func TestSimverseAPI_FocusList(t *testing.T) {
 }
 
 func TestSimverseAPI_SetFocus(t *testing.T) {
+	skipSimverseIfShort(t)
 	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
@@ -321,6 +341,9 @@ func TestSimverseAPI_SetFocus(t *testing.T) {
 }
 
 func TestSimverseAPI_PerfMetrics(t *testing.T) {
+	// 本用例最重：100 次 world.Tick（实测 49s+），短模式由 skipSimverseIfShort 统一跳过
+	skipSimverseIfShort(t)
+
 	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 
@@ -352,6 +375,7 @@ func TestSimverseAPI_PerfMetrics(t *testing.T) {
 }
 
 func TestSimverseAPI_AllEndpoints(t *testing.T) {
+	skipSimverseIfShort(t)
 	r, mgr, _ := setupSimverseTestServer()
 	defer mgr.Stop()
 

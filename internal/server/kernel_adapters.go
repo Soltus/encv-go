@@ -10,9 +10,9 @@
 //     套 json.RawMessage 会丢失类型安全；它们是 kernel 的调用方而非服务）
 //
 // 三个 adapter：
-//   1. SearchVectorService — 包装 *vectorsearch.SearchService（search_files / search_tasks / index_*）
-//   2. WSHubService        — 包装 *service.WSHub（broadcast）
-//   3. FTSRebuilderService — 包装 service.FTSRebuilder（rebuild，支持 ctx 透传）
+//  1. SearchVectorService — 包装 *vectorsearch.SearchService（search_files / search_tasks / index_*）
+//  2. WSHubService        — 包装 *service.WSHub（broadcast）
+//  3. FTSRebuilderService — 包装 service.FTSRebuilder（rebuild，支持 ctx 透传）
 //
 // 调用示例：
 //
@@ -387,6 +387,16 @@ func RegisterKernelAdapters(
 	bgCtx := kernel.NewContext(context.Background())
 	var errs []error
 	for _, a := range adapters {
+		// 【关键】先卸载同名旧实例，再注册新实例。
+		//
+		// 这三个服务名（search.vector / ws.hub / fts.rebuilder）由本函数独占装配，
+		// 同进程内重建 Server（或测试里多次初始化）时必须允许重新装配；
+		// 而 kernel.Register 对重复注册是 panic——那是给「两个不同组件抢同一个名字」
+		// 这种真实编程错误用的，本场景不该触发。
+		//
+		// 不能用「已存在就 skip」：那会留下指向旧 Server 的旧实例（stale pointer），
+		// 比 panic 更隐蔽。
+		kernel.Unregister(a.Name())
 		// 先注册（让其他 service 能 Get 到它）
 		kernel.Register(a)
 		// 再 Init（失败不 unregister，让 Health 暴露问题）

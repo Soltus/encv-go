@@ -3,23 +3,23 @@
 // 2026-07-03 新增：特色微服务内核接入主代码库
 //
 // 测试覆盖：
-//   1. SearchVectorService
-//      - nil svc → Health 返回 error
-//      - 真实 svc（turso + tmp file）→ Call "search_files" / "stats" 工作
-//      - unknown method → 返回 error
-//   2. WSHubService
-//      - nil hub → Health 返回 error
-//      - 真实 hub → Call "broadcast" 不 panic
-//   3. FTSRebuilderService
-//      - nil rebuilder → Health 返回 error
-//      - mock rebuilder → Call "rebuild" 调用 RebuildWithProgress
-//   4. RegisterKernelAdapters
-//      - 注册后 kernel.List() 包含三个 name
-//      - 重复注册会 panic
-//   5. HTTP API（间接测试）
-//      - GET /api/kernel/services → 200 + services 数组
-//      - GET /api/kernel/health → 200 + ok:true
-//      - POST /api/kernel/call（非 dev 模式）→ 403
+//  1. SearchVectorService
+//     - nil svc → Health 返回 error
+//     - 真实 svc（turso + tmp file）→ Call "search_files" / "stats" 工作
+//     - unknown method → 返回 error
+//  2. WSHubService
+//     - nil hub → Health 返回 error
+//     - 真实 hub → Call "broadcast" 不 panic
+//  3. FTSRebuilderService
+//     - nil rebuilder → Health 返回 error
+//     - mock rebuilder → Call "rebuild" 调用 RebuildWithProgress
+//  4. RegisterKernelAdapters
+//     - 注册后 kernel.List() 包含三个 name
+//     - 重复注册会 panic
+//  5. HTTP API（间接测试）
+//     - GET /api/kernel/services → 200 + services 数组
+//     - GET /api/kernel/health → 200 + ok:true
+//     - POST /api/kernel/call（非 dev 模式）→ 403
 package server
 
 import (
@@ -36,6 +36,8 @@ import (
 	vectorsearch "github.com/Soltus/encv-go/internal/search"
 	mobileservice "github.com/Soltus/encv-go/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	_ "turso.tech/database/tursogo"
 )
 
@@ -358,23 +360,49 @@ func TestRegisterKernelAdapters_AllRegistered(t *testing.T) {
 	}
 }
 
-func TestRegisterKernelAdapters_DuplicatePanics(t *testing.T) {
+// TestRegisterKernelAdapters_ReentrantReplacesInstances 锁住新的装配契约：
+//
+// RegisterKernelAdapters 独占装配这三个服务名，同进程内重建 Server（或测试多次初始化）
+// 必须允许重新装配——它先 Unregister 再 Register，因此不会 panic。
+// 关键不是「不 panic」，而是**新实例必须生效**：不能 skip 注册而留下指向旧 Server 的旧实例。
+func TestRegisterKernelAdapters_ReentrantReplacesInstances(t *testing.T) {
 	unregisterAll(t)
 
-	searchSvc := newTestSearchService(t)
-	hub := mobileservice.NewWSHub()
-	mock := &mockFTSRebuilder{}
+	firstSvc := newTestSearchService(t)
+	RegisterKernelAdapters(firstSvc, mobileservice.NewWSHub(), &mockFTSRebuilder{})
+	first, ok := kernel.Get("search.vector")
+	require.True(t, ok, "第一次装配后应能取到服务")
 
-	// 第一次注册（应成功）
-	RegisterKernelAdapters(searchSvc, hub, mock)
+	// 用**不同的** SearchService 重新装配（模拟重建 Server）
+	secondSvc := newTestSearchService(t)
+	require.NotPanics(t, func() {
+		RegisterKernelAdapters(secondSvc, mobileservice.NewWSHub(), &mockFTSRebuilder{})
+	}, "独占装配者重新装配不应 panic")
 
-	// 第二次注册同名 service 应 panic
+	second, ok := kernel.Get("search.vector")
+	require.True(t, ok)
+	require.NotSame(t, first, second, "重新装配必须替换成新实例，而不是保留旧实例（stale pointer）")
+
+	secondAdapter, ok := second.(*SearchVectorService)
+	require.True(t, ok, "取到的应仍是 *SearchVectorService")
+	assert.Same(t, secondSvc, secondAdapter.svc, "服务应指向重新装配时传入的新 svc")
+}
+
+// TestKernelRegister_DuplicateStillPanics 锁住底层不变量：kernel.Register 对**真实重复注册**
+// （两个不同组件抢同一个名字）仍然 panic——这是有效的编程错误信号，不能被上面的可重入装配稀释。
+func TestKernelRegister_DuplicateStillPanics(t *testing.T) {
+	unregisterAll(t)
+
+	first := NewSearchVectorService(nil)
+	kernel.Register(first)
+	defer kernel.Unregister(first.Name())
+
 	defer func() {
 		if r := recover(); r == nil {
-			t.Error("duplicate registration should panic")
+			t.Error("kernel.Register 对重复注册应 panic（真实编程错误信号）")
 		}
 	}()
-	RegisterKernelAdapters(searchSvc, hub, mock)
+	kernel.Register(NewSearchVectorService(nil))
 }
 
 func TestRegisterKernelAdapters_NilSvc_StillRegistersButHealthFails(t *testing.T) {
@@ -495,8 +523,8 @@ func TestHandleKernelHealthGin_AllOK_Returns200(t *testing.T) {
 	}
 
 	var resp struct {
-		OK       bool                    `json:"ok"`
-		Services []kernel.HealthStatus   `json:"services"`
+		OK       bool                  `json:"ok"`
+		Services []kernel.HealthStatus `json:"services"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
@@ -580,8 +608,8 @@ func TestHandleKernelCallGin_DevMode_SearchStats(t *testing.T) {
 	}
 
 	var resp struct {
-		OK       bool        `json:"ok"`
-		Response StatsResp   `json:"response"`
+		OK       bool      `json:"ok"`
+		Response StatsResp `json:"response"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal response: %v", err)

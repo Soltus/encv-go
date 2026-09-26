@@ -91,12 +91,15 @@ func TestScanDirForIndex_FilesAndDirs(t *testing.T) {
 	}
 
 	// 验证 .encv.zip（**文件**，非目录）不应被跳过
+	//
+	// 注意：索引内容会额外追加一行标题标记 `[title:...]`（18868eb 起，
+	// 为了让文件名/标题也能被全文检索命中），因此这里断言「以原文开头」而不是精确相等。
 	foundZip := false
 	for _, e := range entries {
 		if e.Name == ".encv.zip" {
 			foundZip = true
-			if e.Content != "real zip file" {
-				t.Errorf(".encv.zip content = %q, want %q", e.Content, "real zip file")
+			if !strings.HasPrefix(e.Content, "real zip file") {
+				t.Errorf(".encv.zip content = %q, want prefix %q", e.Content, "real zip file")
 			}
 		}
 	}
@@ -104,13 +107,13 @@ func TestScanDirForIndex_FilesAndDirs(t *testing.T) {
 		t.Errorf(".encv.zip file should NOT be skipped (it's not .encv dir, no .encv file extension exists)")
 	}
 
-	// 验证 content 被读到
+	// 验证 content 被读到（同上：允许尾部追加标题标记行）
 	for _, e := range entries {
-		if e.Name == "file1.txt" && e.Content != "在线播放" {
-			t.Errorf("file1.txt content = %q, want %q", e.Content, "在线播放")
+		if e.Name == "file1.txt" && !strings.HasPrefix(e.Content, "在线播放") {
+			t.Errorf("file1.txt content = %q, want prefix %q", e.Content, "在线播放")
 		}
-		if e.Name == "file2.txt" && e.Content != "高清视频" {
-			t.Errorf("file2.txt content = %q, want %q", e.Content, "高清视频")
+		if e.Name == "file2.txt" && !strings.HasPrefix(e.Content, "高清视频") {
+			t.Errorf("file2.txt content = %q, want prefix %q", e.Content, "高清视频")
 		}
 	}
 }
@@ -273,6 +276,11 @@ func TestInitFullTextIndexWithBuild_Populates(t *testing.T) {
 	// 用真实的 servingDir 模拟启动 build 流程
 	cleanup := setupTestFTS(t)
 	defer cleanup()
+
+	// 【关键】fulltextDBPath() 走 config.AppDataDir("fts")，是**全局**数据目录；
+	// 不隔离就会复用别的测试（或上次运行）留下的库，导致 TotalFiles 累加
+	// （实测把 3 个文件数成 6）。AppDataDir 支持 ENCV_FTS_DIR 覆盖，这里指到临时目录。
+	t.Setenv("ENCV_FTS_DIR", t.TempDir())
 
 	// 1. 准备测试数据
 	servingDir := t.TempDir()
