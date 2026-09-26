@@ -295,9 +295,13 @@ export default {
 
     "simverse.about.title": "关于 SimVerse",
     "simverse.about.desc": "一个可演化的虚拟世界引擎：千万级 NPC、百万级组织，持续产生随机事件。",
+    "simverse.about.info": "信息",
     "simverse.about.version": "版本",
     "simverse.about.backend": "后端引擎",
     "simverse.about.frontend": "前端框架",
+    "simverse.detail.quickAccess": "快捷入口",
+    "simverse.eventDetail": "事件详情",
+    "simverse.loadMore": "加载更多",
 
     "simverse.causal.cause": "起因事件",
     "simverse.causal.effect": "后续影响",
@@ -639,9 +643,13 @@ export default {
     "simverse.about.title": "About SimVerse",
     "simverse.about.desc":
       "An evolvable virtual world engine: tens of millions of NPCs and millions of organizations, continuously generating random events.",
+    "simverse.about.info": "Information",
     "simverse.about.version": "Version",
     "simverse.about.backend": "Backend Engine",
     "simverse.about.frontend": "Frontend",
+    "simverse.detail.quickAccess": "Quick Access",
+    "simverse.eventDetail": "Event Details",
+    "simverse.loadMore": "Load More",
 
     "simverse.causal.cause": "Causes",
     "simverse.causal.effect": "Effects",
