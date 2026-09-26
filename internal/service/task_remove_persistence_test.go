@@ -11,6 +11,10 @@ import (
 
 func TestRemoveTask_PersistenceAfterReload(t *testing.T) {
 	tmpDir := t.TempDir()
+	// 【关键】TaskManager 的持久化目录是 config.AppDataDir("tasks")，不是 servingDir。
+	// 不把 ENCV_TASKS_DIR 指到本次的 tmpDir，TaskManager 会去全局应用数据目录读，
+	// 永远读不到下面预置的 JSON（此前表现为「稳定失败 + 读到历史累积的 55 条任务」）。
+	t.Setenv("ENCV_TASKS_DIR", tmpDir)
 	persistPath := filepath.Join(tmpDir, ".encv-tasks.json")
 
 	existingTask := &MobileTask{
@@ -99,6 +103,8 @@ func TestRemoveTask_NotFound(t *testing.T) {
 
 func TestTaskPersistence_RoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
+	// 同上：让本次 tmpDir 成为任务持久化目录，保证「写文件 → 重载」的语义成立。
+	t.Setenv("ENCV_TASKS_DIR", tmpDir)
 	persistPath := filepath.Join(tmpDir, ".encv-tasks.json")
 
 	originalTasks := []*MobileTask{

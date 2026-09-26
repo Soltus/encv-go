@@ -7,6 +7,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/Soltus/encv-go/internal/v2/types"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestV4Info_ContainerId_ValidFormat(t *testing.T) {
@@ -149,11 +151,19 @@ func TestV4Info_Manifest_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestV4Info_SanitizeManifestMap_SpecialCharacters 校验不可打印字符会被替换为占位符。
+//
+// 【2026-09-27 修正断言方式】旧实现在嵌套 map 里用 `for _, sv := range sub` 随机取值，
+// 而子 map 同时含「干净值」与「被替换值」，命中哪个取决于 map 迭代顺序 → 用例时红时绿
+// （表现为「环境相关」，实为不确定性）。改为按显式路径（topKey / nestedKey）取值。
 func TestV4Info_SanitizeManifestMap_SpecialCharacters(t *testing.T) {
 	tests := []struct {
 		name   string
 		input  map[string]interface{}
-		expect string
+		topKey string
+		// nestedKey 非空时：取 input[topKey].([])[0].(map)[nestedKey]
+		nestedKey string
+		expect    string
 	}{
 		{
 			name: "valid utf8 string passes through",
@@ -161,6 +171,7 @@ func TestV4Info_SanitizeManifestMap_SpecialCharacters(t *testing.T) {
 				"container_id": "normal-container-id",
 				"title":        "Hello 世界",
 			},
+			topKey: "title",
 			expect: "Hello 世界",
 		},
 		{
@@ -168,6 +179,7 @@ func TestV4Info_SanitizeManifestMap_SpecialCharacters(t *testing.T) {
 			input: map[string]interface{}{
 				"field_with_garbage": string([]byte{0x01, 0x02, 'h', 'e', 'l', 'l', 'o', 0x7F}),
 			},
+			topKey: "field_with_garbage",
 			expect: "(non-printable data)",
 		},
 		{
@@ -175,6 +187,7 @@ func TestV4Info_SanitizeManifestMap_SpecialCharacters(t *testing.T) {
 			input: map[string]interface{}{
 				"null_byte": string([]byte{'h', 0x00, 'i'}),
 			},
+			topKey: "null_byte",
 			expect: "(non-printable data)",
 		},
 		{
@@ -182,6 +195,7 @@ func TestV4Info_SanitizeManifestMap_SpecialCharacters(t *testing.T) {
 			input: map[string]interface{}{
 				"c1_control": string([]byte{'a', 0x80, 'b', 0x9F, 'c'}),
 			},
+			topKey: "c1_control",
 			expect: "(non-printable data)",
 		},
 		{
@@ -194,13 +208,16 @@ func TestV4Info_SanitizeManifestMap_SpecialCharacters(t *testing.T) {
 					},
 				},
 			},
-			expect: "(non-printable data)",
+			topKey:    "segments",
+			nestedKey: "data",
+			expect:    "(non-printable data)",
 		},
 		{
 			name: "tab and newline allowed (printable JSON whitespace)",
 			input: map[string]interface{}{
 				"description": "line1\ttabbed\nnewline\rcarriage",
 			},
+			topKey: "description",
 			expect: "line1\ttabbed\nnewline\rcarriage",
 		},
 	}
@@ -209,41 +226,24 @@ func TestV4Info_SanitizeManifestMap_SpecialCharacters(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			sanitizeManifestMap(tt.input)
 
-			found := false
+			raw, ok := tt.input[tt.topKey]
+			require.True(t, ok, "用例应声明一个存在的 topKey: %s", tt.topKey)
+
 			var actualValue string
-			for k, v := range tt.input {
-				if s, ok := v.(string); ok && s == tt.expect || strings.Contains(k, "garbage") || strings.Contains(k, "control") || strings.Contains(k, "binary") || strings.Contains(k, "c1") || strings.Contains(k, "null") || strings.Contains(k, "description") {
-					actualValue = s
-					found = true
-					break
-				}
-				if arr, ok := v.([]interface{}); ok {
-					for _, item := range arr {
-						if sub, ok := item.(map[string]interface{}); ok {
-							for _, sv := range sub {
-								if s, ok := sv.(string); ok {
-									actualValue = s
-									found = true
-								}
-							}
-						}
-					}
-				}
+			if tt.nestedKey != "" {
+				arr, ok := raw.([]interface{})
+				require.True(t, ok, "topKey %s 应为数组", tt.topKey)
+				require.NotEmpty(t, arr)
+				sub, ok := arr[0].(map[string]interface{})
+				require.True(t, ok, "数组首元素应为 map")
+				actualValue, ok = sub[tt.nestedKey].(string)
+				require.True(t, ok, "嵌套字段 %s 应为字符串", tt.nestedKey)
+			} else {
+				actualValue, ok = raw.(string)
+				require.True(t, ok, "字段 %s 应为字符串", tt.topKey)
 			}
 
-			if !found {
-				for _, v := range tt.input {
-					if s, ok := v.(string); ok {
-						actualValue = s
-						found = true
-						break
-					}
-				}
-			}
-
-			if found && actualValue != tt.expect {
-				t.Errorf("sanitization result mismatch: got %q, want %q", actualValue, tt.expect)
-			}
+			assert.Equal(t, tt.expect, actualValue)
 		})
 	}
 }

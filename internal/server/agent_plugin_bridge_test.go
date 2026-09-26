@@ -900,7 +900,6 @@ func TestSendAndCache_ConcurrentSafety(t *testing.T) {
 	sess := getOrCreateSession("d-concurrent-test")
 	defer deleteSessionForTest("d-concurrent-test")
 
-	rec := httptest.NewRecorder()
 	srv := &Server{}
 	const n = 50
 	var wg sync.WaitGroup
@@ -908,6 +907,12 @@ func TestSendAndCache_ConcurrentSafety(t *testing.T) {
 	for i := 0; i < n; i++ {
 		go func() {
 			defer wg.Done()
+			// 【关键】每个 goroutine 用自己的 ResponseRecorder。
+			// httptest.ResponseRecorder 内部 Header 是普通 map，非并发安全；
+			// 此前 50 个 goroutine 共用一个 recorder，直接触发
+			// "fatal error: concurrent map read and map write"（崩溃点在 recorder.writeHeader）。
+			// 需要并发共享的是 session，不是 writer。
+			rec := httptest.NewRecorder()
 			srv.sendAndCache(sess, rec, rec, "text_delta", "x")
 		}()
 	}

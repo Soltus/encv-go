@@ -29,6 +29,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -639,7 +640,21 @@ func findScenarioByID(t *testing.T, id string) *MockScenario {
 // 我们用 file 命令作为更稳的测试（在 fake MP4 上也能跑）：
 //   - `file Movies/vacation_2024.mp4` → "Movies/vacation_2024.mp4: data"
 //   - 这是稳定的 stdout 输出。
+//
+// requireCommand 在白名单命令不存在时跳过用例。
+//
+// command_run 依赖宿主机真实二进制；缺 `file` / `ffprobe` 的环境（容器/CI 镜像）
+// 不应判为失败——这与 TestHandleFileMoveGin_CrossDevice_Fallback 的 t.Skip 做法一致。
+// 跳过前会打印原因，避免「测试悄悄不跑」。
+func requireCommand(t *testing.T, name string) {
+	t.Helper()
+	if _, err := exec.LookPath(name); err != nil {
+		t.Skipf("skip: command %q not available in this environment: %v", name, err)
+	}
+}
+
 func TestE2E_CommandRun_RealFileCommand(t *testing.T) {
+	requireCommand(t, "file")
 	dir := setupSandboxDir(t)
 	deps := e2eToolDeps(dir)
 
@@ -681,6 +696,7 @@ func TestE2E_CommandRun_RealFileCommand(t *testing.T) {
 //   - stderr 包含 ffprobe 错误信息（"Invalid data" / "moov atom not found"）
 //   - isError=true
 func TestE2E_CommandRun_RealFfprobe(t *testing.T) {
+	requireCommand(t, "ffprobe")
 	dir := setupSandboxDir(t)
 	deps := e2eToolDeps(dir)
 
