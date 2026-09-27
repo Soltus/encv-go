@@ -17,20 +17,21 @@
 //
 // **向后兼容策略**：
 //   - V4WriteParams 新增字段（CipherMode/CompressionMode/EnableHMAC）默认为「旧行为」：
-//     - CipherMode = 0（AES-128）
-//     - CompressionMode = "none"
-//     - EnableHMAC = false（旧 v4 容器不写 MAC 字节，保持原磁盘格式）
+//   - CipherMode = 0（AES-128）
+//   - CompressionMode = "none"
+//   - EnableHMAC = false（旧 v4 容器不写 MAC 字节，保持原磁盘格式）
 //   - 旧测试不传新字段时，行为与升级前完全一致
 //   - 新测试显式 EnableHMAC=true 时，启用 v4 升级布局（写 MAC 字节）
 //
 // **不加密 Segment 模式**：
 //   - 当 segResult.ModeFlags & ModeFlagEncrypted == 0 时（明文 Segment）：
-//     - layout = [SegmentHeader(34B)][Plaintext(DataLength B)]
-//     - 无 Nonce、Ciphertext、HMAC、SeekTable
+//   - layout = [SegmentHeader(34B)][Plaintext(DataLength B)]
+//   - 无 Nonce、Ciphertext、HMAC、SeekTable
 //   - 当前 SegmentEncryptionResult 总是产出加密 Segment；明文模式由调用方在 ModeFlags 中置 0
 package writer
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
 	"hash"
@@ -103,7 +104,23 @@ type V4WriteParams struct {
 // crypto.GenerateMACSalt() 生成 16 字节随机 mac_salt 并 base64 编码注入。
 //
 // **CipherMode 注入**：从 params.CipherMode 同步到 header.CipherMode。
+// WriteV4Container 把 v4 容器写到 params.OutputPath；实际逻辑见 WriteV4ContainerTo。
 func WriteV4Container(params *V4WriteParams) error {
+	f, err := os.Create(params.OutputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer f.Close()
+	return WriteV4ContainerTo(f, params)
+}
+
+// WriteV4ContainerTo 把 v4 容器写入任意 io.Writer（内存缓冲、网络流…）。
+//
+// 存在的理由：js/wasm 上 os **没有文件系统**（os.Create 直接报
+// "not implemented on js"），浏览器端加密拿不到临时文件可用。
+// 与其在 wasm 侧复制一份容器布局（必然与主线漂移），不如让写入路径只依赖 io.Writer。
+func WriteV4ContainerTo(w io.Writer, params *V4WriteParams) error {
+	var buf bytes.Buffer
 	header, err := types.CreateHeaderV4(params.IsMain, params.ContainerType, params.IsSeekable, params.IDType, params.IDData, params.PasswordHint)
 	if err != nil {
 		return fmt.Errorf("failed to create v4 header: %w", err)
@@ -126,13 +143,7 @@ func WriteV4Container(params *V4WriteParams) error {
 		params.Manifest.MACSaltBase64 = base64.StdEncoding.EncodeToString(macSalt)
 	}
 
-	f, err := os.Create(params.OutputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer f.Close()
-
-	if err := types.WriteHeaderV4(f, header); err != nil {
+	if err := types.WriteHeaderV4(&buf, header); err != nil {
 		return fmt.Errorf("failed to write placeholder header: %w", err)
 	}
 
@@ -140,38 +151,25 @@ func WriteV4Container(params *V4WriteParams) error {
 	globalHasher := crc32.NewIEEE()
 
 	for i, segResult := range params.SegmentResults {
-		if err := writeOneSegment(f, globalHasher, i, segResult, params, header); err != nil {
+		if err := writeOneSegment(&buf, globalHasher, i, segResult, params, header); err != nil {
 			return err
 		}
 	}
 
 	for _, dz := range params.DisasterZones {
-		srcFile, err := os.Open(params.OutputPath)
-		if err != nil {
-			return fmt.Errorf("failed to open source for disaster zone %s: %w", dz.Name, err)
+		written := buf.Bytes()
+		if dz.Offset < 0 || dz.Offset+dz.Size > int64(len(written)) {
+			return fmt.Errorf("disaster zone %s 越界", dz.Name)
 		}
+		dzData := append([]byte(nil), written[dz.Offset:dz.Offset+dz.Size]...)
 
-		dzData := make([]byte, dz.Size)
-		if _, err := srcFile.Seek(dz.Offset, io.SeekStart); err != nil {
-			srcFile.Close()
-			return fmt.Errorf("failed to seek to disaster zone %s: %w", dz.Name, err)
-		}
-		if _, err := io.ReadFull(srcFile, dzData); err != nil {
-			srcFile.Close()
-			return fmt.Errorf("failed to read disaster zone %s: %w", dz.Name, err)
-		}
-		srcFile.Close()
-
-		if _, err := f.Write(dzData); err != nil {
+		if _, err := buf.Write(dzData); err != nil {
 			return fmt.Errorf("failed to write disaster zone %s: %w", dz.Name, err)
 		}
 		globalHasher.Write(dzData)
 	}
 
-	manifestOffset, err := f.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return fmt.Errorf("failed to get manifest offset: %w", err)
-	}
+	manifestOffset := int64(buf.Len())
 
 	manifestJSON, err := params.Manifest.SerializeToJSON_v4()
 	if err != nil {
@@ -183,21 +181,14 @@ func WriteV4Container(params *V4WriteParams) error {
 		return fmt.Errorf("failed to obfuscate manifest: %w", err)
 	}
 
-	if _, err := f.Write(obfuscatedManifest); err != nil {
+	if _, err := buf.Write(obfuscatedManifest); err != nil {
 		return fmt.Errorf("failed to write obfuscated manifest: %w", err)
 	}
 	globalHasher.Write(obfuscatedManifest)
 
 	manifestLength := uint64(len(obfuscatedManifest))
 
-	allDataBuf := make([]byte, manifestOffset-dataStartOffset)
-	if _, err := f.Seek(dataStartOffset, io.SeekStart); err != nil {
-		return fmt.Errorf("failed to seek to data start for crc: %w", err)
-	}
-	if _, err := io.ReadFull(f, allDataBuf); err != nil {
-		return fmt.Errorf("failed to read data for global crc: %w", err)
-	}
-	globalCRC32 := crc32.ChecksumIEEE(allDataBuf)
+	globalCRC32 := crc32.ChecksumIEEE(buf.Bytes()[dataStartOffset:manifestOffset])
 
 	header.ManifestOffset = uint32(manifestOffset)
 	header.ManifestLength = uint32(manifestLength)
@@ -206,26 +197,22 @@ func WriteV4Container(params *V4WriteParams) error {
 		header.Flags |= types.FlagFilenameEncrypted
 	}
 
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("failed to seek to header: %w", err)
-	}
-	if err := types.WriteHeaderV4(f, header); err != nil {
+	var hdrBuf bytes.Buffer
+	if err := types.WriteHeaderV4(&hdrBuf, header); err != nil {
 		return fmt.Errorf("failed to rewrite header with manifest info: %w", err)
 	}
-
-	if _, err := f.Seek(0, io.SeekEnd); err != nil {
-		return fmt.Errorf("failed to seek to end for footer: %w", err)
-	}
+	copy(buf.Bytes(), hdrBuf.Bytes())
 
 	footer := &types.EnvelopeFooterV4{
 		Magic:       types.MagicFooter_v2,
 		GlobalCRC32: globalCRC32,
 	}
-	if err := types.WriteFooterV4(f, footer); err != nil {
+	if err := types.WriteFooterV4(&buf, footer); err != nil {
 		return fmt.Errorf("failed to write footer: %w", err)
 	}
 
-	return nil
+	_, err = w.Write(buf.Bytes())
+	return err
 }
 
 // writeOneSegment 写入单个 v4 Segment（加密或明文）。
@@ -240,7 +227,7 @@ func WriteV4Container(params *V4WriteParams) error {
 //
 // 根据 params.EnableHMAC 决定是否在密文后追加 10 字节 HMAC。
 // params.EnableHMAC=false 时与升级前 v4 布局完全一致（无 HMAC 字节）。
-func writeOneSegment(f *os.File, globalHasher hash.Hash32, i int, segResult *crypto.SegmentEncryptionResult, params *V4WriteParams, header *types.EnvelopeHeaderV4) error {
+func writeOneSegment(buf *bytes.Buffer, globalHasher hash.Hash32, i int, segResult *crypto.SegmentEncryptionResult, params *V4WriteParams, header *types.EnvelopeHeaderV4) error {
 	// 计算布局大小（用于 Manifest 记录）
 	encrypted := segResult.ModeFlags&types.ModeFlagEncrypted != 0
 
@@ -252,7 +239,7 @@ func writeOneSegment(f *os.File, globalHasher hash.Hash32, i int, segResult *cry
 		return fmt.Errorf("failed to marshal segment header %d: %w", i, err)
 	}
 
-	if _, err := f.Write(segHeaderBytes); err != nil {
+	if _, err := buf.Write(segHeaderBytes); err != nil {
 		return fmt.Errorf("failed to write segment header %d: %w", i, err)
 	}
 	globalHasher.Write(segHeaderBytes)
@@ -260,19 +247,19 @@ func writeOneSegment(f *os.File, globalHasher hash.Hash32, i int, segResult *cry
 	// 2. 写入 Segment payload
 	if encrypted {
 		// 加密 Segment：[Nonce][Ciphertext][HMAC?][SeekTable?]
-		if _, err := f.Write(segResult.Nonce); err != nil {
+		if _, err := buf.Write(segResult.Nonce); err != nil {
 			return fmt.Errorf("failed to write nonce for segment %d: %w", i, err)
 		}
 		globalHasher.Write(segResult.Nonce)
 
-		if _, err := f.Write(segResult.EncryptedData); err != nil {
+		if _, err := buf.Write(segResult.EncryptedData); err != nil {
 			return fmt.Errorf("failed to write encrypted data for segment %d: %w", i, err)
 		}
 		globalHasher.Write(segResult.EncryptedData)
 
 		// HMAC 写入（v4 升级布局）：仅在 EnableHMAC=true 时追加 10 字节
 		if params.EnableHMAC {
-			if _, err := f.Write(segResult.HMAC[:]); err != nil {
+			if _, err := buf.Write(segResult.HMAC[:]); err != nil {
 				return fmt.Errorf("failed to write HMAC for segment %d: %w", i, err)
 			}
 			globalHasher.Write(segResult.HMAC[:])
@@ -280,7 +267,7 @@ func writeOneSegment(f *os.File, globalHasher hash.Hash32, i int, segResult *cry
 
 		// SeekTable 写入：仅在 zstd 压缩时有内容
 		if len(segResult.SeekTable) > 0 {
-			if _, err := f.Write(segResult.SeekTable); err != nil {
+			if _, err := buf.Write(segResult.SeekTable); err != nil {
 				return fmt.Errorf("failed to write seek table for segment %d: %w", i, err)
 			}
 			globalHasher.Write(segResult.SeekTable)
@@ -288,17 +275,14 @@ func writeOneSegment(f *os.File, globalHasher hash.Hash32, i int, segResult *cry
 	} else {
 		// 明文 Segment：直接写 EncryptedData 字段（语义上即明文）
 		// 调用方应在 ModeFlags 中清掉 Encrypted 位
-		if _, err := f.Write(segResult.EncryptedData); err != nil {
+		if _, err := buf.Write(segResult.EncryptedData); err != nil {
 			return fmt.Errorf("failed to write plaintext segment %d: %w", i, err)
 		}
 		globalHasher.Write(segResult.EncryptedData)
 	}
 
 	// 3. 更新 Manifest.Segments[i] 的 offset/size/nonce
-	segOffset, err := f.Seek(0, io.SeekCurrent)
-	if err != nil {
-		return fmt.Errorf("failed to get current offset after segment %d: %w", i, err)
-	}
+	segOffset := int64(buf.Len())
 
 	segTotalSize := computeSegmentTotalSize(segResult, encrypted, params.EnableHMAC)
 

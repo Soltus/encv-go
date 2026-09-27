@@ -1,5 +1,7 @@
-//go:build !windows
+//go:build !windows && !js
 
+// js/wasm 没有 unix.Sysinfo（golang.org/x/sys/unix 在 wasm 上不提供），
+// wasm 侧见 memory_js.go：直接返回 0，让 memory.go 走 runtime 估算的降级路径。
 package utils
 
 import (

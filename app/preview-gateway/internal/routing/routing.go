@@ -112,6 +112,25 @@ var SpecialUpstreams = []*Upstream{
 		Hint:     "Check pm2 status for plugin-simverse-vite (:5176)",
 		Required: false,
 	},
+	{
+		// 纯静态目录（无 vite、无构建），剥前缀后由 python3 -m http.server 直接托管。
+		Match:    "/enc-ui",
+		Target:   "http://127.0.0.1:5179",
+		WsTarget: "ws://127.0.0.1:5179",
+		Name:     "enc-preview",
+		Hint:     "Check pm2 status for enc-preview 静态服务 (:5179)",
+		Required: false,
+		PathRewrite: func(p string) string {
+			r := strings.TrimPrefix(p, "/enc-ui")
+			if r == "" {
+				return "/"
+			}
+			if strings.HasPrefix(r, "/") {
+				return r
+			}
+			return "/" + r
+		},
+	},
 }
 
 var ViteDeny = []ViteDenyRule{
@@ -192,6 +211,8 @@ func PickUpstream(rawURL, referer, cookie string) *Upstream {
 		}
 	}
 
+	// 旧 openlist 标记：openlist-ui 的入口 HTML 会种 __plugin_spa=1，
+	// 其无前缀子资源靠它回到 :5174（历史机制，见 README §11）。
 	if strings.Contains(cookie, "__plugin_spa=1") {
 		for _, up := range SpecialUpstreams {
 			if up.Match == "/openlist-ui" {

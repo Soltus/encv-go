@@ -8,10 +8,10 @@
 //	读取 SegmentHeader → 切分密文边界 → 校验 HMAC → AES-CTR 解密 → 可选 zstd 解压
 //
 // 安全保证（与 writer 对称）：
-//   1. 加密 Segment **必须** 先校验 HMAC，失败立即返回 crypto.ErrMACMismatch
-//   2. 失败时不解密、不解压（防 zstd 解压炸弹 + 防 CTR 比特翻转攻击线索泄露）
-//   3. 校验通过后才执行 AES-CTR + 可选解压
-//   4. 解压失败明确返回 error（不静默返回"未解压数据"）
+//  1. 加密 Segment **必须** 先校验 HMAC，失败立即返回 crypto.ErrMACMismatch
+//  2. 失败时不解密、不解压（防 zstd 解压炸弹 + 防 CTR 比特翻转攻击线索泄露）
+//  3. 校验通过后才执行 AES-CTR + 可选解压
+//  4. 解压失败明确返回 error（不静默返回"未解压数据"）
 //
 // 密钥派生策略（OpenV4Container 时一次性完成）：
 //   - encrypt_key = PBKDF2-SHA256(password, encrypt_salt, 100000, KeySizeForCipherMode(CipherMode))
@@ -45,6 +45,27 @@ import (
 	seekable "github.com/SaveTheRbtz/zstd-seekable-format-go/pkg"
 )
 
+// containerFile 是 reader 对容器数据源的最低要求：顺序读 + 定位 + 关闭。
+//
+// *os.File 与内存源（handle.BytesSource）都满足它，所以把字段从 *os.File 换成接口后，
+// 浏览器里能用内存源顶替文件，跑的是同一份 reader —— 而不是另写一套解密。
+type containerFile interface {
+	io.Reader
+	io.Seeker
+	io.Closer
+}
+
+// openContainerFile 取一个可读的容器源：优先复用打开时那个（可能是内存源），
+// 否则按路径打开文件（js/wasm 下没有文件系统，这一步会失败，所以必须优先用 Src）。
+func openContainerFile(info *V4ContainerInfo) (containerFile, error) {
+	if info.Src != nil {
+		if f, ok := info.Src.(containerFile); ok {
+			return f, nil
+		}
+	}
+	return os.Open(info.FilePath)
+}
+
 // V4ContainerInfo 封装一个 v4 容器的元数据 + 派生密钥。
 //
 // 关键字段：
@@ -57,6 +78,12 @@ type V4ContainerInfo struct {
 	Footer   *types.EnvelopeFooterV4
 	Manifest *types.Manifest_v4
 	FilePath string
+
+	// Src 是打开容器所用的数据源（文件 / 内存 / 远端）。
+	//
+	// 浏览器（js/wasm）没有文件系统，容器字节来自内存；reader 后续要按段随机读，
+	// 不能只记得路径。有 Src 就直接用它，没有才退回按 FilePath 开文件（原行为）。
+	Src containerhandle.ContainerSource
 
 	// Key 是旧字段名，语义上等同于 EncryptKey（保留向后兼容）。
 	// 长度由 Header.CipherMode 决定：0=16B（AES-128），1=32B（AES-256）。
@@ -97,10 +124,17 @@ func OpenV4Container(filePath string, password string) (*V4ContainerInfo, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open container source: %w", err)
 	}
+	return OpenV4ContainerFromSource(src, password)
+}
 
+// OpenV4ContainerFromSource 从任意容器源打开 v4 容器（文件 / 字节 / 远端…）。
+//
+// 存在的理由：浏览器（js/wasm）**没有文件系统**，容器字节来自内存或 fetch。
+// 与其在 wasm 侧另写一套解密（必然与主线漂移），不如让打开路径接受 ContainerSource，
+// wasm 与主应用/CLI 就跑的是同一份 reader。
+func OpenV4ContainerFromSource(src containerhandle.ContainerSource, password string) (*V4ContainerInfo, error) {
 	h, err := containerhandle.Open(src)
 	if err != nil {
-		src.Close()
 		return nil, fmt.Errorf("failed to open container handle: %w", err)
 	}
 	defer h.Close()
@@ -143,7 +177,13 @@ func OpenV4Container(filePath string, password string) (*V4ContainerInfo, error)
 			return nil, fmt.Errorf("%w: %v", types.ErrWrongPassword, err)
 		}
 	} else {
-		return nil, fmt.Errorf("v4 container missing WrappedDEK (not a hierarchical-key container)")
+		// 旧 v4 容器（分层密钥迁移之前生成，没有 WrappedDEK）：回退到「密码 + encrypt_salt
+		// 直接派生」，与 virtual_seekable_reader.deriveKeyAndIV 的回退保持一致 ——
+		// 否则这类容器会直接打不开（既有的 v4 存量文件全部作废）。
+		//
+		// 密钥长度按容器自己声明的 CipherMode 取，不写死 32：写死会让声明 AES-128 的容器
+		// 拿 32 字节密钥去解，同样解不开。
+		encryptKey = crypto.GenerateKey(password, salt, crypto.KeySizeForCipherMode_v4(crypto.CipherMode_v4(hdr.CipherMode)))
 	}
 
 	// MacSalt 提取：mac_salt 改存于 Manifest（v4 Header offset 36-2028 被 SpecialID
@@ -166,10 +206,11 @@ func OpenV4Container(filePath string, password string) (*V4ContainerInfo, error)
 	}
 
 	return &V4ContainerInfo{
+		Src:        src,
 		Header:     hdr,
 		Footer:     h.FooterV4(),
 		Manifest:   h.ManifestV4(),
-		FilePath:   filePath,
+		FilePath:   src.Name(),
 		Key:        encryptKey, // 旧字段，向后兼容
 		EncryptKey: encryptKey,
 		MacKey:     macKey,
@@ -180,7 +221,7 @@ func OpenV4Container(filePath string, password string) (*V4ContainerInfo, error)
 // SegmentSeekableReader 提供 v4 Segment 列表的随机访问（io.ReadSeeker）。
 type SegmentSeekableReader struct {
 	info       *V4ContainerInfo
-	file       *os.File
+	file       containerFile
 	playlist   []types.Segment_v4
 	plainSizes []int64
 	offset     int64
@@ -295,7 +336,7 @@ func (r *SegmentSeekableReader) readSegmentParts(seg types.Segment_v4) (*types.S
 //   - MAC 校验失败 → 立即返回 crypto.ErrMACMismatch（不解密、不解压）
 //   - 解压失败 → 返回 compression.ErrDecompressionFailed 包装错误
 func decryptSegmentPayload(info *V4ContainerInfo, seg types.Segment_v4) ([]byte, error) {
-	f, err := os.Open(info.FilePath)
+	f, err := openContainerFile(info)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open container file: %w", err)
 	}
@@ -422,7 +463,7 @@ func NewSegmentSeekableReader(info *V4ContainerInfo, playlistName string) (*Segm
 		return nil, fmt.Errorf("failed to resolve playlist '%s': %w", playlistName, err)
 	}
 
-	f, err := os.Open(info.FilePath)
+	f, err := openContainerFile(info)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
@@ -568,7 +609,7 @@ func (r *SegmentSeekableReader) Close() error {
 // SegmentSequentialReader 提供 v4 Segment 列表的顺序流式访问（io.Reader）。
 type SegmentSequentialReader struct {
 	info      *V4ContainerInfo
-	file      *os.File
+	file      containerFile
 	playlist  []types.Segment_v4
 	segIndex  int
 	segReader io.Reader
@@ -580,7 +621,7 @@ func NewSegmentSequentialReader(info *V4ContainerInfo, playlistName string) (*Se
 		return nil, fmt.Errorf("failed to resolve playlist '%s': %w", playlistName, err)
 	}
 
-	f, err := os.Open(info.FilePath)
+	f, err := openContainerFile(info)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
@@ -698,7 +739,7 @@ func SeekByTime(info *V4ContainerInfo, timeSeconds float64) (segmentIndex int, o
 // 对压缩 Segment 必须读 seek table 才能得知解压后大小；为避免 SeekByTime
 // 重复打开文件，此函数每次都重新打开一次（频率低，开销可接受）。
 func computeSegmentPlainSize(info *V4ContainerInfo, seg types.Segment_v4) (int64, error) {
-	f, err := os.Open(info.FilePath)
+	f, err := openContainerFile(info)
 	if err != nil {
 		return 0, err
 	}

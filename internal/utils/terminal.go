@@ -1,6 +1,10 @@
-//go:build !android
+//go:build !android && !js
 
 // Package utils 提供终端美化输出功能（基于 pterm）
+//
+// ⚠️ 排除 js：pterm 依赖 atomicgo.dev/keyboard，那个库在 js/wasm 下没有实现
+// （undefined: initInput/openInputTTY），只要本包被 wasm 链路引用就会整链编译失败。
+// wasm 侧用同包的 terminal_js.go（无 pterm 的等价实现）。
 package utils
 
 import (

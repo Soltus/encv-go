@@ -98,7 +98,15 @@ type EnvelopeFooterV4 struct {
 //   - 旧 v4 容器的 CipherMode 位置 = 0x0000（Go 结构体零值），读时按 AES-128 解析
 const (
 	CipherModeOffsetV4 = 2040
-	HeaderCRC32EndV4   = 2040 // HeaderCRC32 写入结束位置（不包含 CipherMode 区域）
+)
+
+// CipherMode 取值（与 internal/v2/crypto.CipherMode_v4 同义）。
+//
+// 这里不能 import crypto（crypto 依赖 types，会成环），因此在 types 侧镜像一份常量。
+const (
+	CipherModeAES128CTR uint16 = 0
+	CipherModeAES256CTR uint16 = 1
+	HeaderCRC32EndV4           = 2040 // HeaderCRC32 写入结束位置（不包含 CipherMode 区域）
 )
 
 // WriteHeaderV4 将 EnvelopeHeaderV4 序列化为 2048 字节写入 w。
@@ -310,6 +318,15 @@ func CreateHeaderV4(isMain bool, containerType uint16, isSeekable bool, idType I
 		IsSeekable:    seekable,
 		IDType:        uint32(idType),
 		PasswordHint:  passwordHint,
+		// CipherMode 保持零值（AES-128），与加密端自洽：
+		// 当前加密流水线（crypto.PrepareEncryptionContext）生成的是 **KeySize_v4_128 = 16 字节 DEK**，
+		// 即 AES-128-CTR。读取端主路径用 WrappedDEK 解出的 DEK，长度由 DEK 本身决定；
+		// 只有「旧容器、无 WrappedDEK」的回退路径才会按本字段派生密钥长度，
+		// 所以本字段必须与回退目标（16 字节）一致。
+		//
+		// ⚠️ 若将来加密端改成 AES-256，必须同步把这个字段写成 CipherModeAES256CTR，
+		// 否则回退路径会派生 16 字节密钥去解 32 字节加密的数据 —— CTR 无认证标签，
+		// 表现是「不报错、长度正确、内容全是乱码」，极难定位。
 	}
 	copy(header.SpecialID[:], idData)
 	header.IDLength = uint32(len(idData))

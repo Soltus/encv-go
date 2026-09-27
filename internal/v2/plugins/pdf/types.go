@@ -18,11 +18,40 @@ type PDFIndex struct {
 }
 
 // 实现 Index 接口
-func (t *PDFIndex) GetOriginalFilename() string { return t.OriginalFilename }
-func (t *PDFIndex) GetOriginalFileSize() int64  { return t.OriginalFileSize }
-func (v *PDFIndex) GetOriginalFileMD5() string  { return v.OriginalFileMD5 }
-func (v *PDFIndex) GetEncryptedFileMD5() string { return v.EncryptedFileMD5 }
-func (t *PDFIndex) GetMimeType() string         { return t.MimeType }
+//
+// ⚠️ 全部对 nil 接收者兜底：容器索引解析不出来时拿到的是 (*PDFIndex)(nil)，
+// 直接解引用会让整个进程 panic —— 实测 WebDAV 后台索引器扫到这类容器时
+// 会把服务直接带崩（internal/webdav/fs_v2.go 的 addOrUpdateEntry 调用链）。
+func (t *PDFIndex) GetOriginalFilename() string {
+	if t == nil {
+		return ""
+	}
+	return t.OriginalFilename
+}
+func (t *PDFIndex) GetOriginalFileSize() int64 {
+	if t == nil {
+		return 0
+	}
+	return t.OriginalFileSize
+}
+func (v *PDFIndex) GetOriginalFileMD5() string {
+	if v == nil {
+		return ""
+	}
+	return v.OriginalFileMD5
+}
+func (v *PDFIndex) GetEncryptedFileMD5() string {
+	if v == nil {
+		return ""
+	}
+	return v.EncryptedFileMD5
+}
+func (t *PDFIndex) GetMimeType() string {
+	if t == nil {
+		return ""
+	}
+	return t.MimeType
+}
 
 // 视频容器专用的 KVI
 type PDFKVI_v2 struct {

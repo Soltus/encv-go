@@ -12,11 +12,14 @@ type Paths struct {
 	MobileDataDir       string
 	PluginWebDir        string
 	SimverseFrontendDir string
+	EncPreviewDir       string
+	EncViteBin          string
 	AirBin              string
 	NodeBin             string
+	PythonBin           string
 }
 
-func Resolve(repoRoot, mobileDir, mobileDataDir, pluginWebDir, simverseFrontendDir, airBin, nodeBin string) *Paths {
+func Resolve(repoRoot, mobileDir, mobileDataDir, pluginWebDir, simverseFrontendDir, encPreviewDir, airBin, nodeBin string) *Paths {
 	p := &Paths{
 		RepoRoot:      repoRoot,
 		MobileDataDir: mobileDataDir,
@@ -40,6 +43,16 @@ func Resolve(repoRoot, mobileDir, mobileDataDir, pluginWebDir, simverseFrontendD
 		p.SimverseFrontendDir = filepath.Join(p.RepoRoot, "app", "encv-mobile", "plugin-simverse", "web")
 	}
 
+	if encPreviewDir != "" {
+		p.EncPreviewDir = encPreviewDir
+	} else {
+		p.EncPreviewDir = filepath.Join(p.RepoRoot, "app", "enc-preview")
+	}
+	p.EncViteBin = firstExisting(
+		filepath.Join(p.EncPreviewDir, "node_modules", "vite", "bin", "vite.js"),
+		filepath.Join(p.MobileDir, "node_modules", "vite", "bin", "vite.js"),
+	)
+
 	if airBin != "" {
 		p.AirBin = airBin
 	} else {
@@ -52,7 +65,27 @@ func Resolve(repoRoot, mobileDir, mobileDataDir, pluginWebDir, simverseFrontendD
 		p.NodeBin = "node"
 	}
 
+	if v := os.Getenv("PYTHON_BIN"); v != "" {
+		p.PythonBin = v
+	} else {
+		p.PythonBin = firstExisting("/usr/local/bin/python3", "/usr/bin/python3")
+		if p.PythonBin == "" {
+			p.PythonBin = "python3"
+		}
+	}
+
 	return p
+}
+
+func firstExisting(candidates ...string) string {
+	for _, c := range candidates {
+		if c != "" {
+			if _, err := os.Stat(c); err == nil {
+				return c
+			}
+		}
+	}
+	return ""
 }
 
 func (p *Paths) Validate() error {

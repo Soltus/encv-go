@@ -98,6 +98,11 @@ func getForwardedProto(r *http.Request) string {
 	return ""
 }
 
+// modifyResponse —— 给剥了前缀的 SPA 上游（openlist-ui）的 HTML 响应种来源标记 cookie。
+//
+// 背景见 README §11：Vite 8 dev 不基于 <base href> 改写模块内部 import，
+// 页面随后请求的 /src/...、/@fs/... 都是无前缀的根绝对路径，
+// 网关只能靠这个 cookie 判断「这个请求来自哪个 SPA」。
 func modifyResponse(resp *http.Response) error {
 	source := resp.Header.Get("X-Gw-Source")
 	resp.Header.Del("X-Gw-Source")

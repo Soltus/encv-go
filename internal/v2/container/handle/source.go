@@ -69,6 +69,20 @@ func (s *BytesSource) ReadAt(p []byte, off int64) (int, error) {
 	return s.reader.ReadAt(p, off)
 }
 
+// Close 关闭内存源（无资源可释放，实现 io.Closer 以满足 reader 的容器源要求）。
+func (s *BytesSource) Close() error {
+	return nil
+}
+
+// Read 顺序读（维护自己的读位置）。
+//
+// 有了它，BytesSource 才满足 io.Reader —— 主线 reader 内部按
+// io.Reader/ReaderAt/Seeker/Closer 使用容器源，内存源就能直接顶替 *os.File，
+// 浏览器（js/wasm 没有文件系统）因此跑的是同一份 reader。
+func (s *BytesSource) Read(p []byte) (int, error) {
+	return s.reader.Read(p)
+}
+
 func (s *BytesSource) Seek(off int64, whence int) (int64, error) {
 	return s.reader.Seek(off, whence)
 }

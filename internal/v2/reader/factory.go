@@ -41,6 +41,7 @@ type decryptReaderFactory struct {
 	// 缓存解析结果，避免重复读取文件
 	mu                  sync.RWMutex
 	cachedManifest      *types.Manifest
+	cachedManifestV4    *types.Manifest_v4
 	cachedHeaderVersion int
 	cachedIndex         types.Index
 	kviProvider         types.KVIProvider
@@ -107,6 +108,9 @@ func (f *decryptReaderFactory) parseAndCacheMetadata() error {
 	f.physicalOffsets = fcr.physicalOffsets
 	// 【关键新增】同样缓存 Header Version，无需再次探测
 	f.cachedHeaderVersion = fcr.headerVersion
+	// v4 manifest（含 WrappedDEK）必须一起缓存：重建 reader 时若拿不到它，
+	// 密钥派生会退回到老的单层路径，解出来的就是乱码。
+	f.cachedManifestV4 = fcr.manifestV4
 
 	seekableFragments := filterFragmentsByType(f.cachedManifest.Fragments, string(types.FragmentType_SeekableStream))
 	if len(seekableFragments) > 0 {
@@ -151,7 +155,7 @@ func (f *decryptReaderFactory) verifyPasswordHint() error {
 // NewDecryptReader 使用缓存的数据高效地创建解密器
 func (f *decryptReaderFactory) NewDecryptReader() (DecryptReader, error) {
 	// 【关键】使用新的轻量级构造函数，直接使用缓存好的数据，避免重复扫描
-	containerReader, err := NewFileContainerReaderFromMetadata(f.containerPath, f.cachedManifest, f.cachedHeaderVersion, f.physicalOffsets)
+	containerReader, err := NewFileContainerReaderFromMetadata(f.containerPath, f.cachedManifest, f.cachedManifestV4, f.cachedHeaderVersion, f.physicalOffsets)
 	if err != nil {
 		return nil, err
 	}

@@ -133,8 +133,16 @@ test("密码错误必须报错而不是返回乱码", { skip: !hasArtifacts }, (
   const res = api.decryptText(blob, "wrong horse");
   assert.equal(res.ok, false);
   assert.match(String(res.error), /password/i);
-  assert.equal(api.verifyPassword(blob, "correct horse"), true);
-  assert.equal(api.verifyPassword(blob, "wrong horse"), false);
+  // verifyPassword 与其它导出一样返回「结果对象」（2026-09-27 前它返回裸 bool，
+  // 与 JS 侧统一的 unwrap 契约不一致，前端会拿到 "unknown error"），这里锁住契约。
+  assert.equal(unwrap(api.verifyPassword(blob, "correct horse")), true);
+  assert.equal(unwrap(api.verifyPassword(blob, "wrong horse")), false);
+});
+
+test("verifyPassword 坏参数返回错误结果而不是静默 false", { skip: !hasArtifacts }, () => {
+  const res = api.verifyPassword({ not: "a Uint8Array" }, "pw");
+  assert.equal(res.ok, false, "错误类型应当返回错误结果对象");
+  assert.ok(res.error, "应当带上错误描述，便于定位");
 });
 
 test("AES-128 与 AES-256 两种模式都能往返", { skip: !hasArtifacts }, () => {

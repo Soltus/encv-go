@@ -3,6 +3,7 @@ package video
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -341,6 +342,47 @@ func extractKeyFrameOffsetsWithFFProbe(filePath string) ([]uint64, error) {
 	return offsets, nil
 }
 
+// buildCueArgs 生成 mkvmerge 的 --cues 参数值，例如 "0:iframes"。
+//
+// ⚠️ 不能用 "video:iframes" / "all:iframes"：mkvmerge v9x 的 --cues 选择器只接受
+// **数字轨道 ID**（实测 v92：`video:` 与 `all:` 都直接 exit status 2），
+// 结果就是 mkv/webm 源文件在加密预处理阶段整批失败。
+// 这里先用 `mkvmerge -J` 探测真实的视频轨 ID，探测不到才回退到 0。
+func buildCueArgs(inputPath, mode string) string {
+	ids := detectVideoTrackIDs(inputPath)
+	if len(ids) == 0 {
+		ids = []string{"0"}
+	}
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parts = append(parts, id+":"+mode)
+	}
+	return strings.Join(parts, ",")
+}
+
+func detectVideoTrackIDs(inputPath string) []string {
+	out, err := exec.Command("mkvmerge", "-J", inputPath).Output()
+	if err != nil {
+		return nil
+	}
+	var info struct {
+		Tracks []struct {
+			ID   int    `json:"id"`
+			Type string `json:"type"`
+		} `json:"tracks"`
+	}
+	if err := json.Unmarshal(out, &info); err != nil {
+		return nil
+	}
+	ids := make([]string, 0, len(info.Tracks))
+	for _, t := range info.Tracks {
+		if strings.EqualFold(t.Type, "video") {
+			ids = append(ids, strconv.Itoa(t.ID))
+		}
+	}
+	return ids
+}
+
 func (p *VideoContentPreprocessor) remapWithMKVMerge(inputPath string) (io.ReadCloser, string, error) {
 	fmt.Println("-> [DIAG] Checking original file for Cues...")
 	if hasCues, err := checkFileForCues(inputPath); err == nil {
@@ -365,7 +407,7 @@ func (p *VideoContentPreprocessor) remapWithMKVMerge(inputPath string) (io.ReadC
 	tempFile.Close()
 
 	fmt.Println("-> [DIAG] Attempting to create Cues for all video tracks with 'iframes' mode.")
-	cmd := exec.Command("mkvmerge", "--cues", "video:iframes", "-o", tempPath, inputPath)
+	cmd := exec.Command("mkvmerge", "--cues", buildCueArgs(inputPath, "iframes"), "-o", tempPath, inputPath)
 	slog.Info("Executing command", "component", "DIAG", "command", cmd.String())
 
 	if p.ctx != nil {
@@ -388,7 +430,7 @@ func (p *VideoContentPreprocessor) remapWithMKVMerge(inputPath string) (io.ReadC
 		slog.Error("'video:iframes' succeeded but created no Cues, trying with 'all' as a last resort", "component", "DIAG")
 
 		fmt.Println("-> [DIAG] Attempting to create Cues for all video tracks with 'all' mode.")
-		cmdAll := exec.Command("mkvmerge", "--cues", "video:all", "-o", tempPath, inputPath)
+		cmdAll := exec.Command("mkvmerge", "--cues", buildCueArgs(inputPath, "all"), "-o", tempPath, inputPath)
 		slog.Info("Executing command", "component", "DIAG", "command", cmdAll.String())
 		cmdAll.Stderr = os.Stderr
 		if err := cmdAll.Run(); err != nil {

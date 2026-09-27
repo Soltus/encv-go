@@ -45,19 +45,20 @@ export interface EncvWasmApi {
 /**
  * 求值 Go 的 wasm_exec.js。
  *
- * 不使用 eval：
- *  - Worker 环境用 importScripts(blobURL)（经典 worker 才有 importScripts）；
- *  - 主线程用 <script src=blobURL> 注入。
- * 两条路径都不需要 unsafe-eval，CSP 更友好。
+ * 不使用 eval（不需要 unsafe-eval，CSP 更友好），按宿主能力分三条路径：
+ *  1. 主线程：<script src=blobURL> 注入
+ *  2. 经典 worker：importScripts(blobURL)
+ *  3. module worker：动态 import(blobURL)
+ *
+ * 第 3 条是 2026-09-27 补的：module worker 的 WorkerGlobalScope 上**依然挂着**
+ * importScripts 属性，但一旦调用就抛
+ * `Failed to execute 'importScripts' on 'WorkerGlobalScope': Module scripts don't support importScripts()`。
+ * 也就是说「有没有这个属性」回答不了「能不能用」，只能 try 一次才知道。
  */
 export async function loadGoRuntime(execSource: string): Promise<GoRuntime> {
   const url = URL.createObjectURL(new Blob([execSource], { type: "text/javascript" }));
   try {
-    if (typeof importScripts === "function") {
-      importScripts(url);
-    } else {
-      await loadScriptTag(url);
-    }
+    await evalInHost(url, execSource);
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -66,6 +67,54 @@ export async function loadGoRuntime(execSource: string): Promise<GoRuntime> {
     throw new Error("wasm_exec.js 未定义 globalThis.Go，检查胶水脚本版本是否与构建 wasm 的 Go 版本一致");
   }
   return new GoCtor();
+}
+
+async function evalInHost(url: string, execSource: string): Promise<void> {
+  if (typeof document !== "undefined") {
+    await loadScriptTag(url);
+    return;
+  }
+
+  // 两条路径的失败原因都要保留：只报最后一条会把真正的根因（为什么 importScripts 不行）吞掉。
+  const failures: string[] = [];
+  const describe = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+  if (typeof importScripts === "function") {
+    try {
+      importScripts(url);
+      return;
+    } catch (error) {
+      failures.push(`importScripts 失败：${describe(error)}`);
+    }
+  } else {
+    failures.push("宿主没有 importScripts（module worker）");
+  }
+
+  // module worker 的最终手段：动态 import。
+  //
+  // ⚠️ 用 data: URL 而不是 blob: URL，是为了扛住打包器的 query 注入：
+  // Vite dev 会把 `import(url)` 改写成 `import(__vite__injectQuery(url, 'import'))`，
+  // 而 blob: URL 一旦被追加 `?import`，浏览器在 Blob URL Store 里就查不到它了
+  // （会真的去发请求，拿回 HTML → `Unexpected token '<'`）。
+  // data: URL 不受影响；末尾那个未闭合的行注释 `//` 则是把自己废掉：
+  // 追加进来的 `?import` 落在注释里，不会变成非法的 JS token。
+  const dataUrl = `data:text/javascript;charset=utf-8,${encodeURIComponent(`${execSource}\n//`)}`;
+  try {
+    await import(/* @vite-ignore */ dataUrl);
+    return;
+  } catch (error) {
+    failures.push(`动态 import 失败：${describe(error)}`);
+  }
+
+  // data: 被 CSP 拦下的环境，最后再试一次 blob:
+  try {
+    await import(/* @vite-ignore */ url);
+    return;
+  } catch (error) {
+    failures.push(`动态 import(blob) 失败：${describe(error)}`);
+  }
+
+  throw new Error(`无法在当前宿主加载 wasm_exec.js：${failures.join("；")}`);
 }
 
 function loadScriptTag(url: string): Promise<void> {
@@ -120,8 +169,11 @@ export async function loadEncvWasm(options: { wasm: ArrayBuffer | Uint8Array; ex
   };
 
   return {
-    version: () => call("version") as unknown as string,
-    constants: () => call("constants") as unknown as EnvelopeConstants,
+    // ⚠️ 每个导出都要 unwrap：wasm 侧一律返回「结果对象」 { ok, ... }，
+    //    少了这一层解包，调用方拿到的是 {ok:true,value:{...}} 而不是里面的值，
+    //    读字段全是 undefined —— 而且不报错，排查时很容易误判成 wasm 返回了空数据。
+    version: () => unwrap(call("version")) as string,
+    constants: () => unwrap(call("constants")) as unknown as EnvelopeConstants,
     encrypt: (plain, password, opts) => unwrap(call("encrypt", plain, password, opts ?? null), true) as Uint8Array,
     encryptWithEntropy: (plain, password, opts, salt, iv) =>
       unwrap(call("encryptWithEntropy", plain, password, opts ?? null, salt, iv), true) as Uint8Array,

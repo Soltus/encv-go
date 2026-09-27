@@ -40,5 +40,12 @@ if [[ "${1:-}" != "--no-vectors" ]]; then
   "$GO" run ./cmd/encv-crypto-vectors -out "$VECTORS_DIR/vectors.json"
 fi
 
+# v4 容器解密内核：浏览器/Node 端**不依赖 Go 后端**读 .sccg* 容器（含流式随机读）。
+# 编译的是同一份 internal/v2 代码，所以与主应用/CLI 完全同质 —— ENCV 主线改了，重新 make wasm 即跟随。
+echo "▶ 构建 encv-container.wasm（v4 容器解密内核）"
+mkdir -p "app/enc-preview/wasm"
+GOOS=js GOARCH=wasm "$GO" build -o "app/enc-preview/wasm/encv-container.wasm" ./cmd/encv-wasm-container
+cp "$WASM_EXEC" "app/enc-preview/wasm/wasm_exec.js"
+
 echo "✅ 完成："
 ls -lh "$OUT_DIR"

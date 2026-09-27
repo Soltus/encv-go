@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ENCV · WASM 纯前端容器预览</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%94%90%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">ENCV <span class="logo-dim">WASM 纯前端预览</span></span>
+        <span class="tagline">
+          解密全部发生在浏览器里的 <code>encv-container.wasm</code> —— 同一份
+          <code>internal/v2</code> Go 代码编译而来，<b>零后端通讯</b>
+        </span>
+      </div>
+      <div class="status">
+        <span class="badge" id="badge" data-state="loading">加载 wasm 内核…</span>
+      </div>
+    </header>
+
+    <main class="grid">
+      <section class="card span2">
+        <h2>① 样例容器 <span class="sub">点击即解密（fetch 静态文件 → wasm 解密 → 浏览器渲染）</span></h2>
+        <div class="samples" id="samples"></div>
+      </section>
+
+      <section class="card span2">
+        <h2>② 浏览器内加密 <span class="sub">明文 → wasm 加密成容器 → 立即解密回读验证（全程不出浏览器）</span></h2>
+        <div class="row">
+          <label class="field grow">
+            明文
+            <textarea id="plaintext" rows="3" placeholder="随便写点什么（支持中文/emoji）…">这是一段待加密的明文 🔐 中文也行</textarea>
+          </label>
+        </div>
+        <div class="row actions">
+          <button class="btn btn-accent" id="btn-encrypt">加密并回读验证</button>
+          <label class="btn btn-file">
+            或用文件
+            <input type="file" id="plainfile" hidden />
+          </label>
+          <span class="metric" id="enc-metric">—</span>
+        </div>
+        <p class="host-meta" id="enc-detail">未加密</p>
+      </section>
+
+      <section class="card span2">
+        <h2>③ 自带容器 <span class="sub">选一个 .sccg* 容器，或把它拖进来</span></h2>
+        <div class="drop" id="drop">
+          <p class="hint">点「选择文件」或把容器拖到本区域</p>
+          <input type="file" id="file" accept=".sccgv,.sccga,.sccgi,.sccgp,.sccgpdf,.sccgt,.sccgwps,.sccgi" />
+          <div class="row">
+            <label class="field">
+              口令
+              <input type="password" id="password" value="my-encv_key" />
+            </label>
+            <span class="host-meta" id="own-result">未选择文件</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="card span2">
+        <h2>④ 解密结果 <span class="sub" id="result-title">—</span></h2>
+        <div id="result" class="result"></div>
+        <dl class="kv" id="meta"></dl>
+      </section>
+
+      <section class="card span2">
+        <h2>⑤ 自检 <span class="sub">纯前端可验证：加解密往返、容器 magic、随机读、错口令必拒</span></h2>
+        <div class="row actions">
+          <button class="btn btn-accent" id="btn-selftest">一键自检</button>
+          <span class="metric" id="metric"></span>
+        </div>
+        <pre id="log" class="log" aria-live="polite"></pre>
+      </section>
+    </main>
+
+    <footer class="foot">
+      wasm 内核：<code>cmd/encv-wasm-container</code>（<code>make wasm</code> 构建） ·
+      容器格式：<code>internal/v2/container</code> · 本页不发任何后端请求
+    </footer>
+
+    <script src="./wasm/wasm_exec.js"></script>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

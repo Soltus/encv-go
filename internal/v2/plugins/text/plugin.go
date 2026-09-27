@@ -602,8 +602,11 @@ func (p *TextPlugin) Decrypt(containerPath, outputDir string) (string, error) {
 
 	index := factory.GetIndex()
 	vIndex, ok := index.(*TextIndex)
-	if !ok {
-		return "", fmt.Errorf("container is not a %s container", p.Name())
+	// ⚠️ 必须同时判 nil：GetIndex() 可能返回**带类型的 nil 指针**（(*TextIndex)(nil)），
+	// 此时类型断言 ok=true，紧接着调方法就会 nil 解引用 panic。
+	// 容器缺少插件 index 是合法状态（例如只经过 writer 层写入的容器），应当报错而不是崩。
+	if !ok || vIndex == nil {
+		return "", fmt.Errorf("container is not a %s container (index missing)", p.Name())
 	}
 
 	outputPath := filepath.Join(outputDir, vIndex.GetOriginalFilename())
