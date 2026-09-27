@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.branch || github.ref_name }}
           submodules: false  # 防御：仓库无真实 submodule
@@ -66,31 +66,25 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           java-version: '21'
           distribution: 'temurin'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
-      - name: Cache Android NDK
-        id: cache-ndk
-        uses: actions/cache@v4
+      - name: Setup Android NDK        
+        uses: nttld/setup-ndk@v1        
+        id: ndk        
         with:
-          path: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}
-          key: ndk-${{ env.NDK_VERSION }}
-
-      - name: Install Android NDK
-        if: steps.cache-ndk.outputs.cache-hit != 'true'
-        run: yes | sdkmanager --install "ndk;${{ env.NDK_VERSION }}" > /dev/null 2>&1 && echo "✅ NDK installed"
-
-      - name: Install Android platform & build tools
-        run: yes | sdkmanager --install "platforms;android-36" "build-tools;36.0.0" > /dev/null 2>&1 && echo "✅ Platform & build tools installed"
+          ndk-version: r29 
+          add-to-path: true          
+          link-to-sdk: true   # 等效于原来 sdkmanager 安装后的 $ANDROID_HOME/ndk/<版本> 布局，Gradle 可自动发现
 
       - name: Cache pnpm dependencies (main)
         id: cache-pnpm
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             app/node_modules
@@ -103,7 +97,7 @@ jobs:
             pnpm-main-
 
       - name: Cache Gradle
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.gradle/caches
