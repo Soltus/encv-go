@@ -78,7 +78,7 @@ jobs:
         uses: nttld/setup-ndk@v1        
         id: ndk        
         with:
-          ndk-version: r29 
+          ndk-version: ${{ env.NDK_VERSION }}
           add-to-path: true          
           link-to-sdk: true   # 等效于原来 sdkmanager 安装后的 $ANDROID_HOME/ndk/<版本> 布局，Gradle 可自动发现
 
@@ -175,6 +175,18 @@ jobs:
             eval "val=\$$v"
             echo "  $v = $val"
           done
+      - name: Compute NDK path
+        id: ndk-path
+        run: |
+          # 优先使用 setup-ndk 的输出
+          if [ -n "${{ steps.ndk.outputs.ndk-path }}" ]; then
+            NDK_PATH="${{ steps.ndk.outputs.ndk-path }}"
+          else
+            # 兜底：从 ANDROID_HOME 下查找
+            NDK_PATH=$(find "$ANDROID_HOME/ndk" -maxdepth 1 -type d -name "*" | sort -V | tail -1)
+          fi
+          echo "NDK_PATH=$NDK_PATH" >> "$GITHUB_OUTPUT"
+          echo "✅ Using NDK: $NDK_PATH"
 
       - name: Download MPV native libraries from Release
         if: inputs.skip_mpv_plugin != true
@@ -243,7 +255,7 @@ jobs:
           ls -lh "$JNI_BASE/"
 
           # 验证关键符号
-          NM="${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
+          NM="${{ steps.ndk-path.outputs.NDK_PATH }}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-nm"
           for required in "libffmpeg.so:ffmpeg_run" "libffmpeg.so:ffmpeg_reset" "libffprobe.so:ffprobe_run" "libffprobe.so:ffprobe_reset"; do
             lib="${required%:*}"
             sym="${required#*:}"
@@ -418,7 +430,7 @@ jobs:
       - name: Build Go binary for Android arm64 (with CGO for ffmpeg dlopen + libsql + objectbox)
         working-directory: ${{ github.workspace }}
         env:
-          ANDROID_NDK: ${{ env.ANDROID_HOME }}/ndk/${{ env.NDK_VERSION }}
+          ANDROID_NDK: ${{ steps.ndk-path.outputs.NDK_PATH }}
           LIBSQL_READY: ${{ env.LIBSQL_READY }}
           OBJECTBOX_READY: ${{ env.OBJECTBOX_READY }}
         run: |
