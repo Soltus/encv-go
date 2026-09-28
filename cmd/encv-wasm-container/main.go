@@ -27,18 +27,14 @@ package main
 
 import (
 	"bytes"
-	"crypto/md5"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"syscall/js"
 
+	"github.com/Soltus/encv-go/internal/v2/container/compose"
 	containerhandle "github.com/Soltus/encv-go/internal/v2/container/handle"
-	"github.com/Soltus/encv-go/internal/v2/crypto"
-	textplugin "github.com/Soltus/encv-go/internal/v2/plugins/text"
 
 	// 插件包靠 init() 把各自的 index kind 注册进主线 KVI 注册表；
 	// 不加载就只有注册过的那几种能解（未注册时报 "unknown index kind"）。
@@ -50,7 +46,6 @@ import (
 	_ "github.com/Soltus/encv-go/internal/v2/plugins/wps"
 	"github.com/Soltus/encv-go/internal/v2/reader"
 	"github.com/Soltus/encv-go/internal/v2/types"
-	"github.com/Soltus/encv-go/internal/v2/writer"
 )
 
 // opened 持有一个已打开的容器。
@@ -155,97 +150,22 @@ func openContainerFromSource(src containerhandle.ContainerSource, password strin
 // 用 WriteV4ContainerTo（io.Writer 版）而不是 WriteV4Container（文件版）：
 // js/wasm 上 os 没有文件系统，os.Create 会直接报 "not implemented on js"。
 // 主线 writer 为此拆出了只依赖 io.Writer 的写入路径，wasm 侧就不需要复制布局逻辑。
+// encryptBytes 整块加密：编排（密钥素材 / manifest / KVI）全部在
+// internal/v2/container/compose 里 —— 这里只负责把它写进内存缓冲。
+//
+// ⚠️ 编排不许写在 wasm 侧：主应用改加解密逻辑后这里必须**不用改**
+// （由 thin_shell_test.go 守着）。
 func encryptBytes(plain []byte, password string, containerType uint16, containerTypeStr, originalName string) ([]byte, error) {
-	keyLen := crypto.KeySizeForCipherMode_v4(crypto.CipherModeAES128CTR)
-
-	salt, err := crypto.GenerateSalt_v2(16)
-	if err != nil {
-		return nil, err
-	}
-	iv, err := crypto.GenerateIV_v2(16)
-	if err != nil {
-		return nil, err
-	}
-	macSalt, err := crypto.GenerateMACSalt()
-	if err != nil {
-		return nil, err
-	}
-
-	// 分层密钥：随机 DEK 由口令派生的 KEK 封装（与 openContainer 的 UnwrapDEK 对称）
-	dek := make([]byte, keyLen)
-	if _, err := rand.Read(dek); err != nil {
-		return nil, err
-	}
-	wrapped, err := crypto.WrapDEK(dek, crypto.DeriveKEK(password, salt), nil)
-	if err != nil {
-		return nil, err
-	}
-	hint, err := crypto.CalculatePasswordHint(password, salt)
-	if err != nil {
-		return nil, err
-	}
-	macKey := crypto.DeriveMACKey(password, macSalt)
-
-	seg, err := crypto.EncryptSegment(plain, dek, macKey, 0, "none")
-	if err != nil {
-		return nil, err
-	}
-
-	// KVI 除了盐/IV，还要带**插件 index**（主线把它存在 KVI 里，而不是别处）：
-	// 插件解密路径靠 factory.GetIndex() 从这里取，缺了就报 "index missing"。
-	// 直接引用主线的 TextIndex 类型填，字段名随主线走，不手工抄一份。
-	sum := md5.Sum(plain)
-	kvi, err := json.Marshal(map[string]interface{}{
-		"salt_base64": crypto.Base64Encode_v2(salt),
-		"iv_base64":   crypto.Base64Encode_v2(iv),
-		"text_index": &textplugin.TextIndex{
-			ID:                "0",
-			OriginalFileSize:  int64(len(plain)),
-			MimeType:          "text/plain; charset=utf-8",
-			Format:            "plain",
-			OriginalFilename:  originalName,
-			OriginalInputPath: originalName,
-			OriginalFileMD5:   hex.EncodeToString(sum[:]),
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	idData := make([]byte, 16)
-	if _, err := rand.Read(idData); err != nil {
-		return nil, err
-	}
-
-	params := &writer.V4WriteParams{
-		IsMain:         true,
-		ContainerType:  containerType,
-		IDType:         types.IDType_Raw,
-		IDData:         idData,
-		PasswordHint:   hint,
-		CipherMode:     0, // AES-128-CTR，与 keyLen 一致
-		SegmentResults: []*crypto.SegmentEncryptionResult{seg},
-		Manifest: &types.Manifest_v4{
-			Version:       4,
-			ContainerID:   hex.EncodeToString(idData),
-			ContainerType: containerTypeStr,
-			Segments:      []types.Segment_v4{{ID: "seg-0"}}, // offset/size/nonce 由 writer 回填
-			// Playlists 也得写：主线 reader 的 sequential/seekable reader 按 playlist 名
-			// 取段序列（缺省 "default"），不写就报 "playlist 'default' not found"。
-			Playlists:  map[string][]string{"default": {"seg-0"}},
-			KVI:        kvi,
-			WrappedDEK: wrapped,
-			// 文件名：主线里这是可选字段（加密文件名时才额外写 filename_alg）。
-			// 不填的话部分插件（text）解密时会按"有文件名"去取，直接 nil 引用崩掉，
-			// 所以这里至少给一个明文名；不设 FilenameAlgorithm 即表示"文件名未加密"。
-			OriginalName: originalName,
-			// ⚠️ mac_salt 必须显式写进 manifest：这里加密用的是 DeriveMACKey(password, macSalt)，
-			// 留空的话 writer 会自己再生成一个 recorded salt，reader 派生出的 mac_key 就是另一个，
-			// 哪天把 EnableHMAC 打开会得到一个"MAC 永远验不过"的容器。
-			MACSaltBase64: crypto.Base64Encode_v2(macSalt),
-		},
-	}
 	var buf bytes.Buffer
-	if err := writer.WriteV4ContainerTo(&buf, params); err != nil {
+	err := compose.EncryptBytes(plain, compose.Options{
+		Password:         password,
+		ContainerType:    containerType,
+		ContainerTypeStr: containerTypeStr,
+		OriginalName:     originalName,
+		MimeType:         "text/plain; charset=utf-8",
+		Format:           "plain",
+	}, &buf)
+	if err != nil {
 		return nil, err
 	}
 	return buf.Bytes(), nil
@@ -453,7 +373,7 @@ func (k *streamSink) Finish(head []byte, tail []byte) error {
 
 // encryptSession 一个进行中的流式加密会话。
 type encryptSession struct {
-	w       *writer.V4StreamWriter
+	w       *compose.StreamEncryptor
 	pending [][]byte // 已成型、还没被 JS 取走的数据段
 	head    []byte   // Close 之后才有：容器头（2048B）
 	tail    []byte   // Close 之后才有：manifest + footer
@@ -479,118 +399,37 @@ func (s *encryptSession) takePending() []byte {
 
 // startEncrypt 起一个流式加密会话。密钥素材（salt/DEK/hint/macSalt）在这里生成，
 // 之后所有明文块继续喂给同一个 writer —— 与 encryptBytes 走的是同一条分层密钥路径。
+// startEncrypt 起一个流式加密会话：编排同样在 compose 包里，
+// 这里只把 js 的选项翻成 compose.Options，并把密文段攒给 JS 取。
 func startEncrypt(password string, opts js.Value) (*encryptSession, error) {
-	ct := uint16(types.ContainerTypeText)
-	ctStr := "text"
-	originalName := "encrypted.bin"
-	mimeType := "application/octet-stream"
-	format := "plain"
-	segmentSize := int64(writer.DefaultStreamSegmentSize)
-	enableHMAC := false
+	co := compose.Options{Password: password}
 
 	if opts.Type() == js.TypeObject {
 		if v := opts.Get("containerType"); v.Type() == js.TypeNumber {
-			ct = uint16(v.Int())
+			co.ContainerType = uint16(v.Int())
 		}
 		if v := opts.Get("containerTypeStr"); v.Type() == js.TypeString && v.String() != "" {
-			ctStr = v.String()
+			co.ContainerTypeStr = v.String()
 		}
 		if v := opts.Get("originalName"); v.Type() == js.TypeString && v.String() != "" {
-			originalName = v.String()
+			co.OriginalName = v.String()
 		}
 		if v := opts.Get("mimeType"); v.Type() == js.TypeString && v.String() != "" {
-			mimeType = v.String()
+			co.MimeType = v.String()
 		}
 		if v := opts.Get("format"); v.Type() == js.TypeString && v.String() != "" {
-			format = v.String()
+			co.Format = v.String()
 		}
 		if v := opts.Get("segmentSize"); v.Type() == js.TypeNumber && v.Int() > 0 {
-			segmentSize = int64(v.Int())
+			co.SegmentSize = int64(v.Int())
 		}
 		if v := opts.Get("enableHMAC"); v.Type() == js.TypeBoolean {
-			enableHMAC = v.Bool()
+			co.EnableHMAC = v.Bool()
 		}
-	}
-
-	keyLen := crypto.KeySizeForCipherMode_v4(crypto.CipherModeAES128CTR)
-	salt, err := crypto.GenerateSalt_v2(16)
-	if err != nil {
-		return nil, err
-	}
-	iv, err := crypto.GenerateIV_v2(16)
-	if err != nil {
-		return nil, err
-	}
-	macSalt, err := crypto.GenerateMACSalt()
-	if err != nil {
-		return nil, err
-	}
-	dek := make([]byte, keyLen)
-	if _, err := rand.Read(dek); err != nil {
-		return nil, err
-	}
-	wrapped, err := crypto.WrapDEK(dek, crypto.DeriveKEK(password, salt), nil)
-	if err != nil {
-		return nil, err
-	}
-	hint, err := crypto.CalculatePasswordHint(password, salt)
-	if err != nil {
-		return nil, err
-	}
-	macKey := crypto.DeriveMACKey(password, macSalt)
-	idData := make([]byte, 16)
-	if _, err := rand.Read(idData); err != nil {
-		return nil, err
 	}
 
 	sess := &encryptSession{}
-	params := &writer.V4StreamParams{
-		IsMain:        true,
-		ContainerType: ct,
-		IDType:        types.IDType_Raw,
-		IDData:        idData,
-		PasswordHint:  hint,
-		Key:           dek,
-		MacKey:        macKey,
-		CipherMode:    0, // AES-128-CTR，与 keyLen 一致
-		EnableHMAC:    enableHMAC,
-		SegmentSize:   segmentSize,
-		Manifest: &types.Manifest_v4{
-			Version:       4,
-			ContainerID:   hex.EncodeToString(idData),
-			ContainerType: ctStr,
-			OriginalName:  originalName,
-			WrappedDEK:    wrapped,
-			// mac_salt 必须写进 manifest：留空的话 writer 会自己再生成一个，
-			// 于是加密用一个 mac_key、校验用另一个 —— EnableHMAC=true 时永远验不过。
-			MACSaltBase64: crypto.Base64Encode_v2(macSalt),
-		},
-		// KVI 里的插件 index 要等"明文总长 + MD5"出来才知道，所以放在最后这个回调里填。
-		OnManifest: func(m *types.Manifest_v4, plainSize int64, plainMD5 string) error {
-			kvi, err := json.Marshal(map[string]interface{}{
-				"salt_base64": crypto.Base64Encode_v2(salt),
-				"iv_base64":   crypto.Base64Encode_v2(iv),
-				// 与整块路径一致：主线把插件 index 存在 KVI 里，text 插件解密时会去取，
-				// 缺了就报 "index missing"。流式路径不做因此改变。
-				"text_index": &textplugin.TextIndex{
-					ID:                "0",
-					OriginalFileSize:  plainSize,
-					MimeType:          mimeType,
-					Format:            format,
-					OriginalFilename:  originalName,
-					OriginalInputPath: originalName,
-					OriginalFileMD5:   plainMD5,
-				},
-			})
-			if err != nil {
-				return err
-			}
-			m.KVI = kvi
-			return nil
-		},
-	}
-
-	w, err := writer.NewV4StreamWriter(&streamSink{s: sess}, params)
+	w, err := compose.NewStreamEncryptor(co, &streamSink{s: sess})
 	if err != nil {
 		return nil, err
 	}
@@ -928,63 +767,10 @@ func (o *opened) readRange(off int64, length int) ([]byte, error) {
 //
 // 遇到任一声明了 zstd 压缩的段，就放弃这条捷径（压缩后长度无法预测），
 // 交回 plainAll() 处理。
-func (o *opened) segmentPlainLength() (int64, error) {
-	if o.info == nil || o.info.Src == nil || len(o.manifest.Segments) == 0 {
-		return 0, fmt.Errorf("段栈信息不全，无法算术求长")
-	}
-	src, ok := o.info.Src.(io.ReaderAt)
-	if !ok {
-		return 0, fmt.Errorf("容器源不支持随机读")
-	}
-	segs := o.manifest.Segments
-
-	// 段头**分散在整个容器里**（每段开头 34B），逐段读一遍等于把文件读遍 ——
-	// 1GB/1MB 段的容器就是 1024 个 Range 请求、19 秒，只为了拿一个长度。
-	// 所以这里抽样：首段 + 末段，两段开销一致就按统一开销推算全部。
-	// 不一致（历史容器、混合配置）则报错，交回 plainAll() 的老路子。
-	readOverhead := func(seg types.Segment_v4) (int64, error) {
-		buf := make([]byte, types.SegmentHeaderSize)
-		if _, err := src.ReadAt(buf, int64(seg.Offset)); err != nil {
-			return 0, err
-		}
-		var hdr types.SegmentHeader
-		if err := hdr.UnmarshalBinary(buf); err != nil {
-			return 0, fmt.Errorf("解析段头 %s 失败：%w", seg.ID, err)
-		}
-		if hdr.ModeFlags&types.ModeFlagCompressionZstd != 0 {
-			return 0, fmt.Errorf("段 %s 声明了 zstd 压缩，明长只能解密后才知道", seg.ID)
-		}
-		return int64(types.SegmentHeaderSize) + int64(hdr.NonceSize) + int64(hdr.MACSize) + int64(hdr.SeekTableLength), nil
-	}
-
-	head, err := readOverhead(segs[0])
-	if err != nil {
-		return 0, err
-	}
-	if len(segs) > 1 {
-		tail, err := readOverhead(segs[len(segs)-1])
-		if err != nil {
-			return 0, err
-		}
-		if tail != head {
-			return 0, fmt.Errorf("首段/末段的段头开销不一致（%d vs %d），明长只能逐段读", head, tail)
-		}
-	}
-
-	var total int64
-	for _, seg := range segs {
-		plain := int64(seg.Size) - head
-		if plain < 0 {
-			return 0, fmt.Errorf("段 %s 的尺寸算不出明文长度（Size=%d, 开销=%d）", seg.ID, seg.Size, head)
-		}
-		total += plain
-	}
-	return total, nil
-}
-
 func (o *opened) plainLength() (int64, error) {
 	if o.kind == "segment" {
-		n, err := o.segmentPlainLength()
+		// 求长在主线 reader.PlainLength（抽样段头推算），不读密文
+		n, err := reader.PlainLength(o.info)
 		if err == nil {
 			return n, nil
 		}
