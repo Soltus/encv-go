@@ -83,6 +83,23 @@
 - 同理 mac_salt 必须显式写进 manifest：留空会让 writer 再生成一个，
   造成「加密用一个 mac_key、校验用另一个」→ 打开 EnableHMAC 就永远验不过。
 
+## 主应用加解密架构事实（2026-09-29 盘点，长期）
+
+- **主应用 = CLI（`cmd/encv` → `pkg/encv`）+ Capacitor 移动应用**。后者前端是
+  `app/encv-mobile`（`src/api` + `GoProcess` 插件），它启动**内嵌 Go 后端**
+  `cmd/encv-mobile` → `internal/server`。改"主应用"要想到这两处。
+- **加解密在主应用里本来就是流式的**：插件 `postEncryptDirect` 是
+  `for { src.Read(buf) → XOR → WriteFragmentData }`（定长缓冲直写），
+  解密是 `io.Copy(outputFile, decryptedReader)`。**不要给主应用重复造流式。**
+- **流式 ≠ 更省内存**（实测 40MB/400MB 峰值 RSS：插件 3.2MB→27MB 随规模增长；
+  流式 1MB 段 31MB→33MB 恒定）→ 交叉点在 500MB~1GB，GB 级以上流式才划算。
+- **解密供给早已具备**：后端 `/stream`、`/decrypt` → `ContentHandler.ServeFile`
+  支持 HTTP Range（206，按**明文**偏移）。移动端边播边解 + 拖动靠它。
+  原生播放器（mpv）要的是**绝对 URL**（`getAbsoluteStreamUrl`），
+  给容器文件路径 mpv 根本播不了。
+- 插件未 `Initialize` 时 `p.cfg` 为 nil，取口令会**空指针 panic**；高层入口已有
+  `guardInitialized` 守卫（可选接口 `Initialized() bool`）。
+
 ## 任务系统 lift 重构状态补充（2026-07-13）
 
 - **`lib/workflow/types` 真源分歧已调和（REFACTOR_LIFT.md #16）**：app 版 417 行 vs shared 版 291 行，现已统一——shared 为唯一真源（含 `UnifiedTreeNode`/`isUnifiedTreeNode`/`TestCaseSpec`/`TestCaseResult`/`ALL_PHASES`/`isPhase`/`WORKFLOW_STORE_KEY`/`isUnifiedTimelineEntry`），app 原位为 `export * from "@encv/shared-components/lib/workflow/types"` 垫片。
