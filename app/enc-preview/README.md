@@ -67,10 +67,10 @@ cd app/encv-mobile && SELFTEST=1 bun pw-enc-stream.ts       # 跑页面自带的
 内容正确性怎么验：
 
 1. 浏览器内 ≤128MB：`readRange` 分窗逐字节回读（`verified: byte-identical`）
-2. 浏览器外：`node app/enc-preview/verify-container.mjs <容器> <口令> --pattern`
-   —— 加载的是**同一份** `encv-container.wasm`，走的是同一条主线 reader，
-   不需要浏览器内存。实测 512MB 逐字节通过；1GB 会因为 wasm 线性内存上限
-   在 `info()` 那一步被打死（脚本会明确报出来，不会假装通过）
+2. 浏览器外：`node app/enc-preview/verify-container.mjs <容器> <口令> --pattern [--stream]`
+   —— 加载的是**同一份** `encv-container.wasm`，走的是同一条主线 reader。
+   不加 `--stream` 时容器整体进 wasm，实测上限约 512MB（1GB 会在 `info()` 被打死，
+   脚本会明说，不假装通过）；**加 `--stream` 走按需读字节，实测 1GB 逐字节通过**。
 3. **1GB 级**：把产物落盘后用 `encv decrypt-v2` 解（不受 wasm 内存上限），
    实测 `MATCH 1073741824` —— 这也顺带证明了浏览器产出的容器在 CLI/主线上同样能开
 

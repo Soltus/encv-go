@@ -20,10 +20,12 @@ import { webcrypto } from "node:crypto";
 
 const [containerPath, password, ...rest] = process.argv.slice(2);
 if (!containerPath || !password) {
-  console.error("用法：node verify-container.mjs <容器路径> <口令> [--pattern]");
+  console.error("用法：node verify-container.mjs <容器路径> <口令> [--pattern] [--stream]");
   process.exit(2);
 }
 const usePattern = rest.includes("--pattern");
+// --stream：按需读字节，不把容器整体塞进 wasm（大容器必加）
+const useStream = rest.includes("--stream");
 
 const BUILD_DIR = new URL("./wasm/", import.meta.url);
 const WASM = new URL("encv-container.wasm", BUILD_DIR);
@@ -58,24 +60,83 @@ if (!api) {
   process.exit(1);
 }
 
-const bytes = new Uint8Array(fs.readFileSync(containerPath));
-const opened = api.open(bytes, password);
-if (!opened.ok) {
-  console.error(`✗ 打开失败：${opened.error}`);
+// 两种打开方式：
+//   默认      —— open(bytes)：容器整体读进 wasm 线性内存，实测上限约 512MB
+//   --stream —— openStream + streamFeed：按需从文件读，只受磁盘限制（1GB 也能验）
+const fileSize = fs.statSync(containerPath).size;
+
+async function openWhole() {
+  const bytes = new Uint8Array(fs.readFileSync(containerPath));
+  const opened = api.open(bytes, password);
+  if (!opened.ok) throw new Error(opened.error);
+  return { handle: opened.value.handle, read: null, bytes: bytes.length };
+}
+
+async function openByStream() {
+  const fh = await fs.promises.open(containerPath, "r");
+  const read = async (offset, length) => {
+    const buf = Buffer.alloc(length);
+    await fh.read(buf, 0, length, offset);
+    return new Uint8Array(buf);
+  };
+  const opened = api.openStream(password, { size: fileSize, name: containerPath });
+  if (!opened.ok) throw new Error(opened.error);
+  const handle = opened.value.handle;
+  let need = opened.value.need;
+  let guard = 0;
+  while (need?.length) {
+    if (++guard > 5000) throw new Error("喂字节次数异常（size 不对？）");
+    for (const { offset, length } of need) {
+      const fed = api.streamFeed(handle, offset, await read(offset, length));
+      if (!fed.ok) throw new Error(fed.error);
+      need = fed.value?.need;
+      if (fed.value?.ready) {
+        need = null;
+        break;
+      }
+    }
+  }
+  return { handle, read, bytes: fileSize };
+}
+
+let openedInfo;
+try {
+  openedInfo = useStream ? await openByStream() : await openWhole();
+} catch (error) {
+  console.error(`✗ 打开失败：${error.message}`);
   process.exit(1);
 }
-const handle = opened.value.handle;
-const infoRes = api.info(handle);
+const handle = openedInfo.handle;
+const streamRead = openedInfo.read;
+
+// 可能返回 need（字节还没喂进来）：补上再重试
+async function callWithFeed(fn) {
+  for (let i = 0; ; i++) {
+    const r = fn();
+    if (r.ok || !r.need) return r;
+    if (i > 5000) throw new Error(`内核反复要求补字节：${JSON.stringify(r.need)}`);
+    for (const { offset, length } of r.need) {
+      const fed = api.streamFeed(handle, offset, await streamRead(offset, length));
+      if (!fed.ok) throw new Error(fed.error);
+    }
+  }
+}
+
+const infoRes = await callWithFeed(() => api.info(handle));
 if (!infoRes || !infoRes.ok) {
-  // 大容器里最常遇到的是这一步直接把 wasm 打死：容器 + 明文都要在
-  // Go 的线性内存里，Node/浏览器的上限都绕不过去（实测 ~512MB 可过，1GB 不行）。
-  console.error(`✗ 取容器信息失败：${infoRes?.error ?? "内核无响应（多半是容器太大、wasm 内存不够）"}`);
+  // 走 open(bytes) 时大容器会在这一步把 wasm 打死：容器 + 明文都要在线性内存里
+  // （实测 ~512MB 可过，1GB 不行）—— 这时候加 --stream 重试。
+  console.error(
+    `✗ 取容器信息失败：${infoRes?.error ?? "内核无响应（多半是容器太大、wasm 内存不够，可加 --stream）"}${
+      useStream ? "" : "（加 --stream 重试）"
+    }`
+  );
   process.exit(1);
 }
 const info = infoRes.value;
 const total = Number(info.plainLength);
 console.log(
-  `容器 ${bytes.length} 字节 → 明文 ${total} 字节 · ${info.segments} 段 · 类型 ${info.containerType} · 分层密钥 ${
+  `容器 ${openedInfo.bytes} 字节 → 明文 ${total} 字节 · ${info.segments} 段 · 类型 ${info.containerType} · 分层密钥 ${
     info.hasWrappedDEK ? "✓" : "无"
   }`
 );
@@ -92,7 +153,9 @@ let bad = -1;
 if (usePattern) {
   const WINDOW = 4 << 20;
   for (let off = 0; off < total && bad < 0; off += WINDOW) {
-    const got = new Uint8Array(api.readRange(handle, off, Math.min(WINDOW, total - off)).data);
+    const rr = await callWithFeed(() => api.readRange(handle, off, Math.min(WINDOW, total - off)));
+    if (!rr.ok) throw new Error(`readRange @${off} 失败：${rr.error ?? JSON.stringify(rr)}`);
+    const got = new Uint8Array(rr.data);
     for (let i = 0; i < got.length; i++) {
       if (got[i] !== expectedByte(off + i)) {
         bad = off + i;
