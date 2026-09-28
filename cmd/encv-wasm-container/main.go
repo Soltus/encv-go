@@ -72,7 +72,9 @@ type opened struct {
 	// fragment 栈：主线给的是顺序解密流，随机读在已读出的明文字节上切片完成
 	fragReader io.ReadCloser
 	plainCache []byte
-	plainSize  int64
+	// plainPartial：fragment 栈顺序解密时的断点续读缓冲（见 plainAll）
+	plainPartial []byte
+	plainSize    int64
 }
 
 var (
@@ -1009,12 +1011,21 @@ func (o *opened) plainAll() ([]byte, error) {
 		if o.fragReader == nil {
 			return nil, fmt.Errorf("容器未打开")
 		}
-		p, err := io.ReadAll(o.fragReader)
-		if err != nil {
-			return nil, err
+		// fragment 栈只能顺序解密。字节是按需供给的（openStream）时，
+		// 读取会中途因"还缺字节"中断 —— 解密流是**有状态**的，下次是从断点继续，
+		// 所以已读到的部分必须攒下来，不能丢：
+		// 否则重试后只剩最后那一段（实测 17.8KB 的明文被算成 398 字节）。
+		var buf bytes.Buffer
+		if len(o.plainPartial) > 0 {
+			buf.Write(o.plainPartial)
 		}
-		o.plainCache = p
-		return p, nil
+		if _, err := io.Copy(&buf, o.fragReader); err != nil {
+			o.plainPartial = append([]byte(nil), buf.Bytes()...)
+			return nil, err // 让调用方补齐字节后从断点继续
+		}
+		o.plainPartial = nil
+		o.plainCache = buf.Bytes()
+		return o.plainCache, nil
 	}
 
 	r, err := reader.NewSegmentSeekableReader(o.info, "")

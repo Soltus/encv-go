@@ -26,6 +26,8 @@ const ui = {
   filestream: el("filestream"),
   streamurl: el("streamurl"),
   streamurlGo: el("streamurl-go"),
+  mseurl: el("mseurl"),
+  mseGo: el("mse-go"),
   streamResult: el("stream-result"),
   password: el("password"),
   ownResult: el("own-result"),
@@ -560,6 +562,140 @@ ui.streamurlGo.addEventListener("click", () => {
     });
 });
 
+/**
+ * 边下边播：容器字节经 HTTP Range 按需取、解密后**边解边 append 给 MediaSource**。
+ *
+ * 前提：容器里的视频是**分片 MP4（fMP4，含 moof）**。实测源用
+ * `-movflags +frag_keyframe+empty_moov+default_base_moof` 产出时，
+ * 加密→解密后 fMP4 结构完整保留（插件按大小切片，不重新 remux），
+ * 所以这条路不需要改插件。
+ *
+ * 不是 fMP4（ftyp+moov+mdat）时无法分段喂 —— 直接报错并提示走整体解密播放。
+ */
+async function playViaMSE(url) {
+  if (typeof MediaSource === "undefined") throw new Error("该浏览器不支持 MediaSource");
+
+  const head = await fetch(url, { method: "HEAD" });
+  if (!head.ok) throw new Error(`HEAD ${url} 失败：HTTP ${head.status}`);
+  const size = Number(head.headers.get("Content-Length"));
+  const read = async (offset, length) => {
+    const res = await fetch(url, { headers: { Range: `bytes=${offset}-${offset + length - 1}` } });
+    if (!res.ok && res.status !== 206 && res.status !== 200) throw new Error(`Range 失败：HTTP ${res.status}`);
+    const all = new Uint8Array(await res.arrayBuffer());
+    return res.status === 200 ? all.subarray(0, length) : all;
+  };
+
+  const { handle, info } = await openStream(read, size, url.split("/").pop());
+  const total = Number(info.plainLength);
+
+  // 1) 取初始化段：ftyp+moov（到第一个 moof 为止）
+  const probeLen = Math.min(131072, total);
+  const headPlain = await readWindow(handle, 0, probeLen, read);
+  const moofAt = indexOfBox(headPlain, "moof", 0);
+  if (moofAt < 0) {
+    api.close(handle);
+    throw new Error("这个容器里的视频不是分片 MP4（没找到 moof），无法分段喂播；请走整体解密后播放");
+  }
+  const init = headPlain.subarray(0, moofAt);
+  const picked = pickMime(init);
+  if (!picked) {
+    api.close(handle);
+    throw new Error("浏览器不认这个视频的编码格式（MediaSource.isTypeSupported 全否）");
+  }
+  const { mime, codecs } = picked;
+
+  // 2) 建 MediaSource，先 append 初始化段
+  const ms = new MediaSource();
+  const video = document.createElement("video");
+  video.controls = true;
+  video.src = URL.createObjectURL(ms);
+  await new Promise(r => ms.addEventListener("sourceopen", r, { once: true }));
+  const sb = ms.addSourceBuffer(mime);
+  sb.mode = "sequence";
+  const append = buf =>
+    new Promise((resolve, reject) => {
+      sb.addEventListener("updateend", resolve, { once: true });
+      sb.addEventListener("error", () => reject(new Error("SourceBuffer 出错（容器编码不匹配？）")), { once: true });
+      sb.appendBuffer(buf);
+    });
+
+  await append(init);
+
+  // 3) 边读边 append：窗口大小 256KB，只有真正要播的那一段才会被下载
+  const WINDOW = 256 * 1024;
+  for (let off = moofAt; off < total; off += WINDOW) {
+    const chunk = await readWindow(handle, off, Math.min(WINDOW, total - off), read);
+    await append(chunk);
+  }
+  ms.endOfStream();
+  api.close(handle);
+  return { video, total, initBytes: init.length, mime };
+}
+
+// 在明文里找某个 box 的起始偏移（从 from 开始）
+function indexOfBox(buf, name, from = 0) {
+  for (let i = from; i + 8 <= buf.length; ) {
+    const size =
+      (buf[i] << 24) | (buf[i + 1] << 16) | (buf[i + 2] << 8) | buf[i + 3];
+    const tag = String.fromCharCode(buf[i + 4], buf[i + 5], buf[i + 6], buf[i + 7]);
+    if (tag === name) return i;
+    if (!size) break;
+    i += size;
+  }
+  return -1;
+}
+
+// 从初始化段里读出 codecs 串。
+//
+// 层级是 stsd → avc1 → avcC：avcC 落在 avc1 box 起始之后
+// box 头(8) + VisualSampleEntry 固定字段(78) = 86 字节处；
+// avcC 的负载依次是 configurationVersion / AVCProfileIndication /
+// profile_compatibility / AVCLevelIndication，后三个就是 codecs 里的三字节。
+function codecsFromInit(init) {
+  const avc1 = [0x61, 0x76, 0x63, 0x31];
+  for (let i = 0; i + 100 <= init.length; i++) {
+    if (!avc1.every((b, k) => init[i + k] === b)) continue;
+    const avcC = i + 86;
+    const isAvcC =
+      init[avcC] === 0x61 && init[avcC + 1] === 0x76 && init[avcC + 2] === 0x63 && init[avcC + 3] === 0x43;
+    if (!isAvcC) continue;
+    const hex = n => n.toString(16).padStart(2, "0");
+    return `avc1.${hex(init[avcC + 9])}${hex(init[avcC + 10])}${hex(init[avcC + 11])}`;
+  }
+  return null;
+}
+
+// 挑一个浏览器认的 mime：先试解析出来的，不行再退到常见组合
+function pickMime(init) {
+  const parsed = codecsFromInit(init);
+  const candidates = [parsed, "avc1.4d401f", "avc1.42e01e", "avc1.64001f", "avc1.640028"].filter(Boolean);
+  for (const c of candidates) {
+    const mime = `video/mp4; codecs="${c}"`;
+    if (MediaSource.isTypeSupported(mime)) return { mime, codecs: c, parsed, fallback: c !== parsed };
+  }
+  return null;
+}
+
+ui.mseGo.addEventListener("click", () => {
+  const url = ui.mseurl.value.trim();
+  if (!url) return;
+  ui.streamResult.textContent = `边下边播中… ${url}`;
+  playViaMSE(url)
+    .then(({ video, total, initBytes, mime }) => {
+      ui.resultTitle.textContent = `${url}（边下边播）`;
+      ui.result.innerHTML = "";
+      ui.result.appendChild(video);
+      ui.streamResult.textContent = `✓ 边下边播就绪：${(total / 1048576).toFixed(2)}MB / ${mime}`;
+      log(
+        `✓ 边下边播 ${url}：初始化段 ${initBytes} 字节 · 明文 ${(total / 1048576).toFixed(2)}MB · ${mime}`
+      );
+    })
+    .catch(err => {
+      ui.streamResult.textContent = "✗ 边下边播失败";
+      log(`✗ 边下边播 ${url} 失败：${err.message}`);
+    });
+});
+
 // 流式打开（大容器）：选中文件即按需取字节打开，不把容器整体读进内存
 ui.filestream.addEventListener("change", () => {
   const f = ui.filestream.files?.[0];
@@ -697,6 +833,27 @@ async function selfTest() {
     api.close(handle);
     log(`  ↳ Range 打开 ${url}：容器 ${(r.size / 1048576).toFixed(1)}MB，只取 ${(r.bytes / 1048576).toFixed(1)}MB / ${r.requests} 个请求`);
     return same;
+  });
+
+  await push("边下边播：分片 MP4 容器经 MSE 起播（有样例才跑）", async () => {
+    const url = "samples/fmp4.sccgv";
+    const head = await fetch(url, { method: "HEAD" });
+    if (!head.ok) {
+      log("  ↳ 跳过：没有分片 MP4 样例容器（samples/ 已 gitignore）");
+      return true;
+    }
+    const { video } = await playViaMSE(url);
+    video.style.display = "none";
+    document.body.appendChild(video);
+    try {
+      await video.play().catch(() => {}); // 自动播放可能被策略拦，下面只看 readyState/进度
+      await new Promise(r => setTimeout(r, 800));
+      const ok = video.readyState >= 2 && video.currentTime > 0;
+      log(`  ↳ 播放状态 readyState=${video.readyState} currentTime=${video.currentTime.toFixed(2)}s`);
+      return ok;
+    } finally {
+      video.remove();
+    }
   });
 
   await push("流式加密的产物能被错口令拒绝", async () => {

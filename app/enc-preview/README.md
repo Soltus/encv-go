@@ -97,6 +97,19 @@ go run ./cmd/encv encrypt-v2 <明文文件> --password my-encv_key --output <目
 
 没有样例时样例按钮会报错，其余能力（浏览器内加密、上传容器解密、自检）不受影响。
 
+### 边下边播（MSE）
+
+容器字节经 HTTP Range 按需取、解密后**边解边 append 给 MediaSource**，不整体下载。
+
+前提：容器里的视频必须是**分片 MP4（fMP4，含 moof）**。实测源用
+`ffmpeg -movflags +frag_keyframe+empty_moov+default_base_moof` 产出时，
+加密→解密后 fMP4 结构完整保留（插件按大小切片、不重新 remux），
+所以**不需要改插件**。不是 fMP4（ftyp+moov+mdat）时页面会明确报错，
+提示改走"整体解密后播放"。
+
+页面入口：「分片 MP4 容器（边下边播 / MSE）」+「边下边播」按钮。
+自检里有一条用例锁它（readyState>=2 且 currentTime 前进）。
+
 ### 流式打开（大容器不必整体进内存）
 
 `open(bytes)` 要求容器整体落在 wasm 的线性内存里。实测同一个 **1GB** 容器：
