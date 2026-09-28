@@ -39,6 +39,13 @@ type Options struct {
 	Format           string
 	EnableHMAC       bool
 	SegmentSize      int64 // 流式时才用；<=0 取 writer.DefaultStreamSegmentSize
+
+	// KVIExtra 往 KVI 里塞的**额外字段**（插件 index 等）。
+	//
+	// 默认只写 text_index —— 那样产出的容器只有 text 插件认。主应用要加密
+	// 视频/音频/PDF 等时，在这里给出对应插件的 index（由插件自己构造），
+	// 产物才能被对应插件解开。签名里带明文大小与 MD5 是因为 index 通常要记它们。
+	KVIExtra func(plainSize int64, plainMD5 string) map[string]interface{}
 }
 
 func (o Options) withDefaults() Options {
@@ -80,13 +87,10 @@ type material struct {
 }
 
 func newMaterial(password string) (*material, error) {
-	keyLen := crypto.KeySizeForCipherMode_v4(crypto.CipherModeAES128CTR)
-
-	salt, err := crypto.GenerateSalt_v2(16)
-	if err != nil {
-		return nil, err
-	}
-	iv, err := crypto.GenerateIV_v2(16)
+	// ⚠️ 密钥素材必须走主线 crypto.PrepareEncryptionContext，不要在这里再生成一份：
+	// 整块路径（插件层）用的就是它，两边各自生成就等于两份"怎么派生密钥"的逻辑，
+	// 主应用一改就会出现"CLI 加密的容器 wasm 解不开"这类漂移。
+	ctx, err := crypto.PrepareEncryptionContext(password)
 	if err != nil {
 		return nil, err
 	}
@@ -94,16 +98,7 @@ func newMaterial(password string) (*material, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 分层密钥：随机 DEK 由口令派生的 KEK 封装（与 reader 的 UnwrapDEK 对称）
-	dek := make([]byte, keyLen)
-	if _, err := rand.Read(dek); err != nil {
-		return nil, err
-	}
-	wrapped, err := crypto.WrapDEK(dek, crypto.DeriveKEK(password, salt), nil)
-	if err != nil {
-		return nil, err
-	}
-	hint, err := crypto.CalculatePasswordHint(password, salt)
+	hint, err := crypto.CalculatePasswordHint(password, ctx.Salt)
 	if err != nil {
 		return nil, err
 	}
@@ -112,12 +107,12 @@ func newMaterial(password string) (*material, error) {
 		return nil, err
 	}
 	return &material{
-		salt:     salt,
-		iv:       iv,
+		salt:     ctx.Salt,
+		iv:       ctx.IV,
 		macSalt:  macSalt,
-		dek:      dek,
+		dek:      ctx.DEK,
 		macKey:   crypto.DeriveMACKey(password, macSalt),
-		wrapped:  wrapped,
+		wrapped:  ctx.WrappedDEK,
 		hint:     hint,
 		idData:   idData,
 		password: password,
@@ -130,10 +125,16 @@ func newMaterial(password string) (*material, error) {
 // factory.GetIndex() 从这里取，缺了就报 "index missing"。
 // 字段名直接引用主线的 TextIndex 类型，主线改了这里自动跟随。
 func (m *material) kvi(opts Options, plainSize int64, plainMD5 string) ([]byte, error) {
-	return json.Marshal(map[string]interface{}{
+	kv := map[string]interface{}{
 		"salt_base64": crypto.Base64Encode_v2(m.salt),
 		"iv_base64":   crypto.Base64Encode_v2(m.iv),
-		"text_index": &textplugin.TextIndex{
+	}
+	if opts.KVIExtra != nil {
+		for k, v := range opts.KVIExtra(plainSize, plainMD5) {
+			kv[k] = v
+		}
+	} else {
+		kv["text_index"] = &textplugin.TextIndex{
 			ID:                "0",
 			OriginalFileSize:  plainSize,
 			MimeType:          opts.MimeType,
@@ -141,8 +142,9 @@ func (m *material) kvi(opts Options, plainSize int64, plainMD5 string) ([]byte, 
 			OriginalFilename:  opts.OriginalName,
 			OriginalInputPath: opts.OriginalName,
 			OriginalFileMD5:   plainMD5,
-		},
-	})
+		}
+	}
+	return json.Marshal(kv)
 }
 
 // manifest 模板：版本、容器 ID、文件名、分层密钥、mac_salt。
