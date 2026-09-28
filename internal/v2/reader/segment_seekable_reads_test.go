@@ -145,6 +145,56 @@ func writeSegmentsFixture(t *testing.T, plain []byte, segSize int) string {
 	return path
 }
 
+// TestSegmentSeekableReader_PropagatesNeedBytes 抽样时"字节还没供给"必须**上抛**，
+// 不能被当成"抽样不适用"退回逐段读。
+//
+// 不守这条会怎样：每次重试只会多命中一个段头，于是 O(n²) 次段头读取 ——
+// 实测 1GB 容器触发 13 万次 readSegmentHeader（Range 请求也有上千个）。
+func TestSegmentSeekableReader_PropagatesNeedBytes(t *testing.T) {
+	plain := bytes.Repeat([]byte("0123456789abcdef"), 4096)
+	path := writeSegmentsFixture(t, plain, 1024)
+
+	info, err := OpenV4Container(path, nonceGuardPassword)
+	if err != nil {
+		t.Fatalf("OpenV4Container: %v", err)
+	}
+	if len(info.Manifest.Segments) < 32 {
+		t.Fatalf("fixture 段数太少（%d）", len(info.Manifest.Segments))
+	}
+
+	// 一个永远缺字节的源：任何读取都返回 NeedBytesError
+	info.Src = &neverSuppliedSource{}
+	_, err = NewSegmentSeekableReader(info, "")
+	if err == nil {
+		t.Fatal("字节根本没供给，构造却成功了")
+	}
+	if !IsNeedBytes(err) {
+		t.Errorf("缺字节时必须把 NeedBytesError 原样上抛，实际是：%v", err)
+	}
+}
+
+// neverSuppliedSource 模拟"字节尚未供给"的按需源（浏览器 openStream 就是这种）。
+type neverSuppliedSource struct{ off int64 }
+
+type needBytesErr struct{ off int64 }
+
+func (e *needBytesErr) Error() string     { return "需要容器字节（测试用）" }
+func (e *needBytesErr) IsNeedBytes() bool { return true }
+
+func (s *neverSuppliedSource) ReadAt(p []byte, off int64) (int, error) {
+	return 0, &needBytesErr{off: off}
+}
+func (s *neverSuppliedSource) Read(p []byte) (int, error) { return s.ReadAt(p, s.off) }
+func (s *neverSuppliedSource) Seek(offset int64, whence int) (int64, error) {
+	if whence == io.SeekStart {
+		s.off = offset
+	}
+	return s.off, nil
+}
+func (s *neverSuppliedSource) Close() error { return nil }
+func (s *neverSuppliedSource) Size() int64  { return 1 << 30 }
+func (s *neverSuppliedSource) Name() string { return "never-supplied" }
+
 // TestSegmentSeekableReader_SamplesSegmentHeaders 构造时的随机读次数必须与段数无关。
 func TestSegmentSeekableReader_SamplesSegmentHeaders(t *testing.T) {
 	// 64 段 / 1KB 段：足够多，抽样能省下数量级的随机读

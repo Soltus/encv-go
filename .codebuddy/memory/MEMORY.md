@@ -53,6 +53,10 @@
   ⚠️ **不能让内核回调 JS 拿 Promise**：Go/wasm 无法在导出给 JS 的同步函数里挂起等 Promise，
   实测会让 Go 程序直接退出（之后每个调用都是 `Go program has already exited`）。
   实测 1GB 容器：整块 `open` 的 JS 堆增量 1012MB，流式 `openStream` 只要 4MB。
+- **⚠️ "字节还没供给"(need) 必须原样上抛，绝不能当成普通失败退回兜底路径**（同一类坑踩了两次：
+  ①内核 `plainLength` 退回"读全文"；②主线 `samplePlainSizes` 退回"逐段读段头"。
+  后者的后果是每次重试只多命中一个段头 → O(n²)（1GB 容器 13 万次段头读）。
+  主线约定 `reader.NeedBytesError`（`IsNeedBytes()`），按需源实现它。
 - **wasm 内核的入参与返回值都要先确类型**：① `syscall/js.ValueOf` 不认识自定义结构体
   （塞进 map 会在 `Value.Set` panic）；② 取 `.Int()` 前必须确认它是数字（JS 侧忘 await
   传进 Promise 就会 panic）。**一次 panic = 整个内核实例报废**，后续调用全部失效。

@@ -262,6 +262,12 @@ func (e *errNeedBytes) Error() string {
 	return fmt.Sprintf("需要容器字节 %v（先 streamFeed 再重试）", e.need)
 }
 
+// IsNeedBytes 让主线 reader 能认出"字节还没供给"（reader.NeedBytesError）。
+//
+// 有了它，主线在抽样段头时遇到缺字节会**上抛**而不是退回逐段读 —— 后者在
+// 1GB 容器上会退化成十万级的段头读取（每次重试只多命中一个段头）。
+func (e *errNeedBytes) IsNeedBytes() bool { return true }
+
 // feedCacheBytes 是喂进来的字节缓存上限。
 //
 // ⚠️ 不能按"块数"限制：info() 会把**每个**段的段头（34B）都读一遍，
