@@ -264,6 +264,59 @@ func (r *SegmentSeekableReader) segmentPlainSize(seg types.Segment_v4) (int64, e
 	return int64(st.Size()), nil
 }
 
+// samplePlainSizes 抽样段头推算各段明文长度，**只读取少数几个段头**。
+//
+// 适用条件（任一不满足就返回 false，调用方退回逐段读）：
+//   - 抽到的段都没有声明 zstd 压缩（压缩段的明文长度只有 seek table 知道）
+//   - 抽到的段头开销一致：SegmentHeader + Nonce + MAC + SeekTable
+//   - 用统一开销算出的每段明文长度都是非负数
+//
+// 抽样点取首、中、末三段：混合配置（例如部分段带 MAC、部分不带）会被"开销不一致"挡掉，
+// 不会静默算错。返回 false 时调用方走原路径，行为与过去完全一致。
+func (r *SegmentSeekableReader) samplePlainSizes(playlist []types.Segment_v4) ([]int64, bool) {
+	if len(playlist) <= 2 {
+		return nil, false
+	}
+
+	overhead := func(seg types.Segment_v4) (int64, bool) {
+		hdr, _, err := r.readSegmentHeader(seg)
+		if err != nil {
+			return 0, false
+		}
+		if hdr.ModeFlags&types.ModeFlagCompressionZstd != 0 {
+			return 0, false
+		}
+		// 明文段（未置 Encrypted 位）不参与：它的"明文"就是 DataLength，没有 nonce/MAC 开销
+		if hdr.ModeFlags&types.ModeFlagEncrypted == 0 {
+			return 0, false
+		}
+		return int64(types.SegmentHeaderSize) + int64(hdr.NonceSize) + int64(hdr.MACSize) + int64(hdr.SeekTableLength), true
+	}
+
+	mid := playlist[len(playlist)/2]
+	last := playlist[len(playlist)-1]
+	first, ok := overhead(playlist[0])
+	if !ok {
+		return nil, false
+	}
+	for _, seg := range []types.Segment_v4{mid, last} {
+		o, ok := overhead(seg)
+		if !ok || o != first {
+			return nil, false
+		}
+	}
+
+	sizes := make([]int64, len(playlist))
+	for i, seg := range playlist {
+		plain := int64(seg.Size) - first
+		if plain < 0 {
+			return nil, false
+		}
+		sizes[i] = plain
+	}
+	return sizes, true
+}
+
 // readSegmentHeader 从 file 读取一个 Segment 的 34 字节 Header 并解析。
 // 返回 (segHeader, payloadSize, error)。payloadSize = seg.Size - SegmentHeaderSize
 // （注意 seg.Size 包含 Header、Nonce、Ciphertext、HMAC、SeekTable）。
@@ -476,14 +529,24 @@ func NewSegmentSeekableReader(info *V4ContainerInfo, playlistName string) (*Segm
 		playlist: playlist,
 		offset:   0,
 	}
+	// 构造时一次性计算每个 Segment 的明文大小。
+	//
+	// 默认路径逐段读段头（segmentPlainSize）。而**段头是分散在整个容器里的**：
+	// 1GB/1MB 段的容器就是 1024 次随机读 —— 字节来自内存时无所谓，来自网络
+	// （HTTP Range / 远端源）时是 1024 个 Round Trip，只为了拿一串长度。
+	// 所以先走 samplePlainSizes：抽样几个段头推出统一开销，失败再退回逐段读。
 	plainSizes := make([]int64, len(playlist))
-	for i, seg := range playlist {
-		sz, err := tmpReader.segmentPlainSize(seg)
-		if err != nil {
-			f.Close()
-			return nil, fmt.Errorf("failed to compute plaintext size for segment '%s': %w", seg.ID, err)
+	if sampled, ok := tmpReader.samplePlainSizes(playlist); ok {
+		plainSizes = sampled
+	} else {
+		for i, seg := range playlist {
+			sz, err := tmpReader.segmentPlainSize(seg)
+			if err != nil {
+				f.Close()
+				return nil, fmt.Errorf("failed to compute plaintext size for segment '%s': %w", seg.ID, err)
+			}
+			plainSizes[i] = sz
 		}
-		plainSizes[i] = sz
 	}
 
 	return &SegmentSeekableReader{
