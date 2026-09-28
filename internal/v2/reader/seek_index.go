@@ -3,6 +3,7 @@ package reader
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"sort"
@@ -91,6 +92,23 @@ func buildCTRStreamAtOffset(key, baseIV []byte, absoluteOffset uint64) (cipher.S
 		return nil, fmt.Errorf("failed to create aes cipher: %w", err)
 	}
 	return buildCTRStreamForBlock(block, baseIV, absoluteOffset)
+}
+
+// decodeFragmentNonce 解出分片自带的 nonce（base64）。
+//
+// v4 segment 栈给每段生成一个随机 nonce，适配成 fragment 时必须带过来
+// （types.Fragment.Nonce），读取端才能按段重置 keystream；
+// 为空表示"沿用 KVI 的 iv"，即旧容器的单一 keystream 行为。
+// 解不出来就当作没有（返回 nil，走旧路径），不把一次 base64 失败变成致命错误。
+func decodeFragmentNonce(nonceBase64 string) []byte {
+	if nonceBase64 == "" {
+		return nil
+	}
+	nonce, err := base64.StdEncoding.DecodeString(nonceBase64)
+	if err != nil {
+		return nil
+	}
+	return nonce
 }
 
 func discardReaderBytes(r io.Reader, n uint64, pool *sync.Pool) error {

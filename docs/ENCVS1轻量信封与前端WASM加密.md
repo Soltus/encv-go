@@ -97,4 +97,21 @@ bash scripts/test-go.sh ./internal/v2/crypto/simple/    # Go 侧读同一份向�
 - **体积**：约 1MB 来自 `internal/v2/crypto` 间接依赖的 zstd/cbor（`internal/v2/types` 引入）。
   可把 PBKDF2/AES/HMAC 抽成叶子包 `crypto/primitive` 再让 `crypto` 委托，预计降到约 2.3MB。
   **不要**为了瘦身而在 TS 侧另写一份实现——那正是本方案要消灭的东西。
-- **只做整块加解密**：笔记场景够用；大附件流式加解密留待后续。
+- ~~**只做整块加解密**~~：**已解决（2026-09-29）**。大附件走**流式**路径：
+  `internal/v2/writer/stream_v4.go` 提供 `V4StreamWriter`（io.WriteCloser + sink），
+  plaintext 分片喂入、密文段随写随出，Go 侧常驻内存只与 `SegmentSize` 有关；
+  wasm 内核相应导出 `encryptBegin / encryptWrite / encryptEnd / encryptAbort`。
+  浏览器实测：整块路径在 1GB 明文处 `fatal error: out of memory`，
+  流式路径照常产出（并做了 128MB 级逐字节回读）。详见 `app/enc-preview/README.md`。
+
+  剩余边界：**增量不支持 zstd 压缩**（seekable zstd 要随机访存整段）；
+  **打开侧仍要容器整体在内存**（`open(bytes,…)`），几个 GB 容器的一边下载一边播还没打通。
+- **两套内容组织层的 keystream 模型不同（重要）**：本方案产出的是「v4 segment 栈」
+  （每段独立 nonce）；CLI 的插件解密路径是「fragment 栈」（整条流共用 KVI 里那一个 iv）。
+  曾经用 `encv decrypt-v2` 解 wasm 产出的容器会得到**长度正确、内容全是乱码、且不报错**的结果
+  （CTR 无认证，密钥对、偏移对、只有 keystream 错）。
+  **已修（2026-09-29）**：v4→fragment 适配时把每段 nonce 带进 `types.Fragment.Nonce`，
+  读取端（sequential/virtual seekable/bulk/atomic 四条路径）按分片重置 keystream；
+  分片无 nonce 时行为与过去完全一致。实测 CLI 解 16MB/512MB wasm 产物逐字节一致。
+  回归锁 `internal/v2/reader/factory_nonce_stack_test.go`；详见
+  `app/enc-preview/README.md`「已知边界」。

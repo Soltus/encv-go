@@ -146,6 +146,17 @@ type Fragment struct {
 	// 它表示该分片在整个虚拟数据流中的起始字节位置，用于 O(1) 寻址。
 	GlobalStartOffset uint64 `json:"global_start_offset,omitempty"`
 	PhysicalPath      string `json:"physical_path,omitempty"` // 作为提示，TODO: 后续改为使用 header 关联物理分片
+	// 【新增】Nonce 是该分片自己的初始计数器（base64 编码，16 字节）。
+	//
+	// 存在的理由：v4 segment 栈给**每段**生成随机 nonce（CTR 就该这么用，同一条
+	// keystream 复用就是二时间垫）。而老的 fragment 栈整条逻辑流只用 KVI 里那一个 iv。
+	// 由 v4 manifest 适配来的分片必须把每段的 nonce 带过来，否则读取端会用错 keystream ——
+	// 密钥对、偏移对、只有 keystream 不对，而 CTR 没有认证标签，结果就是
+	// 「长度正确、内容全是乱码、一声不响」。
+	//
+	// 为空时表示「沿用 KVI 里的 iv，按全局偏移推进计数器」（旧行为，向后兼容）。
+	Nonce string `json:"nonce,omitempty"`
+
 	// 【新增】PhysicalOffset 记录该 Fragment 对应的 Block Header 在物理文件中的绝对位置。
 	// 注意：这是 Block Header 的起始位置，而非 Payload 的位置。
 	// 这样设计是为了让解密器能够直接定位到数据，无需复杂的扫描逻辑。

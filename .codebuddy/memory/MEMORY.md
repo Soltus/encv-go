@@ -34,6 +34,51 @@
     3. **只解析静态 import**，动态 `import()`/字符串引用查不到；`--module` 返回的行数含同文件多符号重复，去重看唯一文件。
 （首次约 10 分钟；**增量重跑实测 0.65s**，`skipped 2612 unchanged`）。跨仓库完整度更好（references useTaskStore 9 条 vs 单前端库 5 条）。
 
+## 加密容器流式写入（2026-09-29 落地，长期契约）
+
+- **两条写入路径并存**：`writer.WriteV4Container*(V4WriteParams)` 是**整块**（要三份字节同时在内存）；
+  `writer.V4StreamWriter(V4StreamParams + V4StreamSink)` 是**流式**（Go 侧只持有一个 Segment 的缓冲）。
+  产物布局**逐字节同构**：流式刻意复用整块路径的 `writeOneSegment`，段布局不可能漂移。
+- **为什么 Sink 不是 `io.Writer`**：容器头必须先于数据出现，但头里的 ManifestOffset/GlobalCRC32
+  只有写完全部数据才知道 → 约定「数据段先 Append，最后 `Finish(head, tail)`」，
+  调用方按 `head ‖ 碎块 ‖ tail` 组装。**Append 不转移所有权**，下一次会复用缓冲，sink 必须拷贝。
+- **技术前提**：AES-CTR 是流密码，同一个 `cipher.Stream` 连续 `XORKeyStream` 会推进 keystream，
+  所以明文可以一片一片喂；CRC32/HMAC/md5 全部增量算。**每段必换 nonce**（CTR 复用 nonce = 二时间垫）。
+  **流式不支持 zstd**（seekable zstd 要随机访存整段），需压缩只能走整块路径。
+- **browser/wasm 侧**：`cmd/encv-wasm-container` 导出 `encryptBegin/encryptWrite/encryptEnd/encryptAbort`（薄封装，
+  不含容器逻辑）。整块路径 1GB 明文即 `fatal error: out of memory`（32 位 wasm 内存顶）；
+  流式实测 1GB 正常产出。验证脚本 `app/encv-mobile/pw-enc-stream.ts`（真实浏览器）。
+- **读取侧也有增量版**：`openStream(password,{size})` + `streamFeed(handle,offset,bytes)`。
+  协议是**同步的「内核声明缺口 → JS 喂字节 → 重试」** ——
+  ⚠️ **不能让内核回调 JS 拿 Promise**：Go/wasm 无法在导出给 JS 的同步函数里挂起等 Promise，
+  实测会让 Go 程序直接退出（之后每个调用都是 `Go program has already exited`）。
+  实测 1GB 容器：整块 `open` 的 JS 堆增量 1012MB，流式 `openStream` 只要 4MB。
+- **wasm 内核的入参与返回值都要先确类型**：① `syscall/js.ValueOf` 不认识自定义结构体
+  （塞进 map 会在 `Value.Set` panic）；② 取 `.Int()` 前必须确认它是数字（JS 侧忘 await
+  传进 Promise 就会 panic）。**一次 panic = 整个内核实例报废**，后续调用全部失效。
+- **写"能写完"的测试不足以证明"流式"**：实现可以 Write 里攒全文、Close 时一次性 Append，
+  产物一样对。所以 `stream_v4_test.go` 专门锁了「单次 Append 有常数上界 + 中途就有多个 Append」。
+- fixture 里**必须写 `WrappedDEK`**：不写 reader 会回退「password+salt 直接派生」，
+  解出**正确长度的一堆乱码**（CTR 无认证时最难发现的一类失败）。
+- **⚠️ v4 有两套内容组织层，keystream 模型不同，千万别混（2026-09-29 实测）**：
+  - **segment 栈**（`writer.WriteV4ContainerTo` / 流式 writer / wasm 产出）：每段随机 nonce，
+    keystream 每段重置；只能由 `reader.OpenV4Container + NewSegmentSeekableReader` 读。
+  - **fragment 栈**（CLI 插件路径 / `DecryptReaderFactory`）：整条逻辑流共用 KVI 里那一个 iv，
+    `buildCTRStreamAtOffset(key, iv, absoluteOffset)`。
+  - 曾经用 `encv decrypt-v2` 解 wasm 产物 → **长度正确 + 内容全乱码 + 不报错**。
+  - **已修（2026-09-29）**：`types.Fragment.Nonce`（base64）承载每段 nonce，
+    由 `container/handle.AdaptV4ToV2` 从 v4 segment 复制；读取端四条路径
+    （SequentialSeekable / VirtualSeekable / BulkDecryptor / Sequential）
+    在分片带 nonce 时**按分片重置 keystream**（偏移取段内偏移；无法 seek 靠 discard 时取 0）。
+    分片无 nonce = 旧行为，完全向后兼容。实测 CLI 解 wasm 产物 16MB/512MB 逐字节一致。
+  - `decryptReaderFactory.ensureNonceIsCarried()` 现仅做适配层自校验（nonce 没带过来才报错）；
+    **早先那版"多段即拒绝"的守卫已被此方案取代**。回归锁
+    `internal/v2/reader/factory_nonce_stack_test.go`。
+  - 判别手法：拿**同一个容器**用 Node 加载同一份 wasm 内核开一遍（脚本
+    `app/enc-preview/verify-container.mjs`），能逐字节对上就说明容器没问题、是读取栈选错了。
+- 同理 mac_salt 必须显式写进 manifest：留空会让 writer 再生成一个，
+  造成「加密用一个 mac_key、校验用另一个」→ 打开 EnableHMAC 就永远验不过。
+
 ## 任务系统 lift 重构状态补充（2026-07-13）
 
 - **`lib/workflow/types` 真源分歧已调和（REFACTOR_LIFT.md #16）**：app 版 417 行 vs shared 版 291 行，现已统一——shared 为唯一真源（含 `UnifiedTreeNode`/`isUnifiedTreeNode`/`TestCaseSpec`/`TestCaseResult`/`ALL_PHASES`/`isPhase`/`WORKFLOW_STORE_KEY`/`isUnifiedTimelineEntry`），app 原位为 `export * from "@encv/shared-components/lib/workflow/types"` 垫片。

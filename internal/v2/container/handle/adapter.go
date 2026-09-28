@@ -67,6 +67,9 @@ func AdaptV4ToV2(v4 *types.Manifest_v4, header *types.EnvelopeHeaderV4) *types.M
 			DataCRC32:         0,
 			PhysicalPath:      "",
 			PhysicalOffset:    physicalOffset,
+			// 每段自己的 nonce 必须带到分片上：读取端靠它重置 keystream，
+			// 丢了就会用 KVI 的 iv 推出一条完全不同的 keystream（静默乱码）。
+			Nonce: seg.Nonce,
 		}
 		runningOffset += encDataSize
 	}
