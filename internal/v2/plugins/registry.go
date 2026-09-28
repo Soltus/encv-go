@@ -555,7 +555,26 @@ func ProcessFileWithPlugin(p Plugin, inputPath string) (types.Index, io.ReadClos
 	return index, file, nil
 }
 
+// initializedAware 可选能力：插件用它报告自己是否已完成初始化。
+//
+// 为什么要它：插件的配置（含口令）在 Initialize(ctx) 里才赋值。没初始化就加解密，
+// 取 p.cfg.Password 是一次**空指针 panic** —— 进程崩掉或者被 recover 吞成空结果，
+// 都远不如一条"你忘了 Initialize"清楚。Capacitor 内嵌后端的插件装配会跳过
+// 初始化失败的插件，这种"半成品插件"状态比 CLI 更容易出现。
+type initializedAware interface{ Initialized() bool }
+
+func guardInitialized(plugin Plugin, op string) error {
+	if p, ok := plugin.(initializedAware); ok && !p.Initialized() {
+		return fmt.Errorf("plugin '%s' 尚未初始化：%s 之前必须先 Initialize(ctx)（配置未就位）", plugin.Name(), op)
+	}
+	return nil
+}
+
 func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputRootDir, outputDir string, collector *performance.Collector) (string, error) {
+	if err := guardInitialized(plugin, "加密"); err != nil {
+		return "", err
+	}
+
 	var outputPath string
 	// 可选能力注入（替代对具体插件类型的特判）：谁需要输出目录谁就实现该接口。
 	applyOutputDir(plugin, outputDir)
@@ -637,6 +656,10 @@ func EncryptFileWithPlugin(ctx context.Context, plugin Plugin, inputPath, inputR
 
 // DecryptContainerWithPlugin 是一个新的辅助函数，封装了完整的解密流程
 func DecryptContainerWithPlugin(ctx context.Context, plugin Plugin, containerPath, outputDir string, collector *performance.Collector) (string, error) {
+	if err := guardInitialized(plugin, "解密"); err != nil {
+		return "", err
+	}
+
 	if collector != nil {
 		collector.StartPhase("analyzing")
 	}
