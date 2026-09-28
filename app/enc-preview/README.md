@@ -178,4 +178,14 @@ ln -sf /path/to/1GB.sccgt app/enc-preview/samples/big.sccgt
   + `streamFeed` 按区间供给字节，1GB 容器的 JS 堆增量从 1012MB 降到 4MB。
   仍剩的是"边下载边播"的最后一公里（把 `read` 接到 HTTP Range / MSE 上，页面里还没接）
 - 视频是一次性解密后交给 `<video>` 播放，尚未做 MSE 分段喂流
-- 无样例容器时 `samples/*` 相关自检会失败（`samples/` 是二进制、已 gitignore），其余自检项不受影响
+- 无样例容器时 `samples/*` 相关自检会失败（`samples/` 是二进制、已 gitignore），其余自检项不受影响。
+  补齐办法（本机没装 ffmpeg，所以视频/音频这两类仍会缺）：
+
+  ```bash
+  # 1) 造 4 个源：txt / 最小 PNG / 最小 PDF / 最小 docx（python 生成，见会话记录）
+  # 2) 用 CLI 加密成容器（顺带验证 CLI 加密路径对这些类型可用）
+  go run ./cmd/encv encrypt-v2 <源目录> -p my-encv_key -o app/enc-preview/samples
+  # 页面按扩展名识别：sample.txt.sccgt / sample.gnp.sccgi / sample.fdp.sccgpdf / sample.xcod.sccgwps
+  ```
+
+  补齐后自检应为 14/17（只差视频、音频两类样例）。
