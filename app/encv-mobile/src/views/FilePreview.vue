@@ -242,6 +242,15 @@ async function determinePreviewType(name: string, isEncrypted?: boolean): Promis
   return "unsupported";
 }
 
+// 给**原生播放器**用的解密流地址。
+//
+// getFileStreamUrl 在 DEV 下返回相对路径（/stream?path=…），浏览器能靠 dev proxy 解析，
+// 但 mpv 跑在独立原生进程里、没有这个上下文 —— 必须是带 host:port 的绝对 URL。
+function streamUrlFor(path: string): string {
+  const url = getFileStreamUrl(path);
+  return url.startsWith("http") ? url : `${getApiBaseUrl()}${url}`;
+}
+
 async function loadTextContent() {
   const path = filePath.value;
   if (!path) return;
@@ -333,7 +342,12 @@ async function loadFile() {
           case "audio":
             if (isNative()) {
               const mimeType = containerType === "video" ? "video/*" : "audio/*";
-              openPlayer(path, fileName.value, mimeType);
+              // ⚠️ 交给 mpv 的必须是**后端解密流**的绝对 URL，不能是容器文件路径：
+              // mpv 不认 .sccgv 容器（给它路径只会报"无法识别的格式"）。
+              // 后端 /stream?path=… 支持 HTTP Range，所以是"边播边解 + 可拖动"，
+              // 不需要先把整个视频解密落盘（大视频等半天、还留一份明文在磁盘上）。
+              // 另外必须绝对 URL：mpv 在独立原生进程里，相对路径（DEV 下 /stream?…）解析不了。
+              openPlayer(streamUrlFor(path), fileName.value, mimeType);
             } else {
               router.push({ path: "/player", query: { path, name: fileName.value } });
             }
