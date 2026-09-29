@@ -22,6 +22,12 @@
 #   \bencryptApiKey\b / \bdecryptApiKey\b                历史 agent-stub.js 函数名（仍保留检测，防回归）
 #   node:crypto                      Node.js 内置 crypto 模块导入
 #
+# ⚠️ 模式 A（模块导入）有**白名单豁免**，其余模式没有：
+#    导入 crypto 不等于用它加解密（例如 createHash 算指纹、webcrypto 给 wasm 胶水
+#    补全局对象）。白名单只写在脚本下方的 ALLOWLIST 里，且**只豁免模式 A** ——
+#    白名单文件里一旦出现真加解密 API（scrypt/pbkdf2/createCipher…）照样红灯。
+#    被豁免的文件会在 stderr 打印 [WARN]，可审计。
+#
 # 修复指引（一旦红灯）：
 #   ✅ 全部加解密走 Go 主后端：
 #        internal/server/agent_api.go::EncryptApiKey(plaintext, deviceId...)
@@ -114,6 +120,30 @@ PATTERNS=(
   '\bdecryptApiKey\b'
 )
 
+# ─── 3b. 白名单：允许"导入 node:crypto，但只做非加密用途"的文件 ──────────
+#
+# ⚠️ 白名单**只对上面的模式 A（模块导入）生效**。真正的加解密 API（模式 B/C/D/E）
+#    不受豁免 —— 即使出现在白名单文件里照样红灯。否则白名单就成了绕过口子，
+#    下次有人真用 scryptSync 加密 API Key，只要把文件加进来就"合法"了。
+#
+# 为什么需要它：`import ... from "node:crypto"` 本身不是风险行为，
+# 有人只是拿 createHash 算指纹、拿 webcrypto 给 wasm 胶水补全局对象。
+# 按"导入即违规"一刀切，会把这些正常用法逼成改写代码绕过门禁 —— 反而更糟。
+#
+# 格式：'文件路径|理由'
+ALLOWLIST=(
+  'scripts/skill-manager.mjs|只用 createHash("sha256") 算内容指纹（判断文件是否变化），不做加解密、不做密钥派生'
+  'app/encv-preview/verify-container.mjs|只为 Go 的 wasm_exec.js 胶水补齐 globalThis.crypto（wasm 需要 getRandomValues）；加解密全在 Go/wasm 内核里'
+)
+
+# 白名单腐烂检查：文件被删/改名/拼错时，白名单会悄悄失效 → 明确告警
+for entry in "${ALLOWLIST[@]}"; do
+  f="${entry%%\|*}"
+  if [ ! -f "$f" ]; then
+    warn "白名单里的文件不存在（已删除/改名/拼错？）：$f"
+  fi
+done
+
 # ─── 4. 扫描主循环 ────────────────────────────────────────────
 FOUND=0
 HITS_TOTAL=0
@@ -129,6 +159,25 @@ for pat in "${PATTERNS[@]}"; do
     "${INCLUDE_FILES[@]}" \
     -e "$pat" \
     "${SCAN_DIRS[@]}" 2>/dev/null || true)
+
+  # 模式 A（模块导入）允许白名单豁免；其余模式（真正的加解密 API）一律不豁免
+  if [ -n "$matches" ] && [ "$pat" = 'node:crypto' ]; then
+    filtered=""
+    while IFS= read -r line; do
+      [ -z "$line" ] && continue
+      f="${line%%:*}"
+      allowed=0
+      for entry in "${ALLOWLIST[@]}"; do
+        if [ "${entry%%\|*}" = "$f" ]; then allowed=1; break; fi
+      done
+      if [ "$allowed" -eq 1 ]; then
+        warn "白名单豁免（仅豁免 node:crypto 导入，真加解密 API 仍会红灯）：$f"
+        continue
+      fi
+      filtered+="${line}"$'\n'
+    done <<< "$matches"
+    matches="$filtered"
+  fi
 
   if [ -n "$matches" ]; then
     # 统计行数

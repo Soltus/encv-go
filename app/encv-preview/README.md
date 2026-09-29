@@ -183,6 +183,14 @@ ln -sf /path/to/1GB.sccgt app/encv-preview/samples/big.sccgt
   nonce（`types.Fragment.Nonce` ← `container/handle.AdaptV4ToV2` 从 v4 segment 复制），
   读取端按分片重置 keystream；分片没有 nonce 时行为与过去完全一致。
   回归锁：`internal/v2/reader/factory_nonce_stack_test.go`。
+- **应用内 WebView 的能力是原生侧给的**（2026-09-30 修）：页面没问题、原生没给回调，
+  表现一律是"点了没反应"，而且**不报错**：
+  - **选文件**：必须有 `WebChromeClient.onShowFileChooser`（PreviewAssetsActivity）。
+    另外两个坑：取消时**必须**回调 `null`（否则页面一直停在等待态，之后点同一个 input 收不到回调）；
+    不能照搬页面的 `accept`（自定义 `.sccg*` 扩展名 Android 映射不到 MIME，会一个文件都选不到）。
+  - **保存文件**：`DownloadListener` **收不到 `blob:` 下载** —— blob 只是页面内的对象，
+    不是网络请求。所以页面在检测到 `window.ENCV` 桥时走**分块保存**（1MB 一片的 base64，
+    一次性转整个大文件会把 WebView 打死）；没有桥（浏览器 / 桌面）就保持标准 `<a download>`。
 - **MSE 的 mime 必须把音轨写出来**（2026-09-29 修）：容器里有 AAC 音轨时，只声明
   `video/mp4; codecs="avc1.…"` 会让 SourceBuffer 直接报错，而这条报错**只落在
   `video.error.message`** 上（`audio object type 0x40 does not match what is specified

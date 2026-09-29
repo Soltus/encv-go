@@ -371,6 +371,34 @@ class GoProcessPlugin : Plugin() {
         }
     }
 
+    // 用**系统浏览器**打开同一个地址（更符合真实使用场景：能分享、能用浏览器自带的
+    // 文件选择器、不受 WebView 各种限制；地址仍是 127.0.0.1，走的还是设备内嵌后端）。
+    //
+    // ⚠️ 两处易错点：
+    //   ① 127.0.0.1 在外部浏览器里同样是**设备本身**（不是某台服务器），
+    //      所以后端在内嵌进程里监听 :2025 时，浏览器能直接访问；
+    //   ② 没有浏览器可接时要明确 reject，否则就是"点了没反应"。
+    @PluginMethod
+    fun openPreviewAssetsInBrowser(call: PluginCall) {
+        try {
+            val url = PreviewAssetsActivity.previewAssetsUrl()
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                addCategory(Intent.CATEGORY_BROWSABLE)
+                // 独立任务：返回键能回到应用，而不是把浏览器塞进本应用栈
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (intent.resolveActivity(context.packageManager) == null) {
+                call.reject("设备上没有能打开该地址的浏览器：$url")
+                return
+            }
+            context.startActivity(intent)
+            LogBridge.i(TAG, "openPreviewAssetsInBrowser: $url")
+            call.resolve(JSObject().apply { put("opened", true); put("url", url) })
+        } catch (e: Exception) {
+            call.reject("用浏览器打开预览页失败：${e.message}")
+        }
+    }
+
     /**
      * 选一个预览页资源包（zip）并返回**可在文件系统里访问的路径**。
      *

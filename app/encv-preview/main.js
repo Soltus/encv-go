@@ -59,6 +59,47 @@ function log(line) {
   ui.log.textContent = `[${stamp}] ${line}\n${ui.log.textContent ?? ""}`.slice(0, 20000);
 }
 
+/**
+ * 给一个下载链接接上"真的能存下来"的能力。
+ *
+ * ⚠️ 应用内 WebView（安卓）里 `<a download href="blob:…">` **点了没反应**，而且不报错：
+ * WebView 的 DownloadListener 收不到 `blob:` 的下载请求（blob 只是页面内的对象，
+ * 不是网络请求），于是既没有下载、也没有任何提示。
+ * 原生侧通过 `window.ENCV` 注入了分块保存桥；有桥就走桥，没有（浏览器 / 桌面）
+ * 就保持原生 `<a download>` 行为 —— 同一份页面两种环境都能用。
+ */
+function attachDownload(a, name, blob) {
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  const bridge = window.ENCV;
+  if (!bridge || typeof bridge.saveBegin !== "function") return;
+  a.addEventListener("click", async event => {
+    event.preventDefault();
+    try {
+      log(`  ↳ 保存到设备：${name}（${blob.size} 字节）`);
+      const id = bridge.saveBegin(name);
+      if (!id) throw new Error("原生侧没有返回保存句柄");
+      // 分块传：一次性把几百 MB 转成 base64 会把 WebView 打死
+      const CHUNK = 1024 * 1024;
+      for (let off = 0; off < blob.size; off += CHUNK) {
+        const part = await blob.slice(off, off + CHUNK).arrayBuffer();
+        bridge.saveChunk(id, bytesToBase64(new Uint8Array(part)));
+      }
+      const where = bridge.saveEnd(id);
+      log(`  ↳ 已保存：${where || name}`);
+    } catch (error) {
+      log(`  ↳ 保存失败：${error.message}`);
+    }
+  });
+}
+
+function bytesToBase64(bytes) {
+  let out = "";
+  const STEP = 0x8000; // 每次喂给 fromCharCode 的量，太大在某些 WebView 上会栈溢出
+  for (let i = 0; i < bytes.length; i += STEP) out += String.fromCharCode.apply(null, bytes.subarray(i, i + STEP));
+  return btoa(out);
+}
+
 // ────────────────────────────── wasm 内核 ──────────────────────────────
 
 async function boot() {
@@ -141,9 +182,8 @@ function render(title, plain, info, kind) {
     p.className = "empty";
     p.textContent = `浏览器无法直接渲染该类型（${kind}）；已解密 ${plain.length} 字节。`;
     const a = document.createElement("a");
-    a.href = url;
-    a.download = title;
     a.textContent = "下载解密结果";
+    attachDownload(a, title, blob);
     ui.result.append(p, a);
   }
 
@@ -405,9 +445,7 @@ async function encryptStreamAndVerify(label, source, meta, expected) {
 
   ui.encMetric.textContent = same === false ? "✗ 往返不一致" : same ? "✓ 往返一致" : "✓ 已产出（体积过大，页面内不回读）";
   ui.encDetail.innerHTML = `${label} → 容器 ${blob.size} 字节（明文 ${value.plainSize}）· ${value.segments} 段 · 流式加密 ${elapsed}ms · <a id="enc-download" href="#">下载容器 .${meta.ext}</a>`;
-  const a = el("enc-download");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${meta.originalName}.${meta.ext}`;
+  attachDownload(el("enc-download"), `${meta.originalName}.${meta.ext}`, blob);
   log(
     `${same === false ? "✗" : "✓"} 流式加密 ${label}：明文 ${value.plainSize} → 容器 ${blob.size} 字节 / ${value.segments} 段 / ${elapsed}ms${
       same === null ? "（超过回读上限，未做逐字节比对）" : same ? "，回读一致" : "，回读不一致"
@@ -431,9 +469,7 @@ function encryptAndVerify(plain, label, meta = TEXT_META) {
   ui.encDetail.innerHTML = `${label} → 容器 ${container.length} 字节（明文 ${plain.length}）· 加密 ${elapsed}ms · 分层密钥 ${
     info.hasWrappedDEK ? "✓" : "无"
   } · <a id="enc-download" href="#">下载容器 .${meta.ext}</a>`;
-  const a = el("enc-download");
-  a.href = URL.createObjectURL(new Blob([container], { type: "application/octet-stream" }));
-  a.download = `${meta.originalName}.${meta.ext}`;
+  attachDownload(el("enc-download"), `${meta.originalName}.${meta.ext}`, new Blob([container], { type: "application/octet-stream" }));
   log(`${same ? "✓" : "✗"} 加密 ${label}：明文 ${plain.length} → 容器 ${container.length} 字节，回读${same ? "一致" : "不一致"}`);
   return { container, same };
 }
@@ -866,6 +902,15 @@ async function selfTest() {
   await push("加密→解密往返一致（中文/emoji）", () => {
     const text = new TextEncoder().encode("往返 🔐 中文 test 123");
     return encryptAndVerify(text, "自检文本").same;
+  });
+
+  await push("下载链接：blob 与文件名都挂上了（无桥时保持 <a download>）", () => {
+    // 应用内 WebView 收不到 blob: 下载，所以保存走 window.ENCV 桥；
+    // 浏览器里没有桥，必须仍然是一个标准的 <a download> —— 这条锁住后一半，
+    // 免得哪天改坏成"只有桥才能下载"。
+    encryptAndVerify(new TextEncoder().encode("download-link-probe"), "下载链接探针");
+    const a = el("enc-download");
+    return Boolean(a) && a.href.startsWith("blob:") && a.download === "encrypted.txt.sccgt";
   });
 
   await push("流式加密：多段产物能被 open/readRange 原样解回（逐字节）", async () => {
