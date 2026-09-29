@@ -53,6 +53,15 @@
             <p>{{ t('devtools.previewAssetsOpenDesc') }}</p>
           </ion-label>
         </ion-item>
+        <!-- 同一个地址，交给系统浏览器：能分享/收藏，且用浏览器自带的文件选择器，
+             不受应用内 WebView 的限制（选文件、下载等都更贴近真实使用场景） -->
+        <ion-item button detail @click="handleOpenPreviewAssetsInBrowser">
+          <ion-icon :icon="openOutline" slot="start"></ion-icon>
+          <ion-label>
+            <h3>{{ t('devtools.previewAssetsOpenBrowser') }}</h3>
+            <p>{{ t('devtools.previewAssetsOpenBrowserDesc') }}</p>
+          </ion-label>
+        </ion-item>
         <ion-item button detail @click="handleUpdatePreviewAssets" :disabled="previewBusy !== ''">
           <ion-icon :icon="cloudDownloadOutline" slot="start"></ion-icon>
           <ion-label>
@@ -164,6 +173,7 @@ import {
   extensionPuzzleOutline,
   eyeOutline,
   flaskOutline,
+  openOutline,
   terminal,
 } from "ionicons/icons";
 import { onMounted, ref } from "vue";
@@ -173,7 +183,7 @@ import { apiRequest } from "@encv/shared-components/api/core/request";
 import { useDevTools } from "@encv/shared-components/composables/useDevTools";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { showToast } from "@encv/shared-components/composables/useToast";
-import { openPreviewAssets, pickPreviewAssetsZip } from "@/plugins/GoProcess";
+import { openPreviewAssets, openPreviewAssetsInBrowser, pickPreviewAssetsZip } from "@/plugins/GoProcess";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -251,6 +261,13 @@ async function handleOpenPreviewAssets() {
   if (!r.opened) {
     // showToast 收的是 ToastOptions（{ message, color }），不是裸字符串
     await showToast({ message: `打开预览页失败：${r.error ?? "未知错误"}`, color: "danger" });
+  }
+}
+
+async function handleOpenPreviewAssetsInBrowser() {
+  const r = await openPreviewAssetsInBrowser();
+  if (!r.opened) {
+    await showToast({ message: `用浏览器打开失败：${r.error ?? "未知错误"}`, color: "danger" });
   }
 }
 

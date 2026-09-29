@@ -1,10 +1,15 @@
 package com.encvgo.app
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 
 /**
@@ -32,15 +37,44 @@ class PreviewAssetsActivity : AppCompatActivity() {
         private const val TAG = "PreviewAssetsActivity"
         private const val DEFAULT_PORT = 2025
         private const val ASSETS_PATH = "/preview-assets/"
+
+        // 预览页地址的唯一来源：Activity 自己与「用浏览器打开」都走它，
+        // 否则端口/路径的兜底逻辑会在两处各写一遍、然后慢慢漂移。
+        fun previewAssetsUrl(): String {
+            val port = if (EncvGoService.lastKnownPort > 0) EncvGoService.lastKnownPort else DEFAULT_PORT
+            return "http://127.0.0.1:$port$ASSETS_PATH"
+        }
     }
 
     private var webView: WebView? = null
 
+    // ─── 文件选择（页面的 <input type="file">）───────────────────────────
+    //
+    // ⚠️ 没有 WebChromeClient.onShowFileChooser，点击 input 就是**彻底没反应**：
+    // 既不弹选择器、也不报错（2026-09-30 真机实测）。加了之后还有两个必踩的坑：
+    //   ① 用户取消/失败时**必须**回调 onReceiveValue(null)，否则页面一直停在
+    //      "等待选择"状态，之后点同一个 input 再也收不到回调 —— 表现为偶发失灵；
+    //   ② 不能照搬页面的 accept：那是自定义容器扩展名（.sccgv 之类），
+    //      Android 映射不到 MIME，照搬会让选择器里一个文件都选不到。
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val cb = fileChooserCallback ?: return@registerForActivityResult
+        fileChooserCallback = null
+        val uris = if (result.resultCode == RESULT_OK) {
+            WebChromeClient.FileChooserParams.parseResult(result.resultCode, result.data)
+        } else {
+            null
+        }
+        cb.onReceiveValue(uris)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val port = if (EncvGoService.lastKnownPort > 0) EncvGoService.lastKnownPort else DEFAULT_PORT
-        val url = "http://127.0.0.1:$port$ASSETS_PATH"
+        val url = previewAssetsUrl()
         Log.i(TAG, "open preview assets: $url")
 
         val wv = WebView(this).apply {
@@ -60,6 +94,34 @@ class PreviewAssetsActivity : AppCompatActivity() {
             }
             // 留在应用内：不做 Intent 跳转，否则预览页里的链接会把用户带去外部浏览器
             webViewClient = WebViewClient()
+            webChromeClient = object : WebChromeClient() {
+                override fun onShowFileChooser(
+                    webView: WebView,
+                    filePathCallback: ValueCallback<Array<Uri>>,
+                    fileChooserParams: FileChooserParams
+                ): Boolean {
+                    // 上一个还没回调就先取消掉，避免 callback 泄漏、页面卡在等待态
+                    fileChooserCallback?.onReceiveValue(null)
+                    fileChooserCallback = filePathCallback
+                    val pickIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "*/*"
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        putExtra(
+                            Intent.EXTRA_ALLOW_MULTIPLE,
+                            fileChooserParams.mode == FileChooserParams.MODE_OPEN_MULTIPLE
+                        )
+                    }
+                    return try {
+                        fileChooserLauncher.launch(Intent.createChooser(pickIntent, "选择文件"))
+                        true
+                    } catch (e: Exception) {
+                        Log.e(TAG, "file chooser 启动失败：${e.message}")
+                        fileChooserCallback = null
+                        filePathCallback.onReceiveValue(null)
+                        false
+                    }
+                }
+            }
         }
         setContentView(wv)
         webView = wv
@@ -76,6 +138,10 @@ class PreviewAssetsActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        // 页面还在等文件结果时 Activity 被销毁：必须回调 null，
+        // 否则 WebView 那边会一直挂着一个永远不返回的 Promise。
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
         webView?.destroy()
         webView = null
         super.onDestroy()

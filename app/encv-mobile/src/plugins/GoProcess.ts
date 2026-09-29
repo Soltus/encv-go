@@ -247,6 +247,31 @@ export async function openPreviewAssets(): Promise<{ opened: boolean; error?: st
 }
 
 /**
+ * 用**系统浏览器**打开容器预览页（更符合真实使用场景）。
+ *
+ * 与 openPreviewAssets（应用内全屏 WebView）的区别：
+ * - 浏览器里能用系统自带的文件选择器（应用内 WebView 要靠 onShowFileChooser 兜）；
+ * - 地址仍是 127.0.0.1，走的还是设备内嵌后端，不经过外网；
+ * - 页面因此可以被分享/收藏，也方便在桌面浏览器里调试同一个后端。
+ */
+export async function openPreviewAssetsInBrowser(): Promise<{ opened: boolean; url?: string; error?: string }> {
+  // 非原生平台（浏览器里跑 dev / 直接当网页用）没有 GoProcess 插件 ——
+  // 直接开新标签页，地址同源，走的就是同一个后端。
+  if (!isNative()) {
+    const url = `${window.location.origin}/preview-assets/`;
+    const w = window.open(url, "_blank");
+    return w ? { opened: true, url } : { opened: false, error: "浏览器拦截了新标签页，请手动打开 " + url };
+  }
+  try {
+    return await (GoProcess as any).openPreviewAssetsInBrowser();
+  } catch (e: any) {
+    const msg = e?.message || e?.code || String(e);
+    console.error("[ENCV] GoProcess.openPreviewAssetsInBrowser() failed:", msg);
+    return { opened: false, error: msg };
+  }
+}
+
+/**
  * 选一个预览页资源包（zip），返回**可在文件系统里访问的路径**（原生侧已把 Uri 物化成文件）。
  * 返回空串表示用户取消。
  */
