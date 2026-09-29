@@ -11,7 +11,12 @@ import androidx.appcompat.app.AppCompatActivity
  * PreviewAssetsActivity —— 容器预览页（encv-preview）的独立全屏 WebView。
  *
  * **为什么要单独一个 Activity**：预览页不是主应用的 dist 资源，它由**内嵌 Go 后端**
- * 从可写数据目录提供（`GET /preview-assets/*`，见 internal/server/preview_assets.go）。
+ * 从可写数据目录提供（路由是 /preview-assets/ 加文件路径，见 internal/server/preview_assets.go）。
+ *
+ * ⚠️ 注释里**不能出现块注释起始符**（斜杠加星号）：Kotlin 的块注释是可嵌套的，
+ * 注释里再写一个就会开一层没人闭合的嵌套注释 —— 表现为文件末尾
+ * "Syntax error: Unclosed comment"（2026-09-30 的 CI 就是这样红的）。
+ * 上面那行路由因此写成 "/preview-assets/ 加文件路径"，而不是把通配符原样抄进来。
  * 那一页的资源可以随时整包替换而**不需要换 APK**，所以入口必须指向后端地址，
  * 而不是打包进 APK 的 assets。
  *
