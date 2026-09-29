@@ -34,6 +34,30 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import * as skillManager from "./skill-manager.mjs";
 
+// ═════════════════════════════════════════════════════════════════
+// PATH 兜底：本 MCP server 自带"执行终端命令"能力，自己 spawn 子进程。
+// 但托管它的客户端可能只给了极简 PATH（如 PATH=/usr/bin:/bin），
+// 于是 /usr/local/bin 下的 pnpm / node 全部 spawn ENOENT，
+// 表现为 `app_check_all`/`app_typecheck` 一上来就 `[spawn error] spawn pnpm ENOENT`
+// （失败是"没找到命令"，不是构建失败 —— 极易误判成项目坏了）。
+// 这里把常规安装位补进子进程 PATH；已存在的目录不重复追加。
+// ═════════════════════════════════════════════════════════════════
+const EXTRA_BIN_DIRS = [
+  "/usr/local/bin",
+  "/usr/local/sbin",
+  "/opt/homebrew/bin",
+  process.env.HOME ? `${process.env.HOME}/.local/bin` : "",
+].filter(Boolean);
+
+function withFallbackPath(env) {
+  const parts = String(env?.PATH || "")
+    .split(":")
+    .filter(Boolean);
+  const missing = EXTRA_BIN_DIRS.filter((d) => !parts.includes(d));
+  if (!missing.length) return env;
+  return { ...env, PATH: [...parts, ...missing].join(":") };
+}
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, ".."); // /workspace
 const APP_ROOT = resolve(REPO_ROOT, "app"); // /workspace/app
@@ -49,7 +73,7 @@ const MAX_OUT = 60_000; // cap returned text; note truncation to the caller
  */
 function run(cmd, args, cwd, timeoutMs) {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd, env: process.env });
+    const child = spawn(cmd, args, { cwd, env: withFallbackPath(process.env) });
     let stdout = "";
     let stderr = "";
     let done = false;

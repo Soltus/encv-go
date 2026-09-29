@@ -313,6 +313,10 @@ WSL2 已经打通了 localhost
 ### 🐛 已知问题
 
 - 非 Openlist Webdav 客户端无法播放加密音频
+- **移动端上传单文件上限 500MB**（`internal/service.DefaultMaxUploadSize`），超过会收到
+  `file size (N bytes) exceeds maximum allowed`（HTTP 400）。
+  2026-09-30 起改为**接收请求体之前**就用 `Content-Length` 早拒，不再"传完+写完才报错"。
+  加密本身不受此限制（加密是后端读本地文件，走的是流式路径）。
 
 ---
 

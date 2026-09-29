@@ -79,7 +79,7 @@
     **早先那版"多段即拒绝"的守卫已被此方案取代**。回归锁
     `internal/v2/reader/factory_nonce_stack_test.go`。
   - 判别手法：拿**同一个容器**用 Node 加载同一份 wasm 内核开一遍（脚本
-    `app/enc-preview/verify-container.mjs`），能逐字节对上就说明容器没问题、是读取栈选错了。
+    `app/encv-preview/verify-container.mjs`），能逐字节对上就说明容器没问题、是读取栈选错了。
 - 同理 mac_salt 必须显式写进 manifest：留空会让 writer 再生成一个，
   造成「加密用一个 mac_key、校验用另一个」→ 打开 EnableHMAC 就永远验不过。
 

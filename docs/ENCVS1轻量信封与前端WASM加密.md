@@ -94,15 +94,34 @@ bash scripts/test-go.sh ./internal/v2/crypto/simple/    # Go 侧读同一份向�
 
 ## 6. 已知取舍 / TODO
 
-- **体积**：约 1MB 来自 `internal/v2/crypto` 间接依赖的 zstd/cbor（`internal/v2/types` 引入）。
-  可把 PBKDF2/AES/HMAC 抽成叶子包 `crypto/primitive` 再让 `crypto` 委托，预计降到约 2.3MB。
-  **不要**为了瘦身而在 TS 侧另写一份实现——那正是本方案要消灭的东西。
+- **体积**（2026-09-30 实测，单位 MiB；明细与手段收效见 memory 2026-09-30）：
+
+  | 产物 | raw | gzip -9 | brotli -11 |
+  |---|---|---|---|
+  | Go 空程序（**理论下限**） | 1.58 | 0.47 | — |
+  | 只含 pbkdf2/aes/hmac/sha256 的探针 | **2.23** | 0.64 | — |
+  | `encv.wasm`（crypto 内核） | 3.25 | 0.91 | 0.69 |
+  | `encv-container.wasm`（容器内核） | **8.15** | 2.18 | 1.59 |
+
+  - 「抽 `crypto/primitive` 能降到约 2.3MB」**成立，但只对 crypto 内核成立**：
+    理论下限就是探针量到的 2.23（基线 1.58 + 原语 0.65），省约 1MB。
+    约 1MB 的 zstd/cbor 来自 `internal/v2/types` 的间接依赖。
+  - ⚠️ **真正的大头是 `encv-container.wasm`（8.15MB）**，且 primitive 抽取对它毫无帮助：
+    它带的是 reader/writer/physical 与 6 个插件。Code section 5.11 + Data 2.87。
+  - 已量化过的刀（别凭直觉再试一遍）：
+    - 去掉 5 个插件 = **0.62MB**；
+    - 给 `reader` 的远程 `net/http` 读取器加 `//go:build !js` = **0 字节**
+      （Go 链接器的 DCE 早把它裁了，加了 tag 也只是引入 js/非 js 行为差异）；
+    - `-ldflags="-s -w"` = 0.06MB；`wasm-strip` = 0.17MB —— 都基本无用。
+  - 划算且零风险的是**传输层**：`app/encv-preview/serve.ts` 已支持 gzip（8.15 → 2.18），
+    换 brotli 还能到 1.59。再往下只能砍 zstd/cbor —— 那会牺牲"能解压缩容器"的能力，取舍待定。
+  - **不要**为了瘦身而在 TS 侧另写一份实现——那正是本方案要消灭的东西。
 - ~~**只做整块加解密**~~：**已解决（2026-09-29）**。大附件走**流式**路径：
   `internal/v2/writer/stream_v4.go` 提供 `V4StreamWriter`（io.WriteCloser + sink），
   plaintext 分片喂入、密文段随写随出，Go 侧常驻内存只与 `SegmentSize` 有关；
   wasm 内核相应导出 `encryptBegin / encryptWrite / encryptEnd / encryptAbort`。
   浏览器实测：整块路径在 1GB 明文处 `fatal error: out of memory`，
-  流式路径照常产出（并做了 128MB 级逐字节回读）。详见 `app/enc-preview/README.md`。
+  流式路径照常产出（并做了 128MB 级逐字节回读）。详见 `app/encv-preview/README.md`。
 
   剩余边界：**增量不支持 zstd 压缩**（seekable zstd 要随机访存整段）；
   **打开侧仍要容器整体在内存**（`open(bytes,…)`），几个 GB 容器的一边下载一边播还没打通。
@@ -114,4 +133,4 @@ bash scripts/test-go.sh ./internal/v2/crypto/simple/    # Go 侧读同一份向�
   读取端（sequential/virtual seekable/bulk/atomic 四条路径）按分片重置 keystream；
   分片无 nonce 时行为与过去完全一致。实测 CLI 解 16MB/512MB wasm 产物逐字节一致。
   回归锁 `internal/v2/reader/factory_nonce_stack_test.go`；详见
-  `app/enc-preview/README.md`「已知边界」。
+  `app/encv-preview/README.md`「已知边界」。
