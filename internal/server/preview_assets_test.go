@@ -310,6 +310,38 @@ func TestPreviewAssets_ImportRejectsForeignAbsolutePath(t *testing.T) {
 	}
 }
 
+// zip 套 zip（例如从 GitHub Actions 下载的 artifact）必须被**点破**：
+// 只报"缺 index.html"的话，真机上根本看不出是包套了两层。
+func TestPreviewAssets_RejectsNestedZip(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ENCV_PREVIEW_ASSETS_DIR", filepath.Join(dir, "preview-assets"))
+
+	// 内层：正规资源包
+	innerSrc := filepath.Join(dir, "inner", "encv-preview")
+	seedPreviewAssets(t, innerSrc, "inner")
+	innerZip := filepath.Join(dir, "inner.zip")
+	makeZip(t, filepath.Join(dir, "inner"), innerZip)
+
+	// 外层：只装了那个 zip（模拟 artifact 再压缩一层）
+	outer := filepath.Join(dir, "outer")
+	if err := os.MkdirAll(outer, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(innerZip, filepath.Join(outer, "encv-preview-assets-abc.zip")); err != nil {
+		t.Fatal(err)
+	}
+	outerZip := filepath.Join(dir, "outer.zip")
+	makeZip(t, outer, outerZip)
+
+	w := doImport(t, &Server{servingDir: dir}, outerZip)
+	if w.Code == http.StatusOK {
+		t.Fatalf("zip 套 zip 不该被接受：%s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "zip 套 zip") {
+		t.Errorf("报错应点破是 zip 套 zip，实际：%s", w.Body.String())
+	}
+}
+
 // 包的版本号以**构建产物**为准：CI 打 zip 时会写 version.json
 // （见 .github/workflows/preview-assets.yml）。导入时必须采用它 ——
 // 否则每台设备的版本号都是"安装时刻的时间戳"，看不出两台设备装的是不是同一个版本。

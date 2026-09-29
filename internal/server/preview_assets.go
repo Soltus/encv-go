@@ -349,6 +349,17 @@ func commitPreviewAssets(staging, source string) error {
 		}
 	}
 	if len(missing) > 0 {
+		// 常见坑：导入的是 **zip 套 zip**（例如从 GitHub Actions 下载的 artifact ——
+		// upload-artifact 会把上传内容再压缩一层）。解压完只看到一个 .zip，
+		// 后端只会报"缺 index.html"，真机上几乎不可能看出是包套了两层。
+		// 这里直接把它点破，并给出可执行的下一步。
+		if zips := zipNamesIn(staging); len(zips) > 0 {
+			return fmt.Errorf(
+				"资源包缺文件：%s（需要 %s）；包里只有 %s —— 像是 **zip 套 zip**：请先解压外层，再导入里层的 %s",
+				strings.Join(missing, "、"), strings.Join(previewAssetsRequired, "、"),
+				strings.Join(zips, "、"), zips[0],
+			)
+		}
 		return fmt.Errorf("资源包缺文件：%s（需要 %s）", strings.Join(missing, "、"), strings.Join(previewAssetsRequired, "、"))
 	}
 
@@ -393,6 +404,24 @@ func commitPreviewAssets(staging, source string) error {
 	raw, _ := json.Marshal(v)
 	_ = os.WriteFile(previewAssetsVersionFile(), raw, 0o644)
 	return nil
+}
+
+// zipNamesIn 列出目录下的 .zip 文件名（只看一层，够定位"zip 套 zip"了）。
+func zipNamesIn(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if strings.EqualFold(filepath.Ext(e.Name()), ".zip") {
+			names = append(names, e.Name())
+		}
+	}
+	return names
 }
 
 // copyDir 递归复制目录（资源量不大，直接顺序复制即可）。
