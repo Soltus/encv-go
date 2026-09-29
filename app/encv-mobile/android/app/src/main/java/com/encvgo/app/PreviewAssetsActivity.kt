@@ -1,16 +1,29 @@
 package com.encvgo.app
 
+import android.Manifest
+import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
+import android.util.Base64
 import android.util.Log
+import android.webkit.JavascriptInterface
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import java.io.File
+import java.io.FileOutputStream
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * PreviewAssetsActivity —— 容器预览页（encv-preview）的独立全屏 WebView。
@@ -92,8 +105,21 @@ class PreviewAssetsActivity : AppCompatActivity() {
                 loadWithOverviewMode = true
                 useWideViewPort = true
             }
-            // 留在应用内：不做 Intent 跳转，否则预览页里的链接会把用户带去外部浏览器
-            webViewClient = WebViewClient()
+            // 留在应用内：只放行本机后端的地址。外跳一律拦掉 ——
+            // 既避免预览页把用户带到外部浏览器，也顺带收窄下面那个 JS 桥的暴露面。
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    val host = request.url.host ?: return true
+                    return host != "127.0.0.1" && host != "localhost"
+                }
+            }
+            // 页面下载产物用的桥（见 OutboxBridge 的注释：DownloadListener 收不到 blob:）
+            addJavascriptInterface(OutboxBridge(this@PreviewAssetsActivity), "ENCV")
+            setDownloadListener { url, _, _, _, _ ->
+                // http(s) 的下载（页面里若真有）交给系统去处理
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                    .onFailure { Log.e(TAG, "把下载交给系统失败：${it.message}") }
+            }
             webChromeClient = object : WebChromeClient() {
                 override fun onShowFileChooser(
                     webView: WebView,
@@ -126,6 +152,80 @@ class PreviewAssetsActivity : AppCompatActivity() {
         setContentView(wv)
         webView = wv
         wv.loadUrl(url)
+    }
+
+    // ─── 保存文件（页面的下载链接）───────────────────────────────────────
+    //
+    // ⚠️ WebView 的 DownloadListener **收不到 blob: 的下载**：blob 只是页面内的对象，
+    // 不是网络请求，于是 `<a download href="blob:…">` 点了既没下载也不报错（真机实测）。
+    // 所以页面用 window.ENCV 这套桥把字节交过来：**分块**传（1MB 一片）——
+    // 一次性把几百 MB 转成 base64 会把 WebView 打死。
+    private class OutboxBridge(private val owner: PreviewAssetsActivity) {
+        private val open = ConcurrentHashMap<String, File>()
+
+        @JavascriptInterface
+        fun saveBegin(name: String): String {
+            val safe = name.substringAfterLast('/').substringAfterLast('\\')
+                .ifBlank { "encv-preview-out.bin" }
+            val id = "${System.nanoTime()}"
+            val dir = File(owner.cacheDir, "preview-outbox").apply { mkdirs() }
+            open[id] = File(dir, safe)
+            Log.i("PreviewAssetsActivity", "outbox begin: $safe")
+            return id
+        }
+
+        @JavascriptInterface
+        fun saveChunk(id: String, base64: String) {
+            val f = open[id] ?: return
+            runCatching {
+                FileOutputStream(f, true).use { it.write(Base64.decode(base64, Base64.DEFAULT)) }
+            }.onFailure { Log.e("PreviewAssetsActivity", "outbox 分块写入失败：${it.message}") }
+        }
+
+        @JavascriptInterface
+        fun saveEnd(id: String): String {
+            val f = open.remove(id) ?: return ""
+            return owner.publishToDownloads(f)
+        }
+    }
+
+    // 把收完的文件放到用户看得见的地方：Android 10+ 用 MediaStore（无需权限），
+    // 旧版本有权限就写公共 Downloads，没有就落应用自己的外部目录 ——
+    // 两种情况都**如实返回路径**，不假装成功。
+    private fun publishToDownloads(src: File): String {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, src.name)
+                    put(MediaStore.Downloads.MIME_TYPE, "application/octet-stream")
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: return "保存失败：MediaStore 插入返回空"
+                contentResolver.openOutputStream(uri)?.use { out -> src.inputStream().use { it.copyTo(out) } }
+                values.clear()
+                values.put(MediaStore.Downloads.IS_PENDING, 0)
+                contentResolver.update(uri, values, null, null)
+                "Downloads/${src.name}"
+            } else {
+                val granted = ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED
+                @Suppress("DEPRECATION")
+                val target = if (granted) {
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                } else {
+                    getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                }
+                val out = File(target, src.name)
+                src.inputStream().use { it.copyTo(FileOutputStream(out)) }
+                out.absolutePath
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "publishToDownloads 失败：${e.message}")
+            "保存失败：${e.message}"
+        }
     }
 
     override fun onBackPressed() {
