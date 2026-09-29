@@ -9,7 +9,14 @@
 const SAMPLES = [
   // mp4 的 box 头长度不固定（这里 remux 后是 0x20 而不是常见的 0x18），
   // 所以按偏移 4 处的 'ftyp' 标识校验，别把 box size 写死。
-  { file: "samples/sample.4pm.sccgv", label: "视频 .sccgv", kind: "video", magic: [0x66, 0x74, 0x79, 0x70], magicOffset: 4, note: "mp4 (ftyp)" },
+  {
+    file: "samples/sample.4pm.sccgv",
+    label: "视频 .sccgv",
+    kind: "video",
+    magic: [0x66, 0x74, 0x79, 0x70],
+    magicOffset: 4,
+    note: "mp4 (ftyp)",
+  },
   { file: "samples/sample.3pm.sccga", label: "音频 .sccga", kind: "audio", magic: [0x49, 0x44, 0x33], note: "mp3 (ID3)" },
   { file: "samples/sample.gnp.sccgi", label: "图片 .sccgi", kind: "image", magic: [0x89, 0x50, 0x4e, 0x47], note: "png" },
   { file: "samples/sample.fdp.sccgpdf", label: "PDF .sccgpdf", kind: "pdf", magic: [0x25, 0x50, 0x44, 0x46], note: "pdf" },
@@ -207,8 +214,7 @@ function kindOfFile(file) {
     return { ...base, containerType: 3, containerTypeStr: "image", ext: "sccgi" };
   if (mime === "application/pdf" || name.endsWith(".pdf"))
     return { ...base, containerType: 4, containerTypeStr: "document", ext: "sccgpdf" };
-  if (/\.(docx?|xlsx?|pptx?|wps|et|dps)$/.test(name))
-    return { ...base, containerType: 4, containerTypeStr: "document", ext: "sccgwps" };
+  if (/\.(docx?|xlsx?|pptx?|wps|et|dps)$/.test(name)) return { ...base, containerType: 4, containerTypeStr: "document", ext: "sccgwps" };
   return { ...base, containerType: 5, containerTypeStr: "text", ext: "sccgt" };
 }
 
@@ -371,12 +377,16 @@ async function readWindow(handle, offset, length, read) {
 async function openStreamFile(file) {
   const read = async (offset, length) => new Uint8Array(await file.slice(offset, offset + length).arrayBuffer());
   const { handle, info, elapsed } = await openStream(read, file.size, file.name);
-  const total = Number(info.plainLength ?? info.plainLength === 0 ? info.plainLength : 0);
+  const total = Number((info.plainLength ?? info.plainLength === 0) ? info.plainLength : 0);
   const windows = [0, Math.floor(total / 2), Math.max(0, total - 65536)];
   const heads = [];
   for (const off of windows) {
     const got = await readWindow(handle, off, Math.min(65536, Math.max(0, total - off)), read);
-    heads.push(`${off}:${Array.from(got.slice(0, 4)).map(b => b.toString(16).padStart(2, "0")).join("")}`);
+    heads.push(
+      `${off}:${Array.from(got.slice(0, 4))
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("")}`
+    );
   }
   api.close(handle);
   return { info, elapsed, total, heads };
@@ -455,9 +465,7 @@ ui.plainfile.addEventListener("change", () => {
 
 // ────────────────────────────── 样例按钮 ──────────────────────────────
 
-ui.samples.innerHTML = SAMPLES.map(
-  (s, i) => `<button class="btn btn-sample" data-i="${i}">${s.label}</button>`
-).join("");
+ui.samples.innerHTML = SAMPLES.map((s, i) => `<button class="btn btn-sample" data-i="${i}">${s.label}</button>`).join("");
 for (const btn of ui.samples.querySelectorAll("button")) {
   btn.addEventListener("click", () => {
     loadSample(SAMPLES[Number(btn.dataset.i)]).catch(e => log(`✗ ${e.message}`));
@@ -538,7 +546,11 @@ async function openStreamURL(url) {
   const windows = [];
   for (const off of [0, Math.floor(total / 2), Math.max(0, total - 4096)]) {
     const got = await readWindow(handle, off, Math.min(4096, total - off), read);
-    windows.push(`${off}:${Array.from(got.slice(0, 3)).map(b => b.toString(16).padStart(2, "0")).join("")}`);
+    windows.push(
+      `${off}:${Array.from(got.slice(0, 3))
+        .map(b => b.toString(16).padStart(2, "0"))
+        .join("")}`
+    );
   }
   api.close(handle);
   return { size, total, elapsed, requests, bytes, windows, segments: info.segments };
@@ -628,6 +640,11 @@ async function playViaMSE(url) {
     await append(chunk);
   }
   ms.endOfStream();
+  // ⚠️ codecs 与容器里的流不匹配时，appendBuffer 全程不报错、'updateend' 照常触发，
+  // 错误只挂在 **video.error.message** 上（例如 "audio object type 0x40 does not match..."）。
+  // 不显式查就等于"看着绿、其实没画面" —— 这里给它留出 demuxer 报错的时间窗口。
+  await new Promise(r => setTimeout(r, 300));
+  if (video.error) throw new Error(`播放管线报错：${video.error.message || `code=${video.error.code}`}`);
   api.close(handle);
   return { video, total, initBytes: init.length, mime };
 }
@@ -635,8 +652,7 @@ async function playViaMSE(url) {
 // 在明文里找某个 box 的起始偏移（从 from 开始）
 function indexOfBox(buf, name, from = 0) {
   for (let i = from; i + 8 <= buf.length; ) {
-    const size =
-      (buf[i] << 24) | (buf[i + 1] << 16) | (buf[i + 2] << 8) | buf[i + 3];
+    const size = (buf[i] << 24) | (buf[i + 1] << 16) | (buf[i + 2] << 8) | buf[i + 3];
     const tag = String.fromCharCode(buf[i + 4], buf[i + 5], buf[i + 6], buf[i + 7]);
     if (tag === name) return i;
     if (!size) break;
@@ -645,33 +661,103 @@ function indexOfBox(buf, name, from = 0) {
   return -1;
 }
 
-// 从初始化段里读出 codecs 串。
-//
-// 层级是 stsd → avc1 → avcC：avcC 落在 avc1 box 起始之后
-// box 头(8) + VisualSampleEntry 固定字段(78) = 86 字节处；
-// avcC 的负载依次是 configurationVersion / AVCProfileIndication /
-// profile_compatibility / AVCLevelIndication，后三个就是 codecs 里的三字节。
+/**
+ * 从初始化段读出 **视频 + 音频** 两组 codecs。
+ *
+ * 层级：视频是 stsd → avc1 → avcC；音频是 stsd → mp4a → esds。
+ *
+ * ⚠️ 音频**必须**一并读出：MSE 的 SourceBuffer 会把 mime 里的 codecs 与容器里的流
+ * **逐项**核对。只写 `video/mp4; codecs="avc1.…"` 而容器里有 AAC 音轨时，
+ * Chromium 的报错是：
+ *   PipelineStatus::CHUNK_DEMUXER_ERROR_APPEND_FAILED:
+ *   audio object type 0x40 does not match what is specified in the mimetype
+ * 而这段报错**只出现在 video.error.message 里** —— appendBuffer 本身不抛错、
+ * 'updateend' 正常触发，只看"append 成功"会把失败误判成"边下边播已就绪"。
+ * （2026-09-29 实测：带音轨的 fMP4 样例在这套判断下必经此坑。）
+ */
 function codecsFromInit(init) {
-  const avc1 = [0x61, 0x76, 0x63, 0x31];
-  for (let i = 0; i + 100 <= init.length; i++) {
-    if (!avc1.every((b, k) => init[i + k] === b)) continue;
-    const avcC = i + 86;
-    const isAvcC =
-      init[avcC] === 0x61 && init[avcC + 1] === 0x76 && init[avcC + 2] === 0x63 && init[avcC + 3] === 0x43;
-    if (!isAvcC) continue;
-    const hex = n => n.toString(16).padStart(2, "0");
-    return `avc1.${hex(init[avcC + 9])}${hex(init[avcC + 10])}${hex(init[avcC + 11])}`;
+  return { video: videoCodecFromInit(init), audio: audioCodecFromInit(init) };
+}
+
+// ⚠️ 别按"固定偏移"读：avcC 之前可能有 pasp/btrt 等可选 box，写死 86 字节偏移会读到无关字段
+// （实测就偏成 avc1.e10019，于是被当成"浏览器不认"，白白退到兜底 codecs）。
+// 正确做法是先找到 'avc1'，再在它后面找 'avcC'，取其负载里的三个字节。
+function videoCodecFromInit(init) {
+  const at = indexOfBytes(init, [0x61, 0x76, 0x63, 0x31]); // 'avc1'
+  if (at < 0) return null;
+  const avcC = indexOfBytes(init, [0x61, 0x76, 0x63, 0x43], at); // 'avcC' 在 avc1 之后
+  if (avcC < 0 || avcC + 8 > init.length) return null;
+  // 'avcC' box：size(4) + type(4) + configurationVersion(1) + profile + compat + level
+  const [profile, compat, level] = [init[avcC + 5], init[avcC + 6], init[avcC + 7]];
+  const hex = n => n.toString(16).padStart(2, "0");
+  return `avc1.${hex(profile)}${hex(compat)}${hex(level)}`;
+}
+
+function audioCodecFromInit(init) {
+  const at = indexOfBytes(init, [0x65, 0x73, 0x64, 0x73]); // 'esds'
+  if (at < 0) return null;
+
+  // 描述符从 esds 载荷的 version+flags 之后开始（type 起点 +8）
+  let cur = at + 8;
+  for (let guard = 0; guard < 8 && cur + 1 < init.length; guard++) {
+    const tag = init[cur];
+    if (tag === 0x00) return null;
+    const head = descriptorLength(init, cur + 1);
+    if (head.value < 0) return null;
+
+    if (tag === 0x03) {
+      // ES_Descriptor：ES_ID(2) + flags(1) 之后才是子描述符
+      cur = head.next + 3;
+      continue;
+    }
+    if (tag === 0x04) {
+      // DecoderConfigDescriptor：objectType(1) streamType(1) bufferSize(3)
+      // maxBitrate(4) avgBitrate(4) 之后是 DecoderSpecificInfo(tag 0x05)
+      const body = head.next;
+      const dsi = body + 13;
+      for (let t = dsi; t + 1 < Math.min(body + head.value, init.length); t++) {
+        if (init[t] !== 0x05) continue;
+        const len = descriptorLength(init, t + 1);
+        const aot = init[len.next] >> 3; // 首字节高 5 位 = AudioObjectType（2 = AAC-LC）
+        if (aot >= 1 && aot <= 4) return `mp4a.40.${aot}`;
+      }
+      return null;
+    }
+    cur = head.next + head.value;
   }
   return null;
 }
 
-// 挑一个浏览器认的 mime：先试解析出来的，不行再退到常见组合
+/**
+ * ISO/IEC 14496-1 的描述符长度是**可变长**：每字节低 7 位累加，最高位为 continuation。
+ * ffmpeg 在某些选项组合下会写成 `80 80 80 17` 这样的 4 字节形式 —— 只当它是单字节
+ * 就会把 objectTypeIndication 的位置算错，进而"读不出音频 codecs"（实测）。
+ */
+function descriptorLength(buf, i) {
+  let value = 0;
+  for (let n = 0; n < 4 && i + n < buf.length; n++) {
+    value = (value << 7) | (buf[i + n] & 0x7f);
+    if ((buf[i + n] & 0x80) === 0) return { value, next: i + n + 1 };
+  }
+  return { value: -1, next: i };
+}
+
+function indexOfBytes(buf, needle, from = 0) {
+  outer: for (let i = from; i + needle.length <= buf.length; i++) {
+    for (let k = 0; k < needle.length; k++) if (buf[i + k] !== needle[k]) continue outer;
+    return i;
+  }
+  return -1;
+}
+
+// 挑一个浏览器认的 mime：**优先带完整音视轨声明**，再逐级退化。
 function pickMime(init) {
-  const parsed = codecsFromInit(init);
-  const candidates = [parsed, "avc1.4d401f", "avc1.42e01e", "avc1.64001f", "avc1.640028"].filter(Boolean);
+  const { video, audio } = codecsFromInit(init);
+  const exact = video && audio ? `${video},${audio}` : null;
+  const candidates = [exact, video, "avc1.4d401f", "avc1.42e01e", "avc1.64001f", "avc1.640028"].filter(Boolean);
   for (const c of candidates) {
     const mime = `video/mp4; codecs="${c}"`;
-    if (MediaSource.isTypeSupported(mime)) return { mime, codecs: c, parsed, fallback: c !== parsed };
+    if (MediaSource.isTypeSupported(mime)) return { mime, codecs: c, video, audio, fallback: c !== exact };
   }
   return null;
 }
@@ -686,9 +772,7 @@ ui.mseGo.addEventListener("click", () => {
       ui.result.innerHTML = "";
       ui.result.appendChild(video);
       ui.streamResult.textContent = `✓ 边下边播就绪：${(total / 1048576).toFixed(2)}MB / ${mime}`;
-      log(
-        `✓ 边下边播 ${url}：初始化段 ${initBytes} 字节 · 明文 ${(total / 1048576).toFixed(2)}MB · ${mime}`
-      );
+      log(`✓ 边下边播 ${url}：初始化段 ${initBytes} 字节 · 明文 ${(total / 1048576).toFixed(2)}MB · ${mime}`);
     })
     .catch(err => {
       ui.streamResult.textContent = "✗ 边下边播失败";
@@ -740,12 +824,38 @@ function guessKind(info, name = "") {
 
 // ────────────────────────────── 自检（纯前端可验证） ──────────────────────────────
 
+/**
+ * 用例返回值的一种：**没验到**（缺样例之类的前置条件不满足）。
+ * 它既不是 true 也不是 false —— 混进"通过"里就是假绿，见文件末尾的统计逻辑。
+ */
+const SELFTEST_SKIP = "skip";
+
+/**
+ * 声明"这条用例的前置条件不满足（通常是缺样例），本次没验到"。
+ * samples/ 是 gitignore 的二进制目录，本机有没有样例不该决定自检的颜色 ——
+ * 缺样例必须显式跳过，混进"通过"是假绿，混进"失败"又把环境噪声当成回归。
+ */
+const skipSignal = why => Object.assign(new Error(why), { selfTestSkip: true });
+
+/** 取样例字节；样例不存在就抛 skip 信号。 */
+async function fetchSampleOrSkip(url) {
+  const head = await fetch(url, { method: "HEAD" });
+  if (!head.ok) throw skipSignal(`没有样例容器 ${url}（samples/ 是二进制、已 gitignore）`);
+  return new Uint8Array(await (await fetch(url)).arrayBuffer());
+}
+
 async function selfTest() {
   const cases = [];
   const push = async (name, fn) => {
     try {
       cases.push([name, await fn()]);
     } catch (error) {
+      // 用例可以 throw skipSignal() 主动声明"前置条件不满足"：既不是通过也不是失败。
+      if (error && error.selfTestSkip) {
+        log(`  ↳ 跳过：${error.message}`);
+        cases.push([name, SELFTEST_SKIP]);
+        return;
+      }
       log(`  ↳ ${name} 抛错：${error.message}`);
       cases.push([name, false]);
     }
@@ -788,8 +898,7 @@ async function selfTest() {
     const { blob } = await encryptToBlob(slices(plain), { ...TEXT_META, originalName: "stream-open.bin" });
     const file = new File([blob], "stream-open.bin.sccgt", { type: "application/octet-stream" });
 
-    const fileRead = async (offset, length) =>
-      new Uint8Array(await file.slice(offset, offset + length).arrayBuffer());
+    const fileRead = async (offset, length) => new Uint8Array(await file.slice(offset, offset + length).arrayBuffer());
     const { handle, info } = await openStream(fileRead, file.size, file.name);
     const total = Number(info.plainLength);
     let allSame = total === plain.length;
@@ -808,11 +917,13 @@ async function selfTest() {
   await push("HTTP Range 流式打开：只取需要的字节（有样例才跑）", async () => {
     // 这条验的是"字节供给可以来自网络"：内核完全不知道字节是哪来的，
     // 同一套 openStream/streamFeed 协议，read 换成 fetch(Range) 即可。
-    const url = "samples/stream16.sccgt";
+    const url = "samples/stream16.txt.sccgt";
     const head = await fetch(url, { method: "HEAD" });
     if (!head.ok) {
+      // ⚠️ 缺样例时**必须返回 skip**：早先这里 return true，于是"样例不存在"
+      // 被当成"这条用例通过"计入分子 —— 自检 18/18 里有两项是这么来的假绿。
       log("  ↳ 跳过：没有样例容器（samples/ 是二进制、已 gitignore）");
-      return true;
+      return SELFTEST_SKIP;
     }
     const r = await openStreamURL(url);
     // 该样例的明文由 pw-enc-stream.ts 的生成器规则产出：片内每 997 字节写一个 (全局偏移 & 0xff)
@@ -836,11 +947,12 @@ async function selfTest() {
   });
 
   await push("边下边播：分片 MP4 容器经 MSE 起播（有样例才跑）", async () => {
-    const url = "samples/fmp4.sccgv";
+    const url = "samples/sample.4pm.sccgv";
     const head = await fetch(url, { method: "HEAD" });
     if (!head.ok) {
+      // 同上：缺样例是"没验到"，不是"验过了"。
       log("  ↳ 跳过：没有分片 MP4 样例容器（samples/ 已 gitignore）");
-      return true;
+      return SELFTEST_SKIP;
     }
     const { video } = await playViaMSE(url);
     video.style.display = "none";
@@ -863,9 +975,7 @@ async function selfTest() {
     api.encryptWrite(handle, new TextEncoder().encode("secret"));
     const end = api.encryptEnd(handle);
     if (!end.ok) return false;
-    const container = new Uint8Array(
-      await new Blob([toU8(end.value.head), toU8(end.value.data), toU8(end.value.tail)]).arrayBuffer()
-    );
+    const container = new Uint8Array(await new Blob([toU8(end.value.head), toU8(end.value.data), toU8(end.value.tail)]).arrayBuffer());
     const wrong = api.open(container, "definitely-wrong-password");
     if (wrong.ok) api.close(wrong.value.handle);
     return wrong.ok === false;
@@ -891,16 +1001,21 @@ async function selfTest() {
 
   for (const s of SAMPLES) {
     await push(`${s.label} 解密结果的 magic 正确`, async () => {
-      const bytes = await fetch(s.file).then(r => r.arrayBuffer());
+      const bytes = await fetchSampleOrSkip(s.file);
       const { plain, info } = decrypt(bytes, ui.password.value);
       const ok = matchesMagic(plain, s.magic, s.magicOffset ?? 0);
-      if (!ok) log(`  ${s.label} 前 8 字节：${Array.from(plain.slice(0, 8)).map(b => b.toString(16).padStart(2, "0")).join(" ")}`);
+      if (!ok)
+        log(
+          `  ${s.label} 前 8 字节：${Array.from(plain.slice(0, 8))
+            .map(b => b.toString(16).padStart(2, "0"))
+            .join(" ")}`
+        );
       return ok && plain.length > 0 && Number(info.segments) >= 1;
     });
   }
 
   await push("随机读：中段偏移与整体解密一致", async () => {
-    const bytes = await fetch("samples/sample.4pm.sccgv").then(r => r.arrayBuffer());
+    const bytes = await fetchSampleOrSkip("samples/sample.4pm.sccgv");
     const opened = api.open(new Uint8Array(bytes), ui.password.value);
     const handle = opened.value.handle;
     const info = api.info(handle).value;
@@ -915,7 +1030,7 @@ async function selfTest() {
   });
 
   await push("错口令必须被拒绝（不能解出内容）", async () => {
-    const bytes = await fetch("samples/sample.txt.sccgt").then(r => r.arrayBuffer());
+    const bytes = await fetchSampleOrSkip("samples/sample.txt.sccgt");
     const opened = api.open(new Uint8Array(bytes), "definitely-wrong-password");
     if (opened.ok) {
       api.close(opened.value.handle);
@@ -925,11 +1040,16 @@ async function selfTest() {
     return true;
   });
 
-  for (const [name, ok] of cases) log(`${ok ? "✓" : "✗"} ${name}`);
-  const failed = cases.filter(([, ok]) => !ok);
-  if (failed.length === 0) log(`自检通过（${cases.length} 项，全部在浏览器内完成）`);
+  // skip 是"条件不满足（缺样例），没验到"，必须与"通过"分开统计：
+  // 混进分子就是**假绿**——样例目录是 gitignore 的，本机没有样例时自检会报 18/18，
+  // 看上去全绿，其实边下边播和 Range 流式打开一次都没跑过。
+  for (const [name, ok] of cases) log(`${ok === SELFTEST_SKIP ? "⏭" : ok ? "✓" : "✗"} ${name}`);
+  const failed = cases.filter(([, ok]) => ok !== true && ok !== SELFTEST_SKIP);
+  const skipped = cases.filter(([, ok]) => ok === SELFTEST_SKIP);
+  const ran = cases.length - skipped.length;
+  if (failed.length === 0) log(`自检通过（${ran} 项${skipped.length ? `，另有 ${skipped.length} 项缺样例跳过` : ""}，全部在浏览器内完成）`);
   else log(`自检失败：${failed.map(([n]) => n).join("、")}`);
-  ui.metric.textContent = `${cases.length - failed.length}/${cases.length} 通过`;
+  ui.metric.textContent = `${ran - failed.length}/${ran} 通过` + (skipped.length ? ` · ${skipped.length} 项缺样例未验` : "");
 }
 
 ui.selftest.addEventListener("click", () => {
@@ -946,7 +1066,7 @@ boot().catch(error => {
   log(`✗ 启动失败：${error.message}`);
 });
 
-window.encPreview = {
+window.encvPreview = {
   get api() {
     return api;
   },
@@ -957,4 +1077,9 @@ window.encPreview = {
   slices,
   STREAM_CHUNK,
   VERIFY_LIMIT,
+  // 诊断用：MSE 起播失败的根因几乎都在 codecs 解析上（2026-09-29 的坑），
+  // 把这几个纯函数暴露出来，浏览器里可以直接对某个 init 段试算，不必改代码重跑。
+  pickMime,
+  codecsFromInit,
+  indexOfBytes,
 };
