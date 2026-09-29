@@ -253,6 +253,95 @@ func TestPreviewAssets_UpdateWithoutAnyURLGivesHint(t *testing.T) {
 	}
 }
 
+// 真机实测（2026-09-30）的坑：原生把用户选中的 Uri 物化成文件后，返回的是
+// **app 私有目录的绝对路径**（/data/user/0/<pkg>/cache/preview_assets/xxx.zip）。
+// 它不在任何挂载点内 —— 早期后端把它当相对路径拼到 servingDir 上，
+// 于是 stat /storage/emulated/0/data/user/0/... 必然 no such file。
+func TestPreviewAssets_ImportFromPrivateCacheDir(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ENCV_PREVIEW_ASSETS_DIR", filepath.Join(dir, "preview-assets"))
+
+	// ⚠️ 必须复现真机的**目录关系**：servingDir 是 /storage/emulated/0，
+	// 而 app 私有目录是 /data/user/0/... —— 两者互不相干。
+	// 若把 private 目录放在 servingDir 之下，resolveUserPath 会"碰巧"认下它，
+	// 那这条用例就测不出真机上那个 stat 失败（第一版就是这样写废的）。
+	serving := filepath.Join(dir, "storage", "emulated", "0")
+	if err := os.MkdirAll(serving, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	private := filepath.Join(dir, "data", "user", "0", "com.encvgo.app")
+	files := filepath.Join(private, "files")
+	cache := filepath.Join(private, "cache")
+	t.Setenv("ENCV_APP_FILES_DIR", files)
+
+	s := &Server{servingDir: serving}
+
+	src := filepath.Join(dir, "src", "encv-preview")
+	seedPreviewAssets(t, src, "phone")
+	zipPath := filepath.Join(cache, "preview_assets", "encv-preview-assets-9a73a2f567ec.zip")
+	if err := os.MkdirAll(filepath.Dir(zipPath), 0o755); err != nil {
+		t.Fatalf("造 cache 目录失败：%v", err)
+	}
+	makeZip(t, filepath.Join(dir, "src"), zipPath)
+
+	w := doImport(t, s, zipPath)
+	if w.Code != http.StatusOK {
+		t.Fatalf("私有目录里的 zip 应能导入，实际 %d %s", w.Code, w.Body.String())
+	}
+	got := doPreviewAssetsGet(t, s, "/index.html", nil)
+	if got.Code != http.StatusOK || !strings.Contains(got.Body.String(), "phone") {
+		t.Fatalf("导入后应能拿到页面，实际 %d %s", got.Code, got.Body.String())
+	}
+}
+
+// 认私有目录**不等于**放开整个文件系统：越界的绝对路径仍要拒绝，
+// 且报错要说明"允许哪些目录"，否则下次换个目录还是只能靠猜。
+func TestPreviewAssets_ImportRejectsForeignAbsolutePath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ENCV_PREVIEW_ASSETS_DIR", filepath.Join(dir, "preview-assets"))
+	t.Setenv("ENCV_APP_FILES_DIR", filepath.Join(dir, "files"))
+
+	w := doImport(t, &Server{servingDir: dir}, "/etc/passwd")
+	if w.Code == http.StatusOK {
+		t.Fatalf("越界绝对路径不该被接受：%s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "允许") {
+		t.Errorf("报错应列出允许的目录，实际：%s", w.Body.String())
+	}
+}
+
+// zip 套 zip（例如从 GitHub Actions 下载的 artifact）必须被**点破**：
+// 只报"缺 index.html"的话，真机上根本看不出是包套了两层。
+func TestPreviewAssets_RejectsNestedZip(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ENCV_PREVIEW_ASSETS_DIR", filepath.Join(dir, "preview-assets"))
+
+	// 内层：正规资源包
+	innerSrc := filepath.Join(dir, "inner", "encv-preview")
+	seedPreviewAssets(t, innerSrc, "inner")
+	innerZip := filepath.Join(dir, "inner.zip")
+	makeZip(t, filepath.Join(dir, "inner"), innerZip)
+
+	// 外层：只装了那个 zip（模拟 artifact 再压缩一层）
+	outer := filepath.Join(dir, "outer")
+	if err := os.MkdirAll(outer, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(innerZip, filepath.Join(outer, "encv-preview-assets-abc.zip")); err != nil {
+		t.Fatal(err)
+	}
+	outerZip := filepath.Join(dir, "outer.zip")
+	makeZip(t, outer, outerZip)
+
+	w := doImport(t, &Server{servingDir: dir}, outerZip)
+	if w.Code == http.StatusOK {
+		t.Fatalf("zip 套 zip 不该被接受：%s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "zip 套 zip") {
+		t.Errorf("报错应点破是 zip 套 zip，实际：%s", w.Body.String())
+	}
+}
+
 // 包的版本号以**构建产物**为准：CI 打 zip 时会写 version.json
 // （见 .github/workflows/preview-assets.yml）。导入时必须采用它 ——
 // 否则每台设备的版本号都是"安装时刻的时间戳"，看不出两台设备装的是不是同一个版本。
@@ -339,6 +428,19 @@ func importDir(t *testing.T, s *Server, path string) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("import 失败：%d %s", w.Code, w.Body.String())
 	}
+}
+
+// doImport 调 import 接口并返回响应（允许失败，由调用方断言）。
+func doImport(t *testing.T, s *Server, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	body, _ := json.Marshal(previewAssetsUpdateRequest{Path: path})
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/preview-assets/import", strings.NewReader(string(body)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	s.handlePreviewAssetsImportGin(c)
+	return w
 }
 
 func updateZip(t *testing.T, s *Server, url string) {

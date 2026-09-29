@@ -527,7 +527,13 @@ class GoProcessPlugin : Plugin() {
     private fun handlePickPreviewZipResult(resultCode: Int, data: Intent?) {
         val call = pendingCalls.remove("pickPreviewZip") ?: return
         if (resultCode != Activity.RESULT_OK || data?.data == null) { call.reject("File picker cancelled"); return }
-        val tempFile = UriUtils.copyUriToFile(context, data.data!!, File(context.cacheDir, "preview_assets"))
+        // ⚠️ 物化到 **filesDir** 而不是 cacheDir：
+        //   1) cache 目录会在存储紧张时被系统清空，用户刚选完就没了；
+        //   2) filesDir 与后端的 AppDataDir（<files>/.encv）同根，
+        //      天然落在 /api/preview-assets/import 的允许目录里
+        //      （后端那条路只认"挂载目录内"或"后端可写目录"，早期把 cache 路径
+        //      当相对路径拼到 servingDir 上，真机报 stat /storage/emulated/0/data/user/0/... 失败）。
+        val tempFile = UriUtils.copyUriToFile(context, data.data!!, File(context.filesDir, "preview_assets"))
             ?: run { call.reject("Cannot read selected file"); return }
         LogBridge.i(TAG, "pickPreviewAssetsZip: ${tempFile.name} → ${tempFile.absolutePath}")
         call.resolve(JSObject().apply {

@@ -140,11 +140,28 @@ jobs:
           done
           echo "✅ zip 校验通过"
 
+      - name: Expand zip for artifact
+        id: expand
+        run: |
+          set -euo pipefail
+          # ⚠️ 关键：artifact 不能上传上面那个 .zip。
+          # actions/upload-artifact 会把上传内容**再压缩一层**，于是从 Actions
+          # 下载到的就是"zip 套 zip" —— 解压出来只有一个内层 zip，没有 index.html，
+          # 设备端导入会直接报"资源包缺文件"（真机上很难看出是包套了两层）。
+          # 所以这里先把 zip 展开成目录再上传：下载解压即得资源根目录，单层。
+          STAGE="${{ runner.temp }}/assets"
+          rm -rf "$STAGE"
+          mkdir -p "$STAGE"
+          unzip -q "${{ steps.package.outputs.zip_path }}" -d "$STAGE"
+          echo "stage_dir=$STAGE" >> "$GITHUB_OUTPUT"
+          echo "─── artifact 内容（展开后）───"
+          ls -R "$STAGE" | head -20
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.package.outputs.zip_name }}
-          path: ${{ steps.package.outputs.zip_path }}
+          name: encv-preview-assets-${{ steps.meta.outputs.version }}
+          path: ${{ steps.expand.outputs.stage_dir }}
           if-no-files-found: error
           retention-days: 90
 
