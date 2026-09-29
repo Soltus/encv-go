@@ -988,6 +988,19 @@ async function selfTest() {
     return decrypt(new Uint8Array(enc.data), ui.password.value).plain.length === text.length;
   });
 
+  await push("请求压缩必须被明确拒绝（不是静默忽略）", () => {
+    // compose 编排层两条路都不支持压缩：传 compression:"zstd" 必须拿到明确报错。
+    // 静默忽略的后果是调用方以为自己得到了压缩容器，实际没有 —— 不失败、不告警，
+    // 只有体积不对，等发现时数据已经按"压缩过"的预期流转了。
+    const begun = api.encryptBegin(ui.password.value, { ...TEXT_META, compression: "zstd" });
+    if (begun.ok) {
+      // 真给了 handle 说明它接受了压缩请求：那也必须真的压了，否则就是静默忽略
+      api.encryptAbort(begun.value.handle);
+      return false;
+    }
+    return /不支持压缩/.test(String(begun.error ?? ""));
+  });
+
   await push("wasm 加密的容器不能被错口令打开", () => {
     const enc = api.encryptBytes(new TextEncoder().encode("secret"), "good-pw", {
       containerType: 5,

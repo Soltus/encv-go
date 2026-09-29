@@ -123,8 +123,15 @@ bash scripts/test-go.sh ./internal/v2/crypto/simple/    # Go 侧读同一份向�
   浏览器实测：整块路径在 1GB 明文处 `fatal error: out of memory`，
   流式路径照常产出（并做了 128MB 级逐字节回读）。详见 `app/encv-preview/README.md`。
 
-  剩余边界：**增量不支持 zstd 压缩**（seekable zstd 要随机访存整段）；
-  **打开侧仍要容器整体在内存**（`open(bytes,…)`），几个 GB 容器的一边下载一边播还没打通。
+  剩余边界：
+  - **压缩：compose 编排层两条路都不支持，且会显式报错**（2026-09-30 从隐式硬编码改成契约）。
+    seekable zstd 要随机访存整段，与流式冲突；整块为与流式同构也拒绝。
+    传 `compression: "zstd"` 得到 `ErrCompressionUnsupported`；要压缩走**插件加密路径**
+    （CLI `encrypt-v2`），读取侧两种都能解。
+    ⚠️ 早先这里写的是"需要压缩时只能走整块路径"—— 那是错的：compose 的整块同样不支持，
+    能压缩的是插件/存量那条路。
+  - **打开侧不再需要容器整体进内存**（已解决，见 `openStream`）；
+    多段容器可边下载边播（Range + MSE），但单段/fragment 栈容器只能顺序解到目标偏移。
 - **两套内容组织层的 keystream 模型不同（重要）**：本方案产出的是「v4 segment 栈」
   （每段独立 nonce）；CLI 的插件解密路径是「fragment 栈」（整条流共用 KVI 里那一个 iv）。
   曾经用 `encv decrypt-v2` 解 wasm 产出的容器会得到**长度正确、内容全是乱码、且不报错**的结果

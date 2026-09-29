@@ -196,8 +196,11 @@ ln -sf /path/to/1GB.sccgt app/encv-preview/samples/big.sccgt
   单段 / fragment 栈的容器只能**顺序解到目标偏移**，实测 16MB 的文本容器做三次随机读
   就把 **16MB 全取了**（20 个 Range 请求）—— 这条路径上「按需取字节」不成立，
   别拿它当省流量的证据。
-- **流式路径不支持 zstd 压缩**：seekable zstd 要随机访存整段数据，与"一片进一片出"冲突。
-  需要压缩时只能走整块路径（CompressionMode 由调用方在整块路径侧决定）
+- **压缩：compose 编排层两条路都不支持**（2026-09-30 从隐式改成显式契约）。
+  seekable zstd 要随机访存整段数据，与流式"一片进一片出"冲突；整块为了与流式同构也一并拒绝。
+  传 `compression: "zstd"` 会拿到 `ErrCompressionUnsupported` 的**明确报错**（不是静默忽略后
+  产出一个其实没压缩的容器）。需要压缩的容器走**插件加密路径**（CLI `encrypt-v2`）；
+  读取侧两种都能解（压缩段由 `internal/v2/crypto/compression` 处理）。
 - **回读比对有体积上限**（`VERIFY_LIMIT = 64MB`）：超过之后页面不再把容器整体读进内存做比对，
   只报容器大小/段数。大体积的正确性由 `pw-enc-stream.ts` 在 `VERIFY_MAX_MB` 以内做逐字节回读
 - ~~**打开侧仍是整块的**~~：**已解决（2026-09-29）**，见上面「流式打开」：`openStream`
