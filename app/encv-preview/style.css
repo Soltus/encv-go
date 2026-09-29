@@ -210,6 +210,71 @@ audio {
   word-break: break-all;
 }
 
+/* ── 统一口令：输入框 + 眼睛切换 ────────────────────────────────
+   ⚠️ 本页的 .row / .field / input 等基础控件样式并不全（style.css 只覆盖了
+   一部分组件），所以这里的样式**自成一体**：pw-wrap 负责布局、按钮靠
+   flex 排在输入框右侧，不依赖任何全局 input 规则。 */
+.pw-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pw-wrap input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0d1320;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.pw-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #16202f;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pw-toggle:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  color: var(--text);
+}
+
+.pw-toggle .eye {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pw-toggle .eye-off {
+  display: none;
+}
+
+/* aria-pressed 就是"当前是明文"这个状态 —— 图标的显示由它驱动，
+   不再另存一个布尔量，避免两者不同步。 */
+.pw-toggle[aria-pressed="true"] .eye-open {
+  display: none;
+}
+
+.pw-toggle[aria-pressed="true"] .eye-off {
+  display: block;
+}
+
 .row.actions {
   display: flex;
   align-items: center;

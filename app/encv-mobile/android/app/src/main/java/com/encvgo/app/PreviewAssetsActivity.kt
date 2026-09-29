@@ -51,12 +51,52 @@ class PreviewAssetsActivity : AppCompatActivity() {
         private const val DEFAULT_PORT = 2025
         private const val ASSETS_PATH = "/preview-assets/"
 
-        // 预览页地址的唯一来源：Activity 自己与「用浏览器打开」都走它，
+        // 预览页地址的唯一来源：Activity 自己与「复制地址」都走它，
         // 否则端口/路径的兜底逻辑会在两处各写一遍、然后慢慢漂移。
         fun previewAssetsUrl(): String {
             val port = if (EncvGoService.lastKnownPort > 0) EncvGoService.lastKnownPort else DEFAULT_PORT
             return "http://127.0.0.1:$port$ASSETS_PATH"
         }
+
+        // 下载兜底脚本：设备上的预览资源包可能是**旧版**（页面里还没有 attachDownload），
+        // 所以这里在页面加载完成后注入，直接接管 a[download] 的点击 —— 不依赖资源包版本。
+        //
+        // 页面新版本会在自己接管的链接上打 dataset.encvSaved 标记，两边不会重复保存。
+        // 分块（256KB）同样是硬要求：一次性把整个 blob 转成 base64 会把 WebView 打死。
+        private const val DOWNLOAD_FALLBACK_JS = """
+(function () {
+  if (window.__encvDlPatched) return;
+  window.__encvDlPatched = true;
+  if (!window.ENCV || typeof window.ENCV.saveBegin !== 'function') return;
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    var a = t && t.closest ? t.closest('a[download]') : null;
+    if (!a || a.dataset.encvSaved === '1') return;
+    var href = a.getAttribute('href') || '';
+    if (href.indexOf('blob:') !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    var name = a.getAttribute('download') || 'download.bin';
+    fetch(href).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+      var u8 = new Uint8Array(buf);
+      var id = window.ENCV.saveBegin(name);
+      var CH = 262144;
+      for (var off = 0; off < u8.length; off += CH) {
+        var end = Math.min(off + CH, u8.length);
+        var s = '';
+        for (var i = off; i < end; i += 8192) {
+          s += String.fromCharCode.apply(null, u8.subarray(i, Math.min(i + 8192, end)));
+        }
+        window.ENCV.saveChunk(id, btoa(s));
+      }
+      window.ENCV.saveEnd(id);
+    }).catch(function (err) {
+      window.ENCV.toast('保存失败：' + (err && err.message ? err.message : err));
+    });
+  }, true);
+})();
+"""
+    }
     }
 
     private var webView: WebView? = null
@@ -111,6 +151,12 @@ class PreviewAssetsActivity : AppCompatActivity() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val host = request.url.host ?: return true
                     return host != "127.0.0.1" && host != "localhost"
+                }
+
+                override fun onPageFinished(view: WebView, url: String) {
+                    super.onPageFinished(view, url)
+                    // 资源包可能是旧版，页面自己没有保存逻辑 —— 注入兜底脚本接管下载
+                    view.evaluateJavascript(DOWNLOAD_FALLBACK_JS, null)
                 }
             }
             // 页面下载产物用的桥（见 OutboxBridge 的注释：DownloadListener 收不到 blob:）
@@ -185,7 +231,20 @@ class PreviewAssetsActivity : AppCompatActivity() {
         @JavascriptInterface
         fun saveEnd(id: String): String {
             val f = open.remove(id) ?: return ""
-            return owner.publishToDownloads(f)
+            val where = owner.publishToDownloads(f)
+            // 结果要让用户**看得见**：旧版资源包的页面日志里不会出现这条，
+            // 而且 WebView 里 alert 默认不显示（没实现 onJsAlert）。
+            owner.runOnUiThread {
+                android.widget.Toast.makeText(owner, "已保存：$where", android.widget.Toast.LENGTH_LONG).show()
+            }
+            return where
+        }
+
+        @JavascriptInterface
+        fun toast(message: String) {
+            owner.runOnUiThread {
+                android.widget.Toast.makeText(owner, message, android.widget.Toast.LENGTH_LONG).show()
+            }
         }
     }
 
