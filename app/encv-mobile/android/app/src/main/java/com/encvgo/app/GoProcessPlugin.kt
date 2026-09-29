@@ -371,31 +371,23 @@ class GoProcessPlugin : Plugin() {
         }
     }
 
-    // 用**系统浏览器**打开同一个地址（更符合真实使用场景：能分享、能用浏览器自带的
-    // 文件选择器、不受 WebView 各种限制；地址仍是 127.0.0.1，走的还是设备内嵌后端）。
+    // 把预览页地址复制到剪贴板。
     //
-    // ⚠️ 两处易错点：
-    //   ① 127.0.0.1 在外部浏览器里同样是**设备本身**（不是某台服务器），
-    //      所以后端在内嵌进程里监听 :2025 时，浏览器能直接访问；
-    //   ② 没有浏览器可接时要明确 reject，否则就是"点了没反应"。
+    // 为什么不"用浏览器打开"：真机上 ACTION_VIEW 这条路径不稳定（有的设备没有
+    // 可被 Intent 唤起的浏览器、或被厂商 ROM 拦掉），失败时用户只看到"没反应"。
+    // 复制地址可控得多：粘到任意浏览器即可（127.0.0.1 指的就是设备本身，
+    // 走的仍是内嵌后端，不经过外网）。
     @PluginMethod
-    fun openPreviewAssetsInBrowser(call: PluginCall) {
+    fun copyPreviewAssetsUrl(call: PluginCall) {
         try {
             val url = PreviewAssetsActivity.previewAssetsUrl()
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
-                addCategory(Intent.CATEGORY_BROWSABLE)
-                // 独立任务：返回键能回到应用，而不是把浏览器塞进本应用栈
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            if (intent.resolveActivity(context.packageManager) == null) {
-                call.reject("设备上没有能打开该地址的浏览器：$url")
-                return
-            }
-            context.startActivity(intent)
-            LogBridge.i(TAG, "openPreviewAssetsInBrowser: $url")
-            call.resolve(JSObject().apply { put("opened", true); put("url", url) })
+            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                ?: run { call.reject("拿不到剪贴板服务"); return }
+            cm.setPrimaryClip(android.content.ClipData.newPlainText("ENCV preview URL", url))
+            LogBridge.i(TAG, "copyPreviewAssetsUrl: $url")
+            call.resolve(JSObject().apply { put("copied", true); put("url", url) })
         } catch (e: Exception) {
-            call.reject("用浏览器打开预览页失败：${e.message}")
+            call.reject("复制预览页地址失败：${e.message}")
         }
     }
 

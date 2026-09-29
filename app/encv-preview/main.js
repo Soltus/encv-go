@@ -71,6 +71,9 @@ function log(line) {
 function attachDownload(a, name, blob) {
   a.href = URL.createObjectURL(blob);
   a.download = name;
+  // 标记"这条链接页面自己会处理"：原生侧还注入了一段兜底脚本接管 a[download]
+  // （设备上的资源包可能是旧版，页面里没有这套逻辑），不打标记会保存两遍。
+  a.dataset.encvSaved = "1";
   const bridge = window.ENCV;
   if (!bridge || typeof bridge.saveBegin !== "function") return;
   a.addEventListener("click", async event => {

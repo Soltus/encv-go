@@ -247,27 +247,30 @@ export async function openPreviewAssets(): Promise<{ opened: boolean; error?: st
 }
 
 /**
- * 用**系统浏览器**打开容器预览页（更符合真实使用场景）。
+ * 把预览页地址复制到剪贴板。
  *
- * 与 openPreviewAssets（应用内全屏 WebView）的区别：
- * - 浏览器里能用系统自带的文件选择器（应用内 WebView 要靠 onShowFileChooser 兜）；
- * - 地址仍是 127.0.0.1，走的还是设备内嵌后端，不经过外网；
- * - 页面因此可以被分享/收藏，也方便在桌面浏览器里调试同一个后端。
+ * 为什么不直接"用浏览器打开"：真机上打开外部浏览器这条路径不稳定
+ * （有的设备没有可被 Intent 唤起的浏览器，或者被厂商 ROM 拦掉），
+ * 失败时用户只能看到"没反应"。复制地址更可控 —— 粘到任意浏览器就能开，
+ * 桌面浏览器连同一台设备时也能直接用。
  */
-export async function openPreviewAssetsInBrowser(): Promise<{ opened: boolean; url?: string; error?: string }> {
-  // 非原生平台（浏览器里跑 dev / 直接当网页用）没有 GoProcess 插件 ——
-  // 直接开新标签页，地址同源，走的就是同一个后端。
+export async function copyPreviewAssetsUrl(): Promise<{ copied: boolean; url?: string; error?: string }> {
+  // 非原生平台（浏览器里跑 dev / 直接当网页用）没有 GoProcess 插件：直接用 Web API
   if (!isNative()) {
     const url = `${window.location.origin}/preview-assets/`;
-    const w = window.open(url, "_blank");
-    return w ? { opened: true, url } : { opened: false, error: "浏览器拦截了新标签页，请手动打开 " + url };
+    try {
+      await navigator.clipboard.writeText(url);
+      return { copied: true, url };
+    } catch {
+      return { copied: false, url, error: "复制失败，请手动复制：" + url };
+    }
   }
   try {
-    return await (GoProcess as any).openPreviewAssetsInBrowser();
+    return await (GoProcess as any).copyPreviewAssetsUrl();
   } catch (e: any) {
     const msg = e?.message || e?.code || String(e);
-    console.error("[ENCV] GoProcess.openPreviewAssetsInBrowser() failed:", msg);
-    return { opened: false, error: msg };
+    console.error("[ENCV] GoProcess.copyPreviewAssetsUrl() failed:", msg);
+    return { copied: false, error: msg };
   }
 }
 
