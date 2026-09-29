@@ -708,7 +708,12 @@ func GetTextPreviewExtensions() []string {
 //
 // 优先级：ENCV_<SUBDIR_UPPER>_DIR（明确指定）> 派生默认值。
 func AppDataDir(subdir string) string {
-	envKey := "ENCV_" + strings.ToUpper(subdir) + "_DIR"
+	// ⚠️ 环境变量名必须是合法标识符：子目录里的 '-' / '.' 之类要换成 '_'。
+	// 直接 ToUpper 会把 "preview-assets" 拼成 `ENCV_PREVIEW-ASSETS_DIR` —— 带连字符的
+	// 环境变量既不合规范也没人设得对，结果是"设了 ENCV_PREVIEW_ASSETS_DIR 却完全没生效"，
+	// 资源被静默写进默认的用户数据目录（2026-09-30 实测踩到）。
+	norm := strings.ToUpper(strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(subdir))
+	envKey := "ENCV_" + norm + "_DIR"
 	if v := os.Getenv(envKey); v != "" {
 		return v
 	}

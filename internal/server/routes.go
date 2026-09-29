@@ -71,6 +71,16 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.GET("/stream", gin.WrapF(s.handleStreamRequest))
 	r.GET("/decrypt", gin.WrapF(s.handleStreamRequest))
 	r.GET("/preview/*filepath", gin.WrapH(http.StripPrefix("/preview", web.PreviewHandler())))
+	// 🆕 容器预览页（encv-preview）的**可热更新**托管：资源在可写数据目录，
+	// 不在 Go 二进制/APK 里 —— 更新页面不需要换 APK。见 preview_assets.go 的文件头注释。
+	r.GET("/preview-assets/*filepath", s.handlePreviewAssetsGin)
+	// ⚠️ HEAD 必须单独注册：gin 的 r.GET 只收 GET，HEAD 会落到 404。
+	// 页面自检正是用 HEAD 判断样例/资源在不在 —— 少了这一行，明明资源都在，
+	// 自检却把 10 项判成"缺样例跳过"（2026-09-30 实测踩到）。
+	r.HEAD("/preview-assets/*filepath", s.handlePreviewAssetsGin)
+	r.GET("/api/preview-assets/version", s.handlePreviewAssetsVersionGin)
+	r.POST("/api/preview-assets/import", s.handlePreviewAssetsImportGin)
+	r.POST("/api/preview-assets/update", s.handlePreviewAssetsUpdateGin)
 	r.GET("/api/config", s.handleGetConfigGin)
 	r.PUT("/api/config", s.handlePutConfigGin)
 	r.GET("/api/config/schema", s.handleConfigSchemaGin)
