@@ -13,6 +13,12 @@
       "**/__tests__/**/*.{ts,js,vue,json}",
       "**/*.test.ts",
       "**/*.spec.ts",
+      // encv-preview 是纯静态预览页（不是 **/src/** 结构），此前被上面的 glob
+      // 整体排除，导致本次新增的 main.js / serve.ts / verify-container.mjs
+      // 一条 lint/format 都没过 —— 门禁显示全绿其实是"没检查"造成的假绿。
+      // 显式纳入，让它的 js/mjs 与其余包同一标准。
+      // 预览页的静态服务是 bun + TypeScript（项目不用 python），一并纳管格式
+      "app/encv-preview/**/*.{js,mjs,ts}",
       "!!**/node_modules",
       "!!**/dist",
       "!!**/android",
