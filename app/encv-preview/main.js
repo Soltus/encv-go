@@ -36,7 +36,9 @@ const ui = {
   mseurl: el("mseurl"),
   mseGo: el("mse-go"),
   streamResult: el("stream-result"),
+  // 统一口令：页面上只有这一个口令入口，所有加解密路径都读它
   password: el("password"),
+  pwToggle: el("pw-toggle"),
   ownResult: el("own-result"),
   drop: el("drop"),
   result: el("result"),
@@ -477,6 +479,16 @@ function encryptAndVerify(plain, label, meta = TEXT_META) {
   return { container, same };
 }
 
+// 口令明文/密文切换。
+// 状态记在 **aria-pressed** 上（图标显示也由它驱动，见 style.css），
+// 不再另存一个布尔量 —— 两份状态必然会在某次改动后不同步。
+ui.pwToggle.addEventListener("click", () => {
+  const shown = ui.password.type === "text";
+  ui.password.type = shown ? "password" : "text";
+  ui.pwToggle.setAttribute("aria-pressed", String(!shown));
+  ui.pwToggle.setAttribute("aria-label", shown ? "显示口令" : "隐藏口令");
+});
+
 ui.btnEncrypt.addEventListener("click", () => {
   try {
     encryptAndVerify(new TextEncoder().encode(ui.plaintext.value), "文本");
@@ -914,6 +926,17 @@ async function selfTest() {
     encryptAndVerify(new TextEncoder().encode("download-link-probe"), "下载链接探针");
     const a = el("enc-download");
     return Boolean(a) && a.href.startsWith("blob:") && a.download === "encrypted.txt.sccgt";
+  });
+
+  await push("统一口令：可切换明文显示（图标状态与 aria 同步）", () => {
+    // 状态只存一份（aria-pressed），图标显示由它驱动 —— 这里同时断言两边，
+    // 免得哪天改成"另存一个布尔量"后图标与输入框各说各话。
+    const before = ui.password.type;
+    ui.pwToggle.click();
+    const shown = ui.password.type === "text" && ui.pwToggle.getAttribute("aria-pressed") === "true";
+    ui.pwToggle.click(); // 复原
+    const back = ui.password.type === before && ui.pwToggle.getAttribute("aria-pressed") === "false";
+    return shown && back && before === "password";
   });
 
   await push("流式加密：多段产物能被 open/readRange 原样解回（逐字节）", async () => {
