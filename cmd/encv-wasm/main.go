@@ -120,8 +120,12 @@ func readOptions(v js.Value) simple.Options {
 
 // ────────────────────────────── 导出函数 ──────────────────────────────
 
+// versionFn: () => { ok, value: string }
+//
+// 与其它导出一样包成结果对象：JS 侧（src/core.ts）对所有导出用同一套 unwrap，
+// 谁返回裸值谁就会被当成失败（"encv wasm: unknown error"）。
 func versionFn(js.Value, []js.Value) interface{} {
-	return version
+	return okValue(version)
 }
 
 // constantsFn 把信封常量暴露给 JS，避免前端硬编码一份（硬编码 = 漂移的开始）。
@@ -254,20 +258,24 @@ func decryptTextFn(_ js.Value, args []js.Value) interface{} {
 	return okText(text)
 }
 
-// verifyPasswordFn: (blob: Uint8Array, password: string) => boolean
+// verifyPasswordFn: (blob: Uint8Array, password: string) => { ok, value: boolean }
+//
+// 2026-09-27 修正：此前这里返回裸 bool，坏参数也静默返回 false，
+// 与其余导出「统一返回结果对象」的契约不一致 —— JS 侧统一的 unwrap 会把它判成失败，
+// 前端校验口令时拿到的是 "encv wasm: unknown error" 而不是 true/false。
 func verifyPasswordFn(_ js.Value, args []js.Value) interface{} {
 	if len(args) < 2 {
-		return false
+		return fail(errBadArgs("verifyPassword(blob, password)"))
 	}
 	blob, err := toBytes(args[0])
 	if err != nil {
-		return false
+		return fail(err)
 	}
 	password, err := argString(args, 1)
 	if err != nil {
-		return false
+		return fail(err)
 	}
-	return simple.VerifyPassword(blob, password)
+	return okValue(simple.VerifyPassword(blob, password))
 }
 
 // deriveKeyFn: (password: string, salt: Uint8Array, keyLen: number) => { ok, data }

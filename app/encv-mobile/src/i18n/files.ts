@@ -107,7 +107,8 @@ export default {
     "files.encrypted": "Encrypted file",
     "files.encryptPrompt": 'Enter password to encrypt "{name}"',
     "files.decryptPrompt": 'Enter password to decrypt "{name}"',
-    "files.overwriteConfirm": 'Target file "{name}" already exists. Continuing will overwrite it (the original is moved to trash first and can be restored). Continue?',
+    "files.overwriteConfirm":
+      'Target file "{name}" already exists. Continuing will overwrite it (the original is moved to trash first and can be restored). Continue?',
     "files.searchPlaceholder": "Search files...",
     "files.recursive": "Recursive",
     "files.fullText": "Full Text",

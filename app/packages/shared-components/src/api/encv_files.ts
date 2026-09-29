@@ -169,6 +169,22 @@ export function getFileStreamUrl(path: string): string {
   return `${baseUrl}/stream?path=${proxySafeEncode(path)}`;
 }
 
+/**
+ * 给**原生播放器**（Android mpv）用的解密流地址：保证是绝对 URL。
+ *
+ * 为什么不能直接把 getFileStreamUrl 的结果交给 openPlayer：
+ *   - DEV 下它是相对路径（/stream?path=…）。浏览器能靠 dev proxy 解析，
+ *     但 mpv 跑在**独立原生进程**里，没有页面上下文，相对路径解析不了。
+ *   - 更不能给容器文件路径：mpv 不认 .sccgv 容器，只会报"无法识别的格式"。
+ *
+ * 用 /stream（后端解密流）而不是先解密落盘，是因为后端支持 HTTP Range：
+ * 边播边解 + 可拖动，不必先解出整个视频（大视频等半天，还在磁盘上留一份明文）。
+ */
+export function getAbsoluteStreamUrl(path: string): string {
+  const url = getFileStreamUrl(path);
+  return /^https?:\/\//.test(url) ? url : `${getApiBaseUrl()}${url}`;
+}
+
 export function getFilePreviewUrl(previewPage: string, filePath: string): string {
   if (import.meta.env.DEV) {
     return `/preview/${previewPage}?file=${proxySafeEncode(filePath)}`;

@@ -95,17 +95,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import {
-  IonBackButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
+import { IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
 import { alertCircleOutline, refreshOutline } from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { type SimversePerfMetrics, useSimverse } from "@/composables/useSimverse";

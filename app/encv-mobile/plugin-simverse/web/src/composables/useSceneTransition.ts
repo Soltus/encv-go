@@ -106,7 +106,7 @@ export function useSceneTransition() {
   async function transitionToScene(
     containerEl: HTMLElement | null,
     applyChange: () => void | Promise<void>,
-    options?: SceneTransitionOptions,
+    options?: SceneTransitionOptions
   ): Promise<void> {
     if (!containerEl || typeof window === "undefined") return;
     recordState(containerEl);

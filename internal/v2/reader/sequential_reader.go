@@ -72,7 +72,12 @@ func (r *SequentialDecryptReader) setupNextFragmentDecryptor() error {
 	if err != nil {
 		return fmt.Errorf("failed to create aes cipher: %w", err)
 	}
-	stream := cipher.NewCTR(block, r.iv)
+	// 分片自带 nonce（v4 segment 栈适配而来）时用它起步；否则沿用 KVI 的 iv（旧行为）。
+	baseIV := r.iv
+	if nonce := decodeFragmentNonce(frag.Nonce); len(nonce) > 0 {
+		baseIV = nonce
+	}
+	stream := cipher.NewCTR(block, baseIV)
 	r.currentDecryptor = &cipher.StreamReader{S: stream, R: rawReader}
 	return nil
 }

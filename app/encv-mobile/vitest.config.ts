@@ -112,6 +112,8 @@ const FAST_INCLUDE = [
   'src/theme/__tests__/surfaceMaterial.test.ts',
   // theme: per-theme 主色/背景色定制（2026-07-17 优化），happy-dom
   'src/theme/__tests__/themeCustomization.test.ts',
+  // 原生播放器（mpv）解密流地址必须是绝对 URL（移动端播加密视频的真实 bug），happy-dom
+  'src/__tests__/stream-url.test.ts',
 ]
 
 // ── ISOLATED：有模块级状态 / 用 vi.resetModules / 依赖 localStorage ──
@@ -164,6 +166,7 @@ const ISOLATED_INCLUDE = [
   'src/lib/workflow/__tests__/buildDynamicWorkflow.pre-population.test.ts',
   'src/lib/workflow/__tests__/buildDynamicWorkflow.real-e2e.test.ts',
   'src/views/__tests__/AgentChat.history.test.ts',
+  'src/__tests__/stream-url.test.ts',
 ]
 
 // 公共基础配置（所有 project 共享）

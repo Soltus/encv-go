@@ -39,7 +39,7 @@ type Manager struct {
 	wg       sync.WaitGroup
 }
 
-func New(p *paths.Paths, spawnGo, spawnVite, spawnPluginVite, spawnOpenlist, spawnSimverseVite bool) *Manager {
+func New(p *paths.Paths, spawnGo, spawnVite, spawnPluginVite, spawnOpenlist, spawnSimverseVite, spawnEncvVite bool) *Manager {
 	m := &Manager{paths: p}
 
 	if spawnGo {
@@ -100,6 +100,23 @@ func New(p *paths.Paths, spawnGo, spawnVite, spawnPluginVite, spawnOpenlist, spa
 			Color:    "\033[34m",
 			Required: false,
 			ReadyURL: "http://127.0.0.1:5176/simverse/",
+		})
+	}
+
+	if spawnEncvVite {
+		// 纯静态目录（HTML + JS + CSS），用仓库自带的 **bun + TypeScript** 服务托管
+		// （app/encv-preview/serve.ts；项目不用 python，早年的 serve.py 已删除）。
+		// 它只做静态托管 + Range + gzip，**不代理任何后端** ——
+		// 这一页的价值就在于"零后端也能解容器"，代理会掩盖这件事。
+		// 不必拉 vite（该目录也不在 pnpm workspace，vite 裸导入解析不了）。
+		m.children = append(m.children, &Child{
+			Name:     "encv-preview",
+			Cmd:      p.BunBin,
+			Args:     []string{filepath.Join(p.EncvPreviewDir, "serve.ts"), "5179"},
+			Dir:      p.EncvPreviewDir,
+			Color:    "\033[95m",
+			Required: false,
+			ReadyURL: "http://127.0.0.1:5179/",
 		})
 	}
 

@@ -58,9 +58,7 @@ export function useRouteTransition(options?: RouteTransitionOptions) {
       done();
       return;
     }
-    gsap
-      .timeline({ onComplete: done })
-      .fromTo(el, opts.enterFrom, { ...opts.enterTo, duration: opts.duration, ease: opts.ease });
+    gsap.timeline({ onComplete: done }).fromTo(el, opts.enterFrom, { ...opts.enterTo, duration: opts.duration, ease: opts.ease });
   }
 
   /**
@@ -72,9 +70,7 @@ export function useRouteTransition(options?: RouteTransitionOptions) {
       done();
       return;
     }
-    gsap
-      .timeline({ onComplete: done })
-      .to(el, { ...opts.leaveTo, duration: opts.duration, ease: opts.ease });
+    gsap.timeline({ onComplete: done }).to(el, { ...opts.leaveTo, duration: opts.duration, ease: opts.ease });
   }
 
   return { onEnter, onLeave };

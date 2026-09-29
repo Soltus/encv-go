@@ -90,18 +90,18 @@ func TestMatchesViteDeny_PrefixWithoutSlash(t *testing.T) {
 
 func TestPickUpstream_RootToVite(t *testing.T) {
 	up := PickUpstream("/", "", "")
-	if up.Name != ViteUpstream.Name {
-		t.Errorf("expected %s, got %s", ViteUpstream.Name, up.Name)
+	if up.Name != GetViteUpstream().Name {
+		t.Errorf("expected %s, got %s", GetViteUpstream().Name, up.Name)
 	}
 }
 
 func TestPickUpstream_PlayerToVite(t *testing.T) {
 	up := PickUpstream("/player", "", "")
-	if up.Name != ViteUpstream.Name {
+	if up.Name != GetViteUpstream().Name {
 		t.Errorf("expected Vite, got %s", up.Name)
 	}
 	up = PickUpstream("/player?path=/test", "", "")
-	if up.Name != ViteUpstream.Name {
+	if up.Name != GetViteUpstream().Name {
 		t.Errorf("expected Vite with query, got %s", up.Name)
 	}
 }
@@ -109,7 +109,7 @@ func TestPickUpstream_PlayerToVite(t *testing.T) {
 func TestPickUpstream_TabsToVite(t *testing.T) {
 	for _, p := range []string{"/tabs", "/tabs/", "/tabs/home", "/tabs/files", "/tabs/settings/server/http"} {
 		up := PickUpstream(p, "", "")
-		if up.Name != ViteUpstream.Name {
+		if up.Name != GetViteUpstream().Name {
 			t.Errorf("path %s: expected Vite, got %s", p, up.Name)
 		}
 	}
@@ -135,7 +135,7 @@ func TestPickUpstream_ViteDevArtifacts(t *testing.T) {
 	}
 	for _, p := range vitePaths {
 		up := PickUpstream(p, "", "")
-		if up.Name != ViteUpstream.Name {
+		if up.Name != GetViteUpstream().Name {
 			t.Errorf("path %s: expected Vite, got %s", p, up.Name)
 		}
 	}
@@ -213,7 +213,7 @@ func TestPickUpstream_QueryNotAffect(t *testing.T) {
 		t.Errorf("query should not affect: expected encv-go, got %s", up.Name)
 	}
 	up = PickUpstream("/@vite/client?v=123", "", "")
-	if up.Name != ViteUpstream.Name {
+	if up.Name != GetViteUpstream().Name {
 		t.Errorf("query should not affect vite: expected Vite, got %s", up.Name)
 	}
 }
@@ -238,7 +238,7 @@ func TestPickUpstream_UnknownDefault(t *testing.T) {
 
 func TestPickUpstream_EmptyUrl(t *testing.T) {
 	up := PickUpstream("", "", "")
-	if up.Name != ViteUpstream.Name {
+	if up.Name != GetViteUpstream().Name {
 		t.Errorf("empty url should go to Vite, got %s", up.Name)
 	}
 }
@@ -262,5 +262,55 @@ func TestViteDeny_HasWhy(t *testing.T) {
 		if rule.Why == "" {
 			t.Errorf("rule %s missing why", rule.Match)
 		}
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// crypto-ui（@encv/crypto WASM 预览页）路由
+//
+// 背景：Vite 8 dev 不基于 <base href> 改写模块内部 import，
+// 页面发出的 /src/...、/@fs/... 请求不带 /crypto-ui 前缀，
+// 只靠入口 HTML 种下的 spa cookie 归位（见 README §11）。
+// ─────────────────────────────────────────────────────────────────────────────
+
+func TestPickUpstream_EncvUi(t *testing.T) {
+	for _, p := range []string{"/encv-ui", "/encv-ui/", "/encv-ui/main.js", "/encv-ui/main.js?v=1"} {
+		up := PickUpstream(p, "", "")
+		if up.Name != "encv-preview" {
+			t.Errorf("path %s: expected encv-preview, got %s", p, up.Name)
+		}
+	}
+}
+
+func TestPickUpstream_EncvUiStripsPrefix(t *testing.T) {
+	// 这是「剥前缀」的上游：静态目录托管，/encv-ui/style.css → /style.css。
+	var encv *Upstream
+	for _, up := range SpecialUpstreams {
+		if up.Match == "/encv-ui" {
+			encv = up
+		}
+	}
+	if encv == nil {
+		t.Fatal("special upstreams 缺少 /encv-ui")
+	}
+	if encv.Target != "http://127.0.0.1:5179" {
+		t.Errorf("unexpected target: %s", encv.Target)
+	}
+	if encv.PathRewrite == nil {
+		t.Fatal("/encv-ui 必须配置 PathRewrite（静态目录按根路径提供文件）")
+	}
+	if got := encv.PathRewrite("/encv-ui/main.js"); got != "/main.js" {
+		t.Errorf("PathRewrite(/encv-ui/main.js) = %s, want /main.js", got)
+	}
+	if got := encv.PathRewrite("/encv-ui"); got != "/" {
+		t.Errorf("PathRewrite(/encv-ui) = %s, want /", got)
+	}
+}
+
+func TestPickUpstream_EncvUiSimilarPrefix(t *testing.T) {
+	// /encv-ui-legacy 之类的前缀不能撞到演示页
+	up := PickUpstream("/encv-ui-legacy/", "", "")
+	if up.Name == "encv-preview" {
+		t.Errorf("/encv-ui-legacy should not route to encv-preview, got %s", up.Name)
 	}
 }

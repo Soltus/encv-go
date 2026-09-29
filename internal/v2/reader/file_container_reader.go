@@ -32,6 +32,12 @@ type fileContainerReader struct {
 	// 这确保了后续的 GetFragmentReader 使用的是同一个句柄，避免读取到旧文件或截断的文件
 	initMainFileHandle *os.File
 
+	// src 是打开容器所用的数据源（内存 / 远端），文件场景下为 nil。
+	//
+	// 有它就不去开文件：浏览器（js/wasm）没有文件系统，容器字节来自内存，
+	// 而 fragment 栈原本只认 mainFilePath。这是**能力补充**，不是兼容分支。
+	src containerhandle.ContainerSource
+
 	// 运行时状态，用于物理偏移映射和外部文件缓存
 	mu                sync.RWMutex
 	physicalOffsets   map[string]uint64   // 主文件中的偏移
@@ -99,16 +105,33 @@ func NewEncryptedContainerReaderFromFile(mainFilePath string) (EncryptedContaine
 		return nil, fmt.Errorf("failed to open container source: %w", err)
 	}
 
+	// 文件场景仍走原先的句柄池 + fragment 校验路径，不要把 src 带进 reader。
+	return newEncryptedContainerReader(src, false)
+}
+
+// NewEncryptedContainerReaderFromSource 从任意容器源构造 reader（内存 / 远端 / 文件）。
+//
+// 与 NewEncryptedContainerReaderFromFile 的区别只是数据来源：文件版按路径开文件，
+// 这里复用调用方给的源 —— 浏览器里容器字节在内存，没有路径可开。
+func NewEncryptedContainerReaderFromSource(src containerhandle.ContainerSource) (EncryptedContainerReader, error) {
+	return newEncryptedContainerReader(src, true)
+}
+
+func newEncryptedContainerReader(src containerhandle.ContainerSource, keepSrc bool) (EncryptedContainerReader, error) {
 	h, err := containerhandle.Open(src)
 	if err != nil {
-		src.Close()
 		return nil, fmt.Errorf("failed to open container handle: %w", err)
 	}
 	defer h.Close()
 
+	var keep containerhandle.ContainerSource
+	if keepSrc {
+		keep = src
+	}
 	r := &fileContainerReader{
-		mainFilePath:         mainFilePath,
-		containerDir:         filepath.Dir(mainFilePath),
+		src:                  keep,
+		mainFilePath:         src.Name(),
+		containerDir:         filepath.Dir(src.Name()),
 		manifest:             h.Manifest(),
 		manifestV4:           h.ManifestV4(),
 		headerVersion:        h.Version(),
@@ -139,7 +162,16 @@ func NewEncryptedContainerReaderFromFile(mainFilePath string) (EncryptedContaine
 
 // NewFileContainerReaderFromMetadata 是一个新的、轻量级的构造函数。
 // 它使用预先解析好的 manifest、headerVersion 和 physicalOffsets 来创建 reader，避免了重复的文件扫描。
-func NewFileContainerReaderFromMetadata(mainFilePath string, manifest *types.Manifest, headerVersion int, physicalOffsets map[string]uint64) (*fileContainerReader, error) {
+// manifestV4 不能丢：v4 容器的 WrappedDEK 只存在于 v4 manifest 里。
+// 少了它，deriveKeyAndIV 会静默回退到「密码直接派生密钥」的老路径，
+// 而数据实际是用随机 DEK 加密的 —— 结果就是「不报错、长度正确、内容全是乱码」。
+func NewFileContainerReaderFromMetadata(
+	mainFilePath string,
+	manifest *types.Manifest,
+	manifestV4 *types.Manifest_v4,
+	headerVersion int,
+	physicalOffsets map[string]uint64,
+) (*fileContainerReader, error) {
 	kviProvider, err := types.NewKVIProviderFromManifest(manifest)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal KVI from manifest: %w", err)
@@ -149,6 +181,7 @@ func NewFileContainerReaderFromMetadata(mainFilePath string, manifest *types.Man
 		mainFilePath:         mainFilePath,
 		containerDir:         filepath.Dir(mainFilePath),
 		manifest:             manifest,
+		manifestV4:           manifestV4,
 		headerVersion:        headerVersion,
 		kviProvider:          kviProvider,
 		physicalOffsets:      physicalOffsets, // 【关键】直接使用传入的 map，不扫描
@@ -189,6 +222,16 @@ func (r *fileContainerReader) GetFragmentReader(fragID string) (io.ReadCloser, e
 		payloadOffset, ok := r.physicalOffsets[frag.ID]
 		if !ok || payloadOffset == 0 {
 			return nil, fmt.Errorf("fragment '%s' offset missing or zero", fragID)
+		}
+
+		// 内存源：直接在源上切一段，不需要（也没有）文件句柄
+		if r.src != nil {
+			section := io.NewSectionReader(r.src, int64(payloadOffset), int64(frag.Length))
+			return &readOnlySectionCloser{
+				Reader:   section,
+				ReaderAt: section,
+				Seeker:   section,
+			}, nil
 		}
 
 		mainFile, useInit, err := r.acquireMainFile()

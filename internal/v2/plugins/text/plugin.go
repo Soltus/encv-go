@@ -50,9 +50,9 @@ type TextPlugin struct {
 	containerManager *service.ContainerManager // 注入 ContainerManager
 	physicalPacker   physical.PhysicalPacker
 
-	useDirectPath  bool
-	directCtx  *crypto.EncryptionContext
-	directSrc  io.Reader
+	useDirectPath bool
+	directCtx     *crypto.EncryptionContext
+	directSrc     io.Reader
 }
 
 func (p *TextPlugin) Name() string {
@@ -105,12 +105,26 @@ func init() {
 }
 
 // Plugin 接口实现
+// Initialized 报告插件是否已完成初始化（配置已就位）。
+//
+// 上层（EncryptFileWithPlugin / DecryptContainerWithPlugin）用它把
+// "没初始化就加解密"从**空指针 panic**变成一条明确错误 —— Capacitor 后端
+// 启动顺序复杂（插件装配失败会跳过），这类状态比 CLI 更容易出现。
+func (p *TextPlugin) Initialized() bool { return p.cfg != nil }
+
 func (p *TextPlugin) Initialize(ctx context.Context) error {
 	if ctx == p.ctx {
 		return nil // 避免重复初始化
 	}
 	p.ctx = ctx
-	p.cfg = config.FromContext(ctx)
+	// ⚠️ config.FromContext 在 ctx 没带配置时返回 **nil**，直接赋给 p.cfg 的话，
+	// 后面取 p.cfg.Password 就是一次空指针 panic —— 表现是"进程崩了"而不是"报错"。
+	// 这里显式判空，保证约定：**Initialize 成功 ⇒ cfg 非空**。
+	cfg := config.FromContext(ctx)
+	if cfg == nil {
+		return fmt.Errorf("plugin %s: Initialize 需要一个带配置的 context（config.NewContext）", p.Name())
+	}
+	p.cfg = cfg
 	settings, err := config.GetPluginSettingsFor[TextPluginConfig](p.cfg, p.Name())
 	if err != nil {
 		return fmt.Errorf("could not get settings for plugin %s: %w", p.Name(), err)
@@ -602,8 +616,11 @@ func (p *TextPlugin) Decrypt(containerPath, outputDir string) (string, error) {
 
 	index := factory.GetIndex()
 	vIndex, ok := index.(*TextIndex)
-	if !ok {
-		return "", fmt.Errorf("container is not a %s container", p.Name())
+	// ⚠️ 必须同时判 nil：GetIndex() 可能返回**带类型的 nil 指针**（(*TextIndex)(nil)），
+	// 此时类型断言 ok=true，紧接着调方法就会 nil 解引用 panic。
+	// 容器缺少插件 index 是合法状态（例如只经过 writer 层写入的容器），应当报错而不是崩。
+	if !ok || vIndex == nil {
+		return "", fmt.Errorf("container is not a %s container (index missing)", p.Name())
 	}
 
 	outputPath := filepath.Join(outputDir, vIndex.GetOriginalFilename())

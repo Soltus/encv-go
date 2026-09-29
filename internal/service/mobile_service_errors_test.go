@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"os"
 	"syscall"
 	"testing"
@@ -86,4 +87,27 @@ func TestIsPermissionError(t *testing.T) {
 	err := &os.PathError{Err: syscall.EACCES}
 	assert.True(t, isPermissionError(err))
 	assert.False(t, isPermissionError(assert.AnError))
+}
+
+// ⚠️ 回归锁：移动端上传的 500MB 上限**曾经只在写完整个文件之后才判定** ——
+// 客户端先把超限文件整个传完、服务端 io.Copy 落盘，然后才报 400 把文件删掉
+// （2026-09-30 实测：600MB 上传走完整条链路才失败）。
+// CheckUploadSize 是给 handler **读取 body 之前**早拒用的；两道校验都要在：
+// 早拒省掉白传的带宽，后置校验兜住没有 Content-Length 的 chunked 请求。
+func TestCheckUploadSize(t *testing.T) {
+	const mb = int64(1024 * 1024)
+
+	err := CheckUploadSize(600 * mb)
+	assert.Error(t, err)
+	var badReq *BadRequestError
+	assert.ErrorAs(t, err, &badReq, "超限必须返回 BadRequestError，前端要能据此提示用户")
+	assert.Contains(t, err.Error(), "exceeds maximum allowed")
+	assert.Contains(t, err.Error(), fmt.Sprintf("%d", DefaultMaxUploadSize))
+
+	assert.NoError(t, CheckUploadSize(400*mb), "上限之内必须放行")
+	assert.NoError(t, CheckUploadSize(DefaultMaxUploadSize), "正好等于上限也要放行（边界）")
+
+	// 没有 Content-Length（chunked 传输）时不能据此拒绝 —— 交给后置校验
+	assert.NoError(t, CheckUploadSize(0))
+	assert.NoError(t, CheckUploadSize(-1))
 }

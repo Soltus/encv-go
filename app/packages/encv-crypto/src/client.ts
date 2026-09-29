@@ -35,6 +35,7 @@ export interface CryptoClient {
   readonly mode: CryptoRuntimeMode;
   /** 字节加密 → ENCVS1 信封。 */
   encrypt(plain: Uint8Array, password: string, options?: EncryptOptions): Promise<Uint8Array>;
+
   /** 信封解密 → 明文字节；密码错误抛错（不会返回乱码）。 */
   decrypt(blob: Uint8Array, password: string): Promise<Uint8Array>;
   /** 文本加密 → ENCVS1 信封。 */
@@ -104,6 +105,7 @@ export async function createCryptoClient(options: CryptoClientOptions): Promise<
   return {
     mode: transport.mode,
     encrypt: (plain, password, opts) => bytes({ type: "encrypt", data: toBuffer(plain), password, options: opts }),
+
     decrypt: (blob, password) => bytes({ type: "decrypt", data: toBuffer(blob), password }),
     encryptText: (text, password, opts) => bytes({ type: "encryptText", text, password, options: opts }),
     decryptText: async (blob, password) => {

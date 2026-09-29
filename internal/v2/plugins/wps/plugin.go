@@ -88,12 +88,26 @@ func init() {
 }
 
 // Plugin 接口实现
+// Initialized 报告插件是否已完成初始化（配置已就位）。
+//
+// 上层（EncryptFileWithPlugin / DecryptContainerWithPlugin）用它把
+// "没初始化就加解密"从**空指针 panic**变成一条明确错误 —— Capacitor 后端
+// 启动顺序复杂（插件装配失败会跳过），这类状态比 CLI 更容易出现。
+func (p *WPSPlugin) Initialized() bool { return p.cfg != nil }
+
 func (p *WPSPlugin) Initialize(ctx context.Context) error {
 	if ctx == p.ctx {
 		return nil // 避免重复初始化
 	}
 	p.ctx = ctx
-	p.cfg = config.FromContext(ctx)
+	// ⚠️ config.FromContext 在 ctx 没带配置时返回 **nil**，直接赋给 p.cfg 的话，
+	// 后面取 p.cfg.Password 就是一次空指针 panic —— 表现是"进程崩了"而不是"报错"。
+	// 这里显式判空，保证约定：**Initialize 成功 ⇒ cfg 非空**。
+	cfg := config.FromContext(ctx)
+	if cfg == nil {
+		return fmt.Errorf("plugin %s: Initialize 需要一个带配置的 context（config.NewContext）", p.Name())
+	}
+	p.cfg = cfg
 	settings, err := config.GetPluginSettingsFor[WPSPluginConfig](p.cfg, p.Name())
 	if err != nil {
 		return fmt.Errorf("could not get settings for plugin %s: %w", p.Name(), err)

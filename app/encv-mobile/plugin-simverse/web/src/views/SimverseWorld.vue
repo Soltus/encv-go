@@ -706,11 +706,11 @@ import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { IonInfiniteScroll, IonInfiniteScrollContent, IonLabel, IonSegment, IonSegmentButton } from "@ionic/vue";
 import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 
-const WorldFocusScene = defineAsyncComponent(() => import('./WorldFocusScene.vue'))
-const WorldGachaScene = defineAsyncComponent(() => import('./WorldGachaScene.vue'))
-const WorldEventScene = defineAsyncComponent(() => import('./WorldEventScene.vue'))
-const WorldInterveneScene = defineAsyncComponent(() => import('./WorldInterveneScene.vue'))
-const WorldCharacterScene = defineAsyncComponent(() => import('./WorldCharacterScene.vue'))
+const WorldFocusScene = defineAsyncComponent(() => import("./WorldFocusScene.vue"));
+const WorldGachaScene = defineAsyncComponent(() => import("./WorldGachaScene.vue"));
+const WorldEventScene = defineAsyncComponent(() => import("./WorldEventScene.vue"));
+const WorldInterveneScene = defineAsyncComponent(() => import("./WorldInterveneScene.vue"));
+const WorldCharacterScene = defineAsyncComponent(() => import("./WorldCharacterScene.vue"));
 import { useRouter } from "vue-router";
 import { useSimverseAnimations } from "@/composables/useSimverseAnimations";
 import { usePhaserWorld } from "@/composables/usePhaserWorld";
@@ -816,12 +816,12 @@ function toggleSquad() {
 // 屏幕状态机：横屏世界由多页组成、会互相切换（不再是一页永远不变）。
 // world=主世界 / focus=焦点对象页 / event=事件页 / intervene=干预页 / character=化身页(B) / gacha=抽卡页
 type ScreenState =
-  | 'world'        // 主世界
-  | 'focus'        // NPC 焦点 HUD 场景
-  | 'event'        // 事件流 HUD 场景
-  | 'intervene'    // 干预 HUD 场景
-  | 'character'    // 化身 HUD 场景
-  | 'gacha'        // 抽卡 HUD 场景（从 modal 升级为场景）
+  | "world" // 主世界
+  | "focus" // NPC 焦点 HUD 场景
+  | "event" // 事件流 HUD 场景
+  | "intervene" // 干预 HUD 场景
+  | "character" // 化身 HUD 场景
+  | "gacha"; // 抽卡 HUD 场景（从 modal 升级为场景）
 const screen = ref<ScreenState>("world");
 // 独立 computed，避免模板在 v-if="screen === 'world'" 块内将 screen 收窄为 "world" 而误报比较无交集
 const isIntervene = computed(() => screen.value === "intervene");
@@ -833,7 +833,7 @@ function toggleBottomMore() {
 // 事件页：从主世界进入全屏编年史事件流（屏幕状态机 event 页），用 GSAP Flip 过渡
 async function openEventPage() {
   if (recentEvents.value.length === 0) await loadEvents();
-  await openHudScene('event');
+  await openHudScene("event");
 }
 
 // 干预页：现在通过 openHudScene('intervene') 从底部操作条直接调用
@@ -954,7 +954,7 @@ const playerHpPercent = computed(() => (playerHp.value / playerMaxHp.value) * 10
 // 抽卡：现在通过 openHudScene('gacha') 从"更多"面板直接调用（gacha 已从 modal 升级为 HUD 场景）
 async function closeGachaModal() {
   if (isGachaAnimating.value) return;
-  await openHudScene('world');
+  await openHudScene("world");
 }
 
 function getSparkleStyle(index: number) {
@@ -1282,13 +1282,13 @@ async function selectNPC(npc: SimverseNPC) {
     phaserWorld.centerOnNPC(npc.id);
   }
   recordQuestAction("view_npc");
-  await openHudScene('focus');
+  await openHudScene("focus");
   await loadFocusContext(npc.id);
 }
 
 // 跳转 NPC 详情独立路由（深度页面，从 focus HUD 场景进入完整 NPC 详情）
 function viewNPCDetail(id: number | string) {
-  openDetailRoute('npc', { id: String(id) });
+  openDetailRoute("npc", { id: String(id) });
 }
 
 // 加载焦点对象的编年史时间线与关系网（接真实后端，非桩）
@@ -1314,7 +1314,7 @@ async function backToWorld() {
   if (usePhaser.value && phaserWorld.isReady.value) {
     phaserWorld.returnToWorldView();
   }
-  await openHudScene('world');
+  await openHudScene("world");
 }
 
 // 焦点页标签切换（身份/时间线/关系）
@@ -1330,25 +1330,27 @@ async function openHudScene(target: ScreenState) {
   }
   await transitionToScene(
     hudSceneContainer.value,
-    () => { screen.value = target; },
-    { duration: 0.45, ease: 'power3.inOut' },
+    () => {
+      screen.value = target;
+    },
+    { duration: 0.45, ease: "power3.inOut" }
   );
 }
 
 // 详情路由：导航到独立路由（NPC/编年史/经济/组织/区域/任务/训练/背包/探索/战斗/化身资料/设置）
 function openDetailRoute(name: string, params?: Record<string, string>) {
   const routeMap: Record<string, string> = {
-    npc: '/world/npc/:id',
-    chronicles: '/world/chronicles',
-    economy: '/world/economy',
-    quest: '/world/quest/detail',
-    org: '/tabs/orgs',
-    training: '/world/training',
-    inventory: '/world/inventory',
-    explore: '/world/explore',
-    battle: '/world/battle',
-    profile: '/world/profile',
-    settings: '/world/settings',
+    npc: "/world/npc/:id",
+    chronicles: "/world/chronicles",
+    economy: "/world/economy",
+    quest: "/world/quest/detail",
+    org: "/tabs/orgs",
+    training: "/world/training",
+    inventory: "/world/inventory",
+    explore: "/world/explore",
+    battle: "/world/battle",
+    profile: "/world/profile",
+    settings: "/world/settings",
   };
   const path = routeMap[name];
   if (!path) {
@@ -1367,7 +1369,7 @@ function openDetailRoute(name: string, params?: Record<string, string>) {
 
 // 兼容旧调用：根据 panel 名字自动分流（HUD 场景 vs 详情路由）
 function openPanel(name: string) {
-  const hudScenes = new Set<string>(['focus', 'event', 'intervene', 'character', 'gacha']);
+  const hudScenes = new Set<string>(["focus", "event", "intervene", "character", "gacha"]);
   if (hudScenes.has(name)) {
     openHudScene(name as ScreenState);
   } else {

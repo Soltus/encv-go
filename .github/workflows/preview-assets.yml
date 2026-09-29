@@ -1,0 +1,163 @@
+name: Build Preview Assets (encv-preview zip)
+
+# 产物用途：**不换 APK 更新容器预览页**。
+#
+# 预览页的资源不打包进 APK、也不 embed 进 Go 二进制，而是由内嵌后端从
+# 可写数据目录提供（`GET /preview-assets/*`，见 internal/server/preview_assets.go）。
+# 这里产出的 zip 就是那一整包资源：设备端通过
+#   POST /api/preview-assets/update（URL 指向本 workflow 上传的 zip）
+# 或 POST /api/preview-assets/import（手动导入）把它装进去 —— 全程不动 APK。
+#
+# ⚠️ wasm 不在仓库里（make wasm 生成），所以打包前必须先构建它。
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build (defaults to current)'
+        required: false
+        default: ''
+        type: string
+      version:
+        description: 'Version label (defaults to commit short sha)'
+        required: false
+        default: ''
+        type: string
+      include_samples:
+        description: 'Include samples/ (binary sample containers, +17MB)'
+        required: false
+        default: false
+        type: boolean
+  push:
+    branches: [main]
+    paths:
+      - 'app/encv-preview/**'
+      - 'cmd/encv-wasm-container/**'
+      - 'internal/v2/**'
+      - 'scripts/build-wasm.sh'
+      - '.github/workflows/preview-assets.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      ASSETS_DIR: "app/encv-preview"
+      # 与后端 previewAssetsRequired 保持一致：缺任何一个都装不上
+      REQUIRED: "index.html main.js wasm/encv-container.wasm"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.ref_name }}
+          fetch-depth: 1
+          submodules: false # 防御：仓库无真实 submodule
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build wasm kernels
+        run: |
+          set -euo pipefail
+          echo "═══ make wasm（预览页资源里的 wasm 不在仓库中，必须先构建）═══"
+          make wasm
+
+      - name: Compute version label
+        id: meta
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then VERSION="$(git rev-parse --short=12 HEAD)"; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "版本标签：$VERSION"
+
+      - name: Write version.json
+        run: |
+          set -euo pipefail
+          cd "$ASSETS_DIR"
+          # 与后端 previewAssetsVersion 同构：{version, source, updatedAt}
+          # 后端导入时若包里自带这个文件就采用它（不再用安装时刻的时间戳覆盖）
+          cat > version.json <<EOF
+          {
+            "version": "${{ steps.meta.outputs.version }}",
+            "source": "ci:${{ github.workflow }}@${{ steps.meta.outputs.sha }}",
+            "updatedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          cat version.json
+
+      - name: Verify required files exist
+        run: |
+          set -euo pipefail
+          cd "$ASSETS_DIR"
+          missing=0
+          for f in $REQUIRED; do
+            if [ ! -f "$f" ]; then
+              echo "::error::缺必需文件：$f"
+              missing=1
+            fi
+          done
+          if [ "$missing" != "0" ]; then exit 1; fi
+          echo "✅ 必需文件齐全：$REQUIRED"
+
+      - name: Package zip
+        id: package
+        run: |
+          set -euo pipefail
+          cd "$ASSETS_DIR"
+          VERSION="${{ steps.meta.outputs.version }}"
+          ZIP_NAME="encv-preview-assets-${VERSION}.zip"
+          # samples/ 是样例容器（二进制、体积大），默认排除：设备上用的是用户自己的文件
+          if [ "${{ inputs.include_samples }}" = "true" ]; then
+            echo "包含 samples/（+17MB 量级）"
+            zip -r -q "${{ runner.temp }}/$ZIP_NAME" . -x '*.git*' 'node_modules/*' 'README.md' 'serve.ts'
+          else
+            zip -r -q "${{ runner.temp }}/$ZIP_NAME" . \
+              -x 'samples/*' '*.git*' 'node_modules/*' 'README.md' 'serve.ts'
+            echo "已排除 samples/、README.md、serve.ts（本地静态服务脚本，安卓上用不到）"
+          fi
+          echo "zip_name=$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          echo "zip_path=${{ runner.temp }}/$ZIP_NAME" >> "$GITHUB_OUTPUT"
+          ls -lh "${{ runner.temp }}/$ZIP_NAME"
+          echo "─── 包内容 ───"
+          unzip -l "${{ runner.temp }}/$ZIP_NAME"
+
+      - name: Sanity check the zip (must contain required files)
+        run: |
+          set -euo pipefail
+          LIST="$(unzip -Z1 "${{ steps.package.outputs.zip_path }}")"
+          for f in $REQUIRED; do
+            echo "$LIST" | grep -qx "$f" || { echo "::error::zip 里缺少 $f"; exit 1; }
+          done
+          echo "✅ zip 校验通过"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.zip_name }}
+          path: ${{ steps.package.outputs.zip_path }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish to release tag preview-assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: preview-assets
+          name: "Preview page assets (auto-generated)"
+          body: |
+            容器预览页（encv-preview）整包资源 —— 用于**不换 APK 更新预览页**。
+            **Do not manually edit this release.**
+            Generated by `${{ github.workflow }}` from commit `${{ steps.meta.outputs.sha }}`.
+            设备端取用：`POST /api/preview-assets/update`（配置 `preview.assets_url` 指向这里的 zip）
+            或 `POST /api/preview-assets/import`（手动导入）。
+          overwrite_files: true
+          files: ${{ steps.package.outputs.zip_path }}

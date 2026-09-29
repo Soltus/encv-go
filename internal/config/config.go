@@ -244,6 +244,14 @@ func DefaultAgentConfig() *Agent {
 
 type PreviewConfig struct {
 	TextExtensions []string `json:"text_extensions,omitempty"`
+
+	// AssetsURL 是容器预览页（encv-preview）整包 zip 的远端地址。
+	//
+	// 用于**不换 APK 更新预览页**：`POST /api/preview-assets/update` 不带 url 时就用它。
+	// 资源落在可写数据目录（config.AppDataDir("preview-assets")），不在 Go 二进制/APK 内
+	// （见 internal/server/preview_assets.go 的文件头注释）。
+	// 为空表示"只支持手动导入"，前端的自动更新入口应据此禁用并给出提示。
+	AssetsURL string `json:"assets_url,omitempty"`
 }
 
 // ConfigProvider 定义了获取插件配置的抽象接口
@@ -708,7 +716,12 @@ func GetTextPreviewExtensions() []string {
 //
 // 优先级：ENCV_<SUBDIR_UPPER>_DIR（明确指定）> 派生默认值。
 func AppDataDir(subdir string) string {
-	envKey := "ENCV_" + strings.ToUpper(subdir) + "_DIR"
+	// ⚠️ 环境变量名必须是合法标识符：子目录里的 '-' / '.' 之类要换成 '_'。
+	// 直接 ToUpper 会把 "preview-assets" 拼成 `ENCV_PREVIEW-ASSETS_DIR` —— 带连字符的
+	// 环境变量既不合规范也没人设得对，结果是"设了 ENCV_PREVIEW_ASSETS_DIR 却完全没生效"，
+	// 资源被静默写进默认的用户数据目录（2026-09-30 实测踩到）。
+	norm := strings.ToUpper(strings.NewReplacer("-", "_", ".", "_", " ", "_").Replace(subdir))
+	envKey := "ENCV_" + norm + "_DIR"
 	if v := os.Getenv(envKey); v != "" {
 		return v
 	}

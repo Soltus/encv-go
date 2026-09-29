@@ -40,6 +40,44 @@
         </ion-item>
       </ion-list>
 
+      <!-- 容器预览页：资源由**后端**从可写数据目录提供，整包替换即可更新，不必换 APK -->
+      <ion-list>
+        <ion-list-header>
+          <ion-label>{{ t('devtools.previewAssets') }}</ion-label>
+        </ion-list-header>
+        <p class="section-hint">{{ t('devtools.previewAssetsDesc') }}</p>
+        <ion-item button detail @click="handleOpenPreviewAssets">
+          <ion-icon :icon="eyeOutline" slot="start" color="primary"></ion-icon>
+          <ion-label>
+            <h3>{{ t('devtools.previewAssetsOpen') }}</h3>
+            <p>{{ t('devtools.previewAssetsOpenDesc') }}</p>
+          </ion-label>
+        </ion-item>
+        <ion-item button detail @click="handleUpdatePreviewAssets" :disabled="previewBusy !== ''">
+          <ion-icon :icon="cloudDownloadOutline" slot="start"></ion-icon>
+          <ion-label>
+            <h3>{{ t('devtools.previewAssetsUpdate') }}</h3>
+            <p>{{ t('devtools.previewAssetsUpdateDesc') }}</p>
+          </ion-label>
+          <ion-spinner v-if="previewBusy === 'update'" slot="end" name="crescent"></ion-spinner>
+        </ion-item>
+        <ion-item button detail @click="handleImportPreviewAssets" :disabled="previewBusy !== ''">
+          <ion-icon :icon="archiveOutline" slot="start"></ion-icon>
+          <ion-label>
+            <h3>{{ t('devtools.previewAssetsImport') }}</h3>
+            <p>{{ t('devtools.previewAssetsImportDesc') }}</p>
+          </ion-label>
+          <ion-spinner v-if="previewBusy === 'import'" slot="end" name="crescent"></ion-spinner>
+        </ion-item>
+        <ion-item v-if="previewMessage">
+          <ion-label class="ion-text-wrap">
+            <p :style="{ color: previewOk ? 'var(--ion-color-success)' : 'var(--ion-color-danger)' }">
+              {{ previewMessage }}
+            </p>
+          </ion-label>
+        </ion-item>
+      </ion-list>
+
       <!-- 沙箱预览：dev 专属入口，生产构建整段 v-if false 移除 -->
       <ion-list v-if="isDev">
         <ion-list-header>
@@ -118,12 +156,24 @@
 </template>
 
 <script setup lang="ts">
-import { bookOutline, bugOutline, extensionPuzzleOutline, eyeOutline, flaskOutline, terminal } from "ionicons/icons";
+import {
+  archiveOutline,
+  bookOutline,
+  bugOutline,
+  cloudDownloadOutline,
+  extensionPuzzleOutline,
+  eyeOutline,
+  flaskOutline,
+  terminal,
+} from "ionicons/icons";
 import { onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { fetchPlugins, type PluginMeta } from "@encv/shared-components/api/encv";
+import { apiRequest } from "@encv/shared-components/api/core/request";
 import { useDevTools } from "@encv/shared-components/composables/useDevTools";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
+import { showToast } from "@encv/shared-components/composables/useToast";
+import { openPreviewAssets, pickPreviewAssetsZip } from "@/plugins/GoProcess";
 
 const { t } = useI18n();
 const router = useRouter();
@@ -139,6 +189,17 @@ onMounted(async () => {
     plugins.value = await fetchPlugins();
   } catch (e) {
     pluginLoadError.value = e instanceof Error ? e.message : String(e);
+  }
+  // APK 内不自带预览页资源（这是热更新的前提），所以第一次进来要明说"还没装"，
+  // 否则用户点「打开预览页」只会看到一个空页面。
+  try {
+    const v = await apiRequest<{ installed: boolean }>("/api/preview-assets/version");
+    if (!v.installed) {
+      previewOk.value = false;
+      previewMessage.value = "预览页资源尚未安装（APK 内不自带）：请先「更新资源（远端）」或「导入资源包（zip）」";
+    }
+  } catch {
+    // 查询失败不阻塞页面，用户点按钮时会拿到真实错误
   }
 });
 
@@ -173,6 +234,65 @@ function goComposePrototypesHub() {
 
 function goChronicle() {
   router.push("/tabs/settings/chronicle");
+}
+
+// ─────────── 容器预览页（资源由后端托管，可整包替换） ───────────
+//
+// 三个动作对应三种场景：
+//   - 打开：独立全屏 Activity 加载 /preview-assets/（APK 里不带任何页面资源）
+//   - 更新：按配置里的 preview.assets_url 拉最新 zip（不传 url 即走配置）
+//   - 导入：用户在设备上选一个 zip（没有远端地址时也能装）
+const previewBusy = ref<"" | "update" | "import">("");
+const previewMessage = ref("");
+const previewOk = ref(false);
+
+async function handleOpenPreviewAssets() {
+  const r = await openPreviewAssets();
+  if (!r.opened) {
+    // showToast 收的是 ToastOptions（{ message, color }），不是裸字符串
+    await showToast({ message: `打开预览页失败：${r.error ?? "未知错误"}`, color: "danger" });
+  }
+}
+
+async function handleUpdatePreviewAssets() {
+  previewBusy.value = "update";
+  previewMessage.value = "";
+  try {
+    // 不传 url：后端会用配置里的 preview.assets_url
+    await apiRequest("/api/preview-assets/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    previewOk.value = true;
+    previewMessage.value = "预览页资源已更新";
+  } catch (e) {
+    previewOk.value = false;
+    previewMessage.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    previewBusy.value = "";
+  }
+}
+
+async function handleImportPreviewAssets() {
+  const picked = await pickPreviewAssetsZip();
+  if (!picked.path) return; // 用户取消，不提示
+  previewBusy.value = "import";
+  previewMessage.value = "";
+  try {
+    await apiRequest("/api/preview-assets/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: picked.path }),
+    });
+    previewOk.value = true;
+    previewMessage.value = `已导入 ${picked.name ?? picked.path}`;
+  } catch (e) {
+    previewOk.value = false;
+    previewMessage.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    previewBusy.value = "";
+  }
 }
 
 // 沙箱预览：强制整页跳转，绕过 Vue Router 拦截

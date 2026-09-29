@@ -142,6 +142,18 @@
             android:label="SimVerse World"
         />
 
+        <!-- 容器预览页（encv-preview）：资源由内嵌 Go 后端从可写数据目录提供，
+             可整包替换、不必换 APK，所以这里只指向后端地址，不带任何打包资源。 -->
+        <activity
+            android:name=".PreviewAssetsActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:taskAffinity="com.encvgo.app.preview.task"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:label="ENCV 容器预览"
+        />
+
         <activity
             android:name="com.hjq.logcat.LogcatActivity"
             android:configChanges="orientation|screenSize|keyboardHidden"

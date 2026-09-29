@@ -200,7 +200,7 @@ export function useSimverseAnimations(refs: SimverseAnimationRefs): SimverseAnim
   // 加载旋转：当 phaserLoading 变化时启停（替换 @keyframes spin）
   watch(
     () => refs.phaserLoading.value,
-    (loading) => {
+    loading => {
       if (loading && refs.usePhaser.value && !refs.phaserHasError.value) {
         nextTick(() => {
           loadingSpinTween?.kill();
@@ -221,7 +221,7 @@ export function useSimverseAnimations(refs: SimverseAnimationRefs): SimverseAnim
   // 运行脉冲：当 worldState.running 变化时启停（替换 @keyframes runPulse）
   watch(
     () => refs.worldState.value?.running,
-    (running) => {
+    running => {
       if (running) {
         nextTick(() => {
           runPulseTween?.kill();
@@ -243,7 +243,7 @@ export function useSimverseAnimations(refs: SimverseAnimationRefs): SimverseAnim
   // 抽卡 banner 浮动：当进入 gacha 场景时启停（替换 @keyframes float）
   watch(
     () => refs.screen.value === "gacha",
-    (isGacha) => {
+    isGacha => {
       if (isGacha) {
         nextTick(() => {
           bannerFloatTween?.kill();
@@ -315,15 +315,11 @@ export function useSimverseAnimations(refs: SimverseAnimationRefs): SimverseAnim
   // 底部主操作条：screen === 'world' 时滑入（替换 <transition name="bottom-bar">）
   watch(
     () => refs.screen.value === "world",
-    (isWorld) => {
+    isWorld => {
       if (isWorld) {
         nextTick(() => {
           if (refs.bottomBarRef.value) {
-            gsap.fromTo(
-              refs.bottomBarRef.value,
-              { y: 20, opacity: 0 },
-              { y: 0, opacity: 1, duration: 0.25, ease: "power2.out" }
-            );
+            gsap.fromTo(refs.bottomBarRef.value, { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.25, ease: "power2.out" });
           }
         });
       }
@@ -331,7 +327,7 @@ export function useSimverseAnimations(refs: SimverseAnimationRefs): SimverseAnim
   );
 
   // 更多面板：bottomMoreOpen 切换时淡入 + 网格上滑（替换 <transition name="more-pop">）
-  watch(refs.bottomMoreOpen, (open) => {
+  watch(refs.bottomMoreOpen, open => {
     if (open) {
       nextTick(() => {
         if (refs.morePopRef.value) {
@@ -346,15 +342,11 @@ export function useSimverseAnimations(refs: SimverseAnimationRefs): SimverseAnim
   });
 
   // 抽卡动画 overlay：isGachaAnimating 切换时闪现（替换 <transition name="gacha-flash">）
-  watch(refs.isGachaAnimating, (animating) => {
+  watch(refs.isGachaAnimating, animating => {
     if (animating) {
       nextTick(() => {
         if (refs.gachaFlashRef.value) {
-          gsap.fromTo(
-            refs.gachaFlashRef.value,
-            { opacity: 0.8 },
-            { opacity: 0, duration: 0.5 }
-          );
+          gsap.fromTo(refs.gachaFlashRef.value, { opacity: 0.8 }, { opacity: 0, duration: 0.5 });
         }
       });
     }
@@ -363,11 +355,7 @@ export function useSimverseAnimations(refs: SimverseAnimationRefs): SimverseAnim
   // Ticker：recentEvents 变化时新条目滑入（替换 <transition-group name="ticker">）
   watch(refs.recentEvents, () => {
     nextTick(() => {
-      gsap.fromTo(
-        ".ticker-item",
-        { x: 20, opacity: 0 },
-        { x: 0, opacity: 1, stagger: 0.1, duration: 0.3, ease: "power2.out" }
-      );
+      gsap.fromTo(".ticker-item", { x: 20, opacity: 0 }, { x: 0, opacity: 1, stagger: 0.1, duration: 0.3, ease: "power2.out" });
     });
   });
 

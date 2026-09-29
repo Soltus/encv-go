@@ -71,13 +71,13 @@ func Init(level LogLevel, logFile string) error {
 
 		// 控制台使用带颜色的文本格式，文件使用 JSON 格式
 		handler = &multiFormatHandler{
-			consoleHandler: newTextHandler(os.Stderr, slogLevel, true),
+			consoleHandler: newTextHandler(stderrWriter(), slogLevel, true),
 			fileHandler:    newJSONHandler(file, slogLevel),
 			level:          slogLevel,
 		}
 	} else {
 		// 只输出到控制台，带颜色
-		handler = newTextHandler(os.Stderr, slogLevel, true)
+		handler = newTextHandler(stderrWriter(), slogLevel, true)
 	}
 
 	defaultLogger = slog.New(handler)
@@ -372,7 +372,7 @@ func Default() *slog.Logger {
 	mu.Lock()
 	defer mu.Unlock()
 	if defaultLogger == nil {
-		handler := newTextHandler(os.Stderr, slog.LevelInfo, true)
+		handler := newTextHandler(stderrWriter(), slog.LevelInfo, true)
 		defaultLogger = slog.New(handler)
 		slog.SetDefault(defaultLogger)
 	}

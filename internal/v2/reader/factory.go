@@ -41,6 +41,7 @@ type decryptReaderFactory struct {
 	// 缓存解析结果，避免重复读取文件
 	mu                  sync.RWMutex
 	cachedManifest      *types.Manifest
+	cachedManifestV4    *types.Manifest_v4
 	cachedHeaderVersion int
 	cachedIndex         types.Index
 	kviProvider         types.KVIProvider
@@ -107,6 +108,13 @@ func (f *decryptReaderFactory) parseAndCacheMetadata() error {
 	f.physicalOffsets = fcr.physicalOffsets
 	// 【关键新增】同样缓存 Header Version，无需再次探测
 	f.cachedHeaderVersion = fcr.headerVersion
+	// v4 manifest（含 WrappedDEK）必须一起缓存：重建 reader 时若拿不到它，
+	// 密钥派生会退回到老的单层路径，解出来的就是乱码。
+	f.cachedManifestV4 = fcr.manifestV4
+
+	if err := f.ensureNonceIsCarried(); err != nil {
+		return err
+	}
 
 	seekableFragments := filterFragmentsByType(f.cachedManifest.Fragments, string(types.FragmentType_SeekableStream))
 	if len(seekableFragments) > 0 {
@@ -114,6 +122,37 @@ func (f *decryptReaderFactory) parseAndCacheMetadata() error {
 		f.isSeekable = true
 	}
 
+	return nil
+}
+
+// ensureNonceIsCarried 确认每个带 nonce 的 v4 segment，其 nonce 都被适配层带到了
+// 对应的 fragment 上。
+//
+// 为什么需要这一层：keystream 算错没有任何外部征兆 —— CTR 没有认证标签，
+// 密钥对、偏移对、只有 keystream 不对的话，产出的就是一个
+// **长度正确、内容全是乱码**的文件。早期 fragment 栈只认 KVI 里那一个 iv，
+// 于是 wasm / 流式 writer（每段随机 nonce）产出的容器被 `encv decrypt-v2` 静静地解坏。
+//
+// 2026-09-29：读取端已支持 **per-fragment nonce**（types.Fragment.Nonce，
+// 由 container/handle.AdaptV4ToV2 从 v4 segment 带过来，读取端按段重置 keystream），
+// 所以这里不再是「多段即拒绝」，而退化为一条**适配层自校验**：
+// nonce 没跟过来就说明适配断了，必须报错。
+// （早先那版「多段即拒绝」的守卫已被此处的 per-fragment nonce 支持取代。）
+func (f *decryptReaderFactory) ensureNonceIsCarried() error {
+	if f.cachedManifestV4 == nil || len(f.cachedManifestV4.Segments) == 0 {
+		return nil
+	}
+	for i, seg := range f.cachedManifestV4.Segments {
+		if seg.Nonce == "" {
+			continue
+		}
+		if i >= len(f.cachedManifest.Fragments) || f.cachedManifest.Fragments[i].Nonce != seg.Nonce {
+			return fmt.Errorf(
+				"segment %s 的 nonce 没能带到 fragment 上，读取端会算出错误的 keystream（解出长度正确的乱码）",
+				seg.ID,
+			)
+		}
+	}
 	return nil
 }
 
@@ -151,7 +190,7 @@ func (f *decryptReaderFactory) verifyPasswordHint() error {
 // NewDecryptReader 使用缓存的数据高效地创建解密器
 func (f *decryptReaderFactory) NewDecryptReader() (DecryptReader, error) {
 	// 【关键】使用新的轻量级构造函数，直接使用缓存好的数据，避免重复扫描
-	containerReader, err := NewFileContainerReaderFromMetadata(f.containerPath, f.cachedManifest, f.cachedHeaderVersion, f.physicalOffsets)
+	containerReader, err := NewFileContainerReaderFromMetadata(f.containerPath, f.cachedManifest, f.cachedManifestV4, f.cachedHeaderVersion, f.physicalOffsets)
 	if err != nil {
 		return nil, err
 	}

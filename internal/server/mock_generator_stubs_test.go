@@ -1,23 +1,31 @@
-// internal/server/mock_generator_stubs_test.go
-//
-// 🆕 2026-06-14：临时 stub，让 pre-existing 失败的 mock_generator_test.go 能编译。
+// 🆕 2026-09-30：这里**不再是 stub** —— 直接跑真实的 ffmpeg 生成。
 //
 // 历史：
 //   - commit 249485d (ffmpeg-patch-1) 重构了 mock_generator.go，删了
 //     minimalMP4 / minimalMKV / minimalMP3 / minimalFLAC 四个函数，替换为
 //     planMP4() / planMKV() / ... 返回 mockFileSpec。
 //   - mock_generator_test.go 没有同步更新，仍然引用 minimalMP4() 等。
-//   - 这是 pre-existing 问题，与本次 runtime_api 重构无关。
+//     当时本文件提供 no-op stub（返回空 spec）只为让它能编译。
 //
-// 本文件提供 no-op stub，让 mock_generator_test.go 在不修原作者测试的前提下能编译。
-// 原作者改造完测试后可删除本文件。
+// 为什么必须换成真实实现：
+//   stub 返回空 spec，而 TestMinimalMedia* 只在**没有 ffmpeg** 时才 SKIP
+//   （requireFFmpeg）。2026-09-30 本机装上 ffmpeg 7.1 之后不再 SKIP，
+//   测试拿到 data=nil → TestMinimalMediaIsPlayable 直接红（实测）。
+//   也就是说这套 stub 把「有没有 ffmpeg」变成了「测试红不红」的开关，
+//   而有 ffmpeg 的机器（本地 dev / 真机）恰恰是它本该守住的场景。
+//
+// ⚠️ 别用 plan*() 顶替：plan*() 只返回**计划**，data 字段是空的
+//   （mockFileSpec.data 的注释：plan 阶段为 nil，handler 跑完 ffmpeg 才填）。
+//   要拿到真字节必须调 ffmpegGenerate(ext)。
 
 package server
 
-// minimalMP4/MKV/MP3/FLAC 是 mock_generator_test.go 引用的 stub。
-// 原始实现是返回 *[]byte，已被 plan*() 系列替代。
-// 这里 stub 返回空 spec（data=nil, ffmpegArgs=nil），与原作者测试"data==nil 跳过"的逻辑兼容。
-func minimalMP4() mockFileSpec  { return mockFileSpec{} }
-func minimalMKV() mockFileSpec  { return mockFileSpec{} }
-func minimalMP3() mockFileSpec  { return mockFileSpec{} }
-func minimalFLAC() mockFileSpec { return mockFileSpec{} }
+func specFromFFmpeg(ext string) mockFileSpec {
+	data, stderr, exitCode, _ := ffmpegGenerate(ext)
+	return mockFileSpec{data: data, stderr: stderr, exitCode: exitCode}
+}
+
+func minimalMP4() mockFileSpec  { return specFromFFmpeg("mp4") }
+func minimalMKV() mockFileSpec  { return specFromFFmpeg("mkv") }
+func minimalMP3() mockFileSpec  { return specFromFFmpeg("mp3") }
+func minimalFLAC() mockFileSpec { return specFromFFmpeg("flac") }

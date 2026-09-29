@@ -114,7 +114,17 @@ func (r *VirtualSeekableDecryptReader) setupCurrentFragmentReader() error {
 		}
 	}
 
-	stream, err := buildCTRStreamAtOffset(r.key, r.iv, streamOffset)
+	// 分片自带 nonce（v4 segment 栈适配而来）→ 从该分片自己的计数器起步，
+	// 偏移量取分片内偏移；否则沿用旧行为（KVI 的 iv + 全局偏移）。
+	baseIV, offsetForStream := r.iv, streamOffset
+	if fragNonce := decodeFragmentNonce(frag.Nonce); len(fragNonce) > 0 {
+		baseIV = fragNonce
+		offsetForStream = 0
+		if !needDiscard {
+			offsetForStream = localOffset
+		}
+	}
+	stream, err := buildCTRStreamAtOffset(r.key, baseIV, offsetForStream)
 	if err != nil {
 		_ = rawReader.Close()
 		return err

@@ -15,6 +15,7 @@ import (
 	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/logger"
 	"github.com/Soltus/encv-go/internal/utils"
+	"github.com/Soltus/encv-go/internal/v2/plugins"
 	"github.com/Soltus/encv-go/pkg/encv"
 	"github.com/spf13/cobra"
 )
@@ -52,6 +53,7 @@ func init() {
 	decryptV2Cmd.Flags().StringP("output", "o", "", "Output directory for decrypted files")
 	encryptV2Cmd.Flags().StringP("password", "p", "", "Password for encryption (overrides config)")
 	encryptV2Cmd.Flags().StringP("output", "o", "", "Output directory for encrypted files (overrides config)")
+	encryptV2Cmd.Flags().Bool("stream", false, "流式加密单个大文件：不经插件预处理、不落临时文件，内存占用与文件大小无关（产物仍带插件 index，插件可解）")
 	// play-v2 的标志，包含 OS 相关的默认值
 	defaultPlayer := "mpv"
 	if runtime.GOOS == "windows" {
@@ -270,10 +272,35 @@ var encryptV2Cmd = &cobra.Command{
 			cfg.OutputPath = outputPathFlag
 		}
 
+		streamFlag, _ := cmd.Flags().GetBool("stream")
+
 		encv.Init(rootCtx)
 		if err := os.MkdirAll(cfg.OutputPath, 0755); err != nil {
 			log.Fatalf("Failed to create output directory: %v", err)
 		}
+
+		// 流式通道：只针对**单个文件**。目录场景要先按插件分组、按扩展名命名，
+		// 那是 EncryptPathV2 的职责，这里不重复实现（明确报错而不是悄悄走老路）。
+		if streamFlag {
+			info, err := os.Stat(inputPath)
+			if err != nil {
+				log.Fatalf("Cannot access input path: %v", err)
+			}
+			if info.IsDir() {
+				log.Fatalf("--stream 只支持单个文件（目录请去掉 --stream 走加密目录流程）")
+			}
+			outName, err := plugins.PredictEncryptOutputName(inputPath, cfg)
+			if err != nil {
+				log.Fatalf("Cannot predict output name: %v", err)
+			}
+			outPath := filepath.Join(cfg.OutputPath, filepath.Base(outName))
+			if err := encv.EncryptFileStreamV2(rootCtx, inputPath, outPath, cfg.Password); err != nil {
+				log.Fatalf("Stream encryption failed: %v", err)
+			}
+			utils.PrintSuccess("Stream encryption complete. Output: %s", outPath)
+			return
+		}
+
 		if err := encv.EncryptPathV2(rootCtx, inputPath, cfg.OutputPath); err != nil {
 			log.Fatalf("Encryption process failed: %v", err)
 		}
