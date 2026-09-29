@@ -426,6 +426,13 @@ func startEncrypt(password string, opts js.Value) (*encryptSession, error) {
 		if v := opts.Get("enableHMAC"); v.Type() == js.TypeBoolean {
 			co.EnableHMAC = v.Bool()
 		}
+		// 压缩：读进来交给 compose 校验，而不是**忽略**。
+		// compose 两条路都不支持压缩（seekable zstd 要随机访存整段，与流式冲突），
+		// 传 zstd 会拿到 ErrCompressionUnsupported 的明确报错；
+		// 静默忽略的话，调用方会以为自己得到了压缩容器，实际没有（2026-09-30 显式化）。
+		if v := opts.Get("compression"); v.Type() == js.TypeString && v.String() != "" {
+			co.Compression = v.String()
+		}
 	}
 
 	sess := &encryptSession{}

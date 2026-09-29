@@ -20,6 +20,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 
@@ -39,6 +40,19 @@ type Options struct {
 	Format           string
 	EnableHMAC       bool
 	SegmentSize      int64 // 流式时才用；<=0 取 writer.DefaultStreamSegmentSize
+
+	// Compression 压缩模式：只接受 crypto.CompressionModeNone（零值 "" 也当它用）。
+	//
+	// ⚠️ 契约（2026-09-30 从"隐式硬编码"改成显式）：**compose 这一层两条路都不支持压缩**，
+	// 传 zstd 会被直接拒绝，而不是静默忽略后产出一个"其实没压缩"的容器。
+	//
+	//   - 流式为什么不行：seekable zstd 要随机访存整段数据，与"一片进一片出"冲突；
+	//   - 整块为什么也拒绝：compose 的整块与流式必须同构（wasm 与主应用共用这一层），
+	//     一边能压缩一边不能，就会出现"同一个 API 产出两种容器"。
+	//
+	// 需要压缩的容器走**插件加密路径**（CLI encrypt-v2 / crypto.EncryptToTempFile_v2）；
+	// 读取侧两种都能解（压缩段由 internal/v2/crypto/compression 处理）。
+	Compression string
 
 	// KVIExtra 往 KVI 里塞的**额外字段**（插件 index 等）。
 	//
@@ -72,6 +86,28 @@ func (o Options) withDefaults() Options {
 
 // CipherMode：v4 用 AES-128-CTR（与 KeySizeForCipherMode_v4 保持一致）。
 const cipherMode = uint16(crypto.CipherModeAES128CTR)
+
+// ErrCompressionUnsupported 是 compose 的压缩契约：这一层不支持压缩（见 Options.Compression）。
+//
+// 之所以要**显式报错**而不是"忽略传入值照常产出"：调用方请求了 zstd 却拿到一个没压缩的
+// 容器，它不会失败、不会告警 —— 只有体积不对，等发现时数据已经按"压缩过"的预期流转了。
+var ErrCompressionUnsupported = errors.New("compose 编排层不支持压缩（zstd 需要随机访存整段，与流式写入冲突；整块为与流式同构也一并拒绝）；需要压缩请走插件加密路径（encrypt-v2 / EncryptToTempFile_v2），读取侧两种都能解")
+
+// checkCompression 校验压缩契约；零值（""）按不压缩处理。
+func (o Options) checkCompression() error {
+	if o.Compression != "" && o.Compression != crypto.CompressionModeNone {
+		return fmt.Errorf("%w：请求了 %q", ErrCompressionUnsupported, o.Compression)
+	}
+	return nil
+}
+
+// compressionOf 把 Options 的压缩模式规范化成 crypto 的枚举（空串 → none）。
+func compressionOf(o Options) string {
+	if o.Compression == "" {
+		return crypto.CompressionModeNone
+	}
+	return o.Compression
+}
 
 // material 是一次加密用到的全部密钥素材。
 type material struct {
@@ -171,12 +207,17 @@ func (m *material) manifest(opts Options) *types.Manifest_v4 {
 // 产物格式与 CLI 的 v4 容器一致（同一条 writer 路径），明文大小已知时用它最省事；
 // 大附件请用 NewStreamEncryptor。
 func EncryptBytes(plain []byte, opts Options, w io.Writer) error {
+	if err := opts.checkCompression(); err != nil {
+		return err
+	}
 	opts = opts.withDefaults()
 	m, err := newMaterial(opts.Password)
 	if err != nil {
 		return err
 	}
-	seg, err := crypto.EncryptSegment(plain, m.dek, m.macKey, 0, crypto.CompressionModeNone)
+	// 压缩模式走 Options（已被 checkCompression 限定为 None），
+	// 不再写死常量：将来若真的支持压缩，只需放开校验，不用再改这里。
+	seg, err := crypto.EncryptSegment(plain, m.dek, m.macKey, 0, compressionOf(opts))
 	if err != nil {
 		return err
 	}
@@ -213,6 +254,9 @@ type StreamEncryptor struct {
 
 // NewStreamEncryptor 起一个流式加密会话；sink 决定成型的数据段往哪里去。
 func NewStreamEncryptor(opts Options, sink writer.V4StreamSink) (*StreamEncryptor, error) {
+	if err := opts.checkCompression(); err != nil {
+		return nil, err
+	}
 	opts = opts.withDefaults()
 	m, err := newMaterial(opts.Password)
 	if err != nil {
