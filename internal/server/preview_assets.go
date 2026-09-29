@@ -152,6 +152,63 @@ type previewAssetsUpdateRequest struct {
 	Path string `json:"path"` // import 用：设备上已有的 zip（或目录）
 }
 
+// privateImportRoots 是"后端自己的可写目录"清单（Android 上是 app 私有目录）。
+//
+// 它们**不在任何挂载点内**，但后端与原生是同一个 uid，读写都没问题：
+// 原生把用户选中的 Uri 物化成本地文件后，返回的正是这类绝对路径。
+// 由 ENCV_APP_FILES_DIR（Kotlin 注入的 filesDir）推出 files 与它旁边的 cache。
+func privateImportRoots() []string {
+	roots := []string{
+		filepath.Dir(previewAssetsDir()), // appDataParent：<files>/.encv
+		config.AppDataDir("tmp"),
+	}
+	if files := os.Getenv("ENCV_APP_FILES_DIR"); files != "" {
+		roots = append(roots,
+			files,
+			filepath.Join(filepath.Dir(files), "cache"),
+		)
+	}
+	return roots
+}
+
+// resolveImportPath 解析导入源路径：挂载目录内的用户路径，或后端自己的可写目录。
+//
+// ⚠️ 真机实测（2026-09-30）踩到的坑：原生把 Uri 物化成文件后返回的是
+// **app 私有目录的绝对路径**（`/data/user/0/<pkg>/cache/preview_assets/xxx.zip`），
+// 它不在任何挂载点内。早期只走 resolveUserPath —— 那条路把绝对路径当
+// **相对路径**处理，于是拼到 servingDir 上变成
+// `/storage/emulated/0/data/user/0/<pkg>/cache/...`，stat 自然 no such file。
+// 所以这里**两条路都要认**，且报错要把"到底允许哪些目录"讲清楚，
+// 否则下一次换个目录还是只能靠猜。
+func (s *Server) resolveImportPath(raw string) (string, error) {
+	// ① 挂载目录内（用户在文件管理器里选的，通常是 /storage/emulated/0/Download/...）
+	if abs, err := s.resolveUserPath(raw); err == nil {
+		if _, serr := os.Stat(abs); serr == nil {
+			return abs, nil
+		}
+	}
+
+	// ② 后端自己的可写目录（原生物化出来的文件）
+	if filepath.IsAbs(raw) {
+		for _, root := range privateImportRoots() {
+			if root == "" {
+				continue
+			}
+			if raw != root && !strings.HasPrefix(raw, root+string(os.PathSeparator)) {
+				continue
+			}
+			if _, err := os.Stat(raw); err == nil {
+				return raw, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf(
+		"找不到该文件：%s（允许：挂载目录内的路径，或后端可写目录 %s）",
+		raw, strings.Join(privateImportRoots(), "、"),
+	)
+}
+
 // handlePreviewAssetsImportGin 是 POST /api/preview-assets/import：把设备上的 zip/目录装进资源目录。
 //
 // 这是"不换 APK"最直接的一条路：APK 自带的种子资源、用户放到下载目录的新版本，
@@ -166,9 +223,9 @@ func (s *Server) handlePreviewAssetsImportGin(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "path is required"})
 		return
 	}
-	target, err := s.resolveUserPath(req.Path)
+	target, err := s.resolveImportPath(req.Path)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "path 不在可访问的挂载目录内：" + err.Error()})
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
 	}
 	st, err := os.Stat(target)
