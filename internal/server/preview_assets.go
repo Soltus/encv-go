@@ -203,7 +203,19 @@ func (s *Server) handlePreviewAssetsUpdateGin(c *gin.Context) {
 		return
 	}
 	if req.URL == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "url is required"})
+		// 不传就走配置里的默认地址（preview.assets_url）——
+		// 前端"一键更新"不需要知道资源在哪台机器上。
+		s.configMu.Lock()
+		if s.cfg != nil && s.cfg.Preview != nil {
+			req.URL = s.cfg.Preview.AssetsURL
+		}
+		s.configMu.Unlock()
+	}
+	if req.URL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "url is required（或在配置 preview.assets_url 里给一个默认地址）",
+			"hint":  "没有远端地址时可以用 POST /api/preview-assets/import 手动导入 zip",
+		})
 		return
 	}
 	if !isSafeHTTPURL(req.URL) {

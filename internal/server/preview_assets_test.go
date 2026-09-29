@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Soltus/encv-go/internal/config"
 	"github.com/gin-gonic/gin"
 )
 
@@ -196,6 +197,59 @@ func TestPreviewAssets_UpdateFromZipReplacesAtomically(t *testing.T) {
 	still := doPreviewAssetsGet(t, s, "/index.html", nil)
 	if still.Code != http.StatusOK || !strings.Contains(still.Body.String(), "v2") {
 		t.Fatalf("更新失败后旧版本必须还在（原子替换），实际 %d %s", still.Code, still.Body.String())
+	}
+}
+
+// 一键更新：不传 url 时用配置里的 preview.assets_url（前端不必知道资源在哪台机器上）。
+func TestPreviewAssets_UpdateUsesConfiguredURL(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ENCV_PREVIEW_ASSETS_DIR", filepath.Join(dir, "preview-assets"))
+
+	src := filepath.Join(dir, "v3src", "encv-preview")
+	seedPreviewAssets(t, src, "v3")
+	zipPath := filepath.Join(dir, "v3.zip")
+	makeZip(t, filepath.Join(dir, "v3src"), zipPath)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, zipPath)
+	}))
+	defer srv.Close()
+
+	s := &Server{
+		servingDir: dir,
+		cfg:        &config.Config{Preview: &config.PreviewConfig{AssetsURL: srv.URL + "/v3.zip"}},
+	}
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/preview-assets/update", strings.NewReader(`{}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	s.handlePreviewAssetsUpdateGin(c)
+	if w.Code != http.StatusOK {
+		t.Fatalf("不带 url 时应走配置地址：%d %s", w.Code, w.Body.String())
+	}
+	got := doPreviewAssetsGet(t, s, "/index.html", nil)
+	if !strings.Contains(got.Body.String(), "v3") {
+		t.Fatalf("更新后应拿到 v3：%s", got.Body.String())
+	}
+}
+
+// 既没传 url 也没配置地址时，报错要指出还能手动导入（否则用户就卡住了）。
+func TestPreviewAssets_UpdateWithoutAnyURLGivesHint(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ENCV_PREVIEW_ASSETS_DIR", filepath.Join(dir, "preview-assets"))
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/preview-assets/update", strings.NewReader(`{}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+	(&Server{servingDir: dir, cfg: &config.Config{}}).handlePreviewAssetsUpdateGin(c)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("应 400，实际 %d %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "/api/preview-assets/import") {
+		t.Errorf("报错应指出手动导入这条路，实际：%s", w.Body.String())
 	}
 }
 

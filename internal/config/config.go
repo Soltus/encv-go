@@ -244,6 +244,14 @@ func DefaultAgentConfig() *Agent {
 
 type PreviewConfig struct {
 	TextExtensions []string `json:"text_extensions,omitempty"`
+
+	// AssetsURL 是容器预览页（encv-preview）整包 zip 的远端地址。
+	//
+	// 用于**不换 APK 更新预览页**：`POST /api/preview-assets/update` 不带 url 时就用它。
+	// 资源落在可写数据目录（config.AppDataDir("preview-assets")），不在 Go 二进制/APK 内
+	// （见 internal/server/preview_assets.go 的文件头注释）。
+	// 为空表示"只支持手动导入"，前端的自动更新入口应据此禁用并给出提示。
+	AssetsURL string `json:"assets_url,omitempty"`
 }
 
 // ConfigProvider 定义了获取插件配置的抽象接口
