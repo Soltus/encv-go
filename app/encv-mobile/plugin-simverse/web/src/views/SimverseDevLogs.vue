@@ -53,9 +53,7 @@ let backendLogId = 0;
 let pollInterval: number | null = null;
 let lastEventId = "";
 
-const currentLogs = computed<readonly LogEntry[]>(() =>
-  activeTab.value === "frontend" ? frontendLogs.value : backendLogs.value
-);
+const currentLogs = computed<readonly LogEntry[]>(() => (activeTab.value === "frontend" ? frontendLogs.value : backendLogs.value));
 
 function chronicleLevelToLogLevel(level: string): string {
   if (level === "critical" || level === "catastrophe") return "error";

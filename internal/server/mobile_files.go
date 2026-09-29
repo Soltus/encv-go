@@ -133,6 +133,14 @@ func (s *Server) handleUploadFileGin(c *gin.Context) {
 	}
 	slog.Info("API: upload file", "target_path", targetPath)
 
+	// ⚠️ 早拒：Content-Length 已经在手上，超限就不该让客户端把几百 MB 传完
+	// （旧行为是传完 + 写完才报 400，白耗带宽和磁盘 IO，见
+	// mobileservice.DefaultMaxUploadSize 的注释）。
+	if err := mobileservice.CheckUploadSize(c.Request.ContentLength); err != nil {
+		writeServiceErrorGin(c, err)
+		return
+	}
+
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "missing or invalid 'file' form field"})

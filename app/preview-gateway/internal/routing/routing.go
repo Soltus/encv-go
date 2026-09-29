@@ -113,15 +113,16 @@ var SpecialUpstreams = []*Upstream{
 		Required: false,
 	},
 	{
-		// 纯静态目录（无 vite、无构建），剥前缀后由 python3 -m http.server 直接托管。
-		Match:    "/enc-ui",
+		// 纯静态目录（无 vite、无构建），剥前缀后由仓库自带的 bun 服务托管
+		// （app/encv-preview/serve.ts，:5179）。
+		Match:    "/encv-ui",
 		Target:   "http://127.0.0.1:5179",
 		WsTarget: "ws://127.0.0.1:5179",
-		Name:     "enc-preview",
-		Hint:     "Check pm2 status for enc-preview 静态服务 (:5179)",
+		Name:     "encv-preview",
+		Hint:     "Check pm2 status for encv-preview 静态服务 (:5179)",
 		Required: false,
 		PathRewrite: func(p string) string {
-			r := strings.TrimPrefix(p, "/enc-ui")
+			r := strings.TrimPrefix(p, "/encv-ui")
 			if r == "" {
 				return "/"
 			}

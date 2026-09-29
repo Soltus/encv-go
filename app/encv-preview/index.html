@@ -61,6 +61,27 @@
             </label>
             <span class="host-meta" id="own-result">未选择文件</span>
           </div>
+          <div class="row">
+            <span class="hint">
+              大容器（几百 MB 起）别走上面那条：整块读进 wasm 会 OOM。
+            </span>
+            <input type="file" id="filestream" class="btn" />
+            <span class="host-meta" id="stream-result">流式打开：未选择</span>
+          </div>
+          <div class="row">
+            <label class="field">
+              容器 URL（HTTP Range，不整体下载）
+              <input type="text" id="streamurl" placeholder="samples/big.sccgt" size="34" />
+            </label>
+            <button class="btn" id="streamurl-go">Range 流式打开</button>
+          </div>
+          <div class="row">
+            <label class="field">
+              分片 MP4 容器（边下边播 / MSE）
+              <input type="text" id="mseurl" placeholder="samples/sample.4pm.sccgv" size="34" />
+            </label>
+            <button class="btn btn-accent" id="mse-go">边下边播</button>
+          </div>
         </div>
       </section>
 

@@ -154,6 +154,15 @@ export default {
     "devtools.automationTestsEntryDesc": "生成测试数据 + 动态派生测试用例 + 提交任务",
     // 🆕 2026-06-17：PluginTestsDetail.vue 页面 title 使用
     "devtools.pluginTests": "插件测试",
+    // 🆕 2026-09-30：容器预览页（资源由后端托管，可整包替换、不必换 APK）
+    "devtools.previewAssets": "容器预览页",
+    "devtools.previewAssetsDesc": "资源在可写数据目录里，更新只换目录内容，不需要重装 APK",
+    "devtools.previewAssetsOpen": "打开预览页",
+    "devtools.previewAssetsOpenDesc": "独立全屏页面加载后端的 /preview-assets/",
+    "devtools.previewAssetsUpdate": "更新资源（远端）",
+    "devtools.previewAssetsUpdateDesc": "按配置里的地址拉取最新整包 zip",
+    "devtools.previewAssetsImport": "导入资源包（zip）",
+    "devtools.previewAssetsImportDesc": "从设备里选一个 zip 装进预览页资源目录",
     // 🆕 2026-06-17：AutomationTestsHub.vue 内部子项 i18n key
     "devtools.automationHub.testEntries": "测试入口",
     "devtools.automationHub.pluginTests": "插件测试",
@@ -476,6 +485,15 @@ export default {
     "devtools.automationTestsEntryDesc": "Generate mock data + derive test cases + submit tasks",
     // 🆕 2026-06-17：PluginTestsDetail.vue 页面 title 使用
     "devtools.pluginTests": "Plugin Tests",
+    // 🆕 2026-09-30: container preview page (assets served by the backend, hot-updatable)
+    "devtools.previewAssets": "Container Preview",
+    "devtools.previewAssetsDesc": "Assets live in a writable data dir — updating them needs no APK reinstall",
+    "devtools.previewAssetsOpen": "Open preview page",
+    "devtools.previewAssetsOpenDesc": "Full-screen page loading the backend's /preview-assets/",
+    "devtools.previewAssetsUpdate": "Update assets (remote)",
+    "devtools.previewAssetsUpdateDesc": "Pull the newest zip from the configured URL",
+    "devtools.previewAssetsImport": "Import assets (zip)",
+    "devtools.previewAssetsImportDesc": "Pick a zip on the device and install it",
     "devtools.clickToViewInTasks": "Click to view report in Tasks",
     "virtualLogList.clickToExpand": "Click to expand",
     // 🆕 2026-06-17：AutomationTestsHub.vue 内部子项 i18n key

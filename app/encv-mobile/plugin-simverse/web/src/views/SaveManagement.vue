@@ -111,17 +111,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import {
-  IonBackButton,
-  IonButtons,
-  IonContent,
-  IonHeader,
-  IonIcon,
-  IonPage,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
+import { IonBackButton, IonButtons, IonContent, IonHeader, IonIcon, IonPage, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
 import { useConfirmDialog } from "@encv/shared-components/composables/useConfirmDialog";
 import { cloudDownloadOutline, cloudUploadOutline, saveOutline, trashOutline } from "ionicons/icons";
 import { computed, onMounted, ref } from "vue";

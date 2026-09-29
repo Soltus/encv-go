@@ -119,16 +119,7 @@
 
 <script setup lang="ts">
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import {
-  IonBackButton,
-  IonContent,
-  IonHeader,
-  IonPage,
-  IonSearchbar,
-  IonSpinner,
-  IonTitle,
-  IonToolbar,
-} from "@ionic/vue";
+import { IonBackButton, IonContent, IonHeader, IonPage, IonSearchbar, IonSpinner, IonTitle, IonToolbar } from "@ionic/vue";
 import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { type SimverseNPC, useSimverse } from "@/composables/useSimverse";

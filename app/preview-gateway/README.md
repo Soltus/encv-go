@@ -12,7 +12,7 @@
 :16666  (preview-gateway, 唯一对外入口)
   ├── /             → :8100  encv-mobile Vite (纯净 SPA)
   ├── /openlist-ui/ → :5174  plugin-openlist-web Vite
-  ├── /enc-ui/      → :5179  ENCV 全格式加密容器演示（静态页，媒体走 /stream）
+  ├── /encv-ui/      → :5179  ENCV 全格式加密容器演示（静态页，媒体走 /stream）
   ├── /openlist/    → :2025  encv-go (Go) → :5244  OpenList fork
   ├── /api          → :2025  encv-go
   ├── /p/           → :2025  encv-go
@@ -55,7 +55,7 @@
 |------|------|------|
 | `/` | `http://127.0.0.1:8100` | encv-mobile Vite SPA（默认 fallthrough） |
 | `/openlist-ui` | `http://127.0.0.1:5174` | plugin-openlist-web Vite（OpenList 管理 UI） |
-| `/enc-ui` | `http://127.0.0.1:5179` | ENCV 全格式加密容器演示页（静态目录，剥前缀） |
+| `/encv-ui` | `http://127.0.0.1:5179` | ENCV 全格式加密容器演示页（静态目录，剥前缀） |
 | `/openlist/` | `http://127.0.0.1:2025` | encv-go → OpenList 运行时数据路径 |
 | `/api` | `http://127.0.0.1:2025` | encv-go API（service-guard / config / 上传等） |
 | `/p/` | `http://127.0.0.1:2025` | encv-go 公开路径 |
@@ -86,9 +86,9 @@
 |------|------|------|
 | `PORT` | `16666` | 监听端口 |
 | `HOST` | `0.0.0.0` | 监听地址 |
-| `UPSTREAM_ENC` | `http://127.0.0.1:5179` | 全格式加密容器演示页上游 |
-| `SPAWN_ENC_VITE` | `true` | 是否由网关拉起该演示页的静态服务 |
-| `ENC_PREVIEW_DIR` | `<repo>/app/enc-preview` | 演示页静态目录 |
+| `UPSTREAM_ENCV` | `http://127.0.0.1:5179` | 全格式加密容器演示页上游 |
+| `SPAWN_ENCV_VITE` | `true` | 是否由网关拉起该演示页的静态服务 |
+| `ENCV_PREVIEW_DIR` | `<repo>/app/encv-preview` | 演示页静态目录 |
 
 ---
 
@@ -555,22 +555,22 @@ ss -tlnp | grep -E "(:16666|:8100|:5174|:2025|:5244)" | wc -l             # 5
 
 | 模式 | 代表 | 做法 |
 |---|---|---|
-| **保留前缀**（推荐） | `/enc-ui` 的静态目录（:5179） | 网关**原样转发**，由上游自己按 base 处理；每个请求自带路由信息，不需要 cookie |
+| **保留前缀**（推荐） | `/encv-ui` 的静态目录（:5179） | 网关**原样转发**，由上游自己按 base 处理；每个请求自带路由信息，不需要 cookie |
 | 剥前缀 + cookie 兜底 | `/openlist-ui`（:5174） | 网关剥掉前缀，页面里的模块 URL 退化为根绝对路径，只能靠 `__plugin_spa` cookie 猜来源 |
 
-保留前缀模式下，vite 读到带 base 的请求才会把前缀写回模块 import；一旦剥掉，模块 URL 就成根绝对路径，会落到别的 upstream。以 `/enc-ui` 为例：
+保留前缀模式下，vite 读到带 base 的请求才会把前缀写回模块 import；一旦剥掉，模块 URL 就成根绝对路径，会落到别的 upstream。以 `/encv-ui` 为例：
 
 | 维度 | openlist-ui（剥前缀 + cookie） | enc-ui（保留前缀） |
 |---|---|---|
-| vite `base` | `/openlist-ui/`（靠 `VITE_BASE` env） | `/enc-ui/`（页面自己按 base 写相对引用） |
+| vite `base` | `/openlist-ui/`（靠 `VITE_BASE` env） | `/encv-ui/`（页面自己按 base 写相对引用） |
 | 网关 PathRewrite | 剥 `/openlist-ui` → `/` | **无**（原样转发） |
-| 模块内部 import | 被改写成根绝对路径 `/@fs/...`，丢失前缀 → 必须 cookie 兜底 | 请求本身带 `/enc-ui/` 前缀，每个请求自带路由信息 |
+| 模块内部 import | 被改写成根绝对路径 `/@fs/...`，丢失前缀 → 必须 cookie 兜底 | 请求本身带 `/encv-ui/` 前缀，每个请求自带路由信息 |
 | cookie 标记 | 需要（`__plugin_spa=1`，见 modifyResponse） | 不需要 |
 
 **教训**：Vite 只有在「请求本身带 base 前缀」时才会在 import 里回写前缀。剥前缀看似更干净，实则把路由信息剥掉了，逼着网关用 cookie 猜来源；而 cookie 一旦残留还会污染别的路由（实测：带着 spa cookie 访问主 app 会被误路由）。新增带独立 `base` 的 SPA 上游时，优先选「保留前缀」模式。
 
-子进程：`SPAWN_ENC_VITE=1`（默认开）时由网关拉起 `enc-preview`（纯静态目录，无构建步骤），
-命令是 `python3 -u <dir>/serve.py 5179` —— `serve.py` 除托管静态文件外还会把 `/stream`、`/health`
+子进程：`SPAWN_ENCV_VITE=1`（默认开）时由网关拉起 `encv-preview`（纯静态目录，无构建步骤），
+命令是 `python3 -u <dir>/serve.ts 5179` —— `serve.ts` 除托管静态文件外还会把 `/stream`、`/health`
 代理到后端，因此**离开网关直连 `http://localhost:5179/` 也能完整使用**
 （后端不返回 CORS 头，没有这层代理时浏览器直连会被拦）。
 注意网关的子进程清理不总可靠：进程残留会占住端口，让新子进程因端口占用起不来（表现为 `/__gateway/children` 里该项为 `false`），

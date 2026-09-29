@@ -35,6 +35,7 @@ private const val REQUEST_CODE_PLUGIN_PICK = 9001
 private const val REQUEST_CODE_INSTALL_CONFIRM = 9002
 private const val REQUEST_CODE_MPV_PLAYER = 9003
 private const val REQUEST_CODE_PICK_FOLDER = 9010
+private const val REQUEST_CODE_PICK_PREVIEW_ZIP = 9011
 
 /**
  * Phase 26: in-process 状态推送契约（替代 Phase 22 跨进程 broadcast）。
@@ -45,7 +46,7 @@ private const val EVENT_OPENLIST_STATUS = "openlist:status"
 
 @CapacitorPlugin(
     name = "GoProcess",
-    requestCodes = [REQUEST_CODE_PLUGIN_PICK, REQUEST_CODE_INSTALL_CONFIRM, REQUEST_CODE_MPV_PLAYER, REQUEST_CODE_PICK_FOLDER]
+    requestCodes = [REQUEST_CODE_PLUGIN_PICK, REQUEST_CODE_INSTALL_CONFIRM, REQUEST_CODE_MPV_PLAYER, REQUEST_CODE_PICK_FOLDER, REQUEST_CODE_PICK_PREVIEW_ZIP]
 )
 class GoProcessPlugin : Plugin() {
 
@@ -353,6 +354,47 @@ class GoProcessPlugin : Plugin() {
         }
     }
 
+    /**
+     * 打开容器预览页（独立全屏 Activity）。
+     *
+     * 页面资源由**后端从可写数据目录**提供，整包替换即可更新 —— 不需要换 APK；
+     * 这里只负责把 Activity 拉起来，不带任何打包进 APK 的资源。
+     */
+    @PluginMethod
+    fun openPreviewAssets(call: PluginCall) {
+        try {
+            activity.startActivity(Intent(activity, PreviewAssetsActivity::class.java))
+            call.resolve(JSObject().apply { put("opened", true) })
+        } catch (e: Exception) {
+            pendingCalls.remove("pickPreviewZip")
+            call.reject("打开预览页失败：${e.message}")
+        }
+    }
+
+    /**
+     * 选一个预览页资源包（zip）并返回**可在文件系统里访问的路径**。
+     *
+     * 为什么不把 content:// Uri 直接交给后端：后端只认文件路径，而 ACTION_GET_CONTENT
+     * 给的是 Uri（可能来自 SAF / 云盘 / 下载目录），必须先物化成本地文件。
+     */
+    @PluginMethod
+    fun pickPreviewAssetsZip(call: PluginCall) {
+        pendingCalls["pickPreviewZip"] = call
+        try {
+            activity.startActivityForResult(Intent(Intent.ACTION_GET_CONTENT).apply {
+                type = "application/zip"
+                addCategory(Intent.CATEGORY_OPENABLE)
+                // 部分机型对 application/zip 识别不全，放宽候选交给用户自己选
+                putExtra(
+                    Intent.EXTRA_MIME_TYPES,
+                    arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")
+                )
+            }, REQUEST_CODE_PICK_PREVIEW_ZIP)
+        } catch (e: Exception) {
+            pendingCalls.remove("pickPreviewZip")?.reject(e.message)
+        }
+    }
+
     @PluginMethod
     fun checkInstalledPlugins(call: PluginCall) {
         val result = JSObject()
@@ -478,7 +520,20 @@ class GoProcessPlugin : Plugin() {
             REQUEST_CODE_INSTALL_CONFIRM -> handleInstallConfirmResult(resultCode, data)
             REQUEST_CODE_MPV_PLAYER -> handleMpvPlayerResult(resultCode, data)
             REQUEST_CODE_PICK_FOLDER -> handlePickFolderResult(resultCode, data)
+            REQUEST_CODE_PICK_PREVIEW_ZIP -> handlePickPreviewZipResult(resultCode, data)
         }
+    }
+
+    private fun handlePickPreviewZipResult(resultCode: Int, data: Intent?) {
+        val call = pendingCalls.remove("pickPreviewZip") ?: return
+        if (resultCode != Activity.RESULT_OK || data?.data == null) { call.reject("File picker cancelled"); return }
+        val tempFile = UriUtils.copyUriToFile(context, data.data!!, File(context.cacheDir, "preview_assets"))
+            ?: run { call.reject("Cannot read selected file"); return }
+        LogBridge.i(TAG, "pickPreviewAssetsZip: ${tempFile.name} → ${tempFile.absolutePath}")
+        call.resolve(JSObject().apply {
+            put("path", tempFile.absolutePath)
+            put("name", tempFile.name)
+        })
     }
 
     private fun handleMpvPlayerResult(resultCode: Int, data: Intent?) {

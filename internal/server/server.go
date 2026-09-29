@@ -663,6 +663,8 @@ var knownRoutePrefixes = []string{
 	"/api/", "/admin", "/login", "/logout",
 	"/p", "/p-api", "/openlist",
 	"/preview/", "/stream", "/decrypt",
+	// 预览页的可热更新资源（preview_assets.go）：同样不能让 webdav 挂上去
+	"/preview-assets",
 	"/ws", "/ping", "/health",
 }
 

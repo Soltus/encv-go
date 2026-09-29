@@ -26,7 +26,7 @@ func main() {
 		cfg.MobileDataDir,
 		cfg.PluginWebDir,
 		cfg.SimverseFrontendDir,
-		cfg.EncPreviewDir,
+		cfg.EncvPreviewDir,
 		cfg.AirBin,
 		cfg.NodeBin,
 	)
@@ -35,7 +35,7 @@ func main() {
 		log.Fatalf("preflight failed: %v", err)
 	}
 
-	mgr := children.New(p, cfg.SpawnGo, cfg.SpawnVite, cfg.SpawnPluginVite, cfg.SpawnOpenlist, cfg.SpawnSimverseVite, cfg.SpawnEncVite)
+	mgr := children.New(p, cfg.SpawnGo, cfg.SpawnVite, cfg.SpawnPluginVite, cfg.SpawnOpenlist, cfg.SpawnSimverseVite, cfg.SpawnEncvVite)
 
 	if mgr.HasChildren() {
 		if err := mgr.StartAll(); err != nil {

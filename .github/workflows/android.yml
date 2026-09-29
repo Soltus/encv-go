@@ -280,16 +280,22 @@ jobs:
           echo "✅ gofmt check done"
 
           echo "═══ Go Unit Tests (service layer) ═══"
-          go test ./internal/service/ -count=1 -timeout 120s -v 2>&1 | tail -30
+          bash scripts/test-go.sh ./internal/service
           echo ""
           echo "═══ Go Unit Tests (video plugin) ═══"
-          go test ./internal/v2/plugins/video/ -count=1 -timeout 120s -v 2>&1 | tail -30
+          bash scripts/test-go.sh ./internal/v2/plugins/video
           echo ""
           echo "═══ ComboLite Static Check ═══"
-          go test ./internal/service/ -count=1 -timeout 60s -run TestComboLite -v 2>&1 | tail -20
+          # 定向跑单个用例：test-go.sh 用 EXTRA_ARGS 透传 go test 参数
+          EXTRA_ARGS="-run TestComboLite" bash scripts/test-go.sh ./internal/service
           echo ""
           echo "═══ Go Test Summary ═══"
-          go test ./internal/service/ ./internal/v2/plugins/video/ -count=1 -timeout 120s 2>&1 | tail -5
+          bash scripts/test-go.sh ./internal/service ./internal/v2/plugins/video
+
+          # ⚠️ 这里**不能**裸跑 `go test`：internal/testguard 会在测试 binary 的 init()
+          # 里检查 ENCV_TEST_INVOKED_BY，缺失就 os.Exit(64)（2026-09-30 的 CI 就是这样红的：
+          # service / v2/plugins/video 两个包全部 FAIL，报 "[test-guard] 拦截裸 go test 调用"）。
+          # 统一走 scripts/test-go.sh（它负责 HARD_TIMEOUT / pre-flight / fail-fast / 日志轮转）。
 
       - name: Prepare libsql native library for Android
         run: |

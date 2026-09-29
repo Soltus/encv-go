@@ -42,7 +42,11 @@ const SimVerse = registerPlugin<SimVersePlugin>("SimVerse", {
   web: () => new SimVerseWeb(),
 });
 
-export async function openWorld(worldId: string = "default", worldName: string = "Default", themeCss?: string): Promise<{ success: boolean; error?: string }> {
+export async function openWorld(
+  worldId: string = "default",
+  worldName: string = "Default",
+  themeCss?: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     // 主应用外观设置桥接：未显式传入时，抓取当前主题的已解析 CSS 变量块一并交给插件，
     // 使主应用外观设置在独立插件 WebView 内生效。

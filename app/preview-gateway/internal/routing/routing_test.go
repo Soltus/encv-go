@@ -273,44 +273,44 @@ func TestViteDeny_HasWhy(t *testing.T) {
 // 只靠入口 HTML 种下的 spa cookie 归位（见 README §11）。
 // ─────────────────────────────────────────────────────────────────────────────
 
-func TestPickUpstream_EncUi(t *testing.T) {
-	for _, p := range []string{"/enc-ui", "/enc-ui/", "/enc-ui/main.js", "/enc-ui/main.js?v=1"} {
+func TestPickUpstream_EncvUi(t *testing.T) {
+	for _, p := range []string{"/encv-ui", "/encv-ui/", "/encv-ui/main.js", "/encv-ui/main.js?v=1"} {
 		up := PickUpstream(p, "", "")
-		if up.Name != "enc-preview" {
-			t.Errorf("path %s: expected enc-preview, got %s", p, up.Name)
+		if up.Name != "encv-preview" {
+			t.Errorf("path %s: expected encv-preview, got %s", p, up.Name)
 		}
 	}
 }
 
-func TestPickUpstream_EncUiStripsPrefix(t *testing.T) {
-	// 这是「剥前缀」的上游：静态目录托管，/enc-ui/style.css → /style.css。
-	var enc *Upstream
+func TestPickUpstream_EncvUiStripsPrefix(t *testing.T) {
+	// 这是「剥前缀」的上游：静态目录托管，/encv-ui/style.css → /style.css。
+	var encv *Upstream
 	for _, up := range SpecialUpstreams {
-		if up.Match == "/enc-ui" {
-			enc = up
+		if up.Match == "/encv-ui" {
+			encv = up
 		}
 	}
-	if enc == nil {
-		t.Fatal("special upstreams 缺少 /enc-ui")
+	if encv == nil {
+		t.Fatal("special upstreams 缺少 /encv-ui")
 	}
-	if enc.Target != "http://127.0.0.1:5179" {
-		t.Errorf("unexpected target: %s", enc.Target)
+	if encv.Target != "http://127.0.0.1:5179" {
+		t.Errorf("unexpected target: %s", encv.Target)
 	}
-	if enc.PathRewrite == nil {
-		t.Fatal("/enc-ui 必须配置 PathRewrite（静态目录按根路径提供文件）")
+	if encv.PathRewrite == nil {
+		t.Fatal("/encv-ui 必须配置 PathRewrite（静态目录按根路径提供文件）")
 	}
-	if got := enc.PathRewrite("/enc-ui/main.js"); got != "/main.js" {
-		t.Errorf("PathRewrite(/enc-ui/main.js) = %s, want /main.js", got)
+	if got := encv.PathRewrite("/encv-ui/main.js"); got != "/main.js" {
+		t.Errorf("PathRewrite(/encv-ui/main.js) = %s, want /main.js", got)
 	}
-	if got := enc.PathRewrite("/enc-ui"); got != "/" {
-		t.Errorf("PathRewrite(/enc-ui) = %s, want /", got)
+	if got := encv.PathRewrite("/encv-ui"); got != "/" {
+		t.Errorf("PathRewrite(/encv-ui) = %s, want /", got)
 	}
 }
 
-func TestPickUpstream_EncUiSimilarPrefix(t *testing.T) {
-	// /enc-ui-legacy 之类的前缀不能撞到演示页
-	up := PickUpstream("/enc-ui-legacy/", "", "")
-	if up.Name == "enc-preview" {
-		t.Errorf("/enc-ui-legacy should not route to enc-preview, got %s", up.Name)
+func TestPickUpstream_EncvUiSimilarPrefix(t *testing.T) {
+	// /encv-ui-legacy 之类的前缀不能撞到演示页
+	up := PickUpstream("/encv-ui-legacy/", "", "")
+	if up.Name == "encv-preview" {
+		t.Errorf("/encv-ui-legacy should not route to encv-preview, got %s", up.Name)
 	}
 }

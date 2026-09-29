@@ -48,6 +48,7 @@ func (bd *BulkDecryptor) DecryptToFile(ctx context.Context, outputPath string) e
 	}
 
 	block, _ := aes.NewCipher(key)
+	// 旧行为：整条逻辑流共用一条从 iv 起步的 keystream（所有分片都没有自己的 nonce 时）
 	stream := cipher.NewCTR(block, iv)
 
 	// 4. 按顺序处理所有 Fragment，无抽象开销
@@ -64,8 +65,18 @@ func (bd *BulkDecryptor) DecryptToFile(ctx context.Context, outputPath string) e
 		}
 		defer fragReader.Close()
 
+		// 分片自带 nonce（由 v4 segment 栈适配而来）→ 这一段要用自己的 keystream，
+		// 不能接着上一段的计数器往下走（那是另一条 keystream，解出来是乱码）。
+		fragStream := stream
+		if nonce := decodeFragmentNonce(frag.Nonce); len(nonce) > 0 {
+			fragStream, err = buildCTRStreamAtOffset(key, nonce, 0)
+			if err != nil {
+				return err
+			}
+		}
+
 		// 创建解密流，直接写入文件
-		decryptReader := &cipher.StreamReader{S: stream, R: fragReader}
+		decryptReader := &cipher.StreamReader{S: fragStream, R: fragReader}
 
 		// 【性能优化】使用更大的缓冲区进行拷贝，减少系统调用
 		buf := make([]byte, 4*1024*1024) // 4MB buffer

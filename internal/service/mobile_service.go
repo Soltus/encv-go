@@ -420,7 +420,27 @@ func (s *MobileService) CreateDirectory(parentPath, name string) error {
 	return nil
 }
 
-const defaultMaxUploadSize int64 = 500 * 1024 * 1024
+// DefaultMaxUploadSize 是移动端上传的默认体积上限。
+//
+// ⚠️ 2026-09-30 实测（chromium 走 FormData，链路与 WebView 一致）：
+// 600MB 的上传会以 HTTP 400 `file size (629145600 bytes) exceeds maximum
+// allowed (524288000 bytes)` 收场；而旧实现是**先把整个文件 io.Copy 落盘、
+// 写完之后才判超限再删** —— 客户端白传一遍、服务端白写一遍才报错。
+// 所以 handler 侧要先用 CheckUploadSize 在**读取请求体之前**早拒。
+const DefaultMaxUploadSize int64 = 500 * 1024 * 1024
+
+// CheckUploadSize 用 Content-Length 预检上传体积，返回 nil 表示放行。
+//
+// 它拦不掉所有情况：chunked 传输可能没有 Content-Length，那种情况仍由
+// UploadFile 写完后的后置校验兜底（两道都在，不能只留一道）。
+func CheckUploadSize(contentLength int64) error {
+	if contentLength > DefaultMaxUploadSize {
+		return &BadRequestError{
+			Err: fmt.Errorf("file size (%d bytes) exceeds maximum allowed (%d bytes)", contentLength, DefaultMaxUploadSize),
+		}
+	}
+	return nil
+}
 
 func (s *MobileService) UploadFile(targetPath string, fileName string, content io.Reader, maxSize int64) (*FileInfo, error) {
 	if targetPath == "" {
@@ -453,7 +473,7 @@ func (s *MobileService) UploadFile(targetPath string, fileName string, content i
 	}
 
 	if maxSize <= 0 {
-		maxSize = defaultMaxUploadSize
+		maxSize = DefaultMaxUploadSize
 	}
 
 	destPath := filepath.Join(absDir, fileName)

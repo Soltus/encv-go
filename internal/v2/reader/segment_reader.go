@@ -32,6 +32,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -64,6 +65,29 @@ func openContainerFile(info *V4ContainerInfo) (containerFile, error) {
 		}
 	}
 	return os.Open(info.FilePath)
+}
+
+// NeedBytesError 是「这段字节还没供给」的错误约定。
+//
+// 谁会返回：按需供给的容器源（浏览器内核的 openStream 就是这种：字节来自
+// File.slice / HTTP Range，读的时候才去取）。读不到时它不能假装 EOF，
+// 只能告诉调用方"我需要这几个区间"。
+//
+// 为什么要有约定：调用方**必须**把这类错误原样上抛，让字节补进来后重试。
+// 一旦当成普通失败吃掉、退回别的兜底路径（比如逐段重读），就会退化成
+// 每次重试只多拿到一小段 → O(n²) 次读取（实测 1GB 容器触发 13 万次段头读）。
+type NeedBytesError interface {
+	error
+	IsNeedBytes() bool
+}
+
+// IsNeedBytes 判断 err 是否属于"字节尚未供给"。
+func IsNeedBytes(err error) bool {
+	if err == nil {
+		return false
+	}
+	var nbe NeedBytesError
+	return errors.As(err, &nbe)
 }
 
 // V4ContainerInfo 封装一个 v4 容器的元数据 + 派生密钥。
@@ -262,6 +286,70 @@ func (r *SegmentSeekableReader) segmentPlainSize(seg types.Segment_v4) (int64, e
 		return 0, fmt.Errorf("failed to parse seek table for segment '%s': %w", seg.ID, err)
 	}
 	return int64(st.Size()), nil
+}
+
+// samplePlainSizes 抽样段头推算各段明文长度，**只读取少数几个段头**。
+//
+// 适用条件（任一不满足就返回 false，调用方退回逐段读）：
+//   - 抽到的段都没有声明 zstd 压缩（压缩段的明文长度只有 seek table 知道）
+//   - 抽到的段头开销一致：SegmentHeader + Nonce + MAC + SeekTable
+//   - 用统一开销算出的每段明文长度都是非负数
+//
+// 抽样点取首、中、末三段：混合配置（例如部分段带 MAC、部分不带）会被"开销不一致"挡掉，
+// 不会静默算错。
+//
+// 返回值语义（两者必须分清）：
+//   - errSampleNotApplicable：抽样不适用（段太少 / 混合配置 / 有压缩），调用方退回逐段读
+//   - 其它 error（尤其是"字节还没供给"）：原样上抛，让字节补进来后重试
+var errSampleNotApplicable = errors.New("sampled plaintext sizes not applicable")
+
+func (r *SegmentSeekableReader) samplePlainSizes(playlist []types.Segment_v4) ([]int64, error) {
+	if len(playlist) <= 2 {
+		return nil, errSampleNotApplicable
+	}
+
+	overhead := func(seg types.Segment_v4) (int64, error) {
+		hdr, _, err := r.readSegmentHeader(seg)
+		if err != nil {
+			// ⚠️ "字节还没供给"要原样上抛，让调用方补字节后重试；
+			// 在这里退化成"不适用"会让每次重试只多命中一个段头（O(n²) 次读）。
+			return 0, err
+		}
+		if hdr.ModeFlags&types.ModeFlagCompressionZstd != 0 {
+			return 0, errSampleNotApplicable
+		}
+		// 明文段（未置 Encrypted 位）不参与：它的"明文"就是 DataLength，没有 nonce/MAC 开销
+		if hdr.ModeFlags&types.ModeFlagEncrypted == 0 {
+			return 0, errSampleNotApplicable
+		}
+		return int64(types.SegmentHeaderSize) + int64(hdr.NonceSize) + int64(hdr.MACSize) + int64(hdr.SeekTableLength), nil
+	}
+
+	mid := playlist[len(playlist)/2]
+	last := playlist[len(playlist)-1]
+	first, err := overhead(playlist[0])
+	if err != nil {
+		return nil, err
+	}
+	for _, seg := range []types.Segment_v4{mid, last} {
+		o, err := overhead(seg)
+		if err != nil {
+			return nil, err
+		}
+		if o != first {
+			return nil, errSampleNotApplicable
+		}
+	}
+
+	sizes := make([]int64, len(playlist))
+	for i, seg := range playlist {
+		plain := int64(seg.Size) - first
+		if plain < 0 {
+			return nil, errSampleNotApplicable
+		}
+		sizes[i] = plain
+	}
+	return sizes, nil
 }
 
 // readSegmentHeader 从 file 读取一个 Segment 的 34 字节 Header 并解析。
@@ -476,14 +564,31 @@ func NewSegmentSeekableReader(info *V4ContainerInfo, playlistName string) (*Segm
 		playlist: playlist,
 		offset:   0,
 	}
+	// 构造时一次性计算每个 Segment 的明文大小。
+	//
+	// 默认路径逐段读段头（segmentPlainSize）。而**段头是分散在整个容器里的**：
+	// 1GB/1MB 段的容器就是 1024 次随机读 —— 字节来自内存时无所谓，来自网络
+	// （HTTP Range / 远端源）时是 1024 个 Round Trip，只为了拿一串长度。
+	// 所以先走 samplePlainSizes：抽样几个段头推出统一开销，失败再退回逐段读。
 	plainSizes := make([]int64, len(playlist))
-	for i, seg := range playlist {
-		sz, err := tmpReader.segmentPlainSize(seg)
-		if err != nil {
-			f.Close()
-			return nil, fmt.Errorf("failed to compute plaintext size for segment '%s': %w", seg.ID, err)
+	sampled, err := tmpReader.samplePlainSizes(playlist)
+	switch {
+	case err == nil:
+		plainSizes = sampled
+	case IsNeedBytes(err):
+		// 字节还没供给：上抛，让调用方补了再重试。绝不能退回逐段读 ——
+		// 那样每次重试只会多命中一个段头，1GB 容器会触发十万级的段头读取。
+		f.Close()
+		return nil, err
+	default: // errSampleNotApplicable：抽样不适用，走原路径
+		for i, seg := range playlist {
+			sz, err := tmpReader.segmentPlainSize(seg)
+			if err != nil {
+				f.Close()
+				return nil, fmt.Errorf("failed to compute plaintext size for segment '%s': %w", seg.ID, err)
+			}
+			plainSizes[i] = sz
 		}
-		plainSizes[i] = sz
 	}
 
 	return &SegmentSeekableReader{
