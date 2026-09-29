@@ -2,7 +2,7 @@
 //
 // 「大附件能不能加密」这件事的**浏览器内真实证据**。
 //
-//   1. 先起静态服务：python3 app/enc-preview/serve.py 5179
+//   1. 先起静态服务：bun app/encv-preview/serve.ts 5179
 //   2. bun app/encv-mobile/pw-enc-stream.ts
 //
 // 做什么：
@@ -50,7 +50,7 @@ async function newProbePage() {
   page.on("console", m => logs.push(`[${m.type()}] ${m.text().slice(0, 300)}`));
   page.on("pageerror", e => logs.push(`pageerror: ${String(e).split("\n")[0]}`));
   await page.goto(TARGET, { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => Boolean(globalThis.encPreview?.api), null, { timeout: 60_000 });
+  await page.waitForFunction(() => Boolean(globalThis.encvPreview?.api), null, { timeout: 60_000 });
   return { page, logs };
 }
 
@@ -62,7 +62,7 @@ function report(mb, mode, result, logs) {
 
 /** 页面内跑一档：整块 or 流式。流式一侧可选做逐字节回读比对，或把产物落盘给脚本侧验证。 */
 const runInPage = async ({ total, mode, verify, downloadName, pw, CHUNK, WINDOW }) => {
-  const api = globalThis.encPreview.api;
+  const api = globalThis.encvPreview.api;
 
   // 明文按 1MB 一片生成，从来不整体持有（模拟真实大附件读取）
   function* chunks() {
@@ -235,7 +235,7 @@ async function verifyOutsideBrowser(dlPromise, downloadName, total) {
   // 才能既避开浏览器内存上限、又与浏览器里读到的是同一条主线 reader。
   const cli = spawnSync(
     "node",
-    ["app/enc-preview/verify-container.mjs", containerPath, PW, "--pattern"],
+    ["app/encv-preview/verify-container.mjs", containerPath, PW, "--pattern"],
     { cwd: "/workspace", maxBuffer: 8 << 20, timeout: 900_000 }
   );
   if (cli.status !== 0) {
@@ -253,7 +253,7 @@ async function verifyOutsideBrowser(dlPromise, downloadName, total) {
 async function runSelfTest() {
   const { page, logs } = await newProbePage();
   await page.click("#btn-selftest");
-  await page.waitForFunction(() => /自检(通过|失败)/.test(globalThis.encPreview.logPreview ?? document.getElementById("log").textContent), null, { timeout: 300_000 });
+  await page.waitForFunction(() => /自检(通过|失败)/.test(globalThis.encvPreview.logPreview ?? document.getElementById("log").textContent), null, { timeout: 300_000 });
   const lines = await page.evaluate(() =>
     document
       .getElementById("log")
@@ -281,7 +281,7 @@ async function runOpenStreamProbe(containerPath) {
   const logs = [];
   page.on("console", m => logs.push(`[${m.type()}] ${m.text().slice(0, 200)}`));
   await page.goto(TARGET, { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(() => Boolean(globalThis.encPreview?.api), null, { timeout: 60_000 });
+  await page.waitForFunction(() => Boolean(globalThis.encvPreview?.api), null, { timeout: 60_000 });
   await page.evaluate(() => {
     const i = document.createElement("input");
     i.type = "file";
@@ -292,7 +292,7 @@ async function runOpenStreamProbe(containerPath) {
   await page.setInputFiles("#__probe", containerPath);
 
   const out = await page.evaluate(async pw => {
-    const PV = globalThis.encPreview;
+    const PV = globalThis.encvPreview;
     // 页面里的函数用的是口令输入框的值，这里统一设成容器加密时用的那个
     document.getElementById("password").value = "stream-probe";
     const file = document.getElementById("__probe").files[0];
@@ -320,19 +320,19 @@ async function runOpenStreamProbe(containerPath) {
       }
       if (bad >= 0) break;
     }
-    globalThis.encPreview.api.close(handle);
+    globalThis.encvPreview.api.close(handle);
     report.stream = { ok: bad < 0, total, jsHeapDeltaMB: Math.round((heap() - before1) / 1048576) };
 
     // ② 整块打开：容器整体进内存
     const before2 = heap();
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
-      const opened = globalThis.encPreview.api.open(bytes, "stream-probe");
+      const opened = globalThis.encvPreview.api.open(bytes, "stream-probe");
       if (!opened.ok) throw new Error(opened.error);
       const h2 = opened.value.handle;
-      const i2 = globalThis.encPreview.api.info(h2);
+      const i2 = globalThis.encvPreview.api.info(h2);
       if (!i2.ok) throw new Error(i2.error);
-      globalThis.encPreview.api.close(h2);
+      globalThis.encvPreview.api.close(h2);
       report.block = { ok: true, total: Number(i2.value.plainLength), jsHeapDeltaMB: Math.round((heap() - before2) / 1048576) };
     } catch (error) {
       report.block = { ok: false, error: String(error).split("\n")[0], jsHeapDeltaMB: Math.round((heap() - before2) / 1048576) };

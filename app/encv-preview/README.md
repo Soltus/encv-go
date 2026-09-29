@@ -1,4 +1,4 @@
-# enc-preview —— ENCV 容器的 WASM 纯前端预览
+# encv-preview —— ENCV 容器的 WASM 纯前端预览
 
 **这一页不请求任何后端。** 容器字节来自静态样例或用户选择的文件，
 加解密全在浏览器里由 `encv-container.wasm` 完成；页面里若出现
@@ -7,12 +7,12 @@
 ## 起服务
 
 ```bash
-make wasm                        # 构建 wasm 内核（产出到 app/enc-preview/wasm/）
-python3 app/enc-preview/serve.py 5179   # 纯静态托管，无代理
+make wasm                        # 构建 wasm 内核（产出到 app/encv-preview/wasm/）
+bun app/encv-preview/serve.ts 5179   # 纯静态托管，无代理
 ```
 
 访问：`http://localhost:5179/`
-（有 `:16666` 预览网关时也可走 `http://localhost:16666/enc-ui/`。）
+（有 `:16666` 预览网关时也可走 `http://localhost:16666/encv-ui/`。）
 
 ## wasm 内核
 
@@ -55,7 +55,7 @@ new Blob([head, ...每一次 encryptWrite 取回的碎块, encryptEnd 的最后�
 
 之所以这么绕：容器头必须先于数据出现，但头里的 manifest 偏移/长度/CRC 只有写完全部数据才知道。
 
-验证脚本 `app/encv-mobile/pw-enc-stream.ts`（真实浏览器，需先 `python3 app/enc-preview/serve.py 5179`）：
+验证脚本 `app/encv-mobile/pw-enc-stream.ts`（真实浏览器，需先 `bun app/encv-preview/serve.ts 5179`）：
 
 ```bash
 cd app/encv-mobile && SIZES=512,1024 bun pw-enc-stream.ts   # 每个档位分别跑整块与流式
@@ -67,7 +67,7 @@ cd app/encv-mobile && SELFTEST=1 bun pw-enc-stream.ts       # 跑页面自带的
 内容正确性怎么验：
 
 1. 浏览器内 ≤128MB：`readRange` 分窗逐字节回读（`verified: byte-identical`）
-2. 浏览器外：`node app/enc-preview/verify-container.mjs <容器> <口令> --pattern [--stream]`
+2. 浏览器外：`node app/encv-preview/verify-container.mjs <容器> <口令> --pattern [--stream]`
    —— 加载的是**同一份** `encv-container.wasm`，走的是同一条主线 reader。
    不加 `--stream` 时容器整体进 wasm，实测上限约 512MB（1GB 会在 `info()` 被打死，
    脚本会明说，不假装通过）；**加 `--stream` 走按需读字节，实测 1GB 逐字节通过**。
@@ -92,7 +92,7 @@ cd app/encv-mobile && SELFTEST=1 bun pw-enc-stream.ts       # 跑页面自带的
 
 ```bash
 go run ./cmd/encv encrypt-v2 <明文文件> --password my-encv_key --output <目录>
-# 把产出的 .sccg* 放进 app/enc-preview/samples/ 即可（页面按扩展名识别类型）
+# 把产出的 .sccg* 放进 app/encv-preview/samples/ 即可（页面按扩展名识别类型）
 ```
 
 没有样例时样例按钮会报错，其余能力（浏览器内加密、上传容器解密、自检）不受影响。
@@ -158,11 +158,11 @@ while (r.need?.length) {
 样例（二进制、已 gitignore，需要自己挂）：
 
 ```bash
-ln -sf /path/to/1GB.sccgt app/enc-preview/samples/big.sccgt
+ln -sf /path/to/1GB.sccgt app/encv-preview/samples/big.sccgt
 ```
 
 ⚠️ 静态服务必须支持 Range，否则 `fetch(Range)` 会拿到整个文件：
-`app/enc-preview/serve.py` 已经实现了（206 + Content-Range）。
+`app/encv-preview/serve.ts` 已经实现了（206 + Content-Range）。
 
 配套实现要点（都踩过坑）：
 - 明文长度不能再靠"解密后累加"求（那会把整个容器读一遍）：无压缩的段按段头算术求长，
@@ -183,22 +183,53 @@ ln -sf /path/to/1GB.sccgt app/enc-preview/samples/big.sccgt
   nonce（`types.Fragment.Nonce` ← `container/handle.AdaptV4ToV2` 从 v4 segment 复制），
   读取端按分片重置 keystream；分片没有 nonce 时行为与过去完全一致。
   回归锁：`internal/v2/reader/factory_nonce_stack_test.go`。
+- **MSE 的 mime 必须把音轨写出来**（2026-09-29 修）：容器里有 AAC 音轨时，只声明
+  `video/mp4; codecs="avc1.…"` 会让 SourceBuffer 直接报错，而这条报错**只落在
+  `video.error.message`** 上（`audio object type 0x40 does not match what is specified
+  in the mimetype`）—— `appendBuffer` 不抛错、`updateend` 照常触发，
+  所以**只看 append 成功与否**会把失败误判成「边下边播已就绪」。
+  页面现在从 init 段解析 `avcC` 与 `esds` 拼成 `avc1.X,mp4a.40.Y`；
+  ⚠️ 两个易错点：avcC 之前可能有 `pasp`/`btrt` 等可选 box（不能写死偏移 86），
+  esds 的描述符长度是 ISO/IEC 14496-1 **可变长**（ffmpeg 实测写成 `80 80 80 17`），
+  当单字节读会把 `objectTypeIndication` 的位置算错 → 读不出音频 codecs。
+- **Range 流式打开省下的流量取决于容器的段结构**：多段（segment 栈）容器只取需要的区间；
+  单段 / fragment 栈的容器只能**顺序解到目标偏移**，实测 16MB 的文本容器做三次随机读
+  就把 **16MB 全取了**（20 个 Range 请求）—— 这条路径上「按需取字节」不成立，
+  别拿它当省流量的证据。
 - **流式路径不支持 zstd 压缩**：seekable zstd 要随机访存整段数据，与"一片进一片出"冲突。
   需要压缩时只能走整块路径（CompressionMode 由调用方在整块路径侧决定）
 - **回读比对有体积上限**（`VERIFY_LIMIT = 64MB`）：超过之后页面不再把容器整体读进内存做比对，
   只报容器大小/段数。大体积的正确性由 `pw-enc-stream.ts` 在 `VERIFY_MAX_MB` 以内做逐字节回读
 - ~~**打开侧仍是整块的**~~：**已解决（2026-09-29）**，见上面「流式打开」：`openStream`
   + `streamFeed` 按区间供给字节，1GB 容器的 JS 堆增量从 1012MB 降到 4MB。
-  仍剩的是"边下载边播"的最后一公里（把 `read` 接到 HTTP Range / MSE 上，页面里还没接）
-- 视频是一次性解密后交给 `<video>` 播放，尚未做 MSE 分段喂流
-- 无样例容器时 `samples/*` 相关自检会失败（`samples/` 是二进制、已 gitignore），其余自检项不受影响。
-  补齐办法（本机没装 ffmpeg，所以视频/音频这两类仍会缺）：
+- ~~**边下载边播未接通 / 未做 MSE 分段喂流**~~：**已解决（2026-09-29，`a12acd4`）**：
+  容器内视频符合要求时 `read` 走 HTTP Range、`MediaSource` 边解边 append 起播
+  （页面自检 18/18，新增一条用例锁 MSE 起播）。
+  ⚠️ 前提是**容器里的视频必须是分片 MP4（含 `moof`）**：源要用
+  `ffmpeg -movflags +frag_keyframe+empty_moov+default_base_moof` 产出；插件按大小切片、
+  不重新 remux，fMP4 结构因此能穿过加解密保留下来。不是 fMP4 时页面**明确报错**，
+  并提示改走整体解密播放。
+  仍剩：**非 fMP4 容器没有自动转封装兜底** —— 唯一出路是先用 ffmpeg 把源 remux 成 fMP4 再加密
+  （别指望 mkvmerge：v92 的 `--cues` 只认数字轨道 ID，见 memory 2026-09-28）。
+- **自检的「跳过」不是「通过」**（2026-09-29 修）：`samples/` 是二进制、已 gitignore，
+  没有样例时依赖样例的用例显示 ⏭ 跳过，**不计入分子** —— 报告形如
+  `8/8 通过 · 10 项缺样例未验`。
+  ⚠️ 此前这些用例在缺样例时 `return true`，自检照样报 18/18，其中 10 项一次都没跑；
+  正是这个假绿，把下面这些缺陷一直藏到 2026-09-29 补齐样例后才暴露出来。
+- 补齐样例（本机已装 ffmpeg 7.1，六类源可全量现造）：
 
   ```bash
-  # 1) 造 4 个源：txt / 最小 PNG / 最小 PDF / 最小 docx（python 生成，见会话记录）
-  # 2) 用 CLI 加密成容器（顺带验证 CLI 加密路径对这些类型可用）
-  go run ./cmd/encv encrypt-v2 <源目录> -p my-encv_key -o app/enc-preview/samples
-  # 页面按扩展名识别：sample.txt.sccgt / sample.gnp.sccgi / sample.fdp.sccgpdf / sample.xcod.sccgwps
+  # 1) 视频**必须**是分片 MP4，否则「边下边播」那条用例跑不了（见「已知边界」）
+  ffmpeg -y -f lavfi -i testsrc=size=320x240:rate=25:duration=3 \
+         -f lavfi -i sine=frequency=440:duration=3 -c:v libx264 -pix_fmt yuv420p -c:a aac \
+         -movflags +frag_keyframe+empty_moov+default_base_moov -shortest /tmp/src/sample.mp4
+  ffmpeg -y -f lavfi -i sine=frequency=440:duration=3 -write_id3v2 1 -c:a libmp3lame /tmp/src/sample.mp3
+  # 2) txt / 最小 PNG / 最小 PDF / 最小 docx 用 python 造（或拿任意真实文件替代）
+  # 3) 加密成容器 —— CLI 按「扩展名反转」给产物命名，正好是页面 SAMPLES 里的名字：
+  #    sample.mp4 → sample.4pm.sccgv，sample.mp3 → sample.3pm.sccga，sample.png → sample.gnp.sccgi …
+  go run ./cmd/encv encrypt-v2 /tmp/src -p my-encv_key -o app/encv-preview/samples
+  # 4) 「HTTP Range 流式打开」要的 16MB 文本容器（内容按 pw-enc-stream.ts 的生成器规则）同理，
+  #    加密后落到 samples/stream16.txt.sccgt
   ```
 
-  补齐后自检应为 14/17（只差视频、音频两类样例）。
+  补齐后自检应为 18/18，其中「边下边播」会打出真实播放状态（`readyState=4 currentTime>0`）。

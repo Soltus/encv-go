@@ -12,14 +12,16 @@ type Paths struct {
 	MobileDataDir       string
 	PluginWebDir        string
 	SimverseFrontendDir string
-	EncPreviewDir       string
+	EncvPreviewDir      string
 	EncViteBin          string
 	AirBin              string
 	NodeBin             string
-	PythonBin           string
+	// BunBin：预览页的静态服务是 bun + TypeScript（app/encv-preview/serve.ts）。
+	// 项目不允许用 python 托管，所以这里不再有 PythonBin。
+	BunBin              string
 }
 
-func Resolve(repoRoot, mobileDir, mobileDataDir, pluginWebDir, simverseFrontendDir, encPreviewDir, airBin, nodeBin string) *Paths {
+func Resolve(repoRoot, mobileDir, mobileDataDir, pluginWebDir, simverseFrontendDir, encvPreviewDir, airBin, nodeBin string) *Paths {
 	p := &Paths{
 		RepoRoot:      repoRoot,
 		MobileDataDir: mobileDataDir,
@@ -43,13 +45,13 @@ func Resolve(repoRoot, mobileDir, mobileDataDir, pluginWebDir, simverseFrontendD
 		p.SimverseFrontendDir = filepath.Join(p.RepoRoot, "app", "encv-mobile", "plugin-simverse", "web")
 	}
 
-	if encPreviewDir != "" {
-		p.EncPreviewDir = encPreviewDir
+	if encvPreviewDir != "" {
+		p.EncvPreviewDir = encvPreviewDir
 	} else {
-		p.EncPreviewDir = filepath.Join(p.RepoRoot, "app", "enc-preview")
+		p.EncvPreviewDir = filepath.Join(p.RepoRoot, "app", "encv-preview")
 	}
 	p.EncViteBin = firstExisting(
-		filepath.Join(p.EncPreviewDir, "node_modules", "vite", "bin", "vite.js"),
+		filepath.Join(p.EncvPreviewDir, "node_modules", "vite", "bin", "vite.js"),
 		filepath.Join(p.MobileDir, "node_modules", "vite", "bin", "vite.js"),
 	)
 
@@ -65,12 +67,12 @@ func Resolve(repoRoot, mobileDir, mobileDataDir, pluginWebDir, simverseFrontendD
 		p.NodeBin = "node"
 	}
 
-	if v := os.Getenv("PYTHON_BIN"); v != "" {
-		p.PythonBin = v
+	if v := os.Getenv("BUN_BIN"); v != "" {
+		p.BunBin = v
 	} else {
-		p.PythonBin = firstExisting("/usr/local/bin/python3", "/usr/bin/python3")
-		if p.PythonBin == "" {
-			p.PythonBin = "python3"
+		p.BunBin = firstExisting("/usr/local/bin/bun", "/usr/bin/bun")
+		if p.BunBin == "" {
+			p.BunBin = "bun"
 		}
 	}
 

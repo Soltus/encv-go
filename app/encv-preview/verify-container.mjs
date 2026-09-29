@@ -6,8 +6,8 @@
  * 主线 `internal/v2/reader` 这条读取路径 —— 与浏览器里的 open/readRange 完全一致。
  *
  * 用法：
- *   node app/enc-preview/verify-container.mjs <容器路径> <口令>
- *   node app/enc-preview/verify-container.mjs <容器路径> <口令> --pattern  # 按 pw-enc-stream.ts 的生成规则逐字节比对
+ *   node app/encv-preview/verify-container.mjs <容器路径> <口令>
+ *   node app/encv-preview/verify-container.mjs <容器路径> <口令> --pattern  # 按 pw-enc-stream.ts 的生成规则逐字节比对
  *
  * 与 `encv decrypt-v2` 的关系：CLI 插件路径（fragment 栈）现在也能解 wasm/流式产物了
  * （per-fragment nonce，见 README「已知边界」），体积大时**优先用 CLI** ——
