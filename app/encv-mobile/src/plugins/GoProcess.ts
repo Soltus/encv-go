@@ -230,6 +230,36 @@ export async function pickFolder(): Promise<{ path: string }> {
   }
 }
 
+/**
+ * 打开容器预览页（独立全屏 Activity）。
+ *
+ * 页面资源由**后端从可写数据目录**提供（`GET /preview-assets/*`），整包替换即可更新 ——
+ * 不需要换 APK；这里只是把 Activity 拉起来，APK 里不带任何预览页资源。
+ */
+export async function openPreviewAssets(): Promise<{ opened: boolean; error?: string }> {
+  try {
+    return await (GoProcess as any).openPreviewAssets();
+  } catch (e: any) {
+    const msg = e?.message || e?.code || String(e);
+    console.error("[ENCV] GoProcess.openPreviewAssets() failed:", msg);
+    return { opened: false, error: msg };
+  }
+}
+
+/**
+ * 选一个预览页资源包（zip），返回**可在文件系统里访问的路径**（原生侧已把 Uri 物化成文件）。
+ * 返回空串表示用户取消。
+ */
+export async function pickPreviewAssetsZip(): Promise<{ path: string; name?: string; error?: string }> {
+  try {
+    return await (GoProcess as any).pickPreviewAssetsZip();
+  } catch (e: any) {
+    const msg = e?.message || e?.code || String(e);
+    if (!/cancel/i.test(msg)) console.error("[ENCV] GoProcess.pickPreviewAssetsZip() failed:", msg);
+    return { path: "", error: msg };
+  }
+}
+
 export async function checkInstalledPlugins(): Promise<Record<string, { installed: boolean; enabled: boolean; versionName: string }>> {
   try {
     const result = await GoProcess.checkInstalledPlugins();
