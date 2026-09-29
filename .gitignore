@@ -49,6 +49,8 @@ app/packages/encv-crypto/wasm/
 app/encv-preview/wasm/
 # 预览页样例容器是二进制（用 encv CLI 加密任意文件后放进该目录即可），不入库
 app/encv-preview/samples/
+# 预览页资源包的版本号：由 CI 打 zip 时写入（.github/workflows/preview-assets.yml），不入库
+app/encv-preview/version.json
 
 # 预览网关编译产物（曾误入库，现移出索引）
 app/preview-gateway/bin/

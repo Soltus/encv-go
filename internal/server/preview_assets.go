@@ -315,6 +315,23 @@ func commitPreviewAssets(staging, source string) error {
 	}
 	_ = os.RemoveAll(backup)
 
+	// ⚠️ 包的版本号以**构建产物**为准：CI 打 zip 时会写一份 version.json
+	// （见 .github/workflows/preview-assets.yml），导入时应当采用它 ——
+	// 否则每台设备上看到的安装时间都不同，却无法区分它们装的是不是同一个版本。
+	// 注意读的是 **dir**（正式目录）：此时 root 已经被 rename 进来了，
+	// 再读 root 只会拿到 ENOENT，然后静默回退到时间戳版本号。
+	if raw, err := os.ReadFile(filepath.Join(dir, "version.json")); err == nil {
+		var v previewAssetsVersion
+		if err := json.Unmarshal(raw, &v); err == nil && v.Version != "" {
+			if v.Source == "" {
+				v.Source = source
+			}
+			written, _ := json.Marshal(v)
+			_ = os.WriteFile(previewAssetsVersionFile(), written, 0o644)
+			return nil
+		}
+	}
+
 	v := previewAssetsVersion{Version: time.Now().Format("20060102-150405"), Source: source, UpdatedAt: time.Now().UTC().Format(time.RFC3339)}
 	raw, _ := json.Marshal(v)
 	_ = os.WriteFile(previewAssetsVersionFile(), raw, 0o644)

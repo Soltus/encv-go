@@ -253,6 +253,52 @@ func TestPreviewAssets_UpdateWithoutAnyURLGivesHint(t *testing.T) {
 	}
 }
 
+// 包的版本号以**构建产物**为准：CI 打 zip 时会写 version.json
+// （见 .github/workflows/preview-assets.yml）。导入时必须采用它 ——
+// 否则每台设备的版本号都是"安装时刻的时间戳"，看不出两台设备装的是不是同一个版本。
+func TestPreviewAssets_KeepsVersionFromZip(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ENCV_PREVIEW_ASSETS_DIR", filepath.Join(dir, "preview-assets"))
+	s := &Server{servingDir: dir}
+
+	src := filepath.Join(dir, "vsrc", "encv-preview")
+	seedPreviewAssets(t, src, "v9")
+	if err := os.WriteFile(
+		filepath.Join(src, "version.json"),
+		[]byte(`{"version":"ci-abc123","source":"ci:preview-assets@deadbeef","updatedAt":"2026-09-30T00:00:00Z"}`),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	zipPath := filepath.Join(dir, "v9.zip")
+	makeZip(t, filepath.Join(dir, "vsrc"), zipPath)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, zipPath)
+	}))
+	defer srv.Close()
+	updateZip(t, s, srv.URL+"/v9.zip")
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/preview-assets/version", nil)
+	s.handlePreviewAssetsVersionGin(c)
+
+	var got struct {
+		Version string `json:"version"`
+		Source  string `json:"source"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("version 响应不是 JSON：%v（%s）", err, w.Body.String())
+	}
+	if got.Version != "ci-abc123" {
+		t.Errorf("应采用 zip 自带的版本号，实际 %q（响应 %s）", got.Version, w.Body.String())
+	}
+	if !strings.Contains(got.Source, "ci:preview-assets") {
+		t.Errorf("应保留 zip 里的来源，实际 %q", got.Source)
+	}
+}
+
 func TestPreviewAssets_VersionReportsWhatIsMissing(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ENCV_PREVIEW_ASSETS_DIR", filepath.Join(dir, "preview-assets"))
