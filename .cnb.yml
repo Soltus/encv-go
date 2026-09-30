@@ -17,6 +17,7 @@ $:
           # 参考文档：https://docs.cnb.cool/zh/grammar/pipeline.html#build
           by:
             - .ide/settings.json
+            - .ide/bin/emuctl
       services:
         # docker 写在 vscode 前面
         - docker
