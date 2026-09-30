@@ -78,6 +78,14 @@ android {
 
         ndk {
             abiFilters += setOf("arm64-v8a")
+            // 模拟器调试专用：x86_64 宿主上跑 arm64-only APK 全靠 Berberis 翻译层，
+            // 实测主线程会 SIGTRAP（pc=0）崩溃，无法做 UI 自动化。
+            // 开了这项后若 jniLibs 下有 x86_64/libencv-go.so（Go 用 GOARCH=amd64 编的），
+            // APK 会带上 x86_64 ABI，模拟器上即可原生运行、不进翻译层。
+            // 默认关闭（release 体积不翻倍），按需 `EMU_X86_64=1` 打开。
+            if (System.getenv("EMU_X86_64") == "1") {
+                abiFilters += setOf("x86_64")
+            }
         }
 
         buildConfigField("String", "BUGLY_APP_ID", "\"${System.getenv("BUGLY_APP_ID") ?: ""}\"")

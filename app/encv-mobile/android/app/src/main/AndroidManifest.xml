@@ -167,9 +167,13 @@
         <meta-data
             android:name="LogcatWindowEntrance"
             android:value="true" />
+        <!-- 2026-10-01：关闭通知栏入口。它会自启 LogcatService（FGS），
+             慢设备/模拟器上该 service onCreate 超过 startForeground 20s 义务直接 ANR
+             （"did not then call Service.startForeground()"，无 KVM 模拟器实测三次复现）。
+             应用内日志已由 LogBridge + DevLogs 承担，不再依赖该库的通知入口。 -->
         <meta-data
             android:name="LogcatNotifyEntrance"
-            android:value="true" />
+            android:value="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

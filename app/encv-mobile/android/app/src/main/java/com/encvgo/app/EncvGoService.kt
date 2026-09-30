@@ -135,6 +135,14 @@ class EncvGoService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // ⚠️ startForegroundService() 的 ~20s 义务必须在主线程**立即**履行：
+        // startForeground 原本藏在 startGoProcess（worker 线程池）里，慢设备上
+        // （模拟器：Berberis 翻译 49MB Go 运行时 / 低端真机）超过时限就是
+        // "Context.startForegroundService() did not then call Service.startForeground()"
+        // ANR —— 2026-10-01 无 KVM 模拟器实测三次复现，放宽 activity_manager_constants
+        // 的 service_start_foreground_timeout_ms 无效，只能修时序。
+        // startGoProcess 里那次 startForeground 保留，用于把文案从「启动中」更新掉（幂等）。
+        startForeground(NOTIFICATION_ID, buildNotification("后端启动中"))
         currentSource = intent?.getStringExtra(EXTRA_SOURCE) ?: "manual"
         intent?.let { it ->
             when (it.action) {
