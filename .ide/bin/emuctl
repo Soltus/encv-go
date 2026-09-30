@@ -21,11 +21,13 @@
 # 用法：
 #   emuctl doctor                      环境体检（KVM/镜像/AVD/设备）
 #   emuctl create                      创建（重建）AVD
-#   emuctl start [--wipe]               无头启动并等 boot_completed
-#   emuctl wait                        仅等待开机完成
+#   emuctl start [--wipe]               无头启动并等 boot_completed（末尾自动 tune）
+#   emuctl wait                        仅等待开机完成（末尾自动 tune）
+#   emuctl tune                        慢速环境调优（放宽 AM 超时/关无线/关动画）
+#   emuctl aot <package>               dex AOT 编译（speed），装完必做
 #   emuctl status                      查看运行状态
 #   emuctl stop                        关闭模拟器
-#   emuctl install <apk>                安装（覆盖）APK
+#   emuctl install <apk> [--no-aot]     安装（覆盖）APK，默认随后 AOT 编译
 #   emuctl launch <package>             冷启动某个应用
 #   emuctl screenshot [out.png]         截屏（默认 /tmp/emu-screen.png）
 #   emuctl ui [out.xml]                 uiautomator dump（给 agent 看控件树；TCG 下很慢，需耐心）
@@ -223,14 +225,60 @@ cmd_wait() {
     fi
     if is_booted; then
       ok "模拟器已就绪: $SERIAL（$(adb shell getprop ro.build.version.release 2>/dev/null | tr -d '\r') / API $(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')）"
-      adb shell settings put global window_animation_scale 0 >/dev/null 2>&1
-      adb shell settings put global transition_animation_scale 0 >/dev/null 2>&1
-      adb shell settings put global animator_duration_scale 0 >/dev/null 2>&1
+      cmd_tune
       return 0
     fi
     sleep 5
   done
   die "等待 boot_completed 超时（${BOOT_TIMEOUT}s）。日志尾部：\n$(tail -40 "$LOG" 2>/dev/null)"
+}
+
+# ---------------------------------------------------------------------------
+# cmd_tune —— 慢速（无 KVM / TCG）环境的必备调优，幂等，可重复执行
+# ---------------------------------------------------------------------------
+# 每一条都是 2026-10-01 实测固化下来的（见 .codebuddy/memory/2026-10-01.md §8）：
+#   - AM 各类超时放宽：不加这条，Zygote fork + ART 初始化 > 10s 会被判
+#     "start timeout" 直接杀掉进程（Killing <pid>: start timeout）。
+#     ⚠️ 注意：放宽 service_start_foreground_timeout_ms 对 startForeground 类
+#     ANR 无效（那条要靠应用自己在 onStartCommand 主线程首行调 startForeground）。
+#   - 关 wifi/蓝牙扫描：省掉后台周期性工作，减少无谓 CPU 争抢。
+#   - 关动画 + setenforce 0 + 抬高日志级别：让 UI 测试可预期、日志不被淹没。
+cmd_tune() {
+  is_booted || die "模拟器未就绪，先跑: emuctl start"
+  info "调优模拟器（放宽 AM 超时 / 关无线扫描 / 关动画）…"
+  adb root >/dev/null 2>&1
+  adb wait-for-device >/dev/null 2>&1
+  adb shell settings put global activity_manager_constants \
+    "activity_start_timeout=600000,service_start_foreground_timeout_ms=600000,service_timeout=300000,input_dispatching_timeout=180000,broadcast_timeout=180000,content_provider_timeout=180000" >/dev/null 2>&1
+  adb shell settings put global window_animation_scale 0 >/dev/null 2>&1
+  adb shell settings put global transition_animation_scale 0 >/dev/null 2>&1
+  adb shell settings put global animator_duration_scale 0 >/dev/null 2>&1
+  adb shell settings put global wifi_scan_always_enabled 0 >/dev/null 2>&1
+  adb shell svc wifi disable >/dev/null 2>&1
+  adb shell svc bluetooth disable >/dev/null 2>&1
+  adb shell setprop persist.log.tag W >/dev/null 2>&1
+  adb shell setenforce 0 >/dev/null 2>&1
+  ok "调优完成（activity_start_timeout=600s，无线/动画已关）"
+}
+
+# cmd_aot <package> —— dex AOT 编译（实测 85s，是把"启动必超时"变成 489ms 的关键）
+cmd_aot() {
+  local pkg="${1:-}"
+  [ -n "$pkg" ] || die "用法: emuctl aot <package>"
+  is_booted || die "模拟器未就绪，先跑: emuctl start"
+  info "AOT 编译 $pkg（-m speed -f），无 KVM 下约 1~3 分钟…"
+  timeout 900 adb shell cmd package compile -m speed -f "$pkg" >/dev/null 2>&1 \
+    || warn "AOT 编译未成功（可能包不存在）；继续，但启动大概率超时"
+  ok "AOT 编译完成: $pkg"
+}
+
+# 从 APK 里读 package name（aapt 优先，失败返回空）
+apk_package() {
+  local apk="$1" aapt_bin
+  aapt_bin="$(ls "$ANDROID_HOME"/build-tools/*/aapt 2>/dev/null | sort -V | tail -1)"
+  [ -n "$aapt_bin" ] || return 1
+  "$aapt_bin" dump badging "$apk" 2>/dev/null \
+    | sed -n "s/.*package:name='\([^']*\)'.*/\1/p" | head -1
 }
 
 cmd_status() {
@@ -259,10 +307,21 @@ cmd_stop() {
 }
 
 cmd_install() {
-  [ $# -ge 1 ] || die "用法: emuctl install <apk>"
+  [ $# -ge 1 ] || die "用法: emuctl install <apk> [--no-aot]"
+  local apk="$1"; shift || true
+  local no_aot=0
+  for a in "$@"; do [ "$a" = "--no-aot" ] && no_aot=1; done
+  [ -f "$apk" ] || die "找不到 APK: $apk"
   is_booted || die "模拟器未就绪，先跑: emuctl start"
-  adb install -r -t "$1" || die "安装失败: $1"
-  ok "已安装: $1"
+  adb install -r -t "$apk" || die "安装失败: $apk"
+  ok "已安装: $apk"
+  if [ "$no_aot" = "1" ]; then
+    warn "跳过 AOT（--no-aot）：无 KVM 环境下启动大概率超时，仅当你知道后果才这么做"
+    return 0
+  fi
+  # 无 KVM 时不做 AOT，ART 走解释/JIT，冷启动 attach 必超时被杀（实测 Settings 47s 超时 → AOT 后 489ms）
+  local pkg; pkg="$(apk_package "$apk" || true)"
+  if [ -n "$pkg" ]; then cmd_aot "$pkg"; else warn "读不到 package name，跳过 AOT"; fi
 }
 
 cmd_launch() {
@@ -304,6 +363,8 @@ case "${1:-help}" in
   create)     shift; cmd_create "$@" ;;
   start)      shift; cmd_start "${1:-}" ;;
   wait)       shift; cmd_wait "$@" ;;
+  tune)       shift; cmd_tune "$@" ;;
+  aot)        shift; cmd_aot "$@" ;;
   status)     shift; cmd_status "$@" ;;
   stop)       shift; cmd_stop "$@" ;;
   install)    shift; cmd_install "$@" ;;

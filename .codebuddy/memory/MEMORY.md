@@ -83,6 +83,36 @@
 - 同理 mac_salt 必须显式写进 manifest：留空会让 writer 再生成一个，
   造成「加密用一个 mac_key、校验用另一个」→ 打开 EnableHMAC 就永远验不过。
 
+## HTTP Range / 流式供给契约（2026-10-01 修真 bug 后固化，长期）
+
+- **`FileContentProvider` 的 `GetReader()` 与 `GetSeeker()` 必须返回「共享同一个读取位置」的对象。**
+  `ContentHandler.ServeFile`（`internal/v2/handler/content.go`）的顺序是
+  `reader := GetReader()` → `seeker := GetSeeker()` → `seeker.Seek(start)` → `io.Copy(w, reader)`；
+  两次若返回不同实例，Seek 作用在没人读的流上 ⇒ **HTTP Range 静默失效**：
+  响应头写 `bytes N-M/size`，实体体却从文件头返回（206 也照样返回，全绿假象）。
+  曾因 `LocalFileProvider` 内存缓存分支各 new 一个 `bytes.Reader` 而中招（小文件 ≤3MB 全命中）。
+  修法即 `cachedStream()` 单例；**回归锁 `internal/v2/handler/content_range_cached_test.go`**。
+- **这类契约不能用 mock 测**：旧用例 `TestServeFile_SeekableProvider_SeeksCorrectly` 把同一个
+  `bytes.Reader` 同时塞给 `ReaderVal`/`SeekerVal`，恰好绕开了 bug，全绿却没覆盖到。
+  ⇒ 凡「两个方法必须共享状态」的契约，测试必须用**真实对象**构造。
+- 排查手法：`curl -r N-M` 拿到的字节去明文里 `find`，若命中偏移 0 就是此 bug 的特征。
+
+## Android 模拟器"真机"测试通路（2026-10-01 建立，长期）
+
+- 无 KVM 是硬事实（QEMU TCG，约 90× 慢），**模拟器内 WebView(Chromium) 初始化必崩**
+  （crashpad + `SIGTRAP` pc=0、无 tombstone）→ **UI 级真机测试不可行**；
+  但 **Go 后端在模拟器里完全正常**（Android 文件/权限/mount 语义等价真机）。
+  ⇒ 混合通路：后端跑模拟器 + 前端跑宿主机 Chromium + `adb forward`。
+- 三件套：`scripts/emu-backend-check.sh`（后端 HTTP 契约，7 组含 seek 逐字节）、
+  `scripts/hybrid-e2e.sh`（编排，自包含：现造样例/现构建 dist/反代/trap 自清）、
+  `scripts/emu-smoke.sh`（APK 冒烟，当前红 = 环境限制，环境改善应自转绿）。
+  权威文档：`docs/android-emulator-testing.md`。
+- `emuctl`（真源 `.ide/bin/emuctl`）：`start/wait` 末尾自动 `tune`（放宽 AM 超时/关无线/关动画），
+  `install` 自动 AOT（`cmd package compile -m speed -f`）。**不做 AOT 冷启动必超时**
+  （实测系统 Settings 47s 超时 → AOT 后 489ms）。改完同步：`install -m 755 .ide/bin/emuctl /usr/local/bin/emuctl`。
+- 前端伺服**必须是薄反代**（`/stream|/api|/preview|/themes|/ping` → 后端），纯静态会把 `/stream`
+  兜底成 index.html，播放器拿到 HTML → 必然"播放失败"。
+
 ## 主应用加解密架构事实（2026-09-29 盘点，长期）
 
 - **主应用 = CLI（`cmd/encv` → `pkg/encv`）+ Capacitor 移动应用**。后者前端是
