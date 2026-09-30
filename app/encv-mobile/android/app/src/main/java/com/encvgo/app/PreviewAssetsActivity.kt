@@ -97,7 +97,6 @@ class PreviewAssetsActivity : AppCompatActivity() {
 })();
 """
     }
-    }
 
     private var webView: WebView? = null
 
