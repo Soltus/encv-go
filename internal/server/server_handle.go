@@ -11,6 +11,7 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/container/detector"
 	"github.com/Soltus/encv-go/internal/v2/namer"
 	"github.com/Soltus/encv-go/internal/v2/provider"
+	"github.com/Soltus/encv-go/internal/v2/reader"
 	"github.com/Soltus/encv-go/internal/v2/types"
 )
 
@@ -140,19 +141,66 @@ func (s *Server) serveEncryptedFile(w http.ResponseWriter, r *http.Request, full
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// 注意：只关闭 decryptReader，不要关闭 factory，因为 factory 是 Service 缓存的
-	defer decryptReader.Close()
-
 	// 3. 【关键修复】传入 factory
 	// NewLocalFileProvider 需要 factory 来判断 IsSeekable，从而决定缓存策略
 	prov, err := provider.NewLocalFileProvider(ctx, factory, decryptReader)
 	if err != nil {
+		// provider 没接管 decryptReader，这里自己关（避免句柄泄漏）
+		decryptReader.Close()
 		slog.Error("NewLocalFileProvider failed", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// ⚠️ 所有权已交给 provider：**只**用 prov.Close() 关，不要再加
+	// `defer decryptReader.Close()` —— 那会关两次。
+	// 重复 Close 会把全局共享文件句柄的引用计数多减一次，导致并发的
+	// 其它请求读到 "file already closed"（2026-10-02 模拟器实测）。
+	// （factory 是 Service 缓存的，不要关。）
 	defer prov.Close()
+
+	// 3.5 【完整性预校验】在写任何响应体之前先确认文件没坏。
+	//
+	// 背景：分块 CRC 只能在**读到损坏块**时中止 —— 那时响应头（200 + Content-Length）
+	// 已经发出去了，客户端拿到的是"截断的流"而不是明确的错误。真机上表现为
+	// "播到一半卡住"，用户和前端都不知道是文件坏了。
+	// 预校验让我们能在吐第一个字节前就返回 422 data_corrupted。
+	//
+	// 代价 = 一次顺序读（不解密）。因此严格限制触发条件，避免拖慢大文件首字节：
+	//   · 仅本地容器（远程/alist 流没有 NewRawContainerReader，自动跳过）
+	//   · 仅不带 Range 的请求（带 Range 的拖动/续传由分块 CRC 兜底）
+	//   · 仅大小 ≤ preVerifyMaxSize
+	//   · 容器必须真的带 CRC 元数据（老容器跳过 ⇒ 行为完全不变）
+	if shouldPreVerify(r, prov.GetSize()) {
+		if err := verifyContainerIntegrity(factory, prov.GetSize()); err != nil {
+			slog.Error("pre-serve integrity check failed", "path", fullPath, "error", err)
+			if errors.Is(err, types.ErrDataCorrupted) {
+				http.Error(w, `{"error":"data_corrupted","message":"文件数据已损坏（完整性校验失败）"}`, http.StatusUnprocessableEntity)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 
 	// 4. 处理内容
 	s.contentHandler.ServeFile(w, r, prov)
+}
+
+// preVerifyMaxSize 预校验的大小上限（与 reader.MaxPreVerifySize 对齐）
+const preVerifyMaxSize = reader.MaxPreVerifySize
+
+// shouldPreVerify 是否值得在吐字节前先整片校验一遍
+func shouldPreVerify(r *http.Request, size int64) bool {
+	if size <= 0 || size > preVerifyMaxSize {
+		return false
+	}
+	// 带 Range 的请求（拖动/续传/并发分段）不预校验：
+	// 为了 1KB 的 Range 去读整片不划算，且分块 CRC 已经能在损坏处中止。
+	return r.Header.Get("Range") == ""
+}
+
+// verifyContainerIntegrity 见 reader.VerifyContainerIntegrity（下沉到 reader 包，
+// 好让 server 与 service 两条路径共用同一份实现）。
+func verifyContainerIntegrity(factory reader.DecryptReaderFactory, size int64) error {
+	return reader.VerifyContainerIntegrity(factory, size)
 }

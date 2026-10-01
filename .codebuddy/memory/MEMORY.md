@@ -97,16 +97,83 @@
   ⇒ 凡「两个方法必须共享状态」的契约，测试必须用**真实对象**构造。
 - 排查手法：`curl -r N-M` 拿到的字节去明文里 `find`，若命中偏移 0 就是此 bug 的特征。
 
+## 测试清单体检（2026-10-02，长期·定期做）
+
+- **"绿"可能只是"没跑"的假象**：`app/encv-mobile/vitest.config.ts` 曾存在
+  86 条目里 **41 条指向不存在的文件**（文件已提升到 `packages/shared-components`，
+  清单没跟着改）⇒ 那些用例从来没运行过，却一直在"全绿"的报表里。
+- 修正后暴露两类问题：① 真 bug（`EXT_TO_CATEGORY` 缺图片扩展名 ⇒ png 归到 misc）；
+  ② 孤儿用例（依赖模块已删，导入即失败）。
+- 做法：**定期扫一遍清单里每个路径是否存在**（几行 python 就能做），
+  修路径 → 试跑 → 失败的**挂起并注明原因**（不要静默删，也不要拖红 CI）→ 记录待修清单。
+
+## 全局共享文件句柄（globalFileHandlePool）的契约（2026-10-02 血的教训，长期）
+
+- `internal/v2/reader/file_handle_pool.go` 按**路径**共享同一个 `*os.File`（引用计数）。
+  同一个进程里（HTTP 服务就是如此）多个请求/多条流共用它 ⇒
+  **任何"取引用/还引用"不配平或重复 Close，都是并发 bug**，不是"多打一条日志"。
+- 三条硬约束：
+  1. 从池取的句柄**只能 `Put` 归还，绝不能直接 `Close()`**（直接关会把别人正在用的 fd 干掉）。
+  2. 一次"使用"对应一次 `Get`，由使用该句柄的 reader 的 `Close` 归还；
+     "容器级"引用由 `fileContainerReader.Close()` 归还 —— 两层互不混用。
+  3. 所有 decryptReader / provider 的 `Close()` **必须幂等**（上层真实存在重复 Close 的调用链：
+     `defer prov.Close()` + `defer decryptReader.Close()`）。
+- 症状对照：`read ...: file already closed` / `416 Seek Not Supported` / **206 但实体体被截断** /
+  `io.Copy` nil deref panic（provider 读出错后 `GetReader()` 返回 nil）。
+  这类 bug 只在并发下显现 ⇒ 断言要**多轮**，单轮会漏。
+
+## 容器完整性契约（2026-10-02 决策 A 落地，长期）
+
+- 视频/主链路（`encrypt-v2`）走的是 **v4 fragment 栈**（`SingleFileContainerWriterV4`），
+  **不是** `WriteV4ContainerTo` 的 segment 栈（后者才有 `EnableHMAC`）。改完整性相关行为前
+  先确认自己在哪条栈上 —— 我在这上面踩过一次（按 HMAC 去找，发现那条开关跟主链路无关）。
+- 现在的契约：
+  1. **写入端**必须写 `DataCRC32`（v4 分片也要写，且要带进 v4 manifest 的 `data_crc32`）。
+  2. **`AdaptV4ToV2`** 必须把 segment 的 CRC 带到 fragment（不能写死 0）。
+  3. **读取端**在"从分片起点整片读"时边读边校，不符 → `types.ErrDataCorrupted`。
+  4. `DataCRC32 == 0` = 老容器/无元数据 ⇒ **一律跳过校验**（向后兼容的开关，别乱改）。
+- 校验只能"边读边算"：v4 数据区是裸密文，没有 v2 BlockHeader，
+  `verifyFragmentAt` 那套用不上；也别指望"打开容器时校验"。
+- ⚠️ **必须"读满整片"就判定，不能只等 `io.EOF`**：HTTP 侧
+  `io.Copy(w, io.LimitReader(reader, contentLength))` 在 contentLength == 明文长度时
+  读满即停，不会再调底层 ⇒ 底层 EOF 永不发生 ⇒ 大文件校验永远不触发（实测过）。
+- **分块 CRC（已落地，2026-10-02）**：写入端每 64KB 落一个块 CRC
+  （`Fragment.BlockCRCSize/BlockCRC32` ← `Segment_v4` ← `AdaptV4ToV2`），
+  读取端每读满一块就校 ⇒ 损坏处**立即**中断（8.6MB 实测：客户端只收到 4.3MB 就被截断，
+  而整片校验时是收满 8.6MB 乱码）。
+- **吐字节前的预校验（已落地）**：`serveEncryptedFile` 3.5 步用
+  `factory.NewRawContainerReader()`（只读**密文**，因为 CRC 是密文的）整片核对后再
+  `ServeFile` ⇒ 损坏直接 **422 data_corrupted**。
+  触发条件：本地容器 + 不带 Range + ≤64MB + 有 CRC 元数据（老容器/远程流自动跳过）。
+  代价：正常文件多一次顺序读（不解密）。
+- 两条机制各管一段：**不带 Range → 422**；**带 Range → 206 + 在损坏块处截断**（头已发出，
+  只能截断，状态码改不了）。别指望后者也返回 4xx。
+- **segment 栈（compose / wasm）默认开 HMAC**：`Options` 三态（EnableHMAC/DisableHMAC），
+  默认开；开了 MAC 后 `AdaptV4ToV2` 必须扣掉 `MacSize`（否则明文尾部多 10 字节）；
+  `WriteV4ContainerTo` 必须把 CRC 回填到 manifest（否则 fragment 栈读取路径看不到）。
+  注意：**MAC 在 fragment 栈读取路径上并不被校验**，实际检出的仍是 CRC。
+- 白盒断言技巧：并发 bug 若难以稳定复现，可在同包测试里直接读
+  `globalFileHandlePool.holds[path].count`，断言"重复 Close 不得再减引用"（确定性红/绿）。
+
 ## Android 模拟器"真机"测试通路（2026-10-01 建立，长期）
 
 - 无 KVM 是硬事实（QEMU TCG，约 90× 慢），**模拟器内 WebView(Chromium) 初始化必崩**
   （crashpad + `SIGTRAP` pc=0、无 tombstone）→ **UI 级真机测试不可行**；
   但 **Go 后端在模拟器里完全正常**（Android 文件/权限/mount 语义等价真机）。
   ⇒ 混合通路：后端跑模拟器 + 前端跑宿主机 Chromium + `adb forward`。
-- 三件套：`scripts/emu-backend-check.sh`（后端 HTTP 契约，7 组含 seek 逐字节）、
-  `scripts/hybrid-e2e.sh`（编排，自包含：现造样例/现构建 dist/反代/trap 自清）、
+- 五件套（2026-10-02 扩到五件）：
+  `scripts/emu-backend-check.sh`（核心契约，11 组含 seek 逐字节）、
+  `scripts/emu-backend-edge.sh`（协议边界：416/截断/suffix/HEAD/目录/穿越/缺参/**并发多轮**）、
+  `scripts/emu-backend-large.sh`（**>3MB 流式分支**：全量 + 7 偏移 seek + suffix + 并发多轮）、
+  `scripts/hybrid-e2e.sh`（编排，`--only-backend` / `--full` / `--keep`，自包含）、
   `scripts/emu-smoke.sh`（APK 冒烟，当前红 = 环境限制，环境改善应自转绿）。
   权威文档：`docs/android-emulator-testing.md`。
+- ⚠️ **小文件（≤3MB，内存缓存）与大文件（>3MB，流式）是两套代码路径，必须都验** ——
+  2026-10-01 的 Range bug 只在小文件分支，2026-10-02 的并发截断只在流式分支。
+- ⚠️ **HTTP 层 bug 要靠"并发多轮"才抓得住**：共享文件句柄引用计数被多减一次的 bug
+  单轮 4 条很可能侥幸全绿（实测失败率约 25%）。新脚本的并发段都是多轮（5 轮 / 3 轮）。
+- ⚠️ `curl --data-urlencode` 默认是 **POST**，`/stream` 只认 GET ⇒ 19 字节
+  `404 page not found` 的**假阳性**。带 `--data-urlencode` 必须加 `-G`（HEAD 同理）。
 - `emuctl`（真源 `.ide/bin/emuctl`）：`start/wait` 末尾自动 `tune`（放宽 AM 超时/关无线/关动画），
   `install` 自动 AOT（`cmd package compile -m speed -f`）。**不做 AOT 冷启动必超时**
   （实测系统 Settings 47s 超时 → AOT 后 489ms）。改完同步：`install -m 755 .ide/bin/emuctl /usr/local/bin/emuctl`。

@@ -22,6 +22,7 @@ type SequentialSeekableDecryptReader struct {
 	currentOffset    int64 // 当前在全局数据流中的位置
 	totalSize        int64 // 总数据大小
 	discardBufPool   sync.Pool
+	closed           bool // 【并发安全】Close 必须幂等，见 Close 的注释
 }
 
 func NewSequentialSeekableDecryptReader(cr EncryptedContainerReader, password string) (DecryptReader, error) {
@@ -139,7 +140,9 @@ func (r *SequentialSeekableDecryptReader) setupFragmentAt(index int, localOffset
 		_ = rawReader.Close()
 		return err
 	}
-	streamReader := &cipher.StreamReader{S: stream, R: rawReader}
+	// 【完整性】从分片起点读时，边读边校验密文 CRC（见 crcGuardReader 的注释）。
+	// 损坏的数据必须变成错误，不能当明文往外吐。
+	streamReader := &cipher.StreamReader{S: stream, R: crcGuardFor(rawReader, &frag, localOffset)}
 
 	if needDiscard {
 		if err := discardReaderBytes(streamReader, localOffset, &r.discardBufPool); err != nil {
@@ -158,9 +161,25 @@ func (r *SequentialSeekableDecryptReader) setupFragmentAtIndex(index int) error 
 	return r.setupFragmentAt(index, 0)
 }
 
+// Close 释放本条流占用的资源。
+//
+// 【关键】必须幂等：上层存在**重复 Close** 的真实调用链
+// （server.serveEncryptedFile 里 `defer decryptReader.Close()` +
+//  `defer prov.Close()` 会各关一次同一个 decryptReader）。
+// 不幂等的后果不是"多打一条日志"，而是**把全局共享文件句柄的引用计数多减一次**
+// （fileContainerReader 的句柄来自 globalFileHandlePool，按路径共享）⇒
+// 计数提前归零 ⇒ fd 在别的并发请求还在读时被关闭 ⇒
+// 那些请求拿到 "file already closed"，表现为 416 / 500 / 实体体被截断
+// （2026-10-02 模拟器内后端实测：大文件并发 Range 约 3/24 条被截断）。
 func (r *SequentialSeekableDecryptReader) Close() error {
+	if r.closed {
+		return nil
+	}
+	r.closed = true
 	if r.currentReader != nil {
-		r.currentReader.Close()
+		_ = r.currentReader.Close()
+		r.currentReader = nil
+		r.currentDecryptor = nil
 	}
 	return r.containerReader.Close()
 }

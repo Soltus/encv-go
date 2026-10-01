@@ -23,7 +23,9 @@ const mockBridge = vi.hoisted(() => ({
   options: {} as Record<string, ((data: any) => void) | undefined>,
 }));
 
-vi.mock("@/composables/useTaskEventBridge", () => ({
+// ⚠️ 2026-10-02 修正：mock 路径必须与实现 import 的一致
+//    （实现 import 的是 @encv/shared-components/... ，原来这里 mock 的是 @/... 旧路径 ⇒ 没生效）
+vi.mock("@encv/shared-components/composables/useTaskEventBridge", () => ({
   useTaskEventBridge: (options: any) => {
     mockBridge.options = options;
   },
@@ -34,7 +36,7 @@ let batchCreateTasksMock: (...args: any[]) => any;
 let cancelTaskMock: (...args: any[]) => any;
 let cancelRunMock: (...args: any[]) => any;
 
-vi.mock("@/api/encv", () => ({
+vi.mock("@encv/shared-components/api/encv", () => ({
   batchCreateTasks: (...args: any[]) => batchCreateTasksMock(...args),
   cancelTask: (...args: any[]) => cancelTaskMock(...args),
   cancelRun: (...args: any[]) => cancelRunMock(...args),
@@ -42,7 +44,7 @@ vi.mock("@/api/encv", () => ({
 
 /** mock setTaskMetadata */
 const setTaskMetadataMock = vi.hoisted(() => vi.fn());
-vi.mock("@/composables/useTaskTrigger", () => ({
+vi.mock("@encv/shared-components/composables/useTaskTrigger", () => ({
   setTaskMetadata: (...args: any[]) => setTaskMetadataMock(...args),
 }));
 

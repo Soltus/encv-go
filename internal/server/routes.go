@@ -70,6 +70,12 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.POST("/api/dev/kill-backend", s.handleKillBackendGin)
 	r.GET("/stream", gin.WrapF(s.handleStreamRequest))
 	r.GET("/decrypt", gin.WrapF(s.handleStreamRequest))
+	// ⚠️ HEAD 必须单独注册（同 /preview-assets）：gin 的 r.GET 只收 GET，
+	//    HEAD 会落 404 —— 播放器/下载器常用 HEAD 探测资源，缺这行就是"资源明明在却说没有"
+	//    （2026-10-01 模拟器内真实后端实测：HEAD /stream → 404）。
+	//    ContentHandler.ServeFile 已对 HEAD 只回头部、不解密不传实体体。
+	r.HEAD("/stream", gin.WrapF(s.handleStreamRequest))
+	r.HEAD("/decrypt", gin.WrapF(s.handleStreamRequest))
 	r.GET("/preview/*filepath", gin.WrapH(http.StripPrefix("/preview", web.PreviewHandler())))
 	// 🆕 容器预览页（encv-preview）的**可热更新**托管：资源在可写数据目录，
 	// 不在 Go 二进制/APK 里 —— 更新页面不需要换 APK。见 preview_assets.go 的文件头注释。

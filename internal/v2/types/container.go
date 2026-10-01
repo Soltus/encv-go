@@ -166,6 +166,16 @@ type Fragment struct {
 	// 【关键新增】该片段对应加密数据块的 CRC32 校验和
 	// 这是验证物理文件是否正确的“指纹”，与文件名无关
 	DataCRC32 uint32 `json:"data_crc32"`
+
+	// BlockCRCSize / BlockCRC32：分块 CRC（2026-10-02 新增）。
+	//
+	// 为什么需要：整片 CRC 要**读完整片**才知道坏了，而大文件（流式播放）读到那时
+	// 字节早就发给客户端了 —— HTTP 层仍然是 200 + 全量乱码。
+	// 分块 CRC 让读取端**每读满一块就能校一次**，在损坏处立刻报错。
+	//
+	// 兼容：缺省 0 / 空 ⇒ 读取端退化为整片校验（与改造前一致）。
+	BlockCRCSize uint64   `json:"block_crc_size,omitempty"`
+	BlockCRC32   []uint32 `json:"block_crc32,omitempty"`
 }
 
 // Fragment_v2 是 Fragment 的兼容别名（过渡期）

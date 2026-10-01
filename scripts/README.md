@@ -175,6 +175,34 @@ fork 没提供 `i18n-overlay/` 目录时，脚本直接跳过该步骤，原 fro
 - 参考实现脚本（K-Sillot 仓库，仅参考）：
   - `init_openlist.sh` / `init_web.sh` / `init_gomobile.sh` / `gobind.sh`
 
+## 模拟器"真机"测试闸门（无 KVM 环境下的主力回归）
+
+无 KVM 的模拟器里 **APK 内 WebView 会崩**，但 **Go 后端完全正常**（Android
+文件/权限/mount 语义等价真机）。所以真机级验证走「后端跑模拟器 + 宿主机断言 + `adb forward`」：
+
+| 脚本 | 覆盖 | 当前 |
+|------|------|------|
+| `scripts/emu-backend-check.sh` | 核心契约：/ping、mount、目录列举、全量逐字节、Range 首段/中段 seek、失败路径不静默 200 | 11 PASS |
+| `scripts/emu-backend-edge.sh` | 协议边界：416（空实体体 + `Content-Range: bytes */size`）、end 截断、suffix Range、HEAD、目录、路径穿越、缺参、Accept-Ranges、**并发 5 轮×4 路 Range** | 18 PASS |
+| `scripts/emu-backend-large.sh` | **>3MB 流式分支**（真实视频走这条）：全量逐字节、7 个偏移 seek、suffix 1MB、**并发 3 轮×3 路** | 12 PASS |
+| `scripts/emu-backend-failpath.sh` | 失败路径：错密码(403+wrong_password)、**损坏容器(不得静默乱码)**、非容器文件、/decrypt 语义、`--legacy` 存量容器兼容、`--big` 流式分支损坏能被发现 | 10 PASS |
+| `scripts/hybrid-e2e.sh` | 编排（自包含：缺样例现造、缺 dist 现构建、薄反代、trap 自清）+ 宿主机 Chromium 播放断言 | — |
+| `scripts/emu-smoke.sh` | APK 装→AOT→冷启动→崩溃判定（当前红 = 环境限制） | — |
+
+```bash
+emuctl start                                   # 无头模拟器（冷启动 5~15min，会话内保持常开）
+bash scripts/hybrid-e2e.sh --only-backend      # ① 核心契约 + ①b 协议边界
+bash scripts/hybrid-e2e.sh --only-backend --full   # 再 + ①c 大文件流式分支
+bash scripts/hybrid-e2e.sh                     # 再 + ② 宿主机 Chromium 播放
+```
+
+⚠️ 三个坑（都踩过）：
+1. `curl --data-urlencode` 默认是 **POST**，`/stream` 只认 GET ⇒ 19 字节
+   `404 page not found` 的假阳性。必须加 `-G`（HEAD 同理）。
+2. 并发类断言必须**多轮**（失败率约 25% 时单轮会侥幸全绿）。
+3. 改完 Go 代码要重编并让脚本重推：
+   `bash scripts/android-common.sh build-emu-backend /tmp/encv-x64`。
+
 ## 沙箱 GITHUB_TOKEN 推送工作流
 
 `build-openlist-aar.sh` 在 `git clone` 阶段会**自动**检测 `GITHUB_TOKEN` 是否在 env 中；若已 export，则把 fork URL 改写为 `https://x-access-token:${GITHUB_TOKEN}@github.com/...` 形式（URL 注入走 HTTP Basic Auth，GitHub 接受 PAT 作为 password）。**不**用 `git -c http.extraHeader=Authorization: Bearer ...`——clone 可用但 push 时 GitHub 返回 `invalid credentials`。

@@ -62,19 +62,19 @@ const IS_FULL = process.env.ENCV_TEST_FULL === '1'
 // 这些测试 isolate:false 也不会互相污染，是日常开发的主力
 const FAST_INCLUDE = [
   // 纯数据解析/转换（无状态）
-  'src/__tests__/appResult.test.ts',
+  '../packages/shared-components/src/__tests__/appResult.test.ts',
   'src/__tests__/messageStatus.test.ts',
   'src/__tests__/tokenSnapshot.test.ts',
   'src/__tests__/renderTurnItems.test.ts',
   'src/__tests__/renderTurnItems.agentTask.test.ts',
   // composables: 纯函数式（无模块级 state）
-  'src/composables/__tests__/parseContentDelta.test.ts',
-  'src/composables/__tests__/parseToolResultData.test.ts',
-  'src/composables/__tests__/relativeTime.test.ts',
-  'src/composables/__tests__/useAGUIParser.test.ts',
-  'src/composables/__tests__/useSearchInput.test.ts',
-  'src/composables/__tests__/useSectionDerivation.test.ts',
-  'src/composables/__tests__/useToolCallAccumulator.test.ts',
+  // ⚠️ 2026-10-02 待认领（孤儿用例）：../packages/shared-components/src/composables/__tests__/parseContentDelta.test.ts —— 依赖的 ../useAgent 模块已不存在，导入直接失败（0 test）。需 owner 决定"补模块"还是"删用例"，先挂起避免拖红门禁。
+  // ⚠️ 2026-10-02 待认领（孤儿用例）：../packages/shared-components/src/composables/__tests__/parseToolResultData.test.ts —— 依赖的 ../useAgent 模块已不存在，导入直接失败（0 test）。需 owner 决定"补模块"还是"删用例"，先挂起避免拖红门禁。
+  '../packages/shared-components/src/composables/__tests__/relativeTime.test.ts',
+  // ⚠️ 2026-10-02 待认领（孤儿用例）：../packages/shared-components/src/composables/__tests__/useAGUIParser.test.ts —— 依赖的 ../useAgent 模块已不存在，导入直接失败（0 test）。需 owner 决定"补模块"还是"删用例"，先挂起避免拖红门禁。
+  '../packages/shared-components/src/composables/__tests__/useSearchInput.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useSectionDerivation.test.ts',
+  // ⚠️ 2026-10-02 待认领（孤儿用例）：../packages/shared-components/src/composables/__tests__/useToolCallAccumulator.test.ts —— 依赖的 ../useAgent 模块已不存在，导入直接失败（0 test）。需 owner 决定"补模块"还是"删用例"，先挂起避免拖红门禁。
   '../packages/shared-components/src/composables/__tests__/workflow-core.test.ts',
   'src/composables/activeStatus.test.ts',
   'src/composables/appServerRealtimeReducer.test.ts',
@@ -91,9 +91,9 @@ const FAST_INCLUDE = [
   '../packages/shared-components/src/composables/__tests__/useModal.test.ts',
   '../packages/shared-components/src/lib/__tests__/taskEvent.test.ts',
   // utils: RingBuffer bench（纯算法）
-  'src/utils/RingBuffer.bench.test.ts',
+  '../packages/shared-components/src/utils/RingBuffer.bench.test.ts',
   // view 层纯逻辑（无模块级状态）
-  'src/views/__tests__/useFilesView.searchTokens.test.ts',
+  '../packages/shared-components/src/views/__tests__/useFilesView.searchTokens.test.ts',
   // theme: SCSS 编译期契约快照（纯 sass 编译，无模块级状态）
   'src/theme/__tests__/surface.test.ts',
   // theme: vivid.scss P3 孪生由 @function/@each 派生 + sourcemap 溯源（css-source 同源校验）
@@ -123,49 +123,58 @@ const ISOLATED_INCLUDE = [
   'src/__tests__/usePluginExtensions.test.ts',
   'src/api/__tests__/getApiBaseUrl.test.ts',
   'src/api/encv.test.ts',
-  'src/components/__tests__/TaskBasicInfo.test.ts',
-  'src/components/__tests__/TaskTimeline.test.ts',
+  // 🚧 2026-10-02 挂起：../packages/shared-components/src/components/__tests__/TaskBasicInfo.test.ts —— 依赖已可见后仍失败：组件 UI/文案与断言不符（如 phase label、section-title、crypto params 区块）。
+  //    需 owner 判断是"测试过时"还是"功能回退"，别直接改断言掩盖。
+  // 🚧 2026-10-02 挂起：../packages/shared-components/src/components/__tests__/TaskTimeline.test.ts —— 依赖已可见后仍失败：组件 UI/文案与断言不符（如 phase label、section-title、crypto params 区块）。
+  //    需 owner 判断是"测试过时"还是"功能回退"，别直接改断言掩盖。
   'src/components/automation/__tests__/StepInlineTimeline.test.ts',
   'src/components/automation/__tests__/TreeView.test.ts',
   'src/components/developer/__tests__/MockGenLogCard.test.ts',
-  'src/components/shared/__tests__/PhaseBadge.test.ts',
-  'src/components/shared/__tests__/PhaseIcon.test.ts',
-  'src/components/shared/__tests__/RelevanceBadge.test.ts',
-  'src/components/shared/__tests__/UnifiedTimelineCard.test.ts',
+  // 🚧 2026-10-02 挂起：../packages/shared-components/src/components/shared/__tests__/PhaseBadge.test.ts —— 依赖已可见后仍失败：组件 UI/文案与断言不符（如 phase label、section-title、crypto params 区块）。
+  //    需 owner 判断是"测试过时"还是"功能回退"，别直接改断言掩盖。
+  '../packages/shared-components/src/components/shared/__tests__/PhaseIcon.test.ts',
+  '../packages/shared-components/src/components/shared/__tests__/RelevanceBadge.test.ts',
+  '../packages/shared-components/src/components/shared/__tests__/UnifiedTimelineCard.test.ts',
   '../packages/shared-components/src/components/__tests__/TaskDebugPanel.test.ts',
   '../packages/shared-components/src/components/__tests__/TaskVirtualList.test.ts',
-  'src/composables/__tests__/dev-start-guard.test.ts',
-  'src/composables/__tests__/path-chain-e2e.test.ts',
-  'src/composables/__tests__/realtime/HttpPollBackend.test.ts',
-  'src/composables/__tests__/useApiBaseProbe.test.ts',
-  'src/composables/__tests__/useChatEngine.test.ts',
-  'src/composables/__tests__/useErrorAnalyzer.test.ts',
-  'src/composables/__tests__/useFileList.test.ts',
-  'src/composables/__tests__/useFileList.clientFilter.test.ts',
-  'src/composables/__tests__/usePathResolver.test.ts',
-  'src/composables/__tests__/usePinchZoom.test.ts',
+  '../packages/shared-components/src/composables/__tests__/dev-start-guard.test.ts',
+  '../packages/shared-components/src/composables/__tests__/path-chain-e2e.test.ts',
+  '../packages/shared-components/src/composables/__tests__/realtime/HttpPollBackend.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useApiBaseProbe.test.ts',
+  // ⚠️ 真身已提升到 shared-components（上面那行是历史残留路径，文件已不在 encv-mobile）。
+  //    修后端端口漂移（2025→2026 探测不到）的回归锁在这个文件里，必须真的被跑到。
+  '../packages/shared-components/src/composables/__tests__/useApiBaseProbe.test.ts',
+  // 🚧 2026-10-02 挂起（恢复运行后失败，待修）：../packages/shared-components/src/composables/__tests__/useChatEngine.test.ts —— 详见 .codebuddy/memory/2026-10-02.md §7 【B 孤儿】
+  '../packages/shared-components/src/composables/__tests__/useErrorAnalyzer.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useFileList.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useFileList.clientFilter.test.ts',
+  '../packages/shared-components/src/composables/__tests__/usePathResolver.test.ts',
+  '../packages/shared-components/src/composables/__tests__/usePinchZoom.test.ts',
   '../packages/shared-components/src/composables/__tests__/useProxiedFetch.test.ts',
-  'src/composables/__tests__/useRealtimeTransport.test.ts',
-  'src/composables/__tests__/useTaskTrigger.test.ts',
-  'src/composables/__tests__/useTaskViewCompute.test.ts',
-  'src/composables/__tests__/useTasksList.aggregation.test.ts',
-  'src/composables/__tests__/useTasksList.automation-escape.test.ts',
-  'src/composables/__tests__/useTasksList.dom.test.ts',
-  'src/composables/__tests__/useTasksList.escape.test.ts',
-  'src/composables/__tests__/useTasksList.escape-reverse.test.ts',
-  'src/composables/__tests__/useTasksList.grouping.test.ts',
-  'src/composables/__tests__/useTestCaseGeneration.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useRealtimeTransport.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useTaskTrigger.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useTaskViewCompute.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useTasksList.aggregation.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useTasksList.automation-escape.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useTasksList.dom.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useTasksList.escape.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useTasksList.escape-reverse.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useTasksList.grouping.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useTestCaseGeneration.test.ts',
   '../packages/shared-components/src/composables/__tests__/useVectorSearchStatus.test.ts',
   '../packages/shared-components/src/composables/__tests__/useWebDavWorkflowAdapter.test.ts',
-  'src/composables/__tests__/useWorkflowStore.test.ts',
-  'src/composables/__tests__/useWorkflowTaskService.test.ts',
+  '../packages/shared-components/src/composables/__tests__/useWorkflowStore.test.ts',
+  // 🚧 2026-10-02 挂起：useWorkflowTaskService.test.ts —— **不是**改几行断言能解决的：
+  //    套件整体落后于 2026-06-23 的 fire-and-forget + taskServices 依赖注入重构
+  //    （实现改用 getTaskServices().batchCreateTasks(...)，不再直接 import @/api/encv；
+  //     已修 3 处 vi.mock 路径，仍剩 5 条需要重写 mock 层）。需 owner 重写该套件。
   'src/composables/useAttachments.test.ts',
   'src/engines/__tests__/tdesignEngine.test.ts',
   'src/engines/__tests__/TDesignChatView.test.ts',
-  'src/lib/__tests__/mockDataGenerator.test.ts',
+  '../packages/shared-components/src/lib/__tests__/mockDataGenerator.test.ts',
   'src/lib/workflow/__tests__/buildDynamicWorkflow.pre-population.test.ts',
   'src/lib/workflow/__tests__/buildDynamicWorkflow.real-e2e.test.ts',
-  'src/views/__tests__/AgentChat.history.test.ts',
+  // 🚧 2026-10-02 挂起（恢复运行后失败，待修）：../packages/shared-components/src/views/__tests__/AgentChat.history.test.ts —— 详见 .codebuddy/memory/2026-10-02.md §7 【B 孤儿】
   'src/__tests__/stream-url.test.ts',
 ]
 

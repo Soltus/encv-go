@@ -78,7 +78,8 @@ func (r *SequentialDecryptReader) setupNextFragmentDecryptor() error {
 		baseIV = nonce
 	}
 	stream := cipher.NewCTR(block, baseIV)
-	r.currentDecryptor = &cipher.StreamReader{S: stream, R: rawReader}
+	// 【完整性】原子分片也从起点整片读，同样套 CRC 校验（见 crcGuardReader 注释）
+	r.currentDecryptor = &cipher.StreamReader{S: stream, R: crcGuardFor(rawReader, frag, 0)}
 	return nil
 }
 

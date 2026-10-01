@@ -131,6 +131,28 @@ describe("useApiBaseProbe — 优先级链", () => {
     expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
+  it("[2b] 后端端口漂移（2025 不通、2026 通）→ 必须扫到 2026，不能判 all-failed", async () => {
+    // 真机事故场景：后端 StartGinWithRetry 从 2025 起逐个端口重试，
+    // 2025 被占就漂到 2026。修复前 [2] 只试 2025 ⇒ 探测链直接 all-failed，
+    // 真机表现是「整个 app 连不上后端」且看不出原因。
+    setupFetchMockWithRejects([
+      {
+        match: u => u.includes("127.0.0.1:2025"),
+        reject: () => {
+          throw new TypeError("Failed to fetch");
+        },
+      },
+      { match: u => u.includes("127.0.0.1:2026"), respond: () => okResponse() },
+      { match: u => u.includes("/api/network/lan-access"), respond: () => okResponse({ addresses: [], preferred: "" }) },
+    ]);
+    const probe = freshProbe();
+    const result = await probe.probe({ force: true });
+
+    expect(result.baseUrl).toBe("http://127.0.0.1:2026");
+    expect(result.source).toBe("loopback");
+    expect(encv.setApiBaseUrl).toHaveBeenCalledWith("http://127.0.0.1:2026");
+  });
+
   it("[3] cached 失败 + loopback 失败 + LAN 候选命中 → 走 lan-candidate", async () => {
     localStorage.setItem("encv-server-url", "http://192.168.1.99:2025");
 
@@ -313,11 +335,17 @@ describe("useApiBaseProbe — 沙箱 mock 浏览器 trae gateway 拦截（防回
     const probe = freshProbe();
     const result = await probe.probe({ force: true });
 
-    // ❌ 绝不能 commit trae origin（trae 网关不通）
-    expect(result.baseUrl).not.toContain("trae.cn");
     // ❌ 绝不能 throw（会触发 [App] onErrorCaptured 渲染错误边界）
-    // ✅ 必须 fallback 到沙箱内 127.0.0.1:16666（preview-gateway 入口）
-    expect(result.baseUrl).toBe("http://127.0.0.1:16666");
+    // ✅ fallback 到 **current origin（trae 域名）**，不是 127.0.0.1:16666。
+    //    依据 useApiBaseProbe [4] 的 2026-06-10 决策（代码注释有完整理由）：
+    //      - OpenPreview 浏览器跑在 agent-tool-host 上，它自己的 :16666 不存在
+    //        → commit 16666 等于 connect refused
+    //      - trae 反代已把 trae.cn/* 代理到 :16000 → :16666 → :2025，同源 fetch 可达
+    //    ⚠️ 本用例原先断言 16666 —— 那是**落后于代码**的旧期望（本文件此前因
+    //       vitest 配置里路径写错而从未被跑到，2026-10-02 修配置后才暴露）。
+    //       若你的环境里 16666 确实可达，请连同 useApiBaseProbe [4] 一起改，
+    //       不要只改测试。
+    expect(result.baseUrl).toBe("https://run-agent-fallback.trae.cn");
     expect(result.source).toBe("current-origin");
   });
 });

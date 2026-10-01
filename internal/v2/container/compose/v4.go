@@ -38,8 +38,21 @@ type Options struct {
 	OriginalName     string
 	MimeType         string
 	Format           string
-	EnableHMAC       bool
-	SegmentSize      int64 // 流式时才用；<=0 取 writer.DefaultStreamSegmentSize
+
+	// EnableHMAC / DisableHMAC：v4 容器是否在每段末尾写 10 字节 HMAC-SHA1-80。
+	//
+	// 🆕 2026-10-02 决策：**默认开启**（与 config.V4EnableHMAC 的默认一致）。
+	//   事故背景（真机实测）：容器被篡改/位翻转后，没有 MAC 的容器读出来是
+	//   「长度正确、内容乱码、不报错」——最恶劣的静默损坏。
+	//   因为 Go 的 bool 零值是 false、无法区分"没设"和"显式关"，
+	//   这里用两个字段表达三态：
+	//     两者都未设      → 默认开启
+	//     EnableHMAC=true  → 开启
+	//     DisableHMAC=true → 显式关闭（仅兼容/测试场景使用）
+	EnableHMAC  bool
+	DisableHMAC bool
+
+	SegmentSize int64 // 流式时才用；<=0 取 writer.DefaultStreamSegmentSize
 
 	// Compression 压缩模式：只接受 crypto.CompressionModeNone（零值 "" 也当它用）。
 	//
@@ -80,6 +93,10 @@ func (o Options) withDefaults() Options {
 	}
 	if o.SegmentSize <= 0 {
 		o.SegmentSize = writer.DefaultStreamSegmentSize
+	}
+	// 【完整性默认开启】两者都没显式设置 ⇒ 开启 HMAC（见 Options 的字段注释）
+	if !o.EnableHMAC && !o.DisableHMAC {
+		o.EnableHMAC = true
 	}
 	return o
 }
@@ -240,6 +257,9 @@ func EncryptBytes(plain []byte, opts Options, w io.Writer) error {
 		IDData:         m.idData,
 		PasswordHint:   m.hint,
 		CipherMode:     cipherMode,
+		// 【完整性】修前这里**漏传** EnableHMAC —— 于是整块加密路径产出的容器
+		// 永远不带 MAC（即使 Options 要求开）。篡改后读取端无从校验 ⇒ 静默乱码。
+		EnableHMAC:     opts.EnableHMAC,
 		SegmentResults: []*crypto.SegmentEncryptionResult{seg},
 		Manifest:       mf,
 	})

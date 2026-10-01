@@ -12,12 +12,17 @@
 # 三阶段断言：
 #   ① 后端契约（scripts/emu-backend-check.sh）：/ping、mount 语义、目录列举、
 #      全量解密逐字节、Range 首段、中间偏移 seek、失败路径不静默 200
+#   ①b 协议边界（scripts/emu-backend-edge.sh）：416 / 截断 / suffix / HEAD /
+#      目录 / 穿越 / 缺参 / **并发多轮 Range**（2026-10-02 抓到的间歇性失败点）
+#   ①c 大文件流式分支（scripts/emu-backend-large.sh，仅 --full）：>3MB 容器的
+#      多偏移 seek 逐字节正确（真实视频走的就是这条分支）
 #   ② 前端播放（scripts/hybrid-play.ts）：/stream 206 + artplayer playing + 无错误卡片
 #   ③ 证据落盘：截图 + logcat 片段
 #
 # 用法：
 #   bash scripts/hybrid-e2e.sh [选项]
-#     --only-backend   只跑 ①（快，不需要 dist/浏览器）
+#     --only-backend   只跑 ①+①b（快，不需要 dist/浏览器）
+#     --full           额外跑 ①c 大文件流式分支（要现造 ~8MB 样例，慢）
 #     --keep           结束后保留后端与端口转发（便于手工排查）
 #     --no-build       缺 dist 时不自动构建（直接失败并提示）
 #     --sample <path>  指定加密样例容器（默认 /tmp/src/out/sample.4pm.sccgv）
@@ -32,10 +37,12 @@ OUT_DIR=/tmp/emutest
 KEEP=0
 ONLY_BACKEND=0
 NO_BUILD=0
+FULL=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --only-backend) ONLY_BACKEND=1; shift ;;
+    --full)         FULL=1;         shift ;;
     --keep)         KEEP=1;         shift ;;
     --no-build)     NO_BUILD=1;     shift ;;
     --sample)       SAMPLE="$2";    shift 2 ;;
@@ -175,7 +182,17 @@ ok "容器虚拟路径: $VFILE（primary root=${VPATH:-unknown}）"
 info "阶段①：模拟器内后端契约断言"
 bash "$ROOT/scripts/emu-backend-check.sh" --api "$API" --path "$VFILE" --plain "$PLAIN" || fail "后端契约断言失败"
 
-[ "$ONLY_BACKEND" = "1" ] && { echo; echo "✅ --only-backend：后端契约全通过"; exit 0; }
+# ---------------- 3b) 阶段①b：协议边界 ----------------
+info "阶段①b：HTTP 协议边界断言"
+bash "$ROOT/scripts/emu-backend-edge.sh" --api "$API" --path "$VFILE" --plain "$PLAIN" || fail "协议边界断言失败"
+
+# ---------------- 3c) 阶段①c：大文件流式分支（--full） ----------------
+if [ "$FULL" = "1" ]; then
+  info "阶段①c：大文件流式分支（>3MB，真机视频走的就是这条）"
+  bash "$ROOT/scripts/emu-backend-large.sh" --api "$API" || fail "大文件流式分支断言失败"
+fi
+
+[ "$ONLY_BACKEND" = "1" ] && { echo; echo "✅ --only-backend：后端契约 + 协议边界全通过"; exit 0; }
 
 # ---------------- 4) 阶段②：宿主机 Chromium 跑前端 ----------------
 # ⚠️ 必须是「薄反代」而不是纯静态伺服：真机上 WebView 的页面就是**由 Go 后端本身**提供的，

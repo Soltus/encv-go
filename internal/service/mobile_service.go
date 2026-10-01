@@ -27,6 +27,7 @@ import (
 	"github.com/Soltus/encv-go/internal/v2/namer"
 	"github.com/Soltus/encv-go/internal/v2/plugins"
 	"github.com/Soltus/encv-go/internal/v2/provider"
+	"github.com/Soltus/encv-go/internal/v2/reader"
 	"github.com/Soltus/encv-go/internal/v2/service"
 	"github.com/Soltus/encv-go/internal/v2/types"
 )
@@ -1853,15 +1854,31 @@ func (s *MobileService) serveEncryptedExternalFile(w http.ResponseWriter, r *htt
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer decryptReader.Close()
-
 	prov, err := provider.NewLocalFileProvider(ctx, factory, decryptReader)
 	if err != nil {
+		decryptReader.Close() // provider 没接管，自己关
 		slog.Error("NewLocalFileProvider failed", "error", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// ⚠️ 只由 provider 关一次：重复 Close 会把全局共享文件句柄的引用计数多减一次，
+	//    并发请求会读到 "file already closed"（2026-10-02 模拟器实测）。
 	defer prov.Close()
+
+	// 【完整性预校验】与 server.serveEncryptedFile 的 3.5 步同一份实现：
+	//   在写任何响应体之前先确认文件没坏 ⇒ 损坏直接 422，而不是 200 + 截断流。
+	//   触发条件同样严格：不带 Range + ≤ reader.MaxPreVerifySize + 容器带 CRC 元数据。
+	if r.Header.Get("Range") == "" {
+		if err := reader.VerifyContainerIntegrity(factory, prov.GetSize()); err != nil {
+			slog.Error("pre-serve integrity check failed", "path", fullPath, "error", err)
+			if errors.Is(err, types.ErrDataCorrupted) {
+				http.Error(w, `{"error":"data_corrupted","message":"文件数据已损坏（完整性校验失败）"}`, http.StatusUnprocessableEntity)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 
 	s.contentHandler.ServeFile(w, r, prov)
 }

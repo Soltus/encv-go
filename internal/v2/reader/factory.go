@@ -187,6 +187,18 @@ func (f *decryptReaderFactory) verifyPasswordHint() error {
 	return nil
 }
 
+// NewRawContainerReader 打开一个**只读密文**的容器 reader（不解密）。
+//
+// 用途：在吐出第一个字节**之前**做完整性预校验（verify 场景）。
+// 为什么需要它：`ServeFile` 拿到的是解密后的流，而容器里记的 CRC 是**密文**的，
+// 用解密流算不出同一个值；所以要单独开一条只读密文的通道。
+// 成本：一次顺序读（不解密），本地文件很便宜；远程流不适用（调用方跳过）。
+func (f *decryptReaderFactory) NewRawContainerReader() (EncryptedContainerReader, error) {
+	return NewFileContainerReaderFromMetadata(
+		f.containerPath, f.cachedManifest, f.cachedManifestV4,
+		f.cachedHeaderVersion, f.physicalOffsets)
+}
+
 // NewDecryptReader 使用缓存的数据高效地创建解密器
 func (f *decryptReaderFactory) NewDecryptReader() (DecryptReader, error) {
 	// 【关键】使用新的轻量级构造函数，直接使用缓存好的数据，避免重复扫描

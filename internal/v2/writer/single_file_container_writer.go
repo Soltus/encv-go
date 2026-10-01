@@ -25,6 +25,53 @@ type pendingFragment struct {
 	physicalOffset    uint64
 	crc32             uint32
 	v2DataBuffer      *bytes.Buffer
+	// 分块 CRC：每写满 FragmentBlockCRCSize 就落一个块 CRC
+	blockCRC    hash.Hash32
+	blockAcc    uint64
+	blockCRCs   []uint32
+}
+
+// FragmentBlockCRCSize 分块 CRC 的块大小（64KB）。
+//
+// 取这个值的原因：足够小（8.6MB 视频在损坏处 64KB 内就能发现，不会把整片吐完），
+// 又足够大（元数据体积 = 块数 × 4B ≈ 文件/16KB，1GB 电影也才 64KB 元数据）。
+const FragmentBlockCRCSize = 64 * 1024
+
+// appendBlockCRC 按 FragmentBlockCRCSize 切块累计 CRC，写满一块就落一个值。
+//
+// 分块的意义：整片 CRC 要读完整片才能判定，而流式播放读到那时数据早发给客户端了
+// （HTTP 已经是 200 + 全量乱码）。分块后读取端每读满一块就能校，损坏处立刻报错。
+func (p *pendingFragment) appendBlockCRC(data []byte) {
+	if p.blockCRC == nil {
+		p.blockCRC = crc32.NewIEEE()
+	}
+	for len(data) > 0 {
+		room := FragmentBlockCRCSize - int(p.blockAcc)
+		take := len(data)
+		if take > room {
+			take = room
+		}
+		p.blockCRC.Write(data[:take])
+		p.blockAcc += uint64(take)
+		data = data[take:]
+		if p.blockAcc >= FragmentBlockCRCSize {
+			p.blockCRCs = append(p.blockCRCs, p.blockCRC.Sum32())
+			p.blockCRC.Reset()
+			p.blockAcc = 0
+		}
+	}
+}
+
+// finishBlockCRCs 收尾：不足一块的余数也要落一个 CRC
+func (p *pendingFragment) finishBlockCRCs() (uint64, []uint32) {
+	if len(p.blockCRCs) == 0 && p.blockAcc == 0 {
+		return 0, nil
+	}
+	if p.blockAcc > 0 {
+		p.blockCRCs = append(p.blockCRCs, p.blockCRC.Sum32())
+		p.blockAcc = 0
+	}
+	return FragmentBlockCRCSize, p.blockCRCs
 }
 
 // SingleFileContainerWriter 是 ContainerWriter_v2 的一个具体实现，专用于单文件容器
@@ -158,6 +205,7 @@ func (w *SingleFileContainerWriter) BeginFragment(frag *types.Fragment) error {
 		globalStartOffset: w.currentDataStreamOffset,
 		physicalOffset:    frag.PhysicalOffset,
 		crc32:             0,
+		blockCRC:          crc32.NewIEEE(),
 	}
 
 	if w.headerVersion != 4 {
@@ -177,6 +225,11 @@ func (w *SingleFileContainerWriter) WriteFragmentData(data []byte) error {
 			return fmt.Errorf("failed to write v4 fragment data: %w", err)
 		}
 		w.globalHasher.Write(data)
+		// 【完整性】v4 也累计分片 CRC，FinishFragment 时写进 manifest。
+		// 修前 v4 分支把 DataCRC32 写死成 0 ⇒ 容器里**没有任何完整性元数据**，
+		// 位翻转/截断后读取端无从校验 ⇒ 200 + 长度正确 + 内容乱码（静默损坏）。
+		w.currentFragment.crc32 = crc32.Update(w.currentFragment.crc32, crc32.IEEETable, data)
+		w.currentFragment.appendBlockCRC(data)
 	} else {
 		w.currentFragment.v2DataBuffer.Write(data)
 	}
@@ -195,12 +248,18 @@ func (w *SingleFileContainerWriter) FinishFragment() error {
 	frag := w.currentFragment
 
 	if w.headerVersion == 4 {
+		// 【完整性】写入真实 CRC（修前恒为 0，见 WriteFragmentData 的注释）。
+		// 0 是"老容器/无元数据"的保留值：读取端只在 DataCRC32 != 0 时校验，
+		// 所以这一改动**不影响存量容器**的可读性。
+		blockSize, blockCRCs := frag.finishBlockCRCs()
 		w.fragments = append(w.fragments, types.Fragment{
 			ID:                frag.id,
 			Type:              frag.typ,
 			Length:            frag.length,
 			GlobalStartOffset: frag.globalStartOffset,
-			DataCRC32:         0,
+			DataCRC32:         frag.crc32,
+			BlockCRCSize:      blockSize,
+			BlockCRC32:        blockCRCs,
 			PhysicalPath:      "",
 			PhysicalOffset:    frag.physicalOffset,
 		})
@@ -240,11 +299,16 @@ func (w *SingleFileContainerWriter) writeManifestV4(manifestObj *types.Manifest)
 
 	segments := make([]types.Segment_v4, 0, len(manifestObj.Fragments))
 	for _, frag := range manifestObj.Fragments {
+		// 【完整性】把分片 CRC / 分块 CRC 带进 v4 manifest：读取端是从 v4 manifest 反推
+		// v2 fragment 的（AdaptV4ToV2），这里不带过去，读出来就还是 0。
 		segments = append(segments, types.Segment_v4{
-			ID:     frag.ID,
-			Offset: frag.PhysicalOffset,
-			Size:   frag.Length,
-			Nonce:  "",
+			ID:           frag.ID,
+			Offset:       frag.PhysicalOffset,
+			Size:         frag.Length,
+			Nonce:        "",
+			DataCRC32:    frag.DataCRC32,
+			BlockCRCSize: frag.BlockCRCSize,
+			BlockCRC32:   frag.BlockCRC32,
 		})
 	}
 

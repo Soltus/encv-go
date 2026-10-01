@@ -26,6 +26,12 @@ interface TriggeredByEntry {
   /** workflow run 关联 ID（同一 run 的 task 共享） */
   runId?: string;
   recordedAt: string;
+  /**
+   * 写入序号（单调递增）。recordedAt 相同时用它决出先后 —— 见 sortEntriesNewestFirst
+   * 的注释：没有它，同一毫秒内写入的一批条目裁剪时会保留**最早**的，把刚写的丢掉。
+   * 老数据没有这个字段（读回来时按原顺序补号），缺省 0 ⇒ 不影响存量。
+   */
+  seq?: number;
 }
 
 type TriggeredByMap = Record<string, TriggeredByEntry>;
@@ -34,6 +40,8 @@ type TriggeredByMap = Record<string, TriggeredByEntry>;
 const triggeredByMap = reactive<TriggeredByMap>({});
 
 let initialized = false;
+/** 单调递增的写入序号（见 TriggeredByEntry.seq 的注释） */
+let seqCounter = 0;
 
 function ensureLoaded(): void {
   if (initialized) return;
@@ -43,9 +51,13 @@ function ensureLoaded(): void {
     if (!raw) return;
     const parsed = JSON.parse(raw) as TriggeredByMap;
     if (!parsed || typeof parsed !== "object") return;
+    // 老数据没有 seq ⇒ 按 JSON 里的顺序补号（越靠后越新），保持裁剪语义正确
+    let seq = seqCounter;
     for (const [k, v] of Object.entries(parsed)) {
+      if (typeof v.seq !== "number") v.seq = ++seq;
       triggeredByMap[k] = v;
     }
+    seqCounter = seq;
   } catch (e) {
     // localStorage 异常 → 清空（开发环境，可接受）
     console.warn("[useTaskTrigger] localStorage read failed, starting empty:", e);
@@ -58,12 +70,7 @@ function ensureLoaded(): void {
 }
 
 function writeMap(): void {
-  const entries = Object.entries(triggeredByMap)
-    .sort((a, b) => b[1].recordedAt.localeCompare(a[1].recordedAt))
-    .slice(0, MAX_ENTRIES);
-  const trimmed: TriggeredByMap = Object.fromEntries(entries);
-  for (const k of Object.keys(triggeredByMap)) delete triggeredByMap[k];
-  Object.assign(triggeredByMap, trimmed);
+  const trimmed = trimMapInPlace();
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
   } catch (e) {
@@ -72,13 +79,30 @@ function writeMap(): void {
   }
 }
 
-function trimMapInPlace(): void {
-  const entries = Object.entries(triggeredByMap)
-    .sort((a, b) => b[1].recordedAt.localeCompare(a[1].recordedAt))
-    .slice(0, MAX_ENTRIES);
+// sortEntriesNewestFirst 把条目按「新 → 旧」排序。
+//
+// ⚠️ 为什么要 seq 这个 tie-breaker（2026-10-02 修的真 bug）：
+//   只按 recordedAt（ISO 字符串）排序时，**同一毫秒内**写入的条目时间戳完全相同，
+//   排序退化为"保持原顺序"（稳定排序）⇒ 降序 slice(0, MAX_ENTRIES) 取到的其实是
+//   **最早插入的那批**，刚写入的反而被裁掉。
+//   真机表现：批量创建任务（自动化/workflow 一口气建几百个）时，
+//   `getTriggeredBy()` 随机返回默认值 user ⇒ UI 的"触发者"分类/统计错，且极难复现
+//   （取决于循环跑得快不快 —— 单测里表现为 flaky：600 条用例时红时绿）。
+function sortEntriesNewestFirst(entries: Array<[string, TriggeredByEntry]>): Array<[string, TriggeredByEntry]> {
+  return [...entries].sort((a, b) => {
+    const byTime = b[1].recordedAt.localeCompare(a[1].recordedAt);
+    if (byTime !== 0) return byTime;
+    return (b[1].seq ?? 0) - (a[1].seq ?? 0);
+  });
+}
+
+/** trimMapInPlace 裁剪到 MAX_ENTRIES（保留最新的），返回裁剪后的 map */
+function trimMapInPlace(): TriggeredByMap {
+  const entries = sortEntriesNewestFirst(Object.entries(triggeredByMap)).slice(0, MAX_ENTRIES);
   const trimmed: TriggeredByMap = Object.fromEntries(entries);
   for (const k of Object.keys(triggeredByMap)) delete triggeredByMap[k];
   Object.assign(triggeredByMap, trimmed);
+  return trimmed;
 }
 
 /**
@@ -90,6 +114,7 @@ export function setTaskMetadata(taskId: string, triggeredBy: TriggeredBy, runId?
   triggeredByMap[taskId] = {
     triggeredBy,
     recordedAt: new Date().toISOString(),
+    seq: ++seqCounter,
     ...(runId ? { runId } : {}),
   };
   trimMapInPlace();
