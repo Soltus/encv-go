@@ -93,11 +93,12 @@
 
 ## P2c — 风险收口（R1–R11）
 
-- [ ] Task 2.10: **R3 回归锁**：配置/二维码中禁止 `http://` 对端地址（单测）
-- [ ] Task 2.11: **R4**：确认 `gin_app.go` allowlist 未为 peer 放开；桌面只同源
+- [x] Task 2.10: **R3 回归锁**：配置/二维码中禁止 `http://` 对端地址 —— `peerlink_hub_url_r3_test.go`（11 例表驱动，LAN/公网明文 http 全拒，仅 https 与回环放行）
+- [x] Task 2.11: **R4**：确认 `gin_app.go` allowlist 未为 peer 放开；桌面只同源 —— 抽出 `CorsAllowlistMiddleware()` + `peerlink_cors_r4_test.go`（含预检；**故意放开 ⇒ 已验证必红**）
 - [ ] Task 2.12: **R6**：Hub 地址持久化 + 可重指向；固定域名优先（依赖 E1/E5）
 - [ ] Task 2.13: **R8**：心跳自适应 + 移动网提示
-- [ ] Task 2.14: **R10**：安全判定只用 nonce/单调计数（代码审查 + 单测）
+- [x] Task 2.14: **R10**：安全判定只用 nonce/单调计数 —— `hub_ticket_r10_test.go`：票据取出即销毁（成功/失败都不复活）、
+      过期只用于拒绝不用于放行、**错 proof 也销毁（无重试 oracle）**、未知 pairingId 与已用过同错
 - [~] Task 2.15: **R11**：pairingId 一次性、解配即作废、Hub session 清理、单 peer 并发上限（并发/单会话部分已做）
   - [x] 单 peer **在途 RPC 上限** `MaxConcurrentCallsPerPeer = 4`，超限 → **429 `peer_busy`**（背压）
   - [x] 背压**不计入**熔断失败累计（判定顺序：先 429，再熔断记录）——否则一次限流会自己熔断健康对端

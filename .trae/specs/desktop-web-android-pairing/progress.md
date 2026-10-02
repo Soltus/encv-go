@@ -589,6 +589,30 @@
 - **门禁**：`node scripts/check-all.mjs` **9 PASS / 0 FAIL / 1 SKIP**。
 - **遗留 / 下轮入口**：≥1440 三栏；P2c 收口（2.10 R3 锁 / 2.11 R4 / 2.14 R10）；2.15 的 Hub session 清理。
 
+### Iteration 23 — P2c 收口：R4 / R3 / R10 三道回归锁（2026-10-03）
+
+- **对应任务**：Task 2.11（R4）、2.10（R3）、2.14（R10）—— 都是"已做对但**没锁**"的契约。
+- **R4（CORS 不得为 peer 放开）** `internal/server/peerlink_cors_r4_test.go`：
+  - 把 `gin_app.go` 里内联的 CORS 配置抽成 **`CorsAllowlistMiddleware()`** ——
+    ⚠️ 原来内联在 `NewGinApp` 里，测试用的裸 gin 根本挂不上它 ⇒ "锁"是假的（先红就是这么来的）。
+  - ⚠️ 第二坑：gin 在**注册路由时**固化中间件链 ⇒ `r.Use()` 必须在 `registerPeerlinkRoutes()` **之前**，
+    注册后再 Use 对已有路由无效（也是一次假绿）。
+  - 用例：放行 localhost/127.0.0.1/https://*-plugin.local；**拒绝** LAN 地址、公网 peer 域名、
+    第三方站点、capacitor://；并锁 OPTIONS 预检同样不给对端放行。
+  - **先红验证**：临时把 allowlist 改成 `return true` ⇒ 立刻红（`TestCORSPreflight_RejectsUnknownOrigin`
+    与 R4 用例同时失败）⇒ 还原转绿。证明这把锁真的咬得住。
+- **R3（跨端 Hub 禁止明文 http）** `internal/server/peerlink_hub_url_r3_test.go`：
+  表驱动 11 例 —— https 公网/带端口、回环 http（127.0.0.1/localhost/[::1]）放行；
+  **明文 http 公网 / LAN(192.168.x,10.x) / ws:// / 缺 host / 空串**一律拒绝；并锁尾斜杠规范化。
+- **R10（安全判定不靠时间新鲜度）** `internal/peerlink/hub_ticket_r10_test.go`：
+  ① 配对成功即销毁（二次配对 `ErrTicketUsed`）；② 过期票据 `ErrTicketExpired` 且**已销毁**（再试 `ErrTicketUsed`，
+  不得复活）；③ **错 proof 也销毁票据**（`ErrBadProof` 后正确 proof 仍 `ErrTicketUsed` ⇒ 无重试 oracle）；
+  ④ 未知 pairingId 与已用过同错（不泄漏时序信息）。
+- **说明**：R3/R10 是"契约锁"（锁当前正确行为），红态由构造保证（任一语义变动即报错）；
+  只对其中的 R4 做了"故意放开 ⇒ 必红"的实证（同上）。
+- **遗留 / 下轮入口**：≥1440 三栏；2.12（R6，依赖 E1/E5 固定域名决策）；2.15 的 Hub session 清理；
+  3.5（大流量不经 Hub）；3.7（真机联调）。
+
 ```
 ### Iteration N — <主题>（<日期>）
 

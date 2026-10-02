@@ -96,7 +96,21 @@ func NewGinApp(cfg *config.Config) *gin.Engine {
 	r.Use(gin.LoggerWithConfig(gin.LoggerConfig{Formatter: sanitizedLogFormatter}))
 	r.Use(gin.Recovery())
 
-	r.Use(cors.New(cors.Config{
+	r.Use(CorsAllowlistMiddleware())
+	r.Use(ConfigMiddleware(cfg))
+
+	return r
+}
+
+// CorsAllowlistMiddleware —— 跨源放行策略（**R4**）。
+//
+// 抽成函数是为了让回归锁能直接测它（测试用的 gin 引擎是裸构造的，
+// 中间件内联在 NewGinApp 里就测不到 —— 那样"锁"是假的）。
+//
+// ⚠️ 契约：**不得为 peer 放开**。桌面端只同源访问自己的后端，跨端一律走 Hub(WSS) 中继；
+// 给 LAN 地址/公网 peer 域名开 CORS 等于重新打开"浏览器直连安卓端"的越权面。
+func CorsAllowlistMiddleware() gin.HandlerFunc {
+	return cors.New(cors.Config{
 		AllowOriginFunc: func(origin string) bool {
 			// 允许所有 localhost / 127.0.0.1 来源（本地开发/测试）
 			if strings.HasPrefix(origin, "http://localhost") ||
@@ -117,11 +131,7 @@ func NewGinApp(cfg *config.Config) *gin.Engine {
 		ExposeHeaders:    []string{"Content-Length", "X-Mock-Mode", "X-Mock-Scenario", "X-Agent-Protocol"},
 		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
-	}))
-
-	r.Use(ConfigMiddleware(cfg))
-
-	return r
+	})
 }
 
 func ConfigMiddleware(cfg *config.Config) gin.HandlerFunc {

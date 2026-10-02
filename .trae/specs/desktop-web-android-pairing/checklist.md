@@ -69,11 +69,16 @@
 - [x] R3 回归锁通过（同上）
 - [x] R4：`gin_app.go` `AllowOriginFunc` 只放行 localhost / 127.0.0.1 / `https://*-plugin.local`，
       **未**为 peer 放开（2026-10-02 代码核实 + CORS 处理回路确认）；桌面只同源
+  - [x] 2026-10-03 升级为**回归锁**：抽出 `CorsAllowlistMiddleware()` + `peerlink_cors_r4_test.go`
+        （LAN/公网 peer/第三方/capacitor 全拒 + OPTIONS 预检同样拒）；**故意放开 ⇒ 已实证必红**
 - [~] R6：Hub 地址可重指向（`/edge/pair` 接受任意 hub 地址）+ token 只存内存（重启重扫）；
       **固定域名/30m 回收对策仍依赖 E1/E5 决策，未做**
 - [x] R8：心跳前台 15s / 后台 60s 自适应（`Edge.SetBackground`）+ 断线指数退避重连；
       **重连已在真机 E2E 里验证**（进程重启后 `/edge/pair` → 连回）
 - [x] R10：票据**取出即销毁**（一次性）+ 加入配对 401 `ticket_used`，安全判定不用时间戳
+  - [x] 2026-10-03 回归锁 `hub_ticket_r10_test.go`：成功/失败/过期**都不复活**；过期只用于拒绝不用于放行；
+        **错 proof 也销毁（无重试 oracle）**；未知 pairingId 与已用过同错
+- [x] R3 回归锁（2026-10-03）：`peerlink_hub_url_r3_test.go` —— 跨端 Hub 明文 http（公网/LAN）一律拒绝，仅 https 与回环放行
 - [x] R11：单 peer 并发上限（2026-10-03，先红后绿）
   - [x] 在途 RPC ≤ 4（`MaxConcurrentCallsPerPeer`），超限 **429 `peer_busy`**；背压**不进**熔断计数
   - [x] 一个 peer 只允许一条活跃会话（`SetExclusive` 顶掉旧连接；`DeleteConn` 按连接身份删除，防误删新连接）
