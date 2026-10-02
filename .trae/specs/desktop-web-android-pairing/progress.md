@@ -651,6 +651,31 @@
   跑完 Go 测试后要 `pm2 start ecosystem.config.cjs` 才能继续做前端真机验证。
 - **遗留 / 下轮入口**：3.5（大流量不经 Hub）→ 3.7（真机联调）；真机项不变。
 
+### Iteration 26 — 用户当场抓出：安卓扫码**既没权限声明、也没同步原生插件**（2026-10-03）
+
+- **触发**：用户「安卓已有现成权限申请代码，为什么扫码连权限声明都没有？我去系统设置手动授权都做不到。模拟器是摆设吗？」
+- **两条硬事实（已验）**：
+  1. `android/app/src/main/AndroidManifest.xml` **没有** `android.permission.CAMERA`
+     ⇒ 系统设置里根本不会出现相机开关 ⇒ **手动授权在客观上不可能**（用户说的完全正确）。
+  2. `android/app/src/main/assets/capacitor.plugins.json` **没有** `@capacitor-mlkit/barcode-scanning`
+     ⇒ 只装了 npm 依赖，**从没跑过 `cap sync android`** ⇒ 原生侧 `registerPlugin("BarcodeScanner")`
+     解析不到任何实现 ⇒ 安卓扫码不是"缺权限"，是**原生根本没接**。
+- **我的错误（不推给环境）**：
+  - 误以为「插件自带相机权限」，还把这句写进了 `barcodeScanner.ts` 的注释 ⇒ 从没去核对 Manifest；
+  - `registerPlugin` 的"web 不静态依赖"设计让**原生没装插件**这件事在 web 上完全看不出来，
+    而我只验了 web + 「粘贴配对码」降级路径 ⇒ 缺口被"真机待验"这句话盖住了。
+- **已补**：
+  - `AndroidManifest.xml`：`CAMERA` 权限 + `uses-feature camera/autofocus (required=false)`（无相机设备可装、走降级）；
+  - `cap sync android`：MLKit 插件进入 `capacitor.plugins.json` 与 `capacitor.settings.gradle`；
+  - `barcodeScanner.ts` 注释改真：必须 `cap sync` + **必须手写 CAMERA**（插件不自带）。
+- **⚠️ 仍未拿到运行时证据（诚实标注）**：APK 构建在本沙箱**卡在 gradle 依赖解析**
+  （两次：daemon 启动后无进展，`modules-2` 仅 3.6M；`repo1.maven.org` 返回 429）⇒
+  **装不上 APK，因此"设置里能手动授权 / 扫码弹权限"这两条还没有真机证据**。
+  已验到的只是静态事实（Manifest 有 CAMERA、插件进了原生工程）。
+- **下一步（换可构建环境或修复 maven 源后）**：`./gradlew assembleDebug` → `adb install` →
+  `adb shell pm grant com.encvgo.app android.permission.CAMERA`（证明手动授权可行）→
+  点「开始扫码」看权限弹窗与插件调用 → logcat 确认 MLKit 初始化。
+
 ```
 ### Iteration N — <主题>（<日期>）
 

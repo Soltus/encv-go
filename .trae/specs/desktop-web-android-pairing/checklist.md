@@ -62,7 +62,12 @@
 - [x] 安卓端扫码 **UI 接线完成**（Task 2.6，Iteration 18）：`PeerScanPanel.vue`（扫码 + 粘贴降级）+
       `peerlink/barcodeScanner.ts`（MLKit 经 `registerPlugin`，web 不静态依赖插件包）；
       真实浏览器端到端 `pw-peer-scan.mjs` **9 断言全绿**（含负向对照 + psk 不落盘）
-- [ ] 安卓端**真机**扫码可用（MLKit 插件 + 相机权限）← **真机**（P6）
+- [x] 安卓端扫码的**原生前置**（2026-10-03 补齐，用户当场抓出）：`AndroidManifest` 声明 `CAMERA`
+      + `cap sync android`（插件进 `capacitor.plugins.json`/`capacitor.settings.gradle`）
+      —— 之前两者**都没做**，导致"系统设置里连手动授权都做不到"
+- [ ] 安卓端扫码**运行时**可用（权限弹窗 / MLKit 识别）← 仍未拿到证据：
+      APK 构建在本沙箱卡在 gradle 依赖解析，装不上 APK；需在可构建环境补验
+      （`adb install` → `pm grant` → 点扫码 → logcat）
 
 ## P2c — 风险收口（R1–R11）
 

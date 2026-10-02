@@ -10,10 +10,14 @@
 // ⚠️ 失败必须可见（今天多次踩到"静默失败"的坑）：本模块**不吞错误**，
 //    相机不可用 / 权限被拒 / 用户取消 都以明确的错误码抛给 UI 展示。
 //
-// ⚠️ 真机前置（沙箱无法验证，已列入 checklist）：
-//   · 依赖：`@capacitor-mlkit/barcode-scanning`（peer: @capacitor/core >= 8，本仓库 8.3.4 满足）
-//   · `npx cap sync android` 且设备有 Google Play services（MLKit 依赖）
-//   · AndroidManifest 相机权限由插件自带；首次调用走 requestPermissions()
+// ⚠️ 原生侧前置（2026-10-03 补齐，之前只装了 npm 依赖 ⇒ 原生根本不可用）：
+//   · npm 依赖：`@capacitor-mlkit/barcode-scanning`（peer: @capacitor/core >= 8，本仓库 8.3.4 满足）
+//   · **必须 `cap sync android`**：只装 npm 包不会进 `capacitor.plugins.json`，
+//     原生侧 `registerPlugin("BarcodeScanner")` 解析不到实现（曾漏做，清单里也查不到该插件）。
+//   · **必须在 AndroidManifest 声明 `android.permission.CAMERA`**：插件**不自带**这条权限
+//     （曾误以为自带 ⇒ 系统设置里根本没有相机开关，用户连手动授权都做不到）。
+//     运行时首次调用由插件的 requestPermissions() 发起。
+//   · 无相机设备（TV/盒子）走 `canScan() === false` → UI 降级为「粘贴配对码」。
 
 import { Capacitor, registerPlugin } from "@capacitor/core";
 

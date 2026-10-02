@@ -22,6 +22,18 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
+    <!--
+        🆕 2026-10-03（P2b 扫码配对）：相机权限。
+        ⚠️ 之前只加了前端依赖 `@capacitor-mlkit/barcode-scanning`，**既没同步原生插件、
+        也没声明 CAMERA** ⇒ 系统设置里根本不会出现"相机"权限项，用户连手动授权都做不到。
+        相机是**运行时危险权限**：必须先在这里声明（否则 requestPermissions 直接被系统拒绝、
+        设置页也没有开关），再由插件/前端在扫码前发起请求。
+        uses-feature 标 required=false：没有相机的设备（TV/盒子）仍可安装，走"粘贴配对码"降级。
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <application
         android:name=".EncvApplication"
         android:allowBackup="true"
