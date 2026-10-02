@@ -80,6 +80,24 @@ if (targetIdx >= 0) {
   check("双击后页面未崩溃（列表或播放器仍可渲染）", (await page.locator("body").innerText()).length > 0);
 }
 
+// ── ≥1440 三栏（列表 + 详情 + 预览）/ <1440 保持双栏 ──
+async function previewVisible(page) {
+  const el = page.locator('[data-testid="files-preview"]').first();
+  if ((await el.count()) === 0) return false;
+  return await el.isVisible().catch(() => false);
+}
+
+const wide = await openPage(1440, 900);
+const wideRows = await visibleRows(wide);
+if (wideRows.length > 0) {
+  await wideRows[0].click(); // 先进入挂载点/目录
+  await wide.waitForTimeout(1200);
+}
+check("≥1440：出现第三栏（预览列）", await previewVisible(wide));
+
+const narrow = await openPage(1280, 900);
+check("<1440：不出现第三栏（仍双栏）", !(await previewVisible(narrow)));
+
 // ── 手机 390×844：零回归 ──
 const m = await openPage(390, 844);
 const mRows = await visibleRows(m);

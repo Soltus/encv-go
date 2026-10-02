@@ -633,6 +633,24 @@
   **先红实证**：把 `Sweep` 临时改成空操作 ⇒ 立刻红；还原 ⇒ 绿。
 - **遗留 / 下轮入口**：≥1440 三栏；3.5（大流量不经 Hub）；3.7（真机联调）；2.12（R6，依赖 E1/E5 决策）。
 
+### Iteration 25 — Task 1.2.2 收官：≥1440 三栏（列表 + 详情 + 预览）（2026-10-03）
+
+- **对应任务**：Task 1.2.2 最后一块（≥1440 三栏）。至此 1.2.2 全部完成。
+- **先红**：`pw-files-master-detail.mjs` 加两条断点断言后，1440 下**没有第三栏**（FAIL）。
+- **改动**（`Files.vue`）：新增第三栏 `<aside class="files-preview" data-testid="files-preview">`
+  —— 缩略图（图片走既有 `thumbnailUrls`）/ 文件图标 + 名称 + 大小；未选中显示空态。
+  **断点用纯 CSS**（`@media (min-width: 1440px)` 才 `display:block` 且网格变三列
+  `minmax(0,1fr) 360px 280px`），**不引入新的 JS 形态状态**（避免与 `useFormFactor` 的形态档耦合）。
+- **i18n**：`files.previewEmpty`（zh+en）。
+- **验证（转绿，同一条真实路径）**：`pw-files-master-detail.mjs` **9/9 PASS** ——
+  1440 出现第三栏；**1280 不出现（仍双栏，负向对照）**；手机 390×844 零回归。
+- **门禁**：`check-all` **9 PASS / 0 FAIL / 1 SKIP**（首跑单测偶发红是 `getaddrinfo ENOTFOUND x.test`
+  这类**沙箱网络抖动**，单独重跑 vitest 665/665 全绿，非代码回归）。
+- **⚠️ 环境坑（记牢）**：`scripts/test-go.sh` 的 pre-flight 会**杀掉 :2025 上的进程**，
+  连带把 pm2 的预览链路（gateway :16666 / vite :8100 / encv-go :2025）一起清掉 ⇒
+  跑完 Go 测试后要 `pm2 start ecosystem.config.cjs` 才能继续做前端真机验证。
+- **遗留 / 下轮入口**：3.5（大流量不经 Hub）→ 3.7（真机联调）；真机项不变。
+
 ```
 ### Iteration N — <主题>（<日期>）
 

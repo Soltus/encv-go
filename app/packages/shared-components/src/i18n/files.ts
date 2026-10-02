@@ -76,6 +76,7 @@ export default {
     "files.detailOpen": "打开",
     "files.detailCopyPath": "复制路径",
     "files.detailEmpty": "单击左侧文件查看详情（双击直接打开）",
+    "files.previewEmpty": "选中文件后在此预览",
   },
   en: {
     "files.title": "Files",
@@ -155,5 +156,6 @@ export default {
     "files.detailOpen": "Open",
     "files.detailCopyPath": "Copy path",
     "files.detailEmpty": "Click a file on the left to see details (double-click to open)",
+    "files.previewEmpty": "Select a file to preview it here",
   },
 };

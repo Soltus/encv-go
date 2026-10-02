@@ -599,6 +599,33 @@
             {{ t('files.detailEmpty', { defaultValue: '单击左侧文件查看详情（双击直接打开）' }) }}
           </p>
         </aside>
+
+        <!-- 第三栏：预览（只在 ≥1440 出现，<1440 由 CSS 隐藏，不新增 JS 形态状态） -->
+        <aside
+          v-if="isDesktop"
+          class="files-preview"
+          data-testid="files-preview"
+          aria-label="file-preview"
+        >
+          <template v-if="detailFile">
+            <div class="files-preview-media">
+              <img
+                v-if="isImageFile(detailFile) && thumbnailUrls[detailFile.path]"
+                :src="thumbnailUrls[detailFile.path]"
+                class="files-preview-img"
+                alt=""
+              />
+              <ion-icon v-else :icon="getFileIcon(detailFile)" class="files-preview-icon"></ion-icon>
+            </div>
+            <p class="files-preview-name">{{ detailFile.display_name || detailFile.name }}</p>
+            <p class="files-preview-meta">
+              {{ detailFile.isDirectory ? t('files.directory') : formatFileSize(detailFile.size) }}
+            </p>
+          </template>
+          <p v-else class="files-preview-empty">
+            {{ t('files.previewEmpty', { defaultValue: '选中文件后在此预览' }) }}
+          </p>
+        </aside>
         </div>
       </template>
 
@@ -1865,6 +1892,57 @@ body.dark .diag-item {
 /* 选中态（仅桌面）：用令牌，不用硬编码色值 */
 ion-item.file-selected {
   --background: color-mix(in srgb, var(--color-primary) 12%, var(--color-base-100));
+}
+
+/* === ≥1440 三栏：列表 + 详情 + 预览 ===
+   断点用纯 CSS（不引入新的 JS 形态状态）：<1440 预览列整列 display:none，网格也退回两栏。 */
+.files-preview {
+  display: none;
+}
+@media (min-width: 1440px) {
+  .files-split--desktop {
+    grid-template-columns: minmax(0, 1fr) 360px 280px;
+  }
+  .files-preview {
+    display: block;
+    position: sticky;
+    top: 8px;
+    padding: 12px;
+    border-radius: var(--radius-box, 0.75rem);
+    border: 1px solid var(--color-base-300);
+    background: var(--color-base-100);
+    text-align: center;
+  }
+}
+.files-preview-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  margin-bottom: 8px;
+}
+.files-preview-img {
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: 6px;
+}
+.files-preview-icon {
+  font-size: 4rem;
+  color: var(--color-base-content);
+  opacity: 0.5;
+}
+.files-preview-name {
+  margin: 0 0 4px;
+  font-size: 0.875rem;
+  word-break: break-all;
+  color: var(--color-base-content);
+}
+.files-preview-meta,
+.files-preview-empty {
+  margin: 0;
+  font-size: 0.8125rem;
+  opacity: 0.6;
+  color: var(--color-base-content);
 }
 
 /* 暗黑模式适配 */
