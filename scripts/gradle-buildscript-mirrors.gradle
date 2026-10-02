@@ -1,0 +1,54 @@
+// gradle-buildscript-mirrors.gradle —— 给"自带 repositories 的模块"换镜像（用 -I 传入）
+//
+// 真因（2026-10-03 三次试错后定位）：
+//   · 工程 `settings.gradle.kts` 的镜像 + `exclusiveContent { jitpack }` **本来是对的**；
+//     但 `RepositoriesMode.PREFER_PROJECT` 下，**自己声明了 repositories 的被包含模块**
+//     （Capacitor/Cordova 插件工程：`:ajuarezso-capacitor-high-refresh-rate`、
+//     `:capacitor-cordova-android-plugins`）会**绕过 settings 的镜像**，直连
+//     repo.maven.apache.org ⇒ **429 Too Many Requests** ⇒ Gradle 退避重试 ⇒ 表现为"构建卡死"。
+//   · 反面教材（我的第一版）：去改 `dependencyResolutionManagement` 会把 JitPack 独占解析弄丢
+//     ⇒ `com.github.getActivity:EasyWindow` 解析不到（BUILD FAILED）。
+//
+// 因此本脚本的两条边界：
+//   1. **只处理"已经自己声明过 repositories"的模块**（app 与根工程没有 ⇒ 不碰，
+//      否则会给它们凭空造出项目级仓库，反而盖掉 settings 里正确的配置）；
+//   2. **绝不碰 settings / dependencyResolutionManagement**。
+//
+// 用法（路径必须绝对）：
+//   cd app/encv-mobile/android
+//   ./gradlew -I /workspace/scripts/gradle-buildscript-mirrors.gradle assembleDebug
+
+gradle.ext.bsMirrorUrls = [
+    "https://mirrors.tencent.com/nexus/repository/maven-public/",
+    "https://mirrors.cloud.tencent.com/nexus/repository/maven-public/",
+    "https://maven.aliyun.com/repository/public",
+    "https://maven.aliyun.com/repository/google",
+    "https://maven.aliyun.com/repository/gradle-plugin",
+]
+
+gradle.ext.bsDirectHosts = ["repo1.maven.org", "repo.maven.apache.org", "dl.google.com", "plugins.gradle.org"]
+
+gradle.ext.bsApply = { org.gradle.api.artifacts.dsl.RepositoryHandler h ->
+    def doomed = []
+    h.each { r ->
+        try {
+            def u = r.hasProperty("url") ? (r.url?.toString() ?: "") : ""
+            if (gradle.ext.bsDirectHosts.any { d -> u.contains(d) }) doomed << r
+        } catch (ignored) {
+            // flatDir / ivy 等跳过
+        }
+    }
+    doomed.each { h.remove(it) }
+    gradle.ext.bsMirrorUrls.each { m -> h.maven { url = uri(m) } }
+    // 兜底：com.github.* 只有 JitPack 有（这些插件模块用不到，但留着无害）
+    h.maven { url = uri("https://jitpack.io") }
+}
+
+allprojects { p ->
+    // ① buildscript（AGP classpath 等）
+    p.buildscript {
+        if (it.repositories.size() > 0) gradle.ext.bsApply(it.repositories)
+    }
+    // ② 模块自己声明的项目级仓库（只在"确实声明过"时才改）
+    if (p.repositories.size() > 0) gradle.ext.bsApply(p.repositories)
+}
