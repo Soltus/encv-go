@@ -527,7 +527,12 @@
   突发后在途数归零=槽位不泄漏、并发退去后恢复 200）+ `TestPeerlinkWS_SingleSessionPerPeer`
   （旧连接被顶掉、旧连接退出后表仍指向活的新连接）。
   `bash scripts/test-go.sh ./internal/server` OK（78s）、`./internal/peerlink` OK；`go build ./...` OK。
-- **未跑**：`scripts/emu-peerlink-e2e.sh`（需模拟器），沙箱内模拟器未起，列 P6 复跑项。
+- **真机级 E2E 已补跑**：`bash scripts/emu-peerlink-e2e.sh` **29 PASS / 0 FAIL**
+  （含 T5 联邦搜索真实命中 / T6 远端读真实字节 + 来源头 / T7 执行端审批 `decision=trust_device` /
+  T8 已信任 `auto` / T9 重启后信任失效 + 老票据不可复用 + 自动重连 / T10 401 红线 + 审计脱敏）
+  ⇒ 本轮的并发上限与写帧串行化改动在**真实双进程拓扑**下无回归。
+  ⚠️ 环境耗时：模拟器冷启动（无 KVM）约 **12 分钟**才 `boot_completed=1`（`emuctl start` 超时给到 1800s）；
+  `adb devices` 出现 `device` ≠ 已开机，必须等 `sys.boot_completed=1`。
 - **遗留 / 下轮入口**：Task 1.2.2 剩余（master-detail 双栏 / ≥1440 三栏）→ 补跑 emu E2E → 真机项不变。
 
 ```
