@@ -148,6 +148,19 @@ func validateHubURL(raw string) (string, error) {
 	return "", errors.New("hub_must_be_https")
 }
 
+// hubBaseURL 归一出 Hub 的**基址**（scheme://host[:port]）。
+//
+// ⚠️ 真 bug（2026-10-03 抓出）：票据里的 `hub` 是**带路径**的
+// （`https://host/api/peerlink`，见 handlePeerlinkTicket），而 pairToRemoteHub 又会
+// 拼上 `/api/peerlink/pair` ⇒ 双前缀 `.../api/peerlink/api/peerlink/pair` ⇒ **404**
+// （扫码配对在真机上直接失败：`pair_rejected:404`）。
+// 这里统一把已带的 peerlink 前缀剥掉，两种写法都能用。
+func hubBaseURL(raw string) string {
+	h := strings.TrimRight(strings.TrimSpace(raw), "/")
+	h = strings.TrimSuffix(h, "/api/peerlink")
+	return strings.TrimRight(h, "/")
+}
+
 // pairToRemoteHub 拿票据去远端 Hub 完成配对（proof = HMAC(psk, pairingId, deviceId)）。
 func pairToRemoteHub(hub, pairingID, pskB64, deviceID, name string) (peerID string, token string, err error) {
 	psk, err := peerlink.DecodePSK(pskB64)
@@ -161,7 +174,7 @@ func pairToRemoteHub(hub, pairingID, pskB64, deviceID, name string) (peerID stri
 		"platform":  runtime.GOOS,
 		"proof":     peerlink.Proof(psk, pairingID, deviceID),
 	})
-	resp, err := http.Post(strings.TrimRight(hub, "/")+"/api/peerlink/pair", "application/json", bytes.NewReader(body))
+	resp, err := http.Post(hubBaseURL(hub)+"/api/peerlink/pair", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", "", fmt.Errorf("pair_request_failed: %w", err)
 	}

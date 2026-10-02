@@ -522,6 +522,11 @@ export default {
     "peers.scanHelp": "扫描桌面端显示的配对码；连接由本机服务保持，息屏不影响",
     "peers.scanStart": "开始扫码",
     "peers.scanNoCamera": "当前环境没有相机（非原生环境），请改用下方「粘贴配对码」",
+    // 🆕 2026-10-03：从相册选图识别二维码（相机之外的第二条通路）
+    "peers.pickFromGallery": "从相册选择",
+    "peers.pickFromGalleryHint": "请选择含有配对码二维码的截图",
+    "peers.galleryDecoded": "已从图片识别到配对码：{len} 字符",
+    "peers.galleryDecodeFailed": "从图片识别二维码失败：{detail}",
     "peers.pasteLabel": "粘贴配对码",
     "peers.pastePlaceholder": "粘贴桌面端「复制配对码」得到的文本",
     "peers.pasteSubmit": "连接",
@@ -1060,6 +1065,11 @@ export default {
     "peers.scanHelp": "Scan the pairing code shown on the desktop; the link is kept by the local service, screen-off safe",
     "peers.scanStart": "Scan QR code",
     "peers.scanNoCamera": "No camera in this environment (non-native); use “Paste pairing code” below",
+    // 🆕 2026-10-03: pick an image from the gallery and decode the QR code
+    "peers.pickFromGallery": "Pick from gallery",
+    "peers.pickFromGalleryHint": "Choose a screenshot that contains the pairing QR code",
+    "peers.galleryDecoded": "Decoded pairing code from image ({len} chars)",
+    "peers.galleryDecodeFailed": "Failed to decode QR from image: {detail}",
     "peers.pasteLabel": "Paste pairing code",
     "peers.pastePlaceholder": "Paste the text copied via “Copy pairing code” on the desktop",
     "peers.pasteSubmit": "Connect",

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-02T20:47:07.925Z",
+  "generated_at": "2026-10-02T22:07:08.230Z",
   "source_file": "package.json",
   "items": [
     {
@@ -178,6 +178,17 @@
       "description": "Ionicons — Ionic 官方图标库",
       "icon": "image",
       "license": "MIT"
+    },
+    {
+      "name": "jsqr",
+      "version": "1.4.0",
+      "version_range": "^1.4.0",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "jszip",

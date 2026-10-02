@@ -676,6 +676,30 @@
   `adb shell pm grant com.encvgo.app android.permission.CAMERA`（证明手动授权可行）→
   点「开始扫码」看权限弹窗与插件调用 → logcat 确认 MLKit 初始化。
 
+### Iteration 27 — 扫码界面支持「从相册选择图片」+ 抓出 hub 双前缀 404 真 bug（2026-10-03）
+
+- **需求**：扫码界面需要支持从相册选择图片（相机之外的第二条通路）。
+- **先红**：`pw-qr-gallery.mjs` —— 扫码面板**没有**「从相册选择」入口（FAIL）。
+- **实现**：
+  - 新增 `src/peerlink/qrFromImage.ts`：用 **`jsqr`（纯 JS，无原生依赖、不需要 cap sync）** 解码
+    ImageData。刻意**不用** MLKit 的 `readBarcodesFromImage`：它要原生文件路径，而相册选到的是 File/Blob
+    （还得绕 Filesystem 落盘），且**只能在原生跑，沙箱一条路径都验不了**（今天刚在原生插件上栽过）。
+  - `PeerScanPanel.vue`：加「从相册选择」按钮 + 隐藏 `input[type=file][accept="image/*"]`
+    （`data-testid="qr-file-input"`，原生 WebView 走系统相册、桌面浏览器走文件选择，同一份代码）；
+    解码后**复用同一条 `connectWithText`**；失败可见，且选完清空 value 以便重选同一张。
+  - i18n `peers.pickFromGallery|pickFromGalleryHint|galleryDecoded|galleryDecodeFailed`（zh+en）。
+- **⚠️ 顺带抓出的真 bug（端到端现形）**：`pair_rejected:404`
+  - 现象：相册/扫码拿到配对码后调 `/edge/pair`，后端报 `pair_rejected:404`。
+  - 根因：票据里的 `hub` **带路径**（`https://host/api/peerlink`），而 `pairToRemoteHub` 又拼
+    `/api/peerlink/pair` ⇒ **双前缀** `.../api/peerlink/api/peerlink/pair` ⇒ 404
+    ⇒ **扫码配对在真机上直接失败**（这条之前没暴露，是因为旧 e2e 用的 hub 写法不同）。
+  - 修：新增 `hubBaseURL()` 归一化剥掉已带的 peerlink 前缀（保留其它路径/端口）。
+  - 回归锁 `internal/server/peerlink_hub_base_test.go`（含"拼出来必须只有一个前缀"）。
+- **验证（转绿）**：`pw-qr-gallery.mjs` **4/4 PASS** —— 入口存在；用**真实票据**生成的 PNG 选图后
+  解码并连通（`已连接：http://127.0.0.1:2025/api/peerlink`）；非配对码图给出可见失败（负向对照）。
+- **门禁**：前端 `check-all` **9 PASS / 0 FAIL / 1 SKIP**；`./internal/server`、`./internal/peerlink` 均 OK。
+- **遗留**：相机**实时**扫码仍待真机（APK 构建本轮仍未编完）；相册这条路径已在真实浏览器端到端验证。
+
 ```
 ### Iteration N — <主题>（<日期>）
 

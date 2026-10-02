@@ -62,6 +62,11 @@
 - [x] 安卓端扫码 **UI 接线完成**（Task 2.6，Iteration 18）：`PeerScanPanel.vue`（扫码 + 粘贴降级）+
       `peerlink/barcodeScanner.ts`（MLKit 经 `registerPlugin`，web 不静态依赖插件包）；
       真实浏览器端到端 `pw-peer-scan.mjs` **9 断言全绿**（含负向对照 + psk 不落盘）
+- [x] **从相册选择图片**识别配对码（2026-10-03）：`jsqr` 纯 JS 解码 + 隐藏 file input，
+      复用同一条 `connectWithText`；`pw-qr-gallery.mjs` **4/4 PASS**（真实票据 PNG → 解码连通；
+      非配对码图可见失败）
+- [x] **真 bug**：票据 `hub` 带 `/api/peerlink` 而 `pairToRemoteHub` 又拼一次 ⇒ 双前缀 ⇒
+      `pair_rejected:404`（扫码配对在真机上直接失败）。已加 `hubBaseURL()` 归一化 + 回归锁
 - [x] 安卓端扫码的**原生前置**（2026-10-03 补齐，用户当场抓出）：`AndroidManifest` 声明 `CAMERA`
       + `cap sync android`（插件进 `capacitor.plugins.json`/`capacitor.settings.gradle`）
       —— 之前两者**都没做**，导致"系统设置里连手动授权都做不到"

@@ -10,7 +10,21 @@
       <ion-button size="small" fill="outline" :disabled="busy" data-testid="edge-refresh" @click="refreshStatus">
         {{ t('peers.edgeStatus') || '互联状态' }}
       </ion-button>
+      <!-- 从相册选择：相机不可用/不想扫时的第二条通路（纯 JS 解码，WebView 与桌面浏览器同一份代码） -->
+      <ion-button size="small" fill="outline" :disabled="busy" data-testid="gallery-pick" @click="pickFromGallery">
+        {{ t('peers.pickFromGallery') || '从相册选择' }}
+      </ion-button>
+      <input
+        ref="fileRef"
+        class="qrFileInput"
+        type="file"
+        accept="image/*"
+        data-testid="qr-file-input"
+        @change="onFilePicked"
+      />
     </div>
+
+    <p v-if="galleryMsg" class="scanNote" data-testid="gallery-msg">{{ galleryMsg }}</p>
 
     <p v-if="!nativeCamera" class="scanNote" data-testid="scan-no-camera">
       {{ t('peers.scanNoCamera') || '当前环境没有相机（非原生环境），请改用下方「粘贴配对码」' }}
@@ -54,9 +68,12 @@ import { onMounted, ref } from "vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { type EdgeStatus, fetchEdgeStatus, pairAsEdge, parsePairingQR } from "@encv/shared-components/composables/usePeerLink";
 import { ScanError, scanOnce } from "@/peerlink/barcodeScanner";
+import { QRDecodeError, decodeQRFromImageFile } from "@/peerlink/qrFromImage";
 
 const { t } = useI18n();
 
+const fileRef = ref<HTMLInputElement | null>(null);
+const galleryMsg = ref("");
 const busy = ref(false);
 const pasted = ref("");
 const okMsg = ref("");
@@ -125,6 +142,36 @@ function connectWithPasted() {
   void connectWithText(pasted.value);
 }
 
+/** 打开系统相册/文件选择器（原生与桌面浏览器都是这个 file input）。 */
+function pickFromGallery() {
+  galleryMsg.value = t("peers.pickFromGalleryHint") || "请选择含有配对码二维码的截图";
+  fileRef.value?.click();
+}
+
+/** 选图 → 解码 → 走**同一条** connectWithText（与扫码、粘贴共享连通逻辑）。 */
+async function onFilePicked(e: Event) {
+  const input = e.target as HTMLInputElement | null;
+  const file = input?.files?.[0];
+  if (!file) return;
+  busy.value = true;
+  okMsg.value = "";
+  errMsg.value = "";
+  try {
+    const text = await decodeQRFromImageFile(file);
+    galleryMsg.value = String(t("peers.galleryDecoded") || "已从图片识别到配对码：{len} 字符").replace("{len}", String(text.length));
+    await connectWithText(text);
+  } catch (err) {
+    // ⚠️ 失败必须可见（不静默）：解码失败/图片不对都渲染出来
+    const msg = err instanceof QRDecodeError || err instanceof Error ? err.message : String(err);
+    galleryMsg.value = "";
+    errMsg.value = String(t("peers.galleryDecodeFailed") || "从图片识别二维码失败：{detail}").replace("{detail}", msg);
+    busy.value = false;
+  } finally {
+    // 允许重复选同一张图（否则第二次选同一文件不触发 change）
+    if (input) input.value = "";
+  }
+}
+
 async function refreshStatus() {
   try {
     const st = await fetchEdgeStatus();
@@ -166,6 +213,15 @@ onMounted(() => {
   gap: 8px;
   align-items: center;
   margin: 6px 0;
+}
+
+/* file input 只作为"选图"的载体（按钮由 ion-button 承担），视觉上隐藏但仍可点击/可被测试选中 */
+.qrFileInput {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .pasteRow {

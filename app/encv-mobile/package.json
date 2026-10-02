@@ -59,6 +59,7 @@
     "artplayer": "^5.4.0",
     "dexie": "^4.4.4",
     "ionicons": "catalog:",
+    "jsqr": "^1.4.0",
     "jszip": "^3.10.1",
     "leafer-ui": "^2.1.10",
     "markstream-vue": "1.0.1-beta.5",
