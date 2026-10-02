@@ -27,6 +27,22 @@
 - **⚠️ `app_format` MCP 在本环境不真改文件（2026-07-16 续41 实测）**：`app_format` 报 `Formatted 4 files in 6ms. No fixes applied.` 但 Biome CI 仍 FAIL（格式不符）。**必须用 `pnpm exec biome check --write <path>`（经 app_exec MCP）才真改**；`app_format` 在此环境不可信，勿再单独依赖它修格式。
 - 超时命令必须加超时参数（如 curl 加 `--max-time`）。
 
+## 动效：gsap `from()` 的「终态陷阱」+ vitest isolate:false mock 污染（2026-10-03，长期）
+
+- **⚠️ 挂到 `<ion-page>` 上的进场动效绝不能用 `from({opacity:0})`**：Ionic 转场开始前会给页面写
+  **内联 `opacity:0`**，而 `from()` 把「当前计算值」当**终态** ⇒ 动画实际 **0→0**，`y` 正常归位但
+  透明度永久卡 0 ⇒ **整页空白但可点击**（DOM 在、`elementFromPoint` 能命中、rAF 正常、tween 在跑）。
+  判定特征：`transform` 会归零而 `opacity` 恒 0。正确写法 =
+  `fromTo(el, {y, opacity:0}, {y:0, opacity:1, clearProps:"opacity,transform"})`（终态显式写 1）。
+  落地：`packages/shared-components/src/directives/motion.ts::vPageTransition`（Files/AgentChat 曾中招）。
+- **vitest FAST 项目（`isolate:false`）同模块 `vi.mock` 会互相污染**：新增任何 import
+  `@encv/shared-components/motion/internal` 的用例都会让 `directive-reveal.test.ts` 的引擎 mock 失效，
+  实测**两文件交替假红**；**也不能在用例里调真实 `setMotionDisabled()`**（污染全局开关）。
+  ⇒ 需要 mock 引擎的用例放 **ISOLATED**（`ENCV_TEST_FULL=1` 才跑）；默认门禁要跑到的锁做成
+  **源码扫描**形式（不 import 引擎模块）。
+- vitest 下 `import.meta.url` **不是 file: scheme**（`readFileSync` → `ERR_INVALID_URL_SCHEME`），
+  测试里定位真源用 `resolve(process.cwd(), "../packages/...")`。
+
 ## 双端互联（桌面 web ⇄ 安卓）立项事实（2026-10-02 起，长期）
 
 - **权威规划文档**：`.trae/specs/desktop-web-android-pairing/`（`spec.md` 契约 / `tasks.md` P0–P6 / `checklist.md` / `progress.md` 多轮迭代跟踪 + 恢复入口）。任何"桌面端 / 扫码配对 / 互通搜索 / 远程 Agent"相关会话**先读 `progress.md`**。
@@ -39,6 +55,21 @@
   - 二维码内容从"内网地址"改为"**会合点 hub + pairingId + psk**"（带外通道，不依赖同网）。
   - **手机侧接线**：`POST /api/peerlink/edge/pair`（hub+pairingId+psk）→ 配对成功后由 Go 进程常驻 Edge；`GET /edge/status`、`POST /edge/stop`。token **只存内存** ⇒ 进程重启必须重扫。Hub 地址**禁止明文 http**（仅 https 或本机回环）。
   - **最易低估的风险 R6**：`.cnb.yml` `keepAliveTimeout: 30m` ⇒ cnb 开发环境 30 分钟无心跳即被回收，Hub 会消失 / 地址漂移 ⇒ Hub 地址须持久化且**可重指向**，固定域名优先。
+  - **真机级端到端闸门（2026-10-02 起）**：`bash scripts/emu-peerlink-e2e.sh`（Hub=宿主机 Go 进程，
+    Edge=**模拟器内** x86_64 后端，`adb reverse` 模拟手机主动出网）。**29 断言**覆盖中继/联邦搜索/
+    远端读/远程授权/信任重启失效/401。任何 peerlink 改动后都要跑它——它抓出过两个单进程测试永远抓不到的 bug。
+  - **⚠️ 沙箱内起"安卓后端"的四个硬前置**：① `adb push` 别用短 timeout（首传 68MB 会被掐断）；
+    ② 预建 `/data/user/0/com.encvgo.app/files`（没装 APK 时不存在 ⇒ sqlite 打不开）；
+    ③ 起进程必须 `env HOME=/data/local/tmp`（adb shell 里 HOME 为空 ⇒ 应用数据落只读 `/.local`
+    ⇒ tasks DB/向量搜索/FTS5 全部 `unable to open database file`）；
+    ④ 端口**自选**（1999/2025/2000 都出现过）⇒ 从 `successfully started` 日志解析。
+    配置还要同时设**顶层 `server.dir`**（servingDir 的真正来源）与 `mobile.server.dir`。
+  - **⚠️ 两处"顺序/透传"类缺陷（已修，防复发）**：① `Server.servingDir` **必须在 `NewServer` 里就赋值**
+    （`NewServer` 里 FTS5 建索引 / mount bootstrap / FTSRebuilder 已在用它；只在 `Start()` 赋值 ⇒ 空串
+    ⇒ **本地全文搜索永远 0 命中** + mount root 退化成 cwd；回归锁 `TestNewServer_ServingDirReadyBeforeStart`）；
+    ② 远程 Agent 的**决策必须透传**（`peerlink.AgentInvokeOutcome.Decision`）：Edge 成功分支曾硬编码
+    `accept` ⇒ 调用端分不清"逐次同意"与"已信任自动放行"（回归锁
+    `TestPeerlinkAgentInvoke_DecisionPropagatedToCaller`）。
   - 云端视为**不可信中转**：全链路 AEAD（HKDF(psk) 派生）+ SAS 6 位人工核对 + Hub 不落盘 + 日志脱敏；大流量（文件取回）默认不经 Hub。
 - **Capacitor 桌面端（2026-10-02 调研，长期）**：官方**没有**桌面平台（只有 android/ios/web，`getPlatform()` 只返回这三值）⇒ 桌面只有两条路：① **web 形态**（浏览器/cnb，官方一等公民，插件走 web 实现或 stub）；② **Electron**（`@capacitor/capacitor-electron` → `@capawesome/capacitor-electron`，兼容 Capacitor≥6 + Electron≥28，活跃；`getPlatform()==='electron'` 且 `isNative()===true`；只有带 Electron 实现或有 web fallback 的插件可用；80–150MB；许可未确认）。社区版 `@capacitor-community/electron` 已停滞不采用。
   - **铁律**：桌面形态判定**禁止只看 `isNative()`**（Electron 桌面 isNative=true 却该走桌面壳）；必须看 `platform`（`web`/`electron` 才算桌面候选），平台名经 `appCapabilities.platform()` 注入（`Capacitor.getPlatform()`），见 `computeFormFactor` + 其 4 个单测。

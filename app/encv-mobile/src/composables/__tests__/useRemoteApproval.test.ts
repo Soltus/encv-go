@@ -79,9 +79,7 @@ describe("useRemoteApproval（P4 执行端审批）", () => {
 
   it("已决策的 callId 不再重复弹出", async () => {
     mockFetch(url =>
-      url.includes("/approve")
-        ? { status: 200, body: { ok: true } }
-        : { status: 200, body: { items: [req({ callId: "c1" })] } },
+      url.includes("/approve") ? { status: 200, body: { ok: true } } : { status: 200, body: { items: [req({ callId: "c1" })] } }
     );
     const { decide, refreshPending, current } = useRemoteApproval();
     await decide("c1", "accept");

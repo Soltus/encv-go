@@ -60,6 +60,7 @@ declare module 'vue' {
     OperationCard: typeof import('./components/agent/OperationCard.vue')['default']
     PeerDegradedNotice: typeof import('./components/PeerDegradedNotice.vue')['default']
     PeerPairingPanel: typeof import('./components/PeerPairingPanel.vue')['default']
+    PeerScanPanel: typeof import('./components/PeerScanPanel.vue')['default']
     PeerSourceBadge: typeof import('./components/PeerSourceBadge.vue')['default']
     PerformanceTab: typeof import('./../../packages/shared-components/src/components/PerformanceTab.vue')['default']
     PhaseBadge: typeof import('./../../packages/shared-components/src/components/shared/PhaseBadge.vue')['default']

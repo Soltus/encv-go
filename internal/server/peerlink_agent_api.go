@@ -57,9 +57,13 @@ func (s *Server) isDestructiveAgentTool(tool string) bool {
 // PeerAgentInvokeHandler 执行端入口：先过本端授权，再执行工具。
 //
 // ⚠️ 这是**唯一的执行端路径**：Hub 只搬运，不得绕过授权。
-func (s *Server) PeerAgentInvokeHandler(req peerlink.AgentInvokeRequest) (json.RawMessage, error) {
+// ⚠️ Decision 必须透传授权器的真实决策（auto / accept / trust_device / decline / cancel），
+//
+//	调用端据此区分"逐次同意"与"已信任设备自动放行"（见 peerlink.AgentInvokeOutcome）。
+func (s *Server) PeerAgentInvokeHandler(req peerlink.AgentInvokeRequest) (out peerlink.AgentInvokeOutcome) {
 	if strings.TrimSpace(req.Tool) == "" {
-		return nil, errors.New("missing tool")
+		out.Err = errors.New("missing tool")
+		return out
 	}
 	ap := s.agentApproverGet()
 
@@ -69,8 +73,11 @@ func (s *Server) PeerAgentInvokeHandler(req peerlink.AgentInvokeRequest) (json.R
 	}
 	// ① 挂起等待**本端 UI** 决策（超时自动 decline，绝不默认同意）
 	//    注意：这里不能用带短超时的 ctx，否则会提前取消人工等待。
-	if _, err := ap.Require(context.Background(), req, peerId, req.FromName); err != nil {
-		return nil, err // ErrDeclined / ErrCancelled
+	decision, err := ap.Require(context.Background(), req, peerId, req.FromName)
+	out.Decision = decision
+	if err != nil {
+		out.Err = err // ErrDeclined / ErrCancelled
+		return out
 	}
 
 	// ② 真正执行（有上限，避免工具挂死）
@@ -81,14 +88,16 @@ func (s *Server) PeerAgentInvokeHandler(req peerlink.AgentInvokeRequest) (json.R
 	if len(req.Args) > 0 {
 		args = string(req.Args)
 	}
-	out, execErr := s.executeAgentTool(ctx, req.Tool, args)
+	resStr, execErr := s.executeAgentTool(ctx, req.Tool, args)
 	if execErr != nil {
-		return nil, execErr
+		out.Err = execErr
+		return out
 	}
-	if out == "" {
-		return json.RawMessage(`{}`), nil
+	if strings.TrimSpace(resStr) == "" {
+		resStr = "{}"
 	}
-	return json.RawMessage(out), nil
+	out.Result = json.RawMessage(resStr)
+	return out
 }
 
 // ── 发起端：调对端工具 ─────────────────────────────────────────────

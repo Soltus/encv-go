@@ -69,6 +69,18 @@ type AgentInvokeResult struct {
 	Error    string          `json:"error,omitempty"`  // 失败原因（脱敏后）
 }
 
+// AgentInvokeOutcome 执行端处理一次远程调用的完整结果。
+//
+// ⚠️ Decision 必须是授权器返回的**真实决策**（auto / accept / trust_device / decline / …），
+//
+//	不能退化成 accept：否则调用端永远分不清「用户逐次同意」与「因信任自动放行」，
+//	也看不到用户曾授权 trust_device（2026-10-02 模拟器端到端 T8 抓出此缺陷）。
+type AgentInvokeOutcome struct {
+	Result   json.RawMessage
+	Decision string
+	Err      error
+}
+
 // ApprovalRequest 推给**执行端 UI** 的审批请求（Task 4.2）。
 type ApprovalRequest struct {
 	CallId      string    `json:"callId"`

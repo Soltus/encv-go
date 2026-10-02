@@ -54,7 +54,8 @@ type EdgeOptions struct {
 	// OnAgentInvoke 处理来自对端的**远程 Agent 调用**（P4）。
 	// ⚠️ 审批发生在**执行端**（宿主注入的实现负责挂起 + 等本端 UI 决策）；
 	//    返回 ErrDeclined / ErrCancelled 会被翻译成 decline / cancel 结果。
-	OnAgentInvoke func(req AgentInvokeRequest) (json.RawMessage, error)
+	//    Outcome.Decision 必须透传授权器的真实决策（auto / accept / trust_device）。
+	OnAgentInvoke func(req AgentInvokeRequest) AgentInvokeOutcome
 	// OnRead 处理来自对端的**远端读**请求（P3.4：在线打开 / 缩略图）。
 	// 由宿主注入真实实现；未注入返回 not_supported。
 	// ⚠️ 只允许在**本端**读，不得把远端路径解析成本端可写路径。
@@ -308,24 +309,29 @@ func (e *Edge) handleRequest(conn *websocket.Conn, id, method string, payload js
 				return
 			}
 		}
-		res, err := e.opts.OnAgentInvoke(req)
-		out := AgentInvokeResult{Ok: err == nil}
+		out := e.opts.OnAgentInvoke(req)
+		res := AgentInvokeResult{Ok: out.Err == nil}
 		switch {
-		case err == nil:
-			out.Decision = DecisionAccept
-			out.Result = res
-		case errors.Is(err, ErrDeclined):
-			out.Decision = DecisionDecline
-			out.Error = "user_declined"
-		case errors.Is(err, ErrCancelled):
-			out.Decision = DecisionCancel
-			out.Error = "cancelled"
+		case out.Err == nil:
+			// ⚠️ 不能硬编码 accept：要看**执行端授权器**的真实决策
+			//    （auto=已信任免确认 / accept=逐次同意 / trust_device=本次同意并记住）
+			res.Decision = out.Decision
+			if res.Decision == "" {
+				res.Decision = DecisionAccept
+			}
+			res.Result = out.Result
+		case errors.Is(out.Err, ErrDeclined):
+			res.Decision = DecisionDecline
+			res.Error = "user_declined"
+		case errors.Is(out.Err, ErrCancelled):
+			res.Decision = DecisionCancel
+			res.Error = "cancelled"
 		default:
-			out.Decision = DecisionDecline
+			res.Decision = DecisionDecline
 			// ⚠️ 脱敏：出错原因可能含路径/参数，只回传错误类型文本的前 200 字符
-			out.Error = truncateErr(err.Error(), 200)
+			res.Error = truncateErr(out.Err.Error(), 200)
 		}
-		write(out, "")
+		write(res, "")
 	case "search":
 		if e.opts.OnSearch == nil {
 			write(nil, "not_supported")

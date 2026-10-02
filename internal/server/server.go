@@ -444,6 +444,20 @@ func NewServer(ctx context.Context, configPath string) *Server {
 		peerHub:        peerlink.NewHub("encv-go", ""),
 		peerConns:      peerlink.NewConnRegistry(),
 	}
+	// ⚠️ servingDir 必须在**任何**依赖它的初始化之前就绪。
+	//    历史缺陷（2026-10-02 真机端到端抓出）：原来只在 Start() 里赋值，
+	//    而 NewServer 里已经在用它了 ⇒ 拿到空字符串 ⇒
+	//      · FTS5 启动时后台建索引：servingDir="" ⇒ 永远 "FTS5 no entries to index"
+	//        ⇒ 本地全文搜索 0 命中（要等用户手工 rebuild）
+	//      · mount registry bootstrap：root 退化成 cwd（Abs("")=cwd）
+	//      · FTSRebuilder 也带着空 dir 建不出来
+	//    ⇒ 修复：NewServer 里就按配置解析好，Start() 只做幂等复核。
+	if abs, err := filepath.Abs(cfg.Server.Dir); err == nil {
+		s.servingDir = abs
+	} else {
+		s.servingDir = cfg.Server.Dir
+	}
+	s.mobileSvc.SetServingDir(s.servingDir)
 	s.peerCalls = peerlink.NewCaller(s.peerConns)
 	// 把 mock 引擎的 tool_call.execute_real 真实执行器绑到 s.executeAgentTool
 	// ——剧本里声明 execute_real=true 的工具调用会被实际执行（覆盖硬编码 result）。

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-02T02:40:24.998Z",
+  "generated_at": "2026-10-02T18:36:38.717Z",
   "source_file": "package.json",
   "items": [
     {
@@ -13,6 +13,17 @@
       "description": "Capacitor 插件：高刷新率屏幕支持",
       "icon": "speedometer",
       "license": "MIT"
+    },
+    {
+      "name": "@capacitor-mlkit/barcode-scanning",
+      "version": "8.2.1",
+      "version_range": "8.2.1",
+      "source": "package.json",
+      "kind": "dependency",
+      "importance": "light",
+      "description": "",
+      "icon": "help-circle",
+      "license": "unknown"
     },
     {
       "name": "@capacitor/android",

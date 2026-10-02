@@ -65,8 +65,11 @@ func TestPeerlinkEdgeRuntime_PairThenHubQueriesEdge(t *testing.T) {
 		OnRead: func(req peerlink.ReadRequest) ([]byte, error) {
 			return []byte("REMOTE-BYTES"), nil
 		},
-		OnAgentInvoke: func(req peerlink.AgentInvokeRequest) (json.RawMessage, error) {
-			return json.RawMessage(`{"echo":"` + req.Tool + `"}`), nil
+		OnAgentInvoke: func(req peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome {
+			return peerlink.AgentInvokeOutcome{
+				Decision: peerlink.DecisionAccept,
+				Result:   json.RawMessage(`{"echo":"` + req.Tool + `"}`),
+			}
 		},
 	})
 	defer srvB.Close()

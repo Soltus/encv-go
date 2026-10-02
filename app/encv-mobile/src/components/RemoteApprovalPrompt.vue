@@ -76,7 +76,7 @@ function ensureTimer(on: boolean) {
 watch(
   () => !!current.value,
   on => ensureTimer(on),
-  { immediate: true },
+  { immediate: true }
 );
 onUnmounted(() => ensureTimer(false));
 

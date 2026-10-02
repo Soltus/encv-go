@@ -10,6 +10,8 @@
     </ion-header>
 
     <ion-content class="peersContent">
+      <PeerScanPanel />
+
       <PeerPairingPanel />
 
       <!-- 🆕 P3：互联搜索（本端 + 已配对设备，带来源徽章） -->
@@ -100,6 +102,7 @@ import {
 } from "@ionic/vue";
 import { onMounted, ref } from "vue";
 import PeerPairingPanel from "@/components/PeerPairingPanel.vue";
+import PeerScanPanel from "@/components/PeerScanPanel.vue";
 import PeerSourceBadge from "@/components/PeerSourceBadge.vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { fetchPeers, unpairPeer, usePeerLink } from "@encv/shared-components/composables/usePeerLink";

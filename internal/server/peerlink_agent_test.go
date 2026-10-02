@@ -28,12 +28,15 @@ func TestPeerlinkAgentInvoke_OK_And_Declined(t *testing.T) {
 	defer srv.Close()
 
 	peerID, stop := startPairedEdgeFull(t, r, s, srv.URL+"/api/peerlink", nil, nil,
-		func(req peerlink.AgentInvokeRequest) (json.RawMessage, error) {
+		func(req peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome {
 			if req.Tool == "encrypt_video" {
 				// 模拟"执行端用户拒绝"
-				return nil, peerlink.ErrDeclined
+				return peerlink.AgentInvokeOutcome{Decision: peerlink.DecisionDecline, Err: peerlink.ErrDeclined}
 			}
-			return json.RawMessage(`{"ok":true,"tool":"` + req.Tool + `"}`), nil
+			return peerlink.AgentInvokeOutcome{
+				Decision: peerlink.DecisionAccept,
+				Result:   json.RawMessage(`{"ok":true,"tool":"` + req.Tool + `"}`),
+			}
 		})
 	defer stop()
 
@@ -72,8 +75,8 @@ func TestPeerlinkAgentInvoke_Offline_503_And_BadRequest_400(t *testing.T) {
 	defer srv.Close()
 
 	peerID, stop := startPairedEdgeFull(t, r, s, srv.URL+"/api/peerlink", nil, nil,
-		func(peerlink.AgentInvokeRequest) (json.RawMessage, error) {
-			return json.RawMessage(`{}`), nil
+		func(peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome {
+			return peerlink.AgentInvokeOutcome{Decision: peerlink.DecisionAccept, Result: json.RawMessage(`{}`)}
 		})
 	stop()
 
@@ -116,14 +119,14 @@ func TestPeerlinkAgentApproval_ExecSideFlow(t *testing.T) {
 	// 执行端被对端调用 → 挂起等待本端 UI
 	done := make(chan error, 1)
 	go func() {
-		_, err := s.PeerAgentInvokeHandler(peerlink.AgentInvokeRequest{
+		res := s.PeerAgentInvokeHandler(peerlink.AgentInvokeRequest{
 			CallId:   "call-1",
 			Tool:     "encrypt_video",
 			Args:     json.RawMessage(`{"path":"/sdcard/私密/工资单.mp4"}`),
 			FromId:   "peer-x",
 			FromName: "Desktop",
 		})
-		done <- err
+		done <- res.Err
 	}()
 
 	// 挂起应可见，并标记 destructive

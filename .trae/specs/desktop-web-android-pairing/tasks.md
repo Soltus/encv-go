@@ -19,8 +19,15 @@
   - [x] 1.1.2 单测：13 用例（纯函数 9 + DOM 4），入 `FAST_INCLUDE`
 - [x] Task 1.2: 桌面布局 **第一阶段**（侧边导航 rail 224px 替代底部 Tab；`Tabs.vue` 桌面壳改用 `ion-router-outlet` 直载——`ion-tabs` 是 shadow DOM 内部布局不可达）
   - [x] 1.2.1 移动端 phone/pad **零回归**（390×844 实测：底部栏在位 y=787 h=57、无 rail）
-  - [ ] 1.2.2 内容区 max-width / master-detail 双栏 / ≥1440 三栏（**下轮**，本轮先收口侧边导航）
-- [ ] Task 1.3: 桌面交互（`/` 聚焦搜索、Esc 关浮层）
+  - [~] 1.2.2 内容区 max-width / master-detail 双栏 / ≥1440 三栏
+    - [x] **max-width**：桌面壳 `--desktop-content-max: 1360px` + 居中（真机级验证：1920×1080 由 1696 → **1360 居中** x=392；1440×900 仍 1216，零回归）
+    - [ ] master-detail 双栏（需按页改造：Files 列表 + 详情）
+    - [ ] ≥1440 三栏
+- [x] Task 1.3: 桌面交互（`/` 聚焦搜索、Esc 关浮层）—— `src/composables/useDesktopShortcuts.ts`
+  - [x] `/` 聚焦**当前激活页**搜索框（`[data-testid="search-input"]`）；已在文本输入位 / 有浮层打开 / 带修饰键时不劫持
+  - [x] Esc 关闭最上层 Ionic 浮层（alert → action-sheet → loading → picker → popover → modal，`overlay-hidden` 跳过）
+  - [x] 仅桌面形态生效（`isDesktop` 可注入），手机端零行为变化
+  - [x] 11 例单测（FAST）+ `pw-desktop-shortcuts.mjs` 真实浏览器 **7/7 PASS**
 - [x] Task 1.4: **R16 处置** —— `getApiBaseUrl()` 生产态默认由 `http://127.0.0.1:2025`（隐含"用户本机跑后端"）改为 **`window.location.origin`（同源）**；非 http 协议（capacitor://）保留原绝对地址。契约测试 `src/api/__tests__/getApiBaseUrl.test.ts` 已改为锁新契约（web→同源 / 非 http→:2025），8/8 通过
   - **先红**：服务器托管源站（:8124 代理 /api）下把 localStorage 写回旧默认 `127.0.0.1:2025` → `GET /api/service-guard` **ERR_ABORTED**（跨源 + `gin_app.go` CORS allowlist 只放行 localhost/127.0.0.1）
   - **后绿**：同源默认后，同一源站 `/api/service-guard` **200**、`requestfailed` 为 0
@@ -54,7 +61,9 @@
     - [x] **R3**：`validateHubURL` 拒绝明文 `http://` 跨端地址（仅 https 或本机回环）
     - [x] token **只存内存**（进程重启需重新扫码配对，与 Task 5.2 一致）
     - [x] **两台进程端到端**（`peerlink_edge_runtime_test.go`，真实 WS）：A=Hub 出票 → B 拿票配对并启动 Edge → A 侧 peer online → A 联邦搜索 B（`/sdcard/...` 原样 + `Pixel` 标注）→ A 远端读 B（字节 + `X-Peer-Id`）→ A 远程 invoke B（ok/accept + 结果回传）→ status/stop
-  - [ ] 扫码 UI 调 `/edge/pair`（Task 2.6，MLKit，需真机）+ 息屏保活实测
+  - [x] **扫码 UI 调 `/edge/pair`（Task 2.6 UI 接线，2026-10-03 完成）**：`components/PeerScanPanel.vue`（扫码 + **「粘贴配对码」降级路径**，与扫码共用同一条 `connectWithText`）+ `src/peerlink/barcodeScanner.ts`（MLKit 经 `registerPlugin("BarcodeScanner")`，web 构建不静态依赖插件包；失败必须可见）+ `parsePairingQR`/`pairAsEdge`/`fetchEdgeStatus`（`usePeerLink`）
+    - [x] **真实浏览器端到端**（`pw-peer-scan.mjs`，生产包 + 类网关源站 + 真实 Go 后端）：web 无相机提示可见 → 点扫码错误可见（非静默）→ **非法配对码可见报错（负向对照）** → 粘贴真实票据 → `/edge/pair` 200 → `/edge/status` running+connected（真 WS）→ **Hub 侧 peers 显示该 Edge 在线** → psk 不落盘（存储搜不到）→ 无 JS 错误。**9 断言全绿**
+    - [ ] 真机相机扫码（MLKit + 权限）+ 息屏保活实测 ← P6 必验（沙箱无相机）
 - [x] Task 2.3: 前端 `usePeerLink`（shared 抽象 + 应用注入）：`createPairingTicket` / `fetchPairingStatus` / `waitForPairing` / `fetchPeers` / `unpairPeer` + 响应式状态（`status`/`ticket`/`paired`/`peers`/`onlinePeers`）
   - [x] 边界守死：peer 不是 baseUrl 候选，全部走同源 `/api/peerlink/*`；psk 不落盘（单测断言 localStorage 无新增）
   - [x] 后端配套：`PairingStatus(pairingID)` 按**二维码里的秘密**查询配对结果（桌面端拿不到 peer token，故按 pairingID 查，不泄密）；新增 `GET /api/peerlink/pairing/status`；`peers`/`unpair` 支持 `X-Peerlink-Operator` 运维身份（**P5/R12 TODO：运维侧需真鉴权**）
@@ -70,11 +79,16 @@
 
 ## P2b — 配对 UI（二维码 ↔ 扫码）
 
-- [ ] Task 2.5: 桌面端渲染二维码（`qrcode` 依赖），内容 = `hub + pairingId + psk + exp`（**不含内网地址**，R3）
-- [ ] Task 2.6: 安卓端扫码（`@capacitor-mlkit/barcode-scanning`），WebView 相机权限实测
-- [ ] Task 2.7: SAS 6 位核对 UI（双端各显示，人工确认）
-- [ ] Task 2.8: 设备与配对页 `PeerSettings.vue`（已配对列表、在线状态、解配）
-- [ ] Task 2.9: 门禁 + i18n + **真机扫码实测**（沙箱无相机 → 列入 P6 必验项）
+> ⚠️ 本节与 P2a/P2b 各条有重叠：Task 2.5/2.7/2.8 已在 Iteration 6（见 progress.md）随 P2a 完成；
+> Task 2.6 扫码端 UI 于 2026-10-03（Iteration 18）完成。保留原条目作对照。
+
+- [x] Task 2.5: 桌面端渲染二维码（`qrcode` 依赖），内容 = `hub + pairingId + psk + exp`（**不含内网地址**，R3）——Iteration 6 完成
+- [x] Task 2.6: 安卓端扫码 UI（`@capacitor-mlkit/barcode-scanning@8.2.1`，`registerPlugin` 引入）+ **「粘贴配对码」降级**（Iteration 18）；
+      WebView 相机权限**真机实测仍待 P6**
+- [x] Task 2.7: SAS 6 位核对 UI（双端各显示，人工确认）——Iteration 6 完成
+- [x] Task 2.8: 设备与配对页 `PeerSettings.vue`（已配对列表、在线状态、解配）——Iteration 6 完成
+- [x] Task 2.9: 门禁（check-all 9 PASS / 0 FAIL）+ i18n（peers.scan*/paste*/code*/edge* zh+en 齐）；
+      **真机扫码实测**（沙箱无相机 → 列入 P6 必验项）
 
 ## P2c — 风险收口（R1–R11）
 
@@ -150,8 +164,17 @@
 
 ## P6 — 端到端验证与文档同步
 
-- [ ] Task 6.1: 模拟器 + `adb forward`：中继链路 / 联邦搜索 / 远程 Agent 授权
-- [ ] Task 6.2: **真机（R15）**：扫码配对、移动网（4G/5G）建连、后台息屏审批超时
-- [ ] Task 6.3: `trust_device` 重启失效真机验证（杀 App / 重启 Go 进程 → 必须重新询问）
-- [ ] Task 6.4: 更新 `MOBILE_STRATEGY.md`（桌面端 + 互联拓扑入册）+ 本目录四件套收尾
-- [ ] Task 6.5: 记忆固化（当日 memory + `MEMORY.md`）
+- [x] Task 6.1: 中继链路 / 联邦搜索 / 远程 Agent 授权的**真机级**端到端 ——
+  新增 `scripts/emu-peerlink-e2e.sh`（Hub=宿主机真实 Go 进程，Edge=**模拟器内** x86_64 真实后端，
+  `adb reverse` 模拟手机主动出网）。**29 PASS / 0 FAIL**。
+  过程中抓出并修掉两个真 bug（均有先红后绿 + 回归锁，见 `progress.md` Iteration 17）：
+  ① `internal/server/server.go` **servingDir 初始化时序**（晚于 NewServer 里的使用 ⇒ 空串 ⇒
+  **本地全文搜索永远 0 命中** + mount root 退化成 cwd）；② `peerlink.AgentInvokeOutcome`
+  **执行端真实决策被吞成 accept**（新增 outcome 结构一路透传 `auto`/`trust_device`）。
+- [ ] Task 6.2: **真机（R15）**：扫码配对、移动网（4G/5G）建连、后台息屏审批超时 ← 沙箱无相机/无移动网
+- [~] Task 6.3: `trust_device` 重启失效验证 —— **进程级已验证真机证据**：重启模拟器内 Go 进程后
+  `GET /agent/trust` 为空、老票据不可用、同一工具**再次要求审批**（≠ Application 杀进程场景，仍需真机）
+- [~] Task 6.4: `MOBILE_STRATEGY.md` 已更新（交付清单 / 边界红线 / P6 待验清单）；
+  `checklist.md` 本轮同步；剩余 kill App 类真机项不在文档侧
+- [x] Task 6.5: 记忆固化 —— `2026-10-02.md` §14（端到端脚本 + 两个真 bug 根因/修法/回归锁
+      + 沙箱四个硬前置）+ `MEMORY.md` 长期条目（闸门脚本、环境前置、两处顺序/透传缺陷）

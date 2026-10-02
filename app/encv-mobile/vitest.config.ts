@@ -88,6 +88,8 @@ const FAST_INCLUDE = [
   'src/composables/appServerRealtimeReducer.test.ts',
   'src/composables/inlineFileReference.test.ts',
   'src/composables/reasoningEffort.test.ts',
+  // Task 1.3：桌面快捷键（/ 聚焦搜索、Esc 关浮层），happy-dom
+  'src/composables/__tests__/useDesktopShortcuts.test.ts',
   // lib: 纯数据生成/状态机
   'src/lib/workflow/__tests__/state-machine.test.ts',
   'src/lib/workflow/__tests__/unified-types.test.ts',
@@ -113,7 +115,12 @@ const FAST_INCLUDE = [
   // motion: 滚动揭示 IntersectionObserver 修复（复现「Ionic 内滚整页空白」），happy-dom
   'src/motion/__tests__/scroll-reveal.test.ts',
   // motion: v-reveal 指令同根因修复（Ionic 内滚空白），happy-dom
+  //   ⚠️ 该文件用 vi.mock 替换 motion/internal 引擎；FAST 是 isolate:false，
+  //      同项目内若有别的文件 import **真实** internal 模块，会让它拿到真实引擎而假红。
+  //      因此同样需要 mock 引擎的 v-page-transition 契约锁放进 ISOLATED（见下）。
   'src/motion/__tests__/directive-reveal.test.ts',
+  // motion: v-page-transition 终态契约**源码锁**（不 import internal，避免上面的 mock 污染）
+  'src/motion/__tests__/page-transition-contract.test.ts',
   // theme: 臻彩显示（vivid / P3）真实生效回归（先红后绿），happy-dom
   'src/motion/__tests__/vivid.test.ts',
   // theme: 表面材质模糊令牌 --material-blur 契约（先红后绿），happy-dom
@@ -129,6 +136,11 @@ const FAST_INCLUDE = [
 const ISOLATED_INCLUDE = [
   'src/__tests__/source-extension-delegation.test.ts',
   'src/__tests__/usePluginExtensions.test.ts',
+  // motion: v-page-transition 终态契约（防「Ionic 前置 opacity:0 被当终态 ⇒ 整页空白」复发）
+  //   ⚠️ 必须 isolate:true —— 它用 vi.mock 替换 motion/internal 引擎与 guard；
+  //      放进 FAST(isolate:false) 会与 directive-reveal.test.ts 的同模块 mock 互相污染
+  //      （实测两个文件交替假红）。
+  'src/motion/__tests__/page-transition-directive.test.ts',
   'src/api/__tests__/getApiBaseUrl.test.ts',
   'src/api/encv.test.ts',
   // 🚧 2026-10-02 挂起：../packages/shared-components/src/components/__tests__/TaskBasicInfo.test.ts —— 依赖已可见后仍失败：组件 UI/文案与断言不符（如 phase label、section-title、crypto params 区块）。

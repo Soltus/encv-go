@@ -171,6 +171,117 @@ export async function fetchPeers(): Promise<PeerListItem[]> {
   return state.peers.value;
 }
 
+// ── 扫码端（安卓）：解析二维码 / 作为 Edge 连到 Hub ──────────────────────
+//
+// 桌面端生成的二维码内容 = `{"v":2,"hub":..,"pairingId":..,"psk":..,"exp":..}`
+// （见 encv-mobile `PeerPairingPanel.vue` 的 pairingCode）。扫码端只需把它交给
+// 本端 Go 后端的 `POST /api/peerlink/edge/pair`（Edge 由 Go 进程常驻，不在 WebView 里）。
+//
+// ⚠️ 契约红线：
+//   - hub 必须是 https，**或**本机回环 http（R3：明文 http 跨端会被浏览器按混合内容拦截，
+//     后端 `validateHubURL` 同样拒绝）。
+//   - psk 只在内存流转，绝不落 localStorage。
+
+export interface PairingQRPayload {
+  v?: number;
+  hub: string;
+  pairingId: string;
+  psk: string;
+  exp?: number;
+}
+
+export type PairingQRParse =
+  | { ok: true; payload: PairingQRPayload }
+  | { ok: false; reason: "not_json" | "missing_field" | "bad_hub" | "expired" };
+
+/**
+ * Hub 地址是否可接受（R3）：https 一律放行；http 只允许本机回环（开发/自测）。
+ */
+export function isAllowedHubAddress(hub: string): boolean {
+  const raw = String(hub ?? "").trim();
+  if (!raw) return false;
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return false;
+  }
+  if (u.protocol === "https:") return true;
+  if (u.protocol === "http:") return ["127.0.0.1", "localhost", "[::1]", "::1"].includes(u.hostname);
+  return false;
+}
+
+/**
+ * 解析二维码文本。
+ * `exp` 语义：桌面端写的是**剩余秒数**（不是绝对时间戳）⇒ 这里只在它看起来像
+ * 绝对毫秒时间戳时才判过期；真正的 120s 一次性有效期由后端票据保证。
+ */
+export function parsePairingQR(text: string, nowMs: number = Date.now()): PairingQRParse {
+  const raw = String(text ?? "").trim();
+  if (!raw) return { ok: false, reason: "not_json" };
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return { ok: false, reason: "not_json" };
+  }
+  if (typeof data !== "object" || data === null) return { ok: false, reason: "not_json" };
+  const p = data as Partial<PairingQRPayload>;
+  if (!p.hub || !p.pairingId || !p.psk) return { ok: false, reason: "missing_field" };
+  if (!isAllowedHubAddress(p.hub)) return { ok: false, reason: "bad_hub" };
+  // 绝对时间戳（ms）才判过期，避免把"剩余秒数"当成过期时间误杀
+  if (typeof p.exp === "number" && p.exp > 1e12 && p.exp <= nowMs) {
+    return { ok: false, reason: "expired" };
+  }
+  return { ok: true, payload: { v: p.v, hub: p.hub, pairingId: p.pairingId, psk: p.psk, exp: p.exp } };
+}
+
+export interface EdgePairResult {
+  ok: boolean;
+  hub: string;
+  peerId: string;
+}
+
+/** 扫码后：让**本端** Go 进程作为 Edge 去连 Hub（长连接由 Go 侧承载）。 */
+export async function pairAsEdge(input: {
+  hub: string;
+  pairingId: string;
+  psk: string;
+  deviceId?: string;
+  name?: string;
+}): Promise<EdgePairResult> {
+  const res = await fetchProvider(url("/edge/pair"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...OPERATOR_HEADER },
+    body: JSON.stringify({
+      hub: input.hub,
+      pairingId: input.pairingId,
+      psk: input.psk,
+      ...(input.deviceId ? { deviceId: input.deviceId } : {}),
+      ...(input.name ? { name: input.name } : {}),
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`edge/pair failed: ${res.status} ${text.slice(0, 200)}`);
+  }
+  const out = JSON.parse(text) as EdgePairResult;
+  if (!out?.ok) throw new Error("edge/pair 返回 ok=false");
+  return out;
+}
+
+export interface EdgeStatus {
+  running: boolean;
+  connected?: boolean;
+  hub?: string;
+  peerId?: string;
+}
+
+/** 本端 Edge 的运行状态（是否正连着 Hub）。 */
+export async function fetchEdgeStatus(): Promise<EdgeStatus> {
+  return await getJSON<EdgeStatus>("/edge/status");
+}
+
 /** ⑤ 解配（token 立即作废） */
 export async function unpairPeer(peerId: string): Promise<boolean> {
   const res = await fetchProvider(url("/unpair"), {
@@ -197,5 +308,7 @@ export function usePeerLink() {
     waitForPairing,
     fetchPeers,
     unpairPeer,
+    pairAsEdge,
+    fetchEdgeStatus,
   };
 }

@@ -17,12 +17,7 @@
 import { computed, ref } from "vue";
 import { usePoll } from "@encv/shared-components/composables/usePoll";
 
-export type DegradeKind =
-  | "peer_offline"
-  | "hub_disconnected"
-  | "hub_not_paired"
-  | "rate_limited"
-  | "circuit_open";
+export type DegradeKind = "peer_offline" | "hub_disconnected" | "hub_not_paired" | "rate_limited" | "circuit_open";
 
 export interface DegradeNotice {
   kind: DegradeKind;

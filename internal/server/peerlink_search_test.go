@@ -45,7 +45,7 @@ func startPairedEdgeFull(
 	hubURL string,
 	onSearch func(peerlink.SearchRequest) (json.RawMessage, error),
 	onRead func(peerlink.ReadRequest) ([]byte, error),
-	onAgent func(peerlink.AgentInvokeRequest) (json.RawMessage, error),
+	onAgent func(peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome,
 ) (string, func()) {
 	t.Helper()
 

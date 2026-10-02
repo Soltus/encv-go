@@ -42,6 +42,14 @@
 
 **/screenshots/
 
+# 视觉验证截图（Playwright/pw-*.mjs 产出，非源码，不入库）
+**/test-visual/*.png
+**/test-visual/*.jpg
+**/test-visual/*.jpeg
+**/test-visual/*.webp
+# AI 生成图片的默认输出目录
+/generated-images/
+
 # 前端 WASM 加密内核构建产物（make wasm / scripts/build-wasm.sh 生成，不入库）
 app/packages/encv-crypto/wasm/
 

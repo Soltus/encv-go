@@ -78,9 +78,13 @@ import RemoteApprovalPrompt from "@/components/RemoteApprovalPrompt.vue";
 import PeerDegradedNotice from "@/components/PeerDegradedNotice.vue";
 import { startRemoteApprovalPolling, stopRemoteApprovalPolling } from "@/composables/useRemoteApproval";
 import { startPeerDegradationPolling, stopPeerDegradationPolling } from "@/composables/usePeerDegradation";
+import { useDesktopShortcuts } from "@/composables/useDesktopShortcuts";
 
 const { t } = useI18n();
 const { isDesktop } = useFormFactor();
+
+// Task 1.3：桌面快捷键（/ 聚焦搜索、Esc 关浮层）——仅桌面形态生效
+useDesktopShortcuts();
 
 // 执行端：轮询本端挂起的远程调用请求（未启用/未配对时静默降级）
 onMounted(() => {
@@ -115,6 +119,9 @@ function onTabsDidChange(event: CustomEvent) {
 /* ── 桌面壳 ── */
 .desktop-shell {
   --desktop-rail-width: 224px;
+  /* Task 1.2.2：内容区可读性上限（≥1920 宽屏下列表/卡片不再拉满全宽）。
+     master-detail 双栏 / ≥1440 三栏属后续子任务，届时可按页放宽或移除该上限。 */
+  --desktop-content-max: 1360px;
   display: flex;
   width: 100%;
   height: 100%;
@@ -164,10 +171,14 @@ function onTabsDidChange(event: CustomEvent) {
   text-overflow: ellipsis;
 }
 
-/* 内容区：router-outlet 由 Ionic 自带 absolute 全填充，这里只提供定位容器 */
+/* 内容区：router-outlet 由 Ionic 自带 absolute 全填充，这里只提供定位容器。
+   max-width + margin auto：flex 先把内容区增长到上限，剩余空间由 auto 边距
+   均分到两侧（居中），rail 仍贴左。 */
 .desktop-content {
   flex: 1;
   min-width: 0;
+  max-width: var(--desktop-content-max);
+  margin-inline: auto;
   position: relative;
   overflow: hidden;
   background: var(--color-base-100);

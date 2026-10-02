@@ -44,7 +44,7 @@ type edgeRuntime struct {
 type peerEdgeHandlers struct {
 	OnSearch      func(peerlink.SearchRequest) (json.RawMessage, error)
 	OnRead        func(peerlink.ReadRequest) ([]byte, error)
-	OnAgentInvoke func(peerlink.AgentInvokeRequest) (json.RawMessage, error)
+	OnAgentInvoke func(peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome
 }
 
 func (s *Server) edgeHandlers() peerEdgeHandlers {
@@ -126,7 +126,7 @@ func (s *Server) peerLocalRead(req peerlink.ReadRequest) ([]byte, error) {
 type edgePairBody struct {
 	Hub       string `json:"hub"`       // Hub 基址（二维码里带，必须是 https，R3）
 	PairingID string `json:"pairingId"` // 二维码里的秘密
-	PSK       string `json:"psk"`       // base64(psk)
+	PSK       string `json:"psk"`       // 二维码里的 psk（hex，与票据 PSKHex 同编码）
 	DeviceID  string `json:"deviceId"`
 	Name      string `json:"name"`
 }

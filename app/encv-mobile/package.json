@@ -44,6 +44,7 @@
   },
   "dependencies": {
     "@ajuarezso/capacitor-high-refresh-rate": "^0.6.0",
+    "@capacitor-mlkit/barcode-scanning": "8.2.1",
     "@capacitor/android": "^8.3.4",
     "@capacitor/core": "^8.3.4",
     "@capacitor/device": "^8.0.2",

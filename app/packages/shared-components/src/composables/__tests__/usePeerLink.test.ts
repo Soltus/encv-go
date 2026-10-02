@@ -18,6 +18,8 @@ import {
   createPairingTicket,
   fetchPairingStatus,
   fetchPeers,
+  pairAsEdge,
+  parsePairingQR,
   setPeerLinkFetchProvider,
   unpairPeer,
   usePeerLink,
@@ -29,6 +31,8 @@ function jsonResponse(status: number, body: unknown): Response {
     ok: status >= 200 && status < 300,
     status,
     json: async () => body,
+    // pairAsEdge 走 res.text()（为了把后端错误文本带出来），mock 必须提供
+    text: async () => JSON.stringify(body),
   } as unknown as Response;
 }
 
@@ -145,6 +149,85 @@ describe("存储纪律", () => {
     await createPairingTicket();
     const keys = Object.keys(localStorage as unknown as Record<string, unknown>);
     expect(keys.length).toBe(0);
+    expect(JSON.stringify(localStorage)).not.toContain("ee");
+  });
+});
+
+describe("扫码端：parsePairingQR（Task 2.6）", () => {
+  const good = { v: 2, hub: "https://hub.example/api/peerlink", pairingId: "abc", psk: "ff".repeat(32), exp: 119 };
+
+  it("合法负载解析成功", () => {
+    const r = parsePairingQR(JSON.stringify(good));
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.payload.pairingId).toBe("abc");
+      expect(r.payload.hub).toBe(good.hub);
+    }
+  });
+
+  it("非 JSON / 空串 → not_json", () => {
+    expect(parsePairingQR("not a qr").ok).toBe(false);
+    expect(parsePairingQR("").ok).toBe(false);
+  });
+
+  it("缺字段 → missing_field", () => {
+    const r = parsePairingQR(JSON.stringify({ v: 2, hub: "https://h" }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("missing_field");
+  });
+
+  it("R3：明文 http 非回环 → bad_hub（后端 validateHubURL 同样拒绝）", () => {
+    const r = parsePairingQR(JSON.stringify({ ...good, hub: "http://192.168.1.9:2025/api/peerlink" }));
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toBe("bad_hub");
+    // 本机回环允许（开发/自测）
+    expect(parsePairingQR(JSON.stringify({ ...good, hub: "http://127.0.0.1:2025/api/peerlink" })).ok).toBe(true);
+  });
+
+  it("exp 为绝对毫秒时间戳时才判过期（桌面端写的是剩余秒数，不能误杀）", () => {
+    const now = 1_700_000_000_000;
+    const past = parsePairingQR(JSON.stringify({ ...good, exp: now - 1000 }), now);
+    expect(past.ok).toBe(false);
+    if (!past.ok) expect(past.reason).toBe("expired");
+    // 剩余秒数（119）不应被当成过期时间
+    expect(parsePairingQR(JSON.stringify(good), now).ok).toBe(true);
+  });
+});
+
+describe("扫码端：pairAsEdge（Task 2.6）", () => {
+  it("把 hub/pairingId/psk 交给本端 /api/peerlink/edge/pair，并带运维头", async () => {
+    let seenUrl = "";
+    let seenInit: RequestInit | undefined;
+    setPeerLinkFetchProvider((async (url: string, init?: RequestInit) => {
+      seenUrl = String(url);
+      seenInit = init;
+      return jsonResponse(200, { ok: true, hub: "https://hub.example/api/peerlink", peerId: "p-1" });
+    }) as unknown as typeof fetch);
+
+    const res = await pairAsEdge({ hub: "https://hub.example/api/peerlink", pairingId: "abc", psk: "ff".repeat(32) });
+    expect(res.ok).toBe(true);
+    expect(res.peerId).toBe("p-1");
+    expect(seenUrl).toContain("/api/peerlink/edge/pair");
+    const headers = (seenInit?.headers ?? {}) as Record<string, string>;
+    expect(headers["X-Peerlink-Operator"]).toBe("1");
+    const body = JSON.parse(String(seenInit?.body));
+    expect(body.pairingId).toBe("abc");
+    expect(body.psk).toBe("ff".repeat(32));
+  });
+
+  it("后端拒绝（502/400）→ 抛错，绝不当成功", async () => {
+    setPeerLinkFetchProvider((async () => ({
+      ok: false,
+      status: 502,
+      text: async () => "pair_failed",
+    })) as unknown as typeof fetch);
+    await expect(pairAsEdge({ hub: "https://h", pairingId: "abc", psk: "ff" })).rejects.toThrow(/502/);
+  });
+
+  it("psk 不落盘：扫码连接后 localStorage 仍为空", async () => {
+    setPeerLinkFetchProvider((async () => jsonResponse(200, { ok: true, hub: "https://h", peerId: "p" })) as unknown as typeof fetch);
+    await pairAsEdge({ hub: "https://h", pairingId: "abc", psk: "ee".repeat(32) });
+    expect(Object.keys(localStorage as unknown as Record<string, unknown>).length).toBe(0);
     expect(JSON.stringify(localStorage)).not.toContain("ee");
   });
 });

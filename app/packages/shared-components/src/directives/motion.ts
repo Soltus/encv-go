@@ -84,12 +84,22 @@ export const vPageTransition: Directive<HTMLElement> = {
       return;
     }
     const ctx = motion.context(() => {
-      motion.from(el, {
-        y: 12 * p.intensity,
-        opacity: 0,
-        duration: DUR.base * p.intensity,
-        ease: EASE.out,
-      });
+      // ⚠️ 必须用 fromTo（显式终态 opacity:1），不能用 from()：
+      //   from() 会把「当前计算值」当终态 —— 挂在 <ion-page> 上时，Ionic 转场开始前
+      //   会给页面写内联 opacity:0，from() 采集到 0 → 动画变成 0→0，
+      //   y 正常归位但透明度永久卡 0 ⇒ 整页空白但可点击（真实浏览器复现，Files/AgentChat 均中招）。
+      //   clearProps 与 usePageTransition 同款：结束后清除内联 opacity/transform，回到 CSS 控制。
+      motion.fromTo(
+        el,
+        { y: 12 * p.intensity, opacity: 0 },
+        {
+          y: 0,
+          opacity: 1,
+          duration: DUR.base * p.intensity,
+          ease: EASE.out,
+          clearProps: "opacity,transform",
+        }
+      );
     }, el);
     track(el, () => ctx.revert());
   },
