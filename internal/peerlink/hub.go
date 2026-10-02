@@ -8,6 +8,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -17,6 +18,16 @@ const DefaultTicketTTL = 120 * time.Second
 
 // SessionIdleTTL 会话心跳超时（连续 3 次 15s 心跳未到即视为离线）。
 const SessionIdleTTL = 45 * time.Second
+
+// PairedResultTTL / MaxPairedResults —— 配对结果（桌面端轮询 `pairing/status` 用）的保留策略。
+//
+// ⚠️ 为什么必须有：票据是"取出即销毁"的，但**没人扫的票据**和**配完之后的配对结果**
+// 都没有清理路径 ⇒ 长时间运行会一直堆在内存里（R11：Hub session 清理 / pairingId 逐出）。
+// 结果与票据一样只存内存，逐出不影响安全（重新出码即可）。
+const (
+	PairedResultTTL  = 10 * time.Minute
+	MaxPairedResults = 256
+)
 
 type Hub struct {
 	mu sync.RWMutex
@@ -62,11 +73,83 @@ func (h *Hub) Info() map[string]string {
 	}
 }
 
+// SweepStats 一次清理的产出（观测 / 测试用）。
+type SweepStats struct {
+	Tickets     int // 清掉的过期票据
+	PairResults int // 清掉的过期/超额配对结果
+}
+
+// Sweep 惰性清理（R11）：清掉**过期未消费**的票据与**过期**配对结果，并对配对结果做上限逐出。
+//
+// ⚠️ 刻意**不**清 sessions / peers：token 必须在断线重连后继续可用（Edge 心跳会重建连接），
+//
+//	已配对设备在列表里要显示为"离线"而不是凭空消失；它们的唯一清理入口是 `Unpair`。
+func (h *Hub) Sweep(now time.Time) SweepStats {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var st SweepStats
+
+	for id, t := range h.tickets {
+		if now.After(t.ExpiresAt) {
+			delete(h.tickets, id)
+			st.Tickets++
+		}
+	}
+
+	for id, res := range h.pairedByTicket {
+		ts := time.Time{}
+		if res != nil && res.Peer != nil {
+			ts = res.Peer.PairedAt
+		}
+		if now.Sub(ts) > PairedResultTTL {
+			delete(h.pairedByTicket, id)
+			st.PairResults++
+		}
+	}
+
+	// 上限逐出：超额时删最旧的一批（配对结果只是"配对完成"的回执，可安全丢弃）
+	if over := len(h.pairedByTicket) - MaxPairedResults; over > 0 {
+		type entry struct {
+			id string
+			ts time.Time
+		}
+		all := make([]entry, 0, len(h.pairedByTicket))
+		for id, res := range h.pairedByTicket {
+			ts := time.Time{}
+			if res != nil && res.Peer != nil {
+				ts = res.Peer.PairedAt
+			}
+			all = append(all, entry{id: id, ts: ts})
+		}
+		sort.Slice(all, func(i, j int) bool { return all[i].ts.Before(all[j].ts) })
+		for i := 0; i < over && i < len(all); i++ {
+			delete(h.pairedByTicket, all[i].id)
+			st.PairResults++
+		}
+	}
+	return st
+}
+
+// PendingTickets / PairedResults —— 观测与测试用计数（不泄漏任何密钥材料）。
+func (h *Hub) PendingTickets() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.tickets)
+}
+
+func (h *Hub) PairedResults() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.pairedByTicket)
+}
+
 // CreateTicket 桌面端申请一次性配对票据（二维码内容来源）。
 func (h *Hub) CreateTicket(hubURL string, ttl time.Duration) (*Ticket, error) {
 	if ttl <= 0 {
 		ttl = DefaultTicketTTL
 	}
+	// 惰性清理：桌面端每次出码都顺带扫一遍（不新增长驻 goroutine）
+	h.Sweep(time.Now())
 	id, err := NewPairingID()
 	if err != nil {
 		return nil, err
@@ -215,7 +298,30 @@ func (h *Hub) Heartbeat(token string) bool {
 		p.Online = true
 	}
 	_ = s
+	// R11：长跑进程可能长时间不出新码，借心跳这条既有通道做惰性清理
+	// （只在真有东西可清时才扫，避免每次心跳都遍历）
+	if len(h.tickets) > 0 || len(h.pairedByTicket) > 0 {
+		h.sweepLocked(now)
+	}
 	return true
+}
+
+// sweepLocked 在**已持有写锁**的前提下执行清理（Heartbeat 内部用）。
+func (h *Hub) sweepLocked(now time.Time) {
+	for id, t := range h.tickets {
+		if now.After(t.ExpiresAt) {
+			delete(h.tickets, id)
+		}
+	}
+	for id, res := range h.pairedByTicket {
+		ts := time.Time{}
+		if res != nil && res.Peer != nil {
+			ts = res.Peer.PairedAt
+		}
+		if now.Sub(ts) > PairedResultTTL {
+			delete(h.pairedByTicket, id)
+		}
+	}
 }
 
 // MarkOffline 断开时标记离线（不删会话，允许重连）。

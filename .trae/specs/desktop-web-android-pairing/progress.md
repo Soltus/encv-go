@@ -613,6 +613,26 @@
 - **遗留 / 下轮入口**：≥1440 三栏；2.12（R6，依赖 E1/E5 固定域名决策）；2.15 的 Hub session 清理；
   3.5（大流量不经 Hub）；3.7（真机联调）。
 
+### Iteration 24 — 2.15 收口：Hub session 清理 + pairingId 逐出（`Hub.Sweep`）（2026-10-03）
+
+- **对应任务**：Task 2.15 剩余（Hub session 清理 / pairingId 逐出）。
+- **真缺口（不是纸面项）**：票据"取出即销毁"只覆盖**被消费**的情况 ——
+  ① 没人扫的票据**无人清理**（只在使用时才判过期）⇒ 长跑进程内存里一直堆；
+  ② 配完之后的 `pairedByTicket` 回执**完全没有清理路径**，只增不减。
+- **改动**（`internal/peerlink/hub.go`）：
+  - 新增 `Hub.Sweep(now) SweepStats`：清**过期未消费票据** + 清超 `PairedResultTTL`(10min) 的配对结果
+    + 超 `MaxPairedResults`(256) 时按**最旧**逐出；返回清理计数（可观测）。
+  - 触发走**惰性清理**，不新增长驻 goroutine：`CreateTicket` 每次出码顺带扫；`Heartbeat` 在"确有东西可清"时
+    调用 `sweepLocked`（已持写锁，不重复加锁）。
+  - ⚠️ **刻意不清 sessions / peers**：token 必须在断线重连后继续可用（Edge 会重建连接），
+    已配对设备要在列表里显示为"离线"而不是凭空消失；它们的唯一清理入口是 `Unpair`。
+  - 新增 `PendingTickets()` / `PairedResults()` 计数访问器（不泄漏密钥材料，供观测与测试）。
+- **回归锁** `internal/peerlink/hub_sweep_r11_test.go`（3 例）：过期票据被清且未过期的保留；
+  配对结果 TTL 逐出（`PairingStatus` 随之 nil）与上限逐出；**Sweep 到"天荒地老"也不得动会话/设备**
+  （token 仍可反查 peer、心跳仍有效、设备仍在列表）。
+  **先红实证**：把 `Sweep` 临时改成空操作 ⇒ 立刻红；还原 ⇒ 绿。
+- **遗留 / 下轮入口**：≥1440 三栏；3.5（大流量不经 Hub）；3.7（真机联调）；2.12（R6，依赖 E1/E5 决策）。
+
 ```
 ### Iteration N — <主题>（<日期>）
 

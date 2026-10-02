@@ -84,7 +84,8 @@
   - [x] 一个 peer 只允许一条活跃会话（`SetExclusive` 顶掉旧连接；`DeleteConn` 按连接身份删除，防误删新连接）
   - [x] 槽位不泄漏（突发后在途归零、并发退去后恢复 200）
   - [x] **真 bug**：Edge 并发回写 websocket **panic** ⇒ 所有写帧串行化（Edge `writeMu` + Hub 侧走 `peerConns.WriteJSON`）
-  - [ ] Hub session 清理（残留会话清理 / pairingId 逐出）—— 未做
+  - [x] Hub session 清理（残留会话清理 / pairingId 逐出）—— `Hub.Sweep()` + `hub_sweep_r11_test.go` 3 例
+        （清过期票据与过期/超额配对结果；**不动会话与已配对设备**；故意改成空操作 ⇒ 已实证必红）
 
 ## P3 — 互通搜索索引
 

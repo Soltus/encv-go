@@ -105,7 +105,11 @@
   - [x] 单 peer 只允许**一条活跃会话**：`SetExclusive` 顶掉旧连接 + `DeleteConn` 按连接身份删除（防旧连接 defer 误删新连接）
   - [x] 槽位必归还（突发后在途数归零、并发退去后恢复 200）
   - [x] **真 bug**：Edge 并发回写 websocket panic ⇒ `writeMu` 串行化所有写帧（res / 心跳 / SendJSON）；Hub 侧 hello_ok/pong/error 同样改走 `peerConns.WriteJSON`
-  - [ ] Hub session 清理（断线/重连后的残留会话清理）与 pairingId 逐出策略 —— 未做
+  - [x] Hub session 清理与 pairingId 逐出（2026-10-03）：`Hub.Sweep()` 清**过期未消费票据**
+        + 清超 `PairedResultTTL`(10min) 的配对结果 + 超 `MaxPairedResults`(256) 按最旧逐出；
+        惰性触发（出码/心跳），**不新增长驻 goroutine**；**刻意不清 sessions/peers**（token 要能重连复用、
+        离线设备要能显示）。回归锁 `hub_sweep_r11_test.go` 3 例（含"不得动会话/设备"），
+        **故意改成空操作 ⇒ 已实证必红**
 
 ## P3 — 互通搜索索引（联邦）
 
