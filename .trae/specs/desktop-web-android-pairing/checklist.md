@@ -15,7 +15,8 @@
 - [x] 侧边导航 rail 生效（桌面壳改用 `ion-router-outlet` 直载，`ion-tabs` shadow DOM 不可达已记录）
 - [~] master-detail 双栏 / 内容区 max-width
   - [x] **内容区 max-width**：`--desktop-content-max: 1360px` + 居中（1920×1080：1696 → **1360** x=392；1440×900 零回归）
-  - [ ] master-detail 双栏 / ≥1440 三栏（按页改造，未做）
+  - [x] master-detail 双栏（Files：单击选中+详情面板 / 双击打开；手机零回归，`pw-files-master-detail.mjs` 7/7）
+  - [ ] ≥1440 三栏（按页再拆一栏，未做）
 - [x] 桌面快捷键（Task 1.3）：`/` 聚焦当前页搜索框、Esc 关最上层 Ionic 浮层（11 单测 + `pw-desktop-shortcuts.mjs` **7/7**）
 - [x] **真 bug（2026-10-03）**：`v-page-transition` 用 `from()` 采集 Ionic 前置 `opacity:0` 当终态 ⇒ 动画 0→0
       ⇒ **整页空白但可点击**（Files/AgentChat）。已改 `fromTo` 显式终态 + `clearProps`；

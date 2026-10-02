@@ -568,6 +568,27 @@
   ⇒ 三者叠加 = 一条"只在 dev+网关 + 陈旧缓存"下才出现的问题，从验收网眼里漏过去了。
   **已补的网眼**：`pw-pairing-qr.mjs` 锁 dev+网关路径（canvas 真实像素 + 无 qrDiag）。
 
+### Iteration 22 — Task 1.2.2 收口：Files 页桌面 master-detail 双栏（2026-10-03）
+
+- **对应任务**：Task 1.2.2 剩余（master-detail 双栏）。≥1440 三栏仍**未做**（需按页再拆一栏）。
+- **先红**：`pw-files-master-detail.mjs` —— 桌面 1440 单击文件行**没有任何详情面板**（面板容器都不存在）。
+- **改动**（`encv-mobile/src/views/Files.vue`）：
+  - 接入 `useFormFactor().isDesktop`；新增 `detailPath` / `detailFile`（按 path 从 `displayFiles` 派生，
+    不新增第二份数据）。
+  - 行交互：单击**文件** = 选中（详情面板）；双击**文件** = `handleFileClick`（原有打开行为**不被顶掉**）；
+    单击**目录** = 照旧进入目录。手机端**零变化**（容器 `.files-split` 在手机下不做任何布局约束）。
+  - 模板：列表与详情面板包进 `.files-split`，桌面用 `grid-template-columns: minmax(0,1fr) 360px` + 面板 sticky；
+    选中态 `ion-item.file-selected` 用 `--color-primary` 令牌（不硬编码色值）。
+  - 详情面板：文件名 / 类型 / 大小 / 修改时间 / 路径 + 「打开」「复制路径」，未选中显示空态提示。
+  - i18n：`files.detailTitle|detailType|detailSize|detailModified|detailPath|detailOpen|detailCopyPath|detailEmpty`（zh+en 齐）。
+- **踩坑（真红，别再犯）**：`Files.vue` 的 `<script setup>` **没有 import `ref`/`computed`**（历史沿革），
+  我直接用 `ref()` ⇒ 页面整页崩成"组件渲染错误 / ref is not defined"。已补 `import { computed, ref } from "vue"`。
+- **验证（转绿，同一条真实路径）**：`pw-files-master-detail.mjs` **7/7 PASS** ——
+  进入挂载点 → 单击 `report.txt` → 详情面板显示文件名/大小/时间/路径；单击后**列表条数不变**（只选中不打开）；
+  双击不崩；**手机 390×844 无详情面板（零回归，这条同时是负向对照）**。
+- **门禁**：`node scripts/check-all.mjs` **9 PASS / 0 FAIL / 1 SKIP**。
+- **遗留 / 下轮入口**：≥1440 三栏；P2c 收口（2.10 R3 锁 / 2.11 R4 / 2.14 R10）；2.15 的 Hub session 清理。
+
 ```
 ### Iteration N — <主题>（<日期>）
 

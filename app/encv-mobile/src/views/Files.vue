@@ -484,14 +484,17 @@
           <button class="fulltext-banner-dismiss" type="button" @click="dismissFulltextBanner">×</button>
         </div>
 
+        <!-- Task 1.2.2：桌面双栏容器（手机端是普通单列，零变化） -->
+        <div class="files-split" :class="{ 'files-split--desktop': isDesktop }">
         <ion-list>
           <ion-item
             v-for="file in displayFiles"
             :key="file.path"
-            @click="handleFileClick(file)"
+            @click="onRowClick(file)"
+            @dblclick="onRowDblClick(file)"
             v-longpress="() => handleLongPress(file)"
             :data-highlight-path="file.path"
-            :class="{ 'file-highlight': highlightedPath === file.path, 'greedy-match': searchMode === 'greedy' }"
+            :class="{ 'file-highlight': highlightedPath === file.path, 'greedy-match': searchMode === 'greedy', 'file-selected': isDesktop && detailPath === file.path }"
           >
             <div slot="start" class="file-thumbnail-slot lazy-thumb-target" :data-file-path="file.path">
                 <img
@@ -557,6 +560,46 @@
             </ion-button>
           </ion-item>
         </ion-list>
+
+        <!-- 桌面详情面板（master-detail 的 detail）：只展示元数据 + 动作 -->
+        <aside
+          v-if="isDesktop"
+          class="files-detail"
+          data-testid="files-detail"
+          aria-label="file-detail"
+        >
+          <div class="files-detail-head">
+            <span class="files-detail-title">{{ t('files.detailTitle', { defaultValue: '详情' }) }}</span>
+            <ion-button v-if="detailFile" fill="clear" size="small" @click="closeDetail">
+              <ion-icon :icon="close" slot="icon-only"></ion-icon>
+            </ion-button>
+          </div>
+          <template v-if="detailFile">
+            <h3 class="files-detail-name">{{ detailFile.display_name || detailFile.name }}</h3>
+            <dl class="files-detail-meta">
+              <dt>{{ t('files.detailType', { defaultValue: '类型' }) }}</dt>
+              <dd>{{ detailFile.isDirectory ? t('files.directory') : (detailFile.ext || '-') }}</dd>
+              <dt>{{ t('files.detailSize', { defaultValue: '大小' }) }}</dt>
+              <dd>{{ detailFile.isDirectory ? '-' : formatFileSize(detailFile.size) }}</dd>
+              <dt>{{ t('files.detailModified', { defaultValue: '修改时间' }) }}</dt>
+              <dd>{{ detailFile.modified ? formatDateTime(detailFile.modified) : '-' }}</dd>
+              <dt>{{ t('files.detailPath', { defaultValue: '路径' }) }}</dt>
+              <dd class="files-detail-path">{{ detailFile.path }}</dd>
+            </dl>
+            <div class="files-detail-actions">
+              <ion-button size="small" fill="solid" @click="handleFileClick(detailFile)">
+                {{ t('files.detailOpen', { defaultValue: '打开' }) }}
+              </ion-button>
+              <ion-button size="small" fill="outline" @click="copyDetailPath">
+                {{ t('files.detailCopyPath', { defaultValue: '复制路径' }) }}
+              </ion-button>
+            </div>
+          </template>
+          <p v-else class="files-detail-empty">
+            {{ t('files.detailEmpty', { defaultValue: '单击左侧文件查看详情（双击直接打开）' }) }}
+          </p>
+        </aside>
+        </div>
       </template>
 
       <ion-alert :is-open="showRenameDialog" header="重命名"
@@ -627,6 +670,8 @@
   </ion-page>
 </template>
 <script setup lang="ts">
+// Task 1.2.2：master-detail 需要 ref/computed
+import { computed, ref } from "vue";
 import {
   alertCircle,
   arrowBack,
@@ -659,6 +704,7 @@ import { getFileIcon, getFileIconColor, isImageFile } from "@encv/shared-compone
 import { useFilesView } from "@encv/shared-components/views/useFilesView";
 // 🆕 P3（spec desktop-web-android-pairing）：搜索页接入「互通搜索索引」
 import { type FederatedHit, searchFederated } from "@encv/shared-components/composables/useFederatedSearch";
+import { useFormFactor } from "@encv/shared-components/composables/useFormFactor";
 import PeerSourceBadge from "@/components/PeerSourceBadge.vue";
 
 const {
@@ -790,6 +836,45 @@ const {
 function peerFileUrl(hit: FederatedHit): string {
   const qs = new URLSearchParams({ peerId: hit.peerId, path: hit.path });
   return `/api/peerlink/file?${qs.toString()}`;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Task 1.2.2（剩余）：桌面 master-detail 双栏
+ *
+ * 桌面语义（仅 formFactor=desktop 生效，手机端零变化）：
+ *   - 单击**文件**行 = 选中（右侧详情面板显示元数据 + 动作）
+ *   - 双击**文件**行 = 打开（保持原有行为可达，不是被详情面板顶掉）
+ *   - 单击**目录**行 = 照旧进入目录（目录不做"选中"）
+ * 详情面板只展示信息 + 提供动作，**不改写列表语义**（不合并命名空间、不伪造成别的东西）。
+ * ───────────────────────────────────────────────────────────── */
+const { isDesktop } = useFormFactor();
+const detailPath = ref("");
+const detailFile = computed(() => displayFiles.value.find(f => f.path === detailPath.value) ?? null);
+
+function onRowClick(file: (typeof displayFiles.value)[number]): void {
+  if (isDesktop.value && !file.isDirectory) {
+    detailPath.value = file.path;
+    return;
+  }
+  handleFileClick(file);
+}
+
+function onRowDblClick(file: (typeof displayFiles.value)[number]): void {
+  handleFileClick(file);
+}
+
+function closeDetail(): void {
+  detailPath.value = "";
+}
+
+async function copyDetailPath(): Promise<void> {
+  const p = detailFile.value?.path;
+  if (!p) return;
+  try {
+    await navigator.clipboard.writeText(p);
+  } catch {
+    /* 剪贴板不可用时静默：路径已在面板上可见，可手动复制 */
+  }
 }
 
 // 🆕 2026-07-02 v2 简化：不需要 phraseInsertion 常量（直接调 insertSymbol('__phrase_open__')）
@@ -1708,6 +1793,78 @@ body.dark .diag-item {
   font-weight: 600;
   padding: 0 2px;
   border-radius: 2px;
+}
+
+/* === Task 1.2.2：桌面 master-detail 双栏 === */
+/* 手机端容器完全透明（不加任何布局约束），桌面端才切成两栏网格。 */
+.files-split {
+  display: block;
+}
+.files-split--desktop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 12px;
+  align-items: start;
+  padding: 0 8px 8px;
+}
+.files-detail {
+  position: sticky;
+  top: 8px;
+  padding: 12px;
+  border-radius: var(--radius-box, 0.75rem);
+  border: 1px solid var(--color-base-300);
+  background: var(--color-base-100);
+}
+.files-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.files-detail-title {
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+  color: var(--color-base-content);
+}
+.files-detail-name {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  word-break: break-all;
+  color: var(--color-base-content);
+}
+.files-detail-meta {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 4px 8px;
+  margin: 0 0 12px;
+  font-size: 0.8125rem;
+}
+.files-detail-meta dt {
+  color: var(--color-base-content);
+  opacity: 0.6;
+}
+.files-detail-meta dd {
+  margin: 0;
+  color: var(--color-base-content);
+}
+.files-detail-path {
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.files-detail-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.files-detail-empty {
+  margin: 0;
+  font-size: 0.8125rem;
+  opacity: 0.6;
+  color: var(--color-base-content);
+}
+/* 选中态（仅桌面）：用令牌，不用硬编码色值 */
+ion-item.file-selected {
+  --background: color-mix(in srgb, var(--color-primary) 12%, var(--color-base-100));
 }
 
 /* 暗黑模式适配 */

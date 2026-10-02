@@ -21,8 +21,9 @@
   - [x] 1.2.1 移动端 phone/pad **零回归**（390×844 实测：底部栏在位 y=787 h=57、无 rail）
   - [~] 1.2.2 内容区 max-width / master-detail 双栏 / ≥1440 三栏
     - [x] **max-width**：桌面壳 `--desktop-content-max: 1360px` + 居中（真机级验证：1920×1080 由 1696 → **1360 居中** x=392；1440×900 仍 1216，零回归）
-    - [ ] master-detail 双栏（需按页改造：Files 列表 + 详情）
-    - [ ] ≥1440 三栏
+    - [x] master-detail 双栏（Files 列表 + 详情面板，2026-10-03）：单击文件=选中（详情：名称/类型/大小/时间/路径 + 打开/复制路径）、
+          双击=打开（原行为不被顶掉）、单击目录仍导航；手机端零变化。`pw-files-master-detail.mjs` **7/7 PASS**
+    - [ ] ≥1440 三栏（需按页再拆一栏，未做）
 - [x] Task 1.3: 桌面交互（`/` 聚焦搜索、Esc 关浮层）—— `src/composables/useDesktopShortcuts.ts`
   - [x] `/` 聚焦**当前激活页**搜索框（`[data-testid="search-input"]`）；已在文本输入位 / 有浮层打开 / 带修饰键时不劫持
   - [x] Esc 关闭最上层 Ionic 浮层（alert → action-sheet → loading → picker → popover → modal，`overlay-hidden` 跳过）
