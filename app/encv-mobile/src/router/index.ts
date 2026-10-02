@@ -61,6 +61,11 @@ const routes: RouteRecordRaw[] = [
         meta: { title: "openlist.title" },
       },
       {
+        // 🆕 spec desktop-web-android-pairing P2b：设备与配对（二维码 + SAS 核对）
+        path: "settings/peers",
+        component: () => import("@/views/PeerSettings.vue"),
+      },
+      {
         path: "settings/server",
         component: () => import("@/views/ServerDetail.vue"),
       },

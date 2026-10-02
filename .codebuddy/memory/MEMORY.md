@@ -26,6 +26,22 @@
 - **Biome 配置环境事实（2026-07-14）**：biome 配置已迁到仓库根 `/workspace/biome.jsonc`（原在 `app/biome.jsonc`，用户判定根目录才正确，已删除 app 那份）。真实 IDE 设置 `.vscode/settings.json` 有 `"biome.enabled": true`（VS Code 侧 Biome 已启用，用户那边应能看到内联报错/Problems）。**`.ide/settings.json` 是镜像拷贝源，不被任何 IDE 实时读取**（改它无即时作用，需部署/同步到真实位置才生效）。终端在本环境常不可用 → Biome 查错依赖用户侧 VS Code 红线，或终端可用时 `biome ci`。
 - **⚠️ `app_format` MCP 在本环境不真改文件（2026-07-16 续41 实测）**：`app_format` 报 `Formatted 4 files in 6ms. No fixes applied.` 但 Biome CI 仍 FAIL（格式不符）。**必须用 `pnpm exec biome check --write <path>`（经 app_exec MCP）才真改**；`app_format` 在此环境不可信，勿再单独依赖它修格式。
 - 超时命令必须加超时参数（如 curl 加 `--max-time`）。
+
+## 双端互联（桌面 web ⇄ 安卓）立项事实（2026-10-02 起，长期）
+
+- **权威规划文档**：`.trae/specs/desktop-web-android-pairing/`（`spec.md` 契约 / `tasks.md` P0–P6 / `checklist.md` / `progress.md` 多轮迭代跟踪 + 恢复入口）。任何"桌面端 / 扫码配对 / 互通搜索 / 远程 Agent"相关会话**先读 `progress.md`**。
+- **核心边界（写死防跑偏）**：`baseUrl` = 本端自己的后端（既有语义，不动）；`peer` = 另一台已配对设备，**peer 绝不是 baseUrl 的候选**。`useApiBaseProbe` 的探测链**不得**把 peer 改写进 baseUrl。
+- **"互通搜索索引" ≠ 挂载网络驱动器**：远端命中永远是**跨端引用**（`peerId + path` + 来源徽章），只可"在线打开/取回"，**禁止**合并统一命名空间、禁止伪装成本地路径（有契约回归锁）。
+- **信任语义三分**：`accept`（一次）/ `accept_for_session`（会话级，已有 `sess.GrantedTools`）/ `trust_device`（**进程级，重启即失效**，新增）。token 与信任态**只存 Go 进程内存**，禁止落 localStorage / 配置文件；破坏性工具即使已信任也强制确认。
+- **连通性既有地基**：Go 后端绑 `:port`(0.0.0.0) 故 LAN 可达但零鉴权（配对层先行）；`gin_app.go` CORS 只放行 localhost/127.0.0.1/`https://*-plugin.local`（桌面直连安卓需先解决）；`ApiProxyPlugin.resolveBackendUrl()` 已支持绝对 URL，安卓→对端天然绕 CORS。
+- **⚠️ 拓扑事实（2026-10-02 用户纠正，推翻初版 LAN 假设——初版"两端同局域网 → LAN 直连"设计【已废除】）**：**桌面端（web）跑在 cnb 云开发环境（公网 HTTPS，与其 Go 后端同源，经 preview-gateway :16666 转发 `/agent-api`→:2025）；安卓端在 NAT/CGNAT 后、无公网地址 ⇒ 两端不同网**。因此所有跨端设计必须走「**Hub（cnb 上 Go 内的 peerlink hub，公网 WSS）+ 手机端主动出网建长连接**」，**禁止 LAN 直连**（且 https 页面请求 http 内网地址会被浏览器按混合内容拦截）。桌面 UI 只调同源 REST/SSE ⇒ 天然规避 CORS 与混合内容。
+  - 长连接**放 Go 侧**（非 WebView）：息屏 / 后台 / Activity 重建不断链；UI 只负责渲染与授权弹窗，经 127.0.0.1 与本机 Go 交互。
+  - 二维码内容从"内网地址"改为"**会合点 hub + pairingId + psk**"（带外通道，不依赖同网）。
+  - **手机侧接线**：`POST /api/peerlink/edge/pair`（hub+pairingId+psk）→ 配对成功后由 Go 进程常驻 Edge；`GET /edge/status`、`POST /edge/stop`。token **只存内存** ⇒ 进程重启必须重扫。Hub 地址**禁止明文 http**（仅 https 或本机回环）。
+  - **最易低估的风险 R6**：`.cnb.yml` `keepAliveTimeout: 30m` ⇒ cnb 开发环境 30 分钟无心跳即被回收，Hub 会消失 / 地址漂移 ⇒ Hub 地址须持久化且**可重指向**，固定域名优先。
+  - 云端视为**不可信中转**：全链路 AEAD（HKDF(psk) 派生）+ SAS 6 位人工核对 + Hub 不落盘 + 日志脱敏；大流量（文件取回）默认不经 Hub。
+- **Capacitor 桌面端（2026-10-02 调研，长期）**：官方**没有**桌面平台（只有 android/ios/web，`getPlatform()` 只返回这三值）⇒ 桌面只有两条路：① **web 形态**（浏览器/cnb，官方一等公民，插件走 web 实现或 stub）；② **Electron**（`@capacitor/capacitor-electron` → `@capawesome/capacitor-electron`，兼容 Capacitor≥6 + Electron≥28，活跃；`getPlatform()==='electron'` 且 `isNative()===true`；只有带 Electron 实现或有 web fallback 的插件可用；80–150MB；许可未确认）。社区版 `@capacitor-community/electron` 已停滞不采用。
+  - **铁律**：桌面形态判定**禁止只看 `isNative()`**（Electron 桌面 isNative=true 却该走桌面壳）；必须看 `platform`（`web`/`electron` 才算桌面候选），平台名经 `appCapabilities.platform()` 注入（`Capacitor.getPlatform()`），见 `computeFormFactor` + 其 4 个单测。
   - **前提已确认**：`index` 原生就是**基于内容 hash 的增量**（`cli.mjs` `getFileHash`→`storedHash===file.hash` 则 `skipped++`，只重解析/重嵌入变更文件，`removeStaleFiles` 清理已删文件）。所以查询前重索引对未变文件很廉价（只重 hash，不重嵌入）。**不是 mtime，是内容 hash，更可靠**。watch 守护进程不采用（长驻进程按"环境保持"规矩绝不能 kill，新增风险）。
   - **端到端实测（/tmp fixture）**：新增引用文件后**不手动 index** 直接 `references` → 自动变 2 处；删该文件后直接 `references` → 自动回落 1 处。证明"新鲜度 + stale 清理"双向生效。
   - **⚠️ `references` 三大用法坑（2026-07-12 实战踩坑，"输出不对劲"根因）**：

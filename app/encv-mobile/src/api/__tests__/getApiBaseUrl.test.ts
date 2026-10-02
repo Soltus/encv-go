@@ -80,8 +80,32 @@ describe("getApiBaseUrl — 非 DEV 模式（生产/真机）", () => {
     expect(mod.getApiBaseUrl()).toBe("http://192.168.1.99:2025");
   });
 
-  it("localStorage 空 → fallback 到 DEFAULT_API_BASE_URL (:2025)", async () => {
+  it("localStorage 空 + web(http/https) → **同源**（服务器托管形态：后端在托管方背后）", async () => {
+    // 🆕 2026-10-02（spec desktop-web-android-pairing / Task 1.4 R16）：
+    //   旧契约是 fallback 到 http://127.0.0.1:2025，隐含"用户本机跑着 encv-go"。
+    //   但桌面端是**服务器托管**（cnb：preview-gateway 把 /api、/agent-api 代理到 :2025），
+    //   浏览器去找用户自己机器的 2025 → 跨源 + CORS（gin_app.go 只放行 localhost/127.0.0.1）
+    //   → Failed to fetch。正确默认 = window.location.origin。
+    //   与 useApiBaseProbe 探测链一致：它早就把 [1.5] current-origin 排在 [2] loopback 之前。
     const mod = await import("@encv/shared-components/api/encv");
-    expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2025");
+    expect(mod.getApiBaseUrl()).toBe(window.location.origin);
+    expect(mod.getApiBaseUrl()).not.toBe("http://127.0.0.1:2025");
+  });
+
+  it("localStorage 空 + 非 http(如 capacitor://) → fallback 到 DEFAULT_API_BASE_URL (:2025)", async () => {
+    // 原生壳不走同源：capacitor:// 协议下没有"托管方代理"，保持原绝对地址
+    const original = window.location.protocol;
+    vi.spyOn(window, "location", "get").mockReturnValue({
+      ...window.location,
+      protocol: "capacitor:",
+    } as unknown as Location);
+    try {
+      vi.resetModules();
+      const mod = await import("@encv/shared-components/api/encv");
+      expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2025");
+    } finally {
+      vi.restoreAllMocks();
+      expect(original).toBeTypeOf("string");
+    }
   });
 });

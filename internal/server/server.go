@@ -25,9 +25,10 @@ import (
 	"github.com/Soltus/encv-go/internal/mount"
 	"github.com/Soltus/encv-go/internal/mount/drivers"
 	"github.com/Soltus/encv-go/internal/openlist"
+	"github.com/Soltus/encv-go/internal/peerlink"
 	"github.com/Soltus/encv-go/internal/register"
-	mobileservice "github.com/Soltus/encv-go/internal/service"
 	"github.com/Soltus/encv-go/internal/search"
+	mobileservice "github.com/Soltus/encv-go/internal/service"
 	"github.com/Soltus/encv-go/internal/tools"
 	"github.com/Soltus/encv-go/internal/utils"
 	"github.com/Soltus/encv-go/internal/v2/container/detector"
@@ -41,15 +42,15 @@ import (
 )
 
 type Server struct {
-	server         *http.Server
-	cfg            *config.Config
-	configPath     string
-	configMu       sync.Mutex
+	server     *http.Server
+	cfg        *config.Config
+	configPath string
+	configMu   sync.Mutex
 	// 🆕 2026-06-11 修复：mock generate 并发 race
 	// 多 goroutine 同时写同一文件（os.WriteFile 非原子）→ 部分覆盖 + count 不稳定
 	// 加全局互斥串行化（dev tool，低频，代价可接受）
-	mockGenMu      sync.Mutex
-	servingDir     string
+	mockGenMu  sync.Mutex
+	servingDir string
 	// themesDir 是用户安装主题的【数据目录】——与 servingDir（静态 web 根）严格分离。
 	// 平台/env 派生见 themeDataPath()：Android 落在 app 私有 files 目录（可写、不污染媒体视图），
 	// 桌面端走 XDG / 标准路径。绝不把用户数据写进 servingDir。
@@ -68,7 +69,7 @@ type Server struct {
 	// 🆕 2026-06-17：多挂载点 webdav 实例表（multi-mount-storage-refactor spec 续）
 	// 启动期按 mount registry 填充；key = mount.Name（primary / automation / sandbox 等）
 	webdavFSByMount map[string]*webdavFSEntry
-	mockEngine     *MockEngine
+	mockEngine      *MockEngine
 	// scenarioLoader 是剧本外置 spec 引入的加载器。
 	// 若 agent_settings.mock_scenarios_dir 非空，
 	// NewServer 会创建 loader + 加载 YAML 覆盖 builtin 剧本。
@@ -98,6 +99,31 @@ type Server struct {
 	lastHeartbeatMs int64
 	// 🆕 2026-07-03：向量搜索服务（Turso 原生向量检索 + 中文 bigram 分词）
 	searchSvc *vectorsearch.SearchService
+	// 🆕 2026-10-02：双端互联 Hub（spec desktop-web-android-pairing P2a）
+	//
+	// 桌面端（web）跑在 cnb 公网、安卓端在 NAT 后 ⇒ 跨端走「Hub + 手机主动出网的
+	// 长连接」，不存在 LAN 直连。所有 psk/token/密钥 **只存进程内存**（重启即失效）。
+	peerHub *peerlink.Hub
+	// peerConns：peerID → 活跃 WS 连接（Edge 主动出网连进来，Hub 要能反向发请求）
+	peerConns *peerlink.ConnRegistry
+	// peerCalls：Hub → Edge 的 RPC 关联（联邦搜索 / 远程 Agent），带超时
+	peerCalls *peerlink.Caller
+	// 🆕 2026-10-02：远程 Agent **执行端授权器**（P4）
+	//
+	// 审批只发生在执行端（谁的文件谁点头）；`trust_device` 是**进程级**信任，
+	// 只存内存、**重启即失效**（与会话级 `sess.GrantedTools` 严格区分）。
+	agentApprover   *peerlink.Approver
+	agentApproverMu sync.Mutex
+	// 🆕 2026-10-02：本端作为 **Edge** 连到远端 Hub 的运行时（P2a Task 2.2 接线）
+	//
+	// 扫码配对后启动；token 只存内存（进程重启需重新配对）。
+	peerEdgeMu sync.Mutex
+	peerEdge   *edgeRuntime
+	// peerEdgeHandlersOverride 测试/宿主覆盖 Edge 处理器（默认走本端真实实现）
+	peerEdgeHandlersOverride *peerEdgeHandlers
+	// 🆕 P5/R12：peerlink 限流 + 熔断（进程内存，重启归零）
+	peerLimitMu sync.Mutex
+	peerLimiter *peerlinkLimiters
 	// 🆕 2026-07-03：特色微服务内核 Lifecycle（启停编排 + 内存守卫）
 	//   - Start/Stop 受控：满足"启动 ≤500ms / 停止 ≤200ms"硬指标
 	//   - 不消耗 TCP 端口（纯进程内）
@@ -262,7 +288,7 @@ func kernelDataPath() string {
 	}
 	// 复用 mountRegistryDataPath 的目录派生逻辑，取同级 .encv/kernel 子目录
 	mountsFile := mountRegistryDataPath(nil) // cfg 不影响 env-driven 路径
-	parent := filepath.Dir(mountsFile)        // .../.encv  或 .../encv(-dev)
+	parent := filepath.Dir(mountsFile)       // .../.encv  或 .../encv(-dev)
 	return filepath.Join(parent, "kernel")
 }
 
@@ -415,7 +441,10 @@ func NewServer(ctx context.Context, configPath string) *Server {
 		instanceID:     fmt.Sprintf("%x", time.Now().UnixNano()),
 		mockEngine:     NewMockEngine(),
 		themesDir:      themeDataPath(),
+		peerHub:        peerlink.NewHub("encv-go", ""),
+		peerConns:      peerlink.NewConnRegistry(),
 	}
+	s.peerCalls = peerlink.NewCaller(s.peerConns)
 	// 把 mock 引擎的 tool_call.execute_real 真实执行器绑到 s.executeAgentTool
 	// ——剧本里声明 execute_real=true 的工具调用会被实际执行（覆盖硬编码 result）。
 	// 见 internal/server/agent_mock.go §executeRealAndEmit

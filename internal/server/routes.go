@@ -173,6 +173,11 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.GET("/api/plugins/container-extensions", s.handleContainerExtensionsGin)
 	r.GET("/api/alist-encrypt/stream", s.handleAlistEncryptStreamGin)
 	r.GET("/api/alist-encrypt/decode-filename", s.handleAlistDecodeFilenameGin)
+
+	// 🆕 2026-10-02：双端互联（spec desktop-web-android-pairing P2a）
+	//   桌面端（web，cnb 公网）⇄ 安卓端（NAT 后）走「Hub + 手机主动出网的长连接」，
+	//   **没有 LAN 直连**。除 hello 外全部端点必须带 peer token（未配对一律 401）。
+	registerPeerlinkRoutes(s, r)
 	r.POST("/api/logs", s.handleAPILogsGin)
 	r.GET("/api/logs/recent", s.handleAPILogsRecentGin)
 	r.GET("/api/mounts", s.handleListMountsGin)

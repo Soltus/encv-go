@@ -14,6 +14,8 @@ import { useRoute, useRouter } from "vue-router";
 import { useSearchInput } from "@encv/shared-components/composables/useSearchInput";
 import { type QueryToken, renderSnippet, tokenizeQuery } from "@encv/shared-components/views/useFilesView.searchTokens";
 import { getAppCapabilities } from "@encv/shared-components/runtime/appCapabilities";
+// 🆕 P3：联邦搜索类型（仅类型引用，不引入运行时耦合）
+import type { FederatedHit } from "@encv/shared-components/composables/useFederatedSearch";
 
 // 🆕 2026-07-02: 显式 return type（用 Record<string, any> 兼容所有字段）— 避免 vue-tsc 推断丢字段
 // (历史踩坑：isSelectedModelAvailable / switchSession / lanAccessLoaded / fetchModels / temperature 都从推断 type 中消失过)
@@ -119,7 +121,23 @@ function showErrorToast(message: string): void {
  *   fileBadges / selectedFile / renameValue 等），分多个 composable 要双向同步 props，
  *   反而比单 composable 更难维护。
  */
-export function useFilesView(): UseFilesViewReturn {
+
+/**
+ * P3（spec desktop-web-android-pairing）可选注入：**只查对端**的联邦搜索。
+ *
+ * ⚠️ 契约：注入后远程命中放在**独立的 `peerHits`** 里，
+ *     **绝不**混进 `searchResults` / `displayFiles` —— 远端命中是**跨端引用**，
+ *     不是本地文件（不进统一命名空间、不参与本地排序/打开/长按菜单）。
+ * 不注入（默认）= 行为与接入前完全一致。
+ */
+export interface UseFilesViewOptions {
+  /** 只返回对端命中；抛错/超时由内部吞掉，绝不阻塞本端搜索 */
+  peerSearch?: (q: string, limit: number) => Promise<FederatedHit[]>;
+  /** 搜索页最多展示的远端命中条数（默认 5） */
+  peerHitLimit?: number;
+}
+
+export function useFilesView(opts: UseFilesViewOptions = {}): UseFilesViewReturn {
   // =============================================================================
   // 1) 播放 + 错误展示
   // =============================================================================
@@ -301,6 +319,11 @@ export function useFilesView(): UseFilesViewReturn {
   const mainContentRef = ref<any>(null);
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   let searchGeneration = 0;
+
+  // 🆕 P3：远端命中（**独立容器**，与本地 searchResults 严格分离）
+  const peerHits = ref<FederatedHit[]>([]);
+  const peerSearching = ref(false);
+  const peerHitLimit = opts.peerHitLimit ?? 5;
 
   // 🆕 A6：FTS 失败 banner 提示（不抛错、不清空结果）
   const fulltextBanner = ref<{ type: "unavailable" | "error"; message: string } | null>(null);
@@ -708,6 +731,7 @@ export function useFilesView(): UseFilesViewReturn {
     if (!query) {
       searchGeneration++;
       searchResults.value = null;
+      peerHits.value = []; // P3：清空远端命中（与本地结果同步清空）
       isSearching.value = false;
       fulltextBanner.value = null; // 清空 banner
       return;
@@ -720,6 +744,7 @@ export function useFilesView(): UseFilesViewReturn {
     searchGeneration++;
     clearInput();
     searchResults.value = null;
+    peerHits.value = []; // P3
     isSearching.value = false;
     fulltextBanner.value = null;
   }
@@ -775,6 +800,27 @@ export function useFilesView(): UseFilesViewReturn {
     insertSymbol(op);
   }
 
+  /**
+   * P3：向已配对设备发起联邦搜索（**只取对端命中**）。
+   * 与本地主搜索**并发**且完全解耦：失败/超时一律吞掉 → 只表现为"该端无结果"。
+   */
+  async function runPeerSearch(query: string, gen: number) {
+    if (!opts.peerSearch) return;
+    peerSearching.value = true;
+    try {
+      const hits = await opts.peerSearch(query, peerHitLimit);
+      if (gen !== searchGeneration) return;
+      // 只保留 peer 来源（防御：注入实现若误传本地命中，也不得混进远端区）
+      peerHits.value = (hits ?? []).filter(h => h?.source === "peer").slice(0, peerHitLimit);
+      console.info("[Search] federated hits", { query, count: peerHits.value.length });
+    } catch (e) {
+      console.warn("[Search] federated search degraded", { query, error: e });
+      if (gen === searchGeneration) peerHits.value = [];
+    } finally {
+      if (gen === searchGeneration) peerSearching.value = false;
+    }
+  }
+
   async function performSearch() {
     const query = searchQuery.value.trim();
     if (!query) return;
@@ -803,6 +849,9 @@ export function useFilesView(): UseFilesViewReturn {
       searchGeneration++;
     }
     const gen = ++searchGeneration;
+    peerHits.value = [];
+    // P3：远端搜索**并发**发起、fire-and-forget，绝不阻塞本端结果
+    void runPeerSearch(query, gen);
 
     const cacheKey = `${currentPath.value}:${query}:fulltext=${useFullText}`;
     const cached = searchCache.get(cacheKey);
@@ -1815,6 +1864,9 @@ export function useFilesView(): UseFilesViewReturn {
     searchResults,
     isSearching,
     searchMode,
+    // 🆕 P3：远端命中（独立容器，绝不混入 searchResults）
+    peerHits,
+    peerSearching,
     fulltextBanner, // 🆕 A6: FTS 降级 banner
     searchDiagnostics, // 🆕 2026-07-03: 搜索空结果时的诊断信息（FTS 状态 + 索引统计）
     refreshSearchDiagnostics, // 🆕 2026-07-03: 手动刷新诊断信息（重试按钮用）

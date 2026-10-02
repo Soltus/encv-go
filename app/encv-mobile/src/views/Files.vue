@@ -136,7 +136,30 @@
         </div>
       </div>
 
-      <template v-if="(loading || isSearching || noPermission || !serverOnline || displayFiles.length === 0) && !selectedPlugin">
+      <!-- 🆕 P3（spec desktop-web-android-pairing）：**跨端命中独立展示区**
+           契约：这是**跨端引用**（peerId + 远端原始路径），不是本地文件 ——
+           不进本地结果列表、不参与本地排序、点击只走「在线打开」。
+           ⚠️ 必须放在下面的「空态/结果」分支**之前**：本端 0 命中时
+           下面的 v-else 分支整体不渲染，远端命中会凭空消失（踩过）。 -->
+      <div v-if="searchQuery && (peerHits.length > 0 || peerSearching)" class="peer-results" data-testid="peer-results">
+        <div class="peer-results-header">
+          <span>{{ t('peers.remoteHits', { defaultValue: '来自已配对设备' }) }}（{{ peerHits.length }}）</span>
+          <span v-if="peerSearching" class="peer-results-busy">{{ t('peers.searching', { defaultValue: '搜索中…' }) }}</span>
+        </div>
+        <div v-for="hit in peerHits" :key="hit.key" class="peer-hit-row" data-testid="peer-hit">
+          <PeerSourceBadge :source="hit.source" :peer-name="hit.peerName" />
+          <span class="peer-hit-path" :title="hit.path">{{ hit.path }}</span>
+          <a
+            class="peer-hit-open"
+            data-testid="peer-hit-open"
+            target="_blank"
+            rel="noopener"
+            :href="peerFileUrl(hit)"
+          >{{ t('peers.openOnline') || '在线打开' }}</a>
+        </div>
+      </div>
+
+      <template v-if="(loading || isSearching || noPermission || !serverOnline || (displayFiles.length === 0 && peerHits.length === 0)) && !selectedPlugin">
         <div v-if="loading || isSearching" class="loading-container">
           <!--
             搜索中 loading 三态区分（debug-discipline.md §1.6）：
@@ -634,6 +657,9 @@ import { getFileIcon, getFileIconColor, isImageFile } from "@encv/shared-compone
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
 import { useFilesView } from "@encv/shared-components/views/useFilesView";
+// 🆕 P3（spec desktop-web-android-pairing）：搜索页接入「互通搜索索引」
+import { type FederatedHit, searchFederated } from "@encv/shared-components/composables/useFederatedSearch";
+import PeerSourceBadge from "@/components/PeerSourceBadge.vue";
 
 const {
   // i18n + composable re-exposed values
@@ -670,6 +696,9 @@ const {
   searchResults,
   isSearching,
   searchMode,
+  // 🆕 P3 远端命中（独立展示区，绝不混入本地结果）
+  peerHits,
+  peerSearching,
   // 🆕 A3 contenteditable ref + handlers
   queryInputRef,
   onQueryInput,
@@ -749,7 +778,19 @@ const {
   mountRootOf,
   // icons (template 用)
   add,
-} = useFilesView();
+} = useFilesView({
+  // P3：只查已配对设备的索引（skipLocal），命中进**独立展示区**，不混进本地结果
+  peerSearch: async (q: string, limit: number) => (await searchFederated(q, { limit, skipLocal: true })).items,
+});
+
+/**
+ * P3.4：远端命中的「在线打开」链接。
+ * ⚠️ 恒带 `peerId + 远端原始路径` —— 绝不改写成任何本地路径（不伪装成本地文件）。
+ */
+function peerFileUrl(hit: FederatedHit): string {
+  const qs = new URLSearchParams({ peerId: hit.peerId, path: hit.path });
+  return `/api/peerlink/file?${qs.toString()}`;
+}
 
 // 🆕 2026-07-02 v2 简化：不需要 phraseInsertion 常量（直接调 insertSymbol('__phrase_open__')）
 // 占位：保留空的占位 hooks（focus/blur 事件，可后续加视觉反馈）
@@ -1026,6 +1067,56 @@ function onQueryBlur() {
 
 .fulltext-banner-dismiss:hover {
   opacity: 0.7;
+}
+
+/* 🆕 P3：跨端命中独立展示区（视觉上就与本地结果划清界限） */
+.peer-results {
+  margin: 8px 12px 4px;
+  padding: 8px 10px;
+  border: 1px dashed var(--color-primary);
+  border-radius: 10px;
+  background: rgba(var(--ion-color-primary-rgb, 56, 128, 255), 0.06);
+}
+
+.peer-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin-bottom: 4px;
+}
+
+.peer-results-busy {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.peer-hit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.peer-hit-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.peer-hit-open {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-decoration: none;
 }
 
 /* 🆕 2026-07-02 A4：FTS 命中角标（merge 后非普通结果的项） */

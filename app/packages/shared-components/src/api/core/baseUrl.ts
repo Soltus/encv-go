@@ -51,7 +51,25 @@ export function getApiBaseUrl(): string {
     if (stored) return stored;
     return DEV_SANDBOX_ENTRY;
   }
-  return localStorage.getItem(SERVER_URL_KEY) || DEFAULT_API_BASE_URL;
+
+  // ── prod ──
+  const stored = localStorage.getItem(SERVER_URL_KEY);
+  if (stored) return stored;
+
+  // 🆕 2026-10-02（spec desktop-web-android-pairing / Task 1.4 R16）：
+  //   **web 形态（http/https）默认同源**——页面是谁托管的，后端就在谁背后。
+  //   旧默认 `http://127.0.0.1:2025` 隐含"用户本机跑着 encv-go"，对
+  //   **服务器托管形态（cnb：preview-gateway 把 /api、/agent-api 代理到 :2025）是错的**
+  //   ——浏览器会去找用户自己机器上的 2025，而不是托管页的那台服务器。
+  //   与 useApiBaseProbe 的探测链一致：它早就把 [1.5] current-origin 排在
+  //   [2] loopback 之前（浏览器模式优先同源）。这里只把**默认值**对齐同一意图。
+  //   安全性：若托管方没代理 /api，探测链 [1.5] 失败后会继续回落 loopback / LAN，
+  //   行为与修改前一致（不会比现在更差）。
+  if (typeof window !== "undefined" && /^https?:$/.test(window.location.protocol)) {
+    return window.location.origin;
+  }
+  // 原生（capacitor://）等非 http 场景：保持原绝对地址
+  return DEFAULT_API_BASE_URL;
 }
 
 export function setApiBaseUrl(url: string) {

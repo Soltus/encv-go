@@ -73,6 +73,14 @@ const FAST_INCLUDE = [
   '../packages/shared-components/src/composables/__tests__/relativeTime.test.ts',
   // ⚠️ 2026-10-02 待认领（孤儿用例）：../packages/shared-components/src/composables/__tests__/useAGUIParser.test.ts —— 依赖的 ../useAgent 模块已不存在，导入直接失败（0 test）。需 owner 决定"补模块"还是"删用例"，先挂起避免拖红门禁。
   '../packages/shared-components/src/composables/__tests__/useSearchInput.test.ts',
+  // 🆕 spec desktop-web-android-pairing P1：全局形态档（phone/pad/desktop），纯函数 + happy-dom DOM 行为
+  '../packages/shared-components/src/composables/__tests__/useFormFactor.test.ts',
+  // 🆕 spec desktop-web-android-pairing P2：前端互联抽象（注入 fetch，无模块级副作用）
+  '../packages/shared-components/src/composables/__tests__/usePeerLink.test.ts',
+  // 🆕 spec desktop-web-android-pairing P3：联邦搜索合并/标注/降级（注入 provider，无真实网络）
+  '../packages/shared-components/src/composables/__tests__/useFederatedSearch.test.ts',
+  // 🆕 spec desktop-web-android-pairing P4：执行端远程审批（注入 fetch，无真实网络）
+  'src/composables/__tests__/useRemoteApproval.test.ts',
   '../packages/shared-components/src/composables/__tests__/useSectionDerivation.test.ts',
   // ⚠️ 2026-10-02 待认领（孤儿用例）：../packages/shared-components/src/composables/__tests__/useToolCallAccumulator.test.ts —— 依赖的 ../useAgent 模块已不存在，导入直接失败（0 test）。需 owner 决定"补模块"还是"删用例"，先挂起避免拖红门禁。
   '../packages/shared-components/src/composables/__tests__/workflow-core.test.ts',

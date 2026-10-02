@@ -38,9 +38,18 @@ export interface PermissionResult {
   granted: boolean;
 }
 
+/** Capacitor 平台名（web / android / ios / electron）。桌面形态判定要用。 */
+export type AppPlatform = "web" | "android" | "ios" | "electron";
+
 export interface AppCapabilities {
   /** 是否运行在原生（Capacitor/APK）环境。默认 false（web SPA）。 */
   isNative: () => boolean;
+  /**
+   * 当前 Capacitor 平台名。默认 "web"（未注入时按浏览器处理）。
+   * ⚠️ 桌面端可能是 `web`（浏览器/cnb）也可能是 `electron`（Capawesome Electron 平台，
+   * 此时 `isNative()` 为 true 但形态仍是桌面）——形态判定**必须**看这里，不能只看 isNative。
+   */
+  platform?: () => AppPlatform;
   /** 打开新建任务弹窗（encrypt/decrypt）。未注入时抛错提示。 */
   openNewTask: (initialSourcePath?: string, initialTaskType?: "encrypt" | "decrypt") => void;
   /** 弹出密码输入对话框，返回用户输入的密码或 null（取消）。未注入时抛错提示。 */
@@ -59,6 +68,7 @@ export interface AppCapabilities {
 
 const defaults: AppCapabilities = {
   isNative: () => false,
+  platform: () => "web",
   openNewTask: () => {
     throw new Error("[appCapabilities] openNewTask 未注入（需在 app 启动期调用 setAppCapabilities）");
   },

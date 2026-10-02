@@ -118,6 +118,20 @@
 
       <ion-list>
         <ion-list-header>
+          <ion-label>{{ t('settings.connection') }}</ion-label>
+        </ion-list-header>
+        <!-- 🆕 spec desktop-web-android-pairing P2b：设备与配对入口 -->
+        <ion-item button @click="goPeers" detail>
+          <ion-icon :icon="phonePortraitIcon" slot="start"></ion-icon>
+          <ion-label>
+            <h3>{{ t('peers.title') }}</h3>
+            <p>{{ t('peers.help') }}</p>
+          </ion-label>
+        </ion-item>
+      </ion-list>
+
+      <ion-list>
+        <ion-list-header>
           <ion-label>{{ t('settings.storage') }}</ion-label>
         </ion-list-header>
         <ion-item button @click="goCache" detail>
@@ -403,6 +417,8 @@ import {
   newspaperOutline,
   personOutline,
   phonePortraitOutline,
+  // 🆕 spec desktop-web-android-pairing P2b：设备与配对入口图标
+  phonePortraitOutline as phonePortraitIcon,
   readerOutline,
   refreshCircle,
   save as saveIcon,
@@ -606,6 +622,11 @@ async function handleSaveJson() {
 
 function goServer() {
   router.push("/tabs/settings/server");
+}
+
+// 🆕 spec desktop-web-android-pairing P2b：设备与配对（扫码互联）
+function goPeers() {
+  router.push("/tabs/settings/peers");
 }
 
 function goAbout() {
