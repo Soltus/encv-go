@@ -21,7 +21,7 @@
       ⇒ **整页空白但可点击**（Files/AgentChat）。已改 `fromTo` 显式终态 + `clearProps`；
       回归锁两道（FAST 源码契约锁 + ISOLATED 功能锁，均先红后绿）
 - [x] 移动端 phone/pad **零回归**（390×844 真实浏览器实测，底部栏原样）
-- [ ] `/` 聚焦搜索、Esc 关浮层可用
+- [x] `/` 聚焦搜索、Esc 关浮层可用（2026-10-03 Task 1.3 已落地，见上条；本条为旧条目，勿重复开工）
 - [x] **R16**：生产态 API base 默认改为**同源**（服务器托管形态正确）；先红后绿已验证（旧默认 → ERR_ABORTED；新默认 → 200）
 - [x] 契约测试 `src/api/__tests__/getApiBaseUrl.test.ts` 锁新契约（web→origin / capacitor://→:2025），8/8
 - [x] 真实浏览器复现验证通过（desktop-before/after + mobile-after 三张截图 + DOM 探针）
