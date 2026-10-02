@@ -98,6 +98,12 @@
 - [ ] Task 2.13: **R8**：心跳自适应 + 移动网提示
 - [ ] Task 2.14: **R10**：安全判定只用 nonce/单调计数（代码审查 + 单测）
 - [ ] Task 2.15: **R11**：pairingId 一次性、解配即作废、Hub session 清理、单 peer 并发上限
+  - [x] 单 peer **在途 RPC 上限** `MaxConcurrentCallsPerPeer = 4`，超限 → **429 `peer_busy`**（背压）
+  - [x] 背压**不计入**熔断失败累计（判定顺序：先 429，再熔断记录）——否则一次限流会自己熔断健康对端
+  - [x] 单 peer 只允许**一条活跃会话**：`SetExclusive` 顶掉旧连接 + `DeleteConn` 按连接身份删除（防旧连接 defer 误删新连接）
+  - [x] 槽位必归还（突发后在途数归零、并发退去后恢复 200）
+  - [x] **真 bug**：Edge 并发回写 websocket panic ⇒ `writeMu` 串行化所有写帧（res / 心跳 / SendJSON）；Hub 侧 hello_ok/pong/error 同样改走 `peerConns.WriteJSON`
+  - [ ] Hub session 清理（断线/重连后的残留会话清理）与 pairingId 逐出策略 —— 未做
 
 ## P3 — 互通搜索索引（联邦）
 

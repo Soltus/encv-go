@@ -81,6 +81,18 @@
     3. **只解析静态 import**，动态 `import()`/字符串引用查不到；`--module` 返回的行数含同文件多符号重复，去重看唯一文件。
 （首次约 10 分钟；**增量重跑实测 0.65s**，`skipped 2612 unchanged`）。跨仓库完整度更好（references useTaskStore 9 条 vs 单前端库 5 条）。
 
+## 双端互联：并发与写帧纪律（2026-10-03，长期）
+
+- **R11 背压语义**：单 peer 在途 RPC 上限 `MaxConcurrentCallsPerPeer=4`，超限 **429 `peer_busy`**。
+  ⚠️ **背压不是对端故障**：判定必须**先于**熔断失败累计且**不计入** —— 否则一次限流就把健康对端熔断掉。
+- **⚠️ websocket 不支持并发写**（gorilla 会直接 `panic: concurrent write to websocket connection`）：
+  Edge 的每个请求各起 goroutine 回 res 帧、Hub handler 手写 `conn.WriteJSON`（hello_ok/pong/error）
+  都会绕过连接表里的写锁。**所有写帧必须走统一串行化入口**（Edge `writeMu` / Hub `peerConns.WriteJSON`）。
+  这类 bug 只在并发下暴露 —— 单调用串行时永远绿。
+- **会话替换的删除竞态**：一个 peer 只允许一条活跃会话（`SetExclusive` 顶掉旧连接）后，
+  旧连接退出时的 `defer` **不能按 peerID 直接删**（会把顶替它的新连接一起删掉），
+  必须按**连接身份**删（`DeleteConn(peerID, conn)`）。
+
 ## 加密容器流式写入（2026-09-29 落地，长期契约）
 
 - **两条写入路径并存**：`writer.WriteV4Container*(V4WriteParams)` 是**整块**（要三份字节同时在内存）；

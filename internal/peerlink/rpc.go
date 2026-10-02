@@ -23,12 +23,20 @@ import (
 // DefaultCallTimeout 默认 RPC 超时（联邦搜索对端无响应就降级，不阻塞主搜索）。
 const DefaultCallTimeout = 2 * time.Second
 
+// MaxConcurrentCallsPerPeer 单个 peer 上**同时在途**的 RPC 上限（R11）。
+//
+// 为什么需要：Edge 是手机端，一次联邦搜索/远端读/远程 Agent 都会占住它对端的一条处理；
+// Hub 若无上限地转发，一个桌面端的并发刷新就能把手机端打满（或把 Hub 的内存与
+// goroutine 拖爆）。超限立即 429 peer_busy（**backpressure，不算对端失败**，不进熔断计数）。
+const MaxConcurrentCallsPerPeer = 4
+
 type Caller struct {
 	conns *ConnRegistry
 
-	mu      sync.Mutex
-	seq     uint64
-	pending map[string]chan rawResult
+	mu       sync.Mutex
+	seq      uint64
+	pending  map[string]chan rawResult
+	inFlight map[string]int
 }
 
 type rawResult struct {
@@ -37,7 +45,40 @@ type rawResult struct {
 }
 
 func NewCaller(conns *ConnRegistry) *Caller {
-	return &Caller{conns: conns, pending: make(map[string]chan rawResult)}
+	return &Caller{
+		conns:    conns,
+		pending:  make(map[string]chan rawResult),
+		inFlight: make(map[string]int),
+	}
+}
+
+// tryAcquire 占用一个并发槽（R11）；达到上限返回 ErrPeerBusy。
+func (c *Caller) tryAcquire(peerID string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.inFlight[peerID] >= MaxConcurrentCallsPerPeer {
+		return fmt.Errorf("%w: %s (limit %d)", ErrPeerBusy, peerID, MaxConcurrentCallsPerPeer)
+	}
+	c.inFlight[peerID]++
+	return nil
+}
+
+func (c *Caller) release(peerID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.inFlight[peerID] > 0 {
+		c.inFlight[peerID]--
+	}
+	if c.inFlight[peerID] == 0 {
+		delete(c.inFlight, peerID)
+	}
+}
+
+// InFlight 返回某 peer 当前在途调用数（观测/测试用）。
+func (c *Caller) InFlight(peerID string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.inFlight[peerID]
 }
 
 // Call 向对端发起一次 RPC，等待响应或超时。
@@ -48,6 +89,11 @@ func (c *Caller) Call(ctx context.Context, peerID, method string, payload any, t
 	if !c.conns.Has(peerID) {
 		return nil, fmt.Errorf("%w: %s", ErrPeerOffline, peerID)
 	}
+	// R11：单 peer 在途调用上限（背压）。超限直接拒绝，不占对端资源、也不进熔断计数。
+	if err := c.tryAcquire(peerID); err != nil {
+		return nil, err
+	}
+	defer c.release(peerID)
 
 	c.mu.Lock()
 	c.seq++
@@ -145,4 +191,7 @@ type ReadResult struct {
 var (
 	ErrPeerOffline = fmt.Errorf("peerlink: peer offline")
 	ErrCallTimeout = fmt.Errorf("peerlink: call timeout")
+	// ErrPeerBusy 单 peer 并发已达上限（R11）。属背压（429），不是对端故障，
+	// 调用方应重试/排队，**不应**计入熔断的失败累计。
+	ErrPeerBusy = fmt.Errorf("peerlink: peer busy")
 )

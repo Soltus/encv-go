@@ -505,6 +505,31 @@
 - **门禁**：`node scripts/check-all.mjs` **9 PASS / 0 FAIL / 1 SKIP**（wasm parity 照旧跳过）。
 - **遗留 / 下轮入口**：Task 1.2.2 剩余（master-detail 双栏 / ≥1440 三栏）→ P2c 风险收口（2.10/2.11/2.13/2.15）→ 真机项不变。
 
+### Iteration 20 — P2c R11：单 peer 并发上限 + 抓出「并发写 websocket panic」（2026-10-03）
+
+- **对应任务**：Task 2.15（R11：单 peer 并发上限）；checklist 里 R11 是 P2c 唯一未打勾项
+- **先红**：`TestPeerlinkSearch_PerPeerConcurrencyCapped_429`（先写测试）—— 8 路并发联邦搜索
+  （对端故意慢 400ms）→ **0 个 429、5 个 200**，上限不存在。
+- **改动**：
+  - `internal/peerlink/rpc.go`：`MaxConcurrentCallsPerPeer = 4` + `ErrPeerBusy`；
+    `Caller` 增 `tryAcquire/release/InFlight`，`Call` 起止占用/归还槽位。
+  - HTTP：新增 `peerBusyIfErr()`，search / file / agent-invoke 三处超限 → **429 `peer_busy`**。
+    ⚠️ 背压**不是对端故障**：必须**先于** `peerCircuitRecord` 判定且**不计入**熔断失败累计
+    （否则一次限流就自己把健康对端熔断掉）。
+  - `internal/peerlink/conn.go`：`SetExclusive`（同一 peer 只允许一条活跃会话，二次建连顶掉旧连接）
+    + `DeleteConn`（按**连接身份**删除——旧连接退出时若按 peerID 直接删，会把顶替它的新连接一起删掉）。
+- **⚠️ 顺带抓出的真 bug（并发测试现形）**：`panic: concurrent write to websocket connection`
+  - 根因：Edge `handleRequest` 对每个请求**各起 goroutine** 直接 `conn.WriteJSON` 回 res 帧 ——
+    websocket 不支持并发写；此前单调用串行，从未暴露。R11 允许 4 路并发后必崩。
+  - 修：Edge 增 `writeMu`，**所有**写帧（`res` / 心跳 `ping` / `SendJSON`）串行化；
+    Hub 侧 `handlePeerlinkWS` 的 `hello_ok`/`pong`/`error` 也改走 `peerConns.WriteJSON`（复用连接表写锁）。
+- **验证（转绿）**：`TestPeerlinkSearch_PerPeerConcurrencyCapped_429`（有 429、ok ≤ 上限、
+  突发后在途数归零=槽位不泄漏、并发退去后恢复 200）+ `TestPeerlinkWS_SingleSessionPerPeer`
+  （旧连接被顶掉、旧连接退出后表仍指向活的新连接）。
+  `bash scripts/test-go.sh ./internal/server` OK（78s）、`./internal/peerlink` OK；`go build ./...` OK。
+- **未跑**：`scripts/emu-peerlink-e2e.sh`（需模拟器），沙箱内模拟器未起，列 P6 复跑项。
+- **遗留 / 下轮入口**：Task 1.2.2 剩余（master-detail 双栏 / ≥1440 三栏）→ 补跑 emu E2E → 真机项不变。
+
 ```
 ### Iteration N — <主题>（<日期>）
 

@@ -73,7 +73,12 @@
 - [x] R8：心跳前台 15s / 后台 60s 自适应（`Edge.SetBackground`）+ 断线指数退避重连；
       **重连已在真机 E2E 里验证**（进程重启后 `/edge/pair` → 连回）
 - [x] R10：票据**取出即销毁**（一次性）+ 加入配对 401 `ticket_used`，安全判定不用时间戳
-- [ ] R11：单 peer 并发上限（当前只实现了 pairingId 一次性与解配即作废）
+- [x] R11：单 peer 并发上限（2026-10-03，先红后绿）
+  - [x] 在途 RPC ≤ 4（`MaxConcurrentCallsPerPeer`），超限 **429 `peer_busy`**；背压**不进**熔断计数
+  - [x] 一个 peer 只允许一条活跃会话（`SetExclusive` 顶掉旧连接；`DeleteConn` 按连接身份删除，防误删新连接）
+  - [x] 槽位不泄漏（突发后在途归零、并发退去后恢复 200）
+  - [x] **真 bug**：Edge 并发回写 websocket **panic** ⇒ 所有写帧串行化（Edge `writeMu` + Hub 侧走 `peerConns.WriteJSON`）
+  - [ ] Hub session 清理（残留会话清理 / pairingId 逐出）—— 未做
 
 ## P3 — 互通搜索索引
 

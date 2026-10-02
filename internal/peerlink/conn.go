@@ -44,6 +44,34 @@ func (r *ConnRegistry) Get(peerID string) (*websocket.Conn, bool) {
 	return e.conn, true
 }
 
+// SetExclusive 登记连接并**保证一个 peer 只有一条活跃会话**（R11）。
+//
+// 同一 token 二次建连（网络切换后的重连、或客户端 bug / 滥用）时，先关闭旧连接再替换，
+// 避免同一 peer 在 Hub 上堆出 N 条会话（连接、goroutine、读缓冲都是资源）。
+// 返回是否顶掉过旧连接。
+func (r *ConnRegistry) SetExclusive(peerID string, conn *websocket.Conn) (replaced bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if old, ok := r.conns[peerID]; ok && old.conn != nil && old.conn != conn {
+		_ = old.conn.Close()
+		replaced = true
+	}
+	r.conns[peerID] = &connEntry{conn: conn}
+	return replaced
+}
+
+// DeleteConn 仅当表里登记的就是这条连接时才移除。
+//
+// ⚠️ 为什么不能直接用 Delete：被顶掉的旧连接退出时（defer）若按 peerID 直接删除，
+// 会把**顶替它的新连接**一起删掉（R11 的会话替换才引入了这个竞态）。
+func (r *ConnRegistry) DeleteConn(peerID string, conn *websocket.Conn) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if e, ok := r.conns[peerID]; ok && e.conn == conn {
+		delete(r.conns, peerID)
+	}
+}
+
 func (r *ConnRegistry) Delete(peerID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

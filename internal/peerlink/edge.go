@@ -75,6 +75,9 @@ type Edge struct {
 	closed   bool
 	bg       bool
 	attempts int
+	// writeMu 串行化**所有**写帧（心跳 ping / SendJSON / RPC 响应）。
+	// websocket 不支持并发写：并发回写会 panic "concurrent write to websocket connection"。
+	writeMu sync.Mutex
 	// hbSwitch 用于心跳间隔切换（前台↔后台）时唤醒心跳协程
 	hbSwitch chan struct{}
 }
@@ -267,7 +270,12 @@ func (e *Edge) readLoop(ctx context.Context, conn *websocket.Conn, done chan str
 
 // handleRequest 执行对端请求并回写响应（res 帧）。
 func (e *Edge) handleRequest(conn *websocket.Conn, id, method string, payload json.RawMessage) {
+	// ⚠️ websocket **不支持并发写**：Hub 侧并发调用（R11 上限内仍可 4 路并发）
+	// 会让多个请求处理同时回写 res 帧 ⇒ gorilla 直接 panic
+	// ("concurrent write to websocket connection")。所有写帧必须串行化。
 	write := func(result any, errMsg string) {
+		e.writeMu.Lock()
+		defer e.writeMu.Unlock()
 		_ = conn.WriteJSON(map[string]any{"type": "res", "id": id, "result": result, "error": errMsg})
 	}
 
@@ -406,6 +414,8 @@ func (e *Edge) writePing(conn *websocket.Conn) error {
 		return fmt.Errorf("peerlink: stale connection")
 	}
 	payload, _ := json.Marshal(map[string]any{"type": "ping", "at": time.Now().UnixMilli()})
+	e.writeMu.Lock()
+	defer e.writeMu.Unlock()
 	return conn.WriteMessage(websocket.TextMessage, payload)
 }
 
@@ -421,6 +431,8 @@ func (e *Edge) SendJSON(v any) error {
 	if err != nil {
 		return err
 	}
+	e.writeMu.Lock()
+	defer e.writeMu.Unlock()
 	return conn.WriteMessage(websocket.TextMessage, b)
 }
 

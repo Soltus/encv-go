@@ -157,6 +157,9 @@ func (s *Server) handlePeerlinkAgentInvoke(c *gin.Context) {
 
 	res, err := s.peerCalls.Call(c.Request.Context(), body.PeerId, "agent_invoke", req, peerlink.AgentCallTimeout)
 	if err != nil {
+		if peerBusyIfErr(c, body.PeerId, err) {
+			return
+		}
 		s.peerCircuitRecord(body.PeerId, err.Error()) // R12
 		switch {
 		case errors.Is(err, peerlink.ErrPeerOffline):

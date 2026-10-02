@@ -222,6 +222,24 @@ func (s *Server) handlePeerlinkUnpair(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "peerId": target})
 }
 
+// peerBusyIfErr —— R11 背压：单 peer 在途调用已达上限。
+//
+// 返回 true 表示已写出 429（调用方直接 return）。
+// ⚠️ 背压**不是对端故障**：必须**先于**熔断失败累计判定，且绝不计入失败次数 ——
+//    否则一次限流就会把健康对端熔断掉（限流自己打自己）。
+func peerBusyIfErr(c *gin.Context, peerID string, err error) bool {
+	if err == nil || !errors.Is(err, peerlink.ErrPeerBusy) {
+		return false
+	}
+	c.JSON(http.StatusTooManyRequests, gin.H{
+		"error":   "peer_busy",
+		"peerId":  peerID,
+		"limit":   peerlink.MaxConcurrentCallsPerPeer,
+		"message": "该设备并发调用已达上限，请稍后重试",
+	})
+	return true
+}
+
 // isOperator 判断是否为"本机运维者"（桌面端 UI，与 Hub 同源）。
 //
 // ⚠️ 现状：本应用对 localhost/同源运维请求本就无鉴权（与既有 /api/* 一致），
@@ -306,14 +324,18 @@ func (s *Server) handlePeerlinkWS(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	// 登记活跃连接：Hub 要能反向向 Edge 发请求（联邦搜索 / 远程 Agent）
-	s.peerConns.Set(peerID, conn)
-	defer s.peerConns.Delete(peerID)
+	// R11：一个 peer 只允许一条活跃会话（二次建连顶掉旧连接）
+	s.peerConns.SetExclusive(peerID, conn)
+	// ⚠️ 必须按「连接身份」删除：被顶掉的旧连接退出时若按 peerID 直接删，
+	//    会把顶替它的新连接一起删掉。
+	defer s.peerConns.DeleteConn(peerID, conn)
 
 	s.peerHub.Heartbeat(token)
 	defer s.peerHub.MarkOffline(token)
 
-	_ = conn.WriteJSON(gin.H{"type": "hello_ok", "peerId": peerID})
+	// ⚠️ 写帧必须走连接表的串行化通道：Hub 侧反向发 req 帧也在写这条连接，
+	//    直接 conn.WriteJSON 会与它并发（gorilla 会 panic）。
+	_ = s.peerConns.WriteJSON(peerID, gin.H{"type": "hello_ok", "peerId": peerID})
 
 	for {
 		_, msg, err := conn.ReadMessage()
@@ -327,18 +349,18 @@ func (s *Server) handlePeerlinkWS(c *gin.Context) {
 			Error  string          `json:"error"`
 		}
 		if err := json.Unmarshal(msg, &frame); err != nil {
-			_ = conn.WriteJSON(gin.H{"type": "error", "error": "bad_frame"})
+			_ = s.peerConns.WriteJSON(peerID, gin.H{"type": "error", "error": "bad_frame"})
 			continue
 		}
 		switch frame.Type {
 		case "ping":
 			s.peerHub.Heartbeat(token)
-			_ = conn.WriteJSON(gin.H{"type": "pong", "at": time.Now().UnixMilli()})
+			_ = s.peerConns.WriteJSON(peerID, gin.H{"type": "pong", "at": time.Now().UnixMilli()})
 		case "res":
 			// RPC 响应 → 交给等待中的调用方（联邦搜索）
 			s.peerCalls.Deliver(frame.ID, frame.Result, frame.Error)
 		default:
-			_ = conn.WriteJSON(gin.H{"type": "error", "error": "unknown_type", "type_": frame.Type})
+			_ = s.peerConns.WriteJSON(peerID, gin.H{"type": "error", "error": "unknown_type", "type_": frame.Type})
 		}
 	}
 }
@@ -403,6 +425,9 @@ func (s *Server) handlePeerlinkFile(c *gin.Context) {
 	res, err := s.peerCalls.Call(c.Request.Context(), peerID, "read",
 		peerlink.ReadRequest{Path: remotePath, Offset: offset, Length: length}, peerlink.ReadCallTimeout)
 	if err != nil {
+		if peerBusyIfErr(c, peerID, err) {
+			return
+		}
 		s.peerCircuitRecord(peerID, err.Error()) // R12：失败累计 → 开路
 		switch {
 		case errors.Is(err, peerlink.ErrPeerOffline):
@@ -517,6 +542,9 @@ func (s *Server) handlePeerlinkSearch(c *gin.Context) {
 	res, err := s.peerCalls.Call(c.Request.Context(), peerID, "search",
 		peerlink.SearchRequest{Q: q, Kind: kind, Limit: limit}, peerlink.DefaultCallTimeout)
 	if err != nil {
+		if peerBusyIfErr(c, peerID, err) {
+			return
+		}
 		s.peerCircuitRecord(peerID, err.Error()) // R12
 		switch {
 		case errors.Is(err, peerlink.ErrPeerOffline):
