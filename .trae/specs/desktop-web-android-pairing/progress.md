@@ -535,6 +535,39 @@
   `adb devices` 出现 `device` ≠ 已开机，必须等 `sys.boot_completed=1`。
 - **遗留 / 下轮入口**：Task 1.2.2 剩余（master-detail 双栏 / ≥1440 三栏）→ 补跑 emu E2E → 真机项不变。
 
+### Iteration 21 — 「生成配对码显示依赖未安装」：真因是 dev 期依赖预打包失败（2026-10-03）
+
+- **触发**：用户在桌面 web 预览点「生成配对码」→ 显示「二维码依赖未安装，请手动在安卓端输入配对码」。
+- **先证伪"依赖未安装"**：`qrcode@1.5.4` **装着的**（`package.json` + `pnpm-lock.yaml` +
+  `node_modules/qrcode → .pnpm/qrcode@1.5.4`，文件齐全）⇒ 文案是**误导**。
+- **复现（真实浏览器，走网关）**：`qrDiag` 显示
+  `TypeError: Failed to fetch dynamically imported module: /node_modules/.vite/deps/qrcode.js?v=…`（404）；
+  vite 日志同时报 `error while updating dependencies: ENOENT …@ionic/vue-router@8.8.19_…ret7lyam…/dist/index.js`。
+- **根因（唯一）**：
+  1. 配对码面板是**运行时** `import("qrcode")` ⇒ dev 态由 vite **按需**预打包；
+  2. 那次按需重优化要重扫依赖，而 `node_modules/.vite/deps/_metadata.json` 仍指向**已不存在的旧
+     pnpm store 路径**（`…ret7lyam…`，当前软链是 `…9958421e…`）⇒ ENOENT ⇒ 重优化整轮失败；
+  3. 于是 `qrcode.js` 永不生成 ⇒ 动态 import 404 ⇒ 面板降级，文案却写"依赖未安装"。
+- **修复**：
+  - `vite.config.ts` 加 `optimizeDeps.include: ['qrcode']` —— **启动期**即预打包，不再依赖"运行时才发现的
+    依赖按需重优化"（这条链路在网关/代理后尤其脆）。
+  - 移除陈旧的 `node_modules/.vite` 缓存 + `pm2 restart preview-gateway`（它托管着 vite 子进程，
+    无需 kill dev server）。
+  - i18n `peers.qrUnavailable` zh/en 文案改掉"依赖未安装"这个**误导表述** → "二维码未渲染成功（原因见下方诊断）…"
+    （真正原因仍由 `qrDiag` 原样暴露，不吞错）。
+- **验证（转绿，同一条真实路径）**：网关 :16666 → 设置/设备与配对 → 生成配对码 ⇒
+  canvas **220×220、dark=22928/light=25472**、`qrDiag` 为空、进入"等待安卓端扫码…115s"。
+  新增回归锁 `pw-pairing-qr.mjs`（**4/4 PASS**，专锁 dev+网关这条路径）。
+- **门禁**：`node scripts/check-all.mjs` **9 PASS / 0 FAIL / 1 SKIP**（首跑 build 被 SIGKILL 是
+  模拟器占内存导致的资源争用，单独重跑 vite build 4.26s 成功、整轮复跑全绿）。
+- **怎么通过验收的（诚实回答）**：
+  1. Iteration 6 的二维码验证走的是**生产构建**（`vite build` 后静态托管）—— qrcode 被打进 chunk，
+     **根本不走 `/node_modules/.vite/deps/*` 这条路径**，所以那次 e2e 绿是对的，但**覆盖不到 dev+网关**；
+  2. 之后的桌面形态迭代（1.2.2/1.3）只验布局与快捷键，**没有再点过"生成配对码"**；
+  3. 门禁（单测/类型/Biome/i18n）**不校验运行时依赖是否可加载**，qrcode 是动态 import，类型检查也不会碰它；
+  ⇒ 三者叠加 = 一条"只在 dev+网关 + 陈旧缓存"下才出现的问题，从验收网眼里漏过去了。
+  **已补的网眼**：`pw-pairing-qr.mjs` 锁 dev+网关路径（canvas 真实像素 + 无 qrDiag）。
+
 ```
 ### Iteration N — <主题>（<日期>）
 

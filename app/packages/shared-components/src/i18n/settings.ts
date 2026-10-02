@@ -503,7 +503,9 @@ export default {
     "peers.expiresIn": "{sec}s 后失效",
     "peers.expired": "配对码已失效，请刷新",
     "peers.waiting": "等待安卓端扫码…",
-    "peers.qrUnavailable": "二维码依赖未安装，请手动在安卓端输入配对码",
+    // ⚠️ 2026-10-03：原文案写"依赖未安装"是**误导**（实测根因是 dev 期依赖预打包失败）；
+    //    渲染失败的真正原因由面板的 qrDiag 原样显示，这里只说"未渲染成功 + 手动兜底"。
+    "peers.qrUnavailable": "二维码未渲染成功（原因见下方诊断），请手动在安卓端输入配对码",
     "peers.copyCode": "复制配对码",
     "peers.copied": "已复制",
     "peers.paired": "已配对：{name}",
@@ -1041,7 +1043,7 @@ export default {
     "peers.expiresIn": "expires in {sec}s",
     "peers.expired": "Pairing code expired, please refresh",
     "peers.waiting": "Waiting for Android device to scan…",
-    "peers.qrUnavailable": "QR dependency not installed; enter the pairing code manually on the device",
+    "peers.qrUnavailable": "QR code failed to render (see diagnostics below); enter the pairing code manually on the device",
     "peers.copyCode": "Copy pairing code",
     "peers.copied": "Copied",
     "peers.paired": "Paired: {name}",

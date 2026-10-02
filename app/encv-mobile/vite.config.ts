@@ -350,6 +350,14 @@ export default defineConfig({
     // 链路 :16666 → :8100 看到的 Origin=Host 匹配，CORS 天然通过
     hmr: false,
   },
+  optimizeDeps: {
+    // ⚠️ 必须**启动期**就预打包 qrcode（2026-10-03 真 bug）：
+    //   配对面板是运行时 `import("qrcode")`，属于"运行时才发现的依赖" ⇒ vite 要临时
+    //   跑一次依赖重优化；那次重优化若失败（实测：陈旧 pnpm store 路径 ENOENT），
+    //   `/node_modules/.vite/deps/qrcode.js` 就永远不存在 ⇒ 动态 import 404
+    //   ⇒ UI 误报"二维码依赖未安装"。列入 include 后启动期即预打包，不再依赖临时优化。
+    include: ['qrcode'],
+  },
   resolve: {
     alias: {
       '@encv/shared-components': path.resolve(__dirname, '../packages/shared-components/src'),

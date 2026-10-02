@@ -27,6 +27,24 @@
 - **⚠️ `app_format` MCP 在本环境不真改文件（2026-07-16 续41 实测）**：`app_format` 报 `Formatted 4 files in 6ms. No fixes applied.` 但 Biome CI 仍 FAIL（格式不符）。**必须用 `pnpm exec biome check --write <path>`（经 app_exec MCP）才真改**；`app_format` 在此环境不可信，勿再单独依赖它修格式。
 - 超时命令必须加超时参数（如 curl 加 `--max-time`）。
 
+## 前端：动态 import 的依赖必须在「dev + 网关」真实路径上验（2026-10-03，长期）
+
+- 运行时 `import("xxx")` 的依赖，dev 态靠 vite **按需**预打包；生产构建会把它打进 chunk ⇒
+  **生产构建的绿覆盖不到 `/node_modules/.vite/deps/*` 这条路径**。
+  实测翻车：配对码二维码（运行时 `import("qrcode")`）在 dev+网关下
+  `Failed to fetch dynamically imported module … qrcode.js`（404），真因是
+  `node_modules/.vite/deps/_metadata.json` 残留**已失效的旧 pnpm store 路径** ⇒ 按需重优化 ENOENT 崩。
+  UI 却显示"二维码依赖未安装"——**误导**：依赖其实装着的（`qrDiag` 里才是真因）。
+- **修法**：① `optimizeDeps.include: ['<dep>']` 让它在**启动期**预打包，摆脱"运行时发现→临时重优化"；
+  ② 清掉陈旧的 `node_modules/.vite` 缓存（用 `mv` 挪走，别 `rm -rf`）；
+  ③ 重启服务走 **pm2 restart preview-gateway**（它托管 vite 子进程），**不要 kill dev server**（规矩红线）。
+- **验收铁律**：门禁（单测/类型/Biome/i18n）**不校验运行时依赖是否可加载**，动态 import 连类型检查都碰不到
+  ⇒ 新增任何动态 import 的依赖，必须补一条"dev + 网关"真实浏览器断言（如 `pw-pairing-qr.mjs`：
+  canvas 真实像素 + 无降级诊断文本）。
+- 兜底文案**不许替真因下结论**：降级提示要写"渲染失败（原因见诊断）"，真因另处原样暴露。
+- ⚠️ 跑 `check-all` 时若模拟器在跑，`vite build` 可能被 **SIGKILL**（内存争用）——
+  单独重跑 `vite build` 几秒即过，别误判为代码回归。
+
 ## 动效：gsap `from()` 的「终态陷阱」+ vitest isolate:false mock 污染（2026-10-03，长期）
 
 - **⚠️ 挂到 `<ion-page>` 上的进场动效绝不能用 `from({opacity:0})`**：Ionic 转场开始前会给页面写
