@@ -116,6 +116,23 @@
 - 该文件**不能被忽略**（用户要求）⇒ 禁止 `.gitignore` / `assume-unchanged` / `skip-worktree`。
   `scripts/normalize-skill-registry.py` 仅作一次性清理与 `--check` 校验保留，不再是解法。
 
+## 预览链路分叉：沙箱用网关 :16666，非沙箱用独立 vite dev（2026-10-04，长期）
+
+- **`:16666` preview-gateway 是沙箱（trae / OpenPreview）专用**，不是项目标配。
+  判断依据：那条链路是 `trae 域名 → agent-tool-host(:16000) → preview-gateway(:16666) → vite(:8100)`；
+  CNB / 本机等环境没有 agent-tool-host，硬套会让人误以为它必须存在。
+- **非沙箱环境必须走独立 dev**，否则前端 dev 态会把 API 打到 `DEV_SANDBOX_ENTRY(:16666)` 而死端口断联；
+  同时不能让前端直连 :2025（远程访问时页面 origin 是外部域名，后端 CORS 只放行 localhost/127.0.0.1）：
+  ```
+  ENCV_MOBILE=1 ENCV_DEV_PREVIEW=1 MOBILE_DATA_DIR=/storage/emulated/0 \
+  MOBILE_DIR=/workspace/app/encv-mobile go run ./cmd/encv start    # 后端 :2025
+  cd app/encv-mobile && ENCV_STANDALONE_VITE=1 vite --port 8100    # 前端 :8100，自带 /api 反代
+  ```
+  `ENCV_STANDALONE_VITE=1` 会：启用 `server.proxy`（/api、/agent-api、/ping、/p、/ws→:2025）、
+  `define` 注入 `VITE_ENCV_API_BASE=''`（前端同源）、跳过沙箱专用的 HMR 改写与删 `@vite/client` 插件
+  ⇒ HMR 正常。`dev-start-guard` 认这个环境变量（仍需显式声明，不是放开裸 vite）。沙箱行为不变。
+- ⚠️ 2026-10-03 记的"dev 环境默认打 :16666（沙箱网关）"**只在沙箱成立**，别拿它当通用结论。
+
 ## 动效：gsap `from()` 的「终态陷阱」+ vitest isolate:false mock 污染（2026-10-03，长期）
 
 - **⚠️ 挂到 `<ion-page>` 上的进场动效绝不能用 `from({opacity:0})`**：Ionic 转场开始前会给页面写
