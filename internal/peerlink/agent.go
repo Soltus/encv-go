@@ -101,6 +101,13 @@ type AuditEntry struct {
 	Destructive bool      `json:"destructive"`
 	ArgBytes    int       `json:"argBytes"`
 	ArgKeys     []string  `json:"argKeys,omitempty"` // 仅 JSON 对象的顶层键
+	// CallId 发起端给的调用标识（2026-10-04 补）。
+	//
+	//	没有它时，审计里只剩 tool/peer/decision ⇒ **无法把一条审批记录与那次具体调用对应起来**，
+	//	排障时只能靠时间猜；也正因为如此，幂等（同一 callId 只执行一次）此前无法被观测验证。
+	//	callId 由发起端生成、不含路径与参数 ⇒ 落审计不违反 R14 脱敏要求。
+	//	⚠️ Require 在自动生成 callId 时会写回 req，保证这里拿到的一定是真实使用的那个。
+	CallId string `json:"callId,omitempty"`
 }
 
 // ── 授权器 ──────────────────────────────────────────────────────────
@@ -190,6 +197,9 @@ func (a *Approver) Require(ctx context.Context, req AgentInvokeRequest, peerId, 
 		callId = "call-" + time.Now().Format("20060102-150405.000") + "-" + itoa(a.seq)
 		a.mu.Unlock()
 	}
+	// 写回（req 是本函数的局部拷贝）⇒ 后面 record 出来的审计条目一定带真实的 callId，
+	// 不会留下 CallId 为空的记录（否则审计无法与那次调用对应）。
+	req.CallId = callId
 
 	now := time.Now()
 	ar := ApprovalRequest{
@@ -329,6 +339,7 @@ func (a *Approver) record(peerId string, req AgentInvokeRequest, decision string
 		Decision:    decision,
 		Destructive: destructive,
 		ArgBytes:    len(req.Args),
+		CallId:      req.CallId,
 	}
 	var obj map[string]json.RawMessage
 	if len(req.Args) > 0 && json.Unmarshal(req.Args, &obj) == nil && len(obj) > 0 {

@@ -24,6 +24,16 @@ import (
 // agentExecTimeout 执行端工具执行上限（与审批挂起时长分开，避免工具挂死）
 const agentExecTimeout = 60 * time.Second
 
+// agentIdemGet 惰性创建幂等表（进程内存，重启即失效）。
+func (s *Server) agentIdemGet() *agentIdemTable {
+	s.agentIdemMu.Lock()
+	defer s.agentIdemMu.Unlock()
+	if s.agentIdem == nil {
+		s.agentIdem = newAgentIdemTable()
+	}
+	return s.agentIdem
+}
+
 // agentApproverGet 惰性创建授权器（进程内存，重启即失效）。
 func (s *Server) agentApproverGet() *peerlink.Approver {
 	s.agentApproverMu.Lock()
@@ -65,6 +75,41 @@ func (s *Server) PeerAgentInvokeHandler(req peerlink.AgentInvokeRequest) (out pe
 		out.Err = errors.New("missing tool")
 		return out
 	}
+
+	// ── 🆕 2026-10-04 幂等：同一 callId 不得执行两次 ──
+	//
+	//	重复提交的来源很常见：网络重试、用户误双击、前端重复渲染。
+	//	只读工具看不出差别，写类工具（加密/删除）重跑第二次就是副作用事故。
+	//	这里让重复请求**等在首次执行的 done 上**而不是另起一次 ——
+	//	否则审批还在挂起时再提交一次，手机上会同时弹出两个审批框。
+	var idemKey string
+	var idemEntry *agentIdemEntry
+	if req.CallId != "" {
+		idemKey = req.FromId + "|" + req.Tool + "|" + req.CallId
+		var isNew bool
+		idemEntry, isNew = s.agentIdemGet().begin(idemKey, time.Now())
+		if !isNew {
+			waitFor := peerlink.DefaultApprovalTimeout + agentExecTimeout
+			select {
+			case <-idemEntry.done:
+				return idemEntry.out
+			case <-time.After(waitFor):
+				out.Err = errors.New("duplicate call still running")
+				return out
+			}
+		}
+		defer func() {
+			// 无论成败都要放行等待者，否则并发请求会挂死
+			idemEntry.out = out
+			close(idemEntry.done)
+			// ⚠️ 只有失败才抹掉记录：成功结果要留给后续重复调用复用，
+			//    失败（decline / 执行报错）则应允许重试。
+			if out.Err != nil {
+				s.agentIdemGet().drop(idemKey)
+			}
+		}()
+	}
+
 	ap := s.agentApproverGet()
 
 	peerId := req.FromId

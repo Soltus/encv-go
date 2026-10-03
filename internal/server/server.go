@@ -114,6 +114,12 @@ type Server struct {
 	// 只存内存、**重启即失效**（与会话级 `sess.GrantedTools` 严格区分）。
 	agentApprover   *peerlink.Approver
 	agentApproverMu sync.Mutex
+	// 🆕 2026-10-04：远程 Agent 调用的**幂等表**（执行端）
+	//
+	// 同一 callId 重复提交时只执行一次（其余请求共用结果）；写类工具如果重跑第二次
+	// 就是真事故。只存内存、**重启即失效**，与上面的 trust / audit 同一套纪律。
+	agentIdem   *agentIdemTable
+	agentIdemMu sync.Mutex
 	// 🆕 2026-10-02：本端作为 **Edge** 连到远端 Hub 的运行时（P2a Task 2.2 接线）
 	//
 	// 扫码配对后启动；token 只存内存（进程重启需重新配对）。
