@@ -296,6 +296,26 @@ export async function fetchEdgeStatus(): Promise<EdgeStatus> {
   return await getJSON<EdgeStatus>("/edge/status");
 }
 
+/**
+ * 断开本端 Edge（停止长连接，token 作废）。
+ *
+ * 2026-10-04：补这个封装是为了让**扫码端（手机）**也能解除与对端的连接 ——
+ *   此前只有 Hub 侧有 `unpairPeer(peerId)`，但手机是 Edge，它根本没有 peers 列表
+ *   （`/peers` 只有 Hub 有）⇒ 手机端 UI 只能干瞪眼，连"断开"入口都没有。
+ */
+export async function stopEdge(): Promise<boolean> {
+  try {
+    const res = await fetchProvider(url("/edge/stop"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...OPERATOR_HEADER },
+      body: "{}",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** ⑤ 解配（token 立即作废） */
 export async function unpairPeer(peerId: string): Promise<boolean> {
   const res = await fetchProvider(url("/unpair"), {

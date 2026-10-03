@@ -28,6 +28,23 @@
 //   · 无相机设备（TV/盒子）走 `canScan() === false` → UI 降级为「粘贴配对码」。
 
 import { Capacitor, registerPlugin } from "@capacitor/core";
+import { addFrontendLog } from "@encv/shared-components/composables/useFrontendLogs";
+
+/**
+ * 扫码失败**必须同时写进 DevLogs**（2026-10-04 真机反馈：DevLogs 里看不到有用错误）。
+ * 之前失败只冒泡到 UI 文案，用户翻 DevLogs 排查时一片空白。
+ */
+function logScanFailure(level: "warn" | "error", message: string, detail?: string): void {
+  try {
+    addFrontendLog(level, `[scan] ${message}`, {
+      source: "barcodeScanner",
+      tags: ["frontend", "scan"],
+      stack: detail,
+    });
+  } catch {
+    // 日志失败绝不能反过来影响扫码主流程
+  }
+}
 
 export type ScanFailureReason = "unsupported" | "permission_denied" | "cancelled" | "unavailable" | "unknown";
 
@@ -60,19 +77,37 @@ export function canScan(): boolean {
  */
 export async function scanOnce(): Promise<string> {
   if (!Capacitor.isNativePlatform()) {
+    logScanFailure("warn", "非原生环境，扫码不可用（桌面浏览器无相机）", "unsupported");
     throw new ScanError("unsupported", "当前不是原生环境（桌面浏览器无相机），请改用「粘贴配对码」");
   }
   if (!canScan()) {
+    logScanFailure(
+      "error",
+      "扫码插件不可用：APK 未内置 BarcodeScanner(ZXingLite) 或插件未注册",
+      JSON.stringify({ isNative: Capacitor.isNativePlatform(), available: Capacitor.isPluginAvailable("BarcodeScanner") }),
+    );
     throw new ScanError("unavailable", "扫码插件不可用：需确认 APK 内置了 BarcodeScanner 插件（ZXingLite）并已授予相机权限");
   }
-  const perms = await BarcodeScanner.requestPermissions?.();
+
+  // 权限申请本身的失败也要可见（真机上出现过 PermissionCallback 未注册导致整条链路静默失败）
+  let perms: { camera?: string } | undefined;
+  try {
+    perms = await BarcodeScanner.requestPermissions?.();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logScanFailure("error", `相机权限申请失败：${msg}`, "requestPermissions rejected");
+    throw new ScanError("permission_denied", `相机权限申请失败：${msg}`);
+  }
   if (perms && perms.camera && perms.camera !== "granted") {
+    logScanFailure("warn", `相机权限未授予（camera=${perms.camera}）`);
     throw new ScanError("permission_denied", "没有相机权限，请在系统设置里授权后重试");
   }
+
   try {
     const res = await BarcodeScanner.scan?.({ formats: ["QR_CODE"] });
     const value = res?.barcodes?.[0]?.rawValue || res?.barcodes?.[0]?.displayValue || "";
     if (!value) {
+      logScanFailure("warn", "扫码结束但没有识别到二维码（或用户取消）");
       throw new ScanError("cancelled", "没有识别到二维码（或已取消）");
     }
     return value;
@@ -80,6 +115,7 @@ export async function scanOnce(): Promise<string> {
     if (e instanceof ScanError) throw e;
     // 用户主动取消：插件以字符串 "User cancelled the scan" 之类抛出
     const msg = e instanceof Error ? e.message : String(e);
+    logScanFailure("error", `扫码失败：${msg}`);
     if (/cancel/i.test(msg)) throw new ScanError("cancelled", msg);
     throw new ScanError("unknown", msg);
   }

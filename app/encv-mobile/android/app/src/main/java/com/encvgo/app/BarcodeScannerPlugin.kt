@@ -12,6 +12,7 @@ import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
 import com.getcapacitor.annotation.Permission
+import com.getcapacitor.annotation.PermissionCallback
 import com.king.camera.scan.CameraScan
 
 /**
@@ -112,7 +113,15 @@ class BarcodeScannerPlugin : Plugin() {
         call.resolve(JSObject().apply { put("barcodes", JSArray().apply { put(barcode) }) })
     }
 
-    @PluginMethod
+    /**
+     * 相机权限申请的**回调**（由 [requestPermissionForAlias] 按名字回调到这里）。
+     *
+     * ⚠️ 必须是 `@PermissionCallback`，**不是** `@PluginMethod`（2026-10-04 真机 bug）：
+     *   写成 @PluginMethod 时 Capacitor 在权限申请结束后找不到回调，直接抛
+     *   `There is no PermissionCallback method registered for the name: cameraPermissionCallback`
+     *   ⇒ 扫码在真机上一步都走不出去。方法名必须与 requestPermissionForAlias 的第三个参数一致。
+     */
+    @PermissionCallback
     fun cameraPermissionCallback(call: PluginCall) {
         call.resolve(JSObject().apply {
             put(CAMERA_ALIAS, if (cameraGranted()) "granted" else "denied")

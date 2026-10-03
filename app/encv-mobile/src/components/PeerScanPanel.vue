@@ -72,6 +72,18 @@
       </ion-button>
     </div>
 
+    <!-- 🆕 2026-10-04：Edge 侧的**持久**已连接状态。
+         旧实现只在"刚配对完那一刻"用组件本地 okMsg/sasCode 显示，重进设置页（组件重建）
+         就什么都不剩了 ⇒ 真机反馈"重进设置丢失状态显示"。这里改从 /edge/status 恢复。 -->
+    <div v-if="linkedHub" class="linkedBox" data-testid="edge-linked">
+      <p class="linkedTitle">
+        {{ String(t('peers.edgeLinked') || '已连接到会合点：{host}').replace('{host}', hostOf(linkedHub)) }}
+      </p>
+      <ion-button size="small" fill="outline" data-testid="edge-disconnect" @click="disconnectEdge">
+        {{ t('peers.edgeDisconnect') || '断开连接' }}
+      </ion-button>
+    </div>
+
     <p class="edgeStatus" data-testid="edge-status">
       {{ t('peers.edgeStatus') || '互联状态' }}：{{ edgeLabel }}
     </p>
@@ -97,7 +109,7 @@ import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { type EdgeStatus, fetchEdgeStatus, pairAsEdge, parsePairingQR } from "@encv/shared-components/composables/usePeerLink";
 import { ScanError, scanOnce } from "@/peerlink/barcodeScanner";
 import { QRDecodeError, decodeQRFromImageFile } from "@/peerlink/qrFromImage";
-import { unpairPeer } from "@encv/shared-components/composables/usePeerLink";
+import { stopEdge, unpairPeer } from "@encv/shared-components/composables/usePeerLink";
 
 const { t } = useI18n();
 
@@ -109,6 +121,8 @@ const okMsg = ref("");
 const errMsg = ref("");
 const sasCode = ref("");
 const pairedPeerId = ref("");
+// 已连接的会合点（从 /edge/status 恢复 ⇒ 重进页面也不会丢）
+const linkedHub = ref("");
 const nativeCamera = Capacitor.isNativePlatform();
 const edge = ref<EdgeStatus | null>(null);
 
@@ -231,6 +245,28 @@ function connectWithPasted() {
   void connectWithText(pasted.value);
 }
 
+/**
+ * 断开本端 Edge（手机侧解除与对端的连接）。
+ * 手机是 Edge，`/peers` 只有 Hub 才有 ⇒ 这里不能用 unpairPeer(peerId)，
+ * 必须走 `/edge/stop`（2026-10-04 补的封装）。
+ */
+async function disconnectEdge() {
+  busy.value = true;
+  try {
+    const ok = await stopEdge();
+    if (!ok) throw new Error("edge/stop failed");
+    sasCode.value = "";
+    pairedPeerId.value = "";
+    linkedHub.value = "";
+    okMsg.value = t("peers.edgeDisconnected") || "已断开连接";
+    await refreshStatus();
+  } catch (e) {
+    errMsg.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy.value = false;
+  }
+}
+
 /** 打开系统相册/文件选择器（原生与桌面浏览器都是这个 file input）。 */
 function pickFromGallery() {
   galleryMsg.value = t("peers.pickFromGalleryHint") || "请选择含有配对码二维码的截图";
@@ -268,10 +304,13 @@ async function refreshStatus() {
     if (!st.running) {
       edgeLabel.value = t("peers.edgeIdle") || "未连接（服务重启后需重新扫码）";
       edgeErr.value = "";
+      linkedHub.value = "";
     } else if (st.connected) {
       edgeLabel.value = t("peers.edgeConnected") || "已连上会合点";
       edgeErr.value = "";
+      linkedHub.value = st.hub || "";
     } else if (st.lastErr) {
+      linkedHub.value = "";
       // 连不上：把原因摆出来（禁止用"连接中…"掩盖失败）
       edgeLabel.value = t("peers.edgeFailed") || "连接失败";
       edgeErr.value = String(t("peers.edgeFailedDetail") || "连不上会合点：{detail}（已重试 {n} 次）")
@@ -371,6 +410,21 @@ onUnmounted(() => {
   font-size: 0.75rem;
   opacity: 0.8;
   margin: 6px 0 0;
+}
+
+/* 已连接（持久）：与 .sasBox 同款容器，但语义是"当前连着谁" */
+.linkedBox {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-field, 0.5rem);
+}
+
+.linkedTitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin: 0 0 8px;
+  word-break: break-all;
 }
 
 /* 扫码端 SAS 核对区：与桌面端 PeerPairingPanel 的 .sasBox 同款视觉，
