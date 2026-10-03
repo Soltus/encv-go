@@ -16,6 +16,11 @@ androidxJunit = "1.3.0"
 androidxEspressoCore = "3.7.0"
 # Robolectric：给 JVM 单测提供真实 Android framework 实现（JSONObject / Intent 等不再是 "not mocked"）
 robolectric = "4.15.1"
+# 扫码（2026-10-04 替换 @capacitor-mlkit/barcode-scanning）：ZXingLite 纯本地解码，零 Google 依赖。
+# ⚠️ 3.5.0 在本环境镜像上是坏文件（下载到 1.8KB 的 HTML 错误页），故锁 3.4.1（实测 aar 完整可用）。
+#    CameraScan 是 ZXingLite 3.x 的基础库（com.king.camera.scan.*），随传递依赖自动引入。
+zxingLite = "3.4.1"
+cameraScan = "1.5.0"
 cordovaAndroid = "14.0.1"
 combolite = "2.0.2"
 combolite-aar2apk = "1.1.1"
@@ -41,6 +46,8 @@ kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", versio
 kotlin-reflect = { group = "org.jetbrains.kotlin", name = "kotlin-reflect", version.ref = "kotlin" }
 kotlin-test = { group = "org.jetbrains.kotlin", name = "kotlin-test", version.ref = "kotlin" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+zxing-lite = { group = "com.github.jenly1314", name = "zxing-lite", version.ref = "zxingLite" }
+camera-scan = { group = "com.github.jenly1314", name = "camera-scan", version.ref = "cameraScan" }
 mockito-core = { group = "org.mockito", name = "mockito-core", version.ref = "mockito" }
 mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version.ref = "mockitoKotlin" }
 combolite-core = { group = "io.github.lnzz123", name = "combolite-core", version.ref = "combolite" }

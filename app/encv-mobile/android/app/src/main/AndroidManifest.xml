@@ -207,6 +207,13 @@
             android:theme="@style/AppTheme.NoActionBar"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode" />
 
+        <!-- 扫码界面（ZXingLite，2026-10-04 替换 ML Kit）：只被本应用插件拉起，不导出 -->
+        <activity
+            android:name=".QRScanActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/AppTheme.NoActionBar" />
+
         <!-- ============================================================ -->
         <!-- Phase 25 A2：ComboLite host 代理组件（plugin-openlist 用） -->
         <!-- ============================================================ -->

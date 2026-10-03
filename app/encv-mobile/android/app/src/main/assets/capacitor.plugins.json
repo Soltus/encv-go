@@ -4,10 +4,6 @@
 		"classpath": "com.masterpedidos.highrefreshrate.HighRefreshRatePlugin"
 	},
 	{
-		"pkg": "@capacitor-mlkit/barcode-scanning",
-		"classpath": "io.capawesome.capacitorjs.plugins.mlkit.barcodescanning.BarcodeScannerPlugin"
-	},
-	{
 		"pkg": "@capacitor/device",
 		"classpath": "com.capacitorjs.plugins.device.DevicePlugin"
 	},

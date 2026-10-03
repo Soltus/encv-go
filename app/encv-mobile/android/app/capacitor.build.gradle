@@ -10,7 +10,6 @@ android {
 apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
 dependencies {
     implementation project(':ajuarezso-capacitor-high-refresh-rate')
-    implementation project(':capacitor-mlkit-barcode-scanning')
     implementation project(':capacitor-device')
     implementation project(':capacitor-filesystem')
     implementation project(':capacitor-screen-orientation')

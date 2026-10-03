@@ -111,7 +111,8 @@ OpenList Core → 统一 ENCV Driver → 所有平台继承
   安卓端在 **NAT 后无公网地址** ⇒ 两端**不同网**，跨端一律走「**Hub（cnb）+ 手机主动出网的
   WSS 长连接**」，**禁止 LAN 直连**（https 页面请求 http 内网地址会被浏览器以混合内容拦截）。
 - **配对**：桌面生成一次性票据二维码（内容 = 会合点 hub + pairingId + psk，**不含任何内网地址**，
-  120s 过期）→ 安卓扫码（MLKit）→ HMAC 校验 + SAS 短码核对 → 双向 token 与 AEAD 密钥
+  120s 过期）→ 安卓扫码（**ZXingLite**，2026-10-04 起；此前用 MLKit，依赖 Google Play 服务）
+  → HMAC 校验 + SAS 短码核对 → 双向 token 与 AEAD 密钥
   （**只存进程内存**）→ 心跳保活（前台 15s / 后台 60s）。
 - **互通搜索索引**：双端在线时并发查询对端索引，结果是**跨端引用**（带来源徽章），
   **明确不做**挂载网络驱动器 / 统一命名空间。
@@ -126,7 +127,7 @@ OpenList Core → 统一 ENCV Driver → 所有平台继承
 | Hub / 票据 / 配对 / AEAD / SAS（全内存） | `internal/peerlink/{hub,crypto,types}.go`、`internal/server/peerlink_api.go` | `shared-components/src/composables/usePeerLink.ts` |
 | Edge 长连接（**Go 侧**承载，非 WebView）+ 保活载体 = 既有前台服务 | `internal/peerlink/edge.go`、`internal/server/peerlink_edge_runtime.go` | — |
 | 配对二维码 + SAS 核对 + 设备列表/解配 | 配对状态查询 `/api/peerlink/pairing/status` | `src/components/PeerPairingPanel.vue`、`src/views/PeerSettings.vue` |
-| 扫码端（安卓）UI：扫码 / 粘贴配对码 → 本端 Go 作为 Edge 连 Hub（Task 2.6） | `POST /api/peerlink/edge/pair`、`GET /edge/status` | `src/components/PeerScanPanel.vue`、`src/peerlink/barcodeScanner.ts`（MLKit 经 `registerPlugin`，web 构建不依赖插件包） |
+| 扫码端（安卓）UI：扫码 / 粘贴配对码 → 本端 Go 作为 Edge 连 Hub（Task 2.6） | `POST /api/peerlink/edge/pair`、`GET /edge/status` | `src/components/PeerScanPanel.vue`、`src/peerlink/barcodeScanner.ts`（**自建 ZXingLite 插件**经 `registerPlugin`，web 构建不依赖原生包；原生实现 `BarcodeScannerPlugin.kt` + `QRScanActivity.kt`） |
 | 联邦搜索 + 远端读（在线打开/缩略图） | `/api/peerlink/search`、`/api/peerlink/file`（`X-Peer-*` 来源头） | `useFederatedSearch.ts`、`PeerSourceBadge.vue`、`useFilesView.ts` |
 | 远程 Agent 授权（**执行端**弹窗、90s 超时自动拒绝、破坏性强制确认、脱敏审计） | `internal/peerlink/agent.go`、`internal/server/peerlink_agent_api.go` | `src/composables/useRemoteApproval.ts`、`RemoteApprovalPrompt.vue` |
 | 安全收口：未配对 401 全量 / 零落盘结构性锁 / 限流+熔断 / 访问日志脱敏 / 降级矩阵持久性 UI | `internal/server/peerlink_{security,limits}*.go`、`gin_app.go`(sanitizedLogFormatter) | `src/composables/usePeerDegradation.ts`、`PeerDegradedNotice.vue` |
@@ -160,7 +161,7 @@ Edge → Hub 用 `adb reverse`（模拟"手机主动出网到公网 Hub"）。**
 
 ### 尚未真机验证（P6 必验清单，沙箱无法覆盖）
 
-- 安卓端 **MLKit 扫码**与相机权限（Task 2.6 UI 接线**已完成**：`PeerScanPanel.vue` 扫码 + 「粘贴配对码」
+- 安卓端 **ZXingLite 扫码**与相机权限（Task 2.6 UI 接线**已完成**：`PeerScanPanel.vue` 扫码 + 「粘贴配对码」
   降级路径，真实浏览器端到端 `pw-peer-scan.mjs` 9 断言全绿——票据/`/edge/pair`/Edge 长连接/`edge/status`
   /Hub 侧在线均为真实链路；**沙箱无相机**，"取图像"那步仍需真机）。
 - 移动网（4G/5G、CGNAT / **IPv6-only**）真实建连、息屏/后台保活与电量表现（R2/R7/R8）。

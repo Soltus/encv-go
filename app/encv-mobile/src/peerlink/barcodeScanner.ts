@@ -1,22 +1,30 @@
 // barcodeScanner.ts —— 扫码端（安卓）相机扫描抽象（spec P2b Task 2.6）
 //
 // 为什么用 `registerPlugin('BarcodeScanner')` 而不是直接 import 插件包：
-//   1. 插件（`@capacitor-mlkit/barcode-scanning`）**只在原生工程里存在**，web 构建里没有它；
+//   1. 插件**只在原生工程里存在**，web 构建里没有它；
 //      直接静态 import 会让 web 产物构建失败（web 端根本不需要相机）。
-//   2. Capacitor 的 `registerPlugin` 按**插件名**拿到运行时代理 —— 原生侧装好插件后
-//      （`pnpm add @capacitor-mlkit/barcode-scanning` + `npx cap sync android`），
+//   2. Capacitor 的 `registerPlugin` 按**插件名**拿到运行时代理 —— 原生侧插件就绪后，
 //      同一个名字即可解析到真实实现；没装时调用会 reject，而不是编译失败。
+//
+// 🆕 2026-10-04：原生实现从 `@capacitor-mlkit/barcode-scanning` 换成**自建 ZXingLite 插件**。
+//   原因：ML Kit 依赖 **Google Play 服务**，没有 GMS 的设备（国内多数 ROM、类原生系统）
+//   扫码不可用；ZXingLite 是纯本地解码（ZXing 精简版），零 Google 依赖。
+//   ⇒ **本文件的 API 形状刻意保持不变**（scan → { barcodes: [{ rawValue }] }），
+//     所以前端不需要改调用方式，只换了底层实现。
 //
 // ⚠️ 失败必须可见（今天多次踩到"静默失败"的坑）：本模块**不吞错误**，
 //    相机不可用 / 权限被拒 / 用户取消 都以明确的错误码抛给 UI 展示。
 //
-// ⚠️ 原生侧前置（2026-10-03 补齐，之前只装了 npm 依赖 ⇒ 原生根本不可用）：
-//   · npm 依赖：`@capacitor-mlkit/barcode-scanning`（peer: @capacitor/core >= 8，本仓库 8.3.4 满足）
-//   · **必须 `cap sync android`**：只装 npm 包不会进 `capacitor.plugins.json`，
-//     原生侧 `registerPlugin("BarcodeScanner")` 解析不到实现（曾漏做，清单里也查不到该插件）。
-//   · **必须在 AndroidManifest 声明 `android.permission.CAMERA`**：插件**不自带**这条权限
-//     （曾误以为自带 ⇒ 系统设置里根本没有相机开关，用户连手动授权都做不到）。
-//     运行时首次调用由插件的 requestPermissions() 发起。
+// ⚠️ 原生侧前置（不再需要 npm 插件与 cap sync，改为随 APK 一起编译）：
+//   · 插件实现：`android/app/src/main/java/com/encvgo/app/BarcodeScannerPlugin.kt`
+//      + 扫码界面 `QRScanActivity.kt`（继承 ZXingLite 的 BarcodeCameraScanActivity）
+//   · **必须在 MainActivity 注册**：`registerPlugin(BarcodeScannerPlugin::class.java)`
+//     （自建插件不会像 npm 插件那样自动进 capacitor.plugins.json）
+//   · 依赖：`com.github.jenly1314:zxing-lite:3.4.1` + `camera-scan:1.5.0`
+//     （settings.gradle.kts 里 com.github.* 只把 `com.github.getActivity` 路由到 JitPack，
+//      jenly1314 走 Maven Central 镜像 —— 它不在 JitPack 上）
+//   · **必须声明 `android.permission.CAMERA`**：插件不自带权限 ⇒ 不声明则系统设置里
+//     没有相机开关，用户连手动授权都做不到（曾踩过）。
 //   · 无相机设备（TV/盒子）走 `canScan() === false` → UI 降级为「粘贴配对码」。
 
 import { Capacitor, registerPlugin } from "@capacitor/core";
@@ -32,7 +40,7 @@ export class ScanError extends Error {
   }
 }
 
-/** 我们只用到插件的这两个能力（与 @capacitor-mlkit/barcode-scanning 的 API 对齐）。 */
+/** 我们只用到插件的这两个能力（自建插件与 ML Kit 插件的 API 形状保持一致）。 */
 interface BarcodeScannerLike {
   requestPermissions?: () => Promise<{ camera?: string }>;
   scan?: (opts?: { formats?: string[] }) => Promise<{ barcodes: Array<{ rawValue?: string; displayValue?: string }> }>;
@@ -55,7 +63,7 @@ export async function scanOnce(): Promise<string> {
     throw new ScanError("unsupported", "当前不是原生环境（桌面浏览器无相机），请改用「粘贴配对码」");
   }
   if (!canScan()) {
-    throw new ScanError("unavailable", "扫码插件不可用：需安装 @capacitor-mlkit/barcode-scanning 并 cap sync android");
+    throw new ScanError("unavailable", "扫码插件不可用：需确认 APK 内置了 BarcodeScanner 插件（ZXingLite）并已授予相机权限");
   }
   const perms = await BarcodeScanner.requestPermissions?.();
   if (perms && perms.camera && perms.camera !== "granted") {

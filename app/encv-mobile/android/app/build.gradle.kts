@@ -224,6 +224,11 @@ dependencies {
     // 🆕 2026-10-04：JVM 单测终于能跑到——纯 JVM 下 JSONObject/Intent 全是 "not mocked"，
     //   靠 Robolectric 提供真实 framework 实现。镜像地址见 src/test/resources/robolectric.properties。
     testImplementation(libs.robolectric)
+    // 🆕 2026-10-04：扫码改 ZXingLite（去掉 @capacitor-mlkit 的 Google Play 服务依赖）。
+    //   ZXingLite 3.x 依赖 CameraScan（com.king.camera.scan.*）作为基础库，显式声明以免
+    //   将来传递依赖被裁剪。"com.github.*" 已由 settings.gradle.kts 强制路由到 JitPack。
+    implementation(libs.zxing.lite)
+    implementation(libs.camera.scan)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     implementation(project(":capacitor-cordova-android-plugins"))

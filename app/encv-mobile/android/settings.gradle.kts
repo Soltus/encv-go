@@ -30,14 +30,20 @@ dependencyResolutionManagement {
         // 腾讯云/阿里云的 maven-public 代理会为这些包返回 200 的 POM 但 404 的 aar/jar：
         // 一旦 Gradle 从代理拿到 POM，就会把该模块"钉"在代理仓库，后续 aar 下载只找代理、
         // 拿到 404 后不再回退到排在最后的 JitPack —— 这正是 build-logs 里"只搜了 maven-public"的原因。
-        // 用 exclusiveContent 强制 com.github.* 只经由 JitPack 解析，既绕开代理"投毒"，
+        // 用 exclusiveContent 强制这些 group 只经由 JitPack 解析，既绕开代理"投毒"，
         // 也避免 JitPack 参与其它依赖的解析（保持镜像加速）。
+        //
+        // ⚠️ 2026-10-04 收窄为**显式 group**（原来是 `com\.github\..*`）：
+        //    jenly1314（zxing-lite / camera-scan）虽然也是 com.github.*，但它**发布在
+        //    Maven Central**（jitpack.io 上不存在），被这条规则锁到 JitPack 就会
+        //    "Could not find"。现在只把确实只在 JitPack 上的 group 列进来，
+        //    其余 com.github.* 走上面的镜像仓库（腾讯/阿里已代理 Central）。
         exclusiveContent {
             forRepository {
                 maven { url = uri("https://jitpack.io") }
             }
             filter {
-                includeGroupByRegex("com\\.github\\..*")
+                includeGroup("com.github.getActivity")
             }
         }
         flatDir {
