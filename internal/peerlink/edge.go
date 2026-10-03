@@ -17,14 +17,33 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
+
+// edgeLog —— 2026-10-04：整个 peerlink 子系统此前**零条日志**（全包 grep 'slog.' 0 命中），
+//   用户在 DevLogs 里排查"配对成功但连不上"时一条相关信息都没有（真机反馈：DevLogs
+//   没有可用日志信息）。连接/断线/token 失效必须写后端日志，才会被 WS 广播到 DevLogs。
+//   ⚠️ 只记网络层原因与主机，**绝不记 token / psk**。
+func edgeLog(level slog.Level, msg string, args ...any) {
+	slog.Log(context.Background(), level, msg, args...)
+}
+
+// hubHost 只取会合点主机（wsURL 里带 token，绝不进日志）。
+func (e *Edge) hubHost() string {
+	u, err := url.Parse(e.wsURL())
+	if err != nil {
+		return "(unparsable)"
+	}
+	return u.Host
+}
 
 // 默认心跳间隔（前台 / 后台）与退避参数。
 const (
@@ -188,6 +207,21 @@ func (e *Edge) Start(ctx context.Context) {
 			// ⚠️ 记录失败原因（2026-10-04）：不记录的话 UI 只能显示"连接中…"，
 			//    用户无法区分"正在连"和"根本连不上（如代理不支持 WS 升级）"。
 			e.setLastErr(err)
+
+			// 写后端日志（会被 WS 广播到 DevLogs）。
+			// 节流：退避重连会反复失败，只在**首次、每 5 次、以及 token 被拒**时记，
+			// 否则一条日志/秒地把 DevLogs 冲垮。
+			e.mu.Lock()
+			attempts := e.attempts
+			e.mu.Unlock()
+			unauthorized := strings.Contains(err.Error(), "unauthorized")
+			if unauthorized {
+				edgeLog(slog.LevelWarn, "peerlink edge rejected by hub: token invalid, re-pair required",
+					"hub", e.hubHost(), "attempts", attempts, "err", err.Error())
+			} else if attempts <= 1 || attempts%5 == 0 {
+				edgeLog(slog.LevelWarn, "peerlink edge connect failed",
+					"hub", e.hubHost(), "attempts", attempts, "err", err.Error())
+			}
 			// 真断线（非 ctx/Close 导致的退出）才计数退避重连
 			if err == errDisconnected {
 				e.mu.Lock()
@@ -234,8 +268,11 @@ func (e *Edge) runSession(ctx context.Context) error {
 		return nil
 	}
 	e.conn = conn
+	e.lastErr = ""
 	e.attempts = 0
 	e.mu.Unlock()
+
+	edgeLog(slog.LevelInfo, "peerlink edge connected", "hub", e.hubHost())
 
 	done := make(chan struct{})
 	go e.readLoop(ctx, conn, done)
@@ -253,6 +290,7 @@ func (e *Edge) runSession(ctx context.Context) error {
 	if closed || ctx.Err() != nil {
 		return nil
 	}
+	edgeLog(slog.LevelWarn, "peerlink edge disconnected, will backoff-retry", "hub", e.hubHost())
 	return errDisconnected
 }
 

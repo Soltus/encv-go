@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -161,6 +162,15 @@ func hubBaseURL(raw string) string {
 	return strings.TrimRight(h, "/")
 }
 
+// hubHostOf 只取会合点主机用于日志（票据/地址里不落 token 等密钥到日志）。
+func hubHostOf(hub string) string {
+	u, err := url.Parse(hub)
+	if err != nil {
+		return "(unparsable)"
+	}
+	return u.Host
+}
+
 // pairToRemoteHub 拿票据去远端 Hub 完成配对（proof = HMAC(psk, pairingId, deviceId)）。
 //
 // ⚠️ 第三个返回值 sas 不能丢（2026-10-04）：远端 /api/peerlink/pair 会回 SAS 6 位安全码，
@@ -231,10 +241,14 @@ func (s *Server) handlePeerlinkEdgePair(c *gin.Context) {
 
 	peerID, token, sas, err := pairToRemoteHub(hub, body.PairingID, body.PSK, deviceID, name)
 	if err != nil {
+		// 2026-10-04：扫码端配对失败必须进后端日志（此前整个 peerlink 零日志，
+		//   用户只能看到"连接中…"，DevLogs 里一条相关信息都没有）
+		slog.Warn("peerlink edge pair failed", "hub", hubHostOf(hub), "detail", err.Error())
 		c.JSON(http.StatusBadGateway, gin.H{"error": "pair_failed", "detail": err.Error()})
 		return
 	}
 
+	slog.Info("peerlink edge paired, connecting", "hub", hubHostOf(hub), "peerId", peerID)
 	s.startEdgeLocked(hub, peerID, deviceID, token)
 
 	// sas 回给扫码端 UI（PeerScanPanel）显示，供双端人工核对；

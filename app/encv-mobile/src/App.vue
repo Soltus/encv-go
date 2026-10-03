@@ -129,13 +129,18 @@ import { checkServiceGuard } from "@encv/shared-components/api/encv";
 import ErrorCaptureOverlay from "@/components/shared/ErrorCaptureOverlay.vue";
 import { autoInitVConsole } from "@encv/shared-components/composables/useDevTools";
 import { registerFileFeature } from "@encv/shared-components/composables/useFileFeatures";
-import { hijackConsole } from "@encv/shared-components/composables/useFrontendLogs";
+import { addFrontendLog, hijackConsole } from "@encv/shared-components/composables/useFrontendLogs";
 import { initHighRefreshRate } from "@encv/shared-components/composables/useHighRefreshRate";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useRealtimeTransport } from "@encv/shared-components/composables/useRealtimeTransport";
 import { useTheme } from "@encv/shared-components/composables/useTheme";
 import { createAlistEncryptFeature } from "@encv/shared-components/features/alist-encrypt/index";
-import { isNative, requestNotificationPermission, requestStoragePermission } from "@/plugins/GoProcess";
+import {
+  addKotlinLogListener,
+  isNative,
+  requestNotificationPermission,
+  requestStoragePermission,
+} from "@/plugins/GoProcess";
 
 const { initTheme, detectP3Support } = useTheme();
 const { t } = useI18n();
@@ -368,8 +373,33 @@ async function applyScreenOrientation() {
   }
 }
 
+/**
+ * 🆕 2026-10-04：把安卓原生日志（Kotlin）接进 DevLogs 的前端日志页。
+ *
+ * Kotlin 侧一直通过 `GoProcessPlugin.pushKotlinLog` 推 `kotlin:log` 事件，
+ * 但 JS 侧**从来没注册过监听者** ⇒ 真机上原生日志全部丢失，
+ * DevLogs 里只剩前端 console 日志（真机反馈：没有可用日志信息）。
+ *
+ * 只在原生环境生效（web 没有 GoProcess 插件，调用会抛错，故整体 try/catch）。
+ */
+function installKotlinLogBridge(): void {
+  if (!isNative()) return;
+  void addKotlinLogListener(log => {
+    if (!log) return;
+    const level = ["debug", "info", "warn", "error"].includes(log.level) ? log.level : "info";
+    addFrontendLog(level, String(log.message || ""), {
+      source: log.source || "kotlin",
+      tags: Array.isArray(log.tags) && log.tags.length ? log.tags : ["kotlin", "android"],
+      stack: log.stack,
+    });
+  }).catch(() => {
+    // 插件不可用（如老 APK）时静默降级，不影响主流程
+  });
+}
+
 onMounted(async () => {
   hijackConsole();
+  installKotlinLogBridge();
   initTheme();
   detectP3Support();
   autoInitVConsole();

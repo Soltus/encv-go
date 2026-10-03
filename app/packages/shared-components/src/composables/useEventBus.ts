@@ -30,7 +30,23 @@ export interface EncvEvents {
   "file:change": { path: string; action: "create" | "delete" | "modify" };
   "server:status": { online: boolean };
   "server:connection-error": { error: string };
-  "log:message": { level: string; message: string };
+  /**
+   * 后端日志条目的**统一**事件（2026-10-04）。
+   *
+   * 两条 transport 都会发：
+   *   - WS：DevLogs 自己解 `ws:message` 里的 `{type:"log", data:{...}}`
+   *   - HTTP 长轮询：`HttpPollBackend.fetchAndEmitLogs()` 直接 emit 本事件
+   *     （此前它 emit 的是契约里不存在的 `"log"` ⇒ DevLogs 没监听 ⇒ 无 WS 时后端日志全丢，
+   *       表现为"DevLogs 没有可用日志"）。
+   */
+  "log:message": {
+    level: string;
+    message: string;
+    timestamp?: string;
+    source?: string;
+    tags?: string[];
+    stack?: string;
+  };
   "ws:message": { type: string; data: any };
   "openlist:status": {
     running: boolean;

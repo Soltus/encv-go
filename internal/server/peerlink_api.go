@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -158,6 +159,8 @@ func (s *Server) handlePeerlinkPair(c *gin.Context) {
 
 	res, err := s.peerHub.Pair(body.PairingID, body.DeviceID, body.Name, body.Platform, body.Proof)
 	if err != nil {
+		// 2026-10-04：配对失败原因必须进后端日志（DevLogs 此前一条互联日志都没有）
+		slog.Warn("peerlink pair rejected", "pairingId", body.PairingID, "reason", err.Error())
 		switch err {
 		case peerlink.ErrTicketExpired:
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "ticket_expired", "message": "配对码已过期，请刷新二维码"})
@@ -170,6 +173,7 @@ func (s *Server) handlePeerlinkPair(c *gin.Context) {
 		}
 		return
 	}
+	slog.Info("peerlink paired", "peerId", res.PeerID, "name", res.Peer.Name, "platform", res.Peer.Platform)
 	c.JSON(http.StatusOK, gin.H{
 		"peerId": res.PeerID,
 		"token":  res.Token,

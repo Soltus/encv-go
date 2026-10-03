@@ -164,17 +164,17 @@ export function createHttpPollBackend(emit: EventEmitter, options: HttpPollBacke
     try {
       const resp = await _fetchLogs(lastLogTimestamp || undefined);
       for (const e of resp.logs || []) {
-        emit("log", {
-          type: "log",
-          data: {
-            level: e.level,
-            message: e.message,
-            timestamp: e.timestamp,
-            source: "backend_http_poll",
-            // 后端 slog 当前没把 stack 推到 ring buffer（按需后续扩展），
-            // 这里传 undefined 让 DevLogs 弹窗不显示 stack section
-            stack: undefined,
-          },
+        // ⚠️ 2026-10-04：必须 emit 契约里真实存在的 `"log:message"`。
+        //   此前 emit 的是 `"log"`（契约里没有、DevLogs 也没监听）
+        //   ⇒ **无 WS 时（降级轮询）后端日志 100% 丢失**，DevLogs 后端 tab 恒空。
+        emit("log:message", {
+          level: e.level,
+          message: e.message,
+          timestamp: e.timestamp,
+          source: "backend_http_poll",
+          // 后端 slog 当前没把 stack 推到 ring buffer（按需后续扩展），
+          // 这里传 undefined 让 DevLogs 弹窗不显示 stack section
+          stack: undefined,
         });
         if (e.timestamp > lastLogTimestamp) lastLogTimestamp = e.timestamp;
       }

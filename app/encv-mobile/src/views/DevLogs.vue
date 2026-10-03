@@ -826,11 +826,40 @@ function onServerStatus(data: any) {
   serverOnline.value = data?.online ?? false;
 }
 
+/**
+ * 🆕 2026-10-04：HTTP 长轮询（http-poll）模式下后端日志的入口。
+ *
+ * 此前只监听 `ws:message`，而 `HttpPollBackend` 走的是 `eventBus.emit("log", ...)`
+ * ⇒ **只要没连上 WS（沙箱代理不支持升级 / 降级轮询），后端日志一条都进不来**，
+ *   DevLogs 的后端 tab 就是空的（真机反馈：没有可用日志信息）。
+ * 两种 transport 发出的结构都是 `{type:"log", data:{...}}`，这里共用同一套入队逻辑。
+ */
+function onPollLog(payload: any) {
+  if (!payload) return;
+  // 兼容两种形态：直接条目（{level,message,...}）或 {type:"log", data:{...}}
+  const data = payload?.data ?? payload;
+  if (payload?.type && payload.type !== "log") return;
+  const level = ["debug", "info", "warn", "error"].includes(data?.level) ? data.level : "info";
+  const message = String(data?.message || data?.msg || "");
+  if (!message) return;
+  queueBackendLog({
+    id: ++nextId,
+    timestamp: data.timestamp || new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+    level,
+    message,
+    source: typeof data.source === "string" ? data.source : "http_poll",
+    stack: typeof data.stack === "string" ? data.stack : undefined,
+    tags: normalizeTags(data.tags),
+  });
+}
+
 onMounted(async () => {
   await nextTick();
 
   // transport 已在 App.vue 启动为 useWebSocket 单例，DevLogs 只读 connectionState 不再 connect
   eventBus.on("ws:message", onWsMessage);
+  // http-poll 模式（无 WS 时）的后端日志入口 —— 少了这个后端 tab 会一直空
+  eventBus.on("log:message", onPollLog);
   eventBus.on("server:status", onServerStatus);
 
   serverOnline.value = transport.connectionState.value === "connected";
@@ -905,6 +934,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   eventBus.off("ws:message", onWsMessage);
+  eventBus.off("log:message", onPollLog);
   eventBus.off("server:status", onServerStatus);
   unsubBackendFilter();
 });
