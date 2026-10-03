@@ -100,7 +100,7 @@ import {
   IonTitle,
   IonToolbar,
 } from "@ionic/vue";
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import PeerPairingPanel from "@/components/PeerPairingPanel.vue";
 import PeerScanPanel from "@/components/PeerScanPanel.vue";
 import PeerSourceBadge from "@/components/PeerSourceBadge.vue";
@@ -149,8 +149,27 @@ async function runFedSearch() {
   }
 }
 
+// ⚠️ 在线状态必须持续刷新（2026-10-04）：
+//   旧实现只在 onMounted 拉一次 peers，之后**再也不更新** ——
+//   于是"点完信任后对端掉线/压根没连上"时，桌面端 UI 永远停在那一刻的状态，
+//   用户看到的就是"信任了却还是连不上"（实际是连上又断了 / 从未连上）。
+const PEER_POLL_MS = 5000;
+let peerPollTimer: ReturnType<typeof setInterval> | null = null;
+
 onMounted(() => {
   void fetchPeers().catch(() => undefined);
+  peerPollTimer = setInterval(() => {
+    // 页面不可见时不打搅后端（切后台/息屏）
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    void fetchPeers().catch(() => undefined);
+  }, PEER_POLL_MS);
+});
+
+onUnmounted(() => {
+  if (peerPollTimer) {
+    clearInterval(peerPollTimer);
+    peerPollTimer = null;
+  }
 });
 
 async function handleUnpair(peerId: string) {

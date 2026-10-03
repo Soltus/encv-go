@@ -515,6 +515,11 @@ export default {
     "peers.reject": "不一致，取消配对",
     "peers.confirmed": "已信任（重启服务后失效）",
     "peers.unpair": "解除配对",
+    "peers.unpaired": "已解除配对",
+    "peers.sasPhoneHelp": "请在桌面端核对这个 6 位安全码；两端一致才在桌面点「信任该设备」，不一致请立即取消配对",
+    "peers.edgeFailed": "连接失败",
+    "peers.edgeFailedDetail": "连不上会合点：{detail}（已重试 {n} 次）",
+    "peers.edgeFailedHint": "常见原因：会合点地址手机无法访问，或该地址不支持 WebSocket 升级（例如经某些代理/网关访问时）",
     "peers.empty": "暂无已配对设备",
     "peers.failed": "配对失败：{detail}",
     // 🆕 P2b Task 2.6：扫码端（安卓）连到桌面端 Hub
@@ -1058,6 +1063,11 @@ export default {
     "peers.reject": "Does not match, cancel pairing",
     "peers.confirmed": "Trusted (cleared when the service restarts)",
     "peers.unpair": "Unpair",
+    "peers.unpaired": "Unpaired",
+    "peers.sasPhoneHelp": "Check this 6-digit code on the desktop side; only tap “Trust this device” there if both codes match — otherwise unpair immediately",
+    "peers.edgeFailed": "Connection failed",
+    "peers.edgeFailedDetail": "Can't reach the hub: {detail} (retried {n} times)",
+    "peers.edgeFailedHint": "Common causes: the hub address isn't reachable from this phone, or it doesn't support WebSocket upgrades (e.g. behind some proxies/gateways)",
     "peers.empty": "No paired devices",
     "peers.failed": "Pairing failed: {detail}",
     // 🆕 P2b Task 2.6: scanning side (Android) connects to the desktop Hub

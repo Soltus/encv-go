@@ -240,6 +240,13 @@ export interface EdgePairResult {
   ok: boolean;
   hub: string;
   peerId: string;
+  /**
+   * SAS 6 位安全码（2026-10-04 新增）。
+   * 桌面端点「一致，信任该设备」时手里有 SAS；扫码端（手机）此前**什么都不显示**，
+   * 用户根本不知拿什么去比对。本端 Go 的 `/edge/pair` 现在把远端 Hub 回的 SAS 透出，
+   * 由 PeerScanPanel 显示。为空 = 旧后端，UI 需优雅降级（不显示核对区）。
+   */
+  sas?: string;
 }
 
 /** 扫码后：让**本端** Go 进程作为 Edge 去连 Hub（长连接由 Go 侧承载）。 */
@@ -275,6 +282,13 @@ export interface EdgeStatus {
   connected?: boolean;
   hub?: string;
   peerId?: string;
+  /**
+   * 最近一次连接失败原因（2026-10-04 新增，后端 /edge/status 提供）。
+   * 有它才能区分「正在连」和「根本连不上」——此前 UI 一律显示"连接中…"（静默失败）。
+   */
+  lastErr?: string;
+  /** 已退避重试次数 */
+  attempts?: number;
 }
 
 /** 本端 Edge 的运行状态（是否正连着 Hub）。 */

@@ -75,6 +75,12 @@ type Edge struct {
 	closed   bool
 	bg       bool
 	attempts int
+	// lastErr：最近一次连接失败的原因（2026-10-04）。
+	//   原先 Start() 把 runSession 的错误**吞掉**（只用来算退避），于是手机端
+	//   /edge/status 只能报 running=true/connected=false ⇒ UI 永远显示"连接中…"，
+	//   用户（和我们自己）都看不出到底是地址不通、还是代理不支持 WebSocket 升级。
+	//   ⚠️ 只存**网络层**错误文本，绝不含 token / psk 等密钥。
+	lastErr string
 	// writeMu 串行化**所有**写帧（心跳 ping / SendJSON / RPC 响应）。
 	// websocket 不支持并发写：并发回写会 panic "concurrent write to websocket connection"。
 	writeMu sync.Mutex
@@ -128,6 +134,27 @@ func (e *Edge) SetBackground(bg bool) {
 	}
 }
 
+// LastError 最近一次连接失败的原因（无失败则空串）。
+// 供 /edge/status 暴露给 UI —— 失败必须可见，禁止静默"连接中…"。
+func (e *Edge) LastError() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.lastErr
+}
+
+// Attempts 已重试次数（用于 UI 提示"已重试 N 次"）。
+func (e *Edge) Attempts() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.attempts
+}
+
+func (e *Edge) setLastErr(err error) {
+	e.mu.Lock()
+	e.lastErr = err.Error()
+	e.mu.Unlock()
+}
+
 // Online 是否已连上。
 func (e *Edge) Online() bool {
 	e.mu.Lock()
@@ -158,6 +185,9 @@ func (e *Edge) Start(ctx context.Context) {
 		e.mu.Unlock()
 
 		if err := e.runSession(ctx); err != nil {
+			// ⚠️ 记录失败原因（2026-10-04）：不记录的话 UI 只能显示"连接中…"，
+			//    用户无法区分"正在连"和"根本连不上（如代理不支持 WS 升级）"。
+			e.setLastErr(err)
 			// 真断线（非 ctx/Close 导致的退出）才计数退避重连
 			if err == errDisconnected {
 				e.mu.Lock()

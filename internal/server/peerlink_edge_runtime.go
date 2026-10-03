@@ -162,10 +162,14 @@ func hubBaseURL(raw string) string {
 }
 
 // pairToRemoteHub 拿票据去远端 Hub 完成配对（proof = HMAC(psk, pairingId, deviceId)）。
-func pairToRemoteHub(hub, pairingID, pskB64, deviceID, name string) (peerID string, token string, err error) {
+//
+// ⚠️ 第三个返回值 sas 不能丢（2026-10-04）：远端 /api/peerlink/pair 会回 SAS 6 位安全码，
+//    扫码端（手机）要**显示**它给人工核对 —— 桌面端在等"一致，信任该设备"，
+//    手机端却什么都不显示 ⇒ 用户根本不知道该拿什么去比对（真机反馈：困惑）。
+func pairToRemoteHub(hub, pairingID, pskB64, deviceID, name string) (peerID string, token string, sas string, err error) {
 	psk, err := peerlink.DecodePSK(pskB64)
 	if err != nil {
-		return "", "", fmt.Errorf("bad_psk: %w", err)
+		return "", "", "", fmt.Errorf("bad_psk: %w", err)
 	}
 	body, _ := json.Marshal(map[string]string{
 		"pairingId": pairingID,
@@ -176,21 +180,22 @@ func pairToRemoteHub(hub, pairingID, pskB64, deviceID, name string) (peerID stri
 	})
 	resp, err := http.Post(hubBaseURL(hub)+"/api/peerlink/pair", "application/json", bytes.NewReader(body))
 	if err != nil {
-		return "", "", fmt.Errorf("pair_request_failed: %w", err)
+		return "", "", "", fmt.Errorf("pair_request_failed: %w", err)
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return "", "", fmt.Errorf("pair_rejected:%d", resp.StatusCode)
+		return "", "", "", fmt.Errorf("pair_rejected:%d", resp.StatusCode)
 	}
 	var out struct {
 		PeerID string `json:"peerId"`
 		Token  string `json:"token"`
+		SAS    string `json:"sas"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil || out.Token == "" {
-		return "", "", errors.New("bad_pair_response")
+		return "", "", "", errors.New("bad_pair_response")
 	}
-	return out.PeerID, out.Token, nil
+	return out.PeerID, out.Token, out.SAS, nil
 }
 
 // ── HTTP API（本端 UI / 扫码后用）──────────────────────────────────
@@ -224,7 +229,7 @@ func (s *Server) handlePeerlinkEdgePair(c *gin.Context) {
 		name = s.peerHub.Info()["name"]
 	}
 
-	peerID, token, err := pairToRemoteHub(hub, body.PairingID, body.PSK, deviceID, name)
+	peerID, token, sas, err := pairToRemoteHub(hub, body.PairingID, body.PSK, deviceID, name)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "pair_failed", "detail": err.Error()})
 		return
@@ -232,7 +237,15 @@ func (s *Server) handlePeerlinkEdgePair(c *gin.Context) {
 
 	s.startEdgeLocked(hub, peerID, deviceID, token)
 
-	c.JSON(http.StatusOK, gin.H{"ok": true, "hub": hub, "peerId": peerID, "running": true})
+	// sas 回给扫码端 UI（PeerScanPanel）显示，供双端人工核对；
+	// 不落盘、不进日志（安全码只在配对会话内有效）。
+	c.JSON(http.StatusOK, gin.H{
+		"ok":      true,
+		"hub":     hub,
+		"peerId":  peerID,
+		"sas":     sas,
+		"running": true,
+	})
 }
 
 // startEdgeLocked 启动（或重启）Edge 长连接。token 只存内存。
@@ -247,8 +260,14 @@ func (s *Server) startEdgeLocked(hub, peerID, deviceID, token string) {
 
 	h := s.edgeHandlers()
 	ctx, cancel := context.WithCancel(context.Background())
+	// ⚠️ 必须先用 hubBaseURL 归一化（2026-10-04 真因修复）：
+	//   票据里的 hub **已经自带** `/api/peerlink` 后缀（如 http://host/api/peerlink），
+	//   这里再拼一次 ⇒ Edge 去连 `/api/peerlink/api/peerlink/ws`（双前缀）
+	//   ⇒ 404 / bad handshake ⇒ 手机端永远"连接中…"、桌面端显示离线
+	//   ⇒ 表现就是"信任设备后还是连接失败"。
+	hubNormalized := hubBaseURL(hub) + "/api/peerlink"
 	edge := peerlink.NewEdge(peerlink.EdgeOptions{
-		HubURL:        hub + "/api/peerlink",
+		HubURL:        hubNormalized,
 		Token:         token,
 		DeviceID:      deviceID,
 		OnSearch:      h.OnSearch,
@@ -256,7 +275,7 @@ func (s *Server) startEdgeLocked(hub, peerID, deviceID, token string) {
 		OnAgentInvoke: h.OnAgentInvoke,
 	})
 	rt := &edgeRuntime{
-		hubURL:    hub + "/api/peerlink",
+		hubURL:    hubNormalized,
 		peerID:    peerID,
 		deviceID:  deviceID,
 		startedAt: time.Now(),
@@ -281,11 +300,21 @@ func (s *Server) handlePeerlinkEdgeStatus(c *gin.Context) {
 		return
 	}
 	connected := rt.edge != nil && rt.edge.Online()
+	// ⚠️ 失败原因必须回给 UI（2026-10-04）：running=true 但 connected=false 时，
+	//    没有 lastErr 前端只能显示"连接中…"，永远看不出是地址不通还是代理不支持 WS 升级。
+	lastErr := ""
+	attempts := 0
+	if rt.edge != nil {
+		lastErr = rt.edge.LastError()
+		attempts = rt.edge.Attempts()
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"running":   true,
 		"hub":       rt.hubURL,
 		"peerId":    rt.peerID,
 		"connected": connected,
+		"lastErr":   lastErr,
+		"attempts":  attempts,
 		"startedAt": rt.startedAt,
 	})
 }

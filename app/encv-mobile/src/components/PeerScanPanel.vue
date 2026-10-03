@@ -50,8 +50,36 @@
     <p v-if="okMsg" class="scanOk" data-testid="scan-ok">{{ okMsg }}</p>
     <p v-if="errMsg" class="scanErr" data-testid="scan-error">{{ errMsg }}</p>
 
+    <!-- 🆕 2026-10-04：扫码端的 SAS 核对区。
+         桌面端点「一致，信任该设备」时手里有 6 位安全码，而手机端此前**什么都不显示**
+         ⇒ 用户不知道该拿什么去比对（真机反馈：困惑）。这里把本端 Go 从 Hub 拿到的
+         SAS 显示出来，并说明"只有两端一致时才在桌面点信任"。 -->
+    <div v-if="sasCode" class="sasBox" data-testid="scan-sas">
+      <p class="sasTitle">{{ t('peers.sasTitle') || '核对安全码' }}</p>
+      <div class="sasCode" data-testid="scan-sas-code">{{ sasCode }}</div>
+      <p class="sasHelp">
+        {{ t('peers.sasPhoneHelp') || '请在桌面端核对这个 6 位安全码；两端一致才在桌面点「信任该设备」，不一致请立即取消配对' }}
+      </p>
+      <ion-button
+        v-if="pairedPeerId"
+        size="small"
+        color="danger"
+        fill="outline"
+        data-testid="scan-unpair"
+        @click="unpairCurrent"
+      >
+        {{ t('peers.unpair') || '取消配对' }}
+      </ion-button>
+    </div>
+
     <p class="edgeStatus" data-testid="edge-status">
       {{ t('peers.edgeStatus') || '互联状态' }}：{{ edgeLabel }}
+    </p>
+    <!-- ⚠️ 连接失败必须可见（2026-10-04）：以前 running=true/connected=false 时只显示
+         "连接中…"，用户不知道是还在连、还是根本连不上（真机反馈：困惑）。 -->
+    <p v-if="edgeErr" class="scanErr" data-testid="edge-error">{{ edgeErr }}</p>
+    <p v-if="edgeErr" class="scanNote" data-testid="edge-error-hint">
+      {{ t('peers.edgeFailedHint') || '常见原因：会合点地址手机无法访问，或该地址不支持 WebSocket 升级（例如经某些代理/网关访问时）' }}
     </p>
   </div>
 </template>
@@ -64,11 +92,12 @@
 // ⚠️ psk 只在内存流转（局部变量传参），**不落 localStorage**（与 usePeerLink 同一纪律）。
 import { IonButton } from "@ionic/vue";
 import { Capacitor } from "@capacitor/core";
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { type EdgeStatus, fetchEdgeStatus, pairAsEdge, parsePairingQR } from "@encv/shared-components/composables/usePeerLink";
 import { ScanError, scanOnce } from "@/peerlink/barcodeScanner";
 import { QRDecodeError, decodeQRFromImageFile } from "@/peerlink/qrFromImage";
+import { unpairPeer } from "@encv/shared-components/composables/usePeerLink";
 
 const { t } = useI18n();
 
@@ -78,10 +107,62 @@ const busy = ref(false);
 const pasted = ref("");
 const okMsg = ref("");
 const errMsg = ref("");
+const sasCode = ref("");
+const pairedPeerId = ref("");
 const nativeCamera = Capacitor.isNativePlatform();
 const edge = ref<EdgeStatus | null>(null);
 
 const edgeLabel = ref(t("peers.edgeIdle") || "未连接（服务重启后需重新扫码）");
+const edgeErr = ref("");
+// 配对后的状态巡查：连不上时不能一直停在"连接中…"，要让用户看到真实结果
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+/** 配对后轮询 Edge 状态，直到连上 / 报错 / 超时（60s） */
+function startPollingUntilSettled() {
+  stopPolling();
+  let waited = 0;
+  pollTimer = setInterval(async () => {
+    await refreshStatus();
+    waited += 3000;
+    const st = edge.value;
+    const settled = (st && st.connected) || !!edgeErr.value || !(st && st.running) || waited >= 60_000;
+    if (settled) stopPolling();
+  }, 3000);
+}
+
+/** 取会合点的主机名（回显给用户看），解析失败则原样返回 */
+function hostOf(hubUrl: string): string {
+  try {
+    return new URL(hubUrl).host;
+  } catch {
+    return hubUrl;
+  }
+}
+
+/** 取消配对（两端安全码不一致时给用户的退出路径） */
+async function unpairCurrent() {
+  const id = pairedPeerId.value;
+  if (!id) return;
+  busy.value = true;
+  try {
+    await unpairPeer(id);
+    sasCode.value = "";
+    pairedPeerId.value = "";
+    okMsg.value = t("peers.unpaired") || "已解除配对";
+    await refreshStatus();
+  } catch (e) {
+    errMsg.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy.value = false;
+  }
+}
 
 function errTextFor(reason: string, detail?: string): string {
   switch (reason) {
@@ -103,6 +184,8 @@ async function connectWithText(text: string) {
   busy.value = true;
   okMsg.value = "";
   errMsg.value = "";
+  sasCode.value = "";
+  pairedPeerId.value = "";
   try {
     const parsed = parsePairingQR(text);
     if (!parsed.ok) {
@@ -115,8 +198,14 @@ async function connectWithText(text: string) {
       psk: parsed.payload.psk,
       name: "Android",
     });
-    okMsg.value = String(t("peers.pairOk") || "已连接：{hub}").replace("{hub}", res.hub);
+    // ⚠️ 不要回显裸 URL（真机截图里是一长串 http://127.0.0.1:8100/api/peerlink，
+    //    对用户毫无意义）⇒ 只显示会合点主机名。
+    okMsg.value = String(t("peers.pairOk") || "已连接：{hub}").replace("{hub}", hostOf(res.hub));
+    sasCode.value = res.sas || "";
+    pairedPeerId.value = res.peerId || "";
     await refreshStatus();
+    // 配对完立刻开始巡查：连上 / 失败 / 60s 超时后停止，别让用户盯着"连接中…"
+    startPollingUntilSettled();
   } catch (e) {
     errMsg.value = errTextFor("unknown", e instanceof Error ? e.message : String(e));
   } finally {
@@ -176,16 +265,34 @@ async function refreshStatus() {
   try {
     const st = await fetchEdgeStatus();
     edge.value = st;
-    if (!st.running) edgeLabel.value = t("peers.edgeIdle") || "未连接（服务重启后需重新扫码）";
-    else if (st.connected) edgeLabel.value = t("peers.edgeConnected") || "已连上会合点";
-    else edgeLabel.value = t("peers.edgeRunning") || "连接中…";
+    if (!st.running) {
+      edgeLabel.value = t("peers.edgeIdle") || "未连接（服务重启后需重新扫码）";
+      edgeErr.value = "";
+    } else if (st.connected) {
+      edgeLabel.value = t("peers.edgeConnected") || "已连上会合点";
+      edgeErr.value = "";
+    } else if (st.lastErr) {
+      // 连不上：把原因摆出来（禁止用"连接中…"掩盖失败）
+      edgeLabel.value = t("peers.edgeFailed") || "连接失败";
+      edgeErr.value = String(t("peers.edgeFailedDetail") || "连不上会合点：{detail}（已重试 {n} 次）")
+        .replace("{detail}", st.lastErr)
+        .replace("{n}", String(st.attempts ?? 0));
+    } else {
+      edgeLabel.value = t("peers.edgeRunning") || "连接中…";
+      edgeErr.value = "";
+    }
   } catch (e) {
     edgeLabel.value = e instanceof Error ? e.message : String(e);
+    edgeErr.value = "";
   }
 }
 
 onMounted(() => {
   void refreshStatus();
+});
+
+onUnmounted(() => {
+  stopPolling();
 });
 </script>
 
@@ -264,5 +371,34 @@ onMounted(() => {
   font-size: 0.75rem;
   opacity: 0.8;
   margin: 6px 0 0;
+}
+
+/* 扫码端 SAS 核对区：与桌面端 PeerPairingPanel 的 .sasBox 同款视觉，
+   让用户在两端看到的是"同一个东西" */
+.sasBox {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--color-base-300);
+  border-radius: var(--radius-field, 0.5rem);
+}
+
+.sasTitle {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.sasCode {
+  font-family: ui-monospace, monospace;
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  margin: 4px 0 6px;
+}
+
+.sasHelp {
+  font-size: 0.72rem;
+  opacity: 0.8;
+  margin: 0 0 8px;
 }
 </style>
