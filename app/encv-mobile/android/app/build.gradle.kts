@@ -130,6 +130,13 @@ android {
         }
     }
 
+    testOptions {
+        unitTests {
+            // Robolectric 需要读 AndroidManifest / resources 才能搭出真实 framework
+            isIncludeAndroidResources = true
+        }
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -139,6 +146,37 @@ android {
             pickFirsts += setOf("**/*.so")
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Robolectric 的 SDK jar 必须由 **Gradle** 下载，不能让它自己联网（2026-10-04）
+//
+// 坑：Robolectric 运行时会自己拉 android-all-instrumented*.jar（~199MB），
+//   ① 它走自己的 MavenDependencyResolver，**不经过 Gradle**（Gradle 侧的镜像/重试都用不上）；
+//   ② 默认直连 repo1.maven.org —— 本环境恒返 429 ⇒ 7 秒就 "Failed to fetch maven artifact"。
+// 解法：把 jar 声明成一个普通 Gradle configuration（走已修好的镜像解析），
+//   复制到 build/robolectric-sdk，再让 Robolectric **离线模式**从这个目录取。
+//   这样 CI/他人机器上无需任何手工预置。
+// ⚠️ 版本号必须与 robolectric 版本匹配（4.15.1 + @Config/sdk=35 = Android 15 = 15-robolectric-…）。
+// ─────────────────────────────────────────────────────────────────────────────
+val robolectricSdk by configurations.creating
+
+dependencies {
+    robolectricSdk("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7")
+}
+
+val robolectricSdkDir = layout.buildDirectory.dir("robolectric-sdk")
+
+tasks.register<Copy>("fetchRobolectricSdk") {
+    from(robolectricSdk)
+    into(robolectricSdkDir)
+}
+
+tasks.withType<Test>().configureEach {
+    dependsOn("fetchRobolectricSdk")
+    // 系统属性优先级高于 src/test/resources/robolectric.properties
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", robolectricSdkDir.get().asFile.absolutePath)
 }
 
 packagePlugins {
@@ -183,6 +221,9 @@ dependencies {
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)
     testImplementation(libs.kotlin.test)
+    // 🆕 2026-10-04：JVM 单测终于能跑到——纯 JVM 下 JSONObject/Intent 全是 "not mocked"，
+    //   靠 Robolectric 提供真实 framework 实现。镜像地址见 src/test/resources/robolectric.properties。
+    testImplementation(libs.robolectric)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     implementation(project(":capacitor-cordova-android-plugins"))
