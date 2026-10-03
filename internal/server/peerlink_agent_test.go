@@ -69,6 +69,19 @@ func TestPeerlinkAgentInvoke_OK_And_Declined(t *testing.T) {
 	}
 }
 
+// waitPeerGone 等待 Hub 侧连接表不再认为该 peer 在线（Edge 关闭是异步生效的）。
+func waitPeerGone(t *testing.T, s *Server, peerID string) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if !s.peerConns.Has(peerID) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("Edge stop() 后 Hub 仍认为 %s 在线（连接表清理未完成）", peerID)
+}
+
 func TestPeerlinkAgentInvoke_Offline_503_And_BadRequest_400(t *testing.T) {
 	r, s := newPeerlinkRouter()
 	srv := httptest.NewServer(r)
@@ -79,6 +92,11 @@ func TestPeerlinkAgentInvoke_Offline_503_And_BadRequest_400(t *testing.T) {
 			return peerlink.AgentInvokeOutcome{Decision: peerlink.DecisionAccept, Result: json.RawMessage(`{}`)}
 		})
 	stop()
+	// ⚠️ 2026-10-04 修 flaky：stop() 只是让 Edge 侧关闭，**Hub 侧连接表的清理是异步的**
+	//	（要等 WS 读循环真正退出）。负载高时会竞态 ⇒ 立刻发请求会被当成"在线"而发出去，
+	//	最后等满超时返回 **504**，而不是预期的 503（实测整包跑偶发 504，单跑必过）。
+	//	正确做法是**等到条件成立再断言**，而不是放宽断言去兼容两种状态码。
+	waitPeerGone(t, s, peerID)
 
 	req, _ := http.NewRequest("POST", srv.URL+"/api/peerlink/agent/invoke",
 		bytes.NewReader([]byte(`{"peerId":"`+peerID+`","tool":"read_file"}`)))

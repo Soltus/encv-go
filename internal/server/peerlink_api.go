@@ -585,6 +585,11 @@ func (s *Server) handlePeerlinkSearch(c *gin.Context) {
 		if peerBusyIfErr(c, peerID, err) {
 			return
 		}
+		// 2026-10-04：查询写得不对（空查询 / 无效 regex / 括号不配对）是对端**健康地**拒绝
+		// ⇒ 400 且不计入熔断（否则 keywords 输错几次就把 peer 熔断，连坐合法搜索）。
+		if s.peerRejectedIfErr(c, peerID, err) {
+			return
+		}
 		s.peerCircuitRecord(peerID, err.Error()) // R12
 		switch {
 		case errors.Is(err, peerlink.ErrPeerOffline):

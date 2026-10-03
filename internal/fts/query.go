@@ -19,9 +19,11 @@
 package fts
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // allRegexMarker 当查询全是 regex 时插入的占位 token。
@@ -55,12 +57,12 @@ type Query struct {
 func ParseQuery(input string) (string, []*regexp.Regexp, []string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
-		return "", nil, nil, fmt.Errorf("empty query")
+		return "", nil, nil, fmt.Errorf("%w: empty query", ErrInvalidQuery)
 	}
 
 	tokens, err := tokenize(input)
 	if err != nil {
-		return "", nil, nil, err
+		return "", nil, nil, fmt.Errorf("%w: %v", ErrInvalidQuery, err)
 	}
 
 	// CJK bigram 预处理：每个 word 切成 bigram
@@ -139,10 +141,10 @@ func ParseQuery(input string) (string, []*regexp.Regexp, []string, error) {
 		case tokRegex:
 			re, err := regexp.Compile(tok.value)
 			if err != nil {
-				return "", nil, nil, fmt.Errorf("invalid regex %q: %w", tok.value, err)
+				return "", nil, nil, fmt.Errorf("%w: invalid regex %q: %v", ErrInvalidQuery, tok.value, err)
 			}
 			if tok.value == "" {
-				return "", nil, nil, fmt.Errorf("empty regex pattern")
+				return "", nil, nil, fmt.Errorf("%w: empty regex pattern", ErrInvalidQuery)
 			}
 			regexes = append(regexes, re)
 			// regex 标记占位（用特殊字符串让 Search 知道这是 regex-only 模式）
@@ -251,14 +253,54 @@ func cleanLeadingOps(expr string) string {
 //
 // FTS5 关键字：AND OR NOT NEAR
 // 包含空格/引号的词需要双引号包裹。
+// ErrInvalidQuery 查询表达式本身不合法（输入问题，不是索引/IO 故障）。
+//
+// 2026-10-04：有了它，上层才能把"用户查询写得不对"与"搜索引擎坏了"区分开 ——
+// 前者该给 400 且**不计入熔断**，后者才是真故障（否则几次输错就把对端熔断了，
+// 参见 peerlink 的 ErrPeerRejected）。
+var ErrInvalidQuery = errors.New("fts: invalid query")
+
+// fts5UnsafeRune 该字符是否**不能**裸着放进 MATCH 表达式。
+//
+// ⚠️ 2026-10-04 修的真机 bug：旧实现是**黑名单**（只转义 ` \-"()*:^` 九个），
+//	任何没列举到的 FTS5 元字符都会漏网 —— 用户输入 `/../../etc/passwd` 里的 `/`
+//	就触发了 `fts5: syntax error near "/"`（HTTP 502，且被当成"对端故障"计入熔断）。
+//
+// 黑名单天生写不全（你永远不知道下一个特殊字符是什么），所以改成**白名单**：
+// 只有确信不会被 FTS5 解释成语法的字符才原样输出，其余一律整体加双引号，
+// 当成一个字符串字面量（phrase）来匹配 —— 既不会报错，也能原样搜到含这些字符的文本。
+func fts5UnsafeRune(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return false
+	// 文件名里极常见的字符，FTS5 不做语法解释
+	case r == '-' || r == '_' || r == '.':
+		return false
+	case unicode.IsLetter(r) || unicode.IsDigit(r):
+		return false // CJK 等其它文字体系
+	}
+	return true
+}
+
 func escapeFTS5(s string) string {
+	// 整体加双引号（内部 " 需转义为 ""），变成一个安全的 FTS5 字符串字面量
+	quoted := func(v string) string {
+		return fmt.Sprintf(`"%s"`, strings.ReplaceAll(v, `"`, `""`))
+	}
+
+	if s == "" {
+		return quoted(s)
+	}
 	upper := strings.ToUpper(s)
 	if upper == "AND" || upper == "OR" || upper == "NOT" || upper == "NEAR" {
-		// 把关键字当普通词搜
-		return fmt.Sprintf(`"%s"`, s)
+		// 把关键字当普通词搜（否则会被当成 FTS5 操作符）
+		return quoted(s)
 	}
-	if strings.ContainsAny(s, ` \-"()*:^`) {
-		return fmt.Sprintf(`"%s"`, strings.ReplaceAll(s, `"`, `""`))
+	// 白名单：只要出现一个不安全字符，就整体加引号
+	for _, r := range s {
+		if fts5UnsafeRune(r) {
+			return quoted(s)
+		}
 	}
 	return s
 }

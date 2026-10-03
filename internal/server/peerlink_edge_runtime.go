@@ -76,6 +76,12 @@ func (s *Server) peerLocalSearch(req peerlink.SearchRequest) (json.RawMessage, e
 	}
 	res, err := idx.Search(context.Background(), req.Q, fts.SearchOptions{Limit: limit, IncludeDirs: false})
 	if err != nil {
+		// 2026-10-04：查询表达式本身不合法（空查询 / 无效 regex / 括号不配对等）属于
+		// **调用方的问题**，必须标 rejected ⇒ 发起端给 400 且**不计入熔断**；
+		// 否则几次输错关键词就把 peer 熔断掉，连坐所有合法调用（与 bad_path 同一类坑）。
+		if errors.Is(err, fts.ErrInvalidQuery) {
+			return nil, fmt.Errorf("%w: bad_query", peerlink.ErrPeerRejected)
+		}
 		return nil, err
 	}
 	items := make([]map[string]any, 0, len(res))

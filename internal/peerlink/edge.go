@@ -444,6 +444,11 @@ func (e *Edge) handleRequest(conn *websocket.Conn, id, method string, payload js
 		}
 		out, err := e.opts.OnSearch(req)
 		if err != nil {
+			// 与 read 同理：查询写得不对是对端"健康地拒绝"，不是故障（不计入熔断）。
+			if errors.Is(err, ErrPeerRejected) {
+				writeRejected(nil, unwrapRejectReason(err))
+				return
+			}
 			write(nil, err.Error())
 			return
 		}
