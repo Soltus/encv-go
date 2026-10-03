@@ -31,6 +31,7 @@
   - [x] 仅桌面形态生效（`isDesktop` 可注入），手机端零行为变化
   - [x] 11 例单测（FAST）+ `pw-desktop-shortcuts.mjs` 真实浏览器 **7/7 PASS**
 - [x] Task 1.4: **R16 处置** —— `getApiBaseUrl()` 生产态默认由 `http://127.0.0.1:2025`（隐含"用户本机跑后端"）改为 **`window.location.origin`（同源）**；非 http 协议（capacitor://）保留原绝对地址。契约测试 `src/api/__tests__/getApiBaseUrl.test.ts` 已改为锁新契约（web→同源 / 非 http→:2025），8/8 通过
+  - ⚠️ **本条「非 http 才算原生壳」的前提已于 2026-10-03 被推翻（见下方 Iteration 1h）**：`capacitor.config.ts` 配 `server.androidScheme:'https'` ⇒ 真机 WebView 的 `window.location.origin` 就是 `https://localhost`（**http(s) 协议！**），原生壳判断改由 `isNativeShell()`（appCapabilities DI + `Capacitor.isNativePlatform()` 兜底，排除 electron 桌面形态）负责，命中则回落 `DEFAULT_API_BASE_URL`。回归锁：`src/api/__tests__/getApiBaseUrl.native.test.ts`（vitest `contract` project，默认门禁跑到）。
   - **先红**：服务器托管源站（:8124 代理 /api）下把 localStorage 写回旧默认 `127.0.0.1:2025` → `GET /api/service-guard` **ERR_ABORTED**（跨源 + `gin_app.go` CORS allowlist 只放行 localhost/127.0.0.1）
   - **后绿**：同源默认后，同一源站 `/api/service-guard` **200**、`requestfailed` 为 0
   - ⚠️ **环境坑（已记录）**：本沙箱 `NODE_ENV=development`，**`vite build` 打出来的包 `import.meta.env.DEV` 仍为 true**（实测请求打到 `127.0.0.1:16666`）⇒ 验证生产行为必须 `NODE_ENV=production vite build`

@@ -214,7 +214,7 @@ cnb 容器：preview-gateway :16666 ──► encv-go :2025（含 peerlink Hub�
 | R13 | 大报文（取回文件）打爆 Hub 内存 | Hub OOM | 报文尺寸上限 | 分块 + 限流 + 断点；大流量默认不走 Hub（§3） | P3/P5 |
 | R14 | 日志泄露（查询词 / 路径全文上云） | 隐私 | 日志审查 | Hub 日志脱敏：只记 peerId/字节数/耗时，不记查询词与路径 | P5 |
 | R15 | 真机验证缺口（沙箱无相机 / 无移动网） | 扫码与移动网路径未验 | — | 模拟器 + `adb forward` 验 P2P/中继路径；扫码与移动网列为**必须真机**项并在 checklist 明示 | P6 |
-| R16 | 桌面端"无本机后端"旧分支 | 需求理解错误 | 设计评审 | **作废**：桌面端后端恒为 cnb 同源 Go（`useAgentApiBase` web 分支已如此） | P1 |
+| R16 | 桌面端"无本机后端"旧分支 | 需求理解错误 | 设计评审 | **作废**：桌面端后端恒为 cnb 同源 Go（`useAgentApiBase` web 分支已如此）。⚠️ 其落地实现（Task 1.4）已于 **2026-10-03 修正**：R16 只适用**非原生壳**的 web；原生 APK 的 WebView 页面协议也是 `https`（`androidScheme:'https'` ⇒ origin=`https://localhost`），把它当同源会打到 **:443**。详见 Iteration 1h | P1 |
 
 ---
 

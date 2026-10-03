@@ -45,6 +45,77 @@
 - ⚠️ 跑 `check-all` 时若模拟器在跑，`vite build` 可能被 **SIGKILL**（内存争用）——
   单独重跑 `vite build` 几秒即过，别误判为代码回归。
 
+## Capacitor 原生壳里 `window.location.origin` ≠ 后端地址（2026-10-03 真机事故，长期）
+
+- **铁律**：`capacitor.config.ts` 配 `server.androidScheme:'https'` ⇒ **安卓真机 WebView 的
+  `window.location.origin` 就是 `https://localhost`**（`capacitor://` 是历史 scheme，别再拿它当判据）。
+  任何"页面在什么协议/什么 host 下 ⇒ 后端就在哪"的推断，**必须先排除原生壳**，否则
+  `${origin}/api/...` 会被打到 **localhost 默认端口 443**（表象：`Failed to connect to
+  localhost/127.0.0.1:443`，而后端明明在 :2025）。
+- **判定写法**：`isNativeShell()` = `getAppCapabilities().isNative()` 且 `platform()!=="electron"`；
+  DI 未注入时 fallback `globalThis.Capacitor.isNativePlatform()`。**两层都得有**——只靠 DI，
+  注入时序一旦漂移就漏判；只靠 Capacitor，无法排除 Capawesome Electron 桌面托管形态。
+  实现见 `shared-components/src/api/core/baseUrl.ts`。
+- **两道防线缺一不可**：
+  ① JS 侧不要产出 `https://localhost/...` 的绝对 URL（native 用相对路径或明确的 loopback 端口）；
+  ② **native 侧（ApiProxy）不许对绝对 URL 盲透传** —— `ApiProxyUrlRouter.rewriteWebViewOrigin()`
+  把 WebView origin 重写到 `127.0.0.1:<lastKnownPort>`（顺带兜住端口漂移 2025→2031）。
+  收窄到"localhost 且端口缺省/80/443"，避免误伤 `:5244` openlist 等本机服务和局域网 URL。
+  ⇒ **写 native 侧功能时优先抽成"纯 Kotlin、零 Android 依赖"的 object**，这样 JVM 单测可以直接跑，
+  不必实例化 `Plugin` 子类（也不必 Robolectric）。
+- **✅ gradle 依赖解析 429「卡死」已真修好（2026-10-03，第 4 次才找对）**：`repo.maven.apache.org`
+  与 `repo1.maven.org` 在本沙箱恒返 **429**（其它源全 200：dl.google.com / 腾讯 / 阿里 google / jitpack）。
+  旧版 `scripts/gradle-buildscript-mirrors.gradle` 是**无效药**——它在 init script 的 `allprojects` 里
+  `if (p.repositories.size() > 0)`，而那时 build.gradle 还没被执行、size 恒为 0 ⇒ 从来没生效。
+  **有效做法**：① `allprojects.afterEvaluate` 里对 `MavenArtifactRepository` **原地 `setUrl`** 换 central（别动
+  google/jitpack/flatDir）；② 更关键的是 `gradle.beforeProject { p.buildscript.repositories { maven{url=镜像} } }`
+  **抢先注入**——Capacitor include 的模块在 `buildscript{...}` 块结束时立即解析 classpath，早于 afterEvaluate。
+  ⚠️ **千万别给 `p.repositories` 也注入**：`PREFER_PROJECT` 下一旦 project 有项目级仓库，settings 的
+  dependencyResolutionManagement（含 jitpack exclusiveContent）会被整体屏蔽 ⇒ 依赖大面积找不到。
+  脚本已 `cp` 到 `~/.gradle/init.d/`，现在 `./gradlew :app:testDebugUnitTest` **BUILD SUCCESSFUL**。
+- **⚠️ 安卓 JVM 单测的历史欠账（2026-10-03）**：`:app:testDebugUnitTest` 此前**从未跑起来**（先是被
+  `GoBackendModuleTest` 引用已删类 + `DEFAULT_PORT` 为 private 挡住编译；修完编译后 `EncvGoServiceTest`/
+  `GoProcessPluginTest` 又全挂在 `JSONObject.put / Intent not mocked`）⇒ 真绿需要 Robolectric 或
+  `unitTests.isReturnDefaultValues=true`（后者只免抛错，Intent 断言会假绿）。写 native 单测时优先抽成
+  **纯 Kotlin object（零 Android 依赖）**，`ApiProxyUrlRouter` 就是这么做的 → gradle 下 9/9 真通过。
+- **沙箱 gradle 跑不通（2026-10-03 早期结论，已被上条取代，仅保留绕路手法备查）**：当时卡在 429 退避重试
+  （jstack 抓 `tryResolveAndMaybeDisable`）时的临时办法：`apt-get install -y --no-install-recommends kotlin junit4`
+  ⇒ 用 `kotlinc` 单文件编译 + `java -cp ... org.junit.runner.JUnitCore` 实跑（限纯 Kotlin 文件）。
+  ⚠️ kotlinc 1.3 **不支持尾逗号**，多行调用的最后一个实参后留 `,` 会编译失败。
+- **vitest：既要默认跑到、又不能污染 FAST ⇒ 新开 project**：用 `vi.resetModules()` 切换 env/DI 的用例
+  放 FAST(`isolate:false`) 会让别人的 `vi.mock` 失效（实测 `directive-reveal.test.ts` 转红，
+  基线对比确认），放 ISOLATED 则门禁默认不跑。⇒ `vitest.config.ts` 增 **`contract` project
+  （isolate:true，且非 FULL 模式也跑）**。这是比"退化成源码扫描锁"更通用的解法。
+
+## 安卓 JVM 单测：Robolectric 已落地 + `android-all` 的联网陷阱（2026-10-04，长期）
+
+- **纯 JVM unit test 里 Android framework 全是 stub**：`JSONObject.put` / `Intent.setAction`
+  会抛 `Method ... not mocked` ⇒ 凡是碰这些类的用例必挂。解法 = Robolectric（`4.15.1`），
+  测试类加 `@RunWith(RobolectricTestRunner::class)` + `testOptions.unitTests.isIncludeAndroidResources=true`。
+- **🚨 Robolectric 自己下载 `android-all-instrumented*.jar`（199MB）且**不走 Gradle**：
+  默认直连 `repo1.maven.org`（本环境恒 429）⇒ `Failed to fetch maven artifact`，且表现为"秒失败"。
+  `robolectric.properties` 里的 `dependency.repo.url` **不足以解决**。
+  **正确做法**：把 jar 作为普通 Gradle configuration 依赖（走 Gradle 已配好的镜像解析），
+  Copy 到 `build/robolectric-sdk`，再 `systemProperty("robolectric.offline","true")`
+  + `robolectric.dependency.dir=<该目录>` ⇒ 换机器零手工预置。
+  SDK 级别写死 `sdk=35`（与 Robolectric 版本匹配的 15-robolectric-* jar），别跟 compileSdk=36 走
+  （36 的 android-all 可能没发布/镜像缺包）。
+- `robolectric.application=android.app.Application`：避免 Robolectric 去加载项目自己的
+  Application（Bugly 等初始化会在单测里出副作用）。
+- **现状**：`./gradlew :app:testDebugUnitTest` = **36 tests / 0 failures**（此前 19 failed）。
+
+## `.codebuddy/skill-registry.json` 的时间戳噪音（2026-10-04，长期）
+
+- **源头已修**：写这个文件的是 **`scripts/skill-manager.mjs`**（app-dev MCP 的技能管理器）。
+  原实现两处硬伤：扫描时 `updatedAt` **无条件刷新**（不看 hash），且 `saveRegistry()` **无条件 writeFile**
+  ⇒ 内容一字不差也重写，git 常年显示 modified。现已改为：内容未变则沿用旧 `updatedAt`，
+  且**幂等写**（内容相同不落盘）。验证：跑一次扫描，registry 的 md5 与 mtime 都不变。
+- **❗方法论（用户纠正）**：这类「文件被自动改写」的问题，**先找写它的代码源头修**，
+  不要用 git hook / 事后归一化脚本当解决方案（我第一版就是这么干的，被否了）。
+  另外：codemogger 对 `.mjs` 可能返回空集，**别据此断定"写方不在仓库里"**，换个关键字/直接翻 scripts/。
+- 该文件**不能被忽略**（用户要求）⇒ 禁止 `.gitignore` / `assume-unchanged` / `skip-worktree`。
+  `scripts/normalize-skill-registry.py` 仅作一次性清理与 `--check` 校验保留，不再是解法。
+
 ## 动效：gsap `from()` 的「终态陷阱」+ vitest isolate:false mock 污染（2026-10-03，长期）
 
 - **⚠️ 挂到 `<ion-page>` 上的进场动效绝不能用 `from({opacity:0})`**：Ionic 转场开始前会给页面写

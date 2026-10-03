@@ -139,6 +139,58 @@
 
 ---
 
+### Iteration 1h — Task 1.4 回归修复：真机连不上后端（:443）（2026-10-03）
+
+- **起因**：用户在安卓真机上直接连不上后端，日志
+  `[ENCV] Failed to load config: Error: proxy fetch failed: Failed to connect to localhost/127.0.0.1:443`，
+  而通知栏显示后端端口是 **2025**。
+- **真因（不是猜测，已被复现测试锁定）**：1g 的「http/https 就同源」**漏判了原生壳**。
+  `capacitor.config.ts` 配 `server.androidScheme:'https'` ⇒ 真机 WebView 页面协议就是 `https`、
+  hostname 就是 `localhost` ⇒ WebView **自己的** origin 被当成后端 base ⇒
+  `fetch('https://localhost/api/config')` ⇒ `useProxiedFetch` 交给 ApiProxy，而 ApiProxy 对
+  **绝对 URL 原样透传** ⇒ `HttpURLConnection` 打 localhost + **默认端口 443** ⇒ connect refused。
+  （旧测试里「非 http = capacitor:// 才是原生壳」的前提是错的，capacitor:// 只是历史 scheme。）
+- **修复（两道，都在真实编译/运行下验证）**：
+  1. **根因侧** `shared-components/src/api/core/baseUrl.ts`：新增 `isNativeShell()`
+     （`getAppCapabilities().isNative()` 优先、排除 electron；未注入时 fallback
+     `globalThis.Capacitor.isNativePlatform()`），命中则回落 `DEFAULT_API_BASE_URL`。
+  2. **防线侧** `ApiProxyUrlRouter.kt`（从 `ApiProxyPlugin` 抽出的纯 Kotlin object）：
+     把「WebView 自身 origin」（`localhost` 且端口缺省/80/443）重写到
+     `http://127.0.0.1:<EncvGoService.lastKnownPort>` —— 顺带连端口漂移也兜住；
+     带明确端口的 loopback（如 :5244 openlist）与局域网 URL 一律透传不误伤。
+- **回归锁（均先红后绿）**：
+  - JS：`src/api/__tests__/getApiBaseUrl.native.test.ts`（6 例，含一条
+    WebView→fetch override→ApiProxy 桥的端到端锁：桥收到的必须是 `http://127.0.0.1:2025/ping`）。
+    ⚠️ 放 FAST(`isolate:false`) 会污染 `directive-reveal.test.ts`（FAST 同模块 `vi.mock` 互污染，
+    基线对比已确认：加进来后 directive-reveal 立刻转红、单独跑该文件又绿）⇒ 新开
+    **vitest `contract` project（isolate:true 且默认跑到）**。
+  - Kotlin：`ApiProxyUrlRouterTest`（9 例，纯 JVM）：旧实现 4 FAIL / 新实现 9 OK。
+- **门禁**：`vitest run` 40 files / 670 tests 全通过（含 contract project）；`vue-tsc` 0 错误。
+- **✅ gradle 网络问题已解决（同日修好）**：本沙箱 `./gradlew :app:testDebugUnitTest` 原先
+  卡在 `repo.maven.apache.org` 持续 **429**（jstack 见 `tryResolveAndMaybeDisable` 退避重试），
+  而旧 init script **从未生效** —— 它在 `allprojects` 里判 `repositories.size() > 0`，但那时
+  project 尚未 evaluate、size 恒为 0。已重写 `scripts/gradle-buildscript-mirrors.gradle`：
+  evaluate 后原地 `setUrl` 换中心仓库 **+ `beforeProject` 抢先注入 buildscript 镜像**
+  （Capacitor include 模块的 buildscript classpath 在块结束时立即解析，早于 afterEvaluate）。
+  现实测 **BUILD SUCCESSFUL、`429 = 0`**；gradle 下 `ApiProxyUrlRouterTest` **9 tests / 0 failures**
+  （官方 XML 报告）。kotlinc 绕路不再需要。
+- **✅ 顺带挖出的历史欠账，已一并修完（2026-10-04 补记）**：该 unit test 源码集此前
+  **从未真正跑起来** —— 先被 3 个既有测试文件的 17 处编译错误挡住（访问 private `DEFAULT_PORT`、
+  引用已删的 `GoBackendModule`）。已做：① `DEFAULT_PORT` → `internal const val`；
+  ② 孤儿 `GoBackendModuleTest`（依赖的 `GoBackendModule` 已删除）注释停用并保留原稿。
+  随后剩余 19 例挂在 `JSONObject.put / Intent not mocked`（纯 JVM 缺 Android framework），
+  已**引入 Robolectric 4.15.1** 修好：测试类改 `@RunWith(RobolectricTestRunner::class)`、
+  `testOptions.unitTests.isIncludeAndroidResources=true`；🚨 关键是 Robolectric 运行时会自己
+  下载 `android-all-instrumented*.jar`（199MB）且**不走 Gradle**，默认直连 `repo1.maven.org`
+  （本环境恒 429）⇒ 改成由 Gradle configuration 下载 + `robolectric.offline=true` +
+  `robolectric.dependency.dir=build/robolectric-sdk`。
+  **结果：`./gradlew :app:testDebugUnitTest` = 36 tests / 0 failures**（改前 36 / 19 failed），
+  其中本次新增的 `ApiProxyUrlRouterTest` 9/9。
+- **仍未验**：真机 APK 端到端（需装机复验）。
+- **下轮入口**：**P2a（Hub 与会合）**（不变）。
+
+---
+
 ### Iteration 2 — P2a 后端：Hub 与会合（2026-10-02）
 
 - **对应任务**：Task 2.1（2.1.1–2.1.6）
