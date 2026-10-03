@@ -350,6 +350,18 @@ func (e *Edge) handleRequest(conn *websocket.Conn, id, method string, payload js
 		defer e.writeMu.Unlock()
 		_ = conn.WriteJSON(map[string]any{"type": "res", "id": id, "result": result, "error": errMsg})
 	}
+	// writeRejected 标记"对端健康、但这个请求本身不被接受"（路径非法 / 文件不存在等）。
+	//
+	// 2026-10-04：此前这类错误和普通失败一样裸着过 wire ⇒ Hub 侧一律计入熔断
+	// ⇒ 几次误传参数就把 peer 熔断掉，连坐所有合法调用。带上 errKind 让发起端能区分。
+	// ⚠️ errMsg 必须是**脱敏**后的原因（不得含真实路径 / 参数全文）。
+	writeRejected := func(result any, errMsg string) {
+		e.writeMu.Lock()
+		defer e.writeMu.Unlock()
+		_ = conn.WriteJSON(map[string]any{
+			"type": "res", "id": id, "result": result, "error": errMsg, "errKind": ErrKindRejected,
+		})
+	}
 
 	switch method {
 	case "read":
@@ -373,6 +385,12 @@ func (e *Edge) handleRequest(conn *websocket.Conn, id, method string, payload js
 		}
 		data, total, err := e.opts.OnRead(req)
 		if err != nil {
+			// 业务性拒绝（路径非法 / 打不开 / 越权）⇒ 标 rejected，发起端不当成故障，
+			// 也不计入熔断。其余错误（IO 真挂了等）仍按普通失败处理。
+			if errors.Is(err, ErrPeerRejected) {
+				writeRejected(nil, unwrapRejectReason(err))
+				return
+			}
 			write(nil, err.Error())
 			return
 		}

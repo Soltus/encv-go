@@ -9,6 +9,7 @@ package server
 //   - E4：整文件取回默认禁止穿透云端（本通道只服务小报文）
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -192,6 +193,61 @@ func TestPeerlinkFile_UnknownTotal_206(t *testing.T) {
 	}
 	if th := resp.Header.Get("X-Peer-Total-Size"); th != "" {
 		t.Fatalf("总大小未知时不应输出 X-Peer-Total-Size, got %q", th)
+	}
+}
+
+// TestPeerlinkFile_RejectedNotCircuitBreaker 锁回归（2026-10-04 真机缺陷）：
+//
+//	**非法入参不得计入熔断**。此前路径非法（bad_path）被当成"对端故障"计入失败累计，
+//	连续 2 次就把 peer 熔断开路 ⇒ 之后的**合法**请求一起 503（整条远端读链路瘫到冷却结束），
+//	而用户看到的只是"突然全挂"，完全想不到是刚才输错了一次路径。
+//
+//	正确语义："你这个请求不对"是对端**健康地**回答了不行 ⇒ 应给 400，且要复位失败计数。
+func TestPeerlinkFile_RejectedNotCircuitBreaker(t *testing.T) {
+	r, s := newPeerlinkRouter()
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(req peerlink.ReadRequest) ([]byte, int64, error) {
+		if req.Path != "/sdcard/a.txt" {
+			return nil, 0, fmt.Errorf("%w: bad_path", peerlink.ErrPeerRejected)
+		}
+		return fixture, int64(len(fixture)), nil
+	})
+	defer stop()
+
+	get := func(path string) *http.Response {
+		req, _ := http.NewRequest("GET", srv.URL+"/api/peerlink/file?peerId="+peerID+"&path="+url.QueryEscape(path), nil)
+		req.Header.Set("X-Peerlink-Operator", "1")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("请求失败: %v", err)
+		}
+		return resp
+	}
+
+	// ① 连续 6 次非法路径（远超熔断阈值）：每次都必须是 **400**，绝不能变成 5xx
+	for i := 0; i < 6; i++ {
+		resp := get("../../../../etc/passwd")
+		code := resp.StatusCode
+		resp.Body.Close()
+		if code != http.StatusBadRequest {
+			t.Fatalf("第 %d 次非法路径期望 400 peer_rejected, got %d", i+1, code)
+		}
+	}
+
+	// ② 紧接着的合法请求必须照常成功 —— 这里是防"连坐"的关键断言
+	resp := get("/sdcard/a.txt")
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusServiceUnavailable {
+		t.Fatalf("合法请求被熔断连坐（peer_circuit_open）—— 非法入参不应计入熔断, got 503")
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("合法请求应正常返回 200, got %d", resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != string(fixture) {
+		t.Fatalf("内容错误: %q", string(body))
 	}
 }
 

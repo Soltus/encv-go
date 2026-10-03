@@ -351,6 +351,9 @@ func (s *Server) handlePeerlinkWS(c *gin.Context) {
 			ID     string          `json:"id"`
 			Result json.RawMessage `json:"result"`
 			Error  string          `json:"error"`
+			// ErrKind wire 上的错误类别（"rejected" = 对端业务拒绝，见 peerlink.ErrKindRejected）。
+			// 旧版 Edge 不带该字段 ⇒ 空串 ⇒ 沿用旧语义（当调用失败）。
+			ErrKind string `json:"errKind"`
 		}
 		if err := json.Unmarshal(msg, &frame); err != nil {
 			_ = s.peerConns.WriteJSON(peerID, gin.H{"type": "error", "error": "bad_frame"})
@@ -362,7 +365,7 @@ func (s *Server) handlePeerlinkWS(c *gin.Context) {
 			_ = s.peerConns.WriteJSON(peerID, gin.H{"type": "pong", "at": time.Now().UnixMilli()})
 		case "res":
 			// RPC 响应 → 交给等待中的调用方（联邦搜索）
-			s.peerCalls.Deliver(frame.ID, frame.Result, frame.Error)
+			s.peerCalls.Deliver(frame.ID, frame.Result, frame.Error, frame.ErrKind)
 		default:
 			_ = s.peerConns.WriteJSON(peerID, gin.H{"type": "error", "error": "unknown_type", "type_": frame.Type})
 		}
@@ -430,6 +433,11 @@ func (s *Server) handlePeerlinkFile(c *gin.Context) {
 		peerlink.ReadRequest{Path: remotePath, Offset: offset, Length: length}, peerlink.ReadCallTimeout)
 	if err != nil {
 		if peerBusyIfErr(c, peerID, err) {
+			return
+		}
+		// 2026-10-04：业务性拒绝（路径非法/文件不存在）不得计入熔断 —— 否则几次误传
+		// 参数就开路，连坐所有合法请求（见 peerRejectedIfErr 注释里的真机实测）。
+		if s.peerRejectedIfErr(c, peerID, err) {
 			return
 		}
 		s.peerCircuitRecord(peerID, err.Error()) // R12：失败累计 → 开路
@@ -637,6 +645,34 @@ func writeRateLimited(c *gin.Context, wait time.Duration) {
 		"retryAfterMs": int(wait / time.Millisecond),
 		"message":      "调用过于频繁，请稍后再试",
 	})
+}
+
+// peerRejectedIfErr 处理"对端健康地拒绝了请求"（路径非法 / 文件不存在 / 参数不合法）。
+//
+// 2026-10-04 真机缺陷：这类错误此前与"对端故障"混为一谈，统一 `peerCircuitRecord` 计入熔断
+// ⇒ **连续 2 次** bad_path 就开路 ⇒ 之后连**合法**请求也一起 503 peer_circuit_open，
+// 整条远端读链路在冷却期内完全瘫掉（实测 bad#3 起，正常读文件也全挂）。
+//
+// 正确语义：
+//   - HTTP 用 **400**（是调用方的问题，不是网关/对端的 5xx）
+//   - 不仅**不计入**失败，还要 `peerCircuitRecordSuccess` —— 对端明明健康地回了话，
+//     这正是"链路可用"的证据，应当**复位**连续失败计数。
+//
+// 返回 true 表示已响应、调用方应立即返回。
+func (s *Server) peerRejectedIfErr(c *gin.Context, peerID string, err error) bool {
+	if err == nil || !errors.Is(err, peerlink.ErrPeerRejected) {
+		return false
+	}
+	s.peerCircuitRecordSuccess(peerID)
+	// ⚠️ 脱敏：只回传错误类型的关键片段（R14），不泄漏路径/参数全文
+	reason := strings.TrimPrefix(err.Error(), peerlink.ErrPeerRejected.Error()+": ")
+	c.JSON(http.StatusBadRequest, gin.H{
+		"error":   "peer_rejected",
+		"peerId":  peerID,
+		"reason":  truncateForLog(reason, 120),
+		"message": "请求被对端拒绝（路径非法或不可读），请检查参数",
+	})
+	return true
 }
 
 // peerCircuitAllow 熔断判定；开路时直接 503（不再消耗调用超时预算）。

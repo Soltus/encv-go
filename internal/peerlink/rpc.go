@@ -16,6 +16,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -42,6 +43,39 @@ type Caller struct {
 type rawResult struct {
 	payload json.RawMessage
 	err     string
+	// kind 错误类别（wire 上的 "errKind"）。见 ErrKindRejected。
+	kind string
+}
+
+// ErrKindRejected —— wire 层错误类别：**对端业务性拒绝**（路径非法 / 文件不存在 /
+// 参数不合法等），而不是"对端故障"。
+//
+// 为什么必须单独划一类（2026-10-04 真机：错误对称性缺陷）：
+//
+//	Edge 的错误此前只能以**字符串**过 wire ⇒ Hub 侧一律当"调用失败"
+//	⇒ `peerCircuitRecord` 计入熔断 ⇒ **连续 2 次**传错路径就把整个 peer 熔断开路，
+//	之后连**合法**请求也一起 503（我实测：bad#1、bad#2 → bad#3 起全是
+//	peer_circuit_open，正常读文件也跟着全挂）。
+//
+//	熔断的语义应该只对**网络/可用性故障**（离线、超时、连接断）生效；
+//	"你这个请求本身就不对"是对端健康地回答了"不行"，不该连坐。
+const ErrKindRejected = "rejected"
+
+// ErrPeerRejected 供调用方用 errors.Is 判定"对端业务拒绝"。
+var ErrPeerRejected = fmt.Errorf("peerlink: rejected by peer")
+
+// unwrapRejectReason 从 `fmt.Errorf("%w: <reason>", ErrPeerRejected)` 中取出原因部分，
+// 供 wire 传输。取不到时退回通用文案（**不得**把原始 error 全文外泄）。
+func unwrapRejectReason(err error) string {
+	if err == nil {
+		return "rejected"
+	}
+	s := strings.TrimPrefix(err.Error(), ErrPeerRejected.Error())
+	s = strings.TrimPrefix(s, ": ")
+	if strings.TrimSpace(s) == "" {
+		return "rejected"
+	}
+	return s
 }
 
 func NewCaller(conns *ConnRegistry) *Caller {
@@ -124,17 +158,26 @@ func (c *Caller) Call(ctx context.Context, peerID, method string, payload any, t
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case res := <-ch:
-		if res.err != "" {
+		switch {
+		case res.err == "":
+			return res.payload, nil
+		case res.kind == ErrKindRejected:
+			// 对端**健康地**拒绝了请求（例如路径非法）⇒ 返回可被 errors.Is 识别的 sentinel，
+			// 让上层能把它降级成 400 且**不计入熔断**（否则重试几次就把 peer 熔断了）。
+			return nil, fmt.Errorf("%w: %s", ErrPeerRejected, res.err)
+		default:
 			return nil, fmt.Errorf("peerlink: remote error: %s", res.err)
 		}
-		return res.payload, nil
 	case <-timer.C:
 		return nil, fmt.Errorf("%w: %s timeout after %s", ErrCallTimeout, method, timeout)
 	}
 }
 
 // Deliver 由 WS 读循环调用：把响应交给等待中的调用方。
-func (c *Caller) Deliver(id string, payload json.RawMessage, errMsg string) bool {
+//
+// errKind 取自 wire 上的 "errKind" 字段（见 ErrKindRejected）；旧对端不带此字段时为空串，
+// 此时沿用旧语义按"调用失败"处理（保守兼容）。
+func (c *Caller) Deliver(id string, payload json.RawMessage, errMsg, errKind string) bool {
 	c.mu.Lock()
 	ch, ok := c.pending[id]
 	c.mu.Unlock()
@@ -142,7 +185,7 @@ func (c *Caller) Deliver(id string, payload json.RawMessage, errMsg string) bool
 		return false
 	}
 	select {
-	case ch <- rawResult{payload: payload, err: errMsg}:
+	case ch <- rawResult{payload: payload, err: errMsg, kind: errKind}:
 		return true
 	default:
 		return false

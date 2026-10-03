@@ -126,13 +126,16 @@ func ftsIndexState(idx *fts.FileIndex) string {
 
 // peerLocalRead 对端读**本端**文件分片（在线打开 / 缩略图，R13 有上限）。
 func (s *Server) peerLocalRead(req peerlink.ReadRequest) ([]byte, int64, error) {
+	// ⚠️ 2026-10-04：路径非法 / 打不开这类"请求本身不对"的失败，必须包装成
+	// peerlink.ErrPeerRejected —— 否则发起端会当成"对端故障"计入熔断，
+	// 几次误传参数就把 peer 熔断掉，连坐所有**合法**请求（真机实测 2 次即开路）。
 	abs, err := s.resolveUserPath(req.Path)
 	if err != nil {
-		return nil, 0, errors.New("bad_path")
+		return nil, 0, fmt.Errorf("%w: bad_path", peerlink.ErrPeerRejected)
 	}
 	f, err := os.Open(abs)
 	if err != nil {
-		return nil, 0, errors.New("open_failed")
+		return nil, 0, fmt.Errorf("%w: open_failed", peerlink.ErrPeerRejected)
 	}
 	defer f.Close()
 
