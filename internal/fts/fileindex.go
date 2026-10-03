@@ -457,6 +457,23 @@ func (f *FileIndex) MarkBuilt(elapsed time.Duration) {
 	f.stats.IsIndexing = false
 }
 
+// MarkPartial 标记构建**部分完成**（扫描被超时/中断打断）。
+//
+// 2026-10-04 真机 bug：手机上文件量大，10 分钟扫不完（实测 9597 条后 ctx 到期）。
+// 此时已经入库的成果要保留，但**不能算"构建完成"**：
+//   - 这里刻意**不更新 IndexedAt** —— 它是 InitFullTextIndexWithBuild 判断
+//     "是否已完成过"的唯一依据；
+//   - 若在此处也更新 ⇒ 下次启动会被当成"已建过"而 skip ⇒ 索引永久停在残缺状态，
+//     联邦搜索永远只有部分结果且无人知晓。
+//
+// BulkInsert 用的是 INSERT OR REPLACE ⇒ 下次重复扫描同一批条目是幂等的，续扫安全。
+func (f *FileIndex) MarkPartial(elapsed time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stats.LastBuildMs = elapsed.Milliseconds()
+	f.stats.IsIndexing = false
+}
+
 func boolToInt(b bool) int {
 	if b {
 		return 1

@@ -460,7 +460,35 @@ func (s *Server) handlePeerlinkFile(c *gin.Context) {
 	// RFC 5987：ASCII 兜底名 + filename* 给真实名
 	base := filepath.Base(remotePath)
 	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%q; filename*=UTF-8''%s", asciiFallback(base), url.PathEscape(base)))
-	c.Data(http.StatusOK, "application/octet-stream", rr.Data)
+
+	// ── 2026-10-04 修复：分片读必须表达 Range 语义，不能一律 200 ──
+	//
+	//	旧实现无条件 `c.Data(200, ..., rr.Data)`：单次读的上限是 DefaultReadChunk(256KB)，
+	//	于是 587KB 的 png 被截成 256KB 返回，状态码却是 **200 OK**、没有任何截断标记
+	//	⇒ 调用方（含浏览器/播放器）理所当然认为拿到了完整文件 ⇒ 数据静默损坏。
+	//
+	//	现在：只要"这一片没有覆盖到文件末尾"，就返回 **206 Partial Content** +
+	//	Content-Range，调用方据此知道还要继续取下一片（这也是 HTTP Range 的标准语义）。
+	c.Header("Accept-Ranges", "bytes")
+	c.Header("X-Peer-Chunk-Size", strconv.Itoa(len(rr.Data)))
+	if rr.Total > 0 {
+		c.Header("X-Peer-Total-Size", strconv.FormatInt(rr.Total, 10))
+	}
+
+	// 只有"**明确知道**总长度且这一片已经覆盖到末尾"才允许 200。
+	// ⚠️ 取不到总长度（Total<=0，如对端 stat 失败）时**不能**当成读完了 ——
+	//	那正是"静默截断"的变种。此时按 RFC 7233 用 `bytes <s>-<e>/*` 表达"总长未知"。
+	if rr.Total > 0 && int64(len(rr.Data))+rr.Offset >= rr.Total {
+		c.Data(http.StatusOK, "application/octet-stream", rr.Data)
+		return
+	}
+	endExclusive := rr.Offset + int64(len(rr.Data)) - 1
+	if rr.Total > 0 {
+		c.Header("Content-Range", fmt.Sprintf("bytes %d-%d/%d", rr.Offset, endExclusive, rr.Total))
+	} else {
+		c.Header("Content-Range", fmt.Sprintf("bytes %d-%d/*", rr.Offset, endExclusive))
+	}
+	c.Data(http.StatusPartialContent, "application/octet-stream", rr.Data)
 }
 
 // headerSafe 非 ASCII 路径改百分号编码，避免响应头乱码（latin-1 语义）。
@@ -562,13 +590,37 @@ func (s *Server) handlePeerlinkSearch(c *gin.Context) {
 	}
 	s.peerCircuitRecordSuccess(peerID)
 
+	// 兼容两种执行端返回体（🆕 2026-10-04 加了索引状态后就出现新旧两种格式）：
+	//   - **新**格式（本版本起）：{"items":[...], "indexState":"...", "indexedFiles":N}
+	//   - **旧**格式（老 APK）：  [{...}, ...]  —— 直接就是 items 数组
+	// 必须以宽容方式解析：对面可能是尚未升级的旧 APK，不能因为解析失败就报调用失败。
+	items := res
+	indexState := "unknown"
+	indexedFiles := 0
+	var envelope struct {
+		Items        json.RawMessage `json:"items"`
+		IndexState   string          `json:"indexState"`
+		IndexedFiles int             `json:"indexedFiles"`
+	}
+	if json.Unmarshal(res, &envelope) == nil && len(envelope.Items) > 0 {
+		items = envelope.Items
+		if envelope.IndexState != "" {
+			indexState = envelope.IndexState
+		}
+		indexedFiles = envelope.IndexedFiles
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"peer": gin.H{
 			"id":       p.ID,
 			"name":     p.Name,
 			"platform": p.Platform,
 		},
-		"items": res,
+		"items": items,
+		// indexState=partial/building 时 items 是**不完整**的，前端应据此提示用户，
+		// 而不是显示"没有匹配结果"（2026-10-04 真机：索引超时中断 ⇒ 长期 0 结果却无提示）。
+		"indexState":   indexState,
+		"indexedFiles": indexedFiles,
 	})
 }
 

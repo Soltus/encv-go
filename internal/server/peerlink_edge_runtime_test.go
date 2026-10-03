@@ -62,8 +62,11 @@ func TestPeerlinkEdgeRuntime_PairThenHubQueriesEdge(t *testing.T) {
 				{"path": "/sdcard/Download/报告.pdf", "name": "报告.pdf", "size": 1024},
 			})
 		},
-		OnRead: func(req peerlink.ReadRequest) ([]byte, error) {
-			return []byte("REMOTE-BYTES"), nil
+		// 返回 (数据, 源文件总大小, err)：这里整份数据一次给完 ⇒ total == len(data)
+		// ⇒ 发起端应判定"已是最后一片"并返回 200（若返回 206 说明分片语义算错了）。
+		OnRead: func(req peerlink.ReadRequest) ([]byte, int64, error) {
+			data := []byte("REMOTE-BYTES")
+			return data, int64(len(data)), nil
 		},
 		OnAgentInvoke: func(req peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome {
 			return peerlink.AgentInvokeOutcome{

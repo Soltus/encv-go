@@ -78,7 +78,11 @@ type EdgeOptions struct {
 	// OnRead 处理来自对端的**远端读**请求（P3.4：在线打开 / 缩略图）。
 	// 由宿主注入真实实现；未注入返回 not_supported。
 	// ⚠️ 只允许在**本端**读，不得把远端路径解析成本端可写路径。
-	OnRead func(req ReadRequest) ([]byte, error)
+	//
+	// 返回 (数据, 源文件总字节数, error)：
+	//   2026-10-04 起要求一并返回文件总长度，让发起端能表达 HTTP Range 语义
+	//   （206 + Content-Range），而不是把分片读的结果伪装成完整响应（200）。
+	OnRead func(req ReadRequest) (data []byte, total int64, err error)
 	// OnSearch 处理来自对端的**联邦搜索**请求（P3）。
 	// 由宿主（手机上的 encv-go）注入真实搜索实现；未注入则返回 not_supported。
 	// ⚠️ 搜索只在本地索引上跑，**不把远端路径伪装成本地路径**。
@@ -367,12 +371,12 @@ func (e *Edge) handleRequest(conn *websocket.Conn, id, method string, payload js
 		if req.Length > MaxReadChunk {
 			req.Length = MaxReadChunk
 		}
-		data, err := e.opts.OnRead(req)
+		data, total, err := e.opts.OnRead(req)
 		if err != nil {
 			write(nil, err.Error())
 			return
 		}
-		write(ReadResult{Data: data, Size: len(data), Offset: req.Offset}, "")
+		write(ReadResult{Data: data, Size: len(data), Offset: req.Offset, Total: total}, "")
 	case "agent_invoke":
 		if e.opts.OnAgentInvoke == nil {
 			write(nil, "not_supported")

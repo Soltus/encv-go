@@ -73,6 +73,14 @@ func CloseFullTextIndex() error {
 	return err
 }
 
+// 索引后台构建的两个**独立**时限（2026-10-04 从内联常量提出来做显式约定）：
+//   - 扫描：受控上限，超时后保住已扫成果（见 InitFullTextIndexWithBuild）
+//   - 插入：必须独立于扫描阶段 —— 扫描 ctx 超时后它已失效，插入要用自己的 ctx
+const (
+	indexScanTimeout   = 10 * time.Minute
+	indexInsertTimeout = 15 * time.Minute
+)
+
 // fulltextDBPath 返回 FTS5 数据库文件路径。
 //
 // 续43 脉络：FTS 索引是应用数据，必须落数据目录（config.AppDataDir("fts")），
@@ -103,37 +111,71 @@ func (s *Server) InitFullTextIndexWithBuild(servingDir string) error {
 		return err
 	}
 
-	// 启动时已经累计的条目数（用户可能重启 / 数据已 build 过）
 	idx := GetFullTextIndex()
 	if idx == nil {
 		return nil
 	}
+
+	// ② 启动判据：**必须以"是否构建完整"为准，不能只看"非空"**（2026-10-04 真机 bug）。
+	//
+	//	旧逻辑：`existing.TotalFiles > 0 → skip rebuild`。配合下面"超时后丢弃全部成果"的
+	//	旧 build 行为，会形成**永久死循环**：扫到 9597 条超时 → 全丢 → 库恒为 0 → 下次
+	//	照样判定为空 → 再全量扫 → 再超时 ⇒ 索引永远建不起来，联邦搜索永远是 0 条。
+	//
+	//	现在 IndexedAt 只有 **完整** 构建完成（MarkBuilt）才更新，部分完成（MarkPartial）
+	//	刻意不更新 ⇒ 这里能区分出"上次没建完"，从而继续补齐而不是跳过。
 	existing := idx.Stats()
-	if existing.TotalFiles > 0 {
-		slog.Info("FTS5 index already populated, skip rebuild", "files", existing.TotalFiles)
+	if existing.TotalFiles > 0 && existing.IndexedAt != "" {
+		slog.Info("FTS5 index already complete, skip rebuild",
+			"files", existing.TotalFiles, "indexedAt", existing.IndexedAt)
 		return nil
+	}
+	if existing.TotalFiles > 0 {
+		slog.Warn("FTS5 index incomplete from previous run, continue building",
+			"files", existing.TotalFiles, "indexedAt", existing.IndexedAt)
 	}
 
 	// 后台 goroutine build（不阻塞 server 启动）
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-
 		start := time.Now()
 		idx.SetBuilding(true)
 		defer idx.SetBuilding(false)
 
-		entries, err := scanDirForIndex(ctx, servingDir, 0, 5)
-		if err != nil {
-			slog.Warn("FTS5 background scan failed", "err", err, "scanned", len(entries))
+		// ① 扫描阶段：必须有时限（手机上文件量可达数万，无上限会一直跑）
+		scanCtx, scanCancel := context.WithTimeout(context.Background(), indexScanTimeout)
+		defer scanCancel()
+
+		entries, scanErr := scanDirForIndex(scanCtx, servingDir, 0, 5)
+
+		// ② 【2026-10-04 真机 bug 修复】超时 / 中断时也要**保住已扫到的成果**。
+		//
+		//	scanDirForIndex 在 ctx 到期时是 `return entries, ctx.Err()` —— 它**已经把扫描到的
+		//	条目返回了**；旧调用方却写成 `if err != nil { log; return }`，把这批成果（实测 9597 条）
+		//	整批丢弃 ⇒ 白等 10 分钟，索引仍为空。
+		//
+		//	⚠️ 插入必须用**全新的 ctx**：scanCtx 此刻已 deadline，拿它 BeginTx 会立刻返回
+		//	"context deadline exceeded" ⇒ 就算改对了错误处理，也会在插入这一步再失败一次。
+		if len(entries) > 0 {
+			insertCtx, insertCancel := context.WithTimeout(context.Background(), indexInsertTimeout)
+			defer insertCancel()
+			if err := idx.BulkInsert(insertCtx, entries); err != nil {
+				slog.Error("FTS5 bulk insert failed", "err", err, "count", len(entries), "scanErr", scanErr)
+				return
+			}
+			slog.Info("FTS5 entries persisted", "count", len(entries), "scanErr", scanErr)
+		}
+
+		// ③ 部分完成：**不**调 MarkBuilt（IndexedAt 保持原值）⇒ 下次启动会继续补齐，
+		//	而不是被当成"已建过"跳过（那会让索引永久停在残缺状态）。
+		//	BulkInsert 用的是 INSERT OR REPLACE ⇒ 重复扫描同一批条目是幂等的，续扫安全。
+		if scanErr != nil {
+			idx.MarkPartial(time.Since(start))
+			slog.Warn("FTS5 background scan incomplete, index kept partial",
+				"err", scanErr, "indexed", len(entries), "elapsed", time.Since(start))
 			return
 		}
 		if len(entries) == 0 {
 			slog.Info("FTS5 no entries to index", "servingDir", servingDir)
-			return
-		}
-		if err := idx.BulkInsert(ctx, entries); err != nil {
-			slog.Error("FTS5 bulk insert failed", "err", err, "count", len(entries))
 			return
 		}
 		idx.MarkBuilt(time.Since(start))

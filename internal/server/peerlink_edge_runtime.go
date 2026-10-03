@@ -44,7 +44,7 @@ type edgeRuntime struct {
 // peerEdgeHandlers 允许测试/宿主覆盖 Edge 的三个处理器（默认走本端真实实现）。
 type peerEdgeHandlers struct {
 	OnSearch      func(peerlink.SearchRequest) (json.RawMessage, error)
-	OnRead        func(peerlink.ReadRequest) ([]byte, error)
+	OnRead        func(peerlink.ReadRequest) ([]byte, int64, error)
 	OnAgentInvoke func(peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome
 }
 
@@ -86,20 +86,62 @@ func (s *Server) peerLocalSearch(req peerlink.SearchRequest) (json.RawMessage, e
 			"score": r.Score,
 		})
 	}
-	return json.Marshal(items)
+	// 🆕 2026-10-04：把**本端索引状态**一起回给发起端。
+	//
+	//	背景（真机事故）：手机文件量大时索引构建会在 10 分钟超时中断 ⇒ 库里要么全空、
+	//	要么只有部分 ⇒ 联邦搜索返回 0 条，而 UI 上和"真的没有匹配"长得一模一样，
+	//	用户（和我们排查时）完全无法区分 ⇒ 长期当成"搜索坏了"却查不出原因。
+	//
+	//	四个状态：
+	//	  building —— 正在后台构建，结果会**逐渐变全**
+	//	  empty    —— 一条都没索引（可能还在扫 / 构建失败 / 根本没有文件）
+	//	  partial  —— 有数据但**从未完整构建完**（被超时打断过），结果可能不全
+	//	  ready    —— 完整构建过（MarkBuilt 更新过 IndexedAt）
+	indexState := ftsIndexState(idx)
+
+	return json.Marshal(map[string]any{
+		"items":        items,
+		"indexState":   indexState,
+		"indexedFiles": idx.Stats().TotalFiles,
+	})
+}
+
+// ftsIndexState 由索引统计推出 federated search 需要暴露的状态。
+//
+// 判据说明：IndexedAt 只有 **完整** 构建完成（idx.MarkBuilt）才写入，
+// 部分完成（idx.MarkPartial）刻意不写 ⇒ 这里是区分 partial / ready 的唯一依据。
+func ftsIndexState(idx *fts.FileIndex) string {
+	st := idx.Stats()
+	switch {
+	case st.IsIndexing:
+		return "building"
+	case st.TotalFiles == 0:
+		return "empty"
+	case st.IndexedAt == "":
+		return "partial"
+	default:
+		return "ready"
+	}
 }
 
 // peerLocalRead 对端读**本端**文件分片（在线打开 / 缩略图，R13 有上限）。
-func (s *Server) peerLocalRead(req peerlink.ReadRequest) ([]byte, error) {
+func (s *Server) peerLocalRead(req peerlink.ReadRequest) ([]byte, int64, error) {
 	abs, err := s.resolveUserPath(req.Path)
 	if err != nil {
-		return nil, errors.New("bad_path")
+		return nil, 0, errors.New("bad_path")
 	}
 	f, err := os.Open(abs)
 	if err != nil {
-		return nil, errors.New("open_failed")
+		return nil, 0, errors.New("open_failed")
 	}
 	defer f.Close()
+
+	// 源文件总长度（2026-10-04：发起端要靠它表达 Range 语义）。
+	// stat 失败不该让整次读操作失败 ⇒ 退化成 0（发起端会据此不谎称自己读完了）。
+	var total int64
+	if st, statErr := f.Stat(); statErr == nil {
+		total = st.Size()
+	}
 
 	n := req.Length
 	if n <= 0 {
@@ -111,15 +153,15 @@ func (s *Server) peerLocalRead(req peerlink.ReadRequest) ([]byte, error) {
 	buf := make([]byte, n)
 	if req.Offset > 0 {
 		if _, err := f.Seek(req.Offset, io.SeekStart); err != nil {
-			return nil, errors.New("seek_failed")
+			return nil, total, errors.New("seek_failed")
 		}
 	}
 	read, err := io.ReadFull(f, buf)
 	if err != nil && (err != io.ErrUnexpectedEOF && err != io.EOF) {
-		return nil, errors.New("read_failed")
+		return nil, total, errors.New("read_failed")
 	}
 	// ⚠️ 错误文本不含真实路径（R14 脱敏）
-	return buf[:read], nil
+	return buf[:read], total, nil
 }
 
 // ── 远端配对（扫码后调用）──────────────────────────────────────────

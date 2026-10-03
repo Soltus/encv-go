@@ -181,10 +181,18 @@ type ReadRequest struct {
 }
 
 // ReadResult 远端读响应（Data 经 JSON 编码为 base64）。
+//
+// 2026-10-04：补 Total —— 之前只有 Data/Size/Offset，**没有文件总长度** ⇒
+// Hub 的 /api/peerlink/file 无法判断"这片是不是最后一片"，只能一律返回 **200**，
+// 于是 587KB 的文件被截成 256KB（DefaultReadChunk）返回，调用方却以为拿到了完整内容
+// （静默截断 / 数据损坏，且 HTTP 层没有任何标记）。
 type ReadResult struct {
 	Data   []byte `json:"data"`
 	Size   int    `json:"size"`
 	Offset int64  `json:"offset"`
+	// Total 源文件总字节数（用于生成 Content-Range / 判定单是否为最后一片）。
+	// 取不到时可为 0，此时发起端退化为 UnknownLength，不再假装自己是完整响应。
+	Total int64 `json:"total"`
 }
 
 // ErrPeerOffline / ErrCallTimeout —— 调用方据以降级（前端显示"该端离线/超时"，不得阻塞主结果）。

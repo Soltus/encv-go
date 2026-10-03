@@ -27,19 +27,19 @@ func TestPeerlinkFile_Read_OK_And_Headers(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(req peerlink.ReadRequest) ([]byte, error) {
+	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(req peerlink.ReadRequest) ([]byte, int64, error) {
 		if req.Path != "/sdcard/a.txt" {
-			return nil, peerlink.ErrBadProof // 借 sentinel 表达"路径不存在"
+			return nil, 0, peerlink.ErrBadProof // 借 sentinel 表达"路径不存在"
 		}
 		start := req.Offset
 		if start < 0 || start > int64(len(fixture)) {
-			return nil, peerlink.ErrBadProof
+			return nil, 0, peerlink.ErrBadProof
 		}
 		end := start + int64(req.Length)
 		if end > int64(len(fixture)) {
 			end = int64(len(fixture))
 		}
-		return fixture[start:end], nil
+		return fixture[start:end], int64(len(fixture)), nil
 	})
 	defer stop()
 
@@ -51,8 +51,17 @@ func TestPeerlinkFile_Read_OK_And_Headers(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("期望 200, got %d", resp.StatusCode)
+	// ⚠️ 2026-10-04 契约修正：**非最后一片必须 206**，不能一律 200。
+	//	旧实现无条件返回 200 ⇒ 调用方以为拿到了完整文件（实际被 DefaultReadChunk=256KB 截断）
+	//	⇒ 静默的数据损坏。这里读的是 [10,20)，而文件总长 36 ⇒ 后面还有数据 ⇒ 必须 206。
+	if resp.StatusCode != http.StatusPartialContent {
+		t.Fatalf("期望 206 Partial Content（还有后续分片）, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Range"); got != "bytes 10-19/36" {
+		t.Fatalf("Content-Range 应为 bytes 10-19/36, got %q", got)
+	}
+	if resp.Header.Get("Accept-Ranges") != "bytes" {
+		t.Fatalf("应声明 Accept-Ranges: bytes, got %q", resp.Header.Get("Accept-Ranges"))
 	}
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != "ABCDEFGHIJ" {
@@ -77,8 +86,8 @@ func TestPeerlinkFile_NonASCIIHeader(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(peerlink.ReadRequest) ([]byte, error) {
-		return fixture, nil
+	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(peerlink.ReadRequest) ([]byte, int64, error) {
+		return fixture, int64(len(fixture)), nil
 	})
 	defer stop()
 
@@ -110,13 +119,89 @@ func TestPeerlinkFile_NonASCIIHeader(t *testing.T) {
 	}
 }
 
+// TestPeerlinkFile_LastChunk_200 锁住"读到最后一片必须是 **200**"（2026-10-04 补）。
+//
+// 只校验 206 是不够的：若连最后一片也返回 206，播放器/下载器会以为还有后续分片，
+// 白白多一轮请求甚至报错 ⇒ 必须区分"还有数据(206)"与"已读完整(200)"两种信号。
+func TestPeerlinkFile_LastChunk_200(t *testing.T) {
+	r, s := newPeerlinkRouter()
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(req peerlink.ReadRequest) ([]byte, int64, error) {
+		if req.Path != "/sdcard/a.txt" {
+			return nil, 0, peerlink.ErrBadProof
+		}
+		start := req.Offset
+		if start < 0 || start > int64(len(fixture)) {
+			return nil, 0, peerlink.ErrBadProof
+		}
+		end := start + int64(req.Length)
+		if end > int64(len(fixture)) {
+			end = int64(len(fixture))
+		}
+		return fixture[start:end], int64(len(fixture)), nil
+	})
+	defer stop()
+
+	// length=100 > 文件长度 36 ⇒ 一次读到末尾 ⇒ 必须是 200，且不带 Content-Range
+	req, _ := http.NewRequest("GET", srv.URL+"/api/peerlink/file?peerId="+peerID+"&path=/sdcard/a.txt&length=100", nil)
+	req.Header.Set("X-Peerlink-Operator", "1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("最后一片期望 200, got %d", resp.StatusCode)
+	}
+	if cr := resp.Header.Get("Content-Range"); cr != "" {
+		t.Fatalf("最后一片不应带 Content-Range, got %q", cr)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	if string(body) != string(fixture) {
+		t.Fatalf("内容应是一整份 fixture: %q", string(body))
+	}
+}
+
+// TestPeerlinkFile_UnknownTotal_NoRange 对端取不到文件大小（total=0）时，
+// 发起端**不得**谎称自己是完整响应 —— 这是 2026-10-04 静默截断的根因容错：
+// 宁可给 206，也不能给没有 Content-Range 的 200。
+func TestPeerlinkFile_UnknownTotal_206(t *testing.T) {
+	r, s := newPeerlinkRouter()
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	// total 返回 0（模拟 stat 失败）
+	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(peerlink.ReadRequest) ([]byte, int64, error) {
+		return fixture, 0, nil
+	})
+	defer stop()
+
+	req, _ := http.NewRequest("GET", srv.URL+"/api/peerlink/file?peerId="+peerID+"&path=/sdcard/a.txt", nil)
+	req.Header.Set("X-Peerlink-Operator", "1")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusPartialContent {
+		t.Fatalf("总大小未知时应保守地给 206（不能谎称完整）, got %d", resp.StatusCode)
+	}
+	if th := resp.Header.Get("X-Peer-Total-Size"); th != "" {
+		t.Fatalf("总大小未知时不应输出 X-Peer-Total-Size, got %q", th)
+	}
+}
+
 func TestPeerlinkFile_ChunkTooLarge_413(t *testing.T) {
 	r, s := newPeerlinkRouter()
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(peerlink.ReadRequest) ([]byte, error) {
-		return fixture, nil
+	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(peerlink.ReadRequest) ([]byte, int64, error) {
+		return fixture, int64(len(fixture)), nil
 	})
 	defer stop()
 
@@ -137,8 +222,8 @@ func TestPeerlinkFile_Offline_503_And_MissingParams_400(t *testing.T) {
 	srv := httptest.NewServer(r)
 	defer srv.Close()
 
-	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(peerlink.ReadRequest) ([]byte, error) {
-		return fixture, nil
+	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(peerlink.ReadRequest) ([]byte, int64, error) {
+		return fixture, int64(len(fixture)), nil
 	})
 	stop()
 
