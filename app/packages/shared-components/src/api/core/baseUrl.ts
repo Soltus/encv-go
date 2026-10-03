@@ -79,6 +79,14 @@ export function isOpenPreviewBrowser(): boolean {
 
 export function getApiBaseUrl(): string {
   if (import.meta.env.DEV) {
+    // 🆕 2026-10-04：独立 vite dev（ENCV_STANDALONE_VITE=1，无 preview-gateway）
+    //   vite 已在 :8100 上把 /api、/agent-api、/ws 反代到 encv-go :2025，
+    //   所以 base 必须是**同源**（'' = 相对路径）。否则会走下面的 DEV_SANDBOX_ENTRY(:16666)
+    //   ——那是沙箱网关端口，非沙箱环境根本没有它 ⇒ 必然断联。
+    //   沙箱不注入该变量（vite.config 只在 STANDALONE 下 define），行为不变。
+    const standaloneBase = (import.meta.env as { VITE_ENCV_API_BASE?: string }).VITE_ENCV_API_BASE;
+    if (typeof standaloneBase === "string") return standaloneBase;
+
     // OpenPreview 浏览器（trae 域名）→ 必须同源，让 trae 反代处理
     if (isOpenPreviewBrowser()) {
       return typeof window !== "undefined" ? window.location.origin : "";

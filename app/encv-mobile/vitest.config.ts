@@ -143,6 +143,9 @@ const NATIVE_CONTRACT_INCLUDE = [
   //    origin=https://localhost）下 getApiBaseUrl() 不得返回 WebView origin，否则
   //    /api/config 会被打到 localhost:443（"Failed to connect to localhost/127.0.0.1:443"）。
   'src/api/__tests__/getApiBaseUrl.native.test.ts',
+  // 🆕 2026-10-04 非沙箱环境契约锁：:16666 是沙箱 preview-gateway 专用端口，
+  //    独立 vite dev（ENCV_STANDALONE_VITE=1）必须走同源（vite 反代），不能再打 :16666。
+  'src/api/__tests__/getApiBaseUrl.standalone.test.ts',
 ]
 
 // ── ISOLATED：有模块级状态 / 用 vi.resetModules / 依赖 localStorage ──

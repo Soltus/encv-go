@@ -2,6 +2,16 @@
 // =============================================================================
 // ecosystem.config.cjs — 方案 C：网关合一（Go 版）
 // -----------------------------------------------------------------------------
+// ⚠️ 适用范围（2026-10-04 补记）：本套 = **沙箱专用**（trae / OpenPreview）。
+//    非沙箱环境（CNB、本机…）**没有 agent-tool-host(:16000) 这条链路**，
+//    :16666 只是沙箱统一入口，硬套会让人误以为它是"项目标配网关"。
+//    非沙箱请用独立 dev：
+//        cd app/encv-mobile && ENCV_STANDALONE_VITE=1 vite --port 8100
+//        （vite 自己在 :8100 反代 /api、/agent-api、/ws 到 encv-go :2025）
+//    后端单独起：
+//        ENCV_MOBILE=1 ENCV_DEV_PREVIEW=1 MOBILE_DATA_DIR=/storage/emulated/0 \
+//        MOBILE_DIR=/workspace/app/encv-mobile go run ./cmd/encv start
+//
 // pm2 配置：精简为 2 个 app。
 //   ① preview-gateway   (:16666) — 唯一对外入口 + 唯一进程管理者
 //      Go 二进制，内部 os/exec 管理 4 个子进程：
