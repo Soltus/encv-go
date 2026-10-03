@@ -219,6 +219,16 @@ export function frontendDepsManifestPlugin(): Plugin {
   }
 }
 
+/** 剔除 generated_at 后的规范化内容（用于判断"依赖清单是否真的变了"） */
+function stripGeneratedAt(raw: string): string | null {
+  try {
+    const parsed = JSON.parse(raw)
+    return JSON.stringify({ ...parsed, generated_at: null }, null, 2)
+  } catch {
+    return null
+  }
+}
+
 function regenerate(root: string) {
   const pkgPath = resolve(root, 'package.json')
   if (!existsSync(pkgPath)) return
@@ -278,6 +288,14 @@ function regenerate(root: string) {
     if (!existsSync(dirname(outPath))) {
       mkdirSync(dirname(outPath), { recursive: true })
     }
+    // ⚠️ 幂等写（2026-10-04）：manifest 纳入 git 跟踪，而 generated_at 每次启动都变
+    //   ⇒ 依赖清单一个字没变，git 却天天报 modified（和 skill-registry 一个毛病）。
+    //   做法：内容（剔除 generated_at）与磁盘一致时**不落盘**；
+    //   真变了（package.json 改了依赖）才写入并刷新时间戳 —— 那时 diff 是有意义的。
+    const prevRaw = existsSync(outPath) ? readFileSync(outPath, 'utf-8') : null
+    const prevBody = prevRaw ? stripGeneratedAt(prevRaw) : null
+    const nextBody = JSON.stringify({ ...out, generated_at: null }, null, 2)
+    if (prevBody !== null && prevBody === nextBody) return
     writeFileSync(outPath, JSON.stringify(out, null, 2) + '\n', 'utf-8')
   } catch (e) {
     console.warn('[frontend-deps-manifest] failed to write manifest:', e)
