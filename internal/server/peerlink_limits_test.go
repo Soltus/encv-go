@@ -63,6 +63,26 @@ func TestPeerlinkLimits_RateLimit_429(t *testing.T) {
 	}
 }
 
+// TestPeerlinkLimits_AgentRateAllowsInteractiveUse 锁住远程 Agent 的限流阈值。
+//
+// 2026-10-04：agent 原为 **10 次/分钟**，而远程调试是**交互式**的（列目录 → 展开几层 →
+// 逐个读文件），随手点几下就撞线并被冷却 ~60s，表现得像"功能卡死"。
+// 这条锁的意义是防止有人把它调回个位数 —— 阈值必须明显高于人类操作频率。
+func TestPeerlinkLimits_AgentRateAllowsInteractiveUse(t *testing.T) {
+	w := newRateWindow(rateLimitAgent, time.Minute)
+	now := time.Now()
+
+	for i := 0; i < rateLimitAgent; i++ {
+		if ok, _ := w.allow("k", now.Add(time.Duration(i)*time.Millisecond)); !ok {
+			t.Fatalf("第 %d 次调用就被限流 —— 交互式远程调试不能这么低（阈值 %d/分钟）", i+1, rateLimitAgent)
+		}
+	}
+	// 超过阈值仍要拦住：放宽是为了体验，不是放弃防扫描
+	if ok, _ := w.allow("k", now.Add(time.Duration(rateLimitAgent)*time.Millisecond)); ok {
+		t.Fatalf("超过 %d 次/分钟仍放行 ⇒ 防扫描失效", rateLimitAgent)
+	}
+}
+
 func TestPeerlinkLimits_CircuitBreaker_Open503(t *testing.T) {
 	r, s := newPeerlinkRouter()
 	srv := httptest.NewServer(r)

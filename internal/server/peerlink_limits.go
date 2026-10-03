@@ -131,10 +131,27 @@ func (c *circuitBreaker) state(key string) (failures int, open bool, retryAfter 
 
 // ── 组装 ────────────────────────────────────────────────────────────
 
+// 限流阈值（次/分钟）。
+//
+// ⚠️ 2026-10-04 调整 `agent`：10 → **100**。
+//
+//	10 次/分钟是为"公网 Hub 防扫描"定的，但**远程调试是交互式**的：
+//	列目录 → 展开几层 → 逐个读文件，随手点几下就撞线，然后被冷却 ~60s，
+//	表现为"点几下就卡住不动"，非常像功能坏了（真机压测时我自己就被卡过）。
+//	100/min 仍远超人类交互频率，防扫描的目的不失效。
+//
+//	`file` 保持 60：远端读是**分片**的（单片 256KB），读大文件会连续多次调用，
+//	这里偏低同样是真实痛点 —— 若后续反馈"大文件在线打开很慢"，优先调它。
+const (
+	rateLimitSearch = 30
+	rateLimitFile   = 60
+	rateLimitAgent  = 100
+)
+
 type peerlinkLimiters struct {
-	search *rateWindow // 联邦搜索：30 次/分钟
-	file   *rateWindow // 远端读：60 次/分钟
-	agent  *rateWindow // 远程 Agent：10 次/分钟
+	search *rateWindow // 联邦搜索
+	file   *rateWindow // 远端读
+	agent  *rateWindow // 远程 Agent
 	call   *circuitBreaker
 }
 
@@ -143,9 +160,9 @@ func (s *Server) peerLimits() *peerlinkLimiters {
 	defer s.peerLimitMu.Unlock()
 	if s.peerLimiter == nil {
 		s.peerLimiter = &peerlinkLimiters{
-			search: newRateWindow(30, time.Minute),
-			file:   newRateWindow(60, time.Minute),
-			agent:  newRateWindow(10, time.Minute),
+			search: newRateWindow(rateLimitSearch, time.Minute),
+			file:   newRateWindow(rateLimitFile, time.Minute),
+			agent:  newRateWindow(rateLimitAgent, time.Minute),
 			call:   newCircuitBreaker(5, 30*time.Second),
 		}
 	}

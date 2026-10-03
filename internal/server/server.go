@@ -120,6 +120,12 @@ type Server struct {
 	// 就是真事故。只存内存、**重启即失效**，与上面的 trust / audit 同一套纪律。
 	agentIdem   *agentIdemTable
 	agentIdemMu sync.Mutex
+	// 🆕 2026-10-04：**发起端**远程调用台账（进程内存，重启即失效）
+	//
+	// `/agent/audit` 原本只有执行端记录（Approver 只在工作端工作）⇒ 桌面端永远看不到
+	// 自己发起过什么。这里补发起端视角，供审计接口一并返回。
+	agentCallLog   *agentCallLog
+	agentCallLogMu sync.Mutex
 	// 🆕 2026-10-02：本端作为 **Edge** 连到远端 Hub 的运行时（P2a Task 2.2 接线）
 	//
 	// 扫码配对后启动；token 只存内存（进程重启需重新配对）。

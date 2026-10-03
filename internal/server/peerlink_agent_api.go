@@ -200,16 +200,46 @@ func (s *Server) handlePeerlinkAgentInvoke(c *gin.Context) {
 		req.FromName = s.peerHub.Info()["name"]
 	}
 
+	// 发起端台账：脱敏后记录"我调了谁、调了什么"（成功/失败都记，见 agentCallLog）
+	argBytes, argKeys := argKeysOf(body.Args)
+	logCall := func(decision string, ok bool, errType string) {
+		s.agentCallLogGet().add(AgentCallEntry{
+			At:        time.Now(),
+			PeerId:    body.PeerId,
+			PeerName:  req.FromName,
+			Tool:      body.Tool,
+			CallId:    body.CallId,
+			Decision:  decision,
+			Ok:        ok,
+			ErrorType: errType,
+			ArgBytes:  argBytes,
+			ArgKeys:   argKeys,
+		})
+	}
+
 	res, err := s.peerCalls.Call(c.Request.Context(), body.PeerId, "agent_invoke", req, peerlink.AgentCallTimeout)
 	if err != nil {
 		if peerBusyIfErr(c, body.PeerId, err) {
 			return
 		}
 		s.peerCircuitRecord(body.PeerId, err.Error()) // R12
+		// 失败也要留痕：否则"发起过但没成功"的调用在台账里凭空消失，审计就不完整
+		errType := "peer_call_failed"
 		switch {
 		case errors.Is(err, peerlink.ErrPeerOffline):
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "peer_offline", "peerId": body.PeerId})
+			errType = "peer_offline"
 		case errors.Is(err, peerlink.ErrCallTimeout):
+			errType = "peer_timeout"
+		case errors.Is(err, peerlink.ErrPeerRejected):
+			errType = "peer_rejected"
+		case errors.Is(err, peerlink.ErrPeerBusy):
+			errType = "peer_busy"
+		}
+		logCall("", false, errType)
+		switch errType {
+		case "peer_offline":
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "peer_offline", "peerId": body.PeerId})
+		case "peer_timeout":
 			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "peer_timeout", "peerId": body.PeerId})
 		default:
 			c.JSON(http.StatusBadGateway, gin.H{"error": "peer_call_failed", "detail": err.Error(), "peerId": body.PeerId})
@@ -218,9 +248,11 @@ func (s *Server) handlePeerlinkAgentInvoke(c *gin.Context) {
 	}
 	var out peerlink.AgentInvokeResult
 	if err := json.Unmarshal(res, &out); err != nil {
+		logCall("", false, "bad_peer_payload")
 		c.JSON(http.StatusBadGateway, gin.H{"error": "bad_peer_payload", "detail": err.Error()})
 		return
 	}
+	logCall(out.Decision, out.Ok, "")
 	c.JSON(http.StatusOK, out)
 }
 
@@ -304,5 +336,19 @@ func (s *Server) handlePeerlinkAgentAudit(c *gin.Context) {
 	if items == nil {
 		items = []peerlink.AuditEntry{}
 	}
-	c.JSON(http.StatusOK, gin.H{"items": items, "count": len(items)})
+	// 2026-10-04：补上**发起端**台账。
+	//
+	//	`items` 是**执行端**记录（本端被对端调用时产生的授权审计），保持不变 ⇒ 不破坏既有调用方。
+	//	新增 `outbound` = 本端作为发起端调出去的记录 —— 之前桌面端永远查不到自己发起过什么。
+	//	两者语义不同，不混在一个数组里（否则前端无法区分"别人调我"与"我调别人"）。
+	outbound := s.agentCallLogGet().snapshot()
+	if outbound == nil {
+		outbound = []AgentCallEntry{}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"items":         items,
+		"count":         len(items),
+		"outbound":      outbound,
+		"outboundCount": len(outbound),
+	})
 }
