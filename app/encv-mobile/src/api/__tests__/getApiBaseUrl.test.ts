@@ -81,6 +81,11 @@ describe("getApiBaseUrl — 非 DEV 模式（生产/真机）", () => {
   });
 
   it("localStorage 空 + web(http/https) → **同源**（服务器托管形态：后端在托管方背后）", async () => {
+    // ⚠️ 本用例的隐含前提：**非原生壳**。原生 APK 的 WebView 页面协议也是 https
+    //   （capacitor.config.ts 的 server.androidScheme: 'https' ⇒ origin=https://localhost），
+    //   但它不是"服务器托管页"，而是 WebView 自己 —— 那里必须回落 :2025，
+    //   否则 /api/config 会打到 localhost:443（2026-10-03 真机事故）。
+    //   该分支的回归锁见同目录 getApiBaseUrl.native.test.ts。
     // 🆕 2026-10-02（spec desktop-web-android-pairing / Task 1.4 R16）：
     //   旧契约是 fallback 到 http://127.0.0.1:2025，隐含"用户本机跑着 encv-go"。
     //   但桌面端是**服务器托管**（cnb：preview-gateway 把 /api、/agent-api 代理到 :2025），
@@ -92,8 +97,26 @@ describe("getApiBaseUrl — 非 DEV 模式（生产/真机）", () => {
     expect(mod.getApiBaseUrl()).not.toBe("http://127.0.0.1:2025");
   });
 
+  it("【2026-10-03 真机事故】原生壳 + androidScheme=https（WebView origin=https://localhost）→ 回落 :2025 而非 WebView 自身 origin", async () => {
+    const mod = await import("@encv/shared-components/api/encv");
+    const { setAppCapabilities } = await import("@encv/shared-components/runtime/appCapabilities");
+    vi.spyOn(window, "location", "get").mockReturnValue({
+      ...window.location,
+      protocol: "https:",
+      hostname: "localhost",
+      host: "localhost",
+      origin: "https://localhost",
+      href: "https://localhost/",
+    } as unknown as Location);
+    setAppCapabilities({ isNative: () => true, platform: () => "android" });
+
+    expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2025");
+    expect(mod.getApiBaseUrl()).not.toBe("https://localhost");
+  });
+
   it("localStorage 空 + 非 http(如 capacitor://) → fallback 到 DEFAULT_API_BASE_URL (:2025)", async () => {
     // 原生壳不走同源：capacitor:// 协议下没有"托管方代理"，保持原绝对地址
+    // （注：现代 Capacitor 默认是 https://localhost，capacitor:// 只是历史 scheme）
     const original = window.location.protocol;
     vi.spyOn(window, "location", "get").mockReturnValue({
       ...window.location,

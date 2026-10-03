@@ -207,15 +207,15 @@ class ApiProxyPlugin : Plugin() {
     }
 
     /**
-     * 解析 JS 端发来的 url：
-     *   - 绝对 URL（`http://` / `https://`）原样用
+     * 解析 JS 端发来的 url（契约详见 ApiProxyUrlRouter）：
+     *   - WebView 自身的 origin（`https://localhost`）→ 重写到真实后端
+     *     （2026-10-03 真机事故的 native 侧防线）
+     *   - 其它绝对 URL（`http://` / `https://`）原样用
      *   - 相对路径（`/api/...` / `api/...`）走 backend 127.0.0.1:2025
+     *
+     * internal（非 private）：JVM 单测可直接锁定这条委托。
      */
-    private fun resolveBackendUrl(url: String): String {
-        if (url.startsWith("http://") || url.startsWith("https://")) return url
-        val path = if (url.startsWith("/")) url else "/$url"
-        return "http://127.0.0.1:${backendPort()}$path"
-    }
+    internal fun resolveBackendUrl(url: String): String = ApiProxyUrlRouter.resolve(url, backendPort())
 
     private fun backendOrigin(): String = "http://127.0.0.1:${backendPort()}"
 

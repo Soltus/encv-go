@@ -131,6 +131,20 @@ const FAST_INCLUDE = [
   'src/__tests__/stream-url.test.ts',
 ]
 
+// ── 独立 project（isolate:true）：放不进 FAST 又必须默认跑到（2026-10-03 真机契约锁）的用例 ──
+// 为什么不能放 FAST（isolate:false）：这些用例靠 `vi.resetModules()` 切换
+// import.meta.env / DI 注入，会重建模块注册表；FAST 是 isolate:false 共享注册表，
+// 隔壁用 vi.mock 的 motion 用例（directive-reveal / page-transition）会拿到"被重置后"
+// 的模块实例而假红（实测加进来后 directive-reveal 立刻 Red）。
+// 为什么不放 ISOLATED：ISOLATED 只在 ENCV_TEST_FULL=1 时跑，门禁默认跑不到 ⇒ 守不住 bug。
+// 所以单独开一个 isolate:true 的 project，**默认 `vitest run` 就会跑到**。
+const NATIVE_CONTRACT_INCLUDE = [
+  // 🆕 2026-10-03 真机事故契约锁：Capacitor 原生壳（androidScheme:'https' ⇒ WebView
+  //    origin=https://localhost）下 getApiBaseUrl() 不得返回 WebView origin，否则
+  //    /api/config 会被打到 localhost:443（"Failed to connect to localhost/127.0.0.1:443"）。
+  'src/api/__tests__/getApiBaseUrl.native.test.ts',
+]
+
 // ── ISOLATED：有模块级状态 / 用 vi.resetModules / 依赖 localStorage ──
 // 默认不跑（FAST 子集不含这些），ENCV_TEST_FULL=1 才跑
 const ISOLATED_INCLUDE = [
@@ -273,8 +287,8 @@ export default defineConfig({
     // 默认 include = FAST + ISOLATED（兼容单文件指定路径）
     // 但 FAST project 会先跑（isolate:false 更快），ISOLATED 只在 FULL=1 跑
     include: IS_FULL
-      ? [...FAST_INCLUDE, ...ISOLATED_INCLUDE]
-      : FAST_INCLUDE,
+      ? [...FAST_INCLUDE, ...NATIVE_CONTRACT_INCLUDE, ...ISOLATED_INCLUDE]
+      : [...FAST_INCLUDE, ...NATIVE_CONTRACT_INCLUDE],
 
     // ── Projects：分层测试（和 Go test-go.sh 对齐）──
     projects: IS_FULL
@@ -289,7 +303,17 @@ export default defineConfig({
               include: FAST_INCLUDE,
             },
           },
-          // Project 2: ISOLATED（isolate:true，~35 个文件，~40-50s）
+          // Project 2: 契约锁（isolate:true，~1 个文件）—— 见 NATIVE_CONTRACT_INCLUDE 注释
+          {
+            plugins: BASE_PLUGINS,
+            test: {
+              name: 'contract',
+              ...sharedTestConfig(),
+              isolate: true,
+              include: NATIVE_CONTRACT_INCLUDE,
+            },
+          },
+          // Project 3: ISOLATED（isolate:true，~35 个文件，~40-50s）
           {
             plugins: BASE_PLUGINS,
             test: {
@@ -301,7 +325,7 @@ export default defineConfig({
           },
         ]
       : [
-          // 默认只有 FAST project（日常开发用）
+          // 默认：FAST（日常开发用）+ 契约锁（真机事故回归，必须默认跑到）
           {
             plugins: BASE_PLUGINS,
             test: {
@@ -309,6 +333,15 @@ export default defineConfig({
               ...sharedTestConfig(),
               isolate: false,
               include: FAST_INCLUDE,
+            },
+          },
+          {
+            plugins: BASE_PLUGINS,
+            test: {
+              name: 'contract',
+              ...sharedTestConfig(),
+              isolate: true,
+              include: NATIVE_CONTRACT_INCLUDE,
             },
           },
         ],

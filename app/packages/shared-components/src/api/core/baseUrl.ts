@@ -1,6 +1,9 @@
 // baseUrl.ts - 服务端 URL / 标识 / 持久化常量
 // 从 encv-mobile/src/api/encv_core.ts 提升为共享基座（不依赖任何应用层 @/ 配置）。
-// 仅使用浏览器全局（localStorage / window.location / import.meta.env），符合 shared 边界约束。
+// 仅使用浏览器全局（localStorage / window.location / import.meta.env）+ shared 层的
+// 能力注入点（runtime/appCapabilities），符合 shared 边界约束。
+
+import { getAppCapabilities } from "../../runtime/appCapabilities";
 
 export const SERVER_URL_KEY = "encv-server-url";
 // 🆕 2026-06-15：跨会话持久化 backend instance_id，用于防"端口被劫持/换进程"误判
@@ -32,6 +35,39 @@ export const DEV_SANDBOX_ENTRY = "http://127.0.0.1:16666";
  *   这种情况下 origin.hostname === '127.0.0.1'，原 trae 域名正则匹配不到。
  *   必须靠端口 16000 嗅探。
  */
+/**
+ * 是否运行在 **Capacitor 原生壳**（APK / iOS App）里。
+ *
+ * ⚠️ 这里判定的是「是不是原生壳」，不是「是不是移动端」：
+ *   - `capacitor.config.ts` 配了 `server.androidScheme: 'https'`，所以安卓 WebView 的
+ *     `window.location` 是 **`https://localhost`**（不是很多人以为的 `capacitor://`），
+ *     协议/形态都长得像「一个普通 https 托管页」。
+ *   - 一旦把 WebView **自己的** origin 当成后端 base，所有 `${base}/api/...` 都会打到
+ *     `https://localhost` ⇒ 端口默许 **443** ⇒ ApiProxy（对绝对 URL 原样转发）
+ *     ⇒ `Failed to connect to localhost/127.0.0.1:443`（2026-10-03 真机事故）。
+ *   - 桌面形态若走 Capawesome Electron（isNative=true 但形态仍是桌面托管），按
+ *     appCapabilities 的约定要看 platform，不当原生壳处理。
+ *
+ * 判定顺序：DI（app 启动期注入，唯一真源）→ Capacitor 全局桥（DI 未覆盖时的防线，
+ * 防止注入时序被漂移后就漏判）。
+ */
+function isNativeShell(): boolean {
+  try {
+    const caps = getAppCapabilities();
+    if (caps.isNative()) {
+      return caps.platform?.() !== "electron";
+    }
+  } catch {
+    // 能力未注入 / 取值异常 → 落到下面的全局桥探测，不放大成崩溃
+  }
+  const cap =
+    typeof globalThis !== "undefined"
+      ? ((globalThis as Record<string, unknown>).Capacitor as { isNativePlatform?: () => boolean; getPlatform?: () => string } | undefined)
+      : undefined;
+  if (!cap || typeof cap.isNativePlatform !== "function") return false;
+  return cap.isNativePlatform() === true && cap.getPlatform?.() !== "electron";
+}
+
 export function isOpenPreviewBrowser(): boolean {
   if (typeof window === "undefined" || !window.location) return false;
   const origin = window.location.origin;
@@ -65,10 +101,23 @@ export function getApiBaseUrl(): string {
   //   [2] loopback 之前（浏览器模式优先同源）。这里只把**默认值**对齐同一意图。
   //   安全性：若托管方没代理 /api，探测链 [1.5] 失败后会继续回落 loopback / LAN，
   //   行为与修改前一致（不会比现在更差）。
+  //
+  // 🚨 2026-10-03 真机事故修复（回归锁：src/api/__tests__/getApiBaseUrl.native.test.ts）：
+  //   上一版这条分支只判 protocol（http/https），没先排除**原生壳**。但
+  //   `server.androidScheme: 'https'` 让真机 WebView 的页面协议就是 https、
+  //   hostname 就是 localhost ⇒ WebView 自己的 origin 被当成后端 base
+  //   ⇒ fetch('https://localhost/api/config') ⇒ ApiProxy 对绝对 URL 原样转发
+  //   ⇒ HttpURLConnection 打 127.0.0.1:443 ⇒ connect refused
+  //   （用户侧现象：通知栏后端端口明明是 2025，页面却报 :443）。
+  //   原生壳里后端永远跑在设备 loopback 上，必须回落 DEFAULT_API_BASE_URL。
+  if (isNativeShell()) {
+    return DEFAULT_API_BASE_URL;
+  }
+
   if (typeof window !== "undefined" && /^https?:$/.test(window.location.protocol)) {
     return window.location.origin;
   }
-  // 原生（capacitor://）等非 http 场景：保持原绝对地址
+  // 非 http(s) 场景（如古老 capacitor:// scheme）：保持原绝对地址
   return DEFAULT_API_BASE_URL;
 }
 
