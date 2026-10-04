@@ -557,6 +557,15 @@ export default {
     "peers.edgeStale": "会合点地址可能已失效（域名可能已变更）：已重试多次仍连不上，请重新扫码连接",
     "peers.edgeForget": "忘记这个会合点",
     "peers.edgeForgotten": "已忘记该会合点，请重新扫码连接",
+    // 🆕 2026-10-05 P0-3：僵死设备（长期离线 / 从未连上）要给出"重新配对"的出路
+    "peers.staleNeverLinked": "从未连上",
+    "peers.staleOfflineTooLong": "长期离线",
+    "peers.staleNeverLinkedHint": "配对后从未成功连接（会合点地址或令牌可能已失效），建议解除配对后重新扫码",
+    "peers.staleOfflineTooLongHint": "这台设备已长期离线（可能已重装或不再使用），建议解除配对后重新扫码",
+    // 🆕 2026-10-05 P2：重置连接（保留设备指纹），替代"清除 APP 数据"
+    "peers.resetConnection": "重置连接信息（保留设备指纹）",
+    "peers.resetDone": "已重置连接信息（设备指纹保留），正在重新探测本机后端…",
+    "peers.resetFailed": "重置失败：{detail}",
     // 🆕 2026-10-05：热更新（云控下发 / 回滚 + 本端已装版本）
     "peers.bundleTitle": "热更新",
     "peers.bundleLocal": "本端已安装",
@@ -1133,6 +1142,15 @@ export default {
     "peers.edgeStale": "The rendezvous address may be gone (its domain may have changed): retries keep failing. Please scan a new code.",
     "peers.edgeForget": "Forget this rendezvous",
     "peers.edgeForgotten": "Rendezvous forgotten; please scan a new code",
+    // 2026-10-05 P0-3: stale peers must tell the user to re-pair
+    "peers.staleNeverLinked": "never connected",
+    "peers.staleOfflineTooLong": "offline too long",
+    "peers.staleNeverLinkedHint": "Never connected after pairing (rendezvous address or token may be stale); un-pair and scan again",
+    "peers.staleOfflineTooLongHint": "Offline for a long time (maybe reinstalled or retired); un-pair and scan again",
+    // 2026-10-05 P2: reset connection but keep the device fingerprint
+    "peers.resetConnection": "Reset connection (keep device fingerprint)",
+    "peers.resetDone": "Connection reset (fingerprint kept); re-probing local backend…",
+    "peers.resetFailed": "Reset failed: {detail}",
     // 🆕 2026-10-05: hot update (cloud push / rollback + locally installed versions)
     "peers.bundleTitle": "Hot update",
     "peers.bundleLocal": "Installed on this device",

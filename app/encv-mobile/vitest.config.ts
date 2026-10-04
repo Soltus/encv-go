@@ -77,6 +77,8 @@ const FAST_INCLUDE = [
   '../packages/shared-components/src/composables/__tests__/useFormFactor.test.ts',
   // 🆕 spec desktop-web-android-pairing P2：前端互联抽象（注入 fetch，无模块级副作用）
   '../packages/shared-components/src/composables/__tests__/usePeerLink.test.ts',
+  // 🆕 2026-10-05：落盘设备标识的坏值自愈（P1-1，见 docs/persisted-state-selfhealing.md）
+  '../packages/shared-components/src/composables/__tests__/useDeviceId.test.ts',
   // 🆕 spec desktop-web-android-pairing P3：联邦搜索合并/标注/降级（注入 provider，无真实网络）
   '../packages/shared-components/src/composables/__tests__/useFederatedSearch.test.ts',
   // 🆕 spec desktop-web-android-pairing P4：执行端远程审批（注入 fetch，无真实网络）

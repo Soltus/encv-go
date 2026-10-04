@@ -114,6 +114,15 @@
         <p v-if="bundleMsg" class="bundleMsg" data-testid="bundle-msg">{{ bundleMsg }}</p>
       </div>
 
+      <!-- 🆕 2026-10-05（P2）：重置连接（保留设备指纹）——
+           替代"清除 APP 数据"这条代价过大的自救路径。 -->
+      <div class="resetBox">
+        <ion-button size="small" fill="outline" data-testid="reset-connection" :disabled="resetBusy" @click="resetConnection">
+          {{ t('peers.resetConnection') || '重置连接信息（保留设备指纹）' }}
+        </ion-button>
+        <p v-if="resetMsg" class="bundleMsg" data-testid="reset-msg">{{ resetMsg }}</p>
+      </div>
+
       <ion-list>
         <ion-list-header>
           <ion-label>{{ t('peers.title') }}</ion-label>
@@ -131,7 +140,13 @@
               <ion-badge :color="p.online ? 'success' : 'medium'">
                 {{ p.online ? t('settings.online') : t('settings.offline') }}
               </ion-badge>
+              <!-- 🆕 2026-10-05（P0-3）："这台设备大概已经不在了"必须说出来，
+                   否则用户只会看到一枚离线徽章，不知道要重新配对。 -->
+              <ion-badge v-if="p.stale" color="warning" data-testid="peer-stale">
+                {{ staleLabel(p.staleReason) }}
+              </ion-badge>
             </p>
+            <p v-if="p.stale" class="peerStaleHint" data-testid="peer-stale-hint">{{ staleHint(p.staleReason) }}</p>
           </ion-label>
           <ion-button slot="end" size="small" color="danger" fill="outline" @click="handleUnpair(p.id)">
             {{ t('peers.unpair') }}
@@ -171,9 +186,12 @@ import {
   type LocalBundle,
   rollbackBundle,
   rollbackLocalBundle,
+  stopEdge,
   unpairPeer,
   usePeerLink,
 } from "@encv/shared-components/composables/usePeerLink";
+// resetServerUrl 属于 api 层（baseUrl.ts 经 api/encv barrel 导出），不在 usePeerLink 里
+import { resetServerUrl } from "@encv/shared-components/api/encv";
 import { type FederatedHit, type PeerSearchStatus, searchFederated } from "@encv/shared-components/composables/useFederatedSearch";
 
 const { t } = useI18n();
@@ -301,6 +319,54 @@ onUnmounted(() => {
 async function handleUnpair(peerId: string) {
   await unpairPeer(peerId);
   await fetchPeers().catch(() => undefined);
+}
+
+/** 僵死设备的徽章文案（P0-3） */
+function staleLabel(reason?: string): string {
+  return reason === "never_linked"
+    ? t("peers.staleNeverLinked") || "从未连上"
+    : t("peers.staleOfflineTooLong") || "长期离线";
+}
+
+/**
+ * 僵死设备的"下一步"（P0-3）。
+ *
+ * ⚠️ 只说"离线"不够 —— 用户不知道该做什么。这里明确指向**重新配对**
+ * （解配后重新扫码即可），与"稍等一会儿会自己恢复"区分开。
+ */
+function staleHint(reason?: string): string {
+  return reason === "never_linked"
+    ? t("peers.staleNeverLinkedHint") || "配对后从未成功连接（会合点地址或令牌可能已失效），建议解除配对后重新扫码"
+    : t("peers.staleOfflineTooLongHint") || "这台设备已长期离线（可能已重装或不再使用），建议解除配对后重新扫码";
+}
+
+// ── P2：重置连接（保留设备指纹）─────────────────────────────────
+//
+// 为什么需要它：落盘的连接相关值（服务器地址 / 探测缓存 / 会合点会话）一旦变坏，
+// 用户**唯一的自救手段是清除 APP 数据**（本次真机事故里用户就是这么做的）——
+// 那会连设备指纹一起清掉，代价过大。这里提供一条只清"连接"、保留身份的退路。
+const resetBusy = ref(false);
+const resetMsg = ref("");
+
+async function resetConnection() {
+  resetBusy.value = true;
+  resetMsg.value = "";
+  try {
+    // ① 清落盘的服务器地址与探测缓存（坏值自愈的关键：不清就永远连不上）
+    resetServerUrl();
+    // ② 忘记会合点（设备作为 Edge 时；桌面端无会话时此调用无害）
+    await stopEdge().catch(() => false);
+    // ③ 保留设备指纹：deviceId 不动（清了它，同一台设备会在 Hub 侧变成新设备）
+    await fetchPeers().catch(() => undefined);
+    resetMsg.value = t("peers.resetDone") || "已重置连接信息（设备指纹保留），正在重新探测本机后端…";
+  } catch (e) {
+    resetMsg.value = String(t("peers.resetFailed") || "重置失败：{detail}").replace(
+      "{detail}",
+      e instanceof Error ? e.message : String(e),
+    );
+  } finally {
+    resetBusy.value = false;
+  }
 }
 </script>
 

@@ -501,19 +501,59 @@ func (h *Hub) PeerByID(id string) (*Peer, bool) {
 }
 
 // ListPeers 列出已配对设备（脱敏：不含任何密钥）。
+// “这台设备已经不在了”的两个判据（2026-10-05，见 docs/persisted-state-selfhealing.md P0-3）。
+//
+// 由来：Hub 侧把配对过的设备**永久**列在列表里（这是对的，解配才是删除入口），
+//   但"离线"只有一枚徽章，没有任何引导。于是两种真实状态无人告知：
+//   ① 配对**从未真正连上过**（会合点地址不对 / token 失效）⇒ 用户以为配好了；
+//   ② 设备**早已不在**（重装、换机、长期关机）⇒ 列表里躺着永远离线的"旧自己"。
+//   二者都会让云控下发推错对象，属于"持久化的坏值没被识别"的同一类问题。
+//
+// ⚠️ 判据必须保守：手机息屏/没网几小时是**正常**的，不能误判成"设备没了"
+//   ⇒ 用"从未连上 + 已过 10 分钟"与"连续离线 > 24 小时"两个阈值区分抖动与真失效。
+const (
+	// PeerStaleNeverLinkedAfter 配对后多久仍未连上 ⇒ 这次配对没真正成功。
+	PeerStaleNeverLinkedAfter = 10 * time.Minute
+	// PeerStaleOfflineAfter 连续离线多久 ⇒ 这台设备大概已经不在了。
+	PeerStaleOfflineAfter = 24 * time.Hour
+)
+
+// peerStale 判定一台已配对设备是否"僵死"，并给出原因码（空串 = 正常）。
+func peerStale(p *Peer, online bool, now time.Time) (bool, string) {
+	if p == nil || online {
+		return false, ""
+	}
+	// ① 配对后从未有过一次心跳（LastSeen 还停在配对那一刻）
+	if p.LastSeen.Sub(p.PairedAt) < time.Second && now.Sub(p.PairedAt) > PeerStaleNeverLinkedAfter {
+		return true, "never_linked"
+	}
+	// ② 连过，但已经很久没出现了
+	if now.Sub(p.LastSeen) > PeerStaleOfflineAfter {
+		return true, "offline_too_long"
+	}
+	return false, ""
+}
+
+// ListPeers 列出已配对设备（脱敏，不含任何密钥）。
 func (h *Hub) ListPeers() []map[string]any {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
+	now := time.Now()
 	out := make([]map[string]any, 0, len(h.peers))
 	for _, p := range h.peers {
+		online := p.Online && now.Sub(p.LastSeen) < SessionIdleTTL
+		stale, reason := peerStale(p, online, now)
 		out = append(out, map[string]any{
-			"id":       p.ID,
-			"deviceId": p.DeviceID,
-			"name":     p.Name,
-			"platform": p.Platform,
-			"pairedAt": p.PairedAt,
-			"lastSeen": p.LastSeen,
-			"online":   p.Online && time.Since(p.LastSeen) < SessionIdleTTL,
+			"id":          p.ID,
+			"deviceId":    p.DeviceID,
+			"name":        p.Name,
+			"platform":    p.Platform,
+			"pairedAt":    p.PairedAt,
+			"lastSeen":    p.LastSeen,
+			"online":      online,
+			"offlineSec":  int(now.Sub(p.LastSeen).Seconds()),
+			"stale":       stale,
+			"staleReason": reason,
 		})
 	}
 	return out

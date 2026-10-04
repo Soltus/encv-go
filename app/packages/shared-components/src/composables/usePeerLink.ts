@@ -36,6 +36,17 @@ export interface PeerListItem {
   pairedAt: string;
   lastSeen: string;
   online: boolean;
+  /** 已离线多少秒（UI 展示与"是否僵死"判定都用得上） */
+  offlineSec?: number;
+  /**
+   * 这台设备**大概已经不在了**（2026-10-05，docs/persisted-state-selfhealing.md P0-3）。
+   * Hub 会永久保留已配对设备，于是两类"坏身份"会一直躺在列表里无人告知：
+   *   never_linked     —— 配对从未真正连上（地址不对 / token 失效），用户却以为配好了；
+   *   offline_too_long —— 设备早已不在（重装 / 换机 / 长期关机），云控会推错对象。
+   * ⇒ UI 必须显示"建议重新配对"，并给出入口。
+   */
+  stale?: boolean;
+  staleReason?: "never_linked" | "offline_too_long" | "";
 }
 
 export type PeerLinkStatus = "idle" | "pairing" | "paired" | "timeout" | "error";
