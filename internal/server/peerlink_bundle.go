@@ -87,6 +87,44 @@ func isSafeBundleToken(s string) bool {
 	return !strings.Contains(s, "..")
 }
 
+// splitBundleFileName 把 `<name>-<version>` 切回包名与版本。
+//
+// ⚠️ 两种文件名都会遇到，规则必须同时成立：
+//   - 版本号常带连字符：`web-v0.0.1-test` ⇒ name=web, version=v0.0.1-test
+//     （用 LastIndex('-') 会切成 name="web-v0.0.1" version="test" ⇒ 设备拉包 404，
+//      2026-10-05 真机首测抓到过）；
+//   - 包名也可能带连字符：`go-binary-v0.0.5-logs` ⇒ 必须切成 name=go-binary，
+//     否则清单里只有 "go" ⇒ 云控 push{name:"go-binary"} 得到 bundle_not_found
+//     （2026-10-05 下发 Go 二进制热更时抓到）。
+//
+// 判据优先级（从最可靠到兜底）：
+//   ① 最后一个 "-v"：版本号以 v 开头是本项目约定 ⇒ 它之后全是版本；
+//   ② 第一段以数字开头的 "-"：如 preview-assets-1.2.3；
+//   ③ 兜底：第一个 "-"。
+func splitBundleFileName(base string) (name, version string, ok bool) {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return "", "", false
+	}
+	// ① 版本以 v 开头（v0.0.7-devshell / v1 / v2-rc1）
+	if i := strings.LastIndex(base, "-v"); i > 0 {
+		return base[:i], base[i+1:], true
+	}
+	// ② 第一段是数字（1.2.3 / 2024.10.05）
+	parts := strings.Split(base, "-")
+	for i := 1; i < len(parts); i++ {
+		p := parts[i]
+		if p != "" && p[0] >= '0' && p[0] <= '9' {
+			return strings.Join(parts[:i], "-"), strings.Join(parts[i:], "-"), true
+		}
+	}
+	// ③ 兜底
+	if i := strings.Index(base, "-"); i > 0 {
+		return base[:i], base[i+1:], true
+	}
+	return "", "", false
+}
+
 // loadBundleManifest 扫描仓库目录生成清单（按版本字典序，取每个包的**最新**一版）。
 func loadBundleManifest() []BundleManifestItem {
 	dir := bundlesDir()
@@ -100,15 +138,10 @@ func loadBundleManifest() []BundleManifestItem {
 			continue
 		}
 		base := strings.TrimSuffix(e.Name(), ".zip")
-		// ⚠️ 必须按**第一个** '-' 切：版本号里常带连字符（v0.0.1-test、1.2.3-rc1），
-		//    而包名一般不含。用 LastIndex 会把 "web-v0.0.1-test" 切成
-		//    name="web-v0.0.1" version="test" ⇒ 设备拉包时按这个名字拼下载 URL ⇒ 404
-		//    （2026-10-05 真机云控热更新首测抓到）。
-		idx := strings.Index(base, "-")
-		if idx <= 0 {
+		name, version, splitOK := splitBundleFileName(base)
+		if !splitOK {
 			continue
 		}
-		name, version := base[:idx], base[idx+1:]
 		if !isSafeBundleToken(name) || !isSafeBundleToken(version) {
 			continue
 		}
@@ -424,6 +457,23 @@ func (s *Server) handlePeerlinkBundleStatus(c *gin.Context) {
 	})
 }
 
+// bundleRequiredFiles 某个包"必须有"的文件（缺了就判定包不完整）。
+//
+// ⚠️ 2026-10-05：此前 Hub 下发**从不带** Required，而执行端 ApplyFile 会直接取
+//    `Required[0]` ⇒ 换执行体（go-binary）时 panic ⇒ RPC 永不回包 ⇒ 云端只看到
+//    504 peer_timeout（排查时会误判成"包太大/网络慢"，实际是空数组越界）。
+//    这里按包名给出必含文件，执行端也就有了"这个包对不对"的判据。
+func bundleRequiredFiles(name string) []string {
+	switch strings.TrimSpace(name) {
+	case "go-binary":
+		return []string{"encv-go"}
+	case "web", "preview-assets":
+		// Kotlin 侧也是判定 index.html（I4：没有它就不切换）⇒ 两边判据一致
+		return []string{"index.html"}
+	}
+	return nil
+}
+
 // handlePeerlinkBundlePush —— POST /api/peerlink/bundle/push（运维）：云控下发
 //
 // 入参：{ peerId, name, version? } —— version 省略 = 该包最新版。
@@ -462,11 +512,12 @@ func (s *Server) handlePeerlinkBundlePush(c *gin.Context) {
 	}
 
 	req := peerlink.BundleUpdateRequest{
-		Name:    item.Name,
-		Version: item.Version,
-		SHA256:  item.SHA256,
-		Size:    item.Size,
-		ABI:     item.ABI,
+		Name:     item.Name,
+		Version:  item.Version,
+		SHA256:   item.SHA256,
+		Size:     item.Size,
+		ABI:      item.ABI,
+		Required: bundleRequiredFiles(item.Name),
 	}
 	// 更新是分钟级动作 ⇒ 超时比普通 RPC 长，但仍要封顶（不能无限等）
 	res, err := s.peerCalls.Call(c.Request.Context(), body.PeerId, peerlink.MethodBundleUpdate, req, peerlink.BundleCallTimeout)

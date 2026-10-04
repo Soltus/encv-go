@@ -290,6 +290,13 @@ func ApplyFile(spec FileSpec, zipPath string, opts Options) (Result, error) {
 	if spec.Target == "" || spec.Name == "" {
 		return Result{}, errors.New("bundle: empty Target/Name")
 	}
+	// ⚠️ 2026-10-05：Required 为空时下面会直接 `spec.Required[0]` ⇒ **panic**。
+	//    真机表现：云控下发 go-binary 一直 504 peer_timeout（执行端 goroutine 崩了，
+	//    RPC 永远等不到回包），而 Hub 侧只会看到"超时"，看不到 panic。
+	//    换**执行体**必须声明包内文件名，缺它就明确报错（rejected 语义），不许 panic。
+	if len(spec.Required) == 0 {
+		return Result{}, errors.New("bundle: Required 为空（换执行体必须声明包内文件名）")
+	}
 	if spec.SHA256 != "" {
 		got, err := SHA256File(zipPath)
 		if err != nil {
