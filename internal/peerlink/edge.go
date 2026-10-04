@@ -87,7 +87,19 @@ type EdgeOptions struct {
 	// 由宿主（手机上的 encv-go）注入真实搜索实现；未注入则返回 not_supported。
 	// ⚠️ 搜索只在本地索引上跑，**不把远端路径伪装成本地路径**。
 	OnSearch func(req SearchRequest) (json.RawMessage, error)
+	// OnBundleUpdate 处理来自对端的**云控热更新**指令（2026-10-04）。
+	// Hub 只给"包名字/版本/摘要"，zip 由本端主动出网 HTTP 拉取（数据面不走 WS）。
+	// ⚠️ 执行端必须校验 sha256；失败要能回滚到上一版，绝不留下半新半旧的资源目录。
+	OnBundleUpdate func(req BundleUpdateRequest) BundleUpdateResult
 }
+
+// Token 返回本 Edge 持有的配对 token（云控下载时要用它做鉴权）。
+//
+// ⚠️ 调用方不得打印/落盘/回传给对端：token 等价身份凭证。
+func (e *Edge) Token() string { return e.opts.Token }
+
+// HubURL 返回本 Edge 连的会合点基址（数据面下载要基于它拼 URL）。
+func (e *Edge) HubURL() string { return e.opts.HubURL }
 
 // Edge 是手机侧的长连接客户端。
 type Edge struct {
@@ -450,6 +462,29 @@ func (e *Edge) handleRequest(conn *websocket.Conn, id, method string, payload js
 				return
 			}
 			write(nil, err.Error())
+			return
+		}
+		write(out, "")
+	// 云控热更新（2026-10-04）：Hub 只下发指令，zip 由本端 HTTP 拉取。
+	//
+	//	失败语义分两类，与 read/search 同一套纪律：
+	//	  ① 包名字不认识 / 摘要缺失 ⇒ **对端请求本身不对** ⇒ rejected（发起端 400，不计熔断）
+	//	  ② 下载失败 / 解压失败 / 切换失败 ⇒ 本端故障 ⇒ 普通错误（但已回滚，旧版仍在服务）
+	case "bundle_update":
+		if e.opts.OnBundleUpdate == nil {
+			write(nil, "not_supported")
+			return
+		}
+		var req BundleUpdateRequest
+		if len(payload) > 0 {
+			if err := json.Unmarshal(payload, &req); err != nil {
+				write(nil, "bad_payload")
+				return
+			}
+		}
+		out := e.opts.OnBundleUpdate(req)
+		if out.Rejected {
+			writeRejected(out, out.Error)
 			return
 		}
 		write(out, "")

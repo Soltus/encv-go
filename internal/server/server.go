@@ -126,6 +126,11 @@ type Server struct {
 	// 自己发起过什么。这里补发起端视角，供审计接口一并返回。
 	agentCallLog   *agentCallLog
 	agentCallLogMu sync.Mutex
+	// 🆕 2026-10-04：互联状态的持久化存储（Hub 侧 peers / Edge 侧会话）。
+	//
+	//	决策变更：从"绝不落盘"改为"落应用私有目录 + 0600 + 可撤销 + 可关闭"
+	//	（用户 2026-10-04：设计过于谨慎，服务端重启要能自动恢复连接）。
+	peerStore *peerlink.Store
 	// 🆕 2026-10-02：本端作为 **Edge** 连到远端 Hub 的运行时（P2a Task 2.2 接线）
 	//
 	// 扫码配对后启动；token 只存内存（进程重启需重新配对）。
@@ -471,6 +476,15 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	}
 	s.mobileSvc.SetServingDir(s.servingDir)
 	s.peerCalls = peerlink.NewCaller(s.peerConns)
+	// 互联状态持久化 + **启动即恢复**（2026-10-04 决策变更）：
+	//   此前"一切只存内存"⇒ 后端一重启，已配对设备全部失效、必须重新扫码。
+	//   （真机调试时每改一次后端就要重扫一次，成本不可接受。）
+	//   现在把配对凭据落到应用私有目录（0600），启动即恢复 ⇒ 设备带着旧 token 重连即可。
+	//   关闭方式：ENCV_PEERLINK_PERSIST=0（行为退回旧纪律）。
+	s.peerStore = peerlink.NewStore(peerlinkStateDir())
+	if n := s.restorePeerlinkState(); n > 0 {
+		slog.Info("peerlink state restored", "peers", n, "dir", s.peerStore.Dir())
+	}
 	// 把 mock 引擎的 tool_call.execute_real 真实执行器绑到 s.executeAgentTool
 	// ——剧本里声明 execute_real=true 的工具调用会被实际执行（覆盖硬编码 result）。
 	// 见 internal/server/agent_mock.go §executeRealAndEmit
@@ -808,6 +822,11 @@ func (s *Server) Start(version string) (string, error) {
 	//     HTTP /health JSON 读，HTTP /api/runtime 也读。
 	//     父进程用 HTTP 探活，不需文件。
 	s.startHeartbeatLoopInMemory(context.Background())
+
+	// 🆕 2026-10-04：本端若曾作为 Edge 配对过，启动即**自动重连**（不必重新扫码）
+	if s.restoreEdgeSession() {
+		slog.Info("peerlink edge auto-restored on start")
+	}
 
 	// 🆕 2026-06-14：删除 ENCV_HEARTBEAT_PATH 文件版心跳（ffmpeg.StartHeartbeatLoop）
 	//

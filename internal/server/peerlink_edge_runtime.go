@@ -20,10 +20,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/Soltus/encv-go/internal/bundle"
+	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/fts"
 	"github.com/Soltus/encv-go/internal/peerlink"
 	"github.com/gin-gonic/gin"
@@ -43,9 +46,11 @@ type edgeRuntime struct {
 
 // peerEdgeHandlers 允许测试/宿主覆盖 Edge 的三个处理器（默认走本端真实实现）。
 type peerEdgeHandlers struct {
-	OnSearch      func(peerlink.SearchRequest) (json.RawMessage, error)
-	OnRead        func(peerlink.ReadRequest) ([]byte, int64, error)
-	OnAgentInvoke func(peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome
+	OnSearch       func(peerlink.SearchRequest) (json.RawMessage, error)
+	OnRead         func(peerlink.ReadRequest) ([]byte, int64, error)
+	OnAgentInvoke  func(peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome
+	// OnBundleUpdate 云控热更新（2026-10-04）：Hub 下发指令 → 本端拉包 → 原子生效/回滚
+	OnBundleUpdate func(peerlink.BundleUpdateRequest) peerlink.BundleUpdateResult
 }
 
 func (s *Server) edgeHandlers() peerEdgeHandlers {
@@ -53,10 +58,125 @@ func (s *Server) edgeHandlers() peerEdgeHandlers {
 		return *s.peerEdgeHandlersOverride
 	}
 	return peerEdgeHandlers{
-		OnSearch:      s.peerLocalSearch,
-		OnRead:        s.peerLocalRead,
-		OnAgentInvoke: s.PeerAgentInvokeHandler,
+		OnSearch:       s.peerLocalSearch,
+		OnRead:         s.peerLocalRead,
+		OnAgentInvoke:  s.PeerAgentInvokeHandler,
+		OnBundleUpdate: s.peerLocalBundleUpdate,
 	}
+}
+
+// ── 云控热更新：**执行端**（2026-10-04）────────────────────────────────
+//
+// bundleTargets 是「包名 → 本端可写目录」的映射。只有登记在册的包才允许被云控覆盖，
+// 且目录必须是**应用私有可写目录**（不在 APK / Go 二进制内）—— 否则"热更新"就是空话。
+func (s *Server) bundleTargetDir(name string) (string, bool) {
+	switch name {
+	case "preview-assets":
+		// 已验证过的先例：容器预览页，整包替换即生效，不需要换 APK、也不需要重启
+		return previewAssetsDir(), true
+	case "web":
+		// 主应用 SPA（I4）：目录先就位，WebView 改从本目录加载后即可热更主界面
+		return config.AppDataDir("web-bundle"), true
+	default:
+		return "", false
+	}
+}
+
+// peerLocalBundleUpdate 执行一次云控下发的资源包更新。
+//
+// 纪律（与 bundle.Apply 的不变式一致）：
+//   - 包名不认识 / 没带 sha256 ⇒ **请求本身不对** ⇒ Rejected（发起端 400，不计熔断）
+//   - 下载/校验/切换任一步失败 ⇒ 回滚到上一版，旧资源继续可用（绝不留下半新半旧）
+//   - 回报文本脱敏：不含设备绝对路径
+func (s *Server) peerLocalBundleUpdate(req peerlink.BundleUpdateRequest) (out peerlink.BundleUpdateResult) {
+	out.Name = req.Name
+
+	target, ok := s.bundleTargetDir(req.Name)
+	if !ok {
+		out.Rejected = true
+		out.Error = "unknown_bundle:" + sanitizeBundleName(req.Name)
+		return out
+	}
+	if strings.TrimSpace(req.SHA256) == "" {
+		out.Rejected = true
+		out.Error = "missing_sha256"
+		return out
+	}
+
+	// 数据面：基于本端已知的会合点地址拼下载 URL（Hub 不占控制连接传大数据）
+	s.peerEdgeMu.Lock()
+	rt := s.peerEdge
+	s.peerEdgeMu.Unlock()
+	if rt == nil || rt.edge == nil {
+		out.Error = "edge_not_running"
+		return out
+	}
+	hub := rt.edge.HubURL()
+	token := rt.edge.Token()
+	if hub == "" || token == "" {
+		out.Error = "edge_not_connected"
+		return out
+	}
+	dl := strings.TrimRight(hub, "/") + "/bundle/download?name=" + url.QueryEscape(req.Name) +
+		"&version=" + url.QueryEscape(req.Version) + "&token=" + url.QueryEscape(token)
+
+	tmpDir := config.AppDataDir("tmp")
+	zipPath := filepath.Join(tmpDir, req.Name+"-"+req.Version+".zip")
+	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
+		out.Error = "tmp_unavailable"
+		return out
+	}
+	defer os.Remove(zipPath) // 无论成败都不留 zip（内容已落到目标目录/staging）
+
+	ctx, cancel := context.WithTimeout(context.Background(), peerlink.BundleCallTimeout)
+	defer cancel()
+
+	slog.Info("peerlink bundle update begin", "name", req.Name, "version", req.Version)
+	if err := bundle.Download(ctx, dl, zipPath, bundleMaxZipBytes, peerlink.BundleCallTimeout); err != nil {
+		out.Error = "download_failed:" + truncateBundleErr(err.Error())
+		return out
+	}
+
+	res, err := bundle.Apply(bundle.Spec{
+		Name:      req.Name,
+		TargetDir: target,
+		Version:   req.Version,
+		SHA256:    req.SHA256,
+		Required:  req.Required,
+	}, zipPath, bundle.Options{MaxBytes: bundleMaxZipBytes, Timeout: peerlink.BundleCallTimeout})
+	if err != nil {
+		// ⚠️ 切换/校验失败 ⇒ 必须回滚：目标目录此刻可能已被移走（Apply 内部已尽力恢复，
+		//    这里再兜一次），回滚后旧版继续服务，用户不会看到白屏。
+		if rerr := bundle.Rollback(req.Name, target); rerr == nil {
+			out.RolledBack = true
+		}
+		out.Error = "apply_failed:" + truncateBundleErr(err.Error())
+		slog.Warn("peerlink bundle update failed, rolled back", "name", req.Name, "version", req.Version, "error", err.Error())
+		return out
+	}
+
+	out.Ok = true
+	out.AppliedVersion = res.Version
+	out.PreviousVersion = res.PreviousVersion
+	slog.Info("peerlink bundle update applied", "name", req.Name, "version", res.Version, "prev", res.PreviousVersion)
+	return out
+}
+
+func sanitizeBundleName(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > 32 {
+		s = s[:32]
+	}
+	return s
+}
+
+// truncateBundleErr 回报文本上限（防止把设备绝对路径 / 栈信息整段回传）。
+func truncateBundleErr(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > 120 {
+		return s[:120]
+	}
+	return s
 }
 
 // ── 本端真实实现（被对端查询时执行）────────────────────────────────
@@ -301,6 +421,8 @@ func (s *Server) handlePeerlinkEdgePair(c *gin.Context) {
 
 	slog.Info("peerlink edge paired, connecting", "hub", hubHostOf(hub), "peerId", peerID)
 	s.startEdgeLocked(hub, peerID, deviceID, token)
+	// 记住这次配对（2026-10-04）：Go 进程重启 / APP 冷启动后**自动重连**，不用再扫一次码
+	s.saveEdgeSession(hub, peerID, deviceID, token)
 
 	// sas 回给扫码端 UI（PeerScanPanel）显示，供双端人工核对；
 	// 不落盘、不进日志（安全码只在配对会话内有效）。
@@ -397,5 +519,7 @@ func (s *Server) handlePeerlinkEdgeStop(c *gin.Context) {
 	if rt != nil && rt.cancel != nil {
 		rt.cancel()
 	}
+	// 主动断开 = 忘记这个会合点（否则下次启动又自动连回去）
+	s.clearEdgeSession()
 	c.JSON(http.StatusOK, gin.H{"ok": true, "running": false})
 }

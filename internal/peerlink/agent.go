@@ -67,6 +67,14 @@ type AgentInvokeResult struct {
 	Decision string          `json:"decision"`         // auto|accept|decline|cancel|timeout
 	Result   json.RawMessage `json:"result,omitempty"` // 工具返回的原始 JSON
 	Error    string          `json:"error,omitempty"`  // 失败原因（脱敏后）
+	// ErrorCode 工具返回的**业务错误码**（2026-10-04 补）。
+	//
+	//	背景（真机实测）：调 search_files 少传 mount_id ⇒ 对端回
+	//	`ok:true + result={"error":"mount_id is required"}`。Ok 只表达"RPC 送达且审批通过"
+	//	（edge.go: Ok = out.Err == nil），工具自己的业务错误是塞在 result 里的 errJSON，
+	//	发起端只看 ok 就会把失败当成功 ⇒ 远程调试时静默失败，极难发现。
+	//	发起端识别该形状后把 ok 置 false，并把错误码提到这里，调用方无需解析 result。
+	ErrorCode string `json:"errorCode,omitempty"`
 }
 
 // AgentInvokeOutcome 执行端处理一次远程调用的完整结果。

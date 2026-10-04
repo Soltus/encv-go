@@ -199,6 +199,42 @@
   旧连接退出时的 `defer` **不能按 peerID 直接删**（会把顶替它的新连接一起删掉），
   必须按**连接身份**删（`DeleteConn(peerID, conn)`）。
 
+## 远程 Agent 调用的**结果契约**（2026-10-04 统一，长期）
+
+- `POST /api/peerlink/agent/invoke` 的 `ok` **只表示**「RPC 送达 + 审批通过」（`edge.go`: `Ok = out.Err == nil`）。
+  工具的**业务失败**是包成 `errJSON` 塞在 `result` 里的（真机实测 `{tool:search_files}` 少传 mount_id ⇒
+  `ok:true + result={error:"mount_id is required"}`）⇒ **只看 ok 会把失败当成功**（远程调试最阴的一类静默失败）。
+- 现行契约（发起端 `agentToolErrorOf` 强制）：识别 errJSON 形状 ⇒ `ok=false` + 顶层 `error` / `errorCode`，
+  `result` 原样保留；**HTTP 仍 200**（4xx/5xx 只留给链路故障：离线 503 / 超时 504 / 对端拒绝 400）。
+- 判定必须保守：键集合 ⊆ {error,message,detail} 且 error 为非空字符串才算失败；带其它键一律算成功
+  ⇒ **宁漏判，不把成功误判成失败**。回归锁：`internal/server/peerlink_agent_contract_test.go`。
+- **远程调试诊断工具**（只读、`needConfirm=false`，`internal/server/agent_diag_bridge.go`）：
+  `get_device_info`（对端运行时画像）/ `read_logs`（对端日志，level+since 过滤）。
+  ⚠️ 它们跑在**执行端二进制** ⇒ 对端 APK 未含该代码时得到 `unknown fs tool: <name>`（真机实测），
+  不是 bug，是要重建 APK。
+- **验证边界（环境事实）**：手机在 NAT 后（公网 IP 出网）、`adb devices` 为空 ⇒
+  **设备端改动无法真机验证**，只能 Go 单测 + 真机探针确认"旧二进制未含新工具"。
+  另：Hub 侧改动要重启后端才生效，而 token/psk/信任 全在进程内存 ⇒ **重启 = 手机必须重新扫码配对**。
+
+## 互联持久化 + 云控热更新（2026-10-04 决策变更，长期）
+
+- **旧红线"psk/token 绝不写盘"已被推翻**（用户：设计过于谨慎，重启要能自动恢复连接）。
+  新纪律：配对凭据落**应用私有目录** `config.AppDataDir("peerlink")`，`0600` + 原子写 + 可撤销
+  （unpair/stop 立即删除）+ `ENCV_PEERLINK_PERSIST=0` 可关闭。**psk 仍不落盘**；
+  `trust_device` **仍未持久化**（恢复的是身份与通道，不是授权）。
+  **恢复出来的设备 `Online` 恒为 false** —— 在线只能由长连接证明，不能从磁盘读出来。
+- **云控热更新**：控制面走 WS RPC `bundle_update`（Hub→Edge，因为手机在 NAT 后没有可直连地址），
+  **数据面走 HTTP**（设备主动出网拉 zip；R13 控制面小报文 + zip 要 Content-Length/断点续传）。
+  通用安装器 `internal/bundle/apply.go`：限流下载 → sha256 → staging → 必含文件校验 → 备份 →
+  **原子 rename** → version.json；失败保持旧版 + 可回滚。包名白名单化（`preview-assets` / `web`）。
+- **已有基础（别重新发明）**：`preview-assets` 早就做到"整包替换不换 APK"；
+  Hub↔Edge RPC 现成；`EncvGoService.findExecutableBinary()` 有 filesDir 回退分支 ⇒
+  Go 二进制未来可热更（I3）。
+- **迭代台账**：`docs/cloud-hot-update-and-link-recovery.md`（I1/I2 已落地，I3 Go 二进制热更、
+  I4 主 SPA 热更、I5 灰度与回滚策略未开始）。
+- **⚠️ 长期环境事实**：设备端任何改动都还要**最后一次 APK（引导版）**；手机在 NAT 后、
+  容器 `adb devices` 为空 ⇒ 真机验证只能靠单测 + 真机探针，装机是唯一真机验证途径。
+
 ## 加密容器流式写入（2026-09-29 落地，长期契约）
 
 - **两条写入路径并存**：`writer.WriteV4Container*(V4WriteParams)` 是**整块**（要三份字节同时在内存）；

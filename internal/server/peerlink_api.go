@@ -53,6 +53,12 @@ func registerPeerlinkRoutes(s *Server, r *gin.Engine) {
 	r.GET("/api/peerlink/agent/trust", s.handlePeerlinkAgentTrust)
 	r.DELETE("/api/peerlink/agent/trust", s.handlePeerlinkAgentTrust)
 	r.GET("/api/peerlink/agent/audit", s.handlePeerlinkAgentAudit)
+	// 云控热更新（2026-10-04）：manifest/download/report 走 peer token，push/status 走运维
+	r.GET("/api/peerlink/bundle/manifest", s.handlePeerlinkBundleManifest)
+	r.GET("/api/peerlink/bundle/download", s.handlePeerlinkBundleDownload)
+	r.POST("/api/peerlink/bundle/report", s.handlePeerlinkBundleReport)
+	r.POST("/api/peerlink/bundle/push", s.handlePeerlinkBundlePush)
+	r.GET("/api/peerlink/bundle/status", s.handlePeerlinkBundleStatus)
 	// P2a：本端作为 Edge 连远端 Hub（扫码配对后启动 / 状态 / 停止）
 	r.POST("/api/peerlink/edge/pair", s.handlePeerlinkEdgePair)
 	r.GET("/api/peerlink/edge/status", s.handlePeerlinkEdgeStatus)
@@ -174,6 +180,8 @@ func (s *Server) handlePeerlinkPair(c *gin.Context) {
 		return
 	}
 	slog.Info("peerlink paired", "peerId", res.PeerID, "name", res.Peer.Name, "platform", res.Peer.Platform)
+	// 落盘（2026-10-04）：重启后这张身份仍然有效 ⇒ 设备不必重新扫码
+	s.savePeerlinkPeers()
 	c.JSON(http.StatusOK, gin.H{
 		"peerId": res.PeerID,
 		"token":  res.Token,
@@ -223,6 +231,8 @@ func (s *Server) handlePeerlinkUnpair(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "peer_not_found"})
 		return
 	}
+	// 解配 = 收回凭证 ⇒ 落盘记录必须同步删除（否则重启后"被解配的设备"又活了）
+	s.savePeerlinkPeers()
 	c.JSON(http.StatusOK, gin.H{"ok": true, "peerId": target})
 }
 
