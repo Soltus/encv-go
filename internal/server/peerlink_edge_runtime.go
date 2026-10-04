@@ -460,6 +460,11 @@ func (s *Server) startEdgeLocked(hub, peerID, deviceID, token string) {
 		OnSearch:      h.OnSearch,
 		OnRead:        h.OnRead,
 		OnAgentInvoke: h.OnAgentInvoke,
+		// ⚠️ 2026-10-05：这行**不能漏**。此前只把 OnBundleUpdate 加进了
+		//    peerEdgeHandlers 映射与 edgeHandlers() 默认值，却没在这里传给 Edge
+		//    ⇒ 设备端收到云控 bundle_update 一律回 "not_supported"
+		//    （真机首测才暴露：Hub 侧 push 得到 502 + remote error: not_supported）。
+		OnBundleUpdate: h.OnBundleUpdate,
 	})
 	rt := &edgeRuntime{
 		hubURL:    hubNormalized,

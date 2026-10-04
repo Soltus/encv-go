@@ -146,6 +146,40 @@ func TestPeerlinkBundle_Manifest_ListsLatest(t *testing.T) {
 	}
 }
 
+// TestPeerlinkBundle_Manifest_SplitsNameVersion —— 版本号带连字符时的切分（真机首测抓到的 bug）
+//
+// 真机现象：包文件 `web-v0.0.1-test.zip` 被切成 name="web-v0.0.1" version="test"
+// ⇒ 设备按这个名字拼下载 URL ⇒ Hub 侧 404（bundle_not_found）。
+func TestPeerlinkBundle_Manifest_SplitsNameVersion(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ENCV_BUNDLES_DIR", dir)
+	_, sha := writeTestBundle(t, dir, "web", "v0.0.1-test", map[string]string{"index.html": "1"})
+
+	r, _ := newPeerlinkRouter()
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+	token := pairPeerOnHub(t, r)
+
+	req, _ := http.NewRequest("GET", srv.URL+"/api/peerlink/bundle/manifest", nil)
+	req.Header.Set("Authorization", "Peer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Items []BundleManifestItem `json:"items"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if len(out.Items) != 1 {
+		t.Fatalf("应有 1 项, got %+v", out.Items)
+	}
+	it := out.Items[0]
+	if it.Name != "web" || it.Version != "v0.0.1-test" || it.SHA256 != sha {
+		t.Fatalf("包名/版本切分错误: name=%q version=%q（应为 web / v0.0.1-test）", it.Name, it.Version)
+	}
+}
+
 func TestPeerlinkBundle_Download_RejectsTraversalName(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ENCV_BUNDLES_DIR", dir)
@@ -308,6 +342,34 @@ func TestPeerlinkBundlePush_Rejected_IsBadRequest(t *testing.T) {
 	defer resp2.Body.Close()
 	if resp2.StatusCode != http.StatusOK {
 		t.Fatalf("被拒绝后不应熔断，第二次合法 push 应 200, got %d", resp2.StatusCode)
+	}
+}
+
+// TestPeerEdge_WiresBundleUpdate —— 接线锁：startEdgeLocked 必须把 OnBundleUpdate 传给 Edge
+//
+// 真机首测（2026-10-05）翻车：handler 只在 peerEdgeHandlers / edgeHandlers() 里加了，
+// 没传进 NewEdge 的 EdgeOptions ⇒ 设备端一律回 "not_supported" ⇒ Hub 侧 push 得 502。
+func TestPeerEdge_WiresBundleUpdate(t *testing.T) {
+	r, s := newPeerlinkRouter()
+	_ = r
+	// 用一个必然连不上的地址：本例只断言**接线**，不要求真的连上
+	s.startEdgeLocked("http://127.0.0.1:1/api/peerlink", "peer-x", "dev-x", "tok-x")
+	s.peerEdgeMu.Lock()
+	rt := s.peerEdge
+	s.peerEdgeMu.Unlock()
+	if rt == nil || rt.edge == nil {
+		t.Fatal("startEdgeLocked 未建立 Edge")
+	}
+	defer func() {
+		if rt.cancel != nil {
+			rt.cancel()
+		}
+	}()
+	for _, m := range []string{peerlink.MethodBundleUpdate, "read", "search", "agent_invoke", "no_such_method"} {
+		want := m != "no_such_method"
+		if got := rt.edge.Supports(m); got != want {
+			t.Errorf("Supports(%q) = %v, want %v", m, got, want)
+		}
 	}
 }
 

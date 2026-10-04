@@ -101,6 +101,27 @@ func (e *Edge) Token() string { return e.opts.Token }
 // HubURL 返回本 Edge 连的会合点基址（数据面下载要基于它拼 URL）。
 func (e *Edge) HubURL() string { return e.opts.HubURL }
 
+// Supports 报告本 Edge 是否**接线**了某个 RPC 方法的处理器。
+//
+// 为什么要有它：对端回 "not_supported" 时，无法区分到底是
+//  ① 对端版本旧（没这个方法）还是 ② 本端没把 handler 传进 EdgeOptions。
+//  2026-10-05 真机首测就是 ②（bundle_update 只在 handlers 映射里加了，忘了传给 Edge），
+//  本方法让它变成可断言的事实，而不是靠猜。
+func (e *Edge) Supports(method string) bool {
+	switch method {
+	case "read":
+		return e.opts.OnRead != nil
+	case "search":
+		return e.opts.OnSearch != nil
+	case "agent_invoke":
+		return e.opts.OnAgentInvoke != nil
+	case MethodBundleUpdate:
+		return e.opts.OnBundleUpdate != nil
+	default:
+		return false
+	}
+}
+
 // Edge 是手机侧的长连接客户端。
 type Edge struct {
 	opts EdgeOptions

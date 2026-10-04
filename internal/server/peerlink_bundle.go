@@ -97,7 +97,11 @@ func loadBundleManifest() []BundleManifestItem {
 			continue
 		}
 		base := strings.TrimSuffix(e.Name(), ".zip")
-		idx := strings.LastIndex(base, "-")
+		// ⚠️ 必须按**第一个** '-' 切：版本号里常带连字符（v0.0.1-test、1.2.3-rc1），
+		//    而包名一般不含。用 LastIndex 会把 "web-v0.0.1-test" 切成
+		//    name="web-v0.0.1" version="test" ⇒ 设备拉包时按这个名字拼下载 URL ⇒ 404
+		//    （2026-10-05 真机云控热更新首测抓到）。
+		idx := strings.Index(base, "-")
 		if idx <= 0 {
 			continue
 		}
