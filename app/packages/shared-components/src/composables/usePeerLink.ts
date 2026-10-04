@@ -249,6 +249,53 @@ export interface EdgePairResult {
   sas?: string;
 }
 
+/**
+ * 配对失败的原因码（2026-10-05）。
+ *
+ * 由来：手机拿一张失效的码去配对时，后端此前只回一句 `pair_rejected:401`，
+ *   界面只能显示"连接失败" ⇒ 用户拿着过期码反复扫，却**没有任何"刷新二维码"的引导**
+ *   （真机反馈：不知道该怎么办）。现在后端把远端错误码透出来，前端据此给出具体动作。
+ */
+export type PairFailureReason =
+  | "ticket_expired"
+  | "ticket_used"
+  | "ticket_not_found"
+  | "bad_hub"
+  | "invalid_request"
+  | "unknown";
+
+/** 携带原因码的配对失败（UI 据此给不同的引导文案，而不是一律"连接失败"）。 */
+export class PairEdgeError extends Error {
+  readonly reason: PairFailureReason;
+  /** 是否属于"刷新二维码重扫即可解决"（后端 refreshQr 或票据类错误码） */
+  readonly refreshQr: boolean;
+  readonly status: number;
+
+  constructor(reason: PairFailureReason, status: number, detail: string, refreshQr: boolean) {
+    super(`edge/pair failed: ${status} ${reason}${detail ? ` ${detail}` : ""}`);
+    this.name = "PairEdgeError";
+    this.reason = reason;
+    this.status = status;
+    this.refreshQr = refreshQr;
+  }
+}
+
+function toPairFailureReason(code: string): PairFailureReason {
+  switch (code) {
+    case "ticket_expired":
+    case "ticket_used":
+    case "ticket_not_found":
+      return code;
+    case "invalid_hub":
+      return "bad_hub";
+    case "invalid_json":
+    case "invalid_request":
+      return "invalid_request";
+    default:
+      return "unknown";
+  }
+}
+
 /** 扫码后：让**本端** Go 进程作为 Edge 去连 Hub（长连接由 Go 侧承载）。 */
 export async function pairAsEdge(input: {
   hub: string;
@@ -270,7 +317,23 @@ export async function pairAsEdge(input: {
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`edge/pair failed: ${res.status} ${text.slice(0, 200)}`);
+    // ⚠️ 原因码必须带出去：一律抛 "连接失败" 会让"码过期了"和"连不上会合点"
+    //    在 UI 上长得一模一样，用户只能反复重试同一个注定失败的动作。
+    let code = "";
+    let refreshQr = false;
+    let detail = text.slice(0, 200);
+    try {
+      const body = JSON.parse(text) as { error?: string; reason?: string; refreshQr?: boolean; detail?: string };
+      code = String(body.reason || body.error || "");
+      refreshQr = body.refreshQr === true;
+      if (body.detail) detail = body.detail;
+    } catch {
+      /* 非 JSON 响应：退化为 unknown */
+    }
+    const reason = toPairFailureReason(code);
+    // 票据类错误即便旧后端没带 refreshQr，也应当引导刷新二维码（客户端兜底）
+    const ticketLike = reason === "ticket_expired" || reason === "ticket_used" || reason === "ticket_not_found";
+    throw new PairEdgeError(reason, res.status, detail, refreshQr || ticketLike);
   }
   const out = JSON.parse(text) as EdgePairResult;
   if (!out?.ok) throw new Error("edge/pair 返回 ok=false");
@@ -314,6 +377,105 @@ export async function stopEdge(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ── 云控热更新（2026-10-05）───────────────────────────────────────
+//
+// 待办 ②（docs/HANDOVER-cloud-hot-update.md §5）要求：
+//   桌面端能看热更历史 / 触发回滚；移动端能看自己装了哪版并能退回去。
+// 边界：这些端点都是**运维**接口（X-Peerlink-Operator），绝不暴露给未配对对端。
+
+export interface BundleManifestItem {
+  name: string;
+  version: string;
+  size: number;
+  sha256: string;
+  updatedAt?: string;
+  abi?: string;
+}
+
+export interface BundleReportItem {
+  at: string;
+  peerId: string;
+  name: string;
+  version: string;
+  ok: boolean;
+  rolledBack?: boolean;
+  previousVersion?: string;
+  error?: string;
+}
+
+/** 云控视角：仓库里有哪些包 / 各设备装到哪版 / 最近的下发与回滚记录 */
+export interface BundleStatus {
+  available: BundleManifestItem[];
+  deviceVer: Record<string, string>;
+  reports: BundleReportItem[];
+  reportCount: number;
+}
+
+/** GET /api/peerlink/bundle/status（运维） */
+export async function fetchBundleStatus(): Promise<BundleStatus> {
+  const res = await getJSON<BundleStatus>("/bundle/status");
+  return {
+    available: res.available ?? [],
+    deviceVer: res.deviceVer ?? {},
+    reports: res.reports ?? [],
+    reportCount: res.reportCount ?? (res.reports?.length ?? 0),
+  };
+}
+
+/**
+ * POST /api/peerlink/bundle/rollback（运维）：**云控一键回滚**。
+ *
+ * 为什么不是"再推一个旧版本"：推旧版要重新打包 + 重走下载/校验/切换（分钟级），
+ * 而设备本地本来就有上一次的备份，回滚只是搬回来（秒级）。
+ */
+export async function rollbackBundle(peerId: string, name: string): Promise<{ ok: boolean; version?: string }> {
+  const res = await fetchProvider(url("/bundle/rollback"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...OPERATOR_HEADER },
+    body: JSON.stringify({ peerId, name }),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    let reason = "";
+    try {
+      reason = String((JSON.parse(text) as { reason?: string; error?: string }).reason ?? "");
+    } catch {
+      /* ignore */
+    }
+    throw new Error(`bundle/rollback failed: ${res.status}${reason ? ` ${reason}` : ""}`);
+  }
+  return JSON.parse(text) as { ok: boolean; version?: string };
+}
+
+/** 本端（设备侧）一个包的生效状态 */
+export interface LocalBundle {
+  name: string;
+  version: string;
+  kind: "dir" | "file";
+  /** 有没有上一版可退（false ⇒ 回滚必然被拒，UI 应禁用按钮） */
+  rollable: boolean;
+}
+
+/** GET /api/peerlink/bundle/local：本端装了哪些包、各是哪版、能不能退 */
+export async function fetchLocalBundles(): Promise<LocalBundle[]> {
+  const res = await getJSON<{ items: LocalBundle[] }>("/bundle/local");
+  return res.items ?? [];
+}
+
+/** POST /api/peerlink/bundle/local/rollback：设备**自己**退回上一版（不经过云端） */
+export async function rollbackLocalBundle(name: string): Promise<{ ok: boolean; version?: string }> {
+  const res = await fetchProvider(url("/bundle/local/rollback"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...OPERATOR_HEADER },
+    body: JSON.stringify({ name }),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`local rollback failed: ${res.status} ${text.slice(0, 120)}`);
+  }
+  return JSON.parse(text) as { ok: boolean; version?: string };
 }
 
 /** ⑤ 解配（token 立即作废） */

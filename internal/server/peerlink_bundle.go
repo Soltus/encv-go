@@ -282,8 +282,30 @@ func (r *bundleReports) add(rep bundleReport) {
 		list = list[len(list)-r.cap:]
 	}
 	r.byPeer[rep.PeerID] = list
-	if rep.Ok && !rep.RolledBack {
+	// ⚠️ 判据是"**真的生效了某版**"，不是"没回滚"：
+	//   - 失败的更新：Ok=false 且 AppliedVersion 为空 ⇒ 不动（设备还在旧版）
+	//   - 云控**回滚成功**：Ok=true 且 Version 是退回后的版本 ⇒ **必须更新**，
+	//     否则云控视角里设备会永远停在坏包那一版，下次"要不要再推"的判断全错。
+	if rep.Ok && strings.TrimSpace(rep.Version) != "" {
 		r.lastVer[rep.PeerID] = rep.Name + "@" + rep.Version
+	}
+}
+
+// load 用落盘内容覆盖内存台账（启动时恢复用）。
+func (r *bundleReports) load(items []bundleReport, versions map[string]string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byPeer = map[string][]bundleReport{}
+	for _, it := range items {
+		list := append(r.byPeer[it.PeerID], it)
+		if len(list) > r.cap {
+			list = list[len(list)-r.cap:]
+		}
+		r.byPeer[it.PeerID] = list
+	}
+	r.lastVer = map[string]string{}
+	for k, v := range versions {
+		r.lastVer[k] = v
 	}
 }
 
@@ -298,6 +320,53 @@ func (r *bundleReports) snapshot() (items []bundleReport, versions map[string]st
 		versions[k] = v
 	}
 	return items, versions
+}
+
+// ── 台账持久化（2026-10-05）───────────────────────────────────────
+//
+// 原台账是**纯内存**：真机实测后端重启后 `reportCount` 从 1 变 0 ——
+// "这台设备装到哪版了""上次下发成功还是失败"全部凭空消失，
+// 云控就退化成"每次都当没推过"，既不敢自动重试也无法判断要不要回滚。
+// 落盘纪律与 peers.json 完全一致（应用私有目录 / 0600 / 原子写）。
+
+type bundleReportSnapshot struct {
+	Items    []bundleReport    `json:"items"`
+	Versions map[string]string `json:"versions"`
+}
+
+func (s *Server) saveBundleReports() {
+	if !s.peerStore.Enabled() {
+		return
+	}
+	items, versions := globalBundleReports.snapshot()
+	snap := bundleReportSnapshot{Items: items, Versions: versions}
+	if snap.Items == nil {
+		snap.Items = []bundleReport{}
+	}
+	if err := s.peerStore.SaveState("bundle-reports.json", snap); err != nil {
+		slog.Warn("peerlink bundle reports save failed", "error", err.Error())
+	}
+}
+
+// restoreBundleReports 启动时把台账读回，返回恢复条数。
+func (s *Server) restoreBundleReports() int {
+	if !s.peerStore.Enabled() {
+		return 0
+	}
+	var snap bundleReportSnapshot
+	ok, err := s.peerStore.LoadState("bundle-reports.json", &snap)
+	if err != nil {
+		slog.Warn("peerlink bundle reports load failed", "error", err.Error())
+		return 0
+	}
+	if !ok {
+		return 0
+	}
+	globalBundleReports.load(snap.Items, snap.Versions)
+	if n := len(snap.Items); n > 0 {
+		slog.Info("peerlink bundle reports restored", "reports", n, "devices", len(snap.Versions))
+	}
+	return len(snap.Items)
 }
 
 // handlePeerlinkBundleReport —— POST /api/peerlink/bundle/report（peer token）
@@ -324,6 +393,8 @@ func (s *Server) handlePeerlinkBundleReport(c *gin.Context) {
 		// ⚠️ 脱敏：错误文本可能含设备绝对路径，只留前 200 字符
 		Error: truncateForReport(body.Error, 200),
 	})
+	// 落盘（2026-10-05）：重启即丢的台账等于没有台账（实测 1 → 0）
+	s.saveBundleReports()
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -434,5 +505,175 @@ func (s *Server) handlePeerlinkBundlePush(c *gin.Context) {
 		Ok: out.Ok, RolledBack: out.RolledBack, PreviousVersion: out.PreviousVersion,
 		Error: truncateForReport(out.Error, 200),
 	})
+	s.saveBundleReports()
+	c.JSON(http.StatusOK, out)
+}
+
+// handlePeerlinkBundleRollback —— POST /api/peerlink/bundle/rollback（运维）
+//
+// **云控一键回滚**（2026-10-05）：把某台设备上的某个包退回上一版。
+//
+// 为什么必须是独立端点而不是"再推一个旧版本"：
+//   - 推旧版本要重新打包 + 重新走一遍下载/校验/切换（分钟级），期间设备一直是坏的；
+//   - 设备本地本来就有上一次的备份，回滚只是搬回来（秒级）；
+//   - 坏包往往还伴随"校验过不了/装不完整"，此时根本推不动任何新包。
+//
+// 入参：{ peerId, name, version? }；version 仅用于台账记录（执行端以本地备份为准）。
+func (s *Server) handlePeerlinkBundleRollback(c *gin.Context) {
+	if !isOperator(c) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	var body struct {
+		PeerId  string `json:"peerId"`
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_json", "detail": err.Error()})
+		return
+	}
+	body.PeerId = strings.TrimSpace(body.PeerId)
+	body.Name = strings.TrimSpace(body.Name)
+	if body.PeerId == "" || body.Name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "message": "peerId 与 name 必填"})
+		return
+	}
+	if _, ok := s.peerHub.PeerByID(body.PeerId); !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "peer_not_found"})
+		return
+	}
+	if !s.peerCircuitAllow(c, body.PeerId) {
+		return
+	}
+
+	req := peerlink.BundleRollbackRequest{Name: body.Name, Version: strings.TrimSpace(body.Version)}
+	res, err := s.peerCalls.Call(c.Request.Context(), body.PeerId, peerlink.MethodBundleRollback, req, peerlink.BundleCallTimeout)
+	if err != nil {
+		if peerBusyIfErr(c, body.PeerId, err) {
+			return
+		}
+		// 与 bundle_update 同一套纪律：对端"健康地拒绝"（包名不认识 / **没备份可退**）
+		// ⇒ 400 且**不计入熔断**（"没备份"不是设备故障）。
+		if s.peerRejectedIfErr(c, body.PeerId, err) {
+			return
+		}
+		s.peerCircuitRecord(body.PeerId, err.Error())
+		switch {
+		case errors.Is(err, peerlink.ErrPeerOffline):
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "peer_offline", "peerId": body.PeerId})
+		case errors.Is(err, peerlink.ErrCallTimeout):
+			c.JSON(http.StatusGatewayTimeout, gin.H{"error": "peer_timeout", "peerId": body.PeerId})
+		default:
+			c.JSON(http.StatusBadGateway, gin.H{"error": "peer_call_failed", "detail": err.Error(), "peerId": body.PeerId})
+		}
+		return
+	}
+	s.peerCircuitRecordSuccess(body.PeerId)
+
+	var out peerlink.BundleRollbackResult
+	if err := json.Unmarshal(res, &out); err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "bad_peer_payload", "detail": err.Error()})
+		return
+	}
+	// 台账：回滚本身是一次"变更"，必须留痕且标记 rolledBack
+	// （否则设备版本在云控视角里会停在坏包那一版，下次判断"要不要再推"就全错）
+	ver := out.Version
+	if ver == "" {
+		ver = strings.TrimSpace(body.Version)
+	}
+	globalBundleReports.add(bundleReport{
+		PeerID: body.PeerId, Name: out.Name, Version: ver,
+		Ok: out.Ok, RolledBack: true, PreviousVersion: out.PreviousVersion,
+		Error: truncateForReport(out.Error, 200),
+	})
+	s.saveBundleReports()
+	c.JSON(http.StatusOK, out)
+}
+
+// ── 本端（设备侧）热更状态与自回滚（2026-10-05）────────────────────
+//
+// 移动端 UI 需要"我这台机器装了哪版 / 能不能退回去"，而这两个问题**只有设备自己**
+// 答得出来（Hub 只知道它推过什么，不知道设备本地生效的是哪一版、有没有备份）。
+
+// localBundleState 本端一个包的生效状态。
+type localBundleState struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Kind    string `json:"kind"` // dir（资源目录） / file（执行体）
+	// Rollable 有没有上一版可退（没有备份 ⇒ 回滚必然被拒绝，UI 应直接禁用按钮）
+	Rollable bool `json:"rollable"`
+}
+
+// bundleLocalStates 扫描本端登记在册的包，返回各自生效版本与可否回滚。
+func bundleLocalStates() []localBundleState {
+	// ⚠️ 与 bundleTargetDir / bundleTargetFile 保持同一份清单，别各写一份
+	names := []string{"web", "preview-assets", "go-binary"}
+	out := make([]localBundleState, 0, len(names))
+	for _, name := range names {
+		target, isFile := "", false
+		if dir, ok := bundleTargetDirFor(name); ok {
+			target, isFile = dir, false
+		} else if f, ok2 := bundleTargetFileFor(name); ok2 {
+			target, isFile = f, true
+		} else {
+			continue // 该包在本端不可用（如桌面端没有 go-binary 目标）
+		}
+		kind := "dir"
+		if isFile {
+			kind = "file"
+		}
+		out = append(out, localBundleState{
+			Name:     name,
+			Version:  localBundleVersion(target, isFile),
+			Kind:     kind,
+			Rollable: bundleHasBackup(name, target, isFile),
+		})
+	}
+	return out
+}
+
+func bundleHasBackup(name, target string, isFile bool) bool {
+	if isFile {
+		_, err := os.Stat(filepath.Join(filepath.Dir(target), name+"-backup"))
+		return err == nil
+	}
+	st, err := os.Stat(filepath.Join(filepath.Dir(target), name+"-backup"))
+	return err == nil && st.IsDir()
+}
+
+// handlePeerlinkBundleLocal —— GET /api/peerlink/bundle/local（运维/本端 UI）
+func (s *Server) handlePeerlinkBundleLocal(c *gin.Context) {
+	if !isOperator(c) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"items": bundleLocalStates()})
+}
+
+// handlePeerlinkBundleLocalRollback —— POST /api/peerlink/bundle/local/rollback
+//
+// 设备**自己**退回上一版（不给 Hub 发指令，也不要求在线）。
+// 移动端 UI 的"回滚"按钮走这条：用户就在设备跟前，没理由绕一圈云端。
+func (s *Server) handlePeerlinkBundleLocalRollback(c *gin.Context) {
+	if !isOperator(c) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	var body struct {
+		Name string `json:"name"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	name := strings.TrimSpace(body.Name)
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "message": "name 必填"})
+		return
+	}
+	out := s.peerLocalBundleRollback(peerlink.BundleRollbackRequest{Name: name})
+	if out.Rejected {
+		// 包名不认识 / 没备份可退 ⇒ 400（与云控回滚同一套语义，UI 文案可复用）
+		c.JSON(http.StatusBadRequest, gin.H{"error": "rollback_rejected", "name": name, "reason": out.Error})
+		return
+	}
 	c.JSON(http.StatusOK, out)
 }

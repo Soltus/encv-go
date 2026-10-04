@@ -235,6 +235,37 @@
 - **⚠️ 长期环境事实**：设备端任何改动都还要**最后一次 APK（引导版）**；手机在 NAT 后、
   容器 `adb devices` 为空 ⇒ 真机验证只能靠单测 + 真机探针，装机是唯一真机验证途径。
 
+## 互联：票据 / 台账 / 指纹（2026-10-05，长期）
+
+- **配对票据与会话一起落盘**（`tickets.json`，0600 + 原子写，`ENCV_PEERLINK_PERSIST=0` 可关）。
+  只落**未消费**票据；消费后只留 `pairingId + 过期时间`（**不含 psk**）；读回按 `ExpiresAt` 清 ⇒
+  **过期票据绝不被复活**。只持久化一半（会话落、票据不落）= 后端一重启二维码就失效（真机"连不上"）。
+- **票据错误三态**：`ErrTicketNotFound / ErrTicketExpired / ErrTicketUsed` ⇒ HTTP
+  `ticket_not_found / ticket_expired / ticket_used` + `refreshQr:true`。
+  ⚠️ 旧 R10 锁"未知/已用不区分以防探测"**已因此被取代**（`hub_ticket_r10_test.go` 头部有标注）。
+  **改这类错误语义前先 grep 既有安全锁**，别让旧锁红在那儿没人认领。
+- **失败原因必须跨端透传**：远端 Hub 的 401 到手机端不能再只剩一句 `pair_rejected:401`
+  ⇒ `pairToRemoteHub` 解析远端 `error`，`/edge/pair` 回 `reason` + `refreshQr`，前端 `PairEdgeError`。
+- **云控热更新**：新增 RPC `bundle_rollback` + `POST /bundle/rollback`（运维）；
+  设备端 `GET /bundle/local`、`POST /bundle/local/rollback`。
+  ⚠️ 新 handler **三处都要接**（handlers 映射 / `edgeHandlers()` 默认 / `startEdgeLocked` 传给 `NewEdge`），
+  漏第三处就一律 `not_supported` —— 用 `Edge.Supports(method)` 断言，别靠猜。
+  go-binary 回滚要**删 `.version`/`.abi` sidecar**（否则 Kotlin 继续用"自称新版本"的回滚件）。
+  台账 `lastVer` 更新判据 = 「成功且**生效版本非空**」（否则回滚成功后云侧仍显示停在坏包那版）。
+- **deviceId = 设备指纹**：`ENCV_DEVICE_ID` > `ENCV_ANDROID_ID`（Kotlin 注入，Go 取 sha256 前缀，
+  **不透传原文**）> 落盘 `device.json` > 进程内随机。指纹只用于识别设备，**不是密钥、不鉴权**。
+- **组件测试坑**：`t()` 在未注册字典时返回 `[MISSING: key]`（**非空**）⇒ `t('x') || '兜底'` 的兜底不生效；
+  组件测试要先 `registerI18nModule(settingsMessages)`，否则断言变成在测"缺 key"。
+
+## 环境：`app_check_all` 与长命令（2026-10-05，长期）
+
+- **`app_check_all` 在本环境必然挂**：`pnpm install` 无 TTY 想删 node_modules ⇒
+  `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`，10 项 8 FAIL，**与代码无关**。
+  替代：直接 `./node_modules/.bin/vue-tsc --noEmit`（`encv-mobile` 与 `packages/shared-components` 各跑一次）
+  + `./node_modules/.bin/vitest run` + `app_i18n lint`。
+- **>60s 的命令别用 `cmd_run` 同步等**（会 `Request timed out`，但进程其实还在跑）：
+  `(nohup <cmd> > /tmp/x.log 2>&1 &)` 后台起，再用 `execute_command tail` 看日志。
+
 ## 加密容器流式写入（2026-09-29 落地，长期契约）
 
 - **两条写入路径并存**：`writer.WriteV4Container*(V4WriteParams)` 是**整块**（要三份字节同时在内存）；

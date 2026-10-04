@@ -91,6 +91,9 @@ type EdgeOptions struct {
 	// Hub 只给"包名字/版本/摘要"，zip 由本端主动出网 HTTP 拉取（数据面不走 WS）。
 	// ⚠️ 执行端必须校验 sha256；失败要能回滚到上一版，绝不留下半新半旧的资源目录。
 	OnBundleUpdate func(req BundleUpdateRequest) BundleUpdateResult
+	// OnBundleRollback 处理来自对端的**云控回滚**指令（2026-10-05）。
+	// ⚠️ 没接线时**必须**回 not_supported（而不是"成功"）—— 否则云控侧会以为回滚成功。
+	OnBundleRollback func(req BundleRollbackRequest) BundleRollbackResult
 }
 
 // Token 返回本 Edge 持有的配对 token（云控下载时要用它做鉴权）。
@@ -117,6 +120,8 @@ func (e *Edge) Supports(method string) bool {
 		return e.opts.OnAgentInvoke != nil
 	case MethodBundleUpdate:
 		return e.opts.OnBundleUpdate != nil
+	case MethodBundleRollback:
+		return e.opts.OnBundleRollback != nil
 	default:
 		return false
 	}
@@ -504,6 +509,29 @@ func (e *Edge) handleRequest(conn *websocket.Conn, id, method string, payload js
 			}
 		}
 		out := e.opts.OnBundleUpdate(req)
+		if out.Rejected {
+			writeRejected(out, out.Error)
+			return
+		}
+		write(out, "")
+	// 云控回滚（2026-10-05）：把"上一版备份"搬回来。
+	//
+	//	失败语义与 bundle_update 完全一致：
+	//	  ① 包名不认识 / **没有备份可退** ⇒ rejected（发起端 400，不计熔断）
+	//	  ② 搬移失败 ⇒ 普通错误（本端故障）
+	case MethodBundleRollback:
+		if e.opts.OnBundleRollback == nil {
+			write(nil, "not_supported")
+			return
+		}
+		var req BundleRollbackRequest
+		if len(payload) > 0 {
+			if err := json.Unmarshal(payload, &req); err != nil {
+				write(nil, "bad_payload")
+				return
+			}
+		}
+		out := e.opts.OnBundleRollback(req)
 		if out.Rejected {
 			writeRejected(out, out.Error)
 			return

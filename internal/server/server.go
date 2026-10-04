@@ -482,9 +482,16 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	//   现在把配对凭据落到应用私有目录（0600），启动即恢复 ⇒ 设备带着旧 token 重连即可。
 	//   关闭方式：ENCV_PEERLINK_PERSIST=0（行为退回旧纪律）。
 	s.peerStore = peerlink.NewStore(peerlinkStateDir())
+	// 票据与会话一起落盘（2026-10-05）：只落一半会让"正在展示的二维码"因重启而失效。
+	s.peerHub.SetStore(s.peerStore)
+	// 设备指纹：同一台设备（含重装/清缓存后）必须是同一个 deviceId，
+	// 否则 Hub 侧会为同一台机器反复新增 peer 记录（真机实测同机两条）。
+	s.peerHub.SetDeviceID(deviceFingerprint(s.peerStore))
 	if n := s.restorePeerlinkState(); n > 0 {
 		slog.Info("peerlink state restored", "peers", n, "dir", s.peerStore.Dir())
 	}
+	s.restorePeerlinkTickets()
+	s.restoreBundleReports()
 	// 把 mock 引擎的 tool_call.execute_real 真实执行器绑到 s.executeAgentTool
 	// ——剧本里声明 execute_real=true 的工具调用会被实际执行（覆盖硬编码 result）。
 	// 见 internal/server/agent_mock.go §executeRealAndEmit

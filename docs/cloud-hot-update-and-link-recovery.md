@@ -135,11 +135,96 @@
 
 ---
 
-## I5 · 云控策略（灰度 / 强制 / 回滚指令） ⬜
+## I5 · 云控策略（灰度 / 强制） ⬜
 
-- 目标：manifest 支持 `minAppVersion`、按 deviceId 灰度、"强制升级"开关、云侧一键回滚
-  （再下发一次旧版本即可，I2 已具备能力，缺的是策略与 UI）。
-- 依赖：I2 的 `status` 台账已能给出"每台设备当前版本"，够做策略输入。
+- 目标：manifest 支持 `minAppVersion`、按 deviceId 灰度、"强制升级"开关。
+- 依赖：I6 的台账已能给出"每台设备当前版本"，够做策略输入。
+
+---
+
+## I6 · 热更**记录持久化** + **一键回滚** ✅（2026-10-05）
+
+- **起因（真机实测）**：
+  - 台账 `globalBundleReports` 是**纯内存** ⇒ 后端重启后 `reportCount` **1 → 0**，
+    "这台设备装到哪版了""上次下发成功还是失败"全部消失，云控退化成"每次都当没推过"；
+  - 回滚**只有**设备端 `RollbackFile`（装坏时的自保动作），**云端没有任何一键回滚入口**
+    ⇒ 一次坏包下发后，运维只能重新打一个旧版本包再走一遍下载/校验/切换（分钟级），期间设备一直是坏的。
+- **落地**：
+  - 台账落盘：`internal/peerlink/store.go` 新增 `SaveState/LoadState`（通用命名状态，
+    复用 0600 + 原子写同一套纪律，文件名禁含路径分隔符）；
+    `internal/server/peerlink_bundle.go` 的 `saveBundleReports/restoreBundleReports`，
+    启动时（`NewServer`）恢复，每次回报/下发/回滚后写盘。
+  - 云控回滚：新增 RPC `bundle_rollback`（`internal/peerlink/bundle.go` + `edge.go` 分发 +
+    `Supports()`），Hub 侧 `POST /api/peerlink/bundle/rollback`（运维）。
+    ⚠️ 与 I2 同一个坑：`OnBundleRollback` 必须**同时**加进 `peerEdgeHandlers`、
+    `edgeHandlers()` 默认值、**以及 `startEdgeLocked` 传给 `NewEdge`**（漏第三处就一律 not_supported）。
+  - 设备端自回滚 + 状态查询：`GET /bundle/local`（本端装了哪版 / 有没有备份可退）、
+    `POST /bundle/local/rollback`（移动端 UI 的回滚按钮走这条，不绕云端）。
+  - 语义：目录型（web / preview-assets）整目录搬回上一版；
+    文件型（go-binary）搬回备份**并删除 `.version`/`.abi` sidecar**
+    ⇒ 回到 APK 内置二进制（不删 sidecar 会让 Kotlin 继续用一个"自称新版本"的回滚件）。
+    没有备份可退 ⇒ **400 rejected**，不是 500（"没退路"不是设备故障，也不计入熔断）。
+  - 台账判据修正：`lastVer` 的更新条件由「成功且未回滚」改为「**成功且生效版本非空**」——
+    否则云控回滚成功后，云侧视角里设备版本会永远停在坏包那一版。
+- **UI**：`PeerSettings.vue` 新增「热更新」区块（本端已装版本 + 回滚；云控：可用包 / 设备版本 /
+  最近记录 + 一键回滚）；`usePeerLink.ts` 新增 `fetchBundleStatus / rollbackBundle /
+  fetchLocalBundles / rollbackLocalBundle`；i18n `peers.bundle*`（zh + en）。
+- **验证（先红后绿，均实跑）**：`internal/server/peerlink_bundle_rollback_test.go`
+  - 台账跨"重启"恢复（含设备当前版本）；红验：把 `saveBundleReports` 改成 no-op ⇒ `got 0`；
+  - 云控回滚端到端（Hub → Edge 真收到指令）+ 台账标 `rolledBack`；
+  - 接线锁 `TestPeerEdge_WiresBundleRollback`；红验：去掉传给 Edge 的那行 ⇒ `Supports=false`；
+  - 本端状态与自回滚（磁盘内容真的退回 v1）；没备份 ⇒ 400 `no_backup`。
+- **遗留**：真机验证需引导版 APK；多版本备份（不止"上一版"）尚未支持。
+
+---
+
+## I7 · 配对票据持久化 + 失败原因可诊断 ✅（2026-10-05）
+
+- **起因（真机事故，`docs/HANDOVER-cloud-hot-update.md` §4）**：热更后重启后端 → 手机连不上，
+  `edge/pair failed: 502` + `pair_rejected:401`，后端日志
+  `peerlink pair rejected … reason=peerlink: ticket not found (consumed or unknown)`。
+- **两个真因**：
+  1. I1 只把「会话」落盘，**票据仍在内存** ⇒ 后端一重启，桌面上正在展示的二维码立刻失效；
+  2. `redeem()` 把「不存在 / 已使用 / 已过期」合成**同一个** sentinel ⇒ 日志与 UI 都分不清。
+- **落地**：
+  - 票据落盘：`store.go` 的 `tickets.json`（`pending` + `used`，与 peers.json 同目录/同 0600/原子写，
+    `ENCV_PEERLINK_PERSIST=0` 同样关闭）；Hub 新增 `SetStore / RestoreTickets / LastPersistError`；
+    **只落未消费的票据**，消费后只留 `pairingId + 过期时间`（**不含 psk**）；
+    读回时按 `ExpiresAt` 清一遍 ⇒ **过期票据绝不被复活**。
+  - 错误三态：`ErrTicketNotFound` / `ErrTicketExpired` / `ErrTicketUsed`，HTTP 分别
+    `ticket_not_found` / `ticket_expired` / `ticket_used`，都带 `refreshQr:true`。
+    ⚠️ **决策变更**：旧 R10 纪律刻意"不区分以防探测"（`hub_ticket_r10_test.go`）——
+    **已被本节取代**（一次性语义不变；pairingId 是 128 位秘密，猜不中就没有探测入口），
+    代价（真机连不上却查不出原因）远大于收益。旧结论处已标注。
+  - 原因码跨端透传：`pairToRemoteHub` 解析远端响应体的 `error`，`/edge/pair` 回 `reason` + `refreshQr`；
+    前端 `PairEdgeError`（`usePeerLink.ts`）+ `PeerScanPanel` 的票据类文案与"解决办法"提示。
+- **验证（先红后绿）**：
+  - 复现（修复前实跑）：重启后旧票据 `HTTP 401 ticket_used`、日志 `ticket not found (consumed or unknown)`；
+    已用/不存在两个错误**文本完全相同**。
+  - `internal/peerlink/hub_ticket_persist_test.go`（4 例：跨重启可用 / 三态可区分 /
+    过期不复活 / 痕迹不含 psk）、`internal/server/peerlink_ticket_restart_test.go`（HTTP 层 3 例）、
+    `internal/server/peerlink_edge_pair_reason_test.go`（原因码带回 + 旧后端不误标）。
+  - UI 契约锁 `src/components/__tests__/PeerScanPanel.qrHint.test.ts`（真实 DOM）：
+    票据失败 ⇒ 文案含"刷新二维码"且有"怎么做"提示；非票据失败 ⇒ **不得**误导成刷新二维码。
+    红验：去掉组件里的原因码映射 ⇒ 回到"连接失败：…502 ticket_expired"（真机原样）。
+- **遗留**：真机复验需引导版 APK。
+
+---
+
+## I8 · 设备指纹 ✅（2026-10-05，待装机验证）
+
+- **起因**：deviceId 每次进程启动随机生成 ⇒ 同一台安卓机**重装 / 清缓存**后再配对，
+  Hub 侧就多一条 peer 记录（真机实测同机两条：`ac5e1c75ede3` / `6454ab90716f`）。
+- **落地**：`internal/server/peerlink_device.go` ——
+  ① `ENCV_DEVICE_ID` 显式覆盖（CI/自测）→ ② Kotlin 注入的 `ENCV_ANDROID_ID`
+  （取 sha256 前缀，**不透传系统标识原文**）→ ③ 落盘随机 UUID（`device.json`）
+  → ④ 进程内随机（持久化不可用时退回旧行为）；
+  `NewServer` 里 `s.peerHub.SetDeviceID(...)` ⇒ Hub 的 peerId 即设备指纹。
+  Kotlin：`EncvGoService.deviceAndroidId()`（`Settings.Secure.ANDROID_ID`，排除坏值
+  `9774d56d682e549c`），在 `ProcessBuilder.environment()` 处注入（与 `ENCV_APP_FILES_DIR` 同一处）。
+- **边界**：指纹只用于"识别同一台设备"，**不是密钥、不承担鉴权**（鉴权仍靠票据派生的 token 与 AEAD 密钥）。
+- **验证**：`internal/server/peerlink_device_test.go`（4 例：派生且稳定 / 覆盖优先 / 跨启动一致 / 空值不覆盖）。
+- **遗留**：Kotlin 侧在本环境无法编译验证（JitPack 不可达，与改动无关）；真机需装机确认"重装后仍是同一个 peer"。
 
 ---
 

@@ -51,6 +51,8 @@ type peerEdgeHandlers struct {
 	OnAgentInvoke func(peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome
 	// OnBundleUpdate 云控热更新（2026-10-04）：Hub 下发指令 → 本端拉包 → 原子生效/回滚
 	OnBundleUpdate func(peerlink.BundleUpdateRequest) peerlink.BundleUpdateResult
+	// OnBundleRollback 云控回滚（2026-10-05）：把上一版备份搬回来
+	OnBundleRollback func(peerlink.BundleRollbackRequest) peerlink.BundleRollbackResult
 }
 
 func (s *Server) edgeHandlers() peerEdgeHandlers {
@@ -60,8 +62,9 @@ func (s *Server) edgeHandlers() peerEdgeHandlers {
 	return peerEdgeHandlers{
 		OnSearch:       s.peerLocalSearch,
 		OnRead:         s.peerLocalRead,
-		OnAgentInvoke:  s.PeerAgentInvokeHandler,
-		OnBundleUpdate: s.peerLocalBundleUpdate,
+		OnAgentInvoke:    s.PeerAgentInvokeHandler,
+		OnBundleUpdate:   s.peerLocalBundleUpdate,
+		OnBundleRollback: s.peerLocalBundleRollback,
 	}
 }
 
@@ -69,7 +72,12 @@ func (s *Server) edgeHandlers() peerEdgeHandlers {
 //
 // bundleTargets 是「包名 → 本端可写目录」的映射。只有登记在册的包才允许被云控覆盖，
 // 且目录必须是**应用私有可写目录**（不在 APK / Go 二进制内）—— 否则"热更新"就是空话。
-func (s *Server) bundleTargetDir(name string) (string, bool) {
+// bundleTargetDirFor / bundleTargetFileFor 是「包名 → 目标」的**纯函数**版本。
+//
+// 为什么要有：本端热更状态（/bundle/local）与回滚都要按同一份清单扫描，
+// 而 Server 方法在非 Server 上下文（以及未来的纯函数单测）里拿不到 ⇒ 抽成包级函数，
+// 方法版只是转发（避免"清单写两份"的漂移）。
+func bundleTargetDirFor(name string) (string, bool) {
 	switch name {
 	case "preview-assets":
 		// 已验证过的先例：容器预览页，整包替换即生效，不需要换 APK、也不需要重启
@@ -82,11 +90,7 @@ func (s *Server) bundleTargetDir(name string) (string, bool) {
 	}
 }
 
-// bundleTargetFile 是「包名 → 单文件目标」的映射（I3：Go 二进制热更新）。
-//
-// ⚠️ 只有 go-binary 一个入口：换的是**执行体**，必须带 ABI 且可回滚，
-//    绝不接受任意路径（否则一次云控就能把设备写成砖）。
-func (s *Server) bundleTargetFile(name string) (string, bool) {
+func bundleTargetFileFor(name string) (string, bool) {
 	if name != "go-binary" {
 		return "", false
 	}
@@ -96,6 +100,14 @@ func (s *Server) bundleTargetFile(name string) (string, bool) {
 	}
 	return filepath.Join(files, "encv-go"), true
 }
+
+func (s *Server) bundleTargetDir(name string) (string, bool) { return bundleTargetDirFor(name) }
+
+// bundleTargetFile 是「包名 → 单文件目标」的映射（I3：Go 二进制热更新）。
+//
+// ⚠️ 只有 go-binary 一个入口：换的是**执行体**，必须带 ABI 且可回滚，
+//    绝不接受任意路径（否则一次云控就能把设备写成砖）。
+func (s *Server) bundleTargetFile(name string) (string, bool) { return bundleTargetFileFor(name) }
 
 // peerLocalBundleUpdate 执行一次云控下发的资源包更新。
 //
@@ -215,6 +227,71 @@ func (s *Server) peerLocalBundleUpdate(req peerlink.BundleUpdateRequest) (out pe
 	}
 	slog.Info("peerlink bundle update applied", "name", req.Name, "version", res.Version, "prev", res.PreviousVersion)
 	return out
+}
+
+// peerLocalBundleRollback 执行一次云控下发的**回滚**（2026-10-05）。
+//
+// 与"更新失败自动回滚"的区别：那是安装器内部的自保动作；这是**云控主动发起**的
+// 一键回滚 —— 一次坏包下发之后，运维要能在几秒内把设备退回上一版，
+// 而不是重新打一个旧版本包再走一遍下载/校验/切换。
+//
+// 语义：
+//   - 包名不认识 / **没有备份可退** ⇒ Rejected（发起端 400，不计熔断）
+//   - 目录型（web / preview-assets）：整目录搬回上一版，版本 = 备份里的 version.json
+//   - 文件型（go-binary）：搬回备份二进制，并**删除 sidecar** ⇒ 回到 APK 内置二进制
+func (s *Server) peerLocalBundleRollback(req peerlink.BundleRollbackRequest) (out peerlink.BundleRollbackResult) {
+	out.Name = req.Name
+
+	isFileTarget := false
+	target, ok := s.bundleTargetDir(req.Name)
+	if !ok {
+		if ft, ok2 := s.bundleTargetFile(req.Name); ok2 {
+			target, isFileTarget, ok = ft, true, true
+		}
+	}
+	if !ok {
+		out.Rejected = true
+		out.Error = "unknown_bundle:" + sanitizeBundleName(req.Name)
+		return out
+	}
+
+	// 先记下"被撤掉的是哪版"（云控台账要能回答"从哪版退下来的"）
+	out.PreviousVersion = localBundleVersion(target, isFileTarget)
+
+	if isFileTarget {
+		if err := bundle.RollbackFile(req.Name, target); err != nil {
+			out.Rejected = true
+			out.Error = "no_backup"
+			return out
+		}
+		// ⚠️ 换执行体的回滚 = 退回 **APK 内置**二进制。
+		//    `.version` / `.abi` 是 Kotlin 判定"这是热更通道放进去的二进制"的依据
+		//    （见 EncvGoService.findExecutableBinary）⇒ 必须一起删掉，
+		//    否则 Kotlin 会继续用 filesDir 里那个"自称某版本"的回滚件，
+		//    而它其实已经是备份件 ⇒ 版本显示与实际执行体不一致。
+		_ = os.Remove(target + ".version")
+		_ = os.Remove(target + ".abi")
+		out.Version = "apk"
+	} else {
+		if err := bundle.Rollback(req.Name, target); err != nil {
+			out.Rejected = true
+			out.Error = "no_backup"
+			return out
+		}
+		out.Version = bundle.CurrentVersion(target)
+	}
+
+	out.Ok = true
+	slog.Info("peerlink bundle rollback applied", "name", req.Name, "from", out.PreviousVersion, "to", out.Version)
+	return out
+}
+
+// localBundleVersion 读本端某个包**当前生效**的版本（未安装返回空串）。
+func localBundleVersion(target string, isFile bool) string {
+	if isFile {
+		return strings.TrimSpace(readTextSidecar(target + ".version"))
+	}
+	return bundle.CurrentVersion(target)
 }
 
 // abiOfArgs 取出下发指令里的架构声明（go-binary 必填）。
@@ -402,6 +479,43 @@ func hubHostOf(hub string) string {
 	return u.Host
 }
 
+// pairRejectError 远端 Hub 拒绝了配对（HTTP 非 200）。
+//
+// 2026-10-05：把远端的**错误码**一并带回来（如 ticket_expired / ticket_used /
+// ticket_not_found），否则"/edge/pair 502" 对手机端 UI 就是一团黑盒。
+type pairRejectError struct {
+	status int
+	code   string // 远端响应的 error 字段（可能为空 = 旧版后端）
+	detail string
+}
+
+func (e *pairRejectError) Error() string {
+	if e.code != "" {
+		return fmt.Sprintf("pair_rejected:%d:%s", e.status, e.code)
+	}
+	return fmt.Sprintf("pair_rejected:%d", e.status)
+}
+
+// RefreshQr 该失败是否属于"票据类"（用户刷新二维码重扫即可解决）。
+func (e *pairRejectError) IsTicketFailure() bool {
+	switch e.code {
+	case "ticket_expired", "ticket_used", "ticket_not_found":
+		return true
+	}
+	return false
+}
+
+// remotePairCode 从远端响应体里取 error 字段（取不到返回空串，向后兼容旧后端）。
+func remotePairCode(raw []byte) string {
+	var body struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &body); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(body.Error)
+}
+
 // pairToRemoteHub 拿票据去远端 Hub 完成配对（proof = HMAC(psk, pairingId, deviceId)）。
 //
 // ⚠️ 第三个返回值 sas 不能丢（2026-10-04）：远端 /api/peerlink/pair 会回 SAS 6 位安全码，
@@ -426,7 +540,11 @@ func pairToRemoteHub(hub, pairingID, pskB64, deviceID, name string) (peerID stri
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return "", "", "", fmt.Errorf("pair_rejected:%d", resp.StatusCode)
+		// ⚠️ 2026-10-05：失败**原因**必须带回去。
+		//    旧实现只回 `pair_rejected:401` ⇒ 手机端 UI 只知道"失败了"，
+		//    不知道该让用户"刷新二维码重扫"还是"检查网络"，真机上就是一句没用的
+		//    "连接失败"（真机事故里用户拿着过期码反复扫，界面毫无引导）。
+		return "", "", "", &pairRejectError{status: resp.StatusCode, code: remotePairCode(raw), detail: strings.TrimSpace(string(raw))}
 	}
 	var out struct {
 		PeerID string `json:"peerId"`
@@ -475,6 +593,15 @@ func (s *Server) handlePeerlinkEdgePair(c *gin.Context) {
 		// 2026-10-04：扫码端配对失败必须进后端日志（此前整个 peerlink 零日志，
 		//   用户只能看到"连接中…"，DevLogs 里一条相关信息都没有）
 		slog.Warn("peerlink edge pair failed", "hub", hubHostOf(hub), "detail", err.Error())
+		// 2026-10-05：票据类失败要**单独标记** ⇒ 前端才能提示"刷新二维码重扫"，
+		//   而不是把"码过期了"和"连不上会合点"混成一句"连接失败"。
+		var re *pairRejectError
+		if errors.As(err, &re) && re.IsTicketFailure() {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error": "pair_failed", "reason": re.code, "refreshQr": true, "detail": err.Error(),
+			})
+			return
+		}
 		c.JSON(http.StatusBadGateway, gin.H{"error": "pair_failed", "detail": err.Error()})
 		return
 	}
@@ -524,7 +651,9 @@ func (s *Server) startEdgeLocked(hub, peerID, deviceID, token string) {
 		//    peerEdgeHandlers 映射与 edgeHandlers() 默认值，却没在这里传给 Edge
 		//    ⇒ 设备端收到云控 bundle_update 一律回 "not_supported"
 		//    （真机首测才暴露：Hub 侧 push 得到 502 + remote error: not_supported）。
-		OnBundleUpdate: h.OnBundleUpdate,
+		//    同一个坑对 bundle_rollback 一样成立 ⇒ 有 `Supports()` 可断言，别再靠猜。
+		OnBundleUpdate:   h.OnBundleUpdate,
+		OnBundleRollback: h.OnBundleRollback,
 	})
 	rt := &edgeRuntime{
 		hubURL:    hubNormalized,

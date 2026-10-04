@@ -59,6 +59,10 @@ func registerPeerlinkRoutes(s *Server, r *gin.Engine) {
 	r.POST("/api/peerlink/bundle/report", s.handlePeerlinkBundleReport)
 	r.POST("/api/peerlink/bundle/push", s.handlePeerlinkBundlePush)
 	r.GET("/api/peerlink/bundle/status", s.handlePeerlinkBundleStatus)
+	// 2026-10-05：云控一键回滚 + 本端（设备侧）热更状态/自回滚
+	r.POST("/api/peerlink/bundle/rollback", s.handlePeerlinkBundleRollback)
+	r.GET("/api/peerlink/bundle/local", s.handlePeerlinkBundleLocal)
+	r.POST("/api/peerlink/bundle/local/rollback", s.handlePeerlinkBundleLocalRollback)
 	// P2a：本端作为 Edge 连远端 Hub（扫码配对后启动 / 状态 / 停止）
 	r.POST("/api/peerlink/edge/pair", s.handlePeerlinkEdgePair)
 	r.GET("/api/peerlink/edge/status", s.handlePeerlinkEdgeStatus)
@@ -141,6 +145,14 @@ func (s *Server) handlePeerlinkTicket(c *gin.Context) {
 	})
 }
 
+// ticketPairErr 票据类配对失败的统一响应体。
+//
+// `refreshQr` 是给前端的**动作指令**：这类失败用户能自己解决（刷新二维码重扫），
+// 与"连接不上/地址不通"这类需要排障的失败区分开。
+func ticketPairErr(code, msg string) gin.H {
+	return gin.H{"error": code, "message": msg, "refreshQr": true}
+}
+
 // handlePeerlinkPair —— POST /api/peerlink/pair
 func (s *Server) handlePeerlinkPair(c *gin.Context) {
 	if s.peerHub == nil {
@@ -167,12 +179,17 @@ func (s *Server) handlePeerlinkPair(c *gin.Context) {
 	if err != nil {
 		// 2026-10-04：配对失败原因必须进后端日志（DevLogs 此前一条互联日志都没有）
 		slog.Warn("peerlink pair rejected", "pairingId", body.PairingID, "reason", err.Error())
-		switch err {
-		case peerlink.ErrTicketExpired:
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "ticket_expired", "message": "配对码已过期，请刷新二维码"})
-		case peerlink.ErrTicketUsed:
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "ticket_used", "message": "配对码已使用或不存在"})
-		case peerlink.ErrBadProof:
+		// 2026-10-05：三种票据失败**必须分开**（此前混成一句 "consumed or unknown"，
+		// 排障时根本分不清用户是扫了旧码、码过期了、还是后端重启丢了票据）。
+		// 三者都带 `refreshQr:true` ⇒ 前端统一引导"刷新二维码"，不必猜。
+		switch {
+		case errors.Is(err, peerlink.ErrTicketExpired):
+			c.JSON(http.StatusUnauthorized, ticketPairErr("ticket_expired", "配对码已过期，请刷新二维码"))
+		case errors.Is(err, peerlink.ErrTicketUsed):
+			c.JSON(http.StatusUnauthorized, ticketPairErr("ticket_used", "配对码已被使用过（一张码只能配一次），请刷新二维码"))
+		case errors.Is(err, peerlink.ErrTicketNotFound):
+			c.JSON(http.StatusUnauthorized, ticketPairErr("ticket_not_found", "配对码无效或已失效（服务端可能重启过），请刷新二维码"))
+		case errors.Is(err, peerlink.ErrBadProof):
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "bad_proof", "message": "配对校验失败"})
 		default:
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "pair_failed", "detail": err.Error()})

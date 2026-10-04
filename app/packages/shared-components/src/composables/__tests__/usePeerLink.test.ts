@@ -16,10 +16,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetPeerLinkStateForTests,
   createPairingTicket,
+  fetchBundleStatus,
+  fetchLocalBundles,
   fetchPairingStatus,
   fetchPeers,
+  PairEdgeError,
   pairAsEdge,
   parsePairingQR,
+  rollbackBundle,
+  rollbackLocalBundle,
   setPeerLinkFetchProvider,
   unpairPeer,
   usePeerLink,
@@ -229,6 +234,102 @@ describe("扫码端：pairAsEdge（Task 2.6）", () => {
     await pairAsEdge({ hub: "https://h", pairingId: "abc", psk: "ee".repeat(32) });
     expect(Object.keys(localStorage as unknown as Record<string, unknown>).length).toBe(0);
     expect(JSON.stringify(localStorage)).not.toContain("ee");
+  });
+});
+
+// ── 2026-10-05：配对失败的**原因码**必须带到 UI（真机"连不上"的引导）──
+describe("扫码端：失败原因码（2026-10-05）", () => {
+  const pair = { hub: "https://hub.example/api/peerlink", pairingId: "abc", psk: "ff".repeat(32) };
+
+  it("票据过期 → reason=ticket_expired 且 refreshQr=true（前端据此提示刷新二维码）", async () => {
+    setPeerLinkFetchProvider((async () => ({
+      ok: false,
+      status: 502,
+      text: async () => JSON.stringify({ error: "pair_failed", reason: "ticket_expired", refreshQr: true, detail: "pair_rejected:401:ticket_expired" }),
+    })) as unknown as typeof fetch);
+
+    const err = await pairAsEdge(pair).catch(e => e);
+    expect(err).toBeInstanceOf(PairEdgeError);
+    expect(err.reason).toBe("ticket_expired");
+    expect(err.refreshQr).toBe(true);
+  });
+
+  it("票据已使用 / 不存在 → reason 分别是 ticket_used / ticket_not_found", async () => {
+    for (const reason of ["ticket_used", "ticket_not_found"]) {
+      setPeerLinkFetchProvider((async () => ({
+        ok: false,
+        status: 502,
+        text: async () => JSON.stringify({ error: "pair_failed", reason }),
+      })) as unknown as typeof fetch);
+      const err = await pairAsEdge(pair).catch(e => e);
+      expect(err.reason).toBe(reason);
+      // 旧后端可能不带 refreshQr ⇒ 客户端必须兜底：票据类一律引导刷新二维码
+      expect(err.refreshQr).toBe(true);
+    }
+  });
+
+  it("非票据类失败（连不上会合点）→ 不得误导成刷新二维码", async () => {
+    setPeerLinkFetchProvider((async () => ({
+      ok: false,
+      status: 502,
+      text: async () => JSON.stringify({ error: "pair_failed", detail: "connection refused" }),
+    })) as unknown as typeof fetch);
+    const err = await pairAsEdge(pair).catch(e => e);
+    expect(err.reason).toBe("unknown");
+    expect(err.refreshQr).toBe(false);
+  });
+});
+
+// ── 2026-10-05：云控热更新的前端抽象 ──
+describe("云控热更新（2026-10-05）", () => {
+  it("fetchBundleStatus 解析可用包 / 设备版本 / 记录", async () => {
+    setPeerLinkFetchProvider((async () =>
+      jsonResponse(200, {
+        available: [{ name: "web", version: "v0.0.10", size: 1024, sha256: "ab" }],
+        deviceVer: { "peer-1": "web@v0.0.10" },
+        reports: [{ at: "2026-10-05T00:00:00Z", peerId: "peer-1", name: "web", version: "v0.0.10", ok: true }],
+        reportCount: 1,
+      })) as unknown as typeof fetch);
+    const st = await fetchBundleStatus();
+    expect(st.available[0].name).toBe("web");
+    expect(st.deviceVer["peer-1"]).toBe("web@v0.0.10");
+    expect(st.reportCount).toBe(1);
+  });
+
+  it("rollbackBundle 下发 peerId+name 到 /bundle/rollback", async () => {
+    let seenUrl = "";
+    let body: Record<string, string> = {};
+    setPeerLinkFetchProvider((async (url: string, init?: RequestInit) => {
+      seenUrl = String(url);
+      body = JSON.parse(String(init?.body));
+      return jsonResponse(200, { ok: true, version: "v0.0.9" });
+    }) as unknown as typeof fetch);
+    const out = await rollbackBundle("peer-1", "web");
+    expect(out.ok).toBe(true);
+    expect(seenUrl).toContain("/api/peerlink/bundle/rollback");
+    expect(body.peerId).toBe("peer-1");
+    expect(body.name).toBe("web");
+  });
+
+  it("回滚被拒（没备份可退）→ 抛错并带 reason，绝不当成功", async () => {
+    setPeerLinkFetchProvider((async () => ({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({ error: "rollback_rejected", reason: "no_backup" }),
+    })) as unknown as typeof fetch);
+    await expect(rollbackBundle("peer-1", "web")).rejects.toThrow(/no_backup/);
+  });
+
+  it("fetchLocalBundles / rollbackLocalBundle：本端版本与自回滚", async () => {
+    setPeerLinkFetchProvider((async (url: string) => {
+      if (String(url).includes("/bundle/local/rollback")) return jsonResponse(200, { ok: true, version: "v1" });
+      return jsonResponse(200, { items: [{ name: "web", version: "v2", kind: "dir", rollable: true }] });
+    }) as unknown as typeof fetch);
+    const items = await fetchLocalBundles();
+    expect(items[0].version).toBe("v2");
+    expect(items[0].rollable).toBe(true);
+    const out = await rollbackLocalBundle("web");
+    expect(out.version).toBe("v1");
   });
 });
 

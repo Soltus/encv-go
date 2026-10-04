@@ -14,6 +14,14 @@ import "time"
 // MethodBundleUpdate 是 Hub → Edge 的 RPC 方法名（云控下发）。
 const MethodBundleUpdate = "bundle_update"
 
+// MethodBundleRollback 是 Hub → Edge 的**云控回滚**方法名（2026-10-05）。
+//
+// 为什么要有它：设备端此前只有 `RollbackFile` 这个**本地**函数（"装坏了自动退回"），
+// 云端**没有任何一键回滚的入口** ⇒ 一次坏包下发后，运维只能再推一个旧版本号
+// （要重新打包 + 重新走一遍下载/校验/切换），设备在几分钟里一直是坏的。
+// 回滚指令只有几十字节，与 bundle_update 同一条控制面。
+const MethodBundleRollback = "bundle_rollback"
+
 // BundleCallTimeout 一次热更新的总超时（含"下载 + 解压 + 原子切换 + 回滚"）。
 //
 // 比 AgentCallTimeout(120s) 长得多：更新是分钟级动作（几十 MB 走移动网络）。
@@ -38,6 +46,32 @@ type BundleUpdateRequest struct {
 	//	Kotlin 侧启动前还要与 Build.SUPPORTED_ABIS[0] 比对 ——
 	//	把 arm64 的包装到别的架构上 = CANNOT LINK EXECUTABLE = 设备起不来后端。
 	ABI string `json:"abi,omitempty"`
+}
+
+// BundleRollbackRequest 云控下发的一次**回滚**指令。
+type BundleRollbackRequest struct {
+	// Name 包名：web / preview-assets / go-binary。
+	Name string `json:"name"`
+	// Version 期望回滚到的版本（可空：执行端只有"上一版备份"这一份，以它为准）。
+	// 留着是为了让云控台账能记"从哪版退到哪版"，也是未来多版本备份的扩展位。
+	Version string `json:"version,omitempty"`
+}
+
+// BundleRollbackResult 执行端回报的一次回滚结果。
+type BundleRollbackResult struct {
+	Ok   bool   `json:"ok"`
+	Name string `json:"name"`
+	// Version 回滚后**生效**的版本（回滚成功时才有意义）。
+	Version string `json:"version,omitempty"`
+	// PreviousVersion 被撤掉的那版（"坏包"的版本号，云控台账要记）。
+	PreviousVersion string `json:"previousVersion,omitempty"`
+	// Error 失败原因（**脱敏**：不得含设备绝对路径）。
+	Error string `json:"error,omitempty"`
+	// Rejected 表示"这个请求本身不成立"（包名不认识 / 没有备份可退）
+	//
+	//	⇒ 与 bundle_update 同一套纪律：发起端给 **400** 且**不计入熔断**
+	//	（"没备份可退"不是设备故障，把它算成故障会连坐后续所有云控指令）。
+	Rejected bool `json:"-"`
 }
 
 // BundleUpdateResult 执行端回报的一次更新结果。

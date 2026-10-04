@@ -146,6 +146,9 @@ const NATIVE_CONTRACT_INCLUDE = [
   // 🆕 2026-10-04 非沙箱环境契约锁：:16666 是沙箱 preview-gateway 专用端口，
   //    独立 vite dev（ENCV_STANDALONE_VITE=1）必须走同源（vite 反代），不能再打 :16666。
   'src/api/__tests__/getApiBaseUrl.standalone.test.ts',
+  // 🆕 2026-10-05 真机"连不上"的 UI 契约锁：扫码失败必须渲染出"刷新二维码"引导，
+  //    而不是一句"连接失败"（mount 真实 DOM，故放 contract 的 isolate:true）。
+  'src/components/__tests__/PeerScanPanel.qrHint.test.ts',
 ]
 
 // ── ISOLATED：有模块级状态 / 用 vi.resetModules / 依赖 localStorage ──

@@ -2,13 +2,18 @@ package peerlink
 
 // hub.go —— Hub 侧（cnb 上运行）：票据 / 配对 / 会话 / 心跳 / 解配
 //
-// 全部状态只存内存：进程重启 → 票据、会话、密钥、信任态全部消失（符合 spec 存储纪律）。
+// 存储纪律（2026-10-05 修订）：
+//   - **票据**与**会话**可落盘（应用私有目录 / 0600 / 原子写，`ENCV_PEERLINK_PERSIST=0` 可关）
+//     ⇒ 后端重启后"正在展示的二维码"仍然有效、已配对设备带着旧 token 就能重连。
+//     不这么做，重启 = 手机必然 401（真机"连不上"事故，见 docs/HANDOVER-cloud-hot-update.md §4）。
+//   - **信任态（trust_device）** 仍只存内存：恢复的是"身份与通道"，不是"授权"。
 
 import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -39,9 +44,21 @@ type Hub struct {
 	tickets  map[string]*Ticket
 	peers    map[string]*Peer
 	sessions map[string]*Session // token → session
+	// used 已消费（或已过期）票据的痕迹：pairingID → 过期时间。
+	//
+	// ⚠️ 为什么要有它：票据是"取出即销毁"的，销毁后同一张码再来一次，
+	//    与"压根没这张码"在内存里长得一模一样 ⇒ 日志只能写一句含糊的
+	//    "not found (consumed or unknown)"，排障时根本分不清用户是扫了旧码、
+	//    码过期了、还是后端重启过。留痕只存 ID + 过期时间（**不含 psk**）。
+	used map[string]time.Time
 	// pairedByTicket：以 pairingID 为键记录"哪张票据完成了配对"，供桌面端轮询配对状态。
 	// 键是二维码里的 32 位 hex 秘密（只有扫码方与桌面端知道），因此**无需 token 即可按 ID 查询**。
 	pairedByTicket map[string]*PairResult
+
+	// store 票据的落盘通道（nil = 纯内存，与旧纪律一致）。
+	store *Store
+	// persistErr 最近一次落盘失败（不阻断流程，但要可观测 —— 静默失败比不持久化更难查）。
+	persistErr error
 }
 
 // NewHub 创建一个 Hub（进程内单例）。
@@ -58,8 +75,101 @@ func NewHub(name, version string) *Hub {
 		tickets:        make(map[string]*Ticket),
 		peers:          make(map[string]*Peer),
 		sessions:       make(map[string]*Session),
+		used:           make(map[string]time.Time),
 		pairedByTicket: make(map[string]*PairResult),
 	}
+}
+
+// SetStore 接上落盘通道（票据持久化；nil = 纯内存）。
+//
+// 为什么不在 NewHub 里传：Hub 本身是纯内存对象，持久化是"可选外挂"，
+// 绝大多数单测不该被磁盘行为干扰（显式接上才启用）。
+func (h *Hub) SetStore(st *Store) { h.store = st }
+
+// SetDeviceID 指定本端设备指纹（跨重装稳定的 deviceId）。
+//
+// 默认 peerID 是**每次进程启动随机生成**的 ⇒ 同一台安卓机重装/清缓存后再配对，
+// Hub 侧就多一条 peer 记录（真机实测同机两条）。设备指纹让"同一台设备"始终
+// 是同一个 ID。见 internal/server/peerlink_device.go。
+func (h *Hub) SetDeviceID(id string) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return
+	}
+	h.mu.Lock()
+	h.peerID = id
+	h.mu.Unlock()
+}
+
+// LastPersistError 最近一次票据落盘的失败原因（nil = 一切正常）。
+func (h *Hub) LastPersistError() error {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.persistErr
+}
+
+// saveTickets 把票据快照落盘（无 store / 未启用 = no-op）。
+func (h *Hub) saveTickets() {
+	h.mu.Lock()
+	snap := TicketSnapshot{
+		Pending: make([]Ticket, 0, len(h.tickets)),
+		Used:    make([]UsedTicket, 0, len(h.used)),
+	}
+	for _, t := range h.tickets {
+		snap.Pending = append(snap.Pending, *t)
+	}
+	for id, exp := range h.used {
+		snap.Used = append(snap.Used, UsedTicket{PairingID: id, ExpiresAt: exp})
+	}
+	st := h.store
+	h.mu.Unlock()
+
+	if st == nil || !st.Enabled() {
+		return
+	}
+	err := st.SaveTickets(snap)
+	h.mu.Lock()
+	h.persistErr = err
+	h.mu.Unlock()
+}
+
+// RestoreTickets 启动时把落盘票据读回内存，返回恢复的**待用**票据数。
+//
+// ⚠️ 过期的一律不恢复（读回就立刻按 ExpiresAt 过一遍）—— 把过期码"复活"
+//    比没有持久化更危险：它会让一个本该失效的二维码重新可用。
+func (h *Hub) RestoreTickets() int {
+	if h.store == nil || !h.store.Enabled() {
+		return 0
+	}
+	snap, err := h.store.LoadTickets()
+	if err != nil {
+		h.mu.Lock()
+		h.persistErr = err
+		h.mu.Unlock()
+		return 0
+	}
+	now := time.Now()
+	n := 0
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, t := range snap.Pending {
+		if t.PairingID == "" || t.PSKHex == "" || now.After(t.ExpiresAt) {
+			continue
+		}
+		if _, exists := h.tickets[t.PairingID]; exists {
+			continue
+		}
+		cp := t
+		h.tickets[cp.PairingID] = &cp
+		n++
+	}
+	for _, u := range snap.Used {
+		if u.PairingID == "" || now.After(u.ExpiresAt) {
+			continue
+		}
+		h.used[u.PairingID] = u.ExpiresAt
+	}
+	return n
 }
 
 // Info 返回 hello 响应（未鉴权，只暴露非敏信息）。
@@ -86,7 +196,6 @@ type SweepStats struct {
 //	已配对设备在列表里要显示为"离线"而不是凭空消失；它们的唯一清理入口是 `Unpair`。
 func (h *Hub) Sweep(now time.Time) SweepStats {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	var st SweepStats
 
 	for id, t := range h.tickets {
@@ -95,7 +204,21 @@ func (h *Hub) Sweep(now time.Time) SweepStats {
 			st.Tickets++
 		}
 	}
+	// 消费痕迹同样要清（它是"某张码用过"的证据，票据有效期一过就没有意义了）
+	for id, exp := range h.used {
+		if now.After(exp) {
+			delete(h.used, id)
+			st.Tickets++
+		}
+	}
+	changed := st.Tickets > 0
+	h.mu.Unlock()
+	if changed {
+		h.saveTickets()
+	}
 
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	for id, res := range h.pairedByTicket {
 		ts := time.Time{}
 		if res != nil && res.Peer != nil {
@@ -169,26 +292,53 @@ func (h *Hub) CreateTicket(hubURL string, ttl time.Duration) (*Ticket, error) {
 	h.mu.Lock()
 	h.tickets[id] = t
 	h.mu.Unlock()
+	// 落盘（2026-10-05）：重启后这张码必须还在 —— 否则"正在展示的二维码"会因
+	// 后端重启而失效，手机扫它必然 401（真机"连不上"事故的根因）。
+	h.saveTickets()
 	return t, nil
 }
 
-// ErrTicketExpired / ErrTicketUsed —— 票据错误（用于映射 HTTP 401/400）。
+// 票据错误三态（2026-10-05 拆分，用于映射 HTTP 401 的不同提示）。
+//
+// ⚠️ 为什么必须拆开：此前「不存在」与「已使用」共用 ErrTicketUsed 一个 sentinel，
+//    日志里只能看到一句 `ticket not found (consumed or unknown)` ⇒ 真机"连不上"时
+//    根本分不清用户是扫了旧码、码过期了、还是后端重启丢了票据（排查成本极高）。
+//    拆开后前端也能给出**不同**的引导：过期/已用/不存在都指向"刷新二维码"。
 var (
+	// ErrTicketNotFound 从来没签发过这张码（或已过期被清 / 后端重启且未持久化）。
+	ErrTicketNotFound = fmt.Errorf("peerlink: ticket not found")
+	// ErrTicketExpired 码签过，但已经超过有效期。
 	ErrTicketExpired = fmt.Errorf("peerlink: ticket expired")
-	ErrTicketUsed    = fmt.Errorf("peerlink: ticket not found (consumed or unknown)")
-	ErrBadProof      = fmt.Errorf("peerlink: bad proof")
-	ErrNoSession     = fmt.Errorf("peerlink: no session")
+	// ErrTicketUsed 码已被消费过（一次性：一张码只能配一次）。
+	ErrTicketUsed = fmt.Errorf("peerlink: ticket already used")
+	ErrBadProof   = fmt.Errorf("peerlink: bad proof")
+	ErrNoSession  = fmt.Errorf("peerlink: no session")
 )
 
-// redeem 取出并**立即销毁**票据（一次性）。过期返回 ErrTicketExpired。
+// redeem 取出并**立即销毁**票据（一次性）。
+//
+// 三态判定顺序：过期 > 已用 > 不存在。
+// ⚠️ 销毁 = 从 pending 移到 used（留痕，不含 psk），不是直接 delete ——
+//    否则"用过没有"就再也问不出来了。
 func (h *Hub) redeem(pairingID string) (*Ticket, error) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	t, ok := h.tickets[pairingID]
 	if !ok {
+		exp, used := h.used[pairingID]
+		h.mu.Unlock()
+		if !used {
+			return nil, ErrTicketNotFound
+		}
+		if time.Now().After(exp) {
+			return nil, ErrTicketExpired
+		}
 		return nil, ErrTicketUsed
 	}
 	delete(h.tickets, pairingID) // 一次性：取出即销毁
+	h.used[pairingID] = t.ExpiresAt
+	h.mu.Unlock()
+
+	h.saveTickets()
 	if time.Now().After(t.ExpiresAt) {
 		return nil, ErrTicketExpired
 	}
@@ -311,6 +461,11 @@ func (h *Hub) sweepLocked(now time.Time) {
 	for id, t := range h.tickets {
 		if now.After(t.ExpiresAt) {
 			delete(h.tickets, id)
+		}
+	}
+	for id, exp := range h.used {
+		if now.After(exp) {
+			delete(h.used, id)
 		}
 	}
 	for id, res := range h.pairedByTicket {

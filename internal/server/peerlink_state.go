@@ -53,6 +53,26 @@ func (s *Server) restorePeerlinkState() int {
 	return s.peerHub.RestoreState(items)
 }
 
+// restorePeerlinkTickets 启动时把**未消费**的票据读回（2026-10-05）。
+//
+// 为什么必须做：I1 只把"会话"落盘了，票据仍在内存 ⇒ 后端一重启，桌面上正在展示的
+// 二维码立刻失效，手机拿它来配对必然 401（真机事故：`pair_rejected:401` +
+// `ticket not found (consumed or unknown)`）。票据与会话是同一次配对的两半，
+// 只持久化一半 = 设计不一致，事故迟早发生。
+func (s *Server) restorePeerlinkTickets() int {
+	if s.peerHub == nil || !s.peerStore.Enabled() {
+		return 0
+	}
+	n := s.peerHub.RestoreTickets()
+	if n > 0 {
+		slog.Info("peerlink tickets restored", "tickets", n)
+	}
+	if err := s.peerHub.LastPersistError(); err != nil {
+		slog.Warn("peerlink tickets load failed, starting without restored tickets", "error", err.Error())
+	}
+	return n
+}
+
 // savePeerlinkPeers 把当前已配对设备落盘（配对 / 解配后调用）。
 func (s *Server) savePeerlinkPeers() {
 	if s.peerHub == nil || !s.peerStore.Enabled() {

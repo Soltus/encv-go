@@ -49,6 +49,7 @@
     <!-- ⚠️ 结果/错误必须可见（禁止静默失败）：三处文案都渲染到 DOM -->
     <p v-if="okMsg" class="scanOk" data-testid="scan-ok">{{ okMsg }}</p>
     <p v-if="errMsg" class="scanErr" data-testid="scan-error">{{ errMsg }}</p>
+    <p v-if="hintMsg" class="scanNote" data-testid="scan-hint">{{ hintMsg }}</p>
 
     <!-- 🆕 2026-10-04：扫码端的 SAS 核对区。
          桌面端点「一致，信任该设备」时手里有 6 位安全码，而手机端此前**什么都不显示**
@@ -106,7 +107,13 @@ import { IonButton } from "@ionic/vue";
 import { Capacitor } from "@capacitor/core";
 import { onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { type EdgeStatus, fetchEdgeStatus, pairAsEdge, parsePairingQR } from "@encv/shared-components/composables/usePeerLink";
+import {
+  type EdgeStatus,
+  fetchEdgeStatus,
+  PairEdgeError,
+  pairAsEdge,
+  parsePairingQR,
+} from "@encv/shared-components/composables/usePeerLink";
 import { ScanError, scanOnce } from "@/peerlink/barcodeScanner";
 import { QRDecodeError, decodeQRFromImageFile } from "@/peerlink/qrFromImage";
 import { stopEdge, unpairPeer } from "@encv/shared-components/composables/usePeerLink";
@@ -119,6 +126,8 @@ const busy = ref(false);
 const pasted = ref("");
 const okMsg = ref("");
 const errMsg = ref("");
+// 失败之后的"下一步该做什么"（2026-10-05：只说失败不说办法，用户只能瞎重试）
+const hintMsg = ref("");
 const sasCode = ref("");
 const pairedPeerId = ref("");
 // 已连接的会合点（从 /edge/status 恢复 ⇒ 重进页面也不会丢）
@@ -188,6 +197,15 @@ function errTextFor(reason: string, detail?: string): string {
       return t("peers.codeBadHub") || "配对码里的会合点地址不被允许（必须 https，或本机回环）";
     case "expired":
       return t("peers.codeExpired") || "配对码已过期，请在桌面端刷新后重新扫码";
+    // 🆕 2026-10-05：后端把失败原因码带回来了（此前一律"连接失败"，
+    //    用户拿着过期/用过的码反复扫，界面却没有任何"刷新二维码"的引导）。
+    //    这三种都是**用户自己能解决**的：回桌面端点一下"重新生成"再来。
+    case "ticket_expired":
+      return t("peers.codeTicketExpired") || "配对码已过期，请在桌面端刷新二维码后重新扫描";
+    case "ticket_used":
+      return t("peers.codeTicketUsed") || "这个配对码已经被用过（一张码只能配一次），请在桌面端刷新二维码后重新扫描";
+    case "ticket_not_found":
+      return t("peers.codeTicketNotFound") || "配对码无效（桌面端可能已重启），请在桌面端刷新二维码后重新扫描";
     default:
       return String(t("peers.pairFailed") || "连接失败：{detail}").replace("{detail}", detail ?? reason);
   }
@@ -221,7 +239,16 @@ async function connectWithText(text: string) {
     // 配对完立刻开始巡查：连上 / 失败 / 60s 超时后停止，别让用户盯着"连接中…"
     startPollingUntilSettled();
   } catch (e) {
-    errMsg.value = errTextFor("unknown", e instanceof Error ? e.message : String(e));
+    // ⚠️ 优先用后端给的原因码：一律显示"连接失败"会让"码过期了"与"连不上会合点"
+    //    在用户看来毫无区别（真机反馈：只能反复重试同一个注定失败的动作）。
+    if (e instanceof PairEdgeError) {
+      errMsg.value = errTextFor(e.reason, e.message);
+      // 票据类失败额外给一条"怎么做"的提示，而不是只说"失败了"
+      hintMsg.value = e.refreshQr ? t("peers.refreshQrHint") || "解决办法：回到桌面端点「重新生成」，再扫新码" : "";
+    } else {
+      errMsg.value = errTextFor("unknown", e instanceof Error ? e.message : String(e));
+      hintMsg.value = "";
+    }
   } finally {
     busy.value = false;
   }

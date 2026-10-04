@@ -86,16 +86,20 @@ peerlink pair rejected  pairingId=43f9f0d3…  reason=peerlink: ticket not found
 
 **本质**：I1 把「会话」持久化了，但「票据」没跟进 —— 设计上的不一致。
 
-## 5. 待办（用户明确的顺序）
+## 5. 待办（用户明确的顺序）—— **三件均已于 2026-10-05 落地**
 
-### ① 修复「连不上」
+> 落地细节与回归锁见 `docs/cloud-hot-update-and-link-recovery.md` 的 **I6 / I7 / I8** 三节。
+> 三件都做了**先红后绿**（含真实 DOM 的 UI 契约锁），但**真机复验仍需引导版 APK**
+> （设备端 Go/Kotlin 改动装机才生效；本环境 `adb devices` 为空）。
+
+### ① 修复「连不上」 ✅（→ I7）
 方向：让票据与会话一起落盘（同一目录、0600、原子写），重启后票据仍有效；
 同时对「不存在 / 已过期 / 已使用」给出**分开**的错误码，前端提示「请刷新二维码」。
 
 ⚠️ 当前 `redeem()` 把「不存在」和「已使用」**混成一个 sentinel**（`ErrTicketUsed`：
 `ticket not found (consumed or unknown)`），所以日志里无法区分 —— 排障时要先拆开。
 
-### ② 热更记录与回滚（含桌面端 agent + 移动端 UI）
+### ② 热更记录与回滚（含桌面端 agent + 移动端 UI） ✅（→ I6）
 - **记录**：`globalBundleReports` 目前是**纯内存**台账，重启即丢（实测重启后
   `reportCount` 从 1 变 0）⇒ 需落盘（可复用 `internal/peerlink/store.go` 的
   原子写纪律）。
@@ -103,7 +107,7 @@ peerlink pair rejected  pairingId=43f9f0d3…  reason=peerlink: ticket not found
 - 桌面端 agent：需要能查看热更历史 / 触发回滚。
 - 移动端 UI：需要展示当前热更版本 / 回滚入口。
 
-### ③ 设备指纹
+### ③ 设备指纹 ✅（→ I8）
 
 **现状**：deviceId 每次安装重新生成随机 UUID（Web 端 localStorage / Go 端
 每次进程启动的 `peerHub` peerId）⇒ 同一台安卓机重装 / 清缓存后重新配对，

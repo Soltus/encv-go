@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -153,6 +154,106 @@ func (st *Store) LoadPeers() ([]StoredPeer, error) {
 		return nil, fmt.Errorf("peerlink: peers.json 损坏: %w", err)
 	}
 	return items, nil
+}
+
+// ── Hub 侧：配对票据（2026-10-05）──────────────────────────────
+//
+// 为什么票据也要落盘（与会话同一套纪律）：
+//
+//	I1 只把「会话」落盘了，票据仍在内存 ⇒ 后端一重启，桌面上**正在展示的二维码**
+//	立刻失效，手机拿它来配对必然 401（`ticket not found (consumed or unknown)`）
+//	⇒ 真机表现就是"热更/重启后连不上"（2026-10-05 事故，见 docs/HANDOVER）。
+//	票据与会话是同一次配对的两半，只持久化一半 = 设计不一致。
+//
+// 边界（降低"psk 落盘"的代价）：
+//  1. 只落**未消费**的票据（消费完立刻从 pending 移到 used，used 只留 pairingId +
+//     过期时间，**不带 psk**）⇒ 磁盘上的 psk 最长只活到票据过期（默认 120s）；
+//  2. 读回时先按 ExpiresAt 清一遍（过期的票据绝不能被"复活"）；
+//  3. 与 peers.json 同一目录、同一套 0600 + 原子写；`ENCV_PEERLINK_PERSIST=0` 同样关闭。
+
+// UsedTicket 一张**已消费**（或已过期）票据的痕迹。
+//
+// ⚠️ 刻意**不含 psk**：它唯一的用途是区分「这张码被用过了」与「根本没这张码」
+// （否则排障时日志里只能看到一句含糊的 "consumed or unknown"）。
+type UsedTicket struct {
+	PairingID string    `json:"pairingId"`
+	ExpiresAt time.Time `json:"expiresAt"`
+}
+
+// TicketSnapshot 票据的落盘快照。
+type TicketSnapshot struct {
+	Pending []Ticket     `json:"pending"`
+	Used    []UsedTicket `json:"used"`
+}
+
+// SaveTickets 覆盖写入票据快照。
+func (st *Store) SaveTickets(snap TicketSnapshot) error {
+	if !st.Enabled() {
+		return ErrDisabled
+	}
+	if snap.Pending == nil {
+		snap.Pending = []Ticket{}
+	}
+	if snap.Used == nil {
+		snap.Used = []UsedTicket{}
+	}
+	return st.writeJSONAtomic("tickets.json", snap)
+}
+
+// LoadTickets 读回票据快照；文件不存在返回空快照（不是错误）。
+func (st *Store) LoadTickets() (TicketSnapshot, error) {
+	empty := TicketSnapshot{Pending: []Ticket{}, Used: []UsedTicket{}}
+	if !st.Enabled() {
+		return empty, ErrDisabled
+	}
+	var snap TicketSnapshot
+	if err := st.readJSON("tickets.json", &snap); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return empty, nil
+		}
+		return empty, fmt.Errorf("peerlink: tickets.json 损坏: %w", err)
+	}
+	return snap, nil
+}
+
+// ── 通用状态（供 Hub 侧其它台账复用同一套落盘纪律）──────────────────
+//
+// name 只能是**文件名**（不得含路径分隔符 / 上级引用），否则一律拒绝 ——
+// 调用方是内部代码，但"拼路径"这类口子留着迟早被外部输入碰到。
+
+func safeStateName(name string) bool {
+	if name == "" || strings.Contains(name, "/") || strings.Contains(name, "\\") || strings.Contains(name, "..") {
+		return false
+	}
+	return true
+}
+
+// SaveState 原子写入一份命名状态（0600）。
+func (st *Store) SaveState(name string, v any) error {
+	if !st.Enabled() {
+		return ErrDisabled
+	}
+	if !safeStateName(name) {
+		return fmt.Errorf("peerlink: 非法的状态文件名 %q", name)
+	}
+	return st.writeJSONAtomic(name, v)
+}
+
+// LoadState 读回命名状态；ok=false 表示文件不存在（不是错误）。
+func (st *Store) LoadState(name string, out any) (bool, error) {
+	if !st.Enabled() {
+		return false, ErrDisabled
+	}
+	if !safeStateName(name) {
+		return false, fmt.Errorf("peerlink: 非法的状态文件名 %q", name)
+	}
+	if err := st.readJSON(name, out); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("peerlink: %s 损坏: %w", name, err)
+	}
+	return true, nil
 }
 
 // ── Edge 侧：连 Hub 的会话 ──────────────────────────────────────

@@ -10,6 +10,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import java.io.BufferedReader
@@ -395,6 +396,13 @@ class EncvGoService : Service() {
                 // 显式告诉 Go 端 app 私有文件目录（mount 系统 + 日志持久化需要）
                 // 不依赖 appdata.go 的硬编码 fallback，确保路径 100% 正确
                 environment()["ENCV_APP_FILES_DIR"] = filesDir.absolutePath
+                // 🆕 2026-10-05：设备指纹。
+                //    Go 端（internal/server/peerlink_device.go）据此派生**稳定**的 deviceId ——
+                //    此前 deviceId 每次进程启动随机生成 ⇒ 同一台手机重装/清缓存后重新配对，
+                //    Hub 侧就多一条 peer 记录（真机实测同机两条：ac5e1c75ede3 / 6454ab90716f）。
+                //    ANDROID_ID 跨重装、清缓存都稳定（仅恢复出厂 / 换签名才变）。
+                //    ⚠️ 它只是"识别同一台设备"的标识，**不是密钥**，不参与鉴权。
+                deviceAndroidId()?.let { environment()["ENCV_ANDROID_ID"] = it }
                 // - ENCV_LIB_DIR 给 cgo CallFFmpegNative 用（dlopen libffmpeg.so）
                 // - ENCV_FFMPEG_WORKER 给 ffmpeg worker 路径用（workerClient.locateWorker 优先选这个）
                 //   改用 subprocess worker 调 ffmpeg 后，父进程 ctx cancel 时可以 SIGKILL worker
@@ -424,6 +432,26 @@ class EncvGoService : Service() {
             GoProcessPlugin.pushKotlinLog("error", TAG, "Start exception: ${e.message}")
             publishFailure("start_failed:${e.message ?: "unknown"}", source, command)
         }
+    }
+
+    /**
+     * 设备指纹源：Settings.Secure.ANDROID_ID。
+     *
+     * - 跨**重装 / 清缓存**保持稳定（这是选它的唯一理由）；
+     * - 恢复出厂、更换签名会变 —— 可接受（那时也确实该当成新设备）；
+     * - 取不到（模拟器异常值 / 权限异常）返回 null ⇒ Go 端退回落盘随机 UUID。
+     *
+     * ⚠️ 已知的坏值：`9774d56d682e549c` 是 Android 2.2 时代一批设备的**固定值**
+     *    （不是唯一标识），必须排除，否则所有这类设备会共享同一个 deviceId。
+     *
+     * internal（非 private）：JVM 单测要断言"坏值被排除"这条分支。
+     */
+    internal fun deviceAndroidId(): String? = try {
+        val id = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        if (id.isNullOrBlank() || id == "9774d56d682e549c") null else id
+    } catch (e: Exception) {
+        Log.w(TAG, "ANDROID_ID unavailable: ${e.message}")
+        null
     }
 
     private fun restartGoProcess(source: String, command: String?) {
