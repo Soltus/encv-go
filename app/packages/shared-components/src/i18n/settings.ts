@@ -566,6 +566,13 @@ export default {
     "peers.resetConnection": "重置连接信息（保留设备指纹）",
     "peers.resetDone": "已重置连接信息（设备指纹保留），正在重新探测本机后端…",
     "peers.resetFailed": "重置失败：{detail}",
+    // 🆕 2026-10-05 §10：区分"推过什么(deviceVer)"与"设备端实际有什么(webBundle)"
+    "peers.bundleProbeUnreachable": "探测不到（设备离线）",
+    "peers.bundleMismatch": "与云端记录不一致",
+    "peers.bundleMismatchHint": "不一致通常意味着设备端热更目录被清（清除应用数据/重装），或页面已回退到 APK 内置版本；重新推送后需冷启动 APP。",
+    "peers.bundlePushAgain": "重新推送",
+    "peers.bundlePushDone": "已推送：{version}（需设备冷启动 APP 才生效）",
+    "peers.bundlePushFailed": "推送失败：{detail}",
     // 🆕 2026-10-05：热更新（云控下发 / 回滚 + 本端已装版本）
     "peers.bundleTitle": "热更新",
     "peers.bundleLocal": "本端已安装",
@@ -1151,6 +1158,13 @@ export default {
     "peers.resetConnection": "Reset connection (keep device fingerprint)",
     "peers.resetDone": "Connection reset (fingerprint kept); re-probing local backend…",
     "peers.resetFailed": "Reset failed: {detail}",
+    // 2026-10-05 §10: “what we pushed” vs “what the device actually has”
+    "peers.bundleProbeUnreachable": "unreachable (device offline)",
+    "peers.bundleMismatch": "differs from cloud record",
+    "peers.bundleMismatchHint": "A mismatch usually means the device-side hot-update folder was wiped (cleared app data / reinstall), or the page fell back to the APK-builtin version; re-push and cold-start the app.",
+    "peers.bundlePushAgain": "Push again",
+    "peers.bundlePushDone": "Pushed: {version} (device needs a cold start to take effect)",
+    "peers.bundlePushFailed": "Push failed: {detail}",
     // 🆕 2026-10-05: hot update (cloud push / rollback + locally installed versions)
     "peers.bundleTitle": "Hot update",
     "peers.bundleLocal": "Installed on this device",

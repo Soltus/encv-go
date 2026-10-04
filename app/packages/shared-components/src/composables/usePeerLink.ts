@@ -469,6 +469,99 @@ export async function rollbackBundle(peerId: string, name: string): Promise<{ ok
   return JSON.parse(text) as { ok: boolean; version?: string };
 }
 
+// ── 设备端**实际**装了什么（2026-10-05 §10）────────────────────────
+//
+// 背景（真机坑）：云端台账的 `deviceVer` 只是"我推过什么"，而设备端的热更目录
+// 可能被清 APP 数据 / 回滚 / 判定失败抹掉 ⇒ 二者长期不一致，而云控页只显示前者
+// ⇒ 表现成"推了新包却没生效"，排查时极易误判成"推送失败"。
+// 判生效与否**只能**看设备端回报（get_device_info 的 webBundle）。
+
+export interface DeviceBundleState {
+  peerId: string;
+  /** 设备端是否真的有热更目录（Kotlin 判定：index.html + version.json 都在） */
+  installed: boolean;
+  /** 设备端实际生效的版本 */
+  version: string;
+  /** 云端台账记录的版本（"推过什么"） */
+  cloudVersion: string;
+  /** 二者不一致 ⇒ 需要重新推送（或设备端被清过） */
+  mismatch: boolean;
+  /** 探测不到（设备离线 / 旧版二进制不支持该诊断工具） */
+  unreachable: boolean;
+}
+
+/** 从云端版本串 "web@v0.0.7-devshell" 里取包与版本 */
+export function parseCloudBundle(cloudVersion: string): { name: string; version: string } {
+  const raw = String(cloudVersion ?? "").trim();
+  const at = raw.lastIndexOf("@");
+  if (at <= 0) return { name: raw, version: "" };
+  return { name: raw.slice(0, at), version: raw.slice(at + 1) };
+}
+
+/** 云端记录与设备端实测是否不一致 */
+export function bundleMismatch(cloudVersion: string, installed: boolean, version: string): boolean {
+  const cloud = parseCloudBundle(cloudVersion);
+  if (!cloud.name || !cloud.version) return false; // 没推过就谈不上不一致
+  if (!installed) return true;
+  return version !== cloud.version;
+}
+
+/** 向设备端查询它**实际**装了哪个包（走远程诊断工具，不需要设备端新代码） */
+export async function probeDeviceBundle(peerId: string, cloudVersion: string): Promise<DeviceBundleState> {
+  const base: DeviceBundleState = {
+    peerId,
+    installed: false,
+    version: "",
+    cloudVersion,
+    mismatch: false,
+    unreachable: true,
+  };
+  try {
+    const res = await fetchProvider(url("/agent/invoke"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...OPERATOR_HEADER },
+      body: JSON.stringify({
+        peerId,
+        tool: "get_device_info",
+        args: {},
+        callId: `bundle-probe-${Date.now()}-${peerId}`,
+        fromName: "desktop",
+      }),
+    });
+    if (!res.ok) return base;
+    const out = (await res.json()) as {
+      ok?: boolean;
+      result?: { webBundle?: { installed?: boolean; version?: string } };
+    };
+    if (!out?.ok) return base;
+    const wb = out.result?.webBundle ?? {};
+    const installed = wb.installed === true;
+    const version = String(wb.version ?? "");
+    return {
+      peerId,
+      installed,
+      version,
+      cloudVersion,
+      mismatch: bundleMismatch(cloudVersion, installed, version),
+      unreachable: false,
+    };
+  } catch {
+    return base;
+  }
+}
+
+/** 云控下发（推某台设备升到仓库里该包的最新版） */
+export async function pushBundle(peerId: string, name: string): Promise<{ ok: boolean; version?: string }> {
+  const res = await fetchProvider(url("/bundle/push"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...OPERATOR_HEADER },
+    body: JSON.stringify({ peerId, name }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`bundle/push failed: ${res.status} ${text.slice(0, 120)}`);
+  return JSON.parse(text) as { ok: boolean; version?: string };
+}
+
 /** 本端（设备侧）一个包的生效状态 */
 export interface LocalBundle {
   name: string;

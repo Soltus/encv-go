@@ -152,10 +152,18 @@
   会话，不会删它 —— 这点已确认）。
 - **处置**：设备在线时重新 `push` 即可（实测 06:47 推送后
   `webBundle={installed:true, version:"v0.0.7-devshell"}`），随后**冷启动 APP** 生效。
-- **待办（新增）**：
-  1. 桌面端云控页应显示每台设备的 `webBundle.installed/version`（现在只有 `deviceVer`，
-     那是"推过什么"，不是"设备端实际有没有"）—— 二者不一致时正是本次这种坑；
-  2. `get_device_info` 应额外回报"当前页面是否来自热更目录"，便于一眼分辨。
+- **处置**：设备在线时重新 `push` 即可（实测 06:47 推送后
+  `webBundle={installed:true, version:"v0.0.7-devshell"}`），随后**冷启动 APP** 生效。
+
+### 待办状态
+1. ✅ **云控页同时显示"推过什么"与"设备端实际有什么"**（06:5x 完成）：
+   - `usePeerLink`：`probeDeviceBundle()` 走远程诊断 `get_device_info` 取设备端
+     `webBundle`（**不需要设备端新代码**），`bundleMismatch()` 判定二者是否不一致；
+   - `PeerSettings` 热更区块：列出每台设备的实测版本，不一致 ⇒ 红色标记 +
+     「重新推送」按钮 + 说明（通常是清 APP 数据/重装导致目录被删）；
+   - 锁：`usePeerLink.test.ts` +7 条（含反向锁：一致/没推过都不算不一致；
+     离线不得谎报已安装）。红验：`bundleMismatch` 恒 false ⇒ 2 条红。
+2. ⬜ `get_device_info` 额外回报"当前页面是否来自热更目录"（需设备端新代码 + 装机）。
 
 ### 由此新增的第三条纪律
 **区分"`我推过什么`"与"`设备端实际有什么`"**：台账的 `deviceVer` 是云端视角，

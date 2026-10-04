@@ -20,8 +20,12 @@ import {
   fetchLocalBundles,
   fetchPairingStatus,
   fetchPeers,
+  bundleMismatch,
   PairEdgeError,
   pairAsEdge,
+  parseCloudBundle,
+  probeDeviceBundle,
+  pushBundle,
   parsePairingQR,
   rollbackBundle,
   rollbackLocalBundle,
@@ -340,5 +344,59 @@ describe("注入隔离", () => {
     __resetPeerLinkStateForTests();
     expect(globalThis.fetch).toBe(spy.mock?.object ?? globalThis.fetch);
     spy.mockRestore();
+  });
+});
+
+// ── 2026-10-05 §10：「推过什么」与「设备端实际有什么」必须分开 ──
+describe("云控：设备端实测与云端台账对照", () => {
+  it("parseCloudBundle 拆出包名与版本", () => {
+    expect(parseCloudBundle("web@v0.0.7-devshell")).toEqual({ name: "web", version: "v0.0.7-devshell" });
+    expect(parseCloudBundle("")).toEqual({ name: "", version: "" });
+  });
+
+  it("【事故回归锁】云端显示已推、设备端却没装 ⇒ mismatch=true", () => {
+    // 真机坑：清 APP 数据会连热更目录一起删 ⇒ 云侧仍显示"推过 v0.0.7"，设备端 installed=false
+    expect(bundleMismatch("web@v0.0.7-devshell", false, "")).toBe(true);
+  });
+
+  it("设备端装的是另一个版本 ⇒ mismatch=true", () => {
+    expect(bundleMismatch("web@v0.0.7-devshell", true, "v0.0.5-stale")).toBe(true);
+  });
+
+  it("反向锁：一致 ⇒ 不 mismatch；没推过 ⇒ 也不算不一致", () => {
+    expect(bundleMismatch("web@v0.0.7-devshell", true, "v0.0.7-devshell")).toBe(false);
+    expect(bundleMismatch("", false, "")).toBe(false);
+  });
+
+  it("probeDeviceBundle 采用设备端回报（get_device_info.webBundle），不是云端记录", async () => {
+    setPeerLinkFetchProvider((async () =>
+      jsonResponse(200, { ok: true, result: { webBundle: { installed: true, version: "v0.0.7-devshell" } } })) as unknown as typeof fetch);
+    const st = await probeDeviceBundle("peer-1", "web@v0.0.7-devshell");
+    expect(st.installed).toBe(true);
+    expect(st.version).toBe("v0.0.7-devshell");
+    expect(st.mismatch).toBe(false);
+    expect(st.unreachable).toBe(false);
+  });
+
+  it("设备离线 / 调用失败 ⇒ unreachable，且不得谎报已安装", async () => {
+    setPeerLinkFetchProvider((async () => jsonResponse(503, { error: "peer_offline" })) as unknown as typeof fetch);
+    const st = await probeDeviceBundle("peer-1", "web@v0.0.7-devshell");
+    expect(st.unreachable).toBe(true);
+    expect(st.installed).toBe(false);
+  });
+
+  it("pushBundle 走 /bundle/push 且带 peerId+name", async () => {
+    let seenUrl = "";
+    let body: Record<string, string> = {};
+    setPeerLinkFetchProvider((async (url: string, init?: RequestInit) => {
+      seenUrl = String(url);
+      body = JSON.parse(String(init?.body));
+      return jsonResponse(200, { ok: true, appliedVersion: "v0.0.7-devshell" });
+    }) as unknown as typeof fetch);
+    const out = await pushBundle("peer-1", "web");
+    expect(out.ok).toBe(true);
+    expect(seenUrl).toContain("/api/peerlink/bundle/push");
+    expect(body.peerId).toBe("peer-1");
+    expect(body.name).toBe("web");
   });
 });

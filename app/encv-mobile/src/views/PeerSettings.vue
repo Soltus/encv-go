@@ -97,6 +97,33 @@
             @click="handleCloudRollback(pid as string, ver as string)"
           >{{ t('peers.bundleRollback') }}</ion-button>
         </div>
+        <!-- 🆕 2026-10-05 §10：设备端**实际**装了什么 —— 与上面"推过什么"对照。
+             不一致（云端说推了、设备端却没装）正是"推了新包却没生效"的真身。 -->
+        <div v-for="d in deviceBundles" :key="d.peerId" class="bundleRow" data-testid="device-bundle">
+          <span class="bundleName">{{ d.peerId }}</span>
+          <span class="bundleVer" data-testid="device-bundle-version">
+            {{
+              d.unreachable
+                ? t('peers.bundleProbeUnreachable') || '探测不到（设备离线）'
+                : d.installed
+                  ? d.version || t('peers.bundleNotInstalled')
+                  : t('peers.bundleNotInstalled')
+            }}
+          </span>
+          <span v-if="d.mismatch" class="bundleTag bundleTag_fail" data-testid="device-bundle-mismatch">
+            {{ t('peers.bundleMismatch') || '与云端记录不一致' }}
+          </span>
+          <ion-button
+            v-if="d.mismatch"
+            size="small"
+            data-testid="bundle-push-again"
+            :disabled="bundleBusy"
+            @click="handlePush(d.peerId, d.cloudVersion)"
+          >{{ t('peers.bundlePushAgain') || '重新推送' }}</ion-button>
+        </div>
+        <p v-if="deviceBundles.some(d => d.mismatch)" class="bundleEmpty" data-testid="bundle-mismatch-hint">
+          {{ t('peers.bundleMismatchHint') || '不一致通常意味着设备端热更目录被清（清除应用数据/重装），或页面回退到 APK 内置版本；重新推送后需冷启动 APP。' }}
+        </p>
 
         <p class="bundleSub">{{ t('peers.bundleReports') }}</p>
         <p v-if="!bundleStatus?.reports?.length" class="bundleEmpty" data-testid="bundle-reports-empty">
@@ -180,6 +207,9 @@ import PeerSourceBadge from "@/components/PeerSourceBadge.vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   fetchBundleStatus,
+  type DeviceBundleState,
+  probeDeviceBundle,
+  pushBundle,
   fetchLocalBundles,
   fetchPeers,
   type BundleStatus,
@@ -208,6 +238,8 @@ const localBundles = ref<LocalBundle[]>([]);
 const bundleStatus = ref<BundleStatus | null>(null);
 const bundleBusy = ref(false);
 const bundleMsg = ref("");
+// 设备端**实测**（与云端台账对照，识别"推了但没生效"）
+const deviceBundles = ref<DeviceBundleState[]>([]);
 
 async function refreshBundles() {
   try {
@@ -220,6 +252,40 @@ async function refreshBundles() {
   } catch {
     bundleStatus.value = null;
   }
+  // ⚠️ 光看云端台账（"推过什么"）会被骗：设备端的热更目录可能已被清数据/回滚抹掉。
+  //    ⇒ 逐个向设备端问一句"你实际装了什么"（get_device_info.webBundle）。
+  const vers = bundleStatus.value?.deviceVer ?? {};
+  const ids = Object.keys(vers);
+  deviceBundles.value = ids.length
+    ? await Promise.all(ids.map(id => probeDeviceBundle(id, String(vers[id] ?? ""))))
+    : [];
+}
+
+/** 重新推送（云端显示已推、设备端却没有时用） */
+async function handlePush(peerId: string, cloudVersion: string) {
+  bundleBusy.value = true;
+  bundleMsg.value = "";
+  try {
+    const { name } = parseCloudBundleFor(cloudVersion);
+    const out = await pushBundle(peerId, name);
+    bundleMsg.value = String(t("peers.bundlePushDone") || "已推送：{version}（需设备冷启动 APP 才生效）").replace(
+      "{version}",
+      out.version || "",
+    );
+    await refreshBundles();
+  } catch (e) {
+    bundleMsg.value = String(t("peers.bundlePushFailed") || "推送失败：{detail}").replace(
+      "{detail}",
+      e instanceof Error ? e.message : String(e),
+    );
+  } finally {
+    bundleBusy.value = false;
+  }
+}
+
+function parseCloudBundleFor(cloudVersion: string): { name: string } {
+  const at = String(cloudVersion ?? "").lastIndexOf("@");
+  return { name: at > 0 ? cloudVersion.slice(0, at) : String(cloudVersion ?? "") };
 }
 
 /** 设备**自己**退回上一版（不经过云端；用户就在设备跟前，没理由绕一圈） */
