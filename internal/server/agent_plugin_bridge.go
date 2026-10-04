@@ -242,6 +242,8 @@ func ListPluginTools() []map[string]interface{} {
 func (s *Server) ListAgentTools() []map[string]interface{} {
 	out := ListPluginTools()
 	out = append(out, s.ListFSTools()...)
+	// 2026-10-04：诊断工具（get_device_info / read_logs）—— 远程调试时最先要问的两件事
+	out = append(out, s.ListDiagTools()...)
 	return out
 }
 
@@ -270,6 +272,10 @@ func (s *Server) executeAgentTool(ctx context.Context, toolName, argsJSON string
 	// 旧插件工具（encrypt_video / decrypt_video 等）
 	if _, ok := pluginOpsByName[toolName]; ok {
 		return executePluginTool(ctx, toolName, argsJSON)
+	}
+	// 诊断工具（get_device_info / read_logs，2026-10-04）
+	if toolName == "get_device_info" || toolName == "read_logs" {
+		return s.executeDiagTool(ctx, toolName, argsJSON)
 	}
 	// fs 工具（兼容 v1）
 	return s.executeFSTool(ctx, toolName, argsJSON)

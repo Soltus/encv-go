@@ -118,6 +118,17 @@ OpenList Core → 统一 ENCV Driver → 所有平台继承
   **明确不做**挂载网络驱动器 / 统一命名空间。
 - **远程 Agent**：可调用对端执行调试工具；敏感操作默认在**执行端**弹窗授权，
   可"信任此设备"，**信任仅到本端服务重启为止**。
+- **远程调用结果契约（2026-10-04 统一）**：`ok` **只表示**"RPC 送达 + 审批通过"
+  （`edge.go`: `Ok = out.Err == nil`）。工具自己的**业务失败**是包成 `errJSON` 塞在 `result` 里的
+  （如 `{"error":"mount_id is required"}`）⇒ 发起端识别该形状后把 `ok` 置 **false**，
+  并把错误码/信息提到顶层 `errorCode` / `error`，`result` 原样保留。
+  **HTTP 仍 200**（RPC 确实送达并被对端执行；4xx/5xx 只留给链路故障——离线 503 / 超时 504 / 对端拒绝 400）。
+  ⇒ 调用方**只看 `ok` 就够**，不必再解析 `result`（此前只看 ok 会把工具失败当成功，真机实测踩到）。
+- **远程调试诊断工具（2026-10-04 新增，只读、`needConfirm=false`）**：
+  `get_device_info`（对端运行时画像：平台/版本/uptime/挂载点可用性/互联状态+最后失败原因/索引状态）
+  与 `read_logs`（对端最近日志，支持 level 过滤 + since 增量，上限 200 条、单条 2000 字符）。
+  ⚠️ 二者跑在**执行端二进制**里 ⇒ 对端 APK 未含此代码时调用会得 `unknown fs tool: ...`
+  （真机实测现象），需重新构建安装 APK 后才可用。
 
 ### 已交付（代码落点）
 
@@ -130,13 +141,33 @@ OpenList Core → 统一 ENCV Driver → 所有平台继承
 | 扫码端（安卓）UI：扫码 / 粘贴配对码 → 本端 Go 作为 Edge 连 Hub（Task 2.6） | `POST /api/peerlink/edge/pair`、`GET /edge/status` | `src/components/PeerScanPanel.vue`、`src/peerlink/barcodeScanner.ts`（**自建 ZXingLite 插件**经 `registerPlugin`，web 构建不依赖原生包；原生实现 `BarcodeScannerPlugin.kt` + `QRScanActivity.kt`） |
 | 联邦搜索 + 远端读（在线打开/缩略图） | `/api/peerlink/search`、`/api/peerlink/file`（`X-Peer-*` 来源头） | `useFederatedSearch.ts`、`PeerSourceBadge.vue`、`useFilesView.ts` |
 | 远程 Agent 授权（**执行端**弹窗、90s 超时自动拒绝、破坏性强制确认、脱敏审计） | `internal/peerlink/agent.go`、`internal/server/peerlink_agent_api.go` | `src/composables/useRemoteApproval.ts`、`RemoteApprovalPrompt.vue` |
+| 远程调用**结果契约统一**（工具业务失败 ⇒ `ok:false` + 顶层 `errorCode`/`error`，2026-10-04） | `internal/server/peerlink_agent_api.go`（`agentToolErrorOf`）、`internal/peerlink/agent.go` | 契约锁：`internal/server/peerlink_agent_contract_test.go` |
+| 远程调试诊断工具 `get_device_info` / `read_logs`（只读，2026-10-04） | `internal/server/agent_diag_bridge.go`（派发见 `agent_plugin_bridge.go`） | 回归锁：`internal/server/agent_diag_bridge_test.go` |
+| 互联状态持久化 + **重启自动恢复**（2026-10-04） | `internal/peerlink/store.go`、`internal/server/peerlink_state.go` | 回归锁：`internal/server/peerlink_state_test.go` |
+| **云控热更新**（push 指令走 WS / zip 走 HTTP，2026-10-04） | `internal/server/peerlink_bundle.go`、通用安装器 `internal/bundle/apply.go` | 回归锁：`internal/server/peerlink_bundle_test.go`、`internal/bundle/apply_test.go` |
+
+**迭代台账（多轮）**：`docs/cloud-hot-update-and-link-recovery.md`
+（I1 互联自恢复 ✅ / I2 云控热更新 ✅ / **I3 Go 二进制热更 ✅（待装机真机验证）** /
+I4 主 SPA 热更 ⬜ / I5 灰度与回滚策略 ⬜）。
+
+**I3 要点（Go 二进制热更新，2026-10-05）**：`EncvGoService.findExecutableBinary()` 改为
+`<filesDir>/encv-go` **优先**于 APK 内 `libencv-go.so`（需 `.version` + `.abi` 两个 sidecar，
+`.abi` 必须等于 `Build.SUPPORTED_ABIS[0]`）；用热更二进制启动失败 ⇒ rename 成 `.bad-<ts>` 作废并
+自动用 APK 内二进制重试一次。Go 侧 `bundle.ApplyFile` 做原子 rename 覆盖 + `chmod 755` +
+写 sidecar；**新二进制要重启进程才生效**（下次 APP 冷启动/服务重启自动生效）。
+⇒ **构建这一版 APK 之后，后端与 web 资源都能云控下发，不再需要重新构建 APK。**
 | 安全收口：未配对 401 全量 / 零落盘结构性锁 / 限流+熔断 / 访问日志脱敏 / 降级矩阵持久性 UI | `internal/server/peerlink_{security,limits}*.go`、`gin_app.go`(sanitizedLogFormatter) | `src/composables/usePeerDegradation.ts`、`PeerDegradedNotice.vue` |
 
 ### 关键边界与红线（不可破）
 
 - `baseUrl` = 本端自己的后端（语义不变，生产态默认**同源**）；`peer` = 已配对的另一台设备，
   **peer 不得被写进 baseUrl / 探测链**。
-- psk / token / 信任态 **只存进程内存**：进程重启 ⇒ 必须重新扫码 + 重新授权（`trust_device` 失效）。
+- ~~psk / token / 信任态 **只存进程内存**：进程重启 ⇒ 必须重新扫码 + 重新授权（`trust_device` 失效）。~~
+  **⚠️ 2026-10-04 已被取代（用户：设计过于谨慎，服务端重启要能自动恢复连接）**：
+  配对凭据**落盘**到应用私有目录（`config.AppDataDir("peerlink")`，0600、原子写、可撤销、
+  `ENCV_PEERLINK_PERSIST=0` 可关闭）⇒ **重启后设备带旧 token 重连即可，不用重新扫码**；
+  psk 仍不落盘；`trust_device` **仍未持久化**（恢复的是身份与通道，不是授权）。
+  详见 `docs/cloud-hot-update-and-link-recovery.md` §I1 与 `internal/peerlink/store.go` 头注释。
 - 长连接方向恒为 **手机主动出网**（手机在 NAT 后，出站永远可达，无需打洞；桌面/Hub 有公网地址）。
 - CORS：`gin_app.go` 的 `AllowOriginFunc` **只放行** localhost / 127.0.0.1 / `https://*-plugin.local`，
   **没有**为 peer 放开 ⇒ 桌面端必须**同源**（或经本机后端代理）访问，不得 "浏览器直连对端 2025"。

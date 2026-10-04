@@ -11,6 +11,7 @@ import android.os.PowerManager
 import android.util.Log
 import android.webkit.WebSettings
 import androidx.core.content.ContextCompat
+import java.io.File
 import androidx.lifecycle.lifecycleScope
 import com.getcapacitor.BridgeActivity
 import kotlinx.coroutines.launch
@@ -58,6 +59,8 @@ class MainActivity : BridgeActivity() {
         super.onCreate(savedInstanceState)
         bridge.webView.settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         Log.i(TAG, "WebView mixedContentMode set to MIXED_CONTENT_ALWAYS_ALLOW")
+        // 🆕 I4（2026-10-05）：主应用 SPA 热更新 —— 有热更包就让 Capacitor 本地服务改指向它
+        applyHotWebBundleIfPresent()
         registerBackendReceiver()
         requestBatteryOptimizationExemption()
         val handled = handleIntent(intent)
@@ -71,6 +74,42 @@ class MainActivity : BridgeActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleIntent(intent)
+    }
+
+    // ── I4：主应用 SPA 热更新（2026-10-05）──────────────────────────────────
+    //
+    // 机制：`bridge.setServerBasePath(path)` → Capacitor 的 `WebViewLocalServer.hostFiles(path)`
+    //  ⇒ 把**任意应用私有目录**托管在同一个 `https://localhost` 源下。
+    //
+    // 为什么必须走这条路（而不是 webView.loadUrl("http://127.0.0.1:<port>/web/")）：
+    //   · origin 保持 https://localhost ⇒ CORS / baseUrl 判定 / 混合内容策略全部不变；
+    //   · Capacitor 的插件桥注入与 WEBVIEW_SERVER_URL 都绑这个本地源 ⇒ 换成别的源会让
+    //     GoProcess / BarcodeScanner / Filesystem 等插件直接失效（主应用离不开插件）。
+    //   （PreviewAssetsActivity 之所以能用独立 WebView，是因为那一页不需要任何插件。）
+    //
+    // 安全与回滚：
+    //   · 必须同时有 index.html **和** version.json（version.json 由云控通道写入，
+    //     说明这个目录是热更放的，不是别的什么东西）；
+    //   · 目录里有 .disabled 标记 ⇒ 跳过（给"热更包有问题"留一条不用重新打 APK 的退路）；
+    //   · 判定不过 = 什么都不做 ⇒ Capacitor 照旧用 APK 内 assets/public。
+    private fun applyHotWebBundleIfPresent() {
+        val dir = File(filesDir, ".encv${File.separator}web-bundle")
+        val version = File(dir, "version.json")
+        if (File(dir, "index.html").exists() && version.exists()) {
+            if (File(dir, ".disabled").exists()) {
+                Log.i(TAG, "hot web bundle disabled by marker, using bundled assets")
+                return
+            }
+            try {
+                bridge.setServerBasePath(dir.absolutePath)
+                Log.i(TAG, "hot web bundle active: ${dir.absolutePath} version=${version.readText().take(200)}")
+                GoProcessPlugin.pushKotlinLog("info", TAG, "已加载热更新 SPA 包")
+            } catch (e: Exception) {
+                Log.w(TAG, "failed to switch to hot web bundle, falling back to bundled assets", e)
+            }
+        } else {
+            Log.i(TAG, "no hot web bundle, using bundled assets")
+        }
     }
 
     private fun loadPlugins() {

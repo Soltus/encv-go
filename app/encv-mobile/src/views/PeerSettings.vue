@@ -56,6 +56,100 @@
         <p v-else-if="fedRan" class="fedEmpty">{{ t('files.noSearchResults') || '没有匹配结果' }}</p>
       </div>
 
+      <!-- 🆕 2026-10-05：热更新（待办 ②）
+           移动端：本端装了哪版 / 能不能退回去；桌面端：云控视角的记录与一键回滚。 -->
+      <div class="bundleBox" data-testid="bundle-box">
+        <h3 class="bundleTitle">{{ t('peers.bundleTitle') }}</h3>
+
+        <p class="bundleSub">{{ t('peers.bundleLocal') }}</p>
+        <p v-if="localBundles.length === 0" class="bundleEmpty" data-testid="bundle-local-empty">
+          {{ t('peers.bundleLocalNone') }}
+        </p>
+        <div v-for="b in localBundles" :key="b.name" class="bundleRow" data-testid="bundle-local-item">
+          <span class="bundleName">{{ b.name }}</span>
+          <span class="bundleVer" data-testid="bundle-local-version">{{ b.version || t('peers.bundleNotInstalled') }}</span>
+          <ion-button
+            size="small"
+            fill="outline"
+            data-testid="bundle-local-rollback"
+            :disabled="bundleBusy || !b.rollable"
+            @click="handleLocalRollback(b.name)"
+          >{{ t('peers.bundleRollback') }}</ion-button>
+        </div>
+        <p v-if="!localBundles.some(b => b.rollable)" class="bundleEmpty">{{ t('peers.bundleNoBackup') }}</p>
+
+        <p class="bundleSub">{{ t('peers.bundleCloud') }}</p>
+        <p class="bundleMeta" data-testid="bundle-available">
+          {{
+            bundleStatus && bundleStatus.available.length
+              ? String(t('peers.bundleAvailable')).replace('{list}', bundleStatus.available.map(a => `${a.name}@${a.version}`).join('、'))
+              : t('peers.bundleAvailableNone')
+          }}
+        </p>
+        <div v-for="(ver, pid) in (bundleStatus?.deviceVer || {})" :key="pid" class="bundleRow" data-testid="bundle-device">
+          <span class="bundleName">{{ pid }}</span>
+          <span class="bundleVer">{{ ver }}</span>
+          <ion-button
+            size="small"
+            fill="outline"
+            data-testid="bundle-cloud-rollback"
+            :disabled="bundleBusy"
+            @click="handleCloudRollback(pid as string, ver as string)"
+          >{{ t('peers.bundleRollback') }}</ion-button>
+        </div>
+        <!-- 🆕 2026-10-05 §10：设备端**实际**装了什么 —— 与上面"推过什么"对照。
+             不一致（云端说推了、设备端却没装）正是"推了新包却没生效"的真身。 -->
+        <div v-for="d in deviceBundles" :key="d.peerId" class="bundleRow" data-testid="device-bundle">
+          <span class="bundleName">{{ d.peerId }}</span>
+          <span class="bundleVer" data-testid="device-bundle-version">
+            {{
+              d.unreachable
+                ? t('peers.bundleProbeUnreachable') || '探测不到（设备离线）'
+                : d.installed
+                  ? d.version || t('peers.bundleNotInstalled')
+                  : t('peers.bundleNotInstalled')
+            }}
+          </span>
+          <span v-if="d.mismatch" class="bundleTag bundleTag_fail" data-testid="device-bundle-mismatch">
+            {{ t('peers.bundleMismatch') || '与云端记录不一致' }}
+          </span>
+          <ion-button
+            v-if="d.mismatch"
+            size="small"
+            data-testid="bundle-push-again"
+            :disabled="bundleBusy"
+            @click="handlePush(d.peerId, d.cloudVersion)"
+          >{{ t('peers.bundlePushAgain') || '重新推送' }}</ion-button>
+        </div>
+        <p v-if="deviceBundles.some(d => d.mismatch)" class="bundleEmpty" data-testid="bundle-mismatch-hint">
+          {{ t('peers.bundleMismatchHint') || '不一致通常意味着设备端热更目录被清（清除应用数据/重装），或页面回退到 APK 内置版本；重新推送后需冷启动 APP。' }}
+        </p>
+
+        <p class="bundleSub">{{ t('peers.bundleReports') }}</p>
+        <p v-if="!bundleStatus?.reports?.length" class="bundleEmpty" data-testid="bundle-reports-empty">
+          {{ t('peers.bundleReportsNone') }}
+        </p>
+        <div v-for="(r, i) in (bundleStatus?.reports || []).slice(-8).reverse()" :key="i" class="bundleReport" data-testid="bundle-report">
+          <span class="bundleName">{{ r.name }}@{{ r.version || '-' }}</span>
+          <span class="bundleVer">{{ r.peerId }}</span>
+          <span class="bundleTag" :class="r.ok ? 'bundleTag_ok' : 'bundleTag_fail'">
+            {{ r.ok ? t('peers.bundleReportOk') : t('peers.bundleReportFail') }}
+          </span>
+          <span v-if="r.rolledBack" class="bundleTag bundleTag_rollback">{{ t('peers.bundleReportRolledBack') }}</span>
+        </div>
+
+        <p v-if="bundleMsg" class="bundleMsg" data-testid="bundle-msg">{{ bundleMsg }}</p>
+      </div>
+
+      <!-- 🆕 2026-10-05（P2）：重置连接（保留设备指纹）——
+           替代"清除 APP 数据"这条代价过大的自救路径。 -->
+      <div class="resetBox">
+        <ion-button size="small" fill="outline" data-testid="reset-connection" :disabled="resetBusy" @click="resetConnection">
+          {{ t('peers.resetConnection') || '重置连接信息（保留设备指纹）' }}
+        </ion-button>
+        <p v-if="resetMsg" class="bundleMsg" data-testid="reset-msg">{{ resetMsg }}</p>
+      </div>
+
       <ion-list>
         <ion-list-header>
           <ion-label>{{ t('peers.title') }}</ion-label>
@@ -73,7 +167,13 @@
               <ion-badge :color="p.online ? 'success' : 'medium'">
                 {{ p.online ? t('settings.online') : t('settings.offline') }}
               </ion-badge>
+              <!-- 🆕 2026-10-05（P0-3）："这台设备大概已经不在了"必须说出来，
+                   否则用户只会看到一枚离线徽章，不知道要重新配对。 -->
+              <ion-badge v-if="p.stale" color="warning" data-testid="peer-stale">
+                {{ staleLabel(p.staleReason) }}
+              </ion-badge>
             </p>
+            <p v-if="p.stale" class="peerStaleHint" data-testid="peer-stale-hint">{{ staleHint(p.staleReason) }}</p>
           </ion-label>
           <ion-button slot="end" size="small" color="danger" fill="outline" @click="handleUnpair(p.id)">
             {{ t('peers.unpair') }}
@@ -105,7 +205,23 @@ import PeerPairingPanel from "@/components/PeerPairingPanel.vue";
 import PeerScanPanel from "@/components/PeerScanPanel.vue";
 import PeerSourceBadge from "@/components/PeerSourceBadge.vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
-import { fetchPeers, unpairPeer, usePeerLink } from "@encv/shared-components/composables/usePeerLink";
+import {
+  fetchBundleStatus,
+  type DeviceBundleState,
+  probeDeviceBundle,
+  pushBundle,
+  fetchLocalBundles,
+  fetchPeers,
+  type BundleStatus,
+  type LocalBundle,
+  rollbackBundle,
+  rollbackLocalBundle,
+  stopEdge,
+  unpairPeer,
+  usePeerLink,
+} from "@encv/shared-components/composables/usePeerLink";
+// resetServerUrl 属于 api 层（baseUrl.ts 经 api/encv barrel 导出），不在 usePeerLink 里
+import { resetServerUrl } from "@encv/shared-components/api/encv";
 import { type FederatedHit, type PeerSearchStatus, searchFederated } from "@encv/shared-components/composables/useFederatedSearch";
 
 const { t } = useI18n();
@@ -116,6 +232,99 @@ const fedItems = ref<FederatedHit[]>([]);
 const peerStatuses = ref<PeerSearchStatus[]>([]);
 const fedBusy = ref(false);
 const fedRan = ref(false);
+
+// ── 热更新（2026-10-05）──
+const localBundles = ref<LocalBundle[]>([]);
+const bundleStatus = ref<BundleStatus | null>(null);
+const bundleBusy = ref(false);
+const bundleMsg = ref("");
+// 设备端**实测**（与云端台账对照，识别"推了但没生效"）
+const deviceBundles = ref<DeviceBundleState[]>([]);
+
+async function refreshBundles() {
+  try {
+    localBundles.value = await fetchLocalBundles();
+  } catch {
+    localBundles.value = []; // 本端状态查不到不该让整页红（桌面端没有设备侧目标属正常）
+  }
+  try {
+    bundleStatus.value = await fetchBundleStatus();
+  } catch {
+    bundleStatus.value = null;
+  }
+  // ⚠️ 光看云端台账（"推过什么"）会被骗：设备端的热更目录可能已被清数据/回滚抹掉。
+  //    ⇒ 逐个向设备端问一句"你实际装了什么"（get_device_info.webBundle）。
+  const vers = bundleStatus.value?.deviceVer ?? {};
+  const ids = Object.keys(vers);
+  deviceBundles.value = ids.length
+    ? await Promise.all(ids.map(id => probeDeviceBundle(id, String(vers[id] ?? ""))))
+    : [];
+}
+
+/** 重新推送（云端显示已推、设备端却没有时用） */
+async function handlePush(peerId: string, cloudVersion: string) {
+  bundleBusy.value = true;
+  bundleMsg.value = "";
+  try {
+    const { name } = parseCloudBundleFor(cloudVersion);
+    const out = await pushBundle(peerId, name);
+    bundleMsg.value = String(t("peers.bundlePushDone") || "已推送：{version}（需设备冷启动 APP 才生效）").replace(
+      "{version}",
+      out.version || "",
+    );
+    await refreshBundles();
+  } catch (e) {
+    bundleMsg.value = String(t("peers.bundlePushFailed") || "推送失败：{detail}").replace(
+      "{detail}",
+      e instanceof Error ? e.message : String(e),
+    );
+  } finally {
+    bundleBusy.value = false;
+  }
+}
+
+function parseCloudBundleFor(cloudVersion: string): { name: string } {
+  const at = String(cloudVersion ?? "").lastIndexOf("@");
+  return { name: at > 0 ? cloudVersion.slice(0, at) : String(cloudVersion ?? "") };
+}
+
+/** 设备**自己**退回上一版（不经过云端；用户就在设备跟前，没理由绕一圈） */
+async function handleLocalRollback(name: string) {
+  bundleBusy.value = true;
+  bundleMsg.value = "";
+  try {
+    const out = await rollbackLocalBundle(name);
+    bundleMsg.value = String(t("peers.bundleRollbackDone") || "已回滚到：{version}").replace("{version}", out.version || "");
+    await refreshBundles();
+  } catch (e) {
+    bundleMsg.value = String(t("peers.bundleRollbackFailed") || "回滚失败：{detail}").replace(
+      "{detail}",
+      e instanceof Error ? e.message : String(e),
+    );
+  } finally {
+    bundleBusy.value = false;
+  }
+}
+
+/** 云控一键回滚：让某台已配对设备退回它的上一版 */
+async function handleCloudRollback(peerId: string, ver: string) {
+  // deviceVer 形如 "web@v0.0.10" ⇒ 包名是最后一个 '@' 之前的部分
+  const name = ver.includes("@") ? ver.slice(0, ver.lastIndexOf("@")) : ver;
+  bundleBusy.value = true;
+  bundleMsg.value = "";
+  try {
+    const out = await rollbackBundle(peerId, name);
+    bundleMsg.value = String(t("peers.bundleRollbackDone") || "已回滚到：{version}").replace("{version}", out.version || "");
+    await refreshBundles();
+  } catch (e) {
+    bundleMsg.value = String(t("peers.bundleRollbackFailed") || "回滚失败：{detail}").replace(
+      "{detail}",
+      e instanceof Error ? e.message : String(e),
+    );
+  } finally {
+    bundleBusy.value = false;
+  }
+}
 
 function fedStateLabel(state: PeerSearchStatus["state"]): string {
   switch (state) {
@@ -158,6 +367,7 @@ let peerPollTimer: ReturnType<typeof setInterval> | null = null;
 
 onMounted(() => {
   void fetchPeers().catch(() => undefined);
+  void refreshBundles();
   peerPollTimer = setInterval(() => {
     // 页面不可见时不打搅后端（切后台/息屏）
     if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
@@ -175,6 +385,54 @@ onUnmounted(() => {
 async function handleUnpair(peerId: string) {
   await unpairPeer(peerId);
   await fetchPeers().catch(() => undefined);
+}
+
+/** 僵死设备的徽章文案（P0-3） */
+function staleLabel(reason?: string): string {
+  return reason === "never_linked"
+    ? t("peers.staleNeverLinked") || "从未连上"
+    : t("peers.staleOfflineTooLong") || "长期离线";
+}
+
+/**
+ * 僵死设备的"下一步"（P0-3）。
+ *
+ * ⚠️ 只说"离线"不够 —— 用户不知道该做什么。这里明确指向**重新配对**
+ * （解配后重新扫码即可），与"稍等一会儿会自己恢复"区分开。
+ */
+function staleHint(reason?: string): string {
+  return reason === "never_linked"
+    ? t("peers.staleNeverLinkedHint") || "配对后从未成功连接（会合点地址或令牌可能已失效），建议解除配对后重新扫码"
+    : t("peers.staleOfflineTooLongHint") || "这台设备已长期离线（可能已重装或不再使用），建议解除配对后重新扫码";
+}
+
+// ── P2：重置连接（保留设备指纹）─────────────────────────────────
+//
+// 为什么需要它：落盘的连接相关值（服务器地址 / 探测缓存 / 会合点会话）一旦变坏，
+// 用户**唯一的自救手段是清除 APP 数据**（本次真机事故里用户就是这么做的）——
+// 那会连设备指纹一起清掉，代价过大。这里提供一条只清"连接"、保留身份的退路。
+const resetBusy = ref(false);
+const resetMsg = ref("");
+
+async function resetConnection() {
+  resetBusy.value = true;
+  resetMsg.value = "";
+  try {
+    // ① 清落盘的服务器地址与探测缓存（坏值自愈的关键：不清就永远连不上）
+    resetServerUrl();
+    // ② 忘记会合点（设备作为 Edge 时；桌面端无会话时此调用无害）
+    await stopEdge().catch(() => false);
+    // ③ 保留设备指纹：deviceId 不动（清了它，同一台设备会在 Hub 侧变成新设备）
+    await fetchPeers().catch(() => undefined);
+    resetMsg.value = t("peers.resetDone") || "已重置连接信息（设备指纹保留），正在重新探测本机后端…";
+  } catch (e) {
+    resetMsg.value = String(t("peers.resetFailed") || "重置失败：{detail}").replace(
+      "{detail}",
+      e instanceof Error ? e.message : String(e),
+    );
+  } finally {
+    resetBusy.value = false;
+  }
 }
 </script>
 
@@ -276,5 +534,93 @@ async function handleUnpair(peerId: string) {
   font-size: 0.8rem;
   opacity: 0.7;
   margin: 8px 0;
+}
+
+/* ── 2026-10-05 热更新区块 ── */
+.bundleBox {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-box, 0.75rem);
+}
+
+.bundleTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
+.bundleSub {
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0.85;
+  margin: 10px 0 4px;
+}
+
+.bundleMeta,
+.bundleEmpty {
+  font-size: 0.75rem;
+  opacity: 0.75;
+  margin: 4px 0;
+  word-break: break-all;
+}
+
+.bundleRow,
+.bundleReport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--color-base-300);
+}
+
+.bundleReport:last-child {
+  border-bottom: none;
+}
+
+.bundleName {
+  font-size: 0.78rem;
+  font-weight: 600;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.bundleVer {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.72rem;
+  opacity: 0.8;
+  font-family: ui-monospace, monospace;
+  word-break: break-all;
+}
+
+.bundleTag {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--color-base-200);
+}
+
+.bundleTag_ok {
+  background: var(--color-success, #16a34a);
+  color: #fff;
+}
+
+.bundleTag_fail {
+  background: var(--color-error, #b91c1c);
+  color: #fff;
+}
+
+.bundleTag_rollback {
+  background: var(--color-warning, #f59e0b);
+  color: #1f2937;
+}
+
+.bundleMsg {
+  font-size: 0.75rem;
+  margin: 8px 0 0;
+  color: var(--color-base-content);
+  opacity: 0.85;
+  word-break: break-all;
 }
 </style>

@@ -68,6 +68,53 @@ function isNativeShell(): boolean {
   return cap.isNativePlatform() === true && cap.getPlatform?.() !== "electron";
 }
 
+// sandboxGatewayPort —— 沙箱 preview-gateway 专用端口（从 DEV_SANDBOX_ENTRY 派生，
+// 避免同一个端口号在两处硬编码后漂移）。
+const sandboxGatewayPort = (() => {
+  try {
+    return new URL(DEV_SANDBOX_ENTRY).port || "80";
+  } catch {
+    return "16666";
+  }
+})();
+
+// isLoopbackHost 是否设备本机回环（原生壳的后端只可能在这里）。
+function isLoopbackHost(host: string): boolean {
+  const h = host.toLowerCase();
+  return h === "127.0.0.1" || h === "localhost" || h === "::1" || h === "[::1]" || h === "0.0.0.0";
+}
+
+/**
+ * storedApiBaseUsable —— 落盘（localStorage）的服务器地址**还能不能用**。
+ *
+ * 🚨 2026-10-05 真机事故：prod 分支原先无条件 `if (stored) return stored`，
+ *    于是某次写进 localStorage 的 **:16666（沙箱 preview-gateway 端口）** 被当成
+ *    真机后端 ⇒ `Failed to connect to /127.0.0.1:16666`，且**杀后台、重启 APP 都无效**
+ *    （localStorage 不会随进程重启消失）——用户视角就是"后端永远连不上"。
+ *
+ * 判定（宁可保守：判不出来就当无效，让探测链重新找）：
+ *   - 解析不了 / 非 http(s) ⇒ 无效
+ *   - **沙箱网关端口 :16666 ⇒ 任何形态都无效**（它只在 trae/OpenPreview 沙箱里存在）
+ *   - **原生壳里**：后端永远跑在设备 loopback ⇒ 非 loopback 的落盘值无效
+ *     （与 2026-10-03 事故同一条结论：原生壳的后端不可能在远端）
+ *   - 反之：web 托管形态下用户手配的 https 地址、原生壳下手配的 loopback 端口
+ *     （如 :2031）**必须继续有效**，不误伤既有契约。
+ */
+export function storedApiBaseUsable(raw: string): boolean {
+  const v = String(raw ?? "").trim();
+  if (!v) return false;
+  let u: URL;
+  try {
+    u = new URL(v);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+  if (u.port === sandboxGatewayPort) return false;
+  if (isNativeShell() && !isLoopbackHost(u.hostname)) return false;
+  return true;
+}
+
 export function isOpenPreviewBrowser(): boolean {
   if (typeof window === "undefined" || !window.location) return false;
   const origin = window.location.origin;
@@ -91,6 +138,24 @@ export function getApiBaseUrl(): string {
     if (isOpenPreviewBrowser()) {
       return typeof window !== "undefined" ? window.location.origin : "";
     }
+    // 🚨 2026-10-05（第二次真机事故）：**dev 构建跑在原生壳里**同样会把 API 打向
+    //    DEV_SANDBOX_ENTRY(:16666) —— 沙箱端口在真机上不存在，于是"冷启动就连不上"，
+    //    WS 还会打到 WebView 自己的 origin（wss://localhost/ws）。
+    //    APK 内置资源常是 dev/debug 构建 ⇒ **云控推任何包都可能被打回这条路**，
+    //    所以这里必须拦，不能只修 prod 分支。
+    if (isNativeShell()) {
+      const stored = localStorage.getItem(SERVER_URL_KEY);
+      if (stored) {
+        if (storedApiBaseUsable(stored)) return stored;
+        try {
+          localStorage.removeItem(SERVER_URL_KEY);
+        } catch {
+          /* ignore */
+        }
+        console.warn(`[baseUrl] 丢弃无效的服务器地址（${stored}），回落到默认后端`);
+      }
+      return DEFAULT_API_BASE_URL;
+    }
     const stored = localStorage.getItem(SERVER_URL_KEY);
     if (stored) return stored;
     return DEV_SANDBOX_ENTRY;
@@ -98,7 +163,17 @@ export function getApiBaseUrl(): string {
 
   // ── prod ──
   const stored = localStorage.getItem(SERVER_URL_KEY);
-  if (stored) return stored;
+  if (stored) {
+    if (storedApiBaseUsable(stored)) return stored;
+    // ⚠️ 坏值必须**清掉**：它活在 localStorage 里，杀后台 / 重启 APP 都清不掉，
+    //    不清就会永远连不上（2026-10-05 真机事故：stored = :16666 沙箱端口）。
+    try {
+      localStorage.removeItem(SERVER_URL_KEY);
+    } catch {
+      /* localStorage 不可用时忽略 */
+    }
+    console.warn(`[baseUrl] 丢弃无效的服务器地址（${stored}），回落到默认后端`);
+  }
 
   // 🆕 2026-10-02（spec desktop-web-android-pairing / Task 1.4 R16）：
   //   **web 形态（http/https）默认同源**——页面是谁托管的，后端就在谁背后。
@@ -142,7 +217,9 @@ export function resetServerUrl() {
 }
 
 export function getWebSocketUrl(): string {
-  if (import.meta.env.DEV) {
+  // ⚠️ 2026-10-05：dev 分支原来无脑用 `location.host`（原生壳里就是 WebView 自己
+  //   ⇒ wss://localhost/ws，与 HTTP 的 base 还不一致）。原生壳下必须与 HTTP 同源同 base。
+  if (import.meta.env.DEV && !isNativeShell()) {
     const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
     return `${wsProtocol}//${location.host}/ws`;
   }

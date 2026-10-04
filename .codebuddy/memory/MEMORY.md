@@ -199,6 +199,73 @@
   旧连接退出时的 `defer` **不能按 peerID 直接删**（会把顶替它的新连接一起删掉），
   必须按**连接身份**删（`DeleteConn(peerID, conn)`）。
 
+## 远程 Agent 调用的**结果契约**（2026-10-04 统一，长期）
+
+- `POST /api/peerlink/agent/invoke` 的 `ok` **只表示**「RPC 送达 + 审批通过」（`edge.go`: `Ok = out.Err == nil`）。
+  工具的**业务失败**是包成 `errJSON` 塞在 `result` 里的（真机实测 `{tool:search_files}` 少传 mount_id ⇒
+  `ok:true + result={error:"mount_id is required"}`）⇒ **只看 ok 会把失败当成功**（远程调试最阴的一类静默失败）。
+- 现行契约（发起端 `agentToolErrorOf` 强制）：识别 errJSON 形状 ⇒ `ok=false` + 顶层 `error` / `errorCode`，
+  `result` 原样保留；**HTTP 仍 200**（4xx/5xx 只留给链路故障：离线 503 / 超时 504 / 对端拒绝 400）。
+- 判定必须保守：键集合 ⊆ {error,message,detail} 且 error 为非空字符串才算失败；带其它键一律算成功
+  ⇒ **宁漏判，不把成功误判成失败**。回归锁：`internal/server/peerlink_agent_contract_test.go`。
+- **远程调试诊断工具**（只读、`needConfirm=false`，`internal/server/agent_diag_bridge.go`）：
+  `get_device_info`（对端运行时画像）/ `read_logs`（对端日志，level+since 过滤）。
+  ⚠️ 它们跑在**执行端二进制** ⇒ 对端 APK 未含该代码时得到 `unknown fs tool: <name>`（真机实测），
+  不是 bug，是要重建 APK。
+- **验证边界（环境事实）**：手机在 NAT 后（公网 IP 出网）、`adb devices` 为空 ⇒
+  **设备端改动无法真机验证**，只能 Go 单测 + 真机探针确认"旧二进制未含新工具"。
+  另：Hub 侧改动要重启后端才生效，而 token/psk/信任 全在进程内存 ⇒ **重启 = 手机必须重新扫码配对**。
+
+## 互联持久化 + 云控热更新（2026-10-04 决策变更，长期）
+
+- **旧红线"psk/token 绝不写盘"已被推翻**（用户：设计过于谨慎，重启要能自动恢复连接）。
+  新纪律：配对凭据落**应用私有目录** `config.AppDataDir("peerlink")`，`0600` + 原子写 + 可撤销
+  （unpair/stop 立即删除）+ `ENCV_PEERLINK_PERSIST=0` 可关闭。**psk 仍不落盘**；
+  `trust_device` **仍未持久化**（恢复的是身份与通道，不是授权）。
+  **恢复出来的设备 `Online` 恒为 false** —— 在线只能由长连接证明，不能从磁盘读出来。
+- **云控热更新**：控制面走 WS RPC `bundle_update`（Hub→Edge，因为手机在 NAT 后没有可直连地址），
+  **数据面走 HTTP**（设备主动出网拉 zip；R13 控制面小报文 + zip 要 Content-Length/断点续传）。
+  通用安装器 `internal/bundle/apply.go`：限流下载 → sha256 → staging → 必含文件校验 → 备份 →
+  **原子 rename** → version.json；失败保持旧版 + 可回滚。包名白名单化（`preview-assets` / `web`）。
+- **已有基础（别重新发明）**：`preview-assets` 早就做到"整包替换不换 APK"；
+  Hub↔Edge RPC 现成；`EncvGoService.findExecutableBinary()` 有 filesDir 回退分支 ⇒
+  Go 二进制未来可热更（I3）。
+- **迭代台账**：`docs/cloud-hot-update-and-link-recovery.md`（I1/I2 已落地，I3 Go 二进制热更、
+  I4 主 SPA 热更、I5 灰度与回滚策略未开始）。
+- **⚠️ 长期环境事实**：设备端任何改动都还要**最后一次 APK（引导版）**；手机在 NAT 后、
+  容器 `adb devices` 为空 ⇒ 真机验证只能靠单测 + 真机探针，装机是唯一真机验证途径。
+
+## 互联：票据 / 台账 / 指纹（2026-10-05，长期）
+
+- **配对票据与会话一起落盘**（`tickets.json`，0600 + 原子写，`ENCV_PEERLINK_PERSIST=0` 可关）。
+  只落**未消费**票据；消费后只留 `pairingId + 过期时间`（**不含 psk**）；读回按 `ExpiresAt` 清 ⇒
+  **过期票据绝不被复活**。只持久化一半（会话落、票据不落）= 后端一重启二维码就失效（真机"连不上"）。
+- **票据错误三态**：`ErrTicketNotFound / ErrTicketExpired / ErrTicketUsed` ⇒ HTTP
+  `ticket_not_found / ticket_expired / ticket_used` + `refreshQr:true`。
+  ⚠️ 旧 R10 锁"未知/已用不区分以防探测"**已因此被取代**（`hub_ticket_r10_test.go` 头部有标注）。
+  **改这类错误语义前先 grep 既有安全锁**，别让旧锁红在那儿没人认领。
+- **失败原因必须跨端透传**：远端 Hub 的 401 到手机端不能再只剩一句 `pair_rejected:401`
+  ⇒ `pairToRemoteHub` 解析远端 `error`，`/edge/pair` 回 `reason` + `refreshQr`，前端 `PairEdgeError`。
+- **云控热更新**：新增 RPC `bundle_rollback` + `POST /bundle/rollback`（运维）；
+  设备端 `GET /bundle/local`、`POST /bundle/local/rollback`。
+  ⚠️ 新 handler **三处都要接**（handlers 映射 / `edgeHandlers()` 默认 / `startEdgeLocked` 传给 `NewEdge`），
+  漏第三处就一律 `not_supported` —— 用 `Edge.Supports(method)` 断言，别靠猜。
+  go-binary 回滚要**删 `.version`/`.abi` sidecar**（否则 Kotlin 继续用"自称新版本"的回滚件）。
+  台账 `lastVer` 更新判据 = 「成功且**生效版本非空**」（否则回滚成功后云侧仍显示停在坏包那版）。
+- **deviceId = 设备指纹**：`ENCV_DEVICE_ID` > `ENCV_ANDROID_ID`（Kotlin 注入，Go 取 sha256 前缀，
+  **不透传原文**）> 落盘 `device.json` > 进程内随机。指纹只用于识别设备，**不是密钥、不鉴权**。
+- **组件测试坑**：`t()` 在未注册字典时返回 `[MISSING: key]`（**非空**）⇒ `t('x') || '兜底'` 的兜底不生效；
+  组件测试要先 `registerI18nModule(settingsMessages)`，否则断言变成在测"缺 key"。
+
+## 环境：`app_check_all` 与长命令（2026-10-05，长期）
+
+- **`app_check_all` 在本环境必然挂**：`pnpm install` 无 TTY 想删 node_modules ⇒
+  `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`，10 项 8 FAIL，**与代码无关**。
+  替代：直接 `./node_modules/.bin/vue-tsc --noEmit`（`encv-mobile` 与 `packages/shared-components` 各跑一次）
+  + `./node_modules/.bin/vitest run` + `app_i18n lint`。
+- **>60s 的命令别用 `cmd_run` 同步等**（会 `Request timed out`，但进程其实还在跑）：
+  `(nohup <cmd> > /tmp/x.log 2>&1 &)` 后台起，再用 `execute_command tail` 看日志。
+
 ## 加密容器流式写入（2026-09-29 落地，长期契约）
 
 - **两条写入路径并存**：`writer.WriteV4Container*(V4WriteParams)` 是**整块**（要三份字节同时在内存）；

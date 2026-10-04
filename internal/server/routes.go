@@ -180,6 +180,8 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	registerPeerlinkRoutes(s, r)
 	r.POST("/api/logs", s.handleAPILogsGin)
 	r.GET("/api/logs/recent", s.handleAPILogsRecentGin)
+	// 2026-10-05：前端（WebView）日志批量回传本机后端，供远程调试 read_logs 读取
+	r.POST("/api/logs/frontend", s.handleAPILogsFrontendGin)
 	r.GET("/api/mounts", s.handleListMountsGin)
 	r.GET("/api/mounts/:id", s.handleGetMountGin)
 	r.POST("/api/mounts", s.handleCreateMountGin)

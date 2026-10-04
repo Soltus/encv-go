@@ -252,8 +252,73 @@ func (s *Server) handlePeerlinkAgentInvoke(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "bad_peer_payload", "detail": err.Error()})
 		return
 	}
-	logCall(out.Decision, out.Ok, "")
+	// 2026-10-04：工具**业务失败**不得伪装成成功（契约统一）。
+	//
+	//	真机实测（Hub → 安卓真机）：调 search_files 少传 mount_id ⇒
+	//	对端回 `{"ok":true,"decision":"auto","result":{"error":"mount_id is required"}}`。
+	//	Ok 只表达"RPC 送达 + 审批通过"（edge.go: Ok = out.Err == nil），
+	//	而 fs/plugin 工具把业务错误包成 errJSON 塞进 result（见 agent_fs_bridge.go）。
+	//	⇒ 发起端（含前端 UI）只看 ok 会把失败当成功，远程调试时表现为静默失败。
+	//	修法：发起端识别 errJSON 形状载荷 ⇒ ok=false + 顶层 error/errorCode，
+	//	result 原样保留（向后兼容，调用方仍可解析原始载荷）。
+	//	HTTP 仍 200 —— RPC 确实送达并被对端执行了，用 4xx/5xx 会与"链路故障"混淆。
+	errType := ""
+	if out.Ok {
+		if code, msg, isErr := agentToolErrorOf(out.Result); isErr {
+			out.Ok = false
+			out.ErrorCode = code
+			out.Error = msg
+			errType = "tool_error"
+		}
+	}
+	logCall(out.Decision, out.Ok, errType)
 	c.JSON(http.StatusOK, out)
+}
+
+// agentToolErrorOf 识别工具返回的**错误载荷**（errJSON 形状）。
+//
+// 判定必须保守：只认 errJSON 的两种形状 {"error":code,"message":msg} /
+// {"error":code,"detail":msg}（键集合 ⊆ {error,message,detail}，且 error 是非空字符串）。
+// 任何带其它键的载荷（如 {"count":N,"items":[...]}）都视为成功 —— 否则会把
+// 内含 error 字段的正常业务结果误判成失败（宁可漏判，不可误判成功为失败）。
+//
+// 返回 (code, msg, isErr)；msg 缺失时回退为 code（真机上确有只带 error 的实现）。
+func agentToolErrorOf(res json.RawMessage) (code string, msg string, isErr bool) {
+	if len(res) == 0 {
+		return "", "", false
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(res, &m); err != nil || len(m) == 0 {
+		return "", "", false
+	}
+	for k := range m {
+		if k != "error" && k != "message" && k != "detail" {
+			return "", "", false
+		}
+	}
+	rawCode, ok := m["error"]
+	if !ok {
+		return "", "", false
+	}
+	if err := json.Unmarshal(rawCode, &code); err != nil {
+		return "", "", false // error 不是字符串 ⇒ 不是 errJSON 形状
+	}
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return "", "", false
+	}
+	if rawMsg, ok := m["message"]; ok {
+		_ = json.Unmarshal(rawMsg, &msg)
+	}
+	if msg == "" {
+		if rawDetail, ok := m["detail"]; ok {
+			_ = json.Unmarshal(rawDetail, &msg)
+		}
+	}
+	if msg == "" {
+		msg = code
+	}
+	return code, msg, true
 }
 
 // ── 执行端 UI 接口 ─────────────────────────────────────────────────

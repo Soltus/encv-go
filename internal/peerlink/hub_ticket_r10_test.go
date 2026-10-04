@@ -6,6 +6,14 @@ package peerlink
 //   - 票据**取出即销毁**（一次性），无论成功还是失败都不复活 ⇒ 无重放、无重试 oracle；
 //   - 过期只用于**拒绝**（且在取出之后判定），绝不用于**放行**；
 //   - 因此"把时钟拨一拨"或"稍后再试"都不能让一枚票据多配一次。
+//
+// ⚠️ 2026-10-05 决策变更（用户拍板，见 docs/HANDOVER-cloud-hot-update.md §5 ①）：
+//    原纪律刻意把「不存在 / 已使用 / 已过期」**合成一个** sentinel（"避免探测"）。
+//    真机事故的代价更大：日志只有一句 `ticket not found (consumed or unknown)`，
+//    "连不上"时根本无法判断用户是扫了旧码、码过期了、还是后端重启丢了票据。
+//    ⇒ 现改为三态分离（ErrTicketNotFound / ErrTicketExpired / ErrTicketUsed）。
+//    **一次性语义不变**（三者都无法让一枚票据多配一次，本文件即此锁）；
+//    探测面评估：pairingId 是 128 位随机秘密，猜不中就没有探测入口。
 
 import (
 	"errors"
@@ -39,7 +47,9 @@ func TestHub_Ticket_SecurityUsesOneShotNotFreshness(t *testing.T) {
 	if _, err := h.Pair(exp.PairingID, "dev-r10-2", "Pixel", "android", Proof(eps, exp.PairingID, "dev-r10-2")); !errors.Is(err, ErrTicketExpired) {
 		t.Fatalf("过期票据应 ErrTicketExpired, got %v", err)
 	}
-	if _, err := h.Pair(exp.PairingID, "dev-r10-2", "Pixel", "android", Proof(eps, exp.PairingID, "dev-r10-2")); !errors.Is(err, ErrTicketUsed) {
+	// ②b 再来一次：仍然失败（不得复活）。2026-10-05 起错误码更精确为 ErrTicketExpired
+	//     （旧实现因为把痕迹删了，退化成 "used"；语义上"过期"更准确，一次性不变）
+	if _, err := h.Pair(exp.PairingID, "dev-r10-2", "Pixel", "android", Proof(eps, exp.PairingID, "dev-r10-2")); !errors.Is(err, ErrTicketExpired) {
 		t.Fatalf("过期票据也必须被销毁（不得复活）, got %v", err)
 	}
 
@@ -53,8 +63,9 @@ func TestHub_Ticket_SecurityUsesOneShotNotFreshness(t *testing.T) {
 		t.Fatalf("错 proof 后票据应已销毁（无重试 oracle）, got %v", err)
 	}
 
-	// ④ pairingId 未知：与"已用过"同错（不区分时序信息，避免探测）
-	if _, err := h.Pair("00000000000000000000000000000000", "dev-x", "X", "android", "x"); !errors.Is(err, ErrTicketUsed) {
-		t.Fatalf("未知 pairingId 应 ErrTicketUsed, got %v", err)
+	// ④ pairingId 未知：2026-10-05 起与"已用过"分开（见文件头决策变更）。
+	//    一次性语义不变 —— 这里仍然**拒绝配对**，只是错误更可诊断。
+	if _, err := h.Pair("00000000000000000000000000000000", "dev-x", "X", "android", "x"); !errors.Is(err, ErrTicketNotFound) {
+		t.Fatalf("未知 pairingId 应 ErrTicketNotFound, got %v", err)
 	}
 }
