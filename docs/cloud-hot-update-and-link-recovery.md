@@ -228,6 +228,35 @@
 
 ---
 
+## 真机验证（2026-10-05 05:17–05:25，安卓真机 aa2ae6d94645）
+
+> 设备端 Go 二进制**已含本轮 I6/I7/I8 改动**（判定依据见下），故三轮改动在真机上全部闭环。
+
+| 项 | 真机结果 |
+|---|---|
+| 后端重启后手机自动重连 | ✅ `online:true`，`peerlink state restored peers=1`（I1 闭环） |
+| I7 票据跨重启存活 | ✅ 重启**前**出的码，重启后 `POST /pair` = **200**（修复前必然 401） |
+| I7 三态错误码 | ✅ 同一张码再来 = `401 ticket_used`；不存在的码 = `401 ticket_not_found`，均带 `refreshQr:true` |
+| I7 票据恢复日志 | ✅ `peerlink tickets restored tickets=1` |
+| I8 设备指纹 | ✅ 设备 deviceId = `aa2ae6d946454b02eb0f906a74980e84`（`a` + sha256 前缀 = ANDROID_ID 派生，非随机 UUID）；Hub 侧 peerId `r8c3…`（桌面端落盘随机） |
+| I6 云控下发 | ✅ `push` ⇒ `appliedVersion:v0.0.1-hot`；再推 v0.0.2 ⇒ `previousVersion:v0.0.1-hot`（备份机制生效） |
+| I6 云控一键回滚 | ✅ `rollback` ⇒ `ok:true, version:v0.0.1-hot, previousVersion:v0.0.2-hot`；首次回滚（无备份）正确给 `400 no_backup` |
+| I6 台账持久化 | ✅ 重启后端后 `reportCount` 仍为 **3**（修复前 1→0），`deviceVer` 保持；日志 `bundle reports restored reports=3` |
+| I4 热更生效可观测 | ✅ `get_device_info` 的 `webBundle={installed:true, version:…}` 能远程确认生效版本 |
+
+- **判定"设备端含新代码"的方法**（比猜可靠）：云控回滚若回 `400 no_backup` = 设备端**认识** `bundle_rollback`；
+  若回 `502 not_supported` = 旧二进制。本次是前者。
+- **踩到的副作用（务必记住）**：把**测试包**（只有 `index.html`，内容是 `HOT-UPDATE-OK`）push 到真机后，
+  手机下次冷启动会真的加载它 ⇒ 主界面变测试页。
+  止损：用真实 `dist` 打包（`scripts/build-web-bundle.sh` 走 pnpm 会被无 TTY 卡住 ⇒
+  直接 `./node_modules/.bin/vite build` 后手工打 zip + `.sha256`）push 覆盖。
+  ⇒ **真机云控实验只用真实产物，或先在备用机上做。**
+- **外部访问域名**：真机 Edge 记住的会合点即当前可用桌面 web 入口
+  （本次为 `https://csw3mzwrjz-8100.cnb.run/`）；容器 hostname 拼出来的域名**不对**，
+  用 `get_device_info` 的 `edge.hub` 或 `/api/peerlink/ticket` 的 `hub` 拿最可靠。
+
+---
+
 ## 每轮收尾纪律（本项目通用，别跳）
 
 1. **先红后绿**：新能力必须有能**先失败**的回归锁（本轮全部做过红验）。
