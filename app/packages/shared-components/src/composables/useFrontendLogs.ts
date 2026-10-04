@@ -124,6 +124,65 @@ function deriveFrontendTags(_level: string, source?: string): string[] {
 
 // 🆕 2026-07-02：暴露给 useErrorCapture 等其他系统的直接写入接口
 //   错误捕获系统抓到的异常 → 也写到 DevLogs 前端日志里（带堆栈）
+// ─── 2026-10-05：前端日志回传本机后端（远程调试可见）──────────────
+//
+// 由来：DevLogs 的「前端日志」只活在 WebView 的模块内存里 ⇒ 桌面端远程调试
+//   完全看不到安卓端的 JS 日志（扫码失败、渲染异常、console.error 恰恰最需要远程看）。
+//
+// 纪律（见 docs/remote-logs.md）：
+//   1. **批量 + 节流**（≥20 条或 ≥1.5s，单批 ≤50 条）⇒ 不是每条日志一个请求；
+//   2. **自屏蔽**：上报用原生 fetch，失败**静默**（否则"上报失败 → 记日志 → 再上报"递归）；
+//   3. 通道是设备**回环**（127.0.0.1:<后端端口>），不占跨端链路。
+const REPORT_ENDPOINT = "/api/logs/frontend";
+const REPORT_BATCH = 50;
+const REPORT_THRESHOLD = 20;
+const REPORT_INTERVAL_MS = 1500;
+
+let reportQueue: LogEntry[] = [];
+let reportTimer: ReturnType<typeof setTimeout> | null = null;
+let reportDisabled = false;
+
+/** 把一批日志送到本机后端（失败静默，绝不因此产生新日志） */
+async function flushFrontendLogs(): Promise<void> {
+  if (reportTimer) {
+    clearTimeout(reportTimer);
+    reportTimer = null;
+  }
+  if (reportDisabled || reportQueue.length === 0) return;
+  const batch = reportQueue.splice(0, REPORT_BATCH);
+  try {
+    const res = await fetch(REPORT_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        items: batch.map(e => ({
+          level: e.level,
+          message: e.message,
+          source: e.source,
+          tags: Array.isArray(e.tags) ? e.tags.join(",") : undefined,
+          timestamp: e.timestamp,
+        })),
+      }),
+    });
+    if (!res.ok) reportDisabled = true; // 后端不认这个端点（旧版本）⇒ 不再白费力气
+  } catch {
+    /* 静默：本机后端没起来时不要制造新日志，否则递归 */
+  }
+}
+
+/** 入队并按需触发上报（节流） */
+function scheduleFrontendLogReport(entry: LogEntry): void {
+  reportQueue.push(entry);
+  if (reportQueue.length > 200) reportQueue = reportQueue.slice(-100);
+  if (reportQueue.length >= REPORT_THRESHOLD) {
+    void flushFrontendLogs();
+    return;
+  }
+  if (!reportTimer) {
+    reportTimer = setTimeout(() => void flushFrontendLogs(), REPORT_INTERVAL_MS);
+  }
+}
+
 export function addFrontendLog(level: string, message: string, options?: { source?: string; stack?: string; tags?: string[] }) {
   const entry: LogEntry = {
     id: ++nextId,
@@ -138,6 +197,8 @@ export function addFrontendLog(level: string, message: string, options?: { sourc
   if (logs.value.length > 2000) {
     logs.value = logs.value.slice(-1500);
   }
+  // 回传一份到本机后端 ⇒ 桌面端远程调试能看到与 DevLogs 同款的日志
+  scheduleFrontendLogReport(entry);
 }
 
 export function hijackConsole() {
