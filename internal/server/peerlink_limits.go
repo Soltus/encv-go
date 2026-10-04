@@ -11,6 +11,11 @@ package server
 //    重启后计数归零，这是刻意的（不把限流状态落盘，避免隐私与复杂度）。
 
 import (
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -205,19 +210,88 @@ func (c *circuitBreaker) state(key string) (failures int, open bool, retryAfter 
 //	这里偏低同样是真实痛点 —— 若后续反馈"大文件在线打开很慢"，优先调它。
 const (
 	rateLimitSearch = 30
-	// rateLimitFileBytes 远端读的**流量**上限（字节/分钟）。
+	rateLimitAgent  = 100
+
+	// 远端读流量上限的取值策略（2026-10-04，用户指令）：
 	//
-	//	取值依据：在线播放/预览是本通道的正当用途，中等码率（~1MB/s）连续播放一分钟
-	//	约 60MB ⇒ 取 64MB/分钟既能流畅播放，又能挡住"无限搬数据"。
-	//	（旧实现按次数 60/min：默认单片下约 15MB/min 偏紧，而单片调大后又能到 240MB/min
-	//	 失控 —— 换成按字节后这个问题消失。）
-	rateLimitFileBytes = 64 << 20 // 64 MiB
-	rateLimitAgent     = 100
+	//	固定值（如 64MB/min）**毫无意义** —— 机器可能是百兆小盒子，也可能是万兆服务器，
+	//	一个常数对前者太宽、对后者太紧。所以改为**按实测链路带宽的 90%**，
+	//	并以 **1Mbps** 作为保底（实测不出来/极低时也不能小到没法用）。
+	fileQuotaLinkUtilization = 0.9
+	fileQuotaFloorMbps       = 1.0
+	// envLinkMbpsOverride 覆盖实测值。
+	//
+	//	为什么需要：容器里的 veth/bridge 网卡 `speed` 经常**虚高**（本机实测报 10000Mbps
+	//	即 10G，而真实可用带宽可能低得多），照着它算等于不限流。运维可显式指定真值。
+	envLinkMbpsOverride = "ENCV_PEERLINK_LINK_MBPS"
 )
+
+// measureLinkMbps 实测本机可用链路速率（Mbps）；测不到返回 0。
+//
+// 数据来源：Linux 的 `/sys/class/net/<iface>/speed`（单位 Mbps）。
+// 只认 operstate=up 的**非回环**接口；多网卡取最快的一个（服务器口径）。
+func measureLinkMbps() float64 {
+	if v := strings.TrimSpace(os.Getenv(envLinkMbpsOverride)); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil && f > 0 {
+			return f
+		}
+	}
+	ents, err := os.ReadDir("/sys/class/net")
+	if err != nil {
+		return 0
+	}
+	var best float64
+	for _, e := range ents {
+		name := e.Name()
+		if name == "lo" {
+			continue
+		}
+		base := filepath.Join("/sys/class/net", name)
+		if st, err := os.ReadFile(filepath.Join(base, "operstate")); err == nil {
+			if strings.TrimSpace(string(st)) != "up" {
+				continue
+			}
+		}
+		raw, err := os.ReadFile(filepath.Join(base, "speed"))
+		if err != nil {
+			continue // 虚拟接口常常没有这个文件
+		}
+		mbps, err := strconv.ParseFloat(strings.TrimSpace(string(raw)), 64)
+		if err != nil || mbps <= 0 {
+			continue // -1 / 0 表示未知
+		}
+		if mbps > best {
+			best = mbps
+		}
+	}
+	return best
+}
+
+// quotaBytesPerMinFor 把链路 Mbps 换算成每分钟字节配额：
+// **实测带宽 × 90%**，且**不低于 1Mbps** 保底。
+//
+// 抽成纯函数是为了能直接单测换算（Mbps 是**比特**，要 /8 才是字节）。
+func quotaBytesPerMinFor(linkMbps float64) int64 {
+	utilMbps := linkMbps * fileQuotaLinkUtilization
+	if utilMbps < fileQuotaFloorMbps {
+		utilMbps = fileQuotaFloorMbps // 实测失败/极低 ⇒ 走保底档
+	}
+	return int64(utilMbps * 1e6 / 8 * 60)
+}
+
+// fileQuotaBytesPerMin 本机远端读的流量上限（字节/分钟），启动时取一次。
+func fileQuotaBytesPerMin() int64 {
+	linkMbps := measureLinkMbps()
+	q := quotaBytesPerMinFor(linkMbps)
+	slog.Info("peerlink file quota resolved",
+		"linkMbps", linkMbps, "utilization", fileQuotaLinkUtilization,
+		"bytesPerMin", q)
+	return q
+}
 
 type peerlinkLimiters struct {
 	search *rateWindow // 联邦搜索（按次数）
-	file   *rateQuota  // 远端读（**按流量**，原因见 rateQuota 注释）
+	file   *rateQuota  // 远端读（**按流量**：实测带宽 × 90%）
 	agent  *rateWindow // 远程 Agent（按次数）
 	call   *circuitBreaker
 }
@@ -228,7 +302,7 @@ func (s *Server) peerLimits() *peerlinkLimiters {
 	if s.peerLimiter == nil {
 		s.peerLimiter = &peerlinkLimiters{
 			search: newRateWindow(rateLimitSearch, time.Minute),
-			file:   newRateQuota(rateLimitFileBytes, time.Minute),
+			file:   newRateQuota(fileQuotaBytesPerMin(), time.Minute),
 			agent:  newRateWindow(rateLimitAgent, time.Minute),
 			call:   newCircuitBreaker(5, 30*time.Second),
 		}

@@ -74,12 +74,51 @@ func TestRateQuota_ZeroBytesIsFree(t *testing.T) {
 	}
 }
 
-// TestFileQuota_BudgetMatchesPlaybackUse 额度取值必须能支撑正当用途：
-// 中等码率（~1MB/s）连续播一分钟 ≈ 60MB ⇒ 额度不能低于它，否则"在线播放"会被卡死。
-func TestFileQuota_BudgetMatchesPlaybackUse(t *testing.T) {
-	const oneMinuteOf1MBps = 60 << 20
-	if rateLimitFileBytes < oneMinuteOf1MBps {
-		t.Fatalf("远端读额度 %d 字节/分钟 支撑不了一分钟的 ~1MB/s 播放（需 ≥ %d）",
-			rateLimitFileBytes, oneMinuteOf1MBps)
+// TestQuotaBytesPerMin_... 额度换算策略（2026-10-04 用户指令）：
+// **实测链路带宽 × 90%，且不低于 1Mbps**。固定值对百兆盒子太宽、对万兆服务器太紧，毫无意义。
+func TestQuotaBytesPerMin_FloorIsOneMbps(t *testing.T) {
+	const oneMbpsBytesPerMin = 125000 * 60 // 1Mbps = 125000 B/s
+
+	// 实测不出来（0）⇒ 走保底档
+	if got := quotaBytesPerMinFor(0); got != oneMbpsBytesPerMin {
+		t.Fatalf("实测失败时应回落到 1Mbps 保底（%d）, got %d", oneMbpsBytesPerMin, got)
 	}
+	// 实测极低（0.5Mbps ⇒ 90% 后 0.45Mbps）⇒ 仍不得低于 1Mbps
+	if got := quotaBytesPerMinFor(0.5); got != oneMbpsBytesPerMin {
+		t.Fatalf("带宽过低时必须保底 1Mbps, got %d", got)
+	}
+}
+
+func TestQuotaBytesPerMin_IsNinetyPercentOfLink(t *testing.T) {
+	// 100Mbps × 90% = 90Mbps = 11.25 MB/s ⇒ 每分钟 675,000,000 字节
+	const want = int64(90 * 1e6 / 8 * 60)
+	if got := quotaBytesPerMinFor(100); got != want {
+		t.Fatalf("100Mbps 带宽应得 %d 字节/分钟（90%%）, got %d", want, got)
+	}
+	// 万兆网卡（本机 eth0 报的就是 10000）也不能溢出/翻车
+	if got := quotaBytesPerMinFor(10000); got <= 0 {
+		t.Fatalf("万兆带宽应得到正的额度, got %d", got)
+	}
+}
+
+func TestQuotaBytesPerMin_Monotonic(t *testing.T) {
+	prev := int64(0)
+	for _, mbps := range []float64{0, 1, 10, 100, 1000, 10000} {
+		got := quotaBytesPerMinFor(mbps)
+		if got < prev {
+			t.Fatalf("额度必须随带宽单调不减：%v Mbps ⇒ %d < 上一个 %d", mbps, got, prev)
+		}
+		prev = got
+	}
+}
+
+// TestMeasureLinkMbps_EnvOverride 容器里 veth 网卡 speed 常虚高（本机报 10Gbps），
+// 必须提供环境变量覆盖口，否则照着虚高值算等于不限流。
+func TestMeasureLinkMbps_EnvOverride(t *testing.T) {
+	t.Setenv(envLinkMbpsOverride, "42")
+	if got := measureLinkMbps(); got != 42 {
+		t.Fatalf("环境变量覆盖未生效: %v", got)
+	}
+	t.Setenv(envLinkMbpsOverride, "not-a-number")
+	_ = measureLinkMbps() // 非法值应被忽略，退回实测，不得 panic
 }
