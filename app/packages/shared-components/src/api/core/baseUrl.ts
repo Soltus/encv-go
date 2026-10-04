@@ -138,6 +138,24 @@ export function getApiBaseUrl(): string {
     if (isOpenPreviewBrowser()) {
       return typeof window !== "undefined" ? window.location.origin : "";
     }
+    // 🚨 2026-10-05（第二次真机事故）：**dev 构建跑在原生壳里**同样会把 API 打向
+    //    DEV_SANDBOX_ENTRY(:16666) —— 沙箱端口在真机上不存在，于是"冷启动就连不上"，
+    //    WS 还会打到 WebView 自己的 origin（wss://localhost/ws）。
+    //    APK 内置资源常是 dev/debug 构建 ⇒ **云控推任何包都可能被打回这条路**，
+    //    所以这里必须拦，不能只修 prod 分支。
+    if (isNativeShell()) {
+      const stored = localStorage.getItem(SERVER_URL_KEY);
+      if (stored) {
+        if (storedApiBaseUsable(stored)) return stored;
+        try {
+          localStorage.removeItem(SERVER_URL_KEY);
+        } catch {
+          /* ignore */
+        }
+        console.warn(`[baseUrl] 丢弃无效的服务器地址（${stored}），回落到默认后端`);
+      }
+      return DEFAULT_API_BASE_URL;
+    }
     const stored = localStorage.getItem(SERVER_URL_KEY);
     if (stored) return stored;
     return DEV_SANDBOX_ENTRY;
@@ -199,7 +217,9 @@ export function resetServerUrl() {
 }
 
 export function getWebSocketUrl(): string {
-  if (import.meta.env.DEV) {
+  // ⚠️ 2026-10-05：dev 分支原来无脑用 `location.host`（原生壳里就是 WebView 自己
+  //   ⇒ wss://localhost/ws，与 HTTP 的 base 还不一致）。原生壳下必须与 HTTP 同源同 base。
+  if (import.meta.env.DEV && !isNativeShell()) {
     const wsProtocol = location.protocol === "https:" ? "wss:" : "ws:";
     return `${wsProtocol}//${location.host}/ws`;
   }

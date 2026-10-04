@@ -14,6 +14,7 @@
 |---|---|---|
 | A | `Failed to load config: proxy fetch failed: Failed to connect to /127.0.0.1:16666`，杀后台/重启都无效 | `getApiBaseUrl()` prod 分支 `if (stored) return stored` **无条件信任** localStorage；`:16666` 是沙箱 preview-gateway 端口，真机上不存在 |
 | B | 手机"连不上"但 Hub 侧**零请求**；UI 仍显示"已连接到会合点 X"/"连接中…" | 扫码记住的会合点地址（edge-session.json）随域名变更而失效，设备无限重试，既不清除也不告知 |
+| C | 回滚 web 包无效，仍然 `:16666`，且 WS 打 `wss://localhost/ws` | **dev 构建**（`import.meta.env.DEV=true`，APK 内置资源常是 debug 构建）跑在原生壳里 ⇒ `getApiBaseUrl()` 走 **dev 分支**，stored 空时直接 fallback `DEV_SANDBOX_ENTRY(:16666)`；`getWebSocketUrl()` 的 dev 分支还用 `location.host`。**第一次修复只改了 prod 分支**，这条路仍在漏 |
 
 ### 1.2 通用模式（本文要消灭的东西）
 
@@ -105,3 +106,32 @@
 | 真机 | `web@v0.0.6-selfheal` 已云控下发（需冷启动 APP 生效） |
 | 红验 | P0-3：恒 false ⇒ 3 条红；P1-1：恒 true ⇒ 2 条红 |
 | 未做（留在 §5） | 逐个加固 `JSON.parse(localStorage)`；票据 `hub` 旧域名 |
+
+---
+
+## 9. 第三次实施记录（2026-10-05 06:3x，事故 C）
+
+- **判据（关键取证手法）**：`getWebSocketUrl()` 的 dev 分支产出 `wss://${location.host}/ws`，
+  与真机日志的 `wss://localhost/ws` **逐字一致** ⇒ 反推 `import.meta.env.DEV === true`
+  ⇒ HTTP base 走的是 dev 分支的 `DEV_SANDBOX_ENTRY(:16666)`。
+  ⇒ **教训：WS/HTTP 的 URL 形态本身就是"构建模式"的指纹，别只盯着一个入口。**
+- **修复**：
+  1. `getApiBaseUrl()` dev 分支：原生壳下**先拦截** —— 忽略沙箱端口与 WebView origin，
+     落盘值仍过 `storedApiBaseUsable()`，坏值清除 + warn，最终回落 `DEFAULT_API_BASE_URL`；
+  2. `getWebSocketUrl()`：dev 分支在原生壳下改用 `getApiBaseUrl()` 计算（HTTP/WS 同 base）；
+  3. 热更包构建改为 `ENCV_STANDALONE_VITE=1 vite build`（注入 `VITE_ENCV_API_BASE=''`）
+     ⇒ **即使产物是 dev 构建也不会走 :16666**，双保险。
+- **回归锁**（`getApiBaseUrl.native.test.ts`，4 条）：
+  dev+原生壳 ⇒ `:2025`；dev+原生壳 ⇒ WS 为 `ws://127.0.0.1:2025/ws`；
+  dev+原生壳+落盘 16666 ⇒ 丢弃回落；**反向锁**：dev+沙箱浏览器保持同源不被误伤。
+- **红验**：撤掉 dev 分支拦截 ⇒ 精确复现真机两条原文
+  （`expected 'http://127.0.0.1:16666' to be 'http://127.0.0.1:2025'`、
+   `expected 'wss://localhost/ws' to be 'ws://127.0.0.1:2025/ws'`）。
+- **旁证**：云控 push 回报 `previousVersion: v0.0.5-stale` ⇒ 用户此前确实做过**本地回滚**
+  （移动端热更区块的回滚按钮），把 v0.0.6 换成 v0.0.5 —— 这解释了"推了新包却没生效"。
+- 门禁：vitest 696 全绿；vue-tsc 双包 0 错误；i18n 0 问题。
+  真机：`web@v0.0.7-devshell` 已云控下发（待冷启动生效）。
+
+### 由此新增的两条纪律
+1. **修"读落盘值"时，必须把 dev / prod 两条分支都过一遍**（本次只修 prod ⇒ 漏了 dev）。
+2. **热更包一律用 `ENCV_STANDALONE_VITE=1` 构建**：它对 prod 无副作用，对 dev 是救命。

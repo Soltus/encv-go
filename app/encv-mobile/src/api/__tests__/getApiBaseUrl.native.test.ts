@@ -48,10 +48,14 @@ function stubLocationOrigin(origin: string): void {
  *   native=true  → 注入 appCapabilities（isNative/platform），等价于 main.ts 启动期注入
  *   再动态 import，保证拿到注入后的模块实例。
  */
-async function loadApiWith(options: { origin: string; native: boolean; platform?: "android" | "ios" | "web" | "electron" }) {
+async function loadApiWith(
+  options: { origin: string; native: boolean; platform?: "android" | "ios" | "web" | "electron" },
+  env: { dev?: boolean } = {},
+) {
   vi.resetModules();
-  vi.stubEnv("DEV", false);
-  vi.stubEnv("PROD", true);
+  // dev=true 用于复现"APK 内置资源是 dev 构建"的真机场景（DEV=true）
+  vi.stubEnv("DEV", env.dev === true);
+  vi.stubEnv("PROD", env.dev !== true);
   stubLocationOrigin(options.origin);
 
   const { setAppCapabilities } = await import("@encv/shared-components/runtime/appCapabilities");
@@ -230,5 +234,51 @@ describe("getApiBaseUrl — 落盘地址的有效性（2026-10-05 真机事故�
     mod.setApiBaseUrl("http://127.0.0.1:2031");
 
     expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2031");
+  });
+});
+
+// ────────────────────────────────────────────────────────────────
+// 【真机事故 2026-10-05 · 第二次】dev 构建跑在原生壳里
+//
+// 现象（回滚 web 包无效 ⇒ 说明不是"包"的问题）：
+//   proxy fetch failed: Failed to connect to /127.0.0.1:16666
+//   wss://localhost/ws 连续失败（WS 打到 WebView 自己的 origin）
+//
+// 根因：`import.meta.env.DEV === true`（APK 内置资源常是 dev/debug 构建）
+//   ⇒ getApiBaseUrl() 走 **dev 分支**，stored 为空时直接 fallback 到
+//      DEV_SANDBOX_ENTRY(:16666)；getWebSocketUrl() 的 dev 分支还用 location.host。
+//   第一次修复只改了 prod 分支 ⇒ 这条路仍在漏。
+//
+// 契约：
+//   A. dev + 原生壳 ⇒ HTTP 与 WS 都指向设备 loopback 后端，**绝不能是 :16666 / WebView origin**；
+//   B. dev + 沙箱浏览器（trae/OpenPreview）⇒ 保持既有行为，不被误伤。
+// ────────────────────────────────────────────────────────────────
+describe("getApiBaseUrl — dev 构建跑在原生壳里（2026-10-05 第二次事故）", () => {
+  it("【事故回归锁】dev + 原生壳 + 无落盘 ⇒ :2025，绝不是 :16666", async () => {
+    const mod = await loadApiWith({ origin: "https://localhost", native: true, platform: "android" }, { dev: true });
+
+    expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2025");
+    expect(mod.getApiBaseUrl()).not.toBe(mod.DEV_SANDBOX_ENTRY);
+  });
+
+  it("dev + 原生壳 ⇒ WS 与 HTTP 同 base（不能是 wss://localhost/ws）", async () => {
+    const mod = await loadApiWith({ origin: "https://localhost", native: true, platform: "android" }, { dev: true });
+
+    expect(mod.getWebSocketUrl()).toBe("ws://127.0.0.1:2025/ws");
+    expect(mod.getWebSocketUrl()).not.toContain("localhost/ws");
+  });
+
+  it("dev + 原生壳 + 落盘 :16666 ⇒ 丢弃并回落 :2025", async () => {
+    const mod = await loadApiWith({ origin: "https://localhost", native: true, platform: "android" }, { dev: true });
+    mod.setApiBaseUrl("http://127.0.0.1:16666");
+
+    expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2025");
+    expect(localStorage.getItem("encv-server-url")).toBeNull();
+  });
+
+  it("反向锁：dev + 沙箱浏览器（非原生）⇒ 保持既有行为（同源），不被新分支误伤", async () => {
+    const mod = await loadApiWith({ origin: "https://run-agent-abc.trae.cn", native: false }, { dev: true });
+
+    expect(mod.getApiBaseUrl()).toBe("https://run-agent-abc.trae.cn");
   });
 });
