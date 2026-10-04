@@ -80,6 +80,16 @@ func newRateQuota(limitBytes int64, window time.Duration) *rateQuota {
 	return &rateQuota{limit: limitBytes, window: window, hits: make(map[string][]quotaHit)}
 }
 
+// setLimit 动态调整上限（主动测速完成后用）。
+//
+// ⚠️ 只改上限，**不清空已记账的 hits**：否则测速一完成，先前用保守档积累的额度就归零，
+// 等于给正在传输的会话"突然提速"，反而可能瞬时打满链路。
+func (r *rateQuota) setLimit(limitBytes int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.limit = limitBytes
+}
+
 // allow 判定是否还有额度（**不扣减**）；不足时返回建议等待时间。
 func (r *rateQuota) allow(key string, now time.Time) (bool, time.Duration) {
 	r.mu.Lock()
@@ -279,13 +289,23 @@ func quotaBytesPerMinFor(linkMbps float64) int64 {
 	return int64(utilMbps * 1e6 / 8 * 60)
 }
 
-// fileQuotaBytesPerMin 本机远端读的流量上限（字节/分钟），启动时取一次。
+// fileQuotaBytesPerMin 本机远端读的流量上限（字节/分钟）。
+//
+// ⚠️ 这里返回的是**保守初值**（1Mbps 保底档），真实值由后台主动测速校准
+// （见 peerlink_bandwidth.go）。原因：网卡标称速率**不能当可用带宽用**
+// —— 本机标称 10000Mbps 而实测仅 3.35Mbps，虚高约 3000 倍。
 func fileQuotaBytesPerMin() int64 {
-	linkMbps := measureLinkMbps()
-	q := quotaBytesPerMinFor(linkMbps)
-	slog.Info("peerlink file quota resolved",
-		"linkMbps", linkMbps, "utilization", fileQuotaLinkUtilization,
-		"bytesPerMin", q)
+	if v := strings.TrimSpace(os.Getenv(envLinkMbpsOverride)); v != "" {
+		if mbps, err := strconv.ParseFloat(v, 64); err == nil && mbps > 0 {
+			q := quotaBytesPerMinFor(mbps)
+			slog.Info("peerlink file quota from env override", "linkMbps", mbps, "bytesPerMin", q)
+			return q
+		}
+	}
+	// 保守初值：宁可先限紧，也不能有"启动头几秒不限流"的窗口
+	q := quotaBytesPerMinFor(0)
+	slog.Info("peerlink file quota conservative until bandwidth probe completes",
+		"bytesPerMin", q, "linkSpeedMbps", measureLinkMbps())
 	return q
 }
 
@@ -306,6 +326,8 @@ func (s *Server) peerLimits() *peerlinkLimiters {
 			agent:  newRateWindow(rateLimitAgent, time.Minute),
 			call:   newCircuitBreaker(5, 30*time.Second),
 		}
+		// 首次创建限流器时启动后台测速循环（幂等），实测带宽回来后放宽 file 限额
+		go s.startBandwidthProbeIfNeeded()
 	}
 	return s.peerLimiter
 }
