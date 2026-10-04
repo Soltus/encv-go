@@ -469,6 +469,10 @@ func (s *Server) handlePeerlinkFile(c *gin.Context) {
 	base := filepath.Base(remotePath)
 	c.Header("Content-Disposition", fmt.Sprintf("inline; filename=%q; filename*=UTF-8''%s", asciiFallback(base), url.PathEscape(base)))
 
+	// 流量记账（2026-10-04）：远端读改为按**字节**限流，且必须在拿到实际数据之后扣减
+	// ⇒ 同样的调用次数下，额度消耗取决于真搬了多少数据（分片读不再被"次数"误伤）。
+	s.fileQuotaConsume(limitKey, int64(len(rr.Data)))
+
 	// ── 2026-10-04 修复：分片读必须表达 Range 语义，不能一律 200 ──
 	//
 	//	旧实现无条件 `c.Data(200, ..., rr.Data)`：单次读的上限是 DefaultReadChunk(256KB)，

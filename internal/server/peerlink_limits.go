@@ -48,6 +48,67 @@ func (r *rateWindow) allow(key string, now time.Time) (bool, time.Duration) {
 	return true, 0
 }
 
+// ── 配额（按**字节数**计权的滑动窗口）──────────────────────────────
+//
+// 2026-10-04：远端读（file）换成这个。原因 ——
+//
+//	远端读是**分片**的（单片上限 MaxReadChunk=4MB），同一个文件读下来要几十次调用。
+//	按"调用次数"限制根本拦不住真正要防的东西（**流量**），却会把"读一个大文件"
+//	这种完全正常的使用卡死（旧值 60 次/分钟 ⇔ 默认单片下约 15MB/分钟，而单片
+//	一旦设大就直接飙到 240MB/分钟 —— 约束与风险都不成比例）。
+//
+//	改成按字节计费后：约束的是"这段时间搬了多少数据"，与分片大小/分片次数无关
+//	⇒ 既不会误伤正常使用，也不会因为调大单片而失控。
+type quotaHit struct {
+	at     time.Time
+	weight int64 // 本次消耗的字节数
+}
+
+type rateQuota struct {
+	limit  int64
+	window time.Duration
+	mu     sync.Mutex
+	hits   map[string][]quotaHit
+}
+
+func newRateQuota(limitBytes int64, window time.Duration) *rateQuota {
+	return &rateQuota{limit: limitBytes, window: window, hits: make(map[string][]quotaHit)}
+}
+
+// allow 判定是否还有额度（**不扣减**）；不足时返回建议等待时间。
+func (r *rateQuota) allow(key string, now time.Time) (bool, time.Duration) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var used int64
+	oldest := now
+	cut := now.Add(-r.window)
+	kept := r.hits[key][:0]
+	for _, h := range r.hits[key] {
+		if h.at.After(cut) {
+			kept = append(kept, h)
+			used += h.weight
+			if h.at.Before(oldest) {
+				oldest = h.at
+			}
+		}
+	}
+	r.hits[key] = kept
+	if used >= r.limit {
+		return false, r.window - now.Sub(oldest)
+	}
+	return true, 0
+}
+
+// consume 按实际字节数扣减（在拿到响应之后调用）。
+func (r *rateQuota) consume(key string, now time.Time, bytes int64) {
+	if bytes <= 0 {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hits[key] = append(r.hits[key], quotaHit{at: now, weight: bytes})
+}
+
 // ── 熔断（连续失败 → 开路冷却 → 半开探测）──────────────────────────
 
 type cbState struct {
@@ -144,14 +205,20 @@ func (c *circuitBreaker) state(key string) (failures int, open bool, retryAfter 
 //	这里偏低同样是真实痛点 —— 若后续反馈"大文件在线打开很慢"，优先调它。
 const (
 	rateLimitSearch = 30
-	rateLimitFile   = 60
-	rateLimitAgent  = 100
+	// rateLimitFileBytes 远端读的**流量**上限（字节/分钟）。
+	//
+	//	取值依据：在线播放/预览是本通道的正当用途，中等码率（~1MB/s）连续播放一分钟
+	//	约 60MB ⇒ 取 64MB/分钟既能流畅播放，又能挡住"无限搬数据"。
+	//	（旧实现按次数 60/min：默认单片下约 15MB/min 偏紧，而单片调大后又能到 240MB/min
+	//	 失控 —— 换成按字节后这个问题消失。）
+	rateLimitFileBytes = 64 << 20 // 64 MiB
+	rateLimitAgent     = 100
 )
 
 type peerlinkLimiters struct {
-	search *rateWindow // 联邦搜索
-	file   *rateWindow // 远端读
-	agent  *rateWindow // 远程 Agent
+	search *rateWindow // 联邦搜索（按次数）
+	file   *rateQuota  // 远端读（**按流量**，原因见 rateQuota 注释）
+	agent  *rateWindow // 远程 Agent（按次数）
 	call   *circuitBreaker
 }
 
@@ -161,7 +228,7 @@ func (s *Server) peerLimits() *peerlinkLimiters {
 	if s.peerLimiter == nil {
 		s.peerLimiter = &peerlinkLimiters{
 			search: newRateWindow(rateLimitSearch, time.Minute),
-			file:   newRateWindow(rateLimitFile, time.Minute),
+			file:   newRateQuota(rateLimitFileBytes, time.Minute),
 			agent:  newRateWindow(rateLimitAgent, time.Minute),
 			call:   newCircuitBreaker(5, 30*time.Second),
 		}
@@ -183,6 +250,14 @@ func (s *Server) rateAllow(kind, key string) (bool, time.Duration) {
 	default:
 		return true, 0
 	}
+}
+
+// fileQuotaConsume 远端读**拿到响应后**按实际字节数扣减额度。
+//
+// ⚠️ 必须在实际读取之后记账：调用前并不知道这一片会有多大（单片大小可由调用方指定，
+// 上限 4MB），事前估算要么过松要么过紧。
+func (s *Server) fileQuotaConsume(key string, bytes int64) {
+	s.peerLimits().file.consume(key, time.Now(), bytes)
 }
 
 // ── 测试钩子（仅测试用：把阈值/冷却调小，避免测试跑几十秒）──────────
