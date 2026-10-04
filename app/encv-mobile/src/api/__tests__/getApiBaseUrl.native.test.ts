@@ -180,3 +180,55 @@ describe("getApiBaseUrl — 服务器托管 web SPA（10-02 同��默认不�
     expect(mod.getApiBaseUrl()).toBe("https://encv.example.com");
   });
 });
+
+// ────────────────────────────────────────────────────────────────
+// 【真机事故 2026-10-05】落盘的服务器地址被无条件信任
+//
+// 现象（用户杀后台重启后必现，重启无效）：
+//   `[ENCV] Failed to load config: Error: proxy fetch failed:
+//    Failed to connect to /127.0.0.1:16666`
+//   `wss://localhost/ws` 连续失败 → 降级 http-poll → 同样打 :16666
+//
+// 链路：
+//   1. prod 分支第一行就是 `if (stored) return stored`，**没有任何校验**，
+//      且它排在 `isNativeShell()` 判定之前；
+//   2. :16666 是**沙箱 preview-gateway 专用端口**（DEV_SANDBOX_ENTRY），
+//      真机/托管形态上根本没有这个监听 ⇒ 必然 connect refused；
+//   3. 值存在 localStorage ⇒ **杀后台、重启 APP 都清不掉**，表现就是"怎么都连不上"。
+//
+// 契约（钉死）：
+//   A. 沙箱网关端口 :16666 的落盘值一律无效（任何形态），丢弃并回落；
+//   B. 原生壳里后端永远跑在**设备 loopback** ⇒ 非 loopback 的落盘值同样无效；
+//   C. 用户手配的 loopback 端口（如 :2031）**必须继续优先**（不被误伤）。
+// ────────────────────────────────────────────────────────────────
+describe("getApiBaseUrl — 落盘地址的有效性（2026-10-05 真机事故）", () => {
+  it("【事故回归锁】原生壳 + 落盘 :16666（沙箱端口）→ 丢弃并回落 :2025", async () => {
+    const mod = await loadApiWith({ origin: "https://localhost", native: true, platform: "android" });
+    mod.setApiBaseUrl("http://127.0.0.1:16666");
+
+    expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2025");
+    // 坏值必须被清掉，否则下次启动还是它（这就是"重启也连不上"的根因）
+    expect(localStorage.getItem("encv-server-url")).toBeNull();
+  });
+
+  it("原生壳 + 落盘非 loopback（如局域网地址）→ 无效，回落 :2025", async () => {
+    const mod = await loadApiWith({ origin: "https://localhost", native: true, platform: "android" });
+    mod.setApiBaseUrl("http://192.168.1.9:2025");
+
+    expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2025");
+  });
+
+  it("托管 web 形态 + 落盘 :16666 → 同样丢弃（沙箱端口不是任何形态的后端）", async () => {
+    const mod = await loadApiWith({ origin: "https://encv.example.com", native: false });
+    mod.setApiBaseUrl("http://127.0.0.1:16666");
+
+    expect(mod.getApiBaseUrl()).toBe("https://encv.example.com");
+  });
+
+  it("反向锁：手配的 loopback 端口（:2031）必须仍然优先，不被新校验误伤", async () => {
+    const mod = await loadApiWith({ origin: "https://localhost", native: true, platform: "android" });
+    mod.setApiBaseUrl("http://127.0.0.1:2031");
+
+    expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2031");
+  });
+});
