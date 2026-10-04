@@ -127,11 +127,37 @@
 - **红验**：撤掉 dev 分支拦截 ⇒ 精确复现真机两条原文
   （`expected 'http://127.0.0.1:16666' to be 'http://127.0.0.1:2025'`、
    `expected 'wss://localhost/ws' to be 'ws://127.0.0.1:2025/ws'`）。
-- **旁证**：云控 push 回报 `previousVersion: v0.0.5-stale` ⇒ 用户此前确实做过**本地回滚**
-  （移动端热更区块的回滚按钮），把 v0.0.6 换成 v0.0.5 —— 这解释了"推了新包却没生效"。
+- ~~**旁证**：push 回报 `previousVersion=v0.0.5-stale` ⇒ 用户做过本地回滚~~
+  **❌ 该推论已作废（用户指出，成立）**：设备端本地回滚（`POST /bundle/local/rollback`）
+  走的是设备本端 HTTP，**云端不可能有它的记录**；`previousVersion` 只说明"装包前
+  设备端磁盘上的版本是 v0.0.5"，无法反推是谁、用什么方式把它变成 v0.0.5 的。
+  **教训：不要用云端可见的信号去反推设备端发生了什么 —— 那是猜，不是证据。**
 - 门禁：vitest 696 全绿；vue-tsc 双包 0 错误；i18n 0 问题。
   真机：`web@v0.0.7-devshell` 已云控下发（待冷启动生效）。
 
 ### 由此新增的两条纪律
 1. **修"读落盘值"时，必须把 dev / prod 两条分支都过一遍**（本次只修 prod ⇒ 漏了 dev）。
 2. **热更包一律用 `ENCV_STANDALONE_VITE=1` 构建**：它对 prod 无副作用，对 dev 是救命。
+
+---
+
+## 10. 第三次后续：热更目录被清空 ⇒ 页面回退 APK 内置（dev 构建）
+
+- **决定性证据**：`get_device_info` 的 `webBundle = {"installed": false}`（06:45 实测）
+  ⇒ 设备端**没有热更目录** ⇒ Kotlin 判定不通过 ⇒ 页面加载 **APK 内置资源**。
+  APK 内置是 debug/dev 构建（`import.meta.env.DEV=true`）⇒ 直接命中 §9 的 dev 分支
+  ⇒ `:16666` + `wss://localhost/ws`。**这解释了为什么推了包却"看起来没生效"。**
+- **目录为什么会没了**：热更目录在 app 私有目录（`<filesDir>/.encv/web-bundle`），
+  **清除 APP 数据 / 重装会连它一起删掉**（我加的「重置连接」只清 server-url 与 Edge
+  会话，不会删它 —— 这点已确认）。
+- **处置**：设备在线时重新 `push` 即可（实测 06:47 推送后
+  `webBundle={installed:true, version:"v0.0.7-devshell"}`），随后**冷启动 APP** 生效。
+- **待办（新增）**：
+  1. 桌面端云控页应显示每台设备的 `webBundle.installed/version`（现在只有 `deviceVer`，
+     那是"推过什么"，不是"设备端实际有没有"）—— 二者不一致时正是本次这种坑；
+  2. `get_device_info` 应额外回报"当前页面是否来自热更目录"，便于一眼分辨。
+
+### 由此新增的第三条纪律
+**区分"`我推过什么`"与"`设备端实际有什么`"**：台账的 `deviceVer` 是云端视角，
+设备端目录可能被清数据/回滚/判定失败抹掉；判断生效与否只能看设备端回报
+（`get_device_info.webBundle`），不能看云端记录。
