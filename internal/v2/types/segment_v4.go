@@ -90,6 +90,30 @@ type Segment_v4 struct {
 	Duration     float64         `json:"duration"`
 	Nonce        string          `json:"nonce"`
 	KeyframeInfo []KeyframeEntry `json:"keyframe_info,omitempty"`
+	// MacSize 该 Segment 尾部 HMAC 的字节数（0=没有 MAC，10=开了 HMAC）。
+	//
+	// 为什么需要：读取端（AdaptV4ToV2）是靠 v4 manifest 反推 v2 fragment 长度的，
+	// 而 manifest 里的 Size 含 [SegmentHeader][Nonce][Ciphertext][MAC] 全部字节。
+	// 不把 MAC 长度写进来，读取端就会**把 MAC 当密文解进明文** ⇒
+	// 解密结果尾部多 10 字节垃圾（2026-10-02 实测：5100 字节明文解出 5110 字节）。
+	// 缺省 0 ⇒ 老容器（无 MAC）行为完全不变。
+	MacSize uint16 `json:"mac_size,omitempty"`
+
+	// BlockCRCSize / BlockCRC32：分块 CRC（与 types.Fragment 同名字段同义，
+	// 由 AdaptV4ToV2 搬到 fragment 上）。缺省 0 ⇒ 退化为整片校验。
+	BlockCRCSize uint64   `json:"block_crc_size,omitempty"`
+	BlockCRC32   []uint32 `json:"block_crc32,omitempty"`
+
+	// DataCRC32 该 Segment 数据区的 CRC32（2026-10-02 新增，见下方说明）。
+	//
+	// 为什么需要它：v4 manifest 此前**没有任何完整性字段**，而读取端
+	// （container/handle.AdaptV4ToV2）又是拿 v4 manifest 反推出 v2 fragment 的，
+	// 于是 `DataCRC32` 被硬编码成 0 ⇒ 容器里等于没有完整性元数据 ⇒
+	// 数据被篡改/位翻转后读取端**无从校验**，静默吐乱码（真机：200 + 长度正确 + 花屏）。
+	//
+	// 兼容性：omitempty + 缺省 0。旧容器（无此字段）解析后为 0 ⇒ 读取端跳过校验，
+	// 行为与今天完全一致；旧版本代码遇到新容器也只是忽略未知字段。
+	DataCRC32 uint32 `json:"data_crc32,omitempty"`
 }
 
 type DisasterZone struct {

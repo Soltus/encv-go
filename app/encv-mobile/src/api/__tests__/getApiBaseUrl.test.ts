@@ -31,12 +31,12 @@ beforeEach(() => {
 
 describe("常量契约", () => {
   it("DEFAULT_API_BASE_URL 是 encv-go 直连 :2025（APK 模式用）", async () => {
-    const mod = await import("@/api/encv");
+    const mod = await import("@encv/shared-components/api/encv");
     expect(mod.DEFAULT_API_BASE_URL).toBe("http://127.0.0.1:2025");
   });
 
   it("DEV_SANDBOX_ENTRY 是 preview-gateway 入口 :16666（沙箱 dev 浏览器用）", async () => {
-    const mod = await import("@/api/encv");
+    const mod = await import("@encv/shared-components/api/encv");
     expect(mod.DEV_SANDBOX_ENTRY).toBe("http://127.0.0.1:16666");
   });
 });
@@ -48,13 +48,13 @@ describe("getApiBaseUrl — DEV 模式（沙箱 dev 浏览器）", () => {
   });
 
   it("localStorage 有值 → 用 localStorage（probe commit 后）", async () => {
-    const mod = await import("@/api/encv");
+    const mod = await import("@encv/shared-components/api/encv");
     mod.setApiBaseUrl("http://127.0.0.1:16666");
     expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:16666");
   });
 
   it("localStorage 空 → fallback 到 DEV_SANDBOX_ENTRY (:16666)，不是空字符串", async () => {
-    const mod = await import("@/api/encv");
+    const mod = await import("@encv/shared-components/api/encv");
     // ❌ 旧 dev 行为：返回空字符串 → fetch 走相对路径 → origin 是 trae 域名 → 403
     // ✅ 新 dev 行为：fallback 到 :16666 → fetch 走沙箱内 preview-gateway 入口 → 200
     expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:16666");
@@ -62,7 +62,7 @@ describe("getApiBaseUrl — DEV 模式（沙箱 dev 浏览器）", () => {
   });
 
   it("localStorage 写任何 URL → 用 localStorage（不限制必须 :16666）", async () => {
-    const mod = await import("@/api/encv");
+    const mod = await import("@encv/shared-components/api/encv");
     mod.setApiBaseUrl("http://10.0.0.5:9999");
     expect(mod.getApiBaseUrl()).toBe("http://10.0.0.5:9999");
   });
@@ -75,13 +75,60 @@ describe("getApiBaseUrl — 非 DEV 模式（生产/真机）", () => {
   });
 
   it("localStorage 有值 → 用 localStorage", async () => {
-    const mod = await import("@/api/encv");
+    const mod = await import("@encv/shared-components/api/encv");
     mod.setApiBaseUrl("http://192.168.1.99:2025");
     expect(mod.getApiBaseUrl()).toBe("http://192.168.1.99:2025");
   });
 
-  it("localStorage 空 → fallback 到 DEFAULT_API_BASE_URL (:2025)", async () => {
-    const mod = await import("@/api/encv");
+  it("localStorage 空 + web(http/https) → **同源**（服务器托管形态：后端在托管方背后）", async () => {
+    // ⚠️ 本用例的隐含前提：**非原生壳**。原生 APK 的 WebView 页面协议也是 https
+    //   （capacitor.config.ts 的 server.androidScheme: 'https' ⇒ origin=https://localhost），
+    //   但它不是"服务器托管页"，而是 WebView 自己 —— 那里必须回落 :2025，
+    //   否则 /api/config 会打到 localhost:443（2026-10-03 真机事故）。
+    //   该分支的回归锁见同目录 getApiBaseUrl.native.test.ts。
+    // 🆕 2026-10-02（spec desktop-web-android-pairing / Task 1.4 R16）：
+    //   旧契约是 fallback 到 http://127.0.0.1:2025，隐含"用户本机跑着 encv-go"。
+    //   但桌面端是**服务器托管**（cnb：preview-gateway 把 /api、/agent-api 代理到 :2025），
+    //   浏览器去找用户自己机器的 2025 → 跨源 + CORS（gin_app.go 只放行 localhost/127.0.0.1）
+    //   → Failed to fetch。正确默认 = window.location.origin。
+    //   与 useApiBaseProbe 探测链一致：它早就把 [1.5] current-origin 排在 [2] loopback 之前。
+    const mod = await import("@encv/shared-components/api/encv");
+    expect(mod.getApiBaseUrl()).toBe(window.location.origin);
+    expect(mod.getApiBaseUrl()).not.toBe("http://127.0.0.1:2025");
+  });
+
+  it("【2026-10-03 真机事故】原生壳 + androidScheme=https（WebView origin=https://localhost）→ 回落 :2025 而非 WebView 自身 origin", async () => {
+    const mod = await import("@encv/shared-components/api/encv");
+    const { setAppCapabilities } = await import("@encv/shared-components/runtime/appCapabilities");
+    vi.spyOn(window, "location", "get").mockReturnValue({
+      ...window.location,
+      protocol: "https:",
+      hostname: "localhost",
+      host: "localhost",
+      origin: "https://localhost",
+      href: "https://localhost/",
+    } as unknown as Location);
+    setAppCapabilities({ isNative: () => true, platform: () => "android" });
+
     expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2025");
+    expect(mod.getApiBaseUrl()).not.toBe("https://localhost");
+  });
+
+  it("localStorage 空 + 非 http(如 capacitor://) → fallback 到 DEFAULT_API_BASE_URL (:2025)", async () => {
+    // 原生壳不走同源：capacitor:// 协议下没有"托管方代理"，保持原绝对地址
+    // （注：现代 Capacitor 默认是 https://localhost，capacitor:// 只是历史 scheme）
+    const original = window.location.protocol;
+    vi.spyOn(window, "location", "get").mockReturnValue({
+      ...window.location,
+      protocol: "capacitor:",
+    } as unknown as Location);
+    try {
+      vi.resetModules();
+      const mod = await import("@encv/shared-components/api/encv");
+      expect(mod.getApiBaseUrl()).toBe("http://127.0.0.1:2025");
+    } finally {
+      vi.restoreAllMocks();
+      expect(original).toBeTypeOf("string");
+    }
   });
 });

@@ -7,6 +7,10 @@ ARG G_VERSION=1.8.0
 ARG PNPM_VERSION=11
 ARG ANDROID_SDK_TOOLS_VERSION=13114758
 ARG RUST_VERSION=stable
+# Android 模拟器（无头 AVD，供 agent 做自动化"真机"测试）
+ARG ANDROID_SYSIMG="system-images;android-36;google_apis;x86_64"
+ARG ANDROID_AVD_NAME=encv36
+ARG ANDROID_EMU_DEVICE=pixel_7
 
 FROM soltus/default-dev-env:dev
 
@@ -15,6 +19,9 @@ ARG G_VERSION
 ARG PNPM_VERSION
 ARG ANDROID_SDK_TOOLS_VERSION
 ARG RUST_VERSION
+ARG ANDROID_SYSIMG
+ARG ANDROID_AVD_NAME
+ARG ANDROID_EMU_DEVICE
 
 # Android SDK 开发环境（encv-mobile 安卓构建所需）
 # compileSdk/targetSdk=36, AGP=8.13.0, Gradle=9.0.0, Kotlin=2.3.21
@@ -23,6 +30,11 @@ ENV ANDROID_HOME="/opt/android-sdk" \
     ANDROID_SDK_MANAGER="/opt/android-sdk/cmdline-tools/latest/bin/sdkmanager" \
     ANDROID_NDK="/opt/android-sdk/ndk/latest" \
     ANDROID_NDK_ROOT="/opt/android-sdk/ndk/latest" \
+    ANDROID_EMULATOR_HOME="/root/.android" \
+    ANDROID_AVD_HOME="/root/.android/avd" \
+    ANDROID_AVD_NAME="${ANDROID_AVD_NAME}" \
+    ANDROID_SYSIMG="${ANDROID_SYSIMG}" \
+    ANDROID_EMU_DEVICE="${ANDROID_EMU_DEVICE}" \
     JAVA_HOME="/usr/lib/jvm/java-21-openjdk-amd64"
 
 # ==========================================
@@ -53,6 +65,8 @@ RUN apt-get update && \
 # cmake：scripts/setup-sandbox-env.sh 前置检查强依赖（第 121 行））
 # pkg-config + libssl-dev：Rust/cgo 依赖（如 libsql 经 CGO 编译时需要的 openssl-sys）常用
 # 注意：端到端测试（Cypress/Playwright）不再全局装进镜像，按需在运行端自备。
+# procps：emuctl 用 pgrep 判定模拟器进程；其余 lib*：无头 Android 模拟器
+# （emulator 自带 Qt/GL/swiftshader，这些是仍需系统提供的运行时库/X11 依赖）
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       curl wget git build-essential ca-certificates \
@@ -60,6 +74,12 @@ RUN apt-get update && \
       cmake temurin-17-jdk \
       unzip openjdk-21-jdk jq \
       python3 \
+      procps \
+      libgl1 libglx-mesa0 libgl1-mesa-dri libegl1 libgbm1 \
+      libnss3 libnspr4 libasound2 libpulse0 libdbus-1-3 \
+      libxkbcommon-x11-0 libx11-xcb1 libxcb-cursor0 \
+      libxcomposite1 libxdamage1 libxrandr2 libxtst6 libxi6 libxrender1 \
+      libcups2 libfontconfig1 libfreetype6 \
     && rm -rf /var/lib/apt/lists/*
 # Cypress 不在镜像安装
 
@@ -131,6 +151,37 @@ RUN set -eux; \
     rm -rf /tmp/androidsdk
 
 # ==========================================
+# 1.6 无头 Android 模拟器（供 agent 控制做自动化"真机"测试）
+# ==========================================
+# 关键事实（2026-09-30 在本云原生开发容器内实测）：
+#   - 容器内没有 /dev/kvm（emulator -accel-check 报
+#     "KVM requires a CPU that supports vmx or svm"），因此模拟器只能软件渲染：
+#     `-accel off -gpu swiftshader_indirect`（QEMU TCG）。冷启动实测：首次 ~12 分钟
+#     （初始化 data 分区 + dexopt），二次 ~5 分钟；交互偏慢，但 adb 安装/点击/
+#     截屏/日志全链路可用（建议会话内保持常开，别反复冷启动）。
+#   - 系统镜像取 x86_64 + google_apis（API 36 = 本项目 compileSdk/targetSdk）：
+#     其 build.prop 含 ro.dalvik.vm.native.bridge=libndk_translation.so，
+#     能跑本项目 arm64-v8a-only 的 APK（x86_64 宿主 + TCG 比整台 arm64 模拟更快）。
+#   - 若将来宿主提供 /dev/kvm，emuctl 会自动切 `-accel on -gpu auto`，无需改镜像。
+#   - 换镜像：改 ANDROID_SYSIMG（如 aosp_atd / arm64-v8a）后重建，或运行期
+#     `emuctl create` 重建 AVD。
+# 安装 emulator + 系统镜像
+RUN set -eux; \
+    yes | ${ANDROID_SDK_MANAGER} --licenses > /dev/null || true; \
+    yes | ${ANDROID_SDK_MANAGER} "emulator" "${ANDROID_SYSIMG}" > /dev/null; \
+    ${ANDROID_HOME}/emulator/emulator -version | head -1; \
+    du -sh ${ANDROID_HOME}/system-images/*/*/*
+
+# 装好管控脚本后预创建 AVD（镜像构建期只建配置，不启动模拟器）——
+# 运行期 agent 直接 `emuctl start` 即可，无需再下载镜像/建 AVD。
+COPY .ide/bin/emuctl /usr/local/bin/emuctl
+RUN set -eux; \
+    chmod +x /usr/local/bin/emuctl; \
+    mkdir -p ${ANDROID_AVD_HOME}; \
+    emuctl create; \
+    emuctl doctor
+
+# ==========================================
 # 2. 开发工具链安装
 # ==========================================
 # 2.1 g（Go 版本管理器）→ /usr/local/bin
@@ -189,7 +240,7 @@ RUN g install ${GO_VERSION} && g use ${GO_VERSION}
 # ==========================================
 # 5. 容器级环境变量 (关键！CI 和非交互式 shell 也继承)
 # ==========================================
-ENV PATH="${CARGO_HOME}/bin:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/tools:${ANDROID_NDK}:${JAVA_HOME}/bin:/root/.g/bin:/root/.g/go/bin:/root/go/bin:/usr/local/bin:$PATH" \
+ENV PATH="${CARGO_HOME}/bin:${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/emulator:${ANDROID_HOME}/platform-tools:${ANDROID_HOME}/tools:${ANDROID_NDK}:${JAVA_HOME}/bin:/root/.g/bin:/root/.g/go/bin:/root/go/bin:/usr/local/bin:$PATH" \
     CARGO_HOME="/root/.cargo" \
     RUSTUP_HOME="/root/.rustup" \
     G_MIRROR="https://golang.google.cn/dl/" \
@@ -234,6 +285,9 @@ RUN echo "====================================" && \
     echo "adb:  $(adb --version 2>&1 | head -1)" && \
     echo "sdkmanager: $(${ANDROID_SDK_MANAGER} --version 2>&1 | head -1)" && \
     echo "ndk:  $(readlink -f ${ANDROID_NDK})" && \
+    echo "emulator: $(emulator -version 2>&1 | head -1)" && \
+    echo "avd:  ${ANDROID_AVD_NAME} ($(cat ${ANDROID_AVD_HOME}/${ANDROID_AVD_NAME}.avd/config.ini 2>/dev/null | grep -m1 '^abi.type='))" && \
+    echo "kvm:  $([ -c /dev/kvm ] && echo 'yes（硬件加速可用）' || echo 'no（软件渲染 TCG，启动慢）')" && \
     echo "g:    $(g --version)" && \
     echo "go:   $(go version)" && \
     echo "rustc:$(rustc --version)" && \

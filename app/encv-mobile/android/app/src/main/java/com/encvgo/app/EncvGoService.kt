@@ -28,7 +28,9 @@ class EncvGoService : Service() {
         private const val CHANNEL_ID = "encv_go_service"
         private const val NOTIFICATION_ID = 1001
         private const val BINARY_NAME = "encv-go"
-        private const val DEFAULT_PORT = 2025
+        // internal（非 private）：JVM 单测（EncvGoServiceTest / GoProcessPluginTest）要锁默认端口契约。
+        // 过去是 private，导致 :app:testDebugUnitTest 直接编译失败而无人发现 ⇒ native 回归长期跑不到。
+        internal const val DEFAULT_PORT = 2025
         private const val MAX_PORT_SCAN = 10
         private const val START_TIMEOUT_MS = 10_000L
         private const val POLL_INTERVAL_MS = 200L
@@ -135,6 +137,14 @@ class EncvGoService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // ⚠️ startForegroundService() 的 ~20s 义务必须在主线程**立即**履行：
+        // startForeground 原本藏在 startGoProcess（worker 线程池）里，慢设备上
+        // （模拟器：Berberis 翻译 49MB Go 运行时 / 低端真机）超过时限就是
+        // "Context.startForegroundService() did not then call Service.startForeground()"
+        // ANR —— 2026-10-01 无 KVM 模拟器实测三次复现，放宽 activity_manager_constants
+        // 的 service_start_foreground_timeout_ms 无效，只能修时序。
+        // startGoProcess 里那次 startForeground 保留，用于把文案从「启动中」更新掉（幂等）。
+        startForeground(NOTIFICATION_ID, buildNotification("后端启动中"))
         currentSource = intent?.getStringExtra(EXTRA_SOURCE) ?: "manual"
         intent?.let { it ->
             when (it.action) {

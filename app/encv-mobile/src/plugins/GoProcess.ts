@@ -533,6 +533,30 @@ export async function controlOpenList(
  * host (GoProcessPlugin) 收到跨进程系统广播后调 notifyListeners('openlist:status', ...) 推送至此。
  * 返回的 handle.remove() 必须在 onUnmounted 调用，避免内存泄漏。
  */
+/**
+ * 订阅安卓原生日志（Kotlin 侧通过 GoProcessPlugin.pushKotlinLog → 事件 `kotlin:log`）。
+ *
+ * 🆕 2026-10-04：Kotlin 侧（LogBridge / EncvGoService / GoProcessPlugin…）一直在推这个事件，
+ *   但 JS 侧**从来没人监听** ⇒ 真机上的原生日志一条都进不了 DevLogs，
+ *   排查"配对成功但连不上""Go 后端起不来"这类问题时 DevLogs 里只有前端日志（真机反馈：没有可用日志）。
+ *
+ * 事件负载（GoProcessPlugin.kt:68-77）：
+ *   { timestamp, level: "debug|info|warn|error", message, source: <tag>,
+ *     tags: ["kotlin","android","<tag>"], stack? }
+ */
+export function addKotlinLogListener(
+  callback: (log: {
+    timestamp: string;
+    level: string;
+    message: string;
+    source: string;
+    tags?: string[];
+    stack?: string;
+  }) => void
+): Promise<{ remove: () => Promise<void> }> {
+  return (GoProcess as any).addListener("kotlin:log", callback);
+}
+
 export function addOpenListStatusListener(
   callback: (status: {
     isInstalled: boolean;

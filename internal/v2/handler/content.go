@@ -37,9 +37,33 @@ func (h *ContentHandler) ServeFile(w http.ResponseWriter, r *http.Request, prov 
 	originalSize := prov.GetSize()
 	originalFilename := prov.GetName()
 
+	// 1.5 【健壮性】provider 交不出 reader 时必须显式失败，不能往下走。
+	//
+	// 真实场景：LocalFileProvider 走内存缓存分支时若读/解密失败
+	// （例如并发请求把共享文件句柄关掉 ⇒ "file already closed"），
+	// loadIntoMemory 记下 loadErr，GetReader() 就返回 nil。
+	// 修前：io.Copy(w, io.LimitReader(nil, n)) 对 nil reader 解引用 ⇒
+	//       nil pointer dereference panic ⇒ gin recovery 记 500 并掐断连接
+	//       （2026-10-01 模拟器内真实后端日志实证）。
+	if reader == nil {
+		log.Printf("ERROR: [ContentHandler.ServeFile] provider returned a nil reader for file '%s' (decrypt/read failed upstream)", originalFilename)
+		http.Error(w, "Internal Server Error: content unavailable", http.StatusInternalServerError)
+		return
+	}
+
 	// 2. 解析 HTTP Range 请求头
 	rangeHeader := r.Header.Get("Range")
 	start, end, statusCode := parseRangeHeader(rangeHeader, originalSize)
+
+	// 416 的统一出口（RFC 7233 §4.4）：
+	//   必须带 `Content-Range: bytes */<完整长度>`，且**不能有实体体**。
+	//   修前：parseRangeHeader 把 start/end 重置成"全文件"后照常 io.Copy，
+	//         客户端收到 416 + 整个文件（白解密 + 白传一遍全量）。
+	write416 := func() {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", originalSize))
+		w.Header().Set("Content-Length", "0")
+		w.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
+	}
 
 	// 3. 根据文件能力处理 Seek 操作
 	if isSeekable && seeker != nil {
@@ -56,8 +80,7 @@ func (h *ContentHandler) ServeFile(w http.ResponseWriter, r *http.Request, prov 
 			if err == io.EOF {
 				// SeekTo 失败可能是因为请求的 offset 超出范围
 				log.Printf("WARN: [ContentHandler.ServeFile] Client requested range starting at %d, which is beyond all data fragments for file '%s'.", start, originalFilename)
-				w.Header().Set("Content-Range", fmt.Sprintf("bytes */%d", originalSize))
-				http.Error(w, "Requested Range Not Satisfiable", http.StatusRequestedRangeNotSatisfiable)
+				write416()
 				return
 			}
 			log.Printf("ERROR: [ContentHandler.ServeFile] Failed to seek (SeekerTo) to position %d for file '%s': %v", start, originalFilename, err)
@@ -68,9 +91,16 @@ func (h *ContentHandler) ServeFile(w http.ResponseWriter, r *http.Request, prov 
 		// 如果不支持任何 Seek，且不是从头开始，则无法处理 Range 请求
 		if start > 0 {
 			log.Printf("WARN: [ContentHandler.ServeFile] File '%s' is not seekable, but client requested a non-zero range (%d). Rejecting.", originalFilename, start)
-			http.Error(w, "Seek Not Supported", http.StatusRequestedRangeNotSatisfiable)
+			write416()
 			return
 		}
+	}
+
+	// 3.5 parseRangeHeader 判定的 416（越界 / start > end / 非法 suffix）
+	if statusCode == http.StatusRequestedRangeNotSatisfiable {
+		log.Printf("WARN: [ContentHandler.ServeFile] Unsatisfiable range %q for file '%s' (size %d).", rangeHeader, originalFilename, originalSize)
+		write416()
+		return
 	}
 
 	// 4. 设置通用响应头
@@ -90,6 +120,10 @@ func (h *ContentHandler) ServeFile(w http.ResponseWriter, r *http.Request, prov 
 	w.WriteHeader(statusCode)
 
 	// 7. 传输数据
+	// HEAD 只回头部：不解密、不传实体体（否则白白把整个文件解一遍）
+	if r.Method == http.MethodHead {
+		return
+	}
 	// 使用 io.LimitReader 确保即使底层的 reader 是无限流，我们也只发送请求范围内的数据
 	readerToCopy := io.LimitReader(reader, contentLength)
 	bytesWritten, err := io.Copy(w, readerToCopy)

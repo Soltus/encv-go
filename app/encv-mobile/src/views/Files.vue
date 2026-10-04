@@ -136,7 +136,30 @@
         </div>
       </div>
 
-      <template v-if="(loading || isSearching || noPermission || !serverOnline || displayFiles.length === 0) && !selectedPlugin">
+      <!-- 🆕 P3（spec desktop-web-android-pairing）：**跨端命中独立展示区**
+           契约：这是**跨端引用**（peerId + 远端原始路径），不是本地文件 ——
+           不进本地结果列表、不参与本地排序、点击只走「在线打开」。
+           ⚠️ 必须放在下面的「空态/结果」分支**之前**：本端 0 命中时
+           下面的 v-else 分支整体不渲染，远端命中会凭空消失（踩过）。 -->
+      <div v-if="searchQuery && (peerHits.length > 0 || peerSearching)" class="peer-results" data-testid="peer-results">
+        <div class="peer-results-header">
+          <span>{{ t('peers.remoteHits', { defaultValue: '来自已配对设备' }) }}（{{ peerHits.length }}）</span>
+          <span v-if="peerSearching" class="peer-results-busy">{{ t('peers.searching', { defaultValue: '搜索中…' }) }}</span>
+        </div>
+        <div v-for="hit in peerHits" :key="hit.key" class="peer-hit-row" data-testid="peer-hit">
+          <PeerSourceBadge :source="hit.source" :peer-name="hit.peerName" />
+          <span class="peer-hit-path" :title="hit.path">{{ hit.path }}</span>
+          <a
+            class="peer-hit-open"
+            data-testid="peer-hit-open"
+            target="_blank"
+            rel="noopener"
+            :href="peerFileUrl(hit)"
+          >{{ t('peers.openOnline') || '在线打开' }}</a>
+        </div>
+      </div>
+
+      <template v-if="(loading || isSearching || noPermission || !serverOnline || (displayFiles.length === 0 && peerHits.length === 0)) && !selectedPlugin">
         <div v-if="loading || isSearching" class="loading-container">
           <!--
             搜索中 loading 三态区分（debug-discipline.md §1.6）：
@@ -461,14 +484,17 @@
           <button class="fulltext-banner-dismiss" type="button" @click="dismissFulltextBanner">×</button>
         </div>
 
+        <!-- Task 1.2.2：桌面双栏容器（手机端是普通单列，零变化） -->
+        <div class="files-split" :class="{ 'files-split--desktop': isDesktop }">
         <ion-list>
           <ion-item
             v-for="file in displayFiles"
             :key="file.path"
-            @click="handleFileClick(file)"
+            @click="onRowClick(file)"
+            @dblclick="onRowDblClick(file)"
             v-longpress="() => handleLongPress(file)"
             :data-highlight-path="file.path"
-            :class="{ 'file-highlight': highlightedPath === file.path, 'greedy-match': searchMode === 'greedy' }"
+            :class="{ 'file-highlight': highlightedPath === file.path, 'greedy-match': searchMode === 'greedy', 'file-selected': isDesktop && detailPath === file.path }"
           >
             <div slot="start" class="file-thumbnail-slot lazy-thumb-target" :data-file-path="file.path">
                 <img
@@ -534,6 +560,73 @@
             </ion-button>
           </ion-item>
         </ion-list>
+
+        <!-- 桌面详情面板（master-detail 的 detail）：只展示元数据 + 动作 -->
+        <aside
+          v-if="isDesktop"
+          class="files-detail"
+          data-testid="files-detail"
+          aria-label="file-detail"
+        >
+          <div class="files-detail-head">
+            <span class="files-detail-title">{{ t('files.detailTitle', { defaultValue: '详情' }) }}</span>
+            <ion-button v-if="detailFile" fill="clear" size="small" @click="closeDetail">
+              <ion-icon :icon="close" slot="icon-only"></ion-icon>
+            </ion-button>
+          </div>
+          <template v-if="detailFile">
+            <h3 class="files-detail-name">{{ detailFile.display_name || detailFile.name }}</h3>
+            <dl class="files-detail-meta">
+              <dt>{{ t('files.detailType', { defaultValue: '类型' }) }}</dt>
+              <dd>{{ detailFile.isDirectory ? t('files.directory') : (detailFile.ext || '-') }}</dd>
+              <dt>{{ t('files.detailSize', { defaultValue: '大小' }) }}</dt>
+              <dd>{{ detailFile.isDirectory ? '-' : formatFileSize(detailFile.size) }}</dd>
+              <dt>{{ t('files.detailModified', { defaultValue: '修改时间' }) }}</dt>
+              <dd>{{ detailFile.modified ? formatDateTime(detailFile.modified) : '-' }}</dd>
+              <dt>{{ t('files.detailPath', { defaultValue: '路径' }) }}</dt>
+              <dd class="files-detail-path">{{ detailFile.path }}</dd>
+            </dl>
+            <div class="files-detail-actions">
+              <ion-button size="small" fill="solid" @click="handleFileClick(detailFile)">
+                {{ t('files.detailOpen', { defaultValue: '打开' }) }}
+              </ion-button>
+              <ion-button size="small" fill="outline" @click="copyDetailPath">
+                {{ t('files.detailCopyPath', { defaultValue: '复制路径' }) }}
+              </ion-button>
+            </div>
+          </template>
+          <p v-else class="files-detail-empty">
+            {{ t('files.detailEmpty', { defaultValue: '单击左侧文件查看详情（双击直接打开）' }) }}
+          </p>
+        </aside>
+
+        <!-- 第三栏：预览（只在 ≥1440 出现，<1440 由 CSS 隐藏，不新增 JS 形态状态） -->
+        <aside
+          v-if="isDesktop"
+          class="files-preview"
+          data-testid="files-preview"
+          aria-label="file-preview"
+        >
+          <template v-if="detailFile">
+            <div class="files-preview-media">
+              <img
+                v-if="isImageFile(detailFile) && thumbnailUrls[detailFile.path]"
+                :src="thumbnailUrls[detailFile.path]"
+                class="files-preview-img"
+                alt=""
+              />
+              <ion-icon v-else :icon="getFileIcon(detailFile)" class="files-preview-icon"></ion-icon>
+            </div>
+            <p class="files-preview-name">{{ detailFile.display_name || detailFile.name }}</p>
+            <p class="files-preview-meta">
+              {{ detailFile.isDirectory ? t('files.directory') : formatFileSize(detailFile.size) }}
+            </p>
+          </template>
+          <p v-else class="files-preview-empty">
+            {{ t('files.previewEmpty', { defaultValue: '选中文件后在此预览' }) }}
+          </p>
+        </aside>
+        </div>
       </template>
 
       <ion-alert :is-open="showRenameDialog" header="重命名"
@@ -604,6 +697,8 @@
   </ion-page>
 </template>
 <script setup lang="ts">
+// Task 1.2.2：master-detail 需要 ref/computed
+import { computed, ref } from "vue";
 import {
   alertCircle,
   arrowBack,
@@ -634,6 +729,10 @@ import { getFileIcon, getFileIconColor, isImageFile } from "@encv/shared-compone
 // Vue 3 <script setup> 自动暴露顶层 binding 给 template，所以 template 用法保持不变。
 
 import { useFilesView } from "@encv/shared-components/views/useFilesView";
+// 🆕 P3（spec desktop-web-android-pairing）：搜索页接入「互通搜索索引」
+import { type FederatedHit, searchFederated } from "@encv/shared-components/composables/useFederatedSearch";
+import { useFormFactor } from "@encv/shared-components/composables/useFormFactor";
+import PeerSourceBadge from "@/components/PeerSourceBadge.vue";
 
 const {
   // i18n + composable re-exposed values
@@ -670,6 +769,9 @@ const {
   searchResults,
   isSearching,
   searchMode,
+  // 🆕 P3 远端命中（独立展示区，绝不混入本地结果）
+  peerHits,
+  peerSearching,
   // 🆕 A3 contenteditable ref + handlers
   queryInputRef,
   onQueryInput,
@@ -749,7 +851,58 @@ const {
   mountRootOf,
   // icons (template 用)
   add,
-} = useFilesView();
+} = useFilesView({
+  // P3：只查已配对设备的索引（skipLocal），命中进**独立展示区**，不混进本地结果
+  peerSearch: async (q: string, limit: number) => (await searchFederated(q, { limit, skipLocal: true })).items,
+});
+
+/**
+ * P3.4：远端命中的「在线打开」链接。
+ * ⚠️ 恒带 `peerId + 远端原始路径` —— 绝不改写成任何本地路径（不伪装成本地文件）。
+ */
+function peerFileUrl(hit: FederatedHit): string {
+  const qs = new URLSearchParams({ peerId: hit.peerId, path: hit.path });
+  return `/api/peerlink/file?${qs.toString()}`;
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * Task 1.2.2（剩余）：桌面 master-detail 双栏
+ *
+ * 桌面语义（仅 formFactor=desktop 生效，手机端零变化）：
+ *   - 单击**文件**行 = 选中（右侧详情面板显示元数据 + 动作）
+ *   - 双击**文件**行 = 打开（保持原有行为可达，不是被详情面板顶掉）
+ *   - 单击**目录**行 = 照旧进入目录（目录不做"选中"）
+ * 详情面板只展示信息 + 提供动作，**不改写列表语义**（不合并命名空间、不伪造成别的东西）。
+ * ───────────────────────────────────────────────────────────── */
+const { isDesktop } = useFormFactor();
+const detailPath = ref("");
+const detailFile = computed(() => displayFiles.value.find(f => f.path === detailPath.value) ?? null);
+
+function onRowClick(file: (typeof displayFiles.value)[number]): void {
+  if (isDesktop.value && !file.isDirectory) {
+    detailPath.value = file.path;
+    return;
+  }
+  handleFileClick(file);
+}
+
+function onRowDblClick(file: (typeof displayFiles.value)[number]): void {
+  handleFileClick(file);
+}
+
+function closeDetail(): void {
+  detailPath.value = "";
+}
+
+async function copyDetailPath(): Promise<void> {
+  const p = detailFile.value?.path;
+  if (!p) return;
+  try {
+    await navigator.clipboard.writeText(p);
+  } catch {
+    /* 剪贴板不可用时静默：路径已在面板上可见，可手动复制 */
+  }
+}
 
 // 🆕 2026-07-02 v2 简化：不需要 phraseInsertion 常量（直接调 insertSymbol('__phrase_open__')）
 // 占位：保留空的占位 hooks（focus/blur 事件，可后续加视觉反馈）
@@ -1026,6 +1179,56 @@ function onQueryBlur() {
 
 .fulltext-banner-dismiss:hover {
   opacity: 0.7;
+}
+
+/* 🆕 P3：跨端命中独立展示区（视觉上就与本地结果划清界限） */
+.peer-results {
+  margin: 8px 12px 4px;
+  padding: 8px 10px;
+  border: 1px dashed var(--color-primary);
+  border-radius: 10px;
+  background: rgba(var(--ion-color-primary-rgb, 56, 128, 255), 0.06);
+}
+
+.peer-results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  margin-bottom: 4px;
+}
+
+.peer-results-busy {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+.peer-hit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.peer-hit-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.peer-hit-open {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  text-decoration: none;
 }
 
 /* 🆕 2026-07-02 A4：FTS 命中角标（merge 后非普通结果的项） */
@@ -1617,6 +1820,129 @@ body.dark .diag-item {
   font-weight: 600;
   padding: 0 2px;
   border-radius: 2px;
+}
+
+/* === Task 1.2.2：桌面 master-detail 双栏 === */
+/* 手机端容器完全透明（不加任何布局约束），桌面端才切成两栏网格。 */
+.files-split {
+  display: block;
+}
+.files-split--desktop {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 12px;
+  align-items: start;
+  padding: 0 8px 8px;
+}
+.files-detail {
+  position: sticky;
+  top: 8px;
+  padding: 12px;
+  border-radius: var(--radius-box, 0.75rem);
+  border: 1px solid var(--color-base-300);
+  background: var(--color-base-100);
+}
+.files-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.files-detail-title {
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+  color: var(--color-base-content);
+}
+.files-detail-name {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  word-break: break-all;
+  color: var(--color-base-content);
+}
+.files-detail-meta {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 4px 8px;
+  margin: 0 0 12px;
+  font-size: 0.8125rem;
+}
+.files-detail-meta dt {
+  color: var(--color-base-content);
+  opacity: 0.6;
+}
+.files-detail-meta dd {
+  margin: 0;
+  color: var(--color-base-content);
+}
+.files-detail-path {
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.files-detail-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.files-detail-empty {
+  margin: 0;
+  font-size: 0.8125rem;
+  opacity: 0.6;
+  color: var(--color-base-content);
+}
+/* 选中态（仅桌面）：用令牌，不用硬编码色值 */
+ion-item.file-selected {
+  --background: color-mix(in srgb, var(--color-primary) 12%, var(--color-base-100));
+}
+
+/* === ≥1440 三栏：列表 + 详情 + 预览 ===
+   断点用纯 CSS（不引入新的 JS 形态状态）：<1440 预览列整列 display:none，网格也退回两栏。 */
+.files-preview {
+  display: none;
+}
+@media (min-width: 1440px) {
+  .files-split--desktop {
+    grid-template-columns: minmax(0, 1fr) 360px 280px;
+  }
+  .files-preview {
+    display: block;
+    position: sticky;
+    top: 8px;
+    padding: 12px;
+    border-radius: var(--radius-box, 0.75rem);
+    border: 1px solid var(--color-base-300);
+    background: var(--color-base-100);
+    text-align: center;
+  }
+}
+.files-preview-media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  margin-bottom: 8px;
+}
+.files-preview-img {
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: 6px;
+}
+.files-preview-icon {
+  font-size: 4rem;
+  color: var(--color-base-content);
+  opacity: 0.5;
+}
+.files-preview-name {
+  margin: 0 0 4px;
+  font-size: 0.875rem;
+  word-break: break-all;
+  color: var(--color-base-content);
+}
+.files-preview-meta,
+.files-preview-empty {
+  margin: 0;
+  font-size: 0.8125rem;
+  opacity: 0.6;
+  color: var(--color-base-content);
 }
 
 /* 暗黑模式适配 */

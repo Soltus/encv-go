@@ -26,6 +26,159 @@
 - **Biome 配置环境事实（2026-07-14）**：biome 配置已迁到仓库根 `/workspace/biome.jsonc`（原在 `app/biome.jsonc`，用户判定根目录才正确，已删除 app 那份）。真实 IDE 设置 `.vscode/settings.json` 有 `"biome.enabled": true`（VS Code 侧 Biome 已启用，用户那边应能看到内联报错/Problems）。**`.ide/settings.json` 是镜像拷贝源，不被任何 IDE 实时读取**（改它无即时作用，需部署/同步到真实位置才生效）。终端在本环境常不可用 → Biome 查错依赖用户侧 VS Code 红线，或终端可用时 `biome ci`。
 - **⚠️ `app_format` MCP 在本环境不真改文件（2026-07-16 续41 实测）**：`app_format` 报 `Formatted 4 files in 6ms. No fixes applied.` 但 Biome CI 仍 FAIL（格式不符）。**必须用 `pnpm exec biome check --write <path>`（经 app_exec MCP）才真改**；`app_format` 在此环境不可信，勿再单独依赖它修格式。
 - 超时命令必须加超时参数（如 curl 加 `--max-time`）。
+
+## 前端：动态 import 的依赖必须在「dev + 网关」真实路径上验（2026-10-03，长期）
+
+- 运行时 `import("xxx")` 的依赖，dev 态靠 vite **按需**预打包；生产构建会把它打进 chunk ⇒
+  **生产构建的绿覆盖不到 `/node_modules/.vite/deps/*` 这条路径**。
+  实测翻车：配对码二维码（运行时 `import("qrcode")`）在 dev+网关下
+  `Failed to fetch dynamically imported module … qrcode.js`（404），真因是
+  `node_modules/.vite/deps/_metadata.json` 残留**已失效的旧 pnpm store 路径** ⇒ 按需重优化 ENOENT 崩。
+  UI 却显示"二维码依赖未安装"——**误导**：依赖其实装着的（`qrDiag` 里才是真因）。
+- **修法**：① `optimizeDeps.include: ['<dep>']` 让它在**启动期**预打包，摆脱"运行时发现→临时重优化"；
+  ② 清掉陈旧的 `node_modules/.vite` 缓存（用 `mv` 挪走，别 `rm -rf`）；
+  ③ 重启服务走 **pm2 restart preview-gateway**（它托管 vite 子进程），**不要 kill dev server**（规矩红线）。
+- **验收铁律**：门禁（单测/类型/Biome/i18n）**不校验运行时依赖是否可加载**，动态 import 连类型检查都碰不到
+  ⇒ 新增任何动态 import 的依赖，必须补一条"dev + 网关"真实浏览器断言（如 `pw-pairing-qr.mjs`：
+  canvas 真实像素 + 无降级诊断文本）。
+- 兜底文案**不许替真因下结论**：降级提示要写"渲染失败（原因见诊断）"，真因另处原样暴露。
+- ⚠️ 跑 `check-all` 时若模拟器在跑，`vite build` 可能被 **SIGKILL**（内存争用）——
+  单独重跑 `vite build` 几秒即过，别误判为代码回归。
+
+## Capacitor 原生壳里 `window.location.origin` ≠ 后端地址（2026-10-03 真机事故，长期）
+
+- **铁律**：`capacitor.config.ts` 配 `server.androidScheme:'https'` ⇒ **安卓真机 WebView 的
+  `window.location.origin` 就是 `https://localhost`**（`capacitor://` 是历史 scheme，别再拿它当判据）。
+  任何"页面在什么协议/什么 host 下 ⇒ 后端就在哪"的推断，**必须先排除原生壳**，否则
+  `${origin}/api/...` 会被打到 **localhost 默认端口 443**（表象：`Failed to connect to
+  localhost/127.0.0.1:443`，而后端明明在 :2025）。
+- **判定写法**：`isNativeShell()` = `getAppCapabilities().isNative()` 且 `platform()!=="electron"`；
+  DI 未注入时 fallback `globalThis.Capacitor.isNativePlatform()`。**两层都得有**——只靠 DI，
+  注入时序一旦漂移就漏判；只靠 Capacitor，无法排除 Capawesome Electron 桌面托管形态。
+  实现见 `shared-components/src/api/core/baseUrl.ts`。
+- **两道防线缺一不可**：
+  ① JS 侧不要产出 `https://localhost/...` 的绝对 URL（native 用相对路径或明确的 loopback 端口）；
+  ② **native 侧（ApiProxy）不许对绝对 URL 盲透传** —— `ApiProxyUrlRouter.rewriteWebViewOrigin()`
+  把 WebView origin 重写到 `127.0.0.1:<lastKnownPort>`（顺带兜住端口漂移 2025→2031）。
+  收窄到"localhost 且端口缺省/80/443"，避免误伤 `:5244` openlist 等本机服务和局域网 URL。
+  ⇒ **写 native 侧功能时优先抽成"纯 Kotlin、零 Android 依赖"的 object**，这样 JVM 单测可以直接跑，
+  不必实例化 `Plugin` 子类（也不必 Robolectric）。
+- **✅ gradle 依赖解析 429「卡死」已真修好（2026-10-03，第 4 次才找对）**：`repo.maven.apache.org`
+  与 `repo1.maven.org` 在本沙箱恒返 **429**（其它源全 200：dl.google.com / 腾讯 / 阿里 google / jitpack）。
+  旧版 `scripts/gradle-buildscript-mirrors.gradle` 是**无效药**——它在 init script 的 `allprojects` 里
+  `if (p.repositories.size() > 0)`，而那时 build.gradle 还没被执行、size 恒为 0 ⇒ 从来没生效。
+  **有效做法**：① `allprojects.afterEvaluate` 里对 `MavenArtifactRepository` **原地 `setUrl`** 换 central（别动
+  google/jitpack/flatDir）；② 更关键的是 `gradle.beforeProject { p.buildscript.repositories { maven{url=镜像} } }`
+  **抢先注入**——Capacitor include 的模块在 `buildscript{...}` 块结束时立即解析 classpath，早于 afterEvaluate。
+  ⚠️ **千万别给 `p.repositories` 也注入**：`PREFER_PROJECT` 下一旦 project 有项目级仓库，settings 的
+  dependencyResolutionManagement（含 jitpack exclusiveContent）会被整体屏蔽 ⇒ 依赖大面积找不到。
+  脚本已 `cp` 到 `~/.gradle/init.d/`，现在 `./gradlew :app:testDebugUnitTest` **BUILD SUCCESSFUL**。
+- **⚠️ 安卓 JVM 单测的历史欠账（2026-10-03）**：`:app:testDebugUnitTest` 此前**从未跑起来**（先是被
+  `GoBackendModuleTest` 引用已删类 + `DEFAULT_PORT` 为 private 挡住编译；修完编译后 `EncvGoServiceTest`/
+  `GoProcessPluginTest` 又全挂在 `JSONObject.put / Intent not mocked`）⇒ 真绿需要 Robolectric 或
+  `unitTests.isReturnDefaultValues=true`（后者只免抛错，Intent 断言会假绿）。写 native 单测时优先抽成
+  **纯 Kotlin object（零 Android 依赖）**，`ApiProxyUrlRouter` 就是这么做的 → gradle 下 9/9 真通过。
+- **沙箱 gradle 跑不通（2026-10-03 早期结论，已被上条取代，仅保留绕路手法备查）**：当时卡在 429 退避重试
+  （jstack 抓 `tryResolveAndMaybeDisable`）时的临时办法：`apt-get install -y --no-install-recommends kotlin junit4`
+  ⇒ 用 `kotlinc` 单文件编译 + `java -cp ... org.junit.runner.JUnitCore` 实跑（限纯 Kotlin 文件）。
+  ⚠️ kotlinc 1.3 **不支持尾逗号**，多行调用的最后一个实参后留 `,` 会编译失败。
+- **vitest：既要默认跑到、又不能污染 FAST ⇒ 新开 project**：用 `vi.resetModules()` 切换 env/DI 的用例
+  放 FAST(`isolate:false`) 会让别人的 `vi.mock` 失效（实测 `directive-reveal.test.ts` 转红，
+  基线对比确认），放 ISOLATED 则门禁默认不跑。⇒ `vitest.config.ts` 增 **`contract` project
+  （isolate:true，且非 FULL 模式也跑）**。这是比"退化成源码扫描锁"更通用的解法。
+
+## 安卓 JVM 单测：Robolectric 已落地 + `android-all` 的联网陷阱（2026-10-04，长期）
+
+- **纯 JVM unit test 里 Android framework 全是 stub**：`JSONObject.put` / `Intent.setAction`
+  会抛 `Method ... not mocked` ⇒ 凡是碰这些类的用例必挂。解法 = Robolectric（`4.15.1`），
+  测试类加 `@RunWith(RobolectricTestRunner::class)` + `testOptions.unitTests.isIncludeAndroidResources=true`。
+- **🚨 Robolectric 自己下载 `android-all-instrumented*.jar`（199MB）且**不走 Gradle**：
+  默认直连 `repo1.maven.org`（本环境恒 429）⇒ `Failed to fetch maven artifact`，且表现为"秒失败"。
+  `robolectric.properties` 里的 `dependency.repo.url` **不足以解决**。
+  **正确做法**：把 jar 作为普通 Gradle configuration 依赖（走 Gradle 已配好的镜像解析），
+  Copy 到 `build/robolectric-sdk`，再 `systemProperty("robolectric.offline","true")`
+  + `robolectric.dependency.dir=<该目录>` ⇒ 换机器零手工预置。
+  SDK 级别写死 `sdk=35`（与 Robolectric 版本匹配的 15-robolectric-* jar），别跟 compileSdk=36 走
+  （36 的 android-all 可能没发布/镜像缺包）。
+- `robolectric.application=android.app.Application`：避免 Robolectric 去加载项目自己的
+  Application（Bugly 等初始化会在单测里出副作用）。
+- **现状**：`./gradlew :app:testDebugUnitTest` = **36 tests / 0 failures**（此前 19 failed）。
+
+## `.codebuddy/skill-registry.json` 的时间戳噪音（2026-10-04，长期）
+
+- **源头已修**：写这个文件的是 **`scripts/skill-manager.mjs`**（app-dev MCP 的技能管理器）。
+  原实现两处硬伤：扫描时 `updatedAt` **无条件刷新**（不看 hash），且 `saveRegistry()` **无条件 writeFile**
+  ⇒ 内容一字不差也重写，git 常年显示 modified。现已改为：内容未变则沿用旧 `updatedAt`，
+  且**幂等写**（内容相同不落盘）。验证：跑一次扫描，registry 的 md5 与 mtime 都不变。
+- **❗方法论（用户纠正）**：这类「文件被自动改写」的问题，**先找写它的代码源头修**，
+  不要用 git hook / 事后归一化脚本当解决方案（我第一版就是这么干的，被否了）。
+  另外：codemogger 对 `.mjs` 可能返回空集，**别据此断定"写方不在仓库里"**，换个关键字/直接翻 scripts/。
+- 该文件**不能被忽略**（用户要求）⇒ 禁止 `.gitignore` / `assume-unchanged` / `skip-worktree`。
+  `scripts/normalize-skill-registry.py` 仅作一次性清理与 `--check` 校验保留，不再是解法。
+
+## 预览链路分叉：沙箱用网关 :16666，非沙箱用独立 vite dev（2026-10-04，长期）
+
+- **`:16666` preview-gateway 是沙箱（trae / OpenPreview）专用**，不是项目标配。
+  判断依据：那条链路是 `trae 域名 → agent-tool-host(:16000) → preview-gateway(:16666) → vite(:8100)`；
+  CNB / 本机等环境没有 agent-tool-host，硬套会让人误以为它必须存在。
+- **非沙箱环境必须走独立 dev**，否则前端 dev 态会把 API 打到 `DEV_SANDBOX_ENTRY(:16666)` 而死端口断联；
+  同时不能让前端直连 :2025（远程访问时页面 origin 是外部域名，后端 CORS 只放行 localhost/127.0.0.1）：
+  ```
+  ENCV_MOBILE=1 ENCV_DEV_PREVIEW=1 MOBILE_DATA_DIR=/storage/emulated/0 \
+  MOBILE_DIR=/workspace/app/encv-mobile go run ./cmd/encv start    # 后端 :2025
+  cd app/encv-mobile && ENCV_STANDALONE_VITE=1 vite --port 8100    # 前端 :8100，自带 /api 反代
+  ```
+  `ENCV_STANDALONE_VITE=1` 会：启用 `server.proxy`（/api、/agent-api、/ping、/p、/ws→:2025）、
+  `define` 注入 `VITE_ENCV_API_BASE=''`（前端同源）、跳过沙箱专用的 HMR 改写与删 `@vite/client` 插件
+  ⇒ HMR 正常。`dev-start-guard` 认这个环境变量（仍需显式声明，不是放开裸 vite）。沙箱行为不变。
+- ⚠️ 2026-10-03 记的"dev 环境默认打 :16666（沙箱网关）"**只在沙箱成立**，别拿它当通用结论。
+
+## 动效：gsap `from()` 的「终态陷阱」+ vitest isolate:false mock 污染（2026-10-03，长期）
+
+- **⚠️ 挂到 `<ion-page>` 上的进场动效绝不能用 `from({opacity:0})`**：Ionic 转场开始前会给页面写
+  **内联 `opacity:0`**，而 `from()` 把「当前计算值」当**终态** ⇒ 动画实际 **0→0**，`y` 正常归位但
+  透明度永久卡 0 ⇒ **整页空白但可点击**（DOM 在、`elementFromPoint` 能命中、rAF 正常、tween 在跑）。
+  判定特征：`transform` 会归零而 `opacity` 恒 0。正确写法 =
+  `fromTo(el, {y, opacity:0}, {y:0, opacity:1, clearProps:"opacity,transform"})`（终态显式写 1）。
+  落地：`packages/shared-components/src/directives/motion.ts::vPageTransition`（Files/AgentChat 曾中招）。
+- **vitest FAST 项目（`isolate:false`）同模块 `vi.mock` 会互相污染**：新增任何 import
+  `@encv/shared-components/motion/internal` 的用例都会让 `directive-reveal.test.ts` 的引擎 mock 失效，
+  实测**两文件交替假红**；**也不能在用例里调真实 `setMotionDisabled()`**（污染全局开关）。
+  ⇒ 需要 mock 引擎的用例放 **ISOLATED**（`ENCV_TEST_FULL=1` 才跑）；默认门禁要跑到的锁做成
+  **源码扫描**形式（不 import 引擎模块）。
+- vitest 下 `import.meta.url` **不是 file: scheme**（`readFileSync` → `ERR_INVALID_URL_SCHEME`），
+  测试里定位真源用 `resolve(process.cwd(), "../packages/...")`。
+
+## 双端互联（桌面 web ⇄ 安卓）立项事实（2026-10-02 起，长期）
+
+- **权威规划文档**：`.trae/specs/desktop-web-android-pairing/`（`spec.md` 契约 / `tasks.md` P0–P6 / `checklist.md` / `progress.md` 多轮迭代跟踪 + 恢复入口）。任何"桌面端 / 扫码配对 / 互通搜索 / 远程 Agent"相关会话**先读 `progress.md`**。
+- **核心边界（写死防跑偏）**：`baseUrl` = 本端自己的后端（既有语义，不动）；`peer` = 另一台已配对设备，**peer 绝不是 baseUrl 的候选**。`useApiBaseProbe` 的探测链**不得**把 peer 改写进 baseUrl。
+- **"互通搜索索引" ≠ 挂载网络驱动器**：远端命中永远是**跨端引用**（`peerId + path` + 来源徽章），只可"在线打开/取回"，**禁止**合并统一命名空间、禁止伪装成本地路径（有契约回归锁）。
+- **信任语义三分**：`accept`（一次）/ `accept_for_session`（会话级，已有 `sess.GrantedTools`）/ `trust_device`（**进程级，重启即失效**，新增）。token 与信任态**只存 Go 进程内存**，禁止落 localStorage / 配置文件；破坏性工具即使已信任也强制确认。
+- **连通性既有地基**：Go 后端绑 `:port`(0.0.0.0) 故 LAN 可达但零鉴权（配对层先行）；`gin_app.go` CORS 只放行 localhost/127.0.0.1/`https://*-plugin.local`（桌面直连安卓需先解决）；`ApiProxyPlugin.resolveBackendUrl()` 已支持绝对 URL，安卓→对端天然绕 CORS。
+- **⚠️ 拓扑事实（2026-10-02 用户纠正，推翻初版 LAN 假设——初版"两端同局域网 → LAN 直连"设计【已废除】）**：**桌面端（web）跑在 cnb 云开发环境（公网 HTTPS，与其 Go 后端同源，经 preview-gateway :16666 转发 `/agent-api`→:2025）；安卓端在 NAT/CGNAT 后、无公网地址 ⇒ 两端不同网**。因此所有跨端设计必须走「**Hub（cnb 上 Go 内的 peerlink hub，公网 WSS）+ 手机端主动出网建长连接**」，**禁止 LAN 直连**（且 https 页面请求 http 内网地址会被浏览器按混合内容拦截）。桌面 UI 只调同源 REST/SSE ⇒ 天然规避 CORS 与混合内容。
+  - 长连接**放 Go 侧**（非 WebView）：息屏 / 后台 / Activity 重建不断链；UI 只负责渲染与授权弹窗，经 127.0.0.1 与本机 Go 交互。
+  - 二维码内容从"内网地址"改为"**会合点 hub + pairingId + psk**"（带外通道，不依赖同网）。
+  - **手机侧接线**：`POST /api/peerlink/edge/pair`（hub+pairingId+psk）→ 配对成功后由 Go 进程常驻 Edge；`GET /edge/status`、`POST /edge/stop`。token **只存内存** ⇒ 进程重启必须重扫。Hub 地址**禁止明文 http**（仅 https 或本机回环）。
+  - **最易低估的风险 R6**：`.cnb.yml` `keepAliveTimeout: 30m` ⇒ cnb 开发环境 30 分钟无心跳即被回收，Hub 会消失 / 地址漂移 ⇒ Hub 地址须持久化且**可重指向**，固定域名优先。
+  - **真机级端到端闸门（2026-10-02 起）**：`bash scripts/emu-peerlink-e2e.sh`（Hub=宿主机 Go 进程，
+    Edge=**模拟器内** x86_64 后端，`adb reverse` 模拟手机主动出网）。**29 断言**覆盖中继/联邦搜索/
+    远端读/远程授权/信任重启失效/401。任何 peerlink 改动后都要跑它——它抓出过两个单进程测试永远抓不到的 bug。
+  - **⚠️ 沙箱内起"安卓后端"的四个硬前置**：① `adb push` 别用短 timeout（首传 68MB 会被掐断）；
+    ② 预建 `/data/user/0/com.encvgo.app/files`（没装 APK 时不存在 ⇒ sqlite 打不开）；
+    ③ 起进程必须 `env HOME=/data/local/tmp`（adb shell 里 HOME 为空 ⇒ 应用数据落只读 `/.local`
+    ⇒ tasks DB/向量搜索/FTS5 全部 `unable to open database file`）；
+    ④ 端口**自选**（1999/2025/2000 都出现过）⇒ 从 `successfully started` 日志解析。
+    配置还要同时设**顶层 `server.dir`**（servingDir 的真正来源）与 `mobile.server.dir`。
+  - **⚠️ 两处"顺序/透传"类缺陷（已修，防复发）**：① `Server.servingDir` **必须在 `NewServer` 里就赋值**
+    （`NewServer` 里 FTS5 建索引 / mount bootstrap / FTSRebuilder 已在用它；只在 `Start()` 赋值 ⇒ 空串
+    ⇒ **本地全文搜索永远 0 命中** + mount root 退化成 cwd；回归锁 `TestNewServer_ServingDirReadyBeforeStart`）；
+    ② 远程 Agent 的**决策必须透传**（`peerlink.AgentInvokeOutcome.Decision`）：Edge 成功分支曾硬编码
+    `accept` ⇒ 调用端分不清"逐次同意"与"已信任自动放行"（回归锁
+    `TestPeerlinkAgentInvoke_DecisionPropagatedToCaller`）。
+  - 云端视为**不可信中转**：全链路 AEAD（HKDF(psk) 派生）+ SAS 6 位人工核对 + Hub 不落盘 + 日志脱敏；大流量（文件取回）默认不经 Hub。
+- **Capacitor 桌面端（2026-10-02 调研，长期）**：官方**没有**桌面平台（只有 android/ios/web，`getPlatform()` 只返回这三值）⇒ 桌面只有两条路：① **web 形态**（浏览器/cnb，官方一等公民，插件走 web 实现或 stub）；② **Electron**（`@capacitor/capacitor-electron` → `@capawesome/capacitor-electron`，兼容 Capacitor≥6 + Electron≥28，活跃；`getPlatform()==='electron'` 且 `isNative()===true`；只有带 Electron 实现或有 web fallback 的插件可用；80–150MB；许可未确认）。社区版 `@capacitor-community/electron` 已停滞不采用。
+  - **铁律**：桌面形态判定**禁止只看 `isNative()`**（Electron 桌面 isNative=true 却该走桌面壳）；必须看 `platform`（`web`/`electron` 才算桌面候选），平台名经 `appCapabilities.platform()` 注入（`Capacitor.getPlatform()`），见 `computeFormFactor` + 其 4 个单测。
   - **前提已确认**：`index` 原生就是**基于内容 hash 的增量**（`cli.mjs` `getFileHash`→`storedHash===file.hash` 则 `skipped++`，只重解析/重嵌入变更文件，`removeStaleFiles` 清理已删文件）。所以查询前重索引对未变文件很廉价（只重 hash，不重嵌入）。**不是 mtime，是内容 hash，更可靠**。watch 守护进程不采用（长驻进程按"环境保持"规矩绝不能 kill，新增风险）。
   - **端到端实测（/tmp fixture）**：新增引用文件后**不手动 index** 直接 `references` → 自动变 2 处；删该文件后直接 `references` → 自动回落 1 处。证明"新鲜度 + stale 清理"双向生效。
   - **⚠️ `references` 三大用法坑（2026-07-12 实战踩坑，"输出不对劲"根因）**：
@@ -33,6 +186,18 @@
     2. **`references <file> --file` 必须传绝对路径**（`imports.file_path` 存绝对路径），传相对路径 `composables/x.ts` → 空。用 `"$(pwd)/composables/x.ts"`。
     3. **只解析静态 import**，动态 `import()`/字符串引用查不到；`--module` 返回的行数含同文件多符号重复，去重看唯一文件。
 （首次约 10 分钟；**增量重跑实测 0.65s**，`skipped 2612 unchanged`）。跨仓库完整度更好（references useTaskStore 9 条 vs 单前端库 5 条）。
+
+## 双端互联：并发与写帧纪律（2026-10-03，长期）
+
+- **R11 背压语义**：单 peer 在途 RPC 上限 `MaxConcurrentCallsPerPeer=4`，超限 **429 `peer_busy`**。
+  ⚠️ **背压不是对端故障**：判定必须**先于**熔断失败累计且**不计入** —— 否则一次限流就把健康对端熔断掉。
+- **⚠️ websocket 不支持并发写**（gorilla 会直接 `panic: concurrent write to websocket connection`）：
+  Edge 的每个请求各起 goroutine 回 res 帧、Hub handler 手写 `conn.WriteJSON`（hello_ok/pong/error）
+  都会绕过连接表里的写锁。**所有写帧必须走统一串行化入口**（Edge `writeMu` / Hub `peerConns.WriteJSON`）。
+  这类 bug 只在并发下暴露 —— 单调用串行时永远绿。
+- **会话替换的删除竞态**：一个 peer 只允许一条活跃会话（`SetExclusive` 顶掉旧连接）后，
+  旧连接退出时的 `defer` **不能按 peerID 直接删**（会把顶替它的新连接一起删掉），
+  必须按**连接身份**删（`DeleteConn(peerID, conn)`）。
 
 ## 加密容器流式写入（2026-09-29 落地，长期契约）
 
@@ -82,6 +247,103 @@
     `app/encv-preview/verify-container.mjs`），能逐字节对上就说明容器没问题、是读取栈选错了。
 - 同理 mac_salt 必须显式写进 manifest：留空会让 writer 再生成一个，
   造成「加密用一个 mac_key、校验用另一个」→ 打开 EnableHMAC 就永远验不过。
+
+## HTTP Range / 流式供给契约（2026-10-01 修真 bug 后固化，长期）
+
+- **`FileContentProvider` 的 `GetReader()` 与 `GetSeeker()` 必须返回「共享同一个读取位置」的对象。**
+  `ContentHandler.ServeFile`（`internal/v2/handler/content.go`）的顺序是
+  `reader := GetReader()` → `seeker := GetSeeker()` → `seeker.Seek(start)` → `io.Copy(w, reader)`；
+  两次若返回不同实例，Seek 作用在没人读的流上 ⇒ **HTTP Range 静默失效**：
+  响应头写 `bytes N-M/size`，实体体却从文件头返回（206 也照样返回，全绿假象）。
+  曾因 `LocalFileProvider` 内存缓存分支各 new 一个 `bytes.Reader` 而中招（小文件 ≤3MB 全命中）。
+  修法即 `cachedStream()` 单例；**回归锁 `internal/v2/handler/content_range_cached_test.go`**。
+- **这类契约不能用 mock 测**：旧用例 `TestServeFile_SeekableProvider_SeeksCorrectly` 把同一个
+  `bytes.Reader` 同时塞给 `ReaderVal`/`SeekerVal`，恰好绕开了 bug，全绿却没覆盖到。
+  ⇒ 凡「两个方法必须共享状态」的契约，测试必须用**真实对象**构造。
+- 排查手法：`curl -r N-M` 拿到的字节去明文里 `find`，若命中偏移 0 就是此 bug 的特征。
+
+## 测试清单体检（2026-10-02，长期·定期做）
+
+- **"绿"可能只是"没跑"的假象**：`app/encv-mobile/vitest.config.ts` 曾存在
+  86 条目里 **41 条指向不存在的文件**（文件已提升到 `packages/shared-components`，
+  清单没跟着改）⇒ 那些用例从来没运行过，却一直在"全绿"的报表里。
+- 修正后暴露两类问题：① 真 bug（`EXT_TO_CATEGORY` 缺图片扩展名 ⇒ png 归到 misc）；
+  ② 孤儿用例（依赖模块已删，导入即失败）。
+- 做法：**定期扫一遍清单里每个路径是否存在**（几行 python 就能做），
+  修路径 → 试跑 → 失败的**挂起并注明原因**（不要静默删，也不要拖红 CI）→ 记录待修清单。
+
+## 全局共享文件句柄（globalFileHandlePool）的契约（2026-10-02 血的教训，长期）
+
+- `internal/v2/reader/file_handle_pool.go` 按**路径**共享同一个 `*os.File`（引用计数）。
+  同一个进程里（HTTP 服务就是如此）多个请求/多条流共用它 ⇒
+  **任何"取引用/还引用"不配平或重复 Close，都是并发 bug**，不是"多打一条日志"。
+- 三条硬约束：
+  1. 从池取的句柄**只能 `Put` 归还，绝不能直接 `Close()`**（直接关会把别人正在用的 fd 干掉）。
+  2. 一次"使用"对应一次 `Get`，由使用该句柄的 reader 的 `Close` 归还；
+     "容器级"引用由 `fileContainerReader.Close()` 归还 —— 两层互不混用。
+  3. 所有 decryptReader / provider 的 `Close()` **必须幂等**（上层真实存在重复 Close 的调用链：
+     `defer prov.Close()` + `defer decryptReader.Close()`）。
+- 症状对照：`read ...: file already closed` / `416 Seek Not Supported` / **206 但实体体被截断** /
+  `io.Copy` nil deref panic（provider 读出错后 `GetReader()` 返回 nil）。
+  这类 bug 只在并发下显现 ⇒ 断言要**多轮**，单轮会漏。
+
+## 容器完整性契约（2026-10-02 决策 A 落地，长期）
+
+- 视频/主链路（`encrypt-v2`）走的是 **v4 fragment 栈**（`SingleFileContainerWriterV4`），
+  **不是** `WriteV4ContainerTo` 的 segment 栈（后者才有 `EnableHMAC`）。改完整性相关行为前
+  先确认自己在哪条栈上 —— 我在这上面踩过一次（按 HMAC 去找，发现那条开关跟主链路无关）。
+- 现在的契约：
+  1. **写入端**必须写 `DataCRC32`（v4 分片也要写，且要带进 v4 manifest 的 `data_crc32`）。
+  2. **`AdaptV4ToV2`** 必须把 segment 的 CRC 带到 fragment（不能写死 0）。
+  3. **读取端**在"从分片起点整片读"时边读边校，不符 → `types.ErrDataCorrupted`。
+  4. `DataCRC32 == 0` = 老容器/无元数据 ⇒ **一律跳过校验**（向后兼容的开关，别乱改）。
+- 校验只能"边读边算"：v4 数据区是裸密文，没有 v2 BlockHeader，
+  `verifyFragmentAt` 那套用不上；也别指望"打开容器时校验"。
+- ⚠️ **必须"读满整片"就判定，不能只等 `io.EOF`**：HTTP 侧
+  `io.Copy(w, io.LimitReader(reader, contentLength))` 在 contentLength == 明文长度时
+  读满即停，不会再调底层 ⇒ 底层 EOF 永不发生 ⇒ 大文件校验永远不触发（实测过）。
+- **分块 CRC（已落地，2026-10-02）**：写入端每 64KB 落一个块 CRC
+  （`Fragment.BlockCRCSize/BlockCRC32` ← `Segment_v4` ← `AdaptV4ToV2`），
+  读取端每读满一块就校 ⇒ 损坏处**立即**中断（8.6MB 实测：客户端只收到 4.3MB 就被截断，
+  而整片校验时是收满 8.6MB 乱码）。
+- **吐字节前的预校验（已落地）**：`serveEncryptedFile` 3.5 步用
+  `factory.NewRawContainerReader()`（只读**密文**，因为 CRC 是密文的）整片核对后再
+  `ServeFile` ⇒ 损坏直接 **422 data_corrupted**。
+  触发条件：本地容器 + 不带 Range + ≤64MB + 有 CRC 元数据（老容器/远程流自动跳过）。
+  代价：正常文件多一次顺序读（不解密）。
+- 两条机制各管一段：**不带 Range → 422**；**带 Range → 206 + 在损坏块处截断**（头已发出，
+  只能截断，状态码改不了）。别指望后者也返回 4xx。
+- **segment 栈（compose / wasm）默认开 HMAC**：`Options` 三态（EnableHMAC/DisableHMAC），
+  默认开；开了 MAC 后 `AdaptV4ToV2` 必须扣掉 `MacSize`（否则明文尾部多 10 字节）；
+  `WriteV4ContainerTo` 必须把 CRC 回填到 manifest（否则 fragment 栈读取路径看不到）。
+  注意：**MAC 在 fragment 栈读取路径上并不被校验**，实际检出的仍是 CRC。
+- 白盒断言技巧：并发 bug 若难以稳定复现，可在同包测试里直接读
+  `globalFileHandlePool.holds[path].count`，断言"重复 Close 不得再减引用"（确定性红/绿）。
+
+## Android 模拟器"真机"测试通路（2026-10-01 建立，长期）
+
+- 无 KVM 是硬事实（QEMU TCG，约 90× 慢），**模拟器内 WebView(Chromium) 初始化必崩**
+  （crashpad + `SIGTRAP` pc=0、无 tombstone）→ **UI 级真机测试不可行**；
+  但 **Go 后端在模拟器里完全正常**（Android 文件/权限/mount 语义等价真机）。
+  ⇒ 混合通路：后端跑模拟器 + 前端跑宿主机 Chromium + `adb forward`。
+- 五件套（2026-10-02 扩到五件）：
+  `scripts/emu-backend-check.sh`（核心契约，11 组含 seek 逐字节）、
+  `scripts/emu-backend-edge.sh`（协议边界：416/截断/suffix/HEAD/目录/穿越/缺参/**并发多轮**）、
+  `scripts/emu-backend-large.sh`（**>3MB 流式分支**：全量 + 7 偏移 seek + suffix + 并发多轮）、
+  `scripts/hybrid-e2e.sh`（编排，`--only-backend` / `--full` / `--keep`，自包含）、
+  `scripts/emu-smoke.sh`（APK 冒烟，当前红 = 环境限制，环境改善应自转绿）。
+  权威文档：`docs/android-emulator-testing.md`。
+- ⚠️ **小文件（≤3MB，内存缓存）与大文件（>3MB，流式）是两套代码路径，必须都验** ——
+  2026-10-01 的 Range bug 只在小文件分支，2026-10-02 的并发截断只在流式分支。
+- ⚠️ **HTTP 层 bug 要靠"并发多轮"才抓得住**：共享文件句柄引用计数被多减一次的 bug
+  单轮 4 条很可能侥幸全绿（实测失败率约 25%）。新脚本的并发段都是多轮（5 轮 / 3 轮）。
+- ⚠️ `curl --data-urlencode` 默认是 **POST**，`/stream` 只认 GET ⇒ 19 字节
+  `404 page not found` 的**假阳性**。带 `--data-urlencode` 必须加 `-G`（HEAD 同理）。
+- `emuctl`（真源 `.ide/bin/emuctl`）：`start/wait` 末尾自动 `tune`（放宽 AM 超时/关无线/关动画），
+  `install` 自动 AOT（`cmd package compile -m speed -f`）。**不做 AOT 冷启动必超时**
+  （实测系统 Settings 47s 超时 → AOT 后 489ms）。改完同步：`install -m 755 .ide/bin/emuctl /usr/local/bin/emuctl`。
+- 前端伺服**必须是薄反代**（`/stream|/api|/preview|/themes|/ping` → 后端），纯静态会把 `/stream`
+  兜底成 index.html，播放器拿到 HTML → 必然"播放失败"。
 
 ## 主应用加解密架构事实（2026-09-29 盘点，长期）
 

@@ -58,13 +58,24 @@ func AdaptV4ToV2(v4 *types.Manifest_v4, header *types.EnvelopeHeaderV4) *types.M
 			encDataSize = seg.Size
 			physicalOffset = seg.Offset
 		}
+		// 【完整性】扣掉尾部 MAC：开了 HMAC 的容器，Size 里含 MAC 字节。
+		// 不扣的话 MAC 会被当成密文解进明文 ⇒ 明文尾部多出一段垃圾（实测多 10 字节）。
+		// MacSize 缺省 0 ⇒ 老容器/没开 HMAC 的容器不受影响。
+		if uint64(seg.MacSize) <= encDataSize {
+			encDataSize -= uint64(seg.MacSize)
+		}
 
 		fragments[i] = types.Fragment{
 			ID:                seg.ID,
 			Type:              types.FragmentType_SeekableStream,
 			Length:            encDataSize,
 			GlobalStartOffset: runningOffset,
-			DataCRC32:         0,
+			// 【完整性】CRC 必须从 v4 segment 带过来（修前写死 0 ⇒ 容器等于没有
+			// 完整性元数据，篡改后读取端无从校验，静默吐乱码）。
+			// 0 表示"老容器/无元数据"，读取端据此跳过校验 ⇒ 存量容器不受影响。
+			DataCRC32:         seg.DataCRC32,
+			BlockCRCSize:      seg.BlockCRCSize,
+			BlockCRC32:        seg.BlockCRC32,
 			PhysicalPath:      "",
 			PhysicalOffset:    physicalOffset,
 			// 每段自己的 nonce 必须带到分片上：读取端靠它重置 keystream，

@@ -84,6 +84,13 @@ installMotionDirectives(app);
 // 🆕 2026-07-06：注册 encv 业务 i18n 字典
 initEncvI18n();
 
+// 🆕 spec desktop-web-android-pairing P1：全局形态档（phone/pad/desktop）
+//   写 `document.documentElement.dataset.formFactor`，桌面壳（Tabs.vue 侧边栏）
+//   与各页面 CSS 均以 `[data-form-factor="desktop"]` 消费。
+//   必须在 registerSharedAppCapabilities 之后（依赖注入的 isNative 判定）。
+import { installFormFactor } from "@encv/shared-components/composables/useFormFactor";
+installFormFactor();
+
 // 🆕 2026-07-02 A5：在 Vue app 创建后挂 errorHandler
 // 类型签名差异：Vue 的 errorHandler 第 2 参数是 ComponentPublicInstance 类型，
 // 我们只需要 err/info → 用 any cast 简化（实际语义不影响）

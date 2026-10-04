@@ -7,9 +7,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Before
 import org.junit.runner.RunWith
-import org.mockito.junit.MockitoJUnitRunner
+import org.robolectric.RobolectricTestRunner
 
-@RunWith(MockitoJUnitRunner::class)
+// Robolectric：见 EncvGoServiceTest 同名注释（JSONObject / Intent 需要真实实现）
+@RunWith(RobolectricTestRunner::class)
 class GoProcessPluginTest {
 
     @Before

@@ -234,28 +234,31 @@ func (r *fileContainerReader) GetFragmentReader(fragID string) (io.ReadCloser, e
 			}, nil
 		}
 
-		mainFile, useInit, err := r.acquireMainFile()
+		mainFile, err := r.acquireMainFile()
 		if err != nil {
+			return nil, err
+		}
+		// 【引用记账】acquireMainFile 里那条引用属于"容器级"（容器 Close 时归还）；
+		// 本次 fragment 的使用再单独记一条，由返回 wrapper 的 Close 归还。
+		// 两条互不干涉 ⇒ 只要还有任何一个 reader 没关，池的计数 > 0，fd 就不会被关。
+		if _, err := globalFileHandlePool.Get(r.mainFilePath); err != nil {
 			return nil, err
 		}
 
 		if r.headerVersion != 4 {
 			if err := r.verifyFragmentAt(mainFile, int64(payloadOffset)-headerSize, frag); err != nil {
-				if !useInit {
-					globalFileHandlePool.Put(mainFile)
-				}
+				globalFileHandlePool.Put(mainFile)
 				return nil, err
 			}
 		}
 
 		section := io.NewSectionReader(mainFile, int64(payloadOffset), int64(frag.Length))
-		if useInit {
-			return &readOnlySectionCloser{
-				Reader:   section,
-				ReaderAt: section,
-				Seeker:   section,
-			}, nil
-		}
+		// 【关键】无论句柄是不是扫描期那一个，本次使用都**单独记一次引用**，
+		// 由返回的 wrapper 在 Close 时归还（Put）。这样"还有人在读"时，
+		// 池的引用计数 > 0，fd 就不会被别人关掉。
+		// 修前：复用 initMainFileHandle 时返回 readOnlySectionCloser（Close 什么都不做），
+		//       而 fileContainerReader.Close() 又直接 Close 了那个共享 fd ⇒
+		//       同进程里其它 reader 瞬间读到 "file already closed"。
 		return newPooledFileHandleWrapper(section, mainFile), nil
 	}
 
@@ -304,11 +307,13 @@ func (r *fileContainerReader) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// 关闭初始化阶段打开并持有的主文件句柄
+	// 归还初始化（扫描）阶段持有的主文件句柄。
+	// 【关键】句柄来自 globalFileHandlePool（按路径共享），**必须归还给池**，
+	// 不能直接 Close —— 直接关会把同进程里其它 reader 正在用的同一个 fd 干掉。
 	if r.initMainFileHandle != nil {
-		if err := r.initMainFileHandle.Close(); err != nil {
+		if err := globalFileHandlePool.Put(r.initMainFileHandle); err != nil {
 			// 记录错误但继续尝试清理其他资源
-			log.Printf("WARN: [fileContainerReader] Failed to close initial main file handle: %v", err)
+			log.Printf("WARN: [fileContainerReader] Failed to release initial main file handle: %v", err)
 		}
 		r.initMainFileHandle = nil
 	}
@@ -341,17 +346,22 @@ func (r *fileContainerReader) findFragmentByID(fragID string) (*types.Fragment, 
 	return nil, fmt.Errorf("fragment with ID '%s' not found in manifest", fragID)
 }
 
-func (r *fileContainerReader) acquireMainFile() (*os.File, bool, error) {
+// acquireMainFile 取主文件句柄（池里按路径共享的同一个 *os.File）。
+//
+// 【引用记账】这里记的那一条引用属于**容器级**，只在 fileContainerReader.Close()
+// 时归还；调用方若要把句柄交给一个生命周期更短的 reader（fragment section），
+// 必须自己再 Get 一次并由那个 reader 的 Close 归还（见 GetFragmentReader）。
+func (r *fileContainerReader) acquireMainFile() (*os.File, error) {
 	if r.initMainFileHandle != nil {
 		if _, err := r.initMainFileHandle.Seek(0, io.SeekCurrent); err == nil {
-			return r.initMainFileHandle, true, nil
+			return r.initMainFileHandle, nil
 		}
 	}
 	f, err := globalFileHandlePool.Get(r.mainFilePath)
 	if err == nil {
 		r.initMainFileHandle = f
 	}
-	return f, false, err
+	return f, err
 }
 
 // findManifestBlockOffset 是一个辅助函数，用于找到 Manifest 块的起始偏移量。

@@ -157,9 +157,22 @@ export async function loadRegistry() {
   return state;
 }
 
+/**
+ * 落盘 registry。
+ *
+ * ⚠️ 幂等写（2026-10-04 修复）：内容没变就**不写**，连 mtime 都不动。
+ * 旧实现无条件 `writeFile`，于是每次扫描/文件监听都把文件重写一遍 ——
+ * 内容一字不差，git 却显示 "modified"（mtime 变了），`git status` 常年挂红。
+ *
+ * @returns true = 真的写了（内容有变化）；false = 幂等跳过
+ */
 export async function saveRegistry() {
   await fs.mkdir(dirname(REGISTRY_PATH), { recursive: true });
-  await fs.writeFile(REGISTRY_PATH, JSON.stringify(state, null, 2) + "\n", "utf8");
+  const next = JSON.stringify(state, null, 2) + "\n";
+  const prevRaw = await fs.readFile(REGISTRY_PATH, "utf8").catch(() => null);
+  if (prevRaw === next) return false;
+  await fs.writeFile(REGISTRY_PATH, next, "utf8");
+  return true;
 }
 
 // --- scanning / discovery ---------------------------------------------------
@@ -172,6 +185,17 @@ export async function scanAndSync() {
     for (const s of skills) {
       const relPath = relative(REPO_ROOT, s.absDir);
       const prev = state.skills[s.name];
+      // ⚠️ 内容没变就别刷新 updatedAt（2026-10-04 修复）。
+      // 旧实现每次扫描都 `new Date().toISOString()`，于是 80 个条目被刷成同一时刻 ——
+      // 而 hash（= SKILL.md 全文 sha256）一个都没变 ⇒ registry 里只有时间戳在抖，
+      // `git status` 常年报 "modified"，纯噪音。
+      // 判定要素必须与"文件内容是否真的变了"一致：hash + path + 展示字段。
+      const unchanged =
+        !!prev &&
+        prev.hash === s.hash &&
+        prev.path === relPath &&
+        prev.displayName === s.displayName &&
+        prev.description === s.description;
       discovered[s.name] = {
         path: relPath,
         displayName: s.displayName,
@@ -180,7 +204,7 @@ export async function scanAndSync() {
         // preserve known origin if we already tracked this skill
         source: prev?.source || relPath,
         sourceType: prev?.sourceType || "discovered",
-        updatedAt: new Date().toISOString(),
+        updatedAt: unchanged ? prev.updatedAt : new Date().toISOString(),
       };
     }
   }

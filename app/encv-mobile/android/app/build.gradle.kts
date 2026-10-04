@@ -78,6 +78,14 @@ android {
 
         ndk {
             abiFilters += setOf("arm64-v8a")
+            // 模拟器调试专用：x86_64 宿主上跑 arm64-only APK 全靠 Berberis 翻译层，
+            // 实测主线程会 SIGTRAP（pc=0）崩溃，无法做 UI 自动化。
+            // 开了这项后若 jniLibs 下有 x86_64/libencv-go.so（Go 用 GOARCH=amd64 编的），
+            // APK 会带上 x86_64 ABI，模拟器上即可原生运行、不进翻译层。
+            // 默认关闭（release 体积不翻倍），按需 `EMU_X86_64=1` 打开。
+            if (System.getenv("EMU_X86_64") == "1") {
+                abiFilters += setOf("x86_64")
+            }
         }
 
         buildConfigField("String", "BUGLY_APP_ID", "\"${System.getenv("BUGLY_APP_ID") ?: ""}\"")
@@ -122,6 +130,13 @@ android {
         }
     }
 
+    testOptions {
+        unitTests {
+            // Robolectric 需要读 AndroidManifest / resources 才能搭出真实 framework
+            isIncludeAndroidResources = true
+        }
+    }
+
     packaging {
         jniLibs {
             useLegacyPackaging = true
@@ -131,6 +146,37 @@ android {
             pickFirsts += setOf("**/*.so")
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Robolectric 的 SDK jar 必须由 **Gradle** 下载，不能让它自己联网（2026-10-04）
+//
+// 坑：Robolectric 运行时会自己拉 android-all-instrumented*.jar（~199MB），
+//   ① 它走自己的 MavenDependencyResolver，**不经过 Gradle**（Gradle 侧的镜像/重试都用不上）；
+//   ② 默认直连 repo1.maven.org —— 本环境恒返 429 ⇒ 7 秒就 "Failed to fetch maven artifact"。
+// 解法：把 jar 声明成一个普通 Gradle configuration（走已修好的镜像解析），
+//   复制到 build/robolectric-sdk，再让 Robolectric **离线模式**从这个目录取。
+//   这样 CI/他人机器上无需任何手工预置。
+// ⚠️ 版本号必须与 robolectric 版本匹配（4.15.1 + @Config/sdk=35 = Android 15 = 15-robolectric-…）。
+// ─────────────────────────────────────────────────────────────────────────────
+val robolectricSdk by configurations.creating
+
+dependencies {
+    robolectricSdk("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7")
+}
+
+val robolectricSdkDir = layout.buildDirectory.dir("robolectric-sdk")
+
+tasks.register<Copy>("fetchRobolectricSdk") {
+    from(robolectricSdk)
+    into(robolectricSdkDir)
+}
+
+tasks.withType<Test>().configureEach {
+    dependsOn("fetchRobolectricSdk")
+    // 系统属性优先级高于 src/test/resources/robolectric.properties
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", robolectricSdkDir.get().asFile.absolutePath)
 }
 
 packagePlugins {
@@ -175,6 +221,14 @@ dependencies {
     testImplementation(libs.mockito.core)
     testImplementation(libs.mockito.kotlin)
     testImplementation(libs.kotlin.test)
+    // 🆕 2026-10-04：JVM 单测终于能跑到——纯 JVM 下 JSONObject/Intent 全是 "not mocked"，
+    //   靠 Robolectric 提供真实 framework 实现。镜像地址见 src/test/resources/robolectric.properties。
+    testImplementation(libs.robolectric)
+    // 🆕 2026-10-04：扫码改 ZXingLite（去掉 @capacitor-mlkit 的 Google Play 服务依赖）。
+    //   ZXingLite 3.x 依赖 CameraScan（com.king.camera.scan.*）作为基础库，显式声明以免
+    //   将来传递依赖被裁剪。"com.github.*" 已由 settings.gradle.kts 强制路由到 JitPack。
+    implementation(libs.zxing.lite)
+    implementation(libs.camera.scan)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     implementation(project(":capacitor-cordova-android-plugins"))

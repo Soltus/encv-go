@@ -39,6 +39,21 @@ const EXT_TO_CATEGORY: Record<string, string> = {
   wav: "audio",
   aac: "audio",
   opus: "audio",
+  // 🆕 2026-10-02 补：图片类此前**一个扩展名都没配** ⇒ png/jpg/… 全被归到 misc（其他）。
+  //    CATEGORY_LABELS 里早就有 `image: "图片"`，说明是漏配而不是"不支持图片"。
+  //    表现：按 category 分组时图片文件混进"其他"，分组名/统计都不对。
+  //    （这个 bug 一直没被发现，是因为对应单测在 vitest 清单里路径写错、从未被跑到）
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  gif: "image",
+  bmp: "image",
+  webp: "image",
+  svg: "image",
+  heic: "image",
+  heif: "image",
+  tiff: "image",
+  ico: "image",
   pdf: "pdf",
   doc: "wps",
   docx: "wps",

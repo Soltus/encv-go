@@ -22,6 +22,18 @@
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
+    <!--
+        🆕 2026-10-03（P2b 扫码配对）：相机权限。
+        ⚠️ 之前只加了前端依赖 `@capacitor-mlkit/barcode-scanning`，**既没同步原生插件、
+        也没声明 CAMERA** ⇒ 系统设置里根本不会出现"相机"权限项，用户连手动授权都做不到。
+        相机是**运行时危险权限**：必须先在这里声明（否则 requestPermissions 直接被系统拒绝、
+        设置页也没有开关），再由插件/前端在扫码前发起请求。
+        uses-feature 标 required=false：没有相机的设备（TV/盒子）仍可安装，走"粘贴配对码"降级。
+    -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+
     <application
         android:name=".EncvApplication"
         android:allowBackup="true"
@@ -167,9 +179,13 @@
         <meta-data
             android:name="LogcatWindowEntrance"
             android:value="true" />
+        <!-- 2026-10-01：关闭通知栏入口。它会自启 LogcatService（FGS），
+             慢设备/模拟器上该 service onCreate 超过 startForeground 20s 义务直接 ANR
+             （"did not then call Service.startForeground()"，无 KVM 模拟器实测三次复现）。
+             应用内日志已由 LogBridge + DevLogs 承担，不再依赖该库的通知入口。 -->
         <meta-data
             android:name="LogcatNotifyEntrance"
-            android:value="true" />
+            android:value="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -190,6 +206,13 @@
             android:exported="false"
             android:theme="@style/AppTheme.NoActionBar"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode" />
+
+        <!-- 扫码界面（ZXingLite，2026-10-04 替换 ML Kit）：只被本应用插件拉起，不导出 -->
+        <activity
+            android:name=".QRScanActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:theme="@style/AppTheme.NoActionBar" />
 
         <!-- ============================================================ -->
         <!-- Phase 25 A2：ComboLite host 代理组件（plugin-openlist 用） -->

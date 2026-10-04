@@ -67,6 +67,16 @@ export default {
     "files.createFolderFailed": "创建文件夹失败",
     "files.pathNotFound": "路径不存在",
     "files.yes": "是",
+    // 🆕 2026-10-03 Task 1.2.2：桌面 master-detail 详情面板
+    "files.detailTitle": "详情",
+    "files.detailType": "类型",
+    "files.detailSize": "大小",
+    "files.detailModified": "修改时间",
+    "files.detailPath": "路径",
+    "files.detailOpen": "打开",
+    "files.detailCopyPath": "复制路径",
+    "files.detailEmpty": "单击左侧文件查看详情（双击直接打开）",
+    "files.previewEmpty": "选中文件后在此预览",
   },
   en: {
     "files.title": "Files",
@@ -137,5 +147,15 @@ export default {
     "files.createFolderFailed": "Failed to create folder",
     "files.pathNotFound": "Path not found",
     "files.yes": "Yes",
+    // 🆕 2026-10-03 Task 1.2.2: desktop master-detail detail pane
+    "files.detailTitle": "Details",
+    "files.detailType": "Type",
+    "files.detailSize": "Size",
+    "files.detailModified": "Modified",
+    "files.detailPath": "Path",
+    "files.detailOpen": "Open",
+    "files.detailCopyPath": "Copy path",
+    "files.detailEmpty": "Click a file on the left to see details (double-click to open)",
+    "files.previewEmpty": "Select a file to preview it here",
   },
 };

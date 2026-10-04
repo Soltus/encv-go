@@ -289,6 +289,18 @@ func writeOneSegment(buf *bytes.Buffer, globalHasher hash.Hash32, i int, segResu
 	if i < len(params.Manifest.Segments) {
 		params.Manifest.Segments[i].Offset = uint64(segOffset) - segTotalSize
 		params.Manifest.Segments[i].Size = segTotalSize
+		// 【完整性】MAC 长度必须回填：读取端（container/handle.AdaptV4ToV2）要靠它
+		// 把 Size 里的 MAC 字节扣掉。少了这一步，开了 HMAC 的容器读出来
+		// 尾部会多 10 字节（实测：5100 字节明文解出 5110 字节）。
+		if encrypted && params.EnableHMAC {
+			params.Manifest.Segments[i].MacSize = crypto.HMACSize_v4
+		} else {
+			params.Manifest.Segments[i].MacSize = 0
+		}
+		// 【完整性】CRC 也要回填到 manifest：这条（segment 栈）产物同样是靠
+		// v4 manifest 反推 fragment 读的，读取端只认 manifest 里的 DataCRC32。
+		// 只写在磁盘 SegmentHeader 上的话，fragment 栈读取路径根本看不到。
+		params.Manifest.Segments[i].DataCRC32 = segResult.DataCRC32
 		if encrypted {
 			params.Manifest.Segments[i].Nonce = base64.StdEncoding.EncodeToString(segResult.Nonce)
 		} else {

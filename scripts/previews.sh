@@ -2,6 +2,12 @@
 # =============================================================================
 # previews.sh — 沙箱 dev 服务统一管理（基于 pm2，方案 C 大改 2026-06-08）
 # -----------------------------------------------------------------------------
+# ⚠️ 适用范围（2026-10-04 补记）：**仅沙箱（trae / OpenPreview）**。
+#    非沙箱环境（CNB、本机…）没有 :16666 这条链路，别用本脚本当"项目标配启动器"；
+#    请改用独立 dev（见 ecosystem.config.cjs 头部注释）：
+#       cd app/encv-mobile && ENCV_STANDALONE_VITE=1 vite --port 8100   # 含 /api 反代
+#       ENCV_MOBILE=1 ENCV_DEV_PREVIEW=1 ... go run ./cmd/encv start    # 后端 :2025
+#
 # 管 2 个 pm2 app：
 #   ① preview-gateway    (:16666) — 唯一对外入口 + 唯一进程管理者
 #                              （内部 spawn: encv-go :2025 + encv-mobile-vite :8100）

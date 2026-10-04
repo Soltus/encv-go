@@ -70,6 +70,12 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.POST("/api/dev/kill-backend", s.handleKillBackendGin)
 	r.GET("/stream", gin.WrapF(s.handleStreamRequest))
 	r.GET("/decrypt", gin.WrapF(s.handleStreamRequest))
+	// ⚠️ HEAD 必须单独注册（同 /preview-assets）：gin 的 r.GET 只收 GET，
+	//    HEAD 会落 404 —— 播放器/下载器常用 HEAD 探测资源，缺这行就是"资源明明在却说没有"
+	//    （2026-10-01 模拟器内真实后端实测：HEAD /stream → 404）。
+	//    ContentHandler.ServeFile 已对 HEAD 只回头部、不解密不传实体体。
+	r.HEAD("/stream", gin.WrapF(s.handleStreamRequest))
+	r.HEAD("/decrypt", gin.WrapF(s.handleStreamRequest))
 	r.GET("/preview/*filepath", gin.WrapH(http.StripPrefix("/preview", web.PreviewHandler())))
 	// 🆕 容器预览页（encv-preview）的**可热更新**托管：资源在可写数据目录，
 	// 不在 Go 二进制/APK 里 —— 更新页面不需要换 APK。见 preview_assets.go 的文件头注释。
@@ -167,6 +173,11 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.GET("/api/plugins/container-extensions", s.handleContainerExtensionsGin)
 	r.GET("/api/alist-encrypt/stream", s.handleAlistEncryptStreamGin)
 	r.GET("/api/alist-encrypt/decode-filename", s.handleAlistDecodeFilenameGin)
+
+	// 🆕 2026-10-02：双端互联（spec desktop-web-android-pairing P2a）
+	//   桌面端（web，cnb 公网）⇄ 安卓端（NAT 后）走「Hub + 手机主动出网的长连接」，
+	//   **没有 LAN 直连**。除 hello 外全部端点必须带 peer token（未配对一律 401）。
+	registerPeerlinkRoutes(s, r)
 	r.POST("/api/logs", s.handleAPILogsGin)
 	r.GET("/api/logs/recent", s.handleAPILogsRecentGin)
 	r.GET("/api/mounts", s.handleListMountsGin)

@@ -76,6 +76,14 @@ const PROBE_TIMEOUT_MS = 1500;
 //     trae_web_sandbox_network.md §9.1.2），这是 mock 浏览器架构限制，不是端点选错
 const PROBE_HEALTH_PATH = "/health";
 const PROBE_LAN_PATH = "/api/network/lan-access";
+/**
+ * [2] loopback 端口扫描区间（与后端 register.StartGinWithRetry 的端口漂移对齐）。
+ * 见 buildLoopbackCandidates 的注释：只试 2025 会让"后端漂到 2026"变成真机断联。
+ */
+export const LOOPBACK_PORT_SCAN_START = 2025;
+export const LOOPBACK_PORT_SCAN_COUNT = 10; // 2025..2034
+/** 端口扫描用更短的超时：不通的端口应当快速放弃，别拖慢冷启动 */
+const LOOPBACK_SCAN_TIMEOUT_MS = 400;
 
 /** 模块级单例：避免多个调用方各自维护 probe 状态，经 defineSingleton 收敛样板 */
 const _probe = defineSingleton(createProbe);
@@ -114,11 +122,11 @@ function createProbe() {
    *   注意：仅在「isHttp + 非 loopback」的浏览器模式触发，真机 protocol=file/capacitor
    *   走 [2] loopback → 不会受影响。
    */
-  async function probeHealth(baseUrl: string): Promise<{ ok: boolean; latencyMs: number; err?: string }> {
+  async function probeHealth(baseUrl: string, timeoutMs = PROBE_TIMEOUT_MS): Promise<{ ok: boolean; latencyMs: number; err?: string }> {
     const url = baseUrl.replace(/\/+$/, "") + PROBE_HEALTH_PATH;
     const t0 = performance.now();
     try {
-      const r = await fetchWithTimeout(url, PROBE_TIMEOUT_MS);
+      const r = await fetchWithTimeout(url, timeoutMs);
       const latencyMs = Math.round(performance.now() - t0);
       if (!r.ok) {
         // 🆕 沙箱 mock 浏览器诊断：401/403/5xx 都打响应头 + body 前 200 字符
@@ -199,6 +207,28 @@ function createProbe() {
       /* fallthrough */
     }
     return 2025;
+  }
+
+  /**
+   * [2] loopback 探测要扫**端口区间**，不能只试 2025。
+   *
+   * 真实事故（2026-10-01 在模拟器内真实后端上复现、2026-10-02 修）：
+   *   后端 `register.StartGinWithRetry` 从 initialPort(2025) 起**逐个端口重试**
+   *   （端口被占 / 自检失败就 +1，最多 100 次）。2025 一旦被占（残留进程、
+   *   别的 app、上一次没退干净的后端），后端就会漂到 2026/2027…
+   *   而前端 [2] 只试 `DEFAULT_API_BASE_URL`（写死 2025）⇒ 探测链 [1] 无缓存 →
+   *   [2] 失败 → [3] 无 LAN 候选 → [4] all-failed ⇒ **真机上整个 app 连不上后端**
+   *   （白屏 / 所有接口失败，且看不出原因）。
+   *
+   * 扫描区间与后端重试范围对齐（2025..2034）。失败端口是 connection refused，
+   * fetch 立刻 reject，不会各等 1.5s；扫描用更短的超时进一步压低成本。
+   */
+  function buildLoopbackCandidates(): string[] {
+    const out: string[] = [];
+    for (let i = 0; i < LOOPBACK_PORT_SCAN_COUNT; i++) {
+      out.push(`http://127.0.0.1:${LOOPBACK_PORT_SCAN_START + i}`);
+    }
+    return out;
   }
 
   /**
@@ -301,19 +331,27 @@ function createProbe() {
         console.info(`[probe] step ${msg}`);
       }
 
-      // ─── [2] loopback 探测 ─────────────────────────────
+      // ─── [2] loopback 探测（**扫端口区间**：后端端口会漂，见 buildLoopbackCandidates）──
       {
-        const msg = `[2] try loopback: ${DEFAULT_API_BASE_URL}`;
+        const candidates = buildLoopbackCandidates();
+        const msg = `[2] try loopback ports ${LOOPBACK_PORT_SCAN_START}..${LOOPBACK_PORT_SCAN_START + LOOPBACK_PORT_SCAN_COUNT - 1}`;
         log.push(msg);
         console.info(`[probe] step ${msg}`);
-        const lb = await probeHealth(DEFAULT_API_BASE_URL);
-        const rmsg = `[2] result: ok=${lb.ok} latency=${lb.latencyMs}ms err=${lb.err || "-"}`;
-        log.push(rmsg);
-        console.info(`[probe] step ${rmsg}`);
-        if (lb.ok) {
-          // 拿到 LAN 候选（用于本轮其它探测 + UI 展示）
-          const lanAccess = await fetchLanCandidates(DEFAULT_API_BASE_URL);
-          return await expandWithLanCandidates(DEFAULT_API_BASE_URL, lanAccess, "loopback", log, t0);
+        for (const url of candidates) {
+          const lb = await probeHealth(url, LOOPBACK_SCAN_TIMEOUT_MS);
+          const rmsg = `[2] result: ${url} ok=${lb.ok} latency=${lb.latencyMs}ms err=${lb.err || "-"}`;
+          log.push(rmsg);
+          console.info(`[probe] step ${rmsg}`);
+          if (lb.ok) {
+            if (url !== DEFAULT_API_BASE_URL) {
+              const note = `[2] 后端不在默认端口 ${DEFAULT_API_BASE_URL}，实际在 ${url}（端口漂移）；已按实际端口连上`;
+              log.push(note);
+              console.info(`[probe] step ${note}`);
+            }
+            // 拿到 LAN 候选（用于本轮其它探测 + UI 展示）
+            const lanAccess = await fetchLanCandidates(url);
+            return await expandWithLanCandidates(url, lanAccess, "loopback", log, t0);
+          }
         }
       }
 

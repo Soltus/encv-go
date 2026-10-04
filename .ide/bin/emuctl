@@ -1,0 +1,382 @@
+#!/usr/bin/env bash
+# =============================================================================
+# emuctl — 无头 Android 模拟器管控工具（供 agent 做自动化"真机"测试）
+# -----------------------------------------------------------------------------
+# 由 .ide/Dockerfile 安装到 /usr/local/bin/emuctl，AVD 在镜像构建期已预创建，
+# 运行期只需 `emuctl start` → `emuctl install app.apk` → `emuctl tap ...`。
+#
+# 关键事实（2026-09-30 在云原生开发容器内实测）：
+#   - 容器里没有 /dev/kvm（`emulator -accel-check` 报
+#     "KVM requires a CPU that supports vmx or svm"），因此默认走软件渲染：
+#     `-accel off -gpu swiftshader_indirect`（QEMU TCG）。
+#   - 冷启动实测：首次 ~12 分钟（要初始化 data 分区 + dexopt），
+#     二次 ~5 分钟（分区已初始化）。启动后 adb 安装、点击、截屏、logcat 均正常，
+#     所以**会话内保持模拟器常开**，不要反复冷启动。
+#     快照（`adb emu avd snapshot save`）实测能存但加载失败（Error -22），TCG 下不可依赖。
+#   - arm64-v8a-only 的 APK 可跑：镜像 build.prop 带
+#     ro.dalvik.vm.native.bridge=libndk_translation.so，实测动态链接的 arm64
+#     原生二进制在该镜像上执行成功。
+#   - 若将来宿主提供 /dev/kvm，emuctl 自动切 `-accel on -gpu auto`，无需改脚本。
+#
+# 用法：
+#   emuctl doctor                      环境体检（KVM/镜像/AVD/设备）
+#   emuctl create                      创建（重建）AVD
+#   emuctl start [--wipe]               无头启动并等 boot_completed（末尾自动 tune）
+#   emuctl wait                        仅等待开机完成（末尾自动 tune）
+#   emuctl tune                        慢速环境调优（放宽 AM 超时/关无线/关动画）
+#   emuctl aot <package>               dex AOT 编译（speed），装完必做
+#   emuctl status                      查看运行状态
+#   emuctl stop                        关闭模拟器
+#   emuctl install <apk> [--no-aot]     安装（覆盖）APK，默认随后 AOT 编译
+#   emuctl launch <package>             冷启动某个应用
+#   emuctl screenshot [out.png]         截屏（默认 /tmp/emu-screen.png）
+#   emuctl ui [out.xml]                 uiautomator dump（给 agent 看控件树；TCG 下很慢，需耐心）
+#   emuctl tap <x> <y>                  点击
+#   emuctl swipe <x1> <y1> <x2> <y2> [ms]
+#   emuctl text <string>                输入文本（空格需自行转义）
+#   emuctl key <keycode|name>           按键（如 KEYCODE_HOME / 66）
+#   emuctl shell <args...>              adb shell 透传
+#   emuctl logcat [filter...]           adb logcat 透传
+#
+# 环境变量（均有默认值）：
+#   ANDROID_AVD_NAME   AVD 名           默认 encv36
+#   ANDROID_SYSIMG     系统镜像 package 默认 system-images;android-36;google_apis;x86_64
+#   EMU_DEVICE         设备定义         默认 pixel_7
+#   EMU_MEMORY         内存 MB          默认 3072
+#   EMU_CORES          CPU 核数         默认 4
+#   EMU_SKIN           皮肤/分辨率      默认 1080x2400
+#   EMU_BOOT_TIMEOUT   开机超时秒       默认 1800（软件渲染很慢）
+#   EMU_EXTRA_ARGS     追加给 emulator 的额外参数
+# =============================================================================
+set -uo pipefail
+
+ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
+EMU_BIN="$ANDROID_HOME/emulator/emulator"
+AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+ADB_BIN="$ANDROID_HOME/platform-tools/adb"
+
+AVD_NAME="${ANDROID_AVD_NAME:-encv36}"
+SYSIMG="${ANDROID_SYSIMG:-system-images;android-36;google_apis;x86_64}"
+DEVICE="${EMU_DEVICE:-pixel_7}"
+MEMORY="${EMU_MEMORY:-3072}"
+CORES="${EMU_CORES:-4}"
+SKIN="${EMU_SKIN:-1080x2400}"
+BOOT_TIMEOUT="${EMU_BOOT_TIMEOUT:-1800}"
+EXTRA_ARGS="${EMU_EXTRA_ARGS:-}"
+
+SERIAL="${ANDROID_ADB_SERIAL:-emulator-5554}"
+RUN_DIR="${EMU_RUN_DIR:-/var/run/emulator}"
+LOG="$RUN_DIR/emulator-$AVD_NAME.log"
+PIDFILE="$RUN_DIR/emulator-$AVD_NAME.pid"
+
+log()  { printf '%s\n' "$*"; }
+info() { printf 'ℹ️  %s\n' "$*"; }
+ok()   { printf '✅ %s\n' "$*"; }
+warn() { printf '⚠️  %s\n' "$*" >&2; }
+die()  { printf '❌ %s\n' "$*" >&2; exit 1; }
+
+has_kvm() { [ -c /dev/kvm ] && [ -r /dev/kvm ] && [ -w /dev/kvm ]; }
+
+adb() {
+  "$ADB_BIN" -s "$SERIAL" "$@"
+}
+
+# 模拟器进程是否还在（不依赖 adb，避免 adb 未就绪时误判）
+emu_pid() {
+  if [ -f "$PIDFILE" ]; then
+    local pid
+    pid="$(cat "$PIDFILE" 2>/dev/null || true)"
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && { printf '%s' "$pid"; return 0; }
+  fi
+  local p
+  p="$(pgrep -f "emulator.*@${AVD_NAME}" | head -1)"
+  [ -n "$p" ] && { printf '%s' "$p"; return 0; }
+  return 1
+}
+
+is_booted() {
+  local v
+  v="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n[:space:]')"
+  [ "$v" = "1" ]
+}
+
+cmd_doctor() {
+  log "=========== emuctl doctor ==========="
+  if has_kvm; then
+    ok "/dev/kvm 可用 → 硬件加速（KVM）"
+  else
+    warn "/dev/kvm 不可用 → 软件渲染（QEMU TCG + swiftshader），启动/运行都很慢"
+  fi
+  log "emulator  : $("$EMU_BIN" -version 2>/dev/null | head -1)"
+  log "sdkmanager: $("$SDKMANAGER" --version 2>/dev/null | head -1)"
+  log "系统镜像   : $SYSIMG"
+  log "AVD       : $AVD_NAME ($DEVICE, ${MEMORY}MB, ${CORES}core, skin=$SKIN)"
+  log "emulator 进程: $(emu_pid || echo '未运行')"
+  log "日志       : $LOG"
+  log "--- 已安装系统镜像 ---"
+  ls "$ANDROID_HOME/system-images" 2>/dev/null | sed 's/^/    /' || warn "无 system-images"
+  log "--- AVD 列表 ---"
+  "$AVDMANAGER" list avd 2>/dev/null | sed 's/^/    /'
+  log "--- adb devices ---"
+  "$ADB_BIN" devices 2>/dev/null | sed 's/^/    /'
+  if is_booted; then ok "$SERIAL 已开机完成"; else info "$SERIAL 未就绪"; fi
+  log "===================================="
+}
+
+cmd_create() {
+  mkdir -p "$RUN_DIR" "${ANDROID_AVD_HOME:-$HOME/.android/avd}"
+  info "创建 AVD: $AVD_NAME ($SYSIMG, device=$DEVICE)"
+  # avdmanager 在缺 -d 时会交互式询问「是否自定义硬件profile」，用 no 兜底
+  printf 'no\n' | "$AVDMANAGER" create avd --force \
+    --name "$AVD_NAME" \
+    --package "$SYSIMG" \
+    --device "$DEVICE" \
+    --sdcard 2048M >/dev/null 2>&1 \
+    || die "AVD 创建失败（系统镜像未安装？先跑: $SDKMANAGER \"$SYSIMG\"）"
+
+  local cfg="${ANDROID_AVD_HOME:-$HOME/.android/avd}/${AVD_NAME}.avd/config.ini"
+  [ -f "$cfg" ] || die "找不到 $cfg"
+  # 关键项覆盖：无头 + 软件渲染友好 + agent 可输入
+  python3 - "$cfg" <<'PY'
+import re, sys
+cfg = sys.argv[1]
+want = {
+    "hw.keyboard": "yes",
+    "hw.audioInput": "no",
+    "hw.audioOutput": "no",
+    "hw.camera.back": "none",
+    "hw.camera.front": "none",
+    "hw.gpu.mode": "swiftshader_indirect",
+    "hw.gpu.enabled": "yes",
+    "hw.ramSize": "3072",
+    "hw.cpu.ncore": "4",
+    "hw.sensors.orientation": "no",
+    "hw.sensors.proximity": "no",
+    "disk.dataPartition.size": "4096M",
+    "hw.lcd.density": "420",
+    "skin.dynamic": "yes",
+    "hw.skin.name": "1080x2400",
+    "showDeviceFrame": "no",
+}
+lines = open(cfg).read().splitlines()
+out, seen = [], set()
+for ln in lines:
+    k = ln.split("=", 1)[0].strip() if "=" in ln else ln.strip()
+    if k in want:
+        out.append(f"{k}={want[k]}"); seen.add(k)
+    else:
+        out.append(ln)
+for k, v in want.items():
+    if k not in seen:
+        out.append(f"{k}={v}")
+open(cfg, "w").write("\n".join(out) + "\n")
+PY
+  ok "AVD 就绪: $cfg"
+}
+
+ensure_avd() {
+  local avd_dir="${ANDROID_AVD_HOME:-$HOME/.android/avd}/${AVD_NAME}.avd"
+  [ -d "$avd_dir" ] || cmd_create
+}
+
+cmd_start() {
+  ensure_avd
+  mkdir -p "$RUN_DIR"
+  if is_booted; then ok "模拟器已在运行（$SERIAL）"; return 0; fi
+
+  local accel=(-accel off -gpu swiftshader_indirect)
+  if has_kvm; then
+    accel=(-accel on -gpu auto)
+    info "检测到 /dev/kvm → 硬件加速启动"
+  else
+    warn "无 /dev/kvm → 软件渲染启动（冷启动可能 5~15 分钟，请耐心等待）"
+  fi
+
+  local args=(
+    "@$AVD_NAME"
+    -no-window
+    -no-boot-anim
+    -noaudio
+    -port 5554
+    -memory "$MEMORY"
+    -cores "$CORES"
+    -skin "$SKIN"
+  )
+  args+=("${accel[@]}")
+  [ "$1" = "--wipe" ] && args+=(-wipe-data)
+  # shellcheck disable=SC2206
+  args+=($EXTRA_ARGS)
+
+  "$ADB_BIN" start-server >/dev/null 2>&1
+  info "启动: $EMU_BIN ${args[*]}"
+  nohup "$EMU_BIN" "${args[@]}" > "$LOG" 2>&1 &
+  echo $! > "$PIDFILE"
+  info "emulator pid=$(cat "$PIDFILE")  日志=$LOG"
+  cmd_wait
+}
+
+cmd_wait() {
+  local deadline=$(( $(date +%s) + BOOT_TIMEOUT ))
+  info "等待 boot_completed（超时 ${BOOT_TIMEOUT}s）..."
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    if ! emu_pid >/dev/null 2>&1; then
+      die "模拟器进程已退出，启动失败。日志尾部：\n$(tail -30 "$LOG" 2>/dev/null)"
+    fi
+    if is_booted; then
+      ok "模拟器已就绪: $SERIAL（$(adb shell getprop ro.build.version.release 2>/dev/null | tr -d '\r') / API $(adb shell getprop ro.build.version.sdk 2>/dev/null | tr -d '\r')）"
+      cmd_tune
+      return 0
+    fi
+    sleep 5
+  done
+  die "等待 boot_completed 超时（${BOOT_TIMEOUT}s）。日志尾部：\n$(tail -40 "$LOG" 2>/dev/null)"
+}
+
+# ---------------------------------------------------------------------------
+# cmd_tune —— 慢速（无 KVM / TCG）环境的必备调优，幂等，可重复执行
+# ---------------------------------------------------------------------------
+# 每一条都是 2026-10-01 实测固化下来的（见 .codebuddy/memory/2026-10-01.md §8）：
+#   - AM 各类超时放宽：不加这条，Zygote fork + ART 初始化 > 10s 会被判
+#     "start timeout" 直接杀掉进程（Killing <pid>: start timeout）。
+#     ⚠️ 注意：放宽 service_start_foreground_timeout_ms 对 startForeground 类
+#     ANR 无效（那条要靠应用自己在 onStartCommand 主线程首行调 startForeground）。
+#   - 关 wifi/蓝牙扫描：省掉后台周期性工作，减少无谓 CPU 争抢。
+#   - 关动画 + setenforce 0 + 抬高日志级别：让 UI 测试可预期、日志不被淹没。
+cmd_tune() {
+  is_booted || die "模拟器未就绪，先跑: emuctl start"
+  info "调优模拟器（放宽 AM 超时 / 关无线扫描 / 关动画）…"
+  adb root >/dev/null 2>&1
+  adb wait-for-device >/dev/null 2>&1
+  adb shell settings put global activity_manager_constants \
+    "activity_start_timeout=600000,service_start_foreground_timeout_ms=600000,service_timeout=300000,input_dispatching_timeout=180000,broadcast_timeout=180000,content_provider_timeout=180000" >/dev/null 2>&1
+  adb shell settings put global window_animation_scale 0 >/dev/null 2>&1
+  adb shell settings put global transition_animation_scale 0 >/dev/null 2>&1
+  adb shell settings put global animator_duration_scale 0 >/dev/null 2>&1
+  adb shell settings put global wifi_scan_always_enabled 0 >/dev/null 2>&1
+  adb shell svc wifi disable >/dev/null 2>&1
+  adb shell svc bluetooth disable >/dev/null 2>&1
+  adb shell setprop persist.log.tag W >/dev/null 2>&1
+  adb shell setenforce 0 >/dev/null 2>&1
+  ok "调优完成（activity_start_timeout=600s，无线/动画已关）"
+}
+
+# cmd_aot <package> —— dex AOT 编译（实测 85s，是把"启动必超时"变成 489ms 的关键）
+cmd_aot() {
+  local pkg="${1:-}"
+  [ -n "$pkg" ] || die "用法: emuctl aot <package>"
+  is_booted || die "模拟器未就绪，先跑: emuctl start"
+  info "AOT 编译 $pkg（-m speed -f），无 KVM 下约 1~3 分钟…"
+  timeout 900 adb shell cmd package compile -m speed -f "$pkg" >/dev/null 2>&1 \
+    || warn "AOT 编译未成功（可能包不存在）；继续，但启动大概率超时"
+  ok "AOT 编译完成: $pkg"
+}
+
+# 从 APK 里读 package name（aapt 优先，失败返回空）
+apk_package() {
+  local apk="$1" aapt_bin
+  aapt_bin="$(ls "$ANDROID_HOME"/build-tools/*/aapt 2>/dev/null | sort -V | tail -1)"
+  [ -n "$aapt_bin" ] || return 1
+  "$aapt_bin" dump badging "$apk" 2>/dev/null \
+    | sed -n "s/.*package:name='\([^']*\)'.*/\1/p" | head -1
+}
+
+cmd_status() {
+  if emu_pid >/dev/null 2>&1; then
+    log "emulator pid=$(emu_pid)  日志=$LOG"
+  else
+    log "emulator 未运行"
+  fi
+  "$ADB_BIN" devices | sed 's/^/    /'
+  if is_booted; then ok "boot_completed=1"; else warn "未开机完成"; fi
+}
+
+cmd_stop() {
+  if is_booted; then
+    adb emu kill >/dev/null 2>&1 || true
+  fi
+  local pid
+  pid="$(emu_pid || true)"
+  if [ -n "$pid" ]; then
+    kill "$pid" 2>/dev/null || true
+    sleep 3
+    kill -9 "$pid" 2>/dev/null || true
+  fi
+  rm -f "$PIDFILE"
+  ok "模拟器已停止"
+}
+
+cmd_install() {
+  [ $# -ge 1 ] || die "用法: emuctl install <apk> [--no-aot]"
+  local apk="$1"; shift || true
+  local no_aot=0
+  for a in "$@"; do [ "$a" = "--no-aot" ] && no_aot=1; done
+  [ -f "$apk" ] || die "找不到 APK: $apk"
+  is_booted || die "模拟器未就绪，先跑: emuctl start"
+  adb install -r -t "$apk" || die "安装失败: $apk"
+  ok "已安装: $apk"
+  if [ "$no_aot" = "1" ]; then
+    warn "跳过 AOT（--no-aot）：无 KVM 环境下启动大概率超时，仅当你知道后果才这么做"
+    return 0
+  fi
+  # 无 KVM 时不做 AOT，ART 走解释/JIT，冷启动 attach 必超时被杀（实测 Settings 47s 超时 → AOT 后 489ms）
+  local pkg; pkg="$(apk_package "$apk" || true)"
+  if [ -n "$pkg" ]; then cmd_aot "$pkg"; else warn "读不到 package name，跳过 AOT"; fi
+}
+
+cmd_launch() {
+  [ $# -ge 1 ] || die "用法: emuctl launch <package>"
+  adb shell monkey -p "$1" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 \
+    || die "启动失败: $1"
+  ok "已启动: $1"
+}
+
+cmd_screenshot() {
+  local out="${1:-/tmp/emu-screen.png}"
+  adb exec-out screencap -p > "$out" || die "截屏失败"
+  ok "截屏: $out ($(wc -c < "$out") bytes)"
+}
+
+cmd_ui() {
+  local out="${1:-/tmp/emu-window.xml}"
+  adb shell uiautomator dump /sdcard/emu_window.xml >/dev/null 2>&1 || die "uiautomator dump 失败"
+  adb exec-out cat /sdcard/emu_window.xml > "$out" || die "拉取 UI 树失败"
+  ok "UI 树: $out"
+}
+
+cmd_tap() { [ $# -ge 2 ] || die "用法: emuctl tap <x> <y>"; adb shell input tap "$1" "$2"; }
+cmd_swipe() {
+  [ $# -ge 4 ] || die "用法: emuctl swipe <x1> <y1> <x2> <y2> [ms]"
+  adb shell input swipe "$1" "$2" "$3" "$4" "${5:-300}"
+}
+cmd_text() { [ $# -ge 1 ] || die "用法: emuctl text <string>"; adb shell input text "$1"; }
+cmd_key()  { [ $# -ge 1 ] || die "用法: emuctl key <KEYCODE_NAME|number>"; adb shell input keyevent "$1"; }
+cmd_shell() { adb shell "$@"; }
+cmd_logcat() { adb logcat "$@"; }
+
+usage() {
+  awk '/^# 用法：/ { f = 1 } /^# 环境变量/ { f = 0 } f' "$0" | sed 's/^# \{0,1\}//'
+}
+
+case "${1:-help}" in
+  doctor)     shift; cmd_doctor "$@" ;;
+  create)     shift; cmd_create "$@" ;;
+  start)      shift; cmd_start "${1:-}" ;;
+  wait)       shift; cmd_wait "$@" ;;
+  tune)       shift; cmd_tune "$@" ;;
+  aot)        shift; cmd_aot "$@" ;;
+  status)     shift; cmd_status "$@" ;;
+  stop)       shift; cmd_stop "$@" ;;
+  install)    shift; cmd_install "$@" ;;
+  launch)     shift; cmd_launch "$@" ;;
+  screenshot) shift; cmd_screenshot "$@" ;;
+  ui)         shift; cmd_ui "$@" ;;
+  tap)        shift; cmd_tap "$@" ;;
+  swipe)      shift; cmd_swipe "$@" ;;
+  text)       shift; cmd_text "$@" ;;
+  key)        shift; cmd_key "$@" ;;
+  shell)      shift; cmd_shell "$@" ;;
+  logcat)     shift; cmd_logcat "$@" ;;
+  -h|--help|help) usage ;;
+  *) usage; exit 1 ;;
+esac

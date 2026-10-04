@@ -1,9 +1,11 @@
 // registerSharedAppCapabilities.ts - 在应用启动时把 shared 通用模块所需的应用层能力
 // 注入共享抽象层（@encv/shared-components/runtime/appCapabilities）。
 // 必须早于任何使用这些能力的运行时调用（agent base URL / alist-encrypt 特征）。
+import { Capacitor } from "@capacitor/core";
 import { alertController } from "@ionic/vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import { useNewTaskModal } from "@encv/shared-components/composables/useNewTaskModal";
+import type { AppPlatform } from "@encv/shared-components/runtime/appCapabilities";
 import { getLocalFilePath, isNative, openExternal, openPlayer, requestStoragePermission } from "@/plugins/GoProcess";
 import { setAppCapabilities } from "@encv/shared-components/runtime/appCapabilities";
 
@@ -12,6 +14,9 @@ export function registerSharedAppCapabilities(): void {
 
   setAppCapabilities({
     isNative,
+    // 形态判定要看平台名而非 isNative：Capacitor 官方只有 web/android/ios，
+    // 桌面若走 Capawesome Electron 平台则 getPlatform() === 'electron' 且 isNative=true。
+    platform: () => Capacitor.getPlatform() as AppPlatform,
     openPlayer,
     openExternal,
     getLocalFilePath,

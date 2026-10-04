@@ -12,9 +12,12 @@ import org.json.JSONObject
 import org.junit.Before
 import org.junit.runner.RunWith
 import org.mockito.Mockito.*
-import org.mockito.junit.MockitoJUnitRunner
+import org.robolectric.RobolectricTestRunner
 
-@RunWith(MockitoJUnitRunner::class)
+// Robolectric：提供真实的 Intent / JSONObject 实现。
+// 纯 JVM 下这些 Android framework 方法会抛 "Method setAction in android.content.Intent not mocked"
+// （该题直到 2026-10-04 才被发现——因为本模块此前压根编译不过，测试从没跑起来过）。
+@RunWith(RobolectricTestRunner::class)
 class EncvGoServiceTest {
 
     private lateinit var mockContext: Context

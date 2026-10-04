@@ -50,6 +50,8 @@ class MainActivity : BridgeActivity() {
             registerPlugin(ApiProxyPlugin::class.java)
             registerPlugin(HighRefreshRatePlugin::class.java)
             registerPlugin(SimVersePlugin::class.java)
+            // 2026-10-04：扫码改为自建 ZXingLite 插件（去掉 Google Play 服务依赖）
+            registerPlugin(BarcodeScannerPlugin::class.java)
         } catch (e: Exception) {
             Log.e(TAG, "registerPlugin failed", e)
         }

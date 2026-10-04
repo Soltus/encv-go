@@ -16,8 +16,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const _isOpenPreviewBrowser = vi.fn().mockReturnValue(false);
 const _isNativePlatform = vi.fn().mockReturnValue(false);
 
-vi.mock("@/api/encv", async () => {
-  const actual = await vi.importActual<any>("@/api/encv");
+// ⚠️ 2026-10-02 修正：mock 路径必须**与实现 import 的模块路径完全一致**。
+//    实现（useRealtimeTransport.ts）import 的是 `@encv/shared-components/api/encv`，
+//    而这里原来 mock 的是 `@/api/encv`（encv-mobile 的旧路径，实现根本不 import 它）
+//    ⇒ mock 完全没生效，实现调的是真实的 isOpenPreviewBrowser()（返回 false）
+//    ⇒ "OpenPreview → http-poll" 这条用例必然失败（拿到 ws）。
+//    这是**测试的 mock 打错地方**，不是实现的选举逻辑有问题
+//    （实现里 `if (isOpenPreviewBrowser()) return "http-poll"` 一直在）。
+vi.mock("@encv/shared-components/api/encv", async () => {
+  const actual = await vi.importActual<any>("@encv/shared-components/api/encv");
   return {
     ...actual,
     isOpenPreviewBrowser: () => _isOpenPreviewBrowser(),
@@ -27,8 +34,8 @@ vi.mock("@/api/encv", async () => {
   };
 });
 
-// mock useEventBus
-vi.mock("@/composables/useEventBus", () => ({
+// mock useEventBus（同样要用实现真正 import 的 shared 路径）
+vi.mock("@encv/shared-components/composables/useEventBus", () => ({
   eventBus: {
     emit: vi.fn(),
     on: vi.fn(),

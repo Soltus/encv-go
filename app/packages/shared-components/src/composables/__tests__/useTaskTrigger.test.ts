@@ -82,13 +82,27 @@ describe("useTaskTrigger — clear", () => {
 });
 
 describe("useTaskTrigger — 异常降级", () => {
-  it("localStorage.setItem 抛出时静默降级（下次 getTriggeredBy 返 user）", () => {
+  it("localStorage.setItem 抛出时不冒泡（内存 map 仍生效，仅丢失跨会话持久化）", () => {
+    // 🆕 2026-10-02 契约修订（改**测试**，实现行为是对的）：
+    //   实现 `setTaskMetadata` 的顺序是「先写内存 map → trimMapInPlace → writeMap」。
+    //   持久化（writeMap）失败**不应该**把已经写进内存的值回滚掉 ——
+    //   否则一次 QuotaExceededError 就会让本会话刚创建的 task 全部丢掉 triggeredBy，
+    //   反而比"仅丢失跨会话持久化"更糟（UI 立即显示错，还查不出原因）。
+    //   所以这里断言：
+    //     1) 不抛异常（writeMap 内部已吞掉）
+    //     2) 本次会话内仍能读到刚写入的值
+    //   真正的"降级"体现在**重新加载后**读不回来（那条语义由 writeMap 的 try/catch 保证）。
     const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("QuotaExceededError");
     });
-    recordTriggeredBy("foo", "automation");
-    // 不应抛异常
-    expect(getTriggeredBy("foo")).toBe("user");
+    let threw = false;
+    try {
+      recordTriggeredBy("foo", "automation");
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(false); // 不应抛异常
+    expect(getTriggeredBy("foo")).toBe("automation"); // 内存 map 仍生效
     setItemSpy.mockRestore();
   });
 

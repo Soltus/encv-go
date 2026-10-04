@@ -1,0 +1,100 @@
+// gradle-buildscript-mirrors.gradle —— 把**任何** mavenCentral() 直连换掉（用 -I 传入，或放进 ~/.gradle/init.d/）
+//
+// 【为什么重写 2026-10-03（第三次修环绕失败）】
+//   旧版（我现在才看清是无效的）用：
+//       allprojects { p -> if (p.repositories.size() > 0) applyMirrors(p.repositories) }
+//   但 init script 的 `allprojects` 在 **project 被 evaluate 之前** 执行 —— 此时 build.gradle.kts
+//   里那句 `repositories { mavenCentral() }` 还没跑，`size()` 恒为 0 ⇒ 整段代码一次都没生效。
+//   于是 `RepositoriesMode.PREFER_PROJECT` 下自带 repositories 的模块（Capacitor/Cordova、
+//   combolite-host…）依旧直连 `repo.maven.apache.org` ⇒ **429 退避重试** ⇒ 表现为"构建卡死"。
+//
+// 【新版策略】不在 critically-timed 点上删除/重建仓库，而是 **evaluate 之后直接改写已有仓库的 URL**：
+//   ① settingsEvaluated → pluginManagement + dependencyResolutionManagement
+//   ② 每个 project 的 afterEvaluate → buildscript.repositories + repositories
+//   只替换真正被墙/被限流的 host（repo.maven.apache.org / repo1.maven.org），
+//   google() / dl.google.com / jitpack / flatDir **一律保留**（实测 dl.google.com 200 OK，别乱换）。
+//
+// 【实测 2026-10-03】
+//   repo.maven.apache.org = 429 / repo1.maven.org = 429  ← 唯一的坏点（探测竟然很快返回，卡在实际重试）
+//   dl.google.com = 200 / maven.aliyun.com/repository/google = 200
+//   mirrors.tencent.com/nexus/repository/maven-public = 200 / mirrors.cloud.tencent.com/… = 200
+//
+// 用法：
+//   ./gradlew -I /workspace/scripts/gradle-buildscript-mirrors.gradle <task>
+//   cp /workspace/scripts/gradle-buildscript-mirrors.gradle ~/.gradle/init.d/   # 永久生效
+
+def CENTRAL_MIRROR = "https://mirrors.tencent.com/nexus/repository/maven-public/"
+def DOOMED_HOSTS = ["repo.maven.apache.org", "repo1.maven.org"]
+
+def rewrite = { String tag, repos ->
+    try {
+        repos.each { r ->
+            def u
+            try {
+                u = r.hasProperty("url") ? r.url?.toString() : null
+            } catch (ignored) {
+                u = null // flatDir / ivy 等没有 url
+            }
+            if (u == null) return
+            if (!DOOMED_HOSTS.any { d -> u.contains(d) }) return
+            try {
+                r.setUrl(CENTRAL_MIRROR)
+                println "[mirror-init] ${tag}: ${u} -> ${CENTRAL_MIRROR}"
+            } catch (e) {
+                println "[mirror-init] ${tag}: setUrl failed for ${u}: ${e.message}"
+            }
+        }
+    } catch (e) {
+        println "[mirror-init] ${tag}: skipped (${e.message})"
+    }
+}
+
+gradle.settingsEvaluated { settings ->
+    rewrite("settings/pluginManagement", settings.pluginManagement.repositories)
+    try {
+        rewrite("settings/dependencyResolutionManagement", settings.dependencyResolutionManagement.repositories)
+    } catch (ignored) {
+        // Gradle 版本差异：dependencyResolutionManagement 不可达时忽略
+    }
+}
+
+// ⚠️ 关键修正 #1：仓库是在 evaluate 期间被声明的，必须挂 afterEvaluate 才看得见
+allprojects { p ->
+    p.afterEvaluate {
+        rewrite("${p.path}/buildscript", p.buildscript.repositories)
+        rewrite("${p.path}/repositories", p.repositories)
+    }
+}
+
+// ⚠️ 关键修正 #2（真正解决 429 的一招：**抢先插入**，而不是事后改写）
+//
+// 只有 afterEvaluate 是不够的 —— 被 Capacitor include 进来的模块
+// （如 :ajuarezso-capacitor-high-refresh-rate）会在 build.gradle **脚本体里**写：
+//     buildscript {
+//         repositories { mavenCentral(); google() }
+//         dependencies { classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.25" }
+//     }
+// 而 **buildscript 的 classpath 在这个 block 结束的瞬间就开始解析**（远早于 afterEvaluate），
+// 于是它拿到的是刚声明完的 mavenCentral() ⇒ 429 ⇒ 上一次构建就死在这里。
+//
+// 对策：beforeProject 时先给它的 buildscript.repositories 塞一个镜像。
+// Gradle 对同一个 module **按仓库顺序逐个问、命中即止**（后续仓库根本不会再被请求），
+// 镜像排在第一位 ⇒ maven central 连被查询的机会都没有。
+//
+// ⚠️ 只注入 **buildscript** —— 千万别给 `p.repositories` 也塞！
+//    一旦 project 有了项目级 repositories，在 RepositoriesMode.PREFER_PROJECT 下就会
+//    **整体屏蔽 settings 的 dependencyResolutionManagement**（含 jitpack exclusiveContent、
+//    google、腾讯 tencent 等每个源），app 侧 `com.github.getActivity:Logcat` /
+//    `com.tencent.bugly:crashreport:latest.release` / `io.github.lnzz123:combolite-core`
+//    立刻全部找不到（血泪：只搜了 tencent maven-public 一个源）。
+//    project.repositories 交给下面的 afterEvaluate 做「原地改写 URL」——
+//    依赖解析发生在 execution 阶段，晚于 afterEvaluate，来得及且不改变 PREFER_PROJECT 判定。
+gradle.beforeProject { p ->
+    try {
+        p.buildscript.repositories {
+            maven { url = CENTRAL_MIRROR }
+        }
+    } catch (e) {
+        println "[mirror-init] beforeProject/buildscript inject failed for ${p.path}: ${e.message}"
+    }
+}

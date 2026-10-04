@@ -7,6 +7,11 @@ import { dirname } from 'node:path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+// 非沙箱独立 dev（无 preview-gateway）：vite 自己做 /api 同源反代 + 恢复 HMR。
+// 必须显式 ENCV_STANDALONE_VITE=1（dev-start-guard 才会放行），不是放开裸 vite。
+const STANDALONE = process.env.ENCV_STANDALONE_VITE === '1'
+const BACKEND_TARGET = process.env.ENCV_BACKEND_URL || 'http://127.0.0.1:2025'
+
 // =============================================================================
 // ⚠️ 防御机制：禁止直接 vite 启动（必须通过 PM2 → preview-gateway）
 // =============================================================================
@@ -39,6 +44,12 @@ import Components from 'unplugin-vue-components/vite'
 // =============================================================================
 // D9 决策（spec/unify-sandbox-preview-port §3.1）: vite 是纯净 SPA dev server，
 // 不做任何反向代理。统一由 preview-gateway (:16666) 接管跨上游转发。
+//
+// ⚠️ D9 的**适用前提 = 沙箱（trae / OpenPreview）**，那里才有 :16666 网关。
+//    非沙箱环境（CNB、本机…）没有网关，而前端 dev 态默认把 API 打到
+//    DEV_SANDBOX_ENTRY(:16666) ⇒ 必然断联。2026-10-04 新增
+//    ENCV_STANDALONE_VITE=1：vite 自己在 :8100 上做 /api 同源反代（见下方
+//    STANDALONE 分支），并恢复标准 HMR。沙箱链路行为**完全不变**。
 //
 // 历史胶水（已撤销）:
 //   - `cors: { origin: '*' }` —— 用于绕过 agent-tool-host 的 Origin 改写。
@@ -265,7 +276,9 @@ export default defineConfig({
       dts: 'src/components.d.ts',
     })] : []),
     vue(),
-    dynamicHmrHostPlugin(),
+    // 沙箱专用：把 HMR 的 host/port 改写成外部域名 + 网关端口 16666。
+    // 独立 dev（无网关）不需要这套改写，交给 vite 默认（本机 host + 自身端口）。
+    ...(STANDALONE ? [] : [dynamicHmrHostPlugin()]),
     // @/ alias 多路径 fallback：优先本地 src，其次 shared-components
     {
       name: 'encv-alias-fallback',
@@ -310,7 +323,12 @@ export default defineConfig({
       },
     },
     // ────────────────────────────────────────────────────────────────────────
-    // ⚠️ CRITICAL: 沙箱 dev 必须删除 Vite 自动注入的 @vite/client 脚本！
+    // ⚠️ 仅沙箱（trae 域名 → agent-tool-host 不支持 WS 升级）才需要删 @vite/client。
+    //    独立 dev（无网关，浏览器直连 vite）要保留它，否则没有 HMR/热更新。
+    ...(STANDALONE
+      ? []
+      : [
+          // ⚠️ CRITICAL: 沙箱 dev 必须删除 Vite 自动注入的 @vite/client 脚本！
     //
     // vite 8 (rolldown) 即使设了 `server.hmr = false`，**仍然**会注入
     // <script type="module" src="/@vite/client"> —— hmr:false 只关 HMR 的 WS
@@ -333,6 +351,7 @@ export default defineConfig({
         },
       },
     } as Plugin,
+        ]),
   ],
   server: {
     // 统一入口改 :8100（由 preview-gateway :16666 接管对外暴露）
@@ -348,7 +367,39 @@ export default defineConfig({
     allowedHosts: true,
     // Vite 默认 cors=true 会 reflect Origin —— 配合 preview-gateway changeOrigin:false，
     // 链路 :16666 → :8100 看到的 Origin=Host 匹配，CORS 天然通过
-    hmr: false,
+    // ⚠️ 沙箱链路关 HMR（agent-tool-host 不支持 WS 升级）；独立 dev 下保留 HMR。
+    ...(STANDALONE ? {} : { hmr: false }),
+    // ── 独立 dev（无 preview-gateway）：vite 自己把后端接口反代到 encv-go :2025 ──
+    // 为什么必须同源：远程访问时页面 origin 是外部域名（如 *.cnb.run），
+    // 后端 CORS allowlist 只放行 localhost/127.0.0.1 ⇒ 直连 :2025 会被 CORS 拦。
+    // 反代后前端 fetch('/api/...') 打到自己的 :8100，由 vite 服务端转发，无跨源。
+    ...(STANDALONE
+      ? {
+          proxy: {
+            // ⚠️ 必须 ws:true —— peerlink 的长连接走 /api/peerlink/ws，
+            //    没开 ws 时升级请求被当普通 HTTP 转发 ⇒ Edge 一直 i/o timeout
+            //    （实测：开之前连本机 127.0.0.1 都超时，开了立刻 101）。
+            '/api': { target: BACKEND_TARGET, changeOrigin: false, ws: true },
+            '/agent-api': { target: BACKEND_TARGET, changeOrigin: false },
+            '/ping': { target: BACKEND_TARGET, changeOrigin: false },
+            '/p': { target: BACKEND_TARGET, changeOrigin: false },
+            '/ws': { target: BACKEND_TARGET, ws: true, changeOrigin: false },
+          },
+        }
+      : {}),
+  },
+  // 独立 dev：让前端 dev 态的 API base 用**同源**（'' = 相对路径 → 走上面的反代），
+  // 而不是沙箱默认的 DEV_SANDBOX_ENTRY(:16666)。沙箱不注入此变量，行为不变。
+  ...(STANDALONE
+    ? { define: { 'import.meta.env.VITE_ENCV_API_BASE': JSON.stringify('') } }
+    : {}),
+  optimizeDeps: {
+    // ⚠️ 必须**启动期**就预打包 qrcode（2026-10-03 真 bug）：
+    //   配对面板是运行时 `import("qrcode")`，属于"运行时才发现的依赖" ⇒ vite 要临时
+    //   跑一次依赖重优化；那次重优化若失败（实测：陈旧 pnpm store 路径 ENOENT），
+    //   `/node_modules/.vite/deps/qrcode.js` 就永远不存在 ⇒ 动态 import 404
+    //   ⇒ UI 误报"二维码依赖未安装"。列入 include 后启动期即预打包，不再依赖临时优化。
+    include: ['qrcode'],
   },
   resolve: {
     alias: {

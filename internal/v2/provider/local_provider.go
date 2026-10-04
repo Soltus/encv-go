@@ -25,8 +25,10 @@ type LocalFileProvider struct {
 	factory reader.DecryptReaderFactory
 	// 按需加载的字节切片
 	cachedData []byte
-	once       sync.Once
-	loadErr    error
+	// 缓存数据的**唯一**读取器（GetReader/GetSeeker 共用，保证 Seek 生效）
+	cachedReader *cachedReadCloser
+	once         sync.Once
+	loadErr      error
 }
 
 // 【关键修复】定义一个自定义的 ReadCloser，它同时支持 Seek
@@ -79,13 +81,30 @@ func NewLocalFileProvider(ctx context.Context, factory reader.DecryptReaderFacto
 
 // --- 实现 FileContentProvider 接口 ---
 
+// cachedStream 返回缓存数据的**唯一**读取器实例（读写位置共享）。
+//
+// ⚠️ 必须与 GetSeeker 返回同一个对象，否则 HTTP Range 会静默失效：
+//   ContentHandler.ServeFile 的流程是 `reader := GetReader()` →
+//   `seeker := GetSeeker()` → `seeker.Seek(start)` → `io.Copy(w, reader)`。
+//   若两次各 new 一个 bytes.Reader，Seek 只作用在 seeker 上，真正被拷贝的
+//   reader 仍在偏移 0 ⇒ 响应头写着 `bytes N-M/size`，实体体却返回文件头。
+//   2026-10-01 真机通路实测（/stream?path=... 带 Range）：44KB 样例容器全部
+//   落在内存缓存分支，所有非 0 偏移都返回文件头 → 播放器拖动必然解码失败。
+//   回归锁：internal/v2/handler/content_range_cached_test.go
+func (p *LocalFileProvider) cachedStream() *cachedReadCloser {
+	if p.cachedReader == nil {
+		p.cachedReader = &cachedReadCloser{Reader: bytes.NewReader(p.cachedData)}
+	}
+	return p.cachedReader
+}
+
 func (p *LocalFileProvider) GetReader() io.ReadCloser {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	// 如果已经加载到内存
 	if p.cachedData != nil {
-		return &cachedReadCloser{Reader: bytes.NewReader(p.cachedData)}
+		return p.cachedStream()
 	}
 
 	// 如果加载失败了
@@ -99,7 +118,7 @@ func (p *LocalFileProvider) GetReader() io.ReadCloser {
 		if p.loadErr != nil {
 			return nil
 		}
-		return &cachedReadCloser{Reader: bytes.NewReader(p.cachedData)}
+		return p.cachedStream()
 	}
 
 	// 对于大文件，返回原始的解密器
@@ -107,9 +126,12 @@ func (p *LocalFileProvider) GetReader() io.ReadCloser {
 }
 
 func (p *LocalFileProvider) GetSeeker() (io.Seeker, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	// 如果已经加载到内存
 	if p.cachedData != nil {
-		return bytes.NewReader(p.cachedData), true
+		return p.cachedStream(), true
 	}
 
 	// 如果加载失败了
@@ -123,7 +145,7 @@ func (p *LocalFileProvider) GetSeeker() (io.Seeker, bool) {
 		if p.loadErr != nil {
 			return nil, false
 		}
-		return bytes.NewReader(p.cachedData), true
+		return p.cachedStream(), true
 	}
 
 	// 对于可寻址文件，检查原始解密器
