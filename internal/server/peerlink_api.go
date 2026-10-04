@@ -389,9 +389,12 @@ func (s *Server) handlePeerlinkFile(c *gin.Context) {
 		limitKey = "peer:" + id
 	}
 	peerID := strings.TrimSpace(c.Query("peerId"))
-	remotePath := c.Query("path")
+	// 2026-10-04：参数名统一 —— 远程 Agent 的工具用 `rel_path`，而这里历史上只用 `path`，
+	// 同一套能力两套名字，我自己排查时就先踩过一次（传 rel_path 被判"缺参数"）。
+	// `rel_path` 作为**推荐名**（与工具一致），`path` 保留为兼容别名（前端仍在用）。
+	remotePath := firstNonEmpty(c.Query("rel_path"), c.Query("path"))
 	if peerID == "" || remotePath == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "message": "peerId 与 path 必填"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "message": "peerId 与 rel_path（或 path）必填"})
 		return
 	}
 	p, ok := s.peerHub.PeerByID(peerID)
@@ -501,6 +504,16 @@ func (s *Server) handlePeerlinkFile(c *gin.Context) {
 		c.Header("Content-Range", fmt.Sprintf("bytes %d-%d/*", rr.Offset, endExclusive))
 	}
 	c.Data(http.StatusPartialContent, "application/octet-stream", rr.Data)
+}
+
+// firstNonEmpty 返回第一个非空字符串（用于参数别名兼容）。
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // headerSafe 非 ASCII 路径改百分号编码，避免响应头乱码（latin-1 语义）。

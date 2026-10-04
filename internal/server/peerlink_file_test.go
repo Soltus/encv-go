@@ -9,6 +9,7 @@ package server
 //   - E4：整文件取回默认禁止穿透云端（本通道只服务小报文）
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -248,6 +249,48 @@ func TestPeerlinkFile_RejectedNotCircuitBreaker(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if string(body) != string(fixture) {
 		t.Fatalf("内容错误: %q", string(body))
+	}
+}
+
+// TestPeerlinkFile_ParamAlias 参数名统一（2026-10-04）：
+// 远程 Agent 的工具用 `rel_path`，而 /file 历史上只用 `path` —— 同一套能力两套名字，
+// 排查时极易踩坑（传 rel_path 被判"缺参数"）。现在两者都收，`rel_path` 为推荐名。
+func TestPeerlinkFile_ParamAlias(t *testing.T) {
+	r, s := newPeerlinkRouter()
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	peerID, stop := startPairedEdge(t, r, s, srv.URL+"/api/peerlink", nil, func(req peerlink.ReadRequest) ([]byte, int64, error) {
+		if req.Path != "/sdcard/a.txt" {
+			return nil, 0, errors.New("bad_path")
+		}
+		return fixture, int64(len(fixture)), nil
+	})
+	defer stop()
+
+	get := func(param string) (int, string) {
+		req, _ := http.NewRequest("GET", srv.URL+"/api/peerlink/file?peerId="+peerID+"&"+param+"=/sdcard/a.txt", nil)
+		req.Header.Set("X-Peerlink-Operator", "1")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("请求失败: %v", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(body)
+	}
+
+	// 新名（推荐）
+	if code, body := get("rel_path"); code != http.StatusOK || body != string(fixture) {
+		t.Fatalf("rel_path 应可用: %d %q", code, body)
+	}
+	// 旧名（兼容，前端仍在用）
+	if code, body := get("path"); code != http.StatusOK || body != string(fixture) {
+		t.Fatalf("path 必须继续可用（向后兼容）: %d %q", code, body)
+	}
+	// 两者都缺 → 400
+	if code, _ := get(""); code != http.StatusBadRequest {
+		t.Fatalf("缺路径参数应 400, got %d", code)
 	}
 }
 
