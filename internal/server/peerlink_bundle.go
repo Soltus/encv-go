@@ -31,6 +31,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -126,7 +127,10 @@ func loadBundleManifest() []BundleManifestItem {
 			ABI:       readTextSidecar(filepath.Join(dir, e.Name()+".abi")),
 			UpdatedAt: st.ModTime().Format(time.RFC3339),
 		}
-		if cur, ok := latest[name]; !ok || item.Version > cur.Version {
+		// ⚠️ 不能用字典序比版本（真机/本机实测踩到）：
+		//   "v0.0.1-test" > "v0.0.1-smoketest"、"v0.0.9" > "v0.0.10"
+		//   ⇒ 会把**旧包**当成最新版下发给设备。必须按语义版本比较。
+		if cur, ok := latest[name]; !ok || versionNewer(item.Version, cur.Version) {
 			latest[name] = item
 		}
 	}
@@ -153,6 +157,41 @@ func readTextSidecar(path string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(b))
+}
+
+// versionNewer 判断 a 是否比 b 新（语义版本优先，比不出来再退字典序）。
+//
+// 规则：忽略前导 'v' / 'V'；按 '.' 切段，逐段按**数值**比较；
+// 某段不是数字（如 "0.0.1-rc1" 的 "1-rc1"）则该段按字符串比；
+// 前缀相同而 a 段数更多 ⇒ a 更新（"1.2.3.1" > "1.2.3"）。
+func versionNewer(a, b string) bool {
+	as := strings.Split(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(a), "v"), "V"), ".")
+	bs := strings.Split(strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(b), "v"), "V"), ".")
+	for i := 0; i < len(as) || i < len(bs); i++ {
+		if i >= len(bs) {
+			return true
+		}
+		if i >= len(as) {
+			return false
+		}
+		an, ae := strconv.Atoi(as[i])
+		bn, be := strconv.Atoi(bs[i])
+		switch {
+		case ae == nil && be == nil:
+			if an != bn {
+				return an > bn
+			}
+		case ae == nil && be != nil:
+			return true // 纯数字段优先于含非数字的段（1 > 1-rc1）
+		case ae != nil && be == nil:
+			return false
+		default:
+			if as[i] != bs[i] {
+				return as[i] > bs[i]
+			}
+		}
+	}
+	return false
 }
 
 // findBundleItem 在清单里找指定包与版本（version 为空 = 该包最新版）。

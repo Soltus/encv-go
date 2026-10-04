@@ -106,17 +106,32 @@
 
 ---
 
-## I4 · 主应用 SPA 热更新 ⬜
+## I4 · 主应用 SPA 热更新 ✅（待装机真机验证）
 
 - **目标**：主界面（Capacitor web 资源）也走云控，不再跟着 APK 走。
-- **现状**：主 app 的 web 资源由 `cap sync` 打进 `assets/public`，经 Capacitor 本地
-  asset loader 以 `https://localhost` 提供 ⇒ 改一行 JS 就要重打 APK。
-- **做法**：包目录 `web-bundle`（`config.AppDataDir("web-bundle")`，已在 I2 白名单登记）
-  ⇒ 主 WebView 入口改为"有热更包则加载 `http://127.0.0.1:<port>/`，否则回退 `assets/public`"
-  —— 与 `PreviewAssetsActivity` 完全同一套路（它已经这么干且验证有效）。
-- **注意**：`baseUrl.ts` 的 native 判定不能因此退化（真机 WebView origin 仍可能是
-  `https://localhost`，见长期记忆"Capacitor 原生壳里 origin ≠ 后端地址"）。
-- **遗留**：同上，需要引导版 APK 带这次入口改造。
+- **关键机制（与 PreviewAssetsActivity 那条路不同，别照抄）**：
+  `bridge.setServerBasePath(path)` → Capacitor `WebViewLocalServer.hostFiles(path)`，
+  把**任意应用私有目录**托管在**同一个 `https://localhost` 源**下。
+  - 好处：origin 不变 ⇒ CORS / `baseUrl.ts` 判定 / 混合内容策略全不变，
+    Capacitor 插件桥（GoProcess / BarcodeScanner / Filesystem…）照旧工作；
+  - 反例（**不要这么做**）：`webView.loadUrl("http://127.0.0.1:<port>/web/")` 会换 origin，
+    插件桥注入与 `WEBVIEW_SERVER_URL` 都绑本地源 ⇒ 主应用插件直接失效。
+    `PreviewAssetsActivity` 能用独立 WebView，只因为那一页不需要任何插件。
+- **落地**：`MainActivity.applyHotWebBundleIfPresent()` —— 目录
+  `<filesDir>/.encv/web-bundle` 同时存在 `index.html` **和** `version.json` 才切换；
+  目录里有 `.disabled` 标记则跳过（留一条不用重打 APK 的退路）；判定不过就用 APK 内资源。
+- **可观测**：`get_device_info` 新增 `webBundle.{installed,version}` ——
+  云控下发后用它**远程确认**生效版本（判定与 Kotlin 侧一致：缺 `index.html` 即算未安装）。
+- **产包**：`scripts/build-web-bundle.sh [version] [--no-build]` → `web-<ver>.zip` + `.sha256`
+  （dist 内容放 zip 根；base 保持 `/`，因为托管在 `https://localhost/` 根）。
+- **验证**：`TestDiagGetDeviceInfo_WebBundleInstalled`（3 段：未装 / 已装回显版本 / 缺 index.html 判未装），
+  先红后绿（去掉 index.html 判定 ⇒ "未安装时应 installed=false"）。
+- **顺带修的真缺陷**：清单按**字典序**选最新版 ⇒ `v0.0.9` 会压过 `v0.0.10`、
+  `v0.0.1-test` 压过 `v0.0.1-smoketest` ⇒ 云控可能下发**旧包**。
+  改为语义版本比较（`versionNewer`：`TestVersionNewer` 10 例 + `TestPeerlinkBundle_Manifest_LatestBySemver`，
+  红：改回字典序 ⇒ "最新版应为 v0.0.10, got v0.0.9"）。
+- **遗留**：Kotlin 改动在本环境无法编译验证（JitPack 不可达，与改动无关）；
+  热更包应用后需**重启 APP** 才切换（与 I3 同步：进程/页面重启即生效）。
 
 ---
 

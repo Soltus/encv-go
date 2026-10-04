@@ -180,6 +180,65 @@ func TestPeerlinkBundle_Manifest_SplitsNameVersion(t *testing.T) {
 	}
 }
 
+// TestPeerlinkBundle_Manifest_LatestBySemver —— 最新版必须按**语义版本**选，不能按字典序
+//
+// 字典序会把 v0.0.9 判成比 v0.0.10 新（本机实测：v0.0.1-test 也压过 v0.0.1-smoketest）
+// ⇒ 云控会把**旧包**下发给设备。
+func TestPeerlinkBundle_Manifest_LatestBySemver(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ENCV_BUNDLES_DIR", dir)
+	_, _ = writeTestBundle(t, dir, "web", "v0.0.9", map[string]string{"index.html": "old"})
+	_, shaNew := writeTestBundle(t, dir, "web", "v0.0.10", map[string]string{"index.html": "new"})
+	_, _ = writeTestBundle(t, dir, "web", "v0.0.2", map[string]string{"index.html": "older"})
+
+	r, _ := newPeerlinkRouter()
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+	token := pairPeerOnHub(t, r)
+
+	req, _ := http.NewRequest("GET", srv.URL+"/api/peerlink/bundle/manifest", nil)
+	req.Header.Set("Authorization", "Peer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("请求失败: %v", err)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Items []BundleManifestItem `json:"items"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	if len(out.Items) != 1 {
+		t.Fatalf("同名多版只应暴露最新一版, got %+v", out.Items)
+	}
+	if out.Items[0].Version != "v0.0.10" || out.Items[0].SHA256 != shaNew {
+		t.Fatalf("最新版应为 v0.0.10, got %q", out.Items[0].Version)
+	}
+}
+
+// TestVersionNewer —— 版本比较的边界（纯函数）
+func TestVersionNewer(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"v0.0.10", "v0.0.9", true},
+		{"v0.0.9", "v0.0.10", false},
+		{"1.2.3", "1.2.3", false},
+		{"1.2.4", "1.2.3", true},
+		{"1.10.0", "1.9.0", true},
+		{"v1.0.0", "1.0.0", false}, // 前导 v 忽略 ⇒ 相等
+		{"1.2.3.1", "1.2.3", true},
+		{"1.2", "1.2.0", false},
+		{"1.2.0", "1.2.0-rc1", true}, // 数字段 > 含后缀段
+		{"2.0.0", "10.0.0", false},
+	}
+	for _, c := range cases {
+		if got := versionNewer(c.a, c.b); got != c.want {
+			t.Errorf("versionNewer(%q,%q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
+
 func TestPeerlinkBundle_Download_RejectsTraversalName(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ENCV_BUNDLES_DIR", dir)

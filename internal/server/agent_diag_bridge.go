@@ -22,10 +22,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 
+	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/logger"
 )
 
@@ -156,7 +159,29 @@ func (s *Server) diagGetDeviceInfo(argsJSON string) (string, error) {
 		}
 	}
 
+	// 主应用 SPA 热更包（I4，2026-10-05）：装机后靠它远程确认"热更到底生没生效"。
+	//
+	//	Kotlin 侧 MainActivity 只会在这个目录同时存在 index.html 与 version.json 时
+	//	把 Capacitor 本地服务指向它 ⇒ 这里把"装了哪版"回给发起端，
+	//	云控下发后才能确认生效，而不是靠"看起来变了"来判断。
+	webBundle := map[string]interface{}{"installed": false}
+	if dir := config.AppDataDir("web-bundle"); dir != "" {
+		if _, err := os.Stat(filepath.Join(dir, "index.html")); err == nil {
+			v := ""
+			if b, err := os.ReadFile(filepath.Join(dir, "version.json")); err == nil {
+				var vv struct {
+					Version string `json:"version"`
+				}
+				if json.Unmarshal(b, &vv) == nil {
+					v = vv.Version
+				}
+			}
+			webBundle = map[string]interface{}{"installed": true, "version": v}
+		}
+	}
+
 	return okJSON(map[string]interface{}{
+		"webBundle": webBundle,
 		"platform": map[string]interface{}{
 			"goos":   runtime.GOOS,
 			"goarch": runtime.GOARCH,

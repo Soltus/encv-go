@@ -13,10 +13,13 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Soltus/encv-go/internal/config"
 	"github.com/Soltus/encv-go/internal/logger"
 )
 
@@ -67,6 +70,52 @@ func TestDiagGetDeviceInfo_RequiredFields(t *testing.T) {
 	m0, _ := mounts[0].(map[string]interface{})
 	if m0["id"] != "serving" || m0["available"] != true {
 		t.Errorf("mounts[0] 形态不对: %v", m0)
+	}
+}
+
+// TestDiagGetDeviceInfo_WebBundleInstalled —— I4：主应用 SPA 热更包的"装没装/装了哪版"
+//
+// 用途：云控下发 web 包之后，**远程**确认它到底生没生效（Kotlin 侧只在目录同时有
+// index.html 与 version.json 时才会切过去），而不是靠"看起来变了"判断。
+func TestDiagGetDeviceInfo_WebBundleInstalled(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("ENCV_WEB_BUNDLE_DIR", filepath.Join(root, "web-bundle"))
+	dir := config.AppDataDir("web-bundle")
+
+	// ① 没装 ⇒ installed=false
+	srv := newTestServerWithDirs(t, t.TempDir(), "")
+	raw, err := srv.executeDiagTool(context.Background(), "get_device_info", `{}`)
+	if err != nil {
+		t.Fatalf("执行失败: %v", err)
+	}
+	if !strings.Contains(raw, `"webBundle":{"installed":false}`) {
+		t.Fatalf("未安装时应 installed=false: %s", raw)
+	}
+
+	// ② 装了（index.html + version.json）⇒ installed=true + 版本
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>hot</html>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "version.json"), []byte(`{"version":"v-hot-1","updatedAt":"2026-10-05T00:00:00Z"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	raw, err = srv.executeDiagTool(context.Background(), "get_device_info", `{}`)
+	if err != nil {
+		t.Fatalf("执行失败: %v", err)
+	}
+	if !strings.Contains(raw, `"installed":true`) || !strings.Contains(raw, "v-hot-1") {
+		t.Fatalf("已安装时应回显 installed=true 与版本: %s", raw)
+	}
+	// ③ 缺 index.html（只有 version.json）⇒ 仍算没装（与 Kotlin 侧判定必须一致）
+	if err := os.Remove(filepath.Join(dir, "index.html")); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = srv.executeDiagTool(context.Background(), "get_device_info", `{}`)
+	if !strings.Contains(raw, `"installed":false`) {
+		t.Fatalf("缺 index.html 应判未安装（Kotlin 侧同判定）: %s", raw)
 	}
 }
 
