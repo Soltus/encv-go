@@ -667,6 +667,22 @@ func (s *Server) startEdgeLocked(hub, peerID, deviceID, token string) {
 	go edge.Start(ctx)
 }
 
+// edgeStaleAfterAttempts 连续重连失败多少次后判定"会合点**可能已经不存在了**"。
+//
+// 2026-10-05：与 baseUrl 的 16666 是**同一类**风险——持久化下来的值（这里是通过扫码
+//   记住的会合点地址）失效后，程序只会一遍遍重试，既不报错到能看懂，也不给用户出路。
+//   Hub 侧的表现是"这台设备零请求"（它在连一个到不了的地址），运维只看到 offline。
+//   ⚠️ CNB / 开发环境的域名会随容器重建变化 ⇒ 这种"地址还在、服务没了"是常态，不是异常。
+const edgeStaleAfterAttempts = 5
+
+// edgeSessionStale 判定一个 Edge 会话是否已"僵死"（连不上且重试多次仍失败）。
+//
+// 判据保守：**只在明确连不上且重试够多次时才置 true** —— 手机没网 / 后端刚重启
+// 这类"暂时连不上"不能劝用户重新扫码（那会把一次抖动放大成一次重新配对）。
+func edgeSessionStale(connected bool, attempts int) bool {
+	return !connected && attempts >= edgeStaleAfterAttempts
+}
+
 // handlePeerlinkEdgeStatus —— GET /api/peerlink/edge/status
 func (s *Server) handlePeerlinkEdgeStatus(c *gin.Context) {
 	if !isOperator(c) {
@@ -696,6 +712,9 @@ func (s *Server) handlePeerlinkEdgeStatus(c *gin.Context) {
 		"connected": connected,
 		"lastErr":   lastErr,
 		"attempts":  attempts,
+		// 2026-10-05：会合点地址可能已失效（如域名随容器重建变了）。
+		// UI 据此从"连接中…"改成"这里可能已经不存在了，请重新扫码"并给出忘记入口。
+		"stale":     edgeSessionStale(connected, attempts),
 		"startedAt": rt.startedAt,
 	})
 }

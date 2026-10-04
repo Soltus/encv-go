@@ -554,6 +554,9 @@ export default {
     "peers.codeTicketUsed": "这个配对码已经被用过（一张码只能配一次），请在桌面端刷新二维码后重新扫描",
     "peers.codeTicketNotFound": "配对码无效（桌面端可能已重启），请在桌面端刷新二维码后重新扫描",
     "peers.refreshQrHint": "解决办法：回到桌面端点「重新生成」，再扫新码",
+    "peers.edgeStale": "会合点地址可能已失效（域名可能已变更）：已重试多次仍连不上，请重新扫码连接",
+    "peers.edgeForget": "忘记这个会合点",
+    "peers.edgeForgotten": "已忘记该会合点，请重新扫码连接",
     // 🆕 2026-10-05：热更新（云控下发 / 回滚 + 本端已装版本）
     "peers.bundleTitle": "热更新",
     "peers.bundleLocal": "本端已安装",
@@ -1127,6 +1130,9 @@ export default {
     "peers.codeTicketUsed": "This pairing code was already used (one code pairs once); refresh the QR code on the desktop and scan again",
     "peers.codeTicketNotFound": "Pairing code is invalid (the desktop side may have restarted); refresh the QR code and scan again",
     "peers.refreshQrHint": "Fix: go back to the desktop and tap “Regenerate”, then scan the new code",
+    "peers.edgeStale": "The rendezvous address may be gone (its domain may have changed): retries keep failing. Please scan a new code.",
+    "peers.edgeForget": "Forget this rendezvous",
+    "peers.edgeForgotten": "Rendezvous forgotten; please scan a new code",
     // 🆕 2026-10-05: hot update (cloud push / rollback + locally installed versions)
     "peers.bundleTitle": "Hot update",
     "peers.bundleLocal": "Installed on this device",

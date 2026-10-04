@@ -94,6 +94,16 @@
     <p v-if="edgeErr" class="scanNote" data-testid="edge-error-hint">
       {{ t('peers.edgeFailedHint') || '常见原因：会合点地址手机无法访问，或该地址不支持 WebSocket 升级（例如经某些代理/网关访问时）' }}
     </p>
+    <!-- 🆕 2026-10-05：会合点**地址本身没了**（域名随容器重建就变）时，
+         光说"连不上"没用 —— 用户唯一的出路是重新扫码，必须显式给出来。 -->
+    <div v-if="edgeStale" class="staleBox" data-testid="edge-stale">
+      <p class="scanErr">
+        {{ t('peers.edgeStale') || '会合点地址可能已失效（域名可能已变更）：已重试多次仍连不上。请重新扫码连接。' }}
+      </p>
+      <ion-button size="small" fill="outline" data-testid="edge-forget" @click="forgetAndRescan">
+        {{ t('peers.edgeForget') || '忘记这个会合点' }}
+      </ion-button>
+    </div>
   </div>
 </template>
 
@@ -137,6 +147,8 @@ const edge = ref<EdgeStatus | null>(null);
 
 const edgeLabel = ref(t("peers.edgeIdle") || "未连接（服务重启后需重新扫码）");
 const edgeErr = ref("");
+// 会合点地址已失效（连不上且重试多次）⇒ 必须给用户"重新扫码"这条出路
+const edgeStale = ref(false);
 // 配对后的状态巡查：连不上时不能一直停在"连接中…"，要让用户看到真实结果
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -324,6 +336,28 @@ async function onFilePicked(e: Event) {
   }
 }
 
+/**
+ * 忘记这个会合点（2026-10-05）：清掉落盘的 Edge 会话，让用户能干净地重新扫码。
+ *
+ * 为什么需要它：地址失效后如果不主动忘记，下次启动又会自动连那个已经不存在的地址，
+ * 用户将**永远**卡在"连不上" —— 这正是"持久化的坏值没有自愈路径"的典型形态。
+ */
+async function forgetAndRescan() {
+  busy.value = true;
+  try {
+    await stopEdge();
+    linkedHub.value = "";
+    edgeStale.value = false;
+    edgeErr.value = "";
+    okMsg.value = t("peers.edgeForgotten") || "已忘记该会合点，请重新扫码连接";
+    await refreshStatus();
+  } catch (e) {
+    errMsg.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function refreshStatus() {
   try {
     const st = await fetchEdgeStatus();
@@ -332,7 +366,9 @@ async function refreshStatus() {
       edgeLabel.value = t("peers.edgeIdle") || "未连接（服务重启后需重新扫码）";
       edgeErr.value = "";
       linkedHub.value = "";
+      edgeStale.value = false;
     } else if (st.connected) {
+      edgeStale.value = false;
       edgeLabel.value = t("peers.edgeConnected") || "已连上会合点";
       edgeErr.value = "";
       linkedHub.value = st.hub || "";
@@ -346,6 +382,8 @@ async function refreshStatus() {
     } else {
       edgeLabel.value = t("peers.edgeRunning") || "连接中…";
       edgeErr.value = "";
+      // 连不上且已重试多次 ⇒ 这已经不是"还在连"，而是"地址大概没了"
+      edgeStale.value = st.stale === true;
     }
   } catch (e) {
     edgeLabel.value = e instanceof Error ? e.message : String(e);
