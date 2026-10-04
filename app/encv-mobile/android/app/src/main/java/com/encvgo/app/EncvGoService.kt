@@ -573,6 +573,19 @@ class EncvGoService : Service() {
     }
 
     private fun publishFailure(error: String, source: String, command: String?) {
+        // I3：热更新二进制起不来 ⇒ 立刻作废它，并用 APK 内二进制重试一次
+        val wasHot = usingHotBinary
+        if (wasHot) {
+            rollbackHotBinaryIfBroken()
+            Thread {
+                try {
+                    Thread.sleep(300)
+                    restartGoProcess(source, command)
+                } catch (e: Exception) {
+                    Log.w(TAG, "retry with bundled binary failed", e)
+                }
+            }.start()
+        }
         lastError = error
         isRunning = false
         processReady.set(false)
@@ -825,6 +838,26 @@ class EncvGoService : Service() {
     }
 
     private fun findExecutableBinary(): File? {
+        // ── 🆕 2026-10-05：云控热更新的 Go 二进制**优先**（I3）─────────────────
+        //
+        // 背景：后端能力（新工具 / 修复）都在 APK 内的 libencv-go.so 里，改一次就要
+        //  重新构建 APK。热更新通道（云控 bundle）已经能把包送到设备，只要让
+        //  **filesDir 下的二进制优先**于 APK 内的，就能不换 APK 更新后端 ——
+        //  这是"最后一次 APK"之后不再需要重新构建的关键。
+        //
+        // 安全约束（缺一不可）：
+        //  ① 必须有同名 .version 文件（说明它是热更通道放的，不是随便谁塞的）
+        //  ② .abi 必须等于设备主 ABI（防止把 arm64 包装成别的架构 ⇒ CANNOT LINK EXECUTABLE）
+        //  ③ 用热更二进制启动失败 ⇒ rename 成 .bad，下次自动回退到 APK 内二进制
+        //     （见 rollbackHotBinaryIfBroken，绝不能让设备卡在起不来后端的状态）
+        val hot = hotBinaryFile()
+        usingHotBinary = false
+        if (hot != null) {
+            usingHotBinary = true
+            Log.i(TAG, "Using hot-updated binary: ${hot.absolutePath} version=${hotBinaryVersion()}")
+            return hot
+        }
+
         val nativeLibDir = applicationInfo.nativeLibraryDir
         Log.i(TAG, "nativeLibraryDir: $nativeLibDir")
 
@@ -868,6 +901,66 @@ class EncvGoService : Service() {
             }
         }
         return null
+    }
+
+    // ── I3：热更新二进制的选取与回滚（2026-10-05）──────────────────────────
+
+    /** 本次启动是否用的是热更新二进制（失败回滚判定要用）。 */
+    @Volatile
+    private var usingHotBinary: Boolean = false
+
+    /** 热更新二进制落点：<filesDir>/encv-go（与 BINARY_NAME 一致，Kotlin 侧可写）。 */
+    private fun hotBinaryFile(): File? {
+        val f = File(filesDir, BINARY_NAME)
+        if (!f.exists() || !f.canExecute()) return null
+        // ① 版本 sidecar 必须存在（只有云控通道会写它）
+        val ver = File(filesDir, "$BINARY_NAME.version")
+        if (!ver.exists()) {
+            Log.w(TAG, "hot binary exists but no .version sidecar, ignoring")
+            return null
+        }
+        // ② ABI 必须匹配
+        val abi = File(filesDir, "$BINARY_NAME.abi")
+        val want = Build.SUPPORTED_ABIS.firstOrNull() ?: return null
+        val got = if (abi.exists()) abi.readText().trim() else ""
+        if (got.isEmpty() || got != want) {
+            Log.w(TAG, "hot binary abi mismatch: got=$got want=$want, ignoring")
+            return null
+        }
+        return f
+    }
+
+    private fun hotBinaryVersion(): String {
+        return try {
+            File(filesDir, "$BINARY_NAME.version").readText().trim()
+        } catch (_: Exception) {
+            "unknown"
+        }
+    }
+
+    /**
+     * 用热更新二进制启动失败 ⇒ 把它改名作废，下次启动回退到 APK 内二进制。
+     *
+     * 为什么必须自动回滚：热更二进制若与设备/依赖不匹配（ABI、.so 缺失），
+     * 后端永远起不来 ⇒ 用户眼里就是"APP 打不开"，而我们没法远程救（远程调试也依赖后端）。
+     * 宁可丢掉这次更新，也不能让设备不可用。
+     */
+    private fun rollbackHotBinaryIfBroken() {
+        if (!usingHotBinary) return
+        usingHotBinary = false
+        try {
+            val f = File(filesDir, BINARY_NAME)
+            if (!f.exists()) return
+            val bad = File(filesDir, "$BINARY_NAME.bad-${System.currentTimeMillis()}")
+            if (f.renameTo(bad)) {
+                Log.w(TAG, "hot binary rolled back -> ${bad.name}")
+                GoProcessPlugin.pushKotlinLog("warn", TAG, "热更新二进制启动失败，已回滚到 APK 内版本")
+            }
+            File(filesDir, "$BINARY_NAME.version").renameTo(File(filesDir, "$BINARY_NAME.version.bad"))
+            File(filesDir, "$BINARY_NAME.abi").renameTo(File(filesDir, "$BINARY_NAME.abi.bad"))
+        } catch (e: Exception) {
+            Log.w(TAG, "rollback hot binary failed", e)
+        }
     }
 
     private fun copyBinaryFromAssets(dest: File) {

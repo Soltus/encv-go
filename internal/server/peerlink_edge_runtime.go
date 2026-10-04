@@ -46,9 +46,9 @@ type edgeRuntime struct {
 
 // peerEdgeHandlers 允许测试/宿主覆盖 Edge 的三个处理器（默认走本端真实实现）。
 type peerEdgeHandlers struct {
-	OnSearch       func(peerlink.SearchRequest) (json.RawMessage, error)
-	OnRead         func(peerlink.ReadRequest) ([]byte, int64, error)
-	OnAgentInvoke  func(peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome
+	OnSearch      func(peerlink.SearchRequest) (json.RawMessage, error)
+	OnRead        func(peerlink.ReadRequest) ([]byte, int64, error)
+	OnAgentInvoke func(peerlink.AgentInvokeRequest) peerlink.AgentInvokeOutcome
 	// OnBundleUpdate 云控热更新（2026-10-04）：Hub 下发指令 → 本端拉包 → 原子生效/回滚
 	OnBundleUpdate func(peerlink.BundleUpdateRequest) peerlink.BundleUpdateResult
 }
@@ -82,6 +82,21 @@ func (s *Server) bundleTargetDir(name string) (string, bool) {
 	}
 }
 
+// bundleTargetFile 是「包名 → 单文件目标」的映射（I3：Go 二进制热更新）。
+//
+// ⚠️ 只有 go-binary 一个入口：换的是**执行体**，必须带 ABI 且可回滚，
+//    绝不接受任意路径（否则一次云控就能把设备写成砖）。
+func (s *Server) bundleTargetFile(name string) (string, bool) {
+	if name != "go-binary" {
+		return "", false
+	}
+	files := strings.TrimSpace(os.Getenv("ENCV_APP_FILES_DIR"))
+	if files == "" {
+		return "", false
+	}
+	return filepath.Join(files, "encv-go"), true
+}
+
 // peerLocalBundleUpdate 执行一次云控下发的资源包更新。
 //
 // 纪律（与 bundle.Apply 的不变式一致）：
@@ -91,7 +106,13 @@ func (s *Server) bundleTargetDir(name string) (string, bool) {
 func (s *Server) peerLocalBundleUpdate(req peerlink.BundleUpdateRequest) (out peerlink.BundleUpdateResult) {
 	out.Name = req.Name
 
+	isFileTarget := false
 	target, ok := s.bundleTargetDir(req.Name)
+	if !ok {
+		if ft, ok2 := s.bundleTargetFile(req.Name); ok2 {
+			target, isFileTarget, ok = ft, true, true
+		}
+	}
 	if !ok {
 		out.Rejected = true
 		out.Error = "unknown_bundle:" + sanitizeBundleName(req.Name)
@@ -100,6 +121,12 @@ func (s *Server) peerLocalBundleUpdate(req peerlink.BundleUpdateRequest) (out pe
 	if strings.TrimSpace(req.SHA256) == "" {
 		out.Rejected = true
 		out.Error = "missing_sha256"
+		return out
+	}
+	// 换执行体必须声明 ABI —— Kotlin 侧会比对 Build.SUPPORTED_ABIS[0]，缺了它设备会拒绝使用
+	if isFileTarget && strings.TrimSpace(abiOfArgs(req)) == "" {
+		out.Rejected = true
+		out.Error = "missing_abi"
 		return out
 	}
 
@@ -137,17 +164,38 @@ func (s *Server) peerLocalBundleUpdate(req peerlink.BundleUpdateRequest) (out pe
 		return out
 	}
 
-	res, err := bundle.Apply(bundle.Spec{
-		Name:      req.Name,
-		TargetDir: target,
-		Version:   req.Version,
-		SHA256:    req.SHA256,
-		Required:  req.Required,
-	}, zipPath, bundle.Options{MaxBytes: bundleMaxZipBytes, Timeout: peerlink.BundleCallTimeout})
+	opts := bundle.Options{MaxBytes: bundleMaxZipBytes, Timeout: peerlink.BundleCallTimeout}
+	var res bundle.Result
+	var err error
+	if isFileTarget {
+		// I3：换**执行体**（Go 二进制）—— 原子 rename 覆盖 + sidecar（version/abi）
+		res, err = bundle.ApplyFile(bundle.FileSpec{
+			Name:     req.Name,
+			Target:   target,
+			Version:  req.Version,
+			ABI:      strings.TrimSpace(abiOfArgs(req)),
+			SHA256:   req.SHA256,
+			Required: req.Required,
+		}, zipPath, opts)
+	} else {
+		res, err = bundle.Apply(bundle.Spec{
+			Name:      req.Name,
+			TargetDir: target,
+			Version:   req.Version,
+			SHA256:    req.SHA256,
+			Required:  req.Required,
+		}, zipPath, opts)
+	}
 	if err != nil {
-		// ⚠️ 切换/校验失败 ⇒ 必须回滚：目标目录此刻可能已被移走（Apply 内部已尽力恢复，
-		//    这里再兜一次），回滚后旧版继续服务，用户不会看到白屏。
-		if rerr := bundle.Rollback(req.Name, target); rerr == nil {
+		// ⚠️ 切换/校验失败 ⇒ 必须回滚：目标此刻可能已被移走（Apply 内部已尽力恢复，
+		//    这里再兜一次），回滚后旧版继续服务（目录型＝不白屏，文件型＝后端还能起）。
+		var rerr error
+		if isFileTarget {
+			rerr = bundle.RollbackFile(req.Name, target)
+		} else {
+			rerr = bundle.Rollback(req.Name, target)
+		}
+		if rerr == nil {
 			out.RolledBack = true
 		}
 		out.Error = "apply_failed:" + truncateBundleErr(err.Error())
@@ -158,8 +206,20 @@ func (s *Server) peerLocalBundleUpdate(req peerlink.BundleUpdateRequest) (out pe
 	out.Ok = true
 	out.AppliedVersion = res.Version
 	out.PreviousVersion = res.PreviousVersion
+	if isFileTarget {
+		// 换的是执行体：rename 后**运行中的进程仍持有旧 inode** ⇒ 必须重启进程才生效。
+		// Kotlin 侧下次启动（APP 冷启动 / 服务重启）即自动使用新二进制。
+		slog.Info("peerlink bundle update applied (binary; requires process restart to take effect)",
+			"name", req.Name, "version", res.Version, "prev", res.PreviousVersion)
+		return out
+	}
 	slog.Info("peerlink bundle update applied", "name", req.Name, "version", res.Version, "prev", res.PreviousVersion)
 	return out
+}
+
+// abiOfArgs 取出下发指令里的架构声明（go-binary 必填）。
+func abiOfArgs(req peerlink.BundleUpdateRequest) string {
+	return strings.TrimSpace(req.ABI)
 }
 
 func sanitizeBundleName(s string) string {

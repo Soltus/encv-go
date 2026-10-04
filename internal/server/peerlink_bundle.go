@@ -53,6 +53,8 @@ type BundleManifestItem struct {
 	Size      int64  `json:"size"`
 	SHA256    string `json:"sha256"`
 	UpdatedAt string `json:"updatedAt,omitempty"`
+	// ABI 目标架构（仅 go-binary 需要；换执行体必须声明架构，执行端据此校验）。
+	ABI string `json:"abi,omitempty"`
 }
 
 // bundlesDir 返回 Hub 侧资源包仓库目录。
@@ -121,6 +123,7 @@ func loadBundleManifest() []BundleManifestItem {
 			Version:   version,
 			Size:      st.Size(),
 			SHA256:    readSHA256Sidecar(filepath.Join(dir, e.Name()+".sha256")),
+			ABI:       readTextSidecar(filepath.Join(dir, e.Name()+".abi")),
 			UpdatedAt: st.ModTime().Format(time.RFC3339),
 		}
 		if cur, ok := latest[name]; !ok || item.Version > cur.Version {
@@ -141,6 +144,15 @@ func readSHA256Sidecar(path string) string {
 		return ""
 	}
 	return strings.TrimSpace(strings.Fields(string(b))[0])
+}
+
+// readTextSidecar 读取同名 sidecar 文本（如 .abi）。
+func readTextSidecar(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
 }
 
 // findBundleItem 在清单里找指定包与版本（version 为空 = 该包最新版）。
@@ -344,6 +356,7 @@ func (s *Server) handlePeerlinkBundlePush(c *gin.Context) {
 		Version: item.Version,
 		SHA256:  item.SHA256,
 		Size:    item.Size,
+		ABI:     item.ABI,
 	}
 	// 更新是分钟级动作 ⇒ 超时比普通 RPC 长，但仍要封顶（不能无限等）
 	res, err := s.peerCalls.Call(c.Request.Context(), body.PeerId, peerlink.MethodBundleUpdate, req, peerlink.BundleCallTimeout)

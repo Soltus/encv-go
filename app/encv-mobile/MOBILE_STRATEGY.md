@@ -147,7 +147,15 @@ OpenList Core → 统一 ENCV Driver → 所有平台继承
 | **云控热更新**（push 指令走 WS / zip 走 HTTP，2026-10-04） | `internal/server/peerlink_bundle.go`、通用安装器 `internal/bundle/apply.go` | 回归锁：`internal/server/peerlink_bundle_test.go`、`internal/bundle/apply_test.go` |
 
 **迭代台账（多轮）**：`docs/cloud-hot-update-and-link-recovery.md`
-（I1 互联自恢复 ✅ / I2 云控热更新 ✅ / I3 Go 二进制热更 ⬜ / I4 主 SPA 热更 ⬜ / I5 灰度与回滚策略 ⬜）。
+（I1 互联自恢复 ✅ / I2 云控热更新 ✅ / **I3 Go 二进制热更 ✅（待装机真机验证）** /
+I4 主 SPA 热更 ⬜ / I5 灰度与回滚策略 ⬜）。
+
+**I3 要点（Go 二进制热更新，2026-10-05）**：`EncvGoService.findExecutableBinary()` 改为
+`<filesDir>/encv-go` **优先**于 APK 内 `libencv-go.so`（需 `.version` + `.abi` 两个 sidecar，
+`.abi` 必须等于 `Build.SUPPORTED_ABIS[0]`）；用热更二进制启动失败 ⇒ rename 成 `.bad-<ts>` 作废并
+自动用 APK 内二进制重试一次。Go 侧 `bundle.ApplyFile` 做原子 rename 覆盖 + `chmod 755` +
+写 sidecar；**新二进制要重启进程才生效**（下次 APP 冷启动/服务重启自动生效）。
+⇒ **构建这一版 APK 之后，后端与 web 资源都能云控下发，不再需要重新构建 APK。**
 | 安全收口：未配对 401 全量 / 零落盘结构性锁 / 限流+熔断 / 访问日志脱敏 / 降级矩阵持久性 UI | `internal/server/peerlink_{security,limits}*.go`、`gin_app.go`(sanitizedLogFormatter) | `src/composables/usePeerDegradation.ts`、`PeerDegradedNotice.vue` |
 
 ### 关键边界与红线（不可破）

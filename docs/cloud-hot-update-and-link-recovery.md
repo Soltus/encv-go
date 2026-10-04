@@ -79,21 +79,30 @@
 
 ---
 
-## I3 · Go 二进制热更新（彻底摆脱 APK） ⬜
+## I3 · Go 二进制热更新（彻底摆脱 APK） ✅（待装机真机验证）
 
-- **目标**：让 **Go 后端本身**也能云控更新 —— 这样 I1/I2 之后新增的后端能力（如诊断工具）
-  不必等 APK。
-- **做法（已定位到唯一改动点）**：`EncvGoService.findExecutableBinary()` 目前
-  **优先 `nativeLibraryDir`**，`filesDir` 只是回退。改为：
-  ```
-  filesDir/libencv-go.so 存在 且 版本 >= APK 内版本  →  优先用 filesDir 的
-  否则                                                →  用 APK 内的（现状）
-  ```
-  版本比较用 sidecar 文件（`libencv-go.so.version`）或服务启动后自报 `/api/runtime.version`。
-  二进制包走 I2 的同一条通道（包名 `go-binary`，目标目录 filesDir，切换后由 Kotlin 重启 Go 进程）。
-- **风险与红线**：执行体替换必须与**架构/ABI 匹配**（arm64-v8a），包内要带 `abi` 字段并校验；
-  切换失败必须能回退到 APK 内二进制（否则 APP 直接不可用）—— 沿用 I2 的 staging/backup 语义。
-- **遗留**：需引导版 APK 带上"filesDir 优先"这一行改动（这就是"最后一次 APK"）。
+- **目标**：让 **Go 后端本身**也能云控更新 —— 这样 I1/I2 之后新增的后端能力不必等 APK。
+- **已落地**：
+  - **Kotlin**（`EncvGoService.findExecutableBinary()`）：`<filesDir>/encv-go` **优先**于 APK 内的
+    `libencv-go.so`，但必须满足两道门禁：① 存在 `.version` sidecar（说明是云控通道放的）；
+    ② `.abi` 等于 `Build.SUPPORTED_ABIS[0]`（架构不匹配 ⇒ `CANNOT LINK EXECUTABLE`）。
+  - **失败自动回滚**：用热更二进制启动失败 ⇒ `publishFailure` 里把它 rename 成 `.bad-<ts>`，
+    作废 sidecar，并用 APK 内二进制**重试一次**（`rollbackHotBinaryIfBroken`）。
+    绝不能让设备卡在"后端起不来"的状态 —— 后端挂了连远程调试都救不回来。
+  - **Go**（`bundle.ApplyFile`）：zip 解到 staging → 校验 sha256 + 必含文件 → 备份当前 →
+    **rename 原子覆盖** → `chmod 755` → 写 `.version` / `.abi` sidecar；失败 `RollbackFile` 换回。
+    ⚠️ rename 覆盖正在运行的可执行文件是安全的（进程继续持有旧 inode），
+    **新二进制要重启进程才生效**（下次 APP 冷启动 / 服务重启自动生效，已打日志说明）。
+  - 包名 `go-binary`；下发指令**必须带 ABI**，否则执行端 `rejected`（`missing_abi`）。
+- **验证（先红后绿）**：`internal/bundle/apply_file_test.go` 4 例
+  （原子替换 + sidecar + 回滚 / 摘要不符不动运行中的二进制 / 缺文件不动 / 无备份不造假文件）；
+  `TestPeerLocalGoBinary_RejectedWhenUnknownOrNoABI`（拿不到 filesDir 或没带 ABI ⇒ rejected）。
+  红验：去掉摘要校验 ⇒ "应报 ErrChecksumMismatch"；去掉备份 ⇒ "换执行体必须留备份"。
+- **遗留**：
+  - `:app:compileDebugKotlin` 在本环境**无法验证**（JitPack `getActivity:Logcat` 解析失败，
+    与本改动无关的前置网络问题）⇒ Kotlin 改动只做了逐行复核，等用户在可联网环境构建。
+  - 热更二进制**不会自动触发重启**：当前靠下次冷启动生效。若要"下发即生效"，
+    需补一条 `GoProcessPlugin.restartBackend` 的触发路径（Go 侧回报 → TS/原生调重启）。
 
 ---
 

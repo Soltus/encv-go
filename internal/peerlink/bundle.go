@@ -32,6 +32,12 @@ type BundleUpdateRequest struct {
 	Size int64 `json:"size,omitempty"`
 	// Required 包内必须存在的文件（相对路径），用于挡住"能解开但内容不全"的半成品。
 	Required []string `json:"required,omitempty"`
+	// ABI 目标架构（arm64-v8a / armeabi-v7a / x86_64…）。
+	//
+	//	只有 **go-binary（换执行体）** 需要它：执行端会拒绝没有 ABI 的二进制更新，
+	//	Kotlin 侧启动前还要与 Build.SUPPORTED_ABIS[0] 比对 ——
+	//	把 arm64 的包装到别的架构上 = CANNOT LINK EXECUTABLE = 设备起不来后端。
+	ABI string `json:"abi,omitempty"`
 }
 
 // BundleUpdateResult 执行端回报的一次更新结果。

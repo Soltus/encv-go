@@ -454,6 +454,28 @@ func TestPeerLocalBundleUpdate_BadChecksum_KeepsOld(t *testing.T) {
 	}
 }
 
+// TestPeerLocalGoBinary_RejectedWhenUnknownOrNoABI —— I3：换执行体的两道门禁
+func TestPeerLocalGoBinary_RejectedWhenUnknownOrNoABI(t *testing.T) {
+	// ① 没注入 ENCV_APP_FILES_DIR ⇒ 不知道 filesDir ⇒ 必须拒绝（绝不能猜路径）
+	st := &Server{}
+	out := st.peerLocalBundleUpdate(peerlink.BundleUpdateRequest{
+		Name: "go-binary", Version: "v1", SHA256: "x", ABI: "arm64-v8a",
+	})
+	if !out.Rejected {
+		t.Fatal("拿不到 filesDir 时必须 rejected（不得猜路径写执行体）")
+	}
+
+	// ② 有 filesDir 但没带 ABI ⇒ 拒绝（架构不明的二进制可能让设备起不来后端）
+	files := t.TempDir()
+	t.Setenv("ENCV_APP_FILES_DIR", files)
+	out = st.peerLocalBundleUpdate(peerlink.BundleUpdateRequest{
+		Name: "go-binary", Version: "v1", SHA256: "x",
+	})
+	if !out.Rejected || out.Error != "missing_abi" {
+		t.Fatalf("缺 ABI 应 rejected: %+v", out)
+	}
+}
+
 // TestPeerLocalBundleUpdate_UnknownName_Rejected —— 包名没登记 ⇒ rejected（不是"设备故障"）
 func TestPeerLocalBundleUpdate_UnknownName_Rejected(t *testing.T) {
 	// 直接构造 Server：这两个分支在拿到目标目录之前就返回，不需要路由/连接

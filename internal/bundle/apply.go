@@ -257,6 +257,126 @@ func Apply(spec Spec, zipPath string, opts Options) (Result, error) {
 	return res, nil
 }
 
+// FileSpec 描述一个**单文件**资源（I3：Go 二进制热更新用）。
+//
+// 与 Spec（目录）的区别：目标是**一个文件**，切换仍必须原子（rename 覆盖），
+// 且要保留上一版以便回滚 —— 因为换的是**执行体**，换坏了设备就起不来后端。
+type FileSpec struct {
+	// Name 包名（go-binary），用于备份文件命名。
+	Name string
+	// Target 目标文件绝对路径（如 <filesDir>/encv-go）。
+	Target string
+	// Version 新版本（写入 <Target>.version 供 Kotlin 侧识别"这是热更放进去的"）。
+	Version string
+	// ABI 目标架构（写入 <Target>.abi；Kotlin 侧会与 Build.SUPPORTED_ABIS[0] 比对）。
+	ABI string
+	// Mode 目标文件权限（0 = 0755）。
+	Mode os.FileMode
+	// SHA256 zip 摘要（十六进制）。
+	SHA256 string
+	// Required 包内必须存在的文件（相对路径），例如 ["encv-go"]。
+	Required []string
+}
+
+// ApplyFile 把 zip 里的单个文件原子替换到 spec.Target。
+//
+// 流程：解到 staging → 校验 Required 与 ABI → 备份当前文件 → **rename 覆盖** → 写 sidecar。
+//
+// ⚠️ 为什么 rename 覆盖正在运行的可执行文件是安全的：Linux/Android 上 rename 是
+//
+//	原子的目录项替换，运行中的进程继续持有旧 inode（不受影响）；新进程才用新二进制。
+//	⇒ 热更后**需要重启进程**才生效（Kotlin 侧下启动即生效，见 EncvGoService）。
+func ApplyFile(spec FileSpec, zipPath string, opts Options) (Result, error) {
+	if spec.Target == "" || spec.Name == "" {
+		return Result{}, errors.New("bundle: empty Target/Name")
+	}
+	if spec.SHA256 != "" {
+		got, err := SHA256File(zipPath)
+		if err != nil {
+			return Result{}, err
+		}
+		if !strings.EqualFold(got, spec.SHA256) {
+			return Result{}, fmt.Errorf("%w: want %s got %s", ErrChecksumMismatch, spec.SHA256, got)
+		}
+	}
+	mode := spec.Mode
+	if mode == 0 {
+		mode = 0o755
+	}
+
+	parent := filepath.Dir(spec.Target)
+	staging := filepath.Join(parent, spec.Name+"-staging")
+	backup := filepath.Join(parent, spec.Name+"-backup")
+
+	if err := os.RemoveAll(staging); err != nil {
+		return Result{}, err
+	}
+	if err := os.MkdirAll(staging, 0o755); err != nil {
+		return Result{}, err
+	}
+	defer os.RemoveAll(staging)
+
+	if err := unzip(zipPath, staging, opts.MaxBytes); err != nil {
+		return Result{}, err
+	}
+	root := staging
+	if hasSingleRootDir(staging) {
+		root = singleRootDir(staging)
+	}
+	if missing := missingFiles(root, spec.Required); len(missing) > 0 {
+		return Result{}, fmt.Errorf("%w: %v", ErrIncomplete, missing)
+	}
+
+	res := Result{Name: spec.Name, Version: spec.Version, TargetDir: spec.Target}
+	// 备份当前（存在才备份；rename 保证原子）
+	if _, err := os.Stat(spec.Target); err == nil {
+		_ = os.Remove(backup)
+		if err := os.Rename(spec.Target, backup); err != nil {
+			return Result{}, err
+		}
+		res.BackupDir = backup
+		res.PreviousVersion = strings.TrimSpace(readFileOrEmpty(spec.Target + ".version"))
+	}
+
+	src := filepath.Join(root, filepath.FromSlash(spec.Required[0]))
+	if err := os.Rename(src, spec.Target); err != nil {
+		// 覆盖失败 ⇒ 立刻把备份搬回去，绝不让"没有可执行体"的状态存在
+		if res.BackupDir != "" {
+			_ = os.Rename(backup, spec.Target)
+		}
+		return Result{}, err
+	}
+	if err := os.Chmod(spec.Target, mode); err != nil {
+		return res, err
+	}
+	// sidecar：Kotlin 侧据此判定"这是热更通道放的二进制"并校验 ABI
+	if spec.Version != "" {
+		_ = os.WriteFile(spec.Target+".version", []byte(spec.Version), 0o644)
+	}
+	if spec.ABI != "" {
+		_ = os.WriteFile(spec.Target+".abi", []byte(spec.ABI), 0o644)
+	}
+	return res, nil
+}
+
+// RollbackFile 把 Target 回滚到备份（热更二进制起不来时用）。
+func RollbackFile(name, target string) error {
+	backup := filepath.Join(filepath.Dir(target), name+"-backup")
+	if _, err := os.Stat(backup); err != nil {
+		return fmt.Errorf("bundle: no backup for %s", name)
+	}
+	_ = os.Remove(target)
+	return os.Rename(backup, target)
+}
+
+func readFileOrEmpty(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
 // Rollback 把 targetDir 回滚到备份版本。
 func Rollback(name, targetDir string) error {
 	backup := filepath.Join(filepath.Dir(targetDir), name+backupSuffix)
