@@ -149,17 +149,10 @@ class MainActivity : BridgeActivity() {
         reloadPollHandler.removeCallbacks(reloadPollRunnable)
     }
 
-    override fun onResume() {
-        super.onResume()
-        // 前台 ⇒ 开始取云控指令（远端发 reload 后这里会立刻执行，不需要用户操作）
-        startReloadPolling()
-        checkPendingReload()
-    }
-
-    override fun onPause() {
-        stopReloadPolling()
-        super.onPause()
-    }
+    // ⚠️ vNext Round 10：这里**故意不做轮询**。
+    //    轮询是垃圾方案（耗电 / 有延迟 / 还得 App 在前台）。
+    //    正确链路：Go 广播 WS → 前端收到 → 调 GoProcessPlugin.reloadApp() → 原生执行。
+    //    （下面 retain 的 checkPendingReload 只是 onCreate 兜底，不是主路径。）
 
     // ── vNext Round 7（2026-10-06）：云控三级重载 ──────────────────────────
     //

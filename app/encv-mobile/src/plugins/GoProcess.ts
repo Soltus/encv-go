@@ -42,6 +42,25 @@ export function isNative(): boolean {
   return typeof window !== "undefined" && !!(window as any).Capacitor && (window as any).Capacitor.isNativePlatform();
 }
 
+/**
+ * 云控三级重载（vNext Round 10）
+ *
+ * 链路：Go 广播 WS → 前端收到 bundle_reload → 调本函数 → 原生执行。
+ * ⚠️ activity / app 级**由原生弹二次确认**（重建页面会丢状态、重启会中断操作），
+ *    用户取消时返回 confirmed=false —— 远端不能替用户做这个决定。
+ */
+export async function reloadApp(
+  level: "web" | "activity" | "app",
+  reason?: string
+): Promise<{ success: boolean; confirmed?: boolean; error?: string }> {
+  try {
+    return await GoProcess.reloadApp({ level, reason });
+  } catch (e: any) {
+    console.error("[ENCV] GoProcess.reloadApp() failed:", e?.message || e);
+    return { success: false, error: e?.message || String(e) };
+  }
+}
+
 export async function restartBackend(): Promise<GoProcessResult> {
   try {
     return await GoProcess.restart();

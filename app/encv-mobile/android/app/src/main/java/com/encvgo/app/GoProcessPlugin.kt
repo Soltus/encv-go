@@ -162,6 +162,80 @@ class GoProcessPlugin : Plugin() {
         call.resolve(JSObject().apply { put("success", true); put("port", 0) })
     }
 
+    /**
+     * reloadApp —— 云控三级重载的**事件驱动**入口（vNext Round 10）
+     *
+     * 为什么不用轮询：轮询是垃圾方案（耗电、延迟、还需要 App 在前台）。
+     * 正确链路：Go 广播 WS → 前端(WsBackend)收到 → 调本方法 → 原生执行。
+     *
+     * ⚠️ 二次确认是**软件开发常识**，不是可选装饰：
+     *   - web      无感重载 —— 不打断用户，不需要确认
+     *   - activity 重建页面 —— **会丢当前页面状态** ⇒ 必须确认
+     *   - app      重启进程 —— **侵入性最强**（中断一切进行中的操作）⇒ 必须确认
+     */
+    @PluginMethod
+    fun reloadApp(call: PluginCall) {
+        val level = call.getString("level") ?: "web"
+        val reason = call.getString("reason") ?: ""
+
+        when (level) {
+            "web" -> {
+                activity.runOnUiThread { bridge.webView.reload() }
+                call.resolve(JSObject().apply {
+                    put("success", true)
+                    put("confirmed", true)
+                })
+            }
+            "activity", "app" -> {
+                activity.runOnUiThread { confirmAndReload(level, reason, call) }
+            }
+            else -> call.reject("unknown reload level: $level")
+        }
+    }
+
+    private fun confirmAndReload(level: String, reason: String, call: PluginCall) {
+        val msg = if (level == "app") {
+            "云控请求重启应用。进行中的操作会中断，是否立即重启？"
+        } else {
+            "云控请求重建页面。当前页面未保存的状态会丢失，是否继续？"
+        }
+        val full = if (reason.isNotBlank()) "$msg\n\n原因：$reason" else msg
+
+        android.app.AlertDialog.Builder(activity)
+            .setTitle("云控重载")
+            .setMessage(full)
+            .setPositiveButton("确定") { _, _ ->
+                if (level == "app") restartProcess() else activity.recreate()
+                call.resolve(JSObject().apply {
+                    put("success", true)
+                    put("confirmed", true)
+                })
+            }
+            .setNegativeButton("取消") { _, _ ->
+                call.resolve(JSObject().apply {
+                    put("success", false)
+                    put("confirmed", false)
+                })
+            }
+            .setOnCancelListener {
+                call.resolve(JSObject().apply {
+                    put("success", false)
+                    put("confirmed", false)
+                })
+            }
+            .show()
+    }
+
+    /** app 级：整个进程重启（换执行体 / 换 Go 二进制时用） */
+    private fun restartProcess() {
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        launch?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (launch != null) {
+            context.startActivity(launch)
+        }
+        android.os.Process.killProcess(android.os.Process.myPid())
+    }
+
     @PluginMethod
     fun getStatus(call: PluginCall) {
         call.resolve(JSObject().apply {

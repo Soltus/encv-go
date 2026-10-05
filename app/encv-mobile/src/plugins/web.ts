@@ -59,6 +59,11 @@ export interface GoProcessPlugin {
   getPluginFullState(options: { pluginId: string }): Promise<PluginFullState>;
   ensurePluginLoaded(options: { pluginId: string }): Promise<{ success: boolean }>;
   togglePluginEnabled(options: { pluginId: string; enabled: boolean }): Promise<{ success: boolean; pluginId: string; enabled: boolean }>;
+  /**
+   * 云控三级重载（vNext Round 10）：web（无感）/ activity（重建页面）/ app（重启进程）。
+   * ⚠️ activity / app 级由**原生弹二次确认**，用户取消则 confirmed=false。
+   */
+  reloadApp(options: { level: string; reason?: string }): Promise<{ success: boolean; confirmed?: boolean; error?: string }>;
   uninstallPlugin(options: { pluginId: string }): Promise<{ success: boolean; pluginId: string }>;
   debugLifecycleFlow(options?: { pluginId?: string }): Promise<Record<string, any>>;
   getLocalFilePath(options: { path: string }): Promise<{ path: string }>;
@@ -166,6 +171,22 @@ export class GoProcessWeb extends WebPlugin implements GoProcessPlugin {
 
   async uninstallPlugin(_options: { pluginId: string }): Promise<{ success: boolean; pluginId: string }> {
     return { success: false, pluginId: "" };
+  }
+
+  /**
+   * web 回退：浏览器里没有原生 Activity，只支持 web 级（整页重载）。
+   * activity / app 级在 web 环境无意义 ⇒ 返回 success=false 并说明。
+   */
+  async reloadApp(options: { level: string; reason?: string }): Promise<{ success: boolean; confirmed?: boolean; error?: string }> {
+    const level = String(options?.level ?? "web");
+    if (level === "web") {
+      if (typeof location !== "undefined") {
+        setTimeout(() => location.reload(), 150);
+        return { success: true, confirmed: true };
+      }
+      return { success: false, error: "no location" };
+    }
+    return { success: false, error: `web 环境不支持 ${level} 级重载（需要原生）` };
   }
 
   async debugLifecycleFlow(_options?: { pluginId?: string }): Promise<Record<string, any>> {
