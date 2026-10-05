@@ -487,6 +487,11 @@ export default {
     "peers.allowOnce": "允许一次",
     "peers.trustDevice": "信任此设备",
     "peers.trustHint": "信任仅在本端服务运行期间有效，重启后需重新授权",
+    // 🆕 vNext Round 5：扫码端（安卓）连接后**主动**授信，不必等远端第一次调用
+    "peers.trustedHint": "已信任（重启后失效）· 点击撤销",
+    "peers.trustNeedPeer": "还没拿到会合点标识，请重新扫码连接后再授信",
+    "peers.trustOk": "已信任该设备（本端服务重启后失效；破坏性操作仍需逐次确认）",
+    "peers.untrustOk": "已撤销信任",
     "peers.destructiveHint": "破坏性操作：即使已信任该设备，下次仍会询问",
     "peers.autoDeclineIn": "超时自动拒绝",
     "peers.degradedOffline": "离线：跨端搜索与远程调试暂不可用",
