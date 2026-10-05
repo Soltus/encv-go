@@ -98,6 +98,9 @@ type EdgeOptions struct {
 	// 三级：web（WebView 重载）/ activity（recreate）/ app（整个进程重启）。
 	// ⚠️ 没接线时**必须**回 not_supported，不能假装成功。
 	OnBundleReload func(req BundleReloadRequest) BundleReloadResult
+	// OnPeerCapabilities 回答"你是谁、你能做啥"（vNext Round 12）。
+	// 云控据此决策，而不是靠硬编码常量猜。
+	OnPeerCapabilities func(req PeerCapabilitiesRequest) PeerCapabilitiesResult
 }
 
 // Token 返回本 Edge 持有的配对 token（云控下载时要用它做鉴权）。
@@ -128,6 +131,8 @@ func (e *Edge) Supports(method string) bool {
 		return e.opts.OnBundleRollback != nil
 	case MethodBundleReload:
 		return e.opts.OnBundleReload != nil
+	case MethodPeerCapabilities:
+		return e.opts.OnPeerCapabilities != nil
 	default:
 		return false
 	}
@@ -562,6 +567,25 @@ func (e *Edge) handleRequest(conn *websocket.Conn, id, method string, payload js
 		out := e.opts.OnBundleReload(req)
 		if out.Rejected {
 			writeRejected(out, out.Error)
+			return
+		}
+		write(out, "")
+	// 能力自省（vNext Round 12）：让 Hub 问"你能做啥"，而不是靠约定猜
+	case MethodPeerCapabilities:
+		if e.opts.OnPeerCapabilities == nil {
+			write(nil, "not_supported")
+			return
+		}
+		var req PeerCapabilitiesRequest
+		if len(payload) > 0 {
+			if err := json.Unmarshal(payload, &req); err != nil {
+				write(nil, "bad_payload")
+				return
+			}
+		}
+		out := e.opts.OnPeerCapabilities(req)
+		if !out.Ok {
+			write(nil, out.Error)
 			return
 		}
 		write(out, "")

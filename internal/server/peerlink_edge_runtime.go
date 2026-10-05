@@ -55,6 +55,8 @@ type peerEdgeHandlers struct {
 	OnBundleRollback func(peerlink.BundleRollbackRequest) peerlink.BundleRollbackResult
 	// OnBundleReload 云控重载/重启（2026-10-06）：web / activity / app 三级
 	OnBundleReload func(peerlink.BundleReloadRequest) peerlink.BundleReloadResult
+	// OnPeerCapabilities 能力自省（2026-10-06 Round 12）：回答"我是谁、我能做啥"
+	OnPeerCapabilities func(peerlink.PeerCapabilitiesRequest) peerlink.PeerCapabilitiesResult
 }
 
 func (s *Server) edgeHandlers() peerEdgeHandlers {
@@ -68,6 +70,7 @@ func (s *Server) edgeHandlers() peerEdgeHandlers {
 		OnBundleUpdate:   s.peerLocalBundleUpdate,
 		OnBundleRollback: s.peerLocalBundleRollback,
 		OnBundleReload:   s.peerLocalBundleReload,
+		OnPeerCapabilities: s.peerLocalCapabilities,
 	}
 }
 
@@ -664,6 +667,7 @@ func (s *Server) startEdgeLocked(hub, peerID, deviceID, token string) {
 		OnBundleUpdate:   h.OnBundleUpdate,
 		OnBundleRollback: h.OnBundleRollback,
 		OnBundleReload:   h.OnBundleReload,
+		OnPeerCapabilities: h.OnPeerCapabilities,
 	})
 	rt := &edgeRuntime{
 		hubURL:    hubNormalized,

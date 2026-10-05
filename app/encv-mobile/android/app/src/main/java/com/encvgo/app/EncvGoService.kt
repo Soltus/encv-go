@@ -396,6 +396,9 @@ class EncvGoService : Service() {
                 // 显式告诉 Go 端 app 私有文件目录（mount 系统 + 日志持久化需要）
                 // 不依赖 appdata.go 的硬编码 fallback，确保路径 100% 正确
                 environment()["ENCV_APP_FILES_DIR"] = filesDir.absolutePath
+                // 🆕 vNext Round 12：让 Go 能**自报**设备主 ABI
+                //    （云控据此判断能不能推 go-binary，而不是靠 Hub 侧写死 "arm64-v8a"）
+                environment()["ENCV_APP_ABI"] = Build.SUPPORTED_ABIS.firstOrNull() ?: ""
                 // 🆕 2026-10-05：设备指纹。
                 //    Go 端（internal/server/peerlink_device.go）据此派生**稳定**的 deviceId ——
                 //    此前 deviceId 每次进程启动随机生成 ⇒ 同一台手机重装/清缓存后重新配对，

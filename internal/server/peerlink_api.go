@@ -66,6 +66,8 @@ func registerPeerlinkRoutes(s *Server, r *gin.Engine) {
 	r.POST("/api/peerlink/bundle/rollback", s.handlePeerlinkBundleRollback)
 	// vNext Round 7：云控三级重载（web / activity / app）
 	r.POST("/api/peerlink/bundle/reload", s.handlePeerlinkBundleReload)
+	// vNext Round 12：能力自省 —— 下发/重载前先问"你能做啥"
+	r.GET("/api/peerlink/peer/capabilities", s.handlePeerlinkPeerCapabilities)
 	r.GET("/api/peerlink/bundle/local", s.handlePeerlinkBundleLocal)
 	r.POST("/api/peerlink/bundle/local/rollback", s.handlePeerlinkBundleLocalRollback)
 	// P2a：本端作为 Edge 连远端 Hub（扫码配对后启动 / 状态 / 停止）
