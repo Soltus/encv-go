@@ -134,9 +134,25 @@ TMP_BIN="$(mktemp -d)/encv-go"
 trap 'rm -rf "$(dirname "$TMP_BIN")"' EXIT
 
 log "交叉编译 Go 二进制（CGO + NDK）…"
+# ⚠️ 注入版本号：让 `get_device_info` 能**远端确证**设备跑的是哪一个包。
+#    没有它，version 恒为 "dev" ⇒ 根本分不清跑的是 APK 内置还是热更的
+#    （2026-10-06 就是分不清，误以为热更已生效，白推三次）。
+#
+#    变量名必须与项目一致：scripts/android-common.sh 用的是 **main.version**（小写 v），
+#    写成 main.Version 会静默失效（不报错，但版本永远是 dev）。
+#
+# BUILD_TAGS：与 APK 构建对齐（本机 libsql/objectbox 就绪时可传，如 BUILD_TAGS=libsql）。
+# 不带时功能可能少于 APK 内置二进制，但仍应能启动 —— 启动不了会被 Kotlin
+# 的 rollbackHotBinaryIfBroken 自动作废并回退（不会让设备起不来后端）。
+LDFLAGS="-s -w -X main.version=$VERSION"
+BUILD_FLAGS=""
+if [[ -n "${BUILD_TAGS:-}" ]]; then
+  BUILD_FLAGS="-tags $BUILD_TAGS"
+  log "BUILD_TAGS=$BUILD_TAGS（与 APK 构建对齐）"
+fi
 ( cd "$REPO_ROOT" && \
   CGO_ENABLED=1 GOOS=android GOARCH="$GOARCH" CC="$CC_BIN" \
-  go build -o "$TMP_BIN" ./cmd/encv )
+  go build $BUILD_FLAGS -ldflags "$LDFLAGS" -o "$TMP_BIN" ./cmd/encv )
 
 [[ -f "$TMP_BIN" ]] || { err "编译未产出二进制"; exit 1; }
 log "二进制：$(du -h "$TMP_BIN" | cut -f1)"

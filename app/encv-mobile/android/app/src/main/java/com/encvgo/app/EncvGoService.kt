@@ -407,14 +407,32 @@ class EncvGoService : Service() {
                 // - ENCV_FFMPEG_WORKER 给 ffmpeg worker 路径用（workerClient.locateWorker 优先选这个）
                 //   改用 subprocess worker 调 ffmpeg 后，父进程 ctx cancel 时可以 SIGKILL worker
                 //   解锁（之前 in-process cgo 阻塞 OS thread 没法 cancel，hang spinner forever）
-                environment()["ENCV_LIB_DIR"] = applicationInfo.nativeLibraryDir
+                // 🆕 vNext Round 11（2026-10-06）：.so 云控热更新
+                //
+                // 可行性：Go 是**子进程**，Android linker 按 LD_LIBRARY_PATH 的**顺序**
+                // 解析 DT_NEEDED ⇒ 只要把热更目录排在 APK 的 nativeLibraryDir **前面**，
+                // 同名 .so 就会被优先加载。
+                // 干净在哪：不需要 System.load / dlopen 魔法，也不影响**本进程**已加载的库。
+                val hotLibDir = File(filesDir, ".encv${File.separator}native-lib")
+                val hasHotLibs = hotLibDir.isDirectory &&
+                    (hotLibDir.listFiles()?.any { it.name.endsWith(".so") } == true)
+                if (hasHotLibs) {
+                    Log.i(TAG, "using hot-updated native libs from ${hotLibDir.absolutePath}")
+                }
+                val libDirs = if (hasHotLibs) {
+                    listOf(hotLibDir.absolutePath, applicationInfo.nativeLibraryDir)
+                } else {
+                    listOf(applicationInfo.nativeLibraryDir)
+                }
+                environment()["ENCV_LIB_DIR"] = libDirs.first()
                 // 🆕 2026-07-04：LD_LIBRARY_PATH 让 Android linker 能找到子进程的 .so。
                 // Go 二进制 (libencv-go.so) 通过 ProcessBuilder 直接 exec 执行，
                 // 不是用 System.loadLibrary 加载。linker64 解析 DT_NEEDED 时默认
                 // 不搜应用私有 native lib 目录，必须显式设置 LD_LIBRARY_PATH。
                 // 否则 libobjectbox-jni.so、libsql_experimental.so 等会“not found”。
                 val oldLd = environment()["LD_LIBRARY_PATH"]?.takeIf { it.isNotBlank() }
-                environment()["LD_LIBRARY_PATH"] = listOfNotNull(oldLd, applicationInfo.nativeLibraryDir).joinToString(":")
+                // libDirs 已按优先级排好（热更 .so 在前，APK 内 .so 在后）
+                environment()["LD_LIBRARY_PATH"] = (libDirs + listOfNotNull(oldLd)).joinToString(":")
                 environment()["ENCV_FFMPEG_WORKER"] =
                     File(applicationInfo.nativeLibraryDir, "libffmpeg-worker.so").absolutePath
                 // 🆕 2026-06-14：删除 ENCV_SERVING_DIR / ENCV_HEARTBEAT_PATH

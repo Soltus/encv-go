@@ -659,7 +659,8 @@ type localBundleState struct {
 // bundleLocalStates 扫描本端登记在册的包，返回各自生效版本与可否回滚。
 func bundleLocalStates() []localBundleState {
 	// ⚠️ 与 bundleTargetDir / bundleTargetFile 保持同一份清单，别各写一份
-	names := []string{"web", "preview-assets", "go-binary"}
+	// vNext Round 11：native-lib = .so 热更包（Go 是子进程，靠 LD_LIBRARY_PATH 顺序生效）
+	names := []string{"web", "preview-assets", "go-binary", "native-lib"}
 	out := make([]localBundleState, 0, len(names))
 	for _, name := range names {
 		target, isFile := "", false

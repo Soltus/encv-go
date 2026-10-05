@@ -88,6 +88,12 @@ func bundleTargetDirFor(name string) (string, bool) {
 	case "web":
 		// 主应用 SPA（I4）：目录先就位，WebView 改从本目录加载后即可热更主界面
 		return config.AppDataDir("web-bundle"), true
+	case "native-lib":
+		// vNext Round 11：.so 热更目录。
+		// 与 Kotlin EncvGoService 的 <filesDir>/.encv/native-lib 对齐：
+		// Go 是子进程，linker 按 LD_LIBRARY_PATH 顺序解析 DT_NEEDED，
+		// 该目录被排在 APK 的 nativeLibraryDir 之前 ⇒ 同名 .so 优先加载热更版。
+		return config.AppDataDir("native-lib"), true
 	default:
 		return "", false
 	}
