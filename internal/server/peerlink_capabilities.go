@@ -17,7 +17,11 @@ package server
 //    而不是推一个注定失败的包等真机报错。
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -198,6 +202,58 @@ func (s *Server) handlePeerlinkPeerCapabilities(c *gin.Context) {
 		"advice":  advice,
 		"note":    "能力由受控端自报；advice 为空表示没有已知阻塞项",
 	})
+}
+
+// resolveRequiredFiles 决定下发时的"包内必须存在的文件"清单。
+//
+// 优先级（vNext Round 13）：
+//   1. **受控端自报**（peer_capabilities 的 bundleSpecs）—— 权威来源。
+//      它的 Required 是从自己的落地目标派生的，不是 Hub 写死的常量。
+//   2. Hub 侧硬编码 —— 只为兼容**不支持能力自省**的旧设备，且会 warn。
+//   3. 都没有 ⇒ 返回错误，**绝不猜**。
+//
+// 返回 (required, from, error)；from = "peer" | "hub-fallback"。
+func (s *Server) resolveRequiredFiles(ctx context.Context, peerID, name string) ([]string, string, error) {
+	if caps, err := s.queryPeerCapabilities(ctx, peerID); err == nil && caps != nil {
+		for _, sp := range caps.BundleSpecs {
+			if sp.Name != name {
+				continue
+			}
+			if !sp.Available {
+				return nil, "", fmt.Errorf("受控端声明包 %q 在本端没有落地目标（不可用）", name)
+			}
+			// 目录型（如 native-lib）没有固定必含文件 ⇒ 空清单是合法的
+			return sp.Required, "peer", nil
+		}
+		return nil, "", fmt.Errorf("受控端未声明包 %q", name)
+	}
+	if local := bundleRequiredFiles(name); len(local) > 0 {
+		slog.Warn("bundle: 回退 Hub 侧硬编码的 Required（受控端未自报能力，多半是旧版本二进制）",
+			"name", name, "peerId", peerID)
+		return local, "hub-fallback", nil
+	}
+	return nil, "", fmt.Errorf("无法确定包 %q 的必含文件：受控端未自报且 Hub 无硬编码", name)
+}
+
+// queryPeerCapabilities 向受控端问一次能力。失败不致命 —— 由调用方降级处理。
+func (s *Server) queryPeerCapabilities(ctx context.Context, peerID string) (*peerlink.PeerCapabilities, error) {
+	res, err := s.peerCalls.Call(ctx, peerID, peerlink.MethodPeerCapabilities,
+		peerlink.PeerCapabilitiesRequest{}, peerlink.BundleCallTimeout)
+	if err != nil {
+		return nil, err
+	}
+	var out peerlink.PeerCapabilitiesResult
+	if err := json.Unmarshal(res, &out); err != nil {
+		return nil, err
+	}
+	if !out.Ok || out.Caps == nil {
+		msg := out.Error
+		if msg == "" {
+			msg = "peer_capabilities unavailable"
+		}
+		return nil, errors.New(msg)
+	}
+	return out.Caps, nil
 }
 
 func containsString(list []string, want string) bool {

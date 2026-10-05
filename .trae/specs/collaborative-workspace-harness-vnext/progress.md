@@ -453,6 +453,52 @@ CI `prebuild`（`pnpm check:i18n:full`）失败：
 
 ---
 
+## Round 12–13（2026-10-06）：能力协商 —— 让受控端自报，替代硬编码校验
+
+### 用户批评（切中要害）
+
+> "几天的优化还是一堆脆弱的校验？受控端感知能力太弱，版本、字符、常量什么的都是自导自演
+>  必须按 agent 完整了解上下文才能脆弱的感觉"
+
+**诊断**：我一直用"我知道约定"替代"设备告诉我"——
+文件名 `opencv-go`、ABI 字符串 `arm64-v8a`、版本注入变量名、`Required` 清单、支持哪些方法，
+全是 **Hub 侧单方面假设**，只有掌握全部上下文的人才说得对，换个设备/构建/维护者就崩。
+
+**根因**：不是"校验不够多"，是**没有能力协商**。
+
+### 修法：Hub 问，设备答
+
+新增 RPC `peer_capabilities`（`internal/peerlink/capabilities.go`），受控端自报：
+
+- **身份**：二进制版本 / ABI / GOOS-GOARCH / peerId / uptime
+- **能力**：实际接线的 `methods`（handler 非 nil 才算）/ `reloadLevels` / 各包真实安装状态
+- **包期望** `bundleSpecs`：必含文件**从本端落地目标派生**（`filepath.Base(落地文件)`）、`abiRequired`、`available`
+- **`unknowns`**：拿不到的项显式列出（绝不猜）
+
+Hub API `GET /api/peerlink/peer/capabilities?peerId=` 除 `caps` 外返回 **`advice`**（可执行判断）。
+
+Kotlin 注入 `ENCV_APP_ABI`，让 Go 能自报设备主 ABI。
+
+### 流程改成依赖能力查询
+
+`scripts/push-and-reload.sh` 下发**之前**先问能力，命中任一阻塞项就**不下发**：
+
+- 不支持 `bundle_update` → 退出（热更通道不通）
+- 受控端未声明该包 / 该包本端不可用 → 退出（不猜必含文件）
+- 需 ABI 却拿不到 → 退出（换执行体必崩）
+- 不支持 `bundle_reload` → 只装包，提示需手动重启
+
+⇒ 不再"推一个注定失败的包等真机报错"。`FORCE=1` 可绕过（不建议）。
+
+### 剩余（能力有了，但还有地方没消费它）
+
+- ⬜ Hub 的 `bundleRequiredFiles(name)` 仍是硬编码快路径 —— 应改为优先用受控端自报的 `spec.Required`，查不到就报错
+- ⬜ 设备端 UI 按 `caps` 禁用按钮（不支持 reload 就灰掉重载按钮）
+- ⬜ 前端信任按钮先查对端是否支持授信方法
+- ⬜ 本次改动含 Kotlin（`ENCV_APP_ABI`），需重新构建 APK
+
+---
+
 ## 每轮收尾纪律
 
 0. **提交前本地跑 CI 同款门禁**，尤其是：

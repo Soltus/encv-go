@@ -511,13 +511,29 @@ func (s *Server) handlePeerlinkBundlePush(c *gin.Context) {
 		return
 	}
 
+	// vNext Round 13：必含文件**优先用受控端自报**的（它从自己的落地目标派生），
+	// 拿不到才回退 Hub 侧硬编码（兼容不支持能力自省的旧设备，会告警）；
+	// 两边都没有 ⇒ 报错，绝不猜。
+	required, requiredFrom, reqErr := s.resolveRequiredFiles(c.Request.Context(), body.PeerId, item.Name)
+	if reqErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "unknown_bundle_spec",
+			"message": reqErr.Error(),
+			"name":    item.Name,
+			"peerId":  body.PeerId,
+		})
+		return
+	}
+	slog.Info("bundle: resolved required files",
+		"name", item.Name, "peerId", body.PeerId, "from", requiredFrom, "required", required)
+
 	req := peerlink.BundleUpdateRequest{
 		Name:     item.Name,
 		Version:  item.Version,
 		SHA256:   item.SHA256,
 		Size:     item.Size,
 		ABI:      item.ABI,
-		Required: bundleRequiredFiles(item.Name),
+		Required: required,
 	}
 	// 更新是分钟级动作 ⇒ 超时比普通 RPC 长，但仍要封顶（不能无限等）
 	res, err := s.peerCalls.Call(c.Request.Context(), body.PeerId, peerlink.MethodBundleUpdate, req, peerlink.BundleCallTimeout)
