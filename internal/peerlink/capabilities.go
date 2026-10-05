@@ -43,6 +43,23 @@ type BundleCap struct {
 	Rollable bool `json:"rollable"`
 }
 
+// BundleSpec 某个包在本端的**期望**（自报，不是 Hub 写死）。
+//
+// 为什么要有它：此前 Hub 侧硬编码 `go-binary 必含 opencv-go` —— 这个名字
+// 只有掌握上下文的人才知道，写错就是 `missing required files`，且只能在真机暴露。
+// 现在由**受控端从自己的落地目标派生**后自报：Hub 拿到什么用什么，拿不到就报错而不是猜。
+type BundleSpec struct {
+	Name string `json:"name"`
+	// Kind "file"（换执行体）/ "dir"（资源目录）
+	Kind string `json:"kind"`
+	// Required 包内**必须存在**的文件（相对路径）。目录型至少含入口文件。
+	Required []string `json:"required,omitempty"`
+	// AbiRequired 该包是否必须校验 ABI（换执行体 = true）
+	AbiRequired bool `json:"abiRequired"`
+	// Available 本端是否有该包的落地目标（没有 ⇒ 该包在这台设备上不可用）
+	Available bool `json:"available"`
+}
+
 // PeerCapabilities 受控端自报的能力清单。
 type PeerCapabilities struct {
 	// ── 身份（"我是谁"）──────────────────────────────────────────
@@ -65,6 +82,9 @@ type PeerCapabilities struct {
 	ReloadLevels []string `json:"reloadLevels,omitempty"`
 	// Bundles 各资源包在本端的真实状态
 	Bundles []BundleCap `json:"bundles,omitempty"`
+	// BundleSpecs 各包在本端的期望（必含文件 / 是否校验 ABI / 本端是否可用）。
+	// Hub 下发**必须**以这里为准；查不到就报错，绝不按名字猜。
+	BundleSpecs []BundleSpec `json:"bundleSpecs,omitempty"`
 
 	// ── 自省完整性（诚实标注"我不知道"）──────────────────────────
 	// Unknowns 本端无法确定的项（如 Abi 取不到）⇒ Hub 必须**显式提示**而不是当已知

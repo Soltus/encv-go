@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -74,6 +75,33 @@ func (s *Server) peerLocalCapabilities(_ peerlink.PeerCapabilitiesRequest) peerl
 		})
 	}
 
+	// ── 各包的期望：**从本端落地目标派生**，不是硬编码 ───────────────────
+	//    · 文件型（go-binary）：必含文件 = 落地目标的**文件名**（本端自报）
+	//    · 目录型（web / preview-assets）：必含入口 index.html（与本端切换判据一致）
+	//    · native-lib：目录型，.so 文件名不固定 ⇒ Required 留空，但必须校验 ABI
+	specs := make([]peerlink.BundleSpec, 0, 4)
+	for _, name := range []string{"web", "preview-assets", "go-binary", "native-lib"} {
+		sp := peerlink.BundleSpec{Name: name}
+		switch {
+		case name == "native-lib":
+			if dir, ok := bundleTargetDirFor(name); ok {
+				sp.Kind, sp.Available, sp.AbiRequired = "dir", true, true
+				_ = dir
+			}
+		default:
+			if dir, ok := bundleTargetDirFor(name); ok {
+				sp.Kind, sp.Available = "dir", true
+				sp.Required = []string{"index.html"}
+				_ = dir
+			} else if f, ok := bundleTargetFileFor(name); ok {
+				sp.Kind, sp.Available = "file", true
+				sp.Required = []string{filepath.Base(f)}
+				sp.AbiRequired = name == "go-binary"
+			}
+		}
+		specs = append(specs, sp)
+	}
+
 	// ── 身份：拿不到就留空并记进 Unknowns（绝不猜）──────────────────────
 	unknowns := make([]string, 0, 2)
 	abi := strings.TrimSpace(os.Getenv("ENCV_APP_ABI"))
@@ -98,6 +126,7 @@ func (s *Server) peerLocalCapabilities(_ peerlink.PeerCapabilitiesRequest) peerl
 		Methods:       methods,
 		ReloadLevels:  levels,
 		Bundles:       bundles,
+		BundleSpecs:   specs,
 		Unknowns:      unknowns,
 	}
 	return peerlink.PeerCapabilitiesResult{Ok: true, Caps: caps}
