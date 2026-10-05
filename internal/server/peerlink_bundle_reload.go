@@ -85,11 +85,9 @@ func (s *Server) peerLocalBundleReload(req peerlink.BundleReloadRequest) peerlin
 			"level":  level,
 			"reason": req.Reason,
 		})
-		// ⚠️ 同时落一份 pending：前端 WS 监听**尚未接入**之前，
-		// 由 Kotlin 在下次 onCreate 取走并执行 WebView.reload() 兜底。
-		// 这不是"无感"（要重开 App），只是先保证不用人手去点。
-		// 前端监听接上后，可移除这一行（Kotlin 侧 web 分支保留即可）。
-		setPendingReload(level, req.Reason)
+		// web 级**不**落 pending：前端（WsBackend）收到广播后自行 reload，
+		// 再落一份会让 Kotlin 在下次 onCreate 又 reload 一次（重复且不再是"无感"）。
+		// activity / app 级才落 pending 交给 Kotlin。
 		return peerlink.BundleReloadResult{Ok: true, Level: level, Applied: true}
 	}
 

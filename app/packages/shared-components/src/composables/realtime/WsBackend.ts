@@ -135,6 +135,23 @@ export function createWsBackend(emit: EventEmitter, options: WsBackendOptions = 
         emit(msg.type, msg.data);
       }
       emit("ws:message", { type: msg.type, data: msg.data });
+
+      // vNext Round 8：云控重载（web 级 = 无感重载）
+      //
+      // 由来：热更包应用后此前**只能手动重启 App** 才生效 ⇒ 推完还要人手点一次。
+      // Go 侧收到 bundle_reload(level=web) 后广播本事件 ⇒ 前端直接 reload，
+      // 用户无感，不必重开 App。
+      //
+      // ⚠️ 只处理 web 级：activity（recreate）/ app（重启进程）由 **Kotlin** 接管，
+      //    前端在这里 reload 反而会打断原生流程。
+      if (msg.type === "bundle_reload") {
+        const level = String((msg.data as { level?: string } | undefined)?.level ?? "web");
+        if (level === "web") {
+          console.info("[WsBackend] bundle_reload(web) → reloading SPA (no user action needed)");
+          // 留一点时间让日志/回执先落盘，再重载
+          setTimeout(() => location.reload(), 150);
+        }
+      }
     } catch (e) {
       console.error(
         "[WsBackend] Failed to parse message:",

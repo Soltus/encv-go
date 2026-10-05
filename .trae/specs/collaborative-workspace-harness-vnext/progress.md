@@ -336,6 +336,90 @@ grep goBinary|go-binary   → app/.../java 目录零命中      ← 没有执行
 
 ---
 
+## Round 7（2026-10-06）：云控三级重载 —— 不用再手动重启 App
+
+### 起因
+
+热更包应用后**只能靠用户手动重启 App** 才生效（Kotlin 的 `applyHotWebBundleIfPresent` 只在启动时判定）⇒ 推完还要人手点一次，慢且容易被误认为"没生效"。
+
+### 落地
+
+| 级别 | 执行者 | 动作 | 生效时机 |
+|---|---|---|---|
+| web | Go → 广播 WS | 前端 reload | 无感（**前端监听本轮未接**，见下） |
+| activity | Kotlin | `recreate()` | 立即 |
+| app | Kotlin | 重启进程 | 立即（换执行体用） |
+
+**关键设计**：Go 做不了 Android 组件生命周期 ⇒ activity/app 走**指令交接**，
+**不靠两端拼文件路径**（避免再犯"我以为对上了"）：
+Go 落 `pending` → Kotlin `GET /api/reload/pending` 取走执行 → `POST /api/reload/ack` 清除。
+
+**接线四处全接**（`bundle_rollback` 的教训：漏一处就 `not_supported`）：
+`bundle.go` 常量+报文 / `edge.go` Supports+分发 / `peerlink_edge_runtime.go` 字段+默认值+`startEdgeLocked` 传参 / Hub API `POST /api/peerlink/bundle/reload`。
+
+**提交**：`ec8087ed`（46 文件，+4547）
+
+### 又一处我自己的误判（记下来）
+
+此前远程调用回执里的 **`"decision":"trust_device"`** **就是**用户早早在弹窗点了信任的证据；
+我却把它当成"待修问题"，白推三次 go-binary 热更、让用户重启两次。
+台账 Round 6 已记录 go-binary 热更在 Kotlin 侧未实现这一真相。
+
+### 未完成（不装作完成）
+
+- ⬜ **前端 WS 监听 `bundle_reload` → `location.reload()`** —— web 级"无感"的最后一块，本轮预算耗尽没写；
+  目前 web 级靠 Kotlin 兜底（要重开 App，**不是无感**）
+- ⬜ Kotlin 本环境无法编译验证（JitPack 不可达），需用户重建 APK 后真机验证
+- ⬜ `POST /bundle/push` 仍要调用方显式传 `abi`（manifest 里已有 `.abi` 却未自动透传）
+- ⬜ **go-binary 执行体切换在 Kotlin 侧仍未实现**（`MainActivity` 只有 web-bundle 那条路）
+  ⇒ 要换手机端 Go 二进制，仍需重装 APK
+
+---
+
+## Round 8（2026-10-06，CI 构建等待期间）：补齐 web 级无感重载 + 更正 abi 结论
+
+### 1. 前端 WS 监听（补齐 Round 7 欠账）
+
+`WsBackend.ts` 的 `handleMessage` 新增：收到 `bundle_reload`（level=web）→ `location.reload()`。
+
+- **只处理 web 级**：activity（recreate）/ app（重启进程）由 **Kotlin** 接管，前端在这 reload 会打断原生流程
+- 同时移除 Go 侧 web 级的「落 pending 兜底」——否则 Kotlin 下次 `onCreate` 会再 reload 一次，既重复又不再是"无感"
+
+⇒ web 级现在是真无感：云控推完包，前端自己重载，**不用人手重开 App**。
+
+⚠️ 本次 CI（基于 `ec8087ed`）出的 APK **不含**这个前端改动，web 级无感要等**下一次**构建；
+本次 APK 里 web 级走的仍是 Kotlin 兜底（要重开 App）。
+
+### 2. 更正：abi 根本不用调用方传（我上轮说错了）
+
+查 `internal/server/peerlink_bundle.go:519`：
+
+```go
+req := peerlink.BundleUpdateRequest{ ... ABI: item.ABI }
+```
+
+`item.ABI` 来自**包仓库里 `.abi` sidecar 文件**（`readTextSidecar`）。也就是说 Hub 早就自动带 abi了，
+**push body 里传 abi 是无效的**。
+
+⇒ 上次 `missing_abi` 的真因是：**产包时没有生成 `.abi` sidecar**，不是调用参数问题。
+根治已在 `scripts/build-go-bundle.sh`（出包必写 `.abi` + 自检）。
+
+**更正我上轮的遗留描述**：不是"让 Hub 自动带 abi"，而是"产包必须带 .abi（脚本已保证）"。
+
+### 3. 又一个"测试存在但不跑"
+
+`useRealtimeTransport.test.ts` 存在于 `packages/shared-components/src/composables/__tests__/`，
+但**不在 vitest 的 include 列表里**（与 `useAgent.test.ts` 同款问题，见 Round 2）。
+本轮改动未破坏任何在跑的用例（全量 vitest 验证中）。
+
+### 待办（CI 出包后）
+
+- 用新 APK 真机验证三级重载：`POST /bundle/reload {level:"web"|"activity"|"app"}`
+- web 级应无感重载；activity/app 级由 Kotlin 执行
+- 用 `get_device_info` 远程确认状态
+
+---
+
 ## 每轮收尾纪律
 
 1. **先红后绿**：每轮必须至少有一条"门禁真的拦住了旧行为"的红验记录（Round 1 已满足）。
