@@ -475,6 +475,44 @@ export interface BundleStatus {
   reportCount: number;
 }
 
+/**
+ * GET /api/peerlink/capabilities —— **本端能力自省**（vNext Round 13）
+ *
+ * 返回本端自报的能力（版本 / ABI / 支持的方法 / 各包状态 / 包期望），
+ * 以及 hints：reloadSupported / updateSupported / rollbackSupported。
+ *
+ * UI 用它**禁用不支持的按钮**（点了才报错是垃圾体验），
+ * 而不是靠前端写死"这个版本应该支持什么"。
+ */
+export interface LocalCapabilities {
+  caps: {
+    binaryVersion?: string;
+    abi?: string;
+    goos?: string;
+    goarch?: string;
+    peerId?: string;
+    methods: string[];
+    reloadLevels?: string[];
+    bundles?: { name: string; installed: boolean; version?: string; rollable: boolean }[];
+    unknowns?: string[];
+  };
+  hints: {
+    reloadSupported: boolean;
+    updateSupported: boolean;
+    rollbackSupported: boolean;
+  };
+}
+
+export async function fetchLocalCapabilities(): Promise<LocalCapabilities | null> {
+  try {
+    const res = await getJSON<LocalCapabilities>("/capabilities");
+    return res ?? null;
+  } catch {
+    // 取不到能力（旧版本后端）⇒ 返回 null，调用方按"未知"处理（不禁用按钮，只提示）
+    return null;
+  }
+}
+
 /** GET /api/peerlink/bundle/status（运维） */
 export async function fetchBundleStatus(): Promise<BundleStatus> {
   const res = await getJSON<BundleStatus>("/bundle/status");

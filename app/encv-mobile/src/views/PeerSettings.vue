@@ -72,7 +72,7 @@
             size="small"
             fill="outline"
             data-testid="bundle-local-rollback"
-            :disabled="bundleBusy || !b.rollable"
+            :disabled="bundleBusy || !b.rollable || (capsHints !== null && !capsHints.rollbackSupported)"
             @click="handleLocalRollback(b.name)"
           >{{ t('peers.bundleRollback') }}</ion-button>
         </div>
@@ -93,7 +93,7 @@
             size="small"
             fill="outline"
             data-testid="bundle-cloud-rollback"
-            :disabled="bundleBusy"
+            :disabled="bundleBusy || (capsHints !== null && !capsHints.rollbackSupported)"
             @click="handleCloudRollback(pid as string, ver as string)"
           >{{ t('peers.bundleRollback') }}</ion-button>
         </div>
@@ -117,12 +117,22 @@
             v-if="d.mismatch"
             size="small"
             data-testid="bundle-push-again"
-            :disabled="bundleBusy"
+            :disabled="bundleBusy || (capsHints !== null && !capsHints.updateSupported)"
             @click="handlePush(d.peerId, d.cloudVersion)"
           >{{ t('peers.bundlePushAgain') || '重新推送' }}</ion-button>
         </div>
         <p v-if="deviceBundles.some(d => d.mismatch)" class="bundleEmpty" data-testid="bundle-mismatch-hint">
           {{ t('peers.bundleMismatchHint') || '不一致通常意味着设备端热更目录被清（清除应用数据/重装），或页面回退到 APK 内置版本；重新推送后需冷启动 APP。' }}
+        </p>
+        <!-- vNext Round 13：能力自省的**可见化** —— 不支持就直说后果，别让用户点了才发现 -->
+        <p v-if="capsUnknown" class="bundleEmpty" data-testid="caps-unknown">
+          {{ t('peers.capsUnknown') }}
+        </p>
+        <p v-else-if="capsHints && !capsHints.reloadSupported" class="bundleEmpty" data-testid="caps-no-reload">
+          {{ t('peers.capsNoReload') }}
+        </p>
+        <p v-else-if="capsHints && capsAbi" class="bundleMeta" data-testid="caps-abi">
+          {{ t('peers.capsAbi') }} {{ capsAbi }}
         </p>
 
         <p class="bundleSub">{{ t('peers.bundleReports') }}</p>
@@ -219,6 +229,7 @@ import {
   stopEdge,
   unpairPeer,
   usePeerLink,
+  fetchLocalCapabilities,
 } from "@encv/shared-components/composables/usePeerLink";
 // resetServerUrl 属于 api 层（baseUrl.ts 经 api/encv barrel 导出），不在 usePeerLink 里
 import { resetServerUrl } from "@encv/shared-components/api/encv";
@@ -365,9 +376,24 @@ async function runFedSearch() {
 const PEER_POLL_MS = 5000;
 let peerPollTimer: ReturnType<typeof setInterval> | null = null;
 
+// vNext Round 13：本端能力自省 —— 按**设备自己说能做啥**禁用按钮，
+// 而不是前端写死"这个版本应该支持什么"（那是脆弱的）。
+// null = 取不到能力（旧后端）⇒ 不禁用按钮，只在下方提示"能力未知"。
+const capsHints = ref<{ reloadSupported: boolean; updateSupported: boolean; rollbackSupported: boolean } | null>(null);
+const capsUnknown = ref(false);
+const capsAbi = ref("");
+
 onMounted(() => {
   void fetchPeers().catch(() => undefined);
   void refreshBundles();
+  void fetchLocalCapabilities().then(r => {
+    if (!r) {
+      capsUnknown.value = true;
+      return;
+    }
+    capsHints.value = r.hints;
+    capsAbi.value = r.caps?.abi ?? "";
+  });
   peerPollTimer = setInterval(() => {
     // 页面不可见时不打搅后端（切后台/息屏）
     if (typeof document !== "undefined" && document.visibilityState === "hidden") return;

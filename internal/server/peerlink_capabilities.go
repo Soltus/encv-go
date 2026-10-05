@@ -204,6 +204,31 @@ func (s *Server) handlePeerlinkPeerCapabilities(c *gin.Context) {
 	})
 }
 
+// handlePeerlinkLocalCapabilities —— GET /api/peerlink/capabilities（**本端自省**）
+//
+// 与 /api/peerlink/peer/capabilities 的区别：
+//   · peer/capabilities —— Hub 经 RPC 问**对端**（受控端）
+//   · capabilities      —— 本端问**自己**（运行在手机上的 UI 用它判断"我这台设备能干啥"）
+//
+// UI 用途（vNext Round 13）：按能力禁用按钮 ——
+//   不支持 bundle_reload ⇒ 重载/重启按钮置灰并说明原因，而不是点了才报错。
+func (s *Server) handlePeerlinkLocalCapabilities(c *gin.Context) {
+	out := s.peerLocalCapabilities(peerlink.PeerCapabilitiesRequest{})
+	if !out.Ok || out.Caps == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "capabilities_unavailable", "detail": out.Error})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"ok":   true,
+		"caps": out.Caps,
+		"hints": gin.H{
+			"reloadSupported":  containsString(out.Caps.Methods, peerlink.MethodBundleReload),
+			"updateSupported":  containsString(out.Caps.Methods, peerlink.MethodBundleUpdate),
+			"rollbackSupported": containsString(out.Caps.Methods, peerlink.MethodBundleRollback),
+		},
+	})
+}
+
 // resolveRequiredFiles 决定下发时的"包内必须存在的文件"清单。
 //
 // 优先级（vNext Round 13）：

@@ -492,6 +492,10 @@ export default {
     "peers.trustNeedPeer": "还没拿到会合点标识，请重新扫码连接后再授信",
     "peers.trustOk": "已信任该设备（本端服务重启后失效；破坏性操作仍需逐次确认）",
     "peers.untrustOk": "已撤销信任",
+    // 🆕 vNext Round 13：能力自省（本端自报）在 UI 上的可见化
+    "peers.capsUnknown": "无法获取本端能力（后端版本较旧）：按钮可用性无法判断，失败请看错误提示",
+    "peers.capsNoReload": "本端不支持远程重载：推完包需要手动重启 App 才生效",
+    "peers.capsAbi": "本端架构：",
     "peers.destructiveHint": "破坏性操作：即使已信任该设备，下次仍会询问",
     "peers.autoDeclineIn": "超时自动拒绝",
     "peers.degradedOffline": "离线：跨端搜索与远程调试暂不可用",
