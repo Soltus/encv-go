@@ -138,6 +138,8 @@ export function useAgentChatView() {
     currentMockMode,
     loadMockMode,
     setMockMode,
+    mockAllowed,
+    loadRuntimeProfile,
     mockPresets,
     mockPresetsPhase,
     mockPresetsScenario,
@@ -562,6 +564,15 @@ export function useAgentChatView() {
    * 切换经由 useAgent.setMockMode() 走 PUT /api/config 持久化
    */
   async function toggleMockMode(): Promise<void> {
+    // vNext AGT-004：production profile 下模拟模式不是"能力"，UI 必须挡住
+    if (!mockAllowed.value) {
+      showToast({
+        message: (t("agent.mockModeSetFailed") || "切换失败") + ": 当前运行 profile 为 production，模拟模式不可用（需 ENCV_RUNTIME_PROFILE=test）",
+        duration: 2600,
+        color: "warning",
+      });
+      return;
+    }
     const next = currentMockMode.value === "off" ? "builtin" : "off";
     try {
       await setMockMode(next);
@@ -665,6 +676,15 @@ export function useAgentChatView() {
    * 3. 多轮剧本的 mid-step 暂停由 mock_branch_choice / mock_round_state 事件驱动
    */
   async function onPickV2Scenario(scenario: V2ScenarioEntry): Promise<void> {
+    // vNext AGT-004：v2 剧本是演示入口，production profile 下不提供
+    if (!mockAllowed.value) {
+      showToast({
+        message: (t("agent.mockModeSetFailed") || "切换 mock 模式失败") + ": 当前运行 profile 为 production，剧本演示不可用（需 ENCV_RUNTIME_PROFILE=test）",
+        duration: 2600,
+        color: "warning",
+      });
+      return;
+    }
     if (status.value === "streaming" || status.value === "confirming") {
       showToast({
         message: t("agent.v2Scenarios.busy") || "当前正在请求中，请稍候",
@@ -1067,11 +1087,13 @@ export function useAgentChatView() {
     fetchModels();
     // 启动时尝试恢复最近 session
     await resume();
+    // vNext AGT-004：先取运行 profile，production 下 mock 控制面必须隐藏
+    await loadRuntimeProfile();
     // 加载当前 mock 模式（用户主动控制 → action-sheet 切换）
     await loadMockMode();
-    // mock 模式开启时 → 拉"全局剧本选择器"覆盖在输入框上方
+    // mock 模式开启**且** profile 允许 → 拉"全局剧本选择器"覆盖在输入框上方
     // 用户首次进入就能看到 chip，不必先发消息触发流
-    if (isMockMode.value) {
+    if (isMockMode.value && mockAllowed.value) {
       void loadMockPresets();
     }
     nextTick(() => scrollToBottom("auto"));
@@ -1091,7 +1113,7 @@ export function useAgentChatView() {
   // builtin/custom → 拉新选择器覆盖当前 chip
   watch(currentMockMode, (newMode, _oldMode) => {
     console.debug("[AgentChat] mock mode changed →", newMode);
-    if (newMode === "builtin" || newMode === "custom") {
+    if (mockAllowed.value && (newMode === "builtin" || newMode === "custom")) {
       void loadMockPresets();
     }
     // 'off' 不需要清空 —— isMockMode.value = false → v-if 不渲染
@@ -1215,6 +1237,7 @@ export function useAgentChatView() {
     selectModel,
     handleModelPickerOutsideClick,
     // mock mode toggle
+    mockAllowed,
     mockBadgeText,
     mockBadgeTitle,
     toggleMockMode,

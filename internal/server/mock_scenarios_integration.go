@@ -35,16 +35,23 @@ import (
 // 调用时机：NewServer 末尾（toolDeps 注入之后）。
 //
 // 行为：
-//   1. 通过 s.getAgentConfig() 拿到 agent.MockScenariosDir
-//   2. 字符串为空 → 跳过（保持 builtin 剧本）
-//   3. 构造 ScenarioLoader，调用 LoadAll(ctx)
-//   4. 加载成功且非空 → 用 NewMockEngineWithScenarios 替换 s.mockEngine
-//   5. 加载成功但为空 → 保留 builtin 剧本，log warn
-//   6. 加载失败 → 保留 builtin 剧本，log error（**不**阻断启动）
+//  1. 通过 s.getAgentConfig() 拿到 agent.MockScenariosDir
+//  2. 字符串为空 → 跳过（保持 builtin 剧本）
+//  3. 构造 ScenarioLoader，调用 LoadAll(ctx)
+//  4. 加载成功且非空 → 用 NewMockEngineWithScenarios 替换 s.mockEngine
+//  5. 加载成功但为空 → 保留 builtin 剧本，log warn
+//  6. 加载失败 → 保留 builtin 剧本，log error（**不**阻断启动）
 //
 // 关键约束：替换 mockEngine 后必须重新注入 realExecutor（NewMockEngineWithScenarios 是新实例）。
 func (s *Server) loadScenariosFromAgentConfig() {
 	agentCfg := s.getAgentConfig()
+	if s.RuntimeProfile() == ProfileProduction {
+		if agentCfg.MockScenariosDir != "" {
+			slog.Warn("mock scenarios: dir ignored in production profile",
+				"dir", agentCfg.MockScenariosDir, "profile", s.RuntimeProfile())
+		}
+		return
+	}
 	dir := agentCfg.MockScenariosDir
 	if dir == "" {
 		slog.Debug("mock scenarios: using builtin (no dir configured)")

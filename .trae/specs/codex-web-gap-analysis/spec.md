@@ -1,5 +1,7 @@
 # codex_web 差距分析 + 后续任务规划
 
+> **架构状态（2026-10-06）**：本文作为历史实施分片保留。Agent 实时状态、续传、生产接线与验收策略已被 [`collaborative-workspace-harness-vnext/spec.md`](../collaborative-workspace-harness-vnext/spec.md) 取代；UI 借鉴记录仍可参考，但不能证明生产运行时能力。
+
 ## Why
 
 `go-in-process-agent` spec 已完成设计（spec.md 945 行 + tasks.md 401 行 + checklist.md 333 行），但实际编码只完成 5% 关键路径：

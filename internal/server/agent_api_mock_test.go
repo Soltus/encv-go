@@ -78,9 +78,13 @@ func buildChatRequest(sessionID, userText string) *http.Request {
 func newMockTestHTTPServer(t *testing.T, agentCfg config.Agent) *Server {
 	t.Helper()
 	cfgPath := buildMockModeConfig(t, agentCfg)
+	// vNext Round 1：mock 现在只在 test profile 下生效（production 恒为 off）。
+	// 这些测试明确要验证 mock 短路，因此必须显式声明 test profile，
+	// 而不是依赖"默认就能跑剧本"的旧行为。
 	s := &Server{
-		configPath: cfgPath,
-		mockEngine: NewMockEngine(),
+		configPath:     cfgPath,
+		mockEngine:     NewMockEngine(),
+		runtimeProfile: ProfileTest,
 	}
 	return s
 }
@@ -173,7 +177,9 @@ func TestHandleAgentChat_MockCustom_NoMatch(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	s := &Server{configPath: cfgPath, mockEngine: NewMockEngine()}
+	// custom 模式无匹配 → 继续真实路径；声明 test profile 以保留原用例语义
+	// （custom 模式确实是激活的，只是没有命中任何剧本）。
+	s := &Server{configPath: cfgPath, mockEngine: NewMockEngine(), runtimeProfile: ProfileTest}
 	s.registerAgentRoutes(r)
 
 	// 用完全不会命中任何 custom 剧本的输入

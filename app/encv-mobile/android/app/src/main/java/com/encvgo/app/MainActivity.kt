@@ -62,6 +62,8 @@ class MainActivity : BridgeActivity() {
         // 🆕 I4（2026-10-05）：主应用 SPA 热更新 —— 有热更包就让 Capacitor 本地服务改指向它
         applyHotWebBundleIfPresent()
         registerBackendReceiver()
+        // vNext Round 7：取云控待执行的重载指令（activity/app 级 here，web 级由 Go 广播）
+        checkPendingReload()
         requestBatteryOptimizationExemption()
         val handled = handleIntent(intent)
         if (!handled) {
@@ -110,6 +112,70 @@ class MainActivity : BridgeActivity() {
         } else {
             Log.i(TAG, "no hot web bundle, using bundled assets")
         }
+    }
+
+    // ── vNext Round 7（2026-10-06）：云控三级重载 ──────────────────────────
+    //
+    // 背景：热更包应用后此前**只能手动重启 App** 才生效
+    // （applyHotWebBundleIfPresent 只在启动时判定）⇒ 推完还要人手点一次，
+    // 既慢又容易被误认为"没生效"。
+    //
+    // 分工（别搞反）：
+    //   · Go 能直接做 web 级 —— 广播 WS 让前端 reload，当场生效
+    //   · activity / app 只能由原生做 —— Go 把指令落在 /api/reload/pending，
+    //     这里取走执行后 ack（不依赖文件路径约定，避免两端拼路径拼错）
+    //
+    // 三级：web → WebView.reload()；activity → recreate()；app → 重启进程。
+    private fun checkPendingReload() {
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val url = java.net.URL("http://127.0.0.1:2025/api/reload/pending")
+                val conn = url.openConnection() as java.net.HttpURLConnection
+                conn.connectTimeout = 1500
+                conn.readTimeout = 1500
+                val body = conn.inputStream.bufferedReader().readText()
+                conn.disconnect()
+                val level = org.json.JSONObject(body).optString("level", "")
+                if (level.isBlank()) return@launch
+                Log.i(TAG, "pending reload: level=$level")
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    when (level) {
+                        "web" -> bridge.webView.reload()
+                        "activity" -> recreate()
+                        "app" -> restartApp()
+                    }
+                }
+                ackReload()
+            } catch (e: Exception) {
+                // 后端还没起来 / 没有 pending：都是正常情况，不刷错误日志
+                Log.d(TAG, "checkPendingReload: ${e.message}")
+            }
+        }
+    }
+
+    /** 回执：告诉 Go 指令已执行，清掉 pending（否则会反复重启） */
+    private fun ackReload() {
+        try {
+            val conn = java.net.URL("http://127.0.0.1:2025/api/reload/ack")
+                .openConnection() as java.net.HttpURLConnection
+            conn.requestMethod = "POST"
+            conn.connectTimeout = 1500
+            conn.readTimeout = 1500
+            conn.responseCode
+            conn.disconnect()
+        } catch (e: Exception) {
+            Log.d(TAG, "ackReload: ${e.message}")
+        }
+    }
+
+    /** app 级：整个进程重启（换执行体 / 换 Go 二进制时用） */
+    private fun restartApp() {
+        val intent = packageManager.getLaunchIntentForPackage(packageName)
+        intent?.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (intent != null) {
+            startActivity(intent)
+        }
+        android.os.Process.killProcess(android.os.Process.myPid())
     }
 
     private fun loadPlugins() {

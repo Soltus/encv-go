@@ -1,5 +1,7 @@
 # Spec: Go Agent 独立服务 + OpenList 定制接口 + encv-go 插件适配 + Agent 设置二级页 + Vue 渲染壳
 
+> **架构状态（2026-10-06）**：本文作为历史实施记录保留。其“独立 `/workspace/agent` 服务 + `internal/server` 生产 Agent 并存”、前端本地历史和演示验收方向，已被 [`collaborative-workspace-harness-vnext/spec.md`](../collaborative-workspace-harness-vnext/spec.md) 取代；后续不得据本文新增第二套 Agent 状态机。
+
 > **核心思路**：Agent 是独立的 Go 微服务，通过 OpenList **定制开放的 HTTP 接口**执行工具调用。前端是个极薄 Vue 渲染壳，**首个集成入口直接嵌在 encv-mobile 主应用首页**。
 > **架构三段式**：`agent` Go 服务（SSE 流式对话 + 4-决策确认 + 内存缓存续传）↔ OpenList（仅暴露 `/api/ext/list_files`、`/api/ext/delete_file` 等定制接口）↔ encv-mobile 主应用首页（Vue 渲染壳）。
 > **UI 参考**：[codex_web](https://github.com/shopkeeper2020/codex_web) 的 `MessageBlocks`/`ApprovalCard`/`renderTurnItems` 模式 —— `ApprovalDecision` 4 选 1、`MessageAuthor` 作者头、`BlockHeader` 块头、`GroupedOperationMessage` 操作分组、消息列表虚拟化（>120 触发）。

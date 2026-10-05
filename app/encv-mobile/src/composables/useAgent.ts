@@ -417,6 +417,38 @@ export function useAgent() {
     }
   }
 
+  /**
+   * 运行 profile（vNext AGT-004）：production（默认，fail closed）| test。
+   *
+   * 由后端 GET /api/runtime 的 `profile` 字段驱动。取不到或非 test 一律保持
+   * production，绝不"后端没回就当成能演示"。
+   */
+  const runtimeProfile = ref<"production" | "test">("production");
+
+  /** 当前 profile 是否允许 mock/synthetic 演示路径 */
+  const mockAllowed = computed(() => runtimeProfile.value === "test");
+
+  /**
+   * 拉取后端运行 profile（AgentChat onMounted 调一次）。
+   * 失败 → 保持 production（fail closed），只打 debug 日志。
+   */
+  async function loadRuntimeProfile(): Promise<void> {
+    try {
+      const resp = await fetch(`${getAgentBase()}/api/runtime`);
+      if (!resp.ok) {
+        console.debug("[RuntimeProfile] fetch /api/runtime failed: HTTP", resp.status);
+        return;
+      }
+      const data = (await resp.json()) as { profile?: string; mock_allowed?: boolean };
+      const p = String(data?.profile ?? "").toLowerCase();
+      runtimeProfile.value = p === "test" ? "test" : "production";
+      console.debug("[RuntimeProfile] load → profile =", runtimeProfile.value, "| mockAllowed =", mockAllowed.value);
+    } catch (e) {
+      console.debug("[RuntimeProfile] load failed:", e);
+      runtimeProfile.value = "production";
+    }
+  }
+
   async function loadMockMode() {
     try {
       const resp = await fetch(`${getAgentBase()}/api/config`);
@@ -1408,6 +1440,11 @@ export function useAgent() {
     currentMockMode,
     loadMockMode,
     setMockMode,
+    // 运行 profile（vNext AGT-004）：production 下 mock 只作演示用，
+    // UI 必须据此隐藏/禁用 mock 控制面，不得让演示入口冒充真实能力。
+    runtimeProfile,
+    mockAllowed,
+    loadRuntimeProfile,
     // Mock 模式预设按钮：覆盖在输入框上方的 chip 列表。
     // - mockPresets：当前 chip 列表（mock_presets 事件 / loadMockPresets 驱动）
     // - mockPresetsPhase：当前阶段（initial / after_round_2 / picker / ...）

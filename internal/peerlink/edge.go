@@ -94,6 +94,10 @@ type EdgeOptions struct {
 	// OnBundleRollback 处理来自对端的**云控回滚**指令（2026-10-05）。
 	// ⚠️ 没接线时**必须**回 not_supported（而不是"成功"）—— 否则云控侧会以为回滚成功。
 	OnBundleRollback func(req BundleRollbackRequest) BundleRollbackResult
+	// OnBundleReload 处理来自对端的**云控重载/重启**指令（2026-10-06）。
+	// 三级：web（WebView 重载）/ activity（recreate）/ app（整个进程重启）。
+	// ⚠️ 没接线时**必须**回 not_supported，不能假装成功。
+	OnBundleReload func(req BundleReloadRequest) BundleReloadResult
 }
 
 // Token 返回本 Edge 持有的配对 token（云控下载时要用它做鉴权）。
@@ -122,6 +126,8 @@ func (e *Edge) Supports(method string) bool {
 		return e.opts.OnBundleUpdate != nil
 	case MethodBundleRollback:
 		return e.opts.OnBundleRollback != nil
+	case MethodBundleReload:
+		return e.opts.OnBundleReload != nil
 	default:
 		return false
 	}
@@ -532,6 +538,28 @@ func (e *Edge) handleRequest(conn *websocket.Conn, id, method string, payload js
 			}
 		}
 		out := e.opts.OnBundleRollback(req)
+		if out.Rejected {
+			writeRejected(out, out.Error)
+			return
+		}
+		write(out, "")
+	// 云控重载/重启（2026-10-06）：不再要求用户手动重启 App。
+	//
+	//	web      —— 本端 Go 直接广播 WS 事件 ⇒ 前端 reload，**当场生效**
+	//	activity / app —— Go 只能落指令（写重载请求），由 Kotlin 侧接管执行
+	case MethodBundleReload:
+		if e.opts.OnBundleReload == nil {
+			write(nil, "not_supported")
+			return
+		}
+		var req BundleReloadRequest
+		if len(payload) > 0 {
+			if err := json.Unmarshal(payload, &req); err != nil {
+				write(nil, "bad_payload")
+				return
+			}
+		}
+		out := e.opts.OnBundleReload(req)
 		if out.Rejected {
 			writeRejected(out, out.Error)
 			return

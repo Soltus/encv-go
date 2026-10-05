@@ -227,9 +227,54 @@ RUN set -eux; \
 
 
 # ==========================================
-# 3. 目录预创建
+# 3. 目录预创建与外部参考仓库
 # ==========================================
-RUN mkdir -p /root/.g /root/go
+# deepseek-harness 仅作为长期文档/架构参考，放在临时目录，不污染协同工作区。
+# 每次进入交互式 Bash/Zsh 时同步默认分支；首次为浅克隆，后续强制对齐远端 HEAD。
+ENV DEEPSEEK_HARNESS_REPO="https://github.com/deepseek-ai/deepseek-harness" \
+    DEEPSEEK_HARNESS_DIR="/tmp/deepseek-harness"
+
+# 安卓真机路径：config.user.json 的 mobile.server.dir / mobile.output.path 默认指向
+# /storage/emulated/0（真机存储根）。桌面开发容器里这个路径**不存在**，
+# 而后端会忠实地按配置用它作为 serving_dir ⇒ 必须预创建，否则文件/媒体库为空。
+#
+# 纪律：**建目录，而不是改配置里的路径** —— 配置保持与真机一致，
+# 避免"桌面能跑、真机路径不对"的偏差（2026-10-06 真机联调教训）。
+RUN mkdir -p /storage/emulated/0/encv-output && \
+    chmod 755 /storage/emulated/0
+
+RUN mkdir -p /root/.g /root/go && \
+    printf '%s\n' \
+      '#!/bin/sh' \
+      'set -u' \
+      'repo="${DEEPSEEK_HARNESS_REPO:-https://github.com/deepseek-ai/deepseek-harness}"' \
+      'target="${DEEPSEEK_HARNESS_DIR:-/tmp/deepseek-harness}"' \
+      'lock="${target}.sync.lock"' \
+      'waited=0' \
+      'while ! mkdir "$lock" 2>/dev/null; do' \
+      '  waited=$((waited + 1))' \
+      '  if [ "$waited" -ge 120 ]; then' \
+      '    echo "[deepseek-harness] 同步锁等待超时：$lock" >&2' \
+      '    exit 0' \
+      '  fi' \
+      '  sleep 1' \
+      'done' \
+      'trap '\''rmdir "$lock" 2>/dev/null || true'\'' EXIT HUP INT TERM' \
+      'if [ -d "$target/.git" ]; then' \
+      '  if ! git -C "$target" fetch --depth=1 origin HEAD >/dev/null 2>&1 || ! git -C "$target" reset --hard FETCH_HEAD >/dev/null 2>&1; then' \
+      '    echo "[deepseek-harness] 更新失败，保留已有副本：$target" >&2' \
+      '  fi' \
+      '  exit 0' \
+      'fi' \
+      'if [ -e "$target" ]; then' \
+      '  echo "[deepseek-harness] 目标路径已存在且不是 Git 仓库：$target" >&2' \
+      '  exit 0' \
+      'fi' \
+      'if ! git clone --depth=1 "$repo" "$target" >/dev/null 2>&1; then' \
+      '  echo "[deepseek-harness] 克隆失败：$repo -> $target" >&2' \
+      'fi' \
+      > /usr/local/bin/sync-deepseek-harness-docs && \
+    chmod +x /usr/local/bin/sync-deepseek-harness-docs
 
 # ==========================================
 # 4. 以 root 初始化运行时环境
@@ -258,7 +303,8 @@ RUN echo '' >> /etc/zsh/zshenv && \
     echo 'export G_MIRROR="https://golang.google.cn/dl/"' >> /etc/zsh/zshenv && \
     echo 'export GOPATH="/root/go"' >> /etc/zsh/zshenv && \
     echo 'export GOPROXY="https://goproxy.cn,direct"' >> /etc/zsh/zshenv
-RUN echo '[ -f /etc/zsh/zshenv ] && source /etc/zsh/zshenv' >> /root/.zshrc
+RUN echo '[ -f /etc/zsh/zshenv ] && source /etc/zsh/zshenv' >> /root/.zshrc && \
+    echo '/usr/local/bin/sync-deepseek-harness-docs' >> /root/.zshrc
 RUN echo '#!/bin/sh' > /etc/profile.d/custom_tools.sh && \
     echo 'export PATH="/root/.cargo/bin:/root/.g/bin:/root/.g/go/bin:/root/go/bin:/usr/local/bin:$PATH"' >> /etc/profile.d/custom_tools.sh && \
     echo 'export CARGO_HOME="/root/.cargo"' >> /etc/profile.d/custom_tools.sh && \
@@ -266,7 +312,8 @@ RUN echo '#!/bin/sh' > /etc/profile.d/custom_tools.sh && \
     echo 'export GOPATH="/root/go"' >> /etc/profile.d/custom_tools.sh && \
     echo 'export GOPROXY="https://goproxy.cn,direct"' >> /etc/profile.d/custom_tools.sh && \
     chmod +x /etc/profile.d/custom_tools.sh
-RUN echo '[ -f /etc/profile.d/custom_tools.sh ] && source /etc/profile.d/custom_tools.sh' >> /root/.bashrc
+RUN echo '[ -f /etc/profile.d/custom_tools.sh ] && source /etc/profile.d/custom_tools.sh' >> /root/.bashrc && \
+    echo '/usr/local/bin/sync-deepseek-harness-docs' >> /root/.bashrc
 
 # ==========================================
 # 7. 最终环境验收

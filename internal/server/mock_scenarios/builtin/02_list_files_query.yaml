@@ -36,6 +36,9 @@ presets:
     tooltip: "触发 encrypt_video 剧本"
     icon: "🔒"
 
+# vNext Round 3：真实工具结果必须过断言。
+# 没有 expect 的剧本只是"按延迟吐预录文案"，跑完什么都证明不了；
+# 有了 expect，剧本跑一次就能知道真实工具链是否还返回了它该返回的东西。
 steps:
   - id: intro
     delay_ms: 0
@@ -58,6 +61,10 @@ steps:
           needsConfirm: false
           kind: readOnly
           execute_real: true
+        expect:
+          - path: "$.items"
+            op: exists
+            message: "list_mounts 真实结果必须带 items 字段"
   - id: transition_to_files
     delay_ms: 800
     events:
@@ -77,6 +84,10 @@ steps:
           needsConfirm: false
           kind: readOnly
           execute_real: true
+        expect:
+          - path: "$.items"
+            op: exists
+            message: "list_files 真实结果必须带 items 字段"
   - id: transition_to_video
     delay_ms: 800
     events:
@@ -96,6 +107,10 @@ steps:
           needsConfirm: false
           kind: readOnly
           execute_real: true
+        expect:
+          - path: "$.items"
+            op: exists
+            message: "list_files 真实结果必须带 items 字段"
   - id: read_file
     delay_ms: 1000
     events:
@@ -111,6 +126,10 @@ steps:
           needsConfirm: false
           kind: readOnly
           execute_real: true
+        expect:
+          - path: "$.content"
+            op: non_empty
+            message: "read_file 必须返回非空内容"
   - id: summary
     delay_ms: 1500
     events:

@@ -1,5 +1,7 @@
 # 移动端 AI Agent 2026 现代化差距分析与初步完善方案
 
+> **架构状态（2026-10-06）**：本文作为历史差距分析保留。其生产接线、持久化、实时 reducer、steer/queue、Subagent 和 Mock 验收结论，已由 [`collaborative-workspace-harness-vnext/spec.md`](../collaborative-workspace-harness-vnext/spec.md) 重新核验并取代；本文 checklist 的勾选不能作为当前能力证据。
+
 ## Why
 
 encv-mobile 的 AI 助手后端 (`/workspace/agent/`) 与 Vue 渲染壳 (`/workspace/app/encv-mobile/src/`) 截至 2026-06 已经把 2025 年的「Chat + Tool Call + Approval 4 决策 + SSE 断点续传 + 虚拟列表」闭环跑通（参见已完成的 `.trae/specs/go-in-process-agent/checklist.md` 与 `.trae/specs/codex-web-gap-analysis/` 的 Phase A-G 实施分片）。

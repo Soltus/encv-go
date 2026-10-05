@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -385,6 +386,29 @@ func (s *Server) handlePeerlinkAgentTrust(c *gin.Context) {
 		}
 		ap.Untrust(id)
 		c.JSON(http.StatusOK, gin.H{"ok": true, "untrusted": id})
+	case http.MethodPost:
+		// vNext Round 5：授予信任 = 预先做 trust_device 决策。
+		//
+		// 旧行为里"信任"只能在**远端第一次调用**弹审批时顺手点信任 ——
+		// 用户在连上之后、还没被调用之前，根本没法表达"我信任这台设备"。
+		// 现在受控端（手机）连上即可主动授信，调用时不再被打断。
+		//
+		// 语义不变：进程内存、重启失效；破坏性工具即使已信任仍强制确认。
+		var body struct {
+			PeerID string `json:"peerId"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		id := strings.TrimSpace(body.PeerID)
+		if id == "" {
+			id = strings.TrimSpace(c.Query("peerId"))
+		}
+		if id == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "message": "peerId 必填"})
+			return
+		}
+		ap.Trust(id)
+		slog.Info("peerlink: trust granted (pre-authorized by local user)", "peerId", id)
+		c.JSON(http.StatusOK, gin.H{"ok": true, "trusted": id, "note": "进程级信任，重启失效；破坏性工具仍需逐次确认"})
 	default:
 		c.JSON(http.StatusMethodNotAllowed, gin.H{"error": "method_not_allowed"})
 	}

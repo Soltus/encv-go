@@ -375,6 +375,48 @@ export interface EdgeStatus {
 }
 
 /** 本端 Edge 的运行状态（是否正连着 Hub）。 */
+/**
+ * 信任 / 授信（vNext Round 5）
+ *
+ * 旧行为：受控端（手机）只能在**远端第一次调用**弹出审批时顺手点 trust_device
+ * ⇒ 连上之后、还没被调用之前，用户没有任何入口表达"我信任这台设备"。
+ * 现在连接后即可主动授信，后续调用不再被打断。
+ *
+ * 语义（后端 peerlink.Approver 保证，UI 必须如实告知）：
+ *   - 进程内存，**本端服务重启即失效**
+ *   - 破坏性工具即使已信任仍逐次强制确认
+ */
+export async function listTrustedPeers(): Promise<string[]> {
+  const res = await getJSON<{ items?: string[] }>("/agent/trust");
+  return res.items ?? [];
+}
+
+/** POST /api/peerlink/agent/trust — 授予信任（等价 trust_device 决策） */
+export async function trustPeer(peerId: string): Promise<void> {
+  const id = String(peerId ?? "").trim();
+  if (!id) throw new Error("trustPeer: peerId 必填");
+  const res = await fetchProvider(url("/agent/trust"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...OPERATOR_HEADER },
+    body: JSON.stringify({ peerId: id }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`trust failed: ${res.status} ${detail}`);
+  }
+}
+
+/** DELETE /api/peerlink/agent/trust?peerId=… — 撤销信任 */
+export async function untrustPeer(peerId: string): Promise<void> {
+  const id = String(peerId ?? "").trim();
+  if (!id) throw new Error("untrustPeer: peerId 必填");
+  const res = await fetchProvider(url("/agent/trust", { peerId: id }), {
+    method: "DELETE",
+    headers: { ...OPERATOR_HEADER },
+  });
+  if (!res.ok) throw new Error(`untrust failed: ${res.status}`);
+}
+
 export async function fetchEdgeStatus(): Promise<EdgeStatus> {
   return await getJSON<EdgeStatus>("/edge/status");
 }

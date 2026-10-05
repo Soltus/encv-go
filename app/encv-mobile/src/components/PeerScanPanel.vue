@@ -83,6 +83,27 @@
       <ion-button size="small" fill="outline" data-testid="edge-disconnect" @click="disconnectEdge">
         {{ t('peers.edgeDisconnect') || '断开连接' }}
       </ion-button>
+      <!-- vNext Round 5：连接后即可授信，不必等远端第一次调用 -->
+      <ion-button
+        v-if="!trusted"
+        size="small"
+        data-testid="edge-trust"
+        :disabled="busy || !hubPeerId"
+        @click="trustCurrentHub"
+      >
+        {{ t('peers.trustDevice') || '信任此设备' }}
+      </ion-button>
+      <ion-button
+        v-else
+        size="small"
+        fill="outline"
+        color="success"
+        data-testid="edge-untrust"
+        :disabled="busy"
+        @click="untrustCurrentHub"
+      >
+        {{ t('peers.trustedHint') || '已信任（重启后失效）· 点击撤销' }}
+      </ion-button>
     </div>
 
     <p class="edgeStatus" data-testid="edge-status">
@@ -115,7 +136,7 @@
 // ⚠️ psk 只在内存流转（局部变量传参），**不落 localStorage**（与 usePeerLink 同一纪律）。
 import { IonButton } from "@ionic/vue";
 import { Capacitor } from "@capacitor/core";
-import { onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "@encv/shared-components/composables/useI18n";
 import {
   type EdgeStatus,
@@ -127,6 +148,11 @@ import {
 import { ScanError, scanOnce } from "@/peerlink/barcodeScanner";
 import { QRDecodeError, decodeQRFromImageFile } from "@/peerlink/qrFromImage";
 import { stopEdge, unpairPeer } from "@encv/shared-components/composables/usePeerLink";
+import {
+  listTrustedPeers,
+  trustPeer,
+  untrustPeer,
+} from "@encv/shared-components/composables/usePeerLink";
 
 const { t } = useI18n();
 
@@ -140,6 +166,12 @@ const errMsg = ref("");
 const hintMsg = ref("");
 const sasCode = ref("");
 const pairedPeerId = ref("");
+// vNext Round 5：会合点（Hub）是否已授信。
+// 旧行为只能在远端**第一次调用**弹审批时顺手点 trust_device ⇒ 连上之后、被调用之前
+// 用户没有任何入口表达"我信任这台设备"。现在连接后即可主动授信。
+const trusted = ref(false);
+// 授信对象 = 会合点 peerId：刚配对时来自 pair 结果，之后靠 /edge/status 恢复。
+const hubPeerId = computed(() => pairedPeerId.value || edge.value?.peerId || "");
 // 已连接的会合点（从 /edge/status 恢复 ⇒ 重进页面也不会丢）
 const linkedHub = ref("");
 const nativeCamera = Capacitor.isNativePlatform();
@@ -165,6 +197,7 @@ function startPollingUntilSettled() {
   let waited = 0;
   pollTimer = setInterval(async () => {
     await refreshStatus();
+    await refreshTrust();
     waited += 3000;
     const st = edge.value;
     const settled = (st && st.connected) || !!edgeErr.value || !(st && st.running) || waited >= 60_000;
@@ -192,6 +225,58 @@ async function unpairCurrent() {
     pairedPeerId.value = "";
     okMsg.value = t("peers.unpaired") || "已解除配对";
     await refreshStatus();
+  } catch (e) {
+    errMsg.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy.value = false;
+  }
+}
+
+/** 拉本端已授信名单，判断当前会合点是否已授信（查不到就保持 false，绝不谎报已授信） */
+async function refreshTrust() {
+  const id = hubPeerId.value;
+  if (!id) {
+    trusted.value = false;
+    return;
+  }
+  try {
+    const items = await listTrustedPeers();
+    trusted.value = items.includes(id);
+  } catch {
+    trusted.value = false;
+  }
+}
+
+/** 授信当前会合点：后续远端调用不再逐次弹审批（破坏性工具仍强制确认） */
+async function trustCurrentHub() {
+  const id = hubPeerId.value;
+  if (!id) {
+    errMsg.value = t("peers.trustNeedPeer") || "还没拿到会合点标识，请重新扫码连接后再授信";
+    return;
+  }
+  busy.value = true;
+  errMsg.value = "";
+  try {
+    await trustPeer(id);
+    trusted.value = true;
+    okMsg.value =
+      t("peers.trustOk") || "已信任该设备（本端服务重启后失效；破坏性操作仍需逐次确认）";
+  } catch (e) {
+    errMsg.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function untrustCurrentHub() {
+  const id = hubPeerId.value;
+  if (!id) return;
+  busy.value = true;
+  errMsg.value = "";
+  try {
+    await untrustPeer(id);
+    trusted.value = false;
+    okMsg.value = t("peers.untrustOk") || "已撤销信任";
   } catch (e) {
     errMsg.value = e instanceof Error ? e.message : String(e);
   } finally {

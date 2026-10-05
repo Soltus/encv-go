@@ -22,6 +22,48 @@ const MethodBundleUpdate = "bundle_update"
 // 回滚指令只有几十字节，与 bundle_update 同一条控制面。
 const MethodBundleRollback = "bundle_rollback"
 
+// MethodBundleReload 是 Hub → Edge 的**云控重载/重启**方法名（2026-10-06）。
+//
+// 为什么要有它：热更包应用后，此前**只能靠用户手动重启 App** 才生效
+// （Kotlin 的 applyHotWebBundleIfPresent 只在启动时判定）⇒ 真机联调时
+// "推完还要人手点一次" 既慢又容易让人以为没生效。
+//
+// 三级（由轻到重，云控按需要选择）：
+//
+//	web      —— 只让 WebView 重新加载资源（最快，用户几乎无感）
+//	activity —— recreate 当前 Activity（重建页面与插件桥）
+//	app      —— 整个 App 进程重启（最彻底，用于换执行体/换 Go 二进制）
+const MethodBundleReload = "bundle_reload"
+
+// 三级重载的合法取值。
+const (
+	ReloadLevelWeb      = "web"
+	ReloadLevelActivity = "activity"
+	ReloadLevelApp      = "app"
+)
+
+// BundleReloadRequest 云控下发的一次重载/重启指令。
+type BundleReloadRequest struct {
+	// Level 重载级别：web / activity / app。空串按 web 处理（最轻）。
+	Level string `json:"level,omitempty"`
+	// Reason 可选：为什么要重载（进台账/日志，便于事后解释"谁让设备重启了"）。
+	Reason string `json:"reason,omitempty"`
+}
+
+// BundleReloadResult 执行端回报的一次重载结果。
+type BundleReloadResult struct {
+	Ok bool `json:"ok"`
+	// Level 实际执行的级别（可能与请求的级别不同，例如不支持 app 级时降级）。
+	Level string `json:"level,omitempty"`
+	// Applied 是否**当场**就生效了（web 级=true；activity/app 级需要 Kotlin
+	// 侧接管，Go 只能落指令 ⇒ false，但不算失败）。
+	Applied bool `json:"applied,omitempty"`
+	// Error 失败原因（**脱敏**：不得含设备绝对路径）。
+	Error string `json:"error,omitempty"`
+	// Rejected 请求本身不成立（未知 level / 本端不支持该级别）。
+	Rejected bool `json:"rejected,omitempty"`
+}
+
 // BundleCallTimeout 一次热更新的总超时（含"下载 + 解压 + 原子切换 + 回滚"）。
 //
 // 比 AgentCallTimeout(120s) 长得多：更新是分钟级动作（几十 MB 走移动网络）。

@@ -102,7 +102,8 @@ func (s *Server) handleAgentChat(c *gin.Context) {
 	// 必须放在 session 缓存之后（需要 sess 写入 EventCache），
 	// 必须放在 callOpenAIStream 之前（避免无谓的 API 请求）。
 	agentCfg := s.getAgentConfig()
-	mockMode := strings.ToLower(strings.TrimSpace(agentCfg.MockMode))
+	// production profile 下恒为 off —— 演示剧本不得进入生产链路（AGT-004）。
+	mockMode := s.effectiveMockMode(agentCfg)
 
 	// ════════════════════════════════════════════════════════════
 	// AG-UI 协议模式检测（Phase 4）
@@ -126,6 +127,13 @@ func (s *Server) handleAgentChat(c *gin.Context) {
 	// mock_resume 模式在 mock_mode = "off" 时也允许走（保留路径给未来扩展），
 	// 但实际只有 mock_mode != "off" 才有可恢复的 v2 引擎。
 	if strings.EqualFold(body.Mode, "mock_resume") && body.Scenario != "" {
+		if s.RuntimeProfile() == ProfileProduction {
+			c.JSON(http.StatusNotFound, gin.H{
+				"error":   "mock_disabled_in_production",
+				"message": "当前运行 profile 禁止 mock/synthetic 剧本",
+			})
+			return
+		}
 		if handled, err := s.handleMockResume(c, body, mockMode, aguiMode); handled {
 			if err != nil {
 				slog.Warn("agent: mock_resume failed", "scenario", body.Scenario, "error", err)

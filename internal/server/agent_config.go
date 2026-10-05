@@ -147,18 +147,24 @@ func (s *Server) readAgentConfig(deviceId ...string) agentConfig {
 	if !ok {
 		return cfg // agent_settings 不存在不是错误，返回空配置
 	}
-	var agent map[string]string
-	if err := json.Unmarshal(agentRaw, &agent); err != nil {
+	// ⚠️ 历史缺陷（vNext Round 1 修复）：这里曾用 map[string]string 解析
+	// agent_settings。一旦配置里出现任何非字符串字段（mock_speed 数字、
+	// enabled_tools 数组、max_tool_calls_per_turn 数字…），**整段**解析失败
+	// ⇒ cfg.APIKey 被静默置空 ⇒ handleAgentChat 直接 503 "no_api_key"。
+	// 用户表现为"明明填了 Key 却说没配置"，而日志只有一行 warn —— 这是典型的
+	// 自欺欺人式失败。改用类型化 config.Agent 解析，非字符串字段不再致命。
+	var agentCfg config.Agent
+	if err := json.Unmarshal(agentRaw, &agentCfg); err != nil {
 		slog.Warn("agent: invalid agent_settings json", "error", err)
 		return cfg
 	}
-	cfg.APIKey = DecryptApiKey(agent["openai_api_key"], deviceId...)
-	cfg.BaseURL = agent["openai_base_url"]
+	cfg.APIKey = DecryptApiKey(agentCfg.OpenAIAPIKey, deviceId...)
+	cfg.BaseURL = agentCfg.OpenAIBaseURL
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://api.openai.com"
 	}
-	cfg.SystemPrompt = agent["system_prompt"]
-	cfg.OpenAIModel = agent["openai_model"]
+	cfg.SystemPrompt = agentCfg.SystemPrompt
+	cfg.OpenAIModel = agentCfg.OpenAIModel
 	return cfg
 }
 

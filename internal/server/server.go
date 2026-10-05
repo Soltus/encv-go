@@ -28,6 +28,7 @@ import (
 	"github.com/Soltus/encv-go/internal/peerlink"
 	"github.com/Soltus/encv-go/internal/register"
 	"github.com/Soltus/encv-go/internal/search"
+	"github.com/Soltus/encv-go/internal/stubprovider"
 	mobileservice "github.com/Soltus/encv-go/internal/service"
 	"github.com/Soltus/encv-go/internal/tools"
 	"github.com/Soltus/encv-go/internal/utils"
@@ -70,6 +71,13 @@ type Server struct {
 	// 启动期按 mount registry 填充；key = mount.Name（primary / automation / sandbox 等）
 	webdavFSByMount map[string]*webdavFSEntry
 	mockEngine      *MockEngine
+	// stubProvider 是"模拟的用户配置 agent 服务商"（vNext Round 4）：
+	// 只替代模型大脑，工具调用与结果仍走真实执行。默认不启用。
+	stubProvider *stubprovider.Provider
+	// runtimeProfile 区分 production / test。
+	// production 下禁止一切 mock/synthetic 短路与剧本加载，
+	// 避免演示脚本冒充真实能力（vNext 规格 Phase 0 / AGT-004）。
+	runtimeProfile string
 	// scenarioLoader 是剧本外置 spec 引入的加载器。
 	// 若 agent_settings.mock_scenarios_dir 非空，
 	// NewServer 会创建 loader + 加载 YAML 覆盖 builtin 剧本。
@@ -457,6 +465,7 @@ func NewServer(ctx context.Context, configPath string) *Server {
 		contentHandler: contentHandler,
 		instanceID:     fmt.Sprintf("%x", time.Now().UnixNano()),
 		mockEngine:     NewMockEngine(),
+		stubProvider:   stubprovider.New(),
 		themesDir:      themeDataPath(),
 		peerHub:        peerlink.NewHub("encv-go", ""),
 		peerConns:      peerlink.NewConnRegistry(),
@@ -474,6 +483,7 @@ func NewServer(ctx context.Context, configPath string) *Server {
 	} else {
 		s.servingDir = cfg.Server.Dir
 	}
+	s.runtimeProfile = runtimeProfileFromEnv()
 	s.mobileSvc.SetServingDir(s.servingDir)
 	s.peerCalls = peerlink.NewCaller(s.peerConns)
 	// 互联状态持久化 + **启动即恢复**（2026-10-04 决策变更）：

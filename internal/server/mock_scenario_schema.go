@@ -3,11 +3,11 @@
 // 剧本 YAML schema 定义。
 //
 // 核心铁律（用户原话反复强调）：
-//   1. ❌ YAML 严禁出现 `tool_result` 事件 —— 由 MockEngine 在 tool_call 后自动生成
-//   2. ❌ YAML 严禁出现模板语法 `{{ ... }}` 或 `{% ... %}` —— text_delta 必须是静态文案
-//   3. ❌ YAML 严禁硬编码路径、文件名、文件大小、计数、错误文本 —— 这些必须从真实工具拿
-//   4. ❌ YAML 严禁 user_text / free-form text 字段 —— 剧本 = 预设选项 chip
-//   5. ✅ 工具参数（args）是"过滤条件"（如 ext: ".mp4"），不是"数据"
+//  1. ❌ YAML 严禁出现 `tool_result` 事件 —— 由 MockEngine 在 tool_call 后自动生成
+//  2. ❌ YAML 严禁出现模板语法 `{{ ... }}` 或 `{% ... %}` —— text_delta 必须是静态文案
+//  3. ❌ YAML 严禁硬编码路径、文件名、文件大小、计数、错误文本 —— 这些必须从真实工具拿
+//  4. ❌ YAML 严禁 user_text / free-form text 字段 —— 剧本 = 预设选项 chip
+//  5. ✅ 工具参数（args）是"过滤条件"（如 ext: ".mp4"），不是"数据"
 //
 // 校验函数 Validate() 在 loader.LoadAll() 阶段被调用，违反任一铁律 → 拒绝该文件。
 package server
@@ -117,14 +117,14 @@ type YAMLPreset struct {
 
 // YAMLBranch 是分支选项（v2 兼容字段）。
 type YAMLBranch struct {
-	ID              string           `yaml:"id"`
-	Label           string           `yaml:"label"`
-	Description     string           `yaml:"description,omitempty"`
-	Icon            string           `yaml:"icon,omitempty"`
-	TriggerKeywords []string         `yaml:"trigger_keywords,omitempty"`
-	TriggerRegex    string           `yaml:"trigger_regex,omitempty"`
-	InitialStepID   string           `yaml:"initial_step_id,omitempty"`
-	OnMatch         *LoadedScenario  `yaml:"on_match,omitempty"` // 子剧本（YAML 内联）
+	ID              string          `yaml:"id"`
+	Label           string          `yaml:"label"`
+	Description     string          `yaml:"description,omitempty"`
+	Icon            string          `yaml:"icon,omitempty"`
+	TriggerKeywords []string        `yaml:"trigger_keywords,omitempty"`
+	TriggerRegex    string          `yaml:"trigger_regex,omitempty"`
+	InitialStepID   string          `yaml:"initial_step_id,omitempty"`
+	OnMatch         *LoadedScenario `yaml:"on_match,omitempty"` // 子剧本（YAML 内联）
 }
 
 // YAMLStep 是单个步骤。
@@ -135,16 +135,16 @@ type YAMLBranch struct {
 //   - when_tool_error 可选，指定当某 tool_call 失败时的备选文案
 //   - branch_choice 标记此 step 是分支选择点
 type YAMLStep struct {
-	ID             string                 `yaml:"id"`
-	Events         []YAMLEvent            `yaml:"events"`
-	DelayMs        int                    `yaml:"delay_ms,omitempty"`
-	BranchID       string                 `yaml:"branch_id,omitempty"`
-	RoundIdx       int                    `yaml:"round_idx,omitempty"`
-	PauseForUser   bool                   `yaml:"pause_for_user,omitempty"`
-	BranchChoice   bool                   `yaml:"branch_choice,omitempty"`
-	WhenToolError  map[string]YAMLStepErr `yaml:"when_tool_error,omitempty"`
-	SetContext     map[string]any         `yaml:"set_context,omitempty"`
-	UseContext     []string               `yaml:"use_context,omitempty"`
+	ID            string                 `yaml:"id"`
+	Events        []YAMLEvent            `yaml:"events"`
+	DelayMs       int                    `yaml:"delay_ms,omitempty"`
+	BranchID      string                 `yaml:"branch_id,omitempty"`
+	RoundIdx      int                    `yaml:"round_idx,omitempty"`
+	PauseForUser  bool                   `yaml:"pause_for_user,omitempty"`
+	BranchChoice  bool                   `yaml:"branch_choice,omitempty"`
+	WhenToolError map[string]YAMLStepErr `yaml:"when_tool_error,omitempty"`
+	SetContext    map[string]any         `yaml:"set_context,omitempty"`
+	UseContext    []string               `yaml:"use_context,omitempty"`
 }
 
 // YAMLStepErr 定义当工具失败时的回退配置。
@@ -159,6 +159,9 @@ type YAMLStepErr struct {
 type YAMLEvent struct {
 	Type string                 `yaml:"type"`
 	Data map[string]interface{} `yaml:"data,omitempty"`
+	// Expect 是 vNext Round 3 引入的断言：声明该事件（主要是 tool_call）
+	// 的真实结果必须满足什么条件。没有断言的剧本 = 没有验收标准的过场动画。
+	Expect []Assertion `yaml:"expect,omitempty"`
 }
 
 // YAMLBranchOption 是 mock_branch_choice 事件的 options 列表中的单个选项。
@@ -184,14 +187,14 @@ type YAMLBranchOption struct {
 // Validate 校验剧本 schema 与铁律。返回第一个错误即终止。
 //
 // 校验规则（按 T1.2 spec）：
-//   1. id 必填且非空
-//   2. steps 必填且至少 1 个
-//   3. 每个 step.events 必填且至少 1 个
-//   4. mock_branch_choice 事件的 options 至少 2 个（由具体 step 校验，下面有独立方法）
-//   5. text_delta.text 不含 `{{` 或 `{%`
-//   6. tool_result 事件 → 拒绝（铁律 1）
-//   7. 硬编码路径/大小/计数/错误 → 拒绝（铁律 3）
-//   8. user_text / free-form input 字段 → 拒绝（铁律 4）
+//  1. id 必填且非空
+//  2. steps 必填且至少 1 个
+//  3. 每个 step.events 必填且至少 1 个
+//  4. mock_branch_choice 事件的 options 至少 2 个（由具体 step 校验，下面有独立方法）
+//  5. text_delta.text 不含 `{{` 或 `{%`
+//  6. tool_result 事件 → 拒绝（铁律 1）
+//  7. 硬编码路径/大小/计数/错误 → 拒绝（铁律 3）
+//  8. user_text / free-form input 字段 → 拒绝（铁律 4）
 func (s *LoadedScenario) Validate() error {
 	if strings.TrimSpace(s.ID) == "" {
 		return fmt.Errorf("scenario: missing id")
@@ -348,12 +351,12 @@ func (ev *YAMLEvent) Validate(scenarioID, stepID string, stepIdx, evIdx int) err
 // validateStringField 校验单个字符串字段。
 //
 // 检查项（按顺序）：
-//   1. 模板语法 `{{` / `{%` → 拒绝
-//   2. 硬编码路径（dir/dir/file.ext）→ **仅在非 args 字段拒绝**（args 是用户输入）
-//   3. 硬编码文件大小（数字 + 单位）→ 拒绝
-//   4. 硬编码计数（"N 个 X"）→ 拒绝
-//   5. 硬编码错误信息（"ERROR: ..."）→ 拒绝
-//   6. 自由文本字段（user_text 等）→ 拒绝
+//  1. 模板语法 `{{` / `{%` → 拒绝
+//  2. 硬编码路径（dir/dir/file.ext）→ **仅在非 args 字段拒绝**（args 是用户输入）
+//  3. 硬编码文件大小（数字 + 单位）→ 拒绝
+//  4. 硬编码计数（"N 个 X"）→ 拒绝
+//  5. 硬编码错误信息（"ERROR: ..."）→ 拒绝
+//  6. 自由文本字段（user_text 等）→ 拒绝
 //
 // 豁免：
 //   - key 以 "args." 开头（tool_call args 是用户输入的过滤条件，不是剧本硬编码）
@@ -599,8 +602,9 @@ func (s *LoadedScenario) ConvertToMockScenario() *MockScenario {
 		// 转换每个 event
 		for _, ye := range ys.Events {
 			step.Events = append(step.Events, MockEvent{
-				Type: ye.Type,
-				Data: ye.Data,
+				Type:   ye.Type,
+				Data:   ye.Data,
+				Expect: ye.Expect,
 			})
 			// ⚠️ 关键：如果遇到 tool_call，立即追加一个空 tool_result 标记事件
 			// 真正的 result 会在 executor 阶段填入。

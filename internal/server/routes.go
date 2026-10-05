@@ -90,6 +90,10 @@ func RegisterRoutes(s *Server, r *gin.Engine) {
 	r.GET("/api/config", s.handleGetConfigGin)
 	r.PUT("/api/config", s.handlePutConfigGin)
 	r.GET("/api/config/schema", s.handleConfigSchemaGin)
+	// vNext Round 4：模拟服务商（替身大脑 + 真实链路），仅显式启用时挂载
+	s.registerStubProviderRoutes(r)
+	// vNext Round 7：本端重载交接（Kotlin 取 pending / 回执 ack）
+	s.registerReloadRoutes(r)
 	r.GET("/api/files", s.handleListFilesGin)
 	r.GET("/api/files/stream", s.handleListFilesStreamGin)
 	r.GET("/api/files/plugin-stream", s.handlePluginFilesStreamGin)

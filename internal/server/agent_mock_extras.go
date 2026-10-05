@@ -147,7 +147,8 @@ type scenarioPickerEntry struct {
 
 func (s *Server) handleAgentMockPresets(c *gin.Context) {
 	cfg := s.getAgentConfig()
-	mode := cfg.MockMode
+	// production 下恒为 off ⇒ 返回空 presets（前端 chip 自然不渲染）。
+	mode := s.effectiveMockMode(cfg)
 
 	// mock 模式关闭时返回空（前端 v-if 自然不渲染）
 	if mode == "off" || mode == "" {

@@ -37,27 +37,26 @@
             - mode=off 灰色，builtin/custom 强调色 + 文字"模拟"
           currentMockMode 由 useAgent 从后端 /api/config 加载，切换时
           通过 PUT /api/config 持久化（无需重启后端）。
+
+          vNext AGT-004：运行 profile 为 production 时（默认）模拟模式不是"能力"，
+          整个徽章隐藏，避免演示入口冒充真实能力。仅 ENCV_RUNTIME_PROFILE=test 显示。
         -->
-        <button
-          type="button"
-          class="mockBadge"
-          :class="{
-            mockBadge_active: currentMockMode !== 'off',
-            mockBadge_clickable: true,
-          }"
+        <!-- 徽章已拆到 AgentMockBadge.vue（含自身样式）：AgentChat.vue 超 2000 行触发
+             file-size-limit 构建门禁，长文件必须拆分，不允许放宽门禁。 -->
+        <AgentMockBadge
+          :mock-allowed="mockAllowed"
+          :active="currentMockMode !== 'off'"
+          :text="mockBadgeText"
           :title="mockBadgeTitle"
-          @click="toggleMockMode"
-        >
-          <ion-icon :icon="flaskIcon" class="mockBadgeIcon" />
-          <span class="mockBadgeText">{{ mockBadgeText }}</span>
-          <ion-icon :icon="chevronDownIcon" class="mockBadgeChevron" />
-        </button>
+          @toggle="toggleMockMode"
+        />
         <!--
           v2 剧本演示入口：常驻在 header 上（mock 徽章旁）。
           点击 → 弹 modal 列出 8 个 v2 剧本（搜索/读/写/分支 4 组）。
           点选某剧本 → 自动切到 builtin mock 模式 + 发送 trigger keyword。
         -->
         <V2ScenariosMenu
+          v-if="mockAllowed"
           :disabled="status === 'streaming' || status === 'confirming'"
           @pick="onPickV2Scenario"
         />
@@ -317,7 +316,7 @@
         流式进行中（status === 'streaming'）时禁用 chip，防止重复触发。
       -->
       <MockPresetBar
-        v-if="isMockMode && mockPresets.length > 0"
+        v-if="mockAllowed && isMockMode && mockPresets.length > 0"
         :presets="mockPresets"
         :scenario="mockPresetBarScenario"
         :phase="mockPresetBarPhase"
@@ -551,6 +550,7 @@ import MockPresetBar from "@/components/agent/MockPresetBar.vue";
 import SlashMenu from "@/components/agent/SlashMenu.vue";
 import V2QuickActions from "@/components/agent/V2QuickActions.vue";
 import V2ScenariosMenu from "@/components/agent/V2ScenariosMenu.vue";
+import AgentMockBadge from "@/components/agent/AgentMockBadge.vue";
 import { useAgentChatView } from "./useAgentChatView";
 
 const {
@@ -581,6 +581,7 @@ const {
   isMockMode,
   isDebugAgent,
   currentMockMode,
+  mockAllowed,
   mockPresets,
   pickMockPreset,
   rawSSEEvents,
@@ -615,7 +616,6 @@ const {
   clipboardIcon,
   refreshCircleIcon,
   chevronDownIcon,
-  flaskIcon,
   trashIcon,
   checkmarkIcon,
   // history / LAN
@@ -739,63 +739,6 @@ defineExpose({});
 .headerTitleIcon {
   color: var(--color-primary);
   font-size: 18px;
-}
-
-/* ── Mock 模式切换器（始终可见、可点击、反映当前模式） ── */
-.mockBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border: 0;
-  border-radius: 12px;
-  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 12%, transparent);
-  color: color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100));
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.4;
-  user-select: none;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
-}
-
-.mockBadge:hover {
-  background: color-mix(in srgb, color-mix(in srgb, var(--color-base-content) 50%, var(--color-base-100)) 22%, transparent);
-}
-
-.mockBadge:active {
-  transform: scale(0.96);
-}
-
-.mockBadge:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 1px;
-}
-
-/* 启用 mock（builtin / custom）时的强调色 */
-.mockBadge_active {
-  background: color-mix(in srgb, var(--color-primary) 16%, transparent);
-  color: var(--color-primary);
-}
-
-.mockBadge_active:hover {
-  background: color-mix(in srgb, var(--color-primary) 24%, transparent);
-}
-
-.mockBadgeIcon {
-  font-size: 12px;
-  color: inherit;
-}
-
-.mockBadgeText {
-  letter-spacing: 0.02em;
-}
-
-.mockBadgeChevron {
-  font-size: 10px;
-  color: inherit;
-  opacity: 0.7;
 }
 
 /* ── 多渲染引擎切换器（同款模型选择器样式） ─────────── */

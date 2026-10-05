@@ -52,6 +52,9 @@ func registerPeerlinkRoutes(s *Server, r *gin.Engine) {
 	r.POST("/api/peerlink/agent/approve", s.handlePeerlinkAgentApprove)
 	r.GET("/api/peerlink/agent/trust", s.handlePeerlinkAgentTrust)
 	r.DELETE("/api/peerlink/agent/trust", s.handlePeerlinkAgentTrust)
+	// vNext Round 5：POST = 预先授信。旧实现只挂了 GET/DELETE ⇒ 受控端即使想在
+	// 连接后主动信任也没入口（只能等远端第一次调用弹审批时顺手点）。
+	r.POST("/api/peerlink/agent/trust", s.handlePeerlinkAgentTrust)
 	r.GET("/api/peerlink/agent/audit", s.handlePeerlinkAgentAudit)
 	// 云控热更新（2026-10-04）：manifest/download/report 走 peer token，push/status 走运维
 	r.GET("/api/peerlink/bundle/manifest", s.handlePeerlinkBundleManifest)
@@ -61,6 +64,8 @@ func registerPeerlinkRoutes(s *Server, r *gin.Engine) {
 	r.GET("/api/peerlink/bundle/status", s.handlePeerlinkBundleStatus)
 	// 2026-10-05：云控一键回滚 + 本端（设备侧）热更状态/自回滚
 	r.POST("/api/peerlink/bundle/rollback", s.handlePeerlinkBundleRollback)
+	// vNext Round 7：云控三级重载（web / activity / app）
+	r.POST("/api/peerlink/bundle/reload", s.handlePeerlinkBundleReload)
 	r.GET("/api/peerlink/bundle/local", s.handlePeerlinkBundleLocal)
 	r.POST("/api/peerlink/bundle/local/rollback", s.handlePeerlinkBundleLocalRollback)
 	// P2a：本端作为 Edge 连远端 Hub（扫码配对后启动 / 状态 / 停止）

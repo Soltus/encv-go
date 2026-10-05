@@ -53,6 +53,8 @@ type peerEdgeHandlers struct {
 	OnBundleUpdate func(peerlink.BundleUpdateRequest) peerlink.BundleUpdateResult
 	// OnBundleRollback 云控回滚（2026-10-05）：把上一版备份搬回来
 	OnBundleRollback func(peerlink.BundleRollbackRequest) peerlink.BundleRollbackResult
+	// OnBundleReload 云控重载/重启（2026-10-06）：web / activity / app 三级
+	OnBundleReload func(peerlink.BundleReloadRequest) peerlink.BundleReloadResult
 }
 
 func (s *Server) edgeHandlers() peerEdgeHandlers {
@@ -65,6 +67,7 @@ func (s *Server) edgeHandlers() peerEdgeHandlers {
 		OnAgentInvoke:    s.PeerAgentInvokeHandler,
 		OnBundleUpdate:   s.peerLocalBundleUpdate,
 		OnBundleRollback: s.peerLocalBundleRollback,
+		OnBundleReload:   s.peerLocalBundleReload,
 	}
 }
 
@@ -654,6 +657,7 @@ func (s *Server) startEdgeLocked(hub, peerID, deviceID, token string) {
 		//    同一个坑对 bundle_rollback 一样成立 ⇒ 有 `Supports()` 可断言，别再靠猜。
 		OnBundleUpdate:   h.OnBundleUpdate,
 		OnBundleRollback: h.OnBundleRollback,
+		OnBundleReload:   h.OnBundleReload,
 	})
 	rt := &edgeRuntime{
 		hubURL:    hubNormalized,

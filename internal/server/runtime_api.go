@@ -63,6 +63,15 @@ type RuntimeInfo struct {
 	//   - false：用原生 vector_distance_cos（turso/libsql）
 	//   - true：运行时检测到原生向量函数不可用，降级到 SQLiteStore
 	VectorSearchDegraded bool `json:"vector_search_degraded"`
+	// Profile 运行 profile："production"（默认，fail closed）| "test"。
+	// vNext AGT-004：前端据此隐藏/禁用 mock 控制面，避免演示入口冒充真实能力。
+	Profile string `json:"profile"`
+	// MockAllowed 当前 profile 是否允许 mock/synthetic 演示路径（Profile=="test"）。
+	MockAllowed bool `json:"mock_allowed"`
+	// StubProviderEnabled 是否启用了模拟服务商（vNext Round 4）。
+	// true ⇒ "模型大脑"是确定性替身，但工具调用/结果/传输仍是真实执行。
+	// 对外显式声明，避免替身悄悄冒充真实模型。
+	StubProviderEnabled bool `json:"stub_provider_enabled"`
 }
 
 // HeartbeatStaleThreshold 心跳陈旧阈值。超过这个时间没更新认为进程 hang。
@@ -109,6 +118,11 @@ func (s *Server) snapshotRuntimeInfo() RuntimeInfo {
 		snapshot.VectorSearchAvailable = true
 		snapshot.VectorSearchDegraded = s.searchSvc.IsDegraded()
 	}
+	// 运行 profile（vNext AGT-004）：对外声明"演示能力是否可用"的唯一来源。
+	snapshot.Profile = s.RuntimeProfile()
+	snapshot.MockAllowed = s.mockEnabled()
+	// vNext Round 4：替身大脑是否启用（必须对外可查，不能悄悄开）
+	snapshot.StubProviderEnabled = s.StubProviderEnabled()
 	return snapshot
 }
 

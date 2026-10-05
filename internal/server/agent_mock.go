@@ -26,6 +26,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -129,8 +130,9 @@ type MockStep struct {
 // tool_status / tool_result / stream_status / stream_end /
 // mid_stream_disconnect / sse_corrupt_chunk
 type MockEvent struct {
-	Type string                 // 事件类型
-	Data map[string]interface{} // 事件 data 载荷
+	Type   string                 // 事件类型
+	Data   map[string]interface{} // 事件 data 载荷
+	Expect []Assertion            // vNext Round 3：真实工具结果必须满足的断言
 }
 
 // MockEngine 持有激活的剧本集合（builtin + custom）。
@@ -143,6 +145,10 @@ type MockEvent struct {
 type MockEngine struct {
 	builtinScenarios []*MockScenario
 	customScenarios  []*MockScenario
+	// vNext Round 3：最近一次 Run 的剧本断言失败记录。
+	// 剧本跑完如果这里有内容 ⇒ 真实结果不符合预期，剧本不能算"通过"。
+	assertMu     sync.Mutex
+	lastFailures []ScenarioAssertionFailure
 
 	// scenariosByID 是 builtin + custom 合并的 O(1) 查询 map。
 	// 构造时（NewMockEngine）一次性建好，运行时只读。
@@ -381,6 +387,8 @@ func (e *MockEngine) Run(ctx context.Context, s *Server, sess *agentSession, w h
 	if scenario == nil {
 		return nil
 	}
+	// vNext Round 3：每次运行先清空断言失败记录，避免上一次的失败被误读成本次的。
+	e.ResetFailures()
 
 	// 速率归一化：避免 speed 为 0 或负数时除零
 	effectiveSpeed := speed
@@ -506,7 +514,7 @@ func (e *MockEngine) Run(ctx context.Context, s *Server, sess *agentSession, w h
 				// 缺省 false（保持向后兼容：单测/无 executor 时按硬编码剧本走）。
 				if execReal, _ := ev.Data["execute_real"].(bool); execReal {
 					args, _ := ev.Data["args"].(string)
-					pendingRealCalls[id] = pendingRealCall{name: name, args: args}
+					pendingRealCalls[id] = pendingRealCall{name: name, args: args, expect: ev.Expect}
 					slog.Debug("mock: tool_call marked execute_real=true, will call real handler at result",
 						"scenario", scenario.ID, "id", id, "name", name)
 				}
@@ -587,7 +595,7 @@ func (e *MockEngine) Run(ctx context.Context, s *Server, sess *agentSession, w h
 				// 必须由真实工具执行覆盖。Run 阶段直接调 executor 调真实工具。
 				if autoGen, _ := ev.Data["__yaml_auto_generated"].(bool); autoGen {
 					id, _ := ev.Data["id"].(string)
-					if err := e.executeAutoToolResult(ctx, s, sess, w, flusher, ev, pendingRealCalls, id, writeDebug, emitEvent, stepIdx, evIdx); err != nil {
+					if err := e.executeAutoToolResult(ctx, scenario.ID, s, sess, w, flusher, ev, pendingRealCalls, id, writeDebug, emitEvent, stepIdx, evIdx); err != nil {
 						return err
 					}
 					continue
@@ -611,13 +619,31 @@ func (e *MockEngine) Run(ctx context.Context, s *Server, sess *agentSession, w h
 						// 关键：把 emitEvent 闭包传进去，让真实工具结果也走 AG-UI mapper
 						// 否则 useAGUI=true 时 executeRealAndEmit 走 sendAndCache
 						// 推 legacy tool_result 格式 → 前端 AG-UI parser 无法解析
-						realResult := e.executeRealAndEmit(ctx, s, sess, w, flusher, pending, id, name, writeDebug, emitEvent, stepIdx, evIdx)
+						realResult, realOK := e.executeRealAndEmit(ctx, s, sess, w, flusher, pending, id, name, writeDebug, emitEvent, stepIdx, evIdx)
 						collectedResults[id] = toolResultInfo{id: id, name: name, result: realResult}
+						// vNext Round 3：真实结果必须过断言，否则剧本只是"看着在跑"
+						if realOK {
+							e.applyAssertions(scenario.ID, id, name, realResult, pending.expect, emitEvent, stepIdx, evIdx)
+						}
 						continue
 					}
-					// realExecutor == nil：单测/容灾路径，硬编码剧本 result
-					slog.Debug("mock: execute_real=true but realExecutor nil, falling back to hardcoded result",
-						"scenario", scenario.ID, "id", id)
+					// vNext Round 3：不再回退硬编码假数据。
+					//
+					// 旧行为"realExecutor=nil 就用剧本里写死的 result"会让假数据在真实
+					// 链路里复活 —— 剧本因此永远证明不了任何事，只剩"看起来跑通了"。
+					// 现在显式失败，并把原因说清楚。
+					slog.Error("mock: execute_real=true but realExecutor nil — refusing hardcoded fallback",
+						"scenario", scenario.ID, "id", id, "name", name)
+					emitEvent(MockEvent{Type: "tool_result", Data: map[string]interface{}{
+						"id":         id,
+						"name":       name,
+						"result":     `{"error":"real_executor_unavailable: execute_real=true 但没有真实执行器，已拒绝回退硬编码假数据"}`,
+						"isError":    true,
+						"status":     "failed",
+						"durationMs": 0,
+					}}, stepIdx, evIdx)
+					writeDebug(stepIdx, evIdx, "tool_result(real_executor_unavailable)", fmt.Sprintf("id=%s name=%s", id, name))
+					continue
 				}
 				// 收集结果（硬编码路径 + realExecutor=nil fallback）
 				resultStr, _ := ev.Data["result"].(string)
@@ -671,8 +697,9 @@ func (s *Server) endMockPresets(sess *agentSession, w http.ResponseWriter, flush
 // pendingRealCall 是剧本中标记 execute_real=true 的 tool_call 的最小信息。
 // 后续匹配的 tool_result 事件触发实际 realExecutor 调用时使用。
 type pendingRealCall struct {
-	name string
-	args string
+	name   string
+	args   string
+	expect []Assertion // vNext Round 3：真实结果必须过的断言
 }
 
 // toolResultInfo 记录已完成的 tool_result（用于动态文本模板）。
@@ -713,7 +740,7 @@ func (e *MockEngine) executeRealAndEmit(
 	emitEvent func(ev MockEvent, stepIdx, evIdx int),
 	stepIdx int,
 	evIdx int,
-) string {
+) (string, bool) {
 	t0 := time.Now()
 	out, err := e.realExecutor(ctx, pending.name, pending.args)
 	dur := time.Since(t0).Milliseconds()
@@ -737,7 +764,7 @@ func (e *MockEngine) executeRealAndEmit(
 			"durationMs": dur,
 		}}, stepIdx, evIdx)
 		writeDebug(-1, -1, "tool_result(err)", fmt.Sprintf("id=%s name=%s err=%s", id, name, err.Error()))
-		return resultStr // 返回结果供 collectedResults 收集
+		return resultStr, false // 返回结果供 collectedResults 收集；false = 执行失败，不做断言
 	}
 
 	slog.Info("mock: real tool exec succeeded",
@@ -752,7 +779,7 @@ func (e *MockEngine) executeRealAndEmit(
 		"durationMs": dur,
 	}}, stepIdx, evIdx)
 	writeDebug(-1, -1, "tool_result(ok)", fmt.Sprintf("id=%s name=%s dur=%dms", id, name, dur))
-	return out // 返回结果供 collectedResults 收集
+	return out, true // 返回结果供 collectedResults 收集；true = 执行成功，可跑断言
 }
 
 // executeAutoToolResult 处理 YAML auto-injected tool_result（剧本外置 spec）。
@@ -768,6 +795,7 @@ func (e *MockEngine) executeRealAndEmit(
 //   - executeAutoToolResult 是 YAML 模式的"无条件"路径（schema 保证 tool_call 必配 auto tool_result）
 func (e *MockEngine) executeAutoToolResult(
 	ctx context.Context,
+	scenarioID string,
 	s *Server,
 	sess *agentSession,
 	w http.ResponseWriter,
@@ -806,7 +834,11 @@ func (e *MockEngine) executeAutoToolResult(
 
 	// 调真实执行器（与 executeRealAndEmit 共享逻辑）
 	if e.realExecutor != nil {
-		e.executeRealAndEmit(ctx, s, sess, w, flusher, pending, id, pending.name, writeDebug, emitEvent, stepIdx, evIdx)
+		realResult, ok := e.executeRealAndEmit(ctx, s, sess, w, flusher, pending, id, pending.name, writeDebug, emitEvent, stepIdx, evIdx)
+		// vNext Round 3：真实结果必须过断言（YAML 剧本走的就是这条路径）
+		if ok {
+			e.applyAssertions(scenarioID, id, pending.name, realResult, pending.expect, emitEvent, stepIdx, evIdx)
+		}
 	} else {
 		// 真实执行器未注入（单测 / 容灾）：推失败 tool_result
 		slog.Warn("mock: realExecutor not injected, auto tool_result fails",

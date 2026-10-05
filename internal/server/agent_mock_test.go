@@ -121,7 +121,11 @@ func TestMockEngine_ExecuteReal_OverridesHardcoded(t *testing.T) {
 
 // TestMockEngine_ExecuteReal_FallbackWhenNoExecutor 验证 realExecutor 为 nil
 // 时 execute_real=true 仍按硬编码剧本 result 推送（容灾 + 单测）。
-func TestMockEngine_ExecuteReal_FallbackWhenNoExecutor(t *testing.T) {
+// TestMockEngine_ExecuteReal_RefusesHardcodedFallback 验证 vNext Round 3 的行为变更：
+//
+// 旧行为是"realExecutor=nil 就回退到剧本里写死的 result" —— 这让假数据在真实
+// 链路里复活，剧本因此永远证明不了任何事。现在必须**拒绝回退**并显式报错。
+func TestMockEngine_ExecuteReal_RefusesHardcodedFallback(t *testing.T) {
 	eng := NewMockEngine()
 	// 不调 SetRealExecutor — 留 nil
 
@@ -162,11 +166,19 @@ func TestMockEngine_ExecuteReal_FallbackWhenNoExecutor(t *testing.T) {
 
 	tr := findEventOfType(sess, "tool_result")
 	data, _ := tr.Data.(map[string]interface{})
-	if got, _ := data["result"].(string); got != `{"HARDCODED":true}` {
-		t.Errorf("realExecutor=nil 时 result 应保持硬编码 = %q, want HARDCODED", got)
+	// 假数据不得再出现：result 必须是"拒绝回退"的报错，而不是剧本写死的 HARDCODED
+	got, _ := data["result"].(string)
+	if strings.Contains(got, "HARDCODED") {
+		t.Fatalf("realExecutor=nil 时不得回退硬编码假数据，got %q", got)
 	}
-	if data["durationMs"] != 42 {
-		t.Errorf("realExecutor=nil 时 durationMs 应保持硬编码 42, got %v", data["durationMs"])
+	if !strings.Contains(got, "real_executor_unavailable") {
+		t.Fatalf("realExecutor=nil 时应报 real_executor_unavailable，got %q", got)
+	}
+	if data["isError"] != true {
+		t.Errorf("realExecutor=nil 时 tool_result 必须 isError=true, got %v", data["isError"])
+	}
+	if data["status"] != "failed" {
+		t.Errorf("realExecutor=nil 时 status 必须为 failed, got %v", data["status"])
 	}
 }
 
