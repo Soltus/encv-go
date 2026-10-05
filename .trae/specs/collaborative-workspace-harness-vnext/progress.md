@@ -420,7 +420,44 @@ req := peerlink.BundleUpdateRequest{ ... ABI: item.ABI }
 
 ---
 
+## Round 9（2026-10-06）：CI prebuild 失败 —— 提交前没跑 i18n 检查
+
+### 事故
+
+CI `prebuild`（`pnpm check:i18n:full`）失败：
+
+```
+❌ MISSING: peers.trustedHint / peers.trustNeedPeer / peers.trustOk / peers.untrustOk
+📊 结果: 1265 个使用中的 key, 4 个缺失
+```
+
+原因：Round 5 加「信任此设备」按钮时只写了 `t('peers.xxx') || '兜底中文'`，
+**没往语言文件加词条**。因为 `t()` 有 `|| 默认值` 兜底，本地看不出问题，
+只有 CI 的 i18n 门禁会拦 —— 我把 CI 当成了检查器。
+
+### 修复
+
+补进 `app/packages/shared-components/src/i18n/settings.ts` 的 `zh-CN` 段（本仓库目前**只有 zh-CN 一种语言**）：
+
+- `peers.trustedHint`
+- `peers.trustNeedPeer`
+- `peers.trustOk`
+- `peers.untrustOk`
+
+本地复验（与 CI 同款命令）：`scan` **1265 key / 0 缺失**，`var-check` **0 问题**。
+
+### 教训（写进纪律）
+
+`t('key') || '兜底中文'` **会让缺失静默**：本地永远看不出来，只能靠 CI。
+⇒ 新增任何 `t()` 调用后，**必须**同时加词条，并在提交前本地跑检查。
+
+---
+
 ## 每轮收尾纪律
+
+0. **提交前本地跑 CI 同款门禁**，尤其是：
+   `python3 scripts/i18n-tool.py scan --app encv-mobile && python3 scripts/i18n-tool.py var-check --app encv-mobile`
+   （新增 `t()` 调用必须同时补词条 —— `|| 兜底` 会让缺失静默）
 
 1. **先红后绿**：每轮必须至少有一条"门禁真的拦住了旧行为"的红验记录（Round 1 已满足）。
 2. **纠偏写回 spec**：本轮发现的新缺陷与低估面已回写 `spec.md`，不只在台账里留一句。

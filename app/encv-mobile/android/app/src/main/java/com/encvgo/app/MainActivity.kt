@@ -25,6 +25,8 @@ class MainActivity : BridgeActivity() {
     companion object {
         private const val TAG = "ENCV-go"
         private const val MPV_PLUGIN_ID = "com.encvgo.plugin.mpv"
+        // 前台时取云控重载指令的间隔（vNext Round 9）
+        private const val RELOAD_POLL_INTERVAL_MS = 3000L
     }
 
     private var backendReceiverRegistered = false
@@ -112,6 +114,51 @@ class MainActivity : BridgeActivity() {
         } else {
             Log.i(TAG, "no hot web bundle, using bundled assets")
         }
+    }
+
+    // ── vNext Round 9（2026-10-06）：重载指令的**即时**轮询 ────────────────
+    //
+    // ⚠️ 为什么不能只在 onCreate 取一次：
+    //    Round 7 只在 onCreate 调 checkPendingReload ⇒ App 停在前台时，
+    //    云控下发 reload 后 Kotlin **根本不会去取**，只能等用户自己重开 App
+    //    ⇒ "云控重启"退化成"还是要人手重启"，等于没用。
+    //
+    // 修法：App 在**前台**时按固定间隔轮询 /api/reload/pending（3s），
+    //       取到就执行（activity → recreate，app → 重启进程）并 ack。
+    //       退到后台就停，避免无谓请求。
+    private val reloadPollHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var reloadPolling = false
+
+    private val reloadPollRunnable = object : Runnable {
+        override fun run() {
+            checkPendingReload()
+            if (reloadPolling) {
+                reloadPollHandler.postDelayed(this, RELOAD_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
+    private fun startReloadPolling() {
+        if (reloadPolling) return
+        reloadPolling = true
+        reloadPollHandler.postDelayed(reloadPollRunnable, RELOAD_POLL_INTERVAL_MS)
+    }
+
+    private fun stopReloadPolling() {
+        reloadPolling = false
+        reloadPollHandler.removeCallbacks(reloadPollRunnable)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 前台 ⇒ 开始取云控指令（远端发 reload 后这里会立刻执行，不需要用户操作）
+        startReloadPolling()
+        checkPendingReload()
+    }
+
+    override fun onPause() {
+        stopReloadPolling()
+        super.onPause()
     }
 
     // ── vNext Round 7（2026-10-06）：云控三级重载 ──────────────────────────
