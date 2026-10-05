@@ -1,70 +1,41 @@
 package server
 
-// peerlink_bundle_reload.go —— 云控三级重载（2026-10-06）
+// peerlink_bundle_reload.go —— 云控三级重载（2026-10-06，Round 10 简化）
 //
-// 起因（真机反馈）：热更包应用后**只能靠用户手动重启 App** 才生效
-// （Kotlin 的 applyHotWebBundleIfPresent 只在启动时判定）⇒ 推完还要人手点一次，
-// 既慢又容易让人误以为"没生效"。
+// 起因：热更包应用后**只能靠用户手动重启 App** 才生效
+// （Kotlin 的 applyHotWebBundleIfPresent 只在启动时判定）。
 //
 // 三级（由轻到重）：
 //
-//	web      —— 只让 WebView 重新加载：Go 广播 WS 事件，前端 reload，**当场生效**
+//	web      —— 只让 WebView 重新加载：Go 广播 WS，前端 reload，**无感**
 //	activity —— recreate 当前 Activity（重建页面与插件桥）
 //	app      —— 整个 App 进程重启（换执行体 / 换 Go 二进制时用）
 //
-// 分工（Go 能做什么、不能做什么，必须写清楚，别让调用方以为"返回 ok 就等于重启了"）：
+// ⚠️ 架构边界（Round 10 纠正）：
 //
-//	Go 能直接做：web 级（广播 WS 让前端 reload）
-//	Go 做不到：activity / app（Android 组件生命周期只能由 Kotlin 操作）
-//	            ⇒ Go 只**落指令**（pending），由 Kotlin 侧取走执行并 ack
+//	Go **只广播指令**，不做任何"把指令塞给 Kotlin"的旁门左道
+//	（不再有 pending 轮询 / 不再有 HTTP 交接接口 —— 那会让后端逻辑
+//	 泄漏到 Activity，是架构错误）。
 //
-// 因此 `applied` 字段就是用来区分的：
+//	真正执行的一定是**原生层**，且链路是事件驱动：
+//	  Go --WS--> 前端(WsBackend) --插件桥--> GoProcessPlugin.reloadApp()
+//	      --> 原生弹二次确认 --> recreate / 重启进程
 //
-//	applied=true  ⇒ 当场生效
-//	applied=false ⇒ 指令已落，等 Kotlin 接管（**不是失败**）
+//	activity / app 级**必须二次确认**（重建页面丢状态、重启中断操作），
+//	远端不能替用户做这个决定 ⇒ 由原生弹窗，用户取消就不执行。
 
 import (
 	"encoding/json"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/Soltus/encv-go/internal/peerlink"
 	"github.com/gin-gonic/gin"
 )
 
-var (
-	reloadMu      sync.Mutex
-	reloadPending string // 待 Kotlin 执行的级别（"" / "activity" / "app"）
-	reloadReason  string
-)
-
-func setPendingReload(level, reason string) {
-	reloadMu.Lock()
-	defer reloadMu.Unlock()
-	// 更重的一级优先：app > activity
-	if reloadPending == peerlink.ReloadLevelApp && level != peerlink.ReloadLevelApp {
-		return
-	}
-	reloadPending = level
-	reloadReason = reason
-}
-
-func peekPendingReload() (level, reason string) {
-	reloadMu.Lock()
-	defer reloadMu.Unlock()
-	return reloadPending, reloadReason
-}
-
-func takePendingReload() (level, reason string) {
-	reloadMu.Lock()
-	defer reloadMu.Unlock()
-	level, reason = reloadPending, reloadReason
-	reloadPending, reloadReason = "", ""
-	return
-}
-
 // peerLocalBundleReload 执行端（手机）收到云控重载指令。
+//
+// 只做一件事：把指令广播出去。执行与确认都在原生层。
 func (s *Server) peerLocalBundleReload(req peerlink.BundleReloadRequest) peerlink.BundleReloadResult {
 	level := strings.ToLower(strings.TrimSpace(req.Level))
 	if level == "" {
@@ -79,47 +50,27 @@ func (s *Server) peerLocalBundleReload(req peerlink.BundleReloadRequest) peerlin
 		}
 	}
 
-	if level == peerlink.ReloadLevelWeb {
-		// web 级：广播给已连接前端，前端监听后自行 reload ⇒ **用户无感**
-		s.BroadcastMessage("bundle_reload", map[string]interface{}{
-			"level":  level,
-			"reason": req.Reason,
-		})
-		// web 级**不**落 pending：前端（WsBackend）收到广播后自行 reload，
-		// 再落一份会让 Kotlin 在下次 onCreate 又 reload 一次（重复且不再是"无感"）。
-		// activity / app 级才落 pending 交给 Kotlin。
-		return peerlink.BundleReloadResult{Ok: true, Level: level, Applied: true}
-	}
-
-	// activity / app：Go 落指令，等 Kotlin 取走
-	setPendingReload(level, req.Reason)
+	// 广播给已连接的前端：web 级前端就地 reload；activity/app 级由前端
+	// 经插件桥转交原生（原生弹确认后才执行）。
 	s.BroadcastMessage("bundle_reload", map[string]interface{}{
-		"level":   level,
-		"reason":  req.Reason,
-		"applied": false,
+		"level":  level,
+		"reason": req.Reason,
 	})
-	return peerlink.BundleReloadResult{Ok: true, Level: level, Applied: false}
-}
 
-// handleReloadPending —— GET /api/reload/pending
-//
-// Kotlin 侧（MainActivity）查询"有没有待执行的重载"。这是 Go 与 Kotlin 之间
-// **不依赖文件路径约定**的交接方式（Go 无法直接操作 Activity，只能等原生来取）。
-func (s *Server) handleReloadPending(c *gin.Context) {
-	level, reason := peekPendingReload()
-	c.JSON(http.StatusOK, gin.H{"level": level, "reason": reason})
-}
-
-// handleReloadAck —— POST /api/reload/ack
-// Kotlin 执行完毕后确认，清掉 pending（避免重复重启）。
-func (s *Server) handleReloadAck(c *gin.Context) {
-	level, _ := takePendingReload()
-	c.JSON(http.StatusOK, gin.H{"ok": true, "cleared": level})
+	return peerlink.BundleReloadResult{
+		Ok: true,
+		// web 级当场生效；activity/app 级要等原生确认，这里不能宣称已生效
+		Applied: level == peerlink.ReloadLevelWeb,
+		Level:   level,
+	}
 }
 
 // handlePeerlinkBundleReload —— POST /api/peerlink/bundle/reload（云控，运维）
 //
 // 入参：{ peerId, level: "web"|"activity"|"app", reason? }
+//
+// ⚠️ 返回的 `applied=false` **不是失败**：表示指令已送达设备，
+// 但 activity/app 级要等用户在原生确认框点"确定"才会真正执行。
 func (s *Server) handlePeerlinkBundleReload(c *gin.Context) {
 	if !isOperator(c) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
@@ -169,12 +120,6 @@ func (s *Server) handlePeerlinkBundleReload(c *gin.Context) {
 		"peerId":  body.PeerId,
 		"level":   out.Level,
 		"applied": out.Applied,
-		"note":    "applied=false 表示指令已落、等 Kotlin 接管（activity/app 级），不是失败",
+		"note":    "applied=false 表示已送达设备，activity/app 级需用户在原生确认框确认后才执行",
 	})
-}
-
-// registerReloadRoutes 挂载本端重载交接路由（供 Kotlin 取指令 / 回执）。
-func (s *Server) registerReloadRoutes(r *gin.Engine) {
-	r.GET("/api/reload/pending", s.handleReloadPending)
-	r.POST("/api/reload/ack", s.handleReloadAck)
 }
